@@ -55,8 +55,10 @@
 - **App sonrası:** `prisma generate`; `Device.kind` okuyan/yazan uçları enum değerine geçir. PermissionCategory UPPERCASE seçilirse `seed.ts` + tüketen UI/servis. VarChar yolu ise Zod `max()` hizala.
 - **Risk:** karışık case (`"tablet"`) → cast öncesi `upper()` şart. `Permission.module` VarChar(32)'yi aşıyorsa ALTER patlar → önce `max(length)` kontrol. Tablolar küçük (devices/stations/permissions) → kilit kısa.
 
-#### D-13 — `foldType` serbest string → `FoldType` enum (HC-06 kanal eşleşme riski)
-- **Kolonlar:** `schema.prisma:754, 1195` (`foldType String?`); ayrıca `WorkOrderStep.stepData` (L1250) ve `RollOperation.metadata` (L1464) JSON içinde `"4-kat"/"2-kat"` serbest.
+#### D-13 — `foldType` serbest string → HC-06 kanal eşleşme riski
+- **✅ ÇÖZÜLDÜ — BACKEND-ONLY, DB İŞİ YOK (backend commit `b785cfc`):** Kullanıcı kararı = merkezi Zod sözlüğü (enum migration DEĞİL). `helpers/fold-type.ts` ile 2/4-KAT ailesi tüm yazım uçlarında kanonikleştirilir (`'4-kat'→'4-KAT'`). **DB oturumu bu madde için migration YAZMAZ.**
+- **⚠️ DOMAIN DÜZELTMESİ (enum yapılmamasının nedeni):** foldType yalnız 2/4-KAT DEĞİL — **`TÜP` (tubular) + özel değerler meşru** (mobil UI 'özel' notu; test 'TUP' kullanıyor; frontend selektörleri 2/4-KAT sunsa da alan serbest). Bir `FoldType` enum'u bu meşru değerleri REDDEDERDİ (test_recipe kırıldı → doğrulandı). Bu yüzden enum yerine kanonikleştir-ama-reddetme yaklaşımı seçildi.
+- ~~Kolonlar: schema.prisma:754, 1195 (foldType String?); stepData L1250; metadata L1464~~ — enum'a çevrilmedi.
 - **DDL:**
   ```sql
   SET statement_timeout = 0;
@@ -72,6 +74,7 @@
 - **Risk:** `rolls` yüksek hacimli → `ALTER COLUMN TYPE` tabloyu rewrite eder + yazma kilidi → **vardiya dışı + `statement_timeout=0` zorunlu**. Map edilemeyen değer (`"NaN"`, boş, tireli varyant) cast'i patlatır.
 
 #### F71 — `WorkOrderStatus.PAUSED` ölü enum değeri
+- **✅ APP-CODE HAZIR (backend commit `bba0f15`):** 16 referans (3 filtre dizisi + 2 Set + 1 karşılaştırma + 10 yorum/Swagger) temizlendi, tsc+regresyon yeşil. **DB oturumu enum-recreate migration'ını yazıp aynı merge'e koyabilir** (sıra: app-code önce → enum silme sonra → tsc hep yeşil).
 - **Neden DB:** app'te hiç atanmıyor (ölü); Postgres'te enum-değer silme = tip recreate migration.
 - **Kolon/kod:** `schema.prisma` WorkOrderStatus (L102); `order.service` / `production-balance` / `roll-step.helper` filtre setlerinde PAUSED referansları.
 - **DDL:**
@@ -166,8 +169,8 @@ Gatherer distilasyonu iki maddeyi "DB değil" olarak ayıkladı — DB oturumu b
 ## Özet checklist
 - [ ] F3 — String ID → @db.Uuid (Roll.batchSplitId, PrintedDocument.sourceId, RollReturn.prev*)
 - [ ] F6+D-15 — Device.kind → DeviceKind enum + department/module VarChar/katalog (BİRLEŞİK)
-- [ ] D-13 — foldType → FoldType enum (+ stepData/metadata normalize)  ·  *veya* merkezi Zod sözlüğü (backend-track)
-- [ ] F71 — WorkOrderStatus.PAUSED enum'dan çıkar (+ filtre setleri)
+- [x] ~~D-13 — foldType~~ **ÇÖZÜLDÜ backend-only (b785cfc, merkezi Zod sözlüğü; enum YOK — TÜP/özel meşru). DB işi yok.**
+- [ ] F71 — WorkOrderStatus.PAUSED enum-recreate migration **(app-code hazır bba0f15; DDL sende)**
 - [ ] F4 — updatedAt ekle (RollReturn/Session/WorkOrderToOrderLine) + SystemLog.updatedAt kaldır
 - [ ] F123 — rolls sıralama composite index'leri
 - [ ] F249 — dispatchedAt composite index (EXPLAIN ile doğrula)
