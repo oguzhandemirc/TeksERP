@@ -192,8 +192,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
             select: {
               currentQty: true,
               width: true,
-              item: { select: { name: true } },
-              color: { select: { name: true } },
+              item: { select: { id: true, name: true } },
+              color: { select: { id: true, name: true } },
             },
           },
         },
@@ -225,7 +225,10 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
         const itemName = r.item.name;
         const colorName = r.color?.name ?? "";
         const widthNum = r.width != null ? Number(r.width) : null;
-        const key = `${itemName}|${colorName}|${widthNum ?? ""}`;
+        // F251: İD bazlı anahtar — Item.name/Color.name DB'de unique DEĞİL; aynı ada sahip
+        // iki farklı ürün/renk icmalde birleşmesin (metre yanlış atfedilmesin). Adlar yalnız
+        // görüntüleme için taşınır.
+        const key = `${r.item.id}|${r.color?.id ?? ""}|${widthNum ?? ""}`;
 
         const g = prodMap.get(key) ?? { itemName, colorName, width: widthNum, rollCount: 0, totalMeters: D0() };
         g.rollCount += 1;

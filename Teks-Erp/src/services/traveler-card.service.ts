@@ -543,9 +543,12 @@ export class TravelerCardService {
     // gerekçe). WO batchNumber kısmi araması için contains kalır (relation).
     if (params.search && params.search.trim()) {
       const q = params.search.trim();
+      // F194: barcode/cardNumber UPPERCASE saklanır → terimi normalize et (findByBarcode
+      // ile simetri); picker'a küçük harf yazan/yapıştıran kullanıcı da kartı bulur.
+      const qUpper = q.toUpperCase();
       where.OR = [
-        { cardNumber: q },
-        { barcode: q },
+        { cardNumber: qUpper },
+        { barcode: qUpper },
         ...buildTurkishSearch<Prisma.TravelerCardWhereInput>(q, [
           "workOrder.batchNumber",
         ]),

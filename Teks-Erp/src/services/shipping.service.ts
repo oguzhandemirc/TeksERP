@@ -2987,10 +2987,14 @@ export class ShippingService {
     }): Prisma.Decimal =>
       stockBySpec.reduce((sum, g) => {
         if (g.itemId !== line.itemId) return sum;
-        if (line.colorId != null && g.colorId !== line.colorId) return sum;
+        // F107: specMatch ile aynı — renk/en yalnız İKİSİ de doluysa eşit olmalı; biri
+        // null ise gevşek eşleşir (renksiz/en'siz depo stoğu allocate'te bu satıra tahsis
+        // edilir). Eskiden preview commit'ten daha katı olup kapsamayı düşük gösteriyordu.
+        if (line.colorId != null && g.colorId != null && g.colorId !== line.colorId) return sum;
         if (
           line.width != null &&
-          (g.width == null || !new Prisma.Decimal(line.width).equals(g.width))
+          g.width != null &&
+          !new Prisma.Decimal(line.width).equals(g.width)
         ) {
           return sum;
         }
