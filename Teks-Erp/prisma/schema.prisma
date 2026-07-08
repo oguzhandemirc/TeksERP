@@ -282,7 +282,6 @@ model User {
   cancelledReturns           RollReturn[]             @relation("RollReturnCancelledBy")
   workSessions               WorkSession[]
   sessions                   Session[]
-  goodsReceiptsReceived      GoodsReceipt[]          @relation("GoodsReceiptReceivedBy")
   readiedShipments           Shipment[]              @relation("ShipmentReadyBy")
   dispatchedShipments        Shipment[]              @relation("ShipmentDispatchedBy")
   weighedSacks               Sack[]                  @relation("SackWeighedBy")
@@ -880,9 +879,6 @@ model Roll {
   // bölünmüş çocuklar dahil) tek kimlikle izlenir. NULL = fason'a hiç girmemiş
   // ana akış. FK değil (dispatch silinmez ama soft-cancel olur; serbest grup anahtarı).
   batchSplitId String? @db.Uuid
-  // Y-1: İzlenebilirlik kökü — ham kumaş bu teslimattan (GoodsReceipt) geldi + per-roll lot.
-  goodsReceiptId String? @db.Uuid
-  supplierLotNo  String? @db.VarChar(64)
 
   // Audit — KK1 girişinde / sistem genelinde topu kim oluşturdu
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
@@ -929,7 +925,6 @@ model Roll {
   parent               Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
   children             Roll[]                      @relation("RollLineage")
   parentReceipt        SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
-  goodsReceipt         GoodsReceipt?               @relation(fields: [goodsReceiptId], references: [id])
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
   inheritedOperations  RollOperation[]             @relation("RollOperationInherited")
   dispatchItems        SubcontractorDispatchItem[]
@@ -988,9 +983,6 @@ model Roll {
   // "markedForKartela" = true) — migration 20260607020000. True olan satırlar
   // toplam rollerin %1-2'si → micro-index; false satırlar indekslenmez.
   @@index([markedForKartela])
-  @@index([goodsReceiptId])
-  // Y-1: tedarikçi-lot recall sorgusu — DB'de PARTIAL (WHERE IS NOT NULL), drift-free _idx deseni.
-  @@index([supplierLotNo])
   @@map("rolls")
 }
 
@@ -1014,7 +1006,6 @@ model Customer {
   colorAliases  CustomerColorAlias[]
   shipments     Shipment[]
   rollReturns   RollReturn[]
-  goodsReceipts GoodsReceipt[]       @relation("GoodsReceiptSupplier")
   templateRoutes CustomerTemplateRoute[]
 
   createdAt DateTime @default(now())
@@ -1022,32 +1013,6 @@ model Customer {
 
   @@index([type])
   @@map("customers")
-}
-
-/// Ham kumaş MAL KABUL belgesi (Y-1). Tedarikçiden gelen teslimatı temsil eder; KK1
-/// girişinde bu belgeye bağlı Roll'lar doğar. İzlenebilirliğin KÖKÜ — "hangi tedarikçi
-/// (+lot) hangi müşterilere sevk edildi" sorusu buradan yanıtlanır. Tedarikçi =
-/// Customer(type=SUPPLIER). NOT: app-code entegrasyonu (KK1'de oluşturma/bağlama) AYRI;
-/// bu şu an nullable foundation (Roll.goodsReceiptId opsiyonel).
-model GoodsReceipt {
-  id           String @db.Uuid @id @default(uuid())
-  receiptNo    String   @unique @db.VarChar(64) // MK-YYMM-NNNNNN (app üretir; withBarcodeRetry)
-  supplierId   String @db.Uuid // Customer(type=SUPPLIER)
-  deliveryNote String?  @db.VarChar(64) // Tedarikçi irsaliye no (opsiyonel)
-  receivedAt   DateTime @default(now())
-  receivedById String? @db.Uuid
-  notes        String?
-
-  supplier   Customer @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
-  receivedBy User?    @relation("GoodsReceiptReceivedBy", fields: [receivedById], references: [id])
-  rolls      Roll[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([supplierId])
-  @@index([receivedAt])
-  @@map("goods_receipts")
 }
 
 // =============================================================================
