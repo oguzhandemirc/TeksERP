@@ -127,7 +127,7 @@ export async function recomputeStepStatus(
 
 /**
  * İş emrini PLANNED → IN_PROGRESS'e çeker. Idempotent:
- *   - WO zaten IN_PROGRESS/PAUSED/COMPLETED/CANCELLED ise hiçbir şey olmaz.
+ *   - WO zaten IN_PROGRESS/COMPLETED/CANCELLED ise hiçbir şey olmaz.
  *   - updateMany + filter kullanır, status dışı durumlar bozulmaz.
  *
  * Rolleri attach etmek, bir step'i aktive etmek, fason intake yapmak vs. gibi

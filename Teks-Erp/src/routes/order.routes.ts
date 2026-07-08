@@ -269,7 +269,7 @@ router.get("/", verifyToken, requirePermission("order:read"), controller.findAll
  *     tags: [Orders]
  *     summary: İş emri picker'ı için müsait sipariş kalemleri
  *     description: |
- *       Aktif WO'ya (PLANNED/IN_PROGRESS/PAUSED/COMPLETED) bağlı kalemler
+ *       Aktif WO'ya (PLANNED/IN_PROGRESS/COMPLETED) bağlı kalemler
  *       hem `lines`'tan çıkarılır hem de hiç müsait satırı kalmayan sipariş
  *       tamamen düşer. CANCELLED WO blok değildir. `excludeWorkOrderId`
  *       verilirse o WO'nun kendi bağları "bağ değil gibi" sayılır
@@ -528,7 +528,7 @@ router.post(
  *       totalAmount, deadline, orderDate) + kalemler (lines) güncellenebilir: id
  *       eşleşene update, yeniye create, çıkarılana delete (diff). Aktif (CANCELLED-dışı)
  *       iş emri bağı varsa kalemler kilit (409); customer/branch değişimi
- *       IN_PROGRESS/PAUSED/COMPLETED WO bağında kilit. PARTIAL_SHIPPED'de yalnız
+ *       IN_PROGRESS/COMPLETED WO bağında kilit. PARTIAL_SHIPPED'de yalnız
  *       deadline. COMPLETED/CANCELLED kilitli. currency ISO 4217 kataloğuna, deadline
  *       >= orderDate kuralına göre doğrulanır.
  *     security:

@@ -88,7 +88,7 @@ function computeAllowedActions(
     // reddeder). Tek-sipariş ise CONVERT açık (müşteri kaydı silinir).
     return isSoleOrder ? ["UNLINK_ONLY", "CONVERT_TO_STOCK"] : ["UNLINK_ONLY"];
   }
-  if (woStatus === "IN_PROGRESS" || woStatus === "PAUSED") {
+  if (woStatus === "IN_PROGRESS") {
     return isSoleOrder
       ? ["UNLINK_ONLY", "CONVERT_TO_STOCK", "CANCEL_WO"]
       : ["UNLINK_ONLY"];
@@ -811,7 +811,6 @@ export class OrderService extends BaseService {
           in: [
             WorkOrderStatus.PLANNED,
             WorkOrderStatus.IN_PROGRESS,
-            WorkOrderStatus.PAUSED,
           ],
         },
         isActive: true,
@@ -923,7 +922,6 @@ export class OrderService extends BaseService {
           in: [
             WorkOrderStatus.PLANNED,
             WorkOrderStatus.IN_PROGRESS,
-            WorkOrderStatus.PAUSED,
           ],
         },
         isActive: true,
@@ -1302,7 +1300,7 @@ export class OrderService extends BaseService {
    * Kurallar:
    * - COMPLETED / CANCELLED → değiştirilemez (409).
    * - PARTIAL_SHIPPED → sadece `deadline` güncellenir; lines forbidden.
-   * - APPROVED / PENDING → header alanları açık. Aktif WO (IN_PROGRESS/PAUSED/
+   * - APPROVED / PENDING → header alanları açık. Aktif WO (IN_PROGRESS/
    *   COMPLETED) bağlıysa customerId/branchId değiştirilemez.
    * - Lines: CANCELLED dışı herhangi bir WO bağı yoksa düzenlenebilir.
    *   Diff stratejisi: id eşleşene update, eşleşmeyene create, mevcut'ta var
@@ -1402,7 +1400,7 @@ export class OrderService extends BaseService {
     const customerChanging = Object.prototype.hasOwnProperty.call(cleanData, "customerId");
 
     if (branchChanging || customerChanging) {
-      const blockingStatuses = new Set(["IN_PROGRESS", "PAUSED", "COMPLETED"]);
+      const blockingStatuses = new Set(["IN_PROGRESS", "COMPLETED"]);
       const hasBlockingWO = current.lines.some((line) =>
         line.workOrderLinks.some((link) =>
           blockingStatuses.has(link.workOrder.status)
@@ -1638,7 +1636,7 @@ export class OrderService extends BaseService {
    *   - Sipariş hiçbir WO'ya bağlı değilse sorunsuz iptal.
    *   - PLANNED durumdaki WO bağları varsa → join satırlarını otomatik kopar
    *     (WO hayatta kalır, operatör isterse STOCK_PRODUCTION'a çevirir).
-   *   - IN_PROGRESS / PAUSED / COMPLETED durumda WO varsa → 409 conflict.
+   *   - IN_PROGRESS / COMPLETED durumda WO varsa → 409 conflict.
    *     Operatör önce o WO'yu iptal etmeli.
    */
   /**
@@ -1714,7 +1712,7 @@ export class OrderService extends BaseService {
     }
 
     const allLinks = oldRecord.lines.flatMap((line) => line.workOrderLinks);
-    const blockingStatuses = new Set(["IN_PROGRESS", "PAUSED", "COMPLETED"]);
+    const blockingStatuses = new Set(["IN_PROGRESS", "COMPLETED"]);
     const blockingWOs = allLinks
       .map((l) => l.workOrder)
       .filter((wo) => blockingStatuses.has(wo.status));
@@ -1808,10 +1806,10 @@ export class OrderService extends BaseService {
   //
   // Operatör "Sipariş Sil" derken katı 409 yerine WO başına seçim sunulur:
   //   - PLANNED WO          → otomatik UNLINK_ONLY (üretim yok, sessiz kopar)
-  //   - IN_PROGRESS/PAUSED ya da COMPLETED + tek-sipariş WO
+  //   - IN_PROGRESS ya da COMPLETED + tek-sipariş WO
   //                         → UNLINK_ONLY | CONVERT_TO_STOCK | CANCEL_WO
-  //                           (CANCEL_WO sadece IN_PROGRESS/PAUSED için)
-  //   - IN_PROGRESS/PAUSED ya da COMPLETED + çoklu-sipariş WO
+  //                           (CANCEL_WO sadece IN_PROGRESS için)
+  //   - IN_PROGRESS ya da COMPLETED + çoklu-sipariş WO
   //                         → sadece UNLINK_ONLY (diğer siparişler ayakta)
   //
   // Frontend önce `getCancelPreview` ile etkilenecek WO listesini alır,

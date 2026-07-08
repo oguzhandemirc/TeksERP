@@ -36,7 +36,7 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         description: Parti numarası ile arama
  *       - in: query
  *         name: filter[status]
- *         schema: { type: string, enum: [PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED] }
+ *         schema: { type: string, enum: [PLANNED, IN_PROGRESS, COMPLETED, CANCELLED] }
  *       - in: query
  *         name: filter[type]
  *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION] }

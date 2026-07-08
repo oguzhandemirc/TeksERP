@@ -9,7 +9,7 @@
 // Talep    = Σ (quantity − shippedQty) açık siparişlerden (CANCELLED/COMPLETED hariç)
 // Depo     = WAREHOUSE, sevke okutulmamış (shipmentId=null) toplar
 // Ham      = STOCK, sevksiz toplar (işlenecek hazır kumaş)
-// Üretimde = canlı WO'ların (PLANNED/IN_PROGRESS/PAUSED) hedef-spec başına
+// Üretimde = canlı WO'ların (PLANNED/IN_PROGRESS) hedef-spec başına
 //            in-flight malzemesi = committed − finished (computeWoMaterial).
 //            Renk-veren fason (beyaz→kırmızı) doğru spec'e yazılsın diye top
 //            statüsünden değil WO HEDEF spec'inden hesaplanır.
@@ -23,7 +23,6 @@ import { computeWoMaterial } from "./helpers/coverage.helper";
 const LIVE_WO: WorkOrderStatus[] = [
   WorkOrderStatus.PLANNED,
   WorkOrderStatus.IN_PROGRESS,
-  WorkOrderStatus.PAUSED,
 ];
 
 const D0 = () => new Prisma.Decimal(0);
