@@ -142,7 +142,7 @@ export async function recomputeStepStatus(
             ? new Date()
             : undefined,
         completedAt:
-          nextStatus === StepStatus.COMPLETED ? new Date() : undefined,
+          nextStatus === StepStatus.COMPLETED ? new Date() : null,
       },
     });
   }

@@ -4574,7 +4574,14 @@ export class WorkOrderService {
           { currentStepId: { in: wo.steps.map((s) => s.id) } },
         ],
       },
-      include: { item: true },
+      // F69: manifest yalnız bu alanları kullanıyor — tüm item satırını çekme (over-fetch).
+      select: {
+        barcode: true,
+        currentQty: true,
+        weightKg: true,
+        status: true,
+        item: { select: { name: true } },
+      },
     });
 
     // Hedef adım (rota'nın ilk istasyonu) — dyehouse alanı kaldırıldığı için
