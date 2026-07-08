@@ -17,6 +17,7 @@ Denetim sonrası düzeltmeler bir git branch'inde (**5 commit**) uygulandı; her
 | **Faz 5** `b43fdba` — migration `…130000` | O-13, O-14, D-5, D-6, D-7 | 9 index drop + 2 composite + partial; **dev'e uygulandı + resolve** |
 | **Faz 6** `49ecb71` — migration `…140000` | O-9, O-10, O-11, D-9, D-14, D-16, B-11 | dyehouseNote/updatedAt/uuid + `consistency-check.sql` + doc; **dev'e uygulandı + resolve** |
 | **Faz 7** `c550ac4` — migration `…150000` | Y-1, O-19 | GoodsReceipt (izlenebilirlik kökü) + Roll.goodsReceiptId/supplierLotNo + Shipment/Sack operatör izi; **şema foundation** (app-code entegrasyonu devir); dev'e uygulandı + resolve |
+| **Faz 8** `6a26075` — migration `…160000` | **F103** (backend denetimi, çapraz-koordinasyon) | shipment_orders.isActive + partial unique `(orderId) WHERE isActive` → "bir sipariş tek aktif sevkiyatta" DB seddi; backend'in serileştirme kilidinin yerini alır (bakım app-code'da); dev'e uygulandı + resolve |
 | **Backend track** (ayrı oturum) | Y-2, Y-3, O-1, O-2, O-3, O-4, O-6, O-18, O-21, O-23, D-13, D-15, B-1 + **Y-1/O-19 app-code** | app-code (`services`/`controllers`/`lib`) — devredildi |
 | **Ürün kararı** (ileriye) | O-20, D-3 | çuval dara/net + vardiya-maliyet (bugünün ihtiyacı değil) |
 | **Bilgi — aksiyon yok** | B-2…B-10, D-2 vb. | bilinçli tasarım tespitleri (belge amaçlı) |
