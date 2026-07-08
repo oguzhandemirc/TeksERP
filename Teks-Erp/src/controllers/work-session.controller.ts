@@ -56,6 +56,7 @@ export class WorkSessionController {
         machineId: body.machineId ?? null,
         stationId: body.stationId ?? null,
         confirmTakeover: body.confirmTakeover ?? false,
+        permissions: req.user!.permissions, // F221: istasyon-türü izin enforcement
       });
       res.status(201).json(result);
     } catch (e) {

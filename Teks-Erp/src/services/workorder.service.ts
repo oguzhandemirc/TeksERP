@@ -3121,7 +3121,9 @@ export class WorkOrderService {
     // değişmeyen alanın yeniden gönderilmesi serbesttir (bayat form zararsız).
     const locks = await computeWorkOrderLocks(prisma, id);
     if (
-      data.width != null &&
+      // F59: null'a çekme de kilide çarpmalı (width artık NULL yazılabildiğinden);
+      // `!= null` kilitli en'in NULL'lanmasını kaçırıyordu → `!== undefined`.
+      data.width !== undefined &&
       normNum(wo.width) !== normNum(data.width) &&
       locks.width
     ) {
@@ -3219,7 +3221,8 @@ export class WorkOrderService {
       // WO satırını kilitlediğinden ara-adım geçişleri de bu kilitle serileşir.
       await touchWorkOrderTx(tx, id);
       const freshLocks = await computeWorkOrderLocks(tx, id);
-      if (data.width != null && normNum(wo.width) !== normNum(data.width) && freshLocks.width) {
+      // F59: tx-içi taze kilit kontrolü de `!== undefined` (NULL'a çekme kilide çarpsın).
+      if (data.width !== undefined && normNum(wo.width) !== normNum(data.width) && freshLocks.width) {
         throw AppError.conflict(freshLocks.reasons.width ?? "En kilitli.");
       }
       if (
@@ -3251,9 +3254,11 @@ export class WorkOrderService {
         },
         data: {
           batchNumber: data.batchNumber?.trim() || undefined,
-          width: data.width ?? undefined,
-          targetQuantity: data.targetQuantity ?? undefined,
-          targetWeight: data.targetWeight ?? undefined,
+          // F59: null'ı gerçek NULL olarak yaz (gönderilmeyen=undefined ile ayrış);
+          // `?? undefined` null'ı sessizce yutup temizlemeyi kaçırıyordu.
+          width: data.width === undefined ? undefined : data.width,
+          targetQuantity: data.targetQuantity === undefined ? undefined : data.targetQuantity,
+          targetWeight: data.targetWeight === undefined ? undefined : data.targetWeight,
           plannedStartDate: data.plannedStartDate
             ? new Date(data.plannedStartDate)
             : data.plannedStartDate === null

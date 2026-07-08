@@ -1222,9 +1222,9 @@ export class TamburService {
         parentRoll: { select: { id: true, barcode: true } },
       },
     });
-    if (!swatch) {
-      return { success: false, data: null, message: "Kartela bulunamadı" };
-    }
+    // F292: kardeş getByCardBarcode/getStep deseniyle hizala — bulunamayan barkod
+    // 404 (controller {success:false}'u incelemiyor → servis-throw güvenli).
+    if (!swatch) throw AppError.notFound("Kartela bulunamadı");
     return { success: true, data: swatch };
   }
 

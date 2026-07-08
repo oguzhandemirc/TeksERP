@@ -92,7 +92,8 @@ router.post(
 router.get(
   "/",
   verifyToken,
-  requireAnyPermission("return:read", "return:write"),
+  // F197: getById (:id) ile parite — mobil iade operatörü listeyi de görebilsin.
+  requireAnyPermission("return:read", "return:write", "mobile:iade"),
   controller.list
 );
 

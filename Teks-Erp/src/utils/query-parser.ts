@@ -94,15 +94,23 @@ export function parseQueryParams(req: Request): QueryParams {
 
   const dateField = req.query.dateField as string | undefined;
   const dateFrom = parseIsoDate(req.query.dateFrom);
-  const dateTo = parseIsoDate(req.query.dateTo);
+  // F293: yalnız-tarih (YYYY-MM-DD) dateTo'yu gün SONUNA genişlet — lte ile sınır
+  // günü dışlanmasın (savunmacı; canlı frontend'ler zaten gün-sonu yolluyor, ham
+  // API/script tüketicisi date-only yollarsa doğru davransın). Tam ISO (T'li) kalır.
+  const dateTo = parseIsoDate(req.query.dateTo, true);
 
   return { page, pageSize, sortBy, sortOrder, filters, search, dateField, dateFrom, dateTo };
 }
 
-function parseIsoDate(value: unknown): Date | undefined {
+function parseIsoDate(value: unknown, endOfDayIfDateOnly = false): Date | undefined {
   if (typeof value !== "string" || !value) return undefined;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? undefined : d;
+  const raw = value.trim();
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return undefined;
+  if (endOfDayIfDateOnly && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(`${raw}T23:59:59.999Z`);
+  }
+  return d;
 }
 
 /**

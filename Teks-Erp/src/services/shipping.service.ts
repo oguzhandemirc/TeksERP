@@ -66,6 +66,9 @@ import {
 // `applyDateRange` ile: createdAt indexli (`[status, createdAt]`), diğerleri tarih
 // penceresiyle sınırlı.
 const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier"];
+// F105: listShipments filter[] whitelist'i (resolveSortBy disiplinine paralel) —
+// whitelist-dışı ?filter[x]= sessizce düşer, keyfi kolon where'e sızmaz.
+const SHIPMENT_FILTER_FIELDS = ["status", "customerId", "branchId"] as const;
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt", "readyAt"] as const;
 
 // ---------------------------------------------------------------------------
@@ -772,8 +775,13 @@ export class ShippingService {
     // Electron FilterBar/sekme → filter[status] (tek-değer veya çoklu CSV→{in}),
     // filter[customerId], filter[branchId] + arama (shipmentNo/plaka/sürücü/taşıyıcı)
     // tek seferde kurulur; ardından tarih aralığı (whitelist) eklenir.
+    // F105: ham params.filters yerine whitelist'lenmiş filtre geç.
+    const safeFilters: Record<string, string | string[]> = {};
+    for (const [k, v] of Object.entries(params.filters)) {
+      if ((SHIPMENT_FILTER_FIELDS as readonly string[]).includes(k)) safeFilters[k] = v;
+    }
     const where = buildWhereClause(
-      params.filters,
+      safeFilters,
       SHIPMENT_SEARCH_FIELDS,
       params.search
     ) as Prisma.ShipmentWhereInput;
@@ -2822,8 +2830,10 @@ export class ShippingService {
 
     const rollIds = shipment.rolls.map((r) => r.id);
     const orderIds = shipment.orders.map((o) => o.orderId);
-    // Yeni modelde karşılanma yalnız DISPATCH'te yazılır; PREPARING/READY'de tahsis yoktur
-    // (DISPATCHED zaten iptal edilemez). hadAllocations defansif: eski/legacy kayıt güvenliği.
+    // F104: markReady (commitGoodsTx) karşılanmayı READY'de yazar → READY/AT_DOOR
+    // sevkiyatta tahsis VARDIR. hadAllocations=true ise iptal shippedQty'yi geri alır;
+    // ancak toplar READY'de hâlâ WAREHOUSE (stok yalnız DISPATCH'te SHIPPED düşer) —
+    // statü restorasyonu bu yüzden SADECE SHIPPED legacy toplara uygulanır (aşağıda).
     const hadAllocations = shipment.allocations.length > 0;
 
     await prisma.$transaction(async (tx) => {
@@ -2853,14 +2863,21 @@ export class ShippingService {
         }
         await tx.shipmentAllocation.deleteMany({ where: { shipmentId } });
       }
-      // Toplar serbest — shipment/çuval bağı kopar. PREPARING/READY'de status zaten WAREHOUSE;
-      // tahsis varsa (legacy SHIPPED) WAREHOUSE'a geri çek.
-      // CANLI where (M-2): snapshot rollIds, claim öncesi okunduğundan eşzamanlı
-      // scan'le eklenen topu kaçırır ve top CANCELLED sevkiyata bağlı kalırdı —
-      // swatch temizliğiyle aynı dil (where: {shipmentId}).
+      // F104: Statü restorasyonu ÖNCE (link dururken) ve YALNIZ fiziksel çıkışı
+      // yapılmış (SHIPPED) legacy toplara — iptal/scrap edilmiş edge topu (shipmentId'si
+      // duran ama CANCELLED/SCRAP olan) koşulsuz WAREHOUSE flip'i DİRİLTMESİN.
+      if (hadAllocations) {
+        await tx.roll.updateMany({
+          where: { shipmentId, status: RollStatus.SHIPPED },
+          data: { status: RollStatus.WAREHOUSE },
+        });
+      }
+      // Bağ koparma: TÜM bağlı toplar sevkiyat/çuvaldan ayrılır (statüye DOKUNMADAN).
+      // CANLI where (M-2): snapshot rollIds yerine {shipmentId} — eşzamanlı scan'le
+      // eklenen topu kaçırmaz (swatch temizliğiyle aynı dil).
       await tx.roll.updateMany({
         where: { shipmentId },
-        data: { shipmentId: null, sackId: null, ...(hadAllocations ? { status: RollStatus.WAREHOUSE } : {}) },
+        data: { shipmentId: null, sackId: null },
       });
       // Kartelalar serbest
       await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null, sackId: null } });

@@ -20,6 +20,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { resolveActiveSession, sweepIdleSessions } from "./helpers/work-session.helper";
 import { buildPagination } from "../utils/query-parser";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { WorkSessionEndReason, StationKind } from "@prisma/client";
 import type { ApiResponse, PaginatedResponse } from "../types/api.types";
 
@@ -30,6 +31,16 @@ const TABLE = "WORK_SESSION";
  * backend aynası (RAW_QC→KK1, PROCESS_QC→KK2/Kurşun, TAMBUR→Tambur, SHIPPING→Tartı/Paket).
  */
 export const SESSIONABLE_STATION_KINDS = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SHIPPING"] as const;
+
+// F221: StationKind → o istasyonda oturum açmak için gereken MOBILE izni. mobile:*
+// ve * wildcard'ları matchesPermission ile geçer; yalnız ilgili izne sahip operatör
+// o tür istasyonu açabilir/devralabilir (örn. mobile:kk1'li kullanıcı TAMBUR açamaz).
+const STATION_KIND_PERM: Record<string, string> = {
+  RAW_QC: "mobile:kk1",
+  PROCESS_QC: "mobile:kk2-kursun",
+  TAMBUR: "mobile:tambur",
+  SHIPPING: "mobile:tarti-paket",
+};
 
 /** Oturum açma yetkisi olan mobil ekran izinleri (routes + peripheral for-session paylaşır). */
 export const MOBILE_SESSION_PERMS = [
@@ -163,6 +174,10 @@ export class WorkSessionService {
     machineId?: string | null;
     stationId?: string | null;
     confirmTakeover?: boolean;
+    /** F221: sağlanırsa istasyon-türü izni ENFORCE edilir. Controller req.user.permissions'ı
+     *  HER ZAMAN geçirir (0-izinli kullanıcı = [] → reddedilir). Omit = güvenilen dahili
+     *  çağrı (test/servis-içi) → kontrol atlanır. Güvenlik sınırı controller'dadır. */
+    permissions?: readonly string[];
   }): Promise<ApiResponse<unknown>> {
     const machineId = input.machineId ?? null;
     const stationIdInput = input.stationId ?? null;
@@ -185,6 +200,11 @@ export class WorkSessionService {
       }
       if (!isSessionableKind(machine.station.kind)) {
         throw AppError.badRequest("Bu istasyon türünde çalışma oturumu açılamaz");
+      }
+      // F221: istasyon türü izni (yalnız mobile:kk1 olan TAMBUR makinesini açamaz/devralamaz).
+      const needM = STATION_KIND_PERM[machine.station.kind];
+      if (input.permissions !== undefined && needM && !matchesPermission(input.permissions, needM)) {
+        throw AppError.forbidden("Bu istasyon türünde oturum açma yetkiniz yok");
       }
       stationId = machine.stationId;
 
@@ -220,6 +240,11 @@ export class WorkSessionService {
       if (!station) throw AppError.badRequest("İstasyon bulunamadı veya pasif");
       if (!isSessionableKind(station.kind)) {
         throw AppError.badRequest("Bu istasyon türünde çalışma oturumu açılamaz");
+      }
+      // F221: istasyon türü izni (makine dalıyla aynı).
+      const needS = STATION_KIND_PERM[station.kind];
+      if (input.permissions !== undefined && needS && !matchesPermission(input.permissions, needS)) {
+        throw AppError.forbidden("Bu istasyon türünde oturum açma yetkiniz yok");
       }
       const machineCount = await prisma.machine.count({
         where: { stationId: station.id, isActive: true },
