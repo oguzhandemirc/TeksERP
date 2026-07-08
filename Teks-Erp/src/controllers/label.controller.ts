@@ -274,7 +274,11 @@ export class LabelController {
   getBulkRollLabelsHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = bulkLabelsSchema.parse(req.body);
-      const result = await this.service.getBulkRollLabelsHtml(body.rollIds, { copies: body.copies });
+      const result = await this.service.getBulkRollLabelsHtml(body.rollIds, {
+        copies: body.copies,
+        peripheralId: body.peripheralId, // F183: cihaz-yönlendirme (native handler paritesi)
+        deviceId: req.device?.id ?? undefined,
+      });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(result.data.html);
     } catch (e) { next(e); }

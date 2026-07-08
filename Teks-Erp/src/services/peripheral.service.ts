@@ -41,6 +41,17 @@ export class PeripheralDeviceService extends BaseService {
     return { deletedAt: null };
   }
 
+  /** F220: findById de tombstone'ları (deletedAt dolu) 404 saysın — BaseService.findById
+   *  extraWhere uygulamaz, silinmiş cihaz doğrudan id ile hâlâ çekilebiliyordu. */
+  async findById(id: string): Promise<ApiResponse<unknown>> {
+    const record = await this.delegate.findFirst({
+      where: { id, deletedAt: null },
+      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+    });
+    if (!record) throw AppError.notFound("Cihaz bulunamadı");
+    return { success: true, data: record };
+  }
+
   private async validateRefs(data: Record<string, unknown>, existingId?: string): Promise<void> {
     // Sahiplik: makineye-sabit VEYA makinesiz-istasyona-sabit VEYA tablete-bağlı —
     // en fazla BİRİ (boş serbest). Update'te mevcut kayıtla BİRLEŞTİRİLMİŞ sahiplik
@@ -334,9 +345,10 @@ export class PeripheralDeviceService extends BaseService {
       printerIp: p.address,
       port: p.port ?? undefined,
     });
-    await AuditService.log({
-      userId, action: "CREATE", tableName: PERIPHERAL_TABLE, recordId: id,
-      newData: { test: true, delivered: result.delivered, simulated: result.simulated, target: result.target },
+    // F219: test baskısı kayıt OLUŞTURMAZ → CUD log yerine SYSTEM event (yanıltıcı CREATE değil).
+    await AuditService.logEvent({
+      category: "SYSTEM", action: "PERIPHERAL_TEST", userId: userId ?? null, recordId: id,
+      payload: { delivered: result.delivered, simulated: result.simulated, target: result.target },
     }).catch(() => undefined);
     return { success: true, data: result };
   }

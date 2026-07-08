@@ -864,7 +864,7 @@ export class LabelService {
    */
   async getBulkRollLabelsHtml(
     rollIds: string[],
-    opts?: { copies?: number },
+    opts?: { copies?: number; peripheralId?: string; deviceId?: string },
   ): Promise<ApiResponse<{ html: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
@@ -873,7 +873,12 @@ export class LabelService {
     // N+1 → O(1): format/template/copies'i bir kez çöz + tüm top + ilişki verisini
     // toplu prefetch et. Render (aşağıdaki döngü) DEĞİŞMEDEN preloaded bağlamı kullanır;
     // çıktı per-roll yolla BYTE-IDENTİK (bkz. test_bulk_label_batched.ts).
-    const ctx = await this.buildBulkContext(ids, copies);
+    // F183: cihaz bağlamı (peripheralId/deviceId) native handler ile parite — iş
+    // istasyonunun kendi yazıcı dilinde/şablonunda toplu bassın.
+    const ctx = await this.buildBulkContext(ids, copies, {
+      peripheralId: opts?.peripheralId,
+      deviceId: opts?.deviceId,
+    });
 
     const bodyRe = /<body[^>]*>([\s\S]*?)<\/body>/i;
     let head = "";

@@ -218,7 +218,7 @@ export class DeviceService {
     await prisma.$transaction([
       prisma.devicePeripheral.deleteMany({ where: { deviceId: id } }),
       ...(ids.length
-        ? [prisma.devicePeripheral.createMany({ data: ids.map((peripheralId) => ({ deviceId: id, peripheralId })) })]
+        ? [prisma.devicePeripheral.createMany({ data: ids.map((peripheralId) => ({ deviceId: id, peripheralId })), skipDuplicates: true })] // F218
         : []),
     ]);
     await AuditService.log({

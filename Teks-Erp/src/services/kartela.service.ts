@@ -1336,6 +1336,8 @@ export class KartelaService {
         itemId: data.itemId,
         colorId: data.colorId,
         count: data.count,
+        // F177: hangi kartelaların düşüldüğü izlensin (recordId yalnız ilkini gösteriyordu).
+        swatchIds: ids.slice(0, 100),
         reason,
       },
     });
