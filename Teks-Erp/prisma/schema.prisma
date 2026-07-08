@@ -990,6 +990,9 @@ model Roll {
   // "markedForKartela" = true) — migration 20260607020000. True olan satırlar
   // toplam rollerin %1-2'si → micro-index; false satırlar indekslenmez.
   @@index([markedForKartela])
+  // F123: status-filtreli listede currentQty sıralaması (depo miktar). initialQty/width/
+  // qualityGrade İÇİN eklenmedi — rolls çok-index'li (D-8); ölçekte EXPLAIN ihtiyaç gösterirse.
+  @@index([status, currentQty])
   @@map("rolls")
 }
 
