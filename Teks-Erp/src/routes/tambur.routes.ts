@@ -153,12 +153,11 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [rollId, stepId, startMeter, endMeter, defectTypeId]
+ *             required: [rollId, stepId, startMeter, defectTypeId]
  *             properties:
  *               rollId:       { type: string, format: uuid }
  *               stepId:       { type: string, format: uuid }
  *               startMeter:   { type: number }
- *               endMeter:     { type: number }
  *               defectTypeId: { type: string, format: uuid }
  *     responses:
  *       201: { description: Hata kaydı oluşturuldu }
@@ -215,43 +214,29 @@ router.get("/rolls/:rollId", verifyToken, requireAnyPermission("quality:read", "
  *         application/json:
  *           schema:
  *             type: object
- *             required: [rollId, netCurrentQty, decisions]
+ *             required: [rollId]
  *             properties:
- *               rollId:
- *                 type: string
- *                 format: uuid
- *               netCurrentQty:
- *                 type: number
- *                 description: Kesimler sonrası net metraj
- *                 example: 115.3
+ *               rollId: { type: string, format: uuid }
+ *               cuts:
+ *                 type: array
+ *                 description: Operatörün tamburda yaptığı sıralı kesimler; her biri yeni child Roll.
+ *                 items:
+ *                   type: object
+ *                   required: [length, qualityGrade]
+ *                   properties:
+ *                     length: { type: number, description: Kesim uzunluğu (m), pozitif }
+ *                     qualityGrade: { type: string, description: Kesilen parçanın kalite kodu }
+ *                     relatedErrorIds: { type: array, items: { type: string, format: uuid } }
  *               decisions:
  *                 type: array
  *                 items:
  *                   type: object
  *                   required: [errorId, decision]
  *                   properties:
- *                     errorId:
- *                       type: string
- *                       format: uuid
- *                     decision:
- *                       type: string
- *                       enum: [CUT, NO_CUT]
- *                     qualityGrade:
- *                       type: string
- *                       description: "Kesilen parçanın kalitesi (FIRE, A1 vb.)"
- *                       default: "FIRE"
- *               foldType:
- *                 type: string
- *                 enum: [2-KAT, 4-KAT]
- *                 description: Katlama şekli
- *               cutMode:
- *                 type: string
- *                 enum: [BY_DEFECT, FIXED_LENGTH]
- *                 description: Kesim stratejisi — hata noktasında mı, sabit metrede mi
- *               cutLengthM:
- *                 type: number
- *                 description: FIXED_LENGTH ise her kaç metrede bir kesilecek
- *                 example: 50
+ *                     errorId: { type: string, format: uuid }
+ *                     decision: { type: string, enum: [CUT, NO_CUT] }
+ *               foldType: { type: string, enum: [2-KAT, 4-KAT] }
+ *               markedForKartela: { type: boolean }
  *     responses:
  *       200:
  *         description: Tambur finalizasyonu tamamlandı (orijinal top + kesim topları)

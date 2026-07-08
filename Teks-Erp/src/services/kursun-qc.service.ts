@@ -586,7 +586,8 @@ export class KursunQcService {
    */
   async finishStep(
     data: { stepId: string },
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<{ movedRollCount: number }>> {
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
@@ -682,6 +683,7 @@ export class KursunQcService {
         SET "qtyOut" = "qtyIn",
             "weightOut" = "weightIn",
             "exitedAt" = NOW(),
+            "machineId" = COALESCE(${machineId ?? null}::uuid, "machineId"),
             "notes" = ${finishMarker}
         WHERE "workOrderStepId" = ${step.id}::uuid
           AND "exitedAt" IS NULL
@@ -1381,38 +1383,40 @@ export class KursunQcService {
   ): Promise<ApiResponse<{ id: string; isUrgent: boolean; urgentMarkedAt: Date | null }>> {
     if (!userId) throw AppError.unauthorized();
 
-    const existing = await prisma.workOrderStep.findUnique({
-      where: { id: stepId },
-      select: {
-        id: true,
-        isUrgent: true,
-        status: true,
-        station: { select: { kind: true } },
+    // F167: atomik claim — eşzamanlı finishStep step'i COMPLETED'e çekerken
+    // check-then-act tamamlanmış adıma acil rozeti yazabilirdi. updateMany
+    // status/station koşulunu tek sorguda pinler; 0 satır → nedeni ayır.
+    const claimed = await prisma.workOrderStep.updateMany({
+      where: {
+        id: stepId,
+        status: { not: StepStatus.COMPLETED },
+        station: { kind: StationKind.PROCESS_QC },
       },
+      data: { isUrgent, urgentMarkedAt: isUrgent ? new Date() : null },
     });
-    if (!existing) throw AppError.notFound("Adım bulunamadı");
-    if (existing.station.kind !== StationKind.PROCESS_QC) {
-      throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
-    }
-    if (existing.status === StepStatus.COMPLETED) {
+    if (claimed.count === 0) {
+      const existing = await prisma.workOrderStep.findUnique({
+        where: { id: stepId },
+        select: { status: true, station: { select: { kind: true } } },
+      });
+      if (!existing) throw AppError.notFound("Adım bulunamadı");
+      if (existing.station.kind !== StationKind.PROCESS_QC) {
+        throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
+      }
       throw AppError.badRequest("Adım tamamlanmış, acil işaretlenemez");
     }
 
-    const updated = await prisma.workOrderStep.update({
+    const updated = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
-      data: {
-        isUrgent,
-        urgentMarkedAt: isUrgent ? new Date() : null,
-      },
       select: { id: true, isUrgent: true, urgentMarkedAt: true },
     });
+    if (!updated) throw AppError.notFound("Adım bulunamadı");
 
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "WORK_ORDER_STEP",
       recordId: stepId,
-      oldData: { isUrgent: existing.isUrgent },
       newData: { isUrgent: updated.isUrgent, kursunQueue: true },
     });
 

@@ -143,12 +143,12 @@ async function closeOrphanRollErrors(
   rollId: string,
   stepId: string | null,
   userId?: string
-): Promise<number> {
+): Promise<string[]> {
   const open = await tx.rollError.findMany({
     where: { rollId, isProcessed: false },
     select: { id: true },
   });
-  if (open.length === 0) return 0;
+  if (open.length === 0) return [];
   await tx.rollError.updateMany({
     where: { id: { in: open.map((e) => e.id) } },
     data: {
@@ -159,7 +159,7 @@ async function closeOrphanRollErrors(
       processedAt: new Date(),
     },
   });
-  return open.length;
+  return open.map((e) => e.id);
 }
 
 interface TamburRollErrorSummary {
@@ -180,6 +180,8 @@ interface TamburRollSummary {
   currentQty: number;
   width: number | null;
   qualityGrade: string;
+  /** Parent'tan miras FabricProperty özet listesi (mobil karar ekranı gösterir). */
+  properties: { id: string; name: string }[];
   errorCount: number;
   errors: TamburRollErrorSummary[];
   /** Dal (fason partisi) kimliği — null = fasonsuz/doğrudan top. */
@@ -586,7 +588,10 @@ export class TamburService {
     const errorIds = errorDecisions.map((d) => d.errorId);
     const errors = errorIds.length
       ? await prisma.rollError.findMany({
-          where: { id: { in: errorIds }, rollId: data.rollId },
+          // F134: yalnız AÇIK hatalar — daha önce idari NO_CUT ile kapanmış bir
+          // errorId decisions'da gelirse tarihçesi (actionTaken/processedAt/By)
+          // ezilmesin. Kapanmış hata errorById'de olmaz → aşağıdaki loop atlar.
+          where: { id: { in: errorIds }, rollId: data.rollId, isProcessed: false },
         })
       : [];
     const errorById = new Map(errors.map((e) => [e.id, e]));
@@ -687,6 +692,9 @@ export class TamburService {
     // commit ettiğinden hayalet kayıt kalırdı. Döngüde topla, tx commit ettikten
     // SONRA emit et.
     const childAudits: Array<{ recordId: string; newData: Record<string, unknown> }> = [];
+    // F140: kapatılan RollError'lar için tx-sonrası per-satır audit (agregat log
+    // kapatılan tekil hatayı iz tutmuyordu). tx İÇİNDE toplanır, commit sonrası emit.
+    const closedErrorAudits: Array<{ errorId: string; actionTaken: string }> = [];
     const updatedRoll = await prisma.$transaction(async (tx) => {
       // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
       // (~1024) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
@@ -764,15 +772,18 @@ export class TamburService {
           },
         });
         processedCount++;
+        closedErrorAudits.push({ errorId: d.errorId, actionTaken });
       }
 
       // #8 — decisions'ta geçmeyen açık hatalar NO_CUT olarak otomatik kapansın.
-      processedCount += await closeOrphanRollErrors(
+      const orphanClosedIds = await closeOrphanRollErrors(
         tx,
         data.rollId,
         roll.currentStepId,
         userId
       );
+      processedCount += orphanClosedIds.length;
+      for (const eid of orphanClosedIds) closedErrorAudits.push({ errorId: eid, actionTaken: "NO_CUT" });
 
       // Parent'ın FabricProperty listesini bir kez çek — her çocuğa miras kalır.
       // (Renk veren fason adımında WO.targetProperties parent.properties'e zaten
@@ -1073,6 +1084,17 @@ export class TamburService {
         hadRemainingTail: cumulativeLenD.lessThan(totalQtyD),
       },
     });
+
+    // F140: kapatılan RollError'ların per-satır izini emit et (best-effort, tx dışı).
+    if (closedErrorAudits.length > 0) {
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ROLL_ERROR",
+        recordId: closedErrorAudits.map((e) => e.errorId).join(","),
+        newData: { tamburFinalize: true, rollId: data.rollId, closures: closedErrorAudits },
+      });
+    }
 
     const tailNote = cumulativeLenD.lessThan(totalQtyD) ? " + kalan kuyruk top" : "";
     const baseMsg = `Tambur tamamlandı. Parent bölündü, ${splitRolls.length} yeni top oluşturuldu (${inputCuts.length} kesim${tailNote}, ${processedCount} hata işlendi).`;

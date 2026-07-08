@@ -84,7 +84,8 @@ export class KursunQcController {
   /** GET /api/kursun-qc/step/:stepId */
   async getStep(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getStep(req.params.stepId as string);
+      const stepId = z.string().uuid("Geçersiz adım ID").parse(req.params.stepId);
+      const result = await this.service.getStep(stepId);
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -154,7 +155,14 @@ export class KursunQcController {
   async finishStep(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = finishStepSchema.parse(req.body);
-      const result = await this.service.finishStep(body, req.user?.userId);
+      // F165: kapanan KK2 movement'ına makine damgası — kursunFinish ile hizala.
+      // Non-enforcing: oturum yoksa null döner (finishStep oturum zorunlu KILMAZ).
+      const stamp = await getStampContext(req);
+      const result = await this.service.finishStep(
+        body,
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -207,9 +215,10 @@ export class KursunQcController {
   /** PATCH /api/kursun-qc/queue/:stepId/urgent */
   async setQueueUrgent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const stepId = z.string().uuid("Geçersiz adım ID").parse(req.params.stepId);
       const body = setUrgentSchema.parse(req.body);
       const result = await this.service.setQueueUrgent(
-        req.params.stepId as string,
+        stepId,
         body.isUrgent,
         req.user?.userId,
       );
