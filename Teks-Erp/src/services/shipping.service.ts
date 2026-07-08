@@ -1148,7 +1148,8 @@ export class ShippingService {
     if (ids.length === 0) return;
     await tx.sack.updateMany({
       where: { id: { in: ids }, weightKg: { not: null } },
-      data: { weightKg: null },
+      // O-19: tartı sıfırlanınca tartan izi de temizlenir (içerik değişti → yeniden tartılmalı).
+      data: { weightKg: null, weighedById: null, weighedAt: null },
     });
   }
 
@@ -1807,6 +1808,8 @@ export class ShippingService {
             seq: (maxSeqRow?.seq ?? 0) + 1,
             manualCode: effectiveCode,
             weightKg: data.weightKg != null ? new Prisma.Decimal(data.weightKg) : null,
+            // O-19: açılışta tartıyla geldiyse tartan operatör izi de damgalanır (updateSack ile parite).
+            ...(data.weightKg != null ? { weighedById: userId ?? null, weighedAt: new Date() } : {}),
           },
           select: { id: true, sackNo: true, seq: true, weightKg: true, manualCode: true },
         });
@@ -1856,7 +1859,12 @@ export class ShippingService {
     }
 
     const update: Prisma.SackUpdateInput = {};
-    if (hasWeight) update.weightKg = new Prisma.Decimal(data.weightKg!);
+    if (hasWeight) {
+      update.weightKg = new Prisma.Decimal(data.weightKg!);
+      // O-19: tartan operatör izi — tartı set edilirken damgalanır.
+      update.weighedBy = userId ? { connect: { id: userId } } : { disconnect: true };
+      update.weighedAt = new Date();
+    }
     let codeForLog: string | null | undefined;
     if (hasCode) {
       const code = data.manualCode?.trim() || null; // serbest format, benzersizlik aranmaz
@@ -2416,7 +2424,8 @@ export class ShippingService {
       // İKİ KEZ çalışıp shippedQty'yi çift ARTIRIR. Bkz unmarkReady / tambur claim (~626).
       const claim = await tx.shipment.updateMany({
         where: { id: shipmentId, status: ShipmentStatus.PREPARING },
-        data: { status: ShipmentStatus.READY, readyAt: new Date() },
+        // O-19: Sevke Hazır'a basan operatör izi.
+        data: { status: ShipmentStatus.READY, readyAt: new Date(), readyById: userId ?? null },
       });
       if (claim.count === 0) {
         throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
@@ -2641,6 +2650,7 @@ export class ShippingService {
         data: {
           status: ShipmentStatus.DISPATCHED,
           dispatchedAt: now,
+          dispatchedById: userId ?? null, // O-19: sevk eden (kamyona veren) operatör izi
           readyAt: shipment.readyAt ?? now,
           ...(data.plateNumber !== undefined ? { plateNumber: data.plateNumber } : {}),
           ...(data.driverName !== undefined ? { driverName: data.driverName } : {}),
