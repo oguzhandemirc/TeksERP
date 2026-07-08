@@ -79,6 +79,11 @@ export class ColorService extends BaseService {
     }
     assertValidHex(rest);
 
+    // F41: müşteri doğrulaması renk yazımından ÖNCE (yarım renk + orphan public önle).
+    if (customerIds !== undefined) {
+      await this.assertCustomersAssignable(customerIds);
+    }
+
     const res = await super.create(rest, userId);
     const color = res.data as { id: string } | null;
 
@@ -107,6 +112,11 @@ export class ColorService extends BaseService {
       rest.name = normalizeColorName(rest.name);
     }
     assertValidHex(rest);
+
+    // F41: müşteri doğrulaması renk yazımından ÖNCE.
+    if (customerIds !== undefined) {
+      await this.assertCustomersAssignable(customerIds);
+    }
 
     // rest boşsa gereksiz audit/no-op update üretme — mevcut kaydı çek.
     const res =
@@ -160,6 +170,28 @@ export class ColorService extends BaseService {
   // (boş → null). Map'te olmayan müşterinin (örn. müşteri panelinden girilmiş)
   // adına DOKUNULMAZ. Atama kaldırılan müşteri de map'te olmaz → adı korunur.
   // ===========================================================================
+  /**
+   * F41: Atanacak müşterilerin var + aktif olduğunu doğrular — RENK YAZIMINDAN
+   * ÖNCE çağrılır (doğrulama hatasında yarım renk + atamasız public sızıntısı
+   * oluşmasın). M-23: isActive da doğrulanır (pasif müşteriye exclusive atanan
+   * renk tüm picker'lardan kaybolurdu). Boşsa no-op.
+   */
+  private async assertCustomersAssignable(rawCustomerIds: string[]): Promise<void> {
+    const customerIds = dedupe(rawCustomerIds);
+    if (customerIds.length === 0) return;
+    const found = await prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      select: { id: true, name: true, isActive: true },
+    });
+    if (found.length !== customerIds.length) {
+      throw AppError.badRequest("Bazı müşteriler bulunamadı");
+    }
+    const inactive = found.find((c) => !c.isActive);
+    if (inactive) {
+      throw AppError.badRequest(`'${inactive.name}' müşterisi pasif — renk atanamaz`);
+    }
+  }
+
   private async syncCustomerAssignments(
     colorId: string,
     rawCustomerIds: string[],
@@ -169,22 +201,8 @@ export class ColorService extends BaseService {
     const customerIds = dedupe(rawCustomerIds);
     const aliasMap = normalizeAliasMap(aliasByCustomer);
 
-    if (customerIds.length > 0) {
-      // M-23: isActive da doğrulanır — pasif müşteriye exclusive atanan renk
-      // tüm public picker'lardan kayboluyor ama atanan müşteri de kullanamıyordu
-      // (renk fiilen "kayboluyordu").
-      const found = await prisma.customer.findMany({
-        where: { id: { in: customerIds } },
-        select: { id: true, name: true, isActive: true },
-      });
-      if (found.length !== customerIds.length) {
-        throw AppError.badRequest("Bazı müşteriler bulunamadı");
-      }
-      const inactive = found.find((c) => !c.isActive);
-      if (inactive) {
-        throw AppError.badRequest(`'${inactive.name}' müşterisi pasif — renk atanamaz`);
-      }
-    }
+    // F41: doğrulama tek kaynaktan (create/update önünde erken de çağrılır).
+    await this.assertCustomersAssignable(customerIds);
 
     const existing = await prisma.customerColorAlias.findMany({
       where: { colorId },

@@ -225,7 +225,15 @@ export class BaseService {
     applyDateRange(built, params, this.config.dateFields ?? []);
     const extra = this.extraWhere(req);
     const where = extra ? { AND: [built, extra] } : built;
-    const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
+    // F40: offset modunda id tie-breaker — eşit-değerli sortBy'da (ör. aynı isim)
+    // sayfalar arası mükerrer/kayıp satırı önler (cursor yolu 347 ile parite).
+    const orderBy =
+      params.sortBy === "id"
+        ? buildOrderByClause(params.sortBy, params.sortOrder)
+        : [
+            buildOrderByClause(params.sortBy, params.sortOrder),
+            { id: params.sortOrder },
+          ];
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
     const [data, total] = await Promise.all([
@@ -581,7 +589,22 @@ export class BaseService {
       return { success: false, data: null, message: "Kayıt bulunamadı" };
     }
 
-    await this.delegate.delete({ where: { id } });
+    // F42: bağımlı kayıt (Restrict FK) varsa P2003 fırlar; error middleware bunu
+    // "kayıt bulunamadı/silinmiş" 400'üne eşliyor (create-yanlış-FK mesajı, DELETE'te
+    // yanıltıcı). Anlamlı 409'a çevir — "yıkıcı işlemde net onay" kuralıyla uyumlu.
+    try {
+      await this.delegate.delete({ where: { id } });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2003"
+      ) {
+        throw AppError.conflict(
+          "Bu kayda bağlı başka kayıtlar var — kalıcı olarak silinemez. Kaydı pasife alın.",
+        );
+      }
+      throw err;
+    }
 
     await AuditService.log({
       userId,

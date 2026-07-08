@@ -137,8 +137,37 @@ export const stationHardRemove = makeGuardedHardRemove({
       message: (n) =>
         `İstasyonun makinelerine eşlenmiş ${n} cihaz var — önce cihaz eşleşmelerini kaldırın.`,
     },
+    // F1/F38: RollOperation.machine / Roll.createdMachine / PeripheralDevice.machine
+    // hepsi SetNull → guard olmadan makine silinince üretim atfı SESSİZCE NULL'lanır.
+    {
+      key: "machineOperationCount",
+      count: (id) => prisma.rollOperation.count({ where: { machine: { stationId: id } } }),
+      message: (n) =>
+        `İstasyonun makinelerine damgalı ${n} üretim işlemi (kurşun/QC2) var — kalıcı silinemez. Pasife alın.`,
+    },
+    {
+      key: "machineRollCreatedCount",
+      count: (id) => prisma.roll.count({ where: { createdMachine: { stationId: id } } }),
+      message: (n) =>
+        `İstasyonun makinelerinde ${n} top girişi (KK1) yapılmış — kalıcı silinemez. Pasife alın.`,
+    },
+    {
+      key: "peripheralCount",
+      count: (id) =>
+        prisma.peripheralDevice.count({
+          where: { OR: [{ machine: { stationId: id } }, { stationId: id }] },
+        }),
+      message: (n) =>
+        `İstasyona/makinelerine bağlı ${n} donanım var — önce donanımı taşıyın veya kaldırın.`,
+    },
   ],
   deleteTx: async (tx, id) => {
+    // F38: WorkSession hem station hem machine FK'sinde Restrict → üretim izi olmayan
+    // ama login-oturumu olan istasyon silinirken P2003 patlardı. Makine-bağlı +
+    // makinesiz istasyon oturumlarını birlikte temizle (denetim SystemLog'da append-only kalır).
+    await tx.workSession.deleteMany({
+      where: { OR: [{ stationId: id }, { machine: { stationId: id } }] },
+    });
     await tx.machine.deleteMany({ where: { stationId: id } });
     await tx.station.delete({ where: { id } });
   },
@@ -268,4 +297,28 @@ export const recipeHardRemove = makeGuardedHardRemove({
     await tx.productRecipe.delete({ where: { id } });
   },
   successMessage: "Reçete kalıcı olarak silindi",
+});
+
+/**
+ * F39: DefectType (hata kataloğu) hard-delete guard'ı. Kullanılmış hata tipi
+ * silinirse RollError.defectTypeId SetNull olur → defectTypeId bazlı rapor/filtre
+ * kırılır + (rollId,startMeter,defectTypeId) partial-unique mükerrer-hata guard'ı
+ * o satırlarda devre dışı kalır. Kullanılmışsa 409; normal yol pasife almak.
+ */
+export const defectTypeHardRemove = makeGuardedHardRemove({
+  tableName: "DEFECT_TYPE",
+  notFoundMessage: "Hata tipi bulunamadı",
+  load: (id) => prisma.defectType.findUnique({ where: { id } }),
+  guards: [
+    {
+      key: "rollErrorCount",
+      count: (id) => prisma.rollError.count({ where: { defectTypeId: id } }),
+      message: (n) =>
+        `Bu hata tipi ${n} hata kaydında kullanılmış — kalıcı silinemez. Pasife alın.`,
+    },
+  ],
+  deleteTx: async (tx, id) => {
+    await tx.defectType.delete({ where: { id } });
+  },
+  successMessage: "Hata tipi kalıcı olarak silindi",
 });
