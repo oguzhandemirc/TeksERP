@@ -67,6 +67,35 @@ router.get("/catalog/:kind", verifyToken, requirePermission("label-template:read
 
 /**
  * @openapi
+ * /api/label-templates/catalog:
+ *   get:
+ *     tags: [Label Templates]
+ *     summary: BİRLEŞİK alan kataloğu (tek havuz) — alan + değer ürettiği bağlamlar
+ *     description: Kanvas editörünün eleman paleti; her alanda kinds[] uygunluk bilgisi.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ fields: (FieldDef & { kinds })[] }" }
+ */
+router.get("/catalog", verifyToken, requirePermission("label-template:read"), controller.unifiedCatalog);
+
+/**
+ * @openapi
+ * /api/label-templates/context-defaults:
+ *   get:
+ *     tags: [Label Templates]
+ *     summary: Bağlam (kind) varsayılan şablon atamaları
+ *     security: [{ bearerAuth: [] }]
+ *   put:
+ *     tags: [Label Templates]
+ *     summary: Bağlam varsayılanını ata/kaldır — body { kind, templateId|null }
+ *     description: Tek doğru kaynak LabelContextDefault; kind başına tek default (DB seddi).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/context-defaults", verifyToken, requirePermission("label-template:read"), controller.listContextDefaults);
+router.put("/context-defaults", verifyToken, requirePermission("label-template:write"), controller.setContextDefault);
+
+/**
+ * @openapi
  * /api/label-templates/defaults/{kind}:
  *   get:
  *     tags: [Label Templates]
@@ -215,5 +244,51 @@ router.delete("/:id", verifyToken, requirePermission("label-template:write"), co
  *     security: [{ bearerAuth: [] }]
  */
 router.delete("/:id/permanent", verifyToken, requirePermission("label-template:write"), controller.hardDelete);
+
+// ---- Boyut varyantları (Etiket Stüdyosu v2) ----
+
+/**
+ * @openapi
+ * /api/label-templates/{id}/variants:
+ *   get:
+ *     tags: [Label Templates]
+ *     summary: Şablonun boyut varyantları (primary önce)
+ *     security: [{ bearerAuth: [] }]
+ *   post:
+ *     tags: [Label Templates]
+ *     summary: Yeni boyut varyantı — copyFromVariantId (kopyala-başla) veya elements
+ *     description: |
+ *       Kullanıcı akışı: mevcut tasarımın üstünden yeni boyut ("100×60'tan 100×50").
+ *       OTOMATİK ÖLÇEKLEME YOK — kopyalanan yerleşim elle düzeltilir/teyit edilir.
+ *       Başka şablonun varyantından da kopyalanabilir. İlk varyant otomatik primary.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/:id/variants", verifyToken, requirePermission("label-template:read"), controller.listVariants);
+router.post("/:id/variants", verifyToken, requirePermission("label-template:write"), controller.createVariant);
+
+/**
+ * @openapi
+ * /api/label-templates/variants/{variantId}:
+ *   patch:
+ *     tags: [Label Templates]
+ *     summary: Varyantı güncelle (ad/tuval boyutu/elemanlar/profil referansı)
+ *     security: [{ bearerAuth: [] }]
+ *   delete:
+ *     tags: [Label Templates]
+ *     summary: Varyantı sil (primary yalnız SON varyantsa silinebilir — akış-moduna dönüş)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.patch("/variants/:variantId", verifyToken, requirePermission("label-template:write"), controller.updateVariant);
+router.delete("/variants/:variantId", verifyToken, requirePermission("label-template:write"), controller.deleteVariant);
+
+/**
+ * @openapi
+ * /api/label-templates/variants/{variantId}/set-primary:
+ *   post:
+ *     tags: [Label Templates]
+ *     summary: Varyantı birincil yap (medya eşleşmeyince basılan varyant)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post("/variants/:variantId/set-primary", verifyToken, requirePermission("label-template:write"), controller.setPrimaryVariant);
 
 export default router;

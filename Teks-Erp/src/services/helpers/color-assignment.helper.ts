@@ -29,7 +29,10 @@ export async function assertColorsAssignableToCustomer(
 
   // Bu renklerden hangileri herhangi bir müşteriye ATANMIŞ (exclusive)?
   const assignedRows = await prisma.customerColorAlias.findMany({
-    where: { colorId: { in: uniq }, assigned: true },
+    // F202: pasif müşteriye atanmış renk exclusive SAYILMAZ — yoksa müşteri pasife
+    // alınınca renk hem başka müşterilerde bloklanır hem pasif müşteri sipariş açamaz
+    // → renk fiilen donar. isActive join geri-döndürülebilir (reactivate'te geri gelir).
+    where: { colorId: { in: uniq }, assigned: true, customer: { isActive: true } },
     select: { colorId: true, customerId: true },
   });
   if (assignedRows.length === 0) return; // hepsi public → serbest

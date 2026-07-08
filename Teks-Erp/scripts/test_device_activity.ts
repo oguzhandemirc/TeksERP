@@ -19,7 +19,7 @@
 //      hariç; aynı top için giriş+iptal iki ayrı kronolojik satır
 //  12. history({deviceId}) yalnız o cihazın; history({userId}) kullanıcının TÜM
 //      cihazlardaki oturumları (başka kullanıcı hariç)
-//  13. DeviceService.detail: hardware dedup + formatProfile + lastSession
+//  13. DeviceService.detail: hardware dedup + etiket medyası + lastSession
 //  14. getUserById: kimlik + yetki sayısı + son oturum (cihaz/yer); yok → 404
 //  15. Geçersiz sessionId → 404
 // İzolasyon: dedicated TEST kullanıcıları + makineler — dev verisi atıf dallarına karışamaz.
@@ -124,7 +124,6 @@ async function main() {
   const sessionIds: string[] = [];
   const peripheralIds: string[] = [];
   const logIds: string[] = [];
-  let profileId: string | null = null;
 
   const now = new Date();
   const base = new Date(now.getTime() - min(240));
@@ -438,22 +437,18 @@ async function main() {
       churnARow?.successor?.id === churnB.id && churnARow?.successor?.id !== churnP.id,
       `successor=${churnARow?.successor?.device.name} (beklenen 'TEST Churn B')`);
 
-    // 13: cihaz detayı — donanım dedup + formatProfile + lastSession
+    // 13: cihaz detayı — donanım dedup + etiket medyası (cihazda) + lastSession
     const noSess = await DeviceService.detail(device2.id);
     check("13a. cihaz detay lastSession dolu (device2'de oturum var)", noSess.lastSession !== null);
-    const profile = await prisma.labelFormatProfile.create({
-      data: { code: `TEST-DEVACT-PROF-${ts}`, name: "TEST Döküm Profili", widthMm: 100, heightMm: 148 },
-      select: { id: true, name: true } });
-    profileId = profile.id;
     const printer = await prisma.peripheralDevice.create({
       data: { code: `TEST-DEVACT-PRN-${ts}`, name: "TEST Döküm Yazıcı", kind: "LABEL_PRINTER",
-        connectionType: "BLUETOOTH_SPP", address: "00:11:22:33:44:55",
-        deviceId: device.id, formatProfileId: profile.id }, select: { id: true } });
+        connectionType: "BLUETOOTH_SPP", address: "00:11:22:33:44:55", languageOverride: "PPLA",
+        deviceId: device.id, labelWidthMm: 100, labelHeightMm: 148, labelDpi: 203 }, select: { id: true } });
     peripheralIds.push(printer.id);
     await prisma.devicePeripheral.create({ data: { deviceId: device.id, peripheralId: printer.id } });
     const detail = await DeviceService.detail(device.id);
-    check("13b. hardware dedup (legacy + M:N → 1) + formatProfile dolu",
-      detail.hardware.length === 1 && detail.hardware[0].formatProfile?.name === profile.name,
+    check("13b. hardware dedup (legacy + M:N → 1) + medya dolu (100×148)",
+      detail.hardware.length === 1 && Number(detail.hardware[0].labelWidthMm) === 100 && Number(detail.hardware[0].labelHeightMm) === 148,
       `adet=${detail.hardware.length}`);
     check("13c. cihaz lastSession = en son oturum (canlı)",
       detail.lastSession?.id === sessionLive.id && detail.lastSession?.user.id === user.id);
@@ -474,7 +469,6 @@ async function main() {
     const devIds = [device.id, device2.id, device3.id, device4.id, device5.id, device6.id];
     await prisma.devicePeripheral.deleteMany({ where: { deviceId: { in: devIds } } }).catch(() => {});
     await prisma.peripheralDevice.deleteMany({ where: { id: { in: peripheralIds } } }).catch(() => {});
-    if (profileId) await prisma.labelFormatProfile.deleteMany({ where: { id: profileId } }).catch(() => {});
     await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});

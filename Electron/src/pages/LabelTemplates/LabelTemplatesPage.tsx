@@ -1,21 +1,27 @@
+// =============================================================================
+// Etiket şablonları — TEK HAVUZ listesi (Etiket Stüdyosu v2)
+// =============================================================================
+// Tür sekmeleri kalktı: şablon türden bağımsızdır; nerede basılacağını ATAMALAR
+// belirler (Atamalar sekmesi: bağlam varsayılanı · müşteri formu: müşteri ataması
+// · cihaz kaydı: cihaz yönlendirmesi). Satırda boyut varyantı + atama rozetleri.
+
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Star, StarOff, Trash2, Pencil, PowerOff, RotateCcw } from "lucide-react";
+import { Plus, Star, Trash2, Pencil, PowerOff, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import {
-  LabelKind,
   labelKindLabels,
   labelTemplateService,
+  type ContextDefaultRow,
   type LabelTemplate,
 } from "@/services/labelTemplateService";
 import { NewTemplateDialog } from "./NewTemplateDialog";
@@ -27,24 +33,9 @@ export function LabelTemplatesPage({
   actionsPortal,
 }: { hideHeader?: boolean; actionsPortal?: HTMLElement | null } = {}) {
   const navigate = useNavigate();
-  const [sp, setSp] = useSearchParams();
-  // Aktif tür URL'de (?kind=) — düzenle→geri dönünce hatırlanır (yoksa Bitmiş).
-  const kindParam = sp.get("kind");
-  const activeKind: LabelKind = (Object.keys(labelKindLabels) as LabelKind[]).includes(kindParam as LabelKind)
-    ? (kindParam as LabelKind)
-    : LabelKind.ROLL_FINISHED;
-  const setActiveKind = (k: LabelKind) => {
-    const n = new URLSearchParams(sp);
-    n.set("kind", k);
-    setSp(n, { replace: true });
-  };
   const [newOpen, setNewOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [hardDeleting, setHardDeleting] = useState<{ id: string; name: string } | null>(null);
-
-  // Düzenleme sayfası, aynı tür+sekmeye dönebilmek için türü URL'den okur.
-  const handleEdit = (id: string) =>
-    navigate(`/definitions/label-templates/${id}`);
 
   const actions = (
     <>
@@ -61,85 +52,46 @@ export function LabelTemplatesPage({
     <div className="flex h-full flex-col">
       {!hideHeader && (
         <PageHeader
-          title="Etiket Standartları"
-          description="Top, kartela ve sevkiyat etiketlerinin alan listesi, sırası ve görünümü."
+          title="Etiket Şablonları"
+          description="Tek havuz — şablonlar türden bağımsız; nerede basılacağını Atamalar belirler."
           actions={actions}
         />
       )}
 
       <div className="flex-1 overflow-auto p-4">
-        <Tabs value={activeKind} onValueChange={(v) => setActiveKind(v as LabelKind)}>
-          {hideHeader && !actionsPortal && (
-            <div className="mb-3 flex items-center justify-end gap-2">{actions}</div>
-          )}
-          {hideHeader && actionsPortal && createPortal(actions, actionsPortal)}
-          <TabsList>
-            {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
-              <TabsTrigger key={k} value={k}>
-                {labelKindLabels[k]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
-            <TabsContent key={k} value={k} className="mt-3">
-              <TemplateList
-                kind={k}
-                onEdit={handleEdit}
-                onDelete={setDeletingId}
-                onHardDelete={(t) => setHardDeleting({ id: t.id, name: t.name })}
-              />
-            </TabsContent>
-          ))}
-        </Tabs>
+        {hideHeader && !actionsPortal && (
+          <div className="mb-3 flex items-center justify-end gap-2">{actions}</div>
+        )}
+        {hideHeader && actionsPortal && createPortal(actions, actionsPortal)}
+        <PoolList
+          onEdit={(id) => navigate(`/definitions/label-templates/${id}`)}
+          onDelete={setDeletingId}
+          onHardDelete={(t) => setHardDeleting({ id: t.id, name: t.name })}
+        />
       </div>
 
-      <NewTemplateDialog
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        defaultKind={activeKind}
-      />
-
-      <DeleteConfirm
-        id={deletingId}
-        onClose={() => setDeletingId(null)}
-      />
-
-      <HardDeleteConfirm
-        target={hardDeleting}
-        onClose={() => setHardDeleting(null)}
-      />
+      <NewTemplateDialog open={newOpen} onOpenChange={setNewOpen} />
+      <DeleteConfirm id={deletingId} onClose={() => setDeletingId(null)} />
+      <HardDeleteConfirm target={hardDeleting} onClose={() => setHardDeleting(null)} />
     </div>
   );
 }
 
-function TemplateList({
-  kind,
-  onEdit,
-  onDelete,
-  onHardDelete,
-}: {
-  kind: LabelKind;
+function PoolList({ onEdit, onDelete, onHardDelete }: {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onHardDelete: (t: LabelTemplate) => void;
 }) {
   const qc = useQueryClient();
-  const queryKey = [QUERY_KEY, kind];
   const query = useQuery({
-    queryKey,
-    queryFn: () => labelTemplateService.list(kind),
+    queryKey: [QUERY_KEY, "pool"],
+    queryFn: () => labelTemplateService.list(),
+  });
+  const defaultsQ = useQuery({
+    queryKey: ["label-context-defaults"],
+    queryFn: () => labelTemplateService.listContextDefaults(),
   });
 
-  const setDefaultMut = useMutation({
-    mutationFn: (id: string) => labelTemplateService.setDefault(id),
-    onSuccess: () => {
-      toast.success("Varsayılan şablon güncellendi.");
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-    },
-  });
-
-  // Pasif şablonu geri aktifleştir (users kalıbı: pasife alma GERİ ALINABİLİR).
   const restoreMut = useMutation({
     mutationFn: (id: string) => labelTemplateService.update(id, { isActive: true }),
     onSuccess: () => {
@@ -148,15 +100,13 @@ function TemplateList({
     },
   });
 
-  if (query.isLoading) {
-    return <Skeleton className="h-40 w-full" />;
-  }
-
+  if (query.isLoading) return <Skeleton className="h-40 w-full" />;
   const rows = query.data?.data ?? [];
+  const defaults = defaultsQ.data ?? [];
   if (rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Bu tür için tanımlı template yok.
+        Havuzda şablon yok — "Yeni Şablon" ile başlayın.
       </div>
     );
   }
@@ -164,106 +114,68 @@ function TemplateList({
   return (
     <ul className="divide-y rounded-md border">
       {rows.map((t) => (
-        <TemplateRow
-          key={t.id}
-          template={t}
-          onSetDefault={() => setDefaultMut.mutate(t.id)}
-          onEdit={() => onEdit(t.id)}
-          onDelete={() => onDelete(t.id)}
-          onRestore={() => restoreMut.mutate(t.id)}
-          onHardDelete={() => onHardDelete(t)}
-        />
+        <PoolRow key={t.id} template={t} defaults={defaults}
+          onEdit={() => onEdit(t.id)} onDelete={() => onDelete(t.id)}
+          onRestore={() => restoreMut.mutate(t.id)} onHardDelete={() => onHardDelete(t)} />
       ))}
     </ul>
   );
 }
 
-function TemplateRow({
-  template,
-  onSetDefault,
-  onEdit,
-  onDelete,
-  onRestore,
-  onHardDelete,
-}: {
+function PoolRow({ template: t, defaults, onEdit, onDelete, onRestore, onHardDelete }: {
   template: LabelTemplate;
-  onSetDefault: () => void;
+  defaults: ContextDefaultRow[];
   onEdit: () => void;
   onDelete: () => void;
   onRestore: () => void;
   onHardDelete: () => void;
 }) {
+  const defaultFor = defaults.filter((d) => d.templateId === t.id);
+  const isAnyDefault = defaultFor.length > 0;
   return (
     <li className="flex flex-wrap items-center gap-2 p-3 text-sm">
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{template.name}</span>
-          {template.isDefault && (
-            <Badge variant="muted" className="gap-1 text-[10px]">
-              <Star className="h-3 w-3" /> Varsayılan
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-medium">{t.name}</span>
+          {defaultFor.map((d) => (
+            <Badge key={d.kind} variant="muted" className="gap-1 text-[10px]">
+              <Star className="h-3 w-3" /> {labelKindLabels[d.kind]} varsayılanı
             </Badge>
-          )}
-          {!template.isActive && (
-            <Badge variant="outline" className="text-[10px]">
-              Pasif
-            </Badge>
-          )}
+          ))}
+          {!t.isActive && <Badge variant="outline" className="text-[10px]">Pasif</Badge>}
         </div>
-        <div className="mt-0.5 text-[11px] text-muted-foreground">
-          {template.fields.filter((f) => f.isVisible).length} görünür alan ·{" "}
-          {template.fields.length} toplam
+        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+          {(t.variants ?? []).length === 0 ? (
+            <span title="Kanvas varyantı yok — eski akış düzeninde basılır">akış düzeni (varyantsız)</span>
+          ) : (
+            (t.variants ?? []).map((v) => (
+              <span key={v.id} className="rounded border px-1 font-mono text-[10px]" title={v.name}>
+                {v.isPrimary && "★"}{Number(v.widthMm)}×{Number(v.heightMm)}
+              </span>
+            ))
+          )}
+          {t.kind && <span>· eski tür: {labelKindLabels[t.kind]}</span>}
         </div>
       </div>
       <PermissionGate permission="label-template:write">
-        {!template.isDefault && template.isActive && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="gap-1"
-            onClick={onSetDefault}
-          >
-            <StarOff className="h-3.5 w-3.5" /> Varsayılan Yap
-          </Button>
-        )}
         <Button type="button" size="sm" variant="outline" onClick={onEdit} className="gap-1">
-          <Pencil className="h-3.5 w-3.5" /> Düzenle
+          <Pencil className="h-3.5 w-3.5" /> Stüdyoda Aç
         </Button>
-        {/* Pasife Al (aktifse) / Aktifleştir (pasifse) — GERİ ALINABİLİR */}
-        {!template.isDefault && template.isActive && (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            title="Pasife Al (geri alınabilir)"
-            onClick={onDelete}
-            className="h-8 w-8 text-destructive"
-          >
+        {!isAnyDefault && t.isActive && (
+          <Button type="button" size="icon" variant="ghost" title="Pasife Al (geri alınabilir)"
+            onClick={onDelete} className="h-8 w-8 text-destructive">
             <PowerOff className="h-3.5 w-3.5" />
           </Button>
         )}
-        {!template.isActive && (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            title="Aktifleştir"
-            onClick={onRestore}
-            className="h-8 w-8 text-primary"
-          >
+        {!t.isActive && (
+          <Button type="button" size="icon" variant="ghost" title="Aktifleştir"
+            onClick={onRestore} className="h-8 w-8 text-primary">
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
         )}
-        {/* Kalıcı Sil — GERİ ALINAMAZ (default şablonda kapalı; backend de reddeder) */}
-        {!template.isDefault && (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            title="Kalıcı Sil (GERİ ALINAMAZ)"
-            onClick={onHardDelete}
-            className="h-8 w-8 text-destructive"
-          >
+        {!isAnyDefault && (
+          <Button type="button" size="icon" variant="ghost" title="Kalıcı Sil (GERİ ALINAMAZ)"
+            onClick={onHardDelete} className="h-8 w-8 text-destructive">
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         )}
@@ -272,13 +184,7 @@ function TemplateRow({
   );
 }
 
-function DeleteConfirm({
-  id,
-  onClose,
-}: {
-  id: string | null;
-  onClose: () => void;
-}) {
+function DeleteConfirm({ id, onClose }: { id: string | null; onClose: () => void }) {
   const qc = useQueryClient();
   const mut = useMutation({
     mutationFn: () => labelTemplateService.remove(id!),
@@ -293,20 +199,15 @@ function DeleteConfirm({
       open={Boolean(id)}
       onOpenChange={(open) => !open && onClose()}
       title="Şablon pasifleştirilsin mi?"
-      description="Varsayılan şablonlar pasifleştirilemez. Önce başka bir şablonu varsayılan yapın."
+      description="Bağlam varsayılanı olan şablon pasifleştirilemez — önce Atamalar'dan varsayılanı değiştirin. Cihaz/müşteri atamaları varsayılana düşer."
       confirmLabel="Pasifleştir"
       destructive
-      onConfirm={() => {
-        if (id) mut.mutate();
-      }}
+      onConfirm={() => { if (id) mut.mutate(); }}
     />
   );
 }
 
-function HardDeleteConfirm({
-  target,
-  onClose,
-}: {
+function HardDeleteConfirm({ target, onClose }: {
   target: { id: string; name: string } | null;
   onClose: () => void;
 }) {
@@ -326,18 +227,15 @@ function HardDeleteConfirm({
       title="Şablon KALICI silinsin mi?"
       description={
         target
-          ? `"${target.name}" KALICI olarak silinecek — bu işlem GERİ ALINAMAZ. Kayıt yalnız ` +
-            `veri bütünlüğü için arka planda saklanır; listelerde görünmez, aktifleştirilemez. ` +
-            `Cihazlardaki şablon yönlendirmeleri kaldırılır, şablon adı serbest kalır. ` +
-            `Geçici olarak durdurmak istiyorsanız "Pasife Al"ı kullanın.`
+          ? `"${target.name}" KALICI olarak silinecek — bu işlem GERİ ALINAMAZ. Cihaz VE müşteri ` +
+            `atamaları kaldırılır (etkilenenler varsayılana düşer), boyut varyantları silinir, ` +
+            `şablon adı serbest kalır. Geçici durdurmak için "Pasife Al"ı kullanın.`
           : ""
       }
       confirmLabel="Kalıcı Sil"
       destructive
       isPending={mut.isPending}
-      onConfirm={() => {
-        if (target) mut.mutate();
-      }}
+      onConfirm={() => { if (target) mut.mutate(); }}
     />
   );
 }

@@ -19,7 +19,7 @@
 
 import bwipjs from "bwip-js";
 import { readLabelCopies, readLabelNativeSendEnabled } from "./system-setting.service";
-import { LabelKind, PrinterLanguage, Prisma, type LabelTemplate } from "@prisma/client";
+import { LabelKind, PrinterLanguage, Prisma, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -33,7 +33,8 @@ import {
 } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
-import { resolveLabelRouting } from "./helpers/label-routing.resolver";
+import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
+import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
@@ -119,6 +120,15 @@ export interface UpdateOrderLineCustomerNamesInput {
   customerColorName?: string | null;
 }
 
+/** Baskıda çözülen şablon/varyant izi — audit + tanılama header'ları (fail-open). */
+export interface LabelResolutionMeta {
+  templateId: string | null;
+  templateName: string | null;
+  variantId: string | null;
+  /** exact = medya boyutu eşleşti; fallback = primary varyant; null = akış/bulk. */
+  variantMatch: "exact" | "fallback" | null;
+}
+
 /** Top etiketi render opsiyonları — müşteri bağlamı + kopya + format profili/makine. */
 export interface RollLabelRenderOpts {
   orderLineId?: string | null;
@@ -126,9 +136,7 @@ export interface RollLabelRenderOpts {
   stock?: boolean;
   /** Saha #6: kopya adedi override (1-5). Verilmezse label.copies ayarı (default 2). */
   copies?: number;
-  /** Fiziksel format profili — explicit override. */
-  profileId?: string | null;
-  /** İstasyon makinesi — yazıcı/profil + dil oto çözülür (mobil: req.device.machineId). */
+  /** İstasyon makinesi — yazıcı medyası + dil oto çözülür (mobil: req.device.machineId). */
   machineId?: string | null;
   /** Cihaz kaydı (PeripheralDevice) — explicit hedef yazıcı (dil/profil/şablon yönlendirmesi). */
   peripheralId?: string | null;
@@ -209,6 +217,11 @@ interface BulkLabelContext {
   aliasByCustomer: Map<string, BatchAliasResult>;
   format: ResolvedLabelFormat;
   templateByKind: Partial<Record<LabelKind, LabelTemplate | null>>;
+  /** Kind-başına seçili boyut varyantı (kanvas) — templateByKind ile aynı çözümden. */
+  variantByKind: Partial<Record<LabelKind, LabelTemplateVariant | null>>;
+  /** `${kind}|${customerId}` → müşteriye özel şablon+varyant (yalnız route'u OLAN
+   *  müşteriler; tekil yoldaki CustomerTemplateRoute halkasının batch karşılığı). */
+  customerTemplateByKey: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
   copies: number;
 }
 
@@ -558,7 +571,13 @@ export class LabelService {
     kindOverride: LabelKind | undefined,
     opts?: RollLabelRenderOpts,
     preloaded?: BulkLabelContext,
-  ): Promise<{ input: LabelRenderInput; kind: LabelKind }> {
+  ): Promise<{
+    input: LabelRenderInput;
+    kind: LabelKind;
+    meta: LabelResolutionMeta;
+    // F179: çözülen yönlendirme cihazının native gönderim hedefi (preloaded/bulk'ta null).
+    routing: { peripheralId: string | null; address: string | null; port: number | null } | null;
+  }> {
     const payloadResp = await this.getRollLabel(rollId, opts, preloaded);
     const payload = payloadResp.data;
 
@@ -584,21 +603,40 @@ export class LabelService {
     // Tekil → birleşik yönlendirme: cihaz→{format, template, dil}. Cihaz eşleşmezse
     // bugünkü davranış (resolveLabelFormat + kind default şablon) — geri uyum.
     let template: LabelTemplate | null;
+    let variant: LabelTemplateVariant | null;
     let format: ResolvedLabelFormat;
+    let variantMatch: "exact" | "fallback" | null = null;
+    // F179: native hedef adresi yalnız tekil (non-preloaded) yönlendirmede çözülür.
+    let routingPeripheral: { peripheralId: string | null; address: string | null; port: number | null } | null = null;
     if (preloaded) {
-      template = preloaded.templateByKind[kind] ?? null;
+      // Müşteri-şablon halkasının bulk karşılığı: route'u olan müşterinin topu
+      // kendi şablonuyla basılır (tekil yolla AYNI öncelik: müşteri > cihaz > default).
+      const custom = payload.customerId
+        ? preloaded.customerTemplateByKey.get(`${kind}|${payload.customerId}`)
+        : undefined;
+      template = custom?.template ?? preloaded.templateByKind[kind] ?? null;
+      variant = custom ? custom.variant : preloaded.variantByKind[kind] ?? null;
       format = preloaded.format;
     } else {
       const routing = await resolveLabelRouting({
         kind,
         peripheralId: opts?.peripheralId,
-        profileId: opts?.profileId,
         templateId: opts?.templateId,
         machineId: opts?.machineId,
         deviceId: opts?.deviceId,
+        // Müşteri şablonu halkası — payload ÖNCE çözüldü (explicit-only):
+        // stok/müşterisiz baskıda null → halka hiç sorgulanmaz.
+        customerId: payload.customerId ?? null,
       });
       template = routing.template;
+      variant = routing.variant;
       format = routing.format;
+      variantMatch = routing.variantMatch;
+      routingPeripheral = {
+        peripheralId: routing.peripheralId,
+        address: routing.peripheralAddress,
+        port: routing.peripheralPort,
+      };
     }
     const barcodeSvg = payload.barcode
       ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
@@ -608,7 +646,13 @@ export class LabelService {
       : "";
     // Saha #6: kopya adedi — istek override > bulk-sabit > ayar (default 2).
     const copies = opts?.copies ?? preloaded?.copies ?? (await readLabelCopies());
-    return { input: { payload, template, barcodeSvg, qrSvg, copies, format }, kind };
+    const meta: LabelResolutionMeta = {
+      templateId: template?.id ?? null,
+      templateName: template?.name ?? null,
+      variantId: variant?.id ?? null,
+      variantMatch,
+    };
+    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format }, kind, meta, routing: routingPeripheral };
   }
 
   async getRollLabelHtml(
@@ -631,10 +675,10 @@ export class LabelService {
     rollId: string,
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ ppla: string; profileId: string | null }>> {
+  ): Promise<ApiResponse<{ ppla: string }>> {
     const { input } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const ppla = renderLabel(PrinterLanguage.PPLA, input).content;
-    return { success: true, data: { ppla, profileId: input.format.profileId } };
+    return { success: true, data: { ppla } };
   }
 
   /**
@@ -646,12 +690,12 @@ export class LabelService {
     rollId: string,
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; profileId: string | null }>> {
-    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
+    const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const r = renderLabel(input.format.language, input);
     return {
       success: true,
-      data: { content: r.content, language: r.language, contentType: r.contentType, kind, profileId: input.format.profileId },
+      data: { content: r.content, language: r.language, contentType: r.contentType, kind, meta },
     };
   }
 
@@ -664,16 +708,16 @@ export class LabelService {
     rollId: string,
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ mode: "svg" | "html" | "text"; language: PrinterLanguage; content: string; kind: LabelKind }>> {
-    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+  ): Promise<ApiResponse<{ mode: "svg" | "html" | "text"; language: PrinterLanguage; content: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
+    const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const language = input.format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
-      return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content, kind } };
+      return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content, kind, meta } };
     }
     const native = renderLabel(language, input).content;
     const svg = renderNativePreviewSvg(language, native, mmToDots(input.format.widthMm, input.format.dpi));
-    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), kind } };
-    return { success: true, data: { mode: "text", language, content: native, kind } };
+    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), kind, meta } };
+    return { success: true, data: { mode: "text", language, content: native, kind, meta } };
   }
 
   /** HTML dilinde doğrudan gönderim yok (OS sürücü); aksi halde transport'a delege. */
@@ -710,12 +754,15 @@ export class LabelService {
     userId?: string,
     opts?: RollLabelRenderOpts & { port?: number },
   ): Promise<ApiResponse<PrinterTransportResult & { kind: LabelKind }>> {
-    const { input, kind } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const { input, kind, routing } = await this.buildRollRenderInput(rollId, undefined, opts);
     const rendered = renderLabel(input.format.language, input);
     const enabled = await readLabelNativeSendEnabled();
-    let printerIp: string | null = null;
-    let printerPort: number | undefined = opts?.port;
-    if (opts?.machineId) {
+    // F179: çözülen yönlendirme cihazının (explicit peripheralId / tablet deviceId /
+    // machineId hepsi routing'de çözüldü) adresi BİRİNCİL hedef; loadMachinePrinter
+    // yalnız defansif fallback (routing adres vermezse).
+    let printerIp: string | null = routing?.address ?? null;
+    let printerPort: number | undefined = opts?.port ?? routing?.port ?? undefined;
+    if (printerIp == null && opts?.machineId) {
       const printer = await loadMachinePrinter(opts.machineId);
       printerIp = printer?.address ?? null;
       if (printerPort == null && printer?.port != null) printerPort = printer.port;
@@ -739,11 +786,12 @@ export class LabelService {
   }
 
   /**
-   * Test Et: profil geometrisinde ÖRNEK etiket HTML'i — boyut/pay görsel doğrulaması
-   * (Faz-1, her zaman güvenli). Gerçek top gerekmez; mock veri.
+   * Test Et: seçili yazıcının medyasında ÖRNEK etiket HTML'i — boyut/pay görsel
+   * doğrulaması (Faz-1, her zaman güvenli). Gerçek top gerekmez; mock veri.
+   * peripheralId verilmezse sistem varsayılan medyası kullanılır.
    */
-  async getSampleLabelHtml(profileId?: string | null): Promise<ApiResponse<{ html: string }>> {
-    const input = await this.buildSampleRenderInput(profileId);
+  async getSampleLabelHtml(peripheralId?: string | null): Promise<ApiResponse<{ html: string }>> {
+    const input = await this.buildSampleRenderInput(peripheralId);
     const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
     return { success: true, data: { html } };
   }
@@ -754,12 +802,12 @@ export class LabelService {
    * gerçek yazıcıyı (Faz-2) doğrulama aracı.
    */
   async testNativeSend(opts: {
-    profileId?: string | null;
+    peripheralId?: string | null;
     printerIp: string;
     port?: number;
     language?: PrinterLanguage;
   }): Promise<ApiResponse<PrinterTransportResult>> {
-    const input = await this.buildSampleRenderInput(opts.profileId);
+    const input = await this.buildSampleRenderInput(opts.peripheralId);
     const lang = opts.language ?? input.format.language;
     const rendered = renderLabel(lang, input);
     const enabled = await readLabelNativeSendEnabled();
@@ -771,8 +819,8 @@ export class LabelService {
     return { success: true, data: result };
   }
 
-  /** Örnek (mock) top etiketi render girdisi — Test Et için. profileId geometriyi belirler. */
-  private async buildSampleRenderInput(profileId?: string | null): Promise<LabelRenderInput> {
+  /** Örnek (mock) top etiketi render girdisi — Test Et için. peripheralId medyayı (geometri) belirler. */
+  private async buildSampleRenderInput(peripheralId?: string | null): Promise<LabelRenderInput> {
     const sampleBarcode = "TEKSORNEK0001";
     const payload: LabelPayload = {
       rollId: "ornek-id",
@@ -798,13 +846,14 @@ export class LabelService {
       batchNumber: "P-ORNEK-001",
       printedAt: new Date().toISOString(),
     };
-    const template = await prisma.labelTemplate.findFirst({
-      where: { kind: LabelKind.ROLL_FINISHED, isDefault: true, isActive: true },
-    });
+    const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: sampleBarcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleBarcode, scale: 3, backgroundcolor: "FFFFFF" });
-    const format = await resolveLabelFormat({ profileId });
-    return { payload, template, barcodeSvg, qrSvg, copies: 1, format };
+    // Örnek baskı: peripheralId verilirse o cihazın medyası, yoksa sistem varsayılan medyası.
+    const format = await resolveLabelFormat({ peripheralId });
+    // Örnek baskı = gerçek baskı: şablonun medyaya uyan varyantı da seçilir (WYSIWYG).
+    const { variant } = pickVariant(template?.variants, { widthMm: format.widthMm, heightMm: format.heightMm });
+    return { payload, template, variant, barcodeSvg, qrSvg, copies: 1, format };
   }
 
   /**
@@ -815,7 +864,7 @@ export class LabelService {
    */
   async getBulkRollLabelsHtml(
     rollIds: string[],
-    opts?: { copies?: number },
+    opts?: { copies?: number; peripheralId?: string; deviceId?: string },
   ): Promise<ApiResponse<{ html: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
@@ -824,11 +873,20 @@ export class LabelService {
     // N+1 → O(1): format/template/copies'i bir kez çöz + tüm top + ilişki verisini
     // toplu prefetch et. Render (aşağıdaki döngü) DEĞİŞMEDEN preloaded bağlamı kullanır;
     // çıktı per-roll yolla BYTE-IDENTİK (bkz. test_bulk_label_batched.ts).
-    const ctx = await this.buildBulkContext(ids, copies);
+    // F183: cihaz bağlamı (peripheralId/deviceId) native handler ile parite — iş
+    // istasyonunun kendi yazıcı dilinde/şablonunda toplu bassın.
+    const ctx = await this.buildBulkContext(ids, copies, {
+      peripheralId: opts?.peripheralId,
+      deviceId: opts?.deviceId,
+    });
 
     const bodyRe = /<body[^>]*>([\s\S]*?)<\/body>/i;
     let head = "";
     const bodies: string[] = [];
+    // F178: her top buildRollRenderInput içinde bwipjs.toSVG'yi (Code128+QR) 2 SENKRON
+    // çağırır → çok sayıda topta event-loop starvation (istasyon donması). ~25 topta bir
+    // setImmediate ile check fazına dön → LAN'daki diğer operatörlerin bekleyen soketleri servis edilir.
+    let yielded = 0;
     for (const id of ids) {
       const res = await this.getRollLabelHtml(id, undefined, { copies }, ctx);
       const full = res.data.html;
@@ -839,6 +897,7 @@ export class LabelService {
       }
       const m = full.match(bodyRe);
       if (m) bodies.push(m[1]);
+      if (++yielded % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     }
     // Her topu kendi sayfasında tut (etiket .label zaten A6; topu ayır).
     const combinedBody = bodies
@@ -871,11 +930,14 @@ export class LabelService {
     const language = ctx.format.language;
     let contentType = "text/plain; charset=utf-8";
     const blocks: string[] = [];
+    // F178: getBulkRollLabelsHtml ile aynı — ~25 topta bir event-loop'a nefes aldır.
+    let yieldedN = 0;
     for (const id of ids) {
       const { input } = await this.buildRollRenderInput(id, undefined, { copies }, ctx);
       const r = renderLabel(language, input);
       contentType = r.contentType;
       if (r.content) blocks.push(r.content);
+      if (++yieldedN % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return {
       success: true,
@@ -911,6 +973,10 @@ export class LabelService {
     const templateByKind: Partial<Record<LabelKind, LabelTemplate | null>> = {
       [LabelKind.ROLL_RAW]: rawRouting.template,
       [LabelKind.ROLL_FINISHED]: finishedRouting.template,
+    };
+    const variantByKind: Partial<Record<LabelKind, LabelTemplateVariant | null>> = {
+      [LabelKind.ROLL_RAW]: rawRouting.variant,
+      [LabelKind.ROLL_FINISHED]: finishedRouting.variant,
     };
 
     // §2-A: tüm top'ları tek findMany (getRollLabel ile AYNI include const → drift yok).
@@ -961,6 +1027,8 @@ export class LabelService {
       aliasByCustomer: new Map(),
       format,
       templateByKind,
+      variantByKind,
+      customerTemplateByKey: new Map(),
       copies,
     };
     const byCustomer = new Map<string, { itemIds: Set<string>; colorIds: Set<string> }>();
@@ -982,7 +1050,34 @@ export class LabelService {
       aliasByCustomer.set(cid, await batchLoadAliases(prisma, cid, [...g.itemIds], [...g.colorIds]));
     }
 
-    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, copies };
+    // §2-C: müşteri-şablon route'ları tek sorguda (tekil yoldaki halkanın batch
+    // karşılığı). Varyant, format TEK olduğundan şablon-başına bir kez seçilir.
+    const customerTemplateByKey = new Map<
+      string,
+      { template: LabelTemplate; variant: LabelTemplateVariant | null }
+    >();
+    if (byCustomer.size > 0) {
+      const routes = await prisma.customerTemplateRoute.findMany({
+        where: {
+          customerId: { in: [...byCustomer.keys()] },
+          kind: { in: [LabelKind.ROLL_RAW, LabelKind.ROLL_FINISHED] },
+        },
+        include: { template: { include: { variants: true } } },
+      });
+      for (const r of routes) {
+        if (!r.template.isActive || r.template.deletedAt != null) continue;
+        const picked = pickVariant(r.template.variants, {
+          widthMm: format.widthMm,
+          heightMm: format.heightMm,
+        });
+        customerTemplateByKey.set(`${r.kind}|${r.customerId}`, {
+          template: r.template,
+          variant: picked.variant,
+        });
+      }
+    }
+
+    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, variantByKind, customerTemplateByKey, copies };
   }
 
   /**
@@ -1125,7 +1220,6 @@ export class LabelService {
     const routing = await resolveLabelRouting({
       kind: LabelKind.SWATCH,
       peripheralId: opts?.peripheralId,
-      profileId: opts?.profileId,
       templateId: opts?.templateId,
       machineId: opts?.machineId,
       deviceId: opts?.deviceId,
@@ -1137,6 +1231,9 @@ export class LabelService {
       ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
       : "";
     const copies = opts?.copies ?? (await readLabelCopies());
+    // KARTELA v1 KAPSAM DIŞI (Etiket Stüdyosu): variant BİLEREK geçilmez — kartela
+    // hattı akış-modelinde bayt-aynı kalır. Kanvas'a alınırsa müşteri plumbing'iyle
+    // birlikte ayrı iş (KARTELA-TASARIM.md).
     return {
       input: { payload, template: routing.template, barcodeSvg, qrSvg, copies, format: routing.format },
       kind: LabelKind.SWATCH,
@@ -1161,12 +1258,12 @@ export class LabelService {
   async getSwatchLabelNative(
     swatchId: string,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; profileId: string | null }>> {
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind }>> {
     const { input, kind } = await this.buildSwatchRenderInput(swatchId, opts);
     const r = renderLabel(input.format.language, input);
     return {
       success: true,
-      data: { content: r.content, language: r.language, contentType: r.contentType, kind, profileId: input.format.profileId },
+      data: { content: r.content, language: r.language, contentType: r.contentType, kind },
     };
   }
 
@@ -1217,11 +1314,19 @@ export class LabelService {
   async recordPrintEvent(
     rollId: string,
     userId?: string,
-    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
+    opts?: {
+      orderLineId?: string | null;
+      customerId?: string | null;
+      stock?: boolean;
+      /** Baskıyı yapan cihaz bağlamı (varsa) — audit'teki şablon izini netleştirir. */
+      peripheralId?: string | null;
+      deviceId?: string | null;
+      machineId?: string | null;
+    }
   ): Promise<ApiResponse<{ recorded: true }>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { id: true, barcode: true, status: true },
+      select: { id: true, barcode: true, status: true, colorId: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
@@ -1231,6 +1336,31 @@ export class LabelService {
     // Etiket bayat bayrağını temizle — fiziksel etiket az önce basıldı → veriyle uyumlu.
     // Yalnız bayat iken yaz (gereksiz update yok).
     await prisma.roll.updateMany({ where: { id: rollId, labelDirty: true }, data: { labelDirty: false } });
+
+    // Çözülen şablon/varyant izi (BEST-EFFORT): reprint şablonu DONDURMADIĞINDAN
+    // "o an hangi atama geçerliydi" audit'ten okunur — baskı davranışıyla aynı
+    // zincir (müşteri > cihaz > bağlam default). Hata isteği düşürmez.
+    let resolvedMeta: Record<string, unknown> = {};
+    try {
+      const payload = (await this.getRollLabel(rollId, opts)).data;
+      const kind: LabelKind = roll.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED;
+      const routing = await resolveLabelRouting({
+        kind,
+        customerId: payload.customerId ?? null,
+        peripheralId: opts?.peripheralId ?? null,
+        deviceId: opts?.deviceId ?? null,
+        machineId: opts?.machineId ?? null,
+      });
+      resolvedMeta = {
+        templateId: routing.template?.id ?? null,
+        templateName: routing.template?.name ?? null,
+        variantId: routing.variant?.id ?? null,
+        variantMatch: routing.variantMatch,
+        language: routing.language,
+      };
+    } catch {
+      /* best-effort — audit izi zenginleştirmesi baskı kaydını engellemez */
+    }
 
     // Fiziksel baskı izi.
     await AuditService.log({
@@ -1243,6 +1373,7 @@ export class LabelService {
         barcode: roll.barcode,
         status: roll.status,
         event: "LABEL_PRINTED",
+        ...resolvedMeta,
       },
     });
 

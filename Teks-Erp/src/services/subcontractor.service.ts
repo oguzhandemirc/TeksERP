@@ -40,7 +40,7 @@ import {
 import { buildPrefixedCardNumber } from "../utils/barcode";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
-import { buildPagination } from "../utils/query-parser";
+import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -77,6 +77,23 @@ function decodeSequenceFromBarcode(barcode: string): number | null {
   return n;
 }
 
+/** Ayraçsız ondalık belge no (PFXYYMMNNNNNN) listesinden sayısal max; boş/parse-edilemez atlanır. */
+function decimalDocMax(nos: (string | null)[]): number {
+  return nos.reduce((max, no) => {
+    if (!no) return max;
+    const n = parseInt(no.slice(6), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+}
+/** Ayraçsız Crockford barkod (PFXYYMMXXXXXXC) listesinden sayısal max; boş/decode-edilemez atlanır. */
+function crockfordMax(barcodes: (string | null)[]): number {
+  return barcodes.reduce((max, b) => {
+    if (!b) return max;
+    const n = decodeSequenceFromBarcode(b);
+    return n !== null && n > max ? n : max;
+  }, 0);
+}
+
 // Export: workorder.service per-roll split'te taşınan toplar için yeni SD dispatch
 // numarası üretirken yeniden kullanır (aynı sequence kaynağı).
 export async function nextPrefixedSequence(
@@ -89,48 +106,36 @@ export async function nextPrefixedSequence(
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const barcodePrefix = `${prefix}${yy}${mm}`; // ayraçsız: PFXYYMM ile başlar
 
-  let lastBarcode: string | null = null;
+  // O-21: collation-güvenli — gte (index seek) + startsWith (tam-prefix, collation-
+  // bağımsız) ile aydaki TÜM kayıtları çek, sayısal max'ı JS'te reduce et. Eski
+  // startsWith-tek + orderBy desc glibc collation sırasına + lex taşmaya güveniyordu
+  // (glibc seq-no bug — bkz. order.service.ts:1065 kanıtlı desen).
   if (table === "subcontractorDispatch") {
-    const last = await tx.subcontractorDispatch.findFirst({
-      where: { dispatchNo: { startsWith: barcodePrefix } },
-      orderBy: { dispatchNo: "desc" },
+    const rows = await tx.subcontractorDispatch.findMany({
+      where: { dispatchNo: { gte: barcodePrefix, startsWith: barcodePrefix } },
       select: { dispatchNo: true },
     });
-    lastBarcode = last?.dispatchNo ?? null;
-  } else if (table === "subcontractorReceipt") {
-    const last = await tx.subcontractorReceipt.findFirst({
-      where: { receiptNo: { startsWith: barcodePrefix } },
-      orderBy: { receiptNo: "desc" },
+    return decimalDocMax(rows.map((r) => r.dispatchNo)) + 1;
+  }
+  if (table === "subcontractorReceipt") {
+    const rows = await tx.subcontractorReceipt.findMany({
+      where: { receiptNo: { gte: barcodePrefix, startsWith: barcodePrefix } },
       select: { receiptNo: true },
     });
-    lastBarcode = last?.receiptNo ?? null;
-  } else if (table === "swatch") {
-    const last = await tx.swatch.findFirst({
-      where: { barcode: { startsWith: barcodePrefix } },
-      orderBy: { barcode: "desc" },
+    return decimalDocMax(rows.map((r) => r.receiptNo)) + 1;
+  }
+  if (table === "swatch") {
+    const rows = await tx.swatch.findMany({
+      where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
       select: { barcode: true },
     });
-    lastBarcode = last?.barcode ?? null;
-  } else {
-    const last = await tx.roll.findFirst({
-      where: { barcode: { startsWith: barcodePrefix } },
-      orderBy: { barcode: "desc" },
-      select: { barcode: true },
-    });
-    lastBarcode = last?.barcode ?? null;
+    return crockfordMax(rows.map((r) => r.barcode)) + 1;
   }
-
-  if (!lastBarcode) return 1;
-
-  // Dispatch/Receipt no ayraçsız ondalık: SDYYMMNNNNNN → NNNNNN = pozisyon 6..
-  // Swatch/Roll barkodları ayraçsız Crockford+checksum: PFXYYMMXXXXXXC (decode 6..12)
-  if (table === "subcontractorDispatch" || table === "subcontractorReceipt") {
-    const n = parseInt(lastBarcode.slice(6), 10);
-    return (Number.isFinite(n) ? n : 0) + 1;
-  }
-
-  const n = decodeSequenceFromBarcode(lastBarcode);
-  return (n ?? 0) + 1;
+  const rows = await tx.roll.findMany({
+    where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
+    select: { barcode: true },
+  });
+  return crockfordMax(rows.map((r) => r.barcode)) + 1;
 }
 
 async function logTravelerScan(
@@ -366,7 +371,7 @@ export class SubcontractorService {
         stepId: data.stepId,
         cancelledAt: null,
         directShippedAt: null, // doğrudan-sevk edilmiş sevk "açık" sayılmaz
-        items: { some: { receiptItems: { none: {} } } },
+        items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
       },
       select: {
         id: true,
@@ -570,6 +575,21 @@ export class SubcontractorService {
           `Bu iş emrinde sevk yapılamaz: ${woFresh?.status ?? "bulunamadı"}. Sayfayı yenileyin.`
         );
       }
+
+      // Step status TAZE (F73): step.status tx DIŞINDA okundu. WO kilidi (555)
+      // altında eşzamanlı receive/cancel adımı COMPLETED, downstream directShip
+      // SKIPPED yapmış olabilir. ACTIVE'e-açma kararı bayat status'a dayanırsa
+      // yeni sevk topları AT_SUBCONTRACTOR olurken adım yanlış statüde kalır.
+      const stepFresh = await tx.workOrderStep.findUnique({
+        where: { id: step.id },
+        select: { status: true, startedAt: true },
+      });
+      if (!stepFresh) throw AppError.notFound("İş emri adımı bulunamadı");
+      if (stepFresh.status === StepStatus.SKIPPED) {
+        throw AppError.conflict(
+          "Adım bu sırada atlandı (SKIPPED). Sevk yapılamaz. Sayfayı yenileyin."
+        );
+      }
       // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
       // (status STOCK kalır — alt blok aynı transaction içinde AT_SUBCONTRACTOR'a çekecek.)
       // ATOMİK CLAIM: autoAttachIds tx-DIŞI bayat okumadan geliyor (currentStepId=null
@@ -596,14 +616,14 @@ export class SubcontractorService {
       // sevki yapılıyor, adımı YENİDEN AÇ (çoklu sevk). startedAt korunur,
       // completedAt sıfırlanır ki "şu an açık" görünsün.
       if (
-        step.status === StepStatus.PENDING ||
-        step.status === StepStatus.COMPLETED
+        stepFresh.status === StepStatus.PENDING ||
+        stepFresh.status === StepStatus.COMPLETED
       ) {
         await tx.workOrderStep.update({
           where: { id: step.id },
           data: {
             status: StepStatus.ACTIVE,
-            startedAt: step.startedAt ?? new Date(),
+            startedAt: stepFresh.startedAt ?? new Date(),
             completedAt: null,
           },
         });
@@ -904,9 +924,11 @@ export class SubcontractorService {
 
     const allSteps = step.workOrder.steps;
     const currentIndex = allSteps.findIndex((s) => s.id === step.id);
+    // F76: ilk NON-SKIPPED sonraki adım — SKIPPED terminal adıma bağlanınca top
+    // akışta görünmez, WO tamamlanamaz (recomputeStepStatus SKIPPED'e dokunmaz).
     const nextStep =
-      currentIndex >= 0 && currentIndex < allSteps.length - 1
-        ? allSteps[currentIndex + 1]
+      currentIndex >= 0
+        ? allSteps.slice(currentIndex + 1).find((s) => s.status !== StepStatus.SKIPPED) ?? null
         : null;
     if (!nextStep) {
       throw AppError.badRequest(
@@ -1121,7 +1143,7 @@ export class SubcontractorService {
       qualityGrade: r.qualityGrade,
       width: r.width != null ? Number(r.width) : null,
     }));
-    const totalQty = rolls.reduce((s, r) => s + r.dispatchedQty, 0);
+    const totalQty = Number(rolls.reduce((s, r) => s.plus(r.dispatchedQty), new Prisma.Decimal(0)));
 
     const doc = assembleFasonCekiDoc({
       dispatchNo: "(TASLAK)",
@@ -1364,8 +1386,8 @@ export class SubcontractorService {
                 data: { status: WorkOrderStatus.COMPLETED },
               });
               await tx.travelerCard.updateMany({
-                where: { workOrderId: dispatch.workOrderId, status: "ACTIVE" },
-                data: { status: "COMPLETED" },
+                where: { workOrderId: dispatch.workOrderId, status: TravelerCardStatus.ACTIVE },
+                data: { status: TravelerCardStatus.COMPLETED }, // F83: string literal yerine enum
               });
             }
           } else {
@@ -1628,6 +1650,7 @@ export class SubcontractorService {
         barcode: true,
         currentQty: true,
         weightKg: true,
+        batchSplitId: true, // F74: kaynak sevk (firma çapraz-kontrolü için)
       },
     });
     const outstandingIds = new Set(outstandingRolls.map((r) => r.id));
@@ -1648,10 +1671,42 @@ export class SubcontractorService {
       }
     }
 
+    // F74: dönen topların kaynak sevk firması, seçilen firmayla (data.subcontractorId)
+    // eşleşmeli — yoksa farklı firmaya ait toplar bu makbuza karışır (firma başına
+    // ayrı kabul olmalı). batchSplitId = kaynak SubcontractorDispatch.
+    const returnedRolls = outstandingRolls.filter((r) => returnIds.has(r.id));
+    const srcDispatchIds = [
+      ...new Set(returnedRolls.map((r) => r.batchSplitId).filter((x): x is string => !!x)),
+    ];
+    const srcDispatches =
+      srcDispatchIds.length > 0
+        ? await prisma.subcontractorDispatch.findMany({
+            where: { id: { in: srcDispatchIds } },
+            select: { id: true, subcontractorId: true },
+          })
+        : [];
+    const firmByDispatch = new Map(srcDispatches.map((d) => [d.id, d.subcontractorId]));
+    for (const r of returnedRolls) {
+      const firmId = r.batchSplitId ? firmByDispatch.get(r.batchSplitId) : undefined;
+      if (!firmId) {
+        throw AppError.conflict(
+          "Dönen topun kaynak sevki bulunamadı. Listeyi yenileyip tekrar deneyin.",
+        );
+      }
+      if (firmId !== data.subcontractorId) {
+        throw AppError.badRequest(
+          "Seçilen toplardan biri farklı bir fason firmasına ait — bu makbuza dahil edilemez. Firma başına ayrı kabul yapın.",
+        );
+      }
+    }
+
     const allSteps = step.workOrder.steps;
     const currentIndex = allSteps.findIndex((s) => s.id === step.id);
+    // F76: ilk NON-SKIPPED sonraki adım (SKIPPED terminal adıma bağlanmayı önle).
     const nextStep =
-      currentIndex < allSteps.length - 1 ? allSteps[currentIndex + 1] : null;
+      currentIndex >= 0
+        ? allSteps.slice(currentIndex + 1).find((s) => s.status !== StepStatus.SKIPPED) ?? null
+        : null;
 
     // withBarcodeRetry: receiptNo (@unique) tx içinde nextPrefixedSequence ile
     // üretiliyor; eşzamanlı kabullerde P2002 çakışmasında tx baştan denenir.
@@ -2067,7 +2122,7 @@ export class SubcontractorService {
 
       const dispatches = await prisma.subcontractorDispatch.findMany({
         // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
-        where: { stepId: { in: stepIds }, directShippedAt: null },
+        where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
         select: {
           id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
           driverName: true, stepId: true, subcontractorId: true,
@@ -2155,7 +2210,7 @@ export class SubcontractorService {
 
     const dispatches = await prisma.subcontractorDispatch.findMany({
       // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
-      where: { stepId: { in: stepIds }, directShippedAt: null },
+      where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
@@ -2245,7 +2300,7 @@ export class SubcontractorService {
     // Eskiden tek `lastDispatch` (findFirst) dönüyordu; çoklu sevkte partiler
     // ayrışamıyordu. lastDispatch geriye-uyumluluk için en güncel sevk olarak korunur.
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: { stepId, cancelledAt: null },
+      where: { stepId, cancelledAt: null, directShippedAt: null },
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
@@ -2329,11 +2384,12 @@ export class SubcontractorService {
 
     const search = params?.search?.trim();
     if (search) {
-      where.OR = [
-        { dispatchNo: { contains: search, mode: "insensitive" } },
-        { subcontractor: { name: { contains: search, mode: "insensitive" } } },
-        { workOrder: { batchNumber: { contains: search, mode: "insensitive" } } },
-      ];
+      // Y-2/Y-3: Türkçe-duyarlı arama (C-locale ILIKE İ/ı katlamaz).
+      where.OR = buildTurkishSearch<Prisma.SubcontractorDispatchWhereInput>(search, [
+        "dispatchNo",
+        "subcontractor.name",
+        "workOrder.batchNumber",
+      ]);
     }
 
     // Liste için ÇOK HAFIF select — detay endpoint (`getDispatch`) tam veriyi döner.
@@ -4002,10 +4058,10 @@ export class SubcontractorService {
     // Bu sevk, dispatch'in TÜM (hâlâ fasonda) toplarını mı kapsıyor? Kısmi sevkte
     // dispatch AÇIK kalır (kalan toplar normal kabulle döner), directShippedAt
     // SET EDİLMEZ, donmuş belge üretilmez (belge tüm dispatch'i gösterir).
-    const dispatchStillAtSub = await prisma.roll.count({
-      where: { id: { in: dispatchRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
-    });
-    const isFullDispatchShip = dispatchStillAtSub === shipRollIds.length;
+    // Karar TX İÇİNDE, WO kilidi altında TAZE sayımla verilir (F72 — aşağıda);
+    // tx-DIŞI bayat sayım eşzamanlı receive()'in döndürdüğü topları görmez → 'full'
+    // olması gereken sevk 'partial' hesaplanıp directShippedAt set edilmez / belge donmaz.
+    let isFullDispatchShip = false;
 
     // Opsiyonel karşılanma doğrulaması (verilmişse).
     const allocations = data.orderLineAllocations ?? [];
@@ -4063,6 +4119,14 @@ export class SubcontractorService {
       // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
       // sayımı + downstream SKIP eşzamanlı dispatch'le serileşsin.
       await touchWorkOrderTx(tx, dispatch.workOrderId);
+      // isFullDispatchShip TAZE (F72): WO satırı kilitli olduğundan bu sayım
+      // eşzamanlı değişiklikleri (receive()'in dispatch'ten döndürdüğü toplar)
+      // görür. roll-consume'dan (aşağıda) ÖNCE yapıldığından shipRollIds hâlâ
+      // AT_SUBCONTRACTOR sayılır; biri eşzamanlı taşınmışsa false + roll-claim 409.
+      const dispatchStillAtSub = await tx.roll.count({
+        where: { id: { in: dispatchRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
+      });
+      isFullDispatchShip = dispatchStillAtSub === shipRollIds.length;
       // 1) Dispatch işareti — yalnız dispatch'in TÜMÜ sevk edildiyse directShippedAt
       //    set edilir (atomik claim). Kısmi sevkte dispatch AÇIK kalır; atomiklik
       //    aşağıdaki roll claim'iyle (status=AT_SUBCONTRACTOR + count) sağlanır.
@@ -4327,7 +4391,7 @@ function assembleFasonCekiDoc(args: {
   totalQty: number;
 }): Record<string, unknown> {
   const rolls = args.rolls.map((r, idx) => ({ sequence: idx + 1, ...r }));
-  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+  const totalWeight = Number(rolls.reduce((s, r) => s.plus(r.dispatchedWeight ?? 0), new Prisma.Decimal(0)));
   return {
     dispatchNo: args.dispatchNo,
     dispatchedAt: args.dispatchedAt,
@@ -4492,7 +4556,7 @@ async function buildFasonDirectShipDoc(
     qualityGrade: item.roll.qualityGrade,
     width: item.roll.width != null ? Number(item.roll.width) : null,
   }));
-  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+  const totalWeight = Number(rolls.reduce((s, r) => s.plus(r.dispatchedWeight ?? 0), new Prisma.Decimal(0)));
   const allocations = dispatch.directShipAllocations.map((a) => ({
     orderNumber: a.orderLine.order.orderNumber,
     itemCode: a.orderLine.item.code,

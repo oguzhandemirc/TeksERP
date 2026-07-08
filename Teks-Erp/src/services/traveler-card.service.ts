@@ -22,7 +22,7 @@ import {
   renderTravelerCardHtml,
   type TravelerCardSnapshot,
 } from "./document-render/traveler-card.html";
-import { parseQueryParams, buildPagination, resolveSortBy } from "../utils/query-parser";
+import { parseQueryParams, buildPagination, resolveSortBy, buildTurkishSearch } from "../utils/query-parser";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
 // varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
@@ -104,21 +104,29 @@ export class TravelerCardService {
    * sessizce 1'e dönüp duplicate üretmek yerine bir sonraki geçerli kayda
    * geçer. Hiçbiri parse edilemezse net hata fırlatır — admin müdahale eder.
    */
-  private async nextMonthlySequence(date: Date): Promise<number> {
+  private async nextMonthlySequence(
+    date: Date,
+    // F270: tx içinden çağrıldığında tx snapshot'ından oku — global prisma ile
+    // okumak withBarcodeRetry+$transaction closure'ında retry'lar arası tutarsız
+    // sequence görebilirdi.
+    client: Prisma.TransactionClient = prisma,
+  ): Promise<number> {
     const yy = String(date.getFullYear()).slice(2);
     const mm = String(date.getMonth() + 1).padStart(2, "0");
     const prefix = `RK${yy}${mm}`; // ayraçsız barkod: RKYYMM ile başlar
 
-    const candidates = await prisma.travelerCard.findMany({
-      where: { barcode: { startsWith: prefix } },
-      orderBy: { barcode: "desc" },
-      take: 10,
+    // O-21: gte (index seek) + startsWith (tam-prefix, collation-bağımsız) ile aydaki
+    // TÜM kartları çek; orderBy desc + take 10 glibc collation'ında gerçek max'ı ilk 10
+    // dışında bırakıp DUPLICATE üretebiliyordu. Sayısal max'ı Crockford decode ile bul.
+    const candidates = await client.travelerCard.findMany({
+      where: { barcode: { gte: prefix, startsWith: prefix } },
       select: { barcode: true },
     });
 
     if (candidates.length === 0) return 1;
 
     const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let maxSeq = -1;
     for (const c of candidates) {
       // barcode = RKYYMMXXXXXXC (ayraçsız, 13 char) → XXXXXX = pozisyon 6..12
       const b = c.barcode.toUpperCase();
@@ -134,35 +142,44 @@ export class TravelerCardService {
         }
         n = n * 32 + v;
       }
-      if (valid) return n + 1;
+      if (valid && n > maxSeq) maxSeq = n;
     }
 
-    throw AppError.internal(
-      `Refakat kartı sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
-        `son 10 kayıttan hiçbiri parse edilemiyor. DB'yi manuel inceleyin.`
-    );
+    if (maxSeq < 0) {
+      throw AppError.internal(
+        `Refakat kartı sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
+          `hiçbir kayıt parse edilemiyor. DB'yi manuel inceleyin.`
+      );
+    }
+    return maxSeq + 1;
   }
 
   /**
    * Transaction-aware idempotent kart oluşturucu — WorkOrder.create flow'undan
    * çağrılır. WO zaten varlık doğrulamış olduğu için tekrar kontrol etmez.
    *
-   * - Halihazırda ACTIVE kart varsa onu döner (idempotent — yarıda kesilen
-   *   create/recreate akışlarında güvenli).
-   * - Aksi halde version=1 ile yeni kart üretir, AuditService.log düşer.
+   * - Halihazırda ACTIVE kart varsa onu döner ({created:false}) — idempotent;
+   *   yarıda kesilen create/recreate akışlarında güvenli.
+   * - Aksi halde version=1 ile yeni kart üretir ({created:true}).
+   *
+   * F273: Audit BU METOTTAN KALDIRILDI. Çağıran tx `withBarcodeRetry` ile sarılı
+   * olduğundan tx içinde atılan audit, P2002 retry'ında/rollback'te SystemLog'a
+   * hayalet kayıt bırakırdı (AuditService global pool'da ayrı bağlantıda hemen
+   * commit eder). Çağıran, `created:true` ise audit'i tx COMMIT'inden SONRA yazar
+   * (reprint()/print() deseniyle tutarlı).
    */
   async createForWorkOrder(
     tx: Prisma.TransactionClient,
     workOrderId: string,
     userId?: string
-  ): Promise<TravelerCard> {
+  ): Promise<{ card: TravelerCard; created: boolean }> {
     const existing = await tx.travelerCard.findFirst({
       where: { workOrderId, status: TravelerCardStatus.ACTIVE },
     });
-    if (existing) return existing;
+    if (existing) return { card: existing, created: false };
 
     const now = new Date();
-    const seq = await this.nextMonthlySequence(now);
+    const seq = await this.nextMonthlySequence(now, tx);
     const cardNumber = buildCardNumber(now, seq);
     const barcode = buildBarcode(now, seq);
     const snapshot = await this.buildSnapshot(tx, workOrderId);
@@ -179,22 +196,7 @@ export class TravelerCardService {
       },
     });
 
-    // Audit dış prisma'ya yazıyor — tx commit'inden sonra düşse bile kayıp olmaz
-    // (best-effort log). Asıl card kaydı tx içinde garanti.
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "TRAVELER_CARD",
-      recordId: card.id,
-      newData: {
-        cardNumber,
-        barcode,
-        version: 1,
-        event: "AUTO_PRINT_ON_WO_CREATE",
-      },
-    });
-
-    return card;
+    return { card, created: true };
   }
 
   /**
@@ -312,7 +314,7 @@ export class TravelerCardService {
         // Not: createCardInternal kendi küçük transaction'ı var; burada dış
         // transaction'a katılması için tx'i direkt geçiremeyiz. Basit çözüm:
         // kart oluşturma işini burada inline yapalım.
-        const seq = await this.nextMonthlySequence(new Date());
+        const seq = await this.nextMonthlySequence(new Date(), tx);
         const now = new Date();
         const cardNumber = buildCardNumber(now, seq);
         const barcode = buildBarcode(now, seq);
@@ -472,6 +474,15 @@ export class TravelerCardService {
       throw AppError.conflict("Bağlı iş emri iptal edilmiş");
     }
 
+    // F191: stationId sadece uuid formatında doğrulanıyordu; var-olmayan/pasif
+    // istasyon FK ihlaliyle generic 500 verirdi. Net Türkçe 404/400'e çevir.
+    const station = await prisma.station.findUnique({
+      where: { id: data.stationId },
+      select: { isActive: true },
+    });
+    if (!station) throw AppError.notFound("İstasyon bulunamadı");
+    if (!station.isActive) throw AppError.badRequest("İstasyon pasif — okutma yapılamaz");
+
     // İstasyona karşılık gelen step'i bul (birden fazla varsa PENDING/ACTIVE olanı tercih et)
     const matchingStep = card.workOrder.steps.find(
       (s) => s.stationId === data.stationId && s.status !== "COMPLETED" && s.status !== "SKIPPED"
@@ -547,10 +558,15 @@ export class TravelerCardService {
     // gerekçe). WO batchNumber kısmi araması için contains kalır (relation).
     if (params.search && params.search.trim()) {
       const q = params.search.trim();
+      // F194: barcode/cardNumber UPPERCASE saklanır → terimi normalize et (findByBarcode
+      // ile simetri); picker'a küçük harf yazan/yapıştıran kullanıcı da kartı bulur.
+      const qUpper = q.toUpperCase();
       where.OR = [
-        { cardNumber: q },
-        { barcode: q },
-        { workOrder: { batchNumber: { contains: q, mode: "insensitive" } } },
+        { cardNumber: qUpper },
+        { barcode: qUpper },
+        ...buildTurkishSearch<Prisma.TravelerCardWhereInput>(q, [
+          "workOrder.batchNumber",
+        ]),
       ];
     }
 
@@ -617,7 +633,7 @@ export class TravelerCardService {
    */
   async findByBarcode(
     input: string,
-  ): Promise<ApiResponse<(TravelerCard & { hasOpenDispatch: boolean }) | null>> {
+  ): Promise<ApiResponse<(Omit<TravelerCard, "snapshot"> & { hasOpenDispatch: boolean }) | null>> {
     const normalized = input.trim().toUpperCase();
 
     const isFullBarcode = /^RK\d{4}[0-9A-Z]{6}[0-9A-Z]$/.test(normalized);
@@ -634,6 +650,9 @@ export class TravelerCardService {
 
     const card = await prisma.travelerCard.findFirst({
       where: isFullBarcode ? { barcode: normalized } : { cardNumber: normalized },
+      // F190: önizleme uçları (FasonSevk/FasonKabul tarama) donmuş `snapshot`ı KULLANMAZ
+      // (getCardHtml ayrı çeker) — Prisma 7 omit ile ağır Json'u atla; kalan alanlar/relations byte-uyumlu.
+      omit: { snapshot: true },
       include: {
         workOrder: {
           include: {

@@ -57,11 +57,20 @@ function svgQr(x: number, y: number, mag: number, data: string): string {
   const size = qrFootprintDots(data.length, mag);
   return `<image href="${img.uri}" x="${x}" y="${y}" width="${size.toFixed(0)}" height="${size.toFixed(0)}"/>`;
 }
-function svgBarcode(x: number, y: number, heightDots: number, data: string, human: boolean): string {
+function svgBarcode(
+  x: number,
+  y: number,
+  heightDots: number,
+  data: string,
+  human: boolean,
+  widthScale = 1,
+): string {
   const img = bwipImg({ bcid: "code128", text: data, scale: 2, height: 10, includetext: false, backgroundcolor: "ffffff" });
   if (!img) return "";
-  const ww = heightDots * (img.w / img.h);
-  let out = `<image href="${img.uri}" x="${x}" y="${y}" width="${ww.toFixed(0)}" height="${heightDots}"/>`;
+  // widthScale = modül kalınlığı / taban(2) — komuttaki dar-çubuk değeri önizlemeye
+  // orantılı genişlik olarak yansır (mw büyütmesi "gördüğün = basılan" kalsın).
+  const ww = heightDots * (img.w / img.h) * widthScale;
+  let out = `<image href="${img.uri}" x="${x}" y="${y}" width="${ww.toFixed(0)}" height="${heightDots}" preserveAspectRatio="none"/>`;
   if (human) out += svgText(x + ww / 2, y + heightDots + 4, 18, data, { anchor: "middle" });
   return out;
 }
@@ -94,8 +103,9 @@ export function renderPplbToSvg(pplb: string): string | null {
       continue;
     }
     // Barkod: B x,y,rot,type,narrow,wide,height,human(B/N),"veri" (type 1 = Code128)
-    if ((m = ln.match(/^B(\d+),(\d+),\d+,\d+,\d+,\d+,(\d+),([BN]),"(.*)"$/))) {
-      els.push(svgBarcode(+m[1], +m[2], +m[3], m[5], m[4] === "B"));
+    // narrow (modül) yakalanır → önizleme genişliği orantılı (taban 2).
+    if ((m = ln.match(/^B(\d+),(\d+),\d+,\d+,(\d+),\d+,(\d+),([BN]),"(.*)"$/))) {
+      els.push(svgBarcode(+m[1], +m[2], +m[4], m[6], m[5] === "B", (+m[3] || 2) / 2));
       continue;
     }
     // Dolu siyah çizgi/kutu: LO x,y,w,h
@@ -124,20 +134,35 @@ export function renderPplaToSvg(ppla: string, widthDots: number): string | null 
     let m: RegExpMatchArray | null;
     // Yükseklik: <STX>M#### (max label length)
     if ((m = ln.match(/^\x02?M(\d+)$/))) { H = +m[1]; continue; }
-    // QR: 1W1c0606<row4><col4><veri>  (metin regex'inden ÖNCE — "1W" ile başlar)
-    if ((m = ln.match(/^1W1c\d{4}(\d{4})(\d{4})(.*)$/))) {
-      els.push(svgQr(+m[2], +m[1], 4, m[3]));
+    // QR: 1W1c<mag2><mag2><row4><col4><veri>  (metin regex'inden ÖNCE — "1W" ile başlar)
+    // Modül büyütme komuttan okunur (eskiden sabit 4 varsayılıyordu — qrScale yansımıyordu).
+    if ((m = ln.match(/^1W1c(\d{2})(\d{2})(\d{4})(\d{4})(.*)$/))) {
+      els.push(svgQr(+m[4], +m[3], +m[1] || 4, m[5]));
       continue;
     }
-    // Code128: 1e<n><w><h4><row4><col4><veri>
-    if ((m = ln.match(/^1e\d\d(\d{4})(\d{4})(\d{4})(.*)$/))) {
-      els.push(svgBarcode(+m[3], +m[2], +m[1], m[4], false));
+    // Code128: 1e<n><w><h4><row4><col4><veri> — n (dar/modül) önizleme genişliğine yansır.
+    if ((m = ln.match(/^1e(\d)\d(\d{4})(\d{4})(\d{4})(.*)$/))) {
+      els.push(svgBarcode(+m[4], +m[3], +m[2], m[5], false, (+m[1] || 2) / 2));
       continue;
     }
-    // Metin: 1<font><wMul><hMul>000<row4><col4><veri>
-    if ((m = ln.match(/^1([1-9])(\d)(\d)000(\d{4})(\d{4})(.*)$/))) {
-      const fd = EPL_FONT_BY_CODE[m[1]] ?? EPL_FONT_BY_CODE["3"];
-      els.push(svgTextCell(+m[5], +m[4], fd.w * (+m[2] || 1), fd.h * (+m[3] || 1), m[6]));
+    // DPL grafik (font X): 1X11000<row4><col4>L<w4><h4> (dolu) / B<w4><h4><t4><t4> (çerçeve)
+    if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})L(\d{4})(\d{4})$/))) {
+      els.push(`<rect x="${+m[2]}" y="${+m[1]}" width="${+m[3]}" height="${+m[4]}" fill="#000"/>`);
+      continue;
+    }
+    if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})B(\d{4})(\d{4})(\d{4})(\d{4})$/))) {
+      els.push(
+        `<rect x="${+m[2]}" y="${+m[1]}" width="${+m[3]}" height="${+m[4]}" fill="none" stroke="#000" stroke-width="${+m[5]}"/>`,
+      );
+      continue;
+    }
+    // Metin: <rot 1-4><font><wMul><hMul>000<row4><col4><veri> — DPL rot 1=0°,2=90°,
+    // 3=180°, 4=270° CW (kanvas elemanları döndürülmüş metin basabilir).
+    if ((m = ln.match(/^([1-4])([1-9])(\d)(\d)000(\d{4})(\d{4})(.*)$/))) {
+      const fd = EPL_FONT_BY_CODE[m[2]] ?? EPL_FONT_BY_CODE["3"];
+      const cell = svgTextCell(+m[6], +m[5], fd.w * (+m[3] || 1), fd.h * (+m[4] || 1), m[7]);
+      const deg = (+m[1] - 1) * 90;
+      els.push(deg ? `<g transform="rotate(${deg} ${+m[6]} ${+m[5]})">${cell}</g>` : cell);
       continue;
     }
     // <STX>n, <STX>L, D11, H10, Q####, E — çizim üretmez, atla.
@@ -175,9 +200,9 @@ export function renderZplToSvg(zpl: string): string | null {
   for (const q of zpl.matchAll(/\^FO(\d+),(\d+)\^BQN,\d+,(\d+)\^FD(?:QA,)?([\s\S]*?)\^FS/g)) {
     els.push(svgQr(+q[1], +q[2], +q[3] || 3, q[4]));
   }
-  // Code128: ^FO x,y^BCN,h,Y,...^FD veri^FS  (Y = okunur satır yazıcıda çizilir → biz de)
-  for (const b of zpl.matchAll(/\^FO(\d+),(\d+)\^BCN,(\d+),([^,^]*),[^^]*\^FD([\s\S]*?)\^FS/g)) {
-    els.push(svgBarcode(+b[1], +b[2], +b[3], b[5], b[4] === "Y"));
+  // Code128: ^FO x,y[^BY mw]^BCN,h,Y,...^FD veri^FS  (^BY = modül kalınlığı → genişlik orantılı)
+  for (const b of zpl.matchAll(/\^FO(\d+),(\d+)(?:\^BY(\d+))?\^BCN,(\d+),([^,^]*),[^^]*\^FD([\s\S]*?)\^FS/g)) {
+    els.push(svgBarcode(+b[1], +b[2], +b[4], b[6], b[5] === "Y", (Number(b[3]) || 2) / 2));
   }
   return wrapSvg(W, H, els);
 }

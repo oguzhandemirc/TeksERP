@@ -23,7 +23,7 @@ const format: ResolvedLabelFormat = {
   widthMm: 100, heightMm: 50, marginMm: 2,
   marginTopMm: 2, marginRightMm: 2, marginBottomMm: 2, marginLeftMm: 2, gapMm: 3,
   orientation: "PORTRAIT",
-  dpi: 203, language: "PPLB", profileId: "p1", source: "machine",
+  dpi: 203, language: "PPLB", source: "machine",
 };
 const payload = {
   barcode: "TEKS20260701ABCD1234", qualityGrade: "1.KALITE", widthCm: 150,

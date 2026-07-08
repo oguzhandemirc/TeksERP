@@ -1,11 +1,14 @@
 /**
  * Birleşik cihaz kaydı — yazıcılar (ağ/Bluetooth/USB/seri) + tekstil makine
- * sinyal kaynakları (kantar/metraj, kayıt-only). Her cihaz dil/profil/şablon
- * yönlendirmesini taşır; baskı anında backend cihaz→{dil,profil,şablon} çözer.
+ * sinyal kaynakları (kantar/metraj, kayıt-only). Her cihaz dil/medya/şablon
+ * yönlendirmesini taşır; baskı anında backend cihaz→{dil,medya,şablon} çözer.
  */
 export type ConnectionType = "NETWORK_TCP" | "BLUETOOTH_SPP" | "BLE" | "USB" | "SERIAL_COM";
 export type PeripheralKind = "LABEL_PRINTER" | "SCALE" | "METER" | "SIGNAL_SOURCE";
 export type PrinterLanguage = "RASTER_HTML" | "PPLA" | "PPLB" | "ZPL";
+/** Yönlendirme BAĞLAMI (baskı anındaki iş bağlamı) — şablonun kimliği DEĞİL.
+ *  Etiket Stüdyosu v2 tek-havuz modeli: her bağlama havuzdaki HERHANGİ bir
+ *  şablon atanabilir (LabelTemplate.kind yalnız legacy bilgi, null olabilir). */
 export type RouteLabelKind = "ROLL_RAW" | "ROLL_FINISHED" | "SWATCH";
 
 export interface PeripheralTemplateRouteRef {
@@ -36,15 +39,20 @@ export interface PeripheralDevice {
   /** MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.) — çalışma oturumu modeli. */
   stationId: string | null;
   deviceId: string | null;
-  formatProfileId: string | null;
   languageOverride: PrinterLanguage | null;
+  // Yazıcı MEDYASI (Etiket Stüdyosu v2 — boyut artık doğrudan cihazda; "Boyutlar"
+  // / LabelFormatProfile kataloğu emekli). Yalnız LABEL_PRINTER'da anlamlı, boş
+  // (null) → sistem varsayılan medyası kullanılır. Decimal alanlar JSON'da number.
+  labelWidthMm: number | null;
+  labelHeightMm: number | null;
+  labelDpi: number | null;
+  labelGapMm: number | null;
   isActive: boolean;
   lastSeenAt: string | null;
   notes: string | null;
   machine?: { id: string; code: string; name: string } | null;
   station?: { id: string; code: string; name: string; kind: string } | null;
   device?: { id: string; name: string } | null;
-  formatProfile?: { id: string; code: string; name: string } | null;
   templateRoutes?: PeripheralTemplateRouteRef[];
   createdAt: string;
   updatedAt: string;

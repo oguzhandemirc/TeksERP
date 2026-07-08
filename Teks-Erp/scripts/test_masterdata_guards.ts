@@ -4,13 +4,13 @@
 // =============================================================================
 // 1) relabel (applyManualProperties) allowed-property guard — createInitialEntry
 //    PARİTE: item'ın allowed listesi doluysa liste-dışı özellik → 400.
-// 2) LabelFormatProfileService validateRefs — widthMm/heightMm/dpi > 0, margin/gap >= 0 → 400.
-// (PrinterModelService bölümü 2026-07'de katalogla birlikte kaldırıldı.)
+// (LabelFormatProfileService bölümü 2026-07'de "Boyutlar" kataloğu emekliye ayrılınca
+//  kaldırıldı — cihaz medyası validasyonu artık test_peripheral_registry_crud'da.
+//  PrinterModelService bölümü de 2026-07'de katalogla birlikte kaldırıldı.)
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
-import { LabelFormatProfileService } from "../src/services/label-format-profile.service";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0,
@@ -31,10 +31,8 @@ function need<T>(v: T | null | undefined, what: string): T {
 const is400 = (e: unknown) => e instanceof AppError && e.statusCode === 400;
 
 const inv = new InventoryService();
-const labelProfiles = new LabelFormatProfileService({ modelName: "labelFormatProfile", tableName: "LABEL_FORMAT_PROFILE", uniqueField: "code" });
 
 const stamp = Date.now().toString().slice(-7);
-const profileIds: string[] = [];
 let ITEM = "",
   ROLL = "",
   PROP_A = "",
@@ -86,32 +84,7 @@ async function main(): Promise<void> {
     await inv.applyManualProperties(ROLL, { colorId: null, propertyIds: [PROP_A] }, undefined);
     const after = await prisma.roll.findUnique({ where: { id: ROLL }, select: { properties: { select: { propertyId: true } } } });
     check("izinli özellik → uygulandı", after?.properties.length === 1 && after.properties[0].propertyId === PROP_A);
-
-    console.log("\n=== 2) LabelFormatProfileService guard ===");
-    // Geçerli profil (pozitif yol)
-    const okProfileRes = await labelProfiles.create(
-      { code: `TST-MDG-LP-OK-${stamp}`, name: "ok", widthMm: 100, heightMm: 148, dpi: 203, marginMm: 3, gapMm: 2 },
-      undefined
-    );
-    const okProfileId = (okProfileRes.data as { id?: string } | null)?.id;
-    if (okProfileId) profileIds.push(okProfileId);
-    check("geçerli label-format-profile → ok", okProfileRes.success === true && !!okProfileId);
-
-    let w0: unknown, marginNeg: unknown;
-    try {
-      await labelProfiles.create({ code: `TST-MDG-LP-W-${stamp}`, name: "x", widthMm: 0, heightMm: 148 }, undefined);
-    } catch (e) {
-      w0 = e;
-    }
-    check("widthMm:0 → 400", is400(w0));
-    try {
-      await labelProfiles.create({ code: `TST-MDG-LP-M-${stamp}`, name: "x", widthMm: 100, heightMm: 148, marginMm: -1 }, undefined);
-    } catch (e) {
-      marginNeg = e;
-    }
-    check("marginMm:-1 → 400", is400(marginNeg));
   } finally {
-    await prisma.labelFormatProfile.deleteMany({ where: { code: { startsWith: "TST-MDG-LP-" } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: ROLL } });
     await prisma.roll.deleteMany({ where: { id: ROLL } });
     await prisma.itemAllowedProperty.deleteMany({ where: { itemId: ITEM } });

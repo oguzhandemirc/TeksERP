@@ -85,11 +85,14 @@ export class CustomerBranchService {
   }
 
   async update(
+    customerId: string,
     id: string,
     data: Partial<CustomerBranchInput>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    const existing = await prisma.customerBranch.findUnique({ where: { id } });
+    // F204: şube URL'deki müşteriye AİT olmalı (IDOR — /customers/X/branches/Y'de
+    // Y başka müşterinin şubesiyse 404). findFirst(id+customerId) ile kapsamlandır.
+    const existing = await prisma.customerBranch.findFirst({ where: { id, customerId } });
     if (!existing) throw AppError.notFound("Şube bulunamadı");
 
     const updated = await prisma.customerBranch.update({
@@ -122,8 +125,9 @@ export class CustomerBranchService {
   }
 
   /** Soft delete — şubenin geçmiş sevkiyatları kalır, ileride seçilemez. */
-  async deactivate(id: string, userId?: string): Promise<ApiResponse<{ id: string }>> {
-    const existing = await prisma.customerBranch.findUnique({ where: { id } });
+  async deactivate(customerId: string, id: string, userId?: string): Promise<ApiResponse<{ id: string }>> {
+    // F204: şube URL'deki müşteriye ait olmalı (IDOR guard).
+    const existing = await prisma.customerBranch.findFirst({ where: { id, customerId } });
     if (!existing) throw AppError.notFound("Şube bulunamadı");
 
     if (!existing.isActive) {

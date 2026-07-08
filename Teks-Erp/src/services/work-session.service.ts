@@ -19,6 +19,8 @@ import { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { resolveActiveSession, sweepIdleSessions } from "./helpers/work-session.helper";
+import { buildPagination } from "../utils/query-parser";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { WorkSessionEndReason, StationKind } from "@prisma/client";
 import type { ApiResponse, PaginatedResponse } from "../types/api.types";
 
@@ -29,6 +31,16 @@ const TABLE = "WORK_SESSION";
  * backend aynası (RAW_QC→KK1, PROCESS_QC→KK2/Kurşun, TAMBUR→Tambur, SHIPPING→Tartı/Paket).
  */
 export const SESSIONABLE_STATION_KINDS = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SHIPPING"] as const;
+
+// F221: StationKind → o istasyonda oturum açmak için gereken MOBILE izni. mobile:*
+// ve * wildcard'ları matchesPermission ile geçer; yalnız ilgili izne sahip operatör
+// o tür istasyonu açabilir/devralabilir (örn. mobile:kk1'li kullanıcı TAMBUR açamaz).
+const STATION_KIND_PERM: Record<string, string> = {
+  RAW_QC: "mobile:kk1",
+  PROCESS_QC: "mobile:kk2-kursun",
+  TAMBUR: "mobile:tambur",
+  SHIPPING: "mobile:tarti-paket",
+};
 
 /** Oturum açma yetkisi olan mobil ekran izinleri (routes + peripheral for-session paylaşır). */
 export const MOBILE_SESSION_PERMS = [
@@ -162,6 +174,10 @@ export class WorkSessionService {
     machineId?: string | null;
     stationId?: string | null;
     confirmTakeover?: boolean;
+    /** F221: sağlanırsa istasyon-türü izni ENFORCE edilir. Controller req.user.permissions'ı
+     *  HER ZAMAN geçirir (0-izinli kullanıcı = [] → reddedilir). Omit = güvenilen dahili
+     *  çağrı (test/servis-içi) → kontrol atlanır. Güvenlik sınırı controller'dadır. */
+    permissions?: readonly string[];
   }): Promise<ApiResponse<unknown>> {
     const machineId = input.machineId ?? null;
     const stationIdInput = input.stationId ?? null;
@@ -184,6 +200,11 @@ export class WorkSessionService {
       }
       if (!isSessionableKind(machine.station.kind)) {
         throw AppError.badRequest("Bu istasyon türünde çalışma oturumu açılamaz");
+      }
+      // F221: istasyon türü izni (yalnız mobile:kk1 olan TAMBUR makinesini açamaz/devralamaz).
+      const needM = STATION_KIND_PERM[machine.station.kind];
+      if (input.permissions !== undefined && needM && !matchesPermission(input.permissions, needM)) {
+        throw AppError.forbidden("Bu istasyon türünde oturum açma yetkiniz yok");
       }
       stationId = machine.stationId;
 
@@ -220,6 +241,11 @@ export class WorkSessionService {
       if (!isSessionableKind(station.kind)) {
         throw AppError.badRequest("Bu istasyon türünde çalışma oturumu açılamaz");
       }
+      // F221: istasyon türü izni (makine dalıyla aynı).
+      const needS = STATION_KIND_PERM[station.kind];
+      if (input.permissions !== undefined && needS && !matchesPermission(input.permissions, needS)) {
+        throw AppError.forbidden("Bu istasyon türünde oturum açma yetkiniz yok");
+      }
       const machineCount = await prisma.machine.count({
         where: { stationId: station.id, isActive: true },
       });
@@ -230,6 +256,16 @@ export class WorkSessionService {
       }
       stationId = station.id;
     }
+
+    // F226: devralınacak açık oturumları tx KAPATMADAN ÖNCE yakala → devralma sonrası
+    // her biri için TAKEOVER audit'i yaz (kim kimin oturumunu devraldı izlenebilsin).
+    const takenOver =
+      machineId && input.confirmTakeover
+        ? await prisma.workSession.findMany({
+            where: { machineId, endedAt: null },
+            select: { id: true, userId: true },
+          })
+        : [];
 
     const now = new Date();
     let created;
@@ -292,6 +328,17 @@ export class WorkSessionService {
       newData: { deviceId: input.deviceRowId, machineId, stationId },
     }).catch(() => undefined);
 
+    // F226: devralınan oturumlar için TAKEOVER izi (best-effort, tx dışı, seri).
+    for (const s of takenOver) {
+      await AuditService.log({
+        userId: input.userId,
+        action: "UPDATE",
+        tableName: TABLE,
+        recordId: s.id,
+        newData: { endReason: "TAKEOVER", takenOverFromUserId: s.userId, byUserId: input.userId, machineId },
+      }).catch(() => undefined);
+    }
+
     return { success: true, data: created };
   }
 
@@ -333,10 +380,26 @@ export class WorkSessionService {
     // kapat, active=null dön. lastPlace korunur → yer onayı aynı makineyi yeni
     // kullanıcı adına önerir/açar.
     if (activeMin && requestUserId && activeMin.userId !== requestUserId) {
-      await prisma.workSession.updateMany({
+      const reclaim = await prisma.workSession.updateMany({
         where: { id: activeMin.id, endedAt: null },
         data: { endedAt: new Date(), endReason: "NEW_LOGIN" as WorkSessionEndReason },
       });
+      // F285: başka kullanıcının oturumunu kapatan öz-onarım iz bırakmıyordu
+      // (closeForNewLogin loglar). Best-effort audit — koşullu (0 satır kapatılırsa
+      // eşzamanlı başka bir kapanış araya girmiştir, log atma).
+      if (reclaim.count > 0) {
+        await AuditService.log({
+          userId: requestUserId,
+          action: "UPDATE",
+          tableName: TABLE,
+          recordId: activeMin.id,
+          newData: {
+            endReason: "NEW_LOGIN",
+            reclaimedFromUserId: activeMin.userId,
+            byUserId: requestUserId,
+          },
+        }).catch(() => undefined);
+      }
       activeMin = null;
     }
     const active = activeMin
@@ -444,14 +507,17 @@ export class WorkSessionService {
         ? { startedAt: { ...(q.from ? { gte: q.from } : {}), ...(q.to ? { lte: q.to } : {}) } }
         : {}),
     };
+    // F275: MAX_OFFSET guard (skip>10K → Türkçe 400). WorkSession her login/vardiyada
+    // büyür; ham (page-1)*pageSize sınırsız derin OFFSET taramasına açıktı.
+    const { skip, take } = buildPagination(page, pageSize);
     const [total, items] = await Promise.all([
       prisma.workSession.count({ where }),
       prisma.workSession.findMany({
         where,
         include: SESSION_INCLUDE,
         orderBy: { startedAt: "desc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip,
+        take,
       }),
     ]);
     const data = await attachSuccessors(items);

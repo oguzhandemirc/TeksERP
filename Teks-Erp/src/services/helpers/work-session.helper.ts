@@ -86,15 +86,27 @@ export async function getStampContext(
   // ("ayak izinde eski kullanıcı hâlâ aktif" saha bug'ı). Kalıntıyı vardiya
   // değişimi (NEW_LOGIN) ile kapat; akış "oturum yok" dalına düşer → mobilde
   // yer onayı yeni kullanıcı adına taze oturum açar.
+  let selfRepaired = false;
   if (session && req.user?.userId && session.userId !== req.user.userId) {
     await prisma.workSession.updateMany({
       where: { id: session.id, endedAt: null },
       data: { endedAt: new Date(), endReason: "NEW_LOGIN" as WorkSessionEndReason },
     });
     session = null;
+    selfRepaired = true;
   }
   if (!session) {
     if (opts?.enforceForMobile && req.device.kind !== "DESKTOP") {
+      // F223: Öz-onarımla yabancı kalıntıyı BİZ az önce NEW_LOGIN ile kapattık →
+      // SON kapanan satır tam da o. Onu "sebep" olarak göstermek bu operatöre
+      // yanıltıcı olur ("başka yerde giriş yapıldı"): gerçek sebep "bu cihazda
+      // sana ait oturum yok". Generic dön (reason=null → client varsayılan mesaj).
+      if (selfRepaired) {
+        throw AppError.conflict(
+          "Bu cihazda aktif çalışma oturumu yok — önce makine/istasyon onayı verin",
+          { code: "WORK_SESSION_REQUIRED", reason: null, takenBy: null },
+        );
+      }
       // Sebebi ekle: bu cihazın SON kapanan oturumunun endReason'ı → client doğru
       // bildirim gösterir (devralındı=TAKEOVER / hareketsizlik=IDLE / başka yerde
       // giriş=NEW_LOGIN / yönetici=ADMIN). Aktif oturum yeni kapandıysa bu odur.

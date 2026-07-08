@@ -19,6 +19,12 @@ export const API_URL = devHost
   ? `http://${devHost}:${BACKEND_PORT}/api`
   : envApiUrl ?? `http://localhost:${BACKEND_PORT}/api`;
 
+/** Ekranı bekleten bootstrap GET'lerinin timeout'u (login ekranı verileri,
+ *  work-sessions/current). Global 10sn mutasyonlar için kalır; kullanıcının
+ *  boş ekrana baktığı isteklerde 5sn'den fazlası "donma" olarak algılanır —
+ *  SWR cache'i + arka plan tazeleme zaten devrede (SAHA-AG-DAYANIKLILIK.md §S2). */
+export const BOOTSTRAP_TIMEOUT_MS = 5_000;
+
 export const ENDPOINTS = {
   auth: {
     login: '/auth/login',

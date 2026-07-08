@@ -40,40 +40,66 @@ export const resolveDevice = async (
   if (!deviceId || typeof deviceId !== "string") {
     return next();
   }
-  if (EXEMPT_PATHS.has(req.path)) {
+  // F27: trailing-slash / büyük-harf varyantında announce/status/pairing kilitlenmesin.
+  const normalizedPath = req.path.replace(/\/+$/, "").toLowerCase();
+  if (EXEMPT_PATHS.has(normalizedPath)) {
     return next();
   }
+  // F19: try YALNIZ resolveDevice etrafında. Eskiden boş catch, DB hatasında
+  // eşleştirme zorunluyken bile PENDING/pasif cihazı kapıdan geçiriyordu (fail-open,
+  // görünmez). Artık eşleştirme zorunluysa hata halinde FAIL-CLOSED (503) + iz.
+  let device;
   try {
-    const device = await DeviceService.resolveDevice(deviceId);
-    if (!device) {
-      // Cihaz silinmiş, pasifleştirilmiş veya hiç eşleşmemiş. Eşleştirme zorunluysa
-      // tablet'in tüm istekleri (login dahil) burada kesilir; mobil interceptor
-      // pairing storage'ı temizleyip kullanıcıyı pairing ekranına yönlendirir.
-      // Eşleştirme pasifse (default) bloklama yok — cihaz req.device'sız geçer.
-      if (await readDevicePairingRequired()) {
-        res.status(401).json({
-          success: false,
-          message:
-            "Cihaz pasifleştirilmiş veya kayıtlı değil. Yöneticiden yeni eşleştirme kodu isteyin.",
-          code: "DEVICE_INACTIVE",
-        });
-        return;
-      }
-      return next();
+    device = await DeviceService.resolveDevice(deviceId);
+  } catch (err) {
+    console.warn(
+      "[device.middleware] resolveDevice hatası:",
+      err instanceof Error ? err.message : err,
+    );
+    let pairingRequired = false;
+    try {
+      pairingRequired = await readDevicePairingRequired();
+    } catch {
+      /* flag da okunamadı: eşleştirme kapalı varsayılıp mevcut fail-open korunur */
     }
-    // Onaylı + aktif cihaz GEÇER — makineye atanmamış olsa bile. Yönetici/atamasız
-    // cihaz da çalışır; donanım artık deviceId-join'den çözülür (makineden değil).
-    // machineId yalnızca üretim atfı (RollOperation vb.); null olması erişimi engellemez.
-    req.device = {
-      id: device.id,
-      deviceId: device.deviceId,
-      name: device.name,
-      machineId: device.machineId,
-      kind: device.kind,
-    };
-    touchDevice(device.deviceId); // anlık "bağlı cihaz" izleme (bellekte)
-  } catch {
-    // DB resolve hatası endpoint'i bloklamamalı — log altyapısı yoksa sessiz geç.
+    if (pairingRequired) {
+      res.status(503).json({
+        success: false,
+        message: "Cihaz doğrulaması geçici olarak yapılamıyor. Lütfen tekrar deneyin.",
+        code: "DEVICE_CHECK_UNAVAILABLE",
+      });
+      return;
+    }
+    return next(); // eşleştirme kapalı (default): DB hatası erişimi engellemesin (kasıtlı fail-open)
   }
+
+  if (!device) {
+    // Cihaz silinmiş, pasifleştirilmiş veya hiç eşleşmemiş. Eşleştirme zorunluysa
+    // tablet'in tüm istekleri (login dahil) burada kesilir; mobil interceptor
+    // pairing storage'ı temizleyip kullanıcıyı pairing ekranına yönlendirir.
+    // Eşleştirme pasifse (default) bloklama yok — cihaz req.device'sız geçer.
+    if (await readDevicePairingRequired()) {
+      res.status(401).json({
+        success: false,
+        message:
+          "Cihaz pasifleştirilmiş veya kayıtlı değil. Yöneticiden yeni eşleştirme kodu isteyin.",
+        code: "DEVICE_INACTIVE",
+      });
+      return;
+    }
+    return next();
+  }
+
+  // Onaylı + aktif cihaz GEÇER — makineye atanmamış olsa bile. Yönetici/atamasız
+  // cihaz da çalışır; donanım artık deviceId-join'den çözülür (makineden değil).
+  // machineId yalnızca üretim atfı (RollOperation vb.); null olması erişimi engellemez.
+  req.device = {
+    id: device.id,
+    deviceId: device.deviceId,
+    name: device.name,
+    machineId: device.machineId,
+    kind: device.kind,
+  };
+  touchDevice(device.deviceId); // anlık "bağlı cihaz" izleme (bellekte)
   next();
 };

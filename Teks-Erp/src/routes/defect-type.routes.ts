@@ -9,6 +9,7 @@ import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { defectTypeHardRemove } from "../services/helpers/guarded-hard-remove";
 
 const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur"] as const;
 
@@ -178,11 +179,12 @@ router.delete("/:id", verifyToken, requirePermission("quality:write"), controlle
  *       404:
  *         description: Kayıt bulunamadı
  */
+// F39: guard'lı kalıcı silme — kullanılmış (RollError'da geçen) hata tipi 409 alır.
 router.delete(
   "/:id/permanent",
   verifyToken,
   requirePermission("quality:write"),
-  controller.hardRemove,
+  defectTypeHardRemove,
 );
 
 export default router;

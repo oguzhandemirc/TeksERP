@@ -11,19 +11,47 @@ import { PrinterLanguage, type LabelKind } from "@prisma/client";
 import type { LabelPayload } from "../label.service";
 import { fieldDisplayValue } from "./label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./native-preview";
+import { escapeHtml } from "./label-html.shared";
+import { cleanCtl } from "./native-label.shared";
 
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
-/** {{key}} → payload görüntü değeri. opts ile HTML için {{barcodeSvg}}/{{qrSvg}}. */
+/**
+ * F186: Gömülen ALAN DEĞERİNİ hedef dile göre kaçır/temizle — komut çerçevesine
+ * (admin'in yazdığı raw kod) DOKUNMAZ, yalnız payload veri slotlarına uygulanır.
+ * Normal generator yolundaki cleanCtl/eplData/zplData/escapeHtml ile BİREBİR aynı
+ * davranış → meşru çıktı değişmez; yalnız kullanıcı-kontrollü metnin komut/markup
+ * enjeksiyonu (native frame bozulması + HTML injection) kapanır.
+ */
+function sanitizeFieldValue(value: string, language: PrinterLanguage): string {
+  switch (language) {
+    case PrinterLanguage.RASTER_HTML:
+      return escapeHtml(value);
+    case PrinterLanguage.PPLB:
+      // EPL2 verisi "..." içinde → " veriyi erken kapatır (eplData ile aynı).
+      return cleanCtl(value).replace(/"/g, "'");
+    case PrinterLanguage.ZPL:
+      // ^ ve ~ ZPL komut öneki → veriden ayıkla (zplData ile aynı).
+      return cleanCtl(value).replace(/[\^~]/g, " ");
+    case PrinterLanguage.PPLA:
+    default:
+      // DPL metin kaydı konumsal (tırnaksız) → yalnız kontrol baytları + ASCII fold.
+      return cleanCtl(value);
+  }
+}
+
+/** {{key}} → payload görüntü değeri (dile göre sanitize). opts ile HTML {{barcodeSvg}}/{{qrSvg}}. */
 export function applyRawCode(
   raw: string,
   payload: LabelPayload,
+  language: PrinterLanguage,
   opts?: { barcodeSvg?: string; qrSvg?: string },
 ): string {
   return raw.replace(PLACEHOLDER_RE, (_m, key: string) => {
+    // barcodeSvg/qrSvg = güvenilir sistem SVG'si → HAM bırak (escape SVG'yi bozar).
     if (key === "barcodeSvg") return opts?.barcodeSvg ?? "";
     if (key === "qrSvg") return opts?.qrSvg ?? "";
-    return fieldDisplayValue(payload, key).value;
+    return sanitizeFieldValue(fieldDisplayValue(payload, key).value, language);
   });
 }
 
@@ -55,7 +83,7 @@ export function buildRawCodePreview(
           qrSvg: bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" }),
         }
       : undefined;
-  const filled = applyRawCode(code, payload, opts);
+  const filled = applyRawCode(code, payload, language, opts);
   // Native dil (PPLB) → gerçek komutları görsele çevir (editör önizlemesi = baskı).
   // Çizilemezse (geçersiz kod / çizici yok) ham metni göster.
   if (language !== PrinterLanguage.RASTER_HTML) {

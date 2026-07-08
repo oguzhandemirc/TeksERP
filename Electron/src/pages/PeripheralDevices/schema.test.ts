@@ -27,6 +27,19 @@ describe("peripheralFormSchema", () => {
     });
     expect(r.success).toBe(true);
   });
+  it("medya sınır dışı (eni 5mm) → geçersiz", () => {
+    const r = peripheralFormSchema.safeParse({
+      ...peripheralFormDefaults, code: "BT-1", name: "Argox", languageOverride: "PPLA", labelWidthMm: "5",
+    });
+    expect(r.success).toBe(false);
+  });
+  it("medya geçerli aralıkta (100mm/203dpi) → geçerli", () => {
+    const r = peripheralFormSchema.safeParse({
+      ...peripheralFormDefaults, code: "BT-1", name: "Argox", languageOverride: "PPLA",
+      labelWidthMm: "100", labelHeightMm: "50", labelDpi: "203", labelGapMm: "2",
+    });
+    expect(r.success).toBe(true);
+  });
 });
 
 describe("buildPeripheralPayload (form → API)", () => {
@@ -86,6 +99,33 @@ describe("buildPeripheralPayload (form → API)", () => {
     const raw = p.templateRoutes.find((r) => r.kind === "ROLL_RAW");
     expect(finished?.templateId).toBe("t1");
     expect(raw?.templateId).toBeNull();
+  });
+
+  it("formatProfileId payload'dan çıkarıldı (DEPRECATED)", () => {
+    const p = buildPeripheralPayload({ ...base }) as Record<string, unknown>;
+    expect("formatProfileId" in p).toBe(false);
+  });
+
+  it("yazıcı medyası: dolu → number, boş → null", () => {
+    const p = buildPeripheralPayload({
+      ...base, labelWidthMm: "100", labelHeightMm: "50", labelDpi: "203", labelGapMm: "2.5",
+    });
+    expect(p.labelWidthMm).toBe(100);
+    expect(p.labelHeightMm).toBe(50);
+    expect(p.labelDpi).toBe(203);
+    expect(p.labelGapMm).toBe(2.5);
+
+    const e = buildPeripheralPayload({ ...base });
+    expect(e.labelWidthMm).toBeNull();
+    expect(e.labelDpi).toBeNull();
+  });
+
+  it("SCALE türünde medya temizlenir (yalnız yazıcıda anlamlı)", () => {
+    const p = buildPeripheralPayload({
+      ...base, kind: "SCALE", labelWidthMm: "100", labelHeightMm: "50",
+    });
+    expect(p.labelWidthMm).toBeNull();
+    expect(p.labelHeightMm).toBeNull();
   });
 
   it("giriş cihazı protokol alanları: dolu → çevrilir, boş → null/false", () => {

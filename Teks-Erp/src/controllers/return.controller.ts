@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { ReturnService } from "../services/return.service";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 
 // ---- Zod şemaları ----------------------------------------------------------
@@ -65,7 +66,8 @@ export class ReturnController {
   /** Tek iade kaydı detayı (geçmiş ekranı detay sheet'i). */
   getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.service.getReturnById(req.params.id as string);
+      const id = assertValidUuid(req.params.id);
+      const result = await this.service.getReturnById(id);
       res.status(200).json(result);
     } catch (e) {
       next(e);
@@ -75,9 +77,10 @@ export class ReturnController {
   /** İade kaydını düzelt (neden + not) — top statüsü/sevkiyatı değişmez. */
   edit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const id = assertValidUuid(req.params.id);
       const body = editReturnSchema.parse(req.body);
       const result = await this.service.editReturn(
-        req.params.id as string,
+        id,
         body,
         req.user?.userId
       );
@@ -90,9 +93,10 @@ export class ReturnController {
   /** İadeyi iptal et (geri al) — sebep zorunlu; top sevkiyatına geri döner. */
   cancel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const id = assertValidUuid(req.params.id);
       const body = cancelReturnSchema.parse(req.body);
       const result = await this.service.cancelReturn(
-        req.params.id as string,
+        id,
         body.reason,
         req.user?.userId
       );

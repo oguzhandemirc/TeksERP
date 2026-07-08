@@ -127,10 +127,28 @@ async function main(): Promise<void> {
 
     // === 6) Legacy withInProduction (E2 — itemId varken hesaplanır) ===
     console.log("\n=== 6) Legacy withInProduction ===");
+    let legacyByLine = new Map<string, string>();
     {
       const r = await svc.findAvailableOrderLines({ itemId: ITEM, withInProduction: true });
       const mine = asLines(r).filter((l) => l.orderNumber.startsWith(PREFIX));
       check("legacy+withInProduction: netOpenQty dolu", mine.length === 5 && mine.every((l) => l.netOpenQty != null));
+      legacyByLine = new Map(mine.map((l) => [l.lineId, String(l.netOpenQty)]));
+    }
+
+    // === 7) F152 — cursor withInProduction+itemId legacy ile BİREBİR (eskiden 0 hardcode) ===
+    console.log("\n=== 7) Cursor withInProduction (F152) ===");
+    {
+      const r = (await svc.findAvailableOrderLines({
+        itemId: ITEM,
+        withInProduction: true,
+        limit: 50,
+      })) as CursorPaginatedResponse<Line>;
+      const mine = (r.data as Line[]).filter((l) => l.orderNumber.startsWith(PREFIX));
+      check("cursor+withInProduction: 5 kalemim döndü", mine.length === 5, `mine=${mine.length}`);
+      check(
+        "cursor+withInProduction: netOpenQty legacy ile birebir (F152)",
+        mine.every((l) => legacyByLine.get(l.lineId) === String(l.netOpenQty)),
+      );
     }
   } finally {
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } }); // lines cascade

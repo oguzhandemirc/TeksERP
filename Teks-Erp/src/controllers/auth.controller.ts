@@ -12,9 +12,9 @@ import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import {
   resolveLoginLockoutKey,
-  checkLoginLockout,
-  recordLoginFailure,
+  reserveLoginAttempt,
   resetLoginLockout,
+  releaseLoginAttempt,
 } from "../middlewares/login-lockout";
 import "../types/express-augment";
 
@@ -159,7 +159,8 @@ export class AuthController {
     const ipAddress = req.ip ?? null;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış kartı throttle et (brute-force).
     const lockoutKey = resolveLoginLockoutKey(req);
-    const lock = await checkLoginLockout(lockoutKey);
+    // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
+    const lock = await reserveLoginAttempt(lockoutKey);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(
@@ -191,13 +192,21 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
-      await recordLoginFailure(lockoutKey);
+      // F49: yalnız 401 (kimlik-bilgisi hatası) brute-force sayılır. 409 SESSION_EXISTS
+      // / 403 (yöntem kapalı / erişim yok) brute-force DEĞİL → assume-fail rezervasyonunu
+      // geri al (paylaşımlı tablet 429'a kilitlenmesin). F20: deneme zaten reserve'de sayıldı.
+      const isCredentialError = error instanceof AppError && error.statusCode === 401;
+      if (!isCredentialError) releaseLoginAttempt(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
-        action: "LOGIN_FAILED",
+        action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
         recordId: "card",
         ipAddress,
-        payload: { method: "card", reason: error instanceof Error ? error.message : "unknown" },
+        payload: {
+          method: "card",
+          statusCode: error instanceof AppError ? error.statusCode : 500,
+          reason: error instanceof Error ? error.message : "unknown",
+        },
       });
       next(error);
     }
@@ -229,7 +238,8 @@ export class AuthController {
     const ipAddress = req.ip ?? null;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış PIN'i throttle et (brute-force).
     const lockoutKey = resolveLoginLockoutKey(req);
-    const lock = await checkLoginLockout(lockoutKey);
+    // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
+    const lock = await reserveLoginAttempt(lockoutKey);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(
@@ -261,13 +271,19 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
-      await recordLoginFailure(lockoutKey);
+      // F49: yalnız 401 brute-force sayılır; 409/403 assume-fail'i geri al (F20 reserve).
+      const isCredentialError = error instanceof AppError && error.statusCode === 401;
+      if (!isCredentialError) releaseLoginAttempt(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
-        action: "LOGIN_FAILED",
+        action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
         recordId: "quick-pin",
         ipAddress,
-        payload: { method: "quick-pin", reason: error instanceof Error ? error.message : "unknown" },
+        payload: {
+          method: "quick-pin",
+          statusCode: error instanceof AppError ? error.statusCode : 500,
+          reason: error instanceof Error ? error.message : "unknown",
+        },
       });
       next(error);
     }
@@ -390,16 +406,12 @@ export class AuthController {
    * /api/auth/logout:
    *   post:
    *     tags: [Auth]
-   *     summary: Çıkış (stateless — frontend token'ı silmeli)
+   *     summary: Çıkış (jti registry ile anlık iptal)
    *     description: |
-   *       Stateless logout: backend tarafında bir state tutulmaz çünkü JWT
-   *       self-contained ve revoke edilmez. Frontend bu endpoint'i çağırdıktan
-   *       sonra token'ı local storage'dan silmeli. Audit log için kullanıcı
-   *       çıkış event'i yazılır.
-   *
-   *       Çalınan/sızan token'ı erken iptal etme ihtiyacı doğarsa blacklist
-   *       (in-memory ya da DB) veya refresh-token mimarisi gerek. Şu an Phase 1
-   *       kapsamında değil.
+   *       Bu oturumun jti'si SessionRegistry'de iptal edilir → token silinmese
+   *       bile bir SONRAKI istek 401 alır (anlık revoke, best-effort: iptal yazımı
+   *       düşse de logout başarılı döner). Frontend yine de token'ı local
+   *       storage'dan temizlemeli. Audit log için kullanıcı çıkış event'i yazılır.
    *     security: [{ bearerAuth: [] }]
    *     responses:
    *       200: { description: Çıkış kaydedildi }

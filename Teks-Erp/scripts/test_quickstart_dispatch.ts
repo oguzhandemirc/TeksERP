@@ -173,7 +173,7 @@ async function scenarioA(): Promise<void> {
 
   check("A: 3 top bağlandı", data.attached === 3, `attached=${data.attached}`);
   check("A: dispatch döndü (sevk yapıldı)", !!data.dispatch, JSON.stringify(data.dispatch));
-  check("A: dispatchNo SD- ile başlıyor", !!data.dispatch?.dispatchNo?.startsWith("SD-"), data.dispatch?.dispatchNo);
+  check("A: dispatchNo SD ile başlıyor (ayraçsız SDYYMMNNNNNN)", !!data.dispatch?.dispatchNo?.startsWith("SD"), data.dispatch?.dispatchNo);
 
   // WO + adım durumu
   const wo = await prisma.workOrder.findUnique({

@@ -5,12 +5,13 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
+import { foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
 // (quickStartSchema) yeniden kullanılabilsin — refine ZodEffects'e çevirir, spread'i bozar.
 const workOrderCoreShape = {
-  batchNumber:       z.string().trim().min(1).optional().nullable(),
+  batchNumber:       z.string().trim().min(1).max(64, "Parti kodu en fazla 64 karakter olabilir").optional().nullable(),
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).default("ORDER_PRODUCTION"),
   width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
   targetQuantity:    z.number().positive().max(999_999_999, "Hedef metraj çok büyük").optional().nullable(),
@@ -22,7 +23,7 @@ const workOrderCoreShape = {
   targetItemId:      z.string().uuid().optional().nullable(),
   targetColorId:     z.string().uuid().optional().nullable(),
   // Tambur planlama bilgisi — operatör override edebilir.
-  foldType:          z.string().trim().max(32).optional().nullable(),
+  foldType:          foldTypeSchema,
   steps: z
     .array(z.object({
       stationId:              z.string().uuid("Geçersiz istasyon ID"),
@@ -114,7 +115,7 @@ const updateWorkOrderSchema = z.object({
   plannedEndDate: z.string().nullable().optional(),
   targetItemId: z.string().uuid().nullable().optional(),
   targetColorId: z.string().uuid().nullable().optional(),
-  foldType: z.string().trim().max(32).nullable().optional(),
+  foldType: foldTypeSchema,
 });
 
 /**
@@ -122,7 +123,7 @@ const updateWorkOrderSchema = z.object({
  * iş emirlerinde çalışır. Rota, kalemler, hedef ürün/özellikler hepsi değişebilir.
  */
 const replaceWorkOrderSchema = z.object({
-  batchNumber:       z.string().trim().min(1).optional().nullable(),
+  batchNumber:       z.string().trim().min(1).max(64, "Parti kodu en fazla 64 karakter olabilir").optional().nullable(),
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
   width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
   targetQuantity:    z.number().positive().max(999_999_999, "Hedef metraj çok büyük").optional().nullable(),
@@ -133,7 +134,7 @@ const replaceWorkOrderSchema = z.object({
   routeTemplateId:   z.string().uuid().optional().nullable(),
   targetItemId:      z.string().uuid().optional().nullable(),
   targetColorId:     z.string().uuid().optional().nullable(),
-  foldType:          z.string().trim().max(32).optional().nullable(),
+  foldType:          foldTypeSchema,
   steps: z
     .array(z.object({
       // smart-merge için: mevcut step'i güncellemek istersen id gönder.

@@ -3,7 +3,7 @@
 // Çalıştır: npx tsx scripts/test_customer.ts
 // Doğrulananlar:
 //   1. create: yeni kod → success + id döner, DB'de aktif kayıt oluşur
-//   2. create: aynı koda sahip AKTİF kayıt → AppError.badRequest 400 "aktif kayıt zaten var"
+//   2. create: aynı koda sahip AKTİF kayıt → AppError.conflict 409 "aktif kayıt zaten var" (F43)
 //   3. findAll: search ile kendi TEST- müşterini bul (searchFields code/name/taxNumber)
 //   4. update: ad değiştir → DB'ye yansır
 //   5. softDelete: isActive=false (fiziksel DELETE değil)
@@ -64,16 +64,16 @@ async function main() {
       dbAfterCreate?.isActive === true && dbAfterCreate?.name === "TEST Müşteri A",
     );
 
-    // 2) aktif duplicate kod → AppError.badRequest 400
+    // 2) aktif duplicate kod → AppError.conflict 409 (F43: Swagger 409 contract'ı)
     try {
       await service.create({ code, name: "TEST Müşteri DUP" }, undefined);
-      check("aktif duplicate kod → 400 hata", false, "hata bekleniyordu, başarılı döndü");
+      check("aktif duplicate kod → 409 hata", false, "hata bekleniyordu, başarılı döndü");
     } catch (e) {
       const isAppErr = e instanceof AppError;
       const msg = e instanceof Error ? e.message : String(e);
       check(
-        "aktif duplicate kod → AppError 400 'aktif kayıt zaten var'",
-        isAppErr && (e as AppError).statusCode === 400 && msg.includes("aktif kayıt zaten var"),
+        "aktif duplicate kod → AppError 409 'aktif kayıt zaten var'",
+        isAppErr && (e as AppError).statusCode === 409 && msg.includes("aktif kayıt zaten var"),
         msg,
       );
     }

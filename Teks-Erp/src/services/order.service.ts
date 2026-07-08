@@ -45,7 +45,9 @@ const ORDER_LINE_WRITABLE = new Set([
   "customerColorName",
 ]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
+import { CURRENCIES } from "../config/currencies";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
 import { CustomerAliasService } from "./customer-alias.service";
@@ -53,6 +55,7 @@ import {
   applyDateRange,
   buildOrderByClause,
   buildPagination,
+  buildTurkishSearch,
   buildWhereClause,
   parseQueryParams,
 } from "../utils/query-parser";
@@ -85,7 +88,7 @@ function computeAllowedActions(
     // reddeder). Tek-sipariş ise CONVERT açık (müşteri kaydı silinir).
     return isSoleOrder ? ["UNLINK_ONLY", "CONVERT_TO_STOCK"] : ["UNLINK_ONLY"];
   }
-  if (woStatus === "IN_PROGRESS" || woStatus === "PAUSED") {
+  if (woStatus === "IN_PROGRESS") {
     return isSoleOrder
       ? ["UNLINK_ONLY", "CONVERT_TO_STOCK", "CANCEL_WO"]
       : ["UNLINK_ONLY"];
@@ -256,7 +259,7 @@ export class OrderService extends BaseService {
    *   - unitPrice >= 0 ya da null (null = "fiyatlandırılmamış", iş kuralı)
    * Negatif/sıfır metraj veya negatif fiyat finansal kayıt + üretim akışını
    * bozacağı için service seviyesinde reddedilir (Zod yerine inline AppError,
-   * mevcut validateBranch / isValidCurrency deseniyle uyumlu).
+   * mevcut validateBranch / assertValidCurrency deseniyle uyumlu).
    */
   private validateLines(lines: unknown): void {
     if (!Array.isArray(lines)) return;
@@ -444,18 +447,34 @@ export class OrderService extends BaseService {
     }
   }
 
+  /** F148: para birimi ISO 4217 kataloğunda mı (create/update simetrik). null=opsiyonel. */
+  private assertValidCurrency(currency: unknown): void {
+    if (currency == null) return; // opsiyonel; şema default TRY
+    const code = String(currency);
+    if (!CURRENCIES.some((c) => c.code === code)) {
+      throw AppError.badRequest(`Geçersiz para birimi: ${code}`);
+    }
+  }
+
+  /** F148: termin >= sipariş tarihi (verilmezse referans = now). create/update ortak. */
+  private assertDeadlineNotBeforeOrderDate(deadline: unknown, orderDate: unknown): void {
+    if (deadline == null) return;
+    const d = new Date(deadline as string);
+    if (Number.isNaN(d.getTime())) throw AppError.badRequest("Termin tarihi geçersiz");
+    const ref = orderDate != null ? new Date(orderDate as string) : new Date();
+    if (Number.isNaN(ref.getTime())) throw AppError.badRequest("Sipariş tarihi geçersiz");
+    if (d.getTime() < ref.getTime()) {
+      throw AppError.badRequest("Termin tarihi sipariş tarihinden önce olamaz");
+    }
+  }
+
   /**
    * İş emri picker'ı için müsait sipariş listesi.
    *
-   * Standart `findAll`'dan iki farkı var:
-   *   1. Sipariş kalemlerini `workOrderLinks`'e göre filtreler. Aktif bir WO'ya
-   *      (PLANNED / IN_PROGRESS / PAUSED / COMPLETED) bağlı kalemler hem
-   *      `include`'dan çıkarılır hem de "hiç müsait kalemi yok" olan siparişler
-   *      tamamen listeden düşer. CANCELLED WO'ya bağlı kalemler tekrar müsait
-   *      sayılır (WO iptal olduysa kalem serbest).
-   *   2. `excludeWorkOrderId` verilirse o WO'nun kendi bağları "bağ değilmiş
-   *      gibi" sayılır. Edit modunda picker mevcut WO'nun seçimlerini gösterip
-   *      kontrol edebilsin diye.
+   * Gevşek/gap model (güncel): açık > 0 (quantity − shippedQty) satırı olan,
+   * CANCELLED/COMPLETED-dışı siparişleri döner. WO bağı müsaitliği ETKİLEMEZ —
+   * sipariş yalnız SEVKle kapanır, üretime girince değil. (Eski workOrderLinks-bazlı
+   * filtreleme ve excludeWorkOrderId artık YOK; açık-satır süzgeci DB WHERE'inde.)
    *
    * Standart `filters` (status, customerId), `search`, `dateFrom/dateTo`,
    * `sortBy` ve sayfalama parametreleri `findAll` ile aynı şekilde çalışır.
@@ -474,21 +493,30 @@ export class OrderService extends BaseService {
 
     const search = params.search?.trim();
     if (search) {
-      baseWhere.OR = [
-        { orderNumber: { contains: search, mode: "insensitive" } },
-        { customer: { name: { contains: search, mode: "insensitive" } } },
-        { lines: { some: { item: { name: { contains: search, mode: "insensitive" } } } } },
-        { lines: { some: { customerItemName: { contains: search, mode: "insensitive" } } } },
-      ];
+      baseWhere.OR = buildTurkishSearch<Prisma.OrderWhereInput>(search, [
+        "orderNumber",
+        "customer.name",
+        "lines.some.item.name",
+        "lines.some.customerItemName",
+      ]);
     }
 
     // Gap-bazlı picker: bir satır "müsait" ise Açık > 0.
     //   Açık = quantity − sevk (OrderLine.shippedQty). WO bağı açığı ETKİLEMEZ —
     //   sipariş ancak sevk edilince kapanır, üretime girince değil (gevşek model).
     // Kapalı/iptal sipariş hariç (gap hesabı yalnız açık siparişlerde anlamlı).
-    const where = {
-      ...baseWhere,
+    // F147: açık-satır koşulunu WHERE'e taşı → 500-tavanı yalnız açık siparişlere
+    // harcanır (memory filtresi `lines.length>0` zaten kapalıları eliyordu; özdeş).
+    // F150: filter[status] (buildWhereClause → baseWhere.status) notIn ile EZİLMESİN —
+    // AND ile birleştir (picker daima iptal/tamamlanmışı eler; ek statü onu daraltır).
+    const { status: filterStatus, ...restBase } = baseWhere;
+    const where: Prisma.OrderWhereInput = {
+      ...restBase,
       status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
+      lines: { some: { quantity: { gt: prisma.orderLine.fields.shippedQty } } },
+      ...(filterStatus !== undefined
+        ? { AND: [{ status: filterStatus as Prisma.OrderWhereInput["status"] }] }
+        : {}),
     };
 
     // sortBy güvenlik süzgeci (BaseService) — bilinmeyen kolon 500'ünü engeller.
@@ -582,12 +610,12 @@ export class OrderService extends BaseService {
     if (params.width != null) baseWhere.width = params.width;
     const term = params.search?.trim();
     if (term) {
-      baseWhere.OR = [
-        { order: { orderNumber: { contains: term, mode: "insensitive" } } },
-        { order: { customer: { name: { contains: term, mode: "insensitive" } } } },
-        { item: { name: { contains: term, mode: "insensitive" } } },
-        { customerItemName: { contains: term, mode: "insensitive" } },
-      ];
+      baseWhere.OR = buildTurkishSearch<Prisma.OrderLineWhereInput>(term, [
+        "order.orderNumber",
+        "order.customer.name",
+        "item.name",
+        "customerItemName",
+      ]);
     }
 
     // ── CURSOR MOD (limit verildi): itemId opsiyonel, "sipariş-önce" aramalı liste.
@@ -637,8 +665,19 @@ export class OrderService extends BaseService {
       const page = hasMore ? rows.slice(0, limit) : rows;
       const last = page[page.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
+      // F152: cursor mod da withInProduction'ı hesaplasın (eskiden 0 hardcode idi).
+      // Yalnız itemId sabitlendiğinde anlamlı (spec-havuz item bazlı); broad modda atlanır.
+      let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
+      if (params.withInProduction && params.itemId) {
+        inProdBySpec = await this.computeInProdBySpec(params.itemId);
+      }
       const data = page.map((l) => {
         const openQty = new Prisma.Decimal(l.quantity).minus(l.shippedQty);
+        const inProduction =
+          inProdBySpec?.get(
+            `${l.itemId}|${l.colorId ?? ""}|${l.width == null ? "" : new Prisma.Decimal(l.width).toString()}`,
+          ) ?? new Prisma.Decimal(0);
+        const netOpenQty = Prisma.Decimal.max(0, openQty.minus(inProduction));
         return {
           lineId: l.id,
           itemId: l.itemId,
@@ -658,8 +697,8 @@ export class OrderService extends BaseService {
           width: l.width,
           quantity: l.quantity,
           openQty,
-          inProduction: new Prisma.Decimal(0),
-          netOpenQty: openQty,
+          inProduction,
+          netOpenQty,
         };
       });
       return {
@@ -679,7 +718,9 @@ export class OrderService extends BaseService {
     if (!itemId) throw AppError.badRequest("itemId gerekli");
 
     const lines = await prisma.orderLine.findMany({
-      where: baseWhere,
+      // F146: legacy mod da cursor moddaki açık-satır süzgecini uygular (200-tavanı
+      // açık satırlara harcanır). Bellek süzgeci (openQty>0) defansif kalır — özdeş.
+      where: { ...baseWhere, quantity: { gt: prisma.orderLine.fields.shippedQty } },
       take: 200,
       orderBy: { createdAt: "asc" },
       select: {
@@ -714,35 +755,9 @@ export class OrderService extends BaseService {
       width: Prisma.Decimal | number | null,
     ): string =>
       `${itemId}|${colorId ?? ""}|${width == null ? "" : new Prisma.Decimal(width).toString()}`;
+    // F152: üretimdeki hesabı computeInProdBySpec'e çıkarıldı (cursor mod da kullanır).
     let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
-    if (params.withInProduction) {
-      const liveWos = await prisma.workOrder.findMany({
-        where: {
-          status: {
-            in: [
-              WorkOrderStatus.PLANNED,
-              WorkOrderStatus.IN_PROGRESS,
-              WorkOrderStatus.PAUSED,
-            ],
-          },
-          isActive: true,
-          targetItemId: itemId,
-        },
-        select: { id: true, targetColorId: true, width: true },
-      });
-      const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
-      inProdBySpec = new Map<string, Prisma.Decimal>();
-      for (const w of liveWos) {
-        const mat = woMat.get(w.id);
-        const inFlight = Prisma.Decimal.max(
-          0,
-          (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
-        );
-        if (inFlight.lessThanOrEqualTo(0)) continue;
-        const key = specKey(w.targetColorId, w.width);
-        inProdBySpec.set(key, (inProdBySpec.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
-      }
-    }
+    if (params.withInProduction) inProdBySpec = await this.computeInProdBySpec(itemId);
 
     const data = lines
       .map((l) => {
@@ -780,6 +795,42 @@ export class OrderService extends BaseService {
       .filter((l) => l.openQty.greaterThan(0));
 
     return { success: true, data };
+  }
+
+  /**
+   * F152: bir item'ın canlı WO'larından spec-havuz (item|renk|en) başına üretimdeki
+   * (in-flight = committed − finished) miktarı. findAvailableOrderLines'ın hem cursor
+   * hem legacy modu paylaşır. Anahtar formatı: `${itemId}|${colorId}|${width}`.
+   */
+  private async computeInProdBySpec(
+    itemId: string,
+  ): Promise<Map<string, Prisma.Decimal>> {
+    const liveWos = await prisma.workOrder.findMany({
+      where: {
+        status: {
+          in: [
+            WorkOrderStatus.PLANNED,
+            WorkOrderStatus.IN_PROGRESS,
+          ],
+        },
+        isActive: true,
+        targetItemId: itemId,
+      },
+      select: { id: true, targetColorId: true, width: true },
+    });
+    const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
+    const map = new Map<string, Prisma.Decimal>();
+    for (const w of liveWos) {
+      const mat = woMat.get(w.id);
+      const inFlight = Prisma.Decimal.max(
+        0,
+        (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
+      );
+      if (inFlight.lessThanOrEqualTo(0)) continue;
+      const key = `${itemId}|${w.targetColorId ?? ""}|${w.width == null ? "" : new Prisma.Decimal(w.width).toString()}`;
+      map.set(key, (map.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
+    }
+    return map;
   }
 
   /**
@@ -871,7 +922,6 @@ export class OrderService extends BaseService {
           in: [
             WorkOrderStatus.PLANNED,
             WorkOrderStatus.IN_PROGRESS,
-            WorkOrderStatus.PAUSED,
           ],
         },
         isActive: true,
@@ -933,6 +983,10 @@ export class OrderService extends BaseService {
     data: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // F154: satırsız sipariş = ölü kayıt (coverage/MRP işleyemez, wo-picker düşürür).
+    if (!Array.isArray(data.lines) || data.lines.length === 0) {
+      throw AppError.badRequest("Sipariş en az bir kalem içermeli.");
+    }
     this.validateLines(data.lines);
     await this.validateLineItems(data.lines);
 
@@ -951,6 +1005,9 @@ export class OrderService extends BaseService {
       data.lines,
       data.customerId as string | null | undefined,
     );
+
+    // F148: para birimi kataloğa karşı doğrula (create/update simetrik).
+    this.assertValidCurrency(data.currency);
 
     // totalAmount: gönderilmediyse lines'tan otomatik hesapla. Gönderilmiş ise
     // (planlamacı override etmiş — KDV/indirim gibi) olduğu gibi bırak.
@@ -977,21 +1034,8 @@ export class OrderService extends BaseService {
       deadline.setDate(deadline.getDate() + days);
       data.deadline = deadline;
     } else {
-      // İş kuralı: deadline >= orderDate olmalı (geçmişe teslim anlamsız).
-      // orderDate verilmediyse şema default'u (now()); bu durumda da deadline
-      // bugünden önce olmamalı.
-      const deadlineDate = new Date(data.deadline as string);
-      if (Number.isNaN(deadlineDate.getTime())) {
-        throw AppError.badRequest("Termin tarihi geçersiz");
-      }
-      const orderDateRef = data.orderDate
-        ? new Date(data.orderDate as string)
-        : new Date();
-      if (deadlineDate.getTime() < orderDateRef.getTime()) {
-        throw AppError.badRequest(
-          "Termin tarihi sipariş tarihinden önce olamaz"
-        );
-      }
+      // F148: İş kuralı deadline >= orderDate (helper — update ile simetrik).
+      this.assertDeadlineNotBeforeOrderDate(data.deadline, data.orderDate);
     }
 
     const today = new Date();
@@ -1188,25 +1232,57 @@ export class OrderService extends BaseService {
       quantity: Number(g.quantity),
     }));
 
-    // Siparişi normal create ile aç (orderNumber + doğrulama + audit + alias terfisi).
+    // F143: CLAIM-FIRST. Eskiden sipariş create edilip SONRA topları claim ediyordu;
+    // claim.count HİÇ kontrol edilmiyordu → topların bir kısmı arada başka akışta
+    // tüketilse bile sipariş açılıyor ve preparedToWarehouse yalan söylüyordu.
+    // Artık: create-fail-after-claim'i önlemek için create()'in fırlatabileceği TÜM
+    // doğrulamaları (müşteri/şube + ürün/renk-atanabilirlik) claim'den ÖNCE koştur;
+    // sonra topları atomik claim et. Aksi halde create() içindeki validateLineColors/
+    // validateLineItems fırlatırsa toplar WAREHOUSE'da yetim kalırdı (rollback yok).
+    await this.validateCustomer(data.customerId);
+    if (data.branchId) await this.validateBranch(data.branchId, data.customerId);
+    await this.validateLineItems(lines);
+    await this.validateLineColors(lines, data.customerId);
+
+    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
+    if (stockRollIds.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        const claimed = await tx.roll.updateMany({
+          where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
+          data: { status: RollStatus.WAREHOUSE },
+        });
+        if (claimed.count !== stockRollIds.length) {
+          const escaped = await tx.roll.findMany({
+            where: {
+              id: { in: stockRollIds },
+              NOT: { status: RollStatus.WAREHOUSE, shipmentId: null, currentStepId: null },
+            },
+            select: { id: true, barcode: true },
+          });
+          const list = escaped.map((r) => r.barcode ?? r.id).join(", ");
+          throw AppError.conflict(
+            `Şu toplar işlem sırasında başka bir akışta tüketildi; hızlı sipariş açılmadı, lütfen tekrar okutup deneyin: ${list}`,
+          );
+        }
+      });
+    }
+
+    // Sipariş aç (claim garanti; satırlar gerçek metrajı temsil eder).
     const created = await this.create(
       { customerId: data.customerId, branchId: data.branchId ?? null, lines },
       userId,
     );
     const order = created.data as { id: string; orderNumber: string };
 
-    // STOK toplar → WAREHOUSE (sevke hazır). Atomik: hâlâ STOCK + serbest olanlar.
-    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
+    // Roll hareketini denetle (best-effort, tx DIŞI).
     if (stockRollIds.length > 0) {
-      await prisma.roll.updateMany({
-        where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
-        data: { status: RollStatus.WAREHOUSE },
-      });
       await AuditService.log({
         userId,
         action: "UPDATE",
         tableName: "ROLL",
-        recordId: order.id,
+        // F153: tableName=ROLL ise recordId bir ROLL olmalı (order.id değil) — audit
+        // tutarlılığı; sipariş bağı newData.orderNumber/rollIds ile korunur.
+        recordId: stockRollIds[0],
         newData: { kind: "QUICK_ORDER_RAW_TO_WAREHOUSE", rollIds: stockRollIds, orderNumber: order.orderNumber },
       });
     }
@@ -1224,7 +1300,7 @@ export class OrderService extends BaseService {
    * Kurallar:
    * - COMPLETED / CANCELLED → değiştirilemez (409).
    * - PARTIAL_SHIPPED → sadece `deadline` güncellenir; lines forbidden.
-   * - APPROVED / PENDING → header alanları açık. Aktif WO (IN_PROGRESS/PAUSED/
+   * - APPROVED / PENDING → header alanları açık. Aktif WO (IN_PROGRESS/
    *   COMPLETED) bağlıysa customerId/branchId değiştirilemez.
    * - Lines: CANCELLED dışı herhangi bir WO bağı yoksa düzenlenebilir.
    *   Diff stratejisi: id eşleşene update, eşleşmeyene create, mevcut'ta var
@@ -1242,6 +1318,8 @@ export class OrderService extends BaseService {
         customerId: true,
         branchId: true,
         status: true,
+        orderDate: true, // F148: termin-tarih kuralı için mevcut referans
+        deadline: true,
         lines: {
           select: {
             id: true,
@@ -1284,6 +1362,20 @@ export class OrderService extends BaseService {
       if (!ORDER_HEADER_WRITABLE.has(key)) delete cleanData[key];
     }
 
+    // F148: create ile simetrik doğrulama (update'te eksikti). PARTIAL_SHIPPED'ten
+    // ÖNCE çalışır → deadline-only PATCH'te de termin kuralı uygulanır (currency
+    // PARTIAL_SHIPPED'te zaten whitelist'ten düşer).
+    if (Object.prototype.hasOwnProperty.call(cleanData, "currency")) {
+      this.assertValidCurrency(cleanData.currency);
+    }
+    const deadlineChanging = Object.prototype.hasOwnProperty.call(cleanData, "deadline");
+    const orderDateChanging = Object.prototype.hasOwnProperty.call(cleanData, "orderDate");
+    if (deadlineChanging || orderDateChanging) {
+      const effDeadline = deadlineChanging ? cleanData.deadline : current.deadline;
+      const effOrderDate = orderDateChanging ? cleanData.orderDate : current.orderDate;
+      this.assertDeadlineNotBeforeOrderDate(effDeadline, effOrderDate);
+    }
+
     // PARTIAL_SHIPPED: sadece deadline. Lines kabul edilmez, diğer header
     // alanları sessizce yutulur (eski davranış korunur).
     if (current.status === OrderStatus.PARTIAL_SHIPPED) {
@@ -1297,7 +1389,9 @@ export class OrderService extends BaseService {
         if (!allowed.has(key)) delete cleanData[key];
       }
       if (Object.keys(cleanData).length === 0) {
-        return { success: true, data: current, message: "Değişiklik yok" };
+        // F156: no-op'ta da normal update ile aynı (defaultInclude'lu) tam şekli dön.
+        const full = await this.findById(id);
+        return { ...full, message: "Değişiklik yok" };
       }
       return super.update(id, cleanData, userId);
     }
@@ -1306,7 +1400,7 @@ export class OrderService extends BaseService {
     const customerChanging = Object.prototype.hasOwnProperty.call(cleanData, "customerId");
 
     if (branchChanging || customerChanging) {
-      const blockingStatuses = new Set(["IN_PROGRESS", "PAUSED", "COMPLETED"]);
+      const blockingStatuses = new Set(["IN_PROGRESS", "COMPLETED"]);
       const hasBlockingWO = current.lines.some((line) =>
         line.workOrderLinks.some((link) =>
           blockingStatuses.has(link.workOrder.status)
@@ -1385,6 +1479,21 @@ export class OrderService extends BaseService {
     // Tek transaction: lines diff + header update + final fetch.
     const updated = await prisma.$transaction(async (tx) => {
       if (incomingLines) {
+        // F144: WO-bağı guard'ını tx İÇİNDE TAZE re-check et — pre-tx (1362) okuma
+        // ile deleteMany arasında eşzamanlı WO create (orderLinks INSERT) araya
+        // girip CASCADE ile linki sessizce silebilir; statement commit'li linkleri görür.
+        const activeLink = await tx.workOrderToOrderLine.findFirst({
+          where: {
+            orderLine: { orderId: id },
+            workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
+          },
+          select: { workOrderId: true },
+        });
+        if (activeLink) {
+          throw AppError.conflict(
+            "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
+          );
+        }
         const existingById = new Map(current.lines.map((l) => [l.id, l]));
         const incomingIds = new Set(
           incomingLines
@@ -1395,6 +1504,23 @@ export class OrderService extends BaseService {
         // Delete: existing - incoming. Cascade ile requiredProperties otomatik siler.
         const toDelete = [...existingById.keys()].filter((eid) => !incomingIds.has(eid));
         if (toDelete.length > 0) {
+          // O-6: silinecek satırları FOR UPDATE ile kilitle — in-flight WO orderLine
+          // INSERT'i (FK → FOR KEY SHARE) yalnız FOR UPDATE bloklar (FOR NO KEY UPDATE
+          // yetmez). Sonra toDelete-scope taze link kontrolü: araya giren INSERT ya
+          // guard'da yakalanır (409) ya da silme sonrası FK ihlaliyle düşer.
+          await tx.$queryRaw`SELECT id FROM order_lines WHERE id = ANY(${toDelete}::uuid[]) FOR UPDATE`;
+          const linkedToDeleted = await tx.workOrderToOrderLine.findFirst({
+            where: {
+              orderLineId: { in: toDelete },
+              workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
+            },
+            select: { workOrderId: true },
+          });
+          if (linkedToDeleted) {
+            throw AppError.conflict(
+              "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
+            );
+          }
           await tx.orderLine.deleteMany({ where: { id: { in: toDelete } } });
         }
 
@@ -1510,7 +1636,7 @@ export class OrderService extends BaseService {
    *   - Sipariş hiçbir WO'ya bağlı değilse sorunsuz iptal.
    *   - PLANNED durumdaki WO bağları varsa → join satırlarını otomatik kopar
    *     (WO hayatta kalır, operatör isterse STOCK_PRODUCTION'a çevirir).
-   *   - IN_PROGRESS / PAUSED / COMPLETED durumda WO varsa → 409 conflict.
+   *   - IN_PROGRESS / COMPLETED durumda WO varsa → 409 conflict.
    *     Operatör önce o WO'yu iptal etmeli.
    */
   /**
@@ -1586,7 +1712,7 @@ export class OrderService extends BaseService {
     }
 
     const allLinks = oldRecord.lines.flatMap((line) => line.workOrderLinks);
-    const blockingStatuses = new Set(["IN_PROGRESS", "PAUSED", "COMPLETED"]);
+    const blockingStatuses = new Set(["IN_PROGRESS", "COMPLETED"]);
     const blockingWOs = allLinks
       .map((l) => l.workOrder)
       .filter((wo) => blockingStatuses.has(wo.status));
@@ -1598,26 +1724,59 @@ export class OrderService extends BaseService {
       );
     }
 
-    const plannedLinkIds = allLinks
-      .filter((l) => l.workOrder.status === "PLANNED")
-      .map((l) => ({ workOrderId: l.workOrderId, orderLineId: l.orderLineId }));
-
     const updated = await prisma.$transaction(async (tx) => {
-      if (plannedLinkIds.length > 0) {
+      // F142: atomik claim ÖNCE — çift-paralel iptal ve araya giren COMPLETED
+      // (manualComplete/recompute) koşulsuz CANCELLED ezmesini kapat.
+      const cancelClaim = await tx.order.updateMany({
+        where: { id, status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      if (cancelClaim.count === 0) {
+        const fresh = await tx.order.findUnique({ where: { id }, select: { status: true } });
+        throw AppError.conflict(
+          `Sipariş bu sırada ${
+            fresh?.status === OrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
+          }, tekrar iptal edilemez. Sayfayı yenileyin.`,
+        );
+      }
+
+      // BU siparişin satır bağlarını TAZE oku (orderLineId scope — shared WO'nun
+      // başka sipariş bağları korunur). Linkli WO satırlarını sıralı kilitle
+      // (workorder softDelete deseniyle simetrik) → eşzamanlı WO status geçişi serileşir.
+      const myLinks = await tx.workOrderToOrderLine.findMany({
+        where: { orderLine: { orderId: id } },
+        select: { workOrderId: true, orderLineId: true },
+      });
+      const woIds = [...new Set(myLinks.map((l) => l.workOrderId))].sort();
+      for (const wid of woIds) await touchWorkOrderTx(tx, wid); // döngü — Promise.all(tx.*) YASAK
+      const woRows = await tx.workOrder.findMany({
+        where: { id: { in: woIds } },
+        select: { id: true, status: true, batchNumber: true },
+      });
+      const woById = new Map(woRows.map((w) => [w.id, w]));
+      const blocking = woRows.filter((w) => blockingStatuses.has(w.status));
+      if (blocking.length > 0) {
+        const batchNumbers = [...new Set(blocking.map((w) => w.batchNumber))].join(", ");
+        throw AppError.conflict(
+          `Bu siparişe bağlı aktif/tamamlanmış iş emirleri var: ${batchNumbers}. Önce onları iptal edin.`,
+        );
+      }
+      // Yalnız BU siparişin PLANNED WO link çiftlerini kopar.
+      const plannedPairs = myLinks.filter(
+        (l) => woById.get(l.workOrderId)?.status === "PLANNED",
+      );
+      if (plannedPairs.length > 0) {
         await tx.workOrderToOrderLine.deleteMany({
           where: {
-            OR: plannedLinkIds.map((k) => ({
+            OR: plannedPairs.map((k) => ({
               workOrderId: k.workOrderId,
               orderLineId: k.orderLineId,
             })),
           },
         });
       }
-
-      return tx.order.update({
-        where: { id },
-        data: { status: "CANCELLED" },
-      });
+      const order = await tx.order.findUnique({ where: { id } });
+      return { order: order!, unlinkedCount: plannedPairs.length };
     });
 
     await AuditService.log({
@@ -1628,16 +1787,16 @@ export class OrderService extends BaseService {
       oldData: oldRecord as unknown as Record<string, unknown>,
       newData: {
         status: "CANCELLED",
-        unlinkedWorkOrderCount: plannedLinkIds.length,
+        unlinkedWorkOrderCount: updated.unlinkedCount,
       },
     });
 
     return {
       success: true,
-      data: updated,
+      data: updated.order,
       message:
-        plannedLinkIds.length > 0
-          ? `Sipariş iptal edildi. ${plannedLinkIds.length} planlı iş emri bağlantısı koparıldı.`
+        updated.unlinkedCount > 0
+          ? `Sipariş iptal edildi. ${updated.unlinkedCount} planlı iş emri bağlantısı koparıldı.`
           : "Sipariş iptal edildi",
     };
   }
@@ -1647,10 +1806,10 @@ export class OrderService extends BaseService {
   //
   // Operatör "Sipariş Sil" derken katı 409 yerine WO başına seçim sunulur:
   //   - PLANNED WO          → otomatik UNLINK_ONLY (üretim yok, sessiz kopar)
-  //   - IN_PROGRESS/PAUSED ya da COMPLETED + tek-sipariş WO
+  //   - IN_PROGRESS ya da COMPLETED + tek-sipariş WO
   //                         → UNLINK_ONLY | CONVERT_TO_STOCK | CANCEL_WO
-  //                           (CANCEL_WO sadece IN_PROGRESS/PAUSED için)
-  //   - IN_PROGRESS/PAUSED ya da COMPLETED + çoklu-sipariş WO
+  //                           (CANCEL_WO sadece IN_PROGRESS için)
+  //   - IN_PROGRESS ya da COMPLETED + çoklu-sipariş WO
   //                         → sadece UNLINK_ONLY (diğer siparişler ayakta)
   //
   // Frontend önce `getCancelPreview` ile etkilenecek WO listesini alır,
@@ -1916,13 +2075,56 @@ export class OrderService extends BaseService {
           }, tekrar iptal edilemez. Sayfayı yenileyin.`
         );
       }
+      // F145: preview↔apply arası WO status yarışını kapat. Etkilenen WO'ları
+      // SIRALI kilitle (WO start/dispatch/finalize/cancel yolları da bu satırı
+      // kilitler → serileşir), sonra TAZE status + TAZE sole-order oku ve her
+      // non-CANCEL aksiyonu bayat preview yerine güncel duruma karşı doğrula.
+      const affectedWoIds = [...new Set(preview.affectedWorkOrders.map((w) => w.id))].sort();
+      for (const wid of affectedWoIds) await touchWorkOrderTx(tx, wid); // döngü — Promise.all(tx.*) YASAK
+      const freshRows = await tx.workOrder.findMany({
+        where: { id: { in: affectedWoIds } },
+        select: { id: true, status: true },
+      });
+      const freshStatus = new Map(freshRows.map((r) => [r.id, r.status]));
+      const otherLinks = await tx.workOrderToOrderLine.findMany({
+        where: { workOrderId: { in: affectedWoIds }, orderLine: { orderId: { not: orderId } } },
+        select: { workOrderId: true },
+      });
+      const hasOther = new Set(otherLinks.map((l) => l.workOrderId));
+      for (const wo of preview.affectedWorkOrders) {
+        const action = actionByWO.get(wo.id)!;
+        if (action === "CANCEL_WO") continue; // adım 4'te kendi claim'iyle iptal edilir
+        const fs = freshStatus.get(wo.id);
+        if (!fs) {
+          throw AppError.conflict("İş emri bu sırada kaldırıldı, tekrar deneyin. Sayfayı yenileyin.");
+        }
+        if (!computeAllowedActions(fs, !hasOther.has(wo.id)).includes(action)) {
+          throw AppError.conflict(
+            "İş emri durumu değişti (önizleme bayatladı). Sayfayı yenileyip iptali tekrar onaylayın.",
+          );
+        }
+      }
+      // Önizleme sonrası bu siparişe DOĞAN yeni WO bağı → onaysız kopmayı engelle.
+      const currentLinks = await tx.workOrderToOrderLine.findMany({
+        where: { orderLine: { orderId }, workOrder: { status: { not: WorkOrderStatus.CANCELLED } } },
+        select: { workOrderId: true },
+      });
+      if (currentLinks.some((l) => !affectedWoIds.includes(l.workOrderId))) {
+        throw AppError.conflict(
+          "Önizleme sonrası bu siparişe yeni iş emri bağlandı. Sayfayı yenileyip iptali tekrar onaylayın.",
+        );
+      }
+
       for (const wo of preview.affectedWorkOrders) {
         const action = actionByWO.get(wo.id)!;
         if (action === "CONVERT_TO_STOCK") {
-          await tx.workOrder.update({
-            where: { id: wo.id },
+          const conv = await tx.workOrder.updateMany({
+            where: { id: wo.id, status: { not: WorkOrderStatus.CANCELLED } },
             data: { type: "STOCK_PRODUCTION" },
           });
+          if (conv.count === 0) {
+            throw AppError.conflict("İş emri bu sırada iptal edildi, stoğa çevrilemedi. Sayfayı yenileyin.");
+          }
         }
         // UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO hepsi join'i temizler.
         await tx.workOrderToOrderLine.deleteMany({

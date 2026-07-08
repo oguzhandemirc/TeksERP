@@ -44,13 +44,19 @@ export async function getSubcontractorPerformance(range: DateRange): Promise<Sub
       JOIN subcontractor_dispatch_items sdi ON sdi."dispatchId" = sd.id
       WHERE sd."dispatchedAt" >= ${range.from} AND sd."dispatchedAt" <= ${range.to}
         AND sd."cancelledAt" IS NULL
+        AND sd."directShippedAt" IS NULL
     ),
     returned AS (
-      SELECT sri."sourceDispatchItemId", sr."receivedAt"
+      -- F95: dispatch-item başına EN FAZLA bir dönüş satırı (DISTINCT ON) — aksi halde
+      -- aynı sourceDispatchItemId'de iki aktif receipt item olursa aşağıdaki LEFT JOIN
+      -- satırları çoğaltıp rollsReturned/avgTurnaround'ı şişiriyordu.
+      SELECT DISTINCT ON (sri."sourceDispatchItemId")
+        sri."sourceDispatchItemId", sr."receivedAt"
       FROM subcontractor_receipt_items sri
       JOIN subcontractor_receipts sr ON sri."receiptId" = sr.id
       WHERE sr."cancelledAt" IS NULL
         AND sri."sourceDispatchItemId" IS NOT NULL
+      ORDER BY sri."sourceDispatchItemId", sr."receivedAt"
     )
     SELECT
       sub.id                                  AS "subcontractorId",
@@ -112,22 +118,31 @@ export async function getOpenDispatches(): Promise<OpenDispatchRow[]> {
       totalItems: bigint;
     }>
   >(Prisma.sql`
+    WITH returned AS (
+      -- F85: yalnız İPTAL EDİLMEMİŞ kabuller "dönmüş" sayılır (cancelReceipt item
+      -- satırlarını silmez, header'ı soft-cancel eder) — yoksa iptalli kabulün
+      -- fiziksel geri-dönmüş topları openItems=0 ile rapordan düşerdi.
+      SELECT DISTINCT sri."sourceDispatchItemId"
+      FROM subcontractor_receipt_items sri
+      JOIN subcontractor_receipts sr ON sri."receiptId" = sr.id
+      WHERE sr."cancelledAt" IS NULL AND sri."sourceDispatchItemId" IS NOT NULL
+    )
     SELECT
-      sd.id                                                     AS "dispatchId",
-      sd."dispatchNo"                                           AS "dispatchNo",
-      sd."dispatchedAt"                                         AS "dispatchedAt",
-      sub.name                                                  AS "subcontractorName",
-      wo."batchNumber"                                          AS "workOrderNumber",
-      COUNT(*) FILTER (WHERE r."sourceDispatchItemId" IS NULL)  AS "openItems",
-      COUNT(*)                                                  AS "totalItems"
+      sd.id                                                        AS "dispatchId",
+      sd."dispatchNo"                                              AS "dispatchNo",
+      sd."dispatchedAt"                                            AS "dispatchedAt",
+      sub.name                                                     AS "subcontractorName",
+      wo."batchNumber"                                             AS "workOrderNumber",
+      COUNT(*) FILTER (WHERE ret."sourceDispatchItemId" IS NULL)   AS "openItems",
+      COUNT(*)                                                     AS "totalItems"
     FROM subcontractor_dispatches sd
     JOIN subcontractors sub                       ON sd."subcontractorId" = sub.id
     LEFT JOIN work_orders wo                      ON sd."workOrderId" = wo.id
     JOIN subcontractor_dispatch_items sdi         ON sdi."dispatchId" = sd.id
-    LEFT JOIN subcontractor_receipt_items r       ON r."sourceDispatchItemId" = sdi.id
-    WHERE sd."cancelledAt" IS NULL
+    LEFT JOIN returned ret                        ON ret."sourceDispatchItemId" = sdi.id
+    WHERE sd."cancelledAt" IS NULL AND sd."directShippedAt" IS NULL
     GROUP BY sd.id, sd."dispatchNo", sd."dispatchedAt", sub.name, wo."batchNumber"
-    HAVING COUNT(*) FILTER (WHERE r."sourceDispatchItemId" IS NULL) > 0
+    HAVING COUNT(*) FILTER (WHERE ret."sourceDispatchItemId" IS NULL) > 0
     ORDER BY sd."dispatchedAt" ASC
     LIMIT 200
   `);

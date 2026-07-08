@@ -102,6 +102,10 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     queryFn: authService.getLoginMethods,
     refetchInterval: 5 * 60_000,
     refetchOnMount: 'always',
+    // Uzun vardiyada login ekranı saatlerce mount edilmez — default 5dk gcTime
+    // cache'i boşaltıp "anında çizim" vaadini bozar. 24sa: logout anında liste
+    // hâlâ bellekte (persister yalnız app açılışında devreye girer).
+    gcTime: 24 * 60 * 60 * 1000,
   });
   const enabledMethods = methodsQ.data?.enabled ?? ['list'];
   const [pickedMethod, setPickedMethod] = useState<LoginMethod | null>(null);
@@ -113,10 +117,18 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       ? pickedMethod
       : (methodsQ.data?.primary ?? 'list');
 
+  // Stale-while-revalidate: liste SON BİLİNEN haliyle ANINDA çizilir (cache
+  // logout'ta bilerek korunur — sessionSwitch.clearUserScopedQueries), her ekran
+  // açılışında TAZE çekilir (staleTime 0 + refetchOnMount 'always' → panelden
+  // eklenen kullanıcı 5dk beklemez; eski staleTime bayatlık şikâyeti üretiyordu).
+  // Ağ öldüğünde ekran yine çalışır: son liste görünür, 5sn timeout + arka plan
+  // retry sessizce tazelemeyi dener (SAHA-AG-DAYANIKLILIK.md §S2).
   const usersQuery = useQuery({
     queryKey: ['auth', 'mobile-users'],
     queryFn: () => authService.getMobileUsers(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    gcTime: 24 * 60 * 60 * 1000, // bkz. methodsQ — vardiya boyu bellekte kalsın
     // Kullanıcı listesi yalnız "liste+şifre" görünümünde gerekir (salt-PIN/kart
     // görünümlerinde kimse listelenmez — gereksiz istek atma).
     enabled: enabledMethods.includes('list'),

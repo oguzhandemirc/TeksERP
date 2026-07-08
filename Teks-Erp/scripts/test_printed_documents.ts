@@ -35,20 +35,27 @@ const u = (s: string): string => `${TAG}-${s}-${Math.floor(performance.now())}`;
 
 async function main(): Promise<void> {
   const created = { rolls: [] as string[], dispatchIds: [] as string[], shipmentIds: [] as string[] };
-
+  // F263: master-data tutucuları try DIŞINDA — cleanup finally'de guard'lı çalışsın
+  // (gövde ortasında hata olursa TEST- verisi sızmasın; kardeş test kalıbı).
+  let item: { id: string } | undefined;
+  let color: { id: string } | undefined;
+  let sub: { id: string } | undefined;
+  let customer: { id: string } | undefined;
+  let order: { id: string } | undefined;
+  try {
   // --- Ortak master data ---
-  const item = await prisma.item.create({
+  item = await prisma.item.create({
     data: { code: u("ITM"), name: "Test Kumaş", itemType: "FABRIC" },
   });
-  const color = await prisma.color.create({ data: { code: u("CLR"), name: "Test Renk", hex: "#abcdef" } });
-  const sub = await prisma.subcontractor.create({ data: { code: u("SUB"), name: "Test Kartela Fason" } });
+  color = await prisma.color.create({ data: { code: u("CLR"), name: "Test Renk", hex: "#abcdef" } });
+  sub = await prisma.subcontractor.create({ data: { code: u("SUB"), name: "Test Kartela Fason" } });
 
   const mkRoll = async (qty: number): Promise<string> => {
     const r = await prisma.roll.create({
       data: {
         barcode: u("RL"),
-        itemId: item.id,
-        colorId: color.id,
+        itemId: item!.id,
+        colorId: color!.id,
         initialQty: qty,
         currentQty: qty,
         qualityGrade: "A",
@@ -76,7 +83,13 @@ async function main(): Promise<void> {
   // 1) v1 ACTIVE freeze
   const cur1 = (await printedDocumentService.getCurrent(PrintedDocType.KARTELA_DISPATCH, kd1Id)).data as any;
   check("kartela v1 oluştu", cur1 != null && cur1.version === 1 && cur1.status === "ACTIVE", cur1);
-  check("v1 documentNo = dispatchNo", cur1?.documentNo?.startsWith("KD-"), cur1?.documentNo);
+  // F263: documentNo == kartela dispatchNo (snapshot'tan). Eski `startsWith("KD-")`
+  // bayattı — dispatchNo artık ayraçsız (KD2607000001), tireli değil.
+  check(
+    "v1 documentNo = dispatchNo",
+    !!cur1?.documentNo && cur1.documentNo === cur1?.snapshot?.doc?.dispatchNo,
+    cur1?.documentNo,
+  );
   check("v1 snapshot.doc 2 top içeriyor", cur1?.snapshot?.doc?.rolls?.length === 2);
   check("v1 snapshot company donmuş", typeof cur1?.snapshot?.company?.name === "string");
   check("v1 snapshot frozenAt var", typeof cur1?.snapshot?.frozenAt === "string");
@@ -136,15 +149,15 @@ async function main(): Promise<void> {
   // =========================================================================
   console.log("\n[SHIPMENT] TASLAK → DISPATCHED freeze + satır metrajı doğruluğu");
   // =========================================================================
-  const customer = await prisma.customer.create({
+  customer = await prisma.customer.create({
     data: { code: u("CST"), name: "Test Müşteri", type: "CUSTOMER" },
   });
-  const order = await prisma.order.create({
+  order = await prisma.order.create({
     data: {
       orderNumber: u("ORD"),
       customerId: customer.id,
       status: "APPROVED",
-      lines: { create: [{ itemId: item.id, colorId: color.id, quantity: 100, width: 150 }] },
+      lines: { create: [{ itemId: item!.id, colorId: color!.id, quantity: 100, width: 150 }] },
     },
   });
   const sr1 = await mkRoll(60);
@@ -197,31 +210,34 @@ async function main(): Promise<void> {
     !!htmlRes?.html && htmlRes.html.includes("SEVK İRSALİYESİ") && htmlRes.html.includes("ÇEKİ LİSTESİ"),
     htmlRes?.html?.slice(0, 30));
 
-  // --- Temizlik ---
-  await prisma.printedDocument.deleteMany({
-    where: { sourceId: { in: [...created.dispatchIds, ...created.shipmentIds] } },
-  });
-  await prisma.sack.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
-  await prisma.shipmentAllocation.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
-  await prisma.kartelaDispatchItem.deleteMany({ where: { dispatchId: { in: created.dispatchIds } } });
-  await prisma.kartelaDispatch.deleteMany({ where: { id: { in: created.dispatchIds } } });
-  await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
-  await prisma.shipment.deleteMany({ where: { id: { in: created.shipmentIds } } });
-  await prisma.orderLine.deleteMany({ where: { orderId: order.id } });
-  await prisma.order.delete({ where: { id: order.id } });
-  await prisma.roll.deleteMany({ where: { id: { in: created.rolls } } });
-  await prisma.subcontractor.delete({ where: { id: sub.id } });
-  await prisma.color.delete({ where: { id: color.id } });
-  await prisma.item.delete({ where: { id: item.id } });
-  await prisma.customer.delete({ where: { id: customer.id } });
-
-  console.log(`\n=== ${pass}/${pass + fail} geçti ===`);
-  await prisma.$disconnect();
+  } finally {
+    // F263: cleanup HER ZAMAN çalışır (gövde ortasında hata olsa da) + deleteMany
+    // + if-guard → partial-failure temizliği yeni hata fırlatmaz.
+    await prisma.printedDocument.deleteMany({
+      where: { sourceId: { in: [...created.dispatchIds, ...created.shipmentIds] } },
+    });
+    await prisma.sack.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
+    await prisma.shipmentAllocation.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
+    await prisma.kartelaDispatchItem.deleteMany({ where: { dispatchId: { in: created.dispatchIds } } });
+    await prisma.kartelaDispatch.deleteMany({ where: { id: { in: created.dispatchIds } } });
+    await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
+    await prisma.shipment.deleteMany({ where: { id: { in: created.shipmentIds } } });
+    if (order) {
+      await prisma.orderLine.deleteMany({ where: { orderId: order.id } });
+      await prisma.order.deleteMany({ where: { id: order.id } });
+    }
+    await prisma.roll.deleteMany({ where: { id: { in: created.rolls } } });
+    if (sub) await prisma.subcontractor.deleteMany({ where: { id: sub.id } });
+    if (color) await prisma.color.deleteMany({ where: { id: color.id } });
+    if (item) await prisma.item.deleteMany({ where: { id: item.id } });
+    if (customer) await prisma.customer.deleteMany({ where: { id: customer.id } });
+    console.log(`\n=== ${pass}/${pass + fail} geçti ===`);
+    await prisma.$disconnect();
+  }
   if (fail > 0) process.exit(1);
 }
 
-main().catch(async (e) => {
+main().catch((e) => {
   console.error("TEST FAIL:", e);
-  await prisma.$disconnect();
   process.exit(1);
 });

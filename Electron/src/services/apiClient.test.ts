@@ -7,9 +7,17 @@ vi.mock("@/lib/secure-token", () => ({
   tokenStore: { get: vi.fn(), set: vi.fn(), clear: () => tokenClear() },
 }));
 
-const setUser = vi.fn();
+// Faz 2 tek-uçuş guard'ı user'a bakar: 401 temizliği yalnız OTURUM AÇIKKEN
+// koşar. authState mutable — testler user'ı doldurup/boşaltıp iki dalı da sınar.
+const setUser = vi.fn((u: unknown) => {
+  authState.user = u;
+});
+const authState: { user: unknown; setUser: typeof setUser } = {
+  user: { userId: "u1" },
+  setUser,
+};
 vi.mock("@/store/auth", () => ({
-  useAuthStore: { getState: () => ({ setUser }) },
+  useAuthStore: { getState: () => authState },
 }));
 
 const toastError = vi.fn();
@@ -18,6 +26,7 @@ vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a)
 // serverStatus GERÇEK store — offset/online davranışını uçtan uca doğrulamak için.
 import apiClient from "./apiClient";
 import { useServerStatusStore } from "@/store/serverStatus";
+import { tokenStore } from "@/lib/secure-token"; // vi.mock'lu — spy'lara erişim
 
 type Handler = {
   fulfilled: (r: AxiosResponse) => unknown;
@@ -64,11 +73,48 @@ function makeNetworkError(code = "ENOTFOUND"): AxiosError {
   return err;
 }
 
+describe("apiClient request interceptor — Authorization", () => {
+  type ReqHandler = { fulfilled: (c: unknown) => Promise<{ headers: AxiosHeaders }> };
+  const getReqInterceptor = (): ReqHandler => {
+    const handlers = (apiClient.interceptors.request as unknown as { handlers: ReqHandler[] })
+      .handlers;
+    const h = handlers.find(Boolean);
+    if (!h) throw new Error("request interceptor bulunamadı");
+    return h;
+  };
+
+  beforeEach(() => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockReset();
+  });
+
+  it("preset Authorization EZİLMEZ — logout revoke'u yakalanan token'la gider", async () => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockResolvedValue("yeni-token");
+    const out = await getReqInterceptor().fulfilled({
+      headers: new AxiosHeaders({ Authorization: "Bearer eski-token" }),
+    });
+    // Ezilseydi: logout→anında re-login yarışında YENİ oturum revoke edilirdi.
+    expect(out.headers.Authorization).toBe("Bearer eski-token");
+  });
+
+  it("preset yoksa store token'ı yazılır (normal istek davranışı değişmedi)", async () => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockResolvedValue("yeni-token");
+    const out = await getReqInterceptor().fulfilled({ headers: new AxiosHeaders() });
+    expect(out.headers.Authorization).toBe("Bearer yeni-token");
+  });
+
+  it("token yokken header eklenmez", async () => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    const out = await getReqInterceptor().fulfilled({ headers: new AxiosHeaders() });
+    expect(out.headers.Authorization).toBeUndefined();
+  });
+});
+
 describe("apiClient interceptor", () => {
   beforeEach(() => {
     tokenClear.mockClear();
     setUser.mockClear();
     toastError.mockClear();
+    authState.user = { userId: "u1" }; // varsayılan: oturum açık
     // store'u temiz başlangıca çek
     useServerStatusStore.setState({
       status: "connecting",
@@ -107,6 +153,24 @@ describe("apiClient interceptor", () => {
       expect(tokenClear).toHaveBeenCalledTimes(1);
       expect(setUser).toHaveBeenCalledWith(null);
       expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/Oturum/i));
+    });
+
+    it("oturum ZATEN kapalıysa (user null) temizlik ve toast atlanır — tek-uçuş", async () => {
+      authState.user = null; // manuel logout sonrası arka plan isteği senaryosu
+      await expect(getInterceptor().rejected(makeError(401, { url: "/api/orders" }))).rejects.toBeDefined();
+      expect(tokenClear).not.toHaveBeenCalled();
+      expect(setUser).not.toHaveBeenCalled();
+      expect(toastError).not.toHaveBeenCalled();
+    });
+
+    it("401 yağmuru: ilk istek temizler, sonrakiler (user artık null) atlar", async () => {
+      await expect(getInterceptor().rejected(makeError(401, { url: "/api/a" }))).rejects.toBeDefined();
+      await expect(getInterceptor().rejected(makeError(401, { url: "/api/b" }))).rejects.toBeDefined();
+      await expect(getInterceptor().rejected(makeError(401, { url: "/api/c" }))).rejects.toBeDefined();
+      expect(tokenClear).toHaveBeenCalledTimes(1);
+      expect(setUser).toHaveBeenCalledTimes(1);
+      // Toast sayısı burada assert edilmez: 5sn'lik zaman-bazlı dedupe modül
+      // state'inde yaşar ve önceki testin toast'ı pencereyi tüketmiş olabilir.
     });
 
     it("login isteğinde token SİLİNMEZ, backend mesajını gösterir", async () => {

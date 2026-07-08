@@ -102,6 +102,7 @@ router.patch(
     try {
       const body = updateSchema.parse(req.body);
       const result = await service.update(
+        req.params.customerId as string, // F204: müşteri-kapsamlı guard
         req.params.branchId as string,
         body,
         req.user?.userId
@@ -128,6 +129,7 @@ router.delete(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await service.deactivate(
+        req.params.customerId as string, // F204: müşteri-kapsamlı guard
         req.params.branchId as string,
         req.user?.userId
       );

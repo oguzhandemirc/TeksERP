@@ -62,6 +62,59 @@ export const EPL_FONT: Record<FontSize, { code: string; w: number; h: number }> 
 /** Satırlar arası varsayılan ek boşluk (mm) — otomatik adımda font yüksekliğine eklenir. */
 export const LINE_GAP_MM = 1.2;
 
+// =============================================================================
+// SERBEST METİN BOYUTU (Etiket Stüdyosu v2) — hedef mm → en yakın basılabilir
+// =============================================================================
+// ZPL/HTML serbest ölçek basar (birebir); PPLA/PPLB bitmap fonttur — 5 temel
+// font × dikey/yatay tam-sayı çarpan kombinasyonundan HEDEFE EN YAKINI seçilir
+// (eski 4-kademe sisteminden çok daha granüler; font 5 (32×48) de kullanımda).
+// Genişlik oranı (wr): yatay çarpan ayrı seçilir — dar/geniş ("ince/kalın"
+// görünüm; bitmap'te vuruş kalınlığı genişlikle ölçeklenir).
+
+const EPL_BASE_FONTS: ReadonlyArray<{ code: string; w: number; h: number }> = [
+  { code: "1", w: 8, h: 12 },
+  { code: "2", w: 10, h: 16 },
+  { code: "3", w: 12, h: 20 },
+  { code: "4", w: 14, h: 24 },
+  { code: "5", w: 32, h: 48 },
+];
+
+export interface EplTextStyle {
+  code: string;
+  /** Dikey çarpan (yükseklik). */
+  vmul: number;
+  /** Yatay çarpan (genişlik — wr buradan). */
+  hmul: number;
+  /** Fiilen basılacak hücre (dot) — editör/önizleme "gerçekte ne çıkacak" için. */
+  hDots: number;
+  wDots: number;
+}
+
+/**
+ * Hedef glif yüksekliği (dot) + genişlik oranı → (font, vmul, hmul).
+ * Eşit sapmada BÜYÜK temel font tercih edilir (piksel çoğaltma yerine daha ince
+ * doğal detay). maxMul: PPLB=6 (EPL2 güvenli aralık), PPLA/DPL=9.
+ */
+export function resolveEplTextStyle(targetHDots: number, wr: number, maxMul: number): EplTextStyle {
+  let best = { f: EPL_BASE_FONTS[1]!, v: 1, diff: Number.POSITIVE_INFINITY };
+  for (const f of EPL_BASE_FONTS) {
+    for (let v = 1; v <= maxMul; v++) {
+      const diff = Math.abs(f.h * v - targetHDots);
+      if (diff < best.diff || (diff === best.diff && f.h > best.f.h)) {
+        best = { f, v, diff };
+      }
+    }
+  }
+  const hmul = Math.max(1, Math.min(maxMul, Math.round(best.v * wr)));
+  return {
+    code: best.f.code,
+    vmul: best.v,
+    hmul,
+    hDots: best.f.h * best.v,
+    wDots: best.f.w * hmul,
+  };
+}
+
 /** QR sembol modül sayısı (kenar), veri uzunluğundan tahmin — alnum/byte mod, ECC M.
  *  Yazıcının seçtiği sürümle birebir olmayabilir ama konumlama+önizleme için yeterli
  *  (generator textX ile önizleme QR boyutu AYNI fonksiyondan → tutarlı). */

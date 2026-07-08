@@ -22,7 +22,7 @@ const router = Router();
  *       Mobil infinite scroll cursor mode kullanır; mevcut Electron/tartı-paket çağrıları legacy moddadır.
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/", verifyToken, requireAnyPermission("quality:read", "mobile:tambur", "mobile:tarti-paket", "mobile:depo"), controller.listSwatches);
+router.get("/", verifyToken, requireAnyPermission("quality:read", "kartela:read", "mobile:tambur", "mobile:tarti-paket", "mobile:depo"), controller.listSwatches);
 
 /**
  * @openapi
@@ -38,7 +38,7 @@ router.get("/", verifyToken, requireAnyPermission("quality:read", "mobile:tambur
 router.get(
   "/stats",
   verifyToken,
-  requireAnyPermission("quality:read", "mobile:tambur", "mobile:tarti-paket", "mobile:depo"),
+  requireAnyPermission("quality:read", "kartela:read", "mobile:tambur", "mobile:tarti-paket", "mobile:depo"),
   controller.getSwatchStats
 );
 
@@ -60,7 +60,7 @@ router.get(
 router.get(
   "/by-barcode/:barcode",
   verifyToken,
-  requireAnyPermission("quality:read", "mobile:tarti-paket", "mobile:depo"),
+  requireAnyPermission("quality:read", "kartela:read", "mobile:tarti-paket", "mobile:depo"),
   controller.getSwatchByBarcode
 );
 

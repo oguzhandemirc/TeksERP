@@ -7,6 +7,9 @@ coverage
 .cursor/
 React/
 
+# Claude Code çalışma-zamanı kilidi (per-session artefakt; .claude/settings.json İZLENİR)
+.claude/scheduled_tasks.lock
+
 # Test artefaktları (token, raporlar)
 test-results/
 TEST_BUG_REPORT.md

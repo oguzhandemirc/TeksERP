@@ -15,7 +15,6 @@ import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage"
 import { EtiketlerPage } from "@/pages/Labels/EtiketlerPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { PeripheralDevicesPage } from "@/pages/PeripheralDevices/PeripheralDevicesPage";
-import { LabelFormatProfilesPage } from "@/pages/LabelFormatProfiles/LabelFormatProfilesPage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
@@ -34,10 +33,11 @@ import { SystemEventsPage } from "@/pages/System/Events/SystemEventsPage";
 import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage";
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
 import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
+import { PerfPage } from "@/pages/System/Perf/PerfPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
-import { LabelTemplateEditPage } from "@/pages/LabelTemplates/LabelTemplateEditPage";
+import { LabelStudioPage } from "@/pages/LabelTemplates/editor/LabelStudioPage";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
@@ -142,14 +142,6 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="station:read">
         <PeripheralDevicesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "definitions/label-formats",
-    element: (
-      <ProtectedRoute requirePermission="station:read">
-        <LabelFormatProfilesPage />
       </ProtectedRoute>
     ),
   },
@@ -262,7 +254,7 @@ export const contentRoutes: RouteObject[] = [
     path: "definitions/label-templates/:id",
     element: (
       <ProtectedRoute requirePermission="label-template:write">
-        <LabelTemplateEditPage />
+        <LabelStudioPage />
       </ProtectedRoute>
     ),
   },
@@ -355,6 +347,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <ActivityPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/perf",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <PerfPage />
       </ProtectedRoute>
     ),
   },

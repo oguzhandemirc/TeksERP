@@ -17,9 +17,10 @@
 // ayrıca useSessionConflict'e ihtiyacı yok.
 // =============================================================================
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
 import LoginScreen from '../../screens/Auth/LoginScreen';
 import { useAuthStore } from '../../store/authStore';
 import { useLockStore } from '../../store/lockStore';
@@ -41,7 +42,17 @@ export default function LockScreen() {
         await useAuthStore.getState().setAuth(next, token, keepName);
       } else {
         // Farklı operatör — devir: A flush/kapat → B setAuth/init.
-        await performSwitch({ user: next, token, fullName: next.fullName });
+        const outcome = await performSwitch({ user: next, token, fullName: next.fullName });
+        if (outcome.pendingCount > 0) {
+          // A'nın gönderilemeyen kayıtları cihazda bekliyor — B'nin oturumunda
+          // bağlantı gelince otomatik akar; operatör değişimi bilgiden mahrum kalmasın.
+          Toast.show({
+            type: 'info',
+            text1: `${outcome.pendingCount} kayıt bekletildi`,
+            text2: 'Bağlantı gelince otomatik gönderilecek.',
+            visibilityTime: 6000,
+          });
+        }
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       unlock();
@@ -49,10 +60,36 @@ export default function LockScreen() {
     [unlock],
   );
 
+  // Re-entrancy guard: tavanlı çıkış (≤9sn) sürerken çift dokunuş ikinci bir
+  // flush akışı başlatmasın (adımlar idempotent ama çift POST/toast gereksiz).
+  const logoutInFlight = useRef(false);
   const doLogout = useCallback(() => {
+    if (logoutInFlight.current) return;
+    logoutInFlight.current = true;
     void (async () => {
-      await performLogout();
-      unlock();
+      try {
+        const outcome = await performLogout();
+        if (outcome.pendingCount > 0) {
+          Toast.show({
+            type: 'info',
+            text1: `${outcome.pendingCount} kayıt bekletildi`,
+            text2: 'Kayıtlar cihazda güvende — girişten sonra otomatik gönderilecek.',
+            visibilityTime: 6000,
+          });
+        }
+        unlock();
+      } catch {
+        // clearAuth (SecureStore) hatası — kilitte kalmak güvenli taraf;
+        // operatör tekrar dener. Sessiz unhandled rejection bırakma.
+        Toast.show({
+          type: 'error',
+          text1: 'Çıkış tamamlanamadı',
+          text2: 'Lütfen tekrar deneyin.',
+          visibilityTime: 6000,
+        });
+      } finally {
+        logoutInFlight.current = false;
+      }
     })();
   }, [unlock]);
 

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Send, Printer, Usb } from "lucide-react";
 import { usePreferences } from "@/providers/PreferencesProvider";
-import { labelTemplateService, type LabelKind, type TemplateField } from "@/services/labelTemplateService";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,27 +8,16 @@ import { Button } from "@/components/ui/button";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  kind: LabelKind;
-  fields: TemplateField[];
-  lineStepMm: number | null;
-  qrScale: number | null;
-  lengthBanner: boolean;
+  /** Kaydedilmemiş güncel tasarımın native çıktısını üretir — önizlemeyle AYNI
+   *  kaynak ("gördüğün = basılan"). Kanvas editörü canvasPreview'i bağlar. */
+  fetchNative: () => Promise<{ mode: "svg" | "html" | "text"; language: string; native: string }>;
 }
 
 /**
- * Şablon Test Baskısı — düzenlenen (KAYDEDİLMEMİŞ) alan+yerleşimi örnek veriyle,
- * aktif yazıcı dilinde yazıcıya bastırır (Bu PC / Ağ IP). Native, canlı önizlemenin
- * kaynağıyla AYNI (fieldsPreview.native) → "gördüğün = basılan". Gerçek top gerekmez.
+ * Şablon Test Baskısı — düzenlenen (KAYDEDİLMEMİŞ) tasarımı örnek veriyle,
+ * aktif yazıcı dilinde yazıcıya bastırır (Bu PC / Ağ IP). Gerçek top gerekmez.
  */
-export function TemplateTestPrintDialog({
-  open,
-  onOpenChange,
-  kind,
-  fields,
-  lineStepMm,
-  qrScale,
-  lengthBanner,
-}: Props) {
+export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Props) {
   const { prefs } = usePreferences();
   const lpCfg = prefs.labelPrinter;
   const printerApi = typeof window !== "undefined" ? window.api?.printer : undefined;
@@ -45,8 +33,8 @@ export function TemplateTestPrintDialog({
     setSending(true);
     setResult(null);
     try {
-      // Kaydedilmemiş güncel alan+yerleşimin native'i (önizlemeyle aynı kaynak).
-      const p = await labelTemplateService.fieldsPreview(kind, fields, { lineStepMm, qrScale, lengthBanner });
+      // Kaydedilmemiş güncel tasarımın native'i (önizlemeyle aynı kaynak).
+      const p = await fetchNative();
       if (p.mode === "html") {
         setResult({ ok: false, text: `Aktif dil (${p.language}) HTML — etiket yazıcısına ham gönderilemez.` });
         return;

@@ -134,16 +134,16 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [rollId, stepId, startMeter, endMeter, defectTypeId]
+ *             required: [rollId, stepId, startMeter, defectTypeId]
  *             properties:
  *               rollId:       { type: string, format: uuid }
  *               stepId:       { type: string, format: uuid }
  *               startMeter:   { type: number, example: 120 }
- *               endMeter:     { type: number, example: 125 }
  *               defectTypeId:
  *                 type: string
  *                 format: uuid
  *                 description: DefectType.id — operatör kataloğundan seçer, serbest metin kabul edilmez.
+ *               clientErrorId: { type: string, format: uuid, description: Mobil offline kuyruğu için opsiyonel idempotency UUID }
  *     responses:
  *       201: { description: Hata kaydı oluşturuldu }
  *       400: { description: Metraj aralığı geçersiz veya hata tipi pasif }
@@ -295,7 +295,7 @@ router.get(
  *     summary: Tüm açık PROCESS_QC adımlarındaki bekleyen rollerin birleşik kuyruğu
  *     description: |
  *       Planlama drag-drop sayfası ve tablet operatörü tarafından okunur.
- *       Sıra: önce acil (isUrgent), sonra priority desc, sonra enteredAt asc.
+ *       Sıra: önce acil (isUrgent desc, urgentMarkedAt asc), sonra priority asc, sonra startedAt asc.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Kuyruk listesi }
@@ -316,7 +316,7 @@ router.get(
  *     summary: Kuyruktaki rollerin önceliklerini batch güncelle
  *     description: |
  *       Drag-drop sonrası planlama yeni sırayı (yüksek priority = yukarıda)
- *       gönderir. Yalnızca exitedAt IS NULL olan kayıtlar güncellenir.
+ *       gönderir. Yalnızca açık (status != COMPLETED) PROCESS_QC adımları güncellenir.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -332,7 +332,7 @@ router.get(
  *                   type: object
  *                   required: [id, priority]
  *                   properties:
- *                     id:       { type: string, format: uuid, description: RollMovement.id }
+ *                     id:       { type: string, format: uuid, description: WorkOrderStep.id }
  *                     priority: { type: integer, minimum: 0 }
  *     responses:
  *       200: { description: Güncellenen kayıt sayısı }

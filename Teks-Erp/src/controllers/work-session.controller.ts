@@ -56,6 +56,7 @@ export class WorkSessionController {
         machineId: body.machineId ?? null,
         stationId: body.stationId ?? null,
         confirmTakeover: body.confirmTakeover ?? false,
+        permissions: req.user!.permissions, // F221: istasyon-türü izin enforcement
       });
       res.status(201).json(result);
     } catch (e) {
@@ -93,15 +94,8 @@ export class WorkSessionController {
     }
   };
 
-  static resolveMachine = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const code = typeof req.query.code === "string" ? req.query.code : "";
-      const result = await WorkSessionService.resolveMachineByCode(code);
-      res.status(200).json(result);
-    } catch (e) {
-      next(e);
-    }
-  };
+  // F227: kullanılmayan resolveMachine handler'ı silindi (route WorkSessionService.
+  // resolveMachineByCode'u doğrudan çağırıyor — controller metodu ölüydü).
 
   static listActive = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

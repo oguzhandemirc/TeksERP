@@ -36,7 +36,7 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         description: Parti numarası ile arama
  *       - in: query
  *         name: filter[status]
- *         schema: { type: string, enum: [PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED] }
+ *         schema: { type: string, enum: [PLANNED, IN_PROGRESS, COMPLETED, CANCELLED] }
  *       - in: query
  *         name: filter[type]
  *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION] }
@@ -368,7 +368,7 @@ router.post(
  * /api/work-orders/{id}:
  *   patch:
  *     tags: [WorkOrders]
- *     summary: İş emrinin temel alanlarını güncelle (sadece PLANNED)
+ *     summary: İş emrinin temel alanlarını güncelle (COMPLETED/CANCELLED hariç; kilitli alanlar 409)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -393,7 +393,7 @@ router.post(
  *                 description: Tambur planlama bilgisi ("2-KAT" / "4-KAT" gibi). Tambur'a bilgi olarak iletilir; operatör override edebilir.
  *     responses:
  *       200: { description: Güncellendi }
- *       409: { description: Üretim başlamış (sadece PLANNED düzenlenebilir) }
+ *       409: { description: WO tamamlandı/iptal edildi VEYA fiziksel taahhüt kilitli alan değiştirildi (locks) }
  */
 router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.update);
 
@@ -404,7 +404,7 @@ router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobil
  *     tags: [WorkOrders]
  *     summary: İş emrini tüm ilişkileri ile birlikte yeniden yaz (full replace)
  *     description: |
- *       Sadece PLANNED durumda ve üretime başlanmamış iş emirlerinde çalışır.
+ *       COMPLETED/CANCELLED dışında her durumda çalışır; fiziksel taahhüt (sevk/adım başladı) kilitli alanları 409 döner.
  *       Rota şablonu, custom adımlar, bağlı sipariş kalemleri, hedef ürün ve
  *       özellikler dahil tüm alanlar değişebilir. Mevcut WorkOrderStep,
  *       WorkOrderToOrderLine ve WorkOrderTargetProperty kayıtları drop-and-recreate
@@ -417,7 +417,7 @@ router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobil
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200: { description: Güncellendi }
- *       409: { description: Üretim başlamış (sadece PLANNED + roll bağlı olmayan WO) }
+ *       409: { description: WO tamamlandı/iptal edildi VEYA fiziksel taahhüt kilitli alan değiştirildi (locks) }
  */
 router.put("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.replace);
 

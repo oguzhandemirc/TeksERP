@@ -199,7 +199,11 @@ export class ItemService extends BaseService {
 
     const allowedColorIds = data.allowedColorIds as string[] | undefined;
     const allowedPropertyIds = data.allowedPropertyIds as string[] | undefined;
-    const restData = { ...data };
+    // M-4/F208: bu dal super.update'i (dolayısıyla sanitizeWriteData'yı) atladığı
+    // için restData'yı burada aynı beyaz listeden geçir — ham gövdeden gelen nested
+    // ilişki-write'ları (ör. {"rolls":{"deleteMany":{}}}) doğrudan Prisma'ya
+    // geçmesin, yalnız gerçek scalar kolonlar (name/unit/isActive) kalsın.
+    const restData = this.sanitizeWriteData({ ...data });
     delete restData.allowedColorIds;
     delete restData.allowedPropertyIds;
 
@@ -320,8 +324,11 @@ export class ItemService extends BaseService {
       return { success: true, data: existing, message: "Renk zaten dahil" };
     }
 
-    const created = await prisma.itemAllowedColor.create({
-      data: { itemId, colorId },
+    // F214: upsert — eşzamanlı çift-istekte P2002 yerine mevcut satır idempotent döner.
+    const created = await prisma.itemAllowedColor.upsert({
+      where: { itemId_colorId: { itemId, colorId } },
+      create: { itemId, colorId },
+      update: {},
       include: { color: true },
     });
 
@@ -373,8 +380,11 @@ export class ItemService extends BaseService {
       return { success: true, data: existing, message: "Özellik zaten dahil" };
     }
 
-    const created = await prisma.itemAllowedProperty.create({
-      data: { itemId, propertyId },
+    // F214: upsert — eşzamanlı çift-istekte P2002 yerine mevcut satır idempotent döner.
+    const created = await prisma.itemAllowedProperty.upsert({
+      where: { itemId_propertyId: { itemId, propertyId } },
+      create: { itemId, propertyId },
+      update: {},
       include: { property: true },
     });
 

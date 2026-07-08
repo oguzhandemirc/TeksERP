@@ -126,6 +126,10 @@ export const SETTING_KEYS = {
    *  altına yapıştırılıyor). /labels/rolls/:id/html bu kadar sayfa döner;
    *  çağıran ?copies= ile tek baskı için override edebilir. 1-5 arası. */
   LABEL_COPIES: "label.copies",
+  /** Sistem VARSAYILAN etiket medyası (Etiket Stüdyosu v2 — "Boyutlar" kataloğu
+   *  emekli). Cihazsız baskı/önizleme/kartela bu boyutu kullanır. JSON:
+   *  { widthMm, heightMm, dpi, gapMm, marginMm }. */
+  LABEL_DEFAULT_MEDIA: "label.defaultMedia",
   /** Saha #20: top adı (birleşik ürün tanımı) format şablonu. Token'lar:
    *  {item} {color} {width} {quality}. Default "{item} {color} {width}". Boş
    *  token'lar (renksiz vb.) atlanır, fazla boşluk sadeleşir. Frontend okur. */
@@ -537,6 +541,9 @@ export interface FeatureFlags {
   rollNameTemplate: string;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
+  /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
+   *  medyası. Yazıcı cihazı seçiliyse onun medyası önceliklidir; bu yalnız fallback. */
+  defaultLabelMedia: DefaultLabelMedia;
 }
 
 // =============================================================================
@@ -703,6 +710,7 @@ export class SystemSettingService {
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
+      defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
     // pinleme (taze değeri döndür, cache'i bir sonraki okuma tazeler).
@@ -929,6 +937,15 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_SESSION_DURATION_HOURS,
         Math.floor(v),
         "Oturum (JWT token) ömrü, saat — giriş sonrası token kaç saat geçerli kalır",
+        userId
+      );
+      // F232: enforcement/UI dakika anahtarını okur (readSessionDurationMinutes
+      // önce dakikayı, yoksa saati baz alır). Saat güncellenince dakika kaynağı
+      // bayat kalmasın diye türetilmiş dakikayı da yaz.
+      await this.set(
+        SETTING_KEYS.AUTH_SESSION_DURATION_MINUTES,
+        Math.min(Math.floor(v) * 60, MAX_SESSION_DURATION_MINUTES),
+        "Oturum ömrü, dakika — saat ayarından türetildi",
         userId
       );
     }
@@ -1236,6 +1253,29 @@ export class SystemSettingService {
         SETTING_KEYS.LABEL_NATIVE_SEND_ENABLED,
         input.nativeSendEnabled,
         "Faz-2: native etiket komutlarını yazıcıya doğrudan (RAW TCP 9100) gönder (kapalıyken simülasyon)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "defaultLabelMedia")) {
+      const c = input.defaultLabelMedia;
+      if (!c || typeof c !== "object") throw AppError.badRequest("defaultLabelMedia nesne olmalı");
+      const range = (v: unknown, lo: number, hi: number, label: string) => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n < lo || n > hi) throw AppError.badRequest(`${label} ${lo}–${hi} aralığında olmalı`);
+        return n;
+      };
+      const media: DefaultLabelMedia = {
+        widthMm: range(c.widthMm, 10, 500, "Etiket eni (mm)"),
+        heightMm: range(c.heightMm, 10, 500, "Etiket boyu (mm)"),
+        dpi: Math.floor(range(c.dpi, 50, 1200, "DPI")),
+        gapMm: range(c.gapMm, 0, 50, "Etiket arası boşluk (mm)"),
+        marginMm: range(c.marginMm, 0, 50, "Pay (mm)"),
+      };
+      await this.set(
+        SETTING_KEYS.LABEL_DEFAULT_MEDIA,
+        media as unknown as Prisma.InputJsonValue,
+        "Sistem varsayılan etiket medyası — cihazsız baskı/önizleme (yazıcı cihazı seçiliyse onun medyası öncelikli)",
         userId
       );
     }
@@ -1927,6 +1967,40 @@ export async function readLabelCopies(
   const parsed = asNumber(setting.value);
   if (parsed === null || parsed < 1) return DEFAULT_LABEL_COPIES;
   return Math.min(Math.floor(parsed), 5);
+}
+
+/** Sistem varsayılan etiket medyası (cihazsız baskı/önizleme/kartela). Kayıt yoksa
+ *  100×148 / 203dpi / gap 2 / pay 3 (kod fallback). */
+export interface DefaultLabelMedia {
+  widthMm: number;
+  heightMm: number;
+  dpi: number;
+  gapMm: number;
+  marginMm: number;
+}
+export const CODE_DEFAULT_MEDIA: DefaultLabelMedia = {
+  widthMm: 100, heightMm: 148, dpi: 203, gapMm: 2, marginMm: 3,
+};
+export async function readDefaultLabelMedia(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<DefaultLabelMedia> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_DEFAULT_MEDIA },
+    select: { value: true },
+  });
+  const v = setting?.value as Record<string, unknown> | null | undefined;
+  if (!v || typeof v !== "object") return CODE_DEFAULT_MEDIA;
+  // width/height/dpi > 0 zorunlu; gap/margin 0 GEÇERLİ (sıfır boşluk/pay).
+  const pos = (x: unknown, fb: number) => (typeof x === "number" && Number.isFinite(x) && x > 0 ? x : fb);
+  const nonNeg = (x: unknown, fb: number) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : fb);
+  return {
+    widthMm: pos(v.widthMm, CODE_DEFAULT_MEDIA.widthMm),
+    heightMm: pos(v.heightMm, CODE_DEFAULT_MEDIA.heightMm),
+    dpi: pos(v.dpi, CODE_DEFAULT_MEDIA.dpi),
+    gapMm: nonNeg(v.gapMm, CODE_DEFAULT_MEDIA.gapMm),
+    marginMm: nonNeg(v.marginMm, CODE_DEFAULT_MEDIA.marginMm),
+  };
 }
 
 /**

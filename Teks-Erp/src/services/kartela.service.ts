@@ -30,7 +30,7 @@ import {
 import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
 import { buildPrefixedCardNumber, buildPrefixedBarcode } from "../utils/barcode";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildPagination } from "../utils/query-parser";
+import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -99,26 +99,28 @@ async function nextKartelaDocSequence(
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const docPrefix = `${prefix}${yy}${mm}`; // ayraçsız: PFXYYMM ile başlar
 
-  let lastNo: string | null = null;
+  // O-21: gte (index seek) + startsWith (collation-bağımsız tam-prefix) + JS sayısal
+  // max. Eski startsWith-tek + orderBy desc glibc collation sırasına/lex taşmaya
+  // güveniyordu (glibc seq-no bug — order.service.ts:1065 deseni).
+  let nos: string[];
   if (kind === "dispatch") {
-    const last = await tx.kartelaDispatch.findFirst({
-      where: { dispatchNo: { startsWith: docPrefix } },
-      orderBy: { dispatchNo: "desc" },
+    const rows = await tx.kartelaDispatch.findMany({
+      where: { dispatchNo: { gte: docPrefix, startsWith: docPrefix } },
       select: { dispatchNo: true },
     });
-    lastNo = last?.dispatchNo ?? null;
+    nos = rows.map((r) => r.dispatchNo);
   } else {
-    const last = await tx.kartelaReceipt.findFirst({
-      where: { receiptNo: { startsWith: docPrefix } },
-      orderBy: { receiptNo: "desc" },
+    const rows = await tx.kartelaReceipt.findMany({
+      where: { receiptNo: { gte: docPrefix, startsWith: docPrefix } },
       select: { receiptNo: true },
     });
-    lastNo = last?.receiptNo ?? null;
+    nos = rows.map((r) => r.receiptNo);
   }
-
-  if (!lastNo) return 1;
-  const n = parseInt(lastNo.slice(6), 10); // ayraçsız PFXYYMMNNNNNN → NNNNNN = 6..
-  return (Number.isFinite(n) ? n : 0) + 1;
+  const maxSeq = nos.reduce((max, no) => {
+    const n = parseInt(no.slice(6), 10); // ayraçsız PFXYYMMNNNNNN → NNNNNN = 6..
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  return maxSeq + 1;
 }
 
 /** SW- kartela barkodu sequence (4 parçalı, Crockford + checksum). */
@@ -129,14 +131,18 @@ async function nextSwatchSequence(
   const yy = String(date.getFullYear()).slice(2);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const barcodePrefix = `SW${yy}${mm}`; // ayraçsız: SWYYMM ile başlar
-  const last = await tx.swatch.findFirst({
-    where: { barcode: { startsWith: barcodePrefix } },
-    orderBy: { barcode: "desc" },
+  // O-21: gte + startsWith (tam-prefix) + Crockford decode max — tek collation-top
+  // satıra güvenmek yerine aydaki tüm barkodların sayısal max'ı.
+  const rows = await tx.swatch.findMany({
+    where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
     select: { barcode: true },
   });
-  if (!last?.barcode) return 1;
-  const n = decodeSequenceFromBarcode(last.barcode);
-  return (n ?? 0) + 1;
+  const maxSeq = rows.reduce((max, r) => {
+    if (!r.barcode) return max;
+    const n = decodeSequenceFromBarcode(r.barcode);
+    return n !== null && n > max ? n : max;
+  }, 0);
+  return maxSeq + 1;
 }
 
 // -----------------------------------------------------------------------------
@@ -207,11 +213,24 @@ export class KartelaService {
     // Soft-delete guard: pasife alınmış firmaya yeni kartela sevki açılamaz.
     if (!subcontractor.isActive) throw AppError.badRequest("Kartela firması pasif durumda");
 
+    // F172: mükerrer top kimliği guard'ı (receive() ile simetri) — { in } dedup ettiğinden
+    // aksi halde N istenen ama 1 top bulunup sessizce/parite hatasıyla ilerlerdi.
+    if (new Set(data.rollIds).size !== data.rollIds.length) {
+      throw AppError.badRequest("Aynı top birden fazla kez girilemez");
+    }
+
+    // F176: yalnız kullanılan alanlar — item/color include'u hiç okunmuyordu
+    // (validasyon + item create sadece id/barcode/status/shipmentId/currentQty/weightKg
+    // kullanıyor; yanıt `result`, bu `rolls` değil).
     const rolls = await prisma.roll.findMany({
       where: { id: { in: data.rollIds } },
-      include: {
-        item: { select: { code: true, name: true } },
-        color: { select: { code: true, name: true } },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        shipmentId: true,
+        currentQty: true,
+        weightKg: true,
       },
     });
     if (rolls.length !== data.rollIds.length) {
@@ -469,6 +488,23 @@ export class KartelaService {
     // Soft-delete guard: pasife alınmış firmadan kartela kabulü yapılamaz.
     if (!subcontractor.isActive) throw AppError.badRequest("Kartela firması pasif durumda");
 
+    // F169: Bilgi amaçlı dispatch bağı verildiyse var-mı + iptal-değil + firma-tutarlı
+    // olsun (soft-delete/iptal giriş guard'ı deseni). Yanlış/iptal/yabancı bir dispatchId
+    // belgeyi ve dispatch↔receipt görünümünü bozar; var-olmayan ID tx içinde ham P2003 verir.
+    if (data.dispatchId) {
+      const dispatch = await prisma.kartelaDispatch.findUnique({
+        where: { id: data.dispatchId },
+        select: { id: true, cancelledAt: true, subcontractorId: true },
+      });
+      if (!dispatch) throw AppError.notFound("Kartela sevki bulunamadı");
+      if (dispatch.cancelledAt) {
+        throw AppError.conflict("İptal edilmiş kartela sevkine kabul yapılamaz");
+      }
+      if (dispatch.subcontractorId !== data.subcontractorId) {
+        throw AppError.badRequest("Kartela sevki bu firmaya ait değil");
+      }
+    }
+
     // Doğrula: adet + ölçüm tutarlılığı
     for (const ret of data.returns) {
       if (!Number.isInteger(ret.count) || ret.count <= 0) {
@@ -512,19 +548,31 @@ export class KartelaService {
           consumedRollId: { in: rollIds },
           receipt: { cancelledAt: null },
         },
-        select: { receiptId: true, receipt: { select: { receiptNo: true } } },
+        select: { receiptId: true },
       });
       const receiptIds = new Set(existingItems.map((i) => i.receiptId));
       if (receiptIds.size === 1) {
-        const rec = await prisma.kartelaReceipt.findUnique({
-          where: { id: [...receiptIds][0] },
-        });
-        if (rec) {
-          return {
-            success: true,
-            data: rec,
-            message: `Kartela kabulü zaten yapılmış (idempotent): ${rec.receiptNo}`,
-          };
+        const receiptId = [...receiptIds][0];
+        const rec = await prisma.kartelaReceipt.findUnique({ where: { id: receiptId } });
+        // F173: idempotent replay YALNIZ tam eşleşmede — aynı firma + birebir aynı
+        // top kümesi. Aksi halde (farklı firma, kısmi ya da fazladan top) gerçek
+        // çakışmadır → aşağıdaki 409 ile net reddet, sessizce "kaydedildi" gösterme.
+        if (rec && rec.subcontractorId === data.subcontractorId) {
+          const receiptRolls = await prisma.kartelaReceiptItem.findMany({
+            where: { receiptId },
+            select: { consumedRollId: true },
+          });
+          const incoming = new Set(rollIds);
+          const sameRolls =
+            receiptRolls.length === incoming.size &&
+            receiptRolls.every((r) => incoming.has(r.consumedRollId));
+          if (sameRolls) {
+            return {
+              success: true,
+              data: rec,
+              message: `Kartela kabulü zaten yapılmış (idempotent): ${rec.receiptNo}`,
+            };
+          }
         }
       }
       throw AppError.conflict("Bu toplar zaten kartela olarak kabul edilmiş.");
@@ -837,10 +885,9 @@ export class KartelaService {
     }
     const search = params?.search?.trim();
     if (search) {
-      where.OR = [
-        { dispatchNo: { contains: search, mode: "insensitive" } },
-        { subcontractor: { name: { contains: search, mode: "insensitive" } } },
-      ];
+      where.OR = buildTurkishSearch<Prisma.KartelaDispatchWhereInput>(search, [
+        "dispatchNo", "subcontractor.name",
+      ]);
     }
 
     // Liste için hafif select — detay (`getDispatch`) tam veriyi döner.
@@ -952,8 +999,11 @@ export class KartelaService {
     const where: Prisma.KartelaReceiptWhereInput = {};
     if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
     const status = params?.status ?? "active";
-    if (status === "active") where.cancelledAt = null;
-    else if (status === "cancelled") where.cancelledAt = { not: null };
+    // F171: controller open/received durumlarını da geçiriyor; bunlar 'active' gibi
+    // cancelledAt=null süzülmeli (aksi halde iptaller de listeye sızıyordu). Yalnız
+    // 'cancelled' ve 'all' özel; geri kalan tümü aktif filtresine düşer.
+    if (status === "cancelled") where.cancelledAt = { not: null };
+    else if (status !== "all") where.cancelledAt = null;
     if (params?.dateFrom || params?.dateTo) {
       where.receivedAt = {
         ...(params?.dateFrom ? { gte: params.dateFrom } : {}),
@@ -962,11 +1012,9 @@ export class KartelaService {
     }
     const search = params?.search?.trim();
     if (search) {
-      where.OR = [
-        { receiptNo: { contains: search, mode: "insensitive" } },
-        { manifestNo: { contains: search, mode: "insensitive" } },
-        { subcontractor: { name: { contains: search, mode: "insensitive" } } },
-      ];
+      where.OR = buildTurkishSearch<Prisma.KartelaReceiptWhereInput>(search, [
+        "receiptNo", "manifestNo", "subcontractor.name",
+      ]);
     }
 
     const select = {
@@ -1307,6 +1355,8 @@ export class KartelaService {
         itemId: data.itemId,
         colorId: data.colorId,
         count: data.count,
+        // F177: hangi kartelaların düşüldüğü izlensin (recordId yalnız ilkini gösteriyordu).
+        swatchIds: ids.slice(0, 100),
         reason,
       },
     });

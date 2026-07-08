@@ -62,6 +62,38 @@ const previewRawSchema = z.object({
   code:     z.string().max(20000),
 });
 
+// Kanvas önizleme gövdesi (Etiket Stüdyosu v2) — hafif kabuk; eleman-düzeyi
+// doğrulama servistedir (validateCanvasLayout, Türkçe mesajlar). Enum'lar
+// string-literal + as cast (TDZ kuralı: modül-üstü enum ÜYESİ deref yasak).
+const canvasPreviewSchema = z.object({
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as [string, ...string[]]),
+  widthMm: z.number().min(10).max(500),
+  heightMm: z.number().min(10).max(500),
+  elements: z.unknown(),
+  language: z.enum(["PPLA", "PPLB", "ZPL", "RASTER_HTML"] as [string, ...string[]]).optional(),
+});
+
+// Boyut varyantı gövdeleri — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
+const variantCreateSchema = z.object({
+  name: z.string().max(60).optional(),
+  widthMm: z.number().min(10).max(500),
+  heightMm: z.number().min(10).max(500),
+  copyFromVariantId: z.string().uuid().nullable().optional(),
+  elements: z.unknown().optional(),
+});
+
+const variantUpdateSchema = z.object({
+  name: z.string().max(60).optional(),
+  widthMm: z.number().min(10).max(500).optional(),
+  heightMm: z.number().min(10).max(500).optional(),
+  elements: z.unknown().optional(),
+});
+
+const contextDefaultSchema = z.object({
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as [string, ...string[]]),
+  templateId: z.string().uuid().nullable(),
+});
+
 export class LabelTemplateController {
   private service = new LabelTemplateService();
 
@@ -133,9 +165,24 @@ export class LabelTemplateController {
     } catch (e) { next(e); }
   };
 
-  /** "Alanlar" sekmesi canlı önizlemesi — verilen alanları AKTİF DİLDE render eder. */
+  /** Canlı önizleme — İKİ gövde kabul eder:
+   *  v2 (kanvas): { kind, widthMm, heightMm, elements, language? } — Etiket Stüdyosu.
+   *  v1 (akış):   { kind, fields, lineStepMm?, qrScale?, lengthBanner? } — eski editör
+   *  gövdesi geçiş boyunca çalışmaya devam eder. */
   fieldsPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      if (req.body && typeof req.body === "object" && "elements" in req.body) {
+        const body = canvasPreviewSchema.parse(req.body);
+        const result = await this.service.getCanvasPreview({
+          kind: body.kind as LabelKind,
+          widthMm: body.widthMm,
+          heightMm: body.heightMm,
+          elements: body.elements,
+          language: body.language as PrinterLanguage | undefined,
+        });
+        res.status(200).json(result);
+        return;
+      }
       const { kind, fields, lineStepMm, qrScale, lengthBanner } = z
         .object({
           kind: z.nativeEnum(LabelKind),
@@ -165,6 +212,70 @@ export class LabelTemplateController {
     try {
       const result = await this.service.setDefault(req.params.id as string, req.user?.userId);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- Boyut varyantları (Etiket Stüdyosu v2) ----
+
+  listVariants = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.listVariants(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  createVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = variantCreateSchema.parse(req.body);
+      const result = await this.service.createVariant(req.params.id as string, body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (e) { next(e); }
+  };
+
+  updateVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = variantUpdateSchema.parse(req.body);
+      const result = await this.service.updateVariant(req.params.variantId as string, body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  deleteVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.deleteVariant(req.params.variantId as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setPrimaryVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.setPrimaryVariant(req.params.variantId as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- Bağlam varsayılanları + birleşik katalog ----
+
+  listContextDefaults = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.listContextDefaults());
+    } catch (e) { next(e); }
+  };
+
+  setContextDefault = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = contextDefaultSchema.parse(req.body);
+      const result = await this.service.setContextDefault(
+        body.kind as LabelKind,
+        body.templateId,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  unifiedCatalog = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(this.service.getUnifiedCatalogResponse());
     } catch (e) { next(e); }
   };
 

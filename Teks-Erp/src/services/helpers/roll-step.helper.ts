@@ -22,37 +22,6 @@ import { AppError } from "../../utils/app-error";
 export type TxClient = Prisma.TransactionClient;
 
 /**
- * Belirtilen roll'ün belirtilen step'te açık (exitedAt=null) bir RollMovement
- * kaydı olup olmadığını döner. Operatör START basmış ama FINISH basmamışsa true.
- */
-export async function isRollActiveInStep(
-  tx: TxClient,
-  rollId: string,
-  stepId: string
-): Promise<boolean> {
-  const open = await tx.rollMovement.findFirst({
-    where: { rollId, workOrderStepId: stepId, exitedAt: null },
-    select: { id: true },
-  });
-  return !!open;
-}
-
-/**
- * Belirtilen roll'ün belirtilen step'te kapalı bir movement'i var mı?
- */
-export async function hasRollCompletedStep(
-  tx: TxClient,
-  rollId: string,
-  stepId: string
-): Promise<boolean> {
-  const closed = await tx.rollMovement.findFirst({
-    where: { rollId, workOrderStepId: stepId, exitedAt: { not: null } },
-    select: { id: true },
-  });
-  return !!closed;
-}
-
-/**
  * Step'e ait RollMovement kayıtlarına göre status'ü yeniden hesaplar ve
  * gerekirse günceller. SKIPPED step'lere dokunmaz.
  */
@@ -142,7 +111,7 @@ export async function recomputeStepStatus(
             ? new Date()
             : undefined,
         completedAt:
-          nextStatus === StepStatus.COMPLETED ? new Date() : undefined,
+          nextStatus === StepStatus.COMPLETED ? new Date() : null,
       },
     });
   }
@@ -158,7 +127,7 @@ export async function recomputeStepStatus(
 
 /**
  * İş emrini PLANNED → IN_PROGRESS'e çeker. Idempotent:
- *   - WO zaten IN_PROGRESS/PAUSED/COMPLETED/CANCELLED ise hiçbir şey olmaz.
+ *   - WO zaten IN_PROGRESS/COMPLETED/CANCELLED ise hiçbir şey olmaz.
  *   - updateMany + filter kullanır, status dışı durumlar bozulmaz.
  *
  * Rolleri attach etmek, bir step'i aktive etmek, fason intake yapmak vs. gibi
@@ -171,6 +140,37 @@ export async function ensureWorkOrderInProgress(
   await tx.workOrder.updateMany({
     where: { id: workOrderId, status: WorkOrderStatus.PLANNED },
     data: { status: WorkOrderStatus.IN_PROGRESS },
+  });
+}
+
+/**
+ * F162: Son üretim adımı bitince WO'yu (ve ACTIVE refakat kartını) COMPLETED yap —
+ * ama YALNIZ kalan (COMPLETED/SKIPPED-dışı) adım kalmadıysa. finishStep (kursun-qc)
+ * ve kursunFinish (inventory) son-adım dallarının ORTAK yardımcısı (drift önlenir).
+ * Çağıran tx başında touchWorkOrderTx ile WO'yu write-kilitlemeli (remainingSteps
+ * sayımı eşzamanlı finish/fason/finalize ile serileşsin).
+ */
+export async function completeWorkOrderIfStepsDone(
+  tx: TxClient,
+  workOrderId: string
+): Promise<void> {
+  const remaining = await tx.workOrderStep.count({
+    where: {
+      workOrderId,
+      status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+    },
+  });
+  if (remaining !== 0) return;
+  await tx.workOrder.updateMany({
+    where: {
+      id: workOrderId,
+      status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+    },
+    data: { status: WorkOrderStatus.COMPLETED },
+  });
+  await tx.travelerCard.updateMany({
+    where: { workOrderId, status: "ACTIVE" },
+    data: { status: "COMPLETED" },
   });
 }
 
@@ -229,22 +229,6 @@ export async function openMovementForNextStep(
   });
 
   await recomputeStepStatus(tx, nextStepId);
-}
-
-/**
- * WorkOrder'ın bu step'teki bir roll için önceki "açık" olup olmadığını
- * (movement tablo tabanlı) ve bu roll'ün step'e daha önce girip girmediğini
- * tek bir sorguda döndüren yardımcı (tablet uçlarında etkin-dışı düğmeler için).
- */
-export async function getRollStepState(
-  tx: TxClient,
-  rollId: string,
-  stepId: string
-): Promise<{ active: boolean; completed: boolean }> {
-  // Tx içinde Promise.all kullanılmaz — bkz. recomputeStepStatus açıklaması.
-  const active = await isRollActiveInStep(tx, rollId, stepId);
-  const completed = await hasRollCompletedStep(tx, rollId, stepId);
-  return { active, completed };
 }
 
 /**

@@ -39,10 +39,12 @@ export default [
       "no-restricted-syntax": [
         "error",
         {
+          // F15: hem Promise.all hem Promise.allSettled yakala. Guard isim-tabanlı
+          // (`tx` Identifier) — $transaction closure parametresini DAİMA `tx` adlandır.
           selector:
-            "CallExpression[callee.object.name='Promise'][callee.property.name='all'] Identifier[name='tx']",
+            "CallExpression[callee.object.name='Promise'][callee.property.name=/^(all|allSettled)$/] Identifier[name='tx']",
           message:
-            "Tx client üzerinde Promise.all YASAK — pg@9'da hard-error, paralellik de illüzyon. Sıralı await kullan.",
+            "Tx client üzerinde Promise.all/allSettled YASAK — pg@9'da hard-error, paralellik de illüzyon. Sıralı await kullan.",
         },
       ],
     },

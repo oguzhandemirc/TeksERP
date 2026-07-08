@@ -219,49 +219,27 @@ export class StationCapabilityService {
       }),
     ]);
 
-    const newColorSet = new Set(data.colorIds);
-    const newPropertySet = new Set(data.propertyIds);
-
     await prisma.$transaction(async (tx) => {
-      // Color: silinecekler ve eklenecekler
-      const oldColorSet = new Set(oldColors.map((r) => r.colorId));
-      const colorsToDelete = oldColors
-        .map((r) => r.colorId)
-        .filter((id) => !newColorSet.has(id));
-      const colorsToAdd = data.colorIds.filter((id) => !oldColorSet.has(id));
-
-      if (colorsToDelete.length > 0) {
-        await tx.stationColor.deleteMany({
-          where: { stationId, colorId: { in: colorsToDelete } },
-        });
-      }
-      if (colorsToAdd.length > 0) {
+      // F239: hedef-set-tabanlı replace — eski snapshot (tx DIŞI) üzerinden diff
+      // yerine `notIn` sil + createMany(skipDuplicates). İki eşzamanlı PUT bayat
+      // diff'le birbirinin yazımını ezmez; sonuç her zaman data.colorIds/propertyIds.
+      // notIn: [] Prisma'da "tümü" demek → hedef boşsa hepsi silinir (istenen).
+      await tx.stationColor.deleteMany({
+        where: { stationId, colorId: { notIn: data.colorIds } },
+      });
+      if (data.colorIds.length > 0) {
         await tx.stationColor.createMany({
-          data: colorsToAdd.map((colorId) => ({ stationId, colorId })),
+          data: data.colorIds.map((colorId) => ({ stationId, colorId })),
           skipDuplicates: true,
         });
       }
 
-      // Property: silinecekler ve eklenecekler
-      const oldPropertySet = new Set(oldProperties.map((r) => r.propertyId));
-      const propertiesToDelete = oldProperties
-        .map((r) => r.propertyId)
-        .filter((id) => !newPropertySet.has(id));
-      const propertiesToAdd = data.propertyIds.filter(
-        (id) => !oldPropertySet.has(id),
-      );
-
-      if (propertiesToDelete.length > 0) {
-        await tx.stationProperty.deleteMany({
-          where: { stationId, propertyId: { in: propertiesToDelete } },
-        });
-      }
-      if (propertiesToAdd.length > 0) {
+      await tx.stationProperty.deleteMany({
+        where: { stationId, propertyId: { notIn: data.propertyIds } },
+      });
+      if (data.propertyIds.length > 0) {
         await tx.stationProperty.createMany({
-          data: propertiesToAdd.map((propertyId) => ({
-            stationId,
-            propertyId,
-          })),
+          data: data.propertyIds.map((propertyId) => ({ stationId, propertyId })),
           skipDuplicates: true,
         });
       }

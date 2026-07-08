@@ -15,6 +15,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { randomUUID } from "crypto";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -30,6 +31,7 @@ import {
 } from "@prisma/client";
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 
 interface RollDefectSummary {
   id: string;
@@ -49,6 +51,10 @@ interface RollSummary {
   qc2Completed: boolean;
   errorCount: number;
   defects: RollDefectSummary[];
+  /// Kumaş cinsi + renk — WO.targetItem/targetColor (kart geneli aynı). Açık
+  /// kumaş toplarında barkod yok; mobil liste bunları ad + renkle tanımlar.
+  itemName: string | null;
+  colorName: string | null;
 }
 
 interface StepSummary {
@@ -276,6 +282,21 @@ export class KursunQcService {
       select: { id: true },
     });
 
+    // F283: Idempotency — op zaten varsa (offline outbox replay: sunucu commit etti
+    // ama yanıt istemciye ulaşmadı) upsert no-op'tur. RollOperation append-only
+    // (updatedAt YOK) → no-op'ta hiçbir şey değişmez; audit'i CREATE olarak TEKRAR
+    // yazma (createInitialEntry replay-skip deseni).
+    const existedBefore = await prisma.rollOperation.findUnique({
+      where: {
+        rollId_workOrderStepId_operationType: {
+          rollId: data.rollId,
+          workOrderStepId: data.stepId,
+          operationType: RollOperationType.QC2_COMPLETED,
+        },
+      },
+      select: { id: true },
+    });
+
     const op = await prisma.$transaction(async (tx) => {
       const qc2Op = await tx.rollOperation.upsert({
         where: {
@@ -324,18 +345,21 @@ export class KursunQcService {
       return qc2Op;
     });
 
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "ROLL_OPERATION",
-      recordId: op.id,
-      newData: {
-        rollId: data.rollId,
-        stepId: data.stepId,
-        type: RollOperationType.QC2_COMPLETED,
-        kursunAutoApplied: !!hasKursunCap,
-      },
-    });
+    // F283: yalnız gerçekten yeni oluşturulduysa audit yaz (replay'de mükerrer önlenir).
+    if (!existedBefore) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "ROLL_OPERATION",
+        recordId: op.id,
+        newData: {
+          rollId: data.rollId,
+          stepId: data.stepId,
+          type: RollOperationType.QC2_COMPLETED,
+          kursunAutoApplied: !!hasKursunCap,
+        },
+      });
+    }
 
     return { success: true, data: op, message: "Kalite Kontrol 2 tamamlandı" };
   }
@@ -377,6 +401,7 @@ export class KursunQcService {
         where: { id: data.clientErrorId },
       });
       if (cached) {
+        this.assertClientErrorIdMatches(cached, data);
         return {
           success: true,
           data: cached,
@@ -448,6 +473,7 @@ export class KursunQcService {
             where: { id: data.clientErrorId },
           });
           if (dup) {
+            this.assertClientErrorIdMatches(dup, data);
             return {
               success: true,
               data: dup,
@@ -534,6 +560,12 @@ export class KursunQcService {
         rollId: err.rollId,
         startMeter: err.startMeter,
         errorType: err.errorType,
+        // F163: fiziksel DELETE geri-alınamaz → tüm alanları denetime al (yeniden kurmak için).
+        defectTypeId: err.defectTypeId,
+        detectedAtStepId: err.detectedAtStepId,
+        detectedByUserId: err.detectedByUserId,
+        detectedAt: err.detectedAt,
+        isProcessed: err.isProcessed,
       },
     });
 
@@ -554,7 +586,8 @@ export class KursunQcService {
    */
   async finishStep(
     data: { stepId: string },
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<{ movedRollCount: number }>> {
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
@@ -613,9 +646,19 @@ export class KursunQcService {
     );
 
     // Lazily import helper to avoid circular (roll-step.helper → prisma)
-    const { recomputeStepStatus } = await import("./helpers/roll-step.helper");
+    const { recomputeStepStatus, completeWorkOrderIfStepsDone } = await import(
+      "./helpers/roll-step.helper"
+    );
 
     const result = await prisma.$transaction(async (tx) => {
+      // 0) O-2 write-skew guard: WO satırını tx başında write-kilitle → son-adım
+      //    WO oto-tamamlama sayımını (aşağıdaki remainingSteps) eşzamanlı fason
+      //    receive/cancel/dispatch ve finalize (tambur) yollarıyla serileştir.
+      //    Paylaşımlı kilit olmadan iki tx birbirinin commit'ini görmez → WO ya
+      //    mal fasondayken COMPLETED'a kaçar ya da tüm adımlar bittiği halde
+      //    IN_PROGRESS'te asılı kalır. Lock sırası WO→movement/roll (kardeşlerle tutarlı).
+      await touchWorkOrderTx(tx, step.workOrderId);
+
       // 1) Açık movement'leri ATOMİK kapat (qty/weight per-row eşitlik) + RETURNING
       //    ile fiilen BİZİM kapattığımız rolleri al. `exitedAt IS NULL` guard'ı:
       //    movement seti tx DIŞINDA okunduğundan (satır ~577) bu guard olmasa iki
@@ -628,6 +671,11 @@ export class KursunQcService {
       //    arasında adıma yeni giren top (fason kabul / önceki adım FINISH)
       //    QC2_COMPLETED'sız süpürülüp Tambur'a ilerlerdi. Yeni gelen top açık
       //    kalır; recomputeStepStatus adımı ACTIVE tutar.
+      // F161: kapanış marker'ına TUR kimliği (uygulamada üretilen tek uuid — PARAMETRE
+      // bağlı). gen_random_uuid() VOLATILE olup çok-satırlı UPDATE'te SATIR-BAŞINA
+      // farklı değer üretirdi; app-marker tüm satırlara AYNI turu damgalar → reopen
+      // yalnız SON turu geri çeker (fason çoklu-sevk: batch1 A,B ile batch2 C,D karışmaz).
+      const finishMarker = `QC2_STEP_FINISHED:${randomUUID()}`;
       const closed = await tx.$queryRaw<
         Array<{ rollId: string; qtyIn: Prisma.Decimal; weightIn: Prisma.Decimal | null }>
       >`
@@ -635,7 +683,8 @@ export class KursunQcService {
         SET "qtyOut" = "qtyIn",
             "weightOut" = "weightIn",
             "exitedAt" = NOW(),
-            "notes" = 'QC2_STEP_FINISHED'
+            "machineId" = COALESCE(${machineId ?? null}::uuid, "machineId"),
+            "notes" = ${finishMarker}
         WHERE "workOrderStepId" = ${step.id}::uuid
           AND "exitedAt" IS NULL
           AND "rollId" = ANY(${rollIds}::uuid[])
@@ -669,12 +718,11 @@ export class KursunQcService {
         // 4a) Step durumlarını birer kez recompute et (per-roll değil).
         await recomputeStepStatus(tx, nextStep.id);
       } else {
-        // 2b) Son adımdıysa toplar PRODUCED'a düşer + WO/refakat kartı
-        // tamamlama kontrolü koşar (M-27 — production.handleStepFinish ve
-        // inventory.kursunFinish kardeş yollarıyla aynı semantik). Eskiden
-        // yalnız pointer temizleniyordu: toplar IN_PRODUCTION limbosunda
-        // kalıyor, WO sonsuza dek IN_PROGRESS görünüyordu (rota tanımı
-        // PROCESS_QC ile bitebiliyor — son-adım kuralı yok).
+        // 2b) Son adımdıysa toplar PRODUCED'a düşer + WO/refakat kartı tamamlama
+        // kontrolü koşar (F162 — inventory.kursunFinish kardeş yoluyla ORTAK
+        // completeWorkOrderIfStepsDone yardımcısı; aynı semantik). Eskiden yalnız
+        // pointer temizleniyordu: toplar IN_PRODUCTION limbosunda kalıyor, WO
+        // sonsuza dek IN_PROGRESS görünüyordu (rota PROCESS_QC ile bitebiliyor).
         await tx.roll.updateMany({
           where: { id: { in: closedRollIds } },
           data: { currentStepId: null, status: RollStatus.PRODUCED },
@@ -684,22 +732,8 @@ export class KursunQcService {
       await recomputeStepStatus(tx, step.id);
 
       if (!nextStep) {
-        const remainingSteps = await tx.workOrderStep.count({
-          where: {
-            workOrderId: step.workOrderId,
-            status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-          },
-        });
-        if (remainingSteps === 0) {
-          await tx.workOrder.update({
-            where: { id: step.workOrderId },
-            data: { status: WorkOrderStatus.COMPLETED },
-          });
-          await tx.travelerCard.updateMany({
-            where: { workOrderId: step.workOrderId, status: "ACTIVE" },
-            data: { status: "COMPLETED" },
-          });
-        }
+        // F162: kursunFinish ile ORTAK yardımcı (drift önlenir; davranış birebir).
+        await completeWorkOrderIfStepsDone(tx, step.workOrderId);
       }
 
       return { moved: closed.length };
@@ -722,6 +756,50 @@ export class KursunQcService {
       data: { movedRollCount: result.moved },
       message: `Adım kapatıldı, ${result.moved} top bir sonraki istasyona taşındı`,
     };
+  }
+
+  /**
+   * F161: Bir PROCESS_QC adımının EN SON finish turunun kapalı movement'lerini yükler.
+   * Kapanış marker'ı (QC2_STEP_FINISHED:<uuid>) tur başına benzersizdir; exitedAt DESC
+   * ile en son turun bir satırını bulup o turun marker'ıyla filtreleriz → farklı turlar
+   * (fason çoklu-sevk) karışmaz. Eski suffix'siz 'QC2_STEP_FINISHED' satırları da
+   * startsWith ile yakalanır (reseed öncesi test verisi).
+   */
+  private async loadLatestFinishTurn(stepId: string): Promise<{
+    closed: Array<{
+      id: string;
+      rollId: string;
+      notes: string | null;
+      roll: {
+        id: string;
+        status: RollStatus;
+        currentStepId: string | null;
+        barcode: string | null;
+        currentQty: Prisma.Decimal;
+      };
+    }>;
+    latestMarker: string | null;
+  }> {
+    const finishMoves = await prisma.rollMovement.findMany({
+      where: {
+        workOrderStepId: stepId,
+        exitedAt: { not: null },
+        notes: { startsWith: "QC2_STEP_FINISHED" },
+      },
+      orderBy: { exitedAt: "desc" },
+      select: {
+        id: true,
+        rollId: true,
+        notes: true,
+        roll: {
+          select: { id: true, status: true, currentStepId: true, barcode: true, currentQty: true },
+        },
+      },
+    });
+    if (finishMoves.length === 0) return { closed: [], latestMarker: null };
+    const latestMarker = finishMoves[0].notes;
+    const closed = finishMoves.filter((m) => m.notes === latestMarker);
+    return { closed, latestMarker };
   }
 
   // ---------------------------------------------------------------------------
@@ -770,23 +848,9 @@ export class KursunQcService {
       (s) => s.stepSequence > step.stepSequence
     );
 
-    // finishStep notes='QC2_STEP_FINISHED' ile bu step'in açık hareketlerini kapatmıştı.
-    // Bu sayede aynı step'in eski tarihli (önceki finishStep'lerden gelmiş) kapalı
-    // hareketleri ile yenisini ayırt edebiliyoruz.
-    const closedMovements = await prisma.rollMovement.findMany({
-      where: {
-        workOrderStepId: step.id,
-        exitedAt: { not: null },
-        notes: "QC2_STEP_FINISHED",
-      },
-      select: {
-        id: true,
-        rollId: true,
-        roll: {
-          select: { id: true, status: true, currentStepId: true, barcode: true },
-        },
-      },
-    });
+    // F161: yalnız EN SON finish turunu geri aç (aynı step birden çok turda kapatıldıysa
+    // — fason çoklu-sevk — eski turun rulolarını yanlış geri çekme/eski turu bloklama).
+    const { closed: closedMovements } = await this.loadLatestFinishTurn(step.id);
 
     if (closedMovements.length === 0) {
       throw AppError.badRequest(
@@ -815,6 +879,10 @@ export class KursunQcService {
     const movementIds = closedMovements.map((m) => m.id);
 
     await prisma.$transaction(async (tx) => {
+      // F159: O-2 write-skew guard (finishStep paritesi) — son-adım WO/kart geri
+      // alma ile eşzamanlı finish/finalize'ı serileştir.
+      await touchWorkOrderTx(tx, step.workOrderId);
+
       if (nextStep) {
         // Sonraki adımda finishStep'in oluşturduğu açık movement'leri sil
         await tx.rollMovement.deleteMany({
@@ -843,6 +911,28 @@ export class KursunQcService {
             "Toplardan biri bu sırada ilerledi/değişti (örn. Tambur'da işlendi). Listeyi yenileyip tekrar deneyin."
           );
         }
+      } else {
+        // F159: SON adım (nextStep yok) — finishStep 'PRODUCED + currentStepId=null'
+        // yapmıştı. Bunun TERSİ: topları IN_PRODUCTION'a ve bu adıma geri çek (atomik
+        // claim: biri sevk/tüketim ile PRODUCED'dan çıktıysa count uyuşmaz → 409).
+        const pulledBack = await tx.roll.updateMany({
+          where: { id: { in: rollIds }, status: RollStatus.PRODUCED, currentStepId: null },
+          data: { status: RollStatus.IN_PRODUCTION, currentStepId: step.id },
+        });
+        if (pulledBack.count !== rollIds.length) {
+          throw AppError.conflict(
+            "Toplardan biri artık üretim dışı (sevk/tüketim) — yeniden açılamaz. Listeyi yenileyin."
+          );
+        }
+        // finishStep son-adım dalı WO/kartı COMPLETED yapmış olabilir → geri al.
+        await tx.workOrder.updateMany({
+          where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },
+          data: { status: WorkOrderStatus.IN_PROGRESS },
+        });
+        await tx.travelerCard.updateMany({
+          where: { workOrderId: step.workOrderId, status: "COMPLETED" },
+          data: { status: "ACTIVE" },
+        });
       }
 
       // Bu step'in kapatılmış movement'lerini geri aç
@@ -928,25 +1018,8 @@ export class KursunQcService {
       (s) => s.stepSequence > step.stepSequence
     );
 
-    const closedMovements = await prisma.rollMovement.findMany({
-      where: {
-        workOrderStepId: step.id,
-        exitedAt: { not: null },
-        notes: "QC2_STEP_FINISHED",
-      },
-      select: {
-        rollId: true,
-        roll: {
-          select: {
-            id: true,
-            status: true,
-            currentStepId: true,
-            barcode: true,
-            currentQty: true,
-          },
-        },
-      },
-    });
+    // F161: yalnız EN SON finish turu (reopenStep ile aynı kaynak).
+    const { closed: closedMovements } = await this.loadLatestFinishTurn(step.id);
 
     if (closedMovements.length === 0) {
       return block("Bu adımı yeniden açacak kapalı hareket yok");
@@ -962,6 +1035,16 @@ export class KursunQcService {
           );
         }
         if (cm.roll.status !== RollStatus.IN_PRODUCTION) {
+          return block(
+            `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) artık üretimde değil (${cm.roll.status}) — yeniden açılamaz`
+          );
+        }
+      }
+    } else {
+      // F159: son adımda toplar PRODUCED + currentStepId=null olmalı; sevk/tüketim ile
+      // çıkmışsa reopenStep 409 verir — preview bunu canReopen=false ile önceden gösterir.
+      for (const cm of closedMovements) {
+        if (cm.roll.status !== RollStatus.PRODUCED || cm.roll.currentStepId !== null) {
           return block(
             `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) artık üretimde değil (${cm.roll.status}) — yeniden açılamaz`
           );
@@ -989,6 +1072,30 @@ export class KursunQcService {
   // ---------------------------------------------------------------------------
   // HELPERS
   // ---------------------------------------------------------------------------
+  /**
+   * F160: clientErrorId idempotent dönüşünde, mevcut kaydın gelen istekle AYNI
+   * mantıksal hatayı (aynı top + hata tipi + adım + metre) temsil ettiğini doğrula.
+   * Aynı id başka bir kayıt için kullanılmışsa (yabancı kayıt / istemci id-yeniden-
+   * kullanım bug'ı) sessizce "başarı" dönmek amaçlanan hatayı kaybettirir → 409.
+   */
+  private assertClientErrorIdMatches(
+    cached: RollError,
+    data: { rollId: string; stepId: string; startMeter: number; defectTypeId: string },
+  ): void {
+    const matches =
+      cached.rollId === data.rollId &&
+      cached.defectTypeId === data.defectTypeId &&
+      cached.detectedAtStepId === data.stepId &&
+      new Prisma.Decimal(data.startMeter).equals(cached.startMeter);
+    if (!matches) {
+      throw AppError.conflict(
+        "Bu hata kimliği (clientErrorId) farklı bir kayıt için kullanılmış — " +
+          "aynı id ile farklı top/metre/hata tipi gönderilemez. Listeyi yenileyin.",
+        { code: "CLIENT_ERROR_ID_MISMATCH", existingErrorId: cached.id },
+      );
+    }
+  }
+
   private async assertRollInStep(
     rollId: string,
     stepId: string,
@@ -1021,7 +1128,14 @@ export class KursunQcService {
       where: { id: stepId },
       include: {
         station: true,
-        workOrder: { select: { id: true, batchNumber: true } },
+        workOrder: {
+          select: {
+            id: true,
+            batchNumber: true,
+            targetItem: { select: { name: true } },
+            targetColor: { select: { name: true } },
+          },
+        },
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
@@ -1084,6 +1198,10 @@ export class KursunQcService {
       });
     }
 
+    // Kumaş cinsi + renk kart geneli aynı (WO target) — her role kopyalanır ki
+    // barkodsuz açık kumaş topları listede ad + renkle görünsün.
+    const itemName = step.workOrder.targetItem?.name ?? null;
+    const colorName = step.workOrder.targetColor?.name ?? null;
     const rolls: RollSummary[] = openMovements.map((m) => {
       const defects = defectsByRoll.get(m.roll.id) ?? [];
       return {
@@ -1093,6 +1211,8 @@ export class KursunQcService {
         qc2Completed: qc2DoneSet.has(m.roll.id),
         errorCount: defects.length,
         defects,
+        itemName,
+        colorName,
       };
     });
 
@@ -1263,38 +1383,40 @@ export class KursunQcService {
   ): Promise<ApiResponse<{ id: string; isUrgent: boolean; urgentMarkedAt: Date | null }>> {
     if (!userId) throw AppError.unauthorized();
 
-    const existing = await prisma.workOrderStep.findUnique({
-      where: { id: stepId },
-      select: {
-        id: true,
-        isUrgent: true,
-        status: true,
-        station: { select: { kind: true } },
+    // F167: atomik claim — eşzamanlı finishStep step'i COMPLETED'e çekerken
+    // check-then-act tamamlanmış adıma acil rozeti yazabilirdi. updateMany
+    // status/station koşulunu tek sorguda pinler; 0 satır → nedeni ayır.
+    const claimed = await prisma.workOrderStep.updateMany({
+      where: {
+        id: stepId,
+        status: { not: StepStatus.COMPLETED },
+        station: { kind: StationKind.PROCESS_QC },
       },
+      data: { isUrgent, urgentMarkedAt: isUrgent ? new Date() : null },
     });
-    if (!existing) throw AppError.notFound("Adım bulunamadı");
-    if (existing.station.kind !== StationKind.PROCESS_QC) {
-      throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
-    }
-    if (existing.status === StepStatus.COMPLETED) {
+    if (claimed.count === 0) {
+      const existing = await prisma.workOrderStep.findUnique({
+        where: { id: stepId },
+        select: { status: true, station: { select: { kind: true } } },
+      });
+      if (!existing) throw AppError.notFound("Adım bulunamadı");
+      if (existing.station.kind !== StationKind.PROCESS_QC) {
+        throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
+      }
       throw AppError.badRequest("Adım tamamlanmış, acil işaretlenemez");
     }
 
-    const updated = await prisma.workOrderStep.update({
+    const updated = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
-      data: {
-        isUrgent,
-        urgentMarkedAt: isUrgent ? new Date() : null,
-      },
       select: { id: true, isUrgent: true, urgentMarkedAt: true },
     });
+    if (!updated) throw AppError.notFound("Adım bulunamadı");
 
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "WORK_ORDER_STEP",
       recordId: stepId,
-      oldData: { isUrgent: existing.isUrgent },
       newData: { isUrgent: updated.isUrgent, kursunQueue: true },
     });
 

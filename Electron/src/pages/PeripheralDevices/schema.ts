@@ -24,8 +24,12 @@ export const peripheralFormSchema = z.object({
   machineId: z.string().optional().default(""),
   stationId: z.string().optional().default(""),
   deviceId: z.string().optional().default(""),
-  formatProfileId: z.string().optional().default(""),
   languageOverride: z.string().optional().default(""),
+  // Yazıcı medyası (mm/dpi) — form alanları düz string, "" = boş (sistem varsayılanı).
+  labelWidthMm: z.string().trim().optional().default(""),
+  labelHeightMm: z.string().trim().optional().default(""),
+  labelDpi: z.string().trim().optional().default(""),
+  labelGapMm: z.string().trim().optional().default(""),
   templateRawId: z.string().optional().default(""),
   templateFinishedId: z.string().optional().default(""),
   templateSwatchId: z.string().optional().default(""),
@@ -38,11 +42,32 @@ export const peripheralFormSchema = z.object({
   if (v.kind === "LABEL_PRINTER" && !v.languageOverride.trim()) {
     ctx.addIssue({ code: "custom", path: ["languageOverride"], message: "Yazıcı dili seçin" });
   }
+  // Yazıcı medyası — opsiyonel (boş → sistem varsayılanı), ama girilmişse sınırlı.
+  // Backend peripheral.service.validateRefs aynı aralıkları enforce eder.
+  const range = (
+    field: "labelWidthMm" | "labelHeightMm" | "labelDpi" | "labelGapMm",
+    min: number,
+    max: number,
+    integer: boolean,
+    message: string,
+  ) => {
+    const raw = v[field].trim();
+    if (!raw) return;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < min || n > max || (integer && !Number.isInteger(n))) {
+      ctx.addIssue({ code: "custom", path: [field], message });
+    }
+  };
+  range("labelWidthMm", 10, 500, false, "Etiket eni 10-500 mm arası olmalı");
+  range("labelHeightMm", 10, 500, false, "Etiket boyu 10-500 mm arası olmalı");
+  range("labelDpi", 50, 1200, true, "DPI 50-1200 arası tam sayı olmalı");
+  range("labelGapMm", 0, 50, false, "Boşluk 0-50 mm arası olmalı");
 });
 
 export type PeripheralFormValues = z.infer<typeof peripheralFormSchema>;
 
 const nn = (v: string) => (v.trim() ? v.trim() : null);
+const num = (v: string) => (v.trim() ? Number(v) : null);
 
 // Form → API payload. Sahiplik owner'a göre tek alan; templateRoutes 3-kind array
 // (backend setTemplateRoute ile uygular, boş templateId → kaldır).
@@ -68,8 +93,12 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     stationId: v.owner === "station" ? nn(v.stationId) : null,
     deviceId: v.owner === "device" ? nn(v.deviceId) : null,
     // Yazıcı alanları yalnız LABEL_PRINTER'da anlamlı; metre/kantar'da temizle.
-    formatProfileId: v.kind === "LABEL_PRINTER" ? nn(v.formatProfileId) : null,
+    // formatProfileId DEPRECATED — gönderilmez; medya artık 4 alanda (mm/dpi).
     languageOverride: v.kind === "LABEL_PRINTER" ? nn(v.languageOverride) : null,
+    labelWidthMm: v.kind === "LABEL_PRINTER" ? num(v.labelWidthMm) : null,
+    labelHeightMm: v.kind === "LABEL_PRINTER" ? num(v.labelHeightMm) : null,
+    labelDpi: v.kind === "LABEL_PRINTER" ? num(v.labelDpi) : null,
+    labelGapMm: v.kind === "LABEL_PRINTER" ? num(v.labelGapMm) : null,
     notes: nn(v.notes),
     templateRoutes: [
       { kind: "ROLL_RAW", templateId: nn(v.templateRawId) },
@@ -99,8 +128,11 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   machineId: "",
   stationId: "",
   deviceId: "",
-  formatProfileId: "",
   languageOverride: "",
+  labelWidthMm: "",
+  labelHeightMm: "",
+  labelDpi: "",
+  labelGapMm: "",
   templateRawId: "",
   templateFinishedId: "",
   templateSwatchId: "",

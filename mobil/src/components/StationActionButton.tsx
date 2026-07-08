@@ -39,6 +39,8 @@ interface Props {
   loadingLabel?: string;
   /** Telefon ölçeği — biraz küçük font. */
   compact?: boolean;
+  /** Daha büyük bar (72dp) + büyük font — geniş tablet footer'ı için. */
+  large?: boolean;
 }
 
 export default function StationActionButton({
@@ -50,6 +52,7 @@ export default function StationActionButton({
   disabled = false,
   loadingLabel,
   compact = false,
+  large = false,
 }: Props) {
   const reduced = useReducedMotion();
   const press = useSharedValue(1);
@@ -82,7 +85,7 @@ export default function StationActionButton({
         disabled={blocked}
         borderless
         rippleColor={RIPPLE_ON_TINT}
-        style={[styles.inner, { backgroundColor: surfaceColor }]}
+        style={[styles.inner, large && styles.innerLarge, { backgroundColor: surfaceColor }]}
         accessibilityRole="button"
         accessibilityState={{ disabled: blocked }}
         accessibilityLabel={loading ? (loadingLabel ?? label) : label}
@@ -94,7 +97,11 @@ export default function StationActionButton({
             <Icon source={icon} size={22} color={dimmed ? colors.textMuted : colors.textOnDark} />
           )}
           <Text
-            style={[styles.label, { fontSize: compact ? 16 : 17 }, dimmed && styles.labelDimmed]}
+            style={[
+              styles.label,
+              { fontSize: large ? 19 : compact ? 16 : 17 },
+              dimmed && styles.labelDimmed,
+            ]}
             numberOfLines={1}
           >
             {loading ? (loadingLabel ?? label) : label}
@@ -115,6 +122,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: spacing.md,
   },
+  innerLarge: { height: 72 },
   content: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   label: { color: colors.textOnDark, fontWeight: '700', letterSpacing: 0.2 },
   labelDimmed: { color: colors.textMuted },

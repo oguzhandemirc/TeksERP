@@ -123,6 +123,15 @@ export const PRINTER_LANGUAGE_LABELS: Record<PrinterLanguage, string> = {
   ZPL: "ZPL (Zebra uyumlu)",
 };
 
+/** Sistem varsayılan etiket medyası (cihazsız baskı/önizleme fallback'i). */
+export interface DefaultLabelMedia {
+  widthMm: number;
+  heightMm: number;
+  dpi: number;
+  gapMm: number;
+  marginMm: number;
+}
+
 export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama geneli. */
   companyName: string;
@@ -200,6 +209,9 @@ export interface FeatureFlags {
   rollNameTemplate: string;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
+  /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
+   *  medyası. Yazıcı cihazı seçiliyse onun medyası önceliklidir; bu yalnız fallback. */
+  defaultLabelMedia: DefaultLabelMedia;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */

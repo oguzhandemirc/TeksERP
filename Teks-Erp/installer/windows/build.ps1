@@ -32,7 +32,7 @@ $ProgressPreference = "SilentlyContinue"   # Invoke-WebRequest cok hizlanir
 
 # --- Indirilecek surumler (gerektikce guncelleyin) ---
 $NodeVersion = "22.13.1"
-$PgVersion   = "16.6-1"     # EnterpriseDB binaries-zip surumu
+$PgVersion   = "18.4-1"     # EnterpriseDB binaries-zip surumu (dev PostgreSQL 18.4 ile parite)
 $NssmVersion = "2.24"
 
 $NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"

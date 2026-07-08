@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
 import AppModal from '../AppModal';
 import {
@@ -17,7 +17,6 @@ import Toast from 'react-native-toast-message';
 
 import { labelService } from '../../services/label.service';
 import { usePermissions } from '../../hooks/usePermission';
-import { useLabelTemplate } from '../../hooks/useLabelTemplate';
 import type { LabelPayload, NameSource } from '../../types/models';
 
 // =============================================================================
@@ -33,8 +32,6 @@ import type { LabelPayload, NameSource } from '../../types/models';
 interface Props {
   visible: boolean;
   rollId: string | null;
-  /** Hangi etiket türünün default şablonu kullanılsın — KK1 → ROLL_RAW, Tambur → ROLL_FINISHED. */
-  kind: 'ROLL_RAW' | 'ROLL_FINISHED';
   onDismiss: () => void;
   /** "Bas" — varolan etiketi AYNEN tekrar bas (parent yazıcı tetikler). */
   onPrint?: (payload: LabelPayload) => void;
@@ -52,7 +49,7 @@ function sourceInfo(s: NameSource | null): { short: string; label: string } {
   return { short: 'Standart', label: 'Standart ad' };
 }
 
-export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, onNewLabel, onPrintStock }: Props) {
+export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLabel, onPrintStock }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   // Telefonda (dar) modal neredeyse tam en; tablette dengeli/orta genişlik.
   const phone = winW < 600;
@@ -66,7 +63,6 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, o
   const canEdit = has('label:edit');
   const canPrint = has('label:print') || isMobileLabelOperator;
   const qc = useQueryClient();
-  const { template } = useLabelTemplate(kind);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editItemName, setEditItemName] = useState('');
@@ -79,15 +75,9 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, o
   });
 
   const payload: LabelPayload | null = labelQuery.data?.data ?? null;
-
-  // Template'in fields filter+sort'u UI'yi yöneten kaynak. Backend payload
-  // tüm alanları döner; frontend visible'leri order'a göre render eder.
-  const visibleFields = useMemo(() => {
-    if (!template) return null;
-    return [...template.fields]
-      .filter((f) => f.isVisible)
-      .sort((a, b) => a.order - b.order);
-  }, [template]);
+  // Etiket Stüdyosu v2: şablon yorumu tamamen backend'te (kanvas varyantları).
+  // Bu sayfa VERİ özeti gösterir — alan filtresi yok; gerçek etiket görünümü
+  // baskı çıktısında/Electron Stüdyo önizlemesinde.
 
   const updateMut = useMutation({
     mutationFn: (data: { customerItemName: string | null; customerColorName: string | null }) =>
@@ -195,7 +185,7 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, o
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.scrollBody}>
-              <PreviewBody payload={payload} visibleKeys={visibleFields?.map((f) => f.key) ?? null} />
+              <PreviewBody payload={payload} />
             </ScrollView>
           )}
 
@@ -326,14 +316,9 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, o
   );
 }
 
-function PreviewBody({
-  payload,
-  visibleKeys,
-}: {
-  payload: LabelPayload;
-  visibleKeys: string[] | null;
-}) {
-  const show = (key: string) => !visibleKeys || visibleKeys.includes(key);
+function PreviewBody({ payload }: { payload: LabelPayload }) {
+  // Tüm dolu alanlar gösterilir — şablon/varyant seçimi baskı anında backend'te.
+  const show = (_key: string) => true;
 
   return (
     <Surface style={styles.preview} elevation={1}>

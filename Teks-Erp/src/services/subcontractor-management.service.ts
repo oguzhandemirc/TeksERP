@@ -6,6 +6,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
@@ -15,6 +16,7 @@ import {
   buildWhereClause,
   buildOrderByClause,
   buildPagination,
+  resolveSortBy,
 } from "../utils/query-parser";
 import { Request } from "express";
 
@@ -26,7 +28,14 @@ export class SubcontractorCategoryService {
   async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
     const where = buildWhereClause(params.filters, ["code", "name"], params.search);
-    const orderBy = buildOrderByClause(params.sortBy === "createdAt" ? "name" : params.sortBy, params.sortOrder === "desc" && params.sortBy === "createdAt" ? "asc" : params.sortOrder);
+    // F90: sortBy verilmediğinde name/asc default; explicit createdAt saygı görür;
+    // bilinmeyen sortBy 500 yerine name'e düşer. (Eski çift-ternary HER createdAt'i
+    // — explicit olanı bile — name/asc'a zorluyordu.)
+    const rawSortBy = req.query.sortBy as string | undefined;
+    const orderBy = buildOrderByClause(
+      resolveSortBy(rawSortBy, ["code", "name", "createdAt"], "name"),
+      rawSortBy ? params.sortOrder : "asc",
+    );
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
     const [data, total] = await Promise.all([
@@ -123,18 +132,29 @@ export class SubcontractorCategoryService {
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // F94: mutasyon öncesi before-state — audit oldData boş kalmasın.
+    const before = await prisma.subcontractorCategory.findUnique({
+      where: { id },
+      select: { code: true, name: true, description: true, isActive: true, appliesColor: true, appliesProperty: true },
+    });
     const cat = await prisma.subcontractorCategory.update({ where: { id }, data });
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "SUBCONTRACTOR_CATEGORY",
       recordId: id,
+      oldData: before ?? null,
       newData: data as Record<string, unknown>,
     });
     return { success: true, data: cat, message: "Kategori güncellendi" };
   }
 
   async remove(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    // F94: soft-delete öncesi before-state.
+    const before = await prisma.subcontractorCategory.findUnique({
+      where: { id },
+      select: { code: true, name: true, description: true, isActive: true, appliesColor: true, appliesProperty: true },
+    });
     // Soft delete — bağlı subcontractor veya step varsa veriyi koruyoruz
     const cat = await prisma.subcontractorCategory.update({
       where: { id },
@@ -145,6 +165,7 @@ export class SubcontractorCategoryService {
       action: "DELETE",
       tableName: "SUBCONTRACTOR_CATEGORY",
       recordId: id,
+      oldData: before ?? null,
     });
     return { success: true, data: cat, message: "Kategori pasife alındı" };
   }
@@ -215,6 +236,28 @@ function normalizeAndValidateAddress(raw: unknown): string | null | undefined {
   return trimmed;
 }
 
+/**
+ * F88: categoryIds var-mı + isActive doğrulaması (dedupe) — pasif kategoriye bağ
+ * kurulmasını, olmayan UUID'nin belirsiz P2003'ünü ve mükerrer UUID'nin P2002'sini önler.
+ */
+async function assertActiveCategories(
+  tx: Prisma.TransactionClient,
+  ids: string[],
+): Promise<string[]> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return unique;
+  const found = await tx.subcontractorCategory.findMany({
+    where: { id: { in: unique }, isActive: true },
+    select: { id: true },
+  });
+  if (found.length !== unique.length) {
+    const ok = new Set(found.map((c) => c.id));
+    const invalid = unique.filter((id) => !ok.has(id));
+    throw AppError.badRequest(`Geçersiz veya pasif fason kategorisi: ${invalid.join(", ")}`);
+  }
+  return unique;
+}
+
 export class SubcontractorManagementService {
   async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
@@ -222,14 +265,18 @@ export class SubcontractorManagementService {
     // Standart filtreler (isActive, code...) buildWhereClause halleder
     const where = buildWhereClause(params.filters, ["code", "name", "taxNumber"], params.search);
 
-    // categoryId filter — relation üzerinden M:N filter
-    const categoryId = params.filters["categoryId"] as string | undefined;
-    if (categoryId) {
+    // categoryId filter — relation üzerinden M:N filter. F92: dizi | CSV | tek değeri
+    // normalize et (birden çok kategori seçimi de çalışsın; tek → eşitlik, çok → {in}).
+    const rawCategoryId = params.filters["categoryId"];
+    const catIds = (Array.isArray(rawCategoryId) ? rawCategoryId : String(rawCategoryId ?? "").split(","))
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (catIds.length > 0) {
       (where as Record<string, unknown>).categories = {
-        some: { categoryId },
+        some: { categoryId: catIds.length === 1 ? catIds[0] : { in: catIds } },
       };
-      delete (where as Record<string, unknown>).categoryId;
     }
+    delete (where as Record<string, unknown>).categoryId;
 
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);
@@ -317,33 +364,37 @@ export class SubcontractorManagementService {
     }
 
     const sub = await prisma.$transaction(async (tx) => {
-      let created: { id: string };
+      let createdId: string;
       if (existing && !existing.isActive) {
-        // Reactivate: M:N kategorileri replace + diriltme + güncel veri.
+        // F87: reaktivasyonu atomik claim'e çevir — eşzamanlı iki istek birbirini
+        // sessizce ezmesin; kaybeden 'aktif zaten var' 409 alır.
+        const claim = await tx.subcontractor.updateMany({
+          where: { id: existing.id, isActive: false },
+          data: { ...payload, isActive: true },
+        });
+        if (claim.count === 0) {
+          throw AppError.conflict("Bu kod ile aktif fason firma zaten var");
+        }
         await tx.subcontractorToCategory.deleteMany({
           where: { subcontractorId: existing.id },
         });
-        created = await tx.subcontractor.update({
-          where: { id: existing.id },
-          data: { ...payload, isActive: true },
-          select: { id: true },
-        });
+        createdId = existing.id;
       } else {
-        created = await tx.subcontractor.create({
-          data: payload,
-          select: { id: true },
-        });
+        const c = await tx.subcontractor.create({ data: payload, select: { id: true } });
+        createdId = c.id;
       }
-      if (categoryIds.length > 0) {
+      // F88: kategori doğrulama (var + aktif + dedupe) createMany ÖNCESİ.
+      const uniqueCategoryIds = await assertActiveCategories(tx, categoryIds);
+      if (uniqueCategoryIds.length > 0) {
         await tx.subcontractorToCategory.createMany({
-          data: categoryIds.map((categoryId) => ({
-            subcontractorId: created.id,
+          data: uniqueCategoryIds.map((categoryId) => ({
+            subcontractorId: createdId,
             categoryId,
           })),
         });
       }
       return tx.subcontractor.findUnique({
-        where: { id: created.id },
+        where: { id: createdId },
         include: { categories: { include: { category: true } } },
       });
     });
@@ -386,6 +437,12 @@ export class SubcontractorManagementService {
   ): Promise<ApiResponse<unknown>> {
     const { categoryIds, ...rest } = data;
 
+    // F94: mutasyon öncesi before-state — audit oldData boş kalmasın.
+    const before = await prisma.subcontractor.findUnique({
+      where: { id },
+      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true },
+    });
+
     // Update'te her alan tamamen optional. Gönderilmemişse undefined kalır
     // (Prisma update no-op). Gönderildiyse format şartı uygulanır; sonuç
     // (string ya da null) doğrudan yazılır.
@@ -412,9 +469,11 @@ export class SubcontractorManagementService {
 
       if (categoryIds !== undefined) {
         await tx.subcontractorToCategory.deleteMany({ where: { subcontractorId: id } });
-        if (categoryIds.length > 0) {
+        // F88: kategori doğrulama (var + aktif + dedupe) createMany öncesi.
+        const uniqueCategoryIds = await assertActiveCategories(tx, categoryIds);
+        if (uniqueCategoryIds.length > 0) {
           await tx.subcontractorToCategory.createMany({
-            data: categoryIds.map((categoryId) => ({
+            data: uniqueCategoryIds.map((categoryId) => ({
               subcontractorId: id,
               categoryId,
             })),
@@ -433,13 +492,20 @@ export class SubcontractorManagementService {
       action: "UPDATE",
       tableName: "SUBCONTRACTOR",
       recordId: id,
-      newData: data as Record<string, unknown>,
+      oldData: before ?? null,
+      // F94: normalize edilmiş değerleri logla (ham `data` değil) — kategoriler dahil.
+      newData: { ...rest, categoryIds } as Record<string, unknown>,
     });
 
     return { success: true, data: sub, message: "Fason firma güncellendi" };
   }
 
   async remove(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    // F94: soft-delete öncesi before-state.
+    const before = await prisma.subcontractor.findUnique({
+      where: { id },
+      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true },
+    });
     const sub = await prisma.subcontractor.update({
       where: { id },
       data: { isActive: false },
@@ -449,6 +515,7 @@ export class SubcontractorManagementService {
       action: "DELETE",
       tableName: "SUBCONTRACTOR",
       recordId: id,
+      oldData: before ?? null,
     });
     return { success: true, data: sub, message: "Fason firma pasife alındı" };
   }

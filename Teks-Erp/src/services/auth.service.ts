@@ -309,14 +309,31 @@ export class AuthService {
     // yeni token bu tarihe kadar geçerli → izin süresi bitince oturum sunucu-tarafında
     // ölür (401) ve re-login'de getEffectivePermissions o izni zaten hariç tutar.
     // Nearest varsa exp HER durumda konur (süresiz taban bile bu tarihe kırpılır).
-    const nearest = await prisma.userPermission.findFirst({
-      where: { userId: user.id, validUntil: { gt: new Date(nowMs) } },
-      orderBy: { validUntil: "asc" },
-      select: { validUntil: true },
-    });
-    if (nearest?.validUntil) {
-      if (!hasExp || nearest.validUntil.getTime() < effectiveExpiresAt.getTime()) {
-        effectiveExpiresAt = nearest.validUntil;
+    // F51: iki aday sınır — (a) EFEKTİF (validFrom geçmiş/boş) grant'ın en yakın
+    // validUntil'i (kapanış); (b) henüz BAŞLAMAMIŞ (validFrom gelecekte) grant'ın
+    // en yakın validFrom'u (açılış → re-login'de token o izni alsın). Eski sorgu
+    // yalnız validUntil>now bakıyordu: henüz-başlamamış grant'ın validUntil'i
+    // oturumu gereksiz kırpıyor, açılış anı ise hiç yakalanmıyordu.
+    const nowDate = new Date(nowMs);
+    const [nearestExpiry, nearestOpening] = await Promise.all([
+      prisma.userPermission.findFirst({
+        where: {
+          userId: user.id,
+          validUntil: { gt: nowDate },
+          OR: [{ validFrom: null }, { validFrom: { lte: nowDate } }],
+        },
+        orderBy: { validUntil: "asc" },
+        select: { validUntil: true },
+      }),
+      prisma.userPermission.findFirst({
+        where: { userId: user.id, validFrom: { gt: nowDate } },
+        orderBy: { validFrom: "asc" },
+        select: { validFrom: true },
+      }),
+    ]);
+    for (const boundary of [nearestExpiry?.validUntil, nearestOpening?.validFrom]) {
+      if (boundary && (!hasExp || boundary.getTime() < effectiveExpiresAt.getTime())) {
+        effectiveExpiresAt = boundary;
         hasExp = true;
       }
     }
@@ -367,7 +384,8 @@ export class AuthService {
    */
   static verifyToken(token: string): JwtPayload {
     try {
-      return jwt.verify(token, JWT_SECRET) as JwtPayload;
+      // F22: algorithms sabitle (HS256) — algoritma-karışıklığı/none saldırısına karşı.
+      return jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
     } catch {
       throw AppError.unauthorized("Geçersiz veya süresi dolmuş token");
     }
@@ -389,11 +407,18 @@ export class AuthService {
   > {
     // Emniyet tavanı: mobil login ekranının kullanıcı seçicisi — gerçekte onlarca
     // operatör. `take` ile sınırsız okumayı kapatıyoruz (pratikte hiç dolmaz).
+    // F55: getEffectivePermissions ile aynı geçerlilik penceresi — süresi geçmiş/henüz
+    // başlamamış mobil izin sahibi listede görünüp login olup 403 (boş izin) almasın.
+    const now = new Date();
     return prisma.user.findMany({
       where: {
         isActive: true,
         permissions: {
           some: {
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+              { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
+            ],
             permission: { code: { startsWith: "mobile:" } },
           },
         },

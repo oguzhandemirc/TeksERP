@@ -9,6 +9,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { DeviceKind } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 
@@ -49,14 +50,17 @@ const PERIPHERAL_SUMMARY_SELECT = {
   kind: true,
   connectionType: true,
   languageOverride: true,
-  formatProfile: { select: { id: true, code: true, name: true } },
+  // Etiket Stüdyosu v2: medya cihazın kendinde ("Boyutlar" profili emekli).
+  labelWidthMm: true,
+  labelHeightMm: true,
+  labelDpi: true,
 } as const;
 
-const DEVICE_KINDS = new Set(["TABLET", "PHONE", "DESKTOP"]);
-/** Geçerli cihaz türüne normalize et (geçersiz/boş → TABLET). */
-function normalizeDeviceKind(k?: string | null): string {
+/** Geçerli cihaz türüne normalize et (geçersiz/boş → TABLET). F6: Device.kind artık
+ *  DeviceKind enum'u — dönüş tipi de enum, yazım uçları (create/update) tip-güvenli. */
+function normalizeDeviceKind(k?: string | null): DeviceKind {
   const v = (k ?? "").toUpperCase();
-  return DEVICE_KINDS.has(v) ? v : "TABLET";
+  return (Object.values(DeviceKind) as string[]).includes(v) ? (v as DeviceKind) : DeviceKind.TABLET;
 }
 
 export class DeviceService {
@@ -141,10 +145,19 @@ export class DeviceService {
     const device = await prisma.device.upsert({
       where: { deviceId },
       create: { deviceId, name: fallbackName, kind, status: "PENDING", isActive: true, lastSeenAt: new Date() },
-      // Var olan cihazda türü yalnız client açıkça gönderdiyse güncelle (admin override'ı ezme).
-      update: { lastSeenAt: new Date(), ...(input.kind ? { kind } : {}) },
+      // F216: Var olan cihazda announce SADECE canlılık (lastSeenAt) yazar — kind burada
+      // DEĞİŞTİRİLMEZ. Aksi halde APPROVED bir cihaz public announce ile kind'ını DESKTOP'a
+      // flip edip work-session zorunluluğunu bypass edebilirdi.
+      update: { lastSeenAt: new Date() },
       include: DEVICE_INCLUDE,
     });
+    // Cihaz tipini YALNIZ henüz onaylanmamış (PENDING) cihaz, client düzeltmesiyle
+    // güncelleyebilir (ör. ilk announce TABLET tahmin etti, gerçekte PHONE). APPROVED
+    // cihazın tipini yalnız admin (approveAndAssign) değiştirir. Atomik WHERE status=PENDING:
+    // APPROVED satır 0 etkilenir (upsert↔onay race'inde de güvenli).
+    if (input.kind && device.status === "PENDING" && device.kind !== kind) {
+      await prisma.device.updateMany({ where: { deviceId, status: "PENDING" }, data: { kind } });
+    }
     return toAssignment(device);
   }
 
@@ -206,7 +219,7 @@ export class DeviceService {
     await prisma.$transaction([
       prisma.devicePeripheral.deleteMany({ where: { deviceId: id } }),
       ...(ids.length
-        ? [prisma.devicePeripheral.createMany({ data: ids.map((peripheralId) => ({ deviceId: id, peripheralId })) })]
+        ? [prisma.devicePeripheral.createMany({ data: ids.map((peripheralId) => ({ deviceId: id, peripheralId })), skipDuplicates: true })] // F218
         : []),
     ]);
     await AuditService.log({

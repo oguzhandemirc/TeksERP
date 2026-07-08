@@ -105,11 +105,21 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     params.search
   ) as Prisma.ShipmentWhereInput;
   where.status = ShipmentStatus.DISPATCHED;
-  const rawCustomerId = req.query.customerId as string | undefined;
-  if (rawCustomerId) where.customerId = rawCustomerId;
-  const customerId =
-    (typeof params.filters.customerId === "string" ? params.filters.customerId : undefined) ??
-    rawCustomerId;
+  // F248: customerId TEK doğrulanmış kaynak (where + returnWhere). buildWhereClause
+  // filter[customerId]'yi doğrulamadan yazmış olabilir → önce sil, sonra doğrulanmış
+  // değeri ata (malformed UUID → Prisma parse 500 yerine açık Türkçe 400).
+  delete (where as { customerId?: unknown }).customerId;
+  const rawCustomerId =
+    typeof req.query.customerId === "string" ? req.query.customerId.trim() : undefined;
+  if (rawCustomerId && !UUID_RE.test(rawCustomerId)) {
+    throw AppError.badRequest("Geçersiz müşteri ID.");
+  }
+  const filterCustomerId =
+    typeof params.filters.customerId === "string" && UUID_RE.test(params.filters.customerId)
+      ? params.filters.customerId
+      : undefined;
+  const customerId = rawCustomerId ?? filterCustomerId;
+  if (customerId) where.customerId = customerId;
 
   // İki mod:
   //  • SEÇİM (A): ?ids=a,b,c → yalnız işaretli sevkler (tarih aralığı yok sayılır).
@@ -182,8 +192,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
             select: {
               currentQty: true,
               width: true,
-              item: { select: { name: true } },
-              color: { select: { name: true } },
+              item: { select: { id: true, name: true } },
+              color: { select: { id: true, name: true } },
             },
           },
         },
@@ -215,7 +225,10 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
         const itemName = r.item.name;
         const colorName = r.color?.name ?? "";
         const widthNum = r.width != null ? Number(r.width) : null;
-        const key = `${itemName}|${colorName}|${widthNum ?? ""}`;
+        // F251: İD bazlı anahtar — Item.name/Color.name DB'de unique DEĞİL; aynı ada sahip
+        // iki farklı ürün/renk icmalde birleşmesin (metre yanlış atfedilmesin). Adlar yalnız
+        // görüntüleme için taşınır.
+        const key = `${r.item.id}|${r.color?.id ?? ""}|${widthNum ?? ""}`;
 
         const g = prodMap.get(key) ?? { itemName, colorName, width: widthNum, rollCount: 0, totalMeters: D0() };
         g.rollCount += 1;

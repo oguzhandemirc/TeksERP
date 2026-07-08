@@ -6,7 +6,7 @@
 //   2. Başarılı giriş sayacı SIFIRLAR (reset) — sonraki yanlışlar baştan sayılır.
 //   3. Escalate: ceza turu escalateAfter'a varınca KISA ceza yerine UZUN ceza uygulanır.
 //   4. Kart girişi de aynı kilide tabi (N yanlış kart → 429).
-//   5. pinLockoutEnabled=false → checkLoginLockout hep {blocked:false} (kilit uygulanmaz).
+//   5. pinLockoutEnabled=false → reserveLoginAttempt hep {blocked:false} (kilit uygulanmaz).
 // İzolasyon: dedicated TEST kullanıcısı; ayarlar test içinde set + finally'de restore;
 // her senaryo AYRI anahtar (IP) kullanır + finally resetLoginLockout ile bellek temizlenir.
 // =============================================================================
@@ -17,10 +17,11 @@ import { AuthController } from "../src/controllers/auth.controller";
 import { AuthService } from "../src/services/auth.service";
 import { AppError } from "../src/utils/app-error";
 import {
-  checkLoginLockout,
-  recordLoginFailure,
+  reserveLoginAttempt,
   resetLoginLockout,
 } from "../src/middlewares/login-lockout";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
 
 let pass = 0,
@@ -165,13 +166,18 @@ async function main() {
     // 3) Escalate → uzun ceza (modül-seviye: rounds escalateAfter'a varınca)
     // =====================================================================
     const ipEsc = `escalate-${ts}`; usedKeys.push(ipEsc);
-    // Round 1: 3 fail → penaltyRounds=1 (1>=2? hayır) → KISA (60sn).
-    for (let i = 0; i < 3; i++) await recordLoginFailure(ipEsc);
-    const round1 = await checkLoginLockout(ipEsc);
+    // Reserve modeli: reserve check+increment'i atomik yapar. Kısa cezayı 5sn'ye
+    // (MIN sınır) çekip turlar arası bekleyerek escalation'ı gözlemle (bloklu reserve
+    // read-only, sayaç artırmaz → turu ilerletmek için bloğun bitmesi gerekir).
+    await rawSet(SETTING_KEYS.AUTH_PIN_LOCKOUT_PENALTY_SEC, 5);
+    // Round 1: 3 reserve → penaltyRounds=1 (1>=2? hayır) → KISA (5sn).
+    for (let i = 0; i < 3; i++) await reserveLoginAttempt(ipEsc);
+    const round1 = await reserveLoginAttempt(ipEsc);
     check("3a round1 → blok + KISA ceza (≤60sn)", round1.blocked && round1.retryAfterSec > 0 && round1.retryAfterSec <= 60, `${round1.retryAfterSec}`);
-    // Round 2: 3 fail daha → penaltyRounds=2 (2>=2) → UZUN (15dk=900sn).
-    for (let i = 0; i < 3; i++) await recordLoginFailure(ipEsc);
-    const round2 = await checkLoginLockout(ipEsc);
+    // Kısa blok bitsin, sonra 3 reserve daha → penaltyRounds=2 (2>=2) → UZUN (15dk=900sn).
+    await sleep(5200);
+    for (let i = 0; i < 3; i++) await reserveLoginAttempt(ipEsc);
+    const round2 = await reserveLoginAttempt(ipEsc);
     check("3b round2 → UZUN ceza (>>kısa; ≈900sn)", round2.blocked && round2.retryAfterSec > 300, `${round2.retryAfterSec}`);
 
     // =====================================================================
@@ -189,15 +195,15 @@ async function main() {
     // 5) pinLockoutEnabled=false → checkLoginLockout hep blocked:false
     // =====================================================================
     const ipDis = `disabled-${ts}`; usedKeys.push(ipDis);
-    // Önce (açıkken) bloke et.
-    for (let i = 0; i < 3; i++) await recordLoginFailure(ipDis);
-    const disBefore = await checkLoginLockout(ipDis);
+    // Önce (açıkken) bloke et: 3 reserve eşiği kurar, 4. reserve bloklu döner.
+    for (let i = 0; i < 3; i++) await reserveLoginAttempt(ipDis);
+    const disBefore = await reserveLoginAttempt(ipDis);
     check("5a kilit AÇIK → anahtar bloklu", disBefore.blocked);
     // Kapat → aynı anahtar artık bloklu değil.
     await rawSet(SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED, false);
-    const disAfter = await checkLoginLockout(ipDis);
+    const disAfter = await reserveLoginAttempt(ipDis);
     check("5b kilit KAPALI → blocked:false (bellek dolu olsa da)", !disAfter.blocked);
-    // recordLoginFailure de kapalıyken no-op — controller da bloklamaz.
+    // reserveLoginAttempt de kapalıyken no-op → controller da bloklamaz.
     const disLogin = await invoke(AuthController.loginQuickPin, { body: { pin: wrongPin }, ip: ipDis });
     check("5c kilit KAPALI → controller 429 vermez (401)", is401(disLogin.nextError));
   } finally {

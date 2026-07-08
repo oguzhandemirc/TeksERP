@@ -39,12 +39,14 @@ export class AppError extends Error {
     return new AppError(message, 401, true, details);
   }
 
-  static forbidden(message: string = "Bu işlem için yetkiniz yok"): AppError {
-    return new AppError(message, 403);
+  // F37: forbidden/notFound/internal de details taşıyabilsin (conflict/tooManyRequests
+  // paritesi) — kod/bağlam iletmek için; forbidden/notFound isOperational=true eksplisit.
+  static forbidden(message: string = "Bu işlem için yetkiniz yok", details?: Record<string, unknown>): AppError {
+    return new AppError(message, 403, true, details);
   }
 
-  static notFound(message: string = "Kayıt bulunamadı"): AppError {
-    return new AppError(message, 404);
+  static notFound(message: string = "Kayıt bulunamadı", details?: Record<string, unknown>): AppError {
+    return new AppError(message, 404, true, details);
   }
 
   static conflict(message: string, details?: Record<string, unknown>): AppError {
@@ -55,7 +57,7 @@ export class AppError extends Error {
     return new AppError(message, 429, true, details);
   }
 
-  static internal(message: string = "Sunucu hatası"): AppError {
-    return new AppError(message, 500, false);
+  static internal(message: string = "Sunucu hatası", details?: Record<string, unknown>): AppError {
+    return new AppError(message, 500, false, details);
   }
 }

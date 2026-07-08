@@ -579,7 +579,7 @@ export interface KursunRollSummary {
   qc2Completed: boolean;
   errorCount: number;
   defects: KursunRollDefectSummary[];
-  itemName?: string;
+  itemName?: string | null;
   colorName?: string | null;
 }
 

@@ -5,6 +5,19 @@
 import { RollOperationType } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 
+// F266: scripts/test_*.ts sözleşmesi — check() sayaçları + '=== Sonuç ===' satırı.
+let pass = 0;
+let fail = 0;
+function check(label: string, ok: boolean, extra = "") {
+  if (ok) {
+    pass++;
+    console.log(`✅ ${label}${extra ? ` — ${extra}` : ""}`);
+  } else {
+    fail++;
+    console.log(`❌ ${label}${extra ? ` — ${extra}` : ""}`);
+  }
+}
+
 async function main() {
   // PROCESS_QC adımında veya geçmişte bulunmuş bir roll bul.
   const op = await prisma.rollOperation.findFirst({
@@ -79,14 +92,10 @@ async function main() {
   console.log(`DB'deki satır sayısı: ${count} (beklenen: 1)`);
   console.log(`Önceden vardı: ${preexisting}`);
 
-  if (count !== 1) {
-    console.error("❌ İDEMPOTENCY KIRIK — birden fazla satır oluştu!");
-    process.exitCode = 1;
-  } else {
-    console.log("✅ Idempotency çalışıyor (@@unique + upsert update:{} doğru).");
-  }
+  check("İdempotency: 5 upsert → tek satır (@@unique + update:{})", count === 1, `satır=${count}`);
 
   // Şimdi P2002 direct-create testi:
+  let p2002 = false;
   try {
     await prisma.rollOperation.create({
       data: {
@@ -96,19 +105,15 @@ async function main() {
         metadata: { p2002Test: true },
       },
     });
-    console.error(
-      "❌ P2002 FIRLATILMADI — unique constraint çalışmıyor olmalı?",
-    );
-    process.exitCode = 1;
   } catch (e: unknown) {
     const err = e as { code?: string };
     if (err.code === "P2002") {
-      console.log("✅ Direct create P2002 fırlattı (unique constraint aktif).");
+      p2002 = true;
     } else {
-      console.error("❌ Beklenmedik hata:", e);
-      process.exitCode = 1;
+      console.error("Beklenmedik hata:", e);
     }
   }
+  check("Direct create P2002 fırlattı (unique constraint aktif)", p2002);
 
   // Eğer fresh case açtıysak temizle.
   if (!preexisting) {
@@ -123,6 +128,9 @@ async function main() {
   } else {
     console.log("Cleanup: önceden var olan satıra dokunulmadı.");
   }
+
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main()

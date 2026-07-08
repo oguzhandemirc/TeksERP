@@ -1,146 +1,137 @@
 // =============================================================================
 // Etiket format çözümü — baskı anında hangi fiziksel geometri + yazıcı dili?
 // =============================================================================
+// Etiket Stüdyosu v2: MEDYA (etiket ölçüsü) doğrudan YAZICI CİHAZINDA (Peripheral
+// Device.labelWidthMm vd.); ayrı "Boyutlar" (LabelFormatProfile) kataloğu EMEKLİ.
 // Öncelik zinciri:
-//   1. explicit profileId (query/body)
-//   2. machineId → makineye-bağlı LABEL_PRINTER PeripheralDevice.formatProfile
-//   3. sistem default profili (top: isRollDefault; sonra code="DEFAULT"; yoksa en eski aktif)
-//   4. KOD FALLBACK (DB boş) → DEFAULT_LABEL_FORMAT + RASTER_HTML
+//   1. explicit peripheralId → cihazın kendi medyası
+//   2. machineId → makineye-bağlı LABEL_PRINTER cihazının medyası
+//   3. sistem VARSAYILAN medyası (label.defaultMedia ayarı)
+//   4. KOD FALLBACK → 100×148 / 203dpi
+// Orientation w/h'den türer (w ≥ h → LANDSCAPE). Paylar (margin) yalnız eski akış
+// yolu (kartela/varyantsız) içindir → varsayılan medyanın marginMm'i (kanvas paydan
+// bağımsız; boşluğu eleman konumu verir).
 //
-// Dil bu katmanda SABİT RASTER_HTML'dir — dil YALNIZ cihaz kaydındaki
-// `languageOverride`'dan gelir (bir üst katmanda, label-routing.resolver'da biner).
-// Global "varsayılan yazıcı dili" ayarı 2026-07'de kaldırıldı (heterojen filo).
-//
-// Mobil: `req.device.machineId` (device.middleware) → istasyon yazıcısı OTO çözülür.
-// Electron: device yok → sistem default (adım 3).
+// Dil bu katmanda SABİT RASTER_HTML; dil YALNIZ cihaz languageOverride'ından
+// (label-routing.resolver'da biner). Mobil: req.device.machineId → istasyon
+// yazıcısı OTO. Electron: cihaz yok → varsayılan medya.
 // =============================================================================
 
 import { PrinterLanguage, type LabelKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { DEFAULT_LABEL_FORMAT, type LabelFormatGeometry } from "./label-html.helper";
+import { type LabelFormatGeometry } from "./label-html.helper";
+import { readDefaultLabelMedia } from "../system-setting.service";
 
 export type FormatResolveSource = "explicit" | "machine" | "system-default" | "code-fallback";
 
 export interface ResolvedLabelFormat extends Required<LabelFormatGeometry> {
   dpi: number;
   language: PrinterLanguage;
-  /** Çözülen profil id (kod fallback'te null). */
-  profileId: string | null;
   source: FormatResolveSource;
 }
 
-interface ProfileRow {
-  id: string;
-  widthMm: unknown;
-  heightMm: unknown;
-  marginMm: unknown;
-  marginTopMm?: unknown;
-  marginRightMm?: unknown;
-  marginBottomMm?: unknown;
-  marginLeftMm?: unknown;
-  gapMm?: unknown;
-  dpi: number;
-  orientation: "PORTRAIT" | "LANDSCAPE";
-  isActive: boolean;
+/** Cihaz kaydından okunan medya (yazıcıda takılı etiket). */
+export interface PrinterMedia {
+  labelWidthMm: unknown;
+  labelHeightMm: unknown;
+  labelDpi: number | null;
+  labelGapMm: unknown;
 }
 
-/**
- * Makineye-SABİT aktif LABEL_PRINTER cihazını (format profiliyle) döner. Hem format
- * hem baskı-hedefi (adres/port) kaynağı — `MachineHardware` emekliye ayrıldı, yazıcı
- * tek kaynağı PeripheralDevice.
- */
-export async function loadMachinePrinter(machineId: string) {
-  return prisma.peripheralDevice.findFirst({
-    where: { machineId, kind: "LABEL_PRINTER", isActive: true },
-    include: { formatProfile: true },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
-function fromProfile(
-  p: ProfileRow,
+/** Cihaz medyasını çözülmüş formata çevir; medya YOKSA (labelWidthMm null) null. */
+function fromPeripheralMedia(
+  p: PrinterMedia | null | undefined,
   language: PrinterLanguage,
   source: FormatResolveSource,
-): ResolvedLabelFormat {
-  const base = Number(p.marginMm);
-  const side = (v: unknown) => (v != null && Number.isFinite(Number(v)) ? Number(v) : base);
+  marginMm: number,
+): ResolvedLabelFormat | null {
+  if (!p || p.labelWidthMm == null || p.labelHeightMm == null) return null;
+  const widthMm = Number(p.labelWidthMm);
+  const heightMm = Number(p.labelHeightMm);
+  if (!Number.isFinite(widthMm) || !Number.isFinite(heightMm)) return null;
+  const gapMm = p.labelGapMm != null && Number.isFinite(Number(p.labelGapMm)) ? Number(p.labelGapMm) : 2;
   return {
-    widthMm: Number(p.widthMm),
-    heightMm: Number(p.heightMm),
-    marginMm: base,
-    marginTopMm: side(p.marginTopMm),
-    marginRightMm: side(p.marginRightMm),
-    marginBottomMm: side(p.marginBottomMm),
-    marginLeftMm: side(p.marginLeftMm),
-    gapMm: p.gapMm != null && Number.isFinite(Number(p.gapMm)) ? Number(p.gapMm) : 2,
-    orientation: p.orientation,
-    dpi: p.dpi,
+    widthMm,
+    heightMm,
+    marginMm,
+    marginTopMm: marginMm,
+    marginRightMm: marginMm,
+    marginBottomMm: marginMm,
+    marginLeftMm: marginMm,
+    gapMm,
+    orientation: widthMm >= heightMm ? "LANDSCAPE" : "PORTRAIT",
+    dpi: p.labelDpi ?? 203,
     language,
-    profileId: p.id,
     source,
   };
 }
 
+/**
+ * Makineye-SABİT aktif LABEL_PRINTER cihazını döner (medya kolonları dahil). Hem
+ * medya hem baskı-hedefi (adres/port) kaynağı — yazıcı tek kaynağı PeripheralDevice.
+ */
+export async function loadMachinePrinter(machineId: string) {
+  return prisma.peripheralDevice.findFirst({
+    where: { machineId, kind: "LABEL_PRINTER", isActive: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/** Sistem varsayılan medyasından çözülmüş format (cihaz yok/medyasız). */
+export async function resolveDefaultFormat(language: PrinterLanguage): Promise<ResolvedLabelFormat> {
+  const m = await readDefaultLabelMedia();
+  return {
+    widthMm: m.widthMm,
+    heightMm: m.heightMm,
+    marginMm: m.marginMm,
+    marginTopMm: m.marginMm,
+    marginRightMm: m.marginMm,
+    marginBottomMm: m.marginMm,
+    marginLeftMm: m.marginMm,
+    gapMm: m.gapMm,
+    orientation: m.widthMm >= m.heightMm ? "LANDSCAPE" : "PORTRAIT",
+    dpi: m.dpi,
+    language,
+    source: "system-default",
+  };
+}
+
+/** Cihaz medyası (routing'in yüklediği peripheral) → format; yoksa varsayılan. */
+export async function formatFromPeripheralOrDefault(
+  p: PrinterMedia | null | undefined,
+  language: PrinterLanguage,
+): Promise<ResolvedLabelFormat> {
+  const m = await readDefaultLabelMedia();
+  return fromPeripheralMedia(p, language, "explicit", m.marginMm) ?? (await resolveDefaultFormat(language));
+}
+
 export async function resolveLabelFormat(opts?: {
-  profileId?: string | null;
+  peripheralId?: string | null;
   machineId?: string | null;
-  /** TOP etiketinde (ROLL_RAW/ROLL_FINISHED) sistem-varsayılan = isRollDefault profili;
-   * diğer türlerde (SWATCH) code="DEFAULT". Verilmezse eski davranış (code="DEFAULT"). */
+  /** DEPRECATED — kind artık medya seçimini etkilemez (tek varsayılan medya). */
   kind?: LabelKind | null;
 }): Promise<ResolvedLabelFormat> {
-  let profile: ProfileRow | null = null;
-  let source: FormatResolveSource = "code-fallback";
-
-  // 1. explicit profileId (geometri)
-  if (opts?.profileId) {
-    const p = await prisma.labelFormatProfile.findUnique({ where: { id: opts.profileId } });
-    if (p?.isActive) {
-      profile = p;
-      source = "explicit";
-    }
-  }
-
-  // 2. machineId → makineye-bağlı yazıcı cihazının kendi format profili.
-  //    (Explicit profil çözüldüyse makine sorgusu tamamen atlanır.)
-  if (opts?.machineId && !profile) {
-    const printer = await loadMachinePrinter(opts.machineId);
-    const p = printer?.formatProfile?.isActive ? printer.formatProfile : null;
-    if (p) {
-      profile = p;
-      source = "machine";
-    }
-  }
-
-  // 3. sistem default profili. TOP etiketinde önce isRollDefault'lu profil; sonra
-  //    code="DEFAULT" (kartela/diğerleri burayı kullanır); yoksa en eski aktif.
-  if (!profile) {
-    // SWATCH (kartela) HARİÇ her şey — kind verilmeyen bulk/önizleme dahil — TOP
-    // varsayılanını (isRollDefault) kullanır. Sistem top-merkezli; kartela özel durum.
-    // Böylece bulk (kind'sız) ile tekil (kind=ROLL) yolu aynı boyutu çözer.
-    const isRoll = opts?.kind !== "SWATCH";
-    const sys =
-      (isRoll
-        ? await prisma.labelFormatProfile.findFirst({ where: { isRollDefault: true, isActive: true } })
-        : null) ??
-      (await prisma.labelFormatProfile.findFirst({ where: { code: "DEFAULT", isActive: true } })) ??
-      (await prisma.labelFormatProfile.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: "asc" },
-      }));
-    if (sys) {
-      profile = sys;
-      source = "system-default";
-    }
-  }
-
-  // Etkin dil — bu katmanda SABİT RASTER_HTML: dil YALNIZ cihaz kaydından gelir
-  // (languageOverride, routing resolver'da biner). Cihaz bağlamı olmayan istek native
-  // ÜRETMEZ; istemciler fail-closed davranır ("cihaz seçin" hatası / HTML önizleme).
+  // Dil bu katmanda SABİT RASTER_HTML; cihaz languageOverride'ı routing'de biner.
   const language: PrinterLanguage = PrinterLanguage.RASTER_HTML;
+  const margin = (await readDefaultLabelMedia()).marginMm;
 
-  // 4. KOD FALLBACK — DB'de hiç profil yok
-  if (!profile) {
-    return { ...DEFAULT_LABEL_FORMAT, dpi: 203, language, profileId: null, source: "code-fallback" };
+  // 1. explicit peripheralId → cihazın medyası
+  if (opts?.peripheralId) {
+    const p = await prisma.peripheralDevice.findFirst({
+      where: { id: opts.peripheralId, deletedAt: null },
+      select: { labelWidthMm: true, labelHeightMm: true, labelDpi: true, labelGapMm: true },
+    });
+    const f = fromPeripheralMedia(p, language, "explicit", margin);
+    if (f) return f;
   }
-  return fromProfile(profile, language, source);
+
+  // 2. machineId → makineye-bağlı yazıcının medyası
+  if (opts?.machineId) {
+    const printer = await loadMachinePrinter(opts.machineId);
+    const f = fromPeripheralMedia(printer, language, "machine", margin);
+    if (f) return f;
+  }
+
+  // 3. sistem varsayılan medyası (4. kod fallback readDefaultLabelMedia içinde)
+  return resolveDefaultFormat(language);
 }

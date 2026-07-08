@@ -8,9 +8,16 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
-import { systemSettingService } from "../services/system-setting.service";
+import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
+import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
+import {
+  getLatencyPersistHealth,
+  latencyHistory,
+  latencyHistoryRoutes,
+} from "../services/latency-persist.service";
+import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import { z } from "zod";
 import "../types/express-augment";
@@ -280,7 +287,16 @@ const grantSchema = z.object({
   permissionId: z.string().min(1),
   validFrom: z.coerce.date().optional().nullable(),
   validUntil: z.coerce.date().optional().nullable(),
-});
+})
+  // F256: geçerlilik penceresi tutarlı olmalı (aksi halde ölü/hatalı yetki).
+  .refine((v) => !v.validFrom || !v.validUntil || v.validUntil > v.validFrom, {
+    message: "Bitiş tarihi başlangıç tarihinden sonra olmalı",
+    path: ["validUntil"],
+  })
+  .refine((v) => !v.validUntil || v.validUntil > new Date(), {
+    message: "Bitiş tarihi gelecekte olmalı (geçmiş tarih ölü yetki yaratır)",
+    path: ["validUntil"],
+  });
 
 /**
  * @openapi
@@ -311,11 +327,21 @@ router.post(
 
 // Toplu-set: yeni tarih-taşır şekil { permissions: [{permissionId, validFrom?, validUntil?}] }
 // VEYA geriye-uyum düz { permissionIds: string[] }. En az biri gerekli — normalize edilir.
-const permissionSetItemSchema = z.object({
-  permissionId: z.string().min(1),
-  validFrom: z.coerce.date().nullable().optional(),
-  validUntil: z.coerce.date().nullable().optional(),
-});
+const permissionSetItemSchema = z
+  .object({
+    permissionId: z.string().min(1),
+    validFrom: z.coerce.date().nullable().optional(),
+    validUntil: z.coerce.date().nullable().optional(),
+  })
+  // F256: her yetki kaleminde geçerlilik penceresi tutarlı olmalı.
+  .refine((v) => !v.validFrom || !v.validUntil || v.validUntil > v.validFrom, {
+    message: "Bitiş tarihi başlangıç tarihinden sonra olmalı",
+    path: ["validUntil"],
+  })
+  .refine((v) => !v.validUntil || v.validUntil > new Date(), {
+    message: "Bitiş tarihi gelecekte olmalı (geçmiş tarih ölü yetki yaratır)",
+    path: ["validUntil"],
+  });
 const setSchema = z
   .object({
     permissions: z.array(permissionSetItemSchema).optional(),
@@ -632,6 +658,147 @@ router.delete(
 );
 
 // =============================================================================
+// ENDPOINT GECİKME İSTATİSTİKLERİ (latency-stats — saf bellek, DB yok)
+// =============================================================================
+
+/**
+ * @openapi
+ * /api/admin/perf:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Endpoint gecikme istatistikleri
+ *     description: >
+ *       Route bazında count/errCount/p50/p95/max (bucket-yaklaşık) + son yavaş
+ *       istekler (≥1sn, son 50). Süreç başlangıcından (veya son reset'ten) beri.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/perf",
+  verifyToken,
+  requirePermission("admin:settings"),
+  (_req: Request, res: Response, next: NextFunction): void => {
+    try {
+      res.status(200).json({
+        success: true,
+        // persist: kalıcılaştırma sağlığı (flush hataları /health'teki audit
+        // sayacı deseniyle burada görünür — sessiz veri kaybı olmasın).
+        data: { ...latencySnapshot(), persist: getLatencyPersistHealth() },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+const perfHistoryQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(14),
+  route: z.string().min(1).max(200).optional(),
+});
+
+/**
+ * @openapi
+ * /api/admin/perf/history:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Endpoint gecikme günlük geçmişi (kalıcı özetlerden)
+ *     description: >
+ *       Gün bazlı seri — route verilirse o uç, verilmezse tüm uçların birleşik
+ *       toplamı. Persentiller birleşik bucket'lardan hesaplanır (grafik-hazır).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/perf/history",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { days, route } = perfHistoryQuerySchema.parse(req.query);
+      const series = await latencyHistory(days, route);
+      const routes = await latencyHistoryRoutes(days);
+      res.status(200).json({
+        success: true,
+        data: { days, route: route ?? null, series, routes },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/perf/reset:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Gecikme sayaçlarını sıfırla
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/perf/reset",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      resetLatencyStats();
+      // Best-effort audit (tx yok — saf bellek işlemi ama state değişikliği iz bırakır).
+      await AuditService.log({
+        userId: req.user?.userId,
+        action: "DELETE",
+        tableName: "latency_stats",
+        recordId: "in-memory",
+        newData: { resetAt: new Date().toISOString() },
+      });
+      res.status(200).json({ success: true, data: { reset: true } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================================================
+// SESSIONS BAKIMI (jti registry — ölü satır temizliği, Faz 3)
+// =============================================================================
+
+const sessionPurgeSchema = z.object({
+  olderThanDays: z.number().int().min(7).max(365).default(90),
+});
+
+/**
+ * @openapi
+ * /api/admin/sessions/purge:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Ölü oturum kayıtlarını temizle
+ *     description: >
+ *       revokedAt/expiresAt değeri eşikten eski oturum satırlarını fiziksel
+ *       siler; aktif oturumlar matematiksel olarak kapsam dışıdır (bkz.
+ *       SessionRegistryService.purgeDeadSessions). Operasyonel bakım —
+ *       6 ayda bir system-logs arşiviyle birlikte koşun.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/sessions/purge",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { olderThanDays } = sessionPurgeSchema.parse(req.body ?? {});
+      const result = await SessionRegistryService.purgeDeadSessions(olderThanDays);
+      await AuditService.log({
+        userId: req.user?.userId,
+        action: "DELETE",
+        tableName: "sessions",
+        recordId: "purge",
+        newData: { olderThanDays, deleted: result.deleted },
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================================================
 // SYSTEM LOG MAINTENANCE (mevcut endpoint'ler)
 // =============================================================================
 
@@ -655,6 +822,14 @@ router.post(
     try {
       const { monthsToKeep } = archiveSchema.parse(req.body);
       const result = await AuditService.archiveOlderThan(monthsToKeep);
+      // F230: binlerce satırı fiziksel taşıyan yıkıcı bakım — kardeş uçlar (perf/reset,
+      // sessions/purge, backup) gibi logla. Best-effort (tx dışında, hata isteği düşürmez).
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "AUDIT_ARCHIVE",
+        userId: req.user?.userId ?? null,
+        payload: { monthsToKeep, archived: result.archived, cutoff: result.cutoff },
+      });
       res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);
@@ -851,6 +1026,15 @@ const settingUpsertSchema = z.object({
   description: z.string().max(500).optional(),
 });
 
+// F233: yapılandırılmış JSON tutan anahtarlar — kendi tipli ekranları var
+// (setFeatureFlags: travelerCardConfig/documentsConfig/loginMethods). Generic
+// PUT /settings/:key düz string yazarak bu JSON'ları bozmasın.
+const STRUCTURED_SETTING_KEYS = new Set<string>([
+  SETTING_KEYS.TRAVELER_CARD_CONFIG,
+  SETTING_KEYS.DOCUMENTS_CONFIG,
+  SETTING_KEYS.AUTH_LOGIN_METHODS,
+]);
+
 /**
  * @openapi
  * /api/admin/settings:
@@ -906,9 +1090,15 @@ router.put(
   requirePermission("admin:settings"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const key = req.params.key as string;
+      if (STRUCTURED_SETTING_KEYS.has(key)) {
+        throw AppError.badRequest(
+          "Bu ayar yapılandırılmış JSON içerir — kendi tipli ekranından güncelleyin, düz metinle değiştirilemez",
+        );
+      }
       const { value, description } = settingUpsertSchema.parse(req.body);
       const result = await systemSettingService.set(
-        req.params.key as string,
+        key,
         value,
         description,
         req.user?.userId
@@ -975,10 +1165,14 @@ router.post(
 router.get(
   "/backups",
   verifyToken,
+  // F287: pg_dump .dump TÜM kullanıcıların düz quickPin/cardToken'ını içerir →
+  // admin:users da ZORUNLU (zincir = AND). admin:* her ikisini karşılar; yalnız
+  // salt-admin:settings aktör 403 alır (mobil giriş sırlarını yedekten harvest edemez).
   requirePermission("admin:settings"),
-  (_req: Request, res: Response, next: NextFunction): void => {
+  requirePermission("admin:users"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.status(200).json({ success: true, ...listBackups() });
+      res.status(200).json({ success: true, ...(await listBackups()) });
     } catch (error) {
       next(error);
     }
@@ -1004,15 +1198,26 @@ router.get(
 router.get(
   "/backups/:name/download",
   verifyToken,
+  // F287: yedek düz-metin giriş sırları içerir → admin:settings + admin:users (AND).
   requirePermission("admin:settings"),
-  (req: Request, res: Response, next: NextFunction): void => {
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const abs = resolveBackupPath(req.params.name as string);
+      const name = req.params.name as string;
+      const abs = resolveBackupPath(name);
       if (!abs) {
         next(AppError.notFound("Yedek dosyası bulunamadı."));
         return;
       }
-      res.download(abs, req.params.name as string);
+      // F235: hassas DB dump'ının indirilmesini izle (kim/ne zaman) — BACKUP_TRIGGER
+      // ile aynı best-effort desen.
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "BACKUP_DOWNLOAD",
+        userId: req.user?.userId ?? null,
+        payload: { name },
+      });
+      res.download(abs, name);
     } catch (error) {
       next(error);
     }

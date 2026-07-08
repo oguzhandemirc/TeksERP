@@ -9,6 +9,8 @@
 import prisma from "../lib/prisma";
 import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
+import { AuditService } from "./audit.service";
+import { canonicalizeFoldTypeInPlace } from "./helpers/fold-type";
 import type { ApiResponse } from "../types/api.types";
 
 /** properties[] dizisinden BENZERSİZ propertyId'leri çıkar (dedup). */
@@ -75,6 +77,7 @@ export class ProductRecipeService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     await this.validateRefs(data);
     const next = { ...data };
+    canonicalizeFoldTypeInPlace(next); // D-13: reçete foldType kanonik ("4-kat"→"4-KAT")
     // properties dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
     // BaseService config (nestedCreateFields:["properties"]) deduped diziyi {create:[...]} sarar.
     if (Array.isArray(next.properties)) {
@@ -90,6 +93,7 @@ export class ProductRecipeService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     await this.validateRefs(data);
     const next = { ...data };
+    canonicalizeFoldTypeInPlace(next); // D-13: reçete foldType kanonik
     if (Array.isArray(next.properties)) {
       // dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
       const ids = recipePropertyIds(next.properties);
@@ -99,5 +103,46 @@ export class ProductRecipeService extends BaseService {
       };
     }
     return super.update(id, next, userId);
+  }
+
+  /**
+   * F215: pasif reçete kodu yeniden create edilince gelen `properties` UYGULANIR.
+   * BaseService.reactivate nested alanları sessizce atardı → reçete bayat
+   * özelliklerle dirilirdi. Item.create reactivate dalıyla aynı desen (M:N replace).
+   */
+  protected async reactivate(
+    id: string,
+    data: Record<string, unknown>,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const { properties, ...rest } = data;
+    const oldRecord = await this.delegate.findUnique({ where: { id } });
+    const updateData: Record<string, unknown> = { ...rest, isActive: true };
+    canonicalizeFoldTypeInPlace(updateData); // D-13: reçete foldType kanonik
+    if (Array.isArray(properties)) {
+      const ids = recipePropertyIds(properties);
+      updateData.properties = {
+        deleteMany: {},
+        create: ids.map((propertyId) => ({ propertyId })),
+      };
+    }
+    const updated = await this.delegate.update({
+      where: { id },
+      data: updateData,
+      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+    });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: this.config.tableName,
+      recordId: id,
+      oldData: oldRecord as Record<string, unknown> | null,
+      newData: updateData,
+    });
+    return {
+      success: true,
+      data: updated,
+      message: "Pasif reçete yeniden aktive edildi",
+    };
   }
 }

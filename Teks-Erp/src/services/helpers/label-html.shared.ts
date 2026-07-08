@@ -15,7 +15,8 @@ export interface TemplateField {
   fontSize?: "sm" | "md" | "lg" | "xl";
 }
 
-/** Fiziksel etiket geometrisi — `LabelFormatProfile`'ın render girdisi.
+/** Fiziksel etiket geometrisi — render girdisi (medya: yazıcı cihazından veya
+ *  sistem varsayılanından çözülür; ayrı "Boyutlar" kataloğu emekli).
  *  widthMm/heightMm = medya (fiziksel etiket); marginMm = GÜVENLİK PAYI (her
  *  kenardan içerik insetı, ölçüm/etiket toleransını emer). İçerik = width − 2×margin. */
 export interface LabelFormatGeometry {

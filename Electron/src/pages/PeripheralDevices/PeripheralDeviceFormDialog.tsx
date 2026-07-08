@@ -1,24 +1,15 @@
-import { useState } from "react";
 import { Controller } from "react-hook-form";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil } from "lucide-react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LabelFormatProfileFormDialog } from "@/pages/LabelFormatProfiles/LabelFormatProfileFormDialog";
-import { buildLabelFormatProfilePayload } from "@/pages/LabelFormatProfiles/schema";
 import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
 import { stationService } from "@/pages/Stations/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
-import { PRINTER_LANGUAGE_LABELS } from "@/services/featureFlagService";
-import { labelFormatProfileService } from "@/pages/LabelFormatProfiles/service";
-import type { LabelFormatProfile } from "@/pages/LabelFormatProfiles/types";
-import { labelTemplateService } from "@/services/labelTemplateService";
 import { deviceService } from "@/pages/Devices/service";
+import { PrinterSettingsFields } from "./PrinterSettingsFields";
 import {
   peripheralFormDefaults,
   peripheralFormSchema,
@@ -36,40 +27,11 @@ interface Props {
 
 const SELECT_CLS = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 
-const LANGS = ["RASTER_HTML", "PPLA", "PPLB", "ZPL"] as const;
-const ROUTE_KINDS: { key: RouteLabelKind; label: string; field: "templateRawId" | "templateFinishedId" | "templateSwatchId" }[] = [
-  { key: "ROLL_RAW", label: "Ham Top (KK1)", field: "templateRawId" },
-  { key: "ROLL_FINISHED", label: "Bitmiş Top (Tambur)", field: "templateFinishedId" },
-  { key: "SWATCH", label: "Kartela", field: "templateSwatchId" },
-];
-
 function routeTemplateId(initial: PeripheralDevice | null | undefined, kind: RouteLabelKind): string {
   return initial?.templateRoutes?.find((r) => r.kind === kind)?.templateId ?? "";
 }
 
 export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
-  // Hızlı profil ekleme/düzenleme — formu terk etmeden oluştur (otomatik seç) veya
-  // seçili profili düzenle. Edit için profil nesnesi listeden çözülür.
-  const qc = useQueryClient();
-  const [profileDialog, setProfileDialog] = useState<
-    { mode: "create" } | { mode: "edit"; profile: LabelFormatProfile } | null
-  >(null);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const profilesQuery = useQuery({
-    queryKey: ["label-format-profiles", "device-form"],
-    queryFn: () => loadAllForPicker(labelFormatProfileService),
-    enabled: open,
-  });
-  const profiles = profilesQuery.data?.data ?? [];
-
-  // Şablon yönlendirme select'leri için tüm şablonlar (kind'a göre gruplanır).
-  const templatesQuery = useQuery({
-    queryKey: ["label-templates", "all"],
-    queryFn: () => labelTemplateService.list(),
-    enabled: open,
-  });
-  const templates = templatesQuery.data?.data ?? [];
-
   // Tablet sahibi seçimi (deviceService createCrudService değil → ayrı query).
   const devicesQuery = useQuery({
     queryKey: ["admin-devices", "picker"],
@@ -117,8 +79,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         machineId: initial.machineId ?? "",
         stationId: initial.stationId ?? "",
         deviceId: initial.deviceId ?? "",
-        formatProfileId: initial.formatProfileId ?? "",
         languageOverride: initial.languageOverride ?? "",
+        labelWidthMm: initial.labelWidthMm != null ? String(initial.labelWidthMm) : "",
+        labelHeightMm: initial.labelHeightMm != null ? String(initial.labelHeightMm) : "",
+        labelDpi: initial.labelDpi != null ? String(initial.labelDpi) : "",
+        labelGapMm: initial.labelGapMm != null ? String(initial.labelGapMm) : "",
         templateRawId: routeTemplateId(initial, "ROLL_RAW"),
         templateFinishedId: routeTemplateId(initial, "ROLL_FINISHED"),
         templateSwatchId: routeTemplateId(initial, "SWATCH"),
@@ -305,123 +270,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               )}
             </div>
 
-            {/* Yazıcı dili/profili + şablon — YALNIZ yazıcıda (metre/kantar'da gizli).
-                Ayarların hepsi CİHAZA özeldir: dil ZORUNLU (bu yazıcı hangi komut
-                dilini konuşuyor), profil boşsa sistem varsayılan profili kullanılır. */}
-            {isPrinter && (
-              <>
-            <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/20 p-3">
-              <FormField label="Dil" error={form.formState.errors.languageOverride} required>
-                <select className={SELECT_CLS} {...form.register("languageOverride")}>
-                  <option value="">Dil seçin...</option>
-                  {LANGS.map((l) => (
-                    <option key={l} value={l}>{PRINTER_LANGUAGE_LABELS[l]}</option>
-                  ))}
-                </select>
-              </FormField>
-              <FormField label="Format Profili" hint="Boş bırak → sistem varsayılan profili.">
-                <div className="flex gap-1.5">
-                  <div className="min-w-0 flex-1">
-                    <Controller
-                      control={form.control}
-                      name="formatProfileId"
-                      render={({ field }) => (
-                        <ReferenceSelect<LabelFormatProfile>
-                          value={field.value || null}
-                          onChange={(v) => field.onChange(v ?? "")}
-                          service={labelFormatProfileService}
-                          queryKey="label-format-profiles"
-                          getLabel={(p) => `${p.code} — ${p.name}`}
-                          placeholder="Profil seç..."
-                          nullable
-                          noneLabel="Varsayılan — sistem profili"
-                        />
-                      )}
-                    />
-                  </div>
-                  {(() => {
-                    const selId = form.watch("formatProfileId");
-                    const sel = profiles.find((pr) => pr.id === selId) ?? null;
-                    return (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0"
-                        title={sel ? `"${sel.code}" profilini düzenle` : "Önce bir profil seçin"}
-                        disabled={!sel}
-                        onClick={() => sel && setProfileDialog({ mode: "edit", profile: sel })}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    );
-                  })()}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    title="Yeni format profili ekle"
-                    onClick={() => setProfileDialog({ mode: "create" })}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </FormField>
-            </div>
-
-            {/* Hızlı profil ekle/düzenle — iç dialog portal'a taşınır ama React ağacında
-                bu formun içinde: submit'i dış cihaz formuna SIZDIRMA (stopPropagation). */}
-            <div onSubmit={(e) => e.stopPropagation()}>
-              <LabelFormatProfileFormDialog
-                open={Boolean(profileDialog)}
-                onOpenChange={(o) => !o && setProfileDialog(null)}
-                initial={profileDialog?.mode === "edit" ? profileDialog.profile : null}
-                isSubmitting={savingProfile}
-                onSubmit={async (values) => {
-                  setSavingProfile(true);
-                  try {
-                    const payload = buildLabelFormatProfilePayload(values) as Partial<LabelFormatProfile>;
-                    if (profileDialog?.mode === "edit") {
-                      await labelFormatProfileService.update(profileDialog.profile.id, payload);
-                      toast.success("Format profili güncellendi.");
-                    } else {
-                      const res = await labelFormatProfileService.create(payload);
-                      const id = (res.data as LabelFormatProfile | null)?.id;
-                      if (id) form.setValue("formatProfileId", id, { shouldDirty: true });
-                      toast.success("Format profili eklendi ve bu yazıcı için seçildi.");
-                    }
-                    await qc.invalidateQueries({ queryKey: ["label-format-profiles"] });
-                    setProfileDialog(null);
-                  } finally {
-                    setSavingProfile(false);
-                  }
-                }}
-              />
-            </div>
-
-            {/* Şablon yönlendirme (per-kind; boş → kind varsayılanı) */}
-            <div className="rounded-md border bg-muted/20 p-3">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">
-                Şablon Yönlendirme (boş → tür varsayılanı)
-              </div>
-              <div className="grid grid-cols-1 gap-2">
-                {ROUTE_KINDS.map((r) => (
-                  <FormField key={r.key} label={r.label}>
-                    <select className={SELECT_CLS} {...form.register(r.field)}>
-                      <option value="">— (varsayılan)</option>
-                      {templates
-                        .filter((t) => t.kind === r.key)
-                        .map((t) => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                    </select>
-                  </FormField>
-                ))}
-              </div>
-            </div>
-              </>
-            )}
+            {/* Yazıcı dili/medyası + şablon yönlendirme — YALNIZ yazıcıda (metre/
+                kantar'da gizli). Ayarların hepsi CİHAZA özeldir; medya (mm/dpi)
+                doğrudan cihazda, şablonlar tek havuzdan seçilir + varyant
+                uyumsuzluk hint'i (PrinterSettingsFields). */}
+            {isPrinter && <PrinterSettingsFields form={form} />}
 
             {/* Aktiflik formdan YÖNETİLMEZ — yalnız listedeki Pasife Al / Aktifleştir /
                 Kalıcı Sil aksiyonlarından (users kalıbı). */}

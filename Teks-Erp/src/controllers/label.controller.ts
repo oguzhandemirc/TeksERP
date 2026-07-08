@@ -41,20 +41,29 @@ const previewSchema = z.object({
 
 // Test Et: örnek etiketi verilen yazıcıya gönder (Faz-2 doğrulama).
 const testNativeSchema = z.object({
-  profileId: z.string().uuid("Geçersiz profil ID").optional(),
+  /** Örnek baskıda medyası kullanılacak yazıcı cihazı (boş → sistem varsayılan medyası). */
+  peripheralId: z.string().uuid().optional(),
   printerIp: z.string().trim().min(3, "Yazıcı IP gerekli").max(64),
   port: z.number().int().min(1).max(65535).optional(),
   language: z.enum(["RASTER_HTML", "PPLA", "PPLB", "ZPL"]).optional(),
 });
 
+// F180: recordPrintEvent + seedRollLabelSnapshot gövdesi (eskiden ham `as` cast; malformed
+// UUID Prisma'da 500'e düşerdi). nullish → mobil {customerId:null} yükleri geçerli kalır.
+const printEventSchema = z.object({
+  orderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").nullish(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
+  stock: z.boolean().optional(),
+  peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
+});
+
 /**
- * Fiziksel format çözümü girdisi: explicit ?profileId= veya makine bağlamı.
- * machineId önceliği: AKTİF ÇALIŞMA OTURUMU (mobil baskı oturumun makinesinin
+ * Fiziksel medya çözümü girdisi: explicit ?peripheralId= (cihaz medyası) veya makine
+ * bağlamı. machineId önceliği: AKTİF ÇALIŞMA OTURUMU (mobil baskı oturumun makinesinin
  * yazıcısına gider) → GEÇİŞ fallback'i cihazın statik ataması (req.device.machineId,
- * Faz 6'da sökülür) → opsiyonel ?machineId= query (Electron). Yoksa sistem-default.
+ * Faz 6'da sökülür) → opsiyonel ?machineId= query (Electron). Yoksa sistem-varsayılan medya.
  */
 async function resolveFormatOpts(req: Request): Promise<{
-  profileId?: string;
   machineId?: string;
   peripheralId?: string;
   deviceId?: string;
@@ -66,7 +75,6 @@ async function resolveFormatOpts(req: Request): Promise<{
     req.device?.machineId ??
     (typeof req.query.machineId === "string" ? req.query.machineId : undefined);
   return {
-    profileId: typeof req.query.profileId === "string" ? req.query.profileId : undefined,
     machineId: machineId ?? undefined,
     // Cihaz kaydı yönlendirmesi: explicit ?peripheralId= veya tablete-bağlı yazıcı
     // için req.device.id (device.middleware). ?templateId= explicit şablon override.
@@ -199,6 +207,10 @@ export class LabelController {
       res.setHeader("Content-Type", result.data.contentType);
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Kind", result.data.kind);
+      // Tanılama izi (fail-open — client'lar yokluğunda da çalışır; cors
+      // exposedHeaders'ta OLMALI, aksi halde Electron'da undefined görünür).
+      if (result.data.meta.templateId) res.setHeader("X-Label-Template-Id", result.data.meta.templateId);
+      if (result.data.meta.variantMatch) res.setHeader("X-Label-Variant-Match", result.data.meta.variantMatch);
       res.status(200).send(result.data.content);
     } catch (e) { next(e); }
   };
@@ -237,13 +249,13 @@ export class LabelController {
     } catch (e) { next(e); }
   };
 
-  /** Test Et: profil geometrisinde örnek etiket HTML'i (boyut/pay önizleme). */
+  /** Test Et: seçili yazıcının medyasında örnek etiket HTML'i (boyut/pay önizleme). */
   getSampleLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const profileId =
+      const peripheralId =
         (req.params.id as string | undefined) ??
-        (typeof req.query.profileId === "string" ? req.query.profileId : undefined);
-      const result = await this.service.getSampleLabelHtml(profileId);
+        (typeof req.query.peripheralId === "string" ? req.query.peripheralId : undefined);
+      const result = await this.service.getSampleLabelHtml(peripheralId);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(result.data.html);
     } catch (e) { next(e); }
@@ -262,7 +274,11 @@ export class LabelController {
   getBulkRollLabelsHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = bulkLabelsSchema.parse(req.body);
-      const result = await this.service.getBulkRollLabelsHtml(body.rollIds, { copies: body.copies });
+      const result = await this.service.getBulkRollLabelsHtml(body.rollIds, {
+        copies: body.copies,
+        peripheralId: body.peripheralId, // F183: cihaz-yönlendirme (native handler paritesi)
+        deviceId: req.device?.id ?? undefined,
+      });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(result.data.html);
     } catch (e) { next(e); }
@@ -294,7 +310,7 @@ export class LabelController {
 
   /**
    * Kartela etiketinin tam HTML'i (text/html). `/rolls/:id/html`'in kartela analoğu.
-   * Kartela hep 100×60 yatay düzende basılır; format `?profileId=`/`?machineId=` veya
+   * Kartela hep 100×60 yatay düzende basılır; format `?peripheralId=`/`?machineId=` veya
    * sistem default ile çözülür.
    */
   getSwatchLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -346,11 +362,7 @@ export class LabelController {
 
   recordPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const body = (req.body ?? {}) as {
-        orderLineId?: string | null;
-        customerId?: string | null;
-        stock?: boolean;
-      };
+      const body = printEventSchema.parse(req.body ?? {});
       const result = await this.service.recordPrintEvent(
         req.params.id as string,
         req.user?.userId,
@@ -358,6 +370,11 @@ export class LabelController {
           orderLineId: body.orderLineId ?? undefined,
           customerId: body.customerId ?? undefined,
           stock: body.stock === true,
+          // Audit şablon izi için cihaz bağlamı (best-effort): explicit gövde
+          // cihazı > tablete-bağlı yazıcı (x-device-id) > istasyon makinesi.
+          peripheralId: typeof body.peripheralId === "string" ? body.peripheralId : undefined,
+          deviceId: req.device?.id ?? undefined,
+          machineId: req.device?.machineId ?? undefined,
         },
       );
       res.status(200).json(result);
@@ -371,11 +388,7 @@ export class LabelController {
    */
   seedRollLabelSnapshot = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const body = (req.body ?? {}) as {
-        orderLineId?: string | null;
-        customerId?: string | null;
-        stock?: boolean;
-      };
+      const body = printEventSchema.parse(req.body ?? {});
       const result = await this.service.seedRollLabelSnapshot(
         req.params.id as string,
         req.user?.userId,

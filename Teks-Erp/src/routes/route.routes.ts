@@ -59,7 +59,8 @@ router.get("/", verifyToken, requireAnyPermission("station:read", "mobile:hizli-
  *       404:
  *         description: Kayıt bulunamadı
  */
-router.get("/:id", verifyToken, requirePermission("station:read"), controller.findById);
+// F213: liste ucuyla hizala — Hızlı İş Emri mobil kullanıcısı detayı da görebilsin.
+router.get("/:id", verifyToken, requireAnyPermission("station:read", "mobile:hizli-is-emri"), controller.findById);
 
 /**
  * @openapi

@@ -9,7 +9,6 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 
-const STOCK_STATUSES = ["WAREHOUSE", "STOCK", "PRODUCED"] as const;
 
 // ---------- 1) Roll Aging (snapshot) -----------------------------------------
 
@@ -21,9 +20,11 @@ export interface RollAgingSummary {
 }
 
 export async function getRollAging(): Promise<RollAgingSummary> {
-  const rows = await prisma.$queryRaw<
-    Array<{ bucket: string; count: bigint; qty: number | null; bucketOrder: number }>
-  >(Prisma.sql`
+  // F244: iki bağımsız salt-okunur raw sorgu — pooled base client'ta paralel çalışır.
+  const [rows, oldestRow] = await Promise.all([
+    prisma.$queryRaw<
+      Array<{ bucket: string; count: bigint; qty: number | null; bucketOrder: number }>
+    >(Prisma.sql`
     WITH aged AS (
       SELECT
         r."currentQty",
@@ -51,13 +52,13 @@ export async function getRollAging(): Promise<RollAgingSummary> {
     FROM aged
     GROUP BY 1, 2
     ORDER BY 2
-  `);
-
-  const oldestRow = await prisma.$queryRaw<Array<{ oldestDays: number | null }>>(Prisma.sql`
+  `),
+    prisma.$queryRaw<Array<{ oldestDays: number | null }>>(Prisma.sql`
     SELECT MAX(EXTRACT(EPOCH FROM (NOW() - r."updatedAt")) / 86400.0)::float AS "oldestDays"
     FROM rolls r
     WHERE r.status = 'WAREHOUSE'
-  `);
+  `),
+  ]);
 
   const buckets = rows.map((r) => ({
     bucket: r.bucket,
@@ -96,9 +97,15 @@ export interface StockDistribution {
 }
 
 export async function getStockDistribution(): Promise<StockDistribution> {
-  const itemColorRows = await prisma.$queryRaw<
-    Array<{ itemName: string; colorName: string; rollCount: bigint; totalQty: number | null }>
-  >(Prisma.sql`
+  // F244: üç bağımsız salt-okunur aggregate — tek Promise.all (seri round-trip yerine).
+  // M-33: başlık toplamları LİMİTSİZ ayrı aggregate'ten — eskiden LIMIT 100'lük
+  // byItemColor listesinin reduce'üydü; ürün×renk kombinasyonu 100'ü aşınca
+  // toplamlar sessizce eksik kalıyor ve aynı rapordaki (LIMIT'siz) byWidth ile
+  // çelişiyordu. Tek satırlık aggregate, [status] index'iyle ucuz.
+  const [itemColorRows, widthRows, totalsRow] = await Promise.all([
+    prisma.$queryRaw<
+      Array<{ itemName: string; colorName: string; rollCount: bigint; totalQty: number | null }>
+    >(Prisma.sql`
     SELECT
       i.name                    AS "itemName",
       COALESCE(c.name, 'Ham')   AS "colorName",
@@ -111,11 +118,10 @@ export async function getStockDistribution(): Promise<StockDistribution> {
     GROUP BY i.name, COALESCE(c.name, 'Ham')
     ORDER BY "totalQty" DESC NULLS LAST
     LIMIT 100
-  `);
-
-  const widthRows = await prisma.$queryRaw<
-    Array<{ widthBucket: string; bucketOrder: number; rollCount: bigint; totalQty: number | null }>
-  >(Prisma.sql`
+  `),
+    prisma.$queryRaw<
+      Array<{ widthBucket: string; bucketOrder: number; rollCount: bigint; totalQty: number | null }>
+    >(Prisma.sql`
     SELECT
       CASE
         WHEN r.width IS NULL    THEN 'Belirsiz'
@@ -139,7 +145,15 @@ export async function getStockDistribution(): Promise<StockDistribution> {
     WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
     GROUP BY 1, 2
     ORDER BY 2
-  `);
+  `),
+    prisma.$queryRaw<
+      Array<{ rollCount: bigint; totalQty: number | null }>
+    >(Prisma.sql`
+    SELECT COUNT(*) AS "rollCount", SUM(r."currentQty")::float AS "totalQty"
+    FROM rolls r
+    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
+  `),
+  ]);
 
   const byItemColor = itemColorRows.map((r) => ({
     itemName: r.itemName,
@@ -154,17 +168,6 @@ export async function getStockDistribution(): Promise<StockDistribution> {
     totalQty: Math.round(Number(r.totalQty ?? 0) * 10) / 10,
   }));
 
-  // M-33: başlık toplamları LİMİTSİZ ayrı aggregate'ten — eskiden LIMIT 100'lük
-  // byItemColor listesinin reduce'üydü; ürün×renk kombinasyonu 100'ü aşınca
-  // toplamlar sessizce eksik kalıyor ve aynı rapordaki (LIMIT'siz) byWidth ile
-  // çelişiyordu. Tek satırlık aggregate, [status] index'iyle ucuz.
-  const totalsRow = await prisma.$queryRaw<
-    Array<{ rollCount: bigint; totalQty: number | null }>
-  >(Prisma.sql`
-    SELECT COUNT(*) AS "rollCount", SUM(r."currentQty")::float AS "totalQty"
-    FROM rolls r
-    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
-  `);
   const totalRolls = Number(totalsRow[0]?.rollCount ?? 0);
   const totalQty = Math.round(Number(totalsRow[0]?.totalQty ?? 0) * 10) / 10;
 
@@ -201,5 +204,3 @@ export async function getDailyMovements(range: DateRange): Promise<DailyMovement
     movementCount: Number(r.movementCount),
   }));
 }
-
-export { STOCK_STATUSES };

@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Appbar, Text, Menu, TouchableRipple, Icon, Divider, Button } from 'react-native-paper';
+import {
+  Appbar,
+  Text,
+  Menu,
+  TouchableRipple,
+  Icon,
+  Divider,
+  Button,
+  ActivityIndicator,
+} from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -58,6 +67,9 @@ export default function ScreenChrome({
   const [menuVisible, setMenuVisible] = useState(false);
   // Offline + bekleyen istasyon yazımı varken çıkış: uyar + onay iste.
   const [logoutConfirm, setLogoutConfirm] = useState<{ pending: number } | null>(null);
+  // Çıkış sürerken (tavanlı flush + oturum kapatma) kapatılamaz gösterge;
+  // değer = çıkış anında kuyrukta bekleyen kayıt sayısı.
+  const [logoutBusy, setLogoutBusy] = useState<number | null>(null);
   // Tablet: "Makine değiştir / Bölüm değiştir" profil menüsünde (nadir/arıza-durumu
   // işlemleri — açık yerde durmasın). Modal, menü kapansa da yaşasın diye burada.
   const placeActions = usePlaceActions();
@@ -77,10 +89,38 @@ export default function ScreenChrome({
     rootNav.navigate('Settings');
   };
 
-  // Çıkış: ÖNCE A token'ıyla flush → oturum kapat → clearAuth → cache düş
-  // (performLogout). Offline + kuyrukta istasyon yazımı varsa: uyar + onay iste
-  // (onaysız çıkışta kayıtlar gönderilemez).
-  const runLogout = () => void performLogout();
+  // Çıkış: ÖNCE A token'ıyla TAVANLI flush (≤5sn) → oturum kapat (≤4sn) →
+  // clearAuth → seçici cache temizliği (performLogout). Flush sürerken
+  // kapatılamaz gösterge; tavana takılan kayıtlar cihazda GÜVENLE bekletilir
+  // (NoAuth guard + persist — girişten sonra otomatik gönderilir).
+  const runLogout = async () => {
+    if (logoutBusy !== null) return; // çift dokunuş = tek çıkış akışı
+    setLogoutBusy(pendingStationOpsCount());
+    try {
+      const outcome = await performLogout();
+      if (outcome.pendingCount > 0) {
+        Toast.show({
+          type: 'info',
+          text1: `${outcome.pendingCount} kayıt bekletildi`,
+          text2: 'Kayıtlar cihazda güvende — girişten sonra otomatik gönderilecek.',
+          visibilityTime: 6000,
+        });
+      }
+    } catch {
+      // Tek gerçekçi kaynak: SecureStore silme hatası (clearAuth). Kullanıcı
+      // oturumda kalır — sessiz unhandled rejection yerine tekrar denesin.
+      Toast.show({
+        type: 'error',
+        text1: 'Çıkış tamamlanamadı',
+        text2: 'Lütfen tekrar deneyin.',
+        visibilityTime: 6000,
+      });
+    } finally {
+      // Başarıda bileşen unmount olur (login ekranı); hata/istisna hâlinde
+      // gösterge kalıcı takılı kalmasın.
+      setLogoutBusy(null);
+    }
+  };
   const doLogout = () => {
     setMenuVisible(false);
     const pending = pendingStationOpsCount();
@@ -88,13 +128,13 @@ export default function ScreenChrome({
       Toast.show({
         type: 'error',
         text1: 'İnternet yok — bekleyen kayıtlar var',
-        text2: `${pending} istasyon kaydı henüz gönderilmedi. Şimdi çıkarsan gönderilemez.`,
+        text2: `${pending} istasyon kaydı gönderilmeyi bekliyor.`,
         visibilityTime: 6000,
       });
       setLogoutConfirm({ pending });
       return;
     }
-    runLogout();
+    void runLogout();
   };
 
   // Kilitle → LockScreen açılır (çalışma oturumu açık kalır); farklı operatör
@@ -263,7 +303,9 @@ export default function ScreenChrome({
         />
       )}
 
-      {/* Offline + bekleyen kayıt varken çıkış onayı — kayıp riski açıkça belirtilir. */}
+      {/* Offline + bekleyen kayıt varken çıkış onayı. Kayıtlar artık SİLİNMEZ
+          (NoAuth guard + persist ile cihazda bekler) — yine de operatör bilerek
+          çıksın: en hızlı gönderim, bağlantı gelene dek beklemektir. */}
       <AppModal
         visible={!!logoutConfirm}
         onDismiss={() => setLogoutConfirm(null)}
@@ -273,8 +315,8 @@ export default function ScreenChrome({
           <Icon source="wifi-off" size={40} color="#ef4444" />
           <Text style={styles.confirmTitle}>Bağlantı yok</Text>
           <Text style={styles.confirmBody}>
-            {logoutConfirm?.pending ?? 0} istasyon kaydı gönderilmeyi bekliyor. Şimdi çıkarsan bu
-            kayıtlar gönderilemeden silinir. Yine de çıkmak istiyor musun?
+            {logoutConfirm?.pending ?? 0} istasyon kaydı gönderilmeyi bekliyor. Çıkarsan kayıtlar
+            cihazda bekletilir ve girişten sonra bağlantı gelince otomatik gönderilir.
           </Text>
           <View style={styles.confirmActions}>
             <Button mode="text" textColor="#475569" onPress={() => setLogoutConfirm(null)}>
@@ -285,12 +327,26 @@ export default function ScreenChrome({
               buttonColor="#dc2626"
               onPress={() => {
                 setLogoutConfirm(null);
-                runLogout();
+                void runLogout();
               }}
             >
               Yine de çık
             </Button>
           </View>
+        </View>
+      </AppModal>
+
+      {/* Çıkış sürerken kapatılamaz gösterge — flush ≤5sn + oturum kapatma ≤4sn
+          tavanlı; en kötü durumda bile birkaç saniyede login ekranına düşülür. */}
+      <AppModal visible={logoutBusy !== null} onDismiss={() => {}} swipeToDismiss={false}>
+        <View style={styles.confirmCard}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+          <Text style={styles.confirmTitle}>Çıkış yapılıyor…</Text>
+          {logoutBusy ? (
+            <Text style={styles.confirmBody}>
+              {logoutBusy} bekleyen kayıt gönderiliyor — en fazla birkaç saniye.
+            </Text>
+          ) : null}
         </View>
       </AppModal>
     </View>

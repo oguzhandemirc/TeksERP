@@ -25,12 +25,5 @@ export function installDecimalNumberSerializer(): void {
     };
   patched = true;
 }
-
-/**
- * Eski API geri uyumluluğu — `app.set("json replacer", ...)` ile kullanılır.
- * Artık no-op (toJSON patch'i gerçek dönüşümü yapıyor); sadece import zincirleri
- * için tutulur. Yeni kod doğrudan `installDecimalNumberSerializer()` çağırsın.
- */
-export function decimalJsonReplacer(_key: string, value: unknown): unknown {
-  return value;
-}
+// F35: decimalJsonReplacer (no-op, importer'ı yoktu) KALDIRILDI — app.ts
+// installDecimalNumberSerializer kullanıyor.

@@ -1,8 +1,8 @@
 // =============================================================================
 // TeksERP - Peripheral Device (birleşik cihaz kaydı) Service
 // =============================================================================
-// BaseService + validateRefs (label-format-profile.service deseni). Bare BaseController Zod
-// taşımaz → FK/sahiplik/port hijyeni serviste. Ayrıca per-kind şablon yönlendirme
+// BaseService + validateRefs. Bare BaseController Zod
+// taşımaz → FK/sahiplik/port/medya hijyeni serviste. Ayrıca per-kind şablon yönlendirme
 // (setTemplateRoute) ve bağlantı testi (test). (register-bt ucu 2026-07'de kaldırıldı.)
 // İzin: donanım ailesiyle tutarlı `station:read/write`.
 // =============================================================================
@@ -39,6 +39,17 @@ export class PeripheralDeviceService extends BaseService {
   /** KALICI silinenler (deletedAt dolu) hiçbir listede görünmez — pasifler görünür. */
   protected extraWhere(): Record<string, unknown> {
     return { deletedAt: null };
+  }
+
+  /** F220: findById de tombstone'ları (deletedAt dolu) 404 saysın — BaseService.findById
+   *  extraWhere uygulamaz, silinmiş cihaz doğrudan id ile hâlâ çekilebiliyordu. */
+  async findById(id: string): Promise<ApiResponse<unknown>> {
+    const record = await this.delegate.findFirst({
+      where: { id, deletedAt: null },
+      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+    });
+    if (!record) throw AppError.notFound("Cihaz bulunamadı");
+    return { success: true, data: record };
   }
 
   private async validateRefs(data: Record<string, unknown>, existingId?: string): Promise<void> {
@@ -83,10 +94,22 @@ export class PeripheralDeviceService extends BaseService {
       const s = Number(data.scale);
       if (!Number.isFinite(s) || s <= 0) throw AppError.badRequest("Ölçek (scale) pozitif olmalı");
     }
-    if (typeof data.formatProfileId === "string" && data.formatProfileId) {
-      const f = await prisma.labelFormatProfile.findFirst({ where: { id: data.formatProfileId, isActive: true }, select: { id: true } });
-      if (!f) throw AppError.badRequest("Etiket format profili bulunamadı veya pasif");
+    // Yazıcı MEDYASI (Etiket Stüdyosu v2 — cihazda) — additive, opsiyonel.
+    for (const dim of ["labelWidthMm", "labelHeightMm"] as const) {
+      if (data[dim] !== undefined && data[dim] !== null) {
+        const v = Number(data[dim]);
+        if (!Number.isFinite(v) || v < 10 || v > 500) throw AppError.badRequest("Etiket ölçüsü 10-500 mm arası olmalı");
+      }
     }
+    if (data.labelDpi !== undefined && data.labelDpi !== null) {
+      const v = Number(data.labelDpi);
+      if (!Number.isInteger(v) || v < 50 || v > 1200) throw AppError.badRequest("DPI 50-1200 arası olmalı");
+    }
+    if (data.labelGapMm !== undefined && data.labelGapMm !== null) {
+      const v = Number(data.labelGapMm);
+      if (!Number.isFinite(v) || v < 0 || v > 50) throw AppError.badRequest("Etiket arası boşluk 0-50 mm arası olmalı");
+    }
+    // Medya doğrudan cihazda (yukarıda) — ayrı "Boyutlar" (LabelFormatProfile) kataloğu kaldırıldı.
     if (typeof data.machineId === "string" && data.machineId) {
       const mc = await prisma.machine.findFirst({ where: { id: data.machineId, isActive: true }, select: { id: true } });
       if (!mc) throw AppError.badRequest("Makine bulunamadı veya pasif");
@@ -210,8 +233,13 @@ export class PeripheralDeviceService extends BaseService {
     if (!templateId) {
       await prisma.peripheralTemplateRoute.deleteMany({ where: { peripheralId, kind } });
     } else {
-      const tpl = await prisma.labelTemplate.findFirst({ where: { id: templateId, kind, isActive: true }, select: { id: true } });
-      if (!tpl) throw AppError.badRequest("Şablon bulunamadı / tür uyuşmuyor / pasif");
+      // TEK HAVUZ (Etiket Stüdyosu v2): şablon türden bağımsız — kind eşleşme
+      // şartı kalktı; yalnız var + aktif + kalıcı-silinmemiş kontrolü.
+      const tpl = await prisma.labelTemplate.findFirst({
+        where: { id: templateId, isActive: true, deletedAt: null },
+        select: { id: true },
+      });
+      if (!tpl) throw AppError.badRequest("Şablon bulunamadı veya pasif");
       await prisma.peripheralTemplateRoute.upsert({
         where: { peripheralId_kind: { peripheralId, kind } },
         update: { templateId },
@@ -241,9 +269,17 @@ export class PeripheralDeviceService extends BaseService {
     // donanım yoksa cihazın makinesindeki (machineId) donanıma düşer — eski makine-atamalı
     // kurulum bozulmasın. machineId yoksa boş liste (sim/manuel'e düşer).
     if (owner.deviceId) {
-      // Cihaza atanan donanım = join (DevicePeripheral) — paylaşımlı (M:N).
+      // F217: cihaza atanan donanım — hem doğrudan FK (peripheralDevice.deviceId)
+      // hem M:N join (deviceLinks). device.service.detail() ikisini de gösteriyor;
+      // admin bir donanımı deviceId FK ile bağlarsa tablet artık for-device ile çözer.
       const direct = await prisma.peripheralDevice.findMany({
-        where: { ...base, deviceLinks: { some: { deviceId: owner.deviceId } } },
+        where: {
+          ...base,
+          OR: [
+            { deviceId: owner.deviceId },
+            { deviceLinks: { some: { deviceId: owner.deviceId } } },
+          ],
+        },
         orderBy: { createdAt: "asc" },
       });
       if (direct.length > 0) return { success: true, data: direct };
@@ -309,9 +345,10 @@ export class PeripheralDeviceService extends BaseService {
       printerIp: p.address,
       port: p.port ?? undefined,
     });
-    await AuditService.log({
-      userId, action: "CREATE", tableName: PERIPHERAL_TABLE, recordId: id,
-      newData: { test: true, delivered: result.delivered, simulated: result.simulated, target: result.target },
+    // F219: test baskısı kayıt OLUŞTURMAZ → CUD log yerine SYSTEM event (yanıltıcı CREATE değil).
+    await AuditService.logEvent({
+      category: "SYSTEM", action: "PERIPHERAL_TEST", userId: userId ?? null, recordId: id,
+      payload: { delivered: result.delivered, simulated: result.simulated, target: result.target },
     }).catch(() => undefined);
     return { success: true, data: result };
   }

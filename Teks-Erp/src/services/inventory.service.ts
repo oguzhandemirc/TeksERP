@@ -20,6 +20,7 @@ import {
   isCursorRequested,
   applyDateRange,
   resolveSortBy,
+  buildTurkishSearch,
 } from "../utils/query-parser";
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
@@ -79,7 +80,6 @@ import {
 } from "../utils/cursor";
 import type { CursorPaginatedResponse } from "./base.service";
 import { Request } from "express";
-import { v4 as uuidv4 } from "uuid";
 import {
   Prisma,
   Roll,
@@ -96,9 +96,13 @@ import {
   ensureWorkOrderInProgress,
   openMovementForNextStep,
   recomputeStepStatus,
+  completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchShipmentPreparingTx } from "./helpers/shipment-locks.helper";
+import { generateRollBarcode, ROLL_BARCODE_RE } from "./helpers/roll-barcode.helper";
+import { withBarcodeRetry } from "../utils/barcode-retry";
 
 export interface RollStats {
   totalCount: number;
@@ -290,19 +294,38 @@ function operationLabel(type: RollOperationType): string {
 }
 
 /**
- * Generate a unique barcode string: TEKSYYYYMMDDXXXXXXXX (ayraçsız).
- * Tire YOK — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu
- * (QR kamera doğru okuyordu, 1D wedge bozuyordu); ayraçsız salt harf-rakam her
- * klavye düzeninde sorunsuz okunur.
+ * F112: Operatör iptalinin (softDelete) izin verdiği statü beyaz listesi.
+ * Yalnız operasyonel (henüz sevk/tüketim muhasebesi işlenmemiş) toplar iptal
+ * edilebilir. SHIPPED / *_CONSUMED / AT_KARTELA / AT_SUBCONTRACTOR bu listede
+ * DEĞİL — bunların geri alınması ilgili modülün işidir (iade, fason/kartela
+ * kabul), yoksa sevk edilmiş mal canlı veride "hiç olmamış" olur.
+ * softDelete ve getCancelPreview bu tek kaynağı paylaşır (guard paritesi).
  */
-function generateBarcode(): string {
-  const now = new Date();
-  const datePart =
-    now.getFullYear().toString() +
-    (now.getMonth() + 1).toString().padStart(2, "0") +
-    now.getDate().toString().padStart(2, "0");
-  const randomPart = uuidv4().replace(/-/g, "").substring(0, 8).toUpperCase();
-  return `TEKS${datePart}${randomPart}`;
+const CANCELABLE_ROLL_STATUSES: RollStatus[] = [
+  RollStatus.STOCK,
+  RollStatus.IN_PRODUCTION,
+  RollStatus.PRODUCED,
+  RollStatus.A1_STOCK,
+  RollStatus.WAREHOUSE,
+  RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+];
+
+/** İptal edilemeyen statü için operatöre net Türkçe gerekçe. */
+function nonCancelableRollReason(status: RollStatus): string {
+  switch (status) {
+    case RollStatus.SHIPPED:
+      return "Bu top müşteriye sevk edilmiş — iptal edilemez. Geri almak için İade akışını kullanın.";
+    case RollStatus.TAMBUR_CONSUMED:
+      return "Bu top Tambur'da bölünüp çocuk toplara dönüştürülmüş — iptal edilemez.";
+    case RollStatus.KARTELA_CONSUMED:
+      return "Bu top kartelalara bölünüp kapatılmış — iptal edilemez.";
+    case RollStatus.SUBCONTRACTOR_CONSUMED:
+      return "Bu top fason kabulde kapatılmış — iptal edilemez.";
+    case RollStatus.AT_KARTELA:
+      return "Bu top kartela fasonunda işlemde — iptal edilemez, önce kartela kabulü yapın.";
+    default:
+      return `Bu top '${status}' durumunda — iptal edilemez.`;
+  }
 }
 
 export class InventoryService {
@@ -323,7 +346,7 @@ export class InventoryService {
       propertyIds?: string[];
       /**
        * Opsiyonel client-üretimi barkod. Offline KK1 girişi için mobil tarafta
-       * üretilir (generateBarcode ile aynı format: TEKSYYYYMMDDXXXXXXXX).
+       * üretilir (generateRollBarcode ile aynı format: TEKSYYYYMMDDXXXXXXXX).
        * Verilmezse backend üretir (default davranış). Verilirse retry/dedup
        * doğal anchor olarak Roll.barcode @unique kullanılır — aynı barkodla
        * 2. çağrı cached Roll döner.
@@ -408,12 +431,17 @@ export class InventoryService {
 
     // Barkod: client verdiyse onu kullan (offline retry idempotency), yoksa üret.
     // Client format validasyonu: TEKSYYYYMMDDXXXXXXXX (uppercase hex 8 char, ayraçsız).
-    if (data.clientBarcode && !/^TEKS\d{8}[0-9A-F]{8}$/.test(data.clientBarcode)) {
+    if (data.clientBarcode && !ROLL_BARCODE_RE.test(data.clientBarcode)) {
       throw AppError.badRequest(
         "Geçersiz client-üretimi barkod formatı (beklenen: TEKSYYYYMMDDXXXXXXXX)",
       );
     }
-    const barcode = data.clientBarcode ?? generateBarcode();
+    // F272: Sunucu-üretimi barkod (clientBarcode yok) 32-bit entropi ile nadiren
+    // çakışabilir; eskiden bu P2002 doğrudan 500'e düşüyordu. withBarcodeRetry +
+    // `serverGenerated` predicate ile sadece sunucu-çakışması yeni barkodla retry
+    // edilir; clientBarcode P2002 predicate=false → aşağıdaki idempotency catch'e düşer.
+    const serverGenerated = !data.clientBarcode;
+    let barcode = data.clientBarcode ?? generateRollBarcode();
 
     // Tüm item tipleri (fabric, yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
     const entrySource: RollEntrySource = RollEntrySource.SUPPLIER_RECEIPT;
@@ -422,8 +450,11 @@ export class InventoryService {
     // soft-delete giriş guard'ı; typo'lu kod byQuality istatistiklerini
     // parçalayıp FIRE-dışlama string filtresinden kaçıyordu); default sabit
     // "1.KALITE" lenient kalır.
-    const qualityGradeCode = data.qualityGrade ?? "1.KALITE";
-    const qualityGradeId = data.qualityGrade
+    // F120: Boş/whitespace kalite = 'verilmedi' → default lenient path (aksi halde
+    // qualityGrade="" + qualityGradeId=null katalog-dışı snapshot sızıyordu).
+    const trimmedQuality = data.qualityGrade?.trim();
+    const qualityGradeCode = trimmedQuality || "1.KALITE";
+    const qualityGradeId = trimmedQuality
       ? await resolveQualityGradeIdStrict(qualityGradeCode)
       : await resolveQualityGradeId(qualityGradeCode);
 
@@ -435,7 +466,9 @@ export class InventoryService {
 
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {
-      roll = await prisma.$transaction(async (tx) => {
+      roll = await withBarcodeRetry(
+        () => prisma.$transaction(async (tx) => {
+        if (serverGenerated) barcode = generateRollBarcode();
         const created = await tx.roll.create({
           data: {
             barcode,
@@ -464,7 +497,10 @@ export class InventoryService {
           });
         }
         return created;
-      });
+        }),
+        undefined,
+        () => serverGenerated,
+      );
     } catch (err) {
       // Offline retry idempotency: aynı clientBarcode ile 2. çağrı geldi.
       // Roll.barcode @unique → P2002 → mevcut Roll'u dön (audit log atılmaz,
@@ -483,11 +519,39 @@ export class InventoryService {
           },
         });
         if (existing) {
-          return {
-            success: true,
-            data: existing,
-            message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
-          };
+          // F117: İdempotent retry SADECE gelen payload mevcut kayıtla ÖZDEŞSE
+          // geçerli. Çapraz-cihaz barkod çakışmasında (iki farklı KK1 girişi aynı
+          // clientBarcode üretirse — günlük entropi 32 bit) 2. giriş sessizce
+          // "kaydedildi" görünüp asla yaratılmamalı; kimlik-kilit alanları
+          // (item/renk/metre) uyuşmuyorsa 409 çakışma fırlat.
+          const sameItem = existing.itemId === data.itemId;
+          const sameColor = existing.colorId === (data.colorId ?? null);
+          const sameQty = new Prisma.Decimal(data.initialQty).equals(existing.initialQty);
+          if (sameItem && sameColor && sameQty) {
+            return {
+              success: true,
+              data: existing,
+              message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
+            };
+          }
+          throw AppError.conflict(
+            "Bu barkod farklı bir topla zaten kayıtlı (barkod çakışması). Topu yeniden okutup tekrar deneyin.",
+            {
+              code: "BARCODE_COLLISION",
+              barcode: existing.barcode,
+              existing: {
+                id: existing.id,
+                itemId: existing.itemId,
+                colorId: existing.colorId,
+                initialQty: Number(existing.initialQty),
+              },
+              incoming: {
+                itemId: data.itemId,
+                colorId: data.colorId ?? null,
+                initialQty: data.initialQty,
+              },
+            },
+          );
         }
       }
       throw err;
@@ -545,8 +609,10 @@ export class InventoryService {
       // olarak kalır → "patos" gibi fuzzy ürün araması bozulmadan çalışır.
       where.OR = [
         { barcode: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
+        ...buildTurkishSearch<Prisma.RollWhereInput>(search, [
+          "item.name",
+          "item.code",
+        ]),
       ];
     }
 
@@ -596,10 +662,26 @@ export class InventoryService {
         where.status = scope;
       }
     };
+    // F116 (M-29 türevi): explicit colorId, processingStatus'un renk koşulunu EZMEZ —
+    // where.AND ile KESİŞİR. Aksi halde 'İşlenmiş' sekmesi + belirli renk birlikte
+    // gelince renk sessizce düşer, TÜM renkteki işlenmiş toplar (ve aynı where'i
+    // paylaşan /rolls/stats toplamları) yanlış filtreyle döner. raw+colorId çelişkisi
+    // doğal boş küme döner.
+    const hasExplicitColor = Boolean(colorIdFilter);
+    const applyColorScope = (scope: unknown) => {
+      if (hasExplicitColor) {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+          { colorId: scope },
+        ];
+      } else {
+        where.colorId = scope;
+      }
+    };
     if (processingStatus === "raw") {
-      where.colorId = null;
+      applyColorScope(null);
     } else if (processingStatus === "processed") {
-      where.colorId = { not: null };
+      applyColorScope({ not: null });
       // İzinli statüler EXPLICIT (in) — eski notIn listesi CANCELLED/SHIPPED/
       // A1_STOCK/AT_KARTELA/KARTELA_CONSUMED/RETURNED'ı "işlenmekte" listesine
       // ve aynı where'i paylaşan /rolls/stats toplamlarına sızdırıyordu
@@ -801,7 +883,7 @@ export class InventoryService {
       // rawWidthEnabled kapalıyken stokun çoğu null): nulls EN SONA + null-aware
       // cursor — yoksa DESC'te NULLS FIRST cursor'ı null grubuna kilitler ve
       // "En"/"Barkod" başlığına tıklayan operatör listenin çoğunu hiç göremezdi.
-      const NULLABLE_ROLL_SORT = new Set(["barcode", "width", "qualityGrade"]);
+      const NULLABLE_ROLL_SORT = new Set(["barcode", "width"]);
       const sortNullable = NULLABLE_ROLL_SORT.has(sortBy);
       const orderByPrimary = sortNullable
         ? { [sortBy]: { sort: sortOrder, nulls: "last" as const } }
@@ -937,10 +1019,14 @@ export class InventoryService {
     const agg = (where: Prisma.RollWhereInput) =>
       prisma.roll.aggregate({ where, _count: { _all: true }, _sum: { currentQty: true } });
 
-    const free = await agg({ status: RollStatus.WAREHOUSE, shipmentId: null });
-    const preparing = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PREPARING } });
-    const sackStore = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.READY } });
-    const atDoor = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } });
+    // F121: tx-DIŞI 4 bağımsız aggregate — seri yerine paralel (pg adapter tx-dışı
+    // paralel sorguya izin verir; kural 11 yalnız tx.* Promise.all'ı yasaklar).
+    const [free, preparing, sackStore, atDoor] = await Promise.all([
+      agg({ status: RollStatus.WAREHOUSE, shipmentId: null }),
+      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PREPARING } }),
+      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.READY } }),
+      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } }),
+    ]);
 
     const pick = (r: { _count: { _all: number }; _sum: { currentQty: Prisma.Decimal | null } }) => ({
       count: r._count._all,
@@ -1549,6 +1635,9 @@ export class InventoryService {
       blockReason = `Top zaten iptal/hurda: ${roll.barcode}`;
     } else if (roll.status === RollStatus.AT_SUBCONTRACTOR) {
       blockReason = "Fasondaki top iptal edilemez — önce fason mal kabul yapın";
+    } else if (!CANCELABLE_ROLL_STATUSES.includes(roll.status)) {
+      // F112: softDelete ile aynı beyaz liste — SHIPPED/*_CONSUMED/AT_KARTELA.
+      blockReason = nonCancelableRollReason(roll.status);
     } else {
       const openDispatch = await prisma.subcontractorDispatchItem.findFirst({
         where: { rollId: id, dispatch: { cancelledAt: null } },
@@ -1621,6 +1710,14 @@ export class InventoryService {
       throw AppError.conflict(
         "Fasondaki top iptal edilemez — önce fason mal kabul yapın",
       );
+    }
+
+    // F112: Pozitif statü beyaz listesi (docstring'i UYGULA). SHIPPED /
+    // TAMBUR_CONSUMED / SUBCONTRACTOR_CONSUMED / KARTELA_CONSUMED / AT_KARTELA
+    // gibi sevk/tüketim statüleri buraya kadar geliyordu ve iptal edilip
+    // shipmentId null'lanabiliyordu — sevk edilmiş mal canlı veriden siliniyordu.
+    if (!CANCELABLE_ROLL_STATUSES.includes(existing.status)) {
+      throw AppError.conflict(nonCancelableRollReason(existing.status));
     }
 
     // Açık fason sevkiyatına bağlı mı?
@@ -1792,10 +1889,35 @@ export class InventoryService {
       };
     }
 
-    // STOCK → CANCELLED. RollError ve diğer geçmiş kayıtları aynen kalır.
-    const updated = await prisma.roll.update({
-      where: { id },
-      data: { status: RollStatus.CANCELLED },
+    // STOCK → CANCELLED (F113/O-1). Atomik claim: hâlâ STOCK iken çek —
+    // eşzamanlı prepareRawForSale/recoverOpenFabricToProduction/fason sevk topu
+    // STOCK'tan çıkardıysa count===0 → 409 (koşulsuz update dangling CANCELLED
+    // üretiyordu). CANCELLED top hiçbir istasyon/sevk/çuval referansı taşımamalı.
+    const updated = await prisma.$transaction(async (tx) => {
+      const claim = await tx.roll.updateMany({
+        where: { id, status: RollStatus.STOCK },
+        data: {
+          status: RollStatus.CANCELLED,
+          currentStepId: null,
+          shipmentId: null,
+          sackId: null,
+        },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict(
+          "Top az önce başka bir akışa girdi (durumu değişti) — tekrar deneyin",
+        );
+      }
+      // STOCK topun currentStepId'si normalde null; anomali olarak takılıysa açık
+      // movement'ı kapat + step recompute (softDelete hijyeni; defansif).
+      if (existing.currentStepId) {
+        await tx.rollMovement.updateMany({
+          where: { rollId: id, exitedAt: null },
+          data: { exitedAt: new Date(), qtyOut: 0, weightOut: 0, notes: "ARCHIVED" },
+        });
+        await recomputeStepStatus(tx, existing.currentStepId);
+      }
+      return tx.roll.findUniqueOrThrow({ where: { id } });
     });
 
     await AuditService.log({
@@ -1853,6 +1975,39 @@ export class InventoryService {
     if (!roll) throw AppError.notFound("Top bulunamadı");
     if (roll.status === RollStatus.SCRAP || roll.status === RollStatus.CANCELLED) {
       throw AppError.badRequest("Hurda/iptal edilmiş topun rengi/özelliği değiştirilemez");
+    }
+    // F114: statü kapsamı ÇAĞIRANA göre (mevcut reason↔event ayrımıyla tutarlı —
+    // paylaşılan motor iki farklı ucu karıştırmasın). Süpervizör yolu (/:id/manual-attributes,
+    // reason ZORUNLU): istasyonda açık kumaşı (IN_PRODUCTION/PRODUCED) da düzeltebilir;
+    // yalnız gerçekten tehlikeli statüler (fason/kartelada, emekli/lineage veya sevk edilmiş)
+    // bloklanır. Yeniden Etiketle yolu (/:id/label, reason YOK): yalnız serbest satılabilir stok.
+    const isSupervisor = Boolean(data.reason && data.reason.trim());
+    if (isSupervisor) {
+      const SUPERVISOR_BLOCKED: RollStatus[] = [
+        RollStatus.AT_SUBCONTRACTOR,
+        RollStatus.AT_KARTELA,
+        RollStatus.TAMBUR_CONSUMED,
+        RollStatus.SUBCONTRACTOR_CONSUMED,
+        RollStatus.KARTELA_CONSUMED,
+        RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+        RollStatus.SHIPPED,
+      ];
+      if (SUPERVISOR_BLOCKED.includes(roll.status)) {
+        throw AppError.badRequest(
+          "Bu top fason/kartelada, emekliye ayrılmış veya sevk edilmiş — nitelikleri düzeltilemez (sevk↔kabul paritesi ve izlenebilirlik bozulur).",
+        );
+      }
+    } else {
+      const RELABEL_ALLOWED: RollStatus[] = [
+        RollStatus.STOCK,
+        RollStatus.WAREHOUSE,
+        RollStatus.A1_STOCK,
+      ];
+      if (!RELABEL_ALLOWED.includes(roll.status)) {
+        throw AppError.badRequest(
+          "Bu top serbest/satılabilir stokta değil (fason/üretim/kartela/emekli veya sevk edilmiş) — etiketi ancak STOCK, WAREHOUSE veya A1 durumundaki (ya da hazırlıktaki PREPARING sevkiyat) toplarda düzeltebilirsiniz.",
+        );
+      }
     }
     // Saha #4: etiket (renk/özellik/en/kalite) değiştirme. Commit'li sevkiyatta
     // (READY/AT_DOOR/DISPATCHED) renk/en değişimi spec-karşılanmayı bozar → reddet;
@@ -2005,31 +2160,33 @@ export class InventoryService {
         });
       }
 
-      await tx.systemLog.create({
-        data: {
-          userId: userId ?? null,
-          action: "UPDATE",
-          tableName: "ROLL_MANUAL_OVERRIDE",
-          recordId: rollId,
-          oldData: {
-            colorId: roll.colorId,
-            width: roll.width != null ? Number(roll.width) : null,
-            qualityGrade: roll.qualityGrade,
-            currentQty: Number(roll.currentQty),
-          } as Prisma.InputJsonValue,
-          newData: {
-            colorId: data.colorId,
-            propertyIds: dedupedProps,
-            width: data.width,
-            qualityGrade: data.qualityGrade,
-            currentQty: data.currentQty ?? null,
-            reason: data.reason ?? null,
-            // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör
-            // "Manuel Düzelt" zorunlu sebep gönderir → MANUAL_ATTRIBUTE.
-            event: data.reason ? "MANUAL_ATTRIBUTE" : "RELABEL",
-          } as Prisma.InputJsonValue,
-        },
-      });
+    });
+
+    // F119: audit tx-DIŞI (best-effort konvansiyonu — bu dosyadaki diğer tüm CUD
+    // gibi). oldData/newData tx öncesi yüklenen `roll` + `data` + `dedupedProps`
+    // kapsamda kalır; yazım hatası mutasyonu düşürmez.
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL_MANUAL_OVERRIDE",
+      recordId: rollId,
+      oldData: {
+        colorId: roll.colorId,
+        width: roll.width != null ? Number(roll.width) : null,
+        qualityGrade: roll.qualityGrade,
+        currentQty: Number(roll.currentQty),
+      },
+      newData: {
+        colorId: data.colorId,
+        propertyIds: dedupedProps,
+        width: data.width,
+        qualityGrade: data.qualityGrade,
+        currentQty: data.currentQty ?? null,
+        reason: data.reason ?? null,
+        // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör
+        // "Manuel Düzelt" zorunlu sebep gönderir → MANUAL_ATTRIBUTE.
+        event: data.reason ? "MANUAL_ATTRIBUTE" : "RELABEL",
+      },
     });
 
     return {
@@ -2159,10 +2316,43 @@ export class InventoryService {
     const defaultQualityGradeId = await resolveQualityGradeId("1.KALITE");
 
     const roll = await prisma.$transaction(async (tx) => {
+      // F115: WO satırını tx başında kilitle → cancelReceipt (o da tx başında
+      // touchWorkOrderTx alır) ve WO-completion yollarıyla serileş. Guard'ları
+      // kilit ALTINDA TAZE oku — pre-tx guard'lar (2197-2227) yalnız UX; araya
+      // giren cancelReceipt/WO-tamamlama commit ederse iptalli/tamamlanmış
+      // parent'a hayalet IN_PRODUCTION top doğardı (write-skew).
+      await touchWorkOrderTx(tx, receipt.workOrderId);
+
+      const fr = await tx.subcontractorReceipt.findUnique({
+        where: { id: data.receiptId },
+        select: {
+          cancelledAt: true,
+          workOrder: { select: { status: true, targetItemId: true } },
+        },
+      });
+      if (!fr) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+      if (fr.cancelledAt) {
+        throw AppError.conflict("Mal kabul bu sırada iptal edildi — açık kumaş açılamaz");
+      }
+      if (fr.workOrder.status === WorkOrderStatus.COMPLETED) {
+        throw AppError.conflict("İş emri bu sırada tamamlandı — açık kumaş açılamaz");
+      }
+      if (!fr.workOrder.targetItemId) {
+        throw AppError.badRequest("İş emrinde hedef ürün (targetItem) tanımlı değil");
+      }
+      const fs = await tx.workOrderStep.findUnique({
+        where: { id: data.stepId },
+        select: { status: true },
+      });
+      if (!fs) throw AppError.notFound("İş emri adımı bulunamadı");
+      if (fs.status === StepStatus.COMPLETED || fs.status === StepStatus.SKIPPED) {
+        throw AppError.conflict(`Adım bu sırada kapandı (${fs.status}) — açık kumaş açılamaz`);
+      }
+
       const created = await tx.roll.create({
         data: {
           barcode: null,
-          itemId: receipt.workOrder.targetItemId!,
+          itemId: fr.workOrder.targetItemId,
           colorId: receipt.appliedColorId,
           initialQty: 0,
           currentQty: 0,
@@ -2847,6 +3037,10 @@ export class InventoryService {
     let raceLost = false;
     try {
     await prisma.$transaction(async (tx) => {
+      // F162: O-2 write-skew guard (finishStep paritesi) — son-adım WO oto-tamamlama
+      // sayımını eşzamanlı fason receive/cancel/finalize ile serileştir.
+      await touchWorkOrderTx(tx, woId);
+
       // 1) Roll metraj güncelle
       await tx.roll.update({
         where: { id: rollId },
@@ -2952,6 +3146,11 @@ export class InventoryService {
 
       await recomputeStepStatus(tx, stepId);
       await ensureWorkOrderInProgress(tx, woId);
+      // F162: rota PROCESS_QC ile bitiyorsa (nextStep yok) ve tüm adımlar bittiyse
+      // WO + refakat kartı COMPLETED'a çekilir — 'sonsuza-dek IN_PROGRESS' bug'ı kapanır.
+      if (!nextStep) {
+        await completeWorkOrderIfStepsDone(tx, woId);
+      }
     });
     } catch (e) {
       if (raceLost) {

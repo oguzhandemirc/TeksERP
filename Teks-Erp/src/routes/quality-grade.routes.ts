@@ -18,24 +18,42 @@ const MOBILE_QUALITY_READ = ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur"]
 // değeri DOĞRUDAN child Roll.status'a uyguluyor (tambur.service resolveCutStatus). Bare
 // BaseController Zod taşımadığından admin herhangi bir RollStatus'u (örn. SHIPPED/DISPATCHED)
 // yazabilir → bozuk Tambur çıktısı. Tambur/iade için ANLAMLI alt kümeyle sınırla.
-const qgWriteSchema = z
+const qgTargetEnum = z.enum(["WAREHOUSE", "A1_STOCK", "STOCK", "SCRAP"]);
+const qgReturnEnum = z.enum(["WAREHOUSE", "A1_STOCK", "SCRAP"]);
+
+// UPDATE (PATCH): kısmi — targetStatus opsiyonel.
+const qgUpdateSchema = z
   .object({
-    targetStatus: z.enum(["WAREHOUSE", "A1_STOCK", "STOCK", "SCRAP"]).optional(),
-    returnTargetStatus: z.enum(["WAREHOUSE", "A1_STOCK", "SCRAP"]).nullable().optional(),
+    targetStatus: qgTargetEnum.optional(),
+    returnTargetStatus: qgReturnEnum.nullable().optional(),
   })
   .passthrough();
-function validateQgWrite(req: Request, _res: Response, next: NextFunction): void {
-  const r = qgWriteSchema.safeParse(req.body ?? {});
-  if (!r.success) {
-    return next(
-      AppError.badRequest(
-        "Geçersiz kalite durumu: targetStatus yalnız WAREHOUSE/A1_STOCK/STOCK/SCRAP, " +
-          "returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP olabilir"
-      )
-    );
-  }
-  next();
+
+// F212 — CREATE (POST): targetStatus ZORUNLU. DB default'u SCRAP (yıkıcı); admin
+// göndermezse yeni derece SCRAP olur ve Tambur'da sağlam topu fireye yazar.
+const qgCreateSchema = z
+  .object({
+    targetStatus: qgTargetEnum,
+    returnTargetStatus: qgReturnEnum.nullable().optional(),
+  })
+  .passthrough();
+
+function makeQgValidator(schema: z.ZodTypeAny, msg: string) {
+  return function (req: Request, _res: Response, next: NextFunction): void {
+    if (!schema.safeParse(req.body ?? {}).success) return next(AppError.badRequest(msg));
+    next();
+  };
 }
+const validateQgCreate = makeQgValidator(
+  qgCreateSchema,
+  "Kalite derecesi oluştururken hedef statü (targetStatus) zorunludur: " +
+    "WAREHOUSE/A1_STOCK/STOCK/SCRAP. returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP olabilir.",
+);
+const validateQgUpdate = makeQgValidator(
+  qgUpdateSchema,
+  "Geçersiz kalite durumu: targetStatus yalnız WAREHOUSE/A1_STOCK/STOCK/SCRAP, " +
+    "returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP olabilir.",
+);
 
 const service = new BaseService({
   modelName: "qualityGrade",
@@ -119,7 +137,7 @@ router.get("/:id", verifyToken, requireAnyPermission("quality:read", ...MOBILE_Q
  *       201: { description: Oluşturuldu }
  *       409: { description: Kod zaten mevcut }
  */
-router.post("/", verifyToken, requirePermission("quality:write"), validateQgWrite, controller.create);
+router.post("/", verifyToken, requirePermission("quality:write"), validateQgCreate, controller.create);
 
 /**
  * @openapi
@@ -147,7 +165,7 @@ router.post("/", verifyToken, requirePermission("quality:write"), validateQgWrit
  *     responses:
  *       200: { description: Güncellendi }
  */
-router.patch("/:id", verifyToken, requirePermission("quality:write"), validateQgWrite, controller.update);
+router.patch("/:id", verifyToken, requirePermission("quality:write"), validateQgUpdate, controller.update);
 
 /**
  * @openapi

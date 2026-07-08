@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { InventoryService } from "../services/inventory.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { ROLL_BARCODE_RE } from "../services/helpers/roll-barcode.helper";
 import "../types/express-augment";
 
 // Zod validation schemas
@@ -24,7 +25,7 @@ const initialEntrySchema = z.object({
   // idempotency anchor — aynı barkodla 2. çağrı cached Roll döner).
   clientBarcode: z
     .string()
-    .regex(/^TEKS\d{8}[0-9A-F]{8}$/, "Geçersiz barkod formatı")
+    .regex(ROLL_BARCODE_RE, "Geçersiz barkod formatı")
     .optional(),
 });
 
@@ -75,7 +76,7 @@ const relabelSchema = z.object({
 // Hata aralık değil nokta (endMeter kaldırıldı). Hatalar genelde "Hata Ekle"
 // (reportError) ile tek tek girilir; bu endpoint sadece roll'u ilerletir.
 const kursunFinishSchema = z.object({
-  totalMeters: z.number().positive("Toplam metraj pozitif olmalı").optional(),
+  totalMeters: z.number().positive("Toplam metraj pozitif olmalı").max(999_999, "Toplam metraj çok büyük").optional(),
   errors: z
     .array(
       z.object({
@@ -297,7 +298,7 @@ export class InventoryController {
 
   /**
    * DELETE /api/rolls/:id
-   * Soft-delete: sets roll status to SCRAP.
+   * Soft-delete (operatör iptali): topu CANCELLED yapar (fire/SCRAP değil).
    */
   /**
    * GET /api/rolls/:id/cancel-preview
@@ -329,7 +330,7 @@ export class InventoryController {
 
   /**
    * DELETE /api/rolls/:id/permanent
-   * Hard-delete: physically removes the roll from the database.
+   * Arşivle (soft): STOCK/SCRAP/CANCELLED topu CANCELLED'e çeker — fiziksel DELETE yok.
    */
   async hardDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

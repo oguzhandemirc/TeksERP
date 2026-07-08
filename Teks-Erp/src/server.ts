@@ -2,8 +2,11 @@ import "dotenv/config"; // .env yükle — diğer tüm importlardan ÖNCE (JWT_S
 import "./lib/zod-locale"; // Zod tr locale
 import os from "os";
 import app from './app';
+import prisma, { pool } from './lib/prisma';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { AuditService } from './services/audit.service';
+import { flushLatencyNow } from './services/latency-persist.service';
+import { assertBaseServiceGuards } from './services/base.service';
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
@@ -40,6 +43,16 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
 // invalidation), scheduler → DB advisory lock veya ayrı tek worker. Bu varsayım
 // LAN-only tek-sunucu kurulumda kasıtlıdır (ARCHITECTURE.md "Single-process").
 // =============================================================================
+
+// F29: BaseController mass-assignment koruması (sanitizeWriteData) Prisma DMMF'e
+// bağlı — kaynağı çözülemezse fail-open olur. Boot'ta fail-CLOSED doğrula.
+try {
+    assertBaseServiceGuards();
+} catch (err) {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+}
+
 const server = app.listen(Number(PORT), HOST, () => {
     const lan = getLanAddresses();
 
@@ -79,7 +92,7 @@ const server = app.listen(Number(PORT), HOST, () => {
 // server.close() yeni bağlantıyı reddedip mevcut istekleri bitirir; 5s'de
 // kapanmazsa zorla çıkılır (asılı keep-alive bağlantıları sonsuza dek bekletmesin).
 let shuttingDown = false;
-function gracefulShutdown(signal: string): void {
+function gracefulShutdown(signal: string, exitCode = 0): void {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n${signal} alındı — sunucu kapatılıyor (uçuştaki istekler bitiriliyor)...`);
@@ -88,9 +101,27 @@ function gracefulShutdown(signal: string): void {
         process.exit(1);
     }, 5000);
     forceTimer.unref();
-    server.close(() => {
-        console.log("Sunucu kapandı.");
-        process.exit(0);
+    // Son gecikme delta'ları kaybolmasın (dev'de nodemon her kayıtta restart eder!)
+    // — 2sn tavanlı best-effort flush; başarısızlık kapanışı ASLA bloklamaz.
+    void Promise.race([
+        flushLatencyNow().catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 2000).unref()),
+    ]).finally(() => {
+        server.close(() => {
+            console.log("Sunucu kapandı.");
+            // O3-3: DB kaynaklarını temiz bırak (eski lib/prisma.ts shutdown handler'ından
+            // TAŞINDI — çift handler F10 graceful shutdown'ı boşa çıkarıyordu). Sıra önemli:
+            // önce $disconnect, sonra pool.end. Best-effort; üstteki 5s forceTimer güvenlik ağı korur.
+            void (async () => {
+                try {
+                    await prisma.$disconnect();
+                    await pool.end();
+                } catch (err) {
+                    console.error("[shutdown]: DB kapanış hatası:", err);
+                }
+                process.exit(exitCode);
+            })();
+        });
     });
 }
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
@@ -118,10 +149,17 @@ process.on("unhandledRejection", (reason) => {
 });
 process.on("uncaughtException", (err) => {
     console.error("UncaughtException:", err);
-    void AuditService.logEvent({
+    // F12: crash izini (kim/ne patlattı) boşta senaryoda bile kaydet — audit
+    // yazımını ~2sn tavanla BEKLE, sonra exitCode=1 ile kapan (nssm/servis
+    // yöneticisi crash'i normal restart'tan ayırt edebilsin; forceTimer'ın
+    // exit(1)'iyle de tutarlı).
+    const auditDone = AuditService.logEvent({
         category: "SYSTEM",
         action: "UNCAUGHT_EXCEPTION",
         payload: { message: err.message, stack: err.stack?.split("\n").slice(0, 8) },
-    });
-    gracefulShutdown("uncaughtException");
+    }).catch(() => {});
+    void Promise.race([
+        auditDone,
+        new Promise((resolve) => setTimeout(resolve, 2000).unref()),
+    ]).finally(() => gracefulShutdown("uncaughtException", 1));
 });

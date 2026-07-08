@@ -75,22 +75,28 @@ export interface BackupListing {
   manageScriptPath: string | null; // <cwd>\scripts\manage.ps1
 }
 
-export function listBackups(): BackupListing {
+export async function listBackups(): Promise<BackupListing> {
   const manageScriptPath =
     process.platform === "win32" ? path.join(process.cwd(), "scripts", "manage.ps1") : null;
-  if (!BACKUP_DIR) return { files: [], backupDir: null, manageScriptPath };
+  const dir = BACKUP_DIR;
+  if (!dir) return { files: [], backupDir: null, manageScriptPath };
   try {
-    const files = fs
-      .readdirSync(BACKUP_DIR)
-      .filter((f) => f.toLowerCase().endsWith(".dump"))
-      .map((name) => {
-        const st = fs.statSync(path.join(BACKUP_DIR, name));
-        return { name, sizeBytes: st.size, time: new Date(st.mtimeMs).toISOString() };
-      })
-      .sort((a, b) => b.time.localeCompare(a.time)); // en yeni önce
-    return { files, backupDir: path.resolve(BACKUP_DIR), manageScriptPath };
+    // F234: async fs — büyük yedek klasöründe readdirSync + per-file statSync
+    // istek handler'ını (dolayısıyla event loop'u) bloklamasın.
+    const names = (await fs.promises.readdir(dir)).filter((f) =>
+      f.toLowerCase().endsWith(".dump"),
+    );
+    const files = (
+      await Promise.all(
+        names.map(async (name) => {
+          const st = await fs.promises.stat(path.join(dir, name));
+          return { name, sizeBytes: st.size, time: new Date(st.mtimeMs).toISOString() };
+        }),
+      )
+    ).sort((a, b) => b.time.localeCompare(a.time)); // en yeni önce
+    return { files, backupDir: path.resolve(dir), manageScriptPath };
   } catch {
-    return { files: [], backupDir: path.resolve(BACKUP_DIR), manageScriptPath };
+    return { files: [], backupDir: path.resolve(dir), manageScriptPath };
   }
 }
 

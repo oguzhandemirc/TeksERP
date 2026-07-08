@@ -23,7 +23,7 @@ const svc = new PeripheralDeviceService({
 });
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const createdPeripheralIds: string[] = [];
-let stationId = "", machineId = "", deviceId = "", fpInactiveId = "", tplId = "";
+let stationId = "", machineId = "", deviceId = "", tplId = "";
 
 async function main() {
   const station = await prisma.station.create({ data: { code: `TEST-ST-${stamp}`, name: "ST", type: "INTERNAL", kind: "TAMBUR" }, select: { id: true } });
@@ -32,8 +32,6 @@ async function main() {
   machineId = machine.id;
   const device = await prisma.device.create({ data: { deviceId: `TEST-DV-${stamp}`, name: "Tablet" }, select: { id: true } });
   deviceId = device.id;
-  const fpInactive = await prisma.labelFormatProfile.create({ data: { code: `TEST-FPX-${stamp}`, name: "FPX", widthMm: 100, heightMm: 58, isActive: false }, select: { id: true } });
-  fpInactiveId = fpInactive.id;
   const tpl = await prisma.labelTemplate.create({ data: { name: `TEST-TPL-${stamp}`, kind: LabelKind.ROLL_FINISHED, isDefault: false, fields: [] }, select: { id: true } });
   tplId = tpl.id;
 
@@ -51,10 +49,22 @@ async function main() {
     svc.create({ code: `TEST-PRNX-${stamp}`, name: "X", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", machineId, deviceId, languageOverride: PrinterLanguage.PPLA }),
   );
 
-  // 3. Pasif formatProfile reddedilir
-  await expectThrow("create: pasif formatProfile reddedilir", () =>
-    svc.create({ code: `TEST-PRNY-${stamp}`, name: "Y", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", formatProfileId: fpInactiveId, languageOverride: PrinterLanguage.PPLA }),
+  // 3. Cihaz medyası (Etiket Stüdyosu v2 — "Boyutlar" kataloğu yerine): sınır dışı reddedilir,
+  //    geçerli medya kabul edilir.
+  await expectThrow("create: labelWidthMm 9mm (<10) reddedilir", () =>
+    svc.create({ code: `TEST-PRNY-${stamp}`, name: "Y", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", languageOverride: PrinterLanguage.PPLA, labelWidthMm: 9, labelHeightMm: 100 }),
   );
+  await expectThrow("create: labelDpi 40 (<50) reddedilir", () =>
+    svc.create({ code: `TEST-PRNY2-${stamp}`, name: "Y2", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", languageOverride: PrinterLanguage.PPLA, labelWidthMm: 100, labelHeightMm: 60, labelDpi: 40 }),
+  );
+  await expectThrow("create: labelGapMm -1 reddedilir", () =>
+    svc.create({ code: `TEST-PRNY3-${stamp}`, name: "Y3", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", languageOverride: PrinterLanguage.PPLA, labelWidthMm: 100, labelHeightMm: 60, labelGapMm: -1 }),
+  );
+  const okMedia = await svc.create({ code: `TEST-PRNM-${stamp}`, name: "Medyalı", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", languageOverride: PrinterLanguage.PPLA, labelWidthMm: 100, labelHeightMm: 60, labelDpi: 203, labelGapMm: 2 });
+  const okMediaRec = okMedia.data as { id: string };
+  createdPeripheralIds.push(okMediaRec.id);
+  const okMediaRow = await prisma.peripheralDevice.findUnique({ where: { id: okMediaRec.id }, select: { labelWidthMm: true, labelHeightMm: true, labelDpi: true } });
+  check("create: geçerli medya kaydedildi (100×60, 203dpi)", Number(okMediaRow?.labelWidthMm) === 100 && Number(okMediaRow?.labelHeightMm) === 60 && okMediaRow?.labelDpi === 203);
 
   // 4. Geçersiz port reddedilir
   await expectThrow("create: geçersiz port reddedilir", () =>
@@ -139,7 +149,6 @@ async function main() {
 async function cleanup() {
   await prisma.peripheralDevice.deleteMany({ where: { OR: [{ id: { in: createdPeripheralIds } }, { code: { startsWith: `TEST-PRN-${stamp}` } }, { deviceId }] } });
   if (tplId) await prisma.labelTemplate.deleteMany({ where: { id: tplId } });
-  if (fpInactiveId) await prisma.labelFormatProfile.deleteMany({ where: { id: fpInactiveId } });
   if (deviceId) await prisma.device.deleteMany({ where: { id: deviceId } });
   if (machineId) await prisma.machine.deleteMany({ where: { id: machineId } });
   if (stationId) await prisma.station.deleteMany({ where: { id: stationId } });

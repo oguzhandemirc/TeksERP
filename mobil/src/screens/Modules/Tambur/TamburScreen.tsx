@@ -3745,7 +3745,6 @@ function RecentOutputModal({
       <LabelPreviewSheet
         visible={previewRoll !== null}
         rollId={previewRoll?.id ?? null}
-        kind="ROLL_FINISHED"
         onDismiss={() => setPreviewRoll(null)}
         onPrint={() => {
           const r = previewRoll;

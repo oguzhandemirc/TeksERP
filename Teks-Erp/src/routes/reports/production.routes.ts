@@ -59,7 +59,9 @@ router.get("/station-efficiency", ...guard, async (req: Request, res: Response, 
 router.get("/operator-performance", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getOperatorPerformance(range);
+    // F247: limit sürücü uca bağlandı — servis 50 default'unu artık sabitleyip yok saymıyor.
+    const limit = z.coerce.number().int().min(1).max(200).catch(50).parse(req.query.limit);
+    const data = await getOperatorPerformance(range, limit);
     res.status(200).json(reportEnvelope(data, range));
   } catch (e) {
     next(e);

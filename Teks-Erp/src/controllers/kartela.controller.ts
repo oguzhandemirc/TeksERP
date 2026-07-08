@@ -59,6 +59,15 @@ const reduceStockSchema = z.object({
 const qStr = (v: unknown): string | undefined =>
   typeof v === "string" && v.length > 0 ? v : undefined;
 
+/** F296: sayısal query param — 'abc' gibi geçersizde NaN'ı Prisma'ya sızdırmadan
+ *  undefined'a düşür (tarih paramlarındaki NaN-guard ile simetri). */
+const qNum = (v: unknown): number | undefined => {
+  const s = qStr(v);
+  if (s === undefined) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+};
+
 /** Liste query'sini (offset + cursor + filtre + arama + tarih) tek noktada parse et. */
 function parseListQuery(req: Request) {
   const statusRaw = qStr(req.query.status);
@@ -80,12 +89,12 @@ function parseListQuery(req: Request) {
     dateFrom: dateFrom && !Number.isNaN(dateFrom.getTime()) ? dateFrom : undefined,
     dateTo: dateTo && !Number.isNaN(dateTo.getTime()) ? dateTo : undefined,
     // offset
-    page: qStr(req.query.page) ? Number(req.query.page) : undefined,
-    pageSize: qStr(req.query.pageSize) ? Number(req.query.pageSize) : undefined,
+    page: qNum(req.query.page),
+    pageSize: qNum(req.query.pageSize),
     // cursor
     cursor: qStr(req.query.cursor),
     mode: qStr(req.query.mode),
-    limit: qStr(req.query.limit) ? Number(req.query.limit) : undefined,
+    limit: qNum(req.query.limit),
     withTotal: req.query.withTotal === "true",
   };
 }

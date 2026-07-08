@@ -80,13 +80,39 @@ const updateSchema = z.object({
       enabled: z.array(z.enum(["list", "pin", "card"])).min(1),
       primary: z.enum(["list", "pin", "card"]),
     })
+    // F228: cross-field kurallar Zod'a taşındı → servis orta-döngüde throw edemez
+    // (kısmi commit imkânsız). Servisteki karşılıkları savunma olarak kalır.
+    .refine((v) => v.enabled.includes(v.primary), {
+      message: "Öncelikli giriş yöntemi etkin yöntemlerden biri olmalı",
+    })
+    .refine((v) => new Set(v.enabled).size === v.enabled.length, {
+      message: "Giriş yöntemleri listesinde tekrar olamaz",
+    })
     .optional(),
   // Saha #6: top etiketi kopya adedi (1–5). (Servis ayrıca doğrular.)
   labelCopies: z.number().int().min(1).max(5).optional(),
   // Saha #20: top adı format şablonu (maks 100; servis token doğrular).
-  rollNameTemplate: z.string().max(100).optional(),
+  // F228: en az bir token zorunluluğu Zod'a taşındı (kısmi commit önlenir).
+  rollNameTemplate: z
+    .string()
+    .max(100)
+    .refine((v) => !v.trim() || /\{(item|color|width|quality)\}/.test(v), {
+      message: "Şablon en az bir token içermeli: {item} {color} {width} {quality}",
+    })
+    .optional(),
   // label.nativeSendEnabled — Faz-2 doğrudan yazıcıya gönderim (default false).
   nativeSendEnabled: z.boolean().optional(),
+  // label.defaultMedia — cihazsız baskı/önizleme için sistem varsayılan etiket medyası.
+  // Yazıcı cihazı seçildiğinde onun medyası önceliklidir; bu yalnız fallback. (Servis ayrıca doğrular.)
+  defaultLabelMedia: z
+    .object({
+      widthMm: z.number().min(10).max(500),
+      heightMm: z.number().min(10).max(500),
+      dpi: z.number().int().min(50).max(1200),
+      gapMm: z.number().min(0).max(50),
+      marginMm: z.number().min(0).max(50),
+    })
+    .optional(),
   // Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri).
   travelerCardConfig: z
     .object({

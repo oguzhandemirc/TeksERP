@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { TamburService } from "../services/tambur.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { FOLD_TYPES, foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
 
 // Tambur finalize — yeni model (cumulative length-based):
@@ -44,7 +45,7 @@ const finalizeSchema = z.object({
       })
     )
     .default([]),
-  foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
+  foldType: z.enum(FOLD_TYPES).optional(),
   markedForKartela: z.boolean().optional(),
 });
 
@@ -82,7 +83,7 @@ const finalizeOpenFabricSchema = z.object({
   scrapRemaining: z.boolean().optional(),
   notes: z.string().max(1000).optional().nullable(),
   // Tambur kararı — WO planlaması override (verilmezse WO.foldType kullanılır).
-  foldType: z.string().trim().max(32).optional().nullable(),
+  foldType: foldTypeSchema,
 });
 
 const cutWarehouseRollSchema = z.object({

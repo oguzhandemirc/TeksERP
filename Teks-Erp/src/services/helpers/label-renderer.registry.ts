@@ -8,7 +8,7 @@
 // Bilinmeyen/eksik driver → RASTER_HTML failsafe.
 // =============================================================================
 
-import { PrinterLanguage, type LabelTemplate } from "@prisma/client";
+import { PrinterLanguage, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import { buildRollLabelHtml } from "./label-html.helper";
@@ -16,10 +16,15 @@ import { buildRollLabelPpla } from "./label-ppla.helper";
 import { buildRollLabelPplb } from "./label-pplb.helper";
 import { buildRollLabelZpl } from "./label-zpl.helper";
 import { applyRawCode, readTemplateRawCode } from "./label-rawcode";
+import { emitCanvasNative } from "./label-canvas-native.helper";
+import { buildCanvasLabelHtml } from "./label-canvas-html.helper";
+import { readCanvasLayout } from "../../config/label-elements";
 
 export interface LabelRenderInput {
   payload: LabelPayload;
   template: LabelTemplate | null;
+  /** Seçili boyut varyantı (kanvas yerleşimi) — null/eksik → akış-modeli (dual-mode). */
+  variant?: LabelTemplateVariant | null;
   /** RASTER_HTML için gömülü Code128 SVG (PPLA kullanmaz). */
   barcodeSvg: string;
   /** RASTER_HTML için gömülü QR SVG (PPLA kullanmaz). */
@@ -59,14 +64,16 @@ const CONTENT_TYPES: Record<PrinterLanguage, string> = {
   ZPL: "text/plain; charset=utf-8",
 };
 
-/** Yazıcı diline göre etiketi render et. Driver yoksa RASTER_HTML'e düşer (failsafe). */
+/** Yazıcı diline göre etiketi render et. Driver yoksa RASTER_HTML'e düşer (failsafe).
+ *  Sıra: rawCode (dolu dil HER ŞEYİ ezer) > varyant kanvası > akış-modeli (dual-mode
+ *  — varyantı olmayan/henüz dönüştürülmemiş şablonlar) > şablonsuz fallback. */
 export function renderLabel(language: PrinterLanguage, input: LabelRenderInput): RenderedLabel {
   const effective = RENDERERS[language] ? language : PrinterLanguage.RASTER_HTML;
   // Uzman override: şablonda bu dil için raw-code varsa otomatik üretim yerine onu
   // kullan ({{key}} yer-tutucuları payload'dan doldurulur). Yoksa generator çalışır.
   const raw = readTemplateRawCode(input.template?.rawCode, effective);
   if (raw) {
-    let content = applyRawCode(raw, input.payload, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg });
+    let content = applyRawCode(raw, input.payload, effective, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg });
     // Native yazıcılar (PPLA/PPLB/ZPL) komut satırlarını CR/LF ile ayırır — otomatik
     // üretici CRLF verir + SON komutu da CRLF ile sonlandırır. Kullanıcı LF yapıştırsa
     // ya da sonda satır sonu bırakmasa da normalize et; yoksa son komut (P1=bas)
@@ -77,6 +84,29 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
     }
     return { language: effective, content, contentType: CONTENT_TYPES[effective] };
   }
+
+  // Kanvas yolu: seçili varyantın eleman yerleşimi (Etiket Stüdyosu v2).
+  const layout = input.variant ? readCanvasLayout(input.variant.elements) : null;
+  if (layout) {
+    const content =
+      effective === PrinterLanguage.RASTER_HTML
+        ? buildCanvasLabelHtml({
+            payload: input.payload,
+            format: input.format,
+            copies: input.copies,
+            layout,
+            barcodeSvg: input.barcodeSvg,
+            qrSvg: input.qrSvg,
+          })
+        : emitCanvasNative(effective as "PPLA" | "PPLB" | "ZPL", {
+            payload: input.payload,
+            format: input.format,
+            copies: input.copies,
+            layout,
+          });
+    return { language: effective, content, contentType: CONTENT_TYPES[effective] };
+  }
+
   return {
     language: effective,
     content: RENDERERS[effective]!(input),

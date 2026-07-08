@@ -47,7 +47,6 @@ import fabricPropertyRoutes from "./routes/fabric-property.routes";
 import stationCapabilityRoutes from "./routes/station-capability.routes";
 import labelRoutes from "./routes/label.routes";
 import labelTemplateRoutes from "./routes/label-template.routes";
-import { labelFormatProfileRouter } from "./routes/label-format-profile.routes";
 import { peripheralRouter } from "./routes/peripheral.routes";
 import shippingRoutes from "./routes/shipping.routes";
 import printedDocumentRoutes from "./routes/printed-document.routes";
@@ -61,6 +60,7 @@ import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
+import { latencyMiddleware } from "./middlewares/latency.middleware";
 import { getPresence } from "./lib/presence";
 
 const app: Express = express();
@@ -87,12 +87,24 @@ app.use(
 // exposedHeaders: tarayıcı/Electron renderer'ı cross-origin custom response
 // header'larını ancak burada listelenirse JS'e açar. Etiket dili (native baskı
 // guard'ı buna bakar) + sunucu saati (apiClient offset) okunabilsin diye gerekli.
-app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "Date"] }));
+app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date"] }));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
 // 1KB altı response'lar atlanır (overhead'e değmez).
 app.use(compression({ threshold: 1024 }));
-app.use(express.json());
-app.use(morgan("dev"));
+// F16: 1MB limit — toplu uçlar (yüzlerce rollId) 100kb default'u aşınca generic
+// 500/İngilizce 'entity.too.large' yerine error.middleware net 413 Türkçe döner.
+app.use(express.json({ limit: "1mb" }));
+// F17: production'da 'combined' (tarih/IP/UA — NSSM dosya log'una ANSI'siz),
+// dev'de renkli kısa 'dev'.
+const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
+app.use(morgan(isProd ? "combined" : "dev"));
+
+// Per-endpoint gecikme istatistiği (istek başına O(1)) — morgan'dan sonra,
+// resolveDevice'tan ÖNCE: statik/health/swagger dahil her şey ölçülür. Canlı
+// sayaçlar bellekte (GET /api/admin/perf); Faz 3 ile ~5dk'da bir istek-güdümlü
+// flush günlük özet tablosuna yazar (GET /api/admin/perf/history — trend).
+// Bkz. SAHA-DAYANIKLILIK-FAZ2.md §B + SAHA-DAYANIKLILIK-FAZ3.md §P1.
+app.use(latencyMiddleware);
 
 // x-device-id header'ı varsa req.device'a Device + machineId çöz
 app.use(resolveDevice);
@@ -370,7 +382,6 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/customer-branches", customerBranchListRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/machines", machineRouter);
-app.use("/api/label-format-profiles", labelFormatProfileRouter);
 app.use("/api/peripherals", peripheralRouter);
 app.use("/api/routes", routeRoutes);
 app.use("/api/product-recipes", productRecipeRoutes);

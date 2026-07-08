@@ -62,20 +62,32 @@ async function testAmbPartialUnique(): Promise<void> {
 }
 
 async function testLabelDefaultPartialUnique(): Promise<void> {
-  console.log("\n=== 2) label-template tek-default partial unique ===");
+  // ETİKET STÜDYOSU v2 sözleşme değişikliği: eski label_templates_one_default_per_kind
+  // partial unique index KALDIRILDI (isDefault artık DEPRECATED çift-yazım kolonu).
+  // Bağlam-başına-tek-default DB seddi yeni evinde: label_context_defaults.kind UNIQUE.
+  console.log("\n=== 2) bağlam-default tek kaynak (LabelContextDefault.kind UNIQUE) ===");
   const a = await prisma.labelTemplate.create({ data: { name: `TST-LD-${ts}-A`, kind: "ROLL_FINISHED", isDefault: false, fields: [] as unknown as Prisma.InputJsonValue } });
   const b = await prisma.labelTemplate.create({ data: { name: `TST-LD-${ts}-B`, kind: "ROLL_FINISHED", isDefault: false, fields: [] as unknown as Prisma.InputJsonValue } });
   templateIds.push(a.id, b.id);
-  const before = await prisma.labelTemplate.count({ where: { kind: "ROLL_FINISHED", isDefault: true } });
-  // ROLL_FINISHED'in zaten 1 default'u var (seed). Test satırını da default yapmaya
-  // çalışmak ikinci default demek → partial unique reddeder (ORM → temiz P2002).
+
+  // Bağlamın default'u yoksa (fixture-bağımsızlık) test satırıyla kur; sonda geri al.
+  const existing = await prisma.labelContextDefault.findUnique({ where: { kind: "ROLL_FINISHED" } });
+  let createdDefault = false;
+  if (!existing) {
+    await prisma.labelContextDefault.create({ data: { kind: "ROLL_FINISHED", templateId: a.id } });
+    createdDefault = true;
+  }
+  const before = await prisma.labelContextDefault.count({ where: { kind: "ROLL_FINISHED" } });
   await expectThrow(
-    "aynı kind'de 2. default → P2002",
-    () => prisma.labelTemplate.update({ where: { id: b.id }, data: { isDefault: true } }),
+    "aynı kind'de 2. bağlam-default satırı → P2002",
+    () => prisma.labelContextDefault.create({ data: { kind: "ROLL_FINISHED", templateId: b.id } }),
     isP2002,
   );
-  const after = await prisma.labelTemplate.count({ where: { kind: "ROLL_FINISHED", isDefault: true } });
-  check("ihlal sonrası ROLL_FINISHED default sayısı değişmedi (hâlâ 1)", before === after && after === 1, `${before}→${after}`);
+  const after = await prisma.labelContextDefault.count({ where: { kind: "ROLL_FINISHED" } });
+  check("ihlal sonrası bağlam-default sayısı değişmedi (hâlâ 1)", before === after && after === 1, `${before}→${after}`);
+  if (createdDefault) {
+    await prisma.labelContextDefault.deleteMany({ where: { kind: "ROLL_FINISHED", templateId: a.id } });
+  }
 }
 
 async function testDeleteErrorAtomic(): Promise<void> {

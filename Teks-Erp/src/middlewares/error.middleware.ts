@@ -3,6 +3,8 @@
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";
+import { Prisma } from "@prisma/client";
+import { ZodError } from "zod";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "../services/audit.service";
 import "../types/express-augment";
@@ -117,8 +119,19 @@ export const errorHandler = (
     return;
   }
 
+  // F16: express.json({ limit: "1mb" }) aşıldığında body-parser 'entity.too.large'
+  // fırlatır — generic 500 yerine net 413 Türkçe.
+  if ((err as { type?: string }).type === "entity.too.large") {
+    res.status(413).json({
+      success: false,
+      message: "İstek gövdesi çok büyük (1MB sınırı aşıldı). Daha az kayıtla tekrar deneyin.",
+    });
+    return;
+  }
+
   // Prisma known request errors
-  if (err.constructor.name === "PrismaClientKnownRequestError") {
+  // F25: instanceof (bundler-güvenli) + constructor.name (fallback).
+  if (err instanceof Prisma.PrismaClientKnownRequestError || err.constructor.name === "PrismaClientKnownRequestError") {
     const prismaErr = err as Error & { code: string; meta?: Record<string, unknown> };
 
     if (prismaErr.code === "P2002") {
@@ -183,6 +196,16 @@ export const errorHandler = (
       return;
     }
 
+    // F65: P2023 — Inconsistent column data (örn. UUID kolonuna geçersiz path param).
+    // Generic dala düşmesin → net 400.
+    if (prismaErr.code === "P2023") {
+      res.status(400).json({
+        success: false,
+        message: "Geçersiz ID formatı (beklenen: UUID). Adresi kontrol edin.",
+      });
+      return;
+    }
+
     // P2020 — Value out of range for the type.
     // Yüksek sayı, taşmış decimal, geçersiz tarih vb.
     if (prismaErr.code === "P2020") {
@@ -198,6 +221,15 @@ export const errorHandler = (
     // 5xx olarak işaretle ve audit'e düşür — client'ı yanıltmayalım.
     if (prismaErr.code === "P2022") {
       console.error("[error.middleware] Schema drift detected (P2022):", prismaErr.meta);
+      // F21: 5xx'e eşlenen şema-drift incident'i de SYSTEM/ERROR audit'e/metriğe düşsün.
+      void AuditService.logEvent({
+        category: "SYSTEM",
+        action: "ERROR",
+        userId: req.user?.userId,
+        recordId: prismaErr.code,
+        ipAddress: req.ip ?? null,
+        payload: { code: prismaErr.code, method: req.method, path: req.originalUrl },
+      });
       res.status(500).json({
         success: false,
         message: "Sunucu yapılandırma hatası. Lütfen yöneticiyle iletişime geçin.",
@@ -214,6 +246,36 @@ export const errorHandler = (
       return;
     }
 
+    // F21: P2034 — write conflict / deadlock (eşzamanlı çakışan işlem). İstemci
+    // verisi hatası DEĞİL → 409 + retry sinyali. (Atomik-claim yolları zaten 409
+    // döner; bu, ORM/engine seviyesinde kaçan serialization/deadlock içindir.)
+    if (prismaErr.code === "P2034") {
+      res.status(409).json({
+        success: false,
+        message: "İşlem şu anda başka bir işlemle çakıştı. Lütfen tekrar deneyin.",
+      });
+      return;
+    }
+
+    // F21: P2024 (bağlantı havuzu zaman aşımı) / P2028 (transaction zaman aşımı) —
+    // sunucu tarafı tıkanıklık → 503 + SYSTEM/ERROR audit (5xx izleme/metriğe düşsün).
+    if (prismaErr.code === "P2024" || prismaErr.code === "P2028") {
+      console.error(`[error.middleware] Prisma ${prismaErr.code} (sunucu tıkanıklık):`, prismaErr.meta);
+      void AuditService.logEvent({
+        category: "SYSTEM",
+        action: "ERROR",
+        userId: req.user?.userId,
+        recordId: prismaErr.code,
+        ipAddress: req.ip ?? null,
+        payload: { code: prismaErr.code, method: req.method, path: req.originalUrl },
+      });
+      res.status(503).json({
+        success: false,
+        message: "Sunucu şu anda yoğun. Lütfen birkaç saniye sonra tekrar deneyin.",
+      });
+      return;
+    }
+
     // Diğer Prisma known error'lar — code'u sızdırmadan generic 400 dön.
     // Detay server log'una düşer (Prisma kendisi yazıyor); SYSTEM/ERROR audit'i
     // alta düşmesin diye buradan return ediyoruz.
@@ -226,7 +288,7 @@ export const errorHandler = (
   }
 
   // Prisma validation errors (wrong data shape for model)
-  if (err.constructor.name === "PrismaClientValidationError") {
+  if (err instanceof Prisma.PrismaClientValidationError || err.constructor.name === "PrismaClientValidationError") {
     res.status(400).json({
       success: false,
       message: "Geçersiz veri yapısı. Gönderilen alanları ve tipleri kontrol edin.",
@@ -235,7 +297,7 @@ export const errorHandler = (
   }
 
   // Zod validation errors
-  if (err.constructor.name === "ZodError") {
+  if (err instanceof ZodError || err.constructor.name === "ZodError") {
     const zodErr = err as Error & { issues: Array<{ path: (string | number)[]; message: string }> };
     res.status(400).json({
       success: false,

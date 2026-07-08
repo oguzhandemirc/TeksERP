@@ -8,7 +8,21 @@ import { BaseController } from "../controllers/base.controller";
 import { OrderService } from "../services/order.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
+
+// F157: /available query şeması — ham parse yerine Zod (geçersiz uuid/width net 400).
+const emptyToUndef = (v: unknown) => (v === "" || v == null ? undefined : v);
+const availableQuerySchema = z.object({
+  itemId: z.string().uuid("Geçersiz ürün id").optional(),
+  colorId: z.string().uuid("Geçersiz renk id").optional(),
+  width: z.preprocess(emptyToUndef, z.coerce.number().positive("En pozitif olmalı").optional()),
+  search: z.preprocess(emptyToUndef, z.string().optional()),
+  cursor: z.preprocess(emptyToUndef, z.string().optional()),
+  limit: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(50).optional()),
+  withInProduction: z.string().optional().transform((v) => v === "true"),
+  withTotal: z.string().optional().transform((v) => v === "true"),
+});
 
 const service = new OrderService({
   modelName: "order",
@@ -92,7 +106,7 @@ router.post(
     try {
       const { reason } = reasonSchema.parse(req.body);
       const result = await service.manualComplete(
-        req.params.id as string,
+        assertValidUuid(req.params.id),
         reason,
         req.user?.userId
       );
@@ -122,7 +136,7 @@ router.post(
     try {
       const { reason } = reasonSchema.parse(req.body);
       const result = await service.reopen(
-        req.params.id as string,
+        assertValidUuid(req.params.id),
         reason,
         req.user?.userId
       );
@@ -151,7 +165,7 @@ router.get(
   requirePermission("order:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await service.getCancelPreview(req.params.id as string);
+      const result = await service.getCancelPreview(assertValidUuid(req.params.id));
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -205,7 +219,7 @@ router.post(
     try {
       const { workOrderActions } = cancelBodySchema.parse(req.body ?? {});
       const result = await service.cancelWithActions(
-        req.params.id as string,
+        assertValidUuid(req.params.id),
         workOrderActions,
         req.user?.userId
       );
@@ -238,7 +252,7 @@ router.post(
  *         description: Sipariş numarası ile arama
  *       - in: query
  *         name: filter[status]
- *         schema: { type: string, enum: [PENDING, APPROVED, IN_PRODUCTION, PARTIAL_SHIPPED, COMPLETED, CANCELLED] }
+ *         schema: { type: string, enum: [PENDING, APPROVED, PARTIAL_SHIPPED, COMPLETED, CANCELLED] }
  *       - in: query
  *         name: filter[customerId]
  *         schema: { type: string, format: uuid }
@@ -255,7 +269,7 @@ router.get("/", verifyToken, requirePermission("order:read"), controller.findAll
  *     tags: [Orders]
  *     summary: İş emri picker'ı için müsait sipariş kalemleri
  *     description: |
- *       Aktif WO'ya (PLANNED/IN_PROGRESS/PAUSED/COMPLETED) bağlı kalemler
+ *       Aktif WO'ya (PLANNED/IN_PROGRESS/COMPLETED) bağlı kalemler
  *       hem `lines`'tan çıkarılır hem de hiç müsait satırı kalmayan sipariş
  *       tamamen düşer. CANCELLED WO blok değildir. `excludeWorkOrderId`
  *       verilirse o WO'nun kendi bağları "bağ değil gibi" sayılır
@@ -328,28 +342,16 @@ router.get(
     try {
       // itemId opsiyonel: legacy modda (limit yok) servis zorunlu kılar; cursor
       // modda (limit var) "sipariş-önce" aramalı liste için boş bırakılabilir.
-      const itemId = (req.query.itemId as string | undefined) || undefined;
-      const colorId = (req.query.colorId as string | undefined) || undefined;
-      const widthRaw = req.query.width as string | undefined;
-      const width =
-        widthRaw != null && widthRaw !== "" ? Number(widthRaw) : undefined;
-      // Hızlı İş Emri "ne kadar daha üretmeliyim" için üretimdeki düşülmüş net açık ister.
-      const withInProduction = req.query.withInProduction === "true";
-      const search = (req.query.search as string | undefined) || undefined;
-      const cursor = (req.query.cursor as string | undefined) || undefined;
-      const limitRaw = req.query.limit as string | undefined;
-      const limit =
-        limitRaw != null && limitRaw !== "" ? parseInt(limitRaw, 10) : undefined;
-      const withTotal = req.query.withTotal === "true";
+      const q = availableQuerySchema.parse(req.query);
       const result = await service.findAvailableOrderLines({
-        itemId,
-        colorId,
-        width,
-        withInProduction,
-        search,
-        cursor,
-        limit,
-        withTotal,
+        itemId: q.itemId,
+        colorId: q.colorId,
+        width: q.width,
+        withInProduction: q.withInProduction,
+        search: q.search,
+        cursor: q.cursor,
+        limit: q.limit,
+        withTotal: q.withTotal,
       });
       res.json(result);
     } catch (e) {
@@ -520,12 +522,15 @@ router.post(
  * /api/orders/{id}:
  *   patch:
  *     tags: [Orders]
- *     summary: Sipariş güncelle (header alanları)
+ *     summary: Sipariş güncelle (header + kalemler)
  *     description: |
- *       APPROVED durumunda customerId, branchId, currency, totalAmount, deadline
- *       güncellenebilir (aktif WO bağı varsa customer/branch kilit). PARTIAL_SHIPPED'de
- *       sadece deadline. COMPLETED/CANCELLED kilitli. Kalemler hiçbir durumda
- *       güncellenmez.
+ *       APPROVED/PENDING durumunda header alanları (customerId, branchId, currency,
+ *       totalAmount, deadline, orderDate) + kalemler (lines) güncellenebilir: id
+ *       eşleşene update, yeniye create, çıkarılana delete (diff). Aktif (CANCELLED-dışı)
+ *       iş emri bağı varsa kalemler kilit (409); customer/branch değişimi
+ *       IN_PROGRESS/COMPLETED WO bağında kilit. PARTIAL_SHIPPED'de yalnız
+ *       deadline. COMPLETED/CANCELLED kilitli. currency ISO 4217 kataloğuna, deadline
+ *       >= orderDate kuralına göre doğrulanır.
  *     security:
  *       - bearerAuth: []
  *     parameters:

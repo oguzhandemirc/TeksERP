@@ -29,8 +29,10 @@ import { Request } from "express";
 
 // Model adı → sıralanabilir (scalar/enum) alan adları. Prisma dmmf'ten lazy build
 // + cache. İstemciden gelen sortBy bu kümede (veya relationSortMap'te) değilse
-// createdAt'e düşülür → bilinmeyen kolon `PrismaClientValidationError` (HTTP 500)
-// ve indekssiz keyfi sort engellenir. Model bulunamazsa null → guard'lamaz (geri uyum).
+// createdAt'e düşülür → bilinmeyen kolon `PrismaClientValidationError` (HTTP 500) engellenir.
+// F45 NOT: allowlist modelin TÜM scalar/enum kolonları — indekssiz kolona (description/notes)
+// sort İZİN VERİLİR; gerçek indeks kısıtı için config'e sortableFields eklenmeli.
+// Model bulunamazsa null → guard'lamaz (geri uyum).
 const modelSortFieldCache = new Map<string, Set<string> | null>();
 function sortableFieldsFor(modelName: string): Set<string> | null {
   const key = modelName.toLowerCase();
@@ -50,6 +52,21 @@ function sortableFieldsFor(modelName: string): Set<string> | null {
     : null;
   modelSortFieldCache.set(key, result);
   return result;
+}
+
+// F29: Boot-time guard — sanitizeWriteData/safeSortBy/safeFilters süzgeçleri
+// Prisma.dmmf'e (runtime, deprecated yüzey) bağlı. Bir Prisma major upgrade'inde
+// bu yüzey kalkarsa TÜM modeller null döner ve üç guard da SESSİZCE fail-open olur
+// (13 bare-BaseController route'un mass-assignment koruması düşer). Fail-CLOSED:
+// çekirdek model çözülemezse sunucuyu başlatma (server.ts app.listen'den ÖNCE çağırır).
+export function assertBaseServiceGuards(): void {
+  const probe = sortableFieldsFor("Item");
+  if (!probe || probe.size === 0) {
+    throw new Error(
+      "[base.service] KRİTİK: Prisma DMMF çözülemedi — sanitizeWriteData/safeSortBy " +
+        "guardları fail-open olur. Sunucu başlatılmıyor. (Prisma sürüm/generate uyumsuzluğu?)",
+    );
+  }
 }
 
 // Model adı → NULLABLE (isRequired=false) skaler alanlar. Nullable kolona göre
@@ -171,7 +188,7 @@ export class BaseService {
   /**
    * sortBy güvenlik süzgeci — istemciden gelen sortBy yalnız modelin gerçek
    * (scalar/enum) kolonu VEYA relationSortMap anahtarıysa kullanılır, değilse
-   * `createdAt`'e düşer. Bilinmeyen kolon 500'ünü ve indekssiz keyfi sortu engeller.
+   * `createdAt`'e düşer. Bilinmeyen kolon 500'ünü engeller (indekssiz kolona sort İZİN VERİLİR — allowlist=tüm scalar/enum).
    * Model dmmf'te bulunamazsa guard'lamaz (geri uyum).
    */
   protected safeSortBy(requested: string): string {
@@ -188,6 +205,13 @@ export class BaseService {
    * Modelin gerçek (scalar/enum) kolonu olmayan filtre anahtarları sessizce
    * düşürülür → UI hatasız, 500 yok. Generic CRUD yolu skaler filtre kullanır;
    * relation filtreli subclass'lar zaten kendi findAll'ını override eder.
+   *
+   * F30 GÜVENLİK NOTU: allowlist = modelin TÜM skaler/enum kolonları (UI'ın
+   * filtrelenebilir sunduğu alt küme DEĞİL). Response select'inde gizlenmiş bir
+   * kolon bile `filter[kolon]=x` ile eşitlik-probe edilebilir (var/yok oracle).
+   * Bugün risk yok (BaseService modelleri sır kolonu içermez); DÜZ saklanan sır
+   * kolonlu (quickPin/cardToken emsali) bir modeli BaseService'e BAĞLAMA —
+   * enumerasyon oracle'ı doğar. Gerekirse config'e `filterableFields` allowlist'i ekle.
    */
   protected safeFilters(
     filters: Record<string, string | string[]>
@@ -225,7 +249,15 @@ export class BaseService {
     applyDateRange(built, params, this.config.dateFields ?? []);
     const extra = this.extraWhere(req);
     const where = extra ? { AND: [built, extra] } : built;
-    const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
+    // F40: offset modunda id tie-breaker — eşit-değerli sortBy'da (ör. aynı isim)
+    // sayfalar arası mükerrer/kayıp satırı önler (cursor yolu 347 ile parite).
+    const orderBy =
+      params.sortBy === "id"
+        ? buildOrderByClause(params.sortBy, params.sortOrder)
+        : [
+            buildOrderByClause(params.sortBy, params.sortOrder),
+            { id: params.sortOrder },
+          ];
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
     const [data, total] = await Promise.all([
@@ -293,11 +325,11 @@ export class BaseService {
       const offset = decodeOffsetCursor(req.query.cursor as string | undefined);
       // Derin offset guard — orders gibi mütevazı tablolar için fazlasıyla yeterli.
       if (offset > 10000) {
-        return {
-          success: true,
-          data: [],
-          pagination: { nextCursor: null, hasMore: false, limit },
-        };
+        // F47: sessiz boş dönüş yerine net 400 (buildPagination MAX_OFFSET seddiyle
+        // tutarlı) — istemci "veri yok" değil "filtre daralt" mesajı görsün.
+        throw AppError.badRequest(
+          `Sayfa derinliği aşıldı (offset=${offset}). Lütfen filtre daraltın veya tarih aralığı kullanın.`,
+        );
       }
       const [items, totalEstimate] = await Promise.all([
         this.delegate.findMany({
@@ -406,6 +438,12 @@ export class BaseService {
    * Model dmmf'te bulunamazsa süzme yapılmaz (geri uyum — safeSortBy ile aynı).
    */
   protected sanitizeWriteData(data: Record<string, unknown>): Record<string, unknown> {
+    // F44: Express 5'te Content-Type application/json değilse req.body undefined
+    // kalır; Object.entries(undefined) → TypeError → 500 + audit gürültüsü.
+    // İstemci hatası 5xx'e düşmesin diye erken net 400 ver.
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw AppError.badRequest("Geçersiz istek gövdesi");
+    }
     const allowed = sortableFieldsFor(this.config.modelName);
     if (!allowed) return data;
     const out: Record<string, unknown> = {};
@@ -433,7 +471,9 @@ export class BaseService {
 
         if (existing) {
           if (existing.isActive === true) {
-            throw AppError.badRequest(
+            // F43: aktif duplicate = 409 Conflict — her route'un Swagger'ı '409 Kod
+            // zaten mevcut' belgeliyordu; kod 400 dönüyordu (contract sapması).
+            throw AppError.conflict(
               `Bu ${key} ile aktif kayıt zaten var`,
             );
           }
@@ -581,7 +621,22 @@ export class BaseService {
       return { success: false, data: null, message: "Kayıt bulunamadı" };
     }
 
-    await this.delegate.delete({ where: { id } });
+    // F42: bağımlı kayıt (Restrict FK) varsa P2003 fırlar; error middleware bunu
+    // "kayıt bulunamadı/silinmiş" 400'üne eşliyor (create-yanlış-FK mesajı, DELETE'te
+    // yanıltıcı). Anlamlı 409'a çevir — "yıkıcı işlemde net onay" kuralıyla uyumlu.
+    try {
+      await this.delegate.delete({ where: { id } });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2003"
+      ) {
+        throw AppError.conflict(
+          "Bu kayda bağlı başka kayıtlar var — kalıcı olarak silinemez. Kaydı pasife alın.",
+        );
+      }
+      throw err;
+    }
 
     await AuditService.log({
       userId,

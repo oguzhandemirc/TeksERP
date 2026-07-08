@@ -25,6 +25,7 @@ import {
   dynamicCursorWhere,
   buildNextDynamicCursor,
 } from "../utils/cursor";
+import { buildTurkishSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 
 export interface SwatchStats {
@@ -46,12 +47,19 @@ import {
 } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
+import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 
-/** Generate a barcode for a split-off roll */
-function generateSplitBarcode(originalBarcode: string): string {
+/**
+ * Generate a barcode for a split-off roll (ayraçsız).
+ * Tire YOK — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu
+ * (1D wedge bozuyor, QR kamera doğru okuyor). Parent barkodu zaten ayraçsız
+ * (`generateBarcode` = TEKSYYYYMMDDXXXXXXXX); child = parent + "KS" + suffix.
+ */
+export function generateSplitBarcode(originalBarcode: string): string {
   const suffix = uuidv4().replace(/-/g, "").substring(0, 6).toUpperCase();
-  return `${originalBarcode}-KS-${suffix}`;
+  return `${originalBarcode}KS${suffix}`;
 }
 
 /**
@@ -84,20 +92,6 @@ async function resolveCutLabelIntent(data: {
   return { stock: true };
 }
 
-/**
- * Generate a barcode for a Tambur-born physical roll (open fabric child).
- * Open fabric'ın parent barkodu olmadığı için TEKSYYYYMMDDXXXXXXXX formatı kullanılır
- * (ayraçsız — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu).
- */
-function generateTamburChildBarcode(): string {
-  const now = new Date();
-  const datePart =
-    now.getFullYear().toString() +
-    (now.getMonth() + 1).toString().padStart(2, "0") +
-    now.getDate().toString().padStart(2, "0");
-  const randomPart = uuidv4().replace(/-/g, "").substring(0, 8).toUpperCase();
-  return `TEKS${datePart}${randomPart}`;
-}
 
 interface ErrorDecision {
   errorId: string;
@@ -149,12 +143,12 @@ async function closeOrphanRollErrors(
   rollId: string,
   stepId: string | null,
   userId?: string
-): Promise<number> {
+): Promise<string[]> {
   const open = await tx.rollError.findMany({
     where: { rollId, isProcessed: false },
     select: { id: true },
   });
-  if (open.length === 0) return 0;
+  if (open.length === 0) return [];
   await tx.rollError.updateMany({
     where: { id: { in: open.map((e) => e.id) } },
     data: {
@@ -165,7 +159,7 @@ async function closeOrphanRollErrors(
       processedAt: new Date(),
     },
   });
-  return open.length;
+  return open.map((e) => e.id);
 }
 
 interface TamburRollErrorSummary {
@@ -186,6 +180,8 @@ interface TamburRollSummary {
   currentQty: number;
   width: number | null;
   qualityGrade: string;
+  /** Parent'tan miras FabricProperty özet listesi (mobil karar ekranı gösterir). */
+  properties: { id: string; name: string }[];
   errorCount: number;
   errors: TamburRollErrorSummary[];
   /** Dal (fason partisi) kimliği — null = fasonsuz/doğrudan top. */
@@ -570,7 +566,7 @@ export class TamburService {
     }
 
     // Parent barkodlu (klasik) ise child barkodlar parent prefix'i ile üretilir;
-    // açık kumaş (barcode=null, boyahane dönüşü) ise TEKS-YYYYMMDD-XXXX formatı.
+    // açık kumaş (barcode=null, boyahane dönüşü) ise TEKSYYYYMMDDXXXXXXXX (ayraçsız).
     const parentBarcode = roll.barcode;
 
     const totalQty = Number(roll.currentQty);
@@ -592,7 +588,10 @@ export class TamburService {
     const errorIds = errorDecisions.map((d) => d.errorId);
     const errors = errorIds.length
       ? await prisma.rollError.findMany({
-          where: { id: { in: errorIds }, rollId: data.rollId },
+          // F134: yalnız AÇIK hatalar — daha önce idari NO_CUT ile kapanmış bir
+          // errorId decisions'da gelirse tarihçesi (actionTaken/processedAt/By)
+          // ezilmesin. Kapanmış hata errorById'de olmaz → aşağıdaki loop atlar.
+          where: { id: { in: errorIds }, rollId: data.rollId, isProcessed: false },
         })
       : [];
     const errorById = new Map(errors.map((e) => [e.id, e]));
@@ -693,7 +692,16 @@ export class TamburService {
     // commit ettiğinden hayalet kayıt kalırdı. Döngüde topla, tx commit ettikten
     // SONRA emit et.
     const childAudits: Array<{ recordId: string; newData: Record<string, unknown> }> = [];
+    // F140: kapatılan RollError'lar için tx-sonrası per-satır audit (agregat log
+    // kapatılan tekil hatayı iz tutmuyordu). tx İÇİNDE toplanır, commit sonrası emit.
+    const closedErrorAudits: Array<{ errorId: string; actionTaken: string }> = [];
     const updatedRoll = await prisma.$transaction(async (tx) => {
+      // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
+      // (~1024) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
+      // serileşsin; hepsi WO satırını tx başında kilitlediğinden sayım COMMIT'li
+      // adım statülerini görür (yoksa iki tx birbirinin adımını açık sayıp WO
+      // IN_PROGRESS'te takılır). Lock sırası WO→roll (kardeşlerle tutarlı).
+      if (wo?.id) await touchWorkOrderTx(tx, wo.id);
       // ATOMIK CLAIM: parent'ı tek hamlede sahiplen. Koşullu updateMany satır
       // kilidi + status guard ile iki eşzamanlı finalize'dan yalnız BİRİNE
       // count=1 verir; kaybeden count=0 alır → tx geri sarılır, mükerrer child
@@ -764,15 +772,18 @@ export class TamburService {
           },
         });
         processedCount++;
+        closedErrorAudits.push({ errorId: d.errorId, actionTaken });
       }
 
       // #8 — decisions'ta geçmeyen açık hatalar NO_CUT olarak otomatik kapansın.
-      processedCount += await closeOrphanRollErrors(
+      const orphanClosedIds = await closeOrphanRollErrors(
         tx,
         data.rollId,
         roll.currentStepId,
         userId
       );
+      processedCount += orphanClosedIds.length;
+      for (const eid of orphanClosedIds) closedErrorAudits.push({ errorId: eid, actionTaken: "NO_CUT" });
 
       // Parent'ın FabricProperty listesini bir kez çek — her çocuğa miras kalır.
       // (Renk veren fason adımında WO.targetProperties parent.properties'e zaten
@@ -839,7 +850,7 @@ export class TamburService {
       for (const seg of segments) {
         const splitBarcode = parentBarcode
           ? generateSplitBarcode(parentBarcode)
-          : generateTamburChildBarcode();
+          : generateRollBarcode();
         const splitRoll = await tx.roll.create({
           data: {
             barcode: splitBarcode,
@@ -1074,6 +1085,17 @@ export class TamburService {
       },
     });
 
+    // F140: kapatılan RollError'ların per-satır izini emit et (best-effort, tx dışı).
+    if (closedErrorAudits.length > 0) {
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ROLL_ERROR",
+        recordId: closedErrorAudits.map((e) => e.errorId).join(","),
+        newData: { tamburFinalize: true, rollId: data.rollId, closures: closedErrorAudits },
+      });
+    }
+
     const tailNote = cumulativeLenD.lessThan(totalQtyD) ? " + kalan kuyruk top" : "";
     const baseMsg = `Tambur tamamlandı. Parent bölündü, ${splitRolls.length} yeni top oluşturuldu (${inputCuts.length} kesim${tailNote}, ${processedCount} hata işlendi).`;
     return {
@@ -1131,14 +1153,12 @@ export class TamburService {
       // parti küçük master tablolarda kaldığı için `contains` (fuzzy) korunur.
       where.OR = [
         { barcode: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
-        { color: { name: { contains: search, mode: "insensitive" } } },
-        {
-          producedInStep: {
-            workOrder: { batchNumber: { contains: search, mode: "insensitive" } },
-          },
-        },
+        ...buildTurkishSearch<Prisma.RollWhereInput>(search, [
+          "item.name",
+          "item.code",
+          "color.name",
+          "producedInStep.workOrder.batchNumber",
+        ]),
       ];
     }
 
@@ -1211,9 +1231,9 @@ export class TamburService {
         parentRoll: { select: { id: true, barcode: true } },
       },
     });
-    if (!swatch) {
-      return { success: false, data: null, message: "Kartela bulunamadı" };
-    }
+    // F292: kardeş getByCardBarcode/getStep deseniyle hizala — bulunamayan barkod
+    // 404 (controller {success:false}'u incelemiyor → servis-throw güvenli).
+    if (!swatch) throw AppError.notFound("Kartela bulunamadı");
     return { success: true, data: swatch };
   }
 
@@ -1242,8 +1262,10 @@ export class TamburService {
       where.OR = [
         { barcode: search },
         { cardNumber: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
+        ...buildTurkishSearch<Prisma.SwatchWhereInput>(search, [
+          "item.name",
+          "item.code",
+        ]),
       ];
     }
 
@@ -1304,11 +1326,18 @@ export class TamburService {
       };
     }
 
+    // F170: legacy dal da cursor moduyla AYNI 1..200 clamp'ini uygular — controller
+    // ham Number(req.query.limit) geçiyor (NaN / negatif / 500000 mümkün); ağır
+    // parentRoll+properties+color include'lu sınırsız satır çekimini önle.
+    const legacyLimit = Math.min(
+      Math.max(1, Number.isFinite(params?.limit) ? (params!.limit as number) : 100),
+      200,
+    );
     const swatches = await prisma.swatch.findMany({
       where,
       include,
       orderBy: { createdAt: "desc" },
-      take: params?.limit ?? 100,
+      take: legacyLimit,
     });
     return { success: true, data: swatches };
   }
@@ -1333,8 +1362,10 @@ export class TamburService {
       where.OR = [
         { barcode: search },
         { cardNumber: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
+        ...buildTurkishSearch<Prisma.SwatchWhereInput>(search, [
+          "item.name",
+          "item.code",
+        ]),
       ];
     }
 
@@ -1709,7 +1740,7 @@ export class TamburService {
         ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
         : parent.qualityGradeId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
+    const childBarcode = data.clientChildBarcode ?? generateRollBarcode();
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
     // (üretime devam) child stok etiketle doğar.
     const cutIntentSnapshot =
@@ -1802,15 +1833,19 @@ export class TamburService {
       // Önceki kesim de initialQty=currentQty yaptığı için iki decrement aynı sonucu verir.
       // Aşımda (cutLength > currentQty) decrement negatife düşer → bunun yerine topu
       // tamamen tüket (currentQty/initialQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
+      // F128: guarded-decrement = atomik claim. WHERE'e status + shipmentId:null
+      // eklenerek pre-tx (check-then-act) statü/rezervasyon kontrolü tx içine alınır:
+      // eşzamanlı sevkiyat rezervasyonu (shipping updateMany {id, shipmentId:null,
+      // status:WAREHOUSE}) araya girerse WHERE eşleşmez → P2025 → 409 (rezerve top kesilmez).
       let updatedParent;
       try {
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, currentQty: { gt: 0 } },
+              where: { id: parent.id, status: parent.status, shipmentId: null, currentQty: { gt: 0 } },
               data: { currentQty: 0, initialQty: 0 },
             })
           : await tx.roll.update({
-              where: { id: parent.id, currentQty: { gte: data.cutLength } },
+              where: { id: parent.id, status: parent.status, shipmentId: null, currentQty: { gte: data.cutLength } },
               data: {
                 currentQty: { decrement: data.cutLength },
                 initialQty: { decrement: data.cutLength },
@@ -1822,7 +1857,7 @@ export class TamburService {
           err.code === "P2025"
         ) {
           throw AppError.conflict(
-            "Topun kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
+            "Top bu sırada değişti (statü değişmiş / sevkiyata rezerve edilmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
           );
         }
         throw err;
@@ -1916,6 +1951,17 @@ export class TamburService {
     if (parent.barcode === null) {
       throw AppError.badRequest("Bu Roll açık kumaş; finalizeWarehouseCut sadece barkodlu depo topu için");
     }
+    // F132: Ağ-retry idempotency (finalizeOpenFabric kardeşi). Barkodlu bir top YALNIZ
+    // bu yol ile TAMBUR_CONSUMED'a düşer → TAMBUR_CONSUMED = 'finalize zaten koştu' güvenli
+    // sinyali. 2. çağrı 400 yerine success döner (kalan child zaten depoda; adımsız depo topu
+    // durable RollOperation yazmadığından kalan child/qty replay'de yeniden türetilemez → null/0).
+    if (parent.status === RollStatus.TAMBUR_CONSUMED) {
+      return {
+        success: true,
+        data: { rollId: parent.id, remainingChild: null, remainingQty: 0 },
+        message: "Top zaten kesim ile tamamlanmış (idempotent retry).",
+      };
+    }
     // Ham (renksiz STOCK) kesimi de bu fonksiyonla bitirilir — parent arşivlenir.
     const isRawParent =
       parent.status === RollStatus.STOCK && parent.colorId === null;
@@ -1981,7 +2027,7 @@ export class TamburService {
       if (wantChild) {
         const child = await tx.roll.create({
           data: {
-            barcode: generateTamburChildBarcode(),
+            barcode: generateRollBarcode(),
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,
@@ -2186,8 +2232,9 @@ export class TamburService {
       data.qualityGrade ?? statusToQuality[data.status] ?? "1.KALITE";
     const childStatus = RollStatus.WAREHOUSE;
     const tamburStepId = parent.currentStep.id;
+    const woId = parent.currentStep.workOrderId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
+    const childBarcode = data.clientChildBarcode ?? generateRollBarcode();
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
     const cutIntentSnapshot = buildIntentSnapshot(await resolveCutLabelIntent(data));
 
@@ -2200,6 +2247,17 @@ export class TamburService {
     let result: { child: Roll; newParentQty: number };
     try {
       result = await prisma.$transaction(async (tx) => {
+      // F130: WO satırını kilitle → eşzamanlı WO iptaliyle (softDelete cancelClaim
+      // aynı WO satırını kilitler) serileş; iptal-guard'ını kilit ALTINDA TAZE oku
+      // (pre-tx 2169 guard'ının atomik hali). Lock sırası WO→roll (kardeşlerle tutarlı).
+      await touchWorkOrderTx(tx, woId);
+      const freshWo = await tx.workOrder.findUnique({
+        where: { id: woId },
+        select: { status: true },
+      });
+      if (freshWo?.status === WorkOrderStatus.CANCELLED) {
+        throw AppError.conflict("İptal edilmiş iş emrinin açık kumaşı kesilemez");
+      }
       // Child Roll oluştur
       const child = await tx.roll.create({
         data: {
@@ -2283,13 +2341,16 @@ export class TamburService {
       // kumaşı tamamen tüket (currentQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
       let updatedParent;
       try {
+        // F130: guarded-decrement = atomik claim. status + currentStepId eklendi:
+        // eşzamanlı KK2 reopen (currentStepId'yi KK2 step'e çeker) araya girerse
+        // WHERE eşleşmez → P2025 → 409 (KK2'ye geri çekilmiş top kesilmez).
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, currentQty: { gt: 0 } },
+              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gt: 0 } },
               data: { currentQty: 0 },
             })
           : await tx.roll.update({
-              where: { id: parent.id, currentQty: { gte: data.lengthMeters } },
+              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gte: data.lengthMeters } },
               data: { currentQty: { decrement: data.lengthMeters } },
             });
       } catch (err) {
@@ -2298,7 +2359,7 @@ export class TamburService {
           err.code === "P2025"
         ) {
           throw AppError.conflict(
-            "Açık kumaşın kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
+            "Açık kumaş bu sırada değişti (KK2'ye geri çekilmiş / statü değişmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
           );
         }
         throw err;
@@ -2467,6 +2528,10 @@ export class TamburService {
     const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);
 
     const result = await prisma.$transaction(async (tx) => {
+      // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
+      // (~2620) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
+      // serileşsin (yoksa iki tx birbirinin adımını açık sayıp WO IN_PROGRESS'te takılır).
+      await touchWorkOrderTx(tx, woId);
       // ATOMİK CLAIM (finalize()'daki desen): idempotency ön-kontrolü tx DIŞINDA
       // check-then-act — eşzamanlı çift çağrı ikisinde de geçer ve kalan child
       // İKİ kez basılırdı (TAMBUR_PROCESSED upsert'i ikinci tx'i düşürmez:
@@ -2502,7 +2567,7 @@ export class TamburService {
       if (wantChild) {
         const child = await tx.roll.create({
           data: {
-            barcode: generateTamburChildBarcode(),
+            barcode: generateRollBarcode(),
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,
@@ -2683,7 +2748,6 @@ export class TamburService {
           colorCode: string | null;
           colorName: string | null;
           orderedQty: number;
-          shippedQty: number;
           /// Sipariş satırı kesim notu + eşit-parça önerisi (Tambur talimatı).
           cutNote: string | null;
           pieceLengthM: number | null;
@@ -2774,7 +2838,6 @@ export class TamburService {
           colorName: string | null;
           width: number | null;
           orderedQty: number;
-          shippedQty: number;
           cutNote: string | null;
           pieceLengthM: number | null;
           requiredProperties: { id: string; name: string }[];
@@ -2784,9 +2847,8 @@ export class TamburService {
     for (const link of links) {
       const ol = link.orderLine;
       const order = ol.order;
-      // Sevkiyat modülü 2026-05-25 silindi, yeniden yazılacak. O zamana kadar
-      // shippedQty her zaman 0 — frontend tarafında gösterilmiyor.
-      const shippedQty = 0;
+      // F133: daima-0 shippedQty alanı kaldırıldı — loose modelde top→sipariş satırı
+      // bağı yok, per-line karşılanma türetilemez (spec-toplam üzerinden işler).
       if (!ordersMap.has(order.id)) {
         ordersMap.set(order.id, {
           orderId: order.id,
@@ -2805,7 +2867,6 @@ export class TamburService {
         colorName: ol.color?.name ?? null,
         width: ol.width !== null ? Number(ol.width) : null,
         orderedQty: Number(ol.quantity),
-        shippedQty,
         cutNote: ol.cutNote ?? null,
         pieceLengthM: ol.pieceLengthM !== null ? Number(ol.pieceLengthM) : null,
         requiredProperties: ol.requiredProperties.map((rp) => ({
@@ -2837,11 +2898,14 @@ export class TamburService {
             color: { select: { code: true, name: true } },
             parentReceipt: { select: { receiptNo: true } },
             errors: {
+              // F131: kardeş sorgularla (getPendingRolls/getRollForDecision/loadTamburRolls)
+              // aynı işlenmemiş-hata filtresi — NO_CUT ile idari kapatılmış (isProcessed=true)
+              // hata, fason turundan sonra dönen açık kumaşta 'açık hata' olarak listelenmesin.
+              where: { isProcessed: false },
               orderBy: { startMeter: "asc" },
               select: {
                 id: true,
                 startMeter: true,
-                
                 errorType: true,
               },
             },
