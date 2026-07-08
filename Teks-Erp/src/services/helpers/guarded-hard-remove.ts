@@ -15,6 +15,7 @@ import { Request, Response, NextFunction } from "express";
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AuditService } from "../audit.service";
+import { assertValidUuid } from "../../middlewares/uuid-param.middleware";
 
 type Tx = Prisma.TransactionClient;
 
@@ -50,7 +51,7 @@ export function makeGuardedHardRemove(config: GuardedHardRemoveConfig) {
     next: NextFunction
   ): Promise<void> {
     try {
-      const id = String(req.params.id);
+      const id = assertValidUuid(req.params.id); // F46: geçersiz UUID → net 400 (P2023/500 değil)
 
       const record = await config.load(id);
       if (!record) {
@@ -262,7 +263,7 @@ export async function machineDeletePreview(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const id = String(req.params.id);
+    const id = assertValidUuid(req.params.id); // F46: geçersiz UUID → net 400
     const machine = await prisma.machine.findUnique({ where: { id }, select: { id: true, name: true } });
     if (!machine) {
       res.status(404).json({ success: false, data: null, message: "Makine bulunamadı" });

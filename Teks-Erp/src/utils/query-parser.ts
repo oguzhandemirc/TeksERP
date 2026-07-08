@@ -8,8 +8,6 @@
 import { Request } from "express";
 import { QueryParams } from "../types/api.types";
 import { AppError } from "./app-error";
-import { decodeCursor } from "./cursor";
-import type { Cursor } from "./cursor";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -23,27 +21,8 @@ const MAX_PAGE_SIZE = 500;
 // gidiyorsa filtre eksiktir. Erken hata fırlatıp kullanıcıyı filtre kullanmaya yönlendir.
 const MAX_OFFSET = 10000;
 
-export interface CursorParams {
-  cursor: Cursor | null;
-  limit: number;
-}
-
-/**
- * Cursor pagination parametrelerini parse et.
- * `?cursor=<base64>&limit=50` formatı.
- * Cursor yoksa null (ilk sayfa). Limit MAX_PAGE_SIZE ile sınırlı.
- */
-export function parseCursorParams(req: Request): CursorParams {
-  const cursor = decodeCursor(req.query.cursor as string | undefined);
-  const rawLimit = parseInt(req.query.limit as string, 10) || DEFAULT_PAGE_SIZE;
-  if (rawLimit > MAX_PAGE_SIZE) {
-    throw AppError.badRequest(
-      `Limit (limit=${rawLimit}) en fazla ${MAX_PAGE_SIZE} olabilir.`
-    );
-  }
-  const limit = Math.max(1, rawLimit);
-  return { cursor, limit };
-}
+// F35: parseCursorParams (+ CursorParams) KALDIRILDI — repo genelinde hiç çağıran
+// yoktu ve limit sözleşmesi (>500→400) gerçek cursor yollarından sapıyordu.
 
 /**
  * İstemci cursor mode istediği mi? `?cursor=...` veya `?mode=cursor` parametre.

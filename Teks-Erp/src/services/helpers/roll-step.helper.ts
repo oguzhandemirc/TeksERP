@@ -22,37 +22,6 @@ import { AppError } from "../../utils/app-error";
 export type TxClient = Prisma.TransactionClient;
 
 /**
- * Belirtilen roll'ün belirtilen step'te açık (exitedAt=null) bir RollMovement
- * kaydı olup olmadığını döner. Operatör START basmış ama FINISH basmamışsa true.
- */
-export async function isRollActiveInStep(
-  tx: TxClient,
-  rollId: string,
-  stepId: string
-): Promise<boolean> {
-  const open = await tx.rollMovement.findFirst({
-    where: { rollId, workOrderStepId: stepId, exitedAt: null },
-    select: { id: true },
-  });
-  return !!open;
-}
-
-/**
- * Belirtilen roll'ün belirtilen step'te kapalı bir movement'i var mı?
- */
-export async function hasRollCompletedStep(
-  tx: TxClient,
-  rollId: string,
-  stepId: string
-): Promise<boolean> {
-  const closed = await tx.rollMovement.findFirst({
-    where: { rollId, workOrderStepId: stepId, exitedAt: { not: null } },
-    select: { id: true },
-  });
-  return !!closed;
-}
-
-/**
  * Step'e ait RollMovement kayıtlarına göre status'ü yeniden hesaplar ve
  * gerekirse günceller. SKIPPED step'lere dokunmaz.
  */
@@ -260,22 +229,6 @@ export async function openMovementForNextStep(
   });
 
   await recomputeStepStatus(tx, nextStepId);
-}
-
-/**
- * WorkOrder'ın bu step'teki bir roll için önceki "açık" olup olmadığını
- * (movement tablo tabanlı) ve bu roll'ün step'e daha önce girip girmediğini
- * tek bir sorguda döndüren yardımcı (tablet uçlarında etkin-dışı düğmeler için).
- */
-export async function getRollStepState(
-  tx: TxClient,
-  rollId: string,
-  stepId: string
-): Promise<{ active: boolean; completed: boolean }> {
-  // Tx içinde Promise.all kullanılmaz — bkz. recomputeStepStatus açıklaması.
-  const active = await isRollActiveInStep(tx, rollId, stepId);
-  const completed = await hasRollCompletedStep(tx, rollId, stepId);
-  return { active, completed };
 }
 
 /**

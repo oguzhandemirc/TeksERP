@@ -81,9 +81,9 @@ export function buildNextCursor(
 
 // =============================================================================
 // Generic (dinamik) cursor — keyfi sortBy / sortOrder destekli.
-// Yukarıdaki createdAt-only cursor base.service'te artık bu fonksiyonlarla
-// genelleştirildi. Diğer service'ler (workorder/inventory) hâlâ eski
-// createdAt-cursor kullanıyor — onlara dokunulmadı.
+// F35: base.service (master-data) + workorder/inventory bu dinamik cursor'ı kullanır.
+// Üstteki createdAt-only cursor (encode/decode/cursorWhere/buildNextCursor) hâlâ
+// canlı — system-log.service ve sack-search.service kullanır (zaman-sıralı log/çuval).
 // =============================================================================
 
 const NULL_MARKER = "\u0000NULL\u0000";
@@ -224,6 +224,14 @@ export function buildNextDynamicCursor(
   sortField: string,
 ): string | null {
   if (!lastItem) return null;
+  // F33: cursor sıralamasında `id` select edilmek ZORUNDA — yoksa token id'siz
+  // serileşir, decode null'a düşer ve sonsuz-scroll istemci sürekli 1. sayfayı çeker.
+  // Fail-fast: programcı hatasını hemen yüzeye çıkar (mutlu yolda id her zaman UUID string).
+  if (typeof lastItem.id !== "string") {
+    throw new Error(
+      "buildNextDynamicCursor: lastItem.id string değil — cursor sıralamasında `id` select edilmek ZORUNDA.",
+    );
+  }
   const v = lastItem[sortField];
   let serialized: string | null;
   let tag: CursorValueTag | undefined;

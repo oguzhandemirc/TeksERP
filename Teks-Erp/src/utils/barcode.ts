@@ -53,7 +53,9 @@ export function computeChecksum(input: string): string {
  * Format: RKYYMMXXXXXXC (ayraçsız)
  */
 export function verifyBarcode(barcode: string): boolean {
-  const match = /^RK(\d{4})([0-9A-Z]{6})([0-9A-Z])$/.exec(barcode.toUpperCase());
+  // F31: Crockford sınıfı (I/L/O/U hariç) — encoder bunları asla üretmez; format
+  // kapısında reddetmek O↔0/I↔1 yanlış-okumasını yakalar + 'bizden geldi' garantisi.
+  const match = /^RK(\d{4})([0-9A-HJKMNP-TV-Z]{6})([0-9A-HJKMNP-TV-Z])$/.exec(barcode.toUpperCase());
   if (!match) return false;
   const [, yymm, seq, check] = match;
   const expected = computeChecksum(`RK${yymm}${seq}`);
@@ -128,7 +130,10 @@ export function buildPrefixedCardNumber(
 
 /** Generic verify: prefix ile checksum doğrulaması (ayraçsız PREFIXYYMMXXXXXXC) */
 export function verifyPrefixedBarcode(prefix: string, barcode: string): boolean {
-  const re = new RegExp(`^${prefix}(\\d{4})([0-9A-Z]{6})([0-9A-Z])$`);
+  // F31: prefix guard (regex-injection savunması + buildPrefixedBarcode simetrisi) +
+  // Crockford sınıfı (I/L/O/U hariç).
+  if (!/^[A-Z]{2,3}$/.test(prefix)) return false;
+  const re = new RegExp(`^${prefix}(\\d{4})([0-9A-HJKMNP-TV-Z]{6})([0-9A-HJKMNP-TV-Z])$`);
   const m = re.exec(barcode.toUpperCase());
   if (!m) return false;
   const [, yymm, seq, check] = m;
