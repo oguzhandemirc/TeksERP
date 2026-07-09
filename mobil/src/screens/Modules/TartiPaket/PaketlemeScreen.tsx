@@ -66,17 +66,6 @@ const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR'
 // yuvarlıyordu (yanlış miktar görünüyordu). tr-TR ondalık = virgül, gereksiz sıfır yok.
 const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
-// Otomatik çuval kodu: <id kuyruğu>-DDMMYY-<sıra3>. Çuval id (UUID) çok uzun olduğundan
-// yalnızca sondan kısa bir kuyruk kullanılır (benzersizlik için yeterli). Sahada çuvalın
-// üstüne yazılan kısım "tarih-001" — sıra 1,2,3… diye gider. Operatör koddan override edebilir.
-const autoSackCode = (sackId: string, seq: number) => {
-  const tail = sackId.replace(/[^a-zA-Z0-9]/g, '').slice(-5).toUpperCase();
-  const d = new Date();
-  const date = `${pad2(d.getDate())}${pad2(d.getMonth() + 1)}${String(d.getFullYear()).slice(-2)}`;
-  return `${tail}-${date}-${String(seq).padStart(3, '0')}`;
-};
-
 export default function PaketlemeScreen() {
   // Portrait kilidi yalnızca telefonda — tablette yatay kalsın.
   usePortraitLock(useDeviceType() === 'phone');
@@ -672,8 +661,11 @@ export default function PaketlemeScreen() {
   const openWeigh = (s: { id: string; seq: number; weightKg: number | null; manualCode: string | null }) => {
     setWeighTarget({ id: s.id, seq: s.seq });
     setWeighKg(s.weightKg != null ? String(s.weightKg) : '');
-    // Kod girilmemişse otomatik öner (override edilebilir); girilmişse mevcut kodu göster.
-    setWeighCode(s.manualCode?.trim() ? s.manualCode : autoSackCode(s.id, s.seq));
+    // Kod TEK sunucu kaynağından gelir (SACK_CODE_TEMPLATE — çuval açılışında
+    // otomatik atanır, buraya dolu düşer). Eski istemci-tarafı <uuid>-DDMMYY-NNN
+    // önerisi kaldırıldı: sunucu şablonuyla çelişen ikinci bir "otomatik" şemaydı.
+    // Boş kod yalnız şablon-öncesi eski çuvallarda görülür — elle girilir.
+    setWeighCode(s.manualCode?.trim() ? s.manualCode : '');
   };
 
   return (
