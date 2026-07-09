@@ -64,6 +64,14 @@ export function SackSearchPage() {
     handleScan(code);
   });
 
+  // Sevk edilmiş çuval yönlendirmesi (scan-anywhere): kod tür fark etmeksizin
+  // çuval filtresine yazılır + "sevk edilmişleri de ara" açılır — yoksa
+  // varsayılan kapsam DISPATCHED'ı gizler, operatör boş liste görürdü.
+  useScanSeed("scanCodeDispatched", (code) => {
+    setFilters((f) => ({ ...f, sackCode: code, includeDispatched: true }));
+    toast.info(`Sevk edilmiş çuval filtreye uygulandı: ${code}`);
+  });
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader

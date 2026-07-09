@@ -106,7 +106,58 @@ async function resolveSwatch(code: string): Promise<ScanResolution> {
 interface SackRow {
   sackNo?: string;
   manualCode?: string | null;
-  shipment?: { shipmentNo?: string; customer?: { name?: string } };
+  shipment?: { shipmentNo?: string; status?: string; customer?: { name?: string } };
+}
+
+const SACK_STATUS_LABEL: Record<string, string> = {
+  PREPARING: "Hazırlanıyor",
+  READY: "Çuval Depo",
+  AT_DOOR: "Kapı Önü",
+  DISPATCHED: "Sevk Edildi",
+};
+
+/**
+ * Duruma göre TEK akıllı birincil hedef (operatörün karar yükünü düşür):
+ * PREPARING → Paketleme (içerik orada düzenlenir), READY/AT_DOOR → Çuval Depo
+ * (kapı aksiyonları orada), DISPATCHED → yalnız Arama (içerik kilitli — board'da
+ * ve Paketleme'de işi yok). Diğer hedefler ikincil sırada kalır.
+ */
+function sackActions(code: string, status: string | undefined): ScanAction[] {
+  const packing: ScanAction = {
+    label: "Paketleme'de aç (içeriği düzenle)",
+    to: "/operations/sack-content-edit",
+    state: { focusBarcode: code },
+  };
+  const store: ScanAction = {
+    label: "Çuval Depo'da aç",
+    to: "/operations/sack-store",
+    state: { scanCode: code },
+  };
+  const search: ScanAction = {
+    label: "Çuval Arama'da aç",
+    to: "/operations/sack-search",
+    state: { scanCode: code },
+  };
+  switch (status) {
+    case "PREPARING":
+      return [{ ...packing, primary: true }, store, search];
+    case "READY":
+    case "AT_DOOR":
+      return [{ ...store, primary: true }, packing, search];
+    case "DISPATCHED":
+      // Arama'ya özel seed: sackCode filtresi + "sevk edilmişleri de ara" birlikte
+      // açılır — yoksa varsayılan filtre sevk edilmişi gizler, liste boş görünür.
+      return [
+        {
+          label: "Çuval Arama'da aç (sevk edilmiş)",
+          to: "/operations/sack-search",
+          state: { scanCodeDispatched: code },
+          primary: true,
+        },
+      ];
+    default:
+      return [{ ...store, primary: true }, packing, search];
+  }
 }
 
 async function resolveSackByCode(code: string, kind: BarcodeKind): Promise<ScanResolution> {
@@ -121,6 +172,7 @@ async function resolveSackByCode(code: string, kind: BarcodeKind): Promise<ScanR
   if (!first) {
     return notFound(kind, code);
   }
+  const status = first.shipment?.status;
   return {
     kind: "SACK",
     code,
@@ -128,14 +180,12 @@ async function resolveSackByCode(code: string, kind: BarcodeKind): Promise<ScanR
     title: first.sackNo ?? first.manualCode ?? code,
     subtitle: joinDot([
       rows.length > 1 ? `${rows.length} eşleşme` : null,
+      status ? SACK_STATUS_LABEL[status] : null,
       first.shipment?.shipmentNo,
       first.shipment?.customer?.name,
     ]),
-    actions: [
-      { label: "Çuval Depo'da aç", to: "/operations/sack-store", state: { scanCode: code }, primary: true },
-      { label: "İçeriğini düzenle", to: "/operations/sack-content-edit", state: { focusBarcode: code } },
-      { label: "Çuval Arama'da aç", to: "/operations/sack-search", state: { scanCode: code } },
-    ],
+    note: status === "DISPATCHED" ? "Sevk edilmiş — içerik kilitli." : undefined,
+    actions: sackActions(code, status),
   };
 }
 
