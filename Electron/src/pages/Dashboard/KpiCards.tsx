@@ -55,7 +55,7 @@ const KPIS: KpiDef[] = [
     tone: "text-primary",
     query: fetchOpenWorkOrderCount,
     permission: "workorder:read",
-    to: "/operations/work-orders?filter[status]=PLANNED,IN_PROGRESS,PAUSED",
+    to: "/operations/work-orders?filter[status]=PLANNED,IN_PROGRESS",
   },
   {
     key: "warehouse",

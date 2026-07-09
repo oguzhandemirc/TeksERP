@@ -38,7 +38,6 @@ export const orderStatusTones = {
 export const workOrderStatusTones = {
   PLANNED: "muted",
   IN_PROGRESS: "info",
-  PAUSED: "warning",
   COMPLETED: "success",
   CANCELLED: "muted",
 } as const satisfies Record<string, Tone>;

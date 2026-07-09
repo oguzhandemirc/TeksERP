@@ -26,7 +26,7 @@ export interface BalanceLine {
 export interface BalanceWo {
   id: string;
   batchNumber: string;
-  status: "PLANNED" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
+  status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   inFlight: number;
 }
 

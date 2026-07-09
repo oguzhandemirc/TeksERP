@@ -23,7 +23,7 @@ export async function fetchOpenOrderCount(): Promise<number> {
 
 export async function fetchOpenWorkOrderCount(): Promise<number> {
   const res = await workOrderService.getAll(
-    countParams({ status: "PLANNED,IN_PROGRESS,PAUSED" }),
+    countParams({ status: "PLANNED,IN_PROGRESS" }),
   );
   return res.pagination.total;
 }
@@ -67,7 +67,7 @@ export async function fetchOverdueWorkOrders(): Promise<WorkOrder[]> {
     pageSize: 8,
     sortBy: "plannedEndDate",
     sortOrder: "asc",
-    filters: { status: "PLANNED,IN_PROGRESS,PAUSED" },
+    filters: { status: "PLANNED,IN_PROGRESS" },
     dateField: "plannedEndDate",
     dateTo: new Date().toISOString(),
   });

@@ -30,7 +30,6 @@ const FILTERS: FilterDef[] = [
     options: [
       { value: "PLANNED", label: "Planlandı" },
       { value: "IN_PROGRESS", label: "Devam Ediyor" },
-      { value: "PAUSED", label: "Duraklatıldı" },
       { value: "COMPLETED", label: "Tamamlandı" },
       { value: "CANCELLED", label: "İptal" },
     ],

@@ -16,7 +16,7 @@ export type OrderCancelAction = "UNLINK_ONLY" | "CONVERT_TO_STOCK" | "CANCEL_WO"
 export interface OrderCancelPreviewWO {
   id: string;
   batchNumber: string;
-  status: "PLANNED" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
+  status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   /** WO'nun hedef üretim metrajı (link-only: per-sipariş tahsis yok). null olabilir. */
   targetQuantity: number | null;
   isSoleOrder: boolean;
@@ -46,7 +46,7 @@ export const orderService = {
 
   /**
    * İş emri picker'ı için müsait kalemleri çeker. Backend aktif WO'ya
-   * (PLANNED/IN_PROGRESS/PAUSED/COMPLETED) bağlı satırları gizler;
+   * (PLANNED/IN_PROGRESS/COMPLETED) bağlı satırları gizler;
    * `excludeWorkOrderId` verilirse o WO'nun kendi bağları "müsait" sayılır
    * (edit modu).
    */

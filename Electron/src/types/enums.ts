@@ -97,7 +97,6 @@ export const orderStatusLabels: Record<OrderStatus, string> = {
 export const WorkOrderStatus = {
   PLANNED: "PLANNED",
   IN_PROGRESS: "IN_PROGRESS",
-  PAUSED: "PAUSED",
   COMPLETED: "COMPLETED",
   CANCELLED: "CANCELLED",
 } as const;
@@ -106,7 +105,6 @@ export type WorkOrderStatus = (typeof WorkOrderStatus)[keyof typeof WorkOrderSta
 export const workOrderStatusLabels: Record<WorkOrderStatus, string> = {
   PLANNED: "Planlandı",
   IN_PROGRESS: "Devam Ediyor",
-  PAUSED: "Duraklatıldı",
   COMPLETED: "Tamamlandı",
   CANCELLED: "İptal",
 };
