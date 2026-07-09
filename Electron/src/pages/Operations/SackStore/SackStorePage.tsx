@@ -115,7 +115,6 @@ export function SackStorePage() {
     onSuccess: (_data, action) => {
       toast.success(ACTION_COPY[action.kind].success);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      void qc.invalidateQueries({ queryKey: ["sack-contents"] });
       // O1 fix: bu geçişler sevkiyatın kendisini de değiştirir — unready
       // commit'i GERİ SARIP sipariş durumunu yeniden hesaplar. Açık
       // Sevkiyat/Sipariş sekmeleri bayat kalmasın. (Dispatch tazelemeleri

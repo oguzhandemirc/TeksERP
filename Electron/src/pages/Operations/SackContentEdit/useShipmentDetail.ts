@@ -27,7 +27,7 @@ export function invalidateShipmentData(qc: QueryClient, shipmentId: string) {
   void qc.invalidateQueries({ queryKey: shipmentDetailKey(shipmentId) });
   void qc.invalidateQueries({ queryKey: ["packing"] });
   void qc.invalidateQueries({ queryKey: ["sack-store"] });
-  void qc.invalidateQueries({ queryKey: ["sack-contents"] });
+  // Sevk onayı dökümü ("dispatch-confirm") gcTime:0 — invalidation gerekmez.
   void qc.invalidateQueries({ queryKey: ["sack-search"] });
   void qc.invalidateQueries({ queryKey: ["rolls"] });
   void qc.invalidateQueries({ queryKey: ["shipments"] });
