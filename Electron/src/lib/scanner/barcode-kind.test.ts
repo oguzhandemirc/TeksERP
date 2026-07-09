@@ -34,7 +34,9 @@ describe("classifyBarcode — prefix → tür", () => {
 
 describe("BARCODE_FORMATS — tam format regex'leri", () => {
   it("geçerli kodlar eşleşir", () => {
-    expect(BARCODE_FORMATS.ROLL.test("TEKS20260615AB12CD34")).toBe(true);
+    expect(BARCODE_FORMATS.ROLL.test("TEKS20260615AB12CD34")).toBe(true); // eski biçim
+    expect(BARCODE_FORMATS.ROLL.test("TEKS260709HA001")).toBe(true); // yeni kısa (ham)
+    expect(BARCODE_FORMATS.ROLL.test("TEKS260709FB012")).toBe(true); // yeni kısa (final)
     expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK26049F2K3P7")).toBe(true);
     expect(BARCODE_FORMATS.SWATCH.test("SW26045A3Z9B2")).toBe(true);
     expect(BARCODE_FORMATS.SACK.test("CV-260615-001")).toBe(true);

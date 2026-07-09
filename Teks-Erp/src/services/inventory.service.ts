@@ -101,8 +101,7 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchShipmentPreparingTx } from "./helpers/shipment-locks.helper";
-import { generateRollBarcode, ROLL_BARCODE_RE } from "./helpers/roll-barcode.helper";
-import { withBarcodeRetry } from "../utils/barcode-retry";
+import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 
 export interface RollStats {
   totalCount: number;
@@ -345,13 +344,12 @@ export class InventoryService {
       width?: number | null;  // En (cm) — opsiyonel, ölçülmediyse null
       propertyIds?: string[];
       /**
-       * Opsiyonel client-üretimi barkod. Offline KK1 girişi için mobil tarafta
-       * üretilir (generateRollBarcode ile aynı format: TEKSYYYYMMDDXXXXXXXX).
-       * Verilmezse backend üretir (default davranış). Verilirse retry/dedup
-       * doğal anchor olarak Roll.barcode @unique kullanılır — aynı barkodla
-       * 2. çağrı cached Roll döner.
+       * Opsiyonel idempotency anahtarı (UUID) — offline KK1 / ağ-retry için mobil
+       * üretir. Barkod artık SUNUCU'da sıralı atandığından (TEKS+YYMMDD+H/F+A001..)
+       * dedup barkodla değil bu token'la yapılır: Roll.clientToken @unique → aynı
+       * token'la 2. çağrı cached Roll döner. Verilmezse (backend-içi çağrı) dedup yok.
        */
-      clientBarcode?: string;
+      clientToken?: string;
     },
     userId?: string,
     /** KK1 makine atfı — aktif çalışma oturumundan (controller çözer). KK1 girişi
@@ -429,19 +427,11 @@ export class InventoryService {
       }
     }
 
-    // Barkod: client verdiyse onu kullan (offline retry idempotency), yoksa üret.
-    // Client format validasyonu: TEKSYYYYMMDDXXXXXXXX (uppercase hex 8 char, ayraçsız).
-    if (data.clientBarcode && !ROLL_BARCODE_RE.test(data.clientBarcode)) {
-      throw AppError.badRequest(
-        "Geçersiz client-üretimi barkod formatı (beklenen: TEKSYYYYMMDDXXXXXXXX)",
-      );
-    }
-    // F272: Sunucu-üretimi barkod (clientBarcode yok) 32-bit entropi ile nadiren
-    // çakışabilir; eskiden bu P2002 doğrudan 500'e düşüyordu. withBarcodeRetry +
-    // `serverGenerated` predicate ile sadece sunucu-çakışması yeni barkodla retry
-    // edilir; clientBarcode P2002 predicate=false → aşağıdaki idempotency catch'e düşer.
-    const serverGenerated = !data.clientBarcode;
-    let barcode = data.clientBarcode ?? generateRollBarcode();
+    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcode) — offline istemci
+    // sırayı bilemez. Tip damgası: renkli manuel giriş = hazır/işlenmiş → depoya → "F"
+    // (final kumaş); renksiz = ham (üretime girer) → "H". Mükerrer-top koruması artık
+    // clientToken (@unique) ile — barkod DEDUP ANCHOR'I DEĞİL (aşağıdaki catch).
+    const rollType: RollBarcodeType = data.colorId != null ? "F" : "H";
 
     // Tüm item tipleri (fabric, yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
     const entrySource: RollEntrySource = RollEntrySource.SUPPLIER_RECEIPT;
@@ -466,12 +456,13 @@ export class InventoryService {
 
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {
-      roll = await withBarcodeRetry(
-        () => prisma.$transaction(async (tx) => {
-        if (serverGenerated) barcode = generateRollBarcode();
+      roll = await prisma.$transaction(async (tx) => {
+        // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
+        const barcode = await generateRollBarcode(tx, rollType);
         const created = await tx.roll.create({
           data: {
             barcode,
+            clientToken: data.clientToken ?? null,
             itemId: data.itemId,
             colorId: data.colorId ?? null,
             initialQty: data.initialQty,
@@ -497,21 +488,17 @@ export class InventoryService {
           });
         }
         return created;
-        }),
-        undefined,
-        () => serverGenerated,
-      );
+      });
     } catch (err) {
-      // Offline retry idempotency: aynı clientBarcode ile 2. çağrı geldi.
-      // Roll.barcode @unique → P2002 → mevcut Roll'u dön (audit log atılmaz,
-      // ilk çağrıda zaten yazılmış).
+      // İdempotency: aynı clientToken ile 2. çağrı (offline sync replay / eşzamanlı race).
+      // Roll.clientToken @unique → P2002 → mevcut Roll'u dön (audit ilk çağrıda yazıldı).
       if (
-        data.clientBarcode &&
+        data.clientToken &&
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002"
       ) {
         const existing = await prisma.roll.findUnique({
-          where: { barcode },
+          where: { clientToken: data.clientToken },
           include: {
             item: true,
             color: true,
@@ -519,11 +506,10 @@ export class InventoryService {
           },
         });
         if (existing) {
-          // F117: İdempotent retry SADECE gelen payload mevcut kayıtla ÖZDEŞSE
-          // geçerli. Çapraz-cihaz barkod çakışmasında (iki farklı KK1 girişi aynı
-          // clientBarcode üretirse — günlük entropi 32 bit) 2. giriş sessizce
-          // "kaydedildi" görünüp asla yaratılmamalı; kimlik-kilit alanları
-          // (item/renk/metre) uyuşmuyorsa 409 çakışma fırlat.
+          // F117: İdempotent retry SADECE gelen payload mevcut kayıtla ÖZDEŞSE geçerli.
+          // Aynı token farklı topla kullanıldıysa (istemci hatası) 2. giriş sessizce
+          // "kaydedildi" görünmemeli; kimlik-kilit alanları (item/renk/metre)
+          // uyuşmuyorsa 409 çakışma fırlat.
           const sameItem = existing.itemId === data.itemId;
           const sameColor = existing.colorId === (data.colorId ?? null);
           const sameQty = new Prisma.Decimal(data.initialQty).equals(existing.initialQty);
@@ -535,9 +521,9 @@ export class InventoryService {
             };
           }
           throw AppError.conflict(
-            "Bu barkod farklı bir topla zaten kayıtlı (barkod çakışması). Topu yeniden okutup tekrar deneyin.",
+            "Bu istemci anahtarı farklı bir topla kullanılmış. Topu yeniden okutup tekrar deneyin.",
             {
-              code: "BARCODE_COLLISION",
+              code: "CLIENT_TOKEN_COLLISION",
               barcode: existing.barcode,
               existing: {
                 id: existing.id,

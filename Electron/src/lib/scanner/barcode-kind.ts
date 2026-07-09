@@ -3,7 +3,8 @@
 // =============================================================================
 // Sistem-üretimi kodlar farklı prefix taşır (backend `utils/barcode.ts` +
 // shipping/kartela servisleri ile doğrulandı):
-//   TEKSYYYYMMDDXXXXXXXX    → Roll (top) — ayraçsız (wedge-tarayıcı `-`→`*` fix)
+//   TEKSYYMMDD{H|F}{A-Z}NNN → Roll (top) YENİ kısa biçim (sunucu sıralı; H=ham/F=final)
+//   TEKSYYYYMMDDXXXXXXXX    → Roll (top) ESKİ biçim (sahadaki etiketler) — ikisi de geçerli
 //   RKYYMMXXXXXXC           → TravelerCard (refakat kartı) — ayraçsız (wedge fix)
 //   SWYYMMXXXXXXC           → Swatch (kartela) — ayraçsız tarama barkodu (wedge fix)
 //   CV-YYMMDD-NNN           → Sack (çuval, sackNo)         ← 6 haneli tarih!
@@ -26,7 +27,8 @@ export type BarcodeKind =
 
 /** Tam-format regex'leri (checksum dahil) — opsiyonel istemci doğrulaması için. */
 export const BARCODE_FORMATS = {
-  ROLL: /^TEKS\d{8}[0-9A-F]{8}$/,
+  // Yeni kısa (TEKS+YYMMDD+H/F+A001..) VEYA eski (TEKS+YYYYMMDD+8hex) — ikisi de kabul.
+  ROLL: /^TEKS(\d{6}[HF][A-Z]\d{3}|\d{8}[0-9A-F]{8})$/,
   TRAVELER_CARD: /^RK\d{4}[0-9A-Z]{6}[0-9A-Z]$/,
   SWATCH: /^SW\d{4}[0-9A-Z]{6}[0-9A-Z]$/,
   SACK: /^CV-\d{6}-\d{3}$/,

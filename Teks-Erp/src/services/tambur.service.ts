@@ -45,22 +45,11 @@ import {
   Swatch,
   WorkOrderStatus,
 } from "@prisma/client";
-import { v4 as uuidv4 } from "uuid";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 
-/**
- * Generate a barcode for a split-off roll (ayraçsız).
- * Tire YOK — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu
- * (1D wedge bozuyor, QR kamera doğru okuyor). Parent barkodu zaten ayraçsız
- * (`generateBarcode` = TEKSYYYYMMDDXXXXXXXX); child = parent + "KS" + suffix.
- */
-export function generateSplitBarcode(originalBarcode: string): string {
-  const suffix = uuidv4().replace(/-/g, "").substring(0, 6).toUpperCase();
-  return `${originalBarcode}KS${suffix}`;
-}
 
 /**
  * Kesim etiket NİYETİNİ çözer (pre-tx): hedef sipariş kalemi / müşteri var-mı +
@@ -565,10 +554,6 @@ export class TamburService {
       );
     }
 
-    // Parent barkodlu (klasik) ise child barkodlar parent prefix'i ile üretilir;
-    // açık kumaş (barcode=null, boyahane dönüşü) ise TEKSYYYYMMDDXXXXXXXX (ayraçsız).
-    const parentBarcode = roll.barcode;
-
     const totalQty = Number(roll.currentQty);
     const wo = roll.producedInStep?.workOrder ?? null;
     const plannedFoldType = wo?.foldType ?? null;
@@ -848,9 +833,9 @@ export class TamburService {
 
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
       for (const seg of segments) {
-        const splitBarcode = parentBarcode
-          ? generateSplitBarcode(parentBarcode)
-          : generateRollBarcode();
+        // Split çocuğu FRESH kısa barkod alır (soy-ağacı parentRollId'de tutulur;
+        // eski `parent+KS+suffix` biçimi hem uzundu hem hiçbir yerde parse edilmiyordu).
+        const splitBarcode = await generateRollBarcode(tx, seg.status === RollStatus.WAREHOUSE ? "F" : "H");
         const splitRoll = await tx.roll.create({
           data: {
             barcode: splitBarcode,
@@ -1674,18 +1659,14 @@ export class TamburService {
        *  raw→STOCK (üretime devam) child stok'a düşer. İkisi de boş = stok. */
       targetOrderLineId?: string | null;
       targetCustomerId?: string | null;
-      /** Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
-       *  Verilirse ağ-retry'ında 2. çağrı child @unique P2002 → mevcut child idempotent
-       *  döner (ikinci kesim/decrement YOK). createInitialEntry.clientBarcode deseni. */
-      clientChildBarcode?: string;
+      /** Offline/ağ-retry idempotency anahtarı (UUID). Barkod sunucuda sıralı atanır;
+       *  aynı token'la 2. çağrı child'ı idempotent döner (ikinci kesim/decrement YOK). */
+      clientToken?: string;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
-    }
-    if (data.clientChildBarcode && !/^TEKS\d{8}[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
-      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKSYYYYMMDDXXXXXXXX)");
     }
 
     const parent = await prisma.roll.findUnique({
@@ -1740,7 +1721,8 @@ export class TamburService {
         ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
         : parent.qualityGradeId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = data.clientChildBarcode ?? generateRollBarcode();
+    // Barkod SUNUCU'da sıralı atanır (atomik sayaç). WAREHOUSE child → "F", raw→STOCK → "H".
+    const childBarcode = await generateRollBarcode(prisma, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
     // (üretime devam) child stok etiketle doğar.
     const cutIntentSnapshot =
@@ -1754,6 +1736,7 @@ export class TamburService {
       const child = await tx.roll.create({
         data: {
           barcode: childBarcode,
+          clientToken: data.clientToken ?? null,
           itemId: parent.itemId,
           colorId: parent.colorId,
           width: parent.width,
@@ -1867,15 +1850,15 @@ export class TamburService {
       return { child, newParentQty, updatedParent };
       });
     } catch (err) {
-      // Offline/ağ-retry idempotency: aynı clientChildBarcode ile 2. çağrı → child
-      // @unique P2002. tx geri sarıldığından İKİNCİ decrement UYGULANMAZ; ilk çağrının
-      // oluşturduğu child + güncel parent idempotent döner (createInitialEntry deseni).
+      // Offline/ağ-retry idempotency: aynı clientToken ile 2. çağrı → clientToken @unique
+      // P2002. tx geri sarıldığından İKİNCİ decrement UYGULANMAZ; ilk çağrının oluşturduğu
+      // child + güncel parent idempotent döner (createInitialEntry deseni).
       if (
-        data.clientChildBarcode &&
+        data.clientToken &&
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002"
       ) {
-        const existing = await prisma.roll.findUnique({ where: { barcode: childBarcode } });
+        const existing = await prisma.roll.findUnique({ where: { clientToken: data.clientToken } });
         const freshParent = await prisma.roll.findUnique({ where: { id: rollId } });
         if (existing && freshParent) {
           return {
@@ -2025,9 +2008,10 @@ export class TamburService {
       let remainingChild: Roll | null = null;
 
       if (wantChild) {
+        const childBarcode = await generateRollBarcode(tx, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
         const child = await tx.roll.create({
           data: {
-            barcode: generateRollBarcode(),
+            barcode: childBarcode,
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,
@@ -2165,16 +2149,13 @@ export class TamburService {
        *  İkisi de boş = stok (müşterisiz). */
       targetOrderLineId?: string | null;
       targetCustomerId?: string | null;
-      /** Offline/retry idempotency: client-üretimi child barkod (cutWarehouseRoll ile aynı). */
-      clientChildBarcode?: string;
+      /** Offline/ağ-retry idempotency anahtarı (UUID) — cutWarehouseRoll ile aynı. */
+      clientToken?: string;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.lengthMeters > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
-    }
-    if (data.clientChildBarcode && !/^TEKS\d{8}[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
-      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKSYYYYMMDDXXXXXXXX)");
     }
 
     const parent = await prisma.roll.findUnique({
@@ -2234,7 +2215,8 @@ export class TamburService {
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = data.clientChildBarcode ?? generateRollBarcode();
+    // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
+    const childBarcode = await generateRollBarcode(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
     const cutIntentSnapshot = buildIntentSnapshot(await resolveCutLabelIntent(data));
 
@@ -2262,6 +2244,7 @@ export class TamburService {
       const child = await tx.roll.create({
         data: {
           barcode: childBarcode,
+          clientToken: data.clientToken ?? null,
           itemId: parent.itemId,
           colorId: parent.colorId,
           width: parent.width,
@@ -2369,15 +2352,15 @@ export class TamburService {
       return { child, newParentQty };
       });
     } catch (err) {
-      // Offline/ağ-retry idempotency (cutWarehouseRoll ile aynı): clientChildBarcode
-      // ile 2. çağrı → child @unique P2002, tx geri sarılır (ikinci decrement YOK) →
+      // Offline/ağ-retry idempotency (cutWarehouseRoll ile aynı): aynı clientToken ile
+      // 2. çağrı → clientToken @unique P2002, tx geri sarılır (ikinci decrement YOK) →
       // mevcut child + güncel parent metresi idempotent döner.
       if (
-        data.clientChildBarcode &&
+        data.clientToken &&
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002"
       ) {
-        const existing = await prisma.roll.findUnique({ where: { barcode: childBarcode } });
+        const existing = await prisma.roll.findUnique({ where: { clientToken: data.clientToken } });
         const freshParent = await prisma.roll.findUnique({ where: { id: openFabricRollId } });
         if (existing && freshParent) {
           return {
@@ -2565,9 +2548,10 @@ export class TamburService {
       // Kalan metre için child Roll oluştur (action != discard ve kalan > 0).
       // Kalite operatörün seçimine göre: 1.KALITE / A1 / FIRE. Hepsi WAREHOUSE'a iner.
       if (wantChild) {
+        const childBarcode = await generateRollBarcode(tx, "F"); // hepsi depoya → final
         const child = await tx.roll.create({
           data: {
-            barcode: generateRollBarcode(),
+            barcode: childBarcode,
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,

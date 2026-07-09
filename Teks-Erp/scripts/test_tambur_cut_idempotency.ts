@@ -11,6 +11,7 @@
 //   D) clientChildBarcode YOK (server-üretimi) → idempotency yok (opt-in kanıtı).
 // =============================================================================
 
+import { v4 as uuidv4 } from "uuid";
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { WorkOrderStatus, RollStatus, StationKind } from "@prisma/client";
@@ -40,7 +41,7 @@ let ITEM = "",
 const woIds: string[] = [];
 const parentIds: string[] = [];
 let seq = 0;
-const bc = () => `TEKS20260623${(10000000 + seq++).toString(16).toUpperCase().padStart(8, "0").slice(-8)}`;
+const tok = () => uuidv4(); // idempotency anahtarı (barkod artık sunucu-atanan)
 
 async function resolveFixtures(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
@@ -88,41 +89,41 @@ async function openFabricRoll(qty: number): Promise<string> {
 }
 
 const qtyOf = async (id: string) => Number(need(await prisma.roll.findUnique({ where: { id }, select: { currentQty: true } }), "roll").currentQty);
-const childCount = (barcode: string) => prisma.roll.count({ where: { barcode } });
+const childCountByToken = (t: string) => prisma.roll.count({ where: { clientToken: t } });
 
 async function run(): Promise<void> {
   // A) cutWarehouseRoll sıralı retry
   console.log("\n=== A) cutWarehouseRoll sıralı retry idempotency ===");
   const w1 = await warehouseRoll(100);
-  const b1 = bc();
-  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientChildBarcode: b1 }, ADMIN);
-  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientChildBarcode: b1 }, ADMIN); // retry
-  check("retry: tek child (barkod 1×)", (await childCount(b1)) === 1);
+  const b1 = tok();
+  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientToken: b1 }, ADMIN);
+  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientToken: b1 }, ADMIN); // retry
+  check("retry: tek child (barkod 1×)", (await childCountByToken(b1)) === 1);
   check("retry: parent 1 kez düşüldü (100→70)", (await qtyOf(w1)) === 70, `qty=${await qtyOf(w1)}`);
 
   // B) cutWarehouseRoll EŞZAMANLI
   console.log("\n=== B) cutWarehouseRoll eşzamanlı (2 paralel, aynı barkod) ===");
   const w2 = await warehouseRoll(100);
-  const b2 = bc();
+  const b2 = tok();
   const settled = await Promise.allSettled([
-    tambur.cutWarehouseRoll(w2, { cutLength: 30, clientChildBarcode: b2 }, ADMIN),
-    tambur.cutWarehouseRoll(w2, { cutLength: 30, clientChildBarcode: b2 }, ADMIN),
+    tambur.cutWarehouseRoll(w2, { cutLength: 30, clientToken: b2 }, ADMIN),
+    tambur.cutWarehouseRoll(w2, { cutLength: 30, clientToken: b2 }, ADMIN),
   ]);
   check("paralel: ikisi de hata vermedi (1 fresh + 1 idempotent)", settled.every((s) => s.status === "fulfilled"));
-  check("paralel: tek child", (await childCount(b2)) === 1);
+  check("paralel: tek child", (await childCountByToken(b2)) === 1);
   check("paralel: parent 1 kez düşüldü (100→70)", (await qtyOf(w2)) === 70, `qty=${await qtyOf(w2)}`);
 
   // C) cutOpenFabric sıralı retry
   console.log("\n=== C) cutOpenFabric sıralı retry idempotency ===");
   const o1 = await openFabricRoll(100);
-  const b3 = bc();
-  await tambur.cutOpenFabric(o1, { lengthMeters: 30, status: "WAREHOUSE", clientChildBarcode: b3 }, ADMIN);
-  await tambur.cutOpenFabric(o1, { lengthMeters: 30, status: "WAREHOUSE", clientChildBarcode: b3 }, ADMIN); // retry
-  check("openfabric retry: tek child", (await childCount(b3)) === 1);
+  const b3 = tok();
+  await tambur.cutOpenFabric(o1, { lengthMeters: 30, status: "WAREHOUSE", clientToken: b3 }, ADMIN);
+  await tambur.cutOpenFabric(o1, { lengthMeters: 30, status: "WAREHOUSE", clientToken: b3 }, ADMIN); // retry
+  check("openfabric retry: tek child", (await childCountByToken(b3)) === 1);
   check("openfabric retry: parent 1 kez düşüldü (100→70)", (await qtyOf(o1)) === 70, `qty=${await qtyOf(o1)}`);
 
-  // D) clientChildBarcode YOK → idempotency YOK (opt-in / geriye uyum kanıtı)
-  console.log("\n=== D) clientChildBarcode'suz → server-üretimi, idempotency YOK ===");
+  // D) clientToken YOK → idempotency YOK (opt-in / geriye uyum kanıtı)
+  console.log("\n=== D) clientToken'sız → server-üretimi, idempotency YOK ===");
   const w3 = await warehouseRoll(100);
   await tambur.cutWarehouseRoll(w3, { cutLength: 30 }, ADMIN);
   await tambur.cutWarehouseRoll(w3, { cutLength: 30 }, ADMIN);

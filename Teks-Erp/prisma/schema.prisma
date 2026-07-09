@@ -847,6 +847,11 @@ model Roll {
   /// Açık kumaş Roll'ları (Kurşun/KK2'de doğan) için NULL — fiziksel etiket basılmaz.
   /// Unique constraint: PostgreSQL'de NULL'lar tek olabilir (multiple NULLs allowed).
   barcode String? @unique @db.VarChar(64)
+  /// Idempotency anahtarı — mobil/istemci üretir (UUID); ağ-retry'de mükerrer top
+  /// yaratılmasını önler. Barkod artık SUNUCU tarafından sıralı atandığından
+  /// (TEKS+YYMMDD+H/F+A001..) dedup görevini barkod yerine bu alan yapar. Sunucu-üretimi
+  /// (KK1 dışı) kayıtlar için NULL — partial unique index (NULL'lar çakışmaz).
+  clientToken String? @unique @db.Uuid
   itemId  String @db.Uuid
   /// Rulonun kazandığı renk. Üretim sürecinde "renk veren" fason adımı (örn.
   /// boyahane) başarıyla tamamlandıktan sonra WO.targetColorId'den kopyalanır.
@@ -1409,6 +1414,19 @@ model DefectType {
 
   @@index([isActive])
   @@map("defect_types")
+}
+
+/// Top barkod sıra sayacı — gün+tip başına atomik sıralı numara kaynağı.
+/// Barkod = `TEKS`+`YYMMDD`+`H|F`+encodeRollSeq(n). `INSERT … ON CONFLICT (day,type)
+/// DO UPDATE n=n+1 RETURNING n` ile ÇAKIŞMASIZ (satır kilidi serileştirir) — offline
+/// istemci sırayı üretemediği için sunucu tek kaynak. Yeni gün → yeni satır (n=1'den).
+model RollBarcodeCounter {
+  day  String @db.VarChar(6) /// YYMMDD
+  type String @db.VarChar(1) /// H (ham) | F (final)
+  n    Int    @default(0)
+
+  @@id([day, type])
+  @@map("roll_barcode_counters")
 }
 
 /// Top üzerinde tespit edilen hatalar. Kurşun/QC2 istasyonunda açılır,

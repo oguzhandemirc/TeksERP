@@ -12,7 +12,6 @@
 import prisma from "../src/lib/prisma";
 import { ItemService } from "../src/services/item.service";
 import { InventoryService } from "../src/services/inventory.service";
-import { generateSplitBarcode } from "../src/services/tambur.service";
 import { AppError } from "../src/utils/app-error";
 import { RollStatus } from "@prisma/client";
 
@@ -156,14 +155,9 @@ async function main() {
       stockAfter?.status,
     );
 
-    // ── F129: split barkod ayraçsız ─────────────────────────────────────────
-    const parent = "TEKS20260707ABCD1234";
-    const split = generateSplitBarcode(parent);
-    check(
-      "F129: split barkodda tire YOK",
-      !split.includes("-") && split.startsWith(parent) && split.includes("KS"),
-      split,
-    );
+    // (F129 split-barkod testi kaldırıldı — split çocukları artık FRESH kısa barkod
+    //  alıyor; parent-türevi `generateSplitBarcode` biçimi silindi. Barkod ayraçsızlığı
+    //  test_roll_barcode.ts'te ROLL_BARCODE_RE ile kapsanıyor.)
   } finally {
     // Cleanup — test kendi yarattığını siler.
     if (rollIds.length) {

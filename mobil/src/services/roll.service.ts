@@ -90,11 +90,11 @@ export interface InitialEntryRequest {
   qualityGrade?: string;
   width?: number;
   /**
-   * Opsiyonel client-üretimi barkod (offline KK1 girişi için). Format:
-   * TEKS-YYYYMMDD-XXXXXXXX. Verilirse backend onu kullanır + idempotent
-   * retry desteklenir (aynı barkodla 2. çağrı cached Roll döner).
+   * Opsiyonel idempotency anahtarı (UUID) — offline KK1 / ağ-retry için. Barkod
+   * artık SUNUCU'da sıralı atanır (TEKS+YYMMDD+H/F+A001..); aynı token'la 2. çağrı
+   * cached Roll döner (mükerrer top önlenir). Etiket sunucudan dönen barkodla basılır.
    */
-  clientBarcode?: string;
+  clientToken?: string;
 }
 
 export const rollService = {

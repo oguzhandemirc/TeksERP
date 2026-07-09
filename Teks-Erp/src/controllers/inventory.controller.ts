@@ -9,7 +9,6 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { InventoryService } from "../services/inventory.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
-import { ROLL_BARCODE_RE } from "../services/helpers/roll-barcode.helper";
 import "../types/express-augment";
 
 // Zod validation schemas
@@ -21,12 +20,9 @@ const initialEntrySchema = z.object({
   qualityGrade: z.string().optional(),
   width:        z.number().positive("En pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
   propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional().default([]),
-  // Offline KK1 girişi için opsiyonel client-üretimi barkod (sync replay
-  // idempotency anchor — aynı barkodla 2. çağrı cached Roll döner).
-  clientBarcode: z
-    .string()
-    .regex(ROLL_BARCODE_RE, "Geçersiz barkod formatı")
-    .optional(),
+  // Offline KK1 / ağ-retry idempotency anahtarı (UUID) — barkod artık sunucuda sıralı
+  // atanır; aynı token'la 2. çağrı cached Roll döner (mükerrer-top önlenir).
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 
 const openFabricSchema = z.object({

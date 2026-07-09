@@ -70,7 +70,7 @@ import {
 import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { STATION_MUT } from '../../../offline/mutations';
-import { generateClientBarcode } from '../../../offline/barcode';
+import { generateClientUuid } from '../../../offline/barcode';
 import { useIsOnline } from '../../../offline/hooks';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -453,13 +453,12 @@ export default function KK1Screen() {
 
   // ── Mutation ──
   // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
-  // app restart'ında resolve. Client-üretimi barkod (TEKS-YYYYMMDD-XXXXXXXX)
-  // handleSubmit içinde üretilip vars.clientBarcode'a gömülür — backend
-  // idempotency anchor (Roll.barcode @unique + P2002 catch → cached Roll).
-  // onMutate'te form anında temizlenir + barkod toast'la operatöre gösterilir
-  // (sahada fiziksel mal'a not düşmek için). onError'da form geri yüklenir.
-  // Etiket basımı onSuccess'te tetiklenir — offline'da paused mutation online
-  // dönünce gerçek Roll backend'den geldiğinde LabelPrinter çalışır.
+  // app restart'ında resolve. Client-üretimi idempotency anahtarı (UUID clientToken)
+  // handleSubmit içinde üretilip vars'a gömülür — backend clientToken @unique + P2002
+  // catch → cached Roll (mükerrer top yok). Barkod SUNUCU'da sıralı atanır.
+  // onMutate'te form anında temizlenir. onError'da form geri yüklenir. Etiket basımı
+  // onSuccess'te (res.data'nın gerçek barkoduyla) tetiklenir — offline'da paused
+  // mutation online dönünce çalışır.
   const createMutation = useMutation<
     Awaited<ReturnType<typeof rollService.createInitialEntry>>,
     Error,
@@ -468,7 +467,6 @@ export default function KK1Screen() {
       prevForm: FormState;
       prevManualQty: string;
       prevManualWeight: string;
-      clientBarcode: string | undefined;
     } | undefined
   >({
     mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
@@ -479,8 +477,8 @@ export default function KK1Screen() {
         type: 'success',
         text1: 'Top kaydedildi',
         text2: onlineManager.isOnline()
-          ? `Barkod: ${vars.clientBarcode ?? '...'}`
-          : `Çevrimdışı — sync bekliyor · ${vars.clientBarcode ?? ''}`,
+          ? 'Barkod sunucudan atanıyor — etikete basılacak'
+          : 'Çevrimdışı — sync bekliyor',
       });
       // Oturum sayacı (pending) + başarı flaşı (ekran-içi tatmin, offline'da da çalışır).
       useSessionEntriesStore.getState().addPending('RAW_QC');
@@ -495,7 +493,6 @@ export default function KK1Screen() {
         prevForm,
         prevManualQty,
         prevManualWeight,
-        clientBarcode: vars.clientBarcode,
       };
     },
     onSuccess: (res) => {
@@ -757,17 +754,18 @@ export default function KK1Screen() {
       }
     }
 
-    // Offline-aware: clientBarcode burada üretilir. Mutate paused olursa
-    // persist edilen vars sabit kalır → retry'da aynı barkod gönderilir →
-    // backend P2002 yakalayıp cached Roll döner (idempotent).
-    const clientBarcode = generateClientBarcode();
+    // Offline-aware idempotency: clientToken burada üretilir. Mutate paused olursa
+    // persist edilen vars sabit kalır → retry'da aynı token gönderilir → backend
+    // clientToken @unique P2002 yakalayıp cached Roll döner (idempotent). Barkod
+    // artık SUNUCU'da sıralı atanır (TEKS+YYMMDD+H/F+A001..); etiket res.data ile basılır.
+    const clientToken = generateClientUuid();
     createMutation.mutate({
       itemId: form.itemId,
       initialQty: qty,
       width,
       weightKg,
       qualityGrade: form.qualityGrade,
-      clientBarcode,
+      clientToken,
     });
   };
 

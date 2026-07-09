@@ -1,15 +1,18 @@
 // =============================================================================
-// Test: F117 — clientBarcode idempotency SADECE payload özdeşse (çapraz-cihaz
-// barkod çakışması sessiz veri kaybı yaratmamalı).
+// Test: clientToken idempotency SADECE payload özdeşse (çapraz-cihaz token yeniden
+// kullanımı sessiz veri kaybı yaratmamalı). Barkod artık SUNUCU'da sıralı atanır.
 // Çalıştır: npx tsx scripts/test_p1b_barcode_collision.ts
-//   1. Aynı clientBarcode + AYNI payload → idempotent (aynı id, yeni top YOK)
-//   2. Aynı clientBarcode + FARKLI ürün → 409 BARCODE_COLLISION
-//   3. Aynı clientBarcode + FARKLI metre → 409
-//   4. O barkodla DB'de tam 1 Roll (2. ve sonraki girişler yaratmadı)
+//   1. Aynı clientToken + AYNI payload → idempotent (aynı id, yeni top YOK)
+//   2. Aynı clientToken + FARKLI ürün → 409 CLIENT_TOKEN_COLLISION
+//   3. Aynı clientToken + FARKLI metre → 409
+//   4. O token'la DB'de tam 1 Roll (2. ve sonraki girişler yaratmadı)
+//   5. Atanan barkod yeni kısa formata (TEKS+YYMMDD+H+A001..) uyar
 // =============================================================================
+import { v4 as uuidv4 } from "uuid";
 import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { ItemService } from "../src/services/item.service";
+import { ROLL_BARCODE_RE } from "../src/services/helpers/roll-barcode.helper";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -32,12 +35,11 @@ const itemService = new ItemService({
 
 async function main() {
   const ts = Date.now();
-  const BC = `TEKS20260708${ts.toString(16).slice(-8).toUpperCase().padStart(8, "0")}`;
+  const TOKEN = uuidv4();
   const itemIds: string[] = [];
   const rollIds: string[] = [];
 
   try {
-    // Fixture: iki farklı test ürünü
     for (const suf of ["A", "B"]) {
       const r = await itemService.create(
         { code: `TEST-P1B-${suf}-${ts}`, name: `TEST P1B ${suf}`, itemType: "FABRIC", unit: "MT" },
@@ -46,49 +48,52 @@ async function main() {
       itemIds.push((r.data as { id: string }).id);
     }
 
-    // 1) İlk giriş
+    // 1) İlk giriş (renksiz → ham → barkod tipi H)
     const first = await inventory.createInitialEntry(
-      { itemId: itemIds[0], colorId: null, initialQty: 100, clientBarcode: BC },
+      { itemId: itemIds[0], colorId: null, initialQty: 100, clientToken: TOKEN },
       undefined,
     );
     const firstId = (first.data as { id: string }).id;
+    const firstBarcode = (first.data as { barcode: string }).barcode;
     rollIds.push(firstId);
     check("1) İlk giriş başarılı", first.success === true && !!firstId, firstId);
+    check("5) Atanan barkod yeni kısa formata uyar (…H…)", ROLL_BARCODE_RE.test(firstBarcode), firstBarcode);
 
-    // 2) Aynı payload → idempotent (aynı id)
+    // 2) Aynı token + aynı payload → idempotent (aynı id)
     const again = await inventory.createInitialEntry(
-      { itemId: itemIds[0], colorId: null, initialQty: 100, clientBarcode: BC },
+      { itemId: itemIds[0], colorId: null, initialQty: 100, clientToken: TOKEN },
       undefined,
     );
     check("2) Aynı payload idempotent (aynı id, yeni top yok)", (again.data as { id: string }).id === firstId);
+    check("2b) İdempotent dönüşte barkod da aynı", (again.data as { barcode: string }).barcode === firstBarcode);
 
-    // 3) Aynı barkod + FARKLI ürün → 409 BARCODE_COLLISION
+    // 3) Aynı token + FARKLI ürün → 409 CLIENT_TOKEN_COLLISION
     let collision = false, code = "";
     try {
       await inventory.createInitialEntry(
-        { itemId: itemIds[1], colorId: null, initialQty: 100, clientBarcode: BC },
+        { itemId: itemIds[1], colorId: null, initialQty: 100, clientToken: TOKEN },
         undefined,
       );
     } catch (e) {
       if (e instanceof AppError) { collision = e.statusCode === 409; code = (e.details as { code?: string })?.code ?? ""; }
     }
-    check("3) Farklı ürün + aynı barkod → 409 BARCODE_COLLISION", collision && code === "BARCODE_COLLISION", code);
+    check("3) Farklı ürün + aynı token → 409 CLIENT_TOKEN_COLLISION", collision && code === "CLIENT_TOKEN_COLLISION", code);
 
-    // 4) Aynı barkod + FARKLI metre → 409
+    // 4) Aynı token + FARKLI metre → 409
     let qtyCollision = false;
     try {
       await inventory.createInitialEntry(
-        { itemId: itemIds[0], colorId: null, initialQty: 200, clientBarcode: BC },
+        { itemId: itemIds[0], colorId: null, initialQty: 200, clientToken: TOKEN },
         undefined,
       );
     } catch (e) {
       if (e instanceof AppError) qtyCollision = e.statusCode === 409;
     }
-    check("4) Farklı metre + aynı barkod → 409", qtyCollision);
+    check("4) Farklı metre + aynı token → 409", qtyCollision);
 
-    // 5) O barkodla tam 1 Roll
-    const cnt = await prisma.roll.count({ where: { barcode: BC } });
-    check("5) DB'de o barkodla tam 1 Roll (sessiz veri kaybı yok)", cnt === 1, `count=${cnt}`);
+    // 6) O token'la tam 1 Roll
+    const cnt = await prisma.roll.count({ where: { clientToken: TOKEN } });
+    check("6) DB'de o token'la tam 1 Roll (sessiz veri kaybı yok)", cnt === 1, `count=${cnt}`);
   } finally {
     if (rollIds.length) {
       await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });

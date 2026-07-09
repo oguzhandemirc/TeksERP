@@ -810,9 +810,9 @@ export interface TamburCutRequest {
   targetCustomerId?: string | null;
   /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
   markedForKartela?: boolean;
-  /** Offline/ağ-retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
-   *  Aynı barkodla 2. çağrı backend'de idempotent döner (çift kesim/decrement YOK). */
-  clientChildBarcode?: string;
+  /** Offline/ağ-retry idempotency anahtarı (UUID). Barkod sunucuda sıralı atanır;
+   *  aynı token'la 2. çağrı backend'de idempotent döner (çift kesim/decrement YOK). */
+  clientToken?: string;
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */
