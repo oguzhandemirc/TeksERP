@@ -9,7 +9,7 @@ import { ScanField } from "@/components/scanner/ScanField";
 import { useContinuousScan } from "@/hooks/useContinuousScan";
 import { sackStoreService } from "@/pages/Operations/SackStore/service";
 import { sackStoreStatusLabels, type SackStoreShipment } from "@/pages/Operations/SackStore/types";
-import { DispatchConfirmDialog } from "./DispatchConfirmDialog";
+import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
 
 const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 
@@ -28,7 +28,7 @@ export function ScanDispatchPage() {
   const qc = useQueryClient();
   const [scanValue, setScanValue] = useState("");
   const [groups, setGroups] = useState<ScannedGroup[]>([]);
-  const [dispatchTarget, setDispatchTarget] = useState<SackStoreShipment | null>(null);
+  const [dispatchTarget, setDispatchTarget] = useState<ScannedGroup | null>(null);
 
   const upsertGroup = (shipment: SackStoreShipment, code: string) => {
     setGroups((prev) => {
@@ -171,7 +171,7 @@ export function ScanDispatchPage() {
                       <DoorOpen className="mr-1 h-4 w-4" /> Kapıya Taşı
                     </Button>
                   ) : (
-                    <Button size="sm" onClick={() => setDispatchTarget(g.shipment)}>
+                    <Button size="sm" onClick={() => setDispatchTarget(g)}>
                       <PackageCheck className="mr-1 h-4 w-4" /> Sevk Et
                     </Button>
                   )}
@@ -183,7 +183,17 @@ export function ScanDispatchPage() {
       </div>
 
       <DispatchConfirmDialog
-        shipment={dispatchTarget}
+        shipment={
+          dispatchTarget
+            ? {
+                id: dispatchTarget.shipment.id,
+                shipmentNo: dispatchTarget.shipment.shipmentNo,
+                customerName: dispatchTarget.shipment.customer.name,
+                branchName: dispatchTarget.shipment.branch?.name ?? null,
+              }
+            : null
+        }
+        scannedCodes={dispatchTarget?.codes}
         onOpenChange={(o) => !o && setDispatchTarget(null)}
         onDispatched={(id) => {
           removeGroup(id);

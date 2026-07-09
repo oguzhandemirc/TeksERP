@@ -2,17 +2,9 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DoorOpen, PackageCheck, Warehouse } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
+import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
 import { packingService } from "./service";
 import { invalidateShipmentData } from "./useShipmentDetail";
 import type { ShipmentDetail } from "./types";
@@ -37,14 +29,12 @@ function readyBlockers(detail: ShipmentDetail): string[] {
 /**
  * Paketleme yaşam döngüsü ayağı — PREPARING'de "Çuval Depoya Kaldır" (markReady),
  * sonra onay-akışı bayrağına göre READY→Kapı Önü / READY→Sevk / AT_DOOR→Sevk.
- * Sevk yıkıcıdır: çuvalları listeleyen onay (CLAUDE.md) + stok düşer.
+ * Sevk yıkıcıdır: ortak DispatchConfirmDialog çuval dökümünü canlı listeler.
  */
 export function ShipmentLifecycleFooter({ detail }: { detail: ShipmentDetail }) {
   const qc = useQueryClient();
   const confirmationEnabled = useShipmentConfirmationEnabled();
   const [dispatchOpen, setDispatchOpen] = useState(false);
-  const [plate, setPlate] = useState("");
-  const [driver, setDriver] = useState("");
 
   const blockers = readyBlockers(detail);
   const canReady = blockers.length === 0;
@@ -61,20 +51,6 @@ export function ShipmentLifecycleFooter({ detail }: { detail: ShipmentDetail }) 
     onSuccess: () => {
       toast.success("Kapı önüne kondu");
       invalidateShipmentData(qc, detail.id);
-    },
-  });
-  const dispatchMut = useMutation({
-    mutationFn: () =>
-      packingService.dispatch(detail.id, {
-        plateNumber: plate.trim() || null,
-        driverName: driver.trim() || null,
-      }),
-    onSuccess: () => {
-      toast.success(`Sevk edildi: ${detail.shipmentNo}`);
-      invalidateShipmentData(qc, detail.id);
-      setDispatchOpen(false);
-      setPlate("");
-      setDriver("");
     },
   });
 
@@ -112,56 +88,20 @@ export function ShipmentLifecycleFooter({ detail }: { detail: ShipmentDetail }) 
         )}
       </div>
 
-      <Dialog open={dispatchOpen} onOpenChange={(o) => !dispatchMut.isPending && setDispatchOpen(o)}>
-        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Sevk Et — {detail.shipmentNo}</DialogTitle>
-            <DialogDescription>
-              {detail.customer.name}
-              {detail.branch ? ` · ${detail.branch.name}` : ""} — çıkış yapılacak ve topların stoğu{" "}
-              <strong>düşecek</strong>. Aşağıdaki çuvalların yüklendiğini doğrulayın.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-md border">
-            <ul className="max-h-48 divide-y overflow-y-auto text-sm">
-              {detail.sacks.map((s) => (
-                <li key={s.id} className="flex items-center justify-between px-3 py-1.5">
-                  <span className="font-mono">
-                    {s.sackNo}
-                    {s.manualCode ? (
-                      <span className="ml-1 text-xs text-muted-foreground">({s.manualCode})</span>
-                    ) : null}
-                  </span>
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {s.rollCount} top{s.weightKg != null ? ` · ${fmtM(s.weightKg)} kg` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs">
-              <span className="block text-muted-foreground">Plaka (opsiyonel)</span>
-              <Input className="mt-1" value={plate} onChange={(e) => setPlate(e.target.value)} />
-            </label>
-            <label className="text-xs">
-              <span className="block text-muted-foreground">Şoför (opsiyonel)</span>
-              <Input className="mt-1" value={driver} onChange={(e) => setDriver(e.target.value)} />
-            </label>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDispatchOpen(false)} disabled={dispatchMut.isPending}>
-              İptal
-            </Button>
-            <Button variant="destructive" disabled={dispatchMut.isPending} onClick={() => dispatchMut.mutate()}>
-              {dispatchMut.isPending ? "..." : "Sevk Et"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DispatchConfirmDialog
+        shipment={
+          dispatchOpen
+            ? {
+                id: detail.id,
+                shipmentNo: detail.shipmentNo,
+                customerName: detail.customer.name,
+                branchName: detail.branch?.name ?? null,
+              }
+            : null
+        }
+        onOpenChange={(o) => setDispatchOpen(o)}
+        onDispatched={() => setDispatchOpen(false)}
+      />
     </div>
   );
 }

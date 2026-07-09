@@ -14,6 +14,7 @@ const dispatch = vi.fn();
 const moveToDoor = vi.fn();
 const pullBack = vi.fn();
 const unready = vi.fn();
+const shipmentContents = vi.fn();
 vi.mock("./service", () => ({
   sackStoreService: {
     list: (...a: unknown[]) => list(...a),
@@ -21,6 +22,7 @@ vi.mock("./service", () => ({
     moveToDoor: (...a: unknown[]) => moveToDoor(...a),
     pullBack: (...a: unknown[]) => pullBack(...a),
     unready: (...a: unknown[]) => unready(...a),
+    shipmentContents: (...a: unknown[]) => shipmentContents(...a),
   },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -70,6 +72,52 @@ function page(data: SackStoreShipment[]) {
   };
 }
 
+// Ortak DispatchConfirmDialog sevk onayında çuval dökümünü CANLI çeker
+// (yıkıcı-onay kuralı: etkilenen kayıtlar somut listelenir).
+const readyContents = {
+  success: true,
+  data: {
+    id: "sh-ready",
+    shipmentNo: "SVK-100",
+    status: "READY" as const,
+    readyAt: null,
+    plateNumber: null,
+    driverName: null,
+    carrier: null,
+    customer: { id: "c1", name: "ACME" },
+    branch: null,
+    sackCount: 2,
+    sacks: [
+      {
+        id: "sk1",
+        sackNo: "CV-260601-001",
+        seq: 1,
+        manualCode: "AMB00001",
+        weightKg: 12.5,
+        rollCount: 3,
+        swatchCount: 0,
+        totalQty: 90,
+        contents: [],
+        rolls: [],
+        swatches: [],
+      },
+      {
+        id: "sk2",
+        sackNo: "CV-260601-002",
+        seq: 2,
+        manualCode: null,
+        weightKg: null,
+        rollCount: 2,
+        swatchCount: 0,
+        totalQty: 60,
+        contents: [],
+        rolls: [],
+        swatches: [],
+      },
+    ],
+  },
+};
+
 describe("SackStorePage — Çuval Depo durum geçişleri", () => {
   beforeEach(() => {
     list.mockReset().mockResolvedValue(page([readyShipment]));
@@ -77,6 +125,7 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     moveToDoor.mockReset().mockResolvedValue({ success: true, data: { id: "sh-ready" } });
     pullBack.mockReset().mockResolvedValue({ success: true, data: { id: "sh-door" } });
     unready.mockReset().mockResolvedValue({ success: true, data: { id: "sh-ready" } });
+    shipmentContents.mockReset().mockResolvedValue(readyContents);
     // PermissionGate shipping:write ister — aksiyon butonları çıksın.
     useAuthStore.getState().setUser({
       userId: "u1",
@@ -96,22 +145,32 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     expect(screen.queryByRole("button", { name: "Çuval Depoya Geri Çek" })).not.toBeInTheDocument();
   });
 
-  it("Sevk Et → onay dialog'u açılır (yıkıcı/geri-alınamaz uyarısı), onaylanınca dispatch(id) çağrılır", async () => {
+  it("Sevk Et → ortak onay dialog'u çuvalları SOMUT listeler, onaylanınca dispatch çağrılır", async () => {
     const user = userEvent.setup();
     renderPage(<SackStorePage />);
     await screen.findByText("SVK-100");
 
     await user.click(screen.getByRole("button", { name: "Sevk Et" }));
 
-    // Onay metni: irreversible uyarısı görünmeli (yıkıcı işlem kuralı).
+    // Yıkıcı-onay kuralı: geri-alınamaz uyarısı + etkilenen her çuval somut listelenir.
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/sevk edilsin mi/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/geri alınamaz/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/CV-260601-001/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/AMB00001/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/CV-260601-002/)).toBeInTheDocument();
+    // Karttan (okutmasız) sevkte soft doğrulama notu görünür.
+    expect(within(dialog).getByText(/okutulmadan sevk/i)).toBeInTheDocument();
     // Onaydan ÖNCE çağrılmamalı.
     expect(dispatch).not.toHaveBeenCalled();
 
     await user.click(within(dialog).getByRole("button", { name: "Sevk Et" }));
-    await waitFor(() => expect(dispatch).toHaveBeenCalledWith("sh-ready"));
+    await waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith("sh-ready", {
+        plateNumber: null,
+        driverName: null,
+        carrier: null,
+      }),
+    );
     // Yanlış geçiş tetiklenmemeli.
     expect(moveToDoor).not.toHaveBeenCalled();
     expect(unready).not.toHaveBeenCalled();

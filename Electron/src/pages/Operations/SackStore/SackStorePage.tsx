@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { SackStoreCard } from "./SackStoreCard";
 import { ShipmentContentsSheet } from "./ShipmentContentsSheet";
+import { DispatchConfirmDialog } from "./DispatchConfirmDialog";
 import {
   sackStoreStatusLabels,
   destinationLabels,
@@ -40,8 +41,10 @@ const DEST_TABS: { key: DestFilter; label: string }[] = [
   { key: "EXPORT", label: destinationLabels.EXPORT },
 ];
 
+// Sevk (dispatch) burada YOK — yıkıcı onay çuval dökümünü canlı listeleyen
+// ortak DispatchConfirmDialog'dan geçer; bu üçlü kısa/verisiz geçişlerdir.
 type PendingAction = {
-  kind: "move-to-door" | "pull-back" | "unready" | "dispatch";
+  kind: "move-to-door" | "pull-back" | "unready";
   shipment: SackStoreShipment;
 };
 
@@ -68,12 +71,6 @@ const ACTION_COPY: Record<
     confirmLabel: "Hazırlığa Geri Al",
     success: "Hazırlığa geri alındı — düzenlenebilir",
   },
-  dispatch: {
-    title: (s) => `${s.shipmentNo} sevk edilsin mi?`,
-    description: "Sevk çıkışı yapılır ve stok düşülür. Bu işlem geri alınamaz.",
-    confirmLabel: "Sevk Et",
-    success: "Sevk edildi",
-  },
 };
 
 export function SackStorePage() {
@@ -83,6 +80,7 @@ export function SackStorePage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [dispatchTarget, setDispatchTarget] = useState<SackStoreShipment | null>(null);
   const [openShipment, setOpenShipment] = useState<SackStoreShipment | null>(null);
 
   // "Her yerde okut" → çuval kodu aramaya uygulanır (ilgili sevkiyatı bulur).
@@ -112,24 +110,20 @@ export function SackStorePage() {
     mutationFn: (action: PendingAction) => {
       if (action.kind === "move-to-door") return sackStoreService.moveToDoor(action.shipment.id);
       if (action.kind === "pull-back") return sackStoreService.pullBack(action.shipment.id);
-      if (action.kind === "unready") return sackStoreService.unready(action.shipment.id);
-      return sackStoreService.dispatch(action.shipment.id);
+      return sackStoreService.unready(action.shipment.id);
     },
     onSuccess: (_data, action) => {
       toast.success(ACTION_COPY[action.kind].success);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       void qc.invalidateQueries({ queryKey: ["sack-contents"] });
-      // O1 fix: bu geçişler sevkiyatın kendisini de değiştirir — dispatch
-      // DISPATCHED+SHIPPED yapar, unready commit'i GERİ SARIP sipariş durumunu
-      // yeniden hesaplar. Açık Sevkiyat/Sipariş sekmeleri bayat kalmasın.
+      // O1 fix: bu geçişler sevkiyatın kendisini de değiştirir — unready
+      // commit'i GERİ SARIP sipariş durumunu yeniden hesaplar. Açık
+      // Sevkiyat/Sipariş sekmeleri bayat kalmasın. (Dispatch tazelemeleri
+      // ortak DispatchConfirmDialog'un içinde.)
       void qc.invalidateQueries({ queryKey: ["shipments"] });
       void qc.invalidateQueries({ queryKey: ["shipment-detail", action.shipment.id] });
-      if (action.kind === "unready" || action.kind === "dispatch") {
+      if (action.kind === "unready") {
         void qc.invalidateQueries({ queryKey: ["orders"] });
-      }
-      if (action.kind === "dispatch") {
-        // Toplar SHIPPED'e düştü — top tabloları + stats tazelensin.
-        void qc.invalidateQueries({ queryKey: ["rolls"] });
       }
       setPending(null);
     },
@@ -225,7 +219,7 @@ export function SackStorePage() {
                   onMoveToDoor={(sh) => setPending({ kind: "move-to-door", shipment: sh })}
                   onPullBack={(sh) => setPending({ kind: "pull-back", shipment: sh })}
                   onUnready={(sh) => setPending({ kind: "unready", shipment: sh })}
-                  onDispatch={(sh) => setPending({ kind: "dispatch", shipment: sh })}
+                  onDispatch={setDispatchTarget}
                 />
               ))}
             </div>
@@ -265,11 +259,25 @@ export function SackStorePage() {
         title={pending ? ACTION_COPY[pending.kind].title(pending.shipment) : ""}
         description={pending ? ACTION_COPY[pending.kind].description : undefined}
         confirmLabel={pending ? ACTION_COPY[pending.kind].confirmLabel : "Onayla"}
-        destructive={pending?.kind === "dispatch"}
         isPending={mutation.isPending}
         onConfirm={() => {
           if (pending) mutation.mutate(pending);
         }}
+      />
+
+      <DispatchConfirmDialog
+        shipment={
+          dispatchTarget
+            ? {
+                id: dispatchTarget.id,
+                shipmentNo: dispatchTarget.shipmentNo,
+                customerName: dispatchTarget.customer.name,
+                branchName: dispatchTarget.branch?.name ?? null,
+              }
+            : null
+        }
+        onOpenChange={(o) => !o && setDispatchTarget(null)}
+        onDispatched={() => setDispatchTarget(null)}
       />
     </div>
   );
