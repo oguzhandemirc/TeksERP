@@ -25,6 +25,7 @@ export function CustomersPage() {
       columns={customerColumns}
       writePermission="customer:write"
       glowWhenEmpty
+      keepFormOpenAfterSave
       searchPlaceholder="Kod, ad veya vergi no ara..."
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <CustomerFormDialog

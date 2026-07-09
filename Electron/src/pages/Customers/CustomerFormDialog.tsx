@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -20,6 +20,7 @@ import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
 import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
 import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import type { Customer } from "./types";
 
 interface Props {
@@ -47,13 +48,44 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
     defaultValues: defaults,
   });
 
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [activeTab, setActiveTab] = useState("info");
+  // Kaydet-ve-devam et: create→edit geçişini (id: null → dolu, dialog açıkken)
+  // yakalamak için önceki (open, id) tutulur.
+  const prevRef = useRef<{ open: boolean; id: string | null }>({ open: false, id: null });
+
   useEffect(() => {
     if (open) form.reset(defaults);
+
+    const prev = prevRef.current;
+    const currentId = initial?.id ?? null;
+    if (open && !prev.open) {
+      // Taze açılış (yeni müşteri VEYA mevcut müşteriyi düzenleme) → "Bilgiler".
+      setActiveTab("info");
+    } else if (open && prev.open && prev.id === null && currentId !== null) {
+      // İlk kayıttan sonra düzenlemeye geçildi → kilidi açılan sekmeleri görünür
+      // kılmak için doğrudan "Şubeler"e atla.
+      setActiveTab("branches");
+    }
+    prevRef.current = { open, id: currentId };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
 
+  // Kirli-form guard: kapatma isteği (X / Esc / dış tıklama / İptal — hepsi
+  // onOpenChange'den geçer) yalnızca "Bilgiler" formunda kaydedilmemiş değişiklik
+  // varsa onay ister. Alt paneller (şube/alias) kendi içlerinde anında sunucuya
+  // yazar; kapanışta risk sadece bu formda yazılmış-ama-kaydedilmemiş alanlardır.
+  const requestClose = (next: boolean) => {
+    if (!next && form.formState.isDirty) {
+      setConfirmClose(true);
+      return;
+    }
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Müşteriyi Düzenle" : "Yeni Müşteri"}</DialogTitle>
@@ -64,7 +96,7 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="info">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="info">Bilgiler</TabsTrigger>
             <TabsTrigger value="branches" disabled={!isEdit || !initial}>
@@ -85,6 +117,9 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
             <form
               onSubmit={form.handleSubmit(async (v) => {
                 await onSubmit(v);
+                // Başarılı kayıt sonrası formu "temiz" say: hem guard yanlış
+                // tetiklenmesin, hem kaydet-ve-devam et modunda isDirty sıfırlansın.
+                form.reset(v);
               })}
               className="space-y-3"
             >
@@ -130,7 +165,7 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
               </label>
 
               <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                <Button type="button" variant="outline" onClick={() => requestClose(false)}>
                   İptal
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
@@ -158,5 +193,20 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
         </Tabs>
       </DialogContent>
     </Dialog>
+
+    <ConfirmDialog
+      open={confirmClose}
+      onOpenChange={setConfirmClose}
+      title="Kaydedilmemiş değişiklikler"
+      description="Bu formda kaydedilmemiş değişiklikler var. Kapatırsanız girdiğiniz bilgiler kaybolur. Kapatmak istediğinize emin misiniz?"
+      confirmLabel="Kapat, kaydetme"
+      cancelLabel="Vazgeç"
+      destructive
+      onConfirm={() => {
+        setConfirmClose(false);
+        onOpenChange(false);
+      }}
+    />
+    </>
   );
 }

@@ -42,6 +42,11 @@ interface Props<T extends { id: string }> {
    * ayrıca Trash2 = kalıcı sil (DELETE /:id/permanent) eklenir. Backend'i deletedAt
    * damgalı modellerde kayıt gizlenir ama veri bütünlüğü için DB'de durur. */
   permanentDelete?: { description: (row: T) => string };
+  /** Çok-sekmeli formlar için: kayıt OLUŞTURULUNCA dialog kapanmaz, yeni kaydın
+   * id'siyle düzenleme moduna geçer — böylece id gerektiren alt sekmeler
+   * (şube/alias/şablon vb.) aynı oturumda açılır. Güncellemede de açık kalır.
+   * Varsayılan false: klasik "kaydet → kapat". */
+  keepFormOpenAfterSave?: boolean;
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -68,6 +73,7 @@ export function CrudPage<T extends { id: string }>({
   renderForm,
   permanentDelete,
   actionsPortal,
+  keepFormOpenAfterSave,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<T | null>(null);
@@ -167,8 +173,21 @@ export function CrudPage<T extends { id: string }>({
   });
 
   const onSubmit = async (values: Partial<T>) => {
-    if (editing) await updateMutation.mutateAsync({ id: editing.id, data: values });
-    else await createMutation.mutateAsync(values);
+    if (editing) {
+      const res = await updateMutation.mutateAsync({ id: editing.id, data: values });
+      // keepFormOpenAfterSave: dialog açık kalır, güncel kayıtla düzenlemeye devam.
+      if (keepFormOpenAfterSave) {
+        setEditing(res.data);
+        return;
+      }
+    } else {
+      const res = await createMutation.mutateAsync(values);
+      // Oluşturmadan sonra düzenleme moduna geç → id gerektiren sekmeler açılır.
+      if (keepFormOpenAfterSave) {
+        setEditing(res.data);
+        return;
+      }
+    }
     setFormOpen(false);
     setEditing(null);
   };

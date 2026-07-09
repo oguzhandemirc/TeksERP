@@ -16,6 +16,7 @@ export interface PeripheralRowLike {
   address?: string | null;
   decimals?: number | null;
   scale?: number | null;
+  identifyPattern?: string | null; // codec'e verilir — cihaza özel değer ayıklama regex'i
 }
 
 export interface PeripheralIO {
@@ -41,7 +42,11 @@ export function buildIoFromPeripheral(p: PeripheralRowLike): PeripheralIO {
   }
   const codec =
     p.kind === 'METER' || p.kind === 'SCALE'
-      ? meterCodec({ decimals: p.decimals ?? 1, scale: p.scale ?? 1 })
+      ? meterCodec({
+          decimals: p.decimals ?? 1,
+          scale: p.scale ?? 1,
+          pattern: p.identifyPattern ?? undefined,
+        })
       : null;
   const supported = transport != null && (p.connectionType !== 'BLUETOOTH_SPP' || isBtSupported());
   return { transport, codec, supported };

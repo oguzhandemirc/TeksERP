@@ -9,8 +9,14 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Kaydedilmemiş güncel tasarımın native çıktısını üretir — önizlemeyle AYNI
-   *  kaynak ("gördüğün = basılan"). Kanvas editörü canvasPreview'i bağlar. */
-  fetchNative: () => Promise<{ mode: "svg" | "html" | "text"; language: string; native: string }>;
+   *  kaynak ("gördüğün = basılan"). Kanvas editörü canvasPreview'i bağlar.
+   *  `peripheralId` verilirse dil/medya O CİHAZDAN çözülür (yerel yazıcı = PPLB vs.);
+   *  yoksa varsayılan (cihazsız → RASTER_HTML). */
+  fetchNative: (opts?: { peripheralId?: string }) => Promise<{
+    mode: "svg" | "html" | "text";
+    language: string;
+    native: string;
+  }>;
 }
 
 /**
@@ -33,10 +39,16 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
     setSending(true);
     setResult(null);
     try {
-      // Kaydedilmemiş güncel tasarımın native'i (önizlemeyle aynı kaynak).
-      const p = await fetchNative();
+      // Kaydedilmemiş güncel tasarımın native'i (önizlemeyle aynı kaynak). Yerel
+      // hedefte dil/medya seçili Cihaz Kaydı yazıcısından çözülür → gerçek dilde basar.
+      const p = await fetchNative({ peripheralId: lpCfg?.peripheralId });
       if (p.mode === "html") {
-        setResult({ ok: false, text: `Aktif dil (${p.language}) HTML — etiket yazıcısına ham gönderilemez.` });
+        setResult({
+          ok: false,
+          text: lpCfg?.peripheralId
+            ? `Aktif dil (${p.language}) HTML — seçili Cihaz Kaydı yazıcısının dili native değil (Tanımlar → Donanım'dan PPLA/PPLB/ZPL seçin).`
+            : `Aktif dil (${p.language}) HTML — Genel Ayarlar → Bu Bilgisayar → "Cihaz Kaydı yazıcısı" seçilmemiş; native baskı için seçin.`,
+        });
         return;
       }
       const res = await printerApi.send({ transport, target, baudRate, content: p.native });

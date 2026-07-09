@@ -10,6 +10,8 @@ import {
   readResponse,
   testConnection,
   btClassicTransport,
+  decodeCommand,
+  splitFrames,
 } from './btClassic.transport';
 
 // setup.ts global mock'undaki default nesne (jest.fn'ler).
@@ -85,14 +87,49 @@ describe('btClassic.transport', () => {
     expect(mod.writeToDevice).toHaveBeenCalledWith('AA:11', 'HELLO', 'latin1');
   });
 
-  it('readResponse: pollCommand ascii + CR/LF eklenir, yanıt döner', async () => {
+  it('readResponse POLL: komut TAM gönderilir (otomatik CR/LF YOK), çerçeve döner', async () => {
+    mod.isDeviceConnected.mockResolvedValue(true);
+    mod.availableFromDevice.mockResolvedValueOnce(8);
+    mod.readFromDevice.mockResolvedValueOnce('42.5\r\n');
+    const raw = await readResponse('AA:11', { readMode: 'POLL', pollCommand: 'TTTTTT' });
+    expect(mod.clearFromDevice).toHaveBeenCalledWith('AA:11');
+    // Escape'siz komut aynen 6 bayt gider — eskiden 'TTTTTT\r\n' oluyordu.
+    expect(mod.writeToDevice).toHaveBeenCalledWith('AA:11', 'TTTTTT', 'ascii');
+    expect(raw).toBe('42.5'); // temiz çerçeve (CR/LF kırpılır)
+  });
+
+  it('readResponse POLL: escape dizileri çözülür (\\r → CR)', async () => {
     mod.isDeviceConnected.mockResolvedValue(true);
     mod.availableFromDevice.mockResolvedValueOnce(6);
-    mod.readFromDevice.mockResolvedValueOnce('42.5\r\n');
-    const raw = await readResponse('AA:11', { pollCommand: 'R' });
-    expect(mod.clearFromDevice).toHaveBeenCalledWith('AA:11');
-    expect(mod.writeToDevice).toHaveBeenCalledWith('AA:11', 'R\r\n', 'ascii');
-    expect(raw).toBe('42.5\r\n');
+    mod.readFromDevice.mockResolvedValueOnce('7.0\r\n');
+    await readResponse('AA:11', { readMode: 'POLL', pollCommand: 'R\\r' });
+    expect(mod.writeToDevice).toHaveBeenCalledWith('AA:11', 'R\r', 'ascii');
+  });
+
+  it('readResponse STREAM: komut YOLLAMAZ; framePattern ile SON kararlı (B) çerçeveyi alır', async () => {
+    mod.isDeviceConnected.mockResolvedValue(true);
+    // İlk çerçeve (yarım-başlangıç guard) atlanır; '@' (hareketli) çerçeve desene uymaz.
+    mod.availableFromDevice.mockResolvedValueOnce(40);
+    mod.readFromDevice.mockResolvedValueOnce('10.0B0\r\n77.7@0\r\n25.85B0\r\n25.85B0\r\n');
+    const raw = await readResponse('AA:11', {
+      readMode: 'STREAM',
+      framePattern: '(\\d+(?:\\.\\d+)?)B',
+    });
+    expect(mod.writeToDevice).not.toHaveBeenCalled(); // yayın: komut yok
+    expect(raw).toBe('25.85B0');
+  });
+
+  it('decodeCommand: düz metin aynen, escape çözülür', () => {
+    expect(decodeCommand('TTTTTT')).toBe('TTTTTT');
+    expect(decodeCommand('R\\r\\n')).toBe('R\r\n');
+    expect(decodeCommand('\\x02R\\x03')).toBe('\x02R\x03');
+  });
+
+  it('splitFrames: tam çerçeveleri böler, ayraçsız kuyruğu rest bırakır', () => {
+    expect(splitFrames('25.85B0\r\n26.70@0\r\n2')).toEqual({
+      frames: ['25.85B0', '26.70@0'],
+      rest: '2',
+    });
   });
 
   it('isBonded MAC normalize eder (büyük/küçük harf + boşluk)', async () => {
@@ -124,11 +161,11 @@ describe('btClassic.transport', () => {
     ]);
   });
 
-  it('btClassicTransport.read terminator ile erken döner', async () => {
+  it('btClassicTransport.read terminator ile çerçeveyi döner', async () => {
     mod.isDeviceConnected.mockResolvedValue(true);
     mod.availableFromDevice.mockResolvedValueOnce(3);
     mod.readFromDevice.mockResolvedValueOnce('7.0\n');
     const t = btClassicTransport('AA:11');
-    expect(await t.read({ terminator: '\n' })).toBe('7.0\n');
+    expect(await t.read({ terminator: '\n' })).toBe('7.0');
   });
 });

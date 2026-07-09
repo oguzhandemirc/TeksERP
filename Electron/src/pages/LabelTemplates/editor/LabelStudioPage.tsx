@@ -258,9 +258,10 @@ export function LabelStudioPage() {
       <TemplateTestPrintDialog
         open={testPrintOpen}
         onOpenChange={setTestPrintOpen}
-        fetchNative={() =>
+        fetchNative={(o) =>
           labelTemplateService.canvasPreview({
             kind: previewKind, widthMm: canvas.widthMm, heightMm: canvas.heightMm, elements: state.layout,
+            peripheralId: o?.peripheralId,
           })
         }
       />

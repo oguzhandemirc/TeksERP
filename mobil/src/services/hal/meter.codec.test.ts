@@ -41,6 +41,20 @@ describe('parseMeterReading — scale/decimals parametreleri', () => {
   });
 });
 
+describe('parseMeterReading — pattern (cihaz identifyPattern)', () => {
+  it('regex 1. grubu ile baştaki sayıyı alır (durum bayrağı @/B + sondaki 0 elenir)', () => {
+    // Kantar formatı "25.85B0" — desensiz sezgisel de 25.85 verir ama desen KESİN.
+    expect(parseMeterReading('25.85B0', { pattern: '(\\d+(?:\\.\\d+)?)', decimals: 2 })).toBe(25.85);
+    expect(parseMeterReading('2.20@0', { pattern: '(\\d+(?:\\.\\d+)?)', decimals: 2 })).toBe(2.2);
+  });
+  it('desen eşleşmezse sezgisele düşer (son pozitif sayı)', () => {
+    expect(parseMeterReading('42.7\r\n', { pattern: 'NOPE(\\d+)' })).toBe(42.7);
+  });
+  it('geçersiz regex → sezgisel (çökme yok)', () => {
+    expect(parseMeterReading('42.7\r\n', { pattern: '(' })).toBe(42.7);
+  });
+});
+
 describe('meterCodec fabrikası', () => {
   it('decode opsiyonları uygular', () => {
     const codec = meterCodec({ scale: 0.01, decimals: 2 });

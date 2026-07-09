@@ -94,6 +94,20 @@ export class PeripheralDeviceService extends BaseService {
       const s = Number(data.scale);
       if (!Number.isFinite(s) || s <= 0) throw AppError.badRequest("Ölçek (scale) pozitif olmalı");
     }
+    if (data.readMode !== undefined && data.readMode !== null && data.readMode !== "") {
+      if (data.readMode !== "POLL" && data.readMode !== "STREAM") {
+        throw AppError.badRequest("Okuma modu POLL (sor-cevap) veya STREAM (yayın) olmalı");
+      }
+    }
+    // Veri deseni mobilde regex olarak derlenir — geçersiz regex sessizce okuma
+    // bozar; kayıtta erken reddet.
+    if (typeof data.identifyPattern === "string" && data.identifyPattern.trim()) {
+      try {
+        new RegExp(data.identifyPattern);
+      } catch {
+        throw AppError.badRequest("Veri deseni (regex) geçersiz");
+      }
+    }
     // Yazıcı MEDYASI (Etiket Stüdyosu v2 — cihazda) — additive, opsiyonel.
     for (const dim of ["labelWidthMm", "labelHeightMm"] as const) {
       if (data[dim] !== undefined && data[dim] !== null) {
@@ -303,12 +317,15 @@ export class PeripheralDeviceService extends BaseService {
    */
   async getForSession(
     session: { machineId: string | null; stationId: string | null } | null,
-    kind: string,
+    kind?: string,
   ): Promise<ApiResponse<unknown[]>> {
-    const validKind = Object.values(PeripheralKind).includes(kind as PeripheralKind);
-    if (!validKind) throw AppError.badRequest("Geçersiz cihaz türü (kind)");
+    // kind boşsa (saha donanım-eşleme ekranı) TÜM türler döner; verilmişse doğrula.
+    if (kind) {
+      const validKind = Object.values(PeripheralKind).includes(kind as PeripheralKind);
+      if (!validKind) throw AppError.badRequest("Geçersiz cihaz türü (kind)");
+    }
     if (!session) return { success: true, data: [] };
-    const base = { kind: kind as PeripheralKind, isActive: true };
+    const base = { isActive: true, ...(kind ? { kind: kind as PeripheralKind } : {}) };
     if (session.machineId) {
       const byMachine = await prisma.peripheralDevice.findMany({
         where: { ...base, machineId: session.machineId },
@@ -324,6 +341,65 @@ export class PeripheralDeviceService extends BaseService {
       return { success: true, data: byStation };
     }
     return { success: true, data: [] };
+  }
+
+  /**
+   * SAHA EŞLEME — tablet, taranan HC-06 MAC'ini cihaz kaydına yazar. GÜVENLİK:
+   * cihaz YALNIZ aktif oturumun makinesine (machineId) VEYA makinesiz-istasyonuna
+   * (stationId) aitse yazılır; yer eşleşmezse 403. Böylece makine 2'deki tablet,
+   * makine 3'ün cihazının MAC'ini asla yeniden yazamaz. Gerçek adres atandığı için
+   * simulate=false yapılır (artık sahte değer üretmez — operatör canlı test edebilsin).
+   */
+  async setFieldAddress(
+    id: string,
+    address: string,
+    session: { machineId: string | null; stationId: string | null } | null,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const addr = (address ?? "").trim();
+    if (!addr) throw AppError.badRequest("Cihaz adresi (MAC) zorunlu");
+    if (addr.length > 128) throw AppError.badRequest("Cihaz adresi 128 karakteri aşamaz");
+
+    const p = await prisma.peripheralDevice.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, address: true, machineId: true, stationId: true, simulate: true, kind: true, connectionType: true },
+    });
+    if (!p) throw AppError.notFound("Cihaz bulunamadı");
+
+    // Tür daraltması: saha eşleme YALNIZ Bluetooth kantar/metre içindir. Aksi halde
+    // yalnız oturum-yeri paylaşan bir operatör (station:write GEREKMEDEN) makinesine
+    // bağlı bir ağ yazıcısının IP'sini BT MAC ile ezip baskıyı bozabilirdi.
+    if (p.kind !== "METER" && p.kind !== "SCALE") {
+      throw AppError.badRequest("Saha eşleme yalnız kantar/metre cihazları içindir");
+    }
+    if (p.connectionType !== "BLUETOOTH_SPP") {
+      throw AppError.badRequest("Saha eşleme yalnız Bluetooth (HC-06) cihazlar içindir");
+    }
+
+    // Oturum-kapsam guard (asıl güvenlik). Makine-sahipli cihaz oturumun machineId'si
+    // ile; istasyon-sahipli cihaz (makinesiz, örn. SHIPPING kantarı) stationId ile
+    // eşleşmeli — getForSession'ın çözüm önceliğiyle birebir.
+    const inScope =
+      session != null &&
+      ((session.machineId != null && p.machineId === session.machineId) ||
+        (session.stationId != null && p.machineId == null && p.stationId === session.stationId));
+    if (!inScope) {
+      throw AppError.forbidden("Bu cihaz, aktif oturumunuzun makine/istasyonuna ait değil");
+    }
+
+    const updated = await prisma.peripheralDevice.update({
+      where: { id },
+      data: { address: addr, simulate: false },
+    });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: PERIPHERAL_TABLE,
+      recordId: id,
+      oldData: { address: p.address, simulate: p.simulate },
+      newData: { address: addr, simulate: false, source: "FIELD_PAIR" },
+    }).catch(() => undefined);
+    return { success: true, data: updated };
   }
 
   /** Bağlantı testi: NETWORK_TCP → gerçek/simüle gönderim; diğerleri cihaz tarafı. */

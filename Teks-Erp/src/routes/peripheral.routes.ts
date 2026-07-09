@@ -139,3 +139,40 @@ peripheralRouter.post("/:id/test", verifyToken, requirePermission("station:write
     res.status(200).json(result);
   } catch (e) { next(e); }
 });
+
+/**
+ * @openapi
+ * /api/peripherals/{id}/field-address:
+ *   patch:
+ *     tags: [Peripherals]
+ *     summary: Saha tableti — aktif oturumun makine/istasyonundaki cihaza taranan MAC'i yaz
+ *     description: |
+ *       Body { address }. Tablet BT tarayıp seçtiği HC-06'nın MAC'ini cihaz kaydına yazar.
+ *       GÜVENLİK: cihaz, aktif oturumun machineId/stationId'sine ait DEĞİLSE 403 —
+ *       makine 2'deki tablet makine 3'ün cihazını yeniden yazamaz. Oturum yoksa 409.
+ *       Gerçek MAC atandığı için simulate kapatılır.
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Güncellendi } }
+ */
+peripheralRouter.patch(
+  "/:id/field-address",
+  verifyToken,
+  // Kaba geçit; asıl güvenlik serviste: aktif oturum ZORUNLU (yoksa 409) + cihaz
+  // oturumun makine/istasyonuna ait olmalı (değilse 403) + yalnız BT kantar/metre.
+  // Bu YALNIZ oturumlu saha tableti akışıdır — panelden düzenleme normal PATCH /:id
+  // (station:write) ile yapılır (masaüstü/oturumsuz istek burada kapsam-dışı → 403).
+  requireAnyPermission("station:write", ...MOBILE_SESSION_PERMS),
+  async (req, res, next) => {
+    try {
+      const body = (req.body ?? {}) as { address?: string };
+      const stamp = await getStampContext(req, { enforceForMobile: true }); // oturum yoksa 409
+      const result = await service.setFieldAddress(
+        req.params.id as string,
+        body.address ?? "",
+        stamp,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  },
+);

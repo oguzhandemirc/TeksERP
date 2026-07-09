@@ -264,6 +264,8 @@ export const labelTemplateService = {
     heightMm: number;
     elements: CanvasLayout;
     language?: RawCodeLang;
+    /** "Bu Bilgisayar"da seçili Cihaz Kaydı yazıcısı — dil/medya bu cihazdan çözülür. */
+    peripheralId?: string;
   }): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }> =>
     apiClient
       .post<

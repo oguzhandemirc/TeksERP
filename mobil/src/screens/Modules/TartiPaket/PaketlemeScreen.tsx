@@ -172,9 +172,11 @@ export default function PaketlemeScreen() {
     }
     try {
       const raw = await io.transport.read({
+        readMode: p.readMode,
         pollCommand: p.pollCommand ?? undefined,
         terminator: p.terminator ?? undefined,
         timeoutMs: p.timeoutMs ?? undefined,
+        framePattern: p.identifyPattern ?? undefined,
       });
       const v = io.codec.decode(raw);
       if (v != null && v > 0) return v;

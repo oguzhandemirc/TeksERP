@@ -234,43 +234,111 @@ export async function writeRaw(
   });
 }
 
+type ReadMode = 'POLL' | 'STREAM';
+
 export interface ReadResponseOptions {
+  /** 'POLL' (varsayılan) = komut yolla+cevabı oku · 'STREAM' = komut yok, dinle. */
+  readMode?: ReadMode;
+  /** POLL sorgu komutu — escape çözülür (\r \n \t \xNN \\), cihaza TAM gönderilir. */
   pollCommand?: string;
+  /** Çerçeve (satır) ayracı; boş → herhangi CR/LF. */
+  terminator?: string;
+  /** Zaman aşımı (ms); varsayılan 2500. */
   timeoutMs?: number;
-  /** Tampon tamamlandı mı (varsayılan: herhangi CR/LF). Parse-bilinçli erken dönüş için. */
-  isComplete?: (buf: string) => boolean;
+  /** Geçerli çerçeve regex'i — verilirse buna uyan SON çerçeve döner (ör. sabit "…B"). */
+  framePattern?: string;
+}
+
+/** pollCommand escape dizilerini çöz — cihaza TAM baytlar gitsin (otomatik CR/LF YOK). */
+export function decodeCommand(s: string): string {
+  return s.replace(/\\x([0-9a-fA-F]{2})|\\r|\\n|\\t|\\\\/g, (m, hex) =>
+    hex !== undefined
+      ? String.fromCharCode(parseInt(hex, 16))
+      : m === '\\r'
+        ? '\r'
+        : m === '\\n'
+          ? '\n'
+          : m === '\\t'
+            ? '\t'
+            : '\\',
+  );
+}
+
+/** Tamponu tam çerçevelere böl; ayraçsız son parça `rest` olarak kalır. */
+export function splitFrames(buf: string, terminator?: string): { frames: string[]; rest: string } {
+  const parts = terminator && terminator.length > 0 ? buf.split(terminator) : buf.split(/\r\n|\r|\n/);
+  const rest = parts.pop() ?? '';
+  return { frames: parts, rest };
 }
 
 /**
- * İstek-cevap oku: bayat tamponu temizle, (varsa) sorgu komutunu yaz, sonra gelen
- * baytları `isComplete` true olana veya zaman aşımına kadar biriktir; ham metni döner.
- * Anlamlandırma (sayıya çevirme) çağıranın/codec'in işi.
+ * Cihazdan bir değer çerçevesi oku — iki davranışı da (POLL/STREAM) tek mantıkla:
+ *   • bayat tamponu temizle,
+ *   • POLL ise komutu TAM yaz (escape çözülür, otomatik CR/LF YOK),
+ *   • gelen baytları tam çerçevelere böl; STREAM'de İLK (yarım-başlangıç) çerçeveyi at,
+ *   • `framePattern` varsa ona uyan SON çerçeveyi, yoksa son tam çerçeveyi seç,
+ *   • yeterince taze/kararlı çerçeve toplanınca (veya akış durunca) erken dön.
+ * Sayıya çevirme codec'in işi. Desen istenip hiç uyan çerçeve gelmezse '' döner
+ * (görünür başarısızlık — "sabit değer istendi ama gelmedi").
  */
 export async function readResponse(address: string, opts: ReadResponseOptions = {}): Promise<string> {
+  const mode: ReadMode = opts.readMode ?? 'POLL';
   const mod = await ensureReady(address);
   if (mod.clearFromDevice) await mod.clearFromDevice(address).catch(() => false);
 
-  const cmd = opts.pollCommand?.trim();
-  if (cmd) {
-    // Çoğu RS232 cihazı satır sonu (CR/LF) bekler → kullanıcı eklemediyse biz ekleriz.
-    const payload = /[\r\n]$/.test(opts.pollCommand ?? '') ? (opts.pollCommand as string) : `${cmd}\r\n`;
-    await mod.writeToDevice(address, payload, 'ascii');
+  if (mode === 'POLL' && opts.pollCommand && opts.pollCommand.length > 0) {
+    await mod.writeToDevice(address, decodeCommand(opts.pollCommand), 'ascii');
+  }
+
+  let pattern: RegExp | null = null;
+  if (opts.framePattern && opts.framePattern.trim()) {
+    try {
+      pattern = new RegExp(opts.framePattern);
+    } catch {
+      pattern = null; // geçersiz regex → desensiz davran (backend zaten reddeder)
+    }
   }
 
   const timeoutMs = opts.timeoutMs ?? 2500;
-  const isComplete = opts.isComplete ?? ((b: string) => /[\r\n]/.test(b));
+  const QUIET_MS = 250; // elde geçerli değer varken akış durursa dönme süresi (POLL tek satır)
   const deadline = Date.now() + timeoutMs;
   let buf = '';
+  let frameCount = 0; // toplam tam çerçeve — STREAM yarım-başlangıç guard'ı için
+  let best = ''; // seçilen çerçeve (desene uyan / son tam)
+  let matchCount = 0; // geçerli aday sayısı — snappy erken çıkış
+  let lastDataAt = Date.now();
+
   while (Date.now() < deadline) {
     const avail = await mod.availableFromDevice(address).catch(() => 0);
     if (avail && avail > 0) {
       const chunk = await mod.readFromDevice(address).catch(() => null);
-      if (chunk) buf += chunk;
-      if (isComplete(buf)) return buf;
+      if (chunk) {
+        buf += chunk;
+        lastDataAt = Date.now();
+      }
+      const { frames, rest } = splitFrames(buf, opts.terminator);
+      buf = rest;
+      for (const f of frames) {
+        frameCount++;
+        // STREAM'de İLK tam çerçeve akışa ortadan girişte yarım olabilir → atla.
+        // POLL'de ilk çerçeve cevabın kendisidir → kabul.
+        const isCandidate = mode === 'POLL' || frameCount > 1;
+        if (!isCandidate) continue;
+        const frame = f.trim();
+        if (!frame) continue;
+        if (!pattern || pattern.test(frame)) {
+          best = frame;
+          matchCount++;
+        }
+      }
+      if (best && matchCount >= 2) return best; // ≥2 taze/kararlı çerçeve → hemen dön
+    } else if (best && Date.now() - lastDataAt >= QUIET_MS) {
+      return best; // akış durdu, elde geçerli değer var (POLL tek-satır cevabı)
     }
-    await delay(50);
+    await delay(30);
   }
-  return buf; // zaman aşımı → biriken neyse onu döndür (çağıran karar verir)
+  if (best) return best;
+  return pattern ? '' : buf; // desen istendi ama uyan yok → '' (görünür hata); desensiz → kalan tampon
 }
 
 /** Bir adres için DeviceTransport örneği (HAL fabrikası bunu kullanır). */
@@ -278,13 +346,13 @@ export function btClassicTransport(address: string): DeviceTransport {
   return {
     test: () => testConnection(address),
     write: (content, encoding = 'latin1') => writeRaw(address, content, encoding, { retry: true }),
-    read: (o?: ReadOptions) => {
-      const term = o?.terminator;
-      return readResponse(address, {
+    read: (o?: ReadOptions) =>
+      readResponse(address, {
+        readMode: o?.readMode,
         pollCommand: o?.pollCommand,
+        terminator: o?.terminator,
         timeoutMs: o?.timeoutMs,
-        isComplete: term ? (b) => b.includes(term) : undefined,
-      });
-    },
+        framePattern: o?.framePattern,
+      }),
   };
 }

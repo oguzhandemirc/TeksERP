@@ -19,8 +19,10 @@ export interface DevicePeripheral {
   connectionType: string;
   address: string | null;
   port: number | null;
+  readMode: 'POLL' | 'STREAM'; // POLL=sor-cevap (komut yolla), STREAM=sürekli yayın (dinle)
   pollCommand: string | null;
   terminator: string | null;
+  identifyPattern: string | null; // değer ayıklama / geçerli çerçeve regex'i
   decimals: number | null;
   scale: number | null; // backend Decimal'i number'a serialize eder
   unit: string | null;
@@ -52,4 +54,20 @@ export const peripheralService = {
         `/peripherals/for-session?kind=${encodeURIComponent(kind)}`,
       )
       .then((r) => r.data?.data ?? []),
+
+  /** Oturumun YERİNDEKİ (makine/istasyon) TÜM cihazlar — kind filtresiz (saha eşleme). */
+  getForSessionAll: (): Promise<DevicePeripheral[]> =>
+    apiClient
+      .get<ApiResponse<DevicePeripheral[]>>('/peripherals/for-session')
+      .then((r) => r.data?.data ?? []),
+
+  /**
+   * SAHA EŞLEME: tabletle taranan HC-06 MAC'ini cihaz kaydına yazar. Backend
+   * YALNIZ aktif oturumun makine/istasyonundaki cihaza izin verir (yer eşleşmezse
+   * 403) ve gerçek MAC atandığı için simulate'i kapatır.
+   */
+  assignFieldAddress: (id: string, address: string): Promise<DevicePeripheral> =>
+    apiClient
+      .patch<ApiResponse<DevicePeripheral>>(`/peripherals/${id}/field-address`, { address })
+      .then((r) => r.data.data),
 };

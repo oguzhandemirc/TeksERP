@@ -531,6 +531,15 @@ model Device {
 /// baskı anında cihaz→{dil,medya,şablon} çözülür. Sahiplik tam-biri: makineye
 /// SABİT (machineId) VEYA tablete-BAĞLI (deviceId, BT yazıcı tabletle gezer).
 /// Saha donanımının TEK kaynağı — eski `MachineHardware` emekliye ayrıldı.
+/// Okuma davranışı — cihaz VERİsi (kod değil). POLL: pollCommand yolla, cevabı oku
+/// (Tambur metresi "TTTTTT" → metraj). STREAM: cihaz sürekli yayınlar; dinle, son
+/// (kararlı) çerçeveyi al (Sevkiyat kantarı sürekli kg akıtır). Yeni davranışlı
+/// cihaz = yeni satır + bu alan; uygulama kodu değişmez.
+enum PeripheralReadMode {
+  POLL
+  STREAM
+}
+
 model PeripheralDevice {
   id   String @db.Uuid @id @default(uuid())
   code String @unique @db.VarChar(48)
@@ -544,7 +553,8 @@ model PeripheralDevice {
   identifyPattern String? @db.VarChar(255) // SCALE/METER veri çözüm regex'i
 
   // --- Giriş cihazı (SCALE/METER) okuma protokolü — davranış tamamen VERİ ---
-  pollCommand String?  @db.VarChar(64) // İstek-cevap sorgu komutu (boş = sadece dinle)
+  readMode    PeripheralReadMode @default(POLL) // POLL=sor-cevap (komut yolla), STREAM=sürekli yayın (dinle)
+  pollCommand String?  @db.VarChar(64) // POLL sorgu komutu; escape destekli (\r \n \xNN), TAM gönderilir
   terminator  String?  @db.VarChar(8) // Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF
   decimals    Int? // Codec yuvarlama hassasiyeti (boş → 1)
   scale       Decimal? @db.Decimal(10, 4) // Ham → mühendislik çarpanı (cm→m: 0.01); boş → 1

@@ -10,6 +10,7 @@ export const peripheralFormSchema = z.object({
   port: z.string().trim().optional().default(""),
   identifyPattern: z.string().trim().max(255).optional().default(""),
   // Giriş cihazı (SCALE/METER) protokolü
+  readMode: z.enum(["POLL", "STREAM"]).optional().default("POLL"),
   pollCommand: z.string().trim().max(64).optional().default(""),
   terminator: z.string().max(8).optional().default(""),
   decimals: z.string().trim().optional().default(""),
@@ -80,6 +81,7 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     address: nn(v.address),
     port: v.port.trim() ? Number(v.port) : null,
     identifyPattern: nn(v.identifyPattern),
+    readMode: v.readMode,
     pollCommand: nn(v.pollCommand),
     terminator: v.terminator ? v.terminator : null,
     decimals: v.decimals.trim() ? Number(v.decimals) : null,
@@ -116,6 +118,7 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   address: "",
   port: "",
   identifyPattern: "",
+  readMode: "POLL",
   pollCommand: "",
   terminator: "",
   decimals: "",

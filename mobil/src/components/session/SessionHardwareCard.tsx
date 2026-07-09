@@ -12,12 +12,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text } from 'react-native-paper';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { peripheralService, type DevicePeripheral } from '../../services/peripheral.service';
 import { isBtSupported, isBonded, listBonded, pairByMac } from '../../services/hal/btClassic.transport';
 import { buildIoFromPeripheral } from '../../hooks/usePeripheralIO';
 import { useSessionStore } from '../../store/sessionStore';
+import HardwareScanModal from './HardwareScanModal';
 
 const C = {
   bgSoft: '#1e293b',
@@ -28,6 +29,7 @@ const C = {
   border: '#334155',
   success: '#22c55e',
   warn: '#f59e0b',
+  scan: '#0ea5e9',
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -46,17 +48,12 @@ const KIND_ICON: Record<string, string> = {
 export default function SessionHardwareCard() {
   const active = useSessionStore((s) => s.active);
   const btOk = isBtSupported();
+  const qc = useQueryClient();
 
   const q = useQuery({
     queryKey: ['peripherals', 'for-session', 'ALL', active?.id ?? null],
-    queryFn: async () => {
-      const [printers, scales, meters] = await Promise.all([
-        peripheralService.getForSession('LABEL_PRINTER'),
-        peripheralService.getForSession('SCALE'),
-        peripheralService.getForSession('METER'),
-      ]);
-      return [...meters, ...scales, ...printers];
-    },
+    // Tek çağrı (kind filtresiz): backend oturumun makine/istasyonundaki TÜM cihazları döner.
+    queryFn: () => peripheralService.getForSessionAll(),
     staleTime: 60 * 1000,
     enabled: active != null,
   });
@@ -64,6 +61,7 @@ export default function SessionHardwareCard() {
 
   const [bonded, setBonded] = useState<Record<string, boolean>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [scanTarget, setScanTarget] = useState<DevicePeripheral | null>(null);
 
   const refreshBonded = useCallback(async () => {
     if (!btOk || rows.length === 0) return;
@@ -119,9 +117,11 @@ export default function SessionHardwareCard() {
         throw new Error('Bu derleme/bağlantı türü okuma desteklemiyor (native build gerekli olabilir).');
       }
       const raw = await io.transport.read({
+        readMode: r.readMode,
         pollCommand: r.pollCommand ?? undefined,
         terminator: r.terminator ?? undefined,
-        timeoutMs: r.timeoutMs ?? 2500,
+        timeoutMs: r.timeoutMs ?? undefined,
+        framePattern: r.identifyPattern ?? undefined,
       });
       const value = io.codec.decode(raw);
       Toast.show({
@@ -195,6 +195,18 @@ export default function SessionHardwareCard() {
                   {r.simulate ? '  (simülasyon)' : isSpp ? (isBonded_ ? '  · eşleşik' : '  · eşleşmemiş') : ''}
                 </Text>
               </View>
+              {btOk && r.connectionType === 'BLUETOOTH_SPP' && (
+                <Button
+                  mode="contained"
+                  compact
+                  icon="magnify"
+                  disabled={busyId != null}
+                  buttonColor={C.scan}
+                  onPress={() => setScanTarget(r)}
+                >
+                  {r.address ? 'Yeniden Tara' : 'Tara & Bağla'}
+                </Button>
+              )}
               {isSpp && btOk && !r.simulate && !isBonded_ && (
                 <Button
                   mode="contained"
@@ -208,7 +220,9 @@ export default function SessionHardwareCard() {
                   Eşleştir
                 </Button>
               )}
-              {isInput && (
+              {/* "Oku" yalnız bond edilmiş girişte — bağlı olmayan cihaz zaten okunamaz.
+                  Böylece satırda en fazla 2 aksiyon kalır (taşma/sıkışma önlenir). */}
+              {isInput && isBonded_ && (
                 <Button
                   mode="text"
                   compact
@@ -225,6 +239,16 @@ export default function SessionHardwareCard() {
           );
         })
       )}
+
+      <HardwareScanModal
+        visible={scanTarget != null}
+        target={scanTarget}
+        onDismiss={() => setScanTarget(null)}
+        onAssigned={() => {
+          void qc.invalidateQueries({ queryKey: ['peripherals', 'for-session'] });
+          void refreshBonded();
+        }}
+      />
     </View>
   );
 }

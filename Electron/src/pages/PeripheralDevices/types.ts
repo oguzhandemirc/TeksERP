@@ -6,6 +6,8 @@
 export type ConnectionType = "NETWORK_TCP" | "BLUETOOTH_SPP" | "BLE" | "USB" | "SERIAL_COM";
 export type PeripheralKind = "LABEL_PRINTER" | "SCALE" | "METER" | "SIGNAL_SOURCE";
 export type PrinterLanguage = "RASTER_HTML" | "PPLA" | "PPLB" | "ZPL";
+/** Okuma davranışı (kantar/metre): POLL=komut yolla+cevabı oku · STREAM=sürekli yayın dinle. */
+export type PeripheralReadMode = "POLL" | "STREAM";
 /** Yönlendirme BAĞLAMI (baskı anındaki iş bağlamı) — şablonun kimliği DEĞİL.
  *  Etiket Stüdyosu v2 tek-havuz modeli: her bağlama havuzdaki HERHANGİ bir
  *  şablon atanabilir (LabelTemplate.kind yalnız legacy bilgi, null olabilir). */
@@ -27,6 +29,7 @@ export interface PeripheralDevice {
   port: number | null;
   identifyPattern: string | null;
   // Giriş cihazı (SCALE/METER) okuma protokolü
+  readMode: PeripheralReadMode;
   pollCommand: string | null;
   terminator: string | null;
   decimals: number | null;
@@ -71,4 +74,9 @@ export const peripheralKindLabels: Record<PeripheralKind, string> = {
   SCALE: "Kantar",
   METER: "Metraj",
   SIGNAL_SOURCE: "Sinyal Kaynağı",
+};
+
+export const peripheralReadModeLabels: Record<PeripheralReadMode, string> = {
+  POLL: "Sorgu — komut yolla, cevabı oku",
+  STREAM: "Yayın — cihaz sürekli akıtır, dinle",
 };

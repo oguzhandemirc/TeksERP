@@ -71,6 +71,8 @@ const canvasPreviewSchema = z.object({
   heightMm: z.number().min(10).max(500),
   elements: z.unknown(),
   language: z.enum(["PPLA", "PPLB", "ZPL", "RASTER_HTML"] as [string, ...string[]]).optional(),
+  // "Bu Bilgisayar"da seçili Cihaz Kaydı yazıcısı — dil/medya bu cihazdan çözülür.
+  peripheralId: z.string().uuid().optional(),
 });
 
 // Boyut varyantı gövdeleri — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
@@ -179,6 +181,7 @@ export class LabelTemplateController {
           heightMm: body.heightMm,
           elements: body.elements,
           language: body.language as PrinterLanguage | undefined,
+          peripheralId: body.peripheralId,
         });
         res.status(200).json(result);
         return;

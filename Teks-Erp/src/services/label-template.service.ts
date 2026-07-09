@@ -775,6 +775,9 @@ export class LabelTemplateService {
     heightMm: number;
     elements: unknown;
     language?: PrinterLanguage;
+    /** "Bu Bilgisayar"da seçili Cihaz Kaydı yazıcısı — verilirse dil + medya (dpi)
+     *  O CİHAZDAN çözülür (editör Test Baskısı gerçek yazıcı diliyle bassın diye). */
+    peripheralId?: string;
   }): Promise<
     ApiResponse<{
       mode: "svg" | "html" | "text";
@@ -792,8 +795,21 @@ export class LabelTemplateService {
       throw e;
     }
     const payload = mockPayload(opts.kind);
-    const base = await resolveLabelFormat({ kind: opts.kind });
-    const language = opts.language ?? base.language;
+    // Cihaz seçiliyse medya (dpi/gap) + dil O CİHAZDAN çözülür — "Bu Bilgisayar"da
+    // seçili Cihaz Kaydı yazıcısı (ör. Argox PPLB) editör Test Baskısı'nda da gerçek
+    // dille bassın diye. Dil önceliği: explicit language > cihaz languageOverride >
+    // RASTER_HTML (cihazsız). resolveLabelFormat dili SABİT RASTER_HTML döndürür
+    // (dil routing katmanında biner), o yüzden languageOverride'ı ayrı okuruz.
+    const base = await resolveLabelFormat({ kind: opts.kind, peripheralId: opts.peripheralId ?? null });
+    let deviceLang: PrinterLanguage | undefined;
+    if (opts.peripheralId) {
+      const dev = await prisma.peripheralDevice.findFirst({
+        where: { id: opts.peripheralId, deletedAt: null },
+        select: { languageOverride: true },
+      });
+      deviceLang = dev?.languageOverride ?? undefined;
+    }
+    const language = opts.language ?? deviceLang ?? base.language;
     const format = { ...base, widthMm: opts.widthMm, heightMm: opts.heightMm, language };
     const fakeVariant = {
       elements: layout,

@@ -4,6 +4,7 @@ import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { Input } from "@/components/ui/input";
+import { Callout } from "@/components/ui/callout";
 import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
 import { stationService } from "@/pages/Stations/service";
@@ -15,7 +16,7 @@ import {
   peripheralFormSchema,
   type PeripheralFormValues,
 } from "./schema";
-import { connectionTypeLabels, peripheralKindLabels, type PeripheralDevice, type RouteLabelKind } from "./types";
+import { connectionTypeLabels, peripheralKindLabels, peripheralReadModeLabels, type PeripheralDevice, type RouteLabelKind } from "./types";
 
 interface Props {
   open: boolean;
@@ -26,6 +27,12 @@ interface Props {
 }
 
 const SELECT_CLS = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
+
+// Metre/kantar "rol" ayrımı — mobil HAL bunu BİREBİR string eşleştirir
+// (Tambur foldType→2-KAT/4-KAT, tek-metre istasyonu→PRIMARY). Serbest metin +
+// typo = sahada sessiz "yanlış/eksik cihaz" hatası olduğundan sabit listeye
+// çekildi; kayıtta bulunan bilinmeyen değer "(özel)" olarak korunur.
+const ROLE_OPTIONS = ["2-KAT", "4-KAT", "PRIMARY"] as const;
 
 function routeTemplateId(initial: PeripheralDevice | null | undefined, kind: RouteLabelKind): string {
   return initial?.templateRoutes?.find((r) => r.kind === kind)?.templateId ?? "";
@@ -61,6 +68,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         address: initial.address ?? "",
         port: initial.port != null ? String(initial.port) : "",
         identifyPattern: initial.identifyPattern ?? "",
+        readMode: initial.readMode ?? "POLL",
         pollCommand: initial.pollCommand ?? "",
         terminator: initial.terminator ?? "",
         decimals: initial.decimals != null ? String(initial.decimals) : "",
@@ -106,6 +114,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         const kind = form.watch("kind");
         const isInput = kind === "SCALE" || kind === "METER";
         const isPrinter = kind === "LABEL_PRINTER";
+        const roleVal = form.watch("role");
+        const readMode = form.watch("readMode");
+        // Gerçek adres tanımlı AMA simülasyon açık → cihaz OKUNMAZ, sahte değer
+        // üretilir (kurulum sonrası simulate kapatmayı unutma tuzağı).
+        const simWarn = isInput && !!form.watch("address").trim() && form.watch("simulate");
         return (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -176,14 +189,45 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   Okuma Protokolü (kantar/metre)
                 </div>
                 <div className="grid grid-cols-3 gap-3">
-                  <FormField label="Sorgu Komutu" hint="İstek-cevap (boş=dinle)">
-                    <Input className="font-mono" {...form.register("pollCommand")} placeholder="R" />
+                  <FormField
+                    label="Okuma Modu"
+                    hint="Kantar genelde Yayın · metre Sorgu"
+                    className="col-span-3"
+                  >
+                    <select className={SELECT_CLS} {...form.register("readMode")}>
+                      {Object.entries(peripheralReadModeLabels).map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </FormField>
+                  <FormField
+                    label="Sorgu Komutu"
+                    hint={
+                      readMode === "STREAM"
+                        ? "Yayın modunda kullanılmaz"
+                        : "TAM gönderilir · escape: \\r \\n \\xNN"
+                    }
+                  >
+                    <Input
+                      className="font-mono"
+                      disabled={readMode === "STREAM"}
+                      {...form.register("pollCommand")}
+                      placeholder="TTTTTT"
+                    />
                   </FormField>
                   <FormField label="Satır Sonu" hint="boş → CR/LF">
                     <Input className="font-mono" {...form.register("terminator")} placeholder={"\\r\\n"} />
                   </FormField>
-                  <FormField label="Rol" hint="2-KAT / 4-KAT / PRIMARY">
-                    <Input {...form.register("role")} placeholder="2-KAT" />
+                  <FormField label="Rol" hint="Tambur: 2/4-KAT · tek metre: PRIMARY">
+                    <select className={SELECT_CLS} {...form.register("role")}>
+                      <option value="">— (yok)</option>
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                      {roleVal && !ROLE_OPTIONS.includes(roleVal as (typeof ROLE_OPTIONS)[number]) && (
+                        <option value={roleVal}>{roleVal} (özel)</option>
+                      )}
+                    </select>
                   </FormField>
                   <FormField label="Ondalık" hint="0-4 (boş→1)">
                     <Input {...form.register("decimals")} placeholder="1" />
@@ -197,12 +241,25 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   <FormField label="Zaman Aşımı (ms)" hint="boş→2500">
                     <Input {...form.register("timeoutMs")} placeholder="2500" />
                   </FormField>
-                  <FormField label="Veri Deseni (regex)" hint="Ham cevaptan sayıyı ayıklar" className="col-span-2">
+                  <FormField
+                    label="Veri Deseni (regex)"
+                    hint="1. grup = değer · sabit-satır için: (\d+\.\d+)B"
+                    className="col-span-2"
+                  >
                     <Input className="font-mono text-xs" {...form.register("identifyPattern")} placeholder="(\d+(?:\.\d+)?)" />
                   </FormField>
                   <label className="flex items-center gap-2 self-end pb-2 text-sm">
                     <input type="checkbox" {...form.register("simulate")} /> Simülasyon (sahte değer)
                   </label>
+                  {simWarn && (
+                    <div className="col-span-3">
+                      <Callout tone="warning" title="Simülasyon açık — cihaz gerçekten okunmayacak">
+                        Bu cihazın adresi tanımlı ama <strong>Simülasyon</strong> işaretli:
+                        sahada gerçek okuma yapılmaz, sahte değer üretilir. Kurulum
+                        bittiyse kapatın.
+                      </Callout>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

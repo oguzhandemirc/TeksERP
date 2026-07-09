@@ -8,12 +8,25 @@
 // =============================================================================
 
 export interface ReadOptions {
-  /** İstek-cevap protokolünde cihaza yollanacak sorgu komutu (boş = sadece dinle). */
+  /**
+   * Okuma davranışı:
+   *  • 'POLL' (varsayılan) — `pollCommand`'ı yaz, cevabı oku (Tambur metresi "TTTTTT").
+   *  • 'STREAM'            — komut YOLLAMA; cihaz sürekli yayınlar, son kararlı
+   *                          çerçeveyi al (Sevkiyat kantarı sürekli kg akıtır).
+   */
+  readMode?: 'POLL' | 'STREAM';
+  /** POLL'de cihaza yollanacak sorgu komutu (TAM gönderilir; escape destekli: \r \n \xNN). */
   pollCommand?: string;
-  /** Yanıtın bittiğini gösteren satır sonu (varsayılan: herhangi CR/LF). */
+  /** Çerçeveyi (satırı) bitiren ayraç (varsayılan: herhangi CR/LF). */
   terminator?: string;
   /** Yanıt için bekleme süresi (ms). */
   timeoutMs?: number;
+  /**
+   * Değer çerçevesi regex'i — çok satırlı/gürültülü akışta HANGİ satırın geçerli
+   * olduğunu belirler (ör. `(\d+(?:\.\d+)?)B` → yalnız "sabit" satır). Verilirse
+   * transport bu desene uyan SON çerçeveyi döndürür; boşsa son tam çerçeveyi.
+   */
+  framePattern?: string;
 }
 
 export interface DeviceTransport {
