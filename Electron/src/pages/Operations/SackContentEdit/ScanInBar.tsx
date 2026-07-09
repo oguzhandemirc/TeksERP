@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Layers, PackagePlus } from "lucide-react";
+import { Layers, PackagePlus, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScanField } from "@/components/scanner/ScanField";
+import { beepOk, beepError } from "@/lib/scan-feedback";
 import { packingService } from "./service";
 import { useScanDrainer } from "./useScanDrainer";
 import { invalidateShipmentData } from "./useShipmentDetail";
@@ -15,7 +16,15 @@ interface Props {
   sacks: ShipmentSack[];
   activeSackId: string | null;
   onSetActiveSack: (sackId: string) => void;
+  /**
+   * Sevkiyatta ZATEN olan barkodlar (top + kartela). Okutma bunlardan biriyse
+   * işlem "taşıma"dır — geri-al sunulmaz (geri-al = sevkiyattan çıkar; taşımayı
+   * çıkarmaya çevirmek yanlış olur).
+   */
+  knownBarcodes?: string[];
 }
+
+type LastScan = { kind: "ROLL" | "SWATCH"; id: string; code: string };
 
 /**
  * Aktif-çuval okutma çubuğu (PREPARING) — tabanca topu okutur, kod aktif çuvala
@@ -23,9 +32,25 @@ interface Props {
  * taşır, BAŞKA sevkiyattaki/uygunsuz top backend 409/400 → interceptor toast'lar.
  * Çuval yokken "Çuval Aç" ile başlanır (açılan çuval otomatik aktif olur).
  */
-export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: Props) {
+export function ScanInBar({
+  shipmentId,
+  sacks,
+  activeSackId,
+  onSetActiveSack,
+  knownBarcodes,
+}: Props) {
   const qc = useQueryClient();
   const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [lastScan, setLastScan] = useState<LastScan | null>(null);
+
+  // Üyelik kontrolü POST'tan ÖNCE yapılır; detail refetch'i gecikirse set bir
+  // okutma kadar bayat kalabilir — tek riski çift-okutulan topun geri-al'ının
+  // "sevkiyattan çıkar" olması, kabul edilebilir.
+  const knownRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    knownRef.current = new Set((knownBarcodes ?? []).map((c) => c.trim().toUpperCase()));
+  }, [knownBarcodes]);
 
   const { push, busy, queueLength } = useScanDrainer({
     onScan: async (code) => {
@@ -40,11 +65,41 @@ export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: 
           onSetActiveSack(target);
           toast.success(`Çuval #${res.data.seq} açıldı`);
         }
-        await packingService.scan(shipmentId, code, target);
+        const wasInShipment = knownRef.current.has(code.trim().toUpperCase());
+        const res = await packingService.scan(shipmentId, code, target);
+        beepOk();
+        const scanned = res.data;
+        const id = scanned.kind === "ROLL" ? scanned.rollId : scanned.swatchId;
+        // Geri-al yalnız sevkiyata YENİ giren okutma için (taşıma değil).
+        setLastScan(!wasInShipment && id ? { kind: scanned.kind, id, code } : null);
+      } catch (err) {
+        beepError(); // hata mesajı apiClient interceptor'dan toast'lanır
+        setLastScan(null);
+        throw err;
       } finally {
         // 409/400 olsa bile (atomik claim kaybı vb.) bayat listeyi tazele.
         invalidateShipmentData(qc, shipmentId);
       }
+    },
+  });
+
+  // "Son okutmayı geri al" — tek dokunuş; yanlış çuvala/yanlış topu okutan
+  // operatör satır ikonlarını aramadan düzeltir. Top/kartela depoya döner.
+  const undoMut = useMutation({
+    mutationFn: (scan: LastScan) =>
+      scan.kind === "ROLL"
+        ? packingService.removeRoll(shipmentId, scan.id)
+        : packingService.removeSwatch(shipmentId, scan.id),
+    onSuccess: (_r, scan) => {
+      toast.success(`Geri alındı — ${scan.code} depoya döndü`);
+      setLastScan(null);
+      invalidateShipmentData(qc, shipmentId);
+      inputRef.current?.focus();
+    },
+    onError: () => {
+      // Örn. top bu arada başka işlemle çıkarıldı — bayat butonu düşür, tazele.
+      setLastScan(null);
+      invalidateShipmentData(qc, shipmentId);
     },
   });
 
@@ -55,6 +110,7 @@ export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: 
       toast.success(`Çuval #${sack.seq} açıldı`);
       invalidateShipmentData(qc, shipmentId);
       onSetActiveSack(sack.id);
+      inputRef.current?.focus(); // odak disiplini: yeni çuvala okutma hemen sürsün
     },
   });
 
@@ -95,6 +151,7 @@ export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: 
           placeholder={noSacks ? "Top okut → ilk çuval otomatik açılır" : "Top barkodu okut → aktif çuvala ekle"}
           expectPrefix={["ROLL", "SWATCH"]}
           autoFocus
+          inputRef={inputRef}
           widthClassName="max-w-md"
           className="flex-1"
         />
@@ -117,18 +174,35 @@ export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: 
           <Layers className="h-4 w-4" /> Kartela Ekle
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        {busy || queueLength > 0
-          ? `Okutuluyor… (${queueLength} bekliyor)`
-          : noSacks
-            ? "İlk top okutulunca çuval otomatik açılır; sonrakiler aynı çuvala girer. Elle açmak için 'Çuval Aç'."
-            : "Okutulan toplar aktif (çerçeveli) çuvala eklenir. Aktif çuvalı değiştirmek için kartındaki 'Aktif Yap'a basın."}
-      </p>
+      <div className="flex min-h-6 items-center justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          {busy || queueLength > 0
+            ? `Okutuluyor… (${queueLength} bekliyor)`
+            : noSacks
+              ? "İlk top okutulunca çuval otomatik açılır; sonrakiler aynı çuvala girer. Elle açmak için 'Çuval Aç'."
+              : "Okutulan toplar aktif (çerçeveli) çuvala eklenir. Aktif çuvalı değiştirmek için kartındaki 'Aktif Yap'a basın."}
+        </p>
+        {lastScan && !busy && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 gap-1 px-2 text-xs"
+            disabled={undoMut.isPending}
+            onClick={() => undoMut.mutate(lastScan)}
+          >
+            <Undo2 className="h-3.5 w-3.5" /> Son okutmayı geri al
+            <span className="font-mono">({lastScan.code})</span>
+          </Button>
+        )}
+      </div>
       <AddKartelaDialog
         shipmentId={shipmentId}
         sackId={kartelaSackId}
         open={kartelaOpen}
-        onOpenChange={setKartelaOpen}
+        onOpenChange={(o) => {
+          setKartelaOpen(o);
+          if (!o) inputRef.current?.focus(); // odak disiplini: dialog kapandı → okutmaya dön
+        }}
       />
     </div>
   );

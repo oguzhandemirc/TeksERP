@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Truck, DoorOpen, X, PackageCheck, Trash2 } from "lucide-react";
+import { Truck, DoorOpen, X, PackageCheck, Trash2, CheckCircle2, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScanField } from "@/components/scanner/ScanField";
 import { useContinuousScan } from "@/hooks/useContinuousScan";
+import { cn } from "@/lib/utils";
 import { sackStoreService } from "@/pages/Operations/SackStore/service";
 import { sackStoreStatusLabels, type SackStoreShipment } from "@/pages/Operations/SackStore/types";
 import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
@@ -26,9 +27,12 @@ interface ScannedGroup {
  */
 export function ScanDispatchPage() {
   const qc = useQueryClient();
+  const scanRef = useRef<HTMLInputElement>(null);
   const [scanValue, setScanValue] = useState("");
   const [groups, setGroups] = useState<ScannedGroup[]>([]);
   const [dispatchTarget, setDispatchTarget] = useState<ScannedGroup | null>(null);
+  // Son başarılı okutmanın sevkiyat eşleşmesi — yeşil bantta "kod → sevk no".
+  const [lastOk, setLastOk] = useState<{ code: string; shipmentNo: string } | null>(null);
 
   const upsertGroup = (shipment: SackStoreShipment, code: string) => {
     setGroups((prev) => {
@@ -58,7 +62,10 @@ export function ScanDispatchPage() {
 
   const { push, resolving, lastError } = useContinuousScan<SackStoreShipment>({
     resolve: resolveSack,
-    onResolved: (shipment, code) => upsertGroup(shipment, code),
+    onResolved: (shipment, code) => {
+      upsertGroup(shipment, code);
+      setLastOk({ code, shipmentNo: shipment.shipmentNo });
+    },
     alreadyInList: (code) => groups.some((g) => g.codes.includes(code)),
   });
 
@@ -79,6 +86,7 @@ export function ScanDispatchPage() {
         ),
       );
       void qc.invalidateQueries({ queryKey: ["sack-store"] });
+      scanRef.current?.focus(); // odak disiplini: aksiyon sonrası okutmaya dön
     },
   });
 
@@ -89,7 +97,15 @@ export function ScanDispatchPage() {
         description="Çuvalları kapıda okut → sevkiyatına göre gruplanır → kapıya taşı / sevk et."
         actions={
           groups.length > 0 ? (
-            <Button variant="outline" size="sm" onClick={() => setGroups([])}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setGroups([]);
+                setLastOk(null);
+                scanRef.current?.focus();
+              }}
+            >
               <Trash2 className="mr-1 h-4 w-4" /> Listeyi Temizle
             </Button>
           ) : undefined
@@ -103,15 +119,28 @@ export function ScanDispatchPage() {
         onScan={handleScan}
         placeholder="Çuval kodu okut (CV-…) → sevkiyatı bul"
         autoFocus
+        inputRef={scanRef}
         expectPrefix="SACK"
         submitLabel="Ekle"
       />
-      {(resolving.length > 0 || lastError) && (
-        <div className="border-b px-6 py-1.5 text-xs">
-          {resolving.length > 0 && (
-            <span className="text-muted-foreground">Çözümleniyor: {resolving.join(", ")}</span>
-          )}
-          {lastError && <span className="text-destructive">{lastError}</span>}
+      {/* Tam genişlik okutma sonucu bandı — ret nedeni büyük puntoyla (saha kuralı:
+          sessiz/teknik red yasak), başarı yeşil; çözümleme küçük satırda. */}
+      {lastError ? (
+        <div className="flex items-center gap-2 border-b bg-destructive/10 px-6 py-2.5 text-sm font-semibold text-destructive">
+          <XCircle className="h-5 w-5 shrink-0" />
+          {lastError}
+        </div>
+      ) : lastOk ? (
+        <div className="flex items-center gap-2 border-b bg-emerald-500/10 px-6 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
+          <span className="font-mono">{lastOk.code}</span>
+          <span aria-hidden>→</span>
+          <span className="font-mono">{lastOk.shipmentNo}</span>
+        </div>
+      ) : null}
+      {resolving.length > 0 && (
+        <div className="border-b px-6 py-1.5 text-xs text-muted-foreground">
+          Çözümleniyor: {resolving.join(", ")}
         </div>
       )}
 
@@ -123,61 +152,89 @@ export function ScanDispatchPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {groups.map((g) => (
-              <div key={g.shipment.id} className="rounded-lg border p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-semibold">{g.shipment.shipmentNo}</span>
-                      <Badge variant={g.shipment.status === "AT_DOOR" ? "default" : "secondary"}>
-                        {sackStoreStatusLabels[g.shipment.status]}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {g.shipment.customer.name}
-                      {g.shipment.branch ? ` · ${g.shipment.branch.name}` : ""}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {g.codes.length} / {g.shipment.sackCount} çuval okutuldu ·{" "}
-                      {DEC.format(g.shipment.totalQty)} m
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => removeGroup(g.shipment.id)}
-                    aria-label="Listeden çıkar"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {g.codes.map((c) => (
-                    <span key={c} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
-                      {c}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-3 flex justify-end">
-                  {g.shipment.status === "READY" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={moveMut.isPending}
-                      onClick={() => moveMut.mutate(g.shipment.id)}
-                    >
-                      <DoorOpen className="mr-1 h-4 w-4" /> Kapıya Taşı
-                    </Button>
-                  ) : (
-                    <Button size="sm" onClick={() => setDispatchTarget(g)}>
-                      <PackageCheck className="mr-1 h-4 w-4" /> Sevk Et
-                    </Button>
+            {groups.map((g) => {
+              // Tamamlanma vurgusu: tüm çuvallar okutulduysa kart yeşile döner —
+              // saha vakası: "3/3'ün hiç görünmemesi kafa karıştırıyor".
+              const done = g.shipment.sackCount > 0 && g.codes.length >= g.shipment.sackCount;
+              return (
+                <div
+                  key={g.shipment.id}
+                  className={cn(
+                    "rounded-lg border p-4",
+                    done && "border-emerald-500/60 bg-emerald-500/5",
                   )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold">
+                          {g.shipment.shipmentNo}
+                        </span>
+                        <Badge variant={g.shipment.status === "AT_DOOR" ? "default" : "secondary"}>
+                          {sackStoreStatusLabels[g.shipment.status]}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {g.shipment.customer.name}
+                        {g.shipment.branch ? ` · ${g.shipment.branch.name}` : ""}
+                      </p>
+                      <p
+                        className={cn(
+                          "mt-1 flex items-center gap-1 text-xs",
+                          done
+                            ? "font-semibold text-emerald-700 dark:text-emerald-400"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {done && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        {g.codes.length} / {g.shipment.sackCount} çuval okutuldu
+                        {done ? " — tümü okundu" : ""} · {DEC.format(g.shipment.totalQty)} m
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        removeGroup(g.shipment.id);
+                        scanRef.current?.focus();
+                      }}
+                      aria-label="Listeden çıkar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {g.codes.map((c) => (
+                      <span key={c} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex justify-end">
+                    {g.shipment.status === "READY" ? (
+                      <Button
+                        size="sm"
+                        variant={done ? "default" : "outline"}
+                        disabled={moveMut.isPending}
+                        onClick={() => moveMut.mutate(g.shipment.id)}
+                      >
+                        <DoorOpen className="mr-1 h-4 w-4" /> Kapıya Taşı
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant={done ? "default" : "outline"}
+                        onClick={() => setDispatchTarget(g)}
+                      >
+                        <PackageCheck className="mr-1 h-4 w-4" /> Sevk Et
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -194,10 +251,12 @@ export function ScanDispatchPage() {
             : null
         }
         scannedCodes={dispatchTarget?.codes}
+        returnFocusRef={scanRef}
         onOpenChange={(o) => !o && setDispatchTarget(null)}
         onDispatched={(id) => {
           removeGroup(id);
           setDispatchTarget(null);
+          setLastOk(null); // sevk bitti — bayat "kod → sevk" bandı kalmasın
         }}
       />
     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CheckCircle2, Loader2, PackageCheck, ScanLine } from "lucide-react";
@@ -37,6 +37,8 @@ interface Props {
    * sevk" notu çıkar (soft doğrulama — bloklamaz).
    */
   scannedCodes?: string[];
+  /** Kapanışta odak buraya döner (okutma kutusu) — operatör fare aramadan devam eder. */
+  returnFocusRef?: RefObject<HTMLInputElement | null>;
 }
 
 const norm = (s: string) => s.trim().toUpperCase();
@@ -48,7 +50,13 @@ const norm = (s: string) => s.trim().toUpperCase();
  * ve somut listelenir; döküm yüklenmeden onay verilemez. Taşıma bilgileri
  * (plaka/şoför/nakliyeci) opsiyonel.
  */
-export function DispatchConfirmDialog({ shipment, onOpenChange, onDispatched, scannedCodes }: Props) {
+export function DispatchConfirmDialog({
+  shipment,
+  onOpenChange,
+  onDispatched,
+  scannedCodes,
+  returnFocusRef,
+}: Props) {
   const qc = useQueryClient();
   const open = !!shipment;
   const [plateNumber, setPlateNumber] = useState("");
@@ -112,7 +120,15 @@ export function DispatchConfirmDialog({ shipment, onOpenChange, onDispatched, sc
         onOpenChange(o);
       }}
     >
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+      <DialogContent
+        className="max-h-[90vh] max-w-lg overflow-y-auto"
+        onCloseAutoFocus={(e) => {
+          if (returnFocusRef?.current) {
+            e.preventDefault();
+            returnFocusRef.current.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Sevk Et — {shipment?.shipmentNo}</DialogTitle>
           <DialogDescription>

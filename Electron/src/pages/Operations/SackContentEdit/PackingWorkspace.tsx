@@ -73,6 +73,10 @@ export function PackingWorkspace({ shipmentId, onExit }: Props) {
           sacks={detail.sacks}
           activeSackId={activeSackId}
           onSetActiveSack={setActiveSackId}
+          knownBarcodes={[
+            ...detail.rolls.map((r) => r.barcode),
+            ...detail.swatches.map((s) => s.barcode),
+          ].filter((b): b is string => !!b)}
         />
       )}
 

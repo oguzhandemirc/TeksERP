@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type Ref } from "react";
 import { ScanLine } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,12 @@ interface ScanFieldProps {
   className?: string;
   /** Input kutusunun genişlik sınırı. */
   widthClassName?: string;
+  /**
+   * Odak disiplini için input ref'i — dialog kapanışı/aksiyon sonrası sayfa
+   * `inputRef.current?.focus()` ile odağı okutma kutusuna geri verir
+   * (operatör fare aramadan okutmaya devam eder).
+   */
+  inputRef?: Ref<HTMLInputElement>;
 }
 
 /**
@@ -66,6 +72,7 @@ export function ScanField({
   busyLabel,
   className,
   widthClassName = "max-w-sm",
+  inputRef,
 }: ScanFieldProps) {
   const trimmed = value.trim();
 
@@ -104,6 +111,7 @@ export function ScanField({
         <div className={cn("relative flex-1", widthClassName)}>
           <ScanLine className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={inputRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
