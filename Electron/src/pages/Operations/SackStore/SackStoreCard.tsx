@@ -1,9 +1,26 @@
-import { DoorOpen, Undo2, PackageOpen, Truck, Package, Scale, Layers, ChevronRight } from "lucide-react";
+import {
+  DoorOpen,
+  Undo2,
+  PackageOpen,
+  Truck,
+  Package,
+  Scale,
+  Layers,
+  ChevronRight,
+  MoreHorizontal,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/operations/StatusBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber";
+import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { sackStoreStatusLabels, destinationLabels, type SackStoreShipment } from "./types";
@@ -127,6 +144,12 @@ function SackStoreActions({
   onDispatch,
 }: Omit<Props, "onOpen">) {
   const isReady = shipment.status === "READY";
+  // İki-adım kapı disiplini: onay akışı bayrağı AÇIKKEN READY'nin birincil yolu
+  // "Kapı Önüne Koy"dur; doğrudan sevk ikincil menüye iner (Okutarak Sevk ile
+  // aynı kural — kazara READY'den sevk tek tıkla mümkün olmasın). Bayrak
+  // KAPALIYKEN tek-adım kurulumların READY→sevk yolu aynen korunur.
+  const confirmationEnabled = useShipmentConfirmationEnabled();
+  const twoStep = isReady && confirmationEnabled;
   // Aksiyon butonları kart onClick'ini tetiklemesin → stopPropagation.
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -149,7 +172,7 @@ function SackStoreActions({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant={twoStep ? "default" : "outline"}
               size="sm"
               className="gap-1"
               disabled={busy}
@@ -170,15 +193,40 @@ function SackStoreActions({
             <Undo2 className="h-3.5 w-3.5" /> Çuval Depoya Geri Çek
           </Button>
         )}
-        <Button
-          type="button"
-          size="sm"
-          className="gap-1"
-          disabled={busy}
-          onClick={stop(() => onDispatch(shipment))}
-        >
-          <Truck className="h-3.5 w-3.5" /> {isReady ? "Sevk Et" : "Sevk Et / Alındı"}
-        </Button>
+        {twoStep ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Diğer aksiyonlar"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={stop(() => onDispatch(shipment))}
+              >
+                <Truck className="mr-1.5 h-3.5 w-3.5" /> Sevk Et (kapıyı atla)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1"
+            disabled={busy}
+            onClick={stop(() => onDispatch(shipment))}
+          >
+            <Truck className="h-3.5 w-3.5" /> {isReady ? "Sevk Et" : "Sevk Et / Alındı"}
+          </Button>
+        )}
       </div>
     </PermissionGate>
   );

@@ -26,6 +26,12 @@ vi.mock("./service", () => ({
   },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// Sevkiyat onay-akışı bayrağı — test başına kontrol edilebilir (default kapalı).
+let confirmationEnabled = false;
+vi.mock("@/hooks/usePricingEnabled", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/hooks/usePricingEnabled")>();
+  return { ...mod, useShipmentConfirmationEnabled: () => confirmationEnabled };
+});
 // İçerik slide-over kendi lazy query'sini açar — testte gürültüyü kes.
 vi.mock("./ShipmentContentsSheet", () => ({ ShipmentContentsSheet: () => null }));
 // PageHeader chrome'u (favoriler/komut paleti → Preferences/Router bağımlılığı)
@@ -126,6 +132,7 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     pullBack.mockReset().mockResolvedValue({ success: true, data: { id: "sh-door" } });
     unready.mockReset().mockResolvedValue({ success: true, data: { id: "sh-ready" } });
     shipmentContents.mockReset().mockResolvedValue(readyContents);
+    confirmationEnabled = false;
     // PermissionGate shipping:write ister — aksiyon butonları çıksın.
     useAuthStore.getState().setUser({
       userId: "u1",
@@ -201,6 +208,24 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     await user.click(within(dialog).getByRole("button", { name: "Geri Çek" }));
 
     await waitFor(() => expect(pullBack).toHaveBeenCalledWith("sh-door"));
+  });
+
+  it("onay-akışı bayrağı AÇIKKEN READY kartında doğrudan 'Sevk Et' yok — ikincil menüden erişilir", async () => {
+    confirmationEnabled = true;
+    const user = userEvent.setup();
+    renderPage(<SackStorePage />);
+    await screen.findByText("SVK-100");
+
+    // İki-adım disiplini: birincil yol Kapı Önüne Koy; doğrudan Sevk Et butonu yok.
+    expect(screen.getByRole("button", { name: "Kapı Önüne Koy" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sevk Et" })).not.toBeInTheDocument();
+
+    // Kapıyı atlama yolu kayıp değil: "..." menüsünde, onay dialoğuna gider.
+    await user.click(screen.getByRole("button", { name: "Diğer aksiyonlar" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Sevk Et \(kapıyı atla\)/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/geri alınamaz/i)).toBeInTheDocument();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("shipping:write yoksa aksiyon butonları gizlenir (PermissionGate)", async () => {
