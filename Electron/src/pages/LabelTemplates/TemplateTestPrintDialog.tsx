@@ -34,7 +34,7 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const doSend = async (transport: "cups" | "serial" | "tcp", target: string, baudRate?: number) => {
+  const doSend = async (transport: "cups" | "serial" | "tcp" | "winspool", target: string, baudRate?: number) => {
     if (!printerApi || !target) return;
     setSending(true);
     setResult(null);

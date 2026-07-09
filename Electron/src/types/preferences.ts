@@ -79,10 +79,13 @@ export interface AppPreferences {
    */
   labelPrinter?: {
     enabled?: boolean;
-    /** "serial" = seri/COM (fabrika, Windows); "cups" = macOS/Linux CUPS kuyruğu
-     * (bu Mac'te USB Argox printer-class → seri düğüm açmaz, tek yol budur). */
-    transport?: "serial" | "cups";
-    /** serial: COM yolu (COM5 / /dev/tty.*); cups: CUPS kuyruk adı (lp -d). */
+    /** "serial" = seri/COM (Windows sanal COM / USB-CDC); "cups" = macOS/Linux CUPS
+     * kuyruğu; "winspool" = Windows yazıcı kuyruğu RAW passthrough (USB Argox/Bixolon —
+     * USBPRINT-sınıfı, COM görünmez; "Generic/Text Only" kuyruğu yeterli, vendor sürücüsü
+     * indirmeye gerek yok). Dil cihaz-başına peripheralId'den çözülür. */
+    transport?: "serial" | "cups" | "winspool";
+    /** serial: COM yolu (COM5 / /dev/tty.*); cups: CUPS kuyruk adı (lp -d);
+     * winspool: Windows yazıcı kuyruğu adı. */
     path?: string;
     baudRate?: number;
     /** Cihaz Kaydı'ndaki LABEL_PRINTER id'si — seçiliyse native istekler peripheralId

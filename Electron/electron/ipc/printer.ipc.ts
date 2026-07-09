@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { createRequire } from "node:module";
 import net from "node:net";
 import { spawn } from "node:child_process";
+import { sendWinspool, listWinspool } from "./winspool.js";
 import type {
   PrinterSendOpts,
   PrinterSendResult,
@@ -164,8 +165,10 @@ function listCups(): Promise<ScannerListResult> {
 export function registerPrinterIpc(): void {
   ipcMain.handle("printer:list-serial", () => listSerial());
   ipcMain.handle("printer:list-cups", () => listCups());
+  ipcMain.handle("printer:list-winspool", () => listWinspool());
   ipcMain.handle("printer:send", (_e, opts: PrinterSendOpts) => {
     if (!opts?.content) return Promise.resolve({ ok: false, bytes: 0, available: true, error: "İçerik boş" });
+    if (opts.transport === "winspool") return sendWinspool(opts.target, opts.content);
     if (opts.transport === "cups") return sendCups(opts);
     return opts.transport === "serial" ? sendSerial(opts) : sendTcp(opts);
   });

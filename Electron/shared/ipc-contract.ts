@@ -90,10 +90,11 @@ export interface ScannerDeviceApi {
   onStatus: (cb: (status: ScannerStatus) => void) => () => void;
 }
 
-// --- Native yazıcı transport (Faz-2: seri/COM + ağ TCP 9100 + macOS CUPS) ---
+// --- Native yazıcı transport (seri/COM + ağ TCP 9100 + macOS CUPS + Windows spooler RAW) ---
 export interface PrinterSendOpts {
-  transport: "tcp" | "serial" | "cups";
-  /** TCP: IP/host; serial: COM yolu; cups: CUPS kuyruk adı (lp -d). */
+  transport: "tcp" | "serial" | "cups" | "winspool";
+  /** TCP: IP/host; serial: COM yolu; cups: CUPS kuyruk adı (lp -d);
+   *  winspool: Windows yazıcı kuyruğu adı (USB Argox/Bixolon — RAW passthrough). */
   target: string;
   /** TCP portu (default 9100). */
   port?: number;
@@ -115,7 +116,10 @@ export interface PrinterTransportApi {
   /** macOS/Linux CUPS kuyrukları (lpstat -e) — her cihaz path=kuyruk adı.
    * Windows'ta lp/lpstat yok → available:false (graceful). */
   listCups: () => Promise<ScannerListResult>;
-  /** Native komutu seri/TCP/CUPS yazıcıya gönder. Modül yoksa available:false. */
+  /** Windows kurulu yazıcı kuyrukları (Win32_Printer) — her cihaz path=kuyruk adı.
+   * Windows dışında powershell.exe yok → available:false (graceful). */
+  listWinspool: () => Promise<ScannerListResult>;
+  /** Native komutu seri/TCP/CUPS/Windows-spooler yazıcıya gönder. Modül yoksa available:false. */
   send: (opts: PrinterSendOpts) => Promise<PrinterSendResult>;
 }
 
