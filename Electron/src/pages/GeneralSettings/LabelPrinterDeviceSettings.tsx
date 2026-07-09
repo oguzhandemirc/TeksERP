@@ -18,11 +18,13 @@ import { FlagToggle } from "./SettingRow";
 import type { ScannerDeviceInfo } from "@shared/ipc-contract";
 
 /**
- * Etiket yazıcısı (Argox seri/COM) — bu bilgisayara özel YEREL tercih. Açık + port
- * seçiliyse etiket baskısı OS yazdırma diyaloğu yerine doğrudan seri/COM porta ham
- * PPLA gönderir → "her seferinde yazdırma ekranı çıkması" sorunu kalkar. BT modülü
- * eşleşince yazıcı Windows'ta sanal COM portu olur (USB kablo da COM); ikisi de burada
- * seçilir. Seri sürücü (serialport) tarayıcı ile aynı; bir kez `electron:rebuild` ister.
+ * Etiket yazıcısı — bu bilgisayara özel YEREL tercih. Açık + hedef seçiliyse etiket
+ * baskısı OS yazdırma diyaloğu yerine doğrudan yazıcıya ham komut (PPLA/PPLB/ZPL)
+ * gönderir → "her seferinde yazdırma ekranı çıkması" sorunu kalkar. Üç taşıma:
+ * - winspool: USB Argox/Bixolon (USBPRINT-sınıfı, COM görünmez) → Windows yazıcı
+ *   kuyruğuna RAW passthrough; "Generic/Text Only" kuyruğu yeterli, vendor sürücüsü YOK.
+ * - serial: gerçek seri/RS-232 veya sanal COM (BT-SPP / USB-CDC).
+ * - cups: macOS/Linux USB yazıcı (raw kuyruk).
  * window.api yoksa (web/test) görünmez.
  */
 export function LabelPrinterDeviceSettings() {
@@ -61,7 +63,12 @@ export function LabelPrinterDeviceSettings() {
   const scan = async () => {
     setScanning(true);
     setListErr(null);
-    const r = transport === "cups" ? await printer.listCups() : await printer.listSerial();
+    const r =
+      transport === "winspool"
+        ? await printer.listWinspool()
+        : transport === "cups"
+          ? await printer.listCups()
+          : await printer.listSerial();
     setDevices(r.devices);
     setAvailable(r.available);
     setListErr(r.error);
@@ -105,13 +112,14 @@ export function LabelPrinterDeviceSettings() {
         <span className="block text-muted-foreground">Bağlantı türü</span>
         <Select
           value={transport}
-          onValueChange={(t) => { setCfg({ transport: t as "serial" | "cups", path: undefined }); setDevices([]); setAvailable(null); }}
+          onValueChange={(t) => { setCfg({ transport: t as "serial" | "cups" | "winspool", path: undefined }); setDevices([]); setAvailable(null); }}
         >
           <SelectTrigger className="mt-1 w-full max-w-md">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="serial">Seri / COM (fabrika · Windows sanal COM / USB-CDC)</SelectItem>
+            <SelectItem value="winspool">Windows yazıcı kuyruğu — RAW (USB Argox / Bixolon)</SelectItem>
+            <SelectItem value="serial">Seri / COM (Windows sanal COM / USB-CDC)</SelectItem>
             <SelectItem value="cups">macOS / Linux — CUPS kuyruğu (USB yazıcı)</SelectItem>
           </SelectContent>
         </Select>
@@ -121,7 +129,7 @@ export function LabelPrinterDeviceSettings() {
         <div className="space-y-2">
           <Button type="button" variant="outline" size="sm" onClick={() => void scan()} disabled={scanning}>
             {scanning ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Usb className="mr-1 h-4 w-4" />}
-            {transport === "cups" ? "Kuyrukları Tara" : "Portları Tara"}
+            {transport === "serial" ? "Portları Tara" : "Kuyrukları Tara"}
           </Button>
         </div>
         {transport === "serial" && (
@@ -143,20 +151,26 @@ export function LabelPrinterDeviceSettings() {
       {available === false && (
         <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          {transport === "cups"
-            ? "CUPS bulunamadı (lp/lpstat yok). Bu seçenek yalnız macOS/Linux içindir."
-            : <>Seri sürücü bu derlemede hazır değil. Bir kez <code>npm run electron:rebuild</code> çalıştırın.</>}
+          {transport === "winspool"
+            ? "Windows yazıcı kuyruğu okunamadı (powershell yok). Bu seçenek yalnız Windows içindir."
+            : transport === "cups"
+              ? "CUPS bulunamadı (lp/lpstat yok). Bu seçenek yalnız macOS/Linux içindir."
+              : <>Seri sürücü bu derlemede hazır değil. Bir kez <code>npm run electron:rebuild</code> çalıştırın.</>}
           {listErr ? ` (${listErr})` : ""}
         </p>
       )}
       {available && devices.length > 0 && (
         <label className="block text-xs">
           <span className="block text-muted-foreground">
-            {transport === "cups" ? "CUPS kuyruğu" : "Yazıcı portu (COM)"}
+            {transport === "winspool"
+              ? "Windows yazıcısı (kuyruk)"
+              : transport === "cups"
+                ? "CUPS kuyruğu"
+                : "Yazıcı portu (COM)"}
           </span>
           <Select value={cfg.path ?? ""} onValueChange={(p) => setCfg({ path: p })}>
             <SelectTrigger className="mt-1 w-full max-w-md">
-              <SelectValue placeholder="Port seçin…" />
+              <SelectValue placeholder={transport === "serial" ? "Port seçin…" : "Yazıcı seçin…"} />
             </SelectTrigger>
             <SelectContent>
               {devices.map((d) => (
