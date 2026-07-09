@@ -9,6 +9,8 @@ import type {
   CanvasFontSize,
   CanvasLayout,
   CanvasRotation,
+  Code128Element,
+  FieldElement,
   LabelElement,
   LabelElementType,
 } from "@/types/label-canvas";
@@ -327,19 +329,19 @@ export function makeElement(
  * boyutlanır/kalınlaşır. Ortalama örnek barkod uzunluğuyla yaklaşık kurulur —
  * bağımsız olduğu için kullanıcı istediği gibi kaydırır.
  */
-export function makeBarcodePair(at: { x: number; y: number }): LabelElement[] {
+export function makeBarcodePair(at: { x: number; y: number }): [Code128Element, FieldElement] {
   const x = snap(at.x);
   const y = snap(at.y);
   const mw = 2;
   const barHMm = 9;
   const codeHMm = 3;
-  const bc: LabelElement = { id: newElementId("code128"), type: "code128", x, y, hMm: barHMm, mw, human: false };
+  const bc: Code128Element = { id: newElementId("code128"), type: "code128", x, y, hMm: barHMm, mw, human: false };
   // Kod metnini barkod altında ortala: metin genişliği ≈ uzunluk × yükseklik × monospace oranı.
   const barWmm = code128WidthMm(mw);
   const textWmm = SAMPLE_BC_LEN * codeHMm * 0.62;
   const codeX = snap(x + Math.max(0, (barWmm - textWmm) / 2));
   const codeY = snap(y + barHMm + 1.2);
-  const code: LabelElement = { id: newElementId("field"), type: "field", bind: "barcode", label: "", x: codeX, y: codeY, hMm: codeHMm };
+  const code: FieldElement = { id: newElementId("field"), type: "field", bind: "barcode", label: "", x: codeX, y: codeY, hMm: codeHMm };
   return [bc, code];
 }
 
