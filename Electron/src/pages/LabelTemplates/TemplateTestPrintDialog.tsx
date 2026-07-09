@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Send, Printer, Usb } from "lucide-react";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,8 @@ interface Props {
  * aktif yazıcı dilinde yazıcıya bastırır (Bu PC / Ağ IP). Gerçek top gerekmez.
  */
 export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Props) {
-  const { prefs } = usePreferences();
-  const lpCfg = prefs.labelPrinter;
+  const { config } = useMachineConfig();
+  const lpCfg = config.labelPrinter;
   const printerApi = typeof window !== "undefined" ? window.api?.printer : undefined;
   const localReady = Boolean(lpCfg?.enabled && lpCfg?.path && printerApi);
 

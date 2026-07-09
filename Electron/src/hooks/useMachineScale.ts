@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
-import { usePreferencesOptional } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
 
 /** Kantar satırı (HAL okuması için protokol dahil) — yerel prefs veya backend kaydından. */
 export interface DeviceScale {
@@ -32,8 +32,8 @@ export interface DeviceScale {
 const SERIAL_CONNECTIONS = ["SERIAL_COM", "USB"];
 
 export function useMachineScale(): { scale: DeviceScale | null; isLoading: boolean } {
-  const prefsCtx = usePreferencesOptional();
-  const local = prefsCtx?.prefs.scaleDevice;
+  const { config } = useMachineConfig();
+  const local = config.scaleDevice;
   const hasLocal = !!local?.path || !!local?.simulate;
 
   const q = useQuery({

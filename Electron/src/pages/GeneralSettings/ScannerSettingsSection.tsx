@@ -8,7 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
+import type { ScannerConfig } from "@/lib/machine-config";
 import {
   createWedgeDetector,
   DEFAULT_WEDGE_CONFIG,
@@ -35,10 +36,10 @@ const TERMINATOR_LABELS: Record<Terminator, string> = {
  * Etiketle, Çuval Arama vb.) bu ayardan bağımsız her zaman çalışır.
  */
 export function ScannerSettingsSection() {
-  const { prefs, setPreference } = usePreferences();
-  const sc = prefs.scanner ?? {};
-  const setScanner = (patch: Partial<NonNullable<typeof prefs.scanner>>) =>
-    setPreference({ scanner: { ...sc, ...patch } });
+  const { config, setConfig } = useMachineConfig();
+  const sc = config.scanner ?? {};
+  const setScanner = (patch: Partial<ScannerConfig>) =>
+    setConfig({ scanner: { ...sc, ...patch } });
 
   const scanAnywhere = sc.scanAnywhere ?? false;
   const terminator = (sc.terminator ?? DEFAULT_WEDGE_CONFIG.terminator) as Terminator;

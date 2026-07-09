@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useScannerStore } from "@/store/scanner";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
 
 /**
  * Faz-2 — seri/HID barkod tabancası köprüsü. Tercih (`scanner.device`) açıksa
@@ -11,8 +11,8 @@ import { usePreferences } from "@/providers/PreferencesProvider";
  * `window.api?.scanner` tanımsız → no-op.
  */
 export function useDeviceScanner(): void {
-  const { prefs } = usePreferences();
-  const dev = prefs.scanner?.device;
+  const { config } = useMachineConfig();
+  const dev = config.scanner?.device;
   const pushScan = useScannerStore((s) => s.pushScan);
 
   const enabled = dev?.enabled ?? false;

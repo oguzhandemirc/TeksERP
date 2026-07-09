@@ -14,7 +14,7 @@ import { useScannerWedge } from "@/hooks/useScannerWedge";
 import { useDeviceScanner } from "@/hooks/useDeviceScanner";
 import { useDeviceAnnounce } from "@/hooks/useDeviceAnnounce";
 import { useScannerStore } from "@/store/scanner";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -29,8 +29,8 @@ export function AppShell() {
 
   // Barkod tabancası — "her yerde okut" (opt-in, default kapalı). Wedge global
   // keydown'ı dinler, nitelikli burst'ü store'a iter; overlay sonucu gösterir.
-  const { prefs } = usePreferences();
-  const scannerPrefs = prefs.scanner;
+  const { config } = useMachineConfig();
+  const scannerPrefs = config.scanner;
   const pushScan = useScannerStore((s) => s.pushScan);
   const wedgeConfig = useMemo(
     () => ({

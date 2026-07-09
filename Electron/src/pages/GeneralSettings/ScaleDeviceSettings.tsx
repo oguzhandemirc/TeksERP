@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Loader2, Scale as ScaleIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
+import type { ScaleDeviceConfig } from "@/lib/machine-config";
 import { parseWeight } from "@/lib/weight-codec";
 import type { ScannerDeviceInfo } from "@shared/ipc-contract";
 
@@ -14,10 +15,10 @@ import type { ScannerDeviceInfo } from "@shared/ipc-contract";
  * fallback'i devrededir (useMachineScale).
  */
 export function ScaleDeviceSettings() {
-  const { prefs, setPreference } = usePreferences();
-  const cfg = prefs.scaleDevice ?? {};
-  const setCfg = (patch: Partial<NonNullable<typeof cfg>>) =>
-    setPreference({ scaleDevice: { ...cfg, ...patch } });
+  const { config, setConfig } = useMachineConfig();
+  const cfg = config.scaleDevice ?? {};
+  const setCfg = (patch: Partial<ScaleDeviceConfig>) =>
+    setConfig({ scaleDevice: { ...cfg, ...patch } });
 
   const printer = typeof window !== "undefined" ? window.api?.printer : undefined;
   const scaleApi = typeof window !== "undefined" ? window.api?.scale : undefined;

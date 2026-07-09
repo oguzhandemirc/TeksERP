@@ -141,9 +141,3 @@ export function usePreferences(): PreferencesContextValue {
   if (!ctx) throw new Error("usePreferences must be used within PreferencesProvider");
   return ctx;
 }
-
-/** Provider dışında (test/izole render) THROW etmeyen varyant — null döner.
- *  Tercihe "varsa kullan" diye bakan hook'lar için (örn. useMachineScale yerel kantar). */
-export function usePreferencesOptional(): PreferencesContextValue | null {
-  return useContext(PreferencesContext);
-}

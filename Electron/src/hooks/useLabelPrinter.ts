@@ -1,4 +1,4 @@
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
 import { labelService, type LabelCustomerContext } from "@/services/labelService";
 
 /**
@@ -12,8 +12,8 @@ import { labelService, type LabelCustomerContext } from "@/services/labelService
  * USB kablo da COM olarak görünür — ikisi de bu `serial` transport.
  */
 export function useLabelPrinter() {
-  const { prefs } = usePreferences();
-  const cfg = prefs.labelPrinter;
+  const { config } = useMachineConfig();
+  const cfg = config.labelPrinter;
   const printer = typeof window !== "undefined" ? window.api?.printer : undefined;
   const directEnabled = Boolean(cfg?.enabled && cfg?.path && printer);
 

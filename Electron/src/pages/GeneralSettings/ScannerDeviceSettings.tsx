@@ -9,7 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
+import type { ScannerDeviceConfig } from "@/lib/machine-config";
 import { FlagToggle } from "./SettingRow";
 import type {
   ScannerDeviceInfo,
@@ -39,11 +40,11 @@ const FRAME_LABELS: Record<ScanTerminatorPref, string> = {
  * görünmez.
  */
 export function ScannerDeviceSettings() {
-  const { prefs, setPreference } = usePreferences();
-  const sc = prefs.scanner ?? {};
+  const { config, setConfig } = useMachineConfig();
+  const sc = config.scanner ?? {};
   const dev = sc.device ?? {};
-  const setDevice = (patch: Partial<NonNullable<typeof dev>>) =>
-    setPreference({ scanner: { ...sc, device: { ...dev, ...patch } } });
+  const setDevice = (patch: Partial<ScannerDeviceConfig>) =>
+    setConfig({ scanner: { ...sc, device: { ...dev, ...patch } } });
 
   const scanner = typeof window !== "undefined" ? window.api?.scanner : undefined;
   const [devices, setDevices] = useState<ScannerDeviceInfo[]>([]);

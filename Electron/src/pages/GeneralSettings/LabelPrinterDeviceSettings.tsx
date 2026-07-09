@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { useMachineConfig } from "@/hooks/useMachineConfig";
+import type { LabelPrinterConfig } from "@/lib/machine-config";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { peripheralService } from "@/pages/PeripheralDevices/service";
 import { FlagToggle } from "./SettingRow";
@@ -25,10 +26,10 @@ import type { ScannerDeviceInfo } from "@shared/ipc-contract";
  * window.api yoksa (web/test) görünmez.
  */
 export function LabelPrinterDeviceSettings() {
-  const { prefs, setPreference } = usePreferences();
-  const cfg = prefs.labelPrinter ?? {};
-  const setCfg = (patch: Partial<NonNullable<typeof cfg>>) =>
-    setPreference({ labelPrinter: { ...cfg, ...patch } });
+  const { config, setConfig } = useMachineConfig();
+  const cfg = config.labelPrinter ?? {};
+  const setCfg = (patch: Partial<LabelPrinterConfig>) =>
+    setConfig({ labelPrinter: { ...cfg, ...patch } });
   const transport = cfg.transport ?? "serial";
 
   const printer = typeof window !== "undefined" ? window.api?.printer : undefined;
