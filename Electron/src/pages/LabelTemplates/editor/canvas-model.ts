@@ -49,6 +49,13 @@ export function qrSizeMm(scale: number | undefined): number {
  *  ~11 modül/karakter × (19+3) + stop ≈ 255 modül / 8 dot-per-mm ≈ 32mm. */
 export const BC_BASE_MM = 32;
 
+/** Örnek barkodun fiziksel genişliği (mm) — ayrı kod metnini barkod altında
+ *  ortalamak için (backend code128WidthDots aynası: (11×uzunluk+35)×modül dot,
+ *  203dpi'da 0.125mm/dot). */
+function code128WidthMm(mw: number): number {
+  return (11 * SAMPLE_BC_LEN + 35) * mw * (25.4 / 203);
+}
+
 /** Backend resolveEplTextStyle AYNASI (203dpi, maxMul=6) — "fiilen basılacak"
  *  boyutu panelde göstermek için. ORTAK PAYDA: dört dil bu kombinasyonu basar. */
 const EPL_BASE: ReadonlyArray<{ w: number; h: number }> = [
@@ -106,7 +113,9 @@ export function estimateBounds(el: LabelElement, canvas: { widthMm: number; heig
       return { x: el.x, y: el.y, w: s, h: s };
     }
     case "code128": {
-      const h = (el.hMm ?? 9) + (el.human !== false ? 3.5 : 0);
+      // Okunur satır payı: kod yüksekliği (humanHMm, yok → 2.5) + 1mm boşluk.
+      const humanMm = el.human !== false ? (el.humanHMm ?? 2.5) + 1 : 0;
+      const h = (el.hMm ?? 9) + humanMm;
       // Genişlik ≈ modül sayısı × modül kalınlığı (mw) — örnek barkod uzunluğuyla.
       return { x: el.x, y: el.y, w: Math.min(BC_BASE_MM * (el.mw ?? 2), canvas.widthMm - el.x - 1), h };
     }
@@ -153,7 +162,7 @@ export function applyResize(
     case "code128": {
       // Dikey: bar yüksekliği (okunur satır payı düşülür). Yatay: modül kalınlığı
       // kademesi (1-4) — barkod genişliği serbest ölçü değildir, ORANTILI büyür.
-      const human = el.human !== false ? 3.5 : 0;
+      const human = el.human !== false ? (el.humanHMm ?? 2.5) + 1 : 0;
       const patch: { hMm?: number; mw?: number } = {};
       const hNew = clamp(snap(h - human), 3, 40);
       if (hNew !== (el.hMm ?? 9)) patch.hMm = hNew;
@@ -299,7 +308,9 @@ export function makeElement(
     case "qr":
       return { ...base, type, scale: 5 };
     case "code128":
-      return { ...base, type, hMm: 9, human: true };
+      // Gömülü kod KAPALI: barkod-altı kod artık ayrı bir bağımsız öğe (makeBarcodePair).
+      // Eski şablonlar human:true taşımaya devam eder (bayt-uyum).
+      return { ...base, type, hMm: 9, mw: 2, human: false };
     case "line":
       return { ...base, type, wMm: 40, hMm: 0.8 };
     case "box":
@@ -309,8 +320,31 @@ export function makeElement(
   }
 }
 
+/**
+ * Barkod ekleme = İKİ BAĞIMSIZ öğe: çubuklar (code128, gömülü kod KAPALI) + hemen
+ * altında ORTALANMIŞ ayrı kod metni (field bind="barcode"). İkisi de tuvalde tek
+ * başına seçilir/sürüklenir/döndürülür; kod metni normal bir metin öğesi gibi
+ * boyutlanır/kalınlaşır. Ortalama örnek barkod uzunluğuyla yaklaşık kurulur —
+ * bağımsız olduğu için kullanıcı istediği gibi kaydırır.
+ */
+export function makeBarcodePair(at: { x: number; y: number }): LabelElement[] {
+  const x = snap(at.x);
+  const y = snap(at.y);
+  const mw = 2;
+  const barHMm = 9;
+  const codeHMm = 3;
+  const bc: LabelElement = { id: newElementId("code128"), type: "code128", x, y, hMm: barHMm, mw, human: false };
+  // Kod metnini barkod altında ortala: metin genişliği ≈ uzunluk × yükseklik × monospace oranı.
+  const barWmm = code128WidthMm(mw);
+  const textWmm = SAMPLE_BC_LEN * codeHMm * 0.62;
+  const codeX = snap(x + Math.max(0, (barWmm - textWmm) / 2));
+  const codeY = snap(y + barHMm + 1.2);
+  const code: LabelElement = { id: newElementId("field"), type: "field", bind: "barcode", label: "", x: codeX, y: codeY, hMm: codeHMm };
+  return [bc, code];
+}
+
 /** Yeni (varyantsız) şablon için başlangıç iskeleti — sol-üst QR + ürün + metraj
- *  + alt barkod. Kullanıcı üstünden düzenler. */
+ *  + alt barkod (çubuklar + ayrı kod metni, ikisi bağımsız). Kullanıcı üstünden düzenler. */
 export function starterLayout(canvas: { widthMm: number; heightMm: number }): CanvasLayout {
   const bcY = Math.max(10, canvas.heightMm - 15);
   return {
@@ -320,7 +354,8 @@ export function starterLayout(canvas: { widthMm: number; heightMm: number }): Ca
       { id: newElementId("field"), type: "field", bind: "itemName", label: "", x: 26, y: 3, font: "lg", bold: true },
       { id: newElementId("field"), type: "field", bind: "lengthMeters", label: "Metraj", x: 26, y: 8, font: "md" },
       { id: newElementId("field"), type: "field", bind: "qualityGrade", label: "Kalite", x: 26, y: 12.5, font: "md" },
-      { id: newElementId("code128"), type: "code128", x: 3, y: bcY, hMm: 9, human: true },
+      // Barkod = çubuklar + altında ayrı, ortalanmış, bağımsız kod metni.
+      ...makeBarcodePair({ x: 3, y: bcY }),
     ],
   };
 }

@@ -21,6 +21,8 @@ export interface EditorState {
   /** Marquee sonucu — additive=true mevcut seçimle birleştirir. */
   selectMany: (ids: string[], opts?: { additive?: boolean }) => void;
   addElement: (el: LabelElement) => void;
+  /** Birden çok elemanı TEK undo adımıyla ekle (ör. barkod = çubuk + kod metni). */
+  addElements: (els: LabelElement[]) => void;
   updateElement: (id: string, patch: Partial<LabelElement>) => void;
   moveElement: (id: string, x: number, y: number) => void;
   /** Snapshot'sız canlı yama — tutamaç/grup sürüklemesi için. */
@@ -82,6 +84,12 @@ export function useEditorState(): EditorState {
   const addElement = useCallback((el: LabelElement) => {
     commit((prev) => [...prev, el]);
     setSelectedIds([el.id]);
+  }, [commit]);
+
+  const addElements = useCallback((els: LabelElement[]) => {
+    if (els.length === 0) return;
+    commit((prev) => [...prev, ...els]);
+    setSelectedIds(els.map((e) => e.id));
   }, [commit]);
 
   const updateElement = useCallback((id: string, patch: Partial<LabelElement>) => {
@@ -155,6 +163,7 @@ export function useEditorState(): EditorState {
     select,
     selectMany,
     addElement,
+    addElements,
     updateElement,
     moveElement,
     updateElementLive,

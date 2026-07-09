@@ -105,6 +105,32 @@ function code128WidthDots(len: number, mwDots: number): number {
 /** Küçük okunur-satır glif genişliği (dot) — native font "1" (8×12). */
 const HUMAN_CHAR_W = 8;
 
+/** Okunur satır (barkod altı kod) EPL/DPL stili — humanHMm dolu → 4 dilde ortak-payda
+ *  boyut (metin gibi en yakın basılabilir kombinasyon); boş → bugünkü sabit font "1"
+ *  (bayt-uyum). charW = karakter hücre genişliği (dot) — okunur satırı ortalamak için. */
+function humanEplStyle(humanHMm: number | undefined, d: (mm: number) => number): {
+  code: string;
+  hmul: number;
+  vmul: number;
+  charW: number;
+} {
+  if (humanHMm != null) {
+    const st = resolveEplTextStyle(d(humanHMm), 1, 6);
+    return { code: st.code, hmul: st.hmul, vmul: st.vmul, charW: st.wDots };
+  }
+  return { code: "1", hmul: 1, vmul: 1, charW: HUMAN_CHAR_W };
+}
+
+/** Okunur satır ZPL font hücresi (dot) — humanHMm dolu → ortak-payda; boş → 20×12
+ *  (bugünkü sabit; bayt-uyum). */
+function humanZplStyle(humanHMm: number | undefined, d: (mm: number) => number): { fh: number; fw: number } {
+  if (humanHMm != null) {
+    const st = resolveEplTextStyle(d(humanHMm), 1, 6);
+    return { fh: st.hDots, fw: st.wDots };
+  }
+  return { fh: 20, fw: 12 };
+}
+
 // =============================================================================
 // PPLB (EPL2)
 // =============================================================================
@@ -139,7 +165,12 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
           // SERBEST boyut: hedef mm → en yakın (font, çarpan) kombinasyonu;
           // wr yatay çarpana biner (EPL2 güvenli aralık maxMul=6).
           const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
-          lines.push(`A${x},${y},${rotCode},${st.code},${st.hmul},${st.vmul},N,"${eplData(text)}"`);
+          // KALIN = çift-vuruş: aynı metni +1 dot kaydırıp tekrar bas → çubuklar
+          // kalınlaşır (bitmap fontta gerçek bold yok; boyut değişmez). bold yoksa
+          // tek satır = bayt-aynı.
+          const emit = (dx: number) => `A${x + dx},${y},${rotCode},${st.code},${st.hmul},${st.vmul},N,"${eplData(text)}"`;
+          lines.push(emit(0));
+          if (el.bold) lines.push(emit(1));
         } else {
           // ESKİ 4-kademe yol (bayt-uyum): bold = her iki çarpan ×2.
           const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
@@ -162,9 +193,13 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
         // Okunur satır firmware'de SOLA yaslanır → kapat (N) + manuel ORTALA.
         lines.push(`B${x},${y},0,1,${mw},${mw + 1},${h},N,"${bc}"`);
         if (el.human !== false) {
+          // Boyut humanHMm'den (ortak-payda); ortalı taban + humanDx/Dy ince ayar.
+          const hs = humanEplStyle(el.humanHMm, d);
           const bw = code128WidthDots(bc.length, mw);
-          const hx = x + Math.max(0, Math.round((bw - bc.length * HUMAN_CHAR_W) / 2));
-          lines.push(`A${hx},${y + h + d(1)},0,1,1,1,N,"${bc}"`);
+          const center = Math.max(0, Math.round((bw - bc.length * hs.charW) / 2));
+          const hx = Math.max(0, x + center + d(el.humanDx ?? 0));
+          const hy = Math.max(0, y + h + d(1) + d(el.humanDy ?? 0));
+          lines.push(`A${hx},${hy},0,${hs.code},${hs.hmul},${hs.vmul},N,"${bc}"`);
         }
         break;
       }
@@ -230,7 +265,10 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
           // en dar dil olan PPLB'ninki (maxMul=6). DPL 9'a kadar destekler ama
           // parite için kullanılmaz (eleman dilden dile farklı boyut vermemeli).
           const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
-          lines.push(`${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(row)}${pad4(col)}${cleanCtl(text)}`);
+          // KALIN = çift-vuruş (+1 dot); bold yoksa tek satır = bayt-aynı.
+          const emit = (dc: number) => `${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(row)}${pad4(col + dc)}${cleanCtl(text)}`;
+          lines.push(emit(0));
+          if (el.bold) lines.push(emit(1));
         } else {
           // ESKİ 4-kademe yol (bayt-uyum).
           const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
@@ -253,11 +291,15 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         const mw = Math.min(9, el.mw ?? 2);
         lines.push(`1e${mw}${mw}${pad4(h)}${pad4(row)}${pad4(col)}${bc}`);
         // Okunur satır — barkodun altında ORTALANMIŞ (eskiden sola yaslıydı).
-        // Format: <rot=1><font=1><mul=11>000<row4><col4><veri>
+        // Format: <rot=1><font><hMul><vMul>000<row4><col4><veri>. Boyut humanHMm'den
+        // (ortak-payda); humanDx/Dy ile ince ayar.
         if (el.human !== false) {
+          const hs = humanEplStyle(el.humanHMm, d);
           const bw = code128WidthDots(bc.length, mw);
-          const hcol = col + Math.max(0, Math.round((bw - bc.length * HUMAN_CHAR_W) / 2));
-          lines.push(`1111000${pad4(row + h + d(1))}${pad4(hcol)}${bc}`);
+          const center = Math.max(0, Math.round((bw - bc.length * hs.charW) / 2));
+          const hcol = Math.max(0, col + center + d(el.humanDx ?? 0));
+          const hrow = Math.max(0, row + h + d(1) + d(el.humanDy ?? 0));
+          lines.push(`1${hs.code}${hs.hmul}${hs.vmul}000${pad4(hrow)}${pad4(hcol)}${bc}`);
         }
         break;
       }
@@ -333,7 +375,10 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
           // seçtiği kombinasyonun boyutunda basılır — dört dilde AYNI boyut
           // (eleman dilden dile farklı çıktı vermemeli; kullanıcı kararı).
           const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
-          lines.push(`^FO${x},${y}^A0${rot},${st.hDots},${st.wDots}^FD${zplData(text)}^FS`);
+          // KALIN = çift-vuruş (+1 dot); bold yoksa tek satır = bayt-aynı.
+          const emit = (dx: number) => `^FO${x + dx},${y}^A0${rot},${st.hDots},${st.wDots}^FD${zplData(text)}^FS`;
+          lines.push(emit(0));
+          if (el.bold) lines.push(emit(1));
         } else {
           // ESKİ 4-kademe yol (bayt-uyum).
           const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
@@ -356,10 +401,13 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
         // ZPL yorum satırı (interpretation) sola yaslar → kapat (N) + manuel ORTALA.
         lines.push(`^FO${x},${y}${by}^BCN,${h},N,N,N^FD${bc}^FS`);
         if (el.human !== false) {
+          // Boyut humanHMm'den (ortak-payda); ortalı taban + humanDx/Dy ince ayar.
+          const hs = humanZplStyle(el.humanHMm, d);
           const bw = code128WidthDots(bc.length, el.mw ?? 2);
-          const fh = 20, fw = 12;
-          const hx = x + Math.max(0, Math.round((bw - bc.length * fw) / 2));
-          lines.push(`^FO${hx},${y + h + d(1)}^A0N,${fh},${fw}^FD${bc}^FS`);
+          const center = Math.max(0, Math.round((bw - bc.length * hs.fw) / 2));
+          const hx = Math.max(0, x + center + d(el.humanDx ?? 0));
+          const hy = Math.max(0, y + h + d(1) + d(el.humanDy ?? 0));
+          lines.push(`^FO${hx},${hy}^A0N,${hs.fh},${hs.fw}^FD${bc}^FS`);
         }
         break;
       }

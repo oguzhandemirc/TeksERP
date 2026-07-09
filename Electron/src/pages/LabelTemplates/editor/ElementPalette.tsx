@@ -26,7 +26,7 @@ const STRUCTURAL: Array<{
 }> = [
   { type: "text", label: "Sabit Metin", icon: Type },
   { type: "qr", label: "QR Kod", icon: QrCode },
-  { type: "code128", label: "Barkod (Code128)", icon: Barcode },
+  { type: "code128", label: "Barkod + kod (Code128)", icon: Barcode },
   { type: "line", label: "Çizgi / Dolu Kutu", icon: Minus },
   { type: "box", label: "Çerçeve", icon: Square },
   { type: "lengthBanner", label: "Metraj Bandı", icon: Ruler },

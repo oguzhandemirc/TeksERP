@@ -6,6 +6,7 @@ import {
   distributeElements,
   estimateBounds,
   makeElement,
+  makeBarcodePair,
   qrSizeMm,
   snap,
   snapRotation,
@@ -62,6 +63,27 @@ describe("makeElement", () => {
       expect(el.bind).toBe("customerName");
       expect(el.label).toBe("Müşteri");
     }
+  });
+
+  it("code128: gömülü kod KAPALI (ayrı öğe olacak)", () => {
+    const el = makeElement("code128", { x: 3, y: 3 });
+    if (el.type === "code128") expect(el.human).toBe(false);
+  });
+});
+
+describe("makeBarcodePair", () => {
+  it("iki bağımsız öğe: çubuklar (human:false) + altında ORTALI field(barcode)", () => {
+    const [bc, code] = makeBarcodePair({ x: 3, y: 40 });
+    expect(bc.type).toBe("code128");
+    if (bc.type === "code128") expect(bc.human).toBe(false);
+    expect(code.type).toBe("field");
+    if (code.type === "field") {
+      expect(code.bind).toBe("barcode");
+      expect(code.label).toBe("");
+    }
+    // Kod barkodun ALTINDA (y büyür) ve ortalama için SAĞA kaymış (x ≥ barkod x).
+    expect(code.y).toBeGreaterThan(bc.y);
+    expect(code.x).toBeGreaterThanOrEqual(bc.x);
   });
 });
 

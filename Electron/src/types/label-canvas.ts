@@ -65,6 +65,12 @@ export interface Code128Element extends ElementBase {
   /** Modül (dar çubuk) kalınlığı dot (1-4). Yok → 2. Genişlik serbest ölçü değil —
    *  okunabilirlik için tam-sayı dot şart; büyütme bu kademeyle ORANTILI. */
   mw?: number;
+  /** Okunur satır (barkod altı kod) yüksekliği (mm, 1-20) — büyüt/küçült. Yok →
+   *  küçük varsayılan (dile-özel sabit). */
+  humanHMm?: number;
+  /** Okunur satırı ortalanmış konumdan kaydırma (mm, ±). Yok → 0 = tam ortalı. */
+  humanDx?: number;
+  humanDy?: number;
 }
 
 export interface LineElement extends ElementBase {

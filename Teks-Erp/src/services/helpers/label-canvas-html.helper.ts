@@ -49,6 +49,10 @@ function textDiv(el: FieldElement | TextElement, content: string, dpi: number): 
     "white-space:nowrap",
     "line-height:1",
   ];
+  // KALIN: serbest boyutta gerçek font-weight (native tarafta çift-vuruş karşılığı).
+  // Eski kademeli modda bold = 2× boyut (yukarıda hDots'a bindi) — orada weight yok
+  // (bayt/görünüm-uyum).
+  if (el.hMm != null && el.bold) parts.push("font-weight:bold");
   const transforms: string[] = [];
   if (el.rot) transforms.push(`rotate(${el.rot}deg)`);
   if (scaleX !== 1) transforms.push(`scaleX(${scaleX})`);
@@ -96,10 +100,18 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         // Modül kalınlığı: native'de dar-çubuk dot'u — HTML'de eşdeğeri yatay
         // orantılı ölçek (mw=2 taban; vektör olduğundan okunabilirlik bozulmaz).
         const scaleX = (el.mw ?? 2) / 2;
+        // Okunur satır: boyut humanHMm'den (yok → 1.5mm sabit); barkod altında
+        // ORTALI (text-align:center — sarmalayıcı genişliği = barkod genişliği);
+        // humanDx/Dy ile ortalı konumdan kaydırılır.
+        const humanFontMm = el.humanHMm ?? 1.5;
+        const humanShift =
+          el.humanDx || el.humanDy
+            ? `;transform:translate(${el.humanDx ?? 0}mm,${el.humanDy ?? 0}mm)`
+            : "";
         const inner =
           `<div style="height:${h}mm">${barcodeSvg.replace("<svg ", `<svg style="height:${h}mm;width:auto" `)}</div>` +
           (human
-            ? `<div style="font-family:'Courier New',monospace;font-size:1.5mm;letter-spacing:0.12em;text-align:center">${escapeHtml(payload.barcode)}</div>`
+            ? `<div style="font-family:'Courier New',monospace;font-size:${humanFontMm}mm;letter-spacing:0.12em;text-align:center${humanShift}">${escapeHtml(payload.barcode)}</div>`
             : "");
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm${

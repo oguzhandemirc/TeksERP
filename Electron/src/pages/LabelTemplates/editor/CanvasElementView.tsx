@@ -116,9 +116,9 @@ function ElementBody({ el, zoom }: { el: LabelElement; zoom: number }) {
       if (wr !== 1) transforms.push(`scaleX(${wr})`);
       return (
         <div
-          // Kalın yalnız eski kademeli elemanlarda görsel — serbest boyutta parite
-          // gereği vuruş kalınlığı yok (oran verir).
-          className={cn("whitespace-nowrap font-mono leading-none text-foreground", el.hMm == null && el.bold && "font-bold")}
+          // Kalın: serbest boyutta gerçek vuruş kalınlığı (backend çift-vuruş/font-weight);
+          // eski kademeli modda kalın zaten 2× boyuttan gelir (hMm hesabı), font-bold yok.
+          className={cn("whitespace-nowrap font-mono leading-none text-foreground", el.hMm != null && el.bold && "font-bold")}
           style={{
             fontSize: Math.max(7, hMm * zoom * 0.85),
             transform: transforms.length ? transforms.join(" ") : undefined,
@@ -146,7 +146,18 @@ function ElementBody({ el, zoom }: { el: LabelElement; zoom: number }) {
             }}
           />
           {el.human !== false && (
-            <div className="text-center font-mono text-[7px] tracking-widest text-muted-foreground">BARKOD</div>
+            <div
+              className="text-center font-mono tracking-widest text-muted-foreground"
+              style={{
+                fontSize: Math.max(6, (el.humanHMm ?? 2.5) * zoom * 0.75),
+                transform:
+                  el.humanDx || el.humanDy
+                    ? `translate(${(el.humanDx ?? 0) * zoom}px, ${(el.humanDy ?? 0) * zoom}px)`
+                    : undefined,
+              }}
+            >
+              BARKOD
+            </div>
           )}
         </div>
       );

@@ -31,7 +31,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { VariantTabs } from "./VariantTabs";
 import { VariantMismatchBanner } from "./VariantMismatchBanner";
 import { CanvasPreview } from "./CanvasPreview";
-import { DEFAULT_ZOOM, makeElement } from "./canvas-model";
+import { DEFAULT_ZOOM, makeElement, makeBarcodePair } from "./canvas-model";
 import type { LabelElementType } from "@/types/label-canvas";
 
 export function LabelStudioPage() {
@@ -117,8 +117,14 @@ export function LabelStudioPage() {
     },
   });
 
-  const addStructural = (type: Exclude<LabelElementType, "field">) =>
+  const addStructural = (type: Exclude<LabelElementType, "field">) => {
+    // Barkod = İKİ bağımsız öğe (çubuklar + altında ortalanmış kod metni).
+    if (type === "code128") {
+      state.addElements(makeBarcodePair({ x: 5, y: 5 }));
+      return;
+    }
     state.addElement(makeElement(type, { x: 5, y: 5 }));
+  };
 
   const selected =
     state.selectedIds.length === 1

@@ -88,6 +88,14 @@ export interface Code128Element extends ElementBase {
    *  ölçü DEĞİLDİR: okunabilirlik için çubuklar tam-sayı dot olmalı; genişletme
    *  bu kademeyle ORANTILI yapılır (her kademe ≈ %50-100 genişletir). */
   mw?: number;
+  /** Okunur satır (barkod altı kod) yüksekliği (mm, 1-20) — büyüt/küçült. Yok →
+   *  dile-özel küçük varsayılan (bugünkü sabit; bayt-uyum). Dolu → 4 dilde ortak-payda
+   *  boyut (metin elemanlarındaki gibi en yakın basılabilir kombinasyon). */
+  humanHMm?: number;
+  /** Okunur satırı ORTALANMIŞ konumdan kaydırma (mm, ±). Yok → 0 = barkod altında
+   *  tam ortalı. Barkoddan bağımsız ince ayar için. */
+  humanDx?: number;
+  humanDy?: number;
 }
 
 export interface LineElement extends ElementBase {
@@ -275,6 +283,19 @@ export function validateCanvasLayout(
         if (el.mw !== undefined) {
           if (typeof el.mw !== "number" || !Number.isInteger(el.mw)) bad(`'${el.id}' mw tamsayı olmalı`);
           if ((el.mw as number) < 1 || (el.mw as number) > 4) bad(`'${el.id}' mw 1-4 aralığında olmalı (modül kalınlığı)`);
+        }
+        // Okunur satır boyutu (mm) — metin gibi 1-20 aralığı.
+        if (el.humanHMm !== undefined) {
+          if (typeof el.humanHMm !== "number" || !Number.isFinite(el.humanHMm)) bad(`'${el.id}' humanHMm sayı olmalı`);
+          if ((el.humanHMm as number) < 1 || (el.humanHMm as number) > 20) bad(`'${el.id}' humanHMm 1-20 mm aralığında olmalı`);
+        }
+        // Okunur satır kaydırması — İŞARETLİ (barkod solundan/üstünden negatif olabilir).
+        for (const k of ["humanDx", "humanDy"] as const) {
+          const v = el[k];
+          if (v !== undefined) {
+            if (typeof v !== "number" || !Number.isFinite(v)) bad(`'${el.id}' ${k} sayı olmalı`);
+            if (Math.abs(v as number) > MAX_MM) bad(`'${el.id}' ${k} ±${MAX_MM} mm içinde olmalı`);
+          }
         }
         scannable++;
         break;

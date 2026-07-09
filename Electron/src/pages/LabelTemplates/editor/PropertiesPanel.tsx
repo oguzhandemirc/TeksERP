@@ -142,15 +142,12 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
                 </SelectContent>
               </Select>
             </div>
-            {/* Kalın yalnız ESKİ kademeli elemanlarda (orada 2x çarpan anlamı var).
-                Serbest boyutta kalınlık görünümünü genişlik oranı verir — dört
-                dilde aynı olsun diye font-weight parite dışı bırakıldı. */}
-            {el.hMm == null && (
-              <label className="flex h-7 items-center gap-1.5 text-xs">
-                <Checkbox checked={el.bold ?? false} onCheckedChange={(v) => onChange({ bold: v === true } as Partial<LabelElement>)} />
-                Kalın
-              </label>
-            )}
+            {/* Kalın: serbest boyutta gerçek kalın (native çift-vuruş + HTML font-weight,
+                dört dilde), eski kademeli modda 2× çarpan. Boyutu değiştirmez. */}
+            <label className="flex h-7 items-center gap-1.5 text-xs">
+              <Checkbox checked={el.bold ?? false} onCheckedChange={(v) => onChange({ bold: v === true } as Partial<LabelElement>)} />
+              Kalın
+            </label>
           </div>
           <p className="text-[10px] leading-snug text-muted-foreground">
             ORTAK PAYDA: dört dil (PPLA/PPLB/ZPL/HTML) AYNI boyut kombinasyonunu ve
@@ -186,8 +183,27 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
           </div>
           <label className="col-span-2 flex h-7 items-center gap-1.5 text-xs">
             <Checkbox checked={el.human !== false} onCheckedChange={(v) => onChange({ human: v === true } as Partial<LabelElement>)} />
-            Okunur satır
+            Gömülü okunur satır (barkoda bağlı)
           </label>
+          <p className="col-span-2 text-[10px] leading-snug text-muted-foreground">
+            Barkod eklerken kod, altında AYRI ve bağımsız bir öğe olarak da gelir
+            (tuvalde tek başına seçilip taşınır). Bu kutu ise koda barkoda GÖMÜLÜ,
+            barkodla birlikte hareket eden bir satır ekler — ikisi birden açık olursa
+            kod iki kez görünür.
+          </p>
+          {el.human !== false && (
+            <div className="col-span-2 grid grid-cols-2 gap-2 rounded bg-muted/30 p-2">
+              <NumField label="Kod yüksekliği (mm)" value={el.humanHMm} min={1} max={20} step={0.5}
+                onChange={(v) => onChange({ humanHMm: Math.max(1, Math.min(20, v)) } as Partial<LabelElement>)} />
+              <p className="flex items-end text-[10px] leading-snug text-muted-foreground">
+                Boş = küçük varsayılan. Kod barkoda göre ortalanır.
+              </p>
+              <NumField label="Kodu kaydır X (mm)" value={el.humanDx ?? 0} min={-100} max={100} step={0.5}
+                onChange={(v) => onChange({ humanDx: v } as Partial<LabelElement>)} />
+              <NumField label="Kodu kaydır Y (mm)" value={el.humanDy ?? 0} min={-100} max={100} step={0.5}
+                onChange={(v) => onChange({ humanDy: v } as Partial<LabelElement>)} />
+            </div>
+          )}
           <p className="col-span-2 text-[10px] leading-snug text-muted-foreground">
             Ara değer (örn. 2.5) BASILAMAZ: termal kafa sabit nokta ızgarasıdır — çubuk
             genişliği çubuk başına TAM SAYI dot'tur (203dpi'da 1 dot=0.125mm). Kademeler
