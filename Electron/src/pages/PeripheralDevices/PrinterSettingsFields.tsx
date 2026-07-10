@@ -58,6 +58,15 @@ export function PrinterSettingsFields({ form }: Props) {
             ))}
           </select>
         </FormField>
+        {/* Baskı yöntemi (ribon) — boş=otomatik (yazıcı algılar); seçiliyse baskıda
+            dile göre komuta çevrilir (PPLA <STX>KI7, ZPL ^MT). PPLB'de etkisiz. */}
+        <FormField label="Baskı Yöntemi (Ribon)" error={form.formState.errors.mediaType}>
+          <select className={SELECT_CLS} {...form.register("mediaType")}>
+            <option value="">Otomatik (yazıcı algılar)</option>
+            <option value="DIRECT_THERMAL">Direkt termal (ribonsuz)</option>
+            <option value="THERMAL_TRANSFER">Termal transfer (ribonlu)</option>
+          </select>
+        </FormField>
       </div>
 
       {/* Yazıcı medyası — mm/dpi doğrudan cihazda (ayrı "Boyutlar" kataloğu yok).

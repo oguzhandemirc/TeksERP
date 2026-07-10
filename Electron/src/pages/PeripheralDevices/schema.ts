@@ -26,6 +26,8 @@ export const peripheralFormSchema = z.object({
   stationId: z.string().optional().default(""),
   deviceId: z.string().optional().default(""),
   languageOverride: z.string().optional().default(""),
+  // Baskı yöntemi (ribon): "" = otomatik, DIRECT_THERMAL = ribonsuz, THERMAL_TRANSFER = ribonlu.
+  mediaType: z.string().optional().default(""),
   // Yazıcı medyası (mm/dpi) — form alanları düz string, "" = boş (sistem varsayılanı).
   labelWidthMm: z.string().trim().optional().default(""),
   labelHeightMm: z.string().trim().optional().default(""),
@@ -97,6 +99,7 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     // Yazıcı alanları yalnız LABEL_PRINTER'da anlamlı; metre/kantar'da temizle.
     // formatProfileId DEPRECATED — gönderilmez; medya artık 4 alanda (mm/dpi).
     languageOverride: v.kind === "LABEL_PRINTER" ? nn(v.languageOverride) : null,
+    mediaType: v.kind === "LABEL_PRINTER" ? nn(v.mediaType) : null,
     labelWidthMm: v.kind === "LABEL_PRINTER" ? num(v.labelWidthMm) : null,
     labelHeightMm: v.kind === "LABEL_PRINTER" ? num(v.labelHeightMm) : null,
     labelDpi: v.kind === "LABEL_PRINTER" ? num(v.labelDpi) : null,
@@ -132,6 +135,7 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   stationId: "",
   deviceId: "",
   languageOverride: "",
+  mediaType: "",
   labelWidthMm: "",
   labelHeightMm: "",
   labelDpi: "",

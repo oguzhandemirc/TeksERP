@@ -33,7 +33,7 @@ export function LiveTable({ routes }: { routes: PerfRoute[] }) {
         {routes.map((r) => (
           <TableRow key={r.route}>
             <TableCell className="font-mono text-xs">{r.route}</TableCell>
-            <TableCell className="text-right tabular-nums">{r.count.toLocaleString("tr-TR")}</TableCell>
+            <TableCell className="text-right tabular-nums">{r.count.toLocaleString("tr-TR", { useGrouping: false })}</TableCell>
             <TableCell
               className={cn("text-right tabular-nums", r.errCount > 0 && "text-destructive font-medium")}
             >

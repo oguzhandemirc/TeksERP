@@ -204,7 +204,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {g.orderNumbers.length} sipariş ·{" "}
-                    {g.openTotal.toLocaleString("tr-TR")} m kalan ·{" "}
+                    {g.openTotal.toLocaleString("tr-TR", { useGrouping: false })} m kalan ·{" "}
                     {g.orderNumbers.join(", ")}
                   </div>
                 </button>

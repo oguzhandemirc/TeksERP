@@ -3,7 +3,7 @@ import { safeFormat } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import type { ReturnAppliedStatus, ReturnRow } from "./service";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const SHELF_LABEL: Record<ReturnAppliedStatus, string> = {
   WAREHOUSE: "Hazır Depo",
   A1_STOCK: "2. Kalite Stok",

@@ -10,6 +10,10 @@ interface NumpadProps {
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   compact?: boolean;
+  /** true → tuşlar sabit yükseklik yerine kapsayıcıyı FLEX ile doldurur (satırlar
+   *  eşit paylaşır, tuşlar satır yüksekliğine yayılır). Dar kolonlarda taşmayı
+   *  önler (küçük ekranda küçülür, büyük ekranda iri tuş). `compact`'tan bağımsız. */
+  fill?: boolean;
 }
 
 const ROWS: ReadonlyArray<ReadonlyArray<string>> = [
@@ -27,6 +31,7 @@ export default function Numpad({
   disabled,
   style,
   compact = false,
+  fill = false,
 }: NumpadProps) {
   const handlePress = useCallback(
     (key: string) => {
@@ -54,9 +59,9 @@ export default function Numpad({
   );
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, fill && styles.containerFill, style]}>
       {ROWS.map((row, rIdx) => (
-        <View key={rIdx} style={styles.row}>
+        <View key={rIdx} style={[styles.row, fill && styles.rowFill]}>
           {row.map((key) => {
             const isBackspace = key === 'BACKSPACE';
             const isDecimal = key === '.';
@@ -75,7 +80,8 @@ export default function Numpad({
                 rippleColor="rgba(79, 70, 229, 0.18)"
                 style={[
                   styles.key,
-                  compact && styles.keyCompact,
+                  // Yükseklik: fill → yok (satır flex'ine yayılır); compact → 48; default → 68.
+                  fill ? null : compact ? styles.keyCompact : styles.keyDefaultHeight,
                   isBackspace && styles.keyBackspace,
                   keyDisabled && styles.keyDisabled,
                 ]}
@@ -98,16 +104,20 @@ export default function Numpad({
 
 const styles = StyleSheet.create({
   container: { gap: 8 },
+  containerFill: { flex: 1 },
   row: { flexDirection: 'row', gap: 8 },
+  rowFill: { flex: 1 },
   key: {
     flex: 1,
-    height: 68,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     backgroundColor: '#fff',
     overflow: 'hidden',
   },
+  // Varsayılan sabit yükseklik (fill kapalıyken). fill modunda uygulanmaz →
+  // tuş satır yüksekliğine (rowFill flex) yayılır.
+  keyDefaultHeight: { height: 68 },
   keyCompact: { height: 48, borderRadius: 10 },
   keyContent: {
     flex: 1,

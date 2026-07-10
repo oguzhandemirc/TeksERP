@@ -8,7 +8,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { swatchService, type KartelaStockGroup } from "./swatchService";
 import { ReduceKartelaStockDialog } from "./ReduceKartelaStockDialog";
 
-const NUM_FMT = new Intl.NumberFormat("tr-TR");
+const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
 
 function groupKey(g: KartelaStockGroup): string {
   return `${g.itemId}__${g.colorId ?? "none"}`;

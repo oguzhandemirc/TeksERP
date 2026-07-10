@@ -43,7 +43,7 @@ export function RollLocateCard({ roll, onClear }: { roll: LocatedRoll; onClear: 
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
           {rollName || roll.item.name} ·{" "}
-          {roll.currentQty.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} m
+          {roll.currentQty.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m
         </div>
         <div className="mt-1.5 text-sm">
           <span className="font-medium">Yeri: </span>

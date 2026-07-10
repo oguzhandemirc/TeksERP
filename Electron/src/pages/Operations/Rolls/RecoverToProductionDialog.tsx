@@ -102,7 +102,7 @@ export function RecoverToProductionDialog({ rollId, onOpenChange, onRecovered }:
             <div className="rounded-md border p-3 text-sm">
               <div className="font-medium">{data.roll.itemName}</div>
               <div className="mt-0.5 text-xs text-muted-foreground">
-                {data.roll.currentQty.toLocaleString("tr-TR")} m · {data.roll.qualityGrade}
+                {data.roll.currentQty.toLocaleString("tr-TR", { useGrouping: false })} m · {data.roll.qualityGrade}
               </div>
             </div>
 

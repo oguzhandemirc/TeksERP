@@ -123,7 +123,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
   const lineSummary = useMemo(() => {
     if (!order) return "";
     const totalQty = order.lines.reduce((acc, l) => acc + Number(l.quantity), 0);
-    return `${order.lines.length} kalem · toplam ${totalQty.toLocaleString("tr-TR")} m`;
+    return `${order.lines.length} kalem · toplam ${totalQty.toLocaleString("tr-TR", { useGrouping: false })} m`;
   }, [order]);
 
   return (

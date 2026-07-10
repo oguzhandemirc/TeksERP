@@ -202,11 +202,11 @@ export function HistoryTable() {
                         type="button"
                         className="hover:underline"
                         title="Cihaz işlem dökümü"
-                        onClick={(e) => openTarget(`/definitions/devices/${s.device.id}`, e)}
+                        onClick={(e) => openTarget(`/access/devices/${s.device.id}`, e)}
                         onAuxClick={(e) => {
                           if (e.button === 1) {
                             e.preventDefault();
-                            openTarget(`/definitions/devices/${s.device.id}`, e);
+                            openTarget(`/access/devices/${s.device.id}`, e);
                           }
                         }}
                       >

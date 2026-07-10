@@ -1,7 +1,7 @@
 // Rapor sayfalarında tekrar tekrar kullanılan formatlayıcılar.
 
-const trNum = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
-const trInt = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
+const trNum = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const trInt = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 
 export const fmtNum = (n: number | null | undefined): string => {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";

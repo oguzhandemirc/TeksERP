@@ -224,13 +224,13 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   <div className="text-xs text-muted-foreground">Metre</div>
                   <div className="mt-0.5">
                     <span className="text-2xl font-semibold tabular-nums">
-                      {roll.currentQty.toLocaleString("tr-TR")}
+                      {roll.currentQty.toLocaleString("tr-TR", { useGrouping: false })}
                     </span>
                     <span className="ml-1 text-xs text-muted-foreground">m</span>
                   </div>
                   {roll.currentQty !== roll.initialQty && (
                     <div className="mt-1 text-[11px] text-muted-foreground">
-                      Başlangıç: {roll.initialQty.toLocaleString("tr-TR")} m
+                      Başlangıç: {roll.initialQty.toLocaleString("tr-TR", { useGrouping: false })} m
                     </div>
                   )}
                   {roll.initialQty > 0 && (
@@ -273,7 +273,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   {roll.weightKg != null && (
                     <>
                       <div className="text-xs text-muted-foreground">Ağırlık</div>
-                      <div>{roll.weightKg.toLocaleString("tr-TR")} kg</div>
+                      <div>{roll.weightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
                     </>
                   )}
                   {roll.color && (
@@ -424,7 +424,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                     )}
                     <div className="text-xs text-muted-foreground">İade Metrajı</div>
                     <div className="tabular-nums">
-                      {latestReturn.qty.toLocaleString("tr-TR")} m
+                      {latestReturn.qty.toLocaleString("tr-TR", { useGrouping: false })} m
                     </div>
                     <div className="text-xs text-muted-foreground">Teslim Alan</div>
                     <div className="text-xs">{latestReturn.receivedBy?.fullName ?? "—"}</div>
@@ -449,13 +449,13 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                     {roll.grossWeightKg != null && (
                       <>
                         <div className="text-xs text-muted-foreground">Brüt Ağırlık</div>
-                        <div>{roll.grossWeightKg.toLocaleString("tr-TR")} kg</div>
+                        <div>{roll.grossWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
                       </>
                     )}
                     {roll.netWeightKg != null && (
                       <>
                         <div className="text-xs text-muted-foreground">Net Ağırlık</div>
-                        <div>{roll.netWeightKg.toLocaleString("tr-TR")} kg</div>
+                        <div>{roll.netWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
                       </>
                     )}
                     {roll.packagingDate && (

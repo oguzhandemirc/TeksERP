@@ -30,7 +30,7 @@ export type KartelaSelection =
   | { kind: "receipt"; id: string }
   | null;
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const fmtDate = (s: string) => format(new Date(s), "dd.MM.yyyy HH:mm", { locale: tr });
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

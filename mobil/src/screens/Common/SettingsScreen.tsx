@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   TouchableRipple,
   Switch,
+  Chip,
 } from 'react-native-paper';
 import axios from 'axios';
 import * as Haptics from 'expo-haptics';
@@ -20,6 +21,10 @@ import {
   useBaseUrlStore,
   computeAutoUrl,
   normalizeUrl,
+  parseUrlParts,
+  buildUrl,
+  displayUrl,
+  DEFAULT_PORT,
 } from '../../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
 import { useDeviceStore } from '../../store/deviceStore';
@@ -52,7 +57,7 @@ export default function SettingsScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
-  const { baseUrl, customUrl, setCustomUrl, reset } = useBaseUrlStore();
+  const { baseUrl, customUrl, recentUrls, setCustomUrl, reset } = useBaseUrlStore();
   const autoUrl = computeAutoUrl();
   const manualBarcodeEntry = useDeviceSettingsStore(
     (s) => s.manualBarcodeEntry,
@@ -62,24 +67,45 @@ export default function SettingsScreen() {
   );
   const paired = useDeviceStore((s) => s.paired);
 
-  const [input, setInput] = useState(customUrl ?? baseUrl);
+  // Adres AYRI alanlarda: şema (http/https) · IP/host · port. Tek metin yerine
+  // ayrılınca yanlış format riski azalır; kaydederken birleştirilir.
+  const initialParts = parseUrlParts(customUrl ?? baseUrl);
+  const [scheme, setScheme] = useState<'http' | 'https'>(initialParts.scheme);
+  const [host, setHost] = useState(initialParts.host);
+  const [port, setPort] = useState(initialParts.port);
   const [testing, setTesting] = useState<TestResult>({ status: 'idle' });
   const [saving, setSaving] = useState(false);
 
+  // Aktif adres değişince alanları senkronla (dışarıdan kaydedilirse).
   useEffect(() => {
-    setInput(customUrl ?? baseUrl);
+    const p = parseUrlParts(customUrl ?? baseUrl);
+    setScheme(p.scheme);
+    setHost(p.host);
+    setPort(p.port);
   }, [customUrl, baseUrl]);
+
+  // Alanlardan ham URL (normalizeUrl `/api`'yi ekler). Host boşsa boş.
+  const rawUrl = buildUrl(scheme, host, port);
+
+  // Son-kullanılan çipi / otomatik adres → alanları doldur.
+  const applyParts = (url: string) => {
+    const p = parseUrlParts(url);
+    setScheme(p.scheme);
+    setHost(p.host);
+    setPort(p.port);
+    setTesting({ status: 'idle' });
+  };
 
   const goBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
   };
 
   const runTest = async () => {
-    const url = normalizeUrl(input);
-    if (!url) {
-      setTesting({ status: 'fail', message: 'URL boş olamaz' });
+    if (!host.trim()) {
+      setTesting({ status: 'fail', message: 'IP / host boş olamaz' });
       return;
     }
+    const url = normalizeUrl(rawUrl);
     setTesting({ status: 'testing' });
     try {
       // /auth/me token istemediğimiz için 401 dönecek — ama bağlantının
@@ -138,11 +164,11 @@ export default function SettingsScreen() {
   } | null>(null);
 
   const save = () => {
-    const url = normalizeUrl(input);
-    if (!url) {
-      Toast.show({ type: 'error', text1: 'URL boş olamaz' });
+    if (!host.trim()) {
+      Toast.show({ type: 'error', text1: 'IP / host boş olamaz' });
       return;
     }
+    const url = normalizeUrl(rawUrl);
     setConfirmState({
       title: 'Sunucu adresini değiştir?',
       body: `Yeni adres:\n${url}\n\nUygulama bu adrese bağlanmaya başlayacak. Yanlış adres bağlantıyı keser.`,
@@ -155,8 +181,7 @@ export default function SettingsScreen() {
 
   const doResetToAuto = async () => {
     await reset();
-    setInput(computeAutoUrl());
-    setTesting({ status: 'idle' });
+    applyParts(computeAutoUrl());
     Toast.show({ type: 'info', text1: 'Otomatik adrese döndü' });
   };
 
@@ -199,34 +224,95 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.label}>SUNUCU ADRESİ</Text>
-          <TextInput
-            mode="outlined"
-            value={input}
-            onChangeText={(v) => {
-              setInput(v);
-              if (testing.status !== 'idle') setTesting({ status: 'idle' });
-            }}
-            placeholder="192.168.1.10:4000"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType={Platform.OS === 'android' ? 'visible-password' : 'url'}
-            style={styles.input}
-            outlineColor={COLORS.border}
-            activeOutlineColor={COLORS.accentLight}
-            textColor={COLORS.text}
-            theme={{
-              colors: {
-                background: COLORS.bgDarker,
-                onSurfaceVariant: COLORS.subtext,
-              },
-            }}
-            left={<TextInput.Icon icon="link-variant" color={COLORS.subtext} />}
-          />
+
+          {/* Şema: http / https (LAN'da genelde http). */}
+          <View style={styles.schemeRow}>
+            {(['http', 'https'] as const).map((s) => {
+              const active = scheme === s;
+              return (
+                <Chip
+                  key={s}
+                  compact
+                  selected={active}
+                  onPress={() => {
+                    setScheme(s);
+                    if (testing.status !== 'idle') setTesting({ status: 'idle' });
+                  }}
+                  style={[styles.schemeChip, active && styles.schemeChipActive]}
+                  textStyle={[styles.schemeChipText, active && styles.schemeChipTextActive]}
+                >
+                  {s}
+                </Chip>
+              );
+            })}
+          </View>
+
+          {/* IP/host (esner) + port (dar) — ayrı alanlar. */}
+          <View style={styles.hostPortRow}>
+            <TextInput
+              mode="outlined"
+              label="IP / Host"
+              value={host}
+              onChangeText={(v) => {
+                setHost(v.trim());
+                if (testing.status !== 'idle') setTesting({ status: 'idle' });
+              }}
+              placeholder="192.168.1.10"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
+              style={[styles.input, styles.hostInput]}
+              outlineColor={COLORS.border}
+              activeOutlineColor={COLORS.accentLight}
+              textColor={COLORS.text}
+              theme={{ colors: { background: COLORS.bgDarker, onSurfaceVariant: COLORS.subtext } }}
+              left={<TextInput.Icon icon="ip-network" color={COLORS.subtext} />}
+            />
+            <TextInput
+              mode="outlined"
+              label="Port"
+              value={port}
+              onChangeText={(v) => {
+                setPort(v.replace(/[^0-9]/g, ''));
+                if (testing.status !== 'idle') setTesting({ status: 'idle' });
+              }}
+              placeholder={String(DEFAULT_PORT)}
+              keyboardType="number-pad"
+              maxLength={5}
+              style={[styles.input, styles.portInput]}
+              outlineColor={COLORS.border}
+              activeOutlineColor={COLORS.accentLight}
+              textColor={COLORS.text}
+              theme={{ colors: { background: COLORS.bgDarker, onSurfaceVariant: COLORS.subtext } }}
+            />
+          </View>
+
           <Text style={styles.hint}>
-            Örn: <Text style={styles.mono}>192.168.1.10:4000</Text> — otomatik olarak{' '}
-            <Text style={styles.mono}>http://</Text> ve <Text style={styles.mono}>/api</Text>{' '}
-            eklenir.
+            Bağlanılacak adres:{' '}
+            <Text style={styles.mono}>{normalizeUrl(rawUrl) || '—'}</Text>{' '}
+            (<Text style={styles.mono}>/api</Text> otomatik eklenir)
           </Text>
+
+          {/* Son kullanılan adresler — dokun, alanlar dolsun. */}
+          {recentUrls.length > 0 && (
+            <View style={styles.recentBlock}>
+              <Text style={styles.recentLabel}>SON KULLANILANLAR</Text>
+              <View style={styles.recentRow}>
+                {recentUrls.map((u) => (
+                  <Chip
+                    key={u}
+                    compact
+                    icon="history"
+                    onPress={() => applyParts(u)}
+                    style={styles.recentChip}
+                    textStyle={styles.recentChipText}
+                  >
+                    {displayUrl(u)}
+                  </Chip>
+                ))}
+              </View>
+            </View>
+          )}
 
           <View style={styles.statusBlock}>
             {testing.status === 'testing' && (
@@ -439,6 +525,31 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     color: COLORS.text,
   },
+
+  // Şema seçici (http/https) çipleri.
+  schemeRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  schemeChip: { backgroundColor: COLORS.bgDarker, borderColor: COLORS.border, borderWidth: 1 },
+  schemeChipActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accentLight },
+  schemeChipText: { color: COLORS.subtext, fontWeight: '700' },
+  schemeChipTextActive: { color: '#fff' },
+
+  // IP (esner) + Port (dar) yan yana.
+  hostPortRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  hostInput: { flex: 1 },
+  portInput: { width: 104 },
+
+  // Son kullanılan adresler.
+  recentBlock: { marginTop: 14 },
+  recentLabel: {
+    color: COLORS.subtext,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  recentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  recentChip: { backgroundColor: COLORS.bgSoft, borderColor: COLORS.border, borderWidth: 1 },
+  recentChipText: { color: COLORS.text, fontSize: 12 },
 
   statusBlock: { marginTop: 14, minHeight: 0 },
   statusRow: {

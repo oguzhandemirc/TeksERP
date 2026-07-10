@@ -19,7 +19,7 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { returnsService, type ReturnAppliedStatus, type ReturnRow } from "./service";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const TEXTAREA_CLS =
   "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 

@@ -26,14 +26,14 @@ export function CursorPaginationFooter({
         {totalEstimate !== undefined ? (
           <span>
             <span className="font-semibold text-foreground">
-              {visibleCount.toLocaleString("tr-TR")}
+              {visibleCount.toLocaleString("tr-TR", { useGrouping: false })}
             </span>{" "}
-            / {totalEstimate.toLocaleString("tr-TR")} kayıt gösteriliyor
+            / {totalEstimate.toLocaleString("tr-TR", { useGrouping: false })} kayıt gösteriliyor
           </span>
         ) : (
           <span>
             <span className="font-semibold text-foreground">
-              {visibleCount.toLocaleString("tr-TR")}
+              {visibleCount.toLocaleString("tr-TR", { useGrouping: false })}
             </span>{" "}
             kayıt yüklendi
           </span>

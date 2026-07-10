@@ -64,6 +64,8 @@ export function RollsPage() {
     isRollTabKey(urlTab) ? urlTab : "RAW_STOCK",
   );
   const [manualOpen, setManualOpen] = useState(false);
+  // Manuel giriş hangi sekmeden açıldı — Bitmiş Depo'da renk zorunlu + WAREHOUSE doğar.
+  const [manualTarget, setManualTarget] = useState<"RAW_STOCK" | "FINISHED_STOCK">("RAW_STOCK");
   // Birleşik "okut/ara" input'u: yazınca listeyi süzer (URL search), okut/Enter'da
   // (ROLL barkodu ise) detay panelini açar. Açılışta URL'deki search ile senkron.
   const [scanBarcode, setScanBarcode] = useState(() => searchParams.get("search") ?? "");
@@ -141,9 +143,15 @@ export function RollsPage() {
             <RefreshButton
               queryKey={tab === "KANBAN" ? ["rolls"] : ["rolls", tab]}
             />
-            {tab === "RAW_STOCK" && (
+            {(tab === "RAW_STOCK" || tab === "FINISHED_STOCK") && (
               <PermissionGate permission="roll:write">
-                <Button size="sm" onClick={() => setManualOpen(true)}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setManualTarget(tab === "FINISHED_STOCK" ? "FINISHED_STOCK" : "RAW_STOCK");
+                    setManualOpen(true);
+                  }}
+                >
                   <Plus className="h-4 w-4" /> Manuel Top Ekle
                 </Button>
               </PermissionGate>
@@ -151,7 +159,7 @@ export function RollsPage() {
           </>
         }
       />
-      <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} />
+      <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} target={manualTarget} />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
         <ScanField
           className="min-w-0 flex-1"

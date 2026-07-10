@@ -18,7 +18,7 @@ import { printHtmlString } from "@/lib/print";
 import { printedDocumentService } from "@/services/printedDocumentService";
 import { sackStoreService } from "./service";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 /** Sevk onayının ihtiyacı olan asgari sevkiyat kimliği — her yüzey kendi tipinden eşler. */
 export interface DispatchShipmentInfo {

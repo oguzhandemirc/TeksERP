@@ -3,7 +3,7 @@ import { safeFormat } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import type { KartelaDispatchListItem, KartelaReceiptListItem } from "./service";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 export const kartelaDispatchColumns: ColumnDef<KartelaDispatchListItem>[] = [
   {

@@ -28,7 +28,7 @@ export function DeviceDetailPage() {
 
   useEffect(() => {
     if (!device?.name || !id) return;
-    const tab = useTabsStore.getState().tabs.find((t) => t.path === `/definitions/devices/${id}`);
+    const tab = useTabsStore.getState().tabs.find((t) => t.path === `/access/devices/${id}`);
     if (tab) useTabsStore.getState().updateTabTitle(tab.id, `Cihaz · ${device.name}`);
   }, [device?.name, id]);
 
@@ -37,7 +37,7 @@ export function DeviceDetailPage() {
       <PageHeader
         title={device ? device.name : "Cihaz Detayı"}
         description="Cihazın oturumları ve her oturum penceresinde yapılan işlemlerin dökümü."
-        onBack={() => navigate("/definitions/devices")}
+        onBack={() => navigate("/access/devices")}
         actions={
           <RefreshButton
             queryKey={["admin-devices", "detail", id ?? ""]}

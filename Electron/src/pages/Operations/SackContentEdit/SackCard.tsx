@@ -13,9 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { SackRoll, SackSwatch, ShipmentSack } from "./types";
 
-const fmtKg = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-const fmtInt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmtKg = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 });
+const fmtInt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 
 interface Props {
   sack: ShipmentSack;

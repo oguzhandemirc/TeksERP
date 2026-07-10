@@ -20,9 +20,9 @@ import {
   type ShipmentDestination,
 } from "./types";
 
-const fmtKg = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-const fmtInt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmtKg = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 });
+const fmtInt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 
 interface Props {
   /** Açılan sevkiyat (board kartı) — null ise sheet kapalı. */

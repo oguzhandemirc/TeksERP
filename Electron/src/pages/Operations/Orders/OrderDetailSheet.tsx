@@ -216,7 +216,7 @@ export function OrderDetailSheet({
                 <CardContent className="p-3">
                   <div className="text-xs text-muted-foreground">Toplam</div>
                   <div className="font-medium tabular-nums">
-                    {totalQty.toLocaleString("tr-TR")} m
+                    {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
                   </div>
                 </CardContent>
               </Card>
@@ -228,7 +228,7 @@ export function OrderDetailSheet({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Sevk İlerlemesi</span>
                     <span className="font-medium tabular-nums">
-                      {order.shippedQty.toLocaleString("tr-TR")} / {totalQty.toLocaleString("tr-TR")} m
+                      {order.shippedQty.toLocaleString("tr-TR", { useGrouping: false })} / {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
                       <span className="ml-1 text-muted-foreground">
                         (%{Math.round((order.shippedQty / totalQty) * 100)})
                       </span>
@@ -271,7 +271,7 @@ export function OrderDetailSheet({
                     </span>
                     <span className="font-medium tabular-nums">
                       {returnsSummary.data.count} top ·{" "}
-                      {returnsSummary.data.totalQty.toLocaleString("tr-TR")} m
+                      {returnsSummary.data.totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
                     </span>
                   </div>
                 </CardContent>
@@ -364,7 +364,7 @@ export function OrderDetailSheet({
                           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                             <span>
                               <span className="font-medium text-foreground">
-                                {line.quantity.toLocaleString("tr-TR")}
+                                {line.quantity.toLocaleString("tr-TR", { useGrouping: false })}
                               </span>{" "}
                               metre
                             </span>

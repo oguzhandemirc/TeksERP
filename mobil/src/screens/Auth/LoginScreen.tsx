@@ -14,6 +14,7 @@ import { authActions } from '../../services/authActions';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
+import ServerAddressSheet from '../../components/ServerAddressSheet';
 import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
 import { operatorColor, operatorInitials } from '../../utils/operatorColor';
 import type { MobileUser, LoginResponse } from '../../types/auth';
@@ -87,6 +88,8 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  // Kilit modunda "sunucu ayarları" modalı (kilitken navigate edilemez → modal).
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
 
   // Giriş yöntemleri (auth.loginMethods ayarı — public uç): ekran ÖNCELİKLİ
   // yöntemle açılır; diğer etkin yöntemler "Diğer giriş yöntemlerini dene"
@@ -752,9 +755,22 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       style={[styles.root, { paddingBottom: insets.bottom }]}
     >
       {lock ? (
-        <LockHeader user={lock.user} onLogout={lock.onLogout} disabled={submitting} />
+        <LockHeader
+          user={lock.user}
+          onLogout={lock.onLogout}
+          onOpenSettings={() => setServerSettingsOpen(true)}
+          disabled={submitting}
+        />
       ) : (
         <TopBar compact={isCompact} companyName={methodsQ.data?.companyName} />
+      )}
+
+      {/* Kilitken sunucu adresi modalı — kilit katmanı kendi Paper Portal'ında. */}
+      {lock && (
+        <ServerAddressSheet
+          visible={serverSettingsOpen}
+          onClose={() => setServerSettingsOpen(false)}
+        />
       )}
 
       {activeMethod === 'card' ? (
@@ -897,10 +913,12 @@ const NumpadKey = React.memo(function NumpadKey({
 function LockHeader({
   user,
   onLogout,
+  onOpenSettings,
   disabled,
 }: {
   user: LoginLockContext['user'];
   onLogout: () => void;
+  onOpenSettings: () => void;
   disabled: boolean;
 }) {
   const name = user.fullName || user.username;
@@ -918,6 +936,17 @@ function LockHeader({
           {name}
         </Text>
       </View>
+      {/* Sunucu ayarları — kilitliyken de erişilebilir (yanlış IP'de operatör
+          burada takılıp ayarlara ulaşamıyordu). Kilit katmanı NavigationContainer
+          DIŞINDA olduğu için navigate DEĞİL, kendi Portal'ında modal açılır. */}
+      <IconButton
+        icon="cog"
+        iconColor={COLORS.subtext}
+        size={22}
+        onPress={onOpenSettings}
+        disabled={disabled}
+        accessibilityLabel="Sunucu ayarları"
+      />
       <TouchableRipple
         onPress={onLogout}
         disabled={disabled}

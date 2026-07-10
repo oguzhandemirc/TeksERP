@@ -628,7 +628,7 @@ export function WorkOrderFormView({
                     hintTone="info"
                     hint={
                       locks?.materialCommitted && dispatchedQty > 0
-                        ? `Sevk edilen: ${dispatchedQty.toLocaleString("tr-TR")} m`
+                        ? `Sevk edilen: ${dispatchedQty.toLocaleString("tr-TR", { useGrouping: false })} m`
                         : isOrderProduction
                           ? "Bağlı kalemlerin açığından önerilir — değiştirebilirsin (fazlası stoğa)."
                           : undefined
@@ -647,7 +647,7 @@ export function WorkOrderFormView({
                     {quantityShortfall > 0 && (
                       <Callout tone="warning" className="mt-1.5">
                         Yeni hedef, sevk edilenden{" "}
-                        <strong>{quantityShortfall.toLocaleString("tr-TR")} m</strong>{" "}
+                        <strong>{quantityShortfall.toLocaleString("tr-TR", { useGrouping: false })} m</strong>{" "}
                         düşük.
                       </Callout>
                     )}

@@ -12,7 +12,7 @@ import { packingService } from "./service";
 import { invalidateShipmentData } from "./useShipmentDetail";
 import type { ShipmentSack } from "./types";
 
-const fmtKg = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmtKg = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 interface MoveTarget {
   rollId: string;

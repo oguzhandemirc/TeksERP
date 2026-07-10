@@ -9,7 +9,7 @@ import { packingService } from "./service";
 import { invalidateShipmentData } from "./useShipmentDetail";
 import type { ShipmentDetail } from "./types";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 /** Sevke Hazır invariant'larını client-side önizle (backend yine de doğrular). */
 function readyBlockers(detail: ShipmentDetail): string[] {

@@ -89,7 +89,7 @@ export function buildOrderColumns(pricingEnabled: boolean): ColumnDef<Order>[] {
               }
               return (
                 <span className="tabular-nums text-xs">
-                  {Number(o.totalAmount).toLocaleString("tr-TR", {
+                  {Number(o.totalAmount).toLocaleString("tr-TR", { useGrouping: false,
                     minimumFractionDigits: 2,
                   })}{" "}
                   {o.currency}
@@ -165,7 +165,7 @@ export const orderColumns: ColumnDef<Order>[] = [
       const shipped = o.shippedQty ?? 0;
       const pct = Math.min(100, Math.round((shipped / requested) * 100));
       const fmt = (n: number) =>
-        n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+        n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
       return (
         <span className="tabular-nums text-xs">
           {fmt(shipped)}/{fmt(requested)} m

@@ -29,6 +29,8 @@ import { StationFilterBar, type MachinePresence } from "@/pages/Stations/Station
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import type { StationCapabilitySummary } from "@/pages/StationCapabilities/types";
 import { CapabilitiesEditSheet } from "@/pages/StationCapabilities/CapabilitiesEditSheet";
+import { peripheralService } from "@/pages/PeripheralDevices/service";
+import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
 
 // Üretim akışındaki istasyon türleri — sevkiyat/diğer (OTHER) bu ekranda yok.
 const PRODUCTION_KINDS: StationKind[] = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBCONTRACTOR"] as StationKind[];
@@ -68,6 +70,13 @@ export function ProductionStationsPage() {
     queryFn: () => loadAllForPicker(machineService, showInactive ? { filters: {} } : undefined),
   });
   const capsQ = useQuery({ queryKey: ["station-capabilities"], queryFn: () => stationCapabilityService.list() });
+  // Makineye bağlı cihazlar (metre/yazıcı/tartı) — tek sorgu, makineId'ye gruplanır.
+  // İstasyon kartındaki makine satırında genişletilerek gösterilir (Cihaz Kaydı'nın
+  // makine-bazlı görünümü; merkezi kayıt Tanımlar→Donanım'da).
+  const peripheralsQ = useQuery({
+    queryKey: ["peripherals", "by-machine"],
+    queryFn: () => loadAllForPicker(peripheralService, { filters: { isActive: "true" } }),
+  });
 
   const stationMut = useCrudMutations({ service: stationService, queryKey: "stations", entityName: "İstasyon" });
   const machineMut = useCrudMutations({ service: machineService, queryKey: "machines", entityName: "Makine" });
@@ -87,6 +96,16 @@ export function ProductionStationsPage() {
     () => new Map((capsQ.data?.data ?? []).map((c) => [c.stationId, c])),
     [capsQ.data],
   );
+  const peripheralsByMachine = useMemo(() => {
+    const map = new Map<string, PeripheralDevice[]>();
+    for (const p of peripheralsQ.data?.data ?? []) {
+      if (!p.machineId) continue;
+      const list = map.get(p.machineId) ?? [];
+      list.push(p);
+      map.set(p.machineId, list);
+    }
+    return map;
+  }, [peripheralsQ.data]);
   const machinesByStation = useMemo(() => {
     const map = new Map<string, Machine[]>();
     for (const m of machinesQ.data?.data ?? []) {
@@ -244,6 +263,7 @@ export function ProductionStationsPage() {
             key={s.id}
             station={s}
             machines={machinesByStation.get(s.id) ?? []}
+            peripheralsByMachine={peripheralsByMachine}
             cap={capByStation.get(s.id)}
             canWrite={canWrite}
             onEditStation={(st) => setStationDlg({ open: true, initial: st })}

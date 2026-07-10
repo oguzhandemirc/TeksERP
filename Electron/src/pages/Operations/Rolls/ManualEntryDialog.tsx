@@ -58,10 +58,18 @@ const defaults: FormValues = {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Hangi sekmeden açıldı — hedef statüyü belirler. Backend `createInitialEntry`
+   * `colorId != null → WAREHOUSE`, `null → STOCK` kuralıyla yönlendirir:
+   * - "FINISHED_STOCK" (Bitmiş Depo): renk ZORUNLU → top WAREHOUSE (depo) doğar.
+   * - "RAW_STOCK" (default, Ham Stok): renk opsiyonel; renksiz → STOCK.
+   */
+  target?: "RAW_STOCK" | "FINISHED_STOCK";
 }
 
-export function ManualEntryDialog({ open, onOpenChange }: Props) {
+export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK" }: Props) {
   const qc = useQueryClient();
+  const isWarehouse = target === "FINISHED_STOCK";
   // KK1 ağırlık girişi admin ayarıyla kapatılabilir (default kapalı). Kapalıyken
   // alan gizlenir ve payload'a weightKg konmaz — aksi halde backend guard'ı
   // (createInitialEntry) ağırlıklı girişi 400 ile reddeder.
@@ -95,6 +103,13 @@ export function ManualEntryDialog({ open, onOpenChange }: Props) {
   });
 
   const handleSubmit = form.handleSubmit((v) => {
+    // Bitmiş Depo hedefi WAREHOUSE ister → backend bunu yalnız colorId ile üretir.
+    // Renksiz gönderim STOCK'a düşer (Ham Stok'ta çıkar, kullanıcı depoda arar) →
+    // erken engelle, net hata göster.
+    if (isWarehouse && !v.colorId) {
+      form.setError("colorId", { message: "Bitmiş depo girişi için renk zorunlu" });
+      return;
+    }
     mutation.mutate({
       itemId: v.itemId,
       colorId: v.colorId,
@@ -121,10 +136,11 @@ export function ManualEntryDialog({ open, onOpenChange }: Props) {
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Manuel Top Ekle</DialogTitle>
+          <DialogTitle>{isWarehouse ? "Depoya Manuel Top Ekle" : "Manuel Top Ekle"}</DialogTitle>
           <DialogDescription>
-            Sistem dışından gelen veya geçmiş stoklar için yönetici girişi. Otomatik
-            barkod basılır, top STOCK statüsünde envantere eklenir.
+            {isWarehouse
+              ? "Depodaki bitmiş (renkli) stoklar için yönetici girişi. Otomatik barkod basılır, top Bitmiş Depo (WAREHOUSE) statüsünde eklenir — renk zorunlu."
+              : "Sistem dışından gelen veya geçmiş ham stoklar için yönetici girişi. Otomatik barkod basılır, top STOCK (Ham Stok) statüsünde envantere eklenir."}
           </DialogDescription>
         </DialogHeader>
 
@@ -146,7 +162,12 @@ export function ManualEntryDialog({ open, onOpenChange }: Props) {
             />
           </FormField>
 
-          <FormField label="Renk (opsiyonel)" hint="Ham mal genelde boş — boyahanede kazanır.">
+          <FormField
+            label={isWarehouse ? "Renk" : "Renk (opsiyonel)"}
+            required={isWarehouse}
+            error={form.formState.errors.colorId}
+            hint={isWarehouse ? "Bitmiş depo topu renklidir — zorunlu (WAREHOUSE şartı)." : "Ham mal genelde boş — boyahanede kazanır."}
+          >
             <Controller
               control={form.control}
               name="colorId"

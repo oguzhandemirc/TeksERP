@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { shipmentService } from "./service";
 
-const fmtM = (n: number) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmtM = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 interface Props {
   /** İptal edilecek sevkiyat id'si — null ise dialog kapalı. */

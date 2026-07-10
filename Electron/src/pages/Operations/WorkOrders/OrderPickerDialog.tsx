@@ -499,7 +499,7 @@ export function OrderPickerDialog({
                   <span className="font-medium text-foreground">
                     {selectedArray.length} kalem
                   </span>{" "}
-                  · {totalQty.toLocaleString("tr-TR")} m · {customerCount} müşteri
+                  · {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m · {customerCount} müşteri
                 </div>
               </div>
               {selectedArray.length > 0 && (
@@ -554,7 +554,7 @@ export function OrderPickerDialog({
                           </Badge>
                         )}
                         <span className="ml-auto tabular-nums text-muted-foreground">
-                          {l.quantity.toLocaleString("tr-TR")} m
+                          {l.quantity.toLocaleString("tr-TR", { useGrouping: false })} m
                         </span>
                       </div>
                     </li>
@@ -573,7 +573,7 @@ export function OrderPickerDialog({
                 <span className="font-medium text-foreground">
                   {selectedArray.length} kalem
                 </span>{" "}
-                seçildi · {totalQty.toLocaleString("tr-TR")} m · {customerCount} müşteri
+                seçildi · {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m · {customerCount} müşteri
               </>
             ) : (
               "Henüz seçim yok"
@@ -695,7 +695,7 @@ function FetchedOrderRow({
                   </Badge>
                 )}
                 <span className="tabular-nums text-muted-foreground">
-                  {line.quantity.toLocaleString("tr-TR")} m
+                  {line.quantity.toLocaleString("tr-TR", { useGrouping: false })} m
                   {line.width ? ` × ${line.width} cm` : ""}
                 </span>
                 {incompatible && (
@@ -823,7 +823,7 @@ function SelectedOrderRow({
               </Badge>
             )}
             <span className="tabular-nums text-muted-foreground">
-              {l.quantity.toLocaleString("tr-TR")} m
+              {l.quantity.toLocaleString("tr-TR", { useGrouping: false })} m
               {l.width ? ` × ${l.width} cm` : ""}
             </span>
             {l.requiredProperties.length > 0 && (

@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { PanelRight } from "lucide-react";
+import { PanelRight, Trash2 } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, StandaloneDateRangeFilter, type FilterDef } from "@/components/data-table/FilterBar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -21,10 +23,11 @@ import {
   type RollStatusTabKey,
 } from "./service";
 import { RollDetailSheet } from "./RollDetailSheet";
+import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import type { Roll } from "./types";
 
-const NUM_FMT = new Intl.NumberFormat("tr-TR");
-const DEC_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
+const DEC_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 function RollsStats({ data, isLoading }: { data: RollStats | undefined; isLoading: boolean }) {
   if (isLoading && !data) {
@@ -106,6 +109,7 @@ interface Props {
 
 export function RollsTable({ tab }: Props) {
   const [selected, setSelected] = useState<Roll | null>(null);
+  const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const includeFire = searchParams.get("filter[includeFire]") === "true";
 
@@ -166,6 +170,13 @@ export function RollsTable({ tab }: Props) {
     defaultPageSize: 100,
     forceFilters,
   });
+
+  // Toplu iptal — Ham Stok + Bitmiş Depo'da sunulur (STOCK/WAREHOUSE→CANCELLED,
+  // yanlış giriş düzeltmesi). Backend softDelete WAREHOUSE'a izin verir; rezerve
+  // topsa çuval/sevkiyattan da çıkarır. Seçili satırlar TanStack table state'inden
+  // okunur; seçim kolonu useDataTable'da default açık.
+  const selectedRolls = table.getSelectedRowModel().rows.map((r) => r.original);
+  const bulkCancelable = tab === "RAW_STOCK" || tab === "FINISHED_STOCK";
 
   // Stats query — liste ile aynı filtreleri paylaşır (URL filtreleri + forceFilters
   // + search). Backend /api/rolls/stats aynı buildRollWhere kullanır, listeden sapmaz.
@@ -242,6 +253,25 @@ export function RollsTable({ tab }: Props) {
         pagination={pagination}
         emptyText="Top bulunamadı."
         onRowClick={setSelected}
+        // Ham Stok'ta seçim çubuğuna "Stoktan Kaldır" (iptal) — DataTable bunu
+        // alt şeride (Seçimi temizle'nin yanına) koyar; ayrı üst şerit yok.
+        bulkActions={
+          bulkCancelable
+            ? (rows) =>
+                rows.length > 0 ? (
+                  <PermissionGate permission="roll:write">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="gap-1.5"
+                      onClick={() => setBulkCancelOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4" /> Stoktan Kaldır
+                    </Button>
+                  </PermissionGate>
+                ) : null
+            : undefined
+        }
         rowContextMenu={(roll) => (
           <>
             <ContextMenuItem onSelect={() => setSelected(roll)}>
@@ -260,6 +290,12 @@ export function RollsTable({ tab }: Props) {
         roll={selected}
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
+      />
+      <BulkCancelRollsDialog
+        open={bulkCancelOpen}
+        onOpenChange={setBulkCancelOpen}
+        rolls={selectedRolls}
+        onDone={() => table.resetRowSelection()}
       />
     </>
   );

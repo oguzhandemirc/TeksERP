@@ -63,7 +63,7 @@ export function DeviceRow({
   const canManage = hasPermission("admin:settings");
   const approved = device.status === "APPROVED";
   const lastSeen = device.lastSeenAt ? safeFormat(device.lastSeenAt, "dd.MM.yyyy HH:mm") : "—";
-  const detailPath = `/definitions/devices/${device.id}`;
+  const detailPath = `/access/devices/${device.id}`;
 
   const actions: DeviceAction[] = [
     { key: "detail", label: "İşlem Dökümü / Detay", icon: History, onClick: () => openTarget(detailPath) },

@@ -198,9 +198,9 @@ export function WorkOrderLivePreview({
           {showQuantity && (
             <Row label="Metraj · Kg">
               <span className="tabular-nums">
-                {qtyVal != null ? `${qtyVal.toLocaleString("tr-TR")} m` : "—"}
+                {qtyVal != null ? `${qtyVal.toLocaleString("tr-TR", { useGrouping: false })} m` : "—"}
                 <span className="text-muted-foreground"> · </span>
-                {weightVal != null ? `${weightVal.toLocaleString("tr-TR")} kg` : "—"}
+                {weightVal != null ? `${weightVal.toLocaleString("tr-TR", { useGrouping: false })} kg` : "—"}
               </span>
             </Row>
           )}
@@ -282,7 +282,7 @@ export function WorkOrderLivePreview({
               </span>
               <span className="tabular-nums">
                 <span className="text-sm font-bold text-foreground">
-                  {totalOpen.toLocaleString("tr-TR")}
+                  {totalOpen.toLocaleString("tr-TR", { useGrouping: false })}
                 </span>{" "}
                 m açık
               </span>

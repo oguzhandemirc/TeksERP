@@ -25,7 +25,6 @@ import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesP
 import { SubcontractorCategoriesPage } from "@/pages/SubcontractorCategories/SubcontractorCategoriesPage";
 import { SubcontractorsPage } from "@/pages/Subcontractors/SubcontractorsPage";
 import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapabilitiesPage";
-import { DeadlineDefaultsPage } from "@/pages/DeadlineDefaults/DeadlineDefaultsPage";
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
 import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
@@ -234,14 +233,6 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "definitions/deadline-defaults",
-    element: (
-      <ProtectedRoute requirePermission="admin:settings">
-        <DeadlineDefaultsPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: "definitions/label-templates",
     element: (
       <ProtectedRoute requirePermission="label-template:read">
@@ -274,7 +265,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "definitions/devices",
+    // Saha tabletleri (allowlist + makine ataması) → Yetkilendirme→Cihaz Erişimi'ne
+    // taşındı. "Cihaz Kaydı" (Donanım: metre/yazıcı/tartı) ile karışmasın diye
+    // UI'da "Tabletler" adıyla görünür.
+    path: "access/devices",
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <DevicesPage />
@@ -282,7 +276,7 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "definitions/devices/:id",
+    path: "access/devices/:id",
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <DeviceDetailPage />

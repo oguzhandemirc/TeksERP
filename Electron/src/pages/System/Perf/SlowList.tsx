@@ -34,7 +34,7 @@ export function SlowList({ items }: { items: SlowRequest[] }) {
               {s.status === 499 ? "499 (istemci vazgeçti)" : s.status}
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">
-              {(s.ms / 1000).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} sn
+              {(s.ms / 1000).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} sn
             </TableCell>
           </TableRow>
         ))}

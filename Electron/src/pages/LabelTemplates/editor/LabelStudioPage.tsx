@@ -31,8 +31,8 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { VariantTabs } from "./VariantTabs";
 import { VariantMismatchBanner } from "./VariantMismatchBanner";
 import { CanvasPreview } from "./CanvasPreview";
-import { DEFAULT_ZOOM, makeElement, makeBarcodePair } from "./canvas-model";
-import type { LabelElementType } from "@/types/label-canvas";
+import { DEFAULT_ZOOM, makeElement, makeBarcodePair, clamp } from "./canvas-model";
+import type { CanvasPad, LabelElement, LabelElementType } from "@/types/label-canvas";
 
 export function LabelStudioPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,8 +67,22 @@ export function LabelStudioPage() {
   const canvas = {
     widthMm: activeVariant?.widthMm ?? 100,
     heightMm: activeVariant?.heightMm ?? 60,
+    pad: state.pad,
   };
   const lint = useCanvasLint(state.elements, canvas);
+
+  // Kenar boşluğu değişince: pad'i güncelle + mevcut elemanları yeni güvenli alana İT
+  // (padding büyüyünce dışarıda kalanlar tek "Geri Al" adımıyla içeri çekilir).
+  const handlePadChange = (pad: CanvasPad) => {
+    state.setPad(pad);
+    const patches: Record<string, Partial<LabelElement>> = {};
+    for (const el of state.elements) {
+      const nx = clamp(el.x, pad.left, Math.max(pad.left, canvas.widthMm - pad.right - 1));
+      const ny = clamp(el.y, pad.top, Math.max(pad.top, canvas.heightMm - pad.bottom - 1));
+      if (nx !== el.x || ny !== el.y) patches[el.id] = { x: nx, y: ny } as Partial<LabelElement>;
+    }
+    if (Object.keys(patches).length) state.applyPatches(patches);
+  };
 
   useEffect(() => {
     if (template) {
@@ -224,7 +238,7 @@ export function LabelStudioPage() {
 
                     {/* ORTA: kanvas */}
                     <div className="xl:min-h-0 xl:overflow-y-auto">
-                      <CanvasStage canvas={canvas} state={state} zoom={zoom} onZoom={setZoom} lint={lint} />
+                      <CanvasStage canvas={canvas} state={state} zoom={zoom} onZoom={setZoom} lint={lint} onPadChange={handlePadChange} />
                     </div>
 
                     {/* SAĞ: önizleme + seçili eleman özellikleri + lint */}

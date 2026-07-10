@@ -1,12 +1,18 @@
-import { Plus, Pencil, QrCode, PowerOff, Power, Trash2, HardDrive } from "lucide-react";
+import { Fragment, useState } from "react";
+import { Plus, Pencil, QrCode, PowerOff, Power, Trash2, HardDrive, ChevronRight, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { Machine } from "@/pages/Machines/types";
+import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
+import { MachinePeripheralsCell } from "@/pages/Stations/MachinePeripheralsCell";
 
 interface Props {
   machines: Machine[];
+  /** makineId → o makineye bağlı cihazlar (metre/yazıcı/tartı). Verilirse her
+   *  makine satırında "Cihazlar (N)" genişletici çıkar. */
+  peripheralsByMachine?: Map<string, PeripheralDevice[]>;
   canWrite: boolean;
   onAdd: () => void;
   onEdit: (m: Machine) => void;
@@ -50,6 +56,7 @@ function IconAction({
  */
 export function StationMachineTable({
   machines,
+  peripheralsByMachine,
   canWrite,
   onAdd,
   onEdit,
@@ -58,6 +65,16 @@ export function StationMachineTable({
   onReactivate,
   onDelete,
 }: Props) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const showDevices = peripheralsByMachine !== undefined;
+
   return (
     <div className="rounded-md border">
       <div className="flex items-center justify-between border-b border-sky-200/70 bg-sky-50 px-3 py-2 dark:border-sky-900/40 dark:bg-sky-950/30">
@@ -85,18 +102,46 @@ export function StationMachineTable({
           <TableBody>
             {machines.map((m) => {
               const active = m.isActive !== false;
+              const devices = peripheralsByMachine?.get(m.id) ?? [];
+              const isOpen = expanded.has(m.id);
               return (
-                <TableRow key={m.id} className={active ? undefined : "opacity-60"}>
+                <Fragment key={m.id}>
+                <TableRow className={active ? undefined : "opacity-60"}>
                   <TableCell className="py-1.5">
-                    <button
-                      type="button"
-                      disabled={!canWrite}
-                      className="text-left font-medium hover:underline disabled:cursor-default disabled:no-underline"
-                      onClick={() => canWrite && onEdit(m)}
-                      title={canWrite ? "Düzenle" : undefined}
-                    >
-                      {m.name}
-                    </button>
+                    <div className="flex flex-col items-start gap-1">
+                      <button
+                        type="button"
+                        disabled={!canWrite}
+                        className="text-left font-medium hover:underline disabled:cursor-default disabled:no-underline"
+                        onClick={() => canWrite && onEdit(m)}
+                        title={canWrite ? "Düzenle" : undefined}
+                      >
+                        {m.name}
+                      </button>
+                      {/* Makineye bağlı cihazlar (metre/yazıcı/tartı) — genişletici. */}
+                      {showDevices && (
+                        <button
+                          type="button"
+                          onClick={() => toggle(m.id)}
+                          className="inline-flex items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground"
+                          aria-expanded={isOpen}
+                        >
+                          <ChevronRight className={cn("h-3 w-3 transition-transform", isOpen && "rotate-90")} />
+                          <Cpu className="h-3 w-3" />
+                          Cihazlar
+                          <span
+                            className={cn(
+                              "ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold",
+                              devices.length > 0
+                                ? "bg-primary/10 text-primary"
+                                : "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {devices.length}
+                          </span>
+                        </button>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="py-1.5">
                     {active ? (
@@ -153,6 +198,14 @@ export function StationMachineTable({
                     </div>
                   </TableCell>
                 </TableRow>
+                {showDevices && isOpen && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={3} className="bg-muted/30 py-2 pl-8 pr-3">
+                      <MachinePeripheralsCell peripherals={devices} />
+                    </TableCell>
+                  </TableRow>
+                )}
+                </Fragment>
               );
             })}
           </TableBody>

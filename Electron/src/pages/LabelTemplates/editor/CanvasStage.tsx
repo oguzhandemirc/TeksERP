@@ -11,7 +11,8 @@
 import { useRef, useState } from "react";
 import { ZoomIn, ZoomOut, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { LabelElement } from "@/types/label-canvas";
+import { Input } from "@/components/ui/input";
+import type { CanvasPad, LabelElement } from "@/types/label-canvas";
 import {
   alignElements,
   applyResize,
@@ -31,11 +32,13 @@ import type { EditorState } from "./useEditorState";
 import type { LintIssue } from "./useCanvasLint";
 
 interface Props {
-  canvas: { widthMm: number; heightMm: number };
+  canvas: { widthMm: number; heightMm: number; pad?: CanvasPad };
   state: EditorState;
   zoom: number;
   onZoom: (z: number) => void;
   lint: LintIssue[];
+  /** Kenar boşluğu (padding) değişince — verilirse padding kontrolü + güvenli-alan çizilir. */
+  onPadChange?: (pad: CanvasPad) => void;
 }
 
 type DragState =
@@ -43,10 +46,21 @@ type DragState =
   | { mode: HandleMode; id: string }
   | { mode: "marquee"; additive: boolean; start: { x: number; y: number }; current: { x: number; y: number } };
 
-export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
+export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const warnIds = new Set(lint.filter((i) => i.level !== "info" && i.elementId).map((i) => i.elementId));
+
+  // Güvenli alan = tuval − padding. Eleman ORİJİNİ bu banda clamp'lenir (en az 1mm iç
+  // alan). Padding yoksa eski davranış (0..boyut-1). Draw + sürükle/ok clamp'i paylaşır.
+  const pd = canvas.pad ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const hasPad = !!(pd.top || pd.right || pd.bottom || pd.left);
+  const clampX = (x: number) => clamp(x, pd.left, Math.max(pd.left, canvas.widthMm - pd.right - 1));
+  const clampY = (y: number) => clamp(y, pd.top, Math.max(pd.top, canvas.heightMm - pd.bottom - 1));
+  const setPadSide = (side: keyof CanvasPad, val: number) => {
+    const max = side === "left" || side === "right" ? canvas.widthMm - 5 : canvas.heightMm - 5;
+    onPadChange?.({ ...pd, [side]: Math.max(0, Math.min(Math.max(0, max), val || 0)) });
+  };
 
   const mmFromEvent = (e: React.PointerEvent): { x: number; y: number } => {
     const rect = stageRef.current!.getBoundingClientRect();
@@ -101,8 +115,8 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
         const start = drag.startPos[id];
         if (!start) continue;
         state.updateElementLive(id, {
-          x: clamp(snap(start.x + dx), 0, canvas.widthMm - 1),
-          y: clamp(snap(start.y + dy), 0, canvas.heightMm - 1),
+          x: clampX(snap(start.x + dx)),
+          y: clampY(snap(start.y + dy)),
         });
       }
       return;
@@ -179,8 +193,8 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
       for (const el of state.elements) {
         if (!state.selectedIds.includes(el.id)) continue;
         patches[el.id] = {
-          x: clamp(snap(el.x + d[0]), 0, canvas.widthMm - 1),
-          y: clamp(snap(el.y + d[1]), 0, canvas.heightMm - 1),
+          x: clampX(snap(el.x + d[0])),
+          y: clampY(snap(el.y + d[1])),
         } as Partial<LabelElement>;
       }
       state.applyPatches(patches);
@@ -228,6 +242,37 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
         </div>
       </div>
 
+      {onPadChange && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="font-medium">Kenar boşluğu (mm):</span>
+          {([["top", "Üst"], ["right", "Sağ"], ["bottom", "Alt"], ["left", "Sol"]] as [keyof CanvasPad, string][]).map(
+            ([side, lbl]) => (
+              <label key={side} className="flex items-center gap-1">
+                <span className="text-[10px]">{lbl}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={pd[side]}
+                  onChange={(e) => setPadSide(side, Number(e.target.value))}
+                  className="h-6 w-14 px-1.5 text-[11px]"
+                />
+              </label>
+            ),
+          )}
+          {hasPad && (
+            <button
+              type="button"
+              className="underline hover:text-foreground"
+              onClick={() => onPadChange({ top: 0, right: 0, bottom: 0, left: 0 })}
+            >
+              sıfırla
+            </button>
+          )}
+          <span className="text-[10px] italic">Elemanlar bu alana sıkışır; kesikli mavi çizgi kılavuzdur.</span>
+        </div>
+      )}
+
       <div className="overflow-auto rounded-md border bg-muted/30 p-4">
         <div
           ref={stageRef}
@@ -248,6 +293,17 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
             backgroundSize: `${5 * zoom}px ${5 * zoom}px`,
           }}
         >
+          {hasPad && (
+            <div
+              className="pointer-events-none absolute border border-dashed border-sky-500/70"
+              style={{
+                left: pd.left * zoom,
+                top: pd.top * zoom,
+                width: Math.max(0, canvas.widthMm - pd.left - pd.right) * zoom,
+                height: Math.max(0, canvas.heightMm - pd.top - pd.bottom) * zoom,
+              }}
+            />
+          )}
           {state.elements.map((el) => (
             <CanvasElementView
               key={el.id}

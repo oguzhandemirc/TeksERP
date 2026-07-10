@@ -197,12 +197,12 @@ export function LinkedOrderLinesField({
                     </Badge>
                   )}
                   <span className="ml-auto tabular-nums text-muted-foreground">
-                    {line.quantity.toLocaleString("tr-TR")} m
+                    {line.quantity.toLocaleString("tr-TR", { useGrouping: false })} m
                     {line.width ? ` × ${line.width}cm` : ""}
                   </span>
                 </div>
                 <div className="mt-1 text-[10px] text-muted-foreground">
-                  Açık {line.openQty.toLocaleString("tr-TR")} m (sevk edilmemiş)
+                  Açık {line.openQty.toLocaleString("tr-TR", { useGrouping: false })} m (sevk edilmemiş)
                 </div>
                 {line.requiredProperties.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">

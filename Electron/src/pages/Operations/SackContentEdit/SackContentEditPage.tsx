@@ -79,7 +79,7 @@ export function SackContentEditPage() {
         sevkiyat başlatın.
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1">
         <OrderSelectionPanel onStarted={setShipmentId} />
       </div>
     </div>

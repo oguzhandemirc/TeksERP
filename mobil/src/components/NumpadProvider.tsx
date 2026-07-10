@@ -105,9 +105,12 @@ export function NumpadProvider({ children }: { children: React.ReactNode }) {
 
 interface NumpadHostProps {
   style?: StyleProp<ViewStyle>;
+  /** true → host kalan alanı (flex) doldurur ve tuşlar buna yayılır (Numpad.fill).
+   *  Dar/kısa kolonlarda numpad'in alttan taşmasını önler. Default: sabit yükseklik. */
+  fill?: boolean;
 }
 
-export function NumpadHost({ style }: NumpadHostProps) {
+export function NumpadHost({ style, fill = false }: NumpadHostProps) {
   const { target, notifier } = useNumpadContext();
   useSyncExternalStore(notifier.subscribe, notifier.getSnapshot);
 
@@ -118,13 +121,14 @@ export function NumpadHost({ style }: NumpadHostProps) {
   const disabled = !target;
 
   return (
-    <Surface style={[styles.host, style]} elevation={1}>
+    <Surface style={[styles.host, fill && styles.hostFill, style]} elevation={1}>
       <Numpad
         value={value}
         onChange={onChange}
         allowDecimal={allowDecimal}
         maxLength={maxLength}
         disabled={disabled}
+        fill={fill}
       />
     </Surface>
   );
@@ -184,6 +188,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
+  // fill: host kalan dikey alanı kaplar; içteki Numpad (fill) tuşları buna yayar.
+  hostFill: { flex: 1 },
 });
 
 const modalStyles = StyleSheet.create({

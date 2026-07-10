@@ -21,6 +21,7 @@ import {
   type RawCodeLang,
 } from "@/services/labelTemplateService";
 import type { CanvasLayout } from "@/types/label-canvas";
+import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 
 interface Props {
   kind: LabelKind;
@@ -37,6 +38,10 @@ const PX_PER_MM = 96 / 25.4;
 export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
   const [view, setView] = useState<"visual" | "code">("visual");
   const [lang, setLang] = useState<"active" | RawCodeLang>("active");
+  // "Aktif dil" → bu bilgisayara seçili Cihaz Kaydı yazıcısının dili (PPLA/PPLB/ZPL);
+  // cihaz yoksa RASTER_HTML. Top-etiket önizlemesiyle aynı mantık — peripheralId geçilir,
+  // backend dili cihazın languageOverride'ından çözer (getCanvasPreview zaten destekliyor).
+  const { peripheralId } = useLabelPrinter();
 
   // Önizleme kutusu TUVAL ORANINI izler: mevcut genişliği ölçüp etiket
   // en/boy oranından kutu boyutunu türetir; iframe içeriği (fiziksel mm) bu
@@ -65,7 +70,7 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
   const fitScale = wPx > 0 ? boxW / wPx : 1;
 
   // 350ms debounce — her sürükleme adımında backend'e gitmesin.
-  const liveKey = JSON.stringify({ kind, widthMm, heightMm, layout, lang });
+  const liveKey = JSON.stringify({ kind, widthMm, heightMm, layout, lang, peripheralId });
   const [debouncedKey, setDebouncedKey] = useState(liveKey);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedKey(liveKey), 350);
@@ -77,7 +82,8 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
   // anahtarıyla ateşlenip backend'ten "en az 1 eleman" 400'ü (ve interceptor
   // toast'u) üretiyordu. Boş yük hiç istek atmaz.
   const debounced = JSON.parse(debouncedKey) as {
-    kind: LabelKind; widthMm: number; heightMm: number; layout: CanvasLayout; lang: "active" | RawCodeLang;
+    kind: LabelKind; widthMm: number; heightMm: number; layout: CanvasLayout;
+    lang: "active" | RawCodeLang; peripheralId?: string;
   };
   const previewQ = useQuery({
     queryKey: ["label-canvas-preview", debouncedKey],
@@ -88,6 +94,8 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
         heightMm: debounced.heightMm,
         elements: debounced.layout,
         language: debounced.lang === "active" ? undefined : debounced.lang,
+        // Aktif dil için: seçili yazıcının languageOverride'ı (yoksa RASTER_HTML).
+        peripheralId: debounced.peripheralId,
       }),
     enabled: debounced.layout.elements.length > 0,
     staleTime: 0,

@@ -10,6 +10,7 @@ import {
   Tags,
   ScanLine,
   Layers,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -41,7 +42,8 @@ export type CategoryKind =
   | "company"
   | "session"
   | "label"
-  | "scanner";
+  | "scanner"
+  | "deadline";
 
 export interface SettingsCategory {
   id: string;
@@ -136,6 +138,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken (varsayılan) — Tambur asıl ölçüm noktası olduğu için — operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma) mobilde onay sonrası kabul edilir; kaynak top tamamen tüketilir. Kapatırsan Tambur'da çıkan top kayıtlı metrajdan fazla olamaz (örn. 100m topa 110m girilemez). Yalnızca aşım anında devreye girer, normal kesim etkilenmez.",
       },
     ],
+  },
+  {
+    // Termin Varsayılanları — Tanımlar'dan Genel Ayarlar'a taşındı (politika ayarı).
+    id: "deadline-defaults",
+    label: "Termin Varsayılanları",
+    icon: CalendarClock,
+    description: "Sipariş ve iş emri açılışında termin boş bırakılırsa eklenecek varsayılan gün sayıları.",
+    keywords: "termin deadline gün süre sipariş iş emri planlama varsayılan otomatik tarih plan gün sayısı vade teslim",
+    kind: "deadline",
   },
   {
     id: "shipping",

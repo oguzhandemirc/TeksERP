@@ -15,8 +15,8 @@ export function DataTablePagination({ pagination }: Props) {
     <div className="flex items-center justify-between gap-4 border-t px-3 py-2 text-xs text-muted-foreground">
       <div>
         {total != null
-          ? `Yüklü ${loaded.toLocaleString("tr-TR")} / ${total.toLocaleString("tr-TR")} kayıt`
-          : `Yüklü ${loaded.toLocaleString("tr-TR")} kayıt`}
+          ? `Yüklü ${loaded.toLocaleString("tr-TR", { useGrouping: false })} / ${total.toLocaleString("tr-TR", { useGrouping: false })} kayıt`
+          : `Yüklü ${loaded.toLocaleString("tr-TR", { useGrouping: false })} kayıt`}
       </div>
       <div className="flex items-center gap-2">
         <Button

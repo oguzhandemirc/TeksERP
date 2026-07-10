@@ -244,7 +244,7 @@ function WOActionRow({
         />
         {wo.targetQuantity != null && wo.targetQuantity > 0 && (
           <Badge variant="muted" className="text-[10px]">
-            {wo.targetQuantity.toLocaleString("tr-TR")} m hedef
+            {wo.targetQuantity.toLocaleString("tr-TR", { useGrouping: false })} m hedef
           </Badge>
         )}
         {wo.producedRollCount > 0 && (

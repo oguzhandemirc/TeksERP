@@ -8,11 +8,15 @@ import { stationKindLabels } from "@/types/enums";
 import type { Station } from "@/pages/Stations/types";
 import type { Machine } from "@/pages/Machines/types";
 import type { StationCapabilitySummary } from "@/pages/StationCapabilities/types";
+import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
 import { StationMachineTable } from "@/pages/Stations/StationMachineTable";
 
 interface Props {
   station: Station;
   machines: Machine[];
+  /** makineId → o makineye bağlı cihazlar (metre/yazıcı/tartı). Makine satırında
+   *  genişletilerek gösterilir. */
+  peripheralsByMachine?: Map<string, PeripheralDevice[]>;
   cap?: StationCapabilitySummary;
   canWrite: boolean;
   onEditStation: (s: Station) => void;
@@ -33,6 +37,7 @@ interface Props {
 export function StationCard({
   station: s,
   machines,
+  peripheralsByMachine,
   cap,
   canWrite,
   onEditStation,
@@ -83,6 +88,7 @@ export function StationCard({
         <div className="space-y-3 px-4 pb-4 pt-3">
           <StationMachineTable
             machines={machines}
+            peripheralsByMachine={peripheralsByMachine}
             canWrite={canWrite}
             onAdd={() => onAddMachine(s.id)}
             onEdit={onEditMachine}

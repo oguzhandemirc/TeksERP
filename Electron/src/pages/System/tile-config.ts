@@ -109,7 +109,7 @@ export const systemTiles: SystemTile[] = [
   {
     key: "settings",
     title: "Genel Ayarlar",
-    description: "Özellik anahtarları, cihaz eşleştirme ve API adresi",
+    description: "Özellik anahtarları, cihaz eşleştirme, termin varsayılanları ve API adresi",
     icon: SettingsIcon,
     to: "/system/settings",
     group: "config",

@@ -14,8 +14,8 @@ import { shipmentService } from "./service";
 import { shipmentStatusLabels, shipmentStatusTones } from "./types";
 import { ShipmentDispatchNote } from "./ShipmentDispatchNote";
 
-const fmt = (n: number) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
-const fmtKg = (n: number) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmt = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+const fmtKg = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 interface Props {
   shipmentId: string | null;

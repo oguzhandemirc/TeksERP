@@ -6,7 +6,7 @@
 // estimateBounds tahminiyle: kesinlik değil erken uyarı hedeflenir.
 
 import { useMemo } from "react";
-import type { LabelElement } from "@/types/label-canvas";
+import type { CanvasPad, LabelElement } from "@/types/label-canvas";
 import { skippedLanguages } from "@/types/label-canvas";
 import { estimateBounds, type BoundsMm } from "./canvas-model";
 
@@ -24,10 +24,15 @@ function overlaps(a: BoundsMm, b: BoundsMm): boolean {
 
 export function useCanvasLint(
   elements: LabelElement[],
-  canvas: { widthMm: number; heightMm: number },
+  canvas: { widthMm: number; heightMm: number; pad?: CanvasPad },
 ): LintIssue[] {
   return useMemo(() => {
     const issues: LintIssue[] = [];
+    // Güvenli alan = tuval − padding (padding varsa taşma buna göre uyarılır).
+    const pd = canvas.pad ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    const safeR = canvas.widthMm - pd.right;
+    const safeB = canvas.heightMm - pd.bottom;
+    const hasPad = pd.top || pd.right || pd.bottom || pd.left;
 
     // Taranabilir alan zorunlu (backend kaydetmeyi reddeder — erken söyle).
     const scannable = elements.some((e) => e.type === "qr" || e.type === "code128");
@@ -42,12 +47,14 @@ export function useCanvasLint(
     const bounds = elements.map((el) => ({ el, b: estimateBounds(el, canvas) }));
 
     for (const { el, b } of bounds) {
-      // Tuval taşması
-      if (b.x + b.w > canvas.widthMm + 0.6 || b.y + b.h > canvas.heightMm + 0.6) {
+      // Güvenli-alan taşması (padding varsa kenar boşluğunu, yoksa tuvali aşma)
+      if (b.x + b.w > safeR + 0.6 || b.y + b.h > safeB + 0.6 || b.x < pd.left - 0.6 || b.y < pd.top - 0.6) {
         issues.push({
           level: "warn",
           elementId: el.id,
-          message: `Eleman tuvali taşıyor (~${Math.round(b.x + b.w)}×${Math.round(b.y + b.h)}mm > ${canvas.widthMm}×${canvas.heightMm}mm) — yazıcı taşan kısmı kırpar.`,
+          message: hasPad
+            ? `Eleman güvenli alanı (padding) taşıyor — kenar boşluğunun içinde kalmalı.`
+            : `Eleman tuvali taşıyor (~${Math.round(b.x + b.w)}×${Math.round(b.y + b.h)}mm > ${canvas.widthMm}×${canvas.heightMm}mm) — yazıcı taşan kısmı kırpar.`,
         });
       }
       // Dil degrade bilgisi
@@ -77,5 +84,5 @@ export function useCanvasLint(
     }
 
     return issues;
-  }, [elements, canvas.widthMm, canvas.heightMm]);
+  }, [elements, canvas.widthMm, canvas.heightMm, canvas.pad]);
 }

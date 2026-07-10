@@ -16,7 +16,7 @@ import type { WoTarget, BalanceLine } from "./types";
 
 type Mode = "bind" | "stock";
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 
 function toPicked(l: BalanceLine): PickedOrderLine {
   return {

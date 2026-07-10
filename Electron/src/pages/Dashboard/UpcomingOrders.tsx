@@ -94,7 +94,7 @@ function OrderRow({ order, onClick }: { order: Order; onClick: () => void }) {
         <div className="hidden min-w-[110px] text-right sm:block">
           <p className="text-xs text-muted-foreground">İlerleme</p>
           <p className="text-sm font-medium tabular-nums">
-            {order.shippedQty.toLocaleString("tr-TR")} / {totalQty.toLocaleString("tr-TR")}
+            {order.shippedQty.toLocaleString("tr-TR", { useGrouping: false })} / {totalQty.toLocaleString("tr-TR", { useGrouping: false })}
             <span className="ml-1 text-muted-foreground">m</span>
           </p>
           <AnimatedProgress value={progress} className="mt-1 h-1" barClassName="bg-primary/70" />

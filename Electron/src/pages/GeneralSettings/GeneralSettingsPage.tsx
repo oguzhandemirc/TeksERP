@@ -13,6 +13,7 @@ import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
 import { SackCodeTemplateSetting } from "./SackCodeTemplateSetting";
 import { ScannerSettingsSection } from "./ScannerSettingsSection";
+import { DeadlineDefaultsSection } from "./DeadlineDefaultsSection";
 import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
 import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
 
@@ -116,6 +117,7 @@ export function GeneralSettingsPage() {
                     {cat.kind === "session" && <SessionSettingsSection />}
                     {cat.kind === "label" && <LabelSettingsSection />}
                     {cat.kind === "scanner" && <ScannerSettingsSection />}
+                    {cat.kind === "deadline" && <DeadlineDefaultsSection />}
                   </CardContent>
                 </Card>
               </TabsContent>

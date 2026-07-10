@@ -10,7 +10,7 @@ interface Props {
 }
 
 function fmt(n: number): string {
-  return Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+  return Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 }
 
 interface SpecRow {

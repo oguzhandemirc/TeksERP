@@ -18,7 +18,7 @@ import { returnsService, type ReturnRow, type ReturnsCursorResponse } from "./se
 import { ReturnsDetailSheet } from "./ReturnsDetailSheet";
 import { ReturnEntryDialog } from "./ReturnEntryDialog";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 const FILTERS: FilterDef[] = [
   { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },

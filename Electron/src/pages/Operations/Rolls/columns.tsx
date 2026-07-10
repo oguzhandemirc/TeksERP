@@ -136,10 +136,10 @@ export const rollColumns: ColumnDef<Roll>[] = [
     meta: { label: "Metre" },
     cell: ({ row }) => (
       <div className="text-right">
-        <span className="tabular-nums">{row.original.currentQty.toLocaleString("tr-TR")}</span>
+        <span className="tabular-nums">{row.original.currentQty.toLocaleString("tr-TR", { useGrouping: false })}</span>
         {row.original.currentQty !== row.original.initialQty && (
           <span className="ml-1 text-[10px] text-muted-foreground">
-            / {row.original.initialQty.toLocaleString("tr-TR")}
+            / {row.original.initialQty.toLocaleString("tr-TR", { useGrouping: false })}
           </span>
         )}
       </div>

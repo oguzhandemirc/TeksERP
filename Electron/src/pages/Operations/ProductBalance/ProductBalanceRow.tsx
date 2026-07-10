@@ -14,7 +14,7 @@ import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import type { BalanceGroup, BalanceSpecRow } from "./types";
 
 const fmt = (n: number) =>
-  n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+  n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 
 const widthLabel = (w: number | null) => (w == null ? "en —" : `${w}cm`);
 

@@ -15,7 +15,7 @@ import { printDocumentArea } from "@/lib/print";
 import { sackSearchService } from "./service";
 import { shipmentStatusLabels, type PickListRow } from "./types";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const fmtDate = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("tr-TR") : "—");
 
 interface Props {

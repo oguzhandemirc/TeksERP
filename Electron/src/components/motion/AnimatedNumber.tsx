@@ -27,7 +27,7 @@ export function AnimatedNumber({ value, className, decimals = 0, flash = false, 
   const reduce = useReducedMotion();
   const mv = useMotionValue(0);
   const text = useTransform(mv, (v) =>
-    v.toLocaleString("tr-TR", {
+    v.toLocaleString("tr-TR", { useGrouping: false,
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     }),

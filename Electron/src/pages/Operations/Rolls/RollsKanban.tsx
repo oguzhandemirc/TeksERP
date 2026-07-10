@@ -200,7 +200,7 @@ function RollCard({ roll, onClick }: { roll: Roll; onClick: () => void }) {
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="text-xs font-medium tabular-nums">
-            {roll.currentQty.toLocaleString("tr-TR")} m
+            {roll.currentQty.toLocaleString("tr-TR", { useGrouping: false })} m
           </span>
           <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", gradeClass(roll.qualityGrade))}>
             {roll.qualityGrade}
@@ -218,7 +218,7 @@ function QueueCard({ card }: { card: KanbanQueueCard }) {
       <FabricHeader itemName={card.itemName} colorName={card.colorName} colorHex={card.colorHex} />
       <div className="mt-1.5 flex items-center justify-between gap-2">
         <span className="text-[11px] tabular-nums text-muted-foreground">
-          {card.openRollCount} top · {card.totalCurrentQty.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} m
+          {card.openRollCount} top · {card.totalCurrentQty.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 })} m
         </span>
         {card.isUrgent && (
           <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
@@ -290,9 +290,9 @@ function KanbanSackCard({ shipment }: { shipment: SackStoreShipment }) {
       <div className="mt-1.5 flex items-center gap-1.5 text-[10px] tabular-nums text-muted-foreground">
         <span>{shipment.sackCount} çuval</span>
         <span>·</span>
-        <span>{shipment.totalKg.toLocaleString("tr-TR")} kg</span>
+        <span>{shipment.totalKg.toLocaleString("tr-TR", { useGrouping: false })} kg</span>
         <span>·</span>
-        <span>{shipment.totalQty.toLocaleString("tr-TR")} m</span>
+        <span>{shipment.totalQty.toLocaleString("tr-TR", { useGrouping: false })} m</span>
       </div>
     </div>
   );

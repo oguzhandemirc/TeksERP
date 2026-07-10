@@ -5,8 +5,8 @@ import { safeFormat } from "@/lib/format";
 // Hem donmuş (FrozenSheet) hem taslak (DraftSheet) render'ı paylaşır.
 // =============================================================================
 
-export const NUM = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
-export const NUMKG = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+export const NUM = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+export const NUMKG = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 // Backend buildShipmentDispatchDoc ile birebir aynı şekil.
 export interface ShipmentDocLine {

@@ -6,7 +6,7 @@
 // updateElementLive/applyPatches snapshot'sız akar → tek "Geri Al" tüm jesti alır.
 
 import { useCallback, useRef, useState } from "react";
-import type { CanvasLayout, LabelElement } from "@/types/label-canvas";
+import type { CanvasLayout, CanvasPad, LabelElement } from "@/types/label-canvas";
 import { CANVAS_SCHEMA_VERSION } from "@/types/label-canvas";
 import { snap } from "./canvas-model";
 
@@ -38,11 +38,16 @@ export interface EditorState {
   loadLayout: (layout: CanvasLayout | null) => void;
   undo: () => void;
   canUndo: boolean;
+  /** Kağıt-kenarı güvenli-alan boşluğu (mm) — undefined = boşluk yok. */
+  pad: CanvasPad | undefined;
+  /** Padding'i güncelle (dirty işaretler; hepsi 0 → undefined). */
+  setPad: (pad: CanvasPad | undefined) => void;
   layout: CanvasLayout;
 }
 
 export function useEditorState(): EditorState {
   const [elements, setEls] = useState<LabelElement[]>([]);
+  const [pad, setPadState] = useState<CanvasPad | undefined>(undefined);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const undoRef = useRef<LabelElement[] | null>(null);
@@ -147,8 +152,15 @@ export function useEditorState(): EditorState {
     }
   }, []);
 
+  const setPad = useCallback((p: CanvasPad | undefined) => {
+    // Hepsi 0 → undefined (saklanmaz; backend parseCanvasPad ile aynı davranış).
+    setPadState(p && (p.top || p.right || p.bottom || p.left) ? p : undefined);
+    setDirty(true);
+  }, []);
+
   const loadLayout = useCallback((layout: CanvasLayout | null) => {
     setEls(layout?.elements ?? []);
+    setPadState(layout?.pad);
     setSelectedIds([]);
     undoRef.current = null;
     setCanUndo(false);
@@ -175,6 +187,8 @@ export function useEditorState(): EditorState {
     loadLayout,
     undo,
     canUndo,
-    layout: { v: CANVAS_SCHEMA_VERSION, elements },
+    pad,
+    setPad,
+    layout: { v: CANVAS_SCHEMA_VERSION, elements, ...(pad ? { pad } : {}) },
   };
 }

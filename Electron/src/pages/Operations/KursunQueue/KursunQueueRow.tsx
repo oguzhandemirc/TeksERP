@@ -83,7 +83,7 @@ export function KursunQueueRow({ item, index, onToggleUrgent, busy }: Props) {
               <span className="inline-flex items-center gap-1 tabular-nums">
                 <Package className="h-3 w-3" />
                 {item.openRollCount} top ·{" "}
-                {item.totalCurrentQty.toLocaleString("tr-TR")} m
+                {item.totalCurrentQty.toLocaleString("tr-TR", { useGrouping: false })} m
               </span>
               {item.oldestEnteredAt && (
                 <span>

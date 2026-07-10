@@ -86,7 +86,7 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {wo.targetItem?.name ?? "Hedef ürün yok"}
             {wo.targetColor ? ` • ${wo.targetColor.name}` : ""}
-            {wo.targetQuantity ? ` • ${wo.targetQuantity.toLocaleString("tr-TR")} m` : ""}
+            {wo.targetQuantity ? ` • ${wo.targetQuantity.toLocaleString("tr-TR", { useGrouping: false })} m` : ""}
           </p>
         </div>
 

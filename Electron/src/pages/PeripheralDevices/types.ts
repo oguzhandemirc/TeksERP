@@ -43,6 +43,8 @@ export interface PeripheralDevice {
   stationId: string | null;
   deviceId: string | null;
   languageOverride: PrinterLanguage | null;
+  /** Baskı yöntemi (ribon): null = otomatik; baskıda dile göre komuta çevrilir. */
+  mediaType: "DIRECT_THERMAL" | "THERMAL_TRANSFER" | null;
   // Yazıcı MEDYASI (Etiket Stüdyosu v2 — boyut artık doğrudan cihazda; "Boyutlar"
   // / LabelFormatProfile kataloğu emekli). Yalnız LABEL_PRINTER'da anlamlı, boş
   // (null) → sistem varsayılan medyası kullanılır. Decimal alanlar JSON'da number.

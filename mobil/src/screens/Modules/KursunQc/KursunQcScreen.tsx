@@ -1440,9 +1440,10 @@ export default function KursunQcScreen() {
               </Surface>
 
               {/* Tablet: sayısal tuş takımı sol kolonun altında — metre girişi
-                  ile aynı sütunda, aksiyon butonunun hemen altında. Tam boy tuşlar
-                  (koyu band kalktığı için yer var). Telefonda numpad yok. */}
-              {!compact && <NumpadHost style={styles.numpadHost} />}
+                  ile aynı sütunda, aksiyon butonunun hemen altında. fill: numpad
+                  kalan alana esner (dar tablette taşmaz, geniş tablette iri tuş).
+                  Telefonda numpad yok. */}
+              {!compact && <NumpadHost style={styles.numpadHost} fill />}
             </View>
           )}
         </View>

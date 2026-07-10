@@ -16,7 +16,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 function fmtQty(n: number): string {
-  return `${n.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} m`;
+  return `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
 }
 
 interface Props {
@@ -87,7 +87,7 @@ export function SackResultCard({ sack, selected, onToggleSelect }: Props) {
             <div className="text-muted-foreground">
               {sack.rollCount} top · {fmtQty(sack.totalQty)}
               {sack.swatchCount > 0 ? ` · ${sack.swatchCount} kartela` : ""}
-              {sack.weightKg !== null ? ` · ${sack.weightKg.toLocaleString("tr-TR")} kg` : ""}
+              {sack.weightKg !== null ? ` · ${sack.weightKg.toLocaleString("tr-TR", { useGrouping: false })} kg` : ""}
             </div>
           </div>
           <ChevronDown

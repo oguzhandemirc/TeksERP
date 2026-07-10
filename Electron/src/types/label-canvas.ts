@@ -103,9 +103,19 @@ export type LabelElement =
   | BoxElement
   | LengthBannerElement;
 
+/** Kağıt kenarından güvenli-alan boşluğu (mm) — editör kılavuzu + eleman clamp'i.
+ *  Backend'e layout JSON'unda taşınır (validateCanvasLayout korur). Boş → boşluk yok. */
+export interface CanvasPad {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface CanvasLayout {
   v: number;
   elements: LabelElement[];
+  pad?: CanvasPad;
 }
 
 /** Dil yetenek (degrade) matrisi — backend CAPABILITY ile birebir. "skip" =

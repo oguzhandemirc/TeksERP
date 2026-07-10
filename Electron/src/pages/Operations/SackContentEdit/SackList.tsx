@@ -13,7 +13,7 @@ import { DeleteSackDialog } from "./DeleteSackDialog";
 import { SackTargetPicker, type MoveTarget } from "./SackTargetPicker";
 import { EDITABLE_STATUSES, type SackRoll, type ShipmentDetail, type ShipmentSack } from "./types";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 });
 
 interface SwapSource {
   rollId: string;

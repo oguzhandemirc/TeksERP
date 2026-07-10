@@ -19,7 +19,7 @@ function progressOf(wo: WorkOrder): { input: number; output: number; pct: number
   return { input, output, pct, hasFlow };
 }
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 
 export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
@@ -106,7 +106,7 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     cell: ({ row }) =>
       row.original.targetQuantity != null ? (
         <span className="tabular-nums text-xs">
-          {row.original.targetQuantity.toLocaleString("tr-TR")} m
+          {row.original.targetQuantity.toLocaleString("tr-TR", { useGrouping: false })} m
         </span>
       ) : (
         <span className="text-muted-foreground">—</span>

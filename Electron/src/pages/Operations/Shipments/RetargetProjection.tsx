@@ -10,7 +10,7 @@ interface Props {
   hasSelection: boolean;
 }
 
-const fmtMeters = (n: number) => `${n.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} m`;
+const fmtMeters = (n: number) => `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 })} m`;
 
 /** Kapsama yüzdesine göre renk: tam=yeşil, kısmi=amber, 0=kırmızı. */
 function coverageTone(pct: number): string {

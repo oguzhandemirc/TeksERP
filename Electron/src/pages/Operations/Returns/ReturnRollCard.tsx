@@ -1,6 +1,6 @@
 import type { ReturnLookupResult } from "./service";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 /** İade girişinde sorgulanan topun kimlik kartı (barkod, metraj, ürün, müşteri/sevk). */
 export function ReturnRollCard({ result }: { result: ReturnLookupResult }) {

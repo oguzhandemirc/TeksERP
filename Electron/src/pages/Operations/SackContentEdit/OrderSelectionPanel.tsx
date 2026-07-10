@@ -1,14 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ClipboardList, PackagePlus, PlayCircle } from "lucide-react";
+import { PackagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { safeFormat } from "@/lib/format";
 import { packingService } from "./service";
-import { shipmentStatusLabels, type OpenOrder, type ShipmentStatus } from "./types";
+import { OpenOrdersQueue } from "./OpenOrdersQueue";
+import { OngoingShipmentsBoard, type OngoingShipment } from "./OngoingShipmentsBoard";
+import type { OpenOrder } from "./types";
 
 interface Props {
   onStarted: (shipmentId: string) => void;
@@ -17,12 +16,16 @@ interface Props {
 const groupKey = (o: OpenOrder) => `${o.order.customer.id}|${o.order.branch?.id ?? "_"}`;
 
 /**
- * Sipariş seçim ekranı (mobil TartiPaket aynası). Devam eden sevkiyatları "Sürdür"
- * ile açar; açık siparişlerden TEK müşteri+şube seçip yeni sevkiyat başlatır
- * (createShipment → PREPARING). Karşılanma depo bazlı (covered rozetı).
+ * Sipariş seçim / paketleme giriş ekranı — iki pane: SOL açık sipariş kuyruğu
+ * (arama · aciliyet · depo karşılanma%), SAĞ devam eden sevkiyat panosu (çuval/
+ * top/metraj ilerlemeli). Tek müşteri+şube seçip yeni sevkiyat başlatılır
+ * (createShipment → PREPARING); devam eden "Sürdür" ile açılır.
  */
 export function OrderSelectionPanel({ onStarted }: Props) {
   const qc = useQueryClient();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+
   const q = useQuery({
     queryKey: ["packing", "open-orders"],
     queryFn: () => packingService.listOpenOrders(),
@@ -30,11 +33,9 @@ export function OrderSelectionPanel({ onStarted }: Props) {
   });
   const orders = useMemo(() => q.data?.data ?? [], [q.data]);
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-
   // Devam eden sevkiyatlar (sipariş→aktif sevkiyat) — distinct.
   const inProgress = useMemo(() => {
-    const m = new Map<string, { id: string; shipmentNo: string; status: ShipmentStatus; customer: string }>();
+    const m = new Map<string, OngoingShipment>();
     for (const o of orders) {
       const s = o.order.activeShipment;
       if (s && !m.has(s.id)) {
@@ -44,18 +45,8 @@ export function OrderSelectionPanel({ onStarted }: Props) {
     return [...m.values()];
   }, [orders]);
 
-  // Açık siparişler (aktif sevkiyatı olmayan) — müşteri+şube grupları.
-  const groups = useMemo(() => {
-    const m = new Map<string, { label: string; orders: OpenOrder[] }>();
-    for (const o of orders) {
-      if (o.order.activeShipment) continue;
-      const k = groupKey(o);
-      const label = `${o.order.customer.name}${o.order.branch ? ` · ${o.order.branch.name}` : ""}`;
-      if (!m.has(k)) m.set(k, { label, orders: [] });
-      m.get(k)!.orders.push(o);
-    }
-    return [...m.entries()].map(([key, v]) => ({ key, ...v }));
-  }, [orders]);
+  // Açık siparişler (aktif sevkiyatı olmayan) — gruplama/arama kuyrukta.
+  const openOrders = useMemo(() => orders.filter((o) => !o.order.activeShipment), [orders]);
 
   const selectedGroup = useMemo(() => {
     const first = orders.find((o) => selected.has(o.order.id));
@@ -98,116 +89,21 @@ export function OrderSelectionPanel({ onStarted }: Props) {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {inProgress.length > 0 && (
-        <section>
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-            <PlayCircle className="h-4 w-4 text-primary" /> Devam Eden Sevkiyatlar
-          </h3>
-          <div className="grid gap-2 lg:grid-cols-2">
-            {inProgress.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onStarted(s.id)}
-                className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
-              >
-                <span>
-                  <span className="font-mono font-semibold">{s.shipmentNo}</span>
-                  <span className="ml-2 text-muted-foreground">{s.customer}</span>
-                </span>
-                <Badge variant="outline" className="text-[10px]">
-                  {shipmentStatusLabels[s.status]}
-                </Badge>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section>
-        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-          <ClipboardList className="h-4 w-4" /> Açık Siparişler
-        </h3>
-        {groups.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            Paketlenecek açık sipariş yok.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {groups.map((g) => {
-              const dimmed = selectedGroup !== null && g.key !== selectedGroup;
-              return (
-                <div key={g.key} className={cn("rounded-lg border", dimmed && "opacity-50")}>
-                  <div className="border-b bg-muted/40 px-3 py-1.5 text-xs font-medium">{g.label}</div>
-                  <ul className="divide-y">
-                    {g.orders.map((o) => {
-                      const checked = selected.has(o.order.id);
-                      const allCovered = o.lines.every((l) => l.covered);
-                      return (
-                        <li key={o.order.id}>
-                          <label className="flex cursor-pointer items-start gap-3 px-3 py-2 text-sm hover:bg-muted/40">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggle(o)}
-                              className="mt-1 h-4 w-4 shrink-0"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-medium">{o.order.orderNumber}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {o.lines.length} kalem
-                                  {o.order.deadline
-                                    ? ` · termin ${safeFormat(o.order.deadline, "dd.MM.yyyy")}`
-                                    : ""}
-                                </span>
-                              </div>
-                              {/* Özet — müşteri ne istiyor: ilk kalemler + açık metraj */}
-                              <div className="mt-0.5 space-y-0.5">
-                                {o.lines.slice(0, 3).map((l) => (
-                                  <div key={l.lineId} className="truncate text-xs text-muted-foreground">
-                                    {l.customerItemName ?? l.item.name}
-                                    {l.color ? ` · ${l.customerColorName ?? l.color.name}` : ""}
-                                    {l.width != null ? ` · ${l.width}cm` : ""}
-                                    {" — "}
-                                    <span
-                                      className={cn(
-                                        "tabular-nums",
-                                        l.openQty > 0 && "font-medium text-foreground",
-                                      )}
-                                    >
-                                      {Math.round(l.openQty)}m açık
-                                    </span>
-                                  </div>
-                                ))}
-                                {o.lines.length > 3 ? (
-                                  <div className="text-xs text-muted-foreground">
-                                    +{o.lines.length - 3} kalem daha
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                            <Badge
-                              variant={allCovered ? "secondary" : "outline"}
-                              className="mt-0.5 shrink-0 text-[10px]"
-                            >
-                              {allCovered ? "depoda var" : "kısmi/eksik"}
-                            </Badge>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+    <div className="flex h-full flex-col">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden p-6 lg:grid-cols-[1.7fr_1fr]">
+        <OpenOrdersQueue
+          openOrders={openOrders}
+          search={search}
+          onSearchChange={setSearch}
+          selected={selected}
+          selectedGroup={selectedGroup}
+          onToggle={toggle}
+        />
+        <OngoingShipmentsBoard shipments={inProgress} onOpen={onStarted} className="lg:border-l lg:pl-6" />
+      </div>
 
       {selected.size > 0 && (
-        <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 shadow-lg">
+        <div className="flex items-center justify-between gap-3 border-t bg-card px-6 py-3 shadow-lg">
           <span className="text-sm text-muted-foreground">{selected.size} sipariş seçildi</span>
           <Button disabled={createMut.isPending} onClick={() => createMut.mutate()}>
             <PackagePlus className="mr-1 h-4 w-4" /> Paketlemeye Başla
