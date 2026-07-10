@@ -8,6 +8,7 @@ import {
 } from 'react-native-paper';
 
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
+import { recordActivity } from '../store/lockStore';
 
 // =============================================================================
 // ScannerEntryBar — barkod/refakat kartı giriş bandı için ortak satır.
@@ -112,6 +113,21 @@ export default function ScannerEntryBar({
   const manualMode = manualModeProp ?? manualModeStore;
   const colors = TONES[tone];
 
+  // HID barkod okuyucu = sistem klavyesi: dokunma responder'ına HİÇ girmez —
+  // App.tsx kök trackTouch'ı bunu göremez. Okutma da aktivitedir: idle kilidi,
+  // 10 dk boyunca yalnız okutarak çalışan operatörü İŞ ORTASINDA kilitlemesin
+  // (geri sayım uyarısı da lastActivity tazelenince tick'te kendiliğinden kapanır).
+  const handleChangeText = (v: string) => {
+    recordActivity();
+    onChangeText(v);
+  };
+  const handleResolve = onResolve
+    ? () => {
+        recordActivity();
+        onResolve();
+      }
+    : undefined;
+
   // Kamera-only + compactCta: parent kendi layout'unu kullanır.
   if (!manualMode && compactCta) return null;
 
@@ -121,7 +137,7 @@ export default function ScannerEntryBar({
         <TextInput
           mode="outlined"
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={handleChangeText}
           placeholder={placeholder}
           dense
           autoCapitalize="characters"
@@ -134,15 +150,15 @@ export default function ScannerEntryBar({
                   <ActivityIndicator size={18} color={colors.resolveColor} />
                 )}
               />
-            ) : value.trim() && onResolve ? (
+            ) : value.trim() && handleResolve ? (
               <TextInput.Icon
                 icon="check"
-                onPress={onResolve}
+                onPress={handleResolve}
                 color={colors.resolveColor}
               />
             ) : undefined
           }
-          onSubmitEditing={onResolve}
+          onSubmitEditing={handleResolve}
           returnKeyType="search"
           style={styles.input}
           disabled={inputDisabled || resolving}

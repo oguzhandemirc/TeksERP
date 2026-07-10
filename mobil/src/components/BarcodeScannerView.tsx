@@ -16,6 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { colors, palette } from '../theme/tokens';
 import { springs } from '../theme/motion';
+import { recordActivity, withSystemDialog } from '../store/lockStore';
 
 export type SupportedBarcodeType =
   | 'qr'
@@ -134,6 +135,10 @@ export function BarcodeScannerView({
     if (!data || scannedRef.current) return;
     // Sürekli modda: aynı top hâlâ kadrajdaysa tekrar ekleme.
     if (continuousRef.current && lastScanRef.current === data) return;
+    // Kamera okutması dokunma responder'ına girmez — özellikle continuous
+    // modda operatör dakikalarca dokunmadan okutur; idle kilidi iş ortasında
+    // kilitlemesin diye okutma da aktivite sayılır.
+    recordActivity();
     scannedRef.current = true;
     lastScanRef.current = data;
     setBusy(true);
@@ -226,7 +231,13 @@ export function BarcodeScannerView({
       <Text style={styles.permBody}>
         QR / barkod okumak için kamera erişimini onaylayın.
       </Text>
-      <Button mode="contained" onPress={requestPermission} style={{ marginTop: 16 }}>
+      {/* withSystemDialog: izin diyaloğu activity'yi pause eder → AppState
+          'background' → idle kilidi anında kilitlerdi; sarma bunu bastırır. */}
+      <Button
+        mode="contained"
+        onPress={() => void withSystemDialog(() => requestPermission())}
+        style={{ marginTop: 16 }}
+      >
         İzin Ver
       </Button>
     </View>

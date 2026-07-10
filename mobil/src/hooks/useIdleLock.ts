@@ -13,13 +13,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { useAuthStore } from '../store/authStore';
-import { getLastActivity, recordActivity, useLockStore } from '../store/lockStore';
+import {
+  consumeSuppressedBackground,
+  getLastActivity,
+  isSystemDialogPending,
+  noteSuppressedBackground,
+  recordActivity,
+  useLockStore,
+} from '../store/lockStore';
 import { useMobileIdleLockEnabled, useMobileIdleLockMinutes } from './useFeatureFlags';
 import {
   computeIdlePhase,
   idleMinutesToMs,
   warningSeconds,
   IDLE_WARNING_MS,
+  SUPPRESSED_BACKGROUND_GRACE_MS,
 } from '../utils/idleLock';
 
 export interface IdleLockUi {
@@ -73,10 +81,23 @@ export function useIdleLock(): IdleLockUi {
   }, [activeGuard, locked, idleMs, lock]);
 
   // Arka plana geçince anında kilitle (ayar açık + kullanıcı varken).
+  // MUAFİYET: uygulamanın kendi açtığı sistem diyaloğu (BT izin/aç/PIN,
+  // yazdırma, kamera izni — withSystemDialog ile sarılı) da activity'yi pause
+  // edip 'background' yayar; bu blip'te KİLİTLEME (operatör uygulamadan
+  // ayrılmadı). Ama anı damgala: diyalog açıkken home'a basılır ya da operatör
+  // çekip giderse EK 'background' event'i gelmez (activity zaten paused) —
+  // dönüşteki 'active'te bastırılmış arka plan süresi grace'i aşmışsa kilitle
+  // (dönen kişi başkası olabilir). recordActivity ÇAĞRILMAZ: diyalog süresi
+  // idle sayılır — idle tick'i dönüşte ikinci emniyet ağıdır.
   useEffect(() => {
     if (!activeGuard) return;
     const sub = AppState.addEventListener('change', (s) => {
-      if (s !== 'active') lock();
+      if (s !== 'active') {
+        if (isSystemDialogPending()) noteSuppressedBackground();
+        else lock();
+      } else if (consumeSuppressedBackground() > SUPPRESSED_BACKGROUND_GRACE_MS) {
+        lock();
+      }
     });
     return () => sub.remove();
   }, [activeGuard, lock]);

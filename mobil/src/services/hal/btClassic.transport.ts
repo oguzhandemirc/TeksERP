@@ -1,4 +1,5 @@
 import { PermissionsAndroid, Platform } from 'react-native';
+import { withSystemDialog } from '../../store/lockStore';
 import type { DeviceTransport, ReadOptions } from './transport.types';
 
 // =============================================================================
@@ -69,14 +70,15 @@ async function ensureConnectPermission(): Promise<void> {
   const apiLevel =
     typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
   if (!Number.isNaN(apiLevel) && apiLevel >= 31) {
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      {
+    // withSystemDialog: izin diyaloğu activity'yi pause eder → AppState
+    // 'background' → idle kilidi ANINDA kilitlerdi; sarma bunu bastırır.
+    const granted = await withSystemDialog(() =>
+      PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT, {
         title: 'Bluetooth izni',
         message: 'Cihaza (yazıcı/metre) bağlanmak için Bluetooth izni gerekli.',
         buttonPositive: 'İzin Ver',
         buttonNegative: 'Vazgeç',
-      },
+      }),
     );
     if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
       throw new Error('Bluetooth izni verilmedi');
@@ -93,22 +95,38 @@ async function ensureScanPermission(): Promise<void> {
     !Number.isNaN(apiLevel) && apiLevel >= 31
       ? PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN
       : PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
-  const granted = await PermissionsAndroid.request(perm, {
-    title: 'Bluetooth tarama izni',
-    message: 'Yakındaki yazıcıları bulmak için Bluetooth tarama izni gerekli.',
-    buttonPositive: 'İzin Ver',
-    buttonNegative: 'Vazgeç',
-  });
+  const granted = await withSystemDialog(() =>
+    PermissionsAndroid.request(perm, {
+      title: 'Bluetooth tarama izni',
+      message: 'Yakındaki yazıcıları bulmak için Bluetooth tarama izni gerekli.',
+      buttonPositive: 'İzin Ver',
+      buttonNegative: 'Vazgeç',
+    }),
+  );
   if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
     throw new Error('Bluetooth tarama izni verilmedi');
   }
 }
 
 /** Adaptör kapalıysa kullanıcıdan açmasını iste. */
+// Kütüphane TEK pending activity-result promise'i tutar — eşzamanlı ikinci
+// requestBluetoothEnabled çağrısı ilkini YETİM bırakır (hiç çözülmez; kilit
+// bastırma sayacı askıda kalırdı). Tek uçuş paylaşılır: aynı anda gelen tüm
+// çağrılar aynı sistem diyaloğunun sonucunu bekler.
+let enableRequest: Promise<boolean> | null = null;
+
 async function ensureAdapterEnabled(mod: BtNativeModule): Promise<void> {
   const enabled = await mod.isBluetoothEnabled().catch(() => true);
   if (enabled) return;
-  const ok = await mod.requestBluetoothEnabled().catch(() => false);
+  if (!enableRequest) {
+    // "Bluetooth açılsın mı?" sistem diyaloğu — withSystemDialog kilit bastırır.
+    enableRequest = withSystemDialog(() => mod.requestBluetoothEnabled())
+      .catch(() => false)
+      .finally(() => {
+        enableRequest = null;
+      });
+  }
+  const ok = await enableRequest;
   if (!ok) throw new Error('Bluetooth kapalı — açıp tekrar deneyin.');
 }
 
@@ -121,7 +139,15 @@ async function ensureReady(address: string): Promise<BtNativeModule> {
   await ensureConnectPermission();
   await ensureAdapterEnabled(mod);
   const connected = await mod.isDeviceConnected(address).catch(() => false);
-  if (!connected) await mod.connectToDevice(address);
+  if (!connected) {
+    // Secure RFCOMM, eşleşmemiş cihazda bağlanırken OTOMATİK bond başlatır →
+    // sistem PIN diyaloğu SARILMADAN çıkardı (metre okumasında anında kilit).
+    // Önce açıkça, sarılı pairDevice ile eşleş; connect diyalogsuz kalır.
+    if (!(await isBonded(address))) {
+      await withSystemDialog(() => mod.pairDevice(address));
+    }
+    await mod.connectToDevice(address);
+  }
   return mod;
 }
 
@@ -169,7 +195,8 @@ export async function pairByMac(address: string): Promise<void> {
   await ensureConnectPermission();
   await ensureAdapterEnabled(mod);
   if (await isBonded(address)) return;
-  await mod.pairDevice(address);
+  // createBond → sistem PIN diyaloğu — withSystemDialog kilit bastırır.
+  await withSystemDialog(() => mod.pairDevice(address));
 }
 
 /** RFCOMM soketi açıp bağlantıyı doğrula (yazma/okuma yapmaz). */

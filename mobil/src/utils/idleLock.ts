@@ -53,6 +53,12 @@ export function warningSeconds(msUntilLock: number): number {
 /** Uyarı penceresi süresi (ms) — kilitten önce "Devam et" geri sayımı. */
 export const IDLE_WARNING_MS = 20_000;
 
+/** Bastırılmış (uygulama-içi sistem diyaloğu) arka plandan dönüşte bu süreden
+ *  uzun kalınmışsa kilitle: izin/BT-aç/PIN saniyeler sürer, normal yazdırma
+ *  penceresi de 90sn'i aşmaz — aşan süre "operatör diyaloğun başında değil"
+ *  demektir (paylaşımlı tablet: dönen kişi başkası olabilir). */
+export const SUPPRESSED_BACKGROUND_GRACE_MS = 90_000;
+
 /** Dakika ayarını güvenli ms'e çevirir (1..120 dk clamp; geçersiz → default). */
 export function idleMinutesToMs(minutes: number | undefined, fallbackMinutes = 10): number {
   const m =

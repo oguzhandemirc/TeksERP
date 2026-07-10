@@ -142,3 +142,42 @@ describe("ScannerEntryBar — compactCta (parent kendi tasarımını çizer)", (
     expect(getByPlaceholderText("Barkod gir")).toBeTruthy();
   });
 });
+
+describe("ScannerEntryBar — HID okutması aktivite sayılır (idle kilit regresyonu)", () => {
+  // HID okuyucu sistem klavyesidir: dokunma responder'ına girmez, kök trackTouch
+  // göremez. Input'a gelen her karakter/submit recordActivity ile damgalanmalı —
+  // yalnız okutarak çalışan operatör 10. dakikada iş ortasında kilitlenmesin.
+  const { getLastActivity } = jest.requireActual<
+    typeof import("../store/lockStore")
+  >("../store/lockStore");
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it("input'a yazılan karakter (HID keystroke) son-aktivite damgasını tazeler", () => {
+    const T = 7_777_777_777;
+    jest.spyOn(Date, "now").mockReturnValue(T);
+    const { getByPlaceholderText } = renderWithPaper(
+      <ScannerEntryBar manualMode value="" onChangeText={() => {}} placeholder="Barkod gir" />,
+    );
+    fireEvent.changeText(getByPlaceholderText("Barkod gir"), "TEKS-1");
+    expect(getLastActivity()).toBe(T);
+  });
+
+  it("submit (HID Enter) de damgayı tazeler ve onResolve'u çağırır", () => {
+    const T = 8_888_888_888;
+    jest.spyOn(Date, "now").mockReturnValue(T);
+    const onResolve = jest.fn();
+    const { getByPlaceholderText } = renderWithPaper(
+      <ScannerEntryBar
+        manualMode
+        value="TEKS-1"
+        onChangeText={() => {}}
+        onResolve={onResolve}
+        placeholder="Barkod gir"
+      />,
+    );
+    fireEvent(getByPlaceholderText("Barkod gir"), "submitEditing");
+    expect(onResolve).toHaveBeenCalled();
+    expect(getLastActivity()).toBe(T);
+  });
+});

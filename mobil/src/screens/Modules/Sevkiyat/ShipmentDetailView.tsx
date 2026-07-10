@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Text, ActivityIndicator, Chip, Button, Surface } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import * as Print from 'expo-print';
+import { printHtml } from '../../../services/printHtml';
 import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
 import {
@@ -40,7 +40,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
     try {
       setPrinting(true);
       const html = await getShipmentDispatchHtml(shipmentId);
-      await Print.printAsync({
+      await printHtml({
         html,
         margins: { left: 0, top: 0, right: 0, bottom: 0 },
       });

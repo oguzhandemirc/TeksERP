@@ -1,4 +1,4 @@
-import * as Print from 'expo-print';
+import { printHtml } from './printHtml';
 import { apiClient } from './api';
 import { travelerCardService } from './travelerCard.service';
 
@@ -16,7 +16,7 @@ export async function printTravelerCard(cardId: string): Promise<void> {
     headers: { Accept: 'text/html' },
   });
   const html = typeof res.data === 'string' ? res.data : String(res.data);
-  await Print.printAsync({ html });
+  await printHtml({ html });
 }
 
 /**

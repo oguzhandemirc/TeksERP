@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import * as Print from 'expo-print';
+import { printHtml } from '../services/printHtml';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { labelService } from '../services/label.service';
@@ -153,7 +153,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           // HTML'deki @page { margin: 0 } iOS/Android WebKit print preview'a
           // tam yansımıyor, etiket sayfanın sol üst köşesinden 4-5mm aşağıda
           // başlıyor. Fiziksel yazıcı yine de küçük donanım payı bırakabilir.
-          await Print.printAsync({
+          await printHtml({
             html,
             margins: { left: 0, top: 0, right: 0, bottom: 0 },
           });

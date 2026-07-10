@@ -1,4 +1,4 @@
-import * as Print from 'expo-print';
+import { printHtml } from './printHtml';
 import { apiClient } from './api';
 
 // =============================================================================
@@ -13,5 +13,5 @@ export async function printFasonCeki(dispatchId: string): Promise<void> {
     { responseType: 'text', headers: { Accept: 'text/html' } },
   );
   const html = typeof res.data === 'string' ? res.data : String(res.data);
-  await Print.printAsync({ html });
+  await printHtml({ html });
 }
