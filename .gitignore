@@ -25,3 +25,6 @@ Teks-Erp/_*.mjs
 *.pptx
 /sunum-gorseller/
 /.pptx-build/
+
+# Yerel çalıştırma/derleme logları (dev artefaktı — repo'ya girmez)
+*.log
