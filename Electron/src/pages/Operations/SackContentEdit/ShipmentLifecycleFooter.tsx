@@ -54,17 +54,18 @@ export function ShipmentLifecycleFooter({ detail }: { detail: ShipmentDetail }) 
     },
   });
 
-  if (detail.status === "DISPATCHED" || detail.status === "CANCELLED") return null;
+  // DISPATCHED'da footer gizlenir AMA sevk-onay dialogu açıksa (başarı paneli +
+  // İrsaliyeyi Bas) unmount ETME — baskı fırsatı dialog kapanınca biter.
+  if (detail.status === "CANCELLED") return null;
+  if (detail.status === "DISPATCHED" && !dispatchOpen) return null;
 
-  const showDispatch =
-    detail.status === "AT_DOOR" || (detail.status === "READY" && !confirmationEnabled);
+  const showDispatch = detail.status === "AT_DOOR" || (detail.status === "READY" && !confirmationEnabled);
   const showDoor = detail.status === "READY" && confirmationEnabled;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-card px-6 py-3">
       <div className="text-xs text-muted-foreground">
-        {detail.summary.rollCount} top · {detail.sacks.length} çuval ·{" "}
-        {fmtM(detail.summary.totalMeters)} m
+        {detail.summary.rollCount} top · {detail.sacks.length} çuval · {fmtM(detail.summary.totalMeters)} m
         {detail.status === "PREPARING" && !canReady && (
           <span className="ml-2 text-amber-600">Sevke hazır değil: {blockers.join(", ")}.</span>
         )}
@@ -100,7 +101,7 @@ export function ShipmentLifecycleFooter({ detail }: { detail: ShipmentDetail }) 
             : null
         }
         onOpenChange={(o) => setDispatchOpen(o)}
-        onDispatched={() => setDispatchOpen(false)}
+        // Başarıda dialog açık kalır (İrsaliyeyi Bas paneli); kapanış onOpenChange'ten.
       />
     </div>
   );

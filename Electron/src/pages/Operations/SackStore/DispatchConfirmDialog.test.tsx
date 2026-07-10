@@ -69,9 +69,7 @@ describe("DispatchConfirmDialog — ortak sevk onayı", () => {
   });
 
   it("çuvalları somut listeler; okutma bilgisi yoksa soft doğrulama notu gösterir", async () => {
-    renderWithProviders(
-      <DispatchConfirmDialog shipment={info} onOpenChange={() => {}} />,
-    );
+    renderWithProviders(<DispatchConfirmDialog shipment={info} onOpenChange={() => {}} />);
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText(/CV-260601-001/)).toBeInTheDocument();
     expect(within(dialog).getByText(/CV-260601-002/)).toBeInTheDocument();
@@ -116,5 +114,10 @@ describe("DispatchConfirmDialog — ortak sevk onayı", () => {
       }),
     );
     await waitFor(() => expect(onDispatched).toHaveBeenCalledWith("sh1"));
+
+    // Başarıda dialog KAPANMAZ — irsaliye baskı paneli gösterilir (kamyon
+    // irsaliyesiz çıkamaz; operatör ekran değiştirmeden basar).
+    expect(await within(dialog).findByText(/Sevk edildi — SVK-500/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /İrsaliyeyi Bas/ })).toBeInTheDocument();
   });
 });

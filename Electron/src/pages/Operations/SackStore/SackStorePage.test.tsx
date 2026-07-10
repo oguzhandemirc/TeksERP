@@ -210,6 +210,29 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     await waitFor(() => expect(pullBack).toHaveBeenCalledWith("sh-door"));
   });
 
+  it("kapı okutması: çuval kodu okutulunca kart sayaç gösterir ve sevk onayına taşınır", async () => {
+    const user = userEvent.setup();
+    renderPage(<SackStorePage />);
+    await screen.findByText("SVK-100");
+
+    // Okutma çubuğuna kod yaz + Enter → resolve (board araması) → kartta sayaç.
+    await user.type(
+      screen.getByPlaceholderText(/Çuval kodu okut/),
+      "AMB00001{Enter}",
+    );
+    await waitFor(() =>
+      expect(list).toHaveBeenCalledWith(expect.objectContaining({ search: "AMB00001", limit: 5 })),
+    );
+    expect(await screen.findByText(/1 \/ 2 çuval okutuldu/)).toBeInTheDocument();
+    // Yeşil geri bildirim bandı: kod → sevk no.
+    expect(screen.getByText("AMB00001")).toBeInTheDocument();
+
+    // Sevk onayında okutulan kod ✓/sayaç olarak taşınır (scannedCodes).
+    await user.click(screen.getByRole("button", { name: "Sevk Et" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText(/1\/2 okutuldu/)).toBeInTheDocument();
+  });
+
   it("onay-akışı bayrağı AÇIKKEN READY kartında doğrudan 'Sevk Et' yok — ikincil menüden erişilir", async () => {
     confirmationEnabled = true;
     const user = userEvent.setup();

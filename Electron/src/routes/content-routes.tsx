@@ -81,7 +81,6 @@ import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBal
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { SackStorePage } from "@/pages/Operations/SackStore/SackStorePage";
 import { SackSearchPage } from "@/pages/Operations/SackSearch/SackSearchPage";
-import { ScanDispatchPage } from "@/pages/Operations/ScanDispatch/ScanDispatchPage";
 import { SackContentEditPage } from "@/pages/Operations/SackContentEdit/SackContentEditPage";
 import { RelabelStationPage } from "@/pages/Operations/RelabelStation/RelabelStationPage";
 import { AccountingDispatchPage } from "@/pages/Operations/AccountingDispatch/AccountingDispatchPage";
@@ -506,12 +505,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // Okutarak Sevk, Sevk Kapısı'na (eski Çuval Depo) gömüldü — kayıtlı
+    // sekmeler/scan-anywhere hedefleri kırılmasın diye eski route yönlenir.
     path: "operations/scan-dispatch",
-    element: (
-      <ProtectedRoute requirePermission="shipping:write">
-        <ScanDispatchPage />
-      </ProtectedRoute>
-    ),
+    element: <Navigate to="/operations/sack-store" replace />,
   },
   {
     path: "operations/sack-content-edit",

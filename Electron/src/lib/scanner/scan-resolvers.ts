@@ -129,7 +129,7 @@ function sackActions(code: string, status: string | undefined): ScanAction[] {
     state: { focusBarcode: code },
   };
   const store: ScanAction = {
-    label: "Çuval Depo'da aç",
+    label: "Sevk Kapısı'nda aç",
     to: "/operations/sack-store",
     state: { scanCode: code },
   };

@@ -1,13 +1,16 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, PackageOpen, ChevronDown } from "lucide-react";
+import { Search, PackageOpen, ChevronDown, CheckCircle2, XCircle, Eraser } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { PermissionGate } from "@/components/PermissionGate";
+import { ScanField } from "@/components/scanner/ScanField";
+import { useContinuousScan } from "@/hooks/useContinuousScan";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { cn } from "@/lib/utils";
@@ -73,8 +76,15 @@ const ACTION_COPY: Record<
   },
 };
 
+/** Kapıda okutulmuş çuvalların sevkiyat-bazlı grubu (eski Okutarak Sevk akışı). */
+interface ScannedGroup {
+  shipment: SackStoreShipment;
+  codes: string[];
+}
+
 export function SackStorePage() {
   const qc = useQueryClient();
+  const scanRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<StatusFilter>("ALL");
   const [destination, setDestination] = useState<DestFilter>("ALL");
   const [search, setSearch] = useState("");
@@ -82,6 +92,47 @@ export function SackStorePage() {
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [dispatchTarget, setDispatchTarget] = useState<SackStoreShipment | null>(null);
   const [openShipment, setOpenShipment] = useState<SackStoreShipment | null>(null);
+
+  // ---- Kapı okutması (eski Okutarak Sevk buraya gömüldü) --------------------
+  const [scanValue, setScanValue] = useState("");
+  const [scanned, setScanned] = useState<Record<string, ScannedGroup>>({});
+  const [lastOk, setLastOk] = useState<{ code: string; shipmentNo: string } | null>(null);
+
+  // Çuval kodunu (sackNo/manualCode) sevke-hazır sevkiyatına eşle; birden çok
+  // DİSTİNKT sevkiyat eşleşirse tahmin etme — karttan elle seçilir.
+  const resolveSack = async (code: string): Promise<SackStoreShipment | null> => {
+    const { data } = await sackStoreService.list({ search: code, limit: 5 });
+    const distinct = new Map(data.map((s) => [s.id, s]));
+    if (distinct.size > 1) {
+      toast.warning(`"${code}" birden fazla sevkiyatla eşleşti — karttan elle seçin.`);
+      return null;
+    }
+    return data[0] ?? null;
+  };
+
+  const { push, resolving, lastError } = useContinuousScan<SackStoreShipment>({
+    resolve: resolveSack,
+    onResolved: (shipment, code) => {
+      setScanned((prev) => {
+        const g = prev[shipment.id];
+        return {
+          ...prev,
+          [shipment.id]: {
+            shipment, // taze sayaç/durum
+            codes: g && g.codes.includes(code) ? g.codes : [...(g?.codes ?? []), code],
+          },
+        };
+      });
+      setLastOk({ code, shipmentNo: shipment.shipmentNo });
+    },
+    alreadyInList: (code) => Object.values(scanned).some((g) => g.codes.includes(code)),
+  });
+
+  const clearScanned = () => {
+    setScanned({});
+    setLastOk(null);
+    scanRef.current?.focus();
+  };
 
   // "Her yerde okut" → çuval kodu aramaya uygulanır (ilgili sevkiyatı bulur).
   useScanSeed("scanCode", (code) => setSearch(code));
@@ -101,10 +152,18 @@ export function SackStorePage() {
     staleTime: 30_000,
   });
 
-  const shipments = useMemo(
-    () => query.data?.pages.flatMap((p) => p.data) ?? [],
-    [query.data],
-  );
+  // Board listesi + okutulan sevkiyatlar: okutulanlar EN ÜSTTE (kapıdaki iş
+  // öncelikli); filtre/sayfa dışında kalan okutulmuş sevkiyat da listeye
+  // eklenir (resolve'dan gelen taze board satırıyla) — kart kaybolmaz.
+  const shipments = useMemo(() => {
+    const list = query.data?.pages.flatMap((p) => p.data) ?? [];
+    const listIds = new Set(list.map((s) => s.id));
+    const extras = Object.values(scanned)
+      .filter((g) => !listIds.has(g.shipment.id))
+      .map((g) => g.shipment);
+    const rank = (s: SackStoreShipment) => (scanned[s.id] ? 0 : 1);
+    return [...extras, ...list].sort((a, b) => rank(a) - rank(b));
+  }, [query.data, scanned]);
 
   const mutation = useMutation({
     mutationFn: (action: PendingAction) => {
@@ -124,7 +183,20 @@ export function SackStorePage() {
       if (action.kind === "unready") {
         void qc.invalidateQueries({ queryKey: ["orders"] });
       }
+      // Okutulmuş sevkiyat panodan taşındıysa yerel durum senkron kalsın:
+      // kapı geçişlerinde durum güncellenir, hazırlığa dönen kapıdan çıkar.
+      const id = action.shipment.id;
+      setScanned((prev) => {
+        if (!prev[id]) return prev;
+        if (action.kind === "unready") {
+          const { [id]: _gone, ...rest } = prev;
+          return rest;
+        }
+        const nextStatus = action.kind === "move-to-door" ? "AT_DOOR" : "READY";
+        return { ...prev, [id]: { ...prev[id], shipment: { ...prev[id].shipment, status: nextStatus } } };
+      });
       setPending(null);
+      scanRef.current?.focus(); // odak disiplini
     },
     // Toast apiClient interceptor'dan gelir; L: 409'da (atomik claim — başka
     // operatör aynı sevkiyatı değiştirdi) liste tazelensin ki bayat kartla
@@ -137,13 +209,60 @@ export function SackStorePage() {
 
   const busyId = mutation.isPending ? mutation.variables?.shipment.id : undefined;
 
+  const scannedCount = Object.keys(scanned).length;
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Çuval Depo"
-        description="Firma içinde bekleyen (Çuval Depo) ve kapı önündeki (Kapı Önü) paketli sevkler. Karta tıkla → çuval ve top dökümü."
-        actions={<RefreshButton queryKey={QUERY_KEY} />}
+        title="Sevk Kapısı"
+        description="Kapıda çuval okut → sevkiyat kartı öne gelir → kapıya taşı / sevk et / irsaliye bas. Çuval depo + kapı önü panosu; karta tıkla → çuval ve top dökümü."
+        actions={
+          <div className="flex items-center gap-2">
+            {scannedCount > 0 && (
+              <Button variant="outline" size="sm" onClick={clearScanned}>
+                <Eraser className="mr-1 h-4 w-4" /> Okutulanları Temizle
+              </Button>
+            )}
+            <RefreshButton queryKey={QUERY_KEY} />
+          </div>
+        }
       />
+
+      {/* Kapı okutması — çuval kodu okut, sevkiyatı bul ve kartını öne getir. */}
+      <PermissionGate permission="shipping:write">
+        <ScanField
+          className="border-b px-6 py-3"
+          value={scanValue}
+          onChange={setScanValue}
+          onScan={(code) => {
+            push(code);
+            setScanValue("");
+          }}
+          placeholder="Çuval kodu okut (CV-… veya elle yazılan) → sevkiyatı bul"
+          autoFocus
+          inputRef={scanRef}
+          expectPrefix="SACK"
+          submitLabel="Ekle"
+        />
+        {lastError ? (
+          <div className="flex items-center gap-2 border-b bg-destructive/10 px-6 py-2.5 text-sm font-semibold text-destructive">
+            <XCircle className="h-5 w-5 shrink-0" />
+            {lastError}
+          </div>
+        ) : lastOk ? (
+          <div className="flex items-center gap-2 border-b bg-emerald-500/10 px-6 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
+            <span className="font-mono">{lastOk.code}</span>
+            <span aria-hidden>→</span>
+            <span className="font-mono">{lastOk.shipmentNo}</span>
+          </div>
+        ) : null}
+        {resolving.length > 0 && (
+          <div className="border-b px-6 py-1.5 text-xs text-muted-foreground">
+            Çözümleniyor: {resolving.join(", ")}
+          </div>
+        )}
+      </PermissionGate>
 
       <div className="flex flex-wrap items-center gap-3 border-b px-6 py-3">
         <div className="relative max-w-sm flex-1">
@@ -181,9 +300,7 @@ export function SackStorePage() {
               onClick={() => setDestination(t.key)}
               className={cn(
                 "rounded px-3 py-1 text-xs font-medium transition-colors",
-                destination === t.key
-                  ? "bg-sky-600 text-white"
-                  : "text-muted-foreground hover:bg-muted",
+                destination === t.key ? "bg-sky-600 text-white" : "text-muted-foreground hover:bg-muted",
               )}
             >
               {t.label}
@@ -214,6 +331,7 @@ export function SackStorePage() {
                   key={s.id}
                   shipment={s}
                   busy={busyId === s.id}
+                  scannedCount={scanned[s.id]?.codes.length}
                   onOpen={setOpenShipment}
                   onMoveToDoor={(sh) => setPending({ kind: "move-to-door", shipment: sh })}
                   onPullBack={(sh) => setPending({ kind: "pull-back", shipment: sh })}
@@ -275,8 +393,17 @@ export function SackStorePage() {
               }
             : null
         }
+        scannedCodes={dispatchTarget ? scanned[dispatchTarget.id]?.codes : undefined}
+        returnFocusRef={scanRef}
         onOpenChange={(o) => !o && setDispatchTarget(null)}
-        onDispatched={() => setDispatchTarget(null)}
+        onDispatched={(id) => {
+          // Dialog açık kalır (İrsaliyeyi Bas paneli) — yalnız yerel liste temizliği.
+          setScanned((prev) => {
+            const { [id]: _gone, ...rest } = prev;
+            return rest;
+          });
+          setLastOk(null);
+        }}
       />
     </div>
   );

@@ -8,6 +8,8 @@ import {
   Layers,
   ChevronRight,
   MoreHorizontal,
+  CheckCircle2,
+  ScanLine,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,12 +30,13 @@ import { sackStoreStatusLabels, destinationLabels, type SackStoreShipment } from
 // Tone seti "purple" içermiyor; Çuval Depo (READY) için mor className ile
 // override; Kapı Önü (AT_DOOR) için mevcut "warning" (amber) tonu.
 const STATUS_TONES = { READY: "neutral", AT_DOOR: "warning" } as const;
-const READY_CLASS =
-  "bg-purple-500/15 text-purple-600 dark:text-purple-300 border-transparent";
+const READY_CLASS = "bg-purple-500/15 text-purple-600 dark:text-purple-300 border-transparent";
 
 interface Props {
   shipment: SackStoreShipment;
   busy: boolean;
+  /** Kapıda okutulmuş çuval adedi — verilirse "X/Y okutuldu" sayacı görünür. */
+  scannedCount?: number;
   onOpen: (s: SackStoreShipment) => void;
   onMoveToDoor: (s: SackStoreShipment) => void;
   onPullBack: (s: SackStoreShipment) => void;
@@ -44,6 +47,7 @@ interface Props {
 export function SackStoreCard({
   shipment,
   busy,
+  scannedCount,
   onOpen,
   onMoveToDoor,
   onPullBack,
@@ -51,6 +55,9 @@ export function SackStoreCard({
   onDispatch,
 }: Props) {
   const isReady = shipment.status === "READY";
+  // Tamamlanma vurgusu: tüm çuvallar okutulduysa kart yeşile döner (saha
+  // vakası: "3/3'ün hiç görünmemesi kafa karıştırıyor").
+  const scanDone = scannedCount != null && shipment.sackCount > 0 && scannedCount >= shipment.sackCount;
 
   return (
     <Card
@@ -66,6 +73,7 @@ export function SackStoreCard({
       className={cn(
         "cursor-pointer overflow-hidden transition-colors hover:border-primary/50 hover:bg-muted/30",
         isReady ? "border-purple-500/30" : "border-warning/40",
+        scanDone && "border-emerald-500/60 bg-emerald-500/5",
       )}
     >
       <CardContent className="space-y-3 p-4">
@@ -105,6 +113,20 @@ export function SackStoreCard({
             {shipment.readyAt && (
               <div className="text-xs text-muted-foreground">
                 Hazır: {safeFormat(shipment.readyAt, "dd.MM.yyyy HH:mm")}
+              </div>
+            )}
+            {scannedCount != null && (
+              <div
+                className={cn(
+                  "mt-0.5 flex items-center gap-1 text-xs tabular-nums",
+                  scanDone
+                    ? "font-semibold text-emerald-700 dark:text-emerald-400"
+                    : "text-amber-600 dark:text-amber-400",
+                )}
+              >
+                {scanDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <ScanLine className="h-3.5 w-3.5" />}
+                {scannedCount} / {shipment.sackCount} çuval okutuldu
+                {scanDone ? " — tümü okundu" : ""}
               </div>
             )}
           </div>
@@ -208,10 +230,7 @@ function SackStoreActions({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={stop(() => onDispatch(shipment))}
-              >
+              <DropdownMenuItem className="text-destructive" onClick={stop(() => onDispatch(shipment))}>
                 <Truck className="mr-1.5 h-3.5 w-3.5" /> Sevk Et (kapıyı atla)
               </DropdownMenuItem>
             </DropdownMenuContent>

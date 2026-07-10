@@ -1,11 +1,6 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type {
-  DispatchPayload,
-  SackStoreListParams,
-  SackStoreListResponse,
-  ShipmentContents,
-} from "./types";
+import type { DispatchPayload, SackStoreListParams, SackStoreListResponse, ShipmentContents } from "./types";
 
 /**
  * Çuval Depo servisi — bağlanan paketli sevkler (READY/AT_DOOR) ve durum

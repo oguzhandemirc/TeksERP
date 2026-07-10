@@ -69,10 +69,11 @@ export const operationsTiles: OperationsTile[] = [
     permission: "shipping:read",
   },
   {
+    // Eski "Çuval Depo" + "Okutarak Sevk" tek ekranda birleşti (Sevk Kapısı).
     key: "sack-store",
-    title: "Çuval Depo",
-    description: "Çuval depodaki + kapı önündeki sevkler; hangi çuvalda ne, kodu, kg",
-    icon: Warehouse,
+    title: "Sevk Kapısı",
+    description: "Çuval okut → kapıya taşı / sevk et / irsaliye bas; çuval depo + kapı önü panosu",
+    icon: ScanBarcode,
     to: "/operations/sack-store",
     permission: "shipping:read",
   },
@@ -83,14 +84,6 @@ export const operationsTiles: OperationsTile[] = [
     icon: PackageSearch,
     to: "/operations/sack-search",
     permission: "shipping:read",
-  },
-  {
-    key: "scan-dispatch",
-    title: "Okutarak Sevk",
-    description: "Kapıda çuvalları okut → sevkiyatına göre grupla → kapıya taşı / sevk et",
-    icon: ScanBarcode,
-    to: "/operations/scan-dispatch",
-    permission: "shipping:write",
   },
   {
     key: "sack-content-edit",
