@@ -13,6 +13,7 @@ import { z } from "zod";
 import { systemSettingService } from "../services/system-setting.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import { normalizeSackCodeTemplate } from "../utils/sack-code-template";
 
 const router = Router();
 
@@ -98,6 +99,22 @@ const updateSchema = z.object({
     .max(100)
     .refine((v) => !v.trim() || /\{(item|color|width|quality)\}/.test(v), {
       message: "Şablon en az bir token içermeli: {item} {color} {width} {quality}",
+    })
+    .optional(),
+  // sack.codeTemplate — çuval kodu otomatik üretim şablonu. F228: tam doğrulama
+  // Zod'da (kısmi commit önlenir); kural seti utils/sack-code-template'te tek yerde.
+  sackCodeTemplate: z
+    .string()
+    .max(40)
+    .superRefine((v, ctx) => {
+      try {
+        normalizeSackCodeTemplate(v);
+      } catch (e) {
+        ctx.addIssue({
+          code: "custom",
+          message: e instanceof Error ? e.message : "Geçersiz çuval kodu şablonu",
+        });
+      }
     })
     .optional(),
   // label.nativeSendEnabled — Faz-2 doğrudan yazıcıya gönderim (default false).

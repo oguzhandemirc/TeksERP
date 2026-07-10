@@ -207,6 +207,9 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */
   rollNameTemplate: string;
+  /** Çuval kodu otomatik üretim şablonu ({SIRA:N} zorunlu+sonda, {YYMMDD}, {MUSTERI:N}).
+   *  Backend ENFORCE eder — çuval açılışında kod bu şablondan üretilir (override serbest). */
+  sackCodeTemplate: string;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket

@@ -2,13 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Package, Scale, Layers, Truck, Globe, Pencil, Check } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +40,14 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
   // Düzenlenebilir içerik için tam sevkiyat detayı (Çuval Düzelt ile ortak kaynak).
   const query = useShipmentDetail(open && shipment ? shipment.id : null);
   const detail = query.data?.data;
+
+  // Kapıda içerik düzeltme "Düzelt" toggle'ı arkasında — kazara top çıkarıp
+  // tartı sıfırlatma vakalarını azaltır. Büyük düzeltmenin yolu Hazırlığa Geri
+  // Al → Paketleme'dir; bu toggle son-dakika küçük düzeltme içindir.
+  const [editMode, setEditMode] = useState(false);
+  useEffect(() => {
+    setEditMode(false);
+  }, [shipment?.id]);
 
   const invalidateBoard = () => {
     void qc.invalidateQueries({ queryKey: ["sack-store"] });
@@ -94,7 +96,22 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
               </Card>
             )}
 
-            {/* Çuvallar → içindeki toplar (düzenlenebilir — çıkar/taşı/takas/tartı) */}
+            {/* Çuvallar → içindeki toplar; düzeltme aksiyonları toggle arkasında */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">Çuvallar</p>
+              <PermissionGate permission="shipping:write">
+                <Button
+                  type="button"
+                  variant={editMode ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => setEditMode((v) => !v)}
+                >
+                  <Pencil className="h-3 w-3" />
+                  {editMode ? "Düzeltmeyi Kapat" : "Düzelt"}
+                </Button>
+              </PermissionGate>
+            </div>
             {query.isLoading ? (
               <div className="space-y-2">
                 {[0, 1, 2].map((i) => (
@@ -102,7 +119,7 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
                 ))}
               </div>
             ) : detail ? (
-              <SackList detail={detail} />
+              <SackList detail={detail} editLocked={!editMode} />
             ) : (
               <p className="py-8 text-center text-sm text-muted-foreground">İçerik yüklenemedi.</p>
             )}
@@ -234,15 +251,7 @@ function DestinationProcedureEditor({
   );
 }
 
-function SummaryStat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Package;
-  label: string;
-  value: string;
-}) {
+function SummaryStat({ icon: Icon, label, value }: { icon: typeof Package; label: string; value: string }) {
   return (
     <div className="rounded border bg-card p-2">
       <div className="flex items-center gap-1 text-[11px] text-muted-foreground">

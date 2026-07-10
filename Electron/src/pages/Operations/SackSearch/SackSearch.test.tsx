@@ -62,7 +62,13 @@ describe("RollLocateCard — top konumu (saha #1/#23)", () => {
     const roll: LocatedRoll = {
       ...baseRoll,
       sack: null,
-      shipment: { id: "sh1", shipmentNo: "SVK-9", status: "PREPARING", customer: { id: "c", name: "M" }, branch: null },
+      shipment: {
+        id: "sh1",
+        shipmentNo: "SVK-9",
+        status: "PREPARING",
+        customer: { id: "c", name: "M" },
+        branch: null,
+      },
     };
     renderWithProviders(<RollLocateCard roll={roll} onClear={() => {}} />);
     expect(screen.getByText(/çuvalsız/i)).toBeInTheDocument();
@@ -85,7 +91,13 @@ const sackRow: SackSearchRow = {
   manualCode: "AMB00002",
   weightKg: 30,
   createdAt: "2026-06-10T00:00:00Z",
-  shipment: { id: "sh1", shipmentNo: "SVK-2", status: "READY", customer: { id: "c", name: "ACME" }, branch: null },
+  shipment: {
+    id: "sh1",
+    shipmentNo: "SVK-2",
+    status: "READY",
+    customer: { id: "c", name: "ACME" },
+    branch: null,
+  },
   rollCount: 3,
   totalQty: 150,
   swatchCount: 0,
@@ -100,7 +112,15 @@ describe("SackResultCard — çuval satırı + lazy içerik", () => {
       data: {
         id: "sk1",
         rolls: [
-          { id: "r1", barcode: "BRK-1", currentQty: 50, width: 150, qualityGrade: "A", item: { id: "i", name: "PATOS" }, color: { id: "c", name: "MAVİ", hex: "#00f" } },
+          {
+            id: "r1",
+            barcode: "BRK-1",
+            currentQty: 50,
+            width: 150,
+            qualityGrade: "A",
+            item: { id: "i", name: "PATOS" },
+            color: { id: "c", name: "MAVİ", hex: "#00f" },
+          },
         ],
         swatches: [],
       },

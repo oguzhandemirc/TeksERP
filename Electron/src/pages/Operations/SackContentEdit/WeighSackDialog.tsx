@@ -65,13 +65,18 @@ export function WeighSackDialog({ shipmentId, sack, onOpenChange }: Props) {
   const weightKg = parseKg(kg);
   const trimmedCode = code.trim();
   const kgInvalid = kg.trim() !== "" && weightKg === null;
-  const canSubmit = (weightKg !== null || trimmedCode !== "") && !kgInvalid;
+  // Kod temizleme de geçerli bir işlemdir: alan boşaltıldıysa ve çuvalda kod
+  // VARDI ise backend'e "" gönderilir (backend boş string'i temizler; sevke
+  // hazır invariant'ı kodu yine zorunlu kılar — mobil weigh ile parite).
+  const hadCode = !!sack?.manualCode?.trim();
+  const sendCode = trimmedCode !== "" || hadCode;
+  const canSubmit = (weightKg !== null || sendCode) && !kgInvalid;
 
   const mut = useMutation({
     mutationFn: () =>
       packingService.weighSack(sack!.id, {
         ...(weightKg !== null ? { weightKg } : {}),
-        ...(trimmedCode !== "" ? { manualCode: trimmedCode } : {}),
+        ...(sendCode ? { manualCode: trimmedCode } : {}),
       }),
     onSuccess: () => {
       toast.success(`Çuval #${sack!.seq} güncellendi`);

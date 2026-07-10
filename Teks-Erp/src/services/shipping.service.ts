@@ -44,7 +44,8 @@ import {
   touchShipmentPreparingTx as touchPreparingTx,
   touchShipmentEditableTx as touchEditableTx,
 } from "./helpers/shipment-locks.helper";
-import { readShipmentConfirmationEnabled } from "./system-setting.service";
+import { readShipmentConfirmationEnabled, readSackCodeTemplate } from "./system-setting.service";
+import { resolveSackCodePrefix } from "../utils/sack-code-template";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
@@ -1764,7 +1765,12 @@ export class ShippingService {
     }
     const shipment = await prisma.shipment.findUnique({
       where: { id: data.shipmentId },
-      select: { id: true, status: true, _count: { select: { sacks: true } } },
+      select: {
+        id: true,
+        status: true,
+        _count: { select: { sacks: true } },
+        customer: { select: { code: true } }, // {MUSTERI:N} şablon token'ı için
+      },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
     if (shipment.status !== ShipmentStatus.PREPARING) {
@@ -1772,6 +1778,15 @@ export class ShippingService {
     }
 
     const code = data.manualCode?.trim() || null; // serbest format, benzersizlik aranmaz
+    // Otomatik kod şablonu tx DIŞINDA çözülür (ayar okuma + tarih/müşteri
+    // token'ları) — tx içinde yalnız sıra taraması kalır (kısa tx kuralı).
+    const codeTemplate = code ? null : await readSackCodeTemplate();
+    const codeGen = codeTemplate
+      ? resolveSackCodePrefix(codeTemplate, {
+          now: new Date(),
+          customerCode: shipment.customer?.code ?? null,
+        })
+      : null;
 
     const sack = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
@@ -1787,28 +1802,40 @@ export class ShippingService {
           orderBy: { seq: "desc" },
           select: { seq: true },
         });
-        // Saha #5: müşteri çuval kodu standardı — operatör kod girmediyse
-        // AMB%05d formatında GLOBAL sıradan otomatik üret (eski sistemin
-        // örnek fişindeki AMB00001 düzeniyle birebir). manualCode unique
-        // DEĞİL (serbest alan) — best-effort max+1; tx içinde okunduğundan
-        // pratik çakışma penceresi yok denecek kadar dar.
+        // Saha #5 (şablonlu): operatör kod girmediyse SACK_CODE_TEMPLATE'ten
+        // otomatik üret — default "AMB{SIRA:5}" eski sabit AMB%05d ile birebir.
+        // Sabit-genişlik SIRA kuyruğu → collation-güvenli kapalı aralık (gte/lte);
+        // "prefix￿" sentinel'i glibc'de U+FFFF ignorable olduğundan YASAK (bkz.
+        // nextShipmentNo notu). lte üst değeri dahil eder; prefix+harf devamı
+        // (örn "AMBALAJ") glibc'de "prefix9.."den büyük sıralanıp eşleşmez.
+        // orderBy manualCode desc zero-pad eşit-genişlikte numerik sırayla aynı.
+        // Elle girilmiş farklı-genişlik kodlar aralığa sızabilir (örn "AMB123456"
+        // ≤ "AMB99999" lexicographic) → tam-genişlik regex'iyle elenir.
         let effectiveCode = code;
-        if (!effectiveCode) {
-          // Sabit-genişlik 5 hane → collation-güvenli kapalı aralık (gte/lte);
-          // "AMB99999￿" sentinel'i glibc'de U+FFFF ignorable olduğundan AMB99999'u
-          // dışlardı, ayrıca gereksiz. lte: "AMB99999" üst değeri dahil eder, AMB+harf
-          // (örn "AMBALAJ") glibc'de "AMB9.."den büyük sıralanıp eşleşmez. orderBy
-          // manualCode desc zero-pad eşit-genişlikte numerik sırayla aynıdır.
-          const lastAmb = await tx.sack.findFirst({
-            where: { manualCode: { gte: "AMB00000", lte: "AMB99999" } },
+        if (!effectiveCode && codeGen) {
+          const { prefix, digits } = codeGen;
+          const lo = prefix + "0".repeat(digits);
+          const hi = prefix + "9".repeat(digits);
+          const rows = await tx.sack.findMany({
+            where: { manualCode: { gte: lo, lte: hi } },
             orderBy: { manualCode: "desc" },
+            take: 20,
             select: { manualCode: true },
           });
-          const lastNum = lastAmb?.manualCode
-            ? parseInt(lastAmb.manualCode.replace(/^AMB/, ""), 10)
-            : 0;
-          const nextNum = Number.isFinite(lastNum) ? lastNum + 1 : 1;
-          effectiveCode = `AMB${String(nextNum).padStart(5, "0")}`;
+          const exact = new RegExp(
+            `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d{${digits}}$`
+          );
+          const lastExact = rows
+            .map((r) => r.manualCode)
+            .find((c): c is string => !!c && exact.test(c));
+          const lastNum = lastExact ? parseInt(lastExact.slice(prefix.length), 10) : 0;
+          const nextNum = (Number.isFinite(lastNum) ? lastNum : 0) + 1;
+          if (nextNum > 10 ** digits - 1) {
+            throw AppError.conflict(
+              "Çuval kodu sırası doldu — Ayarlar'dan şablondaki {SIRA} hane sayısını artırın"
+            );
+          }
+          effectiveCode = `${prefix}${String(nextNum).padStart(digits, "0")}`;
         }
         return tx.sack.create({
           data: {
@@ -1881,10 +1908,19 @@ export class ShippingService {
       codeForLog = code;
     }
 
-    await prisma.$transaction(async (tx) => {
-      if (sack.shipmentId) await this.touchShipmentEditableTx(tx, sack.shipmentId); // M-2: finalize ile serileş
-      await tx.sack.update({ where: { id: data.sackId }, data: update });
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (sack.shipmentId) await this.touchShipmentEditableTx(tx, sack.shipmentId); // M-2: finalize ile serileş
+        await tx.sack.update({ where: { id: data.sackId }, data: update });
+      });
+    } catch (e) {
+      // O-7 partial unique (sevkiyat-içi manualCode): operatör override'ı aynı
+      // sevkiyattaki başka çuvalın koduyla çakıştı — teknik P2002 yerine insan dili.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw AppError.conflict("Bu çuval kodu aynı sevkiyatta başka bir çuvalda kullanılıyor");
+      }
+      throw e;
+    }
     await AuditService.log({
       userId,
       action: "UPDATE",

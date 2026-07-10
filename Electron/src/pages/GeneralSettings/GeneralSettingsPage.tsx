@@ -11,6 +11,7 @@ import { ApiEndpointSection } from "./ApiEndpointSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
+import { SackCodeTemplateSetting } from "./SackCodeTemplateSetting";
 import { ScannerSettingsSection } from "./ScannerSettingsSection";
 import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
 import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
@@ -84,7 +85,15 @@ export function GeneralSettingsPage() {
                   </CardHeader>
                   <CardContent className="p-5">
                     {cat.kind === "flags" && cat.flags && (
-                      <FeatureFlagSection flags={cat.flags} />
+                      <>
+                        <FeatureFlagSection flags={cat.flags} />
+                        {/* Sevkiyat kategorisinin toggle-olmayan tek ayarı: çuval kodu şablonu. */}
+                        {cat.id === "shipping" && (
+                          <div className="mt-4 border-t pt-4">
+                            <SackCodeTemplateSetting />
+                          </div>
+                        )}
+                      </>
                     )}
                     {cat.kind === "device" && <DevicePairingSection />}
                     {cat.kind === "workstation" && (

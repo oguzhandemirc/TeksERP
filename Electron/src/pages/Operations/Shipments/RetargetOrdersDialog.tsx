@@ -78,10 +78,7 @@ export function RetargetOrdersDialog({
   // fetch tetiklemez. Seçim boşsa istek atılmaz (enabled).
   const selectedKey = useMemo(() => [...selected].sort().join(","), [selected]);
   const debouncedKey = useDebouncedValue(selectedKey, 300);
-  const previewIds = useMemo(
-    () => (debouncedKey ? debouncedKey.split(",") : []),
-    [debouncedKey],
-  );
+  const previewIds = useMemo(() => (debouncedKey ? debouncedKey.split(",") : []), [debouncedKey]);
   const previewQ = useQuery({
     queryKey: ["shipment", "retarget-preview", shipmentId, debouncedKey],
     queryFn: () => shipmentService.retargetPreview(shipmentId, previewIds),
@@ -117,15 +114,12 @@ export function RetargetOrdersDialog({
             <Target className="h-4 w-4" /> Siparişleri Yeniden Hedefle
           </DialogTitle>
           <DialogDescription>
-            Bu sevkiyatın hangi siparişlere sayılacağını seç. Sevke hazır/kapı önündeki
-            sevkiyatta karşılanma otomatik yeniden hesaplanır (eski siparişlerden düşülür).
+            Bu sevkiyatın hangi siparişlere sayılacağını seç. Sevke hazır/kapı önündeki sevkiyatta karşılanma
+            otomatik yeniden hesaplanır (eski siparişlerden düşülür).
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          data-testid="retarget-order-list"
-          className="min-h-0 flex-1 overflow-auto rounded-md border p-1"
-        >
+        <div data-testid="retarget-order-list" className="min-h-0 flex-1 overflow-auto rounded-md border p-1">
           {ordersQ.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : orders.length === 0 ? (

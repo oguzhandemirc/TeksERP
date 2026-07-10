@@ -1,6 +1,6 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { LocatedRoll, SackContents, SackSearchParams, SackSearchResponse } from "./types";
+import type { LocatedRoll, PickListRow, SackContents, SackSearchParams, SackSearchResponse } from "./types";
 
 /**
  * Çuval/Top Arama servisi (saha #1+#23) — salt-okunur. Liste cursor sayfalı ve
@@ -25,14 +25,16 @@ export const sackSearchService = {
   },
 
   contents: (sackId: string): Promise<ApiResponse<SackContents>> =>
-    apiClient
-      .get<ApiResponse<SackContents>>(`/api/shipping/sacks/${sackId}/contents`)
-      .then((r) => r.data),
+    apiClient.get<ApiResponse<SackContents>>(`/api/shipping/sacks/${sackId}/contents`).then((r) => r.data),
 
   locateRoll: (barcode: string): Promise<ApiResponse<LocatedRoll>> =>
     apiClient
-      .get<ApiResponse<LocatedRoll>>(
-        `/api/shipping/locate-roll?barcode=${encodeURIComponent(barcode)}`,
-      )
+      .get<ApiResponse<LocatedRoll>>(`/api/shipping/locate-roll?barcode=${encodeURIComponent(barcode)}`)
+      .then((r) => r.data),
+
+  /** Çeki listesi — seçilen çuvalların içerik özetli dökümü (salt-okunur POST). */
+  pickList: (sackIds: string[]): Promise<ApiResponse<PickListRow[]>> =>
+    apiClient
+      .post<ApiResponse<PickListRow[]>>(`/api/shipping/sack-search/pick-list`, { sackIds })
       .then((r) => r.data),
 };

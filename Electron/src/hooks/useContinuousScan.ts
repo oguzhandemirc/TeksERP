@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import { beepOk, beepError } from "@/lib/scan-feedback";
 
 interface UseContinuousScanOptions<T> {
   /** Kodu çöz (örn. çuvalı sevkiyatına eşle). null → eşleşme yok. */
@@ -15,7 +16,9 @@ interface UseContinuousScanOptions<T> {
 /**
  * "Okutarak liste oluştur" akışı (mobil FasonSevk/CuvalDuzelt aynası). Aynı
  * hızlı çift-okutmayı (uçuştaki Set) ve tek-tetik çift-ateşini (rearm soğuma)
- * eler; çözülemeyen/eşleşmeyen kodu `lastError`'a yazar.
+ * eler; çözülemeyen/eşleşmeyen kodu `lastError`'a, başarılıyı `lastSuccess`'e
+ * yazar. Her sonuç sesli bip'lenir (başarı=yüksek tek, red=düşük çift) —
+ * operatör ekrana bakmadan okutabilsin.
  */
 export function useContinuousScan<T>({
   resolve,
@@ -25,6 +28,7 @@ export function useContinuousScan<T>({
 }: UseContinuousScanOptions<T>) {
   const [resolving, setResolving] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [lastSuccess, setLastSuccess] = useState<string | null>(null);
 
   const inflightRef = useRef<Set<string>>(new Set());
   const lastRef = useRef<{ code: string; ts: number } | null>(null);
@@ -55,10 +59,21 @@ export function useContinuousScan<T>({
       setLastError(null);
       void resolveRef.current(code)
         .then((item) => {
-          if (item) onResolvedRef.current(item, code);
-          else setLastError(`Eşleşme yok: ${code}`);
+          if (item) {
+            onResolvedRef.current(item, code);
+            setLastSuccess(code);
+            beepOk();
+          } else {
+            setLastError(`Eşleşme yok: ${code}`);
+            setLastSuccess(null);
+            beepError();
+          }
         })
-        .catch(() => setLastError(`Çözümlenemedi: ${code}`))
+        .catch(() => {
+          setLastError(`Çözümlenemedi: ${code}`);
+          setLastSuccess(null);
+          beepError();
+        })
         .finally(() => {
           inflightRef.current.delete(code);
           setResolving((r) => r.filter((c) => c !== code));
@@ -67,5 +82,5 @@ export function useContinuousScan<T>({
     [rearmMs],
   );
 
-  return { push, resolving, lastError };
+  return { push, resolving, lastError, lastSuccess };
 }
