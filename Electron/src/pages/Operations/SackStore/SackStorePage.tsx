@@ -189,7 +189,8 @@ export function SackStorePage() {
       setScanned((prev) => {
         if (!prev[id]) return prev;
         if (action.kind === "unready") {
-          const { [id]: _gone, ...rest } = prev;
+          const rest = { ...prev };
+          delete rest[id];
           return rest;
         }
         const nextStatus = action.kind === "move-to-door" ? "AT_DOOR" : "READY";
@@ -399,7 +400,8 @@ export function SackStorePage() {
         onDispatched={(id) => {
           // Dialog açık kalır (İrsaliyeyi Bas paneli) — yalnız yerel liste temizliği.
           setScanned((prev) => {
-            const { [id]: _gone, ...rest } = prev;
+            const rest = { ...prev };
+            delete rest[id];
             return rest;
           });
           setLastOk(null);

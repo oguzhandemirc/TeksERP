@@ -9,7 +9,6 @@ import {
   SwatchBook,
   Tags,
   Undo2,
-  Warehouse,
   ClipboardList,
   ScanBarcode,
   PackageOpen,
