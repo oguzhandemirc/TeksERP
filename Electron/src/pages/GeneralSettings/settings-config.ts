@@ -141,8 +141,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "shipping",
     label: "Sevkiyat & İade",
     icon: Truck,
-    description: "Sevk çıkış akışı ve iade kabul davranışı.",
-    keywords: "sevk onayı ambar aldı çıkış sevkiyat iade kalite grading hazır depo",
+    description: "Sevk çıkış akışı, çuval kodu üretimi ve iade kabul davranışı.",
+    keywords:
+      "sevk onayı ambar aldı çıkış sevkiyat iade kalite grading hazır depo çuval kodu şablon amb otomatik isimlendirme numara",
     kind: "flags",
     flags: [
       {

@@ -10,8 +10,7 @@ interface Props {
   hasSelection: boolean;
 }
 
-const fmtMeters = (n: number) =>
-  `${n.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} m`;
+const fmtMeters = (n: number) => `${n.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} m`;
 
 /** Kapsama yüzdesine göre renk: tam=yeşil, kısmi=amber, 0=kırmızı. */
 function coverageTone(pct: number): string {
@@ -109,8 +108,8 @@ export function RetargetProjection({ preview, isFetching, hasSelection }: Props)
       {hasLeftover && (
         <p className="flex items-center gap-1.5 px-1 text-xs text-amber-700 dark:text-amber-400">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          Fazla mal: seçili siparişlerin ihtiyacından {fmtMeters(totals.leftover)} fazla yüklü —
-          başka sipariş ekleyin veya malı azaltın.
+          Fazla mal: seçili siparişlerin ihtiyacından {fmtMeters(totals.leftover)} fazla yüklü — başka sipariş
+          ekleyin veya malı azaltın.
         </p>
       )}
 

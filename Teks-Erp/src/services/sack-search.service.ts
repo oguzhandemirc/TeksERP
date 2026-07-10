@@ -92,6 +92,7 @@ export class SackSearchService {
             id: true,
             shipmentNo: true,
             status: true,
+            readyAt: true, // çeki listesi: "ne zamandır hazır bekliyor"
             customer: { select: { id: true, name: true } },
             branch: { select: { id: true, name: true } },
           },
@@ -203,6 +204,86 @@ export class SackSearchService {
     });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
     return { success: true, data: sack };
+  }
+
+  /**
+   * Çeki listesi verisi — SEÇİLEN çuvalların içerik özetiyle tek istekte dökümü.
+   * Senaryo: müşterinin farklı sevkiyatlarda bekleyen çuvallarından bir alt küme
+   * seçilir ("sadece gri Patos"), kağıda basılır, sahada bulunan çuvalın üstü
+   * çizilir. Çalışma kağıdıdır — PrintedDocument (donmuş/versiyonlu) DEĞİL.
+   * Salt-okunur; seçim ≤200 çuval + çuval başına onlarca top → tek sorgu güvenli.
+   */
+  async getPickList(sackIds: string[]): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(sackIds)];
+    if (ids.length === 0) throw AppError.badRequest("En az bir çuval seçilmeli");
+    if (ids.length > 200) throw AppError.badRequest("Bir çeki listesinde en fazla 200 çuval olabilir");
+
+    const sacks = await prisma.sack.findMany({
+      where: { id: { in: ids } },
+      // Sevkiyat + çuval sırası: sahada aynı sevkin çuvalları yan yana durur.
+      orderBy: [{ shipmentId: "asc" }, { seq: "asc" }],
+      select: {
+        id: true,
+        sackNo: true,
+        seq: true,
+        manualCode: true,
+        weightKg: true,
+        shipment: {
+          select: {
+            id: true,
+            shipmentNo: true,
+            status: true,
+            readyAt: true,
+            customer: { select: { id: true, name: true } },
+            branch: { select: { id: true, name: true } },
+          },
+        },
+        rolls: {
+          select: {
+            currentQty: true,
+            width: true,
+            item: { select: { name: true } },
+            color: { select: { name: true } },
+          },
+        },
+        swatches: { select: { id: true } },
+      },
+    });
+
+    const data = sacks.map((s) => {
+      // Ürün·renk·en bazında özet (irsaliye döküm diliyle aynı).
+      const groups = new Map<string, { itemName: string; colorName: string | null; width: number | null; qty: number; rollCount: number }>();
+      let totalQty = 0;
+      for (const r of s.rolls) {
+        const widthNum = r.width === null ? null : Number(r.width);
+        const key = `${r.item.name}|${r.color?.name ?? ""}|${widthNum ?? ""}`;
+        const g = groups.get(key) ?? {
+          itemName: r.item.name,
+          colorName: r.color?.name ?? null,
+          width: widthNum,
+          qty: 0,
+          rollCount: 0,
+        };
+        g.qty += Number(r.currentQty);
+        g.rollCount += 1;
+        groups.set(key, g);
+        totalQty += Number(r.currentQty);
+      }
+      return {
+        id: s.id,
+        sackNo: s.sackNo,
+        seq: s.seq,
+        manualCode: s.manualCode,
+        weightKg: s.weightKg === null ? null : Number(s.weightKg),
+        shipment: s.shipment,
+        rollCount: s.rolls.length,
+        swatchCount: s.swatches.length,
+        totalQty,
+        contents: [...groups.values()],
+      };
+    });
+
+    return { success: true, data };
   }
 
   /**

@@ -138,15 +138,11 @@ describe("RetargetOrdersDialog (saha #7 yeniden hedefleme UI)", () => {
     await list().findByText("SIP-002");
 
     // İlk projeksiyon (o1 tek): %100 görünür, projeksiyon paneli mevcut.
-    await waitFor(() =>
-      expect(screen.getByTestId("retarget-projection")).toHaveTextContent("%100"),
-    );
+    await waitFor(() => expect(screen.getByTestId("retarget-projection")).toHaveTextContent("%100"));
 
     // o2 ekle → debounced preview yeni id kümesiyle çağrılır → kısmi %50 render.
     await user.click(list().getByText("SIP-002"));
-    await waitFor(() =>
-      expect(screen.getByTestId("retarget-projection")).toHaveTextContent("%50"),
-    );
+    await waitFor(() => expect(screen.getByTestId("retarget-projection")).toHaveTextContent("%50"));
     // En son preview çağrısı iki sipariş içermeli (artımlı yeniden hesap).
     await waitFor(() => {
       const lastCall = retargetPreview.mock.calls.at(-1);

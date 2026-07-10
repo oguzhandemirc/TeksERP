@@ -102,12 +102,15 @@ async function main() {
     check("makine cihazına istasyon-oturumuyla yazılamaz (403)",
       await expectStatus(403, () => svc.setFieldAddress(aMeterId, MAC, { machineId: null, stationId: machineA.stationId })));
 
-    // --- Tür daraltması: yalnız BT kantar/metre (yetki-modeli boşluğu fix) ---
+    // --- Tür kısıtı YOK: BT + oturum-yerine ait her tür (yazıcı dâhil) yazılabilir;
+    //     GÜVENLİK yalnız BLUETOOTH_SPP + oturum-kapsamıyla sağlanır. ---
     const aPrinterId = await mk(codes.aPrinter, { kind: "LABEL_PRINTER", machineId: machineA.id });
-    check("LABEL_PRINTER'a saha eşleme yazılamaz (400)",
-      await expectStatus(400, () => svc.setFieldAddress(aPrinterId, MAC, sessA)));
+    const pr = await svc.setFieldAddress(aPrinterId, MAC, sessA);
+    const prAfter = await prisma.peripheralDevice.findUnique({ where: { id: aPrinterId }, select: { address: true } });
+    check("BT LABEL_PRINTER'a saha eşleme MAC yazılır (yazıcı da dâhil)",
+      pr.success === true && prAfter?.address === MAC);
     const aTcpId = await mk(codes.aTcp, { kind: "METER", connectionType: "NETWORK_TCP", machineId: machineA.id });
-    check("NETWORK_TCP cihaza saha eşleme yazılamaz (400)",
+    check("NETWORK_TCP cihaza saha eşleme yazılamaz (400 — ağ IP'si korunur)",
       await expectStatus(400, () => svc.setFieldAddress(aTcpId, MAC, sessA)));
 
     // --- 404: var olmayan + soft-deleted (tombstone) cihaz (varlık kapsamdan önce) ---

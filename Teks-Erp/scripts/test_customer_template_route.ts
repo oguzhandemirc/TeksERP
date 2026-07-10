@@ -13,7 +13,7 @@ import { LabelService } from "../src/services/label.service";
 import { LabelTemplateService } from "../src/services/label-template.service";
 import { CustomerTemplateRouteService } from "../src/services/customer-template-route.service";
 import { resolveLabelRouting } from "../src/services/helpers/label-routing.resolver";
-import { Prisma, type LabelKind } from "@prisma/client";
+import type { LabelKind } from "@prisma/client";
 
 const FINISHED = "ROLL_FINISHED" as LabelKind;
 
@@ -32,21 +32,46 @@ const createdTemplateIds: string[] = [];
 let peripheralId: string | null = null;
 let customerId: string | null = null;
 let rollId: string | null = null;
-let savedSnapshot: unknown = null;
-let savedLabelDirty: boolean | null = null;
+let itemId: string | null = null;
+let colorId: string | null = null;
 
 async function main() {
-  // --- Fixture'lar (business-key; hardcoded UUID yok) ---
-  const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true, name: true } });
-  const roll = await prisma.roll.findFirst({
-    where: { colorId: { not: null }, barcode: { not: null }, status: { notIn: ["CANCELLED"] as never[] } },
-    select: { id: true, barcode: true, lastLabelSnapshot: true, labelDirty: true },
+  // --- Fixture'lar: test KENDİ kayıtlarını yaratır (TEST- prefix'li) ---
+  // Eski hali seed'den ödünç top/müşteri arıyordu; seed Roll üretmediği için
+  // taze kurulumda (CI) "Fixture eksik" ile patlıyordu ve gerçek bir topun
+  // snapshot'ını mutasyona uğratıp geri yüklüyordu. Kendi fixture'ı hem CI'da
+  // deterministik hem paylaşılan veriye dokunmuyor.
+  const ts = Date.now();
+  const customer = await prisma.customer.create({
+    data: { code: `TST-CTR-${ts}`, name: "TEST ŞABLON MÜŞTERİSİ" },
+    select: { id: true, name: true },
   });
-  if (!customer || !roll) throw new Error("Fixture eksik: aktif müşteri + bitmiş top gerekli");
+  const item = await prisma.item.create({
+    data: { code: `TST-CTR-I-${ts}`, name: "TEST ŞABLON ÜRÜN", itemType: "FABRIC", unit: "MT" },
+    select: { id: true },
+  });
+  const color = await prisma.color.create({
+    data: { code: `TST-CTR-C-${ts}`, name: "TEST ŞABLON RENK", hex: "#336699" },
+    select: { id: true },
+  });
+  const roll = await prisma.roll.create({
+    data: {
+      barcode: `TEST-CTR-R-${ts}`,
+      itemId: item.id,
+      colorId: color.id,
+      status: "WAREHOUSE",
+      currentQty: 50,
+      initialQty: 50,
+      width: 150,
+      qualityGrade: "A",
+      entrySource: "SUPPLIER_RECEIPT",
+    },
+    select: { id: true, barcode: true },
+  });
   customerId = customer.id;
   rollId = roll.id;
-  savedSnapshot = roll.lastLabelSnapshot;
-  savedLabelDirty = roll.labelDirty;
+  itemId = item.id;
+  colorId = color.id;
 
   // --- Test şablonları ---
   const tCust = (await tplSvc.create({ name: `TEST-CTR-CUST-${Date.now()}`, kind: FINISHED })).data;
@@ -143,20 +168,16 @@ main()
         await prisma.peripheralTemplateRoute.deleteMany({ where: { peripheralId } });
         await prisma.peripheralDevice.delete({ where: { id: peripheralId } });
       }
-      if (rollId) {
-        await prisma.roll.update({
-          where: { id: rollId },
-          data: {
-            lastLabelSnapshot: (savedSnapshot ?? Prisma.JsonNull) as never,
-            labelDirty: savedLabelDirty ?? false,
-          },
-        });
-      }
+      // Test kendi TEST- fixture'ını siler (paylaşılan veri yok).
+      if (rollId) await prisma.roll.delete({ where: { id: rollId } }).catch(() => {});
+      if (itemId) await prisma.item.delete({ where: { id: itemId } }).catch(() => {});
+      if (colorId) await prisma.color.delete({ where: { id: colorId } }).catch(() => {});
+      if (customerId) await prisma.customer.delete({ where: { id: customerId } }).catch(() => {});
       if (createdTemplateIds.length) {
         await prisma.labelTemplateVariant.deleteMany({ where: { templateId: { in: createdTemplateIds } } });
         await prisma.labelTemplate.deleteMany({ where: { id: { in: createdTemplateIds } } });
       }
-      console.log("Cleanup: test kayıtları silindi, top snapshot'ı geri yüklendi.");
+      console.log("Cleanup: test kayıtları silindi.");
     } catch (e) {
       console.error("Cleanup hatası:", e);
     }

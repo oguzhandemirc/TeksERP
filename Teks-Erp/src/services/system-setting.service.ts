@@ -9,6 +9,11 @@ import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import {
+  DEFAULT_SACK_CODE_TEMPLATE,
+  SACK_CODE_TEMPLATE_MAX_LEN,
+  normalizeSackCodeTemplate,
+} from "../utils/sack-code-template";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -134,6 +139,11 @@ export const SETTING_KEYS = {
    *  {item} {color} {width} {quality}. Default "{item} {color} {width}". Boş
    *  token'lar (renksiz vb.) atlanır, fazla boşluk sadeleşir. Frontend okur. */
   ROLL_NAME_TEMPLATE: "roll.nameTemplate",
+  /** Çuval kodu otomatik üretim şablonu. Token'lar: {SIRA:N} (zorunlu, sonda),
+   *  {YYMMDD}, {MUSTERI:N}. Default "AMB{SIRA:5}" (eski sabit AMB%05d ile birebir).
+   *  Literal yalnız A-Z0-9 (tiresiz — etiket/tarayıcı kapısı açık), rezerve
+   *  tarayıcı prefix'leri yasak. Backend ENFORCE eder (addSack otomatik kod). */
+  SACK_CODE_TEMPLATE: "sack.codeTemplate",
   /** Varsayılan etiket yazıcı dili — top etiketi native render'ı bu dilde üretilir
    *  (default PPLA). Bir yazıcı modeli kendi dilini belirtirse (Argox=PPLA, Zebra=ZPL)
    *  o istasyonda model dili ÖNCELİKLİDİR; bu global ayar model bağlamı çözülemeyen
@@ -539,6 +549,8 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
   rollNameTemplate: string;
+  /** Çuval kodu otomatik üretim şablonu ({SIRA:N} zorunlu+sonda, {YYMMDD}, {MUSTERI:N}). */
+  sackCodeTemplate: string;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
@@ -709,6 +721,7 @@ export class SystemSettingService {
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
+      sackCodeTemplate: await readSackCodeTemplate(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
       defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
     };
@@ -1241,6 +1254,21 @@ export class SystemSettingService {
         SETTING_KEYS.ROLL_NAME_TEMPLATE,
         trimmed || DEFAULT_ROLL_NAME_TEMPLATE,
         "Top adı format şablonu — {item} {color} {width} {quality} token'ları",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "sackCodeTemplate")) {
+      const v = input.sackCodeTemplate;
+      if (typeof v !== "string") {
+        throw AppError.badRequest("Çuval kodu şablonu metin olmalı");
+      }
+      // Tam doğrulama Zod'da da var (F228: kısmi commit önlenir); burada savunma.
+      const canonical = normalizeSackCodeTemplate(v);
+      await this.set(
+        SETTING_KEYS.SACK_CODE_TEMPLATE,
+        canonical,
+        "Çuval kodu otomatik üretim şablonu — {SIRA:N} (zorunlu, sonda) {YYMMDD} {MUSTERI:N}",
         userId
       );
     }
@@ -2018,6 +2046,26 @@ export async function readRollNameTemplate(
   });
   const v = setting?.value;
   return typeof v === "string" && v.trim() ? v.slice(0, 100) : DEFAULT_ROLL_NAME_TEMPLATE;
+}
+
+/**
+ * Çuval kodu otomatik üretim şablonu ({SIRA:N} zorunlu+sonda, {YYMMDD},
+ * {MUSTERI:N}). Yoksa/boşsa default (eski AMB%05d davranışı). addSack her
+ * otomatik kod üretiminde okur — yazımda normalize edildiğinden burada yeniden
+ * doğrulanmaz (bozuk eski değer ihtimaline karşı max-len kırpılır).
+ */
+export async function readSackCodeTemplate(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<string> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SACK_CODE_TEMPLATE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && v.trim()
+    ? v.slice(0, SACK_CODE_TEMPLATE_MAX_LEN)
+    : DEFAULT_SACK_CODE_TEMPLATE;
 }
 
 
