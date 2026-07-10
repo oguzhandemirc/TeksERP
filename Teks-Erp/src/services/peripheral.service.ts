@@ -366,12 +366,11 @@ export class PeripheralDeviceService extends BaseService {
     });
     if (!p) throw AppError.notFound("Cihaz bulunamadı");
 
-    // Tür daraltması: saha eşleme YALNIZ Bluetooth kantar/metre içindir. Aksi halde
-    // yalnız oturum-yeri paylaşan bir operatör (station:write GEREKMEDEN) makinesine
-    // bağlı bir ağ yazıcısının IP'sini BT MAC ile ezip baskıyı bozabilirdi.
-    if (p.kind !== "METER" && p.kind !== "SCALE") {
-      throw AppError.badRequest("Saha eşleme yalnız kantar/metre cihazları içindir");
-    }
+    // Saha eşleme YALNIZ Bluetooth (BLUETOOTH_SPP) cihaz içindir — GÜVENLİK SINIRI budur:
+    // ağ cihazının (NETWORK_TCP) adresini/IP'sini oturum-yeri paylaşan bir operatörün
+    // (station:write GEREKMEDEN) BT MAC ile ezip baskıyı bozması bu şartla engellenir.
+    // Tür (kantar/metre/yazıcı/sinyal) kısıtı YOK: BT + oturum-yerine aitse operatör kendi
+    // yerindeki cihazın MAC'ini tarayıp yazabilir (yazıcı da dâhil — HC-06 Argox eşleme).
     if (p.connectionType !== "BLUETOOTH_SPP") {
       throw AppError.badRequest("Saha eşleme yalnız Bluetooth (HC-06) cihazlar içindir");
     }
