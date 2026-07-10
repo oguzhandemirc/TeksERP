@@ -141,11 +141,11 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
     renderWithProviders(<RelabelPrintForCustomer ctx={baseCtx} />);
     // lastLabelSnapshot.customerId="cA" → açılışta o ön-seçili gelir (en son basılan müşteri).
     await waitFor(() =>
-      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: "cA", orderLineId: null }),
+      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: "cA", orderLineId: null }, undefined),
     );
     await userEvent.click(screen.getByText("BETA"));
     await waitFor(() =>
-      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: "cB", orderLineId: "ol-1" }),
+      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: "cB", orderLineId: "ol-1" }, undefined),
     );
   });
 
@@ -164,7 +164,7 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
     renderWithProviders(<RelabelPrintForCustomer ctx={baseCtx} />);
     await userEvent.click(screen.getByRole("button", { name: /Stok \(müşterisiz\)/ }));
     await waitFor(() =>
-      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { stock: true }),
+      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { stock: true }, undefined),
     );
     const basBtn = await screen.findByRole("button", { name: "Bas" });
     await waitFor(() => expect(basBtn).not.toBeDisabled());

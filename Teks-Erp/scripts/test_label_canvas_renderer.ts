@@ -98,9 +98,10 @@ async function main() {
   check("PPLA: QR 1W1c0606", ppla.includes(`1W1c0606`));
   check("ZPL: QR mag 6", zpl.includes("^BQN,2,6"));
   // Barkod okunur satırı: firmware KAPALI (N) + manuel, barkod ALTINDA ORTALANMIŞ
-  // (barkod sol x=24 değil; PPLB hx=171 / PPLA hcol=0171 / ZPL hx=139).
+  // (barkod sol x=24 değil; PPLB hx=171 dot / PPLA hcol=0084 (171 dot → 1/100 inç) / ZPL hx=139).
   check("PPLB: Code128 human=N + ortalanmış (171)", /B24,368,0,1,2,3,72,N,/.test(pplb) && /A171,448,0,1,1,1,N,"TEKS20260706AB12"/.test(pplb));
-  check("PPLA: Code128 + okunur satır ORTALANMIŞ (0171)", /1e22\d{4}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{4}0171TEKS20260706AB12/.test(ppla));
+  // PPLA birim: 1/100 inç + yükseklik alanı 3 HANE (fiziksel doğrulama 2026-07-10).
+  check("PPLA: Code128 (h3) + okunur satır ORTALANMIŞ (0084)", /1e22\d{3}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{4}0084TEKS20260706AB12/.test(ppla));
   check("ZPL: Code128 interpretation=N + ortalanmış (139)", /\^BCN,72,N,N,N/.test(zpl) && /\^FO139,448\^A0N,20,12\^FDTEKS20260706AB12\^FS/.test(zpl) && !zpl.includes("^BY"));
 
   // --- ÇEVRİLEBİLİR bant: rot metin yönünü döndürür (varsayılan 90 dikey) ---
@@ -154,7 +155,7 @@ async function main() {
   // --- Medya komutları format profilinden ---
   check("PPLB: q/Q medya boyutu", pplb.includes("q799") && /Q480,16/.test(pplb));
   check("ZPL: ^PW/^LL", zpl.includes("^PW799") && zpl.includes("^LL480"));
-  check("PPLA: STX M yükseklik", ppla.includes("\x02M0480"));
+  check("PPLA: STX M yükseklik (1/100 inç: 60mm→0236)", ppla.includes("\x02M0236"));
   check("kopya: P2 / Q0002 / ^PQ2", pplb.includes("P2") && ppla.includes("Q0002") && zpl.includes("^PQ2"));
 
   // --- present:false alan atlanır, DİĞER elemanlar kaymaz ---
@@ -202,7 +203,9 @@ async function main() {
   const svg = renderPplaToSvg(ppla, 799);
   check("preview PPLA: SVG üretildi", !!svg);
   check("preview PPLA: rotasyonlu metin çizildi", !!svg && svg.includes("rotate(90"));
-  check("preview PPLA: QR boyutu mag=6'dan (footprint (21+8)×6=174)", !!svg && svg.includes('width="174"'));
+  // QR footprint = SEMBOL modülleri × mag (sessiz bölge kutuya EKLENMEZ — basılan kara
+  // alan; beyaz sessiz bölge görsel boşluk kalır). 21 modül × 6 = 126.
+  check("preview PPLA: QR boyutu mag=6'dan (sembol 21×6=126)", !!svg && svg.includes('width="126"'));
 }
 
 main()

@@ -44,14 +44,15 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
   });
   const report = reportQ.data?.data;
   // Yapılandırılmış seri/COM Argox varsa toplu etiketi TEK native job'la diyalogsuz bas.
-  const { directEnabled, printRollsBulk } = useLabelPrinter();
+  const { directEnabled, printRollsBulk, peripheralId } = useLabelPrinter();
 
   // Toplu etiketteki topların id'leri + WYSIWYG önizleme (ilk top, aktif dilde).
+  // peripheralId: önizleme bu PC'ye seçili yazıcının dilinde çözülür (baskıyla aynı).
   const rollIds = (report?.cekiRows ?? []).map((c) => c.rollId).filter(Boolean);
   const [labelOpen, setLabelOpen] = useState(false);
   const labelPreviewQ = useQuery({
-    queryKey: ["dispatch-bulk-label-preview", rollIds[0]],
-    queryFn: () => labelService.getRollPreview(rollIds[0]!),
+    queryKey: ["dispatch-bulk-label-preview", rollIds[0], peripheralId],
+    queryFn: () => labelService.getRollPreview(rollIds[0]!, undefined, peripheralId),
     enabled: labelOpen && rollIds.length > 0,
     staleTime: 0,
   });

@@ -9,7 +9,7 @@
 
 import bwipjs from "bwip-js";
 import { PrinterLanguage } from "@prisma/client";
-import { qrFootprintDots } from "./native-label.shared";
+import { qrSymbolModules } from "./native-label.shared";
 
 // EPL2 bitmap font kodu → {w,h} dot (çarpan öncesi). Generator EPL_FONT ile AYNI değerler
 // (native-label.shared) — önizleme metni yazıcı hücresiyle birebir (textLength ile).
@@ -53,8 +53,11 @@ function svgTextCell(x: number, y: number, glyphW: number, glyphH: number, data:
 function svgQr(x: number, y: number, mag: number, data: string): string {
   const img = bwipImg({ bcid: "qrcode", text: data, scale: 1, backgroundcolor: "ffffff" });
   if (!img) return "";
-  // Boyut = yazıcı modeli (modül+sessiz)×mag — bwip viewBox DEĞİL (o ~1.7× şişikti).
-  const size = qrFootprintDots(data.length, mag);
+  // Boyut = SEMBOL modülleri × mag = yazıcının fiilen BASTIĞI kara footprint. Sessiz
+  // bölge (4 modül/kenar) BEYAZ kağıt → görsel boşluk olarak zaten kalır, kutuya
+  // EKLENMEZ. Eklenince QR ~1.38× (29/21) şişip alt barkoda biniyordu; bwip görüntüsü
+  // zaten sessiz-bölgesiz çıplak semboldür (fiziksel baskı doğrulaması — kullanıcı).
+  const size = qrSymbolModules(data.length) * Math.max(1, mag);
   return `<image href="${img.uri}" x="${x}" y="${y}" width="${size.toFixed(0)}" height="${size.toFixed(0)}"/>`;
 }
 function svgBarcode(
@@ -124,35 +127,40 @@ export function renderPplbToSvg(pplb: string): string | null {
 }
 
 /** PPLA/Datamax-DPL komutlarını görsel SVG'ye çevir. Genişlik komutta YOK → widthDots'tan.
- *  Satırlar CR-ayrık; koordinat row=y, col=x (4 hane dot). */
-export function renderPplaToSvg(ppla: string, widthDots: number): string | null {
+ *  Satırlar CR-ayrık. BİRİM: kayıt koordinat/uzunluk alanları 1/100 İNÇ'tir (emitter
+ *  fiziksel doğrulamayla bu birime geçti, 2026-07-10) — SVG tuvali dot olduğundan
+ *  u2d() ile geri çevrilir. Font hücre boyutları dot kalır (bitmap font tablosu). */
+export function renderPplaToSvg(ppla: string, widthDots: number, dpi = 203): string | null {
   const lines = ppla.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
   const W = widthDots || 799;
+  // 1/100 inç → dot (emitter'daki u()'nun tersi).
+  const u2d = (v: number) => Math.round((v * dpi) / 100);
   let H = 0;
   const els: string[] = [];
   for (const ln of lines) {
     let m: RegExpMatchArray | null;
-    // Yükseklik: <STX>M#### (max label length)
-    if ((m = ln.match(/^\x02?M(\d+)$/))) { H = +m[1]; continue; }
+    // Yükseklik: <STX>M#### (max label length, 1/100 inç)
+    if ((m = ln.match(/^\x02?M(\d+)$/))) { H = u2d(+m[1]); continue; }
     // QR: 1W1c<mag2><mag2><row4><col4><veri>  (metin regex'inden ÖNCE — "1W" ile başlar)
     // Modül büyütme komuttan okunur (eskiden sabit 4 varsayılıyordu — qrScale yansımıyordu).
     if ((m = ln.match(/^1W1c(\d{2})(\d{2})(\d{4})(\d{4})(.*)$/))) {
-      els.push(svgQr(+m[4], +m[3], +m[1] || 4, m[5]));
+      els.push(svgQr(u2d(+m[4]), u2d(+m[3]), +m[1] || 4, m[5]));
       continue;
     }
-    // Code128: 1e<n><w><h4><row4><col4><veri> — n (dar/modül) önizleme genişliğine yansır.
-    if ((m = ln.match(/^1e(\d)\d(\d{4})(\d{4})(\d{4})(.*)$/))) {
-      els.push(svgBarcode(+m[4], +m[3], +m[2], m[5], false, (+m[1] || 2) / 2));
+    // Code128: 1e<n><w><h3><row4><col4><veri> — yükseklik alanı 3 HANE (fiziksel
+    // doğrulandı; 4 hane alan kaydırıyordu). n (dar/modül) önizleme genişliğine yansır.
+    if ((m = ln.match(/^1e(\d)\d(\d{3})(\d{4})(\d{4})(.*)$/))) {
+      els.push(svgBarcode(u2d(+m[4]), u2d(+m[3]), u2d(+m[2]), m[5], false, (+m[1] || 2) / 2));
       continue;
     }
     // DPL grafik (font X): 1X11000<row4><col4>L<w4><h4> (dolu) / B<w4><h4><t4><t4> (çerçeve)
     if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})L(\d{4})(\d{4})$/))) {
-      els.push(`<rect x="${+m[2]}" y="${+m[1]}" width="${+m[3]}" height="${+m[4]}" fill="#000"/>`);
+      els.push(`<rect x="${u2d(+m[2])}" y="${u2d(+m[1])}" width="${u2d(+m[3])}" height="${u2d(+m[4])}" fill="#000"/>`);
       continue;
     }
     if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})B(\d{4})(\d{4})(\d{4})(\d{4})$/))) {
       els.push(
-        `<rect x="${+m[2]}" y="${+m[1]}" width="${+m[3]}" height="${+m[4]}" fill="none" stroke="#000" stroke-width="${+m[5]}"/>`,
+        `<rect x="${u2d(+m[2])}" y="${u2d(+m[1])}" width="${u2d(+m[3])}" height="${u2d(+m[4])}" fill="none" stroke="#000" stroke-width="${Math.max(1, u2d(+m[5]))}"/>`,
       );
       continue;
     }
@@ -160,9 +168,11 @@ export function renderPplaToSvg(ppla: string, widthDots: number): string | null 
     // 3=180°, 4=270° CW (kanvas elemanları döndürülmüş metin basabilir).
     if ((m = ln.match(/^([1-4])([1-9])(\d)(\d)000(\d{4})(\d{4})(.*)$/))) {
       const fd = EPL_FONT_BY_CODE[m[2]] ?? EPL_FONT_BY_CODE["3"];
-      const cell = svgTextCell(+m[6], +m[5], fd.w * (+m[3] || 1), fd.h * (+m[4] || 1), m[7]);
+      const x = u2d(+m[6]);
+      const y = u2d(+m[5]);
+      const cell = svgTextCell(x, y, fd.w * (+m[3] || 1), fd.h * (+m[4] || 1), m[7]);
       const deg = (+m[1] - 1) * 90;
-      els.push(deg ? `<g transform="rotate(${deg} ${+m[6]} ${+m[5]})">${cell}</g>` : cell);
+      els.push(deg ? `<g transform="rotate(${deg} ${x} ${y})">${cell}</g>` : cell);
       continue;
     }
     // <STX>n, <STX>L, D11, H10, Q####, E — çizim üretmez, atla.

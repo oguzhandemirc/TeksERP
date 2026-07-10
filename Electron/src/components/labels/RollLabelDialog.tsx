@@ -36,11 +36,15 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     enabled: open,
   });
 
+  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
+  const { directEnabled, printRoll, peripheralId } = useLabelPrinter();
+
   // WYSIWYG önizleme — AKTİF DİLDE (native PPLB → görsel SVG, baskıyla birebir).
   // Baskı yolu (native printRoll / iframe.print) ayrı; önizleme artık gerçek çıktı.
+  // peripheralId: önizleme bu PC'ye seçili yazıcının dilinde çözülür (baskıyla aynı).
   const previewQuery = useQuery({
-    queryKey: ["label-roll-preview", rollId],
-    queryFn: () => labelService.getRollPreview(rollId!),
+    queryKey: ["label-roll-preview", rollId, peripheralId],
+    queryFn: () => labelService.getRollPreview(rollId!, undefined, peripheralId),
     enabled: open,
     staleTime: 0,
   });
@@ -48,8 +52,6 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
 
   const [editOpen, setEditOpen] = useState(false);
   const [sending, setSending] = useState(false);
-  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
-  const { directEnabled, printRoll } = useLabelPrinter();
 
   const printMut = useMutation({
     mutationFn: () => labelService.printRollLabel(rollId!),

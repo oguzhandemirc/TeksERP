@@ -88,11 +88,14 @@ export const labelService = {
   getRollPreview: (
     rollId: string,
     opts?: LabelCustomerContext,
+    peripheralId?: string,
   ): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; kind: string }> =>
     apiClient
       .get<ApiResponse<{ mode: "svg" | "html" | "text"; language: string; content: string; kind: string }>>(
         `/api/labels/rolls/${rollId}/preview`,
-        { params: customerContextQuery(opts) },
+        // peripheralId: Cihaz Kaydı yönlendirmesi — dil bu cihazın languageOverride'ından
+        // çözülür (getRollNative ile aynı) → önizleme baskıyla birebir. Yoksa RASTER_HTML.
+        { params: { ...customerContextQuery(opts), ...(peripheralId ? { peripheralId } : {}) } },
       )
       .then((r) => r.data.data),
 

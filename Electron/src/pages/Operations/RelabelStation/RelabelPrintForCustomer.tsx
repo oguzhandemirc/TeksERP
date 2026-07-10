@@ -32,7 +32,7 @@ export function RelabelPrintForCustomer({
   const qc = useQueryClient();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
-  const { directEnabled, printRoll } = useLabelPrinter();
+  const { directEnabled, printRoll, peripheralId } = useLabelPrinter();
   const [sending, setSending] = useState(false);
 
   // Üç durum: müşteri seçili → o müşteri; stock=true → ZORLA stok (müşterisiz);
@@ -52,9 +52,10 @@ export function RelabelPrintForCustomer({
   const ctxOpts = stock ? { stock: true } : { customerId, orderLineId };
 
   // WYSIWYG önizleme — AKTİF DİLDE (native → görsel SVG, baskıyla birebir).
+  // peripheralId: önizleme bu PC'ye seçili yazıcının dilinde çözülür (baskıyla aynı).
   const previewQuery = useQuery({
-    queryKey: ["relabel-preview", ctx.id, customerId, orderLineId, stock],
-    queryFn: () => labelService.getRollPreview(ctx.id, ctxOpts),
+    queryKey: ["relabel-preview", ctx.id, customerId, orderLineId, stock, peripheralId],
+    queryFn: () => labelService.getRollPreview(ctx.id, ctxOpts, peripheralId),
     staleTime: 0,
   });
   const preview = previewQuery.data;

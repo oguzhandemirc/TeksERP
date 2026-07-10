@@ -69,5 +69,8 @@ export function useLabelPrinter() {
   const printRollsBulk = (rollIds: string[], copies?: number) =>
     send(() => labelService.getBulkRollLabelsNative(rollIds, copies, peripheralId));
 
-  return { directEnabled, printRoll, printRollsBulk };
+  // Önizleme de bu cihazdan çözülsün diye dışa verilir: peripheralId geçilirse
+  // backend dili cihazın languageOverride'ından (PPLA/PPLB/ZPL) çözer → önizleme
+  // = baskı (WYSIWYG). Geçilmezse global fallback RASTER_HTML (HTML önizleme).
+  return { directEnabled, printRoll, printRollsBulk, peripheralId };
 }
