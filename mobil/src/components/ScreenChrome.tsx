@@ -81,7 +81,16 @@ export default function ScreenChrome({
   const isTablet = useDeviceType() === 'tablet';
   const onHomeScreen = route.name === 'ModuleSelect';
   const showHome = hasMultipleMobileScreens && !onBack && !onHomeScreen && !isTablet;
-  const goHome = () => navigation.navigate('ModuleSelect');
+  // Telefonda ana sayfada (dashboard = ModuleSelect) profil tuşunda isim GİZLİ —
+  // dar ekranda modül grid'i başlığıyla sıkışmasın; yalnız ikon kalır. Diğer
+  // ekranlarda ve tablette isim yazılır (isim menüde tekrar edilmez).
+  const showUserName = !(!isTablet && onHomeScreen);
+  // popTo, navigate DEĞİL: v7'de navigate() stack'teki mevcut ekrana geri sarmaz,
+  // hep YENİ kopya push eder — her bölüm değişimi eski istasyon ekranlarını mount
+  // bırakıp stack'i sınırsız büyütüyordu (arka planda canlı gate/effect yükü).
+  // popTo: ModuleSelect stack'te varsa ona geri sarar (üstteki istasyon ekranları
+  // unmount olur), yoksa mevcut ekranın yerine açar — stack hep küçük kalır.
+  const goHome = () => navigation.popTo('ModuleSelect');
   const insets = useSafeAreaInsets();
 
   const openSettings = () => {
@@ -211,10 +220,13 @@ export default function ScreenChrome({
                 {/* size 18: pill iç yüksekliği yazı satırıyla (13px→~18) eş kalsın —
                     diğer header pill'leriyle piksel-eş boy. */}
                 <Icon source="account-circle" size={18} color="#fff" />
-                {/* Kullanıcı adı — tablet ve telefonda AYNI (cihaz ayrımı yok). */}
-                <Text style={styles.userTriggerName} numberOfLines={1}>
-                  {operatorName}
-                </Text>
+                {/* Kullanıcı adı — telefonda dashboard'da gizli (yalnız ikon);
+                    tablet + diğer ekranlarda yazılır. */}
+                {showUserName && (
+                  <Text style={styles.userTriggerName} numberOfLines={1}>
+                    {operatorName}
+                  </Text>
+                )}
               </View>
             </TouchableRipple>
           }

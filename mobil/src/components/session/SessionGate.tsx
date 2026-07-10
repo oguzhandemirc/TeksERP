@@ -7,10 +7,22 @@
 // varken KK1'e girilirse KK1 kapısı yeni yer onayı ister (eski oturum backend'de
 // NEW_LOGIN ile kapanır). Ekran kodu yalnız oturum eşleşince require edilir
 // (lazy-load disiplini korunur).
+//
+// INVARIANT: Yer onayı yalnız ODAKTAKİ ekranda gösterilir/denenir — oturumu
+// yalnız kullanıcının BAKTIĞI ekran açabilir. Native-stack'te alttaki ekranlar
+// mount kalır (v7 navigate() pop-back yapmaz, üste push eder); arka plandaki
+// kind-uyuşmaz bir gate PlaceConfirmView(autoOpen) render etseydi odaktaki
+// gate'le dönüşümlü oturum kapma savaşına girerdi (~1sn'lik ekran↔yer-onayı
+// ping-pong'u — PlaceConfirmView'deki tek-slot 6sn guard'ı dönüşümlü key'leri
+// yakalayamaz). Odağa dönüşte gate taze PlaceConfirmView mount eder → tek
+// otomatik açılış denemesi orada yapılır. Eşleşme (matches) dalı odağa
+// BAĞLANMAZ: alt sayfa (Paketleme vb.) push'larında alttaki ekran state'iyle
+// mount kalmalı.
 // =============================================================================
 
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { useSessionStore } from '../../store/sessionStore';
 import { STATION_KIND_BY_SCREEN } from '../../constants/stationScreens';
 import type { MobileScreenKey } from '../../types/permissions';
@@ -31,6 +43,7 @@ export function withWorkSession(
   return function SessionGate(props: Record<string, unknown>) {
     const active = useSessionStore((s) => s.active);
     const isLoaded = useSessionStore((s) => s.isLoaded);
+    const isFocused = useIsFocused();
 
     const matches = active?.station.kind === expectedKind;
     if (matches) {
@@ -38,7 +51,10 @@ export function withWorkSession(
       const Screen = Loaded;
       return <Screen {...props} />;
     }
-    if (!isLoaded) {
+    // Odakta değilken PlaceConfirmView HİÇ mount edilmez (pasif spinner):
+    // arka plandaki gate ne otomatik oturum açabilir ne de yer listesi çeker.
+    // Ekran odağa dönünce useIsFocused re-render tetikler → taze PlaceConfirmView.
+    if (!isLoaded || !isFocused) {
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
           <ActivityIndicator size="large" color="#4f46e5" />

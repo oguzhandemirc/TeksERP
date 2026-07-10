@@ -19,6 +19,7 @@ import NoAccessScreen from '../screens/Common/NoAccessScreen';
 import SettingsScreen from '../screens/Common/SettingsScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
+import { rootNavigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -172,7 +173,7 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={rootNavigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
         {assignmentRequired && assignment?.status !== 'APPROVED' ? (
           <Stack.Screen name="Pairing" component={AwaitingAssignmentScreen} />

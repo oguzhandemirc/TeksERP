@@ -14,6 +14,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Dialog, Icon, Portal, Text, TouchableRipple } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
@@ -21,6 +22,7 @@ import { useSessionStore } from '../../store/sessionStore';
 import { workSessionService, type ActiveWorkSession } from '../../services/workSession.service';
 import { SCREEN_BY_STATION_KIND, type SessionStationKind } from '../../constants/stationScreens';
 import { SCREEN_BY_KEY } from '../../types/permissions';
+import { rootNavigate } from '../../navigation/navigationRef';
 import { placesOfKind, suggestPlace, type PlaceSuggestion } from './placeSuggest';
 
 const C = {
@@ -57,12 +59,18 @@ interface Props {
 // PlaceConfirmView'i yeniden mount eder → yeni instance → auto-open yeniden dener →
 // tekrar 409 → SONSUZ DÖNGÜ. Aynı yeri kısa sürede yeniden OTOMATİK açmaya
 // kalkarsak durdur, seçim ekranına düş (kullanıcı sorunu görsün, döngü kırılsın).
+// SINIRLARI: (1) tek slot — dönüşümlü key'leri yakalamaz; iki gate'in oturum
+// kapma savaşı SessionGate'in odak invariantıyla engellenir (bu guard yedek
+// katmandır). (2) yalnız <6sn periyodu keser — panelden zorla kapatılan oturumu
+// operatörün sonraki damgalı işlemi >6sn sonra sessizce geri açabilir (bilinçli
+// kabul: cihaz-vs-panel yarışında saha işi kesintiye uğramasın).
 let lastAutoAttempt: { key: string; at: number } | null = null;
 
 export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoOpen = false }: Props) {
   const lastPlace = useSessionStore((s) => s.lastPlace);
   const openSession = useSessionStore((s) => s.openSession);
   const screenLabel = SCREEN_BY_KEY[SCREEN_BY_STATION_KIND[expectedKind]]?.label ?? expectedKind;
+  const insets = useSafeAreaInsets();
 
   const placesQ = useQuery({
     queryKey: ['work-session', 'places'],
@@ -386,6 +394,27 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
         </View>
       )}
 
+      {/* Sunucu ayarları — sağ üst sabit köşe. Header'dan SONRA render → üstte,
+          dokunulabilir. Yanlış IP / sunucuya ulaşılamayan durumda tek çıkış yolu:
+          buradan Ayarlar'a gidip adresi düzelt. Navigasyon rootNavigate (ref) ile:
+          chip modalı Paper Portal'da NavigationContainer DIŞINDA render edilir —
+          useNavigation orada throw eder. Chip modunda önce modal kapatılır
+          (onCancel), yoksa Portal içeriği Settings'in ÜSTÜNDE açık kalırdı. */}
+      <TouchableRipple
+        onPress={() => {
+          onCancel?.();
+          rootNavigate('Settings');
+        }}
+        rippleColor="rgba(255,255,255,0.15)"
+        style={[styles.settingsBtn, { top: insets.top + 6 }]}
+        accessibilityLabel="Sunucu ayarları"
+      >
+        <View style={styles.settingsBtnInner}>
+          <Icon source="cog" size={20} color={C.text} />
+          <Text style={styles.settingsBtnText}>Ayarlar</Text>
+        </View>
+      </TouchableRipple>
+
       <BarcodeScannerModal
         visible={scannerOpen}
         onDismiss={() => setScannerOpen(false)}
@@ -447,6 +476,25 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
 const styles = StyleSheet.create({
   // paddingTop/Bottom: sayfanın üstünden ve altından nefes payı (içerik kenara yapışmaz).
   root: { flex: 1, backgroundColor: C.bg, paddingTop: 16, paddingBottom: 16 },
+  // Sunucu ayarları — sağ üst sabit köşe butonu (top runtime'da safe-area inset'iyle).
+  settingsBtn: {
+    position: 'absolute',
+    right: 10,
+    borderRadius: 10,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    zIndex: 10,
+    elevation: 4,
+  },
+  settingsBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  settingsBtnText: { color: C.text, fontSize: 14, fontWeight: '700' },
   // Sabit başlık (sayfa kaymaz); makine listesi kendi içinde kayar.
   header: { alignItems: 'center', gap: 8, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 8 },
   // Başlık altındaki gövde — kalan yüksekliği kaplar.
