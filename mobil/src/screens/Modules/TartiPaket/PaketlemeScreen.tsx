@@ -13,12 +13,19 @@ import {
   TouchableRipple,
 } from 'react-native-paper';
 import AppModal from '../../../components/AppModal';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import {
+  useNavigation,
+  usePreventRemove,
+  useRoute,
+  type NavigationAction,
+  type RouteProp,
+} from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
-import * as Print from 'expo-print';
+import { printHtml } from '../../../services/printHtml';
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
@@ -43,6 +50,7 @@ import {
 } from '../../../hooks/useMachinePeripherals';
 import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import { isBonded, pairByMac } from '../../../services/hal/btClassic.transport';
+import { useLockStore } from '../../../store/lockStore';
 import {
   useShipmentConfirmationEnabled,
   FLAGS_KEY,
@@ -80,6 +88,26 @@ export default function PaketlemeScreen() {
   // backend'deki değer (ship.destination) otoritedir; bu yalnız create öncesi taslak.
   const [draftDestination, setDraftDestination] = useState<ShipmentDestination>('DOMESTIC');
   const [scanOpen, setScanOpen] = useState<boolean>(!params.shipmentId && !!params.orderIds);
+  // Taslak koruması: sevkiyat henüz "geç oluştur" ile yaratılmadıysa ekrandan
+  // her çıkış (ev/popTo, donanım geri, ok tuşu) sipariş seçimini + kapsamı
+  // SESSİZCE silerdi (kurtarma yalnız oluşturulmuş sevkiyatta var — "Sürdür").
+  // usePreventRemove çıkışı yakalar, onay sorulur; onayda saklanan aksiyon
+  // AYNEN dispatch edilir (aksiyon üzerindeki visited işareti sayesinde ikinci
+  // kez engellenmez). İlk aksiyonda sevkiyat oluşur → koruma kendiliğinden düşer.
+  const [leaveAction, setLeaveAction] = useState<NavigationAction | null>(null);
+  const draftUnsaved = shipmentId === null && draftOrderIds !== null;
+  usePreventRemove(draftUnsaved, ({ data }) => {
+    // Kilitliyken (idle kilit) donanım geri tuşu buraya kadar iner — çıkış yine
+    // engellenir ama diyalog KURULMAZ: kilit overlay'inin altında görünmez kalır
+    // ve kilidi açan (belki başka) operatörü beklenmedik "Çık ve Sil" ile karşılardı.
+    if (!useLockStore.getState().locked) setLeaveAction(data.action);
+  });
+  // Diyalog açıkken uçuştaki ensureShipment tamamlanabilir (adopt → shipmentId) —
+  // taslak kalıcılaşmıştır, "silinir" uyarısı yanlışlaşır: diyaloğu kapat
+  // (sonraki geri basışı guard'sız normal çıkar).
+  useEffect(() => {
+    if (shipmentId !== null) setLeaveAction(null);
+  }, [shipmentId]);
   const [listOpen, setListOpen] = useState(false);
   const [kartelaOpen, setKartelaOpen] = useState(false);
   // Listeden eklenen toplar — picker'da gizle. Eklenen top backend'de committed
@@ -496,7 +524,7 @@ export default function PaketlemeScreen() {
     try {
       setPrinting(true);
       const html = await getShipmentDispatchHtml(shipmentId);
-      await Print.printAsync({
+      await printHtml({
         html,
         margins: { left: 0, top: 0, right: 0, bottom: 0 },
       });
@@ -1382,6 +1410,22 @@ export default function PaketlemeScreen() {
           </View>
         </Surface>
       </AppModal>
+
+      {/* Taslak koruması — sevkiyat oluşmadan çıkış onayı (usePreventRemove). */}
+      <ConfirmDialog
+        kind="destructive"
+        visible={leaveAction != null}
+        onDismiss={() => setLeaveAction(null)}
+        title="Sipariş seçimi kaydedilmedi"
+        description="Sevkiyat henüz oluşturulmadı — çıkarsan seçtiğin siparişler ve kapsam silinir, yeniden seçmen gerekir."
+        confirmLabel="Çık ve Sil"
+        cancelLabel="Kal"
+        onConfirm={() => {
+          const action = leaveAction;
+          setLeaveAction(null);
+          if (action) nav.dispatch(action);
+        }}
+      />
     </ScreenChrome>
   );
 }
