@@ -7,7 +7,7 @@ import { buildRollLabelPpla } from "../src/services/helpers/label-ppla.helper";
 import { buildRollLabelPplb } from "../src/services/helpers/label-pplb.helper";
 import { buildRollLabelZpl } from "../src/services/helpers/label-zpl.helper";
 import { renderPplbToSvg } from "../src/services/helpers/native-preview";
-import { qrFootprintDots } from "../src/services/helpers/native-label.shared";
+import { qrSymbolModules } from "../src/services/helpers/native-label.shared";
 import type { ResolvedLabelFormat } from "../src/services/helpers/label-format.resolver";
 import type { LabelPayload } from "../src/services/label.service";
 import type { LabelTemplate } from "@prisma/client";
@@ -48,13 +48,13 @@ const zplNull = buildRollLabelZpl({ ...base, template: null });
 const pplaNull = buildRollLabelPpla({ ...base, template: null });
 check("PPLB null → varsayılan QR s5", /b\d+,\d+,Q,m2,s5,/.test(pplbNull));
 check("ZPL null → varsayılan QR mag 5 (v2 birleşik)", zplNull.includes("^BQN,2,5^FD"));
-check("PPLA null → varsayılan QR modül 05 (v2 birleşik)", pplaNull.includes("1W1c0505"));
+check("PPLA null → varsayılan QR W1d modül 5 (v2 birleşik)", pplaNull.includes("1W1d55"));
 
 // --- 2. qrScale set → her dilde yansır ---
 const q = { qrScale: 8, lineStepMm: null };
 check("PPLB qrScale8 → s8", /b\d+,\d+,Q,m2,s8,/.test(buildRollLabelPplb({ ...base, template: tpl(q) })));
 check("ZPL qrScale8 → mag 8", buildRollLabelZpl({ ...base, template: tpl(q) }).includes("^BQN,2,8^FD"));
-check("PPLA qrScale8 → modül 08", buildRollLabelPpla({ ...base, template: tpl(q) }).includes("1W1c0808"));
+check("PPLA qrScale8 → W1d modül 8", buildRollLabelPpla({ ...base, template: tpl(q) }).includes("1W1d88"));
 
 // --- 3. qrScale clamp (aralık dışı) ---
 check("PPLB qrScale 99 → 15'e kısılır (s15)", /,s15,/.test(buildRollLabelPplb({ ...base, template: tpl({ qrScale: 99 }) })));
@@ -92,8 +92,9 @@ check("v2: tüm alanlar xl+bold → dikey çakışma YOK", rows.length >= 2 && !
 // --- 6. WYSIWYG: önizleme QR görsel boyutu = generator ayak izi (aynı model) ---
 const previewSvg = renderPplbToSvg(buildRollLabelPplb({ ...base, template: tpl({ qrScale: 6 }) })) ?? "";
 const qrImgW = Number((previewSvg.match(/<image[^>]*width="(\d+)"/) || [])[1]);
-const expectFootprint = qrFootprintDots(payload.barcode.length, 6);
-check("v2 WYSIWYG: önizleme QR boyutu = ayak izi (bwip viewBox değil)", qrImgW === expectFootprint, `önizleme=${qrImgW} ayakizi=${expectFootprint}`);
+// Önizleme QR = ÇIPLAK sembol (modül×mag); sessiz bölge beyaz boşluk, kutuya eklenmez.
+const expectSymbol = qrSymbolModules(payload.barcode.length) * 6;
+check("v2 WYSIWYG: önizleme QR boyutu = sembol×mag (sessiz bölge hariç)", qrImgW === expectSymbol, `önizleme=${qrImgW} sembol=${expectSymbol}`);
 
 // --- 7. QR büyütünce metin kolonu sağa kayar (çakışma önlenir) ---
 const tX = (s: number) => Number((buildRollLabelPplb({ ...base, template: tpl({ qrScale: s }) }).match(/A(\d+),/) || [])[1]);

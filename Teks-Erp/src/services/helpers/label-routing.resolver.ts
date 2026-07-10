@@ -142,7 +142,8 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
   });
 
   return {
-    format: { ...format, language },
+    // mediaType (ribon) cihazdan → emitter dil-özel komuta çevirir (boş → yazıcı otomatik).
+    format: { ...format, language, mediaType: peripheral?.mediaType ?? null },
     template,
     variant: picked.variant,
     variantMatch: picked.match,

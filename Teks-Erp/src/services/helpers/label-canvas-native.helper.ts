@@ -25,6 +25,11 @@ import {
   resolveQrScale,
   resolveEplTextStyle,
   EPL_FONT,
+  DPL_FONT,
+  DPL_BASE_FONTS,
+  dplBarcodeMul,
+  qrSymbolModules,
+  mediaTypeCommand,
 } from "./native-label.shared";
 import { fieldDisplayValue } from "./label-field-values";
 import {
@@ -72,13 +77,21 @@ function elementText(el: FieldElement | TextElement, payload: LabelPayload): str
  *  Glif yüksekliği bandın metne-DİK (cross) eksenine oturur; metin bant içinde
  *  ORTALANIR. origin(len): top-sol anchor + CW dönüşle merkezlenmiş köşe (üç native
  *  dil + DPL aynı model). pad: PPLB'nin kendi-siyah-bandı için boşluk dolgusu. */
-function bannerGeom(colDots: number, rowDots: number, wDots: number, hDots: number, rot: number, valLen: number) {
+function bannerGeom(
+  colDots: number,
+  rowDots: number,
+  wDots: number,
+  hDots: number,
+  rot: number,
+  valLen: number,
+  xl: { code: string; w: number; h: number } = EPL_FONT.xl,
+) {
   const vertical = rot === 90 || rot === 270;
   const cross = vertical ? wDots : hDots; // glif yüksekliği bunu doldurur
   const along = vertical ? hDots : wDots; // metin ilerlemesi bunu doldurur
-  const mul = Math.max(1, Math.min(4, Math.round(cross / EPL_FONT.xl.h)));
-  const gh = EPL_FONT.xl.h * mul;
-  const gw = EPL_FONT.xl.w * mul;
+  const mul = Math.max(1, Math.min(4, Math.round(cross / xl.h)));
+  const gh = xl.h * mul;
+  const gw = xl.w * mul;
   const targetChars = Math.max(valLen, Math.floor((along * 0.85) / gw));
   const pad = Math.max(0, Math.floor((targetChars - valLen) / 2));
   const cx = colDots + wDots / 2;
@@ -114,17 +127,23 @@ const HUMAN_CHAR_W = 8;
 /** Okunur satır (barkod altı kod) EPL/DPL stili — humanHMm dolu → 4 dilde ortak-payda
  *  boyut (metin gibi en yakın basılabilir kombinasyon); boş → bugünkü sabit font "1"
  *  (bayt-uyum). charW = karakter hücre genişliği (dot) — okunur satırı ortalamak için. */
-function humanEplStyle(humanHMm: number | undefined, d: (mm: number) => number): {
+function humanEplStyle(
+  humanHMm: number | undefined,
+  d: (mm: number) => number,
+  baseFonts?: ReadonlyArray<{ code: string; w: number; h: number }>,
+  fallbackCharW: number = HUMAN_CHAR_W,
+): {
   code: string;
   hmul: number;
   vmul: number;
   charW: number;
 } {
   if (humanHMm != null) {
-    const st = resolveEplTextStyle(d(humanHMm), 1, 6);
+    // baseFonts verilirse (PPLA → DPL_BASE_FONTS) seçim dile-doğru fiziksel boyutla yapılır.
+    const st = resolveEplTextStyle(d(humanHMm), 1, 6, baseFonts);
     return { code: st.code, hmul: st.hmul, vmul: st.vmul, charW: st.wDots };
   }
-  return { code: "1", hmul: 1, vmul: 1, charW: HUMAN_CHAR_W };
+  return { code: "1", hmul: 1, vmul: 1, charW: fallbackCharW };
 }
 
 /** Okunur satır ZPL font hücresi (dot) — humanHMm dolu → ortak-payda; boş → 20×12
@@ -253,18 +272,28 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
   const u = (dots: number) => Math.round((dots * 100) / dpi);
   const lines: string[] = [];
   lines.push(`${STX}n`);
-  lines.push(`${STX}M${pad4(u(d(format.heightMm)))}`);
+  // Baskı yöntemi (ribon): cihaz mediaType'ından <STX>KI7 0/1 — boşsa yazıcı otomatik.
+  const mc = mediaTypeCommand(format.language, format.mediaType);
+  if (mc) lines.push(mc);
+  // <STX>M = TOF ararken beslenecek AZAMİ mesafe (sayfa boyu DEĞİL). Gövde boyuna EŞİT
+  // yazınca yazıcı gap'i bulamayıp boş besler; gövde+gap'in ~1.5×'i ve ≥5" güvenli tavan.
+  lines.push(`${STX}M${pad4(Math.max(500, u(d(format.heightMm + format.gapMm)) + 50))}`);
   lines.push(`${STX}L`);
-  lines.push("D11");
+  lines.push("D11"); // basılan dot elemanı w×h çarpanı (1×1). Koyuluk AYRI komut (H).
   lines.push("H10");
 
   const bc = payload.barcode ? cleanCtl(payload.barcode) : "";
   // DPL rot: 1=0°, 2=90°, 3=180°, 4=270°
   const dplRot = (rot?: number) => String(((rot ?? 0) / 90) + 1);
+  // Argox origin = SOL-ALT, Y YUKARI artar; tuval Y ÜSTTEN. Her Argox Y'si = tuval-üst
+  // Y'nin flip'i: H - yÜst - elemanYüksekliği. Yoksa etiket DİKEY TERS basar (fiziksel
+  // doğrulama 2026-07-10: tasarım üstü kağıdın altına düşüyordu).
+  const H = d(format.heightMm);
+  const flipY = (yTopDots: number, hDots: number) => Math.max(0, H - yTopDots - hDots);
 
   for (const el of layout.elements) {
     if (!elementSupported(el.type, "PPLA")) continue; // lengthBanner → yok (reverse yok)
-    const row = d(el.y);
+    const row = d(el.y); // tuval-üstünden Y (flipY ile Argox alt-orijine çevrilir)
     const col = d(el.x);
     switch (el.type) {
       case "field":
@@ -272,75 +301,87 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         const text = elementText(el, payload);
         if (!text) break;
         if (el.hMm != null) {
-          // SERBEST boyut — ORTAK PAYDA: dört dil aynı kombinasyonu basar; sınır
-          // en dar dil olan PPLB'ninki (maxMul=6). DPL 9'a kadar destekler ama
-          // parite için kullanılmaz (eleman dilden dile farklı boyut vermemeli).
-          const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
+          // SERBEST boyut: hedef mm → en yakın (font,çarpan). DPL_BASE_FONTS ile seçilir
+          // ki seçilen kod+çarpan DPL yazıcıda DOĞRU fiziksel boyu üretsin (EPL2 tabanıyla
+          // ~%35 aşıyordu). Çarpan maxMul=6 → tek hane (header hizalı kalır).
+          const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6, DPL_BASE_FONTS);
+          const fy = flipY(row, st.hDots);
           // KALIN = çift-vuruş (+1 birim = 0.254mm ≈ 2 dot); bold yoksa tek satır.
-          const emit = (dc: number) => `${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(u(row))}${pad4(u(col) + dc)}${cleanCtl(text)}`;
+          const emit = (dc: number) => `${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(u(fy))}${pad4(u(col) + dc)}${cleanCtl(text)}`;
           lines.push(emit(0));
           if (el.bold) lines.push(emit(1));
         } else {
-          // ESKİ 4-kademe yol.
-          const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
+          // ESKİ 4-kademe yol — font KODU EPL ile aynı ('1'..'4', DPL'de de geçerli);
+          // DPL_FONT niyeti + flip için gerçek DPL glif yüksekliğini verir.
+          const font = DPL_FONT[el.font ?? "md"] ?? DPL_FONT.md;
           const mult = el.bold ? "22" : "11";
-          lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(u(row))}${pad4(u(col))}${cleanCtl(text)}`);
+          const fy = flipY(row, font.h * (el.bold ? 2 : 1));
+          lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(u(fy))}${pad4(u(col))}${cleanCtl(text)}`);
         }
         break;
       }
       case "qr": {
         if (!bc) break;
-        const mod = String(resolveQrScale(el.scale)).padStart(2, "0");
-        lines.push(`1W1c${mod}${mod}${pad4(u(row))}${pad4(u(col))}${bc}`);
+        // DPL QR: W1d (auto) = QR; W1c DataMatrix'ti (yanlış sembol). Modül TEK karakter
+        // (dplBarcodeMul), c=d kare hücre, eee='000'. NORMAL tek-CR kaydı.
+        const qrMag = dplBarcodeMul(resolveQrScale(el.scale));
+        const qrH = qrSymbolModules(bc.length) * resolveQrScale(el.scale); // flip için ~ayak izi
+        const fy = flipY(row, qrH);
+        lines.push(`1W1d${qrMag}${qrMag}000${pad4(u(fy))}${pad4(u(col))}${bc}`);
         break;
       }
       case "code128": {
         if (!bc) break;
         const h = d(el.hMm ?? 9);
-        // Modül kalınlığı: DPL barkod kaydında 'e' sonrası dar+geniş tek hane.
-        // mw yokken "22" aynen.
-        const mw = Math.min(9, el.mw ?? 2);
-        // DİKKAT: yükseklik alanı 3 HANE (pad3) — 4 hane fiziksel testte kayıt
-        // kaymasına ve kaçak beslemeye yol açtı (8 boş etiket bug'ı).
-        lines.push(`1e${mw}${mw}${pad3(u(h))}${pad4(u(row))}${pad4(u(col))}${bc}`);
-        // Okunur satır — barkodun altında ORTALANMIŞ (eskiden sola yaslıydı).
-        // Format: <rot=1><font><hMul><vMul>000<row4><col4><veri>. Boyut humanHMm'den
-        // (ortak-payda); humanDx/Dy ile ince ayar. İç hesap dot, emisyon u().
+        const mw = Math.min(9, el.mw ?? 2); // dar+geniş modül; barkod yüksekliği 3 HANE (pad3)
+        lines.push(`1e${mw}${mw}${pad3(u(h))}${pad4(u(flipY(row, h)))}${pad4(u(col))}${bc}`);
+        // Okunur satır — barkodun ALTINDA ORTALANMIŞ (flip'te de altında = daha küçük Y).
         if (el.human !== false) {
-          const hs = humanEplStyle(el.humanHMm, d);
+          const hs = humanEplStyle(el.humanHMm, d, DPL_BASE_FONTS, DPL_FONT.sm.w);
+          const humanH = el.humanHMm != null ? d(el.humanHMm) : DPL_FONT.sm.h;
           const bw = code128WidthDots(bc.length, mw);
           const center = Math.max(0, Math.round((bw - bc.length * hs.charW) / 2));
           const hcol = Math.max(0, u(col + center + d(el.humanDx ?? 0)));
-          const hrow = Math.max(0, u(row + h + d(1) + d(el.humanDy ?? 0)));
+          const humanTopY = row + h + d(1) + d(el.humanDy ?? 0); // tuvalde barkod altı
+          const hrow = u(flipY(humanTopY, humanH));
           lines.push(`1${hs.code}${hs.hmul}${hs.vmul}000${pad4(hrow)}${pad4(hcol)}${bc}`);
         }
         break;
       }
-      // DPL font-X grafik kayıtları: L=dolu çizgi/kutu, B=çerçeve.
-      // Format: 1X11000<row4><col4><L|B><yatay4><dikey4>[<alt-üst duvar4><yan duvar4>]
+      // Argox Line/Box (manuel §A7): `RX11000 yyyy xxxx {l|b} ...`. KÜÇÜK l/b = 4-haneli
+      // param; BÜYÜK L/B = 3-haneli. pad4 (4 hane) + BÜYÜK harf → Argox alan kayması →
+      // bozuk kayıt → RESET (Standart Ham Top'un lengthBanner'ı buydu). → küçük l/b.
       case "line":
-        lines.push(`1X11000${pad4(u(row))}${pad4(u(col))}L${pad4(u(d(el.wMm)))}${pad4(u(d(el.hMm)))}`);
+        lines.push(`1X11000${pad4(u(flipY(row, d(el.hMm))))}${pad4(u(col))}l${pad4(u(d(el.wMm)))}${pad4(u(d(el.hMm)))}`);
         break;
       case "box": {
         const t = Math.max(1, u(d(el.thickMm ?? 0.5)));
-        lines.push(`1X11000${pad4(u(row))}${pad4(u(col))}B${pad4(u(d(el.wMm)))}${pad4(u(d(el.hMm)))}${pad4(t)}${pad4(t)}`);
+        const boxH = d(el.hMm);
+        lines.push(`1X11000${pad4(u(flipY(row, boxH)))}${pad4(u(col))}b${pad4(u(d(el.wMm)))}${pad4(u(boxH))}${pad4(t)}${pad4(t)}`);
         break;
       }
       case "lengthBanner": {
-        // PPLA/DPL İSTİSNASI: siyah zemin/beyaz yazı (ters-renk) DPL'de güvenilir
-        // DEĞİL (Datamax reverse cihaza bağlı). Değer görünmez (siyah-üstü-siyah)
-        // riskine düşmemek için PPLA'da ÇERÇEVELİ basılır (kutu + siyah değer, her
-        // zaman okunur). Değer ROT ile döner. PPLB/ZPL/HTML dolgulu siyah + beyaz.
+        // PPLA/DPL İSTİSNASI: ters-renk (siyah zemin/beyaz yazı) DPL'de güvenilir DEĞİL →
+        // ÇERÇEVELİ (kutu + siyah değer) basılır. Kutu = Argox box (küçük 'b', 4-hane).
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
         const rot = el.rot ?? 90;
-        const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
+        const w = el.wMm != null ? d(el.wMm) : DPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * row;
-        lines.push(`1X11000${pad4(u(row))}${pad4(u(col))}B${pad4(u(w))}${pad4(u(h))}${pad4(1)}${pad4(1)}`);
-        const val = cleanCtl(String(payload.lengthMeters));
-        const g = bannerGeom(col, row, w, h, rot, val.length);
-        const o = g.origin(val.length);
-        lines.push(`${rot / 90 + 1}${EPL_FONT.xl.code}${g.mul}${g.mul}000${pad4(u(o.oy))}${pad4(u(o.ox))}${val}`);
+        const boxFy = flipY(row, h);
+        lines.push(`1X11000${pad4(u(boxFy))}${pad4(u(col))}b${pad4(u(w))}${pad4(u(h))}${pad4(1)}${pad4(1)}`);
+        // Değer, metin alanıyla AYNI biçimde (formatNumber → "1.111"); ham String "1111"
+        // veriyordu (Türkçe binlik ayıracı). Birimi ("m") çıkar — dar bant.
+        const val = cleanCtl(dv.value).replace(/\s*m$/i, "").trim() || cleanCtl(String(payload.lengthMeters));
+        // g.gw/gh/mul = fiziksel glif metriği (bannerGeom band genişliğine göre çarpanı seçer).
+        // Değeri Argox kutusuna ORTALA — rot=90 metin anchor'dan SOLA+AŞAĞI uzar (fiziksel
+        // doğrulama 2026-07-10): anchor = kutu-merkezi + (dikey uzunluk/2, gh/2). Böylece
+        // metnin merkezi kutu merkezine oturur. (Banner varsayılan dik/rot=90; diğer rot nadir.)
+        const g = bannerGeom(col, row, w, h, rot, val.length, DPL_FONT.xl);
+        const advance = val.length * g.gw; // rot=90'da dikey uzunluk
+        const valY = boxFy + h / 2 + advance / 2;
+        const valX = col + w / 2 + g.gh / 2;
+        lines.push(`${rot / 90 + 1}${DPL_FONT.xl.code}${g.mul}${g.mul}000${pad4(u(valY))}${pad4(u(valX))}${val}`);
         break;
       }
     }
@@ -367,6 +408,9 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
   const d = (mm: number) => mmToDots(mm, dpi);
   const lines: string[] = [];
   lines.push("^XA");
+  // Baskı yöntemi (ribon): cihaz mediaType'ından ^MTD/^MTT — boşsa yazıcı otomatik.
+  const mc = mediaTypeCommand(format.language, format.mediaType);
+  if (mc) lines.push(mc);
   lines.push("^CI28");
   lines.push(`^PW${d(format.widthMm)}`);
   lines.push(`^LL${d(format.heightMm)}`);

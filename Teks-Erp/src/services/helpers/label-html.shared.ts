@@ -125,7 +125,9 @@ export function formatNumber(n: number | string | null | undefined): string {
   if (n == null) return "—";
   const num = typeof n === "string" ? Number(n) : n;
   if (!Number.isFinite(num)) return "—";
-  return (num as number).toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+  // useGrouping:false → binlik ayıracı YOK (1000 → "1000", "1.000" DEĞİL; TR'de "1.000"
+  // yanlış anlaşılıyor). Ondalık virgül KORUNUR (230,5 → "230,5"). Kullanıcı kuralı.
+  return (num as number).toLocaleString("tr-TR", { maximumFractionDigits: 2, useGrouping: false });
 }
 
 export function formatDate(iso: string): string {

@@ -131,9 +131,33 @@ export type LabelElement =
   | BoxElement
   | LengthBannerElement;
 
+/** Kağıt kenarından güvenli-alan boşluğu (mm), her kenar ayrı. Editör kılavuzu +
+ *  eleman clamp'i için; baskıya DOĞRUDAN yansımaz (elemanlar zaten alan içine
+ *  sıkıştırılır → çıktı otomatik uyar). Eksik/sıfır → boşluk yok. */
+export interface CanvasPad {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface CanvasLayout {
   v: number;
   elements: LabelElement[];
+  pad?: CanvasPad;
+}
+
+/** Ham pad'i sanitize et — her kenar 0-200mm; hepsi 0 ise undefined (saklanmaz).
+ *  Editör kenarları boyuta göre kısıtlar; burada yalnız güvenli aralık zorlanır. */
+export function parseCanvasPad(raw: unknown): CanvasPad | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const p = raw as Record<string, unknown>;
+  const n = (v: unknown): number => {
+    const x = typeof v === "number" && Number.isFinite(v) ? v : 0;
+    return Math.max(0, Math.min(200, x));
+  };
+  const pad = { top: n(p.top), right: n(p.right), bottom: n(p.bottom), left: n(p.left) };
+  return pad.top || pad.right || pad.bottom || pad.left ? pad : undefined;
 }
 
 // =============================================================================
@@ -319,7 +343,9 @@ export function validateCanvasLayout(
     bad("Barkod (Code128) veya QR elemanından en az biri olmalı (taranabilir alan zorunlu)");
   }
 
-  return { v: CANVAS_SCHEMA_VERSION, elements: els as LabelElement[] };
+  // pad KORUNUR (aksi halde her kayıtta silinirdi) — editör güvenli-alan kılavuzu.
+  const pad = parseCanvasPad((layout as { pad?: unknown }).pad);
+  return { v: CANVAS_SCHEMA_VERSION, elements: els as LabelElement[], ...(pad ? { pad } : {}) };
 }
 
 /** Varyant JSON'ından kanvas yerleşimini oku — geçersiz/boş → null (emit katmanı
@@ -329,5 +355,6 @@ export function readCanvasLayout(raw: unknown): CanvasLayout | null {
   const layout = raw as { v?: unknown; elements?: unknown };
   if (layout.v !== CANVAS_SCHEMA_VERSION || !Array.isArray(layout.elements)) return null;
   if (layout.elements.length === 0) return null;
-  return { v: CANVAS_SCHEMA_VERSION, elements: layout.elements as LabelElement[] };
+  const pad = parseCanvasPad((layout as { pad?: unknown }).pad);
+  return { v: CANVAS_SCHEMA_VERSION, elements: layout.elements as LabelElement[], ...(pad ? { pad } : {}) };
 }

@@ -715,7 +715,12 @@ export class LabelService {
       return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content, kind, meta } };
     }
     const native = renderLabel(language, input).content;
-    const svg = renderNativePreviewSvg(language, native, mmToDots(input.format.widthMm, input.format.dpi));
+    const svg = renderNativePreviewSvg(
+      language,
+      native,
+      mmToDots(input.format.widthMm, input.format.dpi),
+      mmToDots(input.format.heightMm, input.format.dpi),
+    );
     if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), kind, meta } };
     return { success: true, data: { mode: "text", language, content: native, kind, meta } };
   }

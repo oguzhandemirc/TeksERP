@@ -79,7 +79,8 @@ async function main() {
   check("PPLB kalın = 2 satır (x, x+1)", new RegExp(`A${bx},80,0,3,2,2,N,"BOLD"`).test(pplb) && new RegExp(`A${bx + 1},80,0,3,2,2,N,"BOLD"`).test(pplb));
   check("PPLB kalın DEĞİL = tek satır (x+1 yok)", (pplb.match(/N,"PLAIN"/g) || []).length === 1);
   check("ZPL kalın = 2 satır ^FO(x)/(x+1)", new RegExp(`\\^FO${bx},80\\^A0N,40,24\\^FDBOLD`).test(zpl) && new RegExp(`\\^FO${bx + 1},80\\^A0N,40,24\\^FDBOLD`).test(zpl));
-  check("PPLA kalın = 2 satır (col, col+1)", (ppla.match(/1322000\d{4}\d{4}BOLD/g) || []).length === 2);
+  // PPLA serbest-boyut DPL taban fontuyla seçilir: hedef 5mm(40dot) → font1×3=39 → "1133".
+  check("PPLA kalın = 2 satır (col, col+1)", (ppla.match(/1133000\d{4}\d{4}BOLD/g) || []).length === 2);
 
   // --- 6) HTML: human font-size = humanHMm, kaydırma translate, kalın font-weight ---
   const hDef = html([{ id: "bc", type: "code128", x: 3, y: 46, hMm: 9, human: true }]);

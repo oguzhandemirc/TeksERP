@@ -70,13 +70,14 @@ async function main() {
 
   // --- Degrade matrisi: PPLA'da YALNIZ banner yok (reverse yok); line/box artık
   //     DPL font-X kayıtlarıyla PPLA'da da basılır ---
-  check("PPLA: line (X-font L kaydı) basılır", /1X11000\d{4}\d{4}L\d{4}\d{4}/.test(ppla));
-  check("PPLA: box (X-font B kaydı) basılır", /1X11000\d{4}\d{4}B\d{4}\d{4}\d{4}\d{4}/.test(ppla));
+  // Argox Line/Box: KÜÇÜK l/b = 4-haneli param (BÜYÜK L/B = 3-haneli → pad4 ile alan kayması/RESET).
+  check("PPLA: line (Argox küçük 'l', 4-hane) basılır", /1X11000\d{4}\d{4}l\d{4}\d{4}/.test(ppla));
+  check("PPLA: box (Argox küçük 'b', 4-hane) basılır", /1X11000\d{4}\d{4}b\d{4}\d{4}\d{4}\d{4}/.test(ppla));
   // Banner PPLA'da ÇERÇEVELİ basılır: band kutusu + 90° döndürülmüş siyah değer
   // (ters-renk yok — DPL reverse güvenilmez; dolgulu sürüm PPLB/ZPL'de).
   check(
     "PPLA: banner çerçeveli sürüm (kutu + rot-90 değer, ters-renksiz)",
-    (ppla.match(/1X11000\d{4}\d{4}B/g) ?? []).length >= 2 && /^24\d\d000\d{8}320/m.test(ppla),
+    (ppla.match(/1X11000\d{4}\d{4}b/g) ?? []).length >= 2 && /^24\d\d000\d{8}320/m.test(ppla),
   );
   check("PPLB: line (LO) basılır", /LO24,240,719,6/.test(pplb));
   check("PPLB: box (X) basılır", /X24,256,8,344,336/.test(pplb) || /^X24,256,/m.test(pplb));
@@ -95,13 +96,13 @@ async function main() {
 
   // --- QR / Code128 ---
   check("PPLB: QR s6", pplb.includes(`b24,24,Q,m2,s6,"${payload.barcode}"`));
-  check("PPLA: QR 1W1c0606", ppla.includes(`1W1c0606`));
+  check("PPLA: QR 1W1d66 (auto QR, tek-karakter modül)", ppla.includes(`1W1d66`));
   check("ZPL: QR mag 6", zpl.includes("^BQN,2,6"));
   // Barkod okunur satırı: firmware KAPALI (N) + manuel, barkod ALTINDA ORTALANMIŞ
   // (barkod sol x=24 değil; PPLB hx=171 dot / PPLA hcol=0084 (171 dot → 1/100 inç) / ZPL hx=139).
   check("PPLB: Code128 human=N + ortalanmış (171)", /B24,368,0,1,2,3,72,N,/.test(pplb) && /A171,448,0,1,1,1,N,"TEKS20260706AB12"/.test(pplb));
   // PPLA birim: 1/100 inç + yükseklik alanı 3 HANE (fiziksel doğrulama 2026-07-10).
-  check("PPLA: Code128 (h3) + okunur satır ORTALANMIŞ (0084)", /1e22\d{3}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{4}0084TEKS20260706AB12/.test(ppla));
+  check("PPLA: Code128 (h3) + okunur satır ORTALANMIŞ (0088, DPL font1 w=7)", /1e22\d{3}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{4}0088TEKS20260706AB12/.test(ppla));
   check("ZPL: Code128 interpretation=N + ortalanmış (139)", /\^BCN,72,N,N,N/.test(zpl) && /\^FO139,448\^A0N,20,12\^FDTEKS20260706AB12\^FS/.test(zpl) && !zpl.includes("^BY"));
 
   // --- ÇEVRİLEBİLİR bant: rot metin yönünü döndürür (varsayılan 90 dikey) ---
@@ -155,7 +156,7 @@ async function main() {
   // --- Medya komutları format profilinden ---
   check("PPLB: q/Q medya boyutu", pplb.includes("q799") && /Q480,16/.test(pplb));
   check("ZPL: ^PW/^LL", zpl.includes("^PW799") && zpl.includes("^LL480"));
-  check("PPLA: STX M yükseklik (1/100 inç: 60mm→0236)", ppla.includes("\x02M0236"));
+  check("PPLA: STX M = TOF tavanı (gövde boyu değil; ≥5\" → 0500)", ppla.includes("\x02M0500"));
   check("kopya: P2 / Q0002 / ^PQ2", pplb.includes("P2") && ppla.includes("Q0002") && zpl.includes("^PQ2"));
 
   // --- present:false alan atlanır, DİĞER elemanlar kaymaz ---

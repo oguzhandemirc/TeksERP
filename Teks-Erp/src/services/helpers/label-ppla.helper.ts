@@ -24,9 +24,11 @@ import {
   templateTextLines,
   resolveQrScale,
   resolveLineStepMm,
-  EPL_FONT,
+  DPL_FONT,
+  dplBarcodeMul,
   LINE_GAP_MM,
   qrFootprintDots,
+  mediaTypeCommand,
   type NativeRenderInput,
 } from "./native-label.shared";
 
@@ -58,13 +60,19 @@ export function buildRollLabelPpla({ payload, format, copies, template }: PplaRe
   const bottomEdge = heightDots - d(format.marginBottomMm);
 
   const qrScale = resolveQrScale(template?.qrScale);
-  const qrMod = String(qrScale).padStart(2, "0"); // DPL QR modül boyutu 2-hane
+  const qrMag = dplBarcodeMul(qrScale); // DPL QR modülü TEK karakter (padStart(2) header'ı kaydırıyordu)
   const gap = d(resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null) ?? LINE_GAP_MM);
   const bc = payload.barcode ? cleanCtl(payload.barcode) : "";
 
   const lines: string[] = [];
   lines.push(`${STX}n`); // ölçü birimi = İNÇ (kayıt alanları 1/100 inç okunur)
-  lines.push(`${STX}M${pad4(u(heightDots))}`); // maksimum etiket boyu (1/100 inç)
+  // Baskı yöntemi (ribon): cihaz mediaType'ından <STX>KI7 0/1 — boşsa yazıcı otomatik.
+  const mc = mediaTypeCommand(format.language, format.mediaType);
+  if (mc) lines.push(mc);
+  // <STX>M = TOF ararken beslenecek AZAMİ mesafe (sayfa boyu DEĞİL). Gövde boyuna EŞİT
+  // yazınca (eski `u(heightDots)`) yazıcı gap'i M'nin ötesinde bulamıyor → paper-fault →
+  // boş besleme. Gövde+gap'in ~1.5×'i ve ≥5" güvenli tavan; pad4 9999'da klipsler.
+  lines.push(`${STX}M${pad4(Math.max(500, u(heightDots + d(format.gapMm)) + 50))}`);
   lines.push(`${STX}L`); // etiket format moduna gir
   lines.push("D11"); // yoğunluk/çözünürlük modülü (203dpi)
   lines.push("H10"); // ısı (heat) — fiziksel test baskısıyla ayarlanır
@@ -83,14 +91,18 @@ export function buildRollLabelPpla({ payload, format, copies, template }: PplaRe
   let colText = left;
   if (bc) {
     const qrPx = Math.min(qrFootprintDots(bc.length, qrScale), Math.round((right - left) * 0.45));
-    lines.push(`1W1c${qrMod}${qrMod}${pad4(u(top))}${pad4(u(left))}${bc}`);
+    // DPL QR: W1d (auto) = QR; W1c = DataMatrix'ti (yanlış sembol). c=d TEK karakter modül,
+    // eee='000'. NORMAL tek-CR kaydı — çift-CR (Datamax "auto" terminatörü) Argox PPLA'da
+    // BOŞ kayıt üretip yazıcıyı resetliyordu (fiziksel: bir kez yanıp sönme + reset).
+    lines.push(`1W1d${qrMag}${qrMag}000${pad4(u(top))}${pad4(u(left))}${bc}`);
     colText = left + qrPx + d(2);
   }
 
   // --- Sağ kolon metin — OTOMATİK adım (fontYük×çarpan + boşluk) → çakışma yok ---
+  // DPL_FONT: satır-adımı GERÇEK DPL glif yüksekliğiyle (EPL2 değil) → DPL'de de çakışmaz.
   let row = top;
   for (const ln of templateTextLines(payload, template)) {
-    const f = EPL_FONT[ln.size] ?? EPL_FONT.md;
+    const f = DPL_FONT[ln.size] ?? DPL_FONT.md;
     const mul = ln.bold ? 2 : 1;
     const cellH = f.h * mul;
     if (row + cellH > bcTop - d(1)) break;

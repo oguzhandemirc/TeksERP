@@ -5,7 +5,7 @@
 // üretir; her dil renderer'ı kendi sözdiziminde konumlar. 203dpi = 8 dot/mm.
 // =============================================================================
 
-import { LabelKind, type LabelTemplate } from "@prisma/client";
+import { LabelKind, PrinterLanguage, type LabelTemplate, type PrinterMediaType } from "@prisma/client";
 import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import type { FontSize, TemplateField } from "../../config/label-fields";
@@ -26,6 +26,21 @@ export const LEFT_COL_MM = 30;
 
 export function mmToDots(mm: number, dpi: number): number {
   return Math.round((mm * dpi) / 25.4);
+}
+
+/** Baskı yöntemi komutu (dile göre) — cihaz mediaType'ından. Boş → "" (yazıcı otomatik
+ *  algılar, komut gönderilmez = güvenli varsayılan). Tek satır döner (emitter CR/CRLF ile
+ *  birleştirir): PPLA `<STX>KI7` 0/1 (0=direkt termal, 1=termal transfer/ribon); ZPL
+ *  `^MTD`/`^MTT`. PPLB (EPL2) iş-başına komut YOK → "". */
+export function mediaTypeCommand(
+  language: PrinterLanguage,
+  mediaType: PrinterMediaType | null | undefined,
+): string {
+  if (!mediaType) return "";
+  const tt = mediaType === "THERMAL_TRANSFER";
+  if (language === PrinterLanguage.PPLA) return `\x02KI7${tt ? "1" : "0"}`;
+  if (language === PrinterLanguage.ZPL) return tt ? "^MTT" : "^MTD";
+  return "";
 }
 
 /** Şablon-başına QR modül büyütme (dots/modül; PPLB `s`, ZPL/PPLA mag). Boş →
@@ -59,6 +74,21 @@ export const EPL_FONT: Record<FontSize, { code: string; w: number; h: number }> 
   xl: { code: "4", w: 14, h: 24 },
 };
 
+/** DPL/PPLA (Datamax/Argox) dahili bitmap font boyutları (203dpi, dot) — W×H, çarpan
+ *  ÖNCESİ. Font KODLARI EPL_FONT ile AYNI ('1'..'4') ve DPL'de de geçerli ID'lerdir —
+ *  AMA fiziksel boyutları EPL2'den FARKLIDIR (DPL fontları daha büyük). PPLB EPL2'nin
+ *  native'i olduğu için EPL_FONT'u kullanır; PPLA bir DPL yazıcısıdır → bu tabloyu
+ *  kullanmalı, yoksa emit+önizleme EPL2 boyutuyla anlaşır ama fiziksel yazıcı ~%35-50
+ *  daha büyük basar ("önizleme doğru, baskı alakasız" kök-nedeni).
+ *  ⚠️ Değerler Datamax DPL spec'inden türetildi; kesin dot boyutları Argox OS-214plus'ta
+ *  tek-satır referans baskısıyla KALİBRE EDİLMELİ (yön kesin, sayılar tahmini). */
+export const DPL_FONT: Record<FontSize, { code: string; w: number; h: number }> = {
+  sm: { code: "1", w: 7, h: 13 },
+  md: { code: "2", w: 10, h: 18 },
+  lg: { code: "3", w: 14, h: 27 },
+  xl: { code: "4", w: 18, h: 36 },
+};
+
 /** Satırlar arası varsayılan ek boşluk (mm) — otomatik adımda font yüksekliğine eklenir. */
 export const LINE_GAP_MM = 1.2;
 
@@ -79,6 +109,37 @@ const EPL_BASE_FONTS: ReadonlyArray<{ code: string; w: number; h: number }> = [
   { code: "5", w: 32, h: 48 },
 ];
 
+/** DPL/PPLA taban fontları (203dpi, dot) — serbest-boyut seçici (resolveEplTextStyle)
+ *  PPLA için BU tabloyla çağrılmalı. EPL2 tabanıyla çağrılırsa DPL yazıcıda hedeften
+ *  ~%35 uzun basar (font3×2=40 dot seçilir → DPL 27×2=54 dot). Font5 DPL'de dar-uzun
+ *  (18×52). ⚠️ Kalibrasyon gerekir (bkz. DPL_FONT). */
+export const DPL_BASE_FONTS: ReadonlyArray<{ code: string; w: number; h: number }> = [
+  { code: "1", w: 7, h: 13 },
+  { code: "2", w: 10, h: 18 },
+  { code: "3", w: 14, h: 27 },
+  { code: "4", w: 18, h: 36 },
+  { code: "5", w: 18, h: 52 },
+];
+
+/** DPL barkod/2D modül çarpanı → TEK karakter kodu. DPL alanı tek karakter ister:
+ *  1-9 → '1'..'9', 10-35 → 'A'..'Z', 36-61 → 'a'..'z'. İki-haneli ondalık ("10") YAZMA
+ *  — sabit-alan header'ını kaydırır (eski `1W1c`+padStart(2) bug'ının ta kendisi). */
+export function dplBarcodeMul(n: number): string {
+  const v = Math.max(1, Math.min(61, Math.round(n)));
+  if (v <= 9) return String(v);
+  if (v <= 35) return String.fromCharCode(55 + v); // 10→'A'(65) … 35→'Z'(90)
+  return String.fromCharCode(61 + v); // 36→'a'(97) … 61→'z'(122)
+}
+
+/** dplBarcodeMul tersi — önizleme parser'ı tek-karakter modülü sayıya çevirir. */
+export function dplBarcodeMulToNum(ch: string): number {
+  const c = ch.charCodeAt(0);
+  if (c >= 49 && c <= 57) return c - 48; // '1'-'9'
+  if (c >= 65 && c <= 90) return c - 55; // 'A'-'Z' → 10-35
+  if (c >= 97 && c <= 122) return c - 61; // 'a'-'z' → 36-61
+  return 4; // güvenli varsayılan
+}
+
 export interface EplTextStyle {
   code: string;
   /** Dikey çarpan (yükseklik). */
@@ -93,11 +154,17 @@ export interface EplTextStyle {
 /**
  * Hedef glif yüksekliği (dot) + genişlik oranı → (font, vmul, hmul).
  * Eşit sapmada BÜYÜK temel font tercih edilir (piksel çoğaltma yerine daha ince
- * doğal detay). maxMul: PPLB=6 (EPL2 güvenli aralık), PPLA/DPL=9.
+ * doğal detay). maxMul: PPLB=6 (EPL2 güvenli aralık). `baseFonts` verilmezse EPL2
+ * tablosu; PPLA/DPL çağrıları DPL_BASE_FONTS geçmeli (dile-doğru fiziksel boyut).
  */
-export function resolveEplTextStyle(targetHDots: number, wr: number, maxMul: number): EplTextStyle {
-  let best = { f: EPL_BASE_FONTS[1]!, v: 1, diff: Number.POSITIVE_INFINITY };
-  for (const f of EPL_BASE_FONTS) {
+export function resolveEplTextStyle(
+  targetHDots: number,
+  wr: number,
+  maxMul: number,
+  baseFonts: ReadonlyArray<{ code: string; w: number; h: number }> = EPL_BASE_FONTS,
+): EplTextStyle {
+  let best = { f: baseFonts[1] ?? baseFonts[0]!, v: 1, diff: Number.POSITIVE_INFINITY };
+  for (const f of baseFonts) {
     for (let v = 1; v <= maxMul; v++) {
       const diff = Math.abs(f.h * v - targetHDots);
       if (diff < best.diff || (diff === best.diff && f.h > best.f.h)) {

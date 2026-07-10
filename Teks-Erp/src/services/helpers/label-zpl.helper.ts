@@ -17,6 +17,7 @@ import {
   EPL_FONT,
   LINE_GAP_MM,
   qrFootprintDots,
+  mediaTypeCommand,
   type NativeRenderInput,
 } from "./native-label.shared";
 
@@ -52,6 +53,9 @@ export function buildRollLabelZpl({ payload, format, copies, template }: NativeR
 
   const lines: string[] = [];
   lines.push("^XA");
+  // Baskı yöntemi (ribon): cihaz mediaType'ından ^MTD/^MTT — boşsa yazıcı otomatik.
+  const mc = mediaTypeCommand(format.language, format.mediaType);
+  if (mc) lines.push(mc);
   lines.push("^CI28"); // UTF-8
   lines.push(`^PW${widthDots}`);
   lines.push(`^LL${heightDots}`);

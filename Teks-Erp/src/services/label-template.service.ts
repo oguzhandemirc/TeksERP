@@ -758,7 +758,12 @@ export class LabelTemplateService {
       return { success: true, data: { mode: "html", language, content: html, native: html } };
     }
     const native = renderLabel(language, input).content;
-    const svg = renderNativePreviewSvg(language, native, mmToDots(format.widthMm, format.dpi));
+    const svg = renderNativePreviewSvg(
+      language,
+      native,
+      mmToDots(format.widthMm, format.dpi),
+      mmToDots(format.heightMm, format.dpi),
+    );
     if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), native } };
     return { success: true, data: { mode: "text", language, content: native, native } };
   }
@@ -824,7 +829,12 @@ export class LabelTemplateService {
       return { success: true, data: { mode: "html", language, content: html, native: html } };
     }
     const native = renderLabel(language, input).content;
-    const svg = renderNativePreviewSvg(language, native, mmToDots(opts.widthMm, format.dpi));
+    const svg = renderNativePreviewSvg(
+      language,
+      native,
+      mmToDots(opts.widthMm, format.dpi),
+      mmToDots(opts.heightMm, format.dpi),
+    );
     if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), native } };
     return { success: true, data: { mode: "text", language, content: native, native } };
   }

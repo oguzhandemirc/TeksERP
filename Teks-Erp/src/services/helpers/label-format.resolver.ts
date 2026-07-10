@@ -17,7 +17,7 @@
 // yazıcısı OTO. Electron: cihaz yok → varsayılan medya.
 // =============================================================================
 
-import { PrinterLanguage, type LabelKind } from "@prisma/client";
+import { PrinterLanguage, type LabelKind, type PrinterMediaType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { type LabelFormatGeometry } from "./label-html.helper";
 import { readDefaultLabelMedia } from "../system-setting.service";
@@ -28,6 +28,9 @@ export interface ResolvedLabelFormat extends Required<LabelFormatGeometry> {
   dpi: number;
   language: PrinterLanguage;
   source: FormatResolveSource;
+  /** Baskı yöntemi (ribonlu=TT / ribonsuz=DT) — cihaz mediaType'ından; boş → yazıcı
+   *  otomatik (komut yok). Emitter dil-özel komuta çevirir (mediaTypeCommand). */
+  mediaType?: PrinterMediaType | null;
 }
 
 /** Cihaz kaydından okunan medya (yazıcıda takılı etiket). */

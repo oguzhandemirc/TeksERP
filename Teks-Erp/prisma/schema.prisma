@@ -154,6 +154,14 @@ enum PrinterLanguage {
   ZPL
 }
 
+/// Baskı yöntemi — ribonlu (termal transfer) vs ribonsuz (direkt termal). Boş → yazıcı
+/// otomatik algılar (komut gönderilmez, güvenli varsayılan). Seçiliyse dil-özel komuta
+/// çevrilir: PPLA `<STX>KI7` 0/1, ZPL `^MTD`/`^MTT`. PPLB'de iş-başına komut yok (atlanır).
+enum PrinterMediaType {
+  DIRECT_THERMAL
+  THERMAL_TRANSFER
+}
+
 /// Etiket yönü — medya geometrisinden türer (w ≥ h → LANDSCAPE).
 enum LabelOrientation {
   PORTRAIT
@@ -583,6 +591,7 @@ model PeripheralDevice {
   labelGapMm    Decimal? @db.Decimal(5, 2) // etiketler arası (gap sensörü); boş → 2
 
   languageOverride PrinterLanguage? // cihaz dili (boş → global ayar label.printerLanguage)
+  mediaType        PrinterMediaType? // baskı yöntemi (boş → yazıcı otomatik; PPLA/ZPL'de komuta çevrilir)
 
   isActive   Boolean   @default(true)
   /// KALICI silinme damgası (users.deletedAt kalıbı) — NULL=normal (isActive ile
@@ -1477,7 +1486,10 @@ model RollError {
   // 20260623100000 bu @@index'i PARTIAL UNIQUE'e (WHERE defectTypeId IS NOT NULL)
   // çevirir (drift-free yöntem — şemada index, migration'da unique+partial). Tambur/
   // KK2 reportError eşzamanlı çift-tıkta P2002 → 409 DUPLICATE_ROLL_ERROR.
-  @@index([rollId, startMeter, defectTypeId], map: "roll_errors_roll_meter_defect_uq")
+  // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE defectTypeId IS NOT NULL). Prisma 7
+  // partial predicate'i drift saymaz; ama uniqueness FARKI (index↔unique) drift SAYAR →
+  // bu yüzden @@unique olmalı (aksi halde migrate dev sonsuz CREATE üretir).
+  @@unique([rollId, startMeter, defectTypeId], map: "roll_errors_roll_meter_defect_uq")
   // Operatör performans raporu: kim hangi tarihte hata kapadı
   @@index([processedByUserId, processedAt])
   // D-5: detectedByUserId sorgu yolu (Cihaz İşlem Dökümü raporu); processedBy emsaliyle simetrik.
@@ -1763,8 +1775,10 @@ model SubcontractorDirectShipAllocation {
 
   createdAt DateTime @default(now())
 
-  // Aynı sevkte bir satıra iki kez karşılanma yazılamaz (ShipmentAllocation deseni)
-  @@unique([dispatchId, orderLineId])
+  // Aynı sevkte bir satıra iki kez karşılanma yazılamaz (ShipmentAllocation deseni).
+  // map: DB'deki gerçek index adı (63-karakter truncation'ı Prisma'nın ürettiğinden
+  // farklı) — aksi halde migrate dev sonsuz RENAME üretir.
+  @@unique([dispatchId, orderLineId], map: "subcontractor_direct_ship_allocations_dispatchId_orderLineId_ke")
   @@index([orderLineId])
   @@map("subcontractor_direct_ship_allocations")
 }
@@ -2259,18 +2273,24 @@ model Sack {
 
   // D-6: @@index([shipmentId]) kaldırıldı — @@unique([shipmentId, seq]) sol-prefix'i kapsar (FK dahil).
   // Saha #5: AMB%05d otomatik kod üretimi global max okur — range seek için.
-  @@index([manualCode])
+  // @@unique (DB'de PARTIAL UNIQUE WHERE manualCode ~ '^AMB[0-9]{5}$'; migration 20260622).
+  // Prisma 7 predicate'i yok sayar → drift-free; index↔unique farkı için @@unique şart.
+  @@unique([manualCode], map: "sacks_manualCode_idx")
   // Sevkiyat içinde cuval sırası benzersiz — silme sonrası yeniden ekleme/yarış
   // çift "Çuval N" üretemez (M-17; migration 20260612103000)
   @@unique([shipmentId, seq])
   // O-7: manualCode SEVKIYAT-İÇİ benzersiz — DB'de PARTIAL UNIQUE (WHERE manualCode
-  // IS NOT NULL; migration 20260708120000). @@index tam görünür ama Prisma 7 partial
-  // predicate'i drift saymaz (CLAUDE.md kural 4).
-  @@index([shipmentId, manualCode])
+  // IS NOT NULL; migration 20260708120000). Prisma 7 predicate'i yok sayar; index↔unique
+  // farkı drift üretmesin diye @@unique (map ile DB adı korunur).
+  @@unique([shipmentId, manualCode], map: "sacks_shipmentId_manualCode_idx")
   // O-22: Roll/Swatch↔Sack↔Shipment tutarlılık invariant'ının FK hedefi. Bu unique
   // sayesinde rolls & swatches'a composite FK (sackId, shipmentId) -> sacks(id,
   // shipmentId) kurulur (DEFERRABLE, raw-SQL; migration 20260708120000). Composite
-  // FK'lar Prisma şemasında YOK (native ifade edilemez) — DB seviyesinde yaşar.
+  // FK'lar Prisma şemasında YOK (native ifade edilemez — basit sackId FK'siyle aynı
+  // kolonu paylaşır + DEFERRABLE desteklenmez) — DB seviyesinde yaşar.
+  // ⚠️ DRIFT: `migrate dev` bu 2 FK'yı (rolls/swatches consistency) DROP etmek İSTER.
+  // ASLA uygulama — `migrate dev --create-only` kullan, üretilen DropForeignKey
+  // satırlarını SİL. (2026-07-10: bir kez yanlışlıkla DROP oldu, elle geri yüklendi.)
   @@unique([id, shipmentId])
   @@map("sacks")
 }

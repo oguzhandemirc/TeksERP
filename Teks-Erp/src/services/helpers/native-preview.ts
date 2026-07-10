@@ -9,13 +9,21 @@
 
 import bwipjs from "bwip-js";
 import { PrinterLanguage } from "@prisma/client";
-import { qrSymbolModules } from "./native-label.shared";
+import { qrSymbolModules, dplBarcodeMulToNum } from "./native-label.shared";
 
 // EPL2 bitmap font kodu → {w,h} dot (çarpan öncesi). Generator EPL_FONT ile AYNI değerler
-// (native-label.shared) — önizleme metni yazıcı hücresiyle birebir (textLength ile).
+// (native-label.shared) — PPLB/ZPL önizleme metni yazıcı hücresiyle birebir (textLength ile).
 const EPL_FONT_BY_CODE: Record<string, { w: number; h: number }> = {
   "1": { w: 8, h: 12 }, "2": { w: 10, h: 16 }, "3": { w: 12, h: 20 },
   "4": { w: 14, h: 24 }, "5": { w: 32, h: 48 },
+};
+
+// DPL/PPLA bitmap font kodu → {w,h} dot. Generator DPL_FONT/DPL_BASE_FONTS ile AYNI —
+// PPLA önizlemesi EPL2 DEĞİL, GERÇEK DPL glif boyunu göstermeli (yoksa önizleme baskıyla
+// uyuşmaz). ⚠️ DPL_FONT ile birlikte kalibre edilecek (bkz. native-label.shared). */
+const DPL_FONT_BY_CODE: Record<string, { w: number; h: number }> = {
+  "1": { w: 7, h: 13 }, "2": { w: 10, h: 18 }, "3": { w: 14, h: 27 },
+  "4": { w: 18, h: 36 }, "5": { w: 18, h: 52 },
 };
 
 function esc(s: string): string {
@@ -130,47 +138,56 @@ export function renderPplbToSvg(pplb: string): string | null {
  *  Satırlar CR-ayrık. BİRİM: kayıt koordinat/uzunluk alanları 1/100 İNÇ'tir (emitter
  *  fiziksel doğrulamayla bu birime geçti, 2026-07-10) — SVG tuvali dot olduğundan
  *  u2d() ile geri çevrilir. Font hücre boyutları dot kalır (bitmap font tablosu). */
-export function renderPplaToSvg(ppla: string, widthDots: number, dpi = 203): string | null {
+export function renderPplaToSvg(ppla: string, widthDots: number, dpi = 203, heightDots?: number): string | null {
   const lines = ppla.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
   const W = widthDots || 799;
   // 1/100 inç → dot (emitter'daki u()'nun tersi).
   const u2d = (v: number) => Math.round((v * dpi) / 100);
-  let H = 0;
+  // Tuval yüksekliği: heightDots verilirse ondan (medya boyu). <STX>M artık gövde boyu
+  // DEĞİL (TOF tavanı, ~5") → ondan okunmamalı; yalnız param yoksa geriye-uyum fallback.
+  let H = heightDots && heightDots > 0 ? heightDots : 0;
   const els: string[] = [];
   for (const ln of lines) {
     let m: RegExpMatchArray | null;
-    // Yükseklik: <STX>M#### (max label length, 1/100 inç)
-    if ((m = ln.match(/^\x02?M(\d+)$/))) { H = u2d(+m[1]); continue; }
-    // QR: 1W1c<mag2><mag2><row4><col4><veri>  (metin regex'inden ÖNCE — "1W" ile başlar)
-    // Modül büyütme komuttan okunur (eskiden sabit 4 varsayılıyordu — qrScale yansımıyordu).
-    if ((m = ln.match(/^1W1c(\d{2})(\d{2})(\d{4})(\d{4})(.*)$/))) {
-      els.push(svgQr(u2d(+m[4]), u2d(+m[3]), +m[1] || 4, m[5]));
+    // <STX>M (max label length) — tuval yüksekliği kaynağı DEĞİL (param'dan gelir); yalnız
+    // heightDots verilmediyse geriye-uyum için fallback.
+    if ((m = ln.match(/^\x02?M(\d+)$/))) { if (!H) H = u2d(+m[1]); continue; }
+    // NOT: emitter Argox ALT-orijin (Y yukarı) yazar; önizleme tuvali ÜST-orijin →
+    // her eleman için svgY = H - argoxY - elemanYüksekliği (emitter flipY'sinin tersi).
+    // QR: 1W1d<mag1><mag1>000<row4><col4><veri> (W1d=auto QR; modül TEK karakter DPL kodu).
+    if ((m = ln.match(/^1W1d(.)(.)000(\d{4})(\d{4})(.*)$/))) {
+      const mag = dplBarcodeMulToNum(m[1]);
+      const qh = qrSymbolModules(m[5].length) * Math.max(1, mag);
+      els.push(svgQr(u2d(+m[4]), H - u2d(+m[3]) - qh, mag, m[5]));
       continue;
     }
-    // Code128: 1e<n><w><h3><row4><col4><veri> — yükseklik alanı 3 HANE (fiziksel
-    // doğrulandı; 4 hane alan kaydırıyordu). n (dar/modül) önizleme genişliğine yansır.
+    // Code128: 1e<n><w><h3><row4><col4><veri> — yükseklik alanı 3 HANE.
     if ((m = ln.match(/^1e(\d)\d(\d{3})(\d{4})(\d{4})(.*)$/))) {
-      els.push(svgBarcode(u2d(+m[4]), u2d(+m[3]), u2d(+m[2]), m[5], false, (+m[1] || 2) / 2));
+      const bh = u2d(+m[2]);
+      els.push(svgBarcode(u2d(+m[4]), H - u2d(+m[3]) - bh, bh, m[5], false, (+m[1] || 2) / 2));
       continue;
     }
-    // DPL grafik (font X): 1X11000<row4><col4>L<w4><h4> (dolu) / B<w4><h4><t4><t4> (çerçeve)
-    if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})L(\d{4})(\d{4})$/))) {
-      els.push(`<rect x="${u2d(+m[2])}" y="${u2d(+m[1])}" width="${u2d(+m[3])}" height="${u2d(+m[4])}" fill="#000"/>`);
+    // Argox Line (küçük 'l' = dolu) / Box (küçük 'b' = çerçeve): 1X11000<row4><col4>{l|b}...
+    if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})l(\d{4})(\d{4})$/))) {
+      const lh = u2d(+m[4]);
+      els.push(`<rect x="${u2d(+m[2])}" y="${H - u2d(+m[1]) - lh}" width="${u2d(+m[3])}" height="${lh}" fill="#000"/>`);
       continue;
     }
-    if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})B(\d{4})(\d{4})(\d{4})(\d{4})$/))) {
+    if ((m = ln.match(/^1X\d\d000(\d{4})(\d{4})b(\d{4})(\d{4})(\d{4})(\d{4})$/))) {
+      const bxh = u2d(+m[4]);
       els.push(
-        `<rect x="${u2d(+m[2])}" y="${u2d(+m[1])}" width="${u2d(+m[3])}" height="${u2d(+m[4])}" fill="none" stroke="#000" stroke-width="${Math.max(1, u2d(+m[5]))}"/>`,
+        `<rect x="${u2d(+m[2])}" y="${H - u2d(+m[1]) - bxh}" width="${u2d(+m[3])}" height="${bxh}" fill="none" stroke="#000" stroke-width="${Math.max(1, u2d(+m[5]))}"/>`,
       );
       continue;
     }
     // Metin: <rot 1-4><font><wMul><hMul>000<row4><col4><veri> — DPL rot 1=0°,2=90°,
-    // 3=180°, 4=270° CW (kanvas elemanları döndürülmüş metin basabilir).
+    // 3=180°, 4=270° CW. GERÇEK DPL glif boyuyla + Y-flip → önizleme = baskı.
     if ((m = ln.match(/^([1-4])([1-9])(\d)(\d)000(\d{4})(\d{4})(.*)$/))) {
-      const fd = EPL_FONT_BY_CODE[m[2]] ?? EPL_FONT_BY_CODE["3"];
+      const fd = DPL_FONT_BY_CODE[m[2]] ?? DPL_FONT_BY_CODE["3"];
+      const cellH = fd.h * (+m[4] || 1);
       const x = u2d(+m[6]);
-      const y = u2d(+m[5]);
-      const cell = svgTextCell(x, y, fd.w * (+m[3] || 1), fd.h * (+m[4] || 1), m[7]);
+      const y = H - u2d(+m[5]) - cellH;
+      const cell = svgTextCell(x, y, fd.w * (+m[3] || 1), cellH, m[7]);
       const deg = (+m[1] - 1) * 90;
       els.push(deg ? `<g transform="rotate(${deg} ${x} ${y})">${cell}</g>` : cell);
       continue;
@@ -218,10 +235,16 @@ export function renderZplToSvg(zpl: string): string | null {
 }
 
 /** Aktif dile göre görsel önizleme SVG'si. Çizicisi olmayan/geçersiz → null (HTML/text'e düş).
- *  widthDots yalnız PPLA için gerekli (genişlik komut akışında yok). */
-export function renderNativePreviewSvg(language: PrinterLanguage, native: string, widthDots?: number): string | null {
+ *  widthDots/heightDots yalnız PPLA için gerekli (geometri komut akışında yok; height artık
+ *  <STX>M'den okunmuyor çünkü M gövde boyu değil TOF tavanıdır). */
+export function renderNativePreviewSvg(
+  language: PrinterLanguage,
+  native: string,
+  widthDots?: number,
+  heightDots?: number,
+): string | null {
   if (language === PrinterLanguage.PPLB) return renderPplbToSvg(native);
-  if (language === PrinterLanguage.PPLA) return renderPplaToSvg(native, widthDots ?? 799);
+  if (language === PrinterLanguage.PPLA) return renderPplaToSvg(native, widthDots ?? 799, 203, heightDots);
   if (language === PrinterLanguage.ZPL) return renderZplToSvg(native);
   return null;
 }
