@@ -17,6 +17,8 @@ export interface SackSearchShipment {
   id: string;
   shipmentNo: string;
   status: ShipmentStatusKey;
+  /** Sevke hazır olma anı — çeki listesinde "ne zamandır bekliyor". */
+  readyAt?: string | null;
   customer: { id: string; name: string };
   branch: { id: string; name: string } | null;
 }
@@ -82,6 +84,26 @@ export interface SackContents {
   shipment: SackSearchShipment;
   rolls: SackContentRoll[];
   swatches: SackContentSwatch[];
+}
+
+/** Çeki listesi satırı — POST /api/shipping/sack-search/pick-list cevabı. */
+export interface PickListRow {
+  id: string;
+  sackNo: string;
+  seq: number;
+  manualCode: string | null;
+  weightKg: number | null;
+  shipment: SackSearchShipment;
+  rollCount: number;
+  swatchCount: number;
+  totalQty: number;
+  contents: {
+    itemName: string;
+    colorName: string | null;
+    width: number | null;
+    qty: number;
+    rollCount: number;
+  }[];
 }
 
 /** locate-roll cevabı — top + bulunduğu çuval/sevkiyat (ikisi de olmayabilir). */

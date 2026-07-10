@@ -132,6 +132,33 @@ async function main() {
       notFound = (e as { statusCode?: number }).statusCode === 404;
     }
     check("Bilinmeyen barkod 404", notFound);
+
+    // 8) Çeki listesi — seçilen çuvalların içerik özetli dökümü
+    const pick = await svc.getPickList([sack1.id, sack2.id]);
+    const pickRows = pick.data as Array<{
+      id: string;
+      totalQty: number;
+      rollCount: number;
+      contents: Array<{ itemName: string; qty: number; rollCount: number }>;
+      shipment: { shipmentNo: string; customer: { name: string } };
+    }>;
+    check("Çeki listesi iki çuvalı da döndürdü", pickRows.length === 2);
+    const p1 = pickRows.find((r) => r.id === sack1.id);
+    check("Çuval-1 özeti: 3 top, 180 m", p1?.rollCount === 3 && p1?.totalQty === 180);
+    check(
+      "Çuval-1 içerik özeti ürün bazında gruplu (itemA 150m/2top + itemB 30m/1top)",
+      p1?.contents.length === 2 &&
+        p1.contents.some((g) => g.qty === 150 && g.rollCount === 2) &&
+        p1.contents.some((g) => g.qty === 30 && g.rollCount === 1),
+    );
+    check("Çeki satırında sevkiyat+müşteri var", !!p1?.shipment.customer.name);
+    let pickEmpty = false;
+    try {
+      await svc.getPickList([]);
+    } catch (e) {
+      pickEmpty = (e as { statusCode?: number }).statusCode === 400;
+    }
+    check("Boş seçim 400", pickEmpty);
   } finally {
     await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id, r4.id, r5.id] } } });
     await prisma.sack.deleteMany({ where: { shipmentId: shipment.id } });

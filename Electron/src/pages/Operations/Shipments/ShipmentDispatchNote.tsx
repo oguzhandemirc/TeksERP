@@ -14,10 +14,7 @@ import { printHtmlString } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
-import {
-  printedDocumentService,
-  type PrintedDocument,
-} from "@/services/printedDocumentService";
+import { printedDocumentService, type PrintedDocument } from "@/services/printedDocumentService";
 
 interface Props {
   shipmentId: string | null;
@@ -49,8 +46,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
   // Geçmişten seçilen eski versiyonun meta'sı (versiyon çubuğu rozeti için).
   const versionQuery = useQuery({
     queryKey: ["printed-doc", DOC_TYPE, shipmentId, "v", selectedVersion],
-    queryFn: () =>
-      printedDocumentService.getVersion<unknown>(DOC_TYPE, shipmentId!, selectedVersion!),
+    queryFn: () => printedDocumentService.getVersion<unknown>(DOC_TYPE, shipmentId!, selectedVersion!),
     enabled: open && Boolean(shipmentId) && selectedVersion != null,
     staleTime: 30_000,
   });
@@ -69,12 +65,12 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
   const html = htmlQuery.data ?? null;
 
   const shownMeta =
-    selectedVersion != null ? ((versionQuery.data?.data ?? null) as PrintedDocument<unknown> | null) : currentDoc;
+    selectedVersion != null
+      ? ((versionQuery.data?.data ?? null) as PrintedDocument<unknown> | null)
+      : currentDoc;
 
   const loading =
-    htmlQuery.isLoading ||
-    docQuery.isLoading ||
-    (selectedVersion != null && versionQuery.isLoading);
+    htmlQuery.isLoading || docQuery.isLoading || (selectedVersion != null && versionQuery.isLoading);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

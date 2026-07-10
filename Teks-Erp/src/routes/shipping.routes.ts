@@ -155,6 +155,31 @@ router.get("/sack-search", verifyToken, READ, controller.searchSacks);
 
 /**
  * @openapi
+ * /api/shipping/sack-search/pick-list:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çeki listesi — seçilen çuvalların içerik özetli dökümü (salt-okunur; body taşıyan okuma)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sackIds]
+ *             properties:
+ *               sackIds:
+ *                 type: array
+ *                 maxItems: 200
+ *                 items: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Çuval dökümü — ürün·renk·en özetli, sevkiyat+müşteri bilgili }
+ *       400: { description: Boş/aşırı seçim }
+ */
+router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList);
+
+/**
+ * @openapi
  * /api/shipping/sacks/{id}/contents:
  *   get:
  *     tags: [Shipping]

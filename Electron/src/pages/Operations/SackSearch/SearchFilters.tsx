@@ -1,12 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -83,9 +77,7 @@ export function SearchFilters({ filters, onChange }: Props) {
         type="number"
         min={1}
         value={filters.width ?? ""}
-        onChange={(e) =>
-          onChange({ width: e.target.value === "" ? undefined : Number(e.target.value) })
-        }
+        onChange={(e) => onChange({ width: e.target.value === "" ? undefined : Number(e.target.value) })}
         placeholder="En (cm)"
         className="h-8 w-24 text-xs"
       />

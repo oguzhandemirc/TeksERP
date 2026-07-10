@@ -65,15 +65,7 @@ export interface ItemRow {
   qty: number;
 }
 
-export function NoteHeader({
-  title,
-  no,
-  date,
-}: {
-  title: string;
-  no: string;
-  date: string | null;
-}) {
+export function NoteHeader({ title, no, date }: { title: string; no: string; date: string | null }) {
   return (
     <div className="flex items-start justify-between border-b-2 border-black pb-3">
       <div>
@@ -84,10 +76,7 @@ export function NoteHeader({
       </div>
       <div className="text-right text-[11px]">
         <div>
-          Tarih:{" "}
-          <span className="font-semibold">
-            {date ? safeFormat(date, "dd.MM.yyyy HH:mm") : "—"}
-          </span>
+          Tarih: <span className="font-semibold">{date ? safeFormat(date, "dd.MM.yyyy HH:mm") : "—"}</span>
         </div>
       </div>
     </div>
@@ -97,9 +86,7 @@ export function NoteHeader({
 export function ItemTable({ lines, totalQty }: { lines: ItemRow[]; totalQty: number }) {
   return (
     <div className="mt-4">
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">
-        Gönderilen Kalemler
-      </div>
+      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">Gönderilen Kalemler</div>
       <table className="w-full border-collapse text-[11px]">
         <thead>
           <tr className="border-b-2 border-black">
@@ -207,9 +194,7 @@ export function SackBreakdown({ sacks, totalKg }: { sacks: ShipmentDocSack[]; to
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded border border-gray-300 p-2">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
-        {title}
-      </div>
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-600">{title}</div>
       <div className="space-y-0.5">{children}</div>
     </div>
   );
@@ -226,9 +211,7 @@ export function Row({ label, value }: { label: string; value: string }) {
 
 export function Th({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <th className={`px-1.5 py-1 text-left text-[10px] font-semibold uppercase ${className}`}>
-      {children}
-    </th>
+    <th className={`px-1.5 py-1 text-left text-[10px] font-semibold uppercase ${className}`}>{children}</th>
   );
 }
 

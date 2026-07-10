@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { sackSearchService } from "./service";
@@ -18,8 +19,15 @@ function fmtQty(n: number): string {
   return `${n.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} m`;
 }
 
+interface Props {
+  sack: SackSearchRow;
+  /** Verilirse satır başında çeki-listesi seçim kutusu görünür. */
+  selected?: boolean;
+  onToggleSelect?: (sackId: string) => void;
+}
+
 /** Tek arama sonucu — başlık satırı + genişletilince lazy içerik dökümü. */
-export function SackResultCard({ sack }: { sack: SackSearchRow }) {
+export function SackResultCard({ sack, selected, onToggleSelect }: Props) {
   const [open, setOpen] = useState(false);
 
   const contents = useQuery({
@@ -32,55 +40,64 @@ export function SackResultCard({ sack }: { sack: SackSearchRow }) {
   const hasMatch = sack.matchRollCount !== null;
 
   return (
-    <div className="rounded-lg border bg-card">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/30"
-        aria-expanded={open}
-      >
-        <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">Çuval {sack.seq}</span>
-            {sack.manualCode && (
-              <Badge variant="outline" className="font-mono text-[10px]">
-                {sack.manualCode}
-              </Badge>
-            )}
-            <span
-              className={cn(
-                "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                STATUS_TONE[sack.shipment.status],
+    <div className={cn("rounded-lg border bg-card", selected && "border-primary/60 bg-primary/5")}>
+      <div className="flex w-full items-center gap-3 px-4 py-3">
+        {onToggleSelect && (
+          <Checkbox
+            checked={!!selected}
+            onCheckedChange={() => onToggleSelect(sack.id)}
+            aria-label={`Çuval ${sack.manualCode ?? sack.seq} seç`}
+          />
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          aria-expanded={open}
+        >
+          <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Çuval {sack.seq}</span>
+              {sack.manualCode && (
+                <Badge variant="outline" className="font-mono text-[10px]">
+                  {sack.manualCode}
+                </Badge>
               )}
-            >
-              {shipmentStatusLabels[sack.shipment.status]}
-            </span>
-          </div>
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-            {sack.shipment.shipmentNo} · {sack.shipment.customer.name}
-            {sack.shipment.branch ? ` / ${sack.shipment.branch.name}` : ""}
-          </div>
-        </div>
-        <div className="shrink-0 text-right text-xs">
-          {hasMatch && (
-            <div className="font-medium text-primary">
-              Eşleşen: {sack.matchRollCount} top · {fmtQty(sack.matchQty ?? 0)}
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  STATUS_TONE[sack.shipment.status],
+                )}
+              >
+                {shipmentStatusLabels[sack.shipment.status]}
+              </span>
             </div>
-          )}
-          <div className="text-muted-foreground">
-            {sack.rollCount} top · {fmtQty(sack.totalQty)}
-            {sack.swatchCount > 0 ? ` · ${sack.swatchCount} kartela` : ""}
-            {sack.weightKg !== null ? ` · ${sack.weightKg.toLocaleString("tr-TR")} kg` : ""}
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {sack.shipment.shipmentNo} · {sack.shipment.customer.name}
+              {sack.shipment.branch ? ` / ${sack.shipment.branch.name}` : ""}
+            </div>
           </div>
-        </div>
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
+          <div className="shrink-0 text-right text-xs">
+            {hasMatch && (
+              <div className="font-medium text-primary">
+                Eşleşen: {sack.matchRollCount} top · {fmtQty(sack.matchQty ?? 0)}
+              </div>
+            )}
+            <div className="text-muted-foreground">
+              {sack.rollCount} top · {fmtQty(sack.totalQty)}
+              {sack.swatchCount > 0 ? ` · ${sack.swatchCount} kartela` : ""}
+              {sack.weightKg !== null ? ` · ${sack.weightKg.toLocaleString("tr-TR")} kg` : ""}
+            </div>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+      </div>
 
       {open && (
         <div className="border-t px-4 py-3">

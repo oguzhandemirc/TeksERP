@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { ChevronDown, PackageSearch } from "lucide-react";
+import { ChevronDown, ClipboardList, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -14,6 +14,7 @@ import { sackSearchService } from "./service";
 import { SearchFilters } from "./SearchFilters";
 import { SackResultCard } from "./SackResultCard";
 import { RollLocateCard } from "./RollLocateCard";
+import { PickListPrintDialog } from "./PickListPrintDialog";
 import type { LocatedRoll, SackSearchParams } from "./types";
 
 const QUERY_KEY = "sack-search";
@@ -28,6 +29,10 @@ export function SackSearchPage() {
   const debounced = useDebouncedValue(filters, 300);
   const [barcode, setBarcode] = useState("");
   const [located, setLocated] = useState<LocatedRoll | null>(null);
+  // Çeki listesi seçimi — filtre değişse de KORUNUR: senaryo "gri Patos'u seç,
+  // sonra mavi Mitos'u filtreleyip ekle" (müşterinin karışık talebi tek kağıtta).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pickListIds, setPickListIds] = useState<string[] | null>(null);
 
   const query = useInfiniteQuery({
     queryKey: [QUERY_KEY, debounced],
@@ -39,6 +44,22 @@ export function SackSearchPage() {
   });
 
   const sacks = useMemo(() => query.data?.pages.flatMap((p) => p.data) ?? [], [query.data]);
+
+  const toggleSelect = (sackId: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sackId)) next.delete(sackId);
+      else next.add(sackId);
+      return next;
+    });
+  const visibleAllSelected = sacks.length > 0 && sacks.every((s) => selectedIds.has(s.id));
+  const toggleSelectVisible = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (visibleAllSelected) sacks.forEach((s) => next.delete(s.id));
+      else sacks.forEach((s) => next.add(s.id));
+      return next;
+    });
 
   // Top bul — 404 toast'ı apiClient interceptor'dan gelir, onError sadece temizler.
   const locate = useMutation({
@@ -93,12 +114,32 @@ export function SackSearchPage() {
         busyLabel="Aranıyor…"
       />
 
-      <SearchFilters
-        filters={filters}
-        onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
-      />
+      <SearchFilters filters={filters} onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))} />
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
+
+      {/* Çeki listesi araç çubuğu — seçim varken veya liste doluyken görünür */}
+      {(sacks.length > 0 || selectedIds.size > 0) && (
+        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-6 py-2">
+          <Button variant="outline" size="sm" onClick={toggleSelectVisible} disabled={sacks.length === 0}>
+            {visibleAllSelected ? "Görünenlerin seçimini kaldır" : "Görünenleri seç"}
+          </Button>
+          {selectedIds.size > 0 && (
+            <>
+              <Button size="sm" onClick={() => setPickListIds([...selectedIds])}>
+                <ClipboardList className="mr-1 h-4 w-4" />
+                Çeki Listesi Bas ({selectedIds.size})
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                Seçimi temizle
+              </Button>
+            </>
+          )}
+          <span className="ml-auto text-xs text-muted-foreground">
+            Çuvalları işaretle → tek kağıtta sahada aranacak döküm.
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-6">
         {query.isLoading ? (
@@ -116,7 +157,12 @@ export function SackSearchPage() {
           <>
             <div className="space-y-2">
               {sacks.map((s) => (
-                <SackResultCard key={s.id} sack={s} />
+                <SackResultCard
+                  key={s.id}
+                  sack={s}
+                  selected={selectedIds.has(s.id)}
+                  onToggleSelect={toggleSelect}
+                />
               ))}
             </div>
             <div className="flex justify-center p-6">
@@ -142,6 +188,8 @@ export function SackSearchPage() {
           </>
         )}
       </div>
+
+      <PickListPrintDialog sackIds={pickListIds} onOpenChange={(o) => !o && setPickListIds(null)} />
     </div>
   );
 }

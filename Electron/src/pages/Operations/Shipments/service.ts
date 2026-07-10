@@ -8,16 +8,13 @@ import type { ShipmentListItem, ShipmentDetail, BranchLookupItem } from "./types
 const base = createCrudService<ShipmentListItem>("/api/shipping/shipments");
 
 /** FilterBar şube filtresi için global şube lookup'ı (customer dahil). */
-export const branchLookupService =
-  createCrudService<BranchLookupItem>("/api/customer-branches");
+export const branchLookupService = createCrudService<BranchLookupItem>("/api/customer-branches");
 
 export const shipmentService = {
   ...base,
   /** Tek sevkiyat detayı — açılınca lazy çekilir (liste değil). */
   getDetail: (id: string): Promise<ApiResponse<ShipmentDetail>> =>
-    apiClient
-      .get<ApiResponse<ShipmentDetail>>(`/api/shipping/shipments/${id}`)
-      .then((r) => r.data),
+    apiClient.get<ApiResponse<ShipmentDetail>>(`/api/shipping/shipments/${id}`).then((r) => r.data),
 
   /** Saha #7: sevkiyatı yeniden hedefle — bağlı sipariş kümesini değiştir (replace). */
   retargetOrders: (id: string, orderIds: string[]): Promise<ApiResponse<unknown>> =>
@@ -29,17 +26,42 @@ export const shipmentService = {
    * Saha #7 (artımlı): yeniden hedefleme SALT-OKUNUR projeksiyonu. Aday sipariş
    * kümesi için karşılanma etkisini COMMIT ETMEDEN döner (backend DB'ye yazmaz).
    */
-  retargetPreview: (
-    id: string,
-    orderIds: string[],
-  ): Promise<ApiResponse<RetargetPreview>> =>
+  retargetPreview: (id: string, orderIds: string[]): Promise<ApiResponse<RetargetPreview>> =>
     apiClient
-      .post<ApiResponse<RetargetPreview>>(
-        `/api/shipping/shipments/${id}/retarget-preview`,
-        { orderIds },
-      )
+      .post<ApiResponse<RetargetPreview>>(`/api/shipping/shipments/${id}/retarget-preview`, { orderIds })
       .then((r) => r.data),
+
+  /** İptal önizlemesi — etkilenecek top/sipariş/çuval dökümü (yıkıcı-onay kuralı). */
+  cancelPreview: (id: string): Promise<ApiResponse<CancelPreview>> =>
+    apiClient
+      .get<ApiResponse<CancelPreview>>(`/api/shipping/shipments/${id}/cancel-preview`)
+      .then((r) => r.data),
+
+  /** Sevkiyatı iptal et (CANCELLED) — toplar serbest kalır, çuvallar silinir. */
+  cancel: (id: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/cancel`, {}).then((r) => r.data),
 };
+
+/** İptal önizleme yanıtı (backend getCancelPreview ile eşleşir). */
+export interface CancelPreview {
+  shipmentId: string;
+  shipmentNo: string;
+  status: string;
+  customerName: string;
+  branchName: string | null;
+  canCancel: boolean;
+  reason: string | null;
+  rolls: {
+    id: string;
+    barcode: string | null;
+    currentQty: number;
+    itemName: string;
+    colorName: string | null;
+  }[];
+  swatchCount: number;
+  sackCount: number;
+  affectedOrders: { orderNumber: string; qty: string }[];
+}
 
 // Saha #7 önizleme yanıt şekli (backend previewRetargetOrders ile eşleşir).
 export interface RetargetPreviewOrder {

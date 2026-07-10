@@ -185,6 +185,20 @@ export class ShippingController {
     }
   };
 
+  // Çeki listesi — seçilen çuvalların içerik özetli dökümü (salt-okunur;
+  // body taşıyan okuma: id listesi query-string'e sığmaz).
+  getPickList = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = z
+        .object({ sackIds: z.array(z.string().uuid()).min(1).max(200) })
+        .parse(req.body);
+      const result = await sackSearchService.getPickList(body.sackIds);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
   locateRoll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const barcode = z.string().trim().min(1, "Barkod gerekli").max(64).parse(req.query.barcode);

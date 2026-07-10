@@ -1,15 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Package, Undo2, Target } from "lucide-react";
+import { Ban, FileText, Package, Undo2, Target } from "lucide-react";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RetargetOrdersDialog } from "./RetargetOrdersDialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+import { CancelShipmentDialog } from "./CancelShipmentDialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +26,7 @@ interface Props {
 export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [retargetOpen, setRetargetOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   // Lazy — yalnız açılınca detay çekilir. queryKey irsaliye ile paylaşılır (cache).
   const q = useQuery({
@@ -48,13 +44,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <span className="font-mono">{d?.shipmentNo ?? "Sevkiyat"}</span>
-            {d && (
-              <StatusBadge
-                status={d.status}
-                labels={shipmentStatusLabels}
-                tones={shipmentStatusTones}
-              />
-            )}
+            {d && <StatusBadge status={d.status} labels={shipmentStatusLabels} tones={shipmentStatusTones} />}
           </SheetTitle>
           <SheetDescription>
             {d ? `${d.customer.name}${d.branch ? " · " + d.branch.name : ""}` : "Yükleniyor…"}
@@ -91,6 +81,16 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                     onClick={() => setRetargetOpen(true)}
                   >
                     <Target className="h-3.5 w-3.5" /> Siparişleri Değiştir
+                  </Button>
+                  {/* İptal: araç vazgeçti / sipariş komple iptal — cancel-preview'lı yıkıcı onay */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-destructive hover:text-destructive"
+                    onClick={() => setCancelOpen(true)}
+                  >
+                    <Ban className="h-3.5 w-3.5" /> İptal Et
                   </Button>
                 </PermissionGate>
               )}
@@ -189,8 +189,8 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
               <Card>
                 <CardContent className="p-3">
                   <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <Undo2 className="h-3.5 w-3.5" /> Bu sevkiyattan iade edilenler (
-                    {d.summary.returnedCount})
+                    <Undo2 className="h-3.5 w-3.5" /> Bu sevkiyattan iade edilenler ({d.summary.returnedCount}
+                    )
                   </div>
                   <div className="space-y-0.5 text-[11px]">
                     {d.returnedRolls.map((r) => (
@@ -241,7 +241,8 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                         <div className="mb-1 flex items-center justify-between text-[11px] font-semibold">
                           <span>Çuval #{s.seq}</span>
                           <span className="tabular-nums font-normal text-muted-foreground">
-                            {s.weightKg != null ? `${fmtKg(s.weightKg)} kg` : "tartılmadı"} · {s.rollCount} top
+                            {s.weightKg != null ? `${fmtKg(s.weightKg)} kg` : "tartılmadı"} · {s.rollCount}{" "}
+                            top
                             {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ""}
                           </span>
                         </div>
@@ -286,11 +287,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
           </div>
         )}
 
-        <ShipmentDispatchNote
-          shipmentId={shipmentId}
-          open={noteOpen}
-          onOpenChange={setNoteOpen}
-        />
+        <ShipmentDispatchNote shipmentId={shipmentId} open={noteOpen} onOpenChange={setNoteOpen} />
 
         {d && (
           <RetargetOrdersDialog
@@ -302,6 +299,11 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
             onOpenChange={setRetargetOpen}
           />
         )}
+
+        <CancelShipmentDialog
+          shipmentId={cancelOpen ? shipmentId : null}
+          onOpenChange={(o) => setCancelOpen(o)}
+        />
       </SheetContent>
     </Sheet>
   );

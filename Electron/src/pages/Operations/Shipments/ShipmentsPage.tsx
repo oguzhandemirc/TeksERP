@@ -8,11 +8,7 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { customerService } from "@/pages/Customers/service";
 import { shipmentColumns } from "./columns";
 import { shipmentService, branchLookupService } from "./service";
-import {
-  shipmentStatusLabels,
-  type ShipmentListItem,
-  type BranchLookupItem,
-} from "./types";
+import { shipmentStatusLabels, type ShipmentListItem, type BranchLookupItem } from "./types";
 import { ShipmentDetailSheet } from "./ShipmentDetailSheet";
 
 const QUERY_KEY = "shipments";
