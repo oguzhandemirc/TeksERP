@@ -53,6 +53,12 @@ function pad4(n: number): string {
   return String(Math.max(0, Math.min(9999, Math.round(n)))).padStart(4, "0");
 }
 
+/** DPL barkod kaydının yükseklik alanı 3 HANE (4 değil) — 4 hane yazılırsa alanlar
+ *  1 kayar, satır devasa okunur → yazıcı boş etiket besler (fiziksel doğrulandı). */
+function pad3(n: number): string {
+  return String(Math.max(0, Math.min(999, Math.round(n)))).padStart(3, "0");
+}
+
 /** field/text elemanının basılacak metni — present:false → null (eleman atlanır). */
 function elementText(el: FieldElement | TextElement, payload: LabelPayload): string | null {
   if (el.type === "text") return el.text;
@@ -240,9 +246,14 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
 export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRenderInput): string {
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
+  // DPL/PPLA inç modunda (STX n) kayıt koordinat/uzunluk alanları 1/100 İNÇ'tir —
+  // dot DEĞİL (Argox OS-214plus fiziksel testi, 2026-07-10: dot yazınca her konum
+  // ×2.03 kayıyor — "ortadaki sağa dayanır, metin taşar"). İç geometri (font seçimi,
+  // ortalama, banner) dot'ta hesaplanır; kayıt alanına yazarken u() ile çevrilir.
+  const u = (dots: number) => Math.round((dots * 100) / dpi);
   const lines: string[] = [];
   lines.push(`${STX}n`);
-  lines.push(`${STX}M${pad4(d(format.heightMm))}`);
+  lines.push(`${STX}M${pad4(u(d(format.heightMm)))}`);
   lines.push(`${STX}L`);
   lines.push("D11");
   lines.push("H10");
@@ -265,40 +276,42 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
           // en dar dil olan PPLB'ninki (maxMul=6). DPL 9'a kadar destekler ama
           // parite için kullanılmaz (eleman dilden dile farklı boyut vermemeli).
           const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
-          // KALIN = çift-vuruş (+1 dot); bold yoksa tek satır = bayt-aynı.
-          const emit = (dc: number) => `${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(row)}${pad4(col + dc)}${cleanCtl(text)}`;
+          // KALIN = çift-vuruş (+1 birim = 0.254mm ≈ 2 dot); bold yoksa tek satır.
+          const emit = (dc: number) => `${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(u(row))}${pad4(u(col) + dc)}${cleanCtl(text)}`;
           lines.push(emit(0));
           if (el.bold) lines.push(emit(1));
         } else {
-          // ESKİ 4-kademe yol (bayt-uyum).
+          // ESKİ 4-kademe yol.
           const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
           const mult = el.bold ? "22" : "11";
-          lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(row)}${pad4(col)}${cleanCtl(text)}`);
+          lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(u(row))}${pad4(u(col))}${cleanCtl(text)}`);
         }
         break;
       }
       case "qr": {
         if (!bc) break;
         const mod = String(resolveQrScale(el.scale)).padStart(2, "0");
-        lines.push(`1W1c${mod}${mod}${pad4(row)}${pad4(col)}${bc}`);
+        lines.push(`1W1c${mod}${mod}${pad4(u(row))}${pad4(u(col))}${bc}`);
         break;
       }
       case "code128": {
         if (!bc) break;
         const h = d(el.hMm ?? 9);
         // Modül kalınlığı: DPL barkod kaydında 'e' sonrası dar+geniş tek hane.
-        // mw yokken bugünkü "22" aynen (bayt-uyum).
+        // mw yokken "22" aynen.
         const mw = Math.min(9, el.mw ?? 2);
-        lines.push(`1e${mw}${mw}${pad4(h)}${pad4(row)}${pad4(col)}${bc}`);
+        // DİKKAT: yükseklik alanı 3 HANE (pad3) — 4 hane fiziksel testte kayıt
+        // kaymasına ve kaçak beslemeye yol açtı (8 boş etiket bug'ı).
+        lines.push(`1e${mw}${mw}${pad3(u(h))}${pad4(u(row))}${pad4(u(col))}${bc}`);
         // Okunur satır — barkodun altında ORTALANMIŞ (eskiden sola yaslıydı).
         // Format: <rot=1><font><hMul><vMul>000<row4><col4><veri>. Boyut humanHMm'den
-        // (ortak-payda); humanDx/Dy ile ince ayar.
+        // (ortak-payda); humanDx/Dy ile ince ayar. İç hesap dot, emisyon u().
         if (el.human !== false) {
           const hs = humanEplStyle(el.humanHMm, d);
           const bw = code128WidthDots(bc.length, mw);
           const center = Math.max(0, Math.round((bw - bc.length * hs.charW) / 2));
-          const hcol = Math.max(0, col + center + d(el.humanDx ?? 0));
-          const hrow = Math.max(0, row + h + d(1) + d(el.humanDy ?? 0));
+          const hcol = Math.max(0, u(col + center + d(el.humanDx ?? 0)));
+          const hrow = Math.max(0, u(row + h + d(1) + d(el.humanDy ?? 0)));
           lines.push(`1${hs.code}${hs.hmul}${hs.vmul}000${pad4(hrow)}${pad4(hcol)}${bc}`);
         }
         break;
@@ -306,11 +319,11 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
       // DPL font-X grafik kayıtları: L=dolu çizgi/kutu, B=çerçeve.
       // Format: 1X11000<row4><col4><L|B><yatay4><dikey4>[<alt-üst duvar4><yan duvar4>]
       case "line":
-        lines.push(`1X11000${pad4(row)}${pad4(col)}L${pad4(d(el.wMm))}${pad4(d(el.hMm))}`);
+        lines.push(`1X11000${pad4(u(row))}${pad4(u(col))}L${pad4(u(d(el.wMm)))}${pad4(u(d(el.hMm)))}`);
         break;
       case "box": {
-        const t = Math.max(1, d(el.thickMm ?? 0.5));
-        lines.push(`1X11000${pad4(row)}${pad4(col)}B${pad4(d(el.wMm))}${pad4(d(el.hMm))}${pad4(t)}${pad4(t)}`);
+        const t = Math.max(1, u(d(el.thickMm ?? 0.5)));
+        lines.push(`1X11000${pad4(u(row))}${pad4(u(col))}B${pad4(u(d(el.wMm)))}${pad4(u(d(el.hMm)))}${pad4(t)}${pad4(t)}`);
         break;
       }
       case "lengthBanner": {
@@ -323,11 +336,11 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * row;
-        lines.push(`1X11000${pad4(row)}${pad4(col)}B${pad4(w)}${pad4(h)}${pad4(2)}${pad4(2)}`);
+        lines.push(`1X11000${pad4(u(row))}${pad4(u(col))}B${pad4(u(w))}${pad4(u(h))}${pad4(1)}${pad4(1)}`);
         const val = cleanCtl(String(payload.lengthMeters));
         const g = bannerGeom(col, row, w, h, rot, val.length);
         const o = g.origin(val.length);
-        lines.push(`${rot / 90 + 1}${EPL_FONT.xl.code}${g.mul}${g.mul}000${pad4(o.oy)}${pad4(o.ox)}${val}`);
+        lines.push(`${rot / 90 + 1}${EPL_FONT.xl.code}${g.mul}${g.mul}000${pad4(u(o.oy))}${pad4(u(o.ox))}${val}`);
         break;
       }
     }

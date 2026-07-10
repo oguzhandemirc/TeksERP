@@ -49,7 +49,10 @@ function main() {
   check("müşteri gömülü", ppla.includes("Musteri: ACME TEKSTIL"));
   check("parti gömülü", ppla.includes("Parti: P-260615-001"));
   check("barkod değeri gömülü", ppla.includes("TEKS20260615AB12CD34"));
-  check("Code128 kaydı (1e..)", /1e\d{2}\d{4}\d{4}\d{4}TEKS/.test(ppla));
+  // Yükseklik alanı 3 HANE (fiziksel doğrulama: 4 hane → alan kayması → kaçak besleme).
+  check("Code128 kaydı (1e.. h3+row4+col4)", /1e\d{2}\d{3}\d{4}\d{4}TEKS/.test(ppla));
+  // Birim: 1/100 inç — 148mm etiket boyu → M0583 (dot 1183 DEĞİL).
+  check("STX M 1/100 inç (148mm → 0583)", ppla.includes(`${STX}M0583`));
   check("QR kaydı (1W1c..)", ppla.includes("1W1c"));
   check("etiket boyu komutu (STX M)", ppla.includes(`${STX}M`));
 
