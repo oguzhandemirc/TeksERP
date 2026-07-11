@@ -26,7 +26,7 @@
 // Per-order yaklaşık footprint (plan hedefi ile uyumlu):
 //   order 1, order_line ~2, work_order ~1, work_order_step ~3, roll ~3,
 //   roll_operation ~6, roll_movement ~6, traveler_card ~1, traveler_card_scan ~6,
-//   shipment ~0.5, sack ~1.5, shipment_allocation ~2, shipment_order ~0.5,
+//   shipment ~0.5, sack ~1.5, sack_allocation ~2, shipment_order ~0.5,
 //   system_log ~25-30.
 // =============================================================================
 
@@ -244,7 +244,7 @@ async function main(): Promise<void> {
     totals.traveler_card = (totals.traveler_card ?? 0) + (await insertChunked("traveler_card", cardRows, (c) => prisma.travelerCard.createMany({ data: c as never })));
     totals.traveler_card_scan = (totals.traveler_card_scan ?? 0) + (await insertChunked("traveler_card_scan", scanRows, (c) => prisma.travelerCardScan.createMany({ data: c as never })));
     totals.shipment_order = (totals.shipment_order ?? 0) + (await insertChunked("shipment_order", shipmentOrderRows, (c) => prisma.shipmentOrder.createMany({ data: c as never })));
-    totals.shipment_allocation = (totals.shipment_allocation ?? 0) + (await insertChunked("shipment_allocation", allocationRows, (c) => prisma.shipmentAllocation.createMany({ data: c as never })));
+    totals.sack_allocation = (totals.sack_allocation ?? 0) + (await insertChunked("sack_allocation", allocationRows, (c) => prisma.sackAllocation.createMany({ data: c as never })));
     totals.system_log = (totals.system_log ?? 0) + (await insertChunked("system_log", logRows, (c) => prisma.systemLog.createMany({ data: c as never })));
 
     // dizileri boşalt
@@ -520,10 +520,11 @@ async function main(): Promise<void> {
       shipSeq++;
       const shipId = uuid();
       ctx.shipmentId = shipId;
+      // Çuval havuzu modeli: PREPARING/READY kalktı → PLANNED (+ AT_DOOR/DISPATCHED).
       const shipStatus: ShipmentStatus =
         status === OrderStatus.COMPLETED
-          ? randPick([ShipmentStatus.DISPATCHED, ShipmentStatus.READY, ShipmentStatus.AT_DOOR])
-          : ShipmentStatus.PREPARING;
+          ? randPick([ShipmentStatus.DISPATCHED, ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR])
+          : ShipmentStatus.PLANNED;
       const shipCreated = plusDays(createdAt, 12 + rand(10));
       shipmentRows.push({
         id: shipId,
@@ -533,16 +534,18 @@ async function main(): Promise<void> {
         status: shipStatus,
         destination: Math.random() < 0.3 ? ShipmentDestination.EXPORT : ShipmentDestination.DOMESTIC,
         plateNumber: shipStatus === ShipmentStatus.DISPATCHED ? `34 LT ${rand(9999)}` : null,
-        readyAt: shipStatus !== ShipmentStatus.PREPARING ? shipCreated : null,
         dispatchedAt: shipStatus === ShipmentStatus.DISPATCHED ? plusDays(shipCreated, 1) : null,
+        dispatchedById: shipStatus === ShipmentStatus.DISPATCHED ? pick(userIds, i) : null,
         createdAt: shipCreated,
         updatedAt: shipCreated,
       });
 
       // ---- ShipmentOrder (~0.5/order) — bu sipariş bu sevkiyatta ----
+      // isActive DENORM: app katmanı PLANNED/AT_DOOR → true, DISPATCHED/CANCELLED → false.
       shipmentOrderRows.push({
         shipmentId: shipId,
         orderId: ctx.id,
+        isActive: shipStatus === ShipmentStatus.PLANNED || shipStatus === ShipmentStatus.AT_DOOR,
         createdAt: shipCreated,
       });
 
@@ -556,10 +559,17 @@ async function main(): Promise<void> {
         sackRows.push({
           id: sackId,
           sackNo: `SACK-LT-${String(sackSeq).padStart(7, "0")}`,
+          customerId, // Sack.customerId NOT NULL — bağlı sevkiyatın müşterisiyle aynı
+          branchId,
           shipmentId: shipId,
           seq: sk + 1,
           manualCode: `AMB${String(sackSeq).padStart(5, "0")}`,
           weightKg: 30 + rand(70),
+          // Sevkiyata atanmış çuval mühürlüdür (tartıldı + kod girildi → havuza/sevkiyata girdi).
+          weighedById: pick(userIds, i),
+          weighedAt: shipCreated,
+          sealedAt: shipCreated,
+          sealedById: pick(userIds, i),
           createdAt: shipCreated,
           updatedAt: shipCreated,
         });
@@ -575,20 +585,29 @@ async function main(): Promise<void> {
       shippableRolls.forEach((rr, idx) => {
         rr.row.shipmentId = shipId;
         rr.row.sackId = sackIds[idx % sackIds.length];
+        // Roll statüsü sevkiyat statüsüyle hizalı: SHIPPED yalnız DISPATCHED'te (stok
+        // bina dışı → currentQty 0); PLANNED/AT_DOOR sevkiyatta toplar hâlâ WAREHOUSE.
+        if (shipStatus === ShipmentStatus.DISPATCHED) {
+          rr.row.status = RollStatus.SHIPPED;
+          rr.row.currentQty = 0;
+        } else {
+          rr.row.status = RollStatus.WAREHOUSE;
+          rr.row.currentQty = rr.row.initialQty;
+        }
       });
 
-      // ---- ShipmentAllocation (~2/order) — committed sevkiyatlarda her satıra ----
-      if (shipStatus !== ShipmentStatus.PREPARING) {
-        for (const lineId of ctx.lineIds) {
-          allocationRows.push({
-            id: uuid(),
-            shipmentId: shipId,
-            orderLineId: lineId,
-            qty: 50 + rand(200),
-            createdAt: shipCreated,
-          });
-        }
-      }
+      // ---- SackAllocation (~2/order) — çuval bazlı karşılanma defteri ----
+      // Model: ShipmentAllocation KALKTI → SackAllocation(sackId, orderLineId, qty).
+      // Her satıra bir çuval ata; (sackId, orderLineId) benzersiz (her satır bir kez).
+      ctx.lineIds.forEach((lineId, li) => {
+        allocationRows.push({
+          id: uuid(),
+          sackId: sackIds[li % sackIds.length],
+          orderLineId: lineId,
+          qty: 50 + rand(200),
+          createdAt: shipCreated,
+        });
+      });
     }
 
     // ---- SystemLog (~25-30/order) — EN HIZLI BÜYÜYEN ----
@@ -621,7 +640,7 @@ async function main(): Promise<void> {
         { table: "shipments", action: "CREATE", recId: ctx.shipmentId },
         { table: "shipments", action: "UPDATE", recId: ctx.shipmentId },
         { table: "sacks", action: "CREATE", recId: ctx.shipmentId },
-        { table: "shipment_allocations", action: "CREATE", recId: ctx.shipmentId },
+        { table: "sack_allocations", action: "CREATE", recId: ctx.shipmentId },
         { table: "order_lines", action: "UPDATE", recId: ctx.lineIds[0] }
       );
     }

@@ -7,7 +7,8 @@
 //   3. quickOrderFromRolls: ham topları spec bazında gruplar → sipariş satırları
 //   4. Aynı spec (ürün+renk+en) toplar tek satırda toplanır
 //   5. quickOrder STOK topları WAREHOUSE'a alır (sevke hazır)
-//   6. Ham (renksiz) sipariş satırı + ham top kapsamada eşleşir (markReady akışı)
+//   6. Ham (renksiz) sipariş satırı + ham top havuz akışında eşleşir
+//      (çuval aç→okut→mühürle = packedQty rezerve; sevkiyat→dispatch = shippedQty karşılar)
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
@@ -76,6 +77,7 @@ async function main() {
   const r3 = await mkRoll(3, 80, 200); // farklı en
   const createdOrders: string[] = [];
   const createdShipments: string[] = [];
+  const createdSacks: string[] = [];
 
   try {
     // 1) prepareRawForSale
@@ -115,28 +117,40 @@ async function main() {
     });
     check("quickOrder: STOK toplar WAREHOUSE'a alındı", states.every((s) => s.status === "WAREHOUSE"));
 
-    // 6) Ham sipariş + ham top kapsamada eşleşir → markReady commit eder
-    const sh2 = (await ship.createShipment({ orderIds: [qd.order.id] })).data as { id: string };
+    // 6) Ham sipariş + ham top havuz akışında eşleşir. Çuval MÜŞTERİYE ait:
+    //    aç → r3'ü okut → tart+kod → mühürle. Mühür → rebalance FIFO renk-null spec ile
+    //    200cm satıra rezerve eder (packedQty). Sevkiyat → dispatch → shippedQty terfi.
+    const sackId = ((await ship.openSack({ customerId: customer.id })).data as { id: string }).id;
+    createdSacks.push(sackId);
+    await ship.scanIntoSack({ sackId, barcode: r3.barcode });
+    await ship.weighSack({ sackId, weightKg: 20, manualCode: `RAW${ts}` });
+    await ship.sealSack({ sackId });
+
+    // 200cm satır (80m talep) ham top r3 (80m) ile rezerve edildi (renk-null kapsama eşleşti).
+    const line200Sealed = await prisma.orderLine.findFirst({
+      where: { orderId: qd.order.id, width: 200 },
+      select: { packedQty: true },
+    });
+    check("Ham 200cm satır rezerve (mühür → packedQty=80, renk-null eşleşti)", Number(line200Sealed?.packedQty) === 80, `${line200Sealed?.packedQty}`);
+
+    // Havuzdan çuval seç → sevkiyat (PLANNED) → dispatch → karşılanma kesinleşir.
+    const sh2 = (await ship.createShipment({ sackIds: [sackId] })).data as { id: string };
     createdShipments.push(sh2.id);
-    const sack2 = (await ship.addSack({ shipmentId: sh2.id })).data as { id: string };
-    await ship.scanIntoShipment({ shipmentId: sh2.id, barcode: r3.barcode, sackId: sack2.id });
-    await ship.updateSack({ sackId: sack2.id, weightKg: 20, manualCode: `RAW${ts}` });
-    const ready = await ship.markReady(sh2.id);
-    check("Ham top sevke hazır (kapsama renk-null eşleşti)", (ready as { success: boolean }).success === true);
-    // 200cm satır (80m talep) ham top r3 (80m) ile karşılandı
+    await ship.dispatchShipment(sh2.id, {});
     const line200 = await prisma.orderLine.findFirst({
       where: { orderId: qd.order.id, width: 200 },
-      select: { shippedQty: true },
+      select: { shippedQty: true, packedQty: true },
     });
-    check("Ham 200cm satır karşılandı (shippedQty=80)", Number(line200?.shippedQty) === 80, `${line200?.shippedQty}`);
+    check("Ham 200cm satır karşılandı (dispatch → shippedQty=80)", Number(line200?.shippedQty) === 80, `${line200?.shippedQty}`);
+    check("Ham 200cm satır rezervi sevke döndü (packedQty=0)", Number(line200?.packedQty) === 0, `${line200?.packedQty}`);
   } finally {
-    for (const id of createdShipments) {
-      await prisma.shipmentAllocation.deleteMany({ where: { shipmentId: id } });
-      await prisma.roll.updateMany({ where: { shipmentId: id }, data: { shipmentId: null, sackId: null } });
-      await prisma.sack.deleteMany({ where: { shipmentId: id } });
-      await prisma.shipmentOrder.deleteMany({ where: { shipmentId: id } });
-      await prisma.shipment.delete({ where: { id } }).catch(() => {});
-    }
+    // Çuval havuzu ters bağımlılık: SackAllocation (Restrict) → roll↔çuval/sevkiyat bağını
+    // çöz → sack → ShipmentOrder (Restrict) → shipment → roll → sipariş → master-data.
+    await prisma.sackAllocation.deleteMany({ where: { sackId: { in: createdSacks } } });
+    await prisma.roll.updateMany({ where: { id: { in: [r1.id, r2.id, r3.id] } }, data: { shipmentId: null, sackId: null } });
+    await prisma.sack.deleteMany({ where: { id: { in: createdSacks } } });
+    await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: createdShipments } } });
+    await prisma.shipment.deleteMany({ where: { id: { in: createdShipments } } });
     await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id] } } });
     for (const id of createdOrders) {
       await prisma.orderLine.deleteMany({ where: { orderId: id } });

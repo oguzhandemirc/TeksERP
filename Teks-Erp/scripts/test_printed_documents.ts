@@ -34,7 +34,7 @@ const TAG = "PDTEST";
 const u = (s: string): string => `${TAG}-${s}-${Math.floor(performance.now())}`;
 
 async function main(): Promise<void> {
-  const created = { rolls: [] as string[], dispatchIds: [] as string[], shipmentIds: [] as string[] };
+  const created = { rolls: [] as string[], dispatchIds: [] as string[], shipmentIds: [] as string[], sackIds: [] as string[] };
   // F263: master-data tutucuları try DIŞINDA — cleanup finally'de guard'lı çalışsın
   // (gövde ortasında hata olursa TEST- verisi sızmasın; kardeş test kalıbı).
   let item: { id: string } | undefined;
@@ -162,21 +162,27 @@ async function main(): Promise<void> {
   });
   const sr1 = await mkRoll(60);
   const sr2 = await mkRoll(40);
-  const ship = await shippingService.createShipment({ orderIds: [order.id] }, undefined);
+
+  // Çuval havuzu: müşteriye çuval aç → iki topu okut → tart+kod → mühürle (havuza girer)
+  // → havuzdan çuval seçerek sevkiyat kur (PLANNED). Kod GLOBAL benzersiz olmalı (partial
+  // unique) — hardcoded "Ç-1" paralel koşuda çakışır, o yüzden benzersiz sackCode.
+  const sackCode = u("CV");
+  const sackId = ((await shippingService.openSack({ customerId: customer.id }, undefined)).data as { id: string }).id;
+  created.sackIds.push(sackId);
+  for (const rid of [sr1, sr2]) {
+    const r = await prisma.roll.findUnique({ where: { id: rid }, select: { barcode: true } });
+    await shippingService.scanIntoSack({ sackId, barcode: r!.barcode! }, undefined);
+  }
+  await shippingService.weighSack({ sackId, weightKg: 42.5, manualCode: sackCode }, undefined);
+  await shippingService.sealSack({ sackId }, undefined);
+  const ship = await shippingService.createShipment({ sackIds: [sackId] }, undefined);
   const shipmentId = (ship.data as { id: string }).id;
   created.shipmentIds.push(shipmentId);
 
-  // 6a) DISPATCHED öncesi TASLAK (belge yok)
+  // 6a) DISPATCHED öncesi TASLAK (belge yok — freeze yalnız dispatch'te)
   const draft = (await printedDocumentService.getCurrent(PrintedDocType.SHIPMENT_DISPATCH, shipmentId)).data;
   check("sevk öncesi belge yok (TASLAK)", draft === null, draft);
 
-  const sack = await shippingService.addSack({ shipmentId, manualCode: "Ç-1" }, undefined);
-  const sackId = (sack.data as { id: string }).id;
-  for (const rid of [sr1, sr2]) {
-    const r = await prisma.roll.findUnique({ where: { id: rid }, select: { barcode: true } });
-    await shippingService.scanIntoShipment({ shipmentId, barcode: r!.barcode!, sackId }, undefined);
-  }
-  await shippingService.updateSack({ sackId, weightKg: 42.5, manualCode: "Ç-1" }, undefined);
   await shippingService.dispatchShipment(shipmentId, { plateNumber: "06 BBB 22", driverName: "Şoför S" }, undefined);
 
   // 6b) DISPATCHED sonrası freeze
@@ -188,8 +194,8 @@ async function main(): Promise<void> {
     doc?.products?.length === 1 && doc?.products?.[0]?.rollCount === 2 && Math.round(doc?.products?.[0]?.totalMeters) === 100,
     JSON.stringify(doc?.products));
   check("toplam metraj 100", Math.round(doc?.totals?.totalMeters) === 100, JSON.stringify(doc?.totals));
-  check("çuval dökümü donmuş (kod Ç-1, 42.5kg, 2 paket)",
-    doc?.sacks?.length === 1 && doc?.sacks?.[0]?.code === "Ç-1" && Math.abs(doc?.sacks?.[0]?.totalKg - 42.5) < 0.001 && doc?.sacks?.[0]?.packageCount === 2,
+  check("çuval dökümü donmuş (kod, 42.5kg, 2 paket)",
+    doc?.sacks?.length === 1 && doc?.sacks?.[0]?.code === sackCode && Math.abs(doc?.sacks?.[0]?.totalKg - 42.5) < 0.001 && doc?.sacks?.[0]?.packageCount === 2,
     JSON.stringify(doc?.sacks));
   check("çeki listesi: kg yalnız çuvalın ilk topunda",
     doc?.cekiRows?.length === 2 && Math.abs(doc?.cekiRows?.[0]?.kg - 42.5) < 0.001 && doc?.cekiRows?.[1]?.kg === 0);
@@ -216,8 +222,11 @@ async function main(): Promise<void> {
     await prisma.printedDocument.deleteMany({
       where: { sourceId: { in: [...created.dispatchIds, ...created.shipmentIds] } },
     });
-    await prisma.sack.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
-    await prisma.shipmentAllocation.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });
+    // Çuval havuzu: SackAllocation (Restrict) → roll↔çuval/sevkiyat bağını çöz → sack →
+    // ShipmentOrder (Restrict) → shipment. (Eski ShipmentAllocation modeli kaldırıldı.)
+    await prisma.sackAllocation.deleteMany({ where: { sackId: { in: created.sackIds } } });
+    await prisma.roll.updateMany({ where: { id: { in: created.rolls } }, data: { shipmentId: null, sackId: null } });
+    await prisma.sack.deleteMany({ where: { id: { in: created.sackIds } } });
     await prisma.kartelaDispatchItem.deleteMany({ where: { dispatchId: { in: created.dispatchIds } } });
     await prisma.kartelaDispatch.deleteMany({ where: { id: { in: created.dispatchIds } } });
     await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: created.shipmentIds } } });

@@ -1,11 +1,12 @@
 // =============================================================================
 // Test: Saha #4 — top etiketi değiştirme (renk/özellik/en/kalite)
 // Çalıştır: npx tsx scripts/test_roll_relabel.ts
-// Doğrulananlar:
+// Doğrulananlar (ÇUVAL HAVUZU modeli):
 //   1. Serbest WAREHOUSE topun rengi/eni/kalitesi değişir
 //   2. Özellik (RollProperty) replace
-//   3. PREPARING sevkiyattaki top relabel edilebilir
-//   4. READY (commit'li) sevkiyattaki top relabel REDDEDİLİR (409)
+//   3. AÇIK havuz çuvalındaki top relabel EDİLEBİLİR
+//   4a. MÜHÜRLÜ çuvaldaki top relabel REDDEDİLİR (409 — "çuvaldan çıkarın")
+//   4b. ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — "sevkiyattan çıkarın")
 //   5. Renksiz (color null) yapılabilir
 //   6. Metraj (currentQty) düzeltmesi — bütün topta initialQty ile birlikte güncellenir
 //   7. Kısmen tüketilmiş topta metraj düzeltme reddedilir (renk-only geçer)
@@ -64,7 +65,7 @@ async function main() {
   const r1 = await mkRoll(1);
   const r2 = await mkRoll(2);
   const r3 = await mkRoll(3);
-  const orderIds: string[] = [];
+  const sackIds: string[] = [];
   const shipmentIds: string[] = [];
 
   try {
@@ -88,39 +89,38 @@ async function main() {
     const r1Raw = await prisma.roll.findUnique({ where: { id: r1.id }, select: { colorId: true, properties: true } });
     check("Renksiz (color null) + özellik temizlendi", r1Raw?.colorId === null && r1Raw.properties.length === 0);
 
-    // 3) PREPARING sevkiyattaki top relabel edilebilir
-    const sh1 = (await ship.createShipment({ orderIds: [] }).catch(() => null)) as { data: { id: string } } | null;
-    // createShipment boş orderIds reddeder → sipariş üret
-    const order = await prisma.order.create({
-      data: {
-        orderNumber: `TEST-RLB-${ts}`,
-        customerId: customer.id,
-        status: "APPROVED",
-        orderDate: new Date(),
-        lines: { create: [{ itemId: item.id, quantity: 100, width: 150 }] },
-      },
-      select: { id: true },
-    });
-    orderIds.push(order.id);
-    const sh = (await ship.createShipment({ orderIds: [order.id] })).data as { id: string };
-    shipmentIds.push(sh.id);
-    const sack = (await ship.addSack({ shipmentId: sh.id })).data as { id: string };
-    await ship.scanIntoShipment({ shipmentId: sh.id, barcode: r2.barcode, sackId: sack.id });
+    // 3) AÇIK havuz çuvalındaki top relabel EDİLEBİLİR (mühürlenmemiş → serbest)
+    const sackId = ((await ship.openSack({ customerId: customer.id, manualCode: `TEST-RLB-S-${ts}` })) as { data: { id: string } }).data.id;
+    sackIds.push(sackId);
+    await ship.scanIntoSack({ sackId, barcode: r2.barcode! });
     await inv.applyManualProperties(r2.id, { colorId: colorB.id, propertyIds: [] }, undefined);
-    const r2After = await prisma.roll.findUnique({ where: { id: r2.id }, select: { colorId: true } });
-    check("PREPARING sevkiyattaki top relabel edildi", r2After?.colorId === colorB.id);
-    void sh1;
+    const r2Open = await prisma.roll.findUnique({ where: { id: r2.id }, select: { colorId: true, sackId: true } });
+    check("Açık çuvaldaki top relabel edildi", r2Open?.colorId === colorB.id && r2Open?.sackId === sackId);
 
-    // 4) READY sevkiyattaki top relabel reddedilir
-    await ship.updateSack({ sackId: sack.id, weightKg: 30, manualCode: `RLB${ts}` });
-    await ship.markReady(sh.id);
-    let rejected = false;
+    // 4a) MÜHÜRLÜ çuvaldaki top relabel REDDEDİLİR (409 — havuz rezervi donar)
+    await ship.sealSack({ sackId });
+    let sealedRej: { code?: number; msg?: string } = {};
     try {
       await inv.applyManualProperties(r2.id, { colorId: colorA.id, propertyIds: [] }, undefined);
     } catch (e) {
-      rejected = (e as { statusCode?: number }).statusCode === 409;
+      const err = e as { statusCode?: number; message?: string };
+      sealedRej = { code: err.statusCode, msg: err.message };
     }
-    check("READY (commit'li) sevkiyattaki top relabel 409", rejected);
+    check("Mühürlü çuvaldaki top relabel 409", sealedRej.code === 409, sealedRej.msg);
+    check("Mühürlü çuval mesajı ('çuval')", !!sealedRej.msg?.includes("çuval"));
+
+    // 4b) ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — sevkiyat donar)
+    const shipmentId = ((await ship.createShipment({ sackIds: [sackId] })) as { data: { id: string } }).data.id;
+    shipmentIds.push(shipmentId);
+    let shipRej: { code?: number; msg?: string } = {};
+    try {
+      await inv.applyManualProperties(r2.id, { colorId: colorA.id, propertyIds: [] }, undefined);
+    } catch (e) {
+      const err = e as { statusCode?: number; message?: string };
+      shipRej = { code: err.statusCode, msg: err.message };
+    }
+    check("Atanmış sevkiyattaki top relabel 409", shipRej.code === 409, shipRej.msg);
+    check("Sevkiyat mesajı ('sevkiyat')", !!shipRej.msg?.includes("sevkiyat"));
 
     // 6) Metraj (currentQty) düzeltmesi — bütün topta initialQty ile BİRLİKTE güncellenir
     await inv.applyManualProperties(r3.id, { colorId: colorA.id, propertyIds: [], currentQty: 250 }, undefined);
@@ -176,19 +176,18 @@ async function main() {
     const r1Noop = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } });
     check("No-op relabel labelDirty set etmez (temiz kalır)", r1Noop?.labelDirty === false);
   } finally {
+    await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
+    await prisma.roll.updateMany({
+      where: { id: { in: [r1.id, r2.id, r3.id] } },
+      data: { shipmentId: null, sackId: null },
+    });
+    await prisma.sack.deleteMany({ where: { id: { in: sackIds } } });
     for (const id of shipmentIds) {
-      await prisma.shipmentAllocation.deleteMany({ where: { shipmentId: id } });
-      await prisma.roll.updateMany({ where: { shipmentId: id }, data: { shipmentId: null, sackId: null } });
-      await prisma.sack.deleteMany({ where: { shipmentId: id } });
       await prisma.shipmentOrder.deleteMany({ where: { shipmentId: id } });
       await prisma.shipment.delete({ where: { id } }).catch(() => {});
     }
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
     await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id] } } });
-    for (const id of orderIds) {
-      await prisma.orderLine.deleteMany({ where: { orderId: id } });
-      await prisma.order.delete({ where: { id } }).catch(() => {});
-    }
     await prisma.color.deleteMany({ where: { id: { in: [colorA.id, colorB.id] } } });
     await prisma.item.delete({ where: { id: item.id } }).catch(() => {});
     await prisma.customer.delete({ where: { id: customer.id } }).catch(() => {});

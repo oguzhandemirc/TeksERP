@@ -5,19 +5,25 @@
 // Bu script SADECE senaryo verisini (TST- prefix) üretir; her çalıştırmada önce
 // kendi eski verisini siler, sonra temiz bir senaryo kurar.
 //
-// Çalıştır:  npx ts-node --project prisma/tsconfig.json prisma/seed-shipping-scenario.ts
+// Çalıştır:  npx tsx prisma/seed-shipping-scenario.ts
 //        ya: npm run seed:scenario
 //
-// Kapsadığı test aşamaları:
+// ÇUVAL HAVUZU (B) MODELİ — kapsadığı test aşamaları:
 //   • WO picker (gap): bazı satırlar Açık>0 görünür, tahsisli olanlar gizli
 //   • Tambur: açık kumaş + refakat kartı → cutOpenFabric/finalize (targetOrderLineId)
-//   • Etiket: targetOrderLineId'li WAREHOUSE topları (müşteriye özel etiket)
-//   • Paket: açık çuval + içinde top + paketlenmemiş WAREHOUSE topları
-//   • Sevkiyat: kapalı çuval + PREPARING irsaliye (dispatch testi)
-//   • Sipariş statüsü: kısmi sevk (PARTIAL_SHIPPED) örneği
+//   • Etiket: WAREHOUSE topları — etiket müşterisi baskı anında seçilir (top→sipariş bağı YOK)
+//   • Paket: AÇIK çuval (sealedAt=null) + içinde top + paketlenmemiş WAREHOUSE topları
+//   • Çuval havuzu: MÜHÜRLÜ + sevkiyatsız çuval → SackAllocation ile packedQty rezervi
+//   • Sevkiyat (PLANNED): mühürlü çuval bir sevkiyata atanmış (dispatch testi)
+//   • Sevkiyat (DISPATCHED): sevk edilmiş çuval → shippedQty + PARTIAL_SHIPPED örneği
+//
+// Karşılanma denormları (OrderLine/Order.packedQty & shippedQty) SackAllocation
+// defteriyle ELDE TUTARLI yazılır (bkz. order-status.helper karşılanma kuralları):
+//   shippedQty = Σ SackAllocation.qty (çuval DISPATCHED sevkiyatta)
+//   packedQty  = Σ SackAllocation.qty (çuval havuzda VEYA PLANNED/AT_DOOR sevkiyatta)
 // =============================================================================
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import "dotenv/config";
@@ -61,36 +67,51 @@ async function reset() {
   });
   const sackIds = sacks.map((s) => s.id);
 
-  // Senaryo roll'larını bul (barkodlu + açık kumaş + hedefli + çuvallı)
-  const rolls = await prisma.roll.findMany({
-    where: {
-      OR: [
-        { barcode: { startsWith: P } },
-        stepIds.length ? { currentStepId: { in: stepIds } } : { id: "__none__" },
-        stepIds.length ? { producedInStepId: { in: stepIds } } : { id: "__none__" },
-        orderLineIds.length ? { targetOrderLineId: { in: orderLineIds } } : { id: "__none__" },
-        sackIds.length ? { sackId: { in: sackIds } } : { id: "__none__" },
-      ],
-    },
+  const shipments = await prisma.shipment.findMany({
+    where: { shipmentNo: { startsWith: P } },
     select: { id: true },
   });
+  const shipmentIds = shipments.map((s) => s.id);
+
+  // Senaryo roll'larını bul (barkodlu + açık kumaş + hedefli + çuvallı + sevkiyatlı).
+  // OR dizisini KOŞULLU kur — boş branch'te `{ id: "__none__" }` sentineli Prisma 7 pg
+  // adapter'ında P2007 (invalid uuid) fırlatır; hiç dolmayan filtreyi eklemeyerek kaçın.
+  const rollOr: Prisma.RollWhereInput[] = [{ barcode: { startsWith: P } }];
+  if (stepIds.length) {
+    rollOr.push({ currentStepId: { in: stepIds } }, { producedInStepId: { in: stepIds } });
+  }
+  if (sackIds.length) rollOr.push({ sackId: { in: sackIds } });
+  if (shipmentIds.length) rollOr.push({ shipmentId: { in: shipmentIds } });
+  const rolls = await prisma.roll.findMany({ where: { OR: rollOr }, select: { id: true } });
   const rollIds = rolls.map((r) => r.id);
 
+  // SackAllocation ÖNCE (Restrict: çuval; ayrıca orderLine'a bağlı) — sil ki sack/order
+  // silinebilsin. Tahsislerimizin tümü TST çuvallarına bağlı; orderLine de savunma için.
+  if (sackIds.length) {
+    await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
+  }
+  if (orderLineIds.length) {
+    await prisma.sackAllocation.deleteMany({ where: { orderLineId: { in: orderLineIds } } });
+  }
+
   // Roll'a RESTRICT bağlı log tabloları ÖNCE silinmeli (movement/operation RESTRICT'tir).
-  if (rollIds.length || stepIds.length) {
-    const rollOrStep = {
-      OR: [
-        rollIds.length ? { rollId: { in: rollIds } } : { id: "__none__" },
-        stepIds.length ? { workOrderStepId: { in: stepIds } } : { id: "__none__" },
-      ],
-    };
-    await prisma.rollMovement.deleteMany({ where: rollOrStep });
-    await prisma.rollOperation.deleteMany({ where: rollOrStep });
+  if (rollIds.length) {
+    await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+  }
+  if (stepIds.length) {
+    await prisma.rollMovement.deleteMany({ where: { workOrderStepId: { in: stepIds } } });
+    await prisma.rollOperation.deleteMany({ where: { workOrderStepId: { in: stepIds } } });
   }
   if (rollIds.length) {
     await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+  }
+
+  // ShipmentOrder (Restrict: shipment + order) — shipment/order silinmeden önce sil.
+  if (shipmentIds.length) {
+    await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
   }
 
   if (woIds.length) {
@@ -156,27 +177,41 @@ async function seed() {
   };
 
   // --- Siparişler + kalemler ---
+  // Karşılanma denormları (packedQty / shippedQty) SackAllocation'larla ELDE tutarlı yazılır:
+  //   o1 (ARDA/IST): l1a packed 400 (PLANNED sevkiyat), l1b packed 500 (havuz) → APPROVED
+  //   o2 (ARDA/ANK): l2a shipped 300 (DISPATCHED) → PARTIAL_SHIPPED
+  //   o3 (Moda/IZM): karşılanma yok → APPROVED
   const o1 = await prisma.order.create({
-    data: { orderNumber: `${P}0001`, customerId: arda.id, branchId: ardaIst.id, status: "APPROVED" },
+    data: {
+      orderNumber: `${P}0001`, customerId: arda.id, branchId: ardaIst.id, status: "APPROVED",
+      packedQty: 900, // l1a 400 + l1b 500
+    },
   });
   const l1a = await prisma.orderLine.create({
     data: {
       orderId: o1.id, itemId: patos.id, colorId: mavi.id, quantity: 1000, width: 280,
       pieceLengthM: 400, cutNote: "Her 400 m'de bir kes", customerItemName: "Soft Patos",
+      packedQty: 400, // CV-0003 (PLANNED sevkiyat) rezervi
     },
   });
   const l1b = await prisma.orderLine.create({
-    data: { orderId: o1.id, itemId: patos.id, colorId: mavi.id, quantity: 500, width: 280 },
+    data: {
+      orderId: o1.id, itemId: patos.id, colorId: mavi.id, quantity: 500, width: 280,
+      packedQty: 500, // CV-0004 (mühürlü havuz çuvalı) rezervi
+    },
   });
 
   const o2 = await prisma.order.create({
     data: {
       orderNumber: `${P}0002`, customerId: arda.id, branchId: ardaAnk.id,
-      status: "PARTIAL_SHIPPED", shippedQty: 300, // W5 (SHIPPED) ile tutarlı
+      status: "PARTIAL_SHIPPED", shippedQty: 300, // CV-0002 (DISPATCHED) ile tutarlı
     },
   });
   const l2a = await prisma.orderLine.create({
-    data: { orderId: o2.id, itemId: patos.id, colorId: mavi.id, quantity: 600, width: 280, pieceLengthM: 300 },
+    data: {
+      orderId: o2.id, itemId: patos.id, colorId: mavi.id, quantity: 600, width: 280, pieceLengthM: 300,
+      shippedQty: 300, // CV-0002 sevk defteri
+    },
   });
 
   const o3 = await prisma.order.create({
@@ -243,71 +278,135 @@ async function seed() {
     });
   }
 
-  // --- WAREHOUSE topları (paket/etiket testi) ---
-  // ARDA L1a'ya 2 top, Moda L3a'ya 1 top, 1 stok (hedefsiz)
-  const w1 = await prisma.roll.create({
-    data: { ...baseRoll, barcode: `${P}TOP-0001`, initialQty: 400, currentQty: 400, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", targetOrderLineId: l1a.id, createdById: adminId },
-  });
-  await prisma.roll.create({
-    data: { ...baseRoll, barcode: `${P}TOP-0002`, initialQty: 400, currentQty: 400, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", targetOrderLineId: l1a.id, createdById: adminId },
-  });
-  await prisma.roll.create({
-    data: { ...baseRoll, barcode: `${P}TOP-0003`, initialQty: 400, currentQty: 400, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", targetOrderLineId: l3a.id, createdById: adminId },
-  });
-  await prisma.roll.create({
-    data: { ...baseRoll, barcode: `${P}TOP-0004`, initialQty: 300, currentQty: 300, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", targetOrderLineId: null, createdById: adminId },
-  });
-
-  // --- Açık çuval (paket akışı sürüyor) + içinde W1 ---
-  const s1 = await prisma.sack.create({
-    data: { sackNo: `${P}CV-0001`, customerId: arda.id, branchId: ardaIst.id, status: "OPEN" },
-  });
-  await prisma.roll.update({ where: { id: w1.id }, data: { sackId: s1.id } });
-
-  // --- Kapalı çuval (tartıldı) + SHIPPED top + PREPARING irsaliye (dispatch testi) ---
-  const w5 = await prisma.roll.create({
-    data: { ...baseRoll, barcode: `${P}TOP-0005`, initialQty: 300, currentQty: 300, status: "SHIPPED", entrySource: "TAMBUR_SPLIT", targetOrderLineId: l2a.id, createdById: adminId },
-  });
-  const shipment = await prisma.shipment.create({
+  // --- Sevkiyatlar (çuvallar bunlara atanmadan ÖNCE var olmalı) ---
+  // IRS-0001: DISPATCHED (o2 sevk edildi) — PARTIAL_SHIPPED örneği
+  const shipDispatched = await prisma.shipment.create({
     data: {
-      shipmentNo: `${P}IRS-0001`, customerId: arda.id, branchId: ardaAnk.id, status: "PREPARING",
+      shipmentNo: `${P}IRS-0001`, customerId: arda.id, branchId: ardaAnk.id, status: "DISPATCHED",
       plateNumber: "34 TST 0001", driverName: "Test Şoför",
+      dispatchedAt: new Date(), dispatchedById: adminId,
     },
   });
+  // IRS-0002: PLANNED (mühürlü çuval sevkiyata atandı) — dispatch testi
+  const shipPlanned = await prisma.shipment.create({
+    data: {
+      shipmentNo: `${P}IRS-0002`, customerId: arda.id, branchId: ardaIst.id, status: "PLANNED",
+      plateNumber: "34 TST 0002", driverName: "Test Şoför 2",
+    },
+  });
+
+  // --- Çuvallar (havuz + sevkiyat) ---
+  // CV-0001: AÇIK çuval (sealedAt=null, sevkiyatsız) — paketleme akışı sürüyor
+  const s1 = await prisma.sack.create({
+    data: { sackNo: `${P}CV-0001`, customerId: arda.id, branchId: ardaIst.id },
+  });
+  // CV-0002: MÜHÜRLÜ + DISPATCHED sevkiyatta (o2 sevk edildi)
   const s2 = await prisma.sack.create({
     data: {
-      sackNo: `${P}CV-0002`, customerId: arda.id, branchId: ardaAnk.id, status: "CLOSED",
-      weightKg: 45.5, closedAt: new Date(), shipmentId: shipment.id,
-      shipToName: ardaAnk.name, shipToAddress: ardaAnk.address, shipToCity: ardaAnk.city, shipToDistrict: ardaAnk.district,
+      sackNo: `${P}CV-0002`, customerId: arda.id, branchId: ardaAnk.id,
+      shipmentId: shipDispatched.id, seq: 1, manualCode: `${P}AMB-0002`,
+      weightKg: 45.5, weighedById: adminId, weighedAt: new Date(),
+      sealedAt: new Date(), sealedById: adminId,
     },
   });
-  await prisma.roll.update({ where: { id: w5.id }, data: { sackId: s2.id } });
+  // CV-0003: MÜHÜRLÜ + PLANNED sevkiyatta (dispatch testi)
+  const s3 = await prisma.sack.create({
+    data: {
+      sackNo: `${P}CV-0003`, customerId: arda.id, branchId: ardaIst.id,
+      shipmentId: shipPlanned.id, seq: 1, manualCode: `${P}AMB-0003`,
+      weightKg: 52.0, weighedById: adminId, weighedAt: new Date(),
+      sealedAt: new Date(), sealedById: adminId,
+    },
+  });
+  // CV-0004: MÜHÜRLÜ + HAVUZDA (shipmentId=null, seq=null) — packedQty rezervi
+  const s4 = await prisma.sack.create({
+    data: {
+      sackNo: `${P}CV-0004`, customerId: arda.id, branchId: ardaIst.id,
+      manualCode: `${P}AMB-0004`,
+      weightKg: 60.0, weighedById: adminId, weighedAt: new Date(),
+      sealedAt: new Date(), sealedById: adminId,
+    },
+  });
+
+  // --- WAREHOUSE / SHIPPED topları (paket/etiket/sevkiyat testi) ---
+  // GEVŞEK MODEL: top→sipariş bağı YOK (Roll.targetOrderLineId kalktı). Toplar spec
+  // (PATOS/MAVI/280) bazında fungible; hangi siparişe sayıldığı SackAllocation defterinde.
+  // Composite FK invariant: çuvaldaki top sevkiyata bağlıysa Roll.shipmentId =
+  // Sack.shipmentId olmalı (sacks(id, shipmentId) hedefli DEFERRABLE FK). Havuz/açık
+  // çuval toplarında shipmentId=null → FK atlanır (MATCH SIMPLE).
+  await prisma.roll.create({
+    data: { ...baseRoll, barcode: `${P}TOP-0001`, initialQty: 400, currentQty: 400, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", sackId: s1.id, createdById: adminId },
+  });
+  await prisma.roll.create({
+    data: { ...baseRoll, barcode: `${P}TOP-0002`, initialQty: 400, currentQty: 400, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", createdById: adminId },
+  });
+  await prisma.roll.create({
+    data: { ...baseRoll, barcode: `${P}TOP-0003`, initialQty: 400, currentQty: 400, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", createdById: adminId },
+  });
+  await prisma.roll.create({
+    data: { ...baseRoll, barcode: `${P}TOP-0004`, initialQty: 300, currentQty: 300, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", createdById: adminId },
+  });
+  // CV-0002 içeriği (DISPATCHED) → SHIPPED; shipmentId çuvalınkiyle eşit.
+  await prisma.roll.create({
+    data: { ...baseRoll, barcode: `${P}TOP-0005`, initialQty: 300, currentQty: 300, status: "SHIPPED", entrySource: "TAMBUR_SPLIT", sackId: s2.id, shipmentId: shipDispatched.id, createdById: adminId },
+  });
+  // CV-0003 içeriği (PLANNED) → WAREHOUSE; shipmentId çuvalınkiyle eşit.
+  await prisma.roll.create({
+    data: { ...baseRoll, barcode: `${P}TOP-0006`, initialQty: 400, currentQty: 400, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", sackId: s3.id, shipmentId: shipPlanned.id, createdById: adminId },
+  });
+  // CV-0004 içeriği (havuz) → WAREHOUSE; shipmentId=null.
+  await prisma.roll.create({
+    data: { ...baseRoll, barcode: `${P}TOP-0007`, initialQty: 500, currentQty: 500, status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", sackId: s4.id, createdById: adminId },
+  });
+
+  // --- SackAllocation defteri (çuval metrajı ↔ sipariş satırı) ---
+  //   CV-0002 (DISPATCHED) → l2a 300 : shippedQty
+  //   CV-0003 (PLANNED)    → l1a 400 : packedQty (donmuş)
+  //   CV-0004 (havuz)      → l1b 500 : packedQty (rezerv)
+  await prisma.sackAllocation.createMany({
+    data: [
+      { sackId: s2.id, orderLineId: l2a.id, qty: 300 },
+      { sackId: s3.id, orderLineId: l1a.id, qty: 400 },
+      { sackId: s4.id, orderLineId: l1b.id, qty: 500 },
+    ],
+  });
+
+  // --- ShipmentOrder (donmuş tahsislerden türeyen sipariş kümesi) ---
+  //   isActive: PLANNED/AT_DOOR → true; DISPATCHED/CANCELLED → false (app katmanı kuralı).
+  await prisma.shipmentOrder.createMany({
+    data: [
+      { shipmentId: shipDispatched.id, orderId: o2.id, isActive: false },
+      { shipmentId: shipPlanned.id, orderId: o1.id, isActive: true },
+    ],
+  });
 
   // --- Özet ---
   console.log(`
-✅ Sevkiyat senaryosu kuruldu (prefix: ${P})
+✅ Sevkiyat senaryosu kuruldu (çuval havuzu B modeli, prefix: ${P})
 
   SİPARİŞLER
     ${P}0001  ARDA / İstanbul   L1a 1000m (her 400 kes, "Soft Patos") + L1b 500m
-    ${P}0002  ARDA / Ankara     L2a 600m (kısmi sevk: 300 gitti → PARTIAL_SHIPPED)
-    ${P}0003  Moda / İzmir      L3a 800m (4 eşit parça)
+              → packedQty 900 (l1a 400 PLANNED + l1b 500 havuz), APPROVED
+    ${P}0002  ARDA / Ankara     L2a 600m (300 sevk edildi → PARTIAL_SHIPPED)
+    ${P}0003  Moda / İzmir      L3a 800m (4 eşit parça), APPROVED
 
   İŞ EMRİ
     ${P}B-0001  çoklu sipariş (ARDA L1a 1000 + Moda L3a 800), hedef 2400 (600 stok fazlası)
-    → WO picker testi: L1a & L3a tahsisli (Açık 0, gizli), L1b (500) & L2a (300) görünür
+    → WO picker testi: L1a & L3a tahsisli (Açık 0, gizli), L1b (500) & L2a görünür
 
   TAMBUR (refakat kartı barkodu: ${P}RK-0001-BC)
-    2 açık kumaş topu (1200m + 800m) tambur adımında → cutOpenFabric/finalize ile
-    "kime?" seçip (L1a/L3a/stok) kes → targetOrderLineId + etiket testi
+    2 açık kumaş topu (1200m + 800m) tambur adımında → cutOpenFabric/finalize ile kes;
+    etiket müşterisi baskı anında seçilir (top→sipariş bağı yok)
 
-  DEPO / ETİKET (WAREHOUSE topları)
-    ${P}TOP-0001 → ARDA L1a (çuval CV-0001 içinde)   ${P}TOP-0002 → ARDA L1a
-    ${P}TOP-0003 → Moda L3a                          ${P}TOP-0004 → STOK (hedefsiz, manuel etiket testi)
+  DEPO / ETİKET (WAREHOUSE topları — PATOS/MAVI/280, spec bazında fungible)
+    ${P}TOP-0001 (açık çuval CV-0001 içinde)   ${P}TOP-0002 / ${P}TOP-0003 / ${P}TOP-0004 (serbest depo)
+    → etiket müşterisi baskı anında seçilir (manuel/müşteriye özel etiket testi)
 
-  PAKET / SEVKİYAT
-    Açık çuval ${P}CV-0001 (ARDA/İstanbul, içinde TOP-0001) → top ekle/tart/kapat testi
-    Kapalı çuval ${P}CV-0002 (ARDA/Ankara, 45.5kg, TOP-0005) → irsaliye ${P}IRS-0001'e bağlı
-    İrsaliye ${P}IRS-0001 (PREPARING, plaka 34 TST 0001) → dispatch testi
+  ÇUVAL HAVUZU / PAKET / SEVKİYAT
+    Açık çuval   ${P}CV-0001 (ARDA/İstanbul, sealedAt=null, TOP-0001) → top ekle/tart/mühürle testi
+    Havuz çuvalı ${P}CV-0004 (ARDA/İstanbul, mühürlü, sevkiyatsız, TOP-0007) → l1b packedQty 500
+    PLANNED       ${P}IRS-0002 (ARDA/İstanbul) ← CV-0003 (TOP-0006) → l1a packedQty 400, dispatch testi
+    DISPATCHED    ${P}IRS-0001 (ARDA/Ankara)   ← CV-0002 (TOP-0005 SHIPPED) → l2a shippedQty 300
 
   Reset: bu scripti tekrar çalıştır — tüm ${P} verisi silinip yeniden kurulur.
 `);

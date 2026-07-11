@@ -56,12 +56,15 @@ async function main() {
     },
     select: { id: true },
   });
+  // manualCode GLOBAL partial-unique → çakışmayı önlemek için run başına benzersiz.
+  const mc1 = `TST-RPT-AMB1-${ts}`;
+  const mc2 = `TST-RPT-AMB2-${ts}`;
   const sack1 = await prisma.sack.create({
-    data: { sackNo: `TEST-RPT-SK1-${ts}`, shipmentId: shipment.id, seq: 1, manualCode: "AMB00001", weightKg: 65.8 },
+    data: { sackNo: `TEST-RPT-SK1-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, manualCode: mc1, weightKg: 65.8 },
     select: { id: true },
   });
   const sack2 = await prisma.sack.create({
-    data: { sackNo: `TEST-RPT-SK2-${ts}`, shipmentId: shipment.id, seq: 2, manualCode: "AMB00002", weightKg: 40 },
+    data: { sackNo: `TEST-RPT-SK2-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 2, manualCode: mc2, weightKg: 40 },
     select: { id: true },
   });
   const mkRoll = (n: number, itemId: string, colorId: string | null, sackId: string, qty: number, w: number | null) =>
@@ -105,17 +108,17 @@ async function main() {
     check("ÜRÜN: NEPS VUAL grubu 1 top / 40m", nepsGroup?.rollCount === 1 && nepsGroup?.totalMeters === 40);
 
     // 2) ÇUVAL LİSTESİ
-    const s1 = d.sacks.find((s) => s.code === "AMB00001");
-    const s2 = d.sacks.find((s) => s.code === "AMB00002");
+    const s1 = d.sacks.find((s) => s.code === mc1);
+    const s2 = d.sacks.find((s) => s.code === mc2);
     check("ÇUVAL AMB00001: 70m / 65,8kg / 2 paket", s1?.totalMeters === 70 && s1?.totalKg === 65.8 && s1?.packageCount === 2);
     check("ÇUVAL AMB00002: 75m / 40kg / 2 paket", s2?.totalMeters === 75 && s2?.totalKg === 40 && s2?.packageCount === 2);
 
     // 3) ÇEKİ LİSTESİ: kg yalnız çuvalın ilk topunda
-    const ceki1 = d.cekiRows.filter((c) => c.sackCode === "AMB00001");
+    const ceki1 = d.cekiRows.filter((c) => c.sackCode === mc1);
     check("ÇEKİ AMB00001 2 satır", ceki1.length === 2);
     check("ÇEKİ ilk top kg=65,8, ikinci=0", ceki1[0]?.kg === 65.8 && ceki1[1]?.kg === 0);
     check("ÇEKİ desen=ürün, varyant=renk", ceki1[0]?.desen === "MC 156" && ceki1[0]?.varyant === "BEYAZ-GÜMÜŞ");
-    const ceki2 = d.cekiRows.filter((c) => c.sackCode === "AMB00002");
+    const ceki2 = d.cekiRows.filter((c) => c.sackCode === mc2);
     check("ÇEKİ AMB00002 ilk top kg=40, renksiz varyant boş", ceki2[0]?.kg === 40 && ceki2[1]?.kg === 0 && ceki2[1]?.varyant === "");
 
     // 4) totals

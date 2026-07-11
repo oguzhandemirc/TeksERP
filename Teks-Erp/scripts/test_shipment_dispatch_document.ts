@@ -6,8 +6,9 @@
 //   yasal başlık (firma/SAYIN/vergi no/irsaliye no/tarih/yön/plaka) + 3 bölüm
 //   (ÜRÜN/ÇUVAL/ÇEKİ) + toplam + imza + filigran (TASLAK/İPTAL/ESKİ KOPYA) + HTML
 //   kaçışı (XSS) + bölüm aç/kapa + başlık override + TR sayı biçimi.
-// Bölüm 2 (DB): PREPARING sevkiyatta getHtml ?draft → TASLAK; donmuş belge yokken
-//   draft'sız → null (controller 409). Tek kaynak: muhasebe fişi içeriği == belge.
+// Bölüm 2 (DB): PLANNED sevkiyatta getHtml ?draft → TASLAK; donmuş belge yokken
+//   draft'sız → null (controller 409). İrsaliye yalnız DISPATCHED'te donar. Tek kaynak:
+//   muhasebe fişi içeriği == belge.
 // =============================================================================
 import { PrintedDocType } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -120,7 +121,7 @@ function part1Pure() {
 }
 
 async function part2Db() {
-  console.log("\n[2] getHtml ?draft — PREPARING sevkiyat (DB)");
+  console.log("\n[2] getHtml ?draft — PLANNED sevkiyat (DB)");
   const ts = Date.now();
   const customer = await prisma.customer.create({
     data: { code: `TST-SDD-${ts}`, name: "TEST SDD MÜŞTERİ", taxNumber: "1112223334" },
@@ -138,13 +139,13 @@ async function part2Db() {
     data: {
       shipmentNo: `TEST-SDD-${ts}`,
       customerId: customer.id,
-      status: "PREPARING",
+      status: "PLANNED",
       destination: "DOMESTIC",
     },
     select: { id: true },
   });
   const sack = await prisma.sack.create({
-    data: { sackNo: `TEST-SDD-SK-${ts}`, shipmentId: shipment.id, seq: 1, manualCode: "AMB-SDD", weightKg: 50 },
+    data: { sackNo: `TEST-SDD-SK-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, manualCode: "AMB-SDD", weightKg: 50, sealedAt: new Date() },
     select: { id: true },
   });
   const mkRoll = (n: number, qty: number) =>
@@ -170,7 +171,7 @@ async function part2Db() {
   try {
     // Donmuş belge yok → getCurrent null (TASLAK)
     const cur = (await printedDocumentService.getCurrent(PrintedDocType.SHIPMENT_DISPATCH, shipment.id)).data;
-    check("PREPARING: donmuş belge yok (TASLAK)", cur === null);
+    check("PLANNED: donmuş belge yok (TASLAK)", cur === null);
 
     // draft'sız getHtml → data null (controller 409'a çevirir)
     const noDraft = (await printedDocumentService.getHtml(PrintedDocType.SHIPMENT_DISPATCH, shipment.id)).data;
