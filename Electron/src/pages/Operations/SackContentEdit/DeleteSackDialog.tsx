@@ -11,30 +11,30 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { packingService } from "./service";
-import { invalidateShipmentData } from "./useShipmentDetail";
-import type { ShipmentSack } from "./types";
+import { invalidatePoolData } from "./useCustomerPool";
+import type { PoolSack } from "./types";
 
 interface Props {
-  shipmentId: string;
-  sack: ShipmentSack | null;
+  sack: PoolSack | null;
+  customerId: string;
   onOpenChange: (open: boolean) => void;
 }
 
 /**
- * Çuval sil. Boşsa düz onay. Doluysa (PREPARING) içeriği TEK TEK listeler —
- * yıkıcı-onay kuralı (soyut "N top" yetmez) — ve onaylanınca toplar/kartelalar
- * serbest depoya döner, çuval silinir (withContents).
+ * Çuval sil. Boşsa düz onay. Doluysa içeriği TEK TEK listeler — yıkıcı-onay kuralı
+ * (soyut "N top" yetmez) — onaylanınca toplar/kartelalar serbest depoya döner (withContents).
  */
-export function DeleteSackDialog({ shipmentId, sack, onOpenChange }: Props) {
+export function DeleteSackDialog({ sack, customerId, onOpenChange }: Props) {
   const qc = useQueryClient();
   const open = !!sack;
+  const label = sack?.manualCode ?? sack?.sackNo ?? "";
   const hasContents = !!sack && (sack.rolls.length > 0 || sack.swatches.length > 0);
 
   const mut = useMutation({
     mutationFn: () => packingService.removeSack(sack!.id, hasContents),
     onSuccess: () => {
-      toast.success(`Çuval #${sack!.seq} silindi`);
-      invalidateShipmentData(qc, shipmentId);
+      toast.success(`Çuval ${label} silindi`);
+      invalidatePoolData(qc, customerId);
       onOpenChange(false);
     },
   });
@@ -44,7 +44,7 @@ export function DeleteSackDialog({ shipmentId, sack, onOpenChange }: Props) {
       <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Trash2 className="h-4 w-4" /> Çuval #{sack?.seq} silinsin mi?
+            <Trash2 className="h-4 w-4" /> Çuval {label} silinsin mi?
           </DialogTitle>
           <DialogDescription>
             {hasContents

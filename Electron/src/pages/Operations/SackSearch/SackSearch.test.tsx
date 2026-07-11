@@ -40,20 +40,19 @@ const baseRoll: LocatedRoll = {
 };
 
 describe("RollLocateCard — top konumu (saha #1/#23)", () => {
-  it("çuvaldaki top: 'Çuval N (kod)' gösterir", () => {
+  it("çuvaldaki top: 'Çuval (kod)' gösterir", () => {
     const roll: LocatedRoll = {
       ...baseRoll,
-      sack: { id: "s1", sackNo: "SK1", seq: 3, manualCode: "AMB00003" },
+      sack: { id: "s1", sackNo: "SK1", seq: null, manualCode: "AMB00003", weightKg: 30 },
       shipment: {
         id: "sh1",
         shipmentNo: "SVK-1",
-        status: "READY",
+        status: "PLANNED",
         customer: { id: "c", name: "MÜŞTERİ" },
         branch: null,
       },
     };
     renderWithProviders(<RollLocateCard roll={roll} onClear={() => {}} />);
-    expect(screen.getByText(/Çuval 3/)).toBeInTheDocument();
     expect(screen.getByText(/AMB00003/)).toBeInTheDocument();
     expect(screen.getByText(/SVK-1/)).toBeInTheDocument();
   });
@@ -65,7 +64,7 @@ describe("RollLocateCard — top konumu (saha #1/#23)", () => {
       shipment: {
         id: "sh1",
         shipmentNo: "SVK-9",
-        status: "PREPARING",
+        status: "PLANNED",
         customer: { id: "c", name: "M" },
         branch: null,
       },
@@ -87,17 +86,14 @@ describe("RollLocateCard — top konumu (saha #1/#23)", () => {
 const sackRow: SackSearchRow = {
   id: "sk1",
   sackNo: "SK1",
-  seq: 2,
+  seq: null,
   manualCode: "AMB00002",
   weightKg: 30,
+  sealedAt: "2026-06-10T00:00:00Z",
   createdAt: "2026-06-10T00:00:00Z",
-  shipment: {
-    id: "sh1",
-    shipmentNo: "SVK-2",
-    status: "READY",
-    customer: { id: "c", name: "ACME" },
-    branch: null,
-  },
+  customer: { id: "c", name: "ACME" },
+  branch: null,
+  shipment: null, // havuzda (mühürlü)
   rollCount: 3,
   totalQty: 150,
   swatchCount: 0,
@@ -127,10 +123,10 @@ describe("SackResultCard — çuval satırı + lazy içerik", () => {
     });
   });
 
-  it("başlık: çuval no/kod + eşleşen adet/metre", () => {
+  it("başlık: çuval kodu + havuz rozeti + eşleşen adet/metre", () => {
     renderWithProviders(<SackResultCard sack={sackRow} />);
-    expect(screen.getByText("Çuval 2")).toBeInTheDocument();
     expect(screen.getByText("AMB00002")).toBeInTheDocument();
+    expect(screen.getByText(/Havuzda/)).toBeInTheDocument();
     expect(screen.getByText(/Eşleşen: 2 top/)).toBeInTheDocument();
   });
 
@@ -160,6 +156,7 @@ describe("SearchFilters — picker PaginatedResponse şekli (regresyon)", () => 
     });
     expect(screen.getByPlaceholderText(/En \(cm\)/)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Sevk no/)).toBeInTheDocument();
-    expect(screen.getAllByRole("combobox").length).toBe(3); // 3 picker mount oldu
+    // 3 lookup (ürün/renk/müşteri) + 1 kapsam (scope) select = 4 combobox.
+    expect(screen.getAllByRole("combobox").length).toBe(4);
   });
 });

@@ -14,7 +14,8 @@ export type MainStackParamList = {
   // Modül değil — Tartı/Paket & Sevkiyat'tan push edilen alt sayfalar (yetki-bağımsız).
   SevkiyatGecmisi: undefined;
   SevkiyatDetay: { shipmentId: string; shipmentNo?: string };
-  Paketleme: { shipmentId?: string; orderIds?: string[] };
+  // Çuval Havuzu: müşteri workspace'i (çuval aç/okut/mühürle). branchId opsiyonel.
+  Paketleme: { customerId: string; branchId?: string | null };
   CuvalDuzelt: undefined;
   HizliSiparis: undefined;
   KartelaSevkGecmisi: undefined;

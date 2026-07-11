@@ -1,14 +1,35 @@
 /**
- * Çuval/Top Arama (saha #1+#23) tipleri — backend GET /api/shipping/sack-search
- * + /api/shipping/sacks/:id/contents + /api/shipping/locate-roll.
+ * Çuval/Top Arama + HAVUZDAN SEVKİYAT KURMA tipleri — backend /api/shipping/sack-search
+ * + /sacks/:id/contents + /locate-roll + POST /shipments (sackIds) + /shipments/preview.
+ * ÇUVAL HAVUZU MODELİ: çuval müşteriye ait; shipment null = havuzda (mühürlü/açık).
  * Decimal'lar backend'de number'a çevrilir.
  */
 
-export type ShipmentStatusKey = "PREPARING" | "READY" | "AT_DOOR" | "DISPATCHED";
+export type ShipmentStatusKey = "PLANNED" | "AT_DOOR" | "DISPATCHED";
 
 export const shipmentStatusLabels: Record<ShipmentStatusKey, string> = {
-  PREPARING: "Hazırlanıyor",
-  READY: "Çuval Depo",
+  PLANNED: "Planlı Sevkiyat",
+  AT_DOOR: "Kapı Önü",
+  DISPATCHED: "Sevk Edildi",
+};
+
+/** Arama kapsamı — havuz / planlı+kapı / sevk edilmiş / tümü. */
+export type SackSearchScope = "POOL" | "PLANNED" | "DISPATCHED" | "ALL";
+
+export const scopeLabels: Record<SackSearchScope, string> = {
+  POOL: "Havuz (sevk edilmemiş)",
+  PLANNED: "Planlı / Kapı Önü",
+  DISPATCHED: "Sevk Edilmiş",
+  ALL: "Tümü",
+};
+
+/** Çuvalın görünen durumu — arama kartında rozet (havuz/açık/planlı/sevk). */
+export type SackDisplayState = "OPEN" | "POOL" | "PLANNED" | "AT_DOOR" | "DISPATCHED";
+
+export const sackStateLabels: Record<SackDisplayState, string> = {
+  OPEN: "Açık (paketleniyor)",
+  POOL: "Havuzda (mühürlü)",
+  PLANNED: "Planlı Sevkiyat",
   AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
 };
@@ -17,21 +38,26 @@ export interface SackSearchShipment {
   id: string;
   shipmentNo: string;
   status: ShipmentStatusKey;
-  /** Sevke hazır olma anı — çeki listesinde "ne zamandır bekliyor". */
-  readyAt?: string | null;
-  customer: { id: string; name: string };
-  branch: { id: string; name: string } | null;
+}
+
+export interface SackCustomerRef {
+  id: string;
+  name: string;
 }
 
 /** Arama sonuç satırı — bir çuval + ucuz sayaçlar (rulo satırı içermez). */
 export interface SackSearchRow {
   id: string;
   sackNo: string;
-  seq: number;
+  seq: number | null;
   manualCode: string | null;
   weightKg: number | null;
+  sealedAt: string | null;
   createdAt: string;
-  shipment: SackSearchShipment;
+  customer: SackCustomerRef | null;
+  branch: { id: string; name: string } | null;
+  /** null = havuzda (mühürlü/açık); dolu = sevkiyata atanmış. */
+  shipment: SackSearchShipment | null;
   rollCount: number;
   totalQty: number;
   swatchCount: number;
@@ -40,11 +66,22 @@ export interface SackSearchRow {
   matchQty: number | null;
 }
 
+/** Bir çuvalın görünen durumunu hesapla. */
+export function sackDisplayState(sack: Pick<SackSearchRow, "shipment" | "sealedAt">): SackDisplayState {
+  if (sack.shipment) {
+    if (sack.shipment.status === "DISPATCHED") return "DISPATCHED";
+    if (sack.shipment.status === "AT_DOOR") return "AT_DOOR";
+    return "PLANNED";
+  }
+  return sack.sealedAt ? "POOL" : "OPEN";
+}
+
 export interface SackSearchParams {
   itemId?: string;
   colorId?: string;
   width?: number;
   customerId?: string;
+  scope?: SackSearchScope;
   shipmentNo?: string;
   sackCode?: string;
   includeDispatched?: boolean;
@@ -78,10 +115,11 @@ export interface SackContentSwatch {
 export interface SackContents {
   id: string;
   sackNo: string;
-  seq: number;
+  seq: number | null;
   manualCode: string | null;
   weightKg: number | null;
-  shipment: SackSearchShipment;
+  customer?: SackCustomerRef | null;
+  shipment: SackSearchShipment | null;
   rolls: SackContentRoll[];
   swatches: SackContentSwatch[];
 }
@@ -90,10 +128,11 @@ export interface SackContents {
 export interface PickListRow {
   id: string;
   sackNo: string;
-  seq: number;
+  seq: number | null;
   manualCode: string | null;
   weightKg: number | null;
-  shipment: SackSearchShipment;
+  customer?: SackCustomerRef | null;
+  shipment: SackSearchShipment | null;
   rollCount: number;
   swatchCount: number;
   totalQty: number;
@@ -106,6 +145,11 @@ export interface PickListRow {
   }[];
 }
 
+export interface LocatedRollShipment extends SackSearchShipment {
+  customer: { id: string; name: string };
+  branch: { id: string; name: string } | null;
+}
+
 /** locate-roll cevabı — top + bulunduğu çuval/sevkiyat (ikisi de olmayabilir). */
 export interface LocatedRoll {
   id: string;
@@ -116,6 +160,22 @@ export interface LocatedRoll {
   qualityGrade: string;
   item: { id: string; name: string };
   color: { id: string; name: string; hex: string | null } | null;
-  sack: { id: string; sackNo: string; seq: number; manualCode: string | null } | null;
-  shipment: SackSearchShipment | null;
+  sack: { id: string; sackNo: string; seq: number | null; manualCode: string | null; weightKg: number | null } | null;
+  shipment: LocatedRollShipment | null;
+}
+
+export type ShipmentDestination = "DOMESTIC" | "EXPORT";
+
+/** Sevkiyat kurulum önizlemesi — POST /shipments/preview. */
+export interface CreateShipmentPreview {
+  sacks: { id: string; sackNo: string; manualCode: string | null; weightKg: number | null; rollCount: number; totalMeters: number }[];
+  orders: { orderNumber: string; qty: number }[];
+  totals: { totalMeters: number; sackCount: number };
+}
+
+export interface CreatedShipment {
+  id: string;
+  shipmentNo: string;
+  status: ShipmentStatusKey;
+  destination: ShipmentDestination;
 }

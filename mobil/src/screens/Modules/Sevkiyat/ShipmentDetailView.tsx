@@ -15,9 +15,8 @@ import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
 const STATUS_COLOR: Record<ShipmentStatus, string> = {
-  PREPARING: '#d97706',
-  READY: '#0284c7',
-  AT_DOOR: '#7c3aed',
+  PLANNED: '#7c3aed',
+  AT_DOOR: '#0284c7',
   DISPATCHED: '#16a34a',
   CANCELLED: '#94a3b8',
 };

@@ -13,7 +13,6 @@ const list = vi.fn();
 const dispatch = vi.fn();
 const moveToDoor = vi.fn();
 const pullBack = vi.fn();
-const unready = vi.fn();
 const shipmentContents = vi.fn();
 vi.mock("./service", () => ({
   sackStoreService: {
@@ -21,7 +20,6 @@ vi.mock("./service", () => ({
     dispatch: (...a: unknown[]) => dispatch(...a),
     moveToDoor: (...a: unknown[]) => moveToDoor(...a),
     pullBack: (...a: unknown[]) => pullBack(...a),
-    unready: (...a: unknown[]) => unready(...a),
     shipmentContents: (...a: unknown[]) => shipmentContents(...a),
   },
 }));
@@ -48,13 +46,13 @@ vi.mock("@/components/RefreshButton", () => ({ RefreshButton: () => null }));
 
 import { SackStorePage } from "./SackStorePage";
 
-const readyShipment: SackStoreShipment = {
+const plannedShipment: SackStoreShipment = {
   id: "sh-ready",
   shipmentNo: "SVK-100",
-  status: "READY",
+  status: "PLANNED",
   destination: "DOMESTIC",
   procedureCode: null,
-  readyAt: "2026-06-10T08:00:00Z",
+  createdAt: "2026-06-10T08:00:00Z",
   customer: { id: "c1", name: "ACME" },
   branch: null,
   sackCount: 2,
@@ -64,7 +62,7 @@ const readyShipment: SackStoreShipment = {
 };
 
 const atDoorShipment: SackStoreShipment = {
-  ...readyShipment,
+  ...plannedShipment,
   id: "sh-door",
   shipmentNo: "SVK-200",
   status: "AT_DOOR",
@@ -80,13 +78,12 @@ function page(data: SackStoreShipment[]) {
 
 // Ortak DispatchConfirmDialog sevk onayında çuval dökümünü CANLI çeker
 // (yıkıcı-onay kuralı: etkilenen kayıtlar somut listelenir).
-const readyContents = {
+const plannedContents = {
   success: true,
   data: {
     id: "sh-ready",
     shipmentNo: "SVK-100",
-    status: "READY" as const,
-    readyAt: null,
+    status: "PLANNED" as const,
     plateNumber: null,
     driverName: null,
     carrier: null,
@@ -126,12 +123,11 @@ const readyContents = {
 
 describe("SackStorePage — Çuval Depo durum geçişleri", () => {
   beforeEach(() => {
-    list.mockReset().mockResolvedValue(page([readyShipment]));
+    list.mockReset().mockResolvedValue(page([plannedShipment]));
     dispatch.mockReset().mockResolvedValue({ success: true, data: { id: "sh-ready" } });
     moveToDoor.mockReset().mockResolvedValue({ success: true, data: { id: "sh-ready" } });
     pullBack.mockReset().mockResolvedValue({ success: true, data: { id: "sh-door" } });
-    unready.mockReset().mockResolvedValue({ success: true, data: { id: "sh-ready" } });
-    shipmentContents.mockReset().mockResolvedValue(readyContents);
+    shipmentContents.mockReset().mockResolvedValue(plannedContents);
     confirmationEnabled = false;
     // PermissionGate shipping:write ister — aksiyon butonları çıksın.
     useAuthStore.getState().setUser({
@@ -143,13 +139,14 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
 
   // Not: Kart kapsayıcısı role="button" → erişilebilir adı tüm metni kapsar.
   // Aksiyon butonlarını TAM ad eşleşmesiyle hedefle (kartı kapsamaz).
-  it("READY kartı 'Kapı Önüne Koy' + 'Hazırlığa Geri Al' aksiyonlarını gösterir", async () => {
+  it("PLANNED kartı 'Kapı Önüne Koy' aksiyonunu gösterir; 'Hazırlığa Geri Al' kaldırıldı", async () => {
     renderPage(<SackStorePage />);
     expect(await screen.findByText("SVK-100")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kapı Önüne Koy" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hazırlığa Geri Al" })).toBeInTheDocument();
-    // Geri-çek yalnız AT_DOOR'da olur → READY kartında bu buton yok.
-    expect(screen.queryByRole("button", { name: "Çuval Depoya Geri Çek" })).not.toBeInTheDocument();
+    // Hazırlığa Geri Al (unready) yeni modelde YOK.
+    expect(screen.queryByRole("button", { name: "Hazırlığa Geri Al" })).not.toBeInTheDocument();
+    // Geri Çek yalnız AT_DOOR'da olur → PLANNED kartında bu buton yok.
+    expect(screen.queryByRole("button", { name: "Geri Çek" })).not.toBeInTheDocument();
   });
 
   it("Sevk Et → ortak onay dialog'u çuvalları SOMUT listeler, onaylanınca dispatch çağrılır", async () => {
@@ -180,7 +177,6 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     );
     // Yanlış geçiş tetiklenmemeli.
     expect(moveToDoor).not.toHaveBeenCalled();
-    expect(unready).not.toHaveBeenCalled();
   });
 
   it("onay dialog'unda İptal → mutation çağrılmaz", async () => {
@@ -196,15 +192,16 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     expect(moveToDoor).not.toHaveBeenCalled();
   });
 
-  it("AT_DOOR kartında 'Çuval Depoya Geri Çek' → onay → pullBack(id)", async () => {
+  it("AT_DOOR kartında 'Geri Çek' → onay → pullBack(id)", async () => {
     list.mockResolvedValue(page([atDoorShipment]));
     const user = userEvent.setup();
     renderPage(<SackStorePage />);
     await screen.findByText("SVK-200");
 
-    await user.click(screen.getByRole("button", { name: "Çuval Depoya Geri Çek" }));
+    // Kart butonu: AT_DOOR → PLANNED geri çekme.
+    await user.click(screen.getByRole("button", { name: "Geri Çek" }));
     const dialog = await screen.findByRole("dialog");
-    // Dialog onay etiketi kısa "Geri Çek".
+    // Dialog onay etiketi de "Geri Çek".
     await user.click(within(dialog).getByRole("button", { name: "Geri Çek" }));
 
     await waitFor(() => expect(pullBack).toHaveBeenCalledWith("sh-door"));
@@ -233,7 +230,7 @@ describe("SackStorePage — Çuval Depo durum geçişleri", () => {
     expect(await within(dialog).findByText(/1\/2 okutuldu/)).toBeInTheDocument();
   });
 
-  it("onay-akışı bayrağı AÇIKKEN READY kartında doğrudan 'Sevk Et' yok — ikincil menüden erişilir", async () => {
+  it("onay-akışı bayrağı AÇIKKEN PLANNED kartında doğrudan 'Sevk Et' yok — ikincil menüden erişilir", async () => {
     confirmationEnabled = true;
     const user = userEvent.setup();
     renderPage(<SackStorePage />);

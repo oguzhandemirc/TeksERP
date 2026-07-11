@@ -1,21 +1,22 @@
 import type { Tone } from "@/components/operations/StatusBadge";
 
-export type ShipmentStatus = "PREPARING" | "READY" | "AT_DOOR" | "DISPATCHED" | "CANCELLED";
+export type ShipmentStatus = "PLANNED" | "AT_DOOR" | "DISPATCHED" | "CANCELLED";
 
 export const shipmentStatusLabels: Record<ShipmentStatus, string> = {
-  PREPARING: "Hazırlanıyor",
-  READY: "Çuval Depo",
+  PLANNED: "Planlı",
   AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
   CANCELLED: "İptal",
 };
 
-export const shipmentStatusTones: Record<string, Tone> = {
-  PREPARING: "warning",
-  READY: "info",
+// Tone paleti semantiktir (StatusBadge): indigo/kırmızı literal Tone'da yok → en
+// yakın anlamsal eşleme — PLANNED=info (indigo/mavi), AT_DOOR=warning (amber),
+// DISPATCHED=muted, CANCELLED=danger (kırmızı).
+export const shipmentStatusTones: Record<ShipmentStatus, Tone> = {
+  PLANNED: "info",
   AT_DOOR: "warning",
-  DISPATCHED: "success",
-  CANCELLED: "muted",
+  DISPATCHED: "muted",
+  CANCELLED: "danger",
 };
 
 /**
@@ -40,7 +41,6 @@ export interface ShipmentListItem {
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;
-  readyAt: string | null;
   dispatchedAt: string | null;
   createdAt: string;
   customer: { id: string; code: string; name: string };
@@ -57,6 +57,9 @@ export interface ShipmentDetailLine {
   customerColorName: string | null;
   requested: number;
   shipped: number;
+  /** Havuzda bu siparişe rezerve (çuvallanmış, henüz sevk edilmemiş). */
+  packed: number;
+  /** requested − shipped − packed. */
   openQty: number;
   /** Bu sevkiyatın bu satıra düşürdüğü/düşüreceği metraj (DISPATCHED'te kesin). */
   thisShipment: number;
@@ -133,7 +136,6 @@ export interface ShipmentDetail {
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;
-  readyAt: string | null;
   dispatchedAt: string | null;
   customer: { id: string; code: string; name: string };
   branch: { id: string; name: string } | null;

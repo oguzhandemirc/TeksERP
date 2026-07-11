@@ -110,17 +110,17 @@ interface SackRow {
 }
 
 const SACK_STATUS_LABEL: Record<string, string> = {
-  PREPARING: "Hazırlanıyor",
-  READY: "Çuval Depo",
+  PLANNED: "Planlı Sevkiyat",
   AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
+  CANCELLED: "İptal",
 };
 
 /**
  * Duruma göre TEK akıllı birincil hedef (operatörün karar yükünü düşür):
- * PREPARING → Paketleme (içerik orada düzenlenir), READY/AT_DOOR → Çuval Depo
- * (kapı aksiyonları orada), DISPATCHED → yalnız Arama (içerik kilitli — board'da
- * ve Paketleme'de işi yok). Diğer hedefler ikincil sırada kalır.
+ * Havuzda (sevkiyata atanmamış, status yok) → Paketleme (içerik orada düzenlenir);
+ * PLANNED/AT_DOOR → Sevk Kapısı (kapı aksiyonları orada), DISPATCHED → yalnız Arama
+ * (içerik kilitli — board'da ve Paketleme'de işi yok). Bilinmeyen/iptal → Arama.
  */
 function sackActions(code: string, status: string | undefined): ScanAction[] {
   const packing: ScanAction = {
@@ -138,10 +138,13 @@ function sackActions(code: string, status: string | undefined): ScanAction[] {
     to: "/operations/sack-search",
     state: { scanCode: code },
   };
+  // Havuzdaki çuval — henüz bir sevkiyata atanmamış (status yok). İçeriği
+  // Paketleme'de düzenlenir; Arama'dan havuzdan sevkiyat kurulabilir.
+  if (!status) {
+    return [{ ...packing, primary: true }, search];
+  }
   switch (status) {
-    case "PREPARING":
-      return [{ ...packing, primary: true }, store, search];
-    case "READY":
+    case "PLANNED":
     case "AT_DOOR":
       return [{ ...store, primary: true }, packing, search];
     case "DISPATCHED":
@@ -156,7 +159,8 @@ function sackActions(code: string, status: string | undefined): ScanAction[] {
         },
       ];
     default:
-      return [{ ...store, primary: true }, packing, search];
+      // Bilinmeyen statü (CANCELLED vb.) → güvenli evrensel hedef: Arama.
+      return [{ ...search, primary: true }];
   }
 }
 

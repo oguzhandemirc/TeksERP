@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, FileText, Package, Undo2, Target } from "lucide-react";
+import { Ban, FileText, Package, Undo2 } from "lucide-react";
 import { PermissionGate } from "@/components/PermissionGate";
-import { RetargetOrdersDialog } from "./RetargetOrdersDialog";
 import { CancelShipmentDialog } from "./CancelShipmentDialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +24,6 @@ interface Props {
 
 export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
-  const [retargetOpen, setRetargetOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
 
   // Lazy — yalnız açılınca detay çekilir. queryKey irsaliye ile paylaşılır (cache).
@@ -70,19 +68,11 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
               >
                 <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
               </Button>
-              {/* Saha #7: yeniden hedefle — sevk edilmemiş her durumda (DISPATCHED/CANCELLED hariç) */}
+              {/* İptal: araç vazgeçti / sipariş komple iptal — cancel-preview'lı yıkıcı onay.
+                  DISPATCHED/CANCELLED dışında. Havuz modelinde sipariş kümesi çuval
+                  tahsislerinden türetilir → elle "Siparişleri Değiştir" (retarget) yok. */}
               {d.status !== "DISPATCHED" && d.status !== "CANCELLED" && (
                 <PermissionGate permission="shipping:write">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="gap-1"
-                    onClick={() => setRetargetOpen(true)}
-                  >
-                    <Target className="h-3.5 w-3.5" /> Siparişleri Değiştir
-                  </Button>
-                  {/* İptal: araç vazgeçti / sipariş komple iptal — cancel-preview'lı yıkıcı onay */}
                   <Button
                     type="button"
                     size="sm"
@@ -133,6 +123,10 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                       <tr className="text-muted-foreground [&>th]:px-1 [&>th]:py-0.5 [&>th]:font-medium">
                         <th className="text-left">Ürün</th>
                         <th className="text-right">İstenen</th>
+                        <th className="text-right">Sevk</th>
+                        <th className="text-right" title="Çuvallanmış — havuzda bu siparişe rezerve">
+                          Çuvallı
+                        </th>
                         <th className="text-right">Açık</th>
                         <th className="text-right">Bu sevk</th>
                       </tr>
@@ -146,6 +140,8 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                             {l.width ? ` · ${l.width}cm` : ""}
                           </td>
                           <td className="text-right text-muted-foreground">{fmt(l.requested)}</td>
+                          <td className="text-right text-muted-foreground">{fmt(l.shipped)}</td>
+                          <td className="text-right text-muted-foreground">{fmt(l.packed)}</td>
                           <td className="text-right text-muted-foreground">{fmt(l.openQty)}</td>
                           <td className="text-right font-semibold">{fmt(l.thisShipment)}</td>
                         </tr>
@@ -288,17 +284,6 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
         )}
 
         <ShipmentDispatchNote shipmentId={shipmentId} open={noteOpen} onOpenChange={setNoteOpen} />
-
-        {d && (
-          <RetargetOrdersDialog
-            shipmentId={d.id}
-            customerId={d.customer.id}
-            branchId={d.branch?.id ?? null}
-            currentOrderIds={d.orders.map((o) => o.id)}
-            open={retargetOpen}
-            onOpenChange={setRetargetOpen}
-          />
-        )}
 
         <CancelShipmentDialog
           shipmentId={cancelOpen ? shipmentId : null}

@@ -5,9 +5,10 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { customerService } from "@/pages/Customers/service";
-import type { SackSearchParams } from "./types";
+import { scopeLabels, type SackSearchParams, type SackSearchScope } from "./types";
 
 const NONE = "__all__";
+const SCOPES: SackSearchScope[] = ["POOL", "PLANNED", "DISPATCHED", "ALL"];
 
 /** Master-data lookup (ürün/renk/müşteri) — loadAllForPicker + Select. */
 function LookupSelect({
@@ -100,15 +101,23 @@ export function SearchFilters({ filters, onChange }: Props) {
         placeholder="Çuval kodu (AMB…)"
         className="h-8 w-36 text-xs"
       />
-      <label className="ml-auto inline-flex cursor-pointer select-none items-center gap-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={filters.includeDispatched ?? false}
-          onChange={(e) => onChange({ includeDispatched: e.target.checked || undefined })}
-          className="h-4 w-4 cursor-pointer accent-primary"
-        />
-        Sevk edilmişleri de ara
-      </label>
+      <div className="ml-auto">
+        <Select
+          value={filters.scope ?? "POOL"}
+          onValueChange={(v) => onChange({ scope: v as SackSearchScope })}
+        >
+          <SelectTrigger className="h-8 w-auto min-w-[170px] gap-1 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SCOPES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {scopeLabels[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }

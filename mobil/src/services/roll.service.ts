@@ -164,14 +164,13 @@ export const rollService = {
       .then((r) => r.data);
   },
 
-  // Depo kapsam sayaçları — serbest / hazırlanan (PREPARING) / çuval depo
-  // (READY) / kapı önü (AT_DOOR). O14: backend 'preparing' kovasını ekledi —
-  // sevkiyata okutulmuş ama henüz çuval depoya kalkmamış toplar.
+  // Depo kapsam sayaçları (çuval havuzu modeli) — serbest (sackId=null) / çuval depo
+  // havuzu (pool: sackId dolu, sevkiyatsız) / planlı sevkiyat (PLANNED) / kapı önü (AT_DOOR).
   getWarehouseScope: (): Promise<
     ApiResponse<{
       free: { count: number; qty: number };
-      preparing: { count: number; qty: number };
-      sackStore: { count: number; qty: number };
+      pool: { count: number; qty: number };
+      planned: { count: number; qty: number };
       atDoor: { count: number; qty: number };
     }>
   > => apiClient.get(`/rolls/warehouse-scope`).then((r) => r.data),

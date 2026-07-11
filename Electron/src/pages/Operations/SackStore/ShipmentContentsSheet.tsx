@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Package, Scale, Layers, Truck, Globe, Pencil, Check } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -8,14 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
-import { SackList } from "@/pages/Operations/SackContentEdit/SackList";
-import { useShipmentDetail } from "@/pages/Operations/SackContentEdit/useShipmentDetail";
 import { sackStoreService } from "./service";
+import { ShipmentSackReadonly } from "./ShipmentSackReadonly";
 import {
   sackStoreStatusLabels,
   destinationLabels,
+  type ContentSack,
   type SackStoreShipment,
   type ShipmentDestination,
 } from "./types";
@@ -32,22 +33,40 @@ interface Props {
 }
 
 /**
- * Çuval Depo board kartına tıklayınca açılan slide-over. Sevkiyatın çuval+rulo
- * dökümünü LAZY çeker (board listesi rulo taşımaz). Tek sevkiyat = sınırlı kapsam.
+ * Sevk Kapısı board kartına tıklayınca açılan slide-over. Sevkiyatın çuval+top
+ * dökümünü LAZY çeker (`sack-contents`) ve SALT-OKUNUR gösterir — içerik düzenleme
+ * (rol çıkar/taşı) Paketleme havuz ekranındadır. PLANNED sevkiyatta her çuval
+ * havuza geri çıkarılabilir ("Çuval Çıkar"). destination/procedure buradan düzenlenir.
  */
 export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
   const qc = useQueryClient();
-  // Düzenlenebilir içerik için tam sevkiyat detayı (Çuval Düzelt ile ortak kaynak).
-  const query = useShipmentDetail(open && shipment ? shipment.id : null);
-  const detail = query.data?.data;
+  const query = useQuery({
+    queryKey: ["sack-store", "contents", shipment?.id],
+    queryFn: () => sackStoreService.shipmentContents(shipment!.id),
+    enabled: open && !!shipment,
+  });
+  const contents = query.data?.data;
+  const isPlanned = shipment?.status === "PLANNED";
 
-  // Kapıda içerik düzeltme "Düzelt" toggle'ı arkasında — kazara top çıkarıp
-  // tartı sıfırlatma vakalarını azaltır. Büyük düzeltmenin yolu Hazırlığa Geri
-  // Al → Paketleme'dir; bu toggle son-dakika küçük düzeltme içindir.
-  const [editMode, setEditMode] = useState(false);
+  // Çuval çıkarma yıkıcı-benzeri (sevkiyattan çıkar, havuza döner) → somut onay.
+  const [pendingRemove, setPendingRemove] = useState<ContentSack | null>(null);
   useEffect(() => {
-    setEditMode(false);
+    setPendingRemove(null);
   }, [shipment?.id]);
+
+  const removeMut = useMutation({
+    mutationFn: (sackId: string) => sackStoreService.removeSack(shipment!.id, sackId),
+    onSuccess: () => {
+      toast.success("Çuval sevkiyattan çıkarıldı — havuza döndü");
+      // Çuval havuza döner; board sayaçları + havuz + arama + sevkiyat tazelensin.
+      void qc.invalidateQueries({ queryKey: ["sack-store"] });
+      void qc.invalidateQueries({ queryKey: ["pool"] });
+      void qc.invalidateQueries({ queryKey: ["sack-search"] });
+      void qc.invalidateQueries({ queryKey: ["shipments"] });
+      if (shipment) void qc.invalidateQueries({ queryKey: ["shipment-detail", shipment.id] });
+      setPendingRemove(null);
+    },
+  });
 
   const invalidateBoard = () => {
     void qc.invalidateQueries({ queryKey: ["sack-store"] });
@@ -83,48 +102,57 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
               <SummaryStat icon={Layers} label="Metraj" value={`${fmtM(shipment.totalQty)} m`} />
             </div>
 
-            {detail && (detail.plateNumber || detail.driverName || detail.carrier) && (
+            {contents && (contents.plateNumber || contents.driverName || contents.carrier) && (
               <Card>
                 <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 text-xs">
                   <span className="flex items-center gap-1 font-medium text-muted-foreground">
                     <Truck className="h-3.5 w-3.5" /> Taşıma
                   </span>
-                  {detail.plateNumber && <span className="font-mono">{detail.plateNumber}</span>}
-                  {detail.driverName && <span>{detail.driverName}</span>}
-                  {detail.carrier && <span className="text-muted-foreground">{detail.carrier}</span>}
+                  {contents.plateNumber && <span className="font-mono">{contents.plateNumber}</span>}
+                  {contents.driverName && <span>{contents.driverName}</span>}
+                  {contents.carrier && <span className="text-muted-foreground">{contents.carrier}</span>}
                 </CardContent>
               </Card>
             )}
 
-            {/* Çuvallar → içindeki toplar; düzeltme aksiyonları toggle arkasında */}
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground">Çuvallar</p>
-              <PermissionGate permission="shipping:write">
-                <Button
-                  type="button"
-                  variant={editMode ? "secondary" : "outline"}
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setEditMode((v) => !v)}
-                >
-                  <Pencil className="h-3 w-3" />
-                  {editMode ? "Düzeltmeyi Kapat" : "Düzelt"}
-                </Button>
-              </PermissionGate>
-            </div>
+            {/* Çuvallar → içindeki toplar (salt-okunur; PLANNED'de çuval çıkarılabilir) */}
+            <p className="text-xs font-medium text-muted-foreground">Çuvallar</p>
             {query.isLoading ? (
               <div className="space-y-2">
                 {[0, 1, 2].map((i) => (
                   <Skeleton key={i} className="h-24 w-full" />
                 ))}
               </div>
-            ) : detail ? (
-              <SackList detail={detail} editLocked={!editMode} />
+            ) : contents && contents.sacks.length > 0 ? (
+              <div className="space-y-2">
+                {contents.sacks.map((sk) => (
+                  <ShipmentSackReadonly
+                    key={sk.id}
+                    sack={sk}
+                    canRemove={!!isPlanned}
+                    removing={removeMut.isPending && pendingRemove?.id === sk.id}
+                    onRemove={setPendingRemove}
+                  />
+                ))}
+              </div>
             ) : (
               <p className="py-8 text-center text-sm text-muted-foreground">İçerik yüklenemedi.</p>
             )}
           </div>
         )}
+
+        <ConfirmDialog
+          open={pendingRemove !== null}
+          onOpenChange={(o) => !o && !removeMut.isPending && setPendingRemove(null)}
+          title={pendingRemove ? `${pendingRemove.sackNo} sevkiyattan çıkarılsın mı?` : ""}
+          description="Çuval bu sevkiyattan çıkarılır ve çuval havuzuna geri döner; sevkiyatta kalan çuvallarla karşılanma yeniden hesaplanır."
+          confirmLabel="Çuval Çıkar"
+          destructive
+          isPending={removeMut.isPending}
+          onConfirm={() => {
+            if (pendingRemove) removeMut.mutate(pendingRemove.id);
+          }}
+        />
       </SheetContent>
     </Sheet>
   );

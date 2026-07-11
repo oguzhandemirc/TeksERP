@@ -6,8 +6,8 @@
 //      — çuval listesi + her çuvalda EŞLEŞEN top sayısı/metresi.
 //   2) "Şu çuvalda ne var?"                        → searchSacks(sackCode) + getSackContents
 //   3) "Bu top hangi çuvalda/sevkiyatta?"          → locateRoll(barcode)
-// Varsayılan kapsam sevk edilMEMİŞ sevkiyatlar (PREPARING/READY/AT_DOOR);
-// DISPATCHED bilinçli filtreyle dahil edilebilir (geçmişte arama).
+// Kapsam (scope): POOL (havuzda, shipmentId null) | PLANNED (planlı/kapı önü sevkiyatta) |
+// DISPATCHED (sevk edilmiş) | ALL. Varsayılan: POOL + PLANNED (sevk edilmemiş).
 // Salt-okunur — yazma/audit yok. Liste cursor'lı (sacks yıllar içinde büyür),
 // aggregate'ler yalnız sayfadaki çuvallar için (over-fetch yok).
 // =============================================================================
@@ -20,22 +20,35 @@ import type { CursorPaginatedResponse } from "./base.service";
 import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 
-const UNSHIPPED: ShipmentStatus[] = [
-  ShipmentStatus.PREPARING,
-  ShipmentStatus.READY,
-  ShipmentStatus.AT_DOOR,
-];
+const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR];
+
+export type SackSearchScope = "POOL" | "PLANNED" | "DISPATCHED" | "ALL";
 
 export interface SackSearchParams {
   itemId?: string;
   colorId?: string;
   width?: number;
   customerId?: string;
+  scope?: SackSearchScope;
   shipmentNo?: string;
   sackCode?: string;
   includeDispatched?: boolean;
   cursor?: string;
   limit?: number;
+}
+
+/** Kapsam → Sack where OR parçaları (POOL=havuz, PLANNED/DISPATCHED=sevkiyat statüsü). */
+function scopeWhere(scope: SackSearchScope): Prisma.SackWhereInput[] {
+  switch (scope) {
+    case "POOL":
+      return [{ shipmentId: null }];
+    case "PLANNED":
+      return [{ shipment: { status: { in: PLANNED_STATUSES } } }];
+    case "DISPATCHED":
+      return [{ shipment: { status: ShipmentStatus.DISPATCHED } }];
+    case "ALL":
+      return [{ shipmentId: null }, { shipment: { is: {} } }];
+  }
 }
 
 export class SackSearchService {
@@ -54,25 +67,22 @@ export class SackSearchService {
     if (params.width !== undefined) rollFilter.width = params.width;
     const hasContentFilter = Object.keys(rollFilter).length > 0;
 
-    const shipmentWhere: Prisma.ShipmentWhereInput = {
-      status: params.includeDispatched
-        ? { in: [...UNSHIPPED, ShipmentStatus.DISPATCHED] }
-        : { in: UNSHIPPED },
-    };
-    if (params.customerId) shipmentWhere.customerId = params.customerId;
+    // Kapsam: verilen scope; yoksa includeDispatched'e göre ALL, aksi POOL+PLANNED (varsayılan).
+    const scopeOr: Prisma.SackWhereInput[] = params.scope
+      ? scopeWhere(params.scope)
+      : params.includeDispatched
+        ? scopeWhere("ALL")
+        : [{ shipmentId: null }, { shipment: { status: { in: PLANNED_STATUSES } } }];
+
+    const andClauses: Prisma.SackWhereInput[] = [{ OR: scopeOr }];
+    if (params.customerId) andClauses.push({ customerId: params.customerId });
     const shipmentNo = params.shipmentNo?.trim();
-    if (shipmentNo) shipmentWhere.OR = buildTurkishSearch<Prisma.ShipmentWhereInput>(shipmentNo, ["shipmentNo"]);
-
-    const where: Prisma.SackWhereInput = { shipment: shipmentWhere };
+    if (shipmentNo) andClauses.push({ shipment: { is: { OR: buildTurkishSearch<Prisma.ShipmentWhereInput>(shipmentNo, ["shipmentNo"]) } } });
     const sackCode = params.sackCode?.trim();
-    if (sackCode) {
-      where.OR = buildTurkishSearch<Prisma.SackWhereInput>(sackCode, [
-        "manualCode",
-        "sackNo",
-      ]);
-    }
-    if (hasContentFilter) where.rolls = { some: rollFilter };
+    if (sackCode) andClauses.push({ OR: buildTurkishSearch<Prisma.SackWhereInput>(sackCode, ["manualCode", "sackNo"]) });
+    if (hasContentFilter) andClauses.push({ rolls: { some: rollFilter } });
 
+    const where: Prisma.SackWhereInput = { AND: andClauses };
     const cursor = decodeCursor(params.cursor);
     const finalWhere: Prisma.SackWhereInput = cursor ? { AND: [where, cursorWhere(cursor)] } : where;
 
@@ -86,15 +96,15 @@ export class SackSearchService {
         seq: true,
         manualCode: true,
         weightKg: true,
+        sealedAt: true,
         createdAt: true,
+        customer: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
         shipment: {
           select: {
             id: true,
             shipmentNo: true,
             status: true,
-            readyAt: true, // çeki listesi: "ne zamandır hazır bekliyor"
-            customer: { select: { id: true, name: true } },
-            branch: { select: { id: true, name: true } },
           },
         },
       },
@@ -143,8 +153,11 @@ export class SackSearchService {
         seq: s.seq,
         manualCode: s.manualCode,
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
+        sealedAt: s.sealedAt,
         createdAt: s.createdAt,
-        shipment: s.shipment,
+        customer: s.customer,
+        branch: s.branch,
+        shipment: s.shipment, // null = havuzda; dolu = sevkiyatta
         rollCount: all?._count._all ?? 0,
         totalQty: Number(all?._sum.currentQty ?? 0),
         swatchCount: swatchBySack.get(s.id)?._count._all ?? 0,
@@ -228,14 +241,14 @@ export class SackSearchService {
         seq: true,
         manualCode: true,
         weightKg: true,
+        sealedAt: true,
+        customer: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
         shipment: {
           select: {
             id: true,
             shipmentNo: true,
             status: true,
-            readyAt: true,
-            customer: { select: { id: true, name: true } },
-            branch: { select: { id: true, name: true } },
           },
         },
         rolls: {
@@ -275,6 +288,9 @@ export class SackSearchService {
         seq: s.seq,
         manualCode: s.manualCode,
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
+        sealedAt: s.sealedAt,
+        customer: s.customer,
+        branch: s.branch,
         shipment: s.shipment,
         rollCount: s.rolls.length,
         swatchCount: s.swatches.length,

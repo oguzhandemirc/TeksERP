@@ -1235,7 +1235,8 @@ export class KartelaService {
   }): Promise<ApiResponse<KartelaStockGroup[]>> {
     const groups = await prisma.swatch.groupBy({
       by: ["itemId", "colorId"],
-      where: { shipmentId: null, cancelledAt: null },
+      // sackId:null: çuvala girmiş kartela stokta sayılmaz (havuz rezervi).
+      where: { shipmentId: null, sackId: null, cancelledAt: null },
       _count: { _all: true },
     });
 
@@ -1322,6 +1323,7 @@ export class KartelaService {
           itemId: data.itemId,
           colorId: data.colorId, // null → colorId IS NULL ("renksiz" grubu)
           shipmentId: null,
+          sackId: null, // çuvaldaki kartela stok değil
           cancelledAt: null,
         },
         select: { id: true },
@@ -1335,7 +1337,7 @@ export class KartelaService {
       }
       const claimIds = candidates.map((c) => c.id);
       const claimed = await tx.swatch.updateMany({
-        where: { id: { in: claimIds }, shipmentId: null, cancelledAt: null },
+        where: { id: { in: claimIds }, shipmentId: null, sackId: null, cancelledAt: null },
         data: { cancelledAt: new Date(), cancelReason: reason },
       });
       if (claimed.count !== data.count) {

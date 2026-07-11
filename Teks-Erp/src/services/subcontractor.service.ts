@@ -56,7 +56,7 @@ import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 // Fasondan doğrudan sevk önizlemesi karşılanma projeksiyonunu shipping'in saf
 // FIFO/spec-eşleşmesiyle üretir (tek karşılanma kaynağı; circular yok — shipping
 // subcontractor'ı import etmez).
-import { allocate, specMatch, type RollSpec, type LineForAlloc } from "./shipping.service";
+import { allocate, specMatch, type RollSpec, type LineForAlloc } from "./helpers/allocation.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -3765,6 +3765,7 @@ export class SubcontractorService {
                         width: true,
                         quantity: true,
                         shippedQty: true,
+                        packedQty: true,
                         item: { select: { code: true, name: true } },
                         color: { select: { name: true } },
                         order: {
@@ -3886,6 +3887,7 @@ export class SubcontractorService {
               width: true,
               quantity: true,
               shippedQty: true,
+              packedQty: true,
               item: { select: { code: true, name: true } },
               color: { select: { name: true } },
               order: {
@@ -3906,7 +3908,8 @@ export class SubcontractorService {
       ...wo.orderLinks.map((l) => l.orderLine).filter(Boolean).map((ol) => ol!),
       ...otherOpenLines,
     ];
-    // Spec-eşleşen ve karşılanmaya yer olan (remaining>0) satırları al.
+    // Spec-eşleşen ve karşılanmaya yer olan (remaining>0) satırları al. Kapasite =
+    // quantity − shippedQty − packedQty (çuvallanmış rezerv de düşülür; §5).
     const matchingLines = rawLines.filter(
       (ol) =>
         rollSpecs.some((rs) =>
@@ -3914,15 +3917,16 @@ export class SubcontractorService {
             { itemId: rs.itemId, colorId: rs.colorId, width: rs.width },
             { itemId: ol.itemId, colorId: ol.colorId, width: ol.width },
           ),
-        ) && new Prisma.Decimal(ol.quantity).greaterThan(ol.shippedQty),
+        ) && new Prisma.Decimal(ol.quantity).greaterThan(new Prisma.Decimal(ol.shippedQty).plus(ol.packedQty)),
     );
+    // allocate cap'i için packed'i shipped'e katla (allocate need = quantity − shippedQty).
     const linesForAlloc: LineForAlloc[] = matchingLines.map((ol) => ({
       id: ol.id,
       itemId: ol.itemId,
       colorId: ol.colorId,
       width: ol.width,
       quantity: new Prisma.Decimal(ol.quantity),
-      shippedQty: new Prisma.Decimal(ol.shippedQty),
+      shippedQty: new Prisma.Decimal(ol.shippedQty).plus(ol.packedQty),
       deadline: ol.order.deadline,
       orderDate: ol.order.orderDate,
       lineCreatedAt: ol.createdAt,
@@ -3938,7 +3942,8 @@ export class SubcontractorService {
       width: ol.width != null ? Number(ol.width) : null,
       quantity: Number(ol.quantity),
       shippedQty: Number(ol.shippedQty),
-      remaining: Number(new Prisma.Decimal(ol.quantity).minus(ol.shippedQty)),
+      packedQty: Number(ol.packedQty),
+      remaining: Number(new Prisma.Decimal(ol.quantity).minus(ol.shippedQty).minus(ol.packedQty)),
       suggestedQty: suggested.has(ol.id) ? Number(suggested.get(ol.id)!) : 0,
       isWorkOrderLinked: linkedLineIds.has(ol.id),
     }));
@@ -4075,7 +4080,7 @@ export class SubcontractorService {
         where: { id: { in: lineIds } },
         select: {
           id: true, itemId: true, colorId: true, width: true,
-          quantity: true, shippedQty: true,
+          quantity: true, shippedQty: true, packedQty: true,
           order: { select: { id: true, status: true } },
         },
       });
@@ -4096,8 +4101,8 @@ export class SubcontractorService {
           throw AppError.badRequest("İptal edilmiş siparişe karşılanma yazılamaz");
         }
         // Aşırı-sevk koruması: karşılanma satırın KALAN kapasitesini aşamaz
-        // (shippedQty <= quantity invariant'ı; shipping commitGoodsTx de cap'lidir).
-        const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty);
+        // (quantity − shippedQty − packedQty; çuvallanmış rezerv dahil).
+        const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty).minus(line.packedQty);
         if (new Prisma.Decimal(a.qty).greaterThan(remaining)) {
           throw AppError.badRequest(
             `Karşılanan metraj (${a.qty}) satırın kalan kapasitesini (${remaining.toString()}) aşıyor`,
@@ -4261,7 +4266,8 @@ export class SubcontractorService {
             id: true,
             quantity: true,
             shippedQty: true,
-            order: { select: { status: true, manualClosedById: true } },
+            packedQty: true,
+            order: { select: { id: true, status: true, manualClosedById: true } },
           },
         });
         const freshById = new Map(freshLines.map((l) => [l.id, l]));
@@ -4277,13 +4283,17 @@ export class SubcontractorService {
               "Sipariş bu sırada kapatıldı/iptal edildi — karşılanma yazılamaz, yenileyin",
             );
           }
-          const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty);
+          // Kapasite = quantity − shippedQty − packedQty (çuvallanmış rezervin üstüne
+          // fason doğrudan sevk over-supply olmasın; §5).
+          const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty).minus(line.packedQty);
           if (new Prisma.Decimal(a.qty).greaterThan(remaining)) {
             throw AppError.conflict(
               `Karşılanan metraj (${a.qty}) satırın kalan kapasitesini (${remaining.toString()}) aştı — ` +
-                "başka bir sevk bu satırı bu sırada doldurmuş olabilir, yenileyip tekrar deneyin",
+                "başka bir sevk/çuvallama bu satırı bu sırada doldurmuş olabilir, yenileyip tekrar deneyin",
             );
           }
+          // Defter kaydı — shippedQty denorm'unu recompute (aşağıda) DirectShipAllocation'dan
+          // türetir; manuel increment YAPILMAZ (çift sayım olurdu).
           await tx.subcontractorDirectShipAllocation.create({
             data: {
               dispatchId: data.dispatchId,
@@ -4291,12 +4301,7 @@ export class SubcontractorService {
               qty: new Prisma.Decimal(a.qty),
             },
           });
-          const ol = await tx.orderLine.update({
-            where: { id: a.orderLineId },
-            data: { shippedQty: { increment: new Prisma.Decimal(a.qty) } },
-            select: { orderId: true },
-          });
-          orderIds.add(ol.orderId);
+          orderIds.add(line.order.id);
         }
         await recomputeOrderStatusForOrders(tx, [...orderIds]);
       }

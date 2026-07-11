@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { ChevronDown, ClipboardList, PackageSearch } from "lucide-react";
+import { ChevronDown, ClipboardList, PackageSearch, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -15,7 +15,8 @@ import { SearchFilters } from "./SearchFilters";
 import { SackResultCard } from "./SackResultCard";
 import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
-import type { LocatedRoll, SackSearchParams } from "./types";
+import { CreateShipmentFromSacksDialog } from "./CreateShipmentFromSacksDialog";
+import { sackDisplayState, type LocatedRoll, type SackSearchParams } from "./types";
 
 const QUERY_KEY = "sack-search";
 const PAGE_SIZE = 30;
@@ -33,6 +34,7 @@ export function SackSearchPage() {
   // sonra mavi Mitos'u filtreleyip ekle" (müşterinin karışık talebi tek kağıtta).
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
+  const [createIds, setCreateIds] = useState<string[] | null>(null);
 
   const query = useInfiniteQuery({
     queryKey: [QUERY_KEY, debounced],
@@ -44,6 +46,15 @@ export function SackSearchPage() {
   });
 
   const sacks = useMemo(() => query.data?.pages.flatMap((p) => p.data) ?? [], [query.data]);
+
+  // Seçili çuvallardan sevkiyat kurulabilir mi: hepsi HAVUZDA-mühürlü (POOL) + tek müşteri.
+  const selectedSacks = useMemo(() => sacks.filter((s) => selectedIds.has(s.id)), [sacks, selectedIds]);
+  const shipmentEligible = useMemo(() => {
+    if (selectedSacks.length === 0) return false;
+    const allPool = selectedSacks.every((s) => sackDisplayState(s) === "POOL");
+    const customers = new Set(selectedSacks.map((s) => s.customer?.id ?? "_"));
+    return allPool && customers.size === 1;
+  }, [selectedSacks]);
 
   const toggleSelect = (sackId: string) =>
     setSelectedIds((prev) => {
@@ -89,7 +100,7 @@ export function SackSearchPage() {
   // çuval filtresine yazılır + "sevk edilmişleri de ara" açılır — yoksa
   // varsayılan kapsam DISPATCHED'ı gizler, operatör boş liste görürdü.
   useScanSeed("scanCodeDispatched", (code) => {
-    setFilters((f) => ({ ...f, sackCode: code, includeDispatched: true }));
+    setFilters((f) => ({ ...f, sackCode: code, scope: "DISPATCHED" }));
     toast.info(`Sevk edilmiş çuval filtreye uygulandı: ${code}`);
   });
 
@@ -126,7 +137,20 @@ export function SackSearchPage() {
           </Button>
           {selectedIds.size > 0 && (
             <>
-              <Button size="sm" onClick={() => setPickListIds([...selectedIds])}>
+              <Button
+                size="sm"
+                disabled={!shipmentEligible}
+                onClick={() => setCreateIds(selectedSacks.map((s) => s.id))}
+                title={
+                  shipmentEligible
+                    ? undefined
+                    : "Sevkiyat için: hepsi HAVUZDA-mühürlü + tek müşteri olmalı"
+                }
+              >
+                <Truck className="mr-1 h-4 w-4" />
+                Sevkiyat Oluştur ({selectedSacks.length})
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPickListIds([...selectedIds])}>
                 <ClipboardList className="mr-1 h-4 w-4" />
                 Çeki Listesi Bas ({selectedIds.size})
               </Button>
@@ -136,7 +160,7 @@ export function SackSearchPage() {
             </>
           )}
           <span className="ml-auto text-xs text-muted-foreground">
-            Çuvalları işaretle → tek kağıtta sahada aranacak döküm.
+            Havuzdaki mühürlü çuvalları seç → sevkiyat kur; ya da çeki listesi bas.
           </span>
         </div>
       )}
@@ -190,6 +214,11 @@ export function SackSearchPage() {
       </div>
 
       <PickListPrintDialog sackIds={pickListIds} onOpenChange={(o) => !o && setPickListIds(null)} />
+      <CreateShipmentFromSacksDialog
+        sackIds={createIds}
+        onOpenChange={(o) => !o && setCreateIds(null)}
+        onCreated={() => setSelectedIds(new Set())}
+      />
     </div>
   );
 }

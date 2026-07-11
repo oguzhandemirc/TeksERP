@@ -100,7 +100,7 @@ import {
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
-import { touchShipmentPreparingTx } from "./helpers/shipment-locks.helper";
+import { touchOpenSackTx } from "./helpers/shipment-locks.helper";
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 
 export interface RollStats {
@@ -231,10 +231,11 @@ export interface RelabelContext {
   propertyIds: string[];
   /** Son basılan etiketin künyesi ("A": kime/hangi sipariş/ne zaman) — null=hiç basılmadı/stok. */
   lastLabelSnapshot: Prisma.JsonValue | null;
-  /** Bulunduğu sevkiyat — committed (PREPARING dışı) ise spec düzenleme kilitlenir (backend de 409). */
+  /** Atanmış sevkiyat — varsa spec düzenleme kilitlenir (backend de 409). */
   shipment: { id: string; shipmentNo: string; status: ShipmentStatus } | null;
-  sack: { id: string; sackNo: string; seq: number } | null;
-  /** Spec düzenleme kilitli mi (committed sevkiyatta) — frontend kolaylığı; backend guard ayrıca enforce eder. */
+  /** Bulunduğu çuval — mühürlüyse (sealedAt) spec düzenleme kilitlenir (havuz rezervi). */
+  sack: { id: string; sackNo: string; seq: number | null; sealedAt: Date | null } | null;
+  /** Spec düzenleme kilitli mi (atanmış sevkiyat / mühürlü çuval) — frontend kolaylığı; backend guard ayrıca enforce eder. */
   specLocked: boolean;
   /** "B" önerileri — topu üreten WO'nun bağlı siparişlerinden distinct müşteriler. */
   candidateCustomers: RelabelCandidateCustomer[];
@@ -985,32 +986,28 @@ export class InventoryService {
   }
 
   /**
-   * Depo kapsam sayaçları — WAREHOUSE topları fiziksel yere göre ayır:
-   *  - serbest:    shipmentId null (satılabilir/okutulabilir gerçek serbest stok)
-   *  - hazırlanan: shipment.status PREPARING (sevkiyata okutuldu, henüz çuval depoda değil)
-   *  - çuval depo: shipment.status READY (çuvallandı, firma içi bekliyor)
+   * Depo kapsam sayaçları — WAREHOUSE topları fiziksel yere göre ayır (ÇUVAL HAVUZU MODELİ):
+   *  - serbest:    shipmentId null + sackId null (satılabilir/okutulabilir gerçek serbest stok)
+   *  - çuval depo: shipmentId null + sackId dolu (çuval depo havuzu — açık/mühürlü çuvallar)
+   *  - planlı:     shipment.status PLANNED (sevkiyata atandı, kapı önüne çıkmadı)
    *  - kapı önü:   shipment.status AT_DOOR (kamyon bekliyor)
    * Hepsi hâlâ binada (WAREHOUSE) ama yalnız "serbest" satılabilir stoktur. SHIPPED hariç.
-   * L (düşük bulgu): PREPARING'deki toplar eskiden HİÇBİR kovada sayılmıyordu —
-   * serbest + çuval + kapı toplamı fiziksel depoyla tutmuyordu.
    */
   async getWarehouseScope(): Promise<
     ApiResponse<{
       free: { count: number; qty: number };
-      preparing: { count: number; qty: number };
-      sackStore: { count: number; qty: number };
+      pool: { count: number; qty: number };
+      planned: { count: number; qty: number };
       atDoor: { count: number; qty: number };
     }>
   > {
     const agg = (where: Prisma.RollWhereInput) =>
       prisma.roll.aggregate({ where, _count: { _all: true }, _sum: { currentQty: true } });
 
-    // F121: tx-DIŞI 4 bağımsız aggregate — seri yerine paralel (pg adapter tx-dışı
-    // paralel sorguya izin verir; kural 11 yalnız tx.* Promise.all'ı yasaklar).
-    const [free, preparing, sackStore, atDoor] = await Promise.all([
-      agg({ status: RollStatus.WAREHOUSE, shipmentId: null }),
-      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PREPARING } }),
-      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.READY } }),
+    const [free, pool, planned, atDoor] = await Promise.all([
+      agg({ status: RollStatus.WAREHOUSE, shipmentId: null, sackId: null }),
+      agg({ status: RollStatus.WAREHOUSE, shipmentId: null, sackId: { not: null } }),
+      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PLANNED } }),
       agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } }),
     ]);
 
@@ -1021,12 +1018,7 @@ export class InventoryService {
 
     return {
       success: true,
-      data: {
-        free: pick(free),
-        preparing: pick(preparing),
-        sackStore: pick(sackStore),
-        atDoor: pick(atDoor),
-      },
+      data: { free: pick(free), pool: pick(pool), planned: pick(planned), atDoor: pick(atDoor) },
     };
   }
 
@@ -1168,7 +1160,7 @@ export class InventoryService {
           },
         },
         shipment: { select: { id: true, shipmentNo: true, status: true } },
-        sack: { select: { id: true, sackNo: true, seq: true } },
+        sack: { select: { id: true, sackNo: true, seq: true, sealedAt: true } },
         producedInStep: {
           select: {
             workOrder: {
@@ -1220,8 +1212,10 @@ export class InventoryService {
       }
     }
 
+    // Spec düzenleme kilidi: atanmış sevkiyatta (PLANNED/AT_DOOR/DISPATCHED) VEYA mühürlü
+    // çuvalda (havuz rezervi) → değişiklik donmuş/havuz tahsisini bozar. Açık çuval/serbest serbest.
     const specLocked =
-      roll.shipment != null && roll.shipment.status !== ShipmentStatus.PREPARING;
+      roll.shipment != null || (roll.sack != null && roll.sack.sealedAt != null);
 
     return {
       success: true,
@@ -1556,6 +1550,7 @@ export class InventoryService {
         width: true,
         currentStepId: true,
         shipmentId: true,
+        sackId: true,
         item: { select: { name: true } },
         color: { select: { name: true } },
         currentStep: {
@@ -1637,13 +1632,13 @@ export class InventoryService {
           where: { id: roll.shipmentId },
           select: { status: true, shipmentNo: true },
         });
-        if (
-          ship &&
-          (ship.status === ShipmentStatus.PREPARING ||
-            ship.status === ShipmentStatus.READY ||
-            ship.status === ShipmentStatus.AT_DOOR)
-        ) {
-          blockReason = `Bu top hazırlanan/bekleyen/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
+        if (ship && (ship.status === ShipmentStatus.PLANNED || ship.status === ShipmentStatus.AT_DOOR)) {
+          blockReason = `Bu top planlı/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
+        }
+      } else if (roll.sackId) {
+        const sk = await prisma.sack.findUnique({ where: { id: roll.sackId }, select: { sealedAt: true, manualCode: true, sackNo: true } });
+        if (sk && sk.sealedAt) {
+          blockReason = `Bu top mühürlü bir çuvalda (${sk.manualCode ?? sk.sackNo}) — önce çuvaldan çıkarın veya mührü açın.`;
         }
       }
     }
@@ -1720,23 +1715,23 @@ export class InventoryService {
       );
     }
 
-    // Aktif (PREPARING/READY/AT_DOOR) bir sevkiyata bağlı mı? Bağlıysa iptal edilemez —
-    // önce sevkten/çuvaldan çıkarılmalı. Aksi halde iptal edilen top sevkiyatta
-    // kalır, karşılanma (commit READY/AT_DOOR'da yazılmış) bayat kalır → sipariş
-    // eksik malla "karşılandı" görünür ve irsaliye dökümünde iptal top kalır.
+    // Planlı/kapı önü bir sevkiyata veya mühürlü çuvala bağlı mı? Bağlıysa iptal
+    // edilemez — önce sevkten/çuvaldan çıkarılmalı (donmuş tahsis/rezerv bayat kalmasın).
     if (existing.shipmentId) {
       const ship = await prisma.shipment.findUnique({
         where: { id: existing.shipmentId },
         select: { status: true, shipmentNo: true },
       });
-      if (
-        ship &&
-        (ship.status === ShipmentStatus.PREPARING ||
-          ship.status === ShipmentStatus.READY ||
-          ship.status === ShipmentStatus.AT_DOOR)
-      ) {
+      if (ship && (ship.status === ShipmentStatus.PLANNED || ship.status === ShipmentStatus.AT_DOOR)) {
         throw AppError.conflict(
-          `Bu top hazırlanan/bekleyen/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
+          `Bu top planlı/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
+        );
+      }
+    } else if (existing.sackId) {
+      const sk = await prisma.sack.findUnique({ where: { id: existing.sackId }, select: { sealedAt: true, manualCode: true, sackNo: true } });
+      if (sk && sk.sealedAt) {
+        throw AppError.conflict(
+          `Bu top mühürlü bir çuvalda (${sk.manualCode ?? sk.sackNo}) — önce çuvaldan çıkarın veya mührü açın.`,
         );
       }
     }
@@ -1955,6 +1950,8 @@ export class InventoryService {
         currentQty: true,
         shipmentId: true,
         shipment: { select: { status: true } },
+        sackId: true,
+        sack: { select: { sealedAt: true } },
         properties: { select: { propertyId: true } },
       },
     });
@@ -1991,16 +1988,21 @@ export class InventoryService {
       ];
       if (!RELABEL_ALLOWED.includes(roll.status)) {
         throw AppError.badRequest(
-          "Bu top serbest/satılabilir stokta değil (fason/üretim/kartela/emekli veya sevk edilmiş) — etiketi ancak STOCK, WAREHOUSE veya A1 durumundaki (ya da hazırlıktaki PREPARING sevkiyat) toplarda düzeltebilirsiniz.",
+          "Bu top serbest/satılabilir stokta değil (fason/üretim/kartela/emekli veya sevk edilmiş) — etiketi ancak STOCK, WAREHOUSE veya A1 durumundaki (serbest ya da açık çuvaldaki) toplarda düzeltebilirsiniz.",
         );
       }
     }
-    // Saha #4: etiket (renk/özellik/en/kalite) değiştirme. Commit'li sevkiyatta
-    // (READY/AT_DOOR/DISPATCHED) renk/en değişimi spec-karşılanmayı bozar → reddet;
-    // operatör önce "Hazırlığa Geri Al" yapmalı. PREPARING + serbest WAREHOUSE/STOCK serbest.
-    if (roll.shipment && roll.shipment.status !== "PREPARING") {
+    // ÇUVAL HAVUZU: renk/en/kalite değişimi spec-karşılanmayı bozar. Atanmış sevkiyatta
+    // (PLANNED/AT_DOOR/DISPATCHED) VEYA mühürlü çuvalda → reddet (önce çuvaldan çıkar /
+    // mührü aç / sevkten çıkar). Açık çuval + serbest WAREHOUSE/STOCK serbest.
+    if (roll.shipmentId) {
       throw AppError.conflict(
-        "Bu top sevke hazır/kapı önü/sevk edilmiş bir sevkiyatta — etiketi değiştirmeden önce sevkiyatı hazırlığa geri alın.",
+        "Bu top bir sevkiyata atanmış — etiketi değiştirmeden önce sevkiyattan çıkarın.",
+      );
+    }
+    if (roll.sack && roll.sack.sealedAt != null) {
+      throw AppError.conflict(
+        "Bu top mühürlü bir çuvalda — etiketi değiştirmeden önce çuvaldan çıkarın veya mührü açın.",
       );
     }
     if (data.width !== undefined && data.width !== null && !(data.width > 0)) {
@@ -2114,21 +2116,23 @@ export class InventoryService {
     }
 
     await prisma.$transaction(async (tx) => {
-      // Saha #4 TOCTOU: PREPARING kontrolü (yukarıda) tx DIŞINDA okundu. Sevkiyat bu
-      // sırada commit edilebilir (markReady/dispatch) → commit'li sevkiyattaki rulonun
-      // renk/en'i değişir, donmuş tahsis/irsaliye bayatlar. Çözüm: shipment bağını tx
-      // İÇİNDE taze oku; varsa touchShipmentPreparingTx ile finalize'a serileş (PREPARING
-      // değilse 409) ve roll yazımını bu shipmentId'ye pinle (eşzamanlı scan-in/çıkarma → 409).
-      const cur = await tx.roll.findUnique({ where: { id: rollId }, select: { shipmentId: true } });
+      // TOCTOU (çuval havuzu): pre-tx kontrol tx DIŞINDA okundu — top bu sırada bir
+      // sevkiyata atanmış veya çuvalı mühürlenmiş olabilir (renk/en değişimi donmuş/havuz
+      // tahsisini bozar). Çözüm: bağı tx İÇİNDE taze oku; atanmışsa 409; açık çuvaldaysa
+      // touchOpenSackTx ile seal claim'ine serileş (mühürlenmişse 409); yazımı pinle.
+      const cur = await tx.roll.findUnique({ where: { id: rollId }, select: { shipmentId: true, sackId: true } });
       if (!cur) throw AppError.notFound("Top bulunamadı");
       if (cur.shipmentId) {
-        await touchShipmentPreparingTx(tx, cur.shipmentId);
+        throw AppError.conflict("Top bu sırada bir sevkiyata atandı — etiketi değiştirmeden önce sevkiyattan çıkarın.");
+      }
+      if (cur.sackId) {
+        await touchOpenSackTx(tx, cur.sackId);
       }
 
-      // 1) Roll skaler alanları (renk/en/kalite) — üyelik PİNLİ atomik claim.
+      // 1) Roll skaler alanları (renk/en/kalite) — üyelik PİNLİ atomik claim (serbest kalır).
       if (Object.keys(rollData).length > 0) {
         const upd = await tx.roll.updateMany({
-          where: { id: rollId, shipmentId: cur.shipmentId },
+          where: { id: rollId, shipmentId: null, sackId: cur.sackId },
           data: rollData,
         });
         if (upd.count === 0) {

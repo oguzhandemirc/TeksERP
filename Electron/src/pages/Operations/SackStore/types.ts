@@ -1,14 +1,14 @@
 /**
- * Çuval Depo (Sack Warehouse) tipleri — backend GET /api/shipping/sack-store
+ * Sevk Kapısı (Sack Store board) tipleri — backend GET /api/shipping/sack-store
  * (HAFİF, sayfalı liste) + /api/shipping/shipments/:id/sack-contents (slide-over).
- * READY = "Çuval Depo" (firma içinde bekleyen), AT_DOOR = "Kapı Önü" (kapıda).
+ * PLANNED = "Planlı Sevkiyat" (havuzdan çuval seçilerek kuruldu), AT_DOOR = "Kapı Önü".
  * Decimal alanlar backend'de JSON number'a çevrildiği için Number() sarmaya gerek yok.
  */
 
-export type SackStoreStatus = "READY" | "AT_DOOR";
+export type SackStoreStatus = "PLANNED" | "AT_DOOR";
 
 export const sackStoreStatusLabels: Record<SackStoreStatus, string> = {
-  READY: "Çuval Depo",
+  PLANNED: "Planlı Sevkiyat",
   AT_DOOR: "Kapı Önü",
 };
 
@@ -28,7 +28,7 @@ export interface SackStoreShipment {
   status: SackStoreStatus;
   destination: ShipmentDestination;
   procedureCode: string | null;
-  readyAt: string | null;
+  createdAt: string;
   customer: { id: string; code?: string; name: string };
   branch: { id: string; code?: string | null; name: string } | null;
   sackCount: number;
@@ -39,7 +39,7 @@ export interface SackStoreShipment {
 
 /** GET /sack-store query parametreleri (sunucu arama + cursor sayfalama). */
 export interface SackStoreListParams {
-  /** Yok → READY+AT_DOOR birden. */
+  /** Yok → PLANNED+AT_DOOR birden. */
   status?: SackStoreStatus;
   search?: string;
   /** Saha #22: yurtiçi/yurtdışı filtresi. */
@@ -107,7 +107,6 @@ export interface ShipmentContents {
   id: string;
   shipmentNo: string;
   status: SackStoreStatus;
-  readyAt: string | null;
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;

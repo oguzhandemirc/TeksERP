@@ -2,182 +2,88 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type {
   AddKartelaResult,
-  CreatedShipment,
+  CustomerPool,
   KartelaStockGroup,
   LocatedRoll,
+  OpenedSack,
   OpenOrder,
   ScanResult,
-  ShipmentDestination,
-  ShipmentDetail,
-  ShipmentSackLean,
 } from "./types";
 
 /**
- * Paketleme / Çuval Düzelt servisi — masaüstü (Electron) paketleme istasyonu.
- * Mobil `packingService` aynası; tüm uçlar mevcut backend uçları (yeni uç YOK).
+ * Paketleme servisi (Çuval Havuzu modeli) — masaüstü paketleme istasyonu.
+ * Çuval müşteriye ait, sevkiyattan bağımsız: aç → okut → tart/kod → mühürle → havuza girer.
  * apiClient interceptor hata mesajını zaten toast'lar → mutation'da onError yok.
  */
 export const packingService = {
-  // ── Sipariş seçim ──
-  /** Açık siparişler + depo karşılaması (müşteri+şube grupları). */
-  listOpenOrders: (params?: {
-    customerId?: string;
-    branchId?: string;
-  }): Promise<ApiResponse<OpenOrder[]>> => {
+  /** Açık siparişler + depo karşılaması (paketleme rehberi). */
+  listOpenOrders: (params?: { customerId?: string; branchId?: string }): Promise<ApiResponse<OpenOrder[]>> => {
     const q = new URLSearchParams();
     if (params?.customerId) q.set("customerId", params.customerId);
     if (params?.branchId) q.set("branchId", params.branchId);
     const qs = q.toString();
-    return apiClient
-      .get<ApiResponse<OpenOrder[]>>(`/api/shipping/open-orders${qs ? `?${qs}` : ""}`)
-      .then((r) => r.data);
+    return apiClient.get<ApiResponse<OpenOrder[]>>(`/api/shipping/open-orders${qs ? `?${qs}` : ""}`).then((r) => r.data);
   },
 
-  // ── Sevkiyat oturumu ──
-  /** Siparişlerden yeni PREPARING sevkiyat aç (tek müşteri+şube zorunlu). */
-  createShipment: (
-    orderIds: string[],
-    destination?: ShipmentDestination,
-  ): Promise<ApiResponse<CreatedShipment>> =>
+  /** Müşterinin havuz çuvalları (açık + mühürlü) + içerik — paketleme workspace kaynağı. */
+  listCustomerPool: (customerId: string): Promise<ApiResponse<CustomerPool>> =>
     apiClient
-      .post<ApiResponse<CreatedShipment>>(`/api/shipping/shipments`, {
-        orderIds,
-        ...(destination ? { destination } : {}),
-      })
+      .get<ApiResponse<CustomerPool>>(`/api/shipping/pool/sacks?customerId=${encodeURIComponent(customerId)}`)
       .then((r) => r.data),
 
-  /** Tam sevkiyat detayı (orders + rolls[sackId] + sacks + summary). */
-  getShipment: (id: string): Promise<ApiResponse<ShipmentDetail>> =>
+  /** Müşteriye yeni (açık) havuz çuvalı aç. */
+  openSack: (customerId: string, branchId?: string | null): Promise<ApiResponse<OpenedSack>> =>
     apiClient
-      .get<ApiResponse<ShipmentDetail>>(`/api/shipping/shipments/${id}`)
+      .post<ApiResponse<OpenedSack>>(`/api/shipping/sacks`, { customerId, ...(branchId ? { branchId } : {}) })
       .then((r) => r.data),
 
-  // ── Okutma / içerik ──
-  /** Barkod okut → top/kartelayı sevkiyata + (verilirse) aktif çuvala ekle/taşı. */
-  scan: (id: string, barcode: string, sackId?: string | null): Promise<ApiResponse<ScanResult>> =>
-    apiClient
-      .post<ApiResponse<ScanResult>>(`/api/shipping/shipments/${id}/scan`, {
-        barcode,
-        ...(sackId ? { sackId } : {}),
-      })
-      .then((r) => r.data),
+  /** Barkod okut → top/kartelayı açık çuvala ekle/taşı. */
+  scanIntoSack: (sackId: string, barcode: string): Promise<ApiResponse<ScanResult>> =>
+    apiClient.post<ApiResponse<ScanResult>>(`/api/shipping/sacks/${sackId}/scan`, { barcode }).then((r) => r.data),
 
-  /** Topu sevkiyattan çıkar (depoya geri döner). */
-  removeRoll: (id: string, rollId: string): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/remove-roll`, { rollId })
-      .then((r) => r.data),
+  /** Çuvalı tart + elle kod gir (en az biri). */
+  weighSack: (sackId: string, body: { weightKg?: number; manualCode?: string }): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/api/shipping/sacks/${sackId}/weigh`, body).then((r) => r.data),
 
-  /** Kartelayı sevkiyattan çıkar. */
-  removeSwatch: (id: string, swatchId: string): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/remove-swatch`, { swatchId })
-      .then((r) => r.data),
+  /** Çuvalı mühürle → çuval depo havuzuna girer. */
+  sealSack: (sackId: string): Promise<ApiResponse<{ sackId: string }>> =>
+    apiClient.post<ApiResponse<{ sackId: string }>>(`/api/shipping/sacks/${sackId}/seal`, {}).then((r) => r.data),
 
-  /** Kartela stoğu (ürün+renk bazında müsait adet) — seçerek-ekle picker'ını besler. */
-  listKartelaStock: (search?: string): Promise<ApiResponse<KartelaStockGroup[]>> =>
-    apiClient
-      .get<ApiResponse<KartelaStockGroup[]>>(
-        `/api/kartela/stock${search ? `?search=${encodeURIComponent(search)}` : ""}`,
-      )
-      .then((r) => r.data),
+  /** Mührü aç — içerik düzeltmek için. */
+  reopenSack: (sackId: string): Promise<ApiResponse<{ sackId: string }>> =>
+    apiClient.post<ApiResponse<{ sackId: string }>>(`/api/shipping/sacks/${sackId}/reopen`, {}).then((r) => r.data),
 
-  /** Seçerek kartela ekle (barkod okutmadan) — ürün+renk+adet → stoktan düşülür. */
-  addKartela: (
-    id: string,
-    body: { itemId: string; colorId: string | null; count: number; sackId?: string | null },
-  ): Promise<ApiResponse<AddKartelaResult>> =>
-    apiClient
-      .post<ApiResponse<AddKartelaResult>>(`/api/shipping/shipments/${id}/add-kartela`, body)
-      .then((r) => r.data),
-
-  /** Topu çuvaldan çuvala taşı (aynı sevkiyat içi). */
-  moveRollToSack: (rollId: string, sackId: string): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/rolls/${rollId}/move-sack`, { sackId })
-      .then((r) => r.data),
-
-  /** İki topun çuvalını takas et (aynı sevkiyat içi). */
-  swapRollSacks: (rollAId: string, rollBId: string): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/rolls/swap-sacks`, { rollAId, rollBId })
-      .then((r) => r.data),
-
-  // ── Çuval (aç / tart / sil) ──
-  /** Boş çuval aç (PREPARING). weightKg verilirse doğrudan tartılı açılır. */
-  addSack: (id: string, weightKg?: number): Promise<ApiResponse<ShipmentSackLean>> =>
-    apiClient
-      .post<ApiResponse<ShipmentSackLean>>(
-        `/api/shipping/shipments/${id}/sacks`,
-        weightKg != null ? { weightKg } : {},
-      )
-      .then((r) => r.data),
-
-  /** Çuvalı tart + elle kod gir (en az biri zorunlu; içerik değişince tartı sıfırlanır). */
-  weighSack: (
-    sackId: string,
-    body: { weightKg?: number; manualCode?: string },
-  ): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/sacks/${sackId}/weigh`, body)
-      .then((r) => r.data),
-
-  /** Çuval sil (boş) veya withContents=true → içeriği depoya döndürüp sil (PREPARING). */
+  /** Çuval sil (boş) veya withContents=true → içeriği depoya döndürüp sil. */
   removeSack: (sackId: string, withContents?: boolean): Promise<ApiResponse<unknown>> =>
     apiClient
-      .post<ApiResponse<unknown>>(
-        `/api/shipping/sacks/${sackId}/remove`,
-        withContents ? { withContents: true } : {},
-      )
+      .post<ApiResponse<unknown>>(`/api/shipping/sacks/${sackId}/remove`, withContents ? { withContents: true } : {})
       .then((r) => r.data),
 
-  // ── Yaşam döngüsü ──
-  /** Sevke Hazır → READY (çuval depo) — karşılanma kesinleşir; invariant'ları backend doğrular. */
-  markReady: (id: string): Promise<ApiResponse<{ shipmentId: string; rollCount: number }>> =>
+  /** Topu çuvaldan çıkar (depoya döner). */
+  removeRollFromSack: (rollId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/api/shipping/rolls/${rollId}/remove-from-sack`, {}).then((r) => r.data),
+
+  /** Kartelayı çuvaldan çıkar. */
+  removeSwatchFromSack: (swatchId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/api/shipping/swatches/${swatchId}/remove-from-sack`, {}).then((r) => r.data),
+
+  /** Topu başka çuvala taşı (aynı müşteri, açık çuvallar). */
+  moveRollToSack: (rollId: string, sackId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/api/shipping/rolls/${rollId}/move-sack`, { sackId }).then((r) => r.data),
+
+  /** Kartela stoğu (ürün+renk bazında müsait adet). */
+  listKartelaStock: (search?: string): Promise<ApiResponse<KartelaStockGroup[]>> =>
     apiClient
-      .post<ApiResponse<{ shipmentId: string; rollCount: number }>>(
-        `/api/shipping/shipments/${id}/ready`,
-        {},
-      )
+      .get<ApiResponse<KartelaStockGroup[]>>(`/api/kartela/stock${search ? `?search=${encodeURIComponent(search)}` : ""}`)
       .then((r) => r.data),
 
-  /** Kapı Önüne Koy (PREPARING/READY → AT_DOOR). */
-  moveToDoor: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>
-    apiClient
-      .post<ApiResponse<{ shipmentId: string }>>(`/api/shipping/shipments/${id}/move-to-door`, {})
-      .then((r) => r.data),
+  /** Seçerek kartela ekle (barkodsuz) — açık çuvala N adet. */
+  addKartela: (sackId: string, body: { itemId: string; colorId: string | null; count: number }): Promise<ApiResponse<AddKartelaResult>> =>
+    apiClient.post<ApiResponse<AddKartelaResult>>(`/api/shipping/sacks/${sackId}/add-kartela`, body).then((r) => r.data),
 
-  /** Sevk çıkışı — stok düşer (terminal). */
-  dispatch: (
-    id: string,
-    data: { plateNumber?: string | null; driverName?: string | null; carrier?: string | null } = {},
-  ): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/dispatch`, data)
-      .then((r) => r.data),
-
-  /** Top yerini bul — barkod tam eşleşme (çuval + sevkiyat + statü). */
+  /** Top yerini bul — barkod tam eşleşme. */
   locateRoll: (barcode: string): Promise<ApiResponse<LocatedRoll>> =>
     apiClient
-      .get<ApiResponse<LocatedRoll>>(
-        `/api/shipping/locate-roll?barcode=${encodeURIComponent(barcode)}`,
-      )
+      .get<ApiResponse<LocatedRoll>>(`/api/shipping/locate-roll?barcode=${encodeURIComponent(barcode)}`)
       .then((r) => r.data),
-
-  /**
-   * Çuval koduna (sackNo veya manualCode) göre sevkiyatı bul — sevk edilmemiş
-   * (PREPARING/READY/AT_DOOR) çuvalları kapsar. Birden çok eşleşirse ilki döner;
-   * çağıran belirsizliği yönetir.
-   */
-  findShipmentIdBySackCode: (code: string): Promise<string | null> =>
-    apiClient
-      .get<{ data: Array<{ shipment?: { id?: string } | null }> }>(
-        `/api/shipping/sack-search?sackCode=${encodeURIComponent(code)}`,
-      )
-      .then((r) => {
-        const ids = new Set(
-          (r.data.data ?? []).map((row) => row.shipment?.id).filter((x): x is string => !!x),
-        );
-        return ids.size === 1 ? [...ids][0]! : null;
-      }),
 };

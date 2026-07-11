@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { Surface, Text, ActivityIndicator, Icon, Divider, Button } from 'react-native-paper';
+import { Surface, Text, ActivityIndicator, Icon, Divider, Button, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import AppModal from '../../../components/AppModal';
 import { packingService, type SackStoreShipmentLite } from '../../../services/packing.service';
@@ -11,13 +11,16 @@ const fmtKg = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')
 interface Props {
   shipment: SackStoreShipmentLite | null;
   onDismiss: () => void;
+  /** PLANNED sevkiyatta çuval çıkarma — verilirse her çuval başlığında çöp ikonu görünür. */
+  onRemoveSack?: (sackId: string, label: string) => void;
+  removing?: boolean;
 }
 
 /**
  * Çuval Depo kartına tıklayınca açılan içerik modalı. Sevkiyatın çuval+rulo
  * dökümünü LAZY çeker (board listesi rulo taşımaz). Tek sevkiyat = sınırlı kapsam.
  */
-export default function SackContentsModal({ shipment, onDismiss }: Props) {
+export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, removing }: Props) {
   const q = useQuery({
     queryKey: ['sack-contents', shipment?.id],
     queryFn: () => packingService.getShipmentSackContents(shipment!.id),
@@ -71,6 +74,17 @@ export default function SackContentsModal({ shipment, onDismiss }: Props) {
                         {fmtKg(sk.weightKg)} · {sk.rollCount} top
                         {sk.swatchCount > 0 ? ` · ${sk.swatchCount} kartela` : ''}
                       </Text>
+                      {onRemoveSack && (
+                        <IconButton
+                          icon="close-circle"
+                          size={20}
+                          iconColor="#dc2626"
+                          disabled={removing}
+                          style={styles.removeBtn}
+                          onPress={() => onRemoveSack(sk.id, sk.manualCode?.trim() || `#${sk.seq}`)}
+                          accessibilityLabel="Çuvalı sevkiyattan çıkar"
+                        />
+                      )}
                     </View>
 
                     {sk.rolls.length === 0 && sk.swatches.length === 0 ? (
@@ -136,6 +150,7 @@ const styles = StyleSheet.create({
   scroll: { maxHeight: 380 },
   sackBlock: { marginBottom: 12 },
   sackHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  removeBtn: { margin: 0 },
   sackChip: {
     flexDirection: 'row',
     alignItems: 'center',

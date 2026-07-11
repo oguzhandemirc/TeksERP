@@ -1,36 +1,34 @@
 // =============================================================================
-// Sipariş status hesabı — tek noktadan yönetilen geçişler
+// Sipariş karşılanma + status hesabı — tek noktadan yönetilen geçişler
 // =============================================================================
 // Sadeleşmiş yaşam döngüsü:
 //   PENDING → APPROVED → PARTIAL_SHIPPED → COMPLETED
 //                     → CANCELLED (manuel)
 //
-// Sevk muhasebesi (GEVŞEK MODEL): top→sipariş bağı YOK. Bir siparişin "sevk
-// edilen" metrajı = satırlarının OrderLine.shippedQty toplamı. shippedQty ise
-// ShipmentAllocation toplamıdır — Sevke Hazır (READY) anında spec-toplam, seçilen
-// siparişlere termin→tarih FIFO dağıtılınca yazılır; iptalde geri alınır. Bu
-// helper o yazımlardan sonra tetiklenir, Order.shippedQty + status'u senkronlar.
+// KARŞILANMA (ÇUVAL HAVUZU MODELİ, top→sipariş bağı YOK): defter-otoritatif —
+// increment/decrement YOK, denorm alanlar her seferinde defterden YENİDEN hesaplanır
+// (drift-free). Bir OrderLine için:
+//   shippedQty = Σ SackAllocation.qty (çuval DISPATCHED sevkiyatta) + Σ DirectShipAllocation.qty
+//   packedQty  = Σ SackAllocation.qty (çuval havuzda VEYA PLANNED/AT_DOOR sevkiyatta)
+// Order.shippedQty/packedQty bunların toplamı. Bu helper ledger değiştikten sonra
+// (rebalance / dispatch / cancel / directShip) tetiklenir; her şeyi senkronlar.
 // =============================================================================
 
-import { Prisma, OrderStatus } from "@prisma/client";
+import { Prisma, OrderStatus, ShipmentStatus } from "@prisma/client";
 import { readShippingToleranceMeters } from "../system-setting.service";
 
 /**
- * Verilen OrderLine satırlarını write-kilitle (sevk muhasebesini serileştirmek için).
+ * Verilen OrderLine satırlarını write-kilitle (karşılanma yazımını serileştirmek için).
  *
- * Neden: `OrderLine.shippedQty` denormalize bir toplamdır ve birden fazla yol
- * (iki ayrı sevkiyatın markReady'si, iki paralel fason directShip) aynı satıra
- * göreli `increment` yazabilir. Kapasite (`quantity - shippedQty`) tx DIŞINDA
- * okunup tx İÇİNDE artırılırsa, READ COMMITTED altında iki işlem birbirinin
- * commit'ini görmeden geçer ve toplam `quantity`'yi aşar (over-coverage).
- * Bu yardımcı, kapasite TAZE okunmadan ÖNCE çağrılır: ikinci işlem burada bloklanır,
- * ilk commit'ten sonra güncel `shippedQty`'yi okur → cap doğru hesaplanır.
+ * Neden: `OrderLine.shippedQty/packedQty` denormalize toplamlardır; birden fazla yol
+ * (iki sevkiyatın dispatch'i, rebalance ile paralel fason directShip) aynı satırı
+ * yeniden hesaplayabilir. Kapasite (`quantity - shipped - packed`) tx DIŞINDA okunup
+ * tx İÇİNDE yazılırsa READ COMMITTED altında iki işlem birbirinin commit'ini görmez ve
+ * `quantity`'yi aşar (over-coverage). Bu yardımcı kapasite TAZE okunmadan ÖNCE çağrılır:
+ * ikinci işlem burada bloklanır, ilk commit'ten sonra güncel değeri okur.
  *
- * Deadlock güvenliği: ID'ler SIRALI kilitlenir (her çağrı aynı sırayı izler).
- * Set-bazlı tek `UPDATE ... WHERE id = ANY()` kilit sırasını GARANTİ ETMEZ
- * (tarama sırası); o yüzden bilinçli olarak id başına ayrı updateMany (await
- * döngüsü — ESLint `Promise.all(tx.*)` yasağına da uygun). Satır sayısı bir
- * sevkiyat/sevk başına küçüktür.
+ * Deadlock güvenliği: ID'ler SIRALI kilitlenir. Set-bazlı tek UPDATE kilit sırasını
+ * GARANTİ ETMEZ; o yüzden bilinçli id-başına döngü (ESLint `Promise.all(tx.*)` yasağına da uygun).
  */
 export async function touchOrderLinesTx(
   tx: Prisma.TransactionClient,
@@ -43,24 +41,78 @@ export async function touchOrderLinesTx(
 }
 
 /**
- * Bir siparişin shippedQty ve status'unu yeniden hesaplar.
+ * Verilen OrderLine satırları için defter-toplamları hesapla (shipped + packed).
+ *   shipped = dispatched SackAllocation + directShip
+ *   packed  = havuz VEYA PLANNED/AT_DOOR SackAllocation
+ * groupBy — @@index([orderLineId]) sürer; sack.shipment.status join'i indexli.
+ */
+export async function computeLineLedger(
+  tx: Prisma.TransactionClient,
+  lineIds: string[]
+): Promise<Map<string, { shipped: Prisma.Decimal; packed: Prisma.Decimal }>> {
+  const result = new Map<string, { shipped: Prisma.Decimal; packed: Prisma.Decimal }>();
+  const ids = [...new Set(lineIds)];
+  if (ids.length === 0) return result;
+  for (const id of ids) result.set(id, { shipped: new Prisma.Decimal(0), packed: new Prisma.Decimal(0) });
+
+  // Sevk edilmiş çuval tahsisleri → shippedQty.
+  const dispatched = await tx.sackAllocation.groupBy({
+    by: ["orderLineId"],
+    where: {
+      orderLineId: { in: ids },
+      sack: { shipment: { status: ShipmentStatus.DISPATCHED } },
+    },
+    _sum: { qty: true },
+  });
+  for (const r of dispatched) {
+    result.get(r.orderLineId)!.shipped = result.get(r.orderLineId)!.shipped.plus(r._sum.qty ?? 0);
+  }
+
+  // Fason doğrudan sevk tahsisleri → shippedQty (Shipment'sız, terminaldir).
+  const direct = await tx.subcontractorDirectShipAllocation.groupBy({
+    by: ["orderLineId"],
+    where: { orderLineId: { in: ids } },
+    _sum: { qty: true },
+  });
+  for (const r of direct) {
+    result.get(r.orderLineId)!.shipped = result.get(r.orderLineId)!.shipped.plus(r._sum.qty ?? 0);
+  }
+
+  // Havuzdaki + planlı/kapıdaki (henüz sevk edilmemiş) çuval tahsisleri → packedQty.
+  const packed = await tx.sackAllocation.groupBy({
+    by: ["orderLineId"],
+    where: {
+      orderLineId: { in: ids },
+      OR: [
+        { sack: { shipmentId: null } },
+        { sack: { shipment: { status: { in: [ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR] } } } },
+      ],
+    },
+    _sum: { qty: true },
+  });
+  for (const r of packed) {
+    result.get(r.orderLineId)!.packed = result.get(r.orderLineId)!.packed.plus(r._sum.qty ?? 0);
+  }
+
+  return result;
+}
+
+/**
+ * Bir siparişin karşılanma denormlarını (satır + header shippedQty/packedQty) defterden
+ * YENİDEN HESAPLA ve status'unu güncelle.
  *
- * Kurallar:
- *   - shippedQty = SUM(OrderLine.shippedQty)   (= Σ ShipmentAllocation.qty)
- *   - totalRequired = SUM(OrderLine.quantity)
+ * Status kuralları (yalnız GERÇEK sevkle ilerler; packedQty status'a girmez):
  *   - shippedQty <= 0                                  → APPROVED
  *   - (totalRequired - shippedQty) <= tolerans          → COMPLETED
  *   - aksi                                              → PARTIAL_SHIPPED
  *
- * CANCELLED terminal — değişmez. COMPLETED ise: manuel kapatılmış (manualClosedById
- * dolu) sipariş terminal kalır; OTOMATİK kapanmış sipariş yeniden hesaplanabilir —
- * sevkiyat iptalinde shippedQty düşünce sipariş yeniden açılır (re-open). Tx kabul eder.
+ * CANCELLED terminal; manuel kapatılmış (manualClosedById dolu) COMPLETED terminal —
+ * status'u değişmez ama denormları yine de güncel tutulur. Otomatik COMPLETED re-open
+ * olabilir (sevk/tahsis geri alınınca). Tx kabul eder.
  */
 export async function recomputeOrderStatus(
   tx: Prisma.TransactionClient,
   orderId: string,
-  // Çok-sipariş döngüsünde (recomputeOrderStatusForOrders) ayar bir kez okunup
-  // geçilir; verilmezse buradan okunur (tek-sipariş çağrıları için geriye uyumlu).
   toleranceMeters?: number
 ): Promise<{ changed: boolean; oldStatus: OrderStatus; newStatus: OrderStatus } | null> {
   const order = await tx.order.findUnique({
@@ -70,51 +122,54 @@ export async function recomputeOrderStatus(
       status: true,
       completedAt: true,
       manualClosedById: true,
-      lines: { select: { quantity: true, shippedQty: true } },
+      lines: { select: { id: true, quantity: true } },
     },
   });
   if (!order) return null;
 
-  // İptal terminal; manuel kapatılmış sipariş de terminal (kullanıcı kararı korunur).
-  if (
-    order.status === OrderStatus.CANCELLED ||
-    (order.status === OrderStatus.COMPLETED && order.manualClosedById != null)
-  ) {
-    return { changed: false, oldStatus: order.status, newStatus: order.status };
+  const ledger = await computeLineLedger(tx, order.lines.map((l) => l.id));
+
+  // Satır denormlarını yaz + header toplamlarını biriktir.
+  let shippedQty = new Prisma.Decimal(0);
+  let packedQty = new Prisma.Decimal(0);
+  let totalRequired = new Prisma.Decimal(0);
+  for (const l of order.lines) {
+    const led = ledger.get(l.id) ?? { shipped: new Prisma.Decimal(0), packed: new Prisma.Decimal(0) };
+    await tx.orderLine.update({
+      where: { id: l.id },
+      data: { shippedQty: led.shipped, packedQty: led.packed },
+    });
+    shippedQty = shippedQty.plus(led.shipped);
+    packedQty = packedQty.plus(led.packed);
+    totalRequired = totalRequired.plus(l.quantity);
   }
 
-  // Sevk edilen metraj — satır bazlı tahsis toplamı (spec-aggregate karşılanma)
-  const shippedQty = order.lines.reduce(
-    (sum, l) => sum.plus(l.shippedQty),
-    new Prisma.Decimal(0)
-  );
-
-  const totalRequired = order.lines.reduce(
-    (sum, l) => sum.plus(l.quantity),
-    new Prisma.Decimal(0)
-  );
+  // İptal terminal; manuel kapatılmış sipariş de terminal (kullanıcı kararı korunur).
+  const terminal =
+    order.status === OrderStatus.CANCELLED ||
+    (order.status === OrderStatus.COMPLETED && order.manualClosedById != null);
 
   const tolerance = new Prisma.Decimal(
     toleranceMeters ?? (await readShippingToleranceMeters(tx))
   );
 
-  let newStatus: OrderStatus = OrderStatus.APPROVED;
-  if (shippedQty.greaterThan(0)) {
-    newStatus = totalRequired.minus(shippedQty).lessThanOrEqualTo(tolerance)
-      ? OrderStatus.COMPLETED
-      : OrderStatus.PARTIAL_SHIPPED;
+  let newStatus: OrderStatus = order.status;
+  if (!terminal) {
+    newStatus = OrderStatus.APPROVED;
+    if (shippedQty.greaterThan(0)) {
+      newStatus = totalRequired.minus(shippedQty).lessThanOrEqualTo(tolerance)
+        ? OrderStatus.COMPLETED
+        : OrderStatus.PARTIAL_SHIPPED;
+    }
   }
 
   const changed = newStatus !== order.status;
-
-  // shippedQty denormalizasyonunu her zaman güncelle; status'u değiştiyse onu da
-  const data: Prisma.OrderUncheckedUpdateInput = { shippedQty };
+  const data: Prisma.OrderUncheckedUpdateInput = { shippedQty, packedQty };
   if (changed) {
     data.status = newStatus;
     if (newStatus === OrderStatus.COMPLETED && !order.completedAt) {
       data.completedAt = new Date();
     }
-    // Re-open (COMPLETED → APPROVED/PARTIAL): otomatik tamamlanma izini temizle.
     if (newStatus !== OrderStatus.COMPLETED && order.completedAt) {
       data.completedAt = null;
     }
@@ -125,7 +180,8 @@ export async function recomputeOrderStatus(
 }
 
 /**
- * Birden çok siparişin statusunu yeniden hesaplar (duplikatlar filtrelenir).
+ * Birden çok siparişin karşılanmasını yeniden hesaplar (duplikatlar filtrelenir).
+ * Sevk-tölerans ayarını BİR KEZ okur.
  */
 export async function recomputeOrderStatusForOrders(
   tx: Prisma.TransactionClient,
@@ -133,8 +189,6 @@ export async function recomputeOrderStatusForOrders(
 ): Promise<void> {
   const unique = [...new Set(orderIds)];
   if (unique.length === 0) return;
-  // Sevk-tölerans ayarını BİR KEZ oku (eskiden her sipariş için tekrar DB'den
-  // okunuyordu — loop içi N+1 read); sipariş başına geçir.
   const toleranceMeters = await readShippingToleranceMeters(tx);
   for (const id of unique) {
     await recomputeOrderStatus(tx, id, toleranceMeters);

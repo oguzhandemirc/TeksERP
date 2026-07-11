@@ -15,12 +15,13 @@ import { Input } from "@/components/ui/input";
 import { useMachineScale } from "@/hooks/useMachineScale";
 import { readWeightFromScale } from "@/lib/scale-read";
 import { packingService } from "./service";
-import { invalidateShipmentData } from "./useShipmentDetail";
-import type { ShipmentSack } from "./types";
+import { invalidatePoolData } from "./useCustomerPool";
+import type { PoolSack } from "./types";
 
 interface Props {
-  shipmentId: string;
-  sack: ShipmentSack | null;
+  /** Düzenlenecek çuval — null ise dialog kapalı. */
+  sack: PoolSack | null;
+  customerId: string;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -35,9 +36,10 @@ function parseKg(raw: string): number | null {
  * ikisi de gerekir (yurtdışında tartı zorunlu) → operatörü ikisini de girmeye
  * yönlendirir. İçerik değiştiyse tartı sıfırlanmış olur, burada yeniden girilir.
  */
-export function WeighSackDialog({ shipmentId, sack, onOpenChange }: Props) {
+export function WeighSackDialog({ sack, customerId, onOpenChange }: Props) {
   const qc = useQueryClient();
   const open = !!sack;
+  const label = sack?.manualCode ?? sack?.sackNo ?? "";
   const [kg, setKg] = useState("");
   const [code, setCode] = useState("");
   const { scale } = useMachineScale();
@@ -79,8 +81,8 @@ export function WeighSackDialog({ shipmentId, sack, onOpenChange }: Props) {
         ...(sendCode ? { manualCode: trimmedCode } : {}),
       }),
     onSuccess: () => {
-      toast.success(`Çuval #${sack!.seq} güncellendi`);
-      invalidateShipmentData(qc, shipmentId);
+      toast.success(`Çuval ${label} güncellendi`);
+      invalidatePoolData(qc, customerId);
       onOpenChange(false);
     },
   });
@@ -90,7 +92,7 @@ export function WeighSackDialog({ shipmentId, sack, onOpenChange }: Props) {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Scale className="h-4 w-4" /> Çuval #{sack?.seq} — Tartı & Kod
+            <Scale className="h-4 w-4" /> Çuval {label} — Tartı & Kod
           </DialogTitle>
           <DialogDescription>
             Brüt tartı ve çuval kodu. Sevke hazır için ikisi de gerekir.

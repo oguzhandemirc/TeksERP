@@ -35,8 +35,9 @@ import type { Order, OrderLine } from "./types";
 
 /** Tek iş emri = tek ürün+renk+en. Kalem imzası bu üçlüden türer. */
 const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ?? ""}`;
-/** Kalan (sevk edilmemiş) metre — 0 ise kalem iş emrine alınamaz. */
-const lineRem = (l: OrderLine) => Number(l.quantity) - Number(l.shippedQty ?? 0);
+/** Açık (sevk edilmemiş + çuvallanmamış) metre — 0 ise kalem iş emrine alınamaz. */
+const lineRem = (l: OrderLine) =>
+  Number(l.quantity) - Number(l.shippedQty ?? 0) - Number(l.packedQty ?? 0);
 /** Çapaya göre hangi nitelikler farklı — overlay'de "neden seçilemez" metni için. */
 const diffLabel = (anchor: OrderLine, line: OrderLine) => {
   const parts: string[] = [];
@@ -238,6 +239,14 @@ export function OrderDetailSheet({
                     value={(order.shippedQty / totalQty) * 100}
                     className="mt-2 h-1.5"
                   />
+                  {(order.packedQty ?? 0) > 0 && (
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Çuvallanmış (havuz rezervi)</span>
+                      <span className="font-medium tabular-nums">
+                        {(order.packedQty ?? 0).toLocaleString("tr-TR", { useGrouping: false })} m
+                      </span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -337,7 +346,9 @@ export function OrderDetailSheet({
                             variant="muted"
                             className="mt-0.5 shrink-0 text-[10px] text-muted-foreground"
                           >
-                            Sevk edildi
+                            {Number(line.shippedQty ?? 0) >= Number(line.quantity)
+                              ? "Sevk edildi"
+                              : "Çuvallanmış"}
                           </Badge>
                         )}
                         <div className="min-w-0 flex-1">
@@ -369,6 +380,15 @@ export function OrderDetailSheet({
                               metre
                             </span>
                             {line.width != null && <span>En: {line.width} cm</span>}
+                            {(line.packedQty ?? 0) > 0 && (
+                              <span>
+                                Çuvallanmış:{" "}
+                                <span className="font-medium text-foreground">
+                                  {(line.packedQty ?? 0).toLocaleString("tr-TR", { useGrouping: false })}
+                                </span>{" "}
+                                m
+                              </span>
+                            )}
                             {line.unitPrice && (
                               <span>
                                 {line.unitPrice} {order.currency}

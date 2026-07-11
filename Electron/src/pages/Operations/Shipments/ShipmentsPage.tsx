@@ -16,15 +16,14 @@ const QUERY_KEY = "shipments";
 // Tüm filtreler FilterBar'da (durum dahil — sekme yok). Durum çoklu-seçim (Sipariş
 // paritesi). Şube SEÇİLEN MÜŞTERİYE bağlı (dependent-lookup): müşteri seçilmeden
 // pasif, seçilince yalnız o müşterinin şubeleri (global endpoint filter[customerId]
-// ile daraltılır). Tarih varsayılanı createdAt (indexli); Sevk/Hazır opsiyonel.
+// ile daraltılır). Tarih varsayılanı createdAt (indexli); Sevk opsiyonel.
 const FILTERS: FilterDef[] = [
   {
     kind: "multi-select",
     key: "status",
     label: "Durum",
     options: [
-      { value: "PREPARING", label: shipmentStatusLabels.PREPARING },
-      { value: "READY", label: shipmentStatusLabels.READY },
+      { value: "PLANNED", label: shipmentStatusLabels.PLANNED },
       { value: "AT_DOOR", label: shipmentStatusLabels.AT_DOOR },
       { value: "DISPATCHED", label: shipmentStatusLabels.DISPATCHED },
       { value: "CANCELLED", label: shipmentStatusLabels.CANCELLED },
@@ -67,7 +66,6 @@ const FILTERS: FilterDef[] = [
     fieldOptions: [
       { value: "createdAt", label: "Oluşturma" },
       { value: "dispatchedAt", label: "Sevk" },
-      { value: "readyAt", label: "Hazır" },
     ],
   },
 ];
@@ -87,7 +85,7 @@ export function ShipmentsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Sevkiyatlar"
-        description="Müşteri sevkiyatları — hazırlanan, hazır ve sevk edilenler."
+        description="Müşteri sevkiyatları — planlı, kapı önü ve sevk edilenler."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
       <DataTableToolbar

@@ -23,8 +23,7 @@ const contents = {
   data: {
     id: "sh1",
     shipmentNo: "SVK-500",
-    status: "AT_DOOR" as const,
-    readyAt: null,
+    status: "PLANNED" as const,
     plateNumber: null,
     driverName: null,
     carrier: null,

@@ -22,10 +22,10 @@ interface Props {
 }
 
 /**
- * Sevkiyat iptali — yıkıcı onay (CLAUDE.md kuralı: etkilenen her kayıt SOMUT
- * listelenir; soyut "N kayıt" yetmez). Önizleme backend cancel-preview'dan
- * canlı gelir: serbest kalacak toplar, silinecek çuvallar, karşılanması geri
- * sarılacak siparişler. DISPATCHED iptal edilemez (backend de reddeder).
+ * Sevkiyat iptali — yıkıcı onay (CLAUDE.md kuralı: etkilenen kayıtlar SOMUT
+ * gösterilir). Önizleme backend cancel-preview'dan canlı gelir (havuz modeli):
+ * havuza dönecek çuval/top/kartela sayıları + rezervi (packedQty) geri sarılacak
+ * siparişler. DISPATCHED iptal edilemez (backend de reddeder).
  */
 export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
   const qc = useQueryClient();
@@ -70,8 +70,8 @@ export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
             {p ? (
               <>
                 {p.customerName}
-                {p.branchName ? ` · ${p.branchName}` : ""} — sevkiyat <strong>iptal</strong> edilecek: toplar
-                serbest depoya döner, çuvallar (tartılarıyla) silinir, sipariş karşılanması geri sarılır.
+                {p.branchName ? ` · ${p.branchName}` : ""} — sevkiyat <strong>iptal</strong> edilirse çuvallar
+                havuza döner, sipariş rezervi (packedQty) serbest kalır.
               </>
             ) : (
               "Önizleme yükleniyor…"
@@ -89,34 +89,26 @@ export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
           <p className="text-sm text-destructive">{p.reason}</p>
         ) : (
           <div className="space-y-3 text-sm">
-            {p.rolls.length > 0 && (
-              <div className="rounded-md border">
-                <div className="border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                  Serbest kalacak {p.rolls.length} top
-                  {p.sackCount > 0 ? ` · silinecek ${p.sackCount} çuval` : ""}
-                  {p.swatchCount > 0 ? ` · ${p.swatchCount} kartela` : ""}
-                </div>
-                <ul className="max-h-48 divide-y overflow-y-auto text-xs">
-                  {p.rolls.map((r) => (
-                    <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-1">
-                      <span className="font-mono">{r.barcode ?? "Açık Kumaş"}</span>
-                      <span className="truncate text-muted-foreground">
-                        {r.itemName}
-                        {r.colorName ? ` · ${r.colorName}` : ""}
-                      </span>
-                      <span className="shrink-0 tabular-nums">{fmtM(r.currentQty)} m</span>
-                    </li>
-                  ))}
-                </ul>
+            {(p.sackCount > 0 || p.rollCount > 0 || p.swatchCount > 0) && (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Havuza dönecek:{" "}
+                <span className="font-semibold tabular-nums text-foreground">{p.sackCount}</span> çuval ·{" "}
+                <span className="font-semibold tabular-nums text-foreground">{p.rollCount}</span> top
+                {p.swatchCount > 0 && (
+                  <>
+                    {" · "}
+                    <span className="font-semibold tabular-nums text-foreground">{p.swatchCount}</span> kartela
+                  </>
+                )}
               </div>
             )}
 
             {p.affectedOrders.length > 0 && (
               <div className="rounded-md border">
                 <div className="border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                  Karşılanması geri sarılacak siparişler
+                  Rezervi (packedQty) serbest kalacak siparişler
                 </div>
-                <ul className="divide-y text-xs">
+                <ul className="max-h-48 divide-y overflow-y-auto text-xs">
                   {p.affectedOrders.map((o) => (
                     <li key={o.orderNumber} className="flex items-center justify-between px-3 py-1">
                       <span className="font-mono">{o.orderNumber}</span>
@@ -127,9 +119,9 @@ export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
               </div>
             )}
 
-            {p.rolls.length === 0 && p.affectedOrders.length === 0 && (
+            {p.sackCount === 0 && p.rollCount === 0 && p.affectedOrders.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                Sevkiyat boş — içerik/karşılanma etkisi yok, kayıt iptal olarak işaretlenecek.
+                Sevkiyat boş — içerik/rezerv etkisi yok, kayıt iptal olarak işaretlenecek.
               </p>
             )}
           </div>

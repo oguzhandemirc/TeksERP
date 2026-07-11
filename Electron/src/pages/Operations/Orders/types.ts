@@ -49,6 +49,8 @@ export interface OrderLine {
   openQty?: number;
   shippedQty?: number;
   reservedQty?: number;
+  /** Çuvallanmış (havuza rezerve) metraj. Açık = quantity − shippedQty − packedQty. */
+  packedQty?: number;
   /** Kalemin bağlandığı WO'lar. Boş veya hepsi CANCELLED ise kalem düzenlenebilir. */
   workOrderLinks?: Array<{
     workOrderId: string;
@@ -65,6 +67,8 @@ export interface Order {
   totalAmount: string | null;
   status: OrderStatus;
   shippedQty: number;
+  /** Header toplam çuvallanmış (havuza rezerve) metraj — backend döner. */
+  packedQty?: number;
   orderDate: string;
   deadline: string | null;
   completedAt: string | null;

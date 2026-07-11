@@ -13,8 +13,8 @@ function groupKey(g: KartelaStockGroup): string {
 
 /**
  * Seçerek kartela ekleme — kartelaların fiziksel etiketi olmadığından barkod
- * okutma yerine ürün+renk stok grubu + adet seçilir. `onAdd` parent'ta sevkiyat
- * + aktif çuval garantiler, backend o gruptan N müsait kartelayı atomik claim eder.
+ * okutma yerine ürün+renk stok grubu + adet seçilir. `onAdd` parent'ta aktif
+ * havuz çuvalını garantiler, backend o gruptan N müsait kartelayı atomik claim eder.
  * Online-gerektirir: stok listesi ağdan gelir (offline'da boş → eklenemez).
  */
 export function KartelaStockPickerModal({
@@ -24,7 +24,7 @@ export function KartelaStockPickerModal({
 }: {
   visible: boolean;
   onDismiss: () => void;
-  /** Eklemeyi gerçekleştirir (ensureShipment + ensureActiveSack + addKartela). Eklenen adedi döndürür. */
+  /** Eklemeyi gerçekleştirir (ensureActiveSack + addKartelaToSack). Eklenen adedi döndürür. */
   onAdd: (group: KartelaStockGroup, count: number) => Promise<number>;
 }) {
   const [search, setSearch] = useState('');

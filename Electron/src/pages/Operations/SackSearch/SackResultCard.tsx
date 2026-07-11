@@ -6,11 +6,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { sackSearchService } from "./service";
-import { shipmentStatusLabels, type SackSearchRow } from "./types";
+import { sackDisplayState, sackStateLabels, type SackDisplayState, type SackSearchRow } from "./types";
 
-const STATUS_TONE: Record<string, string> = {
-  PREPARING: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-  READY: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+const STATE_TONE: Record<SackDisplayState, string> = {
+  OPEN: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  POOL: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  PLANNED: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
   AT_DOOR: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   DISPATCHED: "bg-muted text-muted-foreground",
 };
@@ -38,6 +39,10 @@ export function SackResultCard({ sack, selected, onToggleSelect }: Props) {
   });
 
   const hasMatch = sack.matchRollCount !== null;
+  const state = sackDisplayState(sack);
+  const location = sack.shipment
+    ? `${sack.shipment.shipmentNo} · ${sack.customer?.name ?? ""}`
+    : `Havuz · ${sack.customer?.name ?? ""}${sack.branch ? ` / ${sack.branch.name}` : ""}`;
 
   return (
     <div className={cn("rounded-lg border bg-card", selected && "border-primary/60 bg-primary/5")}>
@@ -58,25 +63,17 @@ export function SackResultCard({ sack, selected, onToggleSelect }: Props) {
           <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">Çuval {sack.seq}</span>
+              <span className="font-medium">{sack.manualCode ?? sack.sackNo}</span>
               {sack.manualCode && (
                 <Badge variant="outline" className="font-mono text-[10px]">
-                  {sack.manualCode}
+                  {sack.sackNo}
                 </Badge>
               )}
-              <span
-                className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                  STATUS_TONE[sack.shipment.status],
-                )}
-              >
-                {shipmentStatusLabels[sack.shipment.status]}
+              <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", STATE_TONE[state])}>
+                {sackStateLabels[state]}
               </span>
             </div>
-            <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {sack.shipment.shipmentNo} · {sack.shipment.customer.name}
-              {sack.shipment.branch ? ` / ${sack.shipment.branch.name}` : ""}
-            </div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">{location}</div>
           </div>
           <div className="shrink-0 text-right text-xs">
             {hasMatch && (

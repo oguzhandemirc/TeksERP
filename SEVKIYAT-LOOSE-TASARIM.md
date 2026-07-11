@@ -1,12 +1,16 @@
 # Sevkiyat & Üretim — Gevşek (Loose) Model Tasarımı
 
-> ## ⚠️ BU DOKÜMAN ARTIK GEÇERLİ DEĞİL (SÜPERSEDED — 2026-06-04)
-> Aşağıdaki "gevşek/L1" tasarım (`targetOrderLineId`, relabel, `/shipping/relabel`,
-> `auto-assign`, reprint-queue) **koda girmedi / sonradan kaldırıldı.** Canlı sevkiyat
-> modeli daha sade: top→sipariş bağı YOK, karşılanma `markReady` anında spec-toplam FIFO
-> (`ShipmentAllocation`), çuval İÇERİK tutar (`Roll.sackId`/`Swatch.sackId`, çuval-önce akış,
-> irsaliyede ürün-bazlı döküm). Gerçek durum için koda + güncel hafıza notlarına bak.
-> Bu doküman yalnız tarihsel tasarım kararları için tutuluyor.
+> ## ⚠️ BU DOKÜMAN ARTIK GEÇERLİ DEĞİL (SÜPERSEDED)
+> **1. katman (2026-06-04):** "gevşek/L1" tasarım (`targetOrderLineId`, relabel,
+> `/shipping/relabel`, `auto-assign`, reprint-queue) koda girmedi / kaldırıldı.
+> **2. katman (2026-07 — GÜNCEL):** Aşağıda anlatılan `markReady` anında spec-toplam FIFO
+> (`ShipmentAllocation`) + PREPARING/READY ara modeli de artık **ÇUVAL HAVUZU ("B") modeline
+> superseded**: çuval **müşteriye ait** (`Sack.customerId`), aç→okut→**mühürle** →
+> `rebalanceCustomerPool` FIFO ile `OrderLine.packedQty` rezervi (`SackAllocation`); sevkiyat
+> `createShipment({sackIds})` ile havuzdan kurulur (PLANNED→AT_DOOR→DISPATCHED); `ShipmentOrder`
+> türetilir; `markReady`/`ShipmentAllocation`/`retarget`/PREPARING-READY **kaldırıldı**.
+> **Kanonik referans:** `CUVAL-HAVUZU-TASARIM.md` + `scripts/test_sack_pool_lifecycle.ts` +
+> `schema.prisma` (§Shipment/Sack/SackAllocation). Bu doküman yalnız tarihsel kararlar için tutuluyor.
 
 > **Durum (tarihsel):** TASARIM — henüz kod yazılmadı. Bu doküman, sahada test edilecek
 > "gevşek" sevkiyat/üretim akışının üzerinde anlaşılan kararlarını tutar.

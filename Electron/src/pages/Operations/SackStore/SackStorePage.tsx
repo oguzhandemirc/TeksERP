@@ -34,7 +34,7 @@ type DestFilter = "ALL" | ShipmentDestination;
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "ALL", label: "Tümü" },
-  { key: "READY", label: sackStoreStatusLabels.READY },
+  { key: "PLANNED", label: sackStoreStatusLabels.PLANNED },
   { key: "AT_DOOR", label: sackStoreStatusLabels.AT_DOOR },
 ];
 
@@ -45,9 +45,9 @@ const DEST_TABS: { key: DestFilter; label: string }[] = [
 ];
 
 // Sevk (dispatch) burada YOK — yıkıcı onay çuval dökümünü canlı listeleyen
-// ortak DispatchConfirmDialog'dan geçer; bu üçlü kısa/verisiz geçişlerdir.
+// ortak DispatchConfirmDialog'dan geçer; bu ikili kısa/verisiz geçişlerdir.
 type PendingAction = {
-  kind: "move-to-door" | "pull-back" | "unready";
+  kind: "move-to-door" | "pull-back";
   shipment: SackStoreShipment;
 };
 
@@ -62,17 +62,10 @@ const ACTION_COPY: Record<
     success: "Kapı önüne kondu",
   },
   "pull-back": {
-    title: (s) => `${s.shipmentNo} çuval depoya geri çekilsin mi?`,
-    description: "Sevk kapı önünden çuval depoya (Çuval Depo) geri alınır.",
+    title: (s) => `${s.shipmentNo} geri çekilsin mi?`,
+    description: "Sevk kapı önünden planlı sevkiyata (Planlı Sevkiyat) geri alınır.",
     confirmLabel: "Geri Çek",
-    success: "Çuval depoya geri çekildi",
-  },
-  unready: {
-    title: (s) => `${s.shipmentNo} hazırlığa geri alınsın mı?`,
-    description:
-      "Karşılanma geri alınır (sipariş tekrar 'bekliyor' sayılır), çuval/top içeriği düzenlenebilir olur. Sevk bu listeden çıkar; Paketleme'den düzenlenip tekrar çuval depoya kaldırılabilir.",
-    confirmLabel: "Hazırlığa Geri Al",
-    success: "Hazırlığa geri alındı — düzenlenebilir",
+    success: "Planlı sevkiyata geri çekildi",
   },
 };
 
@@ -166,34 +159,24 @@ export function SackStorePage() {
   }, [query.data, scanned]);
 
   const mutation = useMutation({
-    mutationFn: (action: PendingAction) => {
-      if (action.kind === "move-to-door") return sackStoreService.moveToDoor(action.shipment.id);
-      if (action.kind === "pull-back") return sackStoreService.pullBack(action.shipment.id);
-      return sackStoreService.unready(action.shipment.id);
-    },
+    mutationFn: (action: PendingAction) =>
+      action.kind === "move-to-door"
+        ? sackStoreService.moveToDoor(action.shipment.id)
+        : sackStoreService.pullBack(action.shipment.id),
     onSuccess: (_data, action) => {
       toast.success(ACTION_COPY[action.kind].success);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      // O1 fix: bu geçişler sevkiyatın kendisini de değiştirir — unready
-      // commit'i GERİ SARIP sipariş durumunu yeniden hesaplar. Açık
+      // O1 fix: bu geçişler sevkiyatın kendisini de değiştirir — açık
       // Sevkiyat/Sipariş sekmeleri bayat kalmasın. (Dispatch tazelemeleri
       // ortak DispatchConfirmDialog'un içinde.)
       void qc.invalidateQueries({ queryKey: ["shipments"] });
       void qc.invalidateQueries({ queryKey: ["shipment-detail", action.shipment.id] });
-      if (action.kind === "unready") {
-        void qc.invalidateQueries({ queryKey: ["orders"] });
-      }
       // Okutulmuş sevkiyat panodan taşındıysa yerel durum senkron kalsın:
-      // kapı geçişlerinde durum güncellenir, hazırlığa dönen kapıdan çıkar.
+      // kapı geçişlerinde durum güncellenir (PLANNED ⇄ AT_DOOR).
       const id = action.shipment.id;
       setScanned((prev) => {
         if (!prev[id]) return prev;
-        if (action.kind === "unready") {
-          const rest = { ...prev };
-          delete rest[id];
-          return rest;
-        }
-        const nextStatus = action.kind === "move-to-door" ? "AT_DOOR" : "READY";
+        const nextStatus: SackStoreStatus = action.kind === "move-to-door" ? "AT_DOOR" : "PLANNED";
         return { ...prev, [id]: { ...prev[id], shipment: { ...prev[id].shipment, status: nextStatus } } };
       });
       setPending(null);
@@ -216,7 +199,7 @@ export function SackStorePage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Sevk Kapısı"
-        description="Kapıda çuval okut → sevkiyat kartı öne gelir → kapıya taşı / sevk et / irsaliye bas. Çuval depo + kapı önü panosu; karta tıkla → çuval ve top dökümü."
+        description="Kapıda çuval okut → sevkiyat kartı öne gelir → kapıya taşı / sevk et / irsaliye bas. Planlı sevkiyat + kapı önü panosu; karta tıkla → çuval ve top dökümü."
         actions={
           <div className="flex items-center gap-2">
             {scannedCount > 0 && (
@@ -321,7 +304,7 @@ export function SackStorePage() {
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-muted-foreground">
             <PackageOpen className="h-8 w-8 opacity-50" />
             <p className="text-sm">
-              {debouncedSearch ? "Aramayla eşleşen sevk yok." : "Çuval depoda bekleyen sevk yok."}
+              {debouncedSearch ? "Aramayla eşleşen sevk yok." : "Sevk kapısında bekleyen sevk yok."}
             </p>
           </div>
         ) : (
@@ -336,7 +319,6 @@ export function SackStorePage() {
                   onOpen={setOpenShipment}
                   onMoveToDoor={(sh) => setPending({ kind: "move-to-door", shipment: sh })}
                   onPullBack={(sh) => setPending({ kind: "pull-back", shipment: sh })}
-                  onUnready={(sh) => setPending({ kind: "unready", shipment: sh })}
                   onDispatch={setDispatchTarget}
                 />
               ))}

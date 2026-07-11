@@ -30,25 +30,25 @@ import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
 
 // =============================================================================
-// Çuval Depo & Çıkış — çuvallanmış bekleyen mal (READY=çuval depo, AT_DOOR=kapı
-// önü). HAFİF board: FlashList + cursor sonsuz kaydırma + sunucu araması/durum
-// filtresi (yüzlerce sevk birikse de "hepsini çek/render" YOK). Kart özet; çuval
-// + rulo dökümü karta tıklayınca lazy (SackContentsModal). Stok yalnız çıkışta düşer.
+// Sevk Kapısı — havuzdan kurulmuş sevkiyatlar (PLANNED=planlı, AT_DOOR=kapı önü).
+// HAFİF board: FlashList + cursor sonsuz kaydırma + sunucu araması/durum filtresi.
+// Kart özet; çuval+rulo dökümü karta tıklayınca lazy (SackContentsModal). PLANNED'da
+// çuval çıkarılabilir (havuza döner). Stok yalnız çıkışta (dispatch) düşer.
 // =============================================================================
 
 const PAGE_SIZE = 30;
-type StatusFilter = 'ALL' | 'READY' | 'AT_DOOR';
+type StatusFilter = 'ALL' | 'PLANNED' | 'AT_DOOR';
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'ALL', label: 'Tümü' },
-  { key: 'READY', label: 'Çuval Depo' },
+  { key: 'PLANNED', label: 'Planlı' },
   { key: 'AT_DOOR', label: 'Kapı Önü' },
 ];
 
 const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
-function waitText(readyAt: string | null): string | null {
-  if (!readyAt) return null;
-  const mins = dayjs().diff(dayjs(readyAt), 'minute');
+function waitText(since: string | null): string | null {
+  if (!since) return null;
+  const mins = dayjs().diff(dayjs(since), 'minute');
   if (mins < 60) return 'az önce';
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours} saattir`;
@@ -67,7 +67,6 @@ export default function SevkiyatScreen() {
 
   const [contentsShip, setContentsShip] = useState<SackStoreShipmentLite | null>(null);
   const [dispatchShip, setDispatchShip] = useState<SackStoreShipmentLite | null>(null);
-  const [unreadyShip, setUnreadyShip] = useState<SackStoreShipmentLite | null>(null);
   const [plate, setPlate] = useState('');
   const [driver, setDriver] = useState('');
   const [carrier, setCarrier] = useState('');
@@ -113,8 +112,7 @@ export default function SevkiyatScreen() {
       setCarrier('');
       refresh();
     },
-    // L fix: 409'da (baska operator ayni sevkiyati degistirdi) board tazelensin —
-    // bayat kartla ayni hata tekrarlanmasin.
+    // L fix: 409'da (baska operator ayni sevkiyati degistirdi) board tazelensin.
     onError: (e: Error) => {
       Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message });
       refresh();
@@ -138,7 +136,7 @@ export default function SevkiyatScreen() {
     mutationFn: (id: string) => packingService.pullBackFromDoor(id),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Çuval depoya geri çekildi', text2: res.message });
+      Toast.show({ type: 'success', text1: 'Planlıya geri çekildi', text2: res.message });
       refresh();
     },
     onError: (e: Error) => {
@@ -147,17 +145,19 @@ export default function SevkiyatScreen() {
     },
   });
 
-  const unreadyMut = useMutation({
-    mutationFn: (id: string) => packingService.unready(id),
-    onSuccess: (_res, id) => {
+  // Çuval çıkar (PLANNED) → havuza döner. Modal içindeki çuval başlıklarından tetiklenir.
+  const removeSackMut = useMutation({
+    mutationFn: ({ shipmentId, sackId }: { shipmentId: string; sackId: string }) =>
+      packingService.removeSackFromShipment(shipmentId, sackId),
+    onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Hazırlığa geri alındı', text2: 'Düzenlemek için paketleme açıldı' });
-      setUnreadyShip(null);
+      Toast.show({ type: 'success', text1: 'Çuval çıkarıldı', text2: res.message });
+      void qc.invalidateQueries({ queryKey: ['sack-contents', variables.shipmentId] });
       refresh();
-      nav.navigate('Paketleme', { shipmentId: id });
     },
     onError: (e: Error) => {
-      Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: e.message });
+      Toast.show({ type: 'error', text1: 'Çuval çıkarılamadı', text2: e.message });
+      void qc.invalidateQueries({ queryKey: ['sack-contents'] });
       refresh();
     },
   });
@@ -172,16 +172,16 @@ export default function SevkiyatScreen() {
   const busy = dispatchMut.isPending || moveToDoorMut.isPending || pullBackMut.isPending;
 
   const renderCard = ({ item: sh }: { item: SackStoreShipmentLite }) => {
-    const wait = waitText(sh.readyAt);
-    const isReady = sh.status === 'READY';
+    const wait = waitText(sh.createdAt);
+    const isPlanned = sh.status === 'PLANNED';
     return (
       <Surface style={styles.card} elevation={1}>
         <View style={styles.cardHead}>
           <View style={styles.titleWrap}>
             <Text style={styles.shipNo}>{sh.shipmentNo}</Text>
-            <View style={[styles.statusChip, isReady ? styles.chipReady : styles.chipDoor]}>
-              <Text style={[styles.statusChipText, { color: isReady ? '#7c3aed' : '#b45309' }]}>
-                {isReady ? 'Çuval Depo' : 'Kapı Önü'}
+            <View style={[styles.statusChip, isPlanned ? styles.chipReady : styles.chipDoor]}>
+              <Text style={[styles.statusChipText, { color: isPlanned ? '#7c3aed' : '#b45309' }]}>
+                {isPlanned ? 'Planlı' : 'Kapı Önü'}
               </Text>
             </View>
             {/* Saha #22: yurtiçi/yurtdışı rozeti */}
@@ -203,28 +203,30 @@ export default function SevkiyatScreen() {
           {wait ? <Text style={styles.waitText}>⏳ {wait}</Text> : null}
         </View>
 
-        {/* İçeriği gör — tıklayınca çuval+rulo dökümü lazy gelir */}
+        {/* İçeriği gör — tıklayınca çuval+rulo dökümü lazy gelir (PLANNED'da çuval çıkarma) */}
         <TouchableRipple onPress={() => setContentsShip(sh)} style={styles.contentsBtn}>
           <View style={styles.contentsRow}>
             <Icon source="sack" size={15} color="#4338ca" />
-            <Text style={styles.contentsText}>{sh.rollCount} top · çuval içeriğini gör</Text>
+            <Text style={styles.contentsText}>
+              {sh.rollCount} top · çuval içeriğini gör{isPlanned ? ' / çuval çıkar' : ''}
+            </Text>
             <Icon source="chevron-right" size={18} color="#94a3b8" />
           </View>
         </TouchableRipple>
 
         {/* Durum bazlı aksiyonlar */}
         <View style={styles.cardActions}>
-          {isReady ? (
+          {isPlanned ? (
             <>
               <Button
                 mode="outlined"
-                icon="pencil"
+                icon="sack-percent"
                 textColor="#b45309"
-                onPress={() => setUnreadyShip(sh)}
+                onPress={() => setContentsShip(sh)}
                 disabled={busy}
                 style={styles.actBtn}
               >
-                Geri Al
+                Çuval Çıkar
               </Button>
               {confirmRequired ? (
                 <Button
@@ -280,7 +282,7 @@ export default function SevkiyatScreen() {
 
   return (
     <ScreenChrome
-      title="Çuval Depo & Çıkış"
+      title="Sevk Çıkışı"
       headerExtras={
         <>
           <RefreshButton
@@ -339,7 +341,7 @@ export default function SevkiyatScreen() {
               <ActivityIndicator style={{ marginTop: 24 }} />
             ) : (
               <Text style={styles.emptySub}>
-                {debouncedSearch ? 'Aramayla eşleşen sevk yok.' : 'Bekleyen çuval yok.'}
+                {debouncedSearch ? 'Aramayla eşleşen sevk yok.' : 'Bekleyen sevkiyat yok.'}
               </Text>
             )
           }
@@ -349,8 +351,19 @@ export default function SevkiyatScreen() {
         />
       </View>
 
-      {/* Çuval + rulo dökümü (lazy) */}
-      <SackContentsModal shipment={contentsShip} onDismiss={() => setContentsShip(null)} />
+      {/* Çuval + rulo dökümü (lazy) — PLANNED'da çuval çıkarma butonlu */}
+      <SackContentsModal
+        shipment={contentsShip}
+        onDismiss={() => setContentsShip(null)}
+        onRemoveSack={
+          contentsShip?.status === 'PLANNED'
+            ? (sackId) => {
+                if (contentsShip) removeSackMut.mutate({ shipmentId: contentsShip.id, sackId });
+              }
+            : undefined
+        }
+        removing={removeSackMut.isPending}
+      />
 
       {/* Çıkış / Alındı — plaka/şoför opsiyonel */}
       <AppModal visible={dispatchShip !== null} onDismiss={() => setDispatchShip(null)}>
@@ -381,41 +394,6 @@ export default function SevkiyatScreen() {
               }}
             >
               Çıkışı Onayla
-            </Button>
-          </View>
-        </Surface>
-      </AppModal>
-
-      {/* Çuval depodan hazırlığa geri al — düzenleme */}
-      <AppModal visible={unreadyShip !== null} onDismiss={() => setUnreadyShip(null)}>
-        <Surface style={styles.sheet} elevation={4}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            {unreadyShip?.shipmentNo} — Hazırlığa Geri Al
-          </Text>
-          <Text style={styles.customer}>
-            {unreadyShip?.customer.name}
-            {unreadyShip?.branch ? ` · ${unreadyShip.branch.name}` : ''} · {unreadyShip?.sackCount} çuval
-          </Text>
-          <Text style={styles.unreadyHint}>
-            Çuval depodan çıkar, paketlemeye döner — top ekleyebilir/çıkarabilirsin. Karşılanma geri
-            alınır (stok düşmediği için güvenli); istediğinde tekrar çuval depoya kaldırırsın.
-          </Text>
-          <View style={styles.actions}>
-            <Button onPress={() => setUnreadyShip(null)} style={styles.actionBtn}>
-              Vazgeç
-            </Button>
-            <Button
-              mode="contained"
-              icon="pencil"
-              buttonColor="#b45309"
-              style={styles.actionBtn}
-              loading={unreadyMut.isPending}
-              disabled={unreadyMut.isPending}
-              onPress={() => {
-                if (unreadyShip) unreadyMut.mutate(unreadyShip.id);
-              }}
-            >
-              Geri Al
             </Button>
           </View>
         </Surface>
@@ -452,7 +430,6 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 13, color: '#94a3b8', marginTop: 24, textAlign: 'center' },
   sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff', alignSelf: 'stretch' },
   sheetTitle: { fontWeight: '700', marginBottom: 4, color: '#0f172a' },
-  unreadyHint: { fontSize: 13, color: '#64748b', marginTop: 8, lineHeight: 18 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionBtn: { flex: 1 },
 });

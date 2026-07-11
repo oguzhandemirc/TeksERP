@@ -8,37 +8,27 @@ import {
   ActivityIndicator,
   IconButton,
   Icon,
-  ProgressBar,
-  Appbar,
   TouchableRipple,
 } from 'react-native-paper';
 import AppModal from '../../../components/AppModal';
-import ConfirmDialog from '../../../components/ConfirmDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  useNavigation,
-  usePreventRemove,
-  useRoute,
-  type NavigationAction,
-  type RouteProp,
-} from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
-import { printHtml } from '../../../services/printHtml';
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { KartelaStockPickerModal } from './KartelaStockPickerModal';
-import type { KartelaStockGroup } from '../../../services/packing.service';
 import { AnimatedEntrance, MarqueeText } from '../../../components/motion';
 import { colors, palette, spacing, radius, shadow, typography } from '../../../theme';
 import {
   packingService,
   shipmentDestinationLabels,
-  type ShipmentSack,
+  type PoolSack,
+  type KartelaStockGroup,
   type ShipmentDestination,
 } from '../../../services/packing.service';
 import { isWorkSessionLost } from '../../../services/api';
@@ -50,29 +40,25 @@ import {
 } from '../../../hooks/useMachinePeripherals';
 import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import { isBonded, pairByMac } from '../../../services/hal/btClassic.transport';
-import { useLockStore } from '../../../store/lockStore';
 import {
   useShipmentConfirmationEnabled,
   FLAGS_KEY,
 } from '../../../hooks/useFeatureFlags';
-import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
-// Paketleme — ÇUVAL-ÖNCE akış. Param: { orderIds } (yeni) veya { shipmentId }.
-// Çuval aç → topları O çuvala okut → tart + KOD gir → kapat → sıradaki çuval. Top
-// başka çuvala tek dokunuşla aktarılır. Sevke Hazır/Sevk: her top çuvalda + her çuval
-// tartılı + kodlu. Onay kapalıysa "Hemen Sevk Et" kısayolu; açıksa çıkış ②'den onaylanır.
+// Paketleme — ÇUVAL HAVUZU akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
+// Ekran müşterinin havuz çuvallarını (/pool/sacks) canlı listeler:
+//   Çuval aç → topları AÇIK çuvala okut → tart + KOD → MÜHÜRLE (havuza girer).
+// "Hemen Sevk Et": bu müşterinin mühürlü çuvallarından sevkiyat kur + (feature
+// flag'e göre) kapı önüne koy / hemen sevk et. Sevkiyat/karşılama backend'de.
 // =============================================================================
 
-// Bizdeki ad + (karşıdaki ad) — alias farklıysa parantezde.
-const dualName = (ourName: string, custName?: string | null) =>
-  custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
-
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
-// Metraj — GERÇEK değeri göster (44,5 → "44,5"). Math.round kullanma: 44,5 → 45
-// yuvarlıyordu (yanlış miktar görünüyordu). tr-TR ondalık = virgül, gereksiz sıfır yok.
+// Metraj — GERÇEK değeri göster (44,5 → "44,5"). tr-TR ondalık = virgül.
 const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+
+const sackCode = (sk: PoolSack) => sk.manualCode?.trim() || sk.sackNo;
 
 export default function PaketlemeScreen() {
   // Portrait kilidi yalnızca telefonda — tablette yatay kalsın.
@@ -80,41 +66,17 @@ export default function PaketlemeScreen() {
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'Paketleme'>>();
-  const params = route.params ?? {};
+  const customerId = route.params.customerId;
+  const branchId = route.params.branchId ?? null;
 
-  const [shipmentId, setShipmentId] = useState<string | null>(params.shipmentId ?? null);
-  const [draftOrderIds, setDraftOrderIds] = useState<string[] | null>(params.orderIds ?? null);
-  // Saha #19: yeni sevkiyatın kapsamı — yurtiçi default. Sevkiyat oluşunca
-  // backend'deki değer (ship.destination) otoritedir; bu yalnız create öncesi taslak.
-  const [draftDestination, setDraftDestination] = useState<ShipmentDestination>('DOMESTIC');
-  const [scanOpen, setScanOpen] = useState<boolean>(!params.shipmentId && !!params.orderIds);
-  // Taslak koruması: sevkiyat henüz "geç oluştur" ile yaratılmadıysa ekrandan
-  // her çıkış (ev/popTo, donanım geri, ok tuşu) sipariş seçimini + kapsamı
-  // SESSİZCE silerdi (kurtarma yalnız oluşturulmuş sevkiyatta var — "Sürdür").
-  // usePreventRemove çıkışı yakalar, onay sorulur; onayda saklanan aksiyon
-  // AYNEN dispatch edilir (aksiyon üzerindeki visited işareti sayesinde ikinci
-  // kez engellenmez). İlk aksiyonda sevkiyat oluşur → koruma kendiliğinden düşer.
-  const [leaveAction, setLeaveAction] = useState<NavigationAction | null>(null);
-  const draftUnsaved = shipmentId === null && draftOrderIds !== null;
-  usePreventRemove(draftUnsaved, ({ data }) => {
-    // Kilitliyken (idle kilit) donanım geri tuşu buraya kadar iner — çıkış yine
-    // engellenir ama diyalog KURULMAZ: kilit overlay'inin altında görünmez kalır
-    // ve kilidi açan (belki başka) operatörü beklenmedik "Çık ve Sil" ile karşılardı.
-    if (!useLockStore.getState().locked) setLeaveAction(data.action);
-  });
-  // Diyalog açıkken uçuştaki ensureShipment tamamlanabilir (adopt → shipmentId) —
-  // taslak kalıcılaşmıştır, "silinir" uyarısı yanlışlaşır: diyaloğu kapat
-  // (sonraki geri basışı guard'sız normal çıkar).
-  useEffect(() => {
-    if (shipmentId !== null) setLeaveAction(null);
-  }, [shipmentId]);
+  // Sevkiyat kapsamı (yurtiçi/yurtdışı) — sevkiyat KURULUMUNDA kullanılır (taslak).
+  const [destination, setDestination] = useState<ShipmentDestination>('DOMESTIC');
+
+  const [scanOpen, setScanOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [kartelaOpen, setKartelaOpen] = useState(false);
-  // Listeden eklenen toplar — picker'da gizle. Eklenen top backend'de committed
-  // olur ama açık picker snapshot'ı anlık güncellenmez → çift-ekleme önlenir.
-  // Modal kapanınca sıfırlanır.
+  // Listeden eklenen toplar — picker'da gizle (açık picker snapshot'ı anlık güncellenmez).
   const [pickedIds, setPickedIds] = useState<string[]>([]);
-  const [cancelOpen, setCancelOpen] = useState(false);
 
   // Aktif çuval — okutma buraya yazılır. State (render) + ref (scan callback yarışını önler).
   const [activeSackId, setActiveSackId] = useState<string | null>(null);
@@ -127,19 +89,16 @@ export default function PaketlemeScreen() {
   // Saha #8: 300-çuval UX — arama + pencereleme (büyük listede hepsini render etme).
   const [sackSearch, setSackSearch] = useState('');
   const [showAllSacks, setShowAllSacks] = useState(false);
-  const SACK_WINDOW = 20; // büyük listede aramasız görünen son çuval sayısı
+  const SACK_WINDOW = 20;
 
-  const [weighTarget, setWeighTarget] = useState<{ id: string; seq: number } | null>(null);
+  const [weighTarget, setWeighTarget] = useState<{ id: string; label: string } | null>(null);
   const [weighKg, setWeighKg] = useState('');
   const [weighCode, setWeighCode] = useState('');
-  // Kantar (HAL): bu telefonun atandığı makinenin SCALE cihaz(lar)ı. "Tart"
-  // tuşu kantara HC-06 BT-SPP ile bağlanıp brüt kg okur (KK1 metresiyle aynı desen).
+  // Kantar (HAL): bu telefonun atandığı makinenin SCALE cihaz(lar)ı.
   const scalePeripherals = useMachinePeripherals('SCALE');
   const [weighing, setWeighing] = useState(false);
 
-  // "Tart": kantardan brüt kg oku. Cihaz yoksa/okunamazsa NET Türkçe hata + null
-  // (sessiz sahte YOK). simulate açıksa sahte kg (test/donanımsız). İstek-cevap
-  // kantar pollCommand ile sorgulanır (readResponse yazıp yanıtı okur).
+  // "Tart": kantardan brüt kg oku. Cihaz yoksa/okunamazsa NET Türkçe hata + null.
   const weighFromMachine = async (): Promise<number | null> => {
     const simWeigh = () => Math.round((10 + Math.random() * 90) * 10) / 10;
     const p = primaryScaleFor(scalePeripherals);
@@ -163,9 +122,6 @@ export default function PaketlemeScreen() {
       });
       return null;
     }
-    // İlk kullanımda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.
-    // Uygulama MAC'ten createBond tetikler; Android PIN'i bir kez sorar (ör. 1234).
-    // Bond sonrası bu blok atlanır → doğrudan bağlanıp okur.
     if (p.connectionType === 'BLUETOOTH_SPP' && p.address) {
       try {
         if (!(await isBonded(p.address))) {
@@ -219,122 +175,66 @@ export default function PaketlemeScreen() {
       setWeighing(false);
     }
   };
-  const [moveTarget, setMoveTarget] = useState<{ rollId: string; fromSackId: string | null; label: string } | null>(null);
-  // Dolu çuval silme onayı — içindeki toplar (depoya dönecekler) somut listelenir.
-  const [removeSackTarget, setRemoveSackTarget] = useState<ShipmentSack | null>(null);
-  const [printing, setPrinting] = useState(false);
 
-  // Sevk onayı açıksa ① yalnız "Sevke Hazır" yapar; kapalıysa "Hemen Sevk Et" kısayolu da görünür.
+  const [moveTarget, setMoveTarget] = useState<{ rollId: string; fromSackId: string; label: string } | null>(null);
+  // Dolu çuval silme onayı — içindeki toplar (depoya dönecekler) somut listelenir.
+  const [removeSackTarget, setRemoveSackTarget] = useState<PoolSack | null>(null);
+
+  // Sevk onayı açık: sevkiyat kur → kapı önüne koy. Kapalı: kur → hemen sevk et.
   const confirmationEnabled = useShipmentConfirmationEnabled();
 
   const scanBusy = useRef(false);
-  const ensureRef = useRef<Promise<string> | null>(null);
   const ensureSackRef = useRef<Promise<string> | null>(null);
 
-  // Taslak karşılaması için açık siparişler (cache'ten gelir).
-  const openOrdersQ = useQuery({
-    queryKey: ['open-orders'],
-    queryFn: () => packingService.listOpenOrders(),
-    enabled: shipmentId === null,
-    staleTime: 10_000,
-  });
-  const openOrders = openOrdersQ.data?.data ?? [];
-
-  const shipQ = useQuery({
-    queryKey: ['shipment', shipmentId],
-    queryFn: () => packingService.getShipment(shipmentId!),
-    enabled: shipmentId !== null,
+  const poolQ = useQuery({
+    queryKey: ['pool-sacks', customerId],
+    queryFn: () => packingService.listCustomerPoolSacks(customerId),
     staleTime: 5_000,
   });
-  const ship = shipQ.data?.data ?? null;
+  const pool = poolQ.data?.data ?? null;
+  const sacks = pool?.sacks ?? [];
+  const customer = pool?.customer ?? null;
 
-  const refreshShip = (id: string | null = shipmentId) =>
-    void qc.invalidateQueries({ queryKey: ['shipment', id] });
+  // Render'dan bağımsız güncel çuval listesi (scan callback stale closure önlemi).
+  const sacksRef = useRef<PoolSack[]>([]);
+  sacksRef.current = sacks;
 
-  // Header "Yenile" — draft'ta açık siparişleri, kayıtlı sevkiyatta sevkiyatı tazeler.
+  const refreshPool = () => void qc.invalidateQueries({ queryKey: ['pool-sacks', customerId] });
+
   const refresh = useManualRefresh(
     () => {
-      // Admin Electron'dan toggle ettiği bayrakları (sevk onayı → "Kapı Önüne Koy"/"Hemen Sevk Et")
-      // 5 dk staleTime'ı beklemeden yansıt — operatör "Yenile"ye basınca footer güncellenir.
+      // Admin'in toggle ettiği bayrakları (sevk onayı) hemen yansıt.
       void qc.invalidateQueries({ queryKey: FLAGS_KEY });
-      return shipmentId === null ? openOrdersQ.refetch() : shipQ.refetch();
+      return poolQ.refetch();
     },
-    shipmentId === null ? 'Açık siparişler güncellendi' : 'Sevkiyat güncellendi',
+    'Çuvallar güncellendi',
   );
   const finishAndBack = () => {
+    void qc.invalidateQueries({ queryKey: ['pool'] });
+    void qc.invalidateQueries({ queryKey: ['pool-sacks', customerId] });
     void qc.invalidateQueries({ queryKey: ['open-orders'] });
-    void qc.invalidateQueries({ queryKey: ['shipments'] });
+    void qc.invalidateQueries({ queryKey: ['sack-store'] });
     nav.goBack();
   };
 
-  // K-B1 fix: createShipment isteği zaman aşımına uğrarsa sevkiyat backend'de
-  // OLUŞMUŞ olabilir — ekran bilmediği için "hayalet sevkiyat" kilidi doğuyordu
-  // (operatörün kurtarma yolu yoktu). Transport hatasında PREPARING listesinde
-  // bu siparişleri içeren sevkiyat aranır; bulunursa OTOMATİK ona bağlanılır.
-  const recoverExistingShipment = async (orderIds: string[]): Promise<string | null> => {
-    try {
-      const list = await packingService.listShipments({ status: 'PREPARING' });
-      for (const sh of list.data ?? []) {
-        const det = await packingService.getShipment(sh.id);
-        const shipOrderIds = (det.data?.orders ?? []).map((o) => o.id);
-        if (orderIds.every((oid) => shipOrderIds.includes(oid))) return sh.id;
-      }
-    } catch {
-      // kurtarma da başarısız — orijinal hata akışına düşülür
-    }
-    return null;
-  };
-
-  // Geç oluştur — ilk aksiyon anında sevkiyatı yarat (eşzamanlı çağrılarda tek kez).
-  const ensureShipment = (): Promise<string> => {
-    if (shipmentId) return Promise.resolve(shipmentId);
-    if (ensureRef.current) return ensureRef.current;
-    if (!draftOrderIds) return Promise.reject(new Error('Sipariş seçili değil'));
-    const orderIds = draftOrderIds;
-    const adopt = (id: string): string => {
-      setShipmentId(id);
-      setDraftOrderIds(null);
-      void qc.invalidateQueries({ queryKey: ['shipments'] });
-      void qc.invalidateQueries({ queryKey: ['open-orders'] });
-      return id;
-    };
-    const p = packingService
-      .createShipment(orderIds, draftDestination)
-      .then((res) => {
-        const id = res.data?.id;
-        if (!id) throw new Error('Sevkiyat açılamadı');
-        return adopt(id);
-      })
-      .catch(async (err: Error & { status?: number }) => {
-        // Yalnız transport-düzeyi hatada (status yok = timeout/ağ — istek sunucuya
-        // ulaşmış olabilir) kurtarma dene; backend reddi (4xx) gerçek hatadır.
-        if (err.status == null) {
-          const recovered = await recoverExistingShipment(orderIds);
-          if (recovered) {
-            Toast.show({
-              type: 'info',
-              text1: 'Mevcut sevkiyat bulundu',
-              text2: 'Bağlantı sorununa rağmen sevkiyat açılmış — kaldığı yerden devam.',
-            });
-            return adopt(recovered);
-          }
-        }
-        throw err;
-      })
-      .finally(() => {
-        ensureRef.current = null;
-      });
-    ensureRef.current = p;
-    return p;
-  };
-
-  // Aktif çuval yoksa bir tane aç (okutmadan önce). Çoklu scan'de tek kez.
-  const ensureActiveSack = (id: string): Promise<string> => {
+  // Aktif çuval yoksa/geçersizse bir açık çuval seç (okutmadan önce). Yoksa yeni aç.
+  const ensureActiveSack = (): Promise<string> => {
+    const list = sacksRef.current;
     const cur = activeSackRef.current;
-    if (cur) return Promise.resolve(cur);
+    if (cur) {
+      const found = list.find((s) => s.id === cur);
+      // Listede yoksa YENİ açılmış (henüz refetch gelmedi) → güven; açıksa kullan.
+      // Yalnız listede + MÜHÜRLÜ ise başka çuvala düş (çift-açmayı önle).
+      if (!found || !found.sealed) return Promise.resolve(cur);
+    }
+    const existingOpen = list.find((s) => !s.sealed);
+    if (existingOpen) {
+      setActiveSack(existingOpen.id);
+      return Promise.resolve(existingOpen.id);
+    }
     if (ensureSackRef.current) return ensureSackRef.current;
     const p = packingService
-      .addSack(id)
+      .openSack({ customerId, branchId })
       .then((res) => {
         const sid = res.data.id;
         setActiveSack(sid);
@@ -347,29 +247,29 @@ export default function PaketlemeScreen() {
     return p;
   };
 
-  // Seçerek kartela ekle — sevkiyat + aktif çuvalı garanti et, sonra adet stoktan düş.
+  // Seçerek kartela ekle — aktif çuvalı garanti et, sonra adet stoktan düş.
   const addKartelaFromStock = async (group: KartelaStockGroup, count: number): Promise<number> => {
-    const id = await ensureShipment();
-    const sackId = await ensureActiveSack(id);
-    const res = await packingService.addKartela(id, {
+    const sackId = await ensureActiveSack();
+    const res = await packingService.addKartelaToSack(sackId, {
       itemId: group.itemId,
       colorId: group.colorId,
       count,
-      sackId,
     });
-    refreshShip(id);
+    refreshPool();
     void qc.invalidateQueries({ queryKey: ['kartela', 'stock'] });
     return res.data?.added ?? count;
   };
 
-  const sacks = ship?.sacks ?? [];
-  const rolls = ship?.rolls ?? [];
-  const summary = ship?.summary ?? { rollCount: 0, swatchCount: 0, totalMeters: 0, sackCount: 0, totalKg: 0 };
+  const openSacks = sacks.filter((s) => !s.sealed);
+  const sealedSacks = sacks.filter((s) => s.sealed);
+  const rollCount = sacks.reduce((a, s) => a + s.rollCount, 0);
+  const swatchCount = sacks.reduce((a, s) => a + s.swatchCount, 0);
+  const totalKg = sacks.reduce((a, s) => a + (s.weightKg ?? 0), 0);
 
-  // Aktif çuval geçersiz/yoksa son çuvala düşür (sacks değişince).
-  const sackKey = sacks.map((s) => s.id).join(',');
+  // Aktif çuval geçersiz/yoksa son açık çuvala düşür (sacks değişince).
+  const sackKey = sacks.map((s) => `${s.id}:${s.sealed ? 1 : 0}`).join(',');
   useEffect(() => {
-    const ids = sacks.map((s) => s.id);
+    const ids = openSacks.map((s) => s.id);
     if (ids.length === 0) {
       if (activeSackRef.current) setActiveSack(null);
       return;
@@ -380,57 +280,63 @@ export default function PaketlemeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sackKey]);
 
-  // Saha #19: yurtiçi/yurtdışı değiştir. Sevkiyat henüz oluşmadıysa taslak state'i
-  // güncelle (create'te kullanılır); oluştuysa backend'e yaz.
-  const destMut = useMutation({
-    mutationFn: (d: ShipmentDestination) => packingService.setDestination(shipmentId!, d),
+  const openSackMut = useMutation({
+    mutationFn: () => packingService.openSack({ customerId, branchId }),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: res.message ?? 'Güncellendi' });
-      refreshShip();
+      setActiveSack(res.data.id);
+      Toast.show({ type: 'success', text1: 'Çuval açıldı', text2: 'Topları bu çuvala okut.' });
+      refreshPool();
     },
     onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
-      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: e.message });
-    },
-  });
-  const setDestination = (d: ShipmentDestination) => {
-    if (shipmentId) destMut.mutate(d);
-    else setDraftDestination(d);
-  };
-  const currentDestination: ShipmentDestination = ship?.destination ?? draftDestination;
-
-  const openSackMut = useMutation({
-    mutationFn: async () => {
-      const id = await ensureShipment();
-      const res = await packingService.addSack(id);
-      return { id, sack: res.data };
-    },
-    onSuccess: ({ id, sack }) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setActiveSack(sack.id);
-      Toast.show({ type: 'success', text1: `Çuval ${sack.seq} açıldı`, text2: 'Topları bu çuvala okut.' });
-      refreshShip(id);
-    },
-    onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      if (isWorkSessionLost(e)) return;
       Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message });
     },
   });
 
   const weighSackMut = useMutation({
-    mutationFn: ({ sackId, kg, code }: { sackId: string; kg: number; code: string }) =>
-      packingService.weighSack(sackId, kg, code.trim()),
+    mutationFn: ({ sackId, kg, code }: { sackId: string; kg: number | null; code: string }) =>
+      packingService.weighSack(sackId, {
+        ...(kg != null ? { weightKg: kg } : {}),
+        manualCode: code.trim(),
+      }),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setWeighTarget(null);
       setWeighKg('');
       setWeighCode('');
-      refreshShip();
+      refreshPool();
     },
     onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      if (isWorkSessionLost(e)) return;
       Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: e.message });
+    },
+  });
+
+  const sealMut = useMutation({
+    mutationFn: (sackId: string) => packingService.sealSack(sackId),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Çuval mühürlendi', text2: 'Çuval depo havuzuna girdi.' });
+      refreshPool();
+    },
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return;
+      Toast.show({ type: 'error', text1: 'Mühürlenemedi', text2: e.message });
+    },
+  });
+
+  const reopenMut = useMutation({
+    mutationFn: (sackId: string) => packingService.reopenSack(sackId),
+    onSuccess: (_res, sackId) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Mühür açıldı', text2: 'Çuval düzenlenebilir.' });
+      setActiveSack(sackId);
+      refreshPool();
+    },
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return;
+      Toast.show({ type: 'error', text1: 'Mühür açılamadı', text2: e.message });
     },
   });
 
@@ -441,10 +347,10 @@ export default function PaketlemeScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Aktarıldı', text2: res.message });
       setMoveTarget(null);
-      refreshShip();
+      refreshPool();
     },
     onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      if (isWorkSessionLost(e)) return;
       Toast.show({ type: 'error', text1: 'Aktarılamadı', text2: e.message });
     },
   });
@@ -454,116 +360,53 @@ export default function PaketlemeScreen() {
       packingService.removeSack(sackId, withContents),
     onSuccess: (res, variables) => {
       setRemoveSackTarget(null);
-      // Kısa yol (dolu çuval) belirgin bir işlem → bildir; boş çuval sessizce silinir.
       if (variables.withContents) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Toast.show({ type: 'success', text1: 'Çuval silindi', text2: res.message });
       }
-      refreshShip();
+      refreshPool();
     },
     onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      if (isWorkSessionLost(e)) return;
       Toast.show({ type: 'error', text1: 'Silinemedi', text2: e.message });
     },
   });
 
   const removeRollMut = useMutation({
-    mutationFn: (rollId: string) => packingService.removeRoll(shipmentId!, rollId),
-    onSuccess: () => refreshShip(),
+    mutationFn: (rollId: string) => packingService.removeRollFromSack(rollId),
+    onSuccess: () => refreshPool(),
     onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      if (isWorkSessionLost(e)) return;
       Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message });
     },
   });
 
-  // "Çuval Depoya Kaldır" (markReady → READY): çuvallandı, firma içi depoda bekler (commit yapılır).
-  const readyMut = useMutation({
-    mutationFn: () => packingService.markReady(shipmentId!),
-    onSuccess: (res) => {
+  // "Hemen Sevk Et" — mühürlü çuvallardan sevkiyat kur → (onay açık) kapı önüne koy / (kapalı) sevk et.
+  const shipMut = useMutation({
+    mutationFn: async () => {
+      const sackIds = sealedSacks.map((s) => s.id);
+      const created = await packingService.createShipmentFromSacks({ sackIds, destination });
+      const id = created.data.id;
+      if (confirmationEnabled) await packingService.moveToDoor(id);
+      else await packingService.dispatch(id, {});
+      return created.data;
+    },
+    onSuccess: (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Çuval depoya kaldırıldı', text2: res.message });
-      finishAndBack();
-    },
-    onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
-      Toast.show({ type: 'error', text1: 'Çuval depoya kaldırılamadı', text2: e.message });
-    },
-  });
-
-  // "Kapı Önüne Koy" (moveToDoor → AT_DOOR): sevk onayı açıkken çıkışın durağı; "Alındı" bekler.
-  const moveToDoorMut = useMutation({
-    mutationFn: () => packingService.moveToDoor(shipmentId!),
-    onSuccess: (res) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Kapı önüne kondu', text2: res.message });
-      finishAndBack();
-    },
-    onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
-      Toast.show({ type: 'error', text1: 'Kapı önüne konamadı', text2: e.message });
-    },
-  });
-
-  // "Hemen Sevk Et" (onay kapalı): → DISPATCHED tek adım — stok düşer, irsaliye kesilir.
-  const dispatchMut = useMutation({
-    mutationFn: () => packingService.dispatch(shipmentId!, {}),
-    onSuccess: (res) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Sevk edildi', text2: res.message });
-      finishAndBack();
-    },
-    onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
-      Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message });
-    },
-  });
-
-  // İrsaliye — DISPATCHED'da donmuş resmi belge, öncesi TASLAK (expo-print).
-  const printNote = async (): Promise<void> => {
-    if (!ship || !shipmentId) return;
-    try {
-      setPrinting(true);
-      const html = await getShipmentDispatchHtml(shipmentId);
-      await printHtml({
-        html,
-        margins: { left: 0, top: 0, right: 0, bottom: 0 },
+      Toast.show({
+        type: 'success',
+        text1: confirmationEnabled ? 'Kapı önüne kondu' : 'Sevk edildi',
+        text2: data.shipmentNo,
       });
-    } catch (e) {
-      const msg = (e as Error).message ?? '';
-      if (!/did not complete|cancel/i.test(msg)) {
-        Toast.show({ type: 'error', text1: 'Yazdırılamadı', text2: msg });
-      }
-    } finally {
-      setPrinting(false);
-    }
-  };
-
-  const cancelMut = useMutation({
-    mutationFn: () => packingService.cancel(shipmentId!),
-    onSuccess: (res) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Sevkiyat iptal edildi', text2: res.message });
-      setCancelOpen(false);
       finishAndBack();
     },
     onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
-      Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: e.message });
+      if (isWorkSessionLost(e)) return;
+      Toast.show({ type: 'error', text1: 'Sevkiyat kurulamadı', text2: e.message });
     },
   });
 
-  const cancelPreviewQ = useQuery({
-    queryKey: ['shipment', shipmentId, 'cancel-preview'],
-    queryFn: () => packingService.cancelPreview(shipmentId!),
-    enabled: cancelOpen && shipmentId !== null,
-    staleTime: 0,
-  });
-  const cancelPreview = cancelPreviewQ.data?.data ?? null;
-
-  // O13 fix: meşgulken (yavaş Wi-Fi'de scan zinciri >800ms sürerken) gelen
-  // okuma SESSİZCE düşüyordu — kamera yeşil ✓ + başarı haptiği vermişken top
-  // çuvala hiç girmiyordu. Artık FIFO kuyruğa alınıp sırayla işlenir; aynı
-  // barkodun ardışık kareleri (işlenen/kuyruktaki) yutulur.
+  // FIFO okuma kuyruğu — meşgulken gelen okumalar sırayla işlenir (yavaş ağda düşme yok).
   const pendingScansRef = useRef<string[]>([]);
   const processingCodeRef = useRef<string | null>(null);
 
@@ -574,16 +417,15 @@ export default function PaketlemeScreen() {
     scanBusy.current = true;
     processingCodeRef.current = code;
     try {
-      const id = await ensureShipment();
-      const sackId = await ensureActiveSack(id);
-      const res = await packingService.scan(id, code, sackId);
+      const sackId = await ensureActiveSack();
+      const res = await packingService.scanIntoSack(sackId, code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
         text1: res.data?.kind === 'SWATCH' ? 'Kartela eklendi' : 'Top eklendi',
         text2: res.message,
       });
-      refreshShip(id);
+      refreshPool();
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Eklenemedi', text2: (e as Error).message });
@@ -591,7 +433,7 @@ export default function PaketlemeScreen() {
       setTimeout(() => {
         scanBusy.current = false;
         processingCodeRef.current = null;
-        void drainScans(); // kuyrukta bekleyen varsa sıradakini işle
+        void drainScans();
       }, 600);
     }
   };
@@ -604,22 +446,17 @@ export default function PaketlemeScreen() {
     void drainScans();
   };
 
-  const isDraft = shipmentId === null;
-  const draftOrders = draftOrderIds ? openOrders.filter((o) => draftOrderIds.includes(o.order.id)) : [];
-  const cust = ship?.customer ?? draftOrders[0]?.order.customer ?? null;
-  const branch = ship?.branch ?? draftOrders[0]?.order.branch ?? null;
+  const activeSack = sacks.find((s) => s.id === activeSackId) ?? null;
+  const activeLabel = activeSack ? sackCode(activeSack) : null;
 
-  const activeSeq = sacks.find((s) => s.id === activeSackId)?.seq ?? null;
-
-  // Saha #8: görünür çuval kümesi. Arama varsa filtrele (kod/seq); yoksa büyük
-  // listede yalnız aktif + son SACK_WINDOW çuval render edilir (300 çuval lag'ini
-  // önler) — "Tümünü göster" ile açılır. İçerik (top satırları) yalnız küçük
-  // listede VEYA aktif çuval VEYA aramada tam-eşleşmede açılır.
+  // Saha #8: görünür çuval kümesi (arama + pencereleme).
   const sackQ = sackSearch.trim().toLocaleLowerCase('tr');
   const isLargeSackList = sacks.length > SACK_WINDOW;
   const filteredSacks = sackQ
     ? sacks.filter(
-        (s) => `${s.seq}` === sackQ || (s.manualCode ?? '').toLocaleLowerCase('tr').includes(sackQ),
+        (s) =>
+          s.sackNo.toLocaleLowerCase('tr').includes(sackQ) ||
+          (s.manualCode ?? '').toLocaleLowerCase('tr').includes(sackQ),
       )
     : sacks;
   const windowed = sackQ || showAllSacks || !isLargeSackList;
@@ -627,113 +464,58 @@ export default function PaketlemeScreen() {
     ? filteredSacks
     : filteredSacks.filter((s, i) => s.id === activeSackId || i >= filteredSacks.length - SACK_WINDOW);
   const hiddenSackCount = filteredSacks.length - visibleSacks.length;
-  const expandContent = (sackId: string) => !isLargeSackList || sackId === activeSackId || Boolean(sackQ);
+  const expandContent = (id: string) => !isLargeSackList || id === activeSackId || Boolean(sackQ);
 
-  const looseRolls = rolls.filter((r) => !r.sackId);
-  const unweighed = sacks.filter((s) => (s.weightKg ?? 0) <= 0);
-  const uncoded = sacks.filter((s) => !s.manualCode || !s.manualCode.trim());
-  const hasContent = summary.rollCount + summary.swatchCount > 0;
-  // Saha #19: çuval tartısı YALNIZ yurtdışı (EXPORT) sevkte zorunlu — yurtiçi sevk
-  // kg'sız çıkabilir (backend assertReadyInvariants ile birebir). Çuval kodu addSack'te
-  // otomatik (AMB%05d) atandığından pratikte hep doludur → "Çuval Depoya"/"Hemen Sevk Et"
-  // yurtiçinde tartı beklemeden aktif olur.
-  const requireWeigh = currentDestination === 'EXPORT';
-  const canReady =
-    !isDraft &&
-    hasContent &&
-    sacks.length > 0 &&
-    looseRolls.length === 0 &&
-    (!requireWeigh || unweighed.length === 0) &&
-    uncoded.length === 0;
+  // ── Sevk kısıtları ──
+  const sealedBranchIds = [...new Set(sealedSacks.map((s) => s.branch?.id ?? '∅'))];
+  const requireWeigh = destination === 'EXPORT';
+  const unweighedSealed = sealedSacks.filter((s) => (s.weightKg ?? 0) <= 0);
+  const canShip =
+    sealedSacks.length > 0 &&
+    sealedBranchIds.length === 1 &&
+    (!requireWeigh || unweighedSealed.length === 0);
 
-  let readyHint = '';
-  if (!hasContent) readyHint = 'Önce çuvala top/kartela okut.';
-  else if (sacks.length === 0) readyHint = 'En az bir çuval aç.';
-  else if (looseRolls.length > 0) readyHint = `${looseRolls.length} top henüz çuvalda değil.`;
-  else if (requireWeigh && unweighed.length > 0) readyHint = `${unweighed.length} çuval tartılmadı (yurtdışı).`;
-  else if (uncoded.length > 0) readyHint = `${uncoded.length} çuvalın kodu girilmedi.`;
+  let shipHint = '';
+  if (sealedSacks.length === 0) shipHint = 'Mühürlü çuval yok — çuval doldur, tart, mühürle.';
+  else if (sealedBranchIds.length > 1) shipHint = 'Mühürlü çuvallar farklı şubelerde — Sevk Kapısı’ndan kur.';
+  else if (requireWeigh && unweighedSealed.length > 0) shipHint = `${unweighedSealed.length} mühürlü çuval tartısız (yurtdışı).`;
 
-  const covRows = ship
-    ? ship.orders.flatMap((o) =>
-        o.lines.map((l) => ({
-          key: l.lineId,
-          order: o.orderNumber,
-          name: dualName(l.item.name, l.customerItemName),
-          colorName: l.color ? dualName(l.color.name, l.customerColorName) : null,
-          width: l.width,
-          openQty: l.openQty,
-          thisShipment: l.thisShipment,
-        })),
-      )
-    : draftOrders.flatMap((o) =>
-        o.lines.map((l) => ({
-          key: l.lineId,
-          order: o.order.orderNumber,
-          name: dualName(l.item.name, l.customerItemName),
-          colorName: l.color ? dualName(l.color.name, l.customerColorName) : null,
-          width: l.width,
-          openQty: l.openQty,
-          thisShipment: 0,
-        })),
-      );
-
-  const okCount = covRows.filter((r) => r.openQty - r.thisShipment <= 0).length;
-  const covTotal = covRows.length;
-  const covProgress = covTotal > 0 ? okCount / covTotal : 0;
-  // Kamera modalı canlı sayacı — toplam metre (fazla okutmada gerçek rakam, kısıtlama yok).
-  const totalWanted = covRows.reduce((a, r) => a + r.openQty, 0);
-  const totalScanned = covRows.reduce((a, r) => a + r.thisShipment, 0);
-
-  const loadingReal = shipmentId !== null && (shipQ.isLoading || !ship);
-
-  const openWeigh = (s: { id: string; seq: number; weightKg: number | null; manualCode: string | null }) => {
-    setWeighTarget({ id: s.id, seq: s.seq });
-    setWeighKg(s.weightKg != null ? String(s.weightKg) : '');
-    // Kod TEK sunucu kaynağından gelir (SACK_CODE_TEMPLATE — çuval açılışında
-    // otomatik atanır, buraya dolu düşer). Eski istemci-tarafı <uuid>-DDMMYY-NNN
-    // önerisi kaldırıldı: sunucu şablonuyla çelişen ikinci bir "otomatik" şemaydı.
-    // Boş kod yalnız şablon-öncesi eski çuvallarda görülür — elle girilir.
-    setWeighCode(s.manualCode?.trim() ? s.manualCode : '');
+  const openWeigh = (sk: PoolSack) => {
+    setWeighTarget({ id: sk.id, label: sackCode(sk) });
+    setWeighKg(sk.weightKg != null ? String(sk.weightKg) : '');
+    setWeighCode(sk.manualCode?.trim() ? sk.manualCode : '');
   };
+
+  const trySeal = (sk: PoolSack) => {
+    if (!sk.manualCode?.trim()) {
+      Toast.show({ type: 'info', text1: 'Önce çuval kodu gir', text2: 'Mühürlemek için kod (ve varsa tartı) gerekli.' });
+      openWeigh(sk);
+      return;
+    }
+    if (sk.rollCount + sk.swatchCount === 0) {
+      Toast.show({ type: 'info', text1: 'Boş çuval mühürlenemez', text2: 'Önce top/kartela okut.' });
+      return;
+    }
+    sealMut.mutate(sk.id);
+  };
+
+  const loadingReal = poolQ.isLoading || !pool;
 
   return (
     <ScreenChrome
       title=""
       onStepBack={() => nav.goBack()}
       headerExtras={
-        <>
-          <RefreshButton
-            headerStyle
-            onPress={refresh.onRefresh}
-            refreshing={refresh.refreshing}
-            isError={refresh.isError}
-            errorMessage={refresh.errorMessage}
-            successMessage={refresh.successMessage}
-          />
-          {!isDraft && (
-            <>
-              {hasContent && (
-                <Appbar.Action
-                  icon={printing ? () => <ActivityIndicator size={18} color={colors.textOnDark} /> : 'file-document-outline'}
-                  color={colors.textOnDark}
-                  disabled={printing}
-                  onPress={printNote}
-                  accessibilityLabel="Sevk irsaliyesi yazdır"
-                />
-              )}
-              <Appbar.Action
-                icon="trash-can-outline"
-                color={colors.textOnDark}
-                onPress={() => setCancelOpen(true)}
-                accessibilityLabel="Sevkiyatı iptal et"
-              />
-            </>
-          )}
-        </>
+        <RefreshButton
+          headerStyle
+          onPress={refresh.onRefresh}
+          refreshing={refresh.refreshing}
+          isError={refresh.isError}
+          errorMessage={refresh.errorMessage}
+          successMessage={refresh.successMessage}
+        />
       }
     >
-      {/* Sevkiyat başlık şeridi — telefonda topbar'a sığmayan "Paketleme" + sevkiyat
-          kodu burada, koyu temada yan yana; sığmazsa yatay kayar. */}
       <View style={styles.subBar}>
         <ScrollView
           horizontal
@@ -743,19 +525,19 @@ export default function PaketlemeScreen() {
           <Icon source="package-variant-closed" size={14} color={colors.textOnDarkMuted} />
           <Text style={styles.subBarTitle}>Paketleme</Text>
           <View style={styles.subBarDivider} />
-          <Text style={styles.subBarCode}>{ship?.shipmentNo ?? 'Yeni · kaydedilmedi'}</Text>
+          <Text style={styles.subBarCode}>{customer?.name ?? '—'}</Text>
         </ScrollView>
       </View>
 
       {loadingReal ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator color={colors.brand} />
-          <Text style={styles.loadingText}>Sevkiyat yükleniyor…</Text>
+          <Text style={styles.loadingText}>Çuvallar yükleniyor…</Text>
         </View>
       ) : (
         <>
           <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>
-            {/* ── Hero: müşteri + KPI + karşılama ── */}
+            {/* ── Hero: müşteri + KPI + kapsam ── */}
             <AnimatedEntrance index={0}>
               <Surface style={styles.hero} elevation={0}>
                 <View style={styles.heroTop}>
@@ -764,51 +546,43 @@ export default function PaketlemeScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.heroCustomer} numberOfLines={1}>
-                      {cust?.name ?? '—'}
+                      {customer?.name ?? '—'}
                     </Text>
-                    {branch ? (
-                      <Text style={styles.heroBranch} numberOfLines={1}>
-                        {branch.name}
-                      </Text>
-                    ) : null}
+                    <Text style={styles.heroBranch} numberOfLines={1}>
+                      Çuval Havuzu · {openSacks.length} açık · {sealedSacks.length} mühürlü
+                    </Text>
                   </View>
-                  {isDraft && (
-                    <View style={styles.draftChip}>
-                      <Text style={styles.draftChipText}>Taslak</Text>
-                    </View>
-                  )}
                 </View>
 
                 <View style={styles.kpiRow}>
                   <View style={styles.kpi}>
-                    <Text style={styles.kpiNum}>{summary.rollCount}</Text>
+                    <Text style={styles.kpiNum}>{rollCount}</Text>
                     <Text style={styles.kpiLabel}>top</Text>
                   </View>
                   <View style={styles.kpiSep} />
                   <View style={styles.kpi}>
-                    <Text style={styles.kpiNum}>{summary.sackCount}</Text>
+                    <Text style={styles.kpiNum}>{sacks.length}</Text>
                     <Text style={styles.kpiLabel}>çuval</Text>
                   </View>
                   <View style={styles.kpiSep} />
                   <View style={styles.kpi}>
-                    <Text style={styles.kpiNum}>{summary.totalKg.toLocaleString('tr-TR')}</Text>
+                    <Text style={styles.kpiNum}>{totalKg.toLocaleString('tr-TR')}</Text>
                     <Text style={styles.kpiLabel}>kg brüt</Text>
                   </View>
                 </View>
 
-                {summary.swatchCount > 0 && (
-                  <Text style={styles.swatchNote}>+{summary.swatchCount} kartela okutuldu</Text>
+                {swatchCount > 0 && (
+                  <Text style={styles.swatchNote}>+{swatchCount} kartela okutuldu</Text>
                 )}
 
-                {/* Saha #19: yurtiçi/yurtdışı — yurtiçi default, yurtdışında tartı zorunlu */}
+                {/* Saha #19: yurtiçi/yurtdışı — sevk kurulumunda kullanılır (yurtdışı: tartı zorunlu) */}
                 <View style={styles.destRow}>
                   {(['DOMESTIC', 'EXPORT'] as const).map((d) => {
-                    const active = currentDestination === d;
+                    const active = destination === d;
                     return (
                       <TouchableRipple
                         key={d}
                         onPress={() => !active && setDestination(d)}
-                        disabled={destMut.isPending}
                         style={[
                           styles.destChip,
                           active && (d === 'EXPORT' ? styles.destChipExport : styles.destChipActive),
@@ -821,111 +595,13 @@ export default function PaketlemeScreen() {
                       </TouchableRipple>
                     );
                   })}
-                  {currentDestination === 'EXPORT' && (
-                    <Text style={styles.destHint}>çuval tartısı zorunlu</Text>
-                  )}
+                  {destination === 'EXPORT' && <Text style={styles.destHint}>çuval tartısı zorunlu</Text>}
                 </View>
-
-                {covTotal > 0 && (
-                  <View style={styles.coverWrap}>
-                    <View style={styles.coverHead}>
-                      <Text style={styles.coverLabel}>Karşılama</Text>
-                      <Text style={styles.coverCount}>
-                        {okCount}/{covTotal} satır tamam
-                      </Text>
-                    </View>
-                    <ProgressBar progress={covProgress} color={colors.successDark} style={styles.progress} />
-                  </View>
-                )}
               </Surface>
             </AnimatedEntrance>
 
-            {/* ── Karşılama detayı ── */}
-            {covTotal > 0 && (
-              <AnimatedEntrance index={1}>
-                <Surface style={styles.card} elevation={0}>
-                  <Text style={styles.cardTitle}>Karşılama</Text>
-                  {covRows.map((r, i) => {
-                    const remaining = Math.max(0, r.openQty - r.thisShipment);
-                    const ok = remaining <= 0;
-                    const progress = r.openQty > 0 ? Math.min(1, r.thisShipment / r.openQty) : ok ? 1 : 0;
-                    return (
-                      <View key={r.key} style={[styles.covRow, i > 0 && styles.rowBorder]}>
-                        <Text style={styles.covSpec} numberOfLines={2}>
-                          {r.order} · {r.name}
-                          {r.colorName ? ` · ${r.colorName}` : ''}
-                          {r.width ? ` · ${r.width}cm` : ''}
-                        </Text>
-
-                        <Text style={styles.covNums}>
-                          <Text style={styles.covNumLabel}>okutulan </Text>
-                          <Text style={[styles.covNumValue, { color: ok ? colors.successDark : colors.brand }]}>
-                            {mText(r.thisShipment)}
-                          </Text>
-                          <Text style={styles.covNumLabel}> / istenen </Text>
-                          <Text style={styles.covNumValue}>{mText(r.openQty)}</Text>
-                          <Text style={styles.covNumLabel}> m</Text>
-                        </Text>
-
-                        <View style={styles.covBarRow}>
-                          <ProgressBar
-                            progress={progress}
-                            color={ok ? colors.successDark : colors.brand}
-                            style={styles.covBar}
-                          />
-                          <Text style={[styles.covStatus, ok ? styles.covStatusOk : styles.covStatusShort]}>
-                            {ok
-                              ? r.thisShipment > r.openQty
-                                ? `✓ +${mText(r.thisShipment - r.openQty)}m fazla`
-                                : '✓ tamam'
-                              : `${mText(remaining)} m eksik`}
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </Surface>
-              </AnimatedEntrance>
-            )}
-
-            {/* ── Çuvalsız toplar (olmaması beklenir; defansif) ── */}
-            {looseRolls.length > 0 && (
-              <AnimatedEntrance index={2}>
-                <Surface style={[styles.card, styles.warnCard]} elevation={0}>
-                  <Text style={styles.cardTitle}>Çuvalsız Toplar ({looseRolls.length})</Text>
-                  <Text style={styles.emptyHint}>Bu toplar bir çuvala konmalı (Sevke Hazır için).</Text>
-                  {looseRolls.map((r, i) => (
-                    <View key={r.id} style={[styles.itemRow, i > 0 && styles.rowBorder]}>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.barcodeChip}>
-                          <Text style={styles.barcodeChipText}>{r.barcode ?? '—'}</Text>
-                        </View>
-                        <Text style={styles.covMeta}>
-                          {r.item.name}
-                          {r.color ? ` · ${r.color.name}` : ''} · {mText(r.currentQty)}m
-                        </Text>
-                      </View>
-                      <IconButton
-                        icon="sack"
-                        size={22}
-                        iconColor={colors.brand}
-                        onPress={() => setMoveTarget({ rollId: r.id, fromSackId: null, label: r.barcode ?? r.item.name })}
-                        accessibilityLabel="Çuvala ekle"
-                      />
-                      <IconButton
-                        icon="close-circle"
-                        size={22}
-                        iconColor={colors.danger}
-                        onPress={() => removeRollMut.mutate(r.id)}
-                      />
-                    </View>
-                  ))}
-                </Surface>
-              </AnimatedEntrance>
-            )}
-
-            {/* ── Çuvallar (içerikleriyle) ── */}
-            <AnimatedEntrance index={3}>
+            {/* ── Çuvallar ── */}
+            <AnimatedEntrance index={1}>
               <Surface style={styles.card} elevation={0}>
                 <View style={styles.cardHeadRow}>
                   <Text style={styles.cardTitle}>Çuvallar ({sacks.length})</Text>
@@ -940,12 +616,11 @@ export default function PaketlemeScreen() {
                   </Button>
                 </View>
 
-                {/* Saha #8: çok çuvalda arama/atla — kod veya sıra no ile */}
                 {isLargeSackList && (
                   <TextInput
                     mode="outlined"
                     dense
-                    placeholder="Çuval ara (kod veya sıra no)…"
+                    placeholder="Çuval ara (kod)…"
                     value={sackSearch}
                     onChangeText={setSackSearch}
                     left={<TextInput.Icon icon="magnify" />}
@@ -966,27 +641,35 @@ export default function PaketlemeScreen() {
                   <Text style={styles.sackEmpty}>“{sackSearch}” ile eşleşen çuval yok.</Text>
                 ) : (
                   visibleSacks.map((s) => {
-                    const active = s.id === activeSackId;
+                    const active = s.id === activeSackId && !s.sealed;
+                    const num = sacks.indexOf(s) + 1;
                     return (
-                      <View key={s.id} style={[styles.sackCard, active && styles.sackCardActive]}>
-                        {/* Bilgi alanı = seçici (aktif çuval); ikonlar AYRI kardeş.
-                            İç içe touchable yarışı (tartı modalı bazen açılmıyordu) önlenir. */}
+                      <View key={s.id} style={[styles.sackCard, active && styles.sackCardActive, s.sealed && styles.sackCardSealed]}>
                         <View style={styles.sackHeadRow}>
                           <TouchableRipple
-                            onPress={() => setActiveSack(s.id)}
+                            onPress={() => !s.sealed && setActiveSack(s.id)}
                             style={styles.sackHeadTap}
                             borderless={false}
                           >
                             <View style={styles.sackHeadTapInner}>
                               <View style={[styles.sackIcon, active && styles.sackIconActive]}>
-                                <Icon source="sack" size={18} color={active ? colors.brand : colors.textSecondary} />
+                                <Icon
+                                  source={s.sealed ? 'lock' : 'sack'}
+                                  size={18}
+                                  color={s.sealed ? colors.successText : active ? colors.brand : colors.textSecondary}
+                                />
                               </View>
                               <View style={{ flex: 1 }}>
                                 <View style={styles.sackTitleRow}>
-                                  <Text style={styles.sackLabel}>Çuval {s.seq}</Text>
+                                  <Text style={styles.sackLabel}>Çuval {num}</Text>
                                   {active && (
                                     <View style={styles.activeTag}>
                                       <Text style={styles.activeTagText}>aktif</Text>
+                                    </View>
+                                  )}
+                                  {s.sealed && (
+                                    <View style={styles.sealedTag}>
+                                      <Text style={styles.sealedTagText}>mühürlü</Text>
                                     </View>
                                   )}
                                 </View>
@@ -994,43 +677,39 @@ export default function PaketlemeScreen() {
                                   {s.rollCount} top
                                   {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''} · {kgText(s.weightKg)}
                                 </Text>
-                                <Text
-                                  style={[
-                                    styles.sackMeta,
-                                    !s.manualCode?.trim() && styles.sackMetaWarn,
-                                  ]}
-                                >
+                                <Text style={[styles.sackMeta, !s.manualCode?.trim() && styles.sackMetaWarn]}>
                                   {s.manualCode?.trim() ? `Kod: ${s.manualCode}` : 'Kod girilmedi'}
                                 </Text>
                               </View>
                             </View>
                           </TouchableRipple>
-                          <IconButton
-                            icon="scale"
-                            size={22}
-                            iconColor={colors.textSecondary}
-                            onPress={() => openWeigh(s)}
-                            accessibilityLabel="Çuvalı tart"
-                          />
+                          {!s.sealed && (
+                            <IconButton
+                              icon="scale"
+                              size={22}
+                              iconColor={colors.textSecondary}
+                              onPress={() => openWeigh(s)}
+                              accessibilityLabel="Çuvalı tart / kod gir"
+                            />
+                          )}
                           <IconButton
                             icon="trash-can-outline"
                             size={22}
                             iconColor={colors.danger}
                             onPress={() =>
                               s.rollCount > 0 || s.swatchCount > 0
-                                ? setRemoveSackTarget(s) // dolu → önce onay (toplar depoya döner)
-                                : removeSackMut.mutate({ sackId: s.id }) // boş → sessizce sil
+                                ? setRemoveSackTarget(s)
+                                : removeSackMut.mutate({ sackId: s.id })
                             }
                             accessibilityLabel="Çuvalı sil"
                           />
                         </View>
 
-                        {s.rolls.length === 0 && s.swatchCount === 0 ? (
+                        {s.rollCount + s.swatchCount === 0 ? (
                           <Text style={styles.sackEmpty}>
                             {active ? 'Boş — “Top Okut” ile bu çuvala ekle' : 'Boş'}
                           </Text>
                         ) : !expandContent(s.id) ? (
-                          // Saha #8: büyük listede içerik gizli (özet başlıkta) — dokun=aç
                           <Text style={styles.sackCollapsed}>
                             {s.rollCount} top — içeriği görmek için çuvala dokun
                           </Text>
@@ -1039,14 +718,13 @@ export default function PaketlemeScreen() {
                             {s.rolls.map((r) => (
                               <View key={r.id} style={styles.sackRollRow}>
                                 <View style={{ flex: 1 }}>
-                                  {/* Barkod tek satır; sığmazsa OTOMATIK kayar (marquee). */}
                                   <MarqueeText text={r.barcode ?? '—'} style={styles.sackRollBarcode} />
                                   <Text style={styles.covMeta}>
                                     {r.item.name}
                                     {r.color ? ` · ${r.color.name}` : ''} · {mText(r.currentQty)}m
                                   </Text>
                                 </View>
-                                {sacks.length > 1 && (
+                                {!s.sealed && openSacks.length > 1 && (
                                   <IconButton
                                     icon="swap-horizontal"
                                     size={20}
@@ -1057,12 +735,14 @@ export default function PaketlemeScreen() {
                                     accessibilityLabel="Başka çuvala aktar"
                                   />
                                 )}
-                                <IconButton
-                                  icon="close-circle"
-                                  size={20}
-                                  iconColor={colors.danger}
-                                  onPress={() => removeRollMut.mutate(r.id)}
-                                />
+                                {!s.sealed && (
+                                  <IconButton
+                                    icon="close-circle"
+                                    size={20}
+                                    iconColor={colors.danger}
+                                    onPress={() => removeRollMut.mutate(r.id)}
+                                  />
+                                )}
                               </View>
                             ))}
                             {s.swatches.map((sw) => (
@@ -1071,26 +751,45 @@ export default function PaketlemeScreen() {
                                   <Text style={styles.covMeta}>
                                     Kartela · {sw.item?.name ?? '—'}
                                     {sw.color ? ` · ${sw.color.name}` : ''}
-                                    {sw.length != null ? ` · ${Math.round(sw.length)}cm` : ''}
                                   </Text>
                                 </View>
                               </View>
                             ))}
                           </View>
                         )}
+
+                        {/* Çuval aksiyonu: aç → Mühürle; mühürlü → Mührü Aç */}
+                        <View style={styles.sackActionRow}>
+                          {s.sealed ? (
+                            <Button
+                              compact
+                              mode="text"
+                              icon="lock-open-variant-outline"
+                              textColor={colors.warningText}
+                              loading={reopenMut.isPending && reopenMut.variables === s.id}
+                              onPress={() => reopenMut.mutate(s.id)}
+                            >
+                              Mührü Aç
+                            </Button>
+                          ) : (
+                            <Button
+                              compact
+                              mode="contained-tonal"
+                              icon="lock-check-outline"
+                              loading={sealMut.isPending && sealMut.variables === s.id}
+                              onPress={() => trySeal(s)}
+                            >
+                              Mühürle
+                            </Button>
+                          )}
+                        </View>
                       </View>
                     );
                   })
                 )}
 
-                {/* Saha #8: pencereleme — gizli çuvalları aç */}
                 {hiddenSackCount > 0 && (
-                  <Button
-                    mode="text"
-                    icon="chevron-down"
-                    onPress={() => setShowAllSacks(true)}
-                    style={{ marginTop: 4 }}
-                  >
+                  <Button mode="text" icon="chevron-down" onPress={() => setShowAllSacks(true)} style={{ marginTop: 4 }}>
                     {hiddenSackCount} çuval daha göster
                   </Button>
                 )}
@@ -1103,55 +802,26 @@ export default function PaketlemeScreen() {
             </AnimatedEntrance>
           </ScrollView>
 
-          {/* ── Sabit alt: Çuval Depoya Kaldır + (onay açık → Kapı Önüne Koy / kapalı → Hemen Sevk Et) ── */}
+          {/* ── Sabit alt: Hemen Sevk Et + okutma ── */}
           <View style={styles.footer}>
-            {!canReady && <Text style={styles.footerHint}>{readyHint || 'Çuvala top okut.'}</Text>}
+            {!canShip && <Text style={styles.footerHint}>{shipHint || 'Çuvala top okut, tart, mühürle.'}</Text>}
             <View style={styles.footerRow}>
               <Button
-                mode="contained-tonal"
-                icon="warehouse"
-                disabled={!canReady || readyMut.isPending || moveToDoorMut.isPending || dispatchMut.isPending}
-                loading={readyMut.isPending}
-                onPress={() => readyMut.mutate()}
+                mode="contained"
+                icon="truck-fast"
+                buttonColor={colors.successDark}
+                disabled={!canShip || shipMut.isPending}
+                loading={shipMut.isPending}
+                onPress={() => shipMut.mutate()}
                 style={styles.footerBtnFlex}
                 contentStyle={styles.footerBtnContent}
               >
-                Çuval Depoya
+                {confirmationEnabled
+                  ? `Sevkiyat Kur → Kapı Önü${sealedSacks.length > 0 ? ` (${sealedSacks.length})` : ''}`
+                  : `Hemen Sevk Et${sealedSacks.length > 0 ? ` (${sealedSacks.length})` : ''}`}
               </Button>
-              {confirmationEnabled ? (
-                // Onay açık: kapı önüne koy → çıkış ("Alındı") Sevk Çıkışı'ndan onaylanır.
-                <Button
-                  mode="contained"
-                  icon="truck-fast"
-                  buttonColor={colors.successDark}
-                  disabled={!canReady || readyMut.isPending || moveToDoorMut.isPending}
-                  loading={moveToDoorMut.isPending}
-                  onPress={() => moveToDoorMut.mutate()}
-                  style={styles.footerBtnFlex}
-                  contentStyle={styles.footerBtnContent}
-                >
-                  Kapı Önüne Koy
-                </Button>
-              ) : (
-                // Onay kapalı: hemen sevk et (stok düşer, müşteriye gitti).
-                <Button
-                  mode="contained"
-                  icon="truck-fast"
-                  buttonColor={colors.successDark}
-                  disabled={!canReady || readyMut.isPending || dispatchMut.isPending}
-                  loading={dispatchMut.isPending}
-                  onPress={() => dispatchMut.mutate()}
-                  style={styles.footerBtnFlex}
-                  contentStyle={styles.footerBtnContent}
-                >
-                  Hemen Sevk Et
-                </Button>
-              )}
             </View>
 
-            {/* ── En altta sabit: Listeden Seç + Top Okut (en sık aksiyon, baş parmağa
-                en yakın) — depo/sevk butonlarının da altında durur. Kamera çalışsa bile
-                operatör depodan listeyle de top seçebilir. ── */}
             <View style={styles.scanRow}>
               <Button
                 mode="contained-tonal"
@@ -1180,7 +850,7 @@ export default function PaketlemeScreen() {
                 contentStyle={styles.scanBtnContent}
                 labelStyle={styles.scanBtnLabel}
               >
-                {activeSeq ? `Top Okut → Çuval ${activeSeq}` : 'Top Okut'}
+                {activeLabel ? `Top Okut → ${activeLabel}` : 'Top Okut'}
               </Button>
             </View>
           </View>
@@ -1191,9 +861,8 @@ export default function PaketlemeScreen() {
         visible={scanOpen}
         onDismiss={() => setScanOpen(false)}
         onScan={handleScan}
-        title={activeSeq ? `Çuval ${activeSeq}'e okut` : 'Depodan top okut'}
-        notice={activeSeq ? undefined : 'Taradığın toplar otomatik ilk çuvala eklenir.'}
-        counter={covTotal > 0 ? { scanned: totalScanned, expected: totalWanted } : undefined}
+        title={activeLabel ? `${activeLabel}'e okut` : 'Depodan top okut'}
+        notice={activeLabel ? undefined : 'Taradığın toplar otomatik ilk çuvala eklenir.'}
         continuous
       />
 
@@ -1208,9 +877,9 @@ export default function PaketlemeScreen() {
           void handleScan(roll.barcode ?? '');
         }}
         filters={{ status: 'WAREHOUSE', shipmentScope: 'free' }}
-        title={activeSeq ? `Çuval ${activeSeq}'e Top Seç` : 'Depodan Top Seç'}
+        title={activeLabel ? `${activeLabel}'e Top Seç` : 'Depodan Top Seç'}
         subtitle="Serbest depodaki toplar · seçince çuvala eklenir"
-        excludeIds={[...pickedIds, ...rolls.map((r) => r.id)]}
+        excludeIds={[...pickedIds, ...sacks.flatMap((s) => s.rolls.map((r) => r.id))]}
         emptyText="Serbest depoda top yok"
         accent={colors.brand}
       />
@@ -1221,9 +890,7 @@ export default function PaketlemeScreen() {
         onAdd={addKartelaFromStock}
       />
 
-      {/* Çuval kapat: kod + brüt tartı (ikisi de zorunlu). marginBottom → center
-          yerleşiminde diyalogu yukarı kaydırır (kod+kg girişinde klavye altta
-          modalı örtmesin diye biraz yukarıda dursun). */}
+      {/* Çuval tart + kod (mühürlemeden önce). */}
       <AppModal
         visible={weighTarget !== null}
         onDismiss={() => setWeighTarget(null)}
@@ -1231,7 +898,7 @@ export default function PaketlemeScreen() {
       >
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
-            Çuval {weighTarget?.seq} — Kod + Brüt Tartı
+            {weighTarget?.label} — Kod + Brüt Tartı
           </Text>
           <TextInput
             mode="outlined"
@@ -1244,7 +911,7 @@ export default function PaketlemeScreen() {
           />
           <TextInput
             mode="outlined"
-            label="Brüt ağırlık (kg)"
+            label="Brüt ağırlık (kg) — opsiyonel"
             keyboardType="decimal-pad"
             value={weighKg}
             onChangeText={setWeighKg}
@@ -1267,10 +934,14 @@ export default function PaketlemeScreen() {
               buttonColor={colors.successDark}
               style={styles.actionBtn}
               loading={weighSackMut.isPending}
-              disabled={weighSackMut.isPending || !(parseFloat(weighKg) > 0) || !weighCode.trim()}
+              disabled={weighSackMut.isPending || !weighCode.trim() || (!!weighKg && !(parseFloat(weighKg) > 0))}
               onPress={() =>
                 weighTarget &&
-                weighSackMut.mutate({ sackId: weighTarget.id, kg: parseFloat(weighKg), code: weighCode })
+                weighSackMut.mutate({
+                  sackId: weighTarget.id,
+                  kg: weighKg && parseFloat(weighKg) > 0 ? parseFloat(weighKg) : null,
+                  code: weighCode,
+                })
               }
             >
               Kaydet
@@ -1279,7 +950,7 @@ export default function PaketlemeScreen() {
         </Surface>
       </AppModal>
 
-      {/* Aktarma modalı — topu başka çuvala taşı */}
+      {/* Aktarma modalı — topu başka açık çuvala taşı */}
       <AppModal visible={moveTarget !== null} onDismiss={() => setMoveTarget(null)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
@@ -1287,7 +958,7 @@ export default function PaketlemeScreen() {
           </Text>
           <Text style={styles.covMeta}>{moveTarget?.label}</Text>
           <ScrollView style={{ maxHeight: 280, marginTop: spacing.sm }}>
-            {sacks
+            {openSacks
               .filter((s) => s.id !== moveTarget?.fromSackId)
               .map((s) => (
                 <Button
@@ -1300,11 +971,11 @@ export default function PaketlemeScreen() {
                   disabled={moveRollMut.isPending}
                   onPress={() => moveTarget && moveRollMut.mutate({ rollId: moveTarget.rollId, sackId: s.id })}
                 >
-                  Çuval {s.seq} · {s.rollCount} top · {kgText(s.weightKg)}
+                  {sackCode(s)} · {s.rollCount} top · {kgText(s.weightKg)}
                 </Button>
               ))}
-            {sacks.filter((s) => s.id !== moveTarget?.fromSackId).length === 0 && (
-              <Text style={styles.emptyHint}>Başka çuval yok — önce yeni çuval aç.</Text>
+            {openSacks.filter((s) => s.id !== moveTarget?.fromSackId).length === 0 && (
+              <Text style={styles.emptyHint}>Başka açık çuval yok — önce yeni çuval aç.</Text>
             )}
           </ScrollView>
           <View style={styles.actions}>
@@ -1315,12 +986,11 @@ export default function PaketlemeScreen() {
         </Surface>
       </AppModal>
 
-      {/* Dolu çuval sil — kısa yol. Depoya dönecek toplar somut listelenir; onaylanınca
-          toplar tek tek çıkarılmadan çuval içeriğiyle silinir. */}
+      {/* Dolu çuval sil — depoya dönecek toplar somut listelenir. */}
       <AppModal visible={removeSackTarget !== null} onDismiss={() => setRemoveSackTarget(null)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
-            Çuval {removeSackTarget?.seq} Sil
+            {removeSackTarget ? sackCode(removeSackTarget) : ''} Sil
           </Text>
           <Text style={styles.covMeta}>
             Bu çuval silinince içindeki {removeSackTarget?.rollCount ?? 0} top depoya dönecek
@@ -1360,72 +1030,6 @@ export default function PaketlemeScreen() {
           </View>
         </Surface>
       </AppModal>
-
-      <AppModal visible={cancelOpen} onDismiss={() => setCancelOpen(false)}>
-        <Surface style={styles.sheet} elevation={4}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            Sevkiyatı İptal Et
-          </Text>
-          {cancelPreviewQ.isLoading || !cancelPreview ? (
-            <ActivityIndicator style={{ marginVertical: spacing.lg }} color={colors.brand} />
-          ) : (
-            <>
-              <Text style={styles.covMeta}>
-                {cancelPreview.rolls.length} top depoya dönecek
-                {cancelPreview.affectedOrders.length > 0
-                  ? ` · ${cancelPreview.affectedOrders.length} siparişin karşılanması geri alınacak`
-                  : ''}
-                .
-              </Text>
-              <ScrollView style={{ maxHeight: 200, marginTop: spacing.sm }}>
-                {cancelPreview.rolls.map((r) => (
-                  <Text key={r.id} style={styles.covMeta}>
-                    • {r.barcode ?? '—'} · {r.itemName}
-                    {r.colorName ? ` · ${r.colorName}` : ''} · {mText(r.currentQty)}m
-                  </Text>
-                ))}
-                {cancelPreview.affectedOrders.map((o) => (
-                  <Text key={o.orderNumber} style={styles.covMeta}>
-                    ↩ {o.orderNumber} · −{Math.round(Number(o.qty))}m
-                  </Text>
-                ))}
-              </ScrollView>
-            </>
-          )}
-          <View style={styles.actions}>
-            <Button onPress={() => setCancelOpen(false)} style={styles.actionBtn}>
-              Vazgeç
-            </Button>
-            <Button
-              mode="contained"
-              icon="close-circle"
-              buttonColor={colors.danger}
-              style={styles.actionBtn}
-              loading={cancelMut.isPending}
-              disabled={cancelMut.isPending || cancelPreview?.canCancel === false}
-              onPress={() => cancelMut.mutate()}
-            >
-              İptal Et
-            </Button>
-          </View>
-        </Surface>
-      </AppModal>
-
-      {/* Taslak koruması — sevkiyat oluşmadan çıkış onayı (usePreventRemove). */}
-      <ConfirmDialog
-        kind="destructive"
-        visible={leaveAction != null}
-        onDismiss={() => setLeaveAction(null)}
-        title="Sipariş seçimi kaydedilmedi"
-        description="Sevkiyat henüz oluşturulmadı — çıkarsan seçtiğin siparişler ve kapsam silinir, yeniden seçmen gerekir."
-        confirmLabel="Çık ve Sil"
-        cancelLabel="Kal"
-        onConfirm={() => {
-          const action = leaveAction;
-          setLeaveAction(null);
-          if (action) nav.dispatch(action);
-        }}
-      />
     </ScreenChrome>
   );
 }
@@ -1434,7 +1038,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
 
-  // ── Sevkiyat başlık şeridi (topbar altı, koyu tema, yatay kayar) ──
+  // ── Başlık şeridi (topbar altı, koyu tema, yatay kayar) ──
   subBar: {
     backgroundColor: palette.slate[800],
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1452,7 +1056,6 @@ const styles = StyleSheet.create({
   subBarCode: {
     fontSize: typography.size.sm,
     fontWeight: '700',
-    fontFamily: 'monospace',
     color: colors.textOnDark,
     letterSpacing: 0.3,
   },
@@ -1480,13 +1083,6 @@ const styles = StyleSheet.create({
   },
   heroCustomer: { fontSize: typography.size.lg, fontWeight: '700', color: colors.text },
   heroBranch: { fontSize: typography.size.sm, color: colors.textSecondary, marginTop: 1 },
-  draftChip: {
-    backgroundColor: colors.warningContainer,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  draftChipText: { fontSize: typography.size.xs, fontWeight: '700', color: colors.warningText },
 
   kpiRow: {
     flexDirection: 'row',
@@ -1503,7 +1099,6 @@ const styles = StyleSheet.create({
 
   swatchNote: { fontSize: typography.size.xs, color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' },
 
-  // Saha #19: yurtiçi/yurtdışı seçim çipleri
   destRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, justifyContent: 'center' },
   destChip: {
     paddingVertical: spacing.xs,
@@ -1518,20 +1113,6 @@ const styles = StyleSheet.create({
   destChipTextActive: { color: colors.textOnDark },
   destHint: { fontSize: typography.size.xs, color: colors.textSecondary, fontStyle: 'italic' },
 
-  coverWrap: { marginTop: spacing.lg },
-  coverHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  coverLabel: { fontSize: typography.size.sm, fontWeight: '700', color: colors.text },
-  coverCount: { fontSize: typography.size.xs, fontWeight: '600', color: colors.textSecondary },
-  progress: { height: 8, borderRadius: radius.full, backgroundColor: colors.surfaceSunken },
-
-  // ── Top Okut CTA (sabit footer'ın en altında) ──
-  scanBtn: { borderRadius: radius.md, marginTop: spacing.xs },
-  scanRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  listBtn: { borderRadius: radius.md },
-  scanBtnFlex: { flex: 1, borderRadius: radius.md },
-  scanBtnContent: { height: 54 },
-  scanBtnLabel: { fontSize: typography.size.base, fontWeight: '700', letterSpacing: 0.3 },
-
   // ── Kartlar ──
   card: {
     backgroundColor: colors.surface,
@@ -1540,37 +1121,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  warnCard: { borderColor: colors.warningText, backgroundColor: colors.warningContainer },
   cardTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
   cardHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
 
-  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-
-  // Karşılama satırı
-  covRow: { paddingVertical: spacing.md, gap: spacing.xs },
-  covSpec: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: '600' },
   covMeta: { fontSize: typography.size.xs, color: colors.textMuted, marginTop: 2 },
-
-  covNums: { marginTop: spacing.xs },
-  covNumLabel: { fontSize: typography.size.sm, color: colors.textMuted, fontWeight: '500' },
-  covNumValue: { fontSize: typography.size.xl, fontWeight: '700', color: colors.text },
-
-  covBarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
-  covBar: { flex: 1, height: 8, borderRadius: radius.full, backgroundColor: colors.surfaceSunken },
-  covStatus: { fontSize: typography.size.sm, fontWeight: '700' },
-  covStatusOk: { color: colors.successText },
-  covStatusShort: { color: colors.warningText },
-
-  // Genel satır (çuvalsız toplar)
-  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.sm },
-  barcodeChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.successContainer,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  barcodeChipText: { fontFamily: 'monospace', fontSize: typography.size.sm, fontWeight: '700', color: colors.successText },
 
   // ── Çuval kartı ──
   sackCard: {
@@ -1582,6 +1136,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   sackCardActive: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
+  sackCardSealed: { borderColor: colors.successText, backgroundColor: colors.successContainer },
   sackHeadRow: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
   sackHeadTap: { flex: 1 },
   sackHeadTapInner: {
@@ -1611,6 +1166,13 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   activeTagText: { fontSize: typography.size.xs, fontWeight: '700', color: colors.textOnDark },
+  sealedTag: {
+    backgroundColor: colors.successText,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 1,
+  },
+  sealedTagText: { fontSize: typography.size.xs, fontWeight: '700', color: colors.textOnDark },
 
   sackEmpty: {
     fontSize: typography.size.xs,
@@ -1634,6 +1196,15 @@ const styles = StyleSheet.create({
   },
   sackRollRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: 2 },
   sackRollBarcode: { fontFamily: 'monospace', fontSize: typography.size.sm, fontWeight: '700', color: colors.text },
+  sackActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: spacing.xs,
+  },
 
   // Boş durum
   empty: { alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.xs },
@@ -1650,13 +1221,16 @@ const styles = StyleSheet.create({
   },
   footerHint: { fontSize: typography.size.xs, color: colors.textMuted, textAlign: 'center' },
   footerBtnContent: { height: 54 },
-  footerBtnLabel: { fontSize: typography.size.base, fontWeight: '700', letterSpacing: 0.3 },
   footerRow: { flexDirection: 'row', gap: spacing.sm },
   footerBtnFlex: { flex: 1 },
 
+  scanRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  listBtn: { borderRadius: radius.md },
+  scanBtnFlex: { flex: 1, borderRadius: radius.md },
+  scanBtnContent: { height: 54 },
+  scanBtnLabel: { fontSize: typography.size.base, fontWeight: '700', letterSpacing: 0.3 },
+
   // ── Modal'lar ──
-  // width:'100%' — AppModal center'da contentStyle'sız çocuğa alignItems:'center'
-  // uygular; açık genişlik olmadan Surface içeriğe büzülüp "ince uzun" taşıyordu.
   sheet: { width: '100%', borderRadius: radius.lg, padding: spacing.lg, backgroundColor: colors.surface },
   sheetTitle: { fontWeight: '700', marginBottom: spacing.xs, color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },

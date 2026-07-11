@@ -1,10 +1,11 @@
 // =============================================================================
 // Sipariş kalemi kapsama (coverage) — GEVŞEK / HİBRİT MODEL
 // =============================================================================
-// Top→sipariş bağı yok; kumaş spec (ürün+renk+en) bazında fungible havuz. Bir
-// sipariş kaleminin "kapsaması" yalnız GERÇEKLEŞEN sevkten türetilir:
-//   coverage(L) = shipped(L) = OrderLine.shippedQty  (= Σ ShipmentAllocation.qty)
-//   open(L)     = quantity(L) − shipped(L)
+// Top→sipariş bağı yok; kumaş spec (ürün+renk+en) bazında fungible havuz. Bir sipariş
+// kaleminin "kapsaması" = sevk EDİLEN + ÇUVALLANMIŞ (havuz/planlı rezerv):
+//   coverage(L) = shipped(L) + packed(L)   (OrderLine.shippedQty + OrderLine.packedQty)
+//   open(L)     = quantity(L) − shipped(L) − packed(L)
+// Çuvallanmış mal fiziksel olarak üretilmiş+paketlenmiş → yeniden üretilmemeli (MRP).
 //
 // ESKİ pro-rata "plan rezervesi" KALDIRILDI. WorkOrderToOrderLine.allocatedQty
 // payına göre bölmek "saçma ondalık" (…,3714) üretiyordu ve sipariş üretime
@@ -39,18 +40,18 @@ const FINISHED_OUTPUT: RollStatus[] = [
 
 export interface LineCoverage {
   shipped: Prisma.Decimal;
-  /** Geriye uyumluluk için 0 — pro-rata plan rezervesi kaldırıldı. */
+  /** Çuvallanmış rezerv (OrderLine.packedQty) — havuz/planlı SackAllocation toplamı. */
   reserved: Prisma.Decimal;
-  /** shipped + reserved (= shipped). */
+  /** shipped + reserved (= shipped + packed). */
   coverage: Prisma.Decimal;
 }
 
 const D0 = () => new Prisma.Decimal(0);
 
 /**
- * Verilen sipariş satırları için kapsama (yalnız sevk) döner.
- * open = quantity − coverage = quantity − shipped. WO bağı kapsamayı ETKİLEMEZ
- * (gevşek model: sipariş ancak sevk edilince kapanır, üretime girince değil).
+ * Verilen sipariş satırları için kapsama (sevk + çuvallanmış rezerv) döner.
+ * open = quantity − coverage = quantity − shipped − packed. WO bağı kapsamayı ETKİLEMEZ
+ * (gevşek model: sipariş ancak sevk/çuvallamayla kapanır, üretime girince değil).
  */
 export async function computeLineCoverage(
   client: Client,
@@ -60,14 +61,15 @@ export async function computeLineCoverage(
   const ids = [...new Set(lineIds)];
   if (ids.length === 0) return result;
 
-  // Sevk edilen — satır bazlı denormalize alan (ShipmentAllocation toplamı).
+  // Sevk + çuvallanmış — satır bazlı denormalize alanlar (SackAllocation toplamları).
   const lineRows = await client.orderLine.findMany({
     where: { id: { in: ids } },
-    select: { id: true, shippedQty: true },
+    select: { id: true, shippedQty: true, packedQty: true },
   });
   for (const l of lineRows) {
     const shipped = new Prisma.Decimal(l.shippedQty);
-    result.set(l.id, { shipped, reserved: D0(), coverage: shipped });
+    const packed = new Prisma.Decimal(l.packedQty);
+    result.set(l.id, { shipped, reserved: packed, coverage: shipped.plus(packed) });
   }
   return result;
 }

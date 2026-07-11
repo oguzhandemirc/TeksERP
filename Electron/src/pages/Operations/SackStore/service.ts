@@ -3,7 +3,7 @@ import type { ApiResponse } from "@/types/api";
 import type { DispatchPayload, SackStoreListParams, SackStoreListResponse, ShipmentContents } from "./types";
 
 /**
- * Çuval Depo servisi — bağlanan paketli sevkler (READY/AT_DOOR) ve durum
+ * Sevk Kapısı servisi — havuzdan kurulmuş sevkler (PLANNED/AT_DOOR) ve durum
  * geçişleri. Liste HAFİF + cursor sayfalı + sunucu-aramalı (rulo içermez);
  * çuval+rulo dökümü karta tıklayınca `shipmentContents` ile lazy gelir.
  * apiClient interceptor hata mesajını zaten toast'lar (mutation onError yok).
@@ -29,22 +29,22 @@ export const sackStoreService = {
       .get<ApiResponse<ShipmentContents>>(`/api/shipping/shipments/${shipmentId}/sack-contents`)
       .then((r) => r.data),
 
-  /** READY → AT_DOOR ("Kapı Önüne Koy"). */
+  /** PLANNED → AT_DOOR ("Kapı Önüne Koy"). */
   moveToDoor: (id: string): Promise<ApiResponse<{ id: string }>> =>
     apiClient
       .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/move-to-door`, {})
       .then((r) => r.data),
 
-  /** AT_DOOR → READY ("Çuval Depoya Geri Çek"). */
+  /** AT_DOOR → PLANNED ("Geri Çek"). */
   pullBack: (id: string): Promise<ApiResponse<{ id: string }>> =>
     apiClient
       .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/pull-back`, {})
       .then((r) => r.data),
 
-  /** READY → PREPARING ("Hazırlığa Geri Al") — karşılanma geri alınır, içerik düzenlenebilir. */
-  unready: (id: string): Promise<ApiResponse<{ id: string }>> =>
+  /** PLANNED sevkiyattan çuvalı çıkar → çuval havuzuna geri döner. */
+  removeSack: (shipmentId: string, sackId: string): Promise<ApiResponse<unknown>> =>
     apiClient
-      .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/unready`, {})
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${shipmentId}/remove-sack`, { sackId })
       .then((r) => r.data),
 
   /** Sevk çıkışı ("Sevk Et" / "Alındı") — taşıma bilgileri opsiyonel. */

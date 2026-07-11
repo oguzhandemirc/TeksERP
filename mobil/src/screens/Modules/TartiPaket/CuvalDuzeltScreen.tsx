@@ -5,7 +5,6 @@ import {
   TextInput,
   Button,
   Divider,
-  List,
   Chip,
   ActivityIndicator,
   TouchableRipple,
@@ -16,7 +15,7 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import AppModal from '../../../components/AppModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
-import { packingService, type LocatedRoll } from '../../../services/packing.service';
+import { packingService, SHIPMENT_STATUS_TR, type LocatedRoll } from '../../../services/packing.service';
 import { rollService } from '../../../services/roll.service';
 import { colorService } from '../../../services/color.service';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
@@ -26,20 +25,15 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 
 // =============================================================================
-// Çuval Düzeltme (saha #3) — sevk edilmemiş çuvallardan top okutarak:
-//   • Çuvaldan Çıkar (depoya döner)  • Başka Çuvala Taşı  • İki Topu Takasla
-// READY/AT_DOOR'da da çalışır: backend tartıyı sıfırlar + karşılanmayı yeniden
-// yazar — operatöre uyarıda söylenir. Online-only (düzeltme akışı).
+// Çuval Düzeltme (saha #3) — top okutarak yerini bul, HAVUZ çuvalında düzelt:
+//   • Çuvaldan Çıkar (depoya döner)   • Başka Çuvala Taşı (hedef çuvaldan top okut)
+//   • Çuvalı Tart                     • Etiket Değiştir (renk/en/kalite + yeniden bas)
+// Yalnız AÇIK havuz çuvalları düzenlenebilir (mühürlü/sevkiyattaki çuval → backend
+// reddeder, net mesaj döner). Online-only (düzeltme akışı).
 // =============================================================================
 
-const STATUS_LABEL: Record<string, string> = {
-  PREPARING: 'Hazırlanıyor',
-  READY: 'Çuval Depo',
-  AT_DOOR: 'Kapı Önü',
-  DISPATCHED: 'Sevk Edildi',
-};
-
-const EDITABLE = new Set(['PREPARING', 'READY', 'AT_DOOR']);
+const sackLabel = (sack: { sackNo: string; manualCode: string | null }) =>
+  sack.manualCode?.trim() || sack.sackNo;
 
 export default function CuvalDuzeltScreen() {
   usePortraitLock(useDeviceType() === 'phone');
@@ -48,9 +42,8 @@ export default function CuvalDuzeltScreen() {
   const [barcode, setBarcode] = useState('');
   const [roll, setRoll] = useState<LocatedRoll | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
-  // Takas: 2. top okutma modunda mıyız?
-  const [swapScanOpen, setSwapScanOpen] = useState(false);
-  const [movePickOpen, setMovePickOpen] = useState(false);
+  // Taşıma: hedef çuvaldan bir top okutma modu.
+  const [moveScanOpen, setMoveScanOpen] = useState(false);
   const [weighOpen, setWeighOpen] = useState(false);
   const [weighKg, setWeighKg] = useState('');
   const [confirm, setConfirm] = useState<{ title: string; desc: string; run: () => void } | null>(null);
@@ -63,11 +56,6 @@ export default function CuvalDuzeltScreen() {
   const [rlQuality, setRlQuality] = useState('');
   const [reprintRoll, setReprintRoll] = useState<Roll | null>(null);
 
-  const committed = roll?.shipment && roll.shipment.status !== 'PREPARING';
-  const committedWarn = committed
-    ? ' Sevkiyat çuval depoda/kapı önünde: etkilenen çuvalların tartısı sıfırlanır (yeniden tartı gerekir) ve karşılanma güncellenir.'
-    : '';
-
   const locate = useMutation({
     mutationFn: (code: string) => packingService.locateRoll(code),
     onSuccess: (res) => setRoll(res.data ?? null),
@@ -78,43 +66,38 @@ export default function CuvalDuzeltScreen() {
     if (roll) locate.mutate(roll.barcode);
   };
   const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ['shipment'] });
+    void qc.invalidateQueries({ queryKey: ['pool-sacks'] });
+    void qc.invalidateQueries({ queryKey: ['pool'] });
     void qc.invalidateQueries({ queryKey: ['sack-store'] });
     void qc.invalidateQueries({ queryKey: ['rolls'] });
   };
 
+  // Havuz çuvalı düzenlenebilir mi: bir çuvalda + sevkiyata bağlı DEĞİL.
+  const editable = !!roll?.sack && !roll.shipment;
+
   const removeMut = useMutation({
-    mutationFn: () => packingService.removeRoll(roll!.shipment!.id, roll!.id),
+    mutationFn: () => packingService.removeRollFromSack(roll!.id),
     onSuccess: (res) => {
       Toast.show({ type: 'success', text1: res.message ?? 'Top çuvaldan çıkarıldı' });
       invalidate();
       relocate();
     },
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message }),
   });
 
   const moveMut = useMutation({
     mutationFn: (sackId: string) => packingService.moveRollToSack(roll!.id, sackId),
     onSuccess: (res) => {
       Toast.show({ type: 'success', text1: res.message ?? 'Top taşındı' });
-      setMovePickOpen(false);
       invalidate();
       relocate();
     },
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Taşınamadı', text2: e.message }),
   });
 
-  const swapMut = useMutation({
-    mutationFn: (otherRollId: string) => packingService.swapRollSacks(roll!.id, otherRollId),
-    onSuccess: (res) => {
-      Toast.show({ type: 'success', text1: res.message ?? 'Takas yapıldı' });
-      invalidate();
-      relocate();
-    },
-  });
-
-  // İçerik düzeltmesi tartıyı sıfırlar — yeniden tartı aynı ekrandan girilir
-  // (READY'de de çalışır; unready'siz akış kapanır).
+  // İçerik düzeltmesi tartıyı sıfırlar — yeniden tartı aynı ekrandan.
   const weighMut = useMutation({
-    mutationFn: (kg: number) => packingService.weighSack(roll!.sack!.id, kg),
+    mutationFn: (kg: number) => packingService.weighSack(roll!.sack!.id, { weightKg: kg }),
     onSuccess: () => {
       Toast.show({ type: 'success', text1: 'Çuval tartısı kaydedildi' });
       setWeighOpen(false);
@@ -122,6 +105,7 @@ export default function CuvalDuzeltScreen() {
       invalidate();
       relocate();
     },
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: e.message }),
   });
 
   // Saha #4: etiket (renk/en/kalite) değiştir — başarınca yeniden etiket bas.
@@ -153,50 +137,37 @@ export default function CuvalDuzeltScreen() {
       Toast.show({ type: 'success', text1: 'Etiket güncellendi', text2: 'Yeni etiket basılıyor…' });
       setRelabelOpen(false);
       invalidate();
-      // Yeniden bas — LabelPrinter roll objesi ister; minimal roll ile tetikle.
       if (roll) setReprintRoll({ id: roll.id, barcode: roll.barcode } as Roll);
       relocate();
     },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: e.message }),
   });
 
-  // Taşıma hedefi: aynı sevkiyatın diğer çuvalları (detaydan lazy).
-  const shipmentQ = useQuery({
-    queryKey: ['shipment', roll?.shipment?.id, 'cuval-duzelt'],
-    queryFn: () => packingService.getShipment(roll!.shipment!.id),
-    enabled: movePickOpen && !!roll?.shipment?.id,
-    staleTime: 10_000,
-  });
-  const targetSacks = (shipmentQ.data?.data.sacks ?? []).filter((s) => s.id !== roll?.sack?.id);
-
-  const handleSwapScan = (code: string) => {
-    setSwapScanOpen(false);
+  // Taşıma: hedef çuvaldaki bir topu okut → o topun çuvalına taşı.
+  const handleMoveScan = (code: string) => {
+    setMoveScanOpen(false);
     const trimmed = code.trim();
     if (!trimmed || !roll) return;
     if (trimmed === roll.barcode) {
-      Toast.show({ type: 'error', text1: 'Aynı top kendisiyle takas edilemez' });
+      Toast.show({ type: 'error', text1: 'Aynı topu okuttun', text2: 'Hedef çuvaldaki BAŞKA bir topu okut.' });
       return;
     }
-    // 2. topu önce bul — aynı sevkiyatta + çuvalda mı kontrolünü backend de yapar,
-    // ama kullanıcıya net mesaj için burada da locate edip doğruluyoruz.
     packingService
       .locateRoll(trimmed)
       .then((res) => {
         const other = res.data;
-        if (!other?.sack || other.shipment?.id !== roll.shipment?.id) {
-          Toast.show({
-            type: 'error',
-            text1: 'Takas yapılamaz',
-            text2: 'İkinci top aynı sevkiyatın bir çuvalında değil',
-          });
+        if (!other?.sack) {
+          Toast.show({ type: 'error', text1: 'Taşınamaz', text2: 'Okutulan top bir çuvalda değil.' });
+          return;
+        }
+        if (other.sack.id === roll.sack?.id) {
+          Toast.show({ type: 'info', text1: 'Top zaten bu çuvalda' });
           return;
         }
         setConfirm({
-          title: 'İki top takaslansın mı?',
-          desc:
-            `${roll.barcode} (Çuval ${roll.sack?.seq}) ↔ ${other.barcode} (Çuval ${other.sack.seq}).` +
-            committedWarn,
-          run: () => swapMut.mutate(other.id),
+          title: 'Top taşınsın mı?',
+          desc: `${roll.barcode} → ${sackLabel(other.sack)} çuvalı.`,
+          run: () => moveMut.mutate(other.sack!.id),
         });
       })
       .catch(() => {
@@ -204,10 +175,8 @@ export default function CuvalDuzeltScreen() {
       });
   };
 
-  const editable = roll?.shipment && EDITABLE.has(roll.shipment.status) && !!roll.sack;
-
   return (
-    <ScreenChrome title="Çuval Düzeltme" subtitle="Top okut → çıkar / taşı / takasla">
+    <ScreenChrome title="Çuval Düzeltme" subtitle="Top okut → çıkar / taşı">
       <ScrollView contentContainerStyle={styles.body}>
         {/* Barkod girişi */}
         <View style={styles.scanRow}>
@@ -235,7 +204,7 @@ export default function CuvalDuzeltScreen() {
               <Text variant="titleMedium" style={styles.mono}>
                 {roll.barcode}
               </Text>
-              <Chip compact>{STATUS_LABEL[roll.status] ?? roll.status}</Chip>
+              <Chip compact>{roll.status}</Chip>
             </View>
             <Text variant="bodyMedium" style={styles.dim}>
               {roll.item.name} · {roll.color?.name ?? 'Ham'}
@@ -246,26 +215,29 @@ export default function CuvalDuzeltScreen() {
             {roll.sack && roll.shipment ? (
               <>
                 <Text variant="bodyLarge" style={styles.loc}>
-                  Çuval {roll.sack.seq}
-                  {roll.sack.manualCode ? ` · ${roll.sack.manualCode}` : ''}
+                  {sackLabel(roll.sack)}
                   {roll.sack.weightKg != null ? ` · ${roll.sack.weightKg} kg` : ''}
                 </Text>
-                {roll.sack.weightKg == null && (
-                  <Text style={styles.warn}>Çuval tartısız — sevkten önce yeniden tartılmalı.</Text>
-                )}
                 <Text variant="bodyMedium" style={styles.dim}>
-                  {roll.shipment.shipmentNo} ({STATUS_LABEL[roll.shipment.status]}) ·{' '}
+                  {roll.shipment.shipmentNo} ({SHIPMENT_STATUS_TR[roll.shipment.status]}) ·{' '}
                   {roll.shipment.customer.name}
                   {roll.shipment.branch ? ` / ${roll.shipment.branch.name}` : ''}
                 </Text>
+                <Text style={styles.warn}>Sevkiyattaki çuval — düzeltme Sevk Çıkışı’ndan yapılır.</Text>
               </>
-            ) : roll.shipment ? (
-              <Text variant="bodyLarge" style={styles.loc}>
-                Sevkiyatta (çuvalsız) — {roll.shipment.shipmentNo}
-              </Text>
+            ) : roll.sack ? (
+              <>
+                <Text variant="bodyLarge" style={styles.loc}>
+                  {sackLabel(roll.sack)} (havuz çuvalı)
+                  {roll.sack.weightKg != null ? ` · ${roll.sack.weightKg} kg` : ''}
+                </Text>
+                {roll.sack.weightKg == null && (
+                  <Text style={styles.warn}>Çuval tartısız — mühürlemeden önce tartılmalı.</Text>
+                )}
+              </>
             ) : (
               <Text variant="bodyLarge" style={styles.loc}>
-                Bir çuvalda değil ({STATUS_LABEL[roll.status] ?? roll.status})
+                Bir çuvalda değil ({roll.status})
               </Text>
             )}
 
@@ -282,7 +254,7 @@ export default function CuvalDuzeltScreen() {
                   onPress={() =>
                     setConfirm({
                       title: 'Top çuvaldan çıkarılsın mı?',
-                      desc: `${roll.barcode} sevkiyattan çıkar, serbest depoya döner.${committedWarn}`,
+                      desc: `${roll.barcode} çuvaldan çıkar, serbest depoya döner.`,
                       run: () => removeMut.mutate(),
                     })
                   }
@@ -294,19 +266,10 @@ export default function CuvalDuzeltScreen() {
                   mode="contained-tonal"
                   icon="swap-horizontal"
                   disabled={moveMut.isPending}
-                  onPress={() => setMovePickOpen(true)}
+                  onPress={() => setMoveScanOpen(true)}
                   style={styles.actionBtn}
                 >
                   Başka Çuvala Taşı
-                </Button>
-                <Button
-                  mode="contained-tonal"
-                  icon="swap-vertical"
-                  disabled={swapMut.isPending}
-                  onPress={() => setSwapScanOpen(true)}
-                  style={styles.actionBtn}
-                >
-                  İki Topu Takasla
                 </Button>
                 <Button
                   mode={roll.sack?.weightKg == null ? 'contained' : 'contained-tonal'}
@@ -344,49 +307,19 @@ export default function CuvalDuzeltScreen() {
         }}
         title="Top Barkodu Okut"
       />
-      {/* Takas için 2. top */}
+      {/* Taşıma için hedef çuvaldan top */}
       <BarcodeScannerModal
-        visible={swapScanOpen}
-        onDismiss={() => setSwapScanOpen(false)}
-        onScan={handleSwapScan}
-        title="Takas Edilecek 2. Topu Okut"
+        visible={moveScanOpen}
+        onDismiss={() => setMoveScanOpen(false)}
+        onScan={handleMoveScan}
+        title="Hedef Çuvaldaki Bir Topu Okut"
       />
-
-      {/* Hedef çuval seçimi */}
-      <AppModal visible={movePickOpen} onDismiss={() => setMovePickOpen(false)} position="bottom">
-        <View style={styles.sheet}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            Hedef Çuval Seç
-          </Text>
-          {shipmentQ.isLoading ? (
-            <ActivityIndicator style={{ marginVertical: 24 }} />
-          ) : targetSacks.length === 0 ? (
-            <Text style={styles.dim}>Bu sevkiyatta başka çuval yok — önce Paketleme'den çuval açın.</Text>
-          ) : (
-            targetSacks.map((s) => (
-              <List.Item
-                key={s.id}
-                title={`Çuval ${s.seq}${s.manualCode ? ` · ${s.manualCode}` : ''}`}
-                description={s.weightKg != null ? `${s.weightKg} kg` : 'Tartılmamış'}
-                left={(p) => <List.Icon {...p} icon="sack" />}
-                onPress={() =>
-                  setConfirm({
-                    title: `Çuval ${s.seq}'e taşınsın mı?`,
-                    desc: `${roll?.barcode} → Çuval ${s.seq}.${committedWarn}`,
-                    run: () => moveMut.mutate(s.id),
-                  })
-                }
-              />
-            ))
-          )}
-        </View>
-      </AppModal>
 
       {/* Çuval tartısı — içerik düzeltmesi sonrası yeniden tartı */}
       <AppModal visible={weighOpen} onDismiss={() => setWeighOpen(false)} position="center">
         <View style={styles.sheet}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
-            Çuval {roll?.sack?.seq} — Brüt Tartı
+            {roll?.sack ? sackLabel(roll.sack) : 'Çuval'} — Brüt Tartı
           </Text>
           <TextInput
             mode="outlined"

@@ -73,7 +73,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
     header: "Tarih",
     cell: ({ row }) => {
       const s = row.original;
-      const d = s.dispatchedAt ?? s.readyAt ?? s.createdAt;
+      const d = s.dispatchedAt ?? s.createdAt;
       return (
         <span className="whitespace-nowrap text-xs tabular-nums">{safeFormat(d, "dd.MM.yyyy HH:mm")}</span>
       );

@@ -53,7 +53,9 @@ export interface BalanceLine {
   width: Prisma.Decimal | null;
   quantity: Prisma.Decimal;
   shipped: Prisma.Decimal;
-  /** istenen − sevk (brüt açık talep). */
+  /** çuvallanmış rezerv (OrderLine.packedQty). */
+  packed: Prisma.Decimal;
+  /** istenen − sevk − çuvallanmış (net açık talep). */
   remaining: Prisma.Decimal;
   /** istenen − sevk − canlı WO rezervesi = yeni WO'ya serbest tahsis tavanı. */
   open: Prisma.Decimal;
@@ -183,6 +185,7 @@ export class ProductionBalanceService {
         width: true,
         quantity: true,
         shippedQty: true,
+        packedQty: true,
         item: { select: { name: true } },
         color: { select: { name: true, hex: true } },
         order: {
@@ -209,9 +212,11 @@ export class ProductionBalanceService {
         colorName: l.color?.name ?? null,
         colorHex: l.color?.hex ?? null,
       });
+      // Talep = quantity − sevk − çuvallanmış (havuz/planlı rezerv). Çuvallanmış mal
+      // fiziksel olarak üretilmiş → talebi karşılar, arz havuzundan (sackId:null) düşülür.
       const remaining = Prisma.Decimal.max(
         0,
-        new Prisma.Decimal(l.quantity).minus(l.shippedQty)
+        new Prisma.Decimal(l.quantity).minus(l.shippedQty).minus(l.packedQty)
       );
       acc.talep = acc.talep.plus(remaining);
       if (remaining.greaterThan(0)) {
@@ -231,6 +236,7 @@ export class ProductionBalanceService {
           width: l.width,
           quantity: new Prisma.Decimal(l.quantity),
           shipped: new Prisma.Decimal(l.shippedQty),
+          packed: new Prisma.Decimal(l.packedQty),
           remaining,
           // Tabana yuvarla: metre tamsayı; pro-rata bölme artığı (…,371) atılır.
           // floor → backend remaining (ondalıklı) asla aşılmaz. F237: remaining'den türetilir.
@@ -255,6 +261,7 @@ export class ProductionBalanceService {
       where: {
         status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
         shipmentId: null,
+        sackId: null, // çuvallanmış (havuz) mal packedQty'de sayılır → çift sayım olmasın (§4)
         ...(itemId ? { itemId } : {}),
       },
       _sum: { currentQty: true },

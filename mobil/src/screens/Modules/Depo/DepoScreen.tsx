@@ -184,10 +184,11 @@ export default function DepoScreen() {
   // O14 fix: PREPARING (sevkiyata okutulmuş, çuval depoya kalkmamış) toplar
   // artık sayaca dahil — eskiden hiçbir kovada görünmüyor, "Serbest + Çuvalda"
   // toplamı fiziksel depoyla tutmuyordu.
+  // Çuvallanmış / planlı / kapıda bekleyen (serbest olmayan WAREHOUSE) toplam.
   const committedCount =
-    (scopeQuery.data?.data?.sackStore.count ?? 0) +
-    (scopeQuery.data?.data?.atDoor.count ?? 0) +
-    (scopeQuery.data?.data?.preparing?.count ?? 0);
+    (scopeQuery.data?.data?.pool?.count ?? 0) +
+    (scopeQuery.data?.data?.planned?.count ?? 0) +
+    (scopeQuery.data?.data?.atDoor?.count ?? 0);
 
   // Kartela = ADET bazlı: ürün+renk grubu → müsait adet ("depoda kaç tane var").
   // Sahada etiketsiz/okutulmadığından tek-tek liste yerine gruplu stok gösterilir.

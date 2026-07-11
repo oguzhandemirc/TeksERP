@@ -14,14 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { packingService } from "./service";
-import { invalidateShipmentData } from "./useShipmentDetail";
+import { invalidatePoolData } from "./useCustomerPool";
 import type { KartelaStockGroup } from "./types";
 
 interface Props {
-  shipmentId: string;
-  /** Aktif çuval — verilirse kartelalar bu çuvala eklenir. */
+  /** Kartelaların ekleneceği açık çuval — null ise dialog kapalı. */
   sackId: string | null;
-  open: boolean;
+  customerId: string;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -34,8 +33,9 @@ function groupKey(g: KartelaStockGroup): string {
  * barkod okutma yerine ürün+renk stok grubu + adet seçilir; backend o gruptan N
  * müsait kartelayı atomik claim eder ve sevkiyata/çuvala bağlar (stoktan düşer).
  */
-export function AddKartelaDialog({ shipmentId, sackId, open, onOpenChange }: Props) {
+export function AddKartelaDialog({ sackId, customerId, onOpenChange }: Props) {
   const qc = useQueryClient();
+  const open = sackId !== null;
   const [search, setSearch] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [count, setCount] = useState("1");
@@ -70,15 +70,14 @@ export function AddKartelaDialog({ shipmentId, sackId, open, onOpenChange }: Pro
 
   const mut = useMutation({
     mutationFn: () =>
-      packingService.addKartela(shipmentId, {
+      packingService.addKartela(sackId!, {
         itemId: selected!.itemId,
         colorId: selected!.colorId,
         count: parsedCount,
-        sackId,
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? `${res.data.added} kartela eklendi`);
-      invalidateShipmentData(qc, shipmentId);
+      invalidatePoolData(qc, customerId);
       void qc.invalidateQueries({ queryKey: ["kartela", "stock"] });
       onOpenChange(false);
     },
@@ -92,8 +91,7 @@ export function AddKartelaDialog({ shipmentId, sackId, open, onOpenChange }: Pro
             <Layers className="h-4 w-4" /> Kartela Ekle
           </DialogTitle>
           <DialogDescription>
-            Ürün + renk seç, adet gir. Seçilen kartelalar stoktan düşülerek
-            {sackId ? " aktif çuvala" : " sevkiyata"} eklenir.
+            Ürün + renk seç, adet gir. Seçilen kartelalar stoktan düşülerek bu çuvala eklenir.
           </DialogDescription>
         </DialogHeader>
 

@@ -16,7 +16,7 @@ import { sackSearchService } from "./service";
 import { shipmentStatusLabels, type PickListRow } from "./types";
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-const fmtDate = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("tr-TR") : "—");
+const locLabel = (r: PickListRow) => (r.shipment ? shipmentStatusLabels[r.shipment.status] : "Havuzda");
 
 interface Props {
   /** Basılacak çuval id'leri — null ise dialog kapalı. */
@@ -49,7 +49,7 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   const totalQty = rows.reduce((a, r) => a + r.totalQty, 0);
   const totalKg = rows.reduce((a, r) => a + (r.weightKg ?? 0), 0);
   const totalRolls = rows.reduce((a, r) => a + r.rollCount, 0);
-  const customers = [...new Set(rows.map((r) => r.shipment.customer.name))];
+  const customers = [...new Set(rows.map((r) => r.customer?.name).filter((n): n is string => !!n))];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,13 +80,11 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                 <tr className="border-b-2 border-foreground/60 text-left">
                   <th className="w-8 py-1 pr-1 font-semibold">✓</th>
                   <th className="py-1 pr-2 font-semibold">Çuval Kodu</th>
-                  <th className="py-1 pr-2 font-semibold">Sevk No</th>
                   <th className="py-1 pr-2 font-semibold">Yer</th>
                   <th className="py-1 pr-2 font-semibold">İçerik</th>
                   <th className="py-1 pr-2 text-right font-semibold">Top</th>
                   <th className="py-1 pr-2 text-right font-semibold">Metre</th>
-                  <th className="py-1 pr-2 text-right font-semibold">Kg</th>
-                  <th className="py-1 text-right font-semibold">Hazır</th>
+                  <th className="py-1 text-right font-semibold">Kg</th>
                 </tr>
               </thead>
               <tbody>
@@ -103,8 +101,10 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                         <span className="ml-1 font-mono text-[10px] text-muted-foreground">({r.sackNo})</span>
                       )}
                     </td>
-                    <td className="py-1.5 pr-2 font-mono">{r.shipment.shipmentNo}</td>
-                    <td className="py-1.5 pr-2">{shipmentStatusLabels[r.shipment.status]}</td>
+                    <td className="py-1.5 pr-2">
+                      {locLabel(r)}
+                      {r.shipment ? ` · ${r.shipment.shipmentNo}` : ""}
+                    </td>
                     <td className="py-1.5 pr-2">
                       {r.contents.map((c, i) => (
                         <div key={i}>
@@ -119,22 +119,20 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                     </td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{r.rollCount}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{fmtM(r.totalQty)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">
+                    <td className="py-1.5 text-right tabular-nums">
                       {r.weightKg != null ? fmtM(r.weightKg) : "tartılmadı"}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums">{fmtDate(r.shipment.readyAt)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-foreground/60 font-semibold">
-                  <td className="py-1.5" colSpan={5}>
+                  <td className="py-1.5" colSpan={4}>
                     TOPLAM — {rows.length} çuval
                   </td>
                   <td className="py-1.5 pr-2 text-right tabular-nums">{totalRolls}</td>
                   <td className="py-1.5 pr-2 text-right tabular-nums">{fmtM(totalQty)}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{totalKg > 0 ? fmtM(totalKg) : "—"}</td>
-                  <td />
+                  <td className="py-1.5 text-right tabular-nums">{totalKg > 0 ? fmtM(totalKg) : "—"}</td>
                 </tr>
               </tfoot>
             </table>

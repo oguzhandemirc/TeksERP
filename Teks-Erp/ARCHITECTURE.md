@@ -202,7 +202,7 @@ STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SU
 geçmediği durumlarda kullanılır (tek-adımlı WO veya rota Tambur içermiyor).
 Normal Tambur'lu akışta top doğrudan child Roll'lar olarak `WAREHOUSE`'a düşer.
 
-> **NOT (2026-06-12):** Sevkiyat modülü canlı: WAREHOUSE → çuval (`Sack`) → `Shipment` PREPARING → READY (Çuval Depo) → AT_DOOR (Kapı Önü) → DISPATCHED. Stok DISPATCH'te `SHIPPED`'e düşer (READY = rezerv). `READY_FOR_SHIP` enum'u şemada YOK (kaldırıldı). Kartela akışı `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
+> **NOT (2026-07 — ÇUVAL HAVUZU MODELİ):** Sevkiyat modülü çuval havuzu ("B") modeline geçti. Çuval (`Sack`) **müşteriye ait** (`Sack.customerId`); akış: WAREHOUSE serbest top → `openSack(customerId)` → `scanIntoSack` → **`sealSack`** → çuval depo havuzu → `rebalanceCustomerPool` FIFO ile `OrderLine.packedQty` rezervi (`SackAllocation` defteri). Sevkiyat havuzdan **çuval seçilerek** kurulur: `createShipment({sackIds})` → `Shipment` PLANNED → AT_DOOR (Kapı Önü) → DISPATCHED. Stok DISPATCH'te `SHIPPED`'e düşer; commit dispatch'te `shippedQty`'ye terfi eder. `ShipmentStatus` = `PLANNED|AT_DOOR|DISPATCHED|CANCELLED` (PREPARING/READY kaldırıldı); `ShipmentAllocation` → `SackAllocation`; `ShipmentOrder` çuvallardan türetilir; `markReady`/`retarget` kaldırıldı. Denormlar defter-otoritatif (`recomputeOrderStatus`). Tam tasarım: `CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
 
 ---
 

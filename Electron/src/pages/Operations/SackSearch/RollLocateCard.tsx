@@ -26,7 +26,7 @@ export function RollLocateCard({ roll, onClear }: { roll: LocatedRoll; onClear: 
     quality: roll.qualityGrade,
   });
   const location = roll.sack
-    ? `Çuval ${roll.sack.seq}${roll.sack.manualCode ? ` (${roll.sack.manualCode})` : ""}`
+    ? `Çuval ${roll.sack.manualCode ?? roll.sack.sackNo}`
     : roll.shipment
       ? "Sevkiyatta (çuvalsız)"
       : (ROLL_STATUS_LABEL[roll.status] ?? roll.status);

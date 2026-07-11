@@ -1,10 +1,19 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { LocatedRoll, PickListRow, SackContents, SackSearchParams, SackSearchResponse } from "./types";
+import type {
+  CreatedShipment,
+  CreateShipmentPreview,
+  LocatedRoll,
+  PickListRow,
+  SackContents,
+  SackSearchParams,
+  SackSearchResponse,
+  ShipmentDestination,
+} from "./types";
 
 /**
- * Çuval/Top Arama servisi (saha #1+#23) — salt-okunur. Liste cursor sayfalı ve
- * rulo satırı içermez; tek çuvalın dökümü satır genişletilince lazy gelir.
+ * Çuval/Top Arama + HAVUZDAN SEVKİYAT KURMA servisi. Arama salt-okunur, cursor sayfalı.
+ * Sevkiyat kurma: seçilen mühürlü havuz çuvallarından POST /shipments {sackIds}.
  */
 export const sackSearchService = {
   search: (params: SackSearchParams = {}): Promise<SackSearchResponse> => {
@@ -13,6 +22,7 @@ export const sackSearchService = {
     if (params.colorId) sp.set("colorId", params.colorId);
     if (params.width !== undefined) sp.set("width", String(params.width));
     if (params.customerId) sp.set("customerId", params.customerId);
+    if (params.scope) sp.set("scope", params.scope);
     if (params.shipmentNo) sp.set("shipmentNo", params.shipmentNo);
     if (params.sackCode) sp.set("sackCode", params.sackCode);
     if (params.includeDispatched) sp.set("includeDispatched", "true");
@@ -36,5 +46,25 @@ export const sackSearchService = {
   pickList: (sackIds: string[]): Promise<ApiResponse<PickListRow[]>> =>
     apiClient
       .post<ApiResponse<PickListRow[]>>(`/api/shipping/sack-search/pick-list`, { sackIds })
+      .then((r) => r.data),
+
+  /** Sevkiyat kurulum önizlemesi (salt-okunur) — içerik + donacak sipariş tahsisleri. */
+  previewShipment: (sackIds: string[]): Promise<ApiResponse<CreateShipmentPreview>> =>
+    apiClient
+      .post<ApiResponse<CreateShipmentPreview>>(`/api/shipping/shipments/preview`, { sackIds })
+      .then((r) => r.data),
+
+  /** Seçilen mühürlü havuz çuvallarından yeni sevkiyat kur (PLANNED). */
+  createShipment: (
+    sackIds: string[],
+    destination?: ShipmentDestination,
+    procedureCode?: string | null,
+  ): Promise<ApiResponse<CreatedShipment>> =>
+    apiClient
+      .post<ApiResponse<CreatedShipment>>(`/api/shipping/shipments`, {
+        sackIds,
+        ...(destination ? { destination } : {}),
+        ...(procedureCode ? { procedureCode } : {}),
+      })
       .then((r) => r.data),
 };

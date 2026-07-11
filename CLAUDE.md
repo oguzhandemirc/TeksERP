@@ -16,14 +16,15 @@ Her alt projenin kendi `CLAUDE.md`'si vardır. **Admin frontend değişiklikleri
 Stok (Roll) → İş Emri → KK1 (RAW_QC) → [opsiyonel Fason] →
   Kurşun + KK2 (PROCESS_QC) → Tambur (final karar) →
   Depo (RollStatus.WAREHOUSE) →
-  Çuval/Tartı (Sack) → Sevkiyat (PREPARING → READY → AT_DOOR → DISPATCHED)
+  Çuval Havuzu (Sack — müşteriye ait; aç→okut→mühürle → packedQty rezerv) →
+  Sevkiyat (havuzdan çuval seç → PLANNED → AT_DOOR → DISPATCHED)
 ```
 
 Fabrika **çözgü/dokuma yapmaz** — kumaş hazır gelir, sadece process + QC + tambur yapılır.
 
 Tambur'dan çıkan üretim topu **önce depoya** geçer (`status=WAREHOUSE` — default; `QualityGrade.targetStatus` katalogdan override edilebilir, seed'de üç kalite de WAREHOUSE). Ham (renksiz) top kesiminde operatör parçayı `STOCK` (üretime devam) da seçebilir. Depo bir istasyon değil, tartı/paket öncesi bekleme statüsüdür.
 
-> **NOT:** Tartı / paket / sevkiyat modülü 2026-06 başında sıfırdan yeniden yazıldı ve canlı (`/api/shipping`, Shipment/Sack/ShipmentAllocation modelleri). Stok yalnız DISPATCH'te `SHIPPED` düşer; READY=Çuval Depo rezervi, AT_DOOR=Kapı Önü. Top→sipariş bağı yok — karşılanma spec-toplam üzerinden (`SEVKIYAT-LOOSE-TASARIM.md`).
+> **NOT:** Tartı / paket / sevkiyat modülü **2026-07'de çuval havuzu ("B") modeline** geçti (`/api/shipping`, Shipment / Sack / **SackAllocation** / ShipmentOrder). Çuval **müşteriye ait** (Sack.customerId); aç→okut→**mühürle** → çuval depo havuzu → `rebalanceCustomerPool` FIFO ile açık siparişlere **`OrderLine.packedQty`** rezervi. Sevkiyat havuzdan **çuval seçilerek** kurulur (`createShipment({sackIds})` → PLANNED → AT_DOOR → DISPATCHED); ShipmentOrder çuvallardan türetilir. Stok yalnız DISPATCH'te `SHIPPED` düşer; commit dispatch'te `shippedQty`'ye terfi eder. Top→sipariş bağı yok. Tasarım: `CUVAL-HAVUZU-TASARIM.md` (eski `SEVKIYAT-LOOSE-TASARIM.md` superseded).
 
 ## Domain Kuralları
 

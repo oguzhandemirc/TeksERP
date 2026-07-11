@@ -16,7 +16,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
+import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { packingService, type OpenOrder } from '../../../services/packing.service';
+import { customerService } from '../../../services/customer.service';
 import { usePermissions } from '../../../hooks/usePermission';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -24,23 +26,23 @@ import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
-// Tartı / Paket — sipariş SEÇİM ekranı (push: Paketleme). Tek müşteri+şube seç,
-// depo karşılaması satırda. "Sonraki adım" → Paketleme (geç oluştur). Zaten
-// sevkiyatta olan sipariş "Sürdür" → Paketleme (shipmentId). Geçmiş ayrı sayfa.
+// Tartı / Paket — GİRİŞ ekranı (push: Paketleme). Çuval Havuzu modeli:
+//   • "Sürdür": havuzda açık/mühürlü çuvalı olan müşteriler (/pool) → Paketleme.
+//   • "Müşteriye Çuvalla": doğrudan müşteri seç → Paketleme.
+//   • Açık siparişler: tek müşteri+şube seç → türetilen müşteriyle Paketleme.
+// Paketleme müşteri workspace'idir (çuval aç/okut/mühürle); sevkiyat orada kurulur.
 // =============================================================================
 
 const groupKey = (customerId: string, branchId: string | null) => `${customerId}|${branchId ?? ''}`;
 
-// "Devam Eden" başta en fazla bu kadar görünür; fazlası aç-kapa ile açılır — çok
-// sevkiyat varken liste şişip "Açık Siparişler"e inmeyi zorlaştırmasın.
-const PREPARING_CAP = 5;
+// "Sürdür" başta en fazla bu kadar; fazlası aç-kapa ile açılır.
+const POOL_CAP = 5;
 
-// Bizdeki ad + (karşıdaki ad) — alias farklıysa parantezde. Personel topu bizdeki adla bulur.
+// Bizdeki ad + (karşıdaki ad) — alias farklıysa parantezde.
 const dualName = (ourName: string, custName?: string | null) =>
   custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
 
 export default function TartiPaketScreen() {
-  // Portrait kilidi yalnızca telefonda — tablette zorunlu dik yapma, yatay kalsın.
   usePortraitLock(useDeviceType() === 'phone');
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { has } = usePermissions();
@@ -48,7 +50,8 @@ export default function TartiPaketScreen() {
 
   const [selected, setSelected] = useState<string[]>([]);
   const [selGroup, setSelGroup] = useState<string | null>(null);
-  const [showAllPreparing, setShowAllPreparing] = useState(false);
+  const [showAllPool, setShowAllPool] = useState(false);
+  const [custPickerOpen, setCustPickerOpen] = useState(false);
 
   const openOrdersQ = useQuery({
     queryKey: ['open-orders'],
@@ -57,31 +60,43 @@ export default function TartiPaketScreen() {
   });
   const openOrders = openOrdersQ.data?.data ?? [];
 
-  const preparingQ = useQuery({
-    queryKey: ['shipments', 'PREPARING'],
-    queryFn: () => packingService.listShipments({ status: 'PREPARING' }),
+  // Çuval havuzu — açık/mühürlü çuvalı olan müşteriler ("Sürdür").
+  const poolQ = useQuery({
+    queryKey: ['pool'],
+    queryFn: () => packingService.listPool(),
     staleTime: 10_000,
   });
-  const preparing = preparingQ.data?.data ?? [];
+  const pool = poolQ.data?.data ?? [];
 
-  const readyQ = useQuery({
-    queryKey: ['shipments', 'READY'],
-    queryFn: () => packingService.listShipments({ status: 'READY' }),
+  // Sevk kapısı sayacı (PLANNED/AT_DOOR) — köprü kartı.
+  const boardQ = useQuery({
+    queryKey: ['sack-store', 'board', 'bridge'],
+    queryFn: () => packingService.listSackStoreBoard({ limit: 30 }),
     enabled: canShip,
     staleTime: 10_000,
   });
-  const readyCount = readyQ.data?.data?.length ?? 0;
+  const doorCount = boardQ.data?.data.length ?? 0;
+  const doorMore = boardQ.data?.pagination.hasMore ?? false;
+
+  // Müşteri picker (Müşteriye Çuvalla) — açılınca lazy.
+  const custQ = useQuery({
+    queryKey: ['customers', 'picker'],
+    queryFn: () => customerService.getAll({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc' }),
+    enabled: custPickerOpen,
+    staleTime: 60_000,
+  });
+  const custOptions: PickerOption[] = (custQ.data?.data ?? []).map((c) => ({
+    value: c.id,
+    label: c.name,
+    sublabel: c.code,
+  }));
 
   const headerRefresh = useManualRefresh(
-    [
-      () => openOrdersQ.refetch(),
-      () => preparingQ.refetch(),
-      () => readyQ.refetch(),
-    ],
+    [() => openOrdersQ.refetch(), () => poolQ.refetch(), () => boardQ.refetch()],
     'Liste güncellendi',
   );
 
-  // ── Sipariş seçimi ──
+  // ── Sipariş seçimi (tek müşteri + şube) ──
   const toggleOrder = (o: OpenOrder) => {
     const key = groupKey(o.order.customer.id, o.order.branch?.id ?? null);
     if (selected.includes(o.order.id)) {
@@ -99,15 +114,17 @@ export default function TartiPaketScreen() {
   };
 
   const startPacking = () => {
-    const orderIds = selected;
+    const first = openOrders.find((o) => selected.includes(o.order.id));
+    if (!first) return;
+    const customerId = first.order.customer.id;
+    const bId = first.order.branch?.id ?? null;
     setSelected([]);
     setSelGroup(null);
-    nav.navigate('Paketleme', { orderIds });
+    nav.navigate('Paketleme', { customerId, branchId: bId });
   };
 
   const inSelGroup = (o: OpenOrder) =>
     selGroup === groupKey(o.order.customer.id, o.order.branch?.id ?? null);
-  // Termine göre sırala; seçim aktifken eşleşen müşteri+şube grubunu üste topla.
   const displayOrders = useMemo(() => {
     const base = [...openOrders].sort((a, b) => {
       const ad = a.order.deadline ? new Date(a.order.deadline).getTime() : Infinity;
@@ -118,7 +135,6 @@ export default function TartiPaketScreen() {
     return [...base.filter((o) => inSelGroup(o)), ...base.filter((o) => !inSelGroup(o))];
   }, [openOrders, selGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // O17 fix: müşteri/sipariş arama — operatör 300 kartı kaydırarak aramasın.
   const [orderSearch, setOrderSearch] = useState('');
   const filteredOrders = useMemo(() => {
     const q = orderSearch.trim().toLocaleLowerCase('tr');
@@ -131,8 +147,6 @@ export default function TartiPaketScreen() {
     );
   }, [displayOrders, orderSearch]);
 
-  // O17 fix: düz ScrollView+map (kötü durumda ~300 kart × satırlar tek frame'de
-  // mount) → FlashList satırları. Grup ayracı da satır tipi olarak listede.
   type OrderRow = { kind: 'order'; o: OpenOrder } | { kind: 'sep' };
   const orderRows = useMemo<OrderRow[]>(() => {
     if (!selGroup) return filteredOrders.map((o) => ({ kind: 'order' as const, o }));
@@ -146,28 +160,6 @@ export default function TartiPaketScreen() {
   }, [filteredOrders, selGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderOrderCard = (o: OpenOrder) => {
-    const active = o.order.activeShipment;
-    // Zaten aktif sevkiyatta → seçilemez, "Sürdür" (Paketleme'ye git).
-    if (active) {
-      return (
-        <TouchableRipple
-          key={o.order.id}
-          onPress={() => nav.navigate('Paketleme', { shipmentId: active.id })}
-          style={[styles.orderCard, styles.orderCardResume]}
-        >
-          <View>
-            <View style={styles.cardHead}>
-              <Text style={styles.rollBarcode}>{o.order.orderNumber}</Text>
-              <Text style={styles.resumeTag}>Sevkiyatta · Sürdür →</Text>
-            </View>
-            <Text style={styles.covMeta}>
-              {o.order.customer.name}
-              {o.order.branch ? ` · ${o.order.branch.name}` : ''} · {active.shipmentNo}
-            </Text>
-          </View>
-        </TouchableRipple>
-      );
-    }
     const isSel = selected.includes(o.order.id);
     const key = groupKey(o.order.customer.id, o.order.branch?.id ?? null);
     const disabled = selected.length > 0 && selGroup !== key && !isSel;
@@ -227,6 +219,12 @@ export default function TartiPaketScreen() {
             successMessage={headerRefresh.successMessage}
           />
           <Appbar.Action
+            icon="account-plus"
+            color="#fff"
+            onPress={() => setCustPickerOpen(true)}
+            accessibilityLabel="Müşteriye çuvalla — doğrudan müşteri seç"
+          />
+          <Appbar.Action
             icon="lightning-bolt"
             color="#fff"
             onPress={() => nav.navigate('HizliSiparis')}
@@ -236,7 +234,7 @@ export default function TartiPaketScreen() {
             icon="package-variant"
             color="#fff"
             onPress={() => nav.navigate('CuvalDuzelt')}
-            accessibilityLabel="Çuval düzeltme — top çıkar / taşı / takasla"
+            accessibilityLabel="Çuval düzeltme — top çıkar / taşı"
           />
           <Appbar.Action
             icon="history"
@@ -265,45 +263,48 @@ export default function TartiPaketScreen() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
-            {canShip && readyCount > 0 && (
+            {canShip && doorCount > 0 && (
               <TouchableRipple onPress={() => nav.navigate('Sevkiyat')} style={styles.bridge}>
                 <View style={styles.bridgeInner}>
-                  <Text style={styles.bridgeText}>{readyCount} sevkiyat kapıda (kamyon bekliyor)</Text>
-                  <Text style={styles.bridgeCta}>Sevkiyat →</Text>
+                  <Text style={styles.bridgeText}>
+                    {doorCount}
+                    {doorMore ? '+' : ''} sevkiyat kapıda (kamyon bekliyor)
+                  </Text>
+                  <Text style={styles.bridgeCta}>Sevk Çıkışı →</Text>
                 </View>
               </TouchableRipple>
             )}
 
-            {/* Devam eden sevkiyatlar */}
-            {preparing.length > 0 && (
+            {/* Çuval havuzunda çuvalı olan müşteriler ("Sürdür") */}
+            {pool.length > 0 && (
               <>
                 <Text variant="titleSmall" style={styles.section}>
-                  Devam Eden ({preparing.length})
+                  Çuval Havuzu ({pool.length})
                 </Text>
-                {(showAllPreparing ? preparing : preparing.slice(0, PREPARING_CAP)).map((sh) => (
+                {(showAllPool ? pool : pool.slice(0, POOL_CAP)).map((g) => (
                   <TouchableRipple
-                    key={sh.id}
-                    onPress={() => nav.navigate('Paketleme', { shipmentId: sh.id })}
+                    key={g.customer.id}
+                    onPress={() => nav.navigate('Paketleme', { customerId: g.customer.id })}
                     style={styles.resumeCard}
                   >
                     <View style={styles.bridgeInner}>
-                      <View>
-                        <Text style={styles.rollBarcode}>{sh.shipmentNo}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rollBarcode}>{g.customer.name}</Text>
                         <Text style={styles.covMeta}>
-                          {sh.customer.name}
-                          {sh.branch ? ` · ${sh.branch.name}` : ''} · {sh._count.rolls} top · {sh._count.sacks} çuval
+                          {g.openSacks} açık · {g.sealedSacks} mühürlü · {g.rollCount} top
+                          {g.totalKg > 0 ? ` · ${g.totalKg.toLocaleString('tr-TR')} kg` : ''}
                         </Text>
                       </View>
                       <Text style={styles.bridgeCta}>Sürdür →</Text>
                     </View>
                   </TouchableRipple>
                 ))}
-                {preparing.length > PREPARING_CAP && (
-                  <TouchableRipple onPress={() => setShowAllPreparing((v) => !v)} style={styles.morePreparing}>
+                {pool.length > POOL_CAP && (
+                  <TouchableRipple onPress={() => setShowAllPool((v) => !v)} style={styles.morePreparing}>
                     <Text style={styles.morePreparingText}>
-                      {showAllPreparing
+                      {showAllPool
                         ? 'Daha az göster ▴'
-                        : `+${preparing.length - PREPARING_CAP} sevkiyat daha göster ▾`}
+                        : `+${pool.length - POOL_CAP} müşteri daha göster ▾`}
                     </Text>
                   </TouchableRipple>
                 )}
@@ -315,7 +316,6 @@ export default function TartiPaketScreen() {
               Açık Siparişler
             </Text>
             <Text style={styles.hint}>Tek müşteri + şube seç. Depo karşılaması satırda görünür.</Text>
-            {/* O17: müşteri / sipariş no / şube araması */}
             <TextInput
               mode="outlined"
               dense
@@ -343,10 +343,24 @@ export default function TartiPaketScreen() {
       {selected.length > 0 && (
         <View style={styles.footer}>
           <Button mode="contained" icon="arrow-right" contentStyle={{ height: 52 }} onPress={startPacking}>
-            Sonraki adım ({selected.length} sipariş)
+            Paketlemeye Geç ({selected.length} sipariş)
           </Button>
         </View>
       )}
+
+      {/* Müşteriye Çuvalla — doğrudan müşteri seç → Paketleme */}
+      <PickerModal
+        visible={custPickerOpen}
+        title="Müşteriye Çuvalla"
+        options={custOptions}
+        loading={custQ.isLoading}
+        onSelect={(value) => {
+          setCustPickerOpen(false);
+          nav.navigate('Paketleme', { customerId: value });
+        }}
+        onDismiss={() => setCustPickerOpen(false)}
+        emptyText="Müşteri bulunamadı"
+      />
     </ScreenChrome>
   );
 }
@@ -374,9 +388,7 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 13, color: '#94a3b8', marginVertical: 8 },
   orderCard: { borderRadius: 12, padding: 12, backgroundColor: '#fff', marginBottom: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   orderCardSel: { borderColor: '#059669', backgroundColor: '#ecfdf5' },
-  orderCardResume: { borderColor: '#1e40af', backgroundColor: '#eff6ff' },
   orderCardDim: { opacity: 0.45 },
-  resumeTag: { fontSize: 12, fontWeight: '700', color: '#1e40af' },
   otherSep: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 10 },
   otherSepText: { fontSize: 11, color: '#94a3b8' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },

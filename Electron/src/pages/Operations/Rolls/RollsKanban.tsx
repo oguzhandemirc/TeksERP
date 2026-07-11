@@ -18,7 +18,7 @@ import type { SackStoreShipment } from "../SackStore/types";
 // Üretim akışı kolonları — salt-okunur görselleştirme (sürükleme yok).
 // HİBRİT model: Ham Stok / Fason / Depo rulo statüsünden (tek tek rulo);
 // Kurşun & Tambur "bekleyen" istasyon kuyruğundan (parti = refakat kartı);
-// Sevk kolonunda Çuval Depo (READY) + Kapı Önü (AT_DOOR) grupları.
+// Sevk kolonunda Planlı Sevkiyat (PLANNED) + Kapı Önü (AT_DOOR) grupları.
 type ColType = "roll" | "kursun" | "tambur" | "sack-store";
 
 interface KanbanColumn {
@@ -230,17 +230,17 @@ function QueueCard({ card }: { card: KanbanQueueCard }) {
   );
 }
 
-/** Sevk kolonunun tüm içeriği — READY (Çuval Depo) + AT_DOOR (Kapı Önü) grupları. */
+/** Sevk kolonunun tüm içeriği — PLANNED (Planlı Sevkiyat) + AT_DOOR (Kapı Önü) grupları. */
 function SackStoreColumn({ items }: { items: SackStoreShipment[] }) {
-  const ready = items.filter((s) => s.status === "READY");
+  const planned = items.filter((s) => s.status === "PLANNED");
   const atDoor = items.filter((s) => s.status === "AT_DOOR");
 
   return (
     <Stagger className="flex flex-col gap-2">
-      {ready.length > 0 && (
+      {planned.length > 0 && (
         <>
-          <SackGroupLabel label="Çuval Depo" count={ready.length} dot="bg-blue-400" />
-          {ready.map((s) => (
+          <SackGroupLabel label="Planlı Sevkiyat" count={planned.length} dot="bg-blue-400" />
+          {planned.map((s) => (
             <StaggerItem key={s.id}>
               <KanbanSackCard shipment={s} />
             </StaggerItem>
@@ -249,7 +249,7 @@ function SackStoreColumn({ items }: { items: SackStoreShipment[] }) {
       )}
       {atDoor.length > 0 && (
         <>
-          {ready.length > 0 && <div className="border-t" />}
+          {planned.length > 0 && <div className="border-t" />}
           <SackGroupLabel label="Kapı Önü" count={atDoor.length} dot="bg-amber-400" />
           {atDoor.map((s) => (
             <StaggerItem key={s.id}>
