@@ -1,11 +1,12 @@
 -- =============================================================================
 -- TeksERP — Veri Tutarlılık Kontrolü (consistency-check.sql)   [D-9]
 -- =============================================================================
--- ÇUVAL HAVUZU MODELİ: shippedQty/packedQty denormalize alanları defter-otoritatiftir
--- (recomputeOrderFulfillment) ama DB seddi YOK — drift oluşursa karşılanma/MRP sessizce
--- yanlışlanır. Bu script onu yakalar.
+-- ÇUVAL DEPO MODELİ (2026-07): shippedQty denormalize alanı defter-otoritatiftir
+-- (recomputeOrderStatusForOrders → computeLineLedger) ama DB seddi YOK — drift oluşursa
+-- karşılanma/MRP sessizce yanlışlanır. Bu script onu yakalar.
 --   shippedQty = Σ SackAllocation(çuval DISPATCHED) + Σ DirectShipAllocation
---   packedQty  = Σ SackAllocation(çuval havuzda VEYA PLANNED/AT_DOOR)
+-- Rezerv/packedQty YOK (mühür + rebalance kaldırıldı) → düşüş yalnız sevkte. PLANNED/AT_DOOR
+-- tahsis shippedQty'ye sayılmaz.
 --
 -- Ne zaman: 3 ayda bir (ARCHITECTURE.md §10.2 ile) veya şüphe anında. Salt-okunur.
 -- Kullanım: psql <db> -f scripts/consistency-check.sql
@@ -33,40 +34,20 @@ LEFT JOIN (SELECT "orderLineId", SUM(qty) AS toplam FROM subcontractor_direct_sh
 WHERE ol."shippedQty" <> COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0);
 
 \echo ''
-\echo '== 1b) OrderLine.packedQty  vs  Σ(SackAllocation[havuz VEYA PLANNED/AT_DOOR]) =='
-\echo '   (satır varsa: çuvallanmış rezerv denormalize toplamı defterden kopmuş)'
-SELECT ol.id AS order_line_id,
-       ol."packedQty" AS kayitli,
-       COALESCE(pa.toplam, 0) AS hesaplanan,
-       ol."packedQty" - COALESCE(pa.toplam, 0) AS fark
-FROM order_lines ol
-LEFT JOIN (
-  SELECT sal."orderLineId", SUM(sal.qty) AS toplam
-  FROM sack_allocations sal
-  JOIN sacks sk ON sk.id = sal."sackId"
-  LEFT JOIN shipments sh ON sh.id = sk."shipmentId"
-  WHERE sk."shipmentId" IS NULL OR sh.status IN ('PLANNED', 'AT_DOOR')
-  GROUP BY sal."orderLineId"
-) pa ON pa."orderLineId" = ol.id
-WHERE ol."packedQty" <> COALESCE(pa.toplam, 0);
-
-\echo ''
-\echo '== 2) Order.shippedQty/packedQty  vs  Σ(OrderLine.*) =='
+\echo '== 2) Order.shippedQty  vs  Σ(OrderLine.shippedQty) =='
 SELECT o.id AS order_id,
-       o."shippedQty" AS shipped_kayitli, COALESCE(SUM(ol."shippedQty"), 0) AS shipped_hesap,
-       o."packedQty"  AS packed_kayitli,  COALESCE(SUM(ol."packedQty"), 0)  AS packed_hesap
+       o."shippedQty" AS shipped_kayitli, COALESCE(SUM(ol."shippedQty"), 0) AS shipped_hesap
 FROM orders o
 LEFT JOIN order_lines ol ON ol."orderId" = o.id
-GROUP BY o.id, o."shippedQty", o."packedQty"
-HAVING o."shippedQty" <> COALESCE(SUM(ol."shippedQty"), 0)
-    OR o."packedQty"  <> COALESCE(SUM(ol."packedQty"), 0);
+GROUP BY o.id, o."shippedQty"
+HAVING o."shippedQty" <> COALESCE(SUM(ol."shippedQty"), 0);
 
 \echo ''
 \echo '== 3) Negatif miktar/metraj/kg  (CHECK backstop — normalde 0) =='
 SELECT 'rolls' AS tablo, id::text AS kayit FROM rolls
   WHERE "currentQty" < 0 OR "initialQty" < 0 OR ("weightKg" IS NOT NULL AND "weightKg" < 0)
 UNION ALL
-SELECT 'order_lines', id::text FROM order_lines WHERE "quantity" <= 0 OR "shippedQty" < 0 OR "packedQty" < 0
+SELECT 'order_lines', id::text FROM order_lines WHERE "quantity" <= 0 OR "shippedQty" < 0
 UNION ALL
 SELECT 'sack_allocations', id::text FROM sack_allocations WHERE qty <= 0;
 
@@ -86,12 +67,10 @@ JOIN shipments s ON s.id = so."shipmentId"
 WHERE so."isActive" <> (s.status IN ('PLANNED', 'AT_DOOR'));
 
 \echo ''
-\echo '== 6) Çuval havuzu invariant: mühürlü çuval boş olamaz / seq-shipmentId tutarlılığı =='
-SELECT sk.id AS sack_id, sk."sealedAt", sk."shipmentId", sk.seq
+\echo '== 6) Çuval seq ↔ shipmentId tutarlılığı  (depoda seq YOK, sevkiyatta seq VAR) =='
+SELECT sk.id AS sack_id, sk."shipmentId", sk.seq
 FROM sacks sk
-WHERE (sk."sealedAt" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM rolls r WHERE r."sackId" = sk.id)
-                                 AND NOT EXISTS (SELECT 1 FROM swatches sw WHERE sw."sackId" = sk.id))
-   OR (sk."shipmentId" IS NULL AND sk.seq IS NOT NULL)      -- havuzda seq olmamalı
+WHERE (sk."shipmentId" IS NULL AND sk.seq IS NOT NULL)      -- depoda seq olmamalı
    OR (sk."shipmentId" IS NOT NULL AND sk.seq IS NULL);     -- sevkiyatta seq olmalı
 
 \echo ''

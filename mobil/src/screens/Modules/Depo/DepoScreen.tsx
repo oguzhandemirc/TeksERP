@@ -60,8 +60,7 @@ const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
 
 /** Rezerve topun bağlı olduğu sevkiyat aşaması — detay özetindeki "Sevkiyat" satırı. */
 const SHIPMENT_SCOPE_LABEL: Record<string, string> = {
-  PREPARING: 'Çuvallanıyor',
-  READY: 'Çuval Depo',
+  PLANNED: 'Çuval Depo',
   AT_DOOR: 'Kapı Önü',
   DISPATCHED: 'Sevk Edildi',
   CANCELLED: 'İptal',
@@ -181,10 +180,8 @@ export default function DepoScreen() {
     enabled: !isSwatchMode,
     staleTime: 30 * 1000,
   });
-  // O14 fix: PREPARING (sevkiyata okutulmuş, çuval depoya kalkmamış) toplar
-  // artık sayaca dahil — eskiden hiçbir kovada görünmüyor, "Serbest + Çuvalda"
-  // toplamı fiziksel depoyla tutmuyordu.
-  // Çuvallanmış / planlı / kapıda bekleyen (serbest olmayan WAREHOUSE) toplam.
+  // Çuvallanmış (pool) + planlı + kapıda bekleyen — serbest stoktan düşen ama
+  // bina içindeki mal. "Serbest + Çuvalda" toplamı fiziksel depoyla tutsun.
   const committedCount =
     (scopeQuery.data?.data?.pool?.count ?? 0) +
     (scopeQuery.data?.data?.planned?.count ?? 0) +

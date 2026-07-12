@@ -4,7 +4,7 @@
 // GEVŞEK MODEL: top→sipariş bağı YOK. Karşılanma birimi = spec (kalem+renk+en);
 // aynı spec'in topları fungible. Bu modül üç yerde paylaşılır:
 //   • shipping.service (getShipmentById projeksiyonu, listOpenOrders spec eşleşmesi)
-//   • sack-allocation.helper (rebalanceCustomerPool — çuval-farkındalı FIFO)
+//   • shipping.service (writeShipmentAllocations — sevk-anı çuval-farkındalı FIFO)
 //   • subcontractor.service (fason doğrudan sevk önizlemesi — aynı FIFO/spec mantığı)
 // Tek karşılanma kaynağı; kopya algoritma yok.
 // =============================================================================
@@ -171,7 +171,7 @@ export function computeLoadedByLine(
 }
 
 // =============================================================================
-// ÇUVAL-FARKINDALI FIFO — rebalanceCustomerPool çekirdeği
+// ÇUVAL-FARKINDALI FIFO — sevk-anı tahsis çekirdeği (writeShipmentAllocations)
 // =============================================================================
 
 /** Havuz çuvalı — mühür sırasına göre FIFO; içeriği (rolls) spec-toplam taşır. */
@@ -201,7 +201,7 @@ function branchMatch(sackBranchId: string | null, lineBranchId: string | null): 
 
 /**
  * Havuzdaki mühürlü çuvalları açık sipariş satırlarına ÇUVAL-FARKINDALI FIFO ile dağıt.
- * İki boyutta FIFO: çuvallar mühür sırasında (sealedAt asc — çağıran sıralar), satırlar
+ * İki boyutta FIFO: çuvallar FIFO sırasında (createdAt asc — çağıran sıralar), satırlar
  * termin→tarih sırasında. Her (çuval, satır) çifti için tahsis metrajı üretir → SackAllocation
  * defteri. Bir çuvalın bir satıra hiç uymayan içeriği (spec/şube) tahsis edilmez (fazla mal).
  *
@@ -209,7 +209,7 @@ function branchMatch(sackBranchId: string | null, lineBranchId: string | null): 
  * verilmeli değil — çağıran taze diziler kurar).
  */
 export function distributeSacksToLines(
-  sacks: PoolSack[], // mühür sırasında (sealedAt asc, id)
+  sacks: PoolSack[], // FIFO sırasında (createdAt asc, id)
   lines: SackAllocLine[]
 ): { sackId: string; orderLineId: string; qty: Prisma.Decimal }[] {
   const sortedLines = [...lines].sort(lineFifoCmp);

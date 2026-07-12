@@ -54,8 +54,7 @@ async function resolveRoll(code: string): Promise<ScanResolution> {
     ]),
     actions: [
       { label: "Detayı aç (Toplar)", to: "/operations/rolls", state: { scanBarcode: code }, primary: true },
-      { label: "Nerede? (Çuval Arama)", to: "/operations/sack-search", state: { scanCode: code } },
-      { label: "Çuvalını düzenle", to: "/operations/sack-content-edit", state: { focusBarcode: code } },
+      { label: "Çuval Deposu'nda bul / düzenle", to: "/operations/sack-content-edit", state: { scanCode: code } },
       { label: "Yeniden Etiketle", to: "/operations/relabel-station", state: { scanCode: code } },
     ],
   };
@@ -105,7 +104,6 @@ async function resolveSwatch(code: string): Promise<ScanResolution> {
 
 interface SackRow {
   sackNo?: string;
-  manualCode?: string | null;
   shipment?: { shipmentNo?: string; status?: string; customer?: { name?: string } };
 }
 
@@ -118,49 +116,43 @@ const SACK_STATUS_LABEL: Record<string, string> = {
 
 /**
  * Duruma göre TEK akıllı birincil hedef (operatörün karar yükünü düşür):
- * Havuzda (sevkiyata atanmamış, status yok) → Paketleme (içerik orada düzenlenir);
- * PLANNED/AT_DOOR → Sevk Kapısı (kapı aksiyonları orada), DISPATCHED → yalnız Arama
- * (içerik kilitli — board'da ve Paketleme'de işi yok). Bilinmeyen/iptal → Arama.
+ * Depoda (sevkiyata atanmamış, status yok) → Çuval Deposu (içerik orada düzenlenir);
+ * PLANNED/AT_DOOR → Sevk Kapısı (kapı aksiyonları orada), DISPATCHED → yalnız Çuval
+ * Deposu araması (içerik kilitli). Arama + Paketleme tek hub'da birleşti.
  */
 function sackActions(code: string, status: string | undefined): ScanAction[] {
-  const packing: ScanAction = {
-    label: "Paketleme'de aç (içeriği düzenle)",
+  const hub: ScanAction = {
+    label: "Çuval Deposu'nda aç (bul / düzenle)",
     to: "/operations/sack-content-edit",
-    state: { focusBarcode: code },
+    state: { scanCode: code },
   };
   const store: ScanAction = {
     label: "Sevk Kapısı'nda aç",
     to: "/operations/sack-store",
     state: { scanCode: code },
   };
-  const search: ScanAction = {
-    label: "Çuval Arama'da aç",
-    to: "/operations/sack-search",
-    state: { scanCode: code },
-  };
-  // Havuzdaki çuval — henüz bir sevkiyata atanmamış (status yok). İçeriği
-  // Paketleme'de düzenlenir; Arama'dan havuzdan sevkiyat kurulabilir.
+  // Depodaki çuval — henüz bir sevkiyata atanmamış (status yok).
   if (!status) {
-    return [{ ...packing, primary: true }, search];
+    return [{ ...hub, primary: true }];
   }
   switch (status) {
     case "PLANNED":
     case "AT_DOOR":
-      return [{ ...store, primary: true }, packing, search];
+      return [{ ...store, primary: true }, hub];
     case "DISPATCHED":
-      // Arama'ya özel seed: sackCode filtresi + "sevk edilmişleri de ara" birlikte
-      // açılır — yoksa varsayılan filtre sevk edilmişi gizler, liste boş görünür.
+      // Hub'a özel seed: sackCode filtresi + "sevk edilmişleri de ara" birlikte
+      // açılır — yoksa varsayılan kapsam sevk edilmişi gizler, liste boş görünür.
       return [
         {
-          label: "Çuval Arama'da aç (sevk edilmiş)",
-          to: "/operations/sack-search",
+          label: "Çuval Deposu'nda aç (sevk edilmiş)",
+          to: "/operations/sack-content-edit",
           state: { scanCodeDispatched: code },
           primary: true,
         },
       ];
     default:
-      // Bilinmeyen statü (CANCELLED vb.) → güvenli evrensel hedef: Arama.
-      return [{ ...search, primary: true }];
+      // Bilinmeyen statü (CANCELLED vb.) → güvenli evrensel hedef: hub.
+      return [{ ...hub, primary: true }];
   }
 }
 
@@ -181,7 +173,7 @@ async function resolveSackByCode(code: string, kind: BarcodeKind): Promise<ScanR
     kind: "SACK",
     code,
     found: true,
-    title: first.sackNo ?? first.manualCode ?? code,
+    title: first.sackNo ?? code,
     subtitle: joinDot([
       rows.length > 1 ? `${rows.length} eşleşme` : null,
       status ? SACK_STATUS_LABEL[status] : null,

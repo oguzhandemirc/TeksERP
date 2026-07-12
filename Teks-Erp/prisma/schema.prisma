@@ -299,7 +299,6 @@ model User {
   sessions                   Session[]
   dispatchedShipments        Shipment[]              @relation("ShipmentDispatchedBy")
   weighedSacks               Sack[]                  @relation("SackWeighedBy")
-  sealedSacks                Sack[]                  @relation("SackSealedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1098,9 +1097,6 @@ model Order {
   /// Denormalize sevk toplamı (m). Tek yazma noktası: recomputeOrderFulfillment.
   /// Liste sayfasında "shippedQty / sum(lines.quantity)" gösterimi için.
   shippedQty Decimal @default(0) @db.Decimal(12, 3)
-  /// Denormalize çuvallanmış rezerv toplamı (m) — Σ line.packedQty. Tek yazma noktası:
-  /// recomputeOrderFulfillment. Sipariş liste/detayında "Çuvallanmış" rozeti için.
-  packedQty  Decimal @default(0) @db.Decimal(12, 3)
 
   // Tamamlanma kaydı
   completedAt       DateTime? // İlk COMPLETED'a düştüğü an (otomatik veya manuel)
@@ -1140,11 +1136,8 @@ model OrderLine {
   quantity   Decimal  @db.Decimal(12, 3) // Requested quantity (meters)
   /// Denormalize SEVK toplamı (m) — Σ(SackAllocation.qty; çuval DISPATCHED'te). Tek yazma
   /// noktası recomputeOrderFulfillment. recomputeOrderStatus/status bunu okur.
+  /// Açık miktar = quantity − shippedQty (rezerv/packedQty YOK — düşüş yalnız sevkte).
   shippedQty Decimal  @default(0) @db.Decimal(12, 3)
-  /// Denormalize ÇUVALLANMIŞ rezerv (m) — Σ(SackAllocation.qty; çuval havuzda VEYA
-  /// PLANNED/AT_DOOR sevkiyatta, henüz sevk edilmemiş). Tek yazma noktası
-  /// recomputeOrderFulfillment. Açık miktar = quantity − shippedQty − packedQty.
-  packedQty  Decimal  @default(0) @db.Decimal(12, 3)
   unitPrice  Decimal? @db.Decimal(12, 2) // For future finance module
   width      Decimal? @db.Decimal(12, 3) // İstenen en (cm)
 
@@ -2230,19 +2223,18 @@ model PrintedDocument {
 }
 
 // =============================================================================
-// 11.7 SEVKIYAT — Sevkiyat oturumu (Shipment) + Çuval (Sack = sadece tartı)
+// 11.7 SEVKIYAT — Sevkiyat (Shipment) + Çuval (Sack = depo nesnesi)
 // =============================================================================
-// ÇUVAL HAVUZU MODELİ (top→sipariş bağı YOK; çuval MÜŞTERİYE ait birinci sınıf varlık).
-// Akış: WAREHOUSE serbest top → müşteriye çuval aç (Sack.customerId) → top okut →
-// mühürle (kod+tartı → sealedAt) → ÇUVAL DEPO HAVUZU (shipmentId NULL). Havuzdaki mühürlü
-// çuvallar deterministik rebalance ile açık sipariş satırlarına FIFO tahsis edilir
-// (SackAllocation + OrderLine.packedQty rezervi). Havuzdan çuval seçilerek sevkiyat kurulur
-// (Shipment PLANNED — tahsisler donar); DISPATCHED'te shippedQty'ye terfi + toplar SHIPPED.
-// Çuval İÇERİK tutar (Roll/Swatch.sackId) → irsaliyede ürün-bazlı döküm.
+// ÇUVAL DEPO MODELİ (top→sipariş bağı YOK; mühür/rezerv YOK). Akış: WAREHOUSE serbest top →
+// çuval aç (customerId OPSİYONEL) → top okut → (opsiyonel tart). Çuval DEPODA bekler
+// (shipmentId NULL, her an düzenlenebilir). Çuval(lar) seçilip müşteri/şube atanır + sipariş
+// seçilir → sevkiyat kurulur (Shipment PLANNED; SackAllocation sevk-anı spec+şube FIFO ile
+// yazılır — distributeSacksToLines). Düşüş yalnız DISPATCHED'te: shippedQty'ye terfi + toplar
+// SHIPPED. Çuval İÇERİK tutar (Roll/Swatch.sackId) → irsaliyede ürün-bazlı döküm.
 // =============================================================================
 
 enum ShipmentStatus {
-  PLANNED // Havuzdan çuvallar seçildi, sevkiyat kuruldu — karşılanma donduruldu, toplar hâlâ WAREHOUSE (serbest DEĞİL)
+  PLANNED // Çuvallar seçildi, sevkiyat kuruldu — tahsis (SackAllocation) yazıldı, toplar hâlâ WAREHOUSE (serbest DEĞİL)
   AT_DOOR // Kapı Önü — kamyon bekliyor. "Alındı" onayıyla DISPATCHED olur (sevk onayı bayrağı açıkken zorunlu durak)
   DISPATCHED // Kamyon aldı/çıktı — toplar SHIPPED, fiziksel stok bina dışı (stok yalnız burada düşer)
   CANCELLED // İptal — çuvallar havuza döner (shipmentId null), donmuş tahsis rezerve geri döner (rebalance)
@@ -2258,45 +2250,37 @@ enum ShipmentDestination {
 
 /// Çuval — MÜŞTERİYE ait fiziksel paket birimi + ÇUVAL DEPO HAVUZUNUN çekirdeği.
 /// Brüt tartı (no + kg) + İÇERİK: hangi toplar/kartelalar bu çuvalda (Roll.sackId /
-/// Swatch.sackId). Çuval-önce akışta önce açılır (customerId sabit), içine okutulur,
-/// brüt tartılır + kod girilir → MÜHÜRLENIR (sealedAt). Mühürlü + shipmentId NULL =
-/// çuval depo havuzunda bekliyor; havuzdan seçilip sevkiyata atanınca shipmentId dolar.
-/// İçinde karışık ürün serbest; irsaliyedeki çuval-bazlı ürün dökümü buradan türetilir.
+/// Swatch.sackId). Çuval DEPODA duran bir nesnedir: açılır, içine top okutulur, (brüt
+/// tartılır + kod girilir). shipmentId NULL = depoda (her an düzenlenebilir); dolu =
+/// sevkiyata atanmış. customerId OPSİYONEL (oluştururken atanabilir; yoksa sevkte atanır).
+/// Mühür/rezerv YOK — sipariş bağı yalnız sevkte kurulur. İçinde karışık ürün serbest;
+/// irsaliyedeki çuval-bazlı ürün dökümü buradan türetilir.
 model Sack {
   id          String    @id @default(uuid()) @db.Uuid
-  sackNo      String    @unique @db.VarChar(64) // Client-üretimi barkod (offline-aware)
-  // Çuval MÜŞTERİYE aittir (havuz kimliği) — sevkiyattan bağımsız var olur.
-  customerId  String    @db.Uuid
+  sackNo      String    @unique @db.VarChar(64) // Sistem çuval kodu — CV + GGAAYY + NNNN (insan-okur = tarama)
+  // Çuval müşterisi OPSİYONEL — oluştururken atanabilir (bilinen sipariş için), yoksa
+  // sevk kurarken atanır. Depoda müşterisiz çuval = genel stok.
+  customerId  String?   @db.Uuid
   branchId    String?   @db.Uuid
   shipmentId  String?   @db.Uuid // NULL = çuval depo havuzunda; dolu = sevkiyata atanmış
   seq         Int? // Sevkiyat içinde sıra (Çuval 1, 2, 3...); havuzdayken NULL
-  manualCode  String?   @db.VarChar(64) // Operatörün çuval üstüne elle yazdığı kod (GLOBAL benzersiz; mühür/sevk için zorunlu)
   weightKg    Decimal?  @db.Decimal(12, 3) // Brüt tartı (kumaş + dara); tekli top kg tutulmaz
   // O-19: tartı izi — kim tarttı, ne zaman.
   weighedById String?   @db.Uuid
   weighedAt   DateTime?
-  // Mühür izi — kod+tartı tamam → çuval havuza girdi. NULL = açık çuval (paketleniyor).
-  // Havuz FIFO sırası bu alandan (sealedAt asc). İçerik değişince açılır (reopen) → yeniden tartı.
-  sealedAt    DateTime?
-  sealedById  String?   @db.Uuid
 
   // Relations
-  customer    Customer         @relation(fields: [customerId], references: [id])
+  customer    Customer?        @relation(fields: [customerId], references: [id])
   branch      CustomerBranch?  @relation(fields: [branchId], references: [id])
   shipment    Shipment?        @relation(fields: [shipmentId], references: [id])
   weighedBy   User?            @relation("SackWeighedBy", fields: [weighedById], references: [id])
-  sealedBy    User?            @relation("SackSealedBy", fields: [sealedById], references: [id])
   rolls       Roll[] // Bu çuvaldaki toplar (içerik)
   swatches    Swatch[] // Bu çuvaldaki kartelalar (içerik)
-  allocations SackAllocation[] // Bu çuvalın sipariş satırlarına karşılanma tahsisi (rebalance)
+  allocations SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // manualCode GLOBAL benzersiz — DB'de PARTIAL UNIQUE (WHERE manualCode IS NOT NULL;
-  // migration). Havuz modelinde shipmentId NULL olduğundan sevkiyat-içi unique koruma
-  // sağlamaz → global. Prisma 7 predicate'i yok sayar → drift-free; @@unique DB adını korur.
-  @@unique([manualCode], map: "sacks_manualCode_idx")
   // Sevkiyat içinde çuval sırası benzersiz (NULL'lar çakışmaz — havuz çuvalları seq=NULL).
   @@unique([shipmentId, seq])
   // O-22: Roll/Swatch↔Sack↔Shipment tutarlılık invariant'ının FK hedefi. Bu unique
@@ -2306,8 +2290,8 @@ model Sack {
   // ⚠️ DRIFT: `migrate dev` bu 2 FK'yı (rolls/swatches consistency) DROP etmek İSTER.
   // ASLA uygulama — `migrate dev --create-only` kullan, üretilen DropForeignKey satırlarını SİL.
   @@unique([id, shipmentId])
-  // Havuz sorguları: müşteri + mühür durumu/sırası (FIFO rebalance, açık/mühürlü ayrımı).
-  @@index([customerId, sealedAt])
+  // Havuz/liste sorguları: müşteri + oluşturma sırası (FIFO = createdAt).
+  @@index([customerId, createdAt])
   @@map("sacks")
 }
 
@@ -2378,11 +2362,11 @@ model ShipmentOrder {
   @@map("shipment_orders")
 }
 
-/// Karşılanma defteri (ÇUVAL bazlı) — bir çuvalın metrajının sipariş satırlarına tahsisi.
-/// rebalanceCustomerPool deterministik FIFO (mühür sırası) ile yazar/yeniden yazar.
-/// Çuval havuzdayken (shipment NULL): rezerv → OrderLine.packedQty. Sevkiyata atanınca
-/// (PLANNED/AT_DOOR): donar. DISPATCHED: sevk defteri → OrderLine.shippedQty. Çuval
-/// silinmeden ÖNCE tahsis temizlenir (rebalance). "Hangi top" değil "ne kadar metraj".
+/// Sevk defteri (ÇUVAL bazlı) — bir çuvalın metrajının sipariş satırlarına tahsisi.
+/// SEVK kurulurken yazılır (createShipment): distributeSacksToLines spec+şube FIFO ile
+/// hangi çuval → hangi satır → ne kadar. PLANNED/AT_DOOR: bekler (shippedQty'ye SAYILMAZ).
+/// DISPATCHED: OrderLine.shippedQty'ye sayılır. Sevkiyat iptalinde silinir. Rezerv/packedQty
+/// YOK. "Hangi top" değil "ne kadar metraj".
 model SackAllocation {
   id          String  @id @default(uuid()) @db.Uuid
   sackId      String  @db.Uuid

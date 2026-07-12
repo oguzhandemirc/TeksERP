@@ -1,13 +1,13 @@
 // =============================================================================
-// Test: O-19 — sevkiyat operatör izi (Çuval Havuzu / B modeli).
+// Test: O-19 — sevkiyat operatör izi (Çuval Depo modeli).
 // Çalıştır: npx tsx scripts/test_o19_operator_trace.ts
 //   1. weighSack tartı → Sack.weighedById=userId + weighedAt set.
 //   2. openSack açılışta tartıyla → weighedById set (weighSack ile parite).
 //   3. Yeniden tartı (weighSack) → en son tartan kazanır.
-//   4. sealSack mühür izi → Sack.sealedById=userId + sealedAt set.
 //   5. dispatchShipment → Shipment.dispatchedById set (sevk eden izi).
 //   6. İçerik değişince (roll çıkar → resetSackWeightsTx) → weighedById/weighedAt/weightKg temizlenir.
-// Not: markReady/Shipment.readyById KALDIRILDI — mühürleyen izi Sack.sealedById'ye taşındı.
+// Not: mühür (sealSack/Sack.sealedAt/sealedById) + markReady/Shipment.readyById KALDIRILDI —
+//      çuval depoda düzenlenebilir; sevk izi Shipment.dispatchedById'de tutulur.
 // =============================================================================
 import { RollStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -65,7 +65,7 @@ async function main() {
     await shipping.scanIntoSack({ sackId: sack1, barcode: roll1.barcode! });
 
     // 1) weighSack tartı → weighedById=uid1 + weighedAt
-    await shipping.weighSack({ sackId: sack1, weightKg: 50, manualCode: `TEST-O19-CV1-${ts}` }, uid1);
+    await shipping.weighSack({ sackId: sack1, weightKg: 50 }, uid1);
     let s = await prisma.sack.findUnique({ where: { id: sack1 }, select: { weighedById: true, weighedAt: true } });
     check("1) weighSack tartı → weighedById=userId + weighedAt set", s?.weighedById === uid1 && s?.weighedAt != null, `weighedById=${s?.weighedById === uid1}`);
 
@@ -74,13 +74,8 @@ async function main() {
     s = await prisma.sack.findUnique({ where: { id: sack1 }, select: { weighedById: true } });
     check("3) yeniden tartı → en son tartan kazanır", s?.weighedById === uid2);
 
-    // 4) sealSack mühür izi → sealedById=uid2 + sealedAt
-    await shipping.sealSack({ sackId: sack1 }, uid2);
-    s = await prisma.sack.findUnique({ where: { id: sack1 }, select: { sealedById: true, sealedAt: true } });
-    check("4) sealSack mühür izi → sealedById=userId + sealedAt set", s?.sealedById === uid2 && s?.sealedAt != null, `sealedById=${s?.sealedById === uid2}`);
-
-    // 5) dispatchShipment → Shipment.dispatchedById
-    const shipmentId = ((await shipping.createShipment({ sackIds: [sack1] })).data as { id: string }).id;
+    // 5) dispatchShipment → Shipment.dispatchedById (çuval depodan seçilerek sevkiyata girer)
+    const shipmentId = ((await shipping.createShipment({ sackIds: [sack1], customerId })).data as { id: string }).id;
     shipmentIds.push(shipmentId);
     await shipping.dispatchShipment(shipmentId, { plateNumber: "34ABC34", driverName: "Ali Veli" }, uid1);
     const sh = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchedById: true, status: true } });

@@ -57,9 +57,7 @@ export interface ShipmentDetailLine {
   customerColorName: string | null;
   requested: number;
   shipped: number;
-  /** Havuzda bu siparişe rezerve (çuvallanmış, henüz sevk edilmemiş). */
-  packed: number;
-  /** requested − shipped − packed. */
+  /** requested − shipped. */
   openQty: number;
   /** Bu sevkiyatın bu satıra düşürdüğü/düşüreceği metraj (DISPATCHED'te kesin). */
   thisShipment: number;

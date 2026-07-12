@@ -20,13 +20,12 @@ const sackSearchQuerySchema = z.object({
 });
 
 // ---- Zod şemaları ----------------------------------------------------------
-// Havuz çuvalı aç — müşteriye ait.
+// Çuval aç — müşteri OPSİYONEL (depoda genel stok da olabilir).
 const openSackSchema = z.object({
-  customerId: z.string().uuid("Geçersiz müşteri ID"),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullable().optional(),
   branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
   weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük").optional().nullable(),
   sackNo: z.string().trim().min(1).max(64).optional().nullable(),
-  manualCode: z.string().trim().max(64).optional().nullable(),
 });
 const scanSchema = z.object({ barcode: z.string().trim().min(1, "Barkod gerekli").max(64) });
 const addKartelaSchema = z.object({
@@ -34,20 +33,27 @@ const addKartelaSchema = z.object({
   colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
   count: z.number().int().positive("Adet pozitif tam sayı olmalı").max(10000),
 });
-const weighSackSchema = z
-  .object({
-    weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük").optional(),
-    manualCode: z.string().trim().max(64).optional(),
-  })
-  .refine((v) => v.weightKg !== undefined || v.manualCode !== undefined, { message: "Tartı veya çuval kodu girilmeli" });
+const weighSackSchema = z.object({
+  weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük"),
+});
 const removeSackSchema = z.object({ withContents: z.boolean().optional() });
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 
-// Sevkiyat kur — havuzdan çuval seç.
+// Sevkiyat kur — depodan çuval seç + müşteri/şube ata + (opsiyonel) sipariş seç.
 const createShipmentSchema = z.object({
   sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçilmeli"),
+  customerId: z.string().uuid("Geçersiz müşteri ID"),
+  branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
+  orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).optional(),
   destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
   procedureCode: z.string().trim().max(64).nullable().optional(),
+});
+// Sevk önizleme — çuval + (opsiyonel) müşteri/şube/sipariş; salt-okunur.
+const previewShipmentSchema = z.object({
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmeli").max(500),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullable().optional(),
+  branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
+  orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).optional(),
 });
 const sackIdsSchema = z.object({ sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmeli").max(500) });
 const removeShipmentSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
@@ -62,11 +68,11 @@ const dispatchSchema = z.object({
 export class ShippingController {
   private service = new ShippingService();
 
-  // ---- ÇUVAL DEPO HAVUZU (çuval aç / okut / tart / mühürle) ----------------
+  // ---- ÇUVAL DEPO (çuval aç / okut / tart) --------------------------------
   openSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = openSackSchema.parse(req.body);
-      const result = await this.service.openSack({ customerId: body.customerId, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo, manualCode: body.manualCode }, req.user?.userId);
+      const result = await this.service.openSack({ customerId: body.customerId ?? null, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
@@ -90,21 +96,7 @@ export class ShippingController {
   weighSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = weighSackSchema.parse(req.body);
-      const result = await this.service.weighSack({ sackId: req.params.id as string, weightKg: body.weightKg, manualCode: body.manualCode }, req.user?.userId);
-      res.status(200).json(result);
-    } catch (e) { next(e); }
-  };
-
-  sealSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const result = await this.service.sealSack({ sackId: req.params.id as string }, req.user?.userId);
-      res.status(200).json(result);
-    } catch (e) { next(e); }
-  };
-
-  reopenSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const result = await this.service.reopenSack({ sackId: req.params.id as string }, req.user?.userId);
+      const result = await this.service.weighSack({ sackId: req.params.id as string, weightKg: body.weightKg }, req.user?.userId);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -154,19 +146,19 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
-  // ---- SEVKİYAT (havuzdan çuval seçerek kur + yaşam döngüsü) ----------------
+  // ---- SEVKİYAT (depodan çuval seçerek kur + yaşam döngüsü) -----------------
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createShipmentSchema.parse(req.body);
-      const result = await this.service.createShipment({ sackIds: body.sackIds, destination: body.destination, procedureCode: body.procedureCode ?? null }, req.user?.userId);
+      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
 
   previewCreateShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const body = sackIdsSchema.parse(req.body);
-      const result = await this.service.previewCreateShipment({ sackIds: body.sackIds });
+      const body = previewShipmentSchema.parse(req.body);
+      const result = await this.service.previewCreateShipment({ sackIds: body.sackIds, customerId: body.customerId ?? null, branchId: body.branchId ?? null, orderIds: body.orderIds });
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

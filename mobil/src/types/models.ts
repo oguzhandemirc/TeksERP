@@ -746,8 +746,6 @@ export interface TamburContextOrderLine {
   colorName: string | null;
   width: number | null;
   orderedQty: number;
-  /** Sevkiyat modülü silindi (2026-05-25), her zaman 0. Modül yeniden yazılınca anlamlanacak. */
-  shippedQty: number;
   /** Sipariş satırı kesim notu ("Kesim notu") — Tambur operatörüne talimat. */
   cutNote?: string | null;
   /** Eşit-parça kesim önerisi (m). NULL = serbest kesim. */

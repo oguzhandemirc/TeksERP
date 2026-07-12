@@ -40,7 +40,7 @@ export function SystemLogSummaryPage() {
 
   return (
     <ReportPageLayout
-      title="Audit Log Özeti"
+      title="Denetim Kaydı Özeti"
       description="SystemLog tablosunda aralık içinde oluşan kayıtların kırılımı."
       defaultDays={7}
     >

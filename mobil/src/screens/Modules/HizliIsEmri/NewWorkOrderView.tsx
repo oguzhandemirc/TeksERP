@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
   Text,
   Button,
@@ -681,7 +682,11 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
+      >
         {/* Toplar kartı */}
         <Surface style={styles.card} elevation={1}>
           <View style={styles.cardHeader}>
@@ -925,7 +930,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
         </Surface>
 
         <View style={{ height: 200 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Sticky başlat alanı */}
       <View style={styles.footer}>

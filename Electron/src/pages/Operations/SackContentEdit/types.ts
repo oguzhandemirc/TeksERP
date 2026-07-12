@@ -1,9 +1,25 @@
-/**
- * Paketleme (Çuval Havuzu modeli) tipleri — backend /api/shipping.
- * Çuval MÜŞTERİYE aittir; paketleme müşteri-bazlıdır: çuval aç → top okut → mühürle →
- * çuval depo havuzuna girer. Sevkiyat AYRI kurulur (Çuval & Top Arama'dan seçilerek).
- * Decimal alanlar backend'de JSON number'a çevrilir.
- */
+// Çuval Deposu / Paketleme hub tipleri — backend /api/shipping (Çuval Depo modeli).
+// Mühür/seal + packedQty KALDIRILDI. `shipment === null` → çuval DEPODA (düzenlenebilir);
+// doluysa sevkiyatta. Decimal'lar JSON number/string döner → kullanırken Number() sar.
+
+// ── Sevkiyat statüleri / kapsam ──────────────────────────────────────────────
+export type ShipmentStatusKey = "PLANNED" | "AT_DOOR" | "DISPATCHED";
+
+export const shipmentStatusLabels: Record<ShipmentStatusKey, string> = {
+  PLANNED: "Planlı Sevkiyat",
+  AT_DOOR: "Kapı Önü",
+  DISPATCHED: "Sevk Edildi",
+};
+
+/** Arama kapsamı — depo / planlı+kapı / sevk edilmiş / tümü. */
+export type SackSearchScope = "POOL" | "PLANNED" | "DISPATCHED" | "ALL";
+
+export const scopeLabels: Record<SackSearchScope, string> = {
+  POOL: "Depoda (sevk edilmemiş)",
+  PLANNED: "Planlı / Kapı Önü",
+  DISPATCHED: "Sevk Edilmiş",
+  ALL: "Tümü",
+};
 
 export type ShipmentDestination = "DOMESTIC" | "EXPORT";
 
@@ -12,41 +28,96 @@ export const destinationLabels: Record<ShipmentDestination, string> = {
   EXPORT: "Yurtdışı",
 };
 
-interface Ref {
+// ── Ortak referanslar ────────────────────────────────────────────────────────
+export interface SackCustomerRef {
   id: string;
-  code?: string;
   name: string;
 }
 
-// ── Sipariş seçim / rehber (open-orders + depo karşılaması) ──
-export interface OpenOrderLine {
-  lineId: string;
-  item: { id: string; code: string; name: string };
-  color: { id: string; code: string; name: string } | null;
+export interface SackShipmentRef {
+  id: string;
+  shipmentNo: string;
+  status: ShipmentStatusKey;
+}
+
+/** Depodaki çuval mı — çoklu seçim/sevkiyat/düzenleme yalnız bunlarda açık. */
+export function isWarehouseSack(s: { shipment: SackShipmentRef | null }): boolean {
+  return s.shipment === null;
+}
+
+// ── Arama sonuç satırı (GET /sack-search, cursor) ────────────────────────────
+export interface SackSearchRow {
+  id: string;
+  sackNo: string;
+  seq: number | null;
+  weightKg: number | null;
+  createdAt: string;
+  customer: SackCustomerRef | null;
+  branch: { id: string; name: string } | null;
+  /** null = depoda (düzenlenebilir); dolu = bir sevkiyata atanmış. */
+  shipment: SackShipmentRef | null;
+  rollCount: number;
+  totalQty: number;
+  swatchCount: number;
+  /** İçerik filtresi (ürün/renk/en) yokken null — eşleşme sütunu gizlenir. */
+  matchRollCount: number | null;
+  matchQty: number | null;
+}
+
+export interface SackSearchParams {
+  itemId?: string;
+  colorId?: string;
+  width?: number;
+  customerId?: string;
+  scope?: SackSearchScope;
+  shipmentNo?: string;
+  sackCode?: string;
+  includeDispatched?: boolean;
+  cursor?: string | null;
+  limit?: number;
+}
+
+export interface SackSearchResponse {
+  success: boolean;
+  data: SackSearchRow[];
+  pagination: { nextCursor: string | null; hasMore: boolean; limit: number };
+}
+
+// ── Tek çuval dökümü (GET /sacks/:id/contents) — editör + arama detayı ───────
+export interface SackContentRoll {
+  id: string;
+  barcode: string | null;
+  currentQty: number;
   width: number | null;
-  customerItemName: string | null;
-  customerColorName: string | null;
-  requested: number;
-  shipped: number;
-  packed: number;
-  openQty: number;
-  warehouseAvailable: number;
-  covered: boolean;
+  qualityGrade: string;
+  item: { id: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
 }
 
-export interface OpenOrder {
-  order: {
-    id: string;
-    orderNumber: string;
-    status: string;
-    deadline: string | null;
-    customer: Ref;
-    branch: { id: string; name: string } | null;
-  };
-  lines: OpenOrderLine[];
+export interface SackContentSwatch {
+  id: string;
+  barcode: string | null;
+  item: { id: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
 }
 
-// ── Havuz çuvalı (müşteri paketleme workspace'i) ──
+export interface SackContents {
+  id: string;
+  sackNo: string;
+  seq: number | null;
+  weightKg: number | null;
+  /** Dolu = sevkiyatta (içerik kilitli); null = depoda. */
+  shipment:
+    | (SackShipmentRef & {
+        customer?: SackCustomerRef | null;
+        branch?: { id: string; name: string } | null;
+      })
+    | null;
+  rolls: SackContentRoll[];
+  swatches: SackContentSwatch[];
+}
+
+// ── Müşteri havuzu (GET /pool/sacks) — taşıma hedefleri için ──────────────────
 export interface PoolSackRoll {
   id: string;
   barcode: string | null;
@@ -66,10 +137,7 @@ export interface PoolSackSwatch {
 export interface PoolSack {
   id: string;
   sackNo: string;
-  manualCode: string | null;
   weightKg: number | null;
-  /** true = mühürlü (havuzda); false = açık (paketleniyor). */
-  sealed: boolean;
   branch: { id: string; name: string } | null;
   rollCount: number;
   swatchCount: number;
@@ -79,17 +147,16 @@ export interface PoolSack {
 }
 
 export interface CustomerPool {
-  customer: Ref;
+  customer: { id: string; code?: string; name: string };
   sacks: PoolSack[];
 }
 
-/** openSack lean dönüşü. */
+/** POST /sacks lean dönüşü. Müşteri artık opsiyonel → nullable. */
 export interface OpenedSack {
   id: string;
   sackNo: string;
-  manualCode: string | null;
   weightKg: number | null;
-  customerId: string;
+  customerId: string | null;
   branchId: string | null;
 }
 
@@ -102,7 +169,7 @@ export interface ScanResult {
   currentQty?: number;
 }
 
-/** Kartela stoğu: ürün+renk bazında müsait (çuvala/sevke girmemiş) kartela adedi. */
+/** Kartela stoğu: ürün+renk bazında müsait (çuvala/sevke girmemiş) adet. */
 export interface KartelaStockGroup {
   itemId: string;
   itemCode: string;
@@ -119,7 +186,39 @@ export interface AddKartelaResult {
   sackId: string;
 }
 
-/** locate-roll cevabı — top + bulunduğu çuval/sevkiyat. */
+// ── Sipariş seçim / rehber (GET /open-orders) — packed KALDIRILDI ────────────
+export interface OpenOrderLine {
+  lineId: string;
+  item: { id: string; code: string; name: string };
+  color: { id: string; code: string; name: string } | null;
+  width: number | null;
+  customerItemName: string | null;
+  customerColorName: string | null;
+  requested: number;
+  shipped: number;
+  openQty: number;
+  warehouseAvailable: number;
+  covered: boolean;
+}
+
+export interface OpenOrder {
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    deadline: string | null;
+    customer: { id: string; code?: string; name: string };
+    branch: { id: string; name: string } | null;
+  };
+  lines: OpenOrderLine[];
+}
+
+// ── Top yerini bul (GET /locate-roll) ────────────────────────────────────────
+export interface LocatedRollShipment extends SackShipmentRef {
+  customer: { id: string; name: string };
+  branch: { id: string; name: string } | null;
+}
+
 export interface LocatedRoll {
   id: string;
   barcode: string;
@@ -129,6 +228,73 @@ export interface LocatedRoll {
   qualityGrade: string;
   item: { id: string; name: string };
   color: { id: string; name: string; hex: string | null } | null;
-  sack: { id: string; sackNo: string; manualCode: string | null; weightKg: number | null } | null;
-  shipment: { id: string; shipmentNo: string; status: string } | null;
+  sack: { id: string; sackNo: string; seq: number | null; weightKg: number | null } | null;
+  shipment: LocatedRollShipment | null;
+}
+
+// ── Çeki listesi (POST /sack-search/pick-list) ───────────────────────────────
+export interface PickListRow {
+  id: string;
+  sackNo: string;
+  seq: number | null;
+  weightKg: number | null;
+  customer?: SackCustomerRef | null;
+  branch?: { id: string; name: string } | null;
+  shipment: SackShipmentRef | null;
+  rollCount: number;
+  swatchCount: number;
+  totalQty: number;
+  contents: {
+    itemName: string;
+    colorName: string | null;
+    width: number | null;
+    qty: number;
+    rollCount: number;
+  }[];
+}
+
+// ── Sevkiyat kurulum önizlemesi + sonuç ──────────────────────────────────────
+export interface PreviewSack {
+  id: string;
+  sackNo: string;
+  weightKg: number | null;
+  rollCount: number;
+  totalMeters: number;
+}
+
+export interface PreviewLine {
+  lineId: string;
+  orderNumber: string;
+  item: string;
+  color: string | null;
+  width: number | null;
+  need: number;
+  allocated: number;
+}
+
+export interface CreateShipmentPreview {
+  sacks: PreviewSack[];
+  lines: PreviewLine[];
+  /** Fazla mal / mükerrer / siparişsiz uyarıları — DİKKAT çekilecek. */
+  warnings: string[];
+  totals: { totalMeters: number; sackCount: number; surplusMeters: number };
+}
+
+export interface CreatedShipment {
+  id: string;
+  shipmentNo: string;
+  status: ShipmentStatusKey;
+  destination: ShipmentDestination;
+}
+
+// ── Editör hedefi (liste → editör geçişi) ────────────────────────────────────
+export interface EditorTarget {
+  sackId: string;
+  sackNo: string;
+  customerId: string | null;
+  customerName: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  /** true = "Yeni Çuval" ile az önce açıldı (boş başlar). */
+  isNew?: boolean;
 }

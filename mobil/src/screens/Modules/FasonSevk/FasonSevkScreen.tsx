@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppModal from '../../../components/AppModal';
 import {
@@ -960,9 +961,10 @@ export default function FasonSevkScreen() {
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ── SOL: Yeni Sevk ── */}
-        <ScrollView
+        <KeyboardAwareScrollView
           style={styles.formCol}
           contentContainerStyle={[styles.formContent, isPhone && styles.formContentPhone]}
+          bottomOffset={16}
         >
           {/* ① İş Emri & Fason */}
           <Surface style={styles.card} elevation={1}>
@@ -1244,7 +1246,7 @@ export default function FasonSevkScreen() {
               ? `${scannedRolls.length} Top Sevk Et`
               : 'Sevk Et'}
           </Button>
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {/* ── SAĞ (tablet) / ALT (telefon): İş Emri Detayları ──
             Telefonda 3 konumlu sürüklenebilir alt panel; tablette sabit sütun. */}

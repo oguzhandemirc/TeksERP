@@ -13,14 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { packingService } from "./service";
-import { invalidatePoolData } from "./useCustomerPool";
+import { sackHubService } from "./service";
+import { invalidateSackHub } from "./useSackData";
 import type { KartelaStockGroup } from "./types";
 
 interface Props {
-  /** Kartelaların ekleneceği açık çuval — null ise dialog kapalı. */
+  /** Kartelaların ekleneceği çuval — null ise dialog kapalı. */
   sackId: string | null;
-  customerId: string;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -29,11 +28,11 @@ function groupKey(g: KartelaStockGroup): string {
 }
 
 /**
- * Seçerek kartela ekleme dialog'u — kartelaların fiziksel etiketi olmadığından
- * barkod okutma yerine ürün+renk stok grubu + adet seçilir; backend o gruptan N
- * müsait kartelayı atomik claim eder ve sevkiyata/çuvala bağlar (stoktan düşer).
+ * Seçerek kartela ekleme — kartelaların fiziksel etiketi olmadığından barkod
+ * okutma yerine ürün+renk stok grubu + adet seçilir; backend o gruptan N müsait
+ * kartelayı atomik claim eder ve çuvala bağlar (stoktan düşer).
  */
-export function AddKartelaDialog({ sackId, customerId, onOpenChange }: Props) {
+export function AddKartelaDialog({ sackId, onOpenChange }: Props) {
   const qc = useQueryClient();
   const open = sackId !== null;
   const [search, setSearch] = useState("");
@@ -50,34 +49,27 @@ export function AddKartelaDialog({ sackId, customerId, onOpenChange }: Props) {
 
   const stockQuery = useQuery({
     queryKey: ["kartela", "stock", search],
-    queryFn: () => packingService.listKartelaStock(search.trim() || undefined),
+    queryFn: () => sackHubService.listKartelaStock(search.trim() || undefined),
     enabled: open,
     staleTime: 5_000,
   });
 
   const groups = useMemo(() => stockQuery.data?.data ?? [], [stockQuery.data]);
-  const selected = useMemo(
-    () => groups.find((g) => groupKey(g) === selectedKey) ?? null,
-    [groups, selectedKey],
-  );
+  const selected = useMemo(() => groups.find((g) => groupKey(g) === selectedKey) ?? null, [groups, selectedKey]);
 
   const parsedCount = Number.parseInt(count.trim(), 10);
-  const countValid =
-    Number.isInteger(parsedCount) &&
-    parsedCount >= 1 &&
-    !!selected &&
-    parsedCount <= selected.count;
+  const countValid = Number.isInteger(parsedCount) && parsedCount >= 1 && !!selected && parsedCount <= selected.count;
 
   const mut = useMutation({
     mutationFn: () =>
-      packingService.addKartela(sackId!, {
+      sackHubService.addKartela(sackId!, {
         itemId: selected!.itemId,
         colorId: selected!.colorId,
         count: parsedCount,
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? `${res.data.added} kartela eklendi`);
-      invalidatePoolData(qc, customerId);
+      invalidateSackHub(qc);
       void qc.invalidateQueries({ queryKey: ["kartela", "stock"] });
       onOpenChange(false);
     },
@@ -110,9 +102,7 @@ export function AddKartelaDialog({ sackId, customerId, onOpenChange }: Props) {
           {stockQuery.isLoading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Yükleniyor…</div>
           ) : groups.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              Müsait kartela stoğu yok.
-            </div>
+            <div className="py-8 text-center text-sm text-muted-foreground">Müsait kartela stoğu yok.</div>
           ) : (
             <ul className="space-y-1">
               {groups.map((g) => {
@@ -131,9 +121,7 @@ export function AddKartelaDialog({ sackId, customerId, onOpenChange }: Props) {
                       }}
                       className={cn(
                         "flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                        isSel
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:bg-muted/50",
+                        isSel ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
                       )}
                     >
                       <span className="flex min-w-0 items-center gap-2">
@@ -143,14 +131,10 @@ export function AddKartelaDialog({ sackId, customerId, onOpenChange }: Props) {
                         />
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{g.itemName}</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {g.colorName ?? "Renksiz"}
-                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">{g.colorName ?? "Renksiz"}</span>
                         </span>
                       </span>
-                      <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
-                        {g.count} adet
-                      </span>
+                      <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{g.count} adet</span>
                     </button>
                   </li>
                 );
@@ -171,15 +155,9 @@ export function AddKartelaDialog({ sackId, customerId, onOpenChange }: Props) {
               disabled={!selected}
               className="w-24"
             />
-            {selected && (
-              <span className="text-xs text-muted-foreground">/ {selected.count} müsait</span>
-            )}
+            {selected && <span className="text-xs text-muted-foreground">/ {selected.count} müsait</span>}
           </div>
-          <Button
-            onClick={() => mut.mutate()}
-            disabled={!countValid || mut.isPending}
-            className="gap-1"
-          >
+          <Button onClick={() => mut.mutate()} disabled={!countValid || mut.isPending} className="gap-1">
             <Layers className="h-4 w-4" />
             {mut.isPending ? "Ekleniyor…" : "Ekle"}
           </Button>

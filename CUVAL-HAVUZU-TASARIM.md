@@ -1,89 +1,105 @@
-# Çuval Havuzu Modeli — Sevkiyat "B Tasarımı" (2026-07)
+# Çuval Depo Modeli — Sevkiyat (2026-07)
 
-> Bu doküman `SEVKIYAT-LOOSE-TASARIM.md`'yi (ve ondan sonra kısa süre canlı kalan
-> "markReady/ShipmentAllocation" ara modelini) **süperseder**. Kanonik referanslar:
+> Bu doküman `SEVKIYAT-LOOSE-TASARIM.md`'yi, ondan sonra kısa süre canlı kalan
+> "markReady/ShipmentAllocation" ara modelini **ve** onu izleyen "çuval havuzu"
+> (mühür + `rebalanceCustomerPool` + `packedQty` rezerv) modelini **süperseder**.
+> Kanonik referanslar:
 > `Teks-Erp/prisma/schema.prisma` (Shipment / Sack / SackAllocation),
-> `Teks-Erp/src/services/helpers/sack-allocation.helper.ts` (rebalance),
-> `Teks-Erp/scripts/test_sack_pool_lifecycle.ts` (yaşam döngüsü testi, 28 kontrol).
+> `Teks-Erp/src/services/shipping.service.ts` (`computeSackAllocations` / `writeShipmentAllocationsTx`,
+> `Teks-Erp/src/services/helpers/allocation.helper.ts:distributeSacksToLines` üzerinden sevk-anı tahsis),
+> `Teks-Erp/scripts/test_sack_pool_lifecycle.ts` (yaşam döngüsü testi, 33 kontrol).
 
 ## Neden değişti
 
-Eski model **sipariş-önce** idi: sevkiyat siparişlerden doğuyor, toplar sevkiyat
-içindeki çuvallara okunuyordu. Saha senaryosu bunu kırdı: bir müşterinin 100 siparişi
-30 çuvala paketlenmiş depoda bekliyor; müşteri arayıp yalnız belli kumaş/renkteki
-çuvalları istiyor. "30 çuvaldan spec'e uyan 10'unu seç-gönder" eski modelde imkânsızdı
-(sevkiyat sipariş-önce, çuval sevkiyatsız var olamıyor, kısmi dispatch yok).
+Önceki "havuz" modeli çuvalı **mühürleyip** (`sealSack`) mühür anında müşterinin açık
+sipariş satırlarına `rebalanceCustomerPool` FIFO'suyla **rezerve** ediyordu
+(`OrderLine.packedQty`). Bu, sahanın istemediği bir "erken taahhüt" yüküydü: çuval daha
+depodayken sipariş defteri kilitleniyor, mühür/aç-kapa her seferinde tüm müşteriyi yeniden
+dengeliyor, "hangi çuval hangi siparişe" kararı fiziksel sevkten çok önce donuyordu.
+
+Yeni model bunu **sevk anına** erteler: çuval sadece bir **depo nesnesidir**; sipariş
+karşılanması yalnızca sevkiyat kurulurken (seçilen siparişlere) ve stok düşüşü yalnızca
+**dispatch**'te olur. Mühür yok, rezerv yok, `rebalanceCustomerPool` yok.
 
 ## Model
 
-**Çuval (Sack) müşteriye ait birinci sınıf depo varlığıdır.** Sevkiyat, havuzdan çuval
-seçilerek kurulan ince bir "kamyon" nesnesine iner.
+**Çuval (Sack) bir depo nesnesidir.** Açılır, içine top/kartela okutulur, opsiyonel brüt
+tartılır. İki hâli vardır:
+
+- **Depoda** (`shipmentId = null`): her an düzenlenebilir (top ekle/çıkar/taşı, sil, tart).
+  Çuval `customerId` **opsiyoneldir** — bilinen sipariş için açılışta atanabilir, yoksa
+  depoda müşterisiz "genel stok çuvalı" olarak durur.
+- **Sevk edilmiş / atanmış** (`shipmentId` dolu): bir sevkiyata bağlıdır, içeriği kilitlidir.
 
 ```
-WAREHOUSE serbest top (sackId=null)
-  → openSack(customerId)            → açık çuval (Sack.customerId, shipmentId=null, sealedAt=null)
-  → scanIntoSack(sackId, barcode)   → Roll.sackId (shipmentId hâlâ null)
-  → weighSack + sealSack            → sealedAt dolu → ÇUVAL DEPO HAVUZU
-      ↳ rebalanceCustomerPool: SackAllocation (FIFO) → OrderLine.packedQty (rezerv)
-  → createShipment(sackIds)         → Shipment PLANNED (çuvallar atanır, tahsis donar)
-  → moveToDoor → AT_DOOR → dispatch → DISPATCHED: toplar SHIPPED, tahsis → shippedQty
-  iptal: cancelShipment             → çuvallar havuza döner (mühürlü), rebalance
+WAREHOUSE serbest top (sackId = null)
+  → openSack(customerId?)            → çuval DEPODA (shipmentId=null, customerId opsiyonel)
+  → scanIntoSack(sackId, barcode)    → Roll.sackId (çuval hâlâ depoda, düzenlenebilir)
+  → (opsiyonel) weighSack            → brüt kg + kod (irsaliye için; rezerv/mühür YOK)
+  → createShipment({ sackIds, customerId, branchId?, orderIds? })
+        → Shipment PLANNED: çuvallar atanır (shipmentId + seq),
+          müşteri/şube çuvala backfill edilir, SEÇİLEN siparişlere SackAllocation yazılır
+          (distributeSacksToLines, spec+şube FIFO). shippedQty HÂLÂ değişmez.
+  → moveToDoor → AT_DOOR → dispatchShipment → DISPATCHED:
+        toplar SHIPPED (stok bina dışı), DISPATCHED tahsisler → OrderLine.shippedQty terfi.
+  iptal: cancelShipment              → sevkiyatın tahsisleri silinir, çuvallar DEPOYA döner.
 ```
 
-- **ShipmentStatus:** `PLANNED | AT_DOOR | DISPATCHED | CANCELLED`. (PREPARING/READY kaldırıldı.)
-- **Karşılanma defteri:** `SackAllocation(sackId, orderLineId, qty)` — çuval bazlı.
-  - Çuval havuzdayken (shipment=null) veya PLANNED/AT_DOOR sevkiyatta → `OrderLine.packedQty` (rezerv).
-  - Çuval DISPATCHED → `OrderLine.shippedQty` (sevk defteri, kalıcı).
-- **Denormlar defter-otoritatif:** `shippedQty`/`packedQty` increment/decrement DEĞİL,
-  her tetikte defterden yeniden hesaplanır (`recomputeOrderStatus`, drift-free).
-  `shippedQty = Σ SackAllocation(DISPATCHED) + Σ DirectShipAllocation`;
-  `packedQty = Σ SackAllocation(havuz veya PLANNED/AT_DOOR)`.
-- **Açık miktar:** `quantity − shippedQty − packedQty` (her openQty/Ürün Dengesi/kapsama tüketicisi).
-- **Serbest stok:** `status=WAREHOUSE, shipmentId=null, sackId=null`. Havuz çuvalındaki
-  top (sackId dolu) serbest DEĞİL — packedQty'de sayılır (çift sayım önlenir).
-
-## rebalanceCustomerPool (çekirdek)
-
-`sack-allocation.helper.ts`. Bir müşterinin **havuz** çuvallarını (shipmentId=null, mühürlü)
-açık sipariş satırlarına deterministik **çuval-farkındalı FIFO** ile dağıtır:
-
-1. Müşterinin açık satırlarını id-sıralı kilitle (`touchOrderLinesTx`).
-2. Havuz SackAllocation'larını sil (yalnız shipmentId=null; donmuşlara dokunma).
-3. `need(satır) = quantity − shippedQty − frozenPacked` (donmuş + sevk edilmiş düşülür).
-4. Havuz çuvalları mühür sırasında (sealedAt asc); içerik spec+şube eşleşen satırlara
-   FIFO (termin→tarih) dağıtılır → yeni SackAllocation'lar. Cap need'de → over-coverage imkânsız.
-5. Etkilenen siparişleri recompute (packedQty + status).
-
-**Tetikleyiciler:** seal / reopen / havuz çuvalı sil / sevkiyat kur & iptal & çuval çıkar /
-dispatch / sipariş oluştur·onay·iptal·satır-düzenle·manuel-kapat·reopen (o müşteri için).
+- **ShipmentStatus:** `PLANNED | AT_DOOR | DISPATCHED | CANCELLED`. (PREPARING/READY yok.)
+- **Karşılanma defteri:** `SackAllocation(sackId, orderLineId, qty)` — çuval bazlı, "ne kadar
+  metraj", "hangi top" değil. Yalnız **sevkiyata atanmış** çuvalların tahsisi olur; depodaki
+  çuvalın tahsisi **yoktur** (rezerv kalktı).
+  - Çuval PLANNED/AT_DOOR sevkiyatta → tahsis bekler, `shippedQty`'ye **sayılmaz**.
+  - Çuval DISPATCHED → tahsis `OrderLine.shippedQty`'ye sayılır (sevk defteri, kalıcı).
+- **Denorm defter-otoritatif:** `shippedQty` increment/decrement DEĞİL, her tetikte defterden
+  yeniden hesaplanır (`recomputeOrderStatusForOrders` → `computeLineLedger`, drift-free).
+  `shippedQty = Σ SackAllocation(çuval DISPATCHED) + Σ DirectShipAllocation`.
+- **Sipariş görünümü:** **İstenen | Sevk | Açık** — `Açık = quantity − shippedQty`.
+  (Rezerv/`packedQty` sütunu yok; düşüş yalnız sevkte.)
+- **Serbest stok:** `status=WAREHOUSE, shipmentId=null, sackId=null`. Depo çuvalındaki top
+  (sackId dolu, shipmentId null) fiziksel olarak hâlâ depodadır ama serbest listeye girmez.
 
 ## Sevkiyat = çuval seçimi
 
-`createShipment({sackIds})`: hepsi mühürlü + havuzda + tek müşteri/şube; EXPORT'ta tümü
-tartılı. Çuvallar sevkiyata atanır (shipmentId + seq), içerik roll/swatch shipmentId
-açıkça yazılır (composite FK deferred), donmuş tahsislerden `ShipmentOrder` **türetilir**
-(irsaliye orderNos), kalan havuz yeniden dengelenir. Sipariş kümesi elle değiştirilemez
-(retarget kaldırıldı) — çuval seçiminden türer.
+`createShipment({ sackIds, customerId, branchId?, orderIds?, destination?, procedureCode? })`:
+seçilen çuvalların **hepsi depoda** olmalı; `customerId` zorunlu (çuvalı olmayanlara backfill
+edilir), EXPORT'ta tümü tartılı. Çuvallar sevkiyata atanır (shipmentId + seq), içerik
+roll/swatch shipmentId açıkça yazılır (composite FK deferred). Sipariş kümesi **kullanıcı
+seçimidir** (`orderIds`) — `ShipmentOrder` bundan kurulur; tahsis
+(`computeSackAllocations`/`writeShipmentAllocationsTx` → `distributeSacksToLines`) seçilen
+siparişlere spec+şube FIFO ile yazılır.
+
+- **Fazla / eşleşmeyen / siparişsiz sevk serbesttir.** Sipariş ihtiyacından fazla metraj →
+  tahsis need'de kapanır, fazlası yine sevk edilir; hiç sipariş seçilmezse hiçbir siparişten
+  düşülmez. `previewCreateShipment` bunları `warnings[]` + `totals.surplusMeters` ile önden
+  gösterir (DB'ye yazmaz).
+- **İptal:** `cancelShipment` sevkiyatın `SackAllocation`'larını siler, çuvalları depoya
+  (shipmentId=null, seq=null) döndürür, etkilenen siparişleri recompute eder. DISPATCHED
+  olmadığı için `shippedQty` zaten 0'dı → sipariş etkilenmez.
 
 ## UI
 
-- **Electron paketleme (`SackContentEdit`):** müşteri-bazlı; sipariş seç (rehber) veya
-  doğrudan müşteri → açık çuvala okut → tart+kod → mühürle.
-- **Electron `SackSearch`:** havuzun ana ekranı; spec (ürün/renk/en) filtresi + çoklu
-  seçim → "Seçili Çuvallardan Sevkiyat Oluştur" (önizleme + destinasyon). **Kullanıcı
-  senaryosunun birebir ekranı.**
+- **Electron paketleme (`SackContentEdit`):** çuval aç → açık çuvala okut → (opsiyonel
+  tart). Mühür yok — çuval depoda düzenlenebilir kalır.
+- **Electron `SackSearch`:** depo çuvallarının ana ekranı; spec (ürün/renk/en) filtresi +
+  çoklu seçim → "Seçili Çuvallardan Sevkiyat Oluştur" (önizleme + müşteri/şube/sipariş
+  seçimi). **Kullanıcı senaryosunun birebir ekranı.**
 - **Electron `SackStore` / mobil `SevkiyatScreen`:** PLANNED/AT_DOOR board → kapı önü / sevk.
-- **Sipariş görünümü:** İstenen | Çuvallanmış (packedQty) | Sevk (shippedQty) | Açık.
+- **Sipariş görünümü:** İstenen | Sevk (shippedQty) | Açık (quantity − shippedQty).
 
 ## Belge zinciri (değişmedi)
 
 İrsaliye + muhasebe fişi + accounting-export tahsis'e DEĞİL, çuval içeriğine (Sack→Roll)
-dayanır (`collectShipmentDocContent`). Havuz remodeli belge zincirini bozmaz.
+dayanır (`collectShipmentDocContent`). Depo remodeli belge zincirini bozmaz. İrsaliyedeki
+çuval kodu artık `Sack.sackNo`'dur (ayrı `manualCode` alanı kaldırıldı).
 
 ## Migration
 
-`20260711120000_cuval_havuzu_remodel` — boş DB'de (`migrate reset`) oynatılacak biçimde
-yazıldı (veri dönüşümü yok; tüm veriler test verisi). Sack.customerId/sealedAt eklendi,
-SackAllocation tablosu, ShipmentStatus enum recreate (remove_paused deseni), ShipmentAllocation
-DROP, readyAt/readyById DROP, shipment_orders_active_order_uq DROP, manualCode global unique.
-`reset` seed'i otomatik koşmaz → sonrasında `npm run seed`.
+`20260712000000_cuval_depo_no_seal` — mühür/rezerv modelini söker: `OrderLine.packedQty` +
+`Order.packedQty` DROP, `Sack.sealedAt` + `Sack.sealedById` DROP (+ FK/index), `Sack.customerId`
+NULLABLE, havuz/liste index'i `sacks(customerId, sealedAt)` → `sacks(customerId, createdAt)`.
+Öncesindeki `20260711120000_cuval_havuzu_remodel` (Sack/SackAllocation + ShipmentStatus recreate)
+tabanının üstüne biner; `20260712120000_drop_sack_manual_code` ayrıca `Sack.manualCode`'u ve
+`sack.codeTemplate` ayarını kaldırır (çuval yalnız `sackNo` ile yürür). Tümü boş DB'de
+(`migrate reset` + `npm run seed`) oynatılacak biçimde yazıldı; veri dönüşümü yok (tüm veriler
+test verisi).

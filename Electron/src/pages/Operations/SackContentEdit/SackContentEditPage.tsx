@@ -1,29 +1,59 @@
 import { useState } from "react";
+import { PackagePlus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { OrderSelectionPanel } from "./OrderSelectionPanel";
-import { PackingWorkspace, type PackingTarget } from "./PackingWorkspace";
+import { RefreshButton } from "@/components/RefreshButton";
+import { Button } from "@/components/ui/button";
+import { SacksListView } from "./SacksListView";
+import { SackEditorView } from "./SackEditorView";
+import { NewSackDialog } from "./NewSackDialog";
+import type { EditorTarget, SackSearchRow } from "./types";
+
+/** Arama satırından editör hedefi türet (müşteri/şube bilgisini taşır). */
+function rowToTarget(s: SackSearchRow): EditorTarget {
+  return {
+    sackId: s.id,
+    sackNo: s.sackNo,
+    customerId: s.customer?.id ?? null,
+    customerName: s.customer?.name ?? null,
+    branchId: s.branch?.id ?? null,
+    branchName: s.branch?.name ?? null,
+  };
+}
 
 /**
- * Paketleme istasyonu (Çuval Havuzu). İki faz: (1) müşteri seç (sipariş seçerek türet
- * veya doğrudan) → (2) müşteri paketleme workspace'i: çuval aç, top okut, tart+kod, mühürle.
- * Mühürlenen çuvallar çuval depo havuzuna girer; sevkiyat AYRI kurulur (Çuval & Top Arama).
+ * Çuval Deposu / Paketleme hub — TEK ekran, iki mod:
+ *  1) Liste (varsayılan): filtrele/ara, çoklu seç → sevkiyat kur.
+ *  2) Editör: "Yeni Çuval" veya depodaki bir çuvala tıkla → içerik düzenle.
+ * Eski ayrı "Çuval & Top Arama" ekranı bu hub'a taşındı.
  */
 export function SackContentEditPage() {
-  const [target, setTarget] = useState<PackingTarget | null>(null);
+  const [target, setTarget] = useState<EditorTarget | null>(null);
+  const [newOpen, setNewOpen] = useState(false);
 
   if (target) {
-    return <PackingWorkspace target={target} onExit={() => setTarget(null)} />;
+    return <SackEditorView target={target} onExit={() => setTarget(null)} />;
   }
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Paketleme (Çuval Havuzu)"
-        description="Müşteri seç → çuval aç, top okut, tart & kod gir, mühürle. Mühürlenen çuvallar depo havuzuna girer; sevkiyatı Çuval & Top Arama'dan kurarsın."
+        title="Çuval Deposu / Paketleme"
+        description="Çuvalları filtrele/ara, tıkla → içeriğini düzenle; depodaki çuvalları seç → havuzdan sevkiyat kur."
+        actions={
+          <>
+            <Button size="sm" onClick={() => setNewOpen(true)} className="gap-1.5">
+              <PackagePlus className="h-4 w-4" /> Yeni Çuval
+            </Button>
+            <RefreshButton
+              queryKey="sack-search"
+              extraKeys={[["packing"]]}
+              successMessage="Çuval listesi yenilendi"
+            />
+          </>
+        }
       />
-      <div className="min-h-0 flex-1">
-        <OrderSelectionPanel onStarted={setTarget} />
-      </div>
+      <SacksListView onEditSack={(s) => setTarget(rowToTarget(s))} />
+      <NewSackDialog open={newOpen} onOpenChange={setNewOpen} onCreated={(t) => setTarget(t)} />
     </div>
   );
 }

@@ -28,8 +28,8 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 // Çuval Düzeltme (saha #3) — top okutarak yerini bul, HAVUZ çuvalında düzelt:
 //   • Çuvaldan Çıkar (depoya döner)   • Başka Çuvala Taşı (hedef çuvaldan top okut)
 //   • Çuvalı Tart                     • Etiket Değiştir (renk/en/kalite + yeniden bas)
-// Yalnız AÇIK havuz çuvalları düzenlenebilir (mühürlü/sevkiyattaki çuval → backend
-// reddeder, net mesaj döner). Online-only (düzeltme akışı).
+// Yalnız havuzdaki (sevkiyata girmemiş) çuvallar düzenlenebilir — sevkiyattaki
+// çuval → backend reddeder, net mesaj döner. Online-only (düzeltme akışı).
 // =============================================================================
 
 const sackLabel = (sack: { sackNo: string; manualCode: string | null }) =>
@@ -232,7 +232,7 @@ export default function CuvalDuzeltScreen() {
                   {roll.sack.weightKg != null ? ` · ${roll.sack.weightKg} kg` : ''}
                 </Text>
                 {roll.sack.weightKg == null && (
-                  <Text style={styles.warn}>Çuval tartısız — mühürlemeden önce tartılmalı.</Text>
+                  <Text style={styles.warn}>Çuval tartısız — sevk edilmeden önce tartılmalı.</Text>
                 )}
               </>
             ) : (

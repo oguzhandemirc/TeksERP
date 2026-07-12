@@ -1,11 +1,11 @@
 // =============================================================================
 // TEST: Kartela ADET-bazlı stok + ÇUVALA seçerek ekleme (kartela.getStock +
-//       shipping.addKartelaToSack — Çuval Havuzu / B modeli)
+//       shipping.addKartelaToSack — Çuval Depo modeli)
 // Çalıştır: npx tsx scripts/test_kartela_stock_and_ship.ts
 // =============================================================================
 // Akış: TEST customer + item + 2 renk → WAREHOUSE toplar → kartelaService.dispatch →
 // receive({count}) ile N swatch doğur → getStock gruplama (sackId:null filtreli) →
-// addKartelaToSack happy/insufficient → sealed-çuval + PLANNED-sevkiyat guard (409) →
+// addKartelaToSack happy/insufficient → PLANNED-sevkiyat guard (409) →
 // removeSwatchFromSack ile stoğa dönüş → colorId=null claim →
 // reduceStock (FIFO soft-cancel) happy/yetersiz/çuvaldakini-çalmaz/gerekçe-guard.
 // Ölçümsüz (adet) akış; izole TEST item sayesinde grup sayıları kesin.
@@ -78,7 +78,7 @@ async function setup(): Promise<void> {
     "KARTELAAS firması",
   ).id;
 
-  // İzole TEST müşterisi — sevkiyat/rebalance sadece kendi havuzumuza dokunsun.
+  // İzole TEST müşterisi — sevkiyat sadece kendi çuvallarımıza dokunsun.
   CUSTOMER = (
     await prisma.customer.create({
       data: { code: `TEST-KRT-CUST-${TS}`, name: `Kartela Test Müşteri ${TS}` },
@@ -114,8 +114,8 @@ async function birthSwatches(colorId: string | null, count: number): Promise<voi
   if (receiptId) receiptIds.push(receiptId);
 }
 
-/** Açık çuvala WAREHOUSE top okut → mühürle → mühürlü havuz çuvalı döndür. */
-async function sealedSackWithRoll(manualCode: string): Promise<string> {
+/** Açık çuvala WAREHOUSE top okut → depoda dolu çuval döndür (mühür YOK). */
+async function depotSackWithRoll(): Promise<string> {
   const roll = await prisma.roll.create({
     data: {
       barcode: `TEST-KRT-GROLL-${TS}-${rollIds.length}`,
@@ -129,10 +129,9 @@ async function sealedSackWithRoll(manualCode: string): Promise<string> {
     select: { id: true, barcode: true },
   });
   rollIds.push(roll.id);
-  const sackId = (await shippingService.openSack({ customerId: CUSTOMER, manualCode }, ADMIN)).data as { id: string };
+  const sackId = (await shippingService.openSack({ customerId: CUSTOMER }, ADMIN)).data as { id: string };
   sackIds.push(sackId.id);
   await shippingService.scanIntoSack({ sackId: sackId.id, barcode: roll.barcode! }, ADMIN);
-  await shippingService.sealSack({ sackId: sackId.id }, ADMIN);
   return sackId.id;
 }
 
@@ -182,18 +181,10 @@ async function run(): Promise<void> {
   check("yetersiz stok → 409", conflicted);
   check("rollback: stok değişmedi", (await stockCount(ITEM, COLOR_A)) === remaining, `${await stockCount(ITEM, COLOR_A)} vs ${remaining}`);
 
-  console.log("\n=== guard: mühürlü çuvala + PLANNED sevkiyattaki çuvala kartela eklenemez (409) ===");
-  const sealedSack = await sealedSackWithRoll(`TEST-KRT-G1-${TS}`);
-  let sealedGuard = false;
-  try {
-    await shippingService.addKartelaToSack({ sackId: sealedSack, itemId: ITEM, colorId: COLOR_A, count: 1 }, ADMIN);
-  } catch (e) {
-    sealedGuard = is409(e);
-  }
-  check("mühürlü çuvala kartela eklenemez → 409", sealedGuard);
-
-  const plannedSack = await sealedSackWithRoll(`TEST-KRT-G2-${TS}`);
-  const planned = (await shippingService.createShipment({ sackIds: [plannedSack] })).data as { id: string; status: string };
+  console.log("\n=== guard: PLANNED sevkiyattaki çuvala kartela eklenemez (409); depo çuvalı düzenlenebilir ===");
+  // Depo çuvalı (sevkiyatsız) düzenlenebilir → kartela eklenir (happy path yukarıda happySack ile).
+  const plannedSack = await depotSackWithRoll();
+  const planned = (await shippingService.createShipment({ sackIds: [plannedSack], customerId: CUSTOMER })).data as { id: string; status: string };
   shipmentIds.push(planned.id);
   check("sevkiyat PLANNED kuruldu", planned.status === "PLANNED", planned.status);
   let plannedGuard = false;
@@ -203,7 +194,7 @@ async function run(): Promise<void> {
     plannedGuard = is409(e);
   }
   check("PLANNED sevkiyattaki çuvala kartela eklenemez → 409", plannedGuard);
-  // Guard'lar colorA'ya dokunmadı (rollback + sealed çuvallarda rol var, kartela yok).
+  // Guard colorA'ya dokunmadı (rollback + sevkiyattaki çuvalda rol var, kartela yok).
   check("guard sonrası colorA stok değişmedi", (await stockCount(ITEM, COLOR_A)) === remaining, `${await stockCount(ITEM, COLOR_A)} vs ${remaining}`);
 
   console.log("\n=== removeSwatchFromSack → stoğa dönüş ===");

@@ -28,7 +28,6 @@ import {
   useWindowDimensions,
   Pressable,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import {
@@ -43,11 +42,7 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import {
   useQuery,
   useInfiniteQuery,
@@ -162,31 +157,6 @@ export default function FasonKabulScreen() {
   const isPhone = device === 'phone';
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const qc = useQueryClient();
-
-  // Footer (İrsaliye No / Kabul Notu) ScrollView'in DIŞINDA → RN'in kendi odak-
-  // kaydırması onu klavyenin üstüne taşımıyor (iç input'lar zaten ScrollView ile
-  // çalışıyor). Bu yüzden YALNIZCA bu iki footer input'u odaklanınca footer'ı klavye
-  // yüksekliği kadar yukarı kaydırıyoruz.
-  // Klavye yüksekliğini RN Keyboard event'lerinden OKUyoruz — reanimated
-  // useAnimatedKeyboard pencerenin decorFitsSystemWindows'unu global değiştirip
-  // iç ScrollView'in çalışan odak-kaydırmasını bozardı; salt-okuma event güvenli.
-  const kbHeight = useSharedValue(0);
-  const footerLift = useSharedValue(0);
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (e) => {
-      kbHeight.value = withTiming(e.endCoordinates?.height ?? 0, { duration: 150 });
-    });
-    const hide = Keyboard.addListener('keyboardDidHide', () => {
-      kbHeight.value = withTiming(0, { duration: 150 });
-    });
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, [kbHeight]);
-  const footerAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -kbHeight.value * footerLift.value }],
-  }));
 
   // ── Form state ──
   const [selectedGroup, setSelectedGroup] = useState<PendingReturnGroup | null>(null);
@@ -926,11 +896,14 @@ export default function FasonKabulScreen() {
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ════════ SOL: form ════════ */}
-        {/* KAV: edge-to-edge'de Android klavyeyi input'ların üstüne biner; sol kolonu
-            sarınca footer + "Dönen Açık Kumaş" Metre input'ları klavyenin üstünde kalır.
-            enabled verilmez → telefon + tablette aktif (KK1 deseni; KK1 tablette numpad
-            kullandığından orada devre dışı, burada Metre native klavye açar). */}
-        <View
+        {/* Klavye yönetimi: KeyboardAvoidingView (padding) klavye açılınca kolonu
+            klavye kadar aşağıdan kısaltır → Toplar ScrollView'i küçülür, sabit footer
+            (İrsaliye/Kabul Notu) + "Metre" input'ları klavyenin üstüne YUMUŞAKÇA çıkar,
+            kapanınca iner. Bu ekranda hem listede hem footer'da input olduğundan
+            padding-kısaltma seçildi (üst üste binme olmaz); edge-to-edge inset'ini
+            kütüphane kendi hesaplar. */}
+        <KeyboardAvoidingView
+          behavior="padding"
           style={[styles.formCol, isPhone && !selectedGroup && styles.formColPhone]}
         >
           {!selectedGroup ? (
@@ -1104,12 +1077,12 @@ export default function FasonKabulScreen() {
                 </TouchableRipple>
               )}
 
-              {/* Toplar — ScrollView'in büyük kısmı */}
+              {/* Toplar listesi. Klavye önleme kolon seviyesinde KeyboardAvoidingView
+                  (padding) ile yapılır → burada düz ScrollView yeterli. */}
               <ScrollView
                 style={styles.rollsScroll}
                 contentContainerStyle={styles.rollsContent}
                 keyboardShouldPersistTaps="handled"
-                automaticallyAdjustKeyboardInsets
               >
                 <View style={styles.rollsHeaderRow}>
                   <View style={styles.statusBadge}>
@@ -1353,9 +1326,8 @@ export default function FasonKabulScreen() {
                 </View>
               </ScrollView>
 
-              {/* Sticky footer — yalnız İrsaliye/Kabul Notu odaklanınca klavyenin
-                  üstüne kayar (footerAnimStyle). */}
-              <Animated.View style={footerAnimStyle}>
+              {/* Sabit footer — kolon KeyboardAvoidingView ile kısaldığından klavye
+                  açılınca bu footer yumuşakça klavyenin üstüne çıkar. */}
               <Surface style={styles.footer} elevation={4}>
                 {/* İrsaliye No / Kabul Notu opsiyonel → varsayılan kapalı. Kapalıyken
                     dolu ise özet, boşsa "ekle" etiketi; tıklayınca açılır. */}
@@ -1400,12 +1372,6 @@ export default function FasonKabulScreen() {
                       placeholder="Opsiyonel"
                       dense
                       autoCapitalize="characters"
-                      onFocus={() => {
-                        footerLift.value = withTiming(1, { duration: 160 });
-                      }}
-                      onBlur={() => {
-                        footerLift.value = withTiming(0, { duration: 160 });
-                      }}
                       style={[styles.footerInput, { flex: 1 }]}
                     />
                     <TextInput
@@ -1415,12 +1381,6 @@ export default function FasonKabulScreen() {
                       onChangeText={setNotes}
                       placeholder="Opsiyonel"
                       dense
-                      onFocus={() => {
-                        footerLift.value = withTiming(1, { duration: 160 });
-                      }}
-                      onBlur={() => {
-                        footerLift.value = withTiming(0, { duration: 160 });
-                      }}
                       style={[styles.footerInput, { flex: 1.2 }]}
                     />
                   </View>
@@ -1448,10 +1408,9 @@ export default function FasonKabulScreen() {
                       : `Mal Kabulü Yap (${checkedCount} top → ${newRolls.length} parça)`}
                 </Button>
               </Surface>
-              </Animated.View>
             </>
           )}
-        </View>
+        </KeyboardAvoidingView>
 
         {/* ════════ SAĞ: bekleyen + geçmiş (tablet) / sadece manuel input (telefon + kamera arızalı) ════════
             Telefon dikey + kamera-only modda kart okuma, liste ve geçmiş aksiyonları

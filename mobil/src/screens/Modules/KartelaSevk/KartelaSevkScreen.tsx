@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Text, TextInput, IconButton, Surface, TouchableRipple, Chip, Icon, ActivityIndicator, Button } from 'react-native-paper';
 import { useMutation, useQueryClient, onlineManager } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
@@ -249,7 +250,11 @@ export default function KartelaSevkScreen() {
   return (
     <ScreenChrome title="Kartela Sevk" headerExtras={<SyncStatusChip />}>
       <View style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
+      >
         {/* Firma seçimi */}
         <Surface style={styles.card} elevation={1}>
           <Text variant="labelLarge" style={styles.cardTitle}>
@@ -354,7 +359,7 @@ export default function KartelaSevkScreen() {
           )}
         </Surface>
 
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Alt bar — FasonKabul deseni (30/40/30): Geçmiş (sol) · OKUT (orta,
           vurgulu dolgulu hero) · Gönder (sağ). Güvenli alanı doldurup ekran

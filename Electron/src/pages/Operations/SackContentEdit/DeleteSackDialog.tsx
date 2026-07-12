@@ -10,32 +10,32 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { packingService } from "./service";
-import { invalidatePoolData } from "./useCustomerPool";
-import type { PoolSack } from "./types";
+import { sackHubService } from "./service";
+import { invalidateSackHub } from "./useSackData";
+import type { SackContentRoll, SackContentSwatch } from "./types";
 
 interface Props {
-  sack: PoolSack | null;
-  customerId: string;
+  sack: { id: string; sackNo: string; rolls: SackContentRoll[]; swatches: SackContentSwatch[] } | null;
   onOpenChange: (open: boolean) => void;
+  onDeleted?: () => void;
 }
 
 /**
  * Çuval sil. Boşsa düz onay. Doluysa içeriği TEK TEK listeler — yıkıcı-onay kuralı
  * (soyut "N top" yetmez) — onaylanınca toplar/kartelalar serbest depoya döner (withContents).
  */
-export function DeleteSackDialog({ sack, customerId, onOpenChange }: Props) {
+export function DeleteSackDialog({ sack, onOpenChange, onDeleted }: Props) {
   const qc = useQueryClient();
   const open = !!sack;
-  const label = sack?.manualCode ?? sack?.sackNo ?? "";
   const hasContents = !!sack && (sack.rolls.length > 0 || sack.swatches.length > 0);
 
   const mut = useMutation({
-    mutationFn: () => packingService.removeSack(sack!.id, hasContents),
+    mutationFn: () => sackHubService.removeSack(sack!.id, hasContents),
     onSuccess: () => {
-      toast.success(`Çuval ${label} silindi`);
-      invalidatePoolData(qc, customerId);
+      toast.success(`Çuval ${sack!.sackNo} silindi`);
+      invalidateSackHub(qc);
       onOpenChange(false);
+      onDeleted?.();
     },
   });
 
@@ -44,7 +44,7 @@ export function DeleteSackDialog({ sack, customerId, onOpenChange }: Props) {
       <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Trash2 className="h-4 w-4" /> Çuval {label} silinsin mi?
+            <Trash2 className="h-4 w-4" /> Çuval {sack?.sackNo} silinsin mi?
           </DialogTitle>
           <DialogDescription>
             {hasContents

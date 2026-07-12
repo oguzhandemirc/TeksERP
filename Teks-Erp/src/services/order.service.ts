@@ -19,6 +19,7 @@ import {
 import { AppError } from "../utils/app-error";
 import { OrderStatus, Prisma, RollStatus, ShipmentStatus, WorkOrderStatus } from "@prisma/client";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 
 // MASS-ASSIGNMENT WHITELIST'leri (M-3): route'larda Zod yok (BaseController ham
 // body); muhasebe/kimlik alanları (status, shippedQty, completedAt,
@@ -47,7 +48,6 @@ const ORDER_LINE_WRITABLE = new Set([
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { CURRENCIES } from "../config/currencies";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
-import { rebalanceCustomerPool } from "./helpers/sack-allocation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
@@ -641,7 +641,6 @@ export class OrderService extends BaseService {
           itemId: true,
           quantity: true,
           shippedQty: true,
-          packedQty: true,
           width: true,
           colorId: true,
           customerItemName: true,
@@ -674,8 +673,8 @@ export class OrderService extends BaseService {
         inProdBySpec = await this.computeInProdBySpec(params.itemId);
       }
       const data = page.map((l) => {
-        // Açık = quantity − sevk − çuvallanmış (havuza paketlenen mala yeni WO açılmasın).
-        const openQty = new Prisma.Decimal(l.quantity).minus(l.shippedQty).minus(l.packedQty);
+        // Açık = quantity − sevk (rezerv yok; düşüş yalnız sevkte).
+        const openQty = new Prisma.Decimal(l.quantity).minus(l.shippedQty);
         const inProduction =
           inProdBySpec?.get(
             `${l.itemId}|${l.colorId ?? ""}|${l.width == null ? "" : new Prisma.Decimal(l.width).toString()}`,
@@ -866,7 +865,6 @@ export class OrderService extends BaseService {
         width: true,
         quantity: true,
         shippedQty: true,
-        packedQty: true,
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
       },
@@ -887,8 +885,8 @@ export class OrderService extends BaseService {
       a == null || b == null ? a == null && b == null : new Prisma.Decimal(a).equals(b);
 
     // Serbest stok — spec bazında grupla; hiçbir çuvala/sevkiyata girmemiş (shipmentId=null
-    // + sackId=null) WAREHOUSE + STOCK toplar (fungible havuz). sackId:null: çuvallanmış
-    // (havuz) mal packedQty'de sayılır → çift sayım olmasın (§4).
+    // + sackId=null) WAREHOUSE + STOCK toplar (fungible havuz). sackId:null: çuvaldaki
+    // (bekleyen) mal serbest stok sayılmaz.
     const itemIds = [...new Set(lines.map((l) => l.itemId))];
     const freeGrouped = await prisma.roll.groupBy({
       by: ["itemId", "colorId", "width", "status"],
@@ -958,7 +956,7 @@ export class OrderService extends BaseService {
 
     const data = lines.map((l) => {
       const shipped = new Prisma.Decimal(l.shippedQty);
-      const packed = new Prisma.Decimal(l.packedQty);
+      const packed = new Prisma.Decimal(0); // rezerv yok — geriye uyum için 0
       const inProduction =
         inProdBySpec.get(specKey(l.itemId, l.colorId, l.width)) ?? new Prisma.Decimal(0);
       const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
@@ -1049,11 +1047,9 @@ export class OrderService extends BaseService {
       this.assertDeadlineNotBeforeOrderDate(data.deadline, data.orderDate);
     }
 
+    // Sipariş no: SIP + GGAAYY + NNNN (örn SIP1207260001) — tek tip kod kalıbı.
     const today = new Date();
-    const prefix =
-      today.getFullYear().toString() +
-      String(today.getMonth() + 1).padStart(2, "0") +
-      String(today.getDate()).padStart(2, "0");
+    const prefix = dailyCodePrefix("SIP", today);
 
     // HEADER + SATIR WHITELIST (M-3): orderNumber/status/shippedQty gibi
     // muhasebe alanları istemciden yazılamaz; bilinmeyen anahtarlar atılır.
@@ -1145,14 +1141,13 @@ export class OrderService extends BaseService {
         where: { orderNumber: { gte: prefix, startsWith: prefix } },
         select: { orderNumber: true },
       });
-      // Numeric tail max: "20260523-9" > "20260523-10" lex-sort hatasına karşı.
-      const maxSeq = todaysOrders.reduce((max, o) => {
-        const tail = o.orderNumber.split("-")[1] ?? "";
-        const n = parseInt(tail, 10);
-        return Number.isFinite(n) && n > max ? n : max;
-      }, 0);
+      // Numeric tail max: sabit-genişlik kuyruk, lex-sort taşmasına karşı NUMERIC.
+      const seq = nextDailySeq(
+        todaysOrders.map((o) => o.orderNumber),
+        prefix,
+      );
       return this.delegate.create({
-        data: { ...prismaData, orderNumber: `${prefix}-${maxSeq + 1}` },
+        data: { ...prismaData, orderNumber: `${prefix}${String(seq).padStart(4, "0")}` },
         ...(this.config.defaultInclude
           ? { include: this.config.defaultInclude }
           : {}),
@@ -1608,9 +1603,6 @@ export class OrderService extends BaseService {
       // ve status, satırların gerçeğinden bayatlar (Σline.shippedQty ile drift).
       if (incomingLines) {
         await recomputeOrderStatus(tx, id);
-        // ÇUVAL HAVUZU: satır/miktar değişti → müşterinin havuz tahsisini yeniden dengele
-        // (need değişti; çuvallanmış rezerv güncel açık satırlara akmalı).
-        await rebalanceCustomerPool(tx, current.customerId);
       }
 
       return tx.order.findUnique({
@@ -1758,9 +1750,6 @@ export class OrderService extends BaseService {
         );
       }
 
-      // ÇUVAL HAVUZU: sipariş kapandı → havuz rezervi (packedQty) serbest kalıp diğer açık
-      // siparişlere akmalı. Sipariş artık CANCELLED → rebalance onu dışlar, tahsisini siler.
-      await rebalanceCustomerPool(tx, oldRecord.customerId);
 
       // BU siparişin satır bağlarını TAZE oku (orderLineId scope — shared WO'nun
       // başka sipariş bağları korunur). Linkli WO satırlarını sıralı kilitle
@@ -2097,9 +2086,6 @@ export class OrderService extends BaseService {
           }, tekrar iptal edilemez. Sayfayı yenileyin.`
         );
       }
-      // ÇUVAL HAVUZU: sipariş kapandı → havuz rezervi diğer açık siparişlere aksın (rebalance).
-      const cancelledOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId }, select: { customerId: true } });
-      await rebalanceCustomerPool(tx, cancelledOrder.customerId);
       // F145: preview↔apply arası WO status yarışını kapat. Etkilenen WO'ları
       // SIRALI kilitle (WO start/dispatch/finalize/cancel yolları da bu satırı
       // kilitler → serileşir), sonra TAZE status + TAZE sole-order oku ve her
@@ -2243,8 +2229,6 @@ export class OrderService extends BaseService {
           `Sipariş bu sırada ${fresh?.status} durumuna geçti — manuel tamamlanamadı. Sayfayı yenileyin.`
         );
       }
-      // ÇUVAL HAVUZU: sipariş kapandı → havuz rezervi diğer açık siparişlere aksın (rebalance).
-      await rebalanceCustomerPool(tx, order.customerId);
     });
     const updated = await prisma.order.findUnique({ where: { id } });
 
@@ -2318,10 +2302,7 @@ export class OrderService extends BaseService {
         );
       }
       await recomputeOrderStatus(tx, id);
-      const ord = await tx.order.findUniqueOrThrow({ where: { id } });
-      // Sipariş yeniden açıldı → müşterinin havuz tahsisini yeniden dengele (yeni açık talep).
-      await rebalanceCustomerPool(tx, ord.customerId);
-      return ord;
+      return tx.order.findUniqueOrThrow({ where: { id } });
     });
 
     await AuditService.log({

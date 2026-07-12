@@ -5,7 +5,7 @@ export function AuditReportsHubPage() {
   return (
     <ReportHubGrid
       title="Sistem Raporları"
-      description="Audit log özeti ve kullanıcı aktivitesi."
+      description="Denetim kaydı özeti ve kullanıcı aktivitesi."
       tiles={auditReportTiles}
     />
   );

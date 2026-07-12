@@ -103,7 +103,7 @@ export const reportTiles: ReportTile[] = [
   {
     key: "audit",
     title: "Sistem",
-    description: "Audit log özetleri, kullanıcı aktivitesi",
+    description: "Denetim kaydı özetleri, kullanıcı aktivitesi",
     icon: Activity,
     to: "/reports/audit",
     permission: "report:audit",

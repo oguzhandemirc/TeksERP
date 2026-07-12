@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Text, TextInput, IconButton, Surface, TouchableRipple, Icon, ActivityIndicator, Button, Switch } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient, onlineManager } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -237,7 +238,11 @@ export default function IadeGirisiScreen() {
   return (
     <ScreenChrome title="İade Girişi">
       <View style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
+        >
           {/* Seri iade — açıkken her kayıttan sonra kamera otomatik yeniden açılır
               (sticky neden/sipariş ile arka arkaya top). Her top yine "İade Al"
               ile onaylanır (tek tek onay korunur). */}
@@ -428,7 +433,7 @@ export default function IadeGirisiScreen() {
               )}
             </>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {/* Alt bar — FasonKabul deseni: Kamera ile Okut (orta, dolgulu yeşil
             hero) · İade Al (sağ, amber). Güvenli alanı doldurup ekran dibine

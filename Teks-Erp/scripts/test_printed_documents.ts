@@ -163,19 +163,17 @@ async function main(): Promise<void> {
   const sr1 = await mkRoll(60);
   const sr2 = await mkRoll(40);
 
-  // Çuval havuzu: müşteriye çuval aç → iki topu okut → tart+kod → mühürle (havuza girer)
-  // → havuzdan çuval seçerek sevkiyat kur (PLANNED). Kod GLOBAL benzersiz olmalı (partial
-  // unique) — hardcoded "Ç-1" paralel koşuda çakışır, o yüzden benzersiz sackCode.
-  const sackCode = u("CV");
+  // Çuval depo: müşteriye çuval aç → iki topu okut → tart (depoda kalır, mühür YOK)
+  // → depodan çuval + sipariş seçerek sevkiyat kur (PLANNED). İrsaliyedeki çuval kodu = sackNo.
   const sackId = ((await shippingService.openSack({ customerId: customer.id }, undefined)).data as { id: string }).id;
   created.sackIds.push(sackId);
   for (const rid of [sr1, sr2]) {
     const r = await prisma.roll.findUnique({ where: { id: rid }, select: { barcode: true } });
     await shippingService.scanIntoSack({ sackId, barcode: r!.barcode! }, undefined);
   }
-  await shippingService.weighSack({ sackId, weightKg: 42.5, manualCode: sackCode }, undefined);
-  await shippingService.sealSack({ sackId }, undefined);
-  const ship = await shippingService.createShipment({ sackIds: [sackId] }, undefined);
+  await shippingService.weighSack({ sackId, weightKg: 42.5 }, undefined);
+  const sackNo = (await prisma.sack.findUnique({ where: { id: sackId }, select: { sackNo: true } }))!.sackNo;
+  const ship = await shippingService.createShipment({ sackIds: [sackId], customerId: customer.id, orderIds: [order.id] }, undefined);
   const shipmentId = (ship.data as { id: string }).id;
   created.shipmentIds.push(shipmentId);
 
@@ -194,8 +192,8 @@ async function main(): Promise<void> {
     doc?.products?.length === 1 && doc?.products?.[0]?.rollCount === 2 && Math.round(doc?.products?.[0]?.totalMeters) === 100,
     JSON.stringify(doc?.products));
   check("toplam metraj 100", Math.round(doc?.totals?.totalMeters) === 100, JSON.stringify(doc?.totals));
-  check("çuval dökümü donmuş (kod, 42.5kg, 2 paket)",
-    doc?.sacks?.length === 1 && doc?.sacks?.[0]?.code === sackCode && Math.abs(doc?.sacks?.[0]?.totalKg - 42.5) < 0.001 && doc?.sacks?.[0]?.packageCount === 2,
+  check("çuval dökümü donmuş (kod=sackNo, 42.5kg, 2 paket)",
+    doc?.sacks?.length === 1 && doc?.sacks?.[0]?.code === sackNo && Math.abs(doc?.sacks?.[0]?.totalKg - 42.5) < 0.001 && doc?.sacks?.[0]?.packageCount === 2,
     JSON.stringify(doc?.sacks));
   check("çeki listesi: kg yalnız çuvalın ilk topunda",
     doc?.cekiRows?.length === 2 && Math.abs(doc?.cekiRows?.[0]?.kg - 42.5) < 0.001 && doc?.cekiRows?.[1]?.kg === 0);

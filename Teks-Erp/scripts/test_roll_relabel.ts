@@ -1,12 +1,11 @@
 // =============================================================================
 // Test: Saha #4 — top etiketi değiştirme (renk/özellik/en/kalite)
 // Çalıştır: npx tsx scripts/test_roll_relabel.ts
-// Doğrulananlar (ÇUVAL HAVUZU modeli):
+// Doğrulananlar (ÇUVAL DEPO modeli):
 //   1. Serbest WAREHOUSE topun rengi/eni/kalitesi değişir
 //   2. Özellik (RollProperty) replace
-//   3. AÇIK havuz çuvalındaki top relabel EDİLEBİLİR
-//   4a. MÜHÜRLÜ çuvaldaki top relabel REDDEDİLİR (409 — "çuvaldan çıkarın")
-//   4b. ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — "sevkiyattan çıkarın")
+//   3. DEPODAKİ (havuz) çuvaldaki top relabel EDİLEBİLİR (mühür YOK → çuval her an düzenlenebilir)
+//   4. ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — "sevkiyattan çıkarın")
 //   5. Renksiz (color null) yapılabilir
 //   6. Metraj (currentQty) düzeltmesi — bütün topta initialQty ile birlikte güncellenir
 //   7. Kısmen tüketilmiş topta metraj düzeltme reddedilir (renk-only geçer)
@@ -89,28 +88,16 @@ async function main() {
     const r1Raw = await prisma.roll.findUnique({ where: { id: r1.id }, select: { colorId: true, properties: true } });
     check("Renksiz (color null) + özellik temizlendi", r1Raw?.colorId === null && r1Raw.properties.length === 0);
 
-    // 3) AÇIK havuz çuvalındaki top relabel EDİLEBİLİR (mühürlenmemiş → serbest)
-    const sackId = ((await ship.openSack({ customerId: customer.id, manualCode: `TEST-RLB-S-${ts}` })) as { data: { id: string } }).data.id;
+    // 3) DEPODAKİ (havuz) çuvaldaki top relabel EDİLEBİLİR (mühür YOK → çuval her an düzenlenebilir)
+    const sackId = ((await ship.openSack({ customerId: customer.id })) as { data: { id: string } }).data.id;
     sackIds.push(sackId);
     await ship.scanIntoSack({ sackId, barcode: r2.barcode! });
     await inv.applyManualProperties(r2.id, { colorId: colorB.id, propertyIds: [] }, undefined);
     const r2Open = await prisma.roll.findUnique({ where: { id: r2.id }, select: { colorId: true, sackId: true } });
-    check("Açık çuvaldaki top relabel edildi", r2Open?.colorId === colorB.id && r2Open?.sackId === sackId);
+    check("Depodaki çuvaldaki top relabel edildi", r2Open?.colorId === colorB.id && r2Open?.sackId === sackId);
 
-    // 4a) MÜHÜRLÜ çuvaldaki top relabel REDDEDİLİR (409 — havuz rezervi donar)
-    await ship.sealSack({ sackId });
-    let sealedRej: { code?: number; msg?: string } = {};
-    try {
-      await inv.applyManualProperties(r2.id, { colorId: colorA.id, propertyIds: [] }, undefined);
-    } catch (e) {
-      const err = e as { statusCode?: number; message?: string };
-      sealedRej = { code: err.statusCode, msg: err.message };
-    }
-    check("Mühürlü çuvaldaki top relabel 409", sealedRej.code === 409, sealedRej.msg);
-    check("Mühürlü çuval mesajı ('çuval')", !!sealedRej.msg?.includes("çuval"));
-
-    // 4b) ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — sevkiyat donar)
-    const shipmentId = ((await ship.createShipment({ sackIds: [sackId] })) as { data: { id: string } }).data.id;
+    // 4) ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — sevkiyat donar)
+    const shipmentId = ((await ship.createShipment({ sackIds: [sackId], customerId: customer.id })) as { data: { id: string } }).data.id;
     shipmentIds.push(shipmentId);
     let shipRej: { code?: number; msg?: string } = {};
     try {

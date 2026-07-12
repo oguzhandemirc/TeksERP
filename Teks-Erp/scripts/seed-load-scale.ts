@@ -520,7 +520,7 @@ async function main(): Promise<void> {
       shipSeq++;
       const shipId = uuid();
       ctx.shipmentId = shipId;
-      // Çuval havuzu modeli: PREPARING/READY kalktı → PLANNED (+ AT_DOOR/DISPATCHED).
+      // Çuval depo modeli: PREPARING/READY kalktı → PLANNED (+ AT_DOOR/DISPATCHED).
       const shipStatus: ShipmentStatus =
         status === OrderStatus.COMPLETED
           ? randPick([ShipmentStatus.DISPATCHED, ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR])
@@ -559,17 +559,14 @@ async function main(): Promise<void> {
         sackRows.push({
           id: sackId,
           sackNo: `SACK-LT-${String(sackSeq).padStart(7, "0")}`,
-          customerId, // Sack.customerId NOT NULL — bağlı sevkiyatın müşterisiyle aynı
+          customerId, // Sack.customerId opsiyonel — burada bağlı sevkiyatın müşterisiyle aynı
           branchId,
           shipmentId: shipId,
           seq: sk + 1,
-          manualCode: `AMB${String(sackSeq).padStart(5, "0")}`,
           weightKg: 30 + rand(70),
-          // Sevkiyata atanmış çuval mühürlüdür (tartıldı + kod girildi → havuza/sevkiyata girdi).
+          // Sevkiyata atanmış çuval tartıldı (mühür/kod YOK — çuval depo modeli; kod = sackNo).
           weighedById: pick(userIds, i),
           weighedAt: shipCreated,
-          sealedAt: shipCreated,
-          sealedById: pick(userIds, i),
           createdAt: shipCreated,
           updatedAt: shipCreated,
         });

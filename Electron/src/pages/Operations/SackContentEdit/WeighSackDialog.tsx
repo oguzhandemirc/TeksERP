@@ -14,14 +14,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMachineScale } from "@/hooks/useMachineScale";
 import { readWeightFromScale } from "@/lib/scale-read";
-import { packingService } from "./service";
-import { invalidatePoolData } from "./useCustomerPool";
-import type { PoolSack } from "./types";
+import { sackHubService } from "./service";
+import { invalidateSackHub } from "./useSackData";
 
 interface Props {
-  /** Düzenlenecek çuval — null ise dialog kapalı. */
-  sack: PoolSack | null;
-  customerId: string;
+  /** Tartılacak çuval — null ise dialog kapalı. */
+  sack: { id: string; sackNo: string; weightKg: number | null } | null;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -32,18 +30,19 @@ function parseKg(raw: string): number | null {
 }
 
 /**
- * Çuval tartısı + elle kod girişi. Backend en az birini ister; sevke-hazır için
- * ikisi de gerekir (yurtdışında tartı zorunlu) → operatörü ikisini de girmeye
- * yönlendirir. İçerik değiştiyse tartı sıfırlanmış olur, burada yeniden girilir.
+ * Çuval brüt tartısı. Backend geçerli bir kg ister (mühür kavramı kalktı — çuval
+ * kodu ayrı alan yok). İçerik değişince kg bayatlar (backend sıfırlar) → yeniden girilir.
  */
-export function WeighSackDialog({ sack, customerId, onOpenChange }: Props) {
+export function WeighSackDialog({ sack, onOpenChange }: Props) {
   const qc = useQueryClient();
   const open = !!sack;
-  const label = sack?.manualCode ?? sack?.sackNo ?? "";
   const [kg, setKg] = useState("");
-  const [code, setCode] = useState("");
   const { scale } = useMachineScale();
   const [weighing, setWeighing] = useState(false);
+
+  useEffect(() => {
+    if (sack) setKg(sack.weightKg != null ? String(sack.weightKg) : "");
+  }, [sack]);
 
   // Kantardan oku ("Tart"): simulate ise sahte, değilse seri IPC → parse → kg.
   const handleWeigh = async () => {
@@ -57,32 +56,14 @@ export function WeighSackDialog({ sack, customerId, onOpenChange }: Props) {
     }
   };
 
-  useEffect(() => {
-    if (sack) {
-      setKg(sack.weightKg != null ? String(sack.weightKg) : "");
-      setCode(sack.manualCode ?? "");
-    }
-  }, [sack]);
-
   const weightKg = parseKg(kg);
-  const trimmedCode = code.trim();
-  const kgInvalid = kg.trim() !== "" && weightKg === null;
-  // Kod temizleme de geçerli bir işlemdir: alan boşaltıldıysa ve çuvalda kod
-  // VARDI ise backend'e "" gönderilir (backend boş string'i temizler; sevke
-  // hazır invariant'ı kodu yine zorunlu kılar — mobil weigh ile parite).
-  const hadCode = !!sack?.manualCode?.trim();
-  const sendCode = trimmedCode !== "" || hadCode;
-  const canSubmit = (weightKg !== null || sendCode) && !kgInvalid;
+  const invalid = kg.trim() !== "" && weightKg === null;
 
   const mut = useMutation({
-    mutationFn: () =>
-      packingService.weighSack(sack!.id, {
-        ...(weightKg !== null ? { weightKg } : {}),
-        ...(sendCode ? { manualCode: trimmedCode } : {}),
-      }),
+    mutationFn: () => sackHubService.weighSack(sack!.id, weightKg!),
     onSuccess: () => {
-      toast.success(`Çuval ${label} güncellendi`);
-      invalidatePoolData(qc, customerId);
+      toast.success(`Çuval ${sack!.sackNo} tartıldı`);
+      invalidateSackHub(qc);
       onOpenChange(false);
     },
   });
@@ -92,54 +73,34 @@ export function WeighSackDialog({ sack, customerId, onOpenChange }: Props) {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Scale className="h-4 w-4" /> Çuval {label} — Tartı & Kod
+            <Scale className="h-4 w-4" /> Çuval {sack?.sackNo} — Tartı
           </DialogTitle>
-          <DialogDescription>
-            Brüt tartı ve çuval kodu. Sevke hazır için ikisi de gerekir.
-          </DialogDescription>
+          <DialogDescription>Brüt tartı (kg). Yurtdışı sevkte tartı zorunludur.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted-foreground">Brüt Tartı (kg)</span>
-            <div className="flex gap-2">
-              <Input
-                value={kg}
-                onChange={(e) => setKg(e.target.value)}
-                inputMode="decimal"
-                placeholder="örn. 24,5"
-                autoFocus
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleWeigh}
-                disabled={weighing}
-                title="Kantardan oku"
-              >
-                <Scale className="h-4 w-4" /> {weighing ? "..." : "Tart"}
-              </Button>
-            </div>
-            {kgInvalid && <span className="mt-1 block text-xs text-destructive">Geçerli bir kg girin.</span>}
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-muted-foreground">Çuval Kodu (elle yazılan)</span>
+        <label className="block text-sm">
+          <span className="mb-1 block text-muted-foreground">Brüt Tartı (kg)</span>
+          <div className="flex gap-2">
             <Input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="çuval üstündeki kod"
-              maxLength={64}
-              className="font-mono"
+              value={kg}
+              onChange={(e) => setKg(e.target.value)}
+              inputMode="decimal"
+              placeholder="örn. 24,5"
+              autoFocus
+              className="flex-1"
             />
-          </label>
-        </div>
+            <Button type="button" variant="outline" onClick={handleWeigh} disabled={weighing} title="Kantardan oku">
+              <Scale className="h-4 w-4" /> {weighing ? "..." : "Tart"}
+            </Button>
+          </div>
+          {invalid && <span className="mt-1 block text-xs text-destructive">Geçerli bir kg girin.</span>}
+        </label>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={mut.isPending}>
             İptal
           </Button>
-          <Button disabled={!canSubmit || mut.isPending} onClick={() => mut.mutate()}>
+          <Button disabled={weightKg === null || mut.isPending} onClick={() => mut.mutate()}>
             {mut.isPending ? "..." : "Kaydet"}
           </Button>
         </DialogFooter>

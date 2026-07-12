@@ -79,7 +79,6 @@ import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage"
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { SackStorePage } from "@/pages/Operations/SackStore/SackStorePage";
-import { SackSearchPage } from "@/pages/Operations/SackSearch/SackSearchPage";
 import { SackContentEditPage } from "@/pages/Operations/SackContentEdit/SackContentEditPage";
 import { RelabelStationPage } from "@/pages/Operations/RelabelStation/RelabelStationPage";
 import { AccountingDispatchPage } from "@/pages/Operations/AccountingDispatch/AccountingDispatchPage";
@@ -491,12 +490,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // "Çuval & Top Arama" ekranı "Çuval Deposu / Paketleme" hub'ına birleşti —
+    // kayıtlı sekmeler/scan-anywhere hedefleri kırılmasın diye eski route yönlenir.
     path: "operations/sack-search",
-    element: (
-      <ProtectedRoute requirePermission="shipping:read">
-        <SackSearchPage />
-      </ProtectedRoute>
-    ),
+    element: <Navigate to="/operations/sack-content-edit" replace />,
   },
   {
     // Okutarak Sevk, Sevk Kapısı'na (eski Çuval Depo) gömüldü — kayıtlı

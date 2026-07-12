@@ -3012,7 +3012,9 @@ function OrdersDetailModal({
                 </View>
 
                 {o.lines.map((line) => {
-                  const remaining = Math.max(0, line.orderedQty - line.shippedQty);
+                  // Loose modelde top→sipariş satırı bağı yok; per-line karşılanma
+                  // türetilemez (backend F133). Sipariş metrajını göster.
+                  const ordered = Math.max(0, line.orderedQty || 0);
                   const hasMeta =
                     line.width != null ||
                     line.requiredProperties.length > 0 ||
@@ -3084,10 +3086,10 @@ function OrdersDetailModal({
                         )}
                       </View>
 
-                      {/* Sağ: kalan metraj — kompakt lacivert pill */}
+                      {/* Sağ: sipariş metrajı — kompakt lacivert pill */}
                       <View style={ordersModalStyles.remainingPill}>
                         <Text style={ordersModalStyles.remainingValue}>
-                          {remaining.toFixed(1)}
+                          {ordered.toFixed(1)}
                         </Text>
                         <Text style={ordersModalStyles.remainingUnit}>m</Text>
                       </View>

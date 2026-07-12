@@ -64,7 +64,7 @@ import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-loc
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildPrefixedCardNumber } from "../utils/barcode";
+import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
 import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
 
@@ -259,17 +259,12 @@ function assertOrderLinesLinkable(
 
 export class WorkOrderService {
   /**
-   * Auto-generate a parti kodu (batchNumber): "P-YYMMDD-NNN".
+   * Auto-generate a parti kodu (batchNumber): "P" + GGAAYY + NNNN (örn P1207260001).
    * Günlük sıra veritabanındaki mevcut maksimum +1.
    */
   async generateBatchNumber(): Promise<string> {
     const now = new Date();
-    const prefix =
-      "P-" +
-      String(now.getFullYear()).slice(2) +
-      String(now.getMonth() + 1).padStart(2, "0") +
-      String(now.getDate()).padStart(2, "0") +
-      "-";
+    const prefix = dailyCodePrefix("P", now);
 
     // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -281,13 +276,12 @@ export class WorkOrderService {
         where: { batchNumber: { gte: prefix, startsWith: prefix } },
         select: { batchNumber: true },
       });
-      const maxSeq = todays.reduce((max, w) => {
-        const tail = w.batchNumber?.split("-").pop() ?? "";
-        const n = parseInt(tail, 10);
-        return Number.isFinite(n) && n > max ? n : max;
-      }, 0);
+      const seq = nextDailySeq(
+        todays.map((w) => w.batchNumber),
+        prefix,
+      );
 
-      const candidate = `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
+      const candidate = `${prefix}${String(seq).padStart(4, "0")}`;
 
       const exists = await prisma.workOrder.findUnique({ where: { batchNumber: candidate } });
       if (!exists) return candidate;
@@ -2354,10 +2348,10 @@ export class WorkOrderService {
         if (!src || src.cancelledAt) {
           throw AppError.conflict("Sevk bu sırada değişti veya iptal edildi — sayfayı yenileyin.");
         }
-        const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "SD", now);
+        const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "FS", now);
         const newDispatch = await tx.subcontractorDispatch.create({
           data: {
-            dispatchNo: buildPrefixedCardNumber("SD", now, seq, 6, ""),
+            dispatchNo: buildDailyCode("FS", seq, now),
             workOrderId: newWo.id,
             stepId: newReEntryStepId,
             subcontractorId: src.subcontractorId,
@@ -4717,14 +4711,9 @@ export class WorkOrderService {
       throw AppError.notFound("İş emri bulunamadı");
     }
 
-    // Manifest no: M-YYMMDD-NNN
+    // Manifest (çeki listesi) no: CL + GGAAYY + NNNN (örn CL1207260001)
     const now = new Date();
-    const prefix =
-      "M-" +
-      String(now.getFullYear()).slice(2) +
-      String(now.getMonth() + 1).padStart(2, "0") +
-      String(now.getDate()).padStart(2, "0") +
-      "-";
+    const prefix = dailyCodePrefix("CL", now);
 
     // manifestNo @unique + günlük sequence TÜM WO'lar arasında paylaşımlı —
     // eşzamanlı iki basım aynı NNN'i hesaplardı; projedeki diğer tüm belge
@@ -4739,12 +4728,11 @@ export class WorkOrderService {
         where: { manifestNo: { gte: prefix, startsWith: prefix } },
         select: { manifestNo: true },
       });
-      const maxSeq = todays.reduce((max, m) => {
-        const tail = m.manifestNo.split("-").pop() ?? "";
-        const n = parseInt(tail, 10);
-        return Number.isFinite(n) && n > max ? n : max;
-      }, 0);
-      const manifestNo = `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
+      const seq = nextDailySeq(
+        todays.map((m) => m.manifestNo),
+        prefix,
+      );
+      const manifestNo = `${prefix}${String(seq).padStart(4, "0")}`;
 
       return prisma.manifest.create({
         data: {

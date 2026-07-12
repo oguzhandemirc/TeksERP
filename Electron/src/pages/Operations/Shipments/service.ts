@@ -22,7 +22,7 @@ export const shipmentService = {
       .get<ApiResponse<CancelPreview>>(`/api/shipping/shipments/${id}/cancel-preview`)
       .then((r) => r.data),
 
-  /** Sevkiyatı iptal et (CANCELLED) — çuvallar havuza döner, sipariş rezervi (packedQty) serbest kalır. */
+  /** Sevkiyatı iptal et (CANCELLED) — çuvallar depoya döner, tahsisler silinir (sipariş bağı kalkar). */
   cancel: (id: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/cancel`, {}).then((r) => r.data),
 };

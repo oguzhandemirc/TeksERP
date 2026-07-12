@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Appbar,
@@ -206,9 +207,10 @@ export default function SettingsScreen() {
         />
       </Appbar.Header>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={16}
       >
         <View style={styles.card}>
           <View style={styles.headRow}>
@@ -466,7 +468,7 @@ export default function SettingsScreen() {
             </>
           )}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <ConfirmDialog
         kind="destructive"

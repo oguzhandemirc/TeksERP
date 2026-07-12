@@ -17,6 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 
 export type AppModalPosition = 'center' | 'bottom' | 'right';
 
@@ -80,6 +81,11 @@ export default function AppModal({
   const progress = useSharedValue(0);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // Klavye yüksekliği (react-native-keyboard-controller — klavyeyle YUMUŞAKÇA akan
+  // reanimated shared value). İçinde TextInput olan modallar (ör. ServerAddressSheet,
+  // kartela ölçü sheet'i, arama alanlı picker'lar) klavye açılınca yukarı kayar,
+  // kapanınca iner. Klavye kapalıyken height=0 → hiçbir modal davranışı değişmez.
+  const keyboard = useReanimatedKeyboardAnimation();
 
   // Sürükle-kapat için canlı offset'ler (px). dragY: bottom/center, dragX: right.
   const dragY = useSharedValue(0);
@@ -141,16 +147,23 @@ export default function AppModal({
 
   const contentAnimStyle = useAnimatedStyle(() => {
     const p = progress.value;
+    const kb = keyboard.height.value; // klavye yüksekliği (0 = kapalı)
     if (position === 'bottom') {
-      return { opacity: 1, transform: [{ translateY: (1 - p) * height + dragY.value }] };
+      // Alttan sheet: klavye kadar tam yukarı kayar (klavyenin tam üstünde durur).
+      return {
+        opacity: 1,
+        transform: [{ translateY: (1 - p) * height + dragY.value - kb }],
+      };
     }
     if (position === 'right') {
+      // Sağ drawer tam yükseklik — içindeki alanlar kendi kaydırmasıyla yönetilir.
       return { opacity: 1, transform: [{ translateX: (1 - p) * width + dragX.value }] };
     }
-    // center
+    // center: klavye açılınca diyaloğu görünür alanda ortalı tutmak için yarı
+    // klavye yüksekliği kadar yukarı taşı (diyalog dikeyde ortalı olduğundan).
     return {
       opacity: p,
-      transform: [{ translateY: dragY.value }, { scale: 0.97 + p * 0.03 }],
+      transform: [{ translateY: dragY.value - kb / 2 }, { scale: 0.97 + p * 0.03 }],
     };
   });
 

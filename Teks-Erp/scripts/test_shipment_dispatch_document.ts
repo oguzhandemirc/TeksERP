@@ -145,7 +145,7 @@ async function part2Db() {
     select: { id: true },
   });
   const sack = await prisma.sack.create({
-    data: { sackNo: `TEST-SDD-SK-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, manualCode: "AMB-SDD", weightKg: 50, sealedAt: new Date() },
+    data: { sackNo: `TEST-SDD-SK-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, weightKg: 50 },
     select: { id: true },
   });
   const mkRoll = (n: number, qty: number) =>
@@ -186,7 +186,7 @@ async function part2Db() {
     check("allowDraft → HTML üretti", !!draftRes?.html, draftRes?.html?.slice(0, 30));
     check("draft → TASLAK filigranı", !!draftRes?.html?.includes(">TASLAK<"));
     check("draft → 3 bölüm var", !!draftRes?.html?.includes("ÇEKİ LİSTESİ") && !!draftRes?.html?.includes("ÜRÜN LİSTESİ"));
-    check("draft → çuval kodu + 100m toplam", !!draftRes?.html?.includes("AMB-SDD") && !!draftRes?.html?.includes("100,00"));
+    check("draft → çuval kodu (sackNo) + 100m toplam", !!draftRes?.html?.includes(`TEST-SDD-SK-${ts}`) && !!draftRes?.html?.includes("100,00"));
 
     // draft önizleme KAYDEDİLMEDİ (defterde satır yok)
     const persisted = await prisma.printedDocument.count({ where: { sourceId: shipment.id } });

@@ -124,9 +124,6 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                         <th className="text-left">Ürün</th>
                         <th className="text-right">İstenen</th>
                         <th className="text-right">Sevk</th>
-                        <th className="text-right" title="Çuvallanmış — havuzda bu siparişe rezerve">
-                          Çuvallı
-                        </th>
                         <th className="text-right">Açık</th>
                         <th className="text-right">Bu sevk</th>
                       </tr>
@@ -141,7 +138,6 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                           </td>
                           <td className="text-right text-muted-foreground">{fmt(l.requested)}</td>
                           <td className="text-right text-muted-foreground">{fmt(l.shipped)}</td>
-                          <td className="text-right text-muted-foreground">{fmt(l.packed)}</td>
                           <td className="text-right text-muted-foreground">{fmt(l.openQty)}</td>
                           <td className="text-right font-semibold">{fmt(l.thisShipment)}</td>
                         </tr>

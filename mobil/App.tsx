@@ -10,6 +10,7 @@ import {
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Toast from 'react-native-toast-message';
@@ -99,6 +100,11 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* Klavye yönetimi (react-native-keyboard-controller): odaklanan input'u
+          klavyenin üstüne otomatik + yumuşak kaydırır. edge-to-edge otomatik
+          algılanır (react-native-is-edge-to-edge). Ekranlar KeyboardAwareScrollView
+          / KeyboardStickyView kullanır. Native rebuild gerekir (expo run:android). */}
+      <KeyboardProvider>
       <SafeAreaProvider>
         <PersistQueryClientProvider
           client={queryClient}
@@ -153,6 +159,7 @@ export default function App() {
           </View>
         </PersistQueryClientProvider>
       </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

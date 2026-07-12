@@ -16,15 +16,15 @@ Her alt projenin kendi `CLAUDE.md`'si vardır. **Admin frontend değişiklikleri
 Stok (Roll) → İş Emri → KK1 (RAW_QC) → [opsiyonel Fason] →
   Kurşun + KK2 (PROCESS_QC) → Tambur (final karar) →
   Depo (RollStatus.WAREHOUSE) →
-  Çuval Havuzu (Sack — müşteriye ait; aç→okut→mühürle → packedQty rezerv) →
-  Sevkiyat (havuzdan çuval seç → PLANNED → AT_DOOR → DISPATCHED)
+  Çuval Depo (Sack — depo nesnesi, müşteri opsiyonel; aç→okut→(opsiyonel tart), mühür/rezerv YOK) →
+  Sevkiyat (depodan çuval seç + müşteri/sipariş ata → PLANNED → AT_DOOR → DISPATCHED)
 ```
 
 Fabrika **çözgü/dokuma yapmaz** — kumaş hazır gelir, sadece process + QC + tambur yapılır.
 
 Tambur'dan çıkan üretim topu **önce depoya** geçer (`status=WAREHOUSE` — default; `QualityGrade.targetStatus` katalogdan override edilebilir, seed'de üç kalite de WAREHOUSE). Ham (renksiz) top kesiminde operatör parçayı `STOCK` (üretime devam) da seçebilir. Depo bir istasyon değil, tartı/paket öncesi bekleme statüsüdür.
 
-> **NOT:** Tartı / paket / sevkiyat modülü **2026-07'de çuval havuzu ("B") modeline** geçti (`/api/shipping`, Shipment / Sack / **SackAllocation** / ShipmentOrder). Çuval **müşteriye ait** (Sack.customerId); aç→okut→**mühürle** → çuval depo havuzu → `rebalanceCustomerPool` FIFO ile açık siparişlere **`OrderLine.packedQty`** rezervi. Sevkiyat havuzdan **çuval seçilerek** kurulur (`createShipment({sackIds})` → PLANNED → AT_DOOR → DISPATCHED); ShipmentOrder çuvallardan türetilir. Stok yalnız DISPATCH'te `SHIPPED` düşer; commit dispatch'te `shippedQty`'ye terfi eder. Top→sipariş bağı yok. Tasarım: `CUVAL-HAVUZU-TASARIM.md` (eski `SEVKIYAT-LOOSE-TASARIM.md` superseded).
+> **NOT:** Tartı / paket / sevkiyat modülü **2026-07'de çuval depo modeline** geçti (`/api/shipping`, Shipment / Sack / **SackAllocation** / ShipmentOrder). Çuval bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte atanır), **mühür yok**. Akış: aç→okut→(opsiyonel tart) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur (`createShipment({ sackIds, customerId, orderIds? })` → PLANNED → AT_DOOR → DISPATCHED); `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`). Stok yalnız DISPATCH'te `SHIPPED` düşer ve tahsis **dispatch'te** `shippedQty`'ye terfi eder (PLANNED tahsis sayılmaz). İptalde tahsis silinir, çuval depoya döner. Top→sipariş bağı yok. Tasarım: `CUVAL-HAVUZU-TASARIM.md` (eski `SEVKIYAT-LOOSE-TASARIM.md` superseded).
 
 ## Domain Kuralları
 

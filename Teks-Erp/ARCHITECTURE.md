@@ -86,7 +86,7 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 ## 4. Schema — 66 Model + 23 Enum
 
-> **Güncellik notu (2026-06-12):** Aşağıdaki model/enum tabloları sevkiyat yeniden-yazımı ÖNCESİNDEN kalma — gerçek envanter 65 model / 23 enum. Tabloda eksik olanlar: `Sack`, `Shipment`, `ShipmentOrder`, `ShipmentAllocation`, `PrintedDocument`, `RollReturn`, `ReturnReason`, `KartelaDispatch(+Item)`, `KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `UserPreference`; enum'larda `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity` vb. Kesin liste için `prisma/schema.prisma`'ya bak.
+> **Güncellik notu (2026-06-12):** Aşağıdaki model/enum tabloları sevkiyat yeniden-yazımı ÖNCESİNDEN kalma — gerçek envanter 65 model / 23 enum. Tabloda eksik olanlar: `Sack`, `Shipment`, `ShipmentOrder`, `SackAllocation`, `PrintedDocument`, `RollReturn`, `ReturnReason`, `KartelaDispatch(+Item)`, `KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `UserPreference`; enum'larda `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity` vb. Kesin liste için `prisma/schema.prisma`'ya bak.
 
 ### Modeller (gruplandırılmış)
 
@@ -202,7 +202,7 @@ STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SU
 geçmediği durumlarda kullanılır (tek-adımlı WO veya rota Tambur içermiyor).
 Normal Tambur'lu akışta top doğrudan child Roll'lar olarak `WAREHOUSE`'a düşer.
 
-> **NOT (2026-07 — ÇUVAL HAVUZU MODELİ):** Sevkiyat modülü çuval havuzu ("B") modeline geçti. Çuval (`Sack`) **müşteriye ait** (`Sack.customerId`); akış: WAREHOUSE serbest top → `openSack(customerId)` → `scanIntoSack` → **`sealSack`** → çuval depo havuzu → `rebalanceCustomerPool` FIFO ile `OrderLine.packedQty` rezervi (`SackAllocation` defteri). Sevkiyat havuzdan **çuval seçilerek** kurulur: `createShipment({sackIds})` → `Shipment` PLANNED → AT_DOOR (Kapı Önü) → DISPATCHED. Stok DISPATCH'te `SHIPPED`'e düşer; commit dispatch'te `shippedQty`'ye terfi eder. `ShipmentStatus` = `PLANNED|AT_DOOR|DISPATCHED|CANCELLED` (PREPARING/READY kaldırıldı); `ShipmentAllocation` → `SackAllocation`; `ShipmentOrder` çuvallardan türetilir; `markReady`/`retarget` kaldırıldı. Denormlar defter-otoritatif (`recomputeOrderStatus`). Tam tasarım: `CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
+> **NOT (2026-07 — ÇUVAL DEPO MODELİ):** Sevkiyat modülü çuval depo modeline geçti (mühür/rezerv YOK). Çuval (`Sack`) bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte). Akış: WAREHOUSE serbest top → `openSack(customerId?)` → `scanIntoSack` → (opsiyonel `weighSack`) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur: `createShipment({ sackIds, customerId, orderIds? })` → `Shipment` PLANNED → AT_DOOR (Kapı Önü) → DISPATCHED. `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`); PLANNED tahsis `shippedQty`'ye SAYILMAZ. Stok yalnız DISPATCH'te `SHIPPED`'e düşer ve tahsis dispatch'te `shippedQty`'ye terfi eder (defter-otoritatif, `recomputeOrderStatusForOrders`); iptalde tahsis silinir, çuval depoya döner. `ShipmentStatus` = `PLANNED|AT_DOOR|DISPATCHED|CANCELLED` (PREPARING/READY kaldırıldı); `ShipmentAllocation`/`markReady`/`retarget`/`sealSack` kaldırıldı; `ShipmentOrder` kullanıcı-seçili sipariş kümesidir. Tam tasarım: `CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
 
 ---
 
@@ -539,7 +539,7 @@ Durum geçişi veya tüketim yapan her kritik yazma `findUnique → if(guard) �
 
 ```typescript
 const claim = await tx.shipment.updateMany({
-  where: { id, status: ShipmentStatus.READY },   // gözlenen TAM durum
+  where: { id, status: ShipmentStatus.PLANNED },   // gözlenen TAM durum (PLANNED → AT_DOOR = moveToDoor)
   data: { status: ShipmentStatus.AT_DOOR },
 });
 if (claim.count === 0) {
@@ -551,7 +551,7 @@ if (claim.count === 0) {
 1. **Claim sonrası taze yükleme:** içerik (toplar/satırlar) tx İÇİNDE yeniden okunur — tx-öncesi okuma yalnız erken/ucuz 4xx içindir, yazma asla bayat snapshot'tan yapılmaz.
 2. **Idempotent akışlarda kaybeden ayrımı:** claim kaybedilince fresh-read ile "paralel AYNI işlem mi (idempotent yanıt dön) / BAŞKA işlem mi (409)" ayrılır (örn. `tambur.service` raceLost deseni).
 
-Kodda 24+ nokta / 10 servis (shipping 9, tambur 3, ...). Test örnekleri: `test_unmark_ready_race.ts`, `test_shipment_transition_races.ts`.
+Kodda 24+ nokta / 10 servis (shipping 9, tambur 3, ...). Test örnekleri: `test_sack_pool_lifecycle.ts` (iptal/dispatch geçişleri), `test_dispatch_claim_step_match.ts`.
 
 ### 8.9 Numara/Barkod Üretimi: withBarcodeRetry
 
@@ -563,12 +563,13 @@ Kodda 24+ nokta / 10 servis (shipping 9, tambur 3, ...). Test örnekleri: `test_
 
 Numara sorgusu `startsWith` DEĞİL `gte/lt` range ile yazılır (ICU collation'da index seek) ve gün-içi son kayıt `createdAt desc` ile bulunur (999→1000 geçişinde lexicographic tuzak yok).
 
-### 8.10 Sevkiyat İçerik-Mutasyon Şablonu
+### 8.10 Çuval / Sevkiyat İçerik-Mutasyon Şablonu
 
-Sevkiyat İÇERİĞİNİ değiştiren her yeni endpoint iki çağrıya UYMAK ZORUNDA (`shipping.service.ts`):
+Çuval veya sevkiyat İÇERİĞİNİ değiştiren her yeni endpoint bağlama göre kilitlemek ZORUNDA (`shipping.service.ts` + `helpers/shipment-locks.helper.ts`). Mühür/rezerv YOK → depodaki çuval her an düzenlenebilir; serileştirmenin iki noktası vardır:
 
-1. **`touchShipmentPreparingTx(tx, shipmentId)`** — tx'in İLK işi: shipment satırına koşullu dokunuş (`WHERE status=PREPARING`, count 0 → 409). Çift işlev: PREPARING dışı içerik değişikliğini reddeder VE satır kilidi alarak markReady/dispatch finalize claim'leriyle TAM serileşir. Atlanırsa: dispatch ile yarışan içerik değişikliği "depoda ama listede yok" top veya kurtarılamaz rezerv bırakır (yaşanmış bug sınıfı).
-2. **`resetSackWeightsTx(tx, sackIds)`** — çuval içeriği değişiyorsa (ekle/çıkar/taşı — taşımada KAYNAK + HEDEF iki çuval birden) etkilenen çuvalların brüt tartısı sıfırlanır; yoksa bayat kg resmi irsaliyeye gider.
+1. **`touchWarehouseSackTx(tx, sackId)`** — DEPODAKİ çuvalın içeriğini (top/kartela ekle-çıkar-taşı) değiştiren tx'in İLK işi: çuval satırına koşullu dokunuş (`WHERE shipmentId IS NULL`, count 0 → 409). Tek kilit **sevkiyata atama** (`createShipment`) claim'iyle serileşir: sevk edilmekte olan çuvala top eklenemez / eklenmekte olan çuval sevk edilemez. Atlanırsa: dispatch ile yarışan içerik değişikliği "depoda ama listede yok" top bırakır (yaşanmış bug sınıfı).
+2. **`touchShipmentPlannedTx(tx, shipmentId)`** — PLANNED sevkiyatın ÇUVAL KÜMESİNİ (çuval ekle/çıkar) değiştiren tx'in İLK işi: shipment satırına koşullu dokunuş (`WHERE status=PLANNED`, count 0 → 409) → dispatch/cancel finalize claim'leriyle TAM serileşir.
+3. **`resetSackWeightsTx(tx, sackIds)`** — çuval içeriği değişiyorsa (ekle/çıkar/taşı — taşımada KAYNAK + HEDEF iki çuval birden) etkilenen çuvalların brüt tartısı sıfırlanır; yoksa bayat kg resmi irsaliyeye gider.
 
 ---
 

@@ -1,51 +1,12 @@
 import type { SystemLogDomainAction } from "@/types/systemLog";
 
-/** Backend `tableName` → planlamacının anladığı Türkçe modül adı. */
-export const tableLabels: Record<string, string> = {
-  USER: "Kullanıcı",
-  ITEM: "Stok Kalemi",
-  CUSTOMER: "Müşteri",
-  CUSTOMER_BRANCH: "Müşteri Şubesi",
-  CUSTOMER_ITEM_ALIAS: "Müşteri Ürün Kodu",
-  CUSTOMER_COLOR_ALIAS: "Müşteri Renk Kodu",
-  STATION: "İstasyon",
-  MACHINE: "Makine",
-  ROUTE: "Rota",
-  COLOR: "Renk",
-  FABRIC_PROPERTY: "Kumaş Özelliği",
-  QUALITY_GRADE: "Kalite Sınıfı",
-  DEFECT_TYPE: "Hata Tipi",
-  ORDER: "Sipariş",
-  ORDER_LINE: "Sipariş Satırı",
-  WORK_ORDER: "İş Emri",
-  WORK_ORDER_STEP: "İş Emri Adımı",
-  ROLL: "Top",
-  ROLL_MOVEMENT: "Top Hareketi",
-  ROLL_OPERATION: "Top İşlemi",
-  ROLL_ERROR: "Top Hatası",
-  SHIPMENT: "Sevkiyat",
-  SHIPMENT_LINE: "Sevkiyat Satırı",
-  TRAVELER_CARD: "Refakat Kartı",
-  SUBCONTRACTOR: "Fasoncu",
-  SUBCONTRACTOR_CATEGORY: "Fason Kategorisi",
-  SUBCONTRACTOR_DISPATCH: "Fason Sevk",
-  SUBCONTRACTOR_RECEIPT: "Fason Kabul",
-  LABEL_TEMPLATE: "Etiket Şablonu",
-  SYSTEM_SETTING: "Sistem Ayarı",
-  PERMISSION: "Yetki",
-  PERMISSION_TEMPLATE: "Yetki Şablonu",
-  USER_PERMISSION: "Kullanıcı Yetkisi",
-  STATION_CAPABILITY: "İstasyon Yeteneği",
-  USER_PREFERENCE: "Kullanıcı Tercihi",
-  USER_PASSWORD: "Kullanıcı Şifresi",
-  USER_PERMISSION_SET: "Yetki Ataması",
-  users: "Kullanıcı",
-  devices: "Cihaz",
-  pairing_codes: "Eşleştirme Kodu",
-  LABEL_PRINT_EVENT: "Etiket Baskısı",
-  SACK: "Çuval",
-};
+// Backend `tableName` → Türkçe modül adı: TEK KAYNAK `@/lib/audit-labels`
+// (Reports/Audit ile paylaşılır — iki harita drift etmesin). Re-export.
+export { tableLabel } from "@/lib/audit-labels";
 
+// Aktivite akışında geçmiş-zaman fiil ("... kaydını oluşturdu"). Reports/Audit
+// aynı action'ları emir kipiyle ("Oluştur") gösterir — o yüzden action etiketi
+// tableName'in aksine ekrana ÖZEL, paylaşılmaz.
 export const actionLabels: Record<SystemLogDomainAction, string> = {
   CREATE: "oluşturdu",
   UPDATE: "düzenledi",
@@ -60,10 +21,6 @@ export const actionVariants: Record<
   UPDATE: "secondary",
   DELETE: "destructive",
 };
-
-export function tableLabel(name: string): string {
-  return tableLabels[name] ?? name;
-}
 
 const DOMAIN_ACTIONS: SystemLogDomainAction[] = ["CREATE", "UPDATE", "DELETE"];
 

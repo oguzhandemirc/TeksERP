@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { systemLogService } from "@/services/systemLogService";
+import { AuditDataBlock } from "@/components/AuditDataBlock";
 import {
   categoryLabels,
   categoryVariants,
@@ -72,7 +73,7 @@ export function SystemEventDetailSheet({ logId, onClose }: Props) {
                 </Row>
               </div>
 
-              <JsonBlock title="Payload" data={query.data.newData} />
+              <AuditDataBlock title="Olay Verisi" data={query.data.newData} />
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Kayıt bulunamadı.</p>
@@ -94,16 +95,3 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function JsonBlock({ title, data }: { title: string; data: unknown }) {
-  if (data == null) return null;
-  return (
-    <div>
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </div>
-      <pre className="max-h-96 overflow-auto rounded-md border bg-muted/40 p-3 text-[11px] leading-relaxed">
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    </div>
-  );
-}

@@ -99,7 +99,7 @@ const SHIPMENT_SCOPE_FILTER: FilterDef = {
   label: "Sevkiyat",
   options: [
     { value: "free", label: "Serbest depo" },
-    { value: "committed", label: "Çuvalda (rezerve)" },
+    { value: "committed", label: "Çuval içinde" },
   ],
 };
 

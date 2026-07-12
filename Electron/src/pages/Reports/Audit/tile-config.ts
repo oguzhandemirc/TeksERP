@@ -4,7 +4,7 @@ import type { HubTile } from "../_components/ReportHubGrid";
 export const auditReportTiles: HubTile[] = [
   {
     key: "system-log-summary",
-    title: "Audit Log Özeti",
+    title: "Denetim Kaydı Özeti",
     description: "Tablo / işlem türüne göre değişim hacmi",
     icon: FileBarChart,
     to: "/reports/audit/system-log-summary",

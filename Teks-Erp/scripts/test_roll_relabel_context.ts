@@ -1,12 +1,12 @@
 // =============================================================================
 // Test: Yeniden-Etiketleme istasyonu bağlamı (getRelabelContext)
 // Çalıştır: npx tsx scripts/test_roll_relabel_context.ts
-// Doğrulananlar (ÇUVAL HAVUZU modeli):
+// Doğrulananlar (ÇUVAL DEPO modeli):
 //   1. Bulunan top → spec (renk/kalite/en/özellik) + propertyIds doğru seed
 //   2. lastLabelSnapshot ("A") aynen döner
 //   3. Aday müşteriler ("B") = topu üreten WO'nun bağlı siparişinden distinct
 //   4. Serbest WAREHOUSE top → specLocked=false (sack=null, shipment=null)
-//   5a. MÜHÜRLÜ havuz çuvalındaki top → specLocked=true + sack.sealedAt set, shipment=null
+//   5a. DEPODAKİ (havuz) çuvaldaki top → specLocked=false + sack set, shipment=null (çuval kilitlemez)
 //   5b. Sevkiyata atanmış top → specLocked=true + shipment.status=PLANNED
 //   6. Ham top (colorId null, barkodlu) → color=null, çökmeden döner
 //   7. Bulunamayan barkod → success=false
@@ -106,7 +106,7 @@ async function main() {
     select: { id: true, barcode: true },
   });
 
-  // r3: mühürlü çuval → sevkiyat zincirine girecek top — specLocked=true
+  // r3: depo çuvalı → sevkiyat zincirine girecek top (depoda specLocked=false, sevkiyatta true)
   const r3 = await prisma.roll.create({
     data: {
       barcode: `TEST-RLBC-R3-${ts}`,
@@ -160,17 +160,16 @@ async function main() {
     check("Ham top color=null (çökmedi)", ctx2.data?.colorId === null && ctx2.data?.color === null);
     check("Ham top aday müşteri yok", ctx2.data?.candidateCustomers.length === 0);
 
-    // 5a) MÜHÜRLÜ havuz çuvalındaki top → specLocked=true, sack.sealedAt set, shipment=null
-    const sackId = ((await ship.openSack({ customerId: customer.id, manualCode: `TEST-RLBC-S-${ts}` })) as { data: { id: string } }).data.id;
+    // 5a) DEPODAKİ (havuz) çuvaldaki top → specLocked=false (çuval kilitlemez), sack set, shipment=null
+    const sackId = ((await ship.openSack({ customerId: customer.id })) as { data: { id: string } }).data.id;
     sackIds.push(sackId);
     await ship.scanIntoSack({ sackId, barcode: r3.barcode! });
-    await ship.sealSack({ sackId });
-    const ctxSealed = await inv.getRelabelContext(r3.barcode!);
-    check("Mühürlü çuvaldaki top specLocked=true", ctxSealed.data?.specLocked === true);
-    check("Mühürlü çuval sack.sealedAt set + shipment=null", ctxSealed.data?.sack?.sealedAt != null && ctxSealed.data?.shipment === null);
+    const ctxDepot = await inv.getRelabelContext(r3.barcode!);
+    check("Depodaki çuvaldaki top specLocked=false (çuval kilitlemez)", ctxDepot.data?.specLocked === false);
+    check("Depo çuvalı sack set + shipment=null", ctxDepot.data?.sack != null && ctxDepot.data?.shipment === null);
 
     // 5b) Sevkiyata atanmış top → specLocked=true + shipment.status=PLANNED
-    const shipmentId = ((await ship.createShipment({ sackIds: [sackId] })) as { data: { id: string } }).data.id;
+    const shipmentId = ((await ship.createShipment({ sackIds: [sackId], customerId: customer.id })) as { data: { id: string } }).data.id;
     shipmentIds.push(shipmentId);
     const ctxShipped = await inv.getRelabelContext(r3.barcode!);
     check("Sevkiyattaki top specLocked=true", ctxShipped.data?.specLocked === true);

@@ -37,7 +37,7 @@ import {
   type BuiltDocContent,
   type PrintedDocDb,
 } from "./printed-document.service";
-import { buildPrefixedCardNumber } from "../utils/barcode";
+import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
@@ -62,80 +62,32 @@ import { allocate, specMatch, type RollSpec, type LineForAlloc } from "./helpers
 // Helpers
 // -----------------------------------------------------------------------------
 
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-function decodeSequenceFromBarcode(barcode: string): number | null {
-  // Ayraçsız PFXYYMMXXXXXXC (13 char) → XXXXXX (Crockford) = pozisyon 6..12
-  if (barcode.length < 13) return null;
-  const seqStr = barcode.slice(6, 12);
-  let n = 0;
-  for (const ch of seqStr.toUpperCase()) {
-    const v = CROCKFORD.indexOf(ch);
-    if (v < 0) return null;
-    n = n * 32 + v;
-  }
-  return n;
-}
-
-/** Ayraçsız ondalık belge no (PFXYYMMNNNNNN) listesinden sayısal max; boş/parse-edilemez atlanır. */
-function decimalDocMax(nos: (string | null)[]): number {
-  return nos.reduce((max, no) => {
-    if (!no) return max;
-    const n = parseInt(no.slice(6), 10);
-    return Number.isFinite(n) && n > max ? n : max;
-  }, 0);
-}
-/** Ayraçsız Crockford barkod (PFXYYMMXXXXXXC) listesinden sayısal max; boş/decode-edilemez atlanır. */
-function crockfordMax(barcodes: (string | null)[]): number {
-  return barcodes.reduce((max, b) => {
-    if (!b) return max;
-    const n = decodeSequenceFromBarcode(b);
-    return n !== null && n > max ? n : max;
-  }, 0);
-}
-
-// Export: workorder.service per-roll split'te taşınan toplar için yeni SD dispatch
+// Export: workorder.service per-roll split'te taşınan toplar için yeni FS dispatch
 // numarası üretirken yeniden kullanır (aynı sequence kaynağı).
 export async function nextPrefixedSequence(
   tx: Prisma.TransactionClient,
-  table: "subcontractorDispatch" | "subcontractorReceipt" | "swatch" | "roll",
+  table: "subcontractorDispatch" | "subcontractorReceipt",
   prefix: string,
   date: Date
 ): Promise<number> {
-  const yy = String(date.getFullYear()).slice(2);
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const barcodePrefix = `${prefix}${yy}${mm}`; // ayraçsız: PFXYYMM ile başlar
+  const fullPrefix = dailyCodePrefix(prefix, date); // PREFIX + GGAAYY
 
   // O-21: collation-güvenli — gte (index seek) + startsWith (tam-prefix, collation-
-  // bağımsız) ile aydaki TÜM kayıtları çek, sayısal max'ı JS'te reduce et. Eski
+  // bağımsız) ile günün TÜM kayıtlarını çek, sayısal max'ı JS'te reduce et. Eski
   // startsWith-tek + orderBy desc glibc collation sırasına + lex taşmaya güveniyordu
-  // (glibc seq-no bug — bkz. order.service.ts:1065 kanıtlı desen).
+  // (glibc seq-no bug — bkz. order.service.ts kanıtlı desen).
   if (table === "subcontractorDispatch") {
     const rows = await tx.subcontractorDispatch.findMany({
-      where: { dispatchNo: { gte: barcodePrefix, startsWith: barcodePrefix } },
+      where: { dispatchNo: { gte: fullPrefix, startsWith: fullPrefix } },
       select: { dispatchNo: true },
     });
-    return decimalDocMax(rows.map((r) => r.dispatchNo)) + 1;
+    return nextDailySeq(rows.map((r) => r.dispatchNo), fullPrefix);
   }
-  if (table === "subcontractorReceipt") {
-    const rows = await tx.subcontractorReceipt.findMany({
-      where: { receiptNo: { gte: barcodePrefix, startsWith: barcodePrefix } },
-      select: { receiptNo: true },
-    });
-    return decimalDocMax(rows.map((r) => r.receiptNo)) + 1;
-  }
-  if (table === "swatch") {
-    const rows = await tx.swatch.findMany({
-      where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
-      select: { barcode: true },
-    });
-    return crockfordMax(rows.map((r) => r.barcode)) + 1;
-  }
-  const rows = await tx.roll.findMany({
-    where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
-    select: { barcode: true },
+  const rows = await tx.subcontractorReceipt.findMany({
+    where: { receiptNo: { gte: fullPrefix, startsWith: fullPrefix } },
+    select: { receiptNo: true },
   });
-  return crockfordMax(rows.map((r) => r.barcode)) + 1;
+  return nextDailySeq(rows.map((r) => r.receiptNo), fullPrefix);
 }
 
 async function logTravelerScan(
@@ -633,8 +585,8 @@ export class SubcontractorService {
 
       // Dispatch numarası
       const now = new Date();
-      const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "SD", now);
-      const dispatchNo = buildPrefixedCardNumber("SD", now, seq, 6, "");
+      const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "FS", now);
+      const dispatchNo = buildDailyCode("FS", seq, now);
 
       const dispatch = await tx.subcontractorDispatch.create({
         data: {
@@ -1716,8 +1668,8 @@ export class SubcontractorService {
       // sayımı eşzamanlı dispatch'in commit'li toplarını görsün.
       await touchWorkOrderTx(tx, data.workOrderId);
       const now = new Date();
-      const seq = await nextPrefixedSequence(tx, "subcontractorReceipt", "SR", now);
-      const receiptNo = buildPrefixedCardNumber("SR", now, seq, 6, "");
+      const seq = await nextPrefixedSequence(tx, "subcontractorReceipt", "FK", now);
+      const receiptNo = buildDailyCode("FK", seq, now);
 
       const receipt = await tx.subcontractorReceipt.create({
         data: {
@@ -3765,7 +3717,6 @@ export class SubcontractorService {
                         width: true,
                         quantity: true,
                         shippedQty: true,
-                        packedQty: true,
                         item: { select: { code: true, name: true } },
                         color: { select: { name: true } },
                         order: {
@@ -3887,7 +3838,6 @@ export class SubcontractorService {
               width: true,
               quantity: true,
               shippedQty: true,
-              packedQty: true,
               item: { select: { code: true, name: true } },
               color: { select: { name: true } },
               order: {
@@ -3909,7 +3859,7 @@ export class SubcontractorService {
       ...otherOpenLines,
     ];
     // Spec-eşleşen ve karşılanmaya yer olan (remaining>0) satırları al. Kapasite =
-    // quantity − shippedQty − packedQty (çuvallanmış rezerv de düşülür; §5).
+    // quantity − shippedQty (§5).
     const matchingLines = rawLines.filter(
       (ol) =>
         rollSpecs.some((rs) =>
@@ -3917,16 +3867,16 @@ export class SubcontractorService {
             { itemId: rs.itemId, colorId: rs.colorId, width: rs.width },
             { itemId: ol.itemId, colorId: ol.colorId, width: ol.width },
           ),
-        ) && new Prisma.Decimal(ol.quantity).greaterThan(new Prisma.Decimal(ol.shippedQty).plus(ol.packedQty)),
+        ) && new Prisma.Decimal(ol.quantity).greaterThan(new Prisma.Decimal(ol.shippedQty)),
     );
-    // allocate cap'i için packed'i shipped'e katla (allocate need = quantity − shippedQty).
+    // allocate need = quantity − shippedQty.
     const linesForAlloc: LineForAlloc[] = matchingLines.map((ol) => ({
       id: ol.id,
       itemId: ol.itemId,
       colorId: ol.colorId,
       width: ol.width,
       quantity: new Prisma.Decimal(ol.quantity),
-      shippedQty: new Prisma.Decimal(ol.shippedQty).plus(ol.packedQty),
+      shippedQty: new Prisma.Decimal(ol.shippedQty),
       deadline: ol.order.deadline,
       orderDate: ol.order.orderDate,
       lineCreatedAt: ol.createdAt,
@@ -3942,8 +3892,7 @@ export class SubcontractorService {
       width: ol.width != null ? Number(ol.width) : null,
       quantity: Number(ol.quantity),
       shippedQty: Number(ol.shippedQty),
-      packedQty: Number(ol.packedQty),
-      remaining: Number(new Prisma.Decimal(ol.quantity).minus(ol.shippedQty).minus(ol.packedQty)),
+      remaining: Number(new Prisma.Decimal(ol.quantity).minus(ol.shippedQty)),
       suggestedQty: suggested.has(ol.id) ? Number(suggested.get(ol.id)!) : 0,
       isWorkOrderLinked: linkedLineIds.has(ol.id),
     }));
@@ -4080,7 +4029,7 @@ export class SubcontractorService {
         where: { id: { in: lineIds } },
         select: {
           id: true, itemId: true, colorId: true, width: true,
-          quantity: true, shippedQty: true, packedQty: true,
+          quantity: true, shippedQty: true,
           order: { select: { id: true, status: true } },
         },
       });
@@ -4101,8 +4050,8 @@ export class SubcontractorService {
           throw AppError.badRequest("İptal edilmiş siparişe karşılanma yazılamaz");
         }
         // Aşırı-sevk koruması: karşılanma satırın KALAN kapasitesini aşamaz
-        // (quantity − shippedQty − packedQty; çuvallanmış rezerv dahil).
-        const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty).minus(line.packedQty);
+        // (quantity − shippedQty).
+        const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty);
         if (new Prisma.Decimal(a.qty).greaterThan(remaining)) {
           throw AppError.badRequest(
             `Karşılanan metraj (${a.qty}) satırın kalan kapasitesini (${remaining.toString()}) aşıyor`,
@@ -4266,7 +4215,6 @@ export class SubcontractorService {
             id: true,
             quantity: true,
             shippedQty: true,
-            packedQty: true,
             order: { select: { id: true, status: true, manualClosedById: true } },
           },
         });
@@ -4283,9 +4231,9 @@ export class SubcontractorService {
               "Sipariş bu sırada kapatıldı/iptal edildi — karşılanma yazılamaz, yenileyin",
             );
           }
-          // Kapasite = quantity − shippedQty − packedQty (çuvallanmış rezervin üstüne
-          // fason doğrudan sevk over-supply olmasın; §5).
-          const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty).minus(line.packedQty);
+          // Kapasite = quantity − shippedQty (fason doğrudan sevk over-supply
+          // olmasın; §5).
+          const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty);
           if (new Prisma.Decimal(a.qty).greaterThan(remaining)) {
             throw AppError.conflict(
               `Karşılanan metraj (${a.qty}) satırın kalan kapasitesini (${remaining.toString()}) aştı — ` +

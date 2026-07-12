@@ -79,7 +79,7 @@ export class SackSearchService {
     const shipmentNo = params.shipmentNo?.trim();
     if (shipmentNo) andClauses.push({ shipment: { is: { OR: buildTurkishSearch<Prisma.ShipmentWhereInput>(shipmentNo, ["shipmentNo"]) } } });
     const sackCode = params.sackCode?.trim();
-    if (sackCode) andClauses.push({ OR: buildTurkishSearch<Prisma.SackWhereInput>(sackCode, ["manualCode", "sackNo"]) });
+    if (sackCode) andClauses.push({ OR: buildTurkishSearch<Prisma.SackWhereInput>(sackCode, ["sackNo"]) });
     if (hasContentFilter) andClauses.push({ rolls: { some: rollFilter } });
 
     const where: Prisma.SackWhereInput = { AND: andClauses };
@@ -94,9 +94,7 @@ export class SackSearchService {
         id: true,
         sackNo: true,
         seq: true,
-        manualCode: true,
         weightKg: true,
-        sealedAt: true,
         createdAt: true,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
@@ -151,9 +149,7 @@ export class SackSearchService {
         id: s.id,
         sackNo: s.sackNo,
         seq: s.seq,
-        manualCode: s.manualCode,
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
-        sealedAt: s.sealedAt,
         createdAt: s.createdAt,
         customer: s.customer,
         branch: s.branch,
@@ -181,7 +177,6 @@ export class SackSearchService {
         id: true,
         sackNo: true,
         seq: true,
-        manualCode: true,
         weightKg: true,
         shipment: {
           select: {
@@ -239,9 +234,7 @@ export class SackSearchService {
         id: true,
         sackNo: true,
         seq: true,
-        manualCode: true,
         weightKg: true,
-        sealedAt: true,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
         shipment: {
@@ -286,9 +279,7 @@ export class SackSearchService {
         id: s.id,
         sackNo: s.sackNo,
         seq: s.seq,
-        manualCode: s.manualCode,
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
-        sealedAt: s.sealedAt,
         customer: s.customer,
         branch: s.branch,
         shipment: s.shipment,
@@ -322,7 +313,7 @@ export class SackSearchService {
         qualityGrade: true,
         item: { select: { id: true, name: true } },
         color: { select: { id: true, name: true, hex: true } },
-        sack: { select: { id: true, sackNo: true, seq: true, manualCode: true, weightKg: true } },
+        sack: { select: { id: true, sackNo: true, seq: true, weightKg: true } },
         shipment: {
           select: {
             id: true,

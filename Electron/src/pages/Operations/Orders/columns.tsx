@@ -175,22 +175,6 @@ export const orderColumns: ColumnDef<Order>[] = [
     },
   },
   {
-    id: "packed",
-    header: "Çuvallanmış",
-    meta: { label: "Çuvallanmış" },
-    cell: ({ row }) => {
-      const packed = row.original.packedQty ?? 0;
-      if (packed === 0) {
-        return <span className="text-muted-foreground text-xs">—</span>;
-      }
-      return (
-        <span className="tabular-nums text-xs">
-          {packed.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m
-        </span>
-      );
-    },
-  },
-  {
     accessorKey: "status",
     header: () => <SortableHeader field="status" label="Durum" />,
     meta: { label: "Durum" },

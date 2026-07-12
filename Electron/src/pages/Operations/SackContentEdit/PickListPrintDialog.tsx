@@ -12,11 +12,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { printDocumentArea } from "@/lib/print";
-import { sackSearchService } from "./service";
+import { sackHubService } from "./service";
 import { shipmentStatusLabels, type PickListRow } from "./types";
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-const locLabel = (r: PickListRow) => (r.shipment ? shipmentStatusLabels[r.shipment.status] : "Havuzda");
+const locLabel = (r: PickListRow) => (r.shipment ? shipmentStatusLabels[r.shipment.status] : "Depoda");
 
 interface Props {
   /** Basılacak çuval id'leri — null ise dialog kapalı. */
@@ -26,17 +26,15 @@ interface Props {
 
 /**
  * Çeki listesi baskısı — seçilen çuvalların SAHADA ARANACAK dökümü. Çalışma
- * kağıdıdır (resmi/donmuş belge DEĞİL — PrintedDocument'a girmez): operatör
- * kağıtla depoya gider, bulduğu çuvalın kutusunu işaretler/üstünü çizer.
- * Çuval etiketi basılmaya başlanınca aynı iş Sevk Kapısı'nda okutma sayacıyla
- * yapılır — bu kağıt o güne kadarki köprüdür.
+ * kağıdıdır (resmi/donmuş belge DEĞİL): operatör kağıtla depoya gider, bulduğu
+ * çuvalın kutusunu işaretler/üstünü çizer.
  */
 export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   const open = !!sackIds && sackIds.length > 0;
   const printRef = useRef<HTMLDivElement>(null);
 
   const fetchMut = useMutation({
-    mutationFn: (ids: string[]) => sackSearchService.pickList(ids),
+    mutationFn: (ids: string[]) => sackHubService.pickList(ids),
   });
 
   // Dialog açılınca dökümü çek (her açılışta taze — bayat kg/içerik basılmasın).
@@ -90,16 +88,11 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="border-b align-top">
-                    {/* Üstünü çizme/işaretleme kutusu — kağıdın asıl kullanım şekli */}
                     <td className="py-1.5 pr-1">
                       <span className="inline-block h-4 w-4 rounded-sm border-2 border-foreground/70" />
                     </td>
                     <td className="py-1.5 pr-2">
-                      {/* Sahada çuvalın üstünde ELLE YAZILI kod var — büyük/kalın o basılır */}
-                      <span className="font-mono text-sm font-bold">{r.manualCode ?? `Çuval ${r.seq}`}</span>
-                      {r.manualCode && (
-                        <span className="ml-1 font-mono text-[10px] text-muted-foreground">({r.sackNo})</span>
-                      )}
+                      <span className="font-mono text-sm font-bold">{r.sackNo}</span>
                     </td>
                     <td className="py-1.5 pr-2">
                       {locLabel(r)}
@@ -113,9 +106,7 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                           {c.width ? ` · ${c.width} cm` : ""} — {fmtM(c.qty)} m ({c.rollCount})
                         </div>
                       ))}
-                      {r.swatchCount > 0 && (
-                        <div className="text-muted-foreground">{r.swatchCount} kartela</div>
-                      )}
+                      {r.swatchCount > 0 && <div className="text-muted-foreground">{r.swatchCount} kartela</div>}
                     </td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{r.rollCount}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{fmtM(r.totalQty)}</td>

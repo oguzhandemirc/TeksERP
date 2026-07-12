@@ -17,9 +17,9 @@
 //     → attachRolls (STOCK → IN_PRODUCTION, ilk adım = PROCESS_QC)
 //     → Kurşun + KK2 (completeQc2: KURSUN_APPLIED + QC2_COMPLETED) → finishStep
 //     → Tambur (finalize, final karar) → child WAREHOUSE'a iner
-//     → Sevkiyat (ÇUVAL HAVUZU: çuval aç → okut → mühürle → havuzdan çuval seç →
+//     → Sevkiyat (ÇUVAL DEPO: çuval aç → okut → (tart) → depodan çuval + sipariş seç →
 //        PLANNED → AT_DOOR → DISPATCHED)
-//     → Mühürde packedQty rezervi; DISPATCH'te stok SHIPPED + shippedQty terfi + sipariş COMPLETED
+//     → Mühür/rezerv YOK; DISPATCH'te stok SHIPPED + shippedQty terfi + sipariş COMPLETED
 //
 //   NOT — Fason (boyahane/zımpara) adımı BİLİNÇLİ atlandı: opsiyoneldir (root
 //   CLAUDE.md "[opsiyonel Fason atla]"). KK1/RAW_QC istasyon ekranı bir
@@ -63,9 +63,9 @@ function check(label: string, ok: boolean, detail = ""): void {
 
 // ── Benzersizlik: TEST-E2E- + ms zaman damgası ──────────────────────────────
 const STAMP = `${Date.now()}`;
-// Çuval havuzu modelinde rebalance MÜŞTERİ-GENELİ FIFO'dur ve E2E paylaşılan ilk aktif
-// müşteriyi kullanır. Benzersiz/yüksek en → başka açık sipariş veya paralel koşu bu
-// sevkiyatla spec (item+renk+en) eşleşmesin (seed tekstil enleri bu aralığa girmez).
+// Çuval depo modelinde tahsis SEVK ANINDA seçilen siparişlere (orderIds) spec+şube FIFO ile
+// yazılır. Benzersiz/yüksek en → sevkiyat yalnız bu testin siparişiyle eşleşsin, paralel koşu
+// veya başka açık sipariş karışmasın (seed tekstil enleri bu aralığa girmez).
 const WIDTH = 500 + Math.floor(Math.random() * 500);
 const CUT_LEN = 90; // Tambur'da kesilecek tek top (= sipariş satır metrajı → COMPLETED)
 const RAW_QTY = 120; // ham topun girişteki metrajı (kalan kuyruk depoda kalır)
@@ -93,8 +93,8 @@ const orderStatusOf = async (id: string) =>
   (await prisma.order.findUnique({ where: { id }, select: { status: true } }))!.status;
 const shippedQtyOf = async (lineId: string) =>
   Number((await prisma.orderLine.findUnique({ where: { id: lineId }, select: { shippedQty: true } }))!.shippedQty);
-const packedQtyOf = async (lineId: string) =>
-  Number((await prisma.orderLine.findUnique({ where: { id: lineId }, select: { packedQty: true } }))!.packedQty);
+const allocOf = async (lineId: string) =>
+  Number((await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId }, _sum: { qty: true } }))._sum.qty ?? 0);
 
 async function main(): Promise<void> {
   console.log("=== Üretim Hattı Uçtan Uca (E2E) Testi ===\n");
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
   }))!.barcode!;
 
   // ===========================================================================
-  // HOP 7 — Sevkiyat (ÇUVAL HAVUZU): çuval aç → okut → mühürle → sevkiyat → dispatch
+  // HOP 7 — Sevkiyat (ÇUVAL DEPO): çuval aç → okut → (tart) → sevkiyat → dispatch
   // ===========================================================================
   // Onay bayrağı KAPALI → dispatch PLANNED veya AT_DOOR'dan olabilir (AT_DOOR akışını da
   // test etmek için moveToDoor'dan geçiyoruz).
@@ -327,24 +327,25 @@ async function main(): Promise<void> {
     cs.sackId === sackId && !cs.shipmentId, `sackId=${cs.sackId} shipmentId=${cs.shipmentId}`);
   check("HOP7 çuvalda ama hâlâ WAREHOUSE (mühür/sevk stok düşmedi)", cs.status === RollStatus.WAREHOUSE, cs.status);
 
-  // 7.2 — Tart + kod + MÜHÜRLE → çuval havuza girer; rebalance packedQty rezerve eder.
-  await ship.weighSack({ sackId, weightKg: 38, manualCode: `TEST-E2E-KOD-${STAMP}` }, userId);
-  await ship.sealSack({ sackId }, userId);
-  check("HOP7a mühür → packedQty=CUT_LEN (rezerve)", (await packedQtyOf(lineId)) === CUT_LEN, `packedQty=${await packedQtyOf(lineId)}`);
+  // 7.2 — Tart (opsiyonel) → çuval DEPODA kalır; mühür/rezerv YOK.
+  await ship.weighSack({ sackId, weightKg: 38 }, userId);
+  const weighed = await prisma.sack.findUnique({ where: { id: sackId }, select: { weightKg: true, shipmentId: true } });
+  check("HOP7a tartıldı + çuval depoda (mühür/rezerv YOK)", Number(weighed?.weightKg) === 38 && weighed?.shipmentId === null, `kg=${weighed?.weightKg} ship=${weighed?.shipmentId}`);
   check("HOP7a shippedQty hâlâ 0 (sevk DISPATCH'te işlenir)", (await shippedQtyOf(lineId)) === 0, `shippedQty=${await shippedQtyOf(lineId)}`);
   cs = await rollState(shipChildId);
   check("HOP7a top hâlâ WAREHOUSE (stok DISPATCH'te düşer)", cs.status === RollStatus.WAREHOUSE, cs.status);
-  // packedQty status'a girmez → sipariş henüz APPROVED (gerçek sevk yok).
-  check("HOP7a sipariş APPROVED (yalnız rezerve; gerçek sevk yok)",
+  // Tahsis yalnız sevkte yazılır → sipariş henüz APPROVED (gerçek sevk/tahsis yok).
+  check("HOP7a sipariş APPROVED (henüz sevk/tahsis yok)",
     (await orderStatusOf(order.id)) === OrderStatus.APPROVED, await orderStatusOf(order.id));
 
-  // 7.3 — Havuzdan çuval seçerek sevkiyat kur (PLANNED). Sipariş kümesi tahsisten türer.
-  const shipmentRes = (await ship.createShipment({ sackIds: [sackId] }, userId)) as { data: { id: string } };
+  // 7.3 — Depodan çuval + sipariş seçerek sevkiyat kur (PLANNED). Tahsis sevk anında yazılır.
+  const shipmentRes = (await ship.createShipment({ sackIds: [sackId], customerId: customer.id, orderIds: [order.id] }, userId)) as { data: { id: string } };
   const shipmentId = shipmentRes.data.id;
   createdShipmentIds.push(shipmentId);
   check("HOP7b sevkiyat oluştu, status=PLANNED", (await shipmentStatusOf(shipmentId)) === ShipmentStatus.PLANNED, await shipmentStatusOf(shipmentId));
-  check("HOP7b packedQty hâlâ CUT_LEN (tahsis donmuş)", (await packedQtyOf(lineId)) === CUT_LEN, `packedQty=${await packedQtyOf(lineId)}`);
-  check("HOP7b ShipmentOrder tahsisten türetildi", (await prisma.shipmentOrder.count({ where: { shipmentId } })) === 1);
+  check("HOP7b SackAllocation=CUT_LEN yazıldı (shippedQty'ye SAYILMAZ)", (await allocOf(lineId)) === CUT_LEN, `alloc=${await allocOf(lineId)}`);
+  check("HOP7b PLANNED'de shippedQty hâlâ 0 (düşüş dispatch'te)", (await shippedQtyOf(lineId)) === 0, `shippedQty=${await shippedQtyOf(lineId)}`);
+  check("HOP7b ShipmentOrder seçilen siparişten kuruldu", (await prisma.shipmentOrder.count({ where: { shipmentId } })) === 1);
   cs = await rollState(shipChildId);
   check("HOP7b top sevkiyata bağlandı (shipmentId set), hâlâ WAREHOUSE",
     !!cs.shipmentId && cs.status === RollStatus.WAREHOUSE, `shipmentId=${cs.shipmentId} status=${cs.status}`);
@@ -354,11 +355,10 @@ async function main(): Promise<void> {
   check("HOP7c moveToDoor → AT_DOOR", (await shipmentStatusOf(shipmentId)) === ShipmentStatus.AT_DOOR);
   check("HOP7c AT_DOOR'da shippedQty hâlâ 0 (commit yok)", (await shippedQtyOf(lineId)) === 0);
 
-  // 7.5 — Sevk (DISPATCHED): toplar SHIPPED, donmuş tahsis → shippedQty terfi, rezerv 0.
+  // 7.5 — Sevk (DISPATCHED): toplar SHIPPED, tahsis → shippedQty terfi.
   await ship.dispatchShipment(shipmentId, { plateNumber: `34 E2E ${STAMP.slice(-3)}` }, userId);
   check("HOP7d dispatch → DISPATCHED", (await shipmentStatusOf(shipmentId)) === ShipmentStatus.DISPATCHED);
   check("HOP7d shippedQty=CUT_LEN (terfi)", (await shippedQtyOf(lineId)) === CUT_LEN, `shippedQty=${await shippedQtyOf(lineId)}`);
-  check("HOP7d packedQty=0 (rezerv sevke döndü)", (await packedQtyOf(lineId)) === 0, `packedQty=${await packedQtyOf(lineId)}`);
   cs = await rollState(shipChildId);
   check("HOP7d fiziksel stok çıktı: top SHIPPED", cs.status === RollStatus.SHIPPED, cs.status);
 

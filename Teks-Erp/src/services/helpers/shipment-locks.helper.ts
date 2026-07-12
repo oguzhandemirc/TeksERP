@@ -1,10 +1,11 @@
 // =============================================================================
-// Çuval / sevkiyat satır kilitleri — içerik mutasyonunu mühür/atama ile serileştir
+// Çuval / sevkiyat satır kilitleri — içerik mutasyonunu atama ile serileştir
 // =============================================================================
-// ÇUVAL HAVUZU MODELİ. İki serileştirme noktası:
-//   • touchOpenSackTx — AÇIK havuz çuvalına (shipmentId NULL, sealedAt NULL) içerik
-//     ekleme/çıkarma; mühürleme (seal) claim'iyle serileşir (mühürlenmekte olan çuvala
-//     top eklenemez / eklenmekte olan çuval mühürlenemez).
+// ÇUVAL DEPO MODELİ. İki serileştirme noktası:
+//   • touchWarehouseSackTx — DEPODAKİ çuvala (shipmentId NULL) içerik ekleme/çıkarma;
+//     sevkiyat atama (createShipment) claim'iyle serileşir (sevk edilmekte olan çuvala
+//     top eklenemez / eklenmekte olan çuval sevk edilemez). Mühür YOK — depodaki her
+//     çuval her an düzenlenebilir; tek kilit sevkiyata atanma anıdır.
 //   • touchShipmentPlannedTx — PLANNED sevkiyata çuval ekleme/çıkarma; dispatch/cancel
 //     claim'leriyle serileşir (sevk edilmekte olan sevkiyattan çuval çıkarılamaz).
 // =============================================================================
@@ -14,21 +15,20 @@ import { ShipmentStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 
 /**
- * AÇIK havuz çuvalı satırını kilitle (shipmentId NULL + sealedAt NULL). Mühürlü, sevkiyata
- * atanmış veya bulunmayan çuvalda 409. İçerik ekleme/çıkarma tx'leri bununla seal/atama
- * claim'lerine serileşir.
+ * DEPODAKİ çuval satırını kilitle (shipmentId NULL). Sevkiyata atanmış veya bulunmayan
+ * çuvalda 409. İçerik ekleme/çıkarma tx'leri bununla sevkiyat-atama claim'ine serileşir.
  */
-export async function touchOpenSackTx(
+export async function touchWarehouseSackTx(
   tx: Prisma.TransactionClient,
   sackId: string
 ): Promise<void> {
   const touched = await tx.sack.updateMany({
-    where: { id: sackId, shipmentId: null, sealedAt: null },
+    where: { id: sackId, shipmentId: null },
     data: { updatedAt: new Date() },
   });
   if (touched.count === 0) {
     throw AppError.conflict(
-      "Çuval bu sırada mühürlendi veya bir sevkiyata atandı — içerik artık değiştirilemez. Sayfayı yenileyin."
+      "Çuval bu sırada bir sevkiyata atandı — içerik artık değiştirilemez. Sayfayı yenileyin."
     );
   }
 }

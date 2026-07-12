@@ -1,11 +1,11 @@
 // =============================================================================
 // Test: Saha #1+#23 — Çuval/Top Arama servisi
 // Çalıştır: npx tsx scripts/test_sack_search.ts
-// Kurulum: 1 müşteri, 1 sevkiyat (PREPARING), 2 çuval; Çuval-1'de 2 top (A ürünü)
+// Kurulum: 1 müşteri, 1 sevkiyat (PLANNED), 2 çuval; Çuval-1'de 2 top (A ürünü)
 //          + 1 top (B ürünü), Çuval-2'de 1 top (B ürünü). 1 top çuvalsız depoda.
 // Doğrulananlar:
 //   1. İçerik filtresi (itemId) → yalnız o ürünü içeren çuvallar + eşleşen adet/metre
-//   2. sackCode araması manualCode'a vurur
+//   2. sackCode araması sackNo'ya vurur
 //   3. müşteri + sevkiyatNo filtreleri
 //   4. includeDispatched=false default → DISPATCHED görünmez
 //   5. getSackContents çuval dökümü döner
@@ -44,15 +44,15 @@ async function main() {
     select: { id: true },
   });
   const shipment = await prisma.shipment.create({
-    data: { shipmentNo: `TEST-SRC-${ts}`, customerId: customer.id, status: "PREPARING" },
+    data: { shipmentNo: `TEST-SRC-${ts}`, customerId: customer.id, status: "PLANNED" },
     select: { id: true },
   });
   const sack1 = await prisma.sack.create({
-    data: { sackNo: `TEST-SRC-SK1-${ts}`, shipmentId: shipment.id, seq: 1, manualCode: `TSTAMB${ts}` },
+    data: { sackNo: `TEST-SRC-SK1-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1 },
     select: { id: true },
   });
   const sack2 = await prisma.sack.create({
-    data: { sackNo: `TEST-SRC-SK2-${ts}`, shipmentId: shipment.id, seq: 2, manualCode: `TSTAMB${ts + 1}` },
+    data: { sackNo: `TEST-SRC-SK2-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 2 },
     select: { id: true },
   });
 
@@ -92,10 +92,10 @@ async function main() {
       `match=${rows[0]?.matchRollCount}/${rows[0]?.matchQty} all=${rows[0]?.rollCount}/${rows[0]?.totalQty}`,
     );
 
-    // 2) sackCode → manualCode vuruşu
-    const byCode = await svc.searchSacks({ sackCode: `TSTAMB${ts + 1}` });
+    // 2) sackCode → sackNo vuruşu
+    const byCode = await svc.searchSacks({ sackCode: `TEST-SRC-SK2-${ts}` });
     const codeRows = byCode.data as Array<{ id: string; matchRollCount: number | null }>;
-    check("sackCode araması Çuval-2'yi buldu", codeRows.length === 1 && codeRows[0].id === sack2.id);
+    check("sackCode araması (sackNo) Çuval-2'yi buldu", codeRows.length === 1 && codeRows[0].id === sack2.id);
     check("İçerik filtresi yokken match alanları null", codeRows[0]?.matchRollCount === null);
 
     // 3) müşteri + sevkiyat no
@@ -108,7 +108,7 @@ async function main() {
     check("DISPATCHED default görünmez", (afterDispatch.data as unknown[]).length === 0);
     const withDispatched = await svc.searchSacks({ customerId: customer.id, includeDispatched: true });
     check("includeDispatched=true ile görünür", (withDispatched.data as unknown[]).length === 2);
-    await prisma.shipment.update({ where: { id: shipment.id }, data: { status: "PREPARING" } });
+    await prisma.shipment.update({ where: { id: shipment.id }, data: { status: "PLANNED" } });
 
     // 5) Çuval dökümü
     const contents = await svc.getSackContents(sack1.id);
@@ -140,7 +140,8 @@ async function main() {
       totalQty: number;
       rollCount: number;
       contents: Array<{ itemName: string; qty: number; rollCount: number }>;
-      shipment: { shipmentNo: string; customer: { name: string } };
+      customer: { name: string } | null;
+      shipment: { shipmentNo: string };
     }>;
     check("Çeki listesi iki çuvalı da döndürdü", pickRows.length === 2);
     const p1 = pickRows.find((r) => r.id === sack1.id);
@@ -151,7 +152,7 @@ async function main() {
         p1.contents.some((g) => g.qty === 150 && g.rollCount === 2) &&
         p1.contents.some((g) => g.qty === 30 && g.rollCount === 1),
     );
-    check("Çeki satırında sevkiyat+müşteri var", !!p1?.shipment.customer.name);
+    check("Çeki satırında müşteri var (çuval müşterisi)", !!p1?.customer?.name);
     let pickEmpty = false;
     try {
       await svc.getPickList([]);

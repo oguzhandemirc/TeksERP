@@ -24,8 +24,8 @@ interface Props {
 /**
  * Sevkiyat iptali — yıkıcı onay (CLAUDE.md kuralı: etkilenen kayıtlar SOMUT
  * gösterilir). Önizleme backend cancel-preview'dan canlı gelir (havuz modeli):
- * havuza dönecek çuval/top/kartela sayıları + rezervi (packedQty) geri sarılacak
- * siparişler. DISPATCHED iptal edilemez (backend de reddeder).
+ * havuza dönecek çuval/top/kartela sayıları + sevkiyattan çıkacak siparişler.
+ * DISPATCHED iptal edilemez (backend de reddeder).
  */
 export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
   const qc = useQueryClient();
@@ -71,7 +71,7 @@ export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
               <>
                 {p.customerName}
                 {p.branchName ? ` · ${p.branchName}` : ""} — sevkiyat <strong>iptal</strong> edilirse çuvallar
-                havuza döner, sipariş rezervi (packedQty) serbest kalır.
+                havuza döner, ilgili siparişler bu sevkiyattan çıkar.
               </>
             ) : (
               "Önizleme yükleniyor…"
@@ -106,7 +106,7 @@ export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
             {p.affectedOrders.length > 0 && (
               <div className="rounded-md border">
                 <div className="border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                  Rezervi (packedQty) serbest kalacak siparişler
+                  Sevkiyattan çıkacak siparişler
                 </div>
                 <ul className="max-h-48 divide-y overflow-y-auto text-xs">
                   {p.affectedOrders.map((o) => (

@@ -26,11 +26,11 @@ import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
-// Tartı / Paket — GİRİŞ ekranı (push: Paketleme). Çuval Havuzu modeli:
-//   • "Sürdür": havuzda açık/mühürlü çuvalı olan müşteriler (/pool) → Paketleme.
+// Tartı / Paket — GİRİŞ ekranı (push: Paketleme). Çuval Depo modeli:
+//   • "Sürdür": havuzda çuvalı olan müşteriler (/pool) → Paketleme.
 //   • "Müşteriye Çuvalla": doğrudan müşteri seç → Paketleme.
 //   • Açık siparişler: tek müşteri+şube seç → türetilen müşteriyle Paketleme.
-// Paketleme müşteri workspace'idir (çuval aç/okut/mühürle); sevkiyat orada kurulur.
+// Paketleme müşteri workspace'idir (çuval aç/okut/tart); sevkiyat orada kurulur.
 // =============================================================================
 
 const groupKey = (customerId: string, branchId: string | null) => `${customerId}|${branchId ?? ''}`;
@@ -60,7 +60,7 @@ export default function TartiPaketScreen() {
   });
   const openOrders = openOrdersQ.data?.data ?? [];
 
-  // Çuval havuzu — açık/mühürlü çuvalı olan müşteriler ("Sürdür").
+  // Çuval havuzu — çuvalı olan müşteriler ("Sürdür"). Müşterisiz grup da olabilir.
   const poolQ = useQuery({
     queryKey: ['pool'],
     queryFn: () => packingService.listPool(),
@@ -283,19 +283,27 @@ export default function TartiPaketScreen() {
                 </Text>
                 {(showAllPool ? pool : pool.slice(0, POOL_CAP)).map((g) => (
                   <TouchableRipple
-                    key={g.customer.id}
-                    onPress={() => nav.navigate('Paketleme', { customerId: g.customer.id })}
+                    key={g.customer?.id ?? 'no-customer'}
+                    onPress={() =>
+                      g.customer
+                        ? nav.navigate('Paketleme', { customerId: g.customer.id })
+                        : Toast.show({
+                            type: 'info',
+                            text1: 'Müşterisiz çuvallar',
+                            text2: 'Sevk Çıkışı’ndan sevkiyata ekleyin.',
+                          })
+                    }
                     style={styles.resumeCard}
                   >
                     <View style={styles.bridgeInner}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.rollBarcode}>{g.customer.name}</Text>
+                        <Text style={styles.rollBarcode}>{g.customer?.name ?? 'Müşterisiz'}</Text>
                         <Text style={styles.covMeta}>
-                          {g.openSacks} açık · {g.sealedSacks} mühürlü · {g.rollCount} top
+                          {g.sackCount} çuval · {g.rollCount} top
                           {g.totalKg > 0 ? ` · ${g.totalKg.toLocaleString('tr-TR')} kg` : ''}
                         </Text>
                       </View>
-                      <Text style={styles.bridgeCta}>Sürdür →</Text>
+                      <Text style={styles.bridgeCta}>{g.customer ? 'Sürdür →' : 'Sevk Çıkışı →'}</Text>
                     </View>
                   </TouchableRipple>
                 ))}

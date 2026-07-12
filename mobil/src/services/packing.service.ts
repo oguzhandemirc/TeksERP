@@ -2,12 +2,12 @@ import { apiClient } from './api';
 import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 
 // =============================================================================
-// Tartı/Paket + Sevkiyat — ÇUVAL HAVUZU sözleşmesi (/api/shipping)
-// Çuval MÜŞTERİYE ait, sevkiyattan bağımsız yaşar. Akış:
-//   1) Müşteriye çuval aç → openSack(customerId)          → havuzda (açık)
+// Tartı/Paket + Sevkiyat — ÇUVAL DEPO sözleşmesi (/api/shipping)
+// Çuval MÜŞTERİYE ait (opsiyonel), sevkiyattan bağımsız yaşar. Akış:
+//   1) Çuval aç → openSack(customerId?)                    → havuzda
 //   2) Top/kartela çuvala okut → scanIntoSack(sackId)
-//   3) Tart + kod → weighSack; MÜHÜRLE → sealSack          → havuza girer
-//   4) Havuzdaki mühürlü çuvallardan sevkiyat kur → createShipmentFromSacks → PLANNED
+//   3) Tart + kod → weighSack                              → çuval depoda hazır
+//   4) Havuzdaki çuvallardan sevkiyat kur → createShipmentFromSacks → PLANNED
 //   5) Kapı önü → moveToDoor (AT_DOOR); sevk → dispatch (DISPATCHED)
 // Karşılanma spec-toplam (SackAllocation defteri) — top→sipariş bağı YOK.
 // =============================================================================
@@ -44,8 +44,6 @@ export interface OpenOrderLine {
   customerColorName: string | null;
   requested: number;
   shipped: number;
-  /** Mühürlü çuvallarda rezerve edilmiş (henüz sevk olmamış) metraj. */
-  packed: number;
   openQty: number;
   warehouseAvailable: number;
   covered: boolean;
@@ -63,10 +61,10 @@ export interface OpenOrder {
 }
 
 // ── Çuval Havuzu — müşteri-gruplu board (Tartı/Paket giriş ekranı "Sürdür") ──
+// Müşterisiz (havuzda müşteri atanmamış) çuvallar için customer null olabilir.
 export interface PoolCustomerGroup {
-  customer: { id: string; code: string; name: string };
-  sealedSacks: number;
-  openSacks: number;
+  customer: { id: string; code: string; name: string } | null;
+  sackCount: number;
   totalKg: number;
   totalMeters: number;
   rollCount: number;
@@ -92,8 +90,6 @@ export interface PoolSack {
   sackNo: string;
   manualCode: string | null;
   weightKg: number | null;
-  /** true = mühürlü (havuza girdi, sevke hazır); false = açık (okutulabilir). */
-  sealed: boolean;
   branch: { id: string; name: string } | null;
   rollCount: number;
   swatchCount: number;
@@ -106,13 +102,13 @@ export interface CustomerPoolSacks {
   sacks: PoolSack[];
 }
 
-/** openSack dönüşü — yeni açılan (boş, açık) havuz çuvalı. */
+/** openSack dönüşü — yeni açılan (boş) havuz çuvalı. Müşteri opsiyonel. */
 export interface OpenedSack {
   id: string;
   sackNo: string;
   manualCode: string | null;
   weightKg: number | null;
-  customerId: string;
+  customerId: string | null;
   branchId: string | null;
 }
 
@@ -133,6 +129,24 @@ export interface CreatedShipment {
   destination: ShipmentDestination;
 }
 
+/** previewCreateShipment — karşılanan sipariş satırı (spec-toplam defterinden). */
+export interface ShipmentPreviewLine {
+  lineId: string;
+  orderNumber: string;
+  item: string;
+  color: string | null;
+  width: number | null;
+  need: number;
+  allocated: number;
+}
+/** previewCreateShipment dönüşü — salt-okunur kurulum önizlemesi. */
+export interface ShipmentPreview {
+  sacks: unknown[];
+  lines: ShipmentPreviewLine[];
+  warnings: string[];
+  totals: { totalMeters: number; sackCount: number; surplusMeters: number };
+}
+
 // ── Sevkiyat detayı ──
 export interface ShipmentDetailLine {
   lineId: string;
@@ -143,7 +157,6 @@ export interface ShipmentDetailLine {
   customerColorName: string | null;
   requested: number;
   shipped: number;
-  packed: number;
   openQty: number;
   thisShipment: number;
 }
@@ -382,12 +395,12 @@ export const packingService = {
   },
 
   // =========================================================================
-  // ÇUVAL HAVUZU — çuval aç / okut / tart / mühürle (sevkiyattan bağımsız)
+  // ÇUVAL DEPO — çuval aç / okut / tart (sevkiyattan bağımsız)
   // =========================================================================
 
-  /** Müşteriye yeni (açık) havuz çuvalı aç. */
+  /** Yeni (boş) havuz çuvalı aç. Müşteri opsiyonel (müşterisiz havuz da olur). */
   openSack: (body: {
-    customerId: string;
+    customerId?: string | null;
     branchId?: string | null;
     weightKg?: number | null;
     manualCode?: string | null;
@@ -410,17 +423,9 @@ export const packingService = {
       )
       .then((r) => r.data),
 
-  /** Çuval brüt tartı ve/veya kodunu güncelle (açık veya mühürlü havuz çuvalı). */
+  /** Çuval brüt tartı ve/veya kodunu güncelle (havuz çuvalı). */
   weighSack: (sackId: string, body: { weightKg?: number; manualCode?: string }): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, body).then((r) => r.data),
-
-  /** Çuvalı MÜHÜRLE → çuval depo havuzuna girer (top/kartela dolu + kod zorunlu). */
-  sealSack: (sackId: string): Promise<ApiResponse<{ sackId: string }>> =>
-    apiClient.post<ApiResponse<{ sackId: string }>>(`/shipping/sacks/${sackId}/seal`, {}).then((r) => r.data),
-
-  /** Mührü aç (havuz çuvalı) — içerik düzeltmek için. */
-  reopenSack: (sackId: string): Promise<ApiResponse<{ sackId: string }>> =>
-    apiClient.post<ApiResponse<{ sackId: string }>>(`/shipping/sacks/${sackId}/reopen`, {}).then((r) => r.data),
 
   /** Havuz çuvalını sil. withContents=true → dolu çuval içeriğiyle silinir (toplar depoya döner). */
   removeSack: (sackId: string, withContents?: boolean): Promise<ApiResponse<unknown>> =>
@@ -449,7 +454,7 @@ export const packingService = {
     return apiClient.get<ApiResponse<PoolCustomerGroup[]>>(`/shipping/pool${qs ? '?' + qs : ''}`).then((r) => r.data);
   },
 
-  /** Bir müşterinin havuz çuvalları (açık + mühürlü) — içerikleriyle. Paketleme workspace kaynağı. */
+  /** Bir müşterinin havuz çuvalları — içerikleriyle. Paketleme workspace kaynağı. */
   listCustomerPoolSacks: (customerId: string): Promise<ApiResponse<CustomerPoolSacks>> =>
     apiClient
       .get<ApiResponse<CustomerPoolSacks>>(`/shipping/pool/sacks?customerId=${encodeURIComponent(customerId)}`)
@@ -467,23 +472,26 @@ export const packingService = {
   // SEVKİYAT — havuzdan çuval seçerek kur + yaşam döngüsü
   // =========================================================================
 
-  /** Havuzdaki mühürlü çuvallardan yeni sevkiyat kur (PLANNED). */
+  /** Havuzdaki çuvallardan yeni sevkiyat kur (PLANNED). Müşteri zorunlu. */
   createShipmentFromSacks: (body: {
     sackIds: string[];
+    customerId: string;
+    branchId?: string | null;
+    orderIds?: string[];
     destination?: ShipmentDestination;
     procedureCode?: string | null;
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments', body).then((r) => r.data),
 
-  /** Sevkiyat kurulum önizlemesi (salt-okunur). */
-  previewCreateShipment: (
-    sackIds: string[],
-  ): Promise<ApiResponse<{ sacks: unknown[]; orders: { orderNumber: string; qty: number }[]; totals: { totalMeters: number; sackCount: number } }>> =>
+  /** Sevkiyat kurulum önizlemesi (salt-okunur) — karşılanan sipariş satırları + fazlalık. */
+  previewCreateShipment: (body: {
+    sackIds: string[];
+    customerId?: string | null;
+    branchId?: string | null;
+    orderIds?: string[];
+  }): Promise<ApiResponse<ShipmentPreview>> =>
     apiClient
-      .post<ApiResponse<{ sacks: unknown[]; orders: { orderNumber: string; qty: number }[]; totals: { totalMeters: number; sackCount: number } }>>(
-        '/shipping/shipments/preview',
-        { sackIds },
-      )
+      .post<ApiResponse<ShipmentPreview>>('/shipping/shipments/preview', body)
       .then((r) => r.data),
 
   /** PLANNED sevkiyata havuzdan çuval ekle. */

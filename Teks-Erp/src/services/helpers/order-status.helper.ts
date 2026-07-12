@@ -5,13 +5,12 @@
 //   PENDING → APPROVED → PARTIAL_SHIPPED → COMPLETED
 //                     → CANCELLED (manuel)
 //
-// KARŞILANMA (ÇUVAL HAVUZU MODELİ, top→sipariş bağı YOK): defter-otoritatif —
+// KARŞILANMA (ÇUVAL DEPO MODELİ, top→sipariş bağı YOK): defter-otoritatif —
 // increment/decrement YOK, denorm alanlar her seferinde defterden YENİDEN hesaplanır
-// (drift-free). Bir OrderLine için:
+// (drift-free). Rezerv/packedQty YOK. Bir OrderLine için:
 //   shippedQty = Σ SackAllocation.qty (çuval DISPATCHED sevkiyatta) + Σ DirectShipAllocation.qty
-//   packedQty  = Σ SackAllocation.qty (çuval havuzda VEYA PLANNED/AT_DOOR sevkiyatta)
-// Order.shippedQty/packedQty bunların toplamı. Bu helper ledger değiştikten sonra
-// (rebalance / dispatch / cancel / directShip) tetiklenir; her şeyi senkronlar.
+// Order.shippedQty bunun toplamı. Bu helper ledger değiştikten sonra
+// (dispatch / cancel / directShip / sipariş düzenleme) tetiklenir; her şeyi senkronlar.
 // =============================================================================
 
 import { Prisma, OrderStatus, ShipmentStatus } from "@prisma/client";
@@ -20,9 +19,9 @@ import { readShippingToleranceMeters } from "../system-setting.service";
 /**
  * Verilen OrderLine satırlarını write-kilitle (karşılanma yazımını serileştirmek için).
  *
- * Neden: `OrderLine.shippedQty/packedQty` denormalize toplamlardır; birden fazla yol
- * (iki sevkiyatın dispatch'i, rebalance ile paralel fason directShip) aynı satırı
- * yeniden hesaplayabilir. Kapasite (`quantity - shipped - packed`) tx DIŞINDA okunup
+ * Neden: `OrderLine.shippedQty` denormalize toplamdır; birden fazla yol
+ * (iki sevkiyatın dispatch'i, paralel fason directShip) aynı satırı
+ * yeniden hesaplayabilir. Kapasite (`quantity - shipped`) tx DIŞINDA okunup
  * tx İÇİNDE yazılırsa READ COMMITTED altında iki işlem birbirinin commit'ini görmez ve
  * `quantity`'yi aşar (over-coverage). Bu yardımcı kapasite TAZE okunmadan ÖNCE çağrılır:
  * ikinci işlem burada bloklanır, ilk commit'ten sonra güncel değeri okur.
@@ -41,19 +40,19 @@ export async function touchOrderLinesTx(
 }
 
 /**
- * Verilen OrderLine satırları için defter-toplamları hesapla (shipped + packed).
+ * Verilen OrderLine satırları için sevk defter-toplamını hesapla (shipped).
  *   shipped = dispatched SackAllocation + directShip
- *   packed  = havuz VEYA PLANNED/AT_DOOR SackAllocation
  * groupBy — @@index([orderLineId]) sürer; sack.shipment.status join'i indexli.
+ * NOT: packedQty/rezerv YOK — havuz/planlı çuvallar hiçbir satıra sayılmaz (düşüş sevkte).
  */
 export async function computeLineLedger(
   tx: Prisma.TransactionClient,
   lineIds: string[]
-): Promise<Map<string, { shipped: Prisma.Decimal; packed: Prisma.Decimal }>> {
-  const result = new Map<string, { shipped: Prisma.Decimal; packed: Prisma.Decimal }>();
+): Promise<Map<string, { shipped: Prisma.Decimal }>> {
+  const result = new Map<string, { shipped: Prisma.Decimal }>();
   const ids = [...new Set(lineIds)];
   if (ids.length === 0) return result;
-  for (const id of ids) result.set(id, { shipped: new Prisma.Decimal(0), packed: new Prisma.Decimal(0) });
+  for (const id of ids) result.set(id, { shipped: new Prisma.Decimal(0) });
 
   // Sevk edilmiş çuval tahsisleri → shippedQty.
   const dispatched = await tx.sackAllocation.groupBy({
@@ -78,37 +77,21 @@ export async function computeLineLedger(
     result.get(r.orderLineId)!.shipped = result.get(r.orderLineId)!.shipped.plus(r._sum.qty ?? 0);
   }
 
-  // Havuzdaki + planlı/kapıdaki (henüz sevk edilmemiş) çuval tahsisleri → packedQty.
-  const packed = await tx.sackAllocation.groupBy({
-    by: ["orderLineId"],
-    where: {
-      orderLineId: { in: ids },
-      OR: [
-        { sack: { shipmentId: null } },
-        { sack: { shipment: { status: { in: [ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR] } } } },
-      ],
-    },
-    _sum: { qty: true },
-  });
-  for (const r of packed) {
-    result.get(r.orderLineId)!.packed = result.get(r.orderLineId)!.packed.plus(r._sum.qty ?? 0);
-  }
-
   return result;
 }
 
 /**
- * Bir siparişin karşılanma denormlarını (satır + header shippedQty/packedQty) defterden
+ * Bir siparişin karşılanma denormunu (satır + header shippedQty) defterden
  * YENİDEN HESAPLA ve status'unu güncelle.
  *
- * Status kuralları (yalnız GERÇEK sevkle ilerler; packedQty status'a girmez):
+ * Status kuralları (yalnız GERÇEK sevkle ilerler):
  *   - shippedQty <= 0                                  → APPROVED
  *   - (totalRequired - shippedQty) <= tolerans          → COMPLETED
  *   - aksi                                              → PARTIAL_SHIPPED
  *
  * CANCELLED terminal; manuel kapatılmış (manualClosedById dolu) COMPLETED terminal —
  * status'u değişmez ama denormları yine de güncel tutulur. Otomatik COMPLETED re-open
- * olabilir (sevk/tahsis geri alınınca). Tx kabul eder.
+ * olabilir (sevk geri alınınca). Tx kabul eder.
  */
 export async function recomputeOrderStatus(
   tx: Prisma.TransactionClient,
@@ -129,18 +112,16 @@ export async function recomputeOrderStatus(
 
   const ledger = await computeLineLedger(tx, order.lines.map((l) => l.id));
 
-  // Satır denormlarını yaz + header toplamlarını biriktir.
+  // Satır denormunu yaz + header toplamını biriktir.
   let shippedQty = new Prisma.Decimal(0);
-  let packedQty = new Prisma.Decimal(0);
   let totalRequired = new Prisma.Decimal(0);
   for (const l of order.lines) {
-    const led = ledger.get(l.id) ?? { shipped: new Prisma.Decimal(0), packed: new Prisma.Decimal(0) };
+    const led = ledger.get(l.id) ?? { shipped: new Prisma.Decimal(0) };
     await tx.orderLine.update({
       where: { id: l.id },
-      data: { shippedQty: led.shipped, packedQty: led.packed },
+      data: { shippedQty: led.shipped },
     });
     shippedQty = shippedQty.plus(led.shipped);
-    packedQty = packedQty.plus(led.packed);
     totalRequired = totalRequired.plus(l.quantity);
   }
 
@@ -164,7 +145,7 @@ export async function recomputeOrderStatus(
   }
 
   const changed = newStatus !== order.status;
-  const data: Prisma.OrderUncheckedUpdateInput = { shippedQty, packedQty };
+  const data: Prisma.OrderUncheckedUpdateInput = { shippedQty };
   if (changed) {
     data.status = newStatus;
     if (newStatus === OrderStatus.COMPLETED && !order.completedAt) {

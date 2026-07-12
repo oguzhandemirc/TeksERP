@@ -7,8 +7,8 @@
 //   3. quickOrderFromRolls: ham topları spec bazında gruplar → sipariş satırları
 //   4. Aynı spec (ürün+renk+en) toplar tek satırda toplanır
 //   5. quickOrder STOK topları WAREHOUSE'a alır (sevke hazır)
-//   6. Ham (renksiz) sipariş satırı + ham top havuz akışında eşleşir
-//      (çuval aç→okut→mühürle = packedQty rezerve; sevkiyat→dispatch = shippedQty karşılar)
+//   6. Ham (renksiz) sipariş satırı + ham top depo akışında eşleşir
+//      (çuval aç→okut→(tart), depoda; sevkiyat + sipariş seç → dispatch = shippedQty karşılar)
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
@@ -117,32 +117,23 @@ async function main() {
     });
     check("quickOrder: STOK toplar WAREHOUSE'a alındı", states.every((s) => s.status === "WAREHOUSE"));
 
-    // 6) Ham sipariş + ham top havuz akışında eşleşir. Çuval MÜŞTERİYE ait:
-    //    aç → r3'ü okut → tart+kod → mühürle. Mühür → rebalance FIFO renk-null spec ile
-    //    200cm satıra rezerve eder (packedQty). Sevkiyat → dispatch → shippedQty terfi.
+    // 6) Ham sipariş + ham top depo akışında eşleşir. Çuval aç → r3'ü okut → (tart).
+    //    Çuval DEPODA kalır (mühür/rezerv YOK). Sevkiyat depodan çuval + sipariş seçilerek
+    //    kurulur → dispatch → 200cm satıra (renk-null spec) shippedQty terfi eder.
     const sackId = ((await ship.openSack({ customerId: customer.id })).data as { id: string }).id;
     createdSacks.push(sackId);
     await ship.scanIntoSack({ sackId, barcode: r3.barcode });
-    await ship.weighSack({ sackId, weightKg: 20, manualCode: `RAW${ts}` });
-    await ship.sealSack({ sackId });
+    await ship.weighSack({ sackId, weightKg: 20 });
 
-    // 200cm satır (80m talep) ham top r3 (80m) ile rezerve edildi (renk-null kapsama eşleşti).
-    const line200Sealed = await prisma.orderLine.findFirst({
-      where: { orderId: qd.order.id, width: 200 },
-      select: { packedQty: true },
-    });
-    check("Ham 200cm satır rezerve (mühür → packedQty=80, renk-null eşleşti)", Number(line200Sealed?.packedQty) === 80, `${line200Sealed?.packedQty}`);
-
-    // Havuzdan çuval seç → sevkiyat (PLANNED) → dispatch → karşılanma kesinleşir.
-    const sh2 = (await ship.createShipment({ sackIds: [sackId] })).data as { id: string };
+    // Depodan çuval + sipariş seç → sevkiyat (PLANNED) → dispatch → karşılanma kesinleşir.
+    const sh2 = (await ship.createShipment({ sackIds: [sackId], customerId: customer.id, orderIds: [qd.order.id] })).data as { id: string };
     createdShipments.push(sh2.id);
     await ship.dispatchShipment(sh2.id, {});
     const line200 = await prisma.orderLine.findFirst({
       where: { orderId: qd.order.id, width: 200 },
-      select: { shippedQty: true, packedQty: true },
+      select: { shippedQty: true },
     });
     check("Ham 200cm satır karşılandı (dispatch → shippedQty=80)", Number(line200?.shippedQty) === 80, `${line200?.shippedQty}`);
-    check("Ham 200cm satır rezervi sevke döndü (packedQty=0)", Number(line200?.packedQty) === 0, `${line200?.packedQty}`);
   } finally {
     // Çuval havuzu ters bağımlılık: SackAllocation (Restrict) → roll↔çuval/sevkiyat bağını
     // çöz → sack → ShipmentOrder (Restrict) → shipment → roll → sipariş → master-data.

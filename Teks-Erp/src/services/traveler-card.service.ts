@@ -15,7 +15,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
-import { buildBarcode, buildCardNumber, verifyBarcode } from "../utils/barcode";
+import { buildDailyCode, dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
 import { readTravelerCardConfig, type TravelerCardConfig } from "./system-setting.service";
 import bwipjs from "bwip-js";
 import {
@@ -104,54 +104,24 @@ export class TravelerCardService {
    * sessizce 1'e dönüp duplicate üretmek yerine bir sonraki geçerli kayda
    * geçer. Hiçbiri parse edilemezse net hata fırlatır — admin müdahale eder.
    */
-  private async nextMonthlySequence(
+  private async nextDailySequence(
     date: Date,
     // F270: tx içinden çağrıldığında tx snapshot'ından oku — global prisma ile
     // okumak withBarcodeRetry+$transaction closure'ında retry'lar arası tutarsız
     // sequence görebilirdi.
     client: Prisma.TransactionClient = prisma,
   ): Promise<number> {
-    const yy = String(date.getFullYear()).slice(2);
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const prefix = `RK${yy}${mm}`; // ayraçsız barkod: RKYYMM ile başlar
+    const prefix = dailyCodePrefix("RK", date); // RK + GGAAYY
 
-    // O-21: gte (index seek) + startsWith (tam-prefix, collation-bağımsız) ile aydaki
-    // TÜM kartları çek; orderBy desc + take 10 glibc collation'ında gerçek max'ı ilk 10
-    // dışında bırakıp DUPLICATE üretebiliyordu. Sayısal max'ı Crockford decode ile bul.
+    // O-21: gte (index seek) + startsWith (tam-prefix, collation-bağımsız) ile günün
+    // TÜM kartlarını çek; orderBy desc + take 10 glibc collation'ında gerçek max'ı ilk
+    // 10 dışında bırakıp DUPLICATE üretebiliyordu. Sayısal max'ı reduce ile bul.
     const candidates = await client.travelerCard.findMany({
-      where: { barcode: { gte: prefix, startsWith: prefix } },
-      select: { barcode: true },
+      where: { cardNumber: { gte: prefix, startsWith: prefix } },
+      select: { cardNumber: true },
     });
 
-    if (candidates.length === 0) return 1;
-
-    const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    let maxSeq = -1;
-    for (const c of candidates) {
-      // barcode = RKYYMMXXXXXXC (ayraçsız, 13 char) → XXXXXX = pozisyon 6..12
-      const b = c.barcode.toUpperCase();
-      if (b.length < 13) continue;
-      const seqStr = b.slice(6, 12);
-      let n = 0;
-      let valid = true;
-      for (const ch of seqStr) {
-        const v = CROCKFORD.indexOf(ch);
-        if (v < 0) {
-          valid = false;
-          break;
-        }
-        n = n * 32 + v;
-      }
-      if (valid && n > maxSeq) maxSeq = n;
-    }
-
-    if (maxSeq < 0) {
-      throw AppError.internal(
-        `Refakat kartı sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
-          `hiçbir kayıt parse edilemiyor. DB'yi manuel inceleyin.`
-      );
-    }
-    return maxSeq + 1;
+    return nextDailySeq(candidates.map((c) => c.cardNumber), prefix);
   }
 
   /**
@@ -179,9 +149,10 @@ export class TravelerCardService {
     if (existing) return { card: existing, created: false };
 
     const now = new Date();
-    const seq = await this.nextMonthlySequence(now, tx);
-    const cardNumber = buildCardNumber(now, seq);
-    const barcode = buildBarcode(now, seq);
+    const seq = await this.nextDailySequence(now, tx);
+    // Tek kod: insan-okur cardNumber = tarama barcode (RK + GGAAYY + NNNN)
+    const cardNumber = buildDailyCode("RK", seq, now);
+    const barcode = cardNumber;
     const snapshot = await this.buildSnapshot(tx, workOrderId);
 
     const card = await tx.travelerCard.create({
@@ -314,10 +285,10 @@ export class TravelerCardService {
         // Not: createCardInternal kendi küçük transaction'ı var; burada dış
         // transaction'a katılması için tx'i direkt geçiremeyiz. Basit çözüm:
         // kart oluşturma işini burada inline yapalım.
-        const seq = await this.nextMonthlySequence(new Date(), tx);
         const now = new Date();
-        const cardNumber = buildCardNumber(now, seq);
-        const barcode = buildBarcode(now, seq);
+        const seq = await this.nextDailySequence(now, tx);
+        const cardNumber = buildDailyCode("RK", seq, now);
+        const barcode = cardNumber;
 
         // DONMUŞ BELGE: reprint orijinali birebir üretir (schema sözleşmesi) —
         // eski kartın snapshot'ı kopyalanır. Legacy (snapshot'sız) kartta
@@ -451,8 +422,8 @@ export class TravelerCardService {
     },
     userId?: string
   ): Promise<ApiResponse<TravelerCardScan>> {
-    if (!verifyBarcode(data.barcode)) {
-      throw AppError.badRequest("Geçersiz barkod formatı veya checksum hatası");
+    if (!isDailyCode(data.barcode, "RK")) {
+      throw AppError.badRequest("Geçersiz barkod formatı");
     }
 
     const card = await prisma.travelerCard.findUnique({
@@ -624,32 +595,21 @@ export class TravelerCardService {
    * Barkoddan kart bilgisi (tarama öncesi önizleme).
    */
   /**
-   * Kartı barkod **veya** insan-okur kart numarası ile bulur.
-   *
-   * - Tam barkod (checksum'lı): `RKYYMMXXXXXXC` — ayraçsız, kamera/yazıcı çıktısı
-   * - Kart numarası (insan-okur): `RK-YYMM-NNN` — tireli, elle yazılırken kısa hali
-   *
-   * Mobile/admin tarafı her iki formatta da bu endpoint'i çağırabilir.
+   * Kartı tek kodu (barkod = kart numarası) ile bulur: `RK + GGAAYY + NNNN`
+   * (örn RK1207260001). Mobile/admin tarafı aynı kodu bu endpoint'e verir.
    */
   async findByBarcode(
     input: string,
   ): Promise<ApiResponse<(Omit<TravelerCard, "snapshot"> & { hasOpenDispatch: boolean }) | null>> {
     const normalized = input.trim().toUpperCase();
 
-    const isFullBarcode = /^RK\d{4}[0-9A-Z]{6}[0-9A-Z]$/.test(normalized);
-    const isCardNumber = /^RK-\d{4}-\d{1,6}$/.test(normalized);
-
-    if (!isFullBarcode && !isCardNumber) {
-      throw AppError.badRequest(
-        "Geçersiz format. Beklenen: RKYYMMXXXXXXC (barkod) veya RK-YYMM-NNN (kart no)",
-      );
-    }
-    if (isFullBarcode && !verifyBarcode(normalized)) {
-      throw AppError.badRequest("Barkod checksum'ı geçersiz");
+    if (!isDailyCode(normalized, "RK")) {
+      throw AppError.badRequest("Geçersiz format. Beklenen: RK1207260001 (kart kodu)");
     }
 
     const card = await prisma.travelerCard.findFirst({
-      where: isFullBarcode ? { barcode: normalized } : { cardNumber: normalized },
+      // barcode = cardNumber (tek kod) — ikisinden biriyle eşleş
+      where: { OR: [{ barcode: normalized }, { cardNumber: normalized }] },
       // F190: önizleme uçları (FasonSevk/FasonKabul tarama) donmuş `snapshot`ı KULLANMAZ
       // (getCardHtml ayrı çeker) — Prisma 7 omit ile ağır Json'u atla; kalan alanlar/relations byte-uyumlu.
       omit: { snapshot: true },
@@ -909,9 +869,9 @@ export class TravelerCardService {
     // Barkod sequence çakışırsa (P2002) yeniden hesaplanır ve create tekrarlanır.
     const card = await withBarcodeRetry(async () => {
       const now = new Date();
-      const seq = await this.nextMonthlySequence(now);
-      const cardNumber = buildCardNumber(now, seq);
-      const barcode = buildBarcode(now, seq);
+      const seq = await this.nextDailySequence(now);
+      const cardNumber = buildDailyCode("RK", seq, now);
+      const barcode = cardNumber;
 
       return prisma.travelerCard.create({
         data: {

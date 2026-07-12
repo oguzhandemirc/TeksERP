@@ -100,7 +100,7 @@ import {
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
-import { touchOpenSackTx } from "./helpers/shipment-locks.helper";
+import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 
 export interface RollStats {
@@ -233,9 +233,9 @@ export interface RelabelContext {
   lastLabelSnapshot: Prisma.JsonValue | null;
   /** Atanmış sevkiyat — varsa spec düzenleme kilitlenir (backend de 409). */
   shipment: { id: string; shipmentNo: string; status: ShipmentStatus } | null;
-  /** Bulunduğu çuval — mühürlüyse (sealedAt) spec düzenleme kilitlenir (havuz rezervi). */
-  sack: { id: string; sackNo: string; seq: number | null; sealedAt: Date | null } | null;
-  /** Spec düzenleme kilitli mi (atanmış sevkiyat / mühürlü çuval) — frontend kolaylığı; backend guard ayrıca enforce eder. */
+  /** Bulunduğu çuval — sevkiyattaysa (shipmentId) spec düzenleme kilitlenir. */
+  sack: { id: string; sackNo: string; seq: number | null; shipmentId: string | null } | null;
+  /** Spec düzenleme kilitli mi (atanmış sevkiyat / sevkiyattaki çuval) — frontend kolaylığı; backend guard ayrıca enforce eder. */
   specLocked: boolean;
   /** "B" önerileri — topu üreten WO'nun bağlı siparişlerinden distinct müşteriler. */
   candidateCustomers: RelabelCandidateCustomer[];
@@ -1160,7 +1160,7 @@ export class InventoryService {
           },
         },
         shipment: { select: { id: true, shipmentNo: true, status: true } },
-        sack: { select: { id: true, sackNo: true, seq: true, sealedAt: true } },
+        sack: { select: { id: true, sackNo: true, seq: true, shipmentId: true } },
         producedInStep: {
           select: {
             workOrder: {
@@ -1212,10 +1212,10 @@ export class InventoryService {
       }
     }
 
-    // Spec düzenleme kilidi: atanmış sevkiyatta (PLANNED/AT_DOOR/DISPATCHED) VEYA mühürlü
-    // çuvalda (havuz rezervi) → değişiklik donmuş/havuz tahsisini bozar. Açık çuval/serbest serbest.
+    // Spec düzenleme kilidi: atanmış sevkiyatta (PLANNED/AT_DOOR/DISPATCHED) VEYA sevkiyattaki
+    // çuvalda → değişiklik donmuş/havuz tahsisini bozar. Açık çuval/serbest serbest.
     const specLocked =
-      roll.shipment != null || (roll.sack != null && roll.sack.sealedAt != null);
+      roll.shipment != null || (roll.sack != null && roll.sack.shipmentId != null);
 
     return {
       success: true,
@@ -1636,9 +1636,9 @@ export class InventoryService {
           blockReason = `Bu top planlı/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
         }
       } else if (roll.sackId) {
-        const sk = await prisma.sack.findUnique({ where: { id: roll.sackId }, select: { sealedAt: true, manualCode: true, sackNo: true } });
-        if (sk && sk.sealedAt) {
-          blockReason = `Bu top mühürlü bir çuvalda (${sk.manualCode ?? sk.sackNo}) — önce çuvaldan çıkarın veya mührü açın.`;
+        const sk = await prisma.sack.findUnique({ where: { id: roll.sackId }, select: { shipmentId: true, sackNo: true } });
+        if (sk && sk.shipmentId) {
+          blockReason = `Bu top sevkiyattaki bir çuvalda (${sk.sackNo}) — önce çuvaldan çıkarın.`;
         }
       }
     }
@@ -1728,10 +1728,10 @@ export class InventoryService {
         );
       }
     } else if (existing.sackId) {
-      const sk = await prisma.sack.findUnique({ where: { id: existing.sackId }, select: { sealedAt: true, manualCode: true, sackNo: true } });
-      if (sk && sk.sealedAt) {
+      const sk = await prisma.sack.findUnique({ where: { id: existing.sackId }, select: { shipmentId: true, sackNo: true } });
+      if (sk && sk.shipmentId) {
         throw AppError.conflict(
-          `Bu top mühürlü bir çuvalda (${sk.manualCode ?? sk.sackNo}) — önce çuvaldan çıkarın veya mührü açın.`,
+          `Bu top sevkiyattaki bir çuvalda (${sk.sackNo}) — önce çuvaldan çıkarın.`,
         );
       }
     }
@@ -1951,7 +1951,7 @@ export class InventoryService {
         shipmentId: true,
         shipment: { select: { status: true } },
         sackId: true,
-        sack: { select: { sealedAt: true } },
+        sack: { select: { shipmentId: true } },
         properties: { select: { propertyId: true } },
       },
     });
@@ -1993,16 +1993,16 @@ export class InventoryService {
       }
     }
     // ÇUVAL HAVUZU: renk/en/kalite değişimi spec-karşılanmayı bozar. Atanmış sevkiyatta
-    // (PLANNED/AT_DOOR/DISPATCHED) VEYA mühürlü çuvalda → reddet (önce çuvaldan çıkar /
-    // mührü aç / sevkten çıkar). Açık çuval + serbest WAREHOUSE/STOCK serbest.
+    // (PLANNED/AT_DOOR/DISPATCHED) VEYA sevkiyattaki çuvalda → reddet (önce çuvaldan çıkar /
+    // sevkten çıkar). Açık çuval + serbest WAREHOUSE/STOCK serbest.
     if (roll.shipmentId) {
       throw AppError.conflict(
         "Bu top bir sevkiyata atanmış — etiketi değiştirmeden önce sevkiyattan çıkarın.",
       );
     }
-    if (roll.sack && roll.sack.sealedAt != null) {
+    if (roll.sack && roll.sack.shipmentId != null) {
       throw AppError.conflict(
-        "Bu top mühürlü bir çuvalda — etiketi değiştirmeden önce çuvaldan çıkarın veya mührü açın.",
+        "Bu top sevkiyattaki bir çuvalda — etiketi değiştirmeden önce çuvaldan çıkarın.",
       );
     }
     if (data.width !== undefined && data.width !== null && !(data.width > 0)) {
@@ -2117,16 +2117,16 @@ export class InventoryService {
 
     await prisma.$transaction(async (tx) => {
       // TOCTOU (çuval havuzu): pre-tx kontrol tx DIŞINDA okundu — top bu sırada bir
-      // sevkiyata atanmış veya çuvalı mühürlenmiş olabilir (renk/en değişimi donmuş/havuz
-      // tahsisini bozar). Çözüm: bağı tx İÇİNDE taze oku; atanmışsa 409; açık çuvaldaysa
-      // touchOpenSackTx ile seal claim'ine serileş (mühürlenmişse 409); yazımı pinle.
+      // sevkiyata atanmış olabilir (renk/en değişimi donmuş/havuz tahsisini bozar).
+      // Çözüm: bağı tx İÇİNDE taze oku; atanmışsa 409; çuvaldaysa
+      // touchWarehouseSackTx ile çuval satırına serileş; yazımı pinle.
       const cur = await tx.roll.findUnique({ where: { id: rollId }, select: { shipmentId: true, sackId: true } });
       if (!cur) throw AppError.notFound("Top bulunamadı");
       if (cur.shipmentId) {
         throw AppError.conflict("Top bu sırada bir sevkiyata atandı — etiketi değiştirmeden önce sevkiyattan çıkarın.");
       }
       if (cur.sackId) {
-        await touchOpenSackTx(tx, cur.sackId);
+        await touchWarehouseSackTx(tx, cur.sackId);
       }
 
       // 1) Roll skaler alanları (renk/en/kalite) — üyelik PİNLİ atomik claim (serbest kalır).

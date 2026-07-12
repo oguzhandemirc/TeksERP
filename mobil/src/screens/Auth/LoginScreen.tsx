@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, Image, TextInput } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TouchableRipple, ActivityIndicator, Icon, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
@@ -774,18 +775,23 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       )}
 
       {activeMethod === 'card' ? (
-        <ScrollView contentContainerStyle={styles.cardWrap} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.cardWrap}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
+        >
           {cardSection}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       ) : activeMethod === 'pin' ? (
         isCompact ? (
-          <ScrollView
+          <KeyboardAwareScrollView
             contentContainerStyle={styles.compactContent}
             keyboardShouldPersistTaps="handled"
+            bottomOffset={16}
           >
             <View style={styles.compactSection}>{quickPinSectionCompact}</View>
             {methodSwitcher}
-          </ScrollView>
+          </KeyboardAwareScrollView>
         ) : (
           <View style={styles.main}>
             <View style={styles.leftPanel}>
@@ -796,14 +802,15 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
           </View>
         )
       ) : isCompact ? (
-        <ScrollView
+        <KeyboardAwareScrollView
           contentContainerStyle={styles.compactContent}
           keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
         >
           <View style={styles.compactSection}>{userSection}</View>
           <View style={styles.compactSection}>{pinSectionCompact}</View>
           {methodSwitcher}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       ) : (
         <View style={styles.main}>
           <View style={styles.leftPanel}>

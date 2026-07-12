@@ -9,6 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
   Text,
   TextInput,
@@ -472,7 +473,11 @@ export default function KartelaKabulScreen() {
       <View style={styles.flex}>
         {selectedJob ? (
           // ── B) Seçili iş: top kutucukları (her birine dokun → ölçü sheet'i) ──
-          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScrollView
+            contentContainerStyle={styles.body}
+            keyboardShouldPersistTaps="handled"
+            bottomOffset={16}
+          >
             {/* İşi değiştir + iş özeti */}
             <Surface style={styles.card} elevation={1}>
               <TouchableRipple onPress={backToList} borderless style={styles.backRow}>
@@ -567,7 +572,7 @@ export default function KartelaKabulScreen() {
                 </>
               )}
             </Surface>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         ) : (
           // ── A) İş listesi ───────────────────────────────────────────────
           <View style={styles.flex}>

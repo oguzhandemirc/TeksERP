@@ -57,8 +57,6 @@ router.post("/sacks", verifyToken, WRITE, controller.openSack);
 router.post("/sacks/:id/scan", verifyToken, WRITE, controller.scanIntoSack);
 router.post("/sacks/:id/add-kartela", verifyToken, WRITE, controller.addKartelaToSack);
 router.post("/sacks/:id/weigh", verifyToken, WRITE, controller.weighSack);
-router.post("/sacks/:id/seal", verifyToken, WRITE, controller.sealSack);
-router.post("/sacks/:id/reopen", verifyToken, WRITE, controller.reopenSack);
 router.post("/sacks/:id/remove", verifyToken, WRITE, controller.removeSack);
 // Çuval içeriği düzeltme (rol/kartela çıkar/taşı)
 router.post("/rolls/:rollId/remove-from-sack", verifyToken, WRITE, controller.removeRollFromSack);
