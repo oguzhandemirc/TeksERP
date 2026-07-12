@@ -211,8 +211,7 @@ export class ProductionBalanceService {
         colorName: l.color?.name ?? null,
         colorHex: l.color?.hex ?? null,
       });
-      // Talep = quantity − sevk − çuvallanmış (havuz/planlı rezerv). Çuvallanmış mal
-      // fiziksel olarak üretilmiş → talebi karşılar, arz havuzundan (sackId:null) düşülür.
+      // Talep = quantity − sevk (rezerv/çuvallanmış YOK — düşüş yalnız sevkte).
       const remaining = Prisma.Decimal.max(
         0,
         new Prisma.Decimal(l.quantity).minus(l.shippedQty)

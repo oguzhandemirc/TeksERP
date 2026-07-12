@@ -126,7 +126,7 @@ export const rollService = {
 
   /**
    * Saha #4: top etiketini değiştir (renk/özellik/en/kalite). Yalnız serbest
-   * stok/depo veya PREPARING sevkiyattaki top; commit'li sevkiyatta 409.
+   * stok/depo veya PLANNED sevkiyattaki top; DISPATCHED sevkiyatta 409.
    */
   relabel: (
     id: string,

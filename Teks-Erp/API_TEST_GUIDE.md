@@ -107,7 +107,7 @@ STOCK → IN_PRODUCTION → AT_SUBCONTRACTOR → RETURNED_FROM_SUBCONTRACTOR ┐
                                               ↓
                                   child rolls → WAREHOUSE | A1_STOCK | SCRAP
                                               ↓
-                                  (yeni sevkiyat modülü) → READY_FOR_SHIP → SHIPPED
+                                  (sevkiyat: dispatch) → SHIPPED
 ```
 
 | Status | Anlam | Nasıl Geçilir? |
@@ -121,8 +121,7 @@ STOCK → IN_PRODUCTION → AT_SUBCONTRACTOR → RETURNED_FROM_SUBCONTRACTOR ┐
 | `A1_STOCK` | 2. kalite satılabilir stok | `POST /api/tambur/finalize` (A2 child) |
 | `SCRAP` | Fire / ıskarta | `POST /api/tambur/finalize` (FIRE child) |
 | `PRODUCED` | Roll, son üretim adımını bitirdi ama Tambur'dan geçmedi (tek-adımlı WO veya rota Tambur içermiyor) | `POST /api/production/step-action` (FINISH, son step) |
-| `READY_FOR_SHIP` | Yeni sevkiyat modülünde tetiklenecek (TBD) | — |
-| `SHIPPED` | Yeni sevkiyat modülünde tetiklenecek (TBD) | — |
+| `SHIPPED` | Çuval sevkiyatı kamyona yüklendi — depodan çıktı | Sevkiyat DISPATCH'te (WAREHOUSE→SHIPPED) |
 
 ### Sipariş Yaşam Döngüsü
 

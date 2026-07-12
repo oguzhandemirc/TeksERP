@@ -50,7 +50,7 @@ interface ScanFieldProps {
 }
 
 /**
- * Barkod okutma/elle giriş alanı — RelabelStation/SackSearch'teki
+ * Barkod okutma/elle giriş alanı — RelabelStation/SackContentEdit'teki
  * Input+ScanLine+Enter desenini paylaşan tek implementasyon. Klavye-wedge
  * tabancalar (kod + Enter) ve elle yazım aynı yoldan geçer. `expectPrefix` ile
  * yanlış-tür guard'ı (mobil FasonSevk davranışı) sunar. Backend tek doğruluk

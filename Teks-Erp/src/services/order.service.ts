@@ -962,9 +962,9 @@ export class OrderService extends BaseService {
       const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
       const freeStock = matchFree(l, RollStatus.STOCK);
       const requested = new Prisma.Decimal(l.quantity);
-      // Net açık = bitmiş/üretimdeki ürün açığı. Çuvallanmış (packed) mal fiziksel olarak
-      // üretilmiş+paketlenmiş → düşülür (freeWarehouse artık havuz malını içermez, §4). Ham
-      // (freeStock) HARİÇ — işlenmemiş girdi, mamul değil (yalnız bilgi).
+      // Net açık = bitmiş/üretimdeki ürün açığı. Rezerv/çuvallanmış (packed) KALKTI —
+      // packed hep 0 (yanıt şekli için tutulur). freeWarehouse havuz malını içermez (§4).
+      // Ham (freeStock) HARİÇ — işlenmemiş girdi, mamul değil (yalnız bilgi).
       const netGap = requested
         .minus(shipped)
         .minus(packed)
@@ -1657,8 +1657,8 @@ export class OrderService extends BaseService {
   private async getActiveShipmentLinks(
     orderId: string
   ): Promise<Array<{ id: string; shipmentNo: string; status: ShipmentStatus }>> {
-    // ÇUVAL HAVUZU: "aktif" = donmuş tahsisli sevkiyat (PLANNED). Havuz rezervi
-    // (packedQty) engel DEĞİL — iptalde rebalance ile serbest kalır (§6).
+    // ÇUVAL HAVUZU: "aktif" = donmuş tahsisli sevkiyat (PLANNED). Rezerv YOK
+    // (packedQty/rebalance kalktı) — açık miktar sevkte düşer; iptal serbest bırakır.
     const links = await prisma.shipmentOrder.findMany({
       where: {
         orderId,

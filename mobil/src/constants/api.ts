@@ -36,7 +36,6 @@ export const ENDPOINTS = {
   travelerCards: '/traveler-cards',
   production: '/production',
   subcontractor: '/subcontractor',
-  packaging: '/packaging',
   shipping: '/shipping',
   tambur: '/tambur',
 };

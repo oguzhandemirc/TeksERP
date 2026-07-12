@@ -174,7 +174,7 @@ export function computeLoadedByLine(
 // ÇUVAL-FARKINDALI FIFO — sevk-anı tahsis çekirdeği (writeShipmentAllocations)
 // =============================================================================
 
-/** Havuz çuvalı — mühür sırasına göre FIFO; içeriği (rolls) spec-toplam taşır. */
+/** Havuz çuvalı — createdAt sırasına göre FIFO; içeriği (rolls) spec-toplam taşır. */
 export interface PoolSack {
   sackId: string;
   branchId: string | null;
@@ -200,7 +200,7 @@ function branchMatch(sackBranchId: string | null, lineBranchId: string | null): 
 }
 
 /**
- * Havuzdaki mühürlü çuvalları açık sipariş satırlarına ÇUVAL-FARKINDALI FIFO ile dağıt.
+ * Depodaki çuvalları açık sipariş satırlarına ÇUVAL-FARKINDALI FIFO ile dağıt.
  * İki boyutta FIFO: çuvallar FIFO sırasında (createdAt asc — çağıran sıralar), satırlar
  * termin→tarih sırasında. Her (çuval, satır) çifti için tahsis metrajı üretir → SackAllocation
  * defteri. Bir çuvalın bir satıra hiç uymayan içeriği (spec/şube) tahsis edilmez (fazla mal).

@@ -30,7 +30,6 @@ export type RollStatus =
   | 'IN_PRODUCTION'
   | 'PRODUCED'
   | 'WAREHOUSE'
-  | 'READY_FOR_SHIP'
   | 'SHIPPED'
   | 'SCRAP'
   | 'AT_SUBCONTRACTOR'

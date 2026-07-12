@@ -104,7 +104,7 @@ async function nextSackNo(): Promise<string> {
 
 export class ShippingService {
   // =========================================================================
-  // ÇUVAL DEPO HAVUZU — çuval aç / okut / tart / mühürle (sevkiyattan bağımsız)
+  // ÇUVAL DEPO HAVUZU — çuval aç / okut / tart (sevkiyattan bağımsız)
   // =========================================================================
 
   /**

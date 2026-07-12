@@ -1712,7 +1712,7 @@ export class InventoryService {
       );
     }
 
-    // Planlı bir sevkiyata veya mühürlü çuvala bağlı mı? Bağlıysa iptal
+    // Planlı bir sevkiyata veya sevkiyattaki çuvala bağlı mı? Bağlıysa iptal
     // edilemez — önce sevkten/çuvaldan çıkarılmalı (donmuş tahsis/rezerv bayat kalmasın).
     if (existing.shipmentId) {
       const ship = await prisma.shipment.findUnique({
@@ -1781,7 +1781,7 @@ export class InventoryService {
       // guard'lar (fason/açık sevk/aktif sevkiyat) tx DIŞINDA okundu; pencerede
       // fason dispatch claim'i veya çuvala okutma (shipmentId claim'i) commit
       // ettiyse top fasondayken/çuvaldayken iptal edilirdi. Gözlenen statü +
-      // shipmentId koşuluyla kaybeden 409 alır (unmarkReady deseni); shipmentId
+      // shipmentId koşuluyla kaybeden 409 alır (atomik claim deseni); shipmentId
       // de temizlenir (CANCELLED top sevkiyat rezervi taşıyamaz).
       const cancelClaim = await tx.roll.updateMany({
         where: { id, status: existing.status, shipmentId: existing.shipmentId },

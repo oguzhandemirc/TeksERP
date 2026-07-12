@@ -128,7 +128,7 @@ describe("RelabelSpecForm — spec düzeltme", () => {
     const locked: RelabelContext = {
       ...baseCtx,
       specLocked: true,
-      shipment: { id: "sh1", shipmentNo: "SVK-7", status: "READY" },
+      shipment: { id: "sh1", shipmentNo: "SVK-7", status: "DISPATCHED" },
     };
     renderWithProviders(<RelabelSpecForm ctx={locked} onSaved={() => {}} />);
     expect(screen.getByText(/SVK-7/)).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe("RollContextHeader + LastLabelBanner", () => {
       ...baseCtx,
       color: null,
       colorId: null,
-      shipment: { id: "sh1", shipmentNo: "SVK-3", status: "PREPARING" },
+      shipment: { id: "sh1", shipmentNo: "SVK-3", status: "PLANNED" },
       sack: { id: "sk1", sackNo: "AMB00003", seq: 3 },
     };
     renderWithProviders(<RollContextHeader ctx={ctx} onClear={() => {}} />);

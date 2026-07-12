@@ -38,7 +38,6 @@ export interface ShipmentDocSack {
 export interface ShipmentDoc {
   shipmentNo: string;
   dispatchedAt: string | null;
-  readyAt: string | null;
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;

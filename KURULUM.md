@@ -176,7 +176,7 @@
 59. **KK1:** RAW_QC'de topu okut, giriş (en az 1 FABRIC Item + kalite mevcut).
 60. **Akış:** [Fason Sevk/Kabul] → Kurşun+KK2 → Tambur (metre: simulate/gerçek) → Depo.
 61. **Etiket DİYALOGSUZ:** OS yazdırma ekranı ÇIKMADAN çıkıyor mu? Electron per-PC COM (D38) veya tablette BT (E44). Çıkmıyorsa: profil / cihazın dili (F47) + diyalogsuz seçim kontrol.
-62. **Çuval/Sevkiyat:** SCALE ile çuval tart → PREPARING→READY→AT_DOOR→DISPATCHED. Stok yalnız DISPATCH'te SHIPPED.
+62. **Çuval/Sevkiyat:** SCALE ile çuval tart → depodan çuval + sipariş seç → sevk (varsayılan doğrudan DISPATCHED; onay ayarı açıksa PLANNED→DISPATCHED). Stok yalnız DISPATCH'te SHIPPED.
 
 ---
 

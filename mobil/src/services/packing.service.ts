@@ -495,7 +495,7 @@ export const packingService = {
   addSacksToShipment: (id: string, sackIds: string[]): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/add-sacks`, { sackIds }).then((r) => r.data),
 
-  /** PLANNED sevkiyattan çuval çıkar → havuza döner (mühürlü kalır). */
+  /** PLANNED sevkiyattan çuval çıkar → depoya döner (mühür YOK; her an düzenlenebilir). */
   removeSackFromShipment: (id: string, sackId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/remove-sack`, { sackId }).then((r) => r.data),
 

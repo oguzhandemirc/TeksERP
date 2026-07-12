@@ -920,7 +920,7 @@ model Roll {
   createdMachineId String? @db.Uuid
 
   // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
-  // (serbest depo). Çuvallanan top PREPARING/READY/AT_DOOR boyunca WAREHOUSE kalır ama
+  // (serbest depo). Çuvallanan top PLANNED boyunca WAREHOUSE kalır ama
   // shipmentId dolu → SERBEST stoktan düşer (çuval depo/kapı önü). SHIPPED'a yalnız
   // DISPATCHED'te (kamyon aldı) çekilir; iptalde shipmentId temizlenir, serbest depoya döner.
   // GEVŞEK MODEL: top→sipariş bağı YOK; etiket müşterisi baskı anında seçilir.
@@ -2295,7 +2295,7 @@ model Sack {
 }
 
 /// Sevkiyat — çuval depo havuzundan seçilen çuvallarla kurulan "kamyon". Tek müşteri+şube.
-/// PLANNED (kuruldu, karşılanma donduruldu) → AT_DOOR (kapı önü) → DISPATCHED (kamyona
+/// PLANNED (kuruldu, karşılanma donduruldu) → DISPATCHED (kamyona
 /// yüklendi, toplar SHIPPED). Sipariş kümesi (ShipmentOrder) donmuş tahsislerden türetilir;
 /// irsaliye çuval içeriğinden basılır.
 model Shipment {
@@ -2343,7 +2343,7 @@ model Shipment {
 model ShipmentOrder {
   shipmentId String  @db.Uuid
   orderId    String  @db.Uuid
-  // Sevkiyatın aktifliğinin DENORM bayrağı (shipment.status IN PLANNED/AT_DOOR).
+  // Sevkiyatın aktifliğinin DENORM bayrağı (shipment.status = PLANNED).
   // Bakımı UYGULAMA katmanında: dispatch/cancel -> false. Havuz modelinde "bir sipariş
   // tek aktif sevkiyatta" kuralı KALKTI (malı iki planlı sevkiyata bölünebilir) →
   // eski partial unique (shipment_orders_active_order_uq) migration ile düşürülür.
@@ -2363,7 +2363,7 @@ model ShipmentOrder {
 
 /// Sevk defteri (ÇUVAL bazlı) — bir çuvalın metrajının sipariş satırlarına tahsisi.
 /// SEVK kurulurken yazılır (createShipment): distributeSacksToLines spec+şube FIFO ile
-/// hangi çuval → hangi satır → ne kadar. PLANNED/AT_DOOR: bekler (shippedQty'ye SAYILMAZ).
+/// hangi çuval → hangi satır → ne kadar. PLANNED: bekler (shippedQty'ye SAYILMAZ).
 /// DISPATCHED: OrderLine.shippedQty'ye sayılır. Sevkiyat iptalinde silinir. Rezerv/packedQty
 /// YOK. "Hangi top" değil "ne kadar metraj".
 model SackAllocation {

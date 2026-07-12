@@ -431,7 +431,7 @@ router.delete("/:id/permanent", verifyToken, requirePermission("roll:write"), co
  *     summary: Top etiketini değiştir (saha #4 — renk/özellik/en/kalite) + yeniden bas
  *     description: |
  *       Yanlış/eksik etiketli stok topunu tartı-paket/sevkiyat ekranından düzeltir.
- *       Yalnız serbest STOCK/WAREHOUSE veya PREPARING sevkiyattaki toplar; sevke
+ *       Yalnız serbest STOCK/WAREHOUSE veya PLANNED sevkiyattaki toplar; sevke
  *       hazır/sevk edilmiş sevkiyatta önce "Hazırlığa Geri Al" gerekir (kapsama bütünlüğü).
  *     security: [{ bearerAuth: [] }]
  *     parameters:

@@ -28,7 +28,7 @@ const ACCOUNTING_READ = requireAnyPermission("shipping:read", "shipping:write", 
 router.get("/open-orders", verifyToken, READ, controller.openOrders);
 
 // ===========================================================================
-// ÇUVAL DEPO HAVUZU — çuval aç / okut / tart / mühürle (sevkiyattan bağımsız)
+// ÇUVAL DEPO HAVUZU — çuval aç / okut / tart (sevkiyattan bağımsız)
 // ===========================================================================
 /**
  * @openapi
@@ -53,7 +53,7 @@ router.get("/pool/sacks", verifyToken, READ, controller.listCustomerPoolSacks);
  */
 router.post("/sacks", verifyToken, WRITE, controller.openSack);
 
-// Çuval içeriği: barkod okut, kartela ekle, tart, mühürle, mührü aç, sil
+// Çuval içeriği: barkod okut, kartela ekle, tart, sil
 router.post("/sacks/:id/scan", verifyToken, WRITE, controller.scanIntoSack);
 router.post("/sacks/:id/add-kartela", verifyToken, WRITE, controller.addKartelaToSack);
 router.post("/sacks/:id/weigh", verifyToken, WRITE, controller.weighSack);
@@ -87,7 +87,7 @@ router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAcc
  * /api/shipping/shipments:
  *   post:
  *     tags: [Shipping]
- *     summary: Havuzdan seçilen mühürlü çuvallarla sevkiyat kur (PLANNED)
+ *     summary: Depodan seçilen çuvallarla sevkiyat kur (varsayılan doğrudan sevk)
  *     security: [{ bearerAuth: [] }]
  *     responses: { 201: { description: Sevkiyat kuruldu } }
  *   get:

@@ -23,7 +23,7 @@
 >   :id/add-kartela` (`shippingService.addKartelaToShipment`) — ürün+renk+adet → o gruptan
 >   N müsait Swatch satırı **select-then-claim** ile atomik bağlanır (FIFO; `claimed.count
 >   !== count` → 409 + tam rollback), `resetSackWeightsTx`. `scanIntoShipment` gibi
->   **yalnız PREPARING** (`touchShipmentPreparingTx`); kartela tahsise girmediğinden recommit YOK.
+>   **yalnız PLANNED** (`touchShipmentPlannedTx`); kartela tahsise girmediğinden recommit YOK.
 >   Mevcut barkod-okut swatch dalı KALIR (zararsız; etiket olmadığından pratikte ölü).
 > - **Yeni izin/seed/migration YOK** (stok: `kartela:read|shipping:*|mobile:tarti-paket|sevkiyat`;
 >   add: mevcut `WRITE`). UI: Electron `AddKartelaDialog` (ScanInBar "Kartela Ekle", çuval

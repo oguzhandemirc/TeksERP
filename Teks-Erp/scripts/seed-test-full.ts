@@ -432,7 +432,7 @@ async function seedReturnReady(ardaOrderId: string): Promise<void> {
   const shipment = await prisma.shipment.create({
     data: {
       shipmentNo: `SHP-${STAMP}-IADE`, customerId: M.arda, branchId: M.ardaIst, status: "DISPATCHED",
-      plateNumber: "34 SVK 042", driverName: "Mehmet Demir", readyAt: new Date(Date.now() - 5 * 86400000), dispatchedAt: new Date(Date.now() - 4 * 86400000),
+      plateNumber: "34 SVK 042", driverName: "Mehmet Demir", dispatchedAt: new Date(Date.now() - 4 * 86400000),
       orders: { create: [{ orderId: ardaOrderId }] },
     },
   });
