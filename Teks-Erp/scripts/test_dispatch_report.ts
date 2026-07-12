@@ -56,15 +56,15 @@ async function main() {
     },
     select: { id: true },
   });
-  // manualCode GLOBAL partial-unique → çakışmayı önlemek için run başına benzersiz.
-  const mc1 = `TST-RPT-AMB1-${ts}`;
-  const mc2 = `TST-RPT-AMB2-${ts}`;
+  // Rapor çuval "code"u artık sackNo (manualCode kalktı) — assertion buna göre.
+  const mc1 = `TEST-RPT-SK1-${ts}`;
+  const mc2 = `TEST-RPT-SK2-${ts}`;
   const sack1 = await prisma.sack.create({
-    data: { sackNo: `TEST-RPT-SK1-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, manualCode: mc1, weightKg: 65.8 },
+    data: { sackNo: mc1, customerId: customer.id, shipmentId: shipment.id, seq: 1, weightKg: 65.8 },
     select: { id: true },
   });
   const sack2 = await prisma.sack.create({
-    data: { sackNo: `TEST-RPT-SK2-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 2, manualCode: mc2, weightKg: 40 },
+    data: { sackNo: mc2, customerId: customer.id, shipmentId: shipment.id, seq: 2, weightKg: 40 },
     select: { id: true },
   });
   const mkRoll = (n: number, itemId: string, colorId: string | null, sackId: string, qty: number, w: number | null) =>

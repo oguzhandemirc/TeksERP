@@ -81,11 +81,11 @@ async function main() {
     select: { id: true },
   });
   const sack1 = await prisma.sack.create({
-    data: { sackNo: `TEST-AEX-SK1-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, manualCode: `TST-AEX-AMB1-${ts}`, weightKg: 65.8 },
+    data: { sackNo: `TEST-AEX-SK1-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, weightKg: 65.8 },
     select: { id: true },
   });
   const sack2 = await prisma.sack.create({
-    data: { sackNo: `TEST-AEX-SK2-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 2, manualCode: `TST-AEX-AMB2-${ts}`, weightKg: 40 },
+    data: { sackNo: `TEST-AEX-SK2-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 2, weightKg: 40 },
     select: { id: true },
   });
   const mkRoll = (n: number, itemId: string, colorId: string | null, sackId: string, qty: number, w: number | null) =>

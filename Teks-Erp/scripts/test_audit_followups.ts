@@ -40,27 +40,6 @@ const machineIds: string[] = [];
 const deviceLocalIds: string[] = [];
 const userIds: string[] = [];
 
-async function testAmbPartialUnique(): Promise<void> {
-  console.log("\n=== 1) AMB çuval kodu partial unique ===");
-  const amb = `AMB${String(90000 + (ts % 9000)).padStart(5, "0")}`; // ^AMB[0-9]{5}$
-  const s1 = await prisma.sack.create({ data: { sackNo: `TST-AF-${ts}-1`, manualCode: amb } });
-  sackIds.push(s1.id);
-  await expectThrow(
-    "aynı AMB kodu 2. çuvalda → P2002 (partial unique)",
-    async () => {
-      const s = await prisma.sack.create({ data: { sackNo: `TST-AF-${ts}-2`, manualCode: amb } });
-      sackIds.push(s.id);
-    },
-    isP2002,
-  );
-  // Serbest (AMB-dışı) kod desene uymaz → çift olabilir (kasıtlı non-unique).
-  const free = `TST-FREE-${ts}`;
-  const f1 = await prisma.sack.create({ data: { sackNo: `TST-AF-${ts}-3`, manualCode: free } });
-  const f2 = await prisma.sack.create({ data: { sackNo: `TST-AF-${ts}-4`, manualCode: free } });
-  sackIds.push(f1.id, f2.id);
-  check("serbest format kod çift olabilir (partial kapsam dışı)", true, free);
-}
-
 async function testLabelDefaultPartialUnique(): Promise<void> {
   // ETİKET STÜDYOSU v2 sözleşme değişikliği: eski label_templates_one_default_per_kind
   // partial unique index KALDIRILDI (isDefault artık DEPRECATED çift-yazım kolonu).
@@ -164,7 +143,6 @@ async function cleanup(): Promise<void> {
 
 async function main(): Promise<void> {
   try {
-    await testAmbPartialUnique();
     await testLabelDefaultPartialUnique();
     await testDeleteErrorAtomic();
     await testDeviceAnnounceIdempotent();
