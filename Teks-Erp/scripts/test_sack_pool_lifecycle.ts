@@ -18,6 +18,7 @@
 //   H. Onay AÇIK: createShipment PLANNED kurar → shippedQty=0 → dispatchShipment → DISPATCHED.
 //   I. Onay AÇIK: PLANNED sevkiyat iptal → çuval depoya döner, tahsis silinir.
 //   J. Çuvalı dağıt (seçili/tümü → depo) + seçili topları başka çuvala toplu taşı + sevkteki çuval guard'ı.
+//   K. HAM (STOCK) top DOĞRUDAN sevk — durum düzeltme YOK (çuvala okut→sevk→SHIPPED); SCRAP guard.
 
 import { RollStatus, ShipmentStatus, OrderStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -65,13 +66,13 @@ async function makeOrder(lineQty: number, width: number, deadlineDaysFromNow?: n
   return { orderId: order.id, lineId: order.lines[0].id };
 }
 
-async function makeRoll(qty: number, width: number): Promise<string> {
+async function makeRoll(qty: number, width: number, status: RollStatus = RollStatus.WAREHOUSE): Promise<string> {
   const roll = await prisma.roll.create({
     data: {
       barcode: `TEST-WH-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
       itemId, colorId: null, width,
       initialQty: qty, currentQty: qty,
-      status: RollStatus.WAREHOUSE, qualityGrade: "1.KALITE",
+      status, qualityGrade: "1.KALITE",
       entrySource: RollEntrySource.SUPPLIER_RECEIPT,
     },
     select: { id: true, barcode: true },
@@ -231,6 +232,28 @@ async function main() {
     let guarded = false;
     try { await ship.distributeSackContents({ sackId: sackZ }); } catch { guarded = true; }
     check("J8 sevkiyattaki çuval dağıtılamaz (guard)", guarded);
+  }
+
+  // ── K: HAM (STOCK) top DOĞRUDAN sevk — manuel durum düzeltme YOK (width 211) ──
+  console.log("\n--- K: ham (STOCK) top çuvala okutulur → doğrudan sevk → SHIPPED (manuel adım yok) ---");
+  {
+    const W = 211;
+    const { orderId, lineId } = await makeOrder(1000, W);
+    const b = await makeRoll(80, W, RollStatus.STOCK); // HAM top (WAREHOUSE DEĞİL)
+    const sackId = await filledSack([b]);              // scanIntoSack ham topu artık kabul etmeli
+    const st1 = await rollState(b);
+    check("K1 ham top çuvala girdi + durum HÂLÂ STOCK (sahte warehouse yok)", st1.sackId === sackId && st1.status === RollStatus.STOCK, `status=${st1.status}`);
+    const created = await createShip([sackId], [orderId]); // onay kapalı → doğrudan DISPATCHED
+    check("K2 sevk DISPATCHED", created.data.status === ShipmentStatus.DISPATCHED, created.data.status);
+    check("K3 ham top SHIPPED (sevkte düştü)", (await rollState(b)).status === RollStatus.SHIPPED, (await rollState(b)).status);
+    check("K4 shippedQty=80", (await shippedOf(lineId)) === 80, `shipped=${await shippedOf(lineId)}`);
+
+    // Guard: fiziksel-imkânsız durum (SCRAP/fire) çuvala okutulamaz
+    const scrap = await makeRoll(10, W, RollStatus.SCRAP);
+    const sk2 = await filledSack([]);
+    let blocked = false;
+    try { await ship.scanIntoSack({ sackId: sk2, barcode: scrap }); } catch { blocked = true; }
+    check("K5 SCRAP (fire) top çuvala okutulamaz (guard)", blocked);
   }
 
   // ═══ SEVK ONAYI AÇIK: createShipment PLANNED kurar, ayrıca dispatch ═══

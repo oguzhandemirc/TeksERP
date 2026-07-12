@@ -77,6 +77,23 @@ const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carr
 const SHIPMENT_FILTER_FIELDS = ["status", "customerId", "branchId"] as const;
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
 
+// Çuvala okutulamayacak / sevke sokulamayacak top durumları. Kalite/bitmişlik GATE'i
+// YOK — envanterde fiziksel mevcut her top girer (ham STOCK, mamul WAREHOUSE, üretildi
+// PRODUCED, 2.kalite A1_STOCK, fason dönüşü). Yalnız FİZİKSEL İMKÂNSIZ durumlar bloklu:
+// gitti (SHIPPED), fire (SCRAP), iptal (CANCELLED), makinede (IN_PRODUCTION), bina dışı
+// (AT_SUBCONTRACTOR/AT_KARTELA), emekli/tüketilmiş (*_CONSUMED) → bagajlanırsa çift-sayım.
+const NON_SACKABLE_STATUSES: RollStatus[] = [
+  RollStatus.SHIPPED,
+  RollStatus.SCRAP,
+  RollStatus.CANCELLED,
+  RollStatus.IN_PRODUCTION,
+  RollStatus.AT_SUBCONTRACTOR,
+  RollStatus.AT_KARTELA,
+  RollStatus.TAMBUR_CONSUMED,
+  RollStatus.SUBCONTRACTOR_CONSUMED,
+  RollStatus.KARTELA_CONSUMED,
+];
+
 // ---------------------------------------------------------------------------
 // Sequence helpers — SVK + GGAAYY + NNNN (sevkiyat), CV + GGAAYY + NNNN (çuval)
 // ---------------------------------------------------------------------------
@@ -214,13 +231,15 @@ export class ShippingService {
       }
       // Serbest depo topu — çuvala ekle (atomik claim).
       if (roll.shipmentId) throw AppError.conflict("Top bir sevkiyatta");
-      if (roll.status !== RollStatus.WAREHOUSE) {
-        throw AppError.badRequest(`Sadece depodaki toplar okutulabilir (bu top: ${roll.status})`);
+      if (NON_SACKABLE_STATUSES.includes(roll.status)) {
+        throw AppError.badRequest(
+          `Bu top çuvala konulamaz — durumu: ${roll.status} (sevk edilmiş/fire/iptal/tüketilmiş/fasonda/kartelada/üretimde). Envanterdeki serbest toplar okutulabilir.`,
+        );
       }
       await prisma.$transaction(async (tx) => {
         await touchWarehouseSackTx(tx, data.sackId);
         const claimed = await tx.roll.updateMany({
-          where: { id: roll.id, shipmentId: null, sackId: null, status: RollStatus.WAREHOUSE },
+          where: { id: roll.id, shipmentId: null, sackId: null, status: { notIn: NON_SACKABLE_STATUSES } },
           data: { sackId: data.sackId },
         });
         if (claimed.count === 0) throw AppError.conflict("Top az önce başka bir akışa girdi — tekrar deneyin.");
@@ -578,7 +597,7 @@ export class ShippingService {
     // Roll metrajı çuval bazında (havuz kapsamı) — sackId → toplam.
     const rollAgg = await prisma.roll.groupBy({
       by: ["sackId"],
-      where: { sackId: { in: sacks.map((s) => s.id) }, status: RollStatus.WAREHOUSE },
+      where: { sackId: { in: sacks.map((s) => s.id) }, status: { notIn: NON_SACKABLE_STATUSES } },
       _sum: { currentQty: true },
       _count: { _all: true },
     });
@@ -1000,7 +1019,7 @@ export class ShippingService {
     });
     if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
-    const flipped = await tx.roll.updateMany({ where: { shipmentId, status: RollStatus.WAREHOUSE }, data: { status: RollStatus.SHIPPED } });
+    const flipped = await tx.roll.updateMany({ where: { shipmentId, status: { not: RollStatus.SHIPPED } }, data: { status: RollStatus.SHIPPED } });
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
     const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
     await recomputeOrderStatusForOrders(tx, orderRows.map((o) => o.orderId));
@@ -1405,8 +1424,10 @@ export class ShippingService {
     });
     if (orders.length === 0) return { success: true, data: [] };
 
-    // Serbest depo stoğu — spec bazında toplam. sackId:null: çuvaldaki (bekleyen) toplar
-    // serbest stok sayılmaz (henüz depoda ama bir çuvala konmuş).
+    // Serbest depo stoğu (sevke-uygun) — spec bazında toplam. Yalnız WAREHOUSE (bitmiş, sevke
+    // hazır); ham STOCK sayılmaz — ham satışı nadir/özel talep, "mevcut" göstergesini şişirmesin.
+    // (Ham yine de çuvala okutulup sevk EDİLEBİLİR; sadece bu sayaçta görünmez.) sackId:null:
+    // çuvaldaki (bekleyen) toplar serbest sayılmaz.
     const itemIds = [...new Set(orders.flatMap((o) => o.lines.map((l) => l.itemId)))];
     const stockBySpec = await prisma.roll.groupBy({
       by: ["itemId", "colorId", "width"],

@@ -125,10 +125,11 @@ async function main() {
     await ship.scanIntoSack({ sackId, barcode: r3.barcode });
     await ship.weighSack({ sackId, weightKg: 20 });
 
-    // Depodan çuval + sipariş seç → sevkiyat (PLANNED) → dispatch → karşılanma kesinleşir.
-    const sh2 = (await ship.createShipment({ sackIds: [sackId], customerId: customer.id, orderIds: [qd.order.id] })).data as { id: string };
+    // Depodan çuval + sipariş seç → sevk. Onay KAPALI (varsayılan) → createShipment
+    // DOĞRUDAN dispatch eder (DISPATCHED); 200cm satıra shippedQty terfi eder.
+    const sh2 = (await ship.createShipment({ sackIds: [sackId], customerId: customer.id, orderIds: [qd.order.id] })).data as { id: string; status: string };
     createdShipments.push(sh2.id);
-    await ship.dispatchShipment(sh2.id, {});
+    check("Sevk doğrudan DISPATCHED (onay kapalı)", sh2.status === "DISPATCHED", sh2.status);
     const line200 = await prisma.orderLine.findFirst({
       where: { orderId: qd.order.id, width: 200 },
       select: { shippedQty: true },
