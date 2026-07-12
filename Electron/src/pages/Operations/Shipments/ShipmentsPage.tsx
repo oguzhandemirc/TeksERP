@@ -24,7 +24,6 @@ const FILTERS: FilterDef[] = [
     label: "Durum",
     options: [
       { value: "PLANNED", label: shipmentStatusLabels.PLANNED },
-      { value: "AT_DOOR", label: shipmentStatusLabels.AT_DOOR },
       { value: "DISPATCHED", label: shipmentStatusLabels.DISPATCHED },
       { value: "CANCELLED", label: shipmentStatusLabels.CANCELLED },
     ],
@@ -85,7 +84,7 @@ export function ShipmentsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Sevkiyatlar"
-        description="Müşteri sevkiyatları — planlı, kapı önü ve sevk edilenler."
+        description="Müşteri sevkiyatları — planlı ve sevk edilenler."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
       <DataTableToolbar

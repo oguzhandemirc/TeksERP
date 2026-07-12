@@ -307,7 +307,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
             </Card>
 
             {/* Sevkiyat rezervasyonu — top bir çuvalın içinde, serbest stok DEĞİL.
-                WAREHOUSE statüsüyle görünse de başka işe ayrılamaz (çuval depo/kapı önü). */}
+                WAREHOUSE statüsüyle görünse de başka işe ayrılamaz (planlı sevkiyat). */}
             {reservedShipment && (
               <Card className="border-amber-300 bg-amber-50/50">
                 <CardContent className="space-y-2 p-3 text-sm">

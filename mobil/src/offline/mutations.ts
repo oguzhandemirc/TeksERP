@@ -170,7 +170,7 @@ export function registerStationMutationDefaults(): void {
       })),
     ...OFFLINE_AWARE,
   });
-  // KK1 ham mal girişi — client-üretimi barkod (TEKS-YYYYMMDD-XXXXXXXX) vars'ta.
+  // KK1 ham mal girişi — sunucu-üretimi barkod (T+GGAAYY+H/F+NNNN) vars'ta.
   // Backend idempotent: Roll.barcode @unique + P2002 catch → cached Roll dönüş.
   // Etiket basımı onSuccess'te tetiklenir (LabelPrinter backend HTML çeker) —
   // offline pause durumunda etiket online dönünce basılır.

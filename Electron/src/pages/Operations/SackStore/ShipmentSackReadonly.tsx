@@ -29,11 +29,6 @@ export function ShipmentSackReadonly({ sack, canRemove, onRemove, removing }: Pr
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-mono text-sm font-semibold">{sack.sackNo}</span>
-              {sack.manualCode && (
-                <Badge variant="outline" className="font-mono text-[10px]">
-                  {sack.manualCode}
-                </Badge>
-              )}
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">

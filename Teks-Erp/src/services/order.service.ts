@@ -2,7 +2,7 @@
 // TeksERP - Order Service (extends BaseService)
 // =============================================================================
 // Overrides:
-//   - create: auto-generates orderNumber as YYYYMMDD-N
+//   - create: auto-generates orderNumber as SIP+GGAAYY+NNNN
 //   - softDelete: sets status = CANCELLED (Order has no isActive field)
 //                 + iş emri bağlarını güvenli şekilde çözer (R1)
 // =============================================================================
@@ -1648,7 +1648,7 @@ export class OrderService extends BaseService {
    *     Operatör önce o WO'yu iptal etmeli.
    */
   /**
-   * Siparişin bağlı olduğu AKTİF (PREPARING/READY/AT_DOOR) sevkiyatları döner.
+   * Siparişin bağlı olduğu AKTİF (PLANNED) sevkiyatları döner.
    * İptal/manuel kapatma bu bağ varken bloklanır: aktif sevkiyat dispatch'te
    * bu siparişe tahsis+shippedQty yazacaktı; computeShipmentAllocation iptal/
    * kapalı siparişi tahsis dışı bıraksa da operatör niyeti netleşmeli — önce
@@ -1657,15 +1657,13 @@ export class OrderService extends BaseService {
   private async getActiveShipmentLinks(
     orderId: string
   ): Promise<Array<{ id: string; shipmentNo: string; status: ShipmentStatus }>> {
-    // ÇUVAL HAVUZU: "aktif" = donmuş tahsisli sevkiyat (PLANNED/AT_DOOR). Havuz rezervi
+    // ÇUVAL HAVUZU: "aktif" = donmuş tahsisli sevkiyat (PLANNED). Havuz rezervi
     // (packedQty) engel DEĞİL — iptalde rebalance ile serbest kalır (§6).
     const links = await prisma.shipmentOrder.findMany({
       where: {
         orderId,
         shipment: {
-          status: {
-            in: [ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR],
-          },
+          status: ShipmentStatus.PLANNED,
         },
       },
       select: {

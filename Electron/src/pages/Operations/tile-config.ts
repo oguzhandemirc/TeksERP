@@ -70,7 +70,7 @@ export const operationsTiles: OperationsTile[] = [
     // Eski "Çuval Depo" + "Okutarak Sevk" tek ekranda birleşti (Sevk Kapısı).
     key: "sack-store",
     title: "Sevk Kapısı",
-    description: "Çuval okut → kapıya taşı / sevk et / irsaliye bas; planlı sevkiyat + kapı önü panosu",
+    description: "Çuval okut → sevk et / irsaliye bas; planlı (çıkış bekleyen) sevkler",
     icon: ScanBarcode,
     to: "/operations/sack-store",
     permission: "shipping:read",

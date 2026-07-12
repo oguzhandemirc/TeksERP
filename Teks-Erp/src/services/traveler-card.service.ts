@@ -52,7 +52,7 @@ const retryUnlessActiveCardClash = (
 
 // Belge Şablonu (Refakat Kartı Ayarları) canlı önizlemesi için örnek içerik.
 // Gerçek kart verisi DEĞİL; renderSampleHtml taslak config ile birleştirir.
-const SAMPLE_TRAVELER_BARCODE = "RK26069F2K3P7"; // ayraçsız (checksum 7 aynı — tire-bağımsız)
+const SAMPLE_TRAVELER_BARCODE = "RK1207260001"; // tek kod: RK + GGAAYY + NNNN
 const SAMPLE_TRAVELER_SNAPSHOT: Omit<TravelerCardSnapshot, "config"> = {
   batchNumber: "P-260607-014",
   type: "ORDER_PRODUCTION",

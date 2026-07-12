@@ -32,8 +32,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 // çuval → backend reddeder, net mesaj döner. Online-only (düzeltme akışı).
 // =============================================================================
 
-const sackLabel = (sack: { sackNo: string; manualCode: string | null }) =>
-  sack.manualCode?.trim() || sack.sackNo;
+const sackLabel = (sack: { sackNo: string }) => sack.sackNo;
 
 export default function CuvalDuzeltScreen() {
   usePortraitLock(useDeviceType() === 'phone');

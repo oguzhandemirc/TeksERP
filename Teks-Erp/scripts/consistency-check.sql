@@ -5,7 +5,7 @@
 -- (recomputeOrderStatusForOrders → computeLineLedger) ama DB seddi YOK — drift oluşursa
 -- karşılanma/MRP sessizce yanlışlanır. Bu script onu yakalar.
 --   shippedQty = Σ SackAllocation(çuval DISPATCHED) + Σ DirectShipAllocation
--- Rezerv/packedQty YOK (mühür + rebalance kaldırıldı) → düşüş yalnız sevkte. PLANNED/AT_DOOR
+-- Rezerv/packedQty YOK (mühür + rebalance kaldırıldı) → düşüş yalnız sevkte. PLANNED
 -- tahsis shippedQty'ye sayılmaz.
 --
 -- Ne zaman: 3 ayda bir (ARCHITECTURE.md §10.2 ile) veya şüphe anında. Salt-okunur.
@@ -64,7 +64,7 @@ WHERE r."shipmentId" IS DISTINCT FROM s."shipmentId";
 SELECT so."shipmentId", so."orderId", so."isActive" AS bayrak, s.status AS gercek_durum
 FROM shipment_orders so
 JOIN shipments s ON s.id = so."shipmentId"
-WHERE so."isActive" <> (s.status IN ('PLANNED', 'AT_DOOR'));
+WHERE so."isActive" <> (s.status = 'PLANNED');
 
 \echo ''
 \echo '== 6) Çuval seq ↔ shipmentId tutarlılığı  (depoda seq YOK, sevkiyatta seq VAR) =='

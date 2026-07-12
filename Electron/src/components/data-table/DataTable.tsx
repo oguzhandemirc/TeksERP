@@ -185,11 +185,15 @@ export function DataTable<T>({
                         >
                           {selectable && (
                             <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
-                                checked={row.getIsSelected()}
-                                onCheckedChange={(v) => row.toggleSelected(!!v)}
-                                aria-label="Seç"
-                              />
+                              {/* Seçilemez satırlarda (enableRowSelection predicate false —
+                                  ör. sevkteki çuval) checkbox gizlenir; boş hücre hizayı korur. */}
+                              {row.getCanSelect() && (
+                                <Checkbox
+                                  checked={row.getIsSelected()}
+                                  onCheckedChange={(v) => row.toggleSelected(!!v)}
+                                  aria-label="Seç"
+                                />
+                              )}
                             </TableCell>
                           )}
                           {row.getVisibleCells().map((cell) => (

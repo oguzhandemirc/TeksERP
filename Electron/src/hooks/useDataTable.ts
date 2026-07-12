@@ -5,6 +5,7 @@ import {
   useReactTable,
   type ColumnDef,
   type OnChangeFn,
+  type Row,
   type RowSelectionState,
   type VisibilityState,
 } from "@tanstack/react-table";
@@ -28,8 +29,10 @@ interface Options<T> {
   defaultPageSize?: number;
   /** Backend'e her durumda yollanan ek filtreler (URL override edemez). */
   forceFilters?: Record<string, string | string[]>;
-  /** Satır seçimi (toplu işlem) — varsayılan açık. */
-  enableSelection?: boolean;
+  /** Satır seçimi (toplu işlem) — varsayılan açık. `boolean` tüm satırlara uygulanır;
+   *  predicate verilirse satır-bazlı karar (yalnız uygun satırlar seçilebilir, örn.
+   *  yalnız depodaki çuvallar). Doğrudan `enableRowSelection`'a geçer. */
+  enableSelection?: boolean | ((row: Row<T>) => boolean);
   /** Varsayılan sütun görünürlük durumları. */
   initialVisibility?: VisibilityState;
 }

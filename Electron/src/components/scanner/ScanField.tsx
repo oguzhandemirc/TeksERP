@@ -1,14 +1,12 @@
 import { useMemo, type Ref } from "react";
-import { ScanLine } from "lucide-react";
+import { ScanLine, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   classifyBarcode,
-  BARCODE_FORMATS,
   type BarcodeKind,
 } from "@/lib/scanner/barcode-kind";
-import { verifyBarcode, verifyPrefixedBarcode } from "@/lib/scanner/barcode";
 
 /** Tür → kullanıcıya gösterilecek kısa Türkçe ad (uyumsuzluk uyarısında). */
 const KIND_LABEL: Record<BarcodeKind, string> = {
@@ -33,8 +31,6 @@ interface ScanFieldProps {
    * Bilinmeyen (serbest) kodlar her zaman geçer.
    */
   expectPrefix?: BarcodeKind | BarcodeKind[];
-  /** RK-/SW- gibi checksum'lı kodlarda checksum'ı kontrol et (uyarı, ENGELLEMEZ). */
-  validateChecksum?: boolean;
   /** Tanımlıysa, input yanında bir submit butonu çizilir. */
   submitLabel?: string;
   busy?: boolean;
@@ -43,6 +39,8 @@ interface ScanFieldProps {
   className?: string;
   /** Input kutusunun genişlik sınırı. */
   widthClassName?: string;
+  /** Dolu iken input'un İÇİNDE temizleme (X) düğmesi göster → tek tıkla siler. */
+  clearable?: boolean;
   /**
    * Odak disiplini için input ref'i — dialog kapanışı/aksiyon sonrası sayfa
    * `inputRef.current?.focus()` ile odağı okutma kutusuna geri verir
@@ -55,9 +53,8 @@ interface ScanFieldProps {
  * Barkod okutma/elle giriş alanı — RelabelStation/SackSearch'teki
  * Input+ScanLine+Enter desenini paylaşan tek implementasyon. Klavye-wedge
  * tabancalar (kod + Enter) ve elle yazım aynı yoldan geçer. `expectPrefix` ile
- * yanlış-tür guard'ı (mobil FasonSevk davranışı), `validateChecksum` ile
- * checksum ipucu sunar. Backend tek doğruluk kaynağıdır — checksum submit'i
- * engellemez, yalnız uyarır.
+ * yanlış-tür guard'ı (mobil FasonSevk davranışı) sunar. Backend tek doğruluk
+ * kaynağıdır — istemci yalnız yanlış-tür uyarısı verir.
  */
 export function ScanField({
   value,
@@ -66,37 +63,28 @@ export function ScanField({
   placeholder,
   autoFocus,
   expectPrefix,
-  validateChecksum,
   submitLabel,
   busy,
   busyLabel,
   className,
   widthClassName = "max-w-sm",
+  clearable = false,
   inputRef,
 }: ScanFieldProps) {
   const trimmed = value.trim();
 
-  const { mismatch, checksumWarn } = useMemo(() => {
-    if (!trimmed) return { mismatch: null as string | null, checksumWarn: false };
-    const { kind, code } = classifyBarcode(trimmed);
-
-    let mismatchMsg: string | null = null;
+  const mismatch = useMemo(() => {
+    if (!trimmed) return null as string | null;
+    const { kind } = classifyBarcode(trimmed);
     if (expectPrefix) {
       const allowed = Array.isArray(expectPrefix) ? expectPrefix : [expectPrefix];
       if (kind !== "UNKNOWN" && !allowed.includes(kind)) {
         const want = allowed.map((k) => KIND_LABEL[k]).join(" / ");
-        mismatchMsg = `Bu bir ${KIND_LABEL[kind]} — buraya ${want} okut.`;
+        return `Bu bir ${KIND_LABEL[kind]} — buraya ${want} okut.`;
       }
     }
-
-    // Checksum ipucu (yalnız tam-formatlı RK-/SW- kodlarda, engellemez).
-    let warn = false;
-    if (validateChecksum && !mismatchMsg) {
-      if (BARCODE_FORMATS.TRAVELER_CARD.test(code)) warn = !verifyBarcode(code);
-      else if (BARCODE_FORMATS.SWATCH.test(code)) warn = !verifyPrefixedBarcode("SW", code);
-    }
-    return { mismatch: mismatchMsg, checksumWarn: warn };
-  }, [trimmed, expectPrefix, validateChecksum]);
+    return null;
+  }, [trimmed, expectPrefix]);
 
   const blocked = Boolean(mismatch);
 
@@ -116,9 +104,19 @@ export function ScanField({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder={placeholder}
-            className="pl-8"
+            className={cn("pl-8", clearable && value && "pr-8")}
             autoFocus={autoFocus}
           />
+          {clearable && value ? (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              aria-label="Temizle"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </div>
         {submitLabel && (
           <Button size="sm" onClick={submit} disabled={!trimmed || blocked || busy}>
@@ -128,10 +126,6 @@ export function ScanField({
       </div>
       {mismatch ? (
         <p className="text-xs text-destructive">{mismatch}</p>
-      ) : checksumWarn ? (
-        <p className="text-xs text-amber-600 dark:text-amber-500">
-          Checksum tutmuyor — kod yanlış okunmuş olabilir, yine de deneyebilirsin.
-        </p>
       ) : null}
     </div>
   );

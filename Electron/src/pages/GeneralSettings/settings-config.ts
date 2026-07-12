@@ -154,13 +154,13 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: Truck,
     description: "Sevk çıkış akışı, çuval kodu üretimi ve iade kabul davranışı.",
     keywords:
-      "sevk onayı ambar aldı çıkış sevkiyat iade kalite grading hazır depo çuval kodu şablon amb otomatik isimlendirme numara",
+      "sevk onayı adımı çıkış sevkiyat planlı sevk kapısı iade kalite grading depo çuval kodu şablon otomatik isimlendirme numara",
     kind: "flags",
     flags: [
       {
         key: "shipmentConfirmationEnabled",
-        title: "Sevk için ayrı 'ambar aldı / çıkış' onayı zorunlu olsun",
-        desc: "Kapalıyken (varsayılan) mobil Sevkiyat ekranında paketleyen 'Hemen Sevk Et' ile direkt sevk edebilir (stok o an düşer); isterse 'Sevke Hazır' yapıp ara depoda bekletir. Açıkken paketleyen yalnızca 'Sevke Hazır' yapar; fiili çıkış ('ambar aldı') ayrı 'Sevk Çıkışı' ekranından onaylanır. Ara depoda bekleme + sonradan çıkış her iki modda da mümkündür — stok yalnız çıkışta düşer.",
+        title: "Sevk onayı adımı",
+        desc: "Kapalı (varsayılan): depo çuvallarını seç → doğrudan sevk edilir (stok o an düşer). Açık: önce PLANNED (planlı) sevkiyat kurulur; fiili çıkış ayrıca 'Sevk Kapısı' ekranından onaylanır. Stok her iki modda da yalnız çıkışta düşer.",
       },
       {
         key: "returnGradingEnabled",

@@ -98,7 +98,7 @@ export function RollsPage() {
     onSuccess: (res) => setScanRoll(res.data ?? null),
   });
   // Detayı aç (açık niyet: "Aç" butonu / useScanSeed navigasyonu / okutma+toggle-açık).
-  // Yalnız TAM-FORMAT top barkodunda dener — gevşek /^TEKS/ değil tam regex ki
+  // Yalnız TAM-FORMAT top barkodunda dener — gevşek /^T\d/ değil tam regex ki
   // "TEKSTİL BEYAZ" gibi ürün adı yanlışlıkla barkod sayılıp 404 toast'ı vermesin.
   const openDetail = (code: string) => {
     if (!BARCODE_FORMATS.ROLL.test(classifyBarcode(code).code)) return;

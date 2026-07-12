@@ -18,7 +18,7 @@ import type { SackStoreShipment } from "../SackStore/types";
 // Üretim akışı kolonları — salt-okunur görselleştirme (sürükleme yok).
 // HİBRİT model: Ham Stok / Fason / Depo rulo statüsünden (tek tek rulo);
 // Kurşun & Tambur "bekleyen" istasyon kuyruğundan (parti = refakat kartı);
-// Sevk kolonunda Planlı Sevkiyat (PLANNED) + Kapı Önü (AT_DOOR) grupları.
+// Sevk kolonunda çıkış bekleyen (PLANNED) planlı sevkler listelenir.
 type ColType = "roll" | "kursun" | "tambur" | "sack-store";
 
 interface KanbanColumn {
@@ -230,59 +230,23 @@ function QueueCard({ card }: { card: KanbanQueueCard }) {
   );
 }
 
-/** Sevk kolonunun tüm içeriği — PLANNED (Planlı Sevkiyat) + AT_DOOR (Kapı Önü) grupları. */
+/** Sevk kolonunun tüm içeriği — çıkış bekleyen (PLANNED) planlı sevkler. */
 function SackStoreColumn({ items }: { items: SackStoreShipment[] }) {
-  const planned = items.filter((s) => s.status === "PLANNED");
-  const atDoor = items.filter((s) => s.status === "AT_DOOR");
-
   return (
     <Stagger className="flex flex-col gap-2">
-      {planned.length > 0 && (
-        <>
-          <SackGroupLabel label="Planlı Sevkiyat" count={planned.length} dot="bg-blue-400" />
-          {planned.map((s) => (
-            <StaggerItem key={s.id}>
-              <KanbanSackCard shipment={s} />
-            </StaggerItem>
-          ))}
-        </>
-      )}
-      {atDoor.length > 0 && (
-        <>
-          {planned.length > 0 && <div className="border-t" />}
-          <SackGroupLabel label="Kapı Önü" count={atDoor.length} dot="bg-amber-400" />
-          {atDoor.map((s) => (
-            <StaggerItem key={s.id}>
-              <KanbanSackCard shipment={s} />
-            </StaggerItem>
-          ))}
-        </>
-      )}
+      {items.map((s) => (
+        <StaggerItem key={s.id}>
+          <KanbanSackCard shipment={s} />
+        </StaggerItem>
+      ))}
     </Stagger>
-  );
-}
-
-function SackGroupLabel({ label, count, dot }: { label: string; count: number; dot: string }) {
-  return (
-    <div className="flex items-center gap-1.5 px-0.5 pt-0.5">
-      <span className={cn("h-1.5 w-1.5 rounded-full", dot)} />
-      <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
-      <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">{count}</span>
-    </div>
   );
 }
 
 function KanbanSackCard({ shipment }: { shipment: SackStoreShipment }) {
   return (
     <div className="w-full rounded-md border bg-card p-2.5">
-      <div className="flex items-start justify-between gap-1">
-        <span className="truncate text-sm font-semibold leading-tight">{shipment.shipmentNo}</span>
-        {shipment.status === "AT_DOOR" && (
-          <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
-            Kapı Önü
-          </span>
-        )}
-      </div>
+      <div className="truncate text-sm font-semibold leading-tight">{shipment.shipmentNo}</div>
       <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
         {shipment.customer.name}
         {shipment.branch && <span> · {shipment.branch.name}</span>}

@@ -309,7 +309,7 @@ export interface Roll {
   /** Topun üstündeki son basılan etiket snapshot'ı (null = stok/etiket yok). BAĞ DEĞİL. */
   lastLabelSnapshot?: RollLabelSnapshot | null;
   /** Sevkiyat rezervasyonu: dolu ise top "serbest depo" DEĞİL — bir çuvalın
-   *  içinde, bir sevkiyata bağlı (çuval depo / kapı önü). WAREHOUSE statüsüyle
+   *  içinde, bir sevkiyata bağlı (çuval depo / planlı sevkiyat). WAREHOUSE statüsüyle
    *  görünse de başka işe (sevk/kartela/iş emri) ayrılamaz. */
   shipmentId?: string | null;
   sackId?: string | null;

@@ -340,7 +340,7 @@ export class WorkOrderService {
    *   - routeTemplateId verilmezse `steps` zorunlu.
    *   - sipariş bağı (orderLineIds/orderLineAllocations) link-only; metraj taşımaz.
    *   - type=ORDER_PRODUCTION ise en az bir sipariş bağı zorunlu.
-   *   - batchNumber (Parti Kodu) verilmezse otomatik üretilir (P-YYMMDD-NNN);
+   *   - batchNumber (Parti Kodu) verilmezse otomatik üretilir (P+GGAAYY+NNNN);
    *     verilirse benzersizliği doğrulanır.
    */
   async create(
@@ -602,7 +602,7 @@ export class WorkOrderService {
 
     // ── batchNumber / Parti Kodu ────────────────────────────────────────────
     // Kullanıcı verdiyse (manuel veya otomatik-override) benzersizliğini doğrula;
-    // vermediyse otomatik üret (P-YYMMDD-NNN) — üretim RETRY KAPSAMINDA, tx
+    // vermediyse otomatik üret (P+GGAAYY+NNNN) — üretim RETRY KAPSAMINDA, tx
     // içinde yapılır: eskiden closure dışındaydı ve eşzamanlı iki create aynı
     // günlük max'ı okuyunca P2002 retry'ları hep AYNI numarayla çakışıp
     // yanıltıcı "Barkod üretimi 5 denemede başarısız" 409'u veriyordu.

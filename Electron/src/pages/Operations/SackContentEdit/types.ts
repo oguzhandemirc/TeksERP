@@ -3,20 +3,19 @@
 // doluysa sevkiyatta. Decimal'lar JSON number/string döner → kullanırken Number() sar.
 
 // ── Sevkiyat statüleri / kapsam ──────────────────────────────────────────────
-export type ShipmentStatusKey = "PLANNED" | "AT_DOOR" | "DISPATCHED";
+export type ShipmentStatusKey = "PLANNED" | "DISPATCHED";
 
 export const shipmentStatusLabels: Record<ShipmentStatusKey, string> = {
   PLANNED: "Planlı Sevkiyat",
-  AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
 };
 
-/** Arama kapsamı — depo / planlı+kapı / sevk edilmiş / tümü. */
+/** Arama kapsamı — depo / planlı / sevk edilmiş / tümü. */
 export type SackSearchScope = "POOL" | "PLANNED" | "DISPATCHED" | "ALL";
 
 export const scopeLabels: Record<SackSearchScope, string> = {
   POOL: "Depoda (sevk edilmemiş)",
-  PLANNED: "Planlı / Kapı Önü",
+  PLANNED: "Planlı Sevkiyat",
   DISPATCHED: "Sevk Edilmiş",
   ALL: "Tümü",
 };
@@ -284,7 +283,12 @@ export interface CreatedShipment {
   id: string;
   shipmentNo: string;
   status: ShipmentStatusKey;
-  destination: ShipmentDestination;
+  /**
+   * Sevk onayı KAPALIYKEN (varsayılan) true → çuvallar oluşturulur oluşturulmaz
+   * SEVK EDİLDİ (status=DISPATCHED, stok düştü). AÇIKKEN false → yalnız PLANNED
+   * kuruldu, çıkış Sevk Kapısı'ndan ayrıca onaylanır.
+   */
+  dispatched: boolean;
 }
 
 // ── Editör hedefi (liste → editör geçişi) ────────────────────────────────────

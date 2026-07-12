@@ -1099,7 +1099,7 @@ export class TamburService {
   // ===========================================================================
   /**
    * Kaynak rolden uzunluk*adet kadar metraj düşerek `count` adet kartela üretir.
-   * Her kartela kendi barkodunu (SW-YYMM-XXXXXX-C) ve kart numarasını alır.
+   * Her kartela kendi barkodunu (KRT+GGAAYY+NNNN) ve kart numarasını alır.
    */
   // NOT: Kartela artık Tambur'da kesilmez. Kartela = bitmiş bir topun kartela
   // fason firmasında işlenmesiyle doğar (KartelaService.receive). Bkz.

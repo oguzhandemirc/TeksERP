@@ -51,15 +51,16 @@ import type { MainStackParamList } from '../../../navigation/types';
 // Ekran müşterinin havuz çuvallarını (/pool/sacks) canlı listeler:
 //   Çuval aç → topları çuvala okut → tart + KOD (çuval depoda hazır kalır).
 // Mühür yok — havuzdaki her çuval düzenlenebilir. "Hemen Sevk Et": bu müşterinin
-// dolu çuvallarından SİPARİŞSİZ sevkiyat kur + (feature flag'e göre) kapı önüne
-// koy / hemen sevk et. Sipariş eşleştirme/karşılama backend'de (Sevk Çıkışı).
+// dolu çuvallarından SİPARİŞSİZ sevkiyat kurar; sevk onayı KAPALIYSA backend
+// doğrudan sevk eder, AÇIKSA PLANNED bırakır (çıkış Sevk Çıkışı'ndan). Sipariş
+// eşleştirme/karşılama backend'de (Sevk Çıkışı).
 // =============================================================================
 
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
 // Metraj — GERÇEK değeri göster (44,5 → "44,5"). tr-TR ondalık = virgül.
 const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
-const sackCode = (sk: PoolSack) => sk.manualCode?.trim() || sk.sackNo;
+const sackCode = (sk: PoolSack) => sk.sackNo;
 
 export default function PaketlemeScreen() {
   // Portrait kilidi yalnızca telefonda — tablette yatay kalsın.
@@ -94,7 +95,6 @@ export default function PaketlemeScreen() {
 
   const [weighTarget, setWeighTarget] = useState<{ id: string; label: string } | null>(null);
   const [weighKg, setWeighKg] = useState('');
-  const [weighCode, setWeighCode] = useState('');
   // Kantar (HAL): bu telefonun atandığı makinenin SCALE cihaz(lar)ı.
   const scalePeripherals = useMachinePeripherals('SCALE');
   const [weighing, setWeighing] = useState(false);
@@ -181,7 +181,8 @@ export default function PaketlemeScreen() {
   // Dolu çuval silme onayı — içindeki toplar (depoya dönecekler) somut listelenir.
   const [removeSackTarget, setRemoveSackTarget] = useState<PoolSack | null>(null);
 
-  // Sevk onayı açık: sevkiyat kur → kapı önüne koy. Kapalı: kur → hemen sevk et.
+  // Sevk onayı açık: createShipment PLANNED bırakır (çıkış Sevk Çıkışı'ndan).
+  // Kapalı (varsayılan): backend doğrudan sevk eder (tek adım).
   const confirmationEnabled = useShipmentConfirmationEnabled();
 
   const scanBusy = useRef(false);
@@ -293,16 +294,12 @@ export default function PaketlemeScreen() {
   });
 
   const weighSackMut = useMutation({
-    mutationFn: ({ sackId, kg, code }: { sackId: string; kg: number | null; code: string }) =>
-      packingService.weighSack(sackId, {
-        ...(kg != null ? { weightKg: kg } : {}),
-        manualCode: code.trim(),
-      }),
+    mutationFn: ({ sackId, kg }: { sackId: string; kg: number }) =>
+      packingService.weighSack(sackId, { weightKg: kg }),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setWeighTarget(null);
       setWeighKg('');
-      setWeighCode('');
       refreshPool();
     },
     onError: (e: Error) => {
@@ -352,8 +349,9 @@ export default function PaketlemeScreen() {
     },
   });
 
-  // "Hemen Sevk Et" — dolu çuvallardan SİPARİŞSİZ sevkiyat kur → (onay açık) kapı
-  // önüne koy / (kapalı) sevk et. Sipariş eşleştirme yapılmaz (orderIds boş).
+  // "Hemen Sevk Et" — dolu çuvallardan SİPARİŞSİZ sevkiyat kur. Sevk onayı kapalıysa
+  // backend doğrudan sevk eder (dispatched=true); açıksa PLANNED bırakır. Sipariş
+  // eşleştirme yapılmaz (orderIds boş).
   const shipMut = useMutation({
     mutationFn: async () => {
       const sackIds = shippableSacks.map((s) => s.id);
@@ -364,16 +362,13 @@ export default function PaketlemeScreen() {
         orderIds: undefined,
         destination,
       });
-      const id = created.data.id;
-      if (confirmationEnabled) await packingService.moveToDoor(id);
-      else await packingService.dispatch(id, {});
       return created.data;
     },
     onSuccess: (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
-        text1: confirmationEnabled ? 'Kapı önüne kondu' : 'Sevk edildi',
+        text1: data.dispatched ? 'Sevk edildi' : 'Sevkiyat kuruldu — Sevk Çıkışı’ndan onayla',
         text2: data.shipmentNo,
       });
       finishAndBack();
@@ -431,11 +426,7 @@ export default function PaketlemeScreen() {
   const sackQ = sackSearch.trim().toLocaleLowerCase('tr');
   const isLargeSackList = sacks.length > SACK_WINDOW;
   const filteredSacks = sackQ
-    ? sacks.filter(
-        (s) =>
-          s.sackNo.toLocaleLowerCase('tr').includes(sackQ) ||
-          (s.manualCode ?? '').toLocaleLowerCase('tr').includes(sackQ),
-      )
+    ? sacks.filter((s) => s.sackNo.toLocaleLowerCase('tr').includes(sackQ))
     : sacks;
   const windowed = sackQ || showAllSacks || !isLargeSackList;
   const visibleSacks = windowed
@@ -457,7 +448,6 @@ export default function PaketlemeScreen() {
   const openWeigh = (sk: PoolSack) => {
     setWeighTarget({ id: sk.id, label: sackCode(sk) });
     setWeighKg(sk.weightKg != null ? String(sk.weightKg) : '');
-    setWeighCode(sk.manualCode?.trim() ? sk.manualCode : '');
   };
 
   const loadingReal = poolQ.isLoading || !pool;
@@ -633,9 +623,7 @@ export default function PaketlemeScreen() {
                                   {s.rollCount} top
                                   {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''} · {kgText(s.weightKg)}
                                 </Text>
-                                <Text style={[styles.sackMeta, !s.manualCode?.trim() && styles.sackMetaWarn]}>
-                                  {s.manualCode?.trim() ? `Kod: ${s.manualCode}` : 'Kod girilmedi'}
-                                </Text>
+                                <Text style={styles.sackMeta}>{s.sackNo}</Text>
                               </View>
                             </View>
                           </TouchableRipple>
@@ -644,7 +632,7 @@ export default function PaketlemeScreen() {
                             size={22}
                             iconColor={colors.textSecondary}
                             onPress={() => openWeigh(s)}
-                            accessibilityLabel="Çuvalı tart / kod gir"
+                            accessibilityLabel="Çuvalı tart"
                           />
                           <IconButton
                             icon="trash-can-outline"
@@ -749,7 +737,7 @@ export default function PaketlemeScreen() {
                 contentStyle={styles.footerBtnContent}
               >
                 {confirmationEnabled
-                  ? `Sevkiyat Kur → Kapı Önü${shippableSacks.length > 0 ? ` (${shippableSacks.length})` : ''}`
+                  ? `Sevkiyat Kur${shippableSacks.length > 0 ? ` (${shippableSacks.length})` : ''}`
                   : `Hemen Sevk Et${shippableSacks.length > 0 ? ` (${shippableSacks.length})` : ''}`}
               </Button>
             </View>
@@ -822,7 +810,7 @@ export default function PaketlemeScreen() {
         onAdd={addKartelaFromStock}
       />
 
-      {/* Çuval tart + kod (mühürlemeden önce). */}
+      {/* Çuval brüt tartısı. */}
       <AppModal
         visible={weighTarget !== null}
         onDismiss={() => setWeighTarget(null)}
@@ -830,24 +818,16 @@ export default function PaketlemeScreen() {
       >
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
-            {weighTarget?.label} — Kod + Brüt Tartı
+            {weighTarget?.label} — Brüt Tartı
           </Text>
           <TextInput
             mode="outlined"
-            label="Çuval kodu (üstüne yazılan)"
-            value={weighCode}
-            onChangeText={setWeighCode}
-            autoFocus
-            autoCapitalize="characters"
-            style={{ marginTop: spacing.md }}
-          />
-          <TextInput
-            mode="outlined"
-            label="Brüt ağırlık (kg) — opsiyonel"
+            label="Brüt ağırlık (kg)"
             keyboardType="decimal-pad"
             value={weighKg}
             onChangeText={setWeighKg}
-            style={{ marginTop: spacing.sm }}
+            autoFocus
+            style={{ marginTop: spacing.md }}
             right={
               <TextInput.Icon
                 icon={weighing ? 'progress-clock' : 'scale'}
@@ -866,14 +846,11 @@ export default function PaketlemeScreen() {
               buttonColor={colors.successDark}
               style={styles.actionBtn}
               loading={weighSackMut.isPending}
-              disabled={weighSackMut.isPending || !weighCode.trim() || (!!weighKg && !(parseFloat(weighKg) > 0))}
+              disabled={weighSackMut.isPending || !(parseFloat(weighKg) > 0)}
               onPress={() =>
                 weighTarget &&
-                weighSackMut.mutate({
-                  sackId: weighTarget.id,
-                  kg: weighKg && parseFloat(weighKg) > 0 ? parseFloat(weighKg) : null,
-                  code: weighCode,
-                })
+                parseFloat(weighKg) > 0 &&
+                weighSackMut.mutate({ sackId: weighTarget.id, kg: parseFloat(weighKg) })
               }
             >
               Kaydet

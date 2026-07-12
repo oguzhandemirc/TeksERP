@@ -501,7 +501,7 @@ export class SubcontractorService {
     );
 
     // withBarcodeRetry: dispatchNo (@unique) tx içinde nextPrefixedSequence ile
-    // üretiliyor; eşzamanlı iki sevk aynı SD-YYMM-NNNNNN'i hesaplarsa P2002
+    // üretiliyor; eşzamanlı iki sevk aynı FS+GGAAYY+NNNN'i hesaplarsa P2002
     // çakışmasında tx baştan denenir → sıra yeniden okunur (kartela/shipping deseni).
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {

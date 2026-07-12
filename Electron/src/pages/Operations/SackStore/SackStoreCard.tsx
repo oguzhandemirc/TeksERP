@@ -1,57 +1,27 @@
-import {
-  DoorOpen,
-  Undo2,
-  Truck,
-  Package,
-  Scale,
-  Layers,
-  ChevronRight,
-  MoreHorizontal,
-  CheckCircle2,
-  ScanLine,
-} from "lucide-react";
+import { Truck, Package, Scale, Layers, ChevronRight, CheckCircle2, ScanLine } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/operations/StatusBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber";
-import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { sackStoreStatusLabels, destinationLabels, type SackStoreShipment } from "./types";
 
-// Tone seti "purple" içermiyor; Planlı Sevkiyat (PLANNED) için mor className ile
-// override; Kapı Önü (AT_DOOR) için mevcut "warning" (amber) tonu.
-const STATUS_TONES = { PLANNED: "neutral", AT_DOOR: "warning" } as const;
+// Board yalnız PLANNED (çıkış bekleyen) sevkleri listeler. Tone setinde "purple"
+// yok → Planlı Sevkiyat rozeti neutral ton + mor className override ile çizilir.
+const STATUS_TONES = { PLANNED: "neutral" } as const;
 const PLANNED_CLASS = "bg-purple-500/15 text-purple-600 dark:text-purple-300 border-transparent";
 
 interface Props {
   shipment: SackStoreShipment;
-  busy: boolean;
   /** Kapıda okutulmuş çuval adedi — verilirse "X/Y okutuldu" sayacı görünür. */
   scannedCount?: number;
   onOpen: (s: SackStoreShipment) => void;
-  onMoveToDoor: (s: SackStoreShipment) => void;
-  onPullBack: (s: SackStoreShipment) => void;
   onDispatch: (s: SackStoreShipment) => void;
 }
 
-export function SackStoreCard({
-  shipment,
-  busy,
-  scannedCount,
-  onOpen,
-  onMoveToDoor,
-  onPullBack,
-  onDispatch,
-}: Props) {
-  const isPlanned = shipment.status === "PLANNED";
+export function SackStoreCard({ shipment, scannedCount, onOpen, onDispatch }: Props) {
   // Tamamlanma vurgusu: tüm çuvallar okutulduysa kart yeşile döner (saha
   // vakası: "3/3'ün hiç görünmemesi kafa karıştırıyor").
   const scanDone = scannedCount != null && shipment.sackCount > 0 && scannedCount >= shipment.sackCount;
@@ -68,8 +38,7 @@ export function SackStoreCard({
         }
       }}
       className={cn(
-        "cursor-pointer overflow-hidden transition-colors hover:border-primary/50 hover:bg-muted/30",
-        isPlanned ? "border-purple-500/30" : "border-warning/40",
+        "cursor-pointer overflow-hidden border-purple-500/30 transition-colors hover:border-primary/50 hover:bg-muted/30",
         scanDone && "border-emerald-500/60 bg-emerald-500/5",
       )}
     >
@@ -83,7 +52,7 @@ export function SackStoreCard({
                 status={shipment.status}
                 labels={sackStoreStatusLabels}
                 tones={STATUS_TONES}
-                className={isPlanned ? PLANNED_CLASS : undefined}
+                className={PLANNED_CLASS}
               />
               {/* Saha #22: yurtiçi/yurtdışı rozeti — farkedilebilirlik (sıkı ayrım değil) */}
               <span
@@ -127,13 +96,7 @@ export function SackStoreCard({
               </div>
             )}
           </div>
-          <SackStoreActions
-            shipment={shipment}
-            busy={busy}
-            onMoveToDoor={onMoveToDoor}
-            onPullBack={onPullBack}
-            onDispatch={onDispatch}
-          />
+          <SackStoreActions shipment={shipment} onDispatch={onDispatch} />
         </div>
 
         {/* Özet sayaçlar — rulo çekmeden (ucuz aggregate) */}
@@ -153,21 +116,8 @@ export function SackStoreCard({
   );
 }
 
-function SackStoreActions({
-  shipment,
-  busy,
-  onMoveToDoor,
-  onPullBack,
-  onDispatch,
-}: Omit<Props, "onOpen">) {
-  const isPlanned = shipment.status === "PLANNED";
-  // İki-adım kapı disiplini: onay akışı bayrağı AÇIKKEN PLANNED'in birincil yolu
-  // "Kapı Önüne Koy"dur; doğrudan sevk ikincil menüye iner (kazara PLANNED'den
-  // sevk tek tıkla mümkün olmasın). Bayrak KAPALIYKEN tek-adım kurulumların
-  // PLANNED→sevk yolu aynen korunur.
-  const confirmationEnabled = useShipmentConfirmationEnabled();
-  const twoStep = isPlanned && confirmationEnabled;
-  // Aksiyon butonları kart onClick'ini tetiklemesin → stopPropagation.
+function SackStoreActions({ shipment, onDispatch }: Pick<Props, "shipment" | "onDispatch">) {
+  // Aksiyon butonu kart onClick'ini tetiklemesin → stopPropagation.
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
     fn();
@@ -175,60 +125,9 @@ function SackStoreActions({
   return (
     <PermissionGate permission="shipping:write">
       <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-        {isPlanned ? (
-          <Button
-            type="button"
-            variant={twoStep ? "default" : "outline"}
-            size="sm"
-            className="gap-1"
-            disabled={busy}
-            onClick={stop(() => onMoveToDoor(shipment))}
-          >
-            <DoorOpen className="h-3.5 w-3.5" /> Kapı Önüne Koy
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            disabled={busy}
-            onClick={stop(() => onPullBack(shipment))}
-          >
-            <Undo2 className="h-3.5 w-3.5" /> Geri Çek
-          </Button>
-        )}
-        {twoStep ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={(e) => e.stopPropagation()}
-                aria-label="Diğer aksiyonlar"
-              >
-                <MoreHorizontal className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem className="text-destructive" onClick={stop(() => onDispatch(shipment))}>
-                <Truck className="mr-1.5 h-3.5 w-3.5" /> Sevk Et (kapıyı atla)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            className="gap-1"
-            disabled={busy}
-            onClick={stop(() => onDispatch(shipment))}
-          >
-            <Truck className="h-3.5 w-3.5" /> {isPlanned ? "Sevk Et" : "Sevk Et / Alındı"}
-          </Button>
-        )}
+        <Button type="button" size="sm" className="gap-1" onClick={stop(() => onDispatch(shipment))}>
+          <Truck className="h-3.5 w-3.5" /> Sevk Et
+        </Button>
       </div>
     </PermissionGate>
   );

@@ -103,7 +103,13 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         procedureCode: procedureCode.trim() || null,
       }),
     onSuccess: (res) => {
-      toast.success(`Sevkiyat kuruldu: ${res.data.shipmentNo}`);
+      // Sevk onayı KAPALIYKEN (varsayılan) backend oluşturur oluşturmaz sevk eder
+      // (dispatched=true, stok düştü); AÇIKKEN yalnız PLANNED kurulur.
+      toast.success(
+        res.data.dispatched
+          ? `Sevk edildi: ${res.data.shipmentNo}`
+          : `Sevkiyat kuruldu — onay bekliyor: ${res.data.shipmentNo}`,
+      );
       invalidateSackHub(qc, { shipment: true });
       onOpenChange(false);
       onCreated();
@@ -129,7 +135,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
             <Truck className="h-5 w-5 text-primary" /> Sevkiyat Kur — {rows.length} çuval
           </DialogTitle>
           <DialogDescription>
-            Çuvallar bir sevkiyata atanır (PLANNED). Seçili siparişlerin açık satırlarına dağıtılır; kalan mal siparişe sayılmaz.
+            Sevk onayı kapalıysa (varsayılan) çuvallar <strong>doğrudan sevk edilir</strong> ve stok anında düşer; açıksa yalnız planlı (PLANNED) sevkiyat kurulur. Seçili siparişlerin açık satırlarına dağıtılır; kalan mal siparişe sayılmaz.
           </DialogDescription>
         </DialogHeader>
 
@@ -228,7 +234,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
             disabled={!canCreate}
             className="gap-2 bg-primary font-semibold shadow-md shadow-primary/30"
           >
-            <Truck className="h-4 w-4" /> {createMut.isPending ? "Kuruluyor…" : "Sevkiyat Kur"}
+            <Truck className="h-4 w-4" /> {createMut.isPending ? "İşleniyor…" : "Sevk Et"}
           </Button>
         </DialogFooter>
       </DialogContent>

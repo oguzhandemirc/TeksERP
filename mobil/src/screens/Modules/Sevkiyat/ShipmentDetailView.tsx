@@ -16,7 +16,6 @@ const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-T
 
 const STATUS_COLOR: Record<ShipmentStatus, string> = {
   PLANNED: '#7c3aed',
-  AT_DOOR: '#0284c7',
   DISPATCHED: '#16a34a',
   CANCELLED: '#94a3b8',
 };
@@ -132,7 +131,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
           <View style={styles.rowBetween}>
             <Text style={styles.rowMono}>
               Çuval {s.seq}
-              {s.manualCode ? ` · ${s.manualCode}` : ''}
+              {s.sackNo ? ` · ${s.sackNo}` : ''}
             </Text>
             <Text style={styles.meta}>
               {s.weightKg != null ? `${n(s.weightKg)} kg` : 'tartılmadı'} · {s.rollCount} top

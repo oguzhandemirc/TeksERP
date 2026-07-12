@@ -18,7 +18,7 @@
 //     → Kurşun + KK2 (completeQc2: KURSUN_APPLIED + QC2_COMPLETED) → finishStep
 //     → Tambur (finalize, final karar) → child WAREHOUSE'a iner
 //     → Sevkiyat (ÇUVAL DEPO: çuval aç → okut → (tart) → depodan çuval + sipariş seç →
-//        PLANNED → AT_DOOR → DISPATCHED)
+//        PLANNED → DISPATCHED)
 //     → Mühür/rezerv YOK; DISPATCH'te stok SHIPPED + shippedQty terfi + sipariş COMPLETED
 //
 //   NOT — Fason (boyahane/zımpara) adımı BİLİNÇLİ atlandı: opsiyoneldir (root
@@ -308,12 +308,14 @@ async function main(): Promise<void> {
   // ===========================================================================
   // HOP 7 — Sevkiyat (ÇUVAL DEPO): çuval aç → okut → (tart) → sevkiyat → dispatch
   // ===========================================================================
-  // Onay bayrağı KAPALI → dispatch PLANNED veya AT_DOOR'dan olabilir (AT_DOOR akışını da
-  // test etmek için moveToDoor'dan geçiyoruz).
+  // Onay bayrağı AÇIK → createShipment PLANNED kurar (doğrudan sevk etmez). Böylece
+  // PLANNED'de shippedQty=0 + ayrı dispatchShipment ile DISPATCHED'e terfi granülerliği
+  // test edilir. (Onay kapalı olsaydı createShipment tek adımda DISPATCHED ederdi — bkz.
+  // test_sack_pool_lifecycle.) Kapı önü / AT_DOOR ara adımı YOK.
   await prisma.systemSetting.upsert({
     where: { key: "shipping.confirmationEnabled" },
-    update: { value: false },
-    create: { key: "shipping.confirmationEnabled", value: false },
+    update: { value: true },
+    create: { key: "shipping.confirmationEnabled", value: true },
   });
 
   // 7.1 — Müşteriye çuval aç (çuval MÜŞTERİYE ait) + kesilen topu çuvala okut.
@@ -350,12 +352,8 @@ async function main(): Promise<void> {
   check("HOP7b top sevkiyata bağlandı (shipmentId set), hâlâ WAREHOUSE",
     !!cs.shipmentId && cs.status === RollStatus.WAREHOUSE, `shipmentId=${cs.shipmentId} status=${cs.status}`);
 
-  // 7.4 — Kapı Önü: AT_DOOR (commit YOK — tahsis zaten donmuş).
-  await ship.moveToDoor(shipmentId, userId);
-  check("HOP7c moveToDoor → AT_DOOR", (await shipmentStatusOf(shipmentId)) === ShipmentStatus.AT_DOOR);
-  check("HOP7c AT_DOOR'da shippedQty hâlâ 0 (commit yok)", (await shippedQtyOf(lineId)) === 0);
-
-  // 7.5 — Sevk (DISPATCHED): toplar SHIPPED, tahsis → shippedQty terfi.
+  // 7.4 — Sevk (DISPATCHED): PLANNED → dispatchShipment; toplar SHIPPED, tahsis → shippedQty
+  // terfi. Kapı önü / AT_DOOR ara adımı YOK — PLANNED doğrudan DISPATCHED'e geçer.
   await ship.dispatchShipment(shipmentId, { plateNumber: `34 E2E ${STAMP.slice(-3)}` }, userId);
   check("HOP7d dispatch → DISPATCHED", (await shipmentStatusOf(shipmentId)) === ShipmentStatus.DISPATCHED);
   check("HOP7d shippedQty=CUT_LEN (terfi)", (await shippedQtyOf(lineId)) === CUT_LEN, `shippedQty=${await shippedQtyOf(lineId)}`);
@@ -380,6 +378,10 @@ async function main(): Promise<void> {
 async function cleanup(): Promise<void> {
   console.log("\n🧹 Temizlik...");
   try {
+    // HOP7 için açtığımız sevk onayı bayrağını varsayılana (KAPALI) döndür — paylaşımlı dev DB.
+    await prisma.systemSetting
+      .upsert({ where: { key: "shipping.confirmationEnabled" }, update: { value: false }, create: { key: "shipping.confirmationEnabled", value: false } })
+      .catch(() => {});
     // Ters bağımlılık sırası (çuval havuzu): SackAllocation (Restrict) → roll↔çuval/sevkiyat
     // bağını çöz → sack → ShipmentOrder (Restrict) → shipment → roll → WO → orderLine → order.
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: createdSackIds } } }).catch(() => {});

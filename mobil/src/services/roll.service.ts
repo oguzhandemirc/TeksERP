@@ -165,13 +165,12 @@ export const rollService = {
   },
 
   // Depo kapsam sayaçları (çuval havuzu modeli) — serbest (sackId=null) / çuval depo
-  // havuzu (pool: sackId dolu, sevkiyatsız) / planlı sevkiyat (PLANNED) / kapı önü (AT_DOOR).
+  // havuzu (pool: sackId dolu, sevkiyatsız) / planlı sevkiyat (PLANNED).
   getWarehouseScope: (): Promise<
     ApiResponse<{
       free: { count: number; qty: number };
       pool: { count: number; qty: number };
       planned: { count: number; qty: number };
-      atDoor: { count: number; qty: number };
     }>
   > => apiClient.get(`/rolls/warehouse-scope`).then((r) => r.data),
 

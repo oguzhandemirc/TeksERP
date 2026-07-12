@@ -520,10 +520,10 @@ async function main(): Promise<void> {
       shipSeq++;
       const shipId = uuid();
       ctx.shipmentId = shipId;
-      // Çuval depo modeli: PREPARING/READY kalktı → PLANNED (+ AT_DOOR/DISPATCHED).
+      // Çuval depo modeli: PREPARING/READY/AT_DOOR kalktı → PLANNED (+ DISPATCHED).
       const shipStatus: ShipmentStatus =
         status === OrderStatus.COMPLETED
-          ? randPick([ShipmentStatus.DISPATCHED, ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR])
+          ? randPick([ShipmentStatus.DISPATCHED, ShipmentStatus.PLANNED])
           : ShipmentStatus.PLANNED;
       const shipCreated = plusDays(createdAt, 12 + rand(10));
       shipmentRows.push({
@@ -541,11 +541,11 @@ async function main(): Promise<void> {
       });
 
       // ---- ShipmentOrder (~0.5/order) — bu sipariş bu sevkiyatta ----
-      // isActive DENORM: app katmanı PLANNED/AT_DOOR → true, DISPATCHED/CANCELLED → false.
+      // isActive DENORM: app katmanı PLANNED → true, DISPATCHED/CANCELLED → false.
       shipmentOrderRows.push({
         shipmentId: shipId,
         orderId: ctx.id,
-        isActive: shipStatus === ShipmentStatus.PLANNED || shipStatus === ShipmentStatus.AT_DOOR,
+        isActive: shipStatus === ShipmentStatus.PLANNED,
         createdAt: shipCreated,
       });
 
@@ -583,7 +583,7 @@ async function main(): Promise<void> {
         rr.row.shipmentId = shipId;
         rr.row.sackId = sackIds[idx % sackIds.length];
         // Roll statüsü sevkiyat statüsüyle hizalı: SHIPPED yalnız DISPATCHED'te (stok
-        // bina dışı → currentQty 0); PLANNED/AT_DOOR sevkiyatta toplar hâlâ WAREHOUSE.
+        // bina dışı → currentQty 0); PLANNED sevkiyatta toplar hâlâ WAREHOUSE.
         if (shipStatus === ShipmentStatus.DISPATCHED) {
           rr.row.status = RollStatus.SHIPPED;
           rr.row.currentQty = 0;

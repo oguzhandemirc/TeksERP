@@ -1,73 +1,35 @@
 import { useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, PackageOpen, ChevronDown, CheckCircle2, XCircle, Eraser } from "lucide-react";
+import { Search, PackageOpen, ChevronDown, CheckCircle2, XCircle, Eraser, Info } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ScanField } from "@/components/scanner/ScanField";
 import { useContinuousScan } from "@/hooks/useContinuousScan";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useScanSeed } from "@/hooks/useScanSeed";
+import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
 import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { SackStoreCard } from "./SackStoreCard";
 import { ShipmentContentsSheet } from "./ShipmentContentsSheet";
 import { DispatchConfirmDialog } from "./DispatchConfirmDialog";
-import {
-  sackStoreStatusLabels,
-  destinationLabels,
-  type SackStoreShipment,
-  type SackStoreStatus,
-  type ShipmentDestination,
-} from "./types";
+import { destinationLabels, type SackStoreShipment, type ShipmentDestination } from "./types";
 
 const QUERY_KEY = "sack-store";
 const PAGE_SIZE = 30;
 
-type StatusFilter = "ALL" | SackStoreStatus;
 type DestFilter = "ALL" | ShipmentDestination;
-
-const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: "ALL", label: "Tümü" },
-  { key: "PLANNED", label: sackStoreStatusLabels.PLANNED },
-  { key: "AT_DOOR", label: sackStoreStatusLabels.AT_DOOR },
-];
 
 const DEST_TABS: { key: DestFilter; label: string }[] = [
   { key: "ALL", label: "Tümü" },
   { key: "DOMESTIC", label: destinationLabels.DOMESTIC },
   { key: "EXPORT", label: destinationLabels.EXPORT },
 ];
-
-// Sevk (dispatch) burada YOK — yıkıcı onay çuval dökümünü canlı listeleyen
-// ortak DispatchConfirmDialog'dan geçer; bu ikili kısa/verisiz geçişlerdir.
-type PendingAction = {
-  kind: "move-to-door" | "pull-back";
-  shipment: SackStoreShipment;
-};
-
-const ACTION_COPY: Record<
-  PendingAction["kind"],
-  { title: (s: SackStoreShipment) => string; description: string; confirmLabel: string; success: string }
-> = {
-  "move-to-door": {
-    title: (s) => `${s.shipmentNo} kapı önüne konsun mu?`,
-    description: "Sevk kapı önüne (Kapı Önü) taşınır, sevke hazır hale gelir.",
-    confirmLabel: "Kapı Önüne Koy",
-    success: "Kapı önüne kondu",
-  },
-  "pull-back": {
-    title: (s) => `${s.shipmentNo} geri çekilsin mi?`,
-    description: "Sevk kapı önünden planlı sevkiyata (Planlı Sevkiyat) geri alınır.",
-    confirmLabel: "Geri Çek",
-    success: "Planlı sevkiyata geri çekildi",
-  },
-};
 
 /** Kapıda okutulmuş çuvalların sevkiyat-bazlı grubu (eski Okutarak Sevk akışı). */
 interface ScannedGroup {
@@ -76,22 +38,22 @@ interface ScannedGroup {
 }
 
 export function SackStorePage() {
-  const qc = useQueryClient();
   const scanRef = useRef<HTMLInputElement>(null);
-  const [status, setStatus] = useState<StatusFilter>("ALL");
   const [destination, setDestination] = useState<DestFilter>("ALL");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
-  const [pending, setPending] = useState<PendingAction | null>(null);
   const [dispatchTarget, setDispatchTarget] = useState<SackStoreShipment | null>(null);
   const [openShipment, setOpenShipment] = useState<SackStoreShipment | null>(null);
+  // Sevk onayı KAPALIYKEN (varsayılan) sevkler doğrudan çıkar → board boş kalır;
+  // bu ekran yalnız ayar AÇIKKEN anlamlı. Kullanıcıya bunu bir ipucuyla açıkla.
+  const confirmationEnabled = useShipmentConfirmationEnabled();
 
   // ---- Kapı okutması (eski Okutarak Sevk buraya gömüldü) --------------------
   const [scanValue, setScanValue] = useState("");
   const [scanned, setScanned] = useState<Record<string, ScannedGroup>>({});
   const [lastOk, setLastOk] = useState<{ code: string; shipmentNo: string } | null>(null);
 
-  // Çuval kodunu (sackNo/manualCode) sevke-hazır sevkiyatına eşle; birden çok
+  // Çuval kodunu (sackNo) çıkış bekleyen sevkiyatına eşle; birden çok
   // DİSTİNKT sevkiyat eşleşirse tahmin etme — karttan elle seçilir.
   const resolveSack = async (code: string): Promise<SackStoreShipment | null> => {
     const { data } = await sackStoreService.list({ search: code, limit: 5 });
@@ -131,11 +93,10 @@ export function SackStorePage() {
   useScanSeed("scanCode", (code) => setSearch(code));
 
   const query = useInfiniteQuery({
-    queryKey: [QUERY_KEY, status, destination, debouncedSearch],
+    queryKey: [QUERY_KEY, destination, debouncedSearch],
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
       sackStoreService.list({
-        status: status === "ALL" ? undefined : status,
         destination: destination === "ALL" ? undefined : destination,
         search: debouncedSearch || undefined,
         cursor: pageParam,
@@ -158,48 +119,13 @@ export function SackStorePage() {
     return [...extras, ...list].sort((a, b) => rank(a) - rank(b));
   }, [query.data, scanned]);
 
-  const mutation = useMutation({
-    mutationFn: (action: PendingAction) =>
-      action.kind === "move-to-door"
-        ? sackStoreService.moveToDoor(action.shipment.id)
-        : sackStoreService.pullBack(action.shipment.id),
-    onSuccess: (_data, action) => {
-      toast.success(ACTION_COPY[action.kind].success);
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      // O1 fix: bu geçişler sevkiyatın kendisini de değiştirir — açık
-      // Sevkiyat/Sipariş sekmeleri bayat kalmasın. (Dispatch tazelemeleri
-      // ortak DispatchConfirmDialog'un içinde.)
-      void qc.invalidateQueries({ queryKey: ["shipments"] });
-      void qc.invalidateQueries({ queryKey: ["shipment-detail", action.shipment.id] });
-      // Okutulmuş sevkiyat panodan taşındıysa yerel durum senkron kalsın:
-      // kapı geçişlerinde durum güncellenir (PLANNED ⇄ AT_DOOR).
-      const id = action.shipment.id;
-      setScanned((prev) => {
-        if (!prev[id]) return prev;
-        const nextStatus: SackStoreStatus = action.kind === "move-to-door" ? "AT_DOOR" : "PLANNED";
-        return { ...prev, [id]: { ...prev[id], shipment: { ...prev[id].shipment, status: nextStatus } } };
-      });
-      setPending(null);
-      scanRef.current?.focus(); // odak disiplini
-    },
-    // Toast apiClient interceptor'dan gelir; L: 409'da (atomik claim — başka
-    // operatör aynı sevkiyatı değiştirdi) liste tazelensin ki bayat kartla
-    // aynı hata tekrarlanmasın.
-    onError: () => {
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      setPending(null);
-    },
-  });
-
-  const busyId = mutation.isPending ? mutation.variables?.shipment.id : undefined;
-
   const scannedCount = Object.keys(scanned).length;
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Sevk Kapısı"
-        description="Kapıda çuval okut → sevkiyat kartı öne gelir → kapıya taşı / sevk et / irsaliye bas. Planlı sevkiyat + kapı önü panosu; karta tıkla → çuval ve top dökümü."
+        description="Kapıda çuval okut → sevkiyat kartı öne gelir → sevk et / irsaliye bas. Planlı (çıkış bekleyen) sevkler; karta tıkla → çuval ve top dökümü."
         actions={
           <div className="flex items-center gap-2">
             {scannedCount > 0 && (
@@ -211,6 +137,16 @@ export function SackStorePage() {
           </div>
         }
       />
+
+      {!confirmationEnabled && (
+        <div className="flex items-start gap-2 border-b bg-sky-500/10 px-6 py-2 text-xs text-sky-800 dark:text-sky-300">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Sevk onayı kapalı — çuvallar seçilir seçilmez doğrudan sevk edilir. Bu ekran yalnızca Genel
+            Ayarlar'da <strong>“Sevk onayı adımı”</strong> açıkken planlı sevkleri listeler.
+          </span>
+        </div>
+      )}
 
       {/* Kapı okutması — çuval kodu okut, sevkiyatı bul ve kartını öne getir. */}
       <PermissionGate permission="shipping:write">
@@ -258,23 +194,6 @@ export function SackStorePage() {
             className="pl-8"
           />
         </div>
-        <div className="flex items-center gap-1 rounded-md border p-0.5">
-          {STATUS_TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setStatus(t.key)}
-              className={cn(
-                "rounded px-3 py-1 text-xs font-medium transition-colors",
-                status === t.key
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
         {/* Saha #22: yurtiçi/yurtdışı filtresi */}
         <div className="flex items-center gap-1 rounded-md border p-0.5">
           {DEST_TABS.map((t) => (
@@ -314,11 +233,8 @@ export function SackStorePage() {
                 <SackStoreCard
                   key={s.id}
                   shipment={s}
-                  busy={busyId === s.id}
                   scannedCount={scanned[s.id]?.codes.length}
                   onOpen={setOpenShipment}
-                  onMoveToDoor={(sh) => setPending({ kind: "move-to-door", shipment: sh })}
-                  onPullBack={(sh) => setPending({ kind: "pull-back", shipment: sh })}
                   onDispatch={setDispatchTarget}
                 />
               ))}
@@ -351,18 +267,6 @@ export function SackStorePage() {
         shipment={openShipment}
         open={openShipment !== null}
         onOpenChange={(o) => !o && setOpenShipment(null)}
-      />
-
-      <ConfirmDialog
-        open={pending !== null}
-        onOpenChange={(o) => !o && !mutation.isPending && setPending(null)}
-        title={pending ? ACTION_COPY[pending.kind].title(pending.shipment) : ""}
-        description={pending ? ACTION_COPY[pending.kind].description : undefined}
-        confirmLabel={pending ? ACTION_COPY[pending.kind].confirmLabel : "Onayla"}
-        isPending={mutation.isPending}
-        onConfirm={() => {
-          if (pending) mutation.mutate(pending);
-        }}
       />
 
       <DispatchConfirmDialog

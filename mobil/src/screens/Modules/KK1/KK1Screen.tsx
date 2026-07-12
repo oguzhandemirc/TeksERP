@@ -23,10 +23,10 @@ import Animated, {
   Easing,
   useSharedValue,
   useAnimatedStyle,
-  useAnimatedKeyboard,
   withTiming,
   withRepeat,
 } from 'react-native-reanimated';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import {
   useQuery,
@@ -202,11 +202,13 @@ export default function KK1Screen() {
   const portraitPhone = compact && winH > winW;
 
   // Klavye (yalnız telefon) — "Kaydet ve Etiket Bas" footer'ını klavye açılınca
-  // YUMUŞAKÇA üstüne kaldır, kapanınca geri indir. useAnimatedKeyboard klavyeyle
-  // birlikte akan bir shared value verir → jank/bekleme yok. Footer absolute
-  // olduğundan `bottom`'u animasyonluyoruz (edge-to-edge'de pencere küçülmüyor;
-  // insets.bottom ScreenChrome içeriğinde zaten uygulanıyor → onu düş).
-  const keyboard = useAnimatedKeyboard();
+  // YUMUŞAKÇA üstüne kaldır, kapanınca geri indir. useReanimatedKeyboardAnimation
+  // (react-native-keyboard-controller) klavyeyle akan bir shared value verir →
+  // uygulama genelinde TEK klavye sistemi (App.tsx KeyboardProvider); eski reanimated
+  // useAnimatedKeyboard rakip 2. sistemdi, kaldırıldı. Footer absolute olduğundan
+  // `bottom`'u animasyonluyoruz (edge-to-edge'de pencere küçülmüyor; insets.bottom
+  // ScreenChrome içeriğinde zaten uygulanıyor → onu düş).
+  const keyboard = useReanimatedKeyboardAnimation();
   const footerAnimStyle = useAnimatedStyle(() => ({
     bottom: Math.max(0, keyboard.height.value - insets.bottom),
   }));

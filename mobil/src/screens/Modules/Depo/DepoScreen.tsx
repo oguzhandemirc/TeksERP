@@ -61,7 +61,6 @@ const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
 /** Rezerve topun bağlı olduğu sevkiyat aşaması — detay özetindeki "Sevkiyat" satırı. */
 const SHIPMENT_SCOPE_LABEL: Record<string, string> = {
   PLANNED: 'Çuval Depo',
-  AT_DOOR: 'Kapı Önü',
   DISPATCHED: 'Sevk Edildi',
   CANCELLED: 'İptal',
 };
@@ -118,8 +117,8 @@ export default function DepoScreen() {
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
   // Min 3 karakter kapısı: 1-2 harflik arama 500k satırda geniş `itemId IN`
-  // kümesi + ağır stats taraması üretir, faydası yok. Barkod metni (TEKS-...,
-  // SW-...) zaten 3+ karakterdir → tam-eşleşme aramasını engellemez. <3 → arama
+  // kümesi + ağır stats taraması üretir, faydası yok. Barkod metni (T...,
+  // KRT...) zaten 3+ karakterdir → tam-eşleşme aramasını engellemez. <3 → arama
   // yok sayılır (queryKey'de de '' olduğu için "a"/"ab"/"" aynı sorguya düşer).
   const effectiveSearch = debouncedSearch.length >= 3 ? debouncedSearch : '';
 
@@ -130,7 +129,7 @@ export default function DepoScreen() {
   // STOCK (ham). includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
   const rollsFilters = useMemo<Record<string, string | string[]>>(() => {
     // shipmentScope:'free' → çuvallanmış (bir sevkiyata okutulmuş) toplar HARİÇ. Çuvallanan
-    // top artık "serbest depoda" görünmez; çuval depo/kapı önü ayrı izlenir (Sevk Çıkışı).
+    // top artık "serbest depoda" görünmez; çuval depo/planlı sevkiyat ayrı izlenir (Sevk Çıkışı).
     const f: Record<string, string | string[]> = { includeFire: 'true', shipmentScope: 'free' };
     if (mode === 'ALL') f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'PRODUCED', 'STOCK'];
     else if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
@@ -180,12 +179,11 @@ export default function DepoScreen() {
     enabled: !isSwatchMode,
     staleTime: 30 * 1000,
   });
-  // Çuvallanmış (pool) + planlı + kapıda bekleyen — serbest stoktan düşen ama
-  // bina içindeki mal. "Serbest + Çuvalda" toplamı fiziksel depoyla tutsun.
+  // Çuvallanmış (pool) + planlı sevkiyat — serbest stoktan düşen ama bina içindeki
+  // mal. "Serbest + Çuvalda" toplamı fiziksel depoyla tutsun.
   const committedCount =
     (scopeQuery.data?.data?.pool?.count ?? 0) +
-    (scopeQuery.data?.data?.planned?.count ?? 0) +
-    (scopeQuery.data?.data?.atDoor?.count ?? 0);
+    (scopeQuery.data?.data?.planned?.count ?? 0);
 
   // Kartela = ADET bazlı: ürün+renk grubu → müsait adet ("depoda kaç tane var").
   // Sahada etiketsiz/okutulmadığından tek-tek liste yerine gruplu stok gösterilir.
@@ -239,9 +237,9 @@ export default function DepoScreen() {
       return;
     }
     // Sekme = listeleme bağlamı; barkod okutma = nokta sorgu, sekmeden bağımsız.
-    // Prefix sabit: SW- → Kartela, TEKS- → Top. Operatör Tümü sekmesindeyken
+    // Prefix sabit: KRT → Kartela, T{rakam} → Top. Operatör Tümü sekmesindeyken
     // kartela barkodu okutursa da kartela detayı açılır.
-    const isSwatchBarcode = /^SW/i.test(barcode);
+    const isSwatchBarcode = /^KRT/i.test(barcode);
     try {
       if (isSwatchBarcode) {
         const res = await swatchService.getByBarcode(barcode);

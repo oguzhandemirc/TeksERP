@@ -5,11 +5,11 @@
 //   1) Çuval aç → openSack(customerId?)  → Sack (depoda; müşteri OPSİYONEL)
 //   2) Topları/kartelaları çuvala okut → scanIntoSack(sackId) → Roll/Swatch.sackId
 //   3) (Opsiyonel) brüt tart + kod gir → weighSack. Çuval depoda, her an düzenlenebilir.
-//   4) Çuval(lar) seç → createShipment({sackIds, customerId, branchId?, orderIds?})
-//      → PLANNED: seçili siparişlere spec-FIFO tahsis (distributeSacksToLines) yazılır.
-//   5) Kapı önü → moveToDoor → AT_DOOR
-//   6) Sevk → dispatchShipment → DISPATCHED: toplar SHIPPED, tahsisler → shippedQty.
-//   İptal → cancelShipment (PLANNED/AT_DOOR): çuvallar depoya döner, tahsisler silinir.
+//   4) Çuval(lar) seç → createShipment({sackIds, customerId, branchId?, orderIds?, plate/driver?})
+//      → seçili siparişlere spec-FIFO tahsis (distributeSacksToLines) yazılır. Sevk onayı
+//      KAPALI (varsayılan) ise AYNI adımda dispatch → DISPATCHED (toplar SHIPPED, tahsisler
+//      → shippedQty). AÇIK ise PLANNED kalır; (5) Sevk Kapısı → dispatchShipment → DISPATCHED.
+//   İptal → cancelShipment (PLANNED): çuvallar depoya döner, tahsisler silinir. Kapı önü YOK.
 //
 // Düşüş yalnız sevkte, elle seçilen siparişlere. Rezerv/packedQty yok. Fazla/eşleşmeyen/
 // siparişsiz sevk edilebilir (uyarı). Çuval İÇERİK tutar (Roll/Swatch.sackId) → irsaliyede
@@ -692,7 +692,7 @@ export class ShippingService {
    * shippedQty yalnız DISPATCH'te terfi eder. Fazla/eşleşmeyen/siparişsiz sevk edilebilir.
    */
   async createShipment(
-    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; destination?: ShipmentDestination; procedureCode?: string | null },
+    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; destination?: ShipmentDestination; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const sackIds = [...new Set(data.sackIds)];
@@ -704,13 +704,15 @@ export class ShippingService {
     const destination = data.destination ?? ShipmentDestination.DOMESTIC;
     this.assertExportWeighed(sacks, destination);
     await this.assertOrdersBelong(orderIds, data.customerId, branchId);
+    // Sevk onayı KAPALI (varsayılan) → aynı adımda dispatch; AÇIK → PLANNED kalır (Sevk Kapısı).
+    const confirmationEnabled = await readShipmentConfirmationEnabled();
 
-    const shipment = await withBarcodeRetry(() =>
+    const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const shipmentNo = await nextShipmentNo();
         const created = await tx.shipment.create({
           data: { shipmentNo, customerId: data.customerId, branchId, status: ShipmentStatus.PLANNED, destination, procedureCode: data.procedureCode?.trim() || null },
-          select: { id: true, shipmentNo: true, status: true, destination: true },
+          select: { id: true, shipmentNo: true },
         });
         // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
         for (let i = 0; i < sackIds.length; i++) {
@@ -726,11 +728,20 @@ export class ShippingService {
         // Sipariş kümesi (kullanıcı seçimi) + spec-FIFO tahsis.
         await this.setShipmentOrdersTx(tx, created.id, orderIds);
         await this.writeShipmentAllocationsTx(tx, created.id, orderIds, branchId);
+        // Onay kapalı → aynı tx'te sevk et (DISPATCHED).
+        if (!confirmationEnabled) {
+          await this.performDispatchTx(tx, created.id, { plateNumber: data.plateNumber, driverName: data.driverName, carrier: data.carrier }, userId);
+        }
         return created;
       })
     );
-    await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: shipment.id, newData: { shipmentNo: shipment.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, destination: shipment.destination } });
-    return { success: true, data: shipment, message: `Sevkiyat kuruldu: ${shipment.shipmentNo}` };
+    const dispatched = !confirmationEnabled;
+    await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, destination, dispatched } });
+    return {
+      success: true,
+      data: { id: result.id, shipmentNo: result.shipmentNo, status: dispatched ? ShipmentStatus.DISPATCHED : ShipmentStatus.PLANNED, dispatched },
+      message: dispatched ? `Sevk edildi: ${result.shipmentNo}` : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`,
+    };
   }
 
   /**
@@ -786,7 +797,7 @@ export class ShippingService {
       }
       const pendingOther = await prisma.sackAllocation.groupBy({
         by: ["orderLineId"],
-        where: { orderLineId: { in: [...lineNeeds.keys()] }, sack: { shipment: { status: { in: [ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR] } } } },
+        where: { orderLineId: { in: [...lineNeeds.keys()] }, sack: { shipment: { status: ShipmentStatus.PLANNED } } },
         _sum: { qty: true },
       });
       for (const g of pendingOther) {
@@ -881,81 +892,61 @@ export class ShippingService {
     return { success: true, data: { shipmentId, procedureCode: code }, message: "Prosedür kodu güncellendi" };
   }
 
-  /** Kapı Önüne Koy (PLANNED → AT_DOOR). Düşüş DISPATCH'te — burada commit yok. */
-  async moveToDoor(shipmentId: string, userId?: string): Promise<ApiResponse<unknown>> {
-    const shipment = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { id: true, status: true, destination: true, sacks: { select: { weightKg: true } } } });
-    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
-    if (shipment.status === ShipmentStatus.AT_DOOR) return { success: true, data: { shipmentId }, message: "Sevkiyat zaten kapı önünde" };
-    if (shipment.status !== ShipmentStatus.PLANNED) throw AppError.conflict("Yalnız planlanan sevkiyat kapı önüne konabilir");
-    this.assertExportWeighed(shipment.sacks, shipment.destination);
-    const claim = await prisma.shipment.updateMany({ where: { id: shipmentId, status: ShipmentStatus.PLANNED }, data: { status: ShipmentStatus.AT_DOOR } });
+  /**
+   * Sevk tx'i — createShipment auto-dispatch + dispatchShipment ortak çekirdeği. PLANNED →
+   * DISPATCHED: toplar SHIPPED, tahsisler → shippedQty (recompute), irsaliye dondurulur.
+   * Döner: sevk edilen top adedi. Çağıran ön-koşulları (dolu, EXPORT tartı) garanti eder.
+   */
+  private async performDispatchTx(
+    tx: Prisma.TransactionClient,
+    shipmentId: string,
+    data: { plateNumber?: string | null; driverName?: string | null; carrier?: string | null },
+    userId?: string
+  ): Promise<number> {
+    const claim = await tx.shipment.updateMany({
+      where: { id: shipmentId, status: ShipmentStatus.PLANNED },
+      data: {
+        status: ShipmentStatus.DISPATCHED,
+        dispatchedAt: new Date(),
+        dispatchedById: userId ?? null,
+        ...(data.plateNumber !== undefined ? { plateNumber: data.plateNumber } : {}),
+        ...(data.driverName !== undefined ? { driverName: data.driverName } : {}),
+        ...(data.carrier !== undefined ? { carrier: data.carrier } : {}),
+      },
+    });
     if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "AT_DOOR", from: "PLANNED" } });
-    return { success: true, data: { shipmentId }, message: "Kapı önüne kondu — kamyon/'Alındı' onayı bekliyor" };
-  }
-
-  /** Kapı önünden geri çek (AT_DOOR → PLANNED). */
-  async pullBackFromDoor(shipmentId: string, userId?: string): Promise<ApiResponse<unknown>> {
-    const shipment = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { id: true, status: true } });
-    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
-    if (shipment.status === ShipmentStatus.PLANNED) return { success: true, data: { shipmentId }, message: "Sevkiyat zaten planlı" };
-    if (shipment.status !== ShipmentStatus.AT_DOOR) throw AppError.conflict("Yalnız kapı önündeki sevkiyat geri çekilir");
-    const claim = await prisma.shipment.updateMany({ where: { id: shipmentId, status: ShipmentStatus.AT_DOOR }, data: { status: ShipmentStatus.PLANNED } });
-    if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "PULL_BACK_FROM_DOOR", from: "AT_DOOR", to: "PLANNED" } });
-    return { success: true, data: { shipmentId }, message: "Kapı önünden geri çekildi" };
+    await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
+    const flipped = await tx.roll.updateMany({ where: { shipmentId, status: RollStatus.WAREHOUSE }, data: { status: RollStatus.SHIPPED } });
+    // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
+    const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+    await recomputeOrderStatusForOrders(tx, orderRows.map((o) => o.orderId));
+    // Resmi belge — sevk irsaliyesi v1 burada donar.
+    await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
+    return flipped.count;
   }
 
   /**
-   * Sevk / Alındı (fiziksel çıkış) — toplar SHIPPED, donmuş tahsis → shippedQty (terfi).
-   * Sevk onayı bayrağı (shipmentConfirmationEnabled):
-   *  - KAPALI: PLANNED/AT_DOOR → DISPATCHED.
-   *  - AÇIK: yalnız AT_DOOR → DISPATCHED.
+   * Sevk (fiziksel çıkış) — PLANNED → DISPATCHED. Yalnız sevk onayı AÇIKKEN gerekir
+   * (kapalıyken createShipment zaten doğrudan dispatch eder). Toplar SHIPPED, tahsisler
+   * → shippedQty terfi eder, irsaliye dondurulur. Kapı önü adımı YOK.
    */
   async dispatchShipment(
     shipmentId: string,
     data: { plateNumber?: string | null; driverName?: string | null; carrier?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    const confirmRequired = await readShipmentConfirmationEnabled();
     const shipment = await prisma.shipment.findUnique({
       where: { id: shipmentId },
-      select: { id: true, status: true, destination: true, customerId: true, sacks: { select: { weightKg: true } }, _count: { select: { rolls: true } } },
+      select: { id: true, status: true, destination: true, sacks: { select: { weightKg: true } } },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
     if (shipment.status === ShipmentStatus.DISPATCHED) throw AppError.conflict("Sevkiyat zaten sevk edilmiş");
-    if (confirmRequired) {
-      if (shipment.status !== ShipmentStatus.AT_DOOR) throw AppError.conflict("Sevk onayı açık — önce 'Kapı Önüne Koy'; çıkış onayı kapı önünden verilir");
-    } else if (shipment.status !== ShipmentStatus.PLANNED && shipment.status !== ShipmentStatus.AT_DOOR) {
-      throw AppError.conflict("Yalnız planlanan veya kapı önündeki sevkiyat sevk edilebilir");
-    }
+    if (shipment.status !== ShipmentStatus.PLANNED) throw AppError.conflict("Yalnız planlanan sevkiyat sevk edilebilir");
     if (shipment.sacks.length === 0) throw AppError.badRequest("Boş sevkiyat sevk edilemez");
     this.assertExportWeighed(shipment.sacks, shipment.destination);
 
-    let shippedRolls = 0;
-    await prisma.$transaction(async (tx) => {
-      const claim = await tx.shipment.updateMany({
-        where: { id: shipmentId, status: shipment.status },
-        data: {
-          status: ShipmentStatus.DISPATCHED,
-          dispatchedAt: new Date(),
-          dispatchedById: userId ?? null,
-          ...(data.plateNumber !== undefined ? { plateNumber: data.plateNumber } : {}),
-          ...(data.driverName !== undefined ? { driverName: data.driverName } : {}),
-          ...(data.carrier !== undefined ? { carrier: data.carrier } : {}),
-        },
-      });
-      if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
-      await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
-      const flipped = await tx.roll.updateMany({ where: { shipmentId, status: RollStatus.WAREHOUSE }, data: { status: RollStatus.SHIPPED } });
-      shippedRolls = flipped.count;
-      // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
-      const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
-      await recomputeOrderStatusForOrders(tx, orderRows.map((o) => o.orderId));
-      // Resmi belge — sevk irsaliyesi v1 burada donar.
-      await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
-    });
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DISPATCH", fromStatus: shipment.status, rollCount: shippedRolls, plateNumber: data.plateNumber ?? null, driverName: data.driverName ?? null } });
+    const shippedRolls = await prisma.$transaction((tx) => this.performDispatchTx(tx, shipmentId, data, userId));
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DISPATCH", rollCount: shippedRolls, plateNumber: data.plateNumber ?? null, driverName: data.driverName ?? null } });
     return { success: true, data: { shipmentId, rollCount: shippedRolls }, message: "Sevk edildi — stok bina dışı, karşılanma kesinleşti" };
   }
 
@@ -1003,7 +994,7 @@ export class ShippingService {
   }
 
   /**
-   * Sevkiyatı iptal et (soft → CANCELLED). PLANNED/AT_DOOR iptal edilebilir: çuvallar depoya
+   * Sevkiyatı iptal et (soft → CANCELLED). PLANNED iptal edilebilir: çuvallar depoya
    * döner, tahsisler silinir (sipariş bağı kalkar). DISPATCHED iptal edilemez.
    */
   async cancelShipment(shipmentId: string, userId?: string): Promise<ApiResponse<unknown>> {
@@ -1207,18 +1198,13 @@ export class ShippingService {
   }
 
   // =========================================================================
-  // SEVK KAPISI — PLANNED/AT_DOOR board
+  // SEVK KAPISI — PLANNED board (yalnız sevk-onayı AÇIKKEN dolar)
   // =========================================================================
 
-  /** Sevk Kapısı board LİSTESİ — PLANNED (planlı) | AT_DOOR (kapı önü); hafif + cursor. */
+  /** Sevk Kapısı board LİSTESİ — onay bekleyen PLANNED sevkiyatlar; hafif + cursor. */
   async listSackStoreBoard(params: { status?: string; search?: string; destination?: string; cursor?: string; limit?: number }): Promise<CursorPaginatedResponse<unknown>> {
     const limit = Math.min(Math.max(1, params.limit ?? 30), 100);
-    const statusFilter: ShipmentStatus[] =
-      params.status === "PLANNED" ? [ShipmentStatus.PLANNED]
-        : params.status === "AT_DOOR" ? [ShipmentStatus.AT_DOOR]
-          : [ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR];
-
-    const where: Prisma.ShipmentWhereInput = { status: { in: statusFilter } };
+    const where: Prisma.ShipmentWhereInput = { status: ShipmentStatus.PLANNED };
     if (params.destination === "DOMESTIC" || params.destination === "EXPORT") {
       where.destination = params.destination as ShipmentDestination;
     }

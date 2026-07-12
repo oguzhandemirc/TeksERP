@@ -2,48 +2,52 @@ import { describe, it, expect } from "vitest";
 import { classifyBarcode, BARCODE_FORMATS } from "./barcode-kind";
 
 describe("classifyBarcode — prefix → tür", () => {
-  it("TEKS- → ROLL", () => {
-    expect(classifyBarcode("TEKS20260615AB12CD34").kind).toBe("ROLL");
+  it("T{GGAAYY}{H/F}NNNN → ROLL", () => {
+    expect(classifyBarcode("T120726H0001").kind).toBe("ROLL");
+    expect(classifyBarcode("T120726F0012").kind).toBe("ROLL");
   });
   it("RK → TRAVELER_CARD", () => {
-    expect(classifyBarcode("RK26049F2K3P7").kind).toBe("TRAVELER_CARD");
+    expect(classifyBarcode("RK1207260001").kind).toBe("TRAVELER_CARD");
   });
-  it("SW- → SWATCH", () => {
-    expect(classifyBarcode("SW26045A3Z9B2").kind).toBe("SWATCH");
+  it("KRT → SWATCH", () => {
+    expect(classifyBarcode("KRT1207260042").kind).toBe("SWATCH");
   });
-  it("CV- → SACK", () => {
-    expect(classifyBarcode("CV-260615-001").kind).toBe("SACK");
+  it("CV → SACK", () => {
+    expect(classifyBarcode("CV1207260001").kind).toBe("SACK");
   });
-  it("SD/SR/KD/KR- → DISPATCH_DOC", () => {
-    expect(classifyBarcode("SD2604000123").kind).toBe("DISPATCH_DOC");
-    expect(classifyBarcode("SR2604000089").kind).toBe("DISPATCH_DOC");
-    expect(classifyBarcode("KD2604000045").kind).toBe("DISPATCH_DOC");
-    expect(classifyBarcode("KR2604000089").kind).toBe("DISPATCH_DOC");
+  it("FS/FK/KS/KK → DISPATCH_DOC", () => {
+    expect(classifyBarcode("FS1207260123").kind).toBe("DISPATCH_DOC");
+    expect(classifyBarcode("FK1207260089").kind).toBe("DISPATCH_DOC");
+    expect(classifyBarcode("KS1207260045").kind).toBe("DISPATCH_DOC");
+    expect(classifyBarcode("KK1207260089").kind).toBe("DISPATCH_DOC");
+  });
+  it("KRT ≠ KK/KS (SWATCH, DISPATCH_DOC değil)", () => {
+    expect(classifyBarcode("KRT1207260001").kind).toBe("SWATCH");
   });
   it("bilinmeyen / serbest kod → UNKNOWN", () => {
     expect(classifyBarcode("RAF-A12").kind).toBe("UNKNOWN");
     expect(classifyBarcode("").kind).toBe("UNKNOWN");
     expect(classifyBarcode("12345").kind).toBe("UNKNOWN");
+    expect(classifyBarcode("SIP1207260001").kind).toBe("UNKNOWN"); // sipariş no scan hedefi değil
   });
   it("trim + uppercase normalize eder", () => {
-    const c = classifyBarcode("  teks20260615ab12cd34  ");
+    const c = classifyBarcode("  t120726h0001  ");
     expect(c.kind).toBe("ROLL");
-    expect(c.code).toBe("TEKS20260615AB12CD34");
+    expect(c.code).toBe("T120726H0001");
   });
 });
 
-describe("BARCODE_FORMATS — tam format regex'leri", () => {
+describe("BARCODE_FORMATS — tam format regex'leri (checksum yok)", () => {
   it("geçerli kodlar eşleşir", () => {
-    expect(BARCODE_FORMATS.ROLL.test("TEKS20260615AB12CD34")).toBe(true); // eski biçim
-    expect(BARCODE_FORMATS.ROLL.test("TEKS260709HA001")).toBe(true); // yeni kısa (ham)
-    expect(BARCODE_FORMATS.ROLL.test("TEKS260709FB012")).toBe(true); // yeni kısa (final)
-    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK26049F2K3P7")).toBe(true);
-    expect(BARCODE_FORMATS.SWATCH.test("SW26045A3Z9B2")).toBe(true);
-    expect(BARCODE_FORMATS.SACK.test("CV-260615-001")).toBe(true);
+    expect(BARCODE_FORMATS.ROLL.test("T120726H0001")).toBe(true);
+    expect(BARCODE_FORMATS.ROLL.test("T120726F0012")).toBe(true);
+    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK1207260001")).toBe(true);
+    expect(BARCODE_FORMATS.SWATCH.test("KRT1207260042")).toBe(true);
+    expect(BARCODE_FORMATS.SACK.test("CV1207260001")).toBe(true);
   });
   it("bozuk kodlar eşleşmez", () => {
-    expect(BARCODE_FORMATS.ROLL.test("TEKS-2026-AB")).toBe(false);
-    expect(BARCODE_FORMATS.SACK.test("CV-20260615-001")).toBe(false); // 8 haneli tarih yanlış
-    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK26049F2K3P")).toBe(false); // checksum yok
+    expect(BARCODE_FORMATS.ROLL.test("TEKS260709HA001")).toBe(false); // eski biçim
+    expect(BARCODE_FORMATS.SACK.test("CV-260615-001")).toBe(false); // tireli eski biçim
+    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK120726001")).toBe(false); // 3 hane sıra eksik
   });
 });

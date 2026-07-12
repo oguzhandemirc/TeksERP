@@ -68,7 +68,7 @@ export default function TartiPaketScreen() {
   });
   const pool = poolQ.data?.data ?? [];
 
-  // Sevk kapısı sayacı (PLANNED/AT_DOOR) — köprü kartı.
+  // Sevk kapısı sayacı (PLANNED) — köprü kartı.
   const boardQ = useQuery({
     queryKey: ['sack-store', 'board', 'bridge'],
     queryFn: () => packingService.listSackStoreBoard({ limit: 30 }),

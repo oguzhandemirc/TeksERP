@@ -7,13 +7,14 @@ import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 //   1) Çuval aç → openSack(customerId?)                    → havuzda
 //   2) Top/kartela çuvala okut → scanIntoSack(sackId)
 //   3) Tart + kod → weighSack                              → çuval depoda hazır
-//   4) Havuzdaki çuvallardan sevkiyat kur → createShipmentFromSacks → PLANNED
-//   5) Kapı önü → moveToDoor (AT_DOOR); sevk → dispatch (DISPATCHED)
+//   4) Havuzdaki çuvallardan sevkiyat kur → createShipmentFromSacks
+//        • Sevk onayı KAPALI (varsayılan) → doğrudan sevk (DISPATCHED, dispatched=true)
+//        • Sevk onayı AÇIK → PLANNED kalır; çıkış ayrıca dispatch ile onaylanır
 // Karşılanma spec-toplam (SackAllocation defteri) — top→sipariş bağı YOK.
 // =============================================================================
 
-// PLANNED (planlı) | AT_DOOR (kapı önü) | DISPATCHED (sevk edildi) | CANCELLED (iptal)
-export type ShipmentStatus = 'PLANNED' | 'AT_DOOR' | 'DISPATCHED' | 'CANCELLED';
+// PLANNED (planlı) | DISPATCHED (sevk edildi) | CANCELLED (iptal)
+export type ShipmentStatus = 'PLANNED' | 'DISPATCHED' | 'CANCELLED';
 /** Saha #19+#22: yurtiçi/yurtdışı sevkiyat kapsamı. */
 export type ShipmentDestination = 'DOMESTIC' | 'EXPORT';
 export const shipmentDestinationLabels: Record<ShipmentDestination, string> = {
@@ -23,7 +24,6 @@ export const shipmentDestinationLabels: Record<ShipmentDestination, string> = {
 
 export const SHIPMENT_STATUS_TR: Record<ShipmentStatus, string> = {
   PLANNED: 'Planlı',
-  AT_DOOR: 'Kapı Önü',
   DISPATCHED: 'Sevk Edildi',
   CANCELLED: 'İptal',
 };
@@ -87,9 +87,7 @@ export interface PoolSackSwatch {
 }
 export interface PoolSack {
   id: string;
-  sackNo: string;
-  manualCode: string | null;
-  weightKg: number | null;
+  sackNo: string;  weightKg: number | null;
   branch: { id: string; name: string } | null;
   rollCount: number;
   swatchCount: number;
@@ -105,9 +103,7 @@ export interface CustomerPoolSacks {
 /** openSack dönüşü — yeni açılan (boş) havuz çuvalı. Müşteri opsiyonel. */
 export interface OpenedSack {
   id: string;
-  sackNo: string;
-  manualCode: string | null;
-  weightKg: number | null;
+  sackNo: string;  weightKg: number | null;
   customerId: string | null;
   branchId: string | null;
 }
@@ -121,12 +117,13 @@ export interface ScanResult {
   currentQty?: number;
 }
 
-/** createShipmentFromSacks dönüşü. */
+/** createShipmentFromSacks dönüşü. Sevk onayı kapalıyken backend doğrudan sevk eder. */
 export interface CreatedShipment {
   id: string;
   shipmentNo: string;
   status: ShipmentStatus;
-  destination: ShipmentDestination;
+  /** true → doğrudan sevk edildi (onay kapalı); false → PLANNED kaldı (onay açık, ayrıca dispatch). */
+  dispatched: boolean;
 }
 
 /** previewCreateShipment — karşılanan sipariş satırı (spec-toplam defterinden). */
@@ -208,9 +205,7 @@ export interface ShipmentSack {
   id: string;
   sackNo: string;
   seq: number | null;
-  /** Operatörün çuval üstüne yazdığı kod. */
-  manualCode: string | null;
-  weightKg: number | null;
+  /** Operatörün çuval üstüne yazdığı kod. */  weightKg: number | null;
   rolls: SackRoll[];
   swatches: SackSwatch[];
   productSummary: SackProductSummary[];
@@ -285,13 +280,13 @@ export interface ShipmentCancelPreview {
   affectedOrders: { orderNumber: string; qty: string }[];
 }
 
-// ── Sevk kapısı board'u (PLANNED=planlı, AT_DOOR=kapı önü) ──
+// ── Sevk kapısı board'u — yalnız PLANNED (sevk bekleyen) sevkiyatlar ──
 // LİSTE: hafif kart (rulo içermez, cursor sayfalı). İÇERİK: karta tıklayınca
 // lazy gelen tam çuval+rulo dökümü (ShipmentSackContents).
 export interface SackStoreShipmentLite {
   id: string;
   shipmentNo: string;
-  status: 'PLANNED' | 'AT_DOOR';
+  status: 'PLANNED';
   destination: ShipmentDestination;
   procedureCode: string | null;
   createdAt: string;
@@ -330,9 +325,7 @@ export interface SackStoreSwatch {
 export interface SackContentSack {
   id: string;
   sackNo: string;
-  seq: number | null;
-  manualCode: string | null;
-  weightKg: number | null;
+  seq: number | null;  weightKg: number | null;
   rollCount: number;
   swatchCount: number;
   totalQty: number;
@@ -343,7 +336,7 @@ export interface SackContentSack {
 export interface ShipmentSackContents {
   id: string;
   shipmentNo: string;
-  status: 'PLANNED' | 'AT_DOOR';
+  status: 'PLANNED';
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;
@@ -363,7 +356,7 @@ export interface LocatedRoll {
   qualityGrade: string;
   item: { id: string; name: string };
   color: { id: string; name: string; hex: string | null } | null;
-  sack: { id: string; sackNo: string; seq: number | null; manualCode: string | null; weightKg: number | null } | null;
+  sack: { id: string; sackNo: string; seq: number | null; weightKg: number | null } | null;
   shipment: {
     id: string;
     shipmentNo: string;
@@ -403,7 +396,6 @@ export const packingService = {
     customerId?: string | null;
     branchId?: string | null;
     weightKg?: number | null;
-    manualCode?: string | null;
   }): Promise<ApiResponse<OpenedSack>> =>
     apiClient.post<ApiResponse<OpenedSack>>('/shipping/sacks', body).then((r) => r.data),
 
@@ -423,8 +415,8 @@ export const packingService = {
       )
       .then((r) => r.data),
 
-  /** Çuval brüt tartı ve/veya kodunu güncelle (havuz çuvalı). */
-  weighSack: (sackId: string, body: { weightKg?: number; manualCode?: string }): Promise<ApiResponse<unknown>> =>
+  /** Çuval brüt tartısını güncelle (havuz çuvalı). */
+  weighSack: (sackId: string, body: { weightKg: number }): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, body).then((r) => r.data),
 
   /** Havuz çuvalını sil. withContents=true → dolu çuval içeriğiyle silinir (toplar depoya döner). */
@@ -472,7 +464,9 @@ export const packingService = {
   // SEVKİYAT — havuzdan çuval seçerek kur + yaşam döngüsü
   // =========================================================================
 
-  /** Havuzdaki çuvallardan yeni sevkiyat kur (PLANNED). Müşteri zorunlu. */
+  /** Havuzdaki çuvallardan yeni sevkiyat kur. Sevk onayı kapalıyken backend doğrudan
+   *  sevk eder (dispatched=true); açıkken PLANNED kalır. Müşteri zorunlu; plaka/şoför/
+   *  taşıyıcı opsiyonel (doğrudan sevkte irsaliyeye geçer). */
   createShipmentFromSacks: (body: {
     sackIds: string[];
     customerId: string;
@@ -480,6 +474,9 @@ export const packingService = {
     orderIds?: string[];
     destination?: ShipmentDestination;
     procedureCode?: string | null;
+    plateNumber?: string | null;
+    driverName?: string | null;
+    carrier?: string | null;
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments', body).then((r) => r.data),
 
@@ -544,16 +541,14 @@ export const packingService = {
   },
 
   // Sevk Kapısı board'u — HAFİF + cursor sayfalı + sunucu-aramalı (FlashList).
-  // status: PLANNED (planlı) | AT_DOOR (kapı önü); ikisi de → boş bırak.
+  // Yalnız PLANNED (sevk bekleyen) sevkiyatları döner.
   listSackStoreBoard: (params: {
-    status?: 'PLANNED' | 'AT_DOOR';
     search?: string;
     cursor?: string | null;
     limit?: number;
   }): Promise<CursorPaginatedResponse<SackStoreShipmentLite>> => {
     const q = new URLSearchParams();
     q.set('limit', String(params.limit ?? 30));
-    if (params.status) q.set('status', params.status);
     if (params.search) q.set('search', params.search);
     if (params.cursor) q.set('cursor', params.cursor);
     return apiClient
@@ -566,14 +561,6 @@ export const packingService = {
     apiClient
       .get<ApiResponse<ShipmentSackContents>>(`/shipping/shipments/${id}/sack-contents`)
       .then((r) => r.data),
-
-  // Kapı Önüne Koy (PLANNED → AT_DOOR) — kamyon bekleme durağı; "Alındı" ile sevk olur.
-  moveToDoor: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>
-    apiClient.post<ApiResponse<{ shipmentId: string }>>(`/shipping/shipments/${id}/move-to-door`, {}).then((r) => r.data),
-
-  // Kapı önünden geri çek (AT_DOOR → PLANNED).
-  pullBackFromDoor: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>
-    apiClient.post<ApiResponse<{ shipmentId: string }>>(`/shipping/shipments/${id}/pull-back`, {}).then((r) => r.data),
 
   dispatch: (
     id: string,

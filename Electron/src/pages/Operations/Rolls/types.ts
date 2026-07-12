@@ -63,7 +63,7 @@ export interface Roll {
     };
   }>;
   /** Sevkiyat rezervasyonu: dolu ise top "serbest depo" DEĞİL — bir çuvalın
-   *  içinde, bir sevkiyata bağlı (çuval depo / kapı önü). WAREHOUSE statüsüyle
+   *  içinde, bir sevkiyata bağlı (planlı sevkiyat). WAREHOUSE statüsüyle
    *  birlikte "Çuvalda" rozeti gösterilir; serbest stok sorgularına girmez. */
   shipmentId?: string | null;
   sackId?: string | null;
@@ -73,19 +73,13 @@ export interface Roll {
   updatedAt: string;
 }
 
-/** Roll'a bağlı sevkiyatın durumu (rezerve rozetinin alt metni için). */
-export type RollShipmentStatus =
-  | "PREPARING"
-  | "READY"
-  | "AT_DOOR"
-  | "DISPATCHED"
-  | "CANCELLED";
+/** Roll'a bağlı sevkiyatın durumu (rezerve rozetinin alt metni için).
+ *  Çuval havuzu modelinde Shipment yalnız PLANNED | DISPATCHED | CANCELLED üretir. */
+export type RollShipmentStatus = "PLANNED" | "DISPATCHED" | "CANCELLED";
 
 /** Rezerve topun bağlı olduğu sevkiyat aşamasının kullanıcı etiketi. */
 export const shipmentScopeLabels: Record<RollShipmentStatus, string> = {
-  PREPARING: "Çuvallanıyor",
-  READY: "Çuval Depo",
-  AT_DOOR: "Kapı Önü",
+  PLANNED: "Planlı Sevkiyat",
   DISPATCHED: "Sevk Edildi",
   CANCELLED: "İptal",
 };

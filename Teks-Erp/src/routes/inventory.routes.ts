@@ -142,7 +142,7 @@ router.get("/", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_RE
  *         name: barcode
  *         required: true
  *         schema: { type: string }
- *         description: Top barkodu (ör. TEKS-20260415-A1B2C3D4)
+ *         description: Top barkodu (ör. T120726H0001)
  *     responses:
  *       200:
  *         description: Top detayı
@@ -219,13 +219,13 @@ router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_RO
  * /api/rolls/warehouse-scope:
  *   get:
  *     tags: [Inventory]
- *     summary: Depo kapsam sayaçları — serbest / çuval depo (READY) / kapı önü (AT_DOOR)
+ *     summary: Depo kapsam sayaçları — serbest / çuval depo havuzu / planlı sevkiyat
  *     description: WAREHOUSE topları fiziksel yere göre ayırır. Yalnız "free" satılabilir serbest stoktur.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: "{ free, sackStore, atDoor } — her biri { count, qty }."
+ *         description: "{ free, pool, planned } — her biri { count, qty }."
  */
 router.get(
   "/warehouse-scope",

@@ -6,7 +6,7 @@
 //      — çuval listesi + her çuvalda EŞLEŞEN top sayısı/metresi.
 //   2) "Şu çuvalda ne var?"                        → searchSacks(sackCode) + getSackContents
 //   3) "Bu top hangi çuvalda/sevkiyatta?"          → locateRoll(barcode)
-// Kapsam (scope): POOL (havuzda, shipmentId null) | PLANNED (planlı/kapı önü sevkiyatta) |
+// Kapsam (scope): POOL (havuzda, shipmentId null) | PLANNED (planlı sevkiyatta) |
 // DISPATCHED (sevk edilmiş) | ALL. Varsayılan: POOL + PLANNED (sevk edilmemiş).
 // Salt-okunur — yazma/audit yok. Liste cursor'lı (sacks yıllar içinde büyür),
 // aggregate'ler yalnız sayfadaki çuvallar için (over-fetch yok).
@@ -17,10 +17,10 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
-import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
+import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 
-const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED, ShipmentStatus.AT_DOOR];
+const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
 export type SackSearchScope = "POOL" | "PLANNED" | "DISPATCHED" | "ALL";
 
@@ -28,11 +28,20 @@ export interface SackSearchParams {
   itemId?: string;
   colorId?: string;
   width?: number;
+  widthMin?: number;
+  widthMax?: number;
   customerId?: string;
   scope?: SackSearchScope;
   shipmentNo?: string;
   sackCode?: string;
   includeDispatched?: boolean;
+  /** Serbest arama — sackNo / müşteri adı-kodu / sevkiyat no (DataTable arama kutusu). */
+  search?: string;
+  /** Sıralama alanı — yalnız Sack skaler kolonu (createdAt | sackNo); aksi createdAt. */
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  /** İlk sayfada toplam tahmini (DataTable). */
+  withTotal?: boolean;
   cursor?: string;
   limit?: number;
 }
@@ -58,13 +67,22 @@ export class SackSearchService {
    * ayrıca döner ("bu çuvalda aradığından ne kadar var").
    */
   async searchSacks(params: SackSearchParams): Promise<CursorPaginatedResponse<unknown>> {
-    const limit = Math.min(Math.max(1, params.limit ?? 30), 100);
+    const limit = Math.min(Math.max(1, params.limit ?? 50), 100);
+    const sortField: "createdAt" | "sackNo" = params.sortBy === "sackNo" ? "sackNo" : "createdAt";
+    const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
 
-    // İçerik (rulo düzeyi) filtresi — yalnız verilen alanlar.
+    // İçerik (rulo düzeyi) filtresi — ürün/renk/en (en tek değer VEYA min-max aralık).
     const rollFilter: Prisma.RollWhereInput = {};
     if (params.itemId) rollFilter.itemId = params.itemId;
     if (params.colorId) rollFilter.colorId = params.colorId;
-    if (params.width !== undefined) rollFilter.width = params.width;
+    if (params.widthMin != null || params.widthMax != null) {
+      rollFilter.width = {
+        ...(params.widthMin != null ? { gte: params.widthMin } : {}),
+        ...(params.widthMax != null ? { lte: params.widthMax } : {}),
+      };
+    } else if (params.width != null) {
+      rollFilter.width = params.width;
+    }
     const hasContentFilter = Object.keys(rollFilter).length > 0;
 
     // Kapsam: verilen scope; yoksa includeDispatched'e göre ALL, aksi POOL+PLANNED (varsayılan).
@@ -80,15 +98,22 @@ export class SackSearchService {
     if (shipmentNo) andClauses.push({ shipment: { is: { OR: buildTurkishSearch<Prisma.ShipmentWhereInput>(shipmentNo, ["shipmentNo"]) } } });
     const sackCode = params.sackCode?.trim();
     if (sackCode) andClauses.push({ OR: buildTurkishSearch<Prisma.SackWhereInput>(sackCode, ["sackNo"]) });
+    // Serbest arama (DataTable kutusu) — sackNo / müşteri adı-kodu / sevkiyat no.
+    const search = params.search?.trim();
+    if (search) {
+      andClauses.push({ OR: buildTurkishSearch<Prisma.SackWhereInput>(search, ["sackNo", "customer.name", "customer.code", "shipment.shipmentNo"]) });
+    }
     if (hasContentFilter) andClauses.push({ rolls: { some: rollFilter } });
 
     const where: Prisma.SackWhereInput = { AND: andClauses };
-    const cursor = decodeCursor(params.cursor);
-    const finalWhere: Prisma.SackWhereInput = cursor ? { AND: [where, cursorWhere(cursor)] } : where;
+    const cursor = decodeDynamicCursor(params.cursor);
+    const finalWhere: Prisma.SackWhereInput = cursor
+      ? { AND: [where, dynamicCursorWhere(cursor, sortField, sortOrder) as Prisma.SackWhereInput] }
+      : where;
 
     const rows = await prisma.sack.findMany({
       where: finalWhere,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ [sortField]: sortOrder }, { id: sortOrder }],
       take: limit + 1,
       select: {
         id: true,
@@ -107,11 +132,14 @@ export class SackSearchService {
         },
       },
     });
+    const totalEstimate = params.withTotal ? await prisma.sack.count({ where }) : undefined;
 
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const ids = pageRows.map((s) => s.id);
-    const nextCursor = hasMore ? buildNextCursor(pageRows[pageRows.length - 1]) : null;
+    const nextCursor = hasMore
+      ? buildNextDynamicCursor(pageRows[pageRows.length - 1] as unknown as Record<string, unknown>, sortField)
+      : null;
 
     // Sayfa kapsamı aggregate'leri: toplam içerik + (filtre aktifse) eşleşen kısım.
     const [allAgg, matchAgg, swatchAgg] = ids.length
@@ -163,7 +191,11 @@ export class SackSearchService {
       };
     });
 
-    return { success: true, data, pagination: { nextCursor, hasMore, limit } };
+    return {
+      success: true,
+      data,
+      pagination: { nextCursor, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) },
+    };
   }
 
   /**

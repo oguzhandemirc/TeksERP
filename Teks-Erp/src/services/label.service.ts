@@ -83,7 +83,7 @@ export interface LabelPayload {
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---
   /** Etiket türü ayırt edici — verilmezse roll (ROLL_RAW/ROLL_FINISHED) kabul edilir. */
   kind?: LabelKind;
-  /** Kartela kart no (SW-...). */
+  /** Kartela kart no (KRT...). */
   cardNumber?: string | null;
   /** Kartela Boy (cm) — roll'da metraj (lengthMeters) kullanılır. */
   lengthCm?: number | null;
@@ -435,7 +435,7 @@ export class LabelService {
     // "Bizdeki ad" alanlarının ayrı işlediğini önizlemede net görsün.
     const mockPayload: LabelPayload = {
       rollId: "preview",
-      barcode: "TR20260526R0123",
+      barcode: "T120726H0001",
       status: "STOCK",
       qualityGrade: "1. Kalite",
       widthCm: 152,
@@ -454,15 +454,15 @@ export class LabelService {
       colorNameSource: "OVERRIDE" as NameSource,
       customerName: "Demo Tekstil A.Ş.",
       customerId: "preview",
-      orderNumber: "SIP-2026-00123",
+      orderNumber: "SIP1207260001",
       orderLineId: "preview",
-      batchNumber: "PRT-A24",
+      batchNumber: "P1207260001",
       printedAt: new Date().toISOString(),
       // SWATCH önizlemesinde kartela alanları görünsün (roll düzeninde yok sayılır).
       kind: input.kind,
-      cardNumber: "SW-2026-05-0042",
+      cardNumber: "KRT1207260001",
       lengthCm: 30,
-      parentRollBarcode: "TR20260526R0123",
+      parentRollBarcode: "T120726H0001",
     };
     const mockTemplate = {
       id: "preview",
@@ -514,7 +514,7 @@ export class LabelService {
   }): Promise<ApiResponse<{ lines: Array<{ text: string; size: string; bold: boolean }> }>> {
     const payload: LabelPayload = {
       rollId: "preview",
-      barcode: "TR20260526R0123",
+      barcode: "T120726H0001",
       status: "STOCK",
       qualityGrade: "1. Kalite",
       widthCm: 152,
@@ -531,14 +531,14 @@ export class LabelService {
       colorNameSource: "OVERRIDE" as NameSource,
       customerName: "Demo Tekstil A.S.",
       customerId: "preview",
-      orderNumber: "SIP-2026-00123",
+      orderNumber: "SIP1207260001",
       orderLineId: "preview",
-      batchNumber: "PRT-A24",
+      batchNumber: "P1207260001",
       printedAt: new Date().toISOString(),
       kind: input.kind,
-      cardNumber: "SW-2026-05-0042",
+      cardNumber: "KRT1207260001",
       lengthCm: 30,
-      parentRollBarcode: "TR20260526R0123",
+      parentRollBarcode: "T120726H0001",
     };
     const template = {
       id: "preview",
@@ -826,7 +826,7 @@ export class LabelService {
 
   /** Örnek (mock) top etiketi render girdisi — Test Et için. peripheralId medyayı (geometri) belirler. */
   private async buildSampleRenderInput(peripheralId?: string | null): Promise<LabelRenderInput> {
-    const sampleBarcode = "TEKSORNEK0001";
+    const sampleBarcode = "T120726F0001";
     const payload: LabelPayload = {
       rollId: "ornek-id",
       barcode: sampleBarcode,
@@ -846,9 +846,9 @@ export class LabelService {
       colorNameSource: "DEFAULT",
       customerName: "ÖRNEK MÜŞTERİ",
       customerId: null,
-      orderNumber: "ORN-0001",
+      orderNumber: "SIP1207260001",
       orderLineId: null,
-      batchNumber: "P-ORNEK-001",
+      batchNumber: "P1207260001",
       printedAt: new Date().toISOString(),
     };
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);

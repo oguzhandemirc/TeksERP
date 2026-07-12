@@ -430,7 +430,7 @@ router.get("/:id", verifyToken, requirePermission("order:read"), controller.find
  *   post:
  *     tags: [Orders]
  *     summary: Yeni sipariş oluştur
- *     description: Sipariş numarası otomatik üretilir (YYYYMMDD-N formatında).
+ *     description: Sipariş numarası otomatik üretilir (SIP+GGAAYY+NNNN (örn SIP1207260001) formatında).
  *     security:
  *       - bearerAuth: []
  *     requestBody:

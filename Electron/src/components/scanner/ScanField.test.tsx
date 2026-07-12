@@ -9,11 +9,9 @@ import type { BarcodeKind } from "@/lib/scanner/barcode-kind";
 function Harness({
   onScan,
   expectPrefix,
-  validateChecksum,
 }: {
   onScan: (c: string) => void;
   expectPrefix?: BarcodeKind | BarcodeKind[];
-  validateChecksum?: boolean;
 }) {
   const [v, setV] = useState("");
   return (
@@ -23,7 +21,6 @@ function Harness({
       onScan={onScan}
       placeholder="okut"
       expectPrefix={expectPrefix}
-      validateChecksum={validateChecksum}
       submitLabel="Getir"
     />
   );
@@ -34,33 +31,30 @@ describe("ScanField", () => {
     const onScan = vi.fn();
     renderWithProviders(<Harness onScan={onScan} expectPrefix="ROLL" />);
     const input = screen.getByPlaceholderText("okut");
-    await userEvent.type(input, "TEKS20260615AB12CD34{Enter}");
-    expect(onScan).toHaveBeenCalledWith("TEKS20260615AB12CD34");
+    await userEvent.type(input, "T120726H0001{Enter}");
+    expect(onScan).toHaveBeenCalledWith("T120726H0001");
   });
 
   it("submit butonu da onScan tetikler", async () => {
     const onScan = vi.fn();
     renderWithProviders(<Harness onScan={onScan} />);
-    await userEvent.type(screen.getByPlaceholderText("okut"), "CV-260615-001");
+    await userEvent.type(screen.getByPlaceholderText("okut"), "CV1207260001");
     await userEvent.click(screen.getByRole("button", { name: "Getir" }));
-    expect(onScan).toHaveBeenCalledWith("CV-260615-001");
+    expect(onScan).toHaveBeenCalledWith("CV1207260001");
   });
 
   it("yanlış tür (expectPrefix ROLL'a refakat kartı) → onScan engellenir + uyarı", async () => {
     const onScan = vi.fn();
     renderWithProviders(<Harness onScan={onScan} expectPrefix="ROLL" />);
-    await userEvent.type(screen.getByPlaceholderText("okut"), "RK26049F2K3P6{Enter}");
+    await userEvent.type(screen.getByPlaceholderText("okut"), "RK1207260001{Enter}");
     expect(onScan).not.toHaveBeenCalled();
     expect(screen.getByText(/buraya top barkodu okut/i)).toBeInTheDocument();
   });
 
-  it("checksum uyarısı gösterir ama submit'i ENGELLEMEZ", async () => {
+  it("bilinmeyen (serbest) kod expectPrefix'e takılmaz — geçer", async () => {
     const onScan = vi.fn();
-    renderWithProviders(<Harness onScan={onScan} expectPrefix="SWATCH" validateChecksum />);
-    // SW- formatında ama yanlış checksum (-9)
-    await userEvent.type(screen.getByPlaceholderText("okut"), "SW26045A3Z9B9");
-    expect(screen.getByText(/checksum tutmuyor/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Getir" }));
-    expect(onScan).toHaveBeenCalledWith("SW26045A3Z9B9");
+    renderWithProviders(<Harness onScan={onScan} expectPrefix="SWATCH" />);
+    await userEvent.type(screen.getByPlaceholderText("okut"), "RAF-A12{Enter}");
+    expect(onScan).toHaveBeenCalledWith("RAF-A12");
   });
 });

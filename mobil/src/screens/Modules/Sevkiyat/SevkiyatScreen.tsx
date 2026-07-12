@@ -25,24 +25,20 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
-import { useShipmentConfirmationEnabled, FLAGS_KEY } from '../../../hooks/useFeatureFlags';
+import { FLAGS_KEY } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
 
 // =============================================================================
-// Sevk Kapısı — havuzdan kurulmuş sevkiyatlar (PLANNED=planlı, AT_DOOR=kapı önü).
-// HAFİF board: FlashList + cursor sonsuz kaydırma + sunucu araması/durum filtresi.
-// Kart özet; çuval+rulo dökümü karta tıklayınca lazy (SackContentsModal). PLANNED'da
-// çuval çıkarılabilir (havuza döner). Stok yalnız çıkışta (dispatch) düşer.
+// Sevk Kapısı — havuzdan kurulmuş, sevk bekleyen PLANNED sevkiyatlar. Sevk onayı
+// açıkken kurulan (veya kapalıyken kurulup henüz sevk edilmemiş) sevkiyatlar burada
+// dispatch edilir — kapı önü ara adımı YOK; PLANNED → tek "Sevk Et" ile DISPATCHED.
+// HAFİF board: FlashList + cursor sonsuz kaydırma + sunucu araması. Kart özet;
+// çuval+rulo dökümü karta tıklayınca lazy (SackContentsModal). PLANNED'da çuval
+// çıkarılabilir (havuza döner). Stok yalnız çıkışta (dispatch) düşer.
 // =============================================================================
 
 const PAGE_SIZE = 30;
-type StatusFilter = 'ALL' | 'PLANNED' | 'AT_DOOR';
-const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: 'ALL', label: 'Tümü' },
-  { key: 'PLANNED', label: 'Planlı' },
-  { key: 'AT_DOOR', label: 'Kapı Önü' },
-];
 
 const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
@@ -59,9 +55,7 @@ export default function SevkiyatScreen() {
   usePortraitLock(useDeviceType() === 'phone');
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const qc = useQueryClient();
-  const confirmRequired = useShipmentConfirmationEnabled();
 
-  const [status, setStatus] = useState<StatusFilter>('ALL');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
@@ -71,12 +65,11 @@ export default function SevkiyatScreen() {
   const [driver, setDriver] = useState('');
   const [carrier, setCarrier] = useState('');
 
-  // HAFİF board — cursor sonsuz kaydırma + server arama/durum filtresi.
+  // HAFİF board — cursor sonsuz kaydırma + server arama. Board yalnız PLANNED döner.
   const listQ = useInfiniteQuery({
-    queryKey: ['sack-store', 'board', status, debouncedSearch] as const,
+    queryKey: ['sack-store', 'board', debouncedSearch] as const,
     queryFn: ({ pageParam }) =>
       packingService.listSackStoreBoard({
-        status: status === 'ALL' ? undefined : status,
         search: debouncedSearch || undefined,
         cursor: pageParam,
         limit: PAGE_SIZE,
@@ -119,32 +112,6 @@ export default function SevkiyatScreen() {
     },
   });
 
-  const moveToDoorMut = useMutation({
-    mutationFn: (id: string) => packingService.moveToDoor(id),
-    onSuccess: (res) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Kapı önüne kondu', text2: res.message });
-      refresh();
-    },
-    onError: (e: Error) => {
-      Toast.show({ type: 'error', text1: 'Kapı önüne konamadı', text2: e.message });
-      refresh();
-    },
-  });
-
-  const pullBackMut = useMutation({
-    mutationFn: (id: string) => packingService.pullBackFromDoor(id),
-    onSuccess: (res) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Planlıya geri çekildi', text2: res.message });
-      refresh();
-    },
-    onError: (e: Error) => {
-      Toast.show({ type: 'error', text1: 'Geri çekilemedi', text2: e.message });
-      refresh();
-    },
-  });
-
   // Çuval çıkar (PLANNED) → havuza döner. Modal içindeki çuval başlıklarından tetiklenir.
   const removeSackMut = useMutation({
     mutationFn: ({ shipmentId, sackId }: { shipmentId: string; sackId: string }) =>
@@ -169,20 +136,17 @@ export default function SevkiyatScreen() {
     setCarrier('');
   };
 
-  const busy = dispatchMut.isPending || moveToDoorMut.isPending || pullBackMut.isPending;
+  const busy = dispatchMut.isPending;
 
   const renderCard = ({ item: sh }: { item: SackStoreShipmentLite }) => {
     const wait = waitText(sh.createdAt);
-    const isPlanned = sh.status === 'PLANNED';
     return (
       <Surface style={styles.card} elevation={1}>
         <View style={styles.cardHead}>
           <View style={styles.titleWrap}>
             <Text style={styles.shipNo}>{sh.shipmentNo}</Text>
-            <View style={[styles.statusChip, isPlanned ? styles.chipReady : styles.chipDoor]}>
-              <Text style={[styles.statusChipText, { color: isPlanned ? '#7c3aed' : '#b45309' }]}>
-                {isPlanned ? 'Planlı' : 'Kapı Önü'}
-              </Text>
+            <View style={[styles.statusChip, styles.chipReady]}>
+              <Text style={[styles.statusChipText, { color: '#7c3aed' }]}>Planlı</Text>
             </View>
             {/* Saha #22: yurtiçi/yurtdışı rozeti */}
             <View style={[styles.statusChip, sh.destination === 'EXPORT' ? styles.chipExport : styles.chipDomestic]}>
@@ -203,78 +167,39 @@ export default function SevkiyatScreen() {
           {wait ? <Text style={styles.waitText}>⏳ {wait}</Text> : null}
         </View>
 
-        {/* İçeriği gör — tıklayınca çuval+rulo dökümü lazy gelir (PLANNED'da çuval çıkarma) */}
+        {/* İçeriği gör — tıklayınca çuval+rulo dökümü lazy gelir (çuval çıkarma) */}
         <TouchableRipple onPress={() => setContentsShip(sh)} style={styles.contentsBtn}>
           <View style={styles.contentsRow}>
             <Icon source="sack" size={15} color="#4338ca" />
             <Text style={styles.contentsText}>
-              {sh.rollCount} top · çuval içeriğini gör{isPlanned ? ' / çuval çıkar' : ''}
+              {sh.rollCount} top · çuval içeriğini gör / çuval çıkar
             </Text>
             <Icon source="chevron-right" size={18} color="#94a3b8" />
           </View>
         </TouchableRipple>
 
-        {/* Durum bazlı aksiyonlar */}
+        {/* Aksiyonlar — çuval çıkar / sevk et (kapı önü ara adımı yok) */}
         <View style={styles.cardActions}>
-          {isPlanned ? (
-            <>
-              <Button
-                mode="outlined"
-                icon="sack-percent"
-                textColor="#b45309"
-                onPress={() => setContentsShip(sh)}
-                disabled={busy}
-                style={styles.actBtn}
-              >
-                Çuval Çıkar
-              </Button>
-              {confirmRequired ? (
-                <Button
-                  mode="contained"
-                  icon="truck-fast"
-                  buttonColor="#7c3aed"
-                  onPress={() => moveToDoorMut.mutate(sh.id)}
-                  disabled={busy}
-                  style={styles.actBtn}
-                >
-                  Kapı Önüne
-                </Button>
-              ) : (
-                <Button
-                  mode="contained"
-                  icon="truck-check"
-                  buttonColor="#16a34a"
-                  onPress={() => openDispatch(sh)}
-                  disabled={busy}
-                  style={styles.actBtn}
-                >
-                  Sevk Et
-                </Button>
-              )}
-            </>
-          ) : (
-            <>
-              <Button
-                mode="outlined"
-                icon="arrow-left"
-                onPress={() => pullBackMut.mutate(sh.id)}
-                disabled={busy}
-                style={styles.actBtn}
-              >
-                Geri Çek
-              </Button>
-              <Button
-                mode="contained"
-                icon="truck-check"
-                buttonColor="#16a34a"
-                onPress={() => openDispatch(sh)}
-                disabled={busy}
-                style={styles.actBtn}
-              >
-                Alındı
-              </Button>
-            </>
-          )}
+          <Button
+            mode="outlined"
+            icon="sack-percent"
+            textColor="#b45309"
+            onPress={() => setContentsShip(sh)}
+            disabled={busy}
+            style={styles.actBtn}
+          >
+            Çuval Çıkar
+          </Button>
+          <Button
+            mode="contained"
+            icon="truck-check"
+            buttonColor="#16a34a"
+            onPress={() => openDispatch(sh)}
+            disabled={busy}
+            style={styles.actBtn}
+          >
+            Sevk Et
+          </Button>
         </View>
       </Surface>
     );
@@ -311,19 +236,6 @@ export default function SevkiyatScreen() {
           onChangeText={setSearch}
           left={<TextInput.Icon icon="magnify" />}
         />
-        <View style={styles.statusRow}>
-          {STATUS_TABS.map((t) => (
-            <Button
-              key={t.key}
-              compact
-              mode={status === t.key ? 'contained' : 'outlined'}
-              onPress={() => setStatus(t.key)}
-              style={styles.statusBtn}
-            >
-              {t.label}
-            </Button>
-          ))}
-        </View>
       </View>
 
       <View style={{ flex: 1 }}>
@@ -351,12 +263,12 @@ export default function SevkiyatScreen() {
         />
       </View>
 
-      {/* Çuval + rulo dökümü (lazy) — PLANNED'da çuval çıkarma butonlu */}
+      {/* Çuval + rulo dökümü (lazy) — PLANNED sevkiyatta çuval çıkarma butonlu */}
       <SackContentsModal
         shipment={contentsShip}
         onDismiss={() => setContentsShip(null)}
         onRemoveSack={
-          contentsShip?.status === 'PLANNED'
+          contentsShip
             ? (sackId) => {
                 if (contentsShip) removeSackMut.mutate({ shipmentId: contentsShip.id, sackId });
               }
@@ -365,11 +277,11 @@ export default function SevkiyatScreen() {
         removing={removeSackMut.isPending}
       />
 
-      {/* Çıkış / Alındı — plaka/şoför opsiyonel */}
+      {/* Sevk çıkışı — plaka/şoför opsiyonel */}
       <AppModal visible={dispatchShip !== null} onDismiss={() => setDispatchShip(null)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
-            {dispatchShip?.shipmentNo} — {confirmRequired ? 'Alındı / Çıkış' : 'Sevk Et'}
+            {dispatchShip?.shipmentNo} — Sevk Et
           </Text>
           <Text style={styles.customer}>
             {dispatchShip?.customer.name} · {dispatchShip?.sackCount} çuval ·{' '}
@@ -404,8 +316,6 @@ export default function SevkiyatScreen() {
 
 const styles = StyleSheet.create({
   filters: { padding: 12, gap: 8, backgroundColor: '#fff' },
-  statusRow: { flexDirection: 'row', gap: 8 },
-  statusBtn: { flex: 1 },
   body: { padding: 12, paddingBottom: 24 },
   card: { borderRadius: 12, padding: 12, backgroundColor: '#fff', marginBottom: 10 },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -413,7 +323,6 @@ const styles = StyleSheet.create({
   shipNo: { fontSize: 15, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
   statusChip: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   chipReady: { backgroundColor: '#f3e8ff' },
-  chipDoor: { backgroundColor: '#fef3c7' },
   chipExport: { backgroundColor: '#e0f2fe' },
   chipDomestic: { backgroundColor: '#f1f5f9' },
   statusChipText: { fontSize: 10, fontWeight: '700' },

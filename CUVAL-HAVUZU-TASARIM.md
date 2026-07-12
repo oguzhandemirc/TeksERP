@@ -37,19 +37,20 @@ WAREHOUSE serbest top (sackId = null)
   → scanIntoSack(sackId, barcode)    → Roll.sackId (çuval hâlâ depoda, düzenlenebilir)
   → (opsiyonel) weighSack            → brüt kg + kod (irsaliye için; rezerv/mühür YOK)
   → createShipment({ sackIds, customerId, branchId?, orderIds? })
-        → Shipment PLANNED: çuvallar atanır (shipmentId + seq),
-          müşteri/şube çuvala backfill edilir, SEÇİLEN siparişlere SackAllocation yazılır
-          (distributeSacksToLines, spec+şube FIFO). shippedQty HÂLÂ değişmez.
-  → moveToDoor → AT_DOOR → dispatchShipment → DISPATCHED:
+        çuvallar atanır (shipmentId + seq), müşteri/şube çuvala backfill edilir,
+        SEÇİLEN siparişlere SackAllocation yazılır (distributeSacksToLines, spec+şube FIFO).
+        Sevk onayı KAPALI (varsayılan) → aynı adımda DISPATCHED; AÇIK → PLANNED kalır
+        (shippedQty HÂLÂ değişmez).
+  → dispatchShipment → DISPATCHED (onay açıkken; kapı önü ara adımı YOK):
         toplar SHIPPED (stok bina dışı), DISPATCHED tahsisler → OrderLine.shippedQty terfi.
   iptal: cancelShipment              → sevkiyatın tahsisleri silinir, çuvallar DEPOYA döner.
 ```
 
-- **ShipmentStatus:** `PLANNED | AT_DOOR | DISPATCHED | CANCELLED`. (PREPARING/READY yok.)
+- **ShipmentStatus:** `PLANNED | DISPATCHED | CANCELLED`. (PREPARING/READY/AT_DOOR yok — kapı önü ara adımı kaldırıldı.)
 - **Karşılanma defteri:** `SackAllocation(sackId, orderLineId, qty)` — çuval bazlı, "ne kadar
   metraj", "hangi top" değil. Yalnız **sevkiyata atanmış** çuvalların tahsisi olur; depodaki
   çuvalın tahsisi **yoktur** (rezerv kalktı).
-  - Çuval PLANNED/AT_DOOR sevkiyatta → tahsis bekler, `shippedQty`'ye **sayılmaz**.
+  - Çuval PLANNED sevkiyatta → tahsis bekler, `shippedQty`'ye **sayılmaz**.
   - Çuval DISPATCHED → tahsis `OrderLine.shippedQty`'ye sayılır (sevk defteri, kalıcı).
 - **Denorm defter-otoritatif:** `shippedQty` increment/decrement DEĞİL, her tetikte defterden
   yeniden hesaplanır (`recomputeOrderStatusForOrders` → `computeLineLedger`, drift-free).
@@ -84,7 +85,7 @@ siparişlere spec+şube FIFO ile yazılır.
 - **Electron `SackSearch`:** depo çuvallarının ana ekranı; spec (ürün/renk/en) filtresi +
   çoklu seçim → "Seçili Çuvallardan Sevkiyat Oluştur" (önizleme + müşteri/şube/sipariş
   seçimi). **Kullanıcı senaryosunun birebir ekranı.**
-- **Electron `SackStore` / mobil `SevkiyatScreen`:** PLANNED/AT_DOOR board → kapı önü / sevk.
+- **Electron `SackStore` / mobil `SevkiyatScreen`:** PLANNED board → sevk (dispatch).
 - **Sipariş görünümü:** İstenen | Sevk (shippedQty) | Açık (quantity − shippedQty).
 
 ## Belge zinciri (değişmedi)

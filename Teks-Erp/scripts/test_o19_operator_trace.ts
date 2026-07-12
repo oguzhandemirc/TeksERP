@@ -32,11 +32,13 @@ async function main() {
   const rollIds: string[] = [];
 
   try {
-    // Sevk onayı bayrağını AÇIKÇA kapat → PLANNED'dan doğrudan dispatch edilebilir.
+    // Sevk onayı bayrağını AÇ → createShipment PLANNED kurar; dispatchShipment ile ayrıca
+    // sevk edilir (dispatchedById = sevk eden izi bu adımda yazılır). Onay kapalıyken
+    // createShipment tek adımda dispatch ederdi → ayrı dispatchShipment izini gözlemleyemezdik.
     await prisma.systemSetting.upsert({
       where: { key: CONFIRM_KEY },
-      update: { value: false },
-      create: { key: CONFIRM_KEY, value: false },
+      update: { value: true },
+      create: { key: CONFIRM_KEY, value: true },
     });
 
     const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
@@ -58,7 +60,7 @@ async function main() {
       return r;
     };
 
-    // ── sack1: aç → okut → tart → yeniden tart → mühürle → sevkiyat → dispatch ──
+    // ── sack1: aç → okut → tart → yeniden tart → sevkiyat kur (PLANNED) → dispatch ──
     const roll1 = await makeRoll(1);
     const sack1 = ((await shipping.openSack({ customerId })).data as { id: string }).id;
     sackIds.push(sack1);
@@ -102,6 +104,10 @@ async function main() {
       `önce=${before?.weighedById === uid1} sonra-null=${after?.weighedById === null}`,
     );
   } finally {
+    // Sevk onayı bayrağını varsayılana (KAPALI) döndür — paylaşımlı dev DB.
+    await prisma.systemSetting
+      .upsert({ where: { key: CONFIRM_KEY }, update: { value: false }, create: { key: CONFIRM_KEY, value: false } })
+      .catch(() => {});
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
     await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { shipmentId: null, sackId: null } });
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: shipmentIds } } });

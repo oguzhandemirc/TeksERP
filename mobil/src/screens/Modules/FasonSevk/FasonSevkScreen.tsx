@@ -75,7 +75,7 @@ import {
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
 // net mesajla yakalar. Refakat kartı "RK", top (rulo) "TEKS" ile başlar; ikisi
 // asla çakışmaz. Yalnızca KESİN ters tipi reddederiz; gerisini backend doğrular.
-const looksLikeRollBarcode = (code: string) => /^TEKS/i.test(code.trim());
+const looksLikeRollBarcode = (code: string) => /^T\d/i.test(code.trim());
 const looksLikeCardBarcode = (code: string) => /^RK/i.test(code.trim());
 
 // Android LMK: OS uzun süre arka planda bırakılan uygulamayı öldürür.
@@ -405,7 +405,7 @@ export default function FasonSevkScreen() {
   const handleCardScan = async (rawBarcode: string) => {
     const barcode = rawBarcode.trim();
     if (!barcode) return;
-    // Yanlış tip: top barkodu (TEKS-) kart alanına okutulduysa anında net hata.
+    // Yanlış tip: top barkodu (T...) kart alanına okutulduysa anında net hata.
     if (looksLikeRollBarcode(barcode)) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Toast.show({

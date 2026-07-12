@@ -346,7 +346,7 @@ export class InventoryService {
       propertyIds?: string[];
       /**
        * Opsiyonel idempotency anahtarı (UUID) — offline KK1 / ağ-retry için mobil
-       * üretir. Barkod artık SUNUCU'da sıralı atandığından (TEKS+YYMMDD+H/F+A001..)
+       * üretir. Barkod artık SUNUCU'da sıralı atandığından (T+GGAAYY+H/F+NNNN)
        * dedup barkodla değil bu token'la yapılır: Roll.clientToken @unique → aynı
        * token'la 2. çağrı cached Roll döner. Verilmezse (backend-içi çağrı) dedup yok.
        */
@@ -777,7 +777,7 @@ export class InventoryService {
 
     // --- Sevkiyat kapsamı: serbest depo vs çuvallanmış (committed) ---
     // 'free'      = serbest depo (shipmentId null) — yalnız satılabilir/okutulabilir stok.
-    // 'committed' = çuvallanmış (shipmentId dolu) — çuval depo/kapı önü/sevk yolundaki.
+    // 'committed' = çuvallanmış (shipmentId dolu) — çuval depo/sevk yolundaki.
     // yok/'all'   = ayrım yapma. Depo ekranı 'free' geçer → çuvallanan top "serbest depoda"
     // görünmez (çuval depo ayrı ekranda izlenir).
     const shipmentScope = f["shipmentScope"] as string | undefined;
@@ -986,11 +986,10 @@ export class InventoryService {
   }
 
   /**
-   * Depo kapsam sayaçları — WAREHOUSE topları fiziksel yere göre ayır (ÇUVAL HAVUZU MODELİ):
+   * Depo kapsam sayaçları — WAREHOUSE topları fiziksel yere göre ayır (ÇUVAL DEPO MODELİ):
    *  - serbest:    shipmentId null + sackId null (satılabilir/okutulabilir gerçek serbest stok)
-   *  - çuval depo: shipmentId null + sackId dolu (çuval depo havuzu — açık/mühürlü çuvallar)
-   *  - planlı:     shipment.status PLANNED (sevkiyata atandı, kapı önüne çıkmadı)
-   *  - kapı önü:   shipment.status AT_DOOR (kamyon bekliyor)
+   *  - çuval depo: shipmentId null + sackId dolu (çuvala konmuş, sevk edilmemiş)
+   *  - planlı:     shipment.status PLANNED (onay bekleyen sevkiyata atandı, henüz sevk edilmedi)
    * Hepsi hâlâ binada (WAREHOUSE) ama yalnız "serbest" satılabilir stoktur. SHIPPED hariç.
    */
   async getWarehouseScope(): Promise<
@@ -998,17 +997,15 @@ export class InventoryService {
       free: { count: number; qty: number };
       pool: { count: number; qty: number };
       planned: { count: number; qty: number };
-      atDoor: { count: number; qty: number };
     }>
   > {
     const agg = (where: Prisma.RollWhereInput) =>
       prisma.roll.aggregate({ where, _count: { _all: true }, _sum: { currentQty: true } });
 
-    const [free, pool, planned, atDoor] = await Promise.all([
+    const [free, pool, planned] = await Promise.all([
       agg({ status: RollStatus.WAREHOUSE, shipmentId: null, sackId: null }),
       agg({ status: RollStatus.WAREHOUSE, shipmentId: null, sackId: { not: null } }),
       agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PLANNED } }),
-      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } }),
     ]);
 
     const pick = (r: { _count: { _all: number }; _sum: { currentQty: Prisma.Decimal | null } }) => ({
@@ -1018,7 +1015,7 @@ export class InventoryService {
 
     return {
       success: true,
-      data: { free: pick(free), pool: pick(pool), planned: pick(planned), atDoor: pick(atDoor) },
+      data: { free: pick(free), pool: pick(pool), planned: pick(planned) },
     };
   }
 
@@ -1212,7 +1209,7 @@ export class InventoryService {
       }
     }
 
-    // Spec düzenleme kilidi: atanmış sevkiyatta (PLANNED/AT_DOOR/DISPATCHED) VEYA sevkiyattaki
+    // Spec düzenleme kilidi: atanmış sevkiyatta (PLANNED/DISPATCHED) VEYA sevkiyattaki
     // çuvalda → değişiklik donmuş/havuz tahsisini bozar. Açık çuval/serbest serbest.
     const specLocked =
       roll.shipment != null || (roll.sack != null && roll.sack.shipmentId != null);
@@ -1632,8 +1629,8 @@ export class InventoryService {
           where: { id: roll.shipmentId },
           select: { status: true, shipmentNo: true },
         });
-        if (ship && (ship.status === ShipmentStatus.PLANNED || ship.status === ShipmentStatus.AT_DOOR)) {
-          blockReason = `Bu top planlı/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
+        if (ship && ship.status === ShipmentStatus.PLANNED) {
+          blockReason = `Bu top planlı bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
         }
       } else if (roll.sackId) {
         const sk = await prisma.sack.findUnique({ where: { id: roll.sackId }, select: { shipmentId: true, sackNo: true } });
@@ -1715,16 +1712,16 @@ export class InventoryService {
       );
     }
 
-    // Planlı/kapı önü bir sevkiyata veya mühürlü çuvala bağlı mı? Bağlıysa iptal
+    // Planlı bir sevkiyata veya mühürlü çuvala bağlı mı? Bağlıysa iptal
     // edilemez — önce sevkten/çuvaldan çıkarılmalı (donmuş tahsis/rezerv bayat kalmasın).
     if (existing.shipmentId) {
       const ship = await prisma.shipment.findUnique({
         where: { id: existing.shipmentId },
         select: { status: true, shipmentNo: true },
       });
-      if (ship && (ship.status === ShipmentStatus.PLANNED || ship.status === ShipmentStatus.AT_DOOR)) {
+      if (ship && ship.status === ShipmentStatus.PLANNED) {
         throw AppError.conflict(
-          `Bu top planlı/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
+          `Bu top planlı bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
         );
       }
     } else if (existing.sackId) {
@@ -1993,7 +1990,7 @@ export class InventoryService {
       }
     }
     // ÇUVAL HAVUZU: renk/en/kalite değişimi spec-karşılanmayı bozar. Atanmış sevkiyatta
-    // (PLANNED/AT_DOOR/DISPATCHED) VEYA sevkiyattaki çuvalda → reddet (önce çuvaldan çıkar /
+    // (PLANNED/DISPATCHED) VEYA sevkiyattaki çuvalda → reddet (önce çuvaldan çıkar /
     // sevkten çıkar). Açık çuval + serbest WAREHOUSE/STOCK serbest.
     if (roll.shipmentId) {
       throw AppError.conflict(

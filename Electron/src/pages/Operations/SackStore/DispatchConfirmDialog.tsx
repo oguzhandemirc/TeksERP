@@ -89,8 +89,8 @@ export function DispatchConfirmDialog({
   const contents = contentsQ.data?.data;
 
   const scannedSet = new Set((scannedCodes ?? []).map(norm));
-  const isScanned = (sack: { sackNo: string; manualCode: string | null }) =>
-    scannedSet.has(norm(sack.sackNo)) || (sack.manualCode ? scannedSet.has(norm(sack.manualCode)) : false);
+  const isScanned = (sack: { sackNo: string }) =>
+    scannedSet.has(norm(sack.sackNo));
 
   const scannedCount = contents ? contents.sacks.filter(isScanned).length : 0;
   const allScanned = !!contents && contents.sackCount > 0 && scannedCount === contents.sackCount;
@@ -218,12 +218,7 @@ export function DispatchConfirmDialog({
                               ) : (
                                 <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-dashed border-muted-foreground/50" />
                               ))}
-                            <span className="truncate">
-                              {s.sackNo}
-                              {s.manualCode ? (
-                                <span className="ml-1 text-xs text-muted-foreground">({s.manualCode})</span>
-                              ) : null}
-                            </span>
+                            <span className="truncate">{s.sackNo}</span>
                           </span>
                           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                             {s.rollCount} top · {DEC.format(s.totalQty)} m

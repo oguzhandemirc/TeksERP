@@ -68,7 +68,7 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
                     <View style={styles.sackHead}>
                       <View style={styles.sackChip}>
                         <Icon source="sack" size={13} color="#4338ca" />
-                        <Text style={styles.sackChipText}>{sk.manualCode?.trim() || `#${sk.seq}`}</Text>
+                        <Text style={styles.sackChipText}>{sk.sackNo || `#${sk.seq}`}</Text>
                       </View>
                       <Text style={styles.sackMeta}>
                         {fmtKg(sk.weightKg)} · {sk.rollCount} top
@@ -81,7 +81,7 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
                           iconColor="#dc2626"
                           disabled={removing}
                           style={styles.removeBtn}
-                          onPress={() => onRemoveSack(sk.id, sk.manualCode?.trim() || `#${sk.seq}`)}
+                          onPress={() => onRemoveSack(sk.id, sk.sackNo || `#${sk.seq}`)}
                           accessibilityLabel="Çuvalı sevkiyattan çıkar"
                         />
                       )}

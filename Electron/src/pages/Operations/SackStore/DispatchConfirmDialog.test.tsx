@@ -35,7 +35,6 @@ const contents = {
         id: "sk1",
         sackNo: "CV-260601-001",
         seq: 1,
-        manualCode: "AMB00001",
         weightKg: 10,
         rollCount: 3,
         swatchCount: 0,
@@ -48,7 +47,6 @@ const contents = {
         id: "sk2",
         sackNo: "CV-260601-002",
         seq: 2,
-        manualCode: "AMB00002",
         weightKg: null,
         rollCount: 2,
         swatchCount: 0,
@@ -77,11 +75,11 @@ describe("DispatchConfirmDialog — ortak sevk onayı", () => {
     expect(within(dialog).queryByText(/okutuldu/)).not.toBeInTheDocument();
   });
 
-  it("scannedCodes verilince X/Y sayacı işler (manuel kod eşleşmesi dahil), not gizlenir", async () => {
+  it("scannedCodes verilince X/Y sayacı işler (sackNo eşleşmesi), not gizlenir", async () => {
     renderWithProviders(
       <DispatchConfirmDialog
         shipment={info}
-        scannedCodes={["amb00001"]} // manuel kod, küçük harf — normalize eşleşmeli
+        scannedCodes={["cv-260601-001"]} // sackNo, küçük harf — normalize eşleşmeli
         onOpenChange={() => {}}
       />,
     );

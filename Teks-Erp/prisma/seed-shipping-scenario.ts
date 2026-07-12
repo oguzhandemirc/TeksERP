@@ -20,7 +20,7 @@
 // Karşılanma denormı (OrderLine/Order.shippedQty) SackAllocation defteriyle ELDE TUTARLI
 // yazılır (packedQty/rezerv kalktı; sipariş görünümü İstenen | Sevk | Açık):
 //   shippedQty = Σ SackAllocation.qty (YALNIZ çuval DISPATCHED sevkiyatta)
-//   PLANNED/AT_DOOR tahsis shippedQty'ye SAYILMAZ; Açık = quantity − shippedQty.
+//   PLANNED tahsis shippedQty'ye SAYILMAZ; Açık = quantity − shippedQty.
 // =============================================================================
 
 import { PrismaClient, Prisma } from "@prisma/client";
@@ -366,7 +366,7 @@ async function seed() {
   });
 
   // --- ShipmentOrder (donmuş tahsislerden türeyen sipariş kümesi) ---
-  //   isActive: PLANNED/AT_DOOR → true; DISPATCHED/CANCELLED → false (app katmanı kuralı).
+  //   isActive: PLANNED → true; DISPATCHED/CANCELLED → false (app katmanı kuralı).
   await prisma.shipmentOrder.createMany({
     data: [
       { shipmentId: shipDispatched.id, orderId: o2.id, isActive: false },

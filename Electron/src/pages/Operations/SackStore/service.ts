@@ -3,9 +3,9 @@ import type { ApiResponse } from "@/types/api";
 import type { DispatchPayload, SackStoreListParams, SackStoreListResponse, ShipmentContents } from "./types";
 
 /**
- * Sevk Kapısı servisi — havuzdan kurulmuş sevkler (PLANNED/AT_DOOR) ve durum
- * geçişleri. Liste HAFİF + cursor sayfalı + sunucu-aramalı (rulo içermez);
- * çuval+rulo dökümü karta tıklayınca `shipmentContents` ile lazy gelir.
+ * Sevk Kapısı servisi — havuzdan kurulmuş PLANNED (çıkış bekleyen) sevkler ve
+ * sevk çıkışı (dispatch). Liste HAFİF + cursor sayfalı + sunucu-aramalı (rulo
+ * içermez); çuval+rulo dökümü karta tıklayınca `shipmentContents` ile lazy gelir.
  * apiClient interceptor hata mesajını zaten toast'lar (mutation onError yok).
  */
 export const sackStoreService = {
@@ -27,18 +27,6 @@ export const sackStoreService = {
   shipmentContents: (shipmentId: string): Promise<ApiResponse<ShipmentContents>> =>
     apiClient
       .get<ApiResponse<ShipmentContents>>(`/api/shipping/shipments/${shipmentId}/sack-contents`)
-      .then((r) => r.data),
-
-  /** PLANNED → AT_DOOR ("Kapı Önüne Koy"). */
-  moveToDoor: (id: string): Promise<ApiResponse<{ id: string }>> =>
-    apiClient
-      .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/move-to-door`, {})
-      .then((r) => r.data),
-
-  /** AT_DOOR → PLANNED ("Geri Çek"). */
-  pullBack: (id: string): Promise<ApiResponse<{ id: string }>> =>
-    apiClient
-      .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/pull-back`, {})
       .then((r) => r.data),
 
   /** PLANNED sevkiyattan çuvalı çıkar → çuval havuzuna geri döner. */

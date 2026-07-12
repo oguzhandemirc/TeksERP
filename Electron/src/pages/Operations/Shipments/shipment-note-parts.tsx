@@ -19,7 +19,7 @@ export interface ShipmentDocLine {
 }
 export interface ShipmentDocSack {
   seq: number;
-  manualCode: string | null;
+  sackNo: string | null;
   weightKg: number | null;
   productSummary: {
     itemName: string;
@@ -140,7 +140,7 @@ export function SackBreakdown({ sacks, totalKg }: { sacks: ShipmentDocSack[]; to
             <div className="flex items-center justify-between border-b border-gray-300 bg-gray-50 px-2 py-1 text-[11px] font-semibold">
               <span>
                 Çuval #{s.seq}
-                {s.manualCode ? ` · ${s.manualCode}` : ""}
+                {s.sackNo ? ` · ${s.sackNo}` : ""}
               </span>
               <span className="tabular-nums">
                 {s.weightKg != null ? `${NUMKG.format(s.weightKg)} kg` : "—"} brüt

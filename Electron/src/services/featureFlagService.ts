@@ -150,9 +150,9 @@ export interface FeatureFlags {
   /** Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
    *  Pasifken eşleşmemiş tabletler de sisteme girer (makine atfı NULL kalır). ENFORCE edilir. */
   devicePairingRequired: boolean;
-  /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (false=default). Kapalıyken
-   *  mobil ① Sevkiyat ekranında "Hemen Sevk Et" kısayolu görünür; açıkken çıkış yalnız ②
-   *  "Sevk Çıkışı" ekranından onaylanır. Ara depoda bekleme her iki modda da mümkündür. */
+  /** Sevk onayı adımı zorunlu mu (false=default). Kapalıyken çuvallar seçilir seçilmez
+   *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
+   *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */
   shipmentConfirmationEnabled: boolean;
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (true=default/açık).
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma)
@@ -207,9 +207,6 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */
   rollNameTemplate: string;
-  /** Çuval kodu otomatik üretim şablonu ({SIRA:N} zorunlu+sonda, {YYMMDD}, {MUSTERI:N}).
-   *  Backend ENFORCE eder — çuval açılışında kod bu şablondan üretilir (override serbest). */
-  sackCodeTemplate: string;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket

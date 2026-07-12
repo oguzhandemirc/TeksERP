@@ -53,7 +53,7 @@ export const SETTING_KEYS = {
    *  etmez — salt UI rehberi; gizlenince zaten null gelir. */
   KARTELA_MEASUREMENT_ENABLED: "kartela.measurementEnabled",
   /** İş emri "Parti Kodu" (batchNumber) otomatik mi üretilsin manuel mi girilsin.
-   *  Default false (manuel). Açıkken form otomatik P-YYMMDD-NNN önerir, override edilebilir. */
+   *  Default false (manuel). Açıkken form otomatik P+GGAAYY+NNNN önerir, override edilebilir. */
   WORKORDER_PARTY_CODE_AUTO: "workorder.partyCodeAuto",
   /** Sipariş oluştururken termin (deadline) verilmediyse orderDate + N gün. Default 7. */
   ORDER_DEFAULT_DEADLINE_DAYS: "order.defaultDeadlineDays",
@@ -66,10 +66,9 @@ export const SETTING_KEYS = {
    *  tabletler de giriş yapıp çalışabilir (makine atfı NULL kalır). True iken
    *  eşleşmemiş/pasif cihaz device.middleware'de 401 ile kesilir. ENFORCE edilir. */
   DEVICE_PAIRING_REQUIRED: "device.pairingRequired",
-  /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu. Default false (kapalı):
-   *  paketleyen ① ekranından "Hemen Sevk Et" ile direkt sevk edebilir. Açıkken ① sadece
-   *  "Sevke Hazır" yapar; çıkış yalnız ② "Sevk Çıkışı" ekranından onaylanır. Sadece UI
-   *  rehberi — backend ENFORCE ETMEZ (her iki yoldan da dispatch kabul edilir). */
+  /** Sevk için ayrı onay adımı zorunlu mu. Default false (KAPALI): çuvalları seç → Sevk Et
+   *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
+   *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
   SHIPMENT_CONFIRMATION_ENABLED: "shipping.confirmationEnabled",
   /** Refakat kartı marka/içerik ayarı (JSON): firma adı + hangi bölümler basılsın.
    *  Kart oluşturulurken snapshot'a DONDURULUR → reprint düzeni de sabit kalır. */
@@ -1455,11 +1454,9 @@ export async function readDevicePairingRequired(
 }
 
 /**
- * Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu? Default false (kapalı).
- * Kapalıyken mobil ① "Sevkiyat" ekranı "Hemen Sevk Et" kısayolunu gösterir (paketleyen
- * direkt sevk eder); açıkken ① sadece "Sevke Hazır" yapar ve çıkış ② "Sevk Çıkışı"
- * ekranından onaylanır. Sadece UI rehberi — backend ENFORCE ETMEZ (her iki yoldan da
- * dispatch kabul edilir; ara depoda bekleme + sonradan çıkış flag'den bağımsız her zaman var).
+ * Sevk için ayrı onay adımı zorunlu mu? Default false (KAPALI). Kapalıyken çuvalları seç →
+ * Sevk Et → createShipment DOĞRUDAN dispatch eder (DISPATCHED). Açıkken createShipment PLANNED
+ * kurar; çıkış ayrıca "Sevk Kapısı"ndan dispatchShipment ile onaylanır. Kapı önü adımı YOK.
  */
 export async function readShipmentConfirmationEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,

@@ -105,8 +105,6 @@ router.post("/shipments/:id/add-sacks", verifyToken, WRITE, controller.addSacksT
 router.post("/shipments/:id/remove-sack", verifyToken, WRITE, controller.removeSackFromShipment);
 router.post("/shipments/:id/destination", verifyToken, WRITE, controller.setDestination);
 router.post("/shipments/:id/procedure-code", verifyToken, WRITE, controller.setProcedureCode);
-router.post("/shipments/:id/move-to-door", verifyToken, WRITE, controller.moveToDoor);
-router.post("/shipments/:id/pull-back", verifyToken, WRITE, controller.pullBackFromDoor);
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
 router.get("/shipments/:id/cancel-preview", verifyToken, READ, controller.cancelPreview);
 router.post("/shipments/:id/cancel", verifyToken, WRITE, controller.cancelShipment);

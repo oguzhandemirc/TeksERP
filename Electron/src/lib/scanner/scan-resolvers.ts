@@ -109,7 +109,6 @@ interface SackRow {
 
 const SACK_STATUS_LABEL: Record<string, string> = {
   PLANNED: "Planlı Sevkiyat",
-  AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
   CANCELLED: "İptal",
 };
@@ -117,7 +116,7 @@ const SACK_STATUS_LABEL: Record<string, string> = {
 /**
  * Duruma göre TEK akıllı birincil hedef (operatörün karar yükünü düşür):
  * Depoda (sevkiyata atanmamış, status yok) → Çuval Deposu (içerik orada düzenlenir);
- * PLANNED/AT_DOOR → Sevk Kapısı (kapı aksiyonları orada), DISPATCHED → yalnız Çuval
+ * PLANNED → Sevk Kapısı (sevk çıkışı orada), DISPATCHED → yalnız Çuval
  * Deposu araması (içerik kilitli). Arama + Paketleme tek hub'da birleşti.
  */
 function sackActions(code: string, status: string | undefined): ScanAction[] {
@@ -137,7 +136,6 @@ function sackActions(code: string, status: string | undefined): ScanAction[] {
   }
   switch (status) {
     case "PLANNED":
-    case "AT_DOOR":
       return [{ ...store, primary: true }, hub];
     case "DISPATCHED":
       // Hub'a özel seed: sackCode filtresi + "sevk edilmişleri de ara" birlikte
@@ -224,8 +222,8 @@ export async function resolveScan(kind: BarcodeKind, code: string): Promise<Scan
         };
       case "UNKNOWN":
       default:
-        // Serbest çuval kodu (manualCode) olabilir — son çare olarak dene.
-        return await resolveSackByCode(code, "UNKNOWN");
+        // Tek tip kod kalıbı: bilinmeyen prefix = eşleşme yok.
+        return notFound(kind, code);
     }
   } catch {
     return notFound(kind, code);

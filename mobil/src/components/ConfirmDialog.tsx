@@ -4,8 +4,6 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import AppModal from './AppModal';
 import {
@@ -157,8 +155,9 @@ export default function ConfirmDialog(props: Props) {
       onDismiss={props.onDismiss}
       dismissable={!props.confirming}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      {/* Klavye lifti AppModal'dan gelir (merkez modal yukarı kayar) — içteki
+          RN KeyboardAvoidingView (Android'de zaten no-op'tu) kaldırıldı. */}
+      <View
         style={[
           styles.sheet,
           { maxWidth: Math.min(winW * 0.9, 480), maxHeight: winH * 0.85 },
@@ -238,7 +237,7 @@ export default function ConfirmDialog(props: Props) {
             {props.confirmLabel ?? (isDestructive ? 'Onayla' : 'Tamam')}
           </Button>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </AppModal>
   );
 }

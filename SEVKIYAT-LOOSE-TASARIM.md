@@ -7,7 +7,7 @@
 > (`ShipmentAllocation`) + PREPARING/READY ara modeli de artık **ÇUVAL HAVUZU ("B") modeline
 > superseded**: çuval **müşteriye ait** (`Sack.customerId`), aç→okut→**mühürle** →
 > `rebalanceCustomerPool` FIFO ile `OrderLine.packedQty` rezervi (`SackAllocation`); sevkiyat
-> `createShipment({sackIds})` ile havuzdan kurulur (PLANNED→AT_DOOR→DISPATCHED); `ShipmentOrder`
+> `createShipment({sackIds})` ile havuzdan kurulur (PLANNED→DISPATCHED); `ShipmentOrder`
 > türetilir; `markReady`/`ShipmentAllocation`/`retarget`/PREPARING-READY **kaldırıldı**.
 > **Kanonik referans:** `CUVAL-HAVUZU-TASARIM.md` + `scripts/test_sack_pool_lifecycle.ts` +
 > `schema.prisma` (§Shipment/Sack/SackAllocation). Bu doküman yalnız tarihsel kararlar için tutuluyor.

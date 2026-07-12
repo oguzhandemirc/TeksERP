@@ -334,7 +334,6 @@ export const ENUM_LABELS: Record<string, string> = {
   IDLE: "Zaman Aşımı",
   ADMIN: "Panelden Kapatıldı",
   // ShipmentStatus / Destination
-  AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
   DOMESTIC: "Yurtiçi",
   EXPORT: "İhracat",

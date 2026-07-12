@@ -2234,15 +2234,14 @@ model PrintedDocument {
 // =============================================================================
 
 enum ShipmentStatus {
-  PLANNED // Çuvallar seçildi, sevkiyat kuruldu — tahsis (SackAllocation) yazıldı, toplar hâlâ WAREHOUSE (serbest DEĞİL)
-  AT_DOOR // Kapı Önü — kamyon bekliyor. "Alındı" onayıyla DISPATCHED olur (sevk onayı bayrağı açıkken zorunlu durak)
-  DISPATCHED // Kamyon aldı/çıktı — toplar SHIPPED, fiziksel stok bina dışı (stok yalnız burada düşer)
-  CANCELLED // İptal — çuvallar havuza döner (shipmentId null), donmuş tahsis rezerve geri döner (rebalance)
+  PLANNED // Onay bekliyor (yalnız sevk-onayı AÇIKKEN): kuruldu + tahsis yazıldı, toplar hâlâ WAREHOUSE. Sevk Kapısı'ndan dispatch edilir.
+  DISPATCHED // Sevk edildi — toplar SHIPPED, fiziksel stok bina dışı (stok yalnız burada düşer). Onay KAPALIYKEN createShipment doğrudan buraya kurar.
+  CANCELLED // İptal — çuvallar depoya döner (shipmentId null), tahsisler silinir
 }
 
 /// Saha #19+#22: sevkiyat varış kapsamı. Yurtiçi default; çuval tartısı zorunluluğu
-/// yalnız EXPORT'ta (yurtiçi kg girilmeden Sevke Hazır/Sevk edilebilir). Çuval depo /
-/// kapı önünde rozet + filtre olarak görünür (sıkı bir ayrım değil, farkedilebilirlik).
+/// yalnız EXPORT'ta (yurtiçi kg girilmeden sevk edilebilir). Sevkiyatta rozet + filtre
+/// olarak görünür (sıkı bir ayrım değil, farkedilebilirlik).
 enum ShipmentDestination {
   DOMESTIC // Yurtiçi
   EXPORT // Yurtdışı / ihracat

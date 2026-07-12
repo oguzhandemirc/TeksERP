@@ -1,5 +1,6 @@
 import apiClient from "@/services/apiClient";
-import type { ApiResponse } from "@/types/api";
+import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
+import { buildCursorQueryString } from "@/lib/query-builder";
 import type {
   AddKartelaResult,
   CreatedShipment,
@@ -11,8 +12,7 @@ import type {
   OpenOrder,
   PickListRow,
   SackContents,
-  SackSearchParams,
-  SackSearchResponse,
+  SackSearchRow,
   ScanResult,
   ShipmentDestination,
 } from "./types";
@@ -24,22 +24,16 @@ import type {
  * apiClient interceptor hata mesajını zaten toast'lar → mutation'da onError yok.
  */
 export const sackHubService = {
-  // ── Arama (salt-okunur, cursor sayfalı) ────────────────────────────────────
-  search: (params: SackSearchParams = {}): Promise<SackSearchResponse> => {
-    const sp = new URLSearchParams();
-    if (params.itemId) sp.set("itemId", params.itemId);
-    if (params.colorId) sp.set("colorId", params.colorId);
-    if (params.width !== undefined) sp.set("width", String(params.width));
-    if (params.customerId) sp.set("customerId", params.customerId);
-    if (params.scope) sp.set("scope", params.scope);
-    if (params.shipmentNo) sp.set("shipmentNo", params.shipmentNo);
-    if (params.sackCode) sp.set("sackCode", params.sackCode);
-    if (params.includeDispatched) sp.set("includeDispatched", "true");
-    if (params.cursor) sp.set("cursor", params.cursor);
-    if (params.limit) sp.set("limit", String(params.limit));
-    const qs = sp.toString();
-    return apiClient.get<SackSearchResponse>(`/api/shipping/sack-search${qs ? `?${qs}` : ""}`).then((r) => r.data);
-  },
+  // ── Liste (DataTable cursor fetcher) ───────────────────────────────────────
+  /**
+   * `useDataTable` fetcher — standart cursor query (`filter[itemId|colorId|
+   * customerId|scope|widthMin|widthMax]` + `search` + `sortBy/sortOrder` +
+   * `withTotal` + `cursor/limit`). Backend `/sack-search` bu sözleşmeyi karşılar.
+   */
+  listSacks: (params: CursorParams): Promise<CursorPaginatedResponse<SackSearchRow>> =>
+    apiClient
+      .get<CursorPaginatedResponse<SackSearchRow>>(`/api/shipping/sack-search${buildCursorQueryString(params)}`)
+      .then((r) => r.data),
 
   /** Tek çuvalın dökümü — arama detayı (lazy) + editör içerik kaynağı. */
   contents: (sackId: string): Promise<ApiResponse<SackContents>> =>

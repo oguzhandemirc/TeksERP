@@ -95,12 +95,12 @@ export function buildRawCodePreview(
 
 export function mockPayload(kind: LabelKind): LabelPayload {
   return {
-    rollId: "preview", barcode: "TR-2026-05-26-R0123", status: "STOCK", qualityGrade: "1. Kalite",
+    rollId: "preview", barcode: "T120726F0001", status: "STOCK", qualityGrade: "1. Kalite",
     widthCm: 152, lengthMeters: 47.5, weightKg: 14.8, markedForKartela: true,
     itemCode: "PA-60S", itemName: "Cotton Lining 60s", itemNameDefault: "Pamuk Astar 60s", itemNameSource: "OVERRIDE",
     colorCode: "BJ", colorName: "Beige", colorNameDefault: "Bej", colorNameSource: "OVERRIDE",
-    customerName: "Demo Tekstil A.S.", customerId: "preview", orderNumber: "SIP-2026-00123", orderLineId: "preview",
-    batchNumber: "PRT-A24", printedAt: new Date().toISOString(),
-    kind, cardNumber: "SW-2026-05-0042", lengthCm: 30, parentRollBarcode: "TR-2026-05-26-R0123",
+    customerName: "Demo Tekstil A.S.", customerId: "preview", orderNumber: "SIP1207260001", orderLineId: "preview",
+    batchNumber: "P1207260001", printedAt: new Date().toISOString(),
+    kind, cardNumber: "KRT1207260001", lengthCm: 30, parentRollBarcode: "T120726H0001",
   } as LabelPayload;
 }

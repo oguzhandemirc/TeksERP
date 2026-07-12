@@ -202,7 +202,7 @@ STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SU
 geçmediği durumlarda kullanılır (tek-adımlı WO veya rota Tambur içermiyor).
 Normal Tambur'lu akışta top doğrudan child Roll'lar olarak `WAREHOUSE`'a düşer.
 
-> **NOT (2026-07 — ÇUVAL DEPO MODELİ):** Sevkiyat modülü çuval depo modeline geçti (mühür/rezerv YOK). Çuval (`Sack`) bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte). Akış: WAREHOUSE serbest top → `openSack(customerId?)` → `scanIntoSack` → (opsiyonel `weighSack`) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur: `createShipment({ sackIds, customerId, orderIds? })` → `Shipment` PLANNED → AT_DOOR (Kapı Önü) → DISPATCHED. `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`); PLANNED tahsis `shippedQty`'ye SAYILMAZ. Stok yalnız DISPATCH'te `SHIPPED`'e düşer ve tahsis dispatch'te `shippedQty`'ye terfi eder (defter-otoritatif, `recomputeOrderStatusForOrders`); iptalde tahsis silinir, çuval depoya döner. `ShipmentStatus` = `PLANNED|AT_DOOR|DISPATCHED|CANCELLED` (PREPARING/READY kaldırıldı); `ShipmentAllocation`/`markReady`/`retarget`/`sealSack` kaldırıldı; `ShipmentOrder` kullanıcı-seçili sipariş kümesidir. Tam tasarım: `CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
+> **NOT (2026-07 — ÇUVAL DEPO MODELİ):** Sevkiyat modülü çuval depo modeline geçti (mühür/rezerv YOK). Çuval (`Sack`) bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte). Akış: WAREHOUSE serbest top → `openSack(customerId?)` → `scanIntoSack` → (opsiyonel `weighSack`) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur: `createShipment({ sackIds, customerId, orderIds? })`; sevk onayı (`shipping.confirmationEnabled`) **kapalı** (varsayılan) → `Shipment` **doğrudan** DISPATCHED (yanıtta `dispatched=true`), **açık** → PLANNED kurulur ve çıkış ayrıca `dispatchShipment` ile onaylanır (kapı önü ara adımı YOK: `PLANNED → DISPATCHED`). `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`); PLANNED tahsis `shippedQty`'ye SAYILMAZ. Stok yalnız DISPATCH'te `SHIPPED`'e düşer ve tahsis dispatch'te `shippedQty`'ye terfi eder (defter-otoritatif, `recomputeOrderStatusForOrders`); iptalde tahsis silinir, çuval depoya döner. `ShipmentStatus` = `PLANNED|DISPATCHED|CANCELLED` (PREPARING/READY/AT_DOOR kaldırıldı); `ShipmentAllocation`/`markReady`/`retarget`/`sealSack`/`moveToDoor` kaldırıldı; `ShipmentOrder` kullanıcı-seçili sipariş kümesidir. Tam tasarım: `CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
 
 ---
 
@@ -539,8 +539,8 @@ Durum geçişi veya tüketim yapan her kritik yazma `findUnique → if(guard) �
 
 ```typescript
 const claim = await tx.shipment.updateMany({
-  where: { id, status: ShipmentStatus.PLANNED },   // gözlenen TAM durum (PLANNED → AT_DOOR = moveToDoor)
-  data: { status: ShipmentStatus.AT_DOOR },
+  where: { id, status: ShipmentStatus.PLANNED },   // gözlenen TAM durum (PLANNED → DISPATCHED = dispatch)
+  data: { status: ShipmentStatus.DISPATCHED },
 });
 if (claim.count === 0) {
   throw AppError.conflict("Sevkiyat bu sırada değişti — sayfayı yenileyin");

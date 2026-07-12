@@ -204,7 +204,7 @@ export function ScannerDeviceSettings() {
           type="button"
           variant="ghost"
           size="sm"
-          onClick={() => scanner.mockEmit("TEKS-20260615-AB12CD34")}
+          onClick={() => scanner.mockEmit("T120726H0001")}
         >
           Test kodu gönder
         </Button>

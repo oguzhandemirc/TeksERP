@@ -88,9 +88,8 @@ export function KartelaPage() {
         value={scanCode}
         onChange={setScanCode}
         onScan={openSwatch}
-        placeholder="Kartela barkodu okut → detay (SW-…)"
+        placeholder="Kartela barkodu okut → detay (KRT…)"
         expectPrefix="SWATCH"
-        validateChecksum
         submitLabel="Aç"
         busy={swatchLookup.isPending}
         busyLabel="…"

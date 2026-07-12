@@ -1,23 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { ShippingService } from "../services/shipping.service";
-import { sackSearchService } from "../services/sack-search.service";
+import { sackSearchService, type SackSearchScope } from "../services/sack-search.service";
 import { buildDispatchAccountingExport } from "../services/accounting-export.service";
 import "../types/express-augment";
-
-// Çuval/Top Arama sorgu şeması — tümü opsiyonel, kombinlenebilir.
-const sackSearchQuerySchema = z.object({
-  itemId: z.string().uuid("Geçersiz ürün ID").optional(),
-  colorId: z.string().uuid("Geçersiz renk ID").optional(),
-  width: z.coerce.number().positive("En pozitif olmalı").optional(),
-  customerId: z.string().uuid("Geçersiz müşteri ID").optional(),
-  scope: z.enum(["POOL", "PLANNED", "DISPATCHED", "ALL"]).optional(),
-  shipmentNo: z.string().trim().max(64).optional(),
-  sackCode: z.string().trim().max(64).optional(),
-  includeDispatched: z.enum(["true", "false"]).optional().transform((v) => v === "true"),
-  cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-});
 
 // ---- Zod şemaları ----------------------------------------------------------
 // Çuval aç — müşteri OPSİYONEL (depoda genel stok da olabilir).
@@ -47,6 +33,10 @@ const createShipmentSchema = z.object({
   orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).optional(),
   destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
   procedureCode: z.string().trim().max(64).nullable().optional(),
+  // Sevk onayı kapalıyken (varsayılan) doğrudan sevk → araç bilgisi opsiyonel.
+  plateNumber: z.string().trim().max(32).nullable().optional(),
+  driverName: z.string().trim().max(100).nullable().optional(),
+  carrier: z.string().trim().max(100).nullable().optional(),
 });
 // Sevk önizleme — çuval + (opsiyonel) müşteri/şube/sipariş; salt-okunur.
 const previewShipmentSchema = z.object({
@@ -150,7 +140,7 @@ export class ShippingController {
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createShipmentSchema.parse(req.body);
-      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null }, req.user?.userId);
+      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
@@ -191,20 +181,6 @@ export class ShippingController {
     try {
       const body = procedureCodeSchema.parse(req.body);
       const result = await this.service.setProcedureCode(req.params.id as string, body.procedureCode ?? null, req.user?.userId);
-      res.status(200).json(result);
-    } catch (e) { next(e); }
-  };
-
-  moveToDoor = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const result = await this.service.moveToDoor(req.params.id as string, req.user?.userId);
-      res.status(200).json(result);
-    } catch (e) { next(e); }
-  };
-
-  pullBackFromDoor = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const result = await this.service.pullBackFromDoor(req.params.id as string, req.user?.userId);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -282,10 +258,37 @@ export class ShippingController {
   };
 
   // ---- ÇUVAL/TOP ARAMA — salt-okunur ---------------------------------------
+  // useDataTable uyumlu: filter[*] + search + sortBy/sortOrder + withTotal + cursor/limit.
   searchSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const q = sackSearchQuerySchema.parse(req.query);
-      const result = await sackSearchService.searchSacks(q);
+      const filt = (k: string): string | undefined => {
+        const v = req.query[`filter[${k}]`];
+        return typeof v === "string" && v.trim() ? v.trim() : undefined;
+      };
+      const num = (v: string | undefined): number | undefined => {
+        if (v == null || v === "") return undefined;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : undefined;
+      };
+      const scopeRaw = filt("scope");
+      const scope = (["POOL", "PLANNED", "DISPATCHED", "ALL"] as const).includes(scopeRaw as SackSearchScope)
+        ? (scopeRaw as SackSearchScope)
+        : undefined;
+      const sortOrderRaw = req.query.sortOrder;
+      const result = await sackSearchService.searchSacks({
+        itemId: filt("itemId"),
+        colorId: filt("colorId"),
+        widthMin: num(filt("widthMin")),
+        widthMax: num(filt("widthMax")),
+        customerId: filt("customerId"),
+        scope,
+        search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
+        sortBy: typeof req.query.sortBy === "string" ? req.query.sortBy : undefined,
+        sortOrder: sortOrderRaw === "asc" ? "asc" : sortOrderRaw === "desc" ? "desc" : undefined,
+        withTotal: req.query.withTotal === "true",
+        cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+        limit: num(typeof req.query.limit === "string" ? req.query.limit : undefined),
+      });
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

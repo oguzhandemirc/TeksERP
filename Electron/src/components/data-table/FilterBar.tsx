@@ -133,6 +133,9 @@ interface Props {
   /** Filtre satırının EN BAŞINA (filtrelerden önce) eklenen öğe — örn. görünüm
    *  seçici dropdown. Aynı satırda, aynı hizada render edilir. */
   leading?: ReactNode;
+  /** Satır-içi mod: kendi border/padding sarmalayıcısını çizmez — başka bir araç
+   *  çubuğunun (ör. DataTableToolbar `leading`) içine gömülmek için. */
+  inline?: boolean;
 }
 
 const DATE_PRESETS = [
@@ -143,7 +146,7 @@ const DATE_PRESETS = [
 
 const NONE = "__all__";
 
-export function FilterBar({ filters, defaultDateRangeDays = 0, leading }: Props) {
+export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline = false }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const dateDef = filters.find((f) => f.kind === "dateRange");
 
@@ -184,7 +187,13 @@ export function FilterBar({ filters, defaultDateRangeDays = 0, leading }: Props)
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs">
+    <div
+      className={
+        inline
+          ? "flex flex-wrap items-center gap-2 text-xs"
+          : "flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs"
+      }
+    >
       {leading}
       {filters.map((f) => {
         if (f.kind === "select") return <SelectFilter key={f.key} def={f} sp={searchParams} update={update} />;

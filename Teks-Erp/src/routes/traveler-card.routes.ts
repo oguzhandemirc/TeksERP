@@ -173,7 +173,7 @@ travelerCardRouter.get(
  *             type: object
  *             required: [barcode, stationId, scanType]
  *             properties:
- *               barcode:   { type: string, example: "RK26049F2K3P7" }
+ *               barcode:   { type: string, example: "RK1207260001" }
  *               stationId: { type: string, format: uuid }
  *               scanType:  { type: string, enum: [ARRIVAL, DEPARTURE, INFO] }
  *               notes:     { type: string }

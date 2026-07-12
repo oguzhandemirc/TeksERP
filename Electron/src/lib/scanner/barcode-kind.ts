@@ -1,20 +1,17 @@
 // =============================================================================
 // Barkod türü sınıflandırıcı — prefix → varlık türü
 // =============================================================================
-// Sistem-üretimi kodlar farklı prefix taşır (backend `utils/barcode.ts` +
-// shipping/kartela servisleri ile doğrulandı):
-//   TEKSYYMMDD{H|F}{A-Z}NNN → Roll (top) YENİ kısa biçim (sunucu sıralı; H=ham/F=final)
-//   TEKSYYYYMMDDXXXXXXXX    → Roll (top) ESKİ biçim (sahadaki etiketler) — ikisi de geçerli
-//   RKYYMMXXXXXXC           → TravelerCard (refakat kartı) — ayraçsız (wedge fix)
-//   SWYYMMXXXXXXC           → Swatch (kartela) — ayraçsız tarama barkodu (wedge fix)
-//   CV-YYMMDD-NNN           → Sack (çuval, sackNo)         ← 6 haneli tarih!
-//   SD/SR/KD/KR...          → fason/kartela sevk/kabul belge no — ayraçsız (wedge fix)
-// Çuval `manualCode`'u serbest metin (çakışmaya açık) → UNKNOWN fallback.
+// Tek tip kod kalıbı: PREFIX + GGAAYY + NNNN (ayraçsız, checksum YOK — insan-okur
+// kod = tarama barkodu). Backend `utils/code-format.ts` ile doğrulandı:
+//   T{GGAAYY}{H|F}NNNN  → Roll (top; H=ham/F=final)     örn T120726H0001
+//   RK{GGAAYY}NNNN      → TravelerCard (refakat kartı)   örn RK1207260001
+//   KRT{GGAAYY}NNNN     → Swatch (kartela/numune)        örn KRT1207260001
+//   CV{GGAAYY}NNNN      → Sack (çuval, sackNo)           örn CV1207260001
+//   FS/FK/KS/KK...      → fason/kartela sevk/kabul belge no
 //
-// Sınıflandırma PREFIX-çapalı (gevşek) tutulur: checksum/format bozuk olsa da
-// doğru türe yönlenir, kesin kararı backend lookup ucu (404) verir. Tam-format
-// regex'leri (checksum'lu) ayrıca dışa açılır — ScanField opsiyonel istemci
-// doğrulamasında kullanır.
+// Sınıflandırma PREFIX-çapalı (gevşek) tutulur: format bozuk olsa da doğru türe
+// yönlenir, kesin kararı backend lookup ucu (404) verir. Tam-format regex'leri
+// ayrıca dışa açılır — ScanField opsiyonel istemci doğrulamasında kullanır.
 // =============================================================================
 
 export type BarcodeKind =
@@ -25,22 +22,22 @@ export type BarcodeKind =
   | "DISPATCH_DOC"
   | "UNKNOWN";
 
-/** Tam-format regex'leri (checksum dahil) — opsiyonel istemci doğrulaması için. */
+/** Tam-format regex'leri — opsiyonel istemci doğrulaması için (checksum yok). */
 export const BARCODE_FORMATS = {
-  // Yeni kısa (TEKS+YYMMDD+H/F+A001..) VEYA eski (TEKS+YYYYMMDD+8hex) — ikisi de kabul.
-  ROLL: /^TEKS(\d{6}[HF][A-Z]\d{3}|\d{8}[0-9A-F]{8})$/,
-  TRAVELER_CARD: /^RK\d{4}[0-9A-Z]{6}[0-9A-Z]$/,
-  SWATCH: /^SW\d{4}[0-9A-Z]{6}[0-9A-Z]$/,
-  SACK: /^CV-\d{6}-\d{3}$/,
+  ROLL: /^T\d{6}[HF]\d{4}$/,
+  TRAVELER_CARD: /^RK\d{6}\d{4}$/,
+  SWATCH: /^KRT\d{6}\d{4}$/,
+  SACK: /^CV\d{6}\d{4}$/,
 } as const;
 
-// Prefix-çapalı sınıflandırma — sıra önemli değil (prefix'ler ayrık).
+// Prefix-çapalı sınıflandırma. Sıra: daha uzun/özgül prefix'ler önce (KRT, KS/KK
+// karışmasın). T→ROLL yalnız T+rakam (KRT/diğerleri K/başka harfle başlar).
 const PREFIX_RULES: Array<{ re: RegExp; kind: BarcodeKind }> = [
-  { re: /^TEKS/, kind: "ROLL" },
+  { re: /^KRT/, kind: "SWATCH" },
   { re: /^RK/, kind: "TRAVELER_CARD" },
-  { re: /^SW/, kind: "SWATCH" },
-  { re: /^CV-/, kind: "SACK" },
-  { re: /^(SD|SR|KD|KR)/, kind: "DISPATCH_DOC" },
+  { re: /^CV/, kind: "SACK" },
+  { re: /^(FS|FK|KS|KK)/, kind: "DISPATCH_DOC" },
+  { re: /^T\d/, kind: "ROLL" },
 ];
 
 export interface ClassifiedBarcode {
@@ -49,7 +46,7 @@ export interface ClassifiedBarcode {
   code: string;
 }
 
-/** Ham taranan string'i türe ayır. Bilinmeyen prefix → UNKNOWN (manualCode denenir). */
+/** Ham taranan string'i türe ayır. Bilinmeyen prefix → UNKNOWN. */
 export function classifyBarcode(raw: string): ClassifiedBarcode {
   const code = raw.trim().toUpperCase();
   for (const rule of PREFIX_RULES) {

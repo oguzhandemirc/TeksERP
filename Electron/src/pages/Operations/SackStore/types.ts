@@ -1,15 +1,15 @@
 /**
  * Sevk Kapısı (Sack Store board) tipleri — backend GET /api/shipping/sack-store
  * (HAFİF, sayfalı liste) + /api/shipping/shipments/:id/sack-contents (slide-over).
- * PLANNED = "Planlı Sevkiyat" (havuzdan çuval seçilerek kuruldu), AT_DOOR = "Kapı Önü".
+ * Board YALNIZ PLANNED (çıkış bekleyen) sevkleri döner; bu ekran ancak sevk onayı
+ * ("shipping.confirmationEnabled") AÇIKKEN dolar (kapalıyken sevkler doğrudan çıkar).
  * Decimal alanlar backend'de JSON number'a çevrildiği için Number() sarmaya gerek yok.
  */
 
-export type SackStoreStatus = "PLANNED" | "AT_DOOR";
+export type SackStoreStatus = "PLANNED";
 
 export const sackStoreStatusLabels: Record<SackStoreStatus, string> = {
   PLANNED: "Planlı Sevkiyat",
-  AT_DOOR: "Kapı Önü",
 };
 
 // ===========================================================================
@@ -39,7 +39,7 @@ export interface SackStoreShipment {
 
 /** GET /sack-store query parametreleri (sunucu arama + cursor sayfalama). */
 export interface SackStoreListParams {
-  /** Yok → PLANNED+AT_DOOR birden. */
+  /** Board yalnız PLANNED döner; filtre pratikte tek değerli. */
   status?: SackStoreStatus;
   search?: string;
   /** Saha #22: yurtiçi/yurtdışı filtresi. */
@@ -93,7 +93,6 @@ export interface ContentSack {
   id: string;
   sackNo: string;
   seq: number;
-  manualCode: string | null;
   weightKg: number | null;
   rollCount: number;
   swatchCount: number;

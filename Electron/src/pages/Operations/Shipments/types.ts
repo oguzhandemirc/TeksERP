@@ -1,20 +1,18 @@
 import type { Tone } from "@/components/operations/StatusBadge";
 
-export type ShipmentStatus = "PLANNED" | "AT_DOOR" | "DISPATCHED" | "CANCELLED";
+export type ShipmentStatus = "PLANNED" | "DISPATCHED" | "CANCELLED";
 
 export const shipmentStatusLabels: Record<ShipmentStatus, string> = {
   PLANNED: "Planlı",
-  AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
   CANCELLED: "İptal",
 };
 
 // Tone paleti semantiktir (StatusBadge): indigo/kırmızı literal Tone'da yok → en
-// yakın anlamsal eşleme — PLANNED=info (indigo/mavi), AT_DOOR=warning (amber),
-// DISPATCHED=muted, CANCELLED=danger (kırmızı).
+// yakın anlamsal eşleme — PLANNED=info (indigo/mavi), DISPATCHED=muted,
+// CANCELLED=danger (kırmızı).
 export const shipmentStatusTones: Record<ShipmentStatus, Tone> = {
   PLANNED: "info",
-  AT_DOOR: "warning",
   DISPATCHED: "muted",
   CANCELLED: "danger",
 };

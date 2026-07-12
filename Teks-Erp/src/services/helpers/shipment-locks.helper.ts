@@ -34,7 +34,7 @@ export async function touchWarehouseSackTx(
 }
 
 /**
- * PLANNED sevkiyat satırını kilitle. Sevkiyat kapı önüne çıkmış/sevk/iptal edilmişse 409.
+ * PLANNED sevkiyat satırını kilitle. Sevkiyat sevk/iptal edilmişse 409.
  * Çuval ekleme/çıkarma tx'leri bununla dispatch/cancel claim'lerine serileşir.
  */
 export async function touchShipmentPlannedTx(
@@ -47,7 +47,7 @@ export async function touchShipmentPlannedTx(
   });
   if (touched.count === 0) {
     throw AppError.conflict(
-      "Sevkiyat bu sırada kapı önüne çıktı / sevk / iptal edildi — çuval kümesi artık değiştirilemez. Sayfayı yenileyin."
+      "Sevkiyat bu sırada sevk / iptal edildi — çuval kümesi artık değiştirilemez. Sayfayı yenileyin."
     );
   }
 }

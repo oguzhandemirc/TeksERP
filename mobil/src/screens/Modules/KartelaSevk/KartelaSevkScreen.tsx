@@ -149,7 +149,7 @@ export default function KartelaSevkScreen() {
             type: 'error',
             text1: 'Top çuvalda — kullanılamaz',
             text2: roll.shipment
-              ? `${roll.shipment.shipmentNo} sevkiyatına bağlı (çuval depo/kapı önü).`
+              ? `${roll.shipment.shipmentNo} sevkiyatına bağlı (çuval depo/planlı sevkiyat).`
               : 'Bu top bir sevkiyatın çuvalında, serbest depoda değil.',
           });
           return;
