@@ -111,26 +111,24 @@ export function SackEditorView({ target, onExit }: { target: EditorTarget; onExi
         <EditorScanBar sackId={target.sackId} />
       )}
 
-      {/* İçerik */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+      {/* İçerik — liste ekranlarıyla aynı: DataTable alanı TAM kaplar (p-6/çerçeve yok). */}
+      <div className="flex min-h-0 flex-1 flex-col">
         {contentsQ.isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor…
           </div>
         ) : (
           <>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
-              <SackContentsTable sackId={target.sackId} rolls={rolls} locked={locked} targets={otherSacks} />
-            </div>
+            <SackContentsTable sackId={target.sackId} rolls={rolls} locked={locked} targets={otherSacks} />
 
             {swatches.length > 0 && (
-              <div className="overflow-hidden rounded-lg border">
-                <div className="border-b bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="border-t">
+                <div className="bg-muted/40 px-6 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Kartelalar · {swatches.length}
                 </div>
-                <ul className="divide-y text-sm">
+                <ul className="max-h-48 divide-y overflow-y-auto text-sm">
                   {swatches.map((s) => (
-                    <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                    <li key={s.id} className="flex items-center justify-between gap-2 px-6 py-1.5">
                       <span className="flex items-center gap-2">
                         <span className="font-mono text-xs">{s.barcode ?? "Kartela"}</span>
                         <span className="text-muted-foreground">
