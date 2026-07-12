@@ -101,6 +101,24 @@ export const sackHubService = {
   moveRollToSack: (rollId: string, sackId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/api/shipping/rolls/${rollId}/move-sack`, { sackId }).then((r) => r.data),
 
+  /** Çuvalı dağıt — seçili (rollIds) veya (boş gövde) TÜM içeriği serbest depoya çıkar. */
+  distributeSack: (
+    sackId: string,
+    body?: { rollIds?: string[]; swatchIds?: string[] },
+  ): Promise<ApiResponse<{ removedRolls: number; removedSwatches: number }>> =>
+    apiClient
+      .post<ApiResponse<{ removedRolls: number; removedSwatches: number }>>(`/api/shipping/sacks/${sackId}/distribute`, {
+        ...(body?.rollIds?.length ? { rollIds: body.rollIds } : {}),
+        ...(body?.swatchIds?.length ? { swatchIds: body.swatchIds } : {}),
+      })
+      .then((r) => r.data),
+
+  /** Seçili topları başka depo çuvalına TOPLU taşı. */
+  moveRollsToSack: (sackId: string, rollIds: string[], targetSackId: string): Promise<ApiResponse<{ moved: number }>> =>
+    apiClient
+      .post<ApiResponse<{ moved: number }>>(`/api/shipping/sacks/${sackId}/move-rolls`, { rollIds, targetSackId })
+      .then((r) => r.data),
+
   /** Kartela stoğu (ürün+renk bazında müsait adet). */
   listKartelaStock: (search?: string): Promise<ApiResponse<KartelaStockGroup[]>> =>
     apiClient

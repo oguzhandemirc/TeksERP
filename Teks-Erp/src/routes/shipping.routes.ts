@@ -62,6 +62,9 @@ router.post("/sacks/:id/remove", verifyToken, WRITE, controller.removeSack);
 router.post("/rolls/:rollId/remove-from-sack", verifyToken, WRITE, controller.removeRollFromSack);
 router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollToSack);
 router.post("/swatches/:swatchId/remove-from-sack", verifyToken, WRITE, controller.removeSwatchFromSack);
+// Toplu: çuvalı dağıt (seçili/tüm içerik → depo) + seçili topları başka çuvala taşı
+router.post("/sacks/:id/distribute", verifyToken, WRITE, controller.distributeSack);
+router.post("/sacks/:id/move-rolls", verifyToken, WRITE, controller.moveRollsToSack);
 
 // ===========================================================================
 // ÇUVAL/TOP ARAMA + salt-okunur raporlar

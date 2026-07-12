@@ -23,6 +23,14 @@ const weighSackSchema = z.object({
   weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük"),
 });
 const removeSackSchema = z.object({ withContents: z.boolean().optional() });
+const distributeSackSchema = z.object({
+  rollIds: z.array(z.string().uuid()).optional(),
+  swatchIds: z.array(z.string().uuid()).optional(),
+});
+const moveRollsSchema = z.object({
+  rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçilmeli"),
+  targetSackId: z.string().uuid(),
+});
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 
 // Sevkiyat kur — depodan çuval seç + müşteri/şube ata + (opsiyonel) sipariş seç.
@@ -117,6 +125,30 @@ export class ShippingController {
     try {
       const body = moveSackSchema.parse(req.body);
       const result = await this.service.moveRollToSack({ rollId: req.params.rollId as string, sackId: body.sackId }, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Çuvalı dağıt — seçili (rollIds/swatchIds) veya tüm içeriği depoya çıkar. */
+  distributeSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = distributeSackSchema.parse(req.body ?? {});
+      const result = await this.service.distributeSackContents(
+        { sackId: req.params.id as string, rollIds: body.rollIds, swatchIds: body.swatchIds },
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Seçili topları başka depo çuvalına toplu taşı. */
+  moveRollsToSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = moveRollsSchema.parse(req.body);
+      const result = await this.service.moveRollsToSack(
+        { sackId: req.params.id as string, rollIds: body.rollIds, targetSackId: body.targetSackId },
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

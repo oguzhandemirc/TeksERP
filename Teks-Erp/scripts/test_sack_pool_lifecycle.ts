@@ -17,6 +17,7 @@
 //   G. Müşterisiz çuval: müşteri sevkte atanır (backfill).
 //   H. Onay AÇIK: createShipment PLANNED kurar → shippedQty=0 → dispatchShipment → DISPATCHED.
 //   I. Onay AÇIK: PLANNED sevkiyat iptal → çuval depoya döner, tahsis silinir.
+//   J. Çuvalı dağıt (seçili/tümü → depo) + seçili topları başka çuvala toplu taşı + sevkteki çuval guard'ı.
 
 import { RollStatus, ShipmentStatus, OrderStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -105,6 +106,9 @@ const rollState = async (barcode: string) =>
   (await prisma.roll.findUnique({ where: { barcode }, select: { status: true, shipmentId: true, sackId: true } }))!;
 const sackState = async (sackId: string) =>
   (await prisma.sack.findUnique({ where: { id: sackId }, select: { shipmentId: true, customerId: true } }))!;
+const rollIdOf = async (barcode: string) =>
+  (await prisma.roll.findUnique({ where: { barcode }, select: { id: true } }))!.id;
+const sackRollCount = async (sackId: string) => prisma.roll.count({ where: { sackId } });
 
 async function main() {
   console.log("=== Çuval Depo Yaşam Döngüsü Testi ===\n");
@@ -194,6 +198,39 @@ async function main() {
     await createShip([sackId], [orderId]);
     check("G2 sevkte çuvala müşteri backfill", (await sackState(sackId)).customerId === customerId);
     check("G3 shippedQty=40", (await shippedOf(lineId)) === 40, `shipped=${await shippedOf(lineId)}`);
+  }
+
+  // ── J: çuvalı dağıt (seçili/tümü) + toplu taşı (width 210) — sevkiyat YOK ──
+  console.log("\n--- J: çuvalı dağıt (seçili/tümü depoya) + seçili topları başka çuvala taşı ---");
+  {
+    const W = 210;
+    const b1 = await makeRoll(30, W), b2 = await makeRoll(30, W), b3 = await makeRoll(30, W);
+    const sackX = await filledSack([b1, b2, b3]);
+    const sackY = await filledSack([]); // hedef (boş, aynı müşteri)
+    check("J1 sackX 3 top ile doldu", (await sackRollCount(sackX)) === 3, `count=${await sackRollCount(sackX)}`);
+
+    // Seçili dağıt: yalnız b1 → depoya
+    await ship.distributeSackContents({ sackId: sackX, rollIds: [await rollIdOf(b1)] });
+    check("J2 b1 depoya çıktı (sackId null)", (await rollState(b1)).sackId === null);
+    check("J3 sackX'te 2 top kaldı", (await sackRollCount(sackX)) === 2, `count=${await sackRollCount(sackX)}`);
+
+    // Toplu taşı: b2,b3 → sackY
+    await ship.moveRollsToSack({ sackId: sackX, rollIds: [await rollIdOf(b2), await rollIdOf(b3)], targetSackId: sackY });
+    check("J4 b2/b3 sackY'ye taşındı", (await rollState(b2)).sackId === sackY && (await rollState(b3)).sackId === sackY);
+    check("J5 sackX boşaldı", (await sackRollCount(sackX)) === 0, `count=${await sackRollCount(sackX)}`);
+
+    // Tümünü dağıt: sackY → depoya (seçim vermeden)
+    const res = (await ship.distributeSackContents({ sackId: sackY })) as { data: { removedRolls: number } };
+    check("J6 tümü dağıtıldı: removedRolls=2", res.data.removedRolls === 2, `removed=${res.data.removedRolls}`);
+    check("J7 sackY boşaldı + b2/b3 depoda", (await sackRollCount(sackY)) === 0 && (await rollState(b2)).sackId === null);
+
+    // Guard: sevkiyattaki çuval dağıtılamaz (onay kapalı → doğrudan DISPATCHED)
+    const b4 = await makeRoll(20, W);
+    const sackZ = await filledSack([b4]);
+    await createShip([sackZ]);
+    let guarded = false;
+    try { await ship.distributeSackContents({ sackId: sackZ }); } catch { guarded = true; }
+    check("J8 sevkiyattaki çuval dağıtılamaz (guard)", guarded);
   }
 
   // ═══ SEVK ONAYI AÇIK: createShipment PLANNED kurar, ayrıca dispatch ═══

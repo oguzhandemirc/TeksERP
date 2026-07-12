@@ -385,6 +385,90 @@ export class ShippingService {
   }
 
   /**
+   * "Çuvalı dağıt" — çuvalın SEÇİLİ (rollIds/swatchIds) veya TÜM (ikisi de boşsa)
+   * top/kartelalarını serbest depoya çıkar (sackId=null). Çuval boş kalır ama SİLİNMEZ
+   * (silmek isteyen `removeSack(withContents)` kullanır). Yalnız depodaki çuval — sevkiyata
+   * atanmış çuval reddedilir (touchWarehouseSackTx). İçerik değiştiği için tartı sıfırlanır.
+   */
+  async distributeSackContents(
+    data: { sackId: string; rollIds?: string[]; swatchIds?: string[] },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const sack = await prisma.sack.findUnique({
+      where: { id: data.sackId },
+      select: { id: true, sackNo: true, shipmentId: true },
+    });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    if (sack.shipmentId != null) {
+      throw AppError.conflict("Sevkiyata atanmış çuvalın içeriği değiştirilemez — önce sevkiyattan çıkarın");
+    }
+    const rollSel = data.rollIds?.length ? data.rollIds : null;
+    const swatchSel = data.swatchIds?.length ? data.swatchIds : null;
+    // Hiç seçim verilmediyse: çuvaldaki HER ŞEYİ dağıt.
+    const all = !rollSel && !swatchSel;
+
+    let removedRolls = 0;
+    let removedSwatches = 0;
+    await prisma.$transaction(async (tx) => {
+      await touchWarehouseSackTx(tx, data.sackId);
+      if (all || rollSel) {
+        const rollWhere: Prisma.RollWhereInput = all
+          ? { sackId: data.sackId, shipmentId: null }
+          : { id: { in: rollSel! }, sackId: data.sackId, shipmentId: null };
+        removedRolls = (await tx.roll.updateMany({ where: rollWhere, data: { sackId: null } })).count;
+      }
+      if (all || swatchSel) {
+        const swatchWhere: Prisma.SwatchWhereInput = all
+          ? { sackId: data.sackId, shipmentId: null }
+          : { id: { in: swatchSel! }, sackId: data.sackId, shipmentId: null };
+        removedSwatches = (await tx.swatch.updateMany({ where: swatchWhere, data: { sackId: null } })).count;
+      }
+      await this.resetSackWeightsTx(tx, [data.sackId]);
+    });
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId,
+      newData: { kind: "SACK_DISTRIBUTE", removedRolls, removedSwatches, all },
+    });
+    const n = removedRolls + removedSwatches;
+    return { success: true, data: { removedRolls, removedSwatches }, message: n > 0 ? `${n} top/kartela depoya çıkarıldı` : "Çıkarılacak içerik yok" };
+  }
+
+  /**
+   * Kaynak çuvalın (`sackId`) SEÇİLİ toplarını başka bir depo çuvalına TOPLU taşı.
+   * Kaynak ve hedef depoda olmalı (sevkiyattaki reddedilir). Atomik updateMany +
+   * her iki çuvalın tartısı sıfırlanır (içerik değişti).
+   */
+  async moveRollsToSack(
+    data: { sackId: string; rollIds: string[]; targetSackId: string },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (!data.rollIds?.length) throw AppError.badRequest("Taşınacak top seçilmedi");
+    if (data.sackId === data.targetSackId) throw AppError.badRequest("Kaynak ve hedef çuval aynı olamaz");
+    const source = await prisma.sack.findUnique({ where: { id: data.sackId }, select: { id: true, shipmentId: true } });
+    if (!source) throw AppError.notFound("Kaynak çuval bulunamadı");
+    if (source.shipmentId != null) throw AppError.conflict("Kaynak çuval sevkiyatta — önce sevkiyattan çıkarın");
+    const target = await prisma.sack.findUnique({ where: { id: data.targetSackId }, select: { id: true, shipmentId: true } });
+    if (!target) throw AppError.notFound("Hedef çuval bulunamadı");
+    if (target.shipmentId != null) throw AppError.conflict("Hedef çuval sevkiyatta");
+
+    let moved = 0;
+    await prisma.$transaction(async (tx) => {
+      await touchWarehouseSackTx(tx, data.sackId);
+      await touchWarehouseSackTx(tx, data.targetSackId);
+      moved = (await tx.roll.updateMany({
+        where: { id: { in: data.rollIds }, sackId: data.sackId, shipmentId: null },
+        data: { sackId: data.targetSackId },
+      })).count;
+      await this.resetSackWeightsTx(tx, [data.sackId, data.targetSackId]);
+    });
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId,
+      newData: { kind: "SACK_MOVE_BULK", targetSackId: data.targetSackId, moved },
+    });
+    return { success: true, data: { moved }, message: moved > 0 ? `${moved} top taşındı` : "Taşınacak top yok" };
+  }
+
+  /**
    * Çuval brüt tartısını güncelle (depodaki çuval — sevkiyata atanmamış).
    */
   async weighSack(
