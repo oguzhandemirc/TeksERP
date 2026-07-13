@@ -35,6 +35,10 @@ interface Options<T> {
   enableSelection?: boolean | ((row: Row<T>) => boolean);
   /** Varsayılan sütun görünürlük durumları. */
   initialVisibility?: VisibilityState;
+  /** false → sorgu çalışmaz (fetch atmaz). Tablo boş kalır. Default true.
+   *  Kullanım: hook üst bileşende çağrılıp tablo kimi sekmelerde hiç
+   *  gösterilmiyorsa (ör. Envanter KANBAN sekmesi) gereksiz fetch'i keser. */
+  enabled?: boolean;
 }
 
 /**
@@ -53,6 +57,7 @@ export function useDataTable<T>({
   forceFilters,
   enableSelection = true,
   initialVisibility,
+  enabled = true,
 }: Options<T>) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -164,6 +169,7 @@ export function useDataTable<T>({
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.pagination.nextCursor,
+    enabled,
     refetchOnMount: "always",
     staleTime: 0,
   });

@@ -52,8 +52,8 @@ export const operationsTiles: OperationsTile[] = [
   },
   {
     key: "rolls",
-    title: "Toplar",
-    description: "Envanter ve top yaşam döngüsü",
+    title: "Envanter",
+    description: "Ham/bitmiş stok ve top yaşam döngüsü",
     icon: Package,
     to: "/operations/rolls",
     permission: "roll:read",

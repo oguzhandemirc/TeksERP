@@ -22,7 +22,6 @@ import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
 import type { Customer } from "@/pages/Customers/types";
 import type { CustomerFormValues } from "@/pages/Customers/schema";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { usePricingEnabled } from "@/hooks/usePricingEnabled";
 import { usePulseSync } from "@/hooks/usePulseSync";
 import { currencyService } from "@/services/featureFlagService";
@@ -202,22 +201,21 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
             </FormField>
           </div>
 
-          {/* Saha #16: sipariş no görünür + override edilebilir (boş = otomatik). */}
-          <FormField label="Sipariş No" error={form.formState.errors.orderNumber}>
-            <Input
-              {...form.register("orderNumber")}
-              placeholder="Boş bırak — otomatik üretilir (YYYYAAGG-N)"
-              disabled={!!order}
-              className="sm:max-w-md"
-            />
-            {!!order && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Mevcut siparişin numarası değiştirilemez (muhasebe/irsaliye izi).
-              </p>
-            )}
-          </FormField>
-
+          {/* Saha #16: sipariş no görünür + override edilebilir (boş = otomatik).
+              Termin ile aynı satırı yarı yarıya paylaşır. */}
           <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+            <FormField label="Sipariş No" error={form.formState.errors.orderNumber}>
+              <Input
+                {...form.register("orderNumber")}
+                placeholder="Boş = otomatik"
+                disabled={!!order}
+              />
+              {!!order && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Mevcut siparişin numarası değiştirilemez (muhasebe/irsaliye izi).
+                </p>
+              )}
+            </FormField>
             <FormField label="Termin" error={form.formState.errors.deadline}>
               <Controller
                 control={form.control}
@@ -226,40 +224,41 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                   <DatePickerInput
                     value={field.value ?? ""}
                     onChange={field.onChange}
-                    placeholder="Boş bırakılırsa varsayılan N gün"
+                    placeholder="Boş = varsayılan"
                   />
                 )}
               />
             </FormField>
-            {pricingEnabled && (
-              <FormField
-                label="Para Birimi"
-                htmlFor="currency"
-                error={form.formState.errors.currency}
-                required
-              >
-                <Controller
-                  control={form.control}
-                  name="currency"
-                  render={({ field }) => (
-                    <select
-                      id="currency"
-                      value={field.value}
-                      onChange={field.onChange}
-                      disabled={headerLocked}
-                      className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                    >
-                      {(currenciesQ.data?.data ?? [{ code: "TRY", name: "TRY", symbol: "₺" }]).map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.code} — {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                />
-              </FormField>
-            )}
           </div>
+
+          {pricingEnabled && (
+            <FormField
+              label="Para Birimi"
+              htmlFor="currency"
+              error={form.formState.errors.currency}
+              required
+            >
+              <Controller
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <select
+                    id="currency"
+                    value={field.value}
+                    onChange={field.onChange}
+                    disabled={headerLocked}
+                    className="h-9 w-full rounded-md border bg-background px-2 text-sm sm:max-w-[220px]"
+                  >
+                    {(currenciesQ.data?.data ?? [{ code: "TRY", name: "TRY", symbol: "₺" }]).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
+            </FormField>
+          )}
 
           {linesEditable ? (
             <div className="border-t pt-3">
@@ -310,7 +309,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
       isSubmitting={createCustomerMut.isPending}
       onSubmit={(v: CustomerFormValues) => {
         createCustomerMut.mutate({
-          code: generateCode(CODE_PREFIXES.CUSTOMER),
+          // Kod backend'de üretilir (MUS+GGAAYY+NNNN) — istemciden gönderilmez.
           name: v.name,
           taxNumber: v.taxNumber || null,
           type: v.type,

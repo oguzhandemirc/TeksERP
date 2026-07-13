@@ -14,6 +14,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,19 +31,22 @@ const restrictToHorizontalAxis: Modifier = ({ transform }) => ({ ...transform, y
 interface Props {
   /** Görünüm sırasında sekmeler (çağıran kayıtlı sırayı uygular). */
   tabs: ReorderableTab[];
-  /** Sağ kenara sabitlenen, sürüklenemez sekme (örn. Arşiv — ayrık tutulur). */
+  /** Son sekmeden hemen sonra (ayrım çizgisiyle) render edilen, sürüklenemez sekme
+   *  (örn. Arşiv — nadir kullanılır, ana sekmelerden ayrık dursun diye). */
   pinnedTab?: ReorderableTab;
   activeKey: string;
   onSelect: (key: string) => void;
   /** Sürükle-bırak sonrası yeni key sırası — kalıcı kaydı çağıran yapar. */
   onReorder: (keys: string[]) => void;
+  /** Şeridin EN SAĞINA (ml-auto) render edilen içerik — örn. "Top/Metre" özeti. */
+  trailing?: ReactNode;
 }
 
 /**
  * Sürüklenip sıralanabilen sekme şeridi. 8px eşik → küçük hareket = tıklama
  * (sekme seçer), 8px üstü = sürükleme (sıralar). Sıra kaydı çağırana ait.
  */
-export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReorder }: Props) {
+export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReorder, trailing }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const handleDragEnd = (e: DragEndEvent) => {
@@ -71,20 +75,25 @@ export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReor
       </DndContext>
 
       {pinnedTab && (
-        <button
-          type="button"
-          onClick={() => onSelect(pinnedTab.key)}
-          className={cn(
-            "ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 border-l border-l-border/70 px-3 py-1.5 pl-3 text-xs font-medium transition-colors",
-            activeKey === pinnedTab.key
-              ? "border-b-primary text-foreground"
-              : "border-b-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <pinnedTab.Icon className="h-3.5 w-3.5" />
-          {pinnedTab.label}
-        </button>
+        <>
+          {/* Ayrım çizgisi — Arşiv nadir kullanılır, ana sekmelerden ayrık dursun. */}
+          <span className="mx-1 h-5 w-px shrink-0 self-center bg-border" aria-hidden />
+          <button
+            type="button"
+            onClick={() => onSelect(pinnedTab.key)}
+            className={cn(
+              "flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-1.5 text-xs font-medium transition-colors",
+              activeKey === pinnedTab.key
+                ? "border-b-primary text-foreground"
+                : "border-b-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <pinnedTab.Icon className="h-3.5 w-3.5" />
+            {pinnedTab.label}
+          </button>
+        </>
       )}
+      {trailing && <div className="ml-auto flex shrink-0 items-center pb-1.5">{trailing}</div>}
     </div>
   );
 }

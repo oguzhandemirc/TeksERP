@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode } from "@/lib/code-generator";
 import { nextSortOrder } from "@/lib/sort-order";
 import { fabricPropertyColumns } from "./columns";
 import { fabricPropertyService } from "./service";
@@ -27,7 +26,8 @@ export function FabricPropertiesPage() {
     v: FabricPropertyFormValues,
     initial: FabricProperty | null,
   ): Partial<FabricProperty> => ({
-    code: initial?.code ?? generateCode("OZL"),
+    // Kod backend'de üretilir (OZL+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+    ...(initial ? { code: initial.code } : {}),
     name: v.name,
     category: v.category?.trim() || null,
     description: v.description?.trim() || null,

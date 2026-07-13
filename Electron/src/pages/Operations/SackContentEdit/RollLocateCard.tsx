@@ -1,8 +1,6 @@
 import { MapPin, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useRollNameTemplate } from "@/hooks/usePricingEnabled";
-import { formatRollName } from "@/lib/roll-name";
 import { shipmentStatusLabels, type LocatedRoll } from "./types";
 
 const ROLL_STATUS_LABEL: Record<string, string> = {
@@ -18,13 +16,14 @@ const ROLL_STATUS_LABEL: Record<string, string> = {
 
 /** "Bu top nerede?" cevabı — barkod okutulunca liste üstünde gösterilir. */
 export function RollLocateCard({ roll, onClear }: { roll: LocatedRoll; onClear: () => void }) {
-  const template = useRollNameTemplate();
-  const rollName = formatRollName(template, {
-    item: roll.item.name,
-    color: roll.color?.name ?? null,
-    width: roll.width,
-    quality: roll.qualityGrade,
-  });
+  // Birleşik ad (ürün + renk + en) — boş parçalar atlanır.
+  const rollName = [
+    roll.item.name,
+    roll.color?.name,
+    roll.width != null ? `${roll.width}cm` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const location = roll.sack
     ? `Çuval ${roll.sack.sackNo}`
     : roll.shipment

@@ -1,4 +1,4 @@
-import { Search, X, Palette, Eye, EyeOff } from "lucide-react";
+import { Search, X, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,6 @@ interface Props {
   onStationId: (v: string) => void;
   machinePresence: MachinePresence;
   onMachinePresence: (v: MachinePresence) => void;
-  capOnly: boolean;
-  onCapOnly: (v: boolean) => void;
-  hasAnyFason: boolean;
   stationOptions: { id: string; name: string }[];
   visibleCount: number;
   totalCount: number;
@@ -34,9 +31,6 @@ export function StationFilterBar({
   onStationId,
   machinePresence,
   onMachinePresence,
-  capOnly,
-  onCapOnly,
-  hasAnyFason,
   stationOptions,
   visibleCount,
   totalCount,
@@ -89,19 +83,6 @@ export function StationFilterBar({
           <SelectItem value="active">Aktif makinesi var</SelectItem>
         </SelectContent>
       </Select>
-
-      {/* 5) Yetenek (yalnız fason istasyon varsa) */}
-      {hasAnyFason && (
-        <Button
-          type="button"
-          size="sm"
-          variant={capOnly ? "default" : "outline"}
-          className="h-8 gap-1 text-xs"
-          onClick={() => onCapOnly(!capOnly)}
-        >
-          <Palette className="h-3.5 w-3.5" /> Yeteneği tanımlı fason
-        </Button>
-      )}
 
       {/* Sağ küme */}
       <div className="ml-auto flex items-center gap-2">

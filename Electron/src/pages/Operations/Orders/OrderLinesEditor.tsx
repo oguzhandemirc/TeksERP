@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2, PackagePlus, Package, Info } from "lucide-react";
+import { Plus, Trash2, PackagePlus, Package, Info, StickyNote, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,21 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
   const qc = useQueryClient();
   const pricingEnabled = usePricingEnabled();
   const [quickAddForLine, setQuickAddForLine] = useState<string | null>(null);
+  // Kesim notu varsayılan olarak GİZLİ — "Not ekle" ile açılır. Dolu notu olan
+  // satır (düzenleme) otomatik açık gelir; boş nota kullanıcı el ile açmadıkça kapalı.
+  const [noteOpenIds, setNoteOpenIds] = useState<Set<string>>(new Set());
+  const isNoteOpen = (line: OrderLineFormValues) =>
+    noteOpenIds.has(line.clientId) || Boolean(line.cutNote?.trim());
+  const openNote = (clientId: string) =>
+    setNoteOpenIds((prev) => new Set(prev).add(clientId));
+  const closeNote = (clientId: string) => {
+    updateLine(clientId, { cutNote: "" });
+    setNoteOpenIds((prev) => {
+      const next = new Set(prev);
+      next.delete(clientId);
+      return next;
+    });
+  };
 
   // Tüm pulse vurguları TEK paylaşılan saatten beslenir ([[usePulseSync]]) — modaldaki
   // her yer (müşteri seçici, kalem alanları, "Kalem Ekle" butonu) aynı hız + aynı fazda yanıp söner.
@@ -217,14 +232,43 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                     itemId={line.itemId}
                     value={line.requiredPropertyIds ?? []}
                     onChange={(ids) => updateLine(line.clientId, { requiredPropertyIds: ids })}
+                    extraAction={
+                      !isNoteOpen(line) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openNote(line.clientId)}
+                          className="h-7 gap-1.5 text-xs border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/50"
+                        >
+                          <StickyNote className="h-3.5 w-3.5" />
+                          Not ekle
+                        </Button>
+                      ) : null
+                    }
                   />
                 </div>
-                <Input
-                  className="col-span-12 text-sm"
-                  placeholder="Kesim notu (ops.) — örn: 3 parça 200+200+100 m"
-                  value={line.cutNote ?? ""}
-                  onChange={(e) => updateLine(line.clientId, { cutNote: e.target.value })}
-                />
+                {isNoteOpen(line) && (
+                  <div className="col-span-12 flex items-center gap-1.5">
+                    <Input
+                      autoFocus
+                      className="flex-1 text-sm"
+                      placeholder="Kesim notu (ops.) — örn: 3 parça 200+200+100 m"
+                      value={line.cutNote ?? ""}
+                      onChange={(e) => updateLine(line.clientId, { cutNote: e.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => closeNote(line.clientId)}
+                      aria-label="Notu kaldır"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
               <Button
                 type="button"

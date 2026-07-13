@@ -22,6 +22,8 @@ import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
 import { customerService } from "@/pages/Customers/service";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
+import { branchLookupService } from "@/pages/Operations/Shipments/service";
+import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
 import { useTabsStore } from "@/store/tabs";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
@@ -41,6 +43,31 @@ const FILTERS: FilterDef[] = [
     ],
   },
   { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
+  {
+    // Şube SEÇİLEN MÜŞTERİYE bağlı (dependent-lookup): müşteri seçilmeden pasif,
+    // seçilince yalnız o müşterinin şubeleri. Backend filter[branchId] (scalar) otomatik.
+    kind: "dependent-lookup",
+    key: "branchId",
+    label: "Şube",
+    dependsOn: "customerId",
+    queryKey: "branch-lookup",
+    placeholderNoParent: "Şube (önce müşteri)",
+    fetchOptions: (customerId) =>
+      branchLookupService
+        .getAll({
+          page: 1,
+          pageSize: 200,
+          sortBy: "name",
+          sortOrder: "asc",
+          filters: { isActive: "true", customerId },
+        })
+        .then((r) => r.data),
+    getLabel: (it) => {
+      const b = it as Partial<BranchLookupItem> & { id: string };
+      if (!b.name) return b.id;
+      return b.city ? `${b.name} (${b.city})` : b.name;
+    },
+  },
   { kind: "lookup", key: "itemId", label: "Ürün", service: itemService, queryKey: "items" },
   { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
@@ -238,7 +265,6 @@ export function OrdersPage() {
               >
                 <Plus className="h-4 w-4" />
                 Yeni Sipariş
-                {isEmpty && <span className="ml-0.5 text-primary-foreground">*</span>}
               </Button>
             </PermissionGate>
           </>

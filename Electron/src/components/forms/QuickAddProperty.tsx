@@ -4,39 +4,34 @@ import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ColorPickerInput } from "@/components/forms/ColorPickerInput";
-import { colorService } from "@/pages/Colors/service";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
-import type { Color } from "@/pages/Colors/types";
+import { fabricPropertyService } from "@/pages/FabricProperties/service";
+import type { FabricProperty } from "@/pages/FabricProperties/types";
 
 /**
- * Saha #12: renk seçicide hızlı renk ekleme — Tanımlar'a gitmeden ad (+ ops. hex)
- * ile yeni PUBLIC renk yaratır ve hemen seçer. Ad standardı (BÜYÜK + sayı başta)
- * backend'de normalize edilir; müşteri ataması bilinçli YAPILMAZ (atanmış renk
- * exclusive olur — operatörü şaşırtmasın, gerekirse renk formundan atanır).
- * Hex girişi görsel color picker (react-colorful) ile — elle #RRGGBB yerine.
+ * Özellik seçicide hızlı özellik ekleme — Tanımlar'a gitmeden ad ile yeni PUBLIC
+ * `FabricProperty` yaratır ve hemen seçer (kod OZL-… otomatik). Renk hızlı-eklemesi
+ * (QuickAddColor) ile aynı desen. Yalnız ürün özellik KISITI YOKKEN gösterilir
+ * (bkz. PropertyChipsField.allowQuickAdd) — kısıtlı üründe yeni global özellik o
+ * ürünün izinli listesinde olmayacağı için anlamsız.
  */
-export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }) {
+export function QuickAddProperty({ onCreated }: { onCreated: (id: string) => void }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [hex, setHex] = useState("");
 
   const createMut = useMutation({
     mutationFn: () =>
-      colorService.create({
-        code: generateCode(CODE_PREFIXES.COLOR),
+      // Kod backend'de üretilir (OZL+GGAAYY+NNNN) — istemci göndermez.
+      fabricPropertyService.create({
         name: name.trim(),
-        hex: /^#[0-9a-fA-F]{6}$/.test(hex.trim()) ? hex.trim() : null,
         isActive: true,
-      } as Partial<Color>),
+      } as Partial<FabricProperty>),
     onSuccess: (res) => {
       const created = res.data;
-      toast.success(`Renk eklendi: ${created.name}`);
-      void qc.invalidateQueries({ queryKey: ["colors"] });
+      toast.success(`Özellik eklendi: ${created.name}`);
+      void qc.invalidateQueries({ queryKey: ["fabric-properties"] });
       setOpen(false);
       setName("");
-      setHex("");
       onCreated(created.id);
     },
   });
@@ -51,7 +46,7 @@ export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }
           onClick={() => setOpen(true)}
         >
           <Plus className="h-4 w-4" />
-          Yeni Renk Ekle
+          Yeni Özellik Ekle
         </Button>
       </div>
     );
@@ -63,7 +58,7 @@ export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Renk adı (örn. beyaz 055)"
+        placeholder="Özellik adı (örn. Antibakteriyel)"
         className="h-8 min-w-[9rem] flex-1 text-sm"
         onKeyDown={(e) => {
           if (e.key === "Enter" && name.trim()) {
@@ -72,7 +67,6 @@ export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }
           }
         }}
       />
-      <ColorPickerInput value={hex} onChange={setHex} className="w-44" />
       <Button
         type="button"
         size="sm"

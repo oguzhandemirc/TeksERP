@@ -61,7 +61,6 @@ export function ProductionStationsPage() {
   const debouncedSearch = useDebouncedValue(search, 300);
   const [stationId, setStationId] = useState("__all__");
   const [machinePresence, setMachinePresence] = useState<MachinePresence>("all");
-  const [capOnly, setCapOnly] = useState(false);
 
   const stationsQ = useQuery({ queryKey: ["stations", "card"], queryFn: () => loadAllForPicker(stationService) });
   // showInactive → filtresiz yükle (pasif makineler de gelsin); aksi halde yalnız aktif.
@@ -115,7 +114,6 @@ export function ProductionStationsPage() {
     }
     return map;
   }, [machinesQ.data]);
-  const hasAnyFason = useMemo(() => allStations.some((s) => s.kind === "SUBCONTRACTOR"), [allStations]);
 
   // İstemci-tarafı filtre — tüm veri zaten yüklü (loadAllForPicker). AND (boyutlar
   // arası) + OR (Tür chip'leri içinde). showInactive filtre DEĞİL, makine yüklemesini sürer.
@@ -129,11 +127,6 @@ export function ProductionStationsPage() {
       if (machinePresence === "none" && sm.length > 0) return false;
       if (machinePresence === "active" && !sm.some((m) => m.isActive !== false)) return false;
 
-      if (capOnly) {
-        const cap = capByStation.get(s.id);
-        if (!cap || !(cap.canApplyColor || cap.canApplyProperty)) return false;
-      }
-
       if (q) {
         const hay = [s.name, s.code, s.department ?? "", ...sm.flatMap((m) => [m.name, m.code])]
           .join(" ")
@@ -142,16 +135,15 @@ export function ProductionStationsPage() {
       }
       return true;
     });
-  }, [allStations, stationId, machinePresence, capOnly, debouncedSearch, machinesByStation, capByStation]);
+  }, [allStations, stationId, machinePresence, debouncedSearch, machinesByStation]);
 
   const anyFilterActive =
-    debouncedSearch.trim() !== "" || stationId !== "__all__" || machinePresence !== "all" || capOnly;
+    debouncedSearch.trim() !== "" || stationId !== "__all__" || machinePresence !== "all";
 
   const clearFilters = () => {
     setSearch("");
     setStationId("__all__");
     setMachinePresence("all");
-    setCapOnly(false);
   };
 
   const handleStationSubmit = (values: StationFormValues) => {
@@ -238,9 +230,6 @@ export function ProductionStationsPage() {
         onStationId={setStationId}
         machinePresence={machinePresence}
         onMachinePresence={setMachinePresence}
-        capOnly={capOnly}
-        onCapOnly={setCapOnly}
-        hasAnyFason={hasAnyFason}
         stationOptions={allStations.map((s) => ({ id: s.id, name: s.name }))}
         visibleCount={stations.length}
         totalCount={allStations.length}
@@ -250,7 +239,7 @@ export function ProductionStationsPage() {
         onToggleInactive={() => setShowInactive((v) => !v)}
       />
 
-      <div className="flex-1 space-y-3 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6">
         {loading && <Skeleton className="h-24 w-full" />}
         {!loading && allStations.length === 0 && (
           <div className="text-sm text-muted-foreground">Üretim istasyonu yok.</div>
@@ -258,24 +247,31 @@ export function ProductionStationsPage() {
         {!loading && allStations.length > 0 && stations.length === 0 && (
           <div className="text-sm text-muted-foreground">Filtreye uyan istasyon yok.</div>
         )}
-        {stations.map((s) => (
-          <StationCard
-            key={s.id}
-            station={s}
-            machines={machinesByStation.get(s.id) ?? []}
-            peripheralsByMachine={peripheralsByMachine}
-            cap={capByStation.get(s.id)}
-            canWrite={canWrite}
-            onEditStation={(st) => setStationDlg({ open: true, initial: st })}
-            onAddMachine={(stationId) => setMachineDlg({ open: true, initial: null, stationId })}
-            onEditMachine={(m) => setMachineDlg({ open: true, initial: m })}
-            onQrMachine={setQrMachine}
-            onDeactivateMachine={setDeactivateMachine}
-            onReactivateMachine={(m) => machineMut.restoreMutation.mutate(m.id)}
-            onDeleteMachine={setDeleteMachine}
-            onEditCap={setCapStation}
-          />
-        ))}
+        {stations.length > 0 && (
+          // Responsive kart grid'i — sütun sayısı mevcut genişliğe göre otomatik
+          // (auto-fill, kart başına min 28rem/448px → makine tablosu rahat sığar).
+          // items-start: kısa kartlar aynı satırdaki uzun karta göre uzamaz.
+          <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fill,minmax(28rem,1fr))]">
+            {stations.map((s) => (
+              <StationCard
+                key={s.id}
+                station={s}
+                machines={machinesByStation.get(s.id) ?? []}
+                peripheralsByMachine={peripheralsByMachine}
+                cap={capByStation.get(s.id)}
+                canWrite={canWrite}
+                onEditStation={(st) => setStationDlg({ open: true, initial: st })}
+                onAddMachine={(stationId) => setMachineDlg({ open: true, initial: null, stationId })}
+                onEditMachine={(m) => setMachineDlg({ open: true, initial: m })}
+                onQrMachine={setQrMachine}
+                onDeactivateMachine={setDeactivateMachine}
+                onReactivateMachine={(m) => machineMut.restoreMutation.mutate(m.id)}
+                onDeleteMachine={setDeleteMachine}
+                onEditCap={setCapStation}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <StationFormDialog

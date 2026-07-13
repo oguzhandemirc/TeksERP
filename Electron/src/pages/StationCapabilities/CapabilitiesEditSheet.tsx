@@ -132,7 +132,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         <SheetHeader>
           <SheetTitle>{station?.stationName ?? "—"}</SheetTitle>
           <SheetDescription>
-            <span className="font-mono">{station?.stationCode}</span>
+            <span className="font-medium text-foreground">{station?.stationName}</span>
             {" · "}İstasyonun uygulayabileceği renkleri ve kazandırabileceği özellikleri seç.
           </SheetDescription>
         </SheetHeader>
@@ -151,7 +151,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
             <Skeleton className="h-64 w-full" />
           </div>
         ) : (
-          <div className="mt-4 flex h-[calc(100vh-180px)] flex-col">
+          <div className="mt-4 flex h-[calc(100vh-230px)] flex-col">
             <Tabs defaultValue={defaultTab} className="flex flex-1 flex-col min-h-0">
               <TabsList>
                 {canApplyColor && (
@@ -202,7 +202,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
             <div className="mt-3 flex items-center justify-between border-t pt-3">
               <Button
                 type="button"
-                variant="ghost"
+                variant="destructive"
                 size="sm"
                 disabled={!dirty || mutation.isPending}
                 onClick={() => {

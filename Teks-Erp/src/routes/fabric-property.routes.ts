@@ -7,16 +7,23 @@
 
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
-import { BaseService } from "../services/base.service";
+import { FabricPropertyService } from "../services/fabric-property.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 
-const service = new BaseService({
+// Kod (`OZL+GGAAYY+NNNN`) backend'de üretilir — bkz. FabricPropertyService.create.
+// `uniqueField` BİLEREK verilmedi: kod backend-üretimli olduğundan generic create'in
+// INSERT-öncesi `findFirst` ön-kontrolü (aktif duplicate → 409) yalnızca eşzamanlı
+// iki create aynı sıra no'yu okuduğunda tetiklenir ve P2002 olmadığı için
+// withBarcodeRetry onu YAKALAYAMAZDI. Ön-kontrol olmadan çakışma DB `@unique`'e
+// düşer → P2002 → withBarcodeRetry taze sıra no ile kendini onarır (order/shipment/
+// çuval üreteçleriyle aynı desen). Pasif-kayıt reactivate yolu zaten ölüydü
+// (taze üretilen kod hiçbir eski kodla eşleşmez).
+const service = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
   searchFields: ["code", "name", "category", "description"],
   defaultInclude: undefined,
-  uniqueField: "code",
 });
 
 const controller = new BaseController(service);

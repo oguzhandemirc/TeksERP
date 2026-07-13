@@ -1,5 +1,4 @@
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { customerColumns } from "./columns";
 import { customerService } from "./service";
 import { CustomerFormDialog } from "./CustomerFormDialog";
@@ -7,7 +6,8 @@ import type { Customer } from "./types";
 import type { CustomerFormValues } from "./schema";
 
 const buildPayload = (v: CustomerFormValues, initial: Customer | null): Partial<Customer> => ({
-  code: initial?.code ?? generateCode(CODE_PREFIXES.CUSTOMER),
+  // Kod backend'de üretilir (MUS+GGAAYY+NNNN); yeni kayıtta gönderilmez, düzenlemede korunur.
+  ...(initial ? { code: initial.code } : {}),
   name: v.name,
   taxNumber: v.taxNumber || null,
   type: v.type,

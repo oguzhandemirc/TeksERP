@@ -53,7 +53,7 @@ async function resolveRoll(code: string): Promise<ScanResolution> {
       roll.status as string,
     ]),
     actions: [
-      { label: "Detayı aç (Toplar)", to: "/operations/rolls", state: { scanBarcode: code }, primary: true },
+      { label: "Detayı aç (Envanter)", to: "/operations/rolls", state: { scanBarcode: code }, primary: true },
       { label: "Çuval Deposu'nda bul / düzenle", to: "/operations/sack-content-edit", state: { scanCode: code } },
       { label: "Yeniden Etiketle", to: "/operations/relabel-station", state: { scanCode: code } },
     ],

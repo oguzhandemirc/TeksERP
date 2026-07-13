@@ -98,9 +98,9 @@ export function AllowedPropertiesDialog({
           <div className="flex items-center justify-end">
             <Button
               type="button"
-              variant="outline"
               size="sm"
               onClick={() => setAddOpen(true)}
+              className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-500 hover:text-white"
             >
               <Plus className="mr-1 h-3.5 w-3.5" />
               Yeni Özellik
@@ -115,6 +115,10 @@ export function AllowedPropertiesDialog({
               placeholder="Özellik ara..."
             />
           </div>
+
+          <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            Not: Hiçbir özellik seçmezseniz bu ürüne <span className="font-medium text-foreground">tüm aktif özellikler</span> serbesttir.
+          </p>
 
           <DialogFooter>
             <Button type="button" onClick={() => onOpenChange(false)}>
