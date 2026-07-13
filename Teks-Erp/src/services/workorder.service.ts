@@ -63,6 +63,7 @@ import {
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { createBatchTx, type CreateBatchResult } from "./batch.service";
+import { WorkOrderSplitService } from "./workorder-split.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
@@ -74,6 +75,8 @@ function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   return typeof v === "number" ? v : Number(v);
 }
+
+const workOrderSplitService = new WorkOrderSplitService();
 
 /**
  * plannedStartDate / plannedEndDate default'ları:
@@ -1842,36 +1845,31 @@ export class WorkOrderService {
   }
 
   // ===========================================================================
-  // PARTİYİ AYIR (redye üç yolu) — Faz 4'te workorder-split.service.ts olarak
-  // yeniden yazılıyor. Eski "dal" (batchSplitId) tabanlı split KALDIRILDI.
+  // PARTİYİ AYIR (redye üç yolu) — workorder-split.service.ts'e delege.
+  // REDYE_SAME_COLOR uygulandı; NEW_COLOR/UNDYED_MOVE (WO klonlu) sonraki iterasyon.
   // ===========================================================================
 
-  /**
-   * KÖPRÜ (Faz 2 → Faz 4): parti ayırma ÖNİZLEMESİ geçici olarak devre dışı.
-   * Yeni parti tabanlı üç-yol ayırma (REDYE_SAME_COLOR / NEW_COLOR / UNDYED_MOVE)
-   * Faz 4'te gelir; o zamana dek 409 döner (Electron SplitBatchModal Faz 6.3).
-   */
+  /** Parti ayırma ÖNİZLEMESİ (izinli modlar + taşınacak toplar). */
   async getSplitPreview(
-    _workOrderId: string,
-    _batchId: string,
+    workOrderId: string,
+    batchId: string,
   ): Promise<ApiResponse<unknown>> {
-    throw AppError.conflict(
-      "Parti ayırma geçiş sırasında geçici olarak devre dışı (Faz 4'te yeni parti modeliyle gelecek).",
-    );
+    return workOrderSplitService.getSplitPreview(workOrderId, batchId);
   }
 
-  /**
-   * KÖPRÜ (Faz 2 → Faz 4): parti ayırma geçici olarak devre dışı — bkz.
-   * getSplitPreview. Üç-yol ayırma workorder-split.service.ts'te yazılacak.
-   */
+  /** Partiyi ayır: REDYE_SAME_COLOR (aynı renk yeniden boyama) / NEW_COLOR / UNDYED_MOVE. */
   async splitBranch(
-    _workOrderId: string,
-    _data: unknown,
-    _userId?: string,
+    workOrderId: string,
+    data: {
+      batchId: string;
+      mode: "REDYE_SAME_COLOR" | "NEW_COLOR" | "UNDYED_MOVE";
+      newColorId?: string | null;
+      orderMode?: "stock" | "keep";
+      rollIds?: string[];
+    },
+    userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    throw AppError.conflict(
-      "Parti ayırma geçiş sırasında geçici olarak devre dışı (Faz 4'te yeni parti modeliyle gelecek).",
-    );
+    return workOrderSplitService.splitBranch(workOrderId, data, userId);
   }
 
   /**

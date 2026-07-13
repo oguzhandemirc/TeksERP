@@ -93,9 +93,10 @@ const targetPropertiesSchema = z.object({
 });
 
 const splitBranchSchema = z.object({
-  batchSplitId: z.string().uuid(),
-  newColorId: z.string().uuid(),
-  newBatchNumber: z.string().trim().min(1).max(64).optional().nullable(),
+  batchId: z.string().uuid(),
+  mode: z.enum(["REDYE_SAME_COLOR", "NEW_COLOR", "UNDYED_MOVE"]),
+  /** Yalnız NEW_COLOR modunda gerekli; REDYE_SAME_COLOR'da yasak. */
+  newColorId: z.string().uuid().optional().nullable(),
   orderMode: z.enum(["stock", "keep"]).default("stock"),
   /** Ayrılacak topların alt-kümesi (yok/boş = partinin tümü). */
   rollIds: z.array(z.string().uuid()).max(500).optional(),
@@ -302,13 +303,13 @@ export class WorkOrderController {
    */
   async getSplitPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const batchSplitId =
-        typeof req.query.batchSplitId === "string" ? req.query.batchSplitId : "";
-      if (!batchSplitId) {
-        res.status(400).json({ success: false, data: null, message: "batchSplitId gerekli" });
+      const batchId =
+        typeof req.query.batchId === "string" ? req.query.batchId : "";
+      if (!batchId) {
+        res.status(400).json({ success: false, data: null, message: "batchId gerekli" });
         return;
       }
-      const result = await this.service.getSplitPreview(req.params.id as string, batchSplitId);
+      const result = await this.service.getSplitPreview(req.params.id as string, batchId);
       res.status(200).json(result);
     } catch (error) {
       next(error);
