@@ -61,6 +61,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -2757,14 +2758,7 @@ export class WorkOrderService {
       }
 
       // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
-      await tx.travelerCard.updateMany({
-        where: { workOrderId: id, status: "ACTIVE" },
-        data: {
-          status: "VOIDED",
-          voidedAt: new Date(),
-          voidReason: "WO_CANCELLED",
-        },
-      });
+      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_CANCELLED" });
 
       const cancelledWO = await tx.workOrder.findUnique({ where: { id } });
       return { updated: cancelledWO! };
@@ -2883,14 +2877,7 @@ export class WorkOrderService {
       // ACTIVE refakat kartı VOID edilir — quickStart zero-attach telafisi ve
       // planlamacı arşivi DB'de arşivli WO'ya bağlı hayalet ACTIVE kart
       // bırakmasın (softDelete'teki bloğun simetriği).
-      await tx.travelerCard.updateMany({
-        where: { workOrderId: id, status: "ACTIVE" },
-        data: {
-          status: "VOIDED",
-          voidedAt: new Date(),
-          voidReason: "WO_ARCHIVED",
-        },
-      });
+      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_ARCHIVED" });
 
       return tx.workOrder.update({
         where: { id },
@@ -2966,10 +2953,13 @@ export class WorkOrderService {
     // R10: Tüm WO tipleri için sadece STOCK statüsündeki rulolar bağlanabilir.
     const acceptedRollStatuses: RollStatus[] = [RollStatus.STOCK];
 
-    const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
-    const errorMessages: string[] = [];
-
-    await prisma.$transaction(async (tx) => {
+    // Faz 1.1: tx withBarcodeRetry ile sarıldı — bugün içeride @unique üretimi yok
+    // (no-op); parti modeli geçişinde tx'e P (parti) + RK (kart) sequence üretimi
+    // girecek, "sequence okuma closure İÇİNDE" iskeleti şimdiden hazır. Sonuç dizileri
+    // closure İÇİNDE tanımlı — retry mükerrer biriktirmesin.
+    const { attached, errorMessages } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
+      const errorMessages: string[] = [];
       // 1) Tüm rulolar tek query'de — N round-trip yerine 1.
       const rolls = await tx.roll.findMany({
         where: { barcode: { in: barcodes } },
@@ -3066,7 +3056,9 @@ export class WorkOrderService {
         await recomputeStepStatus(tx, firstStepId);
         await ensureWorkOrderInProgress(tx, workOrderId);
       }
-    });
+
+      return { attached, errorMessages };
+    }));
 
     // Audit log'lar tx dışında, TEK createMany ile (eski N ayrı INSERT yerine).
     // R8 fix: recordId roll.id (UUID), barcode newData'ya meta olarak gidiyor.

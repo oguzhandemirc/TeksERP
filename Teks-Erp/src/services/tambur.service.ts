@@ -47,6 +47,7 @@ import {
 } from "@prisma/client";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 
@@ -1023,10 +1024,7 @@ export class TamburService {
             where: { id: wo.id },
             data: { status: WorkOrderStatus.COMPLETED },
           });
-          await tx.travelerCard.updateMany({
-            where: { workOrderId: wo.id, status: "ACTIVE" },
-            data: { status: "COMPLETED" },
-          });
+          await setWorkOrderCardStatuses(tx, wo.id, "ACTIVE", "COMPLETED");
         }
       }
 
@@ -2660,10 +2658,7 @@ export class TamburService {
           where: { id: woId },
           data: { status: WorkOrderStatus.COMPLETED },
         });
-        await tx.travelerCard.updateMany({
-          where: { workOrderId: woId, status: "ACTIVE" },
-          data: { status: "COMPLETED" },
-        });
+        await setWorkOrderCardStatuses(tx, woId, "ACTIVE", "COMPLETED");
       }
 
       return { remainingChildId, remainingQty, wantChild };

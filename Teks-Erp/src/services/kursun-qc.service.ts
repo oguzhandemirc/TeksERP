@@ -32,6 +32,7 @@ import {
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 
 interface RollDefectSummary {
   id: string;
@@ -929,10 +930,7 @@ export class KursunQcService {
           where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },
           data: { status: WorkOrderStatus.IN_PROGRESS },
         });
-        await tx.travelerCard.updateMany({
-          where: { workOrderId: step.workOrderId, status: "COMPLETED" },
-          data: { status: "ACTIVE" },
-        });
+        await setWorkOrderCardStatuses(tx, step.workOrderId, "COMPLETED", "ACTIVE");
       }
 
       // Bu step'in kapatılmış movement'lerini geri aç

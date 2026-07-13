@@ -53,6 +53,7 @@ import {
 import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 // Fasondan doğrudan sevk önizlemesi karşılanma projeksiyonunu shipping'in saf
 // FIFO/spec-eşleşmesiyle üretir (tek karşılanma kaynağı; circular yok — shipping
 // subcontractor'ı import etmez).
@@ -1337,10 +1338,7 @@ export class SubcontractorService {
                 where: { id: dispatch.workOrderId },
                 data: { status: WorkOrderStatus.COMPLETED },
               });
-              await tx.travelerCard.updateMany({
-                where: { workOrderId: dispatch.workOrderId, status: TravelerCardStatus.ACTIVE },
-                data: { status: TravelerCardStatus.COMPLETED }, // F83: string literal yerine enum
-              });
+              await setWorkOrderCardStatuses(tx, dispatch.workOrderId, TravelerCardStatus.ACTIVE, TravelerCardStatus.COMPLETED);
             }
           } else {
             // Hiç kabul yok → sevk öncesi duruma (PENDING) dön.
@@ -1822,10 +1820,7 @@ export class SubcontractorService {
             where: { id: data.workOrderId },
             data: { status: WorkOrderStatus.COMPLETED },
           });
-          await tx.travelerCard.updateMany({
-            where: { workOrderId: data.workOrderId, status: TravelerCardStatus.ACTIVE },
-            data: { status: TravelerCardStatus.COMPLETED },
-          });
+          await setWorkOrderCardStatuses(tx, data.workOrderId, TravelerCardStatus.ACTIVE, TravelerCardStatus.COMPLETED);
         }
       }
 
@@ -4194,10 +4189,7 @@ export class SubcontractorService {
               where: { id: dispatch.workOrderId },
               data: { status: WorkOrderStatus.COMPLETED },
             });
-            await tx.travelerCard.updateMany({
-              where: { workOrderId: dispatch.workOrderId, status: TravelerCardStatus.ACTIVE },
-              data: { status: TravelerCardStatus.COMPLETED },
-            });
+            await setWorkOrderCardStatuses(tx, dispatch.workOrderId, TravelerCardStatus.ACTIVE, TravelerCardStatus.COMPLETED);
           }
         }
       }
