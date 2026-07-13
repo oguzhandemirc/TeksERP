@@ -77,6 +77,13 @@ describe("buildPeripheralPayload (form → API)", () => {
     expect(buildPeripheralPayload({ ...base, owner: "none", stationId: "s1" }).stationId).toBeNull();
   });
 
+  it("rasterMode: LABEL_PRINTER'da korunur; yazıcı-dışı türde false", () => {
+    expect(buildPeripheralPayload({ ...base, kind: "LABEL_PRINTER", rasterMode: true }).rasterMode).toBe(true);
+    expect(buildPeripheralPayload({ ...base, kind: "LABEL_PRINTER", rasterMode: false }).rasterMode).toBe(false);
+    // Yazıcı-dışı (kantar/metre) → raster anlamsız, temizlenir.
+    expect(buildPeripheralPayload({ ...base, kind: "SCALE", rasterMode: true }).rasterMode).toBe(false);
+  });
+
   it("schema station owner'ı kabul eder", () => {
     const r = peripheralFormSchema.safeParse({ ...base, owner: "station", stationId: "s1" });
     expect(r.success).toBe(true);

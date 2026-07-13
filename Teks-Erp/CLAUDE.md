@@ -67,6 +67,7 @@ Sadece bunlar. Alternatif tanıtma.
 | Logging | `morgan` |
 | Util | `uuid` |
 | Barcode | `bwip-js` |
+| Etiket fontu (raster) | `opentype.js` (DejaVu TTF → 1bpp glif; fontlar `assets/fonts/`) |
 | Test data | `@faker-js/faker` (dev only) |
 
 ## RBAC Permission Kodları

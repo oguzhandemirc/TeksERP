@@ -129,4 +129,34 @@ fark glif piksel şekilleri (bitmap kafa vs vektör motor) — boyut/konum/metin
 - Logo/görsel elemanı v2 (native bitmap ^GFA/GW + dithering).
 - Fiziksel yazıcı doğrulaması: Argox PPLA/PPLB gerçek baskı (donanım kullanıcıda).
 - Electron editör görseli YAKLAŞIKTIR; sözleşme "önizleme = baskı" backend
-  önizlemesiyle sağlanır (native→SVG, `native-preview.ts`).
+  önizlemesiyle sağlanır (native→SVG, `native-preview.ts`; raster modda BMP).
+
+## 8. Raster baskı (1bpp bitmap) — 2026-07-13, cihaz-başına opt-in
+
+Önizleme↔çıktı sapmasını (font/konum/PPLA %35-50 büyük) KÖKTEN çözer: kanvas
+layout backend'de yazıcı DPI'ında **tek 1bpp bitmap**'e rasterize edilir; AYNI
+bitmap hem önizlemeye (BMP data-URI) hem yazıcıya (dil grafik komutu) gider →
+**önizleme = baskı tanım gereği**. Yazıcı font/konum yorumu devre dışı → Türkçe
+glifler gerçek basılır (asciiFold KALKAR), PPLA/PPLB/ZPL tek boru hattı.
+
+- **Açma:** `PeripheralDevice.rasterMode` (cihaz-başına, varsayılan **kapalı**).
+  Kapalı → bugünkü komut yolu **bayt-aynı**. rawCode uzman yolu ASLA rasterlenmez;
+  varyantsız şablon akış-modeli komutta kalır.
+- **Çekirdek:** `src/services/helpers/raster/` — `raster-bitmap` (1bpp, MSB-first,
+  1=siyah), `raster-font` (opentype.js + DejaVu `assets/fonts/`), `raster-text`
+  (glif→scanline dolgu, `wr`/bold/rot), `raster-barcode` (bwip-js `raw()` → tam-dot
+  blit), `raster-canvas` (7 eleman → bitmap), `raster-bmp` (BMP kodlayıcı + önizleme),
+  `raster-envelope-{pplb,zpl,ppla}` (dil zarfı), `raster-render` (orkestratör).
+- **Zarf:** PPLB `GW` (⚠ polarite 1=beyaz varsayımı, invert; F6 teyit), ZPL `^GFA`
+  (1=siyah, invert yok, salt-ASCII), PPLA grafik indir+yerleştir (`PPLA_RASTER_VERIFIED`
+  bayrağı arkasında — F6 fiziksel test öncesi KAPALI, komuta düşer).
+- **Taşıma:** `encoding=b64` query/body → binary-safe base64 JSON (raster + komut TEK
+  yoldan); param yoksa ham text (eski istemci/mobil bozulmaz — servis rasterMode'u
+  bastırır). Electron IPC `contentB64` (main tek noktada Buffer'a çevirir), winspool/
+  TCP/serial/CUPS ham byte yazar. Registry `renderedBytes()` tek geçit.
+- **Fallback:** rasterize herhangi bir sebeple patlarsa (font eksik, PPLA gated) registry
+  try/catch **komut moduna düşer** → baskı ASLA raster hatasıyla ölmez.
+- **Bilinen açık işler (F6 fiziksel):** PPLB GW polaritesi, PPLA grafik format doğrulaması,
+  barkod okunabilirliği (tam-dot modül), yoğunluk (H/D), mobil BT-SPP hız (şimdilik
+  kapsam dışı — mobil komut modunda kalır). Editör tuvali @font-face ile DejaVu'ya
+  yaklaştırılabilir (kozmetik; sözleşme yine CanvasPreview BMP'sinde).

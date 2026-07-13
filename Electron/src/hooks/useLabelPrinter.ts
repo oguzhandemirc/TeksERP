@@ -18,12 +18,12 @@ export function useLabelPrinter() {
   const directEnabled = Boolean(cfg?.enabled && cfg?.path && printer);
 
   async function send(
-    fetchNative: () => Promise<{ content: string; language: string }>,
+    fetchNative: () => Promise<{ contentB64: string; language: string }>,
   ): Promise<{ ok: boolean; error?: string }> {
     if (!directEnabled || !printer || !cfg?.path) {
       return { ok: false, error: "Yazıcı yapılandırılmadı" };
     }
-    let native: { content: string; language: string };
+    let native: { contentB64: string; language: string };
     try {
       native = await fetchNative();
     } catch (e) {
@@ -32,7 +32,7 @@ export function useLabelPrinter() {
     // FAIL-CLOSED: yalnız BİLİNEN native dil yazıcıya gönderilir. Header cross-origin
     // sıyrılır/boş gelirse (CORS) ham bayt göndermek yerine reddet → çöp etiket çıkmaz.
     const NATIVE_LANGS = ["PPLA", "PPLB", "ZPL"];
-    if (!NATIVE_LANGS.includes(native.language) || !native.content) {
+    if (!NATIVE_LANGS.includes(native.language) || !native.contentB64) {
       return {
         ok: false,
         error: native.language === "RASTER_HTML" || !native.language
@@ -46,7 +46,7 @@ export function useLabelPrinter() {
         transport: cfg.transport ?? "serial",
         target: cfg.path,
         baudRate: cfg.baudRate,
-        content: native.content,
+        contentB64: native.contentB64,
       });
     } catch (e) {
       return { ok: false, error: (e as Error).message };

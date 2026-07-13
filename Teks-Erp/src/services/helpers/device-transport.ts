@@ -21,21 +21,23 @@ export interface ReadOptions {
 export interface DeviceTransport {
   /** Bağlantıyı doğrula (yazma/okuma yapmaz). */
   test(): Promise<void>;
-  /** Ham içerik yaz; yazılan bayt sayısını döner. */
-  write(content: string): Promise<number>;
+  /** Ham içerik yaz; yazılan bayt sayısını döner. Buffer → raster grafik baytları
+   *  (birebir); string → latin1 kodlanır (native komut). */
+  write(content: string | Buffer): Promise<number>;
   /** İstek-cevap oku (ağ-kantar/metre) — ham metin. Yazıcı transport'ta yok. */
   read?(opts?: ReadOptions): Promise<string>;
 }
 
-/** Ham native baytları yazıcıya RAW TCP ile yaz. PPLA/ZPL latin1/binary kodlanır. */
+/** Ham native baytları yazıcıya RAW TCP ile yaz. Buffer → raster grafik baytları
+ *  (birebir, invert/CRLF-normalize YOK); string → latin1 (native komut). */
 export function sendOverTcp(
-  content: string,
+  content: string | Buffer,
   host: string,
   port: number,
   timeoutMs: number,
 ): Promise<number> {
   return new Promise((resolve, reject) => {
-    const buf = Buffer.from(content, "latin1");
+    const buf = Buffer.isBuffer(content) ? content : Buffer.from(content, "latin1");
     const socket = new net.Socket();
     let settled = false;
     const finish = (err?: Error) => {

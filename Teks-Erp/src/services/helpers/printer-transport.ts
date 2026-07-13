@@ -38,7 +38,7 @@ const DEFAULT_PORT = DEFAULT_TCP_PORT;
  * `enabled=false` (default) → simülasyon (hiç socket yok). `enabled=true` + host → RAW TCP.
  */
 export async function dispatchNativeSend(
-  content: string,
+  content: string | Buffer,
   opts: {
     language: PrinterLanguage;
     enabled: boolean;
@@ -48,7 +48,7 @@ export async function dispatchNativeSend(
   },
 ): Promise<PrinterTransportResult> {
   const port = opts.port ?? DEFAULT_PORT;
-  const bytes = Buffer.byteLength(content, "latin1");
+  const bytes = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, "latin1");
 
   // FAZ-1 / opt-out → simüle (socket açma)
   if (!opts.enabled) {

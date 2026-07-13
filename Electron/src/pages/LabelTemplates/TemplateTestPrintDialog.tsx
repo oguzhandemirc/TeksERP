@@ -16,6 +16,8 @@ interface Props {
     mode: "svg" | "html" | "text";
     language: string;
     native: string;
+    /** Raster modda: zarf baytlarının base64'ü (binary-safe gönderim). */
+    nativeB64?: string;
   }>;
 }
 
@@ -51,7 +53,10 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
         });
         return;
       }
-      const res = await printerApi.send({ transport, target, baudRate, content: p.native });
+      // Raster modda base64 zarf baytları (binary-safe); komut modunda ham native metin.
+      const res = p.nativeB64
+        ? await printerApi.send({ transport, target, baudRate, contentB64: p.nativeB64 })
+        : await printerApi.send({ transport, target, baudRate, content: p.native });
       setResult(
         res.ok
           ? { ok: true, text: `Gönderildi → ${target} (${res.bytes} bayt, ${p.language})` }

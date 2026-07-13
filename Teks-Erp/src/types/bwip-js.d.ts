@@ -28,9 +28,27 @@ declare module "bwip-js" {
     cb?: (err: Error | string | null, png: Buffer) => void
   ): Promise<Buffer>;
 
+  // raw() — çizim yapmadan düşük seviye geometri döner (raster boru hattı bunu blit eder).
+  // Linear (code128): sbs = modül genişlik dizisi (çift index = bar, tek = boşluk).
+  // 2D (qrcode): pixs = satır-major 0/1 modül matrisi (pixx×pixy), sessiz bölge yok.
+  interface RawLinear {
+    sbs: number[];
+    bhs: number[];
+    bbs: number[];
+  }
+  interface RawMatrix {
+    pixs: ArrayLike<number>;
+    pixx: number;
+    pixy: number;
+    height: number;
+    width: number;
+  }
+  export function raw(opts: BwipOptions): Array<RawLinear | RawMatrix>;
+
   const bwipjs: {
     toSVG: typeof toSVG;
     toBuffer: typeof toBuffer;
+    raw: typeof raw;
   };
   export default bwipjs;
 }
