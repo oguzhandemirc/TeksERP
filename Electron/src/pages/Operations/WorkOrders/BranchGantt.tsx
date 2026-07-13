@@ -2,12 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { workOrderService, type WorkOrderBranch } from "./service";
+import { workOrderService, type BatchLane, type BatchDispatchStatus } from "./service";
 import type { WorkOrderStepLite } from "./types";
 
-type Status = WorkOrderBranch["status"];
+type Status = BatchDispatchStatus;
 
-/** Dalın o adımda BULUNDUĞU (current) hücre rengi — statüye göre. */
+/** Partinin o adımda BULUNDUĞU (current) hücre rengi — türetilmiş duruma göre. */
 const CUR_CELL: Record<Status, string> = {
   OPEN: "bg-warning text-white",
   PARTIAL: "bg-primary text-primary-foreground",
@@ -24,10 +24,26 @@ const DOT: Record<Status, string> = {
 };
 
 /**
- * Fason dalları swimlane-Gantt: satır = dal (sevk partisi), sütun = rota adımı
- * (+ terminal "Depo"). Her dalın malı hangi sütundaysa o hücre vurgulanır;
- * origin (fason adımı) ile mevcut konum arası "geçildi" olarak dolar. Böylece
- * "1. parti depoya ulaşmış, 2. parti hâlâ boyahanede" tek bakışta okunur.
+ * Partinin lane-Gantt durumu (yalnız hücre rengi için): açık sevki varsa fasonda
+ * (OPEN), kısmi dönüşteyse PARTIAL, tümü döndü/sevkedildi ise RETURNED; hiç sevki
+ * olmayan (fabrika-içi akan) parti PARTIAL (üretimde) sayılır.
+ */
+function batchDisplayStatus(b: BatchLane): Status {
+  if (b.dispatches.some((d) => d.status === "OPEN")) return "OPEN";
+  if (b.dispatches.some((d) => d.status === "PARTIAL")) return "PARTIAL";
+  if (b.dispatches.some((d) => d.status === "DIRECT_SHIPPED")) return "DIRECT_SHIPPED";
+  if (b.dispatches.length > 0 && b.dispatches.every((d) => d.status === "CANCELLED")) {
+    return "CANCELLED";
+  }
+  if (b.dispatches.length > 0) return "RETURNED";
+  return "PARTIAL";
+}
+
+/**
+ * Parti swimlane-Gantt: satır = parti (Batch), sütun = rota adımı (+ terminal
+ * "Depo"). Her partinin malı hangi sütundaysa o hücre vurgulanır; fason sevk
+ * adımı (origin) ile mevcut konum arası "geçildi" olarak dolar. Böylece "1. parti
+ * depoya ulaşmış, 2. parti hâlâ boyahanede" tek bakışta okunur.
  *
  * Konum→sütun eşleşmesi istasyon ADI ile yapılır (getBranches `currentPositions`
  * label'ı istasyon adı ya da "Depo"/"Stok"); eşleşmeyen terminal etiketler Depo
@@ -47,9 +63,9 @@ export function BranchGantt({
     staleTime: 60_000,
   });
 
-  const branches = q.data?.data?.branches ?? [];
+  const batches = q.data?.data?.batches ?? [];
   if (q.isLoading) return <Skeleton className="h-32 w-full" />;
-  if (branches.length === 0) return null;
+  if (batches.length === 0) return null;
 
   const stepNames = steps.map((s) => s.station?.name ?? "—");
   const columns = [...stepNames, "Depo"];
@@ -76,9 +92,12 @@ export function BranchGantt({
           ))}
         </div>
 
-        {/* satırlar (dallar) */}
-        {branches.map((b) => {
-          const originIdx = Math.max(0, stepNames.indexOf(b.stepName ?? ""));
+        {/* satırlar (partiler) */}
+        {batches.map((b) => {
+          const status = batchDisplayStatus(b);
+          // Origin = partinin (ilk) fason sevk adımı; sevki yoksa ilk adımdan başlar.
+          const dispatchStepName = b.dispatches.find((d) => d.stepName)?.stepName ?? "";
+          const originIdx = Math.max(0, stepNames.indexOf(dispatchStepName));
           const posByCol = new Map<number, { count: number; meters: number }>();
           for (const p of b.currentPositions) {
             const ci = colForLabel(p.label);
@@ -92,13 +111,13 @@ export function BranchGantt({
 
           return (
             <div
-              key={b.dispatchId}
+              key={b.batchId}
               className="grid items-center gap-1"
               style={{ gridTemplateColumns: gridCols }}
             >
               <div className="flex min-w-0 items-center gap-1.5 pr-1">
-                <span className={cn("h-2 w-2 shrink-0 rounded-full", DOT[b.status])} />
-                <span className="truncate font-mono text-[11px]">{b.dispatchNo}</span>
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", DOT[status])} />
+                <span className="truncate font-mono text-[11px]">{b.batchNumber}</span>
               </div>
               {columns.map((_, ci) => {
                 const pos = posByCol.get(ci);
@@ -110,7 +129,7 @@ export function BranchGantt({
                       className={cn(
                         "flex h-9 flex-col items-center justify-center gap-0 rounded leading-tight tabular-nums",
                         isCurrent
-                          ? cn("font-semibold", CUR_CELL[b.status])
+                          ? cn("font-semibold", CUR_CELL[status])
                           : isPassed
                             ? "bg-muted text-muted-foreground"
                             : "bg-transparent",

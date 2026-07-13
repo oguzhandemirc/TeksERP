@@ -80,7 +80,7 @@ export function WorkOrderDetailPage() {
       { id: "genel", label: "Genel" },
       { id: "rota", label: "Rota & Dağılım" },
     ];
-    if (hasFason) list.push({ id: "dallar", label: "Dallar" });
+    if (hasFason) list.push({ id: "dallar", label: "Partiler" });
     if (hasProduced) list.push({ id: "cikti", label: "Üretilen" });
     list.push({ id: "siparis", label: "Siparişler" });
     return list;
@@ -164,7 +164,7 @@ export function WorkOrderDetailPage() {
 
               {hasFason && wo.id && (
                 <FadeInUp delay={0.24}>
-                  <SectionBlock id="dallar" title="Dallar (Fason Partileri)" tone="warning" icon={GitBranch}>
+                  <SectionBlock id="dallar" title="Partiler (Fason & Redye)" tone="warning" icon={GitBranch}>
                     <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
                     <BranchLanes workOrderId={wo.id} />
                   </SectionBlock>

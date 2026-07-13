@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ArrowUpRight, Split, Truck, Undo2 } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CreditCard, Lock, Split, Truck, Undo2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,17 +10,17 @@ import { safeFormat, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   workOrderService,
-  type WorkOrderBranch,
+  type BatchLane,
+  type BatchLaneDispatch,
+  type BatchDispatchStatus,
+  type WorkOrderLineageRef,
   type WorkOrderSplitChild,
 } from "./service";
 import { SplitBranchModal } from "./SplitBranchModal";
 import { DirectShipModal } from "./DirectShipModal";
 import { UndoTransferModal } from "./UndoTransferModal";
 
-const STATUS_META: Record<
-  WorkOrderBranch["status"],
-  { label: string; cls: string }
-> = {
+const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> = {
   OPEN: { label: "Fasonda", cls: "border-warning/40 bg-warning/10 text-warning" },
   PARTIAL: { label: "Kısmi dönüş", cls: "border-primary/40 bg-primary/10 text-primary" },
   RETURNED: { label: "Döndü", cls: "border-success/40 bg-success/10 text-success" },
@@ -29,11 +29,10 @@ const STATUS_META: Record<
 };
 
 /**
- * Fason dalları (lane / swimlane). Her dal = bir sevk partisi
- * (SubcontractorDispatch). Aynı WO'da kumaş parça parça fasona gidince her
- * parti kendi satırında durumuyla (Fasonda / Döndü / Kısmi) ve dönüşten doğan
- * topların şu anki konumuyla görünür — "1. parti Kurşun'da, 2. parti hâlâ
- * boyahanede" gibi paralel akışlar tek bakışta okunur.
+ * Parti lane'leri (Partiler paneli). Her lane = bir Batch (parti). Partinin üye
+ * toplarının ŞU ANKİ konumu, aktif refakat kartı, fason sevkleri (K10: bir sevk =
+ * bir parti) ve soy bağı tek bakışta görünür — "1. parti Kurşun'da, 2. parti hâlâ
+ * boyahanede". Kilit türetilmiştir: iptal edilmemiş sevki olan parti kilitlidir.
  */
 export function BranchLanes({ workOrderId }: { workOrderId: string }) {
   const q = useQuery({
@@ -43,7 +42,7 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
     staleTime: 60_000,
   });
 
-  const [splitTarget, setSplitTarget] = useState<{ dispatchId: string; dispatchNo: string } | null>(
+  const [splitTarget, setSplitTarget] = useState<{ batchId: string; batchNumber: string } | null>(
     null,
   );
   const [directShipTarget, setDirectShipTarget] = useState<{
@@ -55,44 +54,44 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
     dispatchNo: string;
   } | null>(null);
 
-  const branches = q.data?.data?.branches ?? [];
+  const batches = q.data?.data?.batches ?? [];
   const splitFrom = q.data?.data?.splitFrom ?? null;
   const splitChildren = q.data?.data?.splitChildren ?? [];
 
   if (q.isLoading) return <Skeleton className="h-24 w-full" />;
-  if (branches.length === 0 && splitChildren.length === 0 && !splitFrom) {
+  if (batches.length === 0 && splitChildren.length === 0 && !splitFrom) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs italic text-muted-foreground">
-        Bu iş emrinde henüz fason sevki (dal) yok.
+        Bu iş emrinde henüz parti yok.
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
-      {splitFrom && <SplitFromNote splitFrom={splitFrom} />}
-      {branches.map((b) => (
-        <BranchLaneRow
-          key={b.dispatchId}
-          branch={b}
-          onSplit={() => setSplitTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })}
-          onDirectShip={() =>
-            setDirectShipTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })
+      {splitFrom && <WorkOrderSplitFromNote splitFrom={splitFrom} />}
+      {batches.map((b) => (
+        <BatchLaneCard
+          key={b.batchId}
+          batch={b}
+          onSplit={() => setSplitTarget({ batchId: b.batchId, batchNumber: b.batchNumber })}
+          onDirectShip={(d) =>
+            setDirectShipTarget({ dispatchId: d.dispatchId, dispatchNo: d.dispatchNo })
           }
-          onUndoTransfer={() =>
-            setUndoTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })
+          onUndoTransfer={(d) =>
+            setUndoTarget({ dispatchId: d.dispatchId, dispatchNo: d.dispatchNo })
           }
         />
       ))}
       {splitChildren.map((c) => (
-        <SplitChildRow key={c.id} child={c} />
+        <WorkOrderSplitChildRow key={c.id} child={c} />
       ))}
       <SplitBranchModal
         open={Boolean(splitTarget)}
         onOpenChange={(o) => !o && setSplitTarget(null)}
         workOrderId={workOrderId}
-        dispatchId={splitTarget?.dispatchId ?? ""}
-        dispatchNo={splitTarget?.dispatchNo ?? ""}
+        batchId={splitTarget?.batchId ?? ""}
+        batchNumber={splitTarget?.batchNumber ?? ""}
       />
       <DirectShipModal
         open={Boolean(directShipTarget)}
@@ -112,8 +111,176 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
   );
 }
 
-/** "Bu iş emri P-XXX'ten ayrıldı" — yeni WO'da kaynağa dönüş izi. */
-function SplitFromNote({ splitFrom }: { splitFrom: { id: string; batchNumber: string } }) {
+function BatchLaneCard({
+  batch,
+  onSplit,
+  onDirectShip,
+  onUndoTransfer,
+}: {
+  batch: BatchLane;
+  onSplit: () => void;
+  onDirectShip: (d: BatchLaneDispatch) => void;
+  onUndoTransfer: (d: BatchLaneDispatch) => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-3">
+        {/* Başlık: parti kodu + kilit + refakat kartı + Ayır */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-mono text-sm font-medium">{batch.batchNumber}</span>
+          {batch.locked && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+              <Lock className="h-3 w-3" /> Sevkte
+            </span>
+          )}
+          {batch.cardNumber && (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <CreditCard className="h-3.5 w-3.5" />
+              <span className="font-mono">{batch.cardNumber}</span>
+            </span>
+          )}
+          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+            {safeFormat(batch.createdAt, "dd.MM.yyyy")}
+          </span>
+          {/* Ayır: modal parti durumundan izinli modları (redye/taşı) türetir. */}
+          <PermissionGate permission="workorder:write">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={onSplit}
+            >
+              <Split className="h-3.5 w-3.5" />
+              Ayır
+            </Button>
+          </PermissionGate>
+        </div>
+
+        {/* İçerik: parti toplarının şu anki konum dağılımı */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="rounded bg-muted px-1.5 py-0.5 tabular-nums">{batch.rollCount} top</span>
+          {batch.currentPositions.length > 0 && (
+            <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+          )}
+          {batch.currentPositions.map((p) => (
+            <span
+              key={p.label}
+              className="rounded bg-primary/10 px-1.5 py-0.5 tabular-nums text-primary"
+            >
+              {p.label}: {p.count} top · {formatNumber(p.totalMeters, 0)} m
+            </span>
+          ))}
+        </div>
+
+        {/* Soy bağı — aynı iş emri içinde redye ile ayrılan/kaynak parti */}
+        {(batch.splitFrom || batch.splitChildren.length > 0) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            {batch.splitFrom && (
+              <span className="inline-flex items-center gap-1">
+                <Split className="h-3 w-3" />
+                <span className="font-mono">{batch.splitFrom.batchNumber}</span>'ten ayrıldı
+              </span>
+            )}
+            {batch.splitChildren.map((c) => (
+              <span key={c.id} className="inline-flex items-center gap-1">
+                <ArrowUpRight className="h-3 w-3" />
+                <span className="font-mono">{c.batchNumber}</span>'e ayrıldı
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Fason sevkleri (K10: bir sevk = bir parti) */}
+        {batch.dispatches.length > 0 && (
+          <div className="space-y-1.5 border-t pt-2">
+            {batch.dispatches.map((d) => (
+              <BatchDispatchRow
+                key={d.dispatchId}
+                dispatch={d}
+                onDirectShip={() => onDirectShip(d)}
+                onUndoTransfer={() => onUndoTransfer(d)}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BatchDispatchRow({
+  dispatch,
+  onDirectShip,
+  onUndoTransfer,
+}: {
+  dispatch: BatchLaneDispatch;
+  onDirectShip: () => void;
+  onUndoTransfer: () => void;
+}) {
+  const meta = STATUS_META[dispatch.status];
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-2 gap-y-1 text-xs",
+        dispatch.status === "CANCELLED" && "opacity-60",
+      )}
+    >
+      <span className="font-mono">{dispatch.dispatchNo}</span>
+      <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", meta.cls)}>
+        {meta.label}
+      </span>
+      <span className="text-muted-foreground">
+        {dispatch.subcontractorName}
+        {dispatch.stepName ? ` · ${dispatch.stepName}` : ""}
+      </span>
+      <span className="tabular-nums text-muted-foreground">
+        {dispatch.rollCount} parça · {formatNumber(dispatch.totalQty, 0)} m
+      </span>
+      <span className="ml-auto tabular-nums text-muted-foreground">
+        {safeFormat(dispatch.dispatchedAt, "dd.MM.yyyy")}
+      </span>
+      {/* Doğrudan sevk: yalnız fasonda bekleyen (OPEN) sevkte. */}
+      {dispatch.status === "OPEN" && (
+        <PermissionGate permission="workorder:write">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 gap-1 px-2 text-[11px]"
+            onClick={onDirectShip}
+          >
+            <Truck className="h-3 w-3" />
+            Doğrudan Sevk
+          </Button>
+        </PermissionGate>
+      )}
+      {/* Aktarımı geri al: yalnız fason→fason aktarım çıktısı + hâlâ fasonda (OPEN). */}
+      {dispatch.status === "OPEN" && dispatch.isTransferOutput && (
+        <PermissionGate permission="workorder:write">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 gap-1 px-2 text-[11px]"
+            onClick={onUndoTransfer}
+          >
+            <Undo2 className="h-3 w-3" />
+            Aktarımı Geri Al
+          </Button>
+        </PermissionGate>
+      )}
+      {dispatch.receipts.length > 0 && (
+        <div className="w-full text-[11px] text-muted-foreground">
+          Dönüş:{" "}
+          {dispatch.receipts
+            .map((r) => `${r.receiptNo} (${safeFormat(r.receivedAt, "dd.MM.yyyy")})`)
+            .join(", ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Bu iş emri İE-XXX'ten ayrıldı" — WO seviyesi (redye ile yeni WO'ya taşınma). */
+function WorkOrderSplitFromNote({ splitFrom }: { splitFrom: WorkOrderLineageRef }) {
   const target = useOpenTarget();
   return (
     <button
@@ -123,7 +290,8 @@ function SplitFromNote({ splitFrom }: { splitFrom: { id: string; batchNumber: st
     >
       <Split className="h-3.5 w-3.5 shrink-0" />
       <span>
-        Bu iş emri <span className="font-mono font-medium text-foreground">{splitFrom.batchNumber}</span>{" "}
+        Bu iş emri{" "}
+        <span className="font-mono font-medium text-foreground">{splitFrom.workOrderNumber}</span>{" "}
         iş emrinden ayrılan bir partidir.
       </span>
       <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0" />
@@ -131,9 +299,8 @@ function SplitFromNote({ splitFrom }: { splitFrom: { id: string; batchNumber: st
   );
 }
 
-/** "Ayrılan parti → P-XXX" — kaynak WO'da, ayrılıp giden partinin izi. Sevk yeni
- *  WO'ya taşındığı için lane buradan kaybolur; bu satır "nereye gitti?"yi yanıtlar. */
-function SplitChildRow({ child }: { child: WorkOrderSplitChild }) {
+/** "Ayrılan parti → İE-XXX" — WO seviyesi, ayrılıp yeni iş emrine giden partinin izi. */
+function WorkOrderSplitChildRow({ child }: { child: WorkOrderSplitChild }) {
   const target = useOpenTarget();
   return (
     <button
@@ -143,7 +310,8 @@ function SplitChildRow({ child }: { child: WorkOrderSplitChild }) {
     >
       <Split className="h-3.5 w-3.5 shrink-0 text-primary" />
       <span className="text-muted-foreground">
-        Ayrılan parti → <span className="font-mono font-medium text-foreground">{child.batchNumber}</span>
+        Ayrılan parti →{" "}
+        <span className="font-mono font-medium text-foreground">{child.workOrderNumber}</span>
       </span>
       {child.targetColor && (
         <span className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
@@ -161,122 +329,5 @@ function SplitChildRow({ child }: { child: WorkOrderSplitChild }) {
         <ArrowUpRight className="h-3.5 w-3.5" />
       </span>
     </button>
-  );
-}
-
-function BranchLaneRow({
-  branch,
-  onSplit,
-  onDirectShip,
-  onUndoTransfer,
-}: {
-  branch: WorkOrderBranch;
-  onSplit: () => void;
-  onDirectShip: () => void;
-  onUndoTransfer: () => void;
-}) {
-  const meta = STATUS_META[branch.status];
-
-  return (
-    <Card className={cn(branch.status === "CANCELLED" && "opacity-60")}>
-      <CardContent className="p-3">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-mono text-sm font-medium">{branch.dispatchNo}</span>
-          <span
-            className={cn(
-              "rounded-full border px-2 py-0.5 text-[11px] font-medium",
-              meta.cls,
-            )}
-          >
-            {meta.label}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {branch.subcontractorName}
-            {branch.stepName ? ` · ${branch.stepName}` : ""}
-          </span>
-          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-            {safeFormat(branch.dispatchedAt, "dd.MM.yyyy")}
-          </span>
-          {/* Ayır: iptal olmayan partiler — boyanmadan (OPEN) devam ya da
-              boyandıysa (PARTIAL/RETURNED) yeniden boyama. Modal uygunluğu doğrular. */}
-          {branch.status !== "CANCELLED" && branch.status !== "DIRECT_SHIPPED" && (
-            <PermissionGate permission="workorder:write">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={onSplit}
-              >
-                <Split className="h-3.5 w-3.5" />
-                Ayır
-              </Button>
-            </PermissionGate>
-          )}
-          {/* Doğrudan sevk: yalnız fasonda bekleyen (OPEN) sevkte — mal dönmeden
-              müşteriye gittiyse manuel kapat. */}
-          {branch.status === "OPEN" && (
-            <PermissionGate permission="workorder:write">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={onDirectShip}
-              >
-                <Truck className="h-3.5 w-3.5" />
-                Doğrudan Sevk
-              </Button>
-            </PermissionGate>
-          )}
-          {/* Aktarımı geri al: yalnız fason→fason aktarım çıktısı + henüz fasonda
-              bekleyen (OPEN) dalda — yanlışlıkla sonraki fasona aktarıldıysa kaynağa geri sar. */}
-          {branch.status === "OPEN" && branch.isTransferOutput && (
-            <PermissionGate permission="workorder:write">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={onUndoTransfer}
-              >
-                <Undo2 className="h-3.5 w-3.5" />
-                Aktarımı Geri Al
-              </Button>
-            </PermissionGate>
-          )}
-        </div>
-
-        {/* Mini-track: Sevk → (Fasonda | şu anki konum) */}
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="rounded bg-muted px-1.5 py-0.5 tabular-nums">
-            Sevk: {branch.rollCount} parça · {formatNumber(branch.totalQty, 0)} m
-          </span>
-          <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-          {branch.status === "OPEN" ? (
-            <span className="text-warning">Boyahanede — dönüş bekleniyor</span>
-          ) : branch.status === "DIRECT_SHIPPED" ? (
-            <span className="text-primary">Fasondan doğrudan sevk edildi (müşteriye)</span>
-          ) : branch.currentPositions.length > 0 ? (
-            branch.currentPositions.map((p) => (
-              <span
-                key={p.label}
-                className="rounded bg-primary/10 px-1.5 py-0.5 tabular-nums text-primary"
-              >
-                {p.label}: {p.count} top · {formatNumber(p.totalMeters, 0)} m
-              </span>
-            ))
-          ) : (
-            <span className="text-muted-foreground">Döndü (çıktı izlenmiyor)</span>
-          )}
-        </div>
-
-        {branch.receipts.length > 0 && (
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            Dönüş:{" "}
-            {branch.receipts
-              .map((r) => `${r.receiptNo} (${safeFormat(r.receivedAt, "dd.MM.yyyy")})`)
-              .join(", ")}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }

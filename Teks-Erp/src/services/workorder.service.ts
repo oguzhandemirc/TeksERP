@@ -1738,6 +1738,9 @@ export class WorkOrderService {
             subcontractor: { select: { id: true, name: true } },
             items: {
               select: {
+                // Aktarım çıktısı türetimi (K: "Aktarımı Geri Al" butonu): sevkin TÜM
+                // topları born (parentReceiptId dolu) ise bu bir fason→fason aktarımdır.
+                roll: { select: { parentReceiptId: true } },
                 receiptItems: {
                   select: {
                     receipt: {
@@ -1774,6 +1777,9 @@ export class WorkOrderService {
         const receivedItemCount = d.items.filter((it) =>
           it.receiptItems.some((ri) => ri.receipt && !ri.receipt.cancelledAt),
         ).length;
+        // Aktarım çıktısı: tüm sevk topları born (parentReceiptId dolu) → geri alınabilir.
+        const isTransferOutput =
+          d.items.length > 0 && d.items.every((it) => it.roll?.parentReceiptId != null);
         let status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED" | "DIRECT_SHIPPED";
         if (d.cancelledAt) status = "CANCELLED";
         else if (d.directShippedAt) status = "DIRECT_SHIPPED";
@@ -1802,6 +1808,7 @@ export class WorkOrderService {
           rollCount: itemCount,
           receivedItemCount,
           status,
+          isTransferOutput,
           directShippedAt: d.directShippedAt,
           directShipReason: d.directShipReason,
           receipts: [...receiptMap.values()],

@@ -98,45 +98,49 @@ export const workOrderService = {
       >(`/api/subcontractor/dispatches/${dispatchId}/instruction`, { instruction })
       .then((r) => r.data),
 
-  /** Fason dalları (paralel sevk partileri) — tam sayfa lane görünümü için. */
+  /** İş emrinin PARTİLERİ (Batch lane'leri) — "Partiler" paneli için. Her parti
+   *  bir lane: üye topların şu anki konumu + fason sevkleri (K10) + soy bağı. */
   getBranches: (id: string) =>
     apiClient
       .get<
         ApiResponse<{
-          branches: WorkOrderBranch[];
-          /** Bu WO bir partiden ayrıldıysa kaynak WO. */
-          splitFrom: { id: string; batchNumber: string } | null;
-          /** Bu WO'dan ayrılan partilerin yeni WO'ları. */
+          batches: BatchLane[];
+          /** Bu WO başka WO'nun partisinden ayrıldıysa (redye NEW_COLOR/UNDYED_MOVE) kaynak WO. */
+          splitFrom: WorkOrderLineageRef | null;
+          /** Bu WO'dan ayrılıp yeni WO'ya taşınan partiler. */
           splitChildren: WorkOrderSplitChild[];
         }>
       >(`/api/work-orders/${id}/branches`)
       .then((r) => r.data),
 
-  /** Partiyi (sevk lane'i) ayırma önizleme — taşınacak toplar + ayrılabilirlik. */
-  getSplitPreview: (id: string, batchSplitId: string) =>
+  /** Parti ayırma önizleme — izinli modlar + taşınacak toplar (hiçbir şeyi değiştirmez). */
+  getSplitPreview: (id: string, batchId: string) =>
     apiClient
-      .get<ApiResponse<BranchSplitPreview>>(
+      .get<ApiResponse<BatchSplitPreview>>(
         `/api/work-orders/${id}/split-preview`,
-        { params: { batchSplitId } },
+        { params: { batchId } },
       )
       .then((r) => r.data),
 
-  /** Partiyi yeni iş emrine ayır (aynı rota + özellikler, yeni renk). */
+  /** Partiyi ayır — REDYE_SAME_COLOR (aynı WO, yeni parti) / NEW_COLOR / UNDYED_MOVE. */
   splitBranch: (
     id: string,
     payload: {
-      batchSplitId: string;
-      newColorId: string;
-      newBatchNumber?: string | null;
-      orderMode: "stock" | "keep";
+      batchId: string;
+      mode: SplitMode;
+      newColorId?: string | null;
+      orderMode?: "stock" | "keep";
       rollIds?: string[];
     },
   ) =>
     apiClient
-      .post<ApiResponse<{ newWorkOrderId: string; batchNumber: string; movedRollCount: number }>>(
-        `/api/work-orders/${id}/split`,
-        payload,
-      )
+      .post<
+        ApiResponse<{
+          newBatchId?: string;
+          newBatchNumber?: string;
+          sourceDeleted?: boolean;
+        }>
+      >(`/api/work-orders/${id}/split`, payload)
       .then((r) => r.data),
 
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
@@ -317,16 +321,26 @@ export interface UndoTransferPreview {
   }[];
 }
 
-/** Bir fason dalının (sevk partisi) doğan toplarının şu anki konum dağılımı. */
-export interface WorkOrderBranchPosition {
-  /** İstasyon adı, ya da konumsuz toplar için statü etiketi (Depo / Tambur...). */
+/** Parti (Batch) modeli ayırma modları — backend `SplitMode` ile birebir. */
+export type SplitMode = "REDYE_SAME_COLOR" | "NEW_COLOR" | "UNDYED_MOVE";
+
+/** Fason sevk / dal durumu (parti lane'i içindeki her sevk için). */
+export type BatchDispatchStatus =
+  | "OPEN"
+  | "PARTIAL"
+  | "RETURNED"
+  | "CANCELLED"
+  | "DIRECT_SHIPPED";
+
+/** Parti üyesi topların şu anki konum dağılımı (istasyon adı / statü etiketi). */
+export interface BatchLanePosition {
   label: string;
   count: number;
   totalMeters: number;
 }
 
-/** Bir fason dalı = bir SubcontractorDispatch (paralel sevk partisi). */
-export interface WorkOrderBranch {
+/** Parti içindeki bir fason sevki (K10: bir sevk = bir parti). */
+export interface BatchLaneDispatch {
   dispatchId: string;
   dispatchNo: string;
   /** Hangi fason adımına gönderildi (istasyon adı). */
@@ -339,58 +353,75 @@ export interface WorkOrderBranch {
   receivedItemCount: number;
   /** OPEN = fasonda · PARTIAL = kısmi dönüş · RETURNED = döndü · CANCELLED = iptal ·
    *  DIRECT_SHIPPED = fasondan doğrudan sevk (mal dönmeden müşteriye gitti). */
-  status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED" | "DIRECT_SHIPPED";
-  /** Bu dal bir fason→fason aktarımın çıktısı mı (tüm topları born) → "Aktarımı Geri Al". */
+  status: BatchDispatchStatus;
+  /** Bu sevk bir fason→fason aktarımın çıktısı mı (tüm topları born) → "Aktarımı Geri Al". */
   isTransferOutput: boolean;
-  /** Doğrudan sevk işareti (DIRECT_SHIPPED dalları için). */
   directShippedAt?: string | null;
   directShipReason?: string | null;
   receipts: { receiptNo: string; receivedAt: string }[];
-  /** Dönüşten doğan açık-kumaş toplarının şu anki konum dağılımı. */
-  currentPositions: WorkOrderBranchPosition[];
 }
 
-/** Bu WO'dan ayrılan bir partinin yeni iş emri (Dallar panelinde iz satırı). */
-export interface WorkOrderSplitChild {
+/** Parti soy bağı — aynı WO içinde ayrılan/kaynak parti (P kodu). */
+export interface BatchLineageRef {
   id: string;
   batchNumber: string;
+}
+
+/**
+ * Bir parti lane'i = bir Batch. Üye topların şu anki konum dağılımı, aktif refakat
+ * kartı, fason sevkleri (K10) ve soy bağı (splitFrom / splitChildren). Kilit
+ * TÜRETİLMİŞ: iptal edilmemiş sevki olan parti kilitlidir (düzenlenemez).
+ */
+export interface BatchLane {
+  batchId: string;
+  /** Parti kodu (P+GGAAYY+NNNN). */
+  batchNumber: string;
+  createdAt: string;
+  /** İptal edilmemiş fason sevki varsa parti kilitli (K8 araçları kapalı). */
+  locked: boolean;
+  /** Partinin aktif refakat kartı (varsa). */
+  cardNumber: string | null;
+  cardBarcode: string | null;
+  rollCount: number;
+  currentPositions: BatchLanePosition[];
+  dispatches: BatchLaneDispatch[];
+  /** Aynı WO içinde bu partinin ayrıldığı kaynak parti (redye). */
+  splitFrom: BatchLineageRef | null;
+  /** Aynı WO içinde bu partiden ayrılan partiler (redye). */
+  splitChildren: BatchLineageRef[];
+}
+
+/** İş emri soy bağı — WO seviyesi ayrılma (redye NEW_COLOR/UNDYED_MOVE → yeni WO). */
+export interface WorkOrderLineageRef {
+  id: string;
+  workOrderNumber: string;
+}
+
+/** Bu WO'dan ayrılıp yeni iş emrine taşınan parti (WO-seviyesi iz satırı). */
+export interface WorkOrderSplitChild {
+  id: string;
+  workOrderNumber: string;
   status: string;
   createdAt: string;
   targetColor: { id: string; name: string; hex: string | null } | null;
 }
 
-export interface BranchSplitPreviewRoll {
+/** Parti ayırma önizlemesindeki tek top (backend minimal select). */
+export interface BatchSplitPreviewRoll {
   id: string;
-  barcode: string | null;
-  currentQty: number;
   status: string;
-  itemName: string | null;
-  colorName: string | null;
+  currentQty: number;
 }
 
-export interface BranchSplitPreviewStep {
-  id: string;
-  stepSequence: number;
-  stationName: string;
-}
-
-/** Partiyi yeni iş emrine ayırma önizlemesi (yıkıcı/yapısal işlem onayı için). */
-export interface BranchSplitPreview {
-  canSplit: boolean;
+/** Parti ayırma önizlemesi (izinli modlar + taşınabilecek toplar). */
+export interface BatchSplitPreview {
+  /** Parti durumundan türetilen izinli modlar (boş = ayrılamaz → blockReason). */
+  allowedModes: SplitMode[];
   blockReason: string | null;
-  /** 'continue' = boyanmadan kaldığı yerden; 'redye' = boyahaneye geri sar (yeniden boya). */
-  mode: "continue" | "redye" | null;
-  dispatchNo: string;
-  /** Partinin şu anki konumu. */
-  currentStep: BranchSplitPreviewStep | null;
-  /** Yeni WO'nun başlayacağı adım (redye'da boyahane). */
-  reEntryStep: BranchSplitPreviewStep | null;
-  sourceColor: { id: string; name: string; hex: string | null } | null;
-  targetItem: { id: string; name: string } | null;
-  hasOrderLinks: boolean;
-  rolls: BranchSplitPreviewRoll[];
+  /** Redye'de topların geri sarılacağı boyahane adımı. */
+  colorStepId: string | null;
   rollCount: number;
-  totalQty: number;
+  rolls: BatchSplitPreviewRoll[];
 }
 
 export interface CoverageLine {
