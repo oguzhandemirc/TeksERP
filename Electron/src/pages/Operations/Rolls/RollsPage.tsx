@@ -205,7 +205,6 @@ export function RollsPage() {
       />
       <RollLabelDialog
         rollId={labelRoll?.id ?? null}
-        printContext={labelRoll?.ctx}
         onOpenChange={(o) => !o && setLabelRoll(null)}
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
