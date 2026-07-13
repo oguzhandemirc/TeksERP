@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Tags, Undo2, Palette, PackageOpen, RotateCcw, Pencil, ArrowRightLeft, AlertTriangle } from "lucide-react";
+import { History, Tag, Tags, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -14,9 +14,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
 import { RelabelDialog } from "@/pages/Operations/RelabelStation/RelabelDialog";
-import { RecoverToProductionDialog } from "./RecoverToProductionDialog";
 import { ManualAttributesDialog } from "./ManualAttributesDialog";
-import { StatusOverrideDialog } from "./StatusOverrideDialog";
+import { RescueStuckDialog } from "./RescueStuckDialog";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
 import { type Roll, shipmentScopeLabels } from "./types";
@@ -30,24 +29,16 @@ interface Props {
 export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const [labelRollId, setLabelRollId] = useState<string | null>(null);
   const [relabelBarcode, setRelabelBarcode] = useState<string | null>(null);
-  const [recoverRollId, setRecoverRollId] = useState<string | null>(null);
   const [manualAttrRollId, setManualAttrRollId] = useState<string | null>(null);
-  const [statusRollId, setStatusRollId] = useState<string | null>(null);
+  const [rescueRollId, setRescueRollId] = useState<string | null>(null);
   const { hasAnyPermission, hasPermission } = useRoleAccess();
   const canRelabel = hasAnyPermission(["roll:write", "label:edit"]);
   const canManualAdjust = hasPermission("roll:manual-adjust");
-  // Takılı açık kumaş = ham stokta, fason dönüşü, barkodsuz → "Üretime Geri Al".
-  const isStuckOpenFabric =
-    !!roll &&
-    roll.status === "STOCK" &&
-    roll.entrySource === "SUBCONTRACTOR_RETURN" &&
-    !roll.barcode;
   // Manuel nitelik düzeltme: hurda/iptal dışı her top (backend de guard'lar).
   const canEditAttributes =
     !!roll && roll.status !== "SCRAP" && roll.status !== "CANCELLED";
-  // Manuel durum düzeltme yalnız whitelist kaynak durumları için anlamlı.
-  const canEditStatus =
-    !!roll && ["STOCK", "WAREHOUSE", "PRODUCED"].includes(roll.status);
+  // "İstasyondan Kurtar" yalnız makinede/istasyonda takılı (IN_PRODUCTION) top için.
+  const canRescue = !!roll && roll.status === "IN_PRODUCTION";
 
   // Liste cevabı `operations` taşımıyor — detay endpoint'i (`/api/rolls/:id`)
   // operation log'unu select ile döndürüyor. Sheet açıldığında lazy fetch.
@@ -101,17 +92,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <Tags className="h-3.5 w-3.5" /> Yeniden Etiketle/Düzenle
               </Button>
             )}
-            {canManualAdjust && isStuckOpenFabric && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-1"
-                onClick={() => setRecoverRollId(roll.id)}
-              >
-                <RotateCcw className="h-3.5 w-3.5" /> Üretime Geri Al
-              </Button>
-            )}
             {canManualAdjust && canEditAttributes && (
               <Button
                 type="button"
@@ -123,15 +103,15 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <Pencil className="h-3.5 w-3.5" /> Manuel Düzelt
               </Button>
             )}
-            {canManualAdjust && canEditStatus && (
+            {canManualAdjust && canRescue && (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 className="gap-1"
-                onClick={() => setStatusRollId(roll.id)}
+                onClick={() => setRescueRollId(roll.id)}
               >
-                <ArrowRightLeft className="h-3.5 w-3.5" /> Durum Düzelt
+                <Wrench className="h-3.5 w-3.5" /> İstasyondan Kurtar
               </Button>
             )}
           </div>
@@ -145,20 +125,15 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
           barcode={relabelBarcode}
           onOpenChange={(open) => !open && setRelabelBarcode(null)}
         />
-        <RecoverToProductionDialog
-          rollId={recoverRollId}
-          onOpenChange={(open) => !open && setRecoverRollId(null)}
-          onRecovered={() => void detailQuery.refetch()}
-        />
         <ManualAttributesDialog
           rollId={manualAttrRollId}
           onOpenChange={(open) => !open && setManualAttrRollId(null)}
           onSaved={() => void detailQuery.refetch()}
         />
-        <StatusOverrideDialog
-          rollId={statusRollId}
-          onOpenChange={(open) => !open && setStatusRollId(null)}
-          onChanged={() => void detailQuery.refetch()}
+        <RescueStuckDialog
+          rollId={rescueRollId}
+          onOpenChange={(open) => !open && setRescueRollId(null)}
+          onRescued={() => void detailQuery.refetch()}
         />
 
         {roll && (
@@ -252,7 +227,11 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               <Card>
                 <CardContent className="p-3">
                   <div className="text-xs text-muted-foreground">Kalite</div>
-                  <div className="mt-0.5 font-medium">{roll.qualityGrade}</div>
+                  <div className="mt-0.5 font-medium">
+                    {roll.qualityGrade ?? (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -262,6 +241,12 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   <div className="text-xs text-muted-foreground">Ürün</div>
                   <div>{roll.item?.name}</div>
+                  <div className="text-xs text-muted-foreground">Biçim</div>
+                  <div>
+                    <Badge variant="muted" className="text-[10px]">
+                      {roll.form === "ACIK" ? "Açık Kumaş" : "Top"}
+                    </Badge>
+                  </div>
                   <div className="text-xs text-muted-foreground">Giriş Kaynağı</div>
                   <div>
                     <Badge variant="muted" className="text-[10px]">

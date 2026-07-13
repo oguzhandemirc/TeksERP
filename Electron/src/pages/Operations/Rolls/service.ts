@@ -66,6 +66,40 @@ export interface RollStats {
   byQuality: Record<string, number>;
 }
 
+// --- Üretim Akışı (Kanban) — tek-istek pano cevabı ------------------------
+/** Kurşun/Tambur kolonu kartı (parti = refakat kartı). */
+export interface ProductionFlowQueueCard {
+  id: string;
+  itemName: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  openRollCount: number;
+  totalCurrentQty: number;
+  batchNumber: string;
+  isUrgent: boolean;
+}
+
+/** Sevk kolonu kartı — çıkış bekleyen (PLANNED) planlı sevk. */
+export interface ProductionFlowSackCard {
+  id: string;
+  shipmentNo: string;
+  customer: { id: string; name: string };
+  branch: { id: string; name: string } | null;
+  sackCount: number;
+  totalKg: number;
+  totalQty: number;
+}
+
+/** 6 kolon; her biri ≤10 önizleme kaydı + gerçek toplam sayaç. */
+export interface ProductionFlowData {
+  hamStok: { rolls: Roll[]; total: number };
+  fason: { rolls: Roll[]; total: number };
+  kursun: { cards: ProductionFlowQueueCard[]; total: number };
+  tambur: { cards: ProductionFlowQueueCard[]; total: number };
+  depo: { rolls: Roll[]; total: number };
+  sevk: { shipments: ProductionFlowSackCard[]; total: number };
+}
+
 export const rollService = {
   ...base,
   getAll: (params: QueryParams): Promise<PaginatedResponse<Roll>> =>
@@ -80,6 +114,11 @@ export const rollService = {
     apiClient
       .get<ApiResponse<RollStats>>(`/api/rolls/stats${buildQueryString(params)}`)
       .then((r) => r.data),
+  /** Üretim Akışı (Kanban) panosu — 6 kolon tek istekte (kolon başına ≤10 + toplam). */
+  getProductionFlow: (): Promise<ApiResponse<ProductionFlowData>> =>
+    apiClient
+      .get<ApiResponse<ProductionFlowData>>("/api/rolls/production-flow")
+      .then((r) => r.data),
   getByBarcode: (barcode: string): Promise<ApiResponse<Roll>> =>
     apiClient
       .get<ApiResponse<Roll>>(`/api/rolls/barcode/${encodeURIComponent(barcode)}`)
@@ -92,3 +131,29 @@ export const rollService = {
 
 export const ROLL_STATUS_TABS = STATUS_GROUPS;
 export type RollStatusTabKey = keyof typeof ROLL_STATUS_TABS;
+
+/**
+ * Sekme → backend'e zorla gönderilen taban filtre (forceFilters). Tablo
+ * (useDataTable) ve üst-satır özeti (useRollStats) AYNI tabanı paylaşsın diye
+ * tek kaynak — yoksa liste ile "Top/Metre" toplamı birbirinden sapar.
+ */
+export function buildRollForceFilters(
+  tab: RollStatusTabKey,
+): Record<string, string | string[]> {
+  // KK1 ham kumaş: renksiz + henüz hiçbir adıma girmemiş.
+  if (tab === "RAW_STOCK") return { rollScope: "RAW_STOCK", status: "ALL" };
+  // Super-set: WO akışındaki tüm toplar (Fasonda + Kurşun/Tambur bekleyen + IN_PRODUCTION).
+  if (tab === "PRODUCTION") return { rollScope: "PRODUCTION_ACTIVE", status: "ALL" };
+  // Tambur sonrası depoya alınmış, sevke hazır.
+  if (tab === "FINISHED_STOCK") return { rollScope: "FINISHED_STOCK", status: "ALL" };
+  // Kurşun/KK2 istasyonundaki açık kumaş kayıtları (status=ALL şart — yoksa default STOCK).
+  if (tab === "KURSUN_PENDING")
+    return { currentStepKind: "PROCESS_QC", rollKind: "OPEN_FABRIC", status: "ALL" };
+  // Tambur istasyonunda bekleyen açık kumaş.
+  if (tab === "TAMBUR_PENDING")
+    return { currentStepKind: "TAMBUR", rollKind: "OPEN_FABRIC", status: "ALL" };
+  const statusVal = ROLL_STATUS_TABS[tab];
+  const out: Record<string, string | string[]> = {};
+  if (statusVal) out.status = statusVal;
+  return out;
+}

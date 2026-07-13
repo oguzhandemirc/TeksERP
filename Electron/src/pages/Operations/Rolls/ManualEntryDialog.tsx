@@ -3,6 +3,7 @@ import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Printer } from "lucide-react";
 import { z } from "zod";
 import {
   Dialog,
@@ -23,15 +24,22 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "@/components/forms/FormField";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
+import { PropertyPickerModal } from "@/components/forms/PropertyPickerModal";
 import { itemService } from "@/pages/Items/service";
-import { colorService } from "@/pages/Colors/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
-import { PropertyChipsField } from "@/components/forms/PropertyChipsField";
+import { customerService } from "@/pages/Customers/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useKk1WeightEntryEnabled } from "@/hooks/usePricingEnabled";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { Item } from "@/pages/Items/types";
-import type { Color } from "@/pages/Colors/types";
+import type { Customer } from "@/pages/Customers/types";
+import type { LabelCustomerContext } from "@/services/labelService";
 import { rollService, type InitialEntryPayload } from "./service";
+
+// Radix Select boş string value kabul etmez → "Belirsiz" için sentinel.
+const QUALITY_NONE = "__none__";
 
 const schema = z.object({
   itemId: z.string().uuid("Ürün seçilmeli"),
@@ -39,8 +47,12 @@ const schema = z.object({
   initialQty: z.number().positive("Miktar pozitif olmalı"),
   weightKg: z.number().positive("Ağırlık pozitif olmalı").nullable(),
   width: z.number().positive("En pozitif olmalı").nullable(),
-  qualityGrade: z.string().min(1, "Kalite sınıfı seçilmeli"),
+  // Kalite opsiyonel — kaliteye bakılmamış manuel girişte "Belirsiz" (boş) kalır.
+  qualityGrade: z.string(),
   propertyIds: z.array(z.string().uuid()).default([]),
+  // Yalnız "Ekle ve Etiket Bas" akışında etiketin müşterisi. Topun kendisine
+  // BAĞLANMAZ (gevşek model: top→müşteri bağı yok); create payload'ına gitmez.
+  customerId: z.string().uuid().nullable(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -51,8 +63,9 @@ const defaults: FormValues = {
   initialQty: 0,
   weightKg: null,
   width: null,
-  qualityGrade: "1.KALITE",
+  qualityGrade: "",
   propertyIds: [],
+  customerId: null,
 };
 
 interface Props {
@@ -65,10 +78,17 @@ interface Props {
    * - "RAW_STOCK" (default, Ham Stok): renk opsiyonel; renksiz → STOCK.
    */
   target?: "RAW_STOCK" | "FINISHED_STOCK";
+  /**
+   * "Ekle ve Etiket Bas" ile çağrılır: yeni topun id'si + (varsa) etiket müşteri
+   * bağlamı. Üst sayfa RollLabelDialog'u bu topla açar (önizleme + Bas).
+   */
+  onCreatedForPrint?: (rollId: string, printContext?: LabelCustomerContext) => void;
 }
 
-export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK" }: Props) {
+export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", onCreatedForPrint }: Props) {
   const qc = useQueryClient();
+  const { hasPermission } = useRoleAccess();
+  const canPrint = hasPermission("label:print");
   const isWarehouse = target === "FINISHED_STOCK";
   // KK1 ağırlık girişi admin ayarıyla kapatılabilir (default kapalı). Kapalıyken
   // alan gizlenir ve payload'a weightKg konmaz — aksi halde backend guard'ı
@@ -89,37 +109,55 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK" }: 
 
   const grades = useMemo(() => gradesQ.data?.data ?? [], [gradesQ.data?.data]);
 
+  // printAfter + printCtx mutation değişkenlerinde taşınır → onSuccess (data, vars)
+  // ile güvenilir okunur (ref/stale-closure yok); UI için mutation.variables.
   const mutation = useMutation({
-    mutationFn: (payload: InitialEntryPayload) => rollService.createInitialEntry(payload),
-    onSuccess: (res) => {
-      const barcode = res.data?.barcode ?? "-";
-      toast.success(`Top oluşturuldu: ${barcode}`);
+    mutationFn: (args: {
+      payload: InitialEntryPayload;
+      printAfter: boolean;
+      printCtx?: LabelCustomerContext;
+    }) => rollService.createInitialEntry(args.payload),
+    onSuccess: (res, vars) => {
+      const roll = res.data;
+      toast.success(`Top oluşturuldu: ${roll?.barcode ?? "-"}`);
       // Y1 fix: ["rolls:STOCK"] ölü key'di (STOCK sekmesi RAW/FINISHED'a bölündü)
       // — liste hiç tazelenmiyordu. ["rolls"] tüm sekme tablolarını + stats'ı kapsar.
       qc.invalidateQueries({ queryKey: ["rolls"] });
       form.reset(defaults);
       onOpenChange(false);
+      if (vars.printAfter && roll?.id) onCreatedForPrint?.(roll.id, vars.printCtx);
     },
   });
 
-  const handleSubmit = form.handleSubmit((v) => {
-    // Bitmiş Depo hedefi WAREHOUSE ister → backend bunu yalnız colorId ile üretir.
-    // Renksiz gönderim STOCK'a düşer (Ham Stok'ta çıkar, kullanıcı depoda arar) →
-    // erken engelle, net hata göster.
-    if (isWarehouse && !v.colorId) {
-      form.setError("colorId", { message: "Bitmiş depo girişi için renk zorunlu" });
-      return;
-    }
-    mutation.mutate({
-      itemId: v.itemId,
-      colorId: v.colorId,
-      initialQty: v.initialQty,
-      weightKg: weightEntryEnabled ? v.weightKg ?? undefined : undefined,
-      width: v.width,
-      qualityGrade: v.qualityGrade,
-      propertyIds: v.propertyIds,
+  const doSubmit = (printAfter: boolean) =>
+    form.handleSubmit((v) => {
+      // Bitmiş Depo hedefi WAREHOUSE ister → backend bunu yalnız colorId ile üretir.
+      // Renksiz gönderim STOCK'a düşer (Ham Stok'ta çıkar, kullanıcı depoda arar) →
+      // erken engelle, net hata göster.
+      if (isWarehouse && !v.colorId) {
+        form.setError("colorId", { message: "Bitmiş depo girişi için renk zorunlu" });
+        return;
+      }
+      mutation.mutate({
+        payload: {
+          itemId: v.itemId,
+          colorId: v.colorId,
+          initialQty: v.initialQty,
+          weightKg: weightEntryEnabled ? v.weightKg ?? undefined : undefined,
+          width: v.width,
+          // Boş = Belirsiz → payload'dan düş (backend null yazar).
+          qualityGrade: v.qualityGrade || undefined,
+          propertyIds: v.propertyIds,
+        },
+        printAfter,
+        // Müşteri seçildiyse serbest müşteri (orderLineId yok → master alias cascade);
+        // seçilmezse undefined → taze topta snapshot yok → stok (müşterisiz) etiket.
+        printCtx: v.customerId ? { customerId: v.customerId, orderLineId: null } : undefined,
+      });
     });
-  });
+
+  const pendingAdd = mutation.isPending && !mutation.variables?.printAfter;
+  const pendingAddPrint = mutation.isPending && mutation.variables?.printAfter === true;
 
   const watchedItemId = form.watch("itemId");
 
@@ -139,12 +177,12 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK" }: 
           <DialogTitle>{isWarehouse ? "Depoya Manuel Top Ekle" : "Manuel Top Ekle"}</DialogTitle>
           <DialogDescription>
             {isWarehouse
-              ? "Depodaki bitmiş (renkli) stoklar için yönetici girişi. Otomatik barkod basılır, top Bitmiş Depo (WAREHOUSE) statüsünde eklenir — renk zorunlu."
-              : "Sistem dışından gelen veya geçmiş ham stoklar için yönetici girişi. Otomatik barkod basılır, top STOCK (Ham Stok) statüsünde envantere eklenir."}
+              ? "Bitmiş (renkli) stok girişi — renk zorunlu; top Bitmiş Depo (WAREHOUSE) statüsünde eklenir, barkodu otomatik atanır."
+              : "Dışarıdan/geçmiş ham stok girişi — top Ham Stok (STOCK) statüsünde eklenir, barkodu otomatik atanır."}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={doSubmit(false)} className="space-y-3">
           <FormField label="Ürün" error={form.formState.errors.itemId} required>
             <Controller
               control={form.control}
@@ -162,46 +200,42 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK" }: 
             />
           </FormField>
 
-          <FormField
-            label={isWarehouse ? "Renk" : "Renk (opsiyonel)"}
-            required={isWarehouse}
-            error={form.formState.errors.colorId}
-            hint={isWarehouse ? "Bitmiş depo topu renklidir — zorunlu (WAREHOUSE şartı)." : "Ham mal genelde boş — boyahanede kazanır."}
-          >
-            <Controller
-              control={form.control}
-              name="colorId"
-              render={({ field }) => (
-                <ReferenceSelect<Color>
-                  value={field.value}
-                  onChange={field.onChange}
-                  service={colorService}
-                  queryKey="colors"
-                  getLabel={(c) => c.name}
-                  placeholder="Renk seç..."
-                  nullable
-                  noneLabel="— (renksiz)"
-                />
-              )}
-            />
-          </FormField>
+          {/* Renk + Özellikler yan yana — ikisi de tıklayınca modal açar. */}
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label={isWarehouse ? "Renk" : "Renk (opsiyonel)"}
+              required={isWarehouse}
+              error={form.formState.errors.colorId}
+              hint={isWarehouse ? "Bitmiş depo topu renklidir — zorunlu." : "Ham mal genelde boş."}
+            >
+              <Controller
+                control={form.control}
+                name="colorId"
+                render={({ field }) => (
+                  <ColorPickerModal
+                    value={field.value}
+                    onChange={field.onChange}
+                    allowNone={!isWarehouse}
+                    placeholder="Renk seç..."
+                  />
+                )}
+              />
+            </FormField>
 
-          <FormField
-            label="Özellikler (opsiyonel)"
-            hint="Topun fiilen sahip olduğu özellikler — tıklayarak ekle/çıkar."
-          >
-            <Controller
-              control={form.control}
-              name="propertyIds"
-              render={({ field }) => (
-                <PropertyChipsField
-                  itemId={watchedItemId}
-                  value={field.value}
-                  onChange={field.onChange}
-                />
-              )}
-            />
-          </FormField>
+            <FormField label="Özellikler (opsiyonel)" hint="Tıkla → modaldan seç.">
+              <Controller
+                control={form.control}
+                name="propertyIds"
+                render={({ field }) => (
+                  <PropertyPickerModal
+                    itemId={watchedItemId}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </FormField>
+          </div>
 
           <div className={weightEntryEnabled ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
             <FormField label="Metraj (mt)" htmlFor="initialQty" error={form.formState.errors.initialQty} required>
@@ -235,16 +269,24 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK" }: 
             </FormField>
           </div>
 
-          <FormField label="Kalite Sınıfı" error={form.formState.errors.qualityGrade} required>
+          <FormField
+            label="Kalite Sınıfı (opsiyonel)"
+            error={form.formState.errors.qualityGrade}
+            hint="Kaliteye bakılmadıysa boş bırak — top 'Belirsiz' kaydedilir, kalite istasyonunda belirlenir."
+          >
             <Controller
               control={form.control}
               name="qualityGrade"
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
+                <Select
+                  value={field.value || QUALITY_NONE}
+                  onValueChange={(v) => field.onChange(v === QUALITY_NONE ? "" : v)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Kalite seç..." />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={QUALITY_NONE}>Belirsiz (kalite yok)</SelectItem>
                     {grades.map((g) => (
                       <SelectItem key={g.id} value={g.code}>
                         {g.name} ({g.code})
@@ -256,13 +298,45 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK" }: 
             />
           </FormField>
 
+          {canPrint && (
+            <FormField
+              label="Etiket müşterisi (opsiyonel)"
+              hint="Yalnız 'Ekle ve Etiket Bas' kullanır — seçilmezse stok (müşterisiz) etiket. Topun kendisi müşteriye bağlanmaz."
+            >
+              <Controller
+                control={form.control}
+                name="customerId"
+                render={({ field }) => (
+                  <EntityPickerModal<Customer>
+                    value={field.value}
+                    onChange={field.onChange}
+                    service={customerService}
+                    queryKey="customers"
+                    getLabel={(c) => `${c.code} — ${c.name}`}
+                    nullable
+                  />
+                )}
+              />
+            </FormField>
+          )}
+
           <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="destructive" onClick={() => onOpenChange(false)}>
               İptal
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Ekleniyor..." : "Topu Ekle"}
+            <Button
+              type="submit"
+              disabled={mutation.isPending}
+              className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+            >
+              {pendingAdd ? "Ekleniyor..." : "Ekle"}
             </Button>
+            {canPrint && (
+              <Button type="button" disabled={mutation.isPending} onClick={doSubmit(true)} className="gap-1.5">
+                <Printer className="h-4 w-4" />
+                {pendingAddPrint ? "Ekleniyor..." : "Ekle ve Etiket Bas"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
