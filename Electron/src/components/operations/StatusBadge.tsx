@@ -45,7 +45,6 @@ export const workOrderStatusTones = {
 export const rollStatusTones = {
   STOCK: "info",
   IN_PRODUCTION: "info",
-  PRODUCED: "info",
   SCRAP: "danger",
   CANCELLED: "muted",
   AT_SUBCONTRACTOR: "warning",

@@ -11,7 +11,7 @@
 //   C (MERGE) tek rcv returns=[1,2]+newRolls=[1]                            → KK2'de 1
 //   D (SPLIT) tek rcv returns=[1]+newRolls=[2]                              → KK2'de 2
 //   E (3 TOP) 3 ayrı kısmi kabul (1+1+1)                                    → KK2'de 3 (birikim)
-//   F (SON ADIM) nextStep yok → born roll STOCK + currentStepId null (serbest stok)
+//   F (SON ADIM) nextStep yok → born roll WAREHOUSE final + barkod + currentStepId null
 //   G (VALIDATION) qty≤0 / outstanding-olmayan / mükerrer / INTERNAL adım  → hepsi AppError
 //
 // Rota: [1] BOYA_FASON (EXTERNAL) → [2] KURSUN_KK2 (INTERNAL)   (F'de tek adım)
@@ -19,7 +19,7 @@
 import prisma from "../src/lib/prisma";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
-import { RollStatus, StepStatus } from "@prisma/client";
+import { RollStatus, RollForm, StepStatus } from "@prisma/client";
 
 let ITEM = "";
 let GRADE = "";
@@ -135,7 +135,7 @@ async function setupWo(tag: string, rollQtys: number[], withNextStep = true): Pr
 }
 
 // Fasondan doğmuş (born) açık-kumaş top sayısı. nextStep varsa Kurşun'da IN_PRODUCTION,
-// yoksa serbest stokta (currentStepId null + STOCK).
+// yoksa FİNAL depoda (fason son adım → currentStepId null + WAREHOUSE).
 async function bornCount(s: Scenario): Promise<number> {
   if (s.kursunStep) {
     return prisma.roll.count({
@@ -152,7 +152,7 @@ async function bornCount(s: Scenario): Promise<number> {
       parentReceipt: { workOrderId: s.woId },
       parentRollId: null,
       currentStepId: null,
-      status: RollStatus.STOCK,
+      status: RollStatus.WAREHOUSE,
     },
   });
 }
@@ -235,18 +235,20 @@ async function main(): Promise<void> {
   check("E: 3. kabul → tam 3 born (fazla yok)", (await bornCount(e)) === 3, `kurşunda ${await bornCount(e)}`);
   check("E: tüm toplar dönünce Boyahane COMPLETED", (await boyaStatus(e)) === StepStatus.COMPLETED);
 
-  // ═══ SENARYO F — SON ADIM (nextStep null) → serbest stok ═══
-  console.log("\n=== SENARYO F: fason son adım (nextStep yok) → born roll serbest stok ===");
+  // ═══ SENARYO F — SON ADIM (nextStep null) → FİNAL depo (WAREHOUSE + barkod, form ACIK) ═══
+  console.log("\n=== SENARYO F: fason son adım (nextStep yok) → born roll FİNAL depoda ===");
   const f = await setupWo("F", [300], /*withNextStep*/ false);
   await sub.receive({ workOrderId: f.woId, stepId: f.boyaStep, subcontractorId: SUB_BOYER,
     returns: [{ rollId: f.rollIds[0] }], newRolls: [{ qty: 295 }] }, ADMIN);
-  check("F: nextStep yok → 1 born roll serbest stokta (STOCK + currentStepId null)", (await bornCount(f)) === 1, `serbest stokta ${await bornCount(f)}`);
+  check("F: nextStep yok → 1 born roll DEPODA (WAREHOUSE + currentStepId null)", (await bornCount(f)) === 1, `depoda ${await bornCount(f)}`);
   const fBorn = await prisma.roll.findFirst({
     where: { parentReceipt: { workOrderId: f.woId }, parentRollId: null },
-    select: { status: true, currentStepId: true, producedInStepId: true },
+    select: { status: true, currentStepId: true, producedInStepId: true, barcode: true, form: true },
   });
-  check("F: born roll STOCK", fBorn?.status === RollStatus.STOCK, String(fBorn?.status));
-  check("F: born roll currentStepId null (serbest)", fBorn?.currentStepId === null);
+  check("F: born roll WAREHOUSE (final)", fBorn?.status === RollStatus.WAREHOUSE, String(fBorn?.status));
+  check("F: born roll barkod üretildi (her kumaşa etiket)", !!fBorn?.barcode, String(fBorn?.barcode));
+  check("F: born roll form ACIK", fBorn?.form === RollForm.ACIK, String(fBorn?.form));
+  check("F: born roll currentStepId null (final serbest)", fBorn?.currentStepId === null);
   check("F: born roll producedInStepId = Boyahane", fBorn?.producedInStepId === f.boyaStep);
 
   // ═══ SENARYO G — VALIDATION GUARD'LARI ═══

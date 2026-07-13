@@ -10,7 +10,7 @@ import { type Roll, shipmentScopeLabels } from "./types";
 /**
  * Roll'un fiziksel/işlenmiş durumunu renk ve duruma göre türet.
  * - Ham:        renk yok ve aktif üretimde değil (stokta bekleyen çiğ kumaş)
- * - İşleniyor:  aktif üretimde (IN_PRODUCTION / AT_SUBCONTRACTOR / PRODUCED)
+ * - İşleniyor:  aktif üretimde (IN_PRODUCTION / AT_SUBCONTRACTOR)
  * - Açık Kumaş: fason dönüşü açık kumaş (parentReceiptId set, henüz Tambur'a
  *               girmemiş — boyalı olsa bile "Bitmiş" değildir, Tambur kararı
  *               bekliyor)
@@ -179,7 +179,12 @@ export const rollColumns: ColumnDef<Roll>[] = [
           </Badge>
         );
       }
-      return <span className="text-xs">{grade}</span>;
+      // Kalite yalnız kalite istasyonlarında belirlenir — bakılmamışsa null → "—".
+      return (
+        <span className="text-xs">
+          {grade ?? <span className="text-muted-foreground">—</span>}
+        </span>
+      );
     },
   },
   {

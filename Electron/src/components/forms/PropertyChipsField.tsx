@@ -4,8 +4,10 @@ import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemService } from "@/pages/Items/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
+import { QuickAddProperty } from "./QuickAddProperty";
 
 interface Props {
   /** Seçili Item ID — boşsa "önce ürün seç" mesajı gösterilir. */
@@ -16,13 +18,27 @@ interface Props {
   emptyHint?: string;
   /** Salt-okunur: çipler ve temizle butonu pasifleşir (örn. kilitli/yetkisiz form). */
   disabled?: boolean;
+  /**
+   * "Yeni Özellik Ekle" hızlı-ekleme butonunu göster. Yalnız ürünün özellik KISITI
+   * YOKKEN (tüm özellikler uygun) ve `property:write` yetkisi varken görünür —
+   * kısıtlı üründe yeni global özellik izinli listeye girmez (renk deseniyle aynı).
+   */
+  allowQuickAdd?: boolean;
 }
 
 /**
  * Inline çoklu seçim: tüm uygun (allowed) özellikler chip olarak çıkar,
  * tek tıkla seçilir/kaldırılır. Popover/dialog yok — form içinde anlık görsel.
  */
-export function PropertyChipsField({ itemId, value, onChange, emptyHint, disabled = false }: Props) {
+export function PropertyChipsField({
+  itemId,
+  value,
+  onChange,
+  emptyHint,
+  disabled = false,
+  allowQuickAdd = false,
+}: Props) {
+  const { hasPermission } = useRoleAccess();
   const itemQuery = useQuery({
     queryKey: ["item-allowed", itemId],
     queryFn: () => itemService.getById(itemId),
@@ -63,6 +79,11 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint, disable
     onChange(Array.from(next));
   };
 
+  // Hızlı-ekleme: ürün özellik KISITI YOK (tüm özellikler uygun) + property:write + izinli çağıran.
+  const canQuickAdd =
+    allowQuickAdd && !disabled && allowedIds.length === 0 && hasPermission("property:write");
+  const addProperty = (id: string) => onChange(Array.from(new Set([...value, id])));
+
   if (!itemId) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs italic text-muted-foreground">
@@ -71,7 +92,9 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint, disable
     );
   }
 
-  if (candidateProps.length === 0) {
+  const isEmpty = candidateProps.length === 0;
+  // Uygun özellik yok VE hızlı-ekleme de yoksa (kısıtlı ürün / yetkisiz) → yalın not.
+  if (isEmpty && !canQuickAdd) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs italic text-muted-foreground">
         {emptyHint ?? "Bu ürüne uygulanabilir özellik tanımlı değil."}
@@ -81,6 +104,11 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint, disable
 
   return (
     <div className="space-y-2">
+      {isEmpty ? (
+        <div className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs italic text-muted-foreground">
+          Henüz özellik tanımlı değil — aşağıdan ekleyebilirsiniz.
+        </div>
+      ) : (
       <div className="flex max-h-40 flex-wrap gap-1.5 overflow-auto rounded-md border bg-muted/20 p-2">
         {candidateProps.map((p) => {
           const isOn = selected.has(p.id);
@@ -104,7 +132,8 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint, disable
           );
         })}
       </div>
-      {value.length > 0 && (
+      )}
+      {!isEmpty && value.length > 0 && (
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             <span className="font-medium text-foreground">{value.length}</span> /{" "}
@@ -122,6 +151,7 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint, disable
           </Button>
         </div>
       )}
+      {canQuickAdd && <QuickAddProperty onCreated={addProperty} />}
     </div>
   );
 }

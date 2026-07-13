@@ -123,6 +123,10 @@ export class PeripheralDeviceService extends BaseService {
       const v = Number(data.labelGapMm);
       if (!Number.isFinite(v) || v < 0 || v > 50) throw AppError.badRequest("Etiket arası boşluk 0-50 mm arası olmalı");
     }
+    // Raster baskı bayrağı (Etiket Stüdyosu v2 — kanvas 1bpp bitmap yolu) — additive, boolean.
+    if (data.rasterMode !== undefined && data.rasterMode !== null && typeof data.rasterMode !== "boolean") {
+      throw AppError.badRequest("rasterMode true/false olmalı");
+    }
     // Medya doğrudan cihazda (yukarıda) — ayrı "Boyutlar" (LabelFormatProfile) kataloğu kaldırıldı.
     if (typeof data.machineId === "string" && data.machineId) {
       const mc = await prisma.machine.findFirst({ where: { id: data.machineId, isActive: true }, select: { id: true } });

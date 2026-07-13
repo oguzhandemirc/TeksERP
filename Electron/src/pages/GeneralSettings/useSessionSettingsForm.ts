@@ -244,6 +244,27 @@ export function useSessionSettingsForm() {
     return Number.isInteger(n) ? n : fallback;
   };
 
+  // "Geri al" — tüm taslağı kayıtlı (sunucu) değerlere döndür (effect ile aynı işlem).
+  const reset = () => {
+    setSessionMin(currentSessionMin);
+    setAutoLogout(currentAutoLogout);
+    setIdleEnabled(currentIdle > 0);
+    setIdleMin(currentIdle > 0 ? currentIdle : DEFAULT_IDLE_MIN);
+    setMobileLock(currentMobileLock);
+    setMobileLockMin(currentMobileLockMin);
+    setWorkEnabled(currentWorkIdle > 0);
+    setWorkMin(currentWorkIdle > 0 ? currentWorkIdle : DEFAULT_WORK_SESSION_IDLE);
+    setPolicy(currentPolicy);
+    setEnabledMethods(currentMethods.enabled);
+    setPrimaryMethod(currentMethods.primary);
+    setCapDays(String(currentCapDays));
+    setPinEnabled(currentPinEnabled);
+    setPinAttempts(String(currentPinAttempts));
+    setPinPenaltySec(String(currentPinPenaltySec));
+    setPinEscalate(String(currentPinEscalate));
+    setPinLongMin(String(currentPinLongMin));
+  };
+
   const save = () =>
     mut.mutate({
       sessionDurationMinutes: sessionMin,
@@ -281,8 +302,8 @@ export function useSessionSettingsForm() {
     // doğrulama
     sessionValid, idleValid, workValid, mobileLockMinValid, methodsValid, allValid, dirty,
     capDaysValid, pinAttemptsValid, pinPenaltyValid, pinEscalateValid, pinLongValid,
-    // kaydet
-    save, isSaving: mut.isPending,
+    // kaydet / geri al
+    save, reset, isSaving: mut.isPending,
     // yetkisiz salt-okunur özet için mevcut (kayıtlı) değerler
     current: {
       sessionMin: currentSessionMin,

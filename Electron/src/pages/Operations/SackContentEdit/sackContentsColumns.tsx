@@ -52,6 +52,6 @@ export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
     accessorKey: "qualityGrade",
     header: "Kalite",
     meta: { label: "Kalite" },
-    cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.qualityGrade}</span>,
+    cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.qualityGrade ?? "—"}</span>,
   },
 ];

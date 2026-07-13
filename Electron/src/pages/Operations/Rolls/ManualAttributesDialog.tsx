@@ -80,7 +80,7 @@ export function ManualAttributesDialog({ rollId, onOpenChange, onSaved }: Props)
 function ManualAttributesForm({ roll, onSaved }: { roll: Roll; onSaved: () => void }) {
   const qc = useQueryClient();
   const [colorId, setColorId] = useState<string | null>(roll.colorId);
-  const [qualityGrade, setQualityGrade] = useState<string>(roll.qualityGrade);
+  const [qualityGrade, setQualityGrade] = useState<string>(roll.qualityGrade ?? "");
   const [width, setWidth] = useState<string>(roll.width != null ? String(roll.width) : "");
   const [propertyIds, setPropertyIds] = useState<string[]>(
     (roll.properties ?? []).map((p) => p.propertyId),

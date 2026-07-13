@@ -165,10 +165,4 @@ export function useSameTypeSessionPolicy(): SameTypeSessionPolicy {
   return isSameTypeSessionPolicy(v) ? v : "kick";
 }
 
-/** Saha #20: top adı format şablonu. Yüklenene kadar default. */
-export function useRollNameTemplate(): string {
-  const q = useFeatureFlags();
-  return q.data?.data?.rollNameTemplate?.trim() || "{item} {color} {width}";
-}
-
 export const FEATURE_FLAGS_QUERY_KEY = QUERY_KEY;

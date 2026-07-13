@@ -19,16 +19,21 @@ export function DataTablePagination({ pagination }: Props) {
           : `Yüklü ${loaded.toLocaleString("tr-TR", { useGrouping: false })} kayıt`}
       </div>
       <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7"
-          onClick={() => loadMore()}
-          disabled={!hasMore || isFetchingMore}
-        >
-          {isFetchingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-          {hasMore ? "Daha Fazla Yükle" : "Tüm kayıtlar yüklendi"}
-        </Button>
+        {hasMore ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={() => loadMore()}
+            disabled={isFetchingMore}
+          >
+            {isFetchingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Daha Fazla Yükle
+          </Button>
+        ) : (
+          // Hepsi yüklendiğinde pasif buton yerine düz durum yazısı.
+          <span className="text-muted-foreground">Tüm kayıtlar yüklendi</span>
+        )}
         <select
           className="h-7 rounded-md border bg-background px-2 text-xs"
           value={pageSize}

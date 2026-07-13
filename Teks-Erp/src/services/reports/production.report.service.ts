@@ -203,7 +203,7 @@ export interface TravelerTraceResult {
     id: string;
     barcode: string | null;
     status: string;
-    qualityGrade: string;
+    qualityGrade: string | null;
     initialQty: number;
     currentQty: number;
     width: number | null;
@@ -307,6 +307,7 @@ export async function getTravelerTrace(rollId: string): Promise<TravelerTraceRes
   return {
     roll: {
       ...roll,
+      qualityGrade: roll.qualityGrade ?? "",
       initialQty: Number(roll.initialQty),
       currentQty: Number(roll.currentQty),
       width: roll.width !== null ? Number(roll.width) : null,

@@ -46,6 +46,8 @@ import { mockPayload } from "./helpers/label-rawcode";
 import { fieldDisplayValue } from "./helpers/label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import { mmToDots } from "./helpers/native-label.shared";
+import { isRasterLanguage, renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
+import { rasterPreviewHtml } from "./helpers/raster/raster-bmp";
 
 const TABLE = "LABEL_TEMPLATE";
 
@@ -790,6 +792,8 @@ export class LabelTemplateService {
       content: string;
       /** Ham yazıcı kodu — "Kod" görünümü (eleman değişimi → koda etkisi görünür). */
       native: string;
+      /** Raster modda: zarf baytlarının base64'ü (editör Test Baskısı gönderir). */
+      nativeB64?: string;
     }>
   > {
     let layout;
@@ -807,12 +811,14 @@ export class LabelTemplateService {
     // (dil routing katmanında biner), o yüzden languageOverride'ı ayrı okuruz.
     const base = await resolveLabelFormat({ kind: opts.kind, peripheralId: opts.peripheralId ?? null });
     let deviceLang: PrinterLanguage | undefined;
+    let rasterMode = false;
     if (opts.peripheralId) {
       const dev = await prisma.peripheralDevice.findFirst({
         where: { id: opts.peripheralId, deletedAt: null },
-        select: { languageOverride: true },
+        select: { languageOverride: true, rasterMode: true },
       });
       deviceLang = dev?.languageOverride ?? undefined;
+      rasterMode = dev?.rasterMode ?? false;
     }
     const language = opts.language ?? deviceLang ?? base.language;
     const format = { ...base, widthMm: opts.widthMm, heightMm: opts.heightMm, language };
@@ -827,6 +833,24 @@ export class LabelTemplateService {
     if (language === PrinterLanguage.RASTER_HTML) {
       const html = renderLabel(language, input).content;
       return { success: true, data: { mode: "html", language, content: html, native: html } };
+    }
+    // RASTER cihaz + kanvas → önizleme AYNI 1bpp bitmap (BMP). "Kod" görünümü insan-okur
+    // özet; baytlar nativeB64'te (editör Test Baskısı gönderir). Envelope patlarsa
+    // (PPLA F0 / font eksik) komut SVG'sine düşer (dual-mode, baskıyla tutarlı).
+    if (rasterMode && isRasterLanguage(language)) {
+      try {
+        const { bytes, bitmap } = renderCanvasRaster(language as RasterLanguage, { payload, format, copies: 1, layout });
+        return {
+          success: true,
+          data: {
+            mode: "html",
+            language,
+            content: rasterPreviewHtml(bitmap, opts.widthMm, opts.heightMm),
+            native: `«raster ${bitmap.widthDots}×${bitmap.heightDots} dot, ${bytes.length} bayt (${language})»`,
+            nativeB64: bytes.toString("base64"),
+          },
+        };
+      } catch { /* raster envelope başarısız → aşağıdaki komut SVG'sine düş */ }
     }
     const native = renderLabel(language, input).content;
     const svg = renderNativePreviewSvg(

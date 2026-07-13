@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CheckCheck, Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -98,39 +98,15 @@ export function AllowedColorsDialog({
                 ? `${items.length} renk · seçim yok`
                 : `${value.length} / ${items.length} renk seçili`}
             </span>
-            <div className="flex gap-2">
-              {value.length < items.length ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={items.length === 0}
-                  onClick={() => onChange(items.map((i) => i.id))}
-                >
-                  <CheckCheck className="mr-1 h-3.5 w-3.5" />
-                  Hepsini Seç
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onChange([])}
-                >
-                  <X className="mr-1 h-3.5 w-3.5" />
-                  Seçimi Temizle
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setAddOpen(true)}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Yeni Renk
-              </Button>
-            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-500 hover:text-white"
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Yeni Renk
+            </Button>
           </div>
 
           <div className="h-80">
@@ -141,6 +117,10 @@ export function AllowedColorsDialog({
               placeholder="Renk ara..."
             />
           </div>
+
+          <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            Not: Hiçbir renk seçmezseniz bu ürüne <span className="font-medium text-foreground">tüm aktif renkler</span> serbesttir.
+          </p>
 
           <DialogFooter>
             <Button type="button" onClick={() => onOpenChange(false)}>

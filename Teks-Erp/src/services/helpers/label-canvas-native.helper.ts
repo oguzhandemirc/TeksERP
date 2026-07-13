@@ -64,8 +64,10 @@ function pad3(n: number): string {
   return String(Math.max(0, Math.min(999, Math.round(n)))).padStart(3, "0");
 }
 
-/** field/text elemanının basılacak metni — present:false → null (eleman atlanır). */
-function elementText(el: FieldElement | TextElement, payload: LabelPayload): string | null {
+/** field/text elemanının basılacak metni — present:false → null (eleman atlanır).
+ *  Raster boru hattı da (raster-canvas) bunu paylaşır → alan/etiket/present mantığı
+ *  komut ve raster yollarında TEK KAYNAK (ham metin; sanitize çağırana ait). */
+export function elementText(el: FieldElement | TextElement, payload: LabelPayload): string | null {
   if (el.type === "text") return el.text;
   const dv = fieldDisplayValue(payload, el.bind);
   if (!dv.present) return null;

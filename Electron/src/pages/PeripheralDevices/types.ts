@@ -45,6 +45,9 @@ export interface PeripheralDevice {
   languageOverride: PrinterLanguage | null;
   /** Baskı yöntemi (ribon): null = otomatik; baskıda dile göre komuta çevrilir. */
   mediaType: "DIRECT_THERMAL" | "THERMAL_TRANSFER" | null;
+  /** Raster baskı: kanvas-varyantlı etiket 1bpp bitmap (raster) gönderilir → önizleme=
+   *  baskı birebir; false = bugünkü komut üretimi. Yalnız LABEL_PRINTER'da anlamlı. */
+  rasterMode: boolean;
   // Yazıcı MEDYASI (Etiket Stüdyosu v2 — boyut artık doğrudan cihazda; "Boyutlar"
   // / LabelFormatProfile kataloğu emekli). Yalnız LABEL_PRINTER'da anlamlı, boş
   // (null) → sistem varsayılan medyası kullanılır. Decimal alanlar JSON'da number.

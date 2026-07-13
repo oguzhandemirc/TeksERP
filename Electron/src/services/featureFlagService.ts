@@ -205,8 +205,6 @@ export interface FeatureFlags {
   loginMethods: { enabled: LoginMethod[]; primary: LoginMethod };
   /** Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına). 1-5. */
   labelCopies: number;
-  /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */
-  rollNameTemplate: string;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket

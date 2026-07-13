@@ -33,6 +33,7 @@ import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
 
 interface RollDefectSummary {
   id: string;
@@ -730,15 +731,11 @@ export class KursunQcService {
         // 4a) Step durumlarını birer kez recompute et (per-roll değil).
         await recomputeStepStatus(tx, nextStep.id);
       } else {
-        // 2b) Son adımdıysa toplar PRODUCED'a düşer + WO/refakat kartı tamamlama
-        // kontrolü koşar (F162 — inventory.kursunFinish kardeş yoluyla ORTAK
-        // completeWorkOrderIfStepsDone yardımcısı; aynı semantik). Eskiden yalnız
-        // pointer temizleniyordu: toplar IN_PRODUCTION limbosunda kalıyor, WO
-        // sonsuza dek IN_PROGRESS görünüyordu (rota PROCESS_QC ile bitebiliyor).
-        await tx.roll.updateMany({
-          where: { id: { in: closedRollIds } },
-          data: { currentStepId: null, status: RollStatus.PRODUCED },
-        });
+        // 2b) SON adım (rotada Tambur yok / bu istasyon son) → toplar FİNAL'e çekilir:
+        // kaliteye göre WAREHOUSE (finalizeRollsAtLastStep — Tambur ile aynı mantık;
+        // artık PRODUCED limbosu YOK). currentStepId=null, form=ACIK, barkodsuz açık
+        // kumaşa barkod üretilir. Ardından completeWorkOrderIfStepsDone WO/kartı kapatır.
+        await finalizeRollsAtLastStep(tx, closedRollIds);
       }
 
       await recomputeStepStatus(tx, step.id);
@@ -786,6 +783,8 @@ export class KursunQcService {
         id: string;
         status: RollStatus;
         currentStepId: string | null;
+        shipmentId: string | null;
+        sackId: string | null;
         barcode: string | null;
         currentQty: Prisma.Decimal;
       };
@@ -804,7 +803,7 @@ export class KursunQcService {
         rollId: true,
         notes: true,
         roll: {
-          select: { id: true, status: true, currentStepId: true, barcode: true, currentQty: true },
+          select: { id: true, status: true, currentStepId: true, shipmentId: true, sackId: true, barcode: true, currentQty: true },
         },
       },
     });
@@ -924,16 +923,23 @@ export class KursunQcService {
           );
         }
       } else {
-        // F159: SON adım (nextStep yok) — finishStep 'PRODUCED + currentStepId=null'
-        // yapmıştı. Bunun TERSİ: topları IN_PRODUCTION'a ve bu adıma geri çek (atomik
-        // claim: biri sevk/tüketim ile PRODUCED'dan çıktıysa count uyuşmaz → 409).
+        // F159: SON adım (nextStep yok) — finishStep artık toplari FİNAL'e (WAREHOUSE/
+        // A1_STOCK/SCRAP, kaliteye göre) çekiyor. Bunun TERSİ: topları IN_PRODUCTION'a ve
+        // bu adıma geri çek (atomik claim: biri sevk edildi / çuvala girdi / tüketildiyse
+        // count uyuşmaz → 409). Barkod/form GERİ ALINMAZ (kalıcı kimlik; re-finalize idempotent).
         const pulledBack = await tx.roll.updateMany({
-          where: { id: { in: rollIds }, status: RollStatus.PRODUCED, currentStepId: null },
+          where: {
+            id: { in: rollIds },
+            status: { in: [RollStatus.WAREHOUSE, RollStatus.A1_STOCK, RollStatus.SCRAP] },
+            currentStepId: null,
+            shipmentId: null,
+            sackId: null,
+          },
           data: { status: RollStatus.IN_PRODUCTION, currentStepId: step.id },
         });
         if (pulledBack.count !== rollIds.length) {
           throw AppError.conflict(
-            "Toplardan biri artık üretim dışı (sevk/tüketim) — yeniden açılamaz. Listeyi yenileyin."
+            "Toplardan biri artık üretim dışı (sevk/çuval/tüketim) — yeniden açılamaz. Listeyi yenileyin."
           );
         }
         // finishStep son-adım dalı WO/kartı COMPLETED yapmış olabilir → geri al.
@@ -1050,12 +1056,19 @@ export class KursunQcService {
         }
       }
     } else {
-      // F159: son adımda toplar PRODUCED + currentStepId=null olmalı; sevk/tüketim ile
-      // çıkmışsa reopenStep 409 verir — preview bunu canReopen=false ile önceden gösterir.
+      // F159: son adımda toplar FİNAL (WAREHOUSE/A1_STOCK/SCRAP) + currentStepId=null +
+      // henüz sevk/çuval GÖRMEMİŞ olmalı; aksi halde reopenStep 409 verir — preview bunu
+      // canReopen=false ile önceden gösterir.
+      const finalStatuses: RollStatus[] = [RollStatus.WAREHOUSE, RollStatus.A1_STOCK, RollStatus.SCRAP];
       for (const cm of closedMovements) {
-        if (cm.roll.status !== RollStatus.PRODUCED || cm.roll.currentStepId !== null) {
+        if (
+          !finalStatuses.includes(cm.roll.status) ||
+          cm.roll.currentStepId !== null ||
+          cm.roll.shipmentId !== null ||
+          cm.roll.sackId !== null
+        ) {
           return block(
-            `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) artık üretimde değil (${cm.roll.status}) — yeniden açılamaz`
+            `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) artık üretimde değil / sevkte (${cm.roll.status}) — yeniden açılamaz`
           );
         }
       }

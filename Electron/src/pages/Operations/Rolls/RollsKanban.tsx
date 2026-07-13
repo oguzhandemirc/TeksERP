@@ -1,30 +1,25 @@
 import { useState } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Cog, Disc3, Package, Send, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { cn } from "@/lib/utils";
-import { rollService } from "./service";
-import { RollDetailSheet } from "./RollDetailSheet";
 import {
-  fetchKursunQueueCards,
-  fetchTamburQueueCards,
-  type KanbanQueueCard,
-} from "./kanbanQueueService";
+  rollService,
+  type ProductionFlowData,
+  type ProductionFlowQueueCard,
+  type ProductionFlowSackCard,
+} from "./service";
+import { RollDetailSheet } from "./RollDetailSheet";
 import type { Roll } from "./types";
-import { sackStoreService } from "../SackStore/service";
-import type { SackStoreShipment } from "../SackStore/types";
 
-// Üretim akışı kolonları — salt-okunur görselleştirme (sürükleme yok).
-// HİBRİT model: Ham Stok / Fason / Depo rulo statüsünden (tek tek rulo);
-// Kurşun & Tambur "bekleyen" istasyon kuyruğundan (parti = refakat kartı);
-// Sevk kolonunda çıkış bekleyen (PLANNED) planlı sevkler listelenir.
-type ColType = "roll" | "kursun" | "tambur" | "sack-store";
-
+// Üretim akışı kolonları — salt-okunur görselleştirme (sürükleme yok). Veri TEK
+// istekte (`/api/rolls/production-flow`) gelir: her kolon en güncel/öncelikli 10
+// kayıt + gerçek toplam sayaç. HİBRİT model: Ham Stok / Fason / Depo rulo
+// statüsünden; Kurşun & Tambur istasyon kuyruğundan (parti = refakat kartı);
+// Sevk kolonu çıkış bekleyen (PLANNED) planlı sevkler.
 interface KanbanColumn {
-  key: string;
-  type: ColType;
-  status?: string;
+  key: keyof ProductionFlowData;
   label: string;
   icon: LucideIcon;
   dot: string;
@@ -32,66 +27,56 @@ interface KanbanColumn {
 }
 
 const COLUMNS: KanbanColumn[] = [
-  { key: "ham-stok", type: "roll", status: "STOCK", label: "Ham Stok", icon: Package, dot: "bg-station-kk1", bar: "bg-station-kk1" },
-  { key: "fason", type: "roll", status: "AT_SUBCONTRACTOR", label: "Fason'da", icon: Send, dot: "bg-station-fason", bar: "bg-station-fason" },
-  { key: "kursun", type: "kursun", label: "Kurşun Bekleyen", icon: Cog, dot: "bg-station-process", bar: "bg-station-process" },
-  { key: "tambur", type: "tambur", label: "Tambur Bekleyen", icon: Disc3, dot: "bg-station-tambur", bar: "bg-station-tambur" },
-  { key: "depo", type: "roll", status: "WAREHOUSE", label: "Depo", icon: Warehouse, dot: "bg-station-depo", bar: "bg-station-depo" },
-  { key: "sevk", type: "sack-store", label: "Sevk", icon: Truck, dot: "bg-emerald-500", bar: "bg-emerald-500" },
+  { key: "hamStok", label: "Ham Stok", icon: Package, dot: "bg-station-kk1", bar: "bg-station-kk1" },
+  { key: "fason", label: "Fason'da", icon: Send, dot: "bg-station-fason", bar: "bg-station-fason" },
+  { key: "kursun", label: "Kurşun Bekleyen", icon: Cog, dot: "bg-station-process", bar: "bg-station-process" },
+  { key: "tambur", label: "Tambur Bekleyen", icon: Disc3, dot: "bg-station-tambur", bar: "bg-station-tambur" },
+  { key: "depo", label: "Depo", icon: Warehouse, dot: "bg-station-depo", bar: "bg-station-depo" },
+  { key: "sevk", label: "Sevk", icon: Truck, dot: "bg-emerald-500", bar: "bg-emerald-500" },
 ];
-const PREVIEW_LIMIT = 12;
 
-type ColumnData =
+// Kolon anahtarını cevaptaki dilime çevir — heterojen (rulo / kuyruk / sevk) union.
+type Slice =
   | { kind: "roll"; rolls: Roll[]; total: number }
-  | { kind: "queue"; cards: KanbanQueueCard[]; total: number }
-  | { kind: "sack-store"; items: SackStoreShipment[] };
+  | { kind: "queue"; cards: ProductionFlowQueueCard[]; total: number }
+  | { kind: "sack"; shipments: ProductionFlowSackCard[]; total: number };
+
+function sliceForColumn(key: keyof ProductionFlowData, data: ProductionFlowData): Slice {
+  switch (key) {
+    case "hamStok": return { kind: "roll", ...data.hamStok };
+    case "fason": return { kind: "roll", ...data.fason };
+    case "depo": return { kind: "roll", ...data.depo };
+    case "kursun": return { kind: "queue", ...data.kursun };
+    case "tambur": return { kind: "queue", ...data.tambur };
+    case "sevk": return { kind: "sack", ...data.sevk };
+  }
+}
+
+const shownCount = (s: Slice): number =>
+  s.kind === "roll" ? s.rolls.length : s.kind === "queue" ? s.cards.length : s.shipments.length;
 
 export function RollsKanban() {
   const [selected, setSelected] = useState<Roll | null>(null);
 
-  const results = useQueries({
-    queries: COLUMNS.map((c) => ({
-      queryKey: ["rolls", "kanban", c.key],
-      staleTime: 30_000,
-      queryFn: async (): Promise<ColumnData> => {
-        if (c.type === "roll") {
-          const res = await rollService.listCursor({
-            cursor: null,
-            limit: PREVIEW_LIMIT,
-            sortBy: "createdAt",
-            sortOrder: "desc",
-            withTotal: true,
-            filters: { status: c.status! },
-          });
-          return { kind: "roll", rolls: res.data, total: res.pagination.totalEstimate ?? res.data.length };
-        }
-        if (c.type === "sack-store") {
-          const res = await sackStoreService.list();
-          return { kind: "sack-store", items: res.data };
-        }
-        const q = c.type === "kursun" ? await fetchKursunQueueCards() : await fetchTamburQueueCards();
-        return { kind: "queue", cards: q.cards.slice(0, PREVIEW_LIMIT), total: q.total };
-      },
-    })),
+  // TEK istek — eskiden 6 ayrı sorgu (useQueries) vardı; kuyruk kolonları ~500
+  // satırı nested payload'la çekiyordu. Artık kolon başına 10 + count sunucuda.
+  const { data, isLoading } = useQuery({
+    queryKey: ["rolls", "kanban"],
+    staleTime: 30_000,
+    queryFn: () => rollService.getProductionFlow().then((r) => r.data),
   });
 
   return (
     <div className="min-h-0 flex-1 overflow-auto p-3">
+      <p className="mb-2 text-[11px] text-muted-foreground">
+        Her sütun en güncel 10 kaydı gösterir · sağ üstteki sayı toplam kayıttır.
+      </p>
       <div className="flex gap-3">
-        {COLUMNS.map((col, i) => {
-          const r = results[i]!;
-          const data = r.data;
-          const total =
-            data?.kind === "roll" ? data.total
-            : data?.kind === "queue" ? data.total
-            : data?.kind === "sack-store" ? data.items.length
-            : 0;
-          const shown =
-            data?.kind === "roll" ? data.rolls.length
-            : data?.kind === "queue" ? data.cards.length
-            : data?.kind === "sack-store" ? data.items.length
-            : 0;
-          const rollMore = data?.kind === "roll" ? Math.max(0, data.total - data.rolls.length) : 0;
+        {COLUMNS.map((col) => {
+          const slice = data ? sliceForColumn(col.key, data) : null;
+          const total = slice?.total ?? 0;
+          const shown = slice ? shownCount(slice) : 0;
+          const more = Math.max(0, total - shown);
 
           return (
             <div key={col.key} className="flex w-64 shrink-0 flex-col rounded-lg border bg-card/40">
@@ -101,33 +86,37 @@ export function RollsKanban() {
                 <col.icon className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs font-semibold">{col.label}</span>
                 <span className="ml-auto rounded bg-muted px-1.5 text-[10px] font-medium tabular-nums">
-                  {r.isLoading ? "…" : total}
+                  {isLoading ? "…" : total}
                 </span>
               </div>
               <div className="flex flex-col gap-2 px-2 pb-2">
-                {r.isLoading ? (
+                {isLoading || !slice ? (
                   Array.from({ length: 3 }).map((_, k) => <Skeleton key={k} className="h-16 w-full" />)
                 ) : shown === 0 ? (
                   <p className="px-1 py-6 text-center text-[11px] text-muted-foreground">Boş</p>
-                ) : data?.kind === "sack-store" ? (
-                  <SackStoreColumn items={data.items} />
                 ) : (
                   <Stagger className="flex flex-col gap-2">
-                    {data?.kind === "roll" &&
-                      data.rolls.map((roll) => (
+                    {slice.kind === "roll" &&
+                      slice.rolls.map((roll) => (
                         <StaggerItem key={roll.id}>
                           <RollCard roll={roll} onClick={() => setSelected(roll)} />
                         </StaggerItem>
                       ))}
-                    {data?.kind === "queue" &&
-                      data.cards.map((card) => (
+                    {slice.kind === "queue" &&
+                      slice.cards.map((card) => (
                         <StaggerItem key={card.id}>
                           <QueueCard card={card} />
                         </StaggerItem>
                       ))}
-                    {rollMore > 0 && (
+                    {slice.kind === "sack" &&
+                      slice.shipments.map((s) => (
+                        <StaggerItem key={s.id}>
+                          <KanbanSackCard shipment={s} />
+                        </StaggerItem>
+                      ))}
+                    {more > 0 && (
                       <p className="px-1 pt-1 text-center text-[11px] text-muted-foreground">
-                        +{rollMore} daha
+                        +{more} daha
                       </p>
                     )}
                   </Stagger>
@@ -147,7 +136,7 @@ export function RollsKanban() {
   );
 }
 
-function gradeClass(grade: string): string {
+function gradeClass(grade: string | null): string {
   if (grade === "FIRE") return "bg-destructive/15 text-destructive";
   if (grade === "A1") return "bg-warning/15 text-warning";
   return "bg-muted text-muted-foreground";
@@ -203,7 +192,7 @@ function RollCard({ roll, onClick }: { roll: Roll; onClick: () => void }) {
             {roll.currentQty.toLocaleString("tr-TR", { useGrouping: false })} m
           </span>
           <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", gradeClass(roll.qualityGrade))}>
-            {roll.qualityGrade}
+            {roll.qualityGrade ?? "—"}
           </span>
         </div>
       </div>
@@ -212,7 +201,7 @@ function RollCard({ roll, onClick }: { roll: Roll; onClick: () => void }) {
 }
 
 /** Parti (refakat kartı) kartı — Kurşun / Tambur kuyruğu. */
-function QueueCard({ card }: { card: KanbanQueueCard }) {
+function QueueCard({ card }: { card: ProductionFlowQueueCard }) {
   return (
     <div className="w-full rounded-md border bg-card p-2.5 text-left">
       <FabricHeader itemName={card.itemName} colorName={card.colorName} colorHex={card.colorHex} />
@@ -230,20 +219,8 @@ function QueueCard({ card }: { card: KanbanQueueCard }) {
   );
 }
 
-/** Sevk kolonunun tüm içeriği — çıkış bekleyen (PLANNED) planlı sevkler. */
-function SackStoreColumn({ items }: { items: SackStoreShipment[] }) {
-  return (
-    <Stagger className="flex flex-col gap-2">
-      {items.map((s) => (
-        <StaggerItem key={s.id}>
-          <KanbanSackCard shipment={s} />
-        </StaggerItem>
-      ))}
-    </Stagger>
-  );
-}
-
-function KanbanSackCard({ shipment }: { shipment: SackStoreShipment }) {
+/** Sevk kolonu kartı — çıkış bekleyen (PLANNED) planlı sevk. */
+function KanbanSackCard({ shipment }: { shipment: ProductionFlowSackCard }) {
   return (
     <div className="w-full rounded-md border bg-card p-2.5">
       <div className="truncate text-sm font-semibold leading-tight">{shipment.shipmentNo}</div>

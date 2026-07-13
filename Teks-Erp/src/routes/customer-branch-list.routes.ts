@@ -24,10 +24,11 @@ const service = new BaseService({
 const controller = new BaseController(service);
 const router = Router();
 
-// Sevkiyatı görebilen herkes (web sevkiyat veya mobil paket/sevkiyat) ya da
-// müşteri okuma yetkisi olan şube filtresini doldurabilsin. Yeni permission yok.
+// Sevkiyatı/siparişi görebilen herkes (web sevkiyat/sipariş veya mobil paket/sevkiyat)
+// ya da müşteri okuma yetkisi olan şube filtresini doldurabilsin. Yeni permission yok.
 const READ = requireAnyPermission(
   "customer:read",
+  "order:read",
   "shipping:read",
   "shipping:write",
   "mobile:tarti-paket",

@@ -1,26 +1,35 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PermissionGate } from "@/components/PermissionGate";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService } from "@/services/featureFlagService";
 import { FlagToggle, ReadOnlyRow } from "./SettingRow";
+import { SettingsSaveBar } from "./SettingsSaveBar";
+import { useRegisterSettingsDirty } from "./settings-dirty";
 
 /**
  * Cihaz eşleştirme zorunluluğu aç/kapa. Default PASİF (false): eşleşmemiş tabletler
- * de sisteme girip çalışabilir. Diğer görünüm flag'lerinden farklı olarak backend
- * tarafından ENFORCE edilir — bu yüzden ayrı, uyarılı bir bölümde tutulur.
+ * de sisteme girip çalışabilir. Backend tarafından ENFORCE edilir (uyarılı bölüm).
+ * TEK kaydetme standardı: toggle taslak tutulur, "Kaydet" yazar (anında-kayıt YOK).
  */
 export function DevicePairingSection() {
   const qc = useQueryClient();
+  const { hasPermission } = useRoleAccess();
+  const canEdit = hasPermission("admin:settings");
   const flagsQ = useFeatureFlags();
-  const required = flagsQ.data?.data?.devicePairingRequired ?? false;
+  const server = flagsQ.data?.data?.devicePairingRequired ?? false;
+
+  const [draft, setDraft] = useState(server);
+  useEffect(() => setDraft(server), [server]);
+  const dirty = draft !== server;
+  useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
-    mutationFn: (next: boolean) =>
-      featureFlagService.update({ devicePairingRequired: next }),
+    mutationFn: () => featureFlagService.update({ devicePairingRequired: draft }),
     onSuccess: () => {
-      toast.success("Cihaz eşleştirme ayarı güncellendi.");
+      toast.success("Cihaz eşleştirme ayarı kaydedildi.");
       void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
     },
   });
@@ -31,17 +40,7 @@ export function DevicePairingSection() {
 
   return (
     <div className="space-y-4">
-      <PermissionGate
-        permission="admin:settings"
-        fallback={
-          <ReadOnlyRow
-            title="Cihaz eşleştirme zorunluluğu"
-            enabled={required}
-            onLabel="Aktif"
-            offLabel="Pasif"
-          />
-        }
-      >
+      {canEdit ? (
         <FlagToggle
           title="Sahadaki tabletler için eşleştirmeyi zorunlu kıl"
           desc={
@@ -52,11 +51,18 @@ export function DevicePairingSection() {
               onaylamadan sisteme giremez.
             </>
           }
-          checked={required}
+          checked={draft}
           disabled={mut.isPending}
-          onChange={(v) => mut.mutate(v)}
+          onChange={setDraft}
         />
-      </PermissionGate>
+      ) : (
+        <ReadOnlyRow
+          title="Cihaz eşleştirme zorunluluğu"
+          enabled={server}
+          onLabel="Aktif"
+          offLabel="Pasif"
+        />
+      )}
 
       <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
         <strong className="text-amber-600 dark:text-amber-400">Dikkat:</strong>{" "}
@@ -65,6 +71,15 @@ export function DevicePairingSection() {
         makine kırılımı görünmez. Makine izini korumak isteyen tabletler yine gönüllü
         olarak eşleştirilebilir; eşleşmiş cihazlar bu moddan etkilenmez.
       </div>
+
+      {canEdit && (
+        <SettingsSaveBar
+          dirty={dirty}
+          saving={mut.isPending}
+          onSave={() => mut.mutate()}
+          onReset={() => setDraft(server)}
+        />
+      )}
     </div>
   );
 }

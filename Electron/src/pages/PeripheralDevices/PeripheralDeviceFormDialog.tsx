@@ -89,6 +89,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         deviceId: initial.deviceId ?? "",
         languageOverride: initial.languageOverride ?? "",
         mediaType: initial.mediaType ?? "",
+        rasterMode: initial.rasterMode ?? false,
         labelWidthMm: initial.labelWidthMm != null ? String(initial.labelWidthMm) : "",
         labelHeightMm: initial.labelHeightMm != null ? String(initial.labelHeightMm) : "",
         labelDpi: initial.labelDpi != null ? String(initial.labelDpi) : "",

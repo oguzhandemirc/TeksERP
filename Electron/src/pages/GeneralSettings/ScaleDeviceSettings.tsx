@@ -1,11 +1,13 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { Loader2, Scale as ScaleIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useMachineConfig } from "@/hooks/useMachineConfig";
-import type { ScaleDeviceConfig } from "@/lib/machine-config";
 import { parseWeight } from "@/lib/weight-codec";
 import type { ScannerDeviceInfo } from "@shared/ipc-contract";
+import { useDeviceDraft } from "./useDeviceDraft";
+import { useRegisterSettingsDirty } from "./settings-dirty";
+import { SettingsSaveBar } from "./SettingsSaveBar";
 
 /**
  * Sevkiyat kantarı (seri/COM) — bu bilgisayara özel YEREL tercih. Çalışma oturumu
@@ -15,10 +17,12 @@ import type { ScannerDeviceInfo } from "@shared/ipc-contract";
  * fallback'i devrededir (useMachineScale).
  */
 export function ScaleDeviceSettings() {
-  const { config, setConfig } = useMachineConfig();
-  const cfg = config.scaleDevice ?? {};
-  const setCfg = (patch: Partial<ScaleDeviceConfig>) =>
-    setConfig({ scaleDevice: { ...cfg, ...patch } });
+  // Taslak: değişiklikler burada birikir, "Kaydet" ile yerel config'e işlenir.
+  // "Deneme Tartısı" TASLAK portu okur → önce dene, sonra kaydet.
+  const draft = useDeviceDraft("scaleDevice");
+  const cfg = draft.draft;
+  const setCfg = draft.patch;
+  useRegisterSettingsDirty(draft.dirty);
 
   const printer = typeof window !== "undefined" ? window.api?.printer : undefined;
   const scaleApi = typeof window !== "undefined" ? window.api?.scale : undefined;
@@ -207,6 +211,16 @@ export function ScaleDeviceSettings() {
           </span>
         )}
       </div>
+
+      <SettingsSaveBar
+        dirty={draft.dirty}
+        saving={false}
+        onSave={() => {
+          draft.save();
+          toast.success("Kantar ayarı kaydedildi.");
+        }}
+        onReset={draft.reset}
+      />
     </div>
   );
 }

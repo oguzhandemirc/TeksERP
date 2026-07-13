@@ -6,7 +6,8 @@
 //   1. Basit akış: 3 STOCK top okut → WO oluşur, targetItem topraklardan türetilir,
 //      toplar IN_PRODUCTION + ilk adıma bağlanır, attached=3.
 //   2. Karışık ürün reddi (tek WO = tek kumaş) — ve WO ORPHAN bırakılmaz.
-//   3. STOCK olmayan top reddi — WO orphan bırakılmaz.
+//   3. Attach-uygun-olmayan durum (IN_PRODUCTION) reddi — WO orphan bırakılmaz.
+//      (WAREHOUSE/A1_STOCK artık KABUL edilir — Faz 4: depo topu yeni WO'ya sokulabilir.)
 //   4. Bulunamayan barkod reddi — WO orphan bırakılmaz.
 //   5. targetItem uyuşmazlığı reddi.
 //   6. Sipariş bağlama: orderLineIds verilince type=ORDER_PRODUCTION + bağ kurulur.
@@ -165,15 +166,17 @@ async function main() {
   }
 
   // ===========================================================================
-  // 3. STOCK olmayan top reddi
+  // 3. Attach-uygun-olmayan durum reddi (IN_PRODUCTION). WAREHOUSE/A1_STOCK artık
+  //    KABUL edilir (Faz 4: depo topu yeni WO'ya sokulabilir); yalnız üretimde/gitmiş
+  //    durumlar reddedilir.
   // ===========================================================================
-  const wh = await makeStockRoll(itemA.id, 50, RollStatus.WAREHOUSE);
+  const busy = await makeStockRoll(itemA.id, 50, RollStatus.IN_PRODUCTION);
   const beforeWh = await prisma.workOrder.count();
-  await expectReject("STOCK olmayan top reddedildi", () =>
-    svc.quickStart({ steps, rollBarcodes: [wh.barcode] }, undefined),
+  await expectReject("IN_PRODUCTION top reddedildi (attach-uygun değil)", () =>
+    svc.quickStart({ steps, rollBarcodes: [busy.barcode] }, undefined),
   );
   const afterWh = await prisma.workOrder.count();
-  check("STOCK olmayan: orphan WO yok", beforeWh === afterWh);
+  check("Attach-uygun-olmayan: orphan WO yok", beforeWh === afterWh);
 
   // ===========================================================================
   // 4. Bulunamayan barkod reddi

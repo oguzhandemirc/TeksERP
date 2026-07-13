@@ -28,7 +28,6 @@ export type WorkOrderType =
 export type RollStatus =
   | 'STOCK'
   | 'IN_PRODUCTION'
-  | 'PRODUCED'
   | 'WAREHOUSE'
   | 'SHIPPED'
   | 'SCRAP'

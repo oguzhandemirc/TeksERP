@@ -29,7 +29,12 @@ export interface Roll {
   weightKg: number | null;
   width: number | null;
   status: RollStatus;
-  qualityGrade: string;
+  /** Kalite yalnız kalite istasyonlarında (KK1 opsiyonel giriş, KK2/Kurşun,
+   *  Tambur) belirlenir → kaliteye bakılmamış toplarda null ("—" gösterilir). */
+  qualityGrade: string | null;
+  /** Topun fiziksel biçimi — TOP (Tambur/ham giriş çocuğu) | ACIK (Tambur-dışı
+   *  finalize + fason dönüşü açık kumaş). Otomatik türetilir, operatör seçmez. */
+  form: "TOP" | "ACIK";
   /** Tambur'da kartela için işaretlendi mi — depoda kartelaya gidecek topları
    *  ayırt etmek için rozet/filtre. Sevki engellemez. */
   markedForKartela?: boolean;

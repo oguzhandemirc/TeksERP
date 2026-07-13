@@ -167,7 +167,7 @@ Enum sayısı 14 → **16** (`PrintedDocType`, `PrintedDocStatus`).
 | `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
 | `ItemType` | YARN, WARP, FABRIC, CONSUMABLE |
 | `RollEntrySource` | SUPPLIER_RECEIPT, TAMBUR_SPLIT, SUBCONTRACTOR_RETURN |
-| `RollStatus` | STOCK, IN_PRODUCTION, PRODUCED, SCRAP, CANCELLED, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE, TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED |
+| `RollStatus` | STOCK, IN_PRODUCTION, SCRAP, CANCELLED, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE, SHIPPED, TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED, AT_KARTELA, KARTELA_CONSUMED (PRODUCED 2026-07-13 KALDIRILDI) |
 | `CompanyType` | CUSTOMER, SUPPLIER, SUBCONTRACTOR, DYEHOUSE |
 | `OrderStatus` | PENDING, APPROVED, IN_PRODUCTION, PARTIAL_SHIPPED, COMPLETED, CANCELLED |
 | `WorkOrderType` | ORDER_PRODUCTION, STOCK_PRODUCTION |
@@ -198,9 +198,12 @@ STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SU
                                             WAREHOUSE  (depo)
 ```
 
-`PRODUCED` statüsü, Roll'un son üretim adımını bitirdiği ama Tambur'dan
-geçmediği durumlarda kullanılır (tek-adımlı WO veya rota Tambur içermiyor).
-Normal Tambur'lu akışta top doğrudan child Roll'lar olarak `WAREHOUSE`'a düşer.
+Rotanın SON adımı — Tambur olsun olmasın — topu final ürüne çeker (kaliteden çözülen
+`RollStatus`, varsayılan `WAREHOUSE`; non-Tambur çıktıda `form=ACIK`; barkodsuza barkod
+üretilir). `PRODUCED` limbo statüsü **kaldırıldı** (2026-07-13, enum'dan da düştü).
+Tambur'lu akışta top child `Roll`'lar olarak `WAREHOUSE`'a düşer; Tambursuz rota (Kurşun/QC2
+veya fason son adım) aynı topu `WAREHOUSE` **açık kumaş** olarak finalize eder
+(`finalizeRollsAtLastStep` — Tambur `resolveCutStatus`'un jenerik hali).
 
 > **NOT (2026-07 — ÇUVAL DEPO MODELİ):** Sevkiyat modülü çuval depo modeline geçti (mühür/rezerv YOK). Çuval (`Sack`) bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte). Akış: WAREHOUSE serbest top → `openSack(customerId?)` → `scanIntoSack` → (opsiyonel `weighSack`) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur: `createShipment({ sackIds, customerId, orderIds? })`; sevk onayı (`shipping.confirmationEnabled`) **kapalı** (varsayılan) → `Shipment` **doğrudan** DISPATCHED (yanıtta `dispatched=true`), **açık** → PLANNED kurulur ve çıkış ayrıca `dispatchShipment` ile onaylanır (kapı önü ara adımı YOK: `PLANNED → DISPATCHED`). `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`); PLANNED tahsis `shippedQty`'ye SAYILMAZ. Stok yalnız DISPATCH'te `SHIPPED`'e düşer ve tahsis dispatch'te `shippedQty`'ye terfi eder (defter-otoritatif, `recomputeOrderStatusForOrders`); iptalde tahsis silinir, çuval depoya döner. `ShipmentStatus` = `PLANNED|DISPATCHED|CANCELLED` (PREPARING/READY/AT_DOOR kaldırıldı); `ShipmentAllocation`/`markReady`/`retarget`/`sealSack`/`moveToDoor` kaldırıldı; `ShipmentOrder` kullanıcı-seçili sipariş kümesidir. Tam tasarım: `CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
 

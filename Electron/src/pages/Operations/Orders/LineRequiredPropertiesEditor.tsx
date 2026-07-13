@@ -20,6 +20,8 @@ interface Props {
   itemId: string;
   value: string[];
   onChange: (next: string[]) => void;
+  /** "Özellik isteği ekle" butonunun yanına (aynı satıra) eklenen opsiyonel aksiyon — örn. "Not ekle". */
+  extraAction?: React.ReactNode;
 }
 
 /**
@@ -28,7 +30,7 @@ interface Props {
  */
 const kursunRank = (name: string): number => (/kurşun/i.test(name) ? 0 : 1);
 
-export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props) {
+export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAction }: Props) {
   const [open, setOpen] = useState(false);
 
   const itemQuery = useQuery({
@@ -112,6 +114,7 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
         <Plus className="h-3.5 w-3.5" />
         {selectedById.length === 0 ? "Özellik isteği ekle" : "Düzenle"}
       </Button>
+      {extraAction}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col">
           <DialogHeader>

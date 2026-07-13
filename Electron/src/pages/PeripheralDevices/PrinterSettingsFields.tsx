@@ -91,6 +91,22 @@ export function PrinterSettingsFields({ form }: Props) {
         </div>
       </div>
 
+      {/* Raster baskı — kanvas-varyantlı etiket 1bpp bitmap gönderilir (önizleme=baskı
+          birebir; Türkçe glifler gerçek basılır). Kapalı → bugünkü komut yolu (bayt-aynı). */}
+      <div className="rounded-md border bg-muted/20 p-3">
+        <label className="flex cursor-pointer items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 h-4 w-4" {...form.register("rasterMode")} />
+          <span>
+            <span className="font-medium">Raster baskı (bitmap)</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Önizleme = baskı birebir; kanvas şablonlu etiketler 1bpp bitmap olarak gönderilir.
+              PPLA'da grafik komutu sahada doğrulanana kadar KAPALI tutun; Bluetooth (mobil)
+              yazıcılarda önerilmez (yavaş).
+            </span>
+          </span>
+        </label>
+      </div>
+
       {/* Şablon yönlendirme (bağlam-başına; boş → bağlam varsayılanı). Her select
           havuzun TAMAMINI listeler; pasif şablon yalnız hâlâ seçiliyse görünür
           (eski kaydın round-trip'i bozulmasın). */}

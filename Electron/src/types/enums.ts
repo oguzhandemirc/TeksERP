@@ -138,7 +138,6 @@ export const stepStatusLabels: Record<StepStatus, string> = {
 export const RollStatus = {
   STOCK: "STOCK",
   IN_PRODUCTION: "IN_PRODUCTION",
-  PRODUCED: "PRODUCED",
   SCRAP: "SCRAP",
   CANCELLED: "CANCELLED",
   AT_SUBCONTRACTOR: "AT_SUBCONTRACTOR",
@@ -155,7 +154,6 @@ export type RollStatus = (typeof RollStatus)[keyof typeof RollStatus];
 export const rollStatusLabels: Record<RollStatus, string> = {
   STOCK: "Stokta",
   IN_PRODUCTION: "Üretimde",
-  PRODUCED: "Üretildi",
   SCRAP: "Fire",
   CANCELLED: "İptal Edildi",
   AT_SUBCONTRACTOR: "Fasonda",

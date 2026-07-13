@@ -18,8 +18,8 @@
 //                                ensureWorkOrderInProgress (idempotent)
 //   - workorder-locks.helper     computeWorkOrderLocks (materialCommitted, renk/
 //                                kat/özellik kilitleri, eksik WO)
-// Ayrıca renderRollName / normalize* ek kenar-durumları (mevcut testlerin
-// kapsamadığı ayraç/idempotans/çoklu-sayı yolları).
+// Ayrıca normalize* ek kenar-durumları (mevcut testlerin kapsamadığı
+// idempotans/çoklu-sayı yolları).
 // =============================================================================
 
 import {
@@ -34,7 +34,6 @@ import {
   normalizeItemName,
   normalizeColorName,
 } from "../src/services/helpers/name-normalize.helper";
-import { renderRollName } from "../src/services/helpers/roll-name.helper";
 import { recomputeOrderStatus } from "../src/services/helpers/order-status.helper";
 import {
   recomputeStepStatus,
@@ -81,41 +80,6 @@ function testNameNormalize() {
   );
   check("color: yalnız sayı", normalizeColorName("042") === "042");
   check("color: boş → boş", normalizeColorName("   ") === "");
-}
-
-// =============================================================================
-// 2) roll-name.helper — saf
-// =============================================================================
-function testRollName() {
-  const D = "{item} {color} {width}";
-  check("rollName: tüm tokenlar", renderRollName(D, { item: "PATOS", color: "055-BEYAZ", width: 150 }) === "PATOS 055-BEYAZ 150");
-  check("rollName: renksiz → renk atlanır", renderRollName(D, { item: "PATOS", color: null, width: 150 }) === "PATOS 150");
-  check("rollName: width null atlanır", renderRollName(D, { item: "X", color: "Y", width: null }) === "X Y");
-  check("rollName: sadece item", renderRollName(D, { item: "SÜET" }) === "SÜET");
-  check("rollName: width 0 yazılır (== null değil)", renderRollName(D, { item: "X", color: null, width: 0 }) === "X 0", renderRollName(D, { item: "X", color: null, width: 0 }));
-  check(
-    "rollName: '{width}cm' suffix korunur",
-    renderRollName("{item} {color} {width}cm {quality}", { item: "POLAR", color: "SİYAH", width: 180, quality: "A" }) === "POLAR SİYAH 180cm A",
-  );
-  // Gerçek davranış (varsayım YOK): helper yalnız çoklu-boşluğu tekler ve
-  // çift-yanı-boşluklu TEK ayracı korur; ardışık ayraç bloklarını birleştirmez.
-  // Boşluklu şablonda boş renk → "A - - 10"; bitişik slash → "A//10".
-  check(
-    "rollName: çoklu boşluk teklenir (boş renkte fazla boşluk gitmez)",
-    renderRollName("{item} - {color} - {width}", { item: "A", color: null, width: 10 }) === "A - - 10",
-    renderRollName("{item} - {color} - {width}", { item: "A", color: null, width: 10 }),
-  );
-  check(
-    "rollName: bitişik slash ayraç boş renkte korunur (A//10)",
-    renderRollName("{item}/{color}/{width}", { item: "A", color: null, width: 10 }) === "A//10",
-    renderRollName("{item}/{color}/{width}", { item: "A", color: null, width: 10 }),
-  );
-  // Çift-yanı-boşluklu ayraç DOLU tokenlarda korunur ("A - B - 10").
-  check(
-    "rollName: dolu tokenlarda boşluklu ayraç korunur",
-    renderRollName("{item} - {color} - {width}", { item: "A", color: "B", width: 10 }) === "A - B - 10",
-    renderRollName("{item} - {color} - {width}", { item: "A", color: "B", width: 10 }),
-  );
 }
 
 // =============================================================================
@@ -553,7 +517,6 @@ async function testWorkOrderLocks() {
 
 async function main() {
   testNameNormalize();
-  testRollName();
   testCustomerName();
   await testQualityGrade();
   await testOrderStatus();

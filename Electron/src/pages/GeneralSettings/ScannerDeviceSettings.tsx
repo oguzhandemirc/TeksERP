@@ -9,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMachineConfig } from "@/hooks/useMachineConfig";
 import type { ScannerDeviceConfig } from "@/lib/machine-config";
 import { FlagToggle } from "./SettingRow";
 import type {
@@ -39,12 +38,16 @@ const FRAME_LABELS: Record<ScanTerminatorPref, string> = {
  * durum gösterir + sahte kodla boru hattını test eder. window.api yoksa (web/test)
  * görünmez.
  */
-export function ScannerDeviceSettings() {
-  const { config, setConfig } = useMachineConfig();
-  const sc = config.scanner ?? {};
-  const dev = sc.device ?? {};
-  const setDevice = (patch: Partial<ScannerDeviceConfig>) =>
-    setConfig({ scanner: { ...sc, device: { ...dev, ...patch } } });
+export function ScannerDeviceSettings({
+  value,
+  onChange,
+}: {
+  /** Üst (Tabanca) sekmesinin scanner TASLAĞındaki device bölümü — controlled. */
+  value: ScannerDeviceConfig;
+  onChange: (patch: Partial<ScannerDeviceConfig>) => void;
+}) {
+  const dev = value;
+  const setDevice = onChange;
 
   const scanner = typeof window !== "undefined" ? window.api?.scanner : undefined;
   const [devices, setDevices] = useState<ScannerDeviceInfo[]>([]);

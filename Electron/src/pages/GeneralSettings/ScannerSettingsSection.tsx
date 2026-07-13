@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ScanLine, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,8 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMachineConfig } from "@/hooks/useMachineConfig";
-import type { ScannerConfig } from "@/lib/machine-config";
 import {
   createWedgeDetector,
   DEFAULT_WEDGE_CONFIG,
@@ -19,6 +18,9 @@ import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { ScannerDeviceSettings } from "./ScannerDeviceSettings";
 import { FlagToggle, FieldLabel } from "./SettingRow";
 import { InfoPopover } from "./SettingHint";
+import { useDeviceDraft } from "./useDeviceDraft";
+import { useRegisterSettingsDirty } from "./settings-dirty";
+import { SettingsSaveBar } from "./SettingsSaveBar";
 
 type Terminator = "Enter" | "Tab" | "both";
 
@@ -36,10 +38,12 @@ const TERMINATOR_LABELS: Record<Terminator, string> = {
  * Etiketle, Çuval Arama vb.) bu ayardan bağımsız her zaman çalışır.
  */
 export function ScannerSettingsSection() {
-  const { config, setConfig } = useMachineConfig();
-  const sc = config.scanner ?? {};
-  const setScanner = (patch: Partial<ScannerConfig>) =>
-    setConfig({ scanner: { ...sc, ...patch } });
+  // Taslak: tüm scanner config'i (wedge parametreleri + Faz-2 cihaz okuyucu) tek
+  // taslakta birikir, "Kaydet" ile işlenir. Test kutusu taslak eşikleri kullanır.
+  const draft = useDeviceDraft("scanner");
+  const sc = draft.draft;
+  const setScanner = draft.patch;
+  useRegisterSettingsDirty(draft.dirty);
 
   const scanAnywhere = sc.scanAnywhere ?? false;
   const terminator = (sc.terminator ?? DEFAULT_WEDGE_CONFIG.terminator) as Terminator;
@@ -124,11 +128,25 @@ export function ScannerSettingsSection() {
         terminator={terminator}
       />
 
-      {/* Faz-2 — seri/HID cihaz okuyucu (klavye-wedge yapamayan tabancalar) */}
+      {/* Faz-2 — seri/HID cihaz okuyucu (klavye-wedge yapamayan tabancalar). Aynı
+          scanner taslağının device bölümünü düzenler → tek Kaydet ile birlikte yazılır. */}
       <div className="border-t pt-4">
         <p className="mb-2 text-sm font-medium">Cihaz okuyucu (seri / HID — Faz-2)</p>
-        <ScannerDeviceSettings />
+        <ScannerDeviceSettings
+          value={sc.device ?? {}}
+          onChange={(patch) => setScanner({ device: { ...(sc.device ?? {}), ...patch } })}
+        />
       </div>
+
+      <SettingsSaveBar
+        dirty={draft.dirty}
+        saving={false}
+        onSave={() => {
+          draft.save();
+          toast.success("Barkod tabancası ayarı kaydedildi.");
+        }}
+        onReset={draft.reset}
+      />
     </div>
   );
 }

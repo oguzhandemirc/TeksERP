@@ -58,7 +58,7 @@ const router = Router();
  *         description: Barkod ile arama
  *       - in: query
  *         name: filter[status]
- *         schema: { type: string, enum: [STOCK, IN_PRODUCTION, PRODUCED, AT_SUBCONTRACTOR, WAREHOUSE, ALL] }
+ *         schema: { type: string, enum: [STOCK, IN_PRODUCTION, AT_SUBCONTRACTOR, WAREHOUSE, ALL] }
  *       - in: query
  *         name: filter[statusIn]
  *         schema: { type: string }
@@ -216,6 +216,31 @@ router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_RO
 
 /**
  * @openapi
+ * /api/rolls/production-flow:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Üretim Akışı (Kanban) panosu — 6 kolon tek istekte
+ *     description: |
+ *       Envanter ekranındaki salt-okunur pano. Ham Stok / Fason / Kurşun / Tambur /
+ *       Depo / Sevk kolonlarının her biri için **en fazla 10 önizleme kaydı + gerçek
+ *       toplam sayaç** döner (6 ayrı isteğin yerine tek round-trip). Kolon-bazlı ince
+ *       yetki: `quality:read` yoksa Kurşun/Tambur, `shipping:read/write` yoksa Sevk boş
+ *       (total 0) döner.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: "{ hamStok, fason, kursun, tambur, depo, sevk } — her biri { <items>, total }."
+ */
+router.get(
+  "/production-flow",
+  verifyToken,
+  requireAnyPermission("roll:read", ...MOBILE_ROLL_READ),
+  controller.getProductionFlow,
+);
+
+/**
+ * @openapi
  * /api/rolls/warehouse-scope:
  *   get:
  *     tags: [Inventory]
@@ -346,7 +371,7 @@ router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ..
  *     summary: Topu iptal et (soft delete → CANCELLED)
  *     description: |
  *       Topun durumunu CANCELLED yapar (iptal — SCRAP fire kararı DEĞİL).
- *       STOCK / IN_PRODUCTION / PRODUCED / A1_STOCK / WAREHOUSE /
+ *       STOCK / IN_PRODUCTION / A1_STOCK / WAREHOUSE /
  *       RETURNED_FROM_SUBCONTRACTOR durumundaki toplar iptal edilebilir;
  *       SHIPPED / *_CONSUMED / AT_KARTELA / AT_SUBCONTRACTOR iptal edilemez.
  *     security:
@@ -488,74 +513,6 @@ router.post(
 
 /**
  * @openapi
- * /api/rolls/{id}/recovery-targets:
- *   get:
- *     tags: [Inventory]
- *     summary: "'Üretime Geri Al' önizlemesi — takılı açık kumaş için uygun Tambur adımları"
- *     description: |
- *       Ham stokta takılı açık kumaş (barkodsuz, fason-dönüşü, STOCK, currentStepId=null)
- *       için uygun "üretime geri al" hedeflerini döner: aynı ürünlü, açık
- *       (PLANNED/IN_PROGRESS) iş emirlerinin kapanmamış Tambur adımları. Salt-okunur.
- *       Top uygun değilse `eligible:false` + `reason`.
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200: { description: "RecoveryTargetsResult (roll + eligible + eligibleTargets + warnings)" }
- *       404: { description: Top bulunamadı }
- */
-router.get(
-  "/:id/recovery-targets",
-  verifyToken,
-  requirePermission("roll:manual-adjust"),
-  controller.getRecoveryTargets,
-);
-
-/**
- * @openapi
- * /api/rolls/{id}/recover-to-production:
- *   post:
- *     tags: [Inventory]
- *     summary: Takılı açık kumaşı seçilen Tambur adımına geri al (üretime sok)
- *     description: |
- *       Süpervizör aksiyonu (roll:manual-adjust). Orphan açık kumaşı YENİ roll
- *       yaratmadan yerinde claim eder (STOCK→IN_PRODUCTION, currentStepId/
- *       producedInStepId=Tambur step) + Tambur'a açık RollMovement açar; sonrasında
- *       normal Tambur kesim akışı çalışır. Zorunlu sebep (audit).
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [stepId, reason]
- *             properties:
- *               stepId: { type: string, format: uuid, description: Hedef Tambur adımı }
- *               reason: { type: string, minLength: 3, description: İşlem nedeni (audit) }
- *     responses:
- *       200: { description: Açık kumaş üretime geri alındı }
- *       400: { description: Top uygun değil / adım Tambur değil / ürün eşleşmiyor }
- *       404: { description: Top veya adım bulunamadı }
- *       409: { description: Top başka işleme alınmış / adım veya iş emri kapalı }
- */
-router.post(
-  "/:id/recover-to-production",
-  verifyToken,
-  requirePermission("roll:manual-adjust"),
-  controller.recoverToProduction,
-);
-
-/**
- * @openapi
  * /api/rolls/{id}/manual-attributes:
  *   patch:
  *     tags: [Inventory]
@@ -596,10 +553,13 @@ router.patch(
 
 /**
  * @openapi
- * /api/rolls/{id}/status-override-preview:
+ * /api/rolls/{id}/rescue-preview:
  *   get:
  *     tags: [Inventory]
- *     summary: Manuel durum düzeltme önizlemesi (izinli hedefler + engel nedenleri)
+ *     summary: İstasyonda takılı (IN_PRODUCTION) top kurtarma önizlemesi
+ *     description: |
+ *       eligible yalnız IN_PRODUCTION topta true; açık fason sevki + açık hareket
+ *       sayısı + istasyon adı + barkod üretilecek mi bilgisini döner. Salt-okunur.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -607,25 +567,27 @@ router.patch(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: "StatusOverridePreview (currentStatus + allowedTargets + blockReasons)" }
+ *       200: { description: "RescuePreview (eligible + blockReasons + station + openMovementCount)" }
  *       404: { description: Top bulunamadı }
  */
 router.get(
-  "/:id/status-override-preview",
+  "/:id/rescue-preview",
   verifyToken,
   requirePermission("roll:manual-adjust"),
-  controller.statusOverridePreview,
+  controller.rescuePreview,
 );
 
 /**
  * @openapi
- * /api/rolls/{id}/manual-status:
+ * /api/rolls/{id}/rescue-stuck:
  *   post:
  *     tags: [Inventory]
- *     summary: Süpervizör manuel durum düzeltme (whitelist — WAREHOUSE↔STOCK, PRODUCED→WAREHOUSE)
+ *     summary: İstasyonda takılı (IN_PRODUCTION) topu depoya kurtar
  *     description: |
- *       Deny-by-default whitelist + invariant guard (sevk/çuval/istasyon/fason bağı
- *       varsa red) + atomik claim + zorunlu sebep (audit event=MANUAL_STATUS_OVERRIDE).
+ *       Süpervizör aksiyonu (roll:manual-adjust). Açık hareketleri fiziksel çıkışla
+ *       kapatır (top metresiyle çıktı), topu WAREHOUSE'a alır, barkodsuzsa final
+ *       etiket üretir. Zorunlu sebep (audit event=RESCUE_STUCK_ROLL). Kapanan movement
+ *       "geçti" sayılır → adım/WO oto-COMPLETE olabilir.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -638,20 +600,19 @@ router.get(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [targetStatus, reason]
+ *             required: [reason]
  *             properties:
- *               targetStatus: { type: string, enum: [STOCK, WAREHOUSE] }
- *               reason:       { type: string, minLength: 3 }
+ *               reason: { type: string, minLength: 3, description: İşlem nedeni (audit) }
  *     responses:
- *       200: { description: Durum güncellendi }
- *       400: { description: Geçiş whitelist dışı }
- *       409: { description: Sevk/çuval/istasyon/fason bağı var veya yarış }
+ *       200: { description: Top istasyondan kurtarıldı (WAREHOUSE) }
+ *       404: { description: Top bulunamadı }
+ *       409: { description: Top üretimde değil / açık fason sevki / yarış }
  */
 router.post(
-  "/:id/manual-status",
+  "/:id/rescue-stuck",
   verifyToken,
   requirePermission("roll:manual-adjust"),
-  controller.manualStatus,
+  controller.rescueStuck,
 );
 
 /**

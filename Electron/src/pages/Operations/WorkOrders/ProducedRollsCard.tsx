@@ -61,7 +61,7 @@ export function ProducedRollsCard({ wo }: { wo: WorkOrder }) {
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="font-mono">{r.barcode ?? "—"}</span>
                     <Badge variant="outline" className={`text-[9px] font-normal ${tone}`}>
-                      {r.qualityGrade}
+                      {r.qualityGrade ?? "—"}
                     </Badge>
                     {removedLabel && (
                       <Badge variant="muted" className="text-[9px] font-normal">

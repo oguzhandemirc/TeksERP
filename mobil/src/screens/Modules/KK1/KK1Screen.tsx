@@ -375,17 +375,15 @@ export default function KK1Screen() {
     [qualityGradesQuery.data],
   );
 
-  // Liste yüklendiğinde / form sıfırlandığında ilk kaliteyi default seç
-  useEffect(() => {
-    if (!form.qualityGrade && qualityGrades.length > 0) {
-      setForm((f) => ({ ...f, qualityGrade: qualityGrades[0].code }));
-    }
-  }, [qualityGrades, form.qualityGrade]);
+  // Kalite OPSİYONEL — auto-preselect YOK. Operatör bakarsa girer; boş bırakılırsa top
+  // "Belirsiz" kalitede girer (backend null yazar). Kalite istasyonu (KK2/Kurşun/Tambur)
+  // sonradan da belirleyebilir.
 
   const handleQualityGradeSelect = useCallback(
     (code: string) => {
       blurAll();
-      setForm((f) => ({ ...f, qualityGrade: code }));
+      // Toggle: seçili kaliteye tekrar dokun → kaldır (Belirsiz'e dön). Kalite opsiyonel.
+      setForm((f) => ({ ...f, qualityGrade: f.qualityGrade === code ? '' : code }));
     },
     [blurAll],
   );
@@ -722,10 +720,7 @@ export default function KK1Screen() {
       Toast.show({ type: 'error', text1: 'En (cm) geçersiz' });
       return;
     }
-    if (!form.qualityGrade) {
-      Toast.show({ type: 'error', text1: 'Kalite sınıfı seçilmedi' });
-      return;
-    }
+    // Kalite OPSİYONEL — boş bırakılabilir (Belirsiz); "kalite seçilmedi" guard'ı YOK.
 
     // Metraj (+ağırlık) kaynağı: manuel modda elle, otomatik modda makineden
     // ("Kaydet"e basınca paralel okunur).
@@ -766,7 +761,7 @@ export default function KK1Screen() {
       initialQty: qty,
       width,
       weightKg,
-      qualityGrade: form.qualityGrade,
+      qualityGrade: form.qualityGrade || undefined,
       clientToken,
     });
   };

@@ -1,20 +1,17 @@
+import { useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE_FLAGS_QUERY_KEY } from "@/hooks/usePricingEnabled";
 import { SETTINGS_CATEGORIES } from "./settings-config";
 import { FeatureFlagSection } from "./FeatureFlagSection";
 import { DevicePairingSection } from "./DevicePairingSection";
-import { ApiEndpointSection } from "./ApiEndpointSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
-import { ScannerSettingsSection } from "./ScannerSettingsSection";
-import { DeadlineDefaultsSection } from "./DeadlineDefaultsSection";
-import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
-import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
+import { WorkstationTabs } from "./WorkstationTabs";
+import { SettingsDirtyProvider } from "./settings-dirty";
 
 /**
  * Genel Ayarlar — sol dikey kategori menüsü + sağ içerik. Ayarlar domaine bölünür
@@ -28,7 +25,23 @@ export function GeneralSettingsPage() {
   const param = searchParams.get("tab");
   const active = SETTINGS_CATEGORIES.some((c) => c.id === param) ? param! : fallback;
 
+  // Aktif sekmede kaydedilmemiş taslak varsa sekme değişiminde uyar (taslak kaybını
+  // önle). Aktif bölüm kendi kirliliğini SettingsDirtyProvider üzerinden bildirir.
+  const dirtyRef = useRef(false);
+  const registerDirty = useCallback((d: boolean) => {
+    dirtyRef.current = d;
+  }, []);
+
   const handleTabChange = (next: string) => {
+    if (
+      dirtyRef.current &&
+      !window.confirm(
+        "Bu sekmede kaydedilmemiş değişiklikler var. Kaydetmeden geçmek istiyor musunuz?",
+      )
+    ) {
+      return;
+    }
+    dirtyRef.current = false;
     setSearchParams(
       (prev) => {
         prev.set("tab", next);
@@ -48,6 +61,7 @@ export function GeneralSettingsPage() {
         }
       />
 
+      <SettingsDirtyProvider value={registerDirty}>
       <Tabs
         value={active}
         onValueChange={handleTabChange}
@@ -75,47 +89,37 @@ export function GeneralSettingsPage() {
             const Icon = cat.icon;
             return (
               <TabsContent key={cat.id} value={cat.id} className="mt-0 max-w-3xl">
-                <Card>
-                  <CardHeader className="border-b p-5">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                      <CardTitle className="text-sm">{cat.label}</CardTitle>
-                    </div>
-                    <CardDescription className="text-xs">{cat.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-5">
-                    {cat.kind === "flags" && cat.flags && (
-                      <FeatureFlagSection flags={cat.flags} />
-                    )}
-                    {cat.kind === "device" && <DevicePairingSection />}
-                    {cat.kind === "workstation" && (
-                      // Bu bilgisayara özel yerel ayarlar bir arada: yazıcı + kantar + sunucu.
-                      <div className="space-y-6">
-                        <div>
-                          <p className="mb-2 text-sm font-medium">
-                            Etiket yazıcısı (bu bilgisayar)
-                          </p>
-                          <LabelPrinterDeviceSettings />
-                        </div>
-                        <ScaleDeviceSettings />
-                        <div className="border-t pt-4">
-                          <p className="mb-2 text-sm font-medium">Sunucu Adresi</p>
-                          <ApiEndpointSection />
-                        </div>
-                      </div>
-                    )}
-                    {cat.kind === "company" && <CompanySettingsSection />}
-                    {cat.kind === "session" && <SessionSettingsSection />}
-                    {cat.kind === "label" && <LabelSettingsSection />}
-                    {cat.kind === "scanner" && <ScannerSettingsSection />}
-                    {cat.kind === "deadline" && <DeadlineDefaultsSection />}
-                  </CardContent>
-                </Card>
+                {/* Sade başlık + ayraç — sol ray zaten sekmeyi etiketliyor; kart/çifte
+                    çerçeve yok, içerik doğrudan akar. */}
+                <div className="mb-5 border-b pb-3">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <h2 className="text-sm font-semibold">{cat.label}</h2>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{cat.description}</p>
+                </div>
+
+                {/* Termin varsayılanı ilgili flag sekmesine gömülü — TEK Kaydet altında. */}
+                {cat.kind === "flags" && cat.flags && (
+                  <FeatureFlagSection
+                    flags={cat.flags}
+                    deadlineField={
+                      cat.id === "orders" ? "order" : cat.id === "work-orders" ? "wo" : undefined
+                    }
+                  />
+                )}
+                {cat.kind === "device" && <DevicePairingSection />}
+                {/* Bu bilgisayara özel donanım — iç içe (segment) sekmeler. */}
+                {cat.kind === "workstation" && <WorkstationTabs />}
+                {cat.kind === "company" && <CompanySettingsSection />}
+                {cat.kind === "session" && <SessionSettingsSection />}
+                {cat.kind === "label" && <LabelSettingsSection />}
               </TabsContent>
             );
           })}
         </div>
       </Tabs>
+      </SettingsDirtyProvider>
     </div>
   );
 }

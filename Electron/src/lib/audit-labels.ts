@@ -238,7 +238,6 @@ export const ENUM_LABELS: Record<string, string> = {
   // RollStatus
   STOCK: "Stok",
   IN_PRODUCTION: "Üretimde",
-  PRODUCED: "Üretildi",
   SCRAP: "Fire",
   AT_SUBCONTRACTOR: "Fasonda",
   A1_STOCK: "2. Kalite Stok",

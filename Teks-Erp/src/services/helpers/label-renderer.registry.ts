@@ -19,6 +19,7 @@ import { applyRawCode, readTemplateRawCode } from "./label-rawcode";
 import { emitCanvasNative } from "./label-canvas-native.helper";
 import { buildCanvasLabelHtml } from "./label-canvas-html.helper";
 import { readCanvasLayout } from "../../config/label-elements";
+import { isRasterLanguage, renderCanvasRaster, type RasterLanguage } from "./raster/raster-render";
 
 export interface LabelRenderInput {
   payload: LabelPayload;
@@ -31,13 +32,21 @@ export interface LabelRenderInput {
   qrSvg: string;
   copies: number;
   format: ResolvedLabelFormat;
+  /** Cihaz raster modu (PeripheralDevice.rasterMode). true + raster dili + kanvas
+   *  varyantı → komut yerine 1bpp bitmap zarfı. Yoksa/false → bugünkü komut yolu
+   *  (bayt-aynı). rawCode uzman yolu hiçbir koşulda rasterlenmez. */
+  rasterMode?: boolean;
 }
 
 export interface RenderedLabel {
   language: PrinterLanguage;
-  /** RASTER_HTML → tam HTML; PPLA → native komut string'i. */
+  /** RASTER_HTML → tam HTML; native komut → komut string'i; raster → "" (bytes'ta). */
   content: string;
   contentType: string;
+  /** "text" → content latin1 gönderilir; "binary" → bytes doğrudan (raster zarfı). */
+  encoding: "text" | "binary";
+  /** Raster zarf baytları (encoding="binary"). Transportlar renderedBytes() ile alır. */
+  bytes?: Buffer;
 }
 
 type Renderer = (input: LabelRenderInput) => string;
@@ -82,12 +91,28 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
       content = content.replace(/\r?\n/g, "\r\n");
       if (!content.endsWith("\r\n")) content += "\r\n";
     }
-    return { language: effective, content, contentType: CONTENT_TYPES[effective] };
+    return { language: effective, content, contentType: CONTENT_TYPES[effective], encoding: "text" };
   }
 
   // Kanvas yolu: seçili varyantın eleman yerleşimi (Etiket Stüdyosu v2).
   const layout = input.variant ? readCanvasLayout(input.variant.elements) : null;
   if (layout) {
+    // RASTER yolu (opt-in cihaz + raster dili): kanvas → 1bpp bitmap zarfı. Rasterize
+    // HERHANGİ bir sebeple patlarsa (font eksik, PPLA henüz desteksiz) komut moduna
+    // düşülür → baskı asla raster hatasıyla ölmez.
+    if (input.rasterMode && isRasterLanguage(effective) && effective !== PrinterLanguage.RASTER_HTML) {
+      try {
+        const { bytes } = renderCanvasRaster(effective as RasterLanguage, {
+          payload: input.payload,
+          format: input.format,
+          copies: input.copies,
+          layout,
+        });
+        return { language: effective, content: "", bytes, encoding: "binary", contentType: "application/octet-stream" };
+      } catch (e) {
+        console.error(`[raster] ${effective} rasterize başarısız, komut moduna düşülüyor:`, (e as Error).message);
+      }
+    }
     const content =
       effective === PrinterLanguage.RASTER_HTML
         ? buildCanvasLabelHtml({
@@ -104,12 +129,28 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
             copies: input.copies,
             layout,
           });
-    return { language: effective, content, contentType: CONTENT_TYPES[effective] };
+    return { language: effective, content, contentType: CONTENT_TYPES[effective], encoding: "text" };
   }
 
   return {
     language: effective,
     content: RENDERERS[effective]!(input),
     contentType: CONTENT_TYPES[effective],
+    encoding: "text",
   };
+}
+
+/** Önizleme + baskı AYNI raster kararını paylaşır (drift imkânsız): raster modu açık +
+ *  raster dili + rawCode YOK + kanvas varyantı var. (Envelope'un fiilen üretilip
+ *  üretilemeyeceği ayrı — PPLA F0'a dek çağrı yerinde try/catch ile komuta düşer.) */
+export function shouldRasterize(language: PrinterLanguage, input: LabelRenderInput): boolean {
+  if (!input.rasterMode) return false;
+  if (!isRasterLanguage(language)) return false;
+  if (readTemplateRawCode(input.template?.rawCode, language)) return false;
+  return input.variant ? readCanvasLayout(input.variant.elements) != null : false;
+}
+
+/** Transportların tek geçidi: raster → ham bytes; text → latin1 kodlu content. */
+export function renderedBytes(r: RenderedLabel): Buffer {
+  return r.bytes ?? Buffer.from(r.content, "latin1");
 }

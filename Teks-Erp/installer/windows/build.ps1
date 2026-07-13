@@ -134,6 +134,14 @@ if (Test-Path (Join-Path $Backend "public")) {
     Copy-Item (Join-Path $Backend "public") (Join-Path $AppOut "public") -Recurse -Force
     Done "Durum sayfasi (public\) eklendi."
 }
+# Raster etiket fontlari (assets\fonts\ -> app\assets\fonts): raster baski DejaVu
+# TTF'leri process.cwd()/assets/fonts'tan okur (raster-font.ts). CWD = app\ oldugundan
+# burada bulunur. Eksikse raster ilk cagirida Turkce hata verip KOMUT moduna duser
+# (baski durmaz), ama raster cihazlarda font ZORUNLU -> bundle'a dahil.
+if (Test-Path (Join-Path $Backend "assets")) {
+    Copy-Item (Join-Path $Backend "assets") (Join-Path $AppOut "assets") -Recurse -Force
+    Done "Raster etiket fontlari (assets\) eklendi."
+}
 Done "payload\ hazir."
 
 # -----------------------------------------------------------------------------

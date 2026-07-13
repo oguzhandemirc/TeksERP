@@ -129,7 +129,7 @@ export function SackDetailSheet({ sack, onOpenChange }: Props) {
                       </td>
                       <td className="py-1 text-right">{r.width ? `${r.width} cm` : "—"}</td>
                       <td className="py-1 text-right tabular-nums">{fmtQty(Number(r.currentQty))}</td>
-                      <td className="py-1 text-right text-muted-foreground">{r.qualityGrade}</td>
+                      <td className="py-1 text-right text-muted-foreground">{r.qualityGrade ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>

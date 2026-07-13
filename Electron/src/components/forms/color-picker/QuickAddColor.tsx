@@ -4,6 +4,7 @@ import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ColorPickerInput } from "@/components/forms/ColorPickerInput";
 import { colorService } from "@/pages/Colors/service";
 import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import type { Color } from "@/pages/Colors/types";
@@ -13,6 +14,7 @@ import type { Color } from "@/pages/Colors/types";
  * ile yeni PUBLIC renk yaratır ve hemen seçer. Ad standardı (BÜYÜK + sayı başta)
  * backend'de normalize edilir; müşteri ataması bilinçli YAPILMAZ (atanmış renk
  * exclusive olur — operatörü şaşırtmasın, gerekirse renk formundan atanır).
+ * Hex girişi görsel color picker (react-colorful) ile — elle #RRGGBB yerine.
  */
 export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }) {
   const qc = useQueryClient();
@@ -41,27 +43,28 @@ export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }
 
   if (!open) {
     return (
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start gap-2 text-muted-foreground"
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Yeni Renk Ekle
-      </Button>
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          className="gap-2 bg-emerald-600 font-medium text-white hover:bg-emerald-600/90"
+          onClick={() => setOpen(true)}
+        >
+          <Plus className="h-4 w-4" />
+          Yeni Renk Ekle
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md border border-dashed p-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-2">
       <Input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Renk adı (örn. beyaz 055)"
-        className="h-8 flex-1 text-sm"
+        className="h-8 min-w-[9rem] flex-1 text-sm"
         onKeyDown={(e) => {
           if (e.key === "Enter" && name.trim()) {
             e.preventDefault();
@@ -69,21 +72,17 @@ export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }
           }
         }}
       />
-      <Input
-        value={hex}
-        onChange={(e) => setHex(e.target.value)}
-        placeholder="#RRGGBB"
-        className="h-8 w-24 font-mono text-xs"
-      />
+      <ColorPickerInput value={hex} onChange={setHex} className="w-44" />
       <Button
         type="button"
         size="sm"
         disabled={!name.trim() || createMut.isPending}
         onClick={() => createMut.mutate()}
+        className="bg-emerald-600 text-white hover:bg-emerald-600/90"
       >
         {createMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Ekle"}
       </Button>
-      <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+      <Button type="button" size="sm" variant="destructive" onClick={() => setOpen(false)}>
         Vazgeç
       </Button>
     </div>

@@ -129,10 +129,6 @@ export const SETTING_KEYS = {
    *  emekli). Cihazsız baskı/önizleme/kartela bu boyutu kullanır. JSON:
    *  { widthMm, heightMm, dpi, gapMm, marginMm }. */
   LABEL_DEFAULT_MEDIA: "label.defaultMedia",
-  /** Saha #20: top adı (birleşik ürün tanımı) format şablonu. Token'lar:
-   *  {item} {color} {width} {quality}. Default "{item} {color} {width}". Boş
-   *  token'lar (renksiz vb.) atlanır, fazla boşluk sadeleşir. Frontend okur. */
-  ROLL_NAME_TEMPLATE: "roll.nameTemplate",
   /** Varsayılan etiket yazıcı dili — top etiketi native render'ı bu dilde üretilir
    *  (default PPLA). Bir yazıcı modeli kendi dilini belirtirse (Argox=PPLA, Zebra=ZPL)
    *  o istasyonda model dili ÖNCELİKLİDİR; bu global ayar model bağlamı çözülemeyen
@@ -536,8 +532,6 @@ export interface FeatureFlags {
   loginMethods: LoginMethodsConfig;
   /** Saha #6: top etiketi kopya adedi (default 2 — üst+alt yapıştırma). 1-5. */
   labelCopies: number;
-  /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
-  rollNameTemplate: string;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
@@ -707,7 +701,6 @@ export class SystemSettingService {
       pinLockoutLongPenaltyMin: await readPinLockoutLongPenaltyMin(cacheClient),
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
-      rollNameTemplate: await readRollNameTemplate(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
       defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
     };
@@ -1223,26 +1216,6 @@ export class SystemSettingService {
       );
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "rollNameTemplate")) {
-      const v = input.rollNameTemplate;
-      if (typeof v !== "string") {
-        throw AppError.badRequest("Top adı şablonu metin olmalı");
-      }
-      const trimmed = v.trim();
-      if (trimmed.length > 100) {
-        throw AppError.badRequest("Top adı şablonu en fazla 100 karakter olabilir");
-      }
-      // En az bir geçerli token bulunmalı (boş/anlamsız şablon engellenir).
-      if (trimmed && !/\{(item|color|width|quality)\}/.test(trimmed)) {
-        throw AppError.badRequest("Şablon en az bir token içermeli: {item} {color} {width} {quality}");
-      }
-      await this.set(
-        SETTING_KEYS.ROLL_NAME_TEMPLATE,
-        trimmed || DEFAULT_ROLL_NAME_TEMPLATE,
-        "Top adı format şablonu — {item} {color} {width} {quality} token'ları",
-        userId
-      );
-    }
 
     if (Object.prototype.hasOwnProperty.call(input, "nativeSendEnabled")) {
       if (typeof input.nativeSendEnabled !== "boolean") {
@@ -2000,22 +1973,6 @@ export async function readDefaultLabelMedia(
   };
 }
 
-/**
- * Saha #20: top adı (birleşik ürün tanımı) format şablonu. Token'lar:
- * {item} {color} {width} {quality}. Yoksa/boşsa default. Maks 100 karakter.
- */
-export const DEFAULT_ROLL_NAME_TEMPLATE = "{item} {color} {width}";
-export async function readRollNameTemplate(
-  tx?: Pick<typeof prisma, "systemSetting">,
-): Promise<string> {
-  const client = tx ?? prisma;
-  const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.ROLL_NAME_TEMPLATE },
-    select: { value: true },
-  });
-  const v = setting?.value;
-  return typeof v === "string" && v.trim() ? v.slice(0, 100) : DEFAULT_ROLL_NAME_TEMPLATE;
-}
 
 /**
  * Faz-2 opt-in: native etiket komutları yazıcıya doğrudan (RAW TCP 9100) gönderilsin mi.
