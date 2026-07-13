@@ -53,7 +53,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     driverName: "Ali Demir",
     plateNumber: "16 XYZ 789",
     notes: "Acele — bugün dönüş bekleniyor",
-    workOrder: { id: "wo1", batchNumber: "P-260607-014", type: "STOCK_PRODUCTION" },
+    workOrder: { id: "wo1", workOrderNumber: "IE1207260001", type: "STOCK_PRODUCTION" },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     requestedColor: "Bej",
     instruction: "Yıkama yapma, matlaştır",
@@ -76,7 +76,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     driverName: "Ali Demir",
     plateNumber: "16 XYZ 789",
     notes: null,
-    workOrder: { id: "wo1", batchNumber: "P-260607-014", type: "ORDER_PRODUCTION" },
+    workOrder: { id: "wo1", workOrderNumber: "IE1207260001", type: "ORDER_PRODUCTION" },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     step: { id: "st1", stepSequence: 2, station: { name: "Boyahane (Fason)", code: "DYE" } },
     rolls: [

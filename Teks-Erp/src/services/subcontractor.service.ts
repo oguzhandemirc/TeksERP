@@ -1334,7 +1334,7 @@ export class SubcontractorService {
       instruction: step.notes ?? null,
       workOrder: {
         id: step.workOrder.id,
-        batchNumber: step.workOrder.workOrderNumber,
+        workOrderNumber: step.workOrder.workOrderNumber,
         parameters: (step.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: step.workOrder.type,
       },
@@ -4544,7 +4544,7 @@ function assembleFasonCekiDoc(args: {
   plateNumber: string | null;
   notes: string | null;
   instruction: string | null;
-  workOrder: { id: string; batchNumber: string; parameters: Record<string, unknown> | null; type: string };
+  workOrder: { id: string; workOrderNumber: string; parameters: Record<string, unknown> | null; type: string };
   subcontractor: { id: string; name: string; code: string | null };
   requestedColor: string | null;
   step: { id: string; stepSequence: number; station: { name: string; code: string } };
@@ -4644,7 +4644,7 @@ async function buildFasonDispatchDoc(
       instruction: dispatch.instruction ?? dispatch.step.notes ?? null,
       workOrder: {
         id: dispatch.workOrder.id,
-        batchNumber: dispatch.workOrder.workOrderNumber,
+        workOrderNumber: dispatch.workOrder.workOrderNumber,
         parameters: (dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: dispatch.workOrder.type,
       },
@@ -4753,7 +4753,7 @@ async function buildFasonDirectShipDoc(
       notes: dispatch.notes,
       workOrder: {
         id: dispatch.workOrder.id,
-        batchNumber: dispatch.workOrder.workOrderNumber,
+        workOrderNumber: dispatch.workOrder.workOrderNumber,
         parameters: (dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: dispatch.workOrder.type,
       },

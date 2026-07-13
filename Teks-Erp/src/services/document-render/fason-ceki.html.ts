@@ -31,7 +31,7 @@ interface FasonCekiDoc {
   driverName: string | null;
   plateNumber: string | null;
   notes: string | null;
-  workOrder: { id: string; batchNumber: string; type: string };
+  workOrder: { id: string; workOrderNumber: string; type: string };
   subcontractor: { id: string; name: string; code: string | null };
   /** Boyamanın hedef rengi — sevkte toplar ham gider, çeki "şu renge boya" der. */
   requestedColor?: string | null;
@@ -234,7 +234,7 @@ export function renderFasonCekiHtml(
         <div class="company">${esc(company?.name ?? "")}</div>
         ${lhLines}
         <div class="sayin">SAYIN: <b>${esc(doc.subcontractor.name)}</b></div>
-        <div class="sub">${esc(doc.step.station.name)} · Parti ${esc(doc.workOrder.batchNumber)}${
+        <div class="sub">${esc(doc.step.station.name)} · İş Emri ${esc(doc.workOrder.workOrderNumber)}${
           doc.subcontractor.code ? ` · Hesap: ${esc(doc.subcontractor.code)}` : ""
         }</div>
       </div>

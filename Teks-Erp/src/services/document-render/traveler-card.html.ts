@@ -36,7 +36,11 @@ interface SnapOrderLink {
 /** Donmuş refakat kartı içeriği — traveler-card.service buildSnapshot ile aynı şekil. */
 export interface TravelerCardSnapshot {
   config?: TravelerCardConfig;
+  /** Parti no (P + GGAAYY + NNNN) — kartın ait olduğu parti (kartta iri basılır). */
   batchNumber: string;
+  /** İş Emri no (İE + GGAAYY + NNNN) — parti bu iş emrine bağlı; kartta metin olarak.
+   *  Eski snapshot'larda olmayabilir → opsiyonel. */
+  workOrderNumber?: string;
   type: string;
   width: number | null;
   targetQuantity: number | null;
@@ -432,6 +436,7 @@ export function renderTravelerCardHtml(
     <div class="id-row">
       <div class="id-left">
         <div class="batch">${esc(snapshot.batchNumber)}</div>
+        ${snapshot.workOrderNumber ? `<div class="wo-no" style="font-size:11px;color:#555;font-weight:600;margin-top:2px;letter-spacing:.02em;">İŞ EMRİ: ${esc(snapshot.workOrderNumber)}</div>` : ""}
         <div class="type-text">${esc(typeText)}</div>
         ${productLine}
       </div>

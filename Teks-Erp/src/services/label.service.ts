@@ -75,8 +75,9 @@ export interface LabelPayload {
   orderNumber: string | null;
   orderLineId: string | null;
 
-  // Batch
+  // Batch (parti) + İş Emri
   batchNumber: string | null;
+  workOrderNumber?: string | null;
   printedAt: string;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
@@ -195,7 +196,7 @@ const ROLL_LABEL_INCLUDE = {
   // Etiketteki parti no (P…) topun PARTİSİNDEN gelir. Eskiden producedInStep.workOrder
   // (İş Emri) "batchNumber"ı taşırdı; parti modelinde parti ayrı nesne (roll.batch).
   batch: {
-    select: { batchNumber: true },
+    select: { batchNumber: true, workOrder: { select: { workOrderNumber: true } } },
   },
 } satisfies Prisma.RollInclude;
 
@@ -410,6 +411,7 @@ export class LabelService {
       orderLineId,
 
       batchNumber: roll.batch?.batchNumber ?? null,
+      workOrderNumber: roll.batch?.workOrder?.workOrderNumber ?? null,
       printedAt: new Date().toISOString(),
     };
 

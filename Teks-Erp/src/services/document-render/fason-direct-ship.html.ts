@@ -48,7 +48,7 @@ interface DirectShipDoc {
   driverName: string | null;
   plateNumber: string | null;
   notes: string | null;
-  workOrder: { id: string; batchNumber: string; type: string };
+  workOrder: { id: string; workOrderNumber: string; type: string };
   subcontractor: { id: string; name: string; code: string | null };
   step: { id: string; stepSequence: number; station: { name: string; code: string } };
   rolls: DirectShipRoll[];
@@ -143,7 +143,7 @@ export function renderFasonDirectShipHtml(
     ? `<div class="box"><div class="box-t">FASON FİRMA (Malın Geldiği)</div>
         <div class="row"><span>Adı:</span><b>${esc(doc.subcontractor.name)}</b></div>
         ${doc.subcontractor.code ? `<div class="row"><span>Kod:</span><b>${esc(doc.subcontractor.code)}</b></div>` : ""}
-        <div class="row"><span>İş Emri:</span><b>${esc(doc.workOrder.batchNumber)}</b></div>
+        <div class="row"><span>İş Emri:</span><b>${esc(doc.workOrder.workOrderNumber)}</b></div>
         <div class="row"><span>Adım:</span><b>${esc(doc.step.station.name)}</b></div>
       </div>`
     : "";

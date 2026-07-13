@@ -82,6 +82,8 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
       return str(payload.orderNumber);
     case "batchNumber":
       return str(payload.batchNumber);
+    case "workOrderNumber":
+      return str(payload.workOrderNumber);
     case "cardNumber":
       return str(payload.cardNumber);
     case "parentRollBarcode":
