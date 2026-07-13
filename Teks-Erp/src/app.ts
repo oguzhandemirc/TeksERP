@@ -34,6 +34,7 @@ import tamburRoutes from "./routes/tambur.routes";
 import kursunQcRoutes from "./routes/kursun-qc.routes";
 import travelerCardRoutes from "./routes/traveler-card.routes";
 import subcontractorRoutes from "./routes/subcontractor.routes";
+import batchRoutes from "./routes/batch.routes";
 import {
   subcontractorRouter,
   subcontractorCategoryRouter,
@@ -393,6 +394,7 @@ app.use("/api/tambur", tamburRoutes);
 app.use("/api/kursun-qc", kursunQcRoutes);
 app.use("/api/traveler-cards", travelerCardRoutes);
 app.use("/api/subcontractor", subcontractorRoutes);
+app.use("/api/batches", batchRoutes);
 app.use("/api/subcontractors", subcontractorRouter);
 app.use("/api/subcontractor-categories", subcontractorCategoryRouter);
 app.use("/api/kartela", kartelaRoutes);
