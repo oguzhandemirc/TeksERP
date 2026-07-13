@@ -8,9 +8,7 @@ import {
   Monitor,
   Clock,
   Tags,
-  ScanLine,
   Layers,
-  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -26,6 +24,12 @@ export interface FlagDef {
   key: BooleanFlagKey;
   title: string;
   desc: string;
+  /**
+   * Sekme içi alt-başlık (aynı domainin farklı istasyonlarını ayırır — örn. Üretim
+   * sekmesinde "KK1 / Kalite", "Fason", "Tambur"). Aynı `group` ardışık flag'ler tek
+   * blok olur; verilmezse başlıksız düz liste (geriye uyumlu).
+   */
+  group?: string;
 }
 
 /**
@@ -41,9 +45,7 @@ export type CategoryKind =
   | "workstation"
   | "company"
   | "session"
-  | "label"
-  | "scanner"
-  | "deadline";
+  | "label";
 
 export interface SettingsCategory {
   id: string;
@@ -78,8 +80,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "orders",
     label: "Siparişler",
     icon: Banknote,
-    description: "Sipariş ekranlarındaki fiyat ve para birimi alanları.",
-    keywords: "fiyat para birimi birim fiyat tutar döviz kur pricing sipariş",
+    description: "Sipariş ekranlarındaki fiyat/para birimi alanları ve varsayılan termin süresi.",
+    keywords:
+      "fiyat para birimi birim fiyat tutar döviz kur pricing sipariş termin deadline gün süre varsayılan vade teslim tarih",
     kind: "flags",
     flags: [
       {
@@ -93,8 +96,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "work-orders",
     label: "İş Emirleri",
     icon: ClipboardList,
-    description: "İş emri formundaki alanlar ve parti kodu davranışı.",
-    keywords: "iş emri hedef metraj parti kodu batch otomatik üretim miktarı",
+    description: "İş emri formundaki alanlar, parti kodu davranışı ve varsayılan planlama süresi.",
+    keywords:
+      "iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan",
     kind: "flags",
     flags: [
       {
@@ -105,7 +109,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "partyCodeAuto",
         title: "İş emri parti kodunu otomatik üret",
-        desc: "Kapalıyken (varsayılan) iş emri formunda Parti Kodu elle girilir ve zorunludur. Açıkken sistem otomatik üretir (P-YYMMDD-NNN); formda 'elle gir' ile yine değiştirilebilir.",
+        desc: "Kapalıyken (varsayılan) iş emri formunda Parti Kodu elle girilir ve zorunludur. Açıkken sistem otomatik üretir (P1207260001 — P + GGAAYY + sıra); formda 'elle gir' ile yine değiştirilebilir.",
       },
     ],
   },
@@ -119,34 +123,29 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     flags: [
       {
         key: "rawWidthEnabled",
+        group: "KK1 / Kalite",
         title: "KK1 ham kumaş girişinde en (cm) alanını göster",
         desc: "Kapalıyken mobil KK1 ekranında en alanı gizlenir; operatör isterse 'en gir' ile yine girebilir. Ham kumaşın eni önemsiz — bitmiş topun eni iş emrinden gelir. Ürün Dengesi ham stoğu en'e bakmadan sayar.",
       },
       {
         key: "kk1WeightEntryEnabled",
+        group: "KK1 / Kalite",
         title: "KK1 ham kumaş girişinde ağırlık (kg) alanını göster",
         desc: "Kapalıyken (varsayılan) mobil KK1 Manuel Giriş ekranında ağırlık (kg) alanı gizlenir VE backend ağırlık verisini reddeder — operatör yanlışlıkla veya kasıtlı olarak kg giremez. Açıkken makine arızasında elle metrajın yanında ağırlık da girilebilir. (Metraj girişi bu ayardan bağımsız, her zaman açıktır.)",
       },
       {
         key: "fasonNoteMobileEntry",
+        group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",
         desc: "Kapalıyken (varsayılan) sahadaki operatör mobil Fason Sevk ekranında talimat giremez; talimat yalnızca iş emrindeki fason adımının notundan gelir. Açıkken operatör sevk sırasında telefondan talimat girebilir/değiştirebilir (boş bırakırsa adım notu kullanılır).",
       },
       {
         key: "tamburOverQuantityEnabled",
+        group: "Tambur",
         title: "Tambur'da çıkan top metresi giriş metresini aşabilsin",
         desc: "Açıkken (varsayılan) — Tambur asıl ölçüm noktası olduğu için — operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma) mobilde onay sonrası kabul edilir; kaynak top tamamen tüketilir. Kapatırsan Tambur'da çıkan top kayıtlı metrajdan fazla olamaz (örn. 100m topa 110m girilemez). Yalnızca aşım anında devreye girer, normal kesim etkilenmez.",
       },
     ],
-  },
-  {
-    // Termin Varsayılanları — Tanımlar'dan Genel Ayarlar'a taşındı (politika ayarı).
-    id: "deadline-defaults",
-    label: "Termin Varsayılanları",
-    icon: CalendarClock,
-    description: "Sipariş ve iş emri açılışında termin boş bırakılırsa eklenecek varsayılan gün sayıları.",
-    keywords: "termin deadline gün süre sipariş iş emri planlama varsayılan otomatik tarih plan gün sayısı vade teslim",
-    kind: "deadline",
   },
   {
     id: "shipping",
@@ -205,19 +204,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "label",
     label: "Etiket Baskısı",
     icon: Tags,
-    description: "Org-geneli etiket baskı ayarları: kopya adedi, top adı şablonu, varsayılan medya, native gönderim.",
+    description: "Org-geneli etiket baskı ayarları: kopya adedi, varsayılan medya, native gönderim.",
     keywords:
-      "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur top adı şablon native gönderim varsayılan medya boyut ölçü mm dpi eni boyu boşluk pay",
+      "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur native gönderim varsayılan medya boyut ölçü mm dpi eni boyu boşluk pay",
     kind: "label",
-  },
-  {
-    id: "scanner",
-    label: "Barkod Tabancası",
-    icon: ScanLine,
-    description: "USB/Bluetooth barkod okuyucu davranışı (bu bilgisayara özel).",
-    keywords:
-      "barkod qr tabanca okuyucu scanner wedge klavye usb bluetooth her yerde okut terminator enter tab hassasiyet test",
-    kind: "scanner",
   },
   {
     // id "system" tarihsel — komut paleti/derin linkler ?tab=system ile gelir, kırmayalım.
@@ -225,10 +215,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "Bu Bilgisayar",
     icon: Monitor,
     description:
-      "Bu bilgisayara özel yerel ayarlar: etiket yazıcısı (seri/CUPS), sevkiyat kantarı ve sunucu adresi.",
+      "Bu bilgisayara özel yerel donanım: etiket yazıcısı (seri/CUPS), sevkiyat kantarı, barkod tabancası ve sunucu adresi.",
     keywords:
       "yazıcı etiket yazıcısı printer com cups kuyruk seri baud diyalogsuz doğrudan baskı cihaz kaydı " +
-      "kantar tartı scale sunucu adresi API backend bağlantı url endpoint bu bilgisayar yerel workstation",
+      "kantar tartı scale sunucu adresi API backend bağlantı url endpoint bu bilgisayar yerel workstation " +
+      "barkod qr tabanca okuyucu scanner wedge klavye usb bluetooth her yerde okut terminator enter tab hassasiyet test",
     kind: "workstation",
   },
 ];

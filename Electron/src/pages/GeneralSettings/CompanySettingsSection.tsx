@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { FieldLabel } from "./SettingRow";
 import { InfoPopover } from "./SettingHint";
+import { SettingsSaveBar } from "./SettingsSaveBar";
+import { useRegisterSettingsDirty } from "./settings-dirty";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import {
   featureFlagService,
@@ -33,6 +34,7 @@ export function CompanySettingsSection() {
     // Sunucudan gelen değer değişince formu eşitle.
     setName(currentName);
     setHead(currentHead);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentName, currentHead.addressLine, currentHead.phone, currentHead.taxInfo]);
 
   const mut = useMutation({
@@ -44,14 +46,19 @@ export function CompanySettingsSection() {
     },
   });
 
-  if (flagsQ.isLoading) return <Skeleton className="h-48 w-full" />;
-
   const trimmedName = name.trim();
   const dirty =
     trimmedName !== currentName.trim() ||
     head.addressLine.trim() !== currentHead.addressLine.trim() ||
     head.phone.trim() !== currentHead.phone.trim() ||
     head.taxInfo.trim() !== currentHead.taxInfo.trim();
+  useRegisterSettingsDirty(dirty);
+  const reset = () => {
+    setName(currentName);
+    setHead(currentHead);
+  };
+
+  if (flagsQ.isLoading) return <Skeleton className="h-48 w-full" />;
 
   return (
     <PermissionGate
@@ -106,28 +113,23 @@ export function CompanySettingsSection() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            disabled={!dirty || !trimmedName || mut.isPending}
-            onClick={() =>
-              mut.mutate({
-                companyName: trimmedName,
-                companyLetterhead: {
-                  addressLine: head.addressLine.trim(),
-                  phone: head.phone.trim(),
-                  taxInfo: head.taxInfo.trim(),
-                },
-              })
-            }
-          >
-            {mut.isPending ? "Kaydediliyor…" : "Kaydet"}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Firma adı boş bırakılırsa varsayılan ({DEFAULT_COMPANY_NAME}) kullanılır.
-            Refakat kartının firma adı/künyesi ayrı yönetilir (Refakat Kartı sekmesi).
-          </span>
-        </div>
+        <SettingsSaveBar
+          dirty={dirty}
+          saving={mut.isPending}
+          canSave={Boolean(trimmedName)}
+          onSave={() =>
+            mut.mutate({
+              companyName: trimmedName,
+              companyLetterhead: {
+                addressLine: head.addressLine.trim(),
+                phone: head.phone.trim(),
+                taxInfo: head.taxInfo.trim(),
+              },
+            })
+          }
+          onReset={reset}
+          note={`Firma adı boş bırakılırsa varsayılan (${DEFAULT_COMPANY_NAME}) kullanılır. Refakat kartının firma adı/künyesi ayrı yönetilir (Refakat Kartı sekmesi).`}
+        />
       </div>
     </PermissionGate>
   );

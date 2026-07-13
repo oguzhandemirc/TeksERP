@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Loader2, Usb, AlertTriangle, Printer } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,12 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMachineConfig } from "@/hooks/useMachineConfig";
-import type { LabelPrinterConfig } from "@/lib/machine-config";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { peripheralService } from "@/pages/PeripheralDevices/service";
 import { FlagToggle } from "./SettingRow";
 import type { ScannerDeviceInfo } from "@shared/ipc-contract";
+import { useDeviceDraft } from "./useDeviceDraft";
+import { useRegisterSettingsDirty } from "./settings-dirty";
+import { SettingsSaveBar } from "./SettingsSaveBar";
 
 /**
  * Etiket yazıcısı — bu bilgisayara özel YEREL tercih. Açık + hedef seçiliyse etiket
@@ -28,10 +30,12 @@ import type { ScannerDeviceInfo } from "@shared/ipc-contract";
  * window.api yoksa (web/test) görünmez.
  */
 export function LabelPrinterDeviceSettings() {
-  const { config, setConfig } = useMachineConfig();
-  const cfg = config.labelPrinter ?? {};
-  const setCfg = (patch: Partial<LabelPrinterConfig>) =>
-    setConfig({ labelPrinter: { ...cfg, ...patch } });
+  // Taslak: değişiklikler burada birikir, "Kaydet" ile yerel config'e işlenir.
+  // "Bağlantıyı Test Et" TASLAK portu/türünü okur → önce dene, sonra kaydet.
+  const draft = useDeviceDraft("labelPrinter");
+  const cfg = draft.draft;
+  const setCfg = draft.patch;
+  useRegisterSettingsDirty(draft.dirty);
   const transport = cfg.transport ?? "serial";
 
   const printer = typeof window !== "undefined" ? window.api?.printer : undefined;
@@ -233,6 +237,16 @@ export function LabelPrinterDeviceSettings() {
           </span>
         )}
       </div>
+
+      <SettingsSaveBar
+        dirty={draft.dirty}
+        saving={false}
+        onSave={() => {
+          draft.save();
+          toast.success("Yazıcı ayarı kaydedildi.");
+        }}
+        onReset={draft.reset}
+      />
     </div>
   );
 }

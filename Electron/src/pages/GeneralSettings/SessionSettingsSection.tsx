@@ -1,6 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { SettingsSaveBar } from "./SettingsSaveBar";
+import { useRegisterSettingsDirty } from "./settings-dirty";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { SAME_TYPE_SESSION_POLICY_OPTIONS } from "@/lib/session-auth";
 import { DurationField } from "./DurationField";
@@ -42,6 +43,7 @@ const POLICY_DESC =
 
 export function SessionSettingsSection() {
   const s = useSessionSettingsForm();
+  useRegisterSettingsDirty(s.dirty);
   // Açıklamalar her yerde (i) info balonunda gösterilir.
   const hint: HintVariant = "popover";
   if (s.isLoading) return <Skeleton className="h-48 w-full" />;
@@ -288,20 +290,14 @@ export function SessionSettingsSection() {
           onPrimaryChange={s.setPrimaryMethod}
         />
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            disabled={!s.dirty || !s.allValid || s.isSaving}
-            onClick={s.save}
-          >
-            {s.isSaving ? "Kaydediliyor…" : "Kaydet"}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Oturum süresi + same-type politikası backend tarafından uygulanır; panel
-            hareketsizlik çıkışı her panel bilgisayarında kendi başına, mobil kilit sahadaki cihazlarda çalışır.
-            Çalışma oturumu zaman aşımı tüm saha cihazları için backend tarafından uygulanır.
-          </span>
-        </div>
+        <SettingsSaveBar
+          dirty={s.dirty}
+          saving={s.isSaving}
+          canSave={s.allValid}
+          onSave={s.save}
+          onReset={s.reset}
+          note="Oturum süresi + same-type politikası backend tarafından uygulanır; panel hareketsizlik çıkışı her panel bilgisayarında kendi başına, mobil kilit sahadaki cihazlarda çalışır. Çalışma oturumu zaman aşımı tüm saha cihazları için backend tarafından uygulanır."
+        />
       </div>
     </PermissionGate>
   );

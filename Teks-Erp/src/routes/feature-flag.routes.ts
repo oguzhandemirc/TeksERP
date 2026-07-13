@@ -91,15 +91,6 @@ const updateSchema = z.object({
     .optional(),
   // Saha #6: top etiketi kopya adedi (1–5). (Servis ayrıca doğrular.)
   labelCopies: z.number().int().min(1).max(5).optional(),
-  // Saha #20: top adı format şablonu (maks 100; servis token doğrular).
-  // F228: en az bir token zorunluluğu Zod'a taşındı (kısmi commit önlenir).
-  rollNameTemplate: z
-    .string()
-    .max(100)
-    .refine((v) => !v.trim() || /\{(item|color|width|quality)\}/.test(v), {
-      message: "Şablon en az bir token içermeli: {item} {color} {width} {quality}",
-    })
-    .optional(),
   // label.nativeSendEnabled — Faz-2 doğrudan yazıcıya gönderim (default false).
   nativeSendEnabled: z.boolean().optional(),
   // label.defaultMedia — cihazsız baskı/önizleme için sistem varsayılan etiket medyası.
