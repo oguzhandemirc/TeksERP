@@ -61,6 +61,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { loadQualityTargetMaps, resolveFinalStatus } from "./helpers/roll-finalize.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -169,7 +170,6 @@ export interface WorkOrderCreateInput {
 // mutasyon (updateTargetProperties) AYNI kümeyi kullanır → onay = gerçek kapsam.
 const TARGET_PROP_FINISHED_STATUSES: RollStatus[] = [
   RollStatus.WAREHOUSE,
-  RollStatus.PRODUCED,
 ];
 const TARGET_PROP_INPROD_STATUSES: RollStatus[] = [
   RollStatus.IN_PRODUCTION,
@@ -797,7 +797,7 @@ export class WorkOrderService {
     // ── 1) Ön-doğrulama: var + STOCK + aynı ürün ────────────────────────────
     const rolls = await prisma.roll.findMany({
       where: { barcode: { in: barcodes } },
-      select: { id: true, barcode: true, status: true, itemId: true },
+      select: { id: true, barcode: true, status: true, itemId: true, sackId: true, shipmentId: true },
     });
     const byBarcode = new Map(rolls.map((r) => [r.barcode, r]));
 
@@ -806,11 +806,20 @@ export class WorkOrderService {
       throw AppError.badRequest(`Şu barkodlar bulunamadı: ${missing.join(", ")}`);
     }
 
-    const notStock = rolls.filter((r) => r.status !== RollStatus.STOCK);
-    if (notStock.length > 0) {
+    // Envanterdeki serbest+satılabilir toplar (ham STOCK + depo WAREHOUSE/A1_STOCK) bağlanabilir.
+    const attachable: RollStatus[] = [RollStatus.STOCK, RollStatus.WAREHOUSE, RollStatus.A1_STOCK];
+    const notAttachable = rolls.filter((r) => !attachable.includes(r.status));
+    if (notAttachable.length > 0) {
       throw AppError.badRequest(
-        "Sadece stoktaki toplar bağlanabilir. Uygun olmayan: " +
-          notStock.map((r) => `${r.barcode} (${r.status})`).join(", "),
+        "Yalnız envanterdeki (stok/depo) toplar bağlanabilir. Uygun olmayan: " +
+          notAttachable.map((r) => `${r.barcode} (${r.status})`).join(", "),
+      );
+    }
+    const committed = rolls.filter((r) => r.sackId != null || r.shipmentId != null);
+    if (committed.length > 0) {
+      throw AppError.badRequest(
+        "Bir çuvalda/sevkiyatta olan top üretime bağlanamaz — önce oradan çıkarın: " +
+          committed.map((r) => r.barcode).join(", "),
       );
     }
 
@@ -1196,7 +1205,12 @@ export class WorkOrderService {
       where: {
         producedInStepId: { in: stepIds },
         parent: { entrySource: RollEntrySource.SUBCONTRACTOR_RETURN },
-        qualityGrade: { notIn: ["FIRE", "A1"] },
+        // Postgres `NOT IN` NULL-hostile: null kalite (kaliteye bakılmadı) sağlam
+        // üretim sayılmalı; düz notIn onu dışlardı. null VEYA (FIRE/A1 değil).
+        OR: [
+          { qualityGrade: null },
+          { qualityGrade: { notIn: ["FIRE", "A1"] } },
+        ],
       },
       _sum: { initialQty: true },
     });
@@ -1374,7 +1388,7 @@ export class WorkOrderService {
       items: Array<{
         id: string;
         barcode: string | null;
-        qualityGrade: string;
+        qualityGrade: string | null;
         /** Snapshot için production anındaki metraj (initialQty). */
         currentQty: Prisma.Decimal;
         /** Anlık durum — frontend re-cut/iptal rozetlerini buradan basar. */
@@ -1409,7 +1423,7 @@ export class WorkOrderService {
         status: RollStatus;
         currentQty: number;
         width: number | null;
-        qualityGrade: string;
+        qualityGrade: string | null;
         kind: "raw" | "dyed" | "open";
         item: { id: string; code: string; name: string } | null;
         color: { id: string; code: string; name: string; hex: string | null } | null;
@@ -1502,7 +1516,7 @@ export class WorkOrderService {
           status: r.status,
           currentQty: Number(r.currentQty),
           width: r.width != null ? Number(r.width) : null,
-          qualityGrade: r.qualityGrade,
+          qualityGrade: r.qualityGrade ?? "",
           kind,
           item: r.item,
           color: r.color,
@@ -1596,7 +1610,7 @@ export class WorkOrderService {
       producedRolls.items = producedRollRows.map((r) => ({
         id: r.id,
         barcode: r.barcode,
-        qualityGrade: r.qualityGrade,
+        qualityGrade: r.qualityGrade ?? "",
         currentQty: r.initialQty,
         status: r.status,
         color: r.color,
@@ -2617,7 +2631,7 @@ export class WorkOrderService {
    * 1. İş Emri iptal edilir.
    * 2. Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen üretimdeki
    *    (currentStepId + IN_PRODUCTION) toplar STOCK'a çekilir; producedInStepId
-   *    (üretim izi) KORUNUR. Bitmiş depo malları (WAREHOUSE/PRODUCED/
+   *    (üretim izi) KORUNUR. Bitmiş depo malları (WAREHOUSE/
    *    TAMBUR_CONSUMED) dokunulmaz.
    * 3. ACTIVE refakat kartları VOIDED'a düşer.
    * Tüm bu işlemler güvenli bir transaction bloğunda gerçekleşir.
@@ -2716,7 +2730,7 @@ export class WorkOrderService {
       if (stepIds.length > 0) {
         // Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen
         // üretimdeki topları STOCK'a geri çek. `producedInStepId` (üretim izi)
-        // KORUNUR. Bitmiş depo malları (WAREHOUSE/PRODUCED/TAMBUR_CONSUMED) ve
+        // KORUNUR. Bitmiş depo malları (WAREHOUSE/TAMBUR_CONSUMED) ve
         // fason ürünleri (yukarıda bloklandı) DOKUNULMAZ.
         await tx.roll.updateMany({
           where: {
@@ -2963,8 +2977,12 @@ export class WorkOrderService {
     // INTERNAL ilk step: roller fabrikada, bağlama anında ilk adıma giriş yaparlar.
     const firstStepIsExternal = firstStep.station.type === "EXTERNAL";
 
-    // R10: Tüm WO tipleri için sadece STOCK statüsündeki rulolar bağlanabilir.
-    const acceptedRollStatuses: RollStatus[] = [RollStatus.STOCK];
+    // Envanterdeki serbest + satılabilir toplar üretime bağlanabilir: ham (STOCK) VE
+    // bitmiş depo malı (WAREHOUSE / A1_STOCK). "Her işlem final üretir" modelinde bir depo
+    // topu yeni bir WO'ya (örn. zımpara, ya da WAREHOUSE açık kumaşı Tambur'a) sokulabilir;
+    // bitince finalize depoya geri döndürür. Çuval/sevkiyattaki top hariç (F5: aşağıdaki
+    // doğrulama + atomik claim'de sackId/shipmentId null guard'ı).
+    const acceptedRollStatuses: RollStatus[] = [RollStatus.STOCK, RollStatus.WAREHOUSE, RollStatus.A1_STOCK];
 
     const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
     const errorMessages: string[] = [];
@@ -2990,6 +3008,11 @@ export class WorkOrderService {
           );
           continue;
         }
+        // F5: WAREHOUSE/A1 topu bir çuvalda/sevkiyatta olabilir → üretime alınamaz.
+        if (roll.sackId != null || roll.shipmentId != null) {
+          errorMessages.push(`${barcode}: Top bir çuvalda/sevkiyatta — önce oradan çıkarın`);
+          continue;
+        }
         candidates.push(roll);
       }
 
@@ -3001,6 +3024,8 @@ export class WorkOrderService {
           where: {
             id: { in: candidateIds },
             status: { in: acceptedRollStatuses },
+            sackId: null,
+            shipmentId: null,
           },
           data: {
             status: RollStatus.IN_PRODUCTION,
@@ -4313,7 +4338,7 @@ export class WorkOrderService {
       // TOPLU (eski kod top başına findUnique+update+updateMany = N+1).
       const found = await tx.roll.findMany({
         where: { id: { in: rollIds } },
-        select: { id: true, barcode: true, status: true, currentStepId: true },
+        select: { id: true, barcode: true, status: true, currentStepId: true, colorId: true, qualityGrade: true },
       });
       const foundIds = new Set(found.map((r) => r.id));
       for (const reqId of rollIds) {
@@ -4345,19 +4370,36 @@ export class WorkOrderService {
       // 1) Toplar → STOCK + pointer/dal kimliği temizle (currentQty'ye
       //    dokunulmaz). ATOMİK CLAIM: aynı koşullar WHERE'de — okuma ile
       //    update arasına başka işlem girerse count uyuşmaz → 409 + rollback.
-      const claimed = await tx.roll.updateMany({
-        where: {
-          id: { in: detachableIds },
-          currentStepId: { in: stepIds },
-          status: { in: DETACHABLE_STATUSES },
-        },
-        data: {
-          status: RollStatus.STOCK,
-          currentStepId: null,
-          batchSplitId: null,
-        },
-      });
-      if (claimed.count !== detachableIds.length) {
+      // F1: detach RESTORE — attach ÖNCESİ duruma en yakın hale getir. prevStatus saklanmadığından
+      // colorId tek doğruluk kaynağı (createInitialEntry hüristiğinin aynası): renksiz (ham) → STOCK;
+      // renkli (işlenmiş) → kaliteden çözülen final durum (varsayılan WAREHOUSE). Aksi halde WAREHOUSE
+      // bir top attach→detach ile sessizce STOCK'a (ham) düşerdi. currentQty'ye dokunulmaz.
+      const { statusByCode } = await loadQualityTargetMaps(tx, detachable.map((r) => r.qualityGrade));
+      const idsByTarget = new Map<RollStatus, string[]>();
+      for (const r of detachable) {
+        const target = r.colorId == null ? RollStatus.STOCK : resolveFinalStatus(r.qualityGrade, statusByCode);
+        const arr = idsByTarget.get(target);
+        if (arr) arr.push(r.id);
+        else idsByTarget.set(target, [r.id]);
+      }
+      // Hedef duruma göre gruplanmış ATOMİK claim'ler (aynı WHERE guard'ı; toplam count kontrolü).
+      let claimedCount = 0;
+      for (const [target, ids] of idsByTarget) {
+        const res = await tx.roll.updateMany({
+          where: {
+            id: { in: ids },
+            currentStepId: { in: stepIds },
+            status: { in: DETACHABLE_STATUSES },
+          },
+          data: {
+            status: target,
+            currentStepId: null,
+            batchSplitId: null,
+          },
+        });
+        claimedCount += res.count;
+      }
+      if (claimedCount !== detachableIds.length) {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir işlemle değişti. Listeyi yenileyip tekrar deneyin.",
         );

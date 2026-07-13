@@ -132,7 +132,7 @@ function TraceContent({ trace }: { trace: NonNullable<Awaited<ReturnType<typeof 
         <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
           <div>
             <p className="text-muted-foreground">Kalite</p>
-            <p className="font-medium">{roll.qualityGrade}</p>
+            <p className="font-medium">{roll.qualityGrade ?? "—"}</p>
           </div>
           <div>
             <p className="text-muted-foreground">İlk Metraj</p>

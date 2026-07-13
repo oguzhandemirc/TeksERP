@@ -114,7 +114,7 @@ export async function getStockDistribution(): Promise<StockDistribution> {
     FROM rolls r
     JOIN items i        ON r."itemId" = i.id
     LEFT JOIN colors c  ON r."colorId" = c.id
-    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
+    WHERE r.status IN ('WAREHOUSE','STOCK')
     GROUP BY i.name, COALESCE(c.name, 'Ham')
     ORDER BY "totalQty" DESC NULLS LAST
     LIMIT 100
@@ -142,7 +142,7 @@ export async function getStockDistribution(): Promise<StockDistribution> {
       COUNT(*)                  AS "rollCount",
       SUM(r."currentQty")::float AS "totalQty"
     FROM rolls r
-    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
+    WHERE r.status IN ('WAREHOUSE','STOCK')
     GROUP BY 1, 2
     ORDER BY 2
   `),
@@ -151,7 +151,7 @@ export async function getStockDistribution(): Promise<StockDistribution> {
     >(Prisma.sql`
     SELECT COUNT(*) AS "rollCount", SUM(r."currentQty")::float AS "totalQty"
     FROM rolls r
-    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
+    WHERE r.status IN ('WAREHOUSE','STOCK')
   `),
   ]);
 

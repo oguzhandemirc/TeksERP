@@ -116,9 +116,11 @@ interface CutInput {
  * targetStatus tanımlanmadıkça WAREHOUSE döner.
  */
 function resolveCutStatus(
-  qualityGradeCode: string,
+  qualityGradeCode: string | null,
   targetStatusByCode: Map<string, RollStatus>
 ): RollStatus {
+  // qualityGrade nullable — null (kaliteye bakılmadı) → katalog override yok → WAREHOUSE.
+  if (qualityGradeCode == null) return RollStatus.WAREHOUSE;
   return targetStatusByCode.get(qualityGradeCode) ?? RollStatus.WAREHOUSE;
 }
 
@@ -168,7 +170,7 @@ interface TamburRollSummary {
   colorName: string | null;
   currentQty: number;
   width: number | null;
-  qualityGrade: string;
+  qualityGrade: string | null;
   /** Parent'tan miras FabricProperty özet listesi (mobil karar ekranı gösterir). */
   properties: { id: string; name: string }[];
   errorCount: number;
@@ -637,7 +639,7 @@ export class TamburService {
     // Cut'lardaki + parent qualityGrade'lerini topla → katalog target status'larını çek.
     const allQualityCodes = Array.from(
       new Set([...inputCuts.map((c) => c.qualityGrade), roll.qualityGrade])
-    );
+    ).filter((c): c is string => c != null);
     const qualityGradeRows = allQualityCodes.length
       ? await prisma.qualityGrade.findMany({
           where: { code: { in: allQualityCodes } },
@@ -786,7 +788,7 @@ export class TamburService {
         end: number; // parent metresinde bitiş offset
         qty: number;
         status: RollStatus;
-        qualityGrade: string;
+        qualityGrade: string | null;
         inheritProperties: boolean;
         auditSource: string;
         auditErrorIds: string[];
@@ -849,7 +851,11 @@ export class TamburService {
             weightKg: null,
             status: seg.status,
             qualityGrade: seg.qualityGrade,
-            qualityGradeId: qualityGradeIdByCode.get(seg.qualityGrade) ?? null,
+            // seg.qualityGrade nullable → null anahtarla katalog araması yok, id null.
+            qualityGradeId:
+              seg.qualityGrade != null
+                ? qualityGradeIdByCode.get(seg.qualityGrade) ?? null
+                : null,
             producedInStepId: roll.producedInStepId,
             parentRollId: roll.id,
             // Phase 4: dal kimliğini parent'tan kalıt → bölünen toplar depoya
@@ -1718,7 +1724,7 @@ export class TamburService {
     const resolvedQualityGrade = data.qualityGrade ?? parent.qualityGrade;
     const resolvedQualityGradeId =
       data.qualityGrade && data.qualityGrade !== parent.qualityGrade
-        ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
+        ? await resolveQualityGradeIdStrict(data.qualityGrade)
         : parent.qualityGradeId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
     // Barkod SUNUCU'da sıralı atanır (atomik sayaç). WAREHOUSE child → "F", raw→STOCK → "H".
@@ -1978,7 +1984,10 @@ export class TamburService {
     const propertyIds = parent.properties.map((p) => p.propertyId);
 
     // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
-    const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);
+    // childQualityGrade nullable (ham parent + keep → parent.qualityGrade null olabilir).
+    const childQualityGradeId = childQualityGrade
+      ? await resolveQualityGradeId(childQualityGrade)
+      : null;
 
     const result = await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM (finalize()'daki desen): tüm ön-kontroller tx DIŞINDA —

@@ -53,7 +53,6 @@ export const ROLL_STATUS_LABEL: Record<string, string> = {
   WAREHOUSE: 'Depo',
   SHIPPED: 'Sevk Edildi',
   DELIVERED: 'Teslim Edildi',
-  PRODUCED: 'Üretildi',
   A1_STOCK: '2. Kalite',
   SCRAP: 'Fire',
   CANCELLED: 'İptal Edildi',

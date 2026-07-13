@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { InventoryService } from "../services/inventory.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import "../types/express-augment";
 
 // Zod validation schemas
@@ -31,13 +32,6 @@ const openFabricSchema = z.object({
   notes:     z.string().max(1000).optional().nullable(),
 });
 
-// "Üretime Geri Al" — takılı açık kumaşı seçilen Tambur adımına geri alma.
-// Zorunlu sebep (audit trail) — süpervizör manuel müdahalesi.
-const recoverToProductionSchema = z.object({
-  stepId: z.string().uuid("Geçersiz adım ID"),
-  reason: z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
-});
-
 // Süpervizör manuel nitelik düzeltme (renk/özellik/en/kalite) — applyManualProperties
 // ile aynı motor ama ZORUNLU sebep (audit event=MANUAL_ATTRIBUTE). itemId/barcode YOK.
 const manualAttributesSchema = z.object({
@@ -48,11 +42,9 @@ const manualAttributesSchema = z.object({
   reason:       z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
 });
 
-// Süpervizör manuel durum düzeltme — hedefler yalnız STOCK/WAREHOUSE (servis
-// MANUAL_STATUS_TRANSITIONS ile kaynak-durum bazlı ayrıca doğrular).
-const manualStatusSchema = z.object({
-  targetStatus: z.enum(["STOCK", "WAREHOUSE"]),
-  reason:       z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
+// Süpervizör "İstasyondan Kurtar" — IN_PRODUCTION takılı topu depoya alır. Zorunlu sebep (audit).
+const rescueSchema = z.object({
+  reason: z.string().trim().min(3, "İşlem nedeni en az 3 karakter").max(500),
 });
 
 // Saha #4: top etiketi değiştir (renk/özellik/en/kalite). Tümü opsiyonel; renk
@@ -93,6 +85,7 @@ export class InventoryController {
     // Bind methods for Express route handler usage
     this.createInitialEntry = this.createInitialEntry.bind(this);
     this.findAllRolls = this.findAllRolls.bind(this);
+    this.getProductionFlow = this.getProductionFlow.bind(this);
     this.getRollStats = this.getRollStats.bind(this);
     this.getWarehouseScope = this.getWarehouseScope.bind(this);
     this.findRollById = this.findRollById.bind(this);
@@ -106,11 +99,9 @@ export class InventoryController {
     this.kursunFinish = this.kursunFinish.bind(this);
     this.relabel = this.relabel.bind(this);
     this.prepareForSale = this.prepareForSale.bind(this);
-    this.getRecoveryTargets = this.getRecoveryTargets.bind(this);
-    this.recoverToProduction = this.recoverToProduction.bind(this);
     this.manualAttributes = this.manualAttributes.bind(this);
-    this.statusOverridePreview = this.statusOverridePreview.bind(this);
-    this.manualStatus = this.manualStatus.bind(this);
+    this.rescuePreview = this.rescuePreview.bind(this);
+    this.rescueStuck = this.rescueStuck.bind(this);
   }
 
   /**
@@ -193,6 +184,25 @@ export class InventoryController {
   async findAllRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.findAllRolls(req);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/production-flow
+   * Üretim Akışı (Kanban) panosu — 6 kolon TEK istekte (her kolon 10 önizleme +
+   * gerçek toplam). Uç `roll:read` ile korunur; kolon-bazlı ince yetki burada:
+   * `quality:read` yoksa Kurşun/Tambur, `shipping:read/write` yoksa Sevk boş döner.
+   */
+  async getProductionFlow(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const perms = req.user?.permissions ?? [];
+      const includeQueues = matchesPermission(perms, "quality:read");
+      const includeSevk =
+        matchesPermission(perms, "shipping:read") || matchesPermission(perms, "shipping:write");
+      const result = await this.service.getProductionFlow({ includeQueues, includeSevk });
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -378,37 +388,6 @@ export class InventoryController {
   }
 
   /**
-   * GET /api/rolls/:id/recovery-targets — "Üretime Geri Al" önizlemesi.
-   * Takılı açık kumaş için uygun (aynı ürünlü, açık, Tambur'lu) iş emri adımları.
-   */
-  async getRecoveryTargets(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const result = await this.service.getRecoveryTargets(req.params.id as string);
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * POST /api/rolls/:id/recover-to-production — takılı açık kumaşı Tambur'a geri al.
-   * Süpervizör (roll:manual-adjust); zorunlu sebep + audit.
-   */
-  async recoverToProduction(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = recoverToProductionSchema.parse(req.body);
-      const result = await this.service.recoverOpenFabricToProduction(
-        req.params.id as string,
-        body,
-        req.user?.userId,
-      );
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
    * PATCH /api/rolls/:id/manual-attributes — süpervizör manuel nitelik düzeltme
    * (renk/özellik/en/kalite) + zorunlu sebep. applyManualProperties motorunu kullanır.
    */
@@ -433,11 +412,11 @@ export class InventoryController {
   }
 
   /**
-   * GET /api/rolls/:id/status-override-preview — manuel durum düzeltme önizlemesi.
+   * GET /api/rolls/:id/rescue-preview — istasyonda takılı (IN_PRODUCTION) top kurtarma önizlemesi.
    */
-  async statusOverridePreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async rescuePreview(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getStatusOverridePreview(req.params.id as string);
+      const result = await this.service.getRescuePreview(req.params.id as string);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -445,14 +424,14 @@ export class InventoryController {
   }
 
   /**
-   * POST /api/rolls/:id/manual-status — süpervizör manuel durum düzeltme (whitelist).
+   * POST /api/rolls/:id/rescue-stuck — istasyonda takılı topu depoya kurtar (roll:manual-adjust).
    */
-  async manualStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async rescueStuck(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = manualStatusSchema.parse(req.body);
-      const result = await this.service.manualStatusOverride(
+      const body = rescueSchema.parse(req.body);
+      const result = await this.service.rescueStuckRoll(
         req.params.id as string,
-        body,
+        { reason: body.reason },
         req.user?.userId,
       );
       res.status(200).json(result);

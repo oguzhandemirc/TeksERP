@@ -24,6 +24,7 @@ import {
   PrintedDocType,
   RollOperationType,
   RollStatus,
+  RollForm,
   StationKind,
   StationType,
   StepStatus,
@@ -50,7 +51,7 @@ import {
   recomputeStepStatus,
   ensureWorkOrderInProgress,
 } from "./helpers/roll-step.helper";
-import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
+import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 // Fasondan doğrudan sevk önizlemesi karşılanma projeksiyonunu shipping'in saf
@@ -1092,7 +1093,7 @@ export class SubcontractorService {
       colorName: r.color?.name ?? null,
       dispatchedQty: Number(r.currentQty),
       dispatchedWeight: r.weightKg != null ? Number(r.weightKg) : null,
-      qualityGrade: r.qualityGrade,
+      qualityGrade: r.qualityGrade ?? "",
       width: r.width != null ? Number(r.width) : null,
     }));
     const totalQty = Number(rolls.reduce((s, r) => s.plus(r.dispatchedQty), new Prisma.Decimal(0)));
@@ -1852,14 +1853,6 @@ export class SubcontractorService {
           );
         }
 
-        // Açık kumaş Roll'ları için varsayılan kalite — Tambur kararı verilene kadar
-        // "1.KALITE" başlangıç değeri (KK1 girişi pattern'i ile aynı).
-        const defaultQualityGradeCode = "1.KALITE";
-        const defaultQualityGradeId = await resolveQualityGradeId(
-          defaultQualityGradeCode,
-          tx,
-        );
-
         // Phase 4: born roll'lar kaynak partinin (dönen orijinal topların) dal
         // kimliğini kalıtır → dönüş çıktısı tüm rota boyunca aynı lane'de izlenir.
         const sourceLotRolls = await tx.roll.findMany({
@@ -1880,8 +1873,19 @@ export class SubcontractorService {
           return { id: uuidv4(), nr };
         });
 
+        // Fason bir SON adımsa (nextStep yok): dönen açık-kumaş toplar FİNAL üründür →
+        // WAREHOUSE + "her kumaşa etiket" (barkod tx içinde SIRALI üretilir; sayaç satır-
+        // kilidiyle serileşir, Promise.all YASAK) + form ACIK. Ara adımsa: IN_PRODUCTION +
+        // barkodsuz (kesin ölçüm/etiket bir sonraki İÇ istasyonun FINISH'inde damgalanır;
+        // STOCK yerine IN_PRODUCTION — currentStepId dolu, cutOpenFabric bunu zorunlu kılar).
+        const bornStatus = nextStep ? RollStatus.IN_PRODUCTION : RollStatus.WAREHOUSE;
+        const bornBarcodes: (string | null)[] = [];
+        for (let i = 0; i < bornRollInputs.length; i++) {
+          bornBarcodes.push(nextStep ? null : await generateRollBarcode(tx, "F"));
+        }
+
         await tx.roll.createMany({
-          data: bornRollInputs.map(({ id, nr }) => ({
+          data: bornRollInputs.map(({ id, nr }, i) => ({
             id,
             itemId: bornItemId,
             colorId: resolvedAppliedColorId,
@@ -1889,22 +1893,20 @@ export class SubcontractorService {
             currentQty: nr.qty,
             weightKg: nr.weightKg ?? null,
             width: bornWidth,
-            // Sonraki adım varsa top fiilen üretimde (currentStepId dolu) → IN_PRODUCTION.
-            // STOCK yapmak yanlış etiketleme: serbest stok listesinde "müsait" görünür
-            // ve Tambur açık-kumaş akışı (cutOpenFabric IN_PRODUCTION ister) tutarsızlaşır.
-            status: nextStep ? RollStatus.IN_PRODUCTION : RollStatus.STOCK,
-            qualityGrade: defaultQualityGradeCode,
-            qualityGradeId: defaultQualityGradeId,
+            status: bornStatus,
+            // Fason dönüşü = açık kumaş (Tambur'dan geçmedi), kaliteye bakılmadı.
+            form: RollForm.ACIK,
+            qualityGrade: null,
+            qualityGradeId: null,
             entrySource: "SUBCONTRACTOR_RETURN",
             parentReceiptId: receipt.id,
             batchSplitId: bornBatchSplitId,
             // Born açık-kumaş topu bu fason adımında "üretildi" — roll→WO bağı.
-            // Bu olmadan (eski hali null) tambur WO-tamamlama, WO ürettiği-toplar
-            // raporu, WO iptalinde kurtarma ve soy-ağacı hepsi fason için kopuyordu.
             producedInStepId: data.stepId,
             currentStepId: nextStep ? nextStep.id : null,
             createdById: userId ?? null,
-            // barcode null — açık kumaş, fiziksel etiket yok
+            // Son adım: final barkod üretildi; ara adım: null (sonraki istasyon damgalar).
+            barcode: bornBarcodes[i],
           })),
         });
 
@@ -4338,7 +4340,7 @@ function assembleFasonCekiDoc(args: {
     colorName: string | null;
     dispatchedQty: number;
     dispatchedWeight: number | null;
-    qualityGrade: string;
+    qualityGrade: string | null;
     width: number | null;
   }>;
   totalQty: number;
@@ -4406,7 +4408,7 @@ async function buildFasonDispatchDoc(
     colorName: item.roll.color?.name ?? null,
     dispatchedQty: Number(item.dispatchedQty),
     dispatchedWeight: item.dispatchedWeight != null ? Number(item.dispatchedWeight) : null,
-    qualityGrade: item.roll.qualityGrade,
+    qualityGrade: item.roll.qualityGrade ?? "",
     width: item.roll.width != null ? Number(item.roll.width) : null,
   }));
   return {

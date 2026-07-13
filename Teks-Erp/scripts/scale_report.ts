@@ -215,7 +215,7 @@ async function main(): Promise<void> {
     () => getStockDistribution(),
     `SELECT i.name, COALESCE(c.name,'Ham'), COUNT(*), SUM(r."currentQty")
      FROM rolls r JOIN items i ON r."itemId"=i.id LEFT JOIN colors c ON r."colorId"=c.id
-     WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED') GROUP BY i.name, COALESCE(c.name,'Ham')
+     WHERE r.status IN ('WAREHOUSE','STOCK') GROUP BY i.name, COALESCE(c.name,'Ham')
      ORDER BY 4 DESC NULLS LAST LIMIT 100`
   );
 

@@ -63,7 +63,6 @@ enum RollEntrySource {
 enum RollStatus {
   STOCK
   IN_PRODUCTION
-  PRODUCED // Son üretim adımı bitti, Tambur'a girmedi (tek-adımlı WO veya rotada Tambur yok)
   SCRAP // Gerçek fire — Tambur kalite reddi vb. fiziksel hurda
   CANCELLED // Operatör iptali (yanlış giriş) — fire değil, sadece kayıt geri alındı
   AT_SUBCONTRACTOR // Fason/boyahanede işlem görüyor
@@ -75,6 +74,14 @@ enum RollStatus {
   SUBCONTRACTOR_CONSUMED // Fason kabulde kapandı — yeni "açık kumaş" Roll'ları receipt üzerinden doğacak
   AT_KARTELA // Bitmiş top kartela fason firmasında işlemde (KartelaDispatch)
   KARTELA_CONSUMED // Kartela kabulde kapandı — metraj N kartela (Swatch) olarak doğdu, parent retire
+}
+
+/// Fiziksel form — bir top rulo mu (TOP) yoksa açık kumaş mı (ACIK). top ⟺ Tambur'dan
+/// geçti (rulo yapıldı); açık ⟺ Tambur-DIŞI bir istasyondan çıktı / fason dönüşü / ham
+/// üretime girdi. Kalite/bitmişlikten bağımsız fiziksel bir nitelik; sevkte fark etmez.
+enum RollForm {
+  TOP // Rulo (Tambur çocuğu veya işlenmemiş ham giriş)
+  ACIK // Açık kumaş (Tambur-dışı son adım finalize'ı / fason dönüşü doğumu / açık kumaş)
 }
 
 enum CompanyType {
@@ -591,6 +598,10 @@ model PeripheralDevice {
 
   languageOverride PrinterLanguage? // cihaz dili (boş → global ayar label.printerLanguage)
   mediaType        PrinterMediaType? // baskı yöntemi (boş → yazıcı otomatik; PPLA/ZPL'de komuta çevrilir)
+  /// Raster baskı: kanvas-varyantlı etiket 1bpp bitmap (raster) olarak gönderilir
+  /// (önizleme=baskı birebir); false = bugünkü komut üretimi (bayt-aynı). Cihaz-başına
+  /// opt-in; PPLA'da grafik komutu (F0) doğrulanana dek açılsa bile komuta düşer.
+  rasterMode Boolean @default(false)
 
   isActive   Boolean   @default(true)
   /// KALICI silinme damgası (users.deletedAt kalıbı) — NULL=normal (isActive ile
@@ -874,9 +885,15 @@ model Roll {
 
   // Status & Quality
   status         RollStatus @default(STOCK)
-  /// Snapshot — yazıldığı andaki kalite kodu (katalog değişse bile sabit).
-  /// Service-level zorunlu (inventory/tambur/subcontractor explicit set eder).
-  qualityGrade   String
+  /// Fiziksel form — TOP (rulo) | ACIK (açık kumaş). Otomatik set: ham giriş & Tambur
+  /// çocukları TOP; Tambur-DIŞI son-adım finalize'ı + fason dönüşü doğumları + açık kumaş
+  /// = ACIK. Operatör seçmez; "durgunda" (final/serbest) anlamlı — ara-üretim flip'i izlenmez.
+  form           RollForm   @default(TOP)
+  /// Snapshot — yazıldığı andaki kalite kodu (katalog değişse bile sabit). NULLABLE:
+  /// kaliteyi YALNIZ kalite istasyonları belirler (KK1 opsiyonel giriş, KK2/Kurşun, Tambur);
+  /// kaliteye bakılmamış top (açık kumaş, fason dönüşü, kalitesiz giriş) NULL kalır → UI "—",
+  /// istatistik "Belirsiz". Finalize'da null → WAREHOUSE'a düşer (resolveFinalStatus).
+  qualityGrade   String?
   /// Canonical — QualityGrade kataloğundaki gerçek kayda referans.
   /// Eski satırlarda null kalabilir; yeni Tambur finalize kayıtlarında doldurulur.
   qualityGradeId String?    @db.Uuid

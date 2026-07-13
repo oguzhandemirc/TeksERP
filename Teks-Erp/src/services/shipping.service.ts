@@ -78,8 +78,8 @@ const SHIPMENT_FILTER_FIELDS = ["status", "customerId", "branchId"] as const;
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
 
 // Çuvala okutulamayacak / sevke sokulamayacak top durumları. Kalite/bitmişlik GATE'i
-// YOK — envanterde fiziksel mevcut her top girer (ham STOCK, mamul WAREHOUSE, üretildi
-// PRODUCED, 2.kalite A1_STOCK, fason dönüşü). Yalnız FİZİKSEL İMKÂNSIZ durumlar bloklu:
+// YOK — envanterde fiziksel mevcut her top girer (ham STOCK, mamul WAREHOUSE,
+// 2.kalite A1_STOCK, fason dönüşü açık kumaş). Yalnız FİZİKSEL İMKÂNSIZ durumlar bloklu:
 // gitti (SHIPPED), fire (SCRAP), iptal (CANCELLED), makinede (IN_PRODUCTION), bina dışı
 // (AT_SUBCONTRACTOR/AT_KARTELA), emekli/tüketilmiş (*_CONSUMED) → bagajlanırsa çift-sayım.
 const NON_SACKABLE_STATUSES: RollStatus[] = [
@@ -1383,7 +1383,7 @@ export class ShippingService {
         id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
         rollCount: sk.rolls.length, swatchCount: sk.swatches.length, totalQty: Number(sackQty),
         contents: [...groups.values()].map((g) => ({ itemName: g.itemName, colorName: g.colorName, width: g.width, qty: Number(g.qty), rollCount: g.rollCount })),
-        rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, qty: Number(r.currentQty), width: r.width != null ? Number(r.width) : null, qualityGrade: r.qualityGrade, item: r.item, color: r.color })),
+        rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, qty: Number(r.currentQty), width: r.width != null ? Number(r.width) : null, qualityGrade: r.qualityGrade ?? "", item: r.item, color: r.color })),
         swatches: sk.swatches.map((s) => ({ id: s.id, barcode: s.barcode, item: s.item, color: s.color })),
       };
     });

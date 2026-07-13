@@ -125,17 +125,17 @@ export default function DepoScreen() {
   // Roll listesi — status filtresi mode'a göre belirlenir. SWATCH modunda
   // bu query enabled=false (kartela ayrı endpoint).
   // ALL sekmesi depo karakterli tüm statüleri kapsar: WAREHOUSE (Tambur sonrası),
-  // A1_STOCK (2. kalite satılabilir), PRODUCED (Tambur'a girmemiş tamamlanmış),
+  // A1_STOCK (2. kalite satılabilir),
   // STOCK (ham). includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
   const rollsFilters = useMemo<Record<string, string | string[]>>(() => {
     // shipmentScope:'free' → çuvallanmış (bir sevkiyata okutulmuş) toplar HARİÇ. Çuvallanan
     // top artık "serbest depoda" görünmez; çuval depo/planlı sevkiyat ayrı izlenir (Sevk Çıkışı).
     const f: Record<string, string | string[]> = { includeFire: 'true', shipmentScope: 'free' };
-    if (mode === 'ALL') f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'PRODUCED', 'STOCK'];
+    if (mode === 'ALL') f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
     else if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
     else if (mode === 'STOCK') f.status = 'STOCK';
     else if (mode === 'KARTELALIK') {
-      f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'PRODUCED', 'STOCK'];
+      f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
       f.markedForKartela = 'true';
     }
     return f;
@@ -556,7 +556,6 @@ function RollListRow({
                   styles.statusPill,
                   roll.status === 'WAREHOUSE' && styles.statusPillWarehouse,
                   roll.status === 'A1_STOCK' && styles.statusPillA1Stock,
-                  roll.status === 'PRODUCED' && styles.statusPillReady,
                 ]}
               >
                 <Text style={styles.statusPillText}>

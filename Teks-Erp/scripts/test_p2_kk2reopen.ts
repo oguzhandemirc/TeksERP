@@ -45,7 +45,7 @@ async function main(): Promise<void> {
       const r = await prisma.roll.create({
         data: {
           barcode: `${tag}-R-${rollIds.length}`, itemId: item.id, initialQty: 100, currentQty: 100,
-          status: RollStatus.PRODUCED, qualityGrade: grade.code, qualityGradeId: grade.id,
+          status: RollStatus.WAREHOUSE, qualityGrade: grade.code, qualityGradeId: grade.id,
           entrySource: "SUPPLIER_RECEIPT", createdById: admin.id, currentStepId: null,
         },
         select: { id: true },
@@ -100,8 +100,8 @@ async function main(): Promise<void> {
       const st = new Map(after.map((r) => [r.id, r.status]));
       check("F161: SON tur C IN_PRODUCTION'a çekildi", st.get(c) === RollStatus.IN_PRODUCTION);
       check("F161: SON tur D IN_PRODUCTION'a çekildi", st.get(d) === RollStatus.IN_PRODUCTION);
-      check("F161: ESKİ tur A PRODUCED kaldı (dokunulmadı)", st.get(a) === RollStatus.PRODUCED);
-      check("F161: ESKİ tur B PRODUCED kaldı (dokunulmadı)", st.get(b) === RollStatus.PRODUCED);
+      check("F161: ESKİ tur A WAREHOUSE kaldı (dokunulmadı)", st.get(a) === RollStatus.WAREHOUSE);
+      check("F161: ESKİ tur B WAREHOUSE kaldı (dokunulmadı)", st.get(b) === RollStatus.WAREHOUSE);
       // Eski turun movement'leri hâlâ kapalı; son turunkiler açıldı.
       const closedA = await prisma.rollMovement.count({ where: { rollId: a, exitedAt: { not: null } } });
       const openC = await prisma.rollMovement.count({ where: { rollId: c, exitedAt: null } });
