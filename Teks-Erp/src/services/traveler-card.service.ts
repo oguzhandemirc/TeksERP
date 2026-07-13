@@ -125,10 +125,11 @@ export class TravelerCardService {
   }
 
   /**
-   * Transaction-aware idempotent kart oluşturucu — WorkOrder.create flow'undan
-   * çağrılır. WO zaten varlık doğrulamış olduğu için tekrar kontrol etmez.
+   * Transaction-aware idempotent kart oluşturucu — Batch doğuşundan
+   * (`batch.service.createBatchTx`) çağrılır. Kart PARTİ başınadır (bir iş emri
+   * N parti = N kart). Parti zaten oluşturulmuş olduğu için varlık kontrolü yapmaz.
    *
-   * - Halihazırda ACTIVE kart varsa onu döner ({created:false}) — idempotent;
+   * - Partide halihazırda ACTIVE kart varsa onu döner ({created:false}) — idempotent;
    *   yarıda kesilen create/recreate akışlarında güvenli.
    * - Aksi halde version=1 ile yeni kart üretir ({created:true}).
    *
@@ -138,13 +139,13 @@ export class TravelerCardService {
    * commit eder). Çağıran, `created:true` ise audit'i tx COMMIT'inden SONRA yazar
    * (reprint()/print() deseniyle tutarlı).
    */
-  async createForWorkOrder(
+  async createForBatch(
     tx: Prisma.TransactionClient,
-    workOrderId: string,
+    batchId: string,
     userId?: string
   ): Promise<{ card: TravelerCard; created: boolean }> {
     const existing = await tx.travelerCard.findFirst({
-      where: { workOrderId, status: TravelerCardStatus.ACTIVE },
+      where: { batchId, status: TravelerCardStatus.ACTIVE },
     });
     if (existing) return { card: existing, created: false };
 
@@ -153,13 +154,13 @@ export class TravelerCardService {
     // Tek kod: insan-okur cardNumber = tarama barcode (RK + GGAAYY + NNNN)
     const cardNumber = buildDailyCode("RK", seq, now);
     const barcode = cardNumber;
-    const snapshot = await this.buildSnapshot(tx, workOrderId);
+    const snapshot = await this.buildSnapshot(tx, batchId);
 
     const card = await tx.travelerCard.create({
       data: {
         cardNumber,
         barcode,
-        workOrderId,
+        batchId,
         version: 1,
         status: TravelerCardStatus.ACTIVE,
         printedById: userId ?? null,
@@ -172,53 +173,82 @@ export class TravelerCardService {
 
   /**
    * Yeni bir refakat kartı üretir (ilk basım).
+   *
+   * KÖPRÜ (Faz 2): kart artık PARTİ başına. Bu uç hâlâ WO id alıyor (Electron
+   * TravelerCardPrintDialog Faz 6'da batchId gönderecek) → WO'nun EN YENİ partisini
+   * hedefler. Faz 6'da imza batchId'ye döner, bu köprü kalkar.
    */
   async print(
     workOrderId: string,
     userId?: string
   ): Promise<ApiResponse<TravelerCard>> {
+    const batch = await this.resolveLatestBatch(workOrderId);
+
+    // Üstteki resolve SIRALI durumu yakalar; bu try/catch EŞZAMANLI çift-print'i
+    // partial unique (traveler_cards_batch_active_uniq) üzerinden kapatır: iki istek de
+    // ön-kontrolü geçse de ikincinin create'i P2002 alır → bu sırada ACTIVE kart
+    // oluşmuşsa ön-kontrolle TUTARLI 409 dön (idempotent-success değil).
+    const active = await prisma.travelerCard.findFirst({
+      where: { batchId: batch.id, status: TravelerCardStatus.ACTIVE },
+      select: { cardNumber: true },
+    });
+    if (active) {
+      throw AppError.conflict(
+        `Bu parti için zaten aktif bir refakat kartı var: ${active.cardNumber}. Yeniden basım için reprint endpoint'ini kullanın.`
+      );
+    }
+
+    try {
+      return await this.createCardInternal(batch.id, 1, userId, "PRINT");
+    } catch (e) {
+      const raced = await prisma.travelerCard.findFirst({
+        where: { batchId: batch.id, status: TravelerCardStatus.ACTIVE },
+        select: { cardNumber: true },
+      });
+      if (raced) {
+        throw AppError.conflict(
+          `Bu parti için zaten aktif bir refakat kartı var: ${raced.cardNumber}. Yeniden basım için reprint endpoint'ini kullanın.`
+        );
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * KÖPRÜ yardımcısı (Faz 2): bir iş emrinin refakat kartı işlemleri (print/reprint)
+   * için hedef partiyi çözer. Kart parti başına olduğundan, WO id ile gelen eski
+   * uçlar WO'nun EN YENİ partisini hedefler. WO yoksa 404, uygun statüde değilse
+   * 409, hiç parti yoksa (henüz top eklenmemiş) 409 fırlatır.
+   */
+  private async resolveLatestBatch(
+    workOrderId: string,
+  ): Promise<{ id: string }> {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
-      include: { travelerCards: { where: { status: TravelerCardStatus.ACTIVE } } },
+      select: {
+        status: true,
+        batches: { select: { id: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      },
     });
 
     if (!wo) {
       throw AppError.notFound("İş emri bulunamadı");
     }
-
     if (
       wo.status !== WorkOrderStatus.PLANNED &&
       wo.status !== WorkOrderStatus.IN_PROGRESS
     ) {
       throw AppError.conflict(
-        `Bu durumda refakat kartı basılamaz: ${wo.status}. Sadece PLANNED veya IN_PROGRESS.`
+        `Bu durumda refakat kartı işlemi yapılamaz: ${wo.status}. Sadece PLANNED veya IN_PROGRESS.`
       );
     }
-
-    if (wo.travelerCards.length > 0) {
+    const batch = wo.batches[0];
+    if (!batch) {
       throw AppError.conflict(
-        `Bu iş emri için zaten aktif bir refakat kartı var: ${wo.travelerCards[0].cardNumber}. Yeniden basım için reprint endpoint'ini kullanın.`
+        "Bu iş emrinde henüz parti yok — parti kartı, iş emrine top eklenince otomatik basılır."
       );
     }
-
-    // Üstteki pre-check SIRALI durumu yakalar; bu try/catch EŞZAMANLI çift-print'i
-    // partial unique (traveler_cards_wo_active_uniq) üzerinden kapatır: iki istek de
-    // pre-check'i geçse de ikincinin create'i P2002 alır → bu sırada ACTIVE kart
-    // oluşmuşsa pre-check ile TUTARLI 409 dön (idempotent-success değil).
-    try {
-      return await this.createCardInternal(workOrderId, 1, userId, "PRINT");
-    } catch (e) {
-      const active = await prisma.travelerCard.findFirst({
-        where: { workOrderId, status: TravelerCardStatus.ACTIVE },
-        select: { cardNumber: true },
-      });
-      if (active) {
-        throw AppError.conflict(
-          `Bu iş emri için zaten aktif bir refakat kartı var: ${active.cardNumber}. Yeniden basım için reprint endpoint'ini kullanın.`
-        );
-      }
-      throw e;
-    }
+    return batch;
   }
 
   /**
@@ -233,21 +263,9 @@ export class TravelerCardService {
       throw AppError.badRequest("Yeniden basım için gerekçe zorunlu (en az 3 karakter)");
     }
 
-    const wo = await prisma.workOrder.findUnique({
-      where: { id: workOrderId },
-      select: { id: true, status: true },
-    });
-
-    if (!wo) {
-      throw AppError.notFound("İş emri bulunamadı");
-    }
-
-    if (
-      wo.status !== WorkOrderStatus.PLANNED &&
-      wo.status !== WorkOrderStatus.IN_PROGRESS
-    ) {
-      throw AppError.conflict(`Bu durumda reprint yapılamaz: ${wo.status}`);
-    }
+    // KÖPRÜ (Faz 2): kart parti başına — WO id ile gelen uç EN YENİ partiyi hedefler.
+    const batch = await this.resolveLatestBatch(workOrderId);
+    const batchId = batch.id;
 
     // Eski kartı REPRINTED'a çek, yeni kartı üret (transaction içinde).
     // Barkod sequence çakışırsa (P2002) tx'i baştan dener.
@@ -259,7 +277,7 @@ export class TravelerCardService {
         // dışındaydı: P2002 retry'ı bayat activeCard'ı tekrar REPRINTED'a çekip
         // bayat lastVersion+1 ile İKİNCİ bir ACTIVE kart üretebiliyordu.
         const cards = await tx.travelerCard.findMany({
-          where: { workOrderId },
+          where: { batchId },
           orderBy: { version: "desc" },
           select: { id: true, version: true, status: true, snapshot: true },
         });
@@ -296,13 +314,13 @@ export class TravelerCardService {
         // WO verisi + istemci default config basıyordu (sözleşme ihlali).
         const snapshot =
           (activeCard?.snapshot as Prisma.InputJsonValue | null | undefined) ??
-          (await this.buildSnapshot(tx, workOrderId));
+          (await this.buildSnapshot(tx, batchId));
 
         return tx.travelerCard.create({
           data: {
             cardNumber,
             barcode,
-            workOrderId,
+            batchId,
             version: lastVersion + 1,
             status: TravelerCardStatus.ACTIVE,
             printedById: userId ?? null,
@@ -428,7 +446,13 @@ export class TravelerCardService {
 
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: data.barcode.toUpperCase() },
-      include: { workOrder: { include: { steps: { orderBy: { stepSequence: "asc" } } } } },
+      include: {
+        batch: {
+          include: {
+            workOrder: { include: { steps: { orderBy: { stepSequence: "asc" } } } },
+          },
+        },
+      },
     });
 
     if (!card) {
@@ -441,7 +465,7 @@ export class TravelerCardService {
       );
     }
 
-    if (card.workOrder.status === WorkOrderStatus.CANCELLED) {
+    if (card.batch.workOrder.status === WorkOrderStatus.CANCELLED) {
       throw AppError.conflict("Bağlı iş emri iptal edilmiş");
     }
 
@@ -455,9 +479,10 @@ export class TravelerCardService {
     if (!station.isActive) throw AppError.badRequest("İstasyon pasif — okutma yapılamaz");
 
     // İstasyona karşılık gelen step'i bul (birden fazla varsa PENDING/ACTIVE olanı tercih et)
-    const matchingStep = card.workOrder.steps.find(
+    const woSteps = card.batch.workOrder.steps;
+    const matchingStep = woSteps.find(
       (s) => s.stationId === data.stationId && s.status !== "COMPLETED" && s.status !== "SKIPPED"
-    ) ?? card.workOrder.steps.find((s) => s.stationId === data.stationId);
+    ) ?? woSteps.find((s) => s.stationId === data.stationId);
 
     const scan = await prisma.travelerCardScan.create({
       data: {
@@ -509,9 +534,9 @@ export class TravelerCardService {
     const where: Prisma.TravelerCardWhereInput = {};
 
     // WO'ya birebir filtre (Hızlı İş Emri kart çıktısı bunu kullanır — fuzzy
-    // batchNumber araması yerine kesin eşleşme).
+    // arama yerine kesin eşleşme). Kart parti başına → WO filtresi parti üzerinden.
     const woFilter = params.filters.workOrderId;
-    if (typeof woFilter === "string" && woFilter) where.workOrderId = woFilter;
+    if (typeof woFilter === "string" && woFilter) where.batch = { workOrderId: woFilter };
 
     const statusFilter = params.filters.status;
     if (statusFilter === "ALL" || (Array.isArray(statusFilter) && statusFilter.includes("ALL"))) {
@@ -526,7 +551,7 @@ export class TravelerCardService {
 
     // Search: cardNumber / barcode TAM eşleşme (ikisi de unique → index seek; kart
     // okutulur/yapıştırılır, ortasından aranmaz — rolls barkod düzeltmesiyle aynı
-    // gerekçe). WO batchNumber kısmi araması için contains kalır (relation).
+    // gerekçe). Parti no (P…) ve iş emri no (İE…) kısmi araması relation üzerinden.
     if (params.search && params.search.trim()) {
       const q = params.search.trim();
       // F194: barcode/cardNumber UPPERCASE saklanır → terimi normalize et (findByBarcode
@@ -536,7 +561,8 @@ export class TravelerCardService {
         { cardNumber: qUpper },
         { barcode: qUpper },
         ...buildTurkishSearch<Prisma.TravelerCardWhereInput>(q, [
-          "workOrder.batchNumber",
+          "batch.batchNumber",
+          "batch.workOrder.workOrderNumber",
         ]),
       ];
     }
@@ -559,19 +585,25 @@ export class TravelerCardService {
           barcode: true,
           version: true,
           status: true,
-          workOrderId: true,
+          batchId: true,
           printedAt: true,
-          workOrder: {
+          batch: {
             select: {
               id: true,
               batchNumber: true,
-              status: true,
-              type: true,
-              // targetItem (iç ürün) + targetColor AYRI alanlar — mobil WorkOrder
-              // tipi/tüketicileri böyle okur. (Item'ın `color` ilişkisi YOK;
-              // önceki targetItem.color select'i geçersizdi → list 400 dönüyordu.)
-              targetItem: { select: { id: true, code: true, name: true } },
-              targetColor: { select: { id: true, code: true, name: true, hex: true } },
+              workOrder: {
+                select: {
+                  id: true,
+                  workOrderNumber: true,
+                  status: true,
+                  type: true,
+                  // targetItem (iç ürün) + targetColor AYRI alanlar — mobil WorkOrder
+                  // tipi/tüketicileri böyle okur. (Item'ın `color` ilişkisi YOK;
+                  // önceki targetItem.color select'i geçersizdi → list 400 dönüyordu.)
+                  targetItem: { select: { id: true, code: true, name: true } },
+                  targetColor: { select: { id: true, code: true, name: true, hex: true } },
+                },
+              },
             },
           },
         },
@@ -579,9 +611,17 @@ export class TravelerCardService {
       prisma.travelerCard.count({ where }),
     ]);
 
+    // KÖPRÜ (Faz 2): mobil `TravelerCardLookup` henüz kartın `workOrder`'ını ÜSTTEN
+    // okuyor; parti (batch) alt-nesnesini Faz 7'de tüketecek. İki yüzeyi de ver —
+    // `batch` (yeni) + düzleştirilmiş `workOrder` (eski tüketiciler kırılmasın).
+    const bridged = items.map((it) => ({
+      ...it,
+      workOrder: it.batch?.workOrder ?? null,
+    }));
+
     return {
       success: true,
-      data: items,
+      data: bridged,
       pagination: {
         page: params.page,
         pageSize: params.pageSize,
@@ -614,11 +654,15 @@ export class TravelerCardService {
       // (getCardHtml ayrı çeker) — Prisma 7 omit ile ağır Json'u atla; kalan alanlar/relations byte-uyumlu.
       omit: { snapshot: true },
       include: {
-        workOrder: {
+        batch: {
           include: {
-            targetItem: true,
-            targetColor: true,
-            steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
+            workOrder: {
+              include: {
+                targetItem: true,
+                targetColor: true,
+                steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
+              },
+            },
           },
         },
         scans: {
@@ -636,27 +680,32 @@ export class TravelerCardService {
     // Fason Sevk akışı: bu WO için açık (cancelledAt=null + mal kabul tam değil)
     // sevk varsa kart üstüne yeni sevk eklenemez. Tüketici mobil UI bu flag'i
     // okuyup operatöre erken uyarı verir; backend dispatch endpoint'i de
-    // ayrıca 409 atar (çift güvenlik).
+    // ayrıca 409 atar (çift güvenlik). Kart parti başına → WO id partiden okunur.
     const openDispatchCount = await prisma.subcontractorDispatch.count({
       where: {
-        workOrderId: card.workOrderId,
+        workOrderId: card.batch.workOrderId,
         cancelledAt: null,
         items: { some: { receiptItems: { none: {} } } },
       },
     });
 
-    return {
-      success: true,
-      data: { ...card, hasOpenDispatch: openDispatchCount > 0 },
+    // KÖPRÜ (Faz 2): mobil FasonSevk/FasonKabul tarama `data.workOrder`'ı ÜSTTEN
+    // okuyor; parti (batch) Faz 7'de tüketilecek. İki yüzeyi de ver. (Const'a
+    // çıkarıldı — inline literal excess-property check `workOrder`'ı reddederdi.)
+    const data = {
+      ...card,
+      workOrder: card.batch.workOrder,
+      hasOpenDispatch: openDispatchCount > 0,
     };
+    return { success: true, data };
   }
 
   /**
-   * Bir iş emrinin tüm kart + tarama geçmişi.
+   * Bir iş emrinin tüm kart + tarama geçmişi (tüm partilerinin kartları).
    */
   async getHistory(workOrderId: string): Promise<ApiResponse<unknown>> {
     const cards = await prisma.travelerCard.findMany({
-      where: { workOrderId },
+      where: { batch: { workOrderId } },
       orderBy: { version: "desc" },
       include: {
         printedBy: { select: { id: true, username: true, fullName: true } },
@@ -691,17 +740,17 @@ export class TravelerCardService {
         status: true,
         voidReason: true,
         snapshot: true,
-        workOrderId: true,
+        batchId: true,
       },
     });
     if (!card) {
       throw new AppError("Refakat kartı bulunamadı", 404);
     }
 
-    // Snapshot kartla birlikte donar; eski/eksik kayıtta WO'dan canlı kur.
+    // Snapshot kartla birlikte donar; eski/eksik kayıtta partiden canlı kur.
     const snapshot =
       (card.snapshot as unknown as TravelerCardSnapshot | null) ??
-      ((await this.buildSnapshot(prisma, card.workOrderId)) as unknown as TravelerCardSnapshot);
+      ((await this.buildSnapshot(prisma, card.batchId)) as unknown as TravelerCardSnapshot);
 
     let qrSvg: string | null = null;
     try {
@@ -752,60 +801,67 @@ export class TravelerCardService {
    */
   private async buildSnapshot(
     client: Prisma.TransactionClient,
-    workOrderId: string,
+    batchId: string,
   ): Promise<Prisma.InputJsonValue> {
-    const wo = await client.workOrder.findUnique({
-      where: { id: workOrderId },
+    const batch = await client.batch.findUnique({
+      where: { id: batchId },
       select: {
         batchNumber: true,
-        type: true,
-        width: true,
-        targetQuantity: true,
-        targetWeight: true,
-        foldType: true,
-        plannedStartDate: true,
-        plannedEndDate: true,
-        routeTemplate: { select: { name: true } },
-        targetItem: { select: { code: true, name: true } },
-        targetColor: { select: { name: true, hex: true } },
-        targetProperties: {
-          select: { propertyId: true, property: { select: { name: true } } },
-        },
-        steps: {
-          orderBy: { stepSequence: "asc" },
+        workOrder: {
           select: {
-            id: true,
-            stepSequence: true,
-            isUrgent: true,
-            notes: true,
-            station: { select: { name: true, type: true } },
-            plannedSubcontractor: { select: { id: true, name: true } },
-          },
-        },
-        orderLinks: {
-          select: {
-            orderLineId: true,
-            orderLine: {
+            workOrderNumber: true,
+            type: true,
+            width: true,
+            targetQuantity: true,
+            targetWeight: true,
+            foldType: true,
+            plannedStartDate: true,
+            plannedEndDate: true,
+            routeTemplate: { select: { name: true } },
+            targetItem: { select: { code: true, name: true } },
+            targetColor: { select: { name: true, hex: true } },
+            targetProperties: {
+              select: { propertyId: true, property: { select: { name: true } } },
+            },
+            steps: {
+              orderBy: { stepSequence: "asc" },
               select: {
-                quantity: true,
-                order: {
-                  select: { orderNumber: true, customer: { select: { name: true } } },
+                id: true,
+                stepSequence: true,
+                isUrgent: true,
+                notes: true,
+                station: { select: { name: true, type: true } },
+                plannedSubcontractor: { select: { id: true, name: true } },
+              },
+            },
+            orderLinks: {
+              select: {
+                orderLineId: true,
+                orderLine: {
+                  select: {
+                    quantity: true,
+                    order: {
+                      select: { orderNumber: true, customer: { select: { name: true } } },
+                    },
+                    item: { select: { name: true } },
+                    color: { select: { name: true } },
+                  },
                 },
-                item: { select: { name: true } },
-                color: { select: { name: true } },
               },
             },
           },
         },
       },
     });
-    if (!wo) return {};
+    if (!batch) return {};
+    const wo = batch.workOrder;
     const config = await readTravelerCardConfig(client);
     const num = (d: Prisma.Decimal | null) => (d == null ? null : Number(d));
     return {
       // Marka/içerik ayarı da donar → reprint düzeni de sabit kalır.
       config,
-      batchNumber: wo.batchNumber,
+      batchNumber: batch.batchNumber,      // Parti no (P…) — kartın ait olduğu parti
+      workOrderNumber: wo.workOrderNumber, // İş Emri no (İE…) — kartta metin (Faz 5 şablonu)
       type: wo.type,
       width: num(wo.width),
       targetQuantity: num(wo.targetQuantity),
@@ -859,13 +915,13 @@ export class TravelerCardService {
    * Kart oluşturma — print ve reprint tarafından kullanılır.
    */
   private async createCardInternal(
-    workOrderId: string,
+    batchId: string,
     version: number,
     userId: string | undefined,
     event: "PRINT" | "REPRINT"
   ): Promise<ApiResponse<TravelerCard>> {
     // Snapshot'ı retry dışında bir kez hesapla (re-create'te yeniden sorgulanmasın).
-    const snapshot = await this.buildSnapshot(prisma, workOrderId);
+    const snapshot = await this.buildSnapshot(prisma, batchId);
     // Barkod sequence çakışırsa (P2002) yeniden hesaplanır ve create tekrarlanır.
     const card = await withBarcodeRetry(async () => {
       const now = new Date();
@@ -877,7 +933,7 @@ export class TravelerCardService {
         data: {
           cardNumber,
           barcode,
-          workOrderId,
+          batchId,
           version,
           status: TravelerCardStatus.ACTIVE,
           printedById: userId ?? null,

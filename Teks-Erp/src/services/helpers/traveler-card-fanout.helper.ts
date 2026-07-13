@@ -26,7 +26,8 @@ export async function setWorkOrderCardStatuses(
 ): Promise<number> {
   const fromList = Array.isArray(from) ? from : [from];
   const res = await tx.travelerCard.updateMany({
-    where: { workOrderId, status: { in: fromList } },
+    // Kart parti başına → WO-kapsamlı geçiş partiler üzerinden TÜM kartlara yayılır.
+    where: { batch: { workOrderId }, status: { in: fromList } },
     data: {
       status: to,
       ...(voidMeta ? { voidedAt: new Date(), voidReason: voidMeta.voidReason } : {}),

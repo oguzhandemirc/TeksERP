@@ -66,8 +66,8 @@ async function expectReject(label: string, fn: () => Promise<unknown>): Promise<
   }
 }
 
-async function woCountForBatch(batchNumber: string): Promise<number> {
-  return prisma.workOrder.count({ where: { batchNumber } });
+async function woCountForBatch(workOrderNumber: string): Promise<number> {
+  return prisma.workOrder.count({ where: { workOrderNumber } });
 }
 
 async function main() {
@@ -136,7 +136,7 @@ async function main() {
   );
 
   // Refakat kartı oluştu mu?
-  const cardCount = await prisma.travelerCard.count({ where: { workOrderId: res.data!.workOrder.id } });
+  const cardCount = await prisma.travelerCard.count({ where: { batch: { workOrderId: res.data!.workOrder.id } } });
   check("Basit: refakat kartı oluştu", cardCount >= 1, `kart=${cardCount}`);
 
   // "Üretime giren" (committed) attach anında dolu olmalı — ilk adım INTERNAL ise
@@ -247,8 +247,9 @@ async function cleanup() {
     await prisma.roll.deleteMany({ where: { id: { in: createdRollIds } } });
   }
   for (const woId of createdWoIds) {
-    await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: woId } } }).catch(() => undefined);
-    await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
+    await prisma.travelerCardScan.deleteMany({ where: { card: { batch: { workOrderId: woId } } } }).catch(() => undefined);
+    await prisma.travelerCard.deleteMany({ where: { batch: { workOrderId: woId } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrder.delete({ where: { id: woId } }).catch(() => undefined);

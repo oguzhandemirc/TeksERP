@@ -903,12 +903,11 @@ model Roll {
   // Açık kumaş ileride Tambur'da bölünüp gerçek toplara dönüşür (parentRollId).
   parentReceiptId String? @db.Uuid
 
-  // Fason dalı / parti kimliği — paralel akış (lane) izlenebilirliği (Phase 4).
-  // origin = sevki yaratan SubcontractorDispatch.id; fason kabulde born roll'a,
-  // Tambur kesiminde çocuk roll'a KALITILIR → bir dal tüm rota boyunca (depodaki
-  // bölünmüş çocuklar dahil) tek kimlikle izlenir. NULL = fason'a hiç girmemiş
-  // ana akış. FK değil (dispatch silinmez ama soft-cancel olur; serbest grup anahtarı).
-  batchSplitId String? @db.Uuid
+  // Parti (Batch) üyeliği. Attach anında doğan partiye yazılır; fason kabulde born
+  // roll'a (dispatch.batchId'den), Tambur kesiminde çocuk roll'a KALITILIR → bir parti
+  // tüm rota boyunca (depodaki bölünmüş çocuklar dahil) tek kimlikle izlenir.
+  // NULL = henüz bir partiye bağlanmamış serbest STOCK top.
+  batchId String? @db.Uuid
 
   // Audit — KK1 girişinde / sistem genelinde topu kim oluşturdu
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
@@ -970,6 +969,7 @@ model Roll {
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
   returns              RollReturn[]
+  batch                Batch?                      @relation(fields: [batchId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -995,9 +995,9 @@ model Roll {
   @@index([producedInStepId, status])
   // Fason kuyruğu: "bu adımda + AT_SUBCONTRACTOR" listeleme
   @@index([currentStepId, status])
-  // Dal/lane izi: bir partinin (batchSplitId) tüm rotadaki tops'larını topla.
-  // PARTIAL (WHERE "batchSplitId" IS NOT NULL) — migration 20260606001717.
-  @@index([batchSplitId])
+  // Parti izi: bir partinin (batchId) tüm rotadaki tops'larını topla.
+  // PARTIAL (WHERE "batchId" IS NOT NULL) — parti_modeli migration.
+  @@index([batchId])
   @@index([qualityGradeId])
   // Sevkiyat oturumunun topları (shipmentId = X). PARTIAL (WHERE "shipmentId" IS
   // NOT NULL) — migration 20260606001717. NOT: "depodaki serbest stok" (shipmentId
@@ -1199,7 +1199,7 @@ model OrderLineRequiredProperty {
 
 model WorkOrder {
   id               String          @id @default(uuid()) @db.Uuid
-  batchNumber      String          @unique @db.VarChar(64) // Parti Numarası
+  workOrderNumber  String          @unique @db.VarChar(64) // İş Emri Numarası (IE+GGAAYY+NNNN)
   type             WorkOrderType   @default(ORDER_PRODUCTION)
   width            Decimal?        @db.Decimal(12, 3) // En (cm) — kumaş eni
   targetQuantity   Decimal?        @db.Decimal(12, 3) // Hedef uzunluk/metraj
@@ -1250,7 +1250,7 @@ model WorkOrder {
   // Relations
   steps            WorkOrderStep[]
   orderLinks       WorkOrderToOrderLine[]
-  travelerCards    TravelerCard[]
+  batches          Batch[]
   manifests        Manifest[]
   dispatches       SubcontractorDispatch[]
   receipts         SubcontractorReceipt[]
@@ -1275,6 +1275,36 @@ model WorkOrder {
   // Ayrılma soy bağı — null-yoğun; migration'da partial'a çevrilir (IS NOT NULL)
   @@index([splitFromId])
   @@map("work_orders")
+}
+
+// Parti (Batch) — üretime aynı anda giren top grubu (bir iş emri N parti içerir).
+// Attach dalgasında doğar; ton/izlenebilirlik birimi; refakat kartı parti başına.
+// "Dal" (eski batchSplitId=dispatch.id) kavramının yerini alır. Detay: PARTI-MODELI-TASARIM.md.
+model Batch {
+  id          String  @id @default(uuid()) @db.Uuid
+  /// Parti numarası: P + GGAAYY + NNNN (günlük sıra). Tek-kod: etikette/kartta
+  /// yazılan da taranabilir referans da budur.
+  batchNumber String  @unique @db.VarChar(64)
+  workOrderId String  @db.Uuid
+
+  /// Parti soy bağı — kısmi sevk kalanı / elle bölme / redye'da kaynak parti.
+  /// NULL = doğrudan ekleme dalgasıyla doğan kök parti.
+  splitFromId String? @db.Uuid
+
+  workOrder     WorkOrder               @relation(fields: [workOrderId], references: [id])
+  splitFrom     Batch?                  @relation("BatchSplitLineage", fields: [splitFromId], references: [id])
+  splitChildren Batch[]                 @relation("BatchSplitLineage")
+  rolls         Roll[]
+  travelerCards TravelerCard[]
+  dispatches    SubcontractorDispatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workOrderId])
+  // Null-yoğun — parti_modeli migration'da partial'a çevrilir (IS NOT NULL, drift-free)
+  @@index([splitFromId])
+  @@map("batches")
 }
 
 model WorkOrderStep {
@@ -1572,7 +1602,7 @@ model TravelerCard {
   id          String             @id @default(uuid()) @db.Uuid
   cardNumber  String             @unique @db.VarChar(64) // İnsan okur: RK-YYMM-000123
   barcode     String             @unique @db.VarChar(64) // Tarama: RK-YYMM-XXXXXX-C (Code128 uyumlu)
-  workOrderId String             @db.Uuid
+  batchId     String             @db.Uuid
   version     Int                @default(1) // Aynı WO için kaçıncı basım (reprint)
   status      TravelerCardStatus @default(ACTIVE)
   printedAt   DateTime           @default(now())
@@ -1587,19 +1617,19 @@ model TravelerCard {
   snapshot Json?
 
   // Relations
-  workOrder WorkOrder          @relation(fields: [workOrderId], references: [id])
+  batch     Batch              @relation(fields: [batchId], references: [id])
   printedBy User?              @relation("TravelerCardPrintedBy", fields: [printedById], references: [id])
   scans     TravelerCardScan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([workOrderId])
+  @@index([batchId])
   @@index([status])
-  // WO başına EN FAZLA 1 ACTIVE kart invariant'ı. Migration 20260623110000 bu
+  // Parti başına EN FAZLA 1 ACTIVE kart invariant'ı. parti_modeli migration bu
   // @@index'i PARTIAL UNIQUE'e (WHERE status='ACTIVE') çevirir (drift-free yöntem).
   // Eşzamanlı çift-print → ikinci create P2002; print/reprint bunu 409'a çevirir.
-  @@index([workOrderId], map: "traveler_cards_wo_active_uniq")
+  @@index([batchId], map: "traveler_cards_batch_active_uniq")
   @@map("traveler_cards")
 }
 
@@ -1684,6 +1714,8 @@ model SubcontractorDispatch {
   id                     String   @id @default(uuid()) @db.Uuid
   dispatchNo             String   @unique @db.VarChar(64) // SD-YYMM-NNNNNN
   workOrderId            String   @db.Uuid
+  // Bir sevk = bir parti (K10). Fason dönüşünde born roll'ların partisi buradan kalıtılır.
+  batchId                String   @db.Uuid
   stepId                 String   @db.Uuid
   subcontractorId        String   @db.Uuid // Gerçekleşen fason firma
   // Sevk anında "plan ne diyordu" snapshot'ı — rapor için.
@@ -1716,6 +1748,7 @@ model SubcontractorDispatch {
 
   // Relations
   workOrder             WorkOrder                           @relation(fields: [workOrderId], references: [id])
+  batch                 Batch                               @relation(fields: [batchId], references: [id])
   step                  WorkOrderStep                       @relation(fields: [stepId], references: [id])
   subcontractor         Subcontractor                       @relation("DispatchSubcontractor", fields: [subcontractorId], references: [id])
   plannedSubcontractor  Subcontractor?                      @relation("DispatchPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
@@ -1734,6 +1767,8 @@ model SubcontractorDispatch {
   @@index([dispatchedAt])
   // Composite: WO-filtreli + tarih sıralı liste (workorder detay panelinde kullanılır)
   @@index([workOrderId, dispatchedAt])
+  // Parti-filtreli sevkler (getBatches lane hesabı + born kalıtım kaynağı)
+  @@index([batchId])
   // Composite: Fason firma-filtreli + tarih sıralı liste (firma raporları için)
   @@index([subcontractorId, dispatchedAt])
   // Composite: Step-filtreli + tarih sıralı (step başına son sevkiyat)

@@ -202,13 +202,22 @@ export class KursunQcService {
         isUrgent: true,
         urgentMarkedAt: true,
         station: { select: { name: true, code: true } },
-        workOrder: {
+        workOrder: { select: { workOrderNumber: true } },
+        // Kart parti başına: step'teki topların partisinin aktif kartını çöz (primer
+        // parti = ilk açık top). Faz 6'da kurşun kuyruğu satırı = parti olacak.
+        currentRolls: {
+          where: { batchId: { not: null } },
+          take: 1,
           select: {
-            batchNumber: true,
-            travelerCards: {
-              where: { status: "ACTIVE" },
-              select: { id: true, cardNumber: true, barcode: true },
-              take: 1,
+            batch: {
+              select: {
+                batchNumber: true,
+                travelerCards: {
+                  where: { status: "ACTIVE" },
+                  select: { id: true, cardNumber: true, barcode: true },
+                  take: 1,
+                },
+              },
             },
           },
         },
@@ -231,14 +240,16 @@ export class KursunQcService {
 
     const data = steps
       .map((s) => {
-        const card = s.workOrder.travelerCards[0];
+        const batch = s.currentRolls[0]?.batch;
+        if (!batch) return null;
+        const card = batch.travelerCards[0];
         if (!card) return null;
         return {
           cardId: card.id,
           cardNumber: card.cardNumber,
           cardBarcode: card.barcode,
           workOrderId: s.workOrderId,
-          batchNumber: s.workOrder.batchNumber,
+          batchNumber: batch.batchNumber,
           stepId: s.id,
           stationName: s.station.name,
           stationCode: s.station.code,
@@ -1129,7 +1140,7 @@ export class KursunQcService {
         workOrder: {
           select: {
             id: true,
-            batchNumber: true,
+            workOrderNumber: true,
             targetItem: { select: { name: true } },
             targetColor: { select: { name: true } },
           },
@@ -1222,7 +1233,7 @@ export class KursunQcService {
         stationCode: step.station.code,
         stationName: step.station.name,
         workOrderId: step.workOrder.id,
-        batchNumber: step.workOrder.batchNumber,
+        batchNumber: step.workOrder.workOrderNumber,
         status: step.status,
         appliesKursun: !!kursunCap,
         stepNote: step.notes,
@@ -1260,21 +1271,31 @@ export class KursunQcService {
         workOrder: {
           select: {
             id: true,
-            batchNumber: true,
+            workOrderNumber: true,
             targetItem: { select: { name: true } },
             targetColor: { select: { name: true, hex: true } },
-            travelerCards: {
-              where: { status: "ACTIVE" },
-              select: { cardNumber: true, barcode: true },
-              take: 1,
-            },
           },
         },
         movements: {
           where: { exitedAt: null },
           select: {
             enteredAt: true,
-            roll: { select: { currentQty: true } },
+            roll: {
+              select: {
+                currentQty: true,
+                // Kart parti başına: adımdaki topların partisinin aktif kartı (primer parti).
+                batch: {
+                  select: {
+                    batchNumber: true,
+                    travelerCards: {
+                      where: { status: "ACTIVE" },
+                      select: { cardNumber: true, barcode: true },
+                      take: 1,
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -1303,12 +1324,13 @@ export class KursunQcService {
         (sum, m) => sum.plus(m.roll.currentQty),
         new Prisma.Decimal(0),
       );
-      const card = s.workOrder.travelerCards[0] ?? null;
+      const batch = s.movements[0]?.roll.batch ?? null;
+      const card = batch?.travelerCards[0] ?? null;
       return {
         workOrderStepId: s.id,
         stationName: s.station.name,
         workOrderId: s.workOrder.id,
-        batchNumber: s.workOrder.batchNumber,
+        batchNumber: batch?.batchNumber ?? s.workOrder.workOrderNumber,
         travelerCardNumber: card?.cardNumber ?? null,
         travelerCardBarcode: card?.barcode ?? null,
         itemName: s.workOrder.targetItem?.name ?? null,

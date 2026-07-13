@@ -1277,7 +1277,7 @@ export class InventoryService {
               select: {
                 stepSequence: true,
                 station: { select: { code: true, name: true } },
-                workOrder: { select: { id: true, batchNumber: true } },
+                workOrder: { select: { id: true, workOrderNumber: true } },
               },
             },
           },
@@ -1356,7 +1356,7 @@ export class InventoryService {
         parentWorkOrder: roll.parent.producedInStep?.workOrder
           ? {
             id: roll.parent.producedInStep.workOrder.id,
-            batchNumber: roll.parent.producedInStep.workOrder.batchNumber,
+            batchNumber: roll.parent.producedInStep.workOrder.workOrderNumber,
           }
           : null,
         parentProducedStation: roll.parent.producedInStep?.station
@@ -1554,7 +1554,7 @@ export class InventoryService {
           select: {
             id: true,
             station: { select: { name: true, kind: true } },
-            workOrder: { select: { id: true, batchNumber: true } },
+            workOrder: { select: { id: true, workOrderNumber: true } },
           },
         },
       },
@@ -1577,7 +1577,7 @@ export class InventoryService {
         stationName: roll.currentStep.station?.name ?? null,
         stationKind: roll.currentStep.station?.kind ?? null,
         workOrderId: roll.currentStep.workOrder.id,
-        batchNumber: roll.currentStep.workOrder.batchNumber,
+        batchNumber: roll.currentStep.workOrder.workOrderNumber,
       };
     } else if (openMovementCount > 0) {
       const mv = await prisma.rollMovement.findFirst({
@@ -1588,7 +1588,7 @@ export class InventoryService {
             select: {
               id: true,
               station: { select: { name: true, kind: true } },
-              workOrder: { select: { id: true, batchNumber: true } },
+              workOrder: { select: { id: true, workOrderNumber: true } },
             },
           },
         },
@@ -1599,7 +1599,7 @@ export class InventoryService {
           stationName: mv.step.station?.name ?? null,
           stationKind: mv.step.station?.kind ?? null,
           workOrderId: mv.step.workOrder.id,
-          batchNumber: mv.step.workOrder.batchNumber,
+          batchNumber: mv.step.workOrder.workOrderNumber,
         };
       }
     }
@@ -2507,7 +2507,7 @@ export class InventoryService {
         workOrder: {
           select: {
             id: true,
-            batchNumber: true,
+            workOrderNumber: true,
             status: true,
             width: true,
             steps: { select: { id: true, status: true } },
@@ -2539,7 +2539,7 @@ export class InventoryService {
       })
       .map((s) => ({
         workOrderId: s.workOrder.id,
-        batchNumber: s.workOrder.batchNumber,
+        batchNumber: s.workOrder.workOrderNumber,
         workOrderStatus: s.workOrder.status,
         stepId: s.id,
         stationName: s.station.name,

@@ -19,6 +19,7 @@ import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
+import { createBatchTx, type CreateBatchResult } from "./batch.service";
 import {
   Prisma,
   PrintedDocType,
@@ -101,7 +102,10 @@ async function logTravelerScan(
   note: string
 ): Promise<void> {
   const activeCard = await tx.travelerCard.findFirst({
-    where: { workOrderId, status: TravelerCardStatus.ACTIVE },
+    // Kart parti başına — WO'nun en güncel aktif parti kartına yaz (köprü; parti-özel
+    // tarama Faz 3'te). batch relation üzerinden WO'ya filtrele.
+    where: { batch: { workOrderId }, status: TravelerCardStatus.ACTIVE },
+    orderBy: { printedAt: "desc" },
     select: { id: true },
   });
   if (!activeCard) return;
@@ -184,9 +188,10 @@ function computeBornRollBlockingReasons(roll: BornRollDownstreamShape): string[]
  * ayrı "Geldi/Gelmedi" teyidiyle kabul eder (parti başına bir SubcontractorReceipt).
  */
 function buildPendingParties<
-  R extends { batchSplitId: string | null; currentQty: Prisma.Decimal },
+  R extends { batchId: string | null; currentQty: Prisma.Decimal },
   D extends {
     id: string;
+    batchId: string;
     dispatchNo: string;
     dispatchedAt: Date;
     plateNumber: string | null;
@@ -195,10 +200,11 @@ function buildPendingParties<
     subcontractor: { id: string; code: string; name: string } | null;
   },
 >(rolls: R[], dispatches: D[]) {
-  const dispatchById = new Map(dispatches.map((d) => [d.id, d] as const));
+  // Parti (batchId) lane'i → dispatch. K10: bir sevk = bir parti → batchId ile eşle.
+  const dispatchById = new Map(dispatches.map((d) => [d.batchId, d] as const));
   const byLane = new Map<string, R[]>();
   for (const r of rolls) {
-    const key = r.batchSplitId ?? "__none__";
+    const key = r.batchId ?? "__none__";
     const arr = byLane.get(key);
     if (arr) arr.push(r);
     else byLane.set(key, [r]);
@@ -495,6 +501,18 @@ export class SubcontractorService {
       }
     }
 
+    // K10: bir sevk = bir parti. Seçilen topların mevcut parti (batchId) dağılımı;
+    // 2+ parti ise sevk reddedilir (Faz 3'te K11 birleştir/ayır stratejisi gelecek).
+    const existingBatchIds = [
+      ...new Set(rolls.map((r) => r.batchId).filter((x): x is string => !!x)),
+    ];
+    if (existingBatchIds.length > 1) {
+      throw AppError.conflict(
+        "Bu sevk birden fazla partiden top içeriyor — bir sevk tek parti taşır (K10). Partileri ayrı sevk edin.",
+        { code: "MULTI_BATCH", batchIds: existingBatchIds },
+      );
+    }
+
     // Decimal aritmetik — float drift olmasın; sevk kaydında string'e dökeriz.
     const totalQty = rolls.reduce(
       (s, r) => s.plus(r.currentQty),
@@ -584,6 +602,28 @@ export class SubcontractorService {
       // WO henüz PLANNED ise IN_PROGRESS'e çek (fason sevki = üretim başlangıcı)
       await ensureWorkOrderInProgress(tx, data.workOrderId);
 
+      // Sevkin partisini belirle (K10). Tek mevcut parti varsa serbest/partisiz toplar
+      // da o partiye katılır; hiç parti yoksa (hepsi serbest stok) sevk anında YENİ
+      // parti doğar (K3 dalgası) — createBatchTx P + RK üretir; kart audit'i tx DIŞINDA.
+      const dispatchRollIdsAll = rolls.map((r) => r.id);
+      let dispatchBatchId: string;
+      let bornCardRes: CreateBatchResult["cardRes"] | null = null;
+      if (existingBatchIds.length === 1) {
+        dispatchBatchId = existingBatchIds[0];
+        await tx.roll.updateMany({
+          where: { id: { in: dispatchRollIdsAll }, batchId: null },
+          data: { batchId: dispatchBatchId },
+        });
+      } else {
+        const created = await createBatchTx(tx, {
+          workOrderId: data.workOrderId,
+          rollIds: dispatchRollIdsAll,
+          userId,
+        });
+        dispatchBatchId = created.batch.id;
+        bornCardRes = created.cardRes;
+      }
+
       // Dispatch numarası
       const now = new Date();
       const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "FS", now);
@@ -593,6 +633,8 @@ export class SubcontractorService {
         data: {
           dispatchNo,
           workOrderId: data.workOrderId,
+          // K10: bir sevk = bir parti. Sevkin partisi yukarıda belirlendi/dolduruldu.
+          batchId: dispatchBatchId,
           stepId: data.stepId,
           subcontractorId: data.subcontractorId,
           // Plan snapshot — sevk anında step.plannedSubcontractorId ne ise dondurulur.
@@ -658,7 +700,7 @@ export class SubcontractorService {
           status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
           currentStepId: data.stepId,
         },
-        data: { status: RollStatus.AT_SUBCONTRACTOR, batchSplitId: dispatch.id },
+        data: { status: RollStatus.AT_SUBCONTRACTOR },
       });
       if (claimed.count !== dispatchRollIds.length) {
         throw AppError.conflict(
@@ -712,7 +754,7 @@ export class SubcontractorService {
         `Fasona sevk: ${dispatchNo}`
       );
 
-      return dispatch;
+      return { dispatch, bornCardRes };
       })
     );
 
@@ -720,9 +762,9 @@ export class SubcontractorService {
       userId,
       action: "CREATE",
       tableName: "SUBCONTRACTOR_DISPATCH",
-      recordId: result.id,
+      recordId: result.dispatch.id,
       newData: {
-        dispatchNo: result.dispatchNo,
+        dispatchNo: result.dispatch.dispatchNo,
         workOrderId: data.workOrderId,
         stepId: data.stepId,
         subcontractorId: data.subcontractorId,
@@ -735,10 +777,26 @@ export class SubcontractorService {
       },
     });
 
+    // Parti sevk-anında doğduysa (hepsi serbest stok) kart audit'i tx DIŞINDA (F273).
+    if (result.bornCardRes?.created) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "TRAVELER_CARD",
+        recordId: result.bornCardRes.card.id,
+        newData: {
+          cardNumber: result.bornCardRes.card.cardNumber,
+          barcode: result.bornCardRes.card.barcode,
+          version: 1,
+          event: "AUTO_PRINT_ON_DISPATCH_BATCH_BIRTH",
+        },
+      });
+    }
+
     return {
       success: true,
-      data: result,
-      message: `Fason sevki oluşturuldu: ${result.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)`,
+      data: result.dispatch,
+      message: `Fason sevki oluşturuldu: ${result.dispatch.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)`,
     };
   }
 
@@ -904,7 +962,7 @@ export class SubcontractorService {
         status: RollStatus.AT_SUBCONTRACTOR,
         ...(hasSubset ? { id: { in: data.rollIds } } : {}),
       },
-      select: { id: true, currentQty: true, batchSplitId: true },
+      select: { id: true, currentQty: true, batchId: true },
     });
     if (atSubRolls.length === 0) {
       throw AppError.badRequest("Bu fasonda aktarılacak (fasonda bekleyen) top yok.");
@@ -915,25 +973,26 @@ export class SubcontractorService {
       );
     }
 
-    const dispatchIds = [
+    const batchIds = [
       ...new Set(
         atSubRolls
-          .map((r) => r.batchSplitId)
+          .map((r) => r.batchId)
           .filter((x): x is string => !!x)
       ),
     ];
+    // Parti (batchId) → firma: partinin AÇIK sevkinin firması (K10).
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: { id: { in: dispatchIds } },
-      select: { id: true, subcontractorId: true },
+      where: { batchId: { in: batchIds }, cancelledAt: null },
+      select: { batchId: true, subcontractorId: true },
     });
-    const dispatchFirm = new Map(dispatches.map((d) => [d.id, d.subcontractorId]));
+    const firmByBatch = new Map(dispatches.map((d) => [d.batchId, d.subcontractorId]));
 
     // Paralel partilerde toplar farklı firmalardan gelebilir → firma başına ayrı
     // kabul (receive tek subcontractorId stamp'liyor; per-roll eşleşme
     // sourceDispatchItemId ile zaten doğru, ama makbuz başlığı doğru firmayı taşımalı).
     const byFirm = new Map<string, typeof atSubRolls>();
     for (const r of atSubRolls) {
-      const firmId = r.batchSplitId ? dispatchFirm.get(r.batchSplitId) : undefined;
+      const firmId = r.batchId ? firmByBatch.get(r.batchId) : undefined;
       if (!firmId) {
         throw AppError.conflict(
           "Fasonda bekleyen topun kaynak sevki bulunamadı. Listeyi yenileyip tekrar deneyin."
@@ -1039,7 +1098,7 @@ export class SubcontractorService {
         workOrder: {
           select: {
             id: true,
-            batchNumber: true,
+            workOrderNumber: true,
             type: true,
             parameters: true,
             targetColor: { select: { name: true } },
@@ -1107,7 +1166,7 @@ export class SubcontractorService {
       instruction: step.notes ?? null,
       workOrder: {
         id: step.workOrder.id,
-        batchNumber: step.workOrder.batchNumber,
+        batchNumber: step.workOrder.workOrderNumber,
         parameters: (step.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: step.workOrder.type,
       },
@@ -1261,7 +1320,7 @@ export class SubcontractorService {
           status: RollStatus.AT_SUBCONTRACTOR,
           currentStepId: dispatch.stepId,
         },
-        data: { status: RollStatus.STOCK, currentStepId: null, batchSplitId: null },
+        data: { status: RollStatus.STOCK, currentStepId: null },
       });
       if (reverted.count !== rollIds.length) {
         throw AppError.conflict(
@@ -1600,7 +1659,7 @@ export class SubcontractorService {
         barcode: true,
         currentQty: true,
         weightKg: true,
-        batchSplitId: true, // F74: kaynak sevk (firma çapraz-kontrolü için)
+        batchId: true, // F74: kaynak parti (firma çapraz-kontrolü için)
       },
     });
     const outstandingIds = new Set(outstandingRolls.map((r) => r.id));
@@ -1625,19 +1684,19 @@ export class SubcontractorService {
     // eşleşmeli — yoksa farklı firmaya ait toplar bu makbuza karışır (firma başına
     // ayrı kabul olmalı). batchSplitId = kaynak SubcontractorDispatch.
     const returnedRolls = outstandingRolls.filter((r) => returnIds.has(r.id));
-    const srcDispatchIds = [
-      ...new Set(returnedRolls.map((r) => r.batchSplitId).filter((x): x is string => !!x)),
+    const srcBatchIds = [
+      ...new Set(returnedRolls.map((r) => r.batchId).filter((x): x is string => !!x)),
     ];
     const srcDispatches =
-      srcDispatchIds.length > 0
+      srcBatchIds.length > 0
         ? await prisma.subcontractorDispatch.findMany({
-            where: { id: { in: srcDispatchIds } },
-            select: { id: true, subcontractorId: true },
+            where: { batchId: { in: srcBatchIds }, cancelledAt: null },
+            select: { batchId: true, subcontractorId: true },
           })
         : [];
-    const firmByDispatch = new Map(srcDispatches.map((d) => [d.id, d.subcontractorId]));
+    const firmByBatch = new Map(srcDispatches.map((d) => [d.batchId, d.subcontractorId]));
     for (const r of returnedRolls) {
-      const firmId = r.batchSplitId ? firmByDispatch.get(r.batchSplitId) : undefined;
+      const firmId = r.batchId ? firmByBatch.get(r.batchId) : undefined;
       if (!firmId) {
         throw AppError.conflict(
           "Dönen topun kaynak sevki bulunamadı. Listeyi yenileyip tekrar deneyin.",
@@ -1859,10 +1918,10 @@ export class SubcontractorService {
         // kimliğini kalıtır → dönüş çıktısı tüm rota boyunca aynı lane'de izlenir.
         const sourceLotRolls = await tx.roll.findMany({
           where: { id: { in: data.returns.map((r) => r.rollId) } },
-          select: { batchSplitId: true },
+          select: { batchId: true },
         });
-        const bornBatchSplitId =
-          sourceLotRolls.find((r) => r.batchSplitId)?.batchSplitId ?? null;
+        const bornBatchId =
+          sourceLotRolls.find((r) => r.batchId)?.batchId ?? null;
 
         // Pre-validate + explicit UUID üret → top başına create+create (N+1) yerine
         // createMany batch. createMany nested write desteklemediği ve eklenen id'leri
@@ -1892,7 +1951,7 @@ export class SubcontractorService {
             qualityGradeId: defaultQualityGradeId,
             entrySource: "SUBCONTRACTOR_RETURN",
             parentReceiptId: receipt.id,
-            batchSplitId: bornBatchSplitId,
+            batchId: bornBatchId,
             // Born açık-kumaş topu bu fason adımında "üretildi" — roll→WO bağı.
             // Bu olmadan (eski hali null) tambur WO-tamamlama, WO ürettiği-toplar
             // raporu, WO iptalinde kurtarma ve soy-ağacı hepsi fason için kopuyordu.
@@ -2049,7 +2108,7 @@ export class SubcontractorService {
         where: { status: RollStatus.AT_SUBCONTRACTOR, currentStep: { workOrderId: { in: woIds } } },
         select: {
           id: true, barcode: true, currentQty: true, weightKg: true, width: true,
-          qualityGrade: true, status: true, currentStepId: true, batchSplitId: true,
+          qualityGrade: true, status: true, currentStepId: true, batchId: true,
           item: { select: { id: true, code: true, name: true } },
           color: { select: { id: true, code: true, name: true } },
         },
@@ -2061,7 +2120,7 @@ export class SubcontractorService {
         select: {
           id: true, stepSequence: true, notes: true,
           station: { select: { id: true, code: true, name: true, type: true } },
-          workOrder: { select: { id: true, batchNumber: true, status: true } },
+          workOrder: { select: { id: true, workOrderNumber: true, status: true } },
           plannedSubcontractor: { select: { id: true, code: true, name: true } },
           requiredCategory: { select: { id: true, code: true, name: true } },
         },
@@ -2071,7 +2130,7 @@ export class SubcontractorService {
         // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
         where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
         select: {
-          id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+          id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
           driverName: true, stepId: true, subcontractorId: true,
           subcontractor: { select: { id: true, code: true, name: true } },
         },
@@ -2096,7 +2155,7 @@ export class SubcontractorService {
             notes: step.notes, requiredCategory: step.requiredCategory,
             plannedSubcontractor: step.plannedSubcontractor,
           },
-          workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.batchNumber, status: step.workOrder.status },
+          workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.workOrderNumber, status: step.workOrder.status },
           lastDispatch,
           parties: buildPendingParties(stepRolls, stepDispatches),
           rolls: stepRolls,
@@ -2149,7 +2208,7 @@ export class SubcontractorService {
       select: {
         id: true, stepSequence: true, notes: true,
         station: { select: { id: true, code: true, name: true, type: true } },
-        workOrder: { select: { id: true, batchNumber: true, status: true } },
+        workOrder: { select: { id: true, workOrderNumber: true, status: true } },
         plannedSubcontractor: { select: { id: true, code: true, name: true } },
         requiredCategory: { select: { id: true, code: true, name: true } },
       },
@@ -2196,7 +2255,7 @@ export class SubcontractorService {
           notes: step.notes, requiredCategory: step.requiredCategory,
           plannedSubcontractor: step.plannedSubcontractor,
         },
-        workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.batchNumber, status: step.workOrder.status },
+        workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.workOrderNumber, status: step.workOrder.status },
         lastDispatch,
         rollCount: Number(stat?.roll_count ?? 0),
         totalQty: new Prisma.Decimal(stat?.total_qty ?? "0"),
@@ -2219,7 +2278,7 @@ export class SubcontractorService {
         station: { select: { id: true, code: true, name: true, type: true } },
         workOrder: {
           select: {
-            id: true, batchNumber: true, status: true,
+            id: true, workOrderNumber: true, status: true,
             targetColor: { select: { id: true, code: true, name: true, hex: true } },
             targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
           },
@@ -2237,7 +2296,7 @@ export class SubcontractorService {
       where: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: stepId },
       select: {
         id: true, barcode: true, currentQty: true, weightKg: true, width: true,
-        qualityGrade: true, status: true, currentStepId: true, batchSplitId: true,
+        qualityGrade: true, status: true, currentStepId: true, batchId: true,
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
       },
@@ -2249,7 +2308,7 @@ export class SubcontractorService {
     const dispatches = await prisma.subcontractorDispatch.findMany({
       where: { stepId, cancelledAt: null, directShippedAt: null },
       select: {
-        id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+        id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
         subcontractor: { select: { id: true, code: true, name: true } },
       },
@@ -2269,7 +2328,7 @@ export class SubcontractorService {
         },
         workOrder: {
           id: step.workOrder.id,
-          batchNumber: step.workOrder.batchNumber,
+          batchNumber: step.workOrder.workOrderNumber,
           status: step.workOrder.status,
           targetColor: step.workOrder.targetColor ?? null,
           targetProperties: step.workOrder.targetProperties.map((p) => p.property),
@@ -2335,7 +2394,7 @@ export class SubcontractorService {
       where.OR = buildTurkishSearch<Prisma.SubcontractorDispatchWhereInput>(search, [
         "dispatchNo",
         "subcontractor.name",
-        "workOrder.batchNumber",
+        "workOrder.workOrderNumber",
       ]);
     }
 
@@ -2354,7 +2413,7 @@ export class SubcontractorService {
       stepId: true,
       cancelledAt: true,
       cancelReason: true,
-      workOrder: { select: { id: true, batchNumber: true } },
+      workOrder: { select: { id: true, workOrderNumber: true } },
       subcontractor: { select: { id: true, name: true } },
       _count: { select: { items: true } },
     } as const;
@@ -2538,7 +2597,7 @@ export class SubcontractorService {
       manifestNo: true,
       receivedAt: true,
       notes: true,
-      workOrder: { select: { id: true, batchNumber: true } },
+      workOrder: { select: { id: true, workOrderNumber: true } },
       subcontractor: { select: { id: true, name: true, code: true } },
       step: {
         select: {
@@ -3150,7 +3209,7 @@ export class SubcontractorService {
             id: true,
             stepSequence: true,
             station: { select: { name: true } },
-            workOrder: { select: { id: true, batchNumber: true, status: true } },
+            workOrder: { select: { id: true, workOrderNumber: true, status: true } },
           },
         },
         items: {
@@ -3370,7 +3429,7 @@ export class SubcontractorService {
           id: true,
           status: true,
           currentStepId: true,
-          batchSplitId: true,
+          batchId: true,
           operations: { select: { id: true, workOrderStepId: true, operationType: true } },
           movements: { select: { exitedAt: true } },
           children: { select: { id: true }, take: 1 },
@@ -3385,7 +3444,7 @@ export class SubcontractorService {
         if (
           r.status !== RollStatus.AT_SUBCONTRACTOR ||
           r.currentStepId !== targetStep.id ||
-          r.batchSplitId !== dispatchId
+          r.batchId !== dispatch.batchId
         ) {
           throw AppError.conflict(
             `Top ${r.id.slice(0, 8)}… artık aktarım geri almaya uygun değil (durum değişmiş). Listeyi yenileyin.`,
@@ -3464,7 +3523,7 @@ export class SubcontractorService {
           id: { in: bornRollIds },
           status: RollStatus.AT_SUBCONTRACTOR,
           currentStepId: targetStep.id,
-          batchSplitId: dispatchId,
+          batchId: dispatch.batchId,
         },
         data: { status: RollStatus.CANCELLED, currentStepId: null },
       });
@@ -3602,7 +3661,7 @@ export class SubcontractorService {
       where: { id },
       include: {
         subcontractor: true,
-        workOrder: { select: { id: true, batchNumber: true, type: true } },
+        workOrder: { select: { id: true, workOrderNumber: true, type: true } },
         step: { include: { station: { select: { name: true, code: true } } } },
         receivedBy: { select: { fullName: true } },
         items: {
@@ -3643,7 +3702,7 @@ export class SubcontractorService {
         receivedBy: receipt.receivedBy?.fullName ?? null,
         workOrder: {
           id: receipt.workOrder.id,
-          batchNumber: receipt.workOrder.batchNumber,
+          batchNumber: receipt.workOrder.workOrderNumber,
           type: receipt.workOrder.type,
         },
         subcontractor: {
@@ -3691,7 +3750,7 @@ export class SubcontractorService {
             workOrder: {
               select: {
                 id: true,
-                batchNumber: true,
+                workOrderNumber: true,
                 status: true,
                 steps: {
                   select: {
@@ -3900,7 +3959,7 @@ export class SubcontractorService {
         cancelled: dispatch.cancelledAt != null,
         alreadyDirectShipped: dispatch.directShippedAt != null,
         subcontractor: dispatch.subcontractor,
-        workOrder: { id: wo.id, batchNumber: wo.batchNumber, status: wo.status },
+        workOrder: { id: wo.id, batchNumber: wo.workOrderNumber, status: wo.status },
         fasonStep: { id: step.id, stepSequence: step.stepSequence, stationName: step.station.name },
         affectedRolls,
         downstreamStepsToSkip,
@@ -4364,7 +4423,7 @@ async function buildFasonDispatchDoc(
       workOrder: {
         select: {
           id: true,
-          batchNumber: true,
+          workOrderNumber: true,
           parameters: true,
           type: true,
           // İstenen renk = boyamanın hedef rengi. Sevkte toplar HAM (renksiz) gider;
@@ -4417,7 +4476,7 @@ async function buildFasonDispatchDoc(
       instruction: dispatch.instruction ?? dispatch.step.notes ?? null,
       workOrder: {
         id: dispatch.workOrder.id,
-        batchNumber: dispatch.workOrder.batchNumber,
+        batchNumber: dispatch.workOrder.workOrderNumber,
         parameters: (dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: dispatch.workOrder.type,
       },
@@ -4459,7 +4518,7 @@ async function buildFasonDirectShipDoc(
     include: {
       subcontractor: { select: { id: true, name: true, code: true } },
       directShippedBy: { select: { fullName: true, username: true } },
-      workOrder: { select: { id: true, batchNumber: true, parameters: true, type: true } },
+      workOrder: { select: { id: true, workOrderNumber: true, parameters: true, type: true } },
       step: { include: { station: { select: { name: true, code: true } } } },
       items: {
         include: {
@@ -4526,7 +4585,7 @@ async function buildFasonDirectShipDoc(
       notes: dispatch.notes,
       workOrder: {
         id: dispatch.workOrder.id,
-        batchNumber: dispatch.workOrder.batchNumber,
+        batchNumber: dispatch.workOrder.workOrderNumber,
         parameters: (dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: dispatch.workOrder.type,
       },

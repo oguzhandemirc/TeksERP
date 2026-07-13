@@ -31,7 +31,7 @@ const WO_SORTABLE_FIELDS = [
   "plannedEndDate",
   "plannedStartDate",
   "targetQuantity",
-  "batchNumber",
+  "workOrderNumber",
   "status",
 ] as const;
 
@@ -62,7 +62,7 @@ import {
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
-import { TravelerCardService } from "./traveler-card.service";
+import { createBatchTx, type CreateBatchResult } from "./batch.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
@@ -74,8 +74,6 @@ function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   return typeof v === "number" ? v : Number(v);
 }
-
-const travelerCardService = new TravelerCardService();
 
 /**
  * plannedStartDate / plannedEndDate default'ları:
@@ -260,74 +258,75 @@ function assertOrderLinesLinkable(
 
 export class WorkOrderService {
   /**
-   * Auto-generate a parti kodu (batchNumber): "P" + GGAAYY + NNNN (örn P1207260001).
-   * Günlük sıra veritabanındaki mevcut maksimum +1.
+   * Auto-generate an iş emri numarası (workOrderNumber): "IE" + GGAAYY + NNNN
+   * (örn IE1207260001). Günlük sıra work_orders'taki mevcut maksimum +1.
+   * (Parti no P… AYRI kimliktir — `batch.service.generateBatchNumberTx` üretir.)
    */
-  async generateBatchNumber(): Promise<string> {
+  async generateWorkOrderNumber(): Promise<string> {
     const now = new Date();
-    const prefix = dailyCodePrefix("P", now);
+    const prefix = dailyCodePrefix("IE", now);
 
     // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene
     for (let attempt = 0; attempt < 5; attempt++) {
       // O-4: collation-güvenli (gte index seek + startsWith tam-prefix) + NUMERIC
       // max — lexicographic "999">"1000" taşmasını (seq kalıcı 1000'de sıkışırdı) ve
-      // manuel harf-kuyruklu batchNumber'ın parseInt→NaN zehirlenmesini (Number.isFinite
+      // manuel harf-kuyruklu workOrderNumber'ın parseInt→NaN zehirlenmesini (Number.isFinite
       // ile) önler. findFirst+orderBy desc ikisine de açıktı.
       const todays = await prisma.workOrder.findMany({
-        where: { batchNumber: { gte: prefix, startsWith: prefix } },
-        select: { batchNumber: true },
+        where: { workOrderNumber: { gte: prefix, startsWith: prefix } },
+        select: { workOrderNumber: true },
       });
       const seq = nextDailySeq(
-        todays.map((w) => w.batchNumber),
+        todays.map((w) => w.workOrderNumber),
         prefix,
       );
 
       const candidate = `${prefix}${String(seq).padStart(4, "0")}`;
 
-      const exists = await prisma.workOrder.findUnique({ where: { batchNumber: candidate } });
+      const exists = await prisma.workOrder.findUnique({ where: { workOrderNumber: candidate } });
       if (!exists) return candidate;
     }
 
-    throw AppError.internal("Parti numarası üretilemedi, lütfen tekrar deneyin");
+    throw AppError.internal("İş emri numarası üretilemedi, lütfen tekrar deneyin");
   }
 
   /**
-   * Kullanıcının verdiği parti kodu (batchNumber) benzersiz mi? Değilse net
+   * Kullanıcının verdiği iş emri numarası (workOrderNumber) benzersiz mi? Değilse net
    * Türkçe hata fırlatır. excludeId verilirse o iş emrini hariç tutar (güncelleme).
    * DB @unique kısıtı backstop'tur; bu ön-kontrol generic P2002 yerine anlaşılır
    * mesaj verir (auto modda withBarcodeRetry'ın yanıltıcı "Barkod..." hatasını da önler).
    */
-  private async assertBatchNumberUnique(
-    batchNumber: string,
+  private async assertWorkOrderNumberUnique(
+    workOrderNumber: string,
     excludeId?: string,
   ): Promise<void> {
     const existing = await prisma.workOrder.findUnique({
-      where: { batchNumber },
+      where: { workOrderNumber },
       select: { id: true },
     });
     if (existing && existing.id !== excludeId) {
-      throw AppError.conflict(`Bu parti kodu zaten kullanılıyor: ${batchNumber}`);
+      throw AppError.conflict(`Bu iş emri numarası zaten kullanılıyor: ${workOrderNumber}`);
     }
   }
 
   /**
-   * Verilen parti kodu (batchNumber) kullanılabilir mi? Form alanı blur'unda
+   * Verilen iş emri numarası (workOrderNumber) kullanılabilir mi? Form alanı blur'unda
    * canlı kontrol için — kaydetmeden önce "bu numara daha önce verilmiş mi"
    * uyarısı. excludeId verilirse o iş emrini hariç tutar (düzenleme modu kendi
    * kodunu çakışma saymaz). Boş kod = kullanılabilir (otomatik üretilecek).
    */
-  async checkBatchNumber(
-    batchNumber: string,
+  async checkWorkOrderNumber(
+    workOrderNumber: string,
     excludeId?: string,
-  ): Promise<{ batchNumber: string; available: boolean }> {
-    const trimmed = batchNumber.trim();
-    if (!trimmed) return { batchNumber: trimmed, available: true };
+  ): Promise<{ workOrderNumber: string; available: boolean }> {
+    const trimmed = workOrderNumber.trim();
+    if (!trimmed) return { workOrderNumber: trimmed, available: true };
     const existing = await prisma.workOrder.findUnique({
-      where: { batchNumber: trimmed },
+      where: { workOrderNumber: trimmed },
       select: { id: true },
     });
     return {
-      batchNumber: trimmed,
+      workOrderNumber: trimmed,
       available: !existing || existing.id === excludeId,
     };
   }
@@ -601,21 +600,22 @@ export class WorkOrderService {
       }
     }
 
-    // ── batchNumber / Parti Kodu ────────────────────────────────────────────
-    // Kullanıcı verdiyse (manuel veya otomatik-override) benzersizliğini doğrula;
-    // vermediyse otomatik üret (P+GGAAYY+NNNN) — üretim RETRY KAPSAMINDA, tx
-    // içinde yapılır: eskiden closure dışındaydı ve eşzamanlı iki create aynı
-    // günlük max'ı okuyunca P2002 retry'ları hep AYNI numarayla çakışıp
-    // yanıltıcı "Barkod üretimi 5 denemede başarısız" 409'u veriyordu.
-    let manualBatchNumber: string | null = null;
+    // ── workOrderNumber / İş Emri No ─────────────────────────────────────────
+    // KÖPRÜ (Faz 2): form/payload alanı hâlâ `batchNumber` adıyla geliyor (Zod
+    // Faz 6'da `manualWorkOrderNumber`'a döner); bu değer artık İŞ EMRİ NO'yu
+    // (İE…) doldurur — parti no (P…) attach anında AYRI üretilir (batch.service).
+    // Kullanıcı verdiyse benzersizliğini doğrula; vermediyse otomatik üret
+    // (IE+GGAAYY+NNNN) — üretim RETRY KAPSAMINDA, tx içinde: eşzamanlı iki create
+    // aynı günlük max'ı okuyup P2002'de aynı numarayla çakışmasın.
+    let manualWorkOrderNumber: string | null = null;
     if (data.batchNumber && data.batchNumber.trim().length > 0) {
-      manualBatchNumber = data.batchNumber.trim();
-      await this.assertBatchNumberUnique(manualBatchNumber);
+      manualWorkOrderNumber = data.batchNumber.trim();
+      await this.assertWorkOrderNumberUnique(manualWorkOrderNumber);
     }
 
-    // Refakat kartı barkodu / parti kodu sequence çakışırsa (P2002) tx'i baştan dene.
-    const { wo: workOrder, cardRes } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      const batchNumber = manualBatchNumber ?? (await this.generateBatchNumber());
+    // Otomatik iş emri no sequence çakışırsa (P2002) tx'i baştan dene.
+    const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      const workOrderNumber = manualWorkOrderNumber ?? (await this.generateWorkOrderNumber());
       // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
       // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla
       // üretim Tambur'da stoğa düşer. Yalnız satırların varlığını doğrula.
@@ -635,7 +635,7 @@ export class WorkOrderService {
 
       const wo = await tx.workOrder.create({
         data: {
-          batchNumber,
+          workOrderNumber,
           type,
           width:             data.width          ?? null,
           targetQuantity:    data.targetQuantity ?? null,
@@ -695,13 +695,12 @@ export class WorkOrderService {
       // Phase 1: WO açılışı order status'a dokunmuyor. "Üretim sürüyor mu?"
       // sorusu line.workOrderLinks üzerinden runtime hesabı.
 
-      // Refakat kartını WO ile birlikte oluştur — istasyon ekranlarında kart
-      // okutulmadan WO görünmüyor (örn. KursunQc by-card / open-cards).
-      // Idempotent: aktif kart varsa atlar (yarıda kesilen retry'larda güvenli).
-      const cardRes = await travelerCardService.createForWorkOrder(tx, wo.id, userId);
+      // Parti modeli: refakat kartı WO açılışında DEĞİL, ilk parti doğduğunda
+      // (attachRolls / sevk-anı auto-attach → createBatchTx) basılır. Boş WO'nun
+      // kartı olmaz — kart parti başınadır.
 
-      return { wo, cardRes };
-    }), undefined, manualBatchNumber
+      return wo;
+    }), undefined, manualWorkOrderNumber
       ? (err) => {
           const meta = (err.meta ?? {}) as Record<string, unknown>;
           const target = JSON.stringify(meta.target ?? "");
@@ -712,10 +711,10 @@ export class WorkOrderService {
             typeof driver?.cause?.constraint === "string" ? driver.cause.constraint : "";
           const orig =
             typeof driver?.cause?.originalMessage === "string" ? driver.cause.originalMessage : "";
-          // F61: batchNumber P2002'si MANUEL modda retry EDİLMEZ (hep aynı numarayı yazar) —
-          // doğrudan anlaşılır 409. Kart/barkod sequence P2002'si eskisi gibi retry (true).
-          if (/batchNumber/i.test(target + constraint + orig)) {
-            throw AppError.conflict(`Bu parti kodu zaten kullanılıyor: ${manualBatchNumber}`);
+          // F61: workOrderNumber P2002'si MANUEL modda retry EDİLMEZ (hep aynı numarayı yazar) —
+          // doğrudan anlaşılır 409. (Auto modda predicate undefined → tüm P2002 retry.)
+          if (/workOrderNumber/i.test(target + constraint + orig)) {
+            throw AppError.conflict(`Bu iş emri numarası zaten kullanılıyor: ${manualWorkOrderNumber}`);
           }
           return true;
         }
@@ -727,7 +726,7 @@ export class WorkOrderService {
       tableName: "WORK_ORDER",
       recordId: workOrder.id,
       newData: {
-        batchNumber:        workOrder.batchNumber,
+        workOrderNumber:    workOrder.workOrderNumber,
         type:               workOrder.type,
         width:              workOrder.width,
         status:             workOrder.status,
@@ -740,27 +739,10 @@ export class WorkOrderService {
       },
     });
 
-    // F273: refakat kartı audit'i tx COMMIT'inden SONRA, yalnız yeni kart üretildiyse
-    // (idempotent yol audit yazmaz — reprint()/print() ile tutarlı; retry'da mükerrer yok).
-    if (cardRes.created) {
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "TRAVELER_CARD",
-        recordId: cardRes.card.id,
-        newData: {
-          cardNumber: cardRes.card.cardNumber,
-          barcode: cardRes.card.barcode,
-          version: 1,
-          event: "AUTO_PRINT_ON_WO_CREATE",
-        },
-      });
-    }
-
     return {
       success: true,
       data: workOrder,
-      message: `İş emri oluşturuldu: ${workOrder.batchNumber}`,
+      message: `İş emri oluşturuldu: ${workOrder.workOrderNumber}`,
     };
   }
 
@@ -944,7 +926,7 @@ export class WorkOrderService {
       success: true,
       data: { workOrder, attached, errors, dispatch },
       message:
-        `İş emri ${workOrder.batchNumber} başlatıldı — ${attached} top bağlandı` +
+        `İş emri ${workOrder.workOrderNumber} başlatıldı — ${attached} top bağlandı` +
         (errors.length ? `, ${errors.length} top bağlanamadı.` : ".") +
         (dispatch ? ` Fasona sevk edildi: ${dispatch.dispatchNo}.` : "") +
         (dispatchWarning ? ` ${dispatchWarning}` : ""),
@@ -969,7 +951,7 @@ export class WorkOrderService {
     params.sortBy = resolveSortBy(params.sortBy, WO_SORTABLE_FIELDS);
     const where = buildWhereClause(
       params.filters,
-      ["batchNumber"],
+      ["workOrderNumber"],
       params.search
     );
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
@@ -1006,7 +988,7 @@ export class WorkOrderService {
 
     const select = {
       id: true,
-      batchNumber: true,
+      workOrderNumber: true,
       type: true,
       status: true,
       width: true,
@@ -1678,33 +1660,29 @@ export class WorkOrderService {
   }
 
   /**
-   * Bir iş emrinin FASON DALLARI (paralel sevk partileri).
+   * Bir iş emrinin PARTİLERİ (Batch lane'leri) — "Dallar" panelinin yeni kaynağı.
    *
-   * Aynı WO'da kumaş parça parça fasona gidebilir (çoklu sevk): her
-   * `SubcontractorDispatch` bir "dal"dır. Lane görünümü için her dalın durumunu
-   * (açık/kısmi/döndü) ve dönüşten doğan açık-kumaş toplarının ŞU ANKİ konumunu
-   * çıkarır — böylece "1. parti Kurşun'da, 2. parti hâlâ boyahanede" tek bakışta
-   * görünür.
-   *
-   * Durum: dispatchItem'larından kaçının (iptal edilmemiş) receiptItem'ı var.
-   * Konum: o sevki kabul eden receipt'lerin `bornRolls`'unun `currentStep`'i.
-   * Not: bir receipt birden çok sevki kapsarsa doğan toplar o sevklerin hepsine
-   * atfedilir (pratikte kabul sevk-bazlı; v1 için kabul edilebilir yaklaşım).
+   * Her parti (Batch) bir lane'dir: üyesi topların ŞU ANKİ konum dağılımı (istasyon
+   * adı / statü etiketi), aktif refakat kartı, fason sevk durumu (K10: bir sevk =
+   * bir parti) ve soy bağı (splitFrom / splitChildren) tek bakışta görünür — "1.
+   * parti Kurşun'da, 2. parti hâlâ boyahanede". Kilit TÜRETİLMİŞ: iptal edilmemiş
+   * sevki olan parti kilitlidir. (Route uyumu için metod adı `getBranches` kaldı;
+   * Electron `/branches` ucu Faz 6'da `/batches`'e döner — bkz. plan Faz 6.3.)
    */
   async getBranches(workOrderId: string): Promise<ApiResponse<unknown>> {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
       select: {
         id: true,
-        // Ayrılma soy bağı — Dallar panelinde iki yönlü iz:
-        // splitFrom = "bu WO, P-XXX'ten ayrıldı"; splitChildren = "ayrılan partiler →".
-        splitFrom: { select: { id: true, batchNumber: true } },
+        // Ayrılma soy bağı (WO seviyesi) — WO başka WO'nun partisinden ayrıldıysa
+        // (redye NEW_COLOR / UNDYED_MOVE ile yeni WO'ya taşınma).
+        splitFrom: { select: { id: true, workOrderNumber: true } },
         splitChildren: {
           where: { isActive: true },
           orderBy: { createdAt: "asc" },
           select: {
             id: true,
-            batchNumber: true,
+            workOrderNumber: true,
             status: true,
             createdAt: true,
             targetColor: { select: { id: true, name: true, hex: true } },
@@ -1716,34 +1694,52 @@ export class WorkOrderService {
       return { success: false, data: null, message: "İş emri bulunamadı" };
     }
 
-    const dispatches = await prisma.subcontractorDispatch.findMany({
+    const batches = await prisma.batch.findMany({
       where: { workOrderId },
-      orderBy: { dispatchedAt: "asc" },
+      orderBy: { createdAt: "asc" },
       select: {
         id: true,
-        dispatchNo: true,
-        dispatchedAt: true,
-        totalQty: true,
-        cancelledAt: true,
-        directShippedAt: true,
-        directShipReason: true,
-        step: { select: { station: { select: { name: true } } } },
-        subcontractor: { select: { id: true, name: true } },
-        items: {
+        batchNumber: true,
+        createdAt: true,
+        splitFrom: { select: { id: true, batchNumber: true } },
+        splitChildren: { select: { id: true, batchNumber: true } },
+        travelerCards: {
+          where: { status: "ACTIVE" },
+          select: { cardNumber: true, barcode: true },
+          take: 1,
+        },
+        // Parti üyesi toplar (tüketilmiş ara düğümler HARİÇ — çift sayım olmasın:
+        // fason öncesi orijinaller CONSUMED, Tambur'da bölünen parent CONSUMED).
+        rolls: {
+          where: {
+            status: { notIn: ["SUBCONTRACTOR_CONSUMED", "TAMBUR_CONSUMED", "CANCELLED"] },
+          },
+          select: {
+            currentQty: true,
+            status: true,
+            currentStep: { select: { station: { select: { name: true } } } },
+          },
+        },
+        // Partinin fason sevkleri (K10) — durum türetimi (açık/kısmi/döndü) için.
+        dispatches: {
+          orderBy: { dispatchedAt: "asc" },
           select: {
             id: true,
-            // Born topların aktarım çıktısı olup olmadığını anlamak için
-            // (parentReceiptId dolu = fason→fason aktarımın doğan topu) → UI'da
-            // "Aktarımı Geri Al" aksiyonu yalnız aktarım çıktısı dallarda görünür.
-            roll: { select: { parentReceiptId: true } },
-            receiptItems: {
+            dispatchNo: true,
+            dispatchedAt: true,
+            totalQty: true,
+            cancelledAt: true,
+            directShippedAt: true,
+            directShipReason: true,
+            step: { select: { station: { select: { name: true } } } },
+            subcontractor: { select: { id: true, name: true } },
+            items: {
               select: {
-                receipt: {
+                receiptItems: {
                   select: {
-                    id: true,
-                    receiptNo: true,
-                    receivedAt: true,
-                    cancelledAt: true,
+                    receipt: {
+                      select: { id: true, receiptNo: true, receivedAt: true, cancelledAt: true },
+                    },
                   },
                 },
               },
@@ -1753,117 +1749,90 @@ export class WorkOrderService {
       },
     });
 
-    // Phase 4: dal kimliği (batchSplitId = dispatch.id) ile her partinin TÜM rota
-    // ayak izini topla — born roll'lar + Tambur'da bölünen çocuklar (depo dahil).
-    // Tüketilen ara düğümler HARİÇ: orijinaller (SUBCONTRACTOR_CONSUMED, yerini
-    // born roll aldı) ve Tambur'da bölünen parent (TAMBUR_CONSUMED, yerini depodaki
-    // çocuklar aldı) — çift sayım olmasın. Açık dalın orijinalleri AT_SUBCONTRACTOR
-    // → fason adımında görünür (currentStep dolu).
-    const dispatchIds = dispatches.map((d) => d.id);
-    const lotRolls = dispatchIds.length
-      ? await prisma.roll.findMany({
-          where: {
-            batchSplitId: { in: dispatchIds },
-            status: { notIn: ["SUBCONTRACTOR_CONSUMED", "TAMBUR_CONSUMED", "CANCELLED"] },
-          },
-          select: {
-            batchSplitId: true,
-            currentQty: true,
-            status: true,
-            currentStep: { select: { station: { select: { name: true } } } },
-          },
-        })
-      : [];
-
     const statusLabel = (s: string): string =>
       s === "WAREHOUSE" ? "Depo" : s === "STOCK" ? "Stok" : "—";
 
-    // batchSplitId → konum dağılımı (label = istasyon adı, yoksa statü etiketi).
-    const positionsByLot = new Map<
-      string,
-      Map<string, { label: string; count: number; totalMeters: number }>
-    >();
-    for (const r of lotRolls) {
-      if (!r.batchSplitId) continue;
-      const label = r.currentStep?.station?.name ?? statusLabel(r.status);
-      const lot = positionsByLot.get(r.batchSplitId) ?? new Map();
-      const cur = lot.get(label) ?? { label, count: 0, totalMeters: 0 };
-      cur.count += 1;
-      cur.totalMeters += Number(r.currentQty);
-      lot.set(label, cur);
-      positionsByLot.set(r.batchSplitId, lot);
-    }
-
-    const branches = dispatches.map((d) => {
-      const itemCount = d.items.length;
-      const receivedItemCount = d.items.filter((it) =>
-        it.receiptItems.some((ri) => ri.receipt && !ri.receipt.cancelledAt),
-      ).length;
-
-      // İptal edilmemiş receipt'ler (dal başına benzersiz).
-      const receiptMap = new Map<string, { receiptNo: string; receivedAt: Date }>();
-      for (const it of d.items) {
-        for (const ri of it.receiptItems) {
-          const rcpt = ri.receipt;
-          if (!rcpt || rcpt.cancelledAt) continue;
-          if (!receiptMap.has(rcpt.id)) {
-            receiptMap.set(rcpt.id, {
-              receiptNo: rcpt.receiptNo,
-              receivedAt: rcpt.receivedAt,
-            });
-          }
-        }
+    const lanes = batches.map((b) => {
+      // Konum dağılımı: istasyon adı yoksa statü etiketi.
+      const positions = new Map<
+        string,
+        { label: string; count: number; totalMeters: number }
+      >();
+      for (const r of b.rolls) {
+        const label = r.currentStep?.station?.name ?? statusLabel(r.status);
+        const cur = positions.get(label) ?? { label, count: 0, totalMeters: 0 };
+        cur.count += 1;
+        cur.totalMeters += Number(r.currentQty);
+        positions.set(label, cur);
       }
 
-      let status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED" | "DIRECT_SHIPPED";
-      if (d.cancelledAt) status = "CANCELLED";
-      // Doğrudan sevk: mal fasondan müşteriye gitti (receive yok) — iptal değil,
-      // dönüş de değil; ayrı terminal durum (lane'de "Doğrudan Sevk" rozeti).
-      else if (d.directShippedAt) status = "DIRECT_SHIPPED";
-      else if (receivedItemCount === 0) status = "OPEN";
-      else if (receivedItemCount >= itemCount) status = "RETURNED";
-      else status = "PARTIAL";
+      const dispatchViews = b.dispatches.map((d) => {
+        const itemCount = d.items.length;
+        const receivedItemCount = d.items.filter((it) =>
+          it.receiptItems.some((ri) => ri.receipt && !ri.receipt.cancelledAt),
+        ).length;
+        let status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED" | "DIRECT_SHIPPED";
+        if (d.cancelledAt) status = "CANCELLED";
+        else if (d.directShippedAt) status = "DIRECT_SHIPPED";
+        else if (receivedItemCount === 0) status = "OPEN";
+        else if (receivedItemCount >= itemCount) status = "RETURNED";
+        else status = "PARTIAL";
 
-      const positions = positionsByLot.get(d.id);
-      // Aktarım çıktısı: sevkin TÜM topları born (parentReceiptId dolu) ise bu dal
-      // bir fason→fason aktarımdan doğmuştur → "Aktarımı Geri Al" uygun.
-      const isTransferOutput =
-        itemCount > 0 && d.items.every((it) => it.roll?.parentReceiptId != null);
+        const receiptMap = new Map<string, { receiptNo: string; receivedAt: Date }>();
+        for (const it of d.items) {
+          for (const ri of it.receiptItems) {
+            const rcpt = ri.receipt;
+            if (!rcpt || rcpt.cancelledAt) continue;
+            if (!receiptMap.has(rcpt.id)) {
+              receiptMap.set(rcpt.id, { receiptNo: rcpt.receiptNo, receivedAt: rcpt.receivedAt });
+            }
+          }
+        }
+
+        return {
+          dispatchId: d.id,
+          dispatchNo: d.dispatchNo,
+          stepName: d.step?.station?.name ?? null,
+          subcontractorName: d.subcontractor.name,
+          dispatchedAt: d.dispatchedAt,
+          totalQty: Number(d.totalQty),
+          rollCount: itemCount,
+          receivedItemCount,
+          status,
+          directShippedAt: d.directShippedAt,
+          directShipReason: d.directShipReason,
+          receipts: [...receiptMap.values()],
+        };
+      });
+
+      // Kilit türetilmiş: iptal edilmemiş sevki varsa parti kilitli (düzenlenemez).
+      const locked = b.dispatches.some((d) => !d.cancelledAt);
+      const card = b.travelerCards[0] ?? null;
+
       return {
-        dispatchId: d.id,
-        dispatchNo: d.dispatchNo,
-        stepName: d.step?.station?.name ?? null,
-        subcontractorName: d.subcontractor.name,
-        dispatchedAt: d.dispatchedAt,
-        totalQty: Number(d.totalQty),
-        rollCount: itemCount,
-        receivedItemCount,
-        status,
-        isTransferOutput,
-        directShippedAt: d.directShippedAt,
-        directShipReason: d.directShipReason,
-        receipts: [...receiptMap.values()],
-        currentPositions: positions ? [...positions.values()] : [],
+        batchId: b.id,
+        batchNumber: b.batchNumber,
+        createdAt: b.createdAt,
+        locked,
+        cardNumber: card?.cardNumber ?? null,
+        cardBarcode: card?.barcode ?? null,
+        rollCount: b.rolls.length,
+        currentPositions: [...positions.values()],
+        dispatches: dispatchViews,
+        splitFrom: b.splitFrom,
+        splitChildren: b.splitChildren,
       };
     });
-
-    // Öksüz boş dalları gizle: fason→fason aktarımda ara sevkin (zımpara) lane'i
-    // boşalır (orijinaller CONSUMED + born toplar sonraki sevkin lane'ine taşındı)
-    // → status RETURNED ama currentPositions boş. Bu yalnız öksüz lane'de olur;
-    // tekli-fason RETURNED dalı born topun pozisyonunu taşır (boş değil), sevk/scrap
-    // olmuş dal label "—" + count>0 (boş değil), CANCELLED dal status≠RETURNED.
-    const visibleBranches = branches.filter(
-      (b) => !(b.status === "RETURNED" && b.currentPositions.length === 0),
-    );
 
     return {
       success: true,
       data: {
-        branches: visibleBranches,
+        batches: lanes,
+        // WO-seviyesi ayrılma bağı (redye ile yeni WO'ya taşınan/gelen partiler).
         splitFrom: wo.splitFrom,
         splitChildren: wo.splitChildren.map((c) => ({
           id: c.id,
-          batchNumber: c.batchNumber,
+          workOrderNumber: c.workOrderNumber,
           status: c.status,
           createdAt: c.createdAt,
           targetColor: c.targetColor,
@@ -1873,578 +1842,36 @@ export class WorkOrderService {
   }
 
   // ===========================================================================
-  // PARTİYİ YENİ İŞ EMRİNE AYIR (Faz B1: boyanmadan)
+  // PARTİYİ AYIR (redye üç yolu) — Faz 4'te workorder-split.service.ts olarak
+  // yeniden yazılıyor. Eski "dal" (batchSplitId) tabanlı split KALDIRILDI.
   // ===========================================================================
 
   /**
-   * Bir partinin (batchSplitId = sevk lane'i) ayrılması için gerekli kaynak
-   * verisini yükler + B1 kapsamında ayrılabilirliği doğrular. Preview ve gerçek
-   * split aynı validasyonu paylaşsın diye tek noktada.
-   *
-   * Faz B1 kapsamı: parti HÂLÂ boyahanede (tüm toplar AT_SUBCONTRACTOR, OPEN),
-   * adım renk veren bir fason adımı. Yeni renk, parti yeni WO'ya kabul edilirken
-   * uygulanır — yeniden boyama (re-dye) yok, geriye sarma yok.
-   */
-  private async loadSplitContext(workOrderId: string, batchSplitId: string) {
-    const sourceWo = await prisma.workOrder.findUnique({
-      where: { id: workOrderId },
-      select: {
-        id: true, batchNumber: true, type: true, width: true, foldType: true,
-        parameters: true, routeTemplateId: true,
-        targetItemId: true, targetColorId: true, status: true,
-        targetItem: { select: { id: true, name: true } },
-        targetColor: { select: { id: true, name: true, hex: true } },
-        targetProperties: { select: { propertyId: true } },
-        orderLinks: { select: { orderLineId: true, allocatedQty: true } },
-        steps: {
-          orderBy: { stepSequence: "asc" },
-          select: {
-            id: true, stationId: true, stepSequence: true, notes: true,
-            stepData: true, requiredCategoryId: true, plannedSubcontractorId: true,
-            status: true, isUrgent: true, priority: true,
-            station: { select: { name: true } },
-            requiredCategory: { select: { appliesColor: true } },
-          },
-        },
-      },
-    });
-    if (!sourceWo) throw AppError.notFound("İş emri bulunamadı");
-
-    const dispatch = await prisma.subcontractorDispatch.findUnique({
-      where: { id: batchSplitId },
-      select: { id: true, dispatchNo: true, workOrderId: true, stepId: true, cancelledAt: true },
-    });
-    if (!dispatch || dispatch.workOrderId !== workOrderId) {
-      throw AppError.notFound("Parti (sevk) bu iş emrinde bulunamadı");
-    }
-
-    // Renk veren (boyahane) adım — re-dye'da geri sarılacak hedef.
-    const colorStep = sourceWo.steps.find((s) => s.requiredCategory?.appliesColor) ?? null;
-
-    const laneRolls = await prisma.roll.findMany({
-      where: {
-        batchSplitId,
-        status: {
-          notIn: [
-            RollStatus.SUBCONTRACTOR_CONSUMED,
-            RollStatus.TAMBUR_CONSUMED,
-            RollStatus.CANCELLED,
-          ],
-        },
-      },
-      select: {
-        id: true, barcode: true, currentQty: true, status: true,
-        currentStepId: true, producedInStepId: true,
-        item: { select: { id: true, name: true } },
-        color: { select: { id: true, name: true } },
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    // Partinin canlı toplarının bulunduğu adım (tek nokta beklenir).
-    const rollStepIds = [
-      ...new Set(laneRolls.map((r) => r.currentStepId).filter(Boolean) as string[]),
-    ];
-    const rollStep =
-      rollStepIds.length === 1
-        ? sourceWo.steps.find((s) => s.id === rollStepIds[0]) ?? null
-        : null;
-
-    // ── Mod + kapsam guard'ı ──
-    // continue (B1): toplar AT_SUBCONTRACTOR (boyahanede) → kaldığı yerden devam.
-    // redye    (B2): toplar boyandı/döndü (IN_PRODUCTION, boyahane sonrası) →
-    //                yeni WO boyahaneye GERİ SARAR, yeni renkle yeniden boyanır.
-    let mode: "continue" | "redye" | null = null;
-    let reEntryStep: (typeof sourceWo.steps)[number] | null = null;
-    let canSplit = true;
-    let blockReason: string | null = null;
-
-    if (dispatch.cancelledAt) {
-      canSplit = false;
-      blockReason = "Bu sevk iptal edilmiş.";
-    } else if (laneRolls.length === 0) {
-      canSplit = false;
-      blockReason = "Bu partide taşınacak aktif top yok.";
-    } else if (!colorStep) {
-      canSplit = false;
-      blockReason = "Rotada renk veren bir fason adımı (boyahane) yok — renk değişimi uygulanamaz.";
-    } else if (!rollStep) {
-      canSplit = false;
-      blockReason = "Parti topları farklı adımlarda — önce hepsi aynı noktada olmalı.";
-    } else if (laneRolls.every((r) => r.status === RollStatus.AT_SUBCONTRACTOR)) {
-      // Boyanmadan — kaldığı yerden devam. Renk veren adımda olmalı.
-      if (rollStep.id !== colorStep.id) {
-        canSplit = false;
-        blockReason = "Parti renk veren adımda (boyahane) değil.";
-      } else {
-        mode = "continue";
-        reEntryStep = colorStep;
-      }
-    } else if (
-      laneRolls.every((r) => r.status === RollStatus.IN_PRODUCTION || r.status === RollStatus.STOCK)
-    ) {
-      // Boyandı/döndü — yeniden boyama. Boyahane sonrasında bekliyor olmalı.
-      if (rollStep.stepSequence <= colorStep.stepSequence) {
-        canSplit = false;
-        blockReason = "Parti henüz boyahane adımında/öncesinde — yeniden boyama gerekmez.";
-      } else {
-        mode = "redye";
-        reEntryStep = colorStep;
-      }
-    } else {
-      canSplit = false;
-      blockReason =
-        "Parti durumu ayırmaya uygun değil — depodaki/sevkli/Tambur sonrası bitmiş top yeniden boyanamaz.";
-    }
-
-    return { sourceWo, dispatch, colorStep, rollStep, laneRolls, mode, reEntryStep, canSplit, blockReason };
-  }
-
-  /**
-   * Partiyi ayırma ÖNİZLEMESİ — hiçbir şeyi değiştirmez. Frontend taşınacak
-   * topları (barkod/metraj/durum) somut listeler, yeni renk + sipariş modu seçer.
+   * KÖPRÜ (Faz 2 → Faz 4): parti ayırma ÖNİZLEMESİ geçici olarak devre dışı.
+   * Yeni parti tabanlı üç-yol ayırma (REDYE_SAME_COLOR / NEW_COLOR / UNDYED_MOVE)
+   * Faz 4'te gelir; o zamana dek 409 döner (Electron SplitBatchModal Faz 6.3).
    */
   async getSplitPreview(
-    workOrderId: string,
-    batchSplitId: string,
+    _workOrderId: string,
+    _batchId: string,
   ): Promise<ApiResponse<unknown>> {
-    const ctx = await this.loadSplitContext(workOrderId, batchSplitId);
-    return {
-      success: true,
-      data: {
-        canSplit: ctx.canSplit,
-        blockReason: ctx.blockReason,
-        // 'continue' = boyanmadan kaldığı yerden; 'redye' = boyahaneye geri sar.
-        mode: ctx.mode,
-        dispatchNo: ctx.dispatch.dispatchNo,
-        currentStep: ctx.rollStep
-          ? {
-              id: ctx.rollStep.id,
-              stepSequence: ctx.rollStep.stepSequence,
-              stationName: ctx.rollStep.station.name,
-            }
-          : null,
-        reEntryStep: ctx.reEntryStep
-          ? {
-              id: ctx.reEntryStep.id,
-              stepSequence: ctx.reEntryStep.stepSequence,
-              stationName: ctx.reEntryStep.station.name,
-            }
-          : null,
-        sourceColor: ctx.sourceWo.targetColor ?? null,
-        targetItem: ctx.sourceWo.targetItem ?? null,
-        hasOrderLinks: ctx.sourceWo.orderLinks.length > 0,
-        rolls: ctx.laneRolls.map((r) => ({
-          id: r.id,
-          barcode: r.barcode,
-          currentQty: Number(r.currentQty),
-          status: r.status,
-          itemName: r.item?.name ?? null,
-          colorName: r.color?.name ?? null,
-        })),
-        rollCount: ctx.laneRolls.length,
-        totalQty: ctx.laneRolls.reduce((s, r) => s + Number(r.currentQty), 0),
-      },
-    };
+    throw AppError.conflict(
+      "Parti ayırma geçiş sırasında geçici olarak devre dışı (Faz 4'te yeni parti modeliyle gelecek).",
+    );
   }
 
   /**
-   * Partiyi (batchSplitId lane'i) YENİ bir iş emrine ayırır. Yeni WO kaynağın
-   * BİREBİR rotasını + iş emri özelliklerini taşır, sadece HEDEF RENK değişir.
-   * Partinin canlı topları (+ açık sevki, movement/operation izleri) yeni WO'nun
-   * AYNI sıradaki adımlarına repoint edilir → "kaldığı yerden devam". Geçmiş
-   * (kapalı sevk/kabul) kaynak WO'da kalır.
-   *
-   * Faz B1: boyanmadan ayırma — yeni renk parti yeni WO'ya kabul edilince uygulanır.
+   * KÖPRÜ (Faz 2 → Faz 4): parti ayırma geçici olarak devre dışı — bkz.
+   * getSplitPreview. Üç-yol ayırma workorder-split.service.ts'te yazılacak.
    */
   async splitBranch(
-    workOrderId: string,
-    data: {
-      batchSplitId: string;
-      newColorId: string;
-      newBatchNumber?: string | null;
-      /** 'stock' = stok üretimine dönsün (sipariş bağı kopar); 'keep' = aynı siparişe bağlı kalsın. */
-      orderMode: "stock" | "keep";
-      /** Ayrılacak topların alt-kümesi (yok/boş = partinin tümü). Kalan toplar
-       *  kaynak WO'da kalır. continue modunda kısmi ayırmada taşınanlara yeni
-       *  SD dispatch (lane) açılır; orijinal sevk kalan toplarla kaynak WO'da kalır. */
-      rollIds?: string[];
-    },
-    userId?: string,
+    _workOrderId: string,
+    _data: unknown,
+    _userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    const ctx = await this.loadSplitContext(workOrderId, data.batchSplitId);
-    if (!ctx.canSplit) {
-      throw AppError.badRequest(ctx.blockReason ?? "Bu parti ayrılamaz");
-    }
-
-    const color = await prisma.color.findUnique({
-      where: { id: data.newColorId },
-      select: { id: true, isActive: true },
-    });
-    if (!color || !color.isActive) {
-      throw AppError.badRequest("Yeni renk bulunamadı veya pasif");
-    }
-    // NOT: split/redye, create()/update()'in aksine yeni rengi ürünün allowedColors
-    // listesine göre KISITLAMAZ — bu KASITLI (redye düzeltme rengine boyayabilir;
-    // test_wo_branch_redye/split fixture'ları katalog-dışı renk kullanır). Yalnız
-    // renk existence+isActive zorunlu. Kısıtlama istenirse ayrı bir ürün kararıdır.
-
-    // batchNumber: verildiyse benzersiz doğrula; yoksa otomatik üret (üretim
-    // RETRY KAPSAMINDA tx içinde — create() ile aynı gerekçe: closure dışında
-    // üretilirse P2002 retry'ları hep aynı numarayla çakışır).
-    let manualBatchNumber: string | null = null;
-    if (data.newBatchNumber && data.newBatchNumber.trim().length > 0) {
-      manualBatchNumber = data.newBatchNumber.trim();
-      await this.assertBatchNumberUnique(manualBatchNumber);
-    }
-
-    const planDates = await resolvePlanDates(null, null);
-    const { sourceWo } = ctx;
-    const reEntryStep = ctx.reEntryStep!;
-    const rollStep = ctx.rollStep!;
-    const isRedye = ctx.mode === "redye";
-    const S = reEntryStep.stepSequence;
-    const newType = data.orderMode === "keep" ? sourceWo.type : "STOCK_PRODUCTION";
-
-    // F273: cardRes tx dışında audit için ayrılır; API response `data`sına sızmaz.
-    const { cardRes, ...result } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      const batchNumber = manualBatchNumber ?? (await this.generateBatchNumber());
-      // Tx içinde partiyi yeniden kilitle/doğrula — durum değişmiş olabilir.
-      const fresh = await tx.roll.findMany({
-        where: {
-          batchSplitId: data.batchSplitId,
-          status: {
-            notIn: [
-              RollStatus.SUBCONTRACTOR_CONSUMED,
-              RollStatus.TAMBUR_CONSUMED,
-              RollStatus.CANCELLED,
-            ],
-          },
-        },
-        select: { id: true, status: true, currentQty: true, weightKg: true },
-      });
-      if (fresh.length === 0) {
-        throw AppError.conflict("Parti durumu değişti — taşınacak aktif top kalmadı");
-      }
-      const statusOk = isRedye
-        ? fresh.every((r) => r.status === RollStatus.IN_PRODUCTION || r.status === RollStatus.STOCK)
-        : fresh.every((r) => r.status === RollStatus.AT_SUBCONTRACTOR);
-      if (!statusOk) {
-        throw AppError.conflict("Parti durumu değişti — ayırma iptal edildi, sayfayı yenileyin");
-      }
-      // Taşınacak toplar: alt-küme verildiyse onu (lane ile kesişim), yoksa tümü.
-      let laneRollIds = fresh.map((r) => r.id);
-      if (data.rollIds && data.rollIds.length > 0) {
-        const freshSet = new Set(laneRollIds);
-        const sel = [...new Set(data.rollIds)].filter((id) => freshSet.has(id));
-        if (sel.length === 0) {
-          throw AppError.conflict("Ayrılacak geçerli top kalmadı — sayfayı yenileyin");
-        }
-        laneRollIds = sel;
-      }
-      const isFullLane = laneRollIds.length === fresh.length;
-      const movedFresh = fresh.filter((r) => laneRollIds.includes(r.id));
-      // Hedef metraj TX İÇİNDE, TAŞINAN toplardan ve Decimal ile.
-      const movedTotalQty = movedFresh.reduce(
-        (s, r) => s.plus(r.currentQty),
-        new Prisma.Decimal(0),
-      );
-      // F67: hedef ağırlık de TAŞINAN toplardan (targetQuantity ile simetrik). Toplam 0 ise
-      // (hiç ağırlık girilmemiş) null bırak — yanıltıcı "0 kg planlandı" yazma.
-      const movedTotalWeight = movedFresh.reduce(
-        (s, r) => s.plus(r.weightKg ?? 0),
-        new Prisma.Decimal(0),
-      );
-
-      // ── Yeni WO: kaynağın birebir rotası + özellikleri, YENİ renk ──
-      const newWo = await tx.workOrder.create({
-        data: {
-          batchNumber,
-          type: newType,
-          width: sourceWo.width,
-          targetQuantity: movedTotalQty,
-          targetWeight: movedTotalWeight.gt(0) ? movedTotalWeight : null,
-          parameters: (sourceWo.parameters as Prisma.InputJsonValue) ?? undefined,
-          status: WorkOrderStatus.IN_PROGRESS,
-          plannedStartDate: planDates.plannedStartDate,
-          plannedEndDate: planDates.plannedEndDate,
-          routeTemplateId: sourceWo.routeTemplateId,
-          targetItemId: sourceWo.targetItemId,
-          targetColorId: data.newColorId,
-          foldType: sourceWo.foldType,
-          // Soy bağı: eski refakat kartı okutulunca kabul bu WO'yu da bulur;
-          // kaynak WO'nun Dallar panelinde "ayrıldı →" izi buradan okunur.
-          splitFromId: sourceWo.id,
-          steps: {
-            create: sourceWo.steps.map((s) => ({
-              stationId: s.stationId,
-              stepSequence: s.stepSequence,
-              notes: s.notes,
-              stepData: (s.stepData as Prisma.InputJsonValue) ?? undefined,
-              requiredCategoryId: s.requiredCategoryId ?? null,
-              plannedSubcontractorId: s.plannedSubcontractorId ?? null,
-              // L (düşük bulgu): kuyruk önceliği klona taşınır — kaynaktaki acil
-              // parti ayrılınca yeni WO kuyruk sonuna düşmesin.
-              isUrgent: s.isUrgent,
-              priority: s.priority,
-              // "Kaldığı yerden devam": S öncesi adımlar tamamlandı sayılır,
-              // S aktif (parti orada), sonrası bekliyor. SKIPPED adımlar (S hariç)
-              // SKIPPED kalır — klon planlamacının atlama kararını diriltmesin.
-              status:
-                s.status === StepStatus.SKIPPED && s.stepSequence !== S
-                  ? StepStatus.SKIPPED
-                  : s.stepSequence < S
-                    ? StepStatus.COMPLETED
-                    : s.stepSequence === S
-                      ? StepStatus.ACTIVE
-                      : StepStatus.PENDING,
-              startedAt: s.stepSequence === S ? planDates.plannedStartDate : null,
-              completedAt: s.stepSequence < S ? new Date() : null,
-            })),
-          },
-          ...(sourceWo.targetProperties.length > 0
-            ? {
-                targetProperties: {
-                  create: sourceWo.targetProperties.map((p) => ({ propertyId: p.propertyId })),
-                },
-              }
-            : {}),
-          ...(data.orderMode === "keep" && sourceWo.orderLinks.length > 0
-            ? {
-                orderLinks: {
-                  create: sourceWo.orderLinks.map((l) => ({
-                    orderLineId: l.orderLineId,
-                    allocatedQty: l.allocatedQty,
-                  })),
-                },
-              }
-            : {}),
-        },
-        include: { steps: { orderBy: { stepSequence: "asc" }, select: { id: true, stepSequence: true } } },
-      });
-
-      // Eski adım → yeni adım (aynı stepSequence) eşlemesi
-      const newStepBySeq = new Map(newWo.steps.map((s) => [s.stepSequence, s.id] as const));
-      const oldToNew = new Map<string, string>();
-      for (const s of sourceWo.steps) {
-        const nid = newStepBySeq.get(s.stepSequence);
-        if (nid) oldToNew.set(s.id, nid);
-      }
-      const newReEntryStepId = newStepBySeq.get(S)!;
-
-      // Partinin TÜM ayak izini (top konumu + movement + operation) yeni WO'nun
-      // aynı sıradaki adımlarına repoint et. recomputeStepStatus WO üyeliğini
-      // movement üzerinden okuduğundan movement repoint ŞART.
-      for (const [oldId, newId] of oldToNew) {
-        await tx.roll.updateMany({
-          where: { id: { in: laneRollIds }, currentStepId: oldId },
-          data: { currentStepId: newId },
-        });
-        await tx.roll.updateMany({
-          where: { id: { in: laneRollIds }, producedInStepId: oldId },
-          data: { producedInStepId: newId },
-        });
-        await tx.rollMovement.updateMany({
-          where: { rollId: { in: laneRollIds }, workOrderStepId: oldId },
-          data: { workOrderStepId: newId },
-        });
-        await tx.rollOperation.updateMany({
-          where: { rollId: { in: laneRollIds }, workOrderStepId: oldId },
-          data: { workOrderStepId: newId },
-        });
-      }
-
-      if (isRedye) {
-        // YENİDEN BOYAMA: partiyi boyahane adımına GERİ SAR. Açık movement'leri
-        // kapat (parti mevcut adımdan fiilen çekiliyor), boyahane adımında taze
-        // açık movement aç (sonraki re-dispatch bunu yeniden kullanır), topları
-        // IN_PRODUCTION @ boyahane yap ve eski lane'den kopar (batchSplitId=null
-        // → yeniden sevkte yeni lane alır).
-        await tx.rollMovement.updateMany({
-          where: { rollId: { in: laneRollIds }, exitedAt: null },
-          data: { exitedAt: new Date(), notes: "REDYE_REWIND" },
-        });
-        // Tek createMany — satırlar rollId/qtyIn/weightIn dışında özdeş (eski kod
-        // roll başına create = N+1; partide yüzlerce roll olabilir).
-        await tx.rollMovement.createMany({
-          data: movedFresh.map((r) => ({
-            rollId: r.id,
-            workOrderStepId: newReEntryStepId,
-            qtyIn: r.currentQty,
-            weightIn: r.weightKg ?? null,
-            operatorId: userId ?? null,
-            notes: "REDYE_REWIND_IN",
-          })),
-        });
-        // ATOMİK CLAIM (M-1): WHERE'e lane kimliği + beklenen statüler kondu —
-        // eşzamanlı ikinci split/işlem partiyi bu arada değiştirdiyse count
-        // uyuşmaz → 409 + tüm tx (yeni WO dahil) geri sarılır.
-        const redyeClaim = await tx.roll.updateMany({
-          where: {
-            id: { in: laneRollIds },
-            batchSplitId: data.batchSplitId,
-            status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
-          },
-          data: {
-            currentStepId: newReEntryStepId,
-            producedInStepId: newReEntryStepId,
-            status: RollStatus.IN_PRODUCTION,
-            batchSplitId: null,
-          },
-        });
-        if (redyeClaim.count !== laneRollIds.length) {
-          throw AppError.conflict(
-            "Parti bu sırada başka bir işlemle değişti — ayırma iptal edildi, sayfayı yenileyin."
-          );
-        }
-        // M-13: geri sarılan topların KK2'de açılmış AÇIK hatalarını karara
-        // bağla. Toplar yeniden boyaya gidip kabulde SUBCONTRACTOR_CONSUMED
-        // olunca bu rollId'ler bir daha hiçbir Tambur akışına giremez (hatayı
-        // kapatan tek yer tambur, rollId bazlı) → açık hata sayacı ve kalite
-        // raporları her redye'de KALICI şişerdi. NO_CUT + processedAtStepId=null
-        // = "kesimsiz kapatıldı, istasyon kararı değil" (closeOrphanRollErrors
-        // semantiği); kumaş yeniden boyanır, kabul sonrası KK2 gerekirse yeni
-        // kayıt açar.
-        await tx.rollError.updateMany({
-          where: { rollId: { in: laneRollIds }, isProcessed: false },
-          data: {
-            isProcessed: true,
-            actionTaken: "NO_CUT",
-            processedAtStepId: null,
-            processedAt: new Date(),
-          },
-        });
-      } else if (isFullLane) {
-        // BOYANMADAN + TÜM parti: açık sevki yeni WO'ya taşı (kabul yeni WO'da düşer;
-        // sourceDispatchItem bağı korunur). Toplar AT_SUBCONTRACTOR + lane korunur.
-        //
-        // ATOMİK CLAIM (M-1): WHERE'e kaynak WO + iptal-değil koşulu: kaybeden 409
-        // alır, tx (yeni WO dahil) geri sarılır.
-        const dispatchClaim = await tx.subcontractorDispatch.updateMany({
-          where: {
-            id: data.batchSplitId,
-            workOrderId: sourceWo.id,
-            cancelledAt: null,
-          },
-          data: { workOrderId: newWo.id, stepId: newReEntryStepId },
-        });
-        if (dispatchClaim.count === 0) {
-          throw AppError.conflict(
-            "Sevk bu sırada başka bir işlemle değişti (ayrılmış veya iptal edilmiş olabilir) — sayfayı yenileyin."
-          );
-        }
-      } else {
-        // BOYANMADAN + KISMİ: taşınan toplar için YENİ SD dispatch (klon) açılır;
-        // orijinal sevk KALAN toplarla kaynak WO'da kalır. Toplar fiziksel olarak
-        // boyahanede → yeni WO'da da AT_SUBCONTRACTOR; receive() yeni dispatch
-        // üzerinden işler. (Orijinalin donmuş irsaliyesi tarihsel kalır.)
-        const now = new Date();
-        const src = await tx.subcontractorDispatch.findUnique({
-          where: { id: data.batchSplitId },
-          select: {
-            subcontractorId: true, plannedSubcontractorId: true,
-            dispatchedById: true, instruction: true, cancelledAt: true,
-          },
-        });
-        if (!src || src.cancelledAt) {
-          throw AppError.conflict("Sevk bu sırada değişti veya iptal edildi — sayfayı yenileyin.");
-        }
-        const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "FS", now);
-        const newDispatch = await tx.subcontractorDispatch.create({
-          data: {
-            dispatchNo: buildDailyCode("FS", seq, now),
-            workOrderId: newWo.id,
-            stepId: newReEntryStepId,
-            subcontractorId: src.subcontractorId,
-            plannedSubcontractorId: src.plannedSubcontractorId,
-            dispatchedById: src.dispatchedById,
-            instruction: src.instruction,
-            totalQty: movedTotalQty,
-          },
-        });
-        // Taşınan topların sevk kalemlerini yeni dispatch'e ATOMİK taşı.
-        const movedItems = await tx.subcontractorDispatchItem.updateMany({
-          where: { dispatchId: data.batchSplitId, rollId: { in: laneRollIds } },
-          data: { dispatchId: newDispatch.id },
-        });
-        if (movedItems.count !== laneRollIds.length) {
-          throw AppError.conflict("Sevk kalemleri bu sırada değişti — sayfayı yenileyin.");
-        }
-        // Orijinal dispatch totalQty'sini düş; taşınanların lane kimliği = yeni dispatch.
-        await tx.subcontractorDispatch.update({
-          where: { id: data.batchSplitId },
-          data: { totalQty: { decrement: movedTotalQty } },
-        });
-        await tx.roll.updateMany({
-          where: { id: { in: laneRollIds } },
-          data: { batchSplitId: newDispatch.id },
-        });
-      }
-
-      // Yeni WO için yeni refakat kartı — parti ayrı WO'da hareket eder,
-      // operatör basıp ayrılan demete takar.
-      const cardRes = await travelerCardService.createForWorkOrder(tx, newWo.id, userId);
-
-      // Kaynak WO'nun, partinin ÇIKTIĞI adımını yeniden hesapla (başka parti
-      // hâlâ orada olabilir → ACTIVE kalır, yoksa PENDING/COMPLETED).
-      await recomputeStepStatus(tx, rollStep.id);
-
-      return { newWorkOrderId: newWo.id, batchNumber: newWo.batchNumber, movedRollCount: laneRollIds.length, cardRes };
-    }));
-
-    await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "WORK_ORDER",
-      recordId: sourceWo.id,
-      newData: {
-        action: "SPLIT_SOURCE",
-        mode: ctx.mode,
-        batchSplitId: data.batchSplitId,
-        newWorkOrderId: result.newWorkOrderId,
-        movedRollCount: result.movedRollCount,
-        newColorId: data.newColorId,
-      },
-    });
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "WORK_ORDER",
-      recordId: result.newWorkOrderId,
-      newData: {
-        action: "SPLIT_TARGET",
-        mode: ctx.mode,
-        sourceWorkOrderId: sourceWo.id,
-        batchNumber: result.batchNumber,
-        movedRollCount: result.movedRollCount,
-        targetColorId: data.newColorId,
-        orderMode: data.orderMode,
-      },
-    });
-    // F273: yeni WO'nun refakat kartı audit'i tx commit'inden SONRA, yalnız yeni kart üretildiyse.
-    if (cardRes.created) {
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "TRAVELER_CARD",
-        recordId: cardRes.card.id,
-        newData: {
-          cardNumber: cardRes.card.cardNumber,
-          barcode: cardRes.card.barcode,
-          version: 1,
-          event: "AUTO_PRINT_ON_WO_CREATE",
-        },
-      });
-    }
-
-    return {
-      success: true,
-      data: result,
-      message:
-        ctx.mode === "redye"
-          ? `Parti yeni iş emrine ayrıldı: ${result.batchNumber} (${result.movedRollCount} top). Boyahaneye geri sarıldı; yeniden boyamada yeni renk uygulanacak.`
-          : `Parti yeni iş emrine ayrıldı: ${result.batchNumber} (${result.movedRollCount} top). Yeni renk kabulde uygulanacak.`,
-    };
+    throw AppError.conflict(
+      "Parti ayırma geçiş sırasında geçici olarak devre dışı (Faz 4'te yeni parti modeliyle gelecek).",
+    );
   }
 
   /**
@@ -2592,7 +2019,7 @@ export class WorkOrderService {
       success: true,
       data: {
         workOrderId: id,
-        batchNumber: wo.batchNumber,
+        batchNumber: wo.workOrderNumber,
         status: wo.status,
         canCancel: blockReason === null,
         blockReason,
@@ -2769,14 +2196,14 @@ export class WorkOrderService {
       action: "DELETE",
       tableName: "WORK_ORDER",
       recordId: id,
-      oldData: { batchNumber: existing.batchNumber, status: existing.status },
+      oldData: { batchNumber: existing.workOrderNumber, status: existing.status },
       newData: { status: WorkOrderStatus.CANCELLED },
     });
 
     return {
       success: true,
       data: updated,
-      message: `İş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.batchNumber}`,
+      message: `İş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`,
     };
   }
 
@@ -2891,7 +2318,7 @@ export class WorkOrderService {
       tableName: "WORK_ORDER",
       recordId: id,
       oldData: {
-        batchNumber: existing.batchNumber,
+        batchNumber: existing.workOrderNumber,
         type: existing.type,
         status: existing.status,
         stepCount: existing.steps.length,
@@ -2902,7 +2329,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: archived,
-      message: `İş emri arşivlendi: ${existing.batchNumber}`,
+      message: `İş emri arşivlendi: ${existing.workOrderNumber}`,
     };
   }
 
@@ -2915,7 +2342,7 @@ export class WorkOrderService {
     workOrderId: string,
     barcodes: string[],
     userId?: string
-  ): Promise<ApiResponse<{ attached: number; errors: string[] }>> {
+  ): Promise<ApiResponse<{ attached: number; errors: string[]; batch: { id: string; batchNumber: string } | null }>> {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
       include: {
@@ -2957,9 +2384,12 @@ export class WorkOrderService {
     // (no-op); parti modeli geçişinde tx'e P (parti) + RK (kart) sequence üretimi
     // girecek, "sequence okuma closure İÇİNDE" iskeleti şimdiden hazır. Sonuç dizileri
     // closure İÇİNDE tanımlı — retry mükerrer biriktirmesin.
-    const { attached, errorMessages } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+    const { attached, errorMessages, batchRes } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
       const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
       const errorMessages: string[] = [];
+      // Bu attach dalgasının doğurduğu parti (K3) — succeeded>0 ise dolar.
+      // Retry mükerrer biriktirmesin diye closure İÇİNDE tanımlı (Faz 1.1 deseni).
+      let batchRes: CreateBatchResult | null = null;
       // 1) Tüm rulolar tek query'de — N round-trip yerine 1.
       const rolls = await tx.roll.findMany({
         where: { barcode: { in: barcodes } },
@@ -3046,6 +2476,15 @@ export class WorkOrderService {
               qtyIn: Number(r.currentQty),
             });
           }
+
+          // Parti doğuşu (K3): bu attach dalgası YENİ bir parti oluşturur; sahiplenilen
+          // toplara batchId damgalanır + refakat kartı (RK) basılır. (Faz 2: her attach =
+          // yeni parti; K4 "mevcut sevksiz partiye ekle" Faz 4'te targetBatchId ile gelir.)
+          batchRes = await createBatchTx(tx, {
+            workOrderId,
+            rollIds: succeeded.map((r) => r.id),
+            userId,
+          });
         }
       }
 
@@ -3057,7 +2496,7 @@ export class WorkOrderService {
         await ensureWorkOrderInProgress(tx, workOrderId);
       }
 
-      return { attached, errorMessages };
+      return { attached, errorMessages, batchRes };
     }));
 
     // Audit log'lar tx dışında, TEK createMany ile (eski N ayrı INSERT yerine).
@@ -3079,11 +2518,44 @@ export class WorkOrderService {
       }))
     );
 
+    // Parti + kart audit'i tx DIŞINDA (F273): bu dalga bir parti doğurduysa yaz.
+    if (batchRes) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "BATCH",
+        recordId: batchRes.batch.id,
+        newData: {
+          batchNumber: batchRes.batch.batchNumber,
+          workOrderId,
+          rollCount: attached.length,
+        },
+      });
+      if (batchRes.cardRes.created) {
+        await AuditService.log({
+          userId,
+          action: "CREATE",
+          tableName: "TRAVELER_CARD",
+          recordId: batchRes.cardRes.card.id,
+          newData: {
+            cardNumber: batchRes.cardRes.card.cardNumber,
+            barcode: batchRes.cardRes.card.barcode,
+            version: 1,
+            batchId: batchRes.batch.id,
+            event: "AUTO_PRINT_ON_BATCH_BIRTH",
+          },
+        });
+      }
+    }
+
     return {
       success: true,
       data: {
         attached: attached.length,
         errors: errorMessages,
+        batch: batchRes
+          ? { id: batchRes.batch.id, batchNumber: batchRes.batch.batchNumber }
+          : null,
       },
       message: `${attached.length} top iş emrine bağlandı`,
     };
@@ -3217,9 +2689,9 @@ export class WorkOrderService {
     if (
       data.batchNumber &&
       data.batchNumber.trim().length > 0 &&
-      data.batchNumber.trim() !== wo.batchNumber
+      data.batchNumber.trim() !== wo.workOrderNumber
     ) {
-      await this.assertBatchNumberUnique(data.batchNumber.trim(), id);
+      await this.assertWorkOrderNumberUnique(data.batchNumber.trim(), id);
     }
 
     // ATOMİK CLAIM (check-then-act DEĞİL): terminal-durum reddini yazmanın WHERE'ine
@@ -3264,7 +2736,7 @@ export class WorkOrderService {
           status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
         },
         data: {
-          batchNumber: data.batchNumber?.trim() || undefined,
+          workOrderNumber: data.batchNumber?.trim() || undefined,
           // F59: null'ı gerçek NULL olarak yaz (gönderilmeyen=undefined ile ayrış);
           // `?? undefined` null'ı sessizce yutup temizlemeyi kaçırıyordu.
           width: data.width === undefined ? undefined : data.width,
@@ -3648,15 +3120,15 @@ export class WorkOrderService {
     if (
       data.batchNumber &&
       data.batchNumber.trim().length > 0 &&
-      data.batchNumber.trim() !== existing.batchNumber
+      data.batchNumber.trim() !== existing.workOrderNumber
     ) {
-      await this.assertBatchNumberUnique(data.batchNumber.trim(), id);
+      await this.assertWorkOrderNumberUnique(data.batchNumber.trim(), id);
     }
 
-    const batchNumber =
+    const workOrderNumber =
       data.batchNumber && data.batchNumber.trim().length > 0
         ? data.batchNumber.trim()
-        : existing.batchNumber;
+        : existing.workOrderNumber;
 
     // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
     const updated = await prisma.$transaction(async (tx) => {
@@ -3897,7 +3369,7 @@ export class WorkOrderService {
       const wo = await tx.workOrder.update({
         where: { id },
         data: {
-          batchNumber,
+          workOrderNumber,
           type,
           width: data.width ?? null,
           targetQuantity: data.targetQuantity ?? null,
@@ -3954,7 +3426,7 @@ export class WorkOrderService {
       recordId: id,
       newData: {
         replace: true,
-        batchNumber: updated.batchNumber,
+        batchNumber: updated.workOrderNumber,
         type: updated.type,
         stepCount: finalSteps.length,
         routeTemplateId: updated.routeTemplateId,
@@ -3968,7 +3440,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: updated,
-      message: `İş emri güncellendi: ${updated.batchNumber}`,
+      message: `İş emri güncellendi: ${updated.workOrderNumber}`,
     };
   }
 
@@ -4346,7 +3818,9 @@ export class WorkOrderService {
         data: {
           status: RollStatus.STOCK,
           currentStepId: null,
-          batchSplitId: null,
+          // Parti üyeliğini kopar (detach = partiden çıkar). Boşalan parti Faz 3/4'te
+          // deleteIfEmptyAndTraceless ile temizlenecek; şimdilik boş parti kalabilir.
+          batchId: null,
         },
       });
       if (claimed.count !== detachableIds.length) {
@@ -4540,7 +4014,7 @@ export class WorkOrderService {
     }
 
     const travelCard = {
-      batchNumber: wo.batchNumber,
+      batchNumber: wo.workOrderNumber,
       type: wo.type,
       width: wo.width,
       targetColor: wo.targetColor
@@ -4621,7 +4095,7 @@ export class WorkOrderService {
       : null;
 
     return {
-      batchNumber: wo.batchNumber,
+      batchNumber: wo.workOrderNumber,
       type: wo.type,
       width: wo.width,
       totalRolls: rolls.length,

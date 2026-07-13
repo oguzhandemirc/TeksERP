@@ -1726,9 +1726,9 @@ export class OrderService extends BaseService {
       .filter((wo) => blockingStatuses.has(wo.status));
 
     if (blockingWOs.length > 0) {
-      const batchNumbers = [...new Set(blockingWOs.map((w) => w.batchNumber))].join(", ");
+      const workOrderNumbers = [...new Set(blockingWOs.map((w) => w.workOrderNumber))].join(", ");
       throw AppError.conflict(
-        `Bu siparişe bağlı aktif/tamamlanmış iş emirleri var: ${batchNumbers}. Önce onları iptal edin.`
+        `Bu siparişe bağlı aktif/tamamlanmış iş emirleri var: ${workOrderNumbers}. Önce onları iptal edin.`
       );
     }
 

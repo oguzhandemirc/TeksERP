@@ -174,8 +174,8 @@ interface TamburRollSummary {
   properties: { id: string; name: string }[];
   errorCount: number;
   errors: TamburRollErrorSummary[];
-  /** Dal (fason partisi) kimliği — null = fasonsuz/doğrudan top. */
-  batchSplitId: string | null;
+  /** Parti (Batch) kimliği — null = partisiz/doğrudan top. */
+  batchId: string | null;
   /** Dalın sevk numarası (SubcontractorDispatch.dispatchNo). */
   dispatchNo: string | null;
   /** WO içindeki 1-based parti sırası (dispatchedAt'e göre, stabil — bir parti
@@ -275,17 +275,17 @@ export class TamburService {
   }
 
   /**
-   * batchSplitId → { dispatchNo, ordinal } haritası. Ordinal = WO'nun TÜM
+   * batchId (parti) → { dispatchNo, ordinal } haritası. Ordinal = WO'nun TÜM
    * sevkleri içinde dispatchedAt sırasına göre 1-based parti no — bir parti
    * Tambur'dan çıksa bile numarası kaymaz. Tambur listesinde dalları (fason
    * partileri) ayırt etmek için kullanılır. Tek sevk lookup'ı.
    */
   private async buildBranchInfoMap(
     workOrderId: string,
-    batchSplitIds: (string | null)[],
+    batchIds: (string | null)[],
   ): Promise<Map<string, { dispatchNo: string; ordinal: number }>> {
     const map = new Map<string, { dispatchNo: string; ordinal: number }>();
-    const present = new Set(batchSplitIds.filter((x): x is string => Boolean(x)));
+    const present = new Set(batchIds.filter((x): x is string => Boolean(x)));
     if (present.size === 0) return map;
     const dispatches = await prisma.subcontractorDispatch.findMany({
       where: { workOrderId },
@@ -302,7 +302,7 @@ export class TamburService {
 
   /**
    * Tambur adımında bekleyen açık RollMovement'leri TamburRollSummary[]'e çevirir
-   * — dal bilgisiyle (batchSplitId/dispatchNo/branchOrdinal) zenginleştirilmiş.
+   * — dal bilgisiyle (batchId/dispatchNo/branchOrdinal) zenginleştirilmiş.
    * getByCardBarcode + getStep ortak kullanır (önceki kopyala-yapıştır birleşti).
    */
   private async loadTamburRolls(step: {
@@ -332,11 +332,11 @@ export class TamburService {
     });
     const branchInfo = await this.buildBranchInfoMap(
       step.workOrderId,
-      openMovements.map((m) => m.roll.batchSplitId),
+      openMovements.map((m) => m.roll.batchId),
     );
     return openMovements.map((m) => {
-      const bi = m.roll.batchSplitId
-        ? branchInfo.get(m.roll.batchSplitId)
+      const bi = m.roll.batchId
+        ? branchInfo.get(m.roll.batchId)
         : undefined;
       return {
         rollId: m.roll.id,
@@ -358,7 +358,7 @@ export class TamburService {
           startMeter: Number(e.startMeter),
           errorType: e.errorType,
         })),
-        batchSplitId: m.roll.batchSplitId ?? null,
+        batchId: m.roll.batchId ?? null,
         dispatchNo: bi?.dispatchNo ?? null,
         branchOrdinal: bi?.ordinal ?? null,
       };
@@ -377,7 +377,8 @@ export class TamburService {
   ): Promise<ApiResponse<TamburStepSummary>> {
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: cardBarcode },
-      select: { id: true, status: true, workOrderId: true },
+      // Kart artık partiye (Batch) bağlı; WO parti üzerinden çözülür (card.batch.workOrder).
+      select: { id: true, status: true, batch: { select: { workOrderId: true } } },
     });
     if (!card) {
       throw AppError.notFound(`Refakat kartı bulunamadı: ${cardBarcode}`);
@@ -391,14 +392,14 @@ export class TamburService {
     // Multi-batch destekli doğrulama. Eğer WO'nun rulları şu an Tambur'da
     // değilse net mesaj döner ("şu an Boyahane'de" gibi).
     const { stepId } = await assertWoAtStepKind(
-      card.workOrderId,
+      card.batch.workOrderId,
       StationKind.TAMBUR,
     );
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
         station: true,
-        workOrder: { select: { batchNumber: true } },
+        workOrder: { select: { workOrderNumber: true } },
       },
     });
     if (!step) {
@@ -416,7 +417,7 @@ export class TamburService {
       data: {
         workOrderStepId: step.id,
         workOrderId: step.workOrderId,
-        batchNumber: step.workOrder.batchNumber,
+        batchNumber: step.workOrder.workOrderNumber,
         stationId: step.stationId,
         stationCode: step.station.code,
         stationName: step.station.name,
@@ -853,9 +854,9 @@ export class TamburService {
             qualityGradeId: qualityGradeIdByCode.get(seg.qualityGrade) ?? null,
             producedInStepId: roll.producedInStepId,
             parentRollId: roll.id,
-            // Phase 4: dal kimliğini parent'tan kalıt → bölünen toplar depoya
-            // gitse bile hangi fason partisinden geldiği lane'de izlenir.
-            batchSplitId: roll.batchSplitId,
+            // Parti (batch) kimliğini parent'tan kalıt → bölünen toplar depoya
+            // gitse bile hangi partiden geldiği lane'de izlenir.
+            batchId: roll.batchId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             // Sadece depoya giden (WAREHOUSE) çıktılar kartelalık işaretlenir;
             // fire/scrap işaretlenmez (zaten sevke uygun değil).
@@ -1140,7 +1141,7 @@ export class TamburService {
           "item.name",
           "item.code",
           "color.name",
-          "producedInStep.workOrder.batchNumber",
+          "producedInStep.workOrder.workOrderNumber",
         ]),
       ];
     }
@@ -1149,7 +1150,7 @@ export class TamburService {
       item: true,
       color: true,
       producedInStep: {
-        select: { workOrder: { select: { id: true, batchNumber: true } } },
+        select: { workOrder: { select: { id: true, workOrderNumber: true } } },
       },
     } as const;
 
@@ -1376,7 +1377,7 @@ export class TamburService {
       where: { id: stepId },
       include: {
         station: true,
-        workOrder: { select: { batchNumber: true } },
+        workOrder: { select: { workOrderNumber: true } },
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
@@ -1394,7 +1395,7 @@ export class TamburService {
       data: {
         workOrderStepId: step.id,
         workOrderId: step.workOrderId,
-        batchNumber: step.workOrder.batchNumber,
+        batchNumber: step.workOrder.workOrderNumber,
         stationId: step.stationId,
         stationCode: step.station.code,
         stationName: step.station.name,
@@ -1563,17 +1564,27 @@ export class TamburService {
         station: { select: { name: true, code: true } },
         workOrder: {
           select: {
-            batchNumber: true,
+            workOrderNumber: true,
             targetItem: { select: { name: true } },
             targetColor: { select: { name: true, hex: true } },
-            travelerCards: {
-              where: { status: "ACTIVE" },
-              select: { id: true, cardNumber: true, barcode: true },
-              take: 1,
+          },
+        },
+        currentRolls: {
+          select: {
+            currentQty: true,
+            // Kart artık partiye (Batch) bağlı — bu Tambur adımındaki topların
+            // partisinin AKTIF kartı Kanban'da gösterilir (topun partisi yoksa kart yok).
+            batch: {
+              select: {
+                travelerCards: {
+                  where: { status: "ACTIVE" },
+                  select: { id: true, cardNumber: true, barcode: true },
+                  take: 1,
+                },
+              },
             },
           },
         },
-        currentRolls: { select: { currentQty: true } },
         movements: {
           where: { exitedAt: null },
           select: { enteredAt: true },
@@ -1592,7 +1603,10 @@ export class TamburService {
 
     const data = steps
       .map((s) => {
-        const card = s.workOrder.travelerCards[0];
+        // Bu adımdaki topların partisine bağlı ilk AKTIF refakat kartı (kart partiye bağlı).
+        const card = s.currentRolls
+          .map((r) => r.batch?.travelerCards[0])
+          .find((c): c is NonNullable<typeof c> => Boolean(c));
         if (!card) return null;
         const oldest = s.movements.reduce<Date | null>((acc, m) => {
           if (acc === null) return m.enteredAt;
@@ -1603,7 +1617,7 @@ export class TamburService {
           cardNumber: card.cardNumber,
           cardBarcode: card.barcode,
           workOrderId: s.workOrderId,
-          batchNumber: s.workOrder.batchNumber,
+          batchNumber: s.workOrder.workOrderNumber,
           stepId: s.id,
           stationName: s.station.name,
           stationCode: s.station.code,
@@ -1746,8 +1760,8 @@ export class TamburService {
           qualityGrade: resolvedQualityGrade,
           qualityGradeId: resolvedQualityGradeId,
           parentRollId: parent.id,
-          // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
-          batchSplitId: parent.batchSplitId,
+          // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
+          batchId: parent.batchId,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
           // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
@@ -2021,8 +2035,8 @@ export class TamburService {
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,
             parentRollId: parent.id,
-            // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
-            batchSplitId: parent.batchSplitId,
+            // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
+            batchId: parent.batchId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
@@ -2254,8 +2268,8 @@ export class TamburService {
           qualityGradeId: resolvedQualityGradeId,
           producedInStepId: tamburStepId,
           parentRollId: parent.id,
-          // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
-          batchSplitId: parent.batchSplitId,
+          // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
+          batchId: parent.batchId,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
           // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
@@ -2561,8 +2575,8 @@ export class TamburService {
             qualityGradeId: childQualityGradeId,
             producedInStepId: tamburStepId,
             parentRollId: parent.id,
-            // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
-            batchSplitId: parent.batchSplitId,
+            // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
+            batchId: parent.batchId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
@@ -2746,14 +2760,15 @@ export class TamburService {
   > {
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: cardBarcode },
-      select: { id: true, status: true, workOrderId: true },
+      // Kart artık partiye (Batch) bağlı; WO parti üzerinden çözülür (card.batch.workOrder).
+      select: { id: true, status: true, batch: { select: { workOrderId: true } } },
     });
     if (!card) throw AppError.notFound(`Refakat kartı bulunamadı: ${cardBarcode}`);
     if (card.status !== "ACTIVE") {
       throw AppError.badRequest(`Bu refakat kartı aktif değil (durum: ${card.status})`);
     }
 
-    const { stepId } = await assertWoAtStepKind(card.workOrderId, StationKind.TAMBUR);
+    const { stepId } = await assertWoAtStepKind(card.batch.workOrderId, StationKind.TAMBUR);
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
@@ -2761,7 +2776,7 @@ export class TamburService {
         workOrder: {
           select: {
             id: true,
-            batchNumber: true,
+            workOrderNumber: true,
             foldType: true,
           },
         },
@@ -2771,7 +2786,7 @@ export class TamburService {
 
     // WO'ya bağlı OrderLine'lar
     const links = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId: card.workOrderId },
+      where: { workOrderId: card.batch.workOrderId },
       select: {
         orderLine: {
           select: {
@@ -2918,7 +2933,7 @@ export class TamburService {
       success: true,
       data: {
         workOrderId: step.workOrderId,
-        batchNumber: step.workOrder.batchNumber,
+        batchNumber: step.workOrder.workOrderNumber,
         stepId: step.id,
         stationName: step.station.name,
         plannedFoldType: step.workOrder.foldType,

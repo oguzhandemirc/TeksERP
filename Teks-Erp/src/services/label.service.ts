@@ -192,8 +192,10 @@ function swatchPayloadToLabelPayload(sw: SwatchLabelPayload): LabelPayload {
 const ROLL_LABEL_INCLUDE = {
   item: { select: { id: true, code: true, name: true } },
   color: { select: { id: true, code: true, name: true } },
-  producedInStep: {
-    select: { workOrder: { select: { batchNumber: true } } },
+  // Etiketteki parti no (P…) topun PARTİSİNDEN gelir. Eskiden producedInStep.workOrder
+  // (İş Emri) "batchNumber"ı taşırdı; parti modelinde parti ayrı nesne (roll.batch).
+  batch: {
+    select: { batchNumber: true },
   },
 } satisfies Prisma.RollInclude;
 
@@ -407,7 +409,7 @@ export class LabelService {
       orderNumber,
       orderLineId,
 
-      batchNumber: roll.producedInStep?.workOrder.batchNumber ?? null,
+      batchNumber: roll.batch?.batchNumber ?? null,
       printedAt: new Date().toISOString(),
     };
 

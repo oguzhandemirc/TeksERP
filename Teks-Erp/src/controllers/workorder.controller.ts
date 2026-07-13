@@ -243,14 +243,23 @@ export class WorkOrderController {
 
   /**
    * GET /api/work-orders/check-batch-number?batchNumber=...&excludeId=...
-   * Parti kodu alanı blur kontrolü — kaydetmeden önce benzersizlik uyarısı.
+   * İş emri no alanı blur kontrolü — kaydetmeden önce benzersizlik uyarısı.
+   * KÖPRÜ (Faz 2): query alanı hâlâ `batchNumber` adıyla geliyor (Electron Faz 6'da
+   * `workOrderNumber`'a döner); değer artık İŞ EMRİ NO'yu (İE…) kontrol eder. Yanıtta
+   * yeni `workOrderNumber` + eski `batchNumber` (alias) birlikte döner.
    */
   async checkBatchNumber(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const batchNumber = (req.query.batchNumber as string | undefined) ?? "";
+      const workOrderNumber =
+        (req.query.workOrderNumber as string | undefined) ??
+        (req.query.batchNumber as string | undefined) ??
+        "";
       const excludeId = (req.query.excludeId as string | undefined) || undefined;
-      const result = await this.service.checkBatchNumber(batchNumber, excludeId);
-      res.status(200).json({ success: true, data: result });
+      const result = await this.service.checkWorkOrderNumber(workOrderNumber, excludeId);
+      res.status(200).json({
+        success: true,
+        data: { ...result, batchNumber: result.workOrderNumber },
+      });
     } catch (error) {
       next(error);
     }

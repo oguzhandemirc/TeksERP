@@ -49,6 +49,7 @@ async function main() {
       shipments,
       work_order_steps,
       rolls,
+      batches,
       order_lines,
       work_orders,
       orders

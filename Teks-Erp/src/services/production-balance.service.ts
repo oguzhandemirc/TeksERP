@@ -274,7 +274,7 @@ export class ProductionBalanceService {
       },
       select: {
         id: true,
-        batchNumber: true,
+        workOrderNumber: true,
         status: true,
         targetItemId: true,
         targetColorId: true,
@@ -300,7 +300,7 @@ export class ProductionBalanceService {
       if (inFlight.greaterThan(0)) {
         acc.wos.push({
           id: w.id,
-          batchNumber: w.batchNumber,
+          batchNumber: w.workOrderNumber,
           status: w.status,
           inFlight,
         });
