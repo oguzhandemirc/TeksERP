@@ -19,7 +19,7 @@ import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
-import { createBatchTx, type CreateBatchResult } from "./batch.service";
+import { createBatchTx, deleteIfEmptyAndTraceless, type CreateBatchResult } from "./batch.service";
 import {
   Prisma,
   PrintedDocType,
@@ -269,6 +269,12 @@ export class SubcontractorService {
        * onaylayınca true gönderir; audit'e routeSkipOverride yazılır.
        */
       allowRouteSkip?: boolean;
+      /**
+       * K11: seçilen toplar 2+ partiye yayılıyorsa çözüm stratejisi. 'MERGE' = en eski
+       * partide birleştir (diğer kartlar VOID); yoksa 409 MULTI_BATCH döner. 'SEPARATE'
+       * bu core metotta işlenmez — bulkDispatchStep parti başına ayrı sevk döngüsü yapar.
+       */
+      multiBatchStrategy?: "MERGE" | "SEPARATE";
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -501,15 +507,24 @@ export class SubcontractorService {
       }
     }
 
-    // K10: bir sevk = bir parti. Seçilen topların mevcut parti (batchId) dağılımı;
-    // 2+ parti ise sevk reddedilir (Faz 3'te K11 birleştir/ayır stratejisi gelecek).
+    // K10/K11: bir sevk = bir parti. Seçilen topların mevcut parti (batchId) dağılımı.
+    // 2+ parti + strateji yok → 409 MULTI_BATCH (Electron birleştir/ayır seçtirir).
+    // MERGE → sevk anında en eski partide birleşir (aşağıda tx içinde).
     const existingBatchIds = [
       ...new Set(rolls.map((r) => r.batchId).filter((x): x is string => !!x)),
     ];
-    if (existingBatchIds.length > 1) {
+    if (existingBatchIds.length > 1 && data.multiBatchStrategy !== "MERGE") {
+      const picker = await prisma.batch.findMany({
+        where: { id: { in: existingBatchIds } },
+        select: { id: true, batchNumber: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      });
       throw AppError.conflict(
-        "Bu sevk birden fazla partiden top içeriyor — bir sevk tek parti taşır (K10). Partileri ayrı sevk edin.",
-        { code: "MULTI_BATCH", batchIds: existingBatchIds },
+        "Bu sevk birden fazla partiden top içeriyor (K11). Birleştir (en eski no yaşar) ya da parti başına ayrı sevk seçin.",
+        {
+          code: "MULTI_BATCH",
+          batches: picker.map((b, i) => ({ id: b.id, batchNumber: b.batchNumber, oldest: i === 0 })),
+        },
       );
     }
 
@@ -608,37 +623,69 @@ export class SubcontractorService {
       const dispatchRollIdsAll = rolls.map((r) => r.id);
       let dispatchBatchId: string;
       let bornCardRes: CreateBatchResult["cardRes"] | null = null;
-      let remainderBatch: CreateBatchResult["batch"] | null = null;
-      let remainderCardRes: CreateBatchResult["cardRes"] | null = null;
-      if (existingBatchIds.length === 1) {
+      const remainderBatches: CreateBatchResult["batch"][] = [];
+      const remainderCardResults: CreateBatchResult["cardRes"][] = [];
+
+      // K5 kalan-böl ortak yardımcısı: verilen partinin bu sevke GİRMEYEN canlı
+      // toplarını (farklı kazana gidecekler) YENİ partiye + karta ayırır.
+      const splitRemainder = async (srcBatchId: string): Promise<void> => {
+        const rem = await tx.roll.findMany({
+          where: {
+            batchId: srcBatchId,
+            id: { notIn: dispatchRollIdsAll },
+            status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
+          },
+          select: { id: true },
+        });
+        if (rem.length > 0) {
+          const r = await createBatchTx(tx, {
+            workOrderId: data.workOrderId,
+            rollIds: rem.map((x) => x.id),
+            splitFromId: srcBatchId,
+            userId,
+          });
+          remainderBatches.push(r.batch);
+          remainderCardResults.push(r.cardRes);
+        }
+      };
+
+      if (existingBatchIds.length > 1) {
+        // K11 MERGE (strateji üstte doğrulandı): EN ESKİ parti survivor; seçilen TÜM
+        // toplar ona taşınır; her kaynağın kalanı K5 ile yeni partiye; survivor-dışı
+        // kaynak kartları VOID + boşalan izsiz kaynaklar silinir.
+        const batchRows = await tx.batch.findMany({
+          where: { id: { in: existingBatchIds } },
+          select: { id: true, batchNumber: true },
+          orderBy: { createdAt: "asc" },
+        });
+        dispatchBatchId = batchRows[0].id;
+        await tx.roll.updateMany({
+          where: { id: { in: dispatchRollIdsAll } },
+          data: { batchId: dispatchBatchId },
+        });
+        for (const b of batchRows) await splitRemainder(b.id);
+        for (const b of batchRows.slice(1)) {
+          await tx.travelerCard.updateMany({
+            where: { batchId: b.id, status: TravelerCardStatus.ACTIVE },
+            data: {
+              status: TravelerCardStatus.VOIDED,
+              voidedAt: new Date(),
+              voidReason: `K11 sevk-birleştir → ${batchRows[0].batchNumber}`,
+            },
+          });
+          await deleteIfEmptyAndTraceless(tx, b.id);
+        }
+      } else if (existingBatchIds.length === 1) {
         dispatchBatchId = existingBatchIds[0];
         // Serbest/partisiz sevk topları bu partiye katılır.
         await tx.roll.updateMany({
           where: { id: { in: dispatchRollIdsAll }, batchId: null },
           data: { batchId: dispatchBatchId },
         });
-        // K5 OTO-BÖL: partinin bu sevke GİRMEYEN canlı topları (kalan) YENİ partiye
-        // ayrılır — gidenler orijinal P'yi + kartını korur; kalan farklı kazana
-        // gideceği için ayrı parti + yeni kart alır (splitFrom = orijinal → soy bağı).
-        const remainderRolls = await tx.roll.findMany({
-          where: {
-            batchId: dispatchBatchId,
-            id: { notIn: dispatchRollIdsAll },
-            status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
-          },
-          select: { id: true },
-        });
-        if (remainderRolls.length > 0) {
-          const remainder = await createBatchTx(tx, {
-            workOrderId: data.workOrderId,
-            rollIds: remainderRolls.map((r) => r.id),
-            splitFromId: dispatchBatchId,
-            userId,
-          });
-          remainderBatch = remainder.batch;
-          remainderCardRes = remainder.cardRes;
-        }
+        // K5 OTO-BÖL: sevke girmeyen kalan → yeni parti (giden orijinal P'yi korur).
+        await splitRemainder(dispatchBatchId);
       } else {
+        // Hepsi serbest stok → sevk anında YENİ parti doğar (K3 dalgası).
         const created = await createBatchTx(tx, {
           workOrderId: data.workOrderId,
           rollIds: dispatchRollIdsAll,
@@ -786,7 +833,7 @@ export class SubcontractorService {
         });
       }
 
-      return { dispatch, bornCardRes, remainderBatch, remainderCardRes };
+      return { dispatch, bornCardRes, remainderBatches, remainderCardResults };
       })
     );
 
@@ -825,46 +872,54 @@ export class SubcontractorService {
       });
     }
 
-    // K5 kalan parti doğduysa (kısmi sevk): parti + kart audit'i tx DIŞINDA.
-    if (result.remainderBatch) {
+    // Kalan parti(ler) doğduysa (K5 kısmi sevk / K11 birleştir): parti + kart audit'i tx DIŞINDA.
+    for (const rb of result.remainderBatches) {
       await AuditService.log({
         userId,
         action: "CREATE",
         tableName: "BATCH",
-        recordId: result.remainderBatch.id,
+        recordId: rb.id,
         newData: {
-          batchNumber: result.remainderBatch.batchNumber,
+          batchNumber: rb.batchNumber,
           workOrderId: data.workOrderId,
-          splitFromId: result.remainderBatch.splitFromId,
-          event: "K5_REMAINDER_SPLIT_ON_DISPATCH",
+          splitFromId: rb.splitFromId,
+          event: "REMAINDER_SPLIT_ON_DISPATCH",
         },
       });
-      if (result.remainderCardRes?.created) {
-        await AuditService.log({
-          userId,
-          action: "CREATE",
-          tableName: "TRAVELER_CARD",
-          recordId: result.remainderCardRes.card.id,
-          newData: {
-            cardNumber: result.remainderCardRes.card.cardNumber,
-            barcode: result.remainderCardRes.card.barcode,
-            version: 1,
-            batchId: result.remainderBatch.id,
-            event: "AUTO_PRINT_ON_K5_REMAINDER",
-          },
-        });
-      }
+    }
+    for (const rc of result.remainderCardResults) {
+      if (!rc.created) continue;
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "TRAVELER_CARD",
+        recordId: rc.card.id,
+        newData: {
+          cardNumber: rc.card.cardNumber,
+          barcode: rc.card.barcode,
+          version: 1,
+          batchId: rc.card.batchId,
+          event: "AUTO_PRINT_ON_REMAINDER",
+        },
+      });
     }
 
+    const remainderNumbers = result.remainderBatches.map((b) => b.batchNumber);
     return {
       success: true,
-      data: result.remainderBatch
-        ? { ...result.dispatch, remainderBatch: result.remainderBatch }
-        : result.dispatch,
+      data:
+        remainderNumbers.length > 0
+          ? {
+              ...result.dispatch,
+              remainderBatches: result.remainderBatches,
+              // Köprü: K5 tekil kalan tüketicileri (test) için ilk kalanı da ver.
+              remainderBatch: result.remainderBatches[0],
+            }
+          : result.dispatch,
       message:
         `Fason sevki oluşturuldu: ${result.dispatch.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)` +
-        (result.remainderBatch
-          ? ` — kalan toplar yeni partiye ayrıldı: ${result.remainderBatch.batchNumber}`
+        (remainderNumbers.length > 0
+          ? ` — kalan toplar yeni parti(ler)e ayrıldı: ${remainderNumbers.join(", ")}`
           : ""),
     };
   }
@@ -893,6 +948,9 @@ export class SubcontractorService {
       instruction?: string;
       plateNumber?: string;
       driverName?: string;
+      /** K11 çok-parti çözümü. MERGE → dispatch()'e iletilir (en eskide birleşir);
+       *  SEPARATE → burada parti başına AYRI sevk döngüsü. */
+      multiBatchStrategy?: "MERGE" | "SEPARATE";
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -941,6 +999,46 @@ export class SubcontractorService {
       );
     }
 
+    // K11 SEPARATE: seçilen toplar 2+ partiye yayılıyorsa PARTİ BAŞINA ayrı sevk
+    // (her birinin kendi FS no'su + kartı). Serbest (partisiz) toplar tek grup.
+    if (data.multiBatchStrategy === "SEPARATE") {
+      const rb = await prisma.roll.findMany({
+        where: { id: { in: rolls.map((r) => r.id) } },
+        select: { id: true, batchId: true },
+      });
+      const byBatch = new Map<string, string[]>();
+      for (const r of rb) {
+        const key = r.batchId ?? "__free__";
+        const arr = byBatch.get(key);
+        if (arr) arr.push(r.id);
+        else byBatch.set(key, [r.id]);
+      }
+      if (byBatch.size > 1) {
+        const dispatches: unknown[] = [];
+        for (const [, rollIds] of byBatch) {
+          const res = await this.dispatch(
+            {
+              workOrderId: data.workOrderId,
+              stepId: data.stepId,
+              subcontractorId,
+              rollIds,
+              allowRouteSkip: data.allowRouteSkip,
+              instruction: data.instruction,
+              plateNumber: data.plateNumber,
+              driverName: data.driverName,
+            },
+            userId,
+          );
+          dispatches.push(res.data);
+        }
+        return {
+          success: true,
+          data: { separate: true, dispatchCount: dispatches.length, dispatches },
+          message: `${dispatches.length} parti ayrı ayrı sevk edildi.`,
+        };
+      }
+    }
+
     return this.dispatch(
       {
         workOrderId: data.workOrderId,
@@ -951,6 +1049,7 @@ export class SubcontractorService {
         instruction: data.instruction,
         plateNumber: data.plateNumber,
         driverName: data.driverName,
+        multiBatchStrategy: data.multiBatchStrategy,
       },
       userId
     );
