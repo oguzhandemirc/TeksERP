@@ -28,6 +28,8 @@ export const peripheralFormSchema = z.object({
   languageOverride: z.string().optional().default(""),
   // Baskı yöntemi (ribon): "" = otomatik, DIRECT_THERMAL = ribonsuz, THERMAL_TRANSFER = ribonlu.
   mediaType: z.string().optional().default(""),
+  // Raster baskı: kanvas-varyantlı etiket 1bpp bitmap gönderilir (önizleme=baskı). LABEL_PRINTER.
+  rasterMode: z.boolean().optional().default(false),
   // Yazıcı medyası (mm/dpi) — form alanları düz string, "" = boş (sistem varsayılanı).
   labelWidthMm: z.string().trim().optional().default(""),
   labelHeightMm: z.string().trim().optional().default(""),
@@ -100,6 +102,7 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     // formatProfileId DEPRECATED — gönderilmez; medya artık 4 alanda (mm/dpi).
     languageOverride: v.kind === "LABEL_PRINTER" ? nn(v.languageOverride) : null,
     mediaType: v.kind === "LABEL_PRINTER" ? nn(v.mediaType) : null,
+    rasterMode: v.kind === "LABEL_PRINTER" ? v.rasterMode : false,
     labelWidthMm: v.kind === "LABEL_PRINTER" ? num(v.labelWidthMm) : null,
     labelHeightMm: v.kind === "LABEL_PRINTER" ? num(v.labelHeightMm) : null,
     labelDpi: v.kind === "LABEL_PRINTER" ? num(v.labelDpi) : null,
@@ -136,6 +139,7 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   deviceId: "",
   languageOverride: "",
   mediaType: "",
+  rasterMode: false,
   labelWidthMm: "",
   labelHeightMm: "",
   labelDpi: "",
