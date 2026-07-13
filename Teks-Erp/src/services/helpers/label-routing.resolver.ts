@@ -30,6 +30,9 @@ export interface LabelRouting {
   /** exact = boyut eşleşti; fallback = primary varyant basılıyor (uyumsuz medya). */
   variantMatch: VariantMatch;
   language: PrinterLanguage;
+  /** Cihaz raster modu (PeripheralDevice.rasterMode) — kanvas-varyantlı etiket 1bpp
+   *  bitmap zarfıyla gönderilir. Cihaz yoksa false (bugünkü komut yolu). */
+  rasterMode: boolean;
   /** Çözülen cihaz id (yoksa null) — native gönderim hedefi için. */
   peripheralId: string | null;
   /** F179: native gönderim hedef adresi (IP/host) — çözülen cihazdan taşınır. */
@@ -148,6 +151,7 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
     variant: picked.variant,
     variantMatch: picked.match,
     language,
+    rasterMode: peripheral?.rasterMode ?? false,
     peripheralId: peripheral?.id ?? null,
     peripheralAddress: peripheral?.address ?? null,
     peripheralPort: peripheral?.port ?? null,

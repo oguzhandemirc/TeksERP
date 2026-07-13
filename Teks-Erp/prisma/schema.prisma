@@ -591,6 +591,10 @@ model PeripheralDevice {
 
   languageOverride PrinterLanguage? // cihaz dili (boş → global ayar label.printerLanguage)
   mediaType        PrinterMediaType? // baskı yöntemi (boş → yazıcı otomatik; PPLA/ZPL'de komuta çevrilir)
+  /// Raster baskı: kanvas-varyantlı etiket 1bpp bitmap (raster) olarak gönderilir
+  /// (önizleme=baskı birebir); false = bugünkü komut üretimi (bayt-aynı). Cihaz-başına
+  /// opt-in; PPLA'da grafik komutu (F0) doğrulanana dek açılsa bile komuta düşer.
+  rasterMode Boolean @default(false)
 
   isActive   Boolean   @default(true)
   /// KALICI silinme damgası (users.deletedAt kalıbı) — NULL=normal (isActive ile
