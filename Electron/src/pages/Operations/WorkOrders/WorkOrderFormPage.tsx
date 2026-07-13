@@ -51,8 +51,8 @@ export function WorkOrderFormPage() {
   // Sekme başlığını anlamlı yap (detay sayfasıyla aynı desen).
   useEffect(() => {
     const title = isEdit
-      ? wo?.batchNumber
-        ? `Düzenle · ${wo.batchNumber.slice(-6)}`
+      ? wo?.workOrderNumber
+        ? `Düzenle · ${wo.workOrderNumber.slice(-6)}`
         : "İş Emrini Düzenle"
       : "Yeni İş Emri";
     const path = isEdit
@@ -60,7 +60,7 @@ export function WorkOrderFormPage() {
       : "/operations/work-orders/new";
     const tab = useTabsStore.getState().tabs.find((t) => t.path === path);
     if (tab) useTabsStore.getState().updateTabTitle(tab.id, title);
-  }, [isEdit, id, wo?.batchNumber]);
+  }, [isEdit, id, wo?.workOrderNumber]);
 
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
@@ -110,7 +110,7 @@ export function WorkOrderFormPage() {
           {isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}
         </span>
         {isEdit && wo && (
-          <span className="font-mono text-sm text-muted-foreground">{wo.batchNumber}</span>
+          <span className="font-mono text-sm text-muted-foreground">{wo.workOrderNumber}</span>
         )}
       </div>
 

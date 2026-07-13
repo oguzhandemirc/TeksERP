@@ -62,7 +62,7 @@ export function WorkOrderDetailHeader({
         <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" /> İş Emirleri
         </Button>
-        <span className="font-mono text-base font-semibold">{wo?.batchNumber ?? "…"}</span>
+        <span className="font-mono text-base font-semibold">{wo?.workOrderNumber ?? "…"}</span>
         {wo && (
           <StatusBadge status={wo.status} labels={workOrderStatusLabels} tones={workOrderStatusTones} />
         )}
@@ -148,7 +148,7 @@ export function WorkOrderDetailHeader({
         open={cancelOpen}
         onOpenChange={setCancelOpen}
         workOrderId={wo?.id ?? null}
-        batchNumber={wo?.batchNumber}
+        batchNumber={wo?.workOrderNumber}
         onCancelled={() => {
           if (wo) qc.invalidateQueries({ queryKey: ["work-order-detail", wo.id] });
         }}

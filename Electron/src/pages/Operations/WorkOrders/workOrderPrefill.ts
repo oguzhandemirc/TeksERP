@@ -31,7 +31,7 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
   const type = pickFormType(wo.type);
   return {
     type,
-    batchNumber: wo.batchNumber,
+    batchNumber: wo.workOrderNumber,
     routeTemplateId: wo.routeTemplateId ?? "",
     targetItemId: wo.targetItemId,
     targetColorId: wo.targetColorId,

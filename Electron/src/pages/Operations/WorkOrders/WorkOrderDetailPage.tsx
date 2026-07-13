@@ -51,12 +51,12 @@ export function WorkOrderDetailPage() {
   const wo = detail.data?.data ?? null;
 
   useEffect(() => {
-    if (!wo?.batchNumber || !id) return;
-    const suffix = wo.batchNumber.slice(-6);
+    if (!wo?.workOrderNumber || !id) return;
+    const suffix = wo.workOrderNumber.slice(-6);
     const title = `İş Emri · ${suffix}`;
     const tab = useTabsStore.getState().tabs.find((t) => t.path === `/operations/work-orders/${id}`);
     if (tab) useTabsStore.getState().updateTabTitle(tab.id, title);
-  }, [wo?.batchNumber, id]);
+  }, [wo?.workOrderNumber, id]);
 
   const sortedSteps = useMemo(
     () => (wo?.steps ? [...wo.steps].sort((a, b) => a.stepSequence - b.stepSequence) : []),

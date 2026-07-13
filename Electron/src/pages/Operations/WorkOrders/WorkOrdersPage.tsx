@@ -145,7 +145,7 @@ export function WorkOrdersPage() {
               )}
             </PermissionGate>
             <ContextMenuSeparator />
-            <CopyMenuItem label="Parti kodu" value={wo.batchNumber} />
+            <CopyMenuItem label="İş Emri No" value={wo.workOrderNumber} />
           </>
         )}
       />
@@ -164,7 +164,7 @@ export function WorkOrdersPage() {
         open={Boolean(cancelWo)}
         onOpenChange={(open) => !open && setCancelWo(null)}
         workOrderId={cancelWo?.id ?? null}
-        batchNumber={cancelWo?.batchNumber}
+        batchNumber={cancelWo?.workOrderNumber}
         onCancelled={() => setCancelWo(null)}
       />
     </div>

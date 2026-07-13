@@ -99,7 +99,8 @@ export interface WorkOrderTargetPropertyLink {
 
 export interface WorkOrder {
   id: string;
-  batchNumber: string;
+  /** İş Emri No (İE + GGAAYY + NNNN). Parti (P…) AYRI nesnedir — bkz. Batch/BatchLane. */
+  workOrderNumber: string;
   type: WorkOrderType;
   status: WorkOrderStatus;
   width: number | null;
@@ -234,7 +235,8 @@ export interface TravelerCard {
   id: string;
   cardNumber: string;
   barcode: string;
-  workOrderId: string;
+  /** Kart PARTİ başına (Batch). Eskiden workOrderId'ydi. */
+  batchId: string;
   version: number;
   status: TravelerCardStatus;
   printedAt: string;

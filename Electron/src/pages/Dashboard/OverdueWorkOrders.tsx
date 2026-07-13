@@ -77,7 +77,7 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate font-medium">{wo.batchNumber}</span>
+            <span className="truncate font-medium">{wo.workOrderNumber}</span>
             <Badge variant="outline" className="shrink-0 text-[10px]">
               {workOrderStatusLabels[wo.status]}
             </Badge>

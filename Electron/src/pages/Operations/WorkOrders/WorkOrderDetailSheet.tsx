@@ -103,7 +103,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <span className="font-mono">{wo?.batchNumber}</span>
+            <span className="font-mono">{wo?.workOrderNumber}</span>
             {wo && (
               <StatusBadge
                 status={wo.status}
@@ -476,7 +476,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
           open={cancelOpen}
           onOpenChange={setCancelOpen}
           workOrderId={wo?.id ?? null}
-          batchNumber={wo?.batchNumber}
+          batchNumber={wo?.workOrderNumber}
           onCancelled={() => onOpenChange(false)}
         />
 

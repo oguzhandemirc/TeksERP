@@ -23,9 +23,9 @@ const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maxi
 
 export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
-    accessorKey: "batchNumber",
-    header: "Parti Kodu",
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.batchNumber}</span>,
+    accessorKey: "workOrderNumber",
+    header: "İş Emri No",
+    cell: ({ row }) => <span className="font-mono text-xs">{row.original.workOrderNumber}</span>,
   },
   {
     accessorKey: "type",
