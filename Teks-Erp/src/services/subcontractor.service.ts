@@ -608,12 +608,36 @@ export class SubcontractorService {
       const dispatchRollIdsAll = rolls.map((r) => r.id);
       let dispatchBatchId: string;
       let bornCardRes: CreateBatchResult["cardRes"] | null = null;
+      let remainderBatch: CreateBatchResult["batch"] | null = null;
+      let remainderCardRes: CreateBatchResult["cardRes"] | null = null;
       if (existingBatchIds.length === 1) {
         dispatchBatchId = existingBatchIds[0];
+        // Serbest/partisiz sevk topları bu partiye katılır.
         await tx.roll.updateMany({
           where: { id: { in: dispatchRollIdsAll }, batchId: null },
           data: { batchId: dispatchBatchId },
         });
+        // K5 OTO-BÖL: partinin bu sevke GİRMEYEN canlı topları (kalan) YENİ partiye
+        // ayrılır — gidenler orijinal P'yi + kartını korur; kalan farklı kazana
+        // gideceği için ayrı parti + yeni kart alır (splitFrom = orijinal → soy bağı).
+        const remainderRolls = await tx.roll.findMany({
+          where: {
+            batchId: dispatchBatchId,
+            id: { notIn: dispatchRollIdsAll },
+            status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
+          },
+          select: { id: true },
+        });
+        if (remainderRolls.length > 0) {
+          const remainder = await createBatchTx(tx, {
+            workOrderId: data.workOrderId,
+            rollIds: remainderRolls.map((r) => r.id),
+            splitFromId: dispatchBatchId,
+            userId,
+          });
+          remainderBatch = remainder.batch;
+          remainderCardRes = remainder.cardRes;
+        }
       } else {
         const created = await createBatchTx(tx, {
           workOrderId: data.workOrderId,
@@ -743,18 +767,26 @@ export class SubcontractorService {
         skipDuplicates: true,
       });
 
-      // Refakat kartı DEPARTURE
-      await logTravelerScan(
-        tx,
-        data.workOrderId,
-        step.stationId,
-        step.id,
-        ScanType.DEPARTURE,
-        userId,
-        `Fasona sevk: ${dispatchNo}`
-      );
+      // Refakat kartı DEPARTURE — sevkin PARTİSİNİN kartına (K5 sonrası kalan partinin
+      // YENİ kartına değil; dispatchBatchId spesifik hedef).
+      const departureCard = await tx.travelerCard.findFirst({
+        where: { batchId: dispatchBatchId, status: TravelerCardStatus.ACTIVE },
+        select: { id: true },
+      });
+      if (departureCard) {
+        await tx.travelerCardScan.create({
+          data: {
+            cardId: departureCard.id,
+            stationId: step.stationId,
+            workOrderStepId: step.id,
+            scanType: ScanType.DEPARTURE,
+            scannedById: userId ?? null,
+            notes: `Fasona sevk: ${dispatchNo}`,
+          },
+        });
+      }
 
-      return { dispatch, bornCardRes };
+      return { dispatch, bornCardRes, remainderBatch, remainderCardRes };
       })
     );
 
@@ -793,10 +825,47 @@ export class SubcontractorService {
       });
     }
 
+    // K5 kalan parti doğduysa (kısmi sevk): parti + kart audit'i tx DIŞINDA.
+    if (result.remainderBatch) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "BATCH",
+        recordId: result.remainderBatch.id,
+        newData: {
+          batchNumber: result.remainderBatch.batchNumber,
+          workOrderId: data.workOrderId,
+          splitFromId: result.remainderBatch.splitFromId,
+          event: "K5_REMAINDER_SPLIT_ON_DISPATCH",
+        },
+      });
+      if (result.remainderCardRes?.created) {
+        await AuditService.log({
+          userId,
+          action: "CREATE",
+          tableName: "TRAVELER_CARD",
+          recordId: result.remainderCardRes.card.id,
+          newData: {
+            cardNumber: result.remainderCardRes.card.cardNumber,
+            barcode: result.remainderCardRes.card.barcode,
+            version: 1,
+            batchId: result.remainderBatch.id,
+            event: "AUTO_PRINT_ON_K5_REMAINDER",
+          },
+        });
+      }
+    }
+
     return {
       success: true,
-      data: result.dispatch,
-      message: `Fason sevki oluşturuldu: ${result.dispatch.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)`,
+      data: result.remainderBatch
+        ? { ...result.dispatch, remainderBatch: result.remainderBatch }
+        : result.dispatch,
+      message:
+        `Fason sevki oluşturuldu: ${result.dispatch.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)` +
+        (result.remainderBatch
+          ? ` — kalan toplar yeni partiye ayrıldı: ${result.remainderBatch.batchNumber}`
+          : ""),
     };
   }
 
