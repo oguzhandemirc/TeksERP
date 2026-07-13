@@ -216,13 +216,13 @@ export default function WorkOrderHeaderFields({
 
       {showBatchNumber ? (
         <>
-          <Text style={styles.label}>Parti Kodu</Text>
+          <Text style={styles.label}>İş Emri No</Text>
           <TextInput
             mode="outlined"
             dense
             value={value.batchNumber}
             onChangeText={(t) => onChange({ batchNumber: t })}
-            placeholder="Boş = otomatik (P-YYMMDD-NNN)"
+            placeholder="Boş = otomatik (İE-GGAAYY-NNNN)"
             style={styles.input}
             autoCapitalize="characters"
           />

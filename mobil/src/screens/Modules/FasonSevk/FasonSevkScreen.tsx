@@ -916,7 +916,7 @@ export default function FasonSevkScreen() {
       </View>
       <View style={styles.metaRow}>
         <Text variant="bodySmall" style={styles.recentsCount} numberOfLines={1}>
-          {selectedWo ? `Batch ${selectedWo.batchNumber}` : 'İş emri seçildikçe burada görünür'}
+          {selectedWo ? `İş Emri ${selectedWo.batchNumber}` : 'İş emri seçildikçe burada görünür'}
         </Text>
         {selectedWo && metaRight.length > 0 && (
           <Text variant="bodySmall" style={styles.metaRight} numberOfLines={1}>

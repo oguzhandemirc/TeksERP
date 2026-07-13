@@ -659,9 +659,9 @@ export interface TamburRollSummary {
   properties: { id: string; name: string }[];
   errorCount: number;
   errors: TamburRollDefect[];
-  /** Dal (fason partisi) kimliği — null = fasonsuz/doğrudan top. */
-  batchSplitId: string | null;
-  /** Dalın sevk numarası (SubcontractorDispatch.dispatchNo). */
+  /** Parti (Batch) kimliği — null = partisiz/doğrudan top. Bu alanla gruplanır. */
+  batchId: string | null;
+  /** Partinin sevk numarası (SubcontractorDispatch.dispatchNo). */
   dispatchNo: string | null;
   /** WO içindeki 1-based parti sırası (dispatchedAt'e göre, stabil). */
   branchOrdinal: number | null;

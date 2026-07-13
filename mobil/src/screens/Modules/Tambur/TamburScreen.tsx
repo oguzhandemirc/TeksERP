@@ -4048,7 +4048,7 @@ interface BranchGroup {
 function buildBranchGroups(rolls: TamburRollSummary[]): BranchGroup[] {
   const byKey = new Map<string, BranchGroup>();
   for (const r of rolls) {
-    const key = r.batchSplitId ?? '__none__';
+    const key = r.batchId ?? '__none__';
     let g = byKey.get(key);
     if (!g) {
       const ordinal = r.branchOrdinal ?? null;

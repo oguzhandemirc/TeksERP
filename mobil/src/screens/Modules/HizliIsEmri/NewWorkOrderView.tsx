@@ -859,14 +859,14 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
             />
           </View>
 
-          {/* Parti Kodu — boş = otomatik (Electron algoritması). */}
-          <Text style={styles.label}>Parti Kodu</Text>
+          {/* İş Emri No — boş = otomatik (backend IE+GGAAYY+NNNN üretir). */}
+          <Text style={styles.label}>İş Emri No</Text>
           <TextInput
             mode="outlined"
             dense
             value={header.batchNumber}
             onChangeText={(t) => setHeader((h) => ({ ...h, batchNumber: t }))}
-            placeholder="Otomatik (P-YYMMDD-NNN) — değiştirmek için yazın"
+            placeholder="Otomatik (İE-GGAAYY-NNNN) — değiştirmek için yazın"
             autoCapitalize="characters"
             style={styles.input}
           />
