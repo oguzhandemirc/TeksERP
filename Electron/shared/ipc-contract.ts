@@ -100,8 +100,11 @@ export interface PrinterSendOpts {
   port?: number;
   /** serial baud (default 9600). */
   baudRate?: number;
-  /** Gönderilecek native komut (PPLA/PPLB/ZPL). latin1 bayt-bire-bir yazılır. */
-  content: string;
+  /** Gönderilecek native komut (PPLA/PPLB/ZPL) — latin1 bayt-bire-bir. content ve
+   *  contentB64'ten TAM BİRİ verilir (content = eski komut yolu). */
+  content?: string;
+  /** Raster/binary yük — base64 (1bpp bitmap zarfı). main'de decode edilip ham gönderilir. */
+  contentB64?: string;
 }
 export interface PrinterSendResult {
   ok: boolean;

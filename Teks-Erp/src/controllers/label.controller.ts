@@ -16,6 +16,8 @@ const bulkLabelsSchema = z.object({
   // (tekli /native'in ?peripheralId= analoğu; iş istasyonu global dile dokunmadan
   // kendi yazıcısının dilinde basar).
   peripheralId: z.string().uuid("Geçersiz cihaz ID").optional(),
+  // "b64" → binary-safe base64 JSON yanıt (raster cihaz desteği). Yoksa ham text (eski istemci).
+  encoding: z.enum(["b64"]).optional(),
 });
 
 const updateNamesSchema = z.object({
@@ -194,6 +196,7 @@ export class LabelController {
         kindParam === LabelKind.ROLL_RAW || kindParam === LabelKind.ROLL_FINISHED
           ? (kindParam as LabelKind)
           : undefined;
+      const wantB64 = req.query.encoding === "b64";
       const result = await this.service.getRollLabelNative(req.params.id as string, kindOverride, {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
@@ -202,16 +205,33 @@ export class LabelController {
           typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
             ? parseInt(req.query.copies, 10)
             : undefined,
+        rasterCapable: wantB64,
         ...(await resolveFormatOpts(req)),
       });
-      res.setHeader("Content-Type", result.data.contentType);
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Kind", result.data.kind);
       // Tanılama izi (fail-open — client'lar yokluğunda da çalışır; cors
       // exposedHeaders'ta OLMALI, aksi halde Electron'da undefined görünür).
       if (result.data.meta.templateId) res.setHeader("X-Label-Template-Id", result.data.meta.templateId);
       if (result.data.meta.variantMatch) res.setHeader("X-Label-Variant-Match", result.data.meta.variantMatch);
-      res.status(200).send(result.data.content);
+      if (wantB64) {
+        // Yeni istemci (Electron): binary-safe base64 JSON — komut da raster de TEK yoldan.
+        res.status(200).json({
+          success: true,
+          data: {
+            encoding: "base64",
+            content: result.data.contentB64,
+            language: result.data.language,
+            contentType: result.data.contentType,
+            kind: result.data.kind,
+            meta: result.data.meta,
+          },
+        });
+      } else {
+        // Eski istemci (mobil): ham text (rasterCapable=false → komut üretildi, >0x7F yok).
+        res.setHeader("Content-Type", result.data.contentType);
+        res.status(200).send(result.data.content);
+      }
     } catch (e) { next(e); }
   };
 
@@ -288,16 +308,31 @@ export class LabelController {
   getBulkRollLabelsNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = bulkLabelsSchema.parse(req.body);
+      const wantB64 = body.encoding === "b64";
       const result = await this.service.getBulkRollLabelsNative(body.rollIds, {
         copies: body.copies,
         // Tekli /native ile aynı yönlendirme: explicit cihaz > tablete-bağlı yazıcı.
         peripheralId: body.peripheralId,
         deviceId: req.device?.id ?? undefined,
+        rasterCapable: wantB64,
       });
-      res.setHeader("Content-Type", result.data.contentType);
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Count", String(result.data.count));
-      res.status(200).send(result.data.content);
+      if (wantB64) {
+        res.status(200).json({
+          success: true,
+          data: {
+            encoding: "base64",
+            content: result.data.contentB64,
+            language: result.data.language,
+            contentType: result.data.contentType,
+            count: result.data.count,
+          },
+        });
+      } else {
+        res.setHeader("Content-Type", result.data.contentType);
+        res.status(200).send(result.data.content);
+      }
     } catch (e) { next(e); }
   };
 

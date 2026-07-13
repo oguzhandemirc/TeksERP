@@ -76,8 +76,7 @@ try {
 `;
 
 /** Ham baytları (PPLA/PPLB/ZPL) Windows yazıcı kuyruğuna RAW olarak gönder. */
-export async function sendWinspool(printerName: string, content: string): Promise<PrinterSendResult> {
-  const buf = Buffer.from(content, "latin1");
+export async function sendWinspool(printerName: string, buf: Buffer): Promise<PrinterSendResult> {
   const dir = os.tmpdir();
   const id = `${process.pid}-${++counter}`;
   const dataPath = path.join(dir, `teks-raw-${id}.prn`);

@@ -266,10 +266,10 @@ export const labelTemplateService = {
     language?: RawCodeLang;
     /** "Bu Bilgisayar"da seçili Cihaz Kaydı yazıcısı — dil/medya bu cihazdan çözülür. */
     peripheralId?: string;
-  }): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }> =>
+  }): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string; nativeB64?: string }> =>
     apiClient
       .post<
-        ApiResponse<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }>
+        ApiResponse<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string; nativeB64?: string }>
       >("/api/label-templates/preview", body)
       .then((r) => r.data.data),
 

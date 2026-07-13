@@ -131,17 +131,19 @@ export const labelService = {
     rollId: string,
     opts?: LabelCustomerContext,
     peripheralId?: string,
-  ): Promise<{ content: string; language: PrinterLanguage }> =>
+  ): Promise<{ contentB64: string; language: PrinterLanguage }> =>
     apiClient
-      .get<string>(`/api/labels/rolls/${rollId}/native`, {
-        // peripheralId: Cihaz Kaydı yönlendirmesi — dil/şablon global yerine bu cihazdan.
-        params: { ...customerContextQuery(opts), ...(peripheralId ? { peripheralId } : {}) },
-        responseType: "text",
-        transformResponse: [(d) => d],
-      })
+      // encoding=b64 → binary-safe base64 JSON (raster cihaz + komut tek yoldan).
+      .get<ApiResponse<{ encoding: string; content: string; language: string }>>(
+        `/api/labels/rolls/${rollId}/native`,
+        {
+          // peripheralId: Cihaz Kaydı yönlendirmesi — dil/şablon global yerine bu cihazdan.
+          params: { ...customerContextQuery(opts), ...(peripheralId ? { peripheralId } : {}), encoding: "b64" },
+        },
+      )
       .then((r) => ({
-        content: String(r.data ?? ""),
-        language: String(r.headers["x-label-language"] ?? "") as PrinterLanguage,
+        contentB64: String(r.data?.data?.content ?? ""),
+        language: String(r.data?.data?.language ?? "") as PrinterLanguage,
       })),
 
   /** Toplu native (PPLA) tek-job — N farklı top tek seri/COM gönderiminde (diyalogsuz). */
@@ -149,16 +151,15 @@ export const labelService = {
     rollIds: string[],
     copies?: number,
     peripheralId?: string,
-  ): Promise<{ content: string; language: PrinterLanguage }> =>
+  ): Promise<{ contentB64: string; language: PrinterLanguage }> =>
     apiClient
-      .post<string>(
+      .post<ApiResponse<{ encoding: string; content: string; language: string; count: number }>>(
         `/api/labels/rolls/bulk-native`,
-        { rollIds, ...(copies ? { copies } : {}), ...(peripheralId ? { peripheralId } : {}) },
-        { responseType: "text", transformResponse: [(d) => d] },
+        { rollIds, ...(copies ? { copies } : {}), ...(peripheralId ? { peripheralId } : {}), encoding: "b64" },
       )
       .then((r) => ({
-        content: String(r.data ?? ""),
-        language: String(r.headers["x-label-language"] ?? "") as PrinterLanguage,
+        contentB64: String(r.data?.data?.content ?? ""),
+        language: String(r.data?.data?.language ?? "") as PrinterLanguage,
       })),
 
   /** Saha #7: toplu etiket HTML'i — seçili topların hepsi tek belgede (her top kendi sayfası). */

@@ -64,8 +64,7 @@ function listSerial(): Promise<ScannerListResult> {
     .catch((e: Error) => ({ available: true, error: e.message, devices: [] }));
 }
 
-function sendTcp(opts: PrinterSendOpts): Promise<PrinterSendResult> {
-  const buf = Buffer.from(opts.content, "latin1");
+function sendTcp(opts: PrinterSendOpts, buf: Buffer): Promise<PrinterSendResult> {
   const port = opts.port ?? 9100;
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -85,10 +84,9 @@ function sendTcp(opts: PrinterSendOpts): Promise<PrinterSendResult> {
   });
 }
 
-function sendSerial(opts: PrinterSendOpts): Promise<PrinterSendResult> {
+function sendSerial(opts: PrinterSendOpts, buf: Buffer): Promise<PrinterSendResult> {
   const { mod, error } = loadSerial();
   if (!mod) return Promise.resolve({ ok: false, bytes: 0, available: false, error: error ?? "serialport yüklenemedi" });
-  const buf = Buffer.from(opts.content, "latin1");
   return new Promise((resolve) => {
     let settled = false;
     const done = (r: PrinterSendResult) => {
@@ -114,8 +112,7 @@ function sendSerial(opts: PrinterSendOpts): Promise<PrinterSendResult> {
 // macOS/Linux CUPS: ham PPLB/PPLA'yı `lp -d <kuyruk> -o raw` ile stdin'den yazıcıya.
 // USB printer-class cihaz seri düğümü açmadığı için Mac'te tek doğru yol budur.
 // Windows'ta lp yoktu → spawn "error" → available:false (uygulama çökmez).
-function sendCups(opts: PrinterSendOpts): Promise<PrinterSendResult> {
-  const buf = Buffer.from(opts.content, "latin1");
+function sendCups(opts: PrinterSendOpts, buf: Buffer): Promise<PrinterSendResult> {
   return new Promise((resolve) => {
     let settled = false;
     const done = (r: PrinterSendResult) => { if (settled) return; settled = true; resolve(r); };
@@ -167,9 +164,17 @@ export function registerPrinterIpc(): void {
   ipcMain.handle("printer:list-cups", () => listCups());
   ipcMain.handle("printer:list-winspool", () => listWinspool());
   ipcMain.handle("printer:send", (_e, opts: PrinterSendOpts) => {
-    if (!opts?.content) return Promise.resolve({ ok: false, bytes: 0, available: true, error: "İçerik boş" });
-    if (opts.transport === "winspool") return sendWinspool(opts.target, opts.content);
-    if (opts.transport === "cups") return sendCups(opts);
-    return opts.transport === "serial" ? sendSerial(opts) : sendTcp(opts);
+    // TEK NOKTADA string→Buffer ayrımı: contentB64 (raster/binary) öncelikli, yoksa
+    // content (latin1 komut). Aşağıdaki transportlar artık hazır Buffer alır.
+    const payload =
+      opts?.contentB64 != null
+        ? Buffer.from(opts.contentB64, "base64")
+        : opts?.content != null
+          ? Buffer.from(opts.content, "latin1")
+          : null;
+    if (!payload || payload.length === 0) return Promise.resolve({ ok: false, bytes: 0, available: true, error: "İçerik boş" });
+    if (opts.transport === "winspool") return sendWinspool(opts.target, payload);
+    if (opts.transport === "cups") return sendCups(opts, payload);
+    return opts.transport === "serial" ? sendSerial(opts, payload) : sendTcp(opts, payload);
   });
 }

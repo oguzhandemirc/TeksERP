@@ -36,7 +36,10 @@ import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from
 import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
 import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
-import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
+import { renderLabel, renderedBytes, shouldRasterize, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
+import { renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
+import { rasterPreviewHtml } from "./helpers/raster/raster-bmp";
+import { readCanvasLayout } from "../config/label-elements";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import { mmToDots } from "./helpers/native-label.shared";
 import { dispatchNativeSend, type PrinterTransportResult } from "./helpers/printer-transport";
@@ -144,6 +147,9 @@ export interface RollLabelRenderOpts {
   deviceId?: string | null;
   /** Şablon explicit override (cihaz yönlendirmesini ezer). */
   templateId?: string | null;
+  /** İstemci raster (binary/base64) baytları KABUL EDİYOR mu (encoding=b64 gönderdi).
+   *  false/yok → eski istemci: raster cihazda bile komut üretilir (bozulmaz). */
+  rasterCapable?: boolean;
 }
 
 /**
@@ -223,6 +229,8 @@ interface BulkLabelContext {
    *  müşteriler; tekil yoldaki CustomerTemplateRoute halkasının batch karşılığı). */
   customerTemplateByKey: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
   copies: number;
+  /** Cihaz raster modu (finishedRouting'den) — bulk raster; false → bugünkü komut. */
+  rasterMode: boolean;
 }
 
 export class LabelService {
@@ -386,7 +394,7 @@ export class LabelService {
       rollId: roll.id,
       barcode: roll.barcode,
       status: roll.status,
-      qualityGrade: roll.qualityGrade,
+      qualityGrade: roll.qualityGrade ?? "",
       widthCm: roll.width !== null ? Number(roll.width) : null,
       lengthMeters: Number(roll.currentQty),
       weightKg: roll.weightKg !== null ? Number(roll.weightKg) : null,
@@ -606,6 +614,8 @@ export class LabelService {
     let variant: LabelTemplateVariant | null;
     let format: ResolvedLabelFormat;
     let variantMatch: "exact" | "fallback" | null = null;
+    // Cihaz raster modu — routing'den (tekil) / bulk bağlamından. false → komut yolu.
+    let rasterMode = false;
     // F179: native hedef adresi yalnız tekil (non-preloaded) yönlendirmede çözülür.
     let routingPeripheral: { peripheralId: string | null; address: string | null; port: number | null } | null = null;
     if (preloaded) {
@@ -617,6 +627,7 @@ export class LabelService {
       template = custom?.template ?? preloaded.templateByKind[kind] ?? null;
       variant = custom ? custom.variant : preloaded.variantByKind[kind] ?? null;
       format = preloaded.format;
+      rasterMode = preloaded.rasterMode;
     } else {
       const routing = await resolveLabelRouting({
         kind,
@@ -632,6 +643,7 @@ export class LabelService {
       variant = routing.variant;
       format = routing.format;
       variantMatch = routing.variantMatch;
+      rasterMode = routing.rasterMode;
       routingPeripheral = {
         peripheralId: routing.peripheralId,
         address: routing.peripheralAddress,
@@ -652,7 +664,7 @@ export class LabelService {
       variantId: variant?.id ?? null,
       variantMatch,
     };
-    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format }, kind, meta, routing: routingPeripheral };
+    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format, rasterMode }, kind, meta, routing: routingPeripheral };
   }
 
   async getRollLabelHtml(
@@ -677,7 +689,8 @@ export class LabelService {
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ ppla: string }>> {
     const { input } = await this.buildRollRenderInput(rollId, kindOverride, opts);
-    const ppla = renderLabel(PrinterLanguage.PPLA, input).content;
+    // İnceleme ucu: HER ZAMAN komut (raster cihazda bile) — dilden-bağımsız PPLA metni.
+    const ppla = renderLabel(PrinterLanguage.PPLA, { ...input, rasterMode: false }).content;
     return { success: true, data: { ppla } };
   }
 
@@ -690,12 +703,21 @@ export class LabelService {
     rollId: string,
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
+  ): Promise<ApiResponse<{ content: string; contentB64: string; encoding: "text" | "binary"; language: PrinterLanguage; contentType: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
     const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
-    const r = renderLabel(input.format.language, input);
+    // rasterCapable değilse (eski istemci) raster'ı bastır → komut üret (bozulmaz).
+    const r = renderLabel(input.format.language, opts?.rasterCapable ? input : { ...input, rasterMode: false });
     return {
       success: true,
-      data: { content: r.content, language: r.language, contentType: r.contentType, kind, meta },
+      data: {
+        content: r.content,
+        contentB64: renderedBytes(r).toString("base64"),
+        encoding: r.encoding,
+        language: r.language,
+        contentType: r.contentType,
+        kind,
+        meta,
+      },
     };
   }
 
@@ -714,6 +736,23 @@ export class LabelService {
     if (language === PrinterLanguage.RASTER_HTML) {
       return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content, kind, meta } };
     }
+    // RASTER cihaz + kanvas varyantı → önizleme AYNI 1bpp bitmap (BMP data-URI) →
+    // önizleme=baskı tanım gereği. Envelope patlarsa (PPLA F0 / font eksik) komut
+    // SVG ters-parser'ına düşer (dual-mode; baskıyla tutarlı — o da komuta düşer).
+    if (shouldRasterize(language, input)) {
+      const layout = readCanvasLayout(input.variant?.elements);
+      if (layout) {
+        try {
+          const { bitmap } = renderCanvasRaster(language as RasterLanguage, {
+            payload: input.payload, format: input.format, copies: 1, layout,
+          });
+          return {
+            success: true,
+            data: { mode: "html", language, content: rasterPreviewHtml(bitmap, input.format.widthMm, input.format.heightMm), kind, meta },
+          };
+        } catch { /* raster envelope başarısız → aşağıdaki komut SVG'sine düş */ }
+      }
+    }
     const native = renderLabel(language, input).content;
     const svg = renderNativePreviewSvg(
       language,
@@ -727,7 +766,7 @@ export class LabelService {
 
   /** HTML dilinde doğrudan gönderim yok (OS sürücü); aksi halde transport'a delege. */
   private async dispatchOrGuard(
-    rendered: { content: string; language: PrinterLanguage },
+    rendered: RenderedLabel,
     opts: { enabled: boolean; printerIp?: string | null; port?: number },
   ): Promise<PrinterTransportResult> {
     if (rendered.language === PrinterLanguage.RASTER_HTML) {
@@ -740,7 +779,8 @@ export class LabelService {
         note: "HTML dilinde doğrudan gönderim yok — OS yazıcı sürücüsü kullanılır.",
       };
     }
-    return dispatchNativeSend(rendered.content, {
+    // Raster → ham bitmap zarfı baytları; komut → latin1 string (renderedBytes tek geçit).
+    return dispatchNativeSend(renderedBytes(rendered), {
       language: rendered.language,
       enabled: opts.enabled,
       printerIp: opts.printerIp,
@@ -923,8 +963,8 @@ export class LabelService {
    */
   async getBulkRollLabelsNative(
     rollIds: string[],
-    opts?: { copies?: number; peripheralId?: string; deviceId?: string },
-  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; count: number }>> {
+    opts?: { copies?: number; peripheralId?: string; deviceId?: string; rasterCapable?: boolean },
+  ): Promise<ApiResponse<{ content: string; contentB64: string; encoding: "text" | "binary"; language: PrinterLanguage; contentType: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
     const copies = opts?.copies ?? (await readLabelCopies());
@@ -934,19 +974,32 @@ export class LabelService {
     });
     const language = ctx.format.language;
     let contentType = "text/plain; charset=utf-8";
-    const blocks: string[] = [];
+    const textBlocks: string[] = [];
+    const buffers: Buffer[] = [];
+    let anyBinary = false;
     // F178: getBulkRollLabelsHtml ile aynı — ~25 topta bir event-loop'a nefes aldır.
     let yieldedN = 0;
     for (const id of ids) {
       const { input } = await this.buildRollRenderInput(id, undefined, { copies }, ctx);
-      const r = renderLabel(language, input);
+      // rasterCapable değilse komut zorla (eski istemci binary alamaz).
+      const r = renderLabel(language, opts?.rasterCapable ? input : { ...input, rasterMode: false });
       contentType = r.contentType;
-      if (r.content) blocks.push(r.content);
+      // Her blok kendi zarfını taşır (N/GW…/P veya ^XA…^XZ) → karışık raster/komut concat güvenli.
+      buffers.push(renderedBytes(r));
+      if (r.encoding === "binary") anyBinary = true;
+      else if (r.content) textBlocks.push(r.content);
       if (++yieldedN % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return {
       success: true,
-      data: { content: blocks.join(""), language, contentType, count: blocks.length },
+      data: {
+        content: textBlocks.join(""),
+        contentB64: Buffer.concat(buffers).toString("base64"),
+        encoding: anyBinary ? "binary" : "text",
+        language,
+        contentType: anyBinary ? "application/octet-stream" : contentType,
+        count: buffers.length,
+      },
     };
   }
 
@@ -1035,6 +1088,7 @@ export class LabelService {
       variantByKind,
       customerTemplateByKey: new Map(),
       copies,
+      rasterMode: finishedRouting.rasterMode,
     };
     const byCustomer = new Map<string, { itemIds: Set<string>; colorIds: Set<string> }>();
     for (const id of ids) {
@@ -1082,7 +1136,7 @@ export class LabelService {
       }
     }
 
-    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, variantByKind, customerTemplateByKey, copies };
+    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, variantByKind, customerTemplateByKey, copies, rasterMode: finishedRouting.rasterMode };
   }
 
   /**
