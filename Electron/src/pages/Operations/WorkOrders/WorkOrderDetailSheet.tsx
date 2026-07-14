@@ -27,7 +27,7 @@ import { SectionBlock } from "./WorkOrderSection";
 import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
 import { ProducedRollsCard } from "./ProducedRollsCard";
 import { OrderLinksCard } from "./OrderLinksCard";
-import { summarizeLinkedFulfillment, isEffectivelyZero } from "./order-fulfillment";
+import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { StepStateBadge } from "./step-state";
 import { FasonStepActions } from "./FasonStepActions";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
@@ -133,7 +133,6 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
                     onClick={() => {
                       if (wo.status === "IN_PROGRESS") {
                         setInProgressConfirmOpen(true);
@@ -141,7 +140,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                         onEdit(wo);
                       }
                     }}
-                    className="gap-1"
+                    className="gap-1 border-transparent bg-primary text-primary-foreground hover:bg-primary/90"
                   >
                     <Pencil className="h-3.5 w-3.5" /> İş Emrini Düzenle
                     {wo.status === "IN_PROGRESS" && (
@@ -155,12 +154,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
             <Button
               type="button"
               size="sm"
-              variant="outline"
               onClick={(e) => {
                 onOpenChange(false);
                 openTarget(`/operations/work-orders/${wo.id}`, e);
               }}
-              className="gap-1"
+              className="gap-1 border-transparent bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
               title="Sol tık: bu sekmede · Shift/Ctrl+tık: yeni sekmede"
             >
               <Maximize2 className="h-3.5 w-3.5" /> Tam Ekran Aç
@@ -168,9 +166,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
             <Button
               type="button"
               size="sm"
-              variant="outline"
               onClick={() => setDocumentsOpen(true)}
-              className="gap-1"
+              className="gap-1 border-transparent bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
             >
               <FileText className="h-3.5 w-3.5" /> Belgeler
             </Button>
@@ -179,9 +176,9 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="destructive"
                   onClick={() => setCancelOpen(true)}
-                  className="gap-1 text-destructive hover:text-destructive"
+                  className="ml-auto gap-1"
                 >
                   <Ban className="h-3.5 w-3.5" /> İptal Et
                 </Button>
@@ -206,12 +203,13 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       {formatNumber(fulfill.requested, 1)}
                       <span className="ml-1 text-xs font-normal text-muted-foreground">m</span>
                     </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Sevk {formatNumber(fulfill.shipped, 1)} ·{" "}
-                      <span className={cn(isEffectivelyZero(fulfill.open) ? "text-success" : "text-warning")}>
-                        Açık {formatNumber(fulfill.open, 1)}
-                      </span>{" "}
-                      m
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <Badge className="border-transparent bg-success font-normal text-success-foreground">
+                        Sevk: {formatNumber(fulfill.shipped, 1)} m
+                      </Badge>
+                      <Badge className="border-transparent bg-destructive font-normal text-destructive-foreground">
+                        Açık: {formatNumber(fulfill.open, 1)} m
+                      </Badge>
                     </div>
                   </CardContent>
                 </Card>

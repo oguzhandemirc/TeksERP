@@ -34,7 +34,14 @@ import type { ProductionRoute } from "@/pages/Routes/types";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { colorService } from "@/pages/Colors/service";
-import { RouteDesignerTemplatePanel } from "./RouteDesignerTemplatePanel";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { RouteStepDetail, type RouteTargetBinding } from "./RouteStepDetail";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
@@ -48,6 +55,8 @@ interface Props {
   onSetNotes: (clientId: string, notes: string) => void;
   onSetFirm: (clientId: string, patch: { plannedSubcontractorId?: string | null }) => void;
   onSeed: (routeId: string | null) => void;
+  /** İç "Şablondan başla" picker'ını gizle — WO formu onu bölüm başlığına taşıdı. */
+  hideSeedPicker?: boolean;
   onSaveTemplate: (name: string, forCustomer: boolean) => void;
   savePending: boolean;
   customerId: string | null;
@@ -65,6 +74,7 @@ export function RouteEditor({
   onSetNotes,
   onSetFirm,
   onSeed,
+  hideSeedPicker,
   onSaveTemplate,
   savePending,
   customerId,
@@ -80,7 +90,7 @@ export function RouteEditor({
   };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [seedId, setSeedId] = useState<string | null>(null);
-  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [forCustomer, setForCustomer] = useState(false);
 
@@ -180,42 +190,32 @@ export function RouteEditor({
 
   return (
     <div className="space-y-2">
-      {/* Şablondan başla (tohum) */}
-      <div className="space-y-1">
-        <label className="text-[11px] text-muted-foreground">Şablondan başla (opsiyonel)</label>
-        <EntityPickerModal<ProductionRoute>
-          value={seedId}
-          onChange={(id) => {
-            setSeedId(id);
-            onSeed(id);
-          }}
-          service={routeService}
-          queryKey="routes"
-          getLabel={(r) => r.name}
-          getSubLabel={(r) => r.code}
-          nullable
-          noneLabel="— Boş başla"
-          icon={Workflow}
-          iconClassName="text-primary"
-          title="Rota Şablonu Seç"
-          description="Hazır rota — adımlar forma yüklenir. Yüzlerce şablonda ara."
-          placeholder="Hazır rota seç — adımlar forma yüklenir..."
-        />
-      </div>
+      {/* Şablondan başla (tohum) — WO formunda bölüm başlığına taşındığında gizli. */}
+      {!hideSeedPicker && (
+        <div className="space-y-1">
+          <label className="text-[11px] text-muted-foreground">Şablondan başla (opsiyonel)</label>
+          <EntityPickerModal<ProductionRoute>
+            value={seedId}
+            onChange={(id) => {
+              setSeedId(id);
+              onSeed(id);
+            }}
+            service={routeService}
+            queryKey="routes"
+            getLabel={(r) => r.name}
+            getSubLabel={(r) => r.code}
+            nullable
+            noneLabel="— Boş başla"
+            icon={Workflow}
+            iconClassName="text-primary"
+            title="Rota Şablonu Seç"
+            description="Hazır rota — adımlar forma yüklenir. Yüzlerce şablonda ara."
+            placeholder="Hazır rota seç — adımlar forma yüklenir..."
+          />
+        </div>
+      )}
 
       {/* Yatay akış çubuğu */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
-          <Workflow className="h-3.5 w-3.5" />
-          Üretim Akışı
-        </span>
-        {steps.length > 0 && (
-          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-            <MousePointerClick className="h-3 w-3" />
-            Tıkla → düzenle · sürükle → sırala
-          </span>
-        )}
-      </div>
       <div ref={flowRef} className="flex flex-wrap items-center gap-1.5">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
@@ -245,7 +245,25 @@ export function RouteEditor({
             onClick={onAdd}
             className="h-8 gap-1 bg-gradient-to-b from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
           >
-            <Plus className="h-3.5 w-3.5" /> Adım
+            <Plus className="h-3.5 w-3.5" /> Adım Ekle
+          </Button>
+        </motion.div>
+        {/* Bu rotayı kaydet — akış satırında en sağda, "Adım Ekle" ile aynı hizada */}
+        <motion.div
+          whileHover={{ y: -1 }}
+          whileTap={{ scale: 0.96 }}
+          transition={springSnappy}
+          className="ml-auto"
+        >
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5"
+            disabled={steps.length === 0}
+            onClick={() => setSaveModalOpen(true)}
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" /> Bu Rotayı Kaydet
           </Button>
         </motion.div>
       </div>
@@ -328,32 +346,60 @@ export function RouteEditor({
         </div>
       )}
 
-      {/* Şablon olarak kaydet */}
-      <RouteDesignerTemplatePanel
-        enabled={saveAsTemplate}
-        onEnabledChange={setSaveAsTemplate}
-        name={saveName}
-        onNameChange={setSaveName}
-        customerId={customerId}
-        forCustomer={forCustomer}
-        onForCustomerChange={setForCustomer}
-      />
-      {saveAsTemplate && (
-        <div className="flex justify-end">
-          <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={springSnappy}>
+      <Dialog open={saveModalOpen} onOpenChange={setSaveModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookmarkPlus className="h-4 w-4 text-primary" /> Bu Rotayı Kaydet
+            </DialogTitle>
+            <DialogDescription>
+              Bu üretim akışını yeniden kullanılabilir bir rota olarak kaydet — sonraki
+              iş emirlerinde başlıktaki "Rota seç" ile tek tıkla gelir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Rota Adı *</label>
+              <Input
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                placeholder="Örn: Boyahane + Kurşun + Tambur"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">Kod otomatik atanır.</p>
+            </div>
+            {customerId && (
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={forCustomer}
+                  onChange={(e) => setForCustomer(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-primary"
+                />
+                Bu müşteriye özel varsayılan rota olarak kaydet
+              </label>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setSaveModalOpen(false)}>
+              Vazgeç
+            </Button>
             <Button
               type="button"
               size="sm"
               className="gap-1.5 bg-gradient-to-b from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
               disabled={savePending || !saveName.trim() || steps.length === 0}
-              onClick={() => onSaveTemplate(saveName.trim(), forCustomer)}
+              onClick={() => {
+                onSaveTemplate(saveName.trim(), forCustomer);
+                setSaveModalOpen(false);
+              }}
             >
               <BookmarkPlus className="h-3.5 w-3.5" />
-              {savePending ? "Kaydediliyor..." : "Şablonu kaydet"}
+              {savePending ? "Kaydediliyor..." : "Kaydet"}
             </Button>
-          </motion.div>
-        </div>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

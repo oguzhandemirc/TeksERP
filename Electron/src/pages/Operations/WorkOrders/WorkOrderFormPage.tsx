@@ -1,13 +1,11 @@
-import { useEffect, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
 import { fireConfetti } from "@/lib/confetti";
-import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTabsStore } from "@/store/tabs";
-import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import { workOrderService } from "./service";
 import { WorkOrderFormView } from "./WorkOrderFormView";
@@ -28,10 +26,11 @@ export function WorkOrderFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = Boolean(id);
   const location = useLocation();
-  const openTarget = useOpenTarget();
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const qc = useQueryClient();
   const targetQuantityEnabled = useTargetQuantityEnabled();
+  // Başlık satırındaki sağ slot — form "Şablon seç" butonunu buraya portal'lar.
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
 
   // Create: seed gezinme state'inden (siparişten WO / Denge "stoğa üret").
   const seed = location.state as {
@@ -91,28 +90,24 @@ export function WorkOrderFormPage() {
 
   const backPath = isEdit ? `/operations/work-orders/${id}` : LIST_PATH;
   const backLabel = isEdit ? "İş Emri" : "İş Emirleri";
+  const backTo = { label: backLabel, to: backPath };
 
   const notFound = isEdit && !detail.isLoading && !wo;
 
   return (
     <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="gap-1"
-          onClick={(e: MouseEvent) => openTarget(backPath, e)}
-        >
-          <ArrowLeft className="h-4 w-4" /> {backLabel}
-        </Button>
-        <span className="text-base font-semibold">
-          {isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}
-        </span>
-        {isEdit && wo && (
-          <span className="font-mono text-sm text-muted-foreground">{wo.workOrderNumber}</span>
-        )}
-      </div>
+      <PageHeader
+        title={isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}
+        description={
+          isEdit
+            ? wo?.workOrderNumber
+            : "Sipariş bağla ya da stoğa üret — rota ve hedefi belirle."
+        }
+        parent={backTo}
+        onBack={() => navigateActive(backPath)}
+        // Sağ aksiyon slotu — yeni kayıtta "Şablon seç" butonu buraya portal'lanır.
+        actions={<div ref={setHeaderSlot} className="flex items-center" />}
+      />
 
       <div className="flex min-h-0 flex-1 flex-col">
         {isEdit && detail.isLoading && (
@@ -139,6 +134,7 @@ export function WorkOrderFormPage() {
             }}
             isSubmitting={isEdit ? replaceMut.isPending : createMut.isPending}
             onCancel={handleCancel}
+            headerSlot={headerSlot}
           />
         )}
       </div>

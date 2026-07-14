@@ -23,10 +23,7 @@ export function WorkOrderInfoCard({ wo }: { wo: WorkOrder }) {
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
           <Field label="Hedef Ürün">
             {wo.targetItem ? (
-              <span className="font-medium">
-                <span className="mr-1 font-mono text-xs text-muted-foreground">{wo.targetItem.code}</span>
-                {wo.targetItem.name}
-              </span>
+              <span className="font-medium">{wo.targetItem.name}</span>
             ) : (
               <span className="text-muted-foreground">—</span>
             )}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -100,6 +101,8 @@ interface Props {
   isSubmitting?: boolean;
   /** İptal / vazgeç — sayfayı kapatıp listeye (veya detaya) döner. */
   onCancel: () => void;
+  /** Sayfa başlığı satırındaki sağ slot — "Şablon seç" butonu buraya portal'lanır (yalnız yeni kayıt). */
+  headerSlot?: HTMLElement | null;
 }
 
 /**
@@ -116,6 +119,7 @@ export function WorkOrderFormView({
   onSubmit,
   isSubmitting,
   onCancel,
+  headerSlot,
 }: Props) {
   const isEdit = Boolean(workOrder);
   const targetQuantityEnabled = useTargetQuantityEnabled();
@@ -180,7 +184,12 @@ export function WorkOrderFormView({
   const [routeError, setRouteError] = useState<string | null>(null);
   const [saveRecipeOpen, setSaveRecipeOpen] = useState(false);
   const [recipeName, setRecipeName] = useState("");
+  const [seedRouteId, setSeedRouteId] = useState<string | null>(null);
   const qc = useQueryClient();
+
+  // Rota Tambur içeriyor mu — "Kat Tipi" seçeneği yalnız Tambur'lu rotalarda görünür
+  // ve zorunlu olur (kat tipi Tambur operatörüne yönelik bir üretim spec'idir).
+  const hasTambur = routeSteps.some((s) => s.stationKind === "TAMBUR");
 
   // Mount + workOrder kimliği değişince formu tohumla. (Tam sayfa: her gezinme
   // taze mount → modal `open` bayrağına ihtiyaç yok.)
@@ -257,7 +266,7 @@ export function WorkOrderFormView({
         itemId: v.targetItemId,
         colorId: v.targetColorId ?? null,
         width: typeof v.width === "number" ? v.width : null,
-        foldType: v.foldType?.trim() ? v.foldType.trim() : null,
+        foldType: hasTambur && v.foldType?.trim() ? v.foldType.trim() : null,
         routeId,
         properties: (v.targetPropertyIds ?? []).map((id) => ({ propertyId: id })),
       } as unknown as Partial<ProductRecipe>);
@@ -390,7 +399,7 @@ export function WorkOrderFormView({
             }
             // Kat tipi yeni iş emrinde zorunlu — boş bırakılamaz (varsayılan 2-KAT,
             // ama recipe/temizleme ile boşalmışsa burada yakalanır).
-            if (!isEdit && !(v.foldType ?? "").trim()) {
+            if (!isEdit && hasTambur && !(v.foldType ?? "").trim()) {
               form.setError("foldType", {
                 type: "manual",
                 message: "Kat tipi seçilmeli (2-KAT veya 4-KAT).",
@@ -404,10 +413,11 @@ export function WorkOrderFormView({
               });
               return;
             }
-            await onSubmit(v, {
-              fasonPlans: [],
-              customSteps: stepsToCustom(routeSteps),
-            });
+            await onSubmit(
+              // Tambur yoksa kat tipi anlamsız — payload'a sızmasın.
+              { ...v, foldType: hasTambur ? v.foldType : "" },
+              { fasonPlans: [], customSteps: stepsToCustom(routeSteps) },
+            );
           },
           (errors) => {
             // Zod doğrulama hataları: satır içi gösterim duruyor, üstüne özet toast.
@@ -433,19 +443,12 @@ export function WorkOrderFormView({
           </Callout>
         )}
 
-        {/* Şablon seç — form üstü hızlı başlangıç (yalnız yeni kayıt). Kompakt tuş
-            "İş Emri Şablonu Seç" modalını açar; seçilince hedef alanları + rota
-            tek tıkla dolar (applyRecipe). Eski "Hızlı Başlangıç" bölümünün yerini alır. */}
-        {!isEdit && (
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-violet-50/50 px-6 py-2 dark:bg-violet-950/20">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <FlaskConical className="h-4 w-4 shrink-0 text-violet-500" />
-              <span>
-                {isOrderProduction
-                  ? "Hazır şablon seçersen ROTA + kat tipi tek tıkla dolar. İstersen atla."
-                  : "Hazır şablon seçersen kumaş, renk, en ve rota tek tıkla dolar. İstersen atla."}
-              </span>
-            </div>
+        {/* Şablon seç — sayfa başlık satırının en sağına portal'lanır (yalnız yeni
+            kayıt). Kompakt buton "İş Emri Şablonu Seç" modalını açar; seçilince hedef
+            alanları + rota tek tıkla dolar (applyRecipe). */}
+        {!isEdit &&
+          headerSlot &&
+          createPortal(
             <EntityPickerModal<ProductRecipe>
               value={recipeId}
               onChange={(id) => void applyRecipe(id)}
@@ -456,15 +459,17 @@ export function WorkOrderFormView({
               nullable
               noneLabel="— Şablon kullanma"
               icon={FlaskConical}
-              iconClassName="text-info"
+              iconClassName="text-white"
               title="İş Emri Şablonu Seç"
               description="Hazır şablon — kumaş, renk, özellik, en ve rota tek tıkla dolar."
               placeholder="Şablon seç..."
-              triggerClassName="w-auto min-w-[220px] shrink-0"
+              placeholderClassName="text-sm font-medium text-white/90"
+              hideChevron
+              triggerClassName="h-9 w-auto min-w-[180px] shrink-0 items-center gap-2 border-0 bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
               countLabel="şablon"
-            />
-          </div>
-        )}
+            />,
+            headerSlot,
+          )}
 
         <div className="flex min-h-0 flex-1">
           {/* Sol panel — yalnız sipariş bağlıyken; stoğa üretimde yer kaplamaz */}
@@ -509,10 +514,6 @@ export function WorkOrderFormView({
                       excludeWorkOrderId={workOrder?.id}
                     />
                   </div>
-                  <Callout tone="info" className="hidden lg:flex">
-                    Bağlı sipariş kalemleri <strong>soldaki panelde</strong> listelenir
-                    ve oradan düzenlenir.
-                  </Callout>
                   {/* Üretim kapsama — "ne kadar üretmeliyim" (sevk/WO/stok kovaları) */}
                   <CoveragePanel
                     lineIds={pickedLines.map((l) => l.lineId)}
@@ -551,7 +552,7 @@ export function WorkOrderFormView({
                   hintTone="info"
                   hint={
                     isOrderProduction
-                      ? "Sipariş kalemlerinden otomatik geldi."
+                      ? undefined
                       : "Stoğa üretimde zorunlu — ne üreteceğini seç."
                   }
                 >
@@ -678,8 +679,31 @@ export function WorkOrderFormView({
               tone="emerald"
               required
               description="En az bir istasyon ekle ve sırala. Renk + üretim özellikleri buradan seçilir."
+              aside={
+                <EntityPickerModal<ProductionRoute>
+                  value={seedRouteId}
+                  onChange={(id) => {
+                    setSeedRouteId(id);
+                    handleSeedRoute(id);
+                  }}
+                  service={routeService}
+                  queryKey="routes"
+                  getLabel={(r) => r.name}
+                  getSubLabel={(r) => r.code}
+                  nullable
+                  noneLabel="— Boş başla"
+                  icon={Workflow}
+                  iconClassName="text-emerald-600 dark:text-emerald-400"
+                  title="Rota Şablonu Seç"
+                  description="Hazır rota — adımlar forma yüklenir. Yüzlerce şablonda ara."
+                  placeholder="Rota seç..."
+                  triggerClassName="h-8 w-auto min-w-[150px] shrink-0 gap-1.5 border-emerald-300 bg-emerald-50 px-3 text-xs font-medium text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                  countLabel="rota"
+                />
+              }
             >
               <RouteEditor
+                hideSeedPicker
                 steps={routeSteps}
                 onAdd={addStep}
                 onRemove={removeStep}
@@ -706,45 +730,43 @@ export function WorkOrderFormView({
                 error={routeError ?? undefined}
               />
 
-              {/* Kat Tipi — rotanın hemen altında (üretim spec'i). Zorunlu: yeni iş
-                  emrinde bir tanesi mutlaka seçili olmalı; aktif düğmeye tekrar
-                  basınca seçim kaldırılmaz. Tambur operatörü için planlanan kat. */}
-              <FormField
-                label="Kat Tipi"
-                required={!isEdit}
-                error={form.formState.errors.foldType}
-                hint={
-                  locks?.foldType
-                    ? locks.reasons.foldType
-                    : "Tambur operatörüne bilgi; operatör gerekirse değiştirebilir."
-                }
-              >
-                <Controller
-                  control={form.control}
-                  name="foldType"
-                  render={({ field }) => (
-                    <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
-                      {(["2-KAT", "4-KAT"] as const).map((opt) => {
-                        const active = field.value === opt;
-                        return (
-                          <Button
-                            key={opt}
-                            type="button"
-                            variant={active ? "default" : "outline"}
-                            disabled={Boolean(locks?.foldType)}
-                            title={
-                              locks?.foldType ? locks.reasons.foldType : undefined
-                            }
-                            onClick={() => field.onChange(opt)}
-                          >
-                            {opt}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  )}
-                />
-              </FormField>
+              {/* Kat Tipi — yalnız rotada Tambur varsa görünür (Tambur operatörüne
+                  yönelik üretim spec'i). Zorunlu: yeni iş emrinde bir tanesi seçili
+                  olmalı; aktif düğmeye tekrar basınca seçim kaldırılmaz. */}
+              {hasTambur && (
+                <FormField
+                  label="Kat Tipi"
+                  required={!isEdit}
+                  error={form.formState.errors.foldType}
+                  hint={locks?.foldType ? locks.reasons.foldType : undefined}
+                >
+                  <Controller
+                    control={form.control}
+                    name="foldType"
+                    render={({ field }) => (
+                      <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
+                        {(["2-KAT", "4-KAT"] as const).map((opt) => {
+                          const active = field.value === opt;
+                          return (
+                            <Button
+                              key={opt}
+                              type="button"
+                              variant={active ? "default" : "outline"}
+                              disabled={Boolean(locks?.foldType)}
+                              title={
+                                locks?.foldType ? locks.reasons.foldType : undefined
+                              }
+                              onClick={() => field.onChange(opt)}
+                            >
+                              {opt}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  />
+                </FormField>
+              )}
             </FormSection>
 
             {/* 4 — Takip + planlama. Parti kodu izler; gelişmiş alanlar opsiyonel. */}

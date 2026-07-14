@@ -15,7 +15,7 @@ export type OrderCancelAction = "UNLINK_ONLY" | "CONVERT_TO_STOCK" | "CANCEL_WO"
 
 export interface OrderCancelPreviewWO {
   id: string;
-  batchNumber: string;
+  workOrderNumber: string;
   status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   /** WO'nun hedef üretim metrajı (link-only: per-sipariş tahsis yok). null olabilir. */
   targetQuantity: number | null;

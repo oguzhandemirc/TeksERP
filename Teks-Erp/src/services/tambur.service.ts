@@ -379,8 +379,8 @@ export class TamburService {
   ): Promise<ApiResponse<TamburStepSummary>> {
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: cardBarcode },
-      // Kart artık partiye (Batch) bağlı; WO parti üzerinden çözülür (card.batch.workOrder).
-      select: { id: true, status: true, batch: { select: { workOrderId: true } } },
+      // Kart iş emri başına — doğrudan workOrderId.
+      select: { id: true, status: true, workOrderId: true },
     });
     if (!card) {
       throw AppError.notFound(`Refakat kartı bulunamadı: ${cardBarcode}`);
@@ -394,7 +394,7 @@ export class TamburService {
     // Multi-batch destekli doğrulama. Eğer WO'nun rulları şu an Tambur'da
     // değilse net mesaj döner ("şu an Boyahane'de" gibi).
     const { stepId } = await assertWoAtStepKind(
-      card.batch.workOrderId,
+      card.workOrderId,
       StationKind.TAMBUR,
     );
     const step = await prisma.workOrderStep.findUnique({
@@ -1573,23 +1573,16 @@ export class TamburService {
             workOrderNumber: true,
             targetItem: { select: { name: true } },
             targetColor: { select: { name: true, hex: true } },
+            // Kart iş emri başına — WO'nun aktif kartı Kanban'da gösterilir.
+            travelerCards: {
+              where: { status: "ACTIVE" },
+              select: { id: true, cardNumber: true, barcode: true },
+              take: 1,
+            },
           },
         },
         currentRolls: {
-          select: {
-            currentQty: true,
-            // Kart artık partiye (Batch) bağlı — bu Tambur adımındaki topların
-            // partisinin AKTIF kartı Kanban'da gösterilir (topun partisi yoksa kart yok).
-            batch: {
-              select: {
-                travelerCards: {
-                  where: { status: "ACTIVE" },
-                  select: { id: true, cardNumber: true, barcode: true },
-                  take: 1,
-                },
-              },
-            },
-          },
+          select: { currentQty: true },
         },
         movements: {
           where: { exitedAt: null },
@@ -1609,10 +1602,8 @@ export class TamburService {
 
     const data = steps
       .map((s) => {
-        // Bu adımdaki topların partisine bağlı ilk AKTIF refakat kartı (kart partiye bağlı).
-        const card = s.currentRolls
-          .map((r) => r.batch?.travelerCards[0])
-          .find((c): c is NonNullable<typeof c> => Boolean(c));
+        // İş emrinin aktif kartı (kart WO başına).
+        const card = s.workOrder.travelerCards[0];
         if (!card) return null;
         const oldest = s.movements.reduce<Date | null>((acc, m) => {
           if (acc === null) return m.enteredAt;
@@ -2769,15 +2760,15 @@ export class TamburService {
   > {
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: cardBarcode },
-      // Kart artık partiye (Batch) bağlı; WO parti üzerinden çözülür (card.batch.workOrder).
-      select: { id: true, status: true, batch: { select: { workOrderId: true } } },
+      // Kart iş emri başına — doğrudan workOrderId.
+      select: { id: true, status: true, workOrderId: true },
     });
     if (!card) throw AppError.notFound(`Refakat kartı bulunamadı: ${cardBarcode}`);
     if (card.status !== "ACTIVE") {
       throw AppError.badRequest(`Bu refakat kartı aktif değil (durum: ${card.status})`);
     }
 
-    const { stepId } = await assertWoAtStepKind(card.batch.workOrderId, StationKind.TAMBUR);
+    const { stepId } = await assertWoAtStepKind(card.workOrderId, StationKind.TAMBUR);
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
@@ -2795,7 +2786,7 @@ export class TamburService {
 
     // WO'ya bağlı OrderLine'lar
     const links = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId: card.batch.workOrderId },
+      where: { workOrderId: card.workOrderId },
       select: {
         orderLine: {
           select: {

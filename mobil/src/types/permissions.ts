@@ -138,7 +138,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     permission: 'mobile:hizli-is-emri',
     label: 'Hızlı İş Emri',
     icon: 'rocket-launch-outline',
-    description: 'Stok topu okut → iş emri başlat + iş emirlerini yönet',
+    description: 'Topu okutup iş emri başlat/yönet',
   },
 ];
 

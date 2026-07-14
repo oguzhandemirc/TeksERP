@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Ban, FileText, Pencil } from "lucide-react";
+import { Ban, FileText, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
@@ -26,7 +27,7 @@ export function WorkOrderDetailHeader({
   autoOpenTravelerCard = false,
 }: {
   wo: WorkOrder | null;
-  onBack: (e: MouseEvent) => void;
+  onBack: () => void;
   /** Parti ayırma akışından gelindi — refakat kartı yazdırma diyaloğunu otomatik aç. */
   autoOpenTravelerCard?: boolean;
 }) {
@@ -57,73 +58,73 @@ export function WorkOrderDetailHeader({
   const canCancel = wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED";
 
   return (
-    <div className="sticky top-0 z-10 border-b bg-background/95 px-4 py-3 backdrop-blur">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" /> İş Emirleri
-        </Button>
-        <span className="font-mono text-base font-semibold">{wo?.workOrderNumber ?? "…"}</span>
-        {wo && (
-          <StatusBadge status={wo.status} labels={workOrderStatusLabels} tones={workOrderStatusTones} />
-        )}
-        {wo && (
-          <span className="text-sm text-muted-foreground">
-            {workOrderTypeLabels[wo.type]}
-            {wo.routeTemplate && <> · Rota: {wo.routeTemplate.name}</>}
-          </span>
-        )}
-        {wo && (
-          <div className="ml-auto flex items-center gap-2">
-            <RefreshButton
-              queryKey={["work-order-detail", wo.id]}
-              extraKeys={[["work-order-branches", wo.id]]}
-              silent
-            />
-            {canEdit && (
-              <PermissionGate permission="workorder:write">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="gap-1"
-                  onClick={() =>
-                    wo.status === "IN_PROGRESS" ? setInProgressConfirmOpen(true) : goEdit()
-                  }
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Düzenle
-                  {wo.status === "IN_PROGRESS" && (
-                    <span className="text-warning" aria-label="üretim devam ediyor">
-                      ⚠
-                    </span>
-                  )}
-                </Button>
-              </PermissionGate>
-            )}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="gap-1"
-              onClick={() => setDocumentsOpen(true)}
-            >
-              <FileText className="h-3.5 w-3.5" /> Belgeler
-            </Button>
-            {canCancel && (
-              <PermissionGate permission="workorder:write">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="gap-1 text-destructive hover:text-destructive"
-                  onClick={() => setCancelOpen(true)}
-                >
-                  <Ban className="h-3.5 w-3.5" /> İptal Et
-                </Button>
-              </PermissionGate>
-            )}
-          </div>
-        )}
-      </div>
+    <>
+      <PageHeader
+        title={wo?.workOrderNumber ?? "İş Emri"}
+        titleExtra={
+          wo && (
+            <StatusBadge status={wo.status} labels={workOrderStatusLabels} tones={workOrderStatusTones} />
+          )
+        }
+        description={
+          wo
+            ? `${workOrderTypeLabels[wo.type]}${wo.routeTemplate ? ` · Rota: ${wo.routeTemplate.name}` : ""}`
+            : undefined
+        }
+        parent={{ label: "İş Emirleri", to: "/operations/work-orders" }}
+        onBack={onBack}
+        actions={
+          wo ? (
+            <>
+              <RefreshButton
+                queryKey={["work-order-detail", wo.id]}
+                extraKeys={[["work-order-branches", wo.id]]}
+                silent
+              />
+              {canEdit && (
+                <PermissionGate permission="workorder:write">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 border-transparent bg-primary text-primary-foreground hover:bg-primary/90"
+                    onClick={() =>
+                      wo.status === "IN_PROGRESS" ? setInProgressConfirmOpen(true) : goEdit()
+                    }
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Düzenle
+                    {wo.status === "IN_PROGRESS" && (
+                      <span className="text-warning" aria-label="üretim devam ediyor">
+                        ⚠
+                      </span>
+                    )}
+                  </Button>
+                </PermissionGate>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1 border-transparent bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
+                onClick={() => setDocumentsOpen(true)}
+              >
+                <FileText className="h-3.5 w-3.5" /> Belgeler
+              </Button>
+              {canCancel && (
+                <PermissionGate permission="workorder:write">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    className="gap-1"
+                    onClick={() => setCancelOpen(true)}
+                  >
+                    <Ban className="h-3.5 w-3.5" /> İptal Et
+                  </Button>
+                </PermissionGate>
+              )}
+            </>
+          ) : undefined
+        }
+      />
 
       <WorkOrderDocumentsDialog
         open={documentsOpen}
@@ -166,6 +167,6 @@ export function WorkOrderDetailHeader({
           goEdit();
         }}
       />
-    </div>
+    </>
   );
 }

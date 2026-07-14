@@ -8,19 +8,24 @@ import { findBreadcrumbParent, findCommandEntry } from "./command-entries";
 
 interface Props {
   title: string;
+  /** Başlığın hemen yanında (aynı satırda) gösterilen ek içerik — ör. durum rozeti. */
+  titleExtra?: ReactNode;
   description?: string;
   actions?: ReactNode;
   className?: string;
   /** Sol geri-oku ikonu için açık hedef (breadcrumb parent yoksa da göster; ör. detay
    *  sayfaları). Verilmezse otomatik breadcrumb-parent (varsa navigate(-1)) kullanılır. */
   onBack?: () => void;
+  /** Breadcrumb üst bağlantısı — verilmezse route'tan otomatik çözülür. Kayıtlı command
+   *  entry'si olmayan alt sayfalar (ör. iş emri oluştur/düzenle) için elle geçilir. */
+  parent?: { label: string; to: string };
 }
 
-export function PageHeader({ title, description, actions, className, onBack }: Props) {
+export function PageHeader({ title, titleExtra, description, actions, className, onBack, parent: parentProp }: Props) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const entry = findCommandEntry(pathname);
-  const parent = findBreadcrumbParent(pathname);
+  const parent = parentProp ?? findBreadcrumbParent(pathname);
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(pathname);
   const showBack = Boolean(onBack || parent);
@@ -57,7 +62,10 @@ export function PageHeader({ title, description, actions, className, onBack }: P
               <ChevronRight className="h-3 w-3 opacity-60" />
             </button>
           )}
-          <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+            {titleExtra}
+          </div>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
       </div>

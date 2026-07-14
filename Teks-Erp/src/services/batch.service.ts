@@ -18,19 +18,15 @@
 // commit sonrası audit'ler (created ise).
 // =============================================================================
 
-import { Prisma, TravelerCard, TravelerCardStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
-import { TravelerCardService } from "./traveler-card.service";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { AppError } from "../utils/app-error";
 
-const travelerCardService = new TravelerCardService();
-
 export interface CreateBatchResult {
   batch: { id: string; batchNumber: string; workOrderId: string; splitFromId: string | null };
-  cardRes: { card: TravelerCard; created: boolean };
 }
 
 /**
@@ -55,13 +51,13 @@ export async function generateBatchNumberTx(
 }
 
 /**
- * Yeni parti doğurur: P kodu + Batch satırı + (varsa) rollIds üyeliği + refakat kartı.
+ * Yeni parti doğurur: P kodu + Batch satırı + (varsa) rollIds üyeliği.
  * Çağıran tx'i `withBarcodeRetry(() => prisma.$transaction(...))` ile sarmalı.
  *
  * Roll üyeliği ATOMİK CLAIM DEĞİL — çağıran topları önceden sahiplenmiş olmalı
  * (attach status-guard'ı / dispatch claim'i); burada yalnız `batchId` damgalanır.
- * Kart audit'i tx DIŞINDA (F273): dönen `cardRes.created` ise çağıran commit
- * sonrası audit yazar.
+ * NOT: Refakat kartı parti başına DEĞİL — iş emri başına (WO açılışında doğar);
+ * parti oluşturmak kart üretmez.
  */
 export async function createBatchTx(
   tx: Prisma.TransactionClient,
@@ -92,9 +88,7 @@ export async function createBatchTx(
     });
   }
 
-  const cardRes = await travelerCardService.createForBatch(tx, batch.id, params.userId);
-
-  return { batch, cardRes };
+  return { batch };
 }
 
 /**
@@ -151,13 +145,7 @@ export async function deleteIfEmptyAndTraceless(
   const childCount = await tx.batch.count({ where: { splitFromId: batchId } });
   if (childCount > 0) return false;
 
-  const scanCount = await tx.travelerCardScan.count({
-    where: { card: { batchId } },
-  });
-  if (scanCount > 0) return false;
-
-  // İzsiz boş parti: kart(lar)ı sil (scan yok → FK RESTRICT güvenli) + partiyi sil.
-  await tx.travelerCard.deleteMany({ where: { batchId } });
+  // Kart iş emri başına (partiye bağlı değil) — boş partiyi silmek karta dokunmaz.
   await tx.batch.delete({ where: { id: batchId } });
   return true;
 }
@@ -235,8 +223,8 @@ export async function moveRolls(
 
 /**
  * K8: İki+ SEVKSİZ partiyi birleştir — EN ESKİ parti no YAŞAR (survivor). Kaynak
- * partilerin topları survivor'a taşınır, kaynak kartlar VOID, boşalan izsiz kaynaklar
- * silinir. Survivor kartını korur. Hepsi aynı iş emrinde + kilitsiz olmalı.
+ * partilerin topları survivor'a taşınır, boşalan izsiz kaynaklar silinir. Kart WO
+ * başına olduğundan (aynı iş emri) karta dokunulmaz. Hepsi kilitsiz olmalı.
  */
 export async function mergeBatches(
   params: { batchIds: string[]; userId?: string },
@@ -264,15 +252,8 @@ export async function mergeBatches(
       where: { batchId: { in: sources.map((s) => s.id) } },
       data: { batchId: survivor.id },
     });
+    // Kart WO başına — birleştirme aynı iş emri içindedir, karta dokunulmaz.
     for (const s of sources) {
-      await tx.travelerCard.updateMany({
-        where: { batchId: s.id, status: TravelerCardStatus.ACTIVE },
-        data: {
-          status: TravelerCardStatus.VOIDED,
-          voidedAt: new Date(),
-          voidReason: `K8 BİRLEŞTİR → ${survivor.batchNumber}`,
-        },
-      });
       await deleteIfEmptyAndTraceless(tx, s.id);
     }
     return { survivorId: survivor.id, survivorNumber: survivor.batchNumber, mergedNumbers: sources.map((s) => s.batchNumber) };
@@ -290,7 +271,8 @@ export async function mergeBatches(
 
 /**
  * K8: Bir SEVKSİZ partiden seçilen topları YENİ bir partiye ayır (elle böl). Yeni
- * parti P kodu + kart alır (splitFrom = kaynak). Partinin TÜM topları seçilemez.
+ * parti P kodu alır (splitFrom = kaynak); kart WO başına olduğundan yeni kart YOK.
+ * Partinin TÜM topları seçilemez.
  */
 export async function splitBatch(
   params: { batchId: string; rollIds: string[]; userId?: string },
@@ -298,7 +280,7 @@ export async function splitBatch(
   const { batchId, rollIds, userId } = params;
   if (rollIds.length === 0) throw AppError.badRequest("Ayrılacak top seçilmedi");
 
-  const { newBatch, cardRes } = await withBarcodeRetry(() =>
+  const { newBatch } = await withBarcodeRetry(() =>
     prisma.$transaction(async (tx) => {
       const src = await tx.batch.findUnique({
         where: { id: batchId },
@@ -323,7 +305,7 @@ export async function splitBatch(
         splitFromId: batchId,
         userId,
       });
-      return { newBatch: created.batch, cardRes: created.cardRes };
+      return { newBatch: created.batch };
     }),
   );
 
@@ -334,20 +316,5 @@ export async function splitBatch(
     recordId: newBatch.id,
     newData: { event: "K8_SPLIT_BATCH", batchNumber: newBatch.batchNumber, splitFromId: batchId, rollCount: rollIds.length },
   });
-  if (cardRes.created) {
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "TRAVELER_CARD",
-      recordId: cardRes.card.id,
-      newData: {
-        cardNumber: cardRes.card.cardNumber,
-        barcode: cardRes.card.barcode,
-        version: 1,
-        batchId: newBatch.id,
-        event: "AUTO_PRINT_ON_K8_SPLIT",
-      },
-    });
-  }
   return { newBatchId: newBatch.id, newBatchNumber: newBatch.batchNumber };
 }

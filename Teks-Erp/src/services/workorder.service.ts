@@ -79,6 +79,7 @@ function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
 }
 
 const workOrderSplitService = new WorkOrderSplitService();
+const travelerCardService = new TravelerCardService();
 
 /**
  * plannedStartDate / plannedEndDate default'ları:
@@ -699,9 +700,10 @@ export class WorkOrderService {
       // Phase 1: WO açılışı order status'a dokunmuyor. "Üretim sürüyor mu?"
       // sorusu line.workOrderLinks üzerinden runtime hesabı.
 
-      // Parti modeli: refakat kartı WO açılışında DEĞİL, ilk parti doğduğunda
-      // (attachRolls / sevk-anı auto-attach → createBatchTx) basılır. Boş WO'nun
-      // kartı olmaz — kart parti başınadır.
+      // Refakat kartı İŞ EMRİ açılışında doğar (İE başına tek kart, barkod = İE).
+      // Parti (Batch) sonradan doğsa da yeni kart üretmez; kart hep bu WO'ya bağlı.
+      // Kartsız WO olmaz → mobil fason sevkte ilk sevkten önce bile okutulabilir.
+      await travelerCardService.createForWorkOrder(tx, wo.id, userId);
 
       return wo;
     }), undefined, manualWorkOrderNumber
@@ -1712,6 +1714,12 @@ export class WorkOrderService {
       return { success: false, data: null, message: "İş emri bulunamadı" };
     }
 
+    // Kart iş emri başına (tek) — tüm parti lane'leri aynı WO kartını gösterir.
+    const woCard = await prisma.travelerCard.findFirst({
+      where: { workOrderId, status: "ACTIVE" },
+      select: { cardNumber: true, barcode: true },
+    });
+
     const batches = await prisma.batch.findMany({
       where: { workOrderId },
       orderBy: { createdAt: "asc" },
@@ -1721,11 +1729,6 @@ export class WorkOrderService {
         createdAt: true,
         splitFrom: { select: { id: true, batchNumber: true } },
         splitChildren: { select: { id: true, batchNumber: true } },
-        travelerCards: {
-          where: { status: "ACTIVE" },
-          select: { cardNumber: true, barcode: true },
-          take: 1,
-        },
         // Parti üyesi toplar (tüketilmiş ara düğümler HARİÇ — çift sayım olmasın:
         // fason öncesi orijinaller CONSUMED, Tambur'da bölünen parent CONSUMED).
         rolls: {
@@ -1832,7 +1835,7 @@ export class WorkOrderService {
 
       // Kilit türetilmiş: iptal edilmemiş sevki varsa parti kilitli (düzenlenemez).
       const locked = b.dispatches.some((d) => !d.cancelledAt);
-      const card = b.travelerCards[0] ?? null;
+      const card = woCard;
 
       return {
         batchId: b.id,
@@ -2562,21 +2565,7 @@ export class WorkOrderService {
           rollCount: attached.length,
         },
       });
-      if (batchRes.cardRes.created) {
-        await AuditService.log({
-          userId,
-          action: "CREATE",
-          tableName: "TRAVELER_CARD",
-          recordId: batchRes.cardRes.card.id,
-          newData: {
-            cardNumber: batchRes.cardRes.card.cardNumber,
-            barcode: batchRes.cardRes.card.barcode,
-            version: 1,
-            batchId: batchRes.batch.id,
-            event: "AUTO_PRINT_ON_BATCH_BIRTH",
-          },
-        });
-      }
+      // Kart audit'i YOK — kart parti doğuşunda değil, iş emri açılışında üretilir.
     }
 
     return {

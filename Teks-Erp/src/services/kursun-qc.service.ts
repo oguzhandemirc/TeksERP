@@ -203,24 +203,22 @@ export class KursunQcService {
         isUrgent: true,
         urgentMarkedAt: true,
         station: { select: { name: true, code: true } },
-        workOrder: { select: { workOrderNumber: true } },
-        // Kart parti başına: step'teki topların partisinin aktif kartını çöz (primer
-        // parti = ilk açık top). Faz 6'da kurşun kuyruğu satırı = parti olacak.
+        workOrder: {
+          select: {
+            workOrderNumber: true,
+            // Kart iş emri başına — WO'nun aktif kartı.
+            travelerCards: {
+              where: { status: "ACTIVE" },
+              select: { id: true, cardNumber: true, barcode: true },
+              take: 1,
+            },
+          },
+        },
+        // Parti no (görüntü): step'teki ilk partili topun batch no'su (opsiyonel).
         currentRolls: {
           where: { batchId: { not: null } },
           take: 1,
-          select: {
-            batch: {
-              select: {
-                batchNumber: true,
-                travelerCards: {
-                  where: { status: "ACTIVE" },
-                  select: { id: true, cardNumber: true, barcode: true },
-                  take: 1,
-                },
-              },
-            },
-          },
+          select: { batch: { select: { batchNumber: true } } },
         },
         _count: { select: { currentRolls: true } },
       },
@@ -241,16 +239,15 @@ export class KursunQcService {
 
     const data = steps
       .map((s) => {
-        const batch = s.currentRolls[0]?.batch;
-        if (!batch) return null;
-        const card = batch.travelerCards[0];
+        const card = s.workOrder.travelerCards[0];
         if (!card) return null;
+        const batchNumber = s.currentRolls[0]?.batch?.batchNumber ?? s.workOrder.workOrderNumber;
         return {
           cardId: card.id,
           cardNumber: card.cardNumber,
           cardBarcode: card.barcode,
           workOrderId: s.workOrderId,
-          batchNumber: batch.batchNumber,
+          batchNumber,
           stepId: s.id,
           stationName: s.station.name,
           stationCode: s.station.code,
@@ -1287,6 +1284,12 @@ export class KursunQcService {
             workOrderNumber: true,
             targetItem: { select: { name: true } },
             targetColor: { select: { name: true, hex: true } },
+            // Kart iş emri başına — WO'nun aktif kartı.
+            travelerCards: {
+              where: { status: "ACTIVE" },
+              select: { cardNumber: true, barcode: true },
+              take: 1,
+            },
           },
         },
         movements: {
@@ -1296,17 +1299,8 @@ export class KursunQcService {
             roll: {
               select: {
                 currentQty: true,
-                // Kart parti başına: adımdaki topların partisinin aktif kartı (primer parti).
-                batch: {
-                  select: {
-                    batchNumber: true,
-                    travelerCards: {
-                      where: { status: "ACTIVE" },
-                      select: { cardNumber: true, barcode: true },
-                      take: 1,
-                    },
-                  },
-                },
+                // Parti no (görüntü): topun parti no'su.
+                batch: { select: { batchNumber: true } },
               },
             },
           },
@@ -1338,7 +1332,7 @@ export class KursunQcService {
         new Prisma.Decimal(0),
       );
       const batch = s.movements[0]?.roll.batch ?? null;
-      const card = batch?.travelerCards[0] ?? null;
+      const card = s.workOrder.travelerCards[0] ?? null;
       return {
         workOrderStepId: s.id,
         stationName: s.station.name,

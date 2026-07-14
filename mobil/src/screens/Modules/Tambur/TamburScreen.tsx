@@ -14,7 +14,6 @@ import {
   Surface,
   TouchableRipple,
   Icon,
-  Appbar,
   ActivityIndicator,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
@@ -33,6 +32,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import { useSessionStore } from '../../../store/sessionStore';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
 import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
@@ -173,23 +173,26 @@ function HeaderChip({
   label,
   onPress,
   accent,
+  fill,
 }: {
   icon: string;
   label: string;
   onPress: () => void;
   accent?: boolean;
+  /** true: 2. kat satırını (secondRow) eşit paylaşır — taşmaz, kaydırma gerekmez. */
+  fill?: boolean;
 }) {
   return (
     <TouchableRipple
       onPress={onPress}
-      style={[styles.headerChip, accent && styles.headerChipAccent]}
+      style={[styles.headerChip, accent && styles.headerChipAccent, fill && styles.headerChipFill]}
       borderless
       rippleColor="rgba(255,255,255,0.2)"
       accessibilityLabel={label}
     >
-      <View style={styles.headerChipInner}>
+      <View style={[styles.headerChipInner, fill && styles.headerChipInnerFill]}>
         <Icon source={icon} size={18} color="#fff" />
-        <Text style={styles.headerChipText}>{label}</Text>
+        <Text style={styles.headerChipText} numberOfLines={1}>{label}</Text>
       </View>
     </TouchableRipple>
   );
@@ -203,6 +206,16 @@ export default function TamburScreen() {
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
+
+  // Bulunulan makine adı — telefonda başlık subtitle'ı olarak gösterilir (Ham
+  // Giriş/KK1 ve Kurşun ile aynı desen); tablette PlaceChip başlığın yanında kalır.
+  const activeSession = useSessionStore((s) => s.active);
+  const machineName =
+    activeSession?.machine?.name ||
+    activeSession?.machine?.code ||
+    activeSession?.station?.name ||
+    undefined;
+
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   // Etiket "kime?" — baskı anında müşteri seçimi (gevşek model: top→sipariş bağı yok).
   const [labelContext, setLabelContext] = useState<LabelTargetContext | undefined>(undefined);
@@ -1535,23 +1548,11 @@ export default function TamburScreen() {
           )}
         </View>
       ) : compact ? (
-        // Telefon kamera-only mod: 4 aksiyon drawer'da tek satır büyük ikon.
+        // Telefon kamera-only mod: Çıkanlar/Kesme drawer'da tek satır büyük
+        // ikon. Liste ve Tara artık header'ın 2. katında (phoneSecondRow) —
+        // burada tekrar etmez.
         <View style={styles.cardInputWrap}>
           <View style={styles.actionsCompactRow}>
-            <CompactAction
-              icon="format-list-bulleted"
-              label="Liste"
-              bg="#e2e8f0"
-              color="#0f172a"
-              onPress={() => openList()}
-            />
-            <CompactAction
-              icon="camera"
-              label="Tara"
-              bg="#dbeafe"
-              color="#1e40af"
-              onPress={() => openScanner()}
-            />
             <CompactAction
               icon="printer-search"
               label="Çıkanlar"
@@ -1620,16 +1621,41 @@ export default function TamburScreen() {
     </>
   );
 
+  // Telefonda "Açık İşler" (operatörün açtığı kart sekmeleri), "Açık Kartlar"
+  // ve "Tara" erişimi Kurşun/Ham Giriş ile aynı desende: header'da sıkışan tek
+  // ikon yerine, başlığın ALTINDAKİ 2. katta yan yana üç etiketli chip
+  // (secondRow) — hepsi drawer açmadan doğrudan erişilir. Çıkanlar/Kesme
+  // telefonda drawer içinde kalır.
+  const phoneSecondRow = (
+    <>
+      <HeaderChip
+        icon="clipboard-list-outline"
+        label={`Açık İşler · ${openJobs.length}`}
+        onPress={() => setRightDrawerOpen(true)}
+        fill
+      />
+      <HeaderChip
+        icon="format-list-bulleted"
+        label="Açık Kartlar"
+        onPress={() => openList()}
+        fill
+      />
+      <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} fill />
+    </>
+  );
+
   // ── Render ──
   return (
     <ScreenChrome
       title="Tambur"
+      subtitle={compact ? machineName : undefined}
+      hidePlaceChip={compact}
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />
           {/* Tablet: kart aksiyonları header'a etiketli pill olarak alınır →
-              sağ kolonda liste için alan açılır. Telefonda header dar; bunlar
-              drawer'da kalır. */}
+              sağ kolonda liste için alan açılır. Telefonda erişim 2. kattaki
+              chip'lerden (phoneSecondRow) + drawer içinden. */}
           {!compact && (
             <>
               <HeaderChip
@@ -1650,20 +1676,10 @@ export default function TamburScreen() {
               />
             </>
           )}
-          {compact ? (
-            <Appbar.Action
-              icon="format-list-bulleted"
-              color="#fff"
-              onPress={() => setRightDrawerOpen(true)}
-              accessibilityLabel={
-                activeJob
-                  ? `Açık iş: ${activeJob.stepSummary.batchNumber}`
-                  : 'Açık İşler / Kart Okut'
-              }
-            />
-          ) : null}
         </View>
       }
+      secondRow={compact ? phoneSecondRow : undefined}
+      secondRowSpread={compact}
     >
       <View
         style={[
@@ -4693,6 +4709,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  // secondRow'da (telefon) 3 chip eşit paylaşır — taşmaz, kaydırma gerekmez.
+  headerChipFill: { flex: 1, marginLeft: 0 },
+  headerChipInnerFill: { justifyContent: 'center' },
   headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   reprintBadge: { position: 'absolute', top: 4, right: 2, backgroundColor: '#dc2626' },
 

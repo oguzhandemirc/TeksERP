@@ -103,10 +103,8 @@ async function logTravelerScan(
   note: string
 ): Promise<void> {
   const activeCard = await tx.travelerCard.findFirst({
-    // Kart parti başına — WO'nun en güncel aktif parti kartına yaz (köprü; parti-özel
-    // tarama Faz 3'te). batch relation üzerinden WO'ya filtrele.
-    where: { batch: { workOrderId }, status: TravelerCardStatus.ACTIVE },
-    orderBy: { printedAt: "desc" },
+    // Kart iş emri başına — WO'nun aktif kartına yaz.
+    where: { workOrderId, status: TravelerCardStatus.ACTIVE },
     select: { id: true },
   });
   if (!activeCard) return;
@@ -620,15 +618,14 @@ export class SubcontractorService {
 
       // Sevkin partisini belirle (K10). Tek mevcut parti varsa serbest/partisiz toplar
       // da o partiye katılır; hiç parti yoksa (hepsi serbest stok) sevk anında YENİ
-      // parti doğar (K3 dalgası) — createBatchTx P + RK üretir; kart audit'i tx DIŞINDA.
+      // parti doğar (K3 dalgası) — createBatchTx yalnız P üretir; kart iş emri başına
+      // (WO açılışında doğdu), parti kart üretmez.
       const dispatchRollIdsAll = rolls.map((r) => r.id);
       let dispatchBatchId: string;
-      let bornCardRes: CreateBatchResult["cardRes"] | null = null;
       const remainderBatches: CreateBatchResult["batch"][] = [];
-      const remainderCardResults: CreateBatchResult["cardRes"][] = [];
 
       // K5 kalan-böl ortak yardımcısı: verilen partinin bu sevke GİRMEYEN canlı
-      // toplarını (farklı kazana gidecekler) YENİ partiye + karta ayırır.
+      // toplarını (farklı kazana gidecekler) YENİ partiye ayırır.
       const splitRemainder = async (srcBatchId: string): Promise<void> => {
         const rem = await tx.roll.findMany({
           where: {
@@ -646,7 +643,6 @@ export class SubcontractorService {
             userId,
           });
           remainderBatches.push(r.batch);
-          remainderCardResults.push(r.cardRes);
         }
       };
 
@@ -665,15 +661,8 @@ export class SubcontractorService {
           data: { batchId: dispatchBatchId },
         });
         for (const b of batchRows) await splitRemainder(b.id);
+        // Kart WO başına — sevk-birleştirmede karta dokunulmaz; boş izsiz kaynaklar silinir.
         for (const b of batchRows.slice(1)) {
-          await tx.travelerCard.updateMany({
-            where: { batchId: b.id, status: TravelerCardStatus.ACTIVE },
-            data: {
-              status: TravelerCardStatus.VOIDED,
-              voidedAt: new Date(),
-              voidReason: `K11 sevk-birleştir → ${batchRows[0].batchNumber}`,
-            },
-          });
           await deleteIfEmptyAndTraceless(tx, b.id);
         }
       } else if (existingBatchIds.length === 1) {
@@ -686,14 +675,14 @@ export class SubcontractorService {
         // K5 OTO-BÖL: sevke girmeyen kalan → yeni parti (giden orijinal P'yi korur).
         await splitRemainder(dispatchBatchId);
       } else {
-        // Hepsi serbest stok → sevk anında YENİ parti doğar (K3 dalgası).
+        // Hepsi serbest stok → sevk anında YENİ parti doğar (K3 dalgası). Kart WO
+        // başına (WO açılışında doğdu) — parti yeni kart üretmez.
         const created = await createBatchTx(tx, {
           workOrderId: data.workOrderId,
           rollIds: dispatchRollIdsAll,
           userId,
         });
         dispatchBatchId = created.batch.id;
-        bornCardRes = created.cardRes;
       }
 
       // Dispatch numarası
@@ -815,10 +804,9 @@ export class SubcontractorService {
         skipDuplicates: true,
       });
 
-      // Refakat kartı DEPARTURE — sevkin PARTİSİNİN kartına (K5 sonrası kalan partinin
-      // YENİ kartına değil; dispatchBatchId spesifik hedef).
+      // Refakat kartı DEPARTURE — iş emrinin kartına (WO başına tek kart).
       const departureCard = await tx.travelerCard.findFirst({
-        where: { batchId: dispatchBatchId, status: TravelerCardStatus.ACTIVE },
+        where: { workOrderId: data.workOrderId, status: TravelerCardStatus.ACTIVE },
         select: { id: true },
       });
       if (departureCard) {
@@ -834,7 +822,7 @@ export class SubcontractorService {
         });
       }
 
-      return { dispatch, bornCardRes, remainderBatches, remainderCardResults };
+      return { dispatch, remainderBatches };
       })
     );
 
@@ -857,23 +845,8 @@ export class SubcontractorService {
       },
     });
 
-    // Parti sevk-anında doğduysa (hepsi serbest stok) kart audit'i tx DIŞINDA (F273).
-    if (result.bornCardRes?.created) {
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "TRAVELER_CARD",
-        recordId: result.bornCardRes.card.id,
-        newData: {
-          cardNumber: result.bornCardRes.card.cardNumber,
-          barcode: result.bornCardRes.card.barcode,
-          version: 1,
-          event: "AUTO_PRINT_ON_DISPATCH_BATCH_BIRTH",
-        },
-      });
-    }
-
-    // Kalan parti(ler) doğduysa (K5 kısmi sevk / K11 birleştir): parti + kart audit'i tx DIŞINDA.
+    // Kalan parti(ler) doğduysa (K5 kısmi sevk / K11 birleştir): parti audit'i tx DIŞINDA.
+    // Kart audit'i YOK — kart iş emri başına (WO açılışında), parti kart üretmez.
     for (const rb of result.remainderBatches) {
       await AuditService.log({
         userId,
@@ -885,22 +858,6 @@ export class SubcontractorService {
           workOrderId: data.workOrderId,
           splitFromId: rb.splitFromId,
           event: "REMAINDER_SPLIT_ON_DISPATCH",
-        },
-      });
-    }
-    for (const rc of result.remainderCardResults) {
-      if (!rc.created) continue;
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "TRAVELER_CARD",
-        recordId: rc.card.id,
-        newData: {
-          cardNumber: rc.card.cardNumber,
-          barcode: rc.card.barcode,
-          version: 1,
-          batchId: rc.card.batchId,
-          event: "AUTO_PRINT_ON_REMAINDER",
         },
       });
     }

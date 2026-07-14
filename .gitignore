@@ -9,6 +9,7 @@ React/
 
 # Claude Code çalışma-zamanı kilidi (per-session artefakt; .claude/settings.json İZLENİR)
 .claude/scheduled_tasks.lock
+.claude/worktrees/
 
 # Test artefaktları (token, raporlar)
 test-results/

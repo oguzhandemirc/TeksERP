@@ -73,10 +73,10 @@ import {
 } from '../../../utils/labels';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
-// net mesajla yakalar. Refakat kartı "RK", top (rulo) "TEKS" ile başlar; ikisi
-// asla çakışmaz. Yalnızca KESİN ters tipi reddederiz; gerisini backend doğrular.
+// net mesajla yakalar. Refakat kartı "İE" (= iş emri no; eski kartlar "RK"), top
+// (rulo) "T" + rakam ile başlar; çakışmaz. Yalnızca KESİN ters tipi reddederiz.
 const looksLikeRollBarcode = (code: string) => /^T\d/i.test(code.trim());
-const looksLikeCardBarcode = (code: string) => /^RK/i.test(code.trim());
+const looksLikeCardBarcode = (code: string) => /^(IE|RK)/i.test(code.trim());
 
 // Android LMK: OS uzun süre arka planda bırakılan uygulamayı öldürür.
 // Form taslağını AsyncStorage'a yazarak uygulama yeniden açılınca geri yükleriz.
@@ -989,7 +989,7 @@ export default function FasonSevkScreen() {
               <ScannerEntryBar
                 value={cardInput}
                 onChangeText={setCardInput}
-                placeholder="Refakat kartı (RK-2605-001 ya da tam barkod)"
+                placeholder="Refakat kartı / İş Emri (örn IE1407260001)"
                 onResolve={() => handleCardScan(cardInput)}
                 resolving={resolvingCard}
                 onScan={() => setCardScannerOpen(true)}

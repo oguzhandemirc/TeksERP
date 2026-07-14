@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer, RefreshCw } from "lucide-react";
+import { Inbox, Printer, RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -74,8 +74,16 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
               <Skeleton className="h-64 w-full" />
             </div>
           ) : !activeCard ? (
-            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-              Aktif refakat kartı bulunamadı.
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Inbox className="h-5 w-5" />
+              </span>
+              <div className="text-sm font-semibold text-foreground">Kart görüntülenemedi</div>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Refakat kartı iş emri açılışında otomatik üretilir (kart = iş emri no,
+                karekod sabit). Bu iş emrinin kartı yüklenemedi — <strong>Yenile</strong>'yi
+                deneyin.
+              </p>
             </div>
           ) : htmlQuery.isLoading ? (
             <div className="p-4">

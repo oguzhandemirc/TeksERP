@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenChrome from '../../../components/ScreenChrome';
 import StationActionButton from '../../../components/StationActionButton';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import { useSessionStore } from '../../../store/sessionStore';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
@@ -94,15 +95,22 @@ function HeaderChip({
   onPress,
   badge,
   iconAnimatedStyle,
+  fill,
 }: {
   icon: string;
   label: string;
   onPress: () => void;
   badge?: React.ReactNode;
   iconAnimatedStyle?: object;
+  /** true: 2. kat satırını (secondRow) eşit paylaşır — taşmaz, kaydırma gerekmez. */
+  fill?: boolean;
 }) {
   return (
-    <View style={styles.headerChipWrap}>
+    <View style={[styles.headerChipWrap, fill && styles.headerChipWrapFill]}>
+      {/* flex:1 BURADA VERİLMEZ: headerChipWrap (row-child) zaten flex:1 alır,
+          bu TouchableRipple onun column-child'ı — kendine de flex:1 verilirse
+          parent'ın (auto-height) main-eksenine göre 0 yüksekliğe çöker (Yoga
+          flex-basis:0 tuzağı). Wrap'in default stretch'i genişliği zaten verir. */}
       <TouchableRipple
         onPress={onPress}
         style={styles.headerChip}
@@ -110,11 +118,11 @@ function HeaderChip({
         rippleColor="rgba(255,255,255,0.2)"
         accessibilityLabel={label}
       >
-        <View style={styles.headerChipInner}>
+        <View style={[styles.headerChipInner, fill && styles.headerChipInnerFill]}>
           <Reanimated.View style={iconAnimatedStyle}>
             <Icon source={icon} size={18} color="#fff" />
           </Reanimated.View>
-          <Text style={styles.headerChipText}>{label}</Text>
+          <Text style={styles.headerChipText} numberOfLines={1}>{label}</Text>
         </View>
       </TouchableRipple>
       {badge}
@@ -130,6 +138,15 @@ export default function KursunQcScreen() {
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
+
+  // Bulunulan makine adı — telefonda başlık subtitle'ı olarak gösterilir (Ham
+  // Giriş/KK1 ile aynı desen); tablette PlaceChip başlığın yanında kalır.
+  const activeSession = useSessionStore((s) => s.active);
+  const machineName =
+    activeSession?.machine?.name ||
+    activeSession?.machine?.code ||
+    activeSession?.station?.name ||
+    undefined;
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   // Drawer + RNModal stack çakışmasını çözen ortak queue (hook).
   const drawerQueue = useDrawerActionQueue({
@@ -1022,81 +1039,44 @@ export default function KursunQcScreen() {
         </Surface>
       )}
 
-      {/* Üst kontrol/sekme şeridi — kamera modunda Okut+Liste solda sabit,
-          sekmeler kalan alanda yatay kaydırılır; manuel modda yalnız sekmeler. */}
-      {((compact && !manualBarcodeEntry) || openJobs.length > 0) && (
+      {/* Açık iş emri sekmeleri — Okut + Liste (Açık Kartlar) artık header'ın
+          2. katında (phoneSecondRow), burada tekrar etmez. Telefonda KENDİ
+          tam-genişlik satırı (tek satır çip); tablette de tek satır. */}
+      {openJobs.length > 0 && (
         <View style={styles.topArea}>
-          {/* Kamera modu aksiyonları (telefon): kendi satırında. */}
-          {compact && !manualBarcodeEntry && (
-            <View style={styles.scanRow}>
-              <Button
-                mode="contained"
-                icon="camera"
-                compact
-                onPress={() => drawerQueue.run(() => setScannerOpen(true))}
-                buttonColor="#059669"
-                style={styles.scanCompactBtn}
-                contentStyle={styles.scanCompactContent}
-                labelStyle={styles.scanCompactLabel}
-              >
-                Okut
-              </Button>
-              <View>
-                <IconButton
-                  icon="format-list-bulleted"
-                  mode="contained-tonal"
-                  containerColor={urgentCount > 0 ? '#fee2e2' : '#f1f5f9'}
-                  iconColor={urgentCount > 0 ? '#b91c1c' : '#475569'}
-                  size={22}
-                  onPress={() => drawerQueue.run(() => setListModalOpen(true))}
-                  accessibilityLabel="Açık kartlar listesi"
-                  style={styles.listCompactBtn}
+          <View style={styles.tabRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.tabScroll, compact && styles.tabScrollCompact]}
+              style={styles.tabScrollArea}
+            >
+              {openJobs.map((job) => (
+                <JobTab
+                  key={job.cardId}
+                  job={job}
+                  compact={compact}
+                  active={job.cardId === activeCardId}
+                  onPress={() => setActiveCardId(job.cardId)}
+                  onClose={() => closeJob(job.cardId)}
                 />
-                <UrgentBadge count={urgentCount} />
+              ))}
+            </ScrollView>
+            {/* Yenile: telefonda tek yer BURASI (header'da "Yenile" pill'i yok).
+                Tablette header'daki pill aynı activeRefresh'i atıyor → tablette
+                buradaki KALDIRILDI, çift buton olmasın. */}
+            {compact && (
+              <View style={styles.tabRefreshWrap}>
+                <RefreshButton
+                  onPress={activeRefresh.onRefresh}
+                  refreshing={activeRefresh.refreshing}
+                  isError={activeRefresh.isError}
+                  errorMessage={activeRefresh.errorMessage}
+                  successMessage={activeRefresh.successMessage}
+                />
               </View>
-              {/* Yenile burada DEĞİL — açık iş sekmeleri şeridinde (tabRow) tek
-                  bir RefreshButton var. İkisi birden gösterilince drawer'da iki
-                  yenile tuşu çıkıyordu. */}
-            </View>
-          )}
-
-          {/* Açık iş emri sekmeleri — telefonda KENDİ tam-genişlik satırı (tek
-              satır çip). Tablette de tek satır; orada zaten ayrı şerit. */}
-          {openJobs.length > 0 && (
-            <View style={styles.tabRow}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[styles.tabScroll, compact && styles.tabScrollCompact]}
-                style={styles.tabScrollArea}
-              >
-                {openJobs.map((job) => (
-                  <JobTab
-                    key={job.cardId}
-                    job={job}
-                    compact={compact}
-                    active={job.cardId === activeCardId}
-                    onPress={() => setActiveCardId(job.cardId)}
-                    onClose={() => closeJob(job.cardId)}
-                  />
-                ))}
-              </ScrollView>
-              {/* Yenile: telefonda tek yer BURASI (header'da "Yenile" pill'i yok).
-                  Tablette header'daki pill aynı activeRefresh'i atıyor → tablette
-                  buradaki KALDIRILDI, çift buton olmasın. */}
-              {compact && (
-                <View style={styles.tabRefreshWrap}>
-                  <RefreshButton
-                    onPress={activeRefresh.onRefresh}
-                    refreshing={activeRefresh.refreshing}
-                    isError={activeRefresh.isError}
-                    errorMessage={activeRefresh.errorMessage}
-                    successMessage={activeRefresh.successMessage}
-                  />
-                </View>
-              )}
-            </View>
-          )}
+            )}
+          </View>
         </View>
       )}
 
@@ -1135,32 +1115,42 @@ export default function KursunQcScreen() {
     </>
   );
 
-  // Telefonda "Açık İşler" header'a (profil ikonunun soluna) taşınır —
-  // ScreenChrome.headerExtras profilden önce render edilir. Acil top varsa
-  // ikon turuncuya döner — operatör drawer'ı açmadan da uyarıyı görsün.
-  const headerOpenJobsBtn = compact ? (
-    <IconButton
-      icon="format-list-bulleted"
-      iconColor={urgentCount > 0 ? '#f59e0b' : '#fff'}
-      size={22}
-      onPress={() => setRightDrawerOpen(true)}
-      accessibilityLabel={
-        activeJob
-          ? `${activeJob.cardNumber} · ${activeJob.stepSummary.rolls.length} top${
-              urgentCount > 0 ? ` · ${urgentCount} acil` : ''
-            }`
-          : 'Açık İşler'
-      }
-      style={styles.headerOpenJobsBtn}
-    />
-  ) : null;
+  // Telefonda "Açık İşler" (operatörün açtığı kart sekmeleri) ve "Açık Kartlar"
+  // (sistemdeki tüm bekleyen kartlar) erişimi Ham Giriş (KK1) ile aynı desende:
+  // header'da sıkışan tek ikon yerine, başlığın ALTINDAKİ 2. katta yan yana üç
+  // etiketli chip (secondRow) — hepsi drawer açmadan doğrudan erişilir.
+  // Açık Kartlar'da acil varsa rozet döner.
+  const openCardsCount = openCardsQuery.data?.data?.length ?? 0;
+  const phoneSecondRow = (
+    <>
+      <HeaderChip
+        icon="clipboard-list-outline"
+        label={`Açık İşler · ${openJobs.length}`}
+        onPress={() => setRightDrawerOpen(true)}
+        fill
+      />
+      <HeaderChip
+        icon="format-list-bulleted"
+        label={`Açık Kartlar · ${openCardsCount}`}
+        onPress={() => drawerQueue.run(() => setListModalOpen(true))}
+        badge={<UrgentBadge count={urgentCount} />}
+        fill
+      />
+      <HeaderChip
+        icon="camera"
+        label="Tara"
+        onPress={() => drawerQueue.run(() => setScannerOpen(true))}
+        fill
+      />
+    </>
+  );
 
   const headerExtras = (
     <View style={styles.headerExtrasRow}>
       <SyncStatusChip />
       {/* Tablet: Kart Okut + Liste aksiyonları header'a etiketli pill olarak
-          alınır (Tambur ekranıyla aynı stil). Telefonda header dar; aksiyonlar
-          drawer'da kalır, headerOpenJobsBtn ile açılır. */}
+          alınır (Tambur ekranıyla aynı stil). Telefonda aksiyonlar drawer'da
+          kalır, erişim 2. kattaki chip'ten (phoneSecondRow). */}
       {!compact && (
         <>
           <HeaderChip
@@ -1185,12 +1175,18 @@ export default function KursunQcScreen() {
           />
         </>
       )}
-      {headerOpenJobsBtn}
     </View>
   );
 
   return (
-    <ScreenChrome title="Kurşun" headerExtras={headerExtras}>
+    <ScreenChrome
+      title="Kurşun"
+      subtitle={compact ? machineName : undefined}
+      hidePlaceChip={compact}
+      headerExtras={headerExtras}
+      secondRow={compact ? phoneSecondRow : undefined}
+      secondRowSpread={compact}
+    >
       <View
         style={[
           styles.body,
@@ -2383,12 +2379,12 @@ const styles = StyleSheet.create({
 
   // Sol — form
   formCol: { flex: 1.4 },
-  // Compact (telefon) — header'da profil ikonu solunda "Açık İşler" ikonu
-  headerOpenJobsBtn: { margin: 0 },
-  // Header'da sync chip + open jobs button yan yana sığsın.
+  // Header'da sync chip + tablet aksiyon chip'leri yan yana sığsın.
   headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
   // Koyu header'a uygun translucent etiketli aksiyon pill'i (Tambur ile aynı).
   headerChipWrap: { marginLeft: 4 },
+  // secondRow'da (telefon) chip'ler eşit paylaşır — taşmaz, kaydırma gerekmez.
+  headerChipWrapFill: { flex: 1, marginLeft: 0 },
   headerChip: {
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.14)',
@@ -2403,6 +2399,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  headerChipInnerFill: { justifyContent: 'center' },
   headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   emptyState: {
@@ -2572,7 +2569,7 @@ const styles = StyleSheet.create({
   cameraBtn: { margin: 0 },
 
   // Üst kontrol/sekme şeridi — Okut + Liste + yatay kaydırılan sekmeler tek satır.
-  // Üst alan: kamera-aksiyon satırı + açık iş sekmeleri satırı (telefonda 2 satır).
+  // Üst alan: açık iş sekmeleri satırı.
   topArea: {
     backgroundColor: '#f8fafc',
     borderBottomWidth: 1,
@@ -2580,21 +2577,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 6,
   },
-  scanRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-  },
   tabRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
   },
-  scanCompactBtn: { borderRadius: 8 },
-  scanCompactContent: { height: 44, paddingHorizontal: 2 },
-  scanCompactLabel: { fontSize: 14, fontWeight: '700' },
-  listCompactBtn: { margin: 0, height: 44, width: 44, borderRadius: 8 },
   // Sekme ScrollView'i kalan alanı kaplar — taşan sekmeler yatay kayar.
   tabScrollArea: { flex: 1 },
   // flexGrow + flex-end: az sekme varken sağa dayanır (refresh'in soluna),

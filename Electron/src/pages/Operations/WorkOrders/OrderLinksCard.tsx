@@ -3,11 +3,8 @@ import { ShoppingCart } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
-import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
-import { orderStatusLabels } from "@/types/enums";
 import { formatNumber } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import { lineOpen, isEffectivelyZero } from "./order-fulfillment";
+import { lineOpen } from "./order-fulfillment";
 import type { WorkOrder } from "./types";
 
 /**
@@ -58,14 +55,6 @@ export function OrderLinksCard({ wo }: { wo: WorkOrder }) {
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
-                {order?.status && (
-                  <StatusBadge
-                    status={order.status}
-                    labels={orderStatusLabels}
-                    tones={orderStatusTones}
-                    className="text-[10px]"
-                  />
-                )}
                 {order?.deadline && <DeadlineBadge deadline={order.deadline} />}
               </div>
             </div>
@@ -93,6 +82,16 @@ export function OrderLinksCard({ wo }: { wo: WorkOrder }) {
                           <span className="text-muted-foreground">{ol.color.name}</span>
                         </span>
                       )}
+                      {ol?.width != null && (
+                        <Badge variant="outline" className="ml-1.5 font-normal">
+                          En: {formatNumber(ol.width, 1)} cm
+                        </Badge>
+                      )}
+                      {ol?.quantity != null && (
+                        <Badge variant="outline" className="ml-1.5 font-normal">
+                          Boy: {formatNumber(ol.quantity, 1)} m
+                        </Badge>
+                      )}
                       {ol?.requiredProperties && ol.requiredProperties.length > 0 && (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {ol.requiredProperties.map((rp) => (
@@ -104,35 +103,16 @@ export function OrderLinksCard({ wo }: { wo: WorkOrder }) {
                       )}
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      {ol?.width != null && (
-                        <Badge variant="outline" className="font-normal">
-                          En: {formatNumber(ol.width, 1)} cm
-                        </Badge>
-                      )}
-                      {ol?.quantity != null && (
-                        <Badge variant="outline" className="font-normal">
-                          Boy: {formatNumber(ol.quantity, 1)} m
-                        </Badge>
-                      )}
                       {/* Sevk/açık = kalemin TÜM sevkiyat toplamı (spec havuzu); bu
                           WO'ya atfedilmez — bağlam. İPTAL siparişte gösterme (ölü). */}
                       {ol && order?.status !== "CANCELLED" && (() => {
                         const open = lineOpen(Number(ol.quantity ?? 0), Number(ol.shippedQty ?? 0));
-                        const done = isEffectivelyZero(open);
                         return (
                           <>
-                            <Badge variant="outline" className="font-normal">
+                            <Badge className="border-transparent bg-success font-normal text-success-foreground">
                               Sevk: {formatNumber(ol.shippedQty ?? 0, 1)} m
                             </Badge>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "font-normal",
-                                done
-                                  ? "border-success/40 text-success"
-                                  : "border-warning/40 text-warning",
-                              )}
-                            >
+                            <Badge className="border-transparent bg-destructive font-normal text-destructive-foreground">
                               Açık: {formatNumber(open, 1)} m
                             </Badge>
                           </>

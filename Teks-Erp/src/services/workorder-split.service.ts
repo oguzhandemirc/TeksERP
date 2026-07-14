@@ -192,7 +192,7 @@ export class WorkOrderSplitService {
     }
     const selectedIds = selected.map((r) => r.id);
 
-    const { newBatch, cardRes, sourceDeleted } = await withBarcodeRetry(() =>
+    const { newBatch, sourceDeleted } = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         // 1) ATOMİK CLAIM: seçilenleri boyahane adımına geri sar (renk sıfırla).
         const claim = await tx.roll.updateMany({
@@ -212,7 +212,7 @@ export class WorkOrderSplitService {
           throw AppError.conflict("Parti bu sırada başka bir işlemle değişti — redye iptal, sayfayı yenileyin.");
         }
 
-        // 2) Yeni parti (aynı WO, splitFrom=kaynak) + kart.
+        // 2) Yeni parti (aynı WO, splitFrom=kaynak). Kart WO başına — yeni kart yok.
         const created = await createBatchTx(tx, {
           workOrderId: ctx.workOrderId,
           rollIds: selectedIds,
@@ -251,7 +251,7 @@ export class WorkOrderSplitService {
         // 6) Kaynak parti boşaldıysa (izsiz) sil.
         const sourceDeleted = await deleteIfEmptyAndTraceless(tx, ctx.batchId);
 
-        return { newBatch: created.batch, cardRes: created.cardRes, sourceDeleted };
+        return { newBatch: created.batch, sourceDeleted };
       }),
     );
 
@@ -269,15 +269,6 @@ export class WorkOrderSplitService {
         sourceDeleted,
       },
     });
-    if (cardRes.created) {
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "TRAVELER_CARD",
-        recordId: cardRes.card.id,
-        newData: { cardNumber: cardRes.card.cardNumber, batchId: newBatch.id, event: "AUTO_PRINT_ON_REDYE" },
-      });
-    }
 
     return {
       success: true,

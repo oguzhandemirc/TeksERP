@@ -236,7 +236,7 @@ function WOActionRow({
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm font-semibold">{wo.batchNumber}</span>
+        <span className="font-mono text-sm font-semibold">{wo.workOrderNumber}</span>
         <StatusBadge
           status={wo.status}
           labels={workOrderStatusLabels}

@@ -40,9 +40,14 @@ export interface EntityPickerModalProps<T extends { id: string }> {
   /** Tetikleyicide ikonun yanında kalın etiket (opsiyonel). */
   label?: string;
   placeholder?: string;
+  /** Placeholder metni sınıfı — renkli (solid) tetikleyicide okunur kılmak için.
+   *  Verilmezse muted (varsayılan). */
+  placeholderClassName?: string;
   title?: string;
   description?: string;
   triggerClassName?: string;
+  /** Tetikleyicideki yukarı/aşağı ok (ChevronsUpDown) ikonunu gizle. */
+  hideChevron?: boolean;
   /** Modal içinde "hızlı ekle" butonu göster. Tıklanınca modal kapanır, callback çağrılır. */
   quickAddLabel?: string;
   onQuickAdd?: () => void;
@@ -73,9 +78,11 @@ export function EntityPickerModal<T extends { id: string }>({
   iconClassName,
   label,
   placeholder = "Seç...",
+  placeholderClassName,
   title,
   description,
   triggerClassName,
+  hideChevron,
   quickAddLabel,
   onQuickAdd,
   countLabel,
@@ -136,10 +143,14 @@ export function EntityPickerModal<T extends { id: string }>({
           ) : value && selectedQ.isLoading ? (
             <span className="truncate text-xs text-muted-foreground">Yükleniyor...</span>
           ) : (
-            <span className="truncate text-xs text-muted-foreground">{placeholder}</span>
+            <span className={cn("truncate text-xs", placeholderClassName ?? "text-muted-foreground")}>
+              {placeholder}
+            </span>
           )}
         </div>
-        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        {!hideChevron && (
+          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>

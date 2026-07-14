@@ -1760,14 +1760,14 @@ export class OrderService extends BaseService {
       for (const wid of woIds) await touchWorkOrderTx(tx, wid); // döngü — Promise.all(tx.*) YASAK
       const woRows = await tx.workOrder.findMany({
         where: { id: { in: woIds } },
-        select: { id: true, status: true, batchNumber: true },
+        select: { id: true, status: true, workOrderNumber: true },
       });
       const woById = new Map(woRows.map((w) => [w.id, w]));
       const blocking = woRows.filter((w) => blockingStatuses.has(w.status));
       if (blocking.length > 0) {
-        const batchNumbers = [...new Set(blocking.map((w) => w.batchNumber))].join(", ");
+        const workOrderNumbers = [...new Set(blocking.map((w) => w.workOrderNumber))].join(", ");
         throw AppError.conflict(
-          `Bu siparişe bağlı aktif/tamamlanmış iş emirleri var: ${batchNumbers}. Önce onları iptal edin.`,
+          `Bu siparişe bağlı aktif/tamamlanmış iş emirleri var: ${workOrderNumbers}. Önce onları iptal edin.`,
         );
       }
       // Yalnız BU siparişin PLANNED WO link çiftlerini kopar.
@@ -1845,7 +1845,7 @@ export class OrderService extends BaseService {
                 workOrder: {
                   select: {
                     id: true,
-                    batchNumber: true,
+                    workOrderNumber: true,
                     status: true,
                     type: true,
                     targetQuantity: true,
@@ -1874,7 +1874,7 @@ export class OrderService extends BaseService {
       string,
       {
         id: string;
-        batchNumber: string;
+        workOrderNumber: string;
         status: string;
         /** WO'nun hedef üretim metrajı (link-only model: per-sipariş tahsis yok). */
         targetQuantity: Prisma.Decimal | null;
@@ -1886,7 +1886,7 @@ export class OrderService extends BaseService {
         if (woMap.has(wo.id)) continue;
         woMap.set(wo.id, {
           id: wo.id,
-          batchNumber: wo.batchNumber,
+          workOrderNumber: wo.workOrderNumber,
           status: wo.status,
           targetQuantity:
             wo.targetQuantity != null ? new Prisma.Decimal(wo.targetQuantity) : null,
@@ -1971,7 +1971,7 @@ export class OrderService extends BaseService {
 
       return {
         id: wo.id,
-        batchNumber: wo.batchNumber,
+        workOrderNumber: wo.workOrderNumber,
         status: wo.status,
         targetQuantity: wo.targetQuantity,
         isSoleOrder,

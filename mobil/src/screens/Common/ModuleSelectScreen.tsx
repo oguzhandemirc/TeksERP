@@ -141,9 +141,6 @@ const ModuleCard = React.memo(function ModuleCard({
         >
           {meta.label}
         </Text>
-        <Text variant="bodySmall" style={styles.desc} numberOfLines={2}>
-          {meta.description}
-        </Text>
       </View>
     </View>
   );
@@ -179,10 +176,6 @@ const styles = StyleSheet.create({
   label: {
     fontWeight: '700',
     color: colors.text,
-    textAlign: 'center',
-  },
-  desc: {
-    color: colors.textMuted,
     textAlign: 'center',
   },
 });

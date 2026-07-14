@@ -4,7 +4,8 @@
 // Tek tip kod kalıbı: PREFIX + GGAAYY + NNNN (ayraçsız, checksum YOK — insan-okur
 // kod = tarama barkodu). Backend `utils/code-format.ts` ile doğrulandı:
 //   T{GGAAYY}{H|F}NNNN  → Roll (top; H=ham/F=final)     örn T120726H0001
-//   RK{GGAAYY}NNNN      → TravelerCard (refakat kartı)   örn RK1207260001
+//   İE{GGAAYY}NNNN      → TravelerCard = iş emri kartı (tek kod, WO'yu açar) örn IE1207260001
+//   RK{GGAAYY}NNNN      → TravelerCard (eski/legacy kart)  örn RK1207260001
 //   KRT{GGAAYY}NNNN     → Swatch (kartela/numune)        örn KRT1207260001
 //   CV{GGAAYY}NNNN      → Sack (çuval, sackNo)           örn CV1207260001
 //   FS/FK/KS/KK...      → fason/kartela sevk/kabul belge no
@@ -25,7 +26,8 @@ export type BarcodeKind =
 /** Tam-format regex'leri — opsiyonel istemci doğrulaması için (checksum yok). */
 export const BARCODE_FORMATS = {
   ROLL: /^T\d{6}[HF]\d{4}$/,
-  TRAVELER_CARD: /^RK\d{6}\d{4}$/,
+  // Kart = iş emri no (İE); eski kartlar RK. Tek-kod, karekod versiyonlar arası sabit.
+  TRAVELER_CARD: /^(?:IE|RK)\d{6}\d{4}$/,
   SWATCH: /^KRT\d{6}\d{4}$/,
   SACK: /^CV\d{6}\d{4}$/,
 } as const;
@@ -34,7 +36,8 @@ export const BARCODE_FORMATS = {
 // karışmasın). T→ROLL yalnız T+rakam (KRT/diğerleri K/başka harfle başlar).
 const PREFIX_RULES: Array<{ re: RegExp; kind: BarcodeKind }> = [
   { re: /^KRT/, kind: "SWATCH" },
-  { re: /^RK/, kind: "TRAVELER_CARD" },
+  { re: /^IE\d/, kind: "TRAVELER_CARD" }, // iş emri kartı (tek kod) — WO'yu açar
+  { re: /^RK/, kind: "TRAVELER_CARD" }, // eski/legacy kart
   { re: /^CV/, kind: "SACK" },
   { re: /^(FS|FK|KS|KK)/, kind: "DISPATCH_DOC" },
   { re: /^T\d/, kind: "ROLL" },

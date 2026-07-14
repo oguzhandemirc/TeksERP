@@ -8,6 +8,7 @@ import {
   TouchableRipple,
   Divider,
   Appbar,
+  Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +24,35 @@ import { usePermissions } from '../../../hooks/usePermission';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
+import { useSessionStore } from '../../../store/sessionStore';
 import type { MainStackParamList } from '../../../navigation/types';
+
+// Koyu header'a uygun translucent etiketli aksiyon pill'i — KK1/Kurşun/Tambur
+// ile aynı stil. Telefonda header'ın 2. katında (secondRow) kullanılır.
+function HeaderChip({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableRipple
+      onPress={onPress}
+      style={styles.headerChip}
+      borderless
+      rippleColor="rgba(255,255,255,0.2)"
+      accessibilityLabel={label}
+    >
+      <View style={styles.headerChipInner}>
+        <Icon source={icon} size={18} color="#fff" />
+        <Text style={styles.headerChipText} numberOfLines={1}>{label}</Text>
+      </View>
+    </TouchableRipple>
+  );
+}
 
 // =============================================================================
 // Tartı / Paket — GİRİŞ ekranı (push: Paketleme). Çuval Depo modeli:
@@ -43,10 +72,20 @@ const dualName = (ourName: string, custName?: string | null) =>
   custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
 
 export default function TartiPaketScreen() {
-  usePortraitLock(useDeviceType() === 'phone');
+  const compact = useDeviceType() === 'phone';
+  usePortraitLock(compact);
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { has } = usePermissions();
   const canShip = has('mobile:sevkiyat');
+
+  // Bulunulan makine adı — telefonda başlık subtitle'ı olarak gösterilir (Ham
+  // Giriş/Kurşun/Tambur ile aynı desen); tablette PlaceChip başlığın yanında kalır.
+  const activeSession = useSessionStore((s) => s.active);
+  const machineName =
+    activeSession?.machine?.name ||
+    activeSession?.machine?.code ||
+    activeSession?.station?.name ||
+    undefined;
 
   const [selected, setSelected] = useState<string[]>([]);
   const [selGroup, setSelGroup] = useState<string | null>(null);
@@ -205,9 +244,23 @@ export default function TartiPaketScreen() {
     );
   };
 
+  // Telefonda 4 aksiyon ikonu header'a sığmıyor — Ham Giriş/Kurşun/Tambur ile
+  // aynı desende, başlığın ALTINDAKİ 2. katta etiketli chip'lere taşınır.
+  // Tablette mevcut Appbar.Action satırı DEĞİŞMEDEN kalır.
+  const phoneSecondRow = (
+    <>
+      <HeaderChip icon="account-plus" label="Çuvalla" onPress={() => setCustPickerOpen(true)} />
+      <HeaderChip icon="lightning-bolt" label="Hızlı Sipariş" onPress={() => nav.navigate('HizliSiparis')} />
+      <HeaderChip icon="package-variant" label="Çuval Düzelt" onPress={() => nav.navigate('CuvalDuzelt')} />
+      <HeaderChip icon="history" label="Geçmiş" onPress={() => nav.navigate('SevkiyatGecmisi')} />
+    </>
+  );
+
   return (
     <ScreenChrome
       title="Sevkiyat"
+      subtitle={compact ? machineName : undefined}
+      hidePlaceChip={compact}
       headerExtras={
         <>
           <RefreshButton
@@ -218,32 +271,37 @@ export default function TartiPaketScreen() {
             errorMessage={headerRefresh.errorMessage}
             successMessage={headerRefresh.successMessage}
           />
-          <Appbar.Action
-            icon="account-plus"
-            color="#fff"
-            onPress={() => setCustPickerOpen(true)}
-            accessibilityLabel="Müşteriye çuvalla — doğrudan müşteri seç"
-          />
-          <Appbar.Action
-            icon="lightning-bolt"
-            color="#fff"
-            onPress={() => nav.navigate('HizliSiparis')}
-            accessibilityLabel="Hızlı sipariş — ham top okut → sipariş"
-          />
-          <Appbar.Action
-            icon="package-variant"
-            color="#fff"
-            onPress={() => nav.navigate('CuvalDuzelt')}
-            accessibilityLabel="Çuval düzeltme — top çıkar / taşı"
-          />
-          <Appbar.Action
-            icon="history"
-            color="#fff"
-            onPress={() => nav.navigate('SevkiyatGecmisi')}
-            accessibilityLabel="Sevkiyat geçmişi"
-          />
+          {!compact && (
+            <>
+              <Appbar.Action
+                icon="account-plus"
+                color="#fff"
+                onPress={() => setCustPickerOpen(true)}
+                accessibilityLabel="Müşteriye çuvalla — doğrudan müşteri seç"
+              />
+              <Appbar.Action
+                icon="lightning-bolt"
+                color="#fff"
+                onPress={() => nav.navigate('HizliSiparis')}
+                accessibilityLabel="Hızlı sipariş — ham top okut → sipariş"
+              />
+              <Appbar.Action
+                icon="package-variant"
+                color="#fff"
+                onPress={() => nav.navigate('CuvalDuzelt')}
+                accessibilityLabel="Çuval düzeltme — top çıkar / taşı"
+              />
+              <Appbar.Action
+                icon="history"
+                color="#fff"
+                onPress={() => nav.navigate('SevkiyatGecmisi')}
+                accessibilityLabel="Sevkiyat geçmişi"
+              />
+            </>
+          )}
         </>
       }
+      secondRow={compact ? phoneSecondRow : undefined}
     >
       <FlashList
         data={orderRows}
@@ -375,6 +433,23 @@ export default function TartiPaketScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  // Koyu header'a uygun translucent etiketli aksiyon pill'i (KK1/Kurşun/Tambur ile aynı).
+  headerChip: {
+    borderRadius: 10,
+    marginLeft: 4,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    overflow: 'hidden',
+  },
+  headerChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   scrollContent: { padding: 12, paddingBottom: 32 },
   searchBox: { marginBottom: 10, backgroundColor: '#fff' },
   bridge: { borderRadius: 10, backgroundColor: '#1e40af', marginBottom: 10 },

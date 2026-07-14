@@ -90,7 +90,7 @@ export function WorkOrderDetailPage() {
     <div className="flex h-full flex-col">
       <WorkOrderDetailHeader
         wo={wo}
-        onBack={(e) => openTarget(LIST_PATH, e)}
+        onBack={() => openTarget(LIST_PATH)}
         autoOpenTravelerCard={autoPrintTravelerCard}
       />
 

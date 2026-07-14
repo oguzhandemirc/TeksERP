@@ -248,8 +248,9 @@ async function seed() {
 
   await prisma.travelerCard.create({
     data: {
-      cardNumber: `${P}RK-0001`,
-      barcode: `${P}RK-0001-BC`,
+      // Tek-kod: cardNumber = barcode = iş emri no (İE). Kart WO başına.
+      cardNumber: wo.workOrderNumber,
+      barcode: wo.workOrderNumber,
       workOrderId: wo.id,
       status: "ACTIVE",
       version: 1,

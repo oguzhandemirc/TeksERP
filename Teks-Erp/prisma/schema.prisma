@@ -1268,6 +1268,7 @@ model WorkOrder {
   steps            WorkOrderStep[]
   orderLinks       WorkOrderToOrderLine[]
   batches          Batch[]
+  travelerCards    TravelerCard[]
   manifests        Manifest[]
   dispatches       SubcontractorDispatch[]
   receipts         SubcontractorReceipt[]
@@ -1312,7 +1313,6 @@ model Batch {
   splitFrom     Batch?                  @relation("BatchSplitLineage", fields: [splitFromId], references: [id])
   splitChildren Batch[]                 @relation("BatchSplitLineage")
   rolls         Roll[]
-  travelerCards TravelerCard[]
   dispatches    SubcontractorDispatch[]
 
   createdAt DateTime @default(now())
@@ -1615,38 +1615,36 @@ model SystemSetting {
 // 8. REFAKAT KARTI (Traveler Card) — Adım 5
 // =============================================================================
 
+// Refakat Kartı — İŞ EMRİ başına TEK kart (2026-07-14 redesign: kart WO açılışında
+// doğar, parti değil). Tek-kod: cardNumber = barcode = workOrderNumber (İE+GGAAYY+NNNN).
+// Karekod versiyonlar arası SABİT (WO değişirse reprint = aynı satırda snapshot yenile +
+// version++, kod DEĞİŞMEZ). Parti (Batch) veri modeli kalır ama kart üretmez.
 model TravelerCard {
   id          String             @id @default(uuid()) @db.Uuid
-  cardNumber  String             @unique @db.VarChar(64) // İnsan okur: RK-YYMM-000123
-  barcode     String             @unique @db.VarChar(64) // Tarama: RK-YYMM-XXXXXX-C (Code128 uyumlu)
-  batchId     String             @db.Uuid
-  version     Int                @default(1) // Aynı WO için kaçıncı basım (reprint)
+  cardNumber  String             @unique @db.VarChar(64) // = workOrderNumber (İE) — insan-okur = tarama (tek kod)
+  barcode     String             @unique @db.VarChar(64) // = workOrderNumber (İE) — QR içeriği; versiyonlar arası sabit
+  workOrderId String             @unique @db.Uuid // Bir iş emri = tek refakat kartı
+  version     Int                @default(1) // Kaçıncı basım (reprint = aynı satırda version++)
   status      TravelerCardStatus @default(ACTIVE)
   printedAt   DateTime           @default(now())
   printedById String?            @db.Uuid
   voidedAt    DateTime?
   voidReason  String?
 
-  /// Basım anında DONDURULAN içerik (ürün/renk/rota/metraj/sipariş + render config).
-  /// Kart bir kimlik jetonu değil, içeriği snapshot'lanmış bir belge: reprint
-  /// orijinali birebir üretir, WO sonradan değişse de eski kart sabit kalır.
-  /// Sorgulanmıyor → GIN yok; sadece detay/print'te okunur (liste select'ine girmez).
+  /// Basım anında DONDURULAN içerik (ürün/renk/rota/sipariş + render config). Değişken
+  /// veriler (top sayısı/metraj) BASILMAZ. Reprint güncel WO'dan yeniden dondurur —
+  /// karekod aynı kalır, içerik tazelenir. Sorgulanmıyor → GIN yok (detay/print'te okunur).
   snapshot Json?
 
   // Relations
-  batch     Batch              @relation(fields: [batchId], references: [id])
+  workOrder WorkOrder          @relation(fields: [workOrderId], references: [id])
   printedBy User?              @relation("TravelerCardPrintedBy", fields: [printedById], references: [id])
   scans     TravelerCardScan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([batchId])
   @@index([status])
-  // Parti başına EN FAZLA 1 ACTIVE kart invariant'ı. parti_modeli migration bu
-  // @@index'i PARTIAL UNIQUE'e (WHERE status='ACTIVE') çevirir (drift-free yöntem).
-  // Eşzamanlı çift-print → ikinci create P2002; print/reprint bunu 409'a çevirir.
-  @@index([batchId], map: "traveler_cards_batch_active_uniq")
   @@map("traveler_cards")
 }
 

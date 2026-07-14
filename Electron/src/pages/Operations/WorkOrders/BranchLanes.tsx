@@ -145,9 +145,8 @@ function BatchLaneCard({
           {/* Ayır: modal parti durumundan izinli modları (redye/taşı) türetir. */}
           <PermissionGate permission="workorder:write">
             <Button
-              variant="outline"
               size="sm"
-              className="h-7 gap-1 px-2 text-xs"
+              className="h-7 gap-1 border-transparent bg-indigo-600 px-2 text-xs text-white hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
               onClick={onSplit}
             >
               <Split className="h-3.5 w-3.5" />
@@ -243,9 +242,8 @@ function BatchDispatchRow({
       {dispatch.status === "OPEN" && (
         <PermissionGate permission="workorder:write">
           <Button
-            variant="outline"
             size="sm"
-            className="h-6 gap-1 px-2 text-[11px]"
+            className="h-6 gap-1 border-transparent bg-emerald-600 px-2 text-[11px] text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
             onClick={onDirectShip}
           >
             <Truck className="h-3 w-3" />
