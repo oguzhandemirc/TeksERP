@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Local-first logout sözleşmesi (SAHA-DAYANIKLILIK-FAZ2.md §E1):
+// Local-first logout sözleşmesi (docs/history/SAHA-DAYANIKLILIK-FAZ2.md §E1):
 // 1) UI revoke isteğini BEKLEMEZ — logout() yerel temizlikle çözülür,
 // 2) revoke arka planda YAKALANMIŞ token'la gider (yerel silmeden etkilenmez),
 // 3) logout ASLA reject etmez (çağıranlar `.then(→ #/login)` zincirine güvenir).

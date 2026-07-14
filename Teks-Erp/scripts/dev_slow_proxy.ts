@@ -9,7 +9,7 @@
 // trafiği yapılandırılmış gecikme + jitter'la, isteğe bağlı paket-drop'la
 // (soket kesilir → timeout/retry/offline-kuyruk yolları GERÇEKÇİ tetiklenir)
 // backend'e iletilir. Faz-1/2 dayanıklılık davranışlarını sahaya gitmeden test
-// etmenin standart yolu (SAHA-DAYANIKLILIK-FAZ3.md §P3).
+// etmenin standart yolu (docs/history/SAHA-DAYANIKLILIK-FAZ3.md §P3).
 //
 // Bağlama:
 //   TABLET  → login ekranı sağ-alt dişli → Sunucu adresi → http://<LAN-IP>:4100

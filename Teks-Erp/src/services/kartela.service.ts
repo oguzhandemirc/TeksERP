@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP - Kartela (Swatch) Fason Service
 // =============================================================================
-// Üretim fasonundan AYRI, İŞ EMRİSİZ akış. Bkz. KARTELA-TASARIM.md.
+// Üretim fasonundan AYRI, İŞ EMRİSİZ akış. Bkz. docs/design/KARTELA-TASARIM.md.
 //
 //   dispatch()       : Depodaki bitmiş toplar kartela firmasına sevk edilir.
 //                      Roll.status WAREHOUSE → AT_KARTELA.

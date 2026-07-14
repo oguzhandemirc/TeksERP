@@ -1,7 +1,7 @@
 // =============================================================================
 // netStats — istemci tarafı istek süresi ölçümü (mobildeki eşleniği).
 // =============================================================================
-// Neden (SAHA-DAYANIKLILIK-FAZ2.md §E3): sunucu ölçümü kullanıcının HİSSETTİĞİ
+// Neden (docs/history/SAHA-DAYANIKLILIK-FAZ2.md §E3): sunucu ölçümü kullanıcının HİSSETTİĞİ
 // süreyi göstermez — kuyruk, retry, IPC, ağ hep istemcide yaşanır. apiClient
 // interceptor'ları her isteğin süresini buraya yazar; eşik üstü istek
 // console.warn ile DevTools/log'dan okunur. UI yok (gerekirse Ayarlar'a

@@ -1,7 +1,7 @@
 // =============================================================================
 // Latency Persist — RAM gecikme delta'larının GÜNLÜK özet tablosuna yazımı
 // =============================================================================
-// Neden (SAHA-DAYANIKLILIK-FAZ3.md §P1): latency-stats süreç belleğinde yaşar —
+// Neden (docs/history/SAHA-DAYANIKLILIK-FAZ3.md §P1): latency-stats süreç belleğinde yaşar —
 // her restart (dev'de nodemon = her dosya kaydı!) veriyi sıfırlar; "değişiklik
 // öncesi/sonrası p95" kıyası ve gün-bazlı trend ancak kalıcı özetle mümkün.
 //

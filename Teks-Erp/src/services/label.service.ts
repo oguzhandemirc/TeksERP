@@ -1296,7 +1296,7 @@ export class LabelService {
     const copies = opts?.copies ?? (await readLabelCopies());
     // KARTELA v1 KAPSAM DIŞI (Etiket Stüdyosu): variant BİLEREK geçilmez — kartela
     // hattı akış-modelinde bayt-aynı kalır. Kanvas'a alınırsa müşteri plumbing'iyle
-    // birlikte ayrı iş (KARTELA-TASARIM.md).
+    // birlikte ayrı iş (docs/design/KARTELA-TASARIM.md).
     return {
       input: { payload, template: routing.template, barcodeSvg, qrSvg, copies, format: routing.format },
       kind: LabelKind.SWATCH,

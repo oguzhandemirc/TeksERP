@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP - Kartela (Swatch) Fason Routes
 // =============================================================================
-// Bitmiş top → kartela firmasına sevk & dönüş. İŞ EMRİSİZ. Bkz. KARTELA-TASARIM.md.
+// Bitmiş top → kartela firmasına sevk & dönüş. İŞ EMRİSİZ. Bkz. docs/design/KARTELA-TASARIM.md.
 
 import { Router } from "express";
 import { KartelaController } from "../controllers/kartela.controller";

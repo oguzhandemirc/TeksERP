@@ -12,7 +12,7 @@ import { TrendChart } from "./TrendChart";
 
 /** Endpoint Performansı — Faz 2/3 gözlemlenebilirlik ekranı.
  *  Canlı tablo süreç belleğinden (restart'ta sıfırlanır); trend kalıcı günlük
- *  özetlerden gelir (SAHA-DAYANIKLILIK-FAZ3.md §P1/§P4). */
+ *  özetlerden gelir (docs/history/SAHA-DAYANIKLILIK-FAZ3.md §P1/§P4). */
 export function PerfPage() {
   const snapshotQ = usePerfSnapshot();
   const resetPerf = usePerfReset();

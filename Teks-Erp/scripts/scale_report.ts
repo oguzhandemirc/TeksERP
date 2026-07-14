@@ -14,7 +14,7 @@
 //   export JWT_SECRET="ci-test-secret-not-for-production"; export TZ=UTC
 //   npx tsx scripts/scale_report.ts
 //
-// Çıktı: konsola insan-okur tablo (SCALE-REPORT.md elle bunu özetler).
+// Çıktı: konsola insan-okur tablo (docs/history/SCALE-REPORT.md elle bunu özetler).
 // CUD YOK — salt okuma; DB'yi değiştirmez.
 // =============================================================================
 

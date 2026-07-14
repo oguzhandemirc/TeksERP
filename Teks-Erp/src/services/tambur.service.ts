@@ -1108,7 +1108,7 @@ export class TamburService {
    */
   // NOT: Kartela artık Tambur'da kesilmez. Kartela = bitmiş bir topun kartela
   // fason firmasında işlenmesiyle doğar (KartelaService.receive). Bkz.
-  // KARTELA-TASARIM.md. Eski createSwatch / nextSwatchSequence kaldırıldı.
+  // docs/design/KARTELA-TASARIM.md. Eski createSwatch / nextSwatchSequence kaldırıldı.
 
   /**
    * Tambur'dan çıkmış son N rolü listeler — operatör etiketleri tekrar basabilsin

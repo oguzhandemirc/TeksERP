@@ -1,6 +1,6 @@
 const TOKEN_KEY = "auth.token";
 
-// Bellek cache'i (Faz 2 — SAHA-DAYANIKLILIK-FAZ2.md §E2): her HTTP isteği token'ı
+// Bellek cache'i (Faz 2 — docs/history/SAHA-DAYANIKLILIK-FAZ2.md §E2): her HTTP isteği token'ı
 // okuyor; IPC round-trip + safeStorage decrypt istek başına ~0.5-3ms (AV
 // taramasında spike) sabit vergiydi. İlk get IPC'den prime eder; set/clear
 // cache'i günceller. tokenStore bu anahtarın TEK geçidi (auth.token'a başka

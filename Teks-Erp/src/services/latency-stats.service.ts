@@ -1,7 +1,7 @@
 // =============================================================================
 // Latency Stats — per-endpoint gecikme istatistiği (saf bellek, DB YOK)
 // =============================================================================
-// Neden (SAHA-DAYANIKLILIK-FAZ2.md §B1): morgan her isteğin süresini konsola
+// Neden (docs/history/SAHA-DAYANIKLILIK-FAZ2.md §B1): morgan her isteğin süresini konsola
 // yazar ama kimse TOPLAMAZ — "hangi endpoint yavaş?" sorusu üretimde ancak
 // böyle bir kalıcı sayaçla anlık cevaplanabilir. Tasarım sınırları:
 //   - İstek başına O(1); kilit yok; timer yok (/health "yeni timer yok" ilkesi

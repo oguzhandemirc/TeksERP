@@ -26,7 +26,7 @@ const GW_ONE_IS_WHITE = true;
  *  komut yolu aynı N/q/Q/D header'ıyla sorunsuz bastığı için fark yalnız GW'deydi).
  *  Polarite de manuelle doğrulandı. Fiziksel doğrulama için AÇIK. Argox'ta yine boş
  *  çıkarsa false yap → registry emitCanvasPplb komut yoluna GÜVENLE düşer (baskı ölmez).
- *  Bkz. [[argox-ppla-spec]] (kardeş PPLB manueli) ve RASTER-F6-FIZIKSEL-CHECKLIST.md. */
+ *  Bkz. [[argox-ppla-spec]] (kardeş PPLB manueli) ve docs/ops/RASTER-F6-FIZIKSEL-CHECKLIST.md. */
 export const PPLB_RASTER_VERIFIED = true;
 
 export class PplbRasterUnsupportedError extends Error {

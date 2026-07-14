@@ -888,7 +888,7 @@ export default function TamburScreen() {
 
   // NOT: Kartela artık Tambur'da kesilmez. Kartela = bitmiş topun kartela fason
   // firmasında işlenmesiyle doğar (Kartela Sevk + Kartela Kabul ekranları).
-  // Eski recutSwatchMutation / handleRecutKartela kaldırıldı. Bkz. KARTELA-TASARIM.md.
+  // Eski recutSwatchMutation / handleRecutKartela kaldırıldı. Bkz. docs/design/KARTELA-TASARIM.md.
 
   // Top Kesme'yi bitir — parent retire (TAMBUR_CONSUMED), kalan için karar
   const finalizeWarehouseCutMutation = useMutation({

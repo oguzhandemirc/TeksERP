@@ -19,7 +19,7 @@ export interface SystemLogSummary {
 }
 
 export async function getSystemLogSummary(range: DateRange): Promise<SystemLogSummary> {
-  // PERF (Faz C2 — ÖLÇÜLDÜ, bkz. SCALE-REPORT.md §8): system_logs en hızlı
+  // PERF (Faz C2 — ÖLÇÜLDÜ, bkz. docs/history/SCALE-REPORT.md §8): system_logs en hızlı
   // büyüyen tablo; 365-gün worst-case'de bu rapor tabloyu tarar. Worst-case
   // toplam ~2.66× hızlandı (p50 1064→400ms, 430k satır). Üç katman:
   //   0) ASIL KAZANÇ (2.14×) KODDA DEĞİL: `daily` sorgusunun

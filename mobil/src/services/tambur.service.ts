@@ -62,7 +62,7 @@ export const tamburService = {
   // Sahada Tambur henüz karar vermediği için aynı endpoint güvenle kullanılabilir.
 
   // NOT: createSwatch kaldırıldı — kartela artık Tambur'da kesilmiyor, fason
-  // dönüşünden doğuyor (kartelaService). Bkz. KARTELA-TASARIM.md.
+  // dönüşünden doğuyor (kartelaService). Bkz. docs/design/KARTELA-TASARIM.md.
 
   // Tambur'dan çıkmış son toplar — etiket yeniden basımı için liste
   // Cursor-paginated + aramalı. Modal infinite scroll için (RollCursorPage).

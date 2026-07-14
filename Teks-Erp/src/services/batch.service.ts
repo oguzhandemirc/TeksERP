@@ -4,7 +4,7 @@
 // Parti = üretime aynı anda giren top grubu; bir iş emri (WorkOrder) N parti içerir.
 // Attach dalgasında / sevk-anı auto-attach'te doğar (K3). Refakat kartı parti
 // başınadır. "Dal" (eski Roll.batchSplitId = dispatch.id) kavramının yerini alır.
-// Detay: PARTI-MODELI-TASARIM.md.
+// Detay: docs/design/PARTI-MODELI-TASARIM.md.
 //
 // Bu servis parti YAŞAM DÖNGÜSÜNÜN tx-içi çekirdeğini sağlar:
 //   - createBatchTx            : P kodu üret + Batch + roll üyeliği + refakat kartı (tek tx)
