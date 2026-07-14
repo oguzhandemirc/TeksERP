@@ -375,9 +375,19 @@ export default function KK1Screen() {
     [qualityGradesQuery.data],
   );
 
-  // Kalite OPSİYONEL — auto-preselect YOK. Operatör bakarsa girer; boş bırakılırsa top
-  // "Belirsiz" kalitede girer (backend null yazar). Kalite istasyonu (KK2/Kurşun/Tambur)
-  // sonradan da belirleyebilir.
+  // Kalite: KK1 ham girişte "1. Kalite" DEFAULT seçili gelir (operatör isteği). Katalog
+  // (async) yüklenince, form boşsa BİR KEZ ön-seçilir; operatör sonra toggle ile kaldırıp
+  // "Belirsiz" (backend null) yapabilir → tekrar zorlamayız. 1.Kalite katalogda yoksa
+  // (admin kaldırmışsa) boş kalır. Kalite hâlâ OPSİYONEL — yalnız varsayılan değişti.
+  const didPreselectQualityRef = useRef(false);
+  useEffect(() => {
+    if (didPreselectQualityRef.current || qualityGrades.length === 0) return;
+    didPreselectQualityRef.current = true;
+    const first = qualityGrades.find(
+      (qg) => qg.code === '1.KALITE' || /1\s*\.?\s*kalite/i.test(qg.name),
+    );
+    if (first) setForm((f) => (f.qualityGrade === '' ? { ...f, qualityGrade: first.code } : f));
+  }, [qualityGrades]);
 
   const handleQualityGradeSelect = useCallback(
     (code: string) => {
