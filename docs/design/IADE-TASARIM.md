@@ -1,7 +1,18 @@
 # İADE — Müşteri İade Girişi (Tasarım)
 
-> Durum: tasarım kilitli, kod yok. Sevkiyat sonrası müşteriden geri dönen
-> kumaş toplarının QR ile Hazır Depo'ya alınması + geriye dönük izlenebilirlik.
+> **Durum: UYGULANDI** (F1-F7 DONE; `return.service.ts` + `RollReturn`/`ReturnReason` şeması).
+> Sevkiyat sonrası müşteriden geri dönen kumaş toplarının QR ile depoya alınması + izlenebilirlik.
+>
+> **⚠️ Gövde tasarımından (§1-§5) SAPMALAR — kod bunları uyguluyor:**
+> - **İade nedeni ZORUNLU** (gövde "opsiyonel" diyor): `reasonId` ve `reasonText` ikisi de boşsa
+>   400 "İade nedeni gerekli" — gerekçe: nedensiz iade kalite geri-besleme verisini değersizleştirir.
+> - **Top HER ZAMAN WAREHOUSE'a inmez** (gövde öyle diyor): `returnGradingEnabled` açık + kalite
+>   override ise `QualityGrade.returnTargetStatus`'a göre FİRE→`SCRAP`, A1→`A1_STOCK`, 1.KALITE→`WAREHOUSE`
+>   (feature flag default **kapalı** → kapalıyken override yok sayılır, hep WAREHOUSE).
+> - **6 servis metodu** (gövde 3 diyor): `lookupForReturn`, `createReturn`, `listReturns`, `getReturnById`,
+>   `cancelReturn`, `editReturn` (PATCH — iade defterini düzeltir; iptalde recency-guard + prevSackId null-fix).
+> - **Lookup query param'la:** `GET /api/returns/lookup?barcode=` (path param değil); top yoksa 404, SHIPPED değilse 400.
+> - Sevk muhasebesine DOKUNULMAZ (shippedQty/allocation değişmez) kararı gövdede doğru ve korunur.
 
 ## 1. Neden bu özellik?
 

@@ -5,7 +5,7 @@ Bu checklist **gerçek Argox/Zebra yazıcıyla** kalan fiziksel doğrulamayı y�
 Raster **cihaz-başına opt-in**'dir (`PeripheralDevice.rasterMode`, varsayılan kapalı);
 kapalıyken bugünkü komut yolu bayt-aynı çalışır, o yüzden bu adımlar üretimi riske atmaz.
 
-> Kod referansları: `Teks-Erp/src/services/helpers/raster/`, tasarım `ETIKET-TASARIM.md §8`,
+> Kod referansları: `Teks-Erp/src/services/helpers/raster/`, tasarım `docs/design/ETIKET-TASARIM.md §8`,
 > PPLA grafik spec `argox-ppla-spec` memory.
 
 ## 0. Ön koşul

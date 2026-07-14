@@ -1,6 +1,6 @@
 # Çuval Depo Modeli — Sevkiyat (2026-07)
 
-> Bu doküman `SEVKIYAT-LOOSE-TASARIM.md`'yi, ondan sonra kısa süre canlı kalan
+> Bu doküman `../history/SEVKIYAT-LOOSE-TASARIM.md`'yi, ondan sonra kısa süre canlı kalan
 > "markReady/ShipmentAllocation" ara modelini **ve** onu izleyen "çuval havuzu"
 > (mühür + `rebalanceCustomerPool` + `packedQty` rezerv) modelini **süperseder**.
 > Kanonik referanslar:

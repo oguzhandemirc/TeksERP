@@ -1,7 +1,7 @@
 # KARTELA — Fason Dönüşü Modeli (Yeniden Tasarım)
 
 > Durum: **TASARIM SABİT** (2026-06-04). Kod yazımı bu dokümana göre fazlı ilerler.
-> İlgili: `SEVKIYAT-LOOSE-TASARIM.md` (çuval/sevkiyat), root `CLAUDE.md` (üretim akışı).
+> İlgili: `CUVAL-HAVUZU-TASARIM.md` (çuval/sevkiyat — güncel model), root `CLAUDE.md` (üretim akışı).
 
 > ## ⚑ 2026-06-28 EK — Kartela ADET-bazlı stok + "seçerek sevk" + ölçüm opsiyonel
 >

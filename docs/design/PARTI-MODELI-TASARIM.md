@@ -1,9 +1,17 @@
 # PARTİ MODELİ TASARIMI — İş Emri / Parti / Top Ayrışması
 
-> **Durum:** 2026-07-13 — tasarım soru-cevap oturumuyla ONAYLANDI, kod yazımı başlamadı.
-> **Supersedes:** "İş emri = parti" varsayımı (`WorkOrder.batchNumber` = P kodu) ve "dal"
-> (`Roll.batchSplitId` = dispatch lane) kavramı. Bu doküman uygulandığında root `CLAUDE.md`,
-> `Teks-Erp/ARCHITECTURE.md` ve ilgili UI metinleri güncellenmelidir.
+> **Durum:** 2026-07-13 tasarım → **UYGULANDI** (Batch modeli, `Roll.batchId`, `WorkOrder.workOrderNumber`
+> rename, üç redye modu, K5 oto-böl, K8 araçları, K11 merge). `batchSplitId`/"dal" kaldırıldı.
+>
+> **⚠️ SUPERSEDED EKSEN — refakat kartı:** Bu dokümanın "kart parti başına doğar (RK prefix'i,
+> per-batch)" anlatan kısımları (K2, K7, §3, §4.2, §6, §9.2, §10) **2026-07-14 "kart iş emriyle
+> doğar" redesign'ıyla GEÇERSİZDİR.** Güncel gerçek: refakat kartı **iş emri açılışında** doğar,
+> **bir WO = tek kart** (`TravelerCard.workOrderId @unique`), karekod = İş Emri No (İE, tek-kod);
+> **parti (Batch) yeni kart ÜRETMEZ** (`batch.service` kart yaratmaz). Kart eksenini okurken bunu
+> baz al; aşağıdaki RK/per-batch ifadeleri tarihsel tasarım katmanıdır.
+>
+> **Not:** Fason sevk kod prefix'i gerçekte `FS` (belgede yer yer `SD-...` geçebilir); idempotency
+> katmanı (`WorkOrder.clientToken @unique`) bu redesign sonrası eklendi.
 
 ---
 

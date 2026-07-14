@@ -27,9 +27,9 @@
 ```
 Teks-Erp/
 ├── prisma/
-│   ├── schema.prisma          # 65 model, 23 enum
+│   ├── schema.prisma          # ~78 model, ~35 enum (kanonik kaynak — sayı yaklaşık)
 │   ├── seed.ts                # Tek dosya: 55 permission + 14 template + 7 kullanıcı + 3 kalite + master demo
-│   └── migrations/            # 2026-05-25 baseline reset + 44 migration (son: 20260612103000)
+│   └── migrations/            # ~114 migration (son: 20260714151000_dispatch_item_unique_dispatch_roll)
 │
 ├── src/
 │   ├── server.ts              # Entry point
@@ -48,9 +48,9 @@ Teks-Erp/
 │   │   ├── device.middleware.ts      # Pairing / device-token auth (mobil)
 │   │   └── uuid-param.middleware.ts  # UUID path param validate
 │   │
-│   ├── controllers/           # 15 dosya — HTTP layer
-│   ├── services/              # 22 dosya + helpers/ + reports/ — iş mantığı
-│   ├── routes/                # 31 dosya + reports/ — Swagger JSDoc + middleware
+│   ├── controllers/           # ~20 dosya — HTTP layer
+│   ├── services/              # ~45 dosya + helpers/ + reports/ — iş mantığı
+│   ├── routes/                # ~41 dosya + reports/ — Swagger JSDoc + middleware
 │   │
 │   ├── types/
 │   │   ├── api.types.ts       # ApiResponse, PaginatedResponse, JwtPayload
@@ -84,9 +84,9 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 ---
 
-## 4. Schema — 66 Model + 23 Enum
+## 4. Schema — ~78 Model + ~35 Enum
 
-> **Güncellik notu (2026-06-12):** Aşağıdaki model/enum tabloları sevkiyat yeniden-yazımı ÖNCESİNDEN kalma — gerçek envanter 65 model / 23 enum. Tabloda eksik olanlar: `Sack`, `Shipment`, `ShipmentOrder`, `SackAllocation`, `PrintedDocument`, `RollReturn`, `ReturnReason`, `KartelaDispatch(+Item)`, `KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `UserPreference`; enum'larda `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity` vb. Kesin liste için `prisma/schema.prisma`'ya bak.
+> **⚠️ Güncellik notu:** Aşağıdaki model/enum tabloları bir NOKTA-ANI SNAPSHOT'tır ve bayatlar — **kanonik kaynak her zaman `prisma/schema.prisma`** (`grep '^model'` / `'^enum'`). Bu bölümdeki sayı/tablo eksik olabilir; bu dokümanın asıl değeri §7-§10 pattern/iş-kuralı/performans gerekçelerindedir. Tablolarda eksik olan başlıca modeller: `Sack`/`Shipment`/`ShipmentOrder`/`SackAllocation`, `Batch` (parti modeli), `SwatchStockReduction` + `clientToken` idempotency alanları, `SubcontractorDirectShipAllocation`, `PeripheralDevice`/`DevicePeripheral`, `LabelTemplateVariant`/`LabelContextDefault`/`CustomerTemplateRoute`, `EndpointLatencyDaily`, `PrintedDocument`, `RollReturn`/`ReturnReason`, `KartelaDispatch(+Item)`/`KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `WorkSession`, `Session`, `UserPreference`; enum'larda `RollForm`, `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity`, `ShipmentDestination`, `ClientType`, `PeripheralKind`/`DeviceKind` vb.
 
 ### Modeller (gruplandırılmış)
 
@@ -156,14 +156,14 @@ Yaşam döngüsü (endüstri standardı): **TASLAK** (kaynak henüz resmileşmed
 - **Endpoint:** `GET /api/printed-documents/:docType/:sourceId/current | /versions | /versions/:v`, `POST .../reissue`. İzin docType→kaynak modülün okuma/yazma iznine eşlenir.
 - **Test:** `scripts/test_printed_documents.ts` (24/24) — freeze, değişmezlik, reissue zinciri, yeni-sevk-yeni-belge, void, TASLAK→freeze + alloc geri-indirgeme.
 
-Enum sayısı 14 → **16** (`PrintedDocType`, `PrintedDocStatus`).
+Enum sayısı ~**35** (kanonik: `grep '^enum' schema.prisma`; aşağıdaki tablo eksiktir — bkz. §4 uyarısı).
 
 ### Enum'lar
 
 | Enum | Değerler |
 |---|---|
 | `StationType` | INTERNAL, EXTERNAL |
-| `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER |
+| `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SHIPPING, SUBCONTRACTOR, OTHER |
 | `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
 | `ItemType` | YARN, WARP, FABRIC, CONSUMABLE |
 | `RollEntrySource` | SUPPLIER_RECEIPT, TAMBUR_SPLIT, SUBCONTRACTOR_RETURN |
@@ -205,7 +205,7 @@ Tambur'lu akışta top child `Roll`'lar olarak `WAREHOUSE`'a düşer; Tambursuz 
 veya fason son adım) aynı topu `WAREHOUSE` **açık kumaş** olarak finalize eder
 (`finalizeRollsAtLastStep` — Tambur `resolveCutStatus`'un jenerik hali).
 
-> **NOT (2026-07 — ÇUVAL DEPO MODELİ):** Sevkiyat modülü çuval depo modeline geçti (mühür/rezerv YOK). Çuval (`Sack`) bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte). Akış: WAREHOUSE serbest top → `openSack(customerId?)` → `scanIntoSack` → (opsiyonel `weighSack`) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur: `createShipment({ sackIds, customerId, orderIds? })`; sevk onayı (`shipping.confirmationEnabled`) **kapalı** (varsayılan) → `Shipment` **doğrudan** DISPATCHED (yanıtta `dispatched=true`), **açık** → PLANNED kurulur ve çıkış ayrıca `dispatchShipment` ile onaylanır (kapı önü ara adımı YOK: `PLANNED → DISPATCHED`). `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`); PLANNED tahsis `shippedQty`'ye SAYILMAZ. Stok yalnız DISPATCH'te `SHIPPED`'e düşer ve tahsis dispatch'te `shippedQty`'ye terfi eder (defter-otoritatif, `recomputeOrderStatusForOrders`); iptalde tahsis silinir, çuval depoya döner. `ShipmentStatus` = `PLANNED|DISPATCHED|CANCELLED` (PREPARING/READY/AT_DOOR kaldırıldı); `ShipmentAllocation`/`markReady`/`retarget`/`sealSack`/`moveToDoor` kaldırıldı; `ShipmentOrder` kullanıcı-seçili sipariş kümesidir. Tam tasarım: `CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
+> **NOT (2026-07 — ÇUVAL DEPO MODELİ):** Sevkiyat modülü çuval depo modeline geçti (mühür/rezerv YOK). Çuval (`Sack`) bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte). Akış: WAREHOUSE serbest top → `openSack(customerId?)` → `scanIntoSack` → (opsiyonel `weighSack`) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur: `createShipment({ sackIds, customerId, orderIds? })`; sevk onayı (`shipping.confirmationEnabled`) **kapalı** (varsayılan) → `Shipment` **doğrudan** DISPATCHED (yanıtta `dispatched=true`), **açık** → PLANNED kurulur ve çıkış ayrıca `dispatchShipment` ile onaylanır (kapı önü ara adımı YOK: `PLANNED → DISPATCHED`). `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`); PLANNED tahsis `shippedQty`'ye SAYILMAZ. Stok yalnız DISPATCH'te `SHIPPED`'e düşer ve tahsis dispatch'te `shippedQty`'ye terfi eder (defter-otoritatif, `recomputeOrderStatusForOrders`); iptalde tahsis silinir, çuval depoya döner. `ShipmentStatus` = `PLANNED|DISPATCHED|CANCELLED` (PREPARING/READY/AT_DOOR kaldırıldı); `ShipmentAllocation`/`markReady`/`retarget`/`sealSack`/`moveToDoor` kaldırıldı; `ShipmentOrder` kullanıcı-seçili sipariş kümesidir. Tam tasarım: `docs/design/CUVAL-HAVUZU-TASARIM.md`, kanonik test: `scripts/test_sack_pool_lifecycle.ts`. Kartela `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
 
 ---
 
@@ -359,7 +359,8 @@ Parent retire: status = TAMBUR_CONSUMED, currentQty = 0, currentStepId = null
 Kabul (receive): orijinal Roll'lar AT_SUBCONTRACTOR → SUBCONTRACTOR_CONSUMED (retire).
 Receipt üzerinden YENİ açık-kumaş Roll'lar doğar:
   entrySource = SUBCONTRACTOR_RETURN, parentReceiptId dolu, barcode null,
-  qty kabulde ZORUNLU (weightKg opsiyonel), batchSplitId sevkten kalıtılır.
+  qty kabulde ZORUNLU (weightKg opsiyonel). (batchSplitId kolonu parti-modeli
+  redesign'ıyla kaldırıldı; parti bağı artık Roll.batchId üzerinden.)
 Kesin ölçüm bir sonraki istasyonun FINISH akışında damgalanır
 (RollMovement.qtyOut/weightOut). RETURNED_FROM_SUBCONTRACTOR = eski model (legacy).
 ```
@@ -374,10 +375,14 @@ Kesin ölçüm bir sonraki istasyonun FINISH akışında damgalanır
 ### 7.4 Refakat Kartı (`TravelerCard`)
 
 ```
-WorkOrder finalize edildiğinde TravelerCard üretilir (cardNumber, barcode).
+WorkOrder AÇILIŞINDA TravelerCard doğar (2026-07-14 "kart iş emriyle doğar";
+  workorder.service create tx'inde createForWorkOrder). Bir WO = tek kart
+  (workOrderId @unique); cardNumber = barcode = workOrderNumber (İE, tek-kod).
+  Parti (Batch) yeni kart ÜRETMEZ.
 Mal ile birlikte fiziksel olarak gezer.
-İstasyonda barkod taranınca → TravelerCardScan kaydı + step ilerletme.
-Reprint → eski kart REPRINTED'e döner, yeni kart ACTIVE.
+İstasyonda barkod taranınca → TravelerCardScan kaydı + step ilerletme
+  (aynı kart+istasyon+tip 10sn içinde tekrar okutulursa dedup — yeni satır yok).
+Reprint → aynı satırda snapshot tazelenir + version++ (barkod=İE SABİT kalır).
 WO COMPLETED → tüm kartlar COMPLETED'a düşer.
 ```
 
@@ -659,7 +664,7 @@ Tek-kolon `orderBy` için yeterli; çok-kolon sırada `(createdAt, id) > (?, ?)`
 
 ### 9.6 JSON Alan Sorguları → GIN Index
 
-Schema'da Json alanları: `WorkOrder.parameters`, `WorkOrderStep.stepData`, `RollOperation.metadata`, `MachineLog.details`, `SystemLog.oldData/newData`, `Manifest.snapshot`, `TravelerCard.snapshot`, `PrintedDocument.snapshot`.
+Schema'da Json alanları: `WorkOrder.parameters`, `WorkOrderStep.stepData`, `RollOperation.metadata`, `SystemLog.oldData/newData`, `Manifest.snapshot`, `TravelerCard.snapshot`, `PrintedDocument.snapshot`. (`MachineLog` modeli 2026-05-25 cleanup'ında silindi.)
 
 Eğer içinde sorgulanmıyorsa (yalnızca okunuyor) — index gerekmez.  
 Eğer sorgulanacaksa raw migration ile GIN index:
@@ -774,7 +779,7 @@ Tüm hot-path tablolarında indeks durumu:
 | `items_active_type_name_idx` | `items` | `WHERE "isActive" = true` üstüne `(itemType, name)` | `20260427150000_add_partial_active_indexes` |
 | `customers_active_type_name_idx` | `customers` | `WHERE "isActive" = true` üstüne `(type, name)` | `20260427150000_add_partial_active_indexes` |
 | `traveler_cards_workOrderId_active_key` | `traveler_cards` | `WHERE status = 'ACTIVE'` üstüne `workOrderId` (unique) | (mevcut) |
-| `rolls` null-yoğun FK partial'ları (9 adet: `sackId`, `shipmentId`, `parentReceiptId`, `batchSplitId`...) | `rolls` | `WHERE col IS NOT NULL` | `20260606001717` → UUID geçişi sonrası `20260612100000_repartialize_after_native_uuid` |
+| `rolls` null-yoğun FK partial'ları (`sackId`, `shipmentId`, `parentReceiptId`, `batchId`, `clientToken`...) | `rolls` | `WHERE col IS NOT NULL` | `20260606001717` → UUID geçişi sonrası `20260612100000_repartialize_after_native_uuid` (`batchSplitId` parti-modeli redesign'ıyla kaldırıldı) |
 | `work_order_steps` açık-kart kuyruğu | `work_order_steps` | `(stationId, status, isUrgent, priority, startedAt)` `WHERE status <> 'COMPLETED'` | `20260607010000` |
 | `roll_movements_one_open_per_roll_step_uq` | `roll_movements` | partial **UNIQUE** `(rollId, workOrderStepId)` `WHERE "exitedAt" IS NULL` — **şema-DIŞI bilinçli** (Prisma partial unique desteklemez) | `20260612101000` |
 | swatch/sack partial'ları | `swatches` / `sacks` | `WHERE "cancelledAt" IS NULL` vb. | `20260609120000` |

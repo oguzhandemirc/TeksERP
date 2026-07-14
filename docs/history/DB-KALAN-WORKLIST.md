@@ -1,5 +1,11 @@
 # DB Oturumu — Kalan İş Listesi (backend denetiminden devir)
 
+> **Durum: ARŞİV (2026-07 DB oturumu kapandı).** ⚠️ **F3 GEÇERSİZ:** `Roll.batchSplitId`'yi
+> `@db.Uuid`'e çevirme işi artık YOK — parti-modeli redesign'ı o kolonu tamamen kaldırdı.
+> Değerli gotcha'lar (statement_timeout=50s DDL tuzağı, tek-oturum migration kuralı,
+> USING::type) kanonik olarak `Teks-Erp/CLAUDE.md §14` + `MIGRATION-DEPLOY.md`'de yaşıyor;
+> bu dosya tarihsel kayıttır.
+>
 > **Amaç:** Backend kod+mimari denetimi (2026-07) sırasında **kasıtlı olarak DB oturumuna devredilen** şema/migration/installer işleri. Backend tarafının DB-dışı backlog'u (P0+P1+P2+P3+P3-round2 = 94/94) `feat/label-studio`'da **TAMAM**. Bu dosya yalnız **DB oturumunda** yapılacakları toplar.
 >
 > **Branch:** DB işleri `fix/db-installer-audit` (PR #60) hattında; app-code hattı `feat/label-studio`. Karıştırma.

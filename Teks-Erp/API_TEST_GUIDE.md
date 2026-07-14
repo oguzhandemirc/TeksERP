@@ -1,6 +1,8 @@
 # TeksERP — API Test Rehberi (Swagger / Postman)
 
-> **Son güncelleme:** 15 Nisan 2026
+> **⚠️ Bu rehber çuval-havuzu/parti/kart/iade redesign'larından (2026-07) ÖNCESİNE dayanır;**
+> endpoint + tablo haritası (§2) kısmen bayat olabilir. Kanonik uç listesi için **canlı Swagger**
+> (`/api-docs`) + `src/routes/` referans alınmalı; akış mantığı büyük ölçüde geçerlidir.
 > Bu rehber, TeksERP API'sini uçtan uca test etmenizi sağlar.
 > Her adımda hangi endpoint'i çağıracağınız, hangi tablo etkilenecek ve dönen yanıttan neyi sonraki adıma taşıyacağınız açıklanmıştır.
 

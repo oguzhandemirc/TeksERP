@@ -63,14 +63,15 @@ src/
 | Navigation | `@react-navigation/native`, `@react-navigation/native-stack`, `@react-navigation/bottom-tabs`, `react-native-safe-area-context`, `react-native-screens` |
 | UI | `react-native-paper`, `@expo/vector-icons`, `react-native-gesture-handler`, `react-native-reanimated` |
 | Camera | `expo-camera` (CameraView + onBarcodeScanned) |
-| Bluetooth | `react-native-ble-plx` |
+| Bluetooth | `react-native-ble-plx` (BLE), `react-native-bluetooth-classic` (BT-Classic/HC-06 SPP — HAL `btClassic.transport.ts` + BT yazıcı `btPrinter.service.ts`) |
 | State | `zustand` |
-| API | `axios`, `@tanstack/react-query` |
+| API | `axios`, `@tanstack/react-query` (+ `@tanstack/react-query-persist-client` + `query-async-storage-persister` — offline mutation kuyruğu) |
 | Storage | `expo-secure-store`, `@react-native-async-storage/async-storage` |
 | Print | `expo-print`, `expo-sharing` |
-| List | `@shopify/flash-list` |
+| List | `@shopify/flash-list`, `react-native-sortables` |
 | SVG/QR | `react-native-svg`, `react-native-qrcode-svg` |
 | Network | `@react-native-community/netinfo` |
+| Input | `react-native-keyboard-controller` (KeyboardAwareScrollView) |
 | UX | `react-native-toast-message` (modal için `react-native-modal` KALDIRILDI → `src/components/AppModal.tsx`: Portal+Reanimated, tüm modallar bunu kullanır) |
 | Util | `dayjs` |
 

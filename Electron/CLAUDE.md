@@ -1,6 +1,6 @@
 # Adnan Şahin ERP — Admin (`Electron/`)
 
-Electron 33 + React 19 + TypeScript + Vite. Yönetim paneli; saha akışı yok. Backend `Teks-Erp/` (Express 5 + Prisma 7) ile HTTP üzerinden konuşur.
+Electron 42 + React 19 + TypeScript + Vite. Yönetim paneli; saha akışı yok. Backend `Teks-Erp/` (Express 5 + Prisma 7) ile HTTP üzerinden konuşur.
 
 > Root `CLAUDE.md` ve `Teks-Erp/ARCHITECTURE.md` domain referansıdır.
 
@@ -13,6 +13,10 @@ npm run build:mac      # .dmg
 npm run build:win      # NSIS installer
 npm run typecheck      # main + renderer type check
 npm run lint
+npm test               # vitest run (birim testleri)
+npm run test:mutation  # stryker (mutation testing — MUTATION-TESTING.md)
+npm run e2e            # playwright (build + e2e)
+npm run electron:rebuild  # native modülleri yeniden derle (serialport, node-hid — tartı/tarayıcı)
 ```
 
 ## Environment
@@ -160,8 +164,10 @@ Yenisi için onay al. Mevcutlar:
 |---|---|
 | Electron core | `electron`, `electron-vite`, `electron-builder` |
 | Native | `electron-log`, `electron-store`, `electron-window-state`, `electron-updater` |
+| Donanım (native) | `serialport`, `node-hid` (tartı/tarayıcı — `electron/ipc/scale.ipc.ts`, `scanner.ipc.ts`; `electron-rebuild` ile derlenir) |
 | UI | `react`, `react-dom`, `react-router-dom`, `react-hook-form`, `@hookform/resolvers`, `zod` |
 | Components | shadcn/ui (Radix + Tailwind), `cmdk`, `sonner`, `lucide-react`, `next-themes` |
+| Animasyon | `framer-motion` (`src/components/motion/`, `lib/motion.ts`) |
 | Style | `tailwindcss`, `@tailwindcss/vite`, `class-variance-authority`, `tailwind-merge`, `clsx` |
 | State | `zustand`, `@tanstack/react-query` |
 | Tablo | `@tanstack/react-table`, `@tanstack/react-virtual` |
@@ -170,7 +176,8 @@ Yenisi için onay al. Mevcutlar:
 | Charts | `recharts` |
 | Drag & Drop | `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` |
 | QR / Renk | `qrcode.react`, `react-colorful` |
-| Export | `exceljs` (renderer .xlsx üretimi — `src/lib/xlsx-export.ts`) |
+| Export | `exceljs` (.xlsx — `src/lib/xlsx-export.ts`, `table-export.ts`), `@react-pdf/renderer` (PDF çıktı) |
+| Test | `vitest` + `@testing-library/react` (birim), `@stryker-mutator/core` (mutation), `@playwright/test` (e2e) |
 
 ## Test Kullanıcıları
 

@@ -2,7 +2,7 @@
 
 Express 5 + Prisma 7 + PostgreSQL. See root `CLAUDE.md` for domain facts.
 
-> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (65 models, 23 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work. (Not: §4-§6 envanter tabloları sevkiyat/kartela/iade modüllerinden eski — başlık sayıları güncel, tablo gövdeleri eksik olabilir.)
+> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (~78 models, ~35 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work. (Not: §4-§6 envanter tabloları/sayıları nokta-anı snapshot'tır ve bayatlar — kanonik kaynak her zaman `schema.prisma`; ARCHITECTURE'ın değeri §7-§10 pattern/gerekçe içeriğindedir.)
 
 ## Commands
 
@@ -45,11 +45,11 @@ JWT_SECRET="..."
 
 **Routes → Controllers → Services → Prisma** — alt katman atlamak yasak. (Bilinçli istisna: ince read/ayar endpoint'leri — admin/dashboard/feature-flag/customer-branch/production-balance/station-capability route'ları controller'sız, route içinde Zod parse + servise delege; iş mantığı yine serviste, prisma import'u route/controller'da YASAK.)
 
-- `controllers/` (19 dosya) — HTTP layer, Zod validate, service çağırır
-- `services/` (33 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
-- `routes/` (38 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
-- `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil allowlist/atama: x-device-id → req.device.machineId), `uuid-param` (UUID path validate)
-- `prisma/schema.prisma` — 65 model, 23 enum, `@prisma/adapter-pg`
+- `controllers/` (~20 dosya) — HTTP layer, Zod validate, service çağırır
+- `services/` (~45 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
+- `routes/` (~41 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
+- `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil allowlist/atama: x-device-id → req.device.machineId), `uuid-param` (UUID path validate), `latency` (per-endpoint gecikme ölçümü), `login-lockout` (PIN/kart giriş kilidi)
+- `prisma/schema.prisma` — ~78 model, ~35 enum, `@prisma/adapter-pg`. **İdempotency katmanı:** `clientToken String? @unique @db.Uuid` (Roll/Order/WorkOrder/KartelaDispatch) + `SwatchStockReduction` olay modeli.
 
 **Master Data CRUD** için yeni kod yazmadan `BaseController` + `BaseService` kullan (`searchFields` config'i yeterli). Detay: ARCHITECTURE.md §8.1.
 
@@ -98,9 +98,9 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 1. **FK index zorunlu.** Her `@relation` kolonuna `@@index([fkColumn])` — Prisma otomatik yapmaz. (Bilinçli istisna: düşük-trafik "kim yaptı" audit FK'ları — `printedById`, `grantedById`, `updatedById` gibi — sorgulanmadıkça indexlenmez; sorgu yolu doğarsa eklenir.)
 2. **Composite index sırası:** Eşitlik kolonları önce, range/order sonra. Örn: `[status, createdAt]` ✓, `[createdAt, status]` ✗.
 3. **Sık birlikte filtrelenen kolonlar = tek composite.** İki ayrı index bitmap scan'e zorlar.
-4. **Null-yoğun / soft-delete tablolarda partial index.** `WHERE col IS NOT NULL` veya `WHERE isActive = true` — raw SQL migration ile (Prisma şemada native değil). **Drift-free yöntem:** şemada `@@index([col])` BIRAK, migration `DROP INDEX ... ; CREATE INDEX ... WHERE ...` ile partial'a çevir — Prisma 7 partial predicate'i drift saymaz (test edildi). Aktif: `rolls` (sackId, shipmentId, parentReceiptId, batchSplitId — migration `20260606001717`); `work_order_steps` (stationId,status,isUrgent,priority,startedAt **WHERE status <> 'COMPLETED'** — açık-kart kuyruğu, COMPLETED yığını indekslenmez; migration `20260607010000`). `items`/`customers` partial'ı henüz YOK (gerekirse aynı yöntemle).
+4. **Null-yoğun / soft-delete tablolarda partial index.** `WHERE col IS NOT NULL` veya `WHERE isActive = true` — raw SQL migration ile (Prisma şemada native değil). **Drift-free yöntem:** şemada `@@index([col])` BIRAK, migration `DROP INDEX ... ; CREATE INDEX ... WHERE ...` ile partial'a çevir — Prisma 7 partial predicate'i drift saymaz (test edildi). Aktif: `rolls` (sackId, shipmentId, parentReceiptId — migration `20260606001717`; `batchSplitId` parti-modeli redesign'ıyla kaldırıldı); `work_order_steps` (stationId,status,isUrgent,priority,startedAt **WHERE status <> 'COMPLETED'** — açık-kart kuyruğu, COMPLETED yığını indekslenmez; migration `20260607010000`). `items`/`customers` partial'ı henüz YOK (gerekirse aynı yöntemle).
 5. **Yüksek hacim tablolar (`Roll`, `RollMovement`, `RollOperation`, `SystemLog`, `TravelerCardScan`)** için cursor pagination. `MAX_OFFSET=10000` guard aktif (`query-parser.ts`) — `skip > 10K` → 400.
-6. **JSON alan sorgulanacaksa GIN index** raw migration ile, **endpoint yazılmadan ÖNCE**. Şu an hiçbiri sorgulanmıyor (`MachineLog.details`, `WorkOrder.parameters`, `RollOperation.metadata`, snapshot'lar).
+6. **JSON alan sorgulanacaksa GIN index** raw migration ile, **endpoint yazılmadan ÖNCE**. Şu an hiçbiri sorgulanmıyor (`WorkOrder.parameters`, `RollOperation.metadata`, snapshot'lar). (`MachineLog` modeli 2026-05-25 cleanup'ında silindi.)
 7. **`include` yerine `select`** — only-needed-fields, over-fetch'i azaltır. Liste sayfaları için detay ekranındaki tüm alanları çekme.
 8. **Karmaşık aggregation → `prisma.$queryRaw`.** Prisma `groupBy` API'si bazen çoklu round-trip yaratır.
 9. **`createMany` toplu insert için.** 100+ satır eklerken tek-tek `create` 10-50x yavaş.
@@ -143,7 +143,7 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 
 Test altyapısı `scripts/test_*.ts` dosyalarıdır — **jest/vitest YOK, kurma** (Allowed Packages listesi). Sözleşme:
 
-- Server'sız entegrasyon: service sınıfı + prisma doğrudan import edilir, HTTP yok; `npx tsx scripts/test_X.ts` ile koşar.
+- Server'sız entegrasyon: service sınıfı + prisma doğrudan import edilir, HTTP yok; `npx tsx scripts/test_X.ts` ile tek tek koşar. **Toplu koşucu:** `npm test` = `tsx scripts/run-all-tests.ts` (tüm `test_*.ts`'i toplar).
 - Fixture: seed master-data'sı business-key ile çözülür (**hardcoded UUID yazma** — reseed'de kırılır); üretilen veri `TEST-` prefix'li benzersiz kodlarla.
 - Çıktı: ✅/❌ `check(label, ok)` sayaçları + sonda `=== Sonuç: N geçti, M başarısız ===` + `process.exit(fail > 0 ? 1 : 0)`.
 - Cleanup `finally` bloğunda (test kendi yarattığını siler) + `prisma.$disconnect()`.

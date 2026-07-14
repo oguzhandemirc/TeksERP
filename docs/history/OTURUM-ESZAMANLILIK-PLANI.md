@@ -1,5 +1,11 @@
 # Oturum & Eşzamanlılık Sertleştirme Planı
 
+> **Durum: BÜYÜK ÖLÇÜDE UYGULANDI (arşiv).** Bu plandaki idempotency/oturum sertleştirmesi
+> sevk edildi (2026-07-14): `clientToken @unique` (Roll/Order/WorkOrder/KartelaDispatch),
+> `SwatchStockReduction`, atomik claim deseni, hızlı-geçiş oturum anahtarları
+> (`SystemSetting`). Canlı gerçek için kök/backend `CLAUDE.md`'nin idempotency bölümü
+> kanoniktir; bu dosya tasarım kaynağı olarak tarihsel değer taşır.
+
 Kullanıcı kararlarına göre kilitlenmiş kapsam (2026-07-04). Tüm ayarlar
 `system_settings` (SystemSetting key-value) üzerinden yönetilir; enforcement notları
 her maddede belirtilmiştir.
