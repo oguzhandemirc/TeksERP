@@ -20,3 +20,16 @@ export function rootNavigate(name: keyof RootStackParamList): void {
     rootNavigationRef.navigate(name as never);
   }
 }
+
+/** Modül/istasyon seçimine (Main → ModuleSelect) güvenli dön — gate'ten "istasyon
+ *  değiştir" için. useNavigation Portal'da (chip) throw ettiğinden ref üzerinden. */
+export function rootNavigateToModuleSelect(): void {
+  if (rootNavigationRef.isReady()) {
+    // RootStackParamList 'Main'i undefined param'la tanımlar → iç içe (nested)
+    // hedefi tiplemez; kontrollü fonksiyon-cast ile Main → ModuleSelect'e git.
+    (rootNavigationRef.navigate as (name: 'Main', params: { screen: string }) => void)(
+      'Main',
+      { screen: 'ModuleSelect' },
+    );
+  }
+}

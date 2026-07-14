@@ -1,25 +1,15 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import {
-  Appbar,
-  Text,
-  Menu,
-  TouchableRipple,
-  Icon,
-  Divider,
-  Button,
-  ActivityIndicator,
-} from 'react-native-paper';
-import Toast from 'react-native-toast-message';
+import { Appbar, Text, Menu, TouchableRipple, Icon, Divider } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useLockStore } from '../store/lockStore';
 import { usePermissions } from '../hooks/usePermission';
-import { useDeviceType } from '../hooks/useDeviceType';
-import { performLogout, pendingStationOpsCount, isOnline } from '../offline/sessionSwitch';
-import AppModal from './AppModal';
+import { useDeviceType, useIsPortrait } from '../hooks/useDeviceType';
+import { useLogout } from '../hooks/useLogout';
+import LogoutModals from './LogoutModals';
 import PlaceChip from './session/PlaceChip';
 import { usePlaceActions, MachinePickerModal } from './session/PlaceActions';
 import HeaderSecondRow from './HeaderSecondRow';
@@ -65,11 +55,8 @@ export default function ScreenChrome({
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
   const [menuVisible, setMenuVisible] = useState(false);
-  // Offline + bekleyen istasyon yazımı varken çıkış: uyar + onay iste.
-  const [logoutConfirm, setLogoutConfirm] = useState<{ pending: number } | null>(null);
-  // Çıkış sürerken (tavanlı flush + oturum kapatma) kapatılamaz gösterge;
-  // değer = çıkış anında kuyrukta bekleyen kayıt sayısı.
-  const [logoutBusy, setLogoutBusy] = useState<number | null>(null);
+  // Çıkış akışı (offline-onay + "çıkış yapılıyor" göstergesi) paylaşımlı hook'ta.
+  const { confirm, setConfirm, busy, runLogout, requestLogout } = useLogout();
   // Tablet: "Makine değiştir / Bölüm değiştir" profil menüsünde (nadir/arıza-durumu
   // işlemleri — açık yerde durmasın). Modal, menü kapansa da yaşasın diye burada.
   const placeActions = usePlaceActions();
@@ -79,12 +66,18 @@ export default function ScreenChrome({
   // TABLETTE ev ikonu hiç çıkmaz: bölüm değiştirme, profil menüsünde
   // ("Bölüm değiştir" — Ayarlar'ın altında). Telefon eski davranışı korur.
   const isTablet = useDeviceType() === 'tablet';
+  const isPortrait = useIsPortrait();
   const onHomeScreen = route.name === 'ModuleSelect';
   const showHome = hasMultipleMobileScreens && !onBack && !onHomeScreen && !isTablet;
   // Telefonda ana sayfada (dashboard = ModuleSelect) profil tuşunda isim GİZLİ —
-  // dar ekranda modül grid'i başlığıyla sıkışmasın; yalnız ikon kalır. Diğer
-  // ekranlarda ve tablette isim yazılır (isim menüde tekrar edilmez).
-  const showUserName = !(!isTablet && onHomeScreen);
+  // dar ekranda modül grid'i başlığıyla sıkışmasın; yalnız ikon kalır. Aynı sebeple
+  // Fason Sevk'te de dikey konumdayken gizli (form alanları + header pill'leri dar
+  // ekranda sıkışıyor); yatayda veya tablette isim yazılır (isim menüde tekrarlanmaz).
+  const onFasonSevkScreen = route.name === 'FasonSevk';
+  const showUserName = !(
+    (!isTablet && onHomeScreen) ||
+    (!isTablet && onFasonSevkScreen && isPortrait)
+  );
   // popTo, navigate DEĞİL: v7'de navigate() stack'teki mevcut ekrana geri sarmaz,
   // hep YENİ kopya push eder — her bölüm değişimi eski istasyon ekranlarını mount
   // bırakıp stack'i sınırsız büyütüyordu (arka planda canlı gate/effect yükü).
@@ -96,54 +89,6 @@ export default function ScreenChrome({
   const openSettings = () => {
     setMenuVisible(false);
     rootNav.navigate('Settings');
-  };
-
-  // Çıkış: ÖNCE A token'ıyla TAVANLI flush (≤5sn) → oturum kapat (≤4sn) →
-  // clearAuth → seçici cache temizliği (performLogout). Flush sürerken
-  // kapatılamaz gösterge; tavana takılan kayıtlar cihazda GÜVENLE bekletilir
-  // (NoAuth guard + persist — girişten sonra otomatik gönderilir).
-  const runLogout = async () => {
-    if (logoutBusy !== null) return; // çift dokunuş = tek çıkış akışı
-    setLogoutBusy(pendingStationOpsCount());
-    try {
-      const outcome = await performLogout();
-      if (outcome.pendingCount > 0) {
-        Toast.show({
-          type: 'info',
-          text1: `${outcome.pendingCount} kayıt bekletildi`,
-          text2: 'Kayıtlar cihazda güvende — girişten sonra otomatik gönderilecek.',
-          visibilityTime: 6000,
-        });
-      }
-    } catch {
-      // Tek gerçekçi kaynak: SecureStore silme hatası (clearAuth). Kullanıcı
-      // oturumda kalır — sessiz unhandled rejection yerine tekrar denesin.
-      Toast.show({
-        type: 'error',
-        text1: 'Çıkış tamamlanamadı',
-        text2: 'Lütfen tekrar deneyin.',
-        visibilityTime: 6000,
-      });
-    } finally {
-      // Başarıda bileşen unmount olur (login ekranı); hata/istisna hâlinde
-      // gösterge kalıcı takılı kalmasın.
-      setLogoutBusy(null);
-    }
-  };
-  const doLogout = () => {
-    setMenuVisible(false);
-    const pending = pendingStationOpsCount();
-    if (!isOnline() && pending > 0) {
-      Toast.show({
-        type: 'error',
-        text1: 'İnternet yok — bekleyen kayıtlar var',
-        text2: `${pending} istasyon kaydı gönderilmeyi bekliyor.`,
-        visibilityTime: 6000,
-      });
-      setLogoutConfirm({ pending });
-      return;
-    }
-    void runLogout();
   };
 
   // Kilitle → LockScreen açılır (çalışma oturumu açık kalır); farklı operatör
@@ -282,7 +227,10 @@ export default function ScreenChrome({
           <Divider />
           <Menu.Item
             leadingIcon="logout"
-            onPress={doLogout}
+            onPress={() => {
+              setMenuVisible(false);
+              requestLogout();
+            }}
             title="Çıkış"
             style={styles.menuItem}
             titleStyle={styles.menuItemTitle}
@@ -315,52 +263,16 @@ export default function ScreenChrome({
         />
       )}
 
-      {/* Offline + bekleyen kayıt varken çıkış onayı. Kayıtlar artık SİLİNMEZ
-          (NoAuth guard + persist ile cihazda bekler) — yine de operatör bilerek
-          çıksın: en hızlı gönderim, bağlantı gelene dek beklemektir. */}
-      <AppModal
-        visible={!!logoutConfirm}
-        onDismiss={() => setLogoutConfirm(null)}
-        swipeToDismiss={false}
-      >
-        <View style={styles.confirmCard}>
-          <Icon source="wifi-off" size={40} color="#ef4444" />
-          <Text style={styles.confirmTitle}>Bağlantı yok</Text>
-          <Text style={styles.confirmBody}>
-            {logoutConfirm?.pending ?? 0} istasyon kaydı gönderilmeyi bekliyor. Çıkarsan kayıtlar
-            cihazda bekletilir ve girişten sonra bağlantı gelince otomatik gönderilir.
-          </Text>
-          <View style={styles.confirmActions}>
-            <Button mode="text" textColor="#475569" onPress={() => setLogoutConfirm(null)}>
-              Vazgeç
-            </Button>
-            <Button
-              mode="contained"
-              buttonColor="#dc2626"
-              onPress={() => {
-                setLogoutConfirm(null);
-                void runLogout();
-              }}
-            >
-              Yine de çık
-            </Button>
-          </View>
-        </View>
-      </AppModal>
-
-      {/* Çıkış sürerken kapatılamaz gösterge — flush ≤5sn + oturum kapatma ≤4sn
-          tavanlı; en kötü durumda bile birkaç saniyede login ekranına düşülür. */}
-      <AppModal visible={logoutBusy !== null} onDismiss={() => {}} swipeToDismiss={false}>
-        <View style={styles.confirmCard}>
-          <ActivityIndicator size="large" color="#4f46e5" />
-          <Text style={styles.confirmTitle}>Çıkış yapılıyor…</Text>
-          {logoutBusy ? (
-            <Text style={styles.confirmBody}>
-              {logoutBusy} bekleyen kayıt gönderiliyor — en fazla birkaç saniye.
-            </Text>
-          ) : null}
-        </View>
-      </AppModal>
+      {/* Çıkış akışı modalları (offline-onay + "çıkış yapılıyor") — paylaşımlı. */}
+      <LogoutModals
+        confirm={confirm}
+        busy={busy}
+        onCancelConfirm={() => setConfirm(null)}
+        onConfirmLogout={() => {
+          setConfirm(null);
+          void runLogout();
+        }}
+      />
     </View>
   );
 }
@@ -405,21 +317,4 @@ const styles = StyleSheet.create({
   // Menü penceresi barın alt kenarından başlasın (tetik bar içinde yukarıda bitiyor).
   menu: { marginTop: 12 },
   content: { flex: 1 },
-
-  confirmCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-  },
-  confirmTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  confirmBody: { fontSize: 15, color: '#475569', textAlign: 'center', lineHeight: 21 },
-  confirmActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    alignSelf: 'stretch',
-    marginTop: 4,
-  },
 });

@@ -12,17 +12,21 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Dialog, Icon, Portal, Text, TouchableRipple } from 'react-native-paper';
+import { ActivityIndicator, Button, Dialog, Divider, Icon, Menu, Portal, Text, TouchableRipple } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
 import { useSessionStore } from '../../store/sessionStore';
+import { useAuthStore } from '../../store/authStore';
+import { useLockStore } from '../../store/lockStore';
+import { useLogout } from '../../hooks/useLogout';
+import LogoutModals from '../LogoutModals';
 import { workSessionService, type ActiveWorkSession } from '../../services/workSession.service';
 import { SCREEN_BY_STATION_KIND, type SessionStationKind } from '../../constants/stationScreens';
 import { SCREEN_BY_KEY } from '../../types/permissions';
-import { rootNavigate } from '../../navigation/navigationRef';
+import { rootNavigate, rootNavigateToModuleSelect } from '../../navigation/navigationRef';
 import { placesOfKind, suggestPlace, type PlaceSuggestion } from './placeSuggest';
 
 const C = {
@@ -71,6 +75,22 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
   const openSession = useSessionStore((s) => s.openSession);
   const screenLabel = SCREEN_BY_KEY[SCREEN_BY_STATION_KIND[expectedKind]]?.label ?? expectedKind;
   const insets = useSafeAreaInsets();
+
+  // Profil / çıkış — gate'te (oturum ÖNCESİ) ScreenChrome yok; tek çıkış /
+  // operatör-değiştir yolu bu köşe (sol üst). Çıkış akışı ScreenChrome ile
+  // paylaşımlı hook (useLogout) + LogoutModals.
+  const user = useAuthStore((s) => s.user);
+  const lock = useLockStore((s) => s.lock);
+  // busy/setBusy adları bu bileşende oturum-açma için kullanılıyor → alias.
+  const {
+    confirm: logoutConfirm,
+    setConfirm: setLogoutConfirm,
+    busy: logoutBusy,
+    runLogout,
+    requestLogout,
+  } = useLogout();
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const operatorName = user?.fullName || user?.username || '—';
 
   const placesQ = useQuery({
     queryKey: ['work-session', 'places'],
@@ -207,8 +227,10 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
 
   return (
     <View style={styles.root}>
-      {/* Sabit başlık — SAYFA kaymaz; aşağıda yalnız makine listesi kayar. */}
-      <View style={styles.header}>
+      {/* Sabit başlık — SAYFA kaymaz; aşağıda yalnız makine listesi kayar.
+          paddingTop safe-area + üst köşe butonlarının (Ayarlar / Profil) altına
+          inecek kadar → ikon/başlık/subtitle durum çubuğuna yapışmaz. */}
+      <View style={[styles.header, { paddingTop: insets.top + 40 }]}>
         <Icon source="map-marker-radius" size={44} color={C.accentLight} />
         <Text style={styles.title}>{screenLabel} — Yer Onayı</Text>
         <Text style={styles.subtitle}>
@@ -394,26 +416,85 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
         </View>
       )}
 
-      {/* Sunucu ayarları — sağ üst sabit köşe. Header'dan SONRA render → üstte,
-          dokunulabilir. Yanlış IP / sunucuya ulaşılamayan durumda tek çıkış yolu:
-          buradan Ayarlar'a gidip adresi düzelt. Navigasyon rootNavigate (ref) ile:
-          chip modalı Paper Portal'da NavigationContainer DIŞINDA render edilir —
-          useNavigation orada throw eder. Chip modunda önce modal kapatılır
-          (onCancel), yoksa Portal içeriği Settings'in ÜSTÜNDE açık kalırdı. */}
-      <TouchableRipple
-        onPress={() => {
-          onCancel?.();
-          rootNavigate('Settings');
-        }}
-        rippleColor="rgba(255,255,255,0.15)"
-        style={[styles.settingsBtn, { top: insets.top + 6 }]}
-        accessibilityLabel="Sunucu ayarları"
-      >
-        <View style={styles.settingsBtnInner}>
-          <Icon source="cog" size={20} color={C.text} />
-          <Text style={styles.settingsBtnText}>Ayarlar</Text>
+      {/* NOT: Chip modunda (makine değiştir modalı) AYARLAR YOK — kullanıcı zaten
+          uygulama içinde, arkadaki ScreenChrome profil menüsünde Ayarlar mevcut.
+          Ayarlar yalnız gate modunda (oturum öncesi) profil menüsünde. */}
+
+      {/* Profil menüsü — YALNIZ gate modunda (onCancel yok), sağ üst köşe. Oturum
+          ÖNCESİ tüm aksiyonlar burada: Ayarlar (sunucu adresi — yanlış IP'de tek
+          çıkış yolu), İstasyon değiştir (ModuleSelect), Kilitle/operatör değiştir,
+          Çıkış. DIŞ konteyner absolute + buton NORMAL akışta: butonu absolute yapıp
+          Menu'ye anchor verince Menu'nün flow wrapper'ına göre konumlanıp ekran
+          dışına kayıyordu (eski hata) — dış View absolute, buton wrapper içinde. */}
+      {!onCancel && (
+        <View style={[styles.profileAnchor, { top: insets.top + 6 }]}>
+          <Menu
+            visible={profileMenuVisible}
+            onDismiss={() => setProfileMenuVisible(false)}
+            anchorPosition="bottom"
+            style={styles.profileMenu}
+            anchor={
+              <TouchableRipple
+                onPress={() => setProfileMenuVisible(true)}
+                rippleColor="rgba(255,255,255,0.15)"
+                style={styles.profileBtn}
+                accessibilityLabel="Kullanıcı menüsü"
+              >
+                <View style={styles.profileBtnInner}>
+                  <Icon source="account-circle" size={20} color={C.text} />
+                  <Text style={styles.profileBtnText} numberOfLines={1}>
+                    {operatorName}
+                  </Text>
+                </View>
+              </TouchableRipple>
+            }
+          >
+            <Menu.Item
+              leadingIcon="cog"
+              onPress={() => {
+                setProfileMenuVisible(false);
+                rootNavigate('Settings');
+              }}
+              title="Ayarlar"
+              style={styles.profileMenuItem}
+              titleStyle={styles.profileMenuItemTitle}
+            />
+            <Divider />
+            <Menu.Item
+              leadingIcon="view-grid"
+              onPress={() => {
+                setProfileMenuVisible(false);
+                rootNavigateToModuleSelect();
+              }}
+              title="İstasyon değiştir"
+              style={styles.profileMenuItem}
+              titleStyle={styles.profileMenuItemTitle}
+            />
+            <Divider />
+            <Menu.Item
+              leadingIcon="lock"
+              onPress={() => {
+                setProfileMenuVisible(false);
+                lock();
+              }}
+              title="Kilitle / operatör değiştir"
+              style={styles.profileMenuItem}
+              titleStyle={styles.profileMenuItemTitle}
+            />
+            <Divider />
+            <Menu.Item
+              leadingIcon="logout"
+              onPress={() => {
+                setProfileMenuVisible(false);
+                requestLogout();
+              }}
+              title="Çıkış"
+              style={styles.profileMenuItem}
+              titleStyle={styles.profileMenuItemTitle}
+            />
+          </Menu>
         </View>
-      </TouchableRipple>
+      )}
 
       <BarcodeScannerModal
         visible={scannerOpen}
@@ -469,6 +550,18 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Çıkış akışı modalları (offline-onay + "çıkış yapılıyor") — ScreenChrome
+          ile paylaşımlı. Gate'te profil menüsündeki "Çıkış" bunları tetikler. */}
+      <LogoutModals
+        confirm={logoutConfirm}
+        busy={logoutBusy}
+        onCancelConfirm={() => setLogoutConfirm(null)}
+        onConfirmLogout={() => {
+          setLogoutConfirm(null);
+          void runLogout();
+        }}
+      />
     </View>
   );
 }
@@ -476,25 +569,29 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
 const styles = StyleSheet.create({
   // paddingTop/Bottom: sayfanın üstünden ve altından nefes payı (içerik kenara yapışmaz).
   root: { flex: 1, backgroundColor: C.bg, paddingTop: 16, paddingBottom: 16 },
-  // Sunucu ayarları — sağ üst sabit köşe butonu (top runtime'da safe-area inset'iyle).
-  settingsBtn: {
-    position: 'absolute',
-    right: 10,
+  // Profil menüsü — sağ üst köşe. DIŞ konteyner absolute; buton NORMAL akışta
+  // (Paper Menu component-anchor'ı doğru ölçsün — absolute buton Menu wrapper'ında
+  // ekran dışına kayıyordu). DOLU marka-indigo (ScreenChrome tetiğiyle aynı dil).
+  profileAnchor: { position: 'absolute', right: 10, zIndex: 10, elevation: 4 },
+  profileBtn: {
     borderRadius: 10,
-    backgroundColor: C.card,
+    backgroundColor: C.accent,
     borderWidth: 1,
-    borderColor: C.border,
-    zIndex: 10,
-    elevation: 4,
+    borderColor: C.accentLight,
+    overflow: 'hidden',
   },
-  settingsBtnInner: {
+  profileBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  settingsBtnText: { color: C.text, fontSize: 14, fontWeight: '700' },
+  profileBtnText: { color: C.text, fontSize: 14, fontWeight: '700', maxWidth: 180 },
+  // Menü barın alt kenarından başlasın + saha dokunma hedefi (min ~56dp).
+  profileMenu: { marginTop: 8 },
+  profileMenuItem: { height: 58 },
+  profileMenuItemTitle: { fontSize: 17 },
   // Sabit başlık (sayfa kaymaz); makine listesi kendi içinde kayar.
   header: { alignItems: 'center', gap: 8, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 8 },
   // Başlık altındaki gövde — kalan yüksekliği kaplar.

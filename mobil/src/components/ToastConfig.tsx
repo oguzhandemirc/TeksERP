@@ -10,6 +10,7 @@ export const toastConfig: ToastConfig = {
         borderLeftColor: '#10b981', // Emerald 500
         borderLeftWidth: 10,
         minHeight: 84,
+        height: 'auto', // BaseToast'ın sabit height:60'ını ez → içerik (uzun text2) büyüsün, metin kenara değmesin
         backgroundColor: '#ffffff',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -17,7 +18,7 @@ export const toastConfig: ToastConfig = {
         shadowRadius: 12,
         elevation: 8,
       }}
-      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 12 }}
+      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 14 }}
       text1Style={{
         fontSize: 16,
         fontWeight: '700',
@@ -37,6 +38,7 @@ export const toastConfig: ToastConfig = {
         borderLeftColor: '#ef4444', // Red 500
         borderLeftWidth: 10,
         minHeight: 84,
+        height: 'auto', // BaseToast'ın sabit height:60'ını ez → içerik (uzun text2) büyüsün, metin kenara değmesin
         backgroundColor: '#ffffff',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -44,7 +46,7 @@ export const toastConfig: ToastConfig = {
         shadowRadius: 12,
         elevation: 8,
       }}
-      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 12 }}
+      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 14 }}
       text1Style={{
         fontSize: 16,
         fontWeight: '700',
@@ -64,6 +66,7 @@ export const toastConfig: ToastConfig = {
         borderLeftColor: '#3b82f6', // Blue 500
         borderLeftWidth: 10,
         minHeight: 84,
+        height: 'auto', // BaseToast'ın sabit height:60'ını ez → içerik (uzun text2) büyüsün, metin kenara değmesin
         backgroundColor: '#ffffff',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -71,7 +74,7 @@ export const toastConfig: ToastConfig = {
         shadowRadius: 12,
         elevation: 8,
       }}
-      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 12 }}
+      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 14 }}
       text1Style={{
         fontSize: 16,
         fontWeight: '700',
