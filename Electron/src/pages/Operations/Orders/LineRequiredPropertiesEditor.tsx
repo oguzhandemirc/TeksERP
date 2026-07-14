@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { MultiSelectCheckboxList, type MultiSelectItem } from "@/components/forms/MultiSelectCheckboxList";
-import { itemService } from "@/pages/Items/service";
+import { useItemDetail } from "@/pages/Items/useItemDetail";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 
 interface Props {
@@ -33,12 +33,8 @@ const kursunRank = (name: string): number => (/kurşun/i.test(name) ? 0 : 1);
 export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAction }: Props) {
   const [open, setOpen] = useState(false);
 
-  const itemQuery = useQuery({
-    queryKey: ["item-allowed", itemId],
-    queryFn: () => itemService.getById(itemId),
-    enabled: Boolean(itemId),
-    staleTime: 60_000,
-  });
+  // Perf: OrderLineColorPicker ile ortak ürün cache'i (satır başına tek GET).
+  const itemQuery = useItemDetail(itemId);
   const allowedIds = useMemo(
     () => (itemQuery.data?.data?.allowedProperties ?? []).map((p) => p.propertyId),
     [itemQuery.data?.data?.allowedProperties],

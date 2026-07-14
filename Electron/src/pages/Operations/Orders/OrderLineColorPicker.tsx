@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { itemService } from "@/pages/Items/service";
+import { useItemDetail } from "@/pages/Items/useItemDetail";
 import { Palette } from "lucide-react";
 import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
 
@@ -15,12 +14,9 @@ interface Props {
 }
 
 export function OrderLineColorPicker({ itemId, value, onChange, customerId, disabled, triggerClassName }: Props) {
-  const itemQ = useQuery({
-    queryKey: ["item-allowed-colors", itemId],
-    queryFn: () => itemService.getById(itemId),
-    enabled: Boolean(itemId),
-    staleTime: 60_000,
-  });
+  // Perf: LineRequiredPropertiesEditor ile aynı ürünü paylaşan tek cache girdisi
+  // (satır başına çift GET yerine tek istek).
+  const itemQ = useItemDetail(itemId);
 
   // Ürünün izinli renkleri (boş = sınırsız → tüm katalog aranabilir).
   const allowedColorIds = useMemo(

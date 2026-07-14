@@ -95,11 +95,12 @@ export function CrudPage<T extends { id: string }>({
     entityName,
   });
 
-  const { table, query, search, setSearch, pagination } = useDataTable<T>({
-    queryKey,
-    fetchFn: service.listCursor,
-    forceFilters,
-    columns: [
+  // Perf: kolonları memoize et. react-table kolon modelini (getAllColumns/leaf/
+  // header groups) kolon dizisinin REFERANSINA göre memoize eder. Inline dizi her
+  // render'da (arama tuşu, mutation pending) yeniden kuruluyor, tüm kolon
+  // örneklerini yeniden yaratıyordu. Bu, tüm master-data sayfalarının ortak kabı.
+  const tableColumns = useMemo<ColumnDef<T>[]>(
+    () => [
       ...columns,
       {
         id: "actions",
@@ -170,6 +171,16 @@ export function CrudPage<T extends { id: string }>({
         },
       },
     ],
+    // restoreMutation.isPending → aktifleştir butonunun `disabled`'ı; state
+    // setter'ları ve restoreMutation.mutate referans olarak kararlı.
+    [columns, writePermission, permanentDelete, restoreMutation.isPending],
+  );
+
+  const { table, query, search, setSearch, pagination } = useDataTable<T>({
+    queryKey,
+    fetchFn: service.listCursor,
+    forceFilters,
+    columns: tableColumns,
   });
 
   const onSubmit = async (values: Partial<T>) => {

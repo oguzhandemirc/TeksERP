@@ -1,4 +1,4 @@
-import { Controller } from "react-hook-form";
+import { Controller, useWatch, type Control } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
@@ -118,9 +118,6 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         const isPrinter = kind === "LABEL_PRINTER";
         const roleVal = form.watch("role");
         const readMode = form.watch("readMode");
-        // Gerçek adres tanımlı AMA simülasyon açık → cihaz OKUNMAZ, sahte değer
-        // üretilir (kurulum sonrası simulate kapatmayı unutma tuzağı).
-        const simWarn = isInput && !!form.watch("address").trim() && form.watch("simulate");
         return (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -253,15 +250,9 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   <label className="flex items-center gap-2 self-end pb-2 text-sm">
                     <input type="checkbox" {...form.register("simulate")} /> Simülasyon (sahte değer)
                   </label>
-                  {simWarn && (
-                    <div className="col-span-3">
-                      <Callout tone="warning" title="Simülasyon açık — cihaz gerçekten okunmayacak">
-                        Bu cihazın adresi tanımlı ama <strong>Simülasyon</strong> işaretli:
-                        sahada gerçek okuma yapılmaz, sahte değer üretilir. Kurulum
-                        bittiyse kapatın.
-                      </Callout>
-                    </div>
-                  )}
+                  {/* Perf: address/simulate aboneliği form kökünden leaf'e taşındı —
+                      Adres yazarken tüm form değil yalnız bu uyarı re-render olur. */}
+                  <SimWarnCallout control={form.control} />
                 </div>
               </div>
             )}
@@ -344,5 +335,25 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         );
       }}
     </EntityFormDialog>
+  );
+}
+
+/**
+ * Perf: Gerçek adres tanımlı AMA simülasyon açık uyarısı. address/simulate'i
+ * form kökünde form.watch ile okumak Adres alanına her tuş vuruşunda tüm formu
+ * (Okuma Protokolü grid'i vb.) render ediyordu; useWatch'la bu leaf'e taşındı.
+ * Yalnız SCALE/METER (isInput) bloğunda render edilir, ayrı kind kontrolü gerekmez.
+ */
+function SimWarnCallout({ control }: { control: Control<PeripheralFormValues> }) {
+  const [address, simulate] = useWatch({ control, name: ["address", "simulate"] });
+  if (!address?.trim() || !simulate) return null;
+  return (
+    <div className="col-span-3">
+      <Callout tone="warning" title="Simülasyon açık — cihaz gerçekten okunmayacak">
+        Bu cihazın adresi tanımlı ama <strong>Simülasyon</strong> işaretli:
+        sahada gerçek okuma yapılmaz, sahte değer üretilir. Kurulum
+        bittiyse kapatın.
+      </Callout>
+    </div>
   );
 }

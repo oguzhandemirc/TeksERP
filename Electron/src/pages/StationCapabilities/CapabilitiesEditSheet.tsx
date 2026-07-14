@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Save, Palette, Sparkles, Lock } from "lucide-react";
@@ -86,20 +86,31 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
     }
   }, [detail.data]);
 
-  const colorItems: MultiSelectItem[] = (colorsQuery.data?.data ?? []).map((c) => ({
-    id: c.id,
-    label: c.name,
-    hint: c.code,
-    swatch: c.hex,
-  }));
+  // Perf: türetilmiş dizileri memoize et. MultiSelectCheckboxList grouping/filter
+  // işini `items` referansına göre memoize eder; her render'da yeni dizi verilince
+  // (her checkbox toggle'ında) o memo geçersizleşip ~500 satırı yeniden gruplardı.
+  const colorItems = useMemo<MultiSelectItem[]>(
+    () =>
+      (colorsQuery.data?.data ?? []).map((c) => ({
+        id: c.id,
+        label: c.name,
+        hint: c.code,
+        swatch: c.hex,
+      })),
+    [colorsQuery.data?.data],
+  );
 
-  const propertyItems: MultiSelectItem[] = (propsQuery.data?.data ?? []).map((p) => ({
-    id: p.id,
-    label: p.name,
-    hint: p.description ?? p.code,
-    group: p.category ?? "Diğer",
-    swatch: p.color,
-  }));
+  const propertyItems = useMemo<MultiSelectItem[]>(
+    () =>
+      (propsQuery.data?.data ?? []).map((p) => ({
+        id: p.id,
+        label: p.name,
+        hint: p.description ?? p.code,
+        group: p.category ?? "Diğer",
+        swatch: p.color,
+      })),
+    [propsQuery.data?.data],
+  );
 
   const dirty =
     colorIds.length !== initialColorIds.length ||

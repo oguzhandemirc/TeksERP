@@ -1,4 +1,4 @@
-import { type UseFormReturn } from "react-hook-form";
+import { useWatch, type Control, type UseFormReturn } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
@@ -38,14 +38,6 @@ export function PrinterSettingsFields({ form }: Props) {
     queryFn: () => labelTemplateService.list(),
   });
   const templates = templatesQuery.data?.data ?? [];
-
-  // Varyant uyumsuzluk hint'i için cihaz medya boyutu (form → Number; eksik → null).
-  const wStr = form.watch("labelWidthMm");
-  const hStr = form.watch("labelHeightMm");
-  const mediaSize =
-    wStr.trim() && hStr.trim()
-      ? { widthMm: Number(wStr), heightMm: Number(hStr) }
-      : null;
 
   return (
     <>
@@ -127,7 +119,7 @@ export function PrinterSettingsFields({ form }: Props) {
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                 </select>
-                <TemplateVariantHint templateId={selTemplateId} media={mediaSize} />
+                <MediaVariantHint control={form.control} templateId={selTemplateId} />
               </FormField>
             );
           })}
@@ -135,4 +127,25 @@ export function PrinterSettingsFields({ form }: Props) {
       </div>
     </>
   );
+}
+
+/**
+ * Perf: Eni/Boyu (mm) alanlarını form KÖKÜNDE form.watch ile okumak, her tuş
+ * vuruşunda tüm peripheral formunu yeniden render ediyordu. useWatch'ı bu leaf
+ * hint'e taşıyınca boyut tuşları yalnız 3 hint'i günceller, formun tamamını değil.
+ * (Aynı boyut değeri 3 hint tarafından okunur; useWatch abonelikleri hafiftir.)
+ */
+function MediaVariantHint({
+  control,
+  templateId,
+}: {
+  control: Control<PeripheralFormValues>;
+  templateId: string;
+}) {
+  const [wStr, hStr] = useWatch({ control, name: ["labelWidthMm", "labelHeightMm"] });
+  const media =
+    wStr?.trim() && hStr?.trim()
+      ? { widthMm: Number(wStr), heightMm: Number(hStr) }
+      : null;
+  return <TemplateVariantHint templateId={templateId} media={media} />;
 }

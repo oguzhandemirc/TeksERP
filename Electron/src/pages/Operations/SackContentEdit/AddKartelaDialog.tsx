@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
@@ -47,9 +48,15 @@ export function AddKartelaDialog({ sackId, onOpenChange }: Props) {
     }
   }, [open]);
 
+  // Perf: aramayı debounce'la — ham `search` doğrudan query key'inde olsaydı her
+  // tuş vuruşu farklı key üretip yeni GET /api/kartela/stock atardı (staleTime
+  // farklı key'leri dedup edemez). 300ms sonra tek istek. Diğer arama input'ları
+  // (SwatchesPanel, SackStorePage) aynı kalıbı kullanıyor.
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+
   const stockQuery = useQuery({
-    queryKey: ["kartela", "stock", search],
-    queryFn: () => sackHubService.listKartelaStock(search.trim() || undefined),
+    queryKey: ["kartela", "stock", debouncedSearch],
+    queryFn: () => sackHubService.listKartelaStock(debouncedSearch || undefined),
     enabled: open,
     staleTime: 5_000,
   });

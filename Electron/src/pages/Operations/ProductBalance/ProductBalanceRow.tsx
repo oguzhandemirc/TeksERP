@@ -5,7 +5,7 @@ import {
   PackageCheck,
   AlertTriangle,
 } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { PermissionGate } from "@/components/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,13 +21,16 @@ const widthLabel = (w: number | null) => (w == null ? "en —" : `${w}cm`);
 interface Props {
   group: BalanceGroup;
   isOpen: boolean;
-  onToggle: () => void;
-  /** Belirli bir en alt-satırı için iş emri aç. */
-  onOpenWo: (spec: BalanceSpecRow) => void;
+  /** Grup key'i ile genişlet/daralt (stabil referans — üst listede memo tutsun). */
+  onToggle: (key: string) => void;
+  /** Belirli bir en alt-satırı için iş emri aç (grup + spec). */
+  onOpenWo: (group: BalanceGroup, spec: BalanceSpecRow) => void;
 }
 
-/** Ürün Dengesi tablosunda tek (ürün+renk) grubu + (açıksa) en kırılımı + drill-down. */
-export function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Props) {
+/** Ürün Dengesi tablosunda tek (ürün+renk) grubu + (açıksa) en kırılımı + drill-down.
+ *  Perf: React.memo — arama kutusuna yazarken filtre dışı kalmayan grupların
+ *  props'u değişmediğinden yeniden render EDİLMEZ (handler'lar üstte useCallback'li). */
+export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Props) {
   const covered = g.uretilecek <= 0;
   const multiWidth = g.specs.length > 1;
   const singleSpec = g.specs[0];
@@ -52,7 +55,7 @@ export function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Prop
         <td className="text-left">
           <button
             type="button"
-            onClick={onToggle}
+            onClick={() => onToggle(g.key)}
             className="flex items-center gap-1.5 text-left hover:text-primary"
           >
             {isOpen ? (
@@ -116,7 +119,7 @@ export function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Prop
                 size="sm"
                 variant="outline"
                 className="h-7 gap-1.5"
-                onClick={() => onOpenWo(singleSpec)}
+                onClick={() => onOpenWo(g, singleSpec)}
               >
                 <Factory className="h-3.5 w-3.5" /> İş Emri Aç
               </Button>
@@ -171,7 +174,7 @@ export function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Prop
                                   size="sm"
                                   variant="outline"
                                   className="h-6 gap-1.5 text-[11px]"
-                                  onClick={() => onOpenWo(s)}
+                                  onClick={() => onOpenWo(g, s)}
                                 >
                                   <Factory className="h-3 w-3" /> İş Emri
                                 </Button>
@@ -257,4 +260,4 @@ export function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Prop
       )}
     </>
   );
-}
+});

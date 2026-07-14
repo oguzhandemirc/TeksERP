@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -34,6 +34,10 @@ import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
 
 // Üretim akışındaki istasyon türleri — sevkiyat/diğer (OTHER) bu ekranda yok.
 const PRODUCTION_KINDS: StationKind[] = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBCONTRACTOR"] as StationKind[];
+
+// Perf: makinesiz kartlar için sabit boş dizi referansı (her render'da yeni `[]`
+// StationCard'ın React.memo'sunu bozardı).
+const EMPTY_MACHINES: Machine[] = [];
 
 const buildStationPayload = (v: StationFormValues, initial: Station | null): Partial<Station> => ({
   code: initial?.code ?? generateCode(CODE_PREFIXES.STATION),
@@ -86,6 +90,18 @@ export function ProductionStationsPage() {
   const [qrMachine, setQrMachine] = useState<Machine | null>(null);
   const [deleteMachine, setDeleteMachine] = useState<Machine | null>(null);
   const [deactivateMachine, setDeactivateMachine] = useState<Machine | null>(null);
+
+  // Perf: StationCard React.memo'lu — kart grid'i arama tuşuna basıldıkça yeniden
+  // render OLMASIN diye handler prop'ları kararlı referans olmalı. (Diğer prop'lar
+  // setState setter'ları — zaten kararlı — doğrudan geçilir.)
+  const restoreMachine = machineMut.restoreMutation.mutate;
+  const onEditStation = useCallback((st: Station) => setStationDlg({ open: true, initial: st }), []);
+  const onAddMachine = useCallback(
+    (sid: string) => setMachineDlg({ open: true, initial: null, stationId: sid }),
+    [],
+  );
+  const onEditMachine = useCallback((m: Machine) => setMachineDlg({ open: true, initial: m }), []);
+  const onReactivateMachine = useCallback((m: Machine) => restoreMachine(m.id), [restoreMachine]);
 
   const allStations = useMemo(
     () => (stationsQ.data?.data ?? []).filter((s) => PRODUCTION_KINDS.includes(s.kind)),
@@ -260,16 +276,16 @@ export function ProductionStationsPage() {
               <StationCard
                 key={s.id}
                 station={s}
-                machines={machinesByStation.get(s.id) ?? []}
+                machines={machinesByStation.get(s.id) ?? EMPTY_MACHINES}
                 peripheralsByMachine={peripheralsByMachine}
                 cap={capByStation.get(s.id)}
                 canWrite={canWrite}
-                onEditStation={(st) => setStationDlg({ open: true, initial: st })}
-                onAddMachine={(stationId) => setMachineDlg({ open: true, initial: null, stationId })}
-                onEditMachine={(m) => setMachineDlg({ open: true, initial: m })}
+                onEditStation={onEditStation}
+                onAddMachine={onAddMachine}
+                onEditMachine={onEditMachine}
                 onQrMachine={setQrMachine}
                 onDeactivateMachine={setDeactivateMachine}
-                onReactivateMachine={(m) => machineMut.restoreMutation.mutate(m.id)}
+                onReactivateMachine={onReactivateMachine}
                 onDeleteMachine={setDeleteMachine}
                 onEditCap={setCapStation}
               />

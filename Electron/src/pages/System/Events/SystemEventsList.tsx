@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +58,7 @@ export function SystemEventsList({ items, loading, onSelect }: Props) {
           </thead>
           <tbody>
             {items.map((item) => (
-              <EventRow key={item.id} item={item} onSelect={() => onSelect(item)} />
+              <EventRow key={item.id} item={item} onSelect={onSelect} />
             ))}
           </tbody>
         </table>
@@ -66,12 +67,15 @@ export function SystemEventsList({ items, loading, onSelect }: Props) {
   );
 }
 
-function EventRow({
+// Perf: React.memo + stabil onSelect(item) → load-more ile satır eklenince tüm
+// birikmiş satırların (formatDistanceToNow + per-row Radix Tooltip) yeniden
+// render'ını önler.
+const EventRow = memo(function EventRow({
   item,
   onSelect,
 }: {
   item: SystemLogListItem;
-  onSelect: () => void;
+  onSelect: (item: SystemLogListItem) => void;
 }) {
   const date = new Date(item.createdAt);
   const userLabel = item.user
@@ -80,7 +84,7 @@ function EventRow({
 
   return (
     <tr
-      onClick={onSelect}
+      onClick={() => onSelect(item)}
       className="cursor-pointer border-b transition-colors hover:bg-accent/40"
     >
       <td className="whitespace-nowrap px-6 py-2 text-xs">
@@ -114,4 +118,4 @@ function EventRow({
       </td>
     </tr>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -36,6 +36,9 @@ export function ArchiveSearchPage() {
     [query.data],
   );
 
+  // Perf: ActivityFeed'in React.memo'lu satırları için stabil referans.
+  const handleSelect = useCallback((item: SystemLogListItem) => setDetailId(item.id), []);
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -49,7 +52,7 @@ export function ArchiveSearchPage() {
         <ActivityFeed
           items={items}
           loading={query.isLoading}
-          onSelect={(item) => setDetailId(item.id)}
+          onSelect={handleSelect}
         />
 
         {items.length > 0 && (

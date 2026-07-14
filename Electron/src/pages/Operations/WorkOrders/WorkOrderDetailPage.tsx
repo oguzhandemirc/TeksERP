@@ -110,7 +110,11 @@ export function WorkOrderDetailPage() {
           )}
 
           {wo && (
-            <div key={detail.dataUpdatedAt} className="mx-auto max-w-6xl space-y-6">
+            // Perf: subtree'yi fetch zaman damgasına DEĞİL WO kimliğine key'le. RQ her
+            // başarılı fetch'te dataUpdatedAt'i tazeler → eski key her invalidate/refresh'te
+            // tüm detayı unmount+remount ediyordu (giriş animasyonları + alt query'ler
+            // yeniden kurulur). wo.id yalnız başka bir WO'ya geçilince değişir.
+            <div key={wo.id} className="mx-auto max-w-6xl space-y-6">
               <FadeInUp delay={0}>
                 <WorkOrderHealthBand wo={wo} />
               </FadeInUp>

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -35,19 +36,22 @@ export function ActivityFeed({ items, loading, onSelect }: Props) {
     <TooltipProvider delayDuration={300}>
       <ul className="divide-y">
         {items.map((item) => (
-          <ActivityRow key={item.id} item={item} onSelect={() => onSelect(item)} />
+          <ActivityRow key={item.id} item={item} onSelect={onSelect} />
         ))}
       </ul>
     </TooltipProvider>
   );
 }
 
-function ActivityRow({
+// Perf: React.memo + stabil onSelect(item) → load-more/detay-açma ile yeni satır
+// eklendiğinde yalnız değişen satırlar değil, önceden yüklenmiş tüm satırların
+// (her biri formatDistanceToNow + Radix Tooltip) yeniden render'ı önlenir.
+const ActivityRow = memo(function ActivityRow({
   item,
   onSelect,
 }: {
   item: SystemLogListItem;
-  onSelect: () => void;
+  onSelect: (item: SystemLogListItem) => void;
 }) {
   const date = new Date(item.createdAt);
   const userLabel = item.user
@@ -58,7 +62,7 @@ function ActivityRow({
     <li>
       <button
         type="button"
-        onClick={onSelect}
+        onClick={() => onSelect(item)}
         className="flex w-full items-center gap-3 px-6 py-3 text-left transition-colors hover:bg-accent/40"
       >
         <Badge variant={actionVariant(item.action)} className="shrink-0">
@@ -88,4 +92,4 @@ function ActivityRow({
       </button>
     </li>
   );
-}
+});

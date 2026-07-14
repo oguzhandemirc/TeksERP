@@ -140,7 +140,12 @@ export function RouteEditor({
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [flowSig, selected]);
+    // Perf: `selected` objesine DEĞİL, ölçümün gerçekten kullandığı clientId'ye
+    // bağlan. updateStep seçili adımı klonladığından (yeni identity) not/firma
+    // yazarken `selected` her tuşta değişip gereksiz senkron reflow (2x
+    // getBoundingClientRect) tetikliyordu; chip düzeni flowSig'de zaten kodlu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowSig, selected?.clientId]);
 
   // --- Sipariş özelliği/rengi karşılanma uyarısı ---
   const stationIds = useMemo(

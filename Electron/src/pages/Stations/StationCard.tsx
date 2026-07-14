@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Pencil, Palette, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,8 +34,13 @@ interface Props {
  * Tek üretim istasyonu kartı. İstasyon türü renkle kodlanır (üst şerit + tonlu
  * başlık) — sahada hızlı ayırt edilsin. İç bölümler (Makineler / Yetenekler)
  * ayrı kenarlıklı kutular; başlık ile aralarında net görsel sınır var.
+ *
+ * Perf: React.memo — üst sayfada arama kutusuna yazarken (debounce'lu filtre
+ * değişmediği sürece) props kararlı kalır ve kart yeniden render EDİLMEZ. Faydası
+ * için üst sayfa handler'ları useCallback ile, boş makine dizisi sabit referansla
+ * geçmeli (ProductionStationsPage).
  */
-export function StationCard({
+export const StationCard = memo(function StationCard({
   station: s,
   machines,
   peripheralsByMachine,
@@ -137,4 +143,4 @@ export function StationCard({
       </CardContent>
     </Card>
   );
-}
+});

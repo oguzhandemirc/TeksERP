@@ -1,5 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { flexRender, type Header, type Table as TanstackTable } from "@tanstack/react-table";
+import { memo, useEffect, useRef, type MutableRefObject, type ReactNode } from "react";
+import { flexRender, type ColumnDef, type Header, type Row, type Table as TanstackTable } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -98,6 +98,16 @@ export function DataTable<T>({
 
   const colCount = table.getAllColumns().length + (selectable ? 1 : 0);
 
+  // DataTableRow memo geçersizleştirme sinyalleri — bunlar OLMADAN memo satır
+  // gövdesini fazla iyi tutar: sütun görünürlük/sıra veya sütun TANIMI değişince
+  // (row referansı table-core'da yalnız [data]'ya bağlı olduğundan) satır
+  // yeniden render OLMAZ → başlık güncellenir ama gövde bayat kalır (hizasızlık /
+  // gizlenen sütun gövdede kalır / CrudPage aksiyon hücresi bayat). visibleColumnIds
+  // görünürlük+sırayı, columnDefs ise hücre-closure (ör. restoreMutation.isPending)
+  // değişimini yakalar. İkisi de satır SEÇİMİ toggle'ında sabit → memo hâlâ tutar.
+  const visibleColumnIds = table.getVisibleLeafColumns().map((c) => c.id).join(",");
+  const columnDefs = table.options.columns;
+
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex-1 overflow-auto">
@@ -156,74 +166,21 @@ export function DataTable<T>({
                         </TableCell>
                       </TableRow>
                     )
-                  : rows.map((row, i) => {
-                      const rowEl = (
-                        <TableRow
-                          key={row.id}
-                          data-state={row.getIsSelected() ? "selected" : undefined}
-                          className={cn("row-enter", onRowClick && "cursor-pointer")}
-                          style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
-                          onClick={(e) => {
-                            if (!onRowClick) return;
-                            // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı
-                            // (aşağıdaki guard'lardan erken çıksa bile) 1. tıkın
-                            // zamanlayıcısını öldürsün.
-                            if (openTimer.current) {
-                              clearTimeout(openTimer.current);
-                              openTimer.current = null;
-                            }
-                            // Sürükleyerek/çift-tıkla metin seçildiyse satırı açma.
-                            if (window.getSelection()?.toString()) return;
-                            // 2./3. tık (çift-tık) → boş hücrede bile açma.
-                            if (e.detail > 1) return;
-                            const data = row.original;
-                            openTimer.current = setTimeout(() => {
-                              openTimer.current = null;
-                              onRowClick(data);
-                            }, ROW_OPEN_DELAY_MS);
-                          }}
-                        >
-                          {selectable && (
-                            <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
-                              {/* Seçilemez satırlarda (enableRowSelection predicate false —
-                                  ör. sevkteki çuval) checkbox gizlenir; boş hücre hizayı korur. */}
-                              {row.getCanSelect() && (
-                                <Checkbox
-                                  checked={row.getIsSelected()}
-                                  onCheckedChange={(v) => row.toggleSelected(!!v)}
-                                  aria-label="Seç"
-                                />
-                              )}
-                            </TableCell>
-                          )}
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-
-                      const menu = rowContextMenu?.(row.original);
-                      if (!menu) return rowEl;
-                      return (
-                        <ContextMenu key={row.id}>
-                          <ContextMenuTrigger
-                            asChild
-                            onContextMenu={(e) => {
-                              // Sağ-tık anındaki seçimi yakala (menü açılmadan önce).
-                              selRef.current = getSelectedText(e.target);
-                            }}
-                          >
-                            {rowEl}
-                          </ContextMenuTrigger>
-                          <ContextMenuContent>
-                            <SelectionCopyItem getText={() => selRef.current} />
-                            {menu}
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      );
-                    })}
+                  : rows.map((row, i) => (
+                      <DataTableRow<T>
+                        key={row.id}
+                        row={row}
+                        index={i}
+                        isSelected={row.getIsSelected()}
+                        selectable={selectable}
+                        onRowClick={onRowClick}
+                        rowContextMenu={rowContextMenu}
+                        openTimer={openTimer}
+                        selRef={selRef}
+                        visibleColumnIds={visibleColumnIds}
+                        columnDefs={columnDefs}
+                      />
+                    ))}
             </TableBody>
           </Table>
         </DndContext>
@@ -278,6 +235,112 @@ export function DataTable<T>({
     </div>
   );
 }
+
+interface DataTableRowProps<T> {
+  row: Row<T>;
+  index: number;
+  isSelected: boolean;
+  selectable: boolean;
+  onRowClick?: (row: T) => void;
+  rowContextMenu?: (row: T) => ReactNode;
+  openTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  selRef: MutableRefObject<string>;
+  // Memo geçersizleştirme sinyalleri — gövdede doğrudan kullanılmaz, React.memo
+  // shallow karşılaştırması görür. Sütun görünürlük/sıra (visibleColumnIds) veya
+  // sütun tanımı (columnDefs) değişince satır yeniden render olur; salt seçim
+  // toggle'ında ikisi de sabit → memo tutar. (Bkz. DataTable gövdesindeki not.)
+  visibleColumnIds: string;
+  columnDefs: ColumnDef<T>[];
+}
+
+/**
+ * Perf: tek satır ayrı React.memo'lu bileşen. Bir satırın seçimi değişince
+ * (setRowSelection → tablo re-render) TÜM satırlar (her hücre flexRender + varsa
+ * per-row Radix ContextMenu) yeniden render oluyordu. react-table satır
+ * referansı `data` değişmedikçe kararlı; `isSelected` prop olarak verildiğinden
+ * yalnız toggle edilen satır re-render eder, gerisi memo ile atlanır. Satır
+ * handler'ı olmayan sayfalarda (CrudPage master-data) memo tamamen tutar.
+ */
+function DataTableRowInner<T>({
+  row,
+  index,
+  isSelected,
+  selectable,
+  onRowClick,
+  rowContextMenu,
+  openTimer,
+  selRef,
+}: DataTableRowProps<T>) {
+  const rowEl = (
+    <TableRow
+      data-state={isSelected ? "selected" : undefined}
+      className={cn("row-enter", onRowClick && "cursor-pointer")}
+      style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
+      onClick={(e) => {
+        if (!onRowClick) return;
+        // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı
+        // (aşağıdaki guard'lardan erken çıksa bile) 1. tıkın
+        // zamanlayıcısını öldürsün.
+        if (openTimer.current) {
+          clearTimeout(openTimer.current);
+          openTimer.current = null;
+        }
+        // Sürükleyerek/çift-tıkla metin seçildiyse satırı açma.
+        if (window.getSelection()?.toString()) return;
+        // 2./3. tık (çift-tık) → boş hücrede bile açma.
+        if (e.detail > 1) return;
+        const data = row.original;
+        openTimer.current = setTimeout(() => {
+          openTimer.current = null;
+          onRowClick(data);
+        }, ROW_OPEN_DELAY_MS);
+      }}
+    >
+      {selectable && (
+        <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
+          {/* Seçilemez satırlarda (enableRowSelection predicate false —
+              ör. sevkteki çuval) checkbox gizlenir; boş hücre hizayı korur. */}
+          {row.getCanSelect() && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(v) => row.toggleSelected(!!v)}
+              aria-label="Seç"
+            />
+          )}
+        </TableCell>
+      )}
+      {row.getVisibleCells().map((cell) => (
+        <TableCell key={cell.id}>
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+
+  const menu = rowContextMenu?.(row.original);
+  if (!menu) return rowEl;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger
+        asChild
+        onContextMenu={(e) => {
+          // Sağ-tık anındaki seçimi yakala (menü açılmadan önce).
+          selRef.current = getSelectedText(e.target);
+        }}
+      >
+        {rowEl}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <SelectionCopyItem getText={() => selRef.current} />
+        {menu}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+// memo + generic korunumu: memo default shallow karşılaştırması props için yeterli
+// (row/refs kararlı, isSelected/index/selectable primitive).
+const DataTableRow = memo(DataTableRowInner) as typeof DataTableRowInner;
 
 function SortableHead<T>({ header }: { header: Header<T, unknown> }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({

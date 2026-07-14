@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -75,15 +75,18 @@ export function ProductBalancePage() {
     });
   }, [groups, colorId, status, search]);
 
-  const toggle = (key: string) =>
+  // Perf: ProductBalanceRow React.memo'lu — aramaya yazarken filtre dışı kalmayan
+  // satırlar re-render olmasın diye handler'lar kararlı referans (useCallback).
+  const toggle = useCallback((key: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
+  }, []);
 
-  const openWo = (g: BalanceGroup, s: BalanceSpecRow) =>
+  const openWo = useCallback((g: BalanceGroup, s: BalanceSpecRow) =>
     setWoTarget({
       key: s.key,
       itemId: s.itemId,
@@ -97,7 +100,7 @@ export function ProductBalancePage() {
       uretilecek: s.uretilecek,
       ham: g.ham,
       lines: s.lines,
-    });
+    }), []);
 
   return (
     <div className="flex h-full flex-col">
@@ -164,8 +167,8 @@ export function ProductBalancePage() {
                     key={g.key}
                     group={g}
                     isOpen={expanded.has(g.key)}
-                    onToggle={() => toggle(g.key)}
-                    onOpenWo={(s) => openWo(g, s)}
+                    onToggle={toggle}
+                    onOpenWo={openWo}
                   />
                 ))}
               </tbody>

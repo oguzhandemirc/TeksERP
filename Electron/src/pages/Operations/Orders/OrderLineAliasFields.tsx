@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { cn } from "@/lib/utils";
@@ -25,10 +25,6 @@ export function OrderLineAliasFields({
   onChange,
 }: Props) {
   const enabled = Boolean(customerId && itemId);
-  const [suggested, setSuggested] = useState<{ item: string | null; color: string | null }>({
-    item: null,
-    color: null,
-  });
   // Override mode: kullanıcı confirm ile "yine de değiştir" dedi. Edit mode'da
   // line zaten dolu geliyorsa (eski override kayıtlı) otomatik açık başlar.
   const [itemOverride, setItemOverride] = useState(Boolean(itemName));
@@ -40,16 +36,17 @@ export function OrderLineAliasFields({
     queryFn: () => orderService.suggestAliases(customerId!, itemId, colorId),
     enabled,
     staleTime: 30_000,
+    // Perf: öneriyi ayrı state'e kopyalayan effect kaldırıldı (her çözünürlükte
+    // fazladan bir commit/render ediyordu). Doğrudan query verisinden türet;
+    // keepPreviousData id değişiminde yeni öneri yüklenene dek eskisini gösterir
+    // (önceki effect'in "veri gelene kadar eski öneriyi tut" davranışıyla birebir).
+    placeholderData: keepPreviousData,
   });
 
-  useEffect(() => {
-    if (suggestQ.data?.data) {
-      setSuggested({
-        item: suggestQ.data.data.itemAlias,
-        color: suggestQ.data.data.colorAlias,
-      });
-    }
-  }, [suggestQ.data?.data]);
+  const suggested = {
+    item: suggestQ.data?.data?.itemAlias ?? null,
+    color: suggestQ.data?.data?.colorAlias ?? null,
+  };
 
   // Item/color değişince override state'i resetle — yeni satır context'i için
   // kilitli başlasın. Override içinde yazılı value form üzerinden temizlenir.
