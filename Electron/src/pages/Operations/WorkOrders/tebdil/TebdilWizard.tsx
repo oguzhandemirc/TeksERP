@@ -60,9 +60,16 @@ export function TebdilWizard({ open, onOpenChange, workOrderId, batchId, batchNu
 
   const stepsShown: TebdilStep[] = dispatchOnly ? [3] : [1, 2, 3];
 
+  // İki-adımlı mutasyon (splitBranch → bulkDispatchStep) uçarken dialog kapanmasını
+  // engelle: ortada kapanma sonuç ekranını (adım 4, çeki basımı) kaybettirir.
+  const handleOpenChange = (next: boolean) => {
+    if (w.runMut.isPending) return;
+    onOpenChange(next);
+  };
+
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="flex max-h-[90vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle className="flex items-center gap-2">
@@ -155,7 +162,7 @@ export function TebdilWizard({ open, onOpenChange, workOrderId, batchId, batchNu
               </Button>
             ) : (
               <>
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <Button variant="outline" disabled={w.runMut.isPending} onClick={() => handleOpenChange(false)}>
                   Vazgeç
                 </Button>
                 {w.step > 1 && !dispatchOnly && (

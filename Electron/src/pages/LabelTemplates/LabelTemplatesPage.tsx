@@ -202,6 +202,7 @@ function DeleteConfirm({ id, onClose }: { id: string | null; onClose: () => void
       description="Bağlam varsayılanı olan şablon pasifleştirilemez — önce Atamalar'dan varsayılanı değiştirin. Cihaz/müşteri atamaları varsayılana düşer."
       confirmLabel="Pasifleştir"
       destructive
+      isPending={mut.isPending}
       onConfirm={() => { if (id) mut.mutate(); }}
     />
   );

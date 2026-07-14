@@ -102,8 +102,15 @@ export function BatchCorrectModal({ open, onOpenChange, workOrderId, source, tar
 
   const submit = () => (mode === "split" ? splitMut.mutate() : moveMut.mutate());
 
+  // Mutasyon uçarken dialog kapanmasını engelle (ESC / dış tık / Vazgeç) —
+  // yarıda kapanma kullanıcıyı sonucu görmeden bırakır (DispatchConfirmDialog deseni).
+  const handleOpenChange = (next: boolean) => {
+    if (pending) return;
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-md flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Parti Düzelt — {source?.batchNumber}</DialogTitle>
@@ -214,7 +221,7 @@ export function BatchCorrectModal({ open, onOpenChange, workOrderId, source, tar
         </div>
 
         <DialogFooter className="shrink-0 border-t bg-background px-6 py-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={pending} onClick={() => handleOpenChange(false)}>
             Vazgeç
           </Button>
           <Button disabled={!canSubmit} onClick={submit}>

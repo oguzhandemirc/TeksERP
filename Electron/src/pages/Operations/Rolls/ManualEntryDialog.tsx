@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -107,6 +107,14 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
     defaultValues: defaults,
   });
 
+  // İdempotency anahtarı — dialog açılışı bir form-oturumudur. Timeout sonrası
+  // tekrar basış aynı token'ı gönderir → backend cached top döner (hayalet stok
+  // önlenir). Dialog her açılışta + başarıda yenilenir (yeni oturum).
+  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
+  useEffect(() => {
+    if (open) setClientToken(crypto.randomUUID());
+  }, [open]);
+
   const grades = useMemo(() => gradesQ.data?.data ?? [], [gradesQ.data?.data]);
 
   // printAfter + printCtx mutation değişkenlerinde taşınır → onSuccess (data, vars)
@@ -124,6 +132,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
       // — liste hiç tazelenmiyordu. ["rolls"] tüm sekme tablolarını + stats'ı kapsar.
       qc.invalidateQueries({ queryKey: ["rolls"] });
       form.reset(defaults);
+      setClientToken(crypto.randomUUID()); // yeni giriş → yeni token
       onOpenChange(false);
       if (vars.printAfter && roll?.id) onCreatedForPrint?.(roll.id, vars.printCtx);
     },
@@ -148,6 +157,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           // Boş = Belirsiz → payload'dan düş (backend null yazar).
           qualityGrade: v.qualityGrade || undefined,
           propertyIds: v.propertyIds,
+          clientToken,
         },
         printAfter,
         // Müşteri seçildiyse serbest müşteri (orderLineId yok → master alias cascade);

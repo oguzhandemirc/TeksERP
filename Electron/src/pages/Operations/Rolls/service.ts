@@ -56,6 +56,9 @@ export interface InitialEntryPayload {
   qualityGrade?: string;
   width?: number | null;
   propertyIds?: string[];
+  /** İdempotency anahtarı — timeout sonrası tekrar denemede mükerrer (hayalet)
+   *  top yaratılmasını önler (backend Roll.clientToken @unique; mobil KK1 emsali). */
+  clientToken?: string;
 }
 
 export interface RollStats {

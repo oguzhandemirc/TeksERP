@@ -89,7 +89,10 @@ export function ScanField({
   const blocked = Boolean(mismatch);
 
   const submit = () => {
-    if (!trimmed || blocked) return;
+    // `busy` guard'ı ŞART: Enter yolu (onKeyDown) da bu fonksiyona düşer — buton
+    // disabled iken (busy) klavye ile ikinci okutma tetiklenip mutasyon uçlarında
+    // (örn. çuvala top okut) çift POST atmasın.
+    if (!trimmed || blocked || busy) return;
     onScan(trimmed);
   };
 

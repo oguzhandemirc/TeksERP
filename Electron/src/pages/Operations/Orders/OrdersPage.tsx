@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, PanelRight, Pencil, Plus } from "lucide-react";
@@ -86,6 +86,8 @@ const QUERY_KEY = "orders";
 interface CreatePayload {
   /** Boş = backend otomatik üretir (SIP + günlük sayaç). Doluysa o kullanılır. */
   orderNumber?: string;
+  /** İdempotency anahtarı — timeout sonrası tekrar gönderimde mükerrer sipariş önlenir. */
+  clientToken?: string;
   customerId: string;
   branchId: string | null;
   currency?: string;
@@ -126,12 +128,17 @@ interface UpdatePayload {
   lines?: UpdateLinePayload[];
 }
 
-function buildCreatePayload(v: OrderFormValues, pricingEnabled: boolean): CreatePayload {
+function buildCreatePayload(
+  v: OrderFormValues,
+  pricingEnabled: boolean,
+  clientToken: string,
+): CreatePayload {
   // Elle girildiyse o numara; boş bırakıldıysa alanı hiç göndermeyip backend'in
   // otomatik numaralandırmasını (SIP + günlük sayaç) devreye sokuyoruz.
   const manualOrderNumber = v.orderNumber?.trim();
   return {
     ...(manualOrderNumber ? { orderNumber: manualOrderNumber } : {}),
+    clientToken,
     customerId: v.customerId,
     branchId: v.branchId || null,
     ...(pricingEnabled ? { currency: v.currency.trim().toUpperCase() } : {}),
@@ -207,6 +214,14 @@ export function OrdersPage() {
   const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
+  // İdempotency anahtarı — create form-oturumu kimliği. Form create modunda her
+  // açılışta ve başarılı create'te yenilenir; hata sonrası SABİT kalır → timeout
+  // sonrası kullanıcının elle tekrar göndermesi aynı token'ı taşır (mükerrer önlenir).
+  // Update yoluna GİRMEZ (PATCH doğal idempotent).
+  const [createToken, setCreateToken] = useState(() => crypto.randomUUID());
+  useEffect(() => {
+    if (formOpen && !editing) setCreateToken(crypto.randomUUID());
+  }, [formOpen, editing]);
 
   const pricingEnabled = usePricingEnabled();
   const columns = useMemo(() => buildOrderColumns(pricingEnabled), [pricingEnabled]);
@@ -356,7 +371,7 @@ export function OrdersPage() {
               payload: buildUpdatePayload(v, pricingEnabled, editing),
             });
           } else {
-            await createMut.mutateAsync(buildCreatePayload(v, pricingEnabled));
+            await createMut.mutateAsync(buildCreatePayload(v, pricingEnabled, createToken));
           }
         }}
         isSubmitting={createMut.isPending || updateMut.isPending}

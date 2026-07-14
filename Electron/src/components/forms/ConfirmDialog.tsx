@@ -19,9 +19,13 @@ interface Props {
 /**
  * K-A1 fix: çift-tık koruması MERKEZÎ — `isPending` opsiyonel olduğundan 10
  * kullanım korumasızdı (yıkıcı onayda hızlı çift tık = çift mutation). Onay
- * butonu tıklanır tıklanmaz kilitlenir; dialog yeniden açılınca veya 2.5sn
- * sonra (onConfirm hata verip dialog açık kaldıysa retry mümkün olsun diye)
- * çözülür. `isPending` verilirse o da ayrıca bağlanır (daha hassas).
+ * butonu tıklanır tıklanmaz kilitlenir.
+ *
+ * Kilit ASYNC-AWARE: `onConfirm()` bir Promise dönerse kilit promise settle
+ * OLANA DEK tutulur (yavaş sunucuda 2.5sn'lik eski sabit timer kilidi erken
+ * çözüp ikinci tetiklemeye açık bırakıyordu). Senkron kullanımlarda (Promise
+ * dönmeyen) 2.5sn fallback timer aynen kalır — dialog açık kalırsa retry mümkün.
+ * `isPending` verilirse o da ayrıca bağlanır (daha hassas). İmza geriye uyumlu.
  */
 export function ConfirmDialog({
   open,
@@ -49,8 +53,15 @@ export function ConfirmDialog({
     if (locked) return;
     setLocked(true);
     if (unlockTimer.current) clearTimeout(unlockTimer.current);
-    unlockTimer.current = setTimeout(() => setLocked(false), 2500);
-    void onConfirm();
+    const result = onConfirm();
+    if (result && typeof (result as Promise<void>).then === "function") {
+      // Async: kilidi promise settle olana dek tut (reject apiClient toast'una
+      // düşer; burada yut ki unhandled rejection üretmesin).
+      void (result as Promise<void>).catch(() => {}).finally(() => setLocked(false));
+    } else {
+      // Senkron kullanım: 2.5sn fallback (dialog açık kalırsa retry açılır).
+      unlockTimer.current = setTimeout(() => setLocked(false), 2500);
+    }
   };
 
   const busy = Boolean(isPending) || locked;

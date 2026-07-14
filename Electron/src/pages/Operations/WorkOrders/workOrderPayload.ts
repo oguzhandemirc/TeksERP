@@ -26,6 +26,9 @@ interface StepPlanPayload {
 
 export interface CreatePayload {
   type: string;
+  /** İdempotency anahtarı — timeout sonrası tekrar gönderimde mükerrer İE +
+   *  refakat kartı önlenir. Yalnız create yolunda gönderilir (replace ALMAZ). */
+  clientToken?: string;
   /** Parti Kodu. Boş/atlanırsa backend otomatik üretir (P-YYMMDD-NNN). */
   batchNumber?: string;
   routeTemplateId?: string;

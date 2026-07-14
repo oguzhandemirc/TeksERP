@@ -31,6 +31,11 @@ export function WorkOrderFormPage() {
   const targetQuantityEnabled = useTargetQuantityEnabled();
   // Başlık satırındaki sağ slot — form "Şablon seç" butonunu buraya portal'lar.
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
+  // İdempotency anahtarı — bu sayfa (sekme) bir create form-oturumudur. Mount'ta
+  // üretilir; timeout sonrası tekrar basış aynı token'ı taşır → backend cached WO
+  // döner (mükerrer İE + refakat kartı önlenir). Başarıda sayfa navigate ile
+  // unmount olduğundan yenileme gerekmez; yalnız create yolunda kullanılır.
+  const [clientToken] = useState(() => crypto.randomUUID());
 
   // Create: seed gezinme state'inden (siparişten WO / Denge "stoğa üret").
   const seed = location.state as {
@@ -130,7 +135,7 @@ export function WorkOrderFormPage() {
             onSubmit={async (v, meta) => {
               const payload = buildPayload(v, meta, targetQuantityEnabled);
               if (isEdit) await replaceMut.mutateAsync(payload);
-              else await createMut.mutateAsync(payload);
+              else await createMut.mutateAsync({ ...payload, clientToken });
             }}
             isSubmitting={isEdit ? replaceMut.isPending : createMut.isPending}
             onCancel={handleCancel}
