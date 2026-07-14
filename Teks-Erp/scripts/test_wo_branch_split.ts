@@ -106,14 +106,16 @@ async function main(): Promise<void> {
   const batch2 = (d2.data as Any).batchId as string;
   console.log(`Parti-1 lane=${lane1.slice(0,8)} (2 top) · Parti-2 lane=${lane2.slice(0,8)} (3 top)\n`);
 
-  // ── ÖNİZLEME ──
+  // ── ÖNİZLEME ── (yeni preview shape: allowedModes/blockReason/rollCount; canSplit/mode KALKTI)
   const prev = (await wos.getSplitPreview(wo.id, batch2)).data as Any;
-  check("Preview: ayrılabilir (canSplit)", prev.canSplit === true, prev.blockReason ?? "");
+  check("Preview: ayrılabilir (blockReason yok)", prev.allowedModes.length > 0 && prev.blockReason == null, prev.blockReason ?? "");
   check("Preview: 3 top taşınacak", prev.rollCount === 3, `${prev.rollCount}`);
-  check("Preview: mod = continue (boyanmadan)", prev.mode === "continue", prev.mode ?? "null");
+  // Toplar fasonda (AT_SUBCONTRACTOR, boyanmadan) → tek izinli mod UNDYED_MOVE
+  // (redye modları yalnız boyanmış/depo topları için). Renk split'te DEĞİL, receive'de uygulanır.
+  check("Preview: izinli mod = UNDYED_MOVE (boyanmadan)", prev.allowedModes.includes("UNDYED_MOVE") && !prev.allowedModes.includes("NEW_COLOR"), (prev.allowedModes ?? []).join(","));
 
-  // ── AYIR: parti-2 → yeni WO, renk B, stok modu ──
-  const res = (await wos.splitBranch(wo.id, { batchId: batch2, newColorId: colorB.id, orderMode: "stock" }, ADMIN)).data as Any;
+  // ── AYIR: parti-2 → yeni WO (UNDYED_MOVE — boyanmadan taşınır; hedef renk B RECEIVE'de uygulanır) ──
+  const res = (await wos.splitBranch(wo.id, { batchId: batch2, mode: "UNDYED_MOVE", orderMode: "stock" }, ADMIN)).data as Any;
   const newWoId = res.newWorkOrderId as string;
   woIds.push(newWoId);
   check("Split: yeni WO oluştu", typeof newWoId === "string" && newWoId !== wo.id);
@@ -126,7 +128,9 @@ async function main(): Promise<void> {
       steps: { orderBy: { stepSequence: "asc" }, select: { id: true, stationId: true, stepSequence: true, status: true, requiredCategoryId: true } } },
   });
   check("Yeni WO type=STOCK_PRODUCTION (stok modu)", newWo?.type === "STOCK_PRODUCTION", String(newWo?.type));
-  check("Yeni WO targetColor = Renk B (yeni renk)", newWo?.targetColorId === colorB.id);
+  // UNDYED_MOVE hedef rengi split'te BELİRLEMEZ — yeni WO kaynağın hedef rengini (A) miras alır;
+  // parti-2'nin yeni rengi B, aşağıda receive'de appliedColorId ile uygulanır.
+  check("Yeni WO targetColor = kaynak renk A (UNDYED_MOVE mirası)", newWo?.targetColorId === colorA.id);
   check("Yeni WO targetItem kaynakla aynı", newWo?.targetItemId === ITEM);
   check("Yeni WO 3 adım (birebir rota)", newWo?.steps.length === 3, `${newWo?.steps.length}`);
   check("Yeni WO istasyon sırası birebir (KK1→Boya→Tambur)",
@@ -164,7 +168,7 @@ async function main(): Promise<void> {
 
   // ── KABUL: parti-2'yi YENİ WO'ya kabul et → YENİ renk uygulanmalı ──
   console.log("\nKABUL — parti-2 yeni WO'ya (yeni renk uygulanmalı)");
-  const rc = await sub.receive({ workOrderId: newWoId, stepId: newBoya, subcontractorId: SUB,
+  const rc = await sub.receive({ workOrderId: newWoId, stepId: newBoya, subcontractorId: SUB, appliedColorId: colorB.id,
     returns: p2.map((id) => ({ rollId: id })), newRolls: [{ qty: 560 }] }, ADMIN);
   const receipt = rc.data as Any;
   const born = await prisma.roll.findFirst({ where: { parentReceiptId: receipt.id }, select: { colorId: true, batchId: true, currentStepId: true } });

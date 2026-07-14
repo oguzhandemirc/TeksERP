@@ -35,7 +35,14 @@ async function rollAt(qty: number, stepId: string): Promise<string> {
   const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.IN_PRODUCTION, currentStepId: stepId, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   return r.id;
 }
-type Branch = { status: string; currentPositions: unknown[]; stepName: string | null };
+// Yeni lane shape (parti-modeli): lane-seviyesi `status`/`stepName` KALKTI. Sevk durumu
+// artık `dispatches[].status` (OPEN|PARTIAL|RETURNED|CANCELLED|DIRECT_SHIPPED), mevcut
+// istasyon `currentPositions[].label` (r.currentStep.station.name ya da statü etiketi).
+type Position = { label: string; count: number; totalMeters: number };
+type Dispatch = { stepName: string | null; status: string };
+type Branch = { currentPositions: Position[]; dispatches: Dispatch[] };
+const fmt = (bs: Branch[]) =>
+  bs.map((b) => `${b.currentPositions.map((p) => p.label).join("|") || "—"}:${b.dispatches.map((d) => d.status).join(",") || "—"}:${b.currentPositions.length}`).join(" ; ");
 async function getBranches(woId: string): Promise<Branch[]> {
   const res = await wos.getBranches(woId);
   return ((res.data as { batches: Branch[] } | null)?.batches) ?? [];
@@ -75,8 +82,8 @@ async function main(): Promise<void> {
   await sub.transferToNextFason({ workOrderId: w1.id, stepId: w1.stepIds[0] }, ADMIN); // boyahaneye aktar
   const b1 = await getBranches(w1.id);
   check("Aktarımdan sonra TAM 1 görünür dal (boş zımpara dalı gizli)", b1.length === 1, `dal=${b1.length}`);
-  check("Görünür dal boyahane + dolu pozisyon", b1[0]?.stepName?.includes("Boyahane") === true && b1[0].currentPositions.length > 0, b1.map((b) => `${b.stepName}:${b.status}:${b.currentPositions.length}`).join(","));
-  check("Hiç boş RETURNED dal yok", !b1.some((b) => b.status === "RETURNED" && b.currentPositions.length === 0));
+  check("Görünür dal boyahane + dolu pozisyon", b1[0]?.currentPositions.some((p) => p.label.includes("Boyahane")) === true && b1[0].currentPositions.length > 0, fmt(b1));
+  check("Hiç boş RETURNED dal yok", !b1.some((b) => b.dispatches.some((d) => d.status === "RETURNED") && b.currentPositions.length === 0));
 
   // ── VAKA 2: zımpara→tambur(internal), kabul → zımpara dalı RETURNED ama DOLU (gizlenMEZ) ──
   const w2 = await makeWo(`TST-BNE-B-${stamp}`, [
@@ -88,7 +95,7 @@ async function main(): Promise<void> {
   await sub.receive({ workOrderId: w2.id, stepId: w2.stepIds[0], subcontractorId: SUB_KESTEL, returns: [{ rollId: r }], newRolls: [{ qty: 400 }] }, ADMIN);
   const b2 = await getBranches(w2.id);
   check("Tekli-fason: zımpara dalı görünür (gizlenmedi)", b2.length === 1, `dal=${b2.length}`);
-  check("Zımpara dalı RETURNED + born top pozisyonu dolu (Tambur)", b2[0]?.status === "RETURNED" && b2[0].currentPositions.length > 0, b2.map((b) => `${b.stepName}:${b.status}:${b.currentPositions.length}`).join(","));
+  check("Zımpara dalı RETURNED + born top pozisyonu dolu (Tambur)", b2[0]?.dispatches.some((d) => d.status === "RETURNED") === true && b2[0].currentPositions.length > 0, fmt(b2));
 
   console.log(`\nSONUÇ: ${pass} geçti, ${fail} başarısız`);
 }

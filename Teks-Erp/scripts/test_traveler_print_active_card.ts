@@ -15,7 +15,6 @@
 
 import prisma from "../src/lib/prisma";
 import { TravelerCardService } from "../src/services/traveler-card.service";
-import { AppError } from "../src/utils/app-error";
 import { WorkOrderStatus } from "@prisma/client";
 
 let pass = 0,
@@ -33,7 +32,6 @@ function need<T>(v: T | null | undefined, what: string): T {
   if (v == null) throw new Error(`Fixture bulunamadı: ${what}`);
   return v;
 }
-const is409 = (e: unknown) => e instanceof AppError && e.statusCode === 409;
 
 const cards = new TravelerCardService();
 let ITEM = "",
@@ -89,36 +87,36 @@ async function run(): Promise<void> {
   check("getCardHtml: workOrderNumber snapshot'tan", html1.includes(wo1.workOrderNumber));
   check("getCardHtml: gömülü QR (svg)", html1.includes("<svg"));
 
-  // B) sıralı tekrar → 409
-  let seqErr: unknown;
-  try {
-    await cards.print(w1, ADMIN);
-  } catch (e) {
-    seqErr = e;
-  }
-  check("sıralı tekrar print → 409", is409(seqErr));
+  // B) sıralı tekrar print → İDEMPOTENT (kart-iş-emriyle: print artık ensure;
+  //    aynı kartı 200 ile döner, 409 ATMAZ — idempotency work'ü print'i idempotent yaptı).
+  const seq = await cards.print(w1, ADMIN);
+  check("sıralı tekrar print → idempotent (aynı kart, 200)", seq.success === true && seq.data?.id === card1.id, `${seq.data?.id?.slice(0, 8)} vs ${card1.id.slice(0, 8)}`);
   check("sıralı tekrar: hâlâ 1 ACTIVE", (await activeCount(w1)) === 1);
 
-  // C) FLAGSHIP eşzamanlı
+  // C) FLAGSHIP eşzamanlı — ikisi de idempotent başarılı, İKİSİ DE AYNI kartı döner
+  //    (kaybeden P2002 → tx bir kez retry → mevcut kart; kart-yarışı 409'a çevrilMEZ).
   const w2 = await makeWo();
   const settled = await Promise.allSettled([cards.print(w2, ADMIN), cards.print(w2, ADMIN)]);
   const ok = settled.filter((s) => s.status === "fulfilled").length;
-  const conflict = settled.filter((s) => s.status === "rejected" && is409((s as PromiseRejectedResult).reason)).length;
-  check("paralel print: tam 1 başarılı", ok === 1, `ok=${ok}`);
-  check("paralel print: tam 1 × 409", conflict === 1, `409=${conflict}`);
-  check("paralel print: DB'de TEK ACTIVE kart (partial unique kanıtı)", (await activeCount(w2)) === 1, `count=${await activeCount(w2)}`);
+  const cardIds = settled
+    .filter((s): s is PromiseFulfilledResult<Awaited<ReturnType<typeof cards.print>>> => s.status === "fulfilled")
+    .map((s) => s.value.data?.id);
+  check("paralel print: ikisi de başarılı (idempotent)", ok === 2, `ok=${ok}`);
+  check("paralel print: ikisi de AYNI kartı döndü", !!cardIds[0] && cardIds[0] === cardIds[1], `${cardIds[0]?.slice(0, 8)} vs ${cardIds[1]?.slice(0, 8)}`);
+  check("paralel print: DB'de TEK ACTIVE kart (workOrderId @unique kanıtı)", (await activeCount(w2)) === 1, `count=${await activeCount(w2)}`);
 
-  // D) reprint → eski REPRINTED + yeni ACTIVE
+  // D) reprint → AYNI kart in-place, version++ (kart WO'ya bağlı; REPRINTED yok,
+  //    ACTIVE kalır — barkod=İE sabit).
+  const beforeRp = need(await prisma.travelerCard.findUnique({ where: { id: card1.id }, select: { version: true } }), "kart (reprint öncesi)");
   const rp = await cards.reprint(w1, "test reprint", ADMIN);
   check("reprint: success", rp.success === true);
   check("reprint sonrası: yine TEK ACTIVE", (await activeCount(w1)) === 1);
-  const reprinted = await prisma.travelerCard.count({ where: { workOrderId: w1, status: "REPRINTED" } });
-  check("reprint: eski kart REPRINTED'a geçti", reprinted >= 1, `reprinted=${reprinted}`);
+  const afterRp = need(await prisma.travelerCard.findUnique({ where: { id: card1.id }, select: { version: true, status: true } }), "kart (reprint sonrası)");
+  check("reprint: AYNI kart in-place version++ (REPRINTED yok, ACTIVE kalır)", afterRp.status === "ACTIVE" && afterRp.version === beforeRp.version + 1, `v${beforeRp.version}→v${afterRp.version}`);
 
-  // E) barkod retry regresyon yok — w1'de 2 kart var (print + reprint), benzersiz barkod
-  const distinct = await prisma.travelerCard.findMany({ where: { workOrderId: w1 }, select: { barcode: true } });
-  const uniqueBarcodes = new Set(distinct.map((c) => c.barcode));
-  check("barkod retry regresyon yok: tüm kartlar benzersiz barkod", uniqueBarcodes.size === distinct.length, `${uniqueBarcodes.size}/${distinct.length}`);
+  // E) kart-iş-emriyle: WO başına TEK kart (barkod=İE sabit; reprint yeni kart yaratmaz).
+  const cardsOfW1 = await prisma.travelerCard.findMany({ where: { workOrderId: w1 }, select: { barcode: true } });
+  check("WO başına TEK kart (barkod=İE, in-place reprint yeni kart yaratmadı)", cardsOfW1.length === 1, `count=${cardsOfW1.length}`);
 }
 
 async function cleanup(): Promise<void> {

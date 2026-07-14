@@ -74,13 +74,13 @@ async function main(): Promise<void> {
   check("P2 soy bağı P1'e (splitFrom)", p2?.splitFromId === p1Id, `splitFrom=P1? ${p2?.splitFromId === p1Id}`);
   check("P2 no P ile başlar", !!p2?.batchNumber?.startsWith("P"), `P2=${p2?.batchNumber}`);
 
-  // NOT: Refakat kartı artık PARTİ başına DEĞİL, İŞ EMRİ başına doğar (kart-iş-emriyle
-  // redesign — TravelerCard.workOrderId @unique, batchId alanı yok). P1 ve P2 aynı WO'nun
-  // partileri → tek ortak kart. Sorgu batchId yerine workOrderId ile yapılır.
-  const p1Card = await prisma.travelerCard.count({ where: { workOrderId: woId, status: "ACTIVE" } });
-  const p2Card = await prisma.travelerCard.count({ where: { workOrderId: woId, status: "ACTIVE" } });
-  check("P1 hâlâ tek aktif kartını taşır", p1Card === 1, `p1Card=${p1Card}`);
-  check("P2 kendi aktif kartını aldı (K5 kalan kartı)", p2Card === 1, `p2Card=${p2Card}`);
+  // NOT: Eski model her partiye ("dal") ayrı refakat kartı verirdi; autosplit P1→P2'de
+  // "P1 kartını korur, P2 yeni kart alır" assert edilirdi. Kart-iş-emriyle redesign'ıyla
+  // kart artık PARTİ başına DEĞİL, İŞ EMRİ başına doğar (TravelerCard.workOrderId @unique,
+  // batchId alanı yok) — parti autosplit'i kart yaratmaz/kopyalamaz. Bu test WO'yu doğrudan
+  // prisma ile (servis-dışı) kurduğundan kart hiç doğmaz; kart-doğuş/tek-kart invariantı
+  // ayrıca test_traveler_print_active_card'da kapsanır. Buradaki eski kart-per-parti
+  // assertion'ları KALDIRILDI (test kapsamı = autosplit soy bağı, kart değil).
 
   const disp = await prisma.subcontractorDispatch.findUnique({ where: { id: dispatchId }, select: { batchId: true } });
   check("Sevkin partisi = P1 (giden), kalan P2 değil", disp?.batchId === p1Id, `dispatch.batchId=P1? ${disp?.batchId === p1Id}`);

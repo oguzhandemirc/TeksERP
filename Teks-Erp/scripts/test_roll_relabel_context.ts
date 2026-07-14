@@ -123,6 +123,9 @@ async function main() {
 
   const sackIds: string[] = [];
   const shipmentIds: string[] = [];
+  // 5b, sevk onayı AÇIK iken çalışır (aşağıda geçici olarak açılır) — finally'de geri alınır.
+  const CONF_KEY = "shipping.confirmationEnabled";
+  let prevConf: { value: unknown } | null | undefined;
   try {
     // 1) Bulunan top → spec doğru
     const ctx1 = await inv.getRelabelContext(r1.barcode!);
@@ -168,7 +171,12 @@ async function main() {
     check("Depodaki çuvaldaki top specLocked=false (çuval kilitlemez)", ctxDepot.data?.specLocked === false);
     check("Depo çuvalı sack set + shipment=null", ctxDepot.data?.sack != null && ctxDepot.data?.shipment === null);
 
-    // 5b) Sevkiyata atanmış top → specLocked=true + shipment.status=PLANNED
+    // 5b) Sevkiyata atanmış top → specLocked=true + shipment.status=PLANNED.
+    // Sevk onayı varsayılan KAPALI → createShipment doğrudan DISPATCHED eder (top SHIPPED).
+    // Bu senaryo "PLANNED = rezerve ama henüz gönderilmemiş" kilit hâlini test ettiğinden
+    // onayı geçici olarak AÇIYORUZ; böylece sevkiyat PLANNED kalır (finally'de geri alınır).
+    prevConf = await prisma.systemSetting.findUnique({ where: { key: CONF_KEY }, select: { value: true } });
+    await prisma.systemSetting.upsert({ where: { key: CONF_KEY }, create: { key: CONF_KEY, value: true }, update: { value: true } });
     const shipmentId = ((await ship.createShipment({ sackIds: [sackId], customerId: customer.id })) as { data: { id: string } }).data.id;
     shipmentIds.push(shipmentId);
     const ctxShipped = await inv.getRelabelContext(r3.barcode!);
@@ -179,6 +187,11 @@ async function main() {
     const ctxMiss = await inv.getRelabelContext(`TEST-RLBC-YOK-${ts}`);
     check("Bulunamayan → success=false", ctxMiss.success === false && ctxMiss.data === null);
   } finally {
+    // Sevk onayı ayarını eski değerine döndür (5b geçici açmıştı).
+    if (prevConf !== undefined) {
+      if (prevConf === null) await prisma.systemSetting.delete({ where: { key: CONF_KEY } }).catch(() => {});
+      else await prisma.systemSetting.update({ where: { key: CONF_KEY }, data: { value: prevConf.value as never } }).catch(() => {});
+    }
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
     await prisma.roll.updateMany({
       where: { id: { in: [r1.id, r2.id, r3.id] } },
