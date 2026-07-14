@@ -305,7 +305,7 @@ export class WorkOrderController {
   }
 
   /**
-   * GET /api/work-orders/:id/split-preview?batchSplitId=... — partiyi ayırma önizleme
+   * GET /api/work-orders/:id/split-preview?batchId=... — partiyi ayırma önizleme
    */
   async getSplitPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

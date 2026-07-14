@@ -128,7 +128,7 @@ router.get("/:id/branches", verifyToken, requireAnyPermission("workorder:read", 
  *   get:
  *     tags: [WorkOrders]
  *     summary: Partiyi (sevk lane'i) yeni iş emrine ayırma önizlemesi
- *     description: batchSplitId query param ile taşınacak topları + ayrılabilirlik (Faz B1 boyanmadan) durumunu döner. Hiçbir şeyi değiştirmez.
+ *     description: batchId query param ile taşınacak topları + ayrılabilirlik (Faz B1 boyanmadan) durumunu döner. Hiçbir şeyi değiştirmez.
  *     security: [ { bearerAuth: [] } ]
  *     parameters:
  *       - in: path
@@ -136,7 +136,7 @@ router.get("/:id/branches", verifyToken, requireAnyPermission("workorder:read", 
  *         required: true
  *         schema: { type: string, format: uuid }
  *       - in: query
- *         name: batchSplitId
+ *         name: batchId
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:

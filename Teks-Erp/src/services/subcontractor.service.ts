@@ -181,7 +181,8 @@ function computeBornRollBlockingReasons(roll: BornRollDownstreamShape): string[]
  * (aynı adıma parça parça boyahaneye gönderim) operatör "ikisi birlikte mi
  * geldi, tek parti mi?" teyidini ancak partiler ayrı görünürse yapabilir.
  *
- * Parti kimliği = `Roll.batchSplitId` (= sevki yaratan SubcontractorDispatch.id;
+ * Parti kimliği = `Roll.batchId` (→ Batch; kaynak sevk `SubcontractorDispatch.batchId`
+ * üzerinden bulunur — eski `batchSplitId` kolonu parti-modeli redesign'ıyla kalktı);
  * sevkte daima set edilir, bkz. dispatch() — bu yüzden AT_SUBCONTRACTOR her top
  * tek bir açık sevke eşlenir). Mobil bu diziyi düz render eder; her partiyi
  * ayrı "Geldi/Gelmedi" teyidiyle kabul eder (parti başına bir SubcontractorReceipt).
@@ -745,7 +746,7 @@ export class SubcontractorService {
       //
       // ATOMİK CLAIM: status kontrolü (satır ~400 + 468-485) tx DIŞINDA yapıldığı
       // için iki operatör aynı topu eşzamanlı sevke okutursa ikisi de guard'ı geçip
-      // burada koşulsuz flip yapabilirdi → top iki dispatch'e girer, batchSplitId
+      // burada koşulsuz flip yapabilirdi → top iki dispatch'e girer, batchId
       // ezilirdi. WHERE'e kabul-statülerini koyup etkilenen satır sayısını doğrula
       // (kartela.dispatch ile aynı desen). autoAttach topları bu tx'te STOCK kalır,
       // diğerleri STOCK|IN_PRODUCTION → ikisi de bu küme içinde.
@@ -1079,8 +1080,9 @@ export class SubcontractorService {
     }
 
     // Bu adımda fasonda (AT_SUBCONTRACTOR) olan toplar + hangi sevke (firma) ait.
-    // AT_SUBCONTRACTOR topun batchSplitId'si = kaynak dispatch.id; makbuzun
-    // stamp'leyeceği firma fiziksel malı tutan firma olmalı (rapor doğruluğu).
+    // AT_SUBCONTRACTOR topun batchId'si (→ Batch); kaynak dispatch
+    // `SubcontractorDispatch.batchId` üzerinden bulunur. Makbuzun stamp'leyeceği
+    // firma fiziksel malı tutan firma olmalı (rapor doğruluğu).
     const hasSubset = !!data.rollIds && data.rollIds.length > 0;
     const atSubRolls = await prisma.roll.findMany({
       where: {
@@ -1435,7 +1437,7 @@ export class SubcontractorService {
 
       // 2) Toplar: STOCK + currentStepId temizle — ATOMİK CLAIM (movedRolls
       //    kontrolü tx dışında; eşzamanlı kabul/başka işlem pencerede araya
-      //    girdiyse count uyuşmaz → 409 + rollback). batchSplitId da temizlenir:
+      //    girdiyse count uyuşmaz → 409 + rollback). batchId da temizlenir:
       //    iptal edilen sevkte parti hiç yaşanmamış sayılır — top yeniden
       //    üretime girerse eski (iptal) dalın lane ayak izini taşımasın.
       //    (Gerçekleşmiş partilerde lot kimliği depoya kadar kalıcıdır; bu
@@ -1823,7 +1825,7 @@ export class SubcontractorService {
 
     // F74: dönen topların kaynak sevk firması, seçilen firmayla (data.subcontractorId)
     // eşleşmeli — yoksa farklı firmaya ait toplar bu makbuza karışır (firma başına
-    // ayrı kabul olmalı). batchSplitId = kaynak SubcontractorDispatch.
+    // ayrı kabul olmalı). Kaynak dispatch: `Roll.batchId` → `SubcontractorDispatch.batchId`.
     const returnedRolls = outstandingRolls.filter((r) => returnIds.has(r.id));
     const srcBatchIds = [
       ...new Set(returnedRolls.map((r) => r.batchId).filter((x): x is string => !!x)),
@@ -3516,7 +3518,7 @@ export class SubcontractorService {
   /**
    * "Aktarımı Geri Al" — adanmış atomik tx: boyahane sevkini iptal et + born
    * topları CANCELLED'a çek + kaynak kabul(ler)i iptal et → orijinaller
-   * AT_SUBCONTRACTOR olarak kaynak fasona (batchSplitId korunur) geri döner.
+   * AT_SUBCONTRACTOR olarak kaynak fasona (batchId korunur) geri döner.
    */
   async undoTransfer(
     dispatchId: string,
@@ -3676,7 +3678,7 @@ export class SubcontractorService {
       }
 
       // 3) Kaynak kabul(ler)i geri al — orijinaller AT_SUBCONTRACTOR'a, kaynak
-      //    fason adımına döner (batchSplitId DOKUNULMAZ → zımpara lane'i kendiliğinden
+      //    fason adımına döner (batchId DOKUNULMAZ → zımpara lane'i kendiliğinden
       //    geri gelir; receive consume'da değişmemişti).
       const sourceStepIds = new Set<string>();
       for (const receiptId of sourceReceiptIds) {
@@ -4335,7 +4337,7 @@ export class SubcontractorService {
       `;
 
       // 3) Sevk edilen toplar TERMINAL: SUBCONTRACTOR_CONSUMED (gerçek sevk;
-      //    batchSplitId KORUNUR — receive deseni). Atomik claim. Seçilmeyen toplar
+      //    batchId KORUNUR — receive deseni). Atomik claim. Seçilmeyen toplar
       //    AT_SUBCONTRACTOR kalır (normal kabulle döner).
       const consumed = await tx.roll.updateMany({
         where: { id: { in: shipRollIds }, status: RollStatus.AT_SUBCONTRACTOR },

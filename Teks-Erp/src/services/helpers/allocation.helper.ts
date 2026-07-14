@@ -4,7 +4,7 @@
 // GEVŞEK MODEL: top→sipariş bağı YOK. Karşılanma birimi = spec (kalem+renk+en);
 // aynı spec'in topları fungible. Bu modül üç yerde paylaşılır:
 //   • shipping.service (getShipmentById projeksiyonu, listOpenOrders spec eşleşmesi)
-//   • shipping.service (writeShipmentAllocations — sevk-anı çuval-farkındalı FIFO)
+//   • shipping.service (writeShipmentAllocationsTx — sevk-anı çuval-farkındalı FIFO)
 //   • subcontractor.service (fason doğrudan sevk önizlemesi — aynı FIFO/spec mantığı)
 // Tek karşılanma kaynağı; kopya algoritma yok.
 // =============================================================================
@@ -171,7 +171,7 @@ export function computeLoadedByLine(
 }
 
 // =============================================================================
-// ÇUVAL-FARKINDALI FIFO — sevk-anı tahsis çekirdeği (writeShipmentAllocations)
+// ÇUVAL-FARKINDALI FIFO — sevk-anı tahsis çekirdeği (writeShipmentAllocationsTx)
 // =============================================================================
 
 /** Havuz çuvalı — createdAt sırasına göre FIFO; içeriği (rolls) spec-toplam taşır. */

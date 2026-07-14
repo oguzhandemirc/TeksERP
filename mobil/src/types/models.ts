@@ -362,7 +362,9 @@ export interface PendingReturnGroup {
    * Adımdaki bekleyen toplar SEVK (parti) bazında alt-gruplanmış hali. Çoklu
    * sevkte (aynı adıma parça parça boyahaneye gönderim) operatör "ikisi birlikte
    * mi geldi, tek parti mi?" teyidini ancak partiler ayrı görünürse yapabilir.
-   * Parti kimliği = Roll.batchSplitId (= sevki yaratan SubcontractorDispatch.id).
+   * Parti kimliği = kaynak sevkin id'si (`SubcontractorDispatch`; backend
+   * `Roll.batchId` → `SubcontractorDispatch.batchId` üzerinden türetir — eski
+   * `batchSplitId` kolonu parti-modeli redesign'ıyla kalktı).
    * Tek parti varsa dizi tek elemanlı; eski payload'larda olmayabilir (guard et).
    */
   parties: PendingReturnParty[];
@@ -371,9 +373,9 @@ export interface PendingReturnGroup {
   totalQty: number;
 }
 
-/** Bekleyen kabul grubu içindeki tek bir sevk partisi (batchSplitId lane'i). */
+/** Bekleyen kabul grubu içindeki tek bir sevk partisi (kaynak dispatch lane'i). */
 export interface PendingReturnParty {
-  /** Sevkin id'si (= batchSplitId). Eski/kimliksiz akışta null olabilir. */
+  /** Sevkin id'si (kaynak `SubcontractorDispatch`). Eski/kimliksiz akışta null olabilir. */
   dispatchId: string | null;
   dispatchNo: string | null;
   dispatchedAt: string | null;
