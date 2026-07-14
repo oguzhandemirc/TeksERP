@@ -131,16 +131,37 @@ export const workOrderService = {
       newColorId?: string | null;
       orderMode?: "stock" | "keep";
       rollIds?: string[];
+      /** Tebdil sebebi (opsiyonel) — audit'e yazılır. */
+      reason?: string;
     },
   ) =>
     apiClient
+      .post<ApiResponse<SplitBranchResult>>(`/api/work-orders/${id}/split`, payload)
+      .then((r) => r.data),
+
+  /** K8: Sevksiz partiden seçili topları başka bir sevksiz partiye taşı (aynı WO). */
+  moveRolls: (rollIds: string[], toBatchId: string) =>
+    apiClient
       .post<
-        ApiResponse<{
-          newBatchId?: string;
-          newBatchNumber?: string;
-          sourceDeleted?: boolean;
-        }>
-      >(`/api/work-orders/${id}/split`, payload)
+        ApiResponse<{ movedCount: number; toBatchNumber: string; deletedBatchIds: string[] }>
+      >("/api/batches/move-rolls", { rollIds, toBatchId })
+      .then((r) => r.data),
+
+  /** K8: Sevksiz partiden seçili topları YENİ partiye ayır (redye DEĞİL — saf idari bölme). */
+  splitBatchRolls: (batchId: string, rollIds: string[]) =>
+    apiClient
+      .post<ApiResponse<{ newBatchId: string; newBatchNumber: string }>>(
+        `/api/batches/${batchId}/split`,
+        { rollIds },
+      )
+      .then((r) => r.data),
+
+  /** K8: Sevksiz partileri birleştir — en eski parti no yaşar (survivor). */
+  mergeBatches: (batchIds: string[]) =>
+    apiClient
+      .post<
+        ApiResponse<{ survivorId: string; survivorNumber: string; mergedNumbers: string[] }>
+      >("/api/batches/merge", { batchIds })
       .then((r) => r.data),
 
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
@@ -379,6 +400,9 @@ export interface BatchLane {
   createdAt: string;
   /** İptal edilmemiş fason sevki varsa parti kilitli (K8 araçları kapalı). */
   locked: boolean;
+  /** Topları bir fason adımında ÜRETİMDE ama sevk edilmemiş (redye geri-sarımı / ilk
+   *  sevk öncesi) → sahadan Fason Sevk ile boyahaneye gönderilmeyi bekliyor. */
+  awaitingFasonDispatch: boolean;
   /** Partinin aktif refakat kartı (varsa). */
   cardNumber: string | null;
   cardBarcode: string | null;
@@ -411,6 +435,9 @@ export interface BatchSplitPreviewRoll {
   id: string;
   status: string;
   currentQty: number;
+  currentStepId: string | null;
+  /** Redye/NEW_COLOR için uygun mu (çuval/sevk yok + boyahane adımında/sonrasında). */
+  eligible: boolean;
 }
 
 /** Parti ayırma önizlemesi (izinli modlar + taşınabilecek toplar). */
@@ -420,8 +447,29 @@ export interface BatchSplitPreview {
   blockReason: string | null;
   /** Redye'de topların geri sarılacağı boyahane adımı. */
   colorStepId: string | null;
+  /** Kaynak WO'nun mevcut hedef rengi (NEW_COLOR seçicisinde referans). */
+  sourceTargetColorId: string | null;
   rollCount: number;
+  /** Redye/NEW_COLOR için uygun top sayısı (karma-adım partide < rollCount olabilir). */
+  eligibleCount: number;
   rolls: BatchSplitPreviewRoll[];
+}
+
+/** Partiyi ayır yanıtı — REDYE (aynı WO, yeni parti) / NEW_COLOR / UNDYED_MOVE (yeni WO). */
+export interface SplitBranchResult {
+  /** REDYE_SAME_COLOR / NEW_COLOR: doğan yeni parti. */
+  newBatchId?: string;
+  newBatchNumber?: string;
+  sourceDeleted?: boolean;
+  sourceBatchDeleted?: boolean;
+  /** NEW_COLOR / UNDYED_MOVE: doğan yeni iş emri. */
+  newWorkOrderId?: string;
+  newWorkOrderNumber?: string;
+  /** UNDYED_MOVE: taşınan parti + açık sevk. */
+  movedBatchId?: string;
+  movedBatchNumber?: string;
+  movedRollCount?: number;
+  dispatchNo?: string;
 }
 
 export interface CoverageLine {

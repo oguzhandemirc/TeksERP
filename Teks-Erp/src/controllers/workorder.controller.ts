@@ -98,8 +98,10 @@ const splitBranchSchema = z.object({
   /** Yalnız NEW_COLOR modunda gerekli; REDYE_SAME_COLOR'da yasak. */
   newColorId: z.string().uuid().optional().nullable(),
   orderMode: z.enum(["stock", "keep"]).default("stock"),
-  /** Ayrılacak topların alt-kümesi (yok/boş = partinin tümü). */
+  /** Ayrılacak topların alt-kümesi (yok/boş = partinin tümü uygun toplar). */
   rollIds: z.array(z.string().uuid()).max(500).optional(),
+  /** Tebdil sebebi (opsiyonel) — audit'e yazılır (renk/ton reddi vb.). */
+  reason: z.string().max(500).optional(),
 });
 
 const updateStepPlanningSchema = z.object({
