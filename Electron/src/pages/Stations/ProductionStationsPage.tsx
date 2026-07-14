@@ -186,7 +186,11 @@ export function ProductionStationsPage() {
       preview.workSessionCount > 0
         ? ` Bu makinede yalnız ${preview.workSessionCount} oturum (login) kaydı var, üretim izi yok — silmede o kayıt(lar) da temizlenecek (denetim izi SystemLog'da kalır).`
         : "";
-    return `"${deleteMachine.name}" kalıcı olarak silinecek. Bu işlem geri alınamaz.${sess}`;
+    const periph =
+      preview.peripheralDetachCount > 0
+        ? ` ${preview.peripheralDetachCount} donanım bu makineden çözülüp boşa çıkacak (donanım kaydı + ayarı korunur, atamasız kalır — sonra başka makineye atayabilirsiniz).`
+        : "";
+    return `"${deleteMachine.name}" kalıcı olarak silinecek. Bu işlem geri alınamaz.${sess}${periph}`;
   })();
 
   const handleMachineDelete = () => {

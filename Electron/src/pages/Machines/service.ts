@@ -7,10 +7,13 @@ export const machineService = createCrudService<Machine>("/api/machines");
 export interface MachineDeletePreview {
   machineId: string;
   machineName: string;
-  /** Üretim izi (işlem/hareket/top girişi) ve eşleşme (cihaz/donanım) yoksa true. */
+  /** Üretim izi (işlem/hareket/top girişi) ve tablet eşleşmesi yoksa true.
+   *  Donanım (peripheral) BLOKLAMAZ — silmede otomatik boşa çıkar. */
   deletable: boolean;
   /** Kalıcı silmede tx içinde temizlenecek oturum (login) satırı sayısı. */
   workSessionCount: number;
+  /** Silmede bu makineden çözülecek (machineId=null) donanım sayısı. */
+  peripheralDetachCount: number;
   /** Silmeyi engelleyen sebepler (deletable=false iken dolu). */
   blockers: { key: string; count: number; message: string }[];
 }

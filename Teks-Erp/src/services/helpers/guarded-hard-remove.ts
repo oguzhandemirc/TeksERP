@@ -206,12 +206,16 @@ export const routeHardRemove = makeGuardedHardRemove({
   successMessage: "Rota ve tüm adımları kalıcı olarak silindi",
 });
 
-// Makine silme guard'ları — ÜRETİM İZİ ve EŞLEŞME engeller; çalışma oturumu ETMEZ.
+// Makine silme guard'ları — ÜRETİM İZİ ve TABLET EŞLEŞMESİ engeller; çalışma
+// oturumu ve DONANIM (peripheral) ETMEZ.
 // Gerekçe: gerçek üretim yapmış (top işlemi/hareketi/girişi) makine kalıcı
 // silinemez — atıf kaybolur, sadece pasife alınır. Ama yalnız oturum (login)
 // izi olan, hiç üretim yapmamış makine "kurulum artığı"dır: kalıcı silinebilir,
 // oturum satırları tx içinde temizlenir. Denetim (kim/ne zaman girdi) SystemLog'da
 // append-only kalır — WorkSession satırını silmek onu kaybettirmez.
+// DONANIM (peripheral) BLOKLAMAZ: silmede machineId=null'a çekilir (donanım kaydı
+// + ayarı korunur, atamasız "boşa çıkar" — sonra başka makineye atanabilir). Şema
+// zaten onDelete:SetNull; deleteTx'te açıkça da yapılır (denetlenebilir + niyet net).
 const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
   {
     key: "rollOperationCount",
@@ -233,11 +237,6 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     count: (id) => prisma.device.count({ where: { machineId: id } }),
     message: (n) => `Bu makineye ${n} cihaz (tablet) atanmış — önce cihaz atamasını kaldırın.`,
   },
-  {
-    key: "peripheralCount",
-    count: (id) => prisma.peripheralDevice.count({ where: { machineId: id } }),
-    message: (n) => `Bu makineye ${n} donanım bağlı — önce donanımı başka makineye taşıyın veya kaldırın.`,
-  },
 ];
 
 export const machineHardRemove = makeGuardedHardRemove({
@@ -246,6 +245,10 @@ export const machineHardRemove = makeGuardedHardRemove({
   load: (id) => prisma.machine.findUnique({ where: { id } }),
   guards: MACHINE_DELETE_GUARDS,
   deleteTx: async (tx, id) => {
+    // Donanım (peripheral) OTOMATİK boşa çıkar (bloklamaz): machineId=null — donanım
+    // kaydı + ayarı (COM/adres/kalibrasyon) korunur, atamasız kalır; sonra başka
+    // makineye atanabilir. Şema onDelete:SetNull ile de garanti; burada açık + auditable.
+    await tx.peripheralDevice.updateMany({ where: { machineId: id }, data: { machineId: null } });
     // Üretim izi olmayan makinenin oturum (login) satırlarını temizle — FK Restrict.
     await tx.workSession.deleteMany({ where: { machineId: id } });
     await tx.machine.delete({ where: { id } });
@@ -276,6 +279,9 @@ export async function machineDeletePreview(
       if (n > 0) blockers.push({ key: guard.key, count: n, message: guard.message(n) });
     }
     const workSessionCount = await prisma.workSession.count({ where: { machineId: id } });
+    // Silmede bu makineden çözülecek (machineId=null) donanım — bloklamaz, onay
+    // modalında "N donanım boşa çıkacak" olarak somut gösterilir (yıkıcı-işlem onay kuralı).
+    const peripheralDetachCount = await prisma.peripheralDevice.count({ where: { machineId: id } });
 
     res.status(200).json({
       success: true,
@@ -284,6 +290,7 @@ export async function machineDeletePreview(
         machineName: machine.name,
         deletable: blockers.length === 0,
         workSessionCount,
+        peripheralDetachCount,
         blockers,
       },
     });
