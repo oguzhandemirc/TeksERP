@@ -77,7 +77,7 @@ npm run prisma:generate         # = npx prisma generate (client üret)
 npm run prisma:migrate          # = npx prisma migrate deploy (şemayı kur)
 npm run seed                    # SADECE ilk kurulumda — admin/yetkiler/kalite
 # sunucuyu kaldır (systemd / pm2 / nohup):
-node dist/src/server.js         # önceden `npm run build` ile derlenmiş olmalı
+node dist/server.js             # önceden `npm run build` ile derlenmiş olmalı (rootDir=src → dist/server.js)
 ```
 
 > **`seed` SADECE ilk kurulumda çalıştırılır.** Sonraki güncellemelerde ASLA —
@@ -127,7 +127,7 @@ sırasıyla uygular; tekrar çalıştırmak güvenli.
 curl -s http://localhost:4000/health
 ```
 
-> **Gerçek endpoint `GET /health`'tir** (`src/app.ts:262`), `/api/health` DEĞİL —
+> **Gerçek endpoint `GET /health`'tir** (`src/app.ts`, `app.get("/health", ...)`), `/api/health` DEĞİL —
 > bir `/api/health` alias'ı yoktur. Windows installer'ın durum kontrolü de
 > (`manage.ps1 -Action status`) `http://localhost:4000/health`'i yoklar.
 
@@ -233,6 +233,10 @@ erişimi yok); sadece backend (4000) fabrika ağına açıktır.
 ## 10) Deploy provası — doğrulandı (2026-06-13)
 
 Boş bir `teks_deploy_probe` DB'sinde tam ilk-kurulum yolu koşuldu:
-`createdb` → `prisma migrate deploy` → `prisma generate` → `dropdb`. Sonuç:
-**51/51 migration hatasız uygulandı** (0 rolled-back/yarım), Prisma Client
-v7.7.0 temiz üretildi. Detay: `Teks-Erp/MIGRATION-DEPLOY.md`.
+`createdb` → `prisma migrate deploy` → `prisma generate` → `dropdb`. Sonuç: o
+tarihteki **tüm migration'lar hatasız uygulandı** (51/51; 0 rolled-back/yarım),
+Prisma Client v7 (`prisma`/`@prisma/client` ^7.7.0) temiz üretildi. Migration
+sayısı sürekli artar — kanonik kaynak `prisma/migrations/` (2026-07-14 itibarıyla
+~114, en yeni `20260714151000_dispatch_item_unique_dispatch_roll`); prova her
+deploy öncesi tekrarlanmalı (bkz. `URETIM-KONTROL-LISTESI.md §C`). Detay:
+`Teks-Erp/MIGRATION-DEPLOY.md`.

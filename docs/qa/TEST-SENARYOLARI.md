@@ -1,6 +1,7 @@
 # TeksERP — Kullanıcı Kabul Test Senaryoları (UAT)
 
-Bu doküman, otomatik testlerin (backend 38 dosya · Electron 41 · mobil 19) KAPSAMADIĞI
+Bu doküman, otomatik testlerin (backend ~160 dosya · Electron ~40 · mobil ~30 — kanonik
+sayı için ilgili proje test dizinleri) KAPSAMADIĞI
 **kullanıcı/UI ve fiziksel akışlar** için adım-adım manuel test senaryolarıdır.
 Otomatik testler iş mantığını doğrular; bu senaryolar gerçek ekran + gerçek cihazla
 doğrulanır.
@@ -23,7 +24,7 @@ doğrulanır.
 ## 2. Sipariş & İsim Standardı 🟡
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
-| 2.1 | Sipariş no override (#16) | Yeni sipariş, "Sipariş No" boş bırak → kaydet | Otomatik `YYYYAAGG-N` üretilir | |
+| 2.1 | Sipariş no override (#16) | Yeni sipariş, "Sipariş No" boş bırak → kaydet | Otomatik `SIP+GGAAYY+NNNN` (örn SIP1207260001) üretilir | |
 | 2.2 | Manuel sipariş no | "Sipariş No" elle gir → kaydet | Girilen no kullanılır; aynı no 2. kez → hata | |
 | 2.3 | Ürün adı BÜYÜK (#13) | "test ürün" adıyla ürün ekle | Liste/detayda "TEST ÜRÜN" | |
 | 2.4 | Renk normalize (#13) | "beyaz 055" adıyla renk ekle | "055-BEYAZ" olarak kaydedilir | |
@@ -39,8 +40,8 @@ doğrulanır.
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
 | 4.1 | Yurtiçi default | Mobil Paketleme'de yeni sevkiyat aç | Kapsam "Yurtiçi" seçili gelir | |
-| 4.2 | Yurtiçi tartısız sevk | Yurtiçi sevk, çuvala kod ver ama TARTMA → Sevke Hazır | İzin verilir (tartı zorunlu değil) | |
-| 4.3 | Yurtdışı tartı zorunlu | Yurtdışı seç, tartısız çuval → Sevke Hazır | "Tartısı girilmemiş (yurtdışı)" engeli | |
+| 4.2 | Yurtiçi tartısız sevk | Yurtiçi sevk, çuvala top okut ama TARTMA → "Hemen Sevk Et" | İzin verilir (yurtiçi tartı zorunlu değil) | |
+| 4.3 | Yurtdışı tartı zorunlu | Yurtdışı seç, tartısız çuval → "Hemen Sevk Et" | "Yurtdışı sevkte tüm çuvallar tartılı olmalı" engeli | |
 | 4.4 | Rozet & filtre | Çuval Depo (Electron) | Her kartta Yurtiçi/Yurtdışı rozeti + üst filtre çalışır | |
 | 4.5 | Kapsam değiştir | Çuval Depo slide-over'da kapsam toggle | Anında değişir; EXPORT'ta tartı uyarısı | |
 
@@ -51,9 +52,10 @@ doğrulanır.
 | 5.2 | Varsayılan | Kod boşsa | Müşteri/şube `code`'u gösterilir | |
 
 ## 6. Çuval & Top Arama (#1, #23) 🟡
+> Not: eski ayrı "Çuval & Top Arama" ekranı **Çuval Deposu / Paketleme** hub'ına taşındı.
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
-| 6.1 | Ürüne göre | Operasyon → Çuval & Top Arama → ürün filtre | O ürünü içeren çuvallar + eşleşen adet/metre | |
+| 6.1 | Ürüne göre | Operasyon → Çuval Deposu / Paketleme (Arama) → ürün filtre | O ürünü içeren çuvallar + eşleşen adet/metre | |
 | 6.2 | Çuval içeriği | Sonuç satırını genişlet | Çuvaldaki toplar (barkod/ürün/renk/metre) lazy gelir | |
 | 6.3 | Top nerede | Barkod okut/yaz → "Topu Bul" | Topun çuvalı + sevkiyatı + statüsü | |
 | 6.4 | Sevk edilmiş | "Sevk edilmişleri de ara" işaretle | DISPATCHED çuvallar da listeye girer | |
@@ -61,11 +63,12 @@ doğrulanır.
 ## 7. Çuval Düzeltme — mobil (#3, #4) 🔴
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
-| 7.1 | Çuvaldan çıkar | TartıPaket → Çuval Düzeltme → top okut → "Çuvaldan Çıkar" | Top serbest depoya döner; READY+ ise tartı sıfırlanır + uyarı | |
-| 7.2 | Başka çuvala taşı | Top okut → "Başka Çuvala Taşı" → hedef seç | Top hedefe taşınır; iki çuvalın tartısı sıfırlanır | |
-| 7.3 | İki topu takasla | Top okut → "İki Topu Takasla" → 2. topu okut | Çuvalları yer değiştirir (aynı sevkiyat); farklı sevkiyatta engel | |
-| 7.4 | Çuvalı tart | İçerik değişiminden sonra "Çuvalı Tart" → kg | Tartı kaydedilir; READY akışı tekrar kapanır | |
-| 7.5 | Etiket değiştir (#4) | Top okut → "Etiket Değiştir" → renk/en/kalite → kaydet | Etiket güncellenir + yeni etiket basılır (yazıcı); commit'li sevkiyatta engel | |
+> Not: yalnız **havuzdaki (sevkiyata girmemiş) çuvallar** düzenlenebilir — sevkiyata atanmış
+> (PLANNED/DISPATCHED) çuval önce sevkiyattan çıkarılmalı. "İki Topu Takasla" özelliği YOK.
+| 7.1 | Çuvaldan çıkar | TartıPaket → Çuval Düzeltme → top okut → "Çuvaldan Çıkar" | Top serbest depoya döner; çuvalın brüt tartısı sıfırlanır (içerik değişti) | |
+| 7.2 | Başka çuvala taşı | Top okut → "Başka Çuvala Taşı" → hedef çuvaldan top okut | Top hedefe taşınır; her iki çuvalın tartısı sıfırlanır | |
+| 7.3 | Çuvalı tart | İçerik değişiminden sonra "Çuvalı Tart" → kg | Yeni brüt tartı kaydedilir | |
+| 7.4 | Etiket değiştir (#4) | Top okut → "Etiket Değiştir" → renk/en/kalite → kaydet | Etiket güncellenir + yeni etiket basılır (yazıcı); sevkiyata atanmış çuvalda engel | |
 
 ## 8. 300-Çuval UX — mobil (#8) 🟡
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
@@ -74,12 +77,15 @@ doğrulanır.
 | 8.2 | Çuval ara/atla | Arama kutusuna kod/sıra no | Eşleşen çuval(lar) listelenir | |
 | 8.3 | Tümünü göster | "N çuval daha göster" | Kalan çuvallar açılır; "Listeyi daralt" geri toplar | |
 
-## 9. Sevkiyat Yeniden Hedefleme (#7) 🔴
+## 9. Planlı (PLANNED) Sevkiyat Düzenleme (#7) 🔴
+> Not: eski "Siparişleri Değiştir" (retarget) KALDIRILDI — tahsis, çuval içeriğinden **sevk
+> anında** türetilir. Statüler yalnız PLANNED/DISPATCHED/CANCELLED (PREPARING/READY/AT_DOOR yok).
+> Düzenleme yalnız PLANNED sevkiyatta; onay AÇIKKEN sevkiyat PLANNED kalır, kapalıyken doğrudan DISPATCHED.
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
-| 9.1 | PREPARING retarget | Sevkiyatlar → detay → "Siparişleri Değiştir" → farklı sipariş seç | Sipariş kümesi değişir | |
-| 9.2 | READY retarget | Sevke hazır sevkiyatta retarget | Eski siparişin karşılanması düşer, yeniye yazılır | |
-| 9.3 | DISPATCHED engel | Sevk edilmiş sevkiyatta "Siparişleri Değiştir" butonu | Görünmez (engelli) | |
+| 9.1 | PLANNED çuval çıkar | Çuval Deposu → planlı sevkiyat detay → "Çuval Çıkar" | Çuval depoya (havuza) döner (`shipmentId` null); tahsis yeniden hesaplanır | |
+| 9.2 | Kapsam/prosedür düzenle | Planlı sevkiyat slide-over → Kapsam toggle / Prosedür No | Anında güncellenir; yurtdışına çevirince tartısız çuval engeli | |
+| 9.3 | DISPATCHED engel | Sevk edilmiş sevkiyat detay | Çuval çıkar / İptal Et butonları görünmez (engelli) | |
 
 ## 10. Muhasebe / Sevk Edilenler (#2) 🔴
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
@@ -130,8 +136,9 @@ doğrulanır.
 ---
 
 ## Otomatik test kapsamı (referans — bunlar zaten yeşil)
-- **Backend** `cd Teks-Erp && npm test` → 38 dosya (sevk yaşam döngüsü, durum geçişleri,
+- **Backend** `cd Teks-Erp && npm test` → ~160 `test_*.ts` dosyası (jest/vitest YOK; `tsx
+  scripts/run-all-tests.ts` hepsini sırayla koşar — sevk yaşam döngüsü, durum geçişleri,
   çuval işlemleri, kapsama, fason, tambur, izin/cihaz/dashboard, vb.).
-- **Electron** `cd Electron && npm test` → 41 test (RBAC, util'ler, zod şema, fiş bileşeni).
-- **mobil** `cd mobil && npm test` → 19 test (RBAC hook, barkod, query, zaman).
+- **Electron** `cd Electron && npm test` → ~40 vitest dosyası (RBAC, util'ler, zod şema, fiş bileşeni).
+- **mobil** `cd mobil && npm test` → ~30 jest dosyası (RBAC hook, barkod, query, zaman).
 - Tümü: `bash run-tests.sh` (+ `--tsc`). CI: `.github/workflows/ci.yml` (her push/PR).

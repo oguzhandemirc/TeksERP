@@ -19,11 +19,37 @@ Denetim sonrası düzeltmeler bir git branch'inde (**5 commit**) uygulandı; her
 | **Faz 7** `c550ac4` — migration `…150000` | ~~Y-1~~, O-19 | Shipment/Sack operatör izi (O-19) — **app-code'ta yazılıyor** (backend `ac81c04`). GoodsReceipt (Y-1) kuruldu ama **Faz 9'da iptal** (aşağı bak) |
 | **Faz 9** `4925620` — migration `…170000` | **Y-1 İPTAL** | Domain doğrulaması: ham kumaş satın alınmıyor (fabrika-içi kayıtsız) → tedarikçi/lot kavramı yok. goods_receipts + Roll.goodsReceiptId/supplierLotNo DROP (veri=0, app-code ref=0). O-19 + CompanyType KORUNDU |
 | **Faz 8** `6a26075` — migration `…160000` | **F103** (backend denetimi, çapraz-koordinasyon) | shipment_orders.isActive + partial unique `(orderId) WHERE isActive` → "bir sipariş tek aktif sevkiyatta" DB seddi; backend'in serileştirme kilidinin yerini alır (bakım app-code'da); dev'e uygulandı + resolve |
-| **Backend track** (ayrı oturum) | Y-2, Y-3, O-1, O-2, O-3, O-4, O-6, O-18, O-21, O-23, D-13, D-15, B-1 + **Y-1/O-19 app-code** | app-code (`services`/`controllers`/`lib`) — devredildi |
+| **Backend track** (ayrı oturum) | Y-2, Y-3, O-1, O-2, O-3, O-4, O-6, O-18, O-21, O-23, D-13, D-15, B-1 + **Y-1/O-19 app-code** | app-code (`services`/`controllers`/`lib`) — devredildi (kod-durumu için §0.1) |
 | **Ürün kararı** (ileriye) | O-20, D-3 | çuval dara/net + vardiya-maliyet (bugünün ihtiyacı değil) |
 | **Bilgi — aksiyon yok** | B-2…B-10, D-2 vb. | bilinçli tasarım tespitleri (belge amaçlı) |
 
 > **⚠️ Üretim deploy notu:** Faz 4/5/6 DDL'i (özellikle Faz 5 `roll_operations` yeni index'leri) dolu üretim tablosunda yazma kilidi alır → **vardiya dışı** `prisma migrate deploy` (CLAUDE.md kural 14; her migration başında `SET statement_timeout = 0` var). Dev DB'de 3 migration resolve'lu; üretimde `migrate deploy` uygular. **Koordinasyon:** dev DB'de bu 3 migration kayıtlı ama paralel backend branch'inde dosyaları yok — o oturum `prisma migrate deploy/status` çalıştırmamalı (merge'de uzlaşır).
+>
+> Not: Faz 4-9 migration'ları main'e girdi ve dizin adlarını aldı — `20260708120000_faz4_db_constraint_hardening`, `…130000_faz5_index_cleanup`, `…140000_faz6_schema_hygiene`, `…150000_faz7_goods_receipt_operator_trace`, `…160000_faz8_shipment_order_active_unique`, `…170000_faz9_drop_goods_receipt` (kanonik: `prisma/migrations/`).
+
+### 0.1 Post-denetim kapanışları (2026-07-09…14 — koda karşı doğrulandı)
+
+Bu raporun bulguları **2026-07-08 anına aittir.** Sonraki hafta gelen dört büyük redesign (çuval-depo `07-12`, "her rota final üretir" `07-13`, parti modeli `07-13`, "kart iş emriyle doğar" `07-14`) + idempotency turu `07-14` + Backend-track'in inmesi, **açık/devredilen bulguların çoğunu kapattı.** Aşağıdaki kapanışlar mevcut `schema.prisma`/servis koduna karşı teyit edildi (bölüm gövdeleri denetim-anı gözlemi olarak korunur — güncel durum burada):
+
+| Bulgu | Durum | Kod kanıtı |
+|---|---|---|
+| **O-3** tx timeout yok | **KAPANDI** — global `transactionOptions { maxWait:5000, timeout:20000 }` | `src/lib/prisma.ts:48-51` (O3-1) |
+| **O-4** parti/manifest no taşması | **KAPANDI** — `workOrderNumber` + `manifestNo` üreticileri `gte+startsWith` + `Number.isFinite` guard'a geçti | `workorder.service.ts:283-296, 4347-4354` |
+| **O-7** `Sack.manualCode` unique invariantı | **GEÇERSİZ (moot)** — kolon tümüyle DROP edildi (mühür-yok çuval-depo modeli) | migration `20260712120000_drop_sack_manual_code`; şemada `manualCode` yok |
+| **O-9** `WorkOrder.dyehouseNote` drift | **KAPANDI** — kolon kaldırıldı (fason talimatı tek kaynak) | `schema.prisma:1261` (yorum) |
+| **O-13/O-14** roll_operations ölü/eksik index | **KAPANDI** (Faz 5) — `[rollId]`+`[operationType]` DROP, `[operationType,createdAt]` eklendi | `schema.prisma` RollOperation `@@index` |
+| **O-19** sevkiyat/tartı operatör izi | **KAPANDI** — `Sack.weighedById/weighedAt` + `Shipment.dispatchedById` birinci-sınıf kolon | Sack/Shipment modelleri |
+| **O-22** Roll↔Sack↔Shipment invariantı | **UYGULANDI** — `sacks @@unique([id, shipmentId])` + rolls/swatches composite FK (raw-SQL, DEFERRABLE) | Sack modeli `@@unique([id, shipmentId])` + O-22 yorumu |
+| **O-23** pg Pool `error` + çift shutdown | **KAPANDI** — `pool.on("error")` eklendi (süreç düşmez), shutdown tek noktada | `src/lib/prisma.ts:38` (O3-2) |
+| **B-1** `prisma.ts` yorumu `30s` diyor | **KAPANDI** — yorum `50s`'e düzeltildi | `src/lib/prisma.ts:26` |
+| **D-1** TravelerCardScan idempotency | **KISMİ** — DB idempotency çapası (clientScanId) yerine 10 sn çift-okutma dedup penceresi eklendi (UX guard, önerilen P2002-idempotent değil) | `traveler-card.service.ts:337-344` |
+| **D-14** 4 `text` UUID kolon | **KAPANDI** — `batchSplitId` parti redesign'ıyla tümüyle kalktı; `sourceId`/`prevSackId`/`prevQualityGradeId` `@db.Uuid`'a çevrildi | `schema.prisma:2294, 2512, 2514` |
+
+**Backend-track (atomik claim + prefix üreticiler) da indi (kod-teyitli):** **O-2** WO oto-tamamlama artık `touchWorkOrderTx` çağırıyor (`kursun-qc.service.ts:670`, `tambur.service.ts:693`); **O-21** 8 numara/barkod üreticisi `gte+startsWith`'e geçti (`subcontractor:84,90`, `kartela:92,98,115`, `traveler-card`). O-1/O-6 (hardDelete / OrderLine silme atomik claim) aynı track'te; tam kapanış için servis diffine bakılabilir.
+
+**Not — `PRODUCED` enum'u kaldırıldı:** "her rota final üretir" redesign'ında `RollStatus.PRODUCED` limbosu enum'dan düştü (migration `20260713092000_drop_produced_roll_status`). Aşağıda O-18'de "PRODUCED'a düşer" ifadesi artık geçersiz — son adım toplarını `finalizeRollsAtLastStep` → `WAREHOUSE` çeker; O-18'in **çekirdek endişesi (Tambur'suz rotada açık-hata guard'ı) hâlâ açık** (aşağıda güncellendi).
+
+**Hâlâ açık (kod-teyitli):** Y-2/Y-3 (collation — 34 elle-arama sahası), Y-4 (offsite yedek + PITR yok), Y-5 (geçmiş DDL'de `statement_timeout=0` eksik), O-15/O-16/O-17 (installer bellek/sürüm/restore), O-18 (Tambur'suz açık-hata guard'ı), D-9 (`consistency-check.sql`) vb. — bunlar operasyonel/collation eksenli, redesign'lar dokunmadı.
 
 ---
 
@@ -100,6 +126,7 @@ Bir veritabanını mimari olarak değerlendirirken baktığım sekiz boyut. Her 
 ## 5. Yüksek Öncelikli Bulgular
 
 ### Y-1 — İzlenebilirlik zincirinin kökü kopuk: ham kumaş girişinde tedarikçi/lot kaydı yok
+> **[İPTAL — §0 Faz 9 `4925620` / §0.1]:** Bu bulgunun önerisi (**GoodsReceipt** + `supplierId`/`supplierLotNo`) domain doğrulamasıyla **reddedildi** — fabrika ham kumaş satın almıyor (fabrika-içi kayıtsız gelir), tedarikçi/lot kavramı yok. Faz 7'de kurulan `goods_receipts` + `Roll.goodsReceiptId`/`supplierLotNo`, migration `20260708170000_faz9_drop_goods_receipt` ile DROP edildi (kod-teyitli: şemada bu alanlar/model yok). Aşağıdaki "Not"un öngördüğü gibi "izlenebilirlik kökü = KK1 girişi" **bilinçli kapsam kararı** oldu. Aşağıki gövde denetim-anı gözlemidir.
 - **Boyut:** Domain · **Konum:** `prisma/schema.prisma:823-982` (Roll) + `src/services/inventory.service.ts:418-454`
 - **Kanıt:** Roll modelinde tedarikçi FK'sı veya lot alanı yok; tek köken bilgisi enum: `entrySource RollEntrySource @default(SUPPLIER_RECEIPT)`. Giriş kaydı (438-454) yalnız `entrySource` yazar; tedarikçi/lot/irsaliye alanı hiç yok. Şemada `CompanyType.SUPPLIER` tanımlı ama Roll'a bağlanan tek kullanım yok. Canlı DB'de koşulan geri-iz recursive CTE'si zinciri `SUPPLIER_RECEIPT` toplarında sonlandırıyor.
 - **Etki:** Fabrika çözgü/dokuma yapmıyor, kumaş hazır geliyor — kusurun en olası kökü tedarikçi lotu. "X tedarikçi lotundan gelen toplar hangi müşterilere sevk edildi" sorusu modelce **yanıtsız**. Yüz binlerce top biriktiğinde tarih-bazlı tahmin, pratikte tüm dönem stoğunu geri çağırmaya eşdeğer olur.
@@ -144,11 +171,11 @@ Bir veritabanını mimari olarak değerlendirirken baktığım sekiz boyut. Her 
 **O-2 — WO oto-tamamlama sayacı Kurşun-QC2 ve Tambur yollarında serileştirilmemiş — write-skew**
 `src/services/kursun-qc.service.ts:691-707` ve `tambur.service.ts:1019-1034`. İki sitede de `tx.workOrderStep.count(...)` → `remaining===0` ise WO'yu COMPLETED yapıyor, ama `touchWorkOrderTx` (WO satır kilidi) **çağrılmıyor** — oysa fason yollarının 6 tx'i çağırıyor. `workorder-locks.helper.ts` docstring'i tehlikeyi açıkça belgeliyor (READ COMMITTED altında sayım eşzamanlı commit'i görmez). Aynı WO'nun son iki adımı eş anlı tamamlanırsa **ikisi de WO'yu tamamlamaz**: tüm adımlar COMPLETED ama WO sonsuza dek IN_PROGRESS, refakat kartı ACTIVE kalır. **Öneri:** İki tx'e `await touchWorkOrderTx(tx, workOrderId)` ekle; `inventory.service`'teki kardeş WO-tamamlama yollarını da tara.
 
-**O-3 — 86 `$transaction` çağrısının hiçbirinde timeout/maxWait yok**
+**O-3 — 86 `$transaction` çağrısının hiçbirinde timeout/maxWait yok** — **[KAPANDI, §0.1: global `transactionOptions` eklendi]**
 `src/lib/prisma.ts:35` (yalnız `{ adapter }`) + 86 çağrı. Prisma default'ları maxWait=2s / timeout=5s. Elle teyit: servis katmanında `maxWait|timeout|isolationLevel` sıfır sonuç. Yüz binlerce satırlı tablolarda ve 30-bağlantılık havuz doygunluğunda ağır tx'ler (tambur finalize, fason kabul) 5s'yi aşıp iptal olabilir → operatör 500 görür (atomik claim'ler güvenle geri sarar ama iş tekrarlanır). `statement_timeout=50s` tek sorguya izin verirken tx tavanının 5s'te kalması **tutarsız bir boğaz**. **Öneri:** Client kurulumuna global `transactionOptions: { maxWait: 5_000, timeout: 20_000 }` (50s'nin altında) ekle; en ağır akışlara per-çağrı daha yüksek değer.
 
-**O-4 — Parti/manifest numarası üreticisinde lexicographic sıra taşması (999 sonrası + NaN zehirlenmesi)**
-`src/services/workorder.service.ts:277-292` (batchNumber) ve `4558-4568` (manifestNo). `orderBy: { batchNumber: 'desc' }` + `parseInt(...pop()) + 1` + `padStart(3)`. `'P-YYMMDD-1000'` string sıralamada `'...-999'`dan **küçük** kaldığından, 1000. kayıttan sonra desc hep '999'u döner → aday hep '1000' → exists → 5 deneme → "Parti numarası üretilemedi". **Elle teyit:** Manuel parti kodu serbest olduğundan (`P-260707-A5` gibi), prefix'e uyan sayısal-olmayan kuyruklu bir kod desc'te en üste çıkar → `parseInt`=NaN → `'P-260707-NaN'` kaydı → o günün otomatik üretimi zehirlenir. Bu bug proje tarafından **zaten biliniyor**: `shipping.service.ts:91-92` ve `order.service.ts:1094-1098` bunu `createdAt desc` + numeric-tail-max ile çözmüş — ders bu iki siteye taşınmamış. **Öneri:** Kanıtlanmış desenlerden birine geçir; parse edilemeyen kuyruğu atla.
+**O-4 — Parti/manifest numarası üreticisinde lexicographic sıra taşması (999 sonrası + NaN zehirlenmesi)** — **[KAPANDI, §0.1: her iki üretici de `gte+startsWith`+`Number.isFinite` guard'a geçti]**
+`src/services/workorder.service.ts` iş-emri-no üreticisi (denetimde `batchNumber`, parti redesign'ıyla alan artık `workOrderNumber`) ve `manifestNo`. Denetim anındaki kalıp: `orderBy: { <no>: 'desc' }` + `parseInt(...pop()) + 1` + `padStart(3)`. `'P-YYMMDD-1000'` string sıralamada `'...-999'`dan **küçük** kaldığından, 1000. kayıttan sonra desc hep '999'u döner → aday hep '1000' → exists → 5 deneme → "Parti numarası üretilemedi". **Elle teyit:** Manuel parti kodu serbest olduğundan (`P-260707-A5` gibi), prefix'e uyan sayısal-olmayan kuyruklu bir kod desc'te en üste çıkar → `parseInt`=NaN → `'P-260707-NaN'` kaydı → o günün otomatik üretimi zehirlenir. Bu bug proje tarafından **zaten biliniyor**: `shipping.service.ts:91-92` ve `order.service.ts:1094-1098` bunu `createdAt desc` + numeric-tail-max ile çözmüş — ders bu iki siteye taşınmamış. **Öneri:** Kanıtlanmış desenlerden birine geçir; parse edilemeyen kuyruğu atla.
 
 ### Veri Bütünlüğü
 
@@ -158,7 +185,7 @@ Canlı DB `pg_constraint WHERE contype='c'` **boş**. `rolls.currentQty/initialQ
 **O-6 — Sipariş kalem silme: tx-dışı check-then-act + CASCADE, yarışta WO bağını sessizce koparır**
 `src/services/order.service.ts:1398` (guard 1361-1368, load 1239). `current` tx **dışında** yükleniyor, guard bu bayat snapshot'a bakıyor, silme tx içinde re-check olmadan. `work_order_to_order_lines.orderLineId` FK'sı **ON DELETE CASCADE** (psql doğrulandı) → yarış penceresinde bağlanan WO-satır bağı (`allocatedQty` muhasebesi) sessizce yok olur. **Öneri:** Guard'ı tx içine taşı (`tx.workOrderToOrderLine.count(...)`); istenirse FK'yı Restrict yap.
 
-**O-7 — `Sack.manualCode`'un "sevkiyat-içi benzersiz" invariantı hiçbir katmanda enforce edilmiyor**
+**O-7 — `Sack.manualCode`'un "sevkiyat-içi benzersiz" invariantı hiçbir katmanda enforce edilmiyor** — **[GEÇERSİZ, §0.1: `manualCode` kolonu DROP edildi]**
 Şema (`2197`) invariantı ilan ediyor ama servis iki yazma noktasında da "benzersizlik aranmaz" diyor; `markReady` yalnız BOŞ kontrolü yapıyor. DB'deki tek unique global AMB-pattern partial'ı — serbest kodları kapsamıyor. Aynı sevkiyatta iki çuval aynı kodu taşıyabilir → tabancayla okutma ve irsaliye dökümü yanlış çuvalı gösterir, yanlış çuval yüklenir. **Öneri:** `markReady`'ye sevkiyat-içi duplicate kontrolü + kalıcı çözüm için `UNIQUE (shipmentId, manualCode) WHERE manualCode IS NOT NULL` partial (drift-free desenle).
 
 **O-8 — İstasyon kalıcı silme, makine kalıcı silmenin guard'larını atlıyor**
@@ -166,7 +193,7 @@ Canlı DB `pg_constraint WHERE contype='c'` **boş**. `rolls.currentQty/initialQ
 
 ### Şema / Modelleme
 
-**O-9 — `WorkOrder.dyehouseNote`: bilinçli silinen kolon drift-fix ile geri geldi**
+**O-9 — `WorkOrder.dyehouseNote`: bilinçli silinen kolon drift-fix ile geri geldi** — **[KAPANDI, §0.1 + Faz 6: kolon kaldırıldı]**
 `schema.prisma:1196` + `migrations/20260629150000_fix_schema_drift`. Migration zinciri: eklenir → "per-adım tek kaynak" diye DROP edilir → bir drift-fix onu yanlışlıkla **geri ekler**. Kod hiç kullanmıyor (yalnız yorumlar). Canlı dev DB'de ayrıca `subcontractor_dispatches`'te hem `instruction` hem şema-dışı `dyehouseNote` kolonu var (psql doğrulandı → **dev DB drift'li**). Yanıltıcı yorum yeni geliştiriciyi ölü kolona yazmaya yönlendirebilir; sonraki `migrate dev` drift/RESET tuzağı üretir. **Öneri:** Yeni migration ile tekrar DROP + şemadan alanı/yorumu sil; dev DB'deki artık kolonu manuel ALTER ile temizle.
 
 **O-10 — `createdAt/updatedAt` konvansiyon ihlali**
@@ -179,10 +206,10 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 
 ### Index
 
-**O-13 — `roll_operations`'ta iki ölü index: `[rollId]` (unique sol-prefix'i) + `[operationType]` (hiç sürücü değil)**
+**O-13 — `roll_operations`'ta iki ölü index: `[rollId]` (unique sol-prefix'i) + `[operationType]` (hiç sürücü değil)** — **[KAPANDI, Faz 5 / §0.1: ikisi de DROP edildi]**
 `schema.prisma:1473-1474`. `@@unique([rollId, workOrderStepId, operationType])` varken `[rollId]` gereksiz; `[operationType]` 5-değerli düşük-seçicilikli enum, tüm where'ler `rollId`/`workOrderStepId` eşliğinde. `roll_operations` en yüksek hacimli append-only tablolardan — her insert'te 2 gereksiz index bakımı = kalıcı yazma amplifikasyonu. **Öneri:** İkisini de DROP; rollId sorguları unique'ten, adım sorguları `[workOrderStepId, createdAt]`'ten çalışır.
 
-**O-14 — `[operationType, createdAt]` composite eksik — rapor sorguları iki ayrı index'e bölünüyor**
+**O-14 — `[operationType, createdAt]` composite eksik — rapor sorguları iki ayrı index'e bölünüyor** — **[KAPANDI, Faz 5 / §0.1: composite eklendi]**
 `reports/quality.report.service.ts:148-206`: `operationType = ... AND createdAt aralığı`. psql: yalnız ayrı `operationType_idx` + `createdAt_idx` var. Planner ya büyük createdAt-range'i heap'te süzer ya da bitmap-AND'e düşer. **Öneri:** `@@index([operationType, createdAt])` ekle; tek kolonlu `[operationType]` prefix'i olarak kaldırılabilir. (O-13 ile birlikte planlanabilir.)
 
 ### Ölçek / Operasyonel
@@ -197,11 +224,11 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 `manage.ps1:722-748`. `Do-Backup` yalnız pg_dump exit code'una bakar — üretilen `.dump`'ın açılabilirliği hiç test edilmez (`pg_restore --list` bile yok). Bozuk/yarım bir dump 14 dosyalık rotasyonla sağlam yedeklerin yerini alır ve felakete kadar fark edilmez. **Öneri:** `Do-Backup` sonuna `pg_restore --list $out` (bütünlük kontrolü) + `secret.json` kopyası; runbook'a 6 aylık test-restore tatbikatı (`-Action verify-restore` ideali).
 
 **O-18 — Açık hatalı top Tambur'suz rotada karar verilmeden depoya/sevke ilerleyebiliyor**
-`src/services/kursun-qc.service.ts:682-685`. KK2 finishStep'te sonraki adım yoksa toplar hata kontrolü **olmadan** PRODUCED'a düşer — `RollError.isProcessed` hiç sorgulanmıyor. `inventory.computeStatusBlockReasons` ve `shipping` scan-in de açık hatayı kontrol etmiyor. Rota PROCESS_QC ile bitebiliyor. CLAUDE.md kuralı "RollError Tambur kararıyla kapanır" Tambur'suz rotada **yapısal olarak ihlal**: "60. metrede hata" girilen top, kusur kararı verilmeden sevk edilebilir; hatalar sonsuza dek `isProcessed=false` kalıp dashboard/rapor sayaçlarını kirletir. **Öneri:** İki savunma: (1) finishStep'te nextStep yoksa açık hata varsa 400 veya idari NO_CUT zorunlu; (2) `computeStatusBlockReasons` ve scan-in claim'ine açık-hata kontrolü (`[rollId, isProcessed]` index'i zaten var).
+`src/services/kursun-qc.service.ts` finishStep (`else` dalı, `finalizeRollsAtLastStep` çağrısı). KK2 finishStep'te sonraki adım yoksa toplar hata kontrolü **olmadan** finalize edilir (`finalizeRollsAtLastStep` → kaliteye göre `WAREHOUSE`; *not: eski* `PRODUCED` *limbosu kaldırıldı, §0.1*) — `RollError.isProcessed` hiç sorgulanmıyor (kod-teyitli: finalize dalında açık-hata guard'ı yok). `inventory.computeStatusBlockReasons` ve `shipping` scan-in de açık hatayı kontrol etmiyor. Rota PROCESS_QC ile bitebiliyor. CLAUDE.md kuralı "RollError Tambur kararıyla kapanır" Tambur'suz rotada **yapısal olarak ihlal**: "60. metrede hata" girilen top, kusur kararı verilmeden sevk edilebilir; hatalar sonsuza dek `isProcessed=false` kalıp dashboard/rapor sayaçlarını kirletir. **Öneri:** İki savunma: (1) finishStep'te nextStep yoksa açık hata varsa 400 veya idari NO_CUT zorunlu; (2) `computeStatusBlockReasons` ve scan-in claim'ine açık-hata kontrolü (`[rollId, isProcessed]` index'i zaten var).
 
 ### Domain
 
-**O-19 — Sevkiyat/tartı/paketleme operasyonlarında birinci-sınıf operatör izi yok**
+**O-19 — Sevkiyat/tartı/paketleme operasyonlarında birinci-sınıf operatör izi yok** — **[KAPANDI, §0.1: `Sack.weighedById/weighedAt` + `Shipment.dispatchedById` eklendi]**
 `schema.prisma:2220-2256` (Shipment), `2192-2214` (Sack). Shipment'ta kullanıcı FK'sı yok, Sack'ta `weighedBy/weighedAt` yok — iz yalnız best-effort SystemLog'da (yazım hatası isteği düşürmez → sessizce kaybolabilir; 6 ayda arşive taşınır). Karşıtlık: fason tarafında `SubcontractorDispatch.dispatchedById` birinci-sınıf kolon. "Bu çuvalı kim tarttı/paketledi, sevki kim onayladı" müşteri şikayetinde cevaplanamayabilir. **Öneri:** Shipment'a `readyById/dispatchedById`, Sack'a `weighedById/weighedAt` (düşük-trafik audit FK istisnası — index şart değil).
 
 **O-20 — Çuval tartısında dara/net modeli yok — yalnız brüt kg**
@@ -210,10 +237,10 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 **O-21 — 8 numara/barkod üreticisi belgeli `gte+startsWith` yerine salt `startsWith` kullanıyor**
 `workorder:277,4560`; `subcontractor:95,102,109,116`; `kartela:105,112,133`; `traveler-card:113`. `order.service.ts:1063` ve `shipping.service.ts:84` bu kalıbı uzun yorumlarla bilinçli uygulamış ("en_US.UTF-8 collation'da LIKE-prefix unique btree'yi kullanamaz"); proje hafızasında da kural. Bugünkü üretim C locale'de `LIKE→range` ile index kullanır — **güncel bir perf hatası değil**; risk (a) belgeli kalıbın ihlali/kopyalanması, (b) taşınabilirlik sigortasının yokluğu — ICU tr-TR geçişi (Y-2) yapılırsa bu 8 üretici her belge/barkodda **tam taramaya** döner (`subcontractor:116` yüksek-hacim `rolls.barcode`'a dokunuyor). **Öneri:** Sekiz sahaya `{ gte: prefix, startsWith: prefix }` uygula (davranışsal nötr; ICU geçişinin ön koşulu).
 
-**O-22 — Roll↔Sack↔Shipment tutarlılık invariantı yalnız servis katmanında — DB düzeyinde zorlanmıyor**
+**O-22 — Roll↔Sack↔Shipment tutarlılık invariantı yalnız servis katmanında — DB düzeyinde zorlanmıyor** — **[UYGULANDI, §0.1: `sacks @@unique([id, shipmentId])` + rolls/swatches composite FK kuruldu]**
 `prisma/schema.prisma:895-899` (Roll.sackId yorumu) + `2192-2215` (Sack). Şema yorumu invariantı açıkça tanımlıyor: `sack.shipmentId == roll.shipmentId` (898). Ancak `rolls.sackId → sacks(id)` ve `rolls.shipmentId → shipments(id)` **iki bağımsız FK**; composite FK, CHECK veya trigger yok (psql: 0 trigger, 0 check doğrulandı). Proje başka invariantlar için DB seddi kurmuş (partial unique'ler) — bu korumasız kalmış. Çuval taşıma/geri çekme uçlarından geçen tek bir servis bug'ı, topu A sevkiyatına bağlıyken B'nin çuvalına yazabilir → **irsaliye/çeki listesi yanlış müşteri içeriği basar (yasal belge)**, sessiz bozulma ancak fiziksel sayımda fark edilir. **Öneri:** Raw migration ile `sacks` üzerinde `UNIQUE (id, "shipmentId")` + `rolls`'a (ve `swatches`'a) composite FK `("sackId","shipmentId") REFERENCES sacks(id,"shipmentId")` — çuvala bağlı topun shipmentId'si çuvalınkiyle zorunlu eşleşir. Şema yorumuna belgele (Prisma karşılığı yok).
 
-**O-23 — pg Pool `error` handler'ı yok + çift SIGTERM/SIGINT kaydı (bu iki bulgu benim elle araştırmamdan)**
+**O-23 — pg Pool `error` handler'ı yok + çift SIGTERM/SIGINT kaydı (bu iki bulgu benim elle araştırmamdan)** — **[KAPANDI, §0.1: `pool.on("error")` eklendi + shutdown tek noktada]**
 `src/lib/prisma.ts:27-46` + `src/server.ts:104-134`. **(a)** `pool.on('error', ...)` **yok** (elle teyit: `grep pool.on` src'de yalnız `backup.service` child process). `pg` Pool, idle bir bağlantı backend hatası aldığında (PostgreSQL yeniden başlaması, gece yedeği sırasındaki kesinti, Windows update) `'error'` yayınlar; dinleyici yoksa bu `uncaughtException`'a düşer — ki `server.ts:127` handler'ı onu **süreç kapatarak** karşılıyor (NSSM yeniden başlatır). Net etki: **kısa bir DB kesintisi, havuz şeffaf reconnect yerine tüm backend'i restart ettirir**, tüm uçuştaki istekleri düşürür. **(b)** SIGTERM/SIGINT **iki yerde** kayıtlı: `server.ts:104-105` (graceful drain) **ve** `prisma.ts:45-46` (`prisma.$disconnect` + `pool.end` + **`process.exit(0)`**). İki handler yarışır; `prisma.ts`'in `process.exit(0)`'ı `server.ts`'in HTTP drain'ini yarıda kesebilir. **Öneri:** `prisma.ts`'e `pool.on('error', (e)=>logla)` ekle (süreç ayakta kalır, havuz bozuk bağlantıyı atar); shutdown'ı tek noktaya topla — `prisma.ts`'ten `process.exit`'i kaldır, `server.ts`'in `gracefulShutdown`'ı `prisma.$disconnect()`+`pool.end()`'i sırayla çağırsın.
 
 ---
@@ -222,7 +249,7 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 
 | # | Boyut | Bulgu | Konum | Öneri (özet) |
 |---|---|---|---|---|
-| D-1 | conc | **TravelerCardScan idempotency çapası yok** + kart-durumu check-then-act; kardeş akışların hepsi çapalı | `traveler-card.service.ts:442-491` | `clientScanId` (UUID) al → id yap + P2002 idempotent dön |
+| D-1 | conc | **[KISMİ, §0.1]** TravelerCardScan idempotency çapası yok + kart-durumu check-then-act | `traveler-card.service.ts:337-344` (10 sn dedup penceresi eklendi) | Önerilen `clientScanId`→P2002 çapası YOK; yerine 10 sn çift-okutma dedup'u (UX guard) |
 | D-2 | domain | Fason dönüşünde iz **receipt (parti) seviyesinde** — top-seviyesi atıf kayboluyor, recall tüm kabule genişler | `schema:870` + receipt_items | Bilinçliyse belgele; ya da opsiyonel `sourceRollId` |
 | D-3 | domain | **Vardiya/duruş modeli yok** — OEE'nin kullanılabilirlik bileşeni yazılamaz; fason maliyeti tabloya bağlanamaz | `schema:462-483` | Shift master + `unitCost` alanları (ileriye dönük) |
 | D-4 | domain | `TravelerCardScan.deviceId` serbest metin — Device/Machine FK'sı yok | `schema:1553` | `devices.id` FK'sına çevir + opsiyonel machineId |
@@ -235,7 +262,7 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 | D-11 | integ | Fason geri-alma append-only iz tablolarını (**RollOperation/RollMovement fiziksel siliyor**) — CLAUDE.md istisna listesinde yok | `subcontractor:3448-3458` | İstisnayı belgele + audit oldData'ya silinen satır özetini göm |
 | D-12 | integ | `WorkOrderStep(workOrderId, stepSequence)` **unique değil** — adım sırası çakışmasına DB seddi yok | `schema:1285` | `@@unique([workOrderId, stepSequence])` (index yerine) |
 | D-13 | model | **`foldType` serbest string**: uçlar arası tutarsız validasyon; küçük/büyük varyant HC-06 kanal eşleşmesini tehdit ediyor | `schema:1191,750,542` | Prisma enum'a çevir veya tek Zod sözlüğü tüm uçlarda |
-| D-14 | model | **4 UUID kolon `text` tipinde** (`batchSplitId`, `sourceId`, `prevSackId/prevQualityGradeId`) — index/satır ~2× şişme | `schema:877,2135,2328,2330` | `@db.Uuid`'a çevir (`USING ::uuid`, FK'sız) |
+| D-14 | model | **[KAPANDI, §0.1]** 4 UUID kolon `text` tipinde (`batchSplitId` parti redesign'ıyla tümüyle kalktı; `sourceId`, `prevSackId/prevQualityGradeId` `@db.Uuid`'a çevrildi) | `schema.prisma` (`sourceId`, `prevSackId`, `prevQualityGradeId` artık `@db.Uuid`) | ~~`@db.Uuid`'a çevir~~ (uygulandı) |
 | D-15 | model | Katalog alanları serbest string (`Device.kind`, `Station.department`, `Permission.module`) + sınırsız String tutarsızlığı | `schema:500,430,346` | `Device.kind` enum'a; department/module katalog veya VarChar limit |
 | D-16 | ops | **Dev DB'de slow-query log kapalı** (`log_min_duration_statement=-1`), CLAUDE.md "aktif" diyor | CLAUDE.md Op.Bakım | `ALTER DATABASE ... SET log_min_duration_statement=500` veya doc netleştir |
 | D-17 | query | **`verifyToken` her istekte 2 seri DB round-trip** yapıyor (en sıcak yol) | `auth.middleware.ts:74-91` | Tek sorguya birleştir (Session→User join) |
@@ -243,13 +270,13 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 | D-19 | query | Sipariş picker'ı **500 kayıt full-include + bellek-içi sayfalama** her sayfada yeniden çekiyor | `order.service.ts:501-542` | `include`→dar `select`; Açık>0 süzgecini SQL'e indir |
 | D-20 | query | **MAX_OFFSET guard'ı work-session listesinde bypass** — sınırsız page ile derin offset | `work-session.service.ts:453` | `page` cap'i ekle veya `buildPagination()` çağır |
 | D-21 | scale | **SystemLog dışı append-only tablolar için purge stratejisi yok**; `system_log_archives`'in kendisi de sınırsız | `audit.service.ts:164` + tablolar | Yaşam döngüsü kararı belgele (retention + purge veya "purge edilmez") |
-| D-23 | ops | **43/88 migration `applied_steps_count=0`** — elle `migrate resolve --applied` akışı SQL'in gerçekten koştuğunu doğrulamıyor (elle araştırmam) | `_prisma_migrations` (psql) | Y-5 ile birleşik: timeout'la yarıda kesilen DDL sessizce "uygulandı" işaretlenebilir. Üretim `migrate deploy` yolu daha güvenli (hata → durur) |
+| D-23 | ops | **43/88 migration `applied_steps_count=0`** (oran denetim anına ait; toplam bugün ~114 — kanonik: `prisma/migrations/`) — elle `migrate resolve --applied` akışı SQL'in gerçekten koştuğunu doğrulamıyor (elle araştırmam) | `_prisma_migrations` (psql) | Y-5 ile birleşik: timeout'la yarıda kesilen DDL sessizce "uygulandı" işaretlenebilir. Üretim `migrate deploy` yolu daha güvenli (hata → durur) |
 
 ---
 
 ## 8. Bilgi Düzeyi Tespitler (bilinçli tasarım / doc-drift / güçlü yönler)
 
-- **B-1 — `prisma.ts:26` yorumu bayat:** `statement_timeout '30s'` yazıyor, gerçek 50s (psql doğrulandı). Tuning kararlarını yanıltabilir. → Yorumu düzelt.
+- **B-1 — `prisma.ts:26` yorumu bayat:** `statement_timeout '30s'` yazıyor, gerçek 50s (psql doğrulandı). Tuning kararlarını yanıltabilir. → Yorumu düzelt. **[KAPANDI, §0.1: yorum 50s'e düzeltildi]**
 - **B-2 — Gevşek modelin izlenebilirlik maliyeti:** Geri çağırma müşteri+çuval düzeyinde **tam** çalışıyor (CTE ile doğrulandı); "sipariş → top" yönü bilinçli olarak yok (`SEVKIYAT-LOOSE-TASARIM.md`). Bulgu değil, tasarımın maliyet tespiti. → İstenirse "sipariş→aday sevkiyat→çuval" hazır raporu.
 - **B-3 — Durum makineleri:** 3 partial-unique DB seddi (tek açık hareket/hata/refakat kartı) + atomik claim'ler; geçiş guard'ları uygulama katmanında. Prisma stack'i için doğru; risk yalnız claim'i atlayan yeni kodda.
 - **B-4 — JSON kolon envanteri (16 kolon):** Çoğu bilinçli snapshot (donmuş belgeler). Riskli olan `RollOperation.metadata` — Tambur'un **gerçek kat sayısı ve kesim noktaları yalnız burada**. Rapor ihtiyacı doğunca GIN index + şema çıkarımı gerekecek. → `metadata` için TS tip sözleşmesi; kritik skaleri kolona terfi et.
@@ -308,7 +335,7 @@ Talep gereği ayrı bir performans bölümü. Performans üç boyuta yayılıyor
 
 Doğrulama katmanı 3 ham bulguyu yanlış pozitif olarak çürüttü — kayda değer, çünkü kod bu konularda **iddiadan daha iyi**:
 
-1. **"Canlı dev DB'de repoda olmayan migration — drift"** → Çürütüldü: `prisma/migrations`'ta 88 dizin var, `_prisma_migrations`'la birebir uyumlu; drift yok.
+1. **"Canlı dev DB'de repoda olmayan migration — drift"** → Çürütüldü: `prisma/migrations` (denetim anında 88 dizin; bugün ~114) `_prisma_migrations`'la birebir uyumlu; drift yok.
 2. **"Periyodik bakım (log arşivi) insan hafızasına emanet"** → Çürütüldü: `src/jobs/archive-scheduler.ts` + `server.ts:63` — arşivleme **otomatik** (server start +60sn, 24 saatte bir kontrol, 30 günde bir çalışır).
 3. **"`yedekle.sh` eski Docker kurulumuna göre yazılmış, çalışmaz"** → Çürütüldü: repo kökünde `docker-compose.yml` (postgres servisi + `./backups` mount) mevcut; script bağlamında geçerli.
 
@@ -342,7 +369,7 @@ Doğrulama katmanı 3 ham bulguyu yanlış pozitif olarak çürüttü — kayda 
 17. **D-21, B-10 — Yaşam döngüsü ve partitioning eşiği kararlarını belgele.**
 
 ### Değerlendirilecek (ürün kararı)
-18. **Y-1 — Tedarikçi/lot modeli** (geri çağırma gereksinimiyse) veya bilinçli istisna olarak belgele.
+18. **Y-1 — Tedarikçi/lot modeli** — **KAPANDI (Faz 9):** ham kumaş satın alınmadığı doğrulandı → bilinçli istisna olarak kapatıldı, `goods_receipts` DROP.
 19. **D-3 — Vardiya/maliyet modeli** (OEE/muhasebe yol haritasıysa).
 
 ---

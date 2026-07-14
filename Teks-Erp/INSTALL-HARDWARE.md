@@ -14,8 +14,8 @@ Eski `MachineHardware` emekliye ayrıldı. Tüm çevre cihazları tek normalize 
 | `kind` | `LABEL_PRINTER` / `SCALE` / `METER` / `SIGNAL_SOURCE` |
 | `connectionType` | `NETWORK_TCP` / `BLUETOOTH_SPP` / `BLE` / `USB` / `SERIAL_COM` |
 | `address`, `port` | IP / MAC / COM yolu / BLE UUID (+ TCP portu) |
-| sahiplik | `machineId` (makineye SABİT) **veya** `deviceId` (tablete BAĞLI — BT yazıcı tabletle gezer) |
-| **yazıcı** | `languageOverride` (dil: PPLA/PPLB/ZPL/RASTER_HTML — yazıcıda ZORUNLU) + `formatProfileId` (geometri; boş → sistem-default profil) + per-kind şablon yönlendirme |
+| sahiplik | `machineId` (makineye SABİT) / `deviceId` (tablete BAĞLI — BT yazıcı tabletle gezer) / `stationId` (MAKİNESİZ istasyona sabit — örn. sevkiyat çuval kantarı) — **tam biri** (serviste enforce) |
+| **yazıcı** | `languageOverride` (dil: PPLA/PPLB/ZPL/RASTER_HTML; boş → RASTER_HTML failsafe — ayrı global dil ayarı YOK) + medya geometrisi **DOĞRUDAN cihazda** (`labelWidthMm`/`labelHeightMm`/`labelDpi`/`labelGapMm`; boş → sistem-default medyası) + `mediaType` (DIRECT_THERMAL/THERMAL_TRANSFER) + `rasterMode` + per-kind şablon yönlendirme |
 | **giriş cihazı** (SCALE/METER) | `pollCommand` (istek-cevap) + `terminator` + `identifyPattern`/`decimals`/`scale`/`unit` (codec) + `timeoutMs` + `role` (2-KAT/4-KAT/PRIMARY) + `simulate` |
 
 Yönetim ekranı: **Electron → Tanımlar → Cihaz Kaydı** (`/api/peripherals`).
@@ -25,7 +25,9 @@ Yönetim ekranı: **Electron → Tanımlar → Cihaz Kaydı** (`/api/peripherals
 - **Yazıcı markası değişti** (Argox→Zebra): cihazın `languageOverride`'ını yeni dile
   çevir. Dört dil (PPLA/PPLB/ZPL/RASTER_HTML) gerçek generator'larıyla hazır
   (`helpers/label-renderer.registry.ts`). Render otomatik o dile gider.
-- **Etiket boyutu/geometri**: yeni `LabelFormatProfile` (Tanımlar → Etiket Format Profilleri).
+- **Etiket boyutu/geometri**: cihazın `labelWidthMm`/`labelHeightMm`/`labelDpi`/`labelGapMm`
+  alanlarını (Cihaz Kaydı'nda) güncelle — ayrı `LabelFormatProfile` "Boyutlar" kataloğu
+  EMEKLİ (Etiket Stüdyosu v2: medya doğrudan cihazda, eleman koordinatları varyantta).
 - **Metre/kantar markası/protokolü**: `pollCommand` / `identifyPattern` (parse regex) /
   `scale` (cm→m: 0.01) / `terminator` / `role`'ü güncelle.
 - **Yeni dil/bağlantı türü** GEREKİRSE: registry/transport'a ~200 LOC adaptör (kapsam dışı).
@@ -65,6 +67,6 @@ Gerçek donanıma geçiş: ilgili `PeripheralDevice.simulate`'i kapat + `address
 
 ## Yeni fabrika konfig yüzeyi (Electron Tanımlar)
 
-LabelFormatProfiles · Etiket Standartları (LabelTemplate) ·
+Etiket Standartları (LabelTemplate — medya/geometri artık Cihaz Kaydı'nda) ·
 **Cihaz Kaydı (PeripheralDevices — tek donanım sayfası)** · İstasyonlar · Makineler ·
 **Cihazlar (tablet onay/atama)** + Genel Ayarlar bayrakları. Hepsi veri; kod dağıtımı gerekmez.

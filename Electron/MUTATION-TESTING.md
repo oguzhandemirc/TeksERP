@@ -12,7 +12,12 @@ demektir → test boşluğu.
 
 ## Son ölçüm (referans)
 
-`npm run test:mutation` (3 dosya, ~1dk 53sn, 2.38 test/mutant):
+`npm run test:mutation` — bu snapshot alındığında 3 dosya mutasyona uğruyordu
+(~1dk 53sn, 2.38 test/mutant). **`roll-name.ts` sonradan silindi (624f7d9,
+"roll-name şablon üretimi kaldırıldı")**; güncel çalışmada yalnız
+`query-builder.ts` + `station-colors.ts` mutasyona uğrar. `stryker.conf.json`
+hâlâ silinen dosyayı `mutate` listesinde tutuyor → temizlenmeli. Aşağıdaki tablo
+silinmeden önceki referans ölçümdür:
 
 | Dosya | Skor (total) | Skor (covered) | killed | survived |
 |---|---|---|---|---|
@@ -55,8 +60,11 @@ dosyalarını hedefler:
 | Dosya | Test | Neden uygun |
 |---|---|---|
 | `src/lib/query-builder.ts` | `query-builder.test.ts` | Saf string/URL kurma; tarih/IO/random yok |
-| `src/lib/roll-name.ts` | `roll-name.test.ts` | Saf şablon doldurma; deterministik |
 | `src/lib/station-colors.ts` | `station-colors.test.ts` | Saf enum→ton eşlemesi |
+
+> **Not:** `stryker.conf.json`'daki `mutate` listesi hâlâ `src/lib/roll-name.ts`'i
+> içeriyor ama o dosya 624f7d9'da (şablon üretimi kaldırıldı) silindi — hem
+> dosya hem `roll-name.test.ts` artık yok. Config girişi temizlenmeli.
 
 **Neden React bileşenleri / `code-generator.ts` dahil değil:**
 

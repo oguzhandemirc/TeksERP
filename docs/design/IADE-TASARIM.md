@@ -3,16 +3,17 @@
 > **Durum: UYGULANDI** (F1-F7 DONE; `return.service.ts` + `RollReturn`/`ReturnReason` şeması).
 > Sevkiyat sonrası müşteriden geri dönen kumaş toplarının QR ile depoya alınması + izlenebilirlik.
 >
-> **⚠️ Gövde tasarımından (§1-§5) SAPMALAR — kod bunları uyguluyor:**
-> - **İade nedeni ZORUNLU** (gövde "opsiyonel" diyor): `reasonId` ve `reasonText` ikisi de boşsa
->   400 "İade nedeni gerekli" — gerekçe: nedensiz iade kalite geri-besleme verisini değersizleştirir.
-> - **Top HER ZAMAN WAREHOUSE'a inmez** (gövde öyle diyor): `returnGradingEnabled` açık + kalite
+> **Kilit gerçekler (gövde §1-§5 bunlara göre güncellendi):**
+> - **İade nedeni ZORUNLU:** `reasonId` ve `reasonText` ikisi de boşsa 400 "İade nedeni gerekli"
+>   — gerekçe: nedensiz iade kalite geri-besleme verisini değersizleştirir.
+> - **Top varsayılan WAREHOUSE, kalite override ederse değişir:** `returnGradingEnabled` açık + kalite
 >   override ise `QualityGrade.returnTargetStatus`'a göre FİRE→`SCRAP`, A1→`A1_STOCK`, 1.KALITE→`WAREHOUSE`
->   (feature flag default **kapalı** → kapalıyken override yok sayılır, hep WAREHOUSE).
-> - **6 servis metodu** (gövde 3 diyor): `lookupForReturn`, `createReturn`, `listReturns`, `getReturnById`,
+>   (feature flag default **kapalı** → kapalıyken override yok sayılır, hep WAREHOUSE). Uygulanan statü
+>   `RollReturn.appliedStatus`'a snapshot'lanır (iptal guard'ı bununla çalışır).
+> - **6 servis metodu:** `lookupForReturn`, `createReturn`, `listReturns`, `getReturnById`,
 >   `cancelReturn`, `editReturn` (PATCH — iade defterini düzeltir; iptalde recency-guard + prevSackId null-fix).
 > - **Lookup query param'la:** `GET /api/returns/lookup?barcode=` (path param değil); top yoksa 404, SHIPPED değilse 400.
-> - Sevk muhasebesine DOKUNULMAZ (shippedQty/allocation değişmez) kararı gövdede doğru ve korunur.
+> - Sevk muhasebesine DOKUNULMAZ (shippedQty/SackAllocation değişmez) kararı gövdede doğru ve korunur.
 
 ## 1. Neden bu özellik?
 
@@ -26,20 +27,26 @@ vazgeçmesi vb. nedenlerle) geri dönebiliyor. Bunların:
 
 ## 2. Temel kararlar (kilitli)
 
-- **Kalite = etiket, statü ≠ kalite.** İade edilen top **her zaman** Hazır Depo'ya
-  (`RollStatus.WAREHOUSE`) iner — tıpkı Tambur çıktısı gibi. Sistemde "2. kalite
-  rafı" diye ayrı bir statü fiilen yok; kalite farkı yalnız `Roll.qualityGrade`
-  etiketinde yaşar (seed: 1.KALITE/A1/FIRE → hepsi WAREHOUSE). İade bu kurguyla
-  birebir tutarlı davranır.
+- **Kalite = etiket; statü varsayılan WAREHOUSE, kalite override ederse değişir.**
+  İade edilen top **varsayılan olarak** Hazır Depo'ya (`RollStatus.WAREHOUSE`) iner —
+  tıpkı Tambur çıktısı gibi. Ancak `returnGradingEnabled` açık + personel kalite
+  override ederse top `QualityGrade.returnTargetStatus`'a iner (FİRE→`SCRAP`,
+  A1→`A1_STOCK`, 1.Kalite→`WAREHOUSE`; kolon null → WAREHOUSE). Bu kolon Tambur'un
+  `targetStatus`'undan KASTEN AYRIDIR (Tambur seed'i hep WAREHOUSE, dokunulmaz).
+  Flag kapalıyken override yok sayılır → hep WAREHOUSE. Kalite farkı yalnız
+  `Roll.qualityGrade` etiketinde yaşar; uygulanan statü `RollReturn.appliedStatus`'a
+  snapshot'lanır.
 - **Sevk muhasebesine DOKUNULMAZ.** İade defteri `OrderLine.shippedQty` /
-  `ShipmentAllocation`'ı değiştirmez → sipariş `COMPLETED` kalır, yeniden sevk
+  `SackAllocation`'ı değiştirmez → sipariş `COMPLETED` kalır, yeniden sevk
   kuyruğuna girmez. İzlenebilirlik tamamen ayrı `RollReturn` defterinden gelir.
 - **Sipariş atfı = personel seçer.** Model fungible (top↔sipariş bağı yok); top
   yalnız geldiği sevkiyatı bilir. İade ekranında o sevkiyatın **spec'e uyan**
   siparişleri listelenir; tek aday varsa otomatik seçili gelir, yoksa boş bırakılır
   (yalnız ürün+müşteri+sevkiyat tutulur).
-- **İade nedeni hem seçilir hem yazılır, ikisi de opsiyonel.** Yönetilebilir
-  katalog (`ReturnReason`, admin CRUD) + serbest metin; ikisi de boş bırakılabilir.
+- **İade nedeni ZORUNLU — katalog VEYA serbest metin.** Yönetilebilir katalog
+  (`ReturnReason`, admin CRUD) + serbest metin; **en az biri dolu olmalı** — ikisi de
+  boşsa 400 "İade nedeni gerekli" (nedensiz iade kalite geri-besleme verisini
+  değersizleştirir). Aynı zorunluluk `editReturn`'de de korunur.
 - **Derecelendirme yetkisi Electron'dan açılır/kapanır** (`returnGradingEnabled`
   feature flag). Kapalıyken personel kalite **belirtemez** (buton görünmez,
   backend gönderilen override'ı yok sayar) — top çıktığı kaliteyle döner.
@@ -69,7 +76,7 @@ createdAt / updatedAt
 > Performans: küçük master-data, yalnız İade ekranı açılınca okunur, sıcak
 > tablolara dokunmaz → `QualityGrade`/`Color` ile aynı, etki yok.
 
-### 3.2 `RollReturn` (iade defteri — izlenebilirliğin omurgası, append-only)
+### 3.2 `RollReturn` (iade defteri — izlenebilirliğin omurgası; düzeltilebilir/iptal edilebilir)
 
 ```
 id            uuid
@@ -84,14 +91,29 @@ colorId       String?
 width         Decimal?
 qty           Decimal                // iade anındaki currentQty
 
-// Neden + not (hepsi opsiyonel)
+// Neden + not — şema nullable ama SERVİS reason'ı zorunlu tutar (reasonId||reasonText)
 reasonId      String?                // ReturnReason FK
 reasonText    String?                // serbest metin
 note          String?                // teslim alan personel notu
 
 qualityGradeId String?               // yalnız personel override ettiyse
 receivedById  String
+
+// İade anında topa UYGULANAN statü (WAREHOUSE/A1_STOCK/SCRAP) — iptal guard'ı bunu okur
+appliedStatus RollStatus?            // null → legacy/WAREHOUSE
+
+// İade öncesi snapshot — iptal (geri al) topu bunlarla eski haline döndürür
+prevSackId         String?
+prevQualityGrade   String?
+prevQualityGradeId String?
+
+// İptal (yanlış iade kabulü geri alındı) — sebeple birlikte
+cancelledAt   DateTime?
+cancelReason  String?
+cancelledById String?
+
 createdAt     DateTime @default(now())
+updatedAt     DateTime @updatedAt    // editReturn/cancelReturn mutasyonları için
 
 @@index([orderId])
 @@index([customerId, createdAt])
@@ -103,9 +125,10 @@ createdAt     DateTime @default(now())
 ### 3.3 `Roll` değişikliği
 
 **Şema değişikliği yok.** İade işlemi mevcut alanları günceller:
-`SHIPPED → WAREHOUSE`, `shipmentId`/`sackId` = null, override varsa
-`qualityGrade(+Id)`. İade notu Roll'a denormalize edilmez — `RollReturn`'den
-(en güncel) join ile gösterilir.
+`SHIPPED → appliedStatus` (override yoksa `WAREHOUSE`; kalite override'ında
+`returnTargetStatus` → SCRAP/A1_STOCK/WAREHOUSE), `shipmentId`/`sackId` = null,
+override varsa `qualityGrade(+Id)`. İade notu Roll'a denormalize edilmez —
+`RollReturn`'den (en güncel) join ile gösterilir.
 
 ### 3.4 Feature flag
 
@@ -117,31 +140,41 @@ createdAt     DateTime @default(now())
 
 ## 4. Akış (Mobil "İade Girişi")
 
-1. **QR okut** → `GET /api/returns/lookup/:barcode`:
-   - Top yoksa / `SHIPPED` değilse → 400 (Türkçe mesaj).
+1. **QR okut** → `GET /api/returns/lookup?barcode=` (query param, path değil):
+   - Top yoksa → 404; `SHIPPED` değilse veya sevkiyat bağı yoksa → 400 (Türkçe mesaj).
    - Döner: top (ürün/renk/en/metraj/mevcut kalite) + sevkiyat + **aday siparişler**
-     (sevkiyatın spec'e uyan siparişleri) + `returnGradingEnabled`.
-2. **Ekran:** sipariş seçici (tek aday otomatik) · neden seçici (katalog, opsiyonel)
-   · neden yazısı (opsiyonel) · teslim alan notu (opsiyonel) · kalite (flag açıksa,
-   **varsayılan kapalı**; açılırsa QualityGrade seç).
+     (sevkiyatın spec'e uyan, iptal-değil siparişleri) + `returnGradingEnabled`.
+2. **Ekran:** sipariş seçici (tek aday otomatik) · neden seçici (katalog) · neden
+   yazısı · teslim alan notu (**neden seçici VEYA neden yazısı zorunlu**) · kalite
+   (flag açıksa, **varsayılan kapalı**; açılırsa QualityGrade seç).
 3. **Onayla** → `POST /api/returns` → tek transaction:
-   - `RollReturn` yaz (spec snapshot + neden + not + seçilen sipariş)
-   - Roll: `SHIPPED → WAREHOUSE`, `shipmentId`/`sackId` = null; flag açık + override
-     verildiyse `qualityGrade(+Id)` güncelle (flag kapalıysa override yok sayılır)
+   - Roll: koşullu flip `SHIPPED → appliedStatus` (override yoksa `WAREHOUSE`; kalite
+     override'ında `returnTargetStatus` → SCRAP/A1_STOCK/WAREHOUSE), `shipmentId`/`sackId`
+     = null; flag açık + override verildiyse `qualityGrade(+Id)` güncelle (flag kapalıysa
+     override yok sayılır) — `count===0` → 409 (çift iade)
+   - `RollReturn` yaz (spec snapshot + neden + not + seçilen sipariş + appliedStatus + prev-snapshot)
    - `AuditService.log`
-   - **`shippedQty` / allocation'a dokunulmaz** → sipariş kapalı kalır.
+   - **`shippedQty` / SackAllocation'a dokunulmaz** → sipariş kapalı kalır.
 
 ## 5. Backend
 
-### 5.1 `return.service.ts`
+### 5.1 `return.service.ts` (6 metot)
 - `lookupForReturn(barcode)` — top + sevkiyat + aday siparişler + flag.
-- `createReturn(input, userId)` — transaction (yukarıdaki adımlar).
-- `listReturns(filters)` — rapor (tarih/müşteri/ürün/sipariş/neden + toplam).
+- `createReturn(input, userId)` — transaction (yukarıdaki adımlar; neden zorunlu, koşullu flip).
+- `listReturns(req)` — rapor (tarih/müşteri/ürün/sipariş/neden + toplam; cursor/array, `?cancelled=active|cancelled|all`).
+- `getReturnById(id)` — tek iade kaydı detayı (mobil geçmiş sheet'i).
+- `cancelReturn(id, reason, userId)` — geri al: top iade öncesi haline (SHIPPED + eski
+  sevkiyat/çuval/kalite) döner; recency-guard + koşullu `updateMany` + prevSackId null-fix.
+- `editReturn(id, input, userId)` — yalnız defter alanları (neden/not); statü/sevkiyat/kalite
+  değişmez, iptal edilmiş kayıt düzeltilemez, neden zorunluluğu korunur.
 
 ### 5.2 `ReturnReason` CRUD — `BaseController` + `BaseService` (`searchFields`).
 
 ### 5.3 Controller + routes + yetki
-- `/api/returns` (lookup, create, list), `/api/return-reasons` (CRUD).
+- `/api/returns`: `GET /lookup?barcode=` · `POST /` (create) · `GET /` (list) ·
+  `GET /:id` (detay) · `PATCH /:id` (düzelt) · `POST /:id/cancel` (iptal).
+  `/api/return-reasons` (CRUD). Yetki: `requireAnyPermission(...)` — yazan uçlar
+  `return:write`+`mobile:iade`, okuyan uçlar (`GET /`, `GET /:id`) `return:read`+`return:write`+`mobile:iade`.
 - Yeni permission: `return:read`, `return:write`, mobil `mobile:iade`.
   ReturnReason CRUD `return:write` altında. **seed.ts + canlı DB INSERT.**
 - `app.ts`'e route mount.
@@ -174,11 +207,15 @@ createdAt     DateTime @default(now())
   `RollReturn`'ü (not + neden + teslim alan) döndürür. tsc/eslint temiz; canlı
   smoke: lookup COMPLETED siparişi aday döndürdü, create sonrası top WAREHOUSE +
   `shippedQty` DEĞİŞMEDİ + sipariş COMPLETED kaldı (invariant geçti).
-  > NOT: F1'de tek karar revize edildi — kalite/statü AYRILMIYOR: sistem zaten
-  > tüm kaliteyi (1.KALITE/A1/FIRE) WAREHOUSE'a koyuyor (seed targetStatus hepsi
-  > WAREHOUSE), kalite yalnız `Roll.qualityGrade` etiketinde. İade de bu yüzden
-  > HEP WAREHOUSE'a iner; "B" (kaliteye göre ayrı raf) fabrika-geneli ayrı bir
-  > karar olur, iadeye özel uygulanmadı.
+  > NOT: F1'de kalite/statü ilk başta AYRILMADI — sistem tüm kaliteyi
+  > (1.KALITE/A1/FIRE) WAREHOUSE'a koyuyordu (Tambur seed'inde `targetStatus` hepsi
+  > WAREHOUSE), kalite yalnız `Roll.qualityGrade` etiketindeydi; iade de bu yüzden
+  > başlangıçta HEP WAREHOUSE'a iniyordu. **Bu karar sonradan revize edildi**
+  > (migration `20260609203650_return_quality_shelf`): iadeye özel bir raf kolonu
+  > `QualityGrade.returnTargetStatus` eklendi (Tambur `targetStatus`'undan AYRI —
+  > seed: FİRE→SCRAP, A1→A1_STOCK, 1.KALITE→WAREHOUSE). Artık `returnGradingEnabled`
+  > açık + personel kalite override ederse iade topu bu kolona göre iner; flag kapalı
+  > veya override yoksa hâlâ WAREHOUSE (header/§2'deki güncel davranış).
 - **F2 — Mobil İade Girişi: ✅ DONE (2026-06-05).** `mobil/src/screens/Modules/IadeGirisi/IadeGirisiScreen.tsx`
   (QR okut → top + aday sipariş seçici + neden seçici/serbest metin + not + flag-aware
   kalite seçici → İade Al) + `services/return.service.ts` (lookup/create/listReasons).

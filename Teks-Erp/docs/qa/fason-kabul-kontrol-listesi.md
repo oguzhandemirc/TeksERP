@@ -73,4 +73,6 @@ görülürse sürüm yayınlanmaz; geliştiriciye senaryo numarası + ekran gör
   `npx tsx scripts/run-all-tests.ts` ile hepsi koşar.
 - Mobil (jest): `mobil/src/screens/Modules/FasonKabul/newRolls.helper.test.ts` +
   `receivePayload.helper.test.ts` — `npx jest src/screens/Modules/FasonKabul`.
-- Kök neden + fix detayı: hafıza `project_fason_partial_receive_overcreate`.
+- Kök neden + fix detayı: bu listenin başındaki "Neden bu liste var" notu +
+  `scripts/test_fason_partial_receive_overcount.ts` başlık yorumu (A=SAHA BUG / B=FIX,
+  ayrıca C=MERGE, D=SPLIT, E=3 TOP birikim, F=son adım final, G=validation senaryoları).

@@ -152,7 +152,7 @@ const total = q.data?.pages[0]?.pagination.totalEstimate ?? 0; // yaklaşık
 ## Ortak Kurallar
 
 - UUID primary key, `createdAt`/`updatedAt` her modelde
-- Soft delete: `isActive: false` veya `RollStatus.SCRAP`
+- Soft delete: `isActive: false` veya `RollStatus.CANCELLED` (`SCRAP` = gerçek fire kararı, arşivleme değil)
 - Her CUD → backend zaten `AuditService.log()` çağırır; mobil ekstra log yazmaz
 - Validation hataları Türkçe
 - `types/` klasöründe backend modelleriyle uyumlu TypeScript tipleri tanımla

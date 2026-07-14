@@ -9,7 +9,7 @@ kapalıyken bugünkü komut yolu bayt-aynı çalışır, o yüzden bu adımlar �
 > PPLA grafik spec `argox-ppla-spec` memory.
 
 ## 0. Ön koşul
-- [ ] Backend + Electron güncel branch'te çalışıyor (`feat/raster-isolated` main'e entegre edildi).
+- [ ] Backend + Electron güncel branch'te çalışıyor (`feat/raster-label` main'e merge edildi).
 - [ ] `Teks-Erp/assets/fonts/` DejaVuSans.ttf + DejaVuSans-Bold.ttf mevcut (prod'da installer `assets\` kopyalar).
 - [ ] Pilot yazıcı **PPLB (Eltron/EPL2)** veya **ZPL (Zebra)** ile başla — PPLA'yı §5'e kadar açma.
 
@@ -31,7 +31,7 @@ kapalıyken bugünkü komut yolu bayt-aynı çalışır, o yüzden bu adımlar �
 - [ ] Aynı etiketin **BMP önizlemesini** (RollLabelDialog / CanvasPreview) basılı etiketle
       fiziksel bindir (ışık masası/fotoğraf). Konum sapması **≤1mm**, font boyutu birebir bekle.
 - [ ] Kenar kırpılması varsa cihaz medyası (`labelWidthMm`/`labelHeightMm`/`labelDpi`) doğru mu kontrol et.
-- [ ] **Türkçe glif**: "ĞÜŞİÖÇı" içeren alan gerçek basılıyor mu (asciiFold kalktı).
+- [ ] **Türkçe glif**: "ĞÜŞİÖÇı" içeren alan gerçek basılıyor mu (raster yolunda asciiFold uygulanmaz — `raster-text.ts`; native komut yolu asciiFold'u hâlâ kullanır).
 
 ## 5. Barkod okunabilirliği
 - [ ] Code128 `mw`=1..4 her kademede + QR `scale` uçlarında sahadaki okuyucuyla

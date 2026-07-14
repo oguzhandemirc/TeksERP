@@ -31,7 +31,7 @@ src/pages/<Module>/
 ├── schema.ts                     # zod schema + defaults
 ├── columns.tsx                   # ColumnDef<T>[]
 ├── <Module>FormDialog.tsx        # EntityFormDialog wrapper
-└── <Module>Page.tsx              # Orkestre — useDataTable + useCrudMutations
+└── <Module>Page.tsx              # <CrudPage<T>> sarmalayıcısını props ile yapılandırır
 ```
 
 Ardından şunları **güncelle**:
@@ -41,9 +41,9 @@ Ardından şunları **güncelle**:
 ## Kurallar
 
 - Dosya başına 300 satır limiti. Form 5+ alan içeriyorsa form sub-bileşenlere böl.
-- `<Module>Page.tsx` sadece **orkestrasyondur**: state, mutation, dialog açma. Tablo, form, kolon mantığı oraya yazma.
+- `<Module>Page.tsx` **orkestrasyonu yazmaz** — onu `<CrudPage<T>>` (`components/layout/CrudPage.tsx`) yapar (state, mutation, dialog açma, tablo, silme onayı). Sayfa yalnızca props verir. Tablo/form/kolon mantığını sayfaya gömme.
 - `useCrudMutations` mutation'ında `onError` toast EKLEME — `apiClient` zaten gösteriyor.
-- `any` yasak. Backend tipi belirsizse önce `Teks-Erp/prisma/schema.prisma` veya `React/src/types/models.ts`'ten doğrula.
+- `any` yasak. Backend tipi belirsizse önce `Teks-Erp/prisma/schema.prisma` veya `Electron/src/types/`'ten doğrula.
 - Yeni paket eklemen gerekiyorsa **önce kullanıcıdan onay al**. Allowed packages tablosu `Electron/CLAUDE.md`'de.
 - Sidebar'a doğrudan satır ekleme — Tanımlar hub'ından geçer.
 
@@ -86,7 +86,7 @@ export const <module>Columns: ColumnDef<<Module>>[] = [ /* sütunlar */ ];
 `EntityFormDialog<<Module>FormValues>` wrap'i — her alan için `<FormField>` + uygun input.
 
 ### `<Module>Page.tsx`
-`useDataTable` + `useCrudMutations` + `DataTable` + `<Module>FormDialog` + `ConfirmDialog`. `pages/Users/UsersPage.tsx`'i referans olarak izle.
+`<CrudPage<T>>` (`components/layout/CrudPage.tsx`) sarmalar — `useDataTable` / `useCrudMutations` / `DataTable` / `ConfirmDialog` / `PermissionGate` orkestrasyonu bu bileşende. Sayfa yalnızca props geçer: `title`, `service`, `columns`, `queryKey`, `writePermission`, `renderForm={({...}) => <<Module>FormDialog .../>}`. `pages/DefectTypes/DefectTypesPage.tsx`'i referans olarak izle.
 
 ## Doğrulama
 

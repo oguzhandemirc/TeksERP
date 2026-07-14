@@ -7,7 +7,7 @@
 > `Teks-Erp/prisma/schema.prisma` (Shipment / Sack / SackAllocation),
 > `Teks-Erp/src/services/shipping.service.ts` (`computeSackAllocations` / `writeShipmentAllocationsTx`,
 > `Teks-Erp/src/services/helpers/allocation.helper.ts:distributeSacksToLines` üzerinden sevk-anı tahsis),
-> `Teks-Erp/scripts/test_sack_pool_lifecycle.ts` (yaşam döngüsü testi, 33 kontrol).
+> `Teks-Erp/scripts/test_sack_pool_lifecycle.ts` (yaşam döngüsü testi, A–K senaryoları, ~40+ kontrol).
 
 ## Neden değişti
 

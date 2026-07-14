@@ -1,9 +1,10 @@
 # TeksERP — API Test Rehberi (Swagger / Postman)
 
-> **⚠️ Bu rehber çuval-havuzu/parti/kart/iade redesign'larından (2026-07) ÖNCESİNE dayanır;**
-> endpoint + tablo haritası (§2) kısmen bayat olabilir. Kanonik uç listesi için **canlı Swagger**
-> (`/api-docs`) + `src/routes/` referans alınmalı; akış mantığı büyük ölçüde geçerlidir.
-> Bu rehber, TeksERP API'sini uçtan uca test etmenizi sağlar.
+> **⚠️ Kanonik uç listesi için her zaman canlı Swagger (`/api-docs`) + `src/routes/` referans alınmalı.**
+> Bu rehber 2026-07 redesign'larına göre güncellendi (çuval-havuzu / parti / kart-iş-emriyle-doğar / kod-format /
+> "her rota final üretir"), fakat Senaryo D'nin üretim akışı **jenerik `/api/production/step-action` yerine**
+> istasyon-özel uçlara dağılmıştır (traveler-card scan, `/api/kursun-qc/*`, `/api/subcontractor/*`) — detay için
+> ilgili route dosyalarına bakın. Bu rehber, TeksERP API'sini uçtan uca test etmenizi sağlar.
 > Her adımda hangi endpoint'i çağıracağınız, hangi tablo etkilenecek ve dönen yanıttan neyi sonraki adıma taşıyacağınız açıklanmıştır.
 
 ---
@@ -47,19 +48,13 @@ npm run dev
 
 ### Test Kullanıcıları
 
-| Kullanıcı | Şifre | Hedef Rol | Seed Sonrası Yetki Durumu |
+| Kullanıcı | Şifre | Rol | Seed Sonrası Yetki Durumu |
 |-----------|-------|-----|--------|
-| `admin` | `123123` | Admin | ✅ **Tam yetki** — tüm 42 permission seed'de atanıyor |
-| `mehmet.planlama` | `test123` | Planlama Şefi (hedef) | ⚠️ **Yetkisiz başlar** — login olur ama her endpoint'te `403` alır |
-| `ali.operator` | `test123` | Üretim Operatörü (hedef) | ⚠️ **Yetkisiz başlar** |
-| `ayse.kalite` | `test123` | Kalite Kontrol (hedef) | ⚠️ **Yetkisiz başlar** |
-| `fatma.satis` | `test123` | Satış Temsilcisi (hedef) | ⚠️ **Yetkisiz başlar** |
-| `ali.kursun` | `test123` | Mobil — Kurşun/KK2 (hedef) | ⚠️ **Yetkisiz başlar** |
-| `ahmet.depo` | `test123` | Mobil — Depo/Tambur (hedef) | ⚠️ **Yetkisiz başlar** |
+| `admin` | `123123` | Admin | ✅ **Tam yetki** — tüm ~55 permission seed'de atanıyor |
 
-> ⚠️ **ÖNEMLİ:** Yalnız `admin` seed'de yetkilendiriliyor. Diğer kullanıcılar yetkisiz başlar — admin UI'sından (`/admin/users/:id/permissions`) tek tek atanmalı. Bu bilinçli tasarım: production'da rol atamaları runtime yapılır. `prisma/seed.ts:163-173` ve `seed.ts:185` notlarına bakın.
+> ⚠️ **ÖNEMLİ (2026-07-03):** Seed artık **yalnızca `admin` kullanıcısını** oluşturur — ek test kullanıcıları (`mehmet.planlama`, `ali.operator` vb.) seed'den kaldırıldı. RBAC/permission testleri için önce `admin` ile login olup admin UI'sından (`/admin/users` + `POST /api/admin/users/:id/permissions`) yeni kullanıcı + izin atayın. Bu bilinçli tasarım: production'da roller runtime atanır. Kaynak: `prisma/seed.ts` başlık bloğu.
 >
-> **Test ipucu:** Çoğu testi `admin` ile koşturun. Permission/RBAC testleri için belirli bir test kullanıcısına ihtiyacınız varsa, önce `admin` ile login olup `POST /api/admin/users/:id/permissions` ile atama yapın.
+> **Test ipucu:** Çoğu testi `admin` ile koşturun. Permission/RBAC senaryosu gerekiyorsa `admin` ile bir test kullanıcısı yaratıp izinleri tek tek atayın.
 
 ---
 
@@ -72,7 +67,7 @@ Her endpoint'in hangi tabloyu etkilediğini bilmek, hata ayıklama ve veri doğr
 | Prisma Model | PostgreSQL Tablo | Açıklama |
 |---|---|---|
 | `User` | `users` | Kullanıcı hesapları |
-| `Permission` | `permissions` | İzin kodları (`order:read`, `roll:write`, vb. — 42 adet) |
+| `Permission` | `permissions` | İzin kodları (`order:read`, `roll:write`, vb. — ~55 adet; kanonik: `prisma/seed.ts`) |
 | `UserPermission` | `user_permissions` | Kullanıcıya doğrudan atanan izinler (rol modeli yok) |
 | `PermissionTemplate` | `permission_templates` | Tekrar kullanılabilir izin setleri (admin UI'dan atanır) |
 | `PermissionTemplateItem` | `permission_template_items` | Template ↔ Permission (N:N) |
@@ -90,55 +85,59 @@ Her endpoint'in hangi tabloyu etkilediğini bilmek, hata ayıklama ve veri doğr
 | `Order` | `orders` | Siparişler (müşteri siparişi) | `POST /api/orders` |
 | `OrderLine` | `order_lines` | Sipariş kalemleri (hangi ürün, ne kadar) | `POST /api/orders` (nested) |
 | `Roll` | `rolls` | Toplar — kumaş birimleri, barkodlu | `POST /api/rolls/initial-entry` |
-| `WorkOrder` | `work_orders` | İş emirleri (parti) | `POST /api/work-orders` |
+| `WorkOrder` | `work_orders` | İş emirleri (`workOrderNumber` = İE…) | `POST /api/work-orders` |
 | `WorkOrderStep` | `work_order_steps` | İş emri rota adımları | `POST /api/work-orders` (nested) |
-| `WorkOrderToOrderLine` | `work_order_to_order_lines` | İş emri ↔ Sipariş bağlantısı (N:N) | `POST /api/work-orders` |
-| `RollError` | `roll_errors` | Top üzerindeki hatalar (leke, yırtık) | `POST /api/production/report-error` |
-| `CurrentAccount` | `current_accounts` | Cari hesaplar (gelecek modül) | — |
-| `MachineLog` | `machine_logs` | Makine durum kayıtları | — |
+| `WorkOrderToOrderLine` | `work_order_to_order_lines` | İş emri ↔ Sipariş kalemi bağlantısı (N:N) | `POST /api/work-orders` |
+| `Batch` | `batches` | Parti (P… — WorkOrder'dan AYRI; 2026-07-13 parti modeli) | — |
+| `TravelerCard` | `traveler_cards` | Refakat kartı (WO açılışında doğar, `workOrderId` @unique) | `POST /api/work-orders` (otomatik) |
+| `RollError` | `roll_errors` | Top üzerindeki hatalar (leke, yırtık — nokta model) | `POST /api/kursun-qc/report-error` |
 | `SystemLog` | `system_logs` | Denetim izi (audit trail) — otomatik | Her CUD işleminde otomatik |
+
+> 📌 `CurrentAccount` ve `MachineLog` modelleri şemadan **kaldırıldı** (MachineLog 2026-05-25). Eski rehberlerde geçebilir.
 
 ### Roll (Top) Yaşam Döngüsü
 
 ```
-STOCK → IN_PRODUCTION → AT_SUBCONTRACTOR → RETURNED_FROM_SUBCONTRACTOR ┐
-                                                                       ↓
-                                              ← IN_PRODUCTION (TAMBUR adımı) ←
-                                              ↓
-                                          TAMBUR_CONSUMED (parent retire)
-                                              ↓
-                                  child rolls → WAREHOUSE | A1_STOCK | SCRAP
+STOCK → IN_PRODUCTION → [opsiyonel: AT_SUBCONTRACTOR → (kabulde parent SUBCONTRACTOR_CONSUMED,
+                         yeni açık-kumaş Roll doğar) → IN_PRODUCTION] →
+   Rotanın SON adımı finalize → final ürün:
+     • Tambur son adımsa → parent TAMBUR_CONSUMED + child'lar → WAREHOUSE | A1_STOCK | SCRAP
+     • Tambur-dışı son adımsa → açık kumaş doğrudan → WAREHOUSE (form=ACIK)
                                               ↓
                                   (sevkiyat: dispatch) → SHIPPED
 ```
 
+> 📌 **"Her rota final üretir" (2026-07-13):** Tambur zorunlu DEĞİL — rota Kurşun/QC2 veya fason ile de bitebilir; son adımın çıktısı her zaman final ürün. `PRODUCED` statüsü enum'dan kaldırıldı. `Roll.qualityGrade` **nullable** (kaliteyi yalnız kalite istasyonları belirler).
+
 | Status | Anlam | Nasıl Geçilir? |
 |--------|-------|----------------|
 | `STOCK` | Depoda, henüz üretime girmemiş | `POST /api/rolls/initial-entry` ile oluşur |
-| `IN_PRODUCTION` | Üretim hattında, bir iş emrine bağlı | `PATCH /api/work-orders/:id/attach-rolls` ile |
+| `IN_PRODUCTION` | Üretim hattında, bir iş emrine bağlı | İş emrine top bağlanınca (attach — HTTP ucu kaldırıldı, `attachRolls` servis metodu quick-start/seed'den çağrılır) |
 | `AT_SUBCONTRACTOR` | Fasonda işlem görüyor | `POST /api/subcontractor/dispatch` ile |
-| `RETURNED_FROM_SUBCONTRACTOR` | Fasondan döndü, bir sonraki istasyona hazır | `POST /api/subcontractor/receive` ile |
+| `RETURNED_FROM_SUBCONTRACTOR` | Fason dönüşü depo statüsü (enum'da mevcut; güncel `receive()` orijinali `SUBCONTRACTOR_CONSUMED` yapar, bu statüyü set etmez) | — |
 | `TAMBUR_CONSUMED` | Tambur'da bölündü, tüm metraj child top'larda | `POST /api/tambur/finalize` (parent) |
-| `WAREHOUSE` | Tambur child top — depoya kaldırıldı, satışa/sevke hazır | `POST /api/tambur/finalize` (1.KALITE child) |
-| `A1_STOCK` | 2. kalite satılabilir stok | `POST /api/tambur/finalize` (A2 child) |
-| `SCRAP` | Fire / ıskarta | `POST /api/tambur/finalize` (FIRE child) |
-| `PRODUCED` | Roll, son üretim adımını bitirdi ama Tambur'dan geçmedi (tek-adımlı WO veya rota Tambur içermiyor) | `POST /api/production/step-action` (FINISH, son step) |
-| `SHIPPED` | Çuval sevkiyatı kamyona yüklendi — depodan çıktı | Sevkiyat DISPATCH'te (WAREHOUSE→SHIPPED) |
+| `WAREHOUSE` | Final ürün — depoya kaldırıldı, satışa/sevke hazır (varsayılan final statü) | Rotanın **son adımı** finalize eder (Tambur child veya Tambur-dışı son adım açık kumaşı) |
+| `A1_STOCK` | 2. kalite satılabilir stok | `QualityGrade.targetStatus` override ile |
+| `SCRAP` | Fire / ıskarta (gerçek fire kararı) | `POST /api/tambur/finalize` (FIRE child) |
+| `SUBCONTRACTOR_CONSUMED` | Fason kabulünde kapandı — yeni açık-kumaş Roll'ları receipt üzerinden doğdu | `POST /api/subcontractor/receive` (parent retire) |
+| `SHIPPED` | Çuval sevkiyatı DISPATCH edildi — depodan çıktı | Sevkiyat DISPATCH'te (WAREHOUSE→SHIPPED) |
 
 ### Sipariş Yaşam Döngüsü
 
 ```
-PENDING → APPROVED → IN_PRODUCTION → PARTIAL_SHIPPED → COMPLETED
-                                                        ↗
-                                              CANCELLED
+PENDING → APPROVED → PARTIAL_SHIPPED → COMPLETED
+                  ↘
+                   CANCELLED
 ```
+
+> 📌 `OrderStatus` enum: `PENDING | APPROVED | PARTIAL_SHIPPED | COMPLETED | CANCELLED` — ayrı bir `IN_PRODUCTION` sipariş statüsü **yoktur** (üretim `WorkOrder` domain'inde izlenir).
 
 ---
 
 ## 3. Adım 0 — Giriş ve Token Alma
 
 **Endpoint:** `POST /api/auth/login`
-**Tablo:** `users`, `roles`, `permissions` (sadece okuma)
+**Tablo:** `users`, `user_permissions`, `permissions` (sadece okuma — rol tablosu YOK)
 
 ```json
 // İstek
@@ -194,9 +193,10 @@ Bu tablolar sıfırdan oluşturulur. Ürün ve müşteri olmadan hiçbir iş yap
 | Değer | Açıklama |
 |-------|----------|
 | `YARN` | İplik |
-| `WARP` | Çözgü |
 | `FABRIC` | Kumaş (ham/boyalı ayrımı `colorId == null` → ham, dolu → boyalı) |
 | `CONSUMABLE` | Sarf malzeme |
+
+> 📌 `enum ItemType` yalnız üç değer içerir: `YARN | FABRIC | CONSUMABLE`. (Fabrika çözgü/dokuma yapmadığı için `WARP` değeri **yok**.)
 
 > 📌 Ham/boyalı kumaş için ayrı `itemType` yok — tek `FABRIC` enum'u kullanılıyor.
 > Roll seviyesinde `colorId` doluluğuna bakılarak "ham" / "işlenmiş" ayrımı yapılıyor.
@@ -217,9 +217,9 @@ Bu tablolar sıfırdan oluşturulur. Ürün ve müşteri olmadan hiçbir iş yap
 }
 ```
 
-**`type` değerleri** (`prisma/schema.prisma → enum CompanyType`): `CUSTOMER` | `SUPPLIER` | `SUBCONTRACTOR` | `DYEHOUSE`
+**`type` değerleri** (`prisma/schema.prisma → enum CompanyType`): `CUSTOMER` | `SUPPLIER`
 
-> 📌 **Fason firmalar `Customer` değil ayrı tabloda** — `POST /api/subcontractors` endpoint'i kullanılır (bkz. fason akışı bölümü). `CompanyType.SUBCONTRACTOR` enum değeri hâlâ şemada duruyor (legacy) ama yeni kayıt için `Subcontractor` modeli kullanılır.
+> 📌 **Fason firmalar `Customer` değil ayrı tabloda** — `POST /api/subcontractors` endpoint'i kullanılır (bkz. fason akışı bölümü). `CompanyType` enum'u yalnız `CUSTOMER | SUPPLIER` içerir; eski `SUBCONTRACTOR`/`DYEHOUSE` değerleri kaldırıldı — fason/boyahane artık ayrı `Subcontractor` modeliyle temsil edilir.
 >
 > 📌 Yanıttan dönen `id` değerini not edin → Sipariş oluştururken `customerId` olarak kullanacaksınız.
 
@@ -249,28 +249,31 @@ Mal kabul noktasında hammadde topları sisteme girilir.
 {
   "itemId": "A1'den aldığınız item ID",
   "initialQty": 500,
-  "weightKg": 62.5,
-  "qualityGrade": "1.KALITE"
+  "weightKg": 62.5
 }
 ```
+
+> 📌 **`qualityGrade` KK1 girişinde opsiyoneldir** (`Roll.qualityGrade` nullable) — kaliteyi normalde kalite istasyonları (KK2/Kurşun, Tambur) belirler. Verilirse `QualityGrade` kataloğundaki bir kod olmalı.
+> 📌 **`weightKg`** admin ayarıyla KK1'de kapatılabilir (default kapalı → opsiyonel).
 
 **Yanıt:**
 ```json
 {
   "success": true,
   "data": {
-    "id": "uuid...",           // ← ROLL_ID — sonraki adımlarda kullanılacak
-    "barcode": "TEKS-20260415-A1B2C3D4",  // ← Otomatik üretilir
+    "id": "uuid...",        // ← ROLL_ID — sonraki adımlarda kullanılacak
+    "barcode": "T150726H0001",  // ← Otomatik üretilir (ham giriş → tip H)
     "itemId": "...",
     "initialQty": 500,
-    "currentQty": 500,         // Başlangıçta initialQty ile aynı
+    "currentQty": 500,      // Başlangıçta initialQty ile aynı
     "status": "STOCK",
-    "qualityGrade": "1.KALITE"
+    "form": "TOP",
+    "qualityGrade": null
   }
 }
 ```
 
-> 📌 **Not:** Barkod otomatik üretilir, formatı: `TEKS-YYYYMMDD-XXXXXXXX`
+> 📌 **Not:** Barkod otomatik üretilir, formatı `T{GGAAYY}{H|F}{NNNN}` (örn. `T150726H0001`) — ayraçsız, `H`=ham/işlenecek, `F`=final; gün+tip başına 0001'den artar. Kaynak: `helpers/roll-barcode.helper.ts`.
 > 📌 **İki top oluşturun** — uçtan uca test için en az 2 top gerekli.
 
 ### B2: Barkod ile Sorgulama (El Terminali)
@@ -279,7 +282,7 @@ Mal kabul noktasında hammadde topları sisteme girilir.
 **Tablo:** `rolls` (okuma)
 
 ```
-GET /api/rolls/barcode/TEKS-20260415-A1B2C3D4
+GET /api/rolls/barcode/T150726H0001
 ```
 
 ### B3: Top Detayı (ID ile)
@@ -296,7 +299,7 @@ GET /api/rolls?filter[status]=IN_PRODUCTION       → Üretimdeki toplar
 GET /api/rolls?filter[status]=WAREHOUSE           → Tambur sonrası depoda
 GET /api/rolls?filter[status]=ALL                 → Tüm statüler (filter atla)
 GET /api/rolls?filter[statusIn]=STOCK,WAREHOUSE   → Çoklu status (virgüllü liste)
-GET /api/rolls?search=TEKS-20260415               → Barkod ile arama
+GET /api/rolls?search=T150726                     → Barkod ile arama
 ```
 
 > ⚠️ **Önemli (v3):** `GET /api/rolls` filtre yokken **sadece STOCK** döner — bu **iş kuralı** (`inventory.service.ts:findAllRolls` default).
@@ -328,7 +331,7 @@ GET /api/rolls?search=TEKS-20260415               → Barkod ile arama
 }
 ```
 
-> 📌 **`orderNumber` server tarafında otomatik üretilir** (`YYYYMMDD-N` formatında). İstemci gönderse bile yok sayılır. Yanıttan dönen değeri kullanın.
+> 📌 **`orderNumber` server tarafında otomatik üretilir** (`SIP`+GGAAYY+NNNN — örn. `SIP1507260001`). İstemci gönderse bile yok sayılır. Yanıttan dönen değeri kullanın.
 > ⚠️ **`customerId` ve `itemId` veritabanında var olmalıdır.** Swagger'ın otomatik doldurduğu placeholder UUID'leri kullanmayın!
 > ⚠️ **Müşteri aktif olmalı** (`isActive: true`); pasif müşteriye sipariş açılamaz (v3, BUG-07).
 > ⚠️ **`deadline` `orderDate`'ten önce olamaz** (v3, BUG-08). `orderDate` verilmediyse şu anki zaman referans alınır.
@@ -336,8 +339,8 @@ GET /api/rolls?search=TEKS-20260415               → Barkod ile arama
 
 **Yanıttan not edin:**
 - `data.id` → `ORDER_ID`
-- `data.orderNumber` → autogen (örn. `20260524-1`)
-- `data.lines[0].id` → `ORDER_LINE_ID` (iş emrine bağlamak ve tahsis için)
+- `data.orderNumber` → autogen (örn. `SIP1507260001`)
+- `data.lines[0].id` → `ORDER_LINE_ID` (iş emrine bağlamak için)
 
 ### C2: İstasyon ID'lerini Öğrenin
 
@@ -354,18 +357,18 @@ GET /api/rolls?search=TEKS-20260415               → Barkod ile arama
 | `KURSUN_1` | Kurşun + KK2 (tek istasyon) | INTERNAL | `PROCESS_QC` |
 | `TAMBUR_1` | Tambur (Final Karar) | INTERNAL | `TAMBUR` |
 
-> 📌 Standart boyama rotası: `KK1_1 → BOYAHANE_DIS → KURSUN_1 → TAMBUR_1`
-> 📌 Paketleme / Sevkiyat istasyonları **kaldırıldı** (`20260517214013_station_kind_drop_packaging_shipping` migration). Yeni sevkiyat modülü tasarlanırken bu istasyonlar yeniden değerlendirilecek.
+> 📌 Standart boyama rotası: `KK1_1 → BOYAHANE_DIS → KURSUN_1 → TAMBUR_1`. **Tambur zorunlu değil** — rota Kurşun/QC2 ile de bitebilir (son adım açık kumaşı finalize eder).
+> 📌 `enum StationKind`: `RAW_QC | PROCESS_QC | TAMBUR | SUBCONTRACTOR | SHIPPING | OTHER`. Paketleme istasyonu yok; `SHIPPING` = üretim-dışı tartı/sevk istasyonu (makinesiz, çuval depo modeliyle kullanılır).
 
-### C3: İş Emri (Parti) Oluştur
+### C3: İş Emri Oluştur
 
 **Endpoint:** `POST /api/work-orders`
-**Tablolar:** `work_orders` + `work_order_steps` + `work_order_to_order_lines`
+**Tablolar:** `work_orders` + `work_order_steps` + `work_order_to_order_lines` + `traveler_cards` (kart WO açılışında otomatik doğar)
 **İzin:** `workorder:write`
 
 ```json
 {
-  "batchNumber": "PARTI-001",
+  "batchNumber": "IE1507260099",
   "type": "ORDER_PRODUCTION",
   "parameters": {
     "color": "Lacivert",
@@ -381,6 +384,9 @@ GET /api/rolls?search=TEKS-20260415               → Barkod ile arama
 }
 ```
 
+> 📌 **`batchNumber` (legacy input adı) = manuel İş Emri Numarası.** **Opsiyoneldir** — verilmezse server `IE`+GGAAYY+NNNN üretir (örn. `IE1507260001`); verilirse benzersizliği doğrulanır. Model kolonu `WorkOrder.workOrderNumber`. Parti (`Batch`, `P…`) artık AYRI bir modeldir; iş emri partiyle karıştırılmamalı.
+> 📌 **Refakat kartı WO açılışında doğar** (`TravelerCard`, `workOrderId` @unique) — `cardNumber = barcode = workOrderNumber` (İE). Finalize'da değil, oluşturmada.
+
 **`type` değerleri** (`prisma/schema.prisma → enum WorkOrderType`):
 
 | Değer | Anlam | Zorunlu alanlar |
@@ -391,22 +397,13 @@ GET /api/rolls?search=TEKS-20260415               → Barkod ile arama
 > 📌 `parameters` alanı JSON'dır, istediğiniz veriyi koyabilirsiniz (reçete no, renk kodu vb.)
 > 📌 `orderLineIds` ORDER_PRODUCTION'da **zorunlu**, diğer type'larda yok.
 > 📌 Yanıttan `data.id` → `WORK_ORDER_ID`
-> 📌 ⚠️ EXTERNAL/SUBCONTRACTOR istasyonlar `POST /api/production/step-action` ile çalışmaz — `POST /api/subcontractor/dispatch` + `/receive` kullanılır (bkz. fason akışı).
+> 📌 ⚠️ EXTERNAL/SUBCONTRACTOR istasyonlar `POST /api/subcontractor/dispatch` + `/receive` ile yürür; PROCESS_QC (Kurşun/KK2) `/api/kursun-qc/*` ile; KK1/genel INTERNAL kart taramasıyla (bkz. Senaryo D).
 
 ### C4: Topları İş Emrine Bağla
 
-**Endpoint:** `PATCH /api/work-orders/{workOrderId}/attach-rolls`
-**Tablolar:** `rolls` (status → `IN_PRODUCTION`), `work_order_steps` (adım 1 ilişki)
-**İzin:** `workorder:write`
+> ⚠️ **HTTP ucu kaldırıldı (K6, 2026-06-12):** `GET /available-for-attach`, `PATCH /:id/attach-rolls`, `PATCH /:id/detach-rolls` uçları hiçbir frontend çağırmadığı için kaldırıldı. **`attachRolls`/`detachRolls` SERVİS metotları yaşıyor** — quick-start ve seed scriptleri içeriden çağırır. Uçtan uca Swagger testinde topları bir WO'ya bağlamak için `scripts/` altındaki quick-start akışını kullanın veya seed senaryosuyla hazır veri üretin.
 
-```json
-{
-  "barcodes": ["TEKS-20260415-A1B2C3D4", "TEKS-20260415-E5F6G7H8"]
-}
-```
-
-> ⚠️ Topların `STOCK` durumunda olması gerekir, yoksa hata döner.
-> ✅ Başarılı olursa topların status'u `IN_PRODUCTION` olur.
+**Etki:** Bağlanan topların status'u `STOCK → IN_PRODUCTION` olur; `work_order_steps` ilk adımla ilişkilenir. Top `STOCK` (veya bir depo statüsü) değilse bağlama reddedilir.
 
 ### C5: Refakat Kartı Görüntüle
 
@@ -426,31 +423,34 @@ Fiziksel olarak toplarla birlikte gönderilen refakat kartı verisini döner (ro
 
 ## 7. Senaryo D — Üretim Akışı
 
-İki ayrı endpoint pattern'i var: **INTERNAL** istasyonlar `step-action` ile, **EXTERNAL** (fason) istasyonlar `subcontractor/dispatch`+`receive` ile yürür.
+> ⚠️ **Jenerik `/api/production/step-action` ve `/api/production/*` UÇLARI YOKTUR.** Üretim ilerletme istasyon türüne göre **ayrı uç ailelerine** dağılmıştır. İstasyon süreçlerini fiziksel olarak **refakat kartı taraması** tetikler (kart WO açılışında doğar). Kanonik uçlar: `src/routes/traveler-card.routes.ts`, `src/routes/kursun-qc.routes.ts`, `src/routes/subcontractor.routes.ts`, `src/routes/tambur.routes.ts`.
 
-### D1: INTERNAL istasyon (KK1/KK2/TAMBUR) — `step-action`
+| İstasyon türü (`StationKind`) | Uç ailesi |
+|---|---|
+| RAW_QC (KK1) / genel INTERNAL | `POST /api/traveler-cards/scan` (kart taraması) |
+| SUBCONTRACTOR (fason/boyahane) | `POST /api/subcontractor/dispatch` + `/api/subcontractor/receive` |
+| PROCESS_QC (Kurşun + KK2) | `POST /api/kursun-qc/complete-qc2` (top-başına) → `/report-error` → `/finish-step` |
+| TAMBUR | `POST /api/tambur/finalize` (bkz. Senaryo E) |
 
-**Endpoint:** `POST /api/production/step-action`
-**Tablolar:** `work_order_steps` (status → `ACTIVE` veya `COMPLETED`)
-**İzin:** `roll:write`
+### D1: İstasyon taraması (KK1 / genel INTERNAL) — `traveler-cards/scan`
+
+**Endpoint:** `POST /api/traveler-cards/scan`
+**Tablo:** `traveler_card_scans` (+ WO/step ilerleme)
+**İzin:** `workorder:write` (mobil ekran izinleri de kabul)
 
 ```json
 {
-  "barcode": "TEKS-20260524-A1B2C3D4",
+  "barcode": "IE1507260099",
   "stationId": "KK1'in ID'si",
-  "action": "FINISH"
+  "scanType": "DEPARTURE"
 }
 ```
 
-> 📌 v3: Step FINISH sonrası sonraki step otomatik START olur (`nextStep.autoStarted=true`). Manuel START çağırmaya gerek yok.
-> 📌 INTERNAL istasyonlarda `newQty` opsiyoneldir (KK1/KK2 metraj değiştirmez; tambur sarım esnasında child Roll'larda yeniden ölçer).
+> 📌 `scanType`: `ARRIVAL` | `DEPARTURE` | `INFO`. Barkod = refakat kartı barkodu (= workOrderNumber, İE). 10 sn içinde aynı kart+istasyon+scanType tekrarı dedup edilir (wedge çift-burst koruması).
 
 ### D2: EXTERNAL istasyon (BOYAHANE/BASKI vb.) — `subcontractor/dispatch` + `receive`
 
-EXTERNAL istasyonlarda `step-action` çağırmak **400 hata** verir:
-> `"Boyahane (Fason)" fason/dış istasyonudur. step-action bu adıma uygulanmaz. Sevk için POST /api/subcontractor/dispatch, mal kabul için POST /api/subcontractor/receive kullanın.`
-
-**Sevk (taşerona gönder):**
+**Sevk (fasona gönder):**
 
 ```json
 POST /api/subcontractor/dispatch
@@ -465,73 +465,91 @@ POST /api/subcontractor/dispatch
 - Roll'ların status'u `AT_SUBCONTRACTOR` olur
 - `SubcontractorDispatch` kaydı oluşur (irsaliye)
 
-**Mal kabul (taşerondan dönüş):**
+**Mal kabul (fasondan dönüş) — yeni açık-kumaş modeli:**
 
 ```json
 POST /api/subcontractor/receive
 {
-  "dispatchId": "DISPATCH_ID",
-  "items": [
-    { "rollId": "ROLL1_ID", "receivedQty": 485, "weightKg": 60 },
-    { "rollId": "ROLL2_ID", "receivedQty": 480, "weightKg": 58 }
-  ]
+  "workOrderId": "WORK_ORDER_ID",
+  "stepId": "BOYAHANE step'in ID'si",
+  "subcontractorId": "Fason firma ID'si",
+  "returns": [
+    { "rollId": "ROLL1_ID" },
+    { "rollId": "ROLL2_ID" }
+  ],
+  "newRolls": [
+    { "qty": 485, "weightKg": 60 },
+    { "qty": 480, "weightKg": 58 }
+  ],
+  "appliedColorId": "opsiyonel — boyahane renk uygular"
 }
 ```
 
-- `receivedQty` < dispatched qty olabilir (fire)
-- Roll'ların status'u `IN_PRODUCTION` olur, currentStepId sonraki step'e geçer
-- `weightKg` opsiyonel (kilo paket aşamasında girilebilir, BUG-34 sonrası)
+> 📌 **Kabulde orijinal rulolar emekliye ayrılır** (`returns[]` → status `SUBCONTRACTOR_CONSUMED`). Fasondan gelen her parça için **yeni açık-kumaş `Roll`** doğar (`newRolls[]`, `barcode=null`, `entrySource=SUBCONTRACTOR_RETURN`, `form=ACIK`) ve rotadaki sonraki adıma (genelde Kurşun/KK2) bağlanır.
+> 📌 `newRolls[].qty` (metraj) **ZORUNLU** — irsaliyedeki parça/metre bilgisi receive anında girilir. `weightKg` opsiyonel (kesin ölçüm sonraki istasyonun FINISH'inde damgalanır).
+> 📌 `dispatchId` kullanılmaz — kabul `workOrderId + stepId + subcontractorId` ile çözülür.
 
-### D3: Kurşun (KK2) adımı
+### D3: Kurşun + KK2 (PROCESS_QC) — top-başına QC2
 
-> 📌 **Manuel START gerekli değil (v3).** Önceki step FINISH çağrıldığında sonraki step otomatik aktif olur (`nextStep.autoStarted: true`). Kurşun step'i otomatik aktiftir; manuel START 400 "zaten başlatılmış" verir.
+**Endpoint:** `POST /api/kursun-qc/complete-qc2`
+**İzin:** `quality:write` (veya `mobile:kk2-kursun`)
 
-Operatör Kurşun istasyonunda doğrudan hata raporlamaya veya FINISH'e geçer:
+```json
+{
+  "rollId": "ROLL_ID",
+  "stepId": "KURSUN step'in ID'si"
+}
+```
+
+> 📌 Kurşun + QC2 **tek fiziksel istasyondur** (`StationKind.PROCESS_QC`, tek `WorkOrderStep`). İstasyonun `propertyCapabilities` listesindeki özellikler Roll'a otomatik `RollProperty` olarak kopyalanır; KURSUN yeteneği atanmışsa `KURSUN_APPLIED` log'u da otomatik atılır.
+> 📌 Kartın adım özetini `GET /api/kursun-qc/by-card/{barcode}` ile çekebilirsiniz.
 
 ### D4: Hata Raporla (Kurşun QC2)
 
-**Endpoint:** `POST /api/production/report-error`
+**Endpoint:** `POST /api/kursun-qc/report-error`
 **Tablo:** `roll_errors` (yeni kayıt)
-**İzin:** `quality:write`
+**İzin:** `quality:write` (veya `mobile:kk2-kursun`)
 
 ```json
 {
-  "rollId": "B1'den aldığınız ROLL_ID",
+  "rollId": "ROLL_ID",
+  "stepId": "KURSUN step'in ID'si",
   "startMeter": 60,
-  "errorType": "LEKE"
+  "defectTypeId": "DefectType katalog UUID'si"
 }
 ```
 
-> 📌 **Yeni model (v3):** Hata sadece **NOKTA** olarak girilir — `startMeter` zorunlu, `endMeter` artık tutulmuyor. Operatör "60. metrede hata" der; aralık bilgisi yok.
+> 📌 **Nokta model:** Hata tek nokta olarak girilir — `startMeter` zorunlu, `endMeter` **tutulmuyor**. Operatör "60. metrede hata" der; aralık yok.
+> 📌 **`defectTypeId` ZORUNLU** — hata tipi `DefectType` kataloğundan seçilir; serbest metin kabul edilmez (`errorType` yalnızca kayıt anında `DefectType.name`'in snapshot kopyasıdır). Katalog için `GET /api/defect-types`.
 > 📌 Tambur operatörü ekranda bu noktayı görür, fiziksel sarım esnasında kesim kararını kendi verir.
-> 📌 Birden fazla hata raporlayabilirsiniz. Her biri ayrı bir `roll_errors` kaydı oluşturur.
-> 📌 `isProcessed: false` olarak oluşur → Tambur'da işlenecek.
-> 📌 Hata türleri: `LEKE`, `YIRTIK`, `IPLIK_HATASI`, `BOYA_LEKESI`, `DELIK` vb. (serbest metin) veya `defectTypeId` ile katalogtan seçim.
-> 📌 Yanıttan `data.id` → `ERROR_ID` (Tambur'da kullanılacak)
+> 📌 Her hata ayrı bir `roll_errors` kaydı; `isProcessed: false` doğar → Tambur'da işlenir.
+> 📌 Mobil offline kuyruğu için opsiyonel `clientErrorId` (idempotency UUID) gönderilebilir.
+> 📌 Yanıttan `data.id` → `ERROR_ID` (Tambur'da kullanılacak).
 
-### D5: Kurşun FINISH
+### D5: PROCESS_QC adımını kapat — `finish-step`
+
+**Endpoint:** `POST /api/kursun-qc/finish-step`
+**İzin:** `quality:write` (veya `mobile:kk2-kursun`)
 
 ```json
 {
-  "barcode": "TEKS-20260415-A1B2C3D4",
-  "stationId": "KURSUN_1'in ID'si",
-  "action": "FINISH"
+  "stepId": "KURSUN step'in ID'si"
 }
 ```
 
-> ✅ Kurşun INTERNAL istasyon olduğu için `newQty` zorunlu **değildir**.
-> ✅ Top artık Tambur adımına geçer (`currentStepId` güncellenir).
+> ✅ Adımdaki tüm toplar QC2'yi tamamlamışsa adım kapanır; QC2 tamamlanmamış top varsa **400** döner.
+> ✅ Toplar rotadaki sonraki adıma (genelde Tambur) geçer.
+> 📌 Yanlışlıkla kapatılan adımı `POST /api/kursun-qc/reopen-step` ile (toplar ileri taşınmadıysa) yeniden açabilirsiniz.
 
-### Aktif Adımları İzleme (Dashboard)
+### Açık Kartları / Kuyruğu İzleme
 
-**Endpoint:** `GET /api/production/active-steps`
-**Tablo:** `work_order_steps` (status = ACTIVE, join: station + workOrder)
+**Endpoint:** `GET /api/kursun-qc/open-cards` (PROCESS_QC'de açık top bekleyen aktif kartlar) veya `GET /api/kursun-qc/queue` (adım kuyruğu).
 
 ---
 
-## 8. Senaryo E — Tambur (Roll Splitting + Tahsis)
+## 8. Senaryo E — Tambur (Roll Splitting)
 
-Tambur, üretimin **karar noktası**dır. Kurşun'dan gelen hata kayıtları burada değerlendirilir.
+Tambur, üretimin **kesim/bölme + kalite kararı** istasyonudur (zorunlu değil; rota Kurşun/QC2 ile de bitebilir). Kurşun'dan gelen hata kayıtları burada değerlendirilir. **Sipariş↔rulo tahsisi Tambur'da YAPILMAZ** — tahsis (`SackAllocation`) sevkiyat DISPATCH anında yazılır (bkz. Senaryo F).
 
 ### E1: Bekleyen Topları Listele
 
@@ -545,13 +563,13 @@ Tambur, üretimin **karar noktası**dır. Kurşun'dan gelen hata kayıtları bur
 
 Topu tüm hataları ile birlikte gösterir.
 
-### E3: Finalize (Kesim Kararı — Cumulative Length Model)
+### E3: Finalize (Kesim Kararı — Bağımsız Kesim Uzunluğu Modeli)
 
 **Endpoint:** `POST /api/tambur/finalize`
 **Tablolar:** `rolls`, `roll_errors`
-**İzin:** `quality:write`
+**İzin:** `quality:write` (veya `mobile:tambur`)
 
-**Yeni model (v3):** Tambur operatörü makinede kumaşı sarar, **sayaç sıfırdan başlar**. Her "kes" tuşu basışında o ana kadar sarılan uzunluk yeni bir top olur (parent'tan ayrılır), sayaç sıfırlanır, devam edilir.
+**Model:** Tambur operatörü makinede kumaşı sarar, **sayaç sıfırdan başlar**. Her "kes" tuşu basışında o ana kadar sarılan uzunluk yeni bir top olur (parent'tan ayrılır), sayaç sıfırlanır, devam edilir.
 
 **API'de:** `cuts` sıralı listesi gönderilir. Her cut:
 - `length`: o kesimin uzunluğu (sayaç sıfırdan başladığı için **bağımsız uzunluk**, cumulative değil)
@@ -596,11 +614,11 @@ Topu tüm hataları ile birlikte gösterir.
   "data": {
     "originalRoll": { "id":"...", "currentQty":0, "status":"TAMBUR_CONSUMED" },
     "splitRolls": [
-      { "barcode":"...KS-022B47", "currentQty":59,  "status":"WAREHOUSE", "qualityGrade":"1.KALITE" },
-      { "barcode":"...KS-4DE05F", "currentQty":10,  "status":"SCRAP",     "qualityGrade":"FIRE" },
-      { "barcode":"...KS-32FE2E", "currentQty":149, "status":"WAREHOUSE", "qualityGrade":"1.KALITE" },
-      { "barcode":"...KS-96750F", "currentQty":10,  "status":"SCRAP",     "qualityGrade":"FIRE" },
-      { "barcode":"...KS-264E58", "currentQty":272, "status":"WAREHOUSE", "qualityGrade":"1.KALITE" }
+      { "barcode":"T150726F0001", "currentQty":59,  "status":"WAREHOUSE", "qualityGrade":"1.KALITE" },
+      { "barcode":"T150726F0002", "currentQty":10,  "status":"SCRAP",     "qualityGrade":"FIRE" },
+      { "barcode":"T150726F0003", "currentQty":149, "status":"WAREHOUSE", "qualityGrade":"1.KALITE" },
+      { "barcode":"T150726F0004", "currentQty":10,  "status":"SCRAP",     "qualityGrade":"FIRE" },
+      { "barcode":"T150726F0005", "currentQty":272, "status":"WAREHOUSE", "qualityGrade":"1.KALITE" }
     ],
     "processedErrors": 2
   },
@@ -610,14 +628,56 @@ Topu tüm hataları ile birlikte gösterir.
 
 ### E4: Sipariş Tahsisi
 
-Allocation modülü kaldırıldı. Yeni sevkiyat akışı tasarlanırken sipariş ↔ rulo
-bağlantısı yeniden modellenecek.
+Eski Tambur-anı allocation modülü kaldırıldı. **Yeni model (çuval havuzu, 2026-07):** top↔sipariş bağı yoktur; final ürünler önce **depo çuvallarına** (`Sack`) toplanır, sipariş tahsisi (`SackAllocation`) yalnız **sevkiyat DISPATCH anında** spec+şube FIFO ile yazılır (bkz. Senaryo F).
 
 ---
 
-## 9. Senaryo F — Sevkiyat
+## 9. Senaryo F — Sevkiyat (Çuval Havuzu Modeli, 2026-07)
 
-> **Sevkiyat modülü sıfırdan yeniden yazılıyor.** Eski `/api/shipping/*`, `/api/sacks/*`, `/api/packaging/*` endpoint'leri kaldırıldı. Bu bölüm yeni modül hazır olduğunda güncellenecek.
+Sevkiyat **çuval depo** modeline geçti (`/api/shipping/*`). Çuval bir **depo nesnesidir**: `Sack.customerId` opsiyonel, **mühür/rezerv YOK**. Akış: **aç → okut → (opsiyonel tart) → çuval depoda bekler → sevkiyat depodan çuval seçilerek kurulur → DISPATCH**. Stok yalnız DISPATCH'te `SHIPPED` düşer; tahsis (`SackAllocation`) dispatch anında yazılır.
+
+### F1: Depoya çuval aç ve final ürün okut
+
+```
+POST /api/shipping/sacks                 → yeni boş çuval (customerId opsiyonel)
+POST /api/shipping/sacks/{id}/scan       → { barcode } — WAREHOUSE/A1_STOCK topu çuvala ekle
+POST /api/shipping/sacks/{id}/weigh      → { weightKg } — opsiyonel tartı
+GET  /api/shipping/sacks/{id}/contents   → çuval içeriği
+```
+
+> 📌 Çuval açıldıktan sonra `shipmentId=null` iken her an düzenlenebilir (top ekle/çıkar/taşı). Sevkiyata atanmış çuvalın içeriği kilitlenir (`touchWarehouseSackTx` WHERE `shipmentId IS NULL`).
+
+### F2: Açık siparişleri gör
+
+```
+GET /api/shipping/open-orders            → İstenen | Sevk | Açık (Açık = quantity − shippedQty)
+```
+
+> 📌 Rezerv yoktur — `OrderLine.packedQty`/`Order.packedQty` kaldırıldı. Sipariş görünümü **İstenen | Sevk | Açık**.
+
+### F3: Sevkiyat kur (depodan çuval seçerek)
+
+```json
+POST /api/shipping/shipments
+{
+  "sackIds": ["SACK1_ID", "SACK2_ID"],
+  "customerId": "CUSTOMER_ID",
+  "orderIds": ["ORDER_ID"]
+}
+```
+
+> 📌 Önizleme: `POST /api/shipping/shipments/preview`. Çuval ekle/çıkar: `/shipments/:id/add-sacks`, `/shipments/:id/remove-sack`.
+
+### F4: Çıkış (DISPATCH)
+
+```
+POST /api/shipping/shipments/{id}/dispatch     → çuvallar SHIPPED, tahsis shippedQty'ye terfi
+GET  /api/shipping/shipments/{id}/cancel-preview
+POST /api/shipping/shipments/{id}/cancel       → tahsis silinir, çuval depoya döner
+```
+
+> 📌 **Sevk onayı** `shipping.confirmationEnabled` feature-flag'ine bağlı (varsayılan **kapalı**): kapalıysa `createShipment` yanıtında çuvallar **doğrudan** `DISPATCHED` olur (`dispatched=true`); açıksa sevkiyat `PLANNED` kalır ve çıkış ayrıca `dispatch` ile onaylanır. `ShipmentStatus` = `PLANNED | DISPATCHED | CANCELLED` (eski `PREPARING/READY/AT_DOOR` kaldırıldı — kapı önü ara adımı YOK).
+> 📌 `SackAllocation` **sevk anında** seçilen sipariş satırlarına spec+şube FIFO ile yazılır (`distributeSacksToLines`). PLANNED tahsis sayılmaz; stok ve `shippedQty` yalnız DISPATCH'te düşer/terfi eder.
 
 ---
 
@@ -629,13 +689,13 @@ Bu senaryoları test ederek hata mesajlarının doğruluğunu kontrol edin:
 |---|------|---------------|
 | 1 | Login yanlış şifre ile | `401` — Kullanıcı adı veya şifre hatalı |
 | 2 | Token olmadan herhangi bir endpoint çağır | `401` — Token gerekli |
-| 3 | `ali.operator` ile `POST /api/orders` çağır | `403` — `order:write` yetkisi yok (seed'de hiç yetki verilmiyor; bkz. §1) |
+| 3 | Yetkisiz (admin dışı, `admin` ile açtığınız yeni) kullanıcıyla `POST /api/orders` çağır | `403` — `order:write` yetkisi yok (yeni kullanıcı yetkisiz başlar; bkz. §1) |
 | 4 | `POST /api/items` aynı `code` ile iki kez | `409` — unique constraint |
 | 5 | `POST /api/orders` `customerId` pasif müşteri ile | `400` — "Müşteri pasif durumda..." (v3, BUG-07) |
 | 6 | `POST /api/rolls/initial-entry` olmayan `itemId` ile | `404` — Ürün bulunamadı |
 | 7 | `POST /api/orders` olmayan `customerId` ile | `400` — Geçersiz veri yapısı |
-| 8 | EXTERNAL (fason) step'e `POST /api/production/step-action` çağır | `400` — "fason/dış istasyonudur. step-action bu adıma uygulanmaz" → `subcontractor/dispatch` + `/receive` kullan |
-| 9 | `STOCK` olmayan topu iş emrine bağla | `400` — Barkod hata listesinde döner |
+| 8 | Fason istasyonuna QC2 kapatma (`kursun-qc/finish-step`) çağır | `400` — fason/dış istasyon; `subcontractor/dispatch` + `/receive` kullan |
+| 9 | `STOCK`/depo statüsünde olmayan topu iş emrine bağlamaya çalış | `400` — Barkod hata listesinde döner |
 | 10 | Bozuk JSON body gönder | `400` — Geçersiz JSON formatı |
 
 ---
@@ -651,21 +711,21 @@ Tüm adımları sırayla takip edin. Her satırdaki ✅ kutusunu zihinsel olarak
 □  B2. Top 2 oluştur         → ROLL2_ID, BARCODE2 not et
 □  B3. Barkod sorgusu test et
 □  C1. Sipariş oluştur       → ORDER_ID, ORDER_LINE_ID not et
-□  C2. İstasyon ID'leri al   → BOYAHANE_ID, KURSUN_ID, TAMBUR_ID, PAKET_ID
-□  C3. İş emri oluştur       → WORK_ORDER_ID not et
-□  C4. Topları bağla          → Status: STOCK → IN_PRODUCTION ✓
+□  C2. İstasyon ID'leri al   → KK1_ID, BOYAHANE_ID, KURSUN_ID, TAMBUR_ID
+□  C3. İş emri oluştur       → WORK_ORDER_ID + refakat kartı (İE) otomatik doğdu ✓
+□  C4. Topları bağla (quick-start/seed servisi) → Status: STOCK → IN_PRODUCTION ✓
 □  C5. Refakat kartı kontrol et
-□  D1. Boyahane START
-□  D2. Boyahane FINISH        → currentQty azaldı ✓ (fire)
-□  D3. Kurşun START
-□  D4. Hata 1 raporla         → ERROR1_ID not et
+□  D1. Boyahane dispatch      → Status: AT_SUBCONTRACTOR ✓
+□  D2. Boyahane receive       → orijinal SUBCONTRACTOR_CONSUMED, yeni açık-kumaş Roll doğdu ✓
+□  D3. Kurşun complete-qc2 (top-başına)
+□  D4. Hata 1 raporla         → ERROR1_ID not et (defectTypeId zorunlu)
 □  D5. Hata 2 raporla         → ERROR2_ID not et
-□  D6. Kurşun FINISH
+□  D6. Kurşun finish-step     → toplar Tambur'a geçti ✓
 □  E1. Tamburda bekleyenler
-□  E2. Tambur finalize         → SCRAP roll oluştu ✓
+□  E2. Tambur finalize        → SCRAP + WAREHOUSE child roll'lar oluştu ✓
+□  F1. Depoya çuval aç + final ürün okut
+□  F2. Sevkiyat kur (sackIds + customerId) + DISPATCH → SHIPPED ✓
 ```
-
-> Sevkiyat akışı yeniden yazılıyor — yeni modül hazır olduğunda buraya eklenecek.
 
 ---
 
@@ -674,11 +734,11 @@ Tüm adımları sırayla takip edin. Her satırdaki ✅ kutusunu zihinsel olarak
 Test verilerini sıfırdan başlatmak için:
 
 ```bash
-# Tam sıfırlama: DB drop + tek migration uygula + seed
+# Tam sıfırlama: DB drop + tüm migration'ları uygula + seed
 npx prisma migrate reset --force
 ```
 
-`migrate reset` mevcut DB'yi düşürür, tüm migration'ları (şu an tek `init`) yeniden uygular ve `npm run seed`'i otomatik çalıştırır. Sonuç: 42 permission + 7 kullanıcı + 3 kalite sınıfı + 4 müşteri + 6 renk + 6 kumaş özelliği + 2 fason kategori + 2 fason firma.
+`migrate reset` mevcut DB'yi düşürür, `prisma/migrations/` altındaki **tüm** migration'ları (~114 adet) sırayla uygular ve `npm run seed`'i otomatik çalıştırır. Sonuç (kanonik: `prisma/seed.ts` içindeki create çağrıları / seed çıktısı — başlık yorum bloğu bayat sayılar taşıyabilir): ~55 permission + 15 permission template + **1 kullanıcı (yalnız `admin`)** + 3 kalite sınıfı (1.KALITE / A1 / FIRE) + 4 müşteri + 6 renk + 7 kumaş özelliği (KURSUN dahil) + 3 fason kategori (BOYA/ZIMPARA/KARTELA) + 3 fason firma (Boyer/Kestel/Kartela A.Ş.).
 
 ---
 

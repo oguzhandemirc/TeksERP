@@ -9,11 +9,11 @@
 İki yol var: **Windows installer (fabrika için ÖNERİLEN)** veya **Linux/manuel**.
 
 ### A0. Ön koşullar (her iki yol)
-1. **Node.js 22.x** (CI 22.19; installer'a gömülü 22.13.1) ve **PostgreSQL 16.x** (gömülü 16.6) kur. `package.json`'da `engines` yok — sürüm operasyonel gerekliliktir.
+1. **Node.js 22.x** (CI: `node-version: 22`; installer'a gömülü 22.13.1) ve **PostgreSQL 18.x** (gömülü 18.4) kur. `package.json`'da `engines` yok — sürüm operasyonel gerekliliktir.
 2. Boş bir PostgreSQL veritabanı + login rolü oluştur. **Rol CREATEDB yetkili olmalı** — Prisma 7 `migrate deploy` bağlanınca DB'yi oluşturmayı dener; yetki yoksa "permission denied to create database" ile patlar.
 
 ### A1. Windows installer yolu (ÖNERİLEN)
-3. Build makinesinde `setup.exe` üret: `powershell -File installer\windows\build.ps1` (gömülü: Node 22.13.1, PostgreSQL 16.6-1, NSSM 2.24).
+3. Build makinesinde `setup.exe` üret: `powershell -File installer\windows\build.ps1` (gömülü: Node 22.13.1, PostgreSQL 18.4-1, NSSM 2.24).
 4. Saha sunucusunda: `.\manage.ps1 -Action install`. Bu tek komut otomatik yapar:
    - PostgreSQL'i **TeksErpDB** servisi yapar (**port 5433**, sadece `127.0.0.1`)
    - **TeksErpDb** DB + **tekserp** rolü (rastgele şifre)
@@ -56,8 +56,8 @@
 ### A4. Seed (yalnızca İLK kurulumda) — DEMO içerir
 10. `npm run seed` (= `npx prisma db seed`).
     - **Tek `main()`, `create` ile yazar → ikinci kez çalıştırılamaz** (unique hatası). Güncellemelerde ASLA.
-    - **Bootstrap (prod-temel, gerekli):** 54 permission, 14 permission template, 1 kullanıcı (yalnız admin/123123), 3 kalite sınıfı (1.KALITE/A1/FIRE), 6 iade nedeni, 2 etiket format profili (ARGOX + DEFAULT), 3 label template default.
-    - **AYNI ZAMANDA DEMO master-data (NODE_ENV guard'ı YOK):** 4 müşteri, 6 renk, 7 özellik, 3 fason kategori + 3 fason firma, 6 istasyon, 4 makine, peripheral'lar, 3 rota, Patos ürünü, alias'lar, 3 şube.
+    - **Bootstrap (prod-temel, gerekli):** 55 permission, 15 permission template, 1 kullanıcı (yalnız admin/123123), 3 kalite sınıfı (1.KALITE/A1/FIRE), 6 iade nedeni, 3 hata tipi, sistem varsayılan etiket medyası (`label.defaultMedia` = 100×58, 203dpi — ayrı "format profili" kataloğu YOK), 3 label template default (ROLL_RAW/ROLL_FINISHED/SWATCH).
+    - **AYNI ZAMANDA DEMO master-data (NODE_ENV guard'ı YOK):** 4 müşteri, 6 renk, 7 özellik, 3 fason kategori (BOYA/ZIMPARA/KARTELA) + 3 fason firma, 6 istasyon, 3 makine, peripheral'lar (ağ yazıcıları + metre/kantar), 3 rota, Patos ürünü, alias'lar, 3 şube.
     - **Temiz fabrika kararı:** Seed pratikte zorunlu (bootstrap olmadan sistem açılmaz). İki seçenek:
       - (a) Seed çalıştır → demo satırlarını Tanımlar UI'sından veya SQL ile **elle sil**, gerçeklerini gir.
       - (b) Tam temiz: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` → `migrate deploy` → `seed` → demo temizle.
@@ -82,26 +82,26 @@
 14. **Admin şifresini değiştir** — demo değer, prod'da değiştirilmeli. (Kesin menü yolu: doğrulamak gerek.)
 15. **Firma adı:** Genel Ayarlar → "Şirket Bilgileri" → `company.name`.
 16. **Künye + belge içeriği:** Tanımlar → Sistem → Belge Şablonları (irsaliye + refakat kartı bölüm aç-kapa, başlık/künye/imza, canlı önizleme).
-17. **Etiket dili = PPLA:** Genel Ayarlar → Etiket → "Etiket yazıcı dili". **Default zaten PPLA** — ekstra gerekmez.
-18. **Kopya adedi + top adı şablonu:** Aynı ekranda.
+17. **Etiket dili = PPLA (cihaz bazlı):** Global "etiket yazıcı dili" ayarı **YOK** — dil her yazıcıda ayrı (`PeripheralDevice.languageOverride`, Tanımlar → Cihazlar / ADIM 8). Seed'lenen tüm yazıcılar PPLA geldiğinden ekstra gerekmez; farklı firmware'de (Zebra=ZPL) cihaz kaydından değiştir.
+18. **Kopya adedi + varsayılan etiket medyası:** Genel Ayarlar → Etiket (aynı ekranda: etiket kopya adedi, varsayılan medya, "Doğrudan yazıcıya gönder (native)" toggle).
 19. **"Doğrudan yazıcıya gönder (native)"** toggle'ı default KAPALI (backend TCP gönderim; diyalogsuz seri/BT baskı için D/E'ye bak — bu toggle'dan bağımsız).
 
 ---
 
 ## C. Master-Data Girişi (DOĞRU SIRAYLA — FK bağımlılıkları)
 
-**Seed'in zaten kurdukları (tekrar GİRME):** 54 izin, 14 izin template, admin kullanıcısı, 3 kalite sınıfı (UI'da salt-okunur), 6 iade nedeni, DEFAULT + ARGOX format profili, 3 label template default.
+**Seed'in zaten kurdukları (tekrar GİRME):** 55 izin, 15 izin template, admin kullanıcısı, 3 kalite sınıfı (UI'da salt-okunur), 6 iade nedeni, 3 hata tipi, sistem varsayılan etiket medyası (`label.defaultMedia`), 3 label template default.
 
 > **C-uyarı (DEMO seed):** Seed "MASTER DEMO" bölümü gerçek fabrikaya ait OLMAYAN sahte müşteri/renk/özellik/istasyon/makine/rota/Patos/alias/şube üretir; bootstrap ile aynı `main()` içinde, ayrım yok. **Gerçek fabrikada bu demo satırları silinmeli.** Kalite sınıfları hariç (salt-okunur sistem sabiti).
 
 20. **ADIM 1 — Kullanıcı yetkileri.** admin ile gir; operatörlere `/admin/users/:id/permissions` üzerinden izin ata (template'lerden toplu). İzinsiz operatör hiçbir akışı yürütemez.
-21. **ADIM 2 — Bağımsız leaf kataloglar (FK yok, paralel):** Renkler · Kumaş Özellikleri (KURSUN/ZIMPARALI dahil) · Hata Tipleri (en az GENEL) · İade Nedenleri · Müşteriler · Fason Kategorileri · Etiket Format Profilleri.
+21. **ADIM 2 — Bağımsız leaf kataloglar (FK yok, paralel):** Renkler · Kumaş Özellikleri (KURSUN/ZIMPARALI dahil) · Hata Tipleri (en az GENEL) · İade Nedenleri · Müşteriler · Fason Kategorileri. (Ayrı "Etiket Format Profili" kataloğu YOK — medya/dil doğrudan cihaz kaydında, ADIM 8.)
 22. **ADIM 3 — Ürünler (Item).** Bağımlılık: renk + özellik. **`Roll.itemId` NOT NULL → en az 1 FABRIC Item zorunlu.** İzinli renk/özellik boş = "tüm aktif serbest".
-23. **ADIM 4 — (KALDIRILDI, 2026-07).** Yazıcı modeli kataloğu yok — yazıcı dili/profili doğrudan Cihaz Kaydı'nda (ADIM 8) seçilir.
+23. **ADIM 4 — (KALDIRILDI, 2026-07).** Yazıcı modeli / format profili kataloğu yok — yazıcı dili (`languageOverride`) ve medyası (`labelWidthMm` vd.) doğrudan Cihaz Kaydı'nda (ADIM 8) girilir.
 24. **ADIM 5 — Fason Firmalar (Subcontractor).** Bağımlılık: SubcontractorCategory önce.
-25. **ADIM 6 — İstasyonlar (Station).** Zorunlu kind'ler: **RAW_QC=KK1** (giriş, adım picker'ında çıkmaz), **PROCESS_QC=Kurşun+KK2**, **TAMBUR**, **SUBCONTRACTOR/EXTERNAL=fason**, **OTHER=Sevkiyat/Paketleme**. EXTERNAL `defaultCategoryId` → kategori.
+25. **ADIM 6 — İstasyonlar (Station).** Zorunlu kind'ler (`StationKind` enum): **RAW_QC=KK1** (giriş, adım picker'ında çıkmaz), **PROCESS_QC=Kurşun+KK2**, **TAMBUR**, **SUBCONTRACTOR=fason** (bu istasyonlar StationType `EXTERNAL` + `defaultCategoryId` → kategori), **SHIPPING=Sevkiyat/Paketleme** (makinesiz). (`OTHER` = diğer/özel, seed kullanmaz.)
 26. **ADIM 7 — Makineler (Machine).** Bağımlılık: `stationId`. Her istasyona makine.
-27. **ADIM 8 — Cihaz Kaydı (PeripheralDevice).** Bağımlılık: machineId (+ opsiyonel formatProfileId). Yazıcıda **dil (languageOverride) ZORUNLU**. KK1/KK2/Tambur → yazıcı; Sevkiyat → SCALE. (Detay = F.)
+27. **ADIM 8 — Cihaz Kaydı (PeripheralDevice).** Bağımlılık: **machineId** (üretim makinesine bağlı yazıcı/metre) **VEYA stationId** (makinesiz SHIPPING istasyonuna bağlı kantar). Ayrı `formatProfileId` **YOK** — medya (`labelWidthMm` vd.) ve dil doğrudan cihazda. Yazıcıda **dil (`languageOverride`) ZORUNLU**. KK1/KK2/Tambur → yazıcı (machineId); Sevkiyat → SCALE (stationId). (Detay = F.)
 28. **ADIM 9 — İstasyon Yetenekleri (StationColor + StationProperty).** Fason boyahane hangi renk/özelliği uygular; Kurşun=KURSUN, Zımpara=ZIMPARALI.
 29. **ADIM 10 — Üretim Rotaları (Route + RouteStep).** Bağımlılık: `RouteStep.stationId` ZORUNLU. Tipik: Boya → Kurşun+KK2 → Tambur. Akış adımları rotadan türer.
 30. **ADIM 11 — İş Emri Şablonları (ProductRecipe) — OPSİYONEL.**
@@ -109,7 +109,7 @@
 32. **ADIM 13 — Alias'lar (OPSİYONEL).** CustomerItemAlias + CustomerColorAlias — müşteri bağlamında.
 33. **ADIM 14 — Etiket Standartları (LabelTemplate).** Seed her LabelKind için 1 default kurdu (silinmesin). Görünüm buradan düzenlenir.
 
-> **FK sırası:** Item←Color+Property · Route←Station · EXTERNAL Station←Category · PeripheralDevice←Machine(+FormatProfile).
+> **FK sırası:** Item←Color+Property · Route←Station · EXTERNAL Station←Category · PeripheralDevice←Machine **veya** Station.
 
 ---
 
@@ -144,7 +144,7 @@
     2. Admin Electron → **Cihazlar sayfası** → tablet "Onay bekliyor".
     3. **"Onayla & Ata"** → makine seç (boş = atamasız) → status=APPROVED + machineId (**admin:settings izni**).
     4. Tablet `/api/devices/status` poll'lar; APPROVED olunca devam. `devicePairingRequired` default **KAPALI** → tablet beklemeden login olur (ama makine atfı NULL → raporda makine kırılımı yok; iz isteniyorsa flag aç/ata).
-    - **STALE UI:** Electron `DevicePairingSection` hâlâ "6 haneli kod" diyor — **eski, kullanma**; Cihazlar sayfasını kullan.
+    - **Eşleştirme aç/kapa:** Electron Genel Ayarlar → Cihazlar → `DevicePairingSection` yalnız `devicePairingRequired` bayrağını aç/kapar (eski "6 haneli kod" akışı KALKTI, artık o metin yok). Fiili onay/atama **Cihazlar sayfasından** "Onayla"/"Onayla & Ata" ile yapılır.
 44. **BT yazıcı seçimi (tablet):** Mobil → Genel Ayarlar → "Etiket Yazıcısı (Bluetooth)" → **ÖNCE Android BT ayarlarından Argox'u pair et** → "Yazıcıları Tara" → seç → Test. Seçim yoksa HTML/expo-print fallback. Dil global PPLA'dan.
 
 ---
@@ -152,11 +152,11 @@
 ## F. Donanım
 
 ### F1. Yazıcı (Argox OS-214 PPLA)
-45. **Zorunlu minimum:** Seed ARGOX/DEFAULT profilleri + istasyon yazıcılarını (dil=PPLA cihaz üstünde) kurar. Global dil ayarı YOK — dil yalnız cihaz kaydından; cihaz eşleşmeyen istek native üretmez (HTML'e düşer, istemci "cihaz seçin" der).
-46. **Opsiyonel:** ek format profili, per-PC COM (D38), per-tablet BT (E44), native TCP (`nativeSendEnabled`).
+45. **Zorunlu minimum:** Seed sistem varsayılan etiket medyasını (`label.defaultMedia`) + istasyon yazıcılarını (dil=PPLA cihaz üstünde) kurar. Global dil ayarı YOK — dil yalnız cihaz kaydından; cihaz eşleşmeyen istek native üretmez (HTML'e düşer, istemci "cihaz seçin" der).
+46. **Opsiyonel:** per-cihaz medya (`labelWidthMm` vd.), per-PC COM (D38), per-tablet BT (E44), native TCP (`nativeSendEnabled`).
 47. **⚠️ YANLIŞ dil:** Dil YALNIZ cihaz kaydında ve yazıcıda ZORUNLU (global varsayılan kaldırıldı). Fiziksel yazıcının gerçekten konuştuğu dili seç (Argox=PPLA/PPLB firmware'ine göre); yanlış dil = boş/bozuk etiket. Native basan her Electron PC'de Genel Ayarlar → Bu Bilgisayar'dan cihaz seçilmeli.
 48. **Sahiplik tam-biri:** PeripheralDevice ya machineId YA deviceId taşır (ikisi/hiçbiri → yönlendirme bozulur). Ağ yazıcı=makine, BT yazıcı=tablet.
-49. **Marka/protokol değişimi = sıfır kod:** Argox→Zebra → cihazın languageOverride'ını değiştir; yeni boyut → format profili. 4 dil hazır (PPLA/PPLB/ZPL/RASTER_HTML).
+49. **Marka/protokol değişimi = sıfır kod:** Argox→Zebra → cihazın languageOverride'ını değiştir; yeni boyut → cihazın medyası (`labelWidthMm`/`labelHeightMm`/`labelDpi`/`labelGapMm`). 4 dil hazır (`PrinterLanguage` enum: PPLA/PPLB/ZPL/RASTER_HTML).
 
 ### F2. Kantar / Metre — simulate ile başla, gerçeğe geç
 50. **Seed = SİMÜLE BAŞLAR:** Tüm METER/SCALE cihazları `simulate=true` (sahte okur). Seed MAC'leri örnektir.
@@ -191,6 +191,6 @@
 - **/health (alias yok):** `GET /health`.
 - **secret.json (Windows):** `C:\ProgramData\TeksERP\secret.json` yedekle; kaybolursa DB'ye bağlanılamaz. DB portu **5433**, 127.0.0.1.
 - **simulate→false:** Fiziksel donanım gerçekten bağlı olmalı; yoksa NET HATA.
-- **STALE UI:** `DevicePairingSection` "6 haneli kod" eski; gerçek akış = announce→PENDING→Onayla&Ata→APPROVED.
+- **Cihaz eşleştirme akışı:** announce→PENDING→(Cihazlar sayfası) Onayla&Ata→APPROVED. PairingCode / 6-haneli kod akışı KALDIRILDI; `DevicePairingSection` yalnız `devicePairingRequired` zorunluluk bayrağını aç/kapar.
 
 **Doğrulanması gereken (kodda kesin kanıt yok):** (1) admin şifre değiştirme ekranının kesin menü yolu; (2) `build:win` NSIS sidebar tuzağının saha build'inde gerçekten patlatıp patlatmadığı — kurulum öncesi bir kez build:win denenmeli.

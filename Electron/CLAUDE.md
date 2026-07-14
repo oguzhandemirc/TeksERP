@@ -181,7 +181,7 @@ Yenisi için onay al. Mevcutlar:
 
 ## Test Kullanıcıları
 
-`admin / 123123` (seed'de TÜM 54 permission). Diğer 6 test kullanıcısı (`mehmet.planlama, ali.operator, ayse.kalite, fatma.satis, ali.kursun, ahmet.depo` — şifre `test123`) **yetkisiz başlar** ve admin UI'sından (`/admin/users/:id/permissions`) tek tek izin atanmadıkça uygulamaya giremez (`canEnterApp` false).
+Seed **yalnız `admin / 123123`** üretir (tüm permission'lar atanmış — ~55 kod, kanonik `Teks-Erp/prisma/seed.ts`). Eski isimli test kullanıcıları (mehmet.planlama vb.) **kaldırıldı** — her reseed'de tek tek silmek zorunda kalınıyordu. Yeni kullanıcılar admin UI'sından açılır ve **yetkisiz başlar**; admin `/admin/users/:id/permissions`'tan en az bir masaüstü izni atamadıkça uygulamaya giremezler (`canEnterApp` false — yalnız `mobile:*` izinli hesap Electron login'de 403 alır).
 
 ## Yeni Sayfa Kontrol Listesi
 

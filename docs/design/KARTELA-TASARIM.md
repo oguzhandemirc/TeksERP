@@ -18,14 +18,16 @@
 >   firmasına gönderilen **topun** gerçek metresi bu flag'den **etkilenmez** (gerçek top).
 > - **Kartela stoğu = ADET, `(ürün, renk)` bazında.** `GET /api/kartela/stock`
 >   (`kartelaService.getStock`): `swatch.groupBy([itemId,colorId]) WHERE shipmentId
->   IS NULL AND cancelledAt IS NULL` + isim/hex batch çözümü. `colorId null` = "renksiz".
-> - **Seçerek sevk (mevcut sevkiyat akışına entegre):** `POST /api/shipping/shipments/
->   :id/add-kartela` (`shippingService.addKartelaToShipment`) — ürün+renk+adet → o gruptan
->   N müsait Swatch satırı **select-then-claim** ile atomik bağlanır (FIFO; `claimed.count
->   !== count` → 409 + tam rollback), `resetSackWeightsTx`. `scanIntoShipment` gibi
->   **yalnız PLANNED** (`touchShipmentPlannedTx`); kartela tahsise girmediğinden recommit YOK.
->   Mevcut barkod-okut swatch dalı KALIR (zararsız; etiket olmadığından pratikte ölü).
-> - **Yeni izin/seed/migration YOK** (stok: `kartela:read|shipping:*|mobile:tarti-paket|sevkiyat`;
+>   IS NULL AND sackId IS NULL AND cancelledAt IS NULL` + isim/hex batch çözümü.
+>   `colorId null` = "renksiz". (Çuvala okutulmuş kartela stoktan düşer — havuz rezervi.)
+> - **Seçerek sevk (çuval-havuzu akışına entegre):** `POST /api/shipping/sacks/
+>   :id/add-kartela` (`shippingService.addKartelaToSack`) — açık çuval + ürün+renk+adet →
+>   o gruptan N müsait Swatch satırı **select-then-claim** ile atomik bağlanır (FIFO;
+>   `claimed.count !== count` → 409 + tam rollback), `resetSackWeightsTx`. `scanIntoSack`
+>   gibi hedef **açık depo çuvalı** (`sack.shipmentId != null` → engel), depo-çuval kilidi
+>   `touchWarehouseSackTx`; kartela tahsise girmediğinden recommit YOK.
+>   Mevcut barkod-okut swatch dalı (scanIntoSack içinde) KALIR (zararsız; etiket olmadığından pratikte ölü).
+> - **Yeni izin/seed/migration YOK** (stok: `kartela:read|shipping:read|shipping:write|mobile:tarti-paket|sevkiyat|depo`;
 >   add: mevcut `WRITE`). UI: Electron `AddKartelaDialog` (ScanInBar "Kartela Ekle", çuval
 >   yoksa oto-aç) + ölçü gating (SwatchesPanel/swatchColumns→`buildSwatchColumns`/SwatchDetailSheet/
 >   KartelaDetailSheet) + Genel Ayarlar "Kartela" kategorisi; mobil `KartelaStockPickerModal`
@@ -78,7 +80,7 @@ yeni bir işleme girmesiyle** oluşur:
 ```prisma
 model KartelaDispatch {
   id              String    @id @default(uuid())
-  dispatchNo      String    @unique @db.VarChar(64) // KD-YYMM-NNNNNN
+  dispatchNo      String    @unique @db.VarChar(64) // KS + GGAAYY + NNNN (kod-format 2026-07-12)
   subcontractorId String                            // Kartela fason firma
   plateNumber     String?
   driverName      String?
@@ -86,7 +88,8 @@ model KartelaDispatch {
   dispatchedById  String?
   notes           String?
   totalQty        Decimal   @default(0) @db.Decimal(12, 3) // sevk metrajı snapshot
-  printSnapshot   Json?     // çeki listesi / irsaliye snapshot
+  // NOT: çeki listesi/irsaliye snapshot'ı artık `PrintedDocument` tablosunda
+  // (versiyonlu resmi belge) — eski `printSnapshot Json?` kolonu KALDIRILDI.
 
   cancelledAt   DateTime?
   cancelledById String?
@@ -120,7 +123,7 @@ model KartelaDispatchItem {
 
 model KartelaReceipt {
   id              String    @id @default(uuid())
-  receiptNo       String    @unique @db.VarChar(64) // KR-YYMM-NNNNNN
+  receiptNo       String    @unique @db.VarChar(64) // KK + GGAAYY + NNNN (kod-format 2026-07-12)
   manifestNo      String?   @db.VarChar(64)
   dispatchId      String?                           // bilgi amaçlı; bağ top üstünden de var
   subcontractorId String
@@ -167,7 +170,7 @@ model KartelaReceiptItem {
 - **Koru:** `parentRollId` → her kartelanın kaynağı orijinal (tükenen) top.
 - **Kaldır:** `workOrderId` + `workOrder` relation (WO yok).
 - **Değiştir:** `length` → **nullable** (`Decimal?`). `weightKg` zaten nullable. `width` zaten nullable (parent'tan miras).
-- **Koru:** `cardNumber`/`barcode` (`SW-...`), `purpose`, çuval/sevkiyat (`shipmentId`/`sackId`) entegrasyonu.
+- **Koru:** `cardNumber`/`barcode` (kabulde `KRT + GGAAYY + NNNN`; tek-kod: cardNumber=barcode), `purpose`, çuval/sevkiyat (`shipmentId`/`sackId`) entegrasyonu.
 
 ### 3.4 `Roll` değişiklikleri
 - **Ekle:** `markedForKartela Boolean @default(false)` — Tambur finalize'da set; depo/kartela-sevk worklist filtresi. Sevki engellemez.
@@ -179,15 +182,15 @@ Tambur kesim → Roll(status=WAREHOUSE, markedForKartela=?)   ◀── depoya b
                           │
           [Kartela Sevk]  │  personel topu okutur, firma seçer
                           ▼
-        KartelaDispatch (KD-) + KartelaDispatchItem
+        KartelaDispatch (KS) + KartelaDispatchItem
         Roll.status: WAREHOUSE → AT_KARTELA
                           │
           [Kartela Kabul] │  firma seç → AT_KARTELA toplar → her top için adet (+ops. kg/cm)
                           ▼
-        KartelaReceipt (KR-) + KartelaReceiptItem(kartelaCount=N)
+        KartelaReceipt (KK) + KartelaReceiptItem(kartelaCount=N)
         Roll.status: AT_KARTELA → KARTELA_CONSUMED        (top komple tüketildi)
         N × Swatch doğar (parentReceiptId + parentRollId; ops. length/weightKg)
-        Barkod SW- kabulde üretilir; ETİKET kabulden sonra basılır
+        Barkod KRT+GGAAYY+NNNN kabulde üretilir; ETİKET basılmaz (adet sayılır, bkz. ⚑ EK)
                           │
                           ▼
         Kartela envanteri → (mevcut) Shipment/Sack ile sevk
@@ -200,15 +203,15 @@ Tambur kesim → Roll(status=WAREHOUSE, markedForKartela=?)   ◀── depoya b
 ## 5. Backend
 
 ### 5.1 `kartela.service.ts` (mevcut `subcontractor.service.ts` aynası, WO'suz)
-- `dispatch({ subcontractorId, rollIds, plateNumber?, driverName?, notes? }, userId)` — `WAREHOUSE` topları doğrula → `KD-` üret → item'lar → `AT_KARTELA`. Idempotency: aynı firma+toplar açık sevki varsa retry kabul.
+- `dispatch({ subcontractorId, rollIds, plateNumber?, driverName?, notes? }, userId)` — `WAREHOUSE` topları doğrula → `KS`-kodu (`dispatchNo`) üret → item'lar → `AT_KARTELA`. Idempotency: aynı firma+toplar açık sevki varsa retry kabul.
 - `cancelDispatch(id, reason, userId)` — soft cancel; toplar `WAREHOUSE`'a döner. Kabul varsa engelle.
-- `receive({ subcontractorId, manifestNo?, notes?, returns: [{ rollId, count, measure?: { mode:'bulk'|'each', kg?, cm?, items?:[{kg?,cm?}] } }] }, userId)` — `KR-` üret; her `returns[]` için: orijinal top `KARTELA_CONSUMED` + `KartelaReceiptItem(kartelaCount=count)` + `count` adet `Swatch` doğur (`SW-` barkod, length=cm, weightKg=kg; bulk→hepsine aynı, each→sırayla). `withBarcodeRetry` ile P2002 koruması.
+- `receive({ subcontractorId, manifestNo?, notes?, returns: [{ rollId, count, measure?: { mode:'bulk'|'each', kg?, cm?, items?:[{kg?,cm?}] } }] }, userId)` — `KK`-kodu (`receiptNo`) üret; her `returns[]` için: orijinal top `KARTELA_CONSUMED` + `KartelaReceiptItem(kartelaCount=count)` + `count` adet `Swatch` doğur (`KRT+GGAAYY+NNNN` barkod, length=cm, weightKg=kg; bulk→hepsine aynı, each→sırayla). Atomik claim (AT_KARTELA statü koşulu + updateMany count) ile çift-makbuz yarışı 409'a çevrilir; `createMany` toplu yazım.
 - `cancelReceipt(id, reason, userId, cascadeSwatchIds[])` — Swatch'ları geri al (downstream güvenli ise) + toplar `AT_KARTELA`.
 - `getReceiptCancelPreview(id)` — doğan Swatch'ların downstream bağ (shipment/sack) önizlemesi.
 - `listDispatches` / `listReceipts` (cursor + filtre: firma, tarih, iptal) ; `getDispatch` / `getReceipt` (detay + çeki listesi/`items`/`swatches`).
 - `outstandingRolls({ subcontractorId })` — kabul worklist'i: `AT_KARTELA` toplar (+ kaynak dispatch).
 - `setRollMarkedForKartela(rollId, value, userId)` — `markedForKartela` toggle (Tambur'dan set + backend kaldırma).
-- Barkod: `nextPrefixedSequence` tablo union'ına `kartelaDispatch | kartelaReceipt`; Swatch için mevcut `SW-` sequence. Tüm CUD'de `AuditService.log` (`KARTELA_DISPATCH` / `KARTELA_RECEIPT` / `SWATCH`).
+- Kod üretimi: kartela.service içi yerel `nextKartelaDocSequence(tx, 'dispatch'|'receipt', 'KS'|'KK', date)` (`dispatchNo`/`receiptNo` prefix taraması + sayısal max) + `nextSwatchSequence` (Swatch `KRT` sırası) — `code-format` `buildDailyCode`/`dailyCodePrefix` ile. Tüm CUD'de `AuditService.log` (`KARTELA_DISPATCH` / `KARTELA_RECEIPT` / `SWATCH`).
 - **Not:** Traveler-card scan (logTravelerScan) WO gerektirdiği için kartelada **atlanır**.
 
 ### 5.2 Controller + routes + yetki
@@ -235,7 +238,7 @@ Tambur kesim → Roll(status=WAREHOUSE, markedForKartela=?)   ◀── depoya b
 
 ## 7. Electron admin (`Electron/`) — Takip
 
-`src/pages/Operations/Kartela/`: `types.ts`, `service.ts`, `kartelaColumns.tsx`, `KartelaDetailSheet.tsx`, `KartelaPage.tsx`.
+`src/pages/Operations/Kartela/`: `kartela-doc.types.ts`, `service.ts`, `kartelaColumns.tsx`, `KartelaTabs.tsx`, `KartelaDetailSheet.tsx`, `KartelaCekiPrintDialog.tsx`, `KartelaPage.tsx`.
 - **KartelaPage:** Sekmeler **Sevkler** (ne gönderdim) / **Kabuller** (ne geldi); cursor liste + firma/tarih filtresi. Satıra tıkla → `Sheet` (sağ slide-over) detay.
 - **Detay (SideOver):** Sevk → çeki listesi (toplar + metraj/ağırlık + firma + tarih + personel + iptal). Kabul → tüketilen toplar + doğan kartelalar (adet/ölçüm) + manifest.
 - Kayıt: `content-routes.tsx` (`operations/kartela`, `kartela:read`), `tile-config.ts` (hub kartı). Tab meta otomatik.

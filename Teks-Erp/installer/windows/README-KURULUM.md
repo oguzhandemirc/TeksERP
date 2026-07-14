@@ -16,7 +16,7 @@ Windows sunucusuna tek bir `setup.exe` ile kuran paketi üretir.
 
 | Bileşen | Servis adı | Detay |
 |---|---|---|
-| PostgreSQL 16 | `TeksErpDB` | Yalnız `127.0.0.1:5433` dinler (dışarı kapalı) |
+| PostgreSQL 18 | `TeksErpDB` | Yalnız `127.0.0.1:5433` dinler (dışarı kapalı) |
 | Backend (Node) | `TeksErpBackend` | `0.0.0.0:4000` — fabrika ağına açık |
 
 **Klasör ayrımı** (güncellemeyi temiz yapan kilit nokta):
@@ -108,11 +108,11 @@ $NssmVersion` değişkenlerinden ayarlanır.
 **Geri alma (rollback):** Güncelleme sonrası bir sorun çıkarsa, migration öncesi
 otomatik alınan yedeğe dönebilirsin:
 ```powershell
-.\manage.ps1 -Action restore -BackupFile "C:\ProgramData\TeksERP\backups\premigrate_1.0.0_20260601_0300.dump"
+.\manage.ps1 -Action restore -BackupFile "C:\ProgramData\TeksERP\backups\premigrate_1.0.0_20260601_030000.dump"
 ```
 (Şema değişen bir sürümde, koddan da eski sürüme dönmen gerekebilir — önce eski `setup.exe`'yi çalıştır, sonra restore et.)
 
-### PostgreSQL major sürüm yükseltme (ör. 16 → 18)
+### PostgreSQL major sürüm yükseltme (ör. 18 → 19)
 
 Yeni setup **daha yeni bir PostgreSQL major** sürümü içeriyorsa, gömülü binary mevcut
 veri dizinini (eski major) **doğrudan açamaz**. Kurulum bunu algılar ve **net bir hatayla
@@ -129,7 +129,7 @@ güvenle durur** (cryptic bir "servis başlamadı" hatası vermez). Yükseltme a
    ```
    (Alternatif: PostgreSQL'in `pg_upgrade` aracıyla yerinde yükseltme — ileri düzey.)
 
-> Bu senaryo yalnızca major sürüm (16→18) atlarken geçerlidir; aynı major içindeki
+> Bu senaryo yalnızca major sürüm (ör. 18→19) atlarken geçerlidir; aynı major içindeki
 > normal güncellemeler (D bölümü) veriyi olduğu gibi korur.
 
 ---
@@ -146,7 +146,7 @@ Yönetici PowerShell'de (`C:\Program Files\TeksERP\scripts\`):
 .\manage.ps1 -Action backup     # C:\ProgramData\TeksERP\backups\ içine .dump al
 .\manage.ps1 -Action backup -BackupPath D:\Yedekler
 .\manage.ps1 -Action backup -OffsitePath \\NAS\teksyedek   # ayrıca makine dışına kopyala (bir kez ayarla, kalıcı olur)
-.\manage.ps1 -Action restore -BackupFile C:\...\tekserp_20260601_0300.dump
+.\manage.ps1 -Action restore -BackupFile C:\...\tekserp_20260601_030000.dump
 ```
 
 Servisleri Windows "Hizmetler" (services.msc) ekranından da yönetebilirsin:

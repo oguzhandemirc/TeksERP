@@ -28,19 +28,25 @@ dosya sırasıyla uygular. Idempotent — tekrar çalıştırmak güvenli.
 > ÇAĞIRMAZ. Manuel/Linux yolunda ise `generate` her güncellemede gereklidir.
 
 > **glibc collation NOTU (sıralı numara üreticileri — düzeltildi):** Günlük/
-> ardışık numara üreten servisler (sevkiyat `shipmentNo`, çuval `sackNo`/
-> `AMB%05d`, sipariş `orderNumber`, iş emri `batchNumber`/`manifestNo`) eskiden
-> üst sınırı `lt: prefix + "￿"` (U+FFFF) ile arıyordu. Bu, U+FFFF'i "en yüksek
-> karakter" sayar — macOS libc'de doğru, ama **Linux glibc** (ve glibc tabanlı
-> üretim sunucuları) altında U+FFFF *ignorable* olduğundan o günün son
-> numaraları aralık dışında kalır, "bugün kaç numara verildi" sorgusu eksik
-> sayar ve **sevk/sipariş/çuval numaraları sessizce çakışırdı**. NİHAİ fix
-> `gte: prefix` (her collation'da güvenli alt sınır + index seek) **+**
-> `startsWith: prefix` (collation'dan bağımsız LIKE 'prefix%' tam-prefix
-> filtresi) kombinasyonudur — `src/services/shipping.service.ts` ve
-> `order.service.ts` içinde. Sonuç: production artık **Linux glibc'de güvenli**;
-> CI'da bu bug 6 sevkiyat testini patlatmıştı, fix sonrası yeşil.
+> ardışık numara üreten servisler (sevkiyat `shipmentNo`=SVK, çuval `sackNo`=CV,
+> sipariş `orderNumber`=SIP, iş emri `workOrderNumber`=IE, parti `batchNumber`=P,
+> fason `dispatchNo`/`receiptNo`/`manifestNo`, müşteri/özellik `code`; tümü
+> `PREFIX+GGAAYY+NNNN`) eskiden üst sınırı `lt: prefix + "￿"` (U+FFFF) ile
+> arıyordu. Bu, U+FFFF'i "en yüksek karakter" sayar — macOS libc'de doğru, ama
+> **Linux glibc** (ve glibc tabanlı üretim sunucuları) altında U+FFFF *ignorable*
+> olduğundan o günün son numaraları aralık dışında kalır, "bugün kaç numara
+> verildi" sorgusu eksik sayar ve **sevk/sipariş/çuval numaraları sessizce
+> çakışırdı**. NİHAİ fix `gte: prefix` (her collation'da güvenli alt sınır +
+> index seek) **+** `startsWith: prefix` (collation'dan bağımsız LIKE 'prefix%'
+> tam-prefix filtresi) kombinasyonudur. Bu desen artık ortak
+> `src/utils/code-format.ts` yardımcılarında (`dailyCodePrefix` + `nextDailySeq`)
+> merkezîleşti; tüm günlük-numara üreticileri (shipping / order / workorder /
+> batch / subcontractor / customer / fabric-property / kartela servisleri) bu
+> yardımcıyı çağırır. Sonuç: production artık **Linux glibc'de güvenli**; CI'da
+> bu bug 6 sevkiyat testini patlatmıştı, fix sonrası yeşil.
 > **Eski sürüm Linux'a deploy edilmemelidir** (numara çakışması riski).
+> (NOT: eski `AMB%05d`/`AMB{SIRA:5}` çuval manuel-kod şablonu 2026-07-12'de
+> tümüyle kaldırıldı — çuval artık yalnız `sackNo`=CV ile yürür.)
 
 ## ⚠️ Index-ağırlıklı migration'lar — VARDİYA DIŞINDA
 
@@ -50,10 +56,13 @@ Yüz binlerce+ satıra index ekleyen migration'ın EN BAŞINA `SET statement_tim
 konmalı (drift-free migration'lara elle eklenebilir) ve **gece/hafta sonu** deploy
 edilmeli. Boş/yeni kurulumda risk yok.
 
-İlgili index migration'ları (mevcut): `20260612100000_repartialize...`,
-`20260612102000_dashboard_report_date_indexes`, `20260612120000_missing_fk_indexes...`,
-`20260613101000_sack_manual_code_index`. Bunlar küçük/orta tabloda hızlıdır ama
-hacim büyüdükçe yukarıdaki kural geçerlidir.
+İlgili index migration'ları (mevcut): `20260612100000_repartialize_after_native_uuid`,
+`20260612102000_dashboard_report_date_indexes`,
+`20260612120000_missing_fk_indexes_routestep_rollreturn`. Bunlar küçük/orta
+tabloda hızlıdır ama hacim büyüdükçe yukarıdaki kural geçerlidir.
+(`20260613101000_sack_manual_code_index` eskiden buradaydı ama `sacks.manualCode`
+kolonu 2026-07-12'de düşürüldü — `20260712120000_drop_sack_manual_code`; index
+artık DB'de yok.)
 
 ## Bu oturumda dev'e uygulanan, production'a gidecek migration'lar (2026-06-13)
 
@@ -66,6 +75,13 @@ hacim büyüdükçe yukarıdaki kural geçerlidir.
 | `20260613112000_machine_hardware` | machine_hardware tablosu + FK + unique index | yeni tablo — anında |
 
 Hepsi geri-uyumlu (yeni kolon/tablo nullable veya default'lu); mevcut veriyi bozmaz.
+
+> **Sonraki gelişme (tarihsel not):** Yukarıdaki tablodan iki migration daha sonra
+> geri alındı — bu doküman güncel şemayı yansıtsın diye: `machine_hardware` tablosu
+> `20260629130000_drop_machine_hardware` ile düşürüldü (saha donanımının tek kaynağı
+> artık `PeripheralDevice`), `sacks.manualCode` index+kolonu ise
+> `20260712120000_drop_sack_manual_code` ile kaldırıldı. Bu iki nesne **artık
+> şemada yok** — deploy sırasında da migrate zinciri kendini düzeltir.
 
 ## Temiz-DB deploy provası — DOĞRULANDI (2026-06-13)
 
@@ -80,13 +96,20 @@ DATABASE_URL="..." JWT_SECRET="..." npx prisma generate   # Prisma Client v7.7.0
 dropdb teks_deploy_probe
 ```
 
-Sonuç: **51/51 migration hatasız uygulandı** (`_prisma_migrations` → 51 finished,
-0 rolled-back/yarım), Prisma Client v7.7.0 temiz üretildi. İlk kurulum
-`migrate deploy` yolu sıfırdan boş DB'de sorunsuz çalışıyor.
+Sonuç (prova tarihindeki durum): **51/51 migration hatasız uygulandı**
+(`_prisma_migrations` → 51 finished, 0 rolled-back/yarım), Prisma Client v7.7.0
+temiz üretildi. İlk kurulum `migrate deploy` yolu sıfırdan boş DB'de sorunsuz
+çalışıyor. **Güncel migration sayısı bu provadan sonra arttı** — kanonik sayı her
+zaman `prisma/migrations/` dizinidir (bu yazının tarihinde ~114, en yenisi
+`20260714151000_dispatch_item_unique_dispatch_roll`); prova metodolojisi
+(boş probe DB + `migrate deploy` + `generate` + `dropdb`) hâlâ geçerli.
 
 ## Seed (örnek veri)
 
-`npm run seed` dev verisini SIFIRLAYIP yeniden kurar (production'da çalıştırılmaz).
-Makine donanımı örnek satırları (yazıcı/RS232 config) seed'e eklendi — yalnız dev/test
-ortamında görünür. Production'da operatör/admin kendi makine donanımını
-`Tanımlar → Makine Donanımı` ekranından girer.
+`npm run seed` (= `npx prisma db seed` → `prisma/seed.ts`) dev verisini SIFIRLAYIP
+yeniden kurar (production'da çalıştırılmaz; installer'da seed yalnız İLK kurulumda,
+`.seeded` bayrağı yoksa koşar). Saha donanımı örnek satırları (istasyon yazıcıları,
+RS232→BT metre girişleri, sevkiyat kantarı) `PeripheralDevice` modeline seed'lenir —
+yalnız dev/test ortamında görünür. (Eski `MachineHardware` tablosu emekliye ayrıldı;
+saha donanımının TEK kaynağı artık `PeripheralDevice`.) Production'da operatör/admin
+kendi cihazlarını Electron **Cihaz Kaydı** (`PeripheralDevicesPage`) ekranından girer.

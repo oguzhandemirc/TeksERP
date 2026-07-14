@@ -28,7 +28,7 @@
 Teks-Erp/
 ├── prisma/
 │   ├── schema.prisma          # ~78 model, ~35 enum (kanonik kaynak — sayı yaklaşık)
-│   ├── seed.ts                # Tek dosya: 55 permission + 14 template + 7 kullanıcı + 3 kalite + master demo
+│   ├── seed.ts                # Tek dosya: 55 permission + 15 template + 1 kullanıcı (admin) + 3 kalite + master demo
 │   └── migrations/            # ~114 migration (son: 20260714151000_dispatch_item_unique_dispatch_roll)
 │
 ├── src/
@@ -39,7 +39,7 @@ Teks-Erp/
 │   │   └── swagger.ts         # OpenAPI 3.0
 │   │
 │   ├── lib/
-│   │   └── prisma.ts          # PrismaClient singleton (pg adapter, pool=20)
+│   │   └── prisma.ts          # PrismaClient singleton (pg adapter, pool max=30)
 │   │
 │   ├── middlewares/
 │   │   ├── auth.middleware.ts        # verifyToken → req.user
@@ -165,13 +165,13 @@ Enum sayısı ~**35** (kanonik: `grep '^enum' schema.prisma`; aşağıdaki tablo
 | `StationType` | INTERNAL, EXTERNAL |
 | `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SHIPPING, SUBCONTRACTOR, OTHER |
 | `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
-| `ItemType` | YARN, WARP, FABRIC, CONSUMABLE |
+| `ItemType` | YARN, FABRIC, CONSUMABLE (WARP kaldırıldı — fabrika çözgü/dokuma yapmaz) |
 | `RollEntrySource` | SUPPLIER_RECEIPT, TAMBUR_SPLIT, SUBCONTRACTOR_RETURN |
 | `RollStatus` | STOCK, IN_PRODUCTION, SCRAP, CANCELLED, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE, SHIPPED, TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED, AT_KARTELA, KARTELA_CONSUMED (PRODUCED 2026-07-13 KALDIRILDI) |
-| `CompanyType` | CUSTOMER, SUPPLIER, SUBCONTRACTOR, DYEHOUSE |
-| `OrderStatus` | PENDING, APPROVED, IN_PRODUCTION, PARTIAL_SHIPPED, COMPLETED, CANCELLED |
+| `CompanyType` | CUSTOMER, SUPPLIER (fason/boyahane ayrı `Subcontractor` modeline taşındı — SUBCONTRACTOR/DYEHOUSE kaldırıldı) |
+| `OrderStatus` | PENDING, APPROVED, PARTIAL_SHIPPED, COMPLETED, CANCELLED (IN_PRODUCTION yok — durum defter-otoritatif shippedQty'den türer) |
 | `WorkOrderType` | ORDER_PRODUCTION, STOCK_PRODUCTION |
-| `WorkOrderStatus` | PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED |
+| `WorkOrderStatus` | PLANNED, IN_PROGRESS, COMPLETED, CANCELLED (PAUSED yok) |
 | `StepStatus` | PENDING, ACTIVE, COMPLETED, SKIPPED |
 | `TravelerCardStatus` | ACTIVE, REPRINTED, VOIDED, COMPLETED |
 | `ScanType` | ARRIVAL, DEPARTURE, INFO |
@@ -213,7 +213,7 @@ veya fason son adım) aynı topu `WAREHOUSE` **açık kumaş** olarak finalize e
 
 `app.ts` üzerinden mount edilen route prefix'leri.
 
-> **Güncellik notu (2026-06-12):** Gerçek mount sayısı 39 — aşağıdaki haritada eksik olanlar: `/api/shipping`, `/api/printed-documents`, `/api/returns`, `/api/return-reasons`, `/api/kartela`, `/api/product-recipes`, `/api/production-balance`, `/api/customer-branches`. Kesin liste için `src/app.ts`'e bak.
+> **Güncellik notu:** Gerçek mount sayısı ~42 (kanonik: `grep 'app.use("/' src/app.ts`) — aşağıdaki harita eksiktir; kapsanmayanlar: `/api/shipping`, `/api/printed-documents`, `/api/returns`, `/api/return-reasons`, `/api/kartela`, `/api/product-recipes`, `/api/production-balance`, `/api/customer-branches`, `/api/batches`, `/api/peripherals`. Kesin liste için `src/app.ts`'e bak.
 
 ### Public (auth gerekmez)
 
@@ -298,7 +298,7 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 | Modül | Permissions |
 |---|---|
 | SALES | `order:read`, `order:write`, `customer:read`, `customer:write`, `customer-alias:read`, `customer-alias:write` |
-| PRODUCTION | `workorder:read`, `workorder:write`, `roll:read`, `roll:write`, `station:read`, `station:write` |
+| PRODUCTION | `workorder:read`, `workorder:write`, `roll:read`, `roll:write`, `roll:manual-adjust`, `station:read`, `station:write` |
 | MASTER_DATA | `item:read`, `item:write` |
 | QUALITY | `quality:read`, `quality:write`, `property:read`, `property:write` |
 | SUBCONTRACTOR | `subcontractor:read`, `subcontractor:write` |
@@ -760,6 +760,8 @@ await prisma.$transaction(async (tx) => {
 
 Tüm hot-path tablolarında indeks durumu:
 
+> **Not:** Aşağıdaki liste nokta-anı snapshot'tır ve eksik olabilir (tekil kolonlar zamanla composite'e evrildi — örn. `rolls` üstünde `colorId`/`status`/`currentStepId`/`producedInStepId` artık `[colorId, status]` / `[status, createdAt]` / `[currentStepId, status]` / `[producedInStepId, status]` composite'lerinin leftmost prefix'i). Kanonik kaynak: `grep '@@index' prisma/schema.prisma`.
+
 | Tablo | Doğrulanmış İndeksler |
 |---|---|
 | `rolls` | `itemId`, `colorId`, `status`, `parentRollId`, `parentReceiptId`, `currentStepId`, `producedInStepId`, `createdById`, **composite `[status, createdAt]`** |
@@ -789,7 +791,7 @@ Tüm hot-path tablolarında indeks durumu:
 - `Order @@index([customerId, status])` — eğer "müşterinin açık siparişleri" sorgusu eklenirse
 - `WorkOrder @@index([status, plannedEndDate])` — eğer "termin yaklaşan WO" raporu eklenirse
 - `RollOperation` BRIN index (`createdAt` üzerinde) — milyon satıra ulaşınca
-- `MachineLog`, `WorkOrder.parameters`, `RollOperation.metadata` için **GIN index** — JSON sütununa filtre uygulanmaya başlandığı anda (önce ekle, sonra endpoint yaz)
+- `WorkOrder.parameters`, `RollOperation.metadata` (ve diğer snapshot Json'ları) için **GIN index** — JSON sütununa filtre uygulanmaya başlandığı anda (önce ekle, sonra endpoint yaz). (`MachineLog` 2026-05-25'te silindi — artık aday değil.)
 
 ---
 
@@ -960,15 +962,15 @@ npx tsc --noEmit             # Type-check (build'siz)
 | Customer-Color alias | 3 | MAVI=Royal Blue, LACIVERT=Navy, BEYAZ=Saf Beyaz |
 | Renk | 6 | Beyaz, Siyah, Lacivert, Kırmızı, Mavi, Bej |
 | Kumaş Özelliği | 7 | Antibakteriyel, Su Geçirmez, Yanmaz, Elastik, Zımparalı, Parlak, **Kurşunlu** |
-| Fason Kategori | 2 | **BOYA** (Boyahane — `appliesColor=true, appliesProperty=true`), **ZIMPARA** (Zımpara — yalnız `appliesProperty=true`) |
-| Fason Firma | 2 | **BOYER** (Boyer Boyacılık → BOYA), **KESTEL** (Kestel Zımpara → ZIMPARA) |
-| İstasyon | 5 | **KK1_1** (RAW_QC, entry-only `allowAsWorkOrderStep=false`), Kurşun+KK2 (PROCESS_QC), Tambur (TAMBUR), Boya Fason, Zımpara Fason |
+| Fason Kategori | 3 | **BOYA** (Boyahane — `appliesColor=true, appliesProperty=true`), **ZIMPARA** (Zımpara — yalnız `appliesProperty=true`), **KARTELA** (bitmiş top → kartela firması) |
+| Fason Firma | 3 | **BOYER** (Boyer Boyacılık → BOYA), **KESTEL** (Kestel Zımpara → ZIMPARA), **KARTELA A.Ş.** (→ KARTELA) |
+| İstasyon | 6 | **KK1_1** (RAW_QC, entry-only `allowAsWorkOrderStep=false`), Kurşun+KK2 (PROCESS_QC), Tambur (TAMBUR), Boya Fason, Zımpara Fason, **Sevkiyat/Paketleme** (SHIPPING, `allowAsWorkOrderStep=false`) |
 | Makine | 3 | KK1-M1 (tablet pair için), KK2-M1, TAMBUR-M1 |
 | İstasyon yeteneği | 6 renk + 7 özellik | Boya = 6 renk + 5 özellik · Kurşun = KURSUN · Zımpara = ZIMPARALI · Tambur = yok |
 | Hata tipi | 2 | YIRTIK (MAJOR), LEKE (MINOR) |
 | Rota şablonu | 3 (9 step) | "Standart Boyama" (generic), "Boya + Zımpara" (generic), "ARDA — Hızlı" (ARDA-özel) |
 | Ürün | 1 | **Patos** (FABRIC, tüm renk + özellik izinli) |
-| Label template | 2 | ROLL default, SWATCH default |
+| Label template | 3 | ROLL_RAW + ROLL_FINISHED + SWATCH default |
 | Kalite Sınıfı | 3 | 1.KALITE, A1, FIRE |
 
 ---

@@ -9,7 +9,8 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 ## A) Kod kalitesi (build makinesinde / CI)
 
 - [ ] **Backend testleri yeşil** — `Teks-Erp/` içinde `npm test`
-      (= `tsx scripts/run-all-tests.ts`, 47 adet `test_*.ts` dosyası) exit 0.
+      (= `tsx scripts/run-all-tests.ts`, tüm `scripts/test_*.ts` dosyalarını
+      toplar — kanonik sayı `scripts/test_*.ts`, 2026-07-14 itibarıyla ~159) exit 0.
 - [ ] **Electron testleri yeşil** — `Electron/` Vitest (`npm test`) hatasız.
 - [ ] **Mobil testleri yeşil** — `mobil/` jest-expo (`npm test`) hatasız.
 - [ ] (Hepsi tek seferde: kök `./run-tests.sh`.)
@@ -36,8 +37,10 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 - [ ] **DB yedeği alındı** (`pg_dump -Fc` / Windows installer güncellemede
       `premigrate_*.dump`'ı otomatik alır — alındığı teyit edildi).
 - [ ] **`migrate deploy` provası yapıldı** — temiz bir DB'de (`teks_deploy_probe`
-      gibi) tüm migration'lar hatasız uygulanıyor (son prova 2026-06-13:
-      **51/51 hatasız**, bkz. `Teks-Erp/MIGRATION-DEPLOY.md`).
+      gibi) tüm migration'lar hatasız uygulanıyor (2026-06-13 provası **51/51
+      hatasız**; migration sayısı sürekli artar — kanonik `prisma/migrations/`,
+      2026-07-14 itibarıyla ~114 — prova her deploy öncesi tekrarlanır;
+      bkz. `Teks-Erp/MIGRATION-DEPLOY.md`).
 - [ ] **Index-ağır migration vardiya dışına planlandı** — büyük tabloda
       `CREATE INDEX` içeren migration gece/hafta sonu deploy edilecek;
       gerekiyorsa migration başına `SET statement_timeout = 0;` eklendi
