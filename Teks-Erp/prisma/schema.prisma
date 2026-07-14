@@ -1817,7 +1817,11 @@ model SubcontractorDispatchItem {
 
   createdAt DateTime @default(now())
 
-  @@index([dispatchId])
+  // Derinlemesine savunma: aynı top aynı sevke iki kez yazılamaz (uygulama
+  // katmanındaki atomik claim'in DB seddi — kardeş tablolarla simetri:
+  // SubcontractorReceiptItem/KartelaReceiptItem/SackAllocation). Sol-prefix
+  // dispatchId'yi kapsar → ayrı @@index([dispatchId]) kaldırıldı (D-6 emsali).
+  @@unique([dispatchId, rollId])
   @@index([rollId])
   @@map("subcontractor_dispatch_items")
 }
@@ -2168,7 +2172,9 @@ model KartelaDispatchItem {
 
   createdAt DateTime @default(now())
 
-  @@index([dispatchId])
+  // Derinlemesine savunma (SubcontractorDispatchItem ile simetrik): aynı top
+  // aynı kartela sevkine iki kez yazılamaz; sol-prefix dispatchId'yi kapsar.
+  @@unique([dispatchId, rollId])
   @@index([rollId])
   @@map("kartela_dispatch_items")
 }
