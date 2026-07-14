@@ -34,6 +34,7 @@ import { routeService } from '../../../services/route.service';
 import { productRecipeService } from '../../../services/productRecipe.service';
 import { subcontractorService } from '../../../services/subcontractor.service';
 import { workOrderService, type QuickStartRequest } from '../../../services/workOrder.service';
+import { generateClientUuid } from '../../../offline/barcode';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import type { Roll } from '../../../types/models';
@@ -73,6 +74,10 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   const [printing, setPrinting] = useState(false);
 
   const [scanned, setScanned] = useState<ScannedRoll[]>([]);
+  // İdempotency anahtarı — form-oturumu kimliği. Mount'ta üretilir; timeout sonrası
+  // tekrar basış aynı token'ı gönderir → backend cached WO döner (quickStart
+  // replay-guard'ı attach/telafi'yi atlar). resetAll'da (yeni WO) yenilenir.
+  const [clientToken, setClientToken] = useState(generateClientUuid);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [listOpenInternal, setListOpenInternal] = useState(false);
   const listOpen = rollListOpen ?? listOpenInternal;
@@ -555,6 +560,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
     const stepPlanning = [...planBySeq.entries()].map(([sequence, v]) => ({ sequence, ...v }));
 
     const payload: QuickStartRequest = {
+      clientToken,
       rollBarcodes: scanned.map((s) => s.barcode),
       routeTemplateId,
       targetColorId: apply ? header.targetColorId : null,
@@ -593,6 +599,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
     setSubmitError(null);
     setDispatchFirstStep(true);
     setResult(null);
+    setClientToken(generateClientUuid()); // yeni WO oturumu → yeni token
   };
 
   // Refakat kartı — backend'in TEK KAYNAK HTML'ini basar (kullanıcı iptali sessiz).

@@ -15,6 +15,9 @@ export interface WorkOrderStepInput {
 /** WO oluşturma/replace ortak gövde — quick-start ve düzenleme paylaşır. */
 export interface WorkOrderPayload {
   batchNumber?: string | null;
+  /** İdempotency anahtarı — form-oturumu başına üretilir; timeout-replay'de
+   *  mükerrer İE + refakat kartı önlenir (yalnız create/quick-start kullanır). */
+  clientToken?: string;
   type?: 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION';
   width?: number | null;
   targetQuantity?: number | null;

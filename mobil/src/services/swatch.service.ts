@@ -132,6 +132,8 @@ export const swatchService = {
     colorId: string | null;
     count: number;
     reason: string;
+    /** İdempotency anahtarı — sayaç-bazlı düşümün replay'i ÇİFT düşüm yapardı. */
+    clientToken?: string;
   }): Promise<ApiResponse<{ reduced: number }>> =>
     apiClient
       .post<ApiResponse<{ reduced: number }>>(`/kartela/stock/reduce`, body)

@@ -29,9 +29,16 @@ export const queryClient = new QueryClient({
       // Default 'always': offline'da paused olmaz, hızlıca network hatasıyla
       // fail eder → loading sonsuza takılmaz. Offline-aware mutation'lar
       // setMutationDefaults ile 'online'a override eder (QC2 vs.).
+      // KALIR — 'online' olsa registry-DIŞI mutasyonlar offline'da paused kalır ama
+      // persist edilmediklerinden (persistPolicy yalnız istasyon kayıtları) zombi/
+      // sonsuz loading üretirdi.
       networkMode: 'always',
-      retry: 1,
-      retryDelay: 800,
+      // retry: 0 (idempotency denetimi — eski 1) — registry-DIŞI, idempotency
+      // anahtarı olmayan mutasyonlar (sipariş/iş emri/kartela-düşüm/sevkiyat) her ağ
+      // hatasında (sunucunun COMMIT etmiş olabileceği timeout dahil) sessizce ikinci
+      // POST atıyordu → sessiz çift kayıt. STATION_MUT registry'si kendi retry'ını
+      // (stationRetry) OFFLINE_AWARE ile set ettiğinden bu değişimden ETKİLENMEZ.
+      retry: 0,
     },
   },
 });
@@ -48,6 +55,10 @@ export const asyncStoragePersister = createAsyncStoragePersister({
 
 // Bump'lar persist cache'i invalidate eder: registry shape değiştiğinde veya
 // eski persisted mutation'larla incompatible bir değişiklik yapıldığında bump'la.
+// NOT (idempotency, retry 1→0): persist BUSTER bilinçli BUMP'LANMADI — persist
+// edilen artefaktların (paused/pending istasyon mutasyonları) davranışı runtime
+// setMutationDefaults'tan gelir; default retry değişimi persist şekliyle uyumlu.
+// Bump etmek update anında kuyruktaki offline saha kayıtlarını SİLERDİ.
 // v10: persist kapsamı daraltıldı (App.tsx dehydrateOptions — yalnız bootstrap
 //      query'leri + paused/pending-istasyon mutation'ları; persistPolicy.ts).
 // v9: QC2_FINISH_STEP registry'e eklendi (adımı kapat offline-aware).

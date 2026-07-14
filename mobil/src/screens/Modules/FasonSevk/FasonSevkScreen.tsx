@@ -813,7 +813,15 @@ export default function FasonSevkScreen() {
   const canDispatch =
     !!workOrderId && !!stepId && !!subcontractorId && scannedRolls.length > 0;
 
+  // Çift dokunuş kilidi. isPaused ŞART: FASON_SEVK_DISPATCH offline-persisted bir
+  // mutation olduğundan çevrimdışıyken isPending true KALIR (paused) — salt isPending
+  // ile bloklamak, offline operatörün İKİNCİ partiyi sevk etmesini engellerdi (meşru
+  // akış; replay'i backend sameRolls idempotency'si korur). Yalnız gerçekten uçuşta
+  // (pending && !paused) olan istek çift-tıkı bloklar.
+  const dispatchBusy = dispatchMutation.isPending && !dispatchMutation.isPaused;
+
   const handleDispatch = () => {
+    if (dispatchBusy) return;
     if (!canDispatch) {
       Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'Tüm seçimleri yapın' });
       return;
@@ -1237,7 +1245,8 @@ export default function FasonSevkScreen() {
             mode="contained"
             icon="truck-delivery"
             onPress={handleDispatch}
-            disabled={!canDispatch}
+            disabled={!canDispatch || dispatchBusy}
+            loading={dispatchBusy}
             style={styles.submitBtn}
             contentStyle={styles.submitBtnContent}
             labelStyle={styles.submitBtnLabel}

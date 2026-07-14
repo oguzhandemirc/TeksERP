@@ -98,6 +98,8 @@ export const orderService = {
     customerId: string;
     branchId?: string | null;
     rollIds: string[];
+    /** İdempotency anahtarı — timeout-replay'de mükerrer sipariş önlenir. */
+    clientToken?: string;
   }): Promise<ApiResponse<QuickOrderResult>> =>
     apiClient.post<ApiResponse<QuickOrderResult>>('/orders/quick-from-rolls', data).then((r) => r.data),
 };

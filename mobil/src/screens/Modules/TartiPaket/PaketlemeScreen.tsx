@@ -560,7 +560,10 @@ export default function PaketlemeScreen() {
                     compact
                     mode="contained-tonal"
                     icon="plus"
+                    // paper'da `loading` tıklamayı ENGELLEMEZ — çift dokunuş + otomatik
+                    // retry mükerrer boş çuval açardı; disabled ile in-flight kilitlenir.
                     loading={openSackMut.isPending}
+                    disabled={openSackMut.isPending}
                     onPress={() => openSackMut.mutate()}
                   >
                     Yeni Çuval

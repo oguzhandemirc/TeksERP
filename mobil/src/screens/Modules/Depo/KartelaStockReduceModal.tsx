@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import AppModal from '../../../components/AppModal';
 import { swatchService, type KartelaStockGroup } from '../../../services/swatch.service';
+import { generateClientUuid } from '../../../offline/barcode';
 import { colors, spacing, radius } from '../../../theme';
 
 /**
@@ -27,11 +28,16 @@ export function KartelaStockReduceModal({
 }) {
   const [count, setCount] = useState('1');
   const [reason, setReason] = useState('');
+  // İdempotency anahtarı — modal açılışı bir form-oturumudur. Sayaç-bazlı düşümün
+  // otomatik/manuel replay'i FARKLI N kartela daha iptal ederdi (çift düşüm);
+  // aynı token'la 2. çağrı backend'de cached { reduced } döner. Her açılışta yenilenir.
+  const [clientToken, setClientToken] = useState(generateClientUuid);
 
   useEffect(() => {
     if (visible) {
       setCount('1');
       setReason('');
+      setClientToken(generateClientUuid());
     }
   }, [visible, group?.itemId, group?.colorId]);
 
@@ -47,6 +53,7 @@ export function KartelaStockReduceModal({
         colorId: group!.colorId,
         count: n,
         reason: reason.trim(),
+        clientToken,
       }),
     onSuccess: (res) => {
       Toast.show({

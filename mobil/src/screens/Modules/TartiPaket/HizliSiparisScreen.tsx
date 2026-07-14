@@ -11,6 +11,7 @@ import PickerModal, { type PickerOption } from '../../../components/PickerModal'
 import { rollService } from '../../../services/roll.service';
 import { customerService } from '../../../services/customer.service';
 import { orderService } from '../../../services/order.service';
+import { generateClientUuid } from '../../../offline/barcode';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import type { MainStackParamList } from '../../../navigation/types';
@@ -41,6 +42,10 @@ export default function HizliSiparisScreen() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [rolls, setRolls] = useState<ScannedRoll[]>([]);
+  // İdempotency anahtarı — form-oturumu kimliği. Ekran açılışında üretilir (mount);
+  // timeout sonrası MANUEL tekrar basış aynı token'ı gönderir → backend mükerrer
+  // siparişi cached döner. Yalnız başarıda yenilenir (yeni form oturumu).
+  const [clientToken, setClientToken] = useState(generateClientUuid);
 
   const lookupMut = useMutation({
     mutationFn: (barcode: string) => rollService.getByBarcode(barcode.trim()),
@@ -83,7 +88,8 @@ export default function HizliSiparisScreen() {
   }));
 
   const submitMut = useMutation({
-    mutationFn: () => orderService.quickFromRolls({ customerId: customerId!, rollIds: rolls.map((r) => r.id) }),
+    mutationFn: () =>
+      orderService.quickFromRolls({ customerId: customerId!, rollIds: rolls.map((r) => r.id), clientToken }),
     onSuccess: (res) => {
       const d = res.data;
       Toast.show({
@@ -94,6 +100,7 @@ export default function HizliSiparisScreen() {
       setRolls([]);
       setCustomerId(null);
       setCustomerName('');
+      setClientToken(generateClientUuid()); // yeni form oturumu → yeni token
       nav.goBack();
     },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sipariş açılamadı', text2: e.message }),
