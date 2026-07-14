@@ -11,7 +11,6 @@ tasarım/operasyon/tarihçe dokümanlarını tasnif eder.
 | `ops/` | Deploy/runbook — kurulum, deploy runbook, üretim kontrol listesi, raster fiziksel checklist | Operasyonel, bakımlı |
 | `qa/` | Manuel kabul testi senaryoları (UAT — gerçek cihaz/UI) | Bakımlı |
 | `history/` | **Arşiv (salt-okunur, tarihsel)** — kapanmış kod incelemeleri, eski risk raporları, tamamlanmış plan/faz dokümanları, superseded tasarımlar | Donmuş; envanter sayıları/satır referansları bayat — referans SANMA |
-| `akademik/` | Yüksek Lisans ders raporu (mühendislik referansı değil) | — |
 
 ## Kanonik referanslar (bu klasörde DEĞİL)
 
