@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabsStore, type TabItem } from "@/store/tabs";
@@ -47,8 +47,15 @@ export function TabHost() {
  * kutuyu sabit kaplar (iç içerik kaysa bile yerinde kalır). Sayfanın kaydırması
  * iç katmanda olur. Pasif sekme `invisible` olduğundan içindeki açık modal da
  * sekmeyle birlikte gizlenir; mount kaldığı için geri dönülünce state korunur.
+ *
+ * Perf: React.memo — KRİTİK. Sekme değiştirince `activeId` değişip `TabHost`
+ * re-render oluyor; memo olmadan AÇIK TÜM sekmelerin sayfa ağacı (tablolar,
+ * formlar) yeniden render oluyordu → çok sekmede geçiş yüzlerce ms sürüp donma
+ * hissi veriyordu. `tab` objesi setActive'de referansını korur, `active` yalnız
+ * eski+yeni aktif sekme için değişir → memo yalnız o 2 pane'i günceller, geri
+ * kalan mount'lu sayfalara dokunmaz. (Sekmelerin hep mount kalması tasarım.)
  */
-function TabPane({ tab, active }: { tab: TabItem; active: boolean }) {
+const TabPane = memo(function TabPane({ tab, active }: { tab: TabItem; active: boolean }) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   return (
     <div
@@ -68,7 +75,7 @@ function TabPane({ tab, active }: { tab: TabItem; active: boolean }) {
       </div>
     </div>
   );
-}
+});
 
 function EmptyTabs({ onOpen }: { onOpen: () => void }) {
   return (
