@@ -63,7 +63,7 @@ async function setupWoOnly(tag: string, count: number): Promise<{ wo: Wo; rollId
   const stamp = `${Date.now()}`.slice(-6);
   const woRow = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-FIC-${tag}-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `TST-FIC-${tag}-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [
         { stationId: ST_BOYA, stepSequence: 1, status: "PENDING" },
@@ -196,6 +196,7 @@ async function cleanup(): Promise<void> {
     await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: receiptIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...createdWoIds] } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: createdWoIds } } });

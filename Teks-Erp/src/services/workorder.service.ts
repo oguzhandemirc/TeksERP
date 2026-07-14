@@ -850,6 +850,32 @@ export class WorkOrderService {
       throw AppError.badRequest("En az bir top barkodu okutmalısınız.");
     }
 
+    // ── 0) İdempotent replay kısa-devresi ───────────────────────────────────
+    // Bu clientToken'la WO zaten açılmışsa (manuel tekrar / timeout-replay), aşağıdaki
+    // ön-doğrulamaya HİÇ girme: toplar İLK istekte bağlandığından artık IN_PRODUCTION
+    // ve pre-validation yanlışlıkla "toplar envanterde değil" 400'ü atardı. Cached WO'yu
+    // dön (create()'in idempotentReplay guard'ının pre-validation-öncesi ikizi).
+    if (woInput.clientToken) {
+      const existing = await prisma.workOrder.findUnique({
+        where: { clientToken: woInput.clientToken },
+        include: {
+          steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
+          orderLinks: { include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } } },
+          routeTemplate: true,
+        },
+      });
+      if (existing && existing.isActive) {
+        const attached = await prisma.roll.count({
+          where: { barcode: { in: barcodes }, currentStep: { workOrderId: existing.id } },
+        });
+        return {
+          success: true,
+          data: { workOrder: existing, attached, errors: [], dispatch: null },
+          message: `İş emri zaten başlatılmış (idempotent retry): ${existing.workOrderNumber}`,
+        };
+      }
+    }
+
     // ── 1) Ön-doğrulama: var + STOCK + aynı ürün ────────────────────────────
     const rolls = await prisma.roll.findMany({
       where: { barcode: { in: barcodes } },
