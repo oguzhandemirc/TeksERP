@@ -23,3 +23,16 @@ tasarım/operasyon/tarihçe dokümanlarını tasnif eder.
 > **Not:** `history/` altındaki dosyalar yazıldıkları anın fotoğrafıdır. Model/enum/migration
 > sayıları ve dosya:satır referansları o günden bu yana bayatlamıştır — güncel gerçek için
 > her zaman `schema.prisma` + kanonik `CLAUDE.md`'lere bak.
+
+## Bayatlık bekçisi (CI)
+
+`scripts/check-docs.mjs` (zero-dep Node) her push/PR'da CI'da koşar (`docs` job'ı) +
+elle `cd Teks-Erp && npm run check:docs`:
+
+- **GATE (fail):** ölü doküman-link — bir doküman taşınmış/silinmiş bir repo dosyasına
+  atıf yaparsa CI kırılır (bu oturumda dosya taşındığında referanslar kırıldı — tam bu senaryoyu yakalar).
+- **ADVISORY (fail etmez):** kaldırılmış-sembol atıfları (`batchSplitId`, `MachineLog`,
+  `packedQty`...) — tasarım dokümanları tarihsel bağlamı meşru anlattığı için yalnız listelenir.
+
+Yeni bir sembol/model kaldırıldığında `REMOVED_SYMBOLS`'e ekle; geri gelirse çıkar. Sayı
+bayatlığı ayrıca kanonik-kaynak yönlendirmesiyle azaltıldı (docs "~N (kanonik: schema.prisma)" der).

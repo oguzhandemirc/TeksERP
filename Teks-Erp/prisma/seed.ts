@@ -15,8 +15,8 @@
 //   3. 1 kullanıcı (yalnız admin — ek test kullanıcıları kaldırıldı 2026-07-03)
 //   4. Admin'e tüm yetkiler atanır
 //   5. 3 kalite sınıfı (1.KALITE / A1 / FIRE)
-//   6. Master demo (test ortamı için): 4 müşteri, 6 renk, 6 kumaş özelliği,
-//      2 fason kategori (BOYA/ZIMPARA), 2 fason firma (Boyer/Kestel Zımpara)
+//   6. Master demo (test ortamı için): 4 müşteri, 6 renk, 7 kumaş özelliği,
+//      3 fason kategori (BOYA/ZIMPARA/KARTELA), 3 fason firma (Boyer/Kestel/Kartela A.Ş.)
 // =============================================================================
 
 import { PrismaClient } from "@prisma/client";

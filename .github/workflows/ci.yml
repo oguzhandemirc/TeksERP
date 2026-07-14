@@ -20,6 +20,22 @@ permissions:
 
 jobs:
   # ===========================================================================
+  # DOKÜMAN BEKÇİSİ — docs'un koda karşı bayatlamasını önler (zero-dep, DB'siz, hızlı).
+  # GATE: ölü doküman-link (taşınmış/silinmiş dosyaya atıf) → fail.
+  # ADVISORY: kaldırılmış-sembol atıfları (fail etmez, log'da görünür).
+  # ===========================================================================
+  docs:
+    name: Doküman bekçisi (link + bayatlık)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Doküman tutarlılık kontrolü
+        run: node scripts/check-docs.mjs
+
+  # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test
   # ===========================================================================
   backend:
