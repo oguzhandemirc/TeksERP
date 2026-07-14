@@ -17,6 +17,7 @@ import {
   EPL_FONT,
   LINE_GAP_MM,
   qrFootprintDots,
+  bannerValueText,
   mediaTypeCommand,
   type NativeRenderInput,
 } from "./native-label.shared";
@@ -68,7 +69,7 @@ export function buildRollLabelZpl({ payload, format, copies, template }: NativeR
   // QR sol-üst; ayak izi qrMag ile → metin kolonu sağa kayar (çakışmaz)
   let textX = left;
   if (bc) {
-    const qrPx = Math.min(qrFootprintDots(bc.length, qrMag), Math.round((contentRight - left) * 0.45));
+    const qrPx = Math.min(qrFootprintDots(bc, qrMag), Math.round((contentRight - left) * 0.45));
     lines.push(`^FO${left},${top}^BQN,2,${qrMag}^FDQA,${bc}^FS`);
     textX = left + qrPx + d(2);
   }
@@ -92,7 +93,7 @@ export function buildRollLabelZpl({ payload, format, copies, template }: NativeR
 
   // Sağ dikey metraj bandı — solid siyah kutu (^GB) + döndürülmüş ters (^A0R+^FR) beyaz değer
   if (bannerOn) {
-    const val = zplData(String(payload.lengthMeters));
+    const val = zplData(bannerValueText(payload));
     const charLen = EPL_FONT.xl.w * BANNER_MUL;
     const bannerH = bottomEdge - top;
     // Siyah arka planı uzat: boşluk dolgusu (^FR ile beyaz metin, siyah boşluk hücresi)

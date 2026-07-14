@@ -433,6 +433,39 @@ export function WorkOrderFormView({
           </Callout>
         )}
 
+        {/* Şablon seç — form üstü hızlı başlangıç (yalnız yeni kayıt). Kompakt tuş
+            "İş Emri Şablonu Seç" modalını açar; seçilince hedef alanları + rota
+            tek tıkla dolar (applyRecipe). Eski "Hızlı Başlangıç" bölümünün yerini alır. */}
+        {!isEdit && (
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-violet-50/50 px-6 py-2 dark:bg-violet-950/20">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <FlaskConical className="h-4 w-4 shrink-0 text-violet-500" />
+              <span>
+                {isOrderProduction
+                  ? "Hazır şablon seçersen ROTA + kat tipi tek tıkla dolar. İstersen atla."
+                  : "Hazır şablon seçersen kumaş, renk, en ve rota tek tıkla dolar. İstersen atla."}
+              </span>
+            </div>
+            <EntityPickerModal<ProductRecipe>
+              value={recipeId}
+              onChange={(id) => void applyRecipe(id)}
+              service={productRecipeService}
+              queryKey="product-recipes"
+              getLabel={(r) => r.name}
+              getSubLabel={(r) => r.code}
+              nullable
+              noneLabel="— Şablon kullanma"
+              icon={FlaskConical}
+              iconClassName="text-info"
+              title="İş Emri Şablonu Seç"
+              description="Hazır şablon — kumaş, renk, özellik, en ve rota tek tıkla dolar."
+              placeholder="Şablon seç..."
+              triggerClassName="w-auto min-w-[220px] shrink-0"
+              countLabel="şablon"
+            />
+          </div>
+        )}
+
         <div className="flex min-h-0 flex-1">
           {/* Sol panel — yalnız sipariş bağlıyken; stoğa üretimde yer kaplamaz */}
           {isOrderProduction && (
@@ -452,43 +485,6 @@ export function WorkOrderFormView({
 
           {/* Orta panel — form içeriği */}
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-4">
-            {/* Hızlı başlangıç — opsiyonel şablon. Hedef + rota tek tıkla dolar. */}
-            {!isEdit && (
-              <FormSection
-                title="Hızlı Başlangıç"
-                icon={FlaskConical}
-                tone="violet"
-                optional
-                description="Hazır şablon seçersen ilgili alanlar otomatik dolar. İstersen atla, aşağıdan elle doldur."
-              >
-                <FormField
-                  label="İş emri şablonundan doldur"
-                  hintTone="info"
-                  hint={
-                    isOrderProduction
-                      ? "Şablondan yalnız ROTA + kat tipi gelir (ürün/renk/en sipariş kaleminden)."
-                      : "Hazır şablon — kumaş, renk, üretim özellikleri, en ve rota otomatik dolar."
-                  }
-                >
-                  <EntityPickerModal<ProductRecipe>
-                    value={recipeId}
-                    onChange={(id) => void applyRecipe(id)}
-                    service={productRecipeService}
-                    queryKey="product-recipes"
-                    getLabel={(r) => r.name}
-                    getSubLabel={(r) => r.code}
-                    nullable
-                    noneLabel="— Şablon kullanma"
-                    icon={FlaskConical}
-                    iconClassName="text-info"
-                    title="İş Emri Şablonu Seç"
-                    description="Hazır şablon — kumaş, renk, özellik, en ve rota tek tıkla dolar."
-                    placeholder="İş emri şablonu seç..."
-                  />
-                </FormField>
-              </FormSection>
-            )}
-
             {/* 1 — Sipariş bağlantısı. Bağlıysa kalemleri karşılar; değilse stoğa üretim. */}
             <FormSection
               step={1}

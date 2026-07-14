@@ -9,7 +9,7 @@
 
 import bwipjs from "bwip-js";
 import { PrinterLanguage } from "@prisma/client";
-import { qrSymbolModules, dplBarcodeMulToNum } from "./native-label.shared";
+import { qrSymbolModules, dplBarcodeMulToNum, CP1254_TO_UNICODE } from "./native-label.shared";
 
 // EPL2 bitmap font kodu → {w,h} dot (çarpan öncesi). Generator EPL_FONT ile AYNI değerler
 // (native-label.shared) — PPLB/ZPL önizleme metni yazıcı hücresiyle birebir (textLength ile).
@@ -27,7 +27,11 @@ const DPL_FONT_BY_CODE: Record<string, { w: number; h: number }> = {
 };
 
 function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  // PPLB `I8,E` (CP1254) yolunda Türkçe glif cp1254 baytı olarak emit edilir (Ş→0xDE=Þ...);
+  // önizlemede baytı GERİ Türkçe'ye eşle → gördüğün = basılan. Bu 6 latin1 kodu Türkçe
+  // etikette asla geçmediği için codepage kontrolü gerekmez (PPLA/ZPL yolunu etkilemez).
+  const tr = s.replace(/[ÐÝÞðýþ]/g, (c) => CP1254_TO_UNICODE[c] ?? c);
+  return tr.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /** bwip-js barkod/QR'ı data-URI + intrinsic boyut olarak döner (embed için). */
@@ -59,13 +63,20 @@ function svgTextCell(x: number, y: number, glyphW: number, glyphH: number, data:
   );
 }
 function svgQr(x: number, y: number, mag: number, data: string): string {
-  const img = bwipImg({ bcid: "qrcode", text: data, scale: 1, backgroundcolor: "ffffff" });
+  // eclevel:"M" → yazıcı QR varsayılanı (manuel p6 default M) ile birebir; hesap
+  // (qrSymbolModules) da M kapasitesine göre → önizleme QR sürümü = basılan sürüm.
+  const img = bwipImg({ bcid: "qrcode", text: data, eclevel: "M", scale: 1, backgroundcolor: "ffffff" });
   if (!img) return "";
-  // Boyut = SEMBOL modülleri × mag = yazıcının fiilen BASTIĞI kara footprint. Sessiz
-  // bölge (4 modül/kenar) BEYAZ kağıt → görsel boşluk olarak zaten kalır, kutuya
-  // EKLENMEZ. Eklenince QR ~1.38× (29/21) şişip alt barkoda biniyordu; bwip görüntüsü
-  // zaten sessiz-bölgesiz çıplak semboldür (fiziksel baskı doğrulaması — kullanıcı).
-  const size = qrSymbolModules(data.length) * Math.max(1, mag);
+  // Boyut = SEMBOL modülleri × mag = yazıcının fiilen BASTIĞI kara footprint. Sessiz bölge
+  // (4 modül/kenar) BEYAZ kağıt → görsel boşluk olarak kalır, kutuya EKLENMEZ.
+  // Modül sayısı = bwip'İN KENDİ sürümü (optimal karışık-mod = yazıcının seçtiği sürümle
+  // BİREBİR, TÜM veride). bwip scale-1 → 2 birim/modül, sessiz-bölgesiz (v1:42=21×2,
+  // v2:50=25×2 doğrulandı) → gerçek modül = img.w/2. Analitik qrSymbolModules yalnız emit
+  // textX rezervinde (güvenli-taraf ≥ gerçek); önizlemede bwip gerçeğini kullan → çakışma
+  // asla olmaz + görsel QR = basılan QR. (esk: analitik qrSymbolModules → uzun/karışık
+  // dizide birkaç modül şişebiliyordu.)
+  const modules = Math.max(21, Math.round(img.w / 2));
+  const size = modules * Math.max(1, mag);
   return `<image href="${img.uri}" x="${x}" y="${y}" width="${size.toFixed(0)}" height="${size.toFixed(0)}"/>`;
 }
 function svgBarcode(
@@ -157,7 +168,7 @@ export function renderPplaToSvg(ppla: string, widthDots: number, dpi = 203, heig
     // QR: 1W1d<mag1><mag1>000<row4><col4><veri> (W1d=auto QR; modül TEK karakter DPL kodu).
     if ((m = ln.match(/^1W1d(.)(.)000(\d{4})(\d{4})(.*)$/))) {
       const mag = dplBarcodeMulToNum(m[1]);
-      const qh = qrSymbolModules(m[5].length) * Math.max(1, mag);
+      const qh = qrSymbolModules(m[5]) * Math.max(1, mag);
       els.push(svgQr(u2d(+m[4]), H - u2d(+m[3]) - qh, mag, m[5]));
       continue;
     }

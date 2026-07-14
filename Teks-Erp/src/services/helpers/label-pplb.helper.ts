@@ -16,6 +16,7 @@
 
 import {
   cleanCtl,
+  cleanCtlCp1254,
   clampCopies,
   mmToDots,
   templateTextLines,
@@ -24,6 +25,7 @@ import {
   EPL_FONT,
   LINE_GAP_MM,
   qrFootprintDots,
+  bannerValueText,
   type NativeRenderInput,
 } from "./native-label.shared";
 
@@ -31,7 +33,7 @@ const CRLF = "\r\n";
 
 /** EPL2 veri çift-tırnak içinde → veri içi `"` güvenli karaktere çevrilir. */
 function eplData(s: string): string {
-  return cleanCtl(s).replace(/"/g, "'");
+  return cleanCtlCp1254(s).replace(/"/g, "'");
 }
 
 export function buildRollLabelPplb({ payload, format, copies, template }: NativeRenderInput): string {
@@ -71,6 +73,7 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   lines.push(`q${widthDots}`); // etiket genişliği (dot)
   lines.push(`Q${heightDots},${d(format.gapMm)}`); // etiket boyu + etiketler arası boşluk
   lines.push("D8"); // yoğunluk (density) — fiziksel test baskısıyla ayarlanır
+  lines.push("I8,E,001"); // Select Symbol Set: 8-bit, Türkçe (CP1254) → gerçek Türkçe glif
 
   // --- Alt bant: tam-genişlik Code128 + okunur satır (sabit, en altta) ---
   const bcBars = bc ? d(9) : 0; // bar yüksekliği
@@ -80,7 +83,7 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   // --- Sol üst: QR. Ayak izi = (modül+sessiz)×qrScale, içerik genişliğinin ≤%45'i ---
   let textX = left;
   if (bc) {
-    const qrPx = Math.min(qrFootprintDots(bc.length, qrScale), Math.round((contentRight - left) * 0.45));
+    const qrPx = Math.min(qrFootprintDots(bc, qrScale), Math.round((contentRight - left) * 0.45));
     lines.push(`b${left},${top},Q,m2,s${qrScale},"${bc}"`);
     textX = left + qrPx + d(2); // metin QR'ı net geçer → yatay çakışma yok
   }
@@ -105,7 +108,7 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   // Reverse kendi siyah kutusunu + beyaz glifi çizer (LO YOK). Sağ kenara yaslanır,
   // dikeyde ortalanır. rotation 1 (90° CW): (x,y) anchor sağ; blok sola+aşağı uzar.
   if (bannerOn) {
-    const val = eplData(String(payload.lengthMeters)); // yalnız değer
+    const val = eplData(bannerValueText(payload)); // formatlı değer + "m"
     const f = EPL_FONT.xl; // font4 (14×24) — büyük, okunur
     const charLen = f.w * BANNER_MUL; // bir karakterin döndürülmüş dikey uzunluğu
     const bannerH = bottomEdge - top;

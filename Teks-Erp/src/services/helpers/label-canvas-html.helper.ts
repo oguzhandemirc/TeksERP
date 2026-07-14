@@ -11,7 +11,7 @@
 import type { CanvasRenderInput } from "./label-canvas-native.helper";
 import { fieldDisplayValue } from "./label-field-values";
 import { escapeHtml, applyCopies } from "./label-html.shared";
-import { asciiFold, qrFootprintDots, resolveEplTextStyle, EPL_FONT } from "./native-label.shared";
+import { asciiFold, qrFootprintDots, bannerValueText, resolveEplTextStyle, EPL_FONT } from "./native-label.shared";
 import type { FieldElement, TextElement } from "../../config/label-elements";
 import { elementSupported } from "../../config/label-elements";
 
@@ -86,7 +86,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
       }
       case "qr": {
         if (!payload.barcode || !qrSvg) break;
-        const sizeMm = qrFootprintDots(payload.barcode.length, el.scale ?? 5) / dotsPerMm;
+        const sizeMm = qrFootprintDots(payload.barcode, el.scale ?? 5) / dotsPerMm;
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${sizeMm.toFixed(1)}mm;height:${sizeMm.toFixed(1)}mm">` +
             `<div style="width:100%;height:100%">${qrSvg.replace("<svg ", '<svg style="width:100%;height:100%" ')}</div></div>`,
@@ -143,7 +143,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         const crossMm = rot === 90 || rot === 270 ? w : h;
         const mul = Math.max(1, Math.min(4, Math.round((crossMm * dotsPerMm) / 24)));
         const glyphMm = (24 * mul) / dotsPerMm;
-        const val = asciiFold(String(payload.lengthMeters));
+        const val = asciiFold(bannerValueText(payload));
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">` +
             `<span style="transform:rotate(${rot}deg);font-family:'Courier New',monospace;font-size:${glyphMm.toFixed(2)}mm;line-height:1;white-space:nowrap">${escapeHtml(val)}</span></div>`,

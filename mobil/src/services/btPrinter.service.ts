@@ -94,3 +94,27 @@ export async function printPpla(address: string, content: string): Promise<void>
     await writeRaw(address, content, 'latin1', { retry: true, timeoutMs: 12_000 });
   }
 }
+
+/** Raster binary (GW bitmap) chunk boyu + parça arası bekleme. FİZİKSEL AYAR: HC-06
+ *  taşarsa (çöp çıktı) DELAY artır; çok yavaşsa azalt (asıl sınır HC-06 baud'u). */
+const RASTER_CHUNK_BYTES = 256;
+const RASTER_CHUNK_DELAY_MS = 50;
+
+/**
+ * Raster (binary GW bitmap) baskısı — HC-06 BT-SPP köprüsü küçük buffer + AKIŞ
+ * KONTROLÜ YOK; ~40KB'i tek yazınca yazıcının seri buffer'ı taşar → boş/çöp. Bu yüzden
+ * PARÇA-PARÇA yazılır, aralarında HC-06'nın seri porta boşaltması için beklenir.
+ * `latin1Bytes` = base64'ten atob ile çözülmüş ham baytlar (her char = 1 bayt, birebir).
+ * İlk parça bağlanır (retry açık); sonraki parçalar retry'sız — akış ortasında reconnect
+ * çıktıyı ikiye böler. ensureReady idempotent → tüm parçalar TEK RFCOMM'u paylaşır.
+ */
+export async function printRawBytes(address: string, latin1Bytes: string): Promise<void> {
+  if (!latin1Bytes) throw new Error('Etiket verisi boş');
+  for (let i = 0; i < latin1Bytes.length; i += RASTER_CHUNK_BYTES) {
+    const chunk = latin1Bytes.slice(i, i + RASTER_CHUNK_BYTES);
+    await writeRaw(address, chunk, 'latin1', { retry: i === 0, timeoutMs: 12_000 });
+    if (i + RASTER_CHUNK_BYTES < latin1Bytes.length) {
+      await new Promise((r) => setTimeout(r, RASTER_CHUNK_DELAY_MS));
+    }
+  }
+}

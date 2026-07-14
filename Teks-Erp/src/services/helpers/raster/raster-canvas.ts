@@ -8,7 +8,7 @@
 // fallback'i burada YOK). Metin gerçek TTF glifi (Türkçe basılır; asciiFold YOK).
 // =============================================================================
 
-import { mmToDots, resolveQrScale } from "../native-label.shared";
+import { mmToDots, resolveQrScale, bannerValueText } from "../native-label.shared";
 import { fieldDisplayValue } from "../label-field-values";
 import { elementText, type CanvasRenderInput } from "../label-canvas-native.helper";
 import type { LabelPayload } from "../../label.service";
@@ -98,7 +98,7 @@ export function rasterizeCanvasLayout(input: CanvasRenderInput): Bitmap1 {
 
 /** lengthBanner — dolu siyah bant + ORTALANMIŞ BEYAZ değer (bölge inversiyonu = blit
  *  clear). PPLA dahil dört dilde aynı görünüm (komut yolundaki PPLA çerçeve istisnası
- *  raster'da yok). Değer birimi ("m") kırpılır (dar bant). */
+ *  raster'da yok). Değer = bannerValueText (TR-formatlı sayı + "m"). */
 function drawBanner(
   bmp: Bitmap1,
   el: LengthBannerElement,
@@ -116,7 +116,7 @@ function drawBanner(
 
   bmp.fillRect(bx, by, bw, bh); // siyah zemin
 
-  const val = rasterCleanText(dv.value.replace(/\s*m$/i, "")) || rasterCleanText(payload.lengthMeters);
+  const val = rasterCleanText(bannerValueText(payload));
   if (!val) return;
   const rot = (el.rot ?? 90) as CanvasRotation;
   const vertical = rot === 90 || rot === 270;

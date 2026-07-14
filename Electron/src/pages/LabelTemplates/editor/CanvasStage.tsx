@@ -142,7 +142,21 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
     if (el.type === "field" || el.type === "text") {
       if (rot !== (el.rot ?? 0)) state.updateElementLive(drag.id, { rot });
     } else if (el.type === "lengthBanner") {
-      if (rot !== (el.rot ?? 90)) state.updateElementLive(drag.id, { rot });
+      const prev = el.rot ?? 90;
+      if (rot !== prev) {
+        // Şerit RİJİT döner: dik(90/270) ↔ yatay(0/180) geçişte kutu w/h TAKAS edilir.
+        // Backend bannerGeom uzun ekseni metne / kısa ekseni glife verir — kutu şekli
+        // dönüşe eşlik etmezse sadece iç yazı döner, şerit dönmez. Takas ile "yazı değil
+        // şeridin kendisi de döner" (kullanıcı isteği). İlk takasta mm'ler explicit olur.
+        const wasVertical = prev === 90 || prev === 270;
+        const nowVertical = rot === 90 || rot === 270;
+        if (wasVertical !== nowVertical) {
+          const cur = estimateBounds(el, canvas);
+          state.updateElementLive(drag.id, { rot, wMm: cur.h, hMm: cur.w });
+        } else {
+          state.updateElementLive(drag.id, { rot });
+        }
+      }
     }
   };
 

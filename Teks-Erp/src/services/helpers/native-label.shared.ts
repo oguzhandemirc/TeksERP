@@ -10,6 +10,7 @@ import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import type { FontSize, TemplateField } from "../../config/label-fields";
 import { fieldDisplayValue } from "./label-field-values";
+import { formatNumber } from "./label-html.shared";
 
 export interface NativeRenderInput {
   payload: LabelPayload;
@@ -182,15 +183,39 @@ export function resolveEplTextStyle(
   };
 }
 
-/** QR sembol modül sayısı (kenar), veri uzunluğundan tahmin — alnum/byte mod, ECC M.
- *  Yazıcının seçtiği sürümle birebir olmayabilir ama konumlama+önizleme için yeterli
- *  (generator textX ile önizleme QR boyutu AYNI fonksiyondan → tutarlı). */
-export function qrSymbolModules(dataLen: number): number {
-  if (dataLen <= 16) return 21;
-  if (dataLen <= 30) return 25;
-  if (dataLen <= 50) return 29;
-  if (dataLen <= 70) return 33;
-  return 37;
+/** QR kodlama modu (ISO/IEC 18004). Yazıcı p7 varsayılan OTOMATİK → bu STANDART seçimi
+ *  yapar: yalnız rakam → numeric; STANDART alnum seti (SADECE büyük harf) → alnum; aksi
+ *  (küçük harf/Türkçe/ç..) → byte. Byte kapasitesi en düşük → en büyük sürüm → en büyük
+ *  ayak izi; mod'a bakmayan eski lookup bunu kaçırıp QR'ı metne bindirebiliyordu. */
+export function qrMode(data: string): "numeric" | "alnum" | "byte" {
+  if (/^[0-9]+$/.test(data)) return "numeric";
+  if (/^[0-9A-Z $%*+./:-]+$/.test(data)) return "alnum"; // STANDART alnum: küçük harf YOK
+  return "byte";
+}
+
+/** ECC seviyesi M için sürüm başına maks. karakter (v1..v10) — ISO/IEC 18004 kapasite
+ *  tablosu. Emit QR komutuna `e` yazmıyoruz → yazıcı varsayılanı M (manuel p6 default M);
+ *  önizleme bwip'i de M'e pinli → hesap = yazıcı = önizleme, üçü de aynı sürümü verir. */
+const QR_CAP_M: Record<"numeric" | "alnum" | "byte", number[]> = {
+  numeric: [34, 63, 101, 149, 202, 255, 293, 365, 432, 513],
+  alnum: [20, 38, 61, 90, 122, 154, 178, 221, 262, 311],
+  byte: [14, 26, 42, 62, 84, 106, 122, 152, 180, 213],
+};
+
+/** Verinin GERÇEK QR sürümü (1..10) — mod + ECC M kapasitesinden. Yazıcının fiilen
+ *  seçtiği sürümle birebir (aynı standart). Kaba uzunluk-lookup DEĞİL. */
+export function qrVersion(data: string): number {
+  const caps = QR_CAP_M[qrMode(data)];
+  const len = data.length;
+  for (let v = 0; v < caps.length; v++) if (len <= caps[v]) return v + 1;
+  return caps.length; // master-data barkodu v10'u aşmaz; güvenli tavan
+}
+
+/** QR sembol modül sayısı (kenar) = 17 + 4×sürüm. Veri STRING'inden — mod-farkındalıklı,
+ *  TAM (v1=21, v2=25, ...). Generator (textX rezervi) + önizleme (görsel boyut) BUNU
+ *  paylaşır → "gördüğün = basılan". */
+export function qrSymbolModules(data: string): number {
+  return 17 + 4 * qrVersion(data);
 }
 
 /** QR spec sessiz-bölge (her kenar modül). */
@@ -198,8 +223,18 @@ export const QR_QUIET_MODULES = 4;
 
 /** QR toplam ayak izi (dot) = (sembol + 2×sessiz) × büyütme. Yazıcı `s<mag>` modeli:
  *  her modül `mag` dot. Generator (textX) ve önizleme (görsel boyut) BUNU paylaşır. */
-export function qrFootprintDots(dataLen: number, mag: number): number {
-  return (qrSymbolModules(dataLen) + 2 * QR_QUIET_MODULES) * Math.max(1, mag);
+export function qrFootprintDots(data: string, mag: number): number {
+  return (qrSymbolModules(data) + 2 * QR_QUIET_MODULES) * Math.max(1, mag);
+}
+
+/** Metraj bandı değeri — TR-formatlı sayı + "m" (metre) son eki, boşluksuz bitişik
+ *  ("230,5m"). Dar dikey şeritte kompakt. TÜM diller (PPLB/PPLA/ZPL/HTML) + önizleme
+ *  bu tek metni kullanır → gördüğün = basılan. Değer yoksa "" döner (çağıran zaten
+ *  present-guard'lı; ham `String(lengthMeters)` binlik-ayıraç + birimsiz veriyordu). */
+export function bannerValueText(payload: LabelPayload): string {
+  const v = payload.lengthMeters;
+  if (v == null || String(v).trim() === "") return "";
+  return `${formatNumber(v)}m`;
 }
 
 // Türkçe → ASCII eşlemesi (İ/Ş/Ğ/ç vb.). Native gönderimde KRİTİK: ham 9100 baytları
@@ -230,6 +265,38 @@ export function asciiFold(s: string): string {
 export function cleanCtl(s: string | number | null | undefined): string {
   // eslint-disable-next-line no-control-regex
   return asciiFold(String(s ?? "").replace(/[\x00-\x1f]/g, " ")).trim();
+}
+
+/** Türkçe glif → CP1254 (Windows-1254) baytı. latin1'den YALNIZ bu 6 kod noktası farklı;
+ *  ç/ö/ü/Ç/Ö/Ü + gerisi latin1 = cp1254 (Unicode kod noktası = bayt değeri). */
+const TR_TO_CP1254: Record<string, string> = {
+  "Ğ": "Ð", "İ": "Ý", "Ş": "Þ", "ğ": "ð", "ı": "ý", "ş": "þ",
+};
+
+/** CP1254 baytı → Türkçe Unicode — önizleme parser'ı (native-preview `esc`) için TERS
+ *  eşleme. Bu 6 latin1 kodu (Ð/Ý/Þ/ð/ý/þ) Türkçe tekstil etiketinde asla geçmez → codepage
+ *  kontrolü gerekmez, güvenle her yerde geri eşlenir → önizleme Türkçe glifi gösterir. */
+export const CP1254_TO_UNICODE: Record<string, string> = {
+  "Ð": "Ğ", "Ý": "İ", "Þ": "Ş", "ð": "ğ", "ý": "ı", "þ": "ş",
+};
+
+/**
+ * CP1254-farkında native veri temizleme — asciiFold YERİNE (codepage destekleyen dilde,
+ * ör. PPLB `I8,E`). Türkçe glifi cp1254 BAYTINA eşler (yazıcı 1254 codepage'iyle GERÇEK
+ * Türkçe basar), latin1'i korur, kalan non-latin1'i fold eder. Baytlar char-code olarak
+ * string'e girer → mevcut latin1 transmit birebir gönderir (transmit'e dokunmadan). Kontrol
+ * baytları ayıklanır (frame güvenliği). Önizleme (esc) baytları geri Türkçe'ye eşler → =çıktı.
+ */
+export function cleanCtlCp1254(s: string | number | null | undefined): string {
+  // eslint-disable-next-line no-control-regex
+  const stripped = String(s ?? "").replace(/[\x00-\x1f]/g, " ").trim();
+  let out = "";
+  for (const ch of stripped) {
+    const cp = TR_TO_CP1254[ch];
+    if (cp) out += cp;
+    else out += ch.charCodeAt(0) <= 0xff ? ch : asciiFold(ch); // latin1 (çöüÇÖÜ dahil) koru
+  }
+  return out;
 }
 
 export interface RollTextLine {

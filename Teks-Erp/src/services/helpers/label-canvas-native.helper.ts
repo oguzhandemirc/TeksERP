@@ -20,6 +20,7 @@ import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import {
   cleanCtl,
+  cleanCtlCp1254,
   clampCopies,
   mmToDots,
   resolveQrScale,
@@ -29,6 +30,7 @@ import {
   DPL_BASE_FONTS,
   dplBarcodeMul,
   qrSymbolModules,
+  bannerValueText,
   mediaTypeCommand,
 } from "./native-label.shared";
 import { fieldDisplayValue } from "./label-field-values";
@@ -162,9 +164,11 @@ function humanZplStyle(humanHMm: number | undefined, d: (mm: number) => number):
 // PPLB (EPL2)
 // =============================================================================
 
-/** EPL2 veri çift-tırnak içinde → veri içi `"` güvenli karaktere çevrilir. */
+/** EPL2 veri çift-tırnak içinde → veri içi `"` güvenli karaktere çevrilir. CP1254-farkında:
+ *  PPLB header'ında `I8,E` (Türkçe 1254) seçildiği için Türkçe glif cp1254 baytına eşlenir
+ *  (asciiFold DEĞİL) → yazıcı gerçek Türkçe basar; önizleme (esc) baytı geri Türkçe'ye eşler. */
 function eplData(s: string): string {
-  return cleanCtl(s).replace(/"/g, "'");
+  return cleanCtlCp1254(s).replace(/"/g, "'");
 }
 
 export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRenderInput): string {
@@ -175,6 +179,7 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
   lines.push(`q${d(format.widthMm)}`);
   lines.push(`Q${d(format.heightMm)},${d(format.gapMm)}`);
   lines.push("D8");
+  lines.push("I8,E,001"); // Select Symbol Set: 8-bit, Türkçe (CP1254) → gerçek Türkçe glif
 
   const bc = payload.barcode ? eplData(payload.barcode) : "";
 
@@ -246,7 +251,7 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
         const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
-        const val = eplData(String(payload.lengthMeters));
+        const val = eplData(bannerValueText(payload));
         const g = bannerGeom(x, y, w, h, rot, val.length);
         const padded = " ".repeat(g.pad) + val + " ".repeat(g.pad);
         const o = g.origin(g.paddedLen);
@@ -327,7 +332,7 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         // DPL QR: W1d (auto) = QR; W1c DataMatrix'ti (yanlış sembol). Modül TEK karakter
         // (dplBarcodeMul), c=d kare hücre, eee='000'. NORMAL tek-CR kaydı.
         const qrMag = dplBarcodeMul(resolveQrScale(el.scale));
-        const qrH = qrSymbolModules(bc.length) * resolveQrScale(el.scale); // flip için ~ayak izi
+        const qrH = qrSymbolModules(bc) * resolveQrScale(el.scale); // flip için ~ayak izi
         const fy = flipY(row, qrH);
         lines.push(`1W1d${qrMag}${qrMag}000${pad4(u(fy))}${pad4(u(col))}${bc}`);
         break;
@@ -372,9 +377,8 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * row;
         const boxFy = flipY(row, h);
         lines.push(`1X11000${pad4(u(boxFy))}${pad4(u(col))}b${pad4(u(w))}${pad4(u(h))}${pad4(1)}${pad4(1)}`);
-        // Değer, metin alanıyla AYNI biçimde (formatNumber → "1.111"); ham String "1111"
-        // veriyordu (Türkçe binlik ayıracı). Birimi ("m") çıkar — dar bant.
-        const val = cleanCtl(dv.value).replace(/\s*m$/i, "").trim() || cleanCtl(String(payload.lengthMeters));
+        // Değer, diğer dillerle AYNI biçim: TR-formatlı sayı + "m" (bannerValueText).
+        const val = cleanCtl(bannerValueText(payload));
         // g.gw/gh/mul = fiziksel glif metriği (bannerGeom band genişliğine göre çarpanı seçer).
         // Değeri Argox kutusuna ORTALA — rot=90 metin anchor'dan SOLA+AŞAĞI uzar (fiziksel
         // doğrulama 2026-07-10): anchor = kutu-merkezi + (dikey uzunluk/2, gh/2). Böylece
@@ -489,7 +493,7 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
         const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
-        const val = zplData(String(payload.lengthMeters));
+        const val = zplData(bannerValueText(payload));
         const g = bannerGeom(x, y, w, h, rot, val.length);
         const o = g.origin(val.length);
         lines.push(`^FO${x},${y}^GB${w},${h},${Math.min(w, h)},B^FS`); // dolu siyah zemin

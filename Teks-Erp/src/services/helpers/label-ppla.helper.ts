@@ -90,7 +90,7 @@ export function buildRollLabelPpla({ payload, format, copies, template }: PplaRe
   // --- Sol üst: QR; ayak izi qrScale ile → metin kolonu sağa kayar (çakışmaz) ---
   let colText = left;
   if (bc) {
-    const qrPx = Math.min(qrFootprintDots(bc.length, qrScale), Math.round((right - left) * 0.45));
+    const qrPx = Math.min(qrFootprintDots(bc, qrScale), Math.round((right - left) * 0.45));
     // DPL QR: W1d (auto) = QR; W1c = DataMatrix'ti (yanlış sembol). c=d TEK karakter modül,
     // eee='000'. NORMAL tek-CR kaydı — çift-CR (Datamax "auto" terminatörü) Argox PPLA'da
     // BOŞ kayıt üretip yazıcıyı resetliyordu (fiziksel: bir kez yanıp sönme + reset).

@@ -6,7 +6,13 @@ import { labelService } from '../services/label.service';
 import { apiClient } from '../services/api';
 import { peripheralService } from '../services/peripheral.service';
 import { useSessionStore } from '../store/sessionStore';
-import { isBtPrinterSupported, printRaw, ensurePrinterPaired } from '../services/btPrinter.service';
+import {
+  isBtPrinterSupported,
+  printRaw,
+  printRawBytes,
+  ensurePrinterPaired,
+} from '../services/btPrinter.service';
+import { useMobileRasterEnabled } from '../hooks/useFeatureFlags';
 import type { Roll } from '../types/models';
 
 interface Props {
@@ -38,6 +44,12 @@ interface Props {
  */
 export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Props) {
   const firedRef = useRef(false);
+
+  // Mobil raster (HC-06'ya GW bitmap) açık mı — admin flag. Ref'le: baskı effect'i
+  // flag değişince yeniden tetiklenmesin, ama her baskıda güncel değeri okusun.
+  const rasterEnabled = useMobileRasterEnabled();
+  const rasterEnabledRef = useRef(rasterEnabled);
+  rasterEnabledRef.current = rasterEnabled;
 
   // onDone parent'tan inline arrow gelebilir → effect deps'inden çıkarmak için
   // ref'le sabitliyoruz. Böylece print akışı yarıda re-tetiklenmez.
@@ -118,8 +130,14 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
         if (viaBt && btPrinterAddr) {
           // Cihazın diline göre native (PPLA/PPLB/ZPL) — kayıttaki yazıcı belirler
           // (backend resolveLabelRouting; cihaz kaydı yoksa RASTER_HTML → aşağıda
-          // fail-closed). kind: KK1 ham / Tambur bitmiş paritesi.
-          const native = await labelService.getRollNative(roll.id, kind, labelContext);
+          // fail-closed). kind: KK1 ham / Tambur bitmiş paritesi. rasterCapable=flag →
+          // açıkken backend cihazın rasterMode'unu onurlandırır (raster GW bitmap, base64).
+          const native = await labelService.getRollNative(
+            roll.id,
+            kind,
+            labelContext,
+            rasterEnabledRef.current,
+          );
           // FAIL-CLOSED: yalnız bilinen native dil ham gönderilir. RASTER_HTML/boş/
           // bilinmeyen → diyaloğa düşmek yerine NET hata (akış ortasında yazdırma
           // ekranı çıkmasın; çöp etiket de basılmasın).
@@ -131,7 +149,13 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           // İlk baskıda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.
           // Zaten eşleşikse no-op; değilse Android PIN'i bir kez sorar, sonra basar.
           await ensurePrinterPaired(btPrinterAddr);
-          await printRaw(btPrinterAddr, native.content);
+          if (native.encoding === 'base64') {
+            // Raster: base64 → ham byte (atob = latin1 binary string) → chunk'lı BT gönderim
+            // (HC-06 buffer'ını taşırmadan). Komut yolu base64 gelse de aynı yol byte-güvenli.
+            await printRawBytes(btPrinterAddr, atob(native.content));
+          } else {
+            await printRaw(btPrinterAddr, native.content);
+          }
           usedBt = true;
         }
         if (!usedBt && !directOnly) {

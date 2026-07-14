@@ -71,7 +71,7 @@ export function flowTemplateToCanvas(
   // Örnek payload — QR ayak izi (barkod uzunluğu) + alan rolleri (headline/row)
   // için. Gerçek barkodlar TEKS+tarih formatında benzer uzunluktadır.
   const payload = mockPayload(tpl.kind);
-  const bcLen = (payload.barcode ?? "").length;
+  const bc = payload.barcode ?? "";
 
   const bannerOn = tpl.lengthBanner === true && tpl.kind !== ("SWATCH" as LabelKind);
   const bannerW = bannerOn ? EPL_FONT.xl.h * BANNER_MUL : 0;
@@ -83,8 +83,8 @@ export function flowTemplateToCanvas(
 
   // --- Sol-üst QR; metin kolonu ayak izinden sağa kayar (akışla birebir) ---
   let textX = left;
-  if (bcLen > 0) {
-    const qrPx = Math.min(qrFootprintDots(bcLen, qrScale), Math.round((contentRight - left) * 0.45));
+  if (bc.length > 0) {
+    const qrPx = Math.min(qrFootprintDots(bc, qrScale), Math.round((contentRight - left) * 0.45));
     elements.push({ id: "qr", type: "qr", x: toMm(left), y: toMm(top), scale: qrScale });
     textX = left + qrPx + d(2);
   }
@@ -116,7 +116,7 @@ export function flowTemplateToCanvas(
   }
 
   // --- Alt tam-genişlik Code128 + okunur satır ---
-  if (bcLen > 0) {
+  if (bc.length > 0) {
     elements.push({
       id: "bc",
       type: "code128",
