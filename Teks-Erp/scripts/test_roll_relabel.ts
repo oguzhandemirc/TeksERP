@@ -66,6 +66,12 @@ async function main() {
   const r3 = await mkRoll(3);
   const sackIds: string[] = [];
   const shipmentIds: string[] = [];
+  // Senaryo 4 (atanmış sevkiyattaki top) sevk onayı AÇIK iken çalışır — aksi halde
+  // sevk onayı varsayılan KAPALI olduğundan createShipment doğrudan DISPATCHED eder
+  // (top SHIPPED → farklı guard/400 fırlar). "Sevkiyata atanmış (PLANNED) → 409" hâlini
+  // test ettiğimizden onayı geçici açıyoruz (finally'de geri alınır).
+  const CONF_KEY = "shipping.confirmationEnabled";
+  let prevConf: { value: unknown } | null | undefined;
 
   try {
     // 1+2) Serbest topu relabel
@@ -96,7 +102,11 @@ async function main() {
     const r2Open = await prisma.roll.findUnique({ where: { id: r2.id }, select: { colorId: true, sackId: true } });
     check("Depodaki çuvaldaki top relabel edildi", r2Open?.colorId === colorB.id && r2Open?.sackId === sackId);
 
-    // 4) ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — sevkiyat donar)
+    // 4) ATANMIŞ sevkiyattaki top relabel REDDEDİLİR (409 — sevkiyat donar).
+    // Sevk onayını geçici aç → sevkiyat PLANNED kalır (top WAREHOUSE'ta ama shipmentId atanmış),
+    // böylece "sevkiyata atanmış" 409 guard'ı tetiklenir (onay kapalıyken top SHIPPED olup 400 alırdı).
+    prevConf = await prisma.systemSetting.findUnique({ where: { key: CONF_KEY }, select: { value: true } });
+    await prisma.systemSetting.upsert({ where: { key: CONF_KEY }, create: { key: CONF_KEY, value: true }, update: { value: true } });
     const shipmentId = ((await ship.createShipment({ sackIds: [sackId], customerId: customer.id })) as { data: { id: string } }).data.id;
     shipmentIds.push(shipmentId);
     let shipRej: { code?: number; msg?: string } = {};
@@ -163,6 +173,11 @@ async function main() {
     const r1Noop = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } });
     check("No-op relabel labelDirty set etmez (temiz kalır)", r1Noop?.labelDirty === false);
   } finally {
+    // Sevk onayı ayarını eski değerine döndür (senaryo 4 geçici açmıştı).
+    if (prevConf !== undefined) {
+      if (prevConf === null) await prisma.systemSetting.delete({ where: { key: CONF_KEY } }).catch(() => {});
+      else await prisma.systemSetting.update({ where: { key: CONF_KEY }, data: { value: prevConf.value as never } }).catch(() => {});
+    }
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
     await prisma.roll.updateMany({
       where: { id: { in: [r1.id, r2.id, r3.id] } },

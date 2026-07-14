@@ -42,6 +42,12 @@ async function main(): Promise<void> {
   let sub: { id: string } | undefined;
   let customer: { id: string } | undefined;
   let order: { id: string } | undefined;
+  // Sevk onayı varsayılan KAPALI → createShipment doğrudan DISPATCHED eder. Bu test
+  // "dispatch öncesi belge YOK (TASLAK) → dispatch → freeze" akışını doğruladığından
+  // sevkiyat PLANNED kalmalı; onay geçici AÇILIR (finally'de geri alınır). Emsal:
+  // test_roll_relabel_context.ts (5b).
+  const CONF_KEY = "shipping.confirmationEnabled";
+  let prevConf: { value: unknown } | null | undefined;
   try {
   // --- Ortak master data ---
   item = await prisma.item.create({
@@ -173,6 +179,9 @@ async function main(): Promise<void> {
   }
   await shippingService.weighSack({ sackId, weightKg: 42.5 }, undefined);
   const sackNo = (await prisma.sack.findUnique({ where: { id: sackId }, select: { sackNo: true } }))!.sackNo;
+  // Onayı geçici AÇ → createShipment PLANNED bırakır (aksi hâlde auto-DISPATCHED olurdu).
+  prevConf = await prisma.systemSetting.findUnique({ where: { key: CONF_KEY }, select: { value: true } });
+  await prisma.systemSetting.upsert({ where: { key: CONF_KEY }, create: { key: CONF_KEY, value: true }, update: { value: true } });
   const ship = await shippingService.createShipment({ sackIds: [sackId], customerId: customer.id, orderIds: [order.id] }, undefined);
   const shipmentId = (ship.data as { id: string }).id;
   created.shipmentIds.push(shipmentId);
@@ -215,6 +224,11 @@ async function main(): Promise<void> {
     htmlRes?.html?.slice(0, 30));
 
   } finally {
+    // Sevk onayı ayarını eski değerine döndür (yukarıda geçici açılmıştı).
+    if (prevConf !== undefined) {
+      if (prevConf === null) await prisma.systemSetting.delete({ where: { key: CONF_KEY } }).catch(() => {});
+      else await prisma.systemSetting.update({ where: { key: CONF_KEY }, data: { value: prevConf.value as never } }).catch(() => {});
+    }
     // F263: cleanup HER ZAMAN çalışır (gövde ortasında hata olsa da) + deleteMany
     // + if-guard → partial-failure temizliği yeni hata fırlatmaz.
     await prisma.printedDocument.deleteMany({

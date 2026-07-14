@@ -82,14 +82,16 @@ async function main() {
   check("PPLB: line (LO) basılır", /LO24,240,719,6/.test(pplb));
   check("PPLB: box (X) basılır", /X24,256,8,344,336/.test(pplb) || /^X24,256,/m.test(pplb));
   // Bant: PPLB/ZPL SİYAH ZEMİN + BEYAZ değer (ters); PPLA çerçeveli (DPL reverse yok).
-  check("PPLB: banner SİYAH+beyaz (ters R + boşluk dolgu)", /A775,77,1,4,3,3,R,"  320  "/.test(pplb));
+  check("PPLB: banner SİYAH+beyaz (ters R + boşluk dolgu)", /A775,56,1,4,3,3,R,"  320m  "/.test(pplb));
   check("ZPL: line dolu ^GB", /\^GB719,6,6,B/.test(zpl));
-  check("ZPL: banner SİYAH+beyaz (dolu ^GB + ^FR ORTALANMIŞ değer)", /\^FO703,24\^GB72,400,72,B\^FS/.test(zpl) && /\^FO775,161\^A0R,72,42\^FR\^FD320\^FS/.test(zpl));
+  check("ZPL: banner SİYAH+beyaz (dolu ^GB + ^FR ORTALANMIŞ değer)", /\^FO703,24\^GB72,400,72,B\^FS/.test(zpl) && /\^FO775,140\^A0R,72,42\^FR\^FD320m\^FS/.test(zpl));
 
   // --- Metin/rotasyon/font ---
   check("PPLB: bold metin çarpan 2", /A240,24,0,3,2,2,N,"PATOS"/.test(pplb));
-  check("PPLB: label'lı alan 'Müşteri: ...'", pplb.includes('"Musteri: Sahin Tekstil"'));
-  check("PPLB: rot 90 → rotCode 1", /A240,160,1,2,1,1,N,"SABIT NOT"/.test(pplb));
+  // PPLB Türkçe codepage (I8,E,001 + CP1254): asciiFold DEĞİL — Türkçe glif cp1254
+  // baytına eşlenir (ü→ü, ş→þ, Ş→Þ) → yazıcı gerçek Türkçe basar. (commit 40b7c6f)
+  check("PPLB: label'lı alan 'Müşteri: ...'", pplb.includes('"Müþteri: Þahin Tekstil"'));
+  check("PPLB: rot 90 → rotCode 1", /A240,160,1,2,1,1,N,"SABÝT NOT"/.test(pplb));
   check("PPLA: rot 90 → önek 2", /^22\d\d000\d{4}\d{4}SABIT NOT/m.test(ppla));
   check("ZPL: rot 90 → ^A0R", /\^A0R,\d+,\d+\^FDSABIT NOT\^FS/.test(zpl));
   check("ZPL: bold ^A0N,40,24 (lg×2)", /\^A0N,40,24\^FDPATOS\^FS/.test(zpl));
@@ -114,8 +116,8 @@ async function main() {
   const zplR0 = emitCanvasZpl(mk({ layout: bnRot0 }));
   const pplaR0 = emitCanvasPpla(mk({ layout: bnRot0 }));
   // rot=0 → PPLB rotCode 0, ZPL ^A0N, PPLA rot öneki 1 (yatay metin).
-  check("bant rot=0: PPLB rotCode 0 (yatay)", /A\d+,\d+,0,4,\d,\d,R," *320 *"/.test(pplbR0));
-  check("bant rot=0: ZPL ^A0N (yatay)", /\^A0N,\d+,\d+\^FR\^FD320\^FS/.test(zplR0));
+  check("bant rot=0: PPLB rotCode 0 (yatay)", /A\d+,\d+,0,4,\d,\d,R," *320m *"/.test(pplbR0));
+  check("bant rot=0: ZPL ^A0N (yatay)", /\^A0N,\d+,\d+\^FR\^FD320m\^FS/.test(zplR0));
   check("bant rot=0: PPLA rot öneki 1 (yatay)", /14\d\d000\d{8}320/.test(pplaR0));
   // Varsayılan (rot yok) = 90 dikey — bayt-uyum (ana layout banner'ı).
   check("bant rot yok → 90 dikey (PPLB rotCode 1)", /A\d+,\d+,1,4,\d,\d,R,/.test(pplb));
@@ -162,8 +164,9 @@ async function main() {
   // --- present:false alan atlanır, DİĞER elemanlar kaymaz ---
   const noCust = { ...payload, customerName: null } as unknown as LabelPayload;
   const pplbNC = emitCanvasPplb(mk({ payload: noCust }));
-  check("present:false: müşteri satırı yok", !pplbNC.includes("Musteri"));
-  const linesWith = pplb.split("\r\n").filter((l) => !l.includes("Musteri"));
+  // PPLB cp1254: müşteri satırı "Müþteri: ..." baytıyla yazılır (asciiFold değil).
+  check("present:false: müşteri satırı yok", !pplbNC.includes("Müþteri"));
+  const linesWith = pplb.split("\r\n").filter((l) => !l.includes("Müþteri"));
   const linesWithout = pplbNC.split("\r\n");
   check("present:false: diğer satırlar BAYT-AYNI (kayma yok)", linesWith.join("|") === linesWithout.join("|"));
 

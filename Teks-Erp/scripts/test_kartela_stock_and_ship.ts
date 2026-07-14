@@ -35,6 +35,12 @@ function need<T>(v: T | null | undefined, what: string): T {
 const is409 = (e: unknown) => e instanceof AppError && e.statusCode === 409;
 const TS = Date.now().toString().slice(-6);
 
+// Sevk onayı varsayılan KAPALI → createShipment doğrudan DISPATCHED eder. Bu test
+// "PLANNED sevkiyattaki çuvala kartela eklenemez" guard'ını kanıtladığından onayı
+// geçici AÇIP sevkiyatı PLANNED tutuyoruz (cleanup'ta eski değere döner).
+const CONF_KEY = "shipping.confirmationEnabled";
+let prevConf: { value: unknown } | null | undefined;
+
 let ADMIN = "";
 let FIRM = "";
 let CUSTOMER = "";
@@ -184,6 +190,9 @@ async function run(): Promise<void> {
   console.log("\n=== guard: PLANNED sevkiyattaki çuvala kartela eklenemez (409); depo çuvalı düzenlenebilir ===");
   // Depo çuvalı (sevkiyatsız) düzenlenebilir → kartela eklenir (happy path yukarıda happySack ile).
   const plannedSack = await depotSackWithRoll();
+  // Sevk onayını geçici aç → sevkiyat DISPATCHED yerine PLANNED kalsın (cleanup geri alır).
+  prevConf = await prisma.systemSetting.findUnique({ where: { key: CONF_KEY }, select: { value: true } });
+  await prisma.systemSetting.upsert({ where: { key: CONF_KEY }, create: { key: CONF_KEY, value: true }, update: { value: true } });
   const planned = (await shippingService.createShipment({ sackIds: [plannedSack], customerId: CUSTOMER })).data as { id: string; status: string };
   shipmentIds.push(planned.id);
   check("sevkiyat PLANNED kuruldu", planned.status === "PLANNED", planned.status);
@@ -283,6 +292,11 @@ async function run(): Promise<void> {
 
 async function cleanup(): Promise<void> {
   try {
+    // Sevk onayı ayarını eski değerine döndür (PLANNED guard'ı için geçici açılmıştı).
+    if (prevConf !== undefined) {
+      if (prevConf === null) await prisma.systemSetting.delete({ where: { key: CONF_KEY } }).catch(() => {});
+      else await prisma.systemSetting.update({ where: { key: CONF_KEY }, data: { value: prevConf.value as never } }).catch(() => {});
+    }
     // Roll-tabanlı (dönen id şekline güvenme): allocation → swatch → receipt → dispatch →
     // roll-unset → sack → shipment → roll → master-data sırası.
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
@@ -299,6 +313,8 @@ async function cleanup(): Promise<void> {
     await prisma.sack.deleteMany({ where: { id: { in: sackIds } } });
     await prisma.shipment.deleteMany({ where: { id: { in: shipmentIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+    // reduceStock, itemId/colorId referanslı SwatchStockReduction olayları yaratır → önce sil.
+    if (ITEM) await prisma.swatchStockReduction.deleteMany({ where: { itemId: ITEM } });
     await prisma.color.deleteMany({ where: { id: { in: [COLOR_A, COLOR_B].filter(Boolean) } } });
     if (ITEM) await prisma.item.deleteMany({ where: { id: ITEM } });
     if (CUSTOMER) await prisma.customer.deleteMany({ where: { id: CUSTOMER } });

@@ -93,7 +93,7 @@ check("v2: tüm alanlar xl+bold → dikey çakışma YOK", rows.length >= 2 && !
 const previewSvg = renderPplbToSvg(buildRollLabelPplb({ ...base, template: tpl({ qrScale: 6 }) })) ?? "";
 const qrImgW = Number((previewSvg.match(/<image[^>]*width="(\d+)"/) || [])[1]);
 // Önizleme QR = ÇIPLAK sembol (modül×mag); sessiz bölge beyaz boşluk, kutuya eklenmez.
-const expectSymbol = qrSymbolModules(payload.barcode.length) * 6;
+const expectSymbol = qrSymbolModules(payload.barcode) * 6;
 check("v2 WYSIWYG: önizleme QR boyutu = sembol×mag (sessiz bölge hariç)", qrImgW === expectSymbol, `önizleme=${qrImgW} sembol=${expectSymbol}`);
 
 // --- 7. QR büyütünce metin kolonu sağa kayar (çakışma önlenir) ---
@@ -104,7 +104,7 @@ check("v2: qrScale büyüdükçe textX sağa kayar (QR'ı geçer)", tX(8) > tX(3
 const bannerTpl = { kind: "ROLL_RAW", rawCode: null, qrScale: null, lineStepMm: null, lengthBanner: true } as unknown as LabelTemplate;
 const withBanner = buildRollLabelPplb({ ...base, template: bannerTpl });
 const noBanner = buildRollLabelPplb({ ...base, template: null });
-check("bant: döndürülmüş ters değer (A rot1 R, metraj + siyah dolgu boşluğu)", /A\d+,\d+,1,\d,\d,\d,R," *320 *"/.test(withBanner));
+check("bant: döndürülmüş ters değer (A rot1 R, metraj + siyah dolgu boşluğu)", /A\d+,\d+,1,\d,\d,\d,R," *320m *"/.test(withBanner));
 check("bant: LO KULLANILMAZ (LO+R = beyaz-kutu XOR bug'ı)", !/LO\d+/.test(withBanner));
 check("bant kapalı (null) → döndürülmüş ters yok", !/A\d+,\d+,1,\d,\d,\d,R,/.test(noBanner));
 // İçerik banda girmez: alt barkod (B x=left) bandın (A x=right) SOLUNDA

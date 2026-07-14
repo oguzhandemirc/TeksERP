@@ -183,11 +183,12 @@ async function main(): Promise<void> {
     woSteps[0].status === StepStatus.PENDING && woSteps[1].status === StepStatus.PENDING);
   const woLink = await prisma.workOrderToOrderLine.count({ where: { workOrderId: woId, orderLineId: lineId } });
   check("HOP2 WO↔OrderLine bağı kuruldu", woLink === 1);
-  // Parti modeli: refakat kartı WO açılışında DEĞİL, ilk parti doğduğunda (attach) basılır.
-  const cardsBeforeAttach = await prisma.travelerCard.count({
-    where: { batch: { workOrderId: woId } },
+  // Kart modeli (redesign "kart iş emriyle doğar"): refakat kartı WO AÇILIŞINDA doğar
+  // (createForWorkOrder, workOrderId @unique) — bir WO = tek kart. Parti (P) kart üretmez.
+  const cardsAfterCreate = await prisma.travelerCard.count({
+    where: { workOrderId: woId, status: "ACTIVE" },
   });
-  check("HOP2 parti modeli: WO açılışında kart YOK (kart attach'te doğar)", cardsBeforeAttach === 0, `kart=${cardsBeforeAttach}`);
+  check("HOP2 kart iş emriyle doğar (WO açılışında 1 ACTIVE kart)", cardsAfterCreate === 1, `kart=${cardsAfterCreate}`);
 
   // ===========================================================================
   // HOP 3 — KK1/RAW_QC: ham mal girişi (createInitialEntry) → STOCK top
@@ -217,17 +218,18 @@ async function main(): Promise<void> {
   check("HOP4 attachRolls attached=1", attach.data!.attached === 1, `attached=${attach.data!.attached}`);
   check("HOP4 attach hatasız", (attach.data!.errors.length ?? -1) === 0, JSON.stringify(attach.data!.errors));
 
-  // Parti modeli: attach dalgası partiyi doğurur (P kodu) + refakat kartını (RK) basar.
+  // Parti modeli: attach dalgası partiyi doğurur (P kodu) + topa batchId damgalar. Refakat
+  // kartı partiye DEĞİL WO'ya bağlıdır (kart WO açılışında doğdu, workOrderId @unique) → hâlâ ACTIVE.
   check("HOP4 attach partiyi doğurdu (P kodu)", !!attach.data!.batch?.batchNumber, JSON.stringify(attach.data!.batch));
-  const bornCard = await prisma.travelerCard.findFirst({
-    where: { batch: { workOrderId: woId }, status: "ACTIVE" },
-    select: { id: true, barcode: true, batchId: true },
+  const woCard = await prisma.travelerCard.findFirst({
+    where: { workOrderId: woId, status: "ACTIVE" },
+    select: { id: true, barcode: true },
   });
-  check("HOP4 refakat kartı (ACTIVE) parti başına doğdu", !!bornCard?.barcode);
+  check("HOP4 refakat kartı (ACTIVE) iş emrine bağlı", !!woCard?.barcode);
   const attachedRollBatch = await prisma.roll.findUnique({ where: { id: rollId }, select: { batchId: true } });
-  check("HOP4 top partiye bağlandı (batchId = kartın partisi)",
-    !!attachedRollBatch?.batchId && attachedRollBatch.batchId === bornCard?.batchId,
-    `rollBatch=${attachedRollBatch?.batchId} cardBatch=${bornCard?.batchId}`);
+  check("HOP4 top attach partisine bağlandı (batchId = doğan parti)",
+    !!attachedRollBatch?.batchId && attachedRollBatch.batchId === attach.data!.batch?.id,
+    `rollBatch=${attachedRollBatch?.batchId} attachBatch=${attach.data!.batch?.id}`);
 
   let rs = await rollState(rollId);
   check("HOP4 top IN_PRODUCTION", rs.status === RollStatus.IN_PRODUCTION, rs.status);
@@ -308,8 +310,8 @@ async function main(): Promise<void> {
   // Tambur son üretim adımı: WO + adım + kart kapanmalı.
   check("HOP6 TAMBUR adımı COMPLETED", (await stepStatusOf(tamburStepId)) === StepStatus.COMPLETED);
   check("HOP6 WO COMPLETED (son üretim adımı bitti)", (await woStatusOf(woId)) === WorkOrderStatus.COMPLETED);
-  const activeCards = await prisma.travelerCard.count({ where: { batch: { workOrderId: woId }, status: "ACTIVE" } });
-  check("HOP6 refakat kartı ACTIVE kalmadı (kapandı)", activeCards === 0, `aktifKart=${activeCards}`);
+  const activeCards = await prisma.travelerCard.count({ where: { workOrderId: woId, status: "ACTIVE" } });
+  check("HOP6 refakat kartı ACTIVE kalmadı (WO COMPLETED → kart COMPLETED)", activeCards === 0, `aktifKart=${activeCards}`);
 
   const shipChildId = shipChild!.id;
   const shipChildBarcode = (await prisma.roll.findUnique({
@@ -414,8 +416,8 @@ async function cleanup(): Promise<void> {
     }
 
     for (const woId of createdWoIds) {
-      await prisma.travelerCardScan.deleteMany({ where: { card: { batch: { workOrderId: woId } } } }).catch(() => {});
-      await prisma.travelerCard.deleteMany({ where: { batch: { workOrderId: woId } } }).catch(() => {});
+      await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: woId } } }).catch(() => {});
+      await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } }).catch(() => {});
       await prisma.batch.deleteMany({ where: { workOrderId: woId } }).catch(() => {});
       await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: woId } }).catch(() => {});
       await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } }).catch(() => {});

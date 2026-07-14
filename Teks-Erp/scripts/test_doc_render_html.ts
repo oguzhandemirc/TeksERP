@@ -128,7 +128,7 @@ function directSnap(over: { doc?: Record<string, unknown>; docConfigOverride?: R
       driverName: "Ali Demir",
       plateNumber: "16 XYZ 789",
       notes: null,
-      workOrder: { id: "wo1", batchNumber: "P-260619-014", type: "ORDER_PRODUCTION" },
+      workOrder: { id: "wo1", workOrderNumber: "IE-260619-0014", type: "ORDER_PRODUCTION" },
       subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
       step: { id: "st1", stepSequence: 2, station: { name: "Boyahane (Fason)", code: "DYE" } },
       rolls,
@@ -146,7 +146,7 @@ function testDirectShip(): void {
   check("başlık DOĞRUDAN SEVK İRSALİYESİ", html.includes("DOĞRUDAN SEVK İRSALİYESİ"));
   check("İrsaliye No", html.includes("DSF-2026-0012"));
   check("FASON FİRMA", html.includes("FASON FİRMA") && html.includes("Yıldız Boyahane"));
-  check("iş emri batchNumber", html.includes("P-260619-014"));
+  check("iş emri workOrderNumber", html.includes("IE-260619-0014"));
   check("DOĞRUDAN SEVK kutusu (sebep + sevk eden)", html.includes("Müşteri acil talep") && html.includes("Ayşe Kaya"));
   check("Karşılanan Siparişler (allocations)", html.includes("Karşılanan Siparişler") && html.includes("SIP-2026-0107"));
   check("Sevk Edilen Toplar tablosu", html.includes("Sevk Edilen Toplar") && html.includes("R1"));
@@ -175,7 +175,7 @@ type TravelerMeta = Parameters<typeof renderTravelerCardHtml>[1];
 
 function travelerSnap(over: Record<string, unknown> = {}): TravelerSnap {
   return {
-    batchNumber: "P-260619-014",
+    workOrderNumber: "IE-260619-0014",
     type: "ORDER_PRODUCTION",
     width: 150,
     targetQuantity: 680,
@@ -216,7 +216,7 @@ function testTraveler(): void {
   check("KART NO + cardNumber", html.includes("KART NO") && html.includes("RK-2606-014"));
   check("barkod metni", html.includes("RK26069F2K3P7"));
   check("versiyon v1 + tarih", html.includes("v1") && html.includes("19.06.2026"));
-  check("batchNumber", html.includes("P-260619-014"));
+  check("workOrderNumber", html.includes("IE-260619-0014"));
   check("tip etiketi (Siparişe Özel)", html.includes("Siparişe Özel"));
   check("targetItem code + name", html.includes("KMS-001") && html.includes("Pamuklu Astar"));
   check("spec grid (Hedef Metraj/Ağırlık)", html.includes("Hedef Metraj") && html.includes("680") && html.includes("Hedef Ağırlık") && html.includes("110"));

@@ -1,6 +1,9 @@
 // TEST (Faz 4.1): Parti ayırma — REDYE_SAME_COLOR (aynı renk yeniden boyama).
 //   Boyanmış parti seçili topları AYNI iş emrinde YENİ partiye ayrılıp boyahane
-//   adımına geri sarılır (renk sıfırlanır). NEW_COLOR/UNDYED_MOVE şu an 409 (WO klonu).
+//   adımına geri sarılır (renk sıfırlanır). NEW_COLOR artık UYGULANDI (WO klonu +
+//   yeni renk); bu test yalnız REDYE_SAME_COLOR'u uçtan uca doğrular, NEW_COLOR'u
+//   yalnız kapı-kontrolleriyle (yeni renk zorunlu) yıkıcı-olmayan biçimde yoklar.
+//   Refakat kartı WO başına (parti yeni kart üretmez), TravelerCard.workOrderId @unique.
 // Çalıştır: npx tsx scripts/test_batch_redye_three_paths.ts
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
@@ -45,6 +48,12 @@ async function main(): Promise<void> {
   const boyaStep = wo.steps[0].id;
   const tamburStep = wo.steps[1].id;
 
+  // Kart WO açılışında doğar (karekod=İE). Test WO'yu doğrudan yarattığı için burada
+  // simüle et — REDYE parti ayırmada yeni kart ÜRETİLMEDİĞİNİ (WO başına tek kart) doğrulayacağız.
+  await prisma.travelerCard.create({
+    data: { cardNumber: wo.workOrderNumber, barcode: wo.workOrderNumber, workOrderId: woId, version: 1, status: "ACTIVE", printedById: ADMIN },
+  });
+
   // 4 STOCK top → attach → parti P1 (boyahane adımında IN_PRODUCTION).
   const bcs = [bc(), bc(), bc(), bc()];
   for (const b of bcs) await prisma.roll.create({ data: { barcode: b, itemId: ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
@@ -54,14 +63,15 @@ async function main(): Promise<void> {
   // Boyanmış + döndü simülasyonu: topları Tambur adımına al + renk ver (MAVI).
   await prisma.roll.updateMany({ where: { batchId: p1Id }, data: { currentStepId: tamburStep, colorId: COLOR } });
 
-  // Gate: NEW_COLOR henüz 409; REDYE + newColorId 400.
-  await expectReject("NEW_COLOR henüz hazır değil (409)", () => wos.splitBranch(woId, { batchId: p1Id, mode: "NEW_COLOR", newColorId: COLOR }, ADMIN), "henüz hazır değil");
+  // Gate (yıkıcı DEĞİL — hiçbiri partiyi tüketmez): NEW_COLOR yeni renk ZORUNLU (400),
+  // REDYE_SAME_COLOR'da yeni renk YASAK (400). Her ikisi de claim'den ÖNCE reddeder.
+  await expectReject("NEW_COLOR'da yeni renk zorunlu (400)", () => wos.splitBranch(woId, { batchId: p1Id, mode: "NEW_COLOR" }, ADMIN), "yeni renk seçilmeli");
   await expectReject("REDYE_SAME_COLOR'da yeni renk yasak (400)", () => wos.splitBranch(woId, { batchId: p1Id, mode: "REDYE_SAME_COLOR", newColorId: COLOR }, ADMIN), "yeni renk verilemez");
 
   // Önizleme: REDYE_SAME_COLOR + NEW_COLOR izinli olmalı.
   const preview = await wos.getSplitPreview(woId, p1Id);
   const allowed = (preview.data as { allowedModes: string[] }).allowedModes;
-  check("önizleme: REDYE_SAME_COLOR izinli", allowed.includes("REDYE_SAME_COLOR"), allowed.join(","));
+  check("önizleme: REDYE_SAME_COLOR + NEW_COLOR izinli", allowed.includes("REDYE_SAME_COLOR") && allowed.includes("NEW_COLOR"), allowed.join(","));
 
   // REDYE_SAME_COLOR (tüm parti).
   const redye = await wos.splitBranch(woId, { batchId: p1Id, mode: "REDYE_SAME_COLOR" }, ADMIN);
@@ -76,7 +86,9 @@ async function main(): Promise<void> {
   check("REDYE: toplar IN_PRODUCTION", p2Rolls.every((r) => r.status === RollStatus.IN_PRODUCTION));
   check("REDYE: renk sıfırlandı (yeniden boyanacak)", p2Rolls.every((r) => r.colorId === null));
 
-  check("REDYE: P2 kendi aktif kartını aldı", (await prisma.travelerCard.count({ where: { batchId: p2Id, status: "ACTIVE" } })) === 1);
+  // Kart WO başına (parti kart üretmez): REDYE aynı WO içinde kaldığından yeni kart doğmaz —
+  // WO'nun tek ACTIVE kartı hâlâ 1.
+  check("REDYE: parti yeni kart üretmedi (WO başına tek ACTIVE kart)", (await prisma.travelerCard.count({ where: { workOrderId: woId, status: "ACTIVE" } })) === 1);
   check("REDYE: kaynak P1 soy-bağı düğümü olarak KALDI (boş)", (await prisma.batch.findUnique({ where: { id: p1Id }, select: { id: true } })) !== null && (await prisma.roll.count({ where: { batchId: p1Id } })) === 0);
   const openMv = await prisma.rollMovement.count({ where: { rollId: { in: p2Rolls.length ? (await prisma.roll.findMany({ where: { batchId: p2Id }, select: { id: true } })).map(r => r.id) : [] }, workOrderStepId: boyaStep, exitedAt: null } });
   check("REDYE: boyahanede taze açık movement var", openMv === 4, `open=${openMv}`);
@@ -95,8 +107,9 @@ async function cleanup(): Promise<void> {
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
-    await prisma.travelerCardScan.deleteMany({ where: { card: { batchId: { in: batchIds } } } });
-    await prisma.travelerCard.deleteMany({ where: { batchId: { in: batchIds } } });
+    // Kart WO başına (workOrderId @unique) — batchId alanı yok.
+    await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: woId } } });
+    await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     // splitFrom self-FK: çocukları önce (splitFromId dolu) sil.
     await prisma.batch.deleteMany({ where: { id: { in: batchIds }, splitFromId: { not: null } } });
     await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });

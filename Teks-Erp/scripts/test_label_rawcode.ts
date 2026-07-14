@@ -53,7 +53,7 @@ check("ZPL override PPLA isteğini etkilemez", onlyZpl.content !== "^XABC-123^XZ
 
 // 4) buildRawCodePreview
 const prev = buildRawCodePreview("ROLL_RAW" as never, PrinterLanguage.ZPL, "{{barcode}}");
-check("preview {{barcode}} → örnek barkod", prev.content.includes("TR-2026-05-26-R0123"), prev.content);
+check("preview {{barcode}} → örnek barkod", prev.content.includes("T120726F0001"), prev.content);
 check("preview native contentType text/plain", prev.contentType.startsWith("text/plain"));
 const prevHtml = buildRawCodePreview("ROLL_RAW" as never, PrinterLanguage.RASTER_HTML, "<b>{{itemName}}</b>");
 check("preview HTML ikame + contentType", prevHtml.content === "<b>Cotton Lining 60s</b>" && prevHtml.contentType.startsWith("text/html"), prevHtml.content);

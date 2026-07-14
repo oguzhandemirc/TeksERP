@@ -166,39 +166,63 @@ async function main() {
     const m404 = await invoke(machineHardRemove, "00000000-0000-0000-0000-000000000000");
     check("Olmayan makine → 404", m404.status === 404);
 
-    // --- 7) 409: bağlı DONANIMI olan makine silinemez (eşleşme engeli) ---
+    // --- 7) 409: makineye ATANMIŞ tablet (cihaz) var → silinemez (eşleşme engeli) ---
+    // Yeni politika: DONANIM (peripheral) bloklamaz, silmede detach edilir. Gerçek
+    // engel = üretim izi veya atanmış cihaz. Fixture device'ını makineye bağla.
+    await prisma.device.update({ where: { id: device.id }, data: { machineId: machine.id } });
     const m409 = await invoke(machineHardRemove, machine.id);
     check(
-      "Donanım bağlı makine → 409 + somut sayı",
-      m409.status === 409 && (m409.body.data as { peripheralCount?: number }).peripheralCount === 1,
+      "Atanmış tabletli makine → 409 + somut sayı",
+      m409.status === 409 && (m409.body.data as { deviceCount?: number }).deviceCount === 1,
       m409.body.message
     );
 
-    // --- 8) Preview: donanım varken deletable=false + peripheral blocker ---
+    // --- 8) Preview: cihaz atanmışken deletable=false + device blocker; DONANIM detach (blocker DEĞİL) ---
     const pv1 = await invoke(machineDeletePreview, machine.id);
-    const pv1d = pv1.body.data as { deletable: boolean; blockers: { key: string }[] };
+    const pv1d = pv1.body.data as {
+      deletable: boolean;
+      blockers: { key: string }[];
+      peripheralDetachCount: number;
+    };
     check(
-      "Preview (donanım bağlı) → deletable=false + peripheral blocker",
-      pv1.status === 200 && pv1d.deletable === false && pv1d.blockers.some((b) => b.key === "peripheralCount")
+      "Preview (cihaz atanmış) → deletable=false + device blocker + donanım detach",
+      pv1.status === 200 &&
+        pv1d.deletable === false &&
+        pv1d.blockers.some((b) => b.key === "deviceCount") &&
+        !pv1d.blockers.some((b) => b.key === "peripheralCount") &&
+        pv1d.peripheralDetachCount === 1
     );
 
-    // --- 9) Donanım kaldırılınca yalnız OTURUM kalır → preview deletable=true, 1 oturum ---
-    await prisma.peripheralDevice.delete({ where: { id: peripheral.id } });
+    // --- 9) Cihaz ataması kalkınca → donanım+oturum ENGELLEMEZ → preview deletable=true ---
+    await prisma.device.update({ where: { id: device.id }, data: { machineId: null } });
     const pv2 = await invoke(machineDeletePreview, machine.id);
-    const pv2d = pv2.body.data as { deletable: boolean; workSessionCount: number };
+    const pv2d = pv2.body.data as {
+      deletable: boolean;
+      workSessionCount: number;
+      peripheralDetachCount: number;
+    };
     check(
-      "Preview (yalnız oturum) → deletable=true + workSessionCount=1",
-      pv2.status === 200 && pv2d.deletable === true && pv2d.workSessionCount === 1,
+      "Preview (donanım+oturum, cihazsız) → deletable=true + workSession=1 + donanım detach=1",
+      pv2.status === 200 &&
+        pv2d.deletable === true &&
+        pv2d.workSessionCount === 1 &&
+        pv2d.peripheralDetachCount === 1,
       JSON.stringify(pv2d)
     );
 
-    // --- 10) Oturum ENGELLEMİYOR → 200 kalıcı silindi + oturum temizlendi ---
+    // --- 10) Donanım+oturum ENGELLEMİYOR → 200 kalıcı silindi; donanım DETACH (silinmez), oturum temizlenir ---
     const m200 = await invoke(machineHardRemove, machine.id);
-    check("Yalnız oturumlu makine → 200 kalıcı silindi", m200.status === 200, m200.body.message);
+    check("Donanım+oturumlu makine → 200 kalıcı silindi", m200.status === 200, m200.body.message);
     const machineGone = await prisma.machine.findUnique({ where: { id: machine.id } });
     check("Makine DB'den gitti", machineGone === null);
     const sessionsGone = await prisma.workSession.count({ where: { machineId: machine.id } });
     check("Oturum satırı tx içinde temizlendi", sessionsGone === 0);
+    // Donanım SİLİNMEZ, machineId=null'a çekilir (boşa çıkar, ayarı korunur → başka makineye atanabilir).
+    const peripheralAfter = await prisma.peripheralDevice.findUnique({ where: { id: peripheral.id } });
+    check(
+      "Donanım silinmedi, machineId=null (detach)",
+      peripheralAfter !== null && peripheralAfter.machineId === null
+    );
 
     const mAudit = await prisma.systemLog.count({
       where: { tableName: "MACHINE", recordId: machine.id, action: "DELETE" },

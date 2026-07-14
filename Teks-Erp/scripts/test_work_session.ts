@@ -80,6 +80,12 @@ async function main() {
 
   const deviceIds = [dev1.id, dev2.id, dev3.id, dev4.id];
 
+  // 9. adım (tembel idle) DB'deki idle-timeout ayarından bağımsız olmalı: ambient
+  // bir systemSetting (0 = kapalı, ya da >11 saat) testi bayatlatırdı. Bilinen küçük
+  // bir değere sabitle, finally'de eski değere döndür (emsal: test_roll_relabel_context 5b).
+  const IDLE_KEY = "workSession.idleTimeoutMinutes";
+  let prevIdle: { value: unknown } | null | undefined;
+
   try {
     // 1) makineli open — stationId makineden türetilir
     const s1 = await WorkSessionService.open({ userId: user.id, deviceRowId: dev1.id, machineId: tamburMachine.id });
@@ -142,7 +148,9 @@ async function main() {
     await expectErr("SUBCONTRACTOR istasyonunda oturum reddi", "istasyon türünde", () =>
       WorkSessionService.open({ userId: user.id, deviceRowId: dev1.id, machineId: fasonMachine.id }));
 
-    // 9) tembel idle: lastActivityAt'i 11 saat geriye çek (default 600 dk)
+    // 9) tembel idle: idle-timeout'u 20 dk'ya sabitle, lastActivityAt'i 11 saat geriye çek
+    prevIdle = await prisma.systemSetting.findUnique({ where: { key: IDLE_KEY }, select: { value: true } });
+    await prisma.systemSetting.upsert({ where: { key: IDLE_KEY }, create: { key: IDLE_KEY, value: 20 }, update: { value: 20 } });
     const idleSession = await WorkSessionService.open({ userId: user.id, deviceRowId: dev1.id, machineId: tamburMachine.id });
     const idleId = (idleSession.data as { id: string }).id;
     await prisma.workSession.update({
@@ -182,6 +190,11 @@ async function main() {
     await expectErr("bilinmeyen makine kodu → 404", "bulunamadı", () =>
       WorkSessionService.resolveMachineByCode(`YOK-${ts}`));
   } finally {
+    // idle-timeout ayarını eski değerine döndür (9. adım geçici sabitlemişti).
+    if (prevIdle !== undefined) {
+      if (prevIdle === null) await prisma.systemSetting.delete({ where: { key: IDLE_KEY } }).catch(() => {});
+      else await prisma.systemSetting.update({ where: { key: IDLE_KEY }, data: { value: prevIdle.value as never } }).catch(() => {});
+    }
     await prisma.workSession.deleteMany({ where: { deviceId: { in: deviceIds } } }).catch(() => {});
     await prisma.device.deleteMany({ where: { id: { in: deviceIds } } }).catch(() => {});
     await prisma.machine.deleteMany({ where: { id: fasonMachine.id } }).catch(() => {});

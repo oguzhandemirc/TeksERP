@@ -62,7 +62,7 @@ async function main(): Promise<void> {
   const p3row = await prisma.batch.findUnique({ where: { id: split.newBatchId }, select: { splitFromId: true } });
   check("splitBatch: P3 splitFrom=P1", p3row?.splitFromId === p1.batchId);
   check("splitBatch: P3=2 top", (await prisma.roll.count({ where: { batchId: split.newBatchId } })) === 2);
-  check("splitBatch: P3 kendi aktif kartını aldı", (await prisma.travelerCard.count({ where: { batchId: split.newBatchId, status: "ACTIVE" } })) === 1);
+  check("splitBatch: yeni kart ÜRETİLMEZ (kart WO başına)", (await prisma.travelerCard.count({ where: { workOrderId: woId } })) === 0);
   check("splitBatch: P1=3 top kaldı", (await prisma.roll.count({ where: { batchId: p1.batchId } })) === 3);
 
   // ── mergeBatches: P1 + P3 → EN ESKİ (P1) yaşar ──
@@ -95,8 +95,8 @@ async function cleanup(): Promise<void> {
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispatchIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
-    await prisma.travelerCardScan.deleteMany({ where: { card: { batchId: { in: batchIds } } } });
-    await prisma.travelerCard.deleteMany({ where: { batchId: { in: batchIds } } });
+    await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: woId } } });
+    await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, woId, ...batchIds] } } });

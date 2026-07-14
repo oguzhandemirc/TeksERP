@@ -173,7 +173,7 @@ async function scenarioA(): Promise<void> {
 
   check("A: 3 top bağlandı", data.attached === 3, `attached=${data.attached}`);
   check("A: dispatch döndü (sevk yapıldı)", !!data.dispatch, JSON.stringify(data.dispatch));
-  check("A: dispatchNo SD ile başlıyor (ayraçsız SDYYMMNNNNNN)", !!data.dispatch?.dispatchNo?.startsWith("SD"), data.dispatch?.dispatchNo);
+  check("A: dispatchNo FS ile başlıyor (ayraçsız FSGGAAYYNNNN)", !!data.dispatch?.dispatchNo?.startsWith("FS"), data.dispatch?.dispatchNo);
 
   // WO + adım durumu
   const wo = await prisma.workOrder.findUnique({
@@ -352,6 +352,7 @@ async function cleanup(): Promise<void> {
     await prisma.systemLog.deleteMany({
       where: { recordId: { in: [...rollIds, ...dispatchIds, ...createdWoIds] } },
     });
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: createdWoIds } } });
     console.log("\n(test verisi temizlendi)");
   } catch (e) {

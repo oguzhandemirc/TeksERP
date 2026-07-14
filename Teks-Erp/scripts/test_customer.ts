@@ -1,17 +1,20 @@
 // =============================================================================
-// Test: CustomerService — BaseService CRUD (create/list/update/soft-delete/reactivate)
+// Test: CustomerService — BaseService CRUD (create/list/update/soft-delete)
 // Çalıştır: npx tsx scripts/test_customer.ts
-// Doğrulananlar:
-//   1. create: yeni kod → success + id döner, DB'de aktif kayıt oluşur
-//   2. create: aynı koda sahip AKTİF kayıt → AppError.conflict 409 "aktif kayıt zaten var" (F43)
-//   3. findAll: search ile kendi TEST- müşterini bul (searchFields code/name/taxNumber)
-//   4. update: ad değiştir → DB'ye yansır
-//   5. softDelete: isActive=false (fiziksel DELETE değil)
-//   6. create (pasif kodla tekrar): reactivate → AYNI id geri döner + isActive=true
+// Doğrulananlar (kod-format redesign SONRASI davranış):
+//   1. create: müşteri kodu BACKEND-AUTHORITATIVE üretilir (MUS+GGAAYY+NNNN);
+//      istemcinin gönderdiği `code` YOK SAYILIR (customer.service.ts nextCustomerCode).
+//   2. create x2 aynı istemci kodu ile → farklı iki müşteri (farklı id + farklı
+//      server-kodu). Kod istemciden gelmediği için "aktif duplicate kod" ARTIK
+//      MÜMKÜN DEĞİL — reddetme yok, her create benzersiz kod alır.
+//   3. findAll: search ile SERVER-üretilen kodu bul (searchFields code/name/taxNumber).
+//   4. update: ad değiştir → DB'ye yansır.
+//   5. softDelete: isActive=false (fiziksel DELETE değil).
+//   6. softDelete sonrası aynı istemci kodu ile create → REACTIVATE DEĞİL: yeni
+//      server-kodu üretildiğinden yeni satır açılır (eski pasif kayıt dokunulmaz).
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
-import { AppError } from "../src/utils/app-error";
 import type { Request } from "express";
 
 let pass = 0;
@@ -35,24 +38,33 @@ const service = new CustomerService({
   uniqueField: "code",
 });
 
+// Server-üretilen kod kalıbı: MUS + GGAAYY(6) + NNNN(4).
+const SERVER_CODE_RE = /^MUS\d{10}$/;
+
 async function main() {
   const ts = Date.now();
-  const code = `TEST-CUST-${ts}`;
-  let customerId = "";
+  // İstemci kodu GÖNDERİLİR ama backend yok sayar — test bunu doğrular.
+  const clientCode = `TEST-CUST-${ts}`;
+  const createdIds: string[] = [];
 
   try {
-    // 1) create — yeni kod
+    // 1) create — kod backend-authoritative üretilir, istemci `code` yok sayılır
     const created = await service.create(
-      { code, name: "TEST Müşteri A", taxNumber: "1234567890" },
+      { code: clientCode, name: "TEST Müşteri A", taxNumber: "1234567890" },
       undefined,
     );
     const createdRec = created.data as { id: string; code: string; name: string; isActive: boolean } | null;
     check(
-      "create yeni kod → success + id",
-      created.success === true && !!createdRec?.id && createdRec.code === code,
-      createdRec?.id,
+      "create → success + id + server-kod (MUS…), istemci kodu yok sayıldı",
+      created.success === true &&
+        !!createdRec?.id &&
+        SERVER_CODE_RE.test(createdRec?.code ?? "") &&
+        createdRec?.code !== clientCode,
+      createdRec?.code,
     );
-    customerId = createdRec!.id;
+    const customerId = createdRec!.id;
+    const serverCode = createdRec!.code;
+    createdIds.push(customerId);
 
     // DB doğrulaması: aktif kayıt gerçekten yazıldı
     const dbAfterCreate = await prisma.customer.findUnique({
@@ -64,25 +76,29 @@ async function main() {
       dbAfterCreate?.isActive === true && dbAfterCreate?.name === "TEST Müşteri A",
     );
 
-    // 2) aktif duplicate kod → AppError.conflict 409 (F43: Swagger 409 contract'ı)
-    try {
-      await service.create({ code, name: "TEST Müşteri DUP" }, undefined);
-      check("aktif duplicate kod → 409 hata", false, "hata bekleniyordu, başarılı döndü");
-    } catch (e) {
-      const isAppErr = e instanceof AppError;
-      const msg = e instanceof Error ? e.message : String(e);
-      check(
-        "aktif duplicate kod → AppError 409 'aktif kayıt zaten var'",
-        isAppErr && (e as AppError).statusCode === 409 && msg.includes("aktif kayıt zaten var"),
-        msg,
-      );
-    }
+    // 2) aynı istemci kodu ile ikinci create → duplicate REDDETME YOK; kod
+    //    istemciden gelmediği için yeni müşteri farklı server-kodu alır.
+    const dup = await service.create(
+      { code: clientCode, name: "TEST Müşteri DUP" },
+      undefined,
+    );
+    const dupRec = dup.data as { id: string; code: string } | null;
+    if (dupRec?.id) createdIds.push(dupRec.id);
+    check(
+      "aynı istemci kodu → farklı müşteri (server-kod benzersiz, duplicate yok)",
+      dup.success === true &&
+        !!dupRec?.id &&
+        dupRec.id !== customerId &&
+        dupRec.code !== serverCode &&
+        SERVER_CODE_RE.test(dupRec?.code ?? ""),
+      `${dupRec?.code} ≠ ${serverCode}`,
+    );
 
-    // 3) findAll — search ile kendi müşterini bul (searchFields code/name/taxNumber)
-    const listed = await service.findAll(mockReq({ search: code }));
+    // 3) findAll — search ile kendi müşterini SERVER-kodu üzerinden bul
+    const listed = await service.findAll(mockReq({ search: serverCode }));
     const rows = (listed.data ?? []) as Array<{ id: string }>;
     check(
-      "findAll search ile TEST müşteriyi buldu",
+      "findAll search (server-kod) ile TEST müşteriyi buldu",
       Array.isArray(rows) && rows.some((r) => r.id === customerId),
       `bulunan=${rows.length}`,
     );
@@ -109,35 +125,37 @@ async function main() {
       dbAfterDelete !== null && dbAfterDelete.isActive === false,
     );
 
-    // 6) pasif kodu tekrar create → reactivate (aynı id geri döner)
-    const reactivated = await service.create(
-      { code, name: "TEST Müşteri C" },
+    // 6) pasif kayıttan sonra aynı istemci kodu ile create → REACTIVATE DEĞİL.
+    //    Backend yeni server-kodu ürettiği için reactivate-by-code tetiklenmez;
+    //    yeni satır açılır, eski pasif kayıt dokunulmaz.
+    const recreated = await service.create(
+      { code: clientCode, name: "TEST Müşteri C" },
       undefined,
     );
-    const reRec = reactivated.data as { id: string; isActive: boolean; name: string } | null;
+    const reRec = recreated.data as { id: string; isActive: boolean; name: string } | null;
+    if (reRec?.id) createdIds.push(reRec.id);
     check(
-      "pasif kodla create → reactivate (AYNI id)",
-      reactivated.success === true && reRec?.id === customerId,
-      `${reRec?.id} === ${customerId}`,
+      "aynı istemci kodu ile tekrar create → YENİ satır (reactivate değil)",
+      recreated.success === true &&
+        !!reRec?.id &&
+        reRec.id !== customerId &&
+        reRec.isActive === true &&
+        reRec.name === "TEST Müşteri C",
+      `${reRec?.id} ≠ ${customerId}`,
     );
-    check(
-      "reactivate sonrası isActive=true + yeni ad yazıldı",
-      reRec?.isActive === true && reRec?.name === "TEST Müşteri C",
-    );
-    // İkinci bir kayıt YARATILMADIĞINI doğrula (tek satır, aynı id)
-    const allWithCode = await prisma.customer.findMany({
-      where: { code },
-      select: { id: true },
+    // Eski pasif kayıt dokunulmadı: hâlâ tek başına ve pasif
+    const oldStill = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { isActive: true, name: true },
     });
     check(
-      "reactivate yeni satır AÇMADI (tek kayıt)",
-      allWithCode.length === 1 && allWithCode[0].id === customerId,
-      `satır=${allWithCode.length}`,
+      "eski pasif kayıt dokunulmadı (isActive=false, adı korundu)",
+      oldStill?.isActive === false && oldStill?.name === "TEST Müşteri B",
     );
   } finally {
     // Kendi yarattığını temizle (audit log SystemLog'da kalır — append-only).
-    if (customerId) {
-      await prisma.customer.delete({ where: { id: customerId } }).catch(() => {});
+    for (const id of createdIds) {
+      await prisma.customer.delete({ where: { id } }).catch(() => {});
     }
   }
 

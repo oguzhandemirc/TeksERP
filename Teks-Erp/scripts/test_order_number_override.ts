@@ -2,7 +2,7 @@
 // Test: Saha #16 — sipariş numarası override (boş = otomatik)
 // Çalıştır: npx tsx scripts/test_order_number_override.ts
 // Doğrulananlar:
-//   1. orderNumber verilmeden create → otomatik YYYYMMDD-N üretilir
+//   1. orderNumber verilmeden create → otomatik SIP+GGAAYY+NNNN üretilir
 //   2. Elle verilen orderNumber aynen kullanılır
 //   3. Aynı numarayla ikinci create → 409
 //   4. update yolu orderNumber'ı EZEMEZ (whitelist korunur)
@@ -52,8 +52,8 @@ async function main() {
     const autoRec = auto.data as { id: string; orderNumber: string };
     orderIds.push(autoRec.id);
     check(
-      "Boş bırakılınca otomatik YYYYMMDD-N üretildi",
-      /^\d{8}-\d+$/.test(autoRec.orderNumber),
+      "Boş bırakılınca otomatik SIP+GGAAYY+NNNN üretildi",
+      /^SIP\d{10}$/.test(autoRec.orderNumber),
       autoRec.orderNumber,
     );
 

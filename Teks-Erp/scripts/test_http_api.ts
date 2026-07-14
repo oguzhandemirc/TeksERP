@@ -12,7 +12,7 @@
 //   Auth/Zod : login başarılı(200+token) · yanlış şifre(401) · eksik alan(400 Zod)
 //   verifyToken : token yok(401) · bozuk token(401) · geçerli(200)
 //   RBAC : yetkisiz kullanıcı requirePermission(403) + requireAnyPermission(403)
-//   Yazma + error-mapping : create(201) · aktif duplicate(409 conflict)
+//   Yazma : create(201) · kod backend-authoritative (istemci `code` yok sayılır → MUS…)
 // =============================================================================
 import type { Server } from "http";
 import type { AddressInfo } from "net";
@@ -66,6 +66,7 @@ async function main() {
   };
 
   let createdCustomerId: string | null = null;
+  let dupCustomerId: string | null = null;
   let lowUserId: string | null = null;
 
   try {
@@ -157,13 +158,26 @@ async function main() {
     createdCustomerId = (createdData.id as string) ?? null;
     check("201 gövdesi success:true + id", created.body.success === true && typeof createdData.id === "string");
 
-    // ---- 9) error-mapping: aynı aktif kod tekrar → 409 (BaseService uniqueField guard, F43) ----
+    // ---- 9) kod backend-authoritative (redesign): tüm otomatik kodlar sunucuda
+    // `MUS+GGAAYY+NNNN` üretilir; istemciden gelen `code` YOK SAYILIR
+    // (CustomerService.create → data.code = nextCustomerCode()). Bu yüzden aynı
+    // client `code` ile ikinci create duplicate ÇAKIŞMAZ — taze benzersiz kod ile
+    // yine 201 döner. (Eski "aktif duplicate → 409" senaryosu artık ulaşılamaz.) ----
     const dup = await call("POST", "/api/customers", {
       token: adminToken,
       body: { code, name: "TEST HTTP Müşteri 2" },
     });
-    check("aktif duplicate kod → 409 (conflict mapping)", dup.status === 409, `status=${dup.status}`);
-    check("409 gövdesi success:false", dup.body.success === false, String(dup.body.message ?? ""));
+    check("aynı client kod ile ikinci create → 201 (kod backend-authoritative)", dup.status === 201, `status=${dup.status}`);
+    const dupData = (dup.body.data ?? {}) as Record<string, unknown>;
+    dupCustomerId = (dupData.id as string) ?? null;
+    check(
+      "server-üretilen kod istemci kodunu yok sayar + benzersiz",
+      typeof createdData.code === "string" &&
+        typeof dupData.code === "string" &&
+        createdData.code !== code &&
+        createdData.code !== dupData.code,
+      `codes=${String(createdData.code)},${String(dupData.code)}`,
+    );
 
     // ---- 10) F264 — RBAC MATRİS: veri-güdümlü guard (token yok→401, yetkisiz→403) ----
     // Salt-okunur koleksiyon GET'leri (path-param yok → uuid-param middleware karışmaz).
@@ -187,6 +201,9 @@ async function main() {
   } finally {
     if (createdCustomerId) {
       await prisma.customer.delete({ where: { id: createdCustomerId } }).catch(() => {});
+    }
+    if (dupCustomerId) {
+      await prisma.customer.delete({ where: { id: dupCustomerId } }).catch(() => {});
     }
     if (lowUserId) {
       await prisma.userPermission.deleteMany({ where: { userId: lowUserId } }).catch(() => {});

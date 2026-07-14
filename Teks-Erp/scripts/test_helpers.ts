@@ -153,9 +153,16 @@ type OrderRow = {
 };
 function makeOrderTx(order: OrderRow | null, tolerance = 5) {
   const updates: Record<string, unknown>[] = [];
+  // Ledger-otoritatif model (ÇUVAL DEPO): recompute shippedQty'yi OrderLine.shippedQty
+  // alanından DEĞİL, SackAllocation + SubcontractorDirectShipAllocation defterinden
+  // (orderLineId ile) YENİDEN hesaplar. Bu yüzden satırlara id atıyoruz ve line.shippedQty'yi
+  // "sevk edilmiş çuval tahsisi" olarak groupBy mock'una taşıyoruz.
+  const linesWithId = order
+    ? order.lines.map((l, i) => ({ ...l, id: `${order.id}-l${i}` }))
+    : [];
   const tx = {
     order: {
-      findUnique: async () => order,
+      findUnique: async () => (order ? { ...order, lines: linesWithId } : null),
       update: async (args: { data: Record<string, unknown> }) => {
         updates.push(args.data);
         if (order) {
@@ -164,6 +171,21 @@ function makeOrderTx(order: OrderRow | null, tolerance = 5) {
         }
         return {};
       },
+    },
+    orderLine: {
+      // Denorm shippedQty yazımı — testte doğrulanmıyor, no-op.
+      update: async () => ({}),
+    },
+    sackAllocation: {
+      // shipped = Σ dispatched çuval tahsisi. Line.shippedQty > 0 olanları tahsis say.
+      groupBy: async () =>
+        linesWithId
+          .filter((l) => l.shippedQty > 0)
+          .map((l) => ({ orderLineId: l.id, _sum: { qty: l.shippedQty } })),
+    },
+    subcontractorDirectShipAllocation: {
+      // Bu senaryolarda fason doğrudan sevk yok.
+      groupBy: async () => [] as { orderLineId: string; _sum: { qty: number } }[],
     },
     systemSetting: {
       findUnique: async () => ({ value: String(tolerance) }),
@@ -204,7 +226,9 @@ async function testOrderStatus() {
     const { tx, updates } = makeOrderTx({ id: "o4", status: "CANCELLED", completedAt: null, manualClosedById: null, lines: [{ quantity: 100, shippedQty: 100 }] });
     const r = await recomputeOrderStatus(tx, "o4");
     check("order: CANCELLED terminal — değişmez", r?.changed === false && r?.newStatus === "CANCELLED");
-    check("order: CANCELLED'de update çağrılmadı", updates.length === 0);
+    // Ledger modeli: denorm shippedQty her zaman senkronlanır (update çağrılır) ama
+    // terminal siparişin status'u ASLA yazılmaz.
+    check("order: CANCELLED'de status yazılmadı", updates.every((u) => !("status" in u)));
   }
   // Manuel kapatılmış COMPLETED terminal
   {

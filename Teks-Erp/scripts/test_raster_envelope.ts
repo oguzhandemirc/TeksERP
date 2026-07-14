@@ -38,11 +38,11 @@ function blackBmp(): Bitmap1 { const b = new Bitmap1(16, 4); b.fillRect(0, 0, 16
   // q/Q FORMAT boyutundan (fiziksel etiket 100×60mm@203 = 799×480, gap 2mm=16);
   // GW imaj boyutu ise BİTMAP'ten (16×4) — ikisi ayrı (gerçek kullanımda eşit).
   check("PPLB N/q/Q/D8 header (format boyutu)", s.startsWith("N\r\nq799\r\nQ480,16\r\nD8\r\n"));
-  check("PPLB GW başlığı (ayraçsız, rowBytes=2 h=4)", s.includes("GW0,0,2,4"));
+  check("PPLB GW başlığı (p4 sonrası virgül, rowBytes=2 h=4)", s.includes("GW0,0,2,4,"));
   check("PPLB P{copies} kuyruğu (clamp 2)", s.trimEnd().endsWith("P2"));
 
-  // GW başlığından sonra 8 baytlık blok — ayraç YOK, DATA hemen gelir.
-  const marker = "GW0,0,2,4";
+  // GW başlığı (p4 SONRASI VİRGÜL) sonrası 8 baytlık blok — Argox PPLB `GWp1,p2,p3,p4,DATA`.
+  const marker = "GW0,0,2,4,";
   const at = buf.indexOf(Buffer.from(marker, "latin1"));
   const block = buf.subarray(at + marker.length, at + marker.length + 8);
   check("PPLB GW blok uzunluğu = rowBytes×h = 8", block.length === 8);
