@@ -1,7 +1,6 @@
 import axios from "axios";
 import { toast } from "sonner";
 import { tokenStore } from "@/lib/secure-token";
-import { getOrCreateDeviceId } from "@/lib/deviceId";
 import { useAuthStore } from "@/store/auth";
 import { useServerStatusStore } from "@/store/serverStatus";
 import { recordNetSample } from "@/services/netStats";
@@ -55,14 +54,13 @@ apiClient.interceptors.request.use(async (config) => {
   if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  // Bu PC'yi backend'e tanıt: Device → Machine çözümü (sevkiyat kantarı vb.).
-  // Atanmamışsa backend normal çalışır (atıf null) — header zararsız.
-  try {
-    const deviceId = await getOrCreateDeviceId();
-    if (deviceId) config.headers["x-device-id"] = deviceId;
-  } catch {
-    /* header yoksa backend etkilenmez */
-  }
+  // NOT: Masaüstü panel BİLEREK `x-device-id` GÖNDERMEZ. Gönderdiğinde,
+  // `devicePairingRequired` (cihaz-onay kapısı) açıkken backend'in device
+  // middleware'i onaysız cihaz sayıp Electron'un TÜM isteklerini 401
+  // DEVICE_INACTIVE ile keser → ayarı açan admin paneline de giremez (deadlock,
+  // bkz. [[device-pairing-lockout]]). Kapı yalnız saha tabletleri içindir.
+  // Eski tek kullanım (for-device kantar çözümü) yerel kantar ayarına taşındı
+  // (useMachineScale: config.scaleDevice → backend'e uğramaz).
   return config;
 });
 

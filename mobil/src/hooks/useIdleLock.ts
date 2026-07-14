@@ -3,9 +3,10 @@
 // =============================================================================
 // Kök seviyede BİR KEZ mount edilir (IdleLockGate). Saf reducer (idleLock.ts)
 // kararı verir; bu hook yalnız zamanlayıcı + AppState + lockStore köprüsüdür.
-//   - `mobileIdleLockEnabled` kapalı VEYA kullanıcı yoksa → asla kilitlenmez.
+//   - `mobileIdleLockEnabled` kapalı VEYA kullanıcı yoksa → idle ile kilitlenmez.
 //   - idle süresi (feature-flags dk) dolmadan `IDLE_WARNING_MS` önce geri sayım.
-//   - Arka plana geçince (AppState !== 'active') ANINDA kilitlenir.
+//   - Arka plana geçince (AppState !== 'active') ANINDA kilitlenir — AYRI bayrak
+//     `mobileLockOnBackground` (default açık); kapalıysa arka plana geçince kilit YOK.
 // Aktivite zaman damgası App.tsx kök responder-capture'ından `recordActivity()`
 // ile güncellenir (bu hook yalnız okur).
 // =============================================================================
@@ -21,7 +22,11 @@ import {
   recordActivity,
   useLockStore,
 } from '../store/lockStore';
-import { useMobileIdleLockEnabled, useMobileIdleLockMinutes } from './useFeatureFlags';
+import {
+  useMobileIdleLockEnabled,
+  useMobileIdleLockMinutes,
+  useMobileLockOnBackground,
+} from './useFeatureFlags';
 import {
   computeIdlePhase,
   idleMinutesToMs,
@@ -42,6 +47,7 @@ export interface IdleLockUi {
 export function useIdleLock(): IdleLockUi {
   const enabled = useMobileIdleLockEnabled();
   const minutes = useMobileIdleLockMinutes();
+  const lockOnBackground = useMobileLockOnBackground();
   const user = useAuthStore((s) => s.user);
   const locked = useLockStore((s) => s.locked);
   const lock = useLockStore((s) => s.lock);
@@ -49,7 +55,8 @@ export function useIdleLock(): IdleLockUi {
   const [warning, setWarning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
-  const activeGuard = enabled && !!user;
+  const activeGuard = enabled && !!user; // idle timeout (hareketsizlik)
+  const bgGuard = lockOnBackground && !!user; // arka plana geçince anında kilit (bağımsız)
   const idleMs = idleMinutesToMs(minutes);
 
   // Etkin olunca aktiviteyi tazele → yükleme/ayar değişiminde anında kilitlenme.
@@ -80,7 +87,9 @@ export function useIdleLock(): IdleLockUi {
     return () => clearInterval(id);
   }, [activeGuard, locked, idleMs, lock]);
 
-  // Arka plana geçince anında kilitle (ayar açık + kullanıcı varken).
+  // Arka plana geçince anında kilitle (mobileLockOnBackground açık + kullanıcı varken).
+  // Idle kilitten BAĞIMSIZ: idle kapalı olsa da bu açıksa arka planda kilitlenir;
+  // bu kapalıysa idle açık olsa da arka planda kilitlenmez (yalnız süre dolunca).
   // MUAFİYET: uygulamanın kendi açtığı sistem diyaloğu (BT izin/aç/PIN,
   // yazdırma, kamera izni — withSystemDialog ile sarılı) da activity'yi pause
   // edip 'background' yayar; bu blip'te KİLİTLEME (operatör uygulamadan
@@ -90,7 +99,7 @@ export function useIdleLock(): IdleLockUi {
   // (dönen kişi başkası olabilir). recordActivity ÇAĞRILMAZ: diyalog süresi
   // idle sayılır — idle tick'i dönüşte ikinci emniyet ağıdır.
   useEffect(() => {
-    if (!activeGuard) return;
+    if (!bgGuard) return;
     const sub = AppState.addEventListener('change', (s) => {
       if (s !== 'active') {
         if (isSystemDialogPending()) noteSuppressedBackground();
@@ -100,7 +109,7 @@ export function useIdleLock(): IdleLockUi {
       }
     });
     return () => sub.remove();
-  }, [activeGuard, lock]);
+  }, [bgGuard, lock]);
 
   const dismissWarning = useCallback(() => {
     recordActivity();

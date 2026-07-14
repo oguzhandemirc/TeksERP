@@ -54,6 +54,7 @@ export function useSessionSettingsForm() {
   const currentAutoLogout = f?.autoLogoutOnExpiry ?? true;
   const currentMobileLock = f?.mobileIdleLockEnabled ?? true;
   const currentMobileLockMin = f?.mobileIdleLockMinutes ?? DEFAULT_MOBILE_IDLE_LOCK_MIN;
+  const currentMobileLockBg = f?.mobileLockOnBackground ?? true;
   const currentPolicy = isSameTypeSessionPolicy(f?.sameTypeSessionPolicy)
     ? f!.sameTypeSessionPolicy
     : DEFAULT_SAME_TYPE_SESSION_POLICY;
@@ -70,6 +71,7 @@ export function useSessionSettingsForm() {
   const [idleMin, setIdleMin] = useState(currentIdle > 0 ? currentIdle : DEFAULT_IDLE_MIN);
   const [mobileLock, setMobileLock] = useState(currentMobileLock);
   const [mobileLockMin, setMobileLockMin] = useState(currentMobileLockMin);
+  const [mobileLockBg, setMobileLockBg] = useState(currentMobileLockBg);
   const [workEnabled, setWorkEnabled] = useState(currentWorkIdle > 0);
   const [workMin, setWorkMin] = useState(
     currentWorkIdle > 0 ? currentWorkIdle : DEFAULT_WORK_SESSION_IDLE,
@@ -92,6 +94,7 @@ export function useSessionSettingsForm() {
     setIdleMin(currentIdle > 0 ? currentIdle : DEFAULT_IDLE_MIN);
     setMobileLock(currentMobileLock);
     setMobileLockMin(currentMobileLockMin);
+    setMobileLockBg(currentMobileLockBg);
     setWorkEnabled(currentWorkIdle > 0);
     setWorkMin(currentWorkIdle > 0 ? currentWorkIdle : DEFAULT_WORK_SESSION_IDLE);
     setPolicy(currentPolicy);
@@ -111,6 +114,7 @@ export function useSessionSettingsForm() {
     currentMobileLockMin,
     currentAutoLogout,
     currentMobileLock,
+    currentMobileLockBg,
     currentPolicy,
     methodsKey,
     currentCapDays,
@@ -129,6 +133,7 @@ export function useSessionSettingsForm() {
       mobileIdleLockMinutes: number;
       autoLogoutOnExpiry: boolean;
       mobileIdleLockEnabled: boolean;
+      mobileLockOnBackground: boolean;
       sameTypeSessionPolicy: SameTypeSessionPolicy;
       loginMethods: { enabled: LoginMethod[]; primary: LoginMethod };
       absoluteSessionCapDays: number;
@@ -211,6 +216,7 @@ export function useSessionSettingsForm() {
     mobileLockMin !== currentMobileLockMin ||
     autoLogout !== currentAutoLogout ||
     mobileLock !== currentMobileLock ||
+    mobileLockBg !== currentMobileLockBg ||
     policy !== currentPolicy ||
     methodsDirty ||
     capDaysNum !== currentCapDays ||
@@ -252,6 +258,7 @@ export function useSessionSettingsForm() {
     setIdleMin(currentIdle > 0 ? currentIdle : DEFAULT_IDLE_MIN);
     setMobileLock(currentMobileLock);
     setMobileLockMin(currentMobileLockMin);
+    setMobileLockBg(currentMobileLockBg);
     setWorkEnabled(currentWorkIdle > 0);
     setWorkMin(currentWorkIdle > 0 ? currentWorkIdle : DEFAULT_WORK_SESSION_IDLE);
     setPolicy(currentPolicy);
@@ -273,6 +280,7 @@ export function useSessionSettingsForm() {
       mobileIdleLockMinutes: mobileLockMin,
       autoLogoutOnExpiry: autoLogout,
       mobileIdleLockEnabled: mobileLock,
+      mobileLockOnBackground: mobileLockBg,
       sameTypeSessionPolicy: policy,
       loginMethods: { enabled: enabledMethods, primary: primaryMethod },
       absoluteSessionCapDays: capDaysNum,
@@ -290,6 +298,7 @@ export function useSessionSettingsForm() {
     autoLogout, setAutoLogout,
     idleEnabled, idleMin, setIdleMin, toggleIdle,
     mobileLock, setMobileLock, mobileLockMin, setMobileLockMin,
+    mobileLockBg, setMobileLockBg,
     workEnabled, workMin, setWorkMin, toggleWork,
     policy, setPolicy,
     enabledMethods, primaryMethod, setPrimaryMethod, toggleMethod,
@@ -312,6 +321,7 @@ export function useSessionSettingsForm() {
       autoLogout: currentAutoLogout,
       mobileLock: currentMobileLock,
       mobileLockMin: currentMobileLockMin,
+      mobileLockBg: currentMobileLockBg,
       policy: currentPolicy,
       methods: currentMethods,
       capDays: currentCapDays,

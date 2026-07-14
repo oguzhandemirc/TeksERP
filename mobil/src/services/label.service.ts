@@ -30,22 +30,41 @@ export const labelService = {
     rollId: string,
     kind: 'ROLL_RAW' | 'ROLL_FINISHED',
     ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
-  ): Promise<{ content: string; language: string }> =>
-    apiClient
+    rasterCapable?: boolean,
+  ): Promise<{ content: string; encoding: 'text' | 'base64'; language: string }> => {
+    const params = {
+      kind,
+      ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
+      ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
+      ...(ctx?.stock ? { stock: '1' } : {}),
+    };
+    // rasterCapable (mobileRasterEnabled) → encoding=b64: backend cihazın rasterMode'unu
+    // ONURLANDIRIR → raster GW bitmap (ya da komut), ikisi de base64 byte olarak JSON döner.
+    // rasterCapable false → eski ham-text komut yolu (byte-birebir latin1).
+    if (rasterCapable) {
+      return apiClient
+        .get<{ success: boolean; data: { content: string; encoding: string; language: string } }>(
+          `/labels/rolls/${rollId}/native`,
+          { params: { ...params, encoding: 'b64' } },
+        )
+        .then((r) => ({
+          content: r.data?.data?.content ?? '',
+          encoding: 'base64' as const,
+          language: String(r.data?.data?.language ?? 'PPLA'),
+        }));
+    }
+    return apiClient
       .get<string>(`/labels/rolls/${rollId}/native`, {
-        params: {
-          kind,
-          ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
-          ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
-          ...(ctx?.stock ? { stock: '1' } : {}),
-        },
+        params,
         responseType: 'text',
         transformResponse: [(d) => d],
       })
       .then((r) => ({
         content: String(r.data ?? ''),
+        encoding: 'text' as const,
         language: String((r.headers?.['x-label-language'] as string | undefined) ?? 'PPLA'),
-      })),
+      }));
+  },
 
   /** Kartelanın etiket payload'u — parentRoll allocation üzerinden cascade. */
   getSwatchLabel: (swatchId: string): Promise<ApiResponse<SwatchLabelPayload>> =>

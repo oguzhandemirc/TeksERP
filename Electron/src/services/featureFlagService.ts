@@ -181,6 +181,9 @@ export interface FeatureFlags {
   mobileIdleLockEnabled: boolean;
   /** Mobil hareketsizlik kilidi süresi — dakika (1..120, default 10). Client ENFORCE (mobil). */
   mobileIdleLockMinutes: number;
+  /** Mobil uygulama arka plana geçince (operatör çıkınca) anında kilitlensin mi
+   *  (default true). Idle kilitten bağımsız. Client ENFORCE (yalnız mobil). */
+  mobileLockOnBackground: boolean;
   /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = süresiz). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar (sızan token sonsuza kadar geçerli
    *  kalmasın). Backend ENFORCE eder (issueToken). */
@@ -207,6 +210,9 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
+  /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
+   *  Electron raster'ından (PeripheralDevice.rasterMode) bağımsız; sahada yavaşsa kapatılır. */
+  mobileRasterEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
    *  medyası. Yazıcı cihazı seçiliyse onun medyası önceliklidir; bu yalnız fallback. */
   defaultLabelMedia: DefaultLabelMedia;

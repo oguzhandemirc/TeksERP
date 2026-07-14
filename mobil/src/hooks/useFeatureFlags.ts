@@ -72,3 +72,13 @@ export function useMobileIdleLockEnabled(): boolean {
 export function useMobileIdleLockMinutes(): number {
   return useFeatureFlags().data?.mobileIdleLockMinutes ?? 10;
 }
+
+/** Uygulama arka plana geçince anında kilitle? Default TRUE. Idle kilitten bağımsız. */
+export function useMobileLockOnBackground(): boolean {
+  return useFeatureFlags().data?.mobileLockOnBackground ?? true;
+}
+
+/** Mobil baskıda raster GW bitmap gönder? Default FALSE (komut yolu). HC-06'da yavaşsa kapalı. */
+export function useMobileRasterEnabled(): boolean {
+  return useFeatureFlags().data?.mobileRasterEnabled ?? false;
+}

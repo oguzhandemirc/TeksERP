@@ -60,6 +60,7 @@ export function SessionSettingsSection() {
           workIdleMinutes={s.current.workIdle}
           mobileLock={s.current.mobileLock}
           mobileLockMinutes={s.current.mobileLockMin}
+          mobileLockBg={s.current.mobileLockBg}
           methods={s.current.methods}
           absoluteCapDays={s.current.capDays}
           pinLockoutEnabled={s.current.pinEnabled}
@@ -155,6 +156,18 @@ export function SessionSettingsSection() {
                 ? `${MIN_MOBILE_IDLE_LOCK_MIN}–${MAX_MOBILE_IDLE_LOCK_MIN} arası bir dakika girin.`
                 : undefined
             }
+          />
+        </div>
+
+        {/* 4b) Mobil arka-plan kilidi — uygulamadan çıkınca anında kilit (idle'dan bağımsız) */}
+        <div className="border-t pt-4">
+          <FlagToggle
+            hint={hint}
+            title="Uygulamadan çıkınca kilitle (mobil)"
+            desc="Açıkken (varsayılan) operatör uygulamadan çıktığı anda (ana ekran / başka uygulama) tablet hemen kilit ekranına geçer — iş oturumu açık kalır, kart/PIN ile devam edilir. Hareketsizlik kilidinden BAĞIMSIZ: kapatırsan uygulamadan çıkınca kilitlenmez, yalnız (açıksa) hareketsizlik süresi dolunca kilitlenir. Uygulamanın kendi açtığı sistem diyalogları (Bluetooth/kamera izni) kilit tetiklemez. Açık tabletler yeni ayarı öne gelince otomatik alır."
+            checked={s.mobileLockBg}
+            disabled={s.isSaving}
+            onChange={s.setMobileLockBg}
           />
         </div>
 

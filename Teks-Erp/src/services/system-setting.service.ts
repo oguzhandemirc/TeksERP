@@ -137,6 +137,11 @@ export const SETTING_KEYS = {
    *  yazıcıya DOĞRUDAN gönderilsin mi (default false = Faz-1 simülasyon). Açıkken
    *  ENFORCE — printer-transport gerçek socket açar; kapalıyken hiç socket yok. */
   LABEL_NATIVE_SEND_ENABLED: "label.nativeSendEnabled",
+  /** Mobil (HC-06/BT-SPP) baskıda raster (1bpp GW bitmap) gönderilsin mi. Default false =
+   *  mobil komut yolunda kalır (hızlı, güvenli). Açıkken mobil `encoding=b64` ile raster
+   *  ister → WYSIWYG ama ~40KB binary HC-06'dan gider (yavaş olabilir). Client (mobil) ENFORCE.
+   *  Electron raster'ından (PeripheralDevice.rasterMode) BAĞIMSIZ — sahada yavaşsa kapatılır. */
+  LABEL_MOBILE_RASTER_ENABLED: "label.mobileRasterEnabled",
   /** Aynı cihaz-tipinden (electron/mobil) ikinci giriş olunca ne yapılsın:
    *  'kick' (default — eskiyi düşür, yeni kazanır) | 'notify' (kullanıcıya sor,
    *  confirmKick ile ikisi de açık kalır) | 'off' (serbest, çoklu oturum). 1 Electron +
@@ -153,6 +158,10 @@ export const SETTING_KEYS = {
   AUTH_MOBILE_IDLE_LOCK_ENABLED: "auth.mobileIdleLockEnabled",
   /** Mobil idle kilit süresi, DAKİKA (1..120). Default 10. Client (mobil) ENFORCE eder. */
   AUTH_MOBILE_IDLE_LOCK_MINUTES: "auth.mobileIdleLockMinutes",
+  /** Mobil "uygulama arka plana geçince ANINDA kilitle" açık mı. Default true. Idle
+   *  kilitten BAĞIMSIZ — operatör uygulamadan çıkınca (home/başka app) hemen kilit
+   *  ekranı gelir (work session AÇIK kalır; kart/PIN ile açılır). Client (mobil) ENFORCE. */
+  AUTH_MOBILE_LOCK_ON_BACKGROUND: "auth.mobileLockOnBackground",
   /** Mutlak oturum tavanı, GÜN. Default 30 (0..365). Zaman aşımı KAPALI iken bile
    *  token en fazla bu kadar gün geçerli olur (sızan token sonsuza kadar yaşamasın).
    *  0 = gerçekten süresiz (exp claim'i yok). Backend ENFORCE eder (issueToken). */
@@ -203,6 +212,9 @@ export const DEFAULT_MOBILE_IDLE_LOCK_ENABLED = true;
 export const DEFAULT_MOBILE_IDLE_LOCK_MINUTES = 10;
 const MIN_MOBILE_IDLE_LOCK_MINUTES = 1;
 const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
+/** Mobil arka-plan kilidi varsayılanı — açık (eski davranış: idle kilit açıkken
+ *  arka plana geçince de kilitlenirdi; artık bağımsız bayrak, default korunur). */
+export const DEFAULT_MOBILE_LOCK_ON_BACKGROUND = true;
 /** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = gerçekten süresiz (exp yok). */
 export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
@@ -513,6 +525,9 @@ export interface FeatureFlags {
   mobileIdleLockEnabled: boolean;
   /** Mobil idle kilit süresi — dakika (default 10, 1..120). Client (mobil) ENFORCE. */
   mobileIdleLockMinutes: number;
+  /** Mobil "uygulama arka plana geçince anında kilitle" açık mı (default true).
+   *  Idle kilitten bağımsız. Client (mobil) ENFORCE. */
+  mobileLockOnBackground: boolean;
   /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = süresiz). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar. Backend ENFORCE (issueToken). */
   absoluteSessionCapDays: number;
@@ -534,6 +549,9 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
+  /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
+   *  Electron raster'ından bağımsız; sahada yavaşsa kapatılır. Client (mobil) ENFORCE. */
+  mobileRasterEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
    *  medyası. Yazıcı cihazı seçiliyse onun medyası önceliklidir; bu yalnız fallback. */
   defaultLabelMedia: DefaultLabelMedia;
@@ -693,6 +711,7 @@ export class SystemSettingService {
       autoLogoutOnExpiry: await readAutoLogoutOnExpiry(cacheClient),
       mobileIdleLockEnabled: await readMobileIdleLockEnabled(cacheClient),
       mobileIdleLockMinutes: await readMobileIdleLockMinutes(cacheClient),
+      mobileLockOnBackground: await readMobileLockOnBackground(cacheClient),
       absoluteSessionCapDays: await readAbsoluteSessionCapDays(cacheClient),
       pinLockoutEnabled: await readPinLockoutEnabled(cacheClient),
       pinLockoutAttempts: await readPinLockoutAttempts(cacheClient),
@@ -702,6 +721,7 @@ export class SystemSettingService {
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
+      mobileRasterEnabled: await readMobileRasterEnabled(cacheClient),
       defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
@@ -1042,6 +1062,18 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "mobileLockOnBackground")) {
+      if (typeof input.mobileLockOnBackground !== "boolean") {
+        throw AppError.badRequest("mobileLockOnBackground boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_MOBILE_LOCK_ON_BACKGROUND,
+        input.mobileLockOnBackground,
+        "Mobil uygulama arka plana geçince (operatör uygulamadan çıkınca) anında kilitlensin",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "mobileIdleLockMinutes")) {
       const v = input.mobileIdleLockMinutes;
       if (
@@ -1225,6 +1257,18 @@ export class SystemSettingService {
         SETTING_KEYS.LABEL_NATIVE_SEND_ENABLED,
         input.nativeSendEnabled,
         "Faz-2: native etiket komutlarını yazıcıya doğrudan (RAW TCP 9100) gönder (kapalıyken simülasyon)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "mobileRasterEnabled")) {
+      if (typeof input.mobileRasterEnabled !== "boolean") {
+        throw AppError.badRequest("mobileRasterEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_MOBILE_RASTER_ENABLED,
+        input.mobileRasterEnabled,
+        "Mobil (HC-06/BT) baskıda raster GW bitmap gönder (kapalıyken komut yolu — hızlı/güvenli)",
         userId
       );
     }
@@ -1770,6 +1814,23 @@ export async function readMobileIdleLockEnabled(
 }
 
 /**
+ * Mobil "uygulama arka plana geçince anında kilitle" açık mı? Default TRUE (kayıt
+ * yoksa). Idle kilitten bağımsız. Client (mobil) ENFORCE eder — AppState 'active'
+ * dışına çıkınca kilit ekranı gelir (work session açık kalır; kart/PIN ile açılır).
+ */
+export async function readMobileLockOnBackground(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_MOBILE_LOCK_ON_BACKGROUND },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_MOBILE_LOCK_ON_BACKGROUND;
+  return asBoolean(setting.value);
+}
+
+/**
  * Mobil idle kilit süresini DAKİKA olarak okur. Yoksa/geçersizse 10; 1..120 aralığına
  * kırpılır. Client (mobil) ENFORCE eder.
  */
@@ -1985,6 +2046,22 @@ export async function readLabelNativeSendEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.LABEL_NATIVE_SEND_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi? Default FALSE (kayıt yoksa →
+ * komut yolu). Electron raster'ından (PeripheralDevice.rasterMode) BAĞIMSIZ. Client (mobil)
+ * ENFORCE eder: açıkken mobil `encoding=b64` ile raster ister, kapalıyken komut yolu.
+ */
+export async function readMobileRasterEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_MOBILE_RASTER_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

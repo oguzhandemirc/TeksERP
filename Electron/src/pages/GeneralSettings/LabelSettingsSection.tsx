@@ -44,13 +44,16 @@ export function LabelSettingsSection() {
 
   const currentCopies = flagsQ.data?.data?.labelCopies ?? DEFAULT_COPIES;
   const currentNative = flagsQ.data?.data?.nativeSendEnabled ?? false;
+  const currentMobileRaster = flagsQ.data?.data?.mobileRasterEnabled ?? false;
   const currentMedia = flagsQ.data?.data?.defaultLabelMedia ?? FALLBACK_MEDIA;
 
   const [copies, setCopies] = useState(String(currentCopies));
   const [native, setNative] = useState(currentNative);
+  const [mobileRaster, setMobileRaster] = useState(currentMobileRaster);
   const [media, setMedia] = useState<Record<keyof DefaultLabelMedia, string>>(() => mediaToStr(currentMedia));
   useEffect(() => setCopies(String(currentCopies)), [currentCopies]);
   useEffect(() => setNative(currentNative), [currentNative]);
+  useEffect(() => setMobileRaster(currentMobileRaster), [currentMobileRaster]);
   useEffect(() => {
     setMedia(mediaToStr(currentMedia));
     // currentMedia obje referansı her render değişebilir → alan-bazlı bağımlılık.
@@ -67,8 +70,9 @@ export function LabelSettingsSection() {
 
   const copiesDirty = copiesNum !== currentCopies;
   const nativeDirty = native !== currentNative;
+  const mobileRasterDirty = mobileRaster !== currentMobileRaster;
   const mediaDirty = MEDIA_FIELDS.some((f) => Number(media[f.key]) !== currentMedia[f.key]);
-  const dirty = copiesDirty || nativeDirty || mediaDirty;
+  const dirty = copiesDirty || nativeDirty || mobileRasterDirty || mediaDirty;
   useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
@@ -76,6 +80,7 @@ export function LabelSettingsSection() {
       const patch: Partial<FeatureFlags> = {};
       if (copiesDirty) patch.labelCopies = copiesNum;
       if (nativeDirty) patch.nativeSendEnabled = native;
+      if (mobileRasterDirty) patch.mobileRasterEnabled = mobileRaster;
       if (mediaDirty) {
         patch.defaultLabelMedia = MEDIA_FIELDS.reduce(
           (acc, f) => ({ ...acc, [f.key]: f.int ? Math.floor(Number(media[f.key])) : Number(media[f.key]) }),
@@ -93,6 +98,7 @@ export function LabelSettingsSection() {
   const reset = () => {
     setCopies(String(currentCopies));
     setNative(currentNative);
+    setMobileRaster(currentMobileRaster);
     setMedia(mediaToStr(currentMedia));
   };
 
@@ -182,6 +188,27 @@ export function LabelSettingsSection() {
           checked={native}
           disabled={mut.isPending}
           onChange={setNative}
+        />
+      </div>
+
+      {/* Mobil raster (BT/HC-06) — Electron raster'ından (cihaz kaydı) BAĞIMSIZ toggle */}
+      <div className="border-t pt-4">
+        <FlagToggle
+          title="Mobilde raster baskı (Bluetooth / HC-06)"
+          desc={
+            <>
+              Açıkken saha tabletleri de etiketi <strong>raster (1bpp bitmap)</strong> basar —
+              Electron'daki gibi önizleme=baskı (WYSIWYG) + gerçek Türkçe glifler.{" "}
+              <strong>Kapalıyken (varsayılan)</strong> mobil hızlı <em>komut yolunu</em> kullanır
+              (yazıcının dahili fontu; Türkçe karakterler sadeleşir). ⚠ Raster ~40&nbsp;KB'lık
+              veriyi HC-06 Bluetooth üzerinden gönderir → <strong>baskı yavaşlayabilir</strong>;
+              sahada çok yavaşsa buradan kapatın. Electron (USB) raster'ını ve cihaz kaydındaki
+              raster ayarını etkilemez.
+            </>
+          }
+          checked={mobileRaster}
+          disabled={mut.isPending}
+          onChange={setMobileRaster}
         />
       </div>
 

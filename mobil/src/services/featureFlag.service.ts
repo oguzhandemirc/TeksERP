@@ -50,6 +50,12 @@ export interface FeatureFlags {
   mobileIdleLockEnabled: boolean;
   /** Kaç dakika hareketsizlikte kilit ekranı (1..120, default 10). */
   mobileIdleLockMinutes: number;
+  /** Uygulama arka plana geçince (operatör çıkınca) anında kilitlensin mi (default true).
+   *  Idle kilitten bağımsız — kapalıysa arka plana geçince kilitlenmez. */
+  mobileLockOnBackground: boolean;
+  /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
+   *  Açıkken WYSIWYG ama ~40KB binary HC-06'dan gider; sahada yavaşsa admin kapatır. */
+  mobileRasterEnabled: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -69,6 +75,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   autoLogoutOnExpiry: true,
   mobileIdleLockEnabled: true,
   mobileIdleLockMinutes: 10,
+  mobileLockOnBackground: true,
+  mobileRasterEnabled: false,
 };
 
 export const featureFlagService = {

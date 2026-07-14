@@ -61,6 +61,10 @@ const updateSchema = z.object({
   mobileIdleLockEnabled: z.boolean().optional(),
   // auth.mobileIdleLockMinutes — mobil idle kilit süresi, dakika (default 10, 1–120). Client (mobil) ENFORCE.
   mobileIdleLockMinutes: z.number().int().min(1).max(120).optional(),
+  // auth.mobileLockOnBackground — uygulama arka plana geçince anında kilitle (default true). Client (mobil) ENFORCE.
+  mobileLockOnBackground: z.boolean().optional(),
+  // label.mobileRasterEnabled — mobil (HC-06/BT) baskıda raster GW bitmap gönder (default false → komut yolu). Client (mobil) ENFORCE.
+  mobileRasterEnabled: z.boolean().optional(),
   // auth.absoluteSessionCapDays — mutlak oturum tavanı, gün (0=süresiz, 0–365). Backend ENFORCE (issueToken).
   absoluteSessionCapDays: z.number().int().min(0).max(365).optional(),
   // auth.pinLockoutEnabled — hızlı PIN/kart deneme kilidi (default true). Backend ENFORCE.

@@ -14,6 +14,7 @@ export function SessionSettingsReadOnly({
   workIdleMinutes,
   mobileLock,
   mobileLockMinutes,
+  mobileLockBg,
   methods,
   absoluteCapDays,
   pinLockoutEnabled,
@@ -29,6 +30,7 @@ export function SessionSettingsReadOnly({
   workIdleMinutes: number;
   mobileLock: boolean;
   mobileLockMinutes: number;
+  mobileLockBg: boolean;
   methods: { enabled: LoginMethod[]; primary: LoginMethod };
   absoluteCapDays: number;
   pinLockoutEnabled: boolean;
@@ -56,6 +58,10 @@ export function SessionSettingsReadOnly({
       <ReadOnlyLine
         label="Mobil hareketsizlik kilidi"
         value={mobileLock ? `${mobileLockMinutes} dakika` : "Kapalı"}
+      />
+      <ReadOnlyLine
+        label="Uygulamadan çıkınca kilitle (mobil)"
+        value={mobileLockBg ? "Açık" : "Kapalı"}
       />
       <ReadOnlyLine
         label="Mutlak oturum tavanı"
