@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-CKD-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
+      workOrderNumber: `TST-CKD-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [
         { stationId: ST_ZIMPARA, stepSequence: 1, status: "PENDING", plannedSubcontractorId: SUB_KESTEL },
         { stationId: ST_BOYA, stepSequence: 2, status: "PENDING", plannedSubcontractorId: SUB_BOYER, notes: "Lacivert boya, yıkama yapma" },
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
   check("Doğru top sayısı (2) totals'da", html.includes(">2<"), "top say.");
   check("Toplam metre (550) çekide", html.includes("550"), "550 m");
   check("Fason talimatı (adım notu) çekide", html.includes("yıkama yapma"));
-  check("İş emri parti kodu çekide", html.includes(wo.batchNumber));
+  check("İş emri parti kodu çekide", html.includes(wo.workOrderNumber));
 
   // Durum DEĞİŞMEDİ — taslak hiçbir kayda dokunmaz
   const after = await prisma.roll.findMany({ where: { id: { in: [A, B] } }, select: { id: true, status: true, currentStepId: true } });
@@ -125,6 +125,7 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, woId] } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrder.delete({ where: { id: woId } });
     console.log("(temizlendi)");
   } catch (e) { console.error("cleanup hata:", e instanceof Error ? e.message : e); }

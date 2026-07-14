@@ -50,7 +50,7 @@ async function resolveFixtures(): Promise<void> {
 async function makeWo(): Promise<string> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-TC-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
+      workOrderNumber: `TST-TC-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
       type: "STOCK_PRODUCTION",
       status: WorkOrderStatus.IN_PROGRESS,
       width: 150,
@@ -79,14 +79,14 @@ async function run(): Promise<void> {
   // (Elle-kurulu unit fixture'ın yakalayamadığı snapshot-şekli + bwip wiring'i.)
   const card1 = need(r.data, "print card");
   const wo1 = need(
-    await prisma.workOrder.findUnique({ where: { id: w1 }, select: { batchNumber: true } }),
+    await prisma.workOrder.findUnique({ where: { id: w1 }, select: { workOrderNumber: true } }),
     "wo1",
   );
   const html1 = await cards.getCardHtml(card1.id);
   check("getCardHtml: HTML döndü", html1.length > 500, `len=${html1.length}`);
   check("getCardHtml: REFAKAT KARTI başlık", html1.includes("REFAKAT KARTI"));
   check("getCardHtml: kart no + barkod (cardMeta)", html1.includes(card1.cardNumber) && html1.includes(card1.barcode));
-  check("getCardHtml: batchNumber snapshot'tan", html1.includes(wo1.batchNumber));
+  check("getCardHtml: workOrderNumber snapshot'tan", html1.includes(wo1.workOrderNumber));
   check("getCardHtml: gömülü QR (svg)", html1.includes("<svg"));
 
   // B) sıralı tekrar → 409

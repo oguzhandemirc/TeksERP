@@ -28,7 +28,7 @@ async function main(): Promise<void> {
 
   const mkFinishedWo = async (rollCount: number): Promise<{ woId: string; stepId: string; cardId: string; rolls: string[] }> => {
     const wo = await prisma.workOrder.create({
-      data: { batchNumber: `${tag}-WO-${woIds.length}`, status: WorkOrderStatus.COMPLETED },
+      data: { workOrderNumber: `${tag}-WO-${woIds.length}`, status: WorkOrderStatus.COMPLETED },
       select: { id: true },
     });
     woIds.push(wo.id);

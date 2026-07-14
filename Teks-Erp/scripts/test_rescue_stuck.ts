@@ -40,7 +40,7 @@ async function fixtures(): Promise<void> {
 async function makeStuck(barcode: string | null): Promise<{ rollId: string; stepId: string }> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-RSC-${Date.now()}${Math.floor(Math.random() * 1000)}`, type: "STOCK_PRODUCTION",
+      workOrderNumber: `TST-RSC-${Date.now()}${Math.floor(Math.random() * 1000)}`, type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS", width: 250, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [{ stationId: ST_KURSUN, stepSequence: 1, status: StepStatus.ACTIVE }] },
     },

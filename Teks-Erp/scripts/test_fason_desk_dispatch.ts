@@ -99,7 +99,7 @@ async function main(): Promise<void> {
   // ── 1) İş emri: zımpara (planlı firma YOK başta) → boyahane (planlı BOYER) → tambur
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-FDD-${stamp}`,
+      workOrderNumber: `TST-FDD-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS",
       width: WIDTH,
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
   const tamburStep = wo.steps[2].id;
   stepIds.push(zimparaStep, boyaStep, tamburStep);
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
-  console.log(`\nİş emri: ${wo.batchNumber}`);
+  console.log(`\nİş emri: ${wo.workOrderNumber}`);
   console.log(`  Rota: [1] Zımpara → [2] Boyahane → [3] Tambur\n`);
 
   // 2 top zımpara adımında bekliyor (KK1 sonrası attach simülasyonu)
@@ -253,6 +253,7 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, woId] } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrder.delete({ where: { id: woId } });
     console.log("(test verisi temizlendi)");
   } catch (e) {

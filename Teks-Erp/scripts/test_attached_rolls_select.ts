@@ -49,7 +49,7 @@ async function main(): Promise<void> {
 
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-AR-WO-${stamp}`,
+      workOrderNumber: `TST-AR-WO-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: WorkOrderStatus.IN_PROGRESS,
       width: 150,

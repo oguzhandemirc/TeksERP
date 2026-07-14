@@ -109,7 +109,7 @@ async function main() {
     // + parent'ta machineId'li QC2 op'u (kalıtım koruması kanıtı için).
     const wo = await prisma.workOrder.create({
       data: {
-        batchNumber: `TST-WSS-WO-${ts}`,
+        workOrderNumber: `TST-WSS-WO-${ts}`,
         type: "STOCK_PRODUCTION", status: WorkOrderStatus.IN_PROGRESS, width: 150, targetItemId: item.id,
         steps: { create: [{ stationId: tamburStation.id, stepSequence: 1, status: "ACTIVE" as const }] },
       },

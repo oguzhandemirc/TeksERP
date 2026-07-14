@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-LIN-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `TST-LIN-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 2000, targetItemId: ITEM, targetColorId: colorA.id,
       steps: { create: [
         { stationId: kk1!.id, stepSequence: 1, status: "PENDING" },
@@ -100,15 +100,16 @@ async function main(): Promise<void> {
   await sub.dispatch({ workOrderId: wo.id, stepId: srcBoya, subcontractorId: SUB, rollIds: p1 }, ADMIN);
   const p2 = [await stockRoll(200), await stockRoll(200)];
   const d2 = await sub.dispatch({ workOrderId: wo.id, stepId: srcBoya, subcontractorId: SUB, rollIds: p2 }, ADMIN);
-  const lane2 = (d2.data as Any).id as string;
+  const lane2 = (d2.data as Any).id as string;          // sevk (dispatch) id — Dallar paneli assertion'ı için
+  const batch2 = (d2.data as Any).batchId as string;    // sevkin partisi (Batch id) — splitBranch artık batchId ister
 
   // ── Parti-2'yi ayır (continue, renk B) ──
-  const res = (await wos.splitBranch(wo.id, { batchSplitId: lane2, newColorId: colorB.id, orderMode: "stock" }, ADMIN)).data as Any;
+  const res = (await wos.splitBranch(wo.id, { batchId: batch2, mode: "NEW_COLOR", newColorId: colorB.id, orderMode: "stock" }, ADMIN)).data as Any;
   const childId = res.newWorkOrderId as string;
   woIds.push(childId);
 
   // ── 1) Soy bağı kolonu ──
-  const child = await prisma.workOrder.findUnique({ where: { id: childId }, select: { splitFromId: true, batchNumber: true } });
+  const child = await prisma.workOrder.findUnique({ where: { id: childId }, select: { splitFromId: true, workOrderNumber: true } });
   check("Yeni WO.splitFromId = kaynak WO", child?.splitFromId === wo.id);
 
   // ── 2) Yeni WO'nun KENDİ aktif kartı (split tx'inde basıldı) ──
@@ -131,7 +132,7 @@ async function main(): Promise<void> {
   check("Ayrılan partinin grubu YENİ WO altında görünür", childGroup?.rollCount === 2, `${childGroup?.rollCount}`);
   check("Ayrılan grup isSplitChild=true işaretli", childGroup?.isSplitChild === true);
   check("Kendi grubu isSplitChild=false", ownGroup?.isSplitChild === false);
-  check("Ayrılan grup yeni batchNumber taşır", childGroup?.workOrder.batchNumber === child?.batchNumber);
+  check("Ayrılan grup yeni batchNumber taşır", childGroup?.workOrder.batchNumber === child?.workOrderNumber);
 
   // ── 4) Dallar paneli izleri ──
   const srcBranches = (await wos.getBranches(wo.id)).data as Any;
@@ -141,11 +142,12 @@ async function main(): Promise<void> {
     srcBranches.splitChildren?.find((c: Any) => c.id === childId)?.targetColor?.id === colorB.id);
   const childBranches = (await wos.getBranches(childId)).data as Any;
   check("Yeni WO Dallar: splitFrom kaynak WO'yu gösterir", childBranches.splitFrom?.id === wo.id);
-  check("Yeni WO Dallar: taşınan sevk lane'i yeni WO'da", childBranches.branches?.some((b: Any) => b.dispatchId === lane2) === true);
+  check("Yeni WO Dallar: taşınan sevk lane'i yeni WO'da",
+    childBranches.batches?.some((b: Any) => b.dispatches?.some((d: Any) => d.dispatchId === lane2)) === true);
 
   // ── 5) ZİNCİR: ayrılanın ayrılması (torun) da eski karttan bulunur ──
   console.log("\nZİNCİR — yeni WO'nun partisini bir kez daha ayır (renk C)");
-  const res2 = (await wos.splitBranch(childId, { batchSplitId: lane2, newColorId: colorC.id, orderMode: "stock" }, ADMIN)).data as Any;
+  const res2 = (await wos.splitBranch(childId, { batchId: res.newBatchId as string, mode: "NEW_COLOR", newColorId: colorC.id, orderMode: "stock" }, ADMIN)).data as Any;
   const grandId = res2.newWorkOrderId as string;
   woIds.push(grandId);
   const groups2 = (await sub.listPendingReturns({ workOrderId: wo.id })).data as Any[];
@@ -193,6 +195,13 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...woIds] } } });
+    // Parti modeli: WO'ya bağlı Batch'ler (dispatch/split ile doğar) — batches_workOrderId_fkey.
+    // Roll.batchId / SubcontractorDispatch.batchId FK'ları önce silindi (yukarıda), şimdi Batch'ler.
+    // Batch.splitFromId self-FK (Restrict) çocuk→ebeveyn zinciri: torun WO'nun batch'i
+    // çocuk WO'nun batch'ine bağlı → önce en yeni WO'nun batch'lerini sil (ters woIds sırası).
+    for (const woId of [...woIds].reverse()) {
+      await prisma.batch.deleteMany({ where: { workOrderId: woId } });
+    }
     // splitFromId self-FK: çocukları önce sil (SET NULL olduğundan sıra kritik değil ama temiz olsun)
     await prisma.workOrder.deleteMany({ where: { id: { in: [...woIds].reverse() } } });
     console.log("(test verisi temizlendi)");

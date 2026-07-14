@@ -14,9 +14,18 @@ import { join } from "node:path";
 const SCRIPTS_DIR = join(__dirname);
 const PER_TEST_TIMEOUT_MS = 180_000;
 
+// Windows'ta `npx` = `npx.cmd`; spawnSync onu shell olmadan çözemez (ENOENT →
+// her test 0.0s'de "çıkış kodu null" ile düşer). shell:true Windows'ta npx'i
+// cmd.exe üzerinden çözer; Linux/CI'da (shell:false) doğrudan çalışır.
+const IS_WIN = process.platform === "win32";
+
 function main() {
+  // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
+  // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
+  const filter = process.argv[2];
   const files = readdirSync(SCRIPTS_DIR)
     .filter((f) => /^test_.*\.ts$/.test(f))
+    .filter((f) => !filter || f.includes(filter))
     .sort();
 
   if (files.length === 0) {
@@ -34,6 +43,7 @@ function main() {
       encoding: "utf8",
       timeout: PER_TEST_TIMEOUT_MS,
       env: process.env,
+      shell: IS_WIN, // Windows npx.cmd çözümü (bkz. IS_WIN notu)
     });
     const ms = Date.now() - start;
     const out = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;

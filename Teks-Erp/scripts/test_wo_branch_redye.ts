@@ -71,7 +71,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-RDY-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `TST-RDY-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 1000, targetItemId: ITEM, targetColorId: colorA.id,
       steps: { create: [
         { stationId: kk1!.id, stepSequence: 1, status: "PENDING" },
@@ -88,23 +88,24 @@ async function main(): Promise<void> {
   // Parti → Boyahane → DÖN (eski renk A uygulanır, açık kumaş Tambur'da bekler)
   const p = [await stockRoll(300), await stockRoll(300)];
   const d = await sub.dispatch({ workOrderId: wo.id, stepId: srcBoya, subcontractorId: SUB, rollIds: p }, ADMIN);
-  const lane = (d.data as Any).id as string;
+  // Parti-modeli: "lane" (eski dispatch.id = batchSplitId) yerine kaynak sevkin partisi (batchId).
+  const srcBatchId = (d.data as Any).batchId as string;
   const rc = await sub.receive({ workOrderId: wo.id, stepId: srcBoya, subcontractorId: SUB,
     returns: p.map((id) => ({ rollId: id })), newRolls: [{ qty: 560 }] }, ADMIN);
   const bornA = await prisma.roll.findFirst({ where: { parentReceiptId: (rc.data as Any).id },
-    select: { id: true, colorId: true, currentStepId: true, status: true, batchSplitId: true } });
+    select: { id: true, colorId: true, currentStepId: true, status: true, batchId: true } });
   check("Parti döndü: açık kumaş eski renk A + Tambur'da IN_PRODUCTION", bornA?.colorId === colorA.id && bornA?.currentStepId === srcTambur && bornA?.status === RollStatus.IN_PRODUCTION);
-  check("Dönen top lane'i (batchSplitId) kalıttı", bornA?.batchSplitId === lane);
+  check("Dönen top partisi (batchId) kalıttı", bornA?.batchId === srcBatchId);
 
   // ── ÖNİZLEME: re-dye modu ──
-  const prev = (await wos.getSplitPreview(wo.id, lane)).data as Any;
-  check("Preview: ayrılabilir", prev.canSplit === true, prev.blockReason ?? "");
-  check("Preview: mod = redye (boyandı)", prev.mode === "redye", prev.mode ?? "null");
-  check("Preview: şu an Tambur'da", prev.currentStep?.id === srcTambur);
-  check("Preview: yeniden giriş = Boyahane", prev.reEntryStep?.id === srcBoya);
+  const prev = (await wos.getSplitPreview(wo.id, srcBatchId)).data as Any;
+  check("Preview: ayrılabilir", (prev.allowedModes?.length ?? 0) > 0, prev.blockReason ?? "");
+  check("Preview: NEW_COLOR modu uygun (boyandı)", (prev.allowedModes ?? []).includes("NEW_COLOR"), (prev.allowedModes ?? []).join(",") || "yok");
+  check("Preview: şu an Tambur'da", prev.rolls?.[0]?.currentStepId === srcTambur);
+  check("Preview: yeniden giriş = Boyahane", prev.colorStepId === srcBoya);
 
   // ── AYIR (re-dye): yeni renk B, boyahaneye geri sar ──
-  const res = (await wos.splitBranch(wo.id, { batchSplitId: lane, newColorId: colorB.id, orderMode: "stock" }, ADMIN)).data as Any;
+  const res = (await wos.splitBranch(wo.id, { batchId: srcBatchId, mode: "NEW_COLOR", newColorId: colorB.id, orderMode: "stock" }, ADMIN)).data as Any;
   const newWoId = res.newWorkOrderId as string;
   woIds.push(newWoId);
   check("Split: yeni WO oluştu", typeof newWoId === "string" && newWoId !== wo.id);
@@ -118,10 +119,10 @@ async function main(): Promise<void> {
   const newBoya = newWo!.steps[1].id, newTambur = newWo!.steps[2].id;
 
   const moved = await prisma.roll.findUnique({ where: { id: bornA!.id },
-    select: { currentStepId: true, producedInStepId: true, status: true, batchSplitId: true } });
+    select: { currentStepId: true, producedInStepId: true, status: true, batchId: true } });
   check("Top BOYAHANE adımına geri sarıldı (currentStep)", moved?.currentStepId === newBoya, String(moved?.currentStepId));
   check("Top IN_PRODUCTION (sevke hazır)", moved?.status === RollStatus.IN_PRODUCTION);
-  check("Top eski lane'den koptu (batchSplitId=null)", moved?.batchSplitId === null);
+  check("Top eski partiden koptu (yeni batchId)", moved?.batchId != null && moved?.batchId !== srcBatchId, String(moved?.batchId));
   check("Top producedInStep = yeni Boyahane", moved?.producedInStepId === newBoya);
 
   // Boyahane adımında taze açık movement açıldı + eski (Tambur) movement kapandı
@@ -133,8 +134,8 @@ async function main(): Promise<void> {
   // ── YENİDEN SEVK + KABUL: yeni renk B uygulanmalı ──
   console.log("\nYENİDEN BOYAMA: yeni WO'dan boyahaneye sevk + kabul");
   await sub.dispatch({ workOrderId: newWoId, stepId: newBoya, subcontractorId: SUB, rollIds: [bornA!.id] }, ADMIN);
-  const afterReDispatch = await prisma.roll.findUnique({ where: { id: bornA!.id }, select: { status: true, batchSplitId: true } });
-  check("Yeniden sevkte top AT_SUBCONTRACTOR + YENİ lane aldı", afterReDispatch?.status === RollStatus.AT_SUBCONTRACTOR && afterReDispatch?.batchSplitId !== null && afterReDispatch?.batchSplitId !== lane);
+  const afterReDispatch = await prisma.roll.findUnique({ where: { id: bornA!.id }, select: { status: true, batchId: true } });
+  check("Yeniden sevkte top AT_SUBCONTRACTOR + YENİ parti aldı", afterReDispatch?.status === RollStatus.AT_SUBCONTRACTOR && afterReDispatch?.batchId != null && afterReDispatch?.batchId !== srcBatchId);
 
   const rc2 = await sub.receive({ workOrderId: newWoId, stepId: newBoya, subcontractorId: SUB,
     returns: [{ rollId: bornA!.id }], newRolls: [{ qty: 555 }] }, ADMIN);
@@ -172,6 +173,9 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...woIds] } } });
+    // Parti-modeli FK: rulolar/dispatch'ler silindikten SONRA, WO'dan ÖNCE partileri sil
+    // (batches_workOrderId_fkey + rolls/dispatch.batchId → Batch).
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     console.log("(test verisi temizlendi)");
   } catch (e) { console.error("cleanup hata:", e instanceof Error ? e.message : e); }

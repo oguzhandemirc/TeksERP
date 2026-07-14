@@ -156,7 +156,7 @@ async function main() {
     // --- Üretim fixture'ı: WO + step + roll'lar ---
     const wo = await prisma.workOrder.create({
       data: {
-        batchNumber: `TST-DEVACT-WO-${ts}`,
+        workOrderNumber: `TST-DEVACT-WO-${ts}`,
         type: "STOCK_PRODUCTION", status: WorkOrderStatus.IN_PROGRESS, width: 150, targetItemId: item.id,
         steps: { create: [{ stationId: tamburStation.id, stepSequence: 1, status: "ACTIVE" as const }] },
       },

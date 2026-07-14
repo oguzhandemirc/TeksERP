@@ -51,7 +51,7 @@ async function resolveFixtures(): Promise<void> {
 async function makeTamburRoll(): Promise<{ rollId: string; stepId: string }> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-P6-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
+      workOrderNumber: `TST-P6-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
       type: "STOCK_PRODUCTION",
       status: WorkOrderStatus.IN_PROGRESS,
       width: 150,

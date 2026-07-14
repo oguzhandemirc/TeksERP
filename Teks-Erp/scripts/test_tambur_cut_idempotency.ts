@@ -68,7 +68,7 @@ async function warehouseRoll(qty: number): Promise<string> {
 async function openFabricRoll(qty: number): Promise<string> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-TCI-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
+      workOrderNumber: `TST-TCI-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
       type: "STOCK_PRODUCTION", status: WorkOrderStatus.IN_PROGRESS, width: 150, targetItemId: ITEM,
       steps: { create: [{ stationId: STATION_TAMBUR, stepSequence: 1, status: "ACTIVE" as const }] },
     },

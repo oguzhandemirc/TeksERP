@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-SPR-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `TST-SPR-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 1000, targetItemId: ITEM, targetColorId: colors[0].id,
       steps: { create: [
         { stationId: kk1.id, stepSequence: 1, status: "PENDING" },
@@ -76,36 +76,39 @@ async function main(): Promise<void> {
   const r1 = await stockRoll(300), r2 = await stockRoll(300);
   const d = await sub.dispatch({ workOrderId: wo.id, stepId: srcBoya, subcontractorId: SUB, rollIds: [r1, r2] }, ADMIN);
   const lane = (d.data as Any).id as string;
+  // Parti modeli: split API'leri dispatch id'yi (lane) DEĞİL Batch id'yi alır
+  // (roll.batchId === dispatch.batchId, K10: bir sevk = bir parti).
+  const batchId = (d.data as Any).batchId as string;
   console.log(`\nDispatch lane=${lane.slice(0, 8)} (2 top: r1, r2)\n`);
 
   // Önizleme: 2 top görünür.
-  const prev = (await wos.getSplitPreview(wo.id, lane)).data as Any;
+  const prev = (await wos.getSplitPreview(wo.id, batchId)).data as Any;
   check("Preview: 2 top listelenir", prev.rollCount === 2, `${prev.rollCount}`);
   check("Preview: mod continue", prev.mode === "continue", prev.mode ?? "null");
 
   // SADECE r1'i ayır.
-  const res = (await wos.splitBranch(wo.id, { batchSplitId: lane, newColorId: colorB.id, orderMode: "stock", rollIds: [r1] }, ADMIN)).data as Any;
+  const res = (await wos.splitBranch(wo.id, { batchId, mode: "NEW_COLOR", newColorId: colorB.id, orderMode: "stock", rollIds: [r1] }, ADMIN)).data as Any;
   const newWoId = res.newWorkOrderId as string;
   woIds.push(newWoId);
   check("Split: yeni WO oluştu", typeof newWoId === "string" && newWoId !== wo.id);
   check("Split: SADECE 1 top taşındı", res.movedRollCount === 1, `${res.movedRollCount}`);
 
   // r1 → yeni WO, yeni dispatch (lane ≠ orijinal), AT_SUBCONTRACTOR.
-  const r1a = await prisma.roll.findUnique({ where: { id: r1 }, select: { status: true, batchSplitId: true, currentStep: { select: { workOrderId: true } } } });
+  const r1a = await prisma.roll.findUnique({ where: { id: r1 }, select: { status: true, batchId: true, currentStep: { select: { workOrderId: true } } } });
   check("r1 AT_SUBCONTRACTOR (boyahanede)", r1a?.status === RollStatus.AT_SUBCONTRACTOR, String(r1a?.status));
   check("r1 YENİ WO'da", r1a?.currentStep?.workOrderId === newWoId, String(r1a?.currentStep?.workOrderId));
-  check("r1 YENİ lane (batchSplitId ≠ orijinal)", !!r1a?.batchSplitId && r1a.batchSplitId !== lane, String(r1a?.batchSplitId));
+  check("r1 YENİ parti (batchId ≠ orijinal)", !!r1a?.batchId && r1a.batchId !== batchId, String(r1a?.batchId));
 
-  // r2 → kaynak WO'da, orijinal lane'de, AT_SUBCONTRACTOR.
-  const r2a = await prisma.roll.findUnique({ where: { id: r2 }, select: { status: true, batchSplitId: true, currentStep: { select: { workOrderId: true } } } });
+  // r2 → kaynak WO'da, orijinal partide, AT_SUBCONTRACTOR.
+  const r2a = await prisma.roll.findUnique({ where: { id: r2 }, select: { status: true, batchId: true, currentStep: { select: { workOrderId: true } } } });
   check("r2 hâlâ AT_SUBCONTRACTOR", r2a?.status === RollStatus.AT_SUBCONTRACTOR, String(r2a?.status));
   check("r2 KAYNAK WO'da kaldı", r2a?.currentStep?.workOrderId === wo.id, String(r2a?.currentStep?.workOrderId));
-  check("r2 ORİJİNAL lane'de", r2a?.batchSplitId === lane, String(r2a?.batchSplitId));
+  check("r2 ORİJİNAL partide", r2a?.batchId === batchId, String(r2a?.batchId));
 
   // Yeni WO rengi B; yeni dispatch r1'i içerir, orijinal dispatch r2'yi.
   const newWo = await prisma.workOrder.findUnique({ where: { id: newWoId }, select: { targetColorId: true } });
   check("Yeni WO targetColor = Renk B", newWo?.targetColorId === colorB.id);
-  const newDispatch = await prisma.subcontractorDispatch.findFirst({ where: { id: r1a!.batchSplitId! }, select: { workOrderId: true, items: { select: { rollId: true } } } });
+  const newDispatch = await prisma.subcontractorDispatch.findFirst({ where: { batchId: r1a!.batchId! }, select: { workOrderId: true, items: { select: { rollId: true } } } });
   check("Yeni dispatch yeni WO'ya ait + r1'i içerir", newDispatch?.workOrderId === newWoId && newDispatch.items.length === 1 && newDispatch.items[0].rollId === r1);
   const origItems = await prisma.subcontractorDispatchItem.findMany({ where: { dispatchId: lane }, select: { rollId: true } });
   check("Orijinal dispatch yalnız r2'yi tutar", origItems.length === 1 && origItems[0].rollId === r2, `${origItems.length} kalem`);
@@ -123,7 +126,7 @@ async function cleanup(): Promise<void> {
   try {
     const dispatches = await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
     const dispatchIds = dispatches.map((d) => d.id);
-    const rolls = await prisma.roll.findMany({ where: { OR: [{ batchSplitId: { in: dispatchIds } }, { barcode: { startsWith: "TST-SPR-" } }] }, select: { id: true } });
+    const rolls = await prisma.roll.findMany({ where: { OR: [{ batchId: { in: dispatchIds } }, { barcode: { startsWith: "TST-SPR-" } }] }, select: { id: true } });
     const rollIds = rolls.map((r) => r.id);
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
@@ -133,6 +136,8 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...woIds, ...dispatchIds] } } });
+    // Parti modeli: WO silmeden önce partileri sil (batches_workOrderId_fkey).
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     console.log("(test verisi temizlendi)");
   } catch (e) {

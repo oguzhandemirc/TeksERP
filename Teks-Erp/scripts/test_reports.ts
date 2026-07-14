@@ -321,7 +321,7 @@ async function main() {
     if (!station) throw new Error("Seed station yok (npm run seed)");
 
     const wo = await prisma.workOrder.create({
-      data: { batchNumber: `TEST-RPT-WO-${ts}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS" },
+      data: { workOrderNumber: `TEST-RPT-WO-${ts}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS" },
       select: { id: true },
     });
     workOrderId = wo.id;

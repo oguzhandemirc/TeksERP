@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-BDR-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
+      workOrderNumber: `TST-BDR-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [
         { stationId: ST_ZIMPARA, stepSequence: 1, status: "PENDING", plannedSubcontractorId: SUB_KESTEL },
         { stationId: ST_BOYA, stepSequence: 2, status: "PENDING" },
@@ -109,6 +109,7 @@ async function cleanup(): Promise<void> {
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispatchIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: woId } });
     await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, woId] } } });

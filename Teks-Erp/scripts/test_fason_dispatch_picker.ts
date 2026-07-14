@@ -113,7 +113,7 @@ async function setup(): Promise<void> {
     });
   }
   const wo = await prisma.workOrder.create({
-    data: { batchNumber: `TEST-FDP-WO-${Date.now()}-${rand()}` },
+    data: { workOrderNumber: `TEST-FDP-WO-${Date.now()}-${rand()}` },
     select: { id: true },
   });
   woId = wo.id;

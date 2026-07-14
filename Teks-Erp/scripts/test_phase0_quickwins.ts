@@ -116,7 +116,7 @@ async function testCancelPreviewGrouping(): Promise<void> {
   const mkWo = async (n: number) =>
     prisma.workOrder.create({
       data: {
-        batchNumber: `TST-P0-WO${n}-${stamp}`,
+        workOrderNumber: `TST-P0-WO${n}-${stamp}`,
         type: "STOCK_PRODUCTION",
         status: "IN_PROGRESS",
         width: WIDTH,

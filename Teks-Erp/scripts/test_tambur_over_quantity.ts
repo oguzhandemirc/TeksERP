@@ -116,7 +116,7 @@ async function makeOpenFabricRollOnTamburStep(itemId: string, qty: number) {
     station = s;
   }
   const wo = await prisma.workOrder.create({
-    data: { batchNumber: `TEST-OQ-WO-${rnd()}`, status: "IN_PROGRESS" },
+    data: { workOrderNumber: `TEST-OQ-WO-${rnd()}`, status: "IN_PROGRESS" },
     select: { id: true },
   });
   createdWOs.push(wo.id);

@@ -87,7 +87,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-CF-${stamp}`,
+      workOrderNumber: `TST-CF-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS",
       width: WIDTH,
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   const tamburStep = wo.steps[2].id;
   stepIds.push(boyaStep, zimparaStep, tamburStep);
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
-  console.log(`\nİş emri: ${wo.batchNumber}`);
+  console.log(`\nİş emri: ${wo.workOrderNumber}`);
   console.log(`  Rota: [1] Boyahane → [2] Zımpara → [3] Tambur\n`);
 
   // ── 2) Stok topları yarat ──
@@ -284,6 +284,8 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, woId] } } });
+    // Fason sevkinde Batch doğar (batches_workOrderId_fkey) — WO'dan ÖNCE sil
+    await prisma.batch.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrder.delete({ where: { id: woId } });
     console.log("(test verisi temizlendi)");
   } catch (e) {

@@ -74,8 +74,11 @@ async function main(): Promise<void> {
   check("P2 soy bağı P1'e (splitFrom)", p2?.splitFromId === p1Id, `splitFrom=P1? ${p2?.splitFromId === p1Id}`);
   check("P2 no P ile başlar", !!p2?.batchNumber?.startsWith("P"), `P2=${p2?.batchNumber}`);
 
-  const p1Card = await prisma.travelerCard.count({ where: { batchId: p1Id, status: "ACTIVE" } });
-  const p2Card = await prisma.travelerCard.count({ where: { batchId: p2Id, status: "ACTIVE" } });
+  // NOT: Refakat kartı artık PARTİ başına DEĞİL, İŞ EMRİ başına doğar (kart-iş-emriyle
+  // redesign — TravelerCard.workOrderId @unique, batchId alanı yok). P1 ve P2 aynı WO'nun
+  // partileri → tek ortak kart. Sorgu batchId yerine workOrderId ile yapılır.
+  const p1Card = await prisma.travelerCard.count({ where: { workOrderId: woId, status: "ACTIVE" } });
+  const p2Card = await prisma.travelerCard.count({ where: { workOrderId: woId, status: "ACTIVE" } });
   check("P1 hâlâ tek aktif kartını taşır", p1Card === 1, `p1Card=${p1Card}`);
   check("P2 kendi aktif kartını aldı (K5 kalan kartı)", p2Card === 1, `p2Card=${p2Card}`);
 
@@ -100,8 +103,8 @@ async function cleanup(): Promise<void> {
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispatchIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
-    await prisma.travelerCardScan.deleteMany({ where: { card: { batchId: { in: batchIds } } } });
-    await prisma.travelerCard.deleteMany({ where: { batchId: { in: batchIds } } });
+    await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: woId } } });
+    await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, woId, ...batchIds] } } });

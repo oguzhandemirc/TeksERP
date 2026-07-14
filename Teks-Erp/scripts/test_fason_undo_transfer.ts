@@ -47,18 +47,24 @@ interface PreviewShape {
   bornRolls: { id: string }[];
   sourceReceipts: { id: string; receiptNo: string; originalRolls: { id: string }[] }[];
 }
-interface BranchShape {
+// Parti-modeli: getBranches artık data.batches döner; her lane (parti) içinde dispatches[] taşır.
+// "Dal" statüleri (OPEN/CANCELLED/RETURNED) artık dispatch-view seviyesinde.
+interface DispatchView {
   dispatchId: string;
   status: string;
   isTransferOutput: boolean;
+}
+interface BatchLane {
+  batchId: string;
   currentPositions: { label: string }[];
+  dispatches: DispatchView[];
 }
 
 async function makeWo(): Promise<{ woId: string; zimparaStep: string; boyaStep: string }> {
   const stamp = `${Date.now()}`.slice(-6) + woIds.length;
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-UND-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
+      workOrderNumber: `TST-UND-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [
         { stationId: ST_ZIMPARA, stepSequence: 1, status: "PENDING", plannedSubcontractorId: SUB_KESTEL },
         { stationId: ST_BOYA, stepSequence: 2, status: "PENDING", plannedSubcontractorId: SUB_BOYER },
@@ -81,8 +87,10 @@ async function main(): Promise<void> {
   const B = await rollAtStep(300, zimparaStep);
   const zimDispatch = await sub.bulkDispatchStep({ workOrderId: woId, stepId: zimparaStep }, ADMIN);
   const zimDispatchId = (zimDispatch.data as { id: string }).id;
-  const aDisp = await prisma.roll.findUnique({ where: { id: A }, select: { batchSplitId: true } });
-  check("Zımpara sevki sonrası A.batchSplitId = zımpara dispatch", aDisp?.batchSplitId === zimDispatchId, String(aDisp?.batchSplitId === zimDispatchId));
+  // Parti-modeli: roll.batchSplitId kalktı → roll.batchId; dispatch id yerine dispatch.batchId ile karşılaştır.
+  const zimDisp = await prisma.subcontractorDispatch.findUnique({ where: { id: zimDispatchId }, select: { batchId: true } });
+  const aDisp = await prisma.roll.findUnique({ where: { id: A }, select: { batchId: true } });
+  check("Zımpara sevki sonrası A.batchId = zımpara dispatch.batchId", aDisp?.batchId != null && aDisp?.batchId === zimDisp?.batchId, String(aDisp?.batchId === zimDisp?.batchId));
 
   // Aktarım: zımpara → boyahane
   const transferRes = await sub.transferToNextFason({ workOrderId: woId, stepId: zimparaStep }, ADMIN);
@@ -104,10 +112,10 @@ async function main(): Promise<void> {
   check("Boyahane sevki CANCELLED", boyaD?.cancelledAt !== null, String(boyaD?.cancelledAt !== null));
   const bornAfter = await prisma.roll.findMany({ where: { id: { in: bornBefore.map((r) => r.id) } }, select: { status: true } });
   check("Born toplar CANCELLED", bornAfter.every((r) => r.status === RollStatus.CANCELLED), bornAfter.map((r) => r.status).join(","));
-  const aAfter = await prisma.roll.findUnique({ where: { id: A }, select: { status: true, currentStepId: true, batchSplitId: true } });
+  const aAfter = await prisma.roll.findUnique({ where: { id: A }, select: { status: true, currentStepId: true, batchId: true } });
   const bAfter = await prisma.roll.findUnique({ where: { id: B }, select: { status: true, currentStepId: true } });
   check("A geri döndü: AT_SUBCONTRACTOR @ zımpara", aAfter?.status === RollStatus.AT_SUBCONTRACTOR && aAfter?.currentStepId === zimparaStep, `${aAfter?.status}`);
-  check("A.batchSplitId KORUNDU (zımpara lane)", aAfter?.batchSplitId === zimDispatchId, String(aAfter?.batchSplitId === zimDispatchId));
+  check("A.batchId KORUNDU (zımpara parti)", aAfter?.batchId != null && aAfter?.batchId === zimDisp?.batchId, String(aAfter?.batchId === zimDisp?.batchId));
   check("B geri döndü: AT_SUBCONTRACTOR @ zımpara", bAfter?.status === RollStatus.AT_SUBCONTRACTOR && bAfter?.currentStepId === zimparaStep, `${bAfter?.status}`);
 
   const zStep = await prisma.workOrderStep.findUnique({ where: { id: zimparaStep }, select: { status: true } });
@@ -117,7 +125,11 @@ async function main(): Promise<void> {
 
   // Dallar: tam 1 görünür OPEN dal (zımpara) + boyahane CANCELLED; boş RETURNED artefaktı yok
   const branchesRes = await woSvc.getBranches(woId);
-  const branches = (branchesRes.data as { branches: BranchShape[] }).branches;
+  const lanes = (branchesRes.data as { batches: BatchLane[] }).batches;
+  // Dispatch-view'leri düzleştir; her dal, ait olduğu partinin currentPositions'ını miras alır.
+  const branches = lanes.flatMap((lane) =>
+    lane.dispatches.map((d) => ({ ...d, currentPositions: lane.currentPositions })),
+  );
   const openBranches = branches.filter((b) => b.status === "OPEN");
   const cancelledBranches = branches.filter((b) => b.status === "CANCELLED");
   const emptyReturned = branches.filter((b) => b.status === "RETURNED" && b.currentPositions.length === 0);
@@ -218,6 +230,8 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...woIds] } } });
+    // Parti-modeli: dispatch/roll bu WO'ların Batch'lerine FK'lı; WO'dan ÖNCE partileri sil (batches_workOrderId_fkey).
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     console.log("(temizlendi)");
   } catch (e) { console.error("cleanup hata:", e instanceof Error ? e.message : e); }

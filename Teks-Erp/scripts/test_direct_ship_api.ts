@@ -48,7 +48,7 @@ async function resolveFixtures(): Promise<void> {
 async function makeDispatch(): Promise<string> {
   const stamp = `${Date.now()}`.slice(-6) + Math.floor(Math.random() * 1000);
   const wo = await prisma.workOrder.create({
-    data: { batchNumber: `TST-API-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: 250, targetQuantity: 1000, targetItemId: ITEM, steps: { create: [{ stationId: ST_BOYA, stepSequence: 1, status: "PENDING" }] } },
+    data: { workOrderNumber: `TST-API-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: 250, targetQuantity: 1000, targetItemId: ITEM, steps: { create: [{ stationId: ST_BOYA, stepSequence: 1, status: "PENDING" }] } },
     include: { steps: true },
   });
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
@@ -163,7 +163,6 @@ async function cleanup(): Promise<void> {
     const rollIds = rolls.map((r) => r.id);
     const dispatches = await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
     const dispatchIds = dispatches.map((d) => d.id);
-    const orderLines = await prisma.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispatchIds } } });
     await prisma.subcontractorDirectShipAllocation.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
@@ -171,12 +170,12 @@ async function cleanup(): Promise<void> {
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
-    await prisma.shipmentAllocation.deleteMany({ where: { orderLineId: { in: orderLines.map((l) => l.id) } } });
     await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, ...woIds] } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     console.log("(test verisi temizlendi)");
   } catch (e) {

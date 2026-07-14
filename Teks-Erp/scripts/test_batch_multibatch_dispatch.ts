@@ -87,8 +87,8 @@ async function cleanup(): Promise<void> {
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispatchIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
-    await prisma.travelerCardScan.deleteMany({ where: { card: { batchId: { in: batchIds } } } });
-    await prisma.travelerCard.deleteMany({ where: { batchId: { in: batchIds } } });
+    await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: woId } } });
+    await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
     await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, woId, ...batchIds] } } });

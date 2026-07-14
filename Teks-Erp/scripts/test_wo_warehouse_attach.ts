@@ -52,7 +52,7 @@ async function makeRoll(status: RollStatus, colorId: string | null): Promise<{ i
 async function makeWo(): Promise<string> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-WHA-${Date.now()}${Math.floor(Math.random() * 1000)}`, type: "STOCK_PRODUCTION",
+      workOrderNumber: `TST-WHA-${Date.now()}${Math.floor(Math.random() * 1000)}`, type: "STOCK_PRODUCTION",
       status: "PLANNED", width: 250, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [{ stationId: ST_KURSUN, stepSequence: 1, status: "PENDING" as const }] },
     },

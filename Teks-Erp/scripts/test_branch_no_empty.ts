@@ -38,7 +38,7 @@ async function rollAt(qty: number, stepId: string): Promise<string> {
 type Branch = { status: string; currentPositions: unknown[]; stepName: string | null };
 async function getBranches(woId: string): Promise<Branch[]> {
   const res = await wos.getBranches(woId);
-  return ((res.data as { branches: Branch[] } | null)?.branches) ?? [];
+  return ((res.data as { batches: Branch[] } | null)?.batches) ?? [];
 }
 
 const woIds: string[] = [];
@@ -47,7 +47,7 @@ const allSteps: string[] = [];
 async function makeWo(batch: string, steps: { stationId: string; planned?: string }[]): Promise<{ id: string; stepIds: string[] }> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: batch, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
+      workOrderNumber: batch, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: steps.map((s, i) => ({ stationId: s.stationId, stepSequence: i + 1, status: "PENDING", plannedSubcontractorId: s.planned ?? null })) },
     },
     include: { steps: { orderBy: { stepSequence: "asc" } } },
@@ -115,6 +115,7 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...woIds] } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     console.log("(temizlendi)");
   } catch (e) { console.error("cleanup hata:", e instanceof Error ? e.message : e); }

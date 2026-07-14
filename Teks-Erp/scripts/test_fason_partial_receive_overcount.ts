@@ -108,7 +108,7 @@ async function setupWo(tag: string, rollQtys: number[], withNextStep = true): Pr
   if (withNextStep) stepCreate.push({ stationId: ST_KURSUN, stepSequence: 2, status: "PENDING" as const });
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-FPR-${tag}-${stamp}`,
+      workOrderNumber: `TST-FPR-${tag}-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS",
       width: WIDTH,
@@ -311,6 +311,7 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...createdWoIds] } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: createdWoIds } } });
     console.log("(test verisi temizlendi)");
   } catch (e) {

@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-SPL-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `TST-SPL-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 2000, targetItemId: ITEM, targetColorId: colorA.id,
       steps: { create: [
         { stationId: kk1.id, stepSequence: 1, status: "PENDING" },
@@ -102,16 +102,18 @@ async function main(): Promise<void> {
   const p2 = [await stockRoll(200), await stockRoll(200), await stockRoll(200)];
   const d2 = await sub.dispatch({ workOrderId: wo.id, stepId: srcBoya, subcontractorId: SUB, rollIds: p2 }, ADMIN);
   const lane2 = (d2.data as Any).id as string;
+  // Parti-modeli: split/preview anahtarı artık dispatch id değil Batch id (roll.batchId).
+  const batch2 = (d2.data as Any).batchId as string;
   console.log(`Parti-1 lane=${lane1.slice(0,8)} (2 top) · Parti-2 lane=${lane2.slice(0,8)} (3 top)\n`);
 
   // ── ÖNİZLEME ──
-  const prev = (await wos.getSplitPreview(wo.id, lane2)).data as Any;
+  const prev = (await wos.getSplitPreview(wo.id, batch2)).data as Any;
   check("Preview: ayrılabilir (canSplit)", prev.canSplit === true, prev.blockReason ?? "");
   check("Preview: 3 top taşınacak", prev.rollCount === 3, `${prev.rollCount}`);
   check("Preview: mod = continue (boyanmadan)", prev.mode === "continue", prev.mode ?? "null");
 
   // ── AYIR: parti-2 → yeni WO, renk B, stok modu ──
-  const res = (await wos.splitBranch(wo.id, { batchSplitId: lane2, newColorId: colorB.id, orderMode: "stock" }, ADMIN)).data as Any;
+  const res = (await wos.splitBranch(wo.id, { batchId: batch2, newColorId: colorB.id, orderMode: "stock" }, ADMIN)).data as Any;
   const newWoId = res.newWorkOrderId as string;
   woIds.push(newWoId);
   check("Split: yeni WO oluştu", typeof newWoId === "string" && newWoId !== wo.id);
@@ -137,10 +139,10 @@ async function main(): Promise<void> {
   const newBoya = newWo!.steps[1].id;
 
   // Parti-2 topları yeni boyahane adımında, hâlâ AT_SUBCONTRACTOR, lane korunmuş
-  const movedRolls = await prisma.roll.findMany({ where: { id: { in: p2 } }, select: { status: true, currentStepId: true, batchSplitId: true } });
+  const movedRolls = await prisma.roll.findMany({ where: { id: { in: p2 } }, select: { status: true, currentStepId: true, batchId: true } });
   check("Parti-2 topları AT_SUBCONTRACTOR (boyanmadan)", movedRolls.every((r) => r.status === RollStatus.AT_SUBCONTRACTOR));
   check("Parti-2 topları YENİ boyahane adımında", movedRolls.every((r) => r.currentStepId === newBoya));
-  check("Parti-2 batchSplitId korundu (lane2)", movedRolls.every((r) => r.batchSplitId === lane2));
+  check("Parti-2 batchId korundu (batch2)", movedRolls.every((r) => r.batchId === batch2));
 
   // Açık sevk yeni WO'ya taşındı
   const movedDispatch = await prisma.subcontractorDispatch.findUnique({ where: { id: lane2 }, select: { workOrderId: true, stepId: true } });
@@ -165,9 +167,9 @@ async function main(): Promise<void> {
   const rc = await sub.receive({ workOrderId: newWoId, stepId: newBoya, subcontractorId: SUB,
     returns: p2.map((id) => ({ rollId: id })), newRolls: [{ qty: 560 }] }, ADMIN);
   const receipt = rc.data as Any;
-  const born = await prisma.roll.findFirst({ where: { parentReceiptId: receipt.id }, select: { colorId: true, batchSplitId: true, currentStepId: true } });
+  const born = await prisma.roll.findFirst({ where: { parentReceiptId: receipt.id }, select: { colorId: true, batchId: true, currentStepId: true } });
   check("Parti-2 kabulünde doğan açık kumaş YENİ renk (B) aldı", born?.colorId === colorB.id, `beklenen ${colorB.id?.slice(0,8)} geldi ${born?.colorId?.slice(0,8)}`);
-  check("Doğan top lane2'yi kalıttı", born?.batchSplitId === lane2);
+  check("Doğan top batch2'yi kalıttı", born?.batchId === batch2);
   check("Doğan top yeni WO Tambur adımında", born?.currentStepId === newWo!.steps[2].id);
 
   // ── KABUL: parti-1'i KAYNAK WO'ya → ESKİ renk (A) ──
@@ -209,6 +211,8 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...woIds] } } });
+    // Parti-modeli: dispatch/roll batchId → Batch FK; WO silmeden önce partileri temizle (batches_workOrderId_fkey).
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     console.log("(test verisi temizlendi)");
   } catch (e) {

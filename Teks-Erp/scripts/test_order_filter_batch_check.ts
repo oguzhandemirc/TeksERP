@@ -53,21 +53,21 @@ async function main(): Promise<void> {
   // ============== PART A: checkBatchNumber ==============
   const woSvc = new WorkOrderService();
   const uniqueCode = `TEST-PARTI-${Date.now()}`;
-  const wo = await prisma.workOrder.create({ data: { batchNumber: uniqueCode } });
+  const wo = await prisma.workOrder.create({ data: { workOrderNumber: uniqueCode } });
   try {
-    const r1 = await woSvc.checkBatchNumber(uniqueCode);
+    const r1 = await woSvc.checkWorkOrderNumber(uniqueCode);
     check("1. Var olan kod → available=false", r1.available === false, JSON.stringify(r1));
 
-    const r2 = await woSvc.checkBatchNumber(uniqueCode, wo.id);
+    const r2 = await woSvc.checkWorkOrderNumber(uniqueCode, wo.id);
     check("2. Var olan kod + excludeId(kendisi) → available=true", r2.available === true, JSON.stringify(r2));
 
-    const r3 = await woSvc.checkBatchNumber("");
+    const r3 = await woSvc.checkWorkOrderNumber("");
     check("3. Boş kod → available=true", r3.available === true, JSON.stringify(r3));
 
-    const r4 = await woSvc.checkBatchNumber(`YOK-${Date.now()}-${Math.floor(Math.random() * 1e9)}`);
+    const r4 = await woSvc.checkWorkOrderNumber(`YOK-${Date.now()}-${Math.floor(Math.random() * 1e9)}`);
     check("4. Olmayan kod → available=true", r4.available === true, JSON.stringify(r4));
 
-    const r5 = await woSvc.checkBatchNumber(`  ${uniqueCode}  `);
+    const r5 = await woSvc.checkWorkOrderNumber(`  ${uniqueCode}  `);
     check("5. Boşluklu var olan kod (trim) → available=false", r5.available === false, JSON.stringify(r5));
   } finally {
     await prisma.workOrder.delete({ where: { id: wo.id } });

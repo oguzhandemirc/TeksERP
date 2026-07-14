@@ -78,7 +78,7 @@ async function main(): Promise<void> {
 
     // --- F59: WO width null yazımı (?? undefined null'ı yutuyordu) ---
     const wo = await prisma.workOrder.create({
-      data: { batchNumber: `TEST-WO-${ts}`, width: 150 },
+      data: { workOrderNumber: `TEST-WO-${ts}`, width: 150 },
       select: { id: true, width: true },
     });
     created.wos.push(wo.id);

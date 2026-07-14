@@ -61,7 +61,7 @@ async function main() {
   const orderLineId = order.lines[0].id;
 
   const wo = await prisma.workOrder.create({
-    data: { batchNumber: `TEST-RLBC-WO-${ts}` },
+    data: { workOrderNumber: `TEST-RLBC-WO-${ts}` },
     select: { id: true },
   });
   const step = station

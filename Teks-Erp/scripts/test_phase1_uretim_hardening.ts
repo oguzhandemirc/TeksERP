@@ -79,7 +79,7 @@ async function makeWo(
   woSeq += 1;
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-P1-${woSeq}-${woIds.length}-${STATION_ANY.slice(0, 4)}${woSeq}`,
+      workOrderNumber: `TST-P1-${woSeq}-${woIds.length}-${STATION_ANY.slice(0, 4)}${woSeq}`,
       type: "STOCK_PRODUCTION",
       status,
       width: WIDTH,

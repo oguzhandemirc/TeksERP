@@ -94,7 +94,7 @@ async function stockRoll(qty: number): Promise<string> {
 async function makeWoBoya(): Promise<{ woId: string; stepId: string }> {
   const stamp = `${Date.now()}`.slice(-6) + Math.floor(Math.random() * 1000);
   const wo = await prisma.workOrder.create({
-    data: { batchNumber: `TST-RACE-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM, steps: { create: [{ stationId: ST_BOYA, stepSequence: 1, status: "PENDING" as const }] } },
+    data: { workOrderNumber: `TST-RACE-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM, steps: { create: [{ stationId: ST_BOYA, stepSequence: 1, status: "PENDING" as const }] } },
     include: { steps: true },
   });
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
@@ -201,8 +201,8 @@ async function cleanup(): Promise<void> {
   await prisma.travelerCard.deleteMany({ where: { id: { in: cardIds } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   await prisma.workOrderStep.deleteMany({ where: { id: { in: stepIdSet } } });
+  await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
   await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
-  await prisma.shipmentAllocation.deleteMany({ where: { orderLineId: { in: orderLineIds } } });
   await prisma.orderLine.deleteMany({ where: { id: { in: orderLineIds } } });
   await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
 }

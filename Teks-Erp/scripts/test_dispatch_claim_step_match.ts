@@ -63,7 +63,7 @@ async function makeWoBoya(): Promise<{ woId: string; stepId: string }> {
   const stamp = `${Date.now()}`.slice(-6) + Math.floor(Math.random() * 1000);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-CLM-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `TST-CLM-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [{ stationId: ST_BOYA, stepSequence: 1, status: "PENDING" as const }] },
     },
@@ -162,6 +162,7 @@ async function cleanup(): Promise<void> {
   await prisma.travelerCardScan.deleteMany({ where: { cardId: { in: cardIds } } });
   await prisma.travelerCard.deleteMany({ where: { id: { in: cardIds } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+  await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
   await prisma.workOrderStep.deleteMany({ where: { id: { in: stepIdSet } } });
   await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
 }

@@ -78,7 +78,7 @@ async function setup(): Promise<string[]> {
   // WO + step + link (branch ④ WO-inference).
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-BLK-WO-${stamp}`,
+      workOrderNumber: `TST-BLK-WO-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: WorkOrderStatus.IN_PROGRESS,
       width: 150,

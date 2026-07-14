@@ -105,7 +105,7 @@ async function testRelabelQuality(): Promise<void> {
 async function makePlannedWo(): Promise<string> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-P3-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
+      workOrderNumber: `TST-P3-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
       type: "STOCK_PRODUCTION",
       status: WorkOrderStatus.PLANNED,
       width: 150,

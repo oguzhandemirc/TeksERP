@@ -71,7 +71,7 @@ async function main() {
 
   // İş emri + tek adım + WO↔satır bağı (TEK müşteri → eski branch ② tetiklerdi).
   const wo = await prisma.workOrder.create({
-    data: { batchNumber: `TEST-WO-${stamp}` },
+    data: { workOrderNumber: `TEST-WO-${stamp}` },
     select: { id: true },
   });
   workOrderId = wo.id;

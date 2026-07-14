@@ -89,7 +89,7 @@ async function testColorHex(): Promise<void> {
 async function makeWoWithCard(): Promise<string> {
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-P2-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
+      workOrderNumber: `TST-P2-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
       type: "STOCK_PRODUCTION",
       status: WorkOrderStatus.IN_PROGRESS,
       width: 150,
