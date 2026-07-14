@@ -30,6 +30,9 @@ const openFabricSchema = z.object({
   receiptId: z.string().uuid("Geçersiz mal kabul ID"),
   stepId:    z.string().uuid("Geçersiz adım ID"),
   notes:     z.string().max(1000).optional().nullable(),
+  // İdempotency anahtarı (initialEntry emsali) — çift çağrıda ikinci hayalet
+  // açık-kumaş doğmasın; aynı token'la 2. çağrı cached Roll döner.
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 
 // Süpervizör manuel nitelik düzeltme (renk/özellik/en/kalite) — applyManualProperties

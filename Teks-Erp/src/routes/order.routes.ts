@@ -443,6 +443,7 @@ router.get("/:id", verifyToken, requirePermission("order:read"), controller.find
  *             properties:
  *               customerId: { type: string, format: uuid }
  *               branchId: { type: string, format: uuid, nullable: true }
+ *               clientToken: { type: string, format: uuid, description: "İdempotency anahtarı — form-oturumu başına üretilir; aynı token'la tekrar gönderim mevcut siparişi cached döner (409 CLIENT_TOKEN_COLLISION: aynı token farklı payload)" }
  *               currency: { type: string, enum: [TRY, USD, EUR, GBP], default: "TRY" }
  *               totalAmount:
  *                 type: number
@@ -493,6 +494,7 @@ router.post("/", verifyToken, requirePermission("order:write"), controller.creat
  *               customerId: { type: string, format: uuid }
  *               branchId: { type: string, format: uuid, nullable: true }
  *               rollIds: { type: array, items: { type: string, format: uuid } }
+ *               clientToken: { type: string, format: uuid, description: "İdempotency anahtarı — timeout-replay'de mükerrer sipariş önlenir (toplar WAREHOUSE olduğundan claim tek başına korumaz)" }
  *     responses:
  *       201: { description: Hızlı sipariş açıldı }
  *       409: { description: Top uygun değil (sevkiyatta/iş emrinde/yanlış statü) }
@@ -507,6 +509,9 @@ router.post(
         customerId: z.string().uuid("Geçersiz müşteri ID"),
         branchId: z.string().uuid("Geçersiz şube ID").optional().nullable(),
         rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top okutulmalı").max(500),
+        // İdempotency anahtarı — mobil form-oturumu başına üretir; timeout-replay
+        // aynı token'la gelir → create cached siparişi döner (mükerrer önlenir).
+        clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
       });
       const body = schema.parse(req.body);
       const result = await service.quickOrderFromRolls(body, req.user?.userId);

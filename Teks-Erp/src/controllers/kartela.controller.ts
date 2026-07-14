@@ -54,6 +54,9 @@ const reduceStockSchema = z.object({
   colorId: z.string().uuid().nullable(),
   count: z.number().int().positive("Adet pozitif tam sayı olmalı").max(1000),
   reason: z.string().trim().min(3, "Gerekçe en az 3 karakter").max(500),
+  // İdempotency anahtarı — sayaç-bazlı düşümün replay'i ÇİFT düşüm yapardı;
+  // aynı token'la 2. çağrı cached { reduced } döner (SwatchStockReduction @unique).
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 
 const qStr = (v: unknown): string | undefined =>

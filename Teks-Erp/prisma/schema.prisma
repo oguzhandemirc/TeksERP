@@ -306,6 +306,7 @@ model User {
   sessions                   Session[]
   dispatchedShipments        Shipment[]              @relation("ShipmentDispatchedBy")
   weighedSacks               Sack[]                  @relation("SackWeighedBy")
+  swatchStockReductions      SwatchStockReduction[]  @relation("SwatchStockReductionCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -852,6 +853,7 @@ model Item {
   customerAliases    CustomerItemAlias[]
   productRecipes     ProductRecipe[]
   rollReturns        RollReturn[]
+  swatchReductions   SwatchStockReduction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1100,6 +1102,10 @@ model CustomerBranch {
 model Order {
   id          String  @id @default(uuid()) @db.Uuid
   orderNumber String  @unique @db.VarChar(64)
+  /// İdempotency anahtarı — istemci form-oturumu başına üretir (UUID); timeout
+  /// sonrası tekrar gönderimde mükerrer sipariş yaratılmasını önler (Roll emsali).
+  /// Sunucu-içi/eski kayıtlar için NULL — partial unique index (NULL'lar çakışmaz).
+  clientToken String? @unique @db.Uuid
   customerId  String  @db.Uuid
   branchId    String? @db.Uuid // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
 
@@ -1217,6 +1223,11 @@ model OrderLineRequiredProperty {
 model WorkOrder {
   id               String          @id @default(uuid()) @db.Uuid
   workOrderNumber  String          @unique @db.VarChar(64) // İş Emri Numarası (IE+GGAAYY+NNNN)
+  /// İdempotency anahtarı — istemci form-oturumu başına üretir (UUID); timeout
+  /// sonrası tekrar gönderimde mükerrer İE + refakat kartı yaratılmasını önler
+  /// (Roll emsali). NULL = sunucu-içi/eski kayıt; partial unique (NULL'lar çakışmaz).
+  /// hardDelete (zero-attach telafisi) token'ı NULL'lar — taze deneme çalışabilsin.
+  clientToken      String?         @unique @db.Uuid
   type             WorkOrderType   @default(ORDER_PRODUCTION)
   width            Decimal?        @db.Decimal(12, 3) // En (cm) — kumaş eni
   targetQuantity   Decimal?        @db.Decimal(12, 3) // Hedef uzunluk/metraj
@@ -2073,6 +2084,34 @@ model Swatch {
   @@map("swatches")
 }
 
+/// Kartela stok düşüm OLAYI — reduceStock'un doğal kaydı + idempotency çapası.
+/// Sayaç-bazlı işlem (FIFO N kartela iptal) tek olay kaydına bağlanır: replay'de
+/// clientToken @unique P2002 → tx rollback → FARKLI N kartela daha iptal OLMAZ,
+/// cached { reduced } döner. Kalem listesi audit'te (swatchIds) — ayrı pivot yok.
+/// Append-only olay kaydı — updatedAt bilinçli yok (kök CLAUDE.md istisnası).
+model SwatchStockReduction {
+  id          String  @id @default(uuid()) @db.Uuid
+  /// İdempotency anahtarı — istemci üretir; NULL'lar çakışmaz (partial unique).
+  clientToken String? @unique @db.Uuid
+  itemId      String  @db.Uuid
+  colorId     String? @db.Uuid
+  count       Int
+  reason      String
+  createdById String? @db.Uuid
+
+  item      Item   @relation(fields: [itemId], references: [id])
+  color     Color? @relation(fields: [colorId], references: [id])
+  createdBy User?  @relation("SwatchStockReductionCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // Düşüm geçmişi (itemId eşitlik + createdAt sıralama); sol-prefix itemId FK'yı kapsar
+  @@index([itemId, createdAt(sort: Desc)])
+  @@index([colorId])
+  // createdById bilinçli indexsiz — düşük-trafik "kim yaptı" audit FK istisnası
+  @@map("swatch_stock_reductions")
+}
+
 // =============================================================================
 // 10.4 KARTELA FASON — Bitmiş ürün → kartela firmasına sevk & dönüş
 // =============================================================================
@@ -2557,6 +2596,7 @@ model Color {
   appliedAtReceipts   SubcontractorReceipt[]
   productRecipes      ProductRecipe[]
   rollReturns         RollReturn[]
+  swatchReductions    SwatchStockReduction[]
 
   @@index([isActive, sortOrder])
   @@map("colors")

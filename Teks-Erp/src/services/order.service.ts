@@ -19,6 +19,8 @@ import {
 import { AppError } from "../utils/app-error";
 import { OrderStatus, Prisma, RollStatus, ShipmentStatus, WorkOrderStatus } from "@prisma/client";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { isClientTokenP2002 } from "../utils/p2002";
+import { validate as isUuidString } from "uuid";
 import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 
 // MASS-ASSIGNMENT WHITELIST'leri (M-3): route'larda Zod yok (BaseController ham
@@ -1089,6 +1091,20 @@ export class OrderService extends BaseService {
       }
     }
 
+    // İdempotency anahtarı (Roll emsali) — form-oturumu başına istemci üretir;
+    // timeout sonrası tekrar gönderim aynı token'la gelir → aşağıdaki catch
+    // mevcut siparişi cached döner. Route-level zod olmadığından (BaseController
+    // ham body) burada doğrulanır; whitelist'ten BİLEREK ayrı işlenir
+    // (manualOrderNumber gibi kontrollü kabul).
+    const clientToken =
+      typeof data.clientToken === "string" && data.clientToken.trim()
+        ? data.clientToken.trim()
+        : null;
+    if (clientToken && !isUuidString(clientToken)) {
+      throw AppError.badRequest("Geçersiz istemci anahtarı");
+    }
+    if (clientToken) prismaData.clientToken = clientToken;
+
     // Saha #16: kullanıcı sipariş numarasını ELLE verebilir (override) —
     // whitelist'ten BİLEREK ayrı işlenir (mass-assignment koruması korunur;
     // yalnız bu alan kontrollü kabul edilir). Boş/verilmemiş → otomatik üretim.
@@ -1152,7 +1168,24 @@ export class OrderService extends BaseService {
           ? { include: this.config.defaultInclude }
           : {}),
       });
-    })) as Record<string, unknown>;
+    }, undefined, (err) =>
+      // İdempotent replay: clientToken P2002'si retry EDİLMEZ (retry hep aynı
+      // token'ı yazar) — aşağıdaki catch cached yanıta çevirir. Diğer P2002'ler
+      // (orderNumber seq yarışı) mevcut M-25 davranışıyla taze max ile retry.
+      !isClientTokenP2002(err),
+    ).catch(async (err) => ({
+      __replayOf: await this.resolveCreateTokenReplay(err, clientToken, data),
+    }))) as Record<string, unknown>;
+
+    if (record.__replayOf) {
+      const existing = record.__replayOf as Record<string, unknown>;
+      // Audit + alias terfisi yalnız gerçek create yolunda (ilk çağrıda yazıldı).
+      return {
+        success: true,
+        data: existing,
+        message: `Sipariş zaten oluşturulmuş (idempotent retry): ${existing.orderNumber}`,
+      };
+    }
     const orderNumber = record.orderNumber as string;
 
     await AuditService.log({
@@ -1177,6 +1210,58 @@ export class OrderService extends BaseService {
   }
 
   /**
+   * create() clientToken P2002 ile düştüyse idempotent replay çözümlemesi (Roll
+   * emsali): aynı token'lı mevcut siparişi bulur; payload kimliği (customerId +
+   * branchId + satır sayısı) uyuşuyorsa onu döner (çağıran cached yanıt üretir).
+   * Uyuşmuyorsa 409 CLIENT_TOKEN_COLLISION — token yenilenseydi sessizce ikinci
+   * sipariş açılırdı; 409 kullanıcıya ilk gönderimin kaydedildiğini ifşa eder.
+   * Token replay'i değilse orijinal hata aynen fırlar.
+   */
+  private async resolveCreateTokenReplay(
+    err: unknown,
+    clientToken: string | null,
+    data: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!clientToken || !isClientTokenP2002(err)) throw err;
+    const existing = (await prisma.order.findUnique({
+      where: { clientToken },
+      ...(this.config.defaultInclude
+        ? { include: this.config.defaultInclude as Prisma.OrderInclude }
+        : {}),
+    })) as Record<string, unknown> | null;
+    if (!existing) throw err;
+    // Hafif payload-özdeşlik (F117 emsali): kimlik-kilit alanları uyuşmalı.
+    // Derin satır karşılaştırması bilinçli yapılmıyor (Decimal/alias-terfisi
+    // kırılgan) — müşteri + şube + satır sayısı "farklı form oturumu"nu yakalar.
+    const existingLines = existing.lines;
+    const incomingLineCount = Array.isArray(data.lines) ? data.lines.length : 0;
+    const same =
+      existing.customerId === data.customerId &&
+      (existing.branchId ?? null) === ((data.branchId as string | null | undefined) ?? null) &&
+      Array.isArray(existingLines) &&
+      existingLines.length === incomingLineCount;
+    if (same) return existing;
+    throw AppError.conflict(
+      `Bu form daha önce kaydedilmiş: ${existing.orderNumber}. Yeni sipariş için formu kapatıp yeniden açın.`,
+      {
+        code: "CLIENT_TOKEN_COLLISION",
+        orderNumber: existing.orderNumber,
+        existing: {
+          id: existing.id,
+          customerId: existing.customerId,
+          branchId: existing.branchId ?? null,
+          lineCount: Array.isArray(existingLines) ? existingLines.length : null,
+        },
+        incoming: {
+          customerId: data.customerId ?? null,
+          branchId: (data.branchId as string | null | undefined) ?? null,
+          lineCount: incomingLineCount,
+        },
+      },
+    );
+  }
+
+  /**
    * Saha #11: ham/stok toplardan HIZLI SİPARİŞ. Operatör 70 topu tek tek satıra
    * girmek yerine okutur → müşteri seçer → sistem topları spec (ürün+renk+en)
    * bazında gruplayıp sipariş satırlarına çevirir, siparişi APPROVED açar ve
@@ -1187,7 +1272,7 @@ export class OrderService extends BaseService {
    * okutmak burada yalnız "ne kadar/ne tür satır açılacağını" türetmek içindir.
    */
   async quickOrderFromRolls(
-    data: { customerId: string; branchId?: string | null; rollIds: string[] },
+    data: { customerId: string; branchId?: string | null; rollIds: string[]; clientToken?: string | null },
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     const rollIds = [...new Set(data.rollIds)];
@@ -1276,8 +1361,11 @@ export class OrderService extends BaseService {
     }
 
     // Sipariş aç (claim garanti; satırlar gerçek metrajı temsil eder).
+    // clientToken create'e akar: timeout-replay'de toplar zaten WAREHOUSE olduğundan
+    // claim bloğu atlanır ve TEK koruma bu token'dır (create cached siparişi döner) —
+    // token'sız replay birebir aynı satırlı İKİNCİ siparişi açardı.
     const created = await this.create(
-      { customerId: data.customerId, branchId: data.branchId ?? null, lines },
+      { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken: data.clientToken ?? null },
       userId,
     );
     const order = created.data as { id: string; orderNumber: string };

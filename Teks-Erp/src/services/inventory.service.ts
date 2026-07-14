@@ -9,6 +9,7 @@
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
+import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 import { readKk1WeightEntryEnabled } from "./system-setting.service";
@@ -2449,6 +2450,9 @@ export class InventoryService {
       receiptId: string;
       stepId: string; // Kurşun/KK2 (PROCESS_QC) step
       notes?: string | null;
+      /** İdempotency anahtarı — çift çağrı (retry) ikinci hayalet açık-kumaş
+       *  doğurmasın (Roll.clientToken @unique; createInitialEntry emsali). */
+      clientToken?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<Roll>> {
@@ -2495,7 +2499,9 @@ export class InventoryService {
 
     const propertyIds = receipt.appliedProperties.map((p) => p.propertyId);
 
-    const roll = await prisma.$transaction(async (tx) => {
+    let roll: Roll;
+    try {
+      roll = await prisma.$transaction(async (tx) => {
       // F115: WO satırını tx başında kilitle → cancelReceipt (o da tx başında
       // touchWorkOrderTx alır) ve WO-completion yollarıyla serileş. Guard'ları
       // kilit ALTINDA TAZE oku — pre-tx guard'lar (2197-2227) yalnız UX; araya
@@ -2532,6 +2538,7 @@ export class InventoryService {
       const created = await tx.roll.create({
         data: {
           barcode: null,
+          clientToken: data.clientToken ?? null,
           itemId: fr.workOrder.targetItemId,
           colorId: receipt.appliedColorId,
           initialQty: 0,
@@ -2576,7 +2583,25 @@ export class InventoryService {
       await ensureWorkOrderInProgress(tx, receipt.workOrderId);
 
       return created;
-    });
+      });
+    } catch (err) {
+      // İdempotent replay (createInitialEntry emsali): aynı clientToken'la 2. çağrı
+      // → mevcut açık-kumaş Roll'u dön (audit ilk çağrıda yazıldı). Catch tx DIŞINDA
+      // — PG aborted-tx tuzağına girmez.
+      if (data.clientToken && isClientTokenP2002(err)) {
+        const existing = await prisma.roll.findUnique({
+          where: { clientToken: data.clientToken },
+        });
+        if (existing) {
+          return {
+            success: true,
+            data: existing,
+            message: `Açık kumaş zaten açılmış (idempotent retry, id: ${existing.id}).`,
+          };
+        }
+      }
+      throw err;
+    }
 
     await AuditService.log({
       userId,

@@ -12,6 +12,10 @@ import "../types/express-augment";
 // (quickStartSchema) yeniden kullanılabilsin — refine ZodEffects'e çevirir, spread'i bozar.
 const workOrderCoreShape = {
   batchNumber:       z.string().trim().min(1).max(64, "Parti kodu en fazla 64 karakter olabilir").optional().nullable(),
+  // İdempotency anahtarı — istemci form-oturumu başına üretir (UUID); timeout
+  // sonrası tekrar gönderimde aynı token cached WO döner (mükerrer İE önlenir).
+  // Yalnız create + quick-start alır; replace/update şemaları bilinçli almaz.
+  clientToken:       z.string().uuid("Geçersiz istemci anahtarı").optional(),
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).default("ORDER_PRODUCTION"),
   width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
   targetQuantity:    z.number().positive().max(999_999_999, "Hedef metraj çok büyük").optional().nullable(),

@@ -30,6 +30,7 @@ import {
 import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { isClientTokenP2002 } from "../utils/p2002";
 import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -1277,7 +1278,7 @@ export class KartelaService {
    * kabul iptali değil. `addKartelaToShipment` ile aynı FIFO select-then-claim kalıbı.
    */
   async reduceStock(
-    data: { itemId: string; colorId: string | null; count: number; reason: string },
+    data: { itemId: string; colorId: string | null; count: number; reason: string; clientToken?: string | null },
     userId?: string
   ): Promise<ApiResponse<{ reduced: number }>> {
     if (!Number.isInteger(data.count) || data.count < 1) {
@@ -1288,37 +1289,88 @@ export class KartelaService {
       throw AppError.badRequest("Gerekçe en az 3 karakter olmalı");
     }
 
-    const ids = await prisma.$transaction(async (tx) => {
-      // updateMany LIMIT desteklemediğinden select-then-claim: N adayı FIFO seç,
-      // sonra yalnız hâlâ müsait olanları (TOCTOU guard) tek updateMany ile iptal et.
-      const candidates = await tx.swatch.findMany({
-        where: {
-          itemId: data.itemId,
-          colorId: data.colorId, // null → colorId IS NULL ("renksiz" grubu)
-          shipmentId: null,
-          sackId: null, // çuvaldaki kartela stok değil
-          cancelledAt: null,
-        },
-        select: { id: true },
-        orderBy: { createdAt: "asc" },
-        take: data.count,
-      });
-      if (candidates.length < data.count) {
-        throw AppError.conflict(
-          `Yeterli kartela stoğu yok — istenen ${data.count}, mevcut ${candidates.length}. Listeyi yenileyin.`
-        );
+    let ids: string[];
+    let reductionId: string;
+    try {
+      ({ ids, reductionId } = await prisma.$transaction(async (tx) => {
+        // İdempotency çapası ÖNCE yazılır (SwatchStockReduction olay kaydı):
+        // istek "şu ID'leri iptal et" değil "N adet düş" dediğinden replay'de FIFO
+        // FARKLI N kartela seçerdi → çift düşüm. clientToken @unique P2002 burada,
+        // claim'e hiç ulaşılmadan patlar → tx rollback, aşağıdaki catch cached döner.
+        const reduction = await tx.swatchStockReduction.create({
+          data: {
+            clientToken: data.clientToken ?? null,
+            itemId: data.itemId,
+            colorId: data.colorId,
+            count: data.count,
+            reason,
+            createdById: userId ?? null,
+          },
+          select: { id: true },
+        });
+
+        // updateMany LIMIT desteklemediğinden select-then-claim: N adayı FIFO seç,
+        // sonra yalnız hâlâ müsait olanları (TOCTOU guard) tek updateMany ile iptal et.
+        const candidates = await tx.swatch.findMany({
+          where: {
+            itemId: data.itemId,
+            colorId: data.colorId, // null → colorId IS NULL ("renksiz" grubu)
+            shipmentId: null,
+            sackId: null, // çuvaldaki kartela stok değil
+            cancelledAt: null,
+          },
+          select: { id: true },
+          orderBy: { createdAt: "asc" },
+          take: data.count,
+        });
+        if (candidates.length < data.count) {
+          throw AppError.conflict(
+            `Yeterli kartela stoğu yok — istenen ${data.count}, mevcut ${candidates.length}. Listeyi yenileyin.`
+          );
+        }
+        const claimIds = candidates.map((c) => c.id);
+        const claimed = await tx.swatch.updateMany({
+          where: { id: { in: claimIds }, shipmentId: null, sackId: null, cancelledAt: null },
+          data: { cancelledAt: new Date(), cancelReason: reason },
+        });
+        if (claimed.count !== data.count) {
+          // Kısmi claim: aralarından biri az önce sevkiyata girdi/iptal oldu → tüm tx
+          // rollback (reduction kaydı dahil — yarım olay kaydı kalmaz, token boşa gitmez).
+          throw AppError.conflict("Kartelalardan biri az önce değişti — tekrar deneyin.");
+        }
+        return { ids: claimIds, reductionId: reduction.id };
+      }));
+    } catch (err) {
+      // İdempotent replay (Roll emsali): aynı token'lı düşüm İLK çağrıda uygulandı.
+      if (data.clientToken && isClientTokenP2002(err)) {
+        const existing = await prisma.swatchStockReduction.findUnique({
+          where: { clientToken: data.clientToken },
+        });
+        if (existing) {
+          // Hafif payload-özdeşlik (F117 emsali).
+          const same =
+            existing.itemId === data.itemId &&
+            (existing.colorId ?? null) === (data.colorId ?? null) &&
+            existing.count === data.count;
+          if (same) {
+            return {
+              success: true,
+              data: { reduced: existing.count },
+              message: `${existing.count} kartela stoktan düşüldü (idempotent retry)`,
+            };
+          }
+          throw AppError.conflict(
+            "Bu istemci anahtarı farklı bir stok düşümüyle kullanılmış. Formu kapatıp yeniden deneyin.",
+            {
+              code: "CLIENT_TOKEN_COLLISION",
+              existing: { itemId: existing.itemId, colorId: existing.colorId, count: existing.count },
+              incoming: { itemId: data.itemId, colorId: data.colorId, count: data.count },
+            },
+          );
+        }
       }
-      const claimIds = candidates.map((c) => c.id);
-      const claimed = await tx.swatch.updateMany({
-        where: { id: { in: claimIds }, shipmentId: null, sackId: null, cancelledAt: null },
-        data: { cancelledAt: new Date(), cancelReason: reason },
-      });
-      if (claimed.count !== data.count) {
-        // Kısmi claim: aralarından biri az önce sevkiyata girdi/iptal oldu → tüm tx rollback.
-        throw AppError.conflict("Kartelalardan biri az önce değişti — tekrar deneyin.");
-      }
-      return claimIds;
-    });
+      throw err;
+    }
 
     await AuditService.log({
       userId,
@@ -1327,6 +1379,7 @@ export class KartelaService {
       recordId: ids[0],
       newData: {
         kind: "KARTELA_STOCK_REDUCE",
+        reductionId,
         itemId: data.itemId,
         colorId: data.colorId,
         count: data.count,
