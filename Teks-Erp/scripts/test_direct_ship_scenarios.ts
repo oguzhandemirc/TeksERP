@@ -3,7 +3,7 @@
 // bu dosya geri kalan her şeyi dener (adversaryal denetim matrisi):
 //   over-ship cap, duplicate alloc, çok-satır karşılanma + order status recompute,
 //   çoklu açık dispatch (WO kapanmaz), ardışık fason + internal downstream SKIP,
-//   batchSplitId korunur, eşleşmeyen/iptal satır reddi, kısa sebep, top kaçtı 409,
+//   batchId (parti) korunur, eşleşmeyen/iptal satır reddi, kısa sebep, top kaçtı 409,
 //   previewDirectShip doğruluğu, donmuş belge içeriği + ayrı zincir.
 //
 // Çalıştır: npx tsx scripts/test_direct_ship_scenarios.ts
@@ -55,7 +55,7 @@ async function stockRoll(qty: number): Promise<string> {
 async function makeWo(steps: Array<{ stationId: string; seq: number }>): Promise<{ woId: string; stepIds: string[] }> {
   const stamp = `${Date.now()}`.slice(-6) + Math.floor(Math.random() * 100);
   const wo = await prisma.workOrder.create({
-    data: { batchNumber: `TST-DSS-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM, steps: { create: steps.map((s) => ({ stationId: s.stationId, stepSequence: s.seq, status: "PENDING" as const })) } },
+    data: { workOrderNumber: `TST-DSS-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM, steps: { create: steps.map((s) => ({ stationId: s.stationId, stepSequence: s.seq, status: "PENDING" as const })) } },
     include: { steps: { orderBy: { stepSequence: "asc" } } },
   });
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
@@ -145,9 +145,11 @@ async function main(): Promise<void> {
     check("TAMBUR(internal) SKIPPED", m(s[2]).status === StepStatus.SKIPPED && m(s[2]).skipReason === "FASON_DIRECT_SHIP");
     const wo = await prisma.workOrder.findUnique({ where: { id: woId }, select: { status: true } });
     check("WO COMPLETED", wo?.status === WorkOrderStatus.COMPLETED);
-    // batchSplitId korunur
-    const ra = await prisma.roll.findUnique({ where: { id: r }, select: { batchSplitId: true } });
-    check("batchSplitId KORUNDU (dispatch.id, null değil)", ra?.batchSplitId === dId, String(ra?.batchSplitId));
+    // Parti lane korunur — direct-ship top'un partisini (batchId) null'lamaz.
+    // Eski batchSplitId=dispatch.id → yeni Roll.batchId = SubcontractorDispatch.batchId (aynı Batch).
+    const disp = await prisma.subcontractorDispatch.findUnique({ where: { id: dId }, select: { batchId: true } });
+    const ra = await prisma.roll.findUnique({ where: { id: r }, select: { batchId: true } });
+    check("batchId (parti) KORUNDU (null değil, dispatch partisiyle eşit)", ra?.batchId != null && ra?.batchId === disp?.batchId, String(ra?.batchId));
   }
 
   // 6) Eşleşmeyen satır + iptal sipariş + kısa sebep
@@ -330,10 +332,10 @@ async function cleanup(): Promise<void> {
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: receiptIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
-    await prisma.shipmentAllocation.deleteMany({ where: { orderLineId: { in: orderLineIds } } });
     await prisma.orderLine.deleteMany({ where: { id: { in: orderLineIds } } });
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, ...woIds, ...orderIds] } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });

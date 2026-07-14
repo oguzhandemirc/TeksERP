@@ -4,7 +4,7 @@
 // sevk edilir. İki sevk boyahanede BİRLEŞMEZ. Kabul ekranı partileri AYRI
 // göstermeli ki operatör "ikisi birlikte mi geldi, tek parti mi?" teyit edebilsin.
 // Her parti kabul edilince AYRI bir SubcontractorReceipt (fiş) doğmalı ve doğan
-// açık kumaş, kaynak partinin batchSplitId lane'ini kalıtmalı.
+// açık kumaş, kaynak partinin batchId (parti) lane'ini kalıtmalı.
 //
 // Rota: [1] Boyahane (Fason) → [2] Tambur (internal)
 //
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-PG-${stamp}`,
+      workOrderNumber: `TST-PG-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS",
       width: WIDTH,
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
   const tamburStep = wo.steps[1].id;
   stepIds.push(boyaStep, tamburStep);
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
-  console.log(`\nİş emri: ${wo.batchNumber}  Rota: [1] Boyahane → [2] Tambur\n`);
+  console.log(`\nİş emri: ${wo.workOrderNumber}  Rota: [1] Boyahane → [2] Tambur\n`);
 
   // ── PARTİ 1: 2 top → Boyahane ──
   const r1 = await stockRoll(300);
@@ -115,8 +115,11 @@ async function main(): Promise<void> {
     { workOrderId: woId, stepId: boyaStep, subcontractorId: SUB_BOYER, rollIds: [r1, r2] },
     ADMIN,
   );
-  const lane1 = (d1.data as Any).id as string;
-  console.log(`Parti-1 sevk: ${(d1.data as Any).dispatchNo} (2 top, lane=${lane1.slice(0, 8)})`);
+  const d1id = (d1.data as Any).id as string;
+  // Parti lane = sevkin partisi (SubcontractorDispatch.batchId → Batch). Eski
+  // batchSplitId=dispatch.id yerine artık dispatch bir Batch'e bağlı ve rollara batchId yazar.
+  const lane1 = (await prisma.subcontractorDispatch.findUnique({ where: { id: d1id }, select: { batchId: true } }))!.batchId;
+  console.log(`Parti-1 sevk: ${(d1.data as Any).dispatchNo} (2 top, parti=${lane1.slice(0, 8)})`);
 
   // ── PARTİ 2: 3 top → AYNI Boyahane adımı (çoklu sevk) ──
   const r3 = await stockRoll(200);
@@ -126,19 +129,20 @@ async function main(): Promise<void> {
     { workOrderId: woId, stepId: boyaStep, subcontractorId: SUB_BOYER, rollIds: [r3, r4, r5] },
     ADMIN,
   );
-  const lane2 = (d2.data as Any).id as string;
-  console.log(`Parti-2 sevk: ${(d2.data as Any).dispatchNo} (3 top, lane=${lane2.slice(0, 8)})\n`);
+  const d2id = (d2.data as Any).id as string;
+  const lane2 = (await prisma.subcontractorDispatch.findUnique({ where: { id: d2id }, select: { batchId: true } }))!.batchId;
+  console.log(`Parti-2 sevk: ${(d2.data as Any).dispatchNo} (3 top, parti=${lane2.slice(0, 8)})\n`);
 
-  check("İki sevk farklı lane (batchSplitId) üretti", lane1 !== lane2);
+  check("İki sevk farklı parti (batchId) üretti", lane1 !== lane2);
 
-  // Topların batchSplitId'si sevkin id'sine eşit mi?
+  // Topların batchId'si (partisi) sevkin partisine eşit mi?
   const rollLanes = await prisma.roll.findMany({
     where: { id: { in: [r1, r2, r3, r4, r5] } },
-    select: { id: true, batchSplitId: true },
+    select: { id: true, batchId: true },
   });
-  const laneOf = (id: string) => rollLanes.find((r) => r.id === id)!.batchSplitId;
-  check("Parti-1 topları lane1 taşıyor", laneOf(r1) === lane1 && laneOf(r2) === lane1);
-  check("Parti-2 topları lane2 taşıyor", [r3, r4, r5].every((id) => laneOf(id) === lane2));
+  const laneOf = (id: string) => rollLanes.find((r) => r.id === id)!.batchId;
+  check("Parti-1 topları parti1 taşıyor", laneOf(r1) === lane1 && laneOf(r2) === lane1);
+  check("Parti-2 topları parti2 taşıyor", [r3, r4, r5].every((id) => laneOf(id) === lane2));
 
   // ── KABUL GRUPLAMA: WO-flow (refakat kartı akışı) ──
   console.log("KABUL GRUPLAMA — listPendingReturns(workOrderId)");
@@ -148,12 +152,12 @@ async function main(): Promise<void> {
   const g = groups[0];
   check("Grupta 2 PARTİ var (sevkler ayrıştı)", g.parties?.length === 2, `parti=${g.parties?.length}`);
   // Sıralama: parti-1 (önce sevk) en üstte
-  check("parties[0] = Parti-1 (sevk tarihine göre artan)", g.parties?.[0]?.dispatchId === lane1, g.parties?.[0]?.dispatchNo);
+  check("parties[0] = Parti-1 (sevk tarihine göre artan)", g.parties?.[0]?.dispatchId === d1id, g.parties?.[0]?.dispatchNo);
   check("Parti-1 rollCount = 2", g.parties?.[0]?.rollCount === 2, `${g.parties?.[0]?.rollCount}`);
   check("Parti-2 rollCount = 3", g.parties?.[1]?.rollCount === 3, `${g.parties?.[1]?.rollCount}`);
   check(
-    "Parti rolls per-roll batchSplitId taşıyor",
-    g.parties?.[0]?.rolls?.every((r: Any) => r.batchSplitId === lane1),
+    "Parti rolls per-roll batchId (parti) taşıyor",
+    g.parties?.[0]?.rolls?.every((r: Any) => r.batchId === lane1),
   );
   check("Parti-1 dispatchNo dolu", typeof g.parties?.[0]?.dispatchNo === "string" && g.parties[0].dispatchNo.length > 0);
   check("Parti-1 subcontractor dolu (Boyer)", g.parties?.[0]?.subcontractor?.id === SUB_BOYER);
@@ -183,9 +187,9 @@ async function main(): Promise<void> {
 
   const born1 = await prisma.roll.findFirst({
     where: { parentReceiptId: receipt1.id },
-    select: { id: true, batchSplitId: true, currentStepId: true, status: true },
+    select: { id: true, batchId: true, currentStepId: true, status: true },
   });
-  check("Parti-1 doğan açık kumaş lane1 kalıttı", born1?.batchSplitId === lane1, `${born1?.batchSplitId?.slice(0, 8)}`);
+  check("Parti-1 doğan açık kumaş parti1 kalıttı", born1?.batchId === lane1, `${born1?.batchId?.slice(0, 8)}`);
   check("Parti-1 doğan top Tambur'da IN_PRODUCTION", born1?.currentStepId === tamburStep && born1?.status === RollStatus.IN_PRODUCTION);
 
   // Boyahane adımı HÂLÂ ACTIVE (Parti-2 dönmedi)
@@ -195,7 +199,7 @@ async function main(): Promise<void> {
   // Pending tekrar → yalnız Parti-2 kaldı
   const detail2 = (await sub.getPendingReturnGroupDetail(boyaStep)).data as Any;
   check("Parti-1 kabulünden sonra pending'de tek parti kaldı", detail2.parties?.length === 1, `parti=${detail2.parties?.length}`);
-  check("Kalan parti = Parti-2 (3 top)", detail2.parties?.[0]?.dispatchId === lane2 && detail2.parties?.[0]?.rollCount === 3);
+  check("Kalan parti = Parti-2 (3 top)", detail2.parties?.[0]?.dispatchId === d2id && detail2.parties?.[0]?.rollCount === 3);
 
   // ── Parti-2'yi kabul et — AYRI fiş ──
   console.log("\nKABUL — Parti-2 (ayrı fiş)");
@@ -215,10 +219,10 @@ async function main(): Promise<void> {
 
   const born2 = await prisma.roll.findFirst({
     where: { parentReceiptId: receipt2.id },
-    select: { id: true, batchSplitId: true },
+    select: { id: true, batchId: true },
   });
-  check("Parti-2 doğan açık kumaş lane2 kalıttı", born2?.batchSplitId === lane2, `${born2?.batchSplitId?.slice(0, 8)}`);
-  check("İki doğan top FARKLI lane taşıyor", born1?.batchSplitId !== born2?.batchSplitId);
+  check("Parti-2 doğan açık kumaş parti2 kalıttı", born2?.batchId === lane2, `${born2?.batchId?.slice(0, 8)}`);
+  check("İki doğan top FARKLI parti taşıyor", born1?.batchId !== born2?.batchId);
 
   // Boyahane artık COMPLETED
   const boyaAfter2 = await prisma.workOrderStep.findUnique({ where: { id: boyaStep }, select: { status: true } });
@@ -264,6 +268,7 @@ async function cleanup(): Promise<void> {
     await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: receiptIds } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
     await prisma.travelerCard.deleteMany({ where: { workOrderId: woId } });
+    await prisma.batch.deleteMany({ where: { workOrderId: woId } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, woId] } } });
     await prisma.workOrder.delete({ where: { id: woId } });

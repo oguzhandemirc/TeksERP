@@ -120,7 +120,7 @@ function barcode(): string {
 // Bir adımda (WorkOrderStep) duran top — açık RollMovement ile.
 async function placeRoll(opts: {
   itemId: string; colorId?: string | null; width: number; qty: number;
-  stepId: string | null; status: RollStatus; producedInStepId?: string | null; batchSplitId?: string | null;
+  stepId: string | null; status: RollStatus; producedInStepId?: string | null; batchId?: string | null;
 }): Promise<string> {
   const r = await prisma.roll.create({
     data: {
@@ -128,7 +128,7 @@ async function placeRoll(opts: {
       initialQty: opts.qty, currentQty: opts.qty, status: opts.status,
       qualityGrade: "1.KALITE", qualityGradeId: M.grade1, width: opts.width,
       currentStepId: opts.stepId, producedInStepId: opts.producedInStepId ?? null,
-      batchSplitId: opts.batchSplitId ?? null, createdById: M.adminId,
+      batchId: opts.batchId ?? null, createdById: M.adminId,
     },
   });
   if (opts.stepId) {
@@ -265,7 +265,7 @@ async function seedProductionWO(): Promise<string> {
 
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `WO-${STAMP}-FULL`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `WO-${STAMP}-FULL`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 5000, targetItemId: ITEM, targetColorId: COLOR,
       plannedEndDate: new Date(Date.now() + 14 * 86400000),
       targetProperties: { create: [{ propertyId: M.propKursunlu }] },
@@ -320,7 +320,7 @@ async function seedProductionWO(): Promise<string> {
   const done = await fasonWave(2, 250, true);                      // DÖNDÜ → Tambur kesimi → Depo
   if (done.bornId) {
     await advance(done.bornId, WS.kursun, WS.tambur);
-    const born = await prisma.roll.findUnique({ where: { id: done.bornId }, select: { currentQty: true, batchSplitId: true } });
+    const born = await prisma.roll.findUnique({ where: { id: done.bornId }, select: { currentQty: true, batchId: true } });
     const total = Number(born!.currentQty), half = Math.round(total / 2);
     await prisma.rollMovement.updateMany({ where: { rollId: done.bornId, workOrderStepId: WS.tambur, exitedAt: null }, data: { exitedAt: new Date(), qtyOut: total } });
     await prisma.roll.update({ where: { id: done.bornId }, data: { status: RollStatus.TAMBUR_CONSUMED, currentStepId: null, currentQty: 0 } });
@@ -328,7 +328,7 @@ async function seedProductionWO(): Promise<string> {
       await prisma.roll.create({
         data: { barcode: barcode(), itemId: ITEM, colorId: COLOR, initialQty: q, currentQty: q, status: RollStatus.WAREHOUSE,
           qualityGrade: "1.KALITE", qualityGradeId: M.grade1, width: WIDTH, producedInStepId: WS.tambur, parentRollId: done.bornId,
-          batchSplitId: born!.batchSplitId, createdById: M.adminId },
+          batchId: born!.batchId, createdById: M.adminId },
       });
     }
   }
@@ -337,7 +337,7 @@ async function seedProductionWO(): Promise<string> {
   await stockRoll(ITEM, WIDTH, 500);
   await stockRoll(ITEM, WIDTH, 500);
 
-  console.log(`✓ C. Üretim WO: ${wo.batchNumber} — KK1/Fason Sevk/Fason Kabul/Kurşun/Tambur/Depo hepsinde aksiyon + 4 fason dalı`);
+  console.log(`✓ C. Üretim WO: ${wo.workOrderNumber} — KK1/Fason Sevk/Fason Kabul/Kurşun/Tambur/Depo hepsinde aksiyon + 4 fason dalı`);
   return wo.id;
 }
 
@@ -348,7 +348,7 @@ async function seedOrderLinkedWO(ardaPatosLineId: string): Promise<void> {
   const WIDTH = 250, ITEM = M.patos, COLOR = M.lacivert;
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `WO-${STAMP}-ORD`, type: "ORDER_PRODUCTION", status: "IN_PROGRESS",
+      workOrderNumber: `WO-${STAMP}-ORD`, type: "ORDER_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 1500, targetItemId: ITEM, targetColorId: COLOR,
       plannedEndDate: new Date(Date.now() + 18 * 86400000),
       targetProperties: { create: [{ propertyId: M.propKursunlu }] },
@@ -370,7 +370,7 @@ async function seedOrderLinkedWO(ardaPatosLineId: string): Promise<void> {
   await placeRoll({ itemId: ITEM, width: WIDTH, qty: 400, stepId: kk1Step, status: RollStatus.IN_PRODUCTION, producedInStepId: kk1Step });
   await placeRoll({ itemId: ITEM, width: WIDTH, qty: 350, stepId: kk1Step, status: RollStatus.IN_PRODUCTION, producedInStepId: kk1Step });
   await stockRoll(ITEM, WIDTH, 600);
-  console.log(`✓ D. Sipariş-bağlı WO: ${wo.batchNumber} (ORDER_PRODUCTION, KK1'de bekliyor, ${"ORD-" + STAMP + "-A"}'ya bağlı)`);
+  console.log(`✓ D. Sipariş-bağlı WO: ${wo.workOrderNumber} (ORDER_PRODUCTION, KK1'de bekliyor, ${"ORD-" + STAMP + "-A"}'ya bağlı)`);
 }
 
 // =============================================================================
@@ -380,7 +380,7 @@ async function seedCompletedWO(): Promise<void> {
   const WIDTH = 250, ITEM = M.patos, COLOR = M.mavi;
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `WO-${STAMP}-DONE`, type: "STOCK_PRODUCTION", status: "COMPLETED",
+      workOrderNumber: `WO-${STAMP}-DONE`, type: "STOCK_PRODUCTION", status: "COMPLETED",
       width: WIDTH, targetQuantity: 1200, targetItemId: ITEM, targetColorId: COLOR,
       plannedEndDate: new Date(Date.now() - 2 * 86400000),
       steps: {
@@ -399,7 +399,7 @@ async function seedCompletedWO(): Promise<void> {
   for (const q of [380, 410, 360]) {
     await placeRoll({ itemId: ITEM, colorId: COLOR, width: WIDTH, qty: q, stepId: null, status: RollStatus.WAREHOUSE, producedInStepId: tamburStep });
   }
-  console.log(`✓ E. Tamamlanmış WO: ${wo.batchNumber} (COMPLETED, 3 depo topu Patos/Mavi)`);
+  console.log(`✓ E. Tamamlanmış WO: ${wo.workOrderNumber} (COMPLETED, 3 depo topu Patos/Mavi)`);
 }
 
 // =============================================================================
@@ -458,13 +458,13 @@ async function seedReturnReady(ardaOrderId: string): Promise<void> {
   await seedKartela();
   await seedReturnReady(ardaOrderId);
 
-  // Özet — üretim WO dalları
+  // Özet — üretim WO partileri (parti modeli: getBranches artık `batches` döner)
   const branches = await new WorkOrderService().getBranches(fullWoId);
-  console.log(`\n✅ Bitti. Üretim WO (WO-${STAMP}-FULL) dalları:`);
-  for (const b of (branches.data as { branches: Array<Record<string, unknown>> }).branches) {
+  console.log(`\n✅ Bitti. Üretim WO (WO-${STAMP}-FULL) partileri:`);
+  for (const b of (branches.data as { batches: Array<Record<string, unknown>> }).batches) {
     const pos = (b.currentPositions as Array<{ label: string; count: number; totalMeters: number }> | undefined)
       ?.map((p) => `${p.label}:${p.count}/${p.totalMeters}m`).join(", ") || "fasonda";
-    console.log(`   ${b.dispatchNo} ${String(b.status).padEnd(9)} → ${pos}`);
+    console.log(`   ${b.batchNumber} (${b.rollCount} top)${b.locked ? " [kilitli]" : ""} → ${pos}`);
   }
   console.log(`\n   Test kullanıcı: admin / 123123`);
   console.log(`   Electron : İş Emirleri → WO-${STAMP}-FULL → "Tam Ekran Aç" (dağılım şeridi + dallar)`);
