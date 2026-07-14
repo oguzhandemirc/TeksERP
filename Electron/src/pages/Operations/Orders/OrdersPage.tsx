@@ -27,7 +27,7 @@ import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
 import { useTabsStore } from "@/store/tabs";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
-import { generateOrderNumber, type OrderFormValues } from "./schema";
+import { type OrderFormValues } from "./schema";
 
 const FILTERS: FilterDef[] = [
   {
@@ -84,7 +84,8 @@ const FILTERS: FilterDef[] = [
 const QUERY_KEY = "orders";
 
 interface CreatePayload {
-  orderNumber: string;
+  /** Boş = backend otomatik üretir (SIP + günlük sayaç). Doluysa o kullanılır. */
+  orderNumber?: string;
   customerId: string;
   branchId: string | null;
   currency?: string;
@@ -126,8 +127,11 @@ interface UpdatePayload {
 }
 
 function buildCreatePayload(v: OrderFormValues, pricingEnabled: boolean): CreatePayload {
+  // Elle girildiyse o numara; boş bırakıldıysa alanı hiç göndermeyip backend'in
+  // otomatik numaralandırmasını (SIP + günlük sayaç) devreye sokuyoruz.
+  const manualOrderNumber = v.orderNumber?.trim();
   return {
-    orderNumber: generateOrderNumber(),
+    ...(manualOrderNumber ? { orderNumber: manualOrderNumber } : {}),
     customerId: v.customerId,
     branchId: v.branchId || null,
     ...(pricingEnabled ? { currency: v.currency.trim().toUpperCase() } : {}),

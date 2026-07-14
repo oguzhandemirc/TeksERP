@@ -33,8 +33,9 @@ export const orderLineSchema = z.object({
 });
 
 export const orderFormSchema = z.object({
-  // Saha #16: boş bırakılırsa backend otomatik üretir (YYYYMMDD-N);
-  // elle girilirse o numara kullanılır (benzersizlik backend'de doğrulanır).
+  // Saha #16: boş bırakılırsa backend otomatik üretir (SIP + GGAAYY + NNNN,
+  // örn. SIP1307260001); elle girilirse o numara kullanılır (benzersizlik
+  // backend'de doğrulanır).
   orderNumber: z
     .string()
     .trim()
@@ -56,17 +57,6 @@ export const orderFormSchema = z.object({
 
 export type OrderLineFormValues = z.infer<typeof orderLineSchema>;
 export type OrderFormValues = z.infer<typeof orderFormSchema>;
-
-export function generateOrderNumber(): string {
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const min = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  return `ORD-${yy}${mm}${dd}-${hh}${min}${ss}`;
-}
 
 let lineCounter = 0;
 export function newLineClientId(): string {

@@ -31,7 +31,7 @@ const service = new OrderService({
   dateFields: ["createdAt", "deadline"],
   defaultInclude: {
     customer: true,
-    branch: { select: { id: true, name: true, city: true, district: true } },
+    branch: { select: { id: true, name: true, code: true, city: true, district: true } },
     lines: {
       include: {
         item: {

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
-import { UserRound } from "lucide-react";
+import { UserRound, X } from "lucide-react";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
@@ -203,13 +203,26 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
 
           {/* Saha #16: sipariş no görünür + override edilebilir (boş = otomatik).
               Termin ile aynı satırı yarı yarıya paylaşır. */}
-          <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label="Sipariş No" error={form.formState.errors.orderNumber}>
-              <Input
-                {...form.register("orderNumber")}
-                placeholder="Boş = otomatik"
-                disabled={!!order}
-              />
+              <div className="relative">
+                <Input
+                  {...form.register("orderNumber")}
+                  placeholder="Boş = otomatik"
+                  disabled={!!order}
+                  className="pr-8"
+                />
+                {!order && !!form.watch("orderNumber") && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => form.setValue("orderNumber", "", { shouldValidate: true })}
+                    className="absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
               {!!order && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Mevcut siparişin numarası değiştirilemez (muhasebe/irsaliye izi).

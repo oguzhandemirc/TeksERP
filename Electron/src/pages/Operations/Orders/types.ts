@@ -71,7 +71,14 @@ export interface Order {
   manualClosedById: string | null;
   manualCloseReason: string | null;
   customer?: { id: string; code: string; name: string };
-  branch?: { id: string; name: string; city: string | null; district: string | null } | null;
+  branch?: {
+    id: string;
+    name: string;
+    /** Müşterinin iç şube kodu — opsiyonel (null olabilir). */
+    code: string | null;
+    city: string | null;
+    district: string | null;
+  } | null;
   lines: OrderLine[];
   createdAt: string;
   updatedAt: string;

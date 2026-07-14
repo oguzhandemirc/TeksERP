@@ -31,6 +31,7 @@ import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders
 import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
+import { OrderPartyCard } from "./OrderPartyCard";
 import type { Order, OrderLine } from "./types";
 
 /** Tek iş emri = tek ürün+renk+en. Kalem imzası bu üçlüden türer. */
@@ -178,26 +179,19 @@ export function OrderDetailSheet({
               />
             )}
           </SheetTitle>
-          <SheetDescription>
+          {/* a11y açıklaması — görsel kimlik OrderPartyCard'da; burası ekran
+              okuyucu için kısa özet (Radix Description zorunlu). */}
+          <SheetDescription className="sr-only">
             {order?.customer?.name}
-            {order?.branch && (
-              <>
-                {" — "}
-                <span className="font-medium text-foreground">Şube: {order.branch.name}</span>
-                {(order.branch.city || order.branch.district) && (
-                  <span className="text-muted-foreground">
-                    {" ("}
-                    {[order.branch.district, order.branch.city].filter(Boolean).join(" / ")}
-                    {")"}
-                  </span>
-                )}
-              </>
-            )}
+            {order?.branch ? ` — Şube: ${order.branch.name}` : ""}
+            {order?.branch?.code ? ` (${order.branch.code})` : ""}
           </SheetDescription>
         </SheetHeader>
 
         {order && (
           <div className="mt-4 space-y-4">
+            <OrderPartyCard customer={order.customer} branch={order.branch} />
+
             <div className="grid grid-cols-3 gap-2 text-sm">
               <Card>
                 <CardContent className="p-3">

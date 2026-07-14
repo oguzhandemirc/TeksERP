@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format, parseISO, isValid } from "date-fns";
 import { tr } from "date-fns/locale";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -109,6 +109,20 @@ export function DatePickerInput({
         maxLength={10}
         className="h-full flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
       />
+
+      {!disabled && displayValue && (
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => {
+            onChange("");
+            setRaw("");
+          }}
+          className="flex h-full items-center px-2 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
