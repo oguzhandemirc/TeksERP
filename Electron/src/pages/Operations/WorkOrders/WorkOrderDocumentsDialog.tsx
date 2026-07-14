@@ -32,12 +32,15 @@ export function WorkOrderDocumentsDialog({
   steps,
   onPrintDispatch,
 }: Props) {
-  const dispatches: DispatchEntry[] = (steps ?? []).flatMap((step) =>
-    (step.dispatches ?? []).map((d) => ({
-      ...d,
-      stationName: step.station?.name ?? "—",
-    })),
-  );
+  const dispatches: DispatchEntry[] = (steps ?? [])
+    .flatMap((step) =>
+      (step.dispatches ?? []).map((d) => ({
+        ...d,
+        stationName: step.station?.name ?? "—",
+      })),
+    )
+    // Yeni → eski: en son yapılan sevk irsaliyesi en üstte.
+    .sort((a, b) => b.dispatchedAt.localeCompare(a.dispatchedAt));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

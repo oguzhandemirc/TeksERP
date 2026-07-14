@@ -102,7 +102,7 @@ function DispatchRow({
             </View>
             <View style={styles.metaRow}>
               <Text style={styles.metaText}>
-                {dispatch.workOrder?.batchNumber ?? '—'}
+                {dispatch.workOrder?.workOrderNumber ?? '—'}
               </Text>
               <Text style={styles.metaSep}>·</Text>
               <Text style={styles.metaText}>

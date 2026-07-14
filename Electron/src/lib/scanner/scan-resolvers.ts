@@ -68,14 +68,14 @@ async function resolveTravelerCard(code: string): Promise<ScanResolution> {
     )
     .then((r) => r.data);
   const card = (res.data ?? {}) as Record<string, unknown>;
-  const wo = card.workOrder as { id?: string; batchNumber?: string } | undefined;
+  const wo = card.workOrder as { id?: string; workOrderNumber?: string } | undefined;
   const woId = (card.workOrderId as string) ?? wo?.id;
   return {
     kind: "TRAVELER_CARD",
     code,
     found: true,
     title: (card.cardNumber as string) ?? code,
-    subtitle: joinDot(["Refakat Kartı", wo?.batchNumber, card.status as string]),
+    subtitle: joinDot(["Refakat Kartı", wo?.workOrderNumber, card.status as string]),
     actions: woId
       ? [{ label: "İş Emrini Aç", to: `/operations/work-orders/${woId}`, primary: true }]
       : [],

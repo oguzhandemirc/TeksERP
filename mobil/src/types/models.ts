@@ -185,7 +185,7 @@ export interface WorkOrderToOrderLine {
 
 export interface WorkOrder {
   id: string;
-  batchNumber: string;
+  workOrderNumber: string;
   status: WorkOrderStatus;
   type?: WorkOrderType;
   width?: number | null;
@@ -235,7 +235,7 @@ export interface SubcontractorDispatchListItem {
   stepId: string;
   cancelledAt: string | null;
   cancelReason: string | null;
-  workOrder?: Pick<WorkOrder, 'id' | 'batchNumber'>;
+  workOrder?: Pick<WorkOrder, 'id' | 'workOrderNumber'>;
   subcontractor?: Pick<Subcontractor, 'id' | 'name'>;
   _count?: { items: number };
 }
@@ -256,7 +256,7 @@ export interface SubcontractorDispatch {
   dispatchedAt: string;
   cancelledAt: string | null;
   cancelReason: string | null;
-  workOrder?: Pick<WorkOrder, 'id' | 'batchNumber'> & Partial<WorkOrder>;
+  workOrder?: Pick<WorkOrder, 'id' | 'workOrderNumber'> & Partial<WorkOrder>;
   step?: WorkOrderStep;
   subcontractor?: Subcontractor;
   plannedSubcontractor?: Subcontractor | null;
@@ -301,7 +301,7 @@ export interface Roll {
   color?: Color | null;
   properties?: RollProperty[];
   producedInStep?: {
-    workOrder?: { id: string; batchNumber: string } | null;
+    workOrder?: { id: string; workOrderNumber: string } | null;
   } | null;
   createdBy?: { id: string; username: string; fullName: string } | null;
   /** Topun üstündeki son basılan etiket snapshot'ı (null = stok/etiket yok). BAĞ DEĞİL. */
@@ -479,7 +479,7 @@ export interface SubcontractorReceiptListItem {
   cancelReason?: string | null;
   appliedColorId?: string | null;
   appliedColor?: Color | null;
-  workOrder?: Pick<WorkOrder, 'id' | 'batchNumber'>;
+  workOrder?: Pick<WorkOrder, 'id' | 'workOrderNumber'>;
   subcontractor?: Pick<Subcontractor, 'id' | 'name' | 'code'>;
   step?: { id: string; stepSequence: number; station: Pick<Station, 'name' | 'code'> };
   receivedBy?: { id: string; username: string; fullName: string } | null;

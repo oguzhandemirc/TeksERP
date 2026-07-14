@@ -358,7 +358,7 @@ export default function FasonSevkScreen() {
 
       return {
         value: w.id,
-        label: w.batchNumber,
+        label: w.workOrderNumber,
         details,
         badge: {
           text: trLabel(WORK_ORDER_STATUS_LABEL, w.status),
@@ -464,13 +464,13 @@ export default function FasonSevkScreen() {
         Toast.show({
           type: 'error',
           text1: 'Sevke uygun fason adımı yok',
-          text2: wo.batchNumber,
+          text2: wo.workOrderNumber,
         });
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setWorkOrderId(wo.id);
-      setWorkOrderLabel(`${wo.batchNumber} · ${trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}`);
+      setWorkOrderLabel(`${wo.workOrderNumber} · ${trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}`);
       setStepId('');
       setSubcontractorId('');
       setSubcontractorLabel('');
@@ -480,7 +480,7 @@ export default function FasonSevkScreen() {
       Toast.show({
         type: 'success',
         text1: 'İş emri seçildi',
-        text2: wo.batchNumber,
+        text2: wo.workOrderNumber,
       });
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -916,7 +916,7 @@ export default function FasonSevkScreen() {
       </View>
       <View style={styles.metaRow}>
         <Text variant="bodySmall" style={styles.recentsCount} numberOfLines={1}>
-          {selectedWo ? `İş Emri ${selectedWo.batchNumber}` : 'İş emri seçildikçe burada görünür'}
+          {selectedWo ? `İş Emri ${selectedWo.workOrderNumber}` : 'İş emri seçildikçe burada görünür'}
         </Text>
         {selectedWo && metaRight.length > 0 && (
           <Text variant="bodySmall" style={styles.metaRight} numberOfLines={1}>

@@ -48,7 +48,7 @@ export default function DispatchDetailPanel({
           <Icon source="briefcase-outline" size={14} color="#64748b" />
           <Text style={styles.rowLabel}>İş Emri</Text>
           <Text style={styles.rowValue} numberOfLines={1}>
-            {dispatch.workOrder?.batchNumber ?? '—'}
+            {dispatch.workOrder?.workOrderNumber ?? '—'}
           </Text>
         </View>
 

@@ -94,7 +94,7 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
                   <Icon source="clipboard-text-outline" size={16} color="#475569" />
                   <Text style={styles.summaryLabel}>İş Emri:</Text>
                   <Text style={styles.summaryValue}>
-                    {receipt.workOrder?.batchNumber ?? '—'}
+                    {receipt.workOrder?.workOrderNumber ?? '—'}
                   </Text>
                 </View>
                 {receipt.step?.station && (

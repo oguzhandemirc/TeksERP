@@ -55,7 +55,7 @@ export interface SwatchListItem {
   createdAt: string;
   item?: { id: string; code: string; name: string } | null;
   color?: { id: string; code: string; name: string } | null;
-  workOrder?: { id: string; batchNumber?: string | null } | null;
+  workOrder?: { id: string; workOrderNumber?: string | null } | null;
   parentRoll?: { id: string; barcode: string } | null;
 }
 

@@ -3829,7 +3829,7 @@ export class SubcontractorService {
         receivedBy: receipt.receivedBy?.fullName ?? null,
         workOrder: {
           id: receipt.workOrder.id,
-          batchNumber: receipt.workOrder.workOrderNumber,
+          workOrderNumber: receipt.workOrder.workOrderNumber,
           type: receipt.workOrder.type,
         },
         subcontractor: {
@@ -4254,6 +4254,28 @@ export class SubcontractorService {
       // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
       // sayımı + downstream SKIP eşzamanlı dispatch'le serileşsin.
       await touchWorkOrderTx(tx, dispatch.workOrderId);
+
+      // VERİ BÜTÜNLÜĞÜ: "iş emrini tamamla" seçildiyse, sevk edilenler DIŞINDA WO'da
+      // hâlâ üretimde/fasonda top varsa TAMAMLAMA. Aksi halde downstream adım SKIPPED
+      // olduğunda o toplar sahipsiz kalırdı (SKIPPED adımda IN_PRODUCTION/AT_SUBCONTRACTOR,
+      // WO COMPLETED). Erken 409 → sevk mutasyonundan ÖNCE tüm işlem rollback olur;
+      // operatör "tamamla"yı kapatıp yalnız sevk eder ya da önce kalanları halleder.
+      if (completeWorkOrder) {
+        const otherInFlight = await tx.roll.count({
+          where: {
+            currentStep: { workOrderId: dispatch.workOrderId },
+            status: { in: [RollStatus.IN_PRODUCTION, RollStatus.AT_SUBCONTRACTOR] },
+            id: { notIn: shipRollIds },
+          },
+        });
+        if (otherInFlight > 0) {
+          throw AppError.conflict(
+            `İş emri tamamlanamaz: sevk edilenler dışında ${otherInFlight} top hâlâ üretimde veya fasonda. ` +
+              `Tamamlarsan bu toplar sahipsiz kalır — önce onları da sevk/kabul et ya da "iş emrini tamamla"yı kapatıp yalnız sevk et.`,
+            { code: "WO_HAS_ROLLS_IN_FLIGHT", inFlightCount: otherInFlight },
+          );
+        }
+      }
       // isFullDispatchShip TAZE (F72): WO satırı kilitli olduğundan bu sayım
       // eşzamanlı değişiklikleri (receive()'in dispatch'ten döndürdüğü toplar)
       // görür. roll-consume'dan (aşağıda) ÖNCE yapıldığından shipRollIds hâlâ

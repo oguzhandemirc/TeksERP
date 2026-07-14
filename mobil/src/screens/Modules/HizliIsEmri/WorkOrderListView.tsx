@@ -72,7 +72,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
           <View style={{ flex: 1 }}>
             <View style={styles.rowTop}>
               <Text style={styles.batch} numberOfLines={1}>
-                {item.batchNumber}
+                {item.workOrderNumber}
               </Text>
               <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
                 <Text style={styles.statusChipText}>{trLabel(WORK_ORDER_STATUS_LABEL, item.status)}</Text>

@@ -166,7 +166,7 @@ export default function ReceiptRow({ receipt, onShowDetail, onCancel }: Props) {
             </View>
             <View style={styles.metaRow}>
               <Text style={styles.metaText}>
-                {receipt.workOrder?.batchNumber ?? '—'}
+                {receipt.workOrder?.workOrderNumber ?? '—'}
               </Text>
               <Text style={styles.metaSep}>·</Text>
               <Text style={styles.metaText}>

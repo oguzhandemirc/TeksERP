@@ -39,7 +39,7 @@ export const workOrderStatusTones = {
   PLANNED: "muted",
   IN_PROGRESS: "info",
   COMPLETED: "success",
-  CANCELLED: "muted",
+  CANCELLED: "danger",
 } as const satisfies Record<string, Tone>;
 
 export const rollStatusTones = {

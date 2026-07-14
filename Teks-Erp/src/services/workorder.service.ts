@@ -1738,7 +1738,7 @@ export class WorkOrderService {
           select: {
             currentQty: true,
             status: true,
-            currentStep: { select: { station: { select: { name: true } } } },
+            currentStep: { select: { station: { select: { name: true, type: true } } } },
           },
         },
         // Partinin fason sevkleri (K10) — durum türetimi (açık/kısmi/döndü) için.
@@ -1836,12 +1836,19 @@ export class WorkOrderService {
       // Kilit türetilmiş: iptal edilmemiş sevki varsa parti kilitli (düzenlenemez).
       const locked = b.dispatches.some((d) => !d.cancelledAt);
       const card = woCard;
+      // Fasona sevk bekliyor: parti topları bir FASON (EXTERNAL) adımında ÜRETİMDE ama
+      // henüz sevk edilmemiş (redye geri-sarımı ya da ilk sevk öncesi). Panelde
+      // "boyahaneye gönder" ipucu için — sahadan Fason Sevk yapılmalı.
+      const awaitingFasonDispatch = b.rolls.some(
+        (r) => r.status === "IN_PRODUCTION" && r.currentStep?.station?.type === "EXTERNAL",
+      );
 
       return {
         batchId: b.id,
         batchNumber: b.batchNumber,
         createdAt: b.createdAt,
         locked,
+        awaitingFasonDispatch,
         cardNumber: card?.cardNumber ?? null,
         cardBarcode: card?.barcode ?? null,
         rollCount: b.rolls.length,

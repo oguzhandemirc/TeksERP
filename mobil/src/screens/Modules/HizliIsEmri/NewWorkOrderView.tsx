@@ -483,7 +483,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
       void setLastRouteTemplateId(routeTemplateId);
       void setLastWoTemplateId(templateId);
       setResult({
-        batchNumber: data.workOrder.batchNumber,
+        batchNumber: data.workOrder.workOrderNumber,
         attached: data.attached,
         errors: data.errors,
         woId: data.workOrder.id,

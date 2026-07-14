@@ -116,7 +116,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       // Önceden sabit '' idi → düzenle/kaydet'te Hedef Kg sessizce siliniyordu. Mevcut değeri yükle.
       targetWeight: wo.targetWeight != null ? String(wo.targetWeight) : '',
       foldType: wo.foldType ?? null,
-      batchNumber: wo.batchNumber,
+      batchNumber: wo.workOrderNumber,
     });
     setMode('edit');
   };
@@ -160,7 +160,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerBatch} numberOfLines={1}>
-            {wo?.batchNumber ?? 'İş Emri'}
+            {wo?.workOrderNumber ?? 'İş Emri'}
           </Text>
           {wo ? (
             <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
