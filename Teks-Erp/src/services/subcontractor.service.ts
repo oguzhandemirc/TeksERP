@@ -1616,39 +1616,54 @@ export class SubcontractorService {
       throw AppError.badRequest("En az bir dönüş kaydı girin");
     }
 
-    // IDEMPOTENCY (offline sync replay): SADECE bu çağrıdaki dönüş topları daha
-    // önce (iptal edilmemiş bir makbuzla) kabul edilmişse cached makbuzu döndür.
+    // IDEMPOTENCY (offline sync replay): yalnız bu çağrıdaki dönüş kümesiyle
+    // BİREBİR AYNI kümeyi kabul etmiş (iptal edilmemiş) bir makbuz varsa cached
+    // döndür — sevk tarafındaki sameRolls guard'ıyla (dispatch) gerçekten simetrik.
     //
-    // Eskiden kontrol "bu adımda iptal edilmemiş herhangi bir makbuz var mı"
-    // idi; bu KISMİ/PARTİLİ dönüşü bozuyordu: boyahane topları parça parça
-    // gönderince ikinci kabul, ilk makbuzu cache sanıp silent dönüyor, kalan
-    // toplar AT_SUBCONTRACTOR'da takılı kalıyordu. Artık sevk tarafındaki
-    // sameRolls idempotency'siyle simetrik: payload'a (returns rollIds) bakar.
+    // Eski guard KESİŞİME bakıyordu (findFirst, newRollId IN incoming): kısmi
+    // örtüşen payload'da ({R1,R2} gelir, R1 önceden kabul edilmiş) makbuz-1 cached
+    // dönüyor, R2 SESSİZCE atlanıyordu — operatör başarı toast'ı görür, top
+    // AT_SUBCONTRACTOR'da takılı kalırdı. Artık:
+    //   TAM küme eşitliği → cached makbuz;
+    //   KISMİ örtüşme    → cached DÖNME, akışa devam — tx içindeki atomik claim
+    //                      AT_SUBCONTRACTOR olmayan topları net 409'lar;
+    //   ayrık küme       → guard tetiklenmez (kısmi/partili dönüş normal kabul).
     //
     // KRİTİK: cancelledAt: null filtresi şart — iptal edilmiş receipt cached
     // dönerse silent failure olur (toast başarılı ama hiçbir şey olmaz).
     const incomingRollIds = data.returns.map((r) => r.rollId);
-    const priorReceiptItem = await prisma.subcontractorReceiptItem.findFirst({
+    const incomingSet = new Set(incomingRollIds);
+    const overlappingItems = await prisma.subcontractorReceiptItem.findMany({
       where: {
         newRollId: { in: incomingRollIds },
         receipt: { stepId: data.stepId, cancelledAt: null },
       },
-      include: {
-        receipt: {
-          include: {
-            subcontractor: true,
-            step: { include: { station: true } },
-            items: { include: { newRoll: true } },
-          },
-        },
-      },
+      select: { receiptId: true },
     });
-    if (priorReceiptItem) {
-      return {
-        success: true,
-        data: priorReceiptItem.receipt,
-        message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${priorReceiptItem.receipt.receiptNo}`,
-      };
+    if (overlappingItems.length > 0) {
+      const priorReceipts = await prisma.subcontractorReceipt.findMany({
+        where: { id: { in: [...new Set(overlappingItems.map((i) => i.receiptId))] } },
+        include: {
+          subcontractor: true,
+          step: { include: { station: true } },
+          items: { include: { newRoll: true } },
+        },
+      });
+      for (const prior of priorReceipts) {
+        // Kalemler yalnız returns'ten yazılır (newRolls kalem üretmez, satır 1954)
+        // → kalem kümesi = kabul edilen dönüş topları kümesi.
+        const priorRollIds = new Set(prior.items.map((i) => i.newRollId));
+        const sameRolls =
+          priorRollIds.size === incomingSet.size &&
+          [...priorRollIds].every((id) => incomingSet.has(id));
+        if (sameRolls) {
+          return {
+            success: true,
+            data: prior,
+            message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${prior.receiptNo}`,
+          };
+        }
+      }
     }
 
     const subcontractor = await prisma.subcontractor.findUnique({
@@ -4408,7 +4423,21 @@ export class SubcontractorService {
         // directShip aynı satırı bayat cap'le aşabilirdi (shippedQty > quantity). Satırları
         // kilitle, TAZE shippedQty/quantity/status oku ve cap'i tx İÇİNDE yeniden doğrula.
         const allocLineIds = allocations.map((a) => a.orderLineId);
-        await touchOrderLinesTx(tx, allocLineIds);
+        // Kilit, tahsisli satırlardan TAM sipariş-satır kümesine genişletildi:
+        // recompute (4454) siparişin TÜM satırlarını yazar; alt-küme kilidi,
+        // dispatch/cancelShipment'ın tam-küme kilidiyle kesişince iki-parti
+        // edinim → deadlock penceresi doğururdu (order-status.helper protokolü).
+        // orderId satırın değişmez alanı — kilitsiz okunabilir.
+        const allocLineOrders = await tx.orderLine.findMany({
+          where: { id: { in: allocLineIds } },
+          select: { orderId: true },
+        });
+        const lockOrderIds = [...new Set(allocLineOrders.map((l) => l.orderId))];
+        const allOrderLines = await tx.orderLine.findMany({
+          where: { orderId: { in: lockOrderIds } },
+          select: { id: true },
+        });
+        await touchOrderLinesTx(tx, allOrderLines.map((l) => l.id));
         const freshLines = await tx.orderLine.findMany({
           where: { id: { in: allocLineIds } },
           select: {

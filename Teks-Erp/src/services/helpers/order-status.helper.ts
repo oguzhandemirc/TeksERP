@@ -163,6 +163,13 @@ export async function recomputeOrderStatus(
 /**
  * Birden çok siparişin karşılanmasını yeniden hesaplar (duplikatlar filtrelenir).
  * Sevk-tölerans ayarını BİR KEZ okur.
+ *
+ * KİLİT PROTOKOLÜ: recompute defteri KİLİTSİZ okur ve shippedQty'yi yazar —
+ * ÇAĞIRAN, bu çağrıdan önce etkilenen siparişlerin TAM satır kümesini
+ * `touchOrderLinesTx` ile TEK sıralı partide kilitlemeli (alt-küme kilidi +
+ * buradaki tam-küme yazımı = iki-parti edinim → deadlock riski; kilitsiz çağrı =
+ * eşzamanlı terminal olaylarda lost-update). Uygulayanlar: performDispatchTx,
+ * cancelShipment, subcontractor directShip.
  */
 export async function recomputeOrderStatusForOrders(
   tx: Prisma.TransactionClient,

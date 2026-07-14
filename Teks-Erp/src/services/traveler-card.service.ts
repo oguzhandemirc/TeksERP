@@ -139,9 +139,23 @@ export class TravelerCardService {
     workOrderId: string,
     userId?: string,
   ): Promise<ApiResponse<TravelerCard>> {
-    const { card, created } = await prisma.$transaction((tx) =>
-      this.createForWorkOrder(tx, workOrderId, userId),
-    );
+    const runTx = () =>
+      prisma.$transaction((tx) => this.createForWorkOrder(tx, workOrderId, userId));
+    let result: { card: TravelerCard; created: boolean };
+    try {
+      result = await runTx();
+    } catch (err) {
+      // Eşzamanlı yarış (kartsız/eski WO'ya iki paralel print): ikisi de
+      // findUnique'te kart görmez, kaybeden workOrderId @unique P2002'sine düşer.
+      // Catch tx DIŞINDA (PG aborted-tx tuzağı) — tx BİR KEZ yeniden koşulur;
+      // ikinci geçiş mevcut kartı bulup idempotent {created:false} döner (200,
+      // ham 409 yerine). Bu tx yalnız travelerCard yazar → her P2002 buraya ait.
+      const isP2002 =
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+      if (!isP2002) throw err;
+      result = await runTx();
+    }
+    const { card, created } = result;
     if (created) {
       await AuditService.log({
         userId,
@@ -174,29 +188,41 @@ export class TravelerCardService {
       throw AppError.badRequest("Yeniden basım için gerekçe zorunlu (en az 3 karakter)");
     }
 
-    const card = await prisma.$transaction(async (tx) => {
-      const existing = await tx.travelerCard.findUnique({ where: { workOrderId } });
-      if (!existing) {
-        // Kartsız (eski) WO — ilk kez üret.
-        const created = await this.createForWorkOrder(tx, workOrderId, userId);
-        return created.card;
-      }
-      if (existing.status !== TravelerCardStatus.ACTIVE) {
-        throw AppError.conflict(
-          `Kart aktif değil (${existing.status}) — iptal/tamamlanmış iş emrinin kartı yeniden basılamaz.`,
-        );
-      }
-      const snapshot = await this.buildSnapshot(tx, workOrderId);
-      return tx.travelerCard.update({
-        where: { id: existing.id },
-        data: {
-          version: existing.version + 1,
-          snapshot,
-          printedById: userId ?? null,
-          printedAt: new Date(),
-        },
+    const runTx = () =>
+      prisma.$transaction(async (tx) => {
+        const existing = await tx.travelerCard.findUnique({ where: { workOrderId } });
+        if (!existing) {
+          // Kartsız (eski) WO — ilk kez üret.
+          const created = await this.createForWorkOrder(tx, workOrderId, userId);
+          return created.card;
+        }
+        if (existing.status !== TravelerCardStatus.ACTIVE) {
+          throw AppError.conflict(
+            `Kart aktif değil (${existing.status}) — iptal/tamamlanmış iş emrinin kartı yeniden basılamaz.`,
+          );
+        }
+        const snapshot = await this.buildSnapshot(tx, workOrderId);
+        return tx.travelerCard.update({
+          where: { id: existing.id },
+          data: {
+            version: existing.version + 1,
+            snapshot,
+            printedById: userId ?? null,
+            printedAt: new Date(),
+          },
+        });
       });
-    });
+    let card: TravelerCard;
+    try {
+      card = await runTx();
+    } catch (err) {
+      // print() ile aynı yarış: kartsız-WO dalında kaybeden P2002 alır → tx BİR KEZ
+      // yeniden koşulur, ikinci geçiş mevcut kartı bulup normal reprint yolundan döner.
+      const isP2002 =
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+      if (!isP2002) throw err;
+      card = await runTx();
+    }
 
     await AuditService.log({
       userId,
@@ -307,6 +333,32 @@ export class TravelerCardService {
       woSteps.find(
         (s) => s.stationId === data.stationId && s.status !== "COMPLETED" && s.status !== "SKIPPED",
       ) ?? woSteps.find((s) => s.stationId === data.stationId);
+
+    // Çift okutma dedup'u (UX): aynı kart + istasyon + tarama tipi son 10 sn
+    // içinde kaydedildiyse yeni satır/audit YAZMA — mevcut kaydı idempotent döndür
+    // (wedge çift-burst'ü ve el titremesi yeniden-okutmayı örter; ARRIVAL/DEPARTURE
+    // ayrı scanType olduğundan meşru ardışık taramalar etkilenmez; mevcut
+    // @@index([cardId, scannedAt Desc]) sorguyu sürer). Bilinçli sınır: bu bir
+    // check-then-act penceresi — eşzamanlı iki istek yine iki satır yazabilir;
+    // append-only log için kabul, unique/kova mühendisliği yapılmadı.
+    const DUP_SCAN_WINDOW_MS = 10_000;
+    const recentDup = await prisma.travelerCardScan.findFirst({
+      where: {
+        cardId: card.id,
+        stationId: data.stationId,
+        scanType: data.scanType,
+        scannedAt: { gte: new Date(Date.now() - DUP_SCAN_WINDOW_MS) },
+      },
+      orderBy: { scannedAt: "desc" },
+      include: { station: true, step: true },
+    });
+    if (recentDup) {
+      return {
+        success: true,
+        data: recentDup,
+        message: `Tarama zaten kaydedildi (mükerrer okutma): ${card.cardNumber} @ ${recentDup.station.name}`,
+      };
+    }
 
     const scan = await prisma.travelerCardScan.create({
       data: {

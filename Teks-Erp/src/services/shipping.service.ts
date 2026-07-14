@@ -37,6 +37,7 @@ import {
   type ShipmentDispatchDoc,
 } from "./document-render/shipment-dispatch.html";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { p2002Mentions } from "../utils/p2002";
 import { readShipmentConfirmationEnabled } from "./system-setting.service";
 import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { touchWarehouseSackTx, touchShipmentPlannedTx } from "./helpers/shipment-locks.helper";
@@ -46,7 +47,7 @@ import {
   type PoolSack,
   type SackAllocLine,
 } from "./helpers/allocation.helper";
-import { recomputeOrderStatusForOrders } from "./helpers/order-status.helper";
+import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
@@ -158,9 +159,10 @@ export class ShippingService {
       branchId = branch.id;
     }
 
+    const manualSackNo = data.sackNo?.trim() || null;
     const sack = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
-        const sackNo = data.sackNo?.trim() || (await nextSackNo());
+        const sackNo = manualSackNo ?? (await nextSackNo());
         return tx.sack.create({
           data: {
             sackNo,
@@ -173,7 +175,20 @@ export class ShippingService {
           },
           select: { id: true, sackNo: true, weightKg: true, customerId: true, branchId: true },
         });
-      })
+      }),
+      undefined,
+      manualSackNo
+        ? (err) => {
+            // F61 emsali: manuel sackNo P2002'si retry EDİLMEZ (retry hep aynı sabit
+            // değeri yazar; 5 tur sonra yanıltıcı "Barkod üretimi 5 denemede başarısız"
+            // dönerdi) — doğrudan anlamlı 409. Otomatik modda predicate yok: sackNo
+            // sequence yarışı taze nextSackNo ile retry edilir (mevcut davranış).
+            if (p2002Mentions(err, /sackNo/i)) {
+              throw AppError.conflict(`Bu çuval kodu zaten kullanılıyor: ${manualSackNo}`);
+            }
+            return true;
+          }
+        : undefined,
     );
     await AuditService.log({
       userId,
@@ -502,13 +517,20 @@ export class ShippingService {
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
     if (sack.shipmentId != null) throw AppError.conflict("Sevkiyata atanmış çuvalın tartısı değiştirilemez");
 
-    await prisma.sack.update({
-      where: { id: data.sackId },
-      data: {
-        weightKg: new Prisma.Decimal(data.weightKg!),
-        weighedBy: userId ? { connect: { id: userId } } : { disconnect: true },
-        weighedAt: new Date(),
-      },
+    // Atomik claim: yukarıdaki tx-dışı guard yalnız UX (404 + okunaklı mesaj) —
+    // findUnique ile update arasında çuval bir sevkiyata claim edilebilirdi
+    // (check-then-act; tartı DISPATCH sırasında yazılırdı). Otorite kilitte:
+    // touchWarehouseSackTx WHERE shipmentId IS NULL, atanmışsa 409.
+    await prisma.$transaction(async (tx) => {
+      await touchWarehouseSackTx(tx, data.sackId);
+      await tx.sack.update({
+        where: { id: data.sackId },
+        data: {
+          weightKg: new Prisma.Decimal(data.weightKg!),
+          weighedBy: userId ? { connect: { id: userId } } : { disconnect: true },
+          weighedAt: new Date(),
+        },
+      });
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId, newData: { kind: "WEIGH", weightKg: data.weightKg } });
     return { success: true, data: {}, message: "Çuval tartısı güncellendi" };
@@ -534,10 +556,21 @@ export class ShippingService {
 
     const rolls = hasContents ? await prisma.roll.findMany({ where: { sackId }, select: { id: true, barcode: true } }) : [];
     await prisma.$transaction(async (tx) => {
-      if (hasContents) {
-        await tx.roll.updateMany({ where: { sackId }, data: { sackId: null } });
-        await tx.swatch.updateMany({ where: { sackId }, data: { sackId: null } });
+      // Atomik claim: tx-dışı shipmentId guard'ı yalnız UX — "atama-önce-silme-sonra"
+      // yarışında PLANNED (onay kapalıysa DISPATCHED) sevkiyattan çuval sessizce
+      // silinir, toplar "sevkiyatta ama çuvalsız" limboya düşerdi. Otorite kilitte
+      // (dosyadaki diğer tüm depo-çuval mutasyonlarıyla aynı desen).
+      await touchWarehouseSackTx(tx, sackId);
+      // İçerik sayımı kilit ALTINDA taze — tx-dışı _count bayat olabilir (araya
+      // giren okutma dolu çuvalı "boş" diye sildirtmesin). updateMany'ler koşulsuz
+      // (boş çuvalda no-op); tx-dışı sayımlar yalnız audit/mesaj için kalır.
+      const freshRolls = await tx.roll.count({ where: { sackId } });
+      const freshSwatches = await tx.swatch.count({ where: { sackId } });
+      if (!withContents && freshRolls + freshSwatches > 0) {
+        throw AppError.conflict("Dolu çuval silinemez — önce içindeki top/kartelaları başka çuvala aktar veya depoya çıkar");
       }
+      await tx.roll.updateMany({ where: { sackId }, data: { sackId: null } });
+      await tx.swatch.updateMany({ where: { sackId }, data: { sackId: null } });
       await tx.sack.delete({ where: { id: sackId } });
     });
     await AuditService.log({
@@ -1022,7 +1055,16 @@ export class ShippingService {
     const flipped = await tx.roll.updateMany({ where: { shipmentId, status: { not: RollStatus.SHIPPED } }, data: { status: RollStatus.SHIPPED } });
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
     const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
-    await recomputeOrderStatusForOrders(tx, orderRows.map((o) => o.orderId));
+    // Lost-update kilidi: recompute defteri KİLİTSİZ okuyup shippedQty yazar — READ
+    // COMMITTED altında aynı siparişe eşzamanlı iki terminal olay (iki dispatch, ya da
+    // dispatch ∥ fason directShip) birbirinin commit'ini görmeden eksik toplam yazardı
+    // (order-status.helper doc'u). Protokol: etkilenen siparişlerin TAM satır kümesi
+    // recompute'tan ÖNCE tek sıralı touchOrderLinesTx partisiyle kilitlenir
+    // (subcontractor directShip ile aynı; alt-küme kilidi deadlock riski taşır).
+    const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
+    const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
+    await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
+    await recomputeOrderStatusForOrders(tx, orderIds);
     // Resmi belge — sevk irsaliyesi v1 burada donar.
     await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
     return flipped.count;
@@ -1111,13 +1153,19 @@ export class ShippingService {
       if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
       // Tahsisleri sil (çuval.shipmentId null'lanmadan ÖNCE — yoksa where eşleşmez) + sipariş defteri.
       const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+      // Lost-update kilidi (performDispatchTx ile simetrik): defter mutasyonu
+      // (deleteMany) + recompute, etkilenen siparişlerin TAM satır kümesi kilitliyken
+      // koşar — eşzamanlı dispatch/iptal shippedQty'yi eksik yazamaz.
+      const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
+      const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
+      await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
       await tx.sackAllocation.deleteMany({ where: { sack: { shipmentId } } });
       await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
       // Çuvallar depoya döner; içerik shipmentId null.
       await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
       await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
       await tx.sack.updateMany({ where: { shipmentId }, data: { shipmentId: null, seq: null } });
-      await recomputeOrderStatusForOrders(tx, orderRows.map((o) => o.orderId));
+      await recomputeOrderStatusForOrders(tx, orderIds);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "CANCEL", freedSacks: shipment._count.sacks } });
     return { success: true, data: { shipmentId, freedSacks: shipment._count.sacks }, message: "Sevkiyat iptal edildi — çuvallar depoya döndü" };
