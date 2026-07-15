@@ -121,6 +121,8 @@ router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:f
  *         description: İş emri bulunamadı
  */
 router.get("/:id/branches", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getBranches);
+// Parti rota-zaman çizelgesi (birleşik hareket+operasyon geçmişi, adıma göre).
+router.get("/:id/batches/:batchId/timeline", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getBatchTimeline);
 
 /**
  * @openapi

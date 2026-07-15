@@ -211,6 +211,7 @@ export class WorkOrderController {
     this.checkBatchNumber = this.checkBatchNumber.bind(this);
     this.findById = this.findById.bind(this);
     this.getBranches = this.getBranches.bind(this);
+    this.getBatchTimeline = this.getBatchTimeline.bind(this);
     this.getSplitPreview = this.getSplitPreview.bind(this);
     this.splitBranch = this.splitBranch.bind(this);
     this.getManualMovePreview = this.getManualMovePreview.bind(this);
@@ -321,6 +322,26 @@ export class WorkOrderController {
   async getBranches(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getBranches(req.params.id as string);
+      if (!result.success) {
+        res.status(404).json(result);
+        return;
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/batches/:batchId/timeline — parti rota-zaman çizelgesi
+   * (birleşik hareket + operasyon geçmişi, adıma göre gruplu).
+   */
+  async getBatchTimeline(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getBatchTimeline(
+        req.params.id as string,
+        req.params.batchId as string,
+      );
       if (!result.success) {
         res.status(404).json(result);
         return;

@@ -1419,7 +1419,7 @@ export class WorkOrderService {
           include: {
             orderLine: {
               include: {
-                order: { include: { customer: true } },
+                order: { include: { customer: true, branch: { select: { id: true, name: true } } } },
                 item: true,
                 color: true,
                 requiredProperties: { include: { property: true } },
@@ -2033,6 +2033,100 @@ export class WorkOrderService {
           createdAt: c.createdAt,
           targetColor: c.targetColor,
         })),
+      },
+    };
+  }
+
+  /**
+   * Parti rota-zaman çizelgesi (birleşik geçmiş) — partinin TÜM toplarının hareket
+   * (RollMovement: adım giriş/çıkış) ve operasyon (RollOperation: kurşun/QC2/tambur/
+   * fason) log'unu ADIMA göre toplar. Performans: per-top `/rolls/:id/history` yerine
+   * TEK istek + toplu (in-list) sorgu (1 round-trip). Tambur-split kopya operasyonları
+   * (inheritedFromParentRollId) hariç → çift sayım yok.
+   */
+  async getBatchTimeline(workOrderId: string, batchId: string): Promise<ApiResponse<unknown>> {
+    const batch = await prisma.batch.findFirst({
+      where: { id: batchId, workOrderId },
+      select: { id: true, batchNumber: true },
+    });
+    if (!batch) {
+      return { success: false, data: null, message: "Parti bulunamadı" };
+    }
+
+    const rolls = await prisma.roll.findMany({ where: { batchId }, select: { id: true } });
+    const rollIds = rolls.map((r) => r.id);
+
+    const [steps, movements, operations] = await Promise.all([
+      prisma.workOrderStep.findMany({
+        where: { workOrderId },
+        orderBy: { stepSequence: "asc" },
+        select: { id: true, stepSequence: true, station: { select: { name: true, type: true } } },
+      }),
+      prisma.rollMovement.findMany({
+        where: { rollId: { in: rollIds } },
+        select: { workOrderStepId: true, rollId: true, enteredAt: true, exitedAt: true },
+      }),
+      prisma.rollOperation.findMany({
+        where: { rollId: { in: rollIds }, inheritedFromParentRollId: null },
+        select: {
+          workOrderStepId: true,
+          operationType: true,
+          createdAt: true,
+          operator: { select: { fullName: true, username: true } },
+        },
+      }),
+    ]);
+
+    const timelineSteps = steps.map((s) => {
+      const stepMovements = movements.filter((m) => m.workOrderStepId === s.id);
+      const stepOps = operations.filter((o) => o.workOrderStepId === s.id);
+      const enteredTimes = stepMovements.map((m) => m.enteredAt.getTime());
+      const exitedMovements = stepMovements.filter((m) => m.exitedAt != null);
+      const allExited = stepMovements.length > 0 && exitedMovements.length === stepMovements.length;
+
+      const opMap = new Map<
+        string,
+        { type: string; count: number; lastAt: Date; operators: Set<string> }
+      >();
+      for (const o of stepOps) {
+        const cur =
+          opMap.get(o.operationType) ??
+          { type: o.operationType, count: 0, lastAt: o.createdAt, operators: new Set<string>() };
+        cur.count += 1;
+        if (o.createdAt > cur.lastAt) cur.lastAt = o.createdAt;
+        const name = o.operator?.fullName ?? o.operator?.username;
+        if (name) cur.operators.add(name);
+        opMap.set(o.operationType, cur);
+      }
+
+      return {
+        stepId: s.id,
+        stepSequence: s.stepSequence,
+        stationName: s.station?.name ?? "—",
+        stationType: s.station?.type ?? null,
+        visited: stepMovements.length > 0,
+        rollCount: new Set(stepMovements.map((m) => m.rollId)).size,
+        enteredAt: enteredTimes.length ? new Date(Math.min(...enteredTimes)) : null,
+        exitedAt:
+          allExited && exitedMovements.length
+            ? new Date(Math.max(...exitedMovements.map((m) => m.exitedAt!.getTime())))
+            : null,
+        operations: [...opMap.values()].map((o) => ({
+          type: o.type,
+          count: o.count,
+          lastAt: o.lastAt,
+          operators: [...o.operators],
+        })),
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        batchId: batch.id,
+        batchNumber: batch.batchNumber,
+        rollCount: rollIds.length,
+        steps: timelineSteps,
       },
     };
   }
