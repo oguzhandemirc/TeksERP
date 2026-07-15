@@ -1108,9 +1108,18 @@ export class SubcontractorService {
           .filter((x): x is string => !!x)
       ),
     ];
-    // Parti (batchId) → firma: partinin AÇIK sevkinin firması (K10).
+    // Parti (batchId) → firma: partinin BU ADIMDAKİ açık sevkinin firması (K10).
+    // stepId scope ŞART: bir parti birden fazla fason adımından geçmişse
+    // (ör. Zımpara→Boyahane), önceki adımın kabul edilmiş dispatch'i hâlâ
+    // cancelledAt=null olur; stepId olmadan batchId→firma 1'e-çok olur ve
+    // Map sona geleni (bayat firma) tutup yanlış "farklı firma" üretir.
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: { batchId: { in: batchIds }, cancelledAt: null },
+      where: {
+        batchId: { in: batchIds },
+        stepId: data.stepId,
+        cancelledAt: null,
+        directShippedAt: null,
+      },
       select: { batchId: true, subcontractorId: true },
     });
     const firmByBatch = new Map(dispatches.map((d) => [d.batchId, d.subcontractorId]));
@@ -1826,6 +1835,10 @@ export class SubcontractorService {
     // F74: dönen topların kaynak sevk firması, seçilen firmayla (data.subcontractorId)
     // eşleşmeli — yoksa farklı firmaya ait toplar bu makbuza karışır (firma başına
     // ayrı kabul olmalı). Kaynak dispatch: `Roll.batchId` → `SubcontractorDispatch.batchId`.
+    // stepId scope ŞART: parti birden fazla fason adımından geçmişse (ör.
+    // Zımpara→Boyahane), önceki adımın kabul edilmiş dispatch'i hâlâ cancelledAt=null
+    // kalır; stepId olmadan batchId→firma 1'e-çok olur, Map bayat firmayı tutar ve
+    // aynı firmaya doğru yapılan kabulde bile yanlış "farklı firma" hatası üretir.
     const returnedRolls = outstandingRolls.filter((r) => returnIds.has(r.id));
     const srcBatchIds = [
       ...new Set(returnedRolls.map((r) => r.batchId).filter((x): x is string => !!x)),
@@ -1833,7 +1846,12 @@ export class SubcontractorService {
     const srcDispatches =
       srcBatchIds.length > 0
         ? await prisma.subcontractorDispatch.findMany({
-            where: { batchId: { in: srcBatchIds }, cancelledAt: null },
+            where: {
+              batchId: { in: srcBatchIds },
+              stepId: data.stepId,
+              cancelledAt: null,
+              directShippedAt: null,
+            },
             select: { batchId: true, subcontractorId: true },
           })
         : [];
