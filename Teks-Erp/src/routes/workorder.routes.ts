@@ -164,6 +164,32 @@ router.post("/:id/split", verifyToken, requirePermission("workorder:write"), con
 
 /**
  * @openapi
+ * /api/work-orders/{id}/manual-move-preview:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Manuel konum düzeltme önizleme (süpervizör override) — salt-okunur
+ *     description: Seçili parti/topların hedef adıma taşınması önizlemesi; taşınabilir/engelli toplar + parti kararı + uyarılar.
+ *     security: [ { bearerAuth: [] } ]
+ *     responses:
+ *       200: { description: Önizleme }
+ */
+router.post("/:id/manual-move-preview", verifyToken, requirePermission("workorder:read"), controller.getManualMovePreview);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/manual-move:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Parti/top bazında rotada manuel taşıma (süpervizör override)
+ *     description: DB'ye elle müdahale yerine panelden; toplar hedef adıma taşınır (ileri/geri), parti kimliği keep/new/join ile kararlaşır. Fasonda/sevkli/işlenmiş toplar engellenir.
+ *     security: [ { bearerAuth: [] } ]
+ *     responses:
+ *       200: { description: Taşındı }
+ */
+router.post("/:id/manual-move", verifyToken, requirePermission("workorder:write"), controller.manualMove);
+
+/**
+ * @openapi
  * /api/work-orders/{id}/travel-card:
  *   get:
  *     tags: [WorkOrders]

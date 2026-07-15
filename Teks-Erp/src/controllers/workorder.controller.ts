@@ -108,6 +108,31 @@ const splitBranchSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+// Manuel konum düzeltme: parti (batchId) VEYA seçili toplar (rollIds) → hedef adım.
+const manualMovePreviewSchema = z
+  .object({
+    batchId: z.string().uuid().optional(),
+    rollIds: z.array(z.string().uuid()).max(500).optional(),
+    targetStepId: z.string().uuid(),
+  })
+  .refine((v) => Boolean(v.batchId) || (v.rollIds && v.rollIds.length > 0), {
+    message: "batchId veya rollIds gerekli",
+  });
+
+const manualMoveSchema = z
+  .object({
+    batchId: z.string().uuid().optional(),
+    rollIds: z.array(z.string().uuid()).max(500).optional(),
+    targetStepId: z.string().uuid(),
+    /** keep = kimlik korunur · new = yeni parti (splitFrom) · join = hedef partiye kat. */
+    partyMode: z.enum(["keep", "new", "join"]).optional(),
+    joinBatchId: z.string().uuid().optional(),
+    reason: z.string().min(3).max(500),
+  })
+  .refine((v) => Boolean(v.batchId) || (v.rollIds && v.rollIds.length > 0), {
+    message: "batchId veya rollIds gerekli",
+  });
+
 const updateStepPlanningSchema = z.object({
   requiredCategoryId: z.string().uuid().nullable().optional(),
   plannedSubcontractorId: z.string().uuid().nullable().optional(),
@@ -188,6 +213,8 @@ export class WorkOrderController {
     this.getBranches = this.getBranches.bind(this);
     this.getSplitPreview = this.getSplitPreview.bind(this);
     this.splitBranch = this.splitBranch.bind(this);
+    this.getManualMovePreview = this.getManualMovePreview.bind(this);
+    this.manualMove = this.manualMove.bind(this);
     this.updateStepPlanning = this.updateStepPlanning.bind(this);
     this.update = this.update.bind(this);
     this.replace = this.replace.bind(this);
@@ -330,6 +357,33 @@ export class WorkOrderController {
       const body = splitBranchSchema.parse(req.body);
       const result = await this.service.splitBranch(req.params.id as string, body, req.user?.userId);
       res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/work-orders/:id/manual-move-preview — manuel konum düzeltme önizleme
+   * (salt-okunur; rollIds array gövdede taşınsın diye POST).
+   */
+  async getManualMovePreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = manualMovePreviewSchema.parse(req.body);
+      const result = await this.service.getManualMovePreview(req.params.id as string, body);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/work-orders/:id/manual-move — parti/top bazında rotada manuel taşıma
+   */
+  async manualMove(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = manualMoveSchema.parse(req.body);
+      const result = await this.service.manualMove(req.params.id as string, body, req.user?.userId);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

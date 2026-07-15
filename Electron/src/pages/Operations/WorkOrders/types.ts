@@ -39,6 +39,17 @@ export interface StepRollItem {
   kind: "raw" | "dyed" | "open";
   item: { id: string; code: string; name: string } | null;
   color: { id: string; code: string; name: string; hex: string | null } | null;
+  /** Hangi partiye üye — "hangi top hangi partide" sorusu için. */
+  batchNumber: string | null;
+}
+
+/** Bir fason sevkinde BİRLİKTE giden tek bir top (sevk kalemi). */
+export interface StepDispatchRoll {
+  id: string;
+  barcode: string | null;
+  dispatchedQty: number;
+  item: { name: string } | null;
+  color: { name: string; hex: string | null } | null;
 }
 
 /** findById response'unda step başına aktif fason sevkler (plaka / sürücü / not). */
@@ -56,6 +67,10 @@ export interface StepDispatch {
   stepNote: string | null;
   subcontractor: { id: string; name: string };
   dispatchedBy: { id: string; fullName: string | null; username: string } | null;
+  /** Bir sevk = bir parti (K10) — bu sevkte hangi partinin topları gitti. */
+  batchNumber: string | null;
+  /** Bu sevkte BİRLİKTE giden toplar — "hangi toplar birlikte o fasona gitti". */
+  rolls: StepDispatchRoll[];
 }
 
 export interface WorkOrderStepLite {

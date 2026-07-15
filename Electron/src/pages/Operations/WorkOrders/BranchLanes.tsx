@@ -4,8 +4,10 @@ import { toast } from "sonner";
 import {
   ArrowRight,
   ArrowUpRight,
+  ChevronDown,
   GitMerge,
   Lock,
+  MoveHorizontal,
   Printer,
   RefreshCw,
   Split,
@@ -33,7 +35,9 @@ import { DirectShipModal } from "./DirectShipModal";
 import { UndoTransferModal } from "./UndoTransferModal";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { BatchCorrectModal } from "./BatchCorrectModal";
+import { ManualMoveModal } from "./ManualMoveModal";
 import { Wrench } from "lucide-react";
+import type { BatchLaneRoll } from "./service";
 
 const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> = {
   OPEN: { label: "Fasonda", cls: "border-warning/40 bg-warning/10 text-warning" },
@@ -77,6 +81,11 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
   const [correctTarget, setCorrectTarget] = useState<{ batchId: string; batchNumber: string } | null>(
     null,
   );
+  const [moveTarget, setMoveTarget] = useState<{
+    batchId: string;
+    batchNumber: string;
+    rolls: BatchLaneRoll[];
+  } | null>(null);
 
   const batches = q.data?.data?.batches ?? [];
   const splitFrom = q.data?.data?.splitFrom ?? null;
@@ -158,6 +167,9 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
               ? undefined
               : () => setCorrectTarget({ batchId: b.batchId, batchNumber: b.batchNumber })
           }
+          onManualMove={() =>
+            setMoveTarget({ batchId: b.batchId, batchNumber: b.batchNumber, rolls: b.rolls ?? [] })
+          }
           onTebdil={(opts) =>
             setTebdilTarget({
               batchId: b.batchId,
@@ -210,6 +222,12 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
           .filter((b) => !b.locked && b.batchId !== correctTarget?.batchId)
           .map((b) => ({ batchId: b.batchId, batchNumber: b.batchNumber }))}
       />
+      <ManualMoveModal
+        open={Boolean(moveTarget)}
+        onOpenChange={(o) => !o && setMoveTarget(null)}
+        workOrderId={workOrderId}
+        source={moveTarget}
+      />
       <ConfirmDialog
         open={confirmMerge}
         onOpenChange={setConfirmMerge}
@@ -233,6 +251,7 @@ function BatchLaneCard({
   selected,
   onToggleSelect,
   onCorrect,
+  onManualMove,
   onTebdil,
   onDirectShip,
   onUndoTransfer,
@@ -245,6 +264,8 @@ function BatchLaneCard({
   onToggleSelect: () => void;
   /** Sevksiz partide K8 düzeltme (top taşı / yeni partiye böl). Kilitliyse undefined. */
   onCorrect?: () => void;
+  /** Süpervizör "Konumu Düzelt" — rotada ileri/geri manuel taşıma (parti/top bazında). */
+  onManualMove: () => void;
   /** Tebdil sihirbazı — normal (ayır/yeniden boya) veya dispatchOnly (badge'den yalnız sevk). */
   onTebdil: (opts?: { dispatchOnly?: boolean }) => void;
   onDirectShip: (d: BatchLaneDispatch) => void;
@@ -255,6 +276,9 @@ function BatchLaneCard({
   const dispatches = [...batch.dispatches].sort((a, b) =>
     b.dispatchedAt.localeCompare(a.dispatchedAt),
   );
+  // Top listesi varsayılan KAPALI — parti kalabalık olabilir; "kaç top" özeti zaten
+  // her zaman görünür, tek tek kimlik istenince açılır.
+  const [rollsOpen, setRollsOpen] = useState(false);
   return (
     <Card
       className={cn(
@@ -324,6 +348,20 @@ function BatchLaneCard({
               </Button>
             </PermissionGate>
           )}
+          {/* Konumu Düzelt: süpervizör override — partiyi/topları rotada ileri-geri taşı
+              (Kurşun↔Tambur). K8 "Düzelt"ten ayrı: bu rota konumu, o parti içi idari. */}
+          <PermissionGate permission="workorder:write">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={onManualMove}
+              title="Rotada ileri/geri taşı (konum düzeltme)"
+            >
+              <MoveHorizontal className="h-3.5 w-3.5" />
+              Konumu Düzelt
+            </Button>
+          </PermissionGate>
           {/* Tebdil / Yeniden Boyat: sihirbaz parti durumundan izinli modları türetir
               (aynı renk yeniden boya · farklı renk yeni İE · boyanmadan taşı). */}
           <PermissionGate permission="workorder:write">
@@ -340,7 +378,15 @@ function BatchLaneCard({
 
         {/* İçerik: parti toplarının şu anki konum dağılımı */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="rounded bg-muted px-1.5 py-0.5 tabular-nums">{batch.rollCount} top</span>
+          <button
+            type="button"
+            onClick={() => setRollsOpen((v) => !v)}
+            className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 tabular-nums hover:bg-muted/70"
+            title={rollsOpen ? "Top listesini gizle" : "Hangi top hangi partide — listeyi göster"}
+          >
+            {batch.rollCount} top
+            <ChevronDown className={cn("h-3 w-3 transition-transform", rollsOpen && "rotate-180")} />
+          </button>
           {batch.currentPositions.length > 0 && (
             <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
           )}
@@ -353,6 +399,42 @@ function BatchLaneCard({
             </span>
           ))}
         </div>
+
+        {/* Tek tek top kimliği — "hangi partide hangi top var" (varsayılan kapalı).
+            batch.rolls opsiyonel: eski/önbelleğe alınmış API yanıtında olmayabilir. */}
+        {rollsOpen && (batch.rolls?.length ?? 0) > 0 && (
+          <ul className="divide-y rounded-md border bg-muted/20 text-[11px]">
+            {batch.rolls.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-2 px-2 py-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {r.barcode ? (
+                    <span className="font-mono">{r.barcode}</span>
+                  ) : (
+                    <span className="italic text-muted-foreground">Açık kumaş</span>
+                  )}
+                  {r.item && <span className="truncate font-medium">{r.item.name}</span>}
+                  {r.color && (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      {r.color.hex && (
+                        <span
+                          className="h-2 w-2 rounded-full border border-black/10"
+                          style={{ backgroundColor: r.color.hex }}
+                        />
+                      )}
+                      {r.color.name}
+                    </span>
+                  )}
+                  <span className="shrink-0 rounded bg-primary/10 px-1 text-[10px] text-primary">
+                    {r.positionLabel}
+                  </span>
+                </div>
+                <span className="shrink-0 font-medium tabular-nums">
+                  {formatNumber(r.currentQty, 0)} m
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {/* Soy bağı — aynı iş emri içinde redye ile ayrılan/kaynak parti */}
         {(batch.splitFrom || batch.splitChildren.length > 0) && (

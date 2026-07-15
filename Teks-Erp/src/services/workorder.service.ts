@@ -64,6 +64,7 @@ import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-loc
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { createBatchTx, type CreateBatchResult } from "./batch.service";
 import { WorkOrderSplitService } from "./workorder-split.service";
+import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
 import { loadQualityTargetMaps, resolveFinalStatus } from "./helpers/roll-finalize.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
@@ -80,6 +81,7 @@ function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
 }
 
 const workOrderSplitService = new WorkOrderSplitService();
+const workOrderManualMoveService = new WorkOrderManualMoveService();
 const travelerCardService = new TravelerCardService();
 
 /**
@@ -1523,6 +1525,8 @@ export class WorkOrderService {
         kind: "raw" | "dyed" | "open";
         item: { id: string; code: string; name: string } | null;
         color: { id: string; code: string; name: string; hex: string | null } | null;
+        /** Hangi partiye üye — "hangi top hangi partide" sorusu için (F: Rota&Dağılım). */
+        batchNumber: string | null;
       }>
     >();
     // Per-step fason sevk bilgisi — plaka / sürücü / not detayı için.
@@ -1541,6 +1545,16 @@ export class WorkOrderService {
         stepNote: string | null;
         subcontractor: { id: string; name: string };
         dispatchedBy: { id: string; fullName: string | null; username: string } | null;
+        /** Bir sevk = bir parti (K10) — bu sevkte hangi partinin topları gitti. */
+        batchNumber: string | null;
+        /** Bu sevkte BİRLİKTE giden toplar (barkod+ürün+renk) — "hangi toplar birlikte gitti". */
+        rolls: Array<{
+          id: string;
+          barcode: string | null;
+          dispatchedQty: number;
+          item: { name: string } | null;
+          color: { name: string; hex: string | null } | null;
+        }>;
       }>
     >();
 
@@ -1559,6 +1573,7 @@ export class WorkOrderService {
           qualityGrade: true,
           item: { select: { id: true, code: true, name: true } },
           color: { select: { id: true, code: true, name: true, hex: true } },
+          batch: { select: { batchNumber: true } },
         },
         orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
       });
@@ -1616,6 +1631,7 @@ export class WorkOrderService {
           kind,
           item: r.item,
           color: r.color,
+          batchNumber: r.batch?.batchNumber ?? null,
         });
         stepRolls.set(key, list);
       }
@@ -1634,6 +1650,21 @@ export class WorkOrderService {
           instruction: true,
           subcontractor: { select: { id: true, name: true } },
           dispatchedBy: { select: { id: true, fullName: true, username: true } },
+          batch: { select: { batchNumber: true } },
+          // Bir sevk = bir parti (K10) — sevkte BİRLİKTE giden topların kimliği.
+          items: {
+            select: {
+              dispatchedQty: true,
+              roll: {
+                select: {
+                  id: true,
+                  barcode: true,
+                  item: { select: { name: true } },
+                  color: { select: { name: true, hex: true } },
+                },
+              },
+            },
+          },
         },
         orderBy: { dispatchedAt: "desc" },
       });
@@ -1652,6 +1683,14 @@ export class WorkOrderService {
           stepNote: stepNotesById.get(d.stepId) ?? null,
           subcontractor: d.subcontractor,
           dispatchedBy: d.dispatchedBy,
+          batchNumber: d.batch?.batchNumber ?? null,
+          rolls: d.items.map((it) => ({
+            id: it.roll.id,
+            barcode: it.roll.barcode,
+            dispatchedQty: Number(it.dispatchedQty),
+            item: it.roll.item,
+            color: it.roll.color,
+          })),
         });
         stepDispatches.set(d.stepId, list);
       }
@@ -1842,10 +1881,15 @@ export class WorkOrderService {
           where: {
             status: { notIn: ["SUBCONTRACTOR_CONSUMED", "TAMBUR_CONSUMED", "CANCELLED"] },
           },
+          orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
           select: {
+            id: true,
+            barcode: true,
             currentQty: true,
             status: true,
             currentStep: { select: { station: { select: { name: true, type: true } } } },
+            item: { select: { name: true } },
+            color: { select: { name: true, hex: true } },
           },
         },
         // Partinin fason sevkleri (K10) — durum türetimi (açık/kısmi/döndü) için.
@@ -1960,6 +2004,16 @@ export class WorkOrderService {
         cardBarcode: card?.barcode ?? null,
         rollCount: b.rolls.length,
         currentPositions: [...positions.values()],
+        // "Hangi partide hangi top var" — count'un ötesinde tek tek kimlik (F: Partiler).
+        rolls: b.rolls.map((r) => ({
+          id: r.id,
+          barcode: r.barcode,
+          status: r.status,
+          currentQty: Number(r.currentQty),
+          positionLabel: r.currentStep?.station?.name ?? statusLabel(r.status),
+          item: r.item,
+          color: r.color,
+        })),
         dispatches: dispatchViews,
         splitFrom: b.splitFrom,
         splitChildren: b.splitChildren,
@@ -2009,6 +2063,30 @@ export class WorkOrderService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     return workOrderSplitService.splitBranch(workOrderId, data, userId);
+  }
+
+  /** Manuel konum düzeltme önizlemesi (süpervizör override) — hiçbir şeyi değiştirmez. */
+  async getManualMovePreview(
+    workOrderId: string,
+    input: { batchId?: string; rollIds?: string[]; targetStepId: string },
+  ): Promise<ApiResponse<unknown>> {
+    return workOrderManualMoveService.getManualMovePreview(workOrderId, input);
+  }
+
+  /** Parti/top bazında rotada manuel taşıma (süpervizör override). */
+  async manualMove(
+    workOrderId: string,
+    input: {
+      batchId?: string;
+      rollIds?: string[];
+      targetStepId: string;
+      partyMode?: PartyMode;
+      joinBatchId?: string;
+      reason: string;
+    },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    return workOrderManualMoveService.manualMove(workOrderId, input, userId);
   }
 
   /**

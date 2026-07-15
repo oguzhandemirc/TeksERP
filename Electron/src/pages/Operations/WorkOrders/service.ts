@@ -164,6 +164,32 @@ export const workOrderService = {
       >("/api/batches/merge", { batchIds })
       .then((r) => r.data),
 
+  /** Manuel konum düzeltme önizlemesi (süpervizör override) — hiçbir şeyi değiştirmez.
+   *  Taşınabilir/engelli toplar + parti kararı gerekli mi + join adayları + uyarılar. */
+  getManualMovePreview: (
+    id: string,
+    payload: { batchId?: string; rollIds?: string[]; targetStepId: string },
+  ) =>
+    apiClient
+      .post<ApiResponse<ManualMovePreview>>(`/api/work-orders/${id}/manual-move-preview`, payload)
+      .then((r) => r.data),
+
+  /** Manuel konum düzeltme uygula — parti/top rotada ileri-geri taşınır (gerekçe zorunlu). */
+  manualMove: (
+    id: string,
+    payload: {
+      batchId?: string;
+      rollIds?: string[];
+      targetStepId: string;
+      partyMode?: ManualMovePartyMode;
+      joinBatchId?: string;
+      reason: string;
+    },
+  ) =>
+    apiClient
+      .post<ApiResponse<ManualMoveResult>>(`/api/work-orders/${id}/manual-move`, payload)
+      .then((r) => r.data),
+
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
   getCoverage: (lineIds: string[], excludeWorkOrderId?: string) =>
     apiClient
@@ -342,6 +368,48 @@ export interface UndoTransferPreview {
   }[];
 }
 
+/** Manuel taşımada parti kararı — backend `PartyMode` ile birebir.
+ *  keep = kimlik korunur (tüm parti) · new = yeni parti (splitFrom) · join = hedef partiye kat. */
+export type ManualMovePartyMode = "keep" | "new" | "join";
+
+/** Manuel taşıma önizlemesindeki tek top (taşınabilir mi + neden değil). */
+export interface ManualMovePreviewRoll {
+  id: string;
+  barcode: string | null;
+  batchNumber: string | null;
+  currentStepId: string | null;
+  /** Şu anki konumu (istasyon adı / "Depo" / "—"). */
+  currentStepName: string;
+  currentQty: number;
+  movable: boolean;
+  blockReason: string | null;
+}
+
+/** Manuel taşıma önizlemesi (backend getManualMovePreview). */
+export interface ManualMovePreview {
+  targetStep: { id: string; stepSequence: number; name: string | null; type: string | null };
+  /** Seçim tek partinin TÜM canlı topları mı (→ kimlik korunur, karar gerekmez). */
+  isWholeParty: boolean;
+  /** Kısmi taşıma → parti kararı (new/join) gerekir. */
+  partyDecisionNeeded: boolean;
+  rolls: ManualMovePreviewRoll[];
+  movableCount: number;
+  blockedCount: number;
+  /** 'join' adayları — aynı WO'da sevksiz (kilitsiz) diğer partiler. */
+  candidateJoinParties: { batchId: string; batchNumber: string }[];
+  warnings: string[];
+}
+
+/** Manuel taşıma sonucu. */
+export interface ManualMoveResult {
+  movedRollCount: number;
+  targetStepName: string | null;
+  partyMode: ManualMovePartyMode;
+  newBatchNumber: string | null;
+  /** Tamamlanmış WO taşıma ile yeniden açıldıysa true. */
+  reopened: boolean;
+}
+
 /** Parti (Batch) modeli ayırma modları — backend `SplitMode` ile birebir. */
 export type SplitMode = "REDYE_SAME_COLOR" | "NEW_COLOR" | "UNDYED_MOVE";
 
@@ -388,6 +456,18 @@ export interface BatchLineageRef {
   batchNumber: string;
 }
 
+/** Parti üyesi TEK top — "hangi partide hangi top var" sorusunun cevabı (kimlik). */
+export interface BatchLaneRoll {
+  id: string;
+  barcode: string | null;
+  status: string;
+  currentQty: number;
+  /** Şu anki konumu (istasyon adı veya statü etiketi — currentPositions'ın kaynağı). */
+  positionLabel: string;
+  item: { name: string } | null;
+  color: { name: string; hex: string | null } | null;
+}
+
 /**
  * Bir parti lane'i = bir Batch. Üye topların şu anki konum dağılımı, aktif refakat
  * kartı, fason sevkleri (K10) ve soy bağı (splitFrom / splitChildren). Kilit
@@ -408,6 +488,8 @@ export interface BatchLane {
   cardBarcode: string | null;
   rollCount: number;
   currentPositions: BatchLanePosition[];
+  /** Partinin toplarının tek tek listesi — "hangi partide hangi top var". */
+  rolls: BatchLaneRoll[];
   dispatches: BatchLaneDispatch[];
   /** Aynı WO içinde bu partinin ayrıldığı kaynak parti (redye). */
   splitFrom: BatchLineageRef | null;

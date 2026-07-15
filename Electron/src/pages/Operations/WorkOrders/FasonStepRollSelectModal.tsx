@@ -116,6 +116,11 @@ export function FasonStepRollSelectModal({
                   <Checkbox checked={on} onCheckedChange={(v) => toggleRoll(r.id, Boolean(v))} />
                   <span className="flex min-w-0 flex-1 items-center gap-1.5">
                     <span className="font-mono">{r.barcode ?? "açık kumaş"}</span>
+                    {r.batchNumber && (
+                      <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+                        {r.batchNumber}
+                      </Badge>
+                    )}
                     {r.item && <span className="truncate text-muted-foreground">{r.item.name}</span>}
                     {r.color && (
                       <Badge variant="muted" className="text-[10px]">
