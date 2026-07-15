@@ -23,6 +23,7 @@ import { createBatchTx, deleteIfEmptyAndTraceless, type CreateBatchResult } from
 import {
   Prisma,
   PrintedDocType,
+  RollEntrySource,
   RollOperationType,
   RollStatus,
   RollForm,
@@ -240,6 +241,144 @@ function buildPendingParties<
 // -----------------------------------------------------------------------------
 // Service
 // -----------------------------------------------------------------------------
+
+/**
+ * Fasonda (AT_SUBCONTRACTOR) bir topun KISMİ metrajını sevk için çocuk top yaratır —
+ * cutWarehouseRoll deseninin fason-adım uyarlaması. Çocuk = sevk edilen metre (yeni
+ * barkod, parent+parti+kalite+özellik+kurşun/QC2 kalıtımı, fason adımında AT_SUBCONTRACTOR,
+ * IN-movement). Orijinal atomik decrement ile kalan metreye iner (fasonda AT_SUBCONTRACTOR
+ * kalır, barkodu korunur). Döner: çocuk top id — çağıran onu consume/operation akışına besler.
+ */
+async function createFasonShipChild(
+  tx: Prisma.TransactionClient,
+  parent: {
+    id: string;
+    itemId: string;
+    colorId: string | null;
+    width: Prisma.Decimal | null;
+    qualityGrade: string | null;
+    qualityGradeId: string | null;
+    batchId: string | null;
+  },
+  shipQty: number,
+  stepId: string,
+  userId?: string,
+): Promise<string> {
+  const barcode = await generateRollBarcode(tx, "H");
+  const props = await tx.rollProperty.findMany({
+    where: { rollId: parent.id },
+    select: { propertyId: true },
+  });
+  const child = await tx.roll.create({
+    data: {
+      barcode,
+      itemId: parent.itemId,
+      colorId: parent.colorId,
+      width: parent.width,
+      initialQty: shipQty,
+      currentQty: shipQty,
+      status: RollStatus.AT_SUBCONTRACTOR,
+      currentStepId: stepId,
+      qualityGrade: parent.qualityGrade,
+      qualityGradeId: parent.qualityGradeId,
+      parentRollId: parent.id,
+      batchId: parent.batchId,
+      entrySource: RollEntrySource.TAMBUR_SPLIT,
+      createdById: userId ?? null,
+    },
+  });
+  if (props.length > 0) {
+    await tx.rollProperty.createMany({
+      data: props.map((p) => ({ rollId: child.id, propertyId: p.propertyId })),
+      skipDuplicates: true,
+    });
+  }
+  const ops = await tx.rollOperation.findMany({
+    where: {
+      rollId: parent.id,
+      operationType: { in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED] },
+    },
+    select: {
+      workOrderStepId: true,
+      operationType: true,
+      operatorId: true,
+      metadata: true,
+      machineId: true,
+    },
+  });
+  if (ops.length > 0) {
+    await tx.rollOperation.createMany({
+      data: ops.map((op) => ({
+        rollId: child.id,
+        workOrderStepId: op.workOrderStepId,
+        operationType: op.operationType,
+        operatorId: op.operatorId,
+        machineId: op.machineId,
+        metadata: (op.metadata ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        inheritedFromParentRollId: parent.id,
+      })),
+      skipDuplicates: true,
+    });
+  }
+  // Çocuğa fason adım hareketi (IN) — directShip movement-close bunu DIRECT_SHIP notuyla kapatır.
+  await tx.rollMovement.create({
+    data: { rollId: child.id, workOrderStepId: stepId, qtyIn: shipQty, enteredAt: new Date() },
+  });
+  // Orijinali atomik decrement: kalan metreye in, fasonda AT_SUBCONTRACTOR kal.
+  const dec = await tx.roll.updateMany({
+    where: { id: parent.id, status: RollStatus.AT_SUBCONTRACTOR, currentQty: { gte: shipQty } },
+    data: { currentQty: { decrement: shipQty }, initialQty: { decrement: shipQty } },
+  });
+  if (dec.count !== 1) {
+    throw AppError.conflict("Top bu sırada değişti — kısmi sevk yapılamadı. Listeyi yenileyin.");
+  }
+  return child.id;
+}
+
+/**
+ * Doğrudan sevkte kısmi metrajlı topları böler. Döner: sevk edilecek EFEKTİF top id'leri
+ * (tam sevk → orijinal id, kısmi sevk → çocuk id) + herhangi bir bölme oldu mu. rollShipQtys
+ * yoksa/boşsa aynı liste (tam sevk). Metre kalanı aşıyorsa/eşitse tam sevk sayılır.
+ */
+async function applyDirectShipSplits(
+  tx: Prisma.TransactionClient,
+  shipRollIds: string[],
+  rollShipQtys: Record<string, number> | undefined,
+  stepId: string,
+  userId?: string,
+): Promise<{ effectiveShipRollIds: string[]; anySplit: boolean }> {
+  if (!rollShipQtys || Object.keys(rollShipQtys).length === 0) {
+    return { effectiveShipRollIds: shipRollIds, anySplit: false };
+  }
+  const rolls = await tx.roll.findMany({
+    where: { id: { in: shipRollIds } },
+    select: {
+      id: true,
+      itemId: true,
+      colorId: true,
+      width: true,
+      qualityGrade: true,
+      qualityGradeId: true,
+      batchId: true,
+      currentQty: true,
+    },
+  });
+  const byId = new Map(rolls.map((r) => [r.id, r]));
+  const effective: string[] = [];
+  let anySplit = false;
+  for (const rid of shipRollIds) {
+    const roll = byId.get(rid);
+    const q = rollShipQtys[rid];
+    if (!roll || q == null || q >= Number(roll.currentQty)) {
+      effective.push(rid); // tam sevk (ya da qty verilmemiş)
+      continue;
+    }
+    if (!(q > 0)) throw AppError.badRequest("Sevk metresi pozitif olmalı");
+    anySplit = true;
+    effective.push(await createFasonShipChild(tx, roll, q, stepId, userId));
+  }
+  return { effectiveShipRollIds: effective, anySplit };
+}
 
 export class SubcontractorService {
   // ===========================================================================
@@ -4140,6 +4279,9 @@ export class SubcontractorService {
       /** Sevk edilecek topların alt-kümesi (yok/boş = sevkin TÜMÜ). Seçilmeyenler
        *  AT_SUBCONTRACTOR kalır → normal fason kabulüyle fabrikaya döner. */
       rollIds?: string[];
+      /** Kısmi metraj: topId → sevk metre. Topun kalanından azsa top bölünür
+       *  (çocuk = sevk edilen, orijinal = kalan, fasonda AT_SUBCONTRACTOR kalır). */
+      rollShipQtys?: Record<string, number>;
       /** true → fason fiilen son durak: kalan adımlar SKIPPED + WO COMPLETED.
        *  false (default) → sadece toplar sevk edilir, WO açık kalır (kalan üretim devam). */
       completeWorkOrder?: boolean;
@@ -4319,6 +4461,25 @@ export class SubcontractorService {
         where: { id: { in: dispatchRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
       });
       isFullDispatchShip = dispatchStillAtSub === shipRollIds.length;
+
+      // KISMİ SPLIT: sevk metresi topun kalanından azsa top bölünür (çocuk = sevk
+      // edilen, orijinal = kalan, fasonda AT_SUBCONTRACTOR kalır). effectiveShipRollIds
+      // = fiilen sevk/consume edilecek toplar (tam sevkler orijinal, kısmiler çocuk).
+      const { effectiveShipRollIds, anySplit } = await applyDirectShipSplits(
+        tx,
+        shipRollIds,
+        data.rollShipQtys,
+        dispatch.stepId,
+        userId,
+      );
+      if (anySplit) {
+        if (completeWorkOrder) {
+          throw AppError.badRequest(
+            "Kısmi (bölünmüş) sevkte iş emri tamamlanamaz — kalan parça hâlâ fasonda.",
+          );
+        }
+        isFullDispatchShip = false; // bölme → dispatch tam sevk edilmedi
+      }
       // 1) Dispatch işareti — yalnız dispatch'in TÜMÜ sevk edildiyse directShippedAt
       //    set edilir (atomik claim). Kısmi sevkte dispatch AÇIK kalır; atomiklik
       //    aşağıdaki roll claim'iyle (status=AT_SUBCONTRACTOR + count) sağlanır.
@@ -4351,17 +4512,17 @@ export class SubcontractorService {
         WHERE rm."rollId" = r."id"
           AND rm."workOrderStepId" = ${dispatch.stepId}::uuid
           AND rm."exitedAt" IS NULL
-          AND rm."rollId" = ANY(${shipRollIds}::uuid[])
+          AND rm."rollId" = ANY(${effectiveShipRollIds}::uuid[])
       `;
 
       // 3) Sevk edilen toplar TERMINAL: SUBCONTRACTOR_CONSUMED (gerçek sevk;
       //    batchId KORUNUR — receive deseni). Atomik claim. Seçilmeyen toplar
       //    AT_SUBCONTRACTOR kalır (normal kabulle döner).
       const consumed = await tx.roll.updateMany({
-        where: { id: { in: shipRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
+        where: { id: { in: effectiveShipRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
         data: { status: RollStatus.SUBCONTRACTOR_CONSUMED, currentStepId: null },
       });
-      if (consumed.count !== shipRollIds.length) {
+      if (consumed.count !== effectiveShipRollIds.length) {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir işlemle değişmiş. Listeyi yenileyip tekrar deneyin.",
         );
@@ -4369,7 +4530,7 @@ export class SubcontractorService {
 
       // 4) RollOperation log (SUBCONTRACTOR_RETURNED + directShip metadata).
       await tx.rollOperation.createMany({
-        data: shipRollIds.map((rid) => ({
+        data: effectiveShipRollIds.map((rid) => ({
           rollId: rid,
           workOrderStepId: dispatch.stepId,
           operationType: RollOperationType.SUBCONTRACTOR_RETURNED,

@@ -67,6 +67,9 @@ const directShipSchema = z.object({
   reason: z.string().trim().min(3, "Doğrudan sevk sebebi en az 3 karakter").max(500),
   /** Sevk edilecek topların alt-kümesi (yok/boş = sevkin tümü). */
   rollIds: z.array(z.string().uuid()).max(500).optional(),
+  /** Kısmi metraj: topId → sevk edilecek metre. Kalan'dan azsa top bölünür
+   *  (çocuk = sevk edilen, orijinal = kalan, fasonda kalır). */
+  rollShipQtys: z.record(z.string().uuid(), z.number().positive()).optional(),
   /** true → fason son durak: kalan adımlar atlanır, WO tamamlanır. */
   completeWorkOrder: z.boolean().optional(),
   /** Opsiyonel karşılanma: mal hangi sipariş satır(lar)ına ne kadar gitti. */
@@ -417,6 +420,7 @@ export class SubcontractorController {
           dispatchId: id,
           reason: body.reason,
           rollIds: body.rollIds,
+          rollShipQtys: body.rollShipQtys,
           completeWorkOrder: body.completeWorkOrder,
           orderLineAllocations: body.orderLineAllocations,
         },
