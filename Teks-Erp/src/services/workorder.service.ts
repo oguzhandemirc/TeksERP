@@ -2053,8 +2053,18 @@ export class WorkOrderService {
       return { success: false, data: null, message: "Parti bulunamadı" };
     }
 
-    const rolls = await prisma.roll.findMany({ where: { batchId }, select: { id: true } });
-    const rollIds = rolls.map((r) => r.id);
+    // Fasondan-sevk split ÇOCUKLARINI dışla: kısmi doğrudan sevkte orijinal top bölünür,
+    // sevk edilen parça yeni bir çocuk roll olur (parentRollId + directShipmentId dolu),
+    // batchId'yi miras alır ve fason adımında bir RollMovement yaratır. Bunlar sevk için
+    // kesilen efemer parçalardır (FASON SEVKLER / Sevkiyatlar'da izlenir), partinin gerçek
+    // üyesi/adım sakini DEĞİL — sayılırsa adım "3 top" gibi şişer (aslında 1 top duruyor).
+    const rolls = await prisma.roll.findMany({
+      where: { batchId },
+      select: { id: true, parentRollId: true, directShipmentId: true },
+    });
+    const rollIds = rolls
+      .filter((r) => !(r.parentRollId != null && r.directShipmentId != null))
+      .map((r) => r.id);
 
     const [steps, movements, operations] = await Promise.all([
       prisma.workOrderStep.findMany({
