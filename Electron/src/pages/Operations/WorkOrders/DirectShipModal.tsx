@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Truck, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Truck, AlertTriangle, UserRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { customerService } from "@/pages/Customers/service";
+import type { Customer } from "@/pages/Customers/types";
 import { workOrderService } from "./service";
 
 interface Props {
@@ -39,6 +42,10 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
   const [completeWO, setCompleteWO] = useState(false);
   // orderLineId → karşılanan metraj (yalnız seçili satırlar).
   const [alloc, setAlloc] = useState<Record<string, number>>({});
+  // Mal kime gitti — ZORUNLU (DirectShipment + irsaliye).
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  // rollId → sevk edilecek metre (varsayılan = topun tam metresi; azsa top bölünür).
+  const [rollQtys, setRollQtys] = useState<Record<string, number>>({});
 
   const previewQ = useQuery({
     queryKey: ["direct-ship-preview", dispatchId],
@@ -54,11 +61,15 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
       setReason("");
       setAlloc({});
       setCompleteWO(false);
+      setCustomerId(null);
     }
   }, [open, dispatchId]);
   useEffect(() => {
     if (preview?.affectedRolls) {
       setSelected(new Set(preview.affectedRolls.map((r) => r.id)));
+      setRollQtys(
+        Object.fromEntries(preview.affectedRolls.map((r) => [r.id, Number(r.currentQty)])),
+      );
     }
   }, [preview?.affectedRolls]);
 
@@ -67,6 +78,8 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
       workOrderService.directShip(dispatchId, {
         reason: reason.trim(),
         rollIds: [...selected],
+        rollShipQtys: Object.fromEntries([...selected].map((id) => [id, rollQtys[id] ?? 0])),
+        customerId: customerId ?? undefined,
         completeWorkOrder: completeWO,
         orderLineAllocations: Object.entries(alloc)
           .filter(([, qty]) => qty > 0)
@@ -93,6 +106,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
     !preview.cancelled &&
     !preview.alreadyDirectShipped &&
     selectedCount > 0 &&
+    Boolean(customerId) &&
     reason.trim().length >= 3 &&
     !mut.isPending;
 
@@ -192,9 +206,33 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                               </Badge>
                             )}
                           </span>
-                          <span className="shrink-0 tabular-nums text-muted-foreground">
-                            {formatNumber(r.currentQty, 0)} m
-                          </span>
+                          {on ? (
+                            <span className="flex shrink-0 items-center gap-1">
+                              <input
+                                type="number"
+                                min={1}
+                                max={Number(r.currentQty)}
+                                step={1}
+                                value={rollQtys[r.id] ?? ""}
+                                onChange={(e) => {
+                                  const v = Math.max(
+                                    0,
+                                    Math.min(Number(r.currentQty), Number(e.target.value) || 0),
+                                  );
+                                  setRollQtys((p) => ({ ...p, [r.id]: v }));
+                                }}
+                                className="w-14 rounded border bg-background px-1.5 py-0.5 text-right text-xs tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                                title="Sevk metresi — topun tam metresinden azsa top bölünür"
+                              />
+                              <span className="text-[10px] text-muted-foreground">
+                                /{formatNumber(r.currentQty, 0)}m
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                              {formatNumber(r.currentQty, 0)} m
+                            </span>
+                          )}
                         </li>
                       );
                     })}
@@ -205,6 +243,26 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                       {total - selectedCount} top fasonda kalacak (kabulle döner)
                     </div>
                   )}
+                </div>
+
+                {/* Müşteri — ZORUNLU (mal kime gitti?) */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium">
+                    Müşteri <span className="text-destructive">*</span>
+                  </label>
+                  <EntityPickerModal<Customer>
+                    value={customerId}
+                    onChange={setCustomerId}
+                    service={customerService}
+                    queryKey="direct-ship-customer"
+                    getLabel={(c) => c.name}
+                    getSubLabel={(c) => c.code}
+                    icon={UserRound}
+                    iconClassName="text-primary"
+                    title="Müşteri Seç"
+                    description="Mal kime sevk edildi — irsaliye ve sevkiyat kaydı için zorunlu."
+                    placeholder="Müşteri seç..."
+                  />
                 </div>
 
                 {/* İş emrini tamamla toggle */}

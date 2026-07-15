@@ -219,12 +219,24 @@ export const workOrderService = {
     payload: {
       reason: string;
       rollIds?: string[];
+      /** topId → sevk metre; topun kalanından azsa top bölünür (kısmi split). */
+      rollShipQtys?: Record<string, number>;
+      /** Mal kime gitti — zorunlu (DirectShipment + irsaliye). */
+      customerId?: string;
+      branchId?: string;
       completeWorkOrder?: boolean;
       orderLineAllocations?: { orderLineId: string; qty: number }[];
     },
   ) =>
     apiClient
-      .post<ApiResponse<{ id: string; dispatchNo: string; consumedRollCount: number }>>(
+      .post<
+        ApiResponse<{
+          id: string;
+          dispatchNo: string;
+          directShipmentNo: string | null;
+          consumedRollCount: number;
+        }>
+      >(
         `/api/subcontractor/dispatches/${dispatchId}/direct-ship`,
         payload,
       )
