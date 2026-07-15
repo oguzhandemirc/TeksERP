@@ -178,16 +178,21 @@ interface TamburRollSummary {
   errors: TamburRollErrorSummary[];
   /** Parti (Batch) kimliği — null = partisiz/doğrudan top. */
   batchId: string | null;
-  /** Dalın sevk numarası (SubcontractorDispatch.dispatchNo). */
+  /** Parti numarası (Batch.batchNumber, P+GGAAYY+NNNN) — partisiz topta null. */
+  batchNumber: string | null;
+  /** Partinin İPTAL EDİLMEMİŞ en güncel fason sevk numarası
+   *  (SubcontractorDispatch.dispatchNo) — hiç sevk görmemiş partide null. */
   dispatchNo: string | null;
-  /** WO içindeki 1-based parti sırası (dispatchedAt'e göre, stabil — bir parti
-   *  Tambur'dan çıksa bile numarası kaymaz). */
+  /** WO içindeki 1-based parti sırası (Batch.createdAt'e göre, stabil — bir
+   *  parti Tambur'dan çıksa bile numarası kaymaz). */
   branchOrdinal: number | null;
 }
 
 interface TamburStepSummary {
   workOrderStepId: string;
   workOrderId: string;
+  /** DİKKAT: legacy alan adı — İŞ EMRİ numarasıdır (WorkOrder.workOrderNumber),
+   *  Batch değil. Gerçek parti numarası per-roll `TamburRollSummary.batchNumber`. */
   batchNumber: string;
   stationId: string;
   stationCode: string;
@@ -277,26 +282,55 @@ export class TamburService {
   }
 
   /**
-   * batchId (parti) → { dispatchNo, ordinal } haritası. Ordinal = WO'nun TÜM
-   * sevkleri içinde dispatchedAt sırasına göre 1-based parti no — bir parti
-   * Tambur'dan çıksa bile numarası kaymaz. Tambur listesinde dalları (fason
-   * partileri) ayırt etmek için kullanılır. Tek sevk lookup'ı.
+   * batchId (parti) → { batchNumber, dispatchNo, ordinal } haritası.
+   *   - batchNumber : Batch.batchNumber (P+GGAAYY+NNNN).
+   *   - dispatchNo  : partinin İPTAL EDİLMEMİŞ en güncel fason sevki
+   *                   (dispatchedAt desc) — hiç sevk görmemiş partide null.
+   *   - ordinal     : WO'nun TÜM partileri içinde createdAt sırasına göre
+   *                   1-based parti sırası — bir parti Tambur'dan çıksa bile
+   *                   numarası kaymaz. Tambur listesinde partileri ayırt
+   *                   etmek için kullanılır.
    */
   private async buildBranchInfoMap(
     workOrderId: string,
     batchIds: (string | null)[],
-  ): Promise<Map<string, { dispatchNo: string; ordinal: number }>> {
-    const map = new Map<string, { dispatchNo: string; ordinal: number }>();
+  ): Promise<
+    Map<string, { batchNumber: string; dispatchNo: string | null; ordinal: number }>
+  > {
+    const map = new Map<
+      string,
+      { batchNumber: string; dispatchNo: string | null; ordinal: number }
+    >();
     const present = new Set(batchIds.filter((x): x is string => Boolean(x)));
     if (present.size === 0) return map;
-    const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: { workOrderId },
-      orderBy: { dispatchedAt: "asc" },
-      select: { id: true, dispatchNo: true },
-    });
-    dispatches.forEach((d, i) => {
-      if (present.has(d.id)) {
-        map.set(d.id, { dispatchNo: d.dispatchNo, ordinal: i + 1 });
+    const [batches, dispatches] = await Promise.all([
+      // Ordinal WO'nun TÜM partileri üzerinden hesaplanır (yalnız listedekiler
+      // değil) — bir parti Tambur'dan düşünce kalanların numarası kaymasın.
+      prisma.batch.findMany({
+        where: { workOrderId },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, batchNumber: true },
+      }),
+      prisma.subcontractorDispatch.findMany({
+        where: { batchId: { in: [...present] }, cancelledAt: null },
+        orderBy: { dispatchedAt: "desc" },
+        select: { batchId: true, dispatchNo: true },
+      }),
+    ]);
+    // dispatchedAt DESC → parti başına ilk görülen kayıt en güncel sevki.
+    const latestDispatchNo = new Map<string, string>();
+    for (const d of dispatches) {
+      if (!latestDispatchNo.has(d.batchId)) {
+        latestDispatchNo.set(d.batchId, d.dispatchNo);
+      }
+    }
+    batches.forEach((b, i) => {
+      if (present.has(b.id)) {
+        map.set(b.id, {
+          batchNumber: b.batchNumber,
+          dispatchNo: latestDispatchNo.get(b.id) ?? null,
+          ordinal: i + 1,
+        });
       }
     });
     return map;
@@ -304,7 +338,7 @@ export class TamburService {
 
   /**
    * Tambur adımında bekleyen açık RollMovement'leri TamburRollSummary[]'e çevirir
-   * — dal bilgisiyle (batchId/dispatchNo/branchOrdinal) zenginleştirilmiş.
+   * — parti bilgisiyle (batchId/batchNumber/dispatchNo/branchOrdinal) zenginleştirilmiş.
    * getByCardBarcode + getStep ortak kullanır (önceki kopyala-yapıştır birleşti).
    */
   private async loadTamburRolls(step: {
@@ -361,6 +395,7 @@ export class TamburService {
           errorType: e.errorType,
         })),
         batchId: m.roll.batchId ?? null,
+        batchNumber: bi?.batchNumber ?? null,
         dispatchNo: bi?.dispatchNo ?? null,
         branchOrdinal: bi?.ordinal ?? null,
       };
@@ -2182,12 +2217,12 @@ export class TamburService {
         properties: { select: { propertyId: true } },
       },
     });
-    if (!parent) throw AppError.notFound("Açık kumaş Roll bulunamadı");
-    if (parent.barcode !== null) {
-      throw AppError.badRequest(
-        "Bu Roll açık kumaş değil (barkodlu); cutOpenFabric sadece açık kumaş için kullanılır",
-      );
-    }
+    if (!parent) throw AppError.notFound("Roll bulunamadı");
+    // Barkod-reddi KALDIRILDI (2026-07-16): Tambur adımındaki HER top kesilebilir —
+    // barkodsuz açık kumaş VE Konumu-Düzelt ile buraya gelmiş barkodlu TOP. Barkod artık
+    // dispatch anahtarı değil, yalnız çocuk-etiketleme semantiği (çocuk hep taze "F" barkod).
+    // Ayrım kriteri form/barkod değil, KONUM (canlı Tambur step + IN_PRODUCTION). Barkodlu top
+    // eskiden iki kesim metodunun arasındaki delikte kalıp kesilemiyordu (ölü rulo).
     if (!parent.currentStep || parent.currentStep.station.kind !== StationKind.TAMBUR) {
       throw AppError.badRequest(
         `Roll Tambur step'inde değil (${parent.currentStep?.station.kind ?? "STEPSIZ"})`,
@@ -2460,10 +2495,10 @@ export class TamburService {
         properties: { select: { propertyId: true } },
       },
     });
-    if (!parent) throw AppError.notFound("Açık kumaş Roll bulunamadı");
-    if (parent.barcode !== null) {
-      throw AppError.badRequest("Bu Roll açık kumaş değil (barkodlu)");
-    }
+    if (!parent) throw AppError.notFound("Roll bulunamadı");
+    // Barkod-reddi KALDIRILDI (2026-07-16): Tambur adımındaki barkodlu top da finalize
+    // edilebilir (bkz. cutOpenFabric aynı gerekçe). Idempotency status=TAMBUR_CONSUMED'a
+    // bakar (barkoda değil), child taze "F" barkod alır → barkodlu parent'ta da güvenli.
 
     // IDEMPOTENCY: Sync replay'inde 2. çağrı için. Parent zaten TAMBUR_CONSUMED
     // ise (status + currentStepId=null) finalize tamamlanmış. TAMBUR_PROCESSED

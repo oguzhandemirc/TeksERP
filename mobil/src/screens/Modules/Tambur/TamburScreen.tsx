@@ -998,14 +998,10 @@ export default function TamburScreen() {
 
   const addVoluntaryCut = (lengthOverride?: number) => {
     if (!selectedRoll) return;
-    if (selectedRoll.barcode) {
-      Toast.show({
-        type: 'error',
-        text1: 'Bu ekran açık kumaş için',
-        text2: 'Barkodlu top için Yeniden Kes kullanın',
-      });
-      return;
-    }
+    // Barkod-reddi KALDIRILDI (2026-07-16): WO-kart akışındaki seçili top zaten Tambur
+    // adımında (IN_PRODUCTION) — barkodlu olsun ya da olmasın kesilir. Backend (cutOpenFabric)
+    // artık barkodlu topu kabul ediyor; "yanlış ekran" yönlendirme hatası kalktı. Gerçek
+    // engel (top adımda değil / iptal / metraj) sunucuda kalır ve somut sebep söyler.
     // Otomatik modda uzunluk makineden (override) gelir. Manuelde input'tan;
     // input BOŞSA → kalanın tamamı (Kes = "kalanı kes", ayrı buton gerekmez).
     const manualTrimmed = work.voluntaryEntry.length.trim();
@@ -4040,9 +4036,9 @@ function RollListItem({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dal (fason partisi) renk paleti + gruplu liste — aynı WO'nun birden çok fason
-// partisi Tambur'a "yetişince" toplar tek listede karışıyordu. Her parti renkli
-// çerçeveli grup kartında gösterilir (yalnız ≥2 dal varsa; tek dalda düz liste).
+// Parti (Batch) renk paleti + gruplu liste — aynı WO'nun birden çok partisi
+// Tambur'a "yetişince" toplar tek listede karışıyordu. Her parti renkli
+// çerçeveli grup kartında gösterilir (yalnız ≥2 parti varsa; tekte düz liste).
 const BRANCH_PALETTE: { border: string; bg: string; text: string; dot: string }[] = [
   { border: '#2563eb', bg: '#eff6ff', text: '#1e40af', dot: '#2563eb' }, // mavi
   { border: '#ea580c', bg: '#fff7ed', text: '#c2410c', dot: '#ea580c' }, // turuncu
@@ -4055,6 +4051,7 @@ const BRANCH_NEUTRAL = { border: '#94a3b8', bg: '#f8fafc', text: '#475569', dot:
 interface BranchGroup {
   key: string;
   ordinal: number | null;
+  batchNumber: string | null;
   dispatchNo: string | null;
   rolls: TamburRollSummary[];
   totalQty: number;
@@ -4075,6 +4072,7 @@ function buildBranchGroups(rolls: TamburRollSummary[]): BranchGroup[] {
       g = {
         key,
         ordinal,
+        batchNumber: r.batchNumber ?? null,
         dispatchNo: r.dispatchNo ?? null,
         rolls: [],
         totalQty: 0,
@@ -4085,7 +4083,7 @@ function buildBranchGroups(rolls: TamburRollSummary[]): BranchGroup[] {
     g.rolls.push(r);
     g.totalQty += r.currentQty;
   }
-  // Parti sırasına göre (1,2,3…); fasonsuz (ordinal null) en sona.
+  // Parti sırasına göre (1,2,3…); partisiz (ordinal null) en sona.
   return [...byKey.values()].sort((a, b) => {
     if (a.ordinal == null) return 1;
     if (b.ordinal == null) return -1;
@@ -4104,7 +4102,7 @@ function BranchGroupedRollList({
 }) {
   const groups = useMemo(() => buildBranchGroups(rolls), [rolls]);
 
-  // Tek dal (ya da fasonsuz) → çerçeveye gerek yok, düz liste (eski davranış).
+  // Tek parti (ya da partisiz) → çerçeveye gerek yok, düz liste (eski davranış).
   if (groups.length <= 1) {
     return (
       <FlashList
@@ -4123,7 +4121,7 @@ function BranchGroupedRollList({
     );
   }
 
-  // ≥2 dal → her parti renkli çerçeveli grup kartında.
+  // ≥2 parti → her parti renkli çerçeveli grup kartında.
   return (
     <FlashList
       data={groups}
@@ -4137,7 +4135,8 @@ function BranchGroupedRollList({
               style={[branchStyles.groupTitle, { color: g.palette.text }]}
               numberOfLines={1}
             >
-              {g.ordinal != null ? `${g.ordinal}. PARTİ` : 'FASONSUZ'}
+              {g.ordinal != null ? `${g.ordinal}. PARTİ` : 'PARTİSİZ'}
+              {g.batchNumber ? ` · ${g.batchNumber}` : ''}
               {g.dispatchNo ? ` · ${g.dispatchNo}` : ''}
             </Text>
             <Text style={[branchStyles.groupMeta, { color: g.palette.text }]}>
