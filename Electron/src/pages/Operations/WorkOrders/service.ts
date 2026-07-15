@@ -419,6 +419,18 @@ export interface ManualMovePreview {
   blockedCount: number;
   /** 'join' adayları — aynı WO'da sevksiz (kilitsiz) diğer partiler. */
   candidateJoinParties: { batchId: string; batchNumber: string }[];
+  /** İleri-atlama (Milestone Backflush) önizlemesi. */
+  backflush: {
+    direction: "forward" | "backward";
+    /** Bypass edilecek ara adım adları (SKIPPED olacak). */
+    skippedStepNames: string[];
+    /** Renk-veren adım atlanıyor → renk WO hedef renginden uygulanacak. */
+    appliesColor: boolean;
+    /** Hedef renk yok → renk-veren adım atlanamaz (taşıma engellenir). */
+    colorBlocked: boolean;
+    /** Kalite adımı atlanıyor → grade "Belirsiz" kalır (sentezlenmez). */
+    qualityStaysUnknown: boolean;
+  };
   warnings: string[];
 }
 

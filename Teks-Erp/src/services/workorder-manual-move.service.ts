@@ -19,7 +19,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationType } from "@prisma/client";
+import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationType, StepStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -65,6 +65,8 @@ interface StepRef {
 interface MoveContext {
   workOrderId: string;
   woStatus: WorkOrderStatus;
+  /** İleri-atlama backflush renk sentezi için WO hedef rengi (boyahane atlanınca uygulanır). */
+  woTargetColorId: string | null;
   steps: StepRef[];
   colorStep: StepRef | null;
   targetStep: StepRef;
@@ -90,6 +92,7 @@ export class WorkOrderManualMoveService {
       select: {
         id: true,
         status: true,
+        targetColorId: true,
         steps: {
           orderBy: { stepSequence: "asc" },
           select: {
@@ -192,7 +195,7 @@ export class WorkOrderManualMoveService {
       isWholeParty = selected.length === total;
     }
 
-    return { workOrderId, woStatus: wo.status, steps, colorStep, targetStep, selected, isWholeParty, sourceBatchIds };
+    return { workOrderId, woStatus: wo.status, woTargetColorId: wo.targetColorId, steps, colorStep, targetStep, selected, isWholeParty, sourceBatchIds };
   }
 
   /** Bir topun taşınamama nedeni (null = taşınabilir). Downstream işlem kontrolü ayrı. */
@@ -242,9 +245,34 @@ export class WorkOrderManualMoveService {
 
     const movable = rolls.filter((r) => r.movable);
     const warnings: string[] = [];
-    if (ctx.colorStep && t.stepSequence > ctx.colorStep.stepSequence && ctx.selected.some((r) => r.colorId == null)) {
-      warnings.push("Renk veren adım sonrasına taşınıyor ama bazı toplar renksiz — manuel taşımada renk uygulanmaz.");
-    }
+
+    // BACKFLUSH önizlemesi (ileri-atlama = Milestone). Atlanan ara adımlar SKIPPED olur,
+    // renk-veren adım atlanınca renk WO hedef renginden UYGULANIR (eski "renk uygulanmaz"
+    // davranışı kalktı), kalite Belirsiz kalır. Hedef renk yoksa taşıma engellenir.
+    const minSourceSeq = Math.min(
+      ...ctx.selected.map((r) => this.stepSeq(ctx.steps, r.currentStepId) ?? Number.POSITIVE_INFINITY),
+    );
+    const isForward = Number.isFinite(minSourceSeq) && t.stepSequence > minSourceSeq;
+    const skippedStepNames = isForward
+      ? ctx.steps
+          .filter((s) => s.stepSequence > minSourceSeq && s.stepSequence < t.stepSequence)
+          .map((s) => s.name ?? "Adım")
+      : [];
+    const colorSynthNeeded =
+      ctx.colorStep != null &&
+      t.stepSequence > ctx.colorStep.stepSequence &&
+      ctx.selected.some((r) => r.colorId == null);
+    // colorBlocked bir HARD-BLOCK (uyarı değil) → warnings'e değil backflush.colorBlocked'a;
+    // frontend kırmızı blok + submit engeli olarak gösterir.
+    const colorBlocked = colorSynthNeeded && !ctx.woTargetColorId;
+    const backflush = {
+      direction: (isForward ? "forward" : "backward") as "forward" | "backward",
+      skippedStepNames,
+      appliesColor: colorSynthNeeded && !colorBlocked,
+      colorBlocked,
+      qualityStaysUnknown: skippedStepNames.length > 0,
+    };
+
     if (ctx.selected.some((r) => r.status === RollStatus.WAREHOUSE)) {
       warnings.push("Depodaki top üretime geri alınıyor.");
     }
@@ -275,6 +303,7 @@ export class WorkOrderManualMoveService {
         movableCount: movable.length,
         blockedCount: rolls.length - movable.length,
         candidateJoinParties,
+        backflush,
         warnings,
       },
     };
@@ -299,6 +328,19 @@ export class WorkOrderManualMoveService {
     const ctx = await this.loadContext(workOrderId, input);
     const t = ctx.targetStep;
     const partyMode: PartyMode = input.partyMode ?? (ctx.isWholeParty ? "keep" : "new");
+
+    // Backflush renk sentezi (Milestone): renk-veren adım (boyahane) atlanıp renksiz top
+    // ileri gidiyorsa renk WO.targetColorId'den uygulanır. Hedef renk yoksa fail-fast —
+    // asla sessiz renksiz bırakma. Kalite ASLA sentezlenmez (qualityGrade null kalır).
+    const colorSynthNeeded =
+      ctx.colorStep != null &&
+      t.stepSequence > ctx.colorStep.stepSequence &&
+      ctx.selected.some((r) => r.colorId == null);
+    if (colorSynthNeeded && !ctx.woTargetColorId) {
+      throw AppError.badRequest(
+        "Bu iş emrinin hedef rengi yok — renk veren adım (boyahane) atlanamaz, renk sentezlenemez.",
+      );
+    }
 
     // B3: istenen topların bir kısmı terminal statüde (sevkli/tüketilmiş/iptal) olduğu için
     // çözülemediyse SESSİZCE daha az taşıma yapma — somut sayı paritesi (yıkıcı-onay ilkesi).
@@ -348,6 +390,21 @@ export class WorkOrderManualMoveService {
         });
         if (claim.count !== selectedIds.length) {
           throw AppError.conflict("Toplar bu sırada değişti — taşıma iptal, önizlemeyi yenileyin.");
+        }
+
+        // Backflush renk sentezi — atlanan renk-veren adım için renksiz topları WO hedef
+        // rengiyle boya (receive() emsali). Kalite ASLA sentezlenmez.
+        let synthesizedColorId: string | null = null;
+        let synthColorRollIds: string[] = [];
+        if (colorSynthNeeded && ctx.woTargetColorId) {
+          synthColorRollIds = ctx.selected.filter((r) => r.colorId == null).map((r) => r.id);
+          if (synthColorRollIds.length > 0) {
+            await tx.roll.updateMany({
+              where: { id: { in: synthColorRollIds } },
+              data: { colorId: ctx.woTargetColorId },
+            });
+            synthesizedColorId = ctx.woTargetColorId;
+          }
         }
 
         // B2: GERİ taşıma işlem engeli — tx İÇİNDE, claim'den SONRA (TOCTOU: ön-kontrol ile
@@ -421,10 +478,59 @@ export class WorkOrderManualMoveService {
           }
         }
 
+        // 3b) BACKFLUSH SKIPPED: ileri-atlamada bypass edilen ara adımları — YALNIZ artık
+        //     erişilemezlerse (atlanan set DIŞINDA o adıma muhtaç aktif üretim topu kalmadıysa)
+        //     — SKIPPED damgala. recompute SKIPPED'e dokunmaz → jump'lanan toplar orada
+        //     pendingRolls sayılmaz, WO tamamlanabilir. Emsal: subcontractor.service.ts:4701.
+        const skippedStepIds: string[] = [];
+        const minSourceSeq = Math.min(
+          ...ctx.selected.map(
+            (r) => this.stepSeq(ctx.steps, r.currentStepId) ?? Number.POSITIVE_INFINITY,
+          ),
+        );
+        if (Number.isFinite(minSourceSeq) && t.stepSequence > minSourceSeq) {
+          const intermediate = ctx.steps.filter(
+            (s) => s.stepSequence > minSourceSeq && s.stepSequence < t.stepSequence,
+          );
+          for (const s of intermediate) {
+            const stillNeeded = await tx.roll.count({
+              where: {
+                id: { notIn: selectedIds },
+                status: {
+                  in: [
+                    RollStatus.IN_PRODUCTION,
+                    RollStatus.AT_SUBCONTRACTOR,
+                    RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+                  ],
+                },
+                movements: { some: { step: { workOrderId } } },
+                NOT: { movements: { some: { workOrderStepId: s.id } } },
+                currentStep: { stepSequence: { lte: s.stepSequence } },
+              },
+            });
+            if (stillNeeded === 0) skippedStepIds.push(s.id);
+          }
+          if (skippedStepIds.length > 0) {
+            await tx.workOrderStep.updateMany({
+              where: {
+                id: { in: skippedStepIds },
+                status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] },
+              },
+              data: {
+                status: StepStatus.SKIPPED,
+                skipReason: `MANUAL_MOVE_BACKFLUSH: ${input.reason.trim().slice(0, 120)}`,
+              },
+            });
+          }
+        }
+
         // 4) Etkilenen adımları recompute (hedef + kaynak + silinen movement'lı sonraki adımlar)
         //    + WO'yu üretime çek. B1: WO COMPLETED ise topun statüsünden BAĞIMSIZ geri aç —
         //    top artık IN_PRODUCTION @ ACTIVE adım; kart flip olmazsa operatör okutamaz, kilitlenir.
-        const affected = [...new Set<string>([t.id, ...sourceStepIds, ...laterStepIds])];
+        //    SKIPPED damgalanan ara adımları recompute'a SOKMA (recompute dokunmaz ama gereksiz).
+        const affected = [...new Set<string>([t.id, ...sourceStepIds, ...laterStepIds])].filter(
+          (id) => !skippedStepIds.includes(id),
+        );
         for (const sid of affected) await recomputeStepStatus(tx, sid);
         await ensureWorkOrderInProgress(tx, workOrderId);
         let reopened = false;
@@ -437,7 +543,14 @@ export class WorkOrderManualMoveService {
           reopened = true;
         }
 
-        return { newBatchNumber, deletedSourceBatches, reopened };
+        return {
+          newBatchNumber,
+          deletedSourceBatches,
+          reopened,
+          skippedStepIds,
+          synthesizedColorId,
+          synthColorRollIds,
+        };
       }),
     );
 
@@ -458,6 +571,12 @@ export class WorkOrderManualMoveService {
         newBatchNumber: result.newBatchNumber,
         reason: input.reason.trim(),
         reopened: result.reopened,
+        // Backflush izi (Milestone atlama) — geri-alma + denetim için.
+        backflush: result.skippedStepIds.length > 0 || result.synthesizedColorId != null,
+        skippedStepIds: result.skippedStepIds,
+        synthesizedColorId: result.synthesizedColorId,
+        synthColorRollIds: result.synthColorRollIds,
+        qcBypassed: result.skippedStepIds.length > 0,
       },
     });
 

@@ -110,12 +110,15 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
   const needParty = preview?.partyDecisionNeeded ?? false;
   const joinCandidates = preview?.candidateJoinParties ?? [];
   const blockedInSelection = (preview?.blockedCount ?? 0) > 0;
+  const bf = preview?.backflush;
+  const isBackflush = bf?.direction === "forward" && (bf?.skippedStepNames.length ?? 0) > 0;
   const canSubmit =
     !pending &&
     Boolean(targetStepId) &&
     selected.size > 0 &&
     preview !== null &&
     !blockedInSelection &&
+    !bf?.colorBlocked &&
     reason.trim().length >= 3 &&
     (!needParty || partyMode !== "join" || Boolean(joinBatchId));
 
@@ -135,6 +138,11 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
           <DialogTitle className="flex items-center gap-2">
             <ArrowRightLeft className="h-4 w-4 text-primary" />
             Konumu Düzelt — {source?.batchNumber}
+            {isBackflush && (
+              <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                Milestone Atla
+              </span>
+            )}
           </DialogTitle>
           <DialogDescription>
             Partiyi/topları rotada ileri veya geri taşı (ör. Kurşun↔Tambur). Bu bir
@@ -250,6 +258,29 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
                   ))}
                 </select>
               )}
+            </div>
+          )}
+
+          {/* İleri-atlama = Milestone Backflush bilgisi (yapılmış say) */}
+          {isBackflush && !bf?.colorBlocked && (
+            <div className="space-y-1 rounded-md border border-primary/40 bg-primary/5 p-2.5 text-[11px]">
+              <div className="flex items-center gap-1.5 font-medium text-primary">
+                <ArrowRightLeft className="h-3.5 w-3.5" /> Milestone Atla — ara işlemler
+                yapılmış sayılır
+              </div>
+              <div className="text-muted-foreground">
+                Atlanacak adımlar: <b className="text-foreground">{bf!.skippedStepNames.join(", ")}</b> (SKIPPED).
+                {bf!.appliesColor && " Renk otomatik uygulanacak."}
+                {bf!.qualityStaysUnknown && " Kalite “Belirsiz” kalır (yalnız kalite istasyonu ölçer)."}
+              </div>
+            </div>
+          )}
+          {/* Renk-veren adım atlanıyor ama hedef renk yok → HARD BLOCK */}
+          {bf?.colorBlocked && (
+            <div className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-[11px] text-destructive">
+              <Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Bu iş emrinin hedef rengi tanımlı değil — renk veren adım (boyahane) atlanamaz.
+              Önce iş emrine hedef rengi tanımlayın.
             </div>
           )}
 
