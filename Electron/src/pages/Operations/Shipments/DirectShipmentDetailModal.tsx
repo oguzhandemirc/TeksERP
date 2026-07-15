@@ -1,4 +1,10 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   DirectShipmentDetailContent,
@@ -12,31 +18,31 @@ interface Props {
 }
 
 /**
- * Fasondan sevk (DirectShipment) detayı — birleşik Sevkiyatlar listesinden "Fasondan
- * Sevk" satırı açılınca (slide-over). Gövde DirectShipmentDetailContent'te (Modal ile
- * paylaşılır); başlık aynı query'yi okur (dedupe).
+ * Fasondan sevk (DirectShipment) detayı — MODAL. Parti Geçmişi'ndeki "Fasondan Sevkler"
+ * satırından açılır. Gövde Sheet ile aynı (DirectShipmentDetailContent); başlık aynı
+ * query'yi okur (dedupe).
  */
-export function DirectShipmentDetailSheet({ directShipmentId, open, onOpenChange }: Props) {
+export function DirectShipmentDetailModal({ directShipmentId, open, onOpenChange }: Props) {
   const q = useDirectShipmentDetail(directShipmentId, open);
   const d = q.data?.data;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-auto sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <span className="font-mono">{d?.shipmentNo ?? "Fasondan Sevk"}</span>
             <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600">
               Fasondan Sevk
             </Badge>
-          </SheetTitle>
-          <SheetDescription>
+          </DialogTitle>
+          <DialogDescription>
             {d ? `${d.customer.name}${d.branch ? " · " + d.branch.name : ""}` : "Yükleniyor…"}
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         <DirectShipmentDetailContent directShipmentId={directShipmentId} enabled={open} />
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

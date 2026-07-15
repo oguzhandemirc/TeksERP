@@ -495,6 +495,16 @@ export interface BatchLaneRoll {
  * kartı, fason sevkleri (K10) ve soy bağı (splitFrom / splitChildren). Kilit
  * TÜRETİLMİŞ: iptal edilmemiş sevki olan parti kilitlidir (düzenlenemez).
  */
+/** Partiye ait fasondan sevk (DSK) — Parti Geçmişi "Fasondan Sevkler" satırı. */
+export interface BatchDirectShipment {
+  id: string;
+  shipmentNo: string;
+  customerName: string | null;
+  totalQty: number;
+  rollCount: number;
+  shippedAt: string;
+}
+
 export interface BatchLane {
   batchId: string;
   /** Parti kodu (P+GGAAYY+NNNN). */
@@ -513,6 +523,8 @@ export interface BatchLane {
   /** Partinin toplarının tek tek listesi — "hangi partide hangi top var". */
   rolls: BatchLaneRoll[];
   dispatches: BatchLaneDispatch[];
+  /** Fasondan sevkler (DSK) — mal fasondan doğrudan müşteriye gitti (Parti Geçmişi). */
+  directShipments: BatchDirectShipment[];
   /** Aynı WO içinde bu partinin ayrıldığı kaynak parti (redye). */
   splitFrom: BatchLineageRef | null;
   /** Aynı WO içinde bu partiden ayrılan partiler (redye). */

@@ -1924,6 +1924,37 @@ export class WorkOrderService {
       },
     });
 
+    // Partiye ait FASONDAN SEVKLER (DSK): split çocuğu ya da tamamı sevk edilmiş orijinal
+    // top directShipmentId taşır + batchId'yi korur → partiye bağlanır. Parti Geçmişi'nde
+    // "Fasondan Sevkler" bölümü için (mal fasondan doğrudan müşteriye gitti).
+    const batchIdList = batches.map((b) => b.id);
+    const dsRolls = batchIdList.length
+      ? await prisma.roll.findMany({
+          where: { batchId: { in: batchIdList }, directShipmentId: { not: null } },
+          select: {
+            batchId: true,
+            directShipment: {
+              select: {
+                id: true,
+                shipmentNo: true,
+                totalQty: true,
+                rollCount: true,
+                shippedAt: true,
+                customer: { select: { name: true } },
+              },
+            },
+          },
+        })
+      : [];
+    type DsRow = NonNullable<(typeof dsRolls)[number]["directShipment"]>;
+    const directShipsByBatch = new Map<string, Map<string, DsRow>>();
+    for (const r of dsRolls) {
+      if (!r.batchId || !r.directShipment) continue;
+      const m = directShipsByBatch.get(r.batchId) ?? new Map<string, DsRow>();
+      m.set(r.directShipment.id, r.directShipment);
+      directShipsByBatch.set(r.batchId, m);
+    }
+
     const statusLabel = (s: string): string =>
       s === "WAREHOUSE" ? "Depo" : s === "STOCK" ? "Stok" : "—";
 
@@ -1984,6 +2015,18 @@ export class WorkOrderService {
         };
       });
 
+      // Fasondan sevkler (DSK) — mal fasondan doğrudan müşteriye gitti; en yeni önce.
+      const directShipments = [...(directShipsByBatch.get(b.id)?.values() ?? [])]
+        .map((ds) => ({
+          id: ds.id,
+          shipmentNo: ds.shipmentNo,
+          customerName: ds.customer?.name ?? null,
+          totalQty: Number(ds.totalQty),
+          rollCount: ds.rollCount,
+          shippedAt: ds.shippedAt,
+        }))
+        .sort((a, c) => c.shippedAt.getTime() - a.shippedAt.getTime());
+
       // Kilit türetilmiş: iptal edilmemiş sevki varsa parti kilitli (düzenlenemez).
       const locked = b.dispatches.some((d) => !d.cancelledAt);
       const card = woCard;
@@ -2003,6 +2046,7 @@ export class WorkOrderService {
         cardNumber: card?.cardNumber ?? null,
         cardBarcode: card?.barcode ?? null,
         rollCount: b.rolls.length,
+        directShipments,
         currentPositions: [...positions.values()],
         // "Hangi partide hangi top var" — count'un ötesinde tek tek kimlik (F: Partiler).
         rolls: b.rolls.map((r) => ({
