@@ -380,6 +380,17 @@ async function applyDirectShipSplits(
   return { effectiveShipRollIds: effective, anySplit };
 }
 
+/** Sonraki DirectShipment numarası (DSK + GGAAYY + NNNN) — tx içinde bugünkü max'tan. */
+async function nextDirectShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
+  const prefix = dailyCodePrefix("DSK");
+  const todays = await tx.directShipment.findMany({
+    where: { shipmentNo: { gte: prefix, startsWith: prefix } },
+    select: { shipmentNo: true },
+  });
+  const seq = nextDailySeq(todays.map((s) => s.shipmentNo), prefix);
+  return `${prefix}${String(seq).padStart(4, "0")}`;
+}
+
 export class SubcontractorService {
   // ===========================================================================
   // DISPATCH — Fasona sevk
@@ -4282,6 +4293,9 @@ export class SubcontractorService {
       /** Kısmi metraj: topId → sevk metre. Topun kalanından azsa top bölünür
        *  (çocuk = sevk edilen, orijinal = kalan, fasonda AT_SUBCONTRACTOR kalır). */
       rollShipQtys?: Record<string, number>;
+      /** Mal KİME gitti — DirectShipment kaydı + irsaliye için ZORUNLU. */
+      customerId?: string;
+      branchId?: string;
       /** true → fason fiilen son durak: kalan adımlar SKIPPED + WO COMPLETED.
        *  false (default) → sadece toplar sevk edilir, WO açık kalır (kalan üretim devam). */
       completeWorkOrder?: boolean;
@@ -4292,6 +4306,9 @@ export class SubcontractorService {
     const trimmedReason = data.reason?.trim();
     if (!trimmedReason || trimmedReason.length < 3) {
       throw AppError.badRequest("Doğrudan sevk sebebi en az 3 karakter olmalı");
+    }
+    if (!data.customerId) {
+      throw AppError.badRequest("Doğrudan sevkte müşteri zorunludur (mal kime gitti?)");
     }
     const completeWorkOrder = data.completeWorkOrder === true;
 
@@ -4374,6 +4391,8 @@ export class SubcontractorService {
     // tx-DIŞI bayat sayım eşzamanlı receive()'in döndürdüğü topları görmez → 'full'
     // olması gereken sevk 'partial' hesaplanıp directShippedAt set edilmez / belge donmaz.
     let isFullDispatchShip = false;
+    // Oluşturulan DirectShipment no'su — tx dışına (return) taşımak için.
+    let createdShipmentNo: string | null = null;
 
     // Opsiyonel karşılanma doğrulaması (verilmişse).
     const allocations = data.orderLineAllocations ?? [];
@@ -4528,6 +4547,34 @@ export class SubcontractorService {
         );
       }
 
+      // DirectShipment kaydı — mal KİME gitti + hangi toplar. "Sevkiyatlar" birleşik
+      // listesinde görünür; kısmi/çoklu sevkte olay-başına ayrı kayıt.
+      const shippedRolls = await tx.roll.findMany({
+        where: { id: { in: effectiveShipRollIds } },
+        select: { currentQty: true },
+      });
+      const totalShippedQty = shippedRolls.reduce(
+        (s, r) => s.plus(r.currentQty),
+        new Prisma.Decimal(0),
+      );
+      const directShipment = await tx.directShipment.create({
+        data: {
+          shipmentNo: await nextDirectShipmentNo(tx),
+          dispatchId: data.dispatchId,
+          customerId: data.customerId!,
+          branchId: data.branchId ?? null,
+          reason: trimmedReason,
+          totalQty: totalShippedQty,
+          rollCount: effectiveShipRollIds.length,
+          shippedById: userId ?? null,
+        },
+      });
+      createdShipmentNo = directShipment.shipmentNo;
+      await tx.roll.updateMany({
+        where: { id: { in: effectiveShipRollIds } },
+        data: { directShipmentId: directShipment.id },
+      });
+
       // 4) RollOperation log (SUBCONTRACTOR_RETURNED + directShip metadata).
       await tx.rollOperation.createMany({
         data: effectiveShipRollIds.map((rid) => ({
@@ -4655,6 +4702,7 @@ export class SubcontractorService {
           await tx.subcontractorDirectShipAllocation.create({
             data: {
               dispatchId: data.dispatchId,
+              directShipmentId: directShipment.id,
               orderLineId: a.orderLineId,
               qty: new Prisma.Decimal(a.qty),
             },
@@ -4709,6 +4757,7 @@ export class SubcontractorService {
       data: {
         id: data.dispatchId,
         dispatchNo: dispatch.dispatchNo,
+        directShipmentNo: createdShipmentNo,
         consumedRollCount: shipRollIds.length,
         partialShip: !isFullDispatchShip,
         workOrderCompleted: completeWorkOrder,
