@@ -1903,7 +1903,7 @@ export class WorkOrderService {
             cancelledAt: true,
             directShippedAt: true,
             directShipReason: true,
-            step: { select: { station: { select: { name: true } } } },
+            step: { select: { stepSequence: true, station: { select: { name: true } } } },
             subcontractor: { select: { id: true, name: true } },
             items: {
               select: {
@@ -2002,6 +2002,7 @@ export class WorkOrderService {
           dispatchId: d.id,
           dispatchNo: d.dispatchNo,
           stepName: d.step?.station?.name ?? null,
+          stepSequence: d.step?.stepSequence ?? 0,
           subcontractorName: d.subcontractor.name,
           dispatchedAt: d.dispatchedAt,
           totalQty: Number(d.totalQty),

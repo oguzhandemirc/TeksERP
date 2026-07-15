@@ -456,6 +456,8 @@ export interface BatchLaneDispatch {
   dispatchNo: string;
   /** Hangi fason adımına gönderildi (istasyon adı). */
   stepName: string | null;
+  /** Adım sırası (rota) — belge modalında Zımpara→Boyahane gruplarını sıralamak için. */
+  stepSequence: number;
   subcontractorName: string;
   dispatchedAt: string;
   totalQty: number;

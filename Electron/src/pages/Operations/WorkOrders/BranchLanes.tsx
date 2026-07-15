@@ -48,6 +48,7 @@ import { DirectShipModal } from "./DirectShipModal";
 import { DirectShipmentDetailModal } from "@/pages/Operations/Shipments/DirectShipmentDetailModal";
 import { UndoTransferModal } from "./UndoTransferModal";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
+import { BatchDocumentsDialog } from "./BatchDocumentsDialog";
 import { BatchCorrectModal } from "./BatchCorrectModal";
 import { ManualMoveModal } from "./ManualMoveModal";
 import { BatchTimeline, stripFason } from "./BatchTimeline";
@@ -338,6 +339,7 @@ function BatchLaneCard({
   // Parti varsayılan KATLI (accordion) — başlıkta özet; açınca toplar + Geçmiş.
   const [expanded, setExpanded] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
   // Accordion başlığındaki konum özeti — "mal nerede" tek bakışta.
   const positionText =
     batch.currentPositions.length > 0
@@ -421,11 +423,11 @@ function BatchLaneCard({
                 <History className="mr-2 h-4 w-4" /> Geçmiş & Sevkler
                 {dispatches.length > 0 ? ` (${dispatches.length})` : ""}
               </DropdownMenuItem>
-              {activeDispatches.map((d) => (
-                <DropdownMenuItem key={`doc-${d.dispatchId}`} onClick={() => onPrintDispatch(d)}>
-                  <Printer className="mr-2 h-4 w-4" /> Sevk Belgesi{dispatchSuffix(d)}
+              {activeDispatches.length > 0 && (
+                <DropdownMenuItem onClick={() => setDocsOpen(true)}>
+                  <Printer className="mr-2 h-4 w-4" /> Sevk Belgeleri ({activeDispatches.length})
                 </DropdownMenuItem>
-              ))}
+              )}
               <PermissionGate permission="workorder:write">
                 <DropdownMenuSeparator />
                 {openDispatches.map((d) => (
@@ -521,6 +523,18 @@ function BatchLaneCard({
           batch={batch}
           workOrderId={workOrderId}
           onUndoTransfer={onUndoTransfer}
+        />
+        {/* Sevk Belgeleri — partinin fason irsaliyeleri, adıma göre gruplu; satıra tıkla
+            → FasonSevkPrintDialog (parent). Belgeler modalı üstte kalır (geri dönülebilir). */}
+        <BatchDocumentsDialog
+          open={docsOpen}
+          onOpenChange={setDocsOpen}
+          batchNumber={batch.batchNumber}
+          dispatches={activeDispatches}
+          onPrintDispatch={(dispatchId) => {
+            const d = batch.dispatches.find((x) => x.dispatchId === dispatchId);
+            if (d) onPrintDispatch(d);
+          }}
         />
       </CardContent>
     </Card>
