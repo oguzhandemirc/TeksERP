@@ -1206,11 +1206,19 @@ export class KartelaService {
    */
   async getStock(params?: {
     search?: string;
+    itemId?: string;
+    colorId?: string;
   }): Promise<ApiResponse<KartelaStockGroup[]>> {
     const groups = await prisma.swatch.groupBy({
       by: ["itemId", "colorId"],
       // sackId:null: çuvala girmiş kartela stokta sayılmaz (havuz rezervi).
-      where: { shipmentId: null, sackId: null, cancelledAt: null },
+      where: {
+        shipmentId: null,
+        sackId: null,
+        cancelledAt: null,
+        ...(params?.itemId && { itemId: params.itemId }),
+        ...(params?.colorId && { colorId: params.colorId }),
+      },
       _count: { _all: true },
     });
 

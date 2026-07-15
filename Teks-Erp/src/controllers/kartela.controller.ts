@@ -240,7 +240,11 @@ export class KartelaController {
   /** GET /api/kartela/stock — müsait kartelaların ürün+renk bazında sayımı (sevk picker) */
   async getStock(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getStock({ search: qStr(req.query.search) });
+      const result = await this.service.getStock({
+        search: qStr(req.query.search),
+        itemId: qStr(req.query.itemId),
+        colorId: qStr(req.query.colorId),
+      });
       res.status(200).json(result);
     } catch (err) {
       next(err);
