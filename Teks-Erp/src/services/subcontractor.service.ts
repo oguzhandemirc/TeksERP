@@ -4712,17 +4712,16 @@ export class SubcontractorService {
         await recomputeOrderStatusForOrders(tx, [...orderIds]);
       }
 
-      // 7) Donmuş resmi belge (yeni docType — ayrı zincir). Yalnız dispatch'in
-      //    TÜMÜ sevk edilince: belge tüm dispatch toplarını gösterir, kısmi sevkte
-      //    yanıltıcı olurdu (kalan toplar dönüş bekliyor).
-      if (isFullDispatchShip) {
-        await printedDocumentService.freezeForSource(
-          tx,
-          PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP,
-          data.dispatchId,
-          userId,
-        );
-      }
+      // 7) Donmuş resmi belge — her doğrudan sevk OLAYI (tam VEYA kısmi) kendi
+      //    irsaliyesini dondurur. sourceId = DirectShipment.id (dispatch DEĞİL):
+      //    bir dispatch'ten birden çok kısmi doğrudan sevk çıkabilir, her biri ayrı
+      //    belge; belge yalnız O olayın toplarını gösterir (kısmi sevkte doğru).
+      await printedDocumentService.freezeForSource(
+        tx,
+        PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP,
+        directShipment.id,
+        userId,
+      );
 
       // 8) Refakat kartı INFO scan.
       await logTravelerScan(
@@ -4914,32 +4913,47 @@ registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_DISPATCH, {
 // =============================================================================
 // RESMİ BELGE — Fasondan Doğrudan Sevk İrsaliyesi (PrintedDocument)
 // =============================================================================
-// Fason sevk irsaliyesinden AYRI belge zinciri (mal müşteriye gidiyor, fasona
-// değil). Aynı dispatch+toplar listesi + doğrudan-sevk meta (sebep/tarih) +
-// varsa karşılanan sipariş satırları. SUBCONTRACTOR_DISPATCH builder şablonu.
+// Fason sevk irsaliyesinden AYRI belge zinciri (mal MÜŞTERİYE gidiyor, fasona
+// değil). sourceId = DirectShipment.id — belge YALNIZ o olayın toplarını +
+// müşteriyi + doğrudan-sevk meta'sını (sebep/tarih) + varsa karşılanan sipariş
+// satırlarını gösterir. Kısmi/çoklu doğrudan sevkte her olay ayrı belge.
 async function buildFasonDirectShipDoc(
   db: PrintedDocDb,
-  dispatchId: string
+  directShipmentId: string
 ): Promise<BuiltDocContent | null> {
-  const dispatch = await db.subcontractorDispatch.findUnique({
-    where: { id: dispatchId },
+  const ds = await db.directShipment.findUnique({
+    where: { id: directShipmentId },
     include: {
-      subcontractor: { select: { id: true, name: true, code: true } },
-      directShippedBy: { select: { fullName: true, username: true } },
-      workOrder: { select: { id: true, workOrderNumber: true, parameters: true, type: true } },
-      step: { include: { station: { select: { name: true, code: true } } } },
-      items: {
-        include: {
-          roll: {
-            include: {
-              item: { select: { code: true, name: true } },
-              color: { select: { code: true, name: true } },
-            },
+      customer: { select: { id: true, name: true, code: true, taxNumber: true } },
+      branch: { select: { id: true, name: true } },
+      shippedBy: { select: { fullName: true, username: true } },
+      dispatch: {
+        select: {
+          dispatchNo: true,
+          dispatchedAt: true,
+          driverName: true,
+          plateNumber: true,
+          notes: true,
+          subcontractor: { select: { id: true, name: true, code: true } },
+          workOrder: { select: { id: true, workOrderNumber: true, parameters: true, type: true } },
+          step: {
+            select: { id: true, stepSequence: true, station: { select: { name: true, code: true } } },
           },
+        },
+      },
+      rolls: {
+        select: {
+          id: true,
+          barcode: true,
+          currentQty: true,
+          qualityGrade: true,
+          width: true,
+          item: { select: { code: true, name: true } },
+          color: { select: { code: true, name: true } },
         },
         orderBy: { createdAt: "asc" },
       },
-      directShipAllocations: {
+      allocations: {
         include: {
           orderLine: {
             select: {
@@ -4953,23 +4967,24 @@ async function buildFasonDirectShipDoc(
       },
     },
   });
-  if (!dispatch) return null;
+  if (!ds) return null;
 
-  const rolls = dispatch.items.map((item, idx) => ({
+  // Doğrudan sevk edilen toplar = DirectShipment'a bağlı (bölünmüşse çocuk) toplar;
+  // dispatchedQty = topun sevk anındaki currentQty'si (kısmi split'te sevk edilen kısım).
+  const rolls = ds.rolls.map((r, idx) => ({
     sequence: idx + 1,
-    id: item.roll.id,
-    barcode: item.roll.barcode,
-    itemCode: item.roll.item?.code ?? "",
-    itemName: item.roll.item?.name ?? "",
-    colorCode: item.roll.color?.code ?? null,
-    colorName: item.roll.color?.name ?? null,
-    dispatchedQty: Number(item.dispatchedQty),
-    dispatchedWeight: item.dispatchedWeight != null ? Number(item.dispatchedWeight) : null,
-    qualityGrade: item.roll.qualityGrade,
-    width: item.roll.width != null ? Number(item.roll.width) : null,
+    id: r.id,
+    barcode: r.barcode,
+    itemCode: r.item?.code ?? "",
+    itemName: r.item?.name ?? "",
+    colorCode: r.color?.code ?? null,
+    colorName: r.color?.name ?? null,
+    dispatchedQty: Number(r.currentQty),
+    dispatchedWeight: null, // bu aşamada top-başına ağırlık tutulmuyor (yalnız metre)
+    qualityGrade: r.qualityGrade,
+    width: r.width != null ? Number(r.width) : null,
   }));
-  const totalWeight = Number(rolls.reduce((s, r) => s.plus(r.dispatchedWeight ?? 0), new Prisma.Decimal(0)));
-  const allocations = dispatch.directShipAllocations.map((a) => ({
+  const allocations = ds.allocations.map((a) => ({
     orderNumber: a.orderLine.order.orderNumber,
     itemCode: a.orderLine.item.code,
     itemName: a.orderLine.item.name,
@@ -4978,41 +4993,50 @@ async function buildFasonDirectShipDoc(
   }));
 
   return {
-    documentNo: dispatch.dispatchNo,
+    documentNo: ds.shipmentNo,
     // Doğrudan sevk terminaldir, iptal yolu yok → voidInfo daima null.
     voidInfo: null,
     doc: {
       directShip: true,
-      dispatchNo: dispatch.dispatchNo,
-      directShippedAt: dispatch.directShippedAt?.toISOString() ?? null,
-      directShipReason: dispatch.directShipReason,
-      directShippedBy: dispatch.directShippedBy?.fullName ?? dispatch.directShippedBy?.username ?? null,
-      dispatchedAt: dispatch.dispatchedAt.toISOString(),
-      driverName: dispatch.driverName,
-      plateNumber: dispatch.plateNumber,
-      notes: dispatch.notes,
+      shipmentNo: ds.shipmentNo,
+      dispatchNo: ds.dispatch.dispatchNo,
+      directShippedAt: ds.shippedAt.toISOString(),
+      directShipReason: ds.reason,
+      directShippedBy: ds.shippedBy?.fullName ?? ds.shippedBy?.username ?? null,
+      dispatchedAt: ds.dispatch.dispatchedAt.toISOString(),
+      driverName: ds.dispatch.driverName,
+      plateNumber: ds.dispatch.plateNumber,
+      notes: ds.dispatch.notes,
+      // Malın gittiği MÜŞTERİ — doğrudan sevk irsaliyesinin asıl alıcısı.
+      customer: {
+        id: ds.customer.id,
+        name: ds.customer.name,
+        code: ds.customer.code ?? null,
+        taxNumber: ds.customer.taxNumber ?? null,
+        branchName: ds.branch?.name ?? null,
+      },
       workOrder: {
-        id: dispatch.workOrder.id,
-        workOrderNumber: dispatch.workOrder.workOrderNumber,
-        parameters: (dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
-        type: dispatch.workOrder.type,
+        id: ds.dispatch.workOrder.id,
+        workOrderNumber: ds.dispatch.workOrder.workOrderNumber,
+        parameters: (ds.dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
+        type: ds.dispatch.workOrder.type,
       },
       subcontractor: {
-        id: dispatch.subcontractor.id,
-        name: dispatch.subcontractor.name,
-        code: dispatch.subcontractor.code ?? null,
+        id: ds.dispatch.subcontractor.id,
+        name: ds.dispatch.subcontractor.name,
+        code: ds.dispatch.subcontractor.code ?? null,
       },
       step: {
-        id: dispatch.step.id,
-        stepSequence: dispatch.step.stepSequence,
-        station: { name: dispatch.step.station.name, code: dispatch.step.station.code },
+        id: ds.dispatch.step.id,
+        stepSequence: ds.dispatch.step.stepSequence,
+        station: { name: ds.dispatch.step.station.name, code: ds.dispatch.step.station.code },
       },
       rolls,
       allocations,
       totals: {
         rollCount: rolls.length,
-        totalQty: Number(dispatch.totalQty),
-        totalWeight,
+        totalQty: Number(ds.totalQty),
+        totalWeight: 0,
       },
     },
   };

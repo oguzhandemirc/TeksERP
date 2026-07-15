@@ -103,6 +103,7 @@ router.post("/shipments", verifyToken, WRITE, controller.createShipment);
 router.get("/shipments", verifyToken, READ, controller.listShipments);
 router.post("/shipments/preview", verifyToken, READ, controller.previewCreateShipment);
 
+router.get("/direct-shipments/:id", verifyToken, READ, controller.getDirectShipment);
 router.get("/shipments/:id", verifyToken, READ, controller.getShipment);
 router.post("/shipments/:id/add-sacks", verifyToken, WRITE, controller.addSacksToShipment);
 router.post("/shipments/:id/remove-sack", verifyToken, WRITE, controller.removeSackFromShipment);

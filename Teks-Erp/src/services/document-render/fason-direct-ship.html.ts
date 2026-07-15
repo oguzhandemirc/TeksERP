@@ -40,6 +40,7 @@ interface DirectShipAllocation {
 /** Donmuş doğrudan-sevk payload'ı — buildFasonDirectShipDoc ile aynı şekil. */
 interface DirectShipDoc {
   directShip: true;
+  shipmentNo?: string;
   dispatchNo: string;
   directShippedAt: string | null;
   directShipReason: string | null;
@@ -48,6 +49,14 @@ interface DirectShipDoc {
   driverName: string | null;
   plateNumber: string | null;
   notes: string | null;
+  /** Malın gittiği müşteri — doğrudan sevk irsaliyesinin asıl alıcısı. */
+  customer?: {
+    id: string;
+    name: string;
+    code: string | null;
+    taxNumber: string | null;
+    branchName: string | null;
+  };
   workOrder: { id: string; workOrderNumber: string; type: string };
   subcontractor: { id: string; name: string; code: string | null };
   step: { id: string; stepSequence: number; station: { name: string; code: string } };
@@ -139,6 +148,16 @@ export function renderFasonDirectShipHtml(
   const showSub = sectionOn(cfg.sections, "subcontractorInfo");
   const showDs = sectionOn(cfg.sections, "directShipInfo");
   const showVeh = sectionOn(cfg.sections, "vehicleInfo");
+  // MÜŞTERİ (Malın Gittiği) — doğrudan sevkin asıl alıcısı; section toggle'dan
+  // bağımsız DAİMA gösterilir (irsaliyenin muhatabı).
+  const cust = doc.customer;
+  const custBox = cust
+    ? `<div class="box"><div class="box-t">MÜŞTERİ (Malın Gittiği)</div>
+        <div class="row"><span>Adı:</span><b>${esc(cust.name)}</b></div>
+        ${cust.branchName ? `<div class="row"><span>Şube:</span><b>${esc(cust.branchName)}</b></div>` : ""}
+        ${cust.taxNumber ? `<div class="row"><span>V.No:</span><b>${esc(cust.taxNumber)}</b></div>` : ""}
+      </div>`
+    : "";
   const subBox = showSub
     ? `<div class="box"><div class="box-t">FASON FİRMA (Malın Geldiği)</div>
         <div class="row"><span>Adı:</span><b>${esc(doc.subcontractor.name)}</b></div>
@@ -161,7 +180,9 @@ export function renderFasonDirectShipHtml(
       </div>`
     : "";
   const infoGrid =
-    subBox || dsBox || vehBox ? `<div class="info">${subBox}${dsBox}${vehBox}</div>` : "";
+    custBox || subBox || dsBox || vehBox
+      ? `<div class="info">${custBox}${subBox}${dsBox}${vehBox}</div>`
+      : "";
 
   // Karşılanan siparişler (allocations) — sevkin hangi sipariş satırlarını kapattığı.
   const allocTable =
@@ -291,7 +312,8 @@ export function renderFasonDirectShipHtml(
       </div>
       <div class="hr">
         <div class="title">${esc(title)}</div>
-        <div class="ln">İrsaliye No: <b>${esc(doc.dispatchNo)}</b></div>
+        <div class="ln">İrsaliye No: <b>${esc(doc.shipmentNo ?? doc.dispatchNo)}</b></div>
+        ${doc.shipmentNo ? `<div class="ln">Fason Sevk No: <b>${esc(doc.dispatchNo)}</b></div>` : ""}
         <div class="ln">Tarih: <b>${esc(fmtDate(shippedDate))}</b></div>
       </div>
     </header>

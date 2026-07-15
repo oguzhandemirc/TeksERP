@@ -254,6 +254,13 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  getDirectShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getDirectShipmentById(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   listSackStoreBoard = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const limitRaw = parseInt(req.query.limit as string, 10);
