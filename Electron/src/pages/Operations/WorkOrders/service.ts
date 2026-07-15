@@ -196,6 +196,13 @@ export const workOrderService = {
       .post<ApiResponse<ManualMoveResult>>(`/api/work-orders/${id}/manual-move`, payload)
       .then((r) => r.data),
 
+  /** Fason sevkini iptal et — Konumu Düzelt'te fasondaki topu içeri almanın gerçek-olay
+   *  kısayolu (ham teleport yerine): çuvallar depoya döner, irsaliye VOID. */
+  cancelFasonDispatch: (dispatchId: string, reason: string) =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/subcontractor/dispatches/${dispatchId}/cancel`, { reason })
+      .then((r) => r.data),
+
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
   getCoverage: (lineIds: string[], excludeWorkOrderId?: string) =>
     apiClient
@@ -421,6 +428,8 @@ export interface ManualMovePreview {
   blockedCount: number;
   /** 'join' adayları — aynı WO'da sevksiz (kilitsiz) diğer partiler. */
   candidateJoinParties: { batchId: string; batchNumber: string }[];
+  /** Fasondaki seçili toplar için açık fason sevkleri — inline Sevk İptali / Fason Kabul. */
+  openDispatches: { dispatchId: string; dispatchNo: string; stepName: string | null }[];
   /** İleri-atlama (Milestone Backflush) önizlemesi. */
   backflush: {
     direction: "forward" | "backward";

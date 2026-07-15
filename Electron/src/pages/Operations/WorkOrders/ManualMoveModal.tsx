@@ -100,6 +100,21 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
   });
   const pending = moveMut.isPending;
 
+  // Fasondaki topu içeri alma — inline "Sevki İptal Et" (gerçek olay; ham teleport yerine).
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const cancelMut = useMutation({
+    mutationFn: (dispatchId: string) =>
+      workOrderService.cancelFasonDispatch(dispatchId, cancelReason.trim()),
+    onSuccess: (res) => {
+      toast.success(res.message ?? "Sevk iptal edildi — toplar depoya döndü");
+      setCancelTarget(null);
+      setCancelReason("");
+      invalidate();
+      void previewQ.refetch();
+    },
+  });
+
   const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -230,6 +245,69 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
               </div>
             )}
           </div>
+
+          {/* Fasondaki toplar — inline gerçek-olay kısayolu (ham teleport HARD-STOP) */}
+          {(preview?.openDispatches.length ?? 0) > 0 && (
+            <div className="space-y-2 rounded-md border border-warning/40 bg-warning/5 p-2.5 text-[11px]">
+              <div className="flex items-center gap-1.5 font-medium text-warning">
+                <AlertTriangle className="h-3.5 w-3.5" /> Seçili toplar fasonda (dışarıda)
+              </div>
+              <div className="text-muted-foreground">
+                Ham taşıma yapılamaz. Mal işlenip döndüyse <b>Fason Kabul</b> (üretim ekranı);
+                sevk hatalıysa aşağıdan iptal edin — toplar depoya döner.
+              </div>
+              {preview!.openDispatches.map((d) => (
+                <div key={d.dispatchId} className="rounded border bg-background p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono">
+                      {d.dispatchNo}
+                      {d.stepName ? ` · ${d.stepName}` : ""}
+                    </span>
+                    {cancelTarget !== d.dispatchId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancelTarget(d.dispatchId);
+                          setCancelReason("");
+                        }}
+                        className="shrink-0 rounded border border-destructive/40 px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+                      >
+                        Sevki İptal Et
+                      </button>
+                    )}
+                  </div>
+                  {cancelTarget === d.dispatchId && (
+                    <div className="mt-1.5 space-y-1.5">
+                      <input
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        placeholder="İptal sebebi (en az 3 karakter)"
+                        maxLength={500}
+                        className="w-full rounded border bg-background px-2 py-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <div className="flex justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setCancelTarget(null)}
+                          className="rounded border px-1.5 py-0.5"
+                        >
+                          Vazgeç
+                        </button>
+                        <button
+                          type="button"
+                          disabled={cancelReason.trim().length < 3 || cancelMut.isPending}
+                          onClick={() => cancelMut.mutate(d.dispatchId)}
+                          className="rounded bg-destructive px-2 py-0.5 font-medium text-white disabled:opacity-50"
+                        >
+                          {cancelMut.isPending ? "İptal ediliyor..." : "Onayla — Sevki İptal Et"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Parti kararı (yalnız kısmi taşımada) */}
           {needParty && (

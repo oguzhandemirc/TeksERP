@@ -305,6 +305,26 @@ export class WorkOrderManualMoveService {
       .filter((b) => b.dispatches.length === 0)
       .map((b) => ({ batchId: b.id, batchNumber: b.batchNumber }));
 
+    // Fasondaki (AT_SUBCONTRACTOR) seçili toplar için AÇIK fason sevkleri — inline
+    // "Sevki İptal Et" / "Fason Kabul" kısayolları için (ham teleport HARD-STOP; çıkmaz
+    // banner yerine gerçek olay). Ham pointer-flip açık dispatch'i orphan ederdi.
+    const fasonRollIds = ctx.selected
+      .filter((r) => r.status === RollStatus.AT_SUBCONTRACTOR)
+      .map((r) => r.id);
+    const openDispatches =
+      fasonRollIds.length > 0
+        ? (
+            await prisma.subcontractorDispatch.findMany({
+              where: {
+                cancelledAt: null,
+                directShippedAt: null,
+                items: { some: { rollId: { in: fasonRollIds } } },
+              },
+              select: { id: true, dispatchNo: true, step: { select: { station: { select: { name: true } } } } },
+            })
+          ).map((d) => ({ dispatchId: d.id, dispatchNo: d.dispatchNo, stepName: d.step?.station?.name ?? null }))
+        : [];
+
     return {
       success: true,
       data: {
@@ -315,6 +335,7 @@ export class WorkOrderManualMoveService {
         movableCount: movable.length,
         blockedCount: rolls.length - movable.length,
         candidateJoinParties,
+        openDispatches,
         backflush,
         warnings,
       },
