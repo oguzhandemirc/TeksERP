@@ -384,12 +384,14 @@ export default function FasonSevkScreen() {
     const steps = woDetailQuery.data?.data?.steps ?? [];
     // Çoklu sevk: COMPLETED fason adımı da seçilebilir (ek parti gönderilince
     // backend adımı yeniden ACTIVE'e açar). Sadece SKIPPED/CANCELLED hariç.
-    return steps.filter(
-      (s) =>
-        s.station?.type === 'EXTERNAL' &&
-        s.status !== 'SKIPPED' &&
-        s.status !== 'CANCELLED'
-    );
+    return steps
+      .filter(
+        (s) =>
+          s.station?.type === 'EXTERNAL' &&
+          s.status !== 'SKIPPED' &&
+          s.status !== 'CANCELLED'
+      )
+      .sort((a, b) => a.stepSequence - b.stepSequence);
   }, [woDetailQuery.data]);
 
   // İş emri seçilince tek EXTERNAL step varsa otomatik seç
@@ -564,12 +566,16 @@ export default function FasonSevkScreen() {
   const isOverride =
     !!plannedSubId && !!subcontractorId && plannedSubId !== subcontractorId;
 
+  // Adım numarası (Adım 1, Adım 2 ...) badge'de kalın gösterilir; sıralama
+  // externalSteps'te stepSequence'a göre yapılır — PickerModal alfabetik
+  // sıralamayı ezmesin diye disableSort ile açılır (aşağıda kullanım).
   const stepOptions = useMemo<PickerOption[]>(
     () =>
       externalSteps.map((s) => ({
         value: s.id,
         label: s.station?.name ?? '—',
-        sublabel: `Adım ${s.stepSequence} · ${trLabel(STEP_STATUS_LABEL, s.status)}`,
+        sublabel: trLabel(STEP_STATUS_LABEL, s.status),
+        badge: { text: `Adım ${s.stepSequence}`, color: palette.indigo[600] },
       })),
     [externalSteps]
   );
@@ -1349,6 +1355,7 @@ export default function FasonSevkScreen() {
         visible={pickerOpen === 'step'}
         title="Fason Adımı Seç"
         options={stepOptions}
+        disableSort
         selectedValue={stepId}
         emptyText="Sevke uygun fason adımı yok"
         onDismiss={() => setPickerOpen(null)}

@@ -422,7 +422,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
 
       {/* Profil menüsü — YALNIZ gate modunda (onCancel yok), sağ üst köşe. Oturum
           ÖNCESİ tüm aksiyonlar burada: Ayarlar (sunucu adresi — yanlış IP'de tek
-          çıkış yolu), İstasyon değiştir (ModuleSelect), Kilitle/operatör değiştir,
+          çıkış yolu), Bölüm değiştir (ModuleSelect), Kilitle/operatör değiştir,
           Çıkış. DIŞ konteyner absolute + buton NORMAL akışta: butonu absolute yapıp
           Menu'ye anchor verince Menu'nün flow wrapper'ına göre konumlanıp ekran
           dışına kayıyordu (eski hata) — dış View absolute, buton wrapper içinde. */}
@@ -466,7 +466,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
                 setProfileMenuVisible(false);
                 rootNavigateToModuleSelect();
               }}
-              title="İstasyon değiştir"
+              title="Bölüm değiştir"
               style={styles.profileMenuItem}
               titleStyle={styles.profileMenuItemTitle}
             />

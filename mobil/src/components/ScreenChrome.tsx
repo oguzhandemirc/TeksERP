@@ -176,8 +176,27 @@ export default function ScreenChrome({
             </TouchableRipple>
           }
         >
-          {/* Menü içeriği tablet/telefon AYNI — ad zaten tetik butonunda yazıyor,
-              menüde tekrar etmez. */}
+          {/* İlk satır — HANGİ KULLANICI olduğun. YALNIZ tetik butonunda ad gizliyken
+              (telefon dashboard / Fason Sevk dikey — orada sadece ikon var). Ad zaten
+              butonda yazıyorsa menüde TEKRAR ETME (çift isim olmasın). */}
+          {!showUserName && (
+            <>
+              <View style={styles.menuHeader}>
+                <Icon source="account-circle" size={22} color="#4f46e5" />
+                <View style={styles.menuHeaderText}>
+                  <Text style={styles.menuHeaderName} numberOfLines={1}>
+                    {operatorName}
+                  </Text>
+                  {user?.fullName?.trim() && user?.username && user.fullName.trim() !== user.username && (
+                    <Text style={styles.menuHeaderSub} numberOfLines={1}>
+                      @{user.username}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              <Divider />
+            </>
+          )}
           <Menu.Item
             leadingIcon="cog"
             onPress={openSettings}
@@ -311,6 +330,20 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   userTriggerName: { color: '#fff', fontWeight: '700', fontSize: 13, maxWidth: 160 },
+  // Menü ilk satırı — giriş yapan operatörün adı (kim olduğun). Menü yüzeyi beyaz →
+  // koyu metin. Ad + (varsa) @kullanıcı-adı alt satır.
+  menuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    maxWidth: 340,
+  },
+  menuHeaderText: { flexShrink: 1 },
+  menuHeaderName: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
+  menuHeaderSub: { fontSize: 13, color: '#64748b', marginTop: 1 },
   // Menü maddeleri — saha dokunma hedefi (min 56dp kuralı) + büyük yazı.
   menuItem: { height: 58, maxWidth: 340 },
   menuItemTitle: { fontSize: 17 },

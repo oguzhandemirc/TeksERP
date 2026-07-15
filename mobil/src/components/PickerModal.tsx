@@ -70,6 +70,10 @@ interface BaseProps {
   pinnedOptions?: PickerOption[];
   /** Çerçevenin üstündeki küçük başlık. */
   pinnedLabel?: string;
+  /** Client (non-paginated) modda varsayılan alfabetik sıralamayı kapatır —
+   *  `options` parent'ta zaten anlamlı bir sırayla geliyorsa (örn. rota adım
+   *  sırası) o sıra korunur. */
+  disableSort?: boolean;
 }
 
 interface PaginatedProps extends BaseProps {
@@ -123,6 +127,7 @@ export default function PickerModal(props: Props) {
     successMessage,
     pinnedOptions = [],
     pinnedLabel,
+    disableSort = false,
   } = props;
 
   // Yenileme: ham isFetching yerine standart hook → offline guard + zaman aşımı
@@ -166,11 +171,11 @@ export default function PickerModal(props: Props) {
   // Sort yalnızca options değişiminde — her tuş basışında yeniden sıralanmasın
   // (localeCompare 'tr' büyük listelerde O(n log n) yüksek sabit faktörlü).
   const sortedOptions = useMemo(() => {
-    if (paginated) return options;
+    if (paginated || disableSort) return options;
     return [...options].sort((a, b) =>
       a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' }),
     );
-  }, [paginated, options]);
+  }, [paginated, disableSort, options]);
 
   // Filter ayrı useMemo: arama değiştikçe yalnızca filtreyi tekrar uygula.
   const listData = useMemo(() => {
