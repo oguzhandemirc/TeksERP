@@ -12,6 +12,7 @@ export const operationTypeLabels: Record<string, string> = {
 /** RollEntrySource → top oluşturma etiketi. */
 export const entrySourceLabels: Record<string, string> = {
   SUPPLIER_RECEIPT: "Kumaş girişi",
+  MANUAL_ENTRY: "Manuel giriş",
   TAMBUR_SPLIT: "Top ayrıldı (tambur)",
   SUBCONTRACTOR_RETURN: "Fason dönüş topu",
 };

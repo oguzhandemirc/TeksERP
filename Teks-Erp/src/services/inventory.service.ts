@@ -373,7 +373,12 @@ export class InventoryService {
     userId?: string,
     /** KK1 makine atfı — aktif çalışma oturumundan (controller çözer). KK1 girişi
      *  RollOperation üretmediği için atıf Roll.createdMachineId üstünde kapanır. */
-    machineId?: string | null
+    machineId?: string | null,
+    /** İsteğin kaynağı — eşleşmiş mobil cihazdan mı (KK1 istasyon taraması) geldi,
+     *  yoksa Electron admin panelinden mi ("Manuel Top Ekle")? entrySource bunu
+     *  ayırt eder (controller `Boolean(req.device)` ile çözer — Electron ASLA
+     *  x-device-id göndermez). */
+    isMobileOrigin?: boolean
   ): Promise<ApiResponse<Roll>> {
     // KK1 istasyonunda ağırlık (kg) girişi admin ayarıyla kapatılabilir (default kapalı).
     // UI alanı gizlemek yetmez — kapalıyken gelen ağırlık payload'ını (yanlışlıkla ya da
@@ -452,8 +457,11 @@ export class InventoryService {
     // clientToken (@unique) ile — barkod DEDUP ANCHOR'I DEĞİL (aşağıdaki catch).
     const rollType: RollBarcodeType = data.colorId != null ? "F" : "H";
 
-    // Tüm item tipleri (fabric, yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
-    const entrySource: RollEntrySource = RollEntrySource.SUPPLIER_RECEIPT;
+    // Mobil KK1 istasyonundan (eşleşmiş cihaz) mı, Electron admin'den elle mi
+    // girildi — "Ham Giriş" / "Manuel Giriş" ayrımı raporlama için kritik.
+    const entrySource: RollEntrySource = isMobileOrigin
+      ? RollEntrySource.SUPPLIER_RECEIPT
+      : RollEntrySource.MANUAL_ENTRY;
 
     // Operatör explicit kalite verdiyse SIKI doğrula (katalog + aktif —
     // soft-delete giriş guard'ı; typo'lu kod byQuality istatistiklerini
@@ -1531,10 +1539,16 @@ export class InventoryService {
     const events: RollHistoryEvent[] = [];
 
     // Top'un sisteme nasıl girdiğine göre başlık — itemType'tan değil entrySource'tan türer.
+    // NOT: eskiden SUBCONTRACTOR_RETURN da `default`'a düşüp yanlışlıkla "Ham Giriş"
+    // gösteriyordu — dört değer de artık AÇIK case'le eşleniyor.
     const entryTitle = ((): string => {
       switch (roll.entrySource) {
         case RollEntrySource.TAMBUR_SPLIT:
           return "Tambur Kesimi (Yeni Parça)";
+        case RollEntrySource.SUBCONTRACTOR_RETURN:
+          return "Fason Dönüşü";
+        case RollEntrySource.MANUAL_ENTRY:
+          return "Manuel Giriş";
         case RollEntrySource.SUPPLIER_RECEIPT:
         default:
           return "Ham Giriş";

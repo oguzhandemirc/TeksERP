@@ -399,7 +399,9 @@ export default function KK1Screen() {
   );
 
   // ── Son kayıtlar (inline): SADECE 1. sayfa, az kayıt ──
-  // entrySource=SUPPLIER_RECEIPT → KK1/manuel girişle gelen toplar (ham + bitmiş).
+  // entrySource=SUPPLIER_RECEIPT,MANUAL_ENTRY → KK1 taramasıyla VEYA Electron admin
+  // "Manuel Top Ekle" ile gelen toplar (ham + bitmiş) — 2026-07-15'te ikisi ayrı enum
+  // değeri oldu, CSV ile ikisi de kapsanır (backend buildWhereClause virgülü `in`'e çevirir).
   // Backend enum'unda 'ALL' / 'PRODUCTION' YOK — status filtresi vermiyoruz ki
   // tüm statüsler (STOCK ham, WAREHOUSE renkli, vs.) görünsün.
   const recentRollsQuery = useQuery({
@@ -410,7 +412,7 @@ export default function KK1Screen() {
         pageSize: RECENT_PAGE_SIZE,
         sortBy: 'createdAt',
         sortOrder: 'desc',
-        filters: { entrySource: 'SUPPLIER_RECEIPT' },
+        filters: { entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY' },
       }),
   });
 
@@ -1537,7 +1539,8 @@ function RollHistoryModal({
       rollService.getAllCursor({
         limit: HISTORY_PAGE_SIZE,
         cursor: pageParam,
-        filters: { entrySource: 'SUPPLIER_RECEIPT' },
+        // Bkz. yukarıdaki "Son kayıtlar" sorgusu — aynı CSV kapsam gerekçesi.
+        filters: { entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY' },
         withTotal: !pageParam,
       }),
     initialPageParam: null as string | null,

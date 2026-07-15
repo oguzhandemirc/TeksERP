@@ -169,10 +169,13 @@ export class InventoryController {
       const body = initialEntrySchema.parse(req.body);
       // KK1 makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
       const stamp = await getStampContext(req, { enforceForMobile: true });
+      // entrySource ayrımı: Electron ASLA x-device-id göndermez (bkz. Electron
+      // apiClient.ts) → req.device yalnız eşleşmiş mobil cihazda dolu olur.
       const result = await this.service.createInitialEntry(
         body,
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null,
+        Boolean(req.device),
       );
       res.status(201).json(result);
     } catch (error) {

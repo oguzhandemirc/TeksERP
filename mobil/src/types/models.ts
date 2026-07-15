@@ -36,11 +36,14 @@ export type RollStatus =
   | 'TAMBUR_CONSUMED'
   | 'SUBCONTRACTOR_CONSUMED';
 
+// Backend enum'uyla (Teks-Erp RollEntrySource) birebir — SUPPLIER_RECEIPT = mobil
+// KK1 istasyon taraması, MANUAL_ENTRY = Electron admin "Manuel Top Ekle" (2026-07-15
+// ayrıştırıldı). Önceki 'KK1_INITIAL'/'MANUAL' değerleri backend'de HİÇ var olmadı.
 export type RollEntrySource =
-  | 'KK1_INITIAL'
+  | 'SUPPLIER_RECEIPT'
+  | 'MANUAL_ENTRY'
   | 'TAMBUR_SPLIT'
-  | 'SUBCONTRACTOR_RETURN'
-  | 'MANUAL';
+  | 'SUBCONTRACTOR_RETURN';
 
 // =============================================================================
 // Master data — Color, FabricProperty

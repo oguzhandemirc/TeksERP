@@ -256,6 +256,7 @@ export const ENUM_LABELS: Record<string, string> = {
   SUBCONTRACTOR_RETURNED: "Fasondan Döndü",
   // RollEntrySource
   SUPPLIER_RECEIPT: "Tedarikçi Mal Kabul",
+  MANUAL_ENTRY: "Manuel Giriş",
   TAMBUR_SPLIT: "Tambur Ayrımı",
   SUBCONTRACTOR_RETURN: "Fason Dönüşü",
   // ItemType / ItemUnit

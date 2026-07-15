@@ -166,7 +166,7 @@ Enum sayısı ~**35** (kanonik: `grep '^enum' schema.prisma`; aşağıdaki tablo
 | `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SHIPPING, SUBCONTRACTOR, OTHER |
 | `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
 | `ItemType` | YARN, FABRIC, CONSUMABLE (WARP kaldırıldı — fabrika çözgü/dokuma yapmaz) |
-| `RollEntrySource` | SUPPLIER_RECEIPT, TAMBUR_SPLIT, SUBCONTRACTOR_RETURN |
+| `RollEntrySource` | SUPPLIER_RECEIPT (mobil KK1 istasyon taraması), MANUAL_ENTRY (Electron admin "Manuel Top Ekle" — 2026-07-15 SUPPLIER_RECEIPT'ten ayrıştırıldı), TAMBUR_SPLIT, SUBCONTRACTOR_RETURN |
 | `RollStatus` | STOCK, IN_PRODUCTION, SCRAP, CANCELLED, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE, SHIPPED, TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED, AT_KARTELA, KARTELA_CONSUMED (PRODUCED 2026-07-13 KALDIRILDI) |
 | `CompanyType` | CUSTOMER, SUPPLIER (fason/boyahane ayrı `Subcontractor` modeline taşındı — SUBCONTRACTOR/DYEHOUSE kaldırıldı) |
 | `OrderStatus` | PENDING, APPROVED, PARTIAL_SHIPPED, COMPLETED, CANCELLED (IN_PRODUCTION yok — durum defter-otoritatif shippedQty'den türer) |

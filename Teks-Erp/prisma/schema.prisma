@@ -55,7 +55,8 @@ enum ItemType {
 /// Top'un sisteme nasıl girdiğini ifade eder — raporlama ayrımı için kritik.
 /// itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
 enum RollEntrySource {
-  SUPPLIER_RECEIPT // Tedarikçiden satın alınan mal kabul (kumaş, yarn, consumable)
+  SUPPLIER_RECEIPT // Mobil KK1 istasyonundan taranarak/girilerek gelen mal kabul (kumaş, yarn, consumable)
+  MANUAL_ENTRY // Electron admin panelinden "Manuel Top Ekle" ile elle girilen top — istasyon taraması DEĞİL
   TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
 }

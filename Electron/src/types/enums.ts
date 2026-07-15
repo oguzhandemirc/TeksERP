@@ -187,15 +187,18 @@ export const rollOperationTypeLabels: Record<RollOperationType, string> = {
 
 export const RollEntrySource = {
   SUPPLIER_RECEIPT: "SUPPLIER_RECEIPT",
+  MANUAL_ENTRY: "MANUAL_ENTRY",
   TAMBUR_SPLIT: "TAMBUR_SPLIT",
   SUBCONTRACTOR_RETURN: "SUBCONTRACTOR_RETURN",
 } as const;
 export type RollEntrySource = (typeof RollEntrySource)[keyof typeof RollEntrySource];
 
-// SUPPLIER_RECEIPT enum değeri "tedarikçiden gelen" anlamı taşımaz; KK1 mobil
-// veya Electron'dan manuel girilen ham toplar bu kaynaktadır.
+// SUPPLIER_RECEIPT = mobil KK1 istasyonundan taranan/girilen top; MANUAL_ENTRY =
+// Electron admin panelinden "Manuel Top Ekle" ile elle girilen top (istasyon
+// taraması DEĞİL) — 2026-07-15 ayrıştırıldı, eskiden ikisi de SUPPLIER_RECEIPT'ti.
 export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
   SUPPLIER_RECEIPT: "Ham Giriş",
+  MANUAL_ENTRY: "Manuel Giriş",
   TAMBUR_SPLIT: "Tambur Kesim",
   SUBCONTRACTOR_RETURN: "Fason Dönüşü",
 };

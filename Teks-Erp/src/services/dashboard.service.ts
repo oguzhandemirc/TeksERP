@@ -112,9 +112,12 @@ export class DashboardService {
         GROUP BY wos."stationId"
       ) disp ON disp."stationId" = s."id"
       LEFT JOIN (
+        -- SUPPLIER_RECEIPT (mobil KK1 taraması) + MANUAL_ENTRY (Electron admin elle
+        -- giriş) ikisi de KK1'in işi olan "bugün gelen ham top" sayısına girer —
+        -- KK1Screen.tsx'teki "Son Kayıtlar" listesiyle aynı kapsam.
         SELECT COUNT("id")::int AS cnt
         FROM "rolls"
-        WHERE "entrySource" = 'SUPPLIER_RECEIPT'
+        WHERE "entrySource" IN ('SUPPLIER_RECEIPT', 'MANUAL_ENTRY')
           AND "createdAt" >= ${today}
           AND "colorId" IS NULL
       ) e ON s."kind" = 'RAW_QC'
