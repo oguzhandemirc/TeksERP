@@ -12,6 +12,8 @@ interface Props {
   nullable?: boolean;
   noneLabel?: string;
   disabled?: boolean;
+  /** false → yalnız şube adı gösterilir (şehir eki gizlenir). Varsayılan true. */
+  showCity?: boolean;
 }
 
 export function BranchSelect({
@@ -21,6 +23,7 @@ export function BranchSelect({
   nullable = true,
   noneLabel = "— (şube seçilmedi)",
   disabled: disabledProp,
+  showCity = true,
 }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ["customer-branches", customerId, "select"],
@@ -65,7 +68,7 @@ export function BranchSelect({
         {branches.map((b) => (
           <SelectItem key={b.id} value={b.id}>
             {b.name}
-            {b.city && <span className="text-muted-foreground"> — {b.city}</span>}
+            {showCity && b.city && <span className="text-muted-foreground"> — {b.city}</span>}
           </SelectItem>
         ))}
       </SelectContent>

@@ -4687,7 +4687,15 @@ export class SubcontractorService {
             id: true,
             quantity: true,
             shippedQty: true,
-            order: { select: { id: true, status: true, manualClosedById: true, customerId: true } },
+            order: {
+              select: {
+                id: true,
+                status: true,
+                manualClosedById: true,
+                customerId: true,
+                branchId: true,
+              },
+            },
           },
         });
         const freshById = new Map(freshLines.map((l) => [l.id, l]));
@@ -4695,12 +4703,17 @@ export class SubcontractorService {
         for (const a of allocations) {
           const line = freshById.get(a.orderLineId);
           if (!line) throw AppError.notFound(`Sipariş satırı bulunamadı: ${a.orderLineId}`);
-          // Karşılanma yalnız SEÇİLEN müşterinin siparişine yazılabilir — mal o müşteriye
-          // gidiyor; başka müşterinin siparişine karşılanma saçma olur (frontend zaten
-          // daraltıyor, bu defense-in-depth).
+          // Karşılanma yalnız SEÇİLEN müşterinin (ve şube seçildiyse o şubenin) siparişine
+          // yazılabilir — mal o müşteriye/şubeye gidiyor; başkasına karşılanma saçma olur
+          // (frontend zaten daraltıyor, bu defense-in-depth).
           if (data.customerId && line.order.customerId !== data.customerId) {
             throw AppError.badRequest(
               "Karşılanan sipariş satırı seçilen müşteriye ait değil — yalnız o müşterinin siparişleri işlenebilir.",
+            );
+          }
+          if (data.branchId && line.order.branchId !== data.branchId) {
+            throw AppError.badRequest(
+              "Karşılanan sipariş satırı seçilen şubeye ait değil — yalnız o şubenin siparişleri işlenebilir.",
             );
           }
           if (

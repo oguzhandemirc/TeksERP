@@ -131,30 +131,41 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
       return next;
     });
 
-  // Siparişler YALNIZ seçilen müşterinin açık satırlarıyla daraltılır — bir sipariş
-  // zaten bir müşteriye aittir; müşteri seçilmeden sipariş seçilemez (çelişki önlenir).
+  // Siparişler seçilen MÜŞTERİ (+ varsa ŞUBE) ile daraltılır — bir sipariş zaten
+  // bir müşteri/şubeye aittir. Şube boşsa o müşterinin tüm şubeleri listelenir.
   const customerOrderLines = useMemo(
     () =>
       customerId
-        ? (preview?.candidateOrderLines ?? []).filter((l) => l.customerId === customerId)
+        ? (preview?.candidateOrderLines ?? []).filter(
+            (l) => l.customerId === customerId && (!branchId || l.branchId === branchId),
+          )
         : [],
-    [customerId, preview?.candidateOrderLines],
+    [customerId, branchId, preview?.candidateOrderLines],
   );
 
-  // Müşteri değişince: şubeyi sıfırla + artık o müşteriye ait olmayan karşılanmaları at.
-  const handleCustomerChange = (id: string | null) => {
-    setCustomerId(id);
-    setBranchId(null);
+  // Daraltma değişince eşleşmeyen karşılanmaları at (ortak yardımcı).
+  const pruneAllocTo = (custId: string | null, brId: string | null) =>
     setAlloc((prev) => {
       const validIds = new Set(
         (preview?.candidateOrderLines ?? [])
-          .filter((l) => l.customerId === id)
+          .filter((l) => l.customerId === custId && (!brId || l.branchId === brId))
           .map((l) => l.orderLineId),
       );
       const next: Record<string, number> = {};
       for (const [k, v] of Object.entries(prev)) if (validIds.has(k)) next[k] = v;
       return next;
     });
+
+  // Müşteri değişince: şubeyi sıfırla + artık o müşteriye ait olmayan karşılanmaları at.
+  const handleCustomerChange = (id: string | null) => {
+    setCustomerId(id);
+    setBranchId(null);
+    pruneAllocTo(id, null);
+  };
+  // Şube değişince: yalnız o şubenin (veya boşsa müşterinin tüm) satırlarını tut.
+  const handleBranchChange = (id: string | null) => {
+    setBranchId(id);
+    pruneAllocTo(customerId, id);
   };
 
   return (
@@ -221,7 +232,12 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-medium">Şube</label>
-                    <BranchSelect customerId={customerId} value={branchId} onChange={setBranchId} />
+                    <BranchSelect
+                      customerId={customerId}
+                      value={branchId}
+                      onChange={handleBranchChange}
+                      showCity={false}
+                    />
                   </div>
                 </div>
 
@@ -363,8 +379,8 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                     </div>
                   ) : customerOrderLines.length === 0 ? (
                     <div className="rounded-md border border-dashed p-2 text-center text-xs italic text-muted-foreground">
-                      Bu müşterinin eşleşen açık sipariş satırı yok. Boş bırakılırsa karşılanmaya
-                      dokunulmaz.
+                      Bu müşterinin{branchId ? " / şubenin" : ""} eşleşen açık sipariş satırı yok.
+                      Boş bırakılırsa karşılanmaya dokunulmaz.
                     </div>
                   ) : (
                     <ul
