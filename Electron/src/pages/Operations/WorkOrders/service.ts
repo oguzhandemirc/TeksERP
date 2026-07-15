@@ -113,6 +113,12 @@ export const workOrderService = {
       >(`/api/work-orders/${id}/branches`)
       .then((r) => r.data),
 
+  /** Parti rota-zaman çizelgesi — birleşik hareket+operasyon geçmişi (adıma göre). */
+  getBatchTimeline: (id: string, batchId: string) =>
+    apiClient
+      .get<ApiResponse<BatchTimeline>>(`/api/work-orders/${id}/batches/${batchId}/timeline`)
+      .then((r) => r.data),
+
   /** Parti ayırma önizleme — izinli modlar + taşınacak toplar (hiçbir şeyi değiştirmez). */
   getSplitPreview: (id: string, batchId: string) =>
     apiClient
@@ -495,6 +501,36 @@ export interface BatchLane {
   splitFrom: BatchLineageRef | null;
   /** Aynı WO içinde bu partiden ayrılan partiler (redye). */
   splitChildren: BatchLineageRef[];
+}
+
+/** Bir operasyon türünün adım özetindeki toplu görünümü (RollOperation). */
+export interface BatchTimelineOperation {
+  /** KURSUN_APPLIED | QC2_COMPLETED | TAMBUR_PROCESSED | SUBCONTRACTOR_SENT | SUBCONTRACTOR_RETURNED */
+  type: string;
+  count: number;
+  lastAt: string;
+  operators: string[];
+}
+
+/** Parti timeline'ında bir rota adımı — partinin o adımdaki geçişi + operasyonları. */
+export interface BatchTimelineStep {
+  stepId: string;
+  stepSequence: number;
+  stationName: string;
+  stationType: string | null;
+  /** Partinin herhangi bir topu bu adıma uğradı mı (hareket kaydı). */
+  visited: boolean;
+  rollCount: number;
+  enteredAt: string | null;
+  exitedAt: string | null;
+  operations: BatchTimelineOperation[];
+}
+
+export interface BatchTimeline {
+  batchId: string;
+  batchNumber: string;
+  rollCount: number;
+  steps: BatchTimelineStep[];
 }
 
 /** İş emri soy bağı — WO seviyesi ayrılma (redye NEW_COLOR/UNDYED_MOVE → yeni WO). */

@@ -40,6 +40,17 @@ const TEXT: Record<SectionTone, string> = {
   process: "text-station-process",
 };
 
+/** Gövde şeridi — başlığın sol şeridiyle AYNI tonda, daha soluk devam eder. İçeriğin
+ *  hangi başlığa ait olduğunu (bitişik renkli "omurga") belirsizlik olmadan gösterir. */
+const RAIL: Record<SectionTone, string> = {
+  neutral: "border-l-foreground/25",
+  primary: "border-l-primary/40",
+  info: "border-l-info/40",
+  success: "border-l-success/40",
+  warning: "border-l-warning/40",
+  process: "border-l-station-process/40",
+};
+
 export function SectionBlock({
   id,
   title,
@@ -60,7 +71,7 @@ export function SectionBlock({
   className?: string;
 }) {
   return (
-    <section id={id} className={cn(id && "scroll-mt-16", "space-y-3", className)}>
+    <section id={id} className={cn(id && "scroll-mt-16", className)}>
       <div
         className={cn(
           "flex items-center gap-2.5 rounded-lg border border-l-4 px-3 py-2 shadow-sm",
@@ -82,7 +93,9 @@ export function SectionBlock({
         </h2>
         {trailing}
       </div>
-      {children}
+      {/* Gövde şeridi — başlığın sol şeridini soluk devam ettirir: içerik hangi
+          başlığa ait belirsiz kalmasın (bitişik omurga). */}
+      <div className={cn("mt-2 space-y-3 border-l-4 pl-3.5", RAIL[tone])}>{children}</div>
     </section>
   );
 }

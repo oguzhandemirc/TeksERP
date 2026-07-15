@@ -123,6 +123,12 @@ export function StepWipCard({
                           {r.qualityGrade}
                         </Badge>
                       )}
+                      {/* Hangi parti — "hangi top hangi partide" sorusunun cevabı. */}
+                      {r.batchNumber && (
+                        <span className="shrink-0 font-mono text-[10px] text-primary">
+                          {r.batchNumber}
+                        </span>
+                      )}
                     </div>
                     <span className="font-medium tabular-nums">
                       {formatNumber(r.currentQty, 0)} m
@@ -144,22 +150,47 @@ export function StepWipCard({
               Fason Sevkler ({step.dispatches.length})
             </div>
             {step.dispatches.map((d) => (
-              <div
-                key={d.id}
-                className="flex items-center justify-between gap-2 text-[11px]"
-              >
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="font-mono">{d.dispatchNo}</span>
-                  <span className="truncate text-muted-foreground">
-                    → {d.subcontractor.name}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {safeFormat(d.dispatchedAt, "dd.MM.yyyy")}
+              <div key={d.id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span className="font-mono">{d.dispatchNo}</span>
+                    <span className="truncate text-muted-foreground">
+                      → {d.subcontractor.name}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {safeFormat(d.dispatchedAt, "dd.MM.yyyy HH:mm")}
+                    </span>
+                    {/* Bir sevk = bir parti (K10) — hangi partinin topları gitti. */}
+                    {d.batchNumber && (
+                      <span className="font-mono text-primary">{d.batchNumber}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 tabular-nums">
+                    {formatNumber(d.totalQty, 0)} m
                   </span>
                 </div>
-                <span className="shrink-0 tabular-nums">
-                  {formatNumber(d.totalQty, 0)} m
-                </span>
+                {/* Bu sevkte BİRLİKTE giden toplar — "hangi toplar birlikte gitti".
+                    d.rolls opsiyonel: eski/önbelleğe alınmış API yanıtında olmayabilir. */}
+                {(d.rolls?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap gap-1 pl-1">
+                    {d.rolls.map((r) => (
+                      <span
+                        key={r.id}
+                        className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[10px]"
+                      >
+                        {r.barcode ? (
+                          <span className="font-mono">{r.barcode}</span>
+                        ) : (
+                          <span className="italic text-muted-foreground">Açık kumaş</span>
+                        )}
+                        {r.item && <span className="text-muted-foreground">{r.item.name}</span>}
+                        <span className="tabular-nums text-muted-foreground">
+                          {formatNumber(r.dispatchedQty, 0)} m
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

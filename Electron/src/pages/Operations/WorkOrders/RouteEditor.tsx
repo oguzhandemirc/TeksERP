@@ -59,6 +59,12 @@ interface Props {
   hideSeedPicker?: boolean;
   onSaveTemplate: (name: string, forCustomer: boolean) => void;
   savePending: boolean;
+  /** İç "Rotayı Kaydet" tetiğini gizle — WO formu onu bölüm başlığına, "Rota Seç"in
+   *  yanına taşıdı. Kaydet modalı (ad + müşteri seçeneği) burada kalır; açık/kapalı
+   *  durumu controlled prop'larla (saveModalOpen/onSaveModalOpenChange) dıştan yönetilir. */
+  hideSaveTrigger?: boolean;
+  saveModalOpen?: boolean;
+  onSaveModalOpenChange?: (open: boolean) => void;
   customerId: string | null;
   target: RouteTargetBinding;
   error?: string;
@@ -77,6 +83,9 @@ export function RouteEditor({
   hideSeedPicker,
   onSaveTemplate,
   savePending,
+  hideSaveTrigger,
+  saveModalOpen: saveModalOpenProp,
+  onSaveModalOpenChange,
   customerId,
   target,
   error,
@@ -90,7 +99,11 @@ export function RouteEditor({
   };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [seedId, setSeedId] = useState<string | null>(null);
-  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  // Uncontrolled fallback (ProductRecipeFormDialog gibi çağıranlar için) — WO formu
+  // controlled prop'larla dıştan yönetir (tetik başlıkta, modal burada).
+  const [internalSaveOpen, setInternalSaveOpen] = useState(false);
+  const saveModalOpen = saveModalOpenProp ?? internalSaveOpen;
+  const setSaveModalOpen = onSaveModalOpenChange ?? setInternalSaveOpen;
   const [saveName, setSaveName] = useState("");
   const [forCustomer, setForCustomer] = useState(false);
 
@@ -253,24 +266,28 @@ export function RouteEditor({
             <Plus className="h-3.5 w-3.5" /> Adım Ekle
           </Button>
         </motion.div>
-        {/* Bu rotayı kaydet — akış satırında en sağda, "Adım Ekle" ile aynı hizada */}
-        <motion.div
-          whileHover={{ y: -1 }}
-          whileTap={{ scale: 0.96 }}
-          transition={springSnappy}
-          className="ml-auto"
-        >
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5"
-            disabled={steps.length === 0}
-            onClick={() => setSaveModalOpen(true)}
+        {/* Bu rotayı kaydet — akış satırında en sağda, "Adım Ekle" ile aynı hizada.
+            hideSaveTrigger ise (WO formu) tetik bölüm başlığına, "Rota Seç"in yanına
+            taşınmıştır; modal (aşağıda) yine burada kalır. */}
+        {!hideSaveTrigger && (
+          <motion.div
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            transition={springSnappy}
+            className="ml-auto"
           >
-            <BookmarkPlus className="h-3.5 w-3.5" /> Bu Rotayı Kaydet
-          </Button>
-        </motion.div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5"
+              disabled={steps.length === 0}
+              onClick={() => setSaveModalOpen(true)}
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" /> Rotayı Kaydet
+            </Button>
+          </motion.div>
+        )}
       </div>
 
       {error && <Callout tone="danger">{error}</Callout>}
@@ -355,7 +372,7 @@ export function RouteEditor({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <BookmarkPlus className="h-4 w-4 text-primary" /> Bu Rotayı Kaydet
+              <BookmarkPlus className="h-4 w-4 text-primary" /> Rotayı Kaydet
             </DialogTitle>
             <DialogDescription>
               Bu üretim akışını yeniden kullanılabilir bir rota olarak kaydet — sonraki

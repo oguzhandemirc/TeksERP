@@ -75,11 +75,11 @@ export function FormSection({
         className,
       )}
     >
-      <header className="flex items-start gap-3 border-b bg-muted/30 px-4 py-2.5">
+      <header className="flex items-center gap-3 border-b bg-muted/30 px-4 py-2.5">
         {step != null && (
           <span
             className={cn(
-              "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm",
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm",
               t.badge,
             )}
           >
@@ -98,7 +98,7 @@ export function FormSection({
               </span>
             )}
             {optional && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none tracking-wide text-muted-foreground">
+              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-blue-600 dark:text-blue-400">
                 Opsiyonel
               </span>
             )}

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
@@ -7,20 +8,25 @@ import type { WorkOrderStepLite } from "./types";
 
 type Status = BatchDispatchStatus;
 
-/** Partinin o adımda BULUNDUĞU (current) hücre rengi — türetilmiş duruma göre. */
-const CUR_CELL: Record<Status, string> = {
-  OPEN: "bg-warning text-white",
-  PARTIAL: "bg-primary text-primary-foreground",
-  RETURNED: "bg-success text-white",
-  CANCELLED: "bg-muted-foreground/40 text-foreground",
-  DIRECT_SHIPPED: "bg-primary text-primary-foreground",
+/** Partinin o adımda BULUNDUĞU (current) hücre stili — v3 paleti (`.wo-v3` var'ları). */
+const CUR_STYLE: Record<Status, CSSProperties> = {
+  OPEN: { background: "var(--warn)", color: "#fff" },
+  PARTIAL: { background: "var(--accent)", color: "#fff" },
+  RETURNED: { background: "var(--ok)", color: "#fff" },
+  CANCELLED: { background: "var(--surface-2)", color: "var(--ink-2)" },
+  DIRECT_SHIPPED: { background: "var(--accent)", color: "#fff" },
 };
-const DOT: Record<Status, string> = {
-  OPEN: "bg-warning",
-  PARTIAL: "bg-primary",
-  RETURNED: "bg-success",
-  CANCELLED: "bg-muted-foreground",
-  DIRECT_SHIPPED: "bg-primary",
+const DOT_COLOR: Record<Status, string> = {
+  OPEN: "var(--warn)",
+  PARTIAL: "var(--accent)",
+  RETURNED: "var(--ok)",
+  CANCELLED: "var(--faint)",
+  DIRECT_SHIPPED: "var(--accent)",
+};
+
+const PASSED_STYLE: CSSProperties = {
+  background: "color-mix(in srgb, var(--ink) 15%, transparent)",
+  color: "var(--ink-2)",
 };
 
 /**
@@ -43,7 +49,8 @@ function batchDisplayStatus(b: BatchLane): Status {
  * Parti swimlane-Gantt: satır = parti (Batch), sütun = rota adımı (+ terminal
  * "Depo"). Her partinin malı hangi sütundaysa o hücre vurgulanır; fason sevk
  * adımı (origin) ile mevcut konum arası "geçildi" olarak dolar. Böylece "1. parti
- * depoya ulaşmış, 2. parti hâlâ boyahanede" tek bakışta okunur.
+ * depoya ulaşmış, 2. parti hâlâ boyahanede" tek bakışta okunur. Renkler v3 paleti
+ * (`.wo-v3` altında; başka yerde kullanılmaz).
  *
  * Konum→sütun eşleşmesi istasyon ADI ile yapılır (getBranches `currentPositions`
  * label'ı istasyon adı ya da "Depo"/"Stok"); eşleşmeyen terminal etiketler Depo
@@ -63,7 +70,8 @@ export function BranchGantt({
     staleTime: 60_000,
   });
 
-  const batches = q.data?.data?.batches ?? [];
+  // Boş (top kalmamış) partiler Gantt'ta gösterilmez — anlık konumları yok.
+  const batches = (q.data?.data?.batches ?? []).filter((b) => b.rollCount > 0);
   if (q.isLoading) return <Skeleton className="h-32 w-full" />;
   if (batches.length === 0) return null;
 
@@ -77,7 +85,7 @@ export function BranchGantt({
   const gridCols = `minmax(120px,150px) repeat(${columns.length}, minmax(56px,1fr))`;
 
   return (
-    <div className="overflow-x-auto rounded-md border p-2">
+    <div className="card" style={{ overflowX: "auto", padding: "8px 10px" }}>
       <div className="min-w-[460px] space-y-1">
         {/* başlık */}
         <div className="grid items-end gap-1" style={{ gridTemplateColumns: gridCols }}>
@@ -85,7 +93,8 @@ export function BranchGantt({
           {columns.map((c, i) => (
             <div
               key={i}
-              className="px-0.5 pb-1 text-center text-[10px] font-medium leading-tight text-muted-foreground"
+              className="px-0.5 pb-1 text-center text-[10px] font-medium leading-tight"
+              style={{ color: "var(--muted)" }}
             >
               {c}
             </div>
@@ -116,8 +125,16 @@ export function BranchGantt({
               style={{ gridTemplateColumns: gridCols }}
             >
               <div className="flex min-w-0 items-center gap-1.5 pr-1">
-                <span className={cn("h-2 w-2 shrink-0 rounded-full", DOT[status])} />
-                <span className="truncate font-mono text-[11px]">{b.batchNumber}</span>
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: DOT_COLOR[status] }}
+                />
+                <span
+                  className="truncate font-mono text-[12px] font-bold tracking-tight"
+                  style={{ color: "var(--ink)" }}
+                >
+                  {b.batchNumber}
+                </span>
               </div>
               {columns.map((_, ci) => {
                 const pos = posByCol.get(ci);
@@ -128,12 +145,11 @@ export function BranchGantt({
                     <div
                       className={cn(
                         "flex h-9 flex-col items-center justify-center gap-0 rounded leading-tight tabular-nums",
-                        isCurrent
-                          ? cn("font-semibold", CUR_CELL[status])
-                          : isPassed
-                            ? "bg-muted text-muted-foreground"
-                            : "bg-transparent",
+                        isCurrent && "font-semibold",
                       )}
+                      style={
+                        isCurrent ? CUR_STYLE[status] : isPassed ? PASSED_STYLE : undefined
+                      }
                       title={
                         isCurrent
                           ? `${columns[ci]}: ${pos!.count} top · ${formatNumber(pos!.meters, 0)} m`
@@ -148,7 +164,9 @@ export function BranchGantt({
                           </span>
                         </>
                       ) : isPassed ? (
-                        <span className="text-[11px] opacity-40">·</span>
+                        <span className="text-[13px]" style={{ opacity: 0.8 }}>
+                          ·
+                        </span>
                       ) : null}
                     </div>
                   </div>

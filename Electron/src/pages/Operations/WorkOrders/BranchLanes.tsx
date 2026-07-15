@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowRight,
   ArrowUpRight,
   ChevronDown,
   GitMerge,
-  Lock,
+  History,
+  MoreHorizontal,
   MoveHorizontal,
   Printer,
   RefreshCw,
@@ -16,6 +16,18 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -36,6 +48,7 @@ import { UndoTransferModal } from "./UndoTransferModal";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { BatchCorrectModal } from "./BatchCorrectModal";
 import { ManualMoveModal } from "./ManualMoveModal";
+import { BatchTimeline } from "./BatchTimeline";
 import { Wrench } from "lucide-react";
 import type { BatchLaneRoll } from "./service";
 
@@ -90,6 +103,12 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
   const batches = q.data?.data?.batches ?? [];
   const splitFrom = q.data?.data?.splitFrom ?? null;
   const splitChildren = q.data?.data?.splitChildren ?? [];
+  // Boş (top kalmamış) partiler fason izi olduğu için silinmeyip kalır ama anlık
+  // görünümde işlevsizdir → varsayılan GİZLİ, toggle ile açılır. (Gantt onları zaten
+  // göstermez; anlık konumları yok.)
+  const filledBatches = batches.filter((b) => b.rollCount > 0);
+  const emptyBatches = batches.filter((b) => b.rollCount === 0);
+  const [showEmpty, setShowEmpty] = useState(false);
 
   // K8 birleştirme: yalnız sevksiz (kilitsiz) partiler seçilebilir; ≥2 sevksiz varsa aktif.
   const unlockedCount = batches.filter((b) => !b.locked).length;
@@ -113,6 +132,36 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+
+  const renderLane = (b: BatchLane, ordinal: number, selectable: boolean) => (
+    <BatchLaneCard
+      key={b.batchId}
+      batch={b}
+      workOrderId={workOrderId}
+      ordinal={ordinal}
+      selectable={selectable}
+      selected={selected.has(b.batchId)}
+      onToggleSelect={() => toggleSelect(b.batchId)}
+      onCorrect={
+        b.locked
+          ? undefined
+          : () => setCorrectTarget({ batchId: b.batchId, batchNumber: b.batchNumber })
+      }
+      onManualMove={() =>
+        setMoveTarget({ batchId: b.batchId, batchNumber: b.batchNumber, rolls: b.rolls ?? [] })
+      }
+      onTebdil={(opts) =>
+        setTebdilTarget({
+          batchId: b.batchId,
+          batchNumber: b.batchNumber,
+          dispatchOnly: opts?.dispatchOnly,
+        })
+      }
+      onDirectShip={(d) => setDirectShipTarget({ dispatchId: d.dispatchId, dispatchNo: d.dispatchNo })}
+      onUndoTransfer={(d) => setUndoTarget({ dispatchId: d.dispatchId, dispatchNo: d.dispatchNo })}
+      onPrintDispatch={(d) => setPrintDispatchId(d.dispatchId)}
+    />
+  );
 
   if (q.isLoading) return <Skeleton className="h-24 w-full" />;
   if (batches.length === 0 && splitChildren.length === 0 && !splitFrom) {
@@ -154,34 +203,28 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
         </div>
       )}
 
-      {batches.map((b, i) => (
-        <BatchLaneCard
-          key={b.batchId}
-          batch={b}
-          ordinal={i + 1}
-          selectable={canSelect && !b.locked}
-          selected={selected.has(b.batchId)}
-          onToggleSelect={() => toggleSelect(b.batchId)}
-          onCorrect={
-            b.locked
-              ? undefined
-              : () => setCorrectTarget({ batchId: b.batchId, batchNumber: b.batchNumber })
-          }
-          onManualMove={() =>
-            setMoveTarget({ batchId: b.batchId, batchNumber: b.batchNumber, rolls: b.rolls ?? [] })
-          }
-          onTebdil={(opts) =>
-            setTebdilTarget({
-              batchId: b.batchId,
-              batchNumber: b.batchNumber,
-              dispatchOnly: opts?.dispatchOnly,
-            })
-          }
-          onDirectShip={(d) => setDirectShipTarget({ dispatchId: d.dispatchId, dispatchNo: d.dispatchNo })}
-          onUndoTransfer={(d) => setUndoTarget({ dispatchId: d.dispatchId, dispatchNo: d.dispatchNo })}
-          onPrintDispatch={(d) => setPrintDispatchId(d.dispatchId)}
-        />
-      ))}
+      {filledBatches.map((b, i) => renderLane(b, i + 1, canSelect && !b.locked))}
+
+      {/* Boş partiler — varsayılan gizli, top kalmadığı için anlık görünümde işlevsiz.
+          Geçmişleri kendi "Geçmiş & Sevkler" butonlarında erişilebilir kalır. */}
+      {emptyBatches.length > 0 && (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowEmpty((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronDown
+              className={cn("h-3.5 w-3.5 transition-transform", showEmpty && "rotate-180")}
+            />
+            {showEmpty
+              ? "Boş partileri gizle"
+              : `${emptyBatches.length} boş parti (top kalmadı) — göster`}
+          </button>
+        </div>
+      )}
+      {showEmpty && emptyBatches.map((b, i) => renderLane(b, filledBatches.length + i + 1, false))}
+
       {splitChildren.map((c) => (
         <WorkOrderSplitChildRow key={c.id} child={c} />
       ))}
@@ -246,6 +289,7 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
 
 function BatchLaneCard({
   batch,
+  workOrderId,
   ordinal,
   selectable,
   selected,
@@ -258,6 +302,7 @@ function BatchLaneCard({
   onPrintDispatch,
 }: {
   batch: BatchLane;
+  workOrderId: string;
   ordinal: number;
   selectable: boolean;
   selected: boolean;
@@ -272,23 +317,33 @@ function BatchLaneCard({
   onUndoTransfer: (d: BatchLaneDispatch) => void;
   onPrintDispatch: (d: BatchLaneDispatch) => void;
 }) {
-  // Sevkler yeni → eski (son sevk üstte).
+  // Sevkler yeni → eski (Geçmiş modalında + buton sayacında kullanılır).
   const dispatches = [...batch.dispatches].sort((a, b) =>
     b.dispatchedAt.localeCompare(a.dispatchedAt),
   );
-  // Top listesi varsayılan KAPALI — parti kalabalık olabilir; "kaç top" özeti zaten
-  // her zaman görünür, tek tek kimlik istenince açılır.
-  const [rollsOpen, setRollsOpen] = useState(false);
+  // Mal ŞU AN fasonda mı = herhangi bir top FİZİKSEL olarak fasonda (AT_SUBCONTRACTOR).
+  // "Konum" sütunuyla AYNI kaynaktan (topların gerçek statüsü) türetilir → pil ile konum
+  // asla çelişmez. NOT: backend `batch.locked` "iptal edilmemiş sevki VAR" = merge-kilidi;
+  // mal döndükten sonra da true kalır → "Sevkte" onu yanlış "konum" gibi gösteriyordu.
+  const atFason = batch.rolls.some((r) => r.status === "AT_SUBCONTRACTOR");
+  // Parti varsayılan KATLI (accordion) — başlıkta özet; açınca toplar + Geçmiş.
+  const [expanded, setExpanded] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // Accordion başlığındaki konum özeti — "mal nerede" tek bakışta.
+  const positionText =
+    batch.currentPositions.length > 0
+      ? batch.currentPositions.map((p) => `${p.label}: ${p.count} top`).join(" · ")
+      : `${batch.rollCount} top`;
   return (
     <Card
       className={cn(
-        "border-l-4 transition-colors",
-        selected ? "border-l-primary ring-2 ring-primary/40" : "border-l-primary/40",
+        "border-border/50 shadow-sm transition-colors",
+        selected && "ring-2 ring-primary/30",
       )}
     >
       <CardContent className="space-y-2 p-3">
-        {/* Başlık: (seç) + N. Parti + kod + kilit + tarih + Ayır */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {/* Başlık = accordion tetik (parti + durum + konum özeti) + tarih + ⋯ menüsü */}
+        <div className="flex items-center gap-2">
           {selectable && (
             <input
               type="checkbox"
@@ -299,181 +354,311 @@ function BatchLaneCard({
               aria-label={`${batch.batchNumber} partisini birleştirmeye seç`}
             />
           )}
-          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary">
-            {ordinal}. Parti
-          </span>
-          <span className="font-mono text-sm font-medium">{batch.batchNumber}</span>
-          {batch.locked && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
-              <Lock className="h-3 w-3" /> Sevkte
-            </span>
-          )}
-          {batch.awaitingFasonDispatch && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
-              title="Toplar fason adımında üretimde ama sevk edilmemiş — Fason Sevk ile boyahaneye gönderin"
-            >
-              <Truck className="h-3 w-3" /> Fasona sevk bekliyor
-            </span>
-          )}
-          {batch.awaitingFasonDispatch && (
-            <PermissionGate permission="workorder:write">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1 border-amber-400/60 px-2 text-xs text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30"
-                onClick={() => onTebdil({ dispatchOnly: true })}
-                title="Bu partiyi boyahaneye gönder (fason sevk + çeki)"
-              >
-                <Truck className="h-3.5 w-3.5" />
-                Sevk Et
-              </Button>
-            </PermissionGate>
-          )}
-          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-            {safeFormat(batch.createdAt, "dd.MM.yyyy")}
-          </span>
-          {/* Düzelt (K8): sevksiz partide top taşı / yeni partiye böl (idari). */}
-          {onCorrect && (
-            <PermissionGate permission="workorder:write">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={onCorrect}
-                title="Top taşı / yeni partiye ayır (düzeltme)"
-              >
-                <Wrench className="h-3.5 w-3.5" />
-                Düzelt
-              </Button>
-            </PermissionGate>
-          )}
-          {/* Konumu Düzelt: süpervizör override — partiyi/topları rotada ileri-geri taşı
-              (Kurşun↔Tambur). K8 "Düzelt"ten ayrı: bu rota konumu, o parti içi idari. */}
-          <PermissionGate permission="workorder:write">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 px-2 text-xs"
-              onClick={onManualMove}
-              title="Rotada ileri/geri taşı (konum düzeltme)"
-            >
-              <MoveHorizontal className="h-3.5 w-3.5" />
-              Konumu Düzelt
-            </Button>
-          </PermissionGate>
-          {/* Tebdil / Yeniden Boyat: sihirbaz parti durumundan izinli modları türetir
-              (aynı renk yeniden boya · farklı renk yeni İE · boyanmadan taşı). */}
-          <PermissionGate permission="workorder:write">
-            <Button
-              size="sm"
-              className="h-7 gap-1 border-transparent bg-indigo-600 px-2 text-xs text-white hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
-              onClick={() => onTebdil()}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Tebdil / Yeniden Boyat
-            </Button>
-          </PermissionGate>
-        </div>
-
-        {/* İçerik: parti toplarının şu anki konum dağılımı */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <button
             type="button"
-            onClick={() => setRollsOpen((v) => !v)}
-            className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 tabular-nums hover:bg-muted/70"
-            title={rollsOpen ? "Top listesini gizle" : "Hangi top hangi partide — listeyi göster"}
+            onClick={() => setExpanded((v) => !v)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            aria-expanded={expanded}
+            title={expanded ? "Partiyi kapat" : "Parti detayını aç"}
           >
-            {batch.rollCount} top
-            <ChevronDown className={cn("h-3 w-3 transition-transform", rollsOpen && "rotate-180")} />
-          </button>
-          {batch.currentPositions.length > 0 && (
-            <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-          )}
-          {batch.currentPositions.map((p) => (
-            <span
-              key={p.label}
-              className="rounded bg-primary/10 px-1.5 py-0.5 tabular-nums text-primary"
-            >
-              {p.label}: {p.count} top · {formatNumber(p.totalMeters, 0)} m
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                expanded && "rotate-180",
+              )}
+            />
+            <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary">
+              {ordinal}. Parti
             </span>
-          ))}
-        </div>
-
-        {/* Tek tek top kimliği — "hangi partide hangi top var" (varsayılan kapalı).
-            batch.rolls opsiyonel: eski/önbelleğe alınmış API yanıtında olmayabilir. */}
-        {rollsOpen && (batch.rolls?.length ?? 0) > 0 && (
-          <ul className="divide-y rounded-md border bg-muted/20 text-[11px]">
-            {batch.rolls.map((r) => (
-              <li key={r.id} className="flex items-center justify-between gap-2 px-2 py-1">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {r.barcode ? (
-                    <span className="font-mono">{r.barcode}</span>
-                  ) : (
-                    <span className="italic text-muted-foreground">Açık kumaş</span>
-                  )}
-                  {r.item && <span className="truncate font-medium">{r.item.name}</span>}
-                  {r.color && (
-                    <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      {r.color.hex && (
-                        <span
-                          className="h-2 w-2 rounded-full border border-black/10"
-                          style={{ backgroundColor: r.color.hex }}
-                        />
-                      )}
-                      {r.color.name}
-                    </span>
-                  )}
-                  <span className="shrink-0 rounded bg-primary/10 px-1 text-[10px] text-primary">
-                    {r.positionLabel}
-                  </span>
-                </div>
-                <span className="shrink-0 font-medium tabular-nums">
-                  {formatNumber(r.currentQty, 0)} m
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* Soy bağı — aynı iş emri içinde redye ile ayrılan/kaynak parti */}
-        {(batch.splitFrom || batch.splitChildren.length > 0) && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            {batch.splitFrom && (
-              <span className="inline-flex items-center gap-1">
-                <Split className="h-3 w-3" />
-                <span className="font-mono">{batch.splitFrom.batchNumber}</span>'ten ayrıldı
+            <span className="shrink-0 font-mono text-sm font-medium">{batch.batchNumber}</span>
+            {atFason && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+                title="Mal şu an bir fason firmasında (henüz dönmedi)"
+              >
+                <Truck className="h-3 w-3" /> Fasonda
               </span>
             )}
-            {batch.splitChildren.map((c) => (
-              <span key={c.id} className="inline-flex items-center gap-1">
-                <ArrowUpRight className="h-3 w-3" />
-                <span className="font-mono">{c.batchNumber}</span>'e ayrıldı
+            {batch.awaitingFasonDispatch && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/50 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+                title="Toplar fason adımında üretimde ama sevk edilmemiş"
+              >
+                <Truck className="h-3 w-3" /> Fasona sevk bekliyor
               </span>
-            ))}
+            )}
+            {/* Konum özeti — kapalıyken mal nerede tek bakışta */}
+            <span className="min-w-0 truncate text-xs text-muted-foreground">· {positionText}</span>
+          </button>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {safeFormat(batch.createdAt, "dd.MM.yyyy · HH:mm")}
+          </span>
+          {/* Parti aksiyonları — tek ⋯ menüsü (yazma izni) */}
+          <PermissionGate permission="workorder:write">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0 p-0"
+                  title="Parti işlemleri"
+                  aria-label="Parti işlemleri"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {batch.awaitingFasonDispatch && (
+                  <DropdownMenuItem onClick={() => onTebdil({ dispatchOnly: true })}>
+                    <Truck className="mr-2 h-4 w-4" /> Fasona Sevk Et
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={onManualMove}>
+                  <MoveHorizontal className="mr-2 h-4 w-4" /> Konumu Düzelt
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onTebdil()}>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Tebdil / Yeniden Boyat
+                </DropdownMenuItem>
+                {onCorrect && (
+                  <DropdownMenuItem onClick={onCorrect}>
+                    <Wrench className="mr-2 h-4 w-4" /> Düzelt (top taşı / ayır)
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </PermissionGate>
+        </div>
+
+        {expanded && (
+          <>
+        {/* Partinin topları — barkod · ürün · renk · konum · metraj (açınca doğrudan). */}
+        {batch.rolls.length > 0 ? (
+          <div className="overflow-x-auto rounded-md border border-border/40">
+            <table className="w-full text-[11px]">
+              <thead className="bg-muted/30 text-left text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1 font-medium">Barkod</th>
+                  <th className="px-2 py-1 font-medium">Ürün</th>
+                  <th className="px-2 py-1 font-medium">Renk</th>
+                  <th className="px-2 py-1 font-medium">Konum</th>
+                  <th className="px-2 py-1 text-right font-medium">Metraj</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {batch.rolls.map((r) => (
+                  <tr key={r.id}>
+                    <td className="px-2 py-1 font-mono">
+                      {r.barcode ?? (
+                        <span className="italic text-muted-foreground">Açık kumaş</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1 font-medium">{r.item?.name ?? "—"}</td>
+                    <td className="px-2 py-1">
+                      {r.color ? (
+                        <span className="inline-flex items-center gap-1">
+                          {r.color.hex && (
+                            <span
+                              className="h-2 w-2 rounded-full border border-black/10"
+                              style={{ backgroundColor: r.color.hex }}
+                            />
+                          )}
+                          {r.color.name}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">
+                        {r.positionLabel}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1 text-right font-medium tabular-nums">
+                      {formatNumber(r.currentQty, 0)} m
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed p-2 text-center text-[11px] italic text-muted-foreground">
+            Bu partide top yok.
           </div>
         )}
 
-        {/* Fason sevkleri (K10: bir sevk = bir parti) — her biri belgeli, yeni → eski */}
-        {dispatches.length > 0 && (
-          <div className="space-y-1.5 border-t pt-2">
-            {dispatches.map((d) => (
-              <BatchDispatchRow
-                key={d.dispatchId}
-                dispatch={d}
-                onDirectShip={() => onDirectShip(d)}
-                onUndoTransfer={() => onUndoTransfer(d)}
-                onPrint={() => onPrintDispatch(d)}
-              />
-            ))}
-          </div>
+        {/* Geçmiş & Sevkler — fason sevkler + dönüşler + soy bağı + kart modalda. */}
+        <div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => setHistoryOpen(true)}
+          >
+            <History className="h-3.5 w-3.5" />
+            Geçmiş & Sevkler{dispatches.length > 0 ? ` (${dispatches.length})` : ""}
+          </Button>
+        </div>
+          </>
         )}
+
+        <BatchHistoryModal
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          batch={batch}
+          workOrderId={workOrderId}
+          onDirectShip={onDirectShip}
+          onUndoTransfer={onUndoTransfer}
+          onPrintDispatch={onPrintDispatch}
+        />
       </CardContent>
     </Card>
   );
 }
 
-function BatchDispatchRow({
+/**
+ * Parti geçmişi modalı — "geçmiş/denetim" detayı lane'den ayrı: refakat kartı,
+ * soy bağı (redye split) ve TÜM fason sevkler (aktif + tamamlanan + iptal) tek
+ * yerde. Sevk aksiyonları (Belge / Doğrudan Sevk / Aktarımı Geri Al) burada.
+ */
+function BatchHistoryModal({
+  open,
+  onOpenChange,
+  batch,
+  workOrderId,
+  onDirectShip,
+  onUndoTransfer,
+  onPrintDispatch,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  batch: BatchLane;
+  workOrderId: string;
+  onDirectShip: (d: BatchLaneDispatch) => void;
+  onUndoTransfer: (d: BatchLaneDispatch) => void;
+  onPrintDispatch: (d: BatchLaneDispatch) => void;
+}) {
+  const dispatches = [...batch.dispatches].sort((a, b) =>
+    b.dispatchedAt.localeCompare(a.dispatchedAt),
+  );
+  // İptal (superseded) sevk denemeleri varsayılan GİZLİ — geçmişte gürültü yapar.
+  const activeDispatches = dispatches.filter((d) => d.status !== "CANCELLED");
+  const cancelledDispatches = dispatches.filter((d) => d.status === "CANCELLED");
+  const [showCancelled, setShowCancelled] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>
+            Parti Geçmişi — <span className="font-mono">{batch.batchNumber}</span>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
+          {batch.cardNumber && (
+            <div className="text-xs text-muted-foreground">
+              Refakat Kartı: <span className="font-mono text-foreground">{batch.cardNumber}</span>
+            </div>
+          )}
+          {(batch.splitFrom || batch.splitChildren.length > 0) && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              {batch.splitFrom && (
+                <span className="inline-flex items-center gap-1">
+                  <Split className="h-3 w-3" />
+                  <span className="font-mono">{batch.splitFrom.batchNumber}</span>'ten ayrıldı
+                </span>
+              )}
+              {batch.splitChildren.map((c) => (
+                <span key={c.id} className="inline-flex items-center gap-1">
+                  <ArrowUpRight className="h-3 w-3" />
+                  <span className="font-mono">{c.batchNumber}</span>'e ayrıldı
+                </span>
+              ))}
+            </div>
+          )}
+          <div>
+            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Rota Geçmişi
+            </div>
+            <BatchTimeline workOrderId={workOrderId} batchId={batch.batchId} enabled={open} />
+          </div>
+          <div>
+            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Fason Sevkler ({dispatches.length})
+            </div>
+            {dispatches.length > 0 ? (
+              <div className="overflow-x-auto rounded-md border border-border/40">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-muted/30 text-left text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-1 font-medium">Sevk No</th>
+                      <th className="px-2 py-1 font-medium">Durum</th>
+                      <th className="px-2 py-1 font-medium">Hedef</th>
+                      <th className="px-2 py-1 text-right font-medium">Miktar</th>
+                      <th className="px-2 py-1 font-medium">Tarih</th>
+                      <th className="px-2 py-1 font-medium">Dönüş</th>
+                      <th className="px-2 py-1 text-right font-medium">Belge</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {activeDispatches.map((d) => (
+                      <DispatchRow
+                        key={d.dispatchId}
+                        dispatch={d}
+                        onDirectShip={() => onDirectShip(d)}
+                        onUndoTransfer={() => onUndoTransfer(d)}
+                        onPrint={() => onPrintDispatch(d)}
+                      />
+                    ))}
+                    {cancelledDispatches.length > 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-2 py-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowCancelled((v) => !v)}
+                            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            <ChevronDown
+                              className={cn("h-3 w-3 transition-transform", showCancelled && "rotate-180")}
+                            />
+                            {showCancelled
+                              ? "İptal edilen denemeleri gizle"
+                              : `${cancelledDispatches.length} iptal edilmiş sevk denemesi`}
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                    {showCancelled &&
+                      cancelledDispatches.map((d) => (
+                        <DispatchRow
+                          key={d.dispatchId}
+                          dispatch={d}
+                          onDirectShip={() => onDirectShip(d)}
+                          onUndoTransfer={() => onUndoTransfer(d)}
+                          onPrint={() => onPrintDispatch(d)}
+                        />
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-[11px] italic text-muted-foreground">
+                Bu partide fason sevk yok.
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Adım adından "(Fason)" ekini temizler — bu bölüm zaten yalnız fason sevkleridir. */
+function stripFason(stepName: string): string {
+  return stepName.replace(/\s*\(fason\)\s*$/i, "");
+}
+
+/** Geçmiş modalında bir fason sevk satırı (hizalı tablo). */
+function DispatchRow({
   dispatch,
   onDirectShip,
   onUndoTransfer,
@@ -485,76 +670,81 @@ function BatchDispatchRow({
   onPrint: () => void;
 }) {
   const meta = STATUS_META[dispatch.status];
+  const cancelled = dispatch.status === "CANCELLED";
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-x-2 gap-y-1 text-xs",
-        dispatch.status === "CANCELLED" && "opacity-60",
-      )}
-    >
-      <span className="font-mono">{dispatch.dispatchNo}</span>
-      <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", meta.cls)}>
-        {meta.label}
-      </span>
-      <span className="text-muted-foreground">
+    <tr className={cn(cancelled && "opacity-60")}>
+      <td className="whitespace-nowrap px-2 py-1 font-mono">{dispatch.dispatchNo}</td>
+      <td className="px-2 py-1">
+        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium", meta.cls)}>
+          {meta.label}
+        </span>
+      </td>
+      <td className="px-2 py-1 text-muted-foreground">
         {dispatch.subcontractorName}
-        {dispatch.stepName ? ` · ${dispatch.stepName}` : ""}
-      </span>
-      <span className="tabular-nums text-muted-foreground">
+        {dispatch.stepName ? ` · ${stripFason(dispatch.stepName)}` : ""}
+      </td>
+      <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">
         {dispatch.rollCount} parça · {formatNumber(dispatch.totalQty, 0)} m
-      </span>
-      <span className="ml-auto tabular-nums text-muted-foreground">
-        {safeFormat(dispatch.dispatchedAt, "dd.MM.yyyy")}
-      </span>
-      {/* Fason sevk irsaliyesi — bu partinin bu sevkinin belgesi (iptal hariç) */}
-      {dispatch.status !== "CANCELLED" && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-6 gap-1 px-2 text-[11px]"
-          onClick={onPrint}
-          title="Fason sevk irsaliyesini yazdır"
-        >
-          <Printer className="h-3 w-3" />
-          Belge
-        </Button>
-      )}
-      {/* Doğrudan sevk: yalnız fasonda bekleyen (OPEN) sevkte. */}
-      {dispatch.status === "OPEN" && (
-        <PermissionGate permission="workorder:write">
-          <Button
-            size="sm"
-            className="h-6 gap-1 border-transparent bg-emerald-600 px-2 text-[11px] text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-            onClick={onDirectShip}
+      </td>
+      <td className="whitespace-nowrap px-2 py-1 tabular-nums text-muted-foreground">
+        {safeFormat(dispatch.dispatchedAt, "dd.MM.yyyy · HH:mm")}
+      </td>
+      <td className="px-2 py-1">
+        {dispatch.receipts.length > 0 ? (
+          <span
+            className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success"
+            title={dispatch.receipts
+              .map((r) => `${r.receiptNo} (${safeFormat(r.receivedAt, "dd.MM.yyyy · HH:mm")})`)
+              .join(", ")}
           >
-            <Truck className="h-3 w-3" />
-            Doğrudan Sevk
-          </Button>
-        </PermissionGate>
-      )}
-      {/* Aktarımı geri al: yalnız fason→fason aktarım çıktısı + hâlâ fasonda (OPEN). */}
-      {dispatch.status === "OPEN" && dispatch.isTransferOutput && (
-        <PermissionGate permission="workorder:write">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-6 gap-1 px-2 text-[11px]"
-            onClick={onUndoTransfer}
-          >
-            <Undo2 className="h-3 w-3" />
-            Aktarımı Geri Al
-          </Button>
-        </PermissionGate>
-      )}
-      {dispatch.receipts.length > 0 && (
-        <div className="w-full text-[11px] text-muted-foreground">
-          Dönüş:{" "}
-          {dispatch.receipts
-            .map((r) => `${r.receiptNo} (${safeFormat(r.receivedAt, "dd.MM.yyyy")})`)
-            .join(", ")}
+            {dispatch.receipts.length} dönüş
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-2 py-1">
+        <div className="flex justify-end gap-1">
+          {!cancelled && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 gap-1 px-2 text-[11px]"
+              onClick={onPrint}
+              title="Fason sevk irsaliyesini yazdır"
+            >
+              <Printer className="h-3 w-3" />
+              Belge
+            </Button>
+          )}
+          {dispatch.status === "OPEN" && (
+            <PermissionGate permission="workorder:write">
+              <Button
+                size="sm"
+                className="h-6 gap-1 border-transparent bg-emerald-600 px-2 text-[11px] text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                onClick={onDirectShip}
+              >
+                <Truck className="h-3 w-3" />
+                Doğrudan Sevk
+              </Button>
+            </PermissionGate>
+          )}
+          {dispatch.status === "OPEN" && dispatch.isTransferOutput && (
+            <PermissionGate permission="workorder:write">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 gap-1 px-2 text-[11px]"
+                onClick={onUndoTransfer}
+              >
+                <Undo2 className="h-3 w-3" />
+                Aktarımı Geri Al
+              </Button>
+            </PermissionGate>
+          )}
         </div>
-      )}
-    </div>
+      </td>
+    </tr>
   );
 }
 

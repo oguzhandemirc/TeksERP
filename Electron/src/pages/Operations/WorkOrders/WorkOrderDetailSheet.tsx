@@ -198,7 +198,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               {hasOrders && (
                 <Card className="border-l-2 border-l-info bg-info/[0.04]">
                   <CardContent className="p-3">
-                    <div className="text-xs text-muted-foreground">Sipariş Toplam</div>
+                    <div className="text-xs font-bold text-muted-foreground">Sipariş Toplam</div>
                     <div className="mt-0.5 text-base font-bold tabular-nums text-info">
                       {formatNumber(fulfill.requested, 1)}
                       <span className="ml-1 text-xs font-normal text-muted-foreground">m</span>
@@ -216,7 +216,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               )}
               <Card className="border-l-2 border-l-primary/50">
                 <CardContent className="p-3">
-                  <div className="text-xs text-muted-foreground">Üretime Giren</div>
+                  <div className="text-xs font-bold text-muted-foreground">Üretime Giren</div>
                   <div className="mt-0.5 text-base font-bold tabular-nums text-primary">
                     {formatNumber(wo.inputRolls?.totalMeters ?? 0, 0)}
                     <span className="ml-1 text-xs font-normal text-muted-foreground">m</span>
@@ -230,7 +230,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </Card>
               <Card>
                 <CardContent className="p-3">
-                  <div className="text-xs text-muted-foreground">En</div>
+                  <div className="text-xs font-bold text-muted-foreground">En</div>
                   <div className="mt-0.5 text-base font-bold tabular-nums">
                     {wo.width != null ? `${wo.width} cm` : "—"}
                   </div>
@@ -238,9 +238,9 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </Card>
               <Card>
                 <CardContent className="p-3">
-                  <div className="text-xs text-muted-foreground">Termin</div>
+                  <div className="text-xs font-bold text-muted-foreground">Termin</div>
                   <div className="mt-1">
-                    <DeadlineBadge deadline={wo.plannedEndDate} />
+                    <DeadlineBadge deadline={wo.plannedEndDate} stacked />
                   </div>
                 </CardContent>
               </Card>
@@ -273,7 +273,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               );
             })()}
 
-            <SectionBlock title="İş Emri Künyesi" tone="primary" icon={ClipboardList}>
+            <SectionBlock title="İş Emri Künyesi" tone="neutral" icon={ClipboardList}>
               <WorkOrderInfoCard wo={wo} />
             </SectionBlock>
 

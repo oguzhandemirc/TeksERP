@@ -144,6 +144,10 @@ export function WorkOrderDetailHeader({
         dispatchId={printDispatchId}
         open={Boolean(printDispatchId)}
         onOpenChange={(o) => !o && setPrintDispatchId(null)}
+        onBack={() => {
+          setPrintDispatchId(null);
+          setDocumentsOpen(true);
+        }}
       />
       <WorkOrderCancelDialog
         open={cancelOpen}

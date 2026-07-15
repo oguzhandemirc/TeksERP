@@ -161,6 +161,8 @@ export interface WorkOrder {
         status: string;
         deadline?: string | null;
         customer?: { id: string; code: string; name: string } | null;
+        /** Sipariş hedef şubesi (opsiyonel — eski kayıtlar null). findById include eder. */
+        branch?: { id: string; name: string } | null;
       };
       item?: {
         id: string;

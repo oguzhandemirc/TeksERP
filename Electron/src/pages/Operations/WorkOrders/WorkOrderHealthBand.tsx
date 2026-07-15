@@ -1,4 +1,5 @@
 import { AlertTriangle, CalendarClock, Flame } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { AnimatedProgress, AnimatedNumber } from "@/components/motion";
@@ -70,16 +71,19 @@ export function WorkOrderHealthBand({ wo }: { wo: WorkOrder }) {
       <CardContent className="flex flex-wrap items-start gap-x-8 gap-y-3 p-4">
         {/* Üretim ilerlemesi (hero) — % öne çıkar, altında çıkan/giren detayı. */}
         <div className="min-w-[240px] flex-1">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
             Üretim İlerlemesi
           </div>
           {hasFlow ? (
             <>
-              <div className="mt-1 flex items-baseline gap-2">
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 <span className="text-lg font-bold leading-none text-primary">%<AnimatedNumber value={pct} delay={0.25} /></span>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  çıkan <AnimatedNumber value={output} delay={0.25} /> / giren <AnimatedNumber value={input} delay={0.25} /> m
-                </span>
+                <Badge className="border-transparent bg-success font-normal tabular-nums text-success-foreground">
+                  Çıkan: <AnimatedNumber value={output} delay={0.25} /> m
+                </Badge>
+                <Badge className="border-transparent bg-primary font-normal tabular-nums text-primary-foreground">
+                  Giren: <AnimatedNumber value={input} delay={0.25} /> m
+                </Badge>
               </div>
               <AnimatedProgress value={pct} className="mt-2 h-2" delay={0.25} />
             </>
@@ -90,19 +94,19 @@ export function WorkOrderHealthBand({ wo }: { wo: WorkOrder }) {
 
         {/* Termin */}
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
             Termin
           </div>
-          <div className="mt-1 flex items-center gap-1.5">
-            <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            <DeadlineBadge deadline={wo.plannedEndDate} />
+          <div className="mt-1 flex items-start gap-1.5">
+            <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <DeadlineBadge deadline={wo.plannedEndDate} stacked />
           </div>
         </div>
 
         {/* Durum — uyarılar (yalnızca varsa) */}
         {(overdue || fireCount > 0) && (
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
               Durum
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2">

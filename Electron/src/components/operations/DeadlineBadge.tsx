@@ -5,9 +5,12 @@ import { cn } from "@/lib/utils";
 interface Props {
   deadline: string | Date | null | undefined;
   className?: string;
+  /** true: tarih üstte, kalan-gün rozeti ALTINDA (dar/dikey kutular için). Varsayılan:
+   *  yan yana (tablo hücreleri ve diğer satır-içi kullanımlar bunu bekler). */
+  stacked?: boolean;
 }
 
-export function DeadlineBadge({ deadline, className }: Props) {
+export function DeadlineBadge({ deadline, className, stacked }: Props) {
   if (!deadline) return <span className="text-muted-foreground">—</span>;
 
   const date = typeof deadline === "string" ? new Date(deadline) : deadline;
@@ -35,7 +38,12 @@ export function DeadlineBadge({ deadline, className }: Props) {
   }
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div
+      className={cn(
+        stacked ? "flex flex-col items-start gap-1" : "flex items-center gap-2",
+        className,
+      )}
+    >
       <span className="text-xs tabular-nums">{dateText}</span>
       <Badge className={cn(tone, "border-transparent text-[10px]")}>{suffix}</Badge>
     </div>

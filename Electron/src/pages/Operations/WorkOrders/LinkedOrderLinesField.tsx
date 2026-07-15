@@ -78,7 +78,7 @@ export function LinkedOrderLinesField({
         <div className="flex items-center gap-2 rounded-md border bg-muted/10 px-3 py-2 text-xs">
           <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="text-muted-foreground">
-            Stoğa üretim. İstersen sipariş kalemi bağla — toplar o siparişe yazılır.
+            Sipariş kalemi bağlanmazsa stoğa üretim yapılır.
           </span>
           <motion.div
             whileHover={{ y: -1 }}

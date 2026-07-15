@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer, Save } from "lucide-react";
+import { ArrowLeft, Printer, Save } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -26,6 +26,8 @@ interface Props {
   dispatchId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Belgeler modalından açıldıysa "geri dön" — verilirse footer'da buton çıkar. */
+  onBack?: () => void;
 }
 
 const DOC_TYPE = "SUBCONTRACTOR_DISPATCH" as const;
@@ -37,7 +39,7 @@ const DOC_TYPE = "SUBCONTRACTOR_DISPATCH" as const;
  * İstenen renk + fason talimatı belgeye DONAR; canlı düzeltme InstructionEditor +
  * "Revize Et" (reissue) ile yeni versiyon dondurur.
  */
-export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) {
+export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange, onBack }: Props) {
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
@@ -150,18 +152,32 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
           </>
         )}
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Kapat
-          </Button>
-          <Button
-            type="button"
-            className="gap-1"
-            disabled={!html}
-            onClick={() => html && printHtmlString(html)}
-          >
-            <Printer className="h-4 w-4" /> Yazdır
-          </Button>
+        <DialogFooter className="sm:justify-between">
+          {onBack ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-1 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-4 w-4" /> Belgeler'e Dön
+            </Button>
+          ) : (
+            <span className="hidden sm:block" />
+          )}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Kapat
+            </Button>
+            <Button
+              type="button"
+              className="gap-1"
+              disabled={!html}
+              onClick={() => html && printHtmlString(html)}
+            >
+              <Printer className="h-4 w-4" /> Yazdır
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

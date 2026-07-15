@@ -1,43 +1,35 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { GitBranch, PackageCheck, Route, ShoppingCart } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { useTabsStore } from "@/store/tabs";
-import { AnimatedNumber, FadeInUp } from "@/components/motion";
-import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { workOrderService } from "./service";
 import { WorkOrderDetailHeader } from "./WorkOrderDetailHeader";
-import { WorkOrderHealthBand } from "./WorkOrderHealthBand";
-import { WorkOrderSectionNav, type NavSection } from "./WorkOrderSectionNav";
-import { SectionBlock } from "./WorkOrderSection";
-import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
-import { RouteDistributionStrip } from "./RouteDistributionStrip";
-import { StepWipCard } from "./StepWipCard";
-import { BranchGantt } from "./BranchGantt";
 import { BranchLanes } from "./BranchLanes";
-import { ProducedRollsCard } from "./ProducedRollsCard";
-import { OrderLinksCard } from "./OrderLinksCard";
+import { BranchGantt } from "./BranchGantt";
+import { CoverageAlert } from "./detail-v3/CoverageAlert";
+import { WorkOrderKpis } from "./detail-v3/WorkOrderKpis";
+import { V3Section } from "./detail-v3/V3Section";
+import { KunyeCard } from "./detail-v3/KunyeCard";
+import { RouteStepline } from "./detail-v3/RouteStepline";
+import { ProducedV3 } from "./detail-v3/ProducedV3";
+import "./detail-v3/work-order-detail-v3.css";
 
 const LIST_PATH = "/operations/work-orders";
 
 /**
- * İş emri tam sayfa detayı (kendi sekmesinde açılır). Slide-over "hızlı bakış"
- * iken bu yüzey her şeyi ferah gösterir: genel bilgi, üretim ilerlemesi, rota
- * dağılımı (şerit + adım kartları), fason dalları (Gantt + lane), üretilen
- * nihai toplar ve bağlı siparişler. Belgeler/İptal aksiyonları başlıkta.
+ * İş emri tam sayfa detayı — "Kurumsal Tasarım v3" (artifact b2bd57a2 birebir).
+ * Header korunur (aksiyon wiring'i); gövde `.wo-v3` altında: koşullu kapsama
+ * uyarısı, 3-KPI özeti, tam-genişlik künye, daire-node rota + aktif adım kartı,
+ * Partiler (fonksiyonel BranchLanes), üretilen ve bağlı siparişler.
  */
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const openTarget = useOpenTarget();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  // Parti ayırma akışından geliyorsak refakat kartı yazdırma diyaloğu otomatik
-  // açılır — yeni kart basılıp ayrılan demete takılmalı (eski kart yanlış WO).
+  // Parti ayırma akışından geliyorsak refakat kartı yazdırma diyaloğu otomatik açılır.
   const autoPrintTravelerCard = Boolean(
     (location.state as { printTravelerCard?: boolean } | null)?.printTravelerCard,
   );
@@ -52,8 +44,7 @@ export function WorkOrderDetailPage() {
 
   useEffect(() => {
     if (!wo?.workOrderNumber || !id) return;
-    const suffix = wo.workOrderNumber.slice(-6);
-    const title = `İş Emri · ${suffix}`;
+    const title = `İş Emri · ${wo.workOrderNumber.slice(-6)}`;
     const tab = useTabsStore.getState().tabs.find((t) => t.path === `/operations/work-orders/${id}`);
     if (tab) useTabsStore.getState().updateTabTitle(tab.id, title);
   }, [wo?.workOrderNumber, id]);
@@ -66,26 +57,14 @@ export function WorkOrderDetailPage() {
     () => sortedSteps.some((s) => s.station?.type === "EXTERNAL"),
     [sortedSteps],
   );
-  const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
-  const hasProduced = (wo?.producedRolls?.count ?? 0) > 0;
-  // Bağlı kalemlerin karşılanma özeti (İPTAL hariç, distinct). Sevk/açık =
-  // kalemin TÜM sevkiyat toplamıdır (spec havuzu), bu WO'ya atfedilmez — bağlam.
-  const fulfill = useMemo(
-    () => summarizeLinkedFulfillment(wo?.orderLinks ?? []),
-    [wo?.orderLinks],
+  const wipSteps = useMemo(
+    () => sortedSteps.filter((s) => (s.currentRolls?.count ?? 0) > 0),
+    [sortedSteps],
   );
+  const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
+  const fulfill = useMemo(() => summarizeLinkedFulfillment(wo?.orderLinks ?? []), [wo?.orderLinks]);
 
-  const navSections = useMemo<NavSection[]>(() => {
-    const list: NavSection[] = [
-      { id: "genel", label: "Genel" },
-      { id: "rota", label: "Rota & Dağılım" },
-    ];
-    if (hasFason) list.push({ id: "dallar", label: "Partiler" });
-    if (hasProduced) list.push({ id: "cikti", label: "Üretilen" });
-    list.push({ id: "siparis", label: "Siparişler" });
-    return list;
-  }, [hasFason, hasProduced]);
-
+  const holdingStep = wipSteps[0];
   return (
     <div className="flex h-full flex-col">
       <WorkOrderDetailHeader
@@ -94,12 +73,10 @@ export function WorkOrderDetailPage() {
         autoOpenTravelerCard={autoPrintTravelerCard}
       />
 
-      <div ref={scrollRef} className="flex-1 overflow-auto">
-        {wo && <WorkOrderSectionNav sections={navSections} scrollRef={scrollRef} />}
-
-        <div className="p-4">
+      <div className="wo-v3 flex-1 overflow-auto">
+        <div className="wrap">
           {detail.isLoading && (
-            <div className="mx-auto max-w-6xl space-y-3">
+            <div className="space-y-3">
               <Skeleton className="h-20 w-full" />
               <Skeleton className="h-28 w-full" />
               <Skeleton className="h-44 w-full" />
@@ -110,126 +87,39 @@ export function WorkOrderDetailPage() {
           )}
 
           {wo && (
-            // Perf: subtree'yi fetch zaman damgasına DEĞİL WO kimliğine key'le. RQ her
-            // başarılı fetch'te dataUpdatedAt'i tazeler → eski key her invalidate/refresh'te
-            // tüm detayı unmount+remount ediyordu (giriş animasyonları + alt query'ler
-            // yeniden kurulur). wo.id yalnız başka bir WO'ya geçilince değişir.
-            <div key={wo.id} className="mx-auto max-w-6xl space-y-6">
-              <FadeInUp delay={0}>
-                <WorkOrderHealthBand wo={wo} />
-              </FadeInUp>
+            // Perf: subtree'yi WO kimliğine key'le (dataUpdatedAt değil) — her refresh'te
+            // unmount+remount olmasın.
+            <div key={wo.id}>
+              {hasOrders && <CoverageAlert requested={fulfill.requested} input={wo.inputRolls?.totalMeters ?? 0} />}
 
-              <FadeInUp delay={0.08}>
-                <section id="genel" className="grid scroll-mt-16 gap-4 lg:grid-cols-3">
-                  <div className="lg:col-span-2">
-                    <WorkOrderInfoCard wo={wo} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 content-start lg:grid-cols-1">
-                    <Kpi
-                      label="Üretime Giren"
-                      value={wo.inputRolls?.totalMeters ?? 0}
-                      unit="m"
-                      tone="primary"
-                      sub={(wo.inputRolls?.count ?? 0) > 0 ? `${wo.inputRolls!.count} top` : undefined}
-                    />
-                    {hasOrders && (
-                      <Kpi
-                        label="Sipariş Toplam"
-                        value={fulfill.requested}
-                        unit="m"
-                        sub={`Sevk ${formatNumber(fulfill.shipped, 1)} · Açık ${formatNumber(fulfill.open, 1)} m`}
-                      />
-                    )}
-                  </div>
-                </section>
-              </FadeInUp>
+              <WorkOrderKpis wo={wo} fulfill={fulfill} hasOrders={hasOrders} />
 
-              <FadeInUp delay={0.16}>
-                <SectionBlock id="rota" title="Rota & Dağılım" tone="process" icon={Route}>
-                  {sortedSteps.length > 0 && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <RouteDistributionStrip steps={sortedSteps} />
-                      </CardContent>
-                    </Card>
-                  )}
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {sortedSteps.map((step) => (
-                      <StepWipCard
-                        key={step.id}
-                        step={step}
-                        steps={sortedSteps}
-                        workOrderId={wo.id}
-                      />
-                    ))}
-                  </div>
-                </SectionBlock>
-              </FadeInUp>
+              <V3Section title="İş Emri Künyesi">
+                <KunyeCard wo={wo} />
+              </V3Section>
+
+              {sortedSteps.length > 0 && (
+                <V3Section title="Rota & Dağılım" active={wipSteps.length > 0}>
+                  <RouteStepline steps={sortedSteps} />
+                </V3Section>
+              )}
 
               {hasFason && wo.id && (
-                <FadeInUp delay={0.24}>
-                  <SectionBlock id="dallar" title="Partiler (Fason & Redye)" tone="warning" icon={GitBranch}>
+                <V3Section id="partiler" title="Partiler (Fason & Redye)" active={wipSteps.some((s) => s.station?.type === "EXTERNAL")}>
+                  <div className="space-y-3">
                     <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
                     <BranchLanes workOrderId={wo.id} />
-                  </SectionBlock>
-                </FadeInUp>
+                  </div>
+                </V3Section>
               )}
 
-              {hasProduced && (
-                <FadeInUp delay={0.32}>
-                  <SectionBlock id="cikti" title="Üretilen Nihai Toplar" tone="success" icon={PackageCheck}>
-                    <ProducedRollsCard wo={wo} />
-                  </SectionBlock>
-                </FadeInUp>
-              )}
-
-              <FadeInUp delay={0.4}>
-                <SectionBlock id="siparis" title="Bağlı Siparişler" tone="info" icon={ShoppingCart}>
-                  <OrderLinksCard wo={wo} />
-                </SectionBlock>
-              </FadeInUp>
+              <V3Section title="Üretilen Nihai Toplar">
+                <ProducedV3 wo={wo} holdingText={holdingStep ? `${holdingStep.station?.name} adımında` : undefined} />
+              </V3Section>
             </div>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  unit,
-  sub,
-  tone = "default",
-}: {
-  label: string;
-  value: number;
-  unit?: string;
-  sub?: string;
-  tone?: "default" | "primary" | "success";
-}) {
-  return (
-    <Card
-      className={cn(
-        tone === "primary" && "border-l-2 border-l-primary/50",
-        tone === "success" && "border-l-2 border-l-success/50",
-      )}
-    >
-      <CardContent className="p-3">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div
-          className={cn(
-            "mt-0.5 text-base font-bold tabular-nums",
-            tone === "primary" && "text-primary",
-            tone === "success" && "text-success",
-          )}
-        >
-          <AnimatedNumber value={value} />{" "}
-          <span className="text-xs font-normal text-muted-foreground">{unit}</span>
-        </div>
-        {sub && <div className="text-[11px] text-muted-foreground">{sub}</div>}
-      </CardContent>
-    </Card>
   );
 }
