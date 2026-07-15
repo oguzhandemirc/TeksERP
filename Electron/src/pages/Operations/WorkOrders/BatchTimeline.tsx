@@ -9,9 +9,20 @@ const OP_LABEL: Record<string, string> = {
   KURSUN_APPLIED: "Kurşun",
   QC2_COMPLETED: "KK2",
   TAMBUR_PROCESSED: "Tambur kararı",
-  SUBCONTRACTOR_SENT: "Fasona sevk",
-  SUBCONTRACTOR_RETURNED: "Fason dönüş",
 };
+
+/**
+ * Fason sevk/dönüş işlem logları timeline çipi OLMAZ: aynı modaldaki "Fason
+ * Sevkler" tablosu bu hikâyenin tek otoritesi (iptal denemelerini de gizler).
+ * Op logu append-only olduğundan geri alınan denemelerin kalıntıları çipe
+ * dönüşüp tabloyla çelişiyordu ("3 top" ama "Fasona sevk ×2" gibi).
+ */
+const HIDDEN_OPS = new Set(["SUBCONTRACTOR_SENT", "SUBCONTRACTOR_RETURNED"]);
+
+/** Adım adından "(Fason)" ekini temizler — Fason rozeti zaten ayrıca basılıyor. */
+export function stripFason(stepName: string): string {
+  return stepName.replace(/\s*\(fason\)\s*$/i, "");
+}
 
 /**
  * Parti rota-zaman çizelgesi — partinin TÜM adımlardaki (fason + iç) birleşik
@@ -53,6 +64,7 @@ export function BatchTimeline({
 
 function TimelineStep({ step }: { step: BatchTimelineStep }) {
   const isFason = step.stationType === "EXTERNAL";
+  const visibleOps = step.operations.filter((op) => !HIDDEN_OPS.has(op.type));
   return (
     <li className="relative">
       <span
@@ -63,14 +75,17 @@ function TimelineStep({ step }: { step: BatchTimelineStep }) {
         aria-hidden
       />
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="text-xs font-semibold">{step.stationName}</span>
+        <span className="text-xs font-semibold">{stripFason(step.stationName)}</span>
         {isFason && (
           <span className="rounded bg-warning/10 px-1 text-[9px] font-medium text-warning">
             Fason
           </span>
         )}
         {step.visited ? (
-          <span className="text-[10px] tabular-nums text-muted-foreground">
+          <span
+            className="text-[10px] tabular-nums text-muted-foreground"
+            title="Bu adımdan geçen top sayısı"
+          >
             {step.enteredAt && safeFormat(step.enteredAt, "dd.MM · HH:mm")}
             {step.exitedAt && ` → ${safeFormat(step.exitedAt, "dd.MM · HH:mm")}`}
             {step.rollCount > 0 && ` · ${step.rollCount} top`}
@@ -79,9 +94,9 @@ function TimelineStep({ step }: { step: BatchTimelineStep }) {
           <span className="text-[10px] italic text-muted-foreground">bekliyor</span>
         )}
       </div>
-      {step.operations.length > 0 && (
+      {visibleOps.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
-          {step.operations.map((op) => (
+          {visibleOps.map((op) => (
             <span
               key={op.type}
               className="inline-flex items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px]"

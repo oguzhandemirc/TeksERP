@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -44,6 +45,7 @@ import {
 } from "./service";
 import { TebdilWizard } from "./tebdil/TebdilWizard";
 import { DirectShipModal } from "./DirectShipModal";
+import { DirectShipmentDetailModal } from "@/pages/Operations/Shipments/DirectShipmentDetailModal";
 import { UndoTransferModal } from "./UndoTransferModal";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { BatchCorrectModal } from "./BatchCorrectModal";
@@ -317,10 +319,17 @@ function BatchLaneCard({
   onUndoTransfer: (d: BatchLaneDispatch) => void;
   onPrintDispatch: (d: BatchLaneDispatch) => void;
 }) {
-  // Sevkler yeni → eski (Geçmiş modalında + buton sayacında kullanılır).
+  // Sevkler yeni → eski (Geçmiş modalında + ⋯ menü maddelerinde kullanılır).
   const dispatches = [...batch.dispatches].sort((a, b) =>
     b.dispatchedAt.localeCompare(a.dispatchedAt),
   );
+  // ⋯ menüsündeki sevk aksiyonları: Belge iptal harici tüm sevkler için,
+  // Doğrudan Sevk yalnız açık (fasonda) sevkler için. Birden çok sevk varsa
+  // madde etiketine sevk no eklenir (hangisi olduğu belli olsun).
+  const activeDispatches = dispatches.filter((d) => d.status !== "CANCELLED");
+  const openDispatches = activeDispatches.filter((d) => d.status === "OPEN");
+  const dispatchSuffix = (d: BatchLaneDispatch) =>
+    activeDispatches.length > 1 ? ` — ${d.dispatchNo}` : "";
   // Mal ŞU AN fasonda mı = herhangi bir top FİZİKSEL olarak fasonda (AT_SUBCONTRACTOR).
   // "Konum" sütunuyla AYNI kaynaktan (topların gerçek statüsü) türetilir → pil ile konum
   // asla çelişmez. NOT: backend `batch.locked` "iptal edilmemiş sevki VAR" = merge-kilidi;
@@ -393,21 +402,37 @@ function BatchLaneCard({
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {safeFormat(batch.createdAt, "dd.MM.yyyy · HH:mm")}
           </span>
-          {/* Parti aksiyonları — tek ⋯ menüsü (yazma izni) */}
-          <PermissionGate permission="workorder:write">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 shrink-0 p-0"
-                  title="Parti işlemleri"
-                  aria-label="Parti işlemleri"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+          {/* Parti aksiyonları — tek ⋯ menüsü. Menü HERKESE açık (Geçmiş + Belge
+              salt-okur işler); yazma gerektiren maddeler tek tek PermissionGate'li. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 shrink-0 p-0"
+                title="Parti işlemleri"
+                aria-label="Parti işlemleri"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+                <History className="mr-2 h-4 w-4" /> Geçmiş & Sevkler
+                {dispatches.length > 0 ? ` (${dispatches.length})` : ""}
+              </DropdownMenuItem>
+              {activeDispatches.map((d) => (
+                <DropdownMenuItem key={`doc-${d.dispatchId}`} onClick={() => onPrintDispatch(d)}>
+                  <Printer className="mr-2 h-4 w-4" /> Sevk Belgesi{dispatchSuffix(d)}
+                </DropdownMenuItem>
+              ))}
+              <PermissionGate permission="workorder:write">
+                <DropdownMenuSeparator />
+                {openDispatches.map((d) => (
+                  <DropdownMenuItem key={`ship-${d.dispatchId}`} onClick={() => onDirectShip(d)}>
+                    <Truck className="mr-2 h-4 w-4" /> Fasondan Sevk{dispatchSuffix(d)}
+                  </DropdownMenuItem>
+                ))}
                 {batch.awaitingFasonDispatch && (
                   <DropdownMenuItem onClick={() => onTebdil({ dispatchOnly: true })}>
                     <Truck className="mr-2 h-4 w-4" /> Fasona Sevk Et
@@ -424,9 +449,9 @@ function BatchLaneCard({
                     <Wrench className="mr-2 h-4 w-4" /> Düzelt (top taşı / ayır)
                   </DropdownMenuItem>
                 )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </PermissionGate>
+              </PermissionGate>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {expanded && (
@@ -487,18 +512,6 @@ function BatchLaneCard({
           </div>
         )}
 
-        {/* Geçmiş & Sevkler — fason sevkler + dönüşler + soy bağı + kart modalda. */}
-        <div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 px-2 text-xs"
-            onClick={() => setHistoryOpen(true)}
-          >
-            <History className="h-3.5 w-3.5" />
-            Geçmiş & Sevkler{dispatches.length > 0 ? ` (${dispatches.length})` : ""}
-          </Button>
-        </div>
           </>
         )}
 
@@ -507,9 +520,7 @@ function BatchLaneCard({
           onOpenChange={setHistoryOpen}
           batch={batch}
           workOrderId={workOrderId}
-          onDirectShip={onDirectShip}
           onUndoTransfer={onUndoTransfer}
-          onPrintDispatch={onPrintDispatch}
         />
       </CardContent>
     </Card>
@@ -519,24 +530,21 @@ function BatchLaneCard({
 /**
  * Parti geçmişi modalı — "geçmiş/denetim" detayı lane'den ayrı: refakat kartı,
  * soy bağı (redye split) ve TÜM fason sevkler (aktif + tamamlanan + iptal) tek
- * yerde. Sevk aksiyonları (Belge / Doğrudan Sevk / Aktarımı Geri Al) burada.
+ * yerde. Belge / Fasondan Sevk parti ⋯ menüsüne taşındı — modalda kalan tek
+ * aksiyon (nadir) "Aktarımı Geri Al".
  */
 function BatchHistoryModal({
   open,
   onOpenChange,
   batch,
   workOrderId,
-  onDirectShip,
   onUndoTransfer,
-  onPrintDispatch,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   batch: BatchLane;
   workOrderId: string;
-  onDirectShip: (d: BatchLaneDispatch) => void;
   onUndoTransfer: (d: BatchLaneDispatch) => void;
-  onPrintDispatch: (d: BatchLaneDispatch) => void;
 }) {
   const dispatches = [...batch.dispatches].sort((a, b) =>
     b.dispatchedAt.localeCompare(a.dispatchedAt),
@@ -545,9 +553,12 @@ function BatchHistoryModal({
   const activeDispatches = dispatches.filter((d) => d.status !== "CANCELLED");
   const cancelledDispatches = dispatches.filter((d) => d.status === "CANCELLED");
   const [showCancelled, setShowCancelled] = useState(false);
+  const directShipments = batch.directShipments ?? [];
+  // Fasondan sevk satırına tıklayınca açılan detay modalı.
+  const [dsDetailId, setDsDetailId] = useState<string | null>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-5xl">
         <DialogHeader>
           {/* Refakat kartı başlıkla AYNI satırda, sağda (pr-6: kapat ✕ ile çakışmasın). */}
           <div className="flex items-baseline justify-between gap-4 pr-6">
@@ -562,7 +573,7 @@ function BatchHistoryModal({
             )}
           </div>
         </DialogHeader>
-        <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
+        <div className="max-h-[78vh] space-y-4 overflow-auto pr-1">
           {(batch.splitFrom || batch.splitChildren.length > 0) && (
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
               {batch.splitFrom && (
@@ -600,7 +611,7 @@ function BatchHistoryModal({
                       <th className="px-2 py-1 text-right font-medium">Miktar</th>
                       <th className="px-2 py-1 font-medium">Tarih</th>
                       <th className="px-2 py-1 font-medium">Dönüş</th>
-                      <th className="px-2 py-1 text-right font-medium">Belge</th>
+                      <th className="px-2 py-1 text-right font-medium">İşlem</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
@@ -608,9 +619,7 @@ function BatchHistoryModal({
                       <DispatchRow
                         key={d.dispatchId}
                         dispatch={d}
-                        onDirectShip={() => onDirectShip(d)}
                         onUndoTransfer={() => onUndoTransfer(d)}
-                        onPrint={() => onPrintDispatch(d)}
                       />
                     ))}
                     {cancelledDispatches.length > 0 && (
@@ -636,9 +645,7 @@ function BatchHistoryModal({
                         <DispatchRow
                           key={d.dispatchId}
                           dispatch={d}
-                          onDirectShip={() => onDirectShip(d)}
                           onUndoTransfer={() => onUndoTransfer(d)}
-                          onPrint={() => onPrintDispatch(d)}
                         />
                       ))}
                   </tbody>
@@ -650,23 +657,70 @@ function BatchHistoryModal({
               </div>
             )}
           </div>
+
+          {/* Fasondan sevkler (DSK) — mal fasondan doğrudan müşteriye gitti. Satıra
+              tıkla → detay modalı (müşteri/toplar/karşılanan sipariş + İrsaliye). */}
+          {directShipments.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Fasondan Sevkler ({directShipments.length})
+              </div>
+              <div className="overflow-x-auto rounded-md border border-border/40">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-muted/30 text-left text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-1 font-medium">Sevk No</th>
+                      <th className="px-2 py-1 font-medium">Müşteri</th>
+                      <th className="px-2 py-1 text-right font-medium">Miktar</th>
+                      <th className="px-2 py-1 font-medium">Tarih</th>
+                      <th className="w-6 px-2 py-1" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {directShipments.map((ds) => (
+                      <tr
+                        key={ds.id}
+                        onClick={() => setDsDetailId(ds.id)}
+                        className="cursor-pointer hover:bg-muted/30"
+                      >
+                        <td className="px-2 py-1 font-mono">{ds.shipmentNo}</td>
+                        <td className="px-2 py-1">{ds.customerName ?? "—"}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">
+                          {formatNumber(ds.totalQty, 0)} m · {ds.rollCount} top
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
+                          {safeFormat(ds.shippedAt, "dd.MM.yyyy · HH:mm")}
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          <ArrowUpRight className="ml-auto h-3.5 w-3.5 text-primary" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
+
+        <DirectShipmentDetailModal
+          directShipmentId={dsDetailId}
+          open={Boolean(dsDetailId)}
+          onOpenChange={(o) => !o && setDsDetailId(null)}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
-/** Geçmiş modalında bir fason sevk satırı (hizalı tablo). */
+/** Geçmiş modalında bir fason sevk satırı (hizalı tablo). Belge / Fasondan Sevk
+ *  parti ⋯ menüsünde — burada yalnız nadir "Aktarımı Geri Al" kaldı. */
 function DispatchRow({
   dispatch,
-  onDirectShip,
   onUndoTransfer,
-  onPrint,
 }: {
   dispatch: BatchLaneDispatch;
-  onDirectShip: () => void;
   onUndoTransfer: () => void;
-  onPrint: () => void;
 }) {
   const meta = STATUS_META[dispatch.status];
   const cancelled = dispatch.status === "CANCELLED";
@@ -710,31 +764,7 @@ function DispatchRow({
       </td>
       <td className="px-2 py-1">
         <div className="flex justify-end gap-1">
-          {!cancelled && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 gap-1 px-2 text-[11px]"
-              onClick={onPrint}
-              title="Fason sevk irsaliyesini yazdır"
-            >
-              <Printer className="h-3 w-3" />
-              Belge
-            </Button>
-          )}
-          {dispatch.status === "OPEN" && (
-            <PermissionGate permission="workorder:write">
-              <Button
-                size="sm"
-                className="h-6 gap-1 border-transparent bg-emerald-600 px-2 text-[11px] text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                onClick={onDirectShip}
-              >
-                <Truck className="h-3 w-3" />
-                Fasondan Sevk
-              </Button>
-            </PermissionGate>
-          )}
-          {dispatch.status === "OPEN" && dispatch.isTransferOutput && (
+          {dispatch.status === "OPEN" && dispatch.isTransferOutput ? (
             <PermissionGate permission="workorder:write">
               <Button
                 variant="outline"
@@ -746,6 +776,8 @@ function DispatchRow({
                 Aktarımı Geri Al
               </Button>
             </PermissionGate>
+          ) : (
+            <span className="text-muted-foreground">—</span>
           )}
         </div>
       </td>
