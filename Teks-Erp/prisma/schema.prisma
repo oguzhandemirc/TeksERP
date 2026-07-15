@@ -1857,10 +1857,12 @@ model SubcontractorDirectShipAllocation {
 
   createdAt DateTime @default(now())
 
-  // Aynı sevkte bir satıra iki kez karşılanma yazılamaz (ShipmentAllocation deseni).
-  // map: DB'deki gerçek index adı (63-karakter truncation'ı Prisma'nın ürettiğinden
-  // farklı) — aksi halde migrate dev sonsuz RENAME üretir.
-  @@unique([dispatchId, orderLineId], map: "subcontractor_direct_ship_allocations_dispatchId_orderLineId_ke")
+  // Karşılanma OLAY-başınadır: aynı DirectShipment olayında bir satıra iki kez
+  // karşılanma yazılamaz. Constraint (dispatchId, orderLineId) DEĞİL — bir dispatch'ten
+  // birden çok kısmi doğrudan sevk çıkabilir ve AYNI sipariş satırına her olayda tekrar
+  // karşılanma yazılabilir (F: "kalan kısma tekrar sevk" P2002 veriyordu).
+  // map: DB'deki gerçek index adı (63-karakter truncation) — aksi halde migrate sonsuz RENAME.
+  @@unique([directShipmentId, orderLineId], map: "subcontractor_direct_ship_allocations_dsId_orderLineId_key")
   @@index([orderLineId])
   @@index([directShipmentId])
   @@map("subcontractor_direct_ship_allocations")
