@@ -10,6 +10,7 @@ import { shipmentColumns } from "./columns";
 import { shipmentService, branchLookupService } from "./service";
 import { shipmentStatusLabels, type ShipmentListItem, type BranchLookupItem } from "./types";
 import { ShipmentDetailSheet } from "./ShipmentDetailSheet";
+import { DirectShipmentDetailSheet } from "./DirectShipmentDetailSheet";
 
 const QUERY_KEY = "shipments";
 
@@ -103,8 +104,13 @@ export function ShipmentsPage() {
         onRowClick={setSelected}
       />
       <ShipmentDetailSheet
-        shipmentId={selected?.id ?? null}
-        open={Boolean(selected)}
+        shipmentId={selected && selected.kind !== "DIRECT" ? selected.id : null}
+        open={Boolean(selected) && selected?.kind !== "DIRECT"}
+        onOpenChange={(o) => !o && setSelected(null)}
+      />
+      <DirectShipmentDetailSheet
+        directShipmentId={selected?.kind === "DIRECT" ? selected.id : null}
+        open={Boolean(selected) && selected?.kind === "DIRECT"}
         onOpenChange={(o) => !o && setSelected(null)}
       />
     </div>

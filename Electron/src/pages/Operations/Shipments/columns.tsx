@@ -9,7 +9,19 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     accessorKey: "shipmentNo",
     header: "Sevkiyat No",
-    cell: ({ row }) => <span className="font-mono text-xs font-semibold">{row.original.shipmentNo}</span>,
+    cell: ({ row }) => {
+      const s = row.original;
+      return (
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-xs font-semibold">{s.shipmentNo}</span>
+          {s.kind === "DIRECT" && (
+            <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600">
+              Fasondan Doğrudan
+            </Badge>
+          )}
+        </div>
+      );
+    },
   },
   {
     id: "customer",
@@ -36,9 +48,13 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
     header: "İçerik",
     cell: ({ row }) => {
       const c = row.original._count;
+      const isDirect = row.original.kind === "DIRECT";
       return (
         <span className="flex items-center gap-1.5 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
-          {c.orders} sipariş · {c.rolls} top · {c.sacks} çuval
+          {/* Doğrudan sevkte çuval yok — top (+ karşılanan sipariş) gösterilir. */}
+          {isDirect
+            ? `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`
+            : `${c.orders} sipariş · ${c.rolls} top · ${c.sacks} çuval`}
           {c.returns > 0 && (
             <Badge
               variant="outline"

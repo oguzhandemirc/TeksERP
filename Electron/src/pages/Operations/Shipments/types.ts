@@ -34,6 +34,9 @@ export interface BranchLookupItem {
 /** Liste satırı — lean (sayılar, dizi değil). Backend listShipments select'i ile birebir. */
 export interface ShipmentListItem {
   id: string;
+  /** SHIPMENT = çuval sevkiyatı; DIRECT = fasondan doğrudan sevk (DirectShipment).
+   *  Birleşik liste iki tabloyu tek akışta döner. */
+  kind: "SHIPMENT" | "DIRECT";
   shipmentNo: string;
   status: ShipmentStatus;
   plateNumber: string | null;
@@ -41,9 +44,49 @@ export interface ShipmentListItem {
   carrier: string | null;
   dispatchedAt: string | null;
   createdAt: string;
+  /** Yalnız DIRECT satırlarında dolu — doğrudan sevk sebebi. */
+  reason?: string | null;
   customer: { id: string; code: string; name: string };
   branch: { id: string; name: string } | null;
   _count: { sacks: number; rolls: number; orders: number; returns: number };
+}
+
+/** Fasondan doğrudan sevk (DirectShipment) detayı — birleşik listeden DIRECT satırı açılınca. */
+export interface DirectShipmentDetail {
+  id: string;
+  kind: "DIRECT";
+  shipmentNo: string;
+  reason: string;
+  totalQty: number;
+  rollCount: number;
+  shippedAt: string;
+  createdAt: string;
+  customer: { id: string; code: string; name: string };
+  branch: { id: string; name: string } | null;
+  shippedBy: string | null;
+  dispatch: {
+    id: string;
+    dispatchNo: string;
+    subcontractor: { id: string; name: string; code: string | null };
+    workOrder: { id: string; workOrderNumber: string };
+    stationName: string;
+    stepSequence: number;
+  };
+  rolls: {
+    id: string;
+    barcode: string | null;
+    itemName: string;
+    colorName: string | null;
+    currentQty: number;
+    width: number | null;
+    qualityGrade: string | null;
+  }[];
+  allocations: {
+    orderNumber: string;
+    itemName: string;
+    colorName: string | null;
+    qty: number;
+  }[];
 }
 
 export interface ShipmentDetailLine {

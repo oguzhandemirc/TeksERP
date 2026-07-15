@@ -1,7 +1,12 @@
 import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { ShipmentListItem, ShipmentDetail, BranchLookupItem } from "./types";
+import type {
+  ShipmentListItem,
+  ShipmentDetail,
+  DirectShipmentDetail,
+  BranchLookupItem,
+} from "./types";
 
 // Liste + cursor: createCrudService (GET /api/shipping/shipments?mode=cursor...).
 // Detay ayrı tip (zengin) → getDetail. Backend listShipments cursor'u non-breaking.
@@ -15,6 +20,12 @@ export const shipmentService = {
   /** Tek sevkiyat detayı — açılınca lazy çekilir (liste değil). */
   getDetail: (id: string): Promise<ApiResponse<ShipmentDetail>> =>
     apiClient.get<ApiResponse<ShipmentDetail>>(`/api/shipping/shipments/${id}`).then((r) => r.data),
+
+  /** Fasondan doğrudan sevk (DirectShipment) detayı — birleşik listeden DIRECT satırı açılınca. */
+  getDirectShipmentDetail: (id: string): Promise<ApiResponse<DirectShipmentDetail>> =>
+    apiClient
+      .get<ApiResponse<DirectShipmentDetail>>(`/api/shipping/direct-shipments/${id}`)
+      .then((r) => r.data),
 
   /** İptal önizlemesi — havuza dönecek çuval/top + rezervi serbest kalacak sipariş dökümü (yıkıcı-onay). */
   cancelPreview: (id: string): Promise<ApiResponse<CancelPreview>> =>
