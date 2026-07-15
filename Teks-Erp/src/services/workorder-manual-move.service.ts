@@ -215,22 +215,30 @@ export class WorkOrderManualMoveService {
     const ctx = await this.loadContext(workOrderId, input);
     const t = ctx.targetStep;
 
-    // GERİ taşımada hedeften SONRA yapılmış kesim/kalite işlemi olan toplar.
+    // GERİ taşımada hedeften SONRA yapılmış işlem — İKİ tür:
+    //   - CUT (fiziksel kesim → parentRollId'li çocuk top var): geri alınamaz → HARD-BLOCK.
+    //   - Salt QC2/Kurşun (çocuk yok): kalite kararı geri alınabilir → top taşınır, kalite VOID
+    //     edilir (grade → Belirsiz). Yanlış girilen grade/kurşun süpervizörün düzelttiği şeydir.
+    const selIds = ctx.selected.map((r) => r.id);
     const opRows = await prisma.rollOperation.findMany({
-      where: {
-        rollId: { in: ctx.selected.map((r) => r.id) },
-        operationType: { in: BLOCKING_OPS },
-        step: { stepSequence: { gt: t.stepSequence } },
-      },
+      where: { rollId: { in: selIds }, operationType: { in: BLOCKING_OPS }, step: { stepSequence: { gt: t.stepSequence } } },
       select: { rollId: true },
     });
-    const opBlocked = new Set(opRows.map((o) => o.rollId));
+    const opRollIds = new Set(opRows.map((o) => o.rollId));
+    const cutParents = await prisma.roll.findMany({
+      where: { parentRollId: { in: selIds } },
+      select: { parentRollId: true },
+    });
+    const cutBlocked = new Set(cutParents.map((c) => c.parentRollId).filter((x): x is string => !!x));
 
+    let anyQcVoid = false;
     const rolls = ctx.selected.map((r) => {
       let blockReason = this.moveBlockReason(r);
-      if (!blockReason && opBlocked.has(r.id)) {
-        blockReason = "Hedef sonrası kesim/kalite işlemi yapılmış — önce o işlemi geri alın";
+      if (!blockReason && cutBlocked.has(r.id)) {
+        blockReason = "Hedef sonrası kesim yapılmış — kesim (çocuk) topları var, geri taşınamaz";
       }
+      const qcWillVoid = !blockReason && opRollIds.has(r.id);
+      if (qcWillVoid) anyQcVoid = true;
       return {
         id: r.id,
         barcode: r.barcode,
@@ -240,6 +248,7 @@ export class WorkOrderManualMoveService {
         currentQty: Number(r.currentQty),
         movable: !blockReason,
         blockReason,
+        qcWillVoid,
       };
     });
 
@@ -275,6 +284,9 @@ export class WorkOrderManualMoveService {
 
     if (ctx.selected.some((r) => r.status === RollStatus.WAREHOUSE)) {
       warnings.push("Depodaki top üretime geri alınıyor.");
+    }
+    if (anyQcVoid) {
+      warnings.push("Bazı topların hedef-sonrası kalite/kurşun kararı geri alınacak (grade → Belirsiz).");
     }
     if (ctx.woStatus === WorkOrderStatus.COMPLETED) {
       warnings.push("Tamamlanmış iş emri — taşıma ile yeniden açılacak (refakat kartı yeniden aktifleşir).");
@@ -407,18 +419,13 @@ export class WorkOrderManualMoveService {
           }
         }
 
-        // B2: GERİ taşıma işlem engeli — tx İÇİNDE, claim'den SONRA (TOCTOU: ön-kontrol ile
-        //     claim arasında yeni bir kesim/kalite işlemi girmiş olabilir).
-        const opBlocked = await tx.rollOperation.count({
-          where: {
-            rollId: { in: selectedIds },
-            operationType: { in: BLOCKING_OPS },
-            step: { stepSequence: { gt: t.stepSequence } },
-          },
-        });
-        if (opBlocked > 0) {
+        // B2 → CUT hard-stop: hedef-sonrası KESİM (fiziksel çocuk top) varsa geri taşınamaz
+        //     (çocukları orphan eder). TOCTOU: ön-kontrol ile claim arasında yeni kesim
+        //     girmiş olabilir → tx İÇİNDE. Salt QC2/Kurşun (çocuk yok) engel değil → VOID edilir.
+        const cutChildren = await tx.roll.count({ where: { parentRollId: { in: selectedIds } } });
+        if (cutChildren > 0) {
           throw AppError.conflict(
-            "Hedef adımdan sonra kesim/kalite işlemi yapılmış top var — önce o işlemi geri alın, sonra taşıyın.",
+            "Hedef sonrası kesim yapılmış — çocuk (kesim) topları var, geri taşınamaz. Önce kesimi geri alın.",
           );
         }
 
@@ -444,6 +451,27 @@ export class WorkOrderManualMoveService {
             notes: "MANUAL_MOVE_IN",
           })),
         });
+
+        // 2b) QC REVERSAL: hedef-sonrası salt QC2/Kurşun kararlarını VOID et — kesim yok
+        //     (yukarıda hard-stop). BLOCKING_OPS log'ları silinir + kalite Belirsiz'e döner;
+        //     top o adımı yeniden işleyince grade'i tekrar kazanır. Movement zaten silindi (2).
+        let qcVoided = false;
+        if (laterStepIds.length > 0) {
+          const del = await tx.rollOperation.deleteMany({
+            where: {
+              rollId: { in: selectedIds },
+              workOrderStepId: { in: laterStepIds },
+              operationType: { in: BLOCKING_OPS },
+            },
+          });
+          if (del.count > 0) {
+            await tx.roll.updateMany({
+              where: { id: { in: selectedIds } },
+              data: { qualityGrade: null },
+            });
+            qcVoided = true;
+          }
+        }
 
         // 3) Parti kararı.
         let newBatchNumber: string | null = null;
@@ -524,6 +552,14 @@ export class WorkOrderManualMoveService {
           }
         }
 
+        // Geri-taşıma korkuluğu: hedefte VE sonrasında SKIPPED adım varsa (önceki ileri-atlamadan)
+        // PENDING'e resetle — recompute SKIPPED'e dokunmaz, aksi halde top orada takılırdı.
+        // İleri-atlama < target'ı SKIP eder, bu >= target'ı açar → çakışmaz.
+        await tx.workOrderStep.updateMany({
+          where: { workOrderId, stepSequence: { gte: t.stepSequence }, status: StepStatus.SKIPPED },
+          data: { status: StepStatus.PENDING, skipReason: null },
+        });
+
         // 4) Etkilenen adımları recompute (hedef + kaynak + silinen movement'lı sonraki adımlar)
         //    + WO'yu üretime çek. B1: WO COMPLETED ise topun statüsünden BAĞIMSIZ geri aç —
         //    top artık IN_PRODUCTION @ ACTIVE adım; kart flip olmazsa operatör okutamaz, kilitlenir.
@@ -550,6 +586,7 @@ export class WorkOrderManualMoveService {
           skippedStepIds,
           synthesizedColorId,
           synthColorRollIds,
+          qcVoided,
         };
       }),
     );
@@ -577,6 +614,7 @@ export class WorkOrderManualMoveService {
         synthesizedColorId: result.synthesizedColorId,
         synthColorRollIds: result.synthColorRollIds,
         qcBypassed: result.skippedStepIds.length > 0,
+        qcVoided: result.qcVoided,
       },
     });
 

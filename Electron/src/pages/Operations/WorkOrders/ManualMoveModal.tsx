@@ -107,6 +107,12 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
       return next;
     });
 
+  // Bloklu (taşınamaz) topları tek tıkla seçimden çıkar — tek tek işaret kaldırmaya gerek yok.
+  const deselectBlocked = () => {
+    const blockedIds = new Set((preview?.rolls ?? []).filter((r) => !r.movable).map((r) => r.id));
+    setSelected((prev) => new Set([...prev].filter((id) => !blockedIds.has(id))));
+  };
+
   const needParty = preview?.partyDecisionNeeded ?? false;
   const joinCandidates = preview?.candidateJoinParties ?? [];
   const blockedInSelection = (preview?.blockedCount ?? 0) > 0;
@@ -296,10 +302,18 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
             </div>
           )}
           {blockedInSelection && (
-            <div className="flex items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-[11px] text-destructive">
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-[11px] text-destructive">
               <Ban className="h-3.5 w-3.5 shrink-0" />
-              Seçili topların bazıları bu hedefe taşınamaz — işaretini kaldırın veya hedefi
-              değiştirin.
+              <span className="flex-1">
+                Seçili {preview?.blockedCount} top bu hedefe taşınamaz (fasonda/çuvalda/sevkte/kesim).
+              </span>
+              <button
+                type="button"
+                onClick={deselectBlocked}
+                className="shrink-0 rounded border border-destructive/40 px-1.5 py-0.5 font-medium hover:bg-destructive/10"
+              >
+                Bloklu topları çıkar
+              </button>
             </div>
           )}
 

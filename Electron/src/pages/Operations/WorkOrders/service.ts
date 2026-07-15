@@ -405,6 +405,8 @@ export interface ManualMovePreviewRoll {
   currentQty: number;
   movable: boolean;
   blockReason: string | null;
+  /** Geri-taşımada bu topun hedef-sonrası kalite/kurşun kararı geri alınacak (grade → Belirsiz). */
+  qcWillVoid?: boolean;
 }
 
 /** Manuel taşıma önizlemesi (backend getManualMovePreview). */
