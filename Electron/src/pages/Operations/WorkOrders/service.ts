@@ -335,6 +335,10 @@ export interface DirectShipPreview {
     orderLineId: string;
     orderId: string;
     orderNumber: string;
+    customerId: string | null;
+    customerName: string | null;
+    branchId: string | null;
+    branchName: string | null;
     itemCode: string;
     itemName: string;
     colorName: string | null;

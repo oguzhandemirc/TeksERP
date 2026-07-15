@@ -18,6 +18,7 @@ import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { customerService } from "@/pages/Customers/service";
+import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import type { Customer } from "@/pages/Customers/types";
 import { workOrderService } from "./service";
 
@@ -42,8 +43,10 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
   const [completeWO, setCompleteWO] = useState(false);
   // orderLineId → karşılanan metraj (yalnız seçili satırlar).
   const [alloc, setAlloc] = useState<Record<string, number>>({});
-  // Mal kime gitti — ZORUNLU (DirectShipment + irsaliye).
+  // Mal kime gitti — ZORUNLU (DirectShipment + irsaliye muhatabı).
   const [customerId, setCustomerId] = useState<string | null>(null);
+  // Teslim şubesi — müşteriye bağlı, opsiyonel (siparişsiz sevkte de sorulur).
+  const [branchId, setBranchId] = useState<string | null>(null);
   // rollId → sevk edilecek metre (varsayılan = topun tam metresi; azsa top bölünür).
   const [rollQtys, setRollQtys] = useState<Record<string, number>>({});
 
@@ -62,6 +65,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
       setAlloc({});
       setCompleteWO(false);
       setCustomerId(null);
+      setBranchId(null);
     }
   }, [open, dispatchId]);
   useEffect(() => {
@@ -80,6 +84,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
         rollIds: [...selected],
         rollShipQtys: Object.fromEntries([...selected].map((id) => [id, rollQtys[id] ?? 0])),
         customerId: customerId ?? undefined,
+        branchId: branchId ?? undefined,
         completeWorkOrder: completeWO,
         orderLineAllocations: Object.entries(alloc)
           .filter(([, qty]) => qty > 0)
@@ -126,6 +131,32 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
       return next;
     });
 
+  // Siparişler YALNIZ seçilen müşterinin açık satırlarıyla daraltılır — bir sipariş
+  // zaten bir müşteriye aittir; müşteri seçilmeden sipariş seçilemez (çelişki önlenir).
+  const customerOrderLines = useMemo(
+    () =>
+      customerId
+        ? (preview?.candidateOrderLines ?? []).filter((l) => l.customerId === customerId)
+        : [],
+    [customerId, preview?.candidateOrderLines],
+  );
+
+  // Müşteri değişince: şubeyi sıfırla + artık o müşteriye ait olmayan karşılanmaları at.
+  const handleCustomerChange = (id: string | null) => {
+    setCustomerId(id);
+    setBranchId(null);
+    setAlloc((prev) => {
+      const validIds = new Set(
+        (preview?.candidateOrderLines ?? [])
+          .filter((l) => l.customerId === id)
+          .map((l) => l.orderLineId),
+      );
+      const next: Record<string, number> = {};
+      for (const [k, v] of Object.entries(prev)) if (validIds.has(k)) next[k] = v;
+      return next;
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[88vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
@@ -167,6 +198,33 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
               </div>
             ) : (
               <>
+                {/* Müşteri + Şube — mal KİME / nereye gitti (irsaliye muhatabı).
+                    Müşteri önce seçilir; siparişler bu müşteriye göre daraltılır. */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium">
+                      Müşteri <span className="text-destructive">*</span>
+                    </label>
+                    <EntityPickerModal<Customer>
+                      value={customerId}
+                      onChange={handleCustomerChange}
+                      service={customerService}
+                      queryKey="direct-ship-customer"
+                      getLabel={(c) => c.name}
+                      getSubLabel={(c) => c.code}
+                      icon={UserRound}
+                      iconClassName="text-primary"
+                      title="Müşteri Seç"
+                      description="Mal kime sevk edildi — irsaliye ve sevkiyat kaydı için zorunlu."
+                      placeholder="Müşteri seç..."
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium">Şube</label>
+                    <BranchSelect customerId={customerId} value={branchId} onChange={setBranchId} />
+                  </div>
+                </div>
+
                 {/* Sevk edilecek toplar — per-roll seçim */}
                 <div>
                   <div className="mb-1 flex items-center justify-between">
@@ -245,26 +303,6 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                   )}
                 </div>
 
-                {/* Müşteri — ZORUNLU (mal kime gitti?) */}
-                <div>
-                  <label className="mb-1 block text-xs font-medium">
-                    Müşteri <span className="text-destructive">*</span>
-                  </label>
-                  <EntityPickerModal<Customer>
-                    value={customerId}
-                    onChange={setCustomerId}
-                    service={customerService}
-                    queryKey="direct-ship-customer"
-                    getLabel={(c) => c.name}
-                    getSubLabel={(c) => c.code}
-                    icon={UserRound}
-                    iconClassName="text-primary"
-                    title="Müşteri Seç"
-                    description="Mal kime sevk edildi — irsaliye ve sevkiyat kaydı için zorunlu."
-                    placeholder="Müşteri seç..."
-                  />
-                </div>
-
                 {/* İş emrini tamamla toggle */}
                 <label
                   className={cn(
@@ -313,18 +351,27 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                   />
                 </div>
 
-                {/* Opsiyonel karşılanma */}
+                {/* Hangi siparişe gitti — SEÇİLEN müşterinin açık satırları (opsiyonel).
+                    Müşteri seçilmeden pasif; her satır şubesiyle listelenir. */}
                 <div>
                   <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Hangi siparişe gitti? (opsiyonel — karşılanmaya işlenir)
                   </div>
-                  {preview.candidateOrderLines.length === 0 ? (
+                  {!customerId ? (
                     <div className="rounded-md border border-dashed p-2 text-center text-xs italic text-muted-foreground">
-                      Eşleşen açık sipariş satırı yok. Boş bırakılırsa karşılanmaya dokunulmaz.
+                      Önce müşteri seçin — siparişler o müşteriye göre listelenir.
+                    </div>
+                  ) : customerOrderLines.length === 0 ? (
+                    <div className="rounded-md border border-dashed p-2 text-center text-xs italic text-muted-foreground">
+                      Bu müşterinin eşleşen açık sipariş satırı yok. Boş bırakılırsa karşılanmaya
+                      dokunulmaz.
                     </div>
                   ) : (
-                    <ul data-testid="ship-orders" className="space-y-1 rounded-md border p-2">
-                      {preview.candidateOrderLines.map((l) => {
+                    <ul
+                      data-testid="ship-orders"
+                      className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2"
+                    >
+                      {customerOrderLines.map((l) => {
                         const checked = l.orderLineId in alloc;
                         return (
                           <li key={l.orderLineId} className="flex items-center gap-2 text-xs">
@@ -336,6 +383,11 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                             />
                             <span className="flex min-w-0 flex-1 items-center gap-1.5">
                               <span className="font-mono">{l.orderNumber}</span>
+                              {l.branchName && (
+                                <Badge variant="muted" className="text-[10px]">
+                                  {l.branchName}
+                                </Badge>
+                              )}
                               {l.isWorkOrderLinked && (
                                 <Badge variant="outline" className="text-[10px]">
                                   WO

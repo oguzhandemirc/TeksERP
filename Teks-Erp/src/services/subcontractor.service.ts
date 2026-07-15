@@ -4092,6 +4092,8 @@ export class SubcontractorService {
                             status: true,
                             orderDate: true,
                             deadline: true,
+                            customer: { select: { id: true, name: true } },
+                            branch: { select: { id: true, name: true } },
                           },
                         },
                         createdAt: true,
@@ -4207,7 +4209,15 @@ export class SubcontractorService {
               item: { select: { code: true, name: true } },
               color: { select: { name: true } },
               order: {
-                select: { id: true, orderNumber: true, status: true, orderDate: true, deadline: true },
+                select: {
+                  id: true,
+                  orderNumber: true,
+                  status: true,
+                  orderDate: true,
+                  deadline: true,
+                  customer: { select: { id: true, name: true } },
+                  branch: { select: { id: true, name: true } },
+                },
               },
               createdAt: true,
             },
@@ -4252,6 +4262,11 @@ export class SubcontractorService {
       orderLineId: ol.id,
       orderId: ol.order.id,
       orderNumber: ol.order.orderNumber,
+      // Müşteri + şube — frontend seçilen müşteriye göre daraltır ve satırda gösterir.
+      customerId: ol.order.customer?.id ?? null,
+      customerName: ol.order.customer?.name ?? null,
+      branchId: ol.order.branch?.id ?? null,
+      branchName: ol.order.branch?.name ?? null,
       itemCode: ol.item.code,
       itemName: ol.item.name,
       colorName: ol.color?.name ?? null,
@@ -4672,7 +4687,7 @@ export class SubcontractorService {
             id: true,
             quantity: true,
             shippedQty: true,
-            order: { select: { id: true, status: true, manualClosedById: true } },
+            order: { select: { id: true, status: true, manualClosedById: true, customerId: true } },
           },
         });
         const freshById = new Map(freshLines.map((l) => [l.id, l]));
@@ -4680,6 +4695,14 @@ export class SubcontractorService {
         for (const a of allocations) {
           const line = freshById.get(a.orderLineId);
           if (!line) throw AppError.notFound(`Sipariş satırı bulunamadı: ${a.orderLineId}`);
+          // Karşılanma yalnız SEÇİLEN müşterinin siparişine yazılabilir — mal o müşteriye
+          // gidiyor; başka müşterinin siparişine karşılanma saçma olur (frontend zaten
+          // daraltıyor, bu defense-in-depth).
+          if (data.customerId && line.order.customerId !== data.customerId) {
+            throw AppError.badRequest(
+              "Karşılanan sipariş satırı seçilen müşteriye ait değil — yalnız o müşterinin siparişleri işlenebilir.",
+            );
+          }
           if (
             line.order.status === "CANCELLED" ||
             (line.order.status === "COMPLETED" && line.order.manualClosedById != null)
