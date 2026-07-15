@@ -306,6 +306,7 @@ model User {
   workSessions               WorkSession[]
   sessions                   Session[]
   dispatchedShipments        Shipment[]              @relation("ShipmentDispatchedBy")
+  directShipments            DirectShipment[]        @relation("DirectShipmentShippedBy")
   weighedSacks               Sack[]                  @relation("SackWeighedBy")
   swatchStockReductions      SwatchStockReduction[]  @relation("SwatchStockReductionCreatedBy")
 
@@ -951,6 +952,10 @@ model Roll {
   // claim/iz sürme). shipment ile tutarlı: sack.shipmentId == roll.shipmentId.
   sackId String? @db.Uuid
 
+  // Fasondan doğrudan sevk edilen top bu DirectShipment olayına bağlıdır (kısmi
+  // split'te kesilen çocuk top). NULL = normal akış / çuval sevkiyatı.
+  directShipmentId String? @db.Uuid
+
   // GEVŞEK MODEL: topun ÜSTÜNDEKİ son basılan etiketin denormalize snapshot'ı
   // (müşteri/sipariş/ürün-renk adı + baskı tarihi/operatör). BAĞ DEĞİL — yalnız
   // "şu an hangi etiket basılı" bilgisi; kapsama/sevk mantığına GİRMEZ. Müşterisiz
@@ -973,6 +978,7 @@ model Roll {
   operations           RollOperation[]
   parent               Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
   children             Roll[]                      @relation("RollLineage")
+  directShipment       DirectShipment?             @relation(fields: [directShipmentId], references: [id])
   parentReceipt        SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
   inheritedOperations  RollOperation[]             @relation("RollOperationInherited")
@@ -1060,6 +1066,7 @@ model Customer {
   shipments      Shipment[]
   sacks          Sack[]
   rollReturns    RollReturn[]
+  directShipments DirectShipment[]
   templateRoutes CustomerTemplateRoute[]
 
   createdAt DateTime @default(now())
@@ -1092,6 +1099,7 @@ model CustomerBranch {
   orders    Order[]
   shipments Shipment[]
   sacks     Sack[]
+  directShipments DirectShipment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1784,6 +1792,7 @@ model SubcontractorDispatch {
   directShippedBy       User?                               @relation("DispatchDirectShippedBy", fields: [directShippedById], references: [id])
   items                 SubcontractorDispatchItem[]
   directShipAllocations SubcontractorDirectShipAllocation[]
+  directShipments       DirectShipment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1838,8 +1847,13 @@ model SubcontractorDirectShipAllocation {
   orderLineId String  @db.Uuid
   qty         Decimal @db.Decimal(12, 3)
 
-  dispatch  SubcontractorDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
-  orderLine OrderLine             @relation(fields: [orderLineId], references: [id])
+  /** Bu karşılanma hangi DirectShipment olayına ait (kısmi/çoklu sevk ayrımı). NULL =
+   *  eski (DirectShipment entity öncesi) kayıtlar. */
+  directShipmentId String? @db.Uuid
+
+  dispatch       SubcontractorDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  orderLine      OrderLine             @relation(fields: [orderLineId], references: [id])
+  directShipment DirectShipment?       @relation(fields: [directShipmentId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -1848,7 +1862,44 @@ model SubcontractorDirectShipAllocation {
   // farklı) — aksi halde migrate dev sonsuz RENAME üretir.
   @@unique([dispatchId, orderLineId], map: "subcontractor_direct_ship_allocations_dispatchId_orderLineId_ke")
   @@index([orderLineId])
+  @@index([directShipmentId])
   @@map("subcontractor_direct_ship_allocations")
+}
+
+/// Fasondan doğrudan müşteriye sevk OLAYI — mal fabrikaya dönmeden fason firmasından
+/// müşteriye gider. Bir fason sevkinin (dispatch) top/parçalarının BİR seferde tek
+/// müşteriye doğrudan sevkini temsil eder (kısmi split ile bir dispatch birden çok
+/// DirectShipment üretebilir). "Sevkiyatlar" birleşik listesinde çuval Shipment'larıyla
+/// birlikte görünür; her biri sevk irsaliyesi (SUBCONTRACTOR_DIRECT_SHIP) dondurur.
+/// Çuval Shipment modeline dokunulmaz — ayrı, roll-bazlı entity.
+model DirectShipment {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// DSK + GGAAYY + NNNN
+  shipmentNo  String   @unique
+  dispatchId  String   @db.Uuid
+  customerId  String   @db.Uuid
+  branchId    String?  @db.Uuid
+  reason      String
+  /// Sevk edilen toplam metraj (efektif toplar — kısmi split'te kesilen çocuk metreleri).
+  totalQty    Decimal  @db.Decimal(12, 3)
+  rollCount   Int
+  shippedAt   DateTime @default(now())
+  shippedById String?  @db.Uuid
+
+  dispatch    SubcontractorDispatch              @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
+  customer    Customer                           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branch      CustomerBranch?                    @relation(fields: [branchId], references: [id])
+  shippedBy   User?                              @relation("DirectShipmentShippedBy", fields: [shippedById], references: [id])
+  rolls       Roll[]
+  allocations SubcontractorDirectShipAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dispatchId])
+  @@index([customerId])
+  @@index([shippedAt])
+  @@map("direct_shipments")
 }
 
 model SubcontractorReceipt {
