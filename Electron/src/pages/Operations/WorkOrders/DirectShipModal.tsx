@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Truck, AlertTriangle, UserRound } from "lucide-react";
+import { Truck, AlertTriangle, UserRound, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,9 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
   const [branchId, setBranchId] = useState<string | null>(null);
   // rollId → sevk edilecek metre (varsayılan = topun tam metresi; azsa top bölünür).
   const [rollQtys, setRollQtys] = useState<Record<string, number>>({});
+  // Karşılanma metrajı elle düzenlenebilir (input açık) olan sipariş satırları —
+  // varsayılan OTOMATİK; pencil'e basınca override input'u açılır.
+  const [allocOpen, setAllocOpen] = useState<Set<string>>(new Set());
 
   const previewQ = useQuery({
     queryKey: ["direct-ship-preview", dispatchId],
@@ -63,6 +66,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
     if (open) {
       setReason("");
       setAlloc({});
+      setAllocOpen(new Set());
       setCompleteWO(false);
       setCustomerId(null);
       setBranchId(null);
@@ -103,6 +107,13 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
     () => Object.values(alloc).reduce((s, q) => s + (q > 0 ? q : 0), 0),
     [alloc],
   );
+  // Toplam FİZİKSEL sevk metresi (seçili topların sevk metrajları) — karşılanma
+  // bunun üstüne çıkamaz; artан kısım "stok" (siparişsiz) sayılır.
+  const shippedTotal = useMemo(
+    () => [...selected].reduce((s, id) => s + (rollQtys[id] ?? 0), 0),
+    [selected, rollQtys],
+  );
+  const unallocated = shippedTotal - allocTotal;
   const total = preview?.affectedRolls.length ?? 0;
   const selectedCount = selected.size;
   const allSelected = total > 0 && selectedCount === total;
@@ -113,6 +124,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
     selectedCount > 0 &&
     Boolean(customerId) &&
     reason.trim().length >= 3 &&
+    allocTotal <= shippedTotal && // siparişlere işlenen, fiziksel sevkten fazla olamaz
     !mut.isPending;
 
   const toggleRoll = (id: string, checked: boolean) =>
@@ -123,13 +135,31 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
       return next;
     });
 
-  const toggleLine = (id: string, suggested: number, checked: boolean) =>
+  // Sipariş işaretlenince karşılanma OTOMATİK dolar: sevk edilen metreden kalan
+  // kapasite kadar (FIFO, satırın kalanına kadar). İşareti kalkınca temizlenir.
+  const toggleLine = (id: string, remaining: number, checked: boolean) => {
     setAlloc((prev) => {
       const next = { ...prev };
-      if (checked) next[id] = suggested > 0 ? suggested : 0;
-      else delete next[id];
+      if (checked) {
+        const others = Object.entries(next).reduce(
+          (s, [k, v]) => (k === id ? s : s + (v > 0 ? v : 0)),
+          0,
+        );
+        next[id] = Math.max(0, Math.min(remaining, shippedTotal - others));
+      } else {
+        delete next[id];
+      }
       return next;
     });
+    if (!checked)
+      setAllocOpen((prev) => {
+        const n = new Set(prev);
+        n.delete(id);
+        return n;
+      });
+  };
+  // Otomatik metrajı elle düzeltmek için input'u aç (pencil).
+  const openOverride = (id: string) => setAllocOpen((prev) => new Set(prev).add(id));
 
   // Siparişler seçilen MÜŞTERİ (+ varsa ŞUBE) ile daraltılır — bir sipariş zaten
   // bir müşteri/şubeye aittir. Şube boşsa o müşterinin tüm şubeleri listelenir.
@@ -371,7 +401,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                     Müşteri seçilmeden pasif; her satır şubesiyle listelenir. */}
                 <div>
                   <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Hangi siparişe gitti? (opsiyonel — karşılanmaya işlenir)
+                    Hangi siparişe gitti? (opsiyonel — sevk edilen metre otomatik işlenir)
                   </div>
                   {!customerId ? (
                     <div className="rounded-md border border-dashed p-2 text-center text-xs italic text-muted-foreground">
@@ -389,12 +419,13 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                     >
                       {customerOrderLines.map((l) => {
                         const checked = l.orderLineId in alloc;
+                        const isOpen = allocOpen.has(l.orderLineId);
                         return (
                           <li key={l.orderLineId} className="flex items-center gap-2 text-xs">
                             <Checkbox
                               checked={checked}
                               onCheckedChange={(v) =>
-                                toggleLine(l.orderLineId, l.suggestedQty, Boolean(v))
+                                toggleLine(l.orderLineId, l.remaining, Boolean(v))
                               }
                             />
                             <span className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -417,28 +448,68 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                             <span className="shrink-0 text-muted-foreground">
                               kalan {formatNumber(l.remaining, 0)} m
                             </span>
-                            <input
-                              type="number"
-                              min={0}
-                              step={1}
-                              disabled={!checked}
-                              value={checked ? alloc[l.orderLineId] : ""}
-                              onChange={(e) =>
-                                setAlloc((prev) => ({
-                                  ...prev,
-                                  [l.orderLineId]: Math.max(0, Number(e.target.value) || 0),
-                                }))
-                              }
-                              className="w-20 rounded-md border bg-background px-2 py-1 text-right text-xs tabular-nums outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                            />
+                            {/* Karşılanma: varsayılan OTOMATİK (salt-okunur) → pencil'e
+                                basınca elle düzeltme input'u açılır. */}
+                            {!checked ? (
+                              <span className="w-[72px] shrink-0" />
+                            ) : isOpen ? (
+                              <input
+                                type="number"
+                                min={0}
+                                max={l.remaining}
+                                step={1}
+                                autoFocus
+                                value={alloc[l.orderLineId]}
+                                onChange={(e) =>
+                                  setAlloc((prev) => ({
+                                    ...prev,
+                                    [l.orderLineId]: Math.max(
+                                      0,
+                                      Math.min(l.remaining, Number(e.target.value) || 0),
+                                    ),
+                                  }))
+                                }
+                                className="w-[72px] shrink-0 rounded-md border bg-background px-2 py-1 text-right text-xs tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                                title="Karşılanan metre (elle düzeltme)"
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => openOverride(l.orderLineId)}
+                                className="flex w-[72px] shrink-0 items-center justify-end gap-1 rounded-md px-1 py-1 text-muted-foreground hover:bg-muted/60"
+                                title="Otomatik metrajı elle düzelt"
+                              >
+                                <span className="tabular-nums">
+                                  {formatNumber(alloc[l.orderLineId] ?? 0, 0)} m
+                                </span>
+                                <Pencil className="h-3 w-3 opacity-60" />
+                              </button>
+                            )}
                           </li>
                         );
                       })}
                     </ul>
                   )}
+                  {/* Özet — fiziksel sevk vs siparişlere işlenen vs stok (siparişsiz). */}
                   {allocTotal > 0 && (
-                    <div className="mt-1 text-right text-[11px] text-muted-foreground">
-                      Toplam karşılanan: {formatNumber(allocTotal, 0)} m
+                    <div className="mt-1.5 flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums">
+                      <span className="text-muted-foreground">
+                        Sevk edilen: <b className="text-foreground">{formatNumber(shippedTotal, 0)} m</b>
+                      </span>
+                      <span className="text-muted-foreground">
+                        İşlenen: <b className="text-foreground">{formatNumber(allocTotal, 0)} m</b>
+                      </span>
+                      {unallocated < 0 ? (
+                        <span className="inline-flex items-center gap-1 font-medium text-destructive">
+                          <AlertTriangle className="h-3 w-3" />
+                          {formatNumber(-unallocated, 0)} m fazla işlendi
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          İşlenmeyen (stok):{" "}
+                          <b className="text-foreground">{formatNumber(unallocated, 0)} m</b>
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
