@@ -1907,6 +1907,8 @@ export class WorkOrderService {
             subcontractor: { select: { id: true, name: true } },
             items: {
               select: {
+                // Kapanış metrajı: dönen kalemin sevk metresi (list-endpoint semantiği).
+                dispatchedQty: true,
                 // Aktarım çıktısı türetimi (K: "Aktarımı Geri Al" butonu): sevkin TÜM
                 // topları born (parentReceiptId dolu) ise bu bir fason→fason aktarımdır.
                 roll: { select: { parentReceiptId: true } },
@@ -1955,6 +1957,20 @@ export class WorkOrderService {
       directShipsByBatch.set(r.batchId, m);
     }
 
+    // Kapanış kolonu için sevk-başına FASONDAN SEVK metrajı (Σ DirectShipment.totalQty).
+    // DirectShipment.dispatchId doğrudan FK → groupBy ile tek sorgu.
+    const dispatchIdsAll = batches.flatMap((b) => b.dispatches.map((d) => d.id));
+    const dsByDispatch = dispatchIdsAll.length
+      ? await prisma.directShipment.groupBy({
+          by: ["dispatchId"],
+          where: { dispatchId: { in: dispatchIdsAll } },
+          _sum: { totalQty: true },
+        })
+      : [];
+    const directShippedByDispatch = new Map(
+      dsByDispatch.map((g) => [g.dispatchId, Number(g._sum.totalQty ?? 0)]),
+    );
+
     const statusLabel = (s: string): string =>
       s === "WAREHOUSE" ? "Depo" : s === "STOCK" ? "Stok" : "—";
 
@@ -1998,6 +2014,18 @@ export class WorkOrderService {
           }
         }
 
+        // Kapanış bakiyesi (metraj): Dönen = non-cancelled makbuzu olan kalemlerin sevk
+        // metresi Σ; Fasondan = bu sevke atfedilmiş Σ DirectShipment.totalQty. Fasonda kalan
+        // = totalQty − Dönen − Fasondan (frontend hesaplar).
+        const returnedQty = d.items.reduce(
+          (s, it) =>
+            it.receiptItems.some((ri) => ri.receipt && !ri.receipt.cancelledAt)
+              ? s + Number(it.dispatchedQty)
+              : s,
+          0,
+        );
+        const directShippedQty = directShippedByDispatch.get(d.id) ?? 0;
+
         return {
           dispatchId: d.id,
           dispatchNo: d.dispatchNo,
@@ -2008,6 +2036,8 @@ export class WorkOrderService {
           totalQty: Number(d.totalQty),
           rollCount: itemCount,
           receivedItemCount,
+          returnedQty,
+          directShippedQty,
           status,
           isTransferOutput,
           directShippedAt: d.directShippedAt,

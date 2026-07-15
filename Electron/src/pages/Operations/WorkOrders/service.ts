@@ -464,6 +464,10 @@ export interface BatchLaneDispatch {
   rollCount: number;
   /** Dönüşü yapılmış sevk kalemi sayısı. */
   receivedItemCount: number;
+  /** Kapanış bakiyesi (metraj): dönen (kabul), fasondan sevk edilen. Fasonda kalan =
+   *  totalQty − returnedQty − directShippedQty. */
+  returnedQty: number;
+  directShippedQty: number;
   /** OPEN = fasonda · PARTIAL = kısmi dönüş · RETURNED = döndü · CANCELLED = iptal ·
    *  DIRECT_SHIPPED = fasondan doğrudan sevk (mal dönmeden müşteriye gitti). */
   status: BatchDispatchStatus;

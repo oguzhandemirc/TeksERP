@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  ArrowRightLeft,
   ArrowUpRight,
   ChevronDown,
   GitMerge,
@@ -48,12 +49,14 @@ import { DirectShipModal } from "./DirectShipModal";
 import { DirectShipmentDetailModal } from "@/pages/Operations/Shipments/DirectShipmentDetailModal";
 import { UndoTransferModal } from "./UndoTransferModal";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
-import { BatchDocumentsDialog } from "./BatchDocumentsDialog";
+import { FasonStepRollSelectModal } from "./FasonStepRollSelectModal";
 import { BatchCorrectModal } from "./BatchCorrectModal";
 import { ManualMoveModal } from "./ManualMoveModal";
 import { BatchTimeline, stripFason } from "./BatchTimeline";
+import { findBatchTransferContext, type BatchTransferContext } from "./batch-transfer";
 import { Wrench } from "lucide-react";
 import type { BatchLaneRoll } from "./service";
+import type { WorkOrderStepLite } from "./types";
 
 const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> = {
   OPEN: { label: "Fasonda", cls: "border-warning/40 bg-warning/10 text-warning" },
@@ -70,7 +73,16 @@ const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> =
  * BİRLEŞTİRİLEBİLİR (K8, en eski no yaşar). Refakat kartı iş emri başına olduğundan
  * lane'de tekrarlanmaz (başlıkta bir kez). Kilit türetilmiş (açık sevk = kilitli).
  */
-export function BranchLanes({ workOrderId }: { workOrderId: string }) {
+export function BranchLanes({
+  workOrderId,
+  steps,
+}: {
+  workOrderId: string;
+  /** WO rotası (getById'den) — parti menüsündeki "Sonraki Fasona Aktar" gating'i
+   *  için (partinin fasondaki topları + sıradaki adım fason mu). Verilmezse madde
+   *  hiç görünmez. */
+  steps?: WorkOrderStepLite[];
+}) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ["work-order-branches", workOrderId],
@@ -102,6 +114,10 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
     batchNumber: string;
     rolls: BatchLaneRoll[];
   } | null>(null);
+  // Parti menüsünden "Sonraki Fasona Aktar" — kaynak adım + parti topları + hedef.
+  const [transferTarget, setTransferTarget] = useState<
+    (BatchTransferContext & { batchNumber: string }) | null
+  >(null);
 
   const batches = q.data?.data?.batches ?? [];
   const splitFrom = q.data?.data?.splitFrom ?? null;
@@ -129,6 +145,22 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
     },
   });
 
+  const transferMut = useMutation({
+    mutationFn: (vars: { stepId: string; rollIds: string[] }) =>
+      workOrderService.transferToNextFason({
+        workOrderId,
+        stepId: vars.stepId,
+        rollIds: vars.rollIds,
+      }),
+    onSuccess: (res) => {
+      toast.success(res.message ?? "Sonraki fasona aktarıldı.");
+      setTransferTarget(null);
+      void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
+      void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
+      void qc.invalidateQueries({ queryKey: ["work-orders"] });
+    },
+  });
+
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -141,10 +173,12 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
       key={b.batchId}
       batch={b}
       workOrderId={workOrderId}
+      steps={steps}
       ordinal={ordinal}
       selectable={selectable}
       selected={selected.has(b.batchId)}
       onToggleSelect={() => toggleSelect(b.batchId)}
+      onTransferFason={(ctx) => setTransferTarget({ ...ctx, batchNumber: b.batchNumber })}
       onCorrect={
         b.locked
           ? undefined
@@ -274,6 +308,21 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
         workOrderId={workOrderId}
         source={moveTarget}
       />
+      {transferTarget && (
+        <FasonStepRollSelectModal
+          open={Boolean(transferTarget)}
+          onOpenChange={(o) => !o && setTransferTarget(null)}
+          title={`${transferTarget.batchNumber} → ${stripFason(transferTarget.nextStationName)} Aktarımı`}
+          mode="transfer"
+          rolls={transferTarget.rolls}
+          destinationName={stripFason(transferTarget.nextStationName)}
+          confirmLabel="Aktar"
+          isPending={transferMut.isPending}
+          onConfirm={(ids) =>
+            transferMut.mutate({ stepId: transferTarget.stepId, rollIds: ids })
+          }
+        />
+      )}
       <ConfirmDialog
         open={confirmMerge}
         onOpenChange={setConfirmMerge}
@@ -293,6 +342,7 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
 function BatchLaneCard({
   batch,
   workOrderId,
+  steps,
   ordinal,
   selectable,
   selected,
@@ -303,9 +353,11 @@ function BatchLaneCard({
   onDirectShip,
   onUndoTransfer,
   onPrintDispatch,
+  onTransferFason,
 }: {
   batch: BatchLane;
   workOrderId: string;
+  steps?: WorkOrderStepLite[];
   ordinal: number;
   selectable: boolean;
   selected: boolean;
@@ -319,27 +371,27 @@ function BatchLaneCard({
   onDirectShip: (d: BatchLaneDispatch) => void;
   onUndoTransfer: (d: BatchLaneDispatch) => void;
   onPrintDispatch: (d: BatchLaneDispatch) => void;
+  /** Partinin fasondaki toplarını sıradaki fason adıma aktar (top seçim modalı açılır). */
+  onTransferFason: (ctx: BatchTransferContext) => void;
 }) {
   // Sevkler yeni → eski (Geçmiş modalında + ⋯ menü maddelerinde kullanılır).
   const dispatches = [...batch.dispatches].sort((a, b) =>
     b.dispatchedAt.localeCompare(a.dispatchedAt),
   );
-  // ⋯ menüsündeki sevk aksiyonları: Belge iptal harici tüm sevkler için,
-  // Doğrudan Sevk yalnız açık (fasonda) sevkler için. Birden çok sevk varsa
-  // madde etiketine sevk no eklenir (hangisi olduğu belli olsun).
-  const activeDispatches = dispatches.filter((d) => d.status !== "CANCELLED");
-  const openDispatches = activeDispatches.filter((d) => d.status === "OPEN");
-  const dispatchSuffix = (d: BatchLaneDispatch) =>
-    activeDispatches.length > 1 ? ` — ${d.dispatchNo}` : "";
   // Mal ŞU AN fasonda mı = herhangi bir top FİZİKSEL olarak fasonda (AT_SUBCONTRACTOR).
   // "Konum" sütunuyla AYNI kaynaktan (topların gerçek statüsü) türetilir → pil ile konum
   // asla çelişmez. NOT: backend `batch.locked` "iptal edilmemiş sevki VAR" = merge-kilidi;
   // mal döndükten sonra da true kalır → "Sevkte" onu yanlış "konum" gibi gösteriyordu.
   const atFason = batch.rolls.some((r) => r.status === "AT_SUBCONTRACTOR");
+  // "Sonraki Fasona Aktar" bağlamı — partinin fasondaki topları + sıradaki adım
+  // fason ise dolu (batch-transfer.ts; FasonStepActions gating'iyle birebir).
+  const transferCtx = useMemo(
+    () => findBatchTransferContext(steps, batch.batchNumber),
+    [steps, batch.batchNumber],
+  );
   // Parti varsayılan KATLI (accordion) — başlıkta özet; açınca toplar + Geçmiş.
   const [expanded, setExpanded] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [docsOpen, setDocsOpen] = useState(false);
   // Accordion başlığındaki konum özeti — "mal nerede" tek bakışta.
   const positionText =
     batch.currentPositions.length > 0
@@ -419,25 +471,29 @@ function BatchLaneCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {/* Sevk-bazlı aksiyonlar (İrsaliye / Fasondan Sevk / Aktarımı Geri Al) artık
+                  Geçmiş & Sevkler tablosunda SATIR ⋯'ında — bakiye bağlamının yanında. */}
               <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
                 <History className="mr-2 h-4 w-4" /> Geçmiş & Sevkler
                 {dispatches.length > 0 ? ` (${dispatches.length})` : ""}
               </DropdownMenuItem>
-              {activeDispatches.length > 0 && (
-                <DropdownMenuItem onClick={() => setDocsOpen(true)}>
-                  <Printer className="mr-2 h-4 w-4" /> Sevk Belgeleri ({activeDispatches.length})
-                </DropdownMenuItem>
-              )}
               <PermissionGate permission="workorder:write">
                 <DropdownMenuSeparator />
-                {openDispatches.map((d) => (
-                  <DropdownMenuItem key={`ship-${d.dispatchId}`} onClick={() => onDirectShip(d)}>
-                    <Truck className="mr-2 h-4 w-4" /> Fasondan Sevk{dispatchSuffix(d)}
-                  </DropdownMenuItem>
-                ))}
                 {batch.awaitingFasonDispatch && (
                   <DropdownMenuItem onClick={() => onTebdil({ dispatchOnly: true })}>
                     <Truck className="mr-2 h-4 w-4" /> Fasona Sevk Et
+                  </DropdownMenuItem>
+                )}
+                {transferCtx && (
+                  <DropdownMenuItem
+                    disabled={!transferCtx.nextPlanned}
+                    title={
+                      transferCtx.nextPlanned ? undefined : "Sonraki fason firması planlanmamış."
+                    }
+                    onClick={() => onTransferFason(transferCtx)}
+                  >
+                    <ArrowRightLeft className="mr-2 h-4 w-4" /> Sonraki Fasona Aktar →{" "}
+                    {stripFason(transferCtx.nextStationName)}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={onManualMove}>
@@ -522,19 +578,9 @@ function BatchLaneCard({
           onOpenChange={setHistoryOpen}
           batch={batch}
           workOrderId={workOrderId}
+          onPrintDispatch={onPrintDispatch}
+          onDirectShip={onDirectShip}
           onUndoTransfer={onUndoTransfer}
-        />
-        {/* Sevk Belgeleri — partinin fason irsaliyeleri, adıma göre gruplu; satıra tıkla
-            → FasonSevkPrintDialog (parent). Belgeler modalı üstte kalır (geri dönülebilir). */}
-        <BatchDocumentsDialog
-          open={docsOpen}
-          onOpenChange={setDocsOpen}
-          batchNumber={batch.batchNumber}
-          dispatches={activeDispatches}
-          onPrintDispatch={(dispatchId) => {
-            const d = batch.dispatches.find((x) => x.dispatchId === dispatchId);
-            if (d) onPrintDispatch(d);
-          }}
         />
       </CardContent>
     </Card>
@@ -552,12 +598,16 @@ function BatchHistoryModal({
   onOpenChange,
   batch,
   workOrderId,
+  onPrintDispatch,
+  onDirectShip,
   onUndoTransfer,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   batch: BatchLane;
   workOrderId: string;
+  onPrintDispatch: (d: BatchLaneDispatch) => void;
+  onDirectShip: (d: BatchLaneDispatch) => void;
   onUndoTransfer: (d: BatchLaneDispatch) => void;
 }) {
   const dispatches = [...batch.dispatches].sort((a, b) =>
@@ -624,8 +674,8 @@ function BatchHistoryModal({
                       <th className="px-2 py-1 font-medium">Hedef</th>
                       <th className="px-2 py-1 text-right font-medium">Miktar</th>
                       <th className="px-2 py-1 font-medium">Tarih</th>
-                      <th className="px-2 py-1 font-medium">Dönüş</th>
-                      <th className="px-2 py-1 text-right font-medium">İşlem</th>
+                      <th className="px-2 py-1 font-medium">Kapanış</th>
+                      <th className="w-8 px-2 py-1" aria-label="İşlem" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
@@ -633,6 +683,8 @@ function BatchHistoryModal({
                       <DispatchRow
                         key={d.dispatchId}
                         dispatch={d}
+                        onPrint={() => onPrintDispatch(d)}
+                        onDirectShip={() => onDirectShip(d)}
                         onUndoTransfer={() => onUndoTransfer(d)}
                       />
                     ))}
@@ -659,6 +711,8 @@ function BatchHistoryModal({
                         <DispatchRow
                           key={d.dispatchId}
                           dispatch={d}
+                          onPrint={() => onPrintDispatch(d)}
+                          onDirectShip={() => onDirectShip(d)}
                           onUndoTransfer={() => onUndoTransfer(d)}
                         />
                       ))}
@@ -727,17 +781,23 @@ function BatchHistoryModal({
   );
 }
 
-/** Geçmiş modalında bir fason sevk satırı (hizalı tablo). Belge / Fasondan Sevk
- *  parti ⋯ menüsünde — burada yalnız nadir "Aktarımı Geri Al" kaldı. */
+/** Geçmiş modalında bir fason sevk satırı (mutabakat tablosu). Sevk-bazlı aksiyonlar
+ *  (İrsaliye / Fasondan Sevk / Aktarımı Geri Al) SATIR ⋯'ında — bakiye bağlamının yanında. */
 function DispatchRow({
   dispatch,
+  onPrint,
+  onDirectShip,
   onUndoTransfer,
 }: {
   dispatch: BatchLaneDispatch;
+  onPrint: () => void;
+  onDirectShip: () => void;
   onUndoTransfer: () => void;
 }) {
   const meta = STATUS_META[dispatch.status];
   const cancelled = dispatch.status === "CANCELLED";
+  const isOpen = dispatch.status === "OPEN";
+  const atFason = Math.max(0, dispatch.totalQty - dispatch.returnedQty - dispatch.directShippedQty);
   return (
     <tr className={cn(cancelled && "opacity-60")}>
       <td className="whitespace-nowrap px-2 py-1 font-mono">{dispatch.dispatchNo}</td>
@@ -763,39 +823,81 @@ function DispatchRow({
         {safeFormat(dispatch.dispatchedAt, "dd.MM.yyyy · HH:mm")}
       </td>
       <td className="px-2 py-1">
-        {dispatch.receipts.length > 0 ? (
-          <span
-            className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success"
-            title={dispatch.receipts
-              .map((r) => `${r.receiptNo} (${safeFormat(r.receivedAt, "dd.MM.yyyy · HH:mm")})`)
-              .join(", ")}
-          >
-            {dispatch.receipts.length} dönüş
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+        <KapanisCell dispatch={dispatch} />
       </td>
-      <td className="px-2 py-1">
-        <div className="flex justify-end gap-1">
-          {dispatch.status === "OPEN" && dispatch.isTransferOutput ? (
+      <td className="px-2 py-1 text-right">
+        {/* Sevk-bazlı aksiyonlar — tek tip ⋯ (asla çıplak '—'); İrsaliye her zaman,
+            Fasondan Sevk & Aktarımı Geri Al koşullu. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" aria-label="Sevk işlemleri">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onPrint}>
+              <Printer className="mr-2 h-4 w-4" /> İrsaliye Yazdır
+            </DropdownMenuItem>
             <PermissionGate permission="workorder:write">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px]"
-                onClick={onUndoTransfer}
-              >
-                <Undo2 className="h-3 w-3" />
-                Aktarımı Geri Al
-              </Button>
+              {isOpen && atFason > 0 && (
+                <DropdownMenuItem onClick={onDirectShip}>
+                  <Truck className="mr-2 h-4 w-4" /> Fasondan Sevk
+                </DropdownMenuItem>
+              )}
+              {isOpen && dispatch.isTransferOutput && (
+                <DropdownMenuItem onClick={onUndoTransfer}>
+                  <Undo2 className="mr-2 h-4 w-4" /> Aktarımı Geri Al
+                </DropdownMenuItem>
+              )}
             </PermissionGate>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </td>
     </tr>
+  );
+}
+
+/** Kapanış hücresi — sevkin akıbeti METRAJ bakiyesi olarak: Dönen · Fasondan · Fasonda
+ *  kalan. Yığılı bar (yeşil/amber/gri) + öne çıkan kalan; tam kapandıysa "✓ Kapandı",
+ *  hiç dokunulmadıysa "Fasonda D m". "Gönderdiğimin ne kadarı hâlâ dışarıda?" tek bakışta. */
+function KapanisCell({ dispatch }: { dispatch: BatchLaneDispatch }) {
+  const D = dispatch.totalQty;
+  const X = dispatch.returnedQty; // dönen
+  const Y = dispatch.directShippedQty; // fasondan sevk
+  const Z = Math.max(0, D - X - Y); // fasonda kalan
+  if (dispatch.status === "CANCELLED" || D <= 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const title = `Sevk ${formatNumber(D, 0)} m · Dönen ${formatNumber(X, 0)} · Fasondan ${formatNumber(Y, 0)} · Fasonda ${formatNumber(Z, 0)}`;
+  if (Z === 0) {
+    return (
+      <span
+        title={title}
+        className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success"
+      >
+        ✓ Kapandı
+      </span>
+    );
+  }
+  if (X === 0 && Y === 0) {
+    return (
+      <span title={title} className="whitespace-nowrap text-[10px] text-muted-foreground">
+        Fasonda {formatNumber(D, 0)} m
+      </span>
+    );
+  }
+  const pct = (v: number) => `${(v / D) * 100}%`;
+  return (
+    <div className="flex items-center gap-1.5" title={title}>
+      <div className="flex h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-muted">
+        {X > 0 && <div className="bg-success" style={{ width: pct(X) }} />}
+        {Y > 0 && <div className="bg-amber-500" style={{ width: pct(Y) }} />}
+        {Z > 0 && <div className="bg-muted-foreground/25" style={{ width: pct(Z) }} />}
+      </div>
+      <span className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">
+        kalan {formatNumber(Z, 0)} m
+      </span>
+    </div>
   );
 }
 
