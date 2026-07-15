@@ -320,9 +320,31 @@ export class WorkOrderManualMoveService {
                 directShippedAt: null,
                 items: { some: { rollId: { in: fasonRollIds } } },
               },
-              select: { id: true, dispatchNo: true, step: { select: { station: { select: { name: true } } } } },
+              select: {
+                id: true,
+                dispatchNo: true,
+                stepId: true,
+                subcontractorId: true,
+                step: { select: { station: { select: { name: true } } } },
+                // İnline Fason Kabul için: bu sevkin fasondaki topları (returns + newRolls prefill).
+                items: {
+                  where: { rollId: { in: fasonRollIds } },
+                  select: { roll: { select: { id: true, barcode: true, currentQty: true } } },
+                },
+              },
             })
-          ).map((d) => ({ dispatchId: d.id, dispatchNo: d.dispatchNo, stepName: d.step?.station?.name ?? null }))
+          ).map((d) => ({
+            dispatchId: d.id,
+            dispatchNo: d.dispatchNo,
+            stepId: d.stepId,
+            subcontractorId: d.subcontractorId,
+            stepName: d.step?.station?.name ?? null,
+            rolls: d.items.map((it) => ({
+              id: it.roll.id,
+              barcode: it.roll.barcode,
+              currentQty: Number(it.roll.currentQty),
+            })),
+          }))
         : [];
 
     return {

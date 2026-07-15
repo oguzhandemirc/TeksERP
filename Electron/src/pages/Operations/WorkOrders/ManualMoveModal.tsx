@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { workOrderService, type BatchLaneRoll, type ManualMovePartyMode } from "./service";
+import { FasonReceiveInline } from "./FasonReceiveInline";
 
 interface Props {
   open: boolean;
@@ -103,6 +104,7 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
   // Fasondaki topu içeri alma — inline "Sevki İptal Et" (gerçek olay; ham teleport yerine).
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [receiveTarget, setReceiveTarget] = useState<string | null>(null);
   const cancelMut = useMutation({
     mutationFn: (dispatchId: string) =>
       workOrderService.cancelFasonDispatch(dispatchId, cancelReason.trim()),
@@ -263,19 +265,43 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
                       {d.dispatchNo}
                       {d.stepName ? ` · ${d.stepName}` : ""}
                     </span>
-                    {cancelTarget !== d.dispatchId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCancelTarget(d.dispatchId);
-                          setCancelReason("");
-                        }}
-                        className="shrink-0 rounded border border-destructive/40 px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10"
-                      >
-                        Sevki İptal Et
-                      </button>
+                    {cancelTarget !== d.dispatchId && receiveTarget !== d.dispatchId && (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReceiveTarget(d.dispatchId);
+                            setCancelTarget(null);
+                          }}
+                          className="rounded border border-primary/40 px-1.5 py-0.5 font-medium text-primary hover:bg-primary/10"
+                        >
+                          Fason Kabul ile içeri al
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCancelTarget(d.dispatchId);
+                            setReceiveTarget(null);
+                            setCancelReason("");
+                          }}
+                          className="rounded border border-destructive/40 px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+                        >
+                          Sevki İptal Et
+                        </button>
+                      </div>
                     )}
                   </div>
+                  {receiveTarget === d.dispatchId && (
+                    <FasonReceiveInline
+                      workOrderId={workOrderId}
+                      dispatch={d}
+                      onDone={() => {
+                        setReceiveTarget(null);
+                        invalidate();
+                        void previewQ.refetch();
+                      }}
+                    />
+                  )}
                   {cancelTarget === d.dispatchId && (
                     <div className="mt-1.5 space-y-1.5">
                       <input

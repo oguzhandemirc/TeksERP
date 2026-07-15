@@ -203,6 +203,19 @@ export const workOrderService = {
       .post<ApiResponse<unknown>>(`/api/subcontractor/dispatches/${dispatchId}/cancel`, { reason })
       .then((r) => r.data),
 
+  /** Fason Kabul (receive) — fasondaki topları içeri al: orijinaller emekli, dönen parçalar
+   *  (newRolls, metraj) yeni açık-kumaş toplar olarak doğar (renk appliesColor'da otomatik). */
+  receiveFason: (payload: {
+    workOrderId: string;
+    stepId: string;
+    subcontractorId: string;
+    returns: { rollId: string }[];
+    newRolls: { qty: number }[];
+  }) =>
+    apiClient
+      .post<ApiResponse<unknown>>("/api/subcontractor/receive", payload)
+      .then((r) => r.data),
+
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
   getCoverage: (lineIds: string[], excludeWorkOrderId?: string) =>
     apiClient
@@ -429,7 +442,15 @@ export interface ManualMovePreview {
   /** 'join' adayları — aynı WO'da sevksiz (kilitsiz) diğer partiler. */
   candidateJoinParties: { batchId: string; batchNumber: string }[];
   /** Fasondaki seçili toplar için açık fason sevkleri — inline Sevk İptali / Fason Kabul. */
-  openDispatches: { dispatchId: string; dispatchNo: string; stepName: string | null }[];
+  openDispatches: {
+    dispatchId: string;
+    dispatchNo: string;
+    stepId: string;
+    subcontractorId: string;
+    stepName: string | null;
+    /** Bu sevkin fasondaki topları — Fason Kabul returns + newRolls prefill. */
+    rolls: { id: string; barcode: string | null; currentQty: number }[];
+  }[];
   /** İleri-atlama (Milestone Backflush) önizlemesi. */
   backflush: {
     direction: "forward" | "backward";
