@@ -64,7 +64,7 @@ const cancelDispatchSchema = z.object({
 });
 
 const directShipSchema = z.object({
-  reason: z.string().trim().min(3, "Doğrudan sevk sebebi en az 3 karakter").max(500),
+  reason: z.string().trim().min(3, "Fasondan sevk sebebi en az 3 karakter").max(500),
   /** Sevk edilecek topların alt-kümesi (yok/boş = sevkin tümü). */
   rollIds: z.array(z.string().uuid()).max(500).optional(),
   /** Kısmi metraj: topId → sevk edilecek metre. Kalan'dan azsa top bölünür

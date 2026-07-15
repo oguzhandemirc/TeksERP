@@ -3557,7 +3557,7 @@ export class SubcontractorService {
 
     const reasons: string[] = [];
     if (dispatch.cancelledAt) reasons.push("Bu sevk zaten iptal edilmiş.");
-    if (dispatch.directShippedAt) reasons.push("Bu sevk doğrudan sevk edilmiş — geri alınamaz.");
+    if (dispatch.directShippedAt) reasons.push("Bu sevk fasondan sevk edilmiş — geri alınamaz.");
 
     // Aktarım çıktısı mı? Tüm sevk topları born (parentReceiptId dolu) olmalı.
     const isTransferOutput =
@@ -3710,7 +3710,7 @@ export class SubcontractorService {
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
     if (dispatch.cancelledAt) throw AppError.conflict("Bu sevk zaten iptal edilmiş");
     if (dispatch.directShippedAt) {
-      throw AppError.conflict("Doğrudan sevk edilmiş sevk geri alınamaz");
+      throw AppError.conflict("Fasondan sevk edilmiş sevk geri alınamaz");
     }
 
     const targetStep = dispatch.step; // boyahane
@@ -4320,10 +4320,10 @@ export class SubcontractorService {
   ): Promise<ApiResponse<unknown>> {
     const trimmedReason = data.reason?.trim();
     if (!trimmedReason || trimmedReason.length < 3) {
-      throw AppError.badRequest("Doğrudan sevk sebebi en az 3 karakter olmalı");
+      throw AppError.badRequest("Fasondan sevk sebebi en az 3 karakter olmalı");
     }
     if (!data.customerId) {
-      throw AppError.badRequest("Doğrudan sevkte müşteri zorunludur (mal kime gitti?)");
+      throw AppError.badRequest("Fasondan sevkte müşteri zorunludur (mal kime gitti?)");
     }
     const completeWorkOrder = data.completeWorkOrder === true;
 
@@ -4343,7 +4343,7 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
-    if (dispatch.cancelledAt) throw AppError.conflict("İptal edilmiş sevk doğrudan sevk edilemez");
+    if (dispatch.cancelledAt) throw AppError.conflict("İptal edilmiş sevk fasondan sevk edilemez");
     if (dispatch.directShippedAt) {
       // Idempotency: zaten doğrudan sevk edilmiş → cached başarı.
       return {
@@ -4353,7 +4353,7 @@ export class SubcontractorService {
       };
     }
     if (dispatch.step.station.kind !== StationKind.SUBCONTRACTOR) {
-      throw AppError.badRequest("Doğrudan sevk yalnızca fason adımındaki sevkler için yapılabilir");
+      throw AppError.badRequest("Fasondan sevk yalnızca fason adımındaki sevkler için yapılabilir");
     }
 
     // Kabul edilmiş sevk doğrudan sevk edilemez (cancel'daki acceptedReceiptItem deseni).
@@ -4767,7 +4767,7 @@ export class SubcontractorService {
         dispatch.stepId,
         ScanType.INFO,
         userId,
-        `Fasondan doğrudan sevk: ${dispatch.dispatchNo} — ${trimmedReason}`,
+        `Fasondan sevk: ${dispatch.dispatchNo} — ${trimmedReason}`,
       );
     });
 
@@ -4797,7 +4797,7 @@ export class SubcontractorService {
         partialShip: !isFullDispatchShip,
         workOrderCompleted: completeWorkOrder,
       },
-      message: `Fasondan doğrudan sevk edildi: ${dispatch.dispatchNo} (${shipRollIds.length} top)`,
+      message: `Fasondan sevk edildi: ${dispatch.dispatchNo} (${shipRollIds.length} top)`,
     };
   }
 }

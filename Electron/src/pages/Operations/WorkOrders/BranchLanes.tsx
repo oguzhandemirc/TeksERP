@@ -48,7 +48,7 @@ import { UndoTransferModal } from "./UndoTransferModal";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { BatchCorrectModal } from "./BatchCorrectModal";
 import { ManualMoveModal } from "./ManualMoveModal";
-import { BatchTimeline } from "./BatchTimeline";
+import { BatchTimeline, stripFason } from "./BatchTimeline";
 import { Wrench } from "lucide-react";
 import type { BatchLaneRoll } from "./service";
 
@@ -57,7 +57,7 @@ const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> =
   PARTIAL: { label: "Kısmi dönüş", cls: "border-primary/40 bg-primary/10 text-primary" },
   RETURNED: { label: "Döndü", cls: "border-success/40 bg-success/10 text-success" },
   CANCELLED: { label: "İptal", cls: "border-border bg-muted text-muted-foreground" },
-  DIRECT_SHIPPED: { label: "Doğrudan Sevk", cls: "border-primary/40 bg-primary/10 text-primary" },
+  DIRECT_SHIPPED: { label: "Fasondan Sevk", cls: "border-primary/40 bg-primary/10 text-primary" },
 };
 
 /**
@@ -549,16 +549,20 @@ function BatchHistoryModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>
-            Parti Geçmişi — <span className="font-mono">{batch.batchNumber}</span>
-          </DialogTitle>
+          {/* Refakat kartı başlıkla AYNI satırda, sağda (pr-6: kapat ✕ ile çakışmasın). */}
+          <div className="flex items-baseline justify-between gap-4 pr-6">
+            <DialogTitle>
+              Parti Geçmişi — <span className="font-mono">{batch.batchNumber}</span>
+            </DialogTitle>
+            {batch.cardNumber && (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                Refakat Kartı:{" "}
+                <span className="font-mono text-foreground">{batch.cardNumber}</span>
+              </span>
+            )}
+          </div>
         </DialogHeader>
         <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
-          {batch.cardNumber && (
-            <div className="text-xs text-muted-foreground">
-              Refakat Kartı: <span className="font-mono text-foreground">{batch.cardNumber}</span>
-            </div>
-          )}
           {(batch.splitFrom || batch.splitChildren.length > 0) && (
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
               {batch.splitFrom && (
@@ -652,11 +656,6 @@ function BatchHistoryModal({
   );
 }
 
-/** Adım adından "(Fason)" ekini temizler — bu bölüm zaten yalnız fason sevkleridir. */
-function stripFason(stepName: string): string {
-  return stepName.replace(/\s*\(fason\)\s*$/i, "");
-}
-
 /** Geçmiş modalında bir fason sevk satırı (hizalı tablo). */
 function DispatchRow({
   dispatch,
@@ -679,9 +678,15 @@ function DispatchRow({
           {meta.label}
         </span>
       </td>
-      <td className="px-2 py-1 text-muted-foreground">
-        {dispatch.subcontractorName}
-        {dispatch.stepName ? ` · ${stripFason(dispatch.stepName)}` : ""}
+      <td className="px-2 py-1">
+        <span className="block whitespace-nowrap font-medium text-foreground">
+          {dispatch.subcontractorName}
+        </span>
+        {dispatch.stepName && (
+          <span className="block whitespace-nowrap text-[10px] text-muted-foreground">
+            {stripFason(dispatch.stepName)} adımı
+          </span>
+        )}
       </td>
       <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">
         {dispatch.rollCount} parça · {formatNumber(dispatch.totalQty, 0)} m
@@ -725,7 +730,7 @@ function DispatchRow({
                 onClick={onDirectShip}
               >
                 <Truck className="h-3 w-3" />
-                Doğrudan Sevk
+                Fasondan Sevk
               </Button>
             </PermissionGate>
           )}

@@ -1363,7 +1363,7 @@ export class ShippingService {
         },
       },
     });
-    if (!ds) throw AppError.notFound("Doğrudan sevk kaydı bulunamadı");
+    if (!ds) throw AppError.notFound("Fasondan sevk kaydı bulunamadı");
 
     return {
       success: true,

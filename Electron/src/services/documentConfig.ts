@@ -88,13 +88,13 @@ export const DOC_DEFS: DocDef[] = [
   },
   {
     key: "fasonDirectShip",
-    label: "Fasondan Doğrudan Sevk İrsaliyesi",
-    defaultTitle: "Fasondan Doğrudan Sevk İrsaliyesi",
+    label: "Fasondan Sevk İrsaliyesi",
+    defaultTitle: "Fasondan Sevk İrsaliyesi",
     defaultSignatures: ["Sevkeden", "Sürücü", "Teslim Alan"],
     sections: [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
       { key: "vehicleInfo", label: "Sevk / araç bilgisi" },
-      { key: "directShipInfo", label: "Doğrudan sevk sebebi / onay" },
+      { key: "directShipInfo", label: "Fasondan sevk sebebi / onay" },
       { key: "rollTable", label: "Sevk edilen toplar tablosu" },
       { key: "allocations", label: "Karşılanan sipariş(ler)" },
     ],

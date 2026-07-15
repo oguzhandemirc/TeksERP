@@ -341,7 +341,7 @@ export const ENUM_LABELS: Record<string, string> = {
   SHIPMENT_DISPATCH: "Sevk İrsaliyesi",
   SUBCONTRACTOR_DISPATCH: "Fason Sevk İrsaliyesi",
   KARTELA_DISPATCH: "Kartela Çeki Listesi",
-  SUBCONTRACTOR_DIRECT_SHIP: "Fasondan Doğrudan Sevk",
+  SUBCONTRACTOR_DIRECT_SHIP: "Fasondan Sevk",
   // SystemLog / Permission kategorileri (değer olarak da geçebilir)
   DOMAIN: "Veri Değişikliği",
   web: "Web",

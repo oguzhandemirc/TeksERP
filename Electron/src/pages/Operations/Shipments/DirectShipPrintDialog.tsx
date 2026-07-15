@@ -40,7 +40,7 @@ export function DirectShipPrintDialog({ directShipmentId, open, onOpenChange, on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-4xl flex-col gap-3">
         <DialogHeader>
-          <DialogTitle>Doğrudan Sevk İrsaliyesi</DialogTitle>
+          <DialogTitle>Fasondan Sevk İrsaliyesi</DialogTitle>
           <DialogDescription>
             Sevk anında dondurulan resmi belge — önizleme baskıyla birebir aynı.
           </DialogDescription>
@@ -53,7 +53,7 @@ export function DirectShipPrintDialog({ directShipmentId, open, onOpenChange, on
             </div>
           ) : html ? (
             <iframe
-              title="Doğrudan Sevk İrsaliyesi Önizleme"
+              title="Fasondan Sevk İrsaliyesi Önizleme"
               srcDoc={html}
               className="h-full w-full border-0 bg-white"
             />

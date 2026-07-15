@@ -16,7 +16,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
           <span className="font-mono text-xs font-semibold">{s.shipmentNo}</span>
           {s.kind === "DIRECT" && (
             <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600">
-              Fasondan Doğrudan
+              Fasondan Sevk
             </Badge>
           )}
         </div>

@@ -115,7 +115,7 @@ export function renderFasonDirectShipHtml(
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = (cfg.titleOverride?.trim() || "DOĞRUDAN SEVK İRSALİYESİ").toUpperCase();
+  const title = (cfg.titleOverride?.trim() || "FASONDAN SEVK İRSALİYESİ").toUpperCase();
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels =
@@ -167,7 +167,7 @@ export function renderFasonDirectShipHtml(
       </div>`
     : "";
   const dsBox = showDs
-    ? `<div class="box"><div class="box-t">DOĞRUDAN SEVK</div>
+    ? `<div class="box"><div class="box-t">FASONDAN SEVK</div>
         <div class="row"><span>Sevk Eden:</span><b>${esc(doc.directShippedBy || "—")}</b></div>
         <div class="row"><span>Sebep:</span><b>${esc(doc.directShipReason || "—")}</b></div>
       </div>`

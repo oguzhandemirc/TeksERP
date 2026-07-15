@@ -13,6 +13,28 @@ vi.mock("./service", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+// Müşteri seçici + şube seçici stub'ları — gerçek picker/servisi çağırmadan seçim yaptırır.
+vi.mock("@/components/forms/entity-picker/EntityPickerModal", () => ({
+  EntityPickerModal: ({
+    value,
+    onChange,
+  }: {
+    value: string | null;
+    onChange: (v: string | null) => void;
+  }) => (
+    <button type="button" data-testid="pick-customer" onClick={() => onChange("cust1")}>
+      {value ?? "müşteri seç"}
+    </button>
+  ),
+}));
+vi.mock("@/pages/Customers/BranchSelect", () => ({
+  BranchSelect: ({ onChange }: { onChange: (v: string | null) => void }) => (
+    <button type="button" data-testid="pick-branch" onClick={() => onChange("br1")}>
+      şube
+    </button>
+  ),
+}));
+
 import { DirectShipModal } from "./DirectShipModal";
 
 function previewData(over: Partial<Record<string, unknown>> = {}) {
@@ -34,7 +56,7 @@ function previewData(over: Partial<Record<string, unknown>> = {}) {
       otherAtSubcontractor: 0,
       woWillComplete: true,
       candidateOrderLines: [
-        { orderLineId: "ol1", orderId: "o1", orderNumber: "SIP-001", itemCode: "PATOS", itemName: "Patos Kumaş", colorName: null, width: 250, quantity: 400, shippedQty: 0, remaining: 400, suggestedQty: 400, isWorkOrderLinked: true },
+        { orderLineId: "ol1", orderId: "o1", orderNumber: "SIP-001", customerId: "cust1", customerName: "Müşteri A", branchId: null, branchName: null, itemCode: "PATOS", itemName: "Patos Kumaş", colorName: null, width: 250, quantity: 400, shippedQty: 0, remaining: 400, suggestedQty: 400, isWorkOrderLinked: true },
       ],
       ...over,
     },
@@ -47,8 +69,10 @@ const render = () =>
   );
 
 const rollChecks = () => within(screen.getByTestId("ship-rolls")).getAllByRole("checkbox");
+const pickCustomer = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByTestId("pick-customer"));
 
-describe("DirectShipModal (fasondan doğrudan sevk UI)", () => {
+describe("DirectShipModal (fasondan sevk UI)", () => {
   beforeEach(() => {
     getDirectShipPreview.mockReset().mockResolvedValue(previewData());
     directShip.mockReset().mockResolvedValue({ success: true, data: { dispatchNo: "SD2606000001", consumedRollCount: 2 } });
@@ -67,27 +91,35 @@ describe("DirectShipModal (fasondan doğrudan sevk UI)", () => {
     expect(screen.getByText(/iş emri AÇIK kalır/i)).toBeInTheDocument();
   });
 
-  it("sebep boşken buton disabled; sebep girilince aktif", async () => {
+  it("sebep + müşteri zorunlu: ikisi de girilene kadar buton disabled", async () => {
     const user = userEvent.setup();
     render();
     const textarea = await screen.findByPlaceholderText(/Boyahane/i);
     const btn = screen.getByRole("button", { name: /Sevk Et/i });
     expect(btn).toBeDisabled();
-    await user.type(textarea, "doğrudan sevk sebebi");
+    await user.type(textarea, "müşteriye gitti"); // yalnız sebep → hâlâ disabled (müşteri yok)
+    expect(btn).toBeDisabled();
+    await pickCustomer(user); // müşteri de seçilince aktif
     await waitFor(() => expect(btn).toBeEnabled());
   });
 
-  it("tüm toplar seçili + sipariş seç → directShip rollIds(tümü)+completeWorkOrder(false)+alloc", async () => {
+  it("tüm toplar seçili + müşteri + sipariş seç → directShip payload (rollIds+customerId+alloc)", async () => {
     const user = userEvent.setup();
     render();
     await user.type(await screen.findByPlaceholderText(/Boyahane/i), "müşteriye gitti");
+    await pickCustomer(user);
     await user.click(within(screen.getByTestId("ship-orders")).getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: /Sevk Et/i }));
     await waitFor(() => expect(directShip).toHaveBeenCalledTimes(1));
-    const [dispatchId, payload] = directShip.mock.calls[0] as [string, { reason: string; rollIds: string[]; completeWorkOrder: boolean; orderLineAllocations: { orderLineId: string; qty: number }[] }];
+    const [dispatchId, payload] = directShip.mock.calls[0] as [
+      string,
+      { customerId: string; rollIds: string[]; completeWorkOrder: boolean; orderLineAllocations: { orderLineId: string; qty: number }[] },
+    ];
     expect(dispatchId).toBe("d1");
+    expect(payload.customerId).toBe("cust1");
     expect([...payload.rollIds].sort()).toEqual(["r1", "r2"]);
     expect(payload.completeWorkOrder).toBe(false);
+    // Karşılanma OTOMATİK dolar: sevk edilen 500m, satır kalanı 400 → min = 400.
     expect(payload.orderLineAllocations).toEqual([{ orderLineId: "ol1", qty: 400 }]);
   });
 
@@ -95,6 +127,7 @@ describe("DirectShipModal (fasondan doğrudan sevk UI)", () => {
     const user = userEvent.setup();
     render();
     await user.type(await screen.findByPlaceholderText(/Boyahane/i), "fason son durak");
+    await pickCustomer(user);
     await user.click(screen.getByRole("checkbox", { name: /İş emrini tamamla/i }));
     expect(await screen.findByText(/sonraki adım atlanacak/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Sevk Et \+ WO/i }));
@@ -107,6 +140,7 @@ describe("DirectShipModal (fasondan doğrudan sevk UI)", () => {
     const user = userEvent.setup();
     render();
     await user.type(await screen.findByPlaceholderText(/Boyahane/i), "kısmi sevk");
+    await pickCustomer(user);
     await user.click(rollChecks()[1]!); // r2'yi çıkar
     expect(await screen.findByText(/1 top fasonda kalacak/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Sevk Et/i }));
@@ -115,10 +149,16 @@ describe("DirectShipModal (fasondan doğrudan sevk UI)", () => {
     expect(payload.rollIds).toEqual(["r1"]);
   });
 
-  it("zaten doğrudan sevk edilmiş sevk → engel mesajı + onay yok", async () => {
+  it("siparişler müşteri seçilmeden pasif: 'önce müşteri seçin' uyarısı", async () => {
+    render();
+    expect(await screen.findByText(/Önce müşteri seçin/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("ship-orders")).not.toBeInTheDocument();
+  });
+
+  it("zaten fasondan sevk edilmiş sevk → engel mesajı + onay yok", async () => {
     getDirectShipPreview.mockResolvedValue(previewData({ alreadyDirectShipped: true }));
     render();
-    expect(await screen.findByText(/zaten doğrudan sevk edilmiş/i)).toBeInTheDocument();
+    expect(await screen.findByText(/zaten fasondan sevk edilmiş/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sevk Et/i })).toBeDisabled();
   });
 });

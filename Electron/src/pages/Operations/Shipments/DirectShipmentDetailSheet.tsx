@@ -50,9 +50,9 @@ export function DirectShipmentDetailSheet({ directShipmentId, open, onOpenChange
       <SheetContent side="right" className="w-full overflow-auto sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <span className="font-mono">{d?.shipmentNo ?? "Doğrudan Sevk"}</span>
+            <span className="font-mono">{d?.shipmentNo ?? "Fasondan Sevk"}</span>
             <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600">
-              Fasondan Doğrudan
+              Fasondan Sevk
             </Badge>
           </SheetTitle>
           <SheetDescription>
@@ -66,7 +66,7 @@ export function DirectShipmentDetailSheet({ directShipmentId, open, onOpenChange
             <Skeleton className="h-48 w-full" />
           </div>
         ) : !d ? (
-          <p className="mt-4 text-sm text-muted-foreground">Doğrudan sevk kaydı bulunamadı.</p>
+          <p className="mt-4 text-sm text-muted-foreground">Fasondan sevk kaydı bulunamadı.</p>
         ) : (
           <div className="mt-4 space-y-4">
             {/* Künye */}

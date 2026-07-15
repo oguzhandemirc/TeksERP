@@ -95,7 +95,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
           .map(([orderLineId, qty]) => ({ orderLineId, qty })),
       }),
     onSuccess: (res) => {
-      toast.success(`Fasondan doğrudan sevk edildi: ${res.data?.dispatchNo ?? dispatchNo}`);
+      toast.success(`Fasondan sevk edildi: ${res.data?.dispatchNo ?? dispatchNo}`);
       void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
@@ -204,10 +204,10 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5 text-primary" />
-            Fasondan Doğrudan Sevk
+            Fasondan Sevk
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{dispatchNo}</span> — seçilen toplar fasondan doğrudan sevk
+            <span className="font-mono">{dispatchNo}</span> — seçilen toplar fasondan müşteriye sevk
             edilir; seçilmeyenler fasonda kalır (normal kabulle döner). Bu işlem geri alınamaz.
           </DialogDescription>
         </DialogHeader>
@@ -234,8 +234,8 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
             preview.cancelled || preview.alreadyDirectShipped ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
                 {preview.cancelled
-                  ? "Bu sevk iptal edilmiş — doğrudan sevk edilemez."
-                  : "Bu sevk zaten doğrudan sevk edilmiş."}
+                  ? "Bu sevk iptal edilmiş — fasondan sevk edilemez."
+                  : "Bu sevk zaten fasondan sevk edilmiş."}
               </div>
             ) : (
               <>
@@ -531,7 +531,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
               ? "Sevk ediliyor..."
               : completeWO
                 ? `Sevk Et + WO'yu Tamamla (${selectedCount})`
-                : `Doğrudan Sevk Et (${selectedCount})`}
+                : `Fasondan Sevk Et (${selectedCount})`}
           </Button>
         </DialogFooter>
       </DialogContent>
