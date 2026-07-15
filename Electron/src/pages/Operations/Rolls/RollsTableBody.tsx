@@ -47,7 +47,7 @@ const FILTERS: FilterDef[] = [
   { kind: "numberRange", key: "qty", label: "Boy", unit: "mt" },
 ];
 
-const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;
+export const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;
 
 // Sadece "Bitmiş Depo" sekmesinde anlamlı: WAREHOUSE topu serbest mi yoksa bir
 // çuvala/sevkiyata rezerve mi? (backend filter[shipmentScope]=free|committed)
@@ -61,6 +61,11 @@ const SHIPMENT_SCOPE_FILTER: FilterDef = {
   ],
 };
 
+// Serbest/rezerve filtresi yalnız depo (Bitmiş Depo) sekmesinde gösterilir.
+export function buildRollFilterDefs(tab: RollStatusTabKey): FilterDef[] {
+  return tab === "FINISHED_STOCK" ? [...FILTERS, SHIPMENT_SCOPE_FILTER] : FILTERS;
+}
+
 interface Props {
   tab: RollStatusTabKey;
   /** Tablo örneği + yükleme/sayfalama ÇAĞIRAN'da kurulur (useDataTable). Gövde salt
@@ -68,23 +73,24 @@ interface Props {
   table: Table<Roll>;
   isLoading: boolean;
   pagination: DataTablePagination;
+  /** true ise dahili filtre satırı çizilmez — çağıran filtreleri kendi araç
+   *  çubuğuna (ör. okutma kutusuyla aynı satıra) taşımak istiyor (Kartela). */
+  hideFilterBar?: boolean;
 }
 
 /**
  * Rulo tablosunun GÖVDESİ — filtre satırı + DataTable + detay paneli + toplu iptal.
  * Tabloyu kendisi kurmaz (Sütunlar/Görünümler araçlarının konumunu çağıran seçsin
- * diye). Envanter sayfası araçları okut/ara satırına koyar; kendi kendine yeten
- * [[RollsTable]] sarmalayıcısı (Kartela sekmesi) araçları kendi çubuğunda gösterir.
+ * diye). Envanter sayfası (RollsPage) ve Kartela ("Kartelada Toplar" sekmesi)
+ * tabloyu kendi üst chrome'unda kurup araçları istediği satıra (okut/ara satırı,
+ * sekme şeridi vb.) yerleştirir; `hideFilterBar` ile bu gövdenin kendi filtre
+ * satırı bastırılabilir.
  */
-export function RollsTableBody({ tab, table, isLoading, pagination }: Props) {
+export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBar = false }: Props) {
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
 
-  // Serbest/rezerve filtresi yalnız depo (Bitmiş Depo) sekmesinde gösterilir.
-  const filters = useMemo<FilterDef[]>(
-    () => (tab === "FINISHED_STOCK" ? [...FILTERS, SHIPMENT_SCOPE_FILTER] : FILTERS),
-    [tab],
-  );
+  const filters = useMemo(() => buildRollFilterDefs(tab), [tab]);
 
   // Toplu iptal — Ham Stok + Bitmiş Depo'da sunulur (STOCK/WAREHOUSE→CANCELLED,
   // yanlış giriş düzeltmesi). Backend softDelete WAREHOUSE'a izin verir; rezerve
@@ -95,7 +101,9 @@ export function RollsTableBody({ tab, table, isLoading, pagination }: Props) {
   return (
     <>
       {/* Filtre satırı — tarih aralığı en başta. */}
-      <FilterBar filters={filters} leading={<StandaloneDateRangeFilter def={DATE_FILTER} />} />
+      {!hideFilterBar && (
+        <FilterBar filters={filters} leading={<StandaloneDateRangeFilter def={DATE_FILTER} />} />
+      )}
       <DataTable<Roll>
         table={table}
         isLoading={isLoading}

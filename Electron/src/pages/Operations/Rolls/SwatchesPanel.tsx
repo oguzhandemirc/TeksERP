@@ -1,17 +1,33 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Minus } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useSearchParams } from "react-router-dom";
+import { Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { ScanField } from "@/components/scanner/ScanField";
+import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { itemService } from "@/pages/Items/service";
+import { colorService } from "@/pages/Colors/service";
 import { swatchService, type KartelaStockGroup } from "./swatchService";
 import { ReduceKartelaStockDialog } from "./ReduceKartelaStockDialog";
 
 const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
 
+const FILTERS: FilterDef[] = [
+  { kind: "lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
+  { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
+];
+
 function groupKey(g: KartelaStockGroup): string {
   return `${g.itemId}__${g.colorId ?? "none"}`;
+}
+
+interface Props {
+  /** Okutulan kod bir kartela (KRT…) ise: liste araması yerine kartela detayını aç. */
+  onScanSwatch: (code: string) => void;
+  swatchLookupPending: boolean;
 }
 
 /**
@@ -20,14 +36,17 @@ function groupKey(g: KartelaStockGroup): string {
  * karteladan kaç tane var" sorusunun tek-bakış cevabı. Stok yalnız kabulde (+)
  * ve sevkiyatta (−) değişir; kayıp/hasar/sayım için "Düş" ile elle azaltılır.
  */
-export function SwatchesPanel() {
+export function SwatchesPanel({ onScanSwatch, swatchLookupPending }: Props) {
   const [search, setSearch] = useState("");
   const [reduceGroup, setReduceGroup] = useState<KartelaStockGroup | null>(null);
   const debounced = useDebouncedValue(search.trim(), 300);
+  const [searchParams] = useSearchParams();
+  const itemId = searchParams.get("filter[itemId]") ?? undefined;
+  const colorId = searchParams.get("filter[colorId]") ?? undefined;
 
   const query = useQuery({
-    queryKey: ["kartela", "stock", debounced],
-    queryFn: () => swatchService.getStock(debounced || undefined),
+    queryKey: ["kartela", "stock", debounced, itemId, colorId],
+    queryFn: () => swatchService.getStock({ search: debounced || undefined, itemId, colorId }),
     staleTime: 5_000,
   });
 
@@ -40,19 +59,32 @@ export function SwatchesPanel() {
     [groups],
   );
 
+  // Tek giriş: kartela barkodu (KRT…) → detay sheet; ürün/renk metni → liste araması.
+  const handleScan = (code: string) => {
+    if (classifyBarcode(code).kind === "SWATCH") {
+      onScanSwatch(code);
+      setSearch("");
+      return;
+    }
+    setSearch(code);
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Toolbar — arama + toplam özet */}
-      <div className="flex items-center gap-3 border-b px-3 py-2">
-        <div className="relative w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ürün / renk ara..."
-            className="h-8 pl-8 text-sm"
-          />
-        </div>
+      {/* Toolbar — ara/okut + filtreler + toplam özet */}
+      <div className="flex flex-wrap items-center gap-3 border-b px-3 py-2">
+        <ScanField
+          value={search}
+          onChange={setSearch}
+          onScan={handleScan}
+          placeholder="Ara ya da barkod okut..."
+          expectPrefix="SWATCH"
+          busy={swatchLookupPending}
+          widthClassName="w-64"
+          inputClassName="h-8 text-xs"
+          clearable
+        />
+        <FilterBar filters={FILTERS} inline />
         <div className="ml-auto flex items-center gap-3 text-xs">
           <Stat label="Toplam" value={NUM_FMT.format(totals.count)} unit="adet" />
           <span className="h-3 w-px bg-border" aria-hidden />
@@ -66,7 +98,11 @@ export function SwatchesPanel() {
           <div className="py-10 text-center text-sm text-muted-foreground">Yükleniyor…</div>
         ) : groups.length === 0 ? (
           <div className="py-10 text-center text-sm text-muted-foreground">
-            {debounced ? `'${debounced}' için kartela stoğu yok.` : "Kartela stoğu yok."}
+            {debounced
+              ? `'${debounced}' için kartela stoğu yok.`
+              : itemId || colorId
+                ? "Filtrelerle eşleşen kartela stoğu yok."
+                : "Kartela stoğu yok."}
           </div>
         ) : (
           <ul className="space-y-1">

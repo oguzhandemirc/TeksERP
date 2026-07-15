@@ -348,7 +348,8 @@ function MultiSelectFilter({
 }
 
 function LookupFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
-  const value = sp.get(`filter[${def.key}]`) ?? NONE;
+  const [open, setOpen] = useState(false);
+  const value = sp.get(`filter[${def.key}]`) ?? "";
   const { data } = useQuery({
     queryKey: [def.queryKey, "filter-lookup", def.extraFilters],
     queryFn: () =>
@@ -362,33 +363,75 @@ function LookupFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "
     staleTime: 60_000,
   });
   const items = data?.data ?? [];
-  const label = (it: { id: string; name?: string; code?: string }) =>
+  const labelOf = (it: LookupItemBase) =>
     def.getLabel ? def.getLabel(it) : it.name ?? it.code ?? it.id;
 
+  const select = (id: string) =>
+    update((next) => {
+      if (!id) next.delete(`filter[${def.key}]`);
+      else next.set(`filter[${def.key}]`, id);
+    });
+
+  const selectedItem = items.find((it) => it.id === value);
+  const triggerLabel = selectedItem ? labelOf(selectedItem) : def.label;
+
   return (
-    <Select
-      value={value}
-      onValueChange={(v) =>
-        update((next) => {
-          if (v === NONE) next.delete(`filter[${def.key}]`);
-          else next.set(`filter[${def.key}]`, v);
-        })
-      }
-    >
-      <SelectTrigger className="h-7 w-auto min-w-[160px] gap-1 text-xs">
-        <SelectValue placeholder={def.label} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={NONE} className="text-muted-foreground">
-          Tümü ({def.label})
-        </SelectItem>
-        {items.map((it) => (
-          <SelectItem key={it.id} value={it.id}>
-            {label(it)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-7 min-w-[160px] justify-between gap-1 px-2 text-xs font-normal",
+            value && "border-primary/50",
+          )}
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {triggerLabel}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`${def.label} ara...`} className="h-8" />
+          <CommandList>
+            <CommandEmpty>Sonuç yok.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__all__"
+                onSelect={() => {
+                  select("");
+                  setOpen(false);
+                }}
+              >
+                <Check className={cn("mr-2 h-3.5 w-3.5", !value ? "opacity-100" : "opacity-0")} />
+                <span className="text-muted-foreground">Tümü ({def.label})</span>
+              </CommandItem>
+              {items.map((it) => (
+                <CommandItem
+                  key={it.id}
+                  value={labelOf(it)}
+                  onSelect={() => {
+                    select(it.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-3.5 w-3.5",
+                      value === it.id ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  {labelOf(it)}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -18,12 +18,12 @@ import type { Roll } from "./types";
  * Station-bazlı sekmeler (`KURSUN_PENDING` ve `TAMBUR_PENDING`) status
  * filtrelemez — sırasıyla `currentStepKind=PROCESS_QC` (KK2/Kurşun) ve
  * `currentStepKind=TAMBUR` ile `rollKind=OPEN_FABRIC` filtreleri uygulanır
- * (RollsTable.tsx içinde). Her iki ekranda da fasondan dönen ve istasyonda
- * sıra bekleyen açık kumaş kayıtları listelenir.
+ * (`buildRollForceFilters` içinde). Her iki ekranda da fasondan dönen ve
+ * istasyonda sıra bekleyen açık kumaş kayıtları listelenir.
  */
 /**
  * Sekme → backend filter. Null değerli sekmeler `status` filter göndermez,
- * RollsTable.tsx `forceFilters` üzerinden farklı parametre (rollScope,
+ * `buildRollForceFilters` üzerinden farklı parametre (rollScope,
  * currentStepKind, rollKind) ile çalışır.
  *
  * Eski "STOCK" sekmesi iki ayrı sekmeye bölündü:
@@ -39,9 +39,8 @@ const STATUS_GROUPS = {
   KURSUN_PENDING: null,
   TAMBUR_PENDING: null,
   FINISHED_STOCK: null,
-  // Sanal anahtar — tepe-sekme DEĞİL; "Kartela" sekmesinin "Gönderilen Toplar"
-  // alt-görünümü RollsTable'a bunu geçer (status=AT_KARTELA). SUBCONTRACTOR ile
-  // aynı mekanizma.
+  // Sanal anahtar — tepe-sekme DEĞİL; Kartela sayfasının "Kartelada Toplar"
+  // sekmesi bunu kullanır (status=AT_KARTELA). SUBCONTRACTOR ile aynı mekanizma.
   KARTELA_SENT: "AT_KARTELA",
   ARCHIVE: "RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED",
 } as const;

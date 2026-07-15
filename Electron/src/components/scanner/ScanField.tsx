@@ -39,6 +39,8 @@ interface ScanFieldProps {
   className?: string;
   /** Input kutusunun genişlik sınırı. */
   widthClassName?: string;
+  /** Input'un kendi sınıfına ek/override (örn. yanındaki filtrelerle yükseklik eşitleme). */
+  inputClassName?: string;
   /** Dolu iken input'un İÇİNDE temizleme (X) düğmesi göster → tek tıkla siler. */
   clearable?: boolean;
   /**
@@ -68,6 +70,7 @@ export function ScanField({
   busyLabel,
   className,
   widthClassName = "max-w-sm",
+  inputClassName,
   clearable = false,
   inputRef,
 }: ScanFieldProps) {
@@ -107,7 +110,7 @@ export function ScanField({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder={placeholder}
-            className={cn("pl-8", clearable && value && "pr-8")}
+            className={cn("pl-8", clearable && value && "pr-8", inputClassName)}
             autoFocus={autoFocus}
           />
           {clearable && value ? (

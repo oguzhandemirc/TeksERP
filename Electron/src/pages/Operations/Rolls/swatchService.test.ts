@@ -22,9 +22,14 @@ describe("swatchService — kartela ADET stok", () => {
     expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock");
   });
 
-  it("getStock(search) → arama encode'lu query", async () => {
-    await swatchService.getStock("patos mavi");
-    expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock?search=patos%20mavi");
+  it("getStock({ search }) → arama encode'lu query", async () => {
+    await swatchService.getStock({ search: "patos mavi" });
+    expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock?search=patos+mavi");
+  });
+
+  it("getStock({ itemId, colorId }) → ikisi de query'de", async () => {
+    await swatchService.getStock({ itemId: "i1", colorId: "c1" });
+    expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock?itemId=i1&colorId=c1");
   });
 
   it("getStock ApiResponse.data'yı döndürür (.then(r => r.data))", async () => {

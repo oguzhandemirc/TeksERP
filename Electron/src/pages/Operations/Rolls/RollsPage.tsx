@@ -102,8 +102,8 @@ export function RollsPage() {
 
   // Rulo tablosu state'i BURADA (üst chrome ile aynı yerde) — böylece Sütunlar/
   // Görünümler araçları + "Fire" toggle okut/ara satırına konabilir (tablo örneği
-  // gerekiyor). KANBAN'da tablo gösterilmez → fetch kapalı. RollsTable tabloyu prop
-  // olarak alır (sadece gövdeyi çizer).
+  // gerekiyor). KANBAN'da tablo gösterilmez → fetch kapalı. RollsTableBody tabloyu
+  // prop olarak alır (sadece gövdeyi çizer).
   const isTableTab = tab !== "KANBAN";
   const dataTable = useDataTable<Roll>({
     queryKey: `rolls:${tab}`,

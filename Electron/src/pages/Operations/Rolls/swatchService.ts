@@ -122,10 +122,18 @@ export const swatchService = {
   },
 
   /** Kartela stoğu — ürün+renk bazında müsait adet ("depoda kaç tane var"). */
-  getStock(search?: string): Promise<ApiResponse<KartelaStockGroup[]>> {
-    const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+  getStock(params?: {
+    search?: string;
+    itemId?: string;
+    colorId?: string;
+  }): Promise<ApiResponse<KartelaStockGroup[]>> {
+    const sp = new URLSearchParams();
+    if (params?.search) sp.set("search", params.search);
+    if (params?.itemId) sp.set("itemId", params.itemId);
+    if (params?.colorId) sp.set("colorId", params.colorId);
+    const qs = sp.toString();
     return apiClient
-      .get<ApiResponse<KartelaStockGroup[]>>(`/api/kartela/stock${qs}`)
+      .get<ApiResponse<KartelaStockGroup[]>>(`/api/kartela/stock${qs ? `?${qs}` : ""}`)
       .then((r) => r.data);
   },
 

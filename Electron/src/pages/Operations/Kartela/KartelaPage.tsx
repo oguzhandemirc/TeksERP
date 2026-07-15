@@ -1,15 +1,24 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Send, PackageCheck, Package, Palette } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
+import { FilterBar, StandaloneDateRangeFilter } from "@/components/data-table/FilterBar";
 import { cn } from "@/lib/utils";
 import { ScanField } from "@/components/scanner/ScanField";
 import { useScanSeed } from "@/hooks/useScanSeed";
-import { RollsTable } from "@/pages/Operations/Rolls/RollsTable";
+import { useDataTable } from "@/hooks/useDataTable";
+import { rollColumns } from "@/pages/Operations/Rolls/columns";
+import { rollService, buildRollForceFilters } from "@/pages/Operations/Rolls/service";
+import { RollsTableBody, buildRollFilterDefs, DATE_FILTER } from "@/pages/Operations/Rolls/RollsTableBody";
 import { SwatchesPanel } from "@/pages/Operations/Rolls/SwatchesPanel";
 import { SwatchDetailSheet } from "@/pages/Operations/Rolls/SwatchDetailSheet";
 import { swatchService, type Swatch } from "@/pages/Operations/Rolls/swatchService";
+import type { Roll } from "@/pages/Operations/Rolls/types";
 import { KartelaDetailSheet, type KartelaSelection } from "./KartelaDetailSheet";
 import { DispatchesTab, ReceiptsTab } from "./KartelaTabs";
 
@@ -25,7 +34,16 @@ const TABS: { key: Tab; label: string; Icon: typeof Send }[] = [
   { key: "swatches", label: "Kartela Stoğu", Icon: Palette },
 ];
 
-function KartelaTabBar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+function KartelaTabBar({
+  tab,
+  onTab,
+  trailing,
+}: {
+  tab: Tab;
+  onTab: (t: Tab) => void;
+  /** Aktif sekmenin araçları (ör. Sütunlar/Görünümler) — sağda, sekmelerle AYNI satırda. */
+  trailing?: ReactNode;
+}) {
   return (
     <div className="flex items-center gap-1 border-b px-3">
       {TABS.map((t) => (
@@ -44,6 +62,7 @@ function KartelaTabBar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
           {t.label}
         </button>
       ))}
+      {trailing ? <div className="ml-auto flex items-center gap-2">{trailing}</div> : null}
     </div>
   );
 }
@@ -53,6 +72,7 @@ export function KartelaPage() {
   const [selection, setSelection] = useState<KartelaSelection>(null);
   const [scanCode, setScanCode] = useState("");
   const [scanSwatch, setScanSwatch] = useState<Swatch | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Kartela (SW-) barkodu okut → kartela detayını aç (404 toast'ı interceptor'dan).
   const swatchLookup = useMutation({
@@ -64,6 +84,28 @@ export function KartelaPage() {
     swatchLookup.mutate(code);
   };
   useScanSeed("scanCode", openSwatch);
+
+  // "Kartelada Toplar" tablosu — Sütunlar/Görünümler/Fire araçlarını sekme
+  // şeridiyle AYNI satırda göstermek için tablo örneği burada (üst chrome'da)
+  // kurulur; diğer sekmelerde `enabled: false` ile fetch atılmaz.
+  const rollFilterDefs = useMemo(() => buildRollFilterDefs("KARTELA_SENT"), []);
+  const rollForceFilters = useMemo(() => buildRollForceFilters("KARTELA_SENT"), []);
+  const rollsTable = useDataTable<Roll>({
+    queryKey: "rolls:KARTELA_SENT",
+    queryKeyParts: ["rolls", "KARTELA_SENT"],
+    fetchFn: rollService.listCursor,
+    columns: rollColumns,
+    defaultPageSize: 100,
+    forceFilters: rollForceFilters,
+    enabled: tab === "rolls",
+  });
+  const includeFire = searchParams.get("filter[includeFire]") === "true";
+  const toggleIncludeFire = (next: boolean) => {
+    const sp = new URLSearchParams(searchParams);
+    if (next) sp.set("filter[includeFire]", "true");
+    else sp.delete("filter[includeFire]");
+    setSearchParams(sp, { replace: true });
+  };
 
   const refreshKey =
     tab === "dispatches"
@@ -81,28 +123,57 @@ export function KartelaPage() {
         description="Kartela sevk/kabul belgeleri, fasondaki toplar ve üretilen kartelalar — tek yerden."
         actions={<RefreshButton queryKey={refreshKey} extraKeys={[["kartela"]]} />}
       />
-      <KartelaTabBar tab={tab} onTab={setTab} />
-      <ScanField
-        className="border-b px-4 py-2"
-        widthClassName="max-w-xs"
-        value={scanCode}
-        onChange={setScanCode}
-        onScan={openSwatch}
-        placeholder="Kartela barkodu okut → detay (KRT…)"
-        expectPrefix="SWATCH"
-        submitLabel="Aç"
-        busy={swatchLookup.isPending}
-        busyLabel="…"
+      <KartelaTabBar
+        tab={tab}
+        onTab={setTab}
+        trailing={
+          tab === "rolls" ? (
+            <>
+              <DataTableTools table={rollsTable.table} exportName="Envanter" />
+              <SavedViewsMenu />
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                <Checkbox
+                  checked={includeFire}
+                  onCheckedChange={(v) => toggleIncludeFire(v === true)}
+                />
+                Fire kaliteyi de göster
+              </label>
+            </>
+          ) : null
+        }
       />
 
       {tab === "dispatches" ? (
-        <DispatchesTab onSelect={setSelection} />
+        <DispatchesTab onSelect={setSelection} onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       ) : tab === "receipts" ? (
-        <ReceiptsTab onSelect={setSelection} />
+        <ReceiptsTab onSelect={setSelection} onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       ) : tab === "rolls" ? (
-        <RollsTable tab="KARTELA_SENT" />
+        <>
+          <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+            <ScanField
+              value={scanCode}
+              onChange={setScanCode}
+              onScan={openSwatch}
+              placeholder="Barkod okut..."
+              expectPrefix="SWATCH"
+              busy={swatchLookup.isPending}
+              widthClassName="w-64"
+              inputClassName="h-8 text-xs"
+              clearable
+            />
+            <StandaloneDateRangeFilter def={DATE_FILTER} />
+            <FilterBar filters={rollFilterDefs} inline />
+          </div>
+          <RollsTableBody
+            tab="KARTELA_SENT"
+            table={rollsTable.table}
+            isLoading={rollsTable.query.isLoading}
+            pagination={rollsTable.pagination}
+            hideFilterBar
+          />
+        </>
       ) : (
-        <SwatchesPanel />
+        <SwatchesPanel onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       )}
 
       <KartelaDetailSheet selection={selection} onClose={() => setSelection(null)} />

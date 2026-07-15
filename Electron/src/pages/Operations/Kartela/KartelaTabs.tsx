@@ -1,6 +1,8 @@
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { ScanField } from "@/components/scanner/ScanField";
+import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { useDataTable } from "@/hooks/useDataTable";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { kartelaService, type KartelaDispatchListItem, type KartelaReceiptListItem } from "./service";
@@ -38,7 +40,14 @@ const RECEIPT_FILTERS: FilterDef[] = [
   { kind: "dateRange", label: "Tarih", defaultField: "receivedAt" },
 ];
 
-export function DispatchesTab({ onSelect }: { onSelect: (s: KartelaSelection) => void }) {
+interface TabProps {
+  onSelect: (s: KartelaSelection) => void;
+  /** Okutulan kod bir kartela (KRT…) ise: liste araması yerine kartela detayını aç. */
+  onScanSwatch: (code: string) => void;
+  swatchLookupPending: boolean;
+}
+
+export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: TabProps) {
   const { table, query, search, setSearch, pagination } = useDataTable<KartelaDispatchListItem>({
     queryKey: "kartela-dispatches",
     fetchFn: kartelaService.listDispatchesCursor,
@@ -47,14 +56,40 @@ export function DispatchesTab({ onSelect }: { onSelect: (s: KartelaSelection) =>
     enableSelection: false,
   });
 
+  // Tek giriş: kartela barkodu (KRT…) → detay sheet; belge no/firma/DISPATCH_DOC
+  // kodu (KS…) → liste araması.
+  const handleScan = (code: string) => {
+    if (classifyBarcode(code).kind === "SWATCH") {
+      onScanSwatch(code);
+      setSearch("");
+      return;
+    }
+    setSearch(code);
+  };
+
   return (
     <>
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Belge no / firma ara..."
+        hideSearch
+        leading={
+          <>
+            <ScanField
+              value={search}
+              onChange={setSearch}
+              onScan={handleScan}
+              placeholder="Ara ya da barkod okut..."
+              expectPrefix={["SWATCH", "DISPATCH_DOC"]}
+              busy={swatchLookupPending}
+              widthClassName="w-72"
+              inputClassName="h-7 text-xs"
+              clearable
+            />
+            <FilterBar filters={DISPATCH_FILTERS} inline />
+          </>
+        }
       />
-      <FilterBar filters={DISPATCH_FILTERS} />
       <DataTable<KartelaDispatchListItem>
         table={table}
         isLoading={query.isLoading}
@@ -66,7 +101,7 @@ export function DispatchesTab({ onSelect }: { onSelect: (s: KartelaSelection) =>
   );
 }
 
-export function ReceiptsTab({ onSelect }: { onSelect: (s: KartelaSelection) => void }) {
+export function ReceiptsTab({ onSelect, onScanSwatch, swatchLookupPending }: TabProps) {
   const { table, query, search, setSearch, pagination } = useDataTable<KartelaReceiptListItem>({
     queryKey: "kartela-receipts",
     fetchFn: kartelaService.listReceiptsCursor,
@@ -75,14 +110,38 @@ export function ReceiptsTab({ onSelect }: { onSelect: (s: KartelaSelection) => v
     enableSelection: false,
   });
 
+  const handleScan = (code: string) => {
+    if (classifyBarcode(code).kind === "SWATCH") {
+      onScanSwatch(code);
+      setSearch("");
+      return;
+    }
+    setSearch(code);
+  };
+
   return (
     <>
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Belge no / irsaliye / firma ara..."
+        hideSearch
+        leading={
+          <>
+            <ScanField
+              value={search}
+              onChange={setSearch}
+              onScan={handleScan}
+              placeholder="Ara ya da barkod okut..."
+              expectPrefix={["SWATCH", "DISPATCH_DOC"]}
+              busy={swatchLookupPending}
+              widthClassName="w-72"
+              inputClassName="h-7 text-xs"
+              clearable
+            />
+            <FilterBar filters={RECEIPT_FILTERS} inline />
+          </>
+        }
       />
-      <FilterBar filters={RECEIPT_FILTERS} />
       <DataTable<KartelaReceiptListItem>
         table={table}
         isLoading={query.isLoading}
