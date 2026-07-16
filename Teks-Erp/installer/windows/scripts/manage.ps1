@@ -8,6 +8,7 @@
 #   .\manage.ps1 -Action uninstall     Servisleri kaldır (veri korunur)
 #   .\manage.ps1 -Action uninstall -RemoveData   Servisleri + TÜM veriyi sil
 #   .\manage.ps1 -Action start|stop|restart|status
+#   .\manage.ps1 -Action logs [-Tail 100]   Backend loglarini canli izle (pm2 logs gibi)
 #   .\manage.ps1 -Action backup [-BackupPath C:\yedek] [-OffsitePath \\NAS\yedek]
 #   .\manage.ps1 -Action restore -BackupFile C:\yedek\tekserp_xxx.dump
 #
@@ -17,12 +18,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("install", "uninstall", "start", "stop", "restart", "status", "backup", "restore", "studio")]
+    [ValidateSet("install", "uninstall", "start", "stop", "restart", "status", "backup", "restore", "studio", "logs")]
     [string]$Action,
 
     # setup.exe kurulum dizinini geçer; elle çalıştırırken script kendi konumundan bulur.
     [string]$InstallDir,
     [switch]$RemoveData,
+    # -Action logs: baslangicta gosterilecek son satir sayisi (pm2 logs --lines gibi).
+    [int]$Tail = 40,
     [string]$BackupPath,
     [string]$BackupFile,
     # Offsite (makine disi) yedek hedefi: UNC (\\NAS\pay) veya harici surucu (E:\yedek).
@@ -914,6 +917,61 @@ function Do-Studio {
 }
 
 # -----------------------------------------------------------------------------
+# Canli log izleme (pm2 logs karsiligi) — backend-out (gri) + backend-err (kirmizi)
+# tek pencerede harmanlanir. NSSM 10MB'da dosyayi dondurdugunde (dosya kuculur)
+# pozisyon basa sarilarak takip surer. Yonetici GEREKMEZ (loglar okunabilir).
+# -----------------------------------------------------------------------------
+function Do-Logs {
+    $out = Join-Path $LogDir "backend-out.log"
+    $err = Join-Path $LogDir "backend-err.log"
+    if (-not (Test-Path $LogDir)) { throw "Log klasoru yok — once kurulum yapin: $LogDir" }
+
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor White
+    Write-Host "  TeksERP Backend Loglari — CANLI (pm2 logs karsiligi)" -ForegroundColor White
+    Write-Host "================================================================" -ForegroundColor White
+    Write-Host "  out=normal (gri)   err=hata (kirmizi)   Cikis: Ctrl+C" -ForegroundColor DarkGray
+    Write-Host "  Klasor: $LogDir" -ForegroundColor DarkGray
+    Write-Host ""
+
+    # Baslangicta her dosyanin son $Tail satirini goster.
+    foreach ($f in @($out, $err)) {
+        if (Test-Path $f) {
+            $color = if ($f -eq $err) { "Red" } else { "Gray" }
+            Get-Content -Path $f -Tail $Tail -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Host $_ -ForegroundColor $color }
+        }
+    }
+
+    # Simdiki dosya sonundan itibaren canli izle.
+    $pos = @{}
+    foreach ($f in @($out, $err)) {
+        $pos[$f] = if (Test-Path $f) { (Get-Item $f).Length } else { 0L }
+    }
+    while ($true) {
+        Start-Sleep -Milliseconds 700
+        foreach ($f in @($out, $err)) {
+            if (-not (Test-Path $f)) { continue }
+            $len = (Get-Item $f).Length
+            if ($len -lt $pos[$f]) { $pos[$f] = 0L }   # NSSM rotasyonu: dosya basa sardi
+            if ($len -le $pos[$f]) { continue }
+            $color = if ($f -eq $err) { "Red" } else { "Gray" }
+            # Paylasimli okuma: NSSM yazmaya devam ederken kilitlemeyelim.
+            $fs = [System.IO.File]::Open($f, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            try {
+                $fs.Seek($pos[$f], [System.IO.SeekOrigin]::Begin) | Out-Null
+                $sr = New-Object System.IO.StreamReader($fs)
+                while (-not $sr.EndOfStream) {
+                    $line = $sr.ReadLine()
+                    if ($null -ne $line) { Write-Host $line -ForegroundColor $color }
+                }
+                $pos[$f] = $fs.Position
+            } finally { $fs.Close() }
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
 # Dispatch
 # -----------------------------------------------------------------------------
 try {
@@ -927,6 +985,7 @@ try {
         "backup"    { Do-Backup }
         "restore"   { Do-Restore }
         "studio"    { Do-Studio }
+        "logs"      { Do-Logs }
     }
     exit 0
 } catch {

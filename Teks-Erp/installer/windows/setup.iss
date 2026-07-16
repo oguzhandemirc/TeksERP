@@ -71,6 +71,13 @@ Name: "{group}\TeksERP Durum Sayfasi"; Filename: "http://localhost:4000/"; \
 Name: "{group}\TeksERP Durumu (konsol)"; Filename: "powershell.exe"; \
   Parameters: "-NoExit -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action status"; \
   IconFilename: "{app}\branding\TeksERP.ico"
+; Canli log izleme (pm2 logs karsiligi) — Baslat menusu + masaustu.
+Name: "{group}\TeksERP Loglari (canli)"; Filename: "powershell.exe"; \
+  Parameters: "-NoExit -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action logs"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+Name: "{commondesktop}\TeksERP Loglari (canli)"; Filename: "powershell.exe"; \
+  Parameters: "-NoExit -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action logs"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
 Name: "{group}\Veritabani (Prisma Studio)"; Filename: "powershell.exe"; \
   Parameters: "-NoExit -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action studio"; \
   IconFilename: "{app}\branding\TeksERP.ico"
