@@ -1,7 +1,7 @@
 {
   "name": "adnan-sahin-erp-admin",
   "productName": "Adnan Şahin ERP",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "Adnan Şahin ERP — Admin Panel by Etkili Yazılım",
@@ -97,7 +97,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^42.0.0",
+    "electron": "^42.7.0",
     "electron-builder": "^26.0.0",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.0",
@@ -180,8 +180,6 @@
       "installerIcon": "resources/TeksERP-LOGO.ico",
       "uninstallerIcon": "resources/TeksERP-LOGO.ico",
       "installerHeaderIcon": "resources/TeksERP-LOGO.ico",
-      "installerSidebar": "build/installerSidebar.bmp",
-      "uninstallerSidebar": "build/installerSidebar.bmp",
       "uninstallDisplayName": "Adnan Şahin ERP",
       "menuCategory": "Etkili Yazılım"
     },
