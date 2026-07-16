@@ -15,6 +15,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
+import { AppError } from "../src/utils/app-error";
 import type { Request } from "express";
 
 let pass = 0;
@@ -36,6 +37,7 @@ const service = new CustomerService({
   searchFields: ["code", "name", "taxNumber"],
   defaultInclude: undefined,
   uniqueField: "code",
+  nestedCreateFields: ["branches"], // tek-adım müşteri+şube (route ile birebir)
 });
 
 // Server-üretilen kod kalıbı: MUS + GGAAYY(6) + NNNN(4).
@@ -152,6 +154,134 @@ async function main() {
       "eski pasif kayıt dokunulmadı (isActive=false, adı korundu)",
       oldStill?.isActive === false && oldStill?.name === "TEST Müşteri B",
     );
+
+    // =========================================================================
+    // İç-içe (TEK-ADIM) şube oluşturma — POST /api/customers body'de branches[]
+    // müşteri + sevk noktaları ATOMİK (Prisma nested-create) doğar.
+    // =========================================================================
+
+    // 7) create + branches[] → müşteri + 2 şube atomik, doğru müşteriye bağlı
+    const withBranches = await service.create(
+      {
+        name: "TEST İnline Şubeli",
+        branches: [
+          { name: "  Merkez Depo  ", city: "İstanbul", contactPhone: "0212 555 0000", code: "MRK" },
+          { name: "Ankara Şubesi", city: "Ankara" },
+        ],
+      },
+      undefined,
+    );
+    const wbRec = withBranches.data as { id: string } | null;
+    if (wbRec?.id) createdIds.push(wbRec.id);
+    const createdBranches = await prisma.customerBranch.findMany({
+      where: { customerId: wbRec!.id },
+      orderBy: { name: "asc" },
+    });
+    check(
+      "create + branches[] → müşteri oluştu ve 2 şube bağlandı",
+      withBranches.success === true && !!wbRec?.id && createdBranches.length === 2,
+      `şube=${createdBranches.length}`,
+    );
+    const merkez = createdBranches.find((b) => b.name === "Merkez Depo");
+    check(
+      "inline şube: ad trim'lendi, alanlar yazıldı, isActive default true",
+      !!merkez &&
+        merkez.city === "İstanbul" &&
+        merkez.code === "MRK" &&
+        merkez.contactPhone === "0212 555 0000" &&
+        merkez.isActive === true &&
+        merkez.customerId === wbRec!.id,
+    );
+    const ankara = createdBranches.find((b) => b.name === "Ankara Şubesi");
+    check(
+      "inline şube: gönderilmeyen opsiyonel alanlar null",
+      !!ankara && ankara.address === null && ankara.contactName === null && ankara.code === null,
+    );
+
+    // 8) boş branches[] → müşteri oluşur, 0 şube (hata yok)
+    const emptyBr = await service.create(
+      { name: "TEST Boş Şube Dizisi", branches: [] },
+      undefined,
+    );
+    const ebRec = emptyBr.data as { id: string } | null;
+    if (ebRec?.id) createdIds.push(ebRec.id);
+    const ebCount = await prisma.customerBranch.count({ where: { customerId: ebRec!.id } });
+    check("boş branches[] → müşteri var, 0 şube", emptyBr.success === true && ebCount === 0);
+
+    // 9) adı boş şube → 400 + o müşteri HİÇ oluşmadı (validasyon create ÖNCESİ = atomik)
+    let badBranch: unknown;
+    try {
+      await service.create(
+        { name: "TEST Bozuk Şube", branches: [{ name: "OK" }, { name: "   " }] },
+        undefined,
+      );
+    } catch (e) {
+      badBranch = e;
+    }
+    check(
+      "adı boş şube → 400 (badRequest)",
+      badBranch instanceof AppError && badBranch.statusCode === 400,
+    );
+    const leaked = await prisma.customer.findFirst({ where: { name: "TEST Bozuk Şube" } });
+    check("geçersiz şube → müşteri sızmadı (atomik, create'e hiç girilmedi)", leaked === null);
+
+    // 10) mass-assignment guard: şubeye enjekte edilen id/customerId/bilinmeyen alan
+    //     yazılmaz — yalnız beyaz-listeli skalerler nested-create'e gider.
+    const injected = await service.create(
+      {
+        name: "TEST Enjekte Şube",
+        branches: [
+          {
+            name: "Enjekte",
+            id: "11111111-1111-1111-1111-111111111111",
+            customerId: "22222222-2222-2222-2222-222222222222",
+            bogusField: "x",
+          } as Record<string, unknown>,
+        ],
+      },
+      undefined,
+    );
+    const injRec = injected.data as { id: string } | null;
+    if (injRec?.id) createdIds.push(injRec.id);
+    const injBranch = await prisma.customerBranch.findFirst({ where: { customerId: injRec!.id } });
+    check(
+      "mass-assignment: enjekte id/customerId yok sayıldı, şube doğru müşteriye bağlı",
+      !!injBranch &&
+        injBranch.id !== "11111111-1111-1111-1111-111111111111" &&
+        injBranch.customerId === injRec!.id,
+    );
+
+    // 11) azami 50 şube sınırı aşımı → 400
+    let tooMany: unknown;
+    try {
+      await service.create(
+        { name: "TEST Çok Şube", branches: Array.from({ length: 51 }, (_, i) => ({ name: `Ş${i}` })) },
+        undefined,
+      );
+    } catch (e) {
+      tooMany = e;
+    }
+    check("51 şube → 400 (azami 50)", tooMany instanceof AppError && tooMany.statusCode === 400);
+
+    // 12) 100 karakteri aşan şube adı → net alan-adlı 400 (Postgres P2000/DB-abort
+    //     DEĞİL); sınır DB kolonu VARCHAR(100) ile birebir. Müşteri de sızmamalı.
+    let longName: unknown;
+    try {
+      await service.create(
+        { name: "TEST Uzun Şube Adı", branches: [{ name: "A".repeat(101) }] },
+        undefined,
+      );
+    } catch (e) {
+      longName = e;
+    }
+    check(
+      "101 karakter şube adı → 400 (DB'ye ulaşmadan, alan-adlı mesaj)",
+      longName instanceof AppError &&
+        longName.statusCode === 400 &&
+        longName.message.includes("100 karakter"),
+    );
+    const longLeak = await prisma.customer.findFirst({ where: { name: "TEST Uzun Şube Adı" } });
+    check("uzun-ad reddi → müşteri sızmadı", longLeak === null);
   } finally {
     // Kendi yarattığını temizle (audit log SystemLog'da kalır — append-only).
     for (const id of createdIds) {

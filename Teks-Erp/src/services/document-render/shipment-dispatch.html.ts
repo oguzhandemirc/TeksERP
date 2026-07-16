@@ -50,6 +50,9 @@ export interface ShipmentDispatchDoc {
     customerCode: string | null;
     customerTaxNumber: string | null;
     branchName: string | null;
+    /** Müşteri şube kodu (CustomerBranch.code) — ihracatta kullanılır; belgede
+     *  "branchCode" section toggle'ıyla açılıp kapanabilir. */
+    branchCode: string | null;
     procedureCode: string | null;
     destination: "DOMESTIC" | "EXPORT";
     status: string;
@@ -147,9 +150,12 @@ export function renderShipmentDispatchHtml(
         ? `<div class="wm wm-old">ESKİ KOPYA</div>`
         : "";
 
+  // Şube kodu (ihracat) — "branchCode" section toggle'ıyla açılıp kapanabilir (varsayılan açık).
+  const showBranchCode = sectionOn(cfg.sections, "branchCode");
   const customerSub = [
     h.customerTaxNumber ? `V.No: ${esc(h.customerTaxNumber)}` : "",
     h.branchName ? `Şube: ${esc(h.branchName)}` : "",
+    showBranchCode && h.branchCode ? `Şube Kodu: ${esc(h.branchCode)}` : "",
     h.customerCode ? `Kod: ${esc(h.customerCode)}` : "",
   ]
     .filter(Boolean)

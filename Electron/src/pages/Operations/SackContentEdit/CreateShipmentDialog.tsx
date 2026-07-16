@@ -17,6 +17,7 @@ import { Callout } from "@/components/ui/callout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { customerService } from "@/pages/Customers/service";
+import { customerBranchService } from "@/pages/Customers/branchService";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
@@ -58,6 +59,8 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const [orderIds, setOrderIds] = useState<Set<string>>(new Set());
   const [destination, setDestination] = useState<ShipmentDestination>("DOMESTIC");
   const [procedureCode, setProcedureCode] = useState("");
+  // Kullanıcı prosedür/ihracat kodunu ELLE değiştirdiyse şube kodu artık ezmez.
+  const [procedureTouched, setProcedureTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -67,12 +70,34 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     setOrderIds(new Set());
     setDestination("DOMESTIC");
     setProcedureCode("");
+    setProcedureTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sackKey]);
 
   const effCustomerId = lockedCustomerId ?? customerId;
   const effBranchId = lockedBranchId ?? branchId;
   const activeOrderIds = orderless ? [] : [...orderIds];
+
+  // Seçili (picker) şubenin kodunu çözmek için — kilitli şube kodu zaten rows'ta.
+  const branchesQ = useQuery({
+    queryKey: ["customer-branches", effCustomerId, "select"],
+    queryFn: () => customerBranchService.list(effCustomerId as string, false),
+    enabled: open && !!effCustomerId && !lockedBranchId,
+    staleTime: 60_000,
+  });
+  // Efektif şubenin kodu = "ihracat kodu" ön-değeri (müşterinin şube kodu).
+  const effBranchCode = useMemo(() => {
+    if (!effBranchId) return null;
+    if (lockedBranchId) return rows.find((s) => s.branch?.id === lockedBranchId)?.branch?.code ?? null;
+    return branchesQ.data?.data.find((b) => b.id === effBranchId)?.code ?? null;
+  }, [effBranchId, lockedBranchId, rows, branchesQ.data]);
+
+  // Şube kodu → prosedür/ihracat kodu input'una OTOMATİK gelir; kullanıcı elle
+  // değiştirmediyse (procedureTouched=false) şube değişiminde güncellenir. Override serbest.
+  useEffect(() => {
+    if (!open || procedureTouched) return;
+    setProcedureCode(effBranchCode ?? "");
+  }, [open, procedureTouched, effBranchCode]);
 
   const customersQ = useQuery({
     queryKey: ["customers", "picker"],
@@ -159,7 +184,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
                   <span className="ml-auto text-[10px] text-muted-foreground">çuvaldan</span>
                 </div>
               ) : (
-                <Select value={customerId} onValueChange={(v) => { setCustomerId(v); setBranchId(null); setOrderIds(new Set()); }}>
+                <Select value={customerId} onValueChange={(v) => { setCustomerId(v); setBranchId(null); setOrderIds(new Set()); setProcedureTouched(false); }}>
                   <SelectTrigger className={!customerId ? "border-primary ring-2 ring-primary/30" : undefined}>
                     <SelectValue placeholder="Hedef müşteri seç…" />
                   </SelectTrigger>
@@ -175,10 +200,20 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Şube</span>
               {lockedBranchId ? (
                 <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                  {rows.find((s) => s.branch?.id === lockedBranchId)?.branch?.name ?? "Şube (çuvaldan)"}
+                  {(() => {
+                    const b = rows.find((s) => s.branch?.id === lockedBranchId)?.branch;
+                    return b ? (b.code ? `${b.name} (${b.code})` : b.name) : "Şube (çuvaldan)";
+                  })()}
                 </div>
               ) : (
-                <BranchSelect customerId={effCustomerId ?? null} value={branchId} onChange={setBranchId} />
+                <BranchSelect
+                  customerId={effCustomerId ?? null}
+                  value={branchId}
+                  onChange={(v) => {
+                    setBranchId(v);
+                    setProcedureTouched(false); // yeni şube → ihracat kodunu tekrar öner
+                  }}
+                />
               )}
             </div>
           </div>
@@ -213,8 +248,11 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
             </Select>
             <Input
               value={procedureCode}
-              onChange={(e) => setProcedureCode(e.target.value)}
-              placeholder="Prosedür / ihracat kodu (opsiyonel)"
+              onChange={(e) => {
+                setProcedureCode(e.target.value);
+                setProcedureTouched(true);
+              }}
+              placeholder="Prosedür / ihracat kodu (şubeden gelir, değiştirilebilir)"
               className="h-9 flex-1"
             />
           </div>

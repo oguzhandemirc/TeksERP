@@ -109,23 +109,27 @@ async function main(): Promise<void> {
     check("reason yok → 400", noReason.status === 400, String(noReason.status));
     const shortReason = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "ab" });
     check("kısa reason → 400", shortReason.status === 400, String(shortReason.status));
-    const badQty = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "geçerli sebep", orderLineAllocations: [{ orderLineId: "11111111-1111-1111-1111-111111111111", qty: -5 }] });
+    const badQty = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "geçerli sebep", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: "11111111-1111-1111-1111-111111111111", qty: -5 }] });
     check("negatif qty → 400 (Zod positive)", badQty.status === 400, String(badQty.status));
-    const badUuidInBody = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "geçerli sebep", orderLineAllocations: [{ orderLineId: "not-a-uuid", qty: 5 }] });
+    const badUuidInBody = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "geçerli sebep", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: "not-a-uuid", qty: 5 }] });
     check("orderLineId geçersiz uuid → 400 (Zod)", badUuidInBody.status === 400, String(badUuidInBody.status));
+    // Müşteri-zorunlu guard (07fbbde): customerId olmadan çağrı → 400 "müşteri zorunludur".
+    // Guard dispatch lookup'tan ÖNCE çalışır → hiçbir mutasyon olmaz.
+    const noCustomer = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "müşterisiz doğrudan sevk denemesi" });
+    check("customerId YOK → 400 'müşteri zorunludur'", noCustomer.status === 400 && (noCustomer.body.message ?? "").includes("müşteri zorunludur"), `${noCustomer.status} ${noCustomer.body.message ?? ""}`);
 
     // --- 404 / geçersiz path uuid ---
     console.log("\n--- 404 / geçersiz id ---");
-    const unknown = await call("POST", `/api/subcontractor/dispatches/99999999-9999-9999-9999-999999999999/direct-ship`, adminTok, { reason: "bilinmeyen dispatch" });
+    const unknown = await call("POST", `/api/subcontractor/dispatches/99999999-9999-9999-9999-999999999999/direct-ship`, adminTok, { reason: "bilinmeyen dispatch", customerId: CUSTOMER });
     check("bilinmeyen dispatchId → 404", unknown.status === 404, String(unknown.status));
     const badPath = await call("POST", `/api/subcontractor/dispatches/not-uuid/direct-ship`, adminTok, { reason: "geçersiz path uuid" });
     check("geçersiz path uuid → 4xx (500 DEĞİL)", badPath.status >= 400 && badPath.status < 500, String(badPath.status));
 
     // --- 200 geçerli + idempotency ---
     console.log("\n--- 200 geçerli akış + idempotency ---");
-    const ok = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "geçerli doğrudan sevk" });
+    const ok = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "geçerli doğrudan sevk", customerId: CUSTOMER });
     check("geçerli direct-ship → 200", ok.status === 200, `${ok.status} ${ok.body.message ?? ""}`);
-    const retry = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "idempotent retry" });
+    const retry = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "idempotent retry", customerId: CUSTOMER });
     check("aynı sevke tekrar → 200 (idempotent cached)", retry.status === 200 && retry.body.data?.alreadyDirectShipped === true, String(retry.status));
 
     // --- preview 200 ---
@@ -138,7 +142,7 @@ async function main(): Promise<void> {
     console.log("\n--- 409 guard ---");
     const d3 = await makeDispatch();
     await sub.cancel(d3, "api test iptal", ADMIN);
-    const cancelled = await call("POST", `/api/subcontractor/dispatches/${d3}/direct-ship`, adminTok, { reason: "iptal edilmiş sevk" });
+    const cancelled = await call("POST", `/api/subcontractor/dispatches/${d3}/direct-ship`, adminTok, { reason: "iptal edilmiş sevk", customerId: CUSTOMER });
     check("iptal edilmiş sevk → 409", cancelled.status === 409, String(cancelled.status));
 
     console.log(`\n──────────────────────────────────────────`);
@@ -163,8 +167,15 @@ async function cleanup(): Promise<void> {
     const rollIds = rolls.map((r) => r.id);
     const dispatches = await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
     const dispatchIds = dispatches.map((d) => d.id);
-    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispatchIds } } });
+    const directShipments = await prisma.directShipment.findMany({ where: { dispatchId: { in: dispatchIds } }, select: { id: true } });
+    const directShipmentIds = directShipments.map((d) => d.id);
+    // Direct-ship irsaliyesinin sourceId'si DirectShipment.id — her iki kaynağı da sil.
+    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...dispatchIds, ...directShipmentIds] } } });
+    // DirectShipment sökümü: önce roll bağını çöz, sonra allocation, sonra kayıt
+    // (DirectShipment.dispatchId Restrict → dispatch'ten ÖNCE silinmeli).
+    await prisma.roll.updateMany({ where: { directShipment: { dispatchId: { in: dispatchIds } } }, data: { directShipmentId: null } });
     await prisma.subcontractorDirectShipAllocation.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
+    await prisma.directShipment.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatchIds } } });

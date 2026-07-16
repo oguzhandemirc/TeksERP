@@ -136,6 +136,8 @@ interface Props {
   /** Satır-içi mod: kendi border/padding sarmalayıcısını çizmez — başka bir araç
    *  çubuğunun (ör. DataTableToolbar `leading`) içine gömülmek için. */
   inline?: boolean;
+  /** Kontrol yüksekliği: "sm" (varsayılan, h-7 kompakt) | "md" (h-9, arama input'uyla eşit). */
+  size?: "sm" | "md";
 }
 
 const DATE_PRESETS = [
@@ -146,9 +148,11 @@ const DATE_PRESETS = [
 
 const NONE = "__all__";
 
-export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline = false }: Props) {
+export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline = false, size = "sm" }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const dateDef = filters.find((f) => f.kind === "dateRange");
+  // Kontrol yüksekliği — "md" arama input'uyla (h-9) hizalar; varsayılan kompakt (h-7).
+  const ctrlH = size === "md" ? "h-9" : "h-7";
 
   // Default tarih aralığını (ilk render) uygula — URL'de yoksa.
   // URL'de explicit `filter[...]` varsa (örn. dashboard'tan gelen "Açık İş Emri"
@@ -196,13 +200,13 @@ export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline =
     >
       {leading}
       {filters.map((f) => {
-        if (f.kind === "select") return <SelectFilter key={f.key} def={f} sp={searchParams} update={update} />;
-        if (f.kind === "multi-select") return <MultiSelectFilter key={f.key} def={f} sp={searchParams} update={update} />;
-        if (f.kind === "lookup") return <LookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
-        if (f.kind === "multi-lookup") return <MultiLookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
-        if (f.kind === "dependent-lookup") return <DependentLookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
-        if (f.kind === "numberRange") return <NumberRangeFilter key={f.key} def={f} sp={searchParams} update={update} />;
-        return <DateRangeFilter key="date" def={f} sp={searchParams} update={update} />;
+        if (f.kind === "select") return <SelectFilter key={f.key} def={f} sp={searchParams} update={update} h={ctrlH} />;
+        if (f.kind === "multi-select") return <MultiSelectFilter key={f.key} def={f} sp={searchParams} update={update} h={ctrlH} />;
+        if (f.kind === "lookup") return <LookupFilter key={f.key} def={f} sp={searchParams} update={update} h={ctrlH} />;
+        if (f.kind === "multi-lookup") return <MultiLookupFilter key={f.key} def={f} sp={searchParams} update={update} h={ctrlH} />;
+        if (f.kind === "dependent-lookup") return <DependentLookupFilter key={f.key} def={f} sp={searchParams} update={update} h={ctrlH} />;
+        if (f.kind === "numberRange") return <NumberRangeFilter key={f.key} def={f} sp={searchParams} update={update} h={ctrlH} />;
+        return <DateRangeFilter key="date" def={f} sp={searchParams} update={update} h={ctrlH} />;
       })}
     </div>
   );
@@ -221,16 +225,18 @@ export function StandaloneDateRangeFilter({
     mutator(next);
     setSearchParams(next, { replace: true });
   };
-  return <DateRangeFilter def={def} sp={searchParams} update={update} />;
+  return <DateRangeFilter def={def} sp={searchParams} update={update} h="h-7" />;
 }
 
 interface SubProps<D> {
   def: D;
   sp: URLSearchParams;
   update: (m: (sp: URLSearchParams) => void) => void;
+  /** Kontrol yükseklik sınıfı (FilterBar `size`'dan) — h-7 (kompakt) | h-9 (arama ile eşit). */
+  h: string;
 }
 
-function SelectFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "select" }>>) {
+function SelectFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind: "select" }>>) {
   const value = sp.get(`filter[${def.key}]`) ?? NONE;
   return (
     <Select
@@ -242,7 +248,7 @@ function SelectFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "
         })
       }
     >
-      <SelectTrigger className="h-7 w-auto min-w-[140px] gap-1 text-xs">
+      <SelectTrigger className={cn(h, "w-auto min-w-[140px] gap-1 text-xs")}>
         <SelectValue placeholder={def.label} />
       </SelectTrigger>
       <SelectContent>
@@ -263,6 +269,7 @@ function MultiSelectFilter({
   def,
   sp,
   update,
+  h,
 }: SubProps<Extract<FilterDef, { kind: "multi-select" }>>) {
   const [open, setOpen] = useState(false);
   const csv = sp.get(`filter[${def.key}]`) ?? "";
@@ -297,7 +304,8 @@ function MultiSelectFilter({
           variant="outline"
           size="sm"
           className={cn(
-            "h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
+            h,
+            "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
             selected.length > 0 && "border-primary/50",
           )}
         >
@@ -347,7 +355,7 @@ function MultiSelectFilter({
   );
 }
 
-function LookupFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
+function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
   const [open, setOpen] = useState(false);
   const value = sp.get(`filter[${def.key}]`) ?? "";
   const { data } = useQuery({
@@ -383,7 +391,8 @@ function LookupFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "
           variant="outline"
           size="sm"
           className={cn(
-            "h-7 min-w-[160px] justify-between gap-1 px-2 text-xs font-normal",
+            h,
+            "min-w-[160px] justify-between gap-1 px-2 text-xs font-normal",
             value && "border-primary/50",
           )}
         >
@@ -435,7 +444,7 @@ function LookupFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "
   );
 }
 
-function DateRangeFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "dateRange" }>>) {
+function DateRangeFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind: "dateRange" }>>) {
   const dateField = sp.get("dateField") ?? def.defaultField;
   const dateFromIso = sp.get("dateFrom") ?? "";
   const dateToIso = sp.get("dateTo") ?? "";
@@ -492,7 +501,7 @@ function DateRangeFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind
           value={dateField}
           onValueChange={(v) => update((next) => next.set("dateField", v))}
         >
-          <SelectTrigger className="h-7 w-auto gap-1 text-xs">
+          <SelectTrigger className={cn(h, "w-auto gap-1 text-xs")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -509,7 +518,7 @@ function DateRangeFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind
         type="date"
         value={fromInput}
         onChange={(e) => setFrom(e.target.value)}
-        className="h-7 w-[130px] px-2 text-xs"
+        className={cn(h, "w-[130px] px-2 text-xs")}
         placeholder="Başlangıç"
         title="Başlangıç tarihi"
       />
@@ -518,7 +527,7 @@ function DateRangeFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind
         type="date"
         value={toInput}
         onChange={(e) => setTo(e.target.value)}
-        className="h-7 w-[130px] px-2 text-xs"
+        className={cn(h, "w-[130px] px-2 text-xs")}
         placeholder="Bitiş"
         title="Bitiş tarihi (gün sonu dahil)"
       />
@@ -529,7 +538,7 @@ function DateRangeFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind
           type="button"
           size="sm"
           variant="outline"
-          className="h-7 px-2 text-xs"
+          className={cn(h, "px-2 text-xs")}
           onClick={() => applyPreset(p.days)}
         >
           {p.label}
@@ -541,7 +550,7 @@ function DateRangeFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind
           type="button"
           size="icon"
           variant="ghost"
-          className="h-7 w-7"
+          className={cn(h, "w-7")}
           onClick={clear}
           title="Tarih filtresini kaldır"
         >
@@ -556,6 +565,7 @@ function MultiLookupFilter({
   def,
   sp,
   update,
+  h,
 }: SubProps<Extract<FilterDef, { kind: "multi-lookup" }>>) {
   const [open, setOpen] = useState(false);
   const csv = sp.get(`filter[${def.key}]`) ?? "";
@@ -607,7 +617,8 @@ function MultiLookupFilter({
           variant="outline"
           size="sm"
           className={cn(
-            "h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
+            h,
+            "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
             selectedIds.length > 0 && "border-primary/50",
           )}
         >
@@ -666,6 +677,7 @@ function DependentLookupFilter({
   def,
   sp,
   update,
+  h,
 }: SubProps<Extract<FilterDef, { kind: "dependent-lookup" }>>) {
   const [open, setOpen] = useState(false);
   const parentId = sp.get(`filter[${def.dependsOn}]`) ?? "";
@@ -716,7 +728,7 @@ function DependentLookupFilter({
         variant="outline"
         size="sm"
         disabled
-        className="h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal text-muted-foreground"
+        className={cn(h, "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal text-muted-foreground")}
       >
         {def.placeholderNoParent ?? def.label}
         <ChevronDown className="h-3.5 w-3.5 opacity-60" />
@@ -739,7 +751,8 @@ function DependentLookupFilter({
           variant="outline"
           size="sm"
           className={cn(
-            "h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
+            h,
+            "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
             selectedIds.length > 0 && "border-primary/50",
           )}
         >
@@ -798,6 +811,7 @@ function NumberRangeFilter({
   def,
   sp,
   update,
+  h,
 }: SubProps<Extract<FilterDef, { kind: "numberRange" }>>) {
   const minKey = `filter[${def.key}Min]`;
   const maxKey = `filter[${def.key}Max]`;
@@ -826,7 +840,8 @@ function NumberRangeFilter({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 rounded-md border bg-background px-1.5 py-0.5",
+        h,
+        "flex items-center gap-1 rounded-md border bg-background px-1.5",
         hasValue ? "border-primary/50" : "border-input",
       )}
       title={placeholder}

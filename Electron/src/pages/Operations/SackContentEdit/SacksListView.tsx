@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ClipboardList, Truck } from "lucide-react";
+import { ClipboardList, Eye, PackageOpen, Scale, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ContextMenuItem } from "@/components/ui/context-menu";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
@@ -19,6 +20,7 @@ import { sacksColumns } from "./sacksColumns";
 import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
+import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
 import { isWarehouseSack, type LocatedRoll, type SackSearchRow } from "./types";
 
@@ -57,6 +59,7 @@ export function SacksListView({ onEditSack }: Props) {
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
   const [detail, setDetail] = useState<SackSearchRow | null>(null);
+  const [weighSack, setWeighSack] = useState<SackSearchRow | null>(null);
 
   const { table, query, search, setSearch, pagination } = useDataTable<SackSearchRow>({
     queryKey: "sack-search",
@@ -122,7 +125,7 @@ export function SacksListView({ onEditSack }: Props) {
               widthClassName="w-72"
               clearable
             />
-            <FilterBar filters={SACK_FILTERS} inline />
+            <FilterBar filters={SACK_FILTERS} inline size="md" />
           </>
         }
       />
@@ -135,6 +138,25 @@ export function SacksListView({ onEditSack }: Props) {
         pagination={pagination}
         emptyText="Filtrelerle eşleşen çuval yok."
         onRowClick={(s) => (isWarehouseSack(s) ? onEditSack(s) : setDetail(s))}
+        rowContextMenu={(s) =>
+          isWarehouseSack(s) ? (
+            <>
+              <ContextMenuItem onSelect={() => onEditSack(s)}>
+                <PackageOpen /> İçeriği düzenle
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => setWeighSack(s)}>
+                <Scale /> Tart
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => setShipSacks([s])}>
+                <Truck /> Sevk Et
+              </ContextMenuItem>
+            </>
+          ) : (
+            <ContextMenuItem onSelect={() => setDetail(s)}>
+              <Eye /> Detayı göster
+            </ContextMenuItem>
+          )
+        }
         selectionHint="Depodaki çuvalları seç → havuzdan sevkiyat kur."
         bulkActions={(rows) => (
           <div className="flex gap-2">
@@ -169,6 +191,10 @@ export function SacksListView({ onEditSack }: Props) {
         }}
       />
       <SackDetailSheet sack={detail} onOpenChange={(o) => !o && setDetail(null)} />
+      <WeighSackDialog
+        sack={weighSack ? { id: weighSack.id, sackNo: weighSack.sackNo, weightKg: weighSack.weightKg } : null}
+        onOpenChange={(o) => !o && setWeighSack(null)}
+      />
     </div>
   );
 }

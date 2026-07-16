@@ -321,7 +321,7 @@ export interface ProductionFlowQueueCard {
   colorHex: string | null;
   openRollCount: number;
   totalCurrentQty: number;
-  batchNumber: string;
+  workOrderNumber: string;
   isUrgent: boolean;
 }
 
@@ -781,6 +781,19 @@ export class InventoryService {
       applyStatusScope({
         in: [RollStatus.WAREHOUSE, RollStatus.A1_STOCK],
       });
+    } else if (rollScope === "IN_SACK") {
+      // "Çuvalda" sekmesi: fiziksel olarak bir çuvalda (sackId dolu) ve henüz
+      // depoyu terk etmemiş (SHIPPED/CANCELLED/SCRAP değil) toplar. Sevkiyata
+      // atanmış (PLANNED) ama henüz sevk edilmemiş çuvallar da hâlâ çuvaldadır.
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        { sackId: { not: null } },
+        {
+          status: {
+            notIn: [RollStatus.SHIPPED, RollStatus.CANCELLED, RollStatus.SCRAP],
+          },
+        },
+      ];
     }
 
     // --- Fason sevk uygunluğu (belirli adım) ---
@@ -807,16 +820,23 @@ export class InventoryService {
     }
 
     // --- Sevkiyat kapsamı: serbest depo vs çuvallanmış (committed) ---
-    // 'free'      = serbest depo (shipmentId null) — yalnız satılabilir/okutulabilir stok.
-    // 'committed' = çuvallanmış (shipmentId dolu) — çuval depo/sevk yolundaki.
-    // yok/'all'   = ayrım yapma. Depo ekranı 'free' geçer → çuvallanan top "serbest depoda"
-    // görünmez (çuval depo ayrı ekranda izlenir).
+    // 'free'      = GERÇEK serbest depo: sackId null VE shipmentId null — yalnız
+    //               satılabilir/okutulabilir stok. Bir çuvala konmuş ama henüz
+    //               sevkiyata atanmamış top (sackId dolu, shipmentId null) serbest
+    //               DEĞİLDİR (çuval havuzu modeli: fiziksel olarak çuvalda).
+    // 'committed' = çuvallanmış VEYA sevkiyatta (sackId dolu ya da shipmentId dolu).
+    // yok/'all'   = ayrım yapma. Depo ekranı 'free' geçer → çuvaldaki top "serbest
+    //               depoda" görünmez.
     const shipmentScope = f["shipmentScope"] as string | undefined;
     delete where.shipmentScope;
     if (shipmentScope === "free") {
       where.shipmentId = null;
+      where.sackId = null;
     } else if (shipmentScope === "committed") {
-      where.shipmentId = { not: null };
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        { OR: [{ sackId: { not: null } }, { shipmentId: { not: null } }] },
+      ];
     }
 
     const itemId = typeof f["itemId"] === "string" ? f["itemId"] : null;
@@ -1013,7 +1033,10 @@ export class InventoryService {
             isUrgent: true,
             workOrder: {
               select: {
-                batchNumber: true,
+                // DİKKAT: WO'da alan adı workOrderNumber (İE…) — eski batchNumber
+                // select'i parti-redesign sonrası Prisma validation hatasıyla tüm
+                // production-flow'u 500'e düşürüyordu (2026-07-15 düzeltildi).
+                workOrderNumber: true,
                 targetItem: { select: { name: true } },
                 targetColor: { select: { name: true, hex: true } },
               },
@@ -1035,7 +1058,7 @@ export class InventoryService {
         totalCurrentQty: s.movements
           .reduce((sum, m) => sum.plus(m.roll.currentQty), new Prisma.Decimal(0))
           .toNumber(),
-        batchNumber: s.workOrder.batchNumber,
+        workOrderNumber: s.workOrder.workOrderNumber,
         isUrgent: s.isUrgent,
       }));
       return { cards, total };
@@ -1057,7 +1080,7 @@ export class InventoryService {
             id: true,
             workOrder: {
               select: {
-                batchNumber: true,
+                workOrderNumber: true,
                 targetItem: { select: { name: true } },
                 targetColor: { select: { name: true, hex: true } },
               },
@@ -1076,7 +1099,7 @@ export class InventoryService {
         totalCurrentQty: s.currentRolls
           .reduce((sum, r) => sum.plus(r.currentQty), new Prisma.Decimal(0))
           .toNumber(),
-        batchNumber: s.workOrder.batchNumber,
+        workOrderNumber: s.workOrder.workOrderNumber,
         isUrgent: false,
       }));
       return { cards, total };

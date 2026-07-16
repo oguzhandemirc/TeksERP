@@ -138,25 +138,31 @@ export class ShippingService {
       throw AppError.badRequest("Geçerli bir kg girilmeli");
     }
     let customerId: string | null = null;
+    let customerName: string | null = null;
     if (data.customerId) {
       const customer = await prisma.customer.findUnique({
         where: { id: data.customerId },
-        select: { id: true, isActive: true },
+        select: { id: true, isActive: true, name: true },
       });
       if (!customer || !customer.isActive) throw AppError.badRequest("Geçerli bir müşteri seçilmeli");
       customerId = customer.id;
+      customerName = customer.name;
     }
     let branchId: string | null = null;
+    let branchName: string | null = null;
+    let branchCode: string | null = null;
     if (data.branchId) {
       if (!customerId) throw AppError.badRequest("Şube seçmek için önce müşteri seçilmeli");
       const branch = await prisma.customerBranch.findUnique({
         where: { id: data.branchId },
-        select: { id: true, customerId: true, isActive: true },
+        select: { id: true, customerId: true, isActive: true, name: true, code: true },
       });
       if (!branch || !branch.isActive || branch.customerId !== customerId) {
         throw AppError.badRequest("Şube bu müşteriye ait değil");
       }
       branchId = branch.id;
+      branchName = branch.name;
+      branchCode = branch.code ?? null;
     }
 
     const manualSackNo = data.sackNo?.trim() || null;
@@ -197,7 +203,86 @@ export class ShippingService {
       recordId: sack.id,
       newData: { sackNo: sack.sackNo, customerId, branchId },
     });
-    return { success: true, data: sack, message: "Çuval açıldı" };
+    return {
+      success: true,
+      data: { ...sack, customerName, branchName, branchCode },
+      message: "Çuval açıldı",
+    };
+  }
+
+  /**
+   * Depodaki çuvalın MÜŞTERİSİNİ (ve şubesini) değiştir — yalnız `shipmentId=null`
+   * (sevkiyata girmemiş) çuvalda. Top→müşteri bağı olmadığından içerik varken de
+   * güvenli; müşteri `null`'a (müşterisiz genel stok) çekilebilir. Şube verilirse yeni
+   * müşteriye ait olmalı; müşteri boşsa/değişince şube temizlenir. `openSack`'in
+   * müşteri/şube doğrulamasıyla aynı kural. Atomik claim: eşzamanlı sevkiyat kurulumu
+   * araya girerse (çuval PLANNED'e kaçarsa) 409.
+   */
+  async reassignSackCustomer(
+    sackId: string,
+    data: { customerId?: string | null; branchId?: string | null },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const sack = await prisma.sack.findUnique({
+      where: { id: sackId },
+      select: { id: true, sackNo: true, shipmentId: true, customerId: true, branchId: true },
+    });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    if (sack.shipmentId != null) {
+      throw AppError.conflict("Çuval bir sevkiyata atanmış — müşteri değiştirilemez (önce sevkiyattan çıkarın)");
+    }
+
+    // Müşteri opsiyonel (null = müşterisiz genel stok). Ad'ı da al → yanıtta dön
+    // (istemci editör rozetini fetch'siz günceller).
+    let customerId: string | null = null;
+    let customerName: string | null = null;
+    if (data.customerId) {
+      const customer = await prisma.customer.findUnique({
+        where: { id: data.customerId },
+        select: { id: true, isActive: true, name: true },
+      });
+      if (!customer || !customer.isActive) throw AppError.badRequest("Geçerli bir müşteri seçilmeli");
+      customerId = customer.id;
+      customerName = customer.name;
+    }
+    // Şube opsiyonel — müşteri gerektirir + o müşteriye ait olmalı.
+    let branchId: string | null = null;
+    let branchName: string | null = null;
+    let branchCode: string | null = null;
+    if (data.branchId) {
+      if (!customerId) throw AppError.badRequest("Şube seçmek için önce müşteri seçilmeli");
+      const branch = await prisma.customerBranch.findUnique({
+        where: { id: data.branchId },
+        select: { id: true, customerId: true, isActive: true, name: true, code: true },
+      });
+      if (!branch || !branch.isActive || branch.customerId !== customerId) {
+        throw AppError.badRequest("Şube bu müşteriye ait değil");
+      }
+      branchId = branch.id;
+      branchName = branch.name;
+      branchCode = branch.code ?? null;
+    }
+
+    // Atomik claim — hâlâ depoda (shipmentId=null) olmalı.
+    const claimed = await prisma.sack.updateMany({
+      where: { id: sackId, shipmentId: null },
+      data: { customerId, branchId },
+    });
+    if (claimed.count !== 1) throw AppError.conflict("Çuval az önce bir sevkiyata girdi — yenileyin.");
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SACK",
+      recordId: sackId,
+      oldData: { customerId: sack.customerId, branchId: sack.branchId },
+      newData: { customerId, branchId },
+    });
+    return {
+      success: true,
+      data: { id: sackId, customerId, customerName, branchId, branchName, branchCode },
+      message: "Çuval müşterisi güncellendi",
+    };
   }
 
   /**
@@ -682,7 +767,7 @@ export class ShippingService {
       orderBy: { createdAt: "asc" },
       select: {
         id: true, sackNo: true, weightKg: true, branchId: true,
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, width: true, currentQty: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true, hex: true } } } },
         swatches: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
       },
@@ -1201,7 +1286,7 @@ export class ShippingService {
       dispatchedAt: true,
       createdAt: true,
       customer: { select: { id: true, code: true, name: true } },
-      branch: { select: { id: true, name: true } },
+      branch: { select: { id: true, code: true, name: true } },
       _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: { cancelledAt: null } } } },
     } as const;
 
@@ -1218,7 +1303,7 @@ export class ShippingService {
       rollCount: true,
       reason: true,
       customer: { select: { id: true, code: true, name: true } },
-      branch: { select: { id: true, name: true } },
+      branch: { select: { id: true, code: true, name: true } },
       _count: { select: { allocations: true } },
     } as const;
     type ShipRow = Prisma.ShipmentGetPayload<{ select: typeof select }>;
@@ -1326,7 +1411,7 @@ export class ShippingService {
       where: { id },
       include: {
         customer: { select: { id: true, code: true, name: true } },
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         shippedBy: { select: { fullName: true, username: true } },
         dispatch: {
           select: {
@@ -1583,7 +1668,7 @@ export class ShippingService {
       select: {
         id: true, shipmentNo: true, status: true, plateNumber: true, driverName: true, carrier: true,
         customer: { select: { id: true, name: true } },
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         sacks: {
           orderBy: { seq: "asc" },
           select: {
@@ -1626,6 +1711,82 @@ export class ShippingService {
     return { success: true, data: content };
   }
 
+  /**
+   * Muhasebe fişi — fasondan DOĞRUDAN sevk (DirectShipment) sürümü. Çuval Shipment'ının
+   * getDispatchReport'u ile AYNI şekli (header/products/sacks/cekiRows/totals) üretir ki
+   * muhasebe ekranındaki Fiş dialog'u tek kontratla çalışsın. Doğrudan sevkte ÇUVAL YOK
+   * (sacks:[], kg:0, çeki satırları top-başına); ürün gruplaması "İsim Renk Encm." biçimiyle
+   * collectShipmentDocContent ile birebir. Baskı/önizleme ayrıca SUBCONTRACTOR_DIRECT_SHIP
+   * donmuş irsaliyesinden gelir — bu yalnız Excel/etiket için yapılandırılmış veridir.
+   */
+  async getDirectShipmentDispatchReport(id: string): Promise<ApiResponse<unknown>> {
+    const ds = await prisma.directShipment.findUnique({
+      where: { id },
+      select: {
+        shipmentNo: true,
+        shippedAt: true,
+        createdAt: true,
+        customer: { select: { code: true, name: true, taxNumber: true } },
+        branch: { select: { code: true, name: true } },
+        allocations: { select: { orderLine: { select: { order: { select: { orderNumber: true } } } } } },
+        rolls: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            barcode: true,
+            currentQty: true,
+            width: true,
+            item: { select: { name: true } },
+            color: { select: { name: true } },
+          },
+        },
+      },
+    });
+    if (!ds) throw AppError.notFound("Fasondan sevk kaydı bulunamadı");
+
+    const productMap = new Map<string, { name: string; rollCount: number; totalMeters: Prisma.Decimal }>();
+    let totalMeters = D0();
+    const cekiRows = ds.rolls.map((r) => {
+      totalMeters = totalMeters.plus(r.currentQty);
+      const widthStr = r.width != null ? `${Number(r.width)}cm.` : "";
+      const stokAdi = [r.item.name, r.color?.name ?? "", widthStr].filter(Boolean).join(" ");
+      const g = productMap.get(stokAdi) ?? { name: stokAdi, rollCount: 0, totalMeters: D0() };
+      g.rollCount += 1;
+      g.totalMeters = g.totalMeters.plus(r.currentQty);
+      productMap.set(stokAdi, g);
+      // Çuval yok → sackCode "—", kg top-başına taşınmaz (0).
+      return { rollId: r.id, sackCode: "—", barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", meters: Number(r.currentQty), kg: 0 };
+    });
+    const products = [...productMap.values()].map((p) => ({ name: p.name, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
+    const orderNos = [...new Set(ds.allocations.map((a) => a.orderLine.order.orderNumber))].join(", ");
+
+    return {
+      success: true,
+      data: {
+        header: {
+          shipmentNo: ds.shipmentNo,
+          customerName: ds.customer.name,
+          customerCode: ds.customer.code,
+          customerTaxNumber: ds.customer.taxNumber ?? null,
+          branchName: ds.branch?.name ?? null,
+          branchCode: ds.branch?.code ?? null,
+          procedureCode: null,
+          destination: ShipmentDestination.DOMESTIC,
+          status: ShipmentStatus.DISPATCHED,
+          date: ds.shippedAt.toISOString(),
+          plateNumber: null,
+          driverName: null,
+          carrier: null,
+          orderNos,
+        },
+        products,
+        sacks: [],
+        cekiRows,
+        totals: { totalRolls: ds.rolls.length, totalMeters: Number(totalMeters), totalKg: 0, sackCount: 0 },
+      },
+    };
+  }
+
   // =========================================================================
   // SİPARİŞ SEÇİM EKRANI — açık siparişler + depo karşılaması (paketleme rehberi)
   // =========================================================================
@@ -1646,7 +1807,7 @@ export class ShippingService {
       select: {
         id: true, orderNumber: true, status: true, deadline: true, orderDate: true,
         customer: { select: { id: true, code: true, name: true } },
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         lines: { select: { id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true, customerItemName: true, customerColorName: true, createdAt: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
       },
     });
@@ -1708,7 +1869,7 @@ async function collectShipmentDocContent(
       shipmentNo: true, status: true, procedureCode: true, destination: true, dispatchedAt: true, createdAt: true,
       plateNumber: true, driverName: true, carrier: true,
       customer: { select: { code: true, name: true, taxNumber: true } },
-      branch: { select: { name: true } },
+      branch: { select: { code: true, name: true } },
       orders: { select: { order: { select: { orderNumber: true } } } },
       sacks: {
         orderBy: { seq: "asc" },
@@ -1745,7 +1906,7 @@ async function collectShipmentDocContent(
   const orderNos = [...new Set(sh.orders.map((o) => o.order.orderNumber))].join(", ");
 
   return {
-    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos },
+    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, branchCode: sh.branch?.code ?? null, procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos },
     products,
     sacks: sackRows,
     cekiRows,

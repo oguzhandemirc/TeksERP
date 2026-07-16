@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
@@ -23,19 +24,30 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workOrderId: string;
-  /** Kaynak parti (sevksiz). */
+  /** Kaynak parti. */
   source: { batchId: string; batchNumber: string } | null;
-  /** Taşıma hedefi olabilecek diğer sevksiz partiler (kaynak hariç). */
+  /** Kaynak parti kilitli (malı fasonda / açık sevkli) — K16 sevk cerrahisi notu gösterilir. */
+  sourceLocked?: boolean;
+  /** Taşıma hedefi olabilecek diğer partiler (kaynak ve birleşmiş tarihçe satırları hariç). */
   targets: { batchId: string; batchNumber: string }[];
 }
 
 /**
- * K8 süpervizör düzeltme — SEVKSİZ partiden seçili topları:
+ * K8 süpervizör düzeltme — partiden seçili topları:
  *  • Yeni partiye AYIR (splitBatch, redye DEĞİL — saf idari bölme; TÜM toplar seçilemez), veya
- *  • Başka sevksiz partiye TAŞI (moveRolls).
+ *  • Başka partiye TAŞI (moveRolls).
+ * K14 ile kilitli (fasonda) partide de çalışır — açık sevk kalemleri hedefe
+ * taşınır/bölünür (K16); aynı adımda farklı firma çakışmasını backend 409'lar.
  * Redye "Ayır"dan ayrıdır (o üretim aksiyonu; bu düzeltme). Toplar getSplitPreview'den.
  */
-export function BatchCorrectModal({ open, onOpenChange, workOrderId, source, targets }: Props) {
+export function BatchCorrectModal({
+  open,
+  onOpenChange,
+  workOrderId,
+  source,
+  sourceLocked,
+  targets,
+}: Props) {
   const qc = useQueryClient();
   const batchId = source?.batchId ?? "";
   const [mode, setMode] = useState<Mode>("split");
@@ -115,11 +127,21 @@ export function BatchCorrectModal({ open, onOpenChange, workOrderId, source, tar
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Parti Düzelt — {source?.batchNumber}</DialogTitle>
           <DialogDescription>
-            Sevksiz partiden top seç; yeni partiye ayır ya da başka partiye taşı.
+            Partiden top seç; yeni partiye ayır ya da başka partiye taşı.
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+          {/* K16: kilitli partide sevk cerrahisi notu — her iki modda kalıcı. Başlık
+              kilit-nötr: kilit zombi-sevk durumunu da kapsar (mal fiziken fasonda
+              olmayabilir ama açık sevk kaydı outstanding'dir). */}
+          {sourceLocked && (
+            <Callout tone="warning" title="Partinin açık fason sevki var">
+              Taşınan topların sevk kalemleri de hedef partiye taşınır/bölünür; irsaliye kaydı
+              güncellenir.
+            </Callout>
+          )}
+
           {/* Mod seçici */}
           <div className="grid grid-cols-2 gap-2">
             <ModeButton
@@ -143,7 +165,7 @@ export function BatchCorrectModal({ open, onOpenChange, workOrderId, source, tar
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Hedef parti</label>
               {targets.length === 0 ? (
                 <div className="rounded-md border border-dashed p-2 text-center text-xs italic text-muted-foreground">
-                  Taşınacak başka sevksiz parti yok.
+                  Taşınacak başka parti yok.
                 </div>
               ) : (
                 <select

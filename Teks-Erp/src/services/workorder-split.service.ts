@@ -22,6 +22,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { createBatchTx, deleteIfEmptyAndTraceless } from "./batch.service";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
@@ -248,11 +249,14 @@ export class WorkOrderSplitService {
   }
 
   /**
-   * Tam-parti ayırma sonrası BOŞALAN kaynak WO'yu iptal eder (B1): hiç canlı top
-   * kalmadıysa ve WO hâlâ açıksa (PLANNED/IN_PROGRESS) → CANCELLED + kart VOIDED.
-   * COMPLETED WO'ya (depo-tebdilinde kalan depo topları) DOKUNMAZ. Döner: iptal edildi mi.
+   * Tam-parti ayırma sonrası BOŞALAN kaynak WO'yu DEVREDER (B1): hiç canlı top
+   * kalmadıysa ve WO hâlâ açıksa (PLANNED/IN_PROGRESS) → SUPERSEDED + kart VOIDED.
+   * CANCELLED DEĞİL — veri kaybı yok, tüm malzeme yeni (devam) iş emrine taşındı
+   * (WorkOrder.splitFromId ile bağlı). "İptal" yanıltıcı olurdu; SUPERSEDED terminal
+   * ama rapor/filtrede iptalle karışmaz. COMPLETED WO'ya (depo-tebdilinde kalan depo
+   * topları) DOKUNMAZ. Döner: devredildi mi.
    */
-  private async cancelEmptiedSourceWorkOrderTx(
+  private async supersedeEmptiedSourceWorkOrderTx(
     tx: Prisma.TransactionClient,
     workOrderId: string,
   ): Promise<boolean> {
@@ -272,7 +276,7 @@ export class WorkOrderSplitService {
     if (liveRolls > 0) return false;
     const res = await tx.workOrder.updateMany({
       where: { id: workOrderId, status: { in: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS] } },
-      data: { status: WorkOrderStatus.CANCELLED },
+      data: { status: WorkOrderStatus.SUPERSEDED },
     });
     if (res.count === 0) return false;
     await setWorkOrderCardStatuses(
@@ -505,7 +509,7 @@ export class WorkOrderSplitService {
         const sourceDeleted = await deleteIfEmptyAndTraceless(tx, ctx.batchId);
 
         // 9) Kaynak WO tümüyle boşaldıysa (tam-parti ayırma) iptal et (B1 — zombi WO).
-        const sourceWorkOrderCancelled = await this.cancelEmptiedSourceWorkOrderTx(tx, ctx.workOrderId);
+        const sourceWorkOrderCancelled = await this.supersedeEmptiedSourceWorkOrderTx(tx, ctx.workOrderId);
 
         return { newWo, newBatch: created.batch, sourceDeleted, sourceWorkOrderCancelled };
       }),
@@ -587,9 +591,26 @@ export class WorkOrderSplitService {
 
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
+        // KAYNAK WO KİLİDİ (kilit tazeliği simetrisi): dispatch/receive/K8 araçları
+        // (moveRolls/splitBatch/mergeBatches) aynı WO satırını kilitler — aşağıdaki
+        // açık-sevk okuması + parti/sevk taşıma onlarla serileşsin (eşzamanlı
+        // dispatch/merge'in commit'i görülsün). Yeni WO satırı zaten bu tx İÇİNDE
+        // doğuyor (cloneWorkOrderTx) — onun için ayrıca kilit gerekmez.
+        await touchWorkOrderTx(tx, ctx.workOrderId);
+        // stepId scope + outstanding koşulu ŞART (K15 retarget başka adımların
+        // dönmüş sevklerini partiye taşıyabilir — findFirst rastgele tarihçe sevki
+        // seçmesin): taşınacak sevk, TAM bu fason adımının hâlâ dönmemiş kalemi
+        // olan açık sevkidir; en güncel açık sevk seçilir (dispatchedAt desc).
         const openDispatch = await tx.subcontractorDispatch.findFirst({
-          where: { batchId: ctx.batchId, cancelledAt: null, directShippedAt: null },
+          where: {
+            batchId: ctx.batchId,
+            stepId: atSubStep.id,
+            cancelledAt: null,
+            directShippedAt: null,
+            items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+          },
           select: { id: true, dispatchNo: true },
+          orderBy: { dispatchedAt: "desc" },
         });
         if (!openDispatch) throw AppError.conflict("Bu partinin açık fason sevki yok — taşıma yapılamaz.");
 
@@ -637,7 +658,7 @@ export class WorkOrderSplitService {
         await recomputeStepStatus(tx, newReEntryStepId);
 
         // 6) Kaynak WO tümüyle boşaldıysa (tüm parti taşındı) iptal et (B1 — zombi WO).
-        const sourceWorkOrderCancelled = await this.cancelEmptiedSourceWorkOrderTx(tx, ctx.workOrderId);
+        const sourceWorkOrderCancelled = await this.supersedeEmptiedSourceWorkOrderTx(tx, ctx.workOrderId);
 
         return { newWo, dispatchNo: openDispatch.dispatchNo, sourceWorkOrderCancelled };
       }),

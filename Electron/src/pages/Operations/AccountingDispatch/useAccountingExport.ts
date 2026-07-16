@@ -75,7 +75,12 @@ export function useAccountingExport() {
         const row = rows[i];
         if (!row) continue;
         try {
-          const report = (await accountingDispatchService.getReport(row.id)).data;
+          // DIRECT satır → fasondan sevk fişi ucu (çuval sevkiyatı ucu 404 verir).
+          const report = (
+            row.kind === "DIRECT"
+              ? await accountingDispatchService.getDirectReport(row.id)
+              : await accountingDispatchService.getReport(row.id)
+          ).data;
           if (report) {
             const blob = await buildWorkbook(buildDispatchReportSheets(report));
             downloadWorkbook(blob, `Sevk_Fisi_${report.header.shipmentNo}`);

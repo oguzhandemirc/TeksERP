@@ -228,6 +228,8 @@ export class WorkOrderController {
     this.getManifestById = this.getManifestById.bind(this);
     this.cancelImpact = this.cancelImpact.bind(this);
     this.softDelete = this.softDelete.bind(this);
+    this.completePreview = this.completePreview.bind(this);
+    this.completeWorkOrder = this.completeWorkOrder.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.getTargetPropertiesImpact = this.getTargetPropertiesImpact.bind(this);
     this.updateTargetProperties = this.updateTargetProperties.bind(this);
@@ -594,6 +596,35 @@ export class WorkOrderController {
   async softDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.softDelete(
+        req.params.id as string,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/complete-preview
+   * Manuel kapatma önizleme: atlanacak adımlar + engelleyen in-flight top (read-only).
+   */
+  async completePreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getCompletePreview(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/work-orders/:id/complete
+   * Manuel kapatma: IN_PROGRESS WO'yu COMPLETED'a çeker (WIP yoksa).
+   */
+  async completeWorkOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.completeWorkOrder(
         req.params.id as string,
         req.user?.userId
       );

@@ -43,6 +43,91 @@ async function nextCustomerCode(): Promise<string> {
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
+// =============================================================================
+// İç-içe (inline) şube oluşturma — create body'sinde opsiyonel `branches[]`
+// =============================================================================
+// Müşteri + sevk noktaları TEK istekte, TEK transaction'da doğar (Prisma
+// nested-create; order+lines emsali). "Önce müşteriyi kaydet, sonra şube ekle"
+// iki-adımlı akışını profesyonel tek adıma indirir.
+
+/** Tek create'te izin verilen azami inline şube sayısı (kötüye kullanım seddi). */
+const MAX_INLINE_BRANCHES = 50;
+
+/** Prisma nested-create'e verilecek beyaz-listeli CustomerBranch skaler şekli. */
+interface InlineBranchData {
+  code: string | null;
+  name: string;
+  address: string | null;
+  city: string | null;
+  district: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  notes: string | null;
+  isActive: boolean;
+}
+
+/** Opsiyonel string alanı: boş/whitespace → null, uzunluk aşımı → 400 (1-tabanlı satır no'lu). */
+function optBranchStr(raw: unknown, label: string, max: number, idx: number): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string") {
+    throw AppError.badRequest(`${idx + 1}. şube: ${label} metin olmalı`);
+  }
+  const t = raw.trim();
+  if (t === "") return null;
+  if (t.length > max) {
+    throw AppError.badRequest(`${idx + 1}. şube: ${label} en fazla ${max} karakter olabilir`);
+  }
+  return t;
+}
+
+/**
+ * Müşteri create body'sindeki opsiyonel `branches` alanını doğrular + şekillendirir:
+ *   - yok/null/boş dizi → undefined (nested-create hiç gönderilmez);
+ *   - dizi değilse veya bir satır bozuksa → 400 (Türkçe, 1-tabanlı satır no'lu);
+ *   - her satır CustomerBranch skaler alanlarına indirgenir (MASS-ASSIGNMENT YOK —
+ *     yalnız beyaz-listeli alanlar geçer; `customerId` ilişkiden gelir, `id`/tarih
+ *     sistem alanları asla istemciden yazılmaz).
+ * Sınırlar customer-branch.routes.ts createSchema ile birebir (tek-adım / iki-adım
+ * şube ekleme aynı validasyonu görsün).
+ */
+function validateAndShapeBranches(raw: unknown): InlineBranchData[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) {
+    throw AppError.badRequest("Şubeler geçersiz (dizi bekleniyor)");
+  }
+  if (raw.length === 0) return undefined;
+  if (raw.length > MAX_INLINE_BRANCHES) {
+    throw AppError.badRequest(`Tek seferde en fazla ${MAX_INLINE_BRANCHES} şube eklenebilir`);
+  }
+  return raw.map((entry, idx): InlineBranchData => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw AppError.badRequest(`${idx + 1}. şube: geçersiz kayıt`);
+    }
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.name !== "string" || rec.name.trim() === "") {
+      throw AppError.badRequest(`${idx + 1}. şube: Şube adı zorunlu`);
+    }
+    const name = rec.name.trim();
+    // Sınırlar DB kolonlarıyla birebir (CustomerBranch.name VARCHAR(100) /
+    // code VARCHAR(50)) — aşan girdi Postgres P2000 (jenerik 400) yerine
+    // burada net, alan-adlı Türkçe 400 alsın; ayrıca atomik create'i boşa düşürmesin.
+    if (name.length > 100) {
+      throw AppError.badRequest(`${idx + 1}. şube: Şube adı en fazla 100 karakter olabilir`);
+    }
+    return {
+      code: optBranchStr(rec.code, "Kod", 50, idx),
+      name,
+      address: optBranchStr(rec.address, "Adres", 500, idx),
+      city: optBranchStr(rec.city, "Şehir", 80, idx),
+      district: optBranchStr(rec.district, "İlçe", 80, idx),
+      contactName: optBranchStr(rec.contactName, "İletişim kişisi", 120, idx),
+      contactPhone: optBranchStr(rec.contactPhone, "Telefon", 40, idx),
+      notes: optBranchStr(rec.notes, "Notlar", 500, idx),
+      isActive: rec.isActive === undefined ? true : Boolean(rec.isActive),
+    };
+  });
+}
+
 export class CustomerService extends BaseService {
   constructor(config: BaseServiceConfig) {
     super(config);
@@ -94,6 +179,12 @@ export class CustomerService extends BaseService {
     // Müşteriler sayfası + sipariş içi hızlı ekleme — aynı formatı alsın).
     // Eşzamanlı iki create aynı sıra no'yu okuyup INSERT'te @unique çakışırsa
     // (P2002) withBarcodeRetry taze sıra no ile yeniden dener.
+    //
+    // Opsiyonel inline şubeler: doğrulama+şekillendirme retry DIŞINDA bir kez
+    // (idempotent, yan etkisiz). Şekillenmiş dizi retry içinde `data.branches`'e
+    // yazılır → super.create sanitize'ı korur (config.nestedCreateFields) ve
+    // BaseService onu `{ create: [...] }`'e sarıp müşteriyle ATOMİK nested-create eder.
+    const branches = validateAndShapeBranches(data.branches);
     return withBarcodeRetry(async () => {
       data.code = await nextCustomerCode();
       this.applyStringFields(data, true);
@@ -101,6 +192,8 @@ export class CustomerService extends BaseService {
       if (validated !== undefined) {
         data.taxNumber = validated;
       }
+      if (branches) data.branches = branches;
+      else delete data.branches;
       return super.create(data, userId);
     });
   }
@@ -110,6 +203,10 @@ export class CustomerService extends BaseService {
     data: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // `branches` yalnız create'e özel iç-içe alandır (nestedCreateFields). Update
+    // gövdesinde gelirse (beklenmez — UI şubeleri ayrı uçlardan yönetir) sessizce
+    // düş: BaseService.update nested-wrap YAPMAZ, ham dizi Prisma update'i bozardı.
+    if ("branches" in data) delete data.branches;
     this.applyStringFields(data, false);
     const validated = this.validateTaxNumber(data.taxNumber);
     if (validated !== undefined) {

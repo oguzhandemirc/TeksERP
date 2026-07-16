@@ -13,6 +13,7 @@ const report: DispatchReport = {
     customerName: "X MÜŞTERİ",
     customerCode: "C1",
     branchName: null,
+    branchCode: null,
     procedureCode: null,
     destination: "DOMESTIC",
     status: "DISPATCHED",
@@ -37,6 +38,7 @@ const data: AccountingExportData = {
       customerName: "X",
       taxNumber: "123",
       branchName: "",
+      branchCode: "",
       destination: "EXPORT",
       procedureCode: "",
       plateNumber: "",
@@ -96,6 +98,45 @@ describe("buildDispatchReportSheets — tek sevk fişi (3 sayfa)", () => {
     expect(ceki.rows).toHaveLength(2);
     expect(ceki.columns.map((c) => c.key)).toEqual(["sackCode", "barcode", "desen", "varyant", "meters", "kg"]);
     expect(ceki.totalRow).toBeUndefined();
+  });
+});
+
+// Fasondan doğrudan sevk fişi — backend getDirectShipmentDispatchReport ile aynı şekil:
+// çuval YOK (sacks:[]), kg 0, çeki satırları top-başına (sackCode "—").
+const directReport: DispatchReport = {
+  header: {
+    shipmentNo: "DSK-1",
+    customerName: "FASON MÜŞTERİ",
+    customerCode: "C2",
+    branchName: null,
+    branchCode: null,
+    procedureCode: null,
+    destination: "DOMESTIC",
+    status: "DISPATCHED",
+    date: "2026-06-28T00:00:00.000Z",
+  },
+  products: [{ name: "PATOS LACIVERT 250cm.", rollCount: 2, totalMeters: 250 }],
+  sacks: [],
+  cekiRows: [
+    { rollId: "r1", sackCode: "—", barcode: "B1", desen: "PATOS", varyant: "LACIVERT", meters: 100, kg: 0 },
+    { rollId: "r2", sackCode: "—", barcode: "B2", desen: "PATOS", varyant: "LACIVERT", meters: 150, kg: 0 },
+  ],
+  totals: { totalRolls: 2, totalMeters: 250, totalKg: 0, sackCount: 0 },
+};
+
+describe("buildDispatchReportSheets — fasondan doğrudan sevk (çuval yok)", () => {
+  const sheets = buildDispatchReportSheets(directReport);
+
+  it("yine 3 sayfa üretir; Çuval sayfası boş", () => {
+    expect(sheets.map((s) => s.name)).toEqual(["Ürün Listesi", "Çuval Listesi", "Çeki Listesi"]);
+    expect(sheets[1]!.rows).toEqual([]);
+  });
+
+  it("Ürün + Çeki dolu, TOPLAM'lar 250m / 0 kg", () => {
+    expect(sheets[0]!.rows).toEqual(directReport.products);
+    expect(sheets[0]!.totalRow).toMatchObject({ rollCount: 2, totalMeters: 250 });
+    expect(sheets[1]!.totalRow).toMatchObject({ totalMeters: 250, totalKg: 0 });
+    expect(sheets[2]!.rows).toHaveLength(2);
   });
 });
 

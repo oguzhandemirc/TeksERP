@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Layers, Loader2, Lock, PackageOpen, RefreshCw, Scale, Trash2, UserRound, X } from "lucide-react";
+import { ArrowLeft, Layers, Loader2, Lock, PackageOpen, RefreshCw, Scale, Trash2, UserRound, UserRoundCog, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -12,6 +12,7 @@ import { WeighSackDialog } from "./WeighSackDialog";
 import { AddKartelaDialog } from "./AddKartelaDialog";
 import { DeleteSackDialog } from "./DeleteSackDialog";
 import { DistributeSackDialog } from "./DistributeSackDialog";
+import { ReassignCustomerDialog, type ReassignPatch } from "./ReassignCustomerDialog";
 import { SackContentsTable } from "./SackContentsTable";
 import type { EditorTarget } from "./types";
 
@@ -22,7 +23,15 @@ const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maxi
  * düzenlenebilir. Okut (ekle/taşı) · tart · kartela ekle · içeriği seç → depoya
  * çıkar / başka çuvala aktar (SackContentsTable) · çuvalı dağıt · sil.
  */
-export function SackEditorView({ target, onExit }: { target: EditorTarget; onExit: () => void }) {
+export function SackEditorView({
+  target,
+  onExit,
+  onReassigned,
+}: {
+  target: EditorTarget;
+  onExit: () => void;
+  onReassigned: (patch: ReassignPatch) => void;
+}) {
   const qc = useQueryClient();
   const contentsQ = useSackContents(target.sackId);
   const data = contentsQ.data?.data;
@@ -43,6 +52,7 @@ export function SackEditorView({ target, onExit }: { target: EditorTarget; onExi
   const [kartelaOpen, setKartelaOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [distributeOpen, setDistributeOpen] = useState(false);
+  const [reassignOpen, setReassignOpen] = useState(false);
 
   const removeSwatchMut = useMutation({
     mutationFn: (swatchId: string) => sackHubService.removeSwatchFromSack(swatchId),
@@ -68,6 +78,15 @@ export function SackEditorView({ target, onExit }: { target: EditorTarget; onExi
                 <Badge variant="outline" className="text-[10px] text-muted-foreground">Müşterisiz (genel stok)</Badge>
               )}
               {target.branchName && <Badge variant="secondary" className="text-[10px]">{target.branchName}</Badge>}
+              {target.branchCode && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-amber-500/40 font-mono text-[10px] text-amber-600"
+                  title="Şube kodu — ihracatta kullanılır"
+                >
+                  Şube Kodu: {target.branchCode}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {rolls.length} top · {fmtM(totalQty)} m
@@ -82,6 +101,9 @@ export function SackEditorView({ target, onExit }: { target: EditorTarget; onExi
           </Button>
           {!locked && (
             <>
+              <Button variant="outline" size="sm" onClick={() => setReassignOpen(true)}>
+                <UserRoundCog className="mr-1 h-4 w-4" /> Müşteri
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setKartelaOpen(true)}>
                 <Layers className="mr-1 h-4 w-4" /> Kartela
               </Button>
@@ -173,6 +195,14 @@ export function SackEditorView({ target, onExit }: { target: EditorTarget; onExi
         onDistributed={(deleted) => {
           if (deleted) onExit();
         }}
+      />
+      <ReassignCustomerDialog
+        open={reassignOpen}
+        onOpenChange={setReassignOpen}
+        sackId={target.sackId}
+        initialCustomerId={target.customerId}
+        initialBranchId={target.branchId}
+        onReassigned={onReassigned}
       />
     </div>
   );

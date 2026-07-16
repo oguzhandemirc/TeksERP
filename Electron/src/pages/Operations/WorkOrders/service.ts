@@ -27,6 +27,18 @@ export const workOrderService = {
       .get<ApiResponse<WorkOrderCancelImpact>>(`/api/work-orders/${id}/cancel-impact`)
       .then((r) => r.data),
 
+  /** Manuel kapatma önizleme: atlanacak adımlar + engelleyen in-flight toplar. */
+  getCompletePreview: (id: string) =>
+    apiClient
+      .get<ApiResponse<WorkOrderCompletePreview>>(`/api/work-orders/${id}/complete-preview`)
+      .then((r) => r.data),
+
+  /** İş emrini manuel kapat (IN_PROGRESS → COMPLETED, WIP yoksa). */
+  complete: (id: string) =>
+    apiClient
+      .post<ApiResponse<WorkOrder>>(`/api/work-orders/${id}/complete`)
+      .then((r) => r.data),
+
   /** Frontend uyarısı için: değişiklik kaç rulo etkiler? */
   getTargetPropertiesImpact: (id: string) =>
     apiClient
@@ -145,7 +157,8 @@ export const workOrderService = {
       .post<ApiResponse<SplitBranchResult>>(`/api/work-orders/${id}/split`, payload)
       .then((r) => r.data),
 
-  /** K8: Sevksiz partiden seçili topları başka bir sevksiz partiye taşı (aynı WO). */
+  /** K8/K16: Seçili topları başka partiye taşı (aynı WO) — kilitli (fasondaki)
+   *  partide de çalışır; açık sevk kalemleri hedef partiyi izler (sevk cerrahisi). */
   moveRolls: (rollIds: string[], toBatchId: string) =>
     apiClient
       .post<
@@ -153,7 +166,8 @@ export const workOrderService = {
       >("/api/batches/move-rolls", { rollIds, toBatchId })
       .then((r) => r.data),
 
-  /** K8: Sevksiz partiden seçili topları YENİ partiye ayır (redye DEĞİL — saf idari bölme). */
+  /** K8/K16: Seçili topları YENİ partiye ayır (redye DEĞİL — saf idari bölme) —
+   *  kilitli partide de çalışır; kısmi bölmede yeni sevk kaydı doğar (K16). */
   splitBatchRolls: (batchId: string, rollIds: string[]) =>
     apiClient
       .post<ApiResponse<{ newBatchId: string; newBatchNumber: string }>>(
@@ -162,7 +176,9 @@ export const workOrderService = {
       )
       .then((r) => r.data),
 
-  /** K8: Sevksiz partileri birleştir — en eski parti no yaşar (survivor). */
+  /** K8/K15: Partileri birleştir — en eski parti no yaşar (survivor). Kilitli
+   *  (fasondaki) partiler de birleşir: sevk kayıtları survivor'a taşınır, aynı
+   *  (adım, firma) açık sevkleri tek kayıtta birleşir; aynı adımda FARKLI firma → 409. */
   mergeBatches: (batchIds: string[]) =>
     apiClient
       .post<
@@ -502,6 +518,8 @@ export interface BatchLaneDispatch {
   stepName: string | null;
   /** Adım sırası (rota) — belge modalında Zımpara→Boyahane gruplarını sıralamak için. */
   stepSequence: number;
+  /** Firma kimliği — K15 onay-listesi gruplaması ad değil kimlik üzerinden yapılır. */
+  subcontractorId: string;
   subcontractorName: string;
   dispatchedAt: string;
   totalQty: number;
@@ -542,8 +560,8 @@ export interface BatchLaneRoll {
 
 /**
  * Bir parti lane'i = bir Batch. Üye topların şu anki konum dağılımı, aktif refakat
- * kartı, fason sevkleri (K10) ve soy bağı (splitFrom / splitChildren). Kilit
- * TÜRETİLMİŞ: iptal edilmemiş sevki olan parti kilitlidir (düzenlenemez).
+ * kartı, fason sevkleri (K10) ve soy bağı (splitFrom / splitChildren / mergedInto).
+ * Kilit TÜRETİLMİŞ (K14): mal fiilen dışarıdayken kilitli, dönünce açılır.
  */
 /** Partiye ait fasondan sevk (DSK) — Parti Geçmişi "Fasondan Sevkler" satırı. */
 export interface BatchDirectShipment {
@@ -560,7 +578,9 @@ export interface BatchLane {
   /** Parti kodu (P+GGAAYY+NNNN). */
   batchNumber: string;
   createdAt: string;
-  /** İptal edilmemiş fason sevki varsa parti kilitli (K8 araçları kapalı). */
+  /** K14: mal fiilen dışarıda — partide AT_SUBCONTRACTOR top VEYA outstanding
+   *  (OPEN/PARTIAL) açık sevk varsa kilitli; mal dönünce kendiliğinden açılır.
+   *  Merge/split/move artık kilitli partide de çalışır (K15/K16 belge cerrahisi). */
   locked: boolean;
   /** Topları bir fason adımında ÜRETİMDE ama sevk edilmemiş (redye geri-sarımı / ilk
    *  sevk öncesi) → sahadan Fason Sevk ile boyahaneye gönderilmeyi bekliyor. */
@@ -579,6 +599,9 @@ export interface BatchLane {
   splitFrom: BatchLineageRef | null;
   /** Aynı WO içinde bu partiden ayrılan partiler (redye). */
   splitChildren: BatchLineageRef[];
+  /** K17 soy bağı: bu parti birleştirmeyle kapandıysa hedef (survivor) parti —
+   *  lane'de "→ P… altına birleşti" rozeti; dolu ise rollCount=0 tarihçe satırıdır. */
+  mergedInto: BatchLineageRef | null;
 }
 
 /** Bir operasyon türünün adım özetindeki toplu görünümü (RollOperation). */
@@ -710,6 +733,21 @@ export interface WorkOrderCancelImpact {
   processedCount: number;
   atSubcontractorCount: number;
   rolls: CancelImpactRoll[];
+}
+
+/** Manuel kapatma önizleme payload'ı — atlanacak adımlar + engelleyen in-flight top. */
+export interface WorkOrderCompletePreview {
+  workOrderId: string;
+  workOrderNumber: string;
+  status: string;
+  canComplete: boolean;
+  blockReason: string | null;
+  remainingSteps: { stepId: string; stationName: string; stepSequence: number }[];
+  inFlight: {
+    count: number;
+    totalMeters: number;
+    byStep: { stationName: string; count: number; meters: number }[];
+  };
 }
 
 /** Donmuş fason sevk irsaliyesindeki tek top satırı (PrintedDocument.doc.rolls). */

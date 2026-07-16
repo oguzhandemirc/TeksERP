@@ -1,8 +1,9 @@
 import { z } from "zod";
 
+// Uzunluk sınırları DB kolonlarıyla birebir: name VARCHAR(100) / code VARCHAR(50).
 export const branchFormSchema = z.object({
-  code: z.string().max(60).optional().or(z.literal("")),
-  name: z.string().min(1, "Şube adı zorunlu").max(120),
+  code: z.string().max(50).optional().or(z.literal("")),
+  name: z.string().min(1, "Şube adı zorunlu").max(100),
   address: z.string().max(500).optional().or(z.literal("")),
   city: z.string().max(80).optional().or(z.literal("")),
   district: z.string().max(80).optional().or(z.literal("")),

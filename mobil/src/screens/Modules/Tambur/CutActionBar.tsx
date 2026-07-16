@@ -43,7 +43,8 @@ import {
 const PURPLE = moduleAccents.Tambur.tint; // #7c3aed
 const RIPPLE_ON_PURPLE = 'rgba(255,255,255,0.26)';
 const RIPPLE_ON_LIGHT = 'rgba(124,58,237,0.16)';
-const BAR_HEIGHT = 60;
+const BAR_HEIGHT = 60; // telefon
+const BAR_HEIGHT_TABLET = 80; // tablet — daha büyük dokunma hedefi (Kes/Kartela)
 
 interface Props {
   compact: boolean;
@@ -121,7 +122,16 @@ function KartelaToggle({
   }));
 
   return (
-    <Animated.View style={[styles.toggle, { width: compact ? 104 : 132 }, boxStyle]}>
+    <Animated.View
+      style={[
+        styles.toggle,
+        {
+          width: compact ? 104 : 132,
+          height: compact ? BAR_HEIGHT : BAR_HEIGHT_TABLET,
+        },
+        boxStyle,
+      ]}
+    >
       <TouchableRipple
         onPress={() => {
           Haptics.selectionAsync().catch(() => {});
@@ -204,7 +214,11 @@ function KesButton({
         disabled={blocked}
         borderless
         rippleColor={RIPPLE_ON_PURPLE}
-        style={[styles.kesInner, dimmed && styles.kesBlocked]}
+        style={[
+          styles.kesInner,
+          { height: compact ? BAR_HEIGHT : BAR_HEIGHT_TABLET },
+          dimmed && styles.kesBlocked,
+        ]}
         accessibilityRole="button"
         accessibilityState={{ disabled: blocked }}
         accessibilityLabel={loading ? 'Kesiliyor' : label}

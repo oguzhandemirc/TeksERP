@@ -12,9 +12,11 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 
 const service = new CustomerBranchService();
 
+// Uzunluk sınırları DB kolonlarıyla birebir: name VARCHAR(100) / code VARCHAR(50)
+// (aşan girdi P2000 → jenerik 400 yerine alan-adlı zod hatası alsın).
 const createSchema = z.object({
-  code: z.string().max(60).optional().nullable(),
-  name: z.string().min(1, "Şube adı zorunludur").max(120),
+  code: z.string().max(50).optional().nullable(),
+  name: z.string().min(1, "Şube adı zorunludur").max(100),
   address: z.string().max(500).optional().nullable(),
   city: z.string().max(80).optional().nullable(),
   district: z.string().max(80).optional().nullable(),

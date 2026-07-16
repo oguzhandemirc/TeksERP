@@ -12,6 +12,10 @@
 //   C) Entegrasyon — fason completion yarışı (subcon #4):
 //        Eşzamanlı receive(D1) + dispatch(D2 yeni parti) → WO COMPLETED ise adımda
 //        AT_SUBCONTRACTOR top KALMAMALI (mal fasonda + WO kapalı = stranded yasak).
+//   D) Entegrasyon — DSK shipmentNo yarışı + directShippedAt claim:
+//        Aynı dispatch'e çifte executeDirectShip → tek DirectShipment, top tek kez
+//        consumed; kaybeden zarif 409 (ya da tx-öncesi idempotent-cached) — P2002
+//        ('shipmentNo' unique) DIŞARI SIZMAZ (withBarcodeRetry tam-tx retry).
 //
 // Not: #1 (çuval re-parent guarded claim), #3 (relabel TOCTOU), çapraz-sevkiyat
 // markReady over-cover happy-path'leri mevcut sack/relabel/retarget suite'lerinde;
@@ -23,6 +27,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { touchOrderLinesTx } from "../src/services/helpers/order-status.helper";
 import { touchWorkOrderTx } from "../src/services/helpers/workorder-locks.helper";
+import { AppError } from "../src/utils/app-error";
 import { RollStatus } from "@prisma/client";
 
 let pass = 0, fail = 0;
@@ -120,17 +125,61 @@ async function testOverCoverageRace(): Promise<void> {
   const b = await makeWoBoya(); const rb = await stockRoll(80); const dB = await dispatchRoll(b.woId, b.stepId, rb);
 
   const results = await Promise.allSettled([
-    sub.executeDirectShip({ dispatchId: dA, reason: "race A", orderLineAllocations: [{ orderLineId: lineId, qty: 80 }] }, ADMIN),
-    sub.executeDirectShip({ dispatchId: dB, reason: "race B", orderLineAllocations: [{ orderLineId: lineId, qty: 80 }] }, ADMIN),
+    sub.executeDirectShip({ dispatchId: dA, reason: "race A", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: lineId, qty: 80 }] }, ADMIN),
+    sub.executeDirectShip({ dispatchId: dB, reason: "race B", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: lineId, qty: 80 }] }, ADMIN),
   ]);
   const fulfilled = results.filter((r) => r.status === "fulfilled").length;
   const rejected = results.filter((r) => r.status === "rejected").length;
   const line = await prisma.orderLine.findUnique({ where: { id: lineId }, select: { shippedQty: true, quantity: true } });
   const shipped = Number(line?.shippedQty);
 
-  check("over-cover: tam BİRİ kazandı (diğeri 409)", fulfilled === 1 && rejected === 1, `fulfilled=${fulfilled} rejected=${rejected}`);
+  check("over-cover: tam BİRİ kazandı (diğeri reddedildi)", fulfilled === 1 && rejected === 1, `fulfilled=${fulfilled} rejected=${rejected}`);
+  // Kaybeden sözleşmesi: ZARİF 409 (AppError) — DSK shipmentNo yarışının P2002'si
+  // dışarı SIZMAMALI (withBarcodeRetry tx'i baştan dener, kaybeden tx-içi atomik
+  // guard'lardan birine — burada satır-kilidi altındaki cap'e — takılır).
+  const loser = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+  const loserErr: unknown = loser?.reason;
+  const loserDesc = loserErr instanceof Error ? `${loserErr.constructor.name}(${(loserErr as AppError).statusCode ?? "-"}): ${loserErr.message}` : String(loserErr);
+  check("over-cover: kaybeden zarif 409 aldı (P2002 sızmadı)", loserErr instanceof AppError && loserErr.statusCode === 409, loserDesc);
+  const winner = results.find((r) => r.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof sub.executeDirectShip>>> | undefined;
+  const winnerNo = (winner?.value.data as { directShipmentNo?: string } | undefined)?.directShipmentNo;
+  check("over-cover: kazanan DSK'lı DirectShipment üretti", typeof winnerNo === "string" && winnerNo.startsWith("DSK"), `directShipmentNo=${winnerNo}`);
   check("over-cover: shippedQty quantity'yi AŞMADI (≤100)", shipped <= 100, `shippedQty=${shipped}`);
   check("over-cover: kazanan tam 80 yazdı", shipped === 80, `shippedQty=${shipped}`);
+}
+
+// ── D) Entegrasyon: DSK shipmentNo yarışı — aynı dispatch çifte-ateş ─────────
+async function testShipmentNoRace(): Promise<void> {
+  console.log("\n=== D) directShip çifte-ateş: aynı dispatch, tek DSK + kaybeden 409/idempotent ===");
+  const { woId, stepId } = await makeWoBoya();
+  const rollId = await stockRoll(50);
+  const dId = await dispatchRoll(woId, stepId, rollId);
+
+  const results = await Promise.allSettled([
+    sub.executeDirectShip({ dispatchId: dId, reason: "çifte-ateş 1", customerId: CUSTOMER }, ADMIN),
+    sub.executeDirectShip({ dispatchId: dId, reason: "çifte-ateş 2", customerId: CUSTOMER }, ADMIN),
+  ]);
+  // Kaybeden sözleşmesi: ya tx-içi atomik claim'e (directShippedAt / AT_SUBCONTRACTOR
+  // count) takılıp zarif 409, ya da tx-öncesi idempotency yolundan cached başarı
+  // (alreadyDirectShipped) — ama ASLA P2002/çift sevk değil.
+  const realWins = results.filter(
+    (r) => r.status === "fulfilled" && !(r.value.data as { alreadyDirectShipped?: boolean }).alreadyDirectShipped,
+  ).length;
+  const gracefulLosses = results.filter(
+    (r) =>
+      (r.status === "rejected" && r.reason instanceof AppError && r.reason.statusCode === 409) ||
+      (r.status === "fulfilled" && (r.value.data as { alreadyDirectShipped?: boolean }).alreadyDirectShipped === true),
+  ).length;
+  const descs = results.map((r) => (r.status === "rejected" ? `rejected(${r.reason instanceof AppError ? r.reason.statusCode : r.reason?.constructor?.name})` : "fulfilled")).join(", ");
+  check("çifte-ateş: tam BİRİ gerçek sevk yaptı", realWins === 1, descs);
+  check("çifte-ateş: kaybeden zarif (409 veya idempotent-cached)", gracefulLosses === 1, descs);
+
+  const shipCount = await prisma.directShipment.count({ where: { dispatchId: dId } });
+  check("çifte-ateş: dispatch için TEK DirectShipment", shipCount === 1, `count=${shipCount}`);
+  const roll = await prisma.roll.findUnique({ where: { id: rollId }, select: { status: true } });
+  check("çifte-ateş: top tek kez SUBCONTRACTOR_CONSUMED", roll?.status === RollStatus.SUBCONTRACTOR_CONSUMED, `status=${roll?.status}`);
+  const disp = await prisma.subcontractorDispatch.findUnique({ where: { id: dId }, select: { directShippedAt: true } });
+  check("çifte-ateş: directShippedAt claim'i set", disp?.directShippedAt != null);
 }
 
 // ── C) Entegrasyon: fason completion yarışı (receive vs dispatch) ────────────
@@ -168,6 +217,11 @@ async function cleanup(): Promise<void> {
   const stepIdSet = steps.map((s) => s.id);
   const dispatches = await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
   const dispatchIds = dispatches.map((d) => d.id);
+  // DirectShipment söküm sırası: alloc (directShipmentId FK) sil → roll FK'sını
+  // boşalt → DirectShipment sil → ANCAK ONDAN SONRA dispatch silinebilir
+  // (DirectShipment.dispatch onDelete: Restrict).
+  const directShipments = await prisma.directShipment.findMany({ where: { dispatchId: { in: dispatchIds } }, select: { id: true } });
+  const directShipmentIds = directShipments.map((s) => s.id);
   const receipts = await prisma.subcontractorReceipt.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
   const receiptIds = receipts.map((r) => r.id);
   // Toplar: TST-RACE- barkodlular + adıma bağlılar + adımda üretilenler + receipt'ten doğanlar.
@@ -189,12 +243,14 @@ async function cleanup(): Promise<void> {
   await prisma.rollOperation.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { workOrderStepId: { in: stepIdSet } }] } });
   await prisma.rollMovement.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { workOrderStepId: { in: stepIdSet } }] } });
   await prisma.subcontractorDirectShipAllocation.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
+  await prisma.roll.updateMany({ where: { directShipmentId: { in: directShipmentIds } }, data: { directShipmentId: null } });
+  await prisma.directShipment.deleteMany({ where: { id: { in: directShipmentIds } } });
   await prisma.subcontractorReceiptItem.deleteMany({ where: { OR: [{ receiptId: { in: receiptIds } }, { newRollId: { in: rollIds } }] } });
   await prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: receiptIds } } });
   await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: receiptIds } } });
   await prisma.subcontractorDispatchItem.deleteMany({ where: { OR: [{ dispatchId: { in: dispatchIds } }, { rollId: { in: rollIds } }] } });
   await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
-  await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...dispatchIds, ...woIds] } } });
+  await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...dispatchIds, ...woIds, ...directShipmentIds] } } });
   const cardRows = await prisma.travelerCard.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
   const cardIds = cardRows.map((c) => c.id);
   await prisma.travelerCardScan.deleteMany({ where: { cardId: { in: cardIds } } });
@@ -212,6 +268,7 @@ async function main(): Promise<void> {
   await resolveFixtures();
   try {
     await testOverCoverageRace();
+    await testShipmentNoRace();
     await testFasonCompletionRace();
   } finally {
     await cleanup();

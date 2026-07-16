@@ -6,12 +6,16 @@
 
 export interface DispatchListItem {
   id: string;
+  /** SHIPMENT = çuval sevkiyatı; DIRECT = fasondan doğrudan sevk (DirectShipment).
+   *  Birleşik liste iki tabloyu tek akışta döner (listShipments). Fiş/Excel akışları
+   *  bu ayrıma göre farklı uca gider. */
+  kind: "SHIPMENT" | "DIRECT";
   shipmentNo: string;
   status: string;
   dispatchedAt: string | null;
   createdAt: string;
   customer: { id: string; code?: string; name: string };
-  branch: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
   _count: { sacks: number; rolls: number; orders: number; returns: number };
 }
 
@@ -21,6 +25,8 @@ export interface DispatchReport {
     customerName: string;
     customerCode: string;
     branchName: string | null;
+    /** Müşteri şube kodu (ihracat) — belgede toggle'lı. */
+    branchCode: string | null;
     procedureCode: string | null;
     destination: "DOMESTIC" | "EXPORT";
     status: string;
@@ -60,6 +66,7 @@ export interface AccountingExportData {
     customerName: string;
     taxNumber: string;
     branchName: string;
+    branchCode: string;
     destination: "DOMESTIC" | "EXPORT";
     procedureCode: string;
     plateNumber: string;

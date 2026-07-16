@@ -562,6 +562,10 @@ router.get("/:id/rolls", verifyToken, requireAnyPermission("workorder:read", "mo
  */
 router.get("/:id/cancel-impact", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.cancelImpact);
 
+// Manuel kapatma (güvenli varyant): WIP yokken IN_PROGRESS WO'yu COMPLETED'a çeker.
+router.get("/:id/complete-preview", verifyToken, requirePermission("workorder:write"), controller.completePreview);
+router.post("/:id/complete", verifyToken, requirePermission("workorder:write"), controller.completeWorkOrder);
+
 router.delete("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.softDelete);
 
 /**

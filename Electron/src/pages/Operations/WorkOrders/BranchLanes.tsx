@@ -54,6 +54,7 @@ import { BatchCorrectModal } from "./BatchCorrectModal";
 import { ManualMoveModal } from "./ManualMoveModal";
 import { BatchTimeline, stripFason } from "./BatchTimeline";
 import { findBatchTransferContext, type BatchTransferContext } from "./batch-transfer";
+import { buildMergeConfirmDescription } from "./batch-merge-confirm";
 import { Wrench } from "lucide-react";
 import type { BatchLaneRoll } from "./service";
 import type { WorkOrderStepLite } from "./types";
@@ -69,9 +70,10 @@ const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> =
 /**
  * Parti lane'leri (Partiler paneli). Her lane = BAĞIMSIZ bir Batch (parti):
  * "N. Parti" başlığı + belirgin ayrım. Üye topların konumu, fason sevkleri (K10),
- * her sevkin belgesi (irsaliye) ve soy bağı görünür. Sevksiz partiler çoklu seçilip
- * BİRLEŞTİRİLEBİLİR (K8, en eski no yaşar). Refakat kartı iş emri başına olduğundan
- * lane'de tekrarlanmaz (başlıkta bir kez). Kilit türetilmiş (açık sevk = kilitli).
+ * her sevkin belgesi (irsaliye) ve soy bağı görünür. Dolu partiler çoklu seçilip
+ * BİRLEŞTİRİLEBİLİR (K8+K15, en eski no yaşar; açık sevkler survivor'a taşınır).
+ * Refakat kartı iş emri başına olduğundan lane'de tekrarlanmaz (başlıkta bir kez).
+ * Kilit türetilmiş (K14: mal fiilen dışarıda) — araçları artık KAPATMAZ, yalnız rozet.
  */
 export function BranchLanes({
   workOrderId,
@@ -106,9 +108,11 @@ export function BranchLanes({
     null,
   );
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
-  const [correctTarget, setCorrectTarget] = useState<{ batchId: string; batchNumber: string } | null>(
-    null,
-  );
+  const [correctTarget, setCorrectTarget] = useState<{
+    batchId: string;
+    batchNumber: string;
+    locked: boolean;
+  } | null>(null);
   const [moveTarget, setMoveTarget] = useState<{
     batchId: string;
     batchNumber: string;
@@ -129,17 +133,32 @@ export function BranchLanes({
   const emptyBatches = batches.filter((b) => b.rollCount === 0);
   const [showEmpty, setShowEmpty] = useState(false);
 
-  // K8 birleştirme: yalnız sevksiz (kilitsiz) partiler seçilebilir; ≥2 sevksiz varsa aktif.
-  const unlockedCount = batches.filter((b) => !b.locked).length;
-  const canSelect = unlockedCount >= 2;
-  const selectedBatches = batches.filter((b) => selected.has(b.batchId));
-  const survivor = selectedBatches[0]; // en eski (getBranches createdAt asc) — no yaşar
+  // K8+K15 birleştirme: kilit artık engel değil (açık sevkler survivor'a taşınır/birleşir,
+  // backend farklı-firma çakışmasını 409'lar) — ≥2 DOLU parti varsa seçim açık.
+  const canSelect = filledBatches.length >= 2;
+  // Bayat seçim budaması: eşzamanlı işlemle boşalan/birleşen parti seçimde takılı
+  // kalmasın (checkbox'ı kaybolduğundan tek tek kaldırılamaz hale geliyordu).
+  const validSelectable = useMemo(
+    () => new Set(filledBatches.map((b) => b.batchId)),
+    [filledBatches],
+  );
+  const prunedSelected = useMemo(
+    () => new Set([...selected].filter((id) => validSelectable.has(id))),
+    [selected, validSelectable],
+  );
+  const selectedBatches = batches.filter((b) => prunedSelected.has(b.batchId));
+  const survivor = selectedBatches[0]; // en eski (getBranches createdAt+id asc) — no yaşar
 
   const mergeMut = useMutation({
     mutationFn: (ids: string[]) => workOrderService.mergeBatches(ids),
     onSuccess: (res) => {
       toast.success(res.message ?? "Partiler birleştirildi");
       setSelected(new Set());
+    },
+    // onSettled: 409'da da lane'i tazele — çakışmaya yol açan bayat görünüm
+    // (başka kullanıcının yeni sevki/birleştirmesi) ekranda kalmasın; kullanıcı
+    // çakışan partiyi görerek seçimden çıkarabilsin (seçim bilinçli resetlenmez).
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
     },
@@ -176,13 +195,11 @@ export function BranchLanes({
       steps={steps}
       ordinal={ordinal}
       selectable={selectable}
-      selected={selected.has(b.batchId)}
+      selected={prunedSelected.has(b.batchId)}
       onToggleSelect={() => toggleSelect(b.batchId)}
       onTransferFason={(ctx) => setTransferTarget({ ...ctx, batchNumber: b.batchNumber })}
-      onCorrect={
-        b.locked
-          ? undefined
-          : () => setCorrectTarget({ batchId: b.batchId, batchNumber: b.batchNumber })
+      onCorrect={() =>
+        setCorrectTarget({ batchId: b.batchId, batchNumber: b.batchNumber, locked: b.locked })
       }
       onManualMove={() =>
         setMoveTarget({ batchId: b.batchId, batchNumber: b.batchNumber, rolls: b.rolls ?? [] })
@@ -213,12 +230,12 @@ export function BranchLanes({
     <div className="space-y-2.5">
       {splitFrom && <WorkOrderSplitFromNote splitFrom={splitFrom} />}
 
-      {/* Birleştirme aksiyon çubuğu — 2+ sevksiz parti seçilince */}
-      {selected.size >= 2 && (
+      {/* Birleştirme aksiyon çubuğu — 2+ parti seçilince (K15: kilitliler dahil) */}
+      {prunedSelected.size >= 2 && (
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs shadow-sm backdrop-blur">
           <GitMerge className="h-4 w-4 shrink-0 text-primary" />
           <span>
-            <strong>{selected.size} parti</strong> seçili — hepsi en eski parti{" "}
+            <strong>{prunedSelected.size} parti</strong> seçili — hepsi en eski parti{" "}
             <span className="font-mono font-medium">{survivor?.batchNumber}</span> altında
             birleşecek.
           </span>
@@ -240,7 +257,7 @@ export function BranchLanes({
         </div>
       )}
 
-      {filledBatches.map((b, i) => renderLane(b, i + 1, canSelect && !b.locked))}
+      {filledBatches.map((b, i) => renderLane(b, i + 1, canSelect))}
 
       {/* Boş partiler — varsayılan gizli, top kalmadığı için anlık görünümde işlevsiz.
           Geçmişleri kendi "Geçmiş & Sevkler" butonlarında erişilebilir kalır. */}
@@ -298,8 +315,11 @@ export function BranchLanes({
         onOpenChange={(o) => !o && setCorrectTarget(null)}
         workOrderId={workOrderId}
         source={correctTarget}
+        sourceLocked={correctTarget?.locked ?? false}
         targets={batches
-          .filter((b) => !b.locked && b.batchId !== correctTarget?.batchId)
+          // K14: kilitli parti de hedef olabilir (backend farklı-firma çakışmasını
+          // 409'lar) — ama birleşip kapanmış (mergedInto) tarihçe satırları olamaz.
+          .filter((b) => !b.mergedInto && b.batchId !== correctTarget?.batchId)
           .map((b) => ({ batchId: b.batchId, batchNumber: b.batchNumber }))}
       />
       <ManualMoveModal
@@ -327,12 +347,12 @@ export function BranchLanes({
         open={confirmMerge}
         onOpenChange={setConfirmMerge}
         title="Partileri birleştir"
-        description={`${selectedBatches.map((b) => b.batchNumber).join(", ")} → hepsi en eski parti ${survivor?.batchNumber ?? ""} altında tek partide birleşecek. İşlem geri alınamaz.`}
+        description={buildMergeConfirmDescription(selectedBatches)}
         confirmLabel="Birleştir"
         cancelLabel="Vazgeç"
         onConfirm={() => {
           setConfirmMerge(false);
-          mergeMut.mutate([...selected]);
+          mergeMut.mutate([...prunedSelected]);
         }}
       />
     </div>
@@ -362,8 +382,9 @@ function BatchLaneCard({
   selectable: boolean;
   selected: boolean;
   onToggleSelect: () => void;
-  /** Sevksiz partide K8 düzeltme (top taşı / yeni partiye böl). Kilitliyse undefined. */
-  onCorrect?: () => void;
+  /** K8 düzeltme (top taşı / yeni partiye böl) — K14: kilitli partide de açık
+   *  (K16 sevk kalemini böler/taşır). Birleşmiş lane'de menü zaten gizli. */
+  onCorrect: () => void;
   /** Süpervizör "Konumu Düzelt" — rotada ileri/geri manuel taşıma (parti/top bazında). */
   onManualMove: () => void;
   /** Tebdil sihirbazı — normal (ayır/yeniden boya) veya dispatchOnly (badge'den yalnız sevk). */
@@ -380,8 +401,8 @@ function BatchLaneCard({
   );
   // Mal ŞU AN fasonda mı = herhangi bir top FİZİKSEL olarak fasonda (AT_SUBCONTRACTOR).
   // "Konum" sütunuyla AYNI kaynaktan (topların gerçek statüsü) türetilir → pil ile konum
-  // asla çelişmez. NOT: backend `batch.locked` "iptal edilmemiş sevki VAR" = merge-kilidi;
-  // mal döndükten sonra da true kalır → "Sevkte" onu yanlış "konum" gibi gösteriyordu.
+  // asla çelişmez. NOT: `batch.locked` (K14) buna outstanding açık sevki de ekler
+  // (zombi-sevk kilidi) — "konum" rozeti için top statüsü daha doğru kaynak.
   const atFason = batch.rolls.some((r) => r.status === "AT_SUBCONTRACTOR");
   // "Sonraki Fasona Aktar" bağlamı — partinin fasondaki topları + sıradaki adım
   // fason ise dolu (batch-transfer.ts; FasonStepActions gating'iyle birebir).
@@ -434,6 +455,14 @@ function BatchLaneCard({
               {ordinal}. Parti
             </span>
             <span className="shrink-0 font-mono text-sm font-medium">{batch.batchNumber}</span>
+            {batch.mergedInto && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                title="Bu parti birleştirmeyle kapandı — topları ve sevkleri hedef partide (K17 tarihçe satırı)"
+              >
+                <GitMerge className="h-3 w-3" /> → {batch.mergedInto.batchNumber} altına birleşti
+              </span>
+            )}
             {atFason && (
               <span
                 className="inline-flex shrink-0 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
@@ -477,37 +506,39 @@ function BatchLaneCard({
                 <History className="mr-2 h-4 w-4" /> Geçmiş & Sevkler
                 {dispatches.length > 0 ? ` (${dispatches.length})` : ""}
               </DropdownMenuItem>
-              <PermissionGate permission="workorder:write">
-                <DropdownMenuSeparator />
-                {batch.awaitingFasonDispatch && (
-                  <DropdownMenuItem onClick={() => onTebdil({ dispatchOnly: true })}>
-                    <Truck className="mr-2 h-4 w-4" /> Fasona Sevk Et
+              {/* Birleşmiş kaynak parti (K17) salt tarihçe satırıdır — yazma
+                  aksiyonları gizli; Geçmiş & Sevkler (+ içindeki belgeler) kalır. */}
+              {!batch.mergedInto && (
+                <PermissionGate permission="workorder:write">
+                  <DropdownMenuSeparator />
+                  {batch.awaitingFasonDispatch && (
+                    <DropdownMenuItem onClick={() => onTebdil({ dispatchOnly: true })}>
+                      <Truck className="mr-2 h-4 w-4" /> Fasona Sevk Et
+                    </DropdownMenuItem>
+                  )}
+                  {transferCtx && (
+                    <DropdownMenuItem
+                      disabled={!transferCtx.nextPlanned}
+                      title={
+                        transferCtx.nextPlanned ? undefined : "Sonraki fason firması planlanmamış."
+                      }
+                      onClick={() => onTransferFason(transferCtx)}
+                    >
+                      <ArrowRightLeft className="mr-2 h-4 w-4" /> Sonraki Fasona Aktar →{" "}
+                      {stripFason(transferCtx.nextStationName)}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={onManualMove}>
+                    <MoveHorizontal className="mr-2 h-4 w-4" /> Konumu Düzelt
                   </DropdownMenuItem>
-                )}
-                {transferCtx && (
-                  <DropdownMenuItem
-                    disabled={!transferCtx.nextPlanned}
-                    title={
-                      transferCtx.nextPlanned ? undefined : "Sonraki fason firması planlanmamış."
-                    }
-                    onClick={() => onTransferFason(transferCtx)}
-                  >
-                    <ArrowRightLeft className="mr-2 h-4 w-4" /> Sonraki Fasona Aktar →{" "}
-                    {stripFason(transferCtx.nextStationName)}
+                  <DropdownMenuItem onClick={() => onTebdil()}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> Tebdil / Yeniden Boyat
                   </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={onManualMove}>
-                  <MoveHorizontal className="mr-2 h-4 w-4" /> Konumu Düzelt
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onTebdil()}>
-                  <RefreshCw className="mr-2 h-4 w-4" /> Tebdil / Yeniden Boyat
-                </DropdownMenuItem>
-                {onCorrect && (
                   <DropdownMenuItem onClick={onCorrect}>
                     <Wrench className="mr-2 h-4 w-4" /> Düzelt (top taşı / ayır)
                   </DropdownMenuItem>
-                )}
-              </PermissionGate>
+                </PermissionGate>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

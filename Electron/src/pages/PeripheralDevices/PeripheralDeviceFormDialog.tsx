@@ -10,6 +10,7 @@ import type { Machine } from "@/pages/Machines/types";
 import { stationService } from "@/pages/Stations/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { deviceService } from "@/pages/Devices/service";
+import { peripheralService } from "./service";
 import { PrinterSettingsFields } from "./PrinterSettingsFields";
 import {
   peripheralFormDefaults,
@@ -58,6 +59,16 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
     const machines = (st as unknown as { machines?: Array<{ isActive?: boolean }> }).machines ?? [];
     return st.isActive && machines.filter((m) => m.isActive !== false).length === 0;
   });
+
+  // Çapraz-kontrol için tüm cihazlar (aynı-MAC / çift-rol korkulukları). Donanım
+  // sayısı düşük → picker helper yeterli. Uyarılar leaf-callout'ta (useWatch) —
+  // liste değişse de yalnız ilgili kutu render olur.
+  const peripheralsQuery = useQuery({
+    queryKey: ["peripherals", "guard-list"],
+    queryFn: () => loadAllForPicker(peripheralService),
+    enabled: open,
+  });
+  const peripherals = peripheralsQuery.data?.data ?? [];
 
   const defaults: PeripheralFormValues = initial
     ? {
@@ -181,6 +192,12 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               );
             })()}
 
+            <SharedMacCallout
+              control={form.control}
+              peripherals={peripherals}
+              currentId={initial?.id}
+            />
+
             {/* Giriş cihazı (SCALE/METER) okuma protokolü */}
             {isInput && (
               <div className="rounded-md border bg-muted/20 p-3">
@@ -253,6 +270,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   {/* Perf: address/simulate aboneliği form kökünden leaf'e taşındı —
                       Adres yazarken tüm form değil yalnız bu uyarı re-render olur. */}
                   <SimWarnCallout control={form.control} />
+                  <RoleConflictCallout
+                    control={form.control}
+                    peripherals={peripherals}
+                    currentId={initial?.id}
+                  />
                 </div>
               </div>
             )}
@@ -355,5 +377,80 @@ function SimWarnCallout({ control }: { control: Control<PeripheralFormValues> })
         bittiyse kapatın.
       </Callout>
     </div>
+  );
+}
+
+/**
+ * Aynı makinede AYNI rol (2-KAT/4-KAT/PRIMARY) iki METRE/kantar cihazında
+ * tanımlıysa uyar: mobil `meterPeripheralFor` kata göre okurken aynı rolden yalnız
+ * İLKİNİ seçer → belirsiz/yanlış cihaz okunur. Leaf useWatch — rol/makine/tür/sahip
+ * değişince yalnız bu kutu render olur.
+ */
+function RoleConflictCallout({
+  control,
+  peripherals,
+  currentId,
+}: {
+  control: Control<PeripheralFormValues>;
+  peripherals: PeripheralDevice[];
+  currentId?: string;
+}) {
+  const [owner, machineId, role, kind] = useWatch({
+    control,
+    name: ["owner", "machineId", "role", "kind"],
+  });
+  const isInput = kind === "SCALE" || kind === "METER";
+  const want = (role ?? "").trim();
+  if (!isInput || owner !== "machine" || !machineId || !want) return null;
+  const clash = peripherals.filter(
+    (p) =>
+      p.id !== currentId &&
+      p.machineId === machineId &&
+      (p.kind === "SCALE" || p.kind === "METER") &&
+      (p.role ?? "").trim() === want,
+  );
+  if (clash.length === 0) return null;
+  const names = clash.map((p) => p.name || p.code).join(", ");
+  return (
+    <div className="col-span-3">
+      <Callout tone="warning" title={`Bu makinede "${want}" rolü zaten tanımlı`}>
+        {names} aynı makinede aynı rolü taşıyor. Mobil, kata göre okurken bu rolden
+        yalnız <strong>ilk</strong> cihazı seçer → belirsiz/yanlış okuma. Rolleri
+        farklılaştır (örn. 2-KAT / 4-KAT).
+      </Callout>
+    </div>
+  );
+}
+
+/**
+ * Bu MAC (Bluetooth) başka cihaz kaydında da tanımlıysa BİLGİ ver: tek fiziksel
+ * bağlantı (tek RFCOMM soketi) paylaşılır — DESTEKLENEN kurulum (tek kabloyla
+ * 2-KAT + 4-KAT metre). Her kayıt farklı Rol + farklı Sorgu Komutu taşımalı; aksi
+ * halde ikisi aynı değeri okur. Yalnız BLUETOOTH_SPP'de anlamlı (TCP multiplekslenir).
+ */
+function SharedMacCallout({
+  control,
+  peripherals,
+  currentId,
+}: {
+  control: Control<PeripheralFormValues>;
+  peripherals: PeripheralDevice[];
+  currentId?: string;
+}) {
+  const [address, connectionType] = useWatch({ control, name: ["address", "connectionType"] });
+  const mac = (address ?? "").trim().toUpperCase();
+  if (!mac || connectionType !== "BLUETOOTH_SPP") return null;
+  const peers = peripherals.filter(
+    (p) => p.id !== currentId && (p.address ?? "").trim().toUpperCase() === mac,
+  );
+  if (peers.length === 0) return null;
+  const names = peers.map((p) => `${p.name || p.code}${p.role ? ` (${p.role})` : ""}`).join(", ");
+  return (
+    <Callout tone="info" title="Bu MAC başka cihazla paylaşılıyor — tek fiziksel bağlantı">
+      {names} ile aynı MAC. Bu <strong>desteklenen</strong> kurulumdur (örn. tek kabloyla
+      2-KAT + 4-KAT metre): tek Bluetooth soketi paylaşılır. Her kayıt{" "}
+      <strong>farklı Rol + farklı Sorgu Komutu</strong> taşımalı; aksi halde ikisi aynı
+      değeri okur.
+    </Callout>
   );
 }

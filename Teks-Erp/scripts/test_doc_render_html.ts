@@ -104,7 +104,7 @@ function testKartela(): void {
 }
 
 // =============================================================================
-// 2) FASONDAN DOĞRUDAN SEVK İRSALİYESİ
+// 2) FASONDAN SEVK İRSALİYESİ
 // =============================================================================
 type DirectSnap = Parameters<typeof renderFasonDirectShipHtml>[0];
 
@@ -140,14 +140,14 @@ function directSnap(over: { doc?: Record<string, unknown>; docConfigOverride?: R
 }
 
 function testDirectShip(): void {
-  console.log("\n══ DOĞRUDAN SEVK İRSALİYESİ ══");
+  console.log("\n══ FASONDAN SEVK İRSALİYESİ ══");
   const html = renderFasonDirectShipHtml(directSnap());
   check("doctype + html", html.startsWith("<!doctype html>") && html.includes("</html>"));
-  check("başlık DOĞRUDAN SEVK İRSALİYESİ", html.includes("DOĞRUDAN SEVK İRSALİYESİ"));
+  check("başlık FASONDAN SEVK İRSALİYESİ", html.includes("FASONDAN SEVK İRSALİYESİ"));
   check("İrsaliye No", html.includes("DSF-2026-0012"));
   check("FASON FİRMA", html.includes("FASON FİRMA") && html.includes("Yıldız Boyahane"));
   check("iş emri workOrderNumber", html.includes("IE-260619-0014"));
-  check("DOĞRUDAN SEVK kutusu (sebep + sevk eden)", html.includes("Müşteri acil talep") && html.includes("Ayşe Kaya"));
+  check("FASONDAN SEVK kutusu (sebep + sevk eden)", html.includes("Müşteri acil talep") && html.includes("Ayşe Kaya"));
   check("Karşılanan Siparişler (allocations)", html.includes("Karşılanan Siparişler") && html.includes("SIP-2026-0107"));
   check("Sevk Edilen Toplar tablosu", html.includes("Sevk Edilen Toplar") && html.includes("R1"));
   check("TOPLAM 500 m", html.includes("500"));
@@ -155,7 +155,7 @@ function testDirectShip(): void {
   const noSub = renderFasonDirectShipHtml(directSnap({ docConfigOverride: { sections: { subcontractorInfo: false } } }));
   check("subcontractorInfo=false → FASON FİRMA gizli", !noSub.includes("FASON FİRMA"));
   const noDs = renderFasonDirectShipHtml(directSnap({ docConfigOverride: { sections: { directShipInfo: false } } }));
-  check("directShipInfo=false → DOĞRUDAN SEVK kutusu gizli", !noDs.includes(">DOĞRUDAN SEVK<"));
+  check("directShipInfo=false → FASONDAN SEVK kutusu gizli", !noDs.includes(">FASONDAN SEVK<"));
   const noRoll = renderFasonDirectShipHtml(directSnap({ docConfigOverride: { sections: { rollTable: false } } }));
   check("rollTable=false → toplar gizli", !noRoll.includes("Sevk Edilen Toplar"));
   // empty allocations → bölüm yok

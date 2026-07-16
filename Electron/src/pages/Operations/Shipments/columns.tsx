@@ -31,7 +31,14 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
       return (
         <div className="min-w-0">
           <div className="truncate font-medium">{s.customer.name}</div>
-          {s.branch && <div className="truncate text-xs text-muted-foreground">{s.branch.name}</div>}
+          {s.branch && (
+            <div className="truncate text-xs text-muted-foreground">
+              {s.branch.name}
+              {s.branch.code && (
+                <span className="ml-1 font-mono text-[10px] text-foreground/70">· {s.branch.code}</span>
+              )}
+            </div>
+          )}
         </div>
       );
     },

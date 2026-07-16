@@ -45,6 +45,7 @@ interface ShipmentRow {
   customerName: string;
   taxNumber: string;
   branchName: string;
+  branchCode: string;
   destination: string;
   procedureCode: string;
   plateNumber: string;
@@ -160,9 +161,26 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     (where as Record<string, unknown>)[effField] = { gte: effFrom, lte: effTo };
   }
 
-  // Perf guard — önce UCUZ indexli COUNT; aşımda hiç yüklemeden 400 (sunucu RAM/CPU
-  // şişmez). Excel üretimi zaten istemci (renderer) tarafında — sunucu yalnız JSON döner.
-  const count = await prisma.shipment.count({ where });
+  // Fasondan DOĞRUDAN sevkler (DirectShipment) de muhasebeye girer — çuval Shipment'larıyla
+  // AYNI filtre penceresinde (müşteri + tarih/ids). Doğrudan sevkte çuval/plaka/sürücü/kg
+  // YOK; tarih alanı dispatchedAt ≙ shippedAt, createdAt ≙ createdAt. Arama yalnız shipmentNo.
+  const directWhere: Prisma.DirectShipmentWhereInput = {};
+  if (customerId) directWhere.customerId = customerId;
+  if (params.search) directWhere.shipmentNo = { contains: params.search, mode: "insensitive" };
+  if (isSelection) {
+    directWhere.id = { in: idList };
+  } else {
+    const directField = effField === "createdAt" ? "createdAt" : "shippedAt";
+    (directWhere as Record<string, unknown>)[directField] = { gte: effFrom, lte: effTo };
+  }
+
+  // Perf guard — önce UCUZ indexli COUNT (iki tablo); aşımda hiç yüklemeden 400 (sunucu
+  // RAM/CPU şişmez). Excel üretimi zaten istemci (renderer) tarafında — sunucu yalnız JSON.
+  const [shipCount, directCount] = await Promise.all([
+    prisma.shipment.count({ where }),
+    prisma.directShipment.count({ where: directWhere }),
+  ]);
+  const count = shipCount + directCount;
   if (count > MAX_SHIPMENTS) {
     throw AppError.badRequest(
       `Seçili kapsamda ${count} sevkiyat var (üst sınır ${MAX_SHIPMENTS}). ` +
@@ -183,7 +201,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       driverName: true,
       carrier: true,
       customer: { select: { code: true, name: true, taxNumber: true } },
-      branch: { select: { name: true } },
+      branch: { select: { code: true, name: true } },
       orders: { select: { order: { select: { orderNumber: true } } } },
       sacks: {
         select: {
@@ -254,6 +272,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       customerName: sh.customer.name,
       taxNumber,
       branchName: sh.branch?.name ?? "",
+      branchCode: sh.branch?.code ?? "",
       destination: sh.destination,
       procedureCode: sh.procedureCode ?? "",
       plateNumber: sh.plateNumber ?? "",
@@ -304,6 +323,118 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     gMeters = gMeters.plus(sMeters);
     gKg = gKg.plus(sKg);
   }
+
+  // ---- Fasondan doğrudan sevkler — çuval sevkleriyle AYNI satır/detay/icmal/totals
+  // yapılarını besler (byCustomer/byProduct map'leri ortak → aynı müşteri/ürün birleşir).
+  const directShipments = await prisma.directShipment.findMany({
+    where: directWhere,
+    orderBy: [{ shippedAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      shipmentNo: true,
+      shippedAt: true,
+      createdAt: true,
+      customer: { select: { code: true, name: true, taxNumber: true } },
+      branch: { select: { code: true, name: true } },
+      allocations: { select: { orderLine: { select: { order: { select: { orderNumber: true } } } } } },
+      rolls: {
+        select: {
+          currentQty: true,
+          width: true,
+          item: { select: { id: true, name: true } },
+          color: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  for (const ds of directShipments) {
+    let sMeters = D0();
+    let rollCount = 0;
+    const prodMap = new Map<string, ProductAgg>();
+
+    for (const r of ds.rolls) {
+      rollCount += 1;
+      sMeters = sMeters.plus(r.currentQty);
+      const itemName = r.item.name;
+      const colorName = r.color?.name ?? "";
+      const widthNum = r.width != null ? Number(r.width) : null;
+      // F251 ile aynı: İD bazlı anahtar (aynı adlı farklı ürün/renk birleşmesin).
+      const key = `${r.item.id}|${r.color?.id ?? ""}|${widthNum ?? ""}`;
+
+      const g = prodMap.get(key) ?? { itemName, colorName, width: widthNum, rollCount: 0, totalMeters: D0() };
+      g.rollCount += 1;
+      g.totalMeters = g.totalMeters.plus(r.currentQty);
+      prodMap.set(key, g);
+
+      const pg = byProduct.get(key) ?? { itemName, colorName, width: widthNum, rollCount: 0, totalMeters: D0() };
+      pg.rollCount += 1;
+      pg.totalMeters = pg.totalMeters.plus(r.currentQty);
+      byProduct.set(key, pg);
+    }
+
+    const dispatchedAt = ds.shippedAt ?? ds.createdAt;
+    const orderNos = [...new Set(ds.allocations.map((a) => a.orderLine.order.orderNumber))].join(", ");
+    const taxNumber = ds.customer.taxNumber ?? "";
+
+    // Doğrudan sevkte çuval/araç/kg yok → sıfır/boş; yön varsayılan yurtiçi.
+    shipmentRows.push({
+      shipmentNo: ds.shipmentNo,
+      dispatchedAt,
+      customerCode: ds.customer.code,
+      customerName: ds.customer.name,
+      taxNumber,
+      branchName: ds.branch?.name ?? "",
+      branchCode: ds.branch?.code ?? "",
+      destination: "DOMESTIC",
+      procedureCode: "",
+      plateNumber: "",
+      driverName: "",
+      carrier: "",
+      sackCount: 0,
+      rollCount,
+      totalMeters: Number(sMeters),
+      totalKg: 0,
+    });
+
+    for (const g of prodMap.values()) {
+      detailRows.push({
+        shipmentNo: ds.shipmentNo,
+        dispatchedAt,
+        customerName: ds.customer.name,
+        orderNos,
+        itemName: g.itemName,
+        colorName: g.colorName,
+        width: g.width,
+        rollCount: g.rollCount,
+        meters: Number(g.totalMeters),
+      });
+    }
+
+    const ckey = ds.customer.code || ds.customer.name;
+    const c =
+      byCustomer.get(ckey) ??
+      ({
+        customerCode: ds.customer.code,
+        customerName: ds.customer.name,
+        taxNumber,
+        shipmentCount: 0,
+        sackCount: 0,
+        rollCount: 0,
+        totalMeters: D0(),
+        totalKg: D0(),
+      } satisfies CustomerAgg);
+    c.shipmentCount += 1;
+    c.rollCount += rollCount;
+    c.totalMeters = c.totalMeters.plus(sMeters);
+    byCustomer.set(ckey, c);
+
+    gRoll += rollCount;
+    gMeters = gMeters.plus(sMeters);
+  }
+
+  // Çuval sevkleri + doğrudan sevkler tek listede — sevk tarihine göre azalan sırala.
+  shipmentRows.sort((a, b) => b.dispatchedAt.getTime() - a.dispatchedAt.getTime());
+  detailRows.sort((a, b) => b.dispatchedAt.getTime() - a.dispatchedAt.getTime());
 
   // İade (RollReturn) — iptal hariç. Seçim modunda: işaretli sevklerden gelen iadeler
   // (fromShipmentId ∈ ids). Dönem modunda: effFrom–effTo penceresindeki iadeler + müşteri.

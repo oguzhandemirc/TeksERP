@@ -320,6 +320,10 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
       open={customerFormOpen}
       onOpenChange={setCustomerFormOpen}
       isSubmitting={createCustomerMut.isPending}
+      // Sipariş içi hızlı ekleme: yalnız müşteriyi oluşturup seç. Şube editörü
+      // gizli — bu onSubmit şubeleri iletmediğinden gösterilse veri kaybı olurdu.
+      // Şube gerekiyorsa Müşteriler sayfasından tam akışla eklenir.
+      showBranchDraft={false}
       onSubmit={(v: CustomerFormValues) => {
         createCustomerMut.mutate({
           // Kod backend'de üretilir (MUS+GGAAYY+NNNN) — istemciden gönderilmez.

@@ -2230,8 +2230,11 @@ export class TamburService {
     }
     // Savunma katmanı (BUG-2): iptal edilmiş iş emrinin Tambur adımına eşzamanlı yarışla
     // sıkışmış açık kumaş kesilmesin — ölü WO'ya çocuk top + bozuk üretim muhasebesi olmaz.
-    if (parent.currentStep.workOrder?.status === WorkOrderStatus.CANCELLED) {
-      throw AppError.conflict("İptal edilmiş iş emrinin açık kumaşı kesilemez");
+    if (
+      parent.currentStep.workOrder?.status === WorkOrderStatus.CANCELLED ||
+      parent.currentStep.workOrder?.status === WorkOrderStatus.SUPERSEDED
+    ) {
+      throw AppError.conflict("İptal/devredilmiş iş emrinin açık kumaşı kesilemez");
     }
     if (parent.status !== RollStatus.IN_PRODUCTION) {
       throw AppError.badRequest(
@@ -2284,8 +2287,11 @@ export class TamburService {
         where: { id: woId },
         select: { status: true },
       });
-      if (freshWo?.status === WorkOrderStatus.CANCELLED) {
-        throw AppError.conflict("İptal edilmiş iş emrinin açık kumaşı kesilemez");
+      if (
+        freshWo?.status === WorkOrderStatus.CANCELLED ||
+        freshWo?.status === WorkOrderStatus.SUPERSEDED
+      ) {
+        throw AppError.conflict("İptal/devredilmiş iş emrinin açık kumaşı kesilemez");
       }
       // Child Roll oluştur
       const child = await tx.roll.create({

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { FileSpreadsheet, Printer, Tags } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { printHtmlString } from "@/lib/print";
 import { labelService } from "@/services/labelService";
@@ -26,10 +27,15 @@ interface Props {
  * Excel + toplu etiket için yapılandırılmış veri (getReport) ayrıca çekilir.
  */
 export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
+  // DIRECT (fasondan doğrudan sevk) satırı → kendi donmuş irsaliyesi (SUBCONTRACTOR_DIRECT_SHIP)
+  // + kendi rapor ucu (çuval yok). Çuval sevkiyatı → SHIPMENT_DISPATCH + dispatch-report.
+  const isDirect = receiptFor?.kind === "DIRECT";
+  const docType = isDirect ? "SUBCONTRACTOR_DIRECT_SHIP" : "SHIPMENT_DISPATCH";
+
   // Baskı/önizleme HTML'i — tek kaynak (irsaliye ile aynı). DISPATCHED'ta donmuş belge var.
   const htmlQ = useQuery({
-    queryKey: ["dispatch-doc-html", receiptFor?.id],
-    queryFn: () => printedDocumentService.getHtml("SHIPMENT_DISPATCH", receiptFor!.id),
+    queryKey: ["dispatch-doc-html", docType, receiptFor?.id],
+    queryFn: () => printedDocumentService.getHtml(docType, receiptFor!.id),
     enabled: Boolean(receiptFor),
     staleTime: 60_000,
   });
@@ -37,8 +43,11 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
 
   // Excel + toplu etiket için yapılandırılmış veri seti (3 bölüm + rollId'ler).
   const reportQ = useQuery({
-    queryKey: ["dispatch-report", receiptFor?.id],
-    queryFn: () => accountingDispatchService.getReport(receiptFor!.id),
+    queryKey: ["dispatch-report", isDirect ? "direct" : "shipment", receiptFor?.id],
+    queryFn: () =>
+      isDirect
+        ? accountingDispatchService.getDirectReport(receiptFor!.id)
+        : accountingDispatchService.getReport(receiptFor!.id),
     enabled: Boolean(receiptFor),
     staleTime: 60_000,
   });
@@ -94,7 +103,14 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
     <Dialog open={Boolean(receiptFor)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex h-[90vh] max-w-4xl flex-col">
         <DialogHeader className="flex shrink-0 flex-row items-center justify-between pr-8">
-          <DialogTitle>Sevk Fişi — {receiptFor?.shipmentNo}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span>Sevk Fişi — {receiptFor?.shipmentNo}</span>
+            {isDirect && (
+              <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600">
+                Fasondan Sevk
+              </Badge>
+            )}
+          </DialogTitle>
           <div className="flex items-center gap-2">
             <Button
               size="sm"

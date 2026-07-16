@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PackagePlus } from "lucide-react";
 import {
@@ -11,16 +11,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { loadAllForPicker } from "@/lib/picker-loader";
+import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
-import { customerBranchService } from "@/pages/Customers/branchService";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import type { EditorTarget } from "./types";
-
-const NO_CUSTOMER = "__none__";
 
 interface Props {
   open: boolean;
@@ -30,52 +26,37 @@ interface Props {
 }
 
 /**
- * Yeni çuval aç — müşteri OPSİYONEL (varsayılan müşterisiz/genel stok). Müşteri
- * seçilirse şube de seçilebilir. Açılınca doğrudan editöre geçilir (top okutulur).
+ * Yeni çuval aç — müşteri OPSİYONEL (varsayılan müşterisiz/genel stok). Müşteri picker'ı
+ * ARAMALI (ReferenceSelect — sunucu-taraflı, debounce'lı). Müşteri seçilirse şube de
+ * seçilebilir. Açılınca doğrudan editöre geçilir (top okutulur). Çözülmüş ad/kod backend
+ * yanıtından gelir → editör hedefi fetch'siz kurulur.
  */
 export function NewSackDialog({ open, onOpenChange, onCreated }: Props) {
   const qc = useQueryClient();
-  const [customerId, setCustomerId] = useState<string | undefined>();
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
-      setCustomerId(undefined);
+      setCustomerId(null);
       setBranchId(null);
     }
   }, [open]);
 
-  const customersQ = useQuery({
-    queryKey: ["customers", "picker"],
-    queryFn: () => loadAllForPicker(customerService),
-    staleTime: 60_000,
-    enabled: open,
-  });
-  const customers = (customersQ.data?.data ?? []) as Array<{ id: string; name?: string; code?: string }>;
-
-  // Şube adını çözmek için (BranchSelect ile aynı query key → dedupe).
-  const branchesQ = useQuery({
-    queryKey: ["customer-branches", customerId, "select"],
-    queryFn: () => customerBranchService.list(customerId as string, false),
-    enabled: open && !!customerId,
-    staleTime: 60_000,
-  });
-
   const mut = useMutation({
-    mutationFn: () => sackHubService.openSack({ customerId: customerId ?? null, branchId }),
+    mutationFn: () => sackHubService.openSack({ customerId, branchId }),
     onSuccess: (res) => {
       invalidateSackHub(qc);
-      const customerName = customers.find((c) => c.id === res.data.customerId)?.name ?? null;
-      const branchName = branchesQ.data?.data.find((b) => b.id === res.data.branchId)?.name ?? null;
       toast.success(`Çuval açıldı: ${res.data.sackNo}`);
       onOpenChange(false);
       onCreated({
         sackId: res.data.id,
         sackNo: res.data.sackNo,
         customerId: res.data.customerId,
-        customerName,
+        customerName: res.data.customerName,
         branchId: res.data.branchId,
-        branchName,
+        branchName: res.data.branchName,
+        branchCode: res.data.branchCode,
         isNew: true,
       });
     },
@@ -96,27 +77,19 @@ export function NewSackDialog({ open, onOpenChange, onCreated }: Props) {
         <div className="space-y-3">
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">Müşteri (opsiyonel)</span>
-            <Select
-              value={customerId ?? NO_CUSTOMER}
-              onValueChange={(v) => {
-                setCustomerId(v === NO_CUSTOMER ? undefined : v);
+            <ReferenceSelect
+              value={customerId}
+              onChange={(v) => {
+                setCustomerId(v);
                 setBranchId(null);
               }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Müşteri seç…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_CUSTOMER} className="text-muted-foreground">
-                  Müşterisiz (genel stok)
-                </SelectItem>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name ?? c.code ?? c.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              service={customerService}
+              queryKey="customers"
+              getLabel={(c) => (c.code ? `${c.code} — ${c.name}` : c.name)}
+              placeholder="Müşteri ara/seç…"
+              nullable
+              noneLabel="Müşterisiz (genel stok)"
+            />
           </label>
 
           {customerId && (

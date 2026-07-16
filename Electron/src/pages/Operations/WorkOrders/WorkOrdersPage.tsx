@@ -135,7 +135,7 @@ export function WorkOrdersPage() {
               <ContextMenuItem onSelect={() => handleEdit(wo)}>
                 <Pencil /> Düzenle
               </ContextMenuItem>
-              {wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && (
+              {wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED" && (
                 <ContextMenuItem
                   onSelect={() => setCancelWo(wo)}
                   className="text-destructive focus:text-destructive"

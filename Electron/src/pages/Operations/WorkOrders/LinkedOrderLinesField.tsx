@@ -243,6 +243,12 @@ function LineCard({
             <div className="mt-1 truncate text-xs font-semibold text-foreground">
               {line.customerName}
             </div>
+            {line.branchName && (
+              <div className="truncate text-[11px] font-normal text-muted-foreground">
+                Şube: {line.branchName}
+                {line.branchCode ? ` (${line.branchCode})` : ""}
+              </div>
+            )}
           </div>
           <button
             type="button"

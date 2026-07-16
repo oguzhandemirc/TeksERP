@@ -42,10 +42,10 @@ interface Props<T extends { id: string }> {
    * ayrıca Trash2 = kalıcı sil (DELETE /:id/permanent) eklenir. Backend'i deletedAt
    * damgalı modellerde kayıt gizlenir ama veri bütünlüğü için DB'de durur. */
   permanentDelete?: { description: (row: T) => string };
-  /** Çok-sekmeli formlar için: kayıt OLUŞTURULUNCA dialog kapanmaz, yeni kaydın
-   * id'siyle düzenleme moduna geçer — böylece id gerektiren alt sekmeler
-   * (şube/alias/şablon vb.) aynı oturumda açılır. Güncellemede de açık kalır.
-   * Varsayılan false: klasik "kaydet → kapat". */
+  /** Çok-sekmeli DÜZENLEME formları için: mevcut kaydı güncelleyince dialog
+   * kapanmaz, güncel kayıtla düzenlemeye devam edilir — böylece kullanıcı aynı
+   * oturumda şube/alias/şablon sekmeleri arasında çalışmaya devam edebilir.
+   * OLUŞTURMA her zaman kapanır (tek-adım kayıt → kapat). Varsayılan false. */
   keepFormOpenAfterSave?: boolean;
   renderForm: (params: {
     open: boolean;
@@ -186,18 +186,16 @@ export function CrudPage<T extends { id: string }>({
   const onSubmit = async (values: Partial<T>) => {
     if (editing) {
       const res = await updateMutation.mutateAsync({ id: editing.id, data: values });
-      // keepFormOpenAfterSave: dialog açık kalır, güncel kayıtla düzenlemeye devam.
+      // keepFormOpenAfterSave: güncellemede dialog açık kalır, güncel kayıtla
+      // düzenlemeye devam (çok-sekmeli formlarda sekmeler arası çalışma).
       if (keepFormOpenAfterSave) {
         setEditing(res.data);
         return;
       }
     } else {
-      const res = await createMutation.mutateAsync(values);
-      // Oluşturmadan sonra düzenleme moduna geç → id gerektiren sekmeler açılır.
-      if (keepFormOpenAfterSave) {
-        setEditing(res.data);
-        return;
-      }
+      // Oluşturma her zaman kapanır — tek-adım kayıt (gerekli iç-içe veri aynı
+      // istekte gönderilir; ayrı bir "önce kaydet, sonra alt-sekme" adımı yok).
+      await createMutation.mutateAsync(values);
     }
     setFormOpen(false);
     setEditing(null);

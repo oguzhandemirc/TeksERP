@@ -52,7 +52,9 @@ export function RollLocateCard({ roll, onClear }: { roll: LocatedRoll; onClear: 
               {" — "}
               {roll.shipment.shipmentNo} ({shipmentStatusLabels[roll.shipment.status]}) ·{" "}
               {roll.shipment.customer.name}
-              {roll.shipment.branch ? ` / ${roll.shipment.branch.name}` : ""}
+              {roll.shipment.branch
+                ? ` / ${roll.shipment.branch.name}${roll.shipment.branch.code ? ` (${roll.shipment.branch.code})` : ""}`
+                : ""}
             </>
           )}
         </div>

@@ -39,6 +39,8 @@ const STATUS_GROUPS = {
   KURSUN_PENDING: null,
   TAMBUR_PENDING: null,
   FINISHED_STOCK: null,
+  // Çuvalda: bir çuvala konmuş, henüz sevk edilmemiş toplar (rollScope=IN_SACK).
+  IN_SACK: null,
   // Sanal anahtar — tepe-sekme DEĞİL; Kartela sayfasının "Kartelada Toplar"
   // sekmesi bunu kullanır (status=AT_KARTELA). SUBCONTRACTOR ile aynı mekanizma.
   KARTELA_SENT: "AT_KARTELA",
@@ -69,7 +71,7 @@ export interface RollStats {
 }
 
 // --- Üretim Akışı (Kanban) — tek-istek pano cevabı ------------------------
-/** Kurşun/Tambur kolonu kartı (parti = refakat kartı). */
+/** Kurşun/Tambur kolonu kartı (adım = bir WO'nun kuyruğu). */
 export interface ProductionFlowQueueCard {
   id: string;
   itemName: string | null;
@@ -77,7 +79,8 @@ export interface ProductionFlowQueueCard {
   colorHex: string | null;
   openRollCount: number;
   totalCurrentQty: number;
-  batchNumber: string;
+  /** İş emri no (İE…) — eski `batchNumber` alanı parti-redesign köprüsüydü. */
+  workOrderNumber: string;
   isUrgent: boolean;
 }
 
@@ -148,6 +151,8 @@ export function buildRollForceFilters(
   if (tab === "PRODUCTION") return { rollScope: "PRODUCTION_ACTIVE", status: "ALL" };
   // Tambur sonrası depoya alınmış, sevke hazır.
   if (tab === "FINISHED_STOCK") return { rollScope: "FINISHED_STOCK", status: "ALL" };
+  // Çuvalda: bir çuvala konmuş (sackId dolu), henüz sevk edilmemiş toplar.
+  if (tab === "IN_SACK") return { rollScope: "IN_SACK", status: "ALL" };
   // Kurşun/KK2 istasyonundaki açık kumaş kayıtları (status=ALL şart — yoksa default STOCK).
   if (tab === "KURSUN_PENDING")
     return { currentStepKind: "PROCESS_QC", rollKind: "OPEN_FABRIC", status: "ALL" };

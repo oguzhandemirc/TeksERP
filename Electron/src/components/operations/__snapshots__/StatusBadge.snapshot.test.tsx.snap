@@ -21,7 +21,7 @@ exports[`StatusBadge — yapısal snapshot > sipariş durumları için ton/etike
     Onaylandı
   </div>
   <div
-    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-info/15 text-info border-transparent"
+    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-station-process/15 text-station-process border-transparent"
   >
     PARTIAL_SHIPPED
   </div>

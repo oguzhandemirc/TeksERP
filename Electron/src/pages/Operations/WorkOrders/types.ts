@@ -162,7 +162,7 @@ export interface WorkOrder {
         deadline?: string | null;
         customer?: { id: string; code: string; name: string } | null;
         /** Sipariş hedef şubesi (opsiyonel — eski kayıtlar null). findById include eder. */
-        branch?: { id: string; name: string } | null;
+        branch?: { id: string; name: string; code: string | null } | null;
       };
       item?: {
         id: string;

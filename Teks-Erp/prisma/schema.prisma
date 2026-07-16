@@ -119,6 +119,11 @@ enum WorkOrderStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  // SUPERSEDED ("Devredildi"): tebdil/parti-ayırma ile TÜM canlı topları yeni bir
+  // iş emrine devredilip boşalan KAYNAK WO. CANCELLED değil — veri kaybı yok, malzeme
+  // devam WO'sunda (WorkOrder.splitFromId ile bağlı). Terminal + değişmez (CANCELLED
+  // gibi), ama rapor/filtrede "iptal" ile karışmaz. Yalnız cancelEmptiedSource... atar.
+  SUPERSEDED
   // F71: PAUSED kaldırıldı (app'te hiç atanmıyordu; 16 ref backend'de temizlendi — bba0f15).
 }
 
@@ -1329,11 +1334,18 @@ model Batch {
   /// NULL = doğrudan ekleme dalgasıyla doğan kök parti.
   splitFromId String? @db.Uuid
 
-  workOrder     WorkOrder               @relation(fields: [workOrderId], references: [id])
-  splitFrom     Batch?                  @relation("BatchSplitLineage", fields: [splitFromId], references: [id])
-  splitChildren Batch[]                 @relation("BatchSplitLineage")
-  rolls         Roll[]
-  dispatches    SubcontractorDispatch[]
+  /// Merge soy bağı (K17) — bu parti başka bir partiye BİRLEŞTİYSE survivor'ı işaret
+  /// eder. Kaynak parti silinmez, "→ P… altına birleşti" tarihçe satırı olarak yaşar.
+  /// NULL = birleşmemiş (canlı) parti.
+  mergedIntoId String? @db.Uuid
+
+  workOrder      WorkOrder               @relation(fields: [workOrderId], references: [id])
+  splitFrom      Batch?                  @relation("BatchSplitLineage", fields: [splitFromId], references: [id])
+  splitChildren  Batch[]                 @relation("BatchSplitLineage")
+  mergedInto     Batch?                  @relation("BatchMergeLineage", fields: [mergedIntoId], references: [id])
+  mergedChildren Batch[]                 @relation("BatchMergeLineage")
+  rolls          Roll[]
+  dispatches     SubcontractorDispatch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1341,6 +1353,8 @@ model Batch {
   @@index([workOrderId])
   // Null-yoğun — parti_modeli migration'da partial'a çevrilir (IS NOT NULL, drift-free)
   @@index([splitFromId])
+  // Null-yoğun — batch_merged_into migration'da partial (IS NOT NULL, drift-free)
+  @@index([mergedIntoId])
   @@map("batches")
 }
 

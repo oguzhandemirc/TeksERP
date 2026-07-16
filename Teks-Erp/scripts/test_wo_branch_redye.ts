@@ -125,6 +125,14 @@ async function main(): Promise<void> {
   check("Top eski partiden koptu (yeni batchId)", moved?.batchId != null && moved?.batchId !== srcBatchId, String(moved?.batchId));
   check("Top producedInStep = yeni Boyahane", moved?.producedInStepId === newBoya);
 
+  // Bug 1 regresyon: SPLIT WO "Üretime Giren" > 0. Enjekte kök (bornA = kaynak
+  // WO'nun 560m fason-dönüşü) yeni WO'nun reEntry adımında (Boyahane seq2) durur;
+  // eski "yalnız ilk adım (KK1 seq1)" çapası bunu 0 sayıyordu. computeWoInput
+  // girdi-kökü tanımı artık sayar (parentReceipt KAYNAK WO'ya işaret eder ≠ yeni WO).
+  const newDetail = (await wos.findById(newWoId)).data as Any;
+  check("Bug1: split WO inputRolls.count = 1 (enjekte kök)", newDetail?.inputRolls?.count === 1, `count=${newDetail?.inputRolls?.count}`);
+  check("Bug1: split WO inputRolls.totalMeters = 560 (eskiden 0)", Number(newDetail?.inputRolls?.totalMeters) === 560, `meters=${newDetail?.inputRolls?.totalMeters}`);
+
   // Boyahane adımında taze açık movement açıldı + eski (Tambur) movement kapandı
   const openMov = await prisma.rollMovement.findFirst({ where: { rollId: bornA!.id, exitedAt: null }, select: { workOrderStepId: true } });
   check("Taze açık movement yeni Boyahane'de", openMov?.workOrderStepId === newBoya, String(openMov?.workOrderStepId));

@@ -30,6 +30,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Müşteri", key: "customerName", width: 28 },
         { header: "Vergi No", key: "taxNumber", width: 14 },
         { header: "Şube", key: "branchName", width: 18 },
+        { header: "Şube Kodu", key: "branchCode", width: 12 },
         { header: "Yön", key: "yon", width: 10 },
         { header: "Gümrük Kodu", key: "procedureCode", width: 16 },
         { header: "Plaka", key: "plateNumber", width: 12 },

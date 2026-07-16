@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Ban, FileText, Pencil } from "lucide-react";
+import { Ban, CheckCircle2, FileText, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -12,6 +12,7 @@ import { useTabsStore } from "@/store/tabs";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
+import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import type { WorkOrder } from "./types";
 
@@ -36,6 +37,7 @@ export function WorkOrderDetailHeader({
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [completeOpen, setCompleteOpen] = useState(false);
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
 
@@ -55,7 +57,10 @@ export function WorkOrderDetailHeader({
   };
 
   const canEdit = wo && (wo.status === "PLANNED" || wo.status === "IN_PROGRESS");
-  const canCancel = wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED";
+  const canCancel =
+    wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED";
+  // Manuel kapatma yalnız üretimdeki (IN_PROGRESS) WO'ya sunulur.
+  const canComplete = wo && wo.status === "IN_PROGRESS";
 
   return (
     <>
@@ -108,6 +113,18 @@ export function WorkOrderDetailHeader({
               >
                 <FileText className="h-3.5 w-3.5" /> Belgeler
               </Button>
+              {canComplete && (
+                <PermissionGate permission="workorder:write">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 border-transparent bg-success text-success-foreground hover:bg-success/90"
+                    onClick={() => setCompleteOpen(true)}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Kapat
+                  </Button>
+                </PermissionGate>
+              )}
               {canCancel && (
                 <PermissionGate permission="workorder:write">
                   <Button
@@ -155,6 +172,15 @@ export function WorkOrderDetailHeader({
         workOrderId={wo?.id ?? null}
         batchNumber={wo?.workOrderNumber}
         onCancelled={() => {
+          if (wo) qc.invalidateQueries({ queryKey: ["work-order-detail", wo.id] });
+        }}
+      />
+      <WorkOrderCompleteDialog
+        open={completeOpen}
+        onOpenChange={setCompleteOpen}
+        workOrderId={wo?.id ?? null}
+        workOrderNumber={wo?.workOrderNumber}
+        onCompleted={() => {
           if (wo) qc.invalidateQueries({ queryKey: ["work-order-detail", wo.id] });
         }}
       />

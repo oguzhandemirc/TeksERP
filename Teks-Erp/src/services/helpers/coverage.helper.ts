@@ -27,6 +27,7 @@ type Client = Prisma.TransactionClient | {
   roll: Prisma.TransactionClient["roll"];
   rollMovement: Prisma.TransactionClient["rollMovement"];
   workOrderStep: Prisma.TransactionClient["workOrderStep"];
+  subcontractorReceipt: Prisma.TransactionClient["subcontractorReceipt"];
 };
 
 // Terminal çıktı statüleri — "bu metraj artık üretildi/karara bağlandı".
@@ -95,23 +96,14 @@ export async function computeWoMaterial(
   const ids = [...new Set(woIds)];
   if (ids.length === 0) return out;
 
-  const committedByWo = new Map<string, Prisma.Decimal>();
   const finishedByWo = new Map<string, Prisma.Decimal>();
 
   const steps = await client.workOrderStep.findMany({
     where: { workOrderId: { in: ids } },
-    select: { id: true, workOrderId: true, stepSequence: true },
+    select: { id: true, workOrderId: true },
   });
   const stepToWo = new Map<string, string>();
-  // WO başına ilk (en düşük stepSequence) adım — malzeme girişi buraya yazılır.
-  const firstStepByWo = new Map<string, { id: string; seq: number }>();
-  for (const s of steps) {
-    stepToWo.set(s.id, s.workOrderId);
-    const cur = firstStepByWo.get(s.workOrderId);
-    if (!cur || s.stepSequence < cur.seq) {
-      firstStepByWo.set(s.workOrderId, { id: s.id, seq: s.stepSequence });
-    }
-  }
+  for (const s of steps) stepToWo.set(s.id, s.workOrderId);
   const stepIds = steps.map((s) => s.id);
 
   if (stepIds.length > 0) {
@@ -129,84 +121,157 @@ export async function computeWoMaterial(
     }
   }
 
-  // committed: ilk adıma girmiş ayrık topların initialQty toplamı (distinct rollId).
-  // İki kaynak: A) ilk adıma RollMovement'ı olanlar (append-only kalıcı; consumed
-  // olsa da sayılır) — mevcut davranış. B) currentStepId = ilk adım olanlar —
-  // EXTERNAL (boyahane) ilk adımda attach anında movement YAZILMAZ (sevkte açılır),
-  // bu top "eklendi ama sevk edilmedi" aralığında yalnız B ile yakalanır.
-  // GUARD (currentStepId null VEYA bu WO'ya ait): top detach edilip başka WO'ya
-  // bağlandıysa A'daki bayat movement bu WO'ya saydırmasın. Born roll (currentStepId
-  // = sonraki adım) ve tambur çıktısı (ilk adıma movement'sız) doğal olarak hariç.
-  const firstStepToWo = new Map<string, string>();
-  for (const [woId, s] of firstStepByWo) firstStepToWo.set(s.id, woId);
-  const firstStepIds = [...firstStepToWo.keys()];
-  if (firstStepIds.length > 0) {
-    const rollIdsByStep = new Map<string, Set<string>>();
-    const allRollIds = new Set<string>();
-    const addToStep = (stepId: string, rollId: string) => {
-      allRollIds.add(rollId);
-      let set = rollIdsByStep.get(stepId);
-      if (!set) {
-        set = new Set();
-        rollIdsByStep.set(stepId, set);
-      }
-      set.add(rollId);
-    };
-    // A: ilk adıma hareketi olan toplar
-    const moves = await client.rollMovement.findMany({
-      where: { workOrderStepId: { in: firstStepIds } },
-      select: { rollId: true, workOrderStepId: true },
-    });
-    for (const m of moves) {
-      if (m.workOrderStepId) addToStep(m.workOrderStepId, m.rollId);
-    }
-    // B: currentStepId ilk adımı gösteren toplar (EXTERNAL attach→sevk penceresi)
-    const bRolls = await client.roll.findMany({
-      where: {
-        currentStepId: { in: firstStepIds },
-        status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
-      },
-      select: { id: true, currentStepId: true },
-    });
-    for (const r of bRolls) {
-      if (r.currentStepId) addToStep(r.currentStepId, r.id);
-    }
-    if (allRollIds.size > 0) {
-      const rolls = await client.roll.findMany({
-        where: {
-          id: { in: [...allRollIds] },
-          status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
-        },
-        select: { id: true, initialQty: true, currentStepId: true },
-      });
-      const qtyByRoll = new Map<string, Prisma.Decimal>();
-      const curStepByRoll = new Map<string, string | null>();
-      for (const r of rolls) {
-        qtyByRoll.set(r.id, new Prisma.Decimal(r.initialQty));
-        curStepByRoll.set(r.id, r.currentStepId);
-      }
-      for (const [stepId, rollSet] of rollIdsByStep) {
-        const woId = firstStepToWo.get(stepId);
-        if (!woId) continue;
-        let sum = committedByWo.get(woId) ?? D0();
-        for (const rid of rollSet) {
-          const q = qtyByRoll.get(rid);
-          if (q == null) continue; // CANCELLED/STOCK elendi
-          // GUARD: başka WO'nun adımına taşınan top (detach→reattach) sayılmaz.
-          const cs = curStepByRoll.get(rid) ?? null;
-          if (cs !== null && stepToWo.get(cs) !== woId) continue;
-          sum = sum.plus(q);
-        }
-        committedByWo.set(woId, sum);
-      }
-    }
-  }
+  // committed (üretime giren ham malzeme) — SPLIT (tebdil) WO dahil doğru hesap
+  // computeWoInput'ta. Eski "yalnız ilk adım" çapası split WO'yu 0 sayıyordu
+  // (toplar reEntry adımında doğar, seq1'e hiç girmez). Girdi-kökü tanımı hem
+  // normal hem split WO için tek kaynak → liste/detay/committed birbirinden sapamaz.
+  const inputByWo = await computeWoInput(client, ids);
 
   for (const woId of ids) {
     out.set(woId, {
-      committed: committedByWo.get(woId) ?? D0(),
+      committed: inputByWo.get(woId)?.meters ?? D0(),
       finished: finishedByWo.get(woId) ?? D0(),
     });
+  }
+  return out;
+}
+
+export interface WoInput {
+  /** Üretime giren KÖK top sayısı (charge-split çocukları sayılmaz). */
+  count: number;
+  /** Üretime giren toplam metraj (kök initialQty + fasondan-sevk charge-split çocuğu). */
+  meters: Prisma.Decimal;
+}
+
+/**
+ * WO başına "üretime giren" (committed) girdi defteri — NORMAL ve SPLIT (tebdil
+ * ile doğmuş) iş emirleri için DOĞRU. Eski "yalnız İLK adım (steps[0])" çapası
+ * split WO'yu 0 sayıyordu: split toplar reEntry adımında (boyahane/seq2) doğar,
+ * seq1'e hiç girmez. Tanım:
+ *
+ *   Üye(W)  = W'nin HERHANGİ adımına movement'ı olan VEYA currentStepId'si ∈ W
+ *             (detach guard: currentStepId null ∨ ∈ W; status ∉ CANCELLED/STOCK).
+ *   Kök(W)  = W dışından gelmiş üye:
+ *               • parentRollId bir ÜYE DEĞİL   (Tambur/fasondan-sevk çocuğu değil)
+ *               • parentReceiptId'nin makbuzu W'ye AİT DEĞİL (W-içi fason-dönüş
+ *                 yeniden-doğumu değil — o, zaten sayılan orijinalin rebirth'ü).
+ *   meters  = Σ Kök.initialQty
+ *           + Σ fasondan-sevk charge-split çocuğu.initialQty (parent kısmi sevkte
+ *             decrement edilir, çocuk shipQty taşır → orijinal charge korunur;
+ *             SAYIMda çocuk elenir, yalnız kök sayılır).
+ *
+ * Normal WO'da sonuç ESKİSİYLE AYNI (tek KK1/supplier kökü; fason-dönüş ve Tambur
+ * çocuğu W-içi → elenir). Split WO'da enjekte kök (parentReceipt kaynak WO'ya
+ * işaret eder, currentStep/movement yeni WO'ya repoint edilmiştir) artık sayılır.
+ * Liste + detay inputRolls + computeWoMaterial.committed hepsi buna dayanır.
+ */
+export async function computeWoInput(
+  client: Client,
+  woIds: string[]
+): Promise<Map<string, WoInput>> {
+  const out = new Map<string, WoInput>();
+  const ids = [...new Set(woIds)];
+  if (ids.length === 0) return out;
+  for (const id of ids) out.set(id, { count: 0, meters: D0() });
+
+  const steps = await client.workOrderStep.findMany({
+    where: { workOrderId: { in: ids } },
+    select: { id: true, workOrderId: true },
+  });
+  if (steps.length === 0) return out;
+  const stepToWo = new Map<string, string>();
+  const woSteps = new Map<string, Set<string>>();
+  for (const s of steps) {
+    stepToWo.set(s.id, s.workOrderId);
+    let set = woSteps.get(s.workOrderId);
+    if (!set) {
+      set = new Set();
+      woSteps.set(s.workOrderId, set);
+    }
+    set.add(s.id);
+  }
+  const stepIds = steps.map((s) => s.id);
+
+  // A: bu WO'ların HERHANGİ adımına movement'ı olan toplar → rollId ⇒ {woId}
+  const moves = await client.rollMovement.findMany({
+    where: { workOrderStepId: { in: stepIds } },
+    select: { rollId: true, workOrderStepId: true },
+    distinct: ["rollId", "workOrderStepId"],
+  });
+  const rollMoveWos = new Map<string, Set<string>>();
+  const candidateIds = new Set<string>();
+  for (const m of moves) {
+    if (!m.workOrderStepId) continue;
+    const wo = stepToWo.get(m.workOrderStepId);
+    if (!wo) continue;
+    candidateIds.add(m.rollId);
+    let set = rollMoveWos.get(m.rollId);
+    if (!set) {
+      set = new Set();
+      rollMoveWos.set(m.rollId, set);
+    }
+    set.add(wo);
+  }
+  // B: currentStepId ∈ adımlar (EXTERNAL attach→sevk penceresi; movement'sız)
+  const bRolls = await client.roll.findMany({
+    where: { currentStepId: { in: stepIds }, status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] } },
+    select: { id: true },
+  });
+  for (const r of bRolls) candidateIds.add(r.id);
+  if (candidateIds.size === 0) return out;
+
+  const rolls = await client.roll.findMany({
+    where: { id: { in: [...candidateIds] }, status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] } },
+    select: {
+      id: true,
+      initialQty: true,
+      currentStepId: true,
+      parentRollId: true,
+      parentReceiptId: true,
+      directShipmentId: true,
+    },
+  });
+
+  // parentReceiptId → makbuzun WO'su (W-içi fason-dönüş ayrımı için)
+  const receiptIds = [
+    ...new Set(rolls.map((r) => r.parentReceiptId).filter((x): x is string => Boolean(x))),
+  ];
+  const receiptWo = new Map<string, string>();
+  if (receiptIds.length > 0) {
+    const recs = await client.subcontractorReceipt.findMany({
+      where: { id: { in: receiptIds } },
+      select: { id: true, workOrderId: true },
+    });
+    for (const rec of recs) receiptWo.set(rec.id, rec.workOrderId);
+  }
+
+  const isMember = (r: (typeof rolls)[number], wo: string): boolean => {
+    const cs = r.currentStepId;
+    // detach guard: currentStepId başka WO'yu gösteriyorsa üye değil
+    if (cs !== null && stepToWo.get(cs) !== wo) return false;
+    // üyelik: currentStepId ∈ W  VEYA  W adımında movement
+    if (cs !== null && woSteps.get(wo)?.has(cs)) return true;
+    return rollMoveWos.get(r.id)?.has(wo) ?? false;
+  };
+
+  for (const wo of ids) {
+    const members = rolls.filter((r) => isMember(r, wo));
+    const memberIds = new Set(members.map((r) => r.id));
+    let count = 0;
+    let meters = D0();
+    for (const r of members) {
+      const parentIsMember = r.parentRollId != null && memberIds.has(r.parentRollId);
+      const receiptInThisWo = r.parentReceiptId != null && receiptWo.get(r.parentReceiptId) === wo;
+      if (!parentIsMember && !receiptInThisWo) {
+        // GİRDİ KÖKÜ (W dışından geldi)
+        count += 1;
+        meters = meters.plus(r.initialQty);
+      } else if (parentIsMember && r.directShipmentId != null) {
+        // fasondan-sevk charge-split çocuğu: parent decrement edildi → charge geri ekle
+        meters = meters.plus(r.initialQty);
+      }
+    }
+    out.set(wo, { count, meters });
   }
   return out;
 }

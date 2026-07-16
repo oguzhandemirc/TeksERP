@@ -17,6 +17,16 @@ import type {
   ShipmentDestination,
 } from "./types";
 
+/** Çuval müşteri değiştirme yanıtı — çözülmüş ad/kod (editör rozeti fetch'siz güncellenir). */
+export interface ReassignResult {
+  id: string;
+  customerId: string | null;
+  customerName: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  branchCode: string | null;
+}
+
 /**
  * Çuval Deposu / Paketleme hub servisi — backend /api/shipping (Çuval Depo modeli).
  * Tek geçit: arama (cursor) + çuval içerik düzenleme (aç/okut/tart/çıkar/taşı/sil) +
@@ -82,6 +92,19 @@ export const sackHubService = {
   /** Çuvalı tart (brüt kg). */
   weighSack: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/api/shipping/sacks/${sackId}/weigh`, { weightKg }).then((r) => r.data),
+
+  /** Depodaki çuvalın müşterisini/şubesini değiştir (sevkiyata girmemiş çuval; null=müşterisiz).
+   *  Yanıt çözülmüş ad/kodu döner → istemci editör rozetini fetch'siz günceller. */
+  reassignCustomer: (
+    sackId: string,
+    body: { customerId: string | null; branchId: string | null },
+  ): Promise<ApiResponse<ReassignResult>> =>
+    apiClient
+      .post<ApiResponse<ReassignResult>>(`/api/shipping/sacks/${sackId}/customer`, {
+        customerId: body.customerId,
+        branchId: body.branchId,
+      })
+      .then((r) => r.data),
 
   /** Çuval sil (boş) veya withContents=true → içeriği depoya döndürüp sil. */
   removeSack: (sackId: string, withContents?: boolean): Promise<ApiResponse<unknown>> =>

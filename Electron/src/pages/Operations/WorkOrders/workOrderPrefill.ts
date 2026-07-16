@@ -58,6 +58,8 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
       orderDeadline: ol.order?.deadline ?? null,
       customerId: ol.order?.customer?.id ?? "",
       customerName: ol.order?.customer?.name ?? "—",
+      branchName: ol.order?.branch?.name ?? null,
+      branchCode: ol.order?.branch?.code ?? null,
       itemId: ol.item?.id ?? "",
       itemName: ol.item?.name ?? "—",
       colorId: ol.colorId ?? null,

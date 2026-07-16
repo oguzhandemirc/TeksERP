@@ -19,7 +19,13 @@ import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
-import { createBatchTx, deleteIfEmptyAndTraceless, type CreateBatchResult } from "./batch.service";
+import {
+  assertBatchInWorkOrder,
+  createBatchTx,
+  deleteIfEmptyAndTraceless,
+  K18_DEAD_STATUSES,
+  type CreateBatchResult,
+} from "./batch.service";
 import {
   Prisma,
   PrintedDocType,
@@ -663,6 +669,62 @@ export class SubcontractorService {
     const existingBatchIds = [
       ...new Set(rolls.map((r) => r.batchId).filter((x): x is string => !!x)),
     ];
+
+    // CROSS-WO PARTİ GUARD'I: sevk iptali batchId'yi bilinçli korur (parti üyeliği
+    // attach'te doğar, iptal bozmaz) — bu yüzden STOCK+stepless bir top BAŞKA iş
+    // emrinin partisini taşıyor olabilir. Böyle bir top serbest sanılıp sevke
+    // alınırsa yabancı WO'nun partisi bu sevkin batchId'si olur (K10 ihlali) ve
+    // splitRemainder yabancı partiyi bölerdi. Sessiz devralma YOK ("yıkıcı işlemde
+    // açık onay" ilkesi): 400 + somut top/parti listesi. Çözüm: topu önce bu iş
+    // emrine bağla (attach yeni parti damgalar) ya da eski iş emrinden çıkar.
+    if (existingBatchIds.length > 0) {
+      const batchScopes = await prisma.batch.findMany({
+        where: { id: { in: existingBatchIds } },
+        select: {
+          id: true,
+          batchNumber: true,
+          workOrderId: true,
+          mergedIntoId: true,
+          mergedInto: { select: { batchNumber: true } },
+          workOrder: { select: { workOrderNumber: true } },
+        },
+      });
+      // K17: birleşmiş kaynak parti tarihçe satırıdır — yeni sevkin partisi olamaz
+      // (toplar/sevkler merge'de survivor'a taşındı; buraya düşen top üyeliği
+      // el ile bozulmuş demektir). İşlem survivor partide yapılmalı.
+      const mergedBatch = batchScopes.find((b) => b.mergedIntoId);
+      if (mergedBatch) {
+        throw AppError.badRequest(
+          `Parti ${mergedBatch.batchNumber}, ${mergedBatch.mergedInto?.batchNumber ?? mergedBatch.mergedIntoId} altına birleştirilmiş — işlem survivor partide yapılmalı`,
+        );
+      }
+      const foreignById = new Map(
+        batchScopes
+          .filter((b) => b.workOrderId !== data.workOrderId)
+          .map((b) => [b.id, b] as const),
+      );
+      if (foreignById.size > 0) {
+        const offending = rolls.filter((r) => r.batchId && foreignById.has(r.batchId));
+        throw AppError.badRequest(
+          `${offending.length} top başka iş emrinin partisine kayıtlı — bu sevke alınamaz. ` +
+            `Önce topu bu iş emrine bağlayın (yeni parti oluşur) ya da kayıtlı olduğu iş emrinden çıkarın.`,
+          {
+            code: "FOREIGN_BATCH",
+            foreignRolls: offending.map((r) => {
+              const b = foreignById.get(r.batchId!)!;
+              return {
+                id: r.id,
+                barcode: r.barcode,
+                batchId: b.id,
+                batchNumber: b.batchNumber,
+                workOrderNumber: b.workOrder.workOrderNumber,
+              };
+            }),
+          },
+        );
+      }
+    }
+
     if (existingBatchIds.length > 1 && data.multiBatchStrategy !== "MERGE") {
       const picker = await prisma.batch.findMany({
         where: { id: { in: existingBatchIds } },
@@ -794,6 +856,13 @@ export class SubcontractorService {
             userId,
           });
           remainderBatches.push(r.batch);
+          // K18: kalanlar YENİ parti numarası aldı — canlı topların fiziksel
+          // etiketindeki Parti No bayat → yeniden bas uyarısı (rem sorgusu
+          // zaten canlı statülerle filtreli; notIn savunma katmanı).
+          await tx.roll.updateMany({
+            where: { id: { in: rem.map((x) => x.id) }, status: { notIn: K18_DEAD_STATUSES } },
+            data: { labelDirty: true },
+          });
         }
       };
 
@@ -801,12 +870,37 @@ export class SubcontractorService {
         // K11 MERGE (strateji üstte doğrulandı): EN ESKİ parti survivor; seçilen TÜM
         // toplar ona taşınır; her kaynağın kalanı K5 ile yeni partiye; survivor-dışı
         // kaynak kartları VOID + boşalan izsiz kaynaklar silinir.
+        // WO-scope tazelemesi (woFresh deseni): cross-WO guard tx DIŞINDA koştu;
+        // pencerede parti başka işlemle değişmiş/silinmiş olabilir. Scope'lu taze
+        // okuma + count kontrolü — yabancı parti survivor OLAMAZ.
+        // mergedIntoId:null (K17 reddi tx-İÇİNDE de): ön-guard (~:694) tx DIŞINDA —
+        // pencerede parti bir K15 merge'ine kaynak olmuş olabilir; birleşmiş
+        // tarihçe satırı yeni sevkin partisi/survivor'ı OLAMAZ.
         const batchRows = await tx.batch.findMany({
-          where: { id: { in: existingBatchIds } },
+          where: { id: { in: existingBatchIds }, workOrderId: data.workOrderId, mergedIntoId: null },
           select: { id: true, batchNumber: true },
           orderBy: { createdAt: "asc" },
         });
+        if (batchRows.length !== existingBatchIds.length) {
+          throw AppError.conflict(
+            "Partilerden biri bu sırada başka bir işlemle değişti (birleştirilmiş olabilir). Listeyi yenileyip tekrar deneyin."
+          );
+        }
         dispatchBatchId = batchRows[0].id;
+        // K18: sevk-anı birleştirmede survivor DIŞI partiden gelen CANLI topların
+        // fiziksel etiketindeki Parti No bayatlar → yeniden bas uyarısı. İlk atama
+        // (batchId null — attach dalgası) K18 kapsamı DIŞI: etiket henüz parti
+        // numarasıyla basılmamıştır, bayraklanmaz. Zaten survivor'da olan top
+        // üyelik değiştirmez — bayraklanmaz.
+        const k18ChangingIds = rolls
+          .filter((r) => r.batchId && r.batchId !== dispatchBatchId)
+          .map((r) => r.id);
+        if (k18ChangingIds.length > 0) {
+          await tx.roll.updateMany({
+            where: { id: { in: k18ChangingIds }, status: { notIn: K18_DEAD_STATUSES } },
+            data: { labelDirty: true },
+          });
+        }
         await tx.roll.updateMany({
           where: { id: { in: dispatchRollIdsAll } },
           data: { batchId: dispatchBatchId },
@@ -818,7 +912,24 @@ export class SubcontractorService {
         }
       } else if (existingBatchIds.length === 1) {
         dispatchBatchId = existingBatchIds[0];
-        // Serbest/partisiz sevk topları bu partiye katılır.
+        // WO-scope tazelemesi (woFresh deseni): cross-WO guard tx DIŞINDA koştu;
+        // tx içinde taze doğrula — yabancı parti bu sevkin batchId'si OLAMAZ.
+        await assertBatchInWorkOrder(tx, dispatchBatchId, data.workOrderId);
+        // K17 reddi tx-İÇİNDE de (MAJOR-2): ön-guard (~:694) tx DIŞINDA koştu —
+        // pencerede parti bir K15 merge'ine kaynak olmuş olabilir; birleşmiş
+        // tarihçe satırı yeni sevk ALAMAZ (toplar/sevkler survivor'a taşındı).
+        const freshBatch = await tx.batch.findUnique({
+          where: { id: dispatchBatchId },
+          select: { batchNumber: true, mergedIntoId: true, mergedInto: { select: { batchNumber: true } } },
+        });
+        if (freshBatch?.mergedIntoId) {
+          throw AppError.conflict(
+            `Parti ${freshBatch.batchNumber}, ${freshBatch.mergedInto?.batchNumber ?? freshBatch.mergedIntoId} altına birleştirilmiş — listeyi yenileyin.`,
+          );
+        }
+        // Serbest/partisiz sevk topları bu partiye katılır. K18 bayrağı YOK:
+        // ilk atama (attach dalgası) kapsam dışı — etiket henüz parti
+        // numarasıyla basılmamıştır, bayatlayacak bir şey yok.
         await tx.roll.updateMany({
           where: { id: { in: dispatchRollIdsAll }, batchId: null },
           data: { batchId: dispatchBatchId },
@@ -827,7 +938,8 @@ export class SubcontractorService {
         await splitRemainder(dispatchBatchId);
       } else {
         // Hepsi serbest stok → sevk anında YENİ parti doğar (K3 dalgası). Kart WO
-        // başına (WO açılışında doğdu) — parti yeni kart üretmez.
+        // başına (WO açılışında doğdu) — parti yeni kart üretmez. K18 bayrağı YOK:
+        // ilk atama (attach dalgası) kapsam dışı — etiket henüz basılmamış olur.
         const created = await createBatchTx(tx, {
           workOrderId: data.workOrderId,
           rollIds: dispatchRollIdsAll,
@@ -1263,12 +1375,17 @@ export class SubcontractorService {
     // (ör. Zımpara→Boyahane), önceki adımın kabul edilmiş dispatch'i hâlâ
     // cancelledAt=null olur; stepId olmadan batchId→firma 1'e-çok olur ve
     // Map sona geleni (bayat firma) tutup yanlış "farklı firma" üretir.
+    // outstanding-scope ŞART (K15 retarget dönmüş sevkleri aynı adıma taşıyabilir):
+    // merge sonrası survivor'da aynı adımda DÖNMÜŞ + AÇIK sevk yan yana durabilir;
+    // outstanding koşulu olmadan Map last-wins belirsizliği dönmüş sevkin firmasını
+    // tutup aktarımı yanlış firmaya (ya da yanlış redde) götürürdü.
     const dispatches = await prisma.subcontractorDispatch.findMany({
       where: {
         batchId: { in: batchIds },
         stepId: data.stepId,
         cancelledAt: null,
         directShippedAt: null,
+        items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
       },
       select: { batchId: true, subcontractorId: true },
     });
@@ -1486,6 +1603,7 @@ export class SubcontractorService {
   // Kural:
   //   - Dispatch silinmez; cancelledAt/cancelledById/cancelReason set edilir.
   //   - Toplar STOCK'a geri döner ve currentStepId temizlenir (serbest stoğa iner).
+  //     Parti üyeliği (batchId) KORUNUR — üyelik attach'te doğar, iptal bozamaz.
   //   - Açık RollMovement varsa "CANCEL:dispatchNo" notuyla kapatılır.
   //   - SUBCONTRACTOR_SENT operation log'u silinir (idempotent).
   //   - Step'te başka aktif sevk/dispatch yoksa PENDING'e döner.
@@ -1596,11 +1714,12 @@ export class SubcontractorService {
 
       // 2) Toplar: STOCK + currentStepId temizle — ATOMİK CLAIM (movedRolls
       //    kontrolü tx dışında; eşzamanlı kabul/başka işlem pencerede araya
-      //    girdiyse count uyuşmaz → 409 + rollback). batchId da temizlenir:
-      //    iptal edilen sevkte parti hiç yaşanmamış sayılır — top yeniden
-      //    üretime girerse eski (iptal) dalın lane ayak izini taşımasın.
-      //    (Gerçekleşmiş partilerde lot kimliği depoya kadar kalıcıdır; bu
-      //    temizlik yalnız iptal yoluna özgüdür.)
+      //    girdiyse count uyuşmaz → 409 + rollback). batchId BİLİNÇLİ KORUNUR:
+      //    parti üyeliği attach'te doğar, sevk iptali üyeliği bozmaz — iptal
+      //    yalnız sevk belgesini geri alır; top aynı iş emrinde yeniden sevk
+      //    edilirse aynı partiyle yola çıkar (lot kimliği kalıcı). Korunan
+      //    batchId'nin BAŞKA iş emrinin sevkine sızması dispatch() içindeki
+      //    cross-WO parti guard'ı (FOREIGN_BATCH → 400) ile engellenir.
       const reverted = await tx.roll.updateMany({
         where: {
           id: { in: rollIds },
@@ -1993,6 +2112,10 @@ export class SubcontractorService {
     const srcBatchIds = [
       ...new Set(returnedRolls.map((r) => r.batchId).filter((x): x is string => !!x)),
     ];
+    // outstanding-scope ŞART (K15 retarget dönmüş sevkleri aynı adıma taşıyabilir):
+    // merge sonrası survivor'da aynı adımda DÖNMÜŞ + AÇIK sevk yan yana durabilir;
+    // outstanding koşulu olmadan Map last-wins belirsizliği dönmüş sevkin (bayat)
+    // firmasını tutar ve doğru firmaya yapılan kabul bile yanlış reddedilirdi.
     const srcDispatches =
       srcBatchIds.length > 0
         ? await prisma.subcontractorDispatch.findMany({
@@ -2001,6 +2124,7 @@ export class SubcontractorService {
               stepId: data.stepId,
               cancelledAt: null,
               directShippedAt: null,
+              items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
             },
             select: { batchId: true, subcontractorId: true },
           })
@@ -2440,7 +2564,15 @@ export class SubcontractorService {
 
       const dispatches = await prisma.subcontractorDispatch.findMany({
         // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
-        where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
+        // outstanding-scope ŞART (K15 retarget dönmüş sevkleri aynı adıma taşıyabilir):
+        // buildPendingParties batchId→dispatch Map'i last-wins — dönmüş sevk açık
+        // sevki ezip mobil kabul gruplamasında yanlış firma/sevk gösterirdi.
+        where: {
+          stepId: { in: stepIds },
+          cancelledAt: null,
+          directShippedAt: null,
+          items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+        },
         select: {
           id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
           driverName: true, stepId: true, subcontractorId: true,
@@ -2528,7 +2660,15 @@ export class SubcontractorService {
 
     const dispatches = await prisma.subcontractorDispatch.findMany({
       // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
-      where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
+      // outstanding-scope ŞART (WO'ya-özel kardeş sorguyla aynı — K15 retarget
+      // dönmüş sevkleri aynı adıma taşıyabilir): lastDispatch en güncel AÇIK sevk
+      // olmalı; dönmüş tarihçe sevki listede yanlış firma/sevk gösterirdi.
+      where: {
+        stepId: { in: stepIds },
+        cancelledAt: null,
+        directShippedAt: null,
+        items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+      },
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
@@ -2617,8 +2757,16 @@ export class SubcontractorService {
     // Bu adımın TÜM sevkleri (parti gruplaması için) — iptal edilmemiş.
     // Eskiden tek `lastDispatch` (findFirst) dönüyordu; çoklu sevkte partiler
     // ayrışamıyordu. lastDispatch geriye-uyumluluk için en güncel sevk olarak korunur.
+    // outstanding-scope ŞART (K15 retarget dönmüş sevkleri aynı adıma taşıyabilir):
+    // buildPendingParties batchId→dispatch Map'i last-wins — dönmüş sevk açık
+    // sevki ezip mobil kabul gruplamasında yanlış firma/sevk gösterirdi.
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: { stepId, cancelledAt: null, directShippedAt: null },
+      where: {
+        stepId,
+        cancelledAt: null,
+        directShippedAt: null,
+        items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+      },
       select: {
         id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
@@ -3419,6 +3567,42 @@ export class SubcontractorService {
           notes: `REOPENED_FROM_RECEIPT:${receipt.receiptNo}`,
         },
       });
+
+      // 2.5) K14 parti-tutarlılık guard'ı: kabul iptali orijinalleri yeniden
+      //    AT_SUBCONTRACTOR yapar ve kaynak sevk(ler) yeniden OUTSTANDING olur.
+      //    K14 dönmüş partiyi K8 araçlarına (merge/move) açtığından, top bu arada
+      //    BAŞKA partiye taşınmış olabilir — o halde canlanacak "AT_SUB topun
+      //    batchId'si = açık sevkin batchId'si" değişmezi (firma çözümü, mobil
+      //    kabul gruplaması, undoTransfer bunu okur) kırılırdı. Uyuşmazlıkta 409:
+      //    iptal, üyelik eski partiye dönmeden / K15 belge-taşıma gelmeden yapılamaz.
+      const [rollBatchRows, srcDispatchItems] = await Promise.all([
+        tx.roll.findMany({
+          where: { id: { in: rollIds } },
+          select: { id: true, barcode: true, batchId: true },
+        }),
+        tx.subcontractorDispatchItem.findMany({
+          where: {
+            rollId: { in: rollIds },
+            dispatch: { stepId: receipt.stepId, cancelledAt: null, directShippedAt: null },
+          },
+          select: { rollId: true, dispatch: { select: { batchId: true, dispatchNo: true } } },
+        }),
+      ]);
+      const rollBatchById = new Map(rollBatchRows.map((r) => [r.id, r]));
+      const mismatches: string[] = [];
+      for (const it of srcDispatchItems) {
+        const roll = rollBatchById.get(it.rollId);
+        if (roll && roll.batchId !== it.dispatch.batchId) {
+          mismatches.push(`${roll.barcode ?? roll.id.slice(0, 8)} (sevk ${it.dispatch.dispatchNo})`);
+        }
+      }
+      if (mismatches.length > 0) {
+        throw AppError.conflict(
+          `Kabul iptal edilemez — topların parti üyeliği kabulden sonra değişmiş ` +
+            `(birleştirme/taşıma): ${mismatches.join(", ")}. Sevk kaydı eski partiye ` +
+            `bağlı; iptal parti/sevk tutarlılığını bozar.`,
+        );
+      }
 
       // 3) Orijinal Roll'ları SUBCONTRACTOR_CONSUMED'dan AT_SUBCONTRACTOR'a geri
       //    çek — ATOMİK CLAIM: beklenen statüde olmayan top varsa (eşzamanlı
@@ -4461,7 +4645,16 @@ export class SubcontractorService {
       }
     }
 
-    await prisma.$transaction(async (tx) => {
+    // withBarcodeRetry: shipmentNo (@unique, DSK+GGAAYY+NNNN) tx içinde günün
+    // max'ından üretiliyor (nextDirectShipmentNo); eşzamanlı iki doğrudan sevk
+    // (farklı WO'lar — aynı WO'dakiler zaten touchWorkOrderTx kilidiyle serileşir)
+    // aynı numarayı hesaplarsa kaybeden P2002 alırdı → tx BAŞTAN denenir, sıra
+    // yeniden okunur (dispatch/receive'deki dispatchNo/receiptNo deseni). Retry
+    // güvenli: tüm yarış guard'ları tx İÇİNDE atomik claim (directShippedAt,
+    // AT_SUBCONTRACTOR count, satır-kilidi altında cap) — kaybeden retry'da
+    // temiz commit edemez, anlamlı Türkçe 409'a düşer.
+    await withBarcodeRetry(() =>
+      prisma.$transaction(async (tx) => {
       // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
       // sayımı + downstream SKIP eşzamanlı dispatch'le serileşsin.
       await touchWorkOrderTx(tx, dispatch.workOrderId);
@@ -4769,7 +4962,8 @@ export class SubcontractorService {
         userId,
         `Fasondan sevk: ${dispatch.dispatchNo} — ${trimmedReason}`,
       );
-    });
+      })
+    );
 
     await AuditService.log({
       userId,
@@ -4961,7 +5155,7 @@ async function buildFasonDirectShipDoc(
     where: { id: directShipmentId },
     include: {
       customer: { select: { id: true, name: true, code: true, taxNumber: true } },
-      branch: { select: { id: true, name: true } },
+      branch: { select: { id: true, name: true, code: true } },
       shippedBy: { select: { fullName: true, username: true } },
       dispatch: {
         select: {
@@ -5050,6 +5244,7 @@ async function buildFasonDirectShipDoc(
         code: ds.customer.code ?? null,
         taxNumber: ds.customer.taxNumber ?? null,
         branchName: ds.branch?.name ?? null,
+        branchCode: ds.branch?.code ?? null,
       },
       workOrder: {
         id: ds.dispatch.workOrder.id,

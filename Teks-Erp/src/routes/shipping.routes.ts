@@ -57,6 +57,7 @@ router.post("/sacks", verifyToken, WRITE, controller.openSack);
 router.post("/sacks/:id/scan", verifyToken, WRITE, controller.scanIntoSack);
 router.post("/sacks/:id/add-kartela", verifyToken, WRITE, controller.addKartelaToSack);
 router.post("/sacks/:id/weigh", verifyToken, WRITE, controller.weighSack);
+router.post("/sacks/:id/customer", verifyToken, WRITE, controller.reassignSackCustomer);
 router.post("/sacks/:id/remove", verifyToken, WRITE, controller.removeSack);
 // Çuval içeriği düzeltme (rol/kartela çıkar/taşı)
 router.post("/rolls/:rollId/remove-from-sack", verifyToken, WRITE, controller.removeRollFromSack);
@@ -80,6 +81,7 @@ router.get("/locate-roll", verifyToken, READ, controller.locateRoll);
 router.get("/sack-store/board", verifyToken, READ, controller.listSackStoreBoard);
 router.get("/shipments/:id/sack-contents", verifyToken, READ, controller.getShipmentSackContents);
 router.get("/shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, controller.getDispatchReport);
+router.get("/direct-shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, controller.getDirectShipmentDispatchReport);
 router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAccountingExport);
 
 // ===========================================================================

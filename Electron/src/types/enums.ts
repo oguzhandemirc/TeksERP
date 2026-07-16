@@ -99,6 +99,9 @@ export const WorkOrderStatus = {
   IN_PROGRESS: "IN_PROGRESS",
   COMPLETED: "COMPLETED",
   CANCELLED: "CANCELLED",
+  // SUPERSEDED ("Devredildi"): tebdil ile boşalan kaynak WO — malzemesi yeni iş
+  // emrine devredildi (splitFromId ile bağlı). İptal DEĞİL, veri kaybı yok.
+  SUPERSEDED: "SUPERSEDED",
 } as const;
 export type WorkOrderStatus = (typeof WorkOrderStatus)[keyof typeof WorkOrderStatus];
 
@@ -107,6 +110,7 @@ export const workOrderStatusLabels: Record<WorkOrderStatus, string> = {
   IN_PROGRESS: "Devam Ediyor",
   COMPLETED: "Tamamlandı",
   CANCELLED: "İptal",
+  SUPERSEDED: "Devredildi",
 };
 
 export const WorkOrderType = {

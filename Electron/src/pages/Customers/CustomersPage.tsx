@@ -3,16 +3,51 @@ import { customerColumns } from "./columns";
 import { customerService } from "./service";
 import { CustomerFormDialog } from "./CustomerFormDialog";
 import type { Customer } from "./types";
-import type { CustomerFormValues } from "./schema";
+import { branchDraftHasContent, type CustomerFormValues } from "./schema";
 
-const buildPayload = (v: CustomerFormValues, initial: Customer | null): Partial<Customer> => ({
-  // Kod backend'de üretilir (MUS+GGAAYY+NNNN); yeni kayıtta gönderilmez, düzenlemede korunur.
-  ...(initial ? { code: initial.code } : {}),
-  name: v.name,
-  taxNumber: v.taxNumber || null,
-  type: v.type,
-  isActive: v.isActive,
-});
+/** Tek-adım oluşturmada backend'e gönderilen satır-içi şube gövdesi. */
+interface BranchCreatePayload {
+  name: string;
+  city: string | null;
+  district: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  code: string | null;
+  address: string | null;
+  notes: string | null;
+}
+
+type CustomerWritePayload = Partial<Customer> & { branches?: BranchCreatePayload[] };
+
+const buildPayload = (v: CustomerFormValues, initial: Customer | null): CustomerWritePayload => {
+  // Şubeler yalnız OLUŞTURMADA gönderilir (müşteri + şubeler tek transaction'da doğar);
+  // düzenlemede şubeler ayrı sekmeden yönetilir → payload'a eklenmez. Tamamen boş
+  // taslak satırları (yanlışlıkla "Şube ekle") elenir — validasyon içerikli satırda
+  // adı zaten zorunlu kıldığı için kalanların hepsinin adı doludur.
+  const branchRows = initial ? [] : v.branches.filter(branchDraftHasContent);
+  return {
+    // Kod backend'de üretilir (MUS+GGAAYY+NNNN); yeni kayıtta gönderilmez, düzenlemede korunur.
+    ...(initial ? { code: initial.code } : {}),
+    name: v.name,
+    taxNumber: v.taxNumber || null,
+    type: v.type,
+    isActive: v.isActive,
+    ...(branchRows.length > 0
+      ? {
+          branches: branchRows.map((b) => ({
+            name: b.name.trim(),
+            city: b.city?.trim() || null,
+            district: b.district?.trim() || null,
+            contactName: b.contactName?.trim() || null,
+            contactPhone: b.contactPhone?.trim() || null,
+            code: b.code?.trim() || null,
+            address: b.address?.trim() || null,
+            notes: b.notes?.trim() || null,
+          })),
+        }
+      : {}),
+  };
+};
 
 export function CustomersPage() {
   return (

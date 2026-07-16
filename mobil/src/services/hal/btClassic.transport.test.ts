@@ -168,4 +168,35 @@ describe('btClassic.transport', () => {
     const t = btClassicTransport('AA:11');
     expect(await t.read({ terminator: '\n' })).toBe('7.0');
   });
+
+  it('aynı MAC eşzamanlı okumalar serileşir (tampon çakışmaz)', async () => {
+    // Tek kabloyla 2-KAT + 4-KAT metre → iki cihaz kaydı AYNI MAC. İki okuma
+    // çakışırsa readResponse'ın clear→write→read döngüsü birbirinin tamponunu
+    // bozardı; MAC kilidi ikinci okumayı ilki bitene dek sıraya sokmalı.
+    mod.isDeviceConnected.mockResolvedValue(true);
+    mod.availableFromDevice.mockResolvedValue(12);
+    mod.readFromDevice.mockResolvedValue('1.0\r\n1.0\r\n'); // 2 çerçeve → tek okumada döner
+    const events: string[] = [];
+    mod.clearFromDevice.mockImplementation(async () => {
+      events.push('clear');
+      return true;
+    });
+    mod.writeToDevice.mockImplementation(async (_addr: string, msg: string) => {
+      events.push(`w:${msg}`);
+      return true;
+    });
+
+    await Promise.all([
+      readResponse('AA:11', { pollCommand: 'CMD1' }),
+      readResponse('AA:11', { pollCommand: 'CMD2' }),
+    ]);
+
+    // Komutlar sırayla gitti (biri bitmeden diğeri yazmadı).
+    expect(events.filter((e) => e.startsWith('w:'))).toEqual(['w:CMD1', 'w:CMD2']);
+    // Serileşme kanıtı: 2. okumanın 'clear'ı 1. komut yazımından SONRA gelir —
+    // kilit olmasa iki 'clear' en başta arka arkaya gelirdi.
+    const clears = events.map((e, i) => (e === 'clear' ? i : -1)).filter((i) => i >= 0);
+    expect(clears).toHaveLength(2);
+    expect(clears[1]).toBeGreaterThan(events.indexOf('w:CMD1'));
+  });
 });

@@ -535,7 +535,7 @@ export class OrderService extends BaseService {
       take: 500,
       include: {
         customer: true,
-        branch: { select: { id: true, name: true, city: true, district: true } },
+        branch: { select: { id: true, name: true, code: true, city: true, district: true } },
         lines: {
           include: {
             // item.allowedProperties picker sonucunda KULLANILMIYOR (TargetPropertyPicker
@@ -1581,7 +1581,7 @@ export class OrderService extends BaseService {
         const activeLink = await tx.workOrderToOrderLine.findFirst({
           where: {
             orderLine: { orderId: id },
-            workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
+            workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
           },
           select: { workOrderId: true },
         });
@@ -1608,7 +1608,7 @@ export class OrderService extends BaseService {
           const linkedToDeleted = await tx.workOrderToOrderLine.findFirst({
             where: {
               orderLineId: { in: toDelete },
-              workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
+              workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
             },
             select: { workOrderId: true },
           });
@@ -2203,7 +2203,7 @@ export class OrderService extends BaseService {
       }
       // Önizleme sonrası bu siparişe DOĞAN yeni WO bağı → onaysız kopmayı engelle.
       const currentLinks = await tx.workOrderToOrderLine.findMany({
-        where: { orderLine: { orderId }, workOrder: { status: { not: WorkOrderStatus.CANCELLED } } },
+        where: { orderLine: { orderId }, workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } } },
         select: { workOrderId: true },
       });
       if (currentLinks.some((l) => !affectedWoIds.includes(l.workOrderId))) {
@@ -2216,7 +2216,7 @@ export class OrderService extends BaseService {
         const action = actionByWO.get(wo.id)!;
         if (action === "CONVERT_TO_STOCK") {
           const conv = await tx.workOrder.updateMany({
-            where: { id: wo.id, status: { not: WorkOrderStatus.CANCELLED } },
+            where: { id: wo.id, status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
             data: { type: "STOCK_PRODUCTION" },
           });
           if (conv.count === 0) {

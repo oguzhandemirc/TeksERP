@@ -665,9 +665,12 @@ export interface TamburRollSummary {
   errors: TamburRollDefect[];
   /** Parti (Batch) kimliği — null = partisiz/doğrudan top. Bu alanla gruplanır. */
   batchId: string | null;
-  /** Partinin sevk numarası (SubcontractorDispatch.dispatchNo). */
+  /** Parti numarası (Batch.batchNumber, P+GGAAYY+NNNN) — partisiz topta null. */
+  batchNumber: string | null;
+  /** Partinin iptal edilmemiş en güncel fason sevk numarası
+   *  (SubcontractorDispatch.dispatchNo) — sevk görmemiş partide null. */
   dispatchNo: string | null;
-  /** WO içindeki 1-based parti sırası (dispatchedAt'e göre, stabil). */
+  /** WO içindeki 1-based parti sırası (Batch.createdAt'e göre, stabil). */
   branchOrdinal: number | null;
 }
 

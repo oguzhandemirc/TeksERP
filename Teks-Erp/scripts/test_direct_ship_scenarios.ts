@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     const r = await stockRoll(300);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r]);
     const lineId = await makeOrderLine(500);
-    await expectThrow("qty=600 (kalan 500) → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "over-ship denemesi", orderLineAllocations: [{ orderLineId: lineId, qty: 600 }] }, ADMIN), "aşıyor");
+    await expectThrow("qty=600 (kalan 500) → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "over-ship denemesi", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: lineId, qty: 600 }] }, ADMIN), "aşıyor");
     // Dispatch hâlâ açık olmalı (tx rollback)
     const d = await prisma.subcontractorDispatch.findUnique({ where: { id: dId }, select: { directShippedAt: true } });
     check("Hatadan sonra dispatch açık kaldı (tx rollback)", d?.directShippedAt === null);
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     const r = await stockRoll(300);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r]);
     const lineId = await makeOrderLine(1000);
-    await expectThrow("aynı satır iki kez → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "duplicate denemesi", orderLineAllocations: [{ orderLineId: lineId, qty: 100 }, { orderLineId: lineId, qty: 50 }] }, ADMIN), "iki kez");
+    await expectThrow("aynı satır iki kez → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "duplicate denemesi", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: lineId, qty: 100 }, { orderLineId: lineId, qty: 50 }] }, ADMIN), "iki kez");
   }
 
   // 3) ÇOK-SATIR karşılanma + order status recompute (tam karşılanma → COMPLETED)
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
     const r1 = await stockRoll(300), r2 = await stockRoll(300);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r1, r2]);
     const lineA = await makeOrderLine(200), lineB = await makeOrderLine(300);
-    await sub.executeDirectShip({ dispatchId: dId, reason: "iki siparişe bölündü", orderLineAllocations: [{ orderLineId: lineA, qty: 200 }, { orderLineId: lineB, qty: 300 }] }, ADMIN);
+    await sub.executeDirectShip({ dispatchId: dId, reason: "iki siparişe bölündü", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: lineA, qty: 200 }, { orderLineId: lineB, qty: 300 }] }, ADMIN);
     const olA = await prisma.orderLine.findUnique({ where: { id: lineA }, select: { shippedQty: true, order: { select: { status: true } } } });
     const olB = await prisma.orderLine.findUnique({ where: { id: lineB }, select: { shippedQty: true } });
     check("Satır A shippedQty=200", Number(olA?.shippedQty) === 200);
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
     const r1 = await stockRoll(200), r2 = await stockRoll(200);
     const d1 = await dispatchRolls(woId, s[0], SUB_BOYER, [r1]);
     await dispatchRolls(woId, s[0], SUB_KESTEL, [r2]); // D2 açık kalır
-    await sub.executeDirectShip({ dispatchId: d1, reason: "yalnız D1 doğrudan sevk" }, ADMIN);
+    await sub.executeDirectShip({ dispatchId: d1, reason: "yalnız D1 doğrudan sevk", customerId: CUSTOMER }, ADMIN);
     const r1a = await prisma.roll.findUnique({ where: { id: r1 }, select: { status: true } });
     const r2a = await prisma.roll.findUnique({ where: { id: r2 }, select: { status: true } });
     const step = await prisma.workOrderStep.findUnique({ where: { id: s[0] }, select: { status: true } });
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     const { woId, stepIds: s } = await makeWo([{ stationId: ST_BOYA, seq: 1 }, { stationId: ST_ZIMPARA, seq: 2 }, { stationId: ST_TAMBUR, seq: 3 }]);
     const r = await stockRoll(400);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r]);
-    await sub.executeDirectShip({ dispatchId: dId, reason: "boyahane son durak oldu", completeWorkOrder: true }, ADMIN);
+    await sub.executeDirectShip({ dispatchId: dId, reason: "boyahane son durak oldu", customerId: CUSTOMER, completeWorkOrder: true }, ADMIN);
     const steps = await prisma.workOrderStep.findMany({ where: { id: { in: s } }, select: { id: true, status: true, skipReason: true } });
     const m = (id: string) => steps.find((x) => x.id === id)!;
     check("BOYA COMPLETED", m(s[0]).status === StepStatus.COMPLETED);
@@ -164,14 +164,16 @@ async function main(): Promise<void> {
       const stamp = `${Date.now()}`.slice(-6) + Math.floor(Math.random() * 1000);
       const ord = await prisma.order.create({ data: { orderNumber: `TST-DSS-NM-${stamp}`, customerId: CUSTOMER, status: "APPROVED", lines: { create: [{ itemId: otherItem.id, width: WIDTH, quantity: 100 }] } }, include: { lines: true } });
       orderIds.push(ord.id);
-      await expectThrow("eşleşmeyen item satırı → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "eşleşmeyen satır", orderLineAllocations: [{ orderLineId: ord.lines[0].id, qty: 50 }] }, ADMIN), "eşleşmiyor");
+      await expectThrow("eşleşmeyen item satırı → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "eşleşmeyen satır", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: ord.lines[0].id, qty: 50 }] }, ADMIN), "eşleşmiyor");
     } else { check("(eşleşmeyen item testi atlandı — başka item yok)", true); }
     // iptal sipariş
     const cancLine = await makeOrderLine(200);
     await prisma.order.updateMany({ where: { lines: { some: { id: cancLine } } }, data: { status: "CANCELLED" } });
-    await expectThrow("iptal sipariş satırı → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "iptal sipariş", orderLineAllocations: [{ orderLineId: cancLine, qty: 50 }] }, ADMIN), "İptal");
-    // kısa sebep
+    await expectThrow("iptal sipariş satırı → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "iptal sipariş", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: cancLine, qty: 50 }] }, ADMIN), "İptal");
+    // kısa sebep (reason guard customerId guard'ından da önce → customerId'siz doğru)
     await expectThrow("kısa sebep (<3) → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "ab" }, ADMIN), "3 karakter");
+    // müşteri-zorunlu guard (07fbbde): customerId olmadan → 400 "müşteri zorunludur"
+    await expectThrow("customerId YOK → 'müşteri zorunludur'", () => sub.executeDirectShip({ dispatchId: dId, reason: "müşterisiz doğrudan sevk denemesi" }, ADMIN), "müşteri zorunludur");
   }
 
   // 7) TOP KAÇTI → 409 (claim guard)
@@ -182,7 +184,7 @@ async function main(): Promise<void> {
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r]);
     // topu elle kaçır (status değiştir)
     await prisma.roll.update({ where: { id: r }, data: { status: RollStatus.STOCK } });
-    await expectThrow("toplar AT_SUBCONTRACTOR değil → hata", () => sub.executeDirectShip({ dispatchId: dId, reason: "top kaçtı senaryosu" }, ADMIN));
+    await expectThrow("toplar AT_SUBCONTRACTOR değil → hata", () => sub.executeDirectShip({ dispatchId: dId, reason: "top kaçtı senaryosu", customerId: CUSTOMER }, ADMIN));
     await prisma.roll.update({ where: { id: r }, data: { status: RollStatus.AT_SUBCONTRACTOR } }); // cleanup için geri al
   }
 
@@ -210,7 +212,7 @@ async function main(): Promise<void> {
     const totalSuggested = pv.candidateOrderLines.reduce((s, c) => s + c.suggestedQty, 0);
     check("preview: FIFO havuzu eşleşen satırlara dağıtıldı (toplam suggestedQty>0)", totalSuggested > 0, `toplam=${totalSuggested}`);
     // direct-ship sonrası alreadyDirectShipped=true
-    await sub.executeDirectShip({ dispatchId: dId, reason: "preview sonrası sevk" }, ADMIN);
+    await sub.executeDirectShip({ dispatchId: dId, reason: "preview sonrası sevk", customerId: CUSTOMER }, ADMIN);
     const pv2 = (await sub.previewDirectShip(dId)).data as { alreadyDirectShipped: boolean };
     check("preview (sevk sonrası): alreadyDirectShipped=true", pv2.alreadyDirectShipped === true);
   }
@@ -234,8 +236,12 @@ async function main(): Promise<void> {
     const r = await stockRoll(300);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r]);
     const lineId = await makeOrderLine(300);
-    await sub.executeDirectShip({ dispatchId: dId, reason: "belge testi sebebi", orderLineAllocations: [{ orderLineId: lineId, qty: 300 }] }, ADMIN);
-    const dsDoc = await prisma.printedDocument.findFirst({ where: { docType: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, sourceId: dId, status: PrintedDocStatus.ACTIVE }, select: { snapshot: true } });
+    await sub.executeDirectShip({ dispatchId: dId, reason: "belge testi sebebi", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: lineId, qty: 300 }] }, ADMIN);
+    // Donmuş belgenin sourceId'si DirectShipment.id (dispatch DEĞİL) — önce olayı bul.
+    const ds9 = await prisma.directShipment.findFirst({ where: { dispatchId: dId }, select: { id: true, customerId: true } });
+    check("DirectShipment kaydı doğdu (customerId doğru)", ds9 != null && ds9.customerId === CUSTOMER);
+    const ds9Id = ds9?.id ?? "00000000-0000-0000-0000-000000000000";
+    const dsDoc = await prisma.printedDocument.findFirst({ where: { docType: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, sourceId: ds9Id, status: PrintedDocStatus.ACTIVE }, select: { snapshot: true } });
     check("DIRECT_SHIP belgesi ACTIVE donmuş", dsDoc != null);
     const snap = dsDoc?.snapshot as { doc?: { directShip?: boolean; directShipReason?: string; allocations?: unknown[] } } | null;
     check("belge snapshot: directShip=true", snap?.doc?.directShip === true);
@@ -254,8 +260,8 @@ async function main(): Promise<void> {
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r]);
     // Aynı dispatch'e eşzamanlı iki çağrı (havuzlu client → ayrı tx/connection).
     const results = await Promise.allSettled([
-      sub.executeDirectShip({ dispatchId: dId, reason: "yarış A" }, ADMIN),
-      sub.executeDirectShip({ dispatchId: dId, reason: "yarış B" }, ADMIN),
+      sub.executeDirectShip({ dispatchId: dId, reason: "yarış A", customerId: CUSTOMER }, ADMIN),
+      sub.executeDirectShip({ dispatchId: dId, reason: "yarış B", customerId: CUSTOMER }, ADMIN),
     ]);
     const fulfilled = results.filter((x) => x.status === "fulfilled").length;
     const rejected = results.filter((x) => x.status === "rejected").length;
@@ -265,7 +271,10 @@ async function main(): Promise<void> {
     const rollNow = await prisma.roll.findUnique({ where: { id: r }, select: { status: true } });
     check("İki paralel çağrı çöküş yapmadı (1 reject VEYA 2 idempotent çözüldü)", fulfilled >= 1 && fulfilled + rejected === 2, `fulfilled=${fulfilled} rejected=${rejected}`);
     check("Top TAM BİR KEZ tüketildi (CONSUMED + tek SUBCONTRACTOR_RETURNED op)", rollNow?.status === RollStatus.SUBCONTRACTOR_CONSUMED && rollOps === 1, `status=${rollNow?.status} ops=${rollOps}`);
-    const doc = await prisma.printedDocument.count({ where: { sourceId: dId, docType: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP } });
+    // Belge sourceId = DirectShipment.id → önce olay kayıtlarını say (çift kayıt da yarış hatası olur).
+    const ds10 = await prisma.directShipment.findMany({ where: { dispatchId: dId }, select: { id: true } });
+    check("Tek DirectShipment kaydı (çift olay yok)", ds10.length === 1, String(ds10.length));
+    const doc = await prisma.printedDocument.count({ where: { sourceId: { in: ds10.map((d) => d.id) }, docType: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP } });
     check("Tek DIRECT_SHIP belgesi (çift freeze yok)", doc === 1, String(doc));
   }
 
@@ -276,7 +285,7 @@ async function main(): Promise<void> {
     const r1 = await stockRoll(150), r2 = await stockRoll(150);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r1, r2]);
     // Tüm topları sevk et ama "iş emrini tamamla" DEME.
-    await sub.executeDirectShip({ dispatchId: dId, reason: "kısmi sipariş, kalan üretim devam", completeWorkOrder: false }, ADMIN);
+    await sub.executeDirectShip({ dispatchId: dId, reason: "kısmi sipariş, kalan üretim devam", customerId: CUSTOMER, completeWorkOrder: false }, ADMIN);
     const steps = await prisma.workOrderStep.findMany({ where: { id: { in: s } }, select: { id: true, status: true } });
     const m = (id: string) => steps.find((x) => x.id === id)!;
     check("BOYA adımı COMPLETED (top kalmadı)", m(s[0]).status === StepStatus.COMPLETED, m(s[0]).status);
@@ -293,7 +302,7 @@ async function main(): Promise<void> {
     const { woId, stepIds: s } = await makeWo([{ stationId: ST_BOYA, seq: 1 }]);
     const r1 = await stockRoll(200), r2 = await stockRoll(200);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r1, r2]);
-    await sub.executeDirectShip({ dispatchId: dId, reason: "yalnız bir topu doğrudan sevk", rollIds: [r1] }, ADMIN);
+    await sub.executeDirectShip({ dispatchId: dId, reason: "yalnız bir topu doğrudan sevk", customerId: CUSTOMER, rollIds: [r1] }, ADMIN);
     const r1a = await prisma.roll.findUnique({ where: { id: r1 }, select: { status: true } });
     const r2a = await prisma.roll.findUnique({ where: { id: r2 }, select: { status: true } });
     check("Sevk edilen top (r1) CONSUMED", r1a?.status === RollStatus.SUBCONTRACTOR_CONSUMED, String(r1a?.status));
@@ -319,10 +328,17 @@ async function cleanup(): Promise<void> {
     const receiptIds = receipts.map((r) => r.id);
     const dispatches = await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
     const dispatchIds = dispatches.map((d) => d.id);
+    const directShipments = await prisma.directShipment.findMany({ where: { dispatchId: { in: dispatchIds } }, select: { id: true } });
+    const directShipmentIds = directShipments.map((d) => d.id);
     const orderLines = await prisma.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
     const orderLineIds = orderLines.map((l) => l.id);
-    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispatchIds } } });
+    // Direct-ship irsaliyesinin sourceId'si DirectShipment.id — her iki kaynağı da sil.
+    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...dispatchIds, ...directShipmentIds] } } });
+    // DirectShipment sökümü: önce roll bağını çöz, sonra allocation, sonra kayıt
+    // (DirectShipment.dispatchId Restrict → dispatch'ten ÖNCE silinmeli).
+    await prisma.roll.updateMany({ where: { directShipment: { dispatchId: { in: dispatchIds } } }, data: { directShipmentId: null } });
     await prisma.subcontractorDirectShipAllocation.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
+    await prisma.directShipment.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });

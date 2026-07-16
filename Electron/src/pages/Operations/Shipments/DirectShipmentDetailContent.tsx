@@ -63,7 +63,12 @@ export function DirectShipmentDetailContent({
           <Card>
             <CardContent className="space-y-1.5 py-4">
               <Row label="Müşteri" value={d.customer.name} />
-              {d.branch && <Row label="Şube" value={d.branch.name} />}
+              {d.branch && (
+                <Row
+                  label="Şube"
+                  value={d.branch.code ? `${d.branch.name} (${d.branch.code})` : d.branch.name}
+                />
+              )}
               <Row
                 label="Fason Firma"
                 value={

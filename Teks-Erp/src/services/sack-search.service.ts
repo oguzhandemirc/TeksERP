@@ -122,7 +122,7 @@ export class SackSearchService {
         weightKg: true,
         createdAt: true,
         customer: { select: { id: true, name: true } },
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         shipment: {
           select: {
             id: true,
@@ -216,7 +216,7 @@ export class SackSearchService {
             shipmentNo: true,
             status: true,
             customer: { select: { id: true, name: true } },
-            branch: { select: { id: true, name: true } },
+            branch: { select: { id: true, code: true, name: true } },
           },
         },
         rolls: {
@@ -268,7 +268,7 @@ export class SackSearchService {
         seq: true,
         weightKg: true,
         customer: { select: { id: true, name: true } },
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         shipment: {
           select: {
             id: true,
@@ -352,7 +352,7 @@ export class SackSearchService {
             shipmentNo: true,
             status: true,
             customer: { select: { id: true, name: true } },
-            branch: { select: { id: true, name: true } },
+            branch: { select: { id: true, code: true, name: true } },
           },
         },
       },

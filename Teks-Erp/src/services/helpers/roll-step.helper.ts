@@ -165,7 +165,8 @@ export async function completeWorkOrderIfStepsDone(
   await tx.workOrder.updateMany({
     where: {
       id: workOrderId,
-      status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+      // SUPERSEDED (tebdil ile devredilmiş) de terminal — recompute onu COMPLETED'e çevirmesin.
+      status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
     },
     data: { status: WorkOrderStatus.COMPLETED },
   });

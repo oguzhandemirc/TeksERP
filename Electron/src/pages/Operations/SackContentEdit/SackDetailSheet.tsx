@@ -72,7 +72,7 @@ export function SackDetailSheet({ sack, onOpenChange }: Props) {
           </SheetTitle>
           <SheetDescription>
             {sack
-              ? `${sack.customer?.name ?? "—"}${sack.branch ? ` · ${sack.branch.name}` : ""} · ${safeFormat(sack.createdAt, "dd.MM.yyyy")}`
+              ? `${sack.customer?.name ?? "—"}${sack.branch ? ` · ${sack.branch.name}${sack.branch.code ? ` (${sack.branch.code})` : ""}` : ""} · ${safeFormat(sack.createdAt, "dd.MM.yyyy")}`
               : ""}
           </SheetDescription>
         </SheetHeader>

@@ -23,7 +23,7 @@ import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationT
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { createBatchTx, deleteIfEmptyAndTraceless } from "./batch.service";
+import { createBatchTx, deleteIfEmptyAndTraceless, isBatchLockedTx, K18_DEAD_STATUSES } from "./batch.service";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
@@ -80,6 +80,44 @@ export class WorkOrderManualMoveService {
   private stepSeq(steps: StepRef[], stepId: string | null): number | null {
     if (!stepId) return null;
     return steps.find((s) => s.id === stepId)?.stepSequence ?? null;
+  }
+
+  /**
+   * CUT hard-stop kümesi — YÖN-BİLİNÇLİ (2026-07-16): yalnız GERİ taşınan toplar
+   * (kaynak adım hedeften SONRA, ya da adımsız — depo/stoktan üretime geri alma) için
+   * ve yalnız çocuğun doğduğu kesim HEDEF-VEYA-SONRASI adımdaysa engeller. İLERİ
+   * taşımada ve hedef-ÖNCESİ (tarihçe) kesimlerde çocuk varlığı engel DEĞİL — eski
+   * yön-bağımsız `parentRollId` sayımı ileri-atlama backflush'ını başka yerde doğmuş
+   * çocuklarla blokluyordu (kendi yorumu "hedef-sonrası kesim / geri taşınamaz" derken).
+   * Doğum adımı bilinmeyen (producedInStepId null) çocuk muhafazakâr biçimde ENGELLER —
+   * kesimin nerede yapıldığı kanıtlanamaz. Başka WO'nun adımında doğmuş çocuk (top
+   * depodan yeni WO'ya alınmış) bu rotada tarihçedir — engel değil.
+   */
+  private async cutBlockedRollIds(
+    db: Prisma.TransactionClient | typeof prisma,
+    ctx: MoveContext,
+  ): Promise<Set<string>> {
+    const t = ctx.targetStep;
+    const backwardIds = ctx.selected
+      .filter((r) => {
+        const seq = this.stepSeq(ctx.steps, r.currentStepId);
+        return seq == null || seq > t.stepSequence;
+      })
+      .map((r) => r.id);
+    if (backwardIds.length === 0) return new Set();
+    const children = await db.roll.findMany({
+      where: { parentRollId: { in: backwardIds } },
+      select: { parentRollId: true, producedInStepId: true },
+    });
+    const targetOrLaterIds = new Set(
+      ctx.steps.filter((s) => s.stepSequence >= t.stepSequence).map((s) => s.id),
+    );
+    return new Set(
+      children
+        .filter((c) => c.producedInStepId == null || targetOrLaterIds.has(c.producedInStepId))
+        .map((c) => c.parentRollId)
+        .filter((x): x is string => !!x),
+    );
   }
 
   /** Ortak bağlam: WO adımları, hedef adım, seçili toplar + hangileri gerçekten taşınabilir. */
@@ -216,7 +254,8 @@ export class WorkOrderManualMoveService {
     const t = ctx.targetStep;
 
     // GERİ taşımada hedeften SONRA yapılmış işlem — İKİ tür:
-    //   - CUT (fiziksel kesim → parentRollId'li çocuk top var): geri alınamaz → HARD-BLOCK.
+    //   - CUT (fiziksel kesim → hedef-veya-sonrası adımda doğmuş parentRollId'li çocuk top):
+    //     geri alınamaz → HARD-BLOCK (yön-bilinçli — bkz. cutBlockedRollIds).
     //   - Salt QC2/Kurşun (çocuk yok): kalite kararı geri alınabilir → top taşınır, kalite VOID
     //     edilir (grade → Belirsiz). Yanlış girilen grade/kurşun süpervizörün düzelttiği şeydir.
     const selIds = ctx.selected.map((r) => r.id);
@@ -225,11 +264,7 @@ export class WorkOrderManualMoveService {
       select: { rollId: true },
     });
     const opRollIds = new Set(opRows.map((o) => o.rollId));
-    const cutParents = await prisma.roll.findMany({
-      where: { parentRollId: { in: selIds } },
-      select: { parentRollId: true },
-    });
-    const cutBlocked = new Set(cutParents.map((c) => c.parentRollId).filter((x): x is string => !!x));
+    const cutBlocked = await this.cutBlockedRollIds(prisma, ctx);
 
     let anyQcVoid = false;
     const rolls = ctx.selected.map((r) => {
@@ -295,14 +330,33 @@ export class WorkOrderManualMoveService {
       warnings.push("Fason adımına taşınıyor — mal orada üretimde bekler, sevki ayrıca (Fason Sevk) yapılır.");
     }
 
-    // 'join' adayları: aynı WO'da sevksiz (kilitsiz) diğer partiler.
+    // 'join' adayları: aynı WO'da KİLİTSİZ + birleşmemiş (K17) diğer partiler.
+    // K14 ÇİFT koşul INLINE (isBatchLockedTx ile aynı kural — sorgu-içi filtre
+    // gerektiğinden kopya): kilitli = (a) AT_SUBCONTRACTOR topu VAR *veya*
+    // (b) açık + OUTSTANDING (dönmemiş kalemi olan) sevki VAR. outstanding-scope
+    // ŞART (K15 retarget dönmüş sevkleri partiye taşıyabilir) — dönmüş sevk
+    // tarihçedir, kilit saymaz; eski `cancelledAt:null` filtresi dönmüş partiyi
+    // sonsuza dek aday listesinden düşürürdü.
     const otherBatches = await prisma.batch.findMany({
-      where: { workOrderId, id: { notIn: ctx.sourceBatchIds } },
-      select: { id: true, batchNumber: true, dispatches: { where: { cancelledAt: null }, select: { id: true } } },
+      where: { workOrderId, id: { notIn: ctx.sourceBatchIds }, mergedIntoId: null },
+      select: {
+        id: true,
+        batchNumber: true,
+        rolls: { where: { status: RollStatus.AT_SUBCONTRACTOR }, select: { id: true }, take: 1 },
+        dispatches: {
+          where: {
+            cancelledAt: null,
+            directShippedAt: null,
+            items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+          },
+          select: { id: true },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: "asc" },
     });
     const candidateJoinParties = otherBatches
-      .filter((b) => b.dispatches.length === 0)
+      .filter((b) => b.rolls.length === 0 && b.dispatches.length === 0)
       .map((b) => ({ batchId: b.id, batchNumber: b.batchNumber }));
 
     // Fasondaki (AT_SUBCONTRACTOR) seçili toplar için AÇIK fason sevkleri — inline
@@ -462,11 +516,13 @@ export class WorkOrderManualMoveService {
           }
         }
 
-        // B2 → CUT hard-stop: hedef-sonrası KESİM (fiziksel çocuk top) varsa geri taşınamaz
-        //     (çocukları orphan eder). TOCTOU: ön-kontrol ile claim arasında yeni kesim
-        //     girmiş olabilir → tx İÇİNDE. Salt QC2/Kurşun (çocuk yok) engel değil → VOID edilir.
-        const cutChildren = await tx.roll.count({ where: { parentRollId: { in: selectedIds } } });
-        if (cutChildren > 0) {
+        // B2 → CUT hard-stop (yön-bilinçli): GERİ taşınan topta HEDEF-VEYA-SONRASI adımda
+        //     doğmuş KESİM (fiziksel çocuk top) varsa geri taşınamaz (çocukları orphan eder).
+        //     İleri taşımada / hedef-öncesi tarihçe kesiminde engel yok (cutBlockedRollIds).
+        //     TOCTOU: ön-kontrol ile claim arasında yeni kesim girmiş olabilir → tx İÇİNDE.
+        //     Salt QC2/Kurşun (çocuk yok) engel değil → VOID edilir.
+        const cutBlockedNow = await this.cutBlockedRollIds(tx, ctx);
+        if (cutBlockedNow.size > 0) {
           throw AppError.conflict(
             "Hedef sonrası kesim yapılmış — çocuk (kesim) topları var, geri taşınamaz. Önce kesimi geri alın.",
           );
@@ -519,6 +575,18 @@ export class WorkOrderManualMoveService {
         // 3) Parti kararı.
         let newBatchNumber: string | null = null;
         const deletedSourceBatches: string[] = [];
+        // K18: 'new'/'join' üyelik değiştirir — üyeliği GERÇEKTEN değişen CANLI
+        // topların fiziksel etiketindeki Parti No bayatlar → yeniden bas uyarısı.
+        // İlk atama (batchId=null; attach dalgası emsali) K18 kapsamı DIŞI —
+        // etiket henüz parti numarasıyla basılmamıştır, bayraklanmaz. 'join'de
+        // zaten hedef partide olan top da üyelik değiştirmez — bayraklanmaz.
+        const flagLabelDirtyK18 = async (changedIds: string[]): Promise<void> => {
+          if (changedIds.length === 0) return;
+          await tx.roll.updateMany({
+            where: { id: { in: changedIds }, status: { notIn: K18_DEAD_STATUSES } },
+            data: { labelDirty: true },
+          });
+        };
         if (partyMode === "new") {
           const created = await createBatchTx(tx, {
             workOrderId,
@@ -527,18 +595,42 @@ export class WorkOrderManualMoveService {
             userId,
           });
           newBatchNumber = created.batch.batchNumber;
+          await flagLabelDirtyK18(
+            ctx.selected.filter((r) => r.batchId !== null).map((r) => r.id),
+          );
         } else if (partyMode === "join") {
           // B2: join hedefini tx İÇİNDE doğrula (kilit yarışı — ön-kontrol ile tx arasında
           //     hedef partiye fason sevki açılmış olabilir).
+          // K14 çift-koşullu kilit (BORÇ-1): inline dispatch-sayımı yerine isBatchLockedTx —
+          // AT_SUB top VEYA açık+outstanding sevk varsa kilitli; DÖNMÜŞ parti serbest
+          // (K15 retarget dönmüş sevkleri partiye taşıyabilir — onlar kilit saymaz).
+          // K17: birleşmiş parti tarihçe satırıdır — yeni üyelik alamaz.
           const jb = await tx.batch.findUnique({
             where: { id: input.joinBatchId! },
-            select: { workOrderId: true, dispatches: { where: { cancelledAt: null }, select: { id: true } } },
+            select: {
+              workOrderId: true,
+              batchNumber: true,
+              mergedIntoId: true,
+              mergedInto: { select: { batchNumber: true } },
+            },
           });
           if (!jb || jb.workOrderId !== workOrderId) {
             throw AppError.badRequest("Katılacak parti bu iş emrinde bulunamadı");
           }
-          if (jb.dispatches.length > 0) throw AppError.conflict("Katılacak parti sevkte — kilitli, katılamaz");
+          if (jb.mergedIntoId) {
+            throw AppError.badRequest(
+              `Parti ${jb.batchNumber}, ${jb.mergedInto?.batchNumber ?? jb.mergedIntoId} altına birleştirilmiş — işlem survivor partide yapılmalı`,
+            );
+          }
+          if (await isBatchLockedTx(tx, input.joinBatchId!)) {
+            throw AppError.conflict("Katılacak parti kilitli — fasonda malı/açık sevki var, katılamaz");
+          }
           await tx.roll.updateMany({ where: { id: { in: selectedIds } }, data: { batchId: input.joinBatchId } });
+          await flagLabelDirtyK18(
+            ctx.selected
+              .filter((r) => r.batchId !== null && r.batchId !== input.joinBatchId)
+              .map((r) => r.id),
+          );
         }
         // 'keep' → batchId'ye dokunma.
 

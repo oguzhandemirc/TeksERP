@@ -47,7 +47,7 @@ export interface ShipmentListItem {
   /** Yalnız DIRECT satırlarında dolu — doğrudan sevk sebebi. */
   reason?: string | null;
   customer: { id: string; code: string; name: string };
-  branch: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
   _count: { sacks: number; rolls: number; orders: number; returns: number };
 }
 
@@ -62,7 +62,7 @@ export interface DirectShipmentDetail {
   shippedAt: string;
   createdAt: string;
   customer: { id: string; code: string; name: string };
-  branch: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
   shippedBy: string | null;
   dispatch: {
     id: string;
@@ -177,7 +177,7 @@ export interface ShipmentDetail {
   carrier: string | null;
   dispatchedAt: string | null;
   customer: { id: string; code: string; name: string };
-  branch: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
   orders: ShipmentDetailOrder[];
   rolls: ShipmentDetailRoll[];
   swatches: { id: string; barcode: string | null; length: number | null; width: number | null }[];

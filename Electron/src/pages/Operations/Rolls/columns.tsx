@@ -230,21 +230,30 @@ export const rollColumns: ColumnDef<Roll>[] = [
     header: () => <span className="text-xs">Konum</span>,
     meta: {
       label: "Konum",
-      exportValue: (r) =>
-        r.shipmentId
-          ? `Çuvalda${r.sack ? ` (${r.sack.sackNo})` : ""}${
-              r.shipment ? ` · ${r.shipment.shipmentNo}` : ""
-            }`
-          : r.status === RollStatus.WAREHOUSE
-            ? "Serbest depo"
-            : "",
+      exportValue: (r) => {
+        // Çuvala VEYA sevkiyata bağlı → serbest DEĞİL. Bir çuvala konmuş ama henüz
+        // sevkiyata atanmamış top (sackId dolu, shipmentId null) de "Çuvalda"dır.
+        const inSack = r.sackId != null || r.sack != null;
+        if (r.shipmentId || inSack) {
+          const scope = r.shipment ? r.shipment.shipmentNo : "Sevk bekliyor";
+          return `Çuvalda${r.sack ? ` (${r.sack.sackNo})` : ""} · ${scope}`;
+        }
+        return r.status === RollStatus.WAREHOUSE ? "Serbest depo" : "";
+      },
     },
     enableSorting: false,
     cell: ({ row }) => {
       const r = row.original;
       // Çuvala/sevkiyata bağlı top serbest stok DEĞİL — sarı "Çuvalda" rozeti.
-      if (r.shipmentId) {
-        const scope = r.shipment ? shipmentScopeLabels[r.shipment.status] : "Çuvalda";
+      // ÖNEMLİ: yalnız shipmentId'ye bakma — çuval sevkiyata atanmadan önce
+      // (sackId dolu, shipmentId null) top fiziksel olarak çuvaldadır; "Serbest"
+      // göstermek çift-tahsis riski yaratır (çuval havuzu modeli: serbest = ne
+      // çuvalda ne sevkiyatta).
+      const inSack = r.sackId != null || r.sack != null;
+      if (r.shipmentId || inSack) {
+        // Alt metin: sevkiyata bağlıysa aşama etiketi (Planlı Sevkiyat / Sevk
+        // Edildi); yalnız çuvaldaysa henüz sevkiyatı yok → "Sevk bekliyor".
+        const scope = r.shipment ? shipmentScopeLabels[r.shipment.status] : "Sevk bekliyor";
         return (
           <div className="flex flex-col gap-0.5">
             <Badge
@@ -260,7 +269,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
           </div>
         );
       }
-      // Çuvallanmamış depo topu = gerçek serbest stok.
+      // Ne çuvalda ne sevkiyatta olan depo topu = gerçek serbest stok.
       if (r.status === RollStatus.WAREHOUSE) {
         return <span className="text-[10px] text-emerald-600">Serbest</span>;
       }

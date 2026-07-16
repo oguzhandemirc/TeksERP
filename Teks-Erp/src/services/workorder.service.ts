@@ -61,6 +61,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { computeWoInput } from "./helpers/coverage.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { createBatchTx, type CreateBatchResult } from "./batch.service";
 import { WorkOrderSplitService } from "./workorder-split.service";
@@ -1317,81 +1318,19 @@ export class WorkOrderService {
       if (r.producedInStepId) producedByStep.set(r.producedInStepId, Number(r._sum.initialQty ?? 0));
     }
 
-    // GİREN — her WO'nun İLK adımına (steps stepSequence asc → steps[0]) girmiş
-    // ayrık topların initialQty toplamı; status≠CANCELLED/STOCK. Detay inputRolls
-    // ile AYNI tanım (A: ilk-adım movement ∪ B: currentStepId=ilk adım, guard:
-    // currentStepId null VEYA bu WO'nun bir adımı). Sayfa başına sabit sorguyla batched.
-    const inputByStep = new Map<string, number>();
-    const stepToWoForInput = new Map<string, string>();
-    for (const w of wos) for (const st of w.steps) stepToWoForInput.set(st.id, w.id);
-    const firstStepIds = wos
-      .map((w) => w.steps[0]?.id)
-      .filter((id): id is string => Boolean(id));
-    if (firstStepIds.length > 0) {
-      // A: ilk adıma hareketi olan toplar (firstStep → rollId kümesi)
-      const moves = await prisma.rollMovement.findMany({
-        where: { workOrderStepId: { in: firstStepIds } },
-        select: { rollId: true, workOrderStepId: true },
-        distinct: ["rollId", "workOrderStepId"],
-      });
-      const rollIdsByStep = new Map<string, Set<string>>();
-      const allRollIds = new Set<string>();
-      const addToStep = (stepId: string, rollId: string) => {
-        allRollIds.add(rollId);
-        let set = rollIdsByStep.get(stepId);
-        if (!set) { set = new Set(); rollIdsByStep.set(stepId, set); }
-        set.add(rollId);
-      };
-      for (const m of moves) {
-        if (!m.workOrderStepId) continue;
-        addToStep(m.workOrderStepId, m.rollId);
-      }
-      // B: currentStepId ilk adımı gösteren toplar (EXTERNAL attach→sevk penceresi)
-      const bRolls = await prisma.roll.findMany({
-        where: {
-          currentStepId: { in: firstStepIds },
-          status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
-        },
-        select: { id: true, currentStepId: true },
-      });
-      for (const r of bRolls) {
-        if (r.currentStepId) addToStep(r.currentStepId, r.id);
-      }
-      if (allRollIds.size > 0) {
-        const rolls = await prisma.roll.findMany({
-          where: {
-            id: { in: [...allRollIds] },
-            status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
-          },
-          select: { id: true, initialQty: true, currentStepId: true },
-        });
-        const qtyByRoll = new Map<string, number>();
-        const curStepByRoll = new Map<string, string | null>();
-        for (const r of rolls) {
-          qtyByRoll.set(r.id, Number(r.initialQty ?? 0));
-          curStepByRoll.set(r.id, r.currentStepId);
-        }
-        for (const [stepId, rollSet] of rollIdsByStep) {
-          const woId = stepToWoForInput.get(stepId);
-          if (!woId) continue;
-          let sum = inputByStep.get(stepId) ?? 0;
-          for (const rid of rollSet) {
-            const qty = qtyByRoll.get(rid);
-            if (qty == null) continue; // CANCELLED/STOCK elendi
-            // GUARD: başka WO'nun adımına taşınan top (detach→reattach) sayılmaz.
-            const cs = curStepByRoll.get(rid) ?? null;
-            if (cs !== null && stepToWoForInput.get(cs) !== woId) continue;
-            sum += qty;
-          }
-          inputByStep.set(stepId, sum);
-        }
-      }
-    }
+    // GİREN (üretime giren) — SPLIT (tebdil) WO dahil doğru; computeWoInput tek
+    // kaynak (detay inputRolls + committed ile AYNI tanım). Girdi kökü = W dışından
+    // gelen üye top; split WO'nun reEntry adımında doğan enjekte kökü de sayılır
+    // (eski "yalnız ilk adım" çapası split WO'yu 0 sayıyordu).
+    const inputByWo = await computeWoInput(
+      prisma,
+      wos.map((w) => w.id),
+    );
 
     return wos.map((w) => ({
       ...w,
       producedMeters: w.steps.reduce((sum, st) => sum + (producedByStep.get(st.id) ?? 0), 0),
-      inputMeters: inputByStep.get(w.steps[0]?.id ?? "") ?? 0,
+      inputMeters: Number(inputByWo.get(w.id)?.meters ?? 0),
       orderedMeters: orderedByWo.get(w.id) ?? 0,
       currentFasonStations: [...(fasonStationsByWo.get(w.id) ?? [])],
     }));
@@ -1419,7 +1358,7 @@ export class WorkOrderService {
           include: {
             orderLine: {
               include: {
-                order: { include: { customer: true, branch: { select: { id: true, name: true } } } },
+                order: { include: { customer: true, branch: { select: { id: true, name: true, code: true } } } },
                 item: true,
                 color: true,
                 requiredProperties: { include: { property: true } },
@@ -1752,38 +1691,14 @@ export class WorkOrderService {
         createdAt: r.createdAt,
       }));
 
-      // Üretime giren ham toplar — WO'nun İLK adımına girmiş ayrık topların
-      // initialQty toplamı. İki kaynağın birleşimi (distinct rollId):
-      //   A) ilk adıma RollMovement'ı olan toplar (append-only kalıcı: top sonradan
-      //      fasona/tambura geçse, consumed olsa da sayılır) — mevcut davranış.
-      //   B) currentStepId = ilk adım olan toplar — EXTERNAL (boyahane/fason) ilk
-      //      adımda attach anında movement YAZILMAZ (sevkte açılır); bu top "eklendi
-      //      ama henüz sevk edilmedi" aralığında yalnız B ile yakalanır.
-      // GUARD (currentStepId null VEYA ∈ bu WO'nun adımları): top detach edilip başka
-      // WO'ya bağlandıysa (currentStepId başka WO'yu gösterir) A'daki bayat movement
-      // bu WO'ya saydırmasın. Born roll (currentStepId=sonraki adım) ve tambur çıktısı
-      // (ilk adıma movement'sız) doğal olarak hariç → çift sayım olmaz.
-      const firstStepId = stepIds[0];
-      const entryRollRows = await prisma.rollMovement.findMany({
-        where: { workOrderStepId: firstStepId },
-        select: { rollId: true },
-        distinct: ["rollId"],
-      });
-      const entryRollIds = entryRollRows.map((m) => m.rollId);
-      const inputAgg = await prisma.roll.aggregate({
-        where: {
-          AND: [
-            { OR: [{ id: { in: entryRollIds } }, { currentStepId: firstStepId }] },
-            { OR: [{ currentStepId: null }, { currentStepId: { in: stepIds } }] },
-            { status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] } },
-          ],
-        },
-        _sum: { initialQty: true },
-        _count: { _all: true },
-      });
+      // Üretime giren ham toplar — SPLIT (tebdil) WO dahil doğru. computeWoInput
+      // "girdi kökü" tanımını kullanır (W dışından gelen üye toplar): normal WO'da
+      // eskiyle AYNI (tek KK1/supplier kökü; fason-dönüş + Tambur çocuğu elenir),
+      // split WO'da reEntry adımında doğan enjekte kökü de sayar (eskiden 0'dı).
+      const wi = (await computeWoInput(prisma, [id])).get(id);
       inputRolls = {
-        count: inputAgg._count._all,
-        totalMeters: inputAgg._sum.initialQty ?? new Prisma.Decimal(0),
+        count: wi?.count ?? 0,
+        totalMeters: wi?.meters ?? new Prisma.Decimal(0),
       };
     }
 
@@ -1831,8 +1746,9 @@ export class WorkOrderService {
    * Her parti (Batch) bir lane'dir: üyesi topların ŞU ANKİ konum dağılımı (istasyon
    * adı / statü etiketi), aktif refakat kartı, fason sevk durumu (K10: bir sevk =
    * bir parti) ve soy bağı (splitFrom / splitChildren) tek bakışta görünür — "1.
-   * parti Kurşun'da, 2. parti hâlâ boyahanede". Kilit TÜRETİLMİŞ: iptal edilmemiş
-   * sevki olan parti kilitlidir. (Route uyumu için metod adı `getBranches` kaldı;
+   * parti Kurşun'da, 2. parti hâlâ boyahanede". Kilit TÜRETİLMİŞ (K14): fasonda
+   * (AT_SUB) topu VEYA outstanding açık sevki olan parti kilitlidir; mal dönünce
+   * kendiliğinden açılır. (Route uyumu için metod adı `getBranches` kaldı;
    * Electron `/branches` ucu Faz 6'da `/batches`'e döner — bkz. plan Faz 6.3.)
    */
   async getBranches(workOrderId: string): Promise<ApiResponse<unknown>> {
@@ -1868,13 +1784,18 @@ export class WorkOrderService {
 
     const batches = await prisma.batch.findMany({
       where: { workOrderId },
-      orderBy: { createdAt: "asc" },
+      // id tie-break: createdAt eşitliğinde (aynı tx'te doğan partiler) UI'nın
+      // survivor önizlemesi ile mergeBatches'in gerçek survivor seçimi ayrışmasın.
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
         id: true,
         batchNumber: true,
         createdAt: true,
         splitFrom: { select: { id: true, batchNumber: true } },
         splitChildren: { select: { id: true, batchNumber: true } },
+        // K17: bu parti bir survivor'a birleştiyse — lane'de "→ P… altına birleşti"
+        // rozeti için (boş+merge'li kaynaklar rollCount=0 lane'i olarak döner).
+        mergedInto: { select: { id: true, batchNumber: true } },
         // Parti üyesi toplar (tüketilmiş ara düğümler HARİÇ — çift sayım olmasın:
         // fason öncesi orijinaller CONSUMED, Tambur'da bölünen parent CONSUMED).
         rolls: {
@@ -2031,6 +1952,10 @@ export class WorkOrderService {
           dispatchNo: d.dispatchNo,
           stepName: d.step?.station?.name ?? null,
           stepSequence: d.step?.stepSequence ?? 0,
+          // K15 onay-listesi gruplaması AD değil KİMLİK üzerinden yapılsın diye
+          // (aynı istasyon adına iki fason adımı / ad çakışması yanlış "birleşecek"
+          // beyanı üretirdi) — Electron batch-merge-confirm bunu anahtar yapar.
+          subcontractorId: d.subcontractor.id,
           subcontractorName: d.subcontractor.name,
           dispatchedAt: d.dispatchedAt,
           totalQty: Number(d.totalQty),
@@ -2058,8 +1983,15 @@ export class WorkOrderService {
         }))
         .sort((a, c) => c.shippedAt.getTime() - a.shippedAt.getTime());
 
-      // Kilit türetilmiş: iptal edilmemiş sevki varsa parti kilitli (düzenlenemez).
-      const locked = b.dispatches.some((d) => !d.cancelledAt);
+      // Kilit türetilmiş (K14, isBatchLockedTx ile aynı ÇİFT kural): partinin FASONDA
+      // (AT_SUBCONTRACTOR) topu VEYA outstanding (OPEN/PARTIAL — dönmemiş kalemi olan)
+      // açık sevki varsa kilitli — mal fiilen dışarıda. İkinci koşul "zombi sevk"
+      // içindir: AT_SUB top detach edilirse roll-koşulu söner ama açık sevk kalır;
+      // kilit sürmeli. Mal dönünce iki koşul da söner → kilit kendiliğinden açılır;
+      // DIRECT_SHIPPED sevk kilit saymaz (toplar SHIPPED, dönmeyecek).
+      const locked =
+        b.rolls.some((r) => r.status === "AT_SUBCONTRACTOR") ||
+        dispatchViews.some((d) => d.status === "OPEN" || d.status === "PARTIAL");
       const card = woCard;
       // Fasona sevk bekliyor: parti topları bir FASON (EXTERNAL) adımında ÜRETİMDE ama
       // henüz sevk edilmemiş (redye geri-sarımı ya da ilk sevk öncesi). Panelde
@@ -2092,6 +2024,9 @@ export class WorkOrderService {
         dispatches: dispatchViews,
         splitFrom: b.splitFrom,
         splitChildren: b.splitChildren,
+        // K17 (additive): { id, batchNumber } | null — dolu ise bu lane birleşmiş
+        // kaynak partidir (Electron Faz 4 rozeti).
+        mergedInto: b.mergedInto,
       };
     });
 
@@ -2400,6 +2335,8 @@ export class WorkOrderService {
     let blockReason: string | null = null;
     if (wo.status === WorkOrderStatus.CANCELLED) {
       blockReason = "İş emri zaten iptal edilmiş.";
+    } else if (wo.status === WorkOrderStatus.SUPERSEDED) {
+      blockReason = "Devredilmiş iş emri iptal edilemez (malzemesi yeni iş emrine taşındı).";
     } else if (wo.status === WorkOrderStatus.COMPLETED) {
       blockReason = "Tamamlanmış iş emri iptal edilemez.";
     } else if (fasonInFlightCount > 0) {
@@ -2460,6 +2397,9 @@ export class WorkOrderService {
     if (existing.status === WorkOrderStatus.CANCELLED) {
       throw AppError.badRequest("İş emri zaten iptal edilmiş");
     }
+    if (existing.status === WorkOrderStatus.SUPERSEDED) {
+      throw AppError.badRequest("Devredilmiş iş emri iptal edilemez (malzemesi yeni iş emrine taşındı)");
+    }
     if (existing.status === WorkOrderStatus.COMPLETED) {
       throw AppError.conflict("Tamamlanmış iş emri iptal edilemez");
     }
@@ -2480,7 +2420,7 @@ export class WorkOrderService {
       const cancelClaim = await tx.workOrder.updateMany({
         where: {
           id,
-          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
         },
         data: { status: WorkOrderStatus.CANCELLED },
       });
@@ -2598,6 +2538,206 @@ export class WorkOrderService {
       success: true,
       data: updated,
       message: `İş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`,
+    };
+  }
+
+  /**
+   * MANUEL KAPATMA ÖNİZLEMESİ (read-only): kalan (atlanacak) adımlar + kapatmayı
+   * engelleyen in-flight (işlemdeki/fasondaki) top özeti. `canComplete=false` ise
+   * `blockReason` UI'da gösterilir; frontend detaylı onay diyaloğu bunu listeler.
+   */
+  async getCompletePreview(id: string) {
+    const wo = await prisma.workOrder.findUnique({
+      where: { id },
+      include: {
+        steps: {
+          include: { station: { select: { name: true } } },
+          orderBy: { stepSequence: "asc" },
+        },
+      },
+    });
+    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+
+    const stepIds = wo.steps.map((s) => s.id);
+    const stepName = new Map(wo.steps.map((s) => [s.id, s.station?.name ?? "—"]));
+
+    // In-flight = bu WO'nun bir adımında halen işlemde/fasonda olan toplar.
+    const inFlightRolls = stepIds.length
+      ? await prisma.roll.findMany({
+          where: {
+            currentStepId: { in: stepIds },
+            status: {
+              in: [
+                RollStatus.IN_PRODUCTION,
+                RollStatus.AT_SUBCONTRACTOR,
+                RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+              ],
+            },
+          },
+          select: { currentQty: true, currentStepId: true },
+        })
+      : [];
+
+    const byStep = new Map<string, { stationName: string; count: number; meters: number }>();
+    for (const r of inFlightRolls) {
+      const key = r.currentStepId!;
+      const e = byStep.get(key) ?? { stationName: stepName.get(key) ?? "—", count: 0, meters: 0 };
+      e.count += 1;
+      e.meters += Number(r.currentQty ?? 0);
+      byStep.set(key, e);
+    }
+    const inFlightCount = inFlightRolls.length;
+    const inFlightMeters = inFlightRolls.reduce((s, r) => s + Number(r.currentQty ?? 0), 0);
+
+    const remainingSteps = wo.steps
+      .filter((s) => s.status === StepStatus.PENDING || s.status === StepStatus.ACTIVE)
+      .map((s) => ({ stepId: s.id, stationName: s.station?.name ?? "—", stepSequence: s.stepSequence }));
+
+    let blockReason: string | null = null;
+    if (wo.status === WorkOrderStatus.COMPLETED) {
+      blockReason = "İş emri zaten tamamlanmış.";
+    } else if (wo.status === WorkOrderStatus.SUPERSEDED) {
+      blockReason = "Devredilmiş iş emri kapatılamaz (malzemesi yeni iş emrine taşındı).";
+    } else if (wo.status === WorkOrderStatus.CANCELLED) {
+      blockReason = "İptal edilmiş iş emri kapatılamaz.";
+    } else if (wo.status === WorkOrderStatus.PLANNED) {
+      blockReason =
+        "İş emri henüz üretime başlamadı (Planlandı). Başlamamış iş emrini kapatmak yerine iptal edin.";
+    } else if (inFlightCount > 0) {
+      blockReason =
+        `${inFlightCount} top hâlâ işlemde/fasonda. Kapatmadan önce bu topların ` +
+        "çözülmesi gerekir (fason kabul / kurtarma / tambur kararı).";
+    }
+
+    return {
+      success: true,
+      data: {
+        workOrderId: id,
+        workOrderNumber: wo.workOrderNumber,
+        status: wo.status,
+        canComplete: blockReason === null,
+        blockReason,
+        remainingSteps,
+        inFlight: {
+          count: inFlightCount,
+          totalMeters: inFlightMeters,
+          byStep: [...byStep.values()],
+        },
+      },
+    };
+  }
+
+  /**
+   * MANUEL KAPATMA (güvenli varyant): IN_PROGRESS bir iş emrini elle COMPLETED'a
+   * çeker. Yalnız WIP YOKKEN çalışır — herhangi bir top hâlâ işlemde/fasondaysa
+   * REDDEDİLİR (önce çözülmeli, top istasyonda takılı kalmasın). Kalan PENDING/
+   * ACTIVE adımlar SKIPPED(MANUAL_COMPLETE), açık movement'lar kapatılır, ACTIVE
+   * refakat kartları COMPLETED olur. Atomik claim + guard tx-içinde (eşzamanlı
+   * finalize/iptal ile yarış güvenli — cancel deseninin aynısı).
+   */
+  async completeWorkOrder(id: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
+    const existing = await prisma.workOrder.findUnique({
+      where: { id },
+      include: { steps: { select: { id: true } } },
+    });
+    if (!existing) throw AppError.notFound("İş emri bulunamadı");
+    if (existing.status === WorkOrderStatus.COMPLETED) {
+      throw AppError.badRequest("İş emri zaten tamamlanmış");
+    }
+    if (existing.status === WorkOrderStatus.SUPERSEDED) {
+      throw AppError.conflict("Devredilmiş iş emri kapatılamaz (malzemesi yeni iş emrine taşındı)");
+    }
+    if (existing.status === WorkOrderStatus.CANCELLED) {
+      throw AppError.conflict("İptal edilmiş iş emri kapatılamaz");
+    }
+    if (existing.status === WorkOrderStatus.PLANNED) {
+      throw AppError.badRequest("İş emri henüz üretime başlamadı — kapatmak yerine iptal edin");
+    }
+
+    const stepIds = existing.steps.map((s) => s.id);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM ÖNCE: WO satırını IN_PROGRESS→COMPLETED koşullu kilitle.
+      // Eşzamanlı son-top finalize (tambur/kursun) ya da iptal WO'yu başka duruma
+      // çekmişse count===0 → 409 (çift geçiş önlenir).
+      const claim = await tx.workOrder.updateMany({
+        where: { id, status: WorkOrderStatus.IN_PROGRESS },
+        data: { status: WorkOrderStatus.COMPLETED },
+      });
+      if (claim.count === 0) {
+        const fresh = await tx.workOrder.findUnique({ where: { id }, select: { status: true } });
+        throw AppError.conflict(
+          `İş emri bu sırada ${
+            fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "değişti"
+          }, kapatılamaz. Sayfayı yenileyin.`,
+        );
+      }
+
+      if (stepIds.length > 0) {
+        // GUARD (claim'den SONRA — cancel deseni): işlemde/fasonda top varsa kapatma.
+        // Trip ederse tüm tx (claim dahil) geri sarılır → WO IN_PROGRESS kalır, mal
+        // "kapalı WO'da istasyonda takılı" limbo'suna düşmez.
+        const inFlight = await tx.roll.count({
+          where: {
+            currentStepId: { in: stepIds },
+            status: {
+              in: [
+                RollStatus.IN_PRODUCTION,
+                RollStatus.AT_SUBCONTRACTOR,
+                RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+              ],
+            },
+          },
+        });
+        if (inFlight > 0) {
+          throw AppError.conflict(
+            `${inFlight} top hâlâ işlemde/fasonda — iş emri kapatılamaz. Önce bu ` +
+              "topları çözün (fason kabul / kurtarma / tambur kararı).",
+          );
+        }
+
+        // Bayat açık movement kalmışsa kapat (defansif — WIP yok ama iz temiz olsun).
+        await tx.$executeRaw`
+          UPDATE roll_movements m
+          SET "exitedAt" = now(),
+              "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
+              "weightOut" = COALESCE(m."weightOut", r."weightKg"),
+              notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_MANUAL_COMPLETE'
+                           ELSE m.notes || ' | WO_MANUAL_COMPLETE' END
+          FROM rolls r
+          WHERE m."rollId" = r.id
+            AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
+            AND m."exitedAt" IS NULL
+        `;
+
+        // Kalan PENDING/ACTIVE adımları SKIPPED — kapatılan WO adımları kuyruk/WIP
+        // istatistiklerinde "içeride" sayılmasın (fason-tamamla / iptal ile aynı).
+        await tx.workOrderStep.updateMany({
+          where: { workOrderId: id, status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] } },
+          data: { status: StepStatus.SKIPPED, skipReason: "MANUAL_COMPLETE" },
+        });
+      }
+
+      // ACTIVE refakat kartları COMPLETED (otomatik-tamamlama yollarıyla aynı).
+      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "COMPLETED");
+
+      const done = await tx.workOrder.findUnique({ where: { id } });
+      return done!;
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "WORK_ORDER",
+      recordId: id,
+      oldData: { workOrderNumber: existing.workOrderNumber, status: existing.status },
+      newData: { status: WorkOrderStatus.COMPLETED, manualComplete: true },
+    });
+
+    return {
+      success: true,
+      data: updated,
+      message: `İş emri manuel kapatıldı: ${existing.workOrderNumber}`,
     };
   }
 
@@ -2756,7 +2896,8 @@ export class WorkOrderService {
 
     if (
       wo.status === WorkOrderStatus.COMPLETED ||
-      wo.status === WorkOrderStatus.CANCELLED
+      wo.status === WorkOrderStatus.CANCELLED ||
+      wo.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
         "Tamamlanmış veya iptal edilmiş iş emrine top bağlanamaz.",
@@ -2985,7 +3126,8 @@ export class WorkOrderService {
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
     if (
       wo.status === WorkOrderStatus.COMPLETED ||
-      wo.status === WorkOrderStatus.CANCELLED
+      wo.status === WorkOrderStatus.CANCELLED ||
+      wo.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
         "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
@@ -3127,7 +3269,7 @@ export class WorkOrderService {
       const updateClaim = await tx.workOrder.updateMany({
         where: {
           id,
-          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
         },
         data: {
           workOrderNumber: data.batchNumber?.trim() || undefined,
@@ -3197,7 +3339,8 @@ export class WorkOrderService {
     if (!existing) throw AppError.notFound("İş emri bulunamadı");
     if (
       existing.status === WorkOrderStatus.COMPLETED ||
-      existing.status === WorkOrderStatus.CANCELLED
+      existing.status === WorkOrderStatus.CANCELLED ||
+      existing.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
         "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
@@ -3534,7 +3677,7 @@ export class WorkOrderService {
       const replaceClaim = await tx.workOrder.updateMany({
         where: {
           id,
-          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
         },
         data: { updatedAt: new Date() },
       });
@@ -4024,7 +4167,8 @@ export class WorkOrderService {
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
     if (
       wo.status === WorkOrderStatus.COMPLETED ||
-      wo.status === WorkOrderStatus.CANCELLED
+      wo.status === WorkOrderStatus.CANCELLED ||
+      wo.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
         `Tamamlanmış/iptal edilmiş iş emrinde adım planlaması değiştirilemez (durum: ${wo.status}).`,
@@ -4088,7 +4232,7 @@ export class WorkOrderService {
     const claim = await prisma.workOrderStep.updateMany({
       where: {
         id: stepId,
-        workOrder: { status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] } },
+        workOrder: { status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
       },
       data: {
         requiredCategoryId: data.requiredCategoryId,
@@ -4142,7 +4286,8 @@ export class WorkOrderService {
     // boyahaneye gönderildikten sonra fark edildi → çıkar, sevki iptal et).
     if (
       wo.status === WorkOrderStatus.COMPLETED ||
-      wo.status === WorkOrderStatus.CANCELLED
+      wo.status === WorkOrderStatus.CANCELLED ||
+      wo.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
         `Tamamlanmış/iptal edilmiş iş emrinden top çıkarılamaz (durum: ${wo.status}).`,

@@ -52,7 +52,7 @@ export interface SackSearchRow {
   weightKg: number | null;
   createdAt: string;
   customer: SackCustomerRef | null;
-  branch: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
   /** null = depoda (düzenlenebilir); dolu = bir sevkiyata atanmış. */
   shipment: SackShipmentRef | null;
   rollCount: number;
@@ -109,7 +109,7 @@ export interface SackContents {
   shipment:
     | (SackShipmentRef & {
         customer?: SackCustomerRef | null;
-        branch?: { id: string; name: string } | null;
+        branch?: { id: string; code: string | null; name: string } | null;
       })
     | null;
   rolls: SackContentRoll[];
@@ -137,7 +137,7 @@ export interface PoolSack {
   id: string;
   sackNo: string;
   weightKg: number | null;
-  branch: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
   rollCount: number;
   swatchCount: number;
   totalQty: number;
@@ -150,13 +150,17 @@ export interface CustomerPool {
   sacks: PoolSack[];
 }
 
-/** POST /sacks lean dönüşü. Müşteri artık opsiyonel → nullable. */
+/** POST /sacks lean dönüşü. Müşteri artık opsiyonel → nullable. Ad/kod çözülmüş döner
+ *  (istemci editör hedefini fetch'siz kurar). */
 export interface OpenedSack {
   id: string;
   sackNo: string;
   weightKg: number | null;
   customerId: string | null;
+  customerName: string | null;
   branchId: string | null;
+  branchName: string | null;
+  branchCode: string | null;
 }
 
 /** Scan cevabı — okutulan kod top mu kartela mı + hangi çuvala bağlandı. */
@@ -207,7 +211,7 @@ export interface OpenOrder {
     status: string;
     deadline: string | null;
     customer: { id: string; code?: string; name: string };
-    branch: { id: string; name: string } | null;
+    branch: { id: string; code: string | null; name: string } | null;
   };
   lines: OpenOrderLine[];
 }
@@ -215,7 +219,7 @@ export interface OpenOrder {
 // ── Top yerini bul (GET /locate-roll) ────────────────────────────────────────
 export interface LocatedRollShipment extends SackShipmentRef {
   customer: { id: string; name: string };
-  branch: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
 }
 
 export interface LocatedRoll {
@@ -238,7 +242,7 @@ export interface PickListRow {
   seq: number | null;
   weightKg: number | null;
   customer?: SackCustomerRef | null;
-  branch?: { id: string; name: string } | null;
+  branch?: { id: string; code: string | null; name: string } | null;
   shipment: SackShipmentRef | null;
   rollCount: number;
   swatchCount: number;
@@ -299,6 +303,7 @@ export interface EditorTarget {
   customerName: string | null;
   branchId: string | null;
   branchName: string | null;
+  branchCode: string | null;
   /** true = "Yeni Çuval" ile az önce açıldı (boş başlar). */
   isNew?: boolean;
 }

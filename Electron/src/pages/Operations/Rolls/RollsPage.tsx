@@ -11,6 +11,7 @@ import {
   Plus,
   Warehouse,
   Columns3,
+  ShoppingBag,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -44,6 +45,7 @@ type RollTabKey = RollStatusTabKey | "KANBAN";
 const TABS: Array<{ key: RollTabKey; label: string; Icon: typeof Package }> = [
   { key: "RAW_STOCK",      label: "Ham Stok",        Icon: Package },
   { key: "FINISHED_STOCK", label: "Bitmiş Depo",     Icon: Warehouse },
+  { key: "IN_SACK",        label: "Çuvalda",         Icon: ShoppingBag },
   { key: "PRODUCTION",     label: "Üretimde",        Icon: Cog },
   { key: "KANBAN",         label: "Üretim Akışı",    Icon: Columns3 },
   { key: "SUBCONTRACTOR",  label: "Fasonda",         Icon: Send },

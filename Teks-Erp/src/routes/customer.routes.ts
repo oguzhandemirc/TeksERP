@@ -19,6 +19,10 @@ const service = new CustomerService({
   searchFields: ["code", "name", "taxNumber"],
   defaultInclude: undefined,
   uniqueField: "code",
+  // Tek-adım müşteri+şube: create body'sindeki opsiyonel `branches[]` sanitize'ı
+  // geçip Prisma nested-create'e (`{ create: [...] }`) sarılır. CustomerService.create
+  // diziyi ÖNCE doğrular/şekillendirir (mass-assignment guard); update'te düşürülür.
+  nestedCreateFields: ["branches"],
 });
 
 const controller = new BaseController(service);

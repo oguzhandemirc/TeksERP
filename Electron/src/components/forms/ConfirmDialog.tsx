@@ -71,7 +71,12 @@ export function ConfirmDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
+          {/* pre-line: "yıkıcı işlemde somut liste" onayları \n'li çok satırlı
+              description geçer (ör. parti birleştirme sevk dökümü) — tek satırlı
+              mevcut kullanımlar etkilenmez. */}
+          {description && (
+            <DialogDescription className="whitespace-pre-line">{description}</DialogDescription>
+          )}
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

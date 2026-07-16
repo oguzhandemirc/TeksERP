@@ -22,7 +22,7 @@ let bcN = 0;
 function bc(): string { bcN++; return `TST-MOV-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bcN}`; }
 const woIds = new Set<string>();
 
-type Ctx = { ITEM: string; GRADE: string; ADMIN: string; ST_INT: string; ST_BOYA: string; ST_TAMBUR: string; CAT_BOYA: string };
+type Ctx = { ITEM: string; GRADE: string; ADMIN: string; ST_INT: string; ST_BOYA: string; ST_TAMBUR: string; CAT_BOYA: string; COLOR: string };
 
 async function seed(): Promise<Ctx> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`Seed eksik: ${l}`); return v.id; };
@@ -34,14 +34,16 @@ async function seed(): Promise<Ctx> {
     ST_BOYA: need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON"),
     ST_TAMBUR: need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1"),
     CAT_BOYA: need(await prisma.subcontractorCategory.findFirst({ where: { code: "BOYA" }, select: { id: true } }), "BOYA"),
+    COLOR: need(await prisma.color.findFirst({ where: { isActive: true }, select: { id: true } }), "renk"),
   };
 }
 
-async function mkWo(c: Ctx, steps: { stationId: string; colorStep?: boolean }[], status: WorkOrderStatus = "IN_PROGRESS"): Promise<{ id: string; stepIds: string[] }> {
+async function mkWo(c: Ctx, steps: { stationId: string; colorStep?: boolean }[], status: WorkOrderStatus = "IN_PROGRESS", targetColorId?: string): Promise<{ id: string; stepIds: string[] }> {
   const stamp = `${Date.now()}`.slice(-7) + Math.floor(Math.random() * 90 + 10);
   const wo = await prisma.workOrder.create({
     data: {
       workOrderNumber: `TST-MOV-${stamp}`, type: "STOCK_PRODUCTION", status, width: WIDTH, targetQuantity: 1000, targetItemId: c.ITEM,
+      targetColorId: targetColorId ?? null,
       steps: { create: steps.map((s, i) => ({ stationId: s.stationId, stepSequence: i + 1, status: "PENDING" as const, requiredCategoryId: s.colorStep ? c.CAT_BOYA : null })) },
     },
     include: { steps: { orderBy: { stepSequence: "asc" } } },
@@ -69,7 +71,11 @@ async function main(): Promise<void> {
   // ═══ İleri + geri (tüm parti, keep) ═══
   console.log("\n── İleri/geri taşıma (tüm parti · keep) ──");
   {
-    const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_BOYA, colorStep: true }, { stationId: c.ST_TAMBUR }]);
+    // Yeni renk-sentezi guard'ı (Milestone backflush): renk-veren adım (boyahane)
+    // atlanırken WO hedef rengi ŞART — renksiz toplar hedef renkle boyanır, hedef
+    // renk yoksa 400 (sessiz renksiz bırakma yok). Test bu davranışa göre onarıldı:
+    // WO'ya targetColor verilir + sentez ayrıca doğrulanır.
+    const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_BOYA, colorStep: true }, { stationId: c.ST_TAMBUR }], "IN_PROGRESS", c.COLOR);
     const [s1, , s3] = wo.stepIds;
     const { batchId, rollIds } = await mkParty(c, wo.id, s1, 3);
 
@@ -79,10 +85,11 @@ async function main(): Promise<void> {
     check("önizleme: 3 taşınabilir", pv.movableCount === 3, `n=${pv.movableCount}`);
 
     await svc.manualMove(wo.id, { batchId, targetStepId: s3, reason: "manuel ileri" }, c.ADMIN);
-    const at3 = await prisma.roll.findMany({ where: { batchId }, select: { currentStepId: true, status: true, batchId: true } });
+    const at3 = await prisma.roll.findMany({ where: { batchId }, select: { currentStepId: true, status: true, batchId: true, colorId: true } });
     check("ileri: 3 top Tambur'da", at3.every((r) => r.currentStepId === s3));
     check("ileri: IN_PRODUCTION", at3.every((r) => r.status === RollStatus.IN_PRODUCTION));
     check("ileri: parti kimliği korundu (keep)", at3.every((r) => r.batchId === batchId));
+    check("ileri: boyahane atlandı → renk WO hedef renginden sentezlendi", at3.every((r) => r.colorId === c.COLOR));
     check("ileri: Tambur'da taze açık movement", (await prisma.rollMovement.count({ where: { rollId: { in: rollIds }, workOrderStepId: s3, exitedAt: null } })) === 3);
     const s3status = (await prisma.workOrderStep.findUnique({ where: { id: s3 }, select: { status: true } }))?.status;
     check("ileri: hedef adım ACTIVE", s3status === "ACTIVE", s3status);
@@ -157,15 +164,29 @@ async function main(): Promise<void> {
     await expectReject("guard: aynı adıma taşıma → red (B5)", () => svc.manualMove(wo.id, { batchId, targetStepId: s1, reason: "ayni adim" }, c.ADMIN), "zaten bu adımda");
   }
 
-  // ═══ Geri taşımada downstream işlem engeli ═══
-  console.log("\n── Geri taşımada işlem engeli ──");
+  // ═══ Geri taşımada downstream işlem: CUT hard-stop + salt-QC void ═══
+  console.log("\n── Geri taşımada işlem: CUT hard-stop + salt-QC void ──");
   {
+    // Yeni davranış (Faz 3 QC reversal, dc7ce1b): salt QC/kurşun/tambur KARARI
+    // (çocuk top YOK) geri taşımayı artık ENGELLEMEZ — karar VOID edilir (op
+    // silinir, grade → Belirsiz); yalnız fiziksel KESİM (parentRollId'li çocuk)
+    // hard-stop'tur. Testin eski "her işlem engeller" beklentisi buna onarıldı.
     const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);
     const [s1, s2] = wo.stepIds;
     const { rollIds } = await mkParty(c, wo.id, s2, 1); // Tambur'da
     await prisma.rollOperation.create({ data: { rollId: rollIds[0], workOrderStepId: s2, operationType: RollOperationType.TAMBUR_PROCESSED } });
-    await expectReject("işlem engeli: geri taşıma reddedilir", () => svc.manualMove(wo.id, { rollIds: [rollIds[0]], targetStepId: s1, reason: "geri" }, c.ADMIN), "kesim/kalite");
-    // İleri (aynı adımda kalıp ileri yok — tek adım sonrası) yerine: aynı topu Tambur'da bırakıp engel doğru mu diye ileriye de bak yok. Skip.
+    await svc.manualMove(wo.id, { rollIds: [rollIds[0]], targetStepId: s1, reason: "geri" }, c.ADMIN);
+    const rQc = await prisma.roll.findUnique({ where: { id: rollIds[0] }, select: { currentStepId: true, qualityGrade: true } });
+    check("salt-QC: geri taşındı + kalite VOID (Belirsiz)", rQc?.currentStepId === s1 && rQc?.qualityGrade === null);
+    check("salt-QC: TAMBUR_PROCESSED op silindi", (await prisma.rollOperation.count({ where: { rollId: rollIds[0] } })) === 0);
+
+    // CUT hard-stop: kesim (çocuk) topu olan top geri taşınamaz.
+    const wo2 = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);
+    const [t1, t2] = wo2.stepIds;
+    const p2 = await mkParty(c, wo2.id, t2, 1);
+    const child = await prisma.roll.create({ data: { barcode: bc(), itemId: c.ITEM, initialQty: 40, currentQty: 40, status: RollStatus.STOCK, width: WIDTH, parentRollId: p2.rollIds[0], createdById: c.ADMIN } });
+    await expectReject("CUT hard-stop: çocuklu (kesilmiş) top geri taşınamaz", () => svc.manualMove(wo2.id, { rollIds: p2.rollIds, targetStepId: t1, reason: "geri" }, c.ADMIN), "geri taşınamaz");
+    await prisma.roll.delete({ where: { id: child.id } });
   }
 
   // ═══ WAREHOUSE topu üretime geri al → WO reopen ═══

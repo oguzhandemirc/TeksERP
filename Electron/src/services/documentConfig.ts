@@ -67,6 +67,7 @@ export const DOC_DEFS: DocDef[] = [
     defaultSignatures: ["Sevkeden", "Sürücü", "Teslim Alan"],
     sections: [
       { key: "customerInfo", label: "Müşteri / şube bilgisi" },
+      { key: "branchCode", label: "Şube kodu (ihracat)" },
       { key: "vehicleInfo", label: "Araç / sürücü bilgisi" },
       { key: "itemTable", label: "Gönderilen kalemler tablosu" },
       { key: "sackBreakdown", label: "Çuval dökümü (çuval içeriği)" },
@@ -93,6 +94,7 @@ export const DOC_DEFS: DocDef[] = [
     defaultSignatures: ["Sevkeden", "Sürücü", "Teslim Alan"],
     sections: [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
+      { key: "branchCode", label: "Müşteri şube kodu (ihracat)" },
       { key: "vehicleInfo", label: "Sevk / araç bilgisi" },
       { key: "directShipInfo", label: "Fasondan sevk sebebi / onay" },
       { key: "rollTable", label: "Sevk edilen toplar tablosu" },

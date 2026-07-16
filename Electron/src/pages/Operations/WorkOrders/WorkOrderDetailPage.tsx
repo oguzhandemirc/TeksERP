@@ -9,6 +9,7 @@ import { workOrderService } from "./service";
 import { WorkOrderDetailHeader } from "./WorkOrderDetailHeader";
 import { BranchLanes } from "./BranchLanes";
 import { BranchGantt } from "./BranchGantt";
+import { FasonStepActions } from "./FasonStepActions";
 import { CoverageAlert } from "./detail-v3/CoverageAlert";
 import { WorkOrderKpis } from "./detail-v3/WorkOrderKpis";
 import { V3Section } from "./detail-v3/V3Section";
@@ -101,6 +102,20 @@ export function WorkOrderDetailPage() {
               {sortedSteps.length > 0 && (
                 <V3Section title="Rota & Dağılım" active={wipSteps.length > 0}>
                   <RouteStepline steps={sortedSteps} />
+                  {/* Fason adım aksiyonları (Sevk Et / Sonraki Fasona Aktar / Çeki
+                      Taslağı) — v2'den v3'e geçerken kaybolmuştu, yalnız detay
+                      panelinde kalmıştı. Bileşen kendi kendini gate'ler (fason
+                      olmayan / aksiyonsuz adımlar null döner). */}
+                  {hasFason &&
+                    sortedSteps.map((s) => (
+                      <FasonStepActions
+                        key={s.id}
+                        step={s}
+                        steps={sortedSteps}
+                        workOrderId={wo.id}
+                        withStationLabel
+                      />
+                    ))}
                 </V3Section>
               )}
 
@@ -108,7 +123,7 @@ export function WorkOrderDetailPage() {
                 <V3Section id="partiler" title="Partiler (Fason & Redye)" active={wipSteps.some((s) => s.station?.type === "EXTERNAL")}>
                   <div className="space-y-3">
                     <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
-                    <BranchLanes workOrderId={wo.id} />
+                    <BranchLanes workOrderId={wo.id} steps={sortedSteps} />
                   </div>
                 </V3Section>
               )}

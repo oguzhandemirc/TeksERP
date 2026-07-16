@@ -55,7 +55,8 @@ export function WorkOrderHealthBand({ wo }: { wo: WorkOrder }) {
     wo.plannedEndDate != null &&
     new Date(wo.plannedEndDate).getTime() < Date.now() &&
     wo.status !== "COMPLETED" &&
-    wo.status !== "CANCELLED";
+    wo.status !== "CANCELLED" &&
+    wo.status !== "SUPERSEDED";
 
   const tone: Tone =
     wo.status === "COMPLETED"

@@ -22,6 +22,11 @@ const addKartelaSchema = z.object({
 const weighSackSchema = z.object({
   weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük"),
 });
+// Çuval müşterisi değiştir — müşteri/şube OPSİYONEL (null = müşterisiz genel stok).
+const reassignSackCustomerSchema = z.object({
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullable().optional(),
+  branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
+});
 const removeSackSchema = z.object({ withContents: z.boolean().optional() });
 const distributeSackSchema = z.object({
   rollIds: z.array(z.string().uuid()).optional(),
@@ -95,6 +100,18 @@ export class ShippingController {
     try {
       const body = weighSackSchema.parse(req.body);
       const result = await this.service.weighSack({ sackId: req.params.id as string, weightKg: body.weightKg }, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  reassignSackCustomer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = reassignSackCustomerSchema.parse(req.body);
+      const result = await this.service.reassignSackCustomer(
+        req.params.id as string,
+        { customerId: body.customerId ?? null, branchId: body.branchId ?? null },
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -285,6 +302,13 @@ export class ShippingController {
   getDispatchReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.getDispatchReport(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  getDirectShipmentDispatchReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getDirectShipmentDispatchReport(req.params.id as string);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

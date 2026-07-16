@@ -45,7 +45,9 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
             {d && <StatusBadge status={d.status} labels={shipmentStatusLabels} tones={shipmentStatusTones} />}
           </SheetTitle>
           <SheetDescription>
-            {d ? `${d.customer.name}${d.branch ? " · " + d.branch.name : ""}` : "Yükleniyor…"}
+            {d
+              ? `${d.customer.name}${d.branch ? " · " + d.branch.name + (d.branch.code ? ` (${d.branch.code})` : "") : ""}`
+              : "Yükleniyor…"}
           </SheetDescription>
         </SheetHeader>
 

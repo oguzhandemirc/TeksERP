@@ -9,17 +9,19 @@
 //   npx prisma migrate dev
 //   npm run seed
 //
-// Yüklenenler:
+// Yüklenenler (TEMİZ FABRİKA KURULUMU — müşteri/renk/ürün/sipariş/top YOK):
 //   1. 55 permission (web + mobil + admin — roll:manual-adjust dahil)
 //   2. 15 permission template (Admin Tam Yetki + mobil/masaüstü roller)
-//   3. 1 kullanıcı (yalnız admin — ek test kullanıcıları kaldırıldı 2026-07-03)
+//   3. 1 kullanıcı (yalnız admin)
 //   4. Admin'e tüm yetkiler atanır
-//   5. 3 kalite sınıfı (1.KALITE / A1 / FIRE)
-//   6. Master demo (test ortamı için): 4 müşteri, 6 renk, 7 kumaş özelliği,
-//      3 fason kategori (BOYA/ZIMPARA/KARTELA), 3 fason firma (Boyer/Kestel/Kartela A.Ş.)
+//   5. 3 kalite sınıfı (1.KALITE / A1 / FIRE) + 6 iade nedeni
+//   6. Çekirdek üretim: 2 kumaş özelliği (KURSUN/ZIMPARALI), 3 fason kategori
+//      (BOYA/ZIMPARA/KARTELA), 3 fason firma (Boyer/Kestel/Kartela A.Ş.),
+//      6 istasyon, 3 makine, 23 sistem ayarı (mevcut fabrika ayarları birebir),
+//      7 donanım cihazı, istasyon yetenekleri, 3 hata tipi, 2 rota, 3 etiket şablonu
 // =============================================================================
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as bcrypt from "bcryptjs";
@@ -35,7 +37,7 @@ async function hashPassword(plain: string): Promise<string> {
 }
 
 async function main() {
-  console.log("🌱 Seeding TeksERP test data...\n");
+  console.log("🌱 TeksERP — temiz fabrika kurulumu seed'i...\n");
 
   // ===========================================================================
   // 1. PERMISSIONS
@@ -231,49 +233,23 @@ async function main() {
   console.log("✅ 6 iade nedeni");
 
   // ===========================================================================
-  // 6. MASTER DEMO (test ortamı — production'da çalıştırılmamalı)
+  // 6. ÇEKİRDEK ÜRETİM VERİSİ (temiz fabrika kurulumu)
   // ===========================================================================
-  // Sıra: müşteri → renk → özellik → fason kategori/firma → istasyon → makine
-  //       → istasyon yetenekleri → hata tipi → rota → ürün+izinler → alias
-  //       → şube → etiket template
+  // Müşteri / renk / ürün / sipariş YOK — fabrika bunları kendi ekler. Yalnız
+  // üretimin dönmesi için gereken çekirdek: özellik → fason kategori/firma →
+  // istasyon → makine → sistem ayarı → donanım → istasyon yeteneği → hata tipi
+  // → rota → etiket şablonu.
 
-  // --- Müşteriler ---
-  const customerData = [
-    { code: "MUS-001", name: "Arda Tekstil A.Ş.",     taxNumber: "1234567890", type: "CUSTOMER" as const },
-    { code: "MUS-002", name: "Moda Konfeksiyon Ltd.", taxNumber: "2345678901", type: "CUSTOMER" as const },
-    { code: "MUS-003", name: "Beyaz Giyim San.",      taxNumber: "3456789012", type: "CUSTOMER" as const },
-    { code: "MUS-004", name: "Yeşil Tekstil İhracat", taxNumber: "4567890123", type: "CUSTOMER" as const },
-  ];
-  const customers = await Promise.all(customerData.map((c) => prisma.customer.create({ data: c })));
-  const custByCode = new Map(customers.map((c) => [c.code, c]));
-  console.log(`✅ ${customers.length} müşteri`);
-
-  // --- Renkler ---
-  const colorData = [
-    { code: "BEYAZ",    name: "BEYAZ",    hex: "#FFFFFF", sortOrder: 10 },
-    { code: "SIYAH",    name: "SİYAH",    hex: "#000000", sortOrder: 20 },
-    { code: "LACIVERT", name: "LACİVERT", hex: "#1e3a8a", sortOrder: 30 },
-    { code: "KIRMIZI",  name: "KIRMIZI",  hex: "#dc2626", sortOrder: 40 },
-    { code: "MAVI",     name: "MAVİ",     hex: "#2563eb", sortOrder: 50 },
-    { code: "BEJ",      name: "BEJ",      hex: "#d4b896", sortOrder: 60 },
-  ];
-  const colors = await Promise.all(colorData.map((c) => prisma.color.create({ data: c })));
-  const colorByCode = new Map(colors.map((c) => [c.code, c]));
-  console.log(`✅ ${colors.length} renk`);
-
-  // --- Kumaş özellikleri (KURSUN dahil 7 — KURSUN sadece kurşun istasyonunda uygulanır) ---
+  // --- Kumaş özellikleri: yalnız istasyon-işlevine bağlı ikisi ---
+  // KURSUN → Kurşun+KK2 istasyonu uygular; ZIMPARALI → Zımpara fason istasyonu
+  // uygular. Demo özellikleri (antibakteriyel vb.) kaldırıldı — admin sonradan ekler.
   const propertyData = [
-    { code: "ANTIBAKTERIYEL", name: "Antibakteriyel", category: "Kimyasal",     color: "#10b981", sortOrder: 10 },
-    { code: "SU_GECIRMEZ",    name: "Su Geçirmez",    category: "Kimyasal",     color: "#0ea5e9", sortOrder: 20 },
-    { code: "YANMAZ",         name: "Yanmaz",         category: "Dayanıklılık", color: "#f97316", sortOrder: 30 },
-    { code: "ELASTIK",        name: "Elastik",        category: "Dayanıklılık", color: "#8b5cf6", sortOrder: 40 },
-    { code: "ZIMPARALI",      name: "Zımparalı",      category: "Yüzey",        color: "#a3a3a3", sortOrder: 50 },
-    { code: "PARLAK",         name: "Parlak",         category: "Yüzey",        color: "#fbbf24", sortOrder: 60 },
-    { code: "KURSUN",         name: "Kurşunlu",       category: "İşlem",        color: "#64748b", sortOrder: 70 },
+    { code: "KURSUN",    name: "Kurşunlu",  category: "İşlem", color: "#64748b", sortOrder: 10 },
+    { code: "ZIMPARALI", name: "Zımparalı", category: "Yüzey", color: "#a3a3a3", sortOrder: 20 },
   ];
   const properties = await Promise.all(propertyData.map((p) => prisma.fabricProperty.create({ data: p })));
   const propByCode = new Map(properties.map((p) => [p.code, p]));
-  console.log(`✅ ${properties.length} kumaş özelliği`);
+  console.log(`✅ ${properties.length} kumaş özelliği (KURSUN + ZIMPARALI)`);
 
   // --- Fason kategori + firma ---
   const cats = await Promise.all([
@@ -389,18 +365,79 @@ async function main() {
   });
   console.log("✅ 3 makine (KK1-M1, KK2-M1, TAMBUR-M1)");
 
-  // --- Sistem varsayılan etiket medyası (Etiket Stüdyosu v2) ---
-  // "Boyutlar" (LabelFormatProfile) kataloğu KALDIRILDI: medya artık doğrudan yazıcı
-  // cihazında (labelWidthMm vd.). Cihaz seçili değilken (Electron önizleme, kartela)
-  // bu ayar kullanılır. Argox OS 214 plus kumaş etiketi: 100×58 mm YATAY, 203dpi,
-  // 2mm gap, 3mm GÜVENLİK PAYI (içerik ~94×52) — topa yatay yapıştırılır.
-  const DEFAULT_MEDIA = { widthMm: 100, heightMm: 58, dpi: 203, gapMm: 2, marginMm: 3 };
-  await prisma.systemSetting.upsert({
-    where: { key: "label.defaultMedia" },
-    create: { key: "label.defaultMedia", value: DEFAULT_MEDIA },
-    update: { value: DEFAULT_MEDIA },
-  });
-  console.log("✅ Sistem varsayılan etiket medyası (label.defaultMedia = 100×58, 203dpi)");
+  // --- Sistem ayarları (kurulum varsayılanları — mevcut fabrika ayarları birebir) ---
+  // Fabrikanın çalışan ayarları seed'e sabitlenir; runtime'da Genel Ayarlar / Feature
+  // Flag ekranlarından değiştirilebilir. Yalnız runtime imleçleri (audit.lastArchiveAt
+  // vb.) BİLİNÇLİ olarak seed'lenmez. Kodda tanımlı ama burada olmayan ayarlar
+  // kendi kod-varsayılanına düşer. Refakat kartı düzeni (traveler.cardConfig) sahadaki
+  // güncel haliyle korunur. Argox kumaş etiketi medyası: 100×58 mm YATAY, 203dpi.
+  const SYSTEM_SETTINGS: { key: string; value: Prisma.InputJsonValue }[] = [
+    { key: "label.defaultMedia", value: { widthMm: 100, heightMm: 58, dpi: 203, gapMm: 2, marginMm: 3 } },
+    { key: "label.copies", value: 1 },
+    { key: "label.nativeSendEnabled", value: false },
+    { key: "label.mobileRasterEnabled", value: false },
+    { key: "workorder.partyCodeAuto", value: true },
+    { key: "finance.pricingEnabled", value: false },
+    { key: "kk1.weightEntryEnabled", value: false },
+    { key: "return.gradingEnabled", value: false },
+    { key: "device.pairingRequired", value: false },
+    { key: "shipping.confirmationEnabled", value: false },
+    { key: "auth.sessionDurationMinutes", value: 480 },
+    { key: "auth.idleTimeoutMinutes", value: 0 },
+    { key: "workSession.idleTimeoutMinutes", value: 0 },
+    { key: "auth.absoluteSessionCapDays", value: 30 },
+    { key: "auth.autoLogoutOnExpiry", value: false },
+    { key: "auth.sameTypeSessionPolicy", value: "off" },
+    { key: "auth.loginMethods", value: { enabled: ["list", "pin"], primary: "pin" } },
+    { key: "auth.mobileIdleLockEnabled", value: false },
+    { key: "auth.mobileIdleLockMinutes", value: 10 },
+    { key: "auth.mobileLockOnBackground", value: false },
+    { key: "auth.pinLockoutEscalateAfter", value: 3 },
+    { key: "auth.pinLockoutLongPenaltyMin", value: 15 },
+    {
+      key: "traveler.cardConfig",
+      value: {
+        companyName: "Adnan Şahin Tekstil",
+        addressLine: "",
+        phone: "",
+        pageSize: "A4",
+        margins: { top: 8, right: 8, bottom: 8, left: 8 },
+        fontScale: 1.15,
+        fontWeight: "normal",
+        showOperationGrid: true,
+        showNotes: true,
+        showOrders: true,
+        showProperties: true,
+        specFields: {
+          color: { show: true, size: "lg", weight: "normal" },
+          width: { show: true, size: "lg", weight: "normal" },
+          targetQuantity: { show: false, size: "md", weight: "normal" },
+          targetWeight: { show: false, size: "md", weight: "normal" },
+          foldType: { show: true, size: "lg", weight: "normal" },
+          startDate: { show: false, size: "md", weight: "normal" },
+          endDate: { show: false, size: "md", weight: "normal" },
+        },
+        specColumns: 3,
+        orderFields: {
+          orderNumber: { show: true, size: "md", weight: "normal" },
+          customer: { show: true, size: "md", weight: "normal" },
+          item: { show: true, size: "md", weight: "normal" },
+          color: { show: true, size: "md", weight: "normal" },
+          quantity: { show: true, size: "md", weight: "normal" },
+        },
+        orderTotal: { show: true, size: "md", weight: "bold" },
+        footerNote: "",
+      },
+    },
+  ];
+  for (const s of SYSTEM_SETTINGS) {
+    await prisma.systemSetting.upsert({
+      where: { key: s.key },
+      create: { key: s.key, value: s.value },
+      update: { value: s.value },
+    });
+  }
+  console.log(`✅ ${SYSTEM_SETTINGS.length} sistem ayarı (mevcut fabrika ayarları birebir)`);
 
   // --- Saha donanımı: makineye-bağlı yazıcılar (PeripheralDevice, NETWORK_TCP) ---
   // MachineHardware emekli; saha donanımının TEK kaynağı PeripheralDevice. Faz-1
@@ -515,24 +552,16 @@ async function main() {
   console.log("✅ Sevkiyat kantarı (SCALE, BT-SPP, istasyona bağlı — SEVK_1)");
 
   // --- İstasyon yetenekleri ---
-  // Boyahane: tüm 6 renk + 5 özellik (Kurşun ve Zımparalı hariç — onlar başka istasyonun işi)
-  await prisma.stationColor.createMany({
-    data: colors.map((c) => ({ stationId: boyaFason.id, colorId: c.id })),
-  });
-  const boyaPropCodes = ["ANTIBAKTERIYEL", "SU_GECIRMEZ", "YANMAZ", "ELASTIK", "PARLAK"];
-  await prisma.stationProperty.createMany({
-    data: boyaPropCodes.map((code) => ({ stationId: boyaFason.id, propertyId: propByCode.get(code)!.id })),
-  });
-  // Kurşun: yalnız KURSUN özelliği
+  // Renk ve demo özellik seed'lenmediği için boyahane yeteneği BOŞ başlar (admin
+  // renk/özellik ekleyip atar). Kurşun ve Zımpara kendi işlevsel özelliğini uygular.
   await prisma.stationProperty.create({
     data: { stationId: kursun.id, propertyId: propByCode.get("KURSUN")!.id },
   });
-  // Zımpara: yalnız ZIMPARALI özelliği
   await prisma.stationProperty.create({
     data: { stationId: zimparaFason.id, propertyId: propByCode.get("ZIMPARALI")!.id },
   });
   // Tambur'un yeteneği yok (karar noktası).
-  console.log("✅ İstasyon yetenekleri (Boya=6 renk+5 özellik, Kurşun=KURSUN, Zımpara=ZIMPARALI)");
+  console.log("✅ İstasyon yetenekleri (Kurşun=KURSUN, Zımpara=ZIMPARALI; boyahane boş)");
 
   // --- Hata tipleri ---
   // Saha #18: GENEL — KK2'de hata tipini belirtmek istemeyen operatör için
@@ -568,74 +597,7 @@ async function main() {
       ]},
     },
   });
-  // ARDA Tekstil'e özel rota — defaultRoutes ilişkisinin demo'su
-  await prisma.route.create({
-    data: {
-      code: "ARDA-HIZLI", name: "ARDA — Hızlı Boyama",
-      description: "ARDA için kısa rota (kurşun atlanır, doğrudan tambur)",
-      customerId: custByCode.get("MUS-001")!.id,
-      steps: { create: [
-        { sequence: 1, stationId: boyaFason.id },
-        { sequence: 2, stationId: tambur.id },
-      ]},
-    },
-  });
-  console.log("✅ 3 rota şablonu (2 generic + 1 ARDA-özel)");
-
-  // --- Patos kumaşı + tüm renk/özellik izinli ---
-  const patos = await prisma.item.create({
-    data: {
-      code: "PATOS", name: "PATOS", itemType: "FABRIC", unit: "MT",
-      allowedColors:     { create: colors.map((c) => ({ colorId: c.id })) },
-      allowedProperties: { create: properties.map((p) => ({ propertyId: p.id })) },
-    },
-  });
-  console.log(`✅ Patos kumaşı (tüm ${colors.length} renk + ${properties.length} özellik izinli)`);
-
-  // --- Customer-Item alias (her müşterinin Patos için kendi adı) ---
-  const itemAliases = [
-    { customerCode: "MUS-001", alias: "Soft Patos" },
-    { customerCode: "MUS-002", alias: "Premium Pamuk" },
-    { customerCode: "MUS-003", alias: "Klasik Patos" },
-    { customerCode: "MUS-004", alias: "Eco Patos" },
-  ];
-  await prisma.customerItemAlias.createMany({
-    data: itemAliases.map((a) => ({
-      customerId: custByCode.get(a.customerCode)!.id,
-      itemId:     patos.id,
-      alias:      a.alias,
-    })),
-  });
-  console.log(`✅ ${itemAliases.length} Patos müşteri alias'ı`);
-
-  // --- Customer-Color alias (örnek 3: aynı renk farklı müşteride farklı isim) ---
-  const colorAliases = [
-    { customerCode: "MUS-001", colorCode: "MAVI",     alias: "Royal Blue" },
-    { customerCode: "MUS-002", colorCode: "LACIVERT", alias: "Navy" },
-    { customerCode: "MUS-003", colorCode: "BEYAZ",    alias: "Saf Beyaz" },
-  ];
-  await prisma.customerColorAlias.createMany({
-    data: colorAliases.map((a) => ({
-      customerId: custByCode.get(a.customerCode)!.id,
-      colorId:    colorByCode.get(a.colorCode)!.id,
-      alias:      a.alias,
-    })),
-  });
-  console.log(`✅ ${colorAliases.length} renk alias'ı`);
-
-  // --- Customer şubeleri (ARDA 2, Moda 1; diğerleri tek-şube/şubesiz) ---
-  await prisma.customerBranch.createMany({
-    data: [
-      { customerId: custByCode.get("MUS-001")!.id, code: "IST", name: "İstanbul Merkez",
-        address: "Tekstilkent Sanayi Sitesi", city: "İstanbul", district: "Esenyurt",
-        contactName: "Murat Bey", contactPhone: "+90 212 555 0001" },
-      { customerId: custByCode.get("MUS-001")!.id, code: "ANK", name: "Ankara Şube",
-        city: "Ankara", district: "OSTİM", contactName: "Selim Bey", contactPhone: "+90 312 555 0002" },
-      { customerId: custByCode.get("MUS-002")!.id, code: "IZM", name: "İzmir Merkez",
-        city: "İzmir", district: "Bornova", contactName: "Aylin Hanım", contactPhone: "+90 232 555 0003" },
-    ],
-  });
-  console.log("✅ 3 şube (ARDA: İstanbul + Ankara, Moda: İzmir)");
+  console.log("✅ 2 rota şablonu (Standart Boyama, Boya + Zımpara)");
 
   // --- Label template'ler (her LabelKind için default — etiket endpoint'leri için zorunlu) ---
   await prisma.labelTemplate.create({

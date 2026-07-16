@@ -56,6 +56,8 @@ interface DirectShipDoc {
     code: string | null;
     taxNumber: string | null;
     branchName: string | null;
+    /** Müşteri şube kodu (ihracat) — "branchCode" section toggle'ıyla açılıp kapanır. */
+    branchCode: string | null;
   };
   workOrder: { id: string; workOrderNumber: string; type: string };
   subcontractor: { id: string; name: string; code: string | null };
@@ -148,6 +150,8 @@ export function renderFasonDirectShipHtml(
   const showSub = sectionOn(cfg.sections, "subcontractorInfo");
   const showDs = sectionOn(cfg.sections, "directShipInfo");
   const showVeh = sectionOn(cfg.sections, "vehicleInfo");
+  // Şube kodu (ihracat) — açılıp kapanabilir (varsayılan açık).
+  const showBranchCode = sectionOn(cfg.sections, "branchCode");
   // MÜŞTERİ (Malın Gittiği) — doğrudan sevkin asıl alıcısı; section toggle'dan
   // bağımsız DAİMA gösterilir (irsaliyenin muhatabı).
   const cust = doc.customer;
@@ -155,6 +159,7 @@ export function renderFasonDirectShipHtml(
     ? `<div class="box"><div class="box-t">MÜŞTERİ (Malın Gittiği)</div>
         <div class="row"><span>Adı:</span><b>${esc(cust.name)}</b></div>
         ${cust.branchName ? `<div class="row"><span>Şube:</span><b>${esc(cust.branchName)}</b></div>` : ""}
+        ${showBranchCode && cust.branchCode ? `<div class="row"><span>Şube Kodu:</span><b>${esc(cust.branchCode)}</b></div>` : ""}
         ${cust.taxNumber ? `<div class="row"><span>V.No:</span><b>${esc(cust.taxNumber)}</b></div>` : ""}
       </div>`
     : "";

@@ -34,7 +34,7 @@ function check(label: string, cond: boolean, extra = ""): void {
 const CASES: { dt: PrintedDocType; title: string; no: string }[] = [
   { dt: PrintedDocType.SHIPMENT_DISPATCH, title: "SEVK İRSALİYESİ", no: "SVK-2026-0042" },
   { dt: PrintedDocType.SUBCONTRACTOR_DISPATCH, title: "KUMAŞ İRSALİYESİ", no: "FSN-2026-0231" },
-  { dt: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, title: "DOĞRUDAN SEVK İRSALİYESİ", no: "DSF-2026-0012" },
+  { dt: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, title: "FASONDAN SEVK İRSALİYESİ", no: "DSF-2026-0012" },
   { dt: PrintedDocType.KARTELA_DISPATCH, title: "KARTELA ÇEKİ LİSTESİ", no: "KRT-2026-0058" },
 ];
 

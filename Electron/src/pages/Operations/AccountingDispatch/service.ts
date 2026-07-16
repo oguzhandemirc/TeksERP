@@ -15,6 +15,16 @@ export const accountingDispatchService = {
       .then((r) => r.data),
 
   /**
+   * Fasondan doğrudan sevk (DirectShipment) fişi — çuval sevkiyatı getReport'u ile AYNI
+   * DispatchReport şeklini döner (çuval yok → Çuval sayfası boş; Ürün/Çeki dolu). Muhasebe
+   * listesinde `kind === "DIRECT"` satırlar bu uca gider.
+   */
+  getDirectReport: (id: string): Promise<ApiResponse<DispatchReport>> =>
+    apiClient
+      .get<ApiResponse<DispatchReport>>(`/api/shipping/direct-shipments/${id}/dispatch-report`)
+      .then((r) => r.data),
+
+  /**
    * Muhasebe Excel veri seti — ekran filtresinin querystring'i (tarih + müşteri)
    * birebir backend'e geçer; status=DISPATCHED backend'de zorlanır.
    */

@@ -29,7 +29,12 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
   await p.workOrderStep.update({ where: { id: kursun.id }, data: { status: "COMPLETED", skipReason: null } });
 
   // === TEST B: CUT hard-stop — roll[0]'a çocuk top ver (roll[1].parentRollId = roll[0]) ===
-  await p.roll.update({ where: { id: rollIds[1] }, data: { parentRollId: rollIds[0] } });
+  // Guard yön-bilinçli (2026-07-16): yalnız hedef-VEYA-SONRASI adımda doğmuş kesim çocuğu
+  // engeller. Sahte çocuk gerçek bir Tambur kesimini modellesin diye producedInStepId'si
+  // Tambur'a damgalanır (fixture'ın kendi değeri — örn. fason-dönüş Zımpara'sı — hedef
+  // ÖNCESİ kalır ve haklı olarak engellemezdi); sonra ön-değerine geri yüklenir.
+  const preProdStep = (await p.roll.findUniqueOrThrow({ where: { id: rollIds[1] }, select: { producedInStepId: true } })).producedInStepId;
+  await p.roll.update({ where: { id: rollIds[1] }, data: { parentRollId: rollIds[0], producedInStepId: tambur.id } });
   let threw = false;
   try {
     await svc.manualMove(WO, { rollIds: [rollIds[0]], targetStepId: kursun.id, partyMode: "new", reason: "test CUT hard-stop" });
@@ -38,7 +43,7 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
     ok(/kesim yapılmış|çocuk/i.test((e as Error).message), `CUT HARD-STOP: ${(e as Error).message.slice(0, 55)}`);
   }
   if (!threw) ok(false, "CUT için hard-stop bekleniyordu ama geçti");
-  await p.roll.update({ where: { id: rollIds[1] }, data: { parentRollId: null } }); // temizle
+  await p.roll.update({ where: { id: rollIds[1] }, data: { parentRollId: null, producedInStepId: preProdStep } }); // temizle
 
   // === TEST A: salt-QC/Kurşun → geri taşınır + op VOID + grade null ===
   const res = await svc.manualMove(WO, { batchId: BATCH, targetStepId: kursun.id, reason: "test QC reversal Tambur->Kurşun" });

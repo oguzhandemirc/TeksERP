@@ -45,14 +45,16 @@ const PAGE_SIZE = 50;
 // Read-only liste + barkod scan + filtre + detay.
 // =============================================================================
 
-// Depo personeli sekmesi: Tümü (depo+ham) / Depo (WAREHOUSE) / Ham (STOCK) /
-// Kartela (Swatch). Sevkiyat modülü yeniden yazılınca burada yeni durumlar
-// olabilir; ham (STOCK) ve kartela üretim öncesi/yan envanteri kapsar.
-type ModeFilter = 'ALL' | 'WAREHOUSE' | 'STOCK' | 'SWATCH' | 'KARTELALIK';
+// Depo personeli sekmesi: Tümü (depo+ham) / Depo (WAREHOUSE serbest) /
+// Çuvalda (bir çuvala konmuş, sevk edilmemiş) / Ham (STOCK) / Kartela (Swatch).
+// Diğer sekmeler `shipmentScope:'free'` ile çuvaldakileri eler; IN_SACK sekmesi
+// tam tersine yalnız çuvaldakileri gösterir.
+type ModeFilter = 'ALL' | 'WAREHOUSE' | 'IN_SACK' | 'STOCK' | 'SWATCH' | 'KARTELALIK';
 
 const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'ALL', label: 'Tümü', color: '#475569' },
   { key: 'WAREHOUSE', label: 'Depo', color: '#d97706' },
+  { key: 'IN_SACK', label: 'Çuvalda', color: '#4338ca' },
   { key: 'STOCK', label: 'Ham', color: '#0ea5e9' },
   { key: 'SWATCH', label: 'Kartela', color: '#7c3aed' },
   { key: 'KARTELALIK', label: 'Kartelalık', color: '#059669' },
@@ -128,15 +130,27 @@ export default function DepoScreen() {
   // A1_STOCK (2. kalite satılabilir),
   // STOCK (ham). includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
   const rollsFilters = useMemo<Record<string, string | string[]>>(() => {
-    // shipmentScope:'free' → çuvallanmış (bir sevkiyata okutulmuş) toplar HARİÇ. Çuvallanan
-    // top artık "serbest depoda" görünmez; çuval depo/planlı sevkiyat ayrı izlenir (Sevk Çıkışı).
-    const f: Record<string, string | string[]> = { includeFire: 'true', shipmentScope: 'free' };
-    if (mode === 'ALL') f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
-    else if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
-    else if (mode === 'STOCK') f.status = 'STOCK';
-    else if (mode === 'KARTELALIK') {
+    // Çuvalda sekmesi: bir çuvala konmuş (sackId dolu) + sevk edilmemiş toplar
+    // (rollScope=IN_SACK). shipmentScope:'free' BİLİNÇLİ verilmez — o, çuvallanmış
+    // topları elerdi (çelişki). status:'ALL' → varsayılan STOCK süzgeci devre dışı.
+    if (mode === 'IN_SACK') {
+      return { includeFire: 'true', rollScope: 'IN_SACK', status: 'ALL' };
+    }
+    const f: Record<string, string | string[]> = { includeFire: 'true' };
+    if (mode === 'ALL') {
+      // Tümü = TÜM envanter (serbest + çuvaldaki). shipmentScope BİLİNÇLİ verilmez →
+      // çuvallanmış toplar da listelenir; satırdaki çuval rozetiyle ayrışırlar.
       f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
-      f.markedForKartela = 'true';
+    } else {
+      // Depo/Ham/Kartelalık = yalnız SERBEST stok. shipmentScope:'free' çuvallanmış
+      // (çuvala/sevkiyata okutulmuş) topları eler → çuvaldakiler "Çuvalda" sekmesinde/"Tümü"de.
+      f.shipmentScope = 'free';
+      if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
+      else if (mode === 'STOCK') f.status = 'STOCK';
+      else if (mode === 'KARTELALIK') {
+        f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
+        f.markedForKartela = 'true';
+      }
     }
     return f;
   }, [mode]);
@@ -301,6 +315,25 @@ export default function DepoScreen() {
         </>
       );
     }
+    // Çuvalda sekmesi: hepsi zaten çuvalda → "Serbest/Çuvalda/Ham" status kutuları
+    // bu bağlamda yanıltıcı. Yalnız sekmeye göre süzülmüş, tek-anlamlı sayaçlar.
+    if (mode === 'IN_SACK') {
+      return (
+        <>
+          <StatBox label="Çuvaldaki Top" value={rollStats.count} color="#4338ca" />
+          <View style={styles.statDivider} />
+          <StatBox
+            label={isPhone ? 'Metre' : 'Toplam Metre'}
+            value={`${rollStats.totalQty.toFixed(0)} m`}
+            color="#0f172a"
+          />
+          <View style={styles.statDivider} />
+          <StatBox label="A1" value={rollStats.a1Quality} color="#7c3aed" />
+          <View style={styles.statDivider} />
+          <StatBox label="Fire" value={rollStats.fireQuality} color="#ef4444" />
+        </>
+      );
+    }
     return (
       <>
         <StatBox
@@ -315,7 +348,14 @@ export default function DepoScreen() {
           color="#0f172a"
         />
         <View style={styles.statDivider} />
-        <StatBox label="Serbest" value={rollStats.warehouse} color="#d97706" />
+        {/* Tümü sekmesi artık çuvaldakileri de listeler → "Serbest" gerçek serbest
+            (sackId=null) sayaçtan gelmeli; byStatus.WAREHOUSE çuvaldaki WAREHOUSE'ı da
+            sayar ve Çuvalda ile çift-sayım olurdu. Diğer sekmelerde eski davranış. */}
+        <StatBox
+          label="Serbest"
+          value={mode === 'ALL' ? (scopeQuery.data?.data?.free?.count ?? 0) : rollStats.warehouse}
+          color="#d97706"
+        />
         <View style={styles.statDivider} />
         <StatBox label="Çuvalda" value={committedCount} color="#4338ca" />
         <View style={styles.statDivider} />
@@ -577,6 +617,15 @@ function RollListRow({
                   <Text style={styles.statusPillKartelaText}>Kartelalık</Text>
                 </View>
               )}
+              {/* Çuvaldaki top — hangi çuvalda olduğunu göster (yalnız IN_SACK
+                  sekmesinde dolu gelir; diğer sekmeler shipmentScope:free ile eler). */}
+              {roll.sackId && (
+                <View style={[styles.statusPill, styles.statusPillSack]}>
+                  <Text style={styles.statusPillSackText}>
+                    {roll.sack?.sackNo ?? 'Çuvalda'}
+                  </Text>
+                </View>
+              )}
             </View>
             <View style={styles.rollMeta}>
               {roll.color?.hex && (
@@ -732,18 +781,20 @@ function RollDetailModal({
       : []),
     { icon: 'star-circle', label: 'Kalite', value: roll.qualityGrade },
     { icon: 'circle', label: 'Durum', value: trLabel(ROLL_STATUS_LABEL, roll.status) },
-    // Çuvala/sevkiyata rezerve top — serbest stok DEĞİL; barkod okutulunca uyar.
-    ...(roll.shipmentId
+    // Çuvala/sevkiyata bağlı top — serbest stok DEĞİL. Yalnız shipmentId'ye değil
+    // sackId'ye de bak: çuvala konmuş ama sevkiyatı olmayan top da "Çuvalda"dır.
+    ...(roll.shipmentId || roll.sackId
       ? [
           {
             icon: 'package-variant-closed',
-            label: 'Sevkiyat',
+            label: 'Konum',
             value:
               'Çuvalda' +
               (roll.sack ? ` · ${roll.sack.sackNo}` : '') +
+              ' · ' +
               (roll.shipment
-                ? ` · ${SHIPMENT_SCOPE_LABEL[roll.shipment.status] ?? roll.shipment.status}`
-                : ''),
+                ? SHIPMENT_SCOPE_LABEL[roll.shipment.status] ?? roll.shipment.status
+                : 'Sevk bekliyor'),
           } as SummaryItem,
         ]
       : []),
@@ -960,8 +1011,10 @@ const styles = StyleSheet.create({
   statusPillFire: { backgroundColor: '#fecaca' },
   statusPillSwatch: { backgroundColor: '#ddd6fe' },
   statusPillKartela: { backgroundColor: '#7c3aed' },
+  statusPillSack: { backgroundColor: '#4338ca' },
   statusPillText: { fontSize: 10, fontWeight: '700', color: '#0f172a' },
   statusPillKartelaText: { fontSize: 10, fontWeight: '700', color: '#ffffff' },
+  statusPillSackText: { fontSize: 10, fontWeight: '700', color: '#ffffff' },
   rollItem: { fontSize: 12, color: '#475569', marginTop: 4 },
   rollMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   rollMetaText: { fontSize: 11, color: '#0f172a', fontWeight: '600' },

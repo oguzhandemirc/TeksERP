@@ -26,6 +26,9 @@ function toPicked(l: BalanceLine): PickedOrderLine {
     orderDeadline: l.deadline,
     customerId: l.customerId,
     customerName: l.customerName,
+    // Ürün Dengesi satırı şube taşımaz (spec-toplaması) → null (gösterimde gizlenir).
+    branchName: null,
+    branchCode: null,
     itemId: l.itemId,
     itemName: l.itemName,
     colorId: l.colorId,

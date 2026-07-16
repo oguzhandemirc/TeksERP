@@ -157,3 +157,31 @@
   .wo-v3 .kpis { grid-template-columns: 1fr; }
   .wo-v3 .info-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Slide-over (yan panel) varyantı — DAR konteyner. Tam sayfanın viewport
+ * media-query'leri (1040/880px) burada tetiklenmez (viewport masaüstü, panel
+ * dar), bu yüzden grid'ler container düzeyinde 2 sütuna sabitlenir ve ölçekler
+ * bir tık küçültülür. İçerik/token'lar tam sayfayla AYNI — yalnız yerleşim.
+ * ────────────────────────────────────────────────────────────────────────── */
+.wo-v3.sheet { min-height: 100%; font-size: 13.5px; }
+.wo-v3.sheet .sheet-wrap { padding: 16px 18px 32px; }
+
+/* Başlık + aksiyonlar */
+.wo-v3.sheet .sheet-head { display: flex; flex-direction: column; gap: 9px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.wo-v3.sheet .sheet-id { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-right: 28px; }
+.wo-v3.sheet .wonum { font-size: 18px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.wo-v3.sheet .sheet-sub { font-size: 12.5px; color: var(--muted); }
+.wo-v3.sheet .sheet-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+
+/* Dar panelde 2 sütun */
+.wo-v3.sheet .kpis { grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.wo-v3.sheet .kpi { padding: 12px 13px; gap: 7px; }
+.wo-v3.sheet .kpi .big { font-size: 21px; }
+.wo-v3.sheet .info-grid { grid-template-columns: 1fr 1fr; gap: 13px 16px; }
+.wo-v3.sheet .section { margin-top: 20px; }
+
+/* Rota şeridi: dar panelde çok adımda sıkışmasın → min-genişlik + yatay kaydırma */
+.wo-v3.sheet .steps { padding: 16px 14px; }
+.wo-v3.sheet .stepline { overflow-x: auto; gap: 2px; padding-bottom: 2px; }
+.wo-v3.sheet .step { min-width: 80px; }

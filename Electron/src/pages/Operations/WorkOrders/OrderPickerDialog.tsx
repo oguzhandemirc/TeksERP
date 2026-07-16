@@ -31,6 +31,9 @@ export interface PickedOrderLine {
   orderDeadline: string | null;
   customerId: string;
   customerName: string;
+  /** Siparişin hedef şubesi (opsiyonel — yoksa null; gösterimde gizlenir). */
+  branchName: string | null;
+  branchCode: string | null;
   itemId: string;
   itemName: string;
   colorId: string | null;
@@ -112,6 +115,8 @@ export function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
     orderDeadline: order.deadline,
     customerId: order.customerId,
     customerName: order.customer?.name ?? "—",
+    branchName: order.branch?.name ?? null,
+    branchCode: order.branch?.code ?? null,
     itemId: line.itemId,
     itemName: line.item?.name ?? "—",
     colorId: line.colorId,
@@ -292,7 +297,7 @@ export function OrderPickerDialog({
   const groupedSelected = useMemo(() => {
     const map = new Map<
       string,
-      { id: string; orderNumber: string; customerName: string; deadline: string | null; lines: PickedOrderLine[] }
+      { id: string; orderNumber: string; customerName: string; branchName: string | null; branchCode: string | null; deadline: string | null; lines: PickedOrderLine[] }
     >();
     for (const p of selectedArray) {
       if (!map.has(p.orderId)) {
@@ -300,6 +305,8 @@ export function OrderPickerDialog({
           id: p.orderId,
           orderNumber: p.orderNumber,
           customerName: p.customerName,
+          branchName: p.branchName,
+          branchCode: p.branchCode,
           deadline: p.orderDeadline,
           lines: [],
         });
@@ -540,6 +547,12 @@ export function OrderPickerDialog({
                         </button>
                       </div>
                       <div className="mt-0.5 text-muted-foreground">{l.customerName}</div>
+                      {l.branchName && (
+                        <div className="text-[10px] text-muted-foreground/80">
+                          Şube: {l.branchName}
+                          {l.branchCode ? ` (${l.branchCode})` : ""}
+                        </div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         <span className="font-medium">{l.itemName}</span>
                         {l.itemColorName && (
@@ -658,6 +671,14 @@ function FetchedOrderRow({
         <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
         <span className="text-muted-foreground">·</span>
         <span className="text-sm">{order.customer?.name}</span>
+        {order.branch && (
+          <Badge variant="outline" className="gap-1 text-[10px] font-normal">
+            {order.branch.name}
+            {order.branch.code && (
+              <span className="font-mono text-muted-foreground">· {order.branch.code}</span>
+            )}
+          </Badge>
+        )}
         <span className="ml-auto">
           <DeadlineBadge deadline={order.deadline} />
         </span>
@@ -785,6 +806,8 @@ function SelectedOrderRow({
     id: string;
     orderNumber: string;
     customerName: string;
+    branchName: string | null;
+    branchCode: string | null;
     deadline: string | null;
     lines: PickedOrderLine[];
   };
@@ -796,6 +819,14 @@ function SelectedOrderRow({
         <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
         <span className="text-muted-foreground">·</span>
         <span className="text-sm">{order.customerName}</span>
+        {order.branchName && (
+          <Badge variant="outline" className="gap-1 text-[10px] font-normal">
+            {order.branchName}
+            {order.branchCode && (
+              <span className="font-mono text-muted-foreground">· {order.branchCode}</span>
+            )}
+          </Badge>
+        )}
         <span className="ml-auto">
           <DeadlineBadge deadline={order.deadline} />
         </span>

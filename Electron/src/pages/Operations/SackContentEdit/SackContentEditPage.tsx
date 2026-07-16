@@ -17,6 +17,7 @@ function rowToTarget(s: SackSearchRow): EditorTarget {
     customerName: s.customer?.name ?? null,
     branchId: s.branch?.id ?? null,
     branchName: s.branch?.name ?? null,
+    branchCode: s.branch?.code ?? null,
   };
 }
 
@@ -31,7 +32,13 @@ export function SackContentEditPage() {
   const [newOpen, setNewOpen] = useState(false);
 
   if (target) {
-    return <SackEditorView target={target} onExit={() => setTarget(null)} />;
+    return (
+      <SackEditorView
+        target={target}
+        onExit={() => setTarget(null)}
+        onReassigned={(patch) => setTarget((t) => (t ? { ...t, ...patch } : t))}
+      />
+    );
   }
 
   return (

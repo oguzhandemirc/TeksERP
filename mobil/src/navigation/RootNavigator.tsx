@@ -49,7 +49,8 @@ export default function RootNavigator() {
   // Atama durumu — SÜREKLİ poll'lanır (APPROVED olduktan SONRA da). Böylece cihaz
   // sonradan panelden pasifleştirilir/silinir/onayı geri alınırsa tablet bunu fark
   // eder ve "Cihaz Atama Bekliyor" ekranına KENDİLİĞİNDEN döner (operatör Ayarlar'dan
-  // "kendini bildir" aramaz). Onaylıyken seyrek (15s — sadece durum kaybını yakala),
+  // "kendini bildir" aramaz). Onaylıyken seyrek (45s — sadece durum kaybını yakala;
+  // pasifleştirme zaten anlık değil, 45s çözünürlük yeterli, taban poll yükü ~3x düşer),
   // beklerken sık (5s — onay anında hızlı geç).
   const assignment = useQuery({
     queryKey: ['device', 'status'],
@@ -61,7 +62,7 @@ export default function RootNavigator() {
       q.state.fetchFailureCount > 0
         ? 30_000
         : q.state.data?.status === 'APPROVED'
-          ? 15_000
+          ? 45_000
           : 5_000,
   }).data;
 

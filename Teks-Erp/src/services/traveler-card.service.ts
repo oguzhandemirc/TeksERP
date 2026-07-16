@@ -316,8 +316,11 @@ export class TravelerCardService {
         `Bu kart artık geçerli değil: ${card.status}. Kart numarası: ${card.cardNumber}`,
       );
     }
-    if (card.workOrder.status === WorkOrderStatus.CANCELLED) {
-      throw AppError.conflict("Bağlı iş emri iptal edilmiş");
+    if (
+      card.workOrder.status === WorkOrderStatus.CANCELLED ||
+      card.workOrder.status === WorkOrderStatus.SUPERSEDED
+    ) {
+      throw AppError.conflict("Bağlı iş emri iptal/devredilmiş");
     }
 
     const station = await prisma.station.findUnique({

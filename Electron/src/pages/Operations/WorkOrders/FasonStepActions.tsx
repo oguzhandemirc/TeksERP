@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Callout } from "@/components/ui/callout";
 import { PermissionGate } from "@/components/PermissionGate";
+import { cn } from "@/lib/utils";
 import { workOrderService } from "./service";
 import { FasonStepRollSelectModal } from "./FasonStepRollSelectModal";
 import { FasonCekiDraftDialog } from "./FasonCekiDraftDialog";
@@ -33,6 +34,9 @@ interface Props {
   /** Sıralı tüm adımlar — önceki/sonraki adımın fason olup olmadığını anlamak için. */
   steps: WorkOrderStepLite[];
   workOrderId: string;
+  /** true: satır başına istasyon adı etiketi + girinti yok — adım satırının ALTINDA
+   *  değil, bağımsız bir listede (v3 detay sayfası) render edilirken bağlam verir. */
+  withStationLabel?: boolean;
 }
 
 /**
@@ -41,7 +45,7 @@ interface Props {
  * "Çeki Taslağı" (sevkten önce sonraki fason çekisi). Mal konumu top-türevli (tek
  * kaynak); aksiyonlar gerçek dispatch()/receive()'e gider. Yalnız workorder:write.
  */
-export function FasonStepActions({ step, steps, workOrderId }: Props) {
+export function FasonStepActions({ step, steps, workOrderId, withStationLabel = false }: Props) {
   const qc = useQueryClient();
   const [bulkOpen, setBulkOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -130,7 +134,15 @@ export function FasonStepActions({ step, steps, workOrderId }: Props) {
 
   return (
     <PermissionGate permission="workorder:write">
-      <div className="mt-2 flex flex-wrap items-center gap-2 pl-7">
+      <div
+        className={cn(
+          "mt-2 flex flex-wrap items-center gap-2",
+          withStationLabel ? "pl-0" : "pl-7",
+        )}
+      >
+        {withStationLabel && (
+          <span className="text-[11px] font-medium text-muted-foreground">{stationName}:</span>
+        )}
         {showBulk && (
           <div className="flex flex-col gap-0.5">
             <Button

@@ -176,6 +176,36 @@ export async function discoverDevices(): Promise<BtBondedDevice[]> {
 
 const normMac = (a: string): string => a.trim().toUpperCase();
 
+// =============================================================================
+// Per-MAC serileştirme kilidi
+// =============================================================================
+// Aynı fiziksel HC-06 bağlantısına (aynı MAC) giden okuma/yazma işlemleri ASLA
+// iç içe geçmemeli. Tek kabloyla iki metre (2-KAT + 4-KAT) senaryosunda iki ayrı
+// PeripheralDevice kaydı AYNI MAC'i paylaşır → tek RFCOMM soketi. readResponse'ın
+// `clear → write(pollCommand) → read` döngüsü başka bir okuma/yazma ile çakışırsa
+// (hızlı çift-dokunuş, teşhis ekranı, ileride eşzamanlı okuma) tamponları birbirini
+// bozar. MAC başına kuyruk: her iş, aynı MAC'teki önceki iş (hata dahil) bitince
+// başlar. Farklı MAC'ler paralel kalır (kilit adrese özel).
+const macLocks = new Map<string, Promise<unknown>>();
+
+function withMacLock<T>(address: string, fn: () => Promise<T>): Promise<T> {
+  const key = normMac(address);
+  const prev = macLocks.get(key) ?? Promise.resolve();
+  // Önceki iş başarılı da olsa hata da verse fn'i çalıştır (zincir kopmasın).
+  const run = prev.then(fn, fn);
+  // Kuyruk-ucu: settle'ı yut ki bir sonraki iş her koşulda başlayabilsin.
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  macLocks.set(key, tail);
+  void tail.finally(() => {
+    // Bu iş kuyruğun sonundaysa (arkasına kimse eklenmediyse) girdiyi temizle.
+    if (macLocks.get(key) === tail) macLocks.delete(key);
+  });
+  return run;
+}
+
 /** Bu MAC Android'de zaten eşleşmiş (bonded) mi? Modül yoksa false. */
 export async function isBonded(address: string): Promise<boolean> {
   const want = normMac(address);
@@ -201,7 +231,7 @@ export async function pairByMac(address: string): Promise<void> {
 
 /** RFCOMM soketi açıp bağlantıyı doğrula (yazma/okuma yapmaz). */
 export async function testConnection(address: string): Promise<void> {
-  await ensureReady(address);
+  await withMacLock(address, () => ensureReady(address));
 }
 
 /**
@@ -240,6 +270,16 @@ export async function writeRaw(
   address: string,
   content: string,
   encoding: 'latin1' | 'ascii' = 'latin1',
+  opts?: { retry?: boolean; timeoutMs?: number },
+): Promise<void> {
+  // Aynı MAC'e giden yazma, paylaşılan soketteki okuma/yazmayla serileşir.
+  return withMacLock(address, () => writeRawUnlocked(address, content, encoding, opts));
+}
+
+async function writeRawUnlocked(
+  address: string,
+  content: string,
+  encoding: 'latin1' | 'ascii',
   opts?: { retry?: boolean; timeoutMs?: number },
 ): Promise<void> {
   const run = async (): Promise<void> => {
@@ -309,6 +349,12 @@ export function splitFrames(buf: string, terminator?: string): { frames: string[
  * (görünür başarısızlık — "sabit değer istendi ama gelmedi").
  */
 export async function readResponse(address: string, opts: ReadResponseOptions = {}): Promise<string> {
+  // Aynı MAC'e giden tüm I/O serileşir (withMacLock) — paylaşılan HC-06 soketinde
+  // clear→write→read döngüsü başka bir okuma/yazmayla çakışıp tamponu bozmasın.
+  return withMacLock(address, () => readResponseUnlocked(address, opts));
+}
+
+async function readResponseUnlocked(address: string, opts: ReadResponseOptions = {}): Promise<string> {
   const mode: ReadMode = opts.readMode ?? 'POLL';
   const mod = await ensureReady(address);
   if (mod.clearFromDevice) await mod.clearFromDevice(address).catch(() => false);

@@ -69,8 +69,18 @@ export const sacksColumns: ColumnDef<SackSearchRow>[] = [
     id: "branch",
     header: "Şube",
     meta: { label: "Şube" },
-    cell: ({ row }) =>
-      row.original.branch?.name ?? <span className="text-muted-foreground">—</span>,
+    cell: ({ row }) => {
+      const b = row.original.branch;
+      if (!b) return <span className="text-muted-foreground">—</span>;
+      return (
+        <span>
+          {b.name}
+          {b.code && (
+            <span className="ml-1 font-mono text-xs text-muted-foreground">({b.code})</span>
+          )}
+        </span>
+      );
+    },
   },
   {
     id: "match",

@@ -160,11 +160,11 @@ async function main(): Promise<void> {
     check("NEW_COLOR: kaynakta 2 top kaldı", (await prisma.roll.count({ where: { batchId: p1 } })) === 2);
     check("NEW_COLOR: kaynak WO hâlâ IN_PROGRESS (kısmi)", (await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } }))?.status === "IN_PROGRESS");
 
-    // TAM: kalan 2 topu da → kaynak boşalır → B1 (CANCELLED + kart VOID).
+    // TAM: kalan 2 topu da → kaynak boşalır → B1 (SUPERSEDED/Devredildi + kart VOID).
     const rest = rollIds.slice(2);
     const r2 = (await wos.splitBranch(wo.id, { batchId: p1, mode: "NEW_COLOR", newColorId: c.COLOR2, rollIds: rest }, c.ADMIN)).data as { newWorkOrderId: string };
     createdWoIds.add(r2.newWorkOrderId);
-    check("B1: kaynak WO CANCELLED (tam-parti ayrıldı)", (await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } }))?.status === "CANCELLED");
+    check("B1: kaynak WO SUPERSEDED/Devredildi (tam-parti ayrıldı, iptal DEĞİL)", (await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } }))?.status === "SUPERSEDED");
     check("B1: kaynak WO kartı VOIDED", (await prisma.travelerCard.count({ where: { workOrderId: wo.id, status: "VOIDED" } })) === 1);
   }
 
@@ -179,7 +179,13 @@ async function main(): Promise<void> {
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds }, exitedAt: null } });
     for (const rid of rollIds) await prisma.rollMovement.create({ data: { rollId: rid, workOrderStepId: boyaStep, qtyIn: 100 } });
     const disp = await prisma.subcontractorDispatch.create({
-      data: { dispatchNo: `TST-SPL-D${Date.now()}`, workOrderId: wo.id, batchId: p1, stepId: boyaStep, subcontractorId: c.SUB, totalQty: 300 },
+      // Kalemli fixture ŞART: gerçek dispatch() her top için kalem yazar; açık sevkin
+      // OUTSTANDING tanımı (K14/K15) kalem-bazlıdır (dönmemiş kalemi olan sevk) —
+      // kalemsiz fixture undyedMove'un outstanding-scope'lu sevk seçimine takılırdı.
+      data: {
+        dispatchNo: `TST-SPL-D${Date.now()}`, workOrderId: wo.id, batchId: p1, stepId: boyaStep, subcontractorId: c.SUB, totalQty: 300,
+        items: { create: rollIds.map((rid) => ({ rollId: rid, dispatchedQty: 100 })) },
+      },
     });
 
     // Guard'lar.
@@ -203,7 +209,7 @@ async function main(): Promise<void> {
     check("UNDYED: toplar AT_SUBCONTRACTOR kaldı", undyedRolls.every((r) => r.status === RollStatus.AT_SUBCONTRACTOR));
     check("UNDYED: toplar yeni WO boyahane adımında", undyedRolls.every((r) => r.currentStepId === newBoyaStep));
     check("UNDYED: açık fason movement hâlâ AÇIK", (await prisma.rollMovement.count({ where: { rollId: { in: rollIds }, workOrderStepId: newBoyaStep, exitedAt: null } })) === 3);
-    check("B1: UNDYED kaynak WO CANCELLED", (await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } }))?.status === "CANCELLED");
+    check("B1: UNDYED kaynak WO SUPERSEDED/Devredildi (iptal DEĞİL)", (await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } }))?.status === "SUPERSEDED");
   }
 
   // ═══════════════ Karma-adım (per-roll uygunluk) ═══════════════
