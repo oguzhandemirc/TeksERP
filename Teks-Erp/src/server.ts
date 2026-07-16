@@ -68,7 +68,9 @@ const server = app.listen(Number(PORT), HOST, () => {
             console.log(`  Ağ     : http://${address}:${PORT}   [${iface}]`);
         }
     }
-    console.log(`  Swagger: http://localhost:${PORT}/api-docs`);
+    if (process.env.NODE_ENV !== "production") {
+        console.log(`  Swagger: http://localhost:${PORT}/api-docs`);
+    }
     console.log("========================================================");
     console.log("");
 

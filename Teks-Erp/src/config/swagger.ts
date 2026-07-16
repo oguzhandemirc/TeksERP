@@ -59,5 +59,8 @@ if (!swaggerPaths || Object.keys(swaggerPaths).length === 0) {
 }
 
 export const setupSwagger = (app: Express): void => {
+    // Production'da API dokümantasyonu GİZLENİR: /api-docs yalnız dev/test'te mount
+    // edilir. Üretim sunucusunda iç API şemasını dışarıya açmamak için (güvenlik).
+    if (process.env.NODE_ENV === "production") return;
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 };

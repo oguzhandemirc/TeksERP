@@ -58,8 +58,10 @@ build edip başlatır → migration + seed otomatik çalışır → erişim adre
 **Erişim:**
 - Bu sunucuda: `http://localhost:4000`
 - Fabrika ağında: `http://<sunucu-ip>:4000`
-- Swagger: `http://<sunucu-ip>:4000/api-docs`
 - Giriş: **admin / 123123**
+
+> Swagger (`/api-docs`) **üretimde kapalıdır** (`NODE_ENV=production`); yalnız
+> geliştirme ortamında açık.
 
 > Panel (Electron) API adresini `http://<sunucu-ip>:4000` yap.
 

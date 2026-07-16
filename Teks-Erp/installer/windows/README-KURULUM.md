@@ -81,8 +81,10 @@ $NssmVersion` değişkenlerinden ayarlanır.
 **Erişim:**
 - Sunucuda: `http://localhost:4000`
 - Fabrika ağında: `http://<sunucu-ip>:4000`
-- Swagger: `http://<sunucu-ip>:4000/api-docs`
 - Giriş: `admin / 123123`
+
+> Swagger API dokümanı (`/api-docs`) **üretimde kapalıdır** (yalnız geliştirme
+> ortamında açık — iç API şemasını dışarıya açmamak için).
 
 > **Yönetim panelini (Electron) bağlama:** Panelin API adresini
 > `http://<sunucu-ip>:4000` yapman yeterli.

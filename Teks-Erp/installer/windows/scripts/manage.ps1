@@ -133,6 +133,27 @@ function Invoke-Psql {
     if ($code -ne 0) { throw "psql hata kodu $code  (SQL: $Sql)" }
 }
 
+# psql -tAc: tek deger dondur; hata/tablo yoksa BOS string (throw etmez).
+# (Migration retry'da _prisma_migrations sorgusu icin — tablo henuz olmayabilir.)
+function Invoke-PsqlQuery {
+    param([string]$Sql, [string]$Db, [string]$SuperPass)
+    $env:PGPASSWORD = $SuperPass
+    $v = & (Join-Path $PgBin "psql.exe") -h 127.0.0.1 -p $PgPort -U $PgSuper -d $Db -tAc $Sql 2>$null
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+    if ($v) { ([string]($v | Select-Object -First 1)).Trim() } else { "" }
+}
+
+# psql -f <dosya>: SQL dosyasini TRANSACTION'SIZ calistir. CREATE INDEX CONCURRENTLY
+# Prisma'nin migrate deploy'unda (her migration tx'e sarilir) calisamaz; bunun icin.
+function Invoke-PsqlFile {
+    param([string]$File, [string]$Db, [string]$SuperPass)
+    $env:PGPASSWORD = $SuperPass
+    & (Join-Path $PgBin "psql.exe") -h 127.0.0.1 -p $PgPort -U $PgSuper -d $Db -v ON_ERROR_STOP=1 -f $File
+    $code = $LASTEXITCODE
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+    if ($code -ne 0) { throw "psql -f `"$File`" hata kodu $code" }
+}
+
 function Wait-PgReady {
     param([string]$SuperPass, [int]$TimeoutSec = 60)
     Write-Step "PostgreSQL hazir olmasi bekleniyor..."
@@ -474,9 +495,43 @@ function Invoke-MigrateAndSeed {
     try {
         $prismaCli = Join-Path $AppDir "node_modules\prisma\build\index.js"
 
-        Write-Step "Veritabani migration'lari uygulaniyor (migrate deploy)..."
-        & $NodeExe $prismaCli migrate deploy
-        if ($LASTEXITCODE -ne 0) { throw "prisma migrate deploy basarisiz (kod $LASTEXITCODE)." }
+        # migrate deploy — CREATE INDEX CONCURRENTLY iceren migration'lar Prisma'nin
+        # her migration'i transaction'a sarmasi yuzunden patlar. entrypoint.sh (Docker)
+        # ile AYNI guvenlik agi: hata -> yarim kalan migration'i bul -> CONCURRENTLY
+        # ise psql ile transaction'siz uygula -> migrate resolve --applied -> tekrar
+        # dene. CONCURRENTLY icermeyen gercek hatada durur (yanlis "uygulandi" demez).
+        $superPass = $Secrets.pgSuperPassword
+        $deployed = $false
+        for ($attempt = 1; $attempt -le 20; $attempt++) {
+            Write-Step "Veritabani migration'lari uygulaniyor (migrate deploy)..."
+            $out = & $NodeExe $prismaCli migrate deploy 2>&1
+            $out | ForEach-Object { Write-Host "     $_" }
+            if ($LASTEXITCODE -eq 0) { $deployed = $true; break }
+
+            # Hangi migration yarim kaldi? Once _prisma_migrations (finished_at IS NULL),
+            # olmazsa migrate ciktisindan "GGAAYYSSDDSS_isim" desenini yakala.
+            $failed = Invoke-PsqlQuery -Db $DbName -SuperPass $superPass `
+                -Sql "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL ORDER BY started_at DESC LIMIT 1"
+            if (-not $failed) {
+                $hits = [regex]::Matches(($out -join "`n"), '\d{8,}_[A-Za-z0-9_]+')
+                if ($hits.Count -gt 0) { $failed = $hits[$hits.Count - 1].Value }
+            }
+            if (-not $failed) { throw "Migration basarisiz ama hangisi oldugu tespit edilemedi. Loglara bakin (manage.ps1 -Action logs)." }
+
+            $sqlPath = Join-Path $AppDir "prisma\migrations\$failed\migration.sql"
+            if (-not (Test-Path $sqlPath)) { throw "$failed icin SQL dosyasi bulunamadi: $sqlPath" }
+
+            if ((Get-Content $sqlPath -Raw) -match '(?i)CONCURRENTLY') {
+                Write-Warn2 "$failed 'CREATE INDEX CONCURRENTLY' iceriyor -> psql ile transaction'siz uygulaniyor..."
+                Invoke-PsqlFile -File $sqlPath -Db $DbName -SuperPass $superPass
+                & $NodeExe $prismaCli migrate resolve --applied $failed
+                if ($LASTEXITCODE -ne 0) { throw "migrate resolve --applied $failed basarisiz." }
+                Write-Ok "$failed uygulandi, migrate deploy yeniden deneniyor..."
+            } else {
+                throw "$failed CONCURRENTLY icermiyor ama migrate deploy basarisiz. Manuel inceleme gerek (manage.ps1 -Action logs)."
+            }
+        }
+        if (-not $deployed) { throw "migrate deploy 20 denemede tamamlanamadi." }
         Write-Ok "Migration'lar guncel."
 
         if (-not (Test-Path $SeededFlag)) {
@@ -707,7 +762,6 @@ function Do-Install {
     Write-Host ""
     Write-Host "  Bu sunucuda:     http://localhost:$ApiPort"
     Write-Host "  Fabrika aginda:  http://$ip`:$ApiPort" -ForegroundColor Green
-    Write-Host "  Swagger:         http://$ip`:$ApiPort/api-docs"
     if ($altIps.Count -gt 0) {
         Write-Host ""
         Write-Host "  Bu sunucuda birden fazla ag adresi var. Yukaridaki calismazsa" -ForegroundColor Yellow

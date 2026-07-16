@@ -88,8 +88,6 @@ Name: "{group}\Veritabani (Prisma Studio)"; Filename: "powershell.exe"; \
 Name: "{group}\TeksERP Yedek Al"; Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action backup"; \
   IconFilename: "{app}\branding\TeksERP.ico"
-Name: "{group}\Swagger API Dokumani"; Filename: "http://localhost:4000/api-docs"; \
-  IconFilename: "{app}\branding\TeksERP.ico"
 ; Kullanim kilavuzu (log komutlari + yonetim + yedek + sorun giderme) — Baslat menusu.
 Name: "{group}\TeksERP Kullanim Kilavuzu"; Filename: "notepad.exe"; \
   Parameters: """{app}\README-KURULUM.md"""; \
