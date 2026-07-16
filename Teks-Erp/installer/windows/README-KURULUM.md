@@ -143,11 +143,44 @@ Yönetici PowerShell'de (`C:\Program Files\TeksERP\scripts\`):
 .\manage.ps1 -Action restart    # her iki servisi yeniden başlat
 .\manage.ps1 -Action stop
 .\manage.ps1 -Action start
+.\manage.ps1 -Action logs       # backend loglarını CANLI izle (pm2 logs gibi; Ctrl+C ile çık)
+.\manage.ps1 -Action logs -Tail 200   # son 200 satırdan başlayarak izle
+.\manage.ps1 -Action studio     # Prisma Studio — veritabanını tarayıcıda görüntüle
 .\manage.ps1 -Action backup     # C:\ProgramData\TeksERP\backups\ içine .dump al
 .\manage.ps1 -Action backup -BackupPath D:\Yedekler
 .\manage.ps1 -Action backup -OffsitePath \\NAS\teksyedek   # ayrıca makine dışına kopyala (bir kez ayarla, kalıcı olur)
 .\manage.ps1 -Action restore -BackupFile C:\...\tekserp_20260601_030000.dump
 ```
+
+### Loglara bakma (log kayıtları) 📋
+
+Bir sorun olduğunda **ilk buraya bak.** Üç yolu var:
+
+**1. Canlı izleme — en pratik (`pm2 logs` karşılığı):**
+```powershell
+.\manage.ps1 -Action logs            # canlı akış; Ctrl+C ile çık
+.\manage.ps1 -Action logs -Tail 200  # son 200 satırdan başlayarak izle
+```
+Başlat menüsünde **"TeksERP Logları (canlı)"** ve **masaüstünde** aynı kısayol var —
+çift tıkla, canlı log penceresi açılır (sunucuya PowerShell yazmana gerek yok).
+
+**2. Log dosyaları** (`C:\ProgramData\TeksERP\logs\`):
+- `backend-out.log` — normal çıktı (açılış, istekler)
+- `backend-err.log` — **hatalar / stack trace'ler** ← sorun olduğunda önce bu
+```powershell
+Get-Content C:\ProgramData\TeksERP\logs\backend-err.log -Tail 100 -Wait
+```
+
+**3. Yönetim panelinden (sunucuya hiç girmeden):** İş/veri hataları backend tarafından
+**veritabanına** da yazılır ve panelde görünür:
+- **Sistem → Sistem Kayıtları** — backend 5xx hataları (stack + hangi endpoint + kullanıcı)
+- **Sistem → Aktivite Günlüğü** — kim hangi kaydı değiştirdi
+- **Sistem → Endpoint Performansı** — hangi uç yavaş (p50/p95)
+
+> PostgreSQL'in kendi logu ayrı: `C:\ProgramData\TeksERP\pgdata\log\`. DB servisi
+> (`TeksErpDB`) hiç başlamıyorsa oraya bak.
+
+---
 
 Servisleri Windows "Hizmetler" (services.msc) ekranından da yönetebilirsin:
 `TeksErpDB`, `TeksErpBackend`. Çoğu işlem için sistem tepsisindeki **durum paneli**

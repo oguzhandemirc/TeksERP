@@ -63,6 +63,10 @@ Source: "scripts\*"; DestDir: "{app}\scripts"; Flags: recursesubdirs createallsu
 Source: "tray\*"; DestDir: "{app}\tray"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Marka varliklari: logo ikonu (tray + kisayollar bunu kullanir)
 Source: "branding\*"; DestDir: "{app}\branding"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Kullanim kilavuzu — kurulum dizinine ({app}) kopyalanir + asagida Baslat menusu kisayolu.
+; Log komutlari, gunluk yonetim, yedek/geri-yukleme ve sorun giderme burada.
+Source: "README-KURULUM.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "REHBER.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 [Icons]
 ; Markali durum sayfasi (API/DB OK mi) — tarayicida acilir.
@@ -85,6 +89,10 @@ Name: "{group}\TeksERP Yedek Al"; Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action backup"; \
   IconFilename: "{app}\branding\TeksERP.ico"
 Name: "{group}\Swagger API Dokumani"; Filename: "http://localhost:4000/api-docs"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+; Kullanim kilavuzu (log komutlari + yonetim + yedek + sorun giderme) — Baslat menusu.
+Name: "{group}\TeksERP Kullanim Kilavuzu"; Filename: "notepad.exe"; \
+  Parameters: """{app}\README-KURULUM.md"""; \
   IconFilename: "{app}\branding\TeksERP.ico"
 Name: "{group}\TeksERP Kaldir"; Filename: "{uninstallexe}"; \
   IconFilename: "{app}\branding\TeksERP.ico"
