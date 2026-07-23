@@ -55,7 +55,7 @@ async function reset() {
   const orderLineIds = orders.flatMap((o) => o.lines.map((l) => l.id));
 
   const wos = await prisma.workOrder.findMany({
-    where: { batchNumber: { startsWith: P } },
+    where: { workOrderNumber: { startsWith: P } },
     select: { id: true, steps: { select: { id: true } } },
   });
   const woIds = wos.map((w) => w.id);
@@ -118,6 +118,9 @@ async function reset() {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
+    // Parti-modeli (2026-07-13): Batch → WorkOrder RESTRICT FK. WO silmeden önce
+    // partileri temizle (senaryo Batch üretmez ama test artıkları bırakmış olabilir).
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
   }
   if (orderIds.length) {
@@ -226,7 +229,7 @@ async function seed() {
   // --- İş emri (çoklu sipariş: ARDA L1a + Moda L3a) + tambur adımı + refakat kartı ---
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `${P}B-0001`,
+      workOrderNumber: `${P}B-0001`,
       type: "ORDER_PRODUCTION",
       status: "IN_PROGRESS",
       targetItemId: patos.id,

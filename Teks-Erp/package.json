@@ -6,6 +6,8 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "build": "tsc",
     "seed": "npx prisma db seed",
+    "seed:fixtures": "tsx prisma/seed-fixtures.ts",
+    "seed:demo": "tsx prisma/seed-demo-stations.ts",
     "seed:scenario": "ts-node prisma/seed-shipping-scenario.ts",
     "seed:sevkiyat": "ts-node --project prisma/tsconfig.json prisma/seed-sevkiyat-mock.ts",
     "prisma:generate": "npx prisma generate",
