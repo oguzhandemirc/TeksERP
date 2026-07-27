@@ -273,7 +273,14 @@ export async function moveRolls(
 
     const rolls = await tx.roll.findMany({
       where: { id: { in: rollIds } },
-      select: { id: true, batchId: true, status: true, barcode: true },
+      select: {
+        id: true,
+        batchId: true,
+        status: true,
+        barcode: true,
+        currentStep: { select: { workOrderId: true } },
+        producedInStep: { select: { workOrderId: true } },
+      },
     });
     if (rolls.length !== rollIds.length) throw AppError.notFound("Bazı toplar bulunamadı");
     // K16 madde 5 (splitBatch simetrisi): tüketilmiş/iptal TARİHÇE topu tek
@@ -295,6 +302,21 @@ export async function moveRolls(
       if (!src || src.workOrderId !== target.workOrderId) {
         throw AppError.badRequest("Toplar hedef partiyle aynı iş emrinde değil");
       }
+    }
+    // PARTİSİZ (batchId=null) top yukarıdaki kaynak-parti kontrolünden GEÇMİYORDU —
+    // yabancı WO'nun topu doğrudan API çağrısıyla bu partiye damgalanabilirdi (lane
+    // metrajı şişer, fason sevk kalemine yabancı top girer). Üyelik kanıtı: topun
+    // canlı adımı (currentStep) VEYA doğum adımı (producedInStep) hedef WO'ya ait olmalı.
+    const foreignLoose = rolls.filter(
+      (r) =>
+        r.batchId == null &&
+        r.currentStep?.workOrderId !== target.workOrderId &&
+        r.producedInStep?.workOrderId !== target.workOrderId,
+    );
+    if (foreignLoose.length > 0) {
+      throw AppError.badRequest(
+        `Partisiz toplar bu iş emrine ait değil: ${foreignLoose.map((r) => r.barcode ?? r.id).join(", ")}`,
+      );
     }
 
     // ── K16 SEVK CERRAHİSİ (üyelik taşınmadan ÖNCE — kalem→sevk eşleşmesi taze).

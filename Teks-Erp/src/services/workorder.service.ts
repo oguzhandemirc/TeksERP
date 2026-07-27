@@ -63,7 +63,7 @@ import {
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeWoInput } from "./helpers/coverage.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
-import { createBatchTx, type CreateBatchResult } from "./batch.service";
+import { createBatchTx, K18_DEAD_STATUSES, type CreateBatchResult } from "./batch.service";
 import { WorkOrderSplitService } from "./workorder-split.service";
 import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
 import { loadQualityTargetMaps, resolveFinalStatus } from "./helpers/roll-finalize.helper";
@@ -1224,11 +1224,60 @@ export class WorkOrderService {
   }
 
   /**
+   * WO ÜRETİM ÇIKTISI küme tanımı — liste (withProductionMeters) ve detay
+   * (producedRolls) AYNI kümeyi kullanır (drift = iki ekranda farklı sayı).
+   *
+   * 2026-07-27 düzeltmesi: eski tanım `parent.entrySource=SUBCONTRACTOR_RETURN`
+   * şartıyla YALNIZ fason-dönüşü açık kumaştan kesilen çocukları sayıyordu —
+   * fasonsuz rota (stok top → KK1→KK2→Tambur) ve Tambur'suz biten rota
+   * ("her rotanın son adımı final üretir": Kurşun/fason finalize) ÇIKAN=0
+   * görünüyordu. Yeni küme iki daldan oluşur:
+   *   a) Tambur birinci-nesil çocukları (entrySource=TAMBUR_SPLIT, bu WO'nun
+   *      adımında doğmuş). AYNI WO içi re-cut torunları çift sayım nedeniyle
+   *      hariç; ama BAŞKA WO'nun deposundan tüketilen TAMBUR_SPLIT parent'ın
+   *      çocukları meşru çıktıdır (parent.producedInStepId kapsam şartı).
+   *      Snapshot: sonradan TAMBUR_CONSUMED/CANCELLED olan çocuk listede kalır
+   *      (detay rozet basar).
+   *   b) Çocuğa bölünmeden nihai-ürün statüsüne ulaşan finalize çıktıları —
+   *      rota Kurşun/QC2 veya fasonla bitti. Ara-tüketilenler
+   *      (TAMBUR_CONSUMED/SUBCONTRACTOR_CONSUMED) ve canlı üretim bu dala giremez.
+   */
+  private producedOutputWhere(stepIds: string[]): Prisma.RollWhereInput {
+    return {
+      producedInStepId: { in: stepIds },
+      OR: [
+        {
+          entrySource: RollEntrySource.TAMBUR_SPLIT,
+          NOT: {
+            parent: {
+              entrySource: RollEntrySource.TAMBUR_SPLIT,
+              producedInStepId: { in: stepIds },
+            },
+          },
+        },
+        {
+          entrySource: { not: RollEntrySource.TAMBUR_SPLIT },
+          status: {
+            in: [
+              RollStatus.WAREHOUSE,
+              RollStatus.A1_STOCK,
+              RollStatus.SCRAP,
+              RollStatus.SHIPPED,
+              RollStatus.AT_KARTELA,
+              RollStatus.KARTELA_CONSUMED,
+            ],
+          },
+        },
+      ],
+    };
+  }
+
+  /**
    * Liste WO'larına ÜRETİLEN DEPO METRAJINI ekler (ilerleme kolonu için). Detay
-   * sayfasının `producedRolls.warehouse.totalMeters` tanımıyla aynı: WO adımlarında
-   * üretilmiş (producedInStepId), orijinal Tambur kesimi (parent=SUBCONTRACTOR_RETURN),
-   * FIRE/A1 olmayan rulolar; initialQty toplamı. Tek groupBy ile sayfa başına 1 sorgu.
-   * Ayrıca üretime GİREN ham metrajı ve bağlı SİPARİŞ TOPLAMINI (talep) ekler.
+   * sayfasının `producedRolls.warehouse.totalMeters` tanımıyla aynı küme
+   * (`producedOutputWhere`); FIRE/A1 olmayan rulolar; initialQty toplamı. Tek
+   * groupBy ile sayfa başına 1 sorgu. Ayrıca üretime GİREN ham metrajı ve bağlı
+   * SİPARİŞ TOPLAMINI (talep) ekler.
    */
   private async withProductionMeters<
     T extends { id: string; steps: { id: string; stepSequence: number }[] },
@@ -1297,18 +1346,21 @@ export class WorkOrderService {
       set.add(name);
     }
 
-    // ÇIKAN — üretim çıktısı; detay producedRolls.warehouse ile AYNI tanım
-    // (producedInStepId ∈ adımlar, parent=SUBCONTRACTOR_RETURN, FIRE/A1 hariç).
+    // ÇIKAN — üretim çıktısı; detay producedRolls.warehouse ile AYNI küme
+    // (producedOutputWhere) + FIRE/A1 hariç (sağlam üretim).
     const producedRows = await prisma.roll.groupBy({
       by: ["producedInStepId"],
       where: {
-        producedInStepId: { in: stepIds },
-        parent: { entrySource: RollEntrySource.SUBCONTRACTOR_RETURN },
-        // Postgres `NOT IN` NULL-hostile: null kalite (kaliteye bakılmadı) sağlam
-        // üretim sayılmalı; düz notIn onu dışlardı. null VEYA (FIRE/A1 değil).
-        OR: [
-          { qualityGrade: null },
-          { qualityGrade: { notIn: ["FIRE", "A1"] } },
+        AND: [
+          this.producedOutputWhere(stepIds),
+          {
+            // Postgres `NOT IN` NULL-hostile: null kalite (kaliteye bakılmadı) sağlam
+            // üretim sayılmalı; düz notIn onu dışlardı. null VEYA (FIRE/A1 değil).
+            OR: [
+              { qualityGrade: null },
+              { qualityGrade: { notIn: ["FIRE", "A1"] } },
+            ],
+          },
         ],
       },
       _sum: { initialQty: true },
@@ -1634,19 +1686,13 @@ export class WorkOrderService {
         stepDispatches.set(d.stepId, list);
       }
 
-      // Üretim çıktısı — SNAPSHOT: Tambur'un açık kumaştan kestiği birinci
-      // nesil çocuklar. Status filtresi yok; sonradan re-cut'la TAMBUR_CONSUMED
-      // veya CANCELLED olanlar listede kalır (rozetle işaretlenir). Metraj
-      // initialQty (production anı), currentQty değil — re-cut sonrası
-      // sıfırlanmaz, snapshot sabit.
-      // parent.entrySource = SUBCONTRACTOR_RETURN: parent açık kumaş ise
-      // bu rulo Tambur'un orijinal kesim çıktısıdır. Sonraki nesiller
-      // (re-cut çocukları) parent.entrySource = TAMBUR_SPLIT olur, filtrelenir.
+      // Üretim çıktısı — SNAPSHOT: liste metriğiyle AYNI küme (producedOutputWhere;
+      // Tambur birinci-nesil çocukları + Tambur'suz finalize çıktıları). Tambur
+      // dalında status filtresi yok; sonradan re-cut'la TAMBUR_CONSUMED veya
+      // CANCELLED olanlar listede kalır (rozetle işaretlenir). Metraj initialQty
+      // (production anı), currentQty değil — re-cut sonrası sıfırlanmaz, snapshot sabit.
       const producedRollRows = await prisma.roll.findMany({
-        where: {
-          producedInStepId: { in: stepIds },
-          parent: { entrySource: RollEntrySource.SUBCONTRACTOR_RETURN },
-        },
+        where: this.producedOutputWhere(stepIds),
         select: {
           id: true,
           barcode: true,
@@ -1797,10 +1843,12 @@ export class WorkOrderService {
         // rozeti için (boş+merge'li kaynaklar rollCount=0 lane'i olarak döner).
         mergedInto: { select: { id: true, batchNumber: true } },
         // Parti üyesi toplar (tüketilmiş ara düğümler HARİÇ — çift sayım olmasın:
-        // fason öncesi orijinaller CONSUMED, Tambur'da bölünen parent CONSUMED).
+        // fason öncesi orijinaller CONSUMED, Tambur'da bölünen parent CONSUMED,
+        // kartelaya bölünen parent KARTELA_CONSUMED). Küme tek kaynaktan (K18) —
+        // elle liste kopyası KARTELA_CONSUMED'ı atlıyordu (lane'de hayalet top).
         rolls: {
           where: {
-            status: { notIn: ["SUBCONTRACTOR_CONSUMED", "TAMBUR_CONSUMED", "CANCELLED"] },
+            status: { notIn: K18_DEAD_STATUSES },
           },
           orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
           select: {
