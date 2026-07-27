@@ -27,6 +27,7 @@ import {
 } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
+import { K18_DEAD_STATUSES } from "./batch.service";
 
 export interface SwatchStats {
   count: number;
@@ -41,13 +42,15 @@ import {
   RollEntrySource,
   RollOperationType,
   StationKind,
-  StepStatus,
   Swatch,
   WorkOrderStatus,
 } from "@prisma/client";
-import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
+import {
+  assertWoAtStepKind,
+  completeWorkOrderIfStepsDone,
+  recomputeStepStatus,
+} from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 
@@ -346,9 +349,11 @@ export class TamburService {
     workOrderId: string;
   }): Promise<TamburRollSummary[]> {
     // LIFO (enteredAt desc): KK2'den son çıkan açık kumaş Tambur'a ilk gelir.
+    // İkincil anahtar id: toplu taşıma (finishStep createMany) aynı timestamp'i
+    // yazar — tie-break'siz sıra refetch'ler arasında zıplıyordu (deterministik olsun).
     const openMovements = await prisma.rollMovement.findMany({
       where: { workOrderStepId: step.id, exitedAt: null },
-      orderBy: { enteredAt: "desc" },
+      orderBy: [{ enteredAt: "desc" }, { id: "desc" }],
       select: {
         roll: {
           include: {
@@ -515,12 +520,19 @@ export class TamburService {
       where: { id: data.rollId },
       include: {
         item: true,
-        currentStep: { select: { id: true, station: { select: { kind: true } } } },
-        producedInStep: {
+        // WO, topun KÖKENİNDEN (producedInStep) değil ŞU ANKİ ADIMINDAN çözülür:
+        // Top Kesme çocuğu producedInStepId=null doğar ve Konumu-Düzelt ile Tambur'a
+        // sokulabilir — köken üzerinden çözüm bu topta WO kilidini + tamamlama
+        // sayımını atlıyordu (WO sonsuza dek IN_PROGRESS kalırdı).
+        currentStep: {
           select: {
+            id: true,
+            workOrderId: true,
+            station: { select: { kind: true } },
             workOrder: {
               select: {
                 id: true,
+                status: true,
                 targetItemId: true,
                 targetColorId: true,
                 foldType: true,
@@ -551,11 +563,30 @@ export class TamburService {
         where: { id: data.rollId },
         include: { item: true, color: true },
       });
-      const cachedChildren = await prisma.roll.findMany({
+      // Cevap yalnız FİNALİZE'IN KENDİ çocuklarını dönmeli — parent'ın önceki
+      // cutOpenFabric çocukları dahil edilirse istemci retry'de onlara mükerrer
+      // etiket basar. Finalize, çocuk id'lerini TAMBUR_PROCESSED metadata'sına
+      // yazar; yoksa (legacy kayıt / metadata öncesi finalize) tüm TAMBUR_SPLIT
+      // çocuklara düşülür (eski davranış).
+      const tamburOp = await prisma.rollOperation.findFirst({
         where: {
-          parentRollId: data.rollId,
-          entrySource: RollEntrySource.TAMBUR_SPLIT,
+          rollId: data.rollId,
+          operationType: RollOperationType.TAMBUR_PROCESSED,
         },
+        select: { metadata: true },
+        orderBy: { createdAt: "desc" },
+      });
+      const meta = (tamburOp?.metadata ?? null) as { childRollIds?: unknown } | null;
+      const childRollIds = Array.isArray(meta?.childRollIds)
+        ? (meta.childRollIds.filter((x): x is string => typeof x === "string"))
+        : null;
+      const cachedChildren = await prisma.roll.findMany({
+        where: childRollIds
+          ? { id: { in: childRollIds } }
+          : {
+              parentRollId: data.rollId,
+              entrySource: RollEntrySource.TAMBUR_SPLIT,
+            },
         include: { item: true, color: true },
         orderBy: { createdAt: "asc" },
       });
@@ -594,8 +625,18 @@ export class TamburService {
     }
 
     const totalQty = Number(roll.currentQty);
-    const wo = roll.producedInStep?.workOrder ?? null;
+    const wo = roll.currentStep.workOrder;
     const plannedFoldType = wo?.foldType ?? null;
+
+    // Savunma katmanı (cutOpenFabric BUG-2 paritesi): iptal/devredilmiş iş emrinin
+    // Tambur adımında sıkışmış top finalize EDİLEMEZ — ölü WO'ya çocuk top üretimi
+    // + iptalin COMPLETED'a dirilmesi olmaz. Taze hali kilit altında tekrar okunur.
+    if (
+      wo.status === WorkOrderStatus.CANCELLED ||
+      wo.status === WorkOrderStatus.SUPERSEDED
+    ) {
+      throw AppError.conflict("İptal/devredilmiş iş emrinin topu finalize edilemez");
+    }
 
     // Renk kontrolü — Tambur'a gelen rulonun renk kazanmış olması beklenir
     // (boyahane Fason Kabul'ünde set edilir). Renksiz rulo Tambur'da operatöre
@@ -725,7 +766,20 @@ export class TamburService {
       // serileşsin; hepsi WO satırını tx başında kilitlediğinden sayım COMMIT'li
       // adım statülerini görür (yoksa iki tx birbirinin adımını açık sayıp WO
       // IN_PROGRESS'te takılır). Lock sırası WO→roll (kardeşlerle tutarlı).
-      if (wo?.id) await touchWorkOrderTx(tx, wo.id);
+      await touchWorkOrderTx(tx, wo.id);
+      // F130 paritesi: iptal-guard'ını kilit ALTINDA taze oku — pre-tx guard ile
+      // claim arasında WO iptal edilmiş olabilir (softDelete cancelClaim aynı WO
+      // satırını kilitler → burada serileşir).
+      const freshWo = await tx.workOrder.findUnique({
+        where: { id: wo.id },
+        select: { status: true },
+      });
+      if (
+        freshWo?.status === WorkOrderStatus.CANCELLED ||
+        freshWo?.status === WorkOrderStatus.SUPERSEDED
+      ) {
+        throw AppError.conflict("İptal/devredilmiş iş emrinin topu finalize edilemez");
+      }
       // ATOMIK CLAIM: parent'ı tek hamlede sahiplen. Koşullu updateMany satır
       // kilidi + status guard ile iki eşzamanlı finalize'dan yalnız BİRİNE
       // count=1 verir; kaybeden count=0 alır → tx geri sarılır, mükerrer child
@@ -893,7 +947,11 @@ export class TamburService {
               seg.qualityGrade != null
                 ? qualityGradeIdByCode.get(seg.qualityGrade) ?? null
                 : null,
-            producedInStepId: roll.producedInStepId,
+            // Çocuk, İŞLEMİN YAPILDIĞI Tambur adımını damgalar (cutOpenFabric
+            // paritesi) — parent kalıtımı değil: parent producedInStepId=null
+            // olabilir (Top Kesme çocuğu) ve üretim atfı/istatistik çocuğun
+            // doğduğu adıma aittir.
+            producedInStepId: roll.currentStep!.id,
             parentRollId: roll.id,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen toplar depoya
             // gitse bile hangi partiden geldiği lane'de izlenir.
@@ -979,11 +1037,23 @@ export class TamburService {
         });
       }
 
-      // Tambur adımındaki açık RollMovement'i kapat. Parent'ın tüm metrajı
-      // çocuk toplara dağıldığı için qtyOut = totalQty.
+      // Tambur adımındaki açık RollMovement'i kapat. qtyOut = movement'ın KENDİ
+      // qtyIn'i (istasyona giren işlenmiş metraj — kursun finishStep paritesi):
+      // finalize öncesi cutOpenFabric/cutWarehouseRoll kesimleri currentQty'yi
+      // düşürmüş olabilir; kalanla (totalQty) kapatmak istasyon iş-hacmi
+      // raporundan kesilen metrajı kaybettirirdi. qtyIn ölçülmemişse (0/null,
+      // KK1 kenarı) kalan metraja düşülür.
       const now = new Date();
       const oldStepId = roll.currentStepId;
       if (oldStepId) {
+        const openMove = await tx.rollMovement.findFirst({
+          where: { rollId: data.rollId, workOrderStepId: oldStepId, exitedAt: null },
+          select: { qtyIn: true },
+        });
+        const qtyOutD =
+          openMove && new Prisma.Decimal(openMove.qtyIn).greaterThan(0)
+            ? new Prisma.Decimal(openMove.qtyIn)
+            : new Prisma.Decimal(totalQty);
         await tx.rollMovement.updateMany({
           where: {
             rollId: data.rollId,
@@ -992,7 +1062,7 @@ export class TamburService {
           },
           data: {
             exitedAt: now,
-            qtyOut: totalQty,
+            qtyOut: qtyOutD,
             weightOut: roll.weightKg,
             notes: `TAMBUR_CONSUMED`,
             // İşin YAPILDIĞI makine kapanışta damgalanır (oturumdan).
@@ -1041,6 +1111,10 @@ export class TamburService {
               // Operatörün gerçek seçimi (override etmiş olabilir).
               foldType: data.foldType ?? null,
               childRollCount: segments.length,
+              // BU finalize çağrısında doğan çocuklar — idempotent retry cevabı
+              // yalnız bunları döner (öncesindeki cutOpenFabric çocukları değil;
+              // yoksa retry'de istemci C1/C2 için mükerrer etiket basardı).
+              childRollIds: splitRolls.map((r) => r.id),
               cutCount: inputCuts.length,
               tailCount: offsetD.lessThan(totalQtyD) ? 1 : 0,
               processedErrors: processedCount,
@@ -1052,23 +1126,10 @@ export class TamburService {
       }
 
       // WO completion — Tambur production'ın son istasyonu. Tüm üretim step'leri
-      // COMPLETED/SKIPPED ise WO kapanır. (Tartı/paket/sevkiyat artık step
-      // değil, fulfillment akışı — WO'yu tutmaz.)
-      if (wo?.id) {
-        const remaining = await tx.workOrderStep.count({
-          where: {
-            workOrderId: wo.id,
-            status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-          },
-        });
-        if (remaining === 0) {
-          await tx.workOrder.update({
-            where: { id: wo.id },
-            data: { status: WorkOrderStatus.COMPLETED },
-          });
-          await setWorkOrderCardStatuses(tx, wo.id, "ACTIVE", "COMPLETED");
-        }
-      }
+      // COMPLETED/SKIPPED ise WO kapanır. (Tartı/paket/sevkiyat artık step değil,
+      // fulfillment akışı — WO'yu tutmaz.) Terminal-durum guard'lı ORTAK helper:
+      // CANCELLED/SUPERSEDED buradan COMPLETED'a DİRİLMEZ (kart fanout helper içinde).
+      await completeWorkOrderIfStepsDone(tx, wo.id);
 
       return updated;
     }).catch((e) => {
@@ -1165,6 +1226,9 @@ export class TamburService {
   }): Promise<ApiResponse<Roll[]> | CursorPaginatedResponse<Roll>> {
     const where: Prisma.RollWhereInput = {
       entrySource: RollEntrySource.TAMBUR_SPLIT,
+      // Sonradan tüketilen/iptal edilen çocuk (re-cut'ta TAMBUR_CONSUMED,
+      // kartela/fason tüketimi, CANCELLED) fiziksel top değil — etiket basılmaz.
+      status: { notIn: K18_DEAD_STATUSES },
       ...(params?.workOrderId
         ? { producedInStep: { workOrderId: params.workOrderId } }
         : {}),
@@ -1517,16 +1581,38 @@ export class TamburService {
     // iki paralel istek findFirst'te boş görse de ikincinin create'i P2002 alır → 409.
     let err: RollError;
     try {
-      err = await prisma.rollError.create({
-        data: {
-          rollId: data.rollId,
-          startMeter: data.startMeter,
-          defectTypeId: defectType.id,
-          errorType: defectType.name,
-          isProcessed: false,
-          detectedAtStepId: data.stepId,
-          detectedByUserId: userId ?? null,
-        },
+      err = await prisma.$transaction(async (tx) => {
+        // ATOMİK CLAIM (finalize ile yarış): create'ten önce top satır-kilitlenir
+        // ve hâlâ bu Tambur adımında IN_PRODUCTION olduğu tx İÇİNDE doğrulanır.
+        // Yukarıdaki currentStepId pre-check'i check-then-act — eşzamanlı finalize
+        // (closeOrphanRollErrors) parent'ı tüketirken bu create ondan SONRA commit
+        // ederse RollError sonsuza dek açık yetim kalırdı (TAMBUR_CONSUMED topun
+        // hatasını hiçbir ekran bir daha karara bağlayamaz). Kilit sayesinde
+        // finalize bu hatayı ya görür (NO_CUT kapatır) ya da bu çağrı 409 alır.
+        const claim = await tx.roll.updateMany({
+          where: {
+            id: data.rollId,
+            status: RollStatus.IN_PRODUCTION,
+            currentStepId: data.stepId,
+          },
+          data: { updatedAt: new Date() },
+        });
+        if (claim.count === 0) {
+          throw AppError.conflict(
+            "Top bu sırada başka bir işlemle değişti (finalize edilmiş olabilir). Listeyi yenileyip tekrar deneyin."
+          );
+        }
+        return tx.rollError.create({
+          data: {
+            rollId: data.rollId,
+            startMeter: data.startMeter,
+            defectTypeId: defectType.id,
+            errorType: defectType.name,
+            isProcessed: false,
+            detectedAtStepId: data.stepId,
+            detectedByUserId: userId ?? null,
+          },
+        });
       });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -2542,6 +2628,14 @@ export class TamburService {
     if (parent.status !== RollStatus.IN_PRODUCTION) {
       throw AppError.badRequest(`Açık kumaş aktif değil (${parent.status})`);
     }
+    // Savunma katmanı (cutOpenFabric BUG-2 paritesi): iptal/devredilmiş iş emrinin
+    // adımında sıkışmış açık kumaş finalize edilemez. Taze hali kilit altında okunur.
+    if (
+      parent.currentStep.workOrder.status === WorkOrderStatus.CANCELLED ||
+      parent.currentStep.workOrder.status === WorkOrderStatus.SUPERSEDED
+    ) {
+      throw AppError.conflict("İptal/devredilmiş iş emrinin açık kumaşı finalize edilemez");
+    }
 
     // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.
     const action: "keep_1kalite" | "keep_a1" | "scrap" | "discard" =
@@ -2568,6 +2662,18 @@ export class TamburService {
       // (~2620) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
       // serileşsin (yoksa iki tx birbirinin adımını açık sayıp WO IN_PROGRESS'te takılır).
       await touchWorkOrderTx(tx, woId);
+      // F130 paritesi: iptal-guard'ını kilit ALTINDA taze oku (pre-tx guard ile
+      // claim arasında WO iptal edilmiş olabilir).
+      const freshWo = await tx.workOrder.findUnique({
+        where: { id: woId },
+        select: { status: true },
+      });
+      if (
+        freshWo?.status === WorkOrderStatus.CANCELLED ||
+        freshWo?.status === WorkOrderStatus.SUPERSEDED
+      ) {
+        throw AppError.conflict("İptal/devredilmiş iş emrinin açık kumaşı finalize edilemez");
+      }
       // ATOMİK CLAIM (finalize()'daki desen): idempotency ön-kontrolü tx DIŞINDA
       // check-then-act — eşzamanlı çift çağrı ikisinde de geçer ve kalan child
       // İKİ kez basılırdı (TAMBUR_PROCESSED upsert'i ikinci tx'i düşürmez:
@@ -2648,11 +2754,21 @@ export class TamburService {
         },
       });
 
-      // Tambur movement'ı kapat
+      // Tambur movement'ı kapat. qtyOut = movement'ın KENDİ qtyIn'i (finalize()
+      // ile aynı kural — istasyona giren işlenmiş metraj): initialQty artık
+      // güvenilir değil (cutWarehouseRoll parent initialQty'yi resetler).
       const movementNote =
         wantChild && remainingChildId
           ? `TAMBUR_FINALIZED:REMAINING_${remainingQty}_${childQualityGrade}`
           : "TAMBUR_FINALIZED";
+      const openMove = await tx.rollMovement.findFirst({
+        where: { rollId: parent.id, workOrderStepId: tamburStepId, exitedAt: null },
+        select: { qtyIn: true },
+      });
+      const qtyOutD =
+        openMove && new Prisma.Decimal(openMove.qtyIn).greaterThan(0)
+          ? new Prisma.Decimal(openMove.qtyIn)
+          : new Prisma.Decimal(parent.initialQty);
       await tx.rollMovement.updateMany({
         where: {
           rollId: parent.id,
@@ -2660,7 +2776,7 @@ export class TamburService {
           exitedAt: null,
         },
         data: {
-          qtyOut: parent.initialQty,
+          qtyOut: qtyOutD,
           exitedAt: new Date(),
           notes: movementNote,
           // İşin YAPILDIĞI makine kapanışta damgalanır (oturumdan).
@@ -2701,20 +2817,9 @@ export class TamburService {
       await recomputeStepStatus(tx, tamburStepId);
 
       // WO completion check — Tambur production'ın son istasyonu (paketleme/sevk
-      // fulfillment, WO step değil).
-      const remainingSteps = await tx.workOrderStep.count({
-        where: {
-          workOrderId: woId,
-          status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-        },
-      });
-      if (remainingSteps === 0) {
-        await tx.workOrder.update({
-          where: { id: woId },
-          data: { status: WorkOrderStatus.COMPLETED },
-        });
-        await setWorkOrderCardStatuses(tx, woId, "ACTIVE", "COMPLETED");
-      }
+      // fulfillment, WO step değil). Terminal-durum guard'lı ORTAK helper:
+      // CANCELLED/SUPERSEDED buradan COMPLETED'a dirilmez.
+      await completeWorkOrderIfStepsDone(tx, woId);
 
       return { remainingChildId, remainingQty, wantChild };
     });
@@ -2789,6 +2894,8 @@ export class TamburService {
       }>;
       openFabricRolls: Array<{
         rollId: string;
+        /** Barkodlu top adıma alınmışsa dolu (2026-07-27); açık kumaşta null. */
+        barcode: string | null;
         currentQty: number;
         initialQty: number;
         receiptNo: string | null;
@@ -2912,22 +3019,28 @@ export class TamburService {
     }
     const orders = Array.from(ordersMap.values());
 
-    // Açık kumaş Roll'ları (LIFO — Tambur movement enteredAt DESC)
+    // Adımdaki kesilebilir Roll'lar (LIFO — Tambur movement enteredAt DESC).
+    // `barcode: null` filtresi KALDIRILDI (2026-07-27): "Tambur adımındaki HER top
+    // kesilebilir" (2026-07-16, bkz. cutOpenFabric) — Konumu-Düzelt ile gelen
+    // barkodlu TOP bu listede görünmüyordu; adım listesi (loadTamburRolls) ile
+    // sayılar çelişiyordu. Barkod payload'a eklendi (UI etiketleyebilsin).
     const openMovements = await prisma.rollMovement.findMany({
       where: {
         workOrderStepId: stepId,
         exitedAt: null,
         roll: {
-          barcode: null,
           status: RollStatus.IN_PRODUCTION,
         },
       },
-      orderBy: { enteredAt: "desc" }, // LIFO: en son giren en üstte
+      // LIFO: en son giren en üstte; id tie-break — toplu taşımada eşit enteredAt
+      // sırayı refetch'ler arasında zıplatmasın (loadTamburRolls paritesi).
+      orderBy: [{ enteredAt: "desc" }, { id: "desc" }],
       select: {
         enteredAt: true,
         roll: {
           select: {
             id: true,
+            barcode: true,
             currentQty: true,
             initialQty: true,
             color: { select: { code: true, name: true } },
@@ -2957,6 +3070,7 @@ export class TamburService {
 
     const openFabricRolls = openMovements.map((m) => ({
       rollId: m.roll.id,
+      barcode: m.roll.barcode,
       currentQty: Number(m.roll.currentQty),
       initialQty: Number(m.roll.initialQty),
       receiptNo: m.roll.parentReceipt?.receiptNo ?? null,
