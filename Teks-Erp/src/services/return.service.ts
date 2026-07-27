@@ -560,21 +560,32 @@ export class ReturnService {
         createdAt: true,
         rollId: true,
         fromShipmentId: true,
+        // İadede uygulanan kalite override'ı (varsa) — iptalde geri alma koşulu.
+        qualityGradeId: true,
         prevSackId: true,
         prevQualityGrade: true,
         prevQualityGradeId: true,
         appliedStatus: true,
-        roll: { select: { barcode: true, status: true, shipmentId: true } },
+        roll: { select: { barcode: true, status: true, shipmentId: true, sackId: true } },
       },
     });
     if (!rr) throw AppError.notFound("İade kaydı bulunamadı");
     if (rr.cancelledAt) throw AppError.conflict("Bu iade zaten iptal edilmiş.");
     // İade anında topa uygulanan raf (override yoksa / legacy null → WAREHOUSE). Top hâlâ
-    // tam bu raftaysa ve sevkiyatsızsa iptal edilebilir; sonradan kesim/yeniden sevk → engel.
+    // tam bu raftaysa, sevkiyatsız VE çuvalsızsa iptal edilebilir; sonradan kesim /
+    // yeniden sevk / yeni depo çuvalına okutma → engel. (İade topu çuvalsız bırakır —
+    // sackId dolu = iade sonrası yeni çuvala girmiş; sessizce sökülmesin, çuval
+    // tartısı/içeriği bayatlar.)
     const expectedStatus = rr.appliedStatus ?? RollStatus.WAREHOUSE;
-    if (rr.roll.status !== expectedStatus || rr.roll.shipmentId !== null) {
+    if (
+      rr.roll.status !== expectedStatus ||
+      rr.roll.shipmentId !== null ||
+      rr.roll.sackId !== null
+    ) {
       throw AppError.conflict(
-        `Top iade sonrası işlem görmüş (durum: ${rr.roll.status}) — iade iptal edilemez.`
+        rr.roll.sackId !== null
+          ? "Top iade sonrası bir depo çuvalına konmuş — önce çuvaldan çıkarın, sonra iadeyi iptal edin."
+          : `Top iade sonrası işlem görmüş (durum: ${rr.roll.status}) — iade iptal edilemez.`
       );
     }
     if (!rr.fromShipmentId) {
@@ -611,15 +622,20 @@ export class ReturnService {
     }
 
     await prisma.$transaction(async (tx) => {
-      // KOŞULLU geri-yükleme: yalnız hâlâ WAREHOUSE + sevkiyatsız ise (eşzamanlı koruması).
+      // KOŞULLU geri-yükleme: yalnız hâlâ iade rafında + sevkiyatsız + ÇUVALSIZ ise
+      // (eşzamanlı koruması — pre-check'in atomik hali).
       const restore = await tx.roll.updateMany({
-        where: { id: rr.rollId, status: expectedStatus, shipmentId: null },
+        where: { id: rr.rollId, status: expectedStatus, shipmentId: null, sackId: null },
         data: {
           status: RollStatus.SHIPPED,
           shipmentId: rr.fromShipmentId,
           sackId: restoreSackId,
-          // Kalite snapshot'ı varsa geri yaz (override edilmişse eski etikete döner).
-          ...(rr.prevQualityGrade != null
+          // Kalite override'ı İADEDE uygulandıysa (rr.qualityGradeId dolu) snapshot'a
+          // geri dön. Koşul "override var mıydı"dır, "eski kalite dolu muydu" DEĞİL:
+          // kalitesiz (null) sevk edilmiş top iade + A1 override + iptal edildiğinde
+          // eski koşul override'ı geri almıyor, top SHIPPED'e A1 etiketiyle dönüyordu.
+          // Snapshot null olabilir — null geri yazmak doğru davranıştır.
+          ...(rr.qualityGradeId != null
             ? { qualityGrade: rr.prevQualityGrade, qualityGradeId: rr.prevQualityGradeId }
             : {}),
         },
