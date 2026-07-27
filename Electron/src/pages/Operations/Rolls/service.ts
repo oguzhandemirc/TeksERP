@@ -17,9 +17,10 @@ import type { Roll } from "./types";
  *
  * Station-bazlı sekmeler (`KURSUN_PENDING` ve `TAMBUR_PENDING`) status
  * filtrelemez — sırasıyla `currentStepKind=PROCESS_QC` (KK2/Kurşun) ve
- * `currentStepKind=TAMBUR` ile `rollKind=OPEN_FABRIC` filtreleri uygulanır
- * (`buildRollForceFilters` içinde). Her iki ekranda da fasondan dönen ve
- * istasyonda sıra bekleyen açık kumaş kayıtları listelenir.
+ * `currentStepKind=TAMBUR` filtresi uygulanır (`buildRollForceFilters` içinde).
+ * İstasyonda sıra bekleyen açık kumaş VE barkodlu toplar birlikte listelenir
+ * (rollKind=OPEN_FABRIC filtresi 2026-07-27'de kaldırıldı — barkodlu top da
+ * istasyonda meşru bekler).
  */
 /**
  * Sekme → backend filter. Null değerli sekmeler `status` filter göndermez,
@@ -44,7 +45,8 @@ const STATUS_GROUPS = {
   // Sanal anahtar — tepe-sekme DEĞİL; Kartela sayfasının "Kartelada Toplar"
   // sekmesi bunu kullanır (status=AT_KARTELA). SUBCONTRACTOR ile aynı mekanizma.
   KARTELA_SENT: "AT_KARTELA",
-  ARCHIVE: "RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED",
+  ARCHIVE:
+    "RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED,KARTELA_CONSUMED",
 } as const;
 
 const base = createCrudService<Roll>("/api/rolls");
@@ -153,12 +155,16 @@ export function buildRollForceFilters(
   if (tab === "FINISHED_STOCK") return { rollScope: "FINISHED_STOCK", status: "ALL" };
   // Çuvalda: bir çuvala konmuş (sackId dolu), henüz sevk edilmemiş toplar.
   if (tab === "IN_SACK") return { rollScope: "IN_SACK", status: "ALL" };
-  // Kurşun/KK2 istasyonundaki açık kumaş kayıtları (status=ALL şart — yoksa default STOCK).
+  // Kurşun/KK2 istasyonunda bekleyen kayıtlar (status=ALL şart — yoksa default STOCK).
+  // rollKind=OPEN_FABRIC filtresi KALDIRILDI (2026-07-27): "barkodlu top da
+  // kesilebilir/işlenebilir" (2026-07-16) sonrası istasyonda barkodlu TOP meşru
+  // bekler (Konumu-Düzelt / depodan WO'ya alınan top); barkod filtresi onları
+  // gizleyip sekme sayısını Kanban'la çelişik gösteriyordu.
   if (tab === "KURSUN_PENDING")
-    return { currentStepKind: "PROCESS_QC", rollKind: "OPEN_FABRIC", status: "ALL" };
-  // Tambur istasyonunda bekleyen açık kumaş.
+    return { currentStepKind: "PROCESS_QC", status: "ALL" };
+  // Tambur istasyonunda bekleyen kayıtlar (açık kumaş + barkodlu top).
   if (tab === "TAMBUR_PENDING")
-    return { currentStepKind: "TAMBUR", rollKind: "OPEN_FABRIC", status: "ALL" };
+    return { currentStepKind: "TAMBUR", status: "ALL" };
   const statusVal = ROLL_STATUS_TABS[tab];
   const out: Record<string, string | string[]> = {};
   if (statusVal) out.status = statusVal;

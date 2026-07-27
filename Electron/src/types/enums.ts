@@ -148,6 +148,7 @@ export const RollStatus = {
   A1_STOCK: "A1_STOCK",
   RETURNED_FROM_SUBCONTRACTOR: "RETURNED_FROM_SUBCONTRACTOR",
   WAREHOUSE: "WAREHOUSE",
+  SHIPPED: "SHIPPED",
   TAMBUR_CONSUMED: "TAMBUR_CONSUMED",
   SUBCONTRACTOR_CONSUMED: "SUBCONTRACTOR_CONSUMED",
   AT_KARTELA: "AT_KARTELA",
@@ -164,17 +165,19 @@ export const rollStatusLabels: Record<RollStatus, string> = {
   A1_STOCK: "A1 (2. Kalite)",
   RETURNED_FROM_SUBCONTRACTOR: "Fasondan Döndü",
   WAREHOUSE: "Depoda",
+  SHIPPED: "Sevk Edildi",
   TAMBUR_CONSUMED: "Tamburda Bölündü",
   SUBCONTRACTOR_CONSUMED: "Fasonda Tüketildi",
   AT_KARTELA: "Kartelada",
   KARTELA_CONSUMED: "Kartela'da Tüketildi",
 };
 
+// NOT: Eski PACKAGED girdisi kaldırıldı (2026-07-27) — backend RollOperationType
+// enum'unda yok (çuval-depo modeline geçişte düştü); bayat kopya tip drift'iydi.
 export const RollOperationType = {
   KURSUN_APPLIED: "KURSUN_APPLIED",
   QC2_COMPLETED: "QC2_COMPLETED",
   TAMBUR_PROCESSED: "TAMBUR_PROCESSED",
-  PACKAGED: "PACKAGED",
   SUBCONTRACTOR_SENT: "SUBCONTRACTOR_SENT",
   SUBCONTRACTOR_RETURNED: "SUBCONTRACTOR_RETURNED",
 } as const;
@@ -184,7 +187,6 @@ export const rollOperationTypeLabels: Record<RollOperationType, string> = {
   KURSUN_APPLIED: "Kurşun Uygulandı",
   QC2_COMPLETED: "KK2 Tamamlandı",
   TAMBUR_PROCESSED: "Tambur Kararı",
-  PACKAGED: "Paketlendi",
   SUBCONTRACTOR_SENT: "Fasona Gönderildi",
   SUBCONTRACTOR_RETURNED: "Fasondan Döndü",
 };

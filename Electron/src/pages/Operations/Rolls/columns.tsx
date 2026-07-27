@@ -23,11 +23,20 @@ function rollProcessingState(
   if (
     roll.status === RollStatus.TAMBUR_CONSUMED ||
     roll.status === RollStatus.SUBCONTRACTOR_CONSUMED ||
+    roll.status === RollStatus.KARTELA_CONSUMED ||
     roll.status === RollStatus.RETURNED_FROM_SUBCONTRACTOR
   ) {
     return "arsiv";
   }
-  if (roll.status === RollStatus.WAREHOUSE) {
+  // Bitmiş ürün ailesi: depo (WAREHOUSE+A1 — backend FINISHED_STOCK kapsamıyla
+  // aynı), kartelada bekleyen bitmiş top ve sevk edilmiş top. Eskiden yalnız
+  // WAREHOUSE sayılıyordu — A1/kartela/sevkli top "İşleniyor" görünüyordu.
+  if (
+    roll.status === RollStatus.WAREHOUSE ||
+    roll.status === RollStatus.A1_STOCK ||
+    roll.status === RollStatus.AT_KARTELA ||
+    roll.status === RollStatus.SHIPPED
+  ) {
     return "bitmis";
   }
   // Fason dönüşü açık kumaş — boyalı bile olsa Tambur'a girmediği için "Bitmiş"

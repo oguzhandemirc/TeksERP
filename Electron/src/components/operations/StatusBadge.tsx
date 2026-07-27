@@ -57,7 +57,9 @@ export const rollStatusTones = {
   A1_STOCK: "warning",
   RETURNED_FROM_SUBCONTRACTOR: "muted",
   WAREHOUSE: "info",
+  SHIPPED: "success",
   TAMBUR_CONSUMED: "muted",
+  SUBCONTRACTOR_CONSUMED: "muted",
   AT_KARTELA: "warning",
   KARTELA_CONSUMED: "muted",
 } as const satisfies Record<string, Tone>;
