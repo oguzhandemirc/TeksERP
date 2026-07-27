@@ -264,9 +264,10 @@ export default function TamburScreen() {
   // kartelaya kesen operatör için kesimler arası kalıcı, finalize'da sıfırlanır.
   const [markAsKartela, setMarkAsKartela] = useState(false);
 
-  // Tambur'da çıkan top metresi kayıtlı kalanı aşabilir mi (admin flag, default
-  // kapalı). Kapalıyken aşan giriş engellenir; açıkken aşımda onay diyaloğu çıkar
-  // (parmak hatası koruması) ve onaylanınca backend kabul eder (parent tamamen tüketilir).
+  // Tambur'da çıkan top metresi kayıtlı kalanı aşabilir mi (admin flag, VARSAYILAN
+  // AÇIK — hook fallback'i true, flags yüklenemese de açık; 2026-07-27 ürün kararı).
+  // Açıkken aşımda onay diyaloğu çıkar (parmak hatası koruması) ve onaylanınca
+  // backend kabul eder (parent tamamen tüketilir); admin kapatırsa aşan giriş engellenir.
   const overQuantityEnabled = useTamburOverQuantityEnabled();
   // 2-kat / 4-kat metre cihazları — tabletin atandığı makineden backend çözer
   // (admin Cihaz Kaydı'nda tanımlar). foldType→role ile seçilir; cihazın `simulate`
@@ -336,6 +337,23 @@ export default function TamburScreen() {
   });
   const recutLineOptions = recutLinesQuery.data?.data ?? [];
   const [recutFinalizeOpen, setRecutFinalizeOpen] = useState(false);
+  // İdempotency: clientToken MANTIKSAL KESİM DENEMESİ başına bir kez üretilir —
+  // timeout/hata sonrası tekrar "Kes" basışı AYNI token'ı gönderir (backend
+  // P2002 ile cache'lenmiş child'ı döner, mükerrer kesim + çift metraj düşümü
+  // olmaz). Token yalnız o topun BAŞARI yanıtı gelince düşer; top değişince
+  // rollId anahtarı uyuşmaz → taze token. (Eski kod her mutate()'te yeni token
+  // üretiyordu — koruma fiilen hiç devreye girmiyordu.)
+  const cutTokenRef = useRef<{ rollId: string; token: string } | null>(null);
+  const recutTokenRef = useRef<{ rollId: string; token: string } | null>(null);
+  const takeCutToken = (
+    ref: React.MutableRefObject<{ rollId: string; token: string } | null>,
+    rollId: string,
+  ): string => {
+    if (!ref.current || ref.current.rollId !== rollId) {
+      ref.current = { rollId, token: generateClientUuid() };
+    }
+    return ref.current.token;
+  };
   // Son kesimden dönen güncel parent — X kapat sırasında etiketi basıma kuyruğa
   // atılır (operatör fiziksel etiketi yenilemeli, eski metraj artık geçersiz).
   const [recutLastParentRoll, setRecutLastParentRoll] = useState<Roll | null>(null);
@@ -622,6 +640,10 @@ export default function TamburScreen() {
       }),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
+      if (cutTokenRef.current?.rollId === variables.rollId) cutTokenRef.current = null;
+      // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
+      qc.invalidateQueries({ queryKey: ['rolls'] });
       const data = res.data as
         | { childRoll?: Roll; parentRemainingQty?: number }
         | undefined;
@@ -837,12 +859,23 @@ export default function TamburScreen() {
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
+      if (recutTokenRef.current?.rollId === variables.rollId) recutTokenRef.current = null;
+      // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
+      qc.invalidateQueries({ queryKey: ['rolls'] });
       const data = res.data;
+      // Y11 paritesi (açık kumaş kesimindeki düzeltmenin aynısı): yanıt geldiğinde
+      // ekranda BAŞKA top olabilir (istek uçuştayken operatör yeni top okuttu).
+      // Ekran-state güncellemeleri yalnız yanıtın ait olduğu top hâlâ aktifken
+      // yapılır; otomatik bitirme ise HER ZAMAN yanıtın KENDİ rollId'siyle çalışır
+      // — aksi hâlde yanlış top TAMBUR_CONSUMED'a arşivlenip kalanı discard edilirdi.
+      const isCurrent = variables.rollId === recutResolvedRollId;
       if (data?.childRoll?.barcode) {
         // Hedef "Kime" bölümünde zaten seçili → tekrar "Etiket kime?" SORMA,
         // doğrudan o hedefe bas (open fabric kesimiyle aynı). Hiçbir şey seçili
         // değilse = stok (explicit müşterisiz etiket — WO tahmini sızmasın);
-        // sonradan "Etiket Değiştir" ile yönlendirilebilir.
+        // sonradan "Etiket Değiştir" ile yönlendirilebilir. (Çocuk etiketi yanıtın
+        // kendi verisi — top değişmiş olsa da basımı doğru.)
         setLabelContext(
           variables.targetCustomerId
             ? { customerId: variables.targetCustomerId }
@@ -852,23 +885,24 @@ export default function TamburScreen() {
         );
         setActivePrintRoll(data.childRoll);
       }
-      // Parent metraj güncelle (sticky header anında yansır)
-      if (data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
+      // Parent metraj güncelle (sticky header anında yansır) — yalnız aynı top.
+      if (isCurrent && data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
         setRecutRollMeta({ ...recutRollMeta, currentQty: data.parentRemainingQty });
       }
       // Güncel parent'ı tut — X kapat sırasında etiket yenilenmek için kuyruğa
       // atılır (backend initialQty'yi de reset etti, etiket fiziksel olarak da
-      // yenilenmeli).
-      if (data?.parentRoll) {
+      // yenilenmeli). Yalnız aynı top — bayat yanıt B oturumuna A'nın parent'ını yazmasın.
+      if (isCurrent && data?.parentRoll) {
         setRecutLastParentRoll(data.parentRoll);
       }
-      setRecutCutLength('');
-      // OTOMATİK BİTİŞ: kalan ~0 ise ayrı "Bitir" beklemeden arşivle.
+      if (isCurrent) setRecutCutLength('');
+      // OTOMATİK BİTİŞ: kalan ~0 ise ayrı "Bitir" beklemeden arşivle — kesilen
+      // topun KENDİSİ (variables.rollId), ekrandaki o anki top DEĞİL.
       const remaining = data?.parentRemainingQty ?? 0;
-      if (remaining < 0.1 && recutResolvedRollId) {
+      if (remaining < 0.1) {
         Toast.show({ type: 'success', text1: 'Top Kesme tamamlandı' });
         finalizeWarehouseCutMutation.mutate({
-          rollId: recutResolvedRollId,
+          rollId: variables.rollId,
           remainingAction: 'discard',
         });
       } else {
@@ -899,11 +933,22 @@ export default function TamburScreen() {
       rollId: string;
       remainingAction: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
     }) => tamburService.finalizeWarehouseCut(rollId, { remainingAction }),
-    onSuccess: (res) => {
+    onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Top Kesme bitti', text2: 'Top arşivlendi' });
-      setMarkAsKartela(false); // bir sonraki top için sıfırla
       const remainingChild = res.data?.remainingChild ?? null;
+      // Y11 paritesi: bayat yanıt (otomatik bitirme uçuştayken operatör yeni top
+      // okuttu) AKTİF oturumu sıfırlamasın — yalnız yanıtın topu hâlâ ekrandaysa
+      // temizlik yapılır. Kalan-child etiketi ve liste tazeleme her durumda doğru.
+      const isCurrent = variables.rollId === recutResolvedRollId;
+      if (!isCurrent) {
+        if (remainingChild) {
+          setPendingPrintRolls((prev) => [...prev, remainingChild as Roll]);
+        }
+        qc.invalidateQueries({ queryKey: ['rolls'] });
+        return;
+      }
+      setMarkAsKartela(false); // bir sonraki top için sıfırla
 
       if (recutFinalizeOpen) {
         // Modal açıkken bitirildiyse (kalan > 0), kapanma animasyonu bittikten
@@ -1046,8 +1091,8 @@ export default function TamburScreen() {
         targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
         targetCustomerId: work.voluntaryEntry.targetCustomerId,
         markedForKartela: markAsKartela,
-        // Ağ-retry idempotency: kesim anında üret, retry'da aynı barkod → çift kesim yok.
-        clientToken: generateClientUuid(),
+        // Ağ-retry idempotency: deneme başına SABİT token (tekrar basış = aynı token).
+        clientToken: takeCutToken(cutTokenRef, selectedRoll.rollId),
       });
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
     if (exceedsRemaining) {
@@ -1277,8 +1322,8 @@ export default function TamburScreen() {
         targetCustomerId: recutTargetCustomerId,
         markedForKartela: markAsKartela,
         rawDestination: isRawStock ? recutRawDestination : undefined,
-        // Ağ-retry idempotency: kesim anında üret, retry'da aynı barkod → çift kesim yok.
-        clientToken: generateClientUuid(),
+        // Ağ-retry idempotency: deneme başına SABİT token (tekrar basış = aynı token).
+        clientToken: takeCutToken(recutTokenRef, recutResolvedRollId),
       });
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
     if (exceedsRemaining) {
@@ -1500,6 +1545,12 @@ export default function TamburScreen() {
     setRecutQualityGrade('1.KALITE');
     setRecutRawDestination('STOCK');
     setRecutLastParentRoll(null);
+    // Kartelalık işareti akışa özgüdür — X ile kapatınca da sıfırla; yoksa
+    // SONRAKİ açık-kumaş kesimleri sessizce kartelalık işaretlenirdi (sızıntı).
+    setMarkAsKartela(false);
+    // Kesim yapıldıysa parent metrajı değişti — RollPickerModal / rulo listeleri
+    // bayat kalmasın (finalize yollarındaki invalidation X-kapatta çalışmıyordu).
+    qc.invalidateQueries({ queryKey: ['rolls'] });
   };
 
   const renderRightContent = () => (
@@ -1965,12 +2016,21 @@ export default function TamburScreen() {
                 </Surface>
               </ScrollView>
 
-              {/* Sticky footer (Kartela + Kes) — Top Kesme akışı. Son kesimde
-                  kalan ~0 olunca depo topu OTOMATİK arşivlenir. */}
+              {/* Sticky footer (Kartela + Bitir + Kes) — Top Kesme akışı. Son
+                  kesimde kalan ~0 olunca depo topu OTOMATİK arşivlenir; kalan
+                  varken operatör "Bitir" ile karar modalını (1.KALITE/A1/FIRE)
+                  açar — parent arşivlenir, kalan child olarak yaşar. */}
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
+                onBitir={() => setRecutFinalizeOpen(true)}
+                bitirDisabled={
+                  cutWarehouseRollMutation.isPending ||
+                  finalizeWarehouseCutMutation.isPending ||
+                  measuring ||
+                  recutRollMeta.currentQty <= 0
+                }
                 onKes={handleRecutKes}
                 kesLoading={
                   cutWarehouseRollMutation.isPending ||
@@ -2697,9 +2757,13 @@ export default function TamburScreen() {
         roll={activePrintRoll}
         kind={activePrintRoll?.colorId == null ? 'ROLL_RAW' : 'ROLL_FINISHED'}
         labelContext={labelContext}
-        onDone={() => {
-          setActivePrintRoll(null);
-          setLabelContext(undefined);
+        onDone={(printed) => {
+          // Yalnız HÂLÂ güncel slotu temizle: baskı uçuştayken slota yeni top
+          // (B) atandıysa onun işi kuyruktadır — A'nın bitişi B'yi ezmesin.
+          if (activePrintRoll?.id === printed.id) {
+            setActivePrintRoll(null);
+            setLabelContext(undefined);
+          }
         }}
       />
 

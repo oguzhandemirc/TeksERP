@@ -394,12 +394,15 @@ export default function CuvalDuzeltScreen() {
         onDismiss={() => setColorPickOpen(false)}
       />
 
-      {/* Yeniden etiket baskısı (relabel sonrası) */}
+      {/* Yeniden etiket baskısı (relabel sonrası). onDone guard'ı: baskı
+          uçuştayken başka top seçildiyse yeni slot ezilmesin (işi kuyrukta). */}
       <LabelPrinter
         roll={reprintRoll}
         kind="ROLL_FINISHED"
         labelContext={{ stock: true }}
-        onDone={() => setReprintRoll(null)}
+        onDone={(printed) =>
+          setReprintRoll((cur) => (cur?.id === printed.id ? null : cur))
+        }
       />
 
       <ConfirmDialog

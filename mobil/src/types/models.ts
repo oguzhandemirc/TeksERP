@@ -777,6 +777,8 @@ export interface TamburContextOpenFabricError {
 
 export interface TamburContextOpenFabric {
   rollId: string;
+  /** Barkodlu top adıma alınmışsa dolu (2026-07-27); açık kumaşta null. */
+  barcode: string | null;
   currentQty: number;
   initialQty: number;
   receiptNo: string | null;

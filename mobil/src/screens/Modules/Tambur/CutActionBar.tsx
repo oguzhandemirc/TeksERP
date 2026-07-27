@@ -58,6 +58,11 @@ interface Props {
   kesDisabled: boolean;
   /** İşlem sürüyor (spinner + kilit, ama mor görünüm korunur). */
   kesLoading: boolean;
+  /** Opsiyonel "Bitir" aksiyonu (Top Kesme akışı): kalan kumaş için karar modalını
+   *  açar (1.KALITE/A1/FIRE). Verilmezse buton render edilmez — açık kumaş akışı
+   *  kendi bitişini yönetir. */
+  onBitir?: () => void;
+  bitirDisabled?: boolean;
 }
 
 export default function CutActionBar({
@@ -68,11 +73,20 @@ export default function CutActionBar({
   onKes,
   kesDisabled,
   kesLoading,
+  onBitir,
+  bitirDisabled,
 }: Props) {
   return (
     <Surface style={styles.bar} elevation={3}>
       <View style={styles.row}>
         <KartelaToggle on={kartelaOn} onToggle={onToggleKartela} compact={compact} />
+        {onBitir && (
+          <BitirButton
+            onPress={onBitir}
+            disabled={!!bitirDisabled}
+            compact={compact}
+          />
+        )}
         <KesButton
           label={kesLabel}
           onPress={onKes}
@@ -82,6 +96,66 @@ export default function CutActionBar({
         />
       </View>
     </Surface>
+  );
+}
+
+// ───────────────────────── Bitir (Top Kesme kapanışı) ─────────────────────────
+function BitirButton({
+  onPress,
+  disabled,
+  compact,
+}: {
+  onPress: () => void;
+  disabled: boolean;
+  compact: boolean;
+}) {
+  return (
+    <View
+      style={[
+        styles.toggle,
+        {
+          width: compact ? 88 : 112,
+          height: compact ? BAR_HEIGHT : BAR_HEIGHT_TABLET,
+        },
+        disabled && styles.bitirDisabled,
+      ]}
+    >
+      <TouchableRipple
+        onPress={
+          disabled
+            ? undefined
+            : () => {
+                Haptics.selectionAsync().catch(() => {});
+                onPress();
+              }
+        }
+        disabled={disabled}
+        borderless
+        rippleColor={RIPPLE_ON_LIGHT}
+        style={styles.toggleInner}
+        accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        accessibilityLabel="Top kesmeyi bitir — kalan kumaş için karar ver"
+      >
+        <View style={styles.toggleContent}>
+          <Icon
+            source="flag-checkered"
+            size={20}
+            color={disabled ? colors.textMuted : PURPLE}
+          />
+          <Text
+            style={[
+              styles.bitirLabel,
+              { fontSize: compact ? 13 : 14 },
+              disabled && { color: colors.textMuted },
+            ]}
+            numberOfLines={1}
+          >
+            Bitir
+          </Text>
+        </View>
+      </TouchableRipple>
+    </View>
   );
 }
 
@@ -276,6 +350,8 @@ const styles = StyleSheet.create({
   },
   toggleContent: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   toggleLabel: { fontWeight: '800', letterSpacing: 0.2 },
+  bitirLabel: { fontWeight: '800', letterSpacing: 0.2, color: PURPLE },
+  bitirDisabled: { borderColor: colors.border, backgroundColor: colors.surfaceSunken },
 
   // Kes — esnek (kalanı doldurur), büyük dokunma hedefi, gölgeyle "kalkık".
   kesWrap: {

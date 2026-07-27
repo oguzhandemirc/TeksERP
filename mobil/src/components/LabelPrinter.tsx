@@ -26,8 +26,12 @@ interface Props {
    *  stock → explicit "Stok/müşterisiz" (backend müşteriyi zorla null bırakır,
    *  snapshot/WO tahminini atlar); hiçbiri yoksa doğal etiket (snapshot/WO). */
   labelContext?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean };
-  /** Print akışı bittiğinde (başarılı / hatalı) parent state'ini temizler. */
-  onDone: () => void;
+  /** Print akışı bittiğinde (başarılı / hatalı) parent state'ini temizler.
+   *  `printed` = biten işin topu — parent yalnız HÂLÂ güncel olan slotu
+   *  temizlemeli (`cur?.id === printed.id`); baskı uçuştayken slot yeni topa
+   *  geçtiyse onun işi kuyruktadır, slotu ezme. (Argümansız eski imza da
+   *  geçerli — parametre yok sayılabilir.) */
+  onDone: (printed: Roll) => void;
   /** Sonuç bildirimi (opsiyonel): ok=false + cancelled=false → GERÇEK hata —
    *  parent (KK1) topu "başarısızlar" listesine alıp Tekrar Dene sunar.
    *  İptal (expo-print diyaloğu kapatıldı) hata SAYILMAZ (cancelled=true). */
@@ -43,7 +47,14 @@ interface Props {
  * Electron LabelPreview de iframe ile aynı HTML'i tüketir.
  */
 export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Props) {
-  const firedRef = useRef(false);
+  // SERİ BASKI KUYRUĞU (2026-07-27): eski tek-slot `firedRef` modeli, baskı
+  // uçuştayken parent `roll`u A→B değiştirirse B'yi SESSİZCE atlıyordu (bayrak
+  // yalnız roll===null'da sıfırlanıyordu) — seri kesim + BT yazıcı akışında
+  // ikinci topun fiziksel etiketi VE seedSnapshot niyeti kayboluyordu. Şimdi her
+  // yeni roll.id bir İŞ olarak promise zincirine eklenir: işler sırayla basılır
+  // (BT yazıcıya eşzamanlı iki gönderim olmaz), hiçbiri düşmez.
+  const lastJobIdRef = useRef<string | null>(null);
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
 
   // Mobil raster (HC-06'ya GW bitmap) açık mı — admin flag. Ref'le: baskı effect'i
   // flag değişince yeniden tetiklenmesin, ama her baskıda güncel değeri okusun.
@@ -74,22 +85,28 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
 
   useEffect(() => {
     if (!roll) {
-      firedRef.current = false;
+      // Slot boşaldı → aynı top ileride yeniden basılabilsin (bilinçli re-print).
+      lastJobIdRef.current = null;
       return;
     }
-    if (!roll.barcode) {
-      Toast.show({
-        type: 'info',
-        text1: 'Bu top için etiket basılamaz',
-        text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
-      });
-      onDoneRef.current();
-      return;
-    }
-    if (firedRef.current) return;
-    firedRef.current = true;
-
-    (async () => {
+    // Aynı topun işi zaten kuyrukta/basıldı — context değişimi yeni iş açmaz
+    // (eski firedRef davranışıyla birebir).
+    if (lastJobIdRef.current === roll.id) return;
+    lastJobIdRef.current = roll.id;
+    // İş, TETİKLENDİĞİ ANIN roll/kind/context değerlerini taşır — zincir sırası
+    // gelince parent state'i değişmiş olsa da doğru etiket basılır.
+    const job = { roll, kind, labelContext };
+    chainRef.current = chainRef.current.then(async () => {
+      const { roll: jobRoll, kind: jobKind, labelContext: jobContext } = job;
+      if (!jobRoll.barcode) {
+        Toast.show({
+          type: 'info',
+          text1: 'Bu top için etiket basılamaz',
+          text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
+        });
+        if (mountedRef.current) onDoneRef.current(jobRoll);
+        return;
+      }
       // Etiket NİYETİNİ (müşteri / stok / sipariş) fiziksel baskıdan BAĞIMSIZ
       // kalıcılaştır (seedSnapshot — LABEL_PRINTED audit YAZMAZ): yazıcı bağlı
       // olmasa, BT baskısı patlasa veya operatör diyaloğu iptal etse BİLE
@@ -97,7 +114,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
       // başarısı snapshot'ı KOŞULLAMAZ ("etiket geçerli olmuyor" bug'ı). Gerçek
       // baskı tamamlanınca AŞAĞIDA ayrıca recordPrintEvent (LABEL_PRINTED) atılır.
       // best-effort: hata baskı akışını engellemez.
-      labelService.seedSnapshot(roll.id, labelContext).catch((e) => {
+      labelService.seedSnapshot(jobRoll.id, jobContext).catch((e) => {
         console.warn('Etiket snapshot kaydı başarısız', (e as Error).message);
       });
 
@@ -133,9 +150,9 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           // fail-closed). kind: KK1 ham / Tambur bitmiş paritesi. rasterCapable=flag →
           // açıkken backend cihazın rasterMode'unu onurlandırır (raster GW bitmap, base64).
           const native = await labelService.getRollNative(
-            roll.id,
-            kind,
-            labelContext,
+            jobRoll.id,
+            jobKind,
+            jobContext,
             rasterEnabledRef.current,
           );
           // FAIL-CLOSED: yalnız bilinen native dil ham gönderilir. RASTER_HTML/boş/
@@ -159,12 +176,12 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           usedBt = true;
         }
         if (!usedBt && !directOnly) {
-          const r = await apiClient.get<string>(`/labels/rolls/${roll.id}/html`, {
+          const r = await apiClient.get<string>(`/labels/rolls/${jobRoll.id}/html`, {
             params: {
-              kind,
-              ...(labelContext?.orderLineId ? { orderLineId: labelContext.orderLineId } : {}),
-              ...(labelContext?.customerId ? { customerId: labelContext.customerId } : {}),
-              ...(labelContext?.stock ? { stock: "1" } : {}),
+              kind: jobKind,
+              ...(jobContext?.orderLineId ? { orderLineId: jobContext.orderLineId } : {}),
+              ...(jobContext?.customerId ? { customerId: jobContext.customerId } : {}),
+              ...(jobContext?.stock ? { stock: "1" } : {}),
             },
             responseType: 'text',
             transformResponse: [(d) => d],
@@ -188,7 +205,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
         // Niyet YUKARIDA seedSnapshot ile zaten kalıcı. Burada — yalnız GERÇEK
         // baskı tamamlandığında — LABEL_PRINTED audit'i düş (iptal/hata catch'e
         // gider, audit YAZILMAZ → "basıldı" yalanı olmaz). best-effort.
-        labelService.recordPrintEvent(roll.id, labelContext).catch((e) => {
+        labelService.recordPrintEvent(jobRoll.id, jobContext).catch((e) => {
           console.warn('Baskı audit kaydı başarısız', (e as Error).message);
         });
       } catch (err) {
@@ -216,9 +233,9 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           visibilityTime: isCancel ? 3000 : 8000,
         });
       } finally {
-        if (mountedRef.current) onDoneRef.current();
+        if (mountedRef.current) onDoneRef.current(jobRoll);
       }
-    })();
+    });
   }, [roll, kind, labelContext]);
 
   return null;
