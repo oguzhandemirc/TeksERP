@@ -21,10 +21,10 @@ export const TABLE_LABELS: Record<string, string> = {
 
   // Master data
   USER: "Kullanıcı",
-  ITEM: "Ürün / Stok Kalemi",
+  ITEM: "Kumaş / Stok Kalemi",
   CUSTOMER: "Müşteri",
   CUSTOMER_BRANCH: "Müşteri Şubesi",
-  CUSTOMER_ITEM_ALIAS: "Müşteri Ürün Kodu",
+  CUSTOMER_ITEM_ALIAS: "Müşteri Kumaş Kodu",
   CUSTOMER_COLOR_ALIAS: "Müşteri Renk Kodu",
   STATION: "İstasyon",
   STATION_CAPABILITY: "İstasyon Yeteneği",
@@ -35,7 +35,7 @@ export const TABLE_LABELS: Record<string, string> = {
   QUALITY_GRADE: "Kalite Sınıfı",
   DEFECT_TYPE: "Hata Tipi",
   RETURN_REASON: "İade Sebebi",
-  PRODUCT_RECIPE: "Ürün Reçetesi",
+  PRODUCT_RECIPE: "İş Emri Şablonu",
   PERIPHERAL_DEVICE: "Saha Cihazı",
 
   // Sipariş & İş Emri
@@ -129,10 +129,10 @@ export const FIELD_LABELS: Record<string, string> = {
   color: "Renk",
   hex: "Renk (Hex)",
 
-  // Ürün / miktar
-  itemId: "Ürün",
-  itemCode: "Ürün Kodu",
-  itemName: "Ürün Adı",
+  // Kumaş / miktar
+  itemId: "Kumaş",
+  itemCode: "Kumaş Kodu",
+  itemName: "Kumaş Adı",
   unit: "Birim",
   quantity: "Miktar",
   qty: "Miktar",

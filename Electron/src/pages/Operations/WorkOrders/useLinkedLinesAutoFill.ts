@@ -11,7 +11,7 @@ import type { WorkOrderFormValues } from "./schema";
  * - `handleLinesChange`: kalem ekle/sil — form'un `orderLineIds`'i + state'i günceller
  *   (link-only, metraj taşımaz); `targetQuantity` önerisi + (eşitse) `width` senkron.
  * - `handlePickerConfirm`: picker onayında targetItem + targetPropertyIds otomatik dolar
- *   (tüm kalemler aynı ürün ise). Kalem silmede yeniden çalışmaz.
+ *   (tüm kalemler aynı kumaş ise). Kalem silmede yeniden çalışmaz.
  */
 export function useLinkedLinesAutoFill(form: UseFormReturn<WorkOrderFormValues>) {
   const [pickedLines, setPickedLines] = useState<PickedOrderLine[]>([]);

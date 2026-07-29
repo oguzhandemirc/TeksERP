@@ -34,7 +34,7 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
     mutationFn: ({ itemId, alias }: { itemId: string; alias: string }) =>
       customerAliasService.upsertItemAlias(customerId, itemId, alias),
     onSuccess: () => {
-      toast.success("Müşterideki ürün adı kaydedildi.");
+      toast.success("Müşterideki kumaş adı kaydedildi.");
       invalidate();
       setDraftItemId(null);
       setDraftAlias("");
@@ -45,7 +45,7 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
     mutationFn: (itemId: string) =>
       customerAliasService.deleteItemAlias(customerId, itemId),
     onSuccess: () => {
-      toast.success("Müşterideki ürün adı silindi.");
+      toast.success("Müşterideki kumaş adı silindi.");
       invalidate();
       setDeletingItemId(null);
     },
@@ -53,7 +53,7 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
 
   const handleAdd = () => {
     if (!draftItemId || !draftAlias.trim()) {
-      toast.error("Ürün ve müşterideki ad gerekli.");
+      toast.error("Kumaş ve müşterideki ad gerekli.");
       return;
     }
     upsertMut.mutate({ itemId: draftItemId, alias: draftAlias.trim() });
@@ -63,14 +63,14 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
     <div className="space-y-3">
       <PermissionGate permission="customer-alias:write">
         <div className="flex items-end gap-2 rounded-md border bg-muted/30 p-2">
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <ReferenceSelect<Item>
               value={draftItemId ?? undefined}
               onChange={(v) => setDraftItemId(v ?? null)}
               service={itemService}
               queryKey="items"
               getLabel={(i) => `${i.code} — ${i.name}`}
-              placeholder="Ürün seç..."
+              placeholder="Kumaş seç..."
             />
           </div>
           <Input
@@ -104,8 +104,8 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
       <ConfirmDialog
         open={Boolean(deletingItemId)}
         onOpenChange={(open) => !open && setDeletingItemId(null)}
-        title="Müşterideki ürün adı silinsin mi?"
-        description="Bu ürün için müşteriye özel ad silinecek; sipariş etiketlerinde standart ad kullanılır."
+        title="Müşterideki kumaş adı silinsin mi?"
+        description="Bu kumaş için müşteriye özel ad silinecek; sipariş etiketlerinde standart ad kullanılır."
         confirmLabel="Sil"
         destructive
         onConfirm={() => {
@@ -128,7 +128,7 @@ function AliasList({
   if (rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-        Tanımlı müşteriye özel ürün adı yok.
+        Tanımlı müşteriye özel kumaş adı yok.
       </div>
     );
   }

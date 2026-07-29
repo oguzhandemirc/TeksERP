@@ -132,6 +132,98 @@ function computeTotalAmount(
   return any ? Number(total.toFixed(2)) : null;
 }
 
+// ── "İş Emri" rollup filtresi (filter[woState]) ──────────────────────────────
+// Semantik Electron `work-order-rollup.ts` (deriveWoRollup) ile BİREBİR aynı
+// olmalı — rozet ne gösteriyorsa filtre onu bulmalı. Aktif küme CANCELLED +
+// SUPERSEDED hariçtir; PLANNED+COMPLETED karışımı (IN_PROGRESS yokken) rozette
+// "Üretimde" sayılır. Durumlar bu tanımla karşılıklı münhasırdır; çoklu seçim
+// OR'lanır. Varlık sorgusu (some) distinct-WO ayrımına duyarsızdır → frontend'in
+// distinct kümesiyle aynı sonucu verir.
+const WO_ROLLUP_ACTIVE: WorkOrderStatus[] = [
+  WorkOrderStatus.PLANNED,
+  WorkOrderStatus.IN_PROGRESS,
+  WorkOrderStatus.COMPLETED,
+];
+
+/** "Siparişin herhangi bir kalemi, verilen durumlardan bir WO'ya bağlı" koşulu. */
+function hasWoLink(statuses: WorkOrderStatus[]): Record<string, unknown> {
+  return {
+    lines: {
+      some: { workOrderLinks: { some: { workOrder: { status: { in: statuses } } } } },
+    },
+  };
+}
+
+const WO_STATE_WHERE: Record<string, Record<string, unknown>> = {
+  NONE: { NOT: hasWoLink(WO_ROLLUP_ACTIVE) },
+  PLANNED: {
+    AND: [
+      hasWoLink([WorkOrderStatus.PLANNED]),
+      { NOT: hasWoLink([WorkOrderStatus.IN_PROGRESS]) },
+      { NOT: hasWoLink([WorkOrderStatus.COMPLETED]) },
+    ],
+  },
+  IN_PROGRESS: {
+    OR: [
+      hasWoLink([WorkOrderStatus.IN_PROGRESS]),
+      { AND: [hasWoLink([WorkOrderStatus.PLANNED]), hasWoLink([WorkOrderStatus.COMPLETED])] },
+    ],
+  },
+  COMPLETED: {
+    AND: [
+      hasWoLink([WorkOrderStatus.COMPLETED]),
+      { NOT: hasWoLink([WorkOrderStatus.PLANNED]) },
+      { NOT: hasWoLink([WorkOrderStatus.IN_PROGRESS]) },
+    ],
+  },
+};
+
+/** filter[woState] (CSV) → Prisma where. Geçersiz/boş değerler sessizce düşer. */
+function buildWoStateWhere(
+  raw: string | string[] | undefined
+): Record<string, unknown> | undefined {
+  const values = (Array.isArray(raw) ? raw : (raw ?? "").split(","))
+    .map((v) => v.trim())
+    .filter((v) => v in WO_STATE_WHERE);
+  if (values.length === 0) return undefined;
+  const conds = [...new Set(values)].map((v) => WO_STATE_WHERE[v]);
+  return conds.length === 1 ? conds[0] : { OR: conds };
+}
+
+// ── Sipariş → sevkiyat drill-down (getOrderShipments) ────────────────────────
+/** İç toplama kovası — çuval sevki ve fason direkt sevk aynı şekle indirgenir. */
+interface ShipmentAgg {
+  shipmentId: string;
+  shipmentNo: string;
+  status: ShipmentStatus;
+  kind: "SHIPMENT" | "DIRECT";
+  date: Date | null;
+  qty: Prisma.Decimal;
+  sacks: Set<string>;
+  branchName: string | null;
+}
+
+export interface OrderShipmentRow {
+  /** DIRECT legacy toplu satırında boş (tıklanamaz). */
+  shipmentId: string;
+  shipmentNo: string;
+  status: ShipmentStatus;
+  kind: "SHIPMENT" | "DIRECT";
+  /** ISO; PLANNED çuval-sevkinde/DIRECT-legacy'de null olabilir. */
+  date: string | null;
+  qty: number;
+  sackCount: number;
+  branchName: string | null;
+}
+
+export interface OrderShipmentsResult {
+  /** DISPATCHED çuval + fason direkt — order.shippedQty ile mutabık. */
+  dispatchedTotal: number;
+  /** PLANNED çuval (bekleyen, henüz sevk edilmemiş). */
+  plannedTotal: number;
+  shipments: OrderShipmentRow[];
+}
+
 export class OrderService extends BaseService {
   private aliasService = new CustomerAliasService();
 
@@ -140,15 +232,17 @@ export class OrderService extends BaseService {
   }
 
   /**
-   * Liste filtresi `filter[itemId]` / `filter[colorId]` ilişki bazlıdır: Order'da
-   * bu kolonlar yoktur, OrderLine'dadır. `safeFilters` skaler-süzgeci bunları
-   * düşürür (500'ü önler) — burada `lines.some` koşuluna çevirip `findAll`'ın
-   * where'ine AND'liyoruz. İkisi birden verilirse AYNI satır eşleşmeli (ürün X +
-   * renk Y olan kalem); tek başına verilirse yalnız o koşul. Siparişler ekranı
-   * ürün/renk sütun + filtresini besler.
+   * Liste filtresi `filter[itemId]` / `filter[colorId]` / `filter[woState]`
+   * ilişki bazlıdır: Order'da bu kolonlar yoktur. `safeFilters` skaler-süzgeci
+   * bunları düşürür (500'ü önler) — burada ilişki koşuluna çevirip `findAll`'ın
+   * where'ine AND'liyoruz. itemId+colorId birden verilirse AYNI satır eşleşmeli
+   * (ürün X + renk Y olan kalem). `woState` = "İş Emri" rollup filtresi (CSV,
+   * çoklu seçim OR'lanır) — DB'de hesaplanır, sayfadaki veriyle sınırlı değildir.
    */
   protected extraWhere(req: Request): Record<string, unknown> | undefined {
     const { filters } = parseQueryParams(req);
+    const conds: Record<string, unknown>[] = [];
+
     const lineCond: Record<string, unknown> = {};
     if (typeof filters.itemId === "string" && filters.itemId) {
       lineCond.itemId = filters.itemId;
@@ -156,8 +250,13 @@ export class OrderService extends BaseService {
     if (typeof filters.colorId === "string" && filters.colorId) {
       lineCond.colorId = filters.colorId;
     }
-    if (Object.keys(lineCond).length === 0) return undefined;
-    return { lines: { some: lineCond } };
+    if (Object.keys(lineCond).length > 0) conds.push({ lines: { some: lineCond } });
+
+    const woCond = buildWoStateWhere(filters.woState);
+    if (woCond) conds.push(woCond);
+
+    if (conds.length === 0) return undefined;
+    return conds.length === 1 ? conds[0] : { AND: conds };
   }
 
   /**
@@ -278,6 +377,17 @@ export class OrderService extends BaseService {
       // Decimal(12,3) tavanı — aşımda DB'de P2020 yerine alan-düzeyinde net hata.
       if (qty > 999_999_999) {
         throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: miktar çok büyük.`);
+      }
+      // En (width) opsiyonel; verildiyse pozitif + makul üst sınır (0/negatif/
+      // aşırı-büyük en üretim spec'ini bozar — miktar deseniyle aynı hijyen).
+      if (line.width != null) {
+        const w = Number(line.width);
+        if (!Number.isFinite(w) || w <= 0) {
+          throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: en pozitif olmalı (0'dan büyük).`);
+        }
+        if (w > 100_000) {
+          throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: en çok büyük.`);
+        }
       }
       if (line.unitPrice != null) {
         const price =
@@ -988,6 +1098,225 @@ export class OrderService extends BaseService {
     });
 
     return { success: true, data };
+  }
+
+  /**
+   * Spec-bazlı anlık müsaitlik — sipariş GİRİŞ formunda (henüz kaydedilmemiş,
+   * lineId'siz satır) "Depoda / Üretimde / Ham" ipucu için. getCoverageForLines
+   * ile AYNI kaynakları kullanır ama tek spec (item+renk+en) parametresiyle,
+   * satır/sevk muhasebesi olmadan:
+   *  - freeWarehouse: item+renk+en birebir eşleşen serbest depo (WAREHOUSE).
+   *  - freeStock: renk-joker + en-agnostik serbest ham (STOCK).
+   *  - inProduction: canlı WO'ların hedef-spec başına in-flight'ı (computeInProdBySpec).
+   * ANLIK FOTOĞRAF — rezervasyon değildir. Değerler DÜRÜST number döner (Decimal
+   * JSON'a string sızmasın — getCoverageForLines emsalinin aksine, `.toNumber()`).
+   */
+  async getSpecAvailability(params: {
+    itemId: string;
+    colorId?: string | null;
+    width?: number | null;
+  }): Promise<ApiResponse<{ freeWarehouse: number; inProduction: number; freeStock: number }>> {
+    const colorId = params.colorId ?? null;
+    const width = params.width == null ? null : new Prisma.Decimal(params.width);
+
+    // Serbest stok — hiçbir çuvala/sevkiyata girmemiş WAREHOUSE + STOCK (fungible havuz).
+    const freeGrouped = await prisma.roll.groupBy({
+      by: ["colorId", "width", "status"],
+      where: {
+        shipmentId: null,
+        sackId: null,
+        itemId: params.itemId,
+        status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
+      },
+      _sum: { currentQty: true },
+    });
+
+    // En eşleşmesi: Depo birebir; Ham en-agnostik (getCoverageForLines ile aynı kural).
+    const widthEqual = (a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean =>
+      a == null || b == null ? a == null && b == null : new Prisma.Decimal(a).equals(b);
+
+    let freeWarehouse = new Prisma.Decimal(0);
+    let freeStock = new Prisma.Decimal(0);
+    for (const g of freeGrouped) {
+      const qty = g._sum.currentQty ?? new Prisma.Decimal(0);
+      if (g.status === RollStatus.WAREHOUSE) {
+        // Depo: renk + en BİREBİR.
+        if ((g.colorId ?? null) !== colorId) continue;
+        if (!widthEqual(g.width, width)) continue;
+        freeWarehouse = freeWarehouse.plus(qty);
+      } else {
+        // Ham: renksiz joker (renkli talebe de sayılır), en-agnostik.
+        const colorOk = g.colorId == null || colorId == null || g.colorId === colorId;
+        if (!colorOk) continue;
+        freeStock = freeStock.plus(qty);
+      }
+    }
+
+    // Üretimde — hazır spec-havuz hesabı; anahtar computeInProdBySpec ile aynı format.
+    const inProdBySpec = await this.computeInProdBySpec(params.itemId);
+    const key = `${params.itemId}|${colorId ?? ""}|${width == null ? "" : width.toString()}`;
+    const inProduction = inProdBySpec.get(key) ?? new Prisma.Decimal(0);
+
+    return {
+      success: true,
+      data: {
+        freeWarehouse: freeWarehouse.toNumber(),
+        inProduction: inProduction.toNumber(),
+        freeStock: freeStock.toNumber(),
+      },
+    };
+  }
+
+  /**
+   * Sipariş detayında "hangi sevkiyatlarla sevk edildi" drill-down'ı. İKİ kaynağı
+   * birleştirir — `shippedQty` de bu ikisinin toplamıdır (order-status.helper
+   * computeLineLedger), o yüzden `dispatchedTotal` `order.shippedQty` ile MUTABIK olmalı:
+   *   - Çuval sevki (SHIPMENT): SackAllocation → sack → shipment (CANCELLED hariç;
+   *     DISPATCHED sevk edilen, PLANNED bekleyen).
+   *   - Fason direkt sevk (DIRECT): SubcontractorDirectShipAllocation → directShipment
+   *     (terminal — hep sevk edilmiş sayılır). Legacy directShipmentId=null → tek toplu satır.
+   * Bilgilendirici snapshot (sevk muhasebesini değiştirmez).
+   */
+  async getOrderShipments(orderId: string): Promise<ApiResponse<OrderShipmentsResult>> {
+    // ── Kaynak A: çuval sevkiyatı ──
+    const sackAllocs = await prisma.sackAllocation.findMany({
+      where: {
+        orderLine: { orderId },
+        sack: { shipment: { status: { not: ShipmentStatus.CANCELLED } } },
+      },
+      select: {
+        qty: true,
+        sackId: true,
+        sack: {
+          select: {
+            shipment: {
+              select: {
+                id: true,
+                shipmentNo: true,
+                status: true,
+                dispatchedAt: true,
+                branch: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const byShipment = new Map<string, ShipmentAgg>();
+    for (const a of sackAllocs) {
+      const s = a.sack.shipment;
+      if (!s) continue;
+      let agg = byShipment.get(s.id);
+      if (!agg) {
+        agg = {
+          shipmentId: s.id,
+          shipmentNo: s.shipmentNo,
+          status: s.status,
+          kind: "SHIPMENT",
+          date: s.dispatchedAt,
+          qty: new Prisma.Decimal(0),
+          sacks: new Set<string>(),
+          branchName: s.branch?.name ?? null,
+        };
+        byShipment.set(s.id, agg);
+      }
+      agg.qty = agg.qty.plus(a.qty);
+      agg.sacks.add(a.sackId);
+    }
+
+    // ── Kaynak B: fason direkt sevk ──
+    const directAllocs = await prisma.subcontractorDirectShipAllocation.findMany({
+      where: { orderLine: { orderId } },
+      select: {
+        qty: true,
+        directShipmentId: true,
+        directShipment: {
+          select: {
+            id: true,
+            shipmentNo: true,
+            shippedAt: true,
+            branch: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    const byDirect = new Map<string, ShipmentAgg>();
+    let legacyDirectQty = new Prisma.Decimal(0);
+    for (const a of directAllocs) {
+      const d = a.directShipment;
+      if (!d || !a.directShipmentId) {
+        legacyDirectQty = legacyDirectQty.plus(a.qty);
+        continue;
+      }
+      let agg = byDirect.get(d.id);
+      if (!agg) {
+        agg = {
+          shipmentId: d.id,
+          shipmentNo: d.shipmentNo,
+          status: ShipmentStatus.DISPATCHED, // direkt sevk terminal
+          kind: "DIRECT",
+          date: d.shippedAt,
+          qty: new Prisma.Decimal(0),
+          sacks: new Set<string>(),
+          branchName: d.branch?.name ?? null,
+        };
+        byDirect.set(d.id, agg);
+      }
+      agg.qty = agg.qty.plus(a.qty);
+    }
+
+    // ── Totaller (mutabakat: dispatchedTotal = order.shippedQty) ──
+    let dispatchedTotal = new Prisma.Decimal(0);
+    let plannedTotal = new Prisma.Decimal(0);
+    for (const agg of byShipment.values()) {
+      if (agg.status === ShipmentStatus.DISPATCHED) dispatchedTotal = dispatchedTotal.plus(agg.qty);
+      else if (agg.status === ShipmentStatus.PLANNED) plannedTotal = plannedTotal.plus(agg.qty);
+    }
+    for (const agg of byDirect.values()) dispatchedTotal = dispatchedTotal.plus(agg.qty);
+    dispatchedTotal = dispatchedTotal.plus(legacyDirectQty);
+
+    // ── Satırlar: PLANNED üstte (bekliyor), sonra tarih desc ──
+    const rows = [...byShipment.values(), ...byDirect.values()].map((a) => ({
+      shipmentId: a.shipmentId,
+      shipmentNo: a.shipmentNo,
+      status: a.status,
+      kind: a.kind,
+      date: a.date ? a.date.toISOString() : null,
+      qty: a.qty.toNumber(),
+      sackCount: a.sacks.size,
+      branchName: a.branchName,
+    }));
+    if (legacyDirectQty.greaterThan(0)) {
+      rows.push({
+        shipmentId: "",
+        shipmentNo: "Fason direkt sevk (eski)",
+        status: ShipmentStatus.DISPATCHED,
+        kind: "DIRECT",
+        date: null,
+        qty: legacyDirectQty.toNumber(),
+        sackCount: 0,
+        branchName: null,
+      });
+    }
+    rows.sort((a, b) => {
+      const ap = a.status === ShipmentStatus.PLANNED ? 0 : 1;
+      const bp = b.status === ShipmentStatus.PLANNED ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      const ad = a.date ? Date.parse(a.date) : 0;
+      const bd = b.date ? Date.parse(b.date) : 0;
+      return bd - ad;
+    });
+
+    return {
+      success: true,
+      data: {
+        dispatchedTotal: dispatchedTotal.toNumber(),
+        plannedTotal: plannedTotal.toNumber(),
+        shipments: rows,
+      },
+    };
   }
 
   async create(

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat } from "@/lib/format";
 import { rollStatusLabels, RollStatus } from "@/types/enums";
-import { type Roll, shipmentScopeLabels } from "./types";
+import { type Roll, shipmentScopeLabels, activeDispatchOf, activeCategoryOf } from "./types";
 
 /**
  * Roll'un fiziksel/işlenmiş durumunu renk ve duruma göre türet.
@@ -75,7 +75,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   },
   {
     id: "item",
-    header: "Ürün",
+    header: "Kumaş",
     cell: ({ row }) => (
       <span className="text-xs font-medium">
         {row.original.item?.name ?? "—"}
@@ -140,9 +140,62 @@ export const rollColumns: ColumnDef<Roll>[] = [
     },
   },
   {
+    id: "subcontractorCategory",
+    header: "İşlem",
+    meta: {
+      label: "İşlem",
+      exportValue: (r) =>
+        r.status === RollStatus.AT_SUBCONTRACTOR ? activeCategoryOf(r)?.name ?? "" : "",
+    },
+    enableSorting: false,
+    // Yalnız fasondaki topta göster — dispatchItems include'u anlık status-geçiş/
+    // bayat cache'te dolu gelebilir, statü guard'ı savunma amaçlı şart. Kategori
+    // adımdan boşsa firmanın kategorisine düşer (activeCategoryOf).
+    cell: ({ row }) => {
+      const cat =
+        row.original.status === RollStatus.AT_SUBCONTRACTOR
+          ? activeCategoryOf(row.original)
+          : null;
+      return cat ? (
+        <Badge variant="outline" className="text-[10px]">
+          {cat.name}
+        </Badge>
+      ) : (
+        <span className="text-muted-foreground text-xs">—</span>
+      );
+    },
+  },
+  {
+    id: "subcontractor",
+    header: "Fason Firması",
+    meta: {
+      label: "Fason Firması",
+      exportValue: (r) =>
+        r.status === RollStatus.AT_SUBCONTRACTOR
+          ? activeDispatchOf(r)?.subcontractor.name ?? ""
+          : "",
+    },
+    enableSorting: false,
+    cell: ({ row }) => {
+      const d =
+        row.original.status === RollStatus.AT_SUBCONTRACTOR
+          ? activeDispatchOf(row.original)
+          : null;
+      if (!d) return <span className="text-muted-foreground text-xs">—</span>;
+      return (
+        <span className="text-xs font-medium">
+          {d.subcontractor.name}
+          {d.subcontractor.code ? (
+            <span className="ml-1 text-muted-foreground">({d.subcontractor.code})</span>
+          ) : null}
+        </span>
+      );
+    },
+  },
+  {
     accessorKey: "currentQty",
     header: () => <SortableHeader field="currentQty" label="Metre" />,
-    meta: { label: "Metre" },
+    meta: { label: "Metre", summable: true },
     cell: ({ row }) => (
       <div className="text-right">
         <span className="tabular-nums">{row.original.currentQty.toLocaleString("tr-TR", { useGrouping: false })}</span>
@@ -288,7 +341,8 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "createdAt",
     header: () => <SortableHeader field="createdAt" label="Tarih" />,
-    meta: { label: "Tarih" },
+    // Export'ta ham ISO yerine UI ile aynı biçimlenmiş yerel tarih.
+    meta: { label: "Tarih", exportValue: (r) => safeFormat(r.createdAt, "dd.MM.yyyy HH:mm") },
     cell: ({ row }) => {
       const d = row.original.createdAt;
       return (

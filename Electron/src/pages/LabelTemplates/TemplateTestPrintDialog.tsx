@@ -4,6 +4,7 @@ import { useMachineConfig } from "@/hooks/useMachineConfig";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CopiesInput } from "./CopiesInput";
 
 interface Props {
   open: boolean;
@@ -11,8 +12,9 @@ interface Props {
   /** Kaydedilmemiş güncel tasarımın native çıktısını üretir — önizlemeyle AYNI
    *  kaynak ("gördüğün = basılan"). Kanvas editörü canvasPreview'i bağlar.
    *  `peripheralId` verilirse dil/medya O CİHAZDAN çözülür (yerel yazıcı = PPLB vs.);
-   *  yoksa varsayılan (cihazsız → RASTER_HTML). */
-  fetchNative: (opts?: { peripheralId?: string }) => Promise<{
+   *  yoksa varsayılan (cihazsız → RASTER_HTML). `copies` verilirse baskı o kadar
+   *  çoğaltılır (backend copies desteği). */
+  fetchNative: (opts?: { peripheralId?: string; copies?: number }) => Promise<{
     mode: "svg" | "html" | "text";
     language: string;
     native: string;
@@ -33,6 +35,7 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
 
   const [mode, setMode] = useState<"local" | "ip">("local");
   const [printerIp, setPrinterIp] = useState("");
+  const [copies, setCopies] = useState(1);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -43,8 +46,13 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
     try {
       // Kaydedilmemiş güncel tasarımın native'i (önizlemeyle aynı kaynak). Yerel
       // hedefte dil/medya seçili Cihaz Kaydı yazıcısından çözülür → gerçek dilde basar.
-      const p = await fetchNative({ peripheralId: lpCfg?.peripheralId });
-      if (p.mode === "html") {
+      // copies yalnız >1 ise gönderilir — backend "verilmedi = 1" kabul eder.
+      const p = await fetchNative({
+        peripheralId: lpCfg?.peripheralId,
+        copies: copies > 1 ? copies : undefined,
+      });
+      // Raster modda mode "html" gelir ama nativeB64 zarfı taşır → o dal aşağıda basar.
+      if (p.mode === "html" && !p.nativeB64) {
         setResult({
           ok: false,
           text: lpCfg?.peripheralId
@@ -59,7 +67,7 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
         : await printerApi.send({ transport, target, baudRate, content: p.native });
       setResult(
         res.ok
-          ? { ok: true, text: `Gönderildi → ${target} (${res.bytes} bayt, ${p.language})` }
+          ? { ok: true, text: `Gönderildi → ${target} (${res.bytes} bayt, ${p.language}, ${copies} kopya)` }
           : { ok: false, text: res.available ? (res.error ?? "bilinmeyen hata") : "Yazıcı sürücüsü/hedef hazır değil." },
       );
     } catch (e) {
@@ -81,12 +89,12 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
         <DialogHeader>
           <DialogTitle>Test Baskısı</DialogTitle>
           <DialogDescription>
-            Şu anki (kaydedilmemiş) tasarım, örnek veriyle, aktif yazıcı dilinde basılır —
-            soldaki önizlemenin aynısı. Gerçek top gerekmez.
+            Kaydedilmemiş tasarımı örnek veriyle basar (önizlemenin aynısı).
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 rounded-md border p-3">
+          <CopiesInput id="tpl-test-copies" value={copies} onChange={setCopies} disabled={sending} />
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-medium">Hedef</div>
             <div className="flex gap-1">
@@ -115,8 +123,7 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
             localReady ? (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Yerel yazıcı: <span className="font-mono">{lpCfg?.path}</span> (
-                  {lpCfg?.transport ?? "serial"}). Genel Ayarlar → Etiket Yazıcısı'ndan değişir.
+                  Yazıcı: <span className="font-mono">{lpCfg?.path}</span>
                 </p>
                 <Button
                   type="button"
@@ -129,7 +136,7 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
               </div>
             ) : (
               <p className="text-xs text-amber-600 dark:text-amber-500">
-                Bu PC'de yazıcı ayarlı değil. Genel Ayarlar → Etiket Yazıcısı'ndan aç + kuyruğu/portu seç.
+                Bu PC'de yazıcı seçili değil — Genel Ayarlar → Etiket Yazıcısı.
               </p>
             )
           ) : (
@@ -168,10 +175,6 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
               {result.ok ? `✓ ${result.text}` : `Gönderilemedi: ${result.text}`}
             </div>
           )}
-          <p className="text-[10px] text-muted-foreground">
-            "Bu PC" = yerel yazıcıya doğrudan (USB/CUPS/seri). "Ağ (IP)" = ağ yazıcısına (RAW 9100).
-            Değişiklikleri kaydetmeden de test edebilirsin.
-          </p>
         </div>
       </DialogContent>
     </Dialog>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RotateCcw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -35,7 +36,7 @@ export function PerfPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Endpoint Performansı"
         description={
@@ -51,7 +52,7 @@ export function PerfPage() {
         }
       />
 
-      <div className="space-y-6 overflow-y-auto p-6">
+      <PageBody className="space-y-6 p-6">
         {snapshotQ.isError && (
           <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -97,7 +98,7 @@ export function PerfPage() {
             <SlowList items={snap?.slowRequests ?? []} />
           </CardContent>
         </Card>
-      </div>
+      </PageBody>
 
       <ConfirmDialog
         open={confirmOpen}
@@ -109,6 +110,6 @@ export function PerfPage() {
         onConfirm={doReset}
         isPending={resetting}
       />
-    </div>
+    </PageShell>
   );
 }

@@ -13,6 +13,45 @@ export interface RollItem {
   name: string;
 }
 
+/** Aktif fason sevkinin liste/detay cevabındaki şekli. "İşlem" kategorisi önce
+ *  adımdan (step.requiredCategory) gelir; boşsa firmanın kendi kategorisine
+ *  düşülür (activeCategoryOf — firma tek kategoriliyse). */
+export interface RollActiveDispatch {
+  dispatchNo: string;
+  dispatchedAt: string;
+  subcontractor: {
+    id: string;
+    name: string;
+    code: string | null;
+    /** Firmanın hizmet kategorileri (M:N) — step boşken "İşlem" fallback'i. */
+    categories: Array<{ category: { id: string; name: string } }>;
+  };
+  step: { requiredCategory: { id: string; name: string } | null };
+}
+
+/** Topun aktif fason sevki (varsa) — kolon hücreleri + detay kartı ortak okur. */
+export function activeDispatchOf(roll: Roll): RollActiveDispatch | null {
+  return roll.dispatchItems?.[0]?.dispatch ?? null;
+}
+
+/** Bir fason sevkinin "İşlem" kategorisi: önce adımın requiredCategory'si; boşsa
+ *  firmanın kendi kategorisi (yalnız TEK kategoriliyse — çok kategoride belirsiz).
+ *  Backend özet ucu + filtre AYNI COALESCE(step, firma-tek-kategori) tanımını
+ *  kullanır → kolon/chip/filtre/detay tutarlı. */
+export function categoryOfDispatch(
+  d: RollActiveDispatch,
+): { id: string; name: string } | null {
+  if (d.step.requiredCategory) return d.step.requiredCategory;
+  const cats = d.subcontractor.categories ?? [];
+  return cats.length === 1 ? cats[0]?.category ?? null : null;
+}
+
+/** Topun aktif fason sevkinin "İşlem" kategorisi (varsa) — kolon + chip ortak. */
+export function activeCategoryOf(roll: Roll): { id: string; name: string } | null {
+  const d = activeDispatchOf(roll);
+  return d ? categoryOfDispatch(d) : null;
+}
+
 export interface RollPropertyLink {
   propertyId: string;
   property: { id: string; code: string; name: string };
@@ -67,6 +106,12 @@ export interface Roll {
       subcontractor: { id: string; name: string; code: string | null };
     };
   }>;
+  /** AT_SUBCONTRACTOR top için açık (dönmemiş) SON fason sevk kalemi — liste
+   *  VE detay include'undan gelir (kartelaDispatchItems emsali, en fazla 1 eleman).
+   *  Açık-kalem tanımı F85: dönmüş topta backend BOŞ dizi döndürür — yine de UI
+   *  hücre/kartlarda status===AT_SUBCONTRACTOR guard'ı savunma amaçlı korunur
+   *  (anlık status-geçiş / bayat cache). */
+  dispatchItems?: Array<{ dispatch: RollActiveDispatch }>;
   /** Sevkiyat rezervasyonu: dolu ise top "serbest depo" DEĞİL — bir çuvalın
    *  içinde, bir sevkiyata bağlı (planlı sevkiyat). WAREHOUSE statüsüyle
    *  birlikte "Çuvalda" rozeti gösterilir; serbest stok sorgularına girmez. */

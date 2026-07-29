@@ -36,6 +36,7 @@ import {
   renderShipmentDispatchHtml,
   type ShipmentDispatchDoc,
 } from "./document-render/shipment-dispatch.html";
+import { renderQualityCertificateHtml, type QualityCertificateDoc } from "./document-render/quality-certificate.html";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { p2002Mentions } from "../utils/p2002";
 import { readShipmentConfirmationEnabled } from "./system-setting.service";
@@ -57,6 +58,7 @@ import {
   buildWhereClause,
   applyDateRange,
   buildTurkishSearch,
+  resolveSortBy,
 } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -74,8 +76,10 @@ export {
 } from "./helpers/allocation.helper";
 
 // Sevkiyat liste filtreleri (Electron FilterBar + arama).
-const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier"];
-const SHIPMENT_FILTER_FIELDS = ["status", "customerId", "branchId"] as const;
+const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier", "customer.name"];
+// destination = Shipment skaler alanı (DOMESTIC|EXPORT) → buildWhereClause halleder.
+// itemId/colorId/hasReturns BİLİNÇLİ dışarıda: relation alt-sorgusu (some) olarak elle kurulur.
+const SHIPMENT_FILTER_FIELDS = ["status", "customerId", "branchId", "destination"] as const;
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
 
 // Çuvala okutulamayacak / sevke sokulamayacak top durumları. Kalite/bitmişlik GATE'i
@@ -1004,11 +1008,14 @@ export class ShippingService {
 
       const lineRows = await prisma.orderLine.findMany({
         where: { id: { in: [...lineNeeds.keys()] } },
-        select: { id: true, width: true, item: { select: { name: true } }, color: { select: { name: true } }, customerItemName: true, customerColorName: true, order: { select: { orderNumber: true } } },
+        select: { id: true, width: true, item: { select: { name: true } }, color: { select: { name: true } }, order: { select: { orderNumber: true } } },
       });
+      // Önizleme iç operasyon ekranıdır: her zaman bizdeki ad basılır. Satırdaki
+      // müşteri override'ı yalnız adın girildiği siparişte dolu olduğundan burada
+      // kullanmak aynı kumaşı iki farklı adla gösteriyordu.
       lines = lineRows.map((l) => ({
         lineId: l.id, orderNumber: l.order.orderNumber,
-        item: l.customerItemName ?? l.item.name, color: l.customerColorName ?? l.color?.name ?? null,
+        item: l.item.name, color: l.color?.name ?? null,
         width: l.width != null ? Number(l.width) : null,
         need: Number(lineNeeds.get(l.id) ?? 0), allocated: Number(allocByLine.get(l.id) ?? 0),
       }));
@@ -1111,6 +1118,23 @@ export class ShippingService {
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "PROCEDURE_CODE", procedureCode: code } });
     return { success: true, data: { shipmentId, procedureCode: code }, message: "Prosedür kodu güncellendi" };
+  }
+
+  /** İrsaliye açıklaması (annotation) — sevkiyat DURUMU fark etmez, her an düzenlenir
+   *  (SÜRÜM DOĞURMAZ; belge basılırken canlı çözülür). Boş → temizlenir. */
+  async setDispatchNote(shipmentId: string, note: string | null, userId?: string): Promise<ApiResponse<unknown>> {
+    const value = note?.trim().slice(0, 500) || null;
+    const updated = await prisma.shipment.updateMany({ where: { id: shipmentId }, data: { dispatchNote: value } });
+    if (updated.count === 0) throw AppError.notFound("Sevkiyat bulunamadı");
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DISPATCH_NOTE", dispatchNote: value } });
+    return { success: true, data: { shipmentId, dispatchNote: value }, message: "İrsaliye açıklaması güncellendi" };
+  }
+
+  /** İrsaliye açıklamasını oku — irsaliye modalı notu ağır getDetail'siz alsın. */
+  async getDispatchNote(shipmentId: string): Promise<ApiResponse<{ dispatchNote: string | null }>> {
+    const s = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchNote: true } });
+    if (!s) throw AppError.notFound("Sevkiyat bulunamadı");
+    return { success: true, data: { dispatchNote: s.dispatchNote } };
   }
 
   /**
@@ -1276,6 +1300,49 @@ export class ShippingService {
     const rawCustomerId = req.query.customerId as string | undefined;
     if (rawCustomerId) where.customerId = rawCustomerId;
 
+    // --- İÇERİK FİLTRESİ (ürün + renk = TEK TOP eşleşmesi) --------------------
+    // itemId/colorId relation alt-sorgusudur (skaler DEĞİL) → SHIPMENT_FILTER_FIELDS'e
+    // KOYULMAZ (buildWhereClause skaler bekler). csv → temiz ID listesi. İkisi de
+    // seçiliyse AYNI topun HEM üründe HEM renkte olması gerekir (tek `some` bloğu,
+    // iki koşul AND — "mavi patos" = aynı topun itemId∈seçili VE colorId∈seçili).
+    const csvIds = (v: string | string[] | undefined): string[] => {
+      if (v == null) return [];
+      const arr = Array.isArray(v) ? v : String(v).split(",");
+      return arr.map((s) => s.trim()).filter(Boolean);
+    };
+    const itemIds = csvIds(params.filters.itemId);
+    const colorIds = csvIds(params.filters.colorId);
+    const rollMatch: Prisma.RollWhereInput = {};
+    if (itemIds.length) rollMatch.itemId = { in: itemIds };
+    if (colorIds.length) rollMatch.colorId = { in: colorIds };
+    const hasContentFilter = itemIds.length > 0 || colorIds.length > 0;
+    // Roll.itemId + Roll.colorId indexli → some alt-sorgusu performanslı.
+    if (hasContentFilter) where.rolls = { some: rollMatch };
+
+    // --- İADE FİLTRESİ ("iade içerenler") — basit; iptalsiz iade taşıyan sevkler.
+    const hasReturnsFilter = params.filters.hasReturns === "true";
+    if (hasReturnsFilter) where.returns = { some: { cancelledAt: null } };
+
+    // destination (DOMESTIC|EXPORT) buildWhereClause tarafından where'e YAZILDI;
+    // DirectShipment'ta destination YOK → aktifse doğrudan sevkler union'dan düşer.
+    const hasDestinationFilter = safeFilters.destination != null;
+
+    // --- SIRALAMA (whitelist) — createdAt|shipmentNo (ikisi de her iki tabloda
+    // NON-NULL var → union keyset güvenli). dispatchedAt BİLİNÇLİ dışarıda: PLANNED'da
+    // null olduğundan NULLS sıralaması union keyset'i bozar.
+    const SORTABLE = ["createdAt", "shipmentNo"] as const;
+    type ShipSortField = (typeof SORTABLE)[number];
+    const sortField = resolveSortBy(params.sortBy, SORTABLE, "createdAt") as ShipSortField;
+    const sortDir: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
+    const shipOrderBy: Prisma.ShipmentOrderByWithRelationInput[] =
+      sortField === "shipmentNo"
+        ? [{ shipmentNo: sortDir }, { id: sortDir }]
+        : [{ createdAt: sortDir }, { id: sortDir }];
+    const directOrderBy: Prisma.DirectShipmentOrderByWithRelationInput[] =
+      sortField === "shipmentNo"
+        ? [{ shipmentNo: sortDir }, { id: sortDir }]
+        : [{ createdAt: sortDir }, { id: sortDir }];
+
     const select = {
       id: true,
       shipmentNo: true,
@@ -1325,11 +1392,22 @@ export class ShippingService {
       _count: { sacks: 0, rolls: d.rollCount, orders: d._count.allocations, returns: 0 },
     });
     type UnifiedRow = ReturnType<typeof mapShip> | ReturnType<typeof mapDirect>;
-    // desc by (createdAt, id) — iki tablonun ortak sıralama anahtarı (orderBy ile birebir).
+    // Union sıralama karşılaştırıcısı — sortField + sortDir'e göre (orderBy ile birebir).
+    // Birincil anahtar sortField (createdAt→getTime, shipmentNo→string compare); tie-break
+    // DAİMA id, aynı yönde (dynamicCursorWhere tie-break'iyle simetrik).
+    const dir = sortDir === "asc" ? 1 : -1;
     const cmp = (a: UnifiedRow, b: UnifiedRow): number => {
-      const t = b.createdAt.getTime() - a.createdAt.getTime();
-      if (t !== 0) return t;
-      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+      const primary =
+        sortField === "shipmentNo"
+          ? a.shipmentNo < b.shipmentNo
+            ? -1
+            : a.shipmentNo > b.shipmentNo
+              ? 1
+              : 0
+          : a.createdAt.getTime() - b.createdAt.getTime();
+      if (primary !== 0) return dir * primary;
+      const idc = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      return dir * idc;
     };
 
     // DirectShipment'ın status'u yok → daima DISPATCHED. Status filtresi DISPATCHED
@@ -1341,9 +1419,13 @@ export class ShippingService {
         : Array.isArray(statusRaw)
           ? statusRaw
           : String(statusRaw).split(",").map((s) => s.trim());
+    // DirectShipment'ta status/destination/returns YOK → bu filtreler aktifse doğrudan
+    // sevkler union'dan düşer. (İçerik filtresi DÜŞÜRMEZ — DirectShipment.rolls'a uygulanır.)
     const includeDirect =
       (!statuses || statuses.includes(ShipmentStatus.DISPATCHED)) &&
-      (!rawStatus || rawStatus === ShipmentStatus.DISPATCHED);
+      (!rawStatus || rawStatus === ShipmentStatus.DISPATCHED) &&
+      !hasReturnsFilter &&
+      !hasDestinationFilter;
 
     // DirectShipment where — Shipment ile AYNI filtreleri alanlarına eşle.
     const directBaseWhere: Prisma.DirectShipmentWhereInput = {};
@@ -1354,10 +1436,10 @@ export class ShippingService {
       if (cust) directBaseWhere.customerId = cust;
       if (typeof safeFilters.branchId === "string") directBaseWhere.branchId = safeFilters.branchId;
       if (params.search)
-        directBaseWhere.OR = [
-          { shipmentNo: { contains: params.search, mode: "insensitive" } },
-          { reason: { contains: params.search, mode: "insensitive" } },
-        ];
+        directBaseWhere.OR = buildTurkishSearch<Prisma.DirectShipmentWhereInput>(
+          params.search,
+          ["shipmentNo", "reason", "customer.name"]
+        );
       if (params.dateField && (params.dateFrom || params.dateTo)) {
         const range: { gte?: Date; lte?: Date } = {};
         if (params.dateFrom) range.gte = params.dateFrom;
@@ -1366,20 +1448,62 @@ export class ShippingService {
         if (params.dateField === "createdAt") directBaseWhere.createdAt = range;
         else if (params.dateField === "dispatchedAt") directBaseWhere.shippedAt = range;
       }
+      // İçerik filtresi doğrudan sevklere de (DirectShipment.rolls Roll[] — aynı rollMatch).
+      if (hasContentFilter) directBaseWhere.rolls = { some: rollMatch };
     }
+
+    // --- EŞLEŞME ROZETİ verisi — SADECE hasContentFilter iken. dataRows'a bağımlı →
+    // merge/slice SONRASI ayrı Promise.all (mevcut Promise.all'a EKLENMEZ). tx dışı,
+    // salt-okuma (prisma.* global) → Promise.all serbest. hasContentFilter yoksa alan
+    // HİÇ eklenmez (matchRollCount undefined kalır).
+    const attachBadges = async (
+      rows: UnifiedRow[],
+    ): Promise<Array<UnifiedRow & { matchRollCount?: number }>> => {
+      if (!hasContentFilter) return rows;
+      const shipIds = rows.filter((r) => r.kind === "SHIPMENT").map((r) => r.id);
+      const directIds = rows.filter((r) => r.kind === "DIRECT").map((r) => r.id);
+      const [shipGroups, directGroups] = await Promise.all([
+        shipIds.length
+          ? prisma.roll.groupBy({
+              by: ["shipmentId"],
+              where: { shipmentId: { in: shipIds }, ...rollMatch },
+              _count: { _all: true },
+            })
+          : Promise.resolve([] as Array<{ shipmentId: string | null; _count: { _all: number } }>),
+        directIds.length
+          ? prisma.roll.groupBy({
+              by: ["directShipmentId"],
+              where: { directShipmentId: { in: directIds }, ...rollMatch },
+              _count: { _all: true },
+            })
+          : Promise.resolve(
+              [] as Array<{ directShipmentId: string | null; _count: { _all: number } }>,
+            ),
+      ]);
+      const shipMap = new Map<string | null, number>(
+        shipGroups.map((g): [string | null, number] => [g.shipmentId, g._count._all]),
+      );
+      const directMap = new Map<string | null, number>(
+        directGroups.map((g): [string | null, number] => [g.directShipmentId, g._count._all]),
+      );
+      return rows.map((r) => ({
+        ...r,
+        matchRollCount: r.kind === "SHIPMENT" ? (shipMap.get(r.id) ?? 0) : (directMap.get(r.id) ?? 0),
+      }));
+    };
 
     if (isCursorRequested(req)) {
       const rawLimit = parseInt(req.query.limit as string, 10) || 50;
       const limit = Math.min(Math.max(1, rawLimit), 200);
       const wantTotal = req.query.withTotal === "true";
       const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
-      const cw = cursor ? dynamicCursorWhere(cursor, "createdAt", "desc") : null;
+      const cw = cursor ? dynamicCursorWhere(cursor, sortField, sortDir) : null;
       const shipWhere = cw ? { AND: [where, cw] } : where;
       const directWhere = cw ? { AND: [directBaseWhere, cw] } : directBaseWhere;
       const [shipItems, directItems, shipTotal, directTotal] = await Promise.all([
-        prisma.shipment.findMany({ where: shipWhere, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit + 1, select }),
+        prisma.shipment.findMany({ where: shipWhere, orderBy: shipOrderBy, take: limit + 1, select }),
         includeDirect
-          ? prisma.directShipment.findMany({ where: directWhere, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit + 1, select: directSelect })
+          ? prisma.directShipment.findMany({ where: directWhere, orderBy: directOrderBy, take: limit + 1, select: directSelect })
           : Promise.resolve([] as DirectRow[]),
         wantTotal ? prisma.shipment.count({ where }) : Promise.resolve(undefined),
         wantTotal && includeDirect ? prisma.directShipment.count({ where: directBaseWhere }) : Promise.resolve(0),
@@ -1388,19 +1512,21 @@ export class ShippingService {
       const hasMore = merged.length > limit;
       const dataRows = hasMore ? merged.slice(0, limit) : merged;
       const last = dataRows[dataRows.length - 1] as Record<string, unknown> | undefined;
-      const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
+      const nextCursor = hasMore ? buildNextDynamicCursor(last, sortField) : null;
       const totalEstimate = shipTotal !== undefined ? shipTotal + (directTotal ?? 0) : undefined;
-      return { success: true, data: dataRows, pagination: { nextCursor, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) } };
+      const data = await attachBadges(dataRows);
+      return { success: true, data, pagination: { nextCursor, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) } };
     }
 
     const [shipments, directs] = await Promise.all([
-      prisma.shipment.findMany({ where, orderBy: { createdAt: "desc" }, take: 200, select }),
+      prisma.shipment.findMany({ where, orderBy: shipOrderBy, take: 200, select }),
       includeDirect
-        ? prisma.directShipment.findMany({ where: directBaseWhere, orderBy: { createdAt: "desc" }, take: 200, select: directSelect })
+        ? prisma.directShipment.findMany({ where: directBaseWhere, orderBy: directOrderBy, take: 200, select: directSelect })
         : Promise.resolve([] as DirectRow[]),
     ]);
     const merged: UnifiedRow[] = [...shipments.map(mapShip), ...directs.map(mapDirect)].sort(cmp).slice(0, 200);
-    return { success: true, data: merged };
+    const data = await attachBadges(merged);
+    return { success: true, data };
   }
 
   /** Fasondan doğrudan sevk (DirectShipment) detayı — birleşik Sevkiyatlar
@@ -1498,6 +1624,7 @@ export class ShippingService {
       select: {
         id: true, shipmentNo: true, status: true, destination: true, procedureCode: true,
         plateNumber: true, driverName: true, carrier: true, dispatchedAt: true, createdAt: true,
+        dispatchNote: true,
         customer: { select: { id: true, code: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         orders: {
@@ -1517,13 +1644,13 @@ export class ShippingService {
             },
           },
         },
-        rolls: { select: { id: true, barcode: true, itemId: true, colorId: true, width: true, currentQty: true, sackId: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
+        rolls: { select: { id: true, barcode: true, itemId: true, colorId: true, width: true, currentQty: true, qualityGrade: true, sackId: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
         swatches: { select: { id: true, barcode: true, length: true, width: true, sackId: true } },
         sacks: {
           orderBy: { seq: "asc" },
           select: {
             id: true, sackNo: true, seq: true, weightKg: true,
-            rolls: { select: { id: true, barcode: true, width: true, currentQty: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
+            rolls: { select: { id: true, barcode: true, width: true, currentQty: true, qualityGrade: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
             swatches: { select: { id: true, barcode: true, length: true, width: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
             allocations: { select: { orderLineId: true, qty: true } },
           },
@@ -1584,9 +1711,11 @@ export class ShippingService {
     const returnRows = await prisma.rollReturn.findMany({
       where: { fromShipmentId: id, cancelledAt: null },
       orderBy: { createdAt: "desc" },
-      select: { id: true, qty: true, width: true, createdAt: true, reasonText: true, roll: { select: { barcode: true } }, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } }, reason: { select: { name: true, color: true } } },
+      select: { id: true, qty: true, width: true, createdAt: true, reasonText: true, prevSackId: true, roll: { select: { barcode: true } }, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } }, reason: { select: { name: true, color: true } } },
     });
-    const returnedRolls = returnRows.map((rr) => ({ id: rr.id, barcode: rr.roll.barcode, item: rr.item, color: rr.color, width: rr.width, qty: rr.qty, returnedAt: rr.createdAt, reasonName: rr.reason?.name ?? rr.reasonText ?? null, reasonColor: rr.reason?.color ?? null }));
+    // prevSackId = iade anındaki çuval (top artık o çuvalda değil ama iz burada); UI
+    // sackNo/seq'i sevkiyatın YÜKLÜ sacks[]'ından çözer (çuval sevkiyatta kalır).
+    const returnedRolls = returnRows.map((rr) => ({ id: rr.id, barcode: rr.roll.barcode, item: rr.item, color: rr.color, width: rr.width, qty: rr.qty, returnedAt: rr.createdAt, reasonName: rr.reason?.name ?? rr.reasonText ?? null, reasonColor: rr.reason?.color ?? null, prevSackId: rr.prevSackId }));
     const returnedMeters = returnRows.reduce((s, r) => s.plus(r.qty), D0());
 
     return {
@@ -1597,6 +1726,7 @@ export class ShippingService {
         status: shipment.status,
         destination: shipment.destination,
         procedureCode: shipment.procedureCode,
+        dispatchNote: shipment.dispatchNote,
         plateNumber: shipment.plateNumber,
         driverName: shipment.driverName,
         carrier: shipment.carrier,
@@ -1604,7 +1734,7 @@ export class ShippingService {
         customer: shipment.customer,
         branch: shipment.branch,
         orders,
-        rolls: shipment.rolls.map((r) => ({ id: r.id, barcode: r.barcode, item: r.item, color: r.color, width: r.width, currentQty: r.currentQty, sackId: r.sackId })),
+        rolls: shipment.rolls.map((r) => ({ id: r.id, barcode: r.barcode, item: r.item, color: r.color, width: r.width, currentQty: r.currentQty, qualityGrade: r.qualityGrade, sackId: r.sackId })),
         swatches: shipment.swatches,
         sacks,
         returnedRolls,
@@ -1726,7 +1856,7 @@ export class ShippingService {
         shipmentNo: true,
         shippedAt: true,
         createdAt: true,
-        customer: { select: { code: true, name: true, taxNumber: true } },
+        customer: { select: { code: true, name: true, taxNumber: true, exportCode: true } },
         branch: { select: { code: true, name: true } },
         allocations: { select: { orderLine: { select: { order: { select: { orderNumber: true } } } } } },
         rolls: {
@@ -1770,6 +1900,9 @@ export class ShippingService {
           customerTaxNumber: ds.customer.taxNumber ?? null,
           branchName: ds.branch?.name ?? null,
           branchCode: ds.branch?.code ?? null,
+          // Şirket ihracat kodu — tek "İhracat Kodu" satırına şube ihracat kodu
+          // (branchCode) boşsa yedek olarak basılır (branchCode ?? customerExportCode).
+          customerExportCode: ds.customer.exportCode ?? null,
           procedureCode: null,
           destination: ShipmentDestination.DOMESTIC,
           status: ShipmentStatus.DISPATCHED,
@@ -1868,7 +2001,7 @@ async function collectShipmentDocContent(
     select: {
       shipmentNo: true, status: true, procedureCode: true, destination: true, dispatchedAt: true, createdAt: true,
       plateNumber: true, driverName: true, carrier: true,
-      customer: { select: { code: true, name: true, taxNumber: true } },
+      customer: { select: { code: true, name: true, taxNumber: true, exportCode: true } },
       branch: { select: { code: true, name: true } },
       orders: { select: { order: { select: { orderNumber: true } } } },
       sacks: {
@@ -1896,7 +2029,7 @@ async function collectShipmentDocContent(
   });
 
   const cekiRows = sh.sacks.flatMap((sk) =>
-    sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0 }))
+    sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0 }))
   );
 
   const products = [...productMap.values()].map((p) => ({ name: p.name, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
@@ -1906,7 +2039,10 @@ async function collectShipmentDocContent(
   const orderNos = [...new Set(sh.orders.map((o) => o.order.orderNumber))].join(", ");
 
   return {
-    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, branchCode: sh.branch?.code ?? null, procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos },
+    // branchCode = şube ihracat kodu; customerExportCode = şirket ihracat kodu.
+    // Belgede TEK "İhracat Kodu" satırı basılır: branchCode ?? customerExportCode
+    // (şube önce, boşsa şirket) — "exportCode" section toggle'ıyla açılıp kapanır.
+    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, branchCode: sh.branch?.code ?? null, customerExportCode: sh.customer.exportCode ?? null, procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos },
     products,
     sacks: sackRows,
     cekiRows,
@@ -1932,4 +2068,128 @@ registerPrintedDocBuilder(PrintedDocType.SHIPMENT_DISPATCH, {
   fresh: buildShipmentDispatchDoc,
   renderHtml: renderShipmentDispatchHtml,
   buildPreview: buildShipmentDispatchPreview,
+  // Belge şablon profili: sevkiyatın müşterisine atanmış profil (yoksa genel ayar).
+  resolveProfileId: async (db, sourceId) => {
+    const s = await db.shipment.findUnique({
+      where: { id: sourceId },
+      select: { customer: { select: { documentProfileId: true } } },
+    });
+    return s?.customer?.documentProfileId ?? null;
+  },
+  // İrsaliye açıklaması — sevkiyata kayıtlı serbest not (annotation). Donmuş belgeye
+  // girmez; her baskıda canlı çözülür, düzenlenince tekrar baskıda güncel çıkar.
+  resolveLiveNote: async (db, sourceId) => {
+    const s = await db.shipment.findUnique({
+      where: { id: sourceId },
+      select: { dispatchNote: true },
+    });
+    return s?.dispatchNote ?? null;
+  },
 });
+
+// =============================================================================
+// SEVKİYAT-TÜREVLİ BELGELER — Kalite Sertifikası / Packing List / Commercial Invoice
+// =============================================================================
+// Aynı Shipment kaynağının farklı görünümleri (sourceId = Shipment.id, her belge
+// tipi kendi zinciri). Tek genişletilmiş collector: kalite, ambalaj ve fiyat verisi
+// bir sorguda. Fatura fiyatı çuval→SackAllocation→OrderLine.unitPrice'tan türetilir.
+async function collectShipmentDerived(db: PrintedDocDb, shipmentId: string) {
+  const sh = await db.shipment.findUnique({
+    where: { id: shipmentId },
+    select: {
+      shipmentNo: true, status: true, destination: true, dispatchedAt: true, createdAt: true, procedureCode: true,
+      customer: { select: { code: true, name: true, taxNumber: true, exportCode: true, address: true, city: true, country: true } },
+      orders: { select: { order: { select: { orderNumber: true } } } },
+      sacks: {
+        orderBy: { seq: "asc" },
+        select: {
+          seq: true, sackNo: true, weightKg: true,
+          rolls: { orderBy: { createdAt: "asc" }, select: { barcode: true, currentQty: true, width: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, qualityGradeRef: { select: { name: true } } } },
+          allocations: { select: { qty: true, orderLine: { select: { unitPrice: true, currency: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } } } } } },
+        },
+      },
+    },
+  });
+  if (!sh) return null;
+
+  const date = (sh.dispatchedAt ?? sh.createdAt).toISOString();
+  const orderNos = [...new Set(sh.orders.map((o) => o.order.orderNumber))].join(", ");
+  const addr = [sh.customer.address, sh.customer.city, sh.customer.country].filter(Boolean).join(", ") || null;
+
+  // ── Kalite: kalite başına adet/metraj + top dökümü ──
+  const gradeMap = new Map<string, { grade: string; rollCount: number; totalMeters: Prisma.Decimal }>();
+  const qualityRolls: { sequence: number; barcode: string | null; itemName: string; colorName: string | null; width: number | null; grade: string; meters: number }[] = [];
+  let seq = 0;
+  for (const sk of sh.sacks) {
+    for (const r of sk.rolls) {
+      const grade = r.qualityGradeRef?.name ?? r.qualityGrade ?? "Belirsiz";
+      const g = gradeMap.get(grade) ?? { grade, rollCount: 0, totalMeters: D0() };
+      g.rollCount += 1;
+      g.totalMeters = g.totalMeters.plus(r.currentQty);
+      gradeMap.set(grade, g);
+      qualityRolls.push({ sequence: ++seq, barcode: r.barcode, itemName: r.item.name, colorName: r.color?.name ?? null, width: r.width != null ? Number(r.width) : null, grade, meters: Number(r.currentQty) });
+    }
+  }
+  const grades = [...gradeMap.values()].map((g) => ({ grade: g.grade, rollCount: g.rollCount, totalMeters: Number(g.totalMeters) }));
+  const totalRolls = qualityRolls.length;
+  const totalMeters = Number(qualityRolls.reduce((s, r) => s.plus(r.meters), D0()));
+
+  // ── Ambalaj (packing): çuval bazlı ── (width = çuvaldaki farklı enler, cm)
+  const packages = sh.sacks.map((sk) => {
+    const contents = [...new Set(sk.rolls.map((r) => `${r.item.name}${r.color?.name ? ` ${r.color.name}` : ""}`))].join(", ");
+    const meters = Number(sk.rolls.reduce((s, r) => s.plus(r.currentQty), D0()));
+    const widths = [...new Set(sk.rolls.map((r) => (r.width != null ? Math.round(Number(r.width)) : null)).filter((w): w is number => w != null))]
+      .sort((a, b) => a - b)
+      .join(" / ");
+    return { no: sk.sackNo ?? `#${sk.seq}`, contents, width: widths, meters, netKg: sk.weightKg != null ? Number(sk.weightKg) : 0, rollCount: sk.rolls.length };
+  });
+  const totalNetKg = Number(sh.sacks.reduce((s, sk) => s.plus(sk.weightKg ?? 0), D0()));
+
+  // ── Fatura: allocation → orderLine fiyatı; (açıklama|fiyat|para) bazında grupla ──
+  const invMap = new Map<string, { description: string; qty: Prisma.Decimal; unit: string; unitPrice: number | null; currency: string; amount: Prisma.Decimal | null }>();
+  let anyPrice = false;
+  let currency = "TRY";
+  for (const sk of sh.sacks) {
+    for (const al of sk.allocations) {
+      const ol = al.orderLine;
+      const desc = ol.customerItemName?.trim() || `${ol.item.name}${ol.color?.name ? ` · ${ol.color.name}` : ""}`;
+      const up = ol.unitPrice != null ? Number(ol.unitPrice) : null;
+      if (up != null) anyPrice = true;
+      currency = ol.currency;
+      const key = `${desc}|${up ?? ""}|${ol.currency}`;
+      const row = invMap.get(key) ?? { description: desc, qty: D0(), unit: "m", unitPrice: up, currency: ol.currency, amount: up != null ? D0() : null };
+      row.qty = row.qty.plus(al.qty);
+      if (up != null && row.amount != null) row.amount = row.amount.plus(new Prisma.Decimal(al.qty).times(up));
+      invMap.set(key, row);
+    }
+  }
+  const invoiceLines = [...invMap.values()].map((r) => ({ description: r.description, qty: Number(r.qty), unit: r.unit, unitPrice: r.unitPrice, amount: r.amount != null ? Number(r.amount) : null }));
+  const curTotals = new Map<string, Prisma.Decimal>();
+  for (const r of invMap.values()) {
+    if (r.amount != null) curTotals.set(r.currency, (curTotals.get(r.currency) ?? D0()).plus(r.amount));
+  }
+  const invoiceTotals = [...curTotals.entries()].map(([currency, amount]) => ({ currency, amount: Number(amount) }));
+
+  const header = { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, customerAddress: addr, date, orderNos, procedureCode: sh.procedureCode };
+  return { header, destination: sh.destination, grades, qualityRolls, packages, invoiceLines, invoiceTotals, currency, hasPrices: anyPrice, totals: { totalRolls, totalMeters, totalNetKg } };
+}
+
+async function buildQualityCertificateDoc(db: PrintedDocDb, shipmentId: string): Promise<BuiltDocContent | null> {
+  const c = await collectShipmentDerived(db, shipmentId);
+  if (!c) return null;
+  const doc: QualityCertificateDoc = {
+    header: { shipmentNo: c.header.shipmentNo, customerName: c.header.customerName, customerCode: c.header.customerCode, date: c.header.date, orderNos: c.header.orderNos },
+    grades: c.grades,
+    rolls: c.qualityRolls,
+    totals: { rollCount: c.totals.totalRolls, totalMeters: c.totals.totalMeters },
+  };
+  return { documentNo: c.header.shipmentNo, doc: doc as unknown as Record<string, unknown> };
+}
+
+// Sevkiyat-türevli belgelerin ortak profil çözücüsü (müşteri profili).
+const resolveShipmentProfileId = async (db: PrintedDocDb, sourceId: string) => {
+  const s = await db.shipment.findUnique({ where: { id: sourceId }, select: { customer: { select: { documentProfileId: true } } } });
+  return s?.customer?.documentProfileId ?? null;
+};
+
+registerPrintedDocBuilder(PrintedDocType.QUALITY_CERTIFICATE, { fresh: buildQualityCertificateDoc, renderHtml: renderQualityCertificateHtml, resolveProfileId: resolveShipmentProfileId });

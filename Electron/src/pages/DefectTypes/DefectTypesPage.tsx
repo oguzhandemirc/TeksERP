@@ -1,5 +1,4 @@
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { defectTypeColumns } from "./columns";
 import { defectTypeService } from "./service";
 import { DefectTypeFormDialog } from "./DefectTypeFormDialog";
@@ -10,7 +9,8 @@ const buildPayload = (
   v: DefectTypeFormValues,
   initial: DefectType | null,
 ): Partial<DefectType> => ({
-  code: initial?.code ?? generateCode(CODE_PREFIXES.DEFECT_TYPE),
+  // Kod backend'de üretilir (HATA+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+  ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
   description: v.description || null,
   severity: (v.severity || null) as DefectType["severity"],

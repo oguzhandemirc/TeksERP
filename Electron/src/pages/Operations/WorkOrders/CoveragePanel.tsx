@@ -26,7 +26,7 @@ interface SpecRow {
 }
 
 /**
- * Aynı spec (ürün+renk+en) kalemlerini tek satırda topla:
+ * Aynı spec (kumaş+renk+en) kalemlerini tek satırda topla:
  * - istenen / sevk → TOPLANIR (kaleme özel muhasebe),
  * - üretimde / serbest depo / ham → PAYLAŞILAN havuz; aynı spec için her kalem
  *   aynı değeri döndürür, bir kez sayılır (Math.max ile çift sayım önlenir),
@@ -100,7 +100,7 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
             <table className="w-full text-[11px] tabular-nums">
               <thead>
                 <tr className="text-muted-foreground [&>th]:px-1.5 [&>th]:py-1 [&>th]:font-medium">
-                  <th className="text-left">Ürün</th>
+                  <th className="text-left">Kumaş</th>
                   <th className="text-right">İstenen</th>
                   <th className="text-right" title="Sevk edilen">Sevk</th>
                   <th className="text-right" title="Üretimde — canlı iş emirleri">Üretim</th>

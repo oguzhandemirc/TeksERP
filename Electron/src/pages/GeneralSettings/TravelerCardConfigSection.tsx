@@ -76,7 +76,7 @@ const SPEC_FIELDS: { key: keyof TravelerCardSpecFields; label: string }[] = [
 const ORDER_FIELDS: { key: keyof TravelerCardOrderFields; label: string }[] = [
   { key: "orderNumber", label: "Sipariş No" },
   { key: "customer", label: "Müşteri" },
-  { key: "item", label: "Ürün" },
+  { key: "item", label: "Kumaş" },
   { key: "color", label: "Renk" },
   { key: "quantity", label: "Miktar" },
 ];
@@ -396,7 +396,7 @@ export function TravelerCardConfigSection({
           <div className="py-3">
             <FlagToggle
               title="Bağlı siparişler"
-              desc="Sipariş no / müşteri / ürün / miktar tablosu kartta basılsın mı."
+              desc="Sipariş no / müşteri / kumaş / miktar tablosu kartta basılsın mı."
               checked={draft.showOrders}
               disabled={mut.isPending}
               onChange={(v) => setDraft((d) => ({ ...d, showOrders: v }))}

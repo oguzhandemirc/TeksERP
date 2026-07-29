@@ -1,4 +1,4 @@
-/** Ürün Dengesi — backend production-balance.service çıktısı (Decimal → number). */
+/** Kumaş Dengesi — backend production-balance.service çıktısı (Decimal → number). */
 
 export interface BalanceLine {
   lineId: string;
@@ -31,7 +31,7 @@ export interface BalanceWo {
 }
 
 /**
- * En (width) alt-satırı. Ham / malzeme açığı BURADA YOK — (ürün+renk) grubu
+ * En (width) alt-satırı. Ham / malzeme açığı BURADA YOK — (kumaş+renk) grubu
  * düzeyinde (ham kumaşın eni önemsiz). Depo en'e göre birebir → burada kalır.
  */
 export interface BalanceSpecRow {
@@ -55,7 +55,7 @@ export interface BalanceSpecRow {
 }
 
 /**
- * (ürün, renk) grubu. Ham havuzu + malzeme açığı bu düzeyde (en-agnostik, tek
+ * (kumaş, renk) grubu. Ham havuzu + malzeme açığı bu düzeyde (en-agnostik, tek
  * sayım). Talep/Depo/Üretimde/Üretilecek başlıkta Σ; en kırılımı specs[].
  */
 export interface BalanceGroup {
@@ -69,7 +69,7 @@ export interface BalanceGroup {
   depo: number;
   uretimde: number;
   uretilecek: number;
-  /** Sevksiz STOCK havuzu (ürün+renk, en-agnostik). */
+  /** Sevksiz STOCK havuzu (kumaş+renk, en-agnostik). */
   ham: number;
   /** max(0, Σüretilecek − ham) → kumaş tedariki gereken kısım. */
   malzemeAcigi: number;
@@ -91,7 +91,7 @@ export interface WoTarget {
   depo: number;
   uretimde: number;
   uretilecek: number;
-  /** Grup ham havuzu (bu ürün+renk için paylaşılan; en'e bölünmez). */
+  /** Grup ham havuzu (bu kumaş+renk için paylaşılan; en'e bölünmez). */
   ham: number;
   lines: BalanceLine[];
 }

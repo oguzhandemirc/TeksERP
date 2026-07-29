@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, PanelRight, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
@@ -42,6 +44,19 @@ const FILTERS: FilterDef[] = [
       { value: "CANCELLED", label: "İptal" },
     ],
   },
+  {
+    // "İş Emri" rollup filtresi — backend'de hesaplanır (OrderService.extraWhere →
+    // filter[woState]); rozet kolonuyla aynı semantik (work-order-rollup.ts).
+    kind: "multi-select",
+    key: "woState",
+    label: "İş Emri",
+    options: [
+      { value: "NONE", label: "İş emri yok" },
+      { value: "PLANNED", label: "Planlandı" },
+      { value: "IN_PROGRESS", label: "Üretimde" },
+      { value: "COMPLETED", label: "Üretildi" },
+    ],
+  },
   { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
   {
     // Şube SEÇİLEN MÜŞTERİYE bağlı (dependent-lookup): müşteri seçilmeden pasif,
@@ -68,7 +83,7 @@ const FILTERS: FilterDef[] = [
       return b.city ? `${b.name} (${b.city})` : b.name;
     },
   },
-  { kind: "lookup", key: "itemId", label: "Ürün", service: itemService, queryKey: "items" },
+  { kind: "lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
   { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
     kind: "dateRange",
@@ -223,6 +238,38 @@ export function OrdersPage() {
     if (formOpen && !editing) setCreateToken(crypto.randomUUID());
   }, [formOpen, editing]);
 
+  // Deep-link: `?focus=<orderId>` (İE detayından "bağlı sipariş" tıklaması, Dashboard
+  // yaklaşan siparişler vb.) → siparişi çekip detay panelini otomatik aç. Param sonra
+  // temizlenir ki refresh/re-render tekrar tetiklemesin; 404'te sessizce geç.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const focusId = searchParams.get("focus");
+    if (!focusId) return;
+    let cancelled = false;
+    orderService
+      .getById(focusId)
+      .then((res) => {
+        if (!cancelled && res.data) setSelected(res.data);
+      })
+      .catch(() => {
+        /* 404 / silinmiş sipariş — sessiz, panel açılmaz */
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("focus");
+            return next;
+          },
+          { replace: true },
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, setSearchParams]);
+
   const pricingEnabled = usePricingEnabled();
   const columns = useMemo(() => buildOrderColumns(pricingEnabled), [pricingEnabled]);
 
@@ -269,10 +316,9 @@ export function OrdersPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Siparişler"
-        description="Müşteri siparişleri ve termin takibi."
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
@@ -293,7 +339,7 @@ export function OrdersPage() {
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sipariş numarası ara..."
+        placeholder="Sipariş no, firma veya kumaş ara..."
         table={table}
         exportName="Siparişler"
       />
@@ -343,7 +389,7 @@ export function OrdersPage() {
         onEdit={handleEdit}
         onCreateWorkOrder={(lines) => {
           // Açılan iş emri sekmesine yönlendir. Panel kapatılmaz — state'i
-          // Siparişler sekmesinde açık kalır; başka ürün için kullanıcı bu
+          // Siparişler sekmesinde açık kalır; başka kumaş için kullanıcı bu
           // sekmeye geri dönüp ilgili kalemin "İş emri"ne basabilir.
           openTab("/operations/work-orders/new", {
             forceNew: true,
@@ -376,6 +422,6 @@ export function OrdersPage() {
         }}
         isSubmitting={createMut.isPending || updateMut.isPending}
       />
-    </div>
+    </PageShell>
   );
 }

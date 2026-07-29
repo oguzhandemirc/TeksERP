@@ -24,7 +24,7 @@ export interface ColorPickerModalProps {
   onChange: (id: string | null) => void;
   /** Seçili müşteri — renkleri üstte + vurgulu gösterilir. */
   customerId?: string | null;
-  /** Ürün izinli renk listesi. Dolu → kısıtlı mod (sadece bu set). */
+  /** Kumaş izinli renk listesi. Dolu → kısıtlı mod (sadece bu set). */
   allowedColorIds?: string[] | null;
   /** "Renksiz" seçeneği gösterilsin mi. Default: true. */
   allowNone?: boolean;
@@ -54,7 +54,7 @@ export function ColorPickerModal({
   const { hasPermission } = useRoleAccess();
 
   const data = useColorPickerData({ open, customerId, allowedColorIds, debouncedSearch });
-  // Saha #12: hızlı ekleme — kısıtlı modda (ürün izinli renkleri) anlamsız,
+  // Saha #12: hızlı ekleme — kısıtlı modda (kumaş izinli renkleri) anlamsız,
   // yeni renk izinli listede olmayacağı için gizli.
   const canQuickAdd = hasPermission("property:write") && !data.isRestricted;
 
@@ -111,7 +111,7 @@ export function ColorPickerModal({
               />
               <span className="truncate">{selected.name}</span>
               {isOrphan && (
-                <span className="text-warning" title="Ürünün izinli renkleri dışında">
+                <span className="text-warning" title="Kumaşın izinli renkleri dışında">
                   !
                 </span>
               )}
@@ -131,7 +131,7 @@ export function ColorPickerModal({
               {customerId
                 ? "Müşteriye atanmış renkler üstte ★ ile işaretli. Aramada tüm katalog taranır."
                 : data.isRestricted
-                  ? "Ürüne dahil renklerden birini seç."
+                  ? "Kumaşa dahil renklerden birini seç."
                   : "Tüm renk kataloğunda ara."}
             </DialogDescription>
           </DialogHeader>

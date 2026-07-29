@@ -125,7 +125,7 @@ function DispatchDetail({ id }: { id: string }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Top</TableHead>
-                    <TableHead>Ürün / Renk</TableHead>
+                    <TableHead>Kumaş / Renk</TableHead>
                     <TableHead className="text-right">Metre</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -213,7 +213,7 @@ function ReceiptDetail({ id }: { id: string }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Top</TableHead>
-                    <TableHead>Ürün / Renk</TableHead>
+                    <TableHead>Kumaş / Renk</TableHead>
                     <TableHead className="text-right">Kartela</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -242,7 +242,7 @@ function ReceiptDetail({ id }: { id: string }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Kart No</TableHead>
-                    <TableHead>Ürün / Renk</TableHead>
+                    <TableHead>Kumaş / Renk</TableHead>
                     {showMeasure && <TableHead className="text-right">cm</TableHead>}
                     {showMeasure && <TableHead className="text-right">kg</TableHead>}
                   </TableRow>

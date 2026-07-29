@@ -74,7 +74,7 @@ async function main() {
   ];
   const pplb = emitCanvasPplb(mk(boldEls));
   const ppla = emitCanvasPpla(mk(boldEls));
-  const zpl = emitCanvasZpl(mk(boldEls));
+  const zpl = await emitCanvasZpl(mk(boldEls)); // emitCanvasZpl 2026-07 icon işiyle ASYNC
   const bx = d(10);
   check("PPLB kalın = 2 satır (x, x+1)", new RegExp(`A${bx},80,0,3,2,2,N,"BOLD"`).test(pplb) && new RegExp(`A${bx + 1},80,0,3,2,2,N,"BOLD"`).test(pplb));
   check("PPLB kalın DEĞİL = tek satır (x+1 yok)", (pplb.match(/N,"PLAIN"/g) || []).length === 1);

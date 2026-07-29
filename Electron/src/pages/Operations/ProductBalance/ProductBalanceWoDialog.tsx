@@ -26,7 +26,7 @@ function toPicked(l: BalanceLine): PickedOrderLine {
     orderDeadline: l.deadline,
     customerId: l.customerId,
     customerName: l.customerName,
-    // Ürün Dengesi satırı şube taşımaz (spec-toplaması) → null (gösterimde gizlenir).
+    // Kumaş Dengesi satırı şube taşımaz (spec-toplaması) → null (gösterimde gizlenir).
     branchName: null,
     branchCode: null,
     itemId: l.itemId,
@@ -48,7 +48,7 @@ interface Props {
 }
 
 /**
- * Ürün Dengesi → "İş Emri Aç". İki mod:
+ * Kumaş Dengesi → "İş Emri Aç". İki mod:
  *  - Siparişlere bağla (termin): açık siparişlere en acil terminden başlayarak
  *    miktar kadar tahsis (seedPickedLines) → ORDER_PRODUCTION.
  *  - Stoğa üret: sipariş bağı yok, hedef spec + miktar (seedTarget) → STOCK_PRODUCTION.
@@ -96,7 +96,7 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
         picked.push(toPicked(l));
         left -= l.open;
       }
-      // Yeni (odaklı) sekmede aç → Ürün Dengesi açık kalır, listeden başka
+      // Yeni (odaklı) sekmede aç → Kumaş Dengesi açık kalır, listeden başka
       // satırlar için de iş emri açılabilir. forceNew: kaydedilmemiş formu
       // ezmemek için her zaman taze sekme.
       openTab("/operations/work-orders/new", {
@@ -171,7 +171,7 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
           <p className="text-xs text-muted-foreground">
             {mode === "bind"
               ? "Açık siparişlere en acil terminden başlayarak tahsis edilir; formda düzenleyebilirsin."
-              : "Hiçbir siparişe bağlanmaz; ürün havuzunu besler, eşleşme sevkte kurulur."}
+              : "Hiçbir siparişe bağlanmaz; kumaş havuzunu besler, eşleşme sevkte kurulur."}
           </p>
 
           {bindCapped && (

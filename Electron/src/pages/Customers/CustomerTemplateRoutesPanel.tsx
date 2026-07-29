@@ -41,9 +41,11 @@ export function CustomerTemplateRoutesPanel({ customerId }: Props) {
     queryFn: () => customerTemplateRouteService.list(customerId),
   });
 
+  // Atanabilir havuz — serbest etiketler atama seçicisinde GÖRÜNMEZ. Ayrı key
+  // (unwrap edilmiş dizi döner; ApiResponse dönen "assignable" key'iyle çakışmaz).
   const templatesQuery = useQuery({
-    queryKey: ["label-templates", "picker"],
-    queryFn: () => labelTemplateService.list().then((r) => r.data),
+    queryKey: ["label-templates", "assignable", "route-picker"],
+    queryFn: () => labelTemplateService.list({ assignable: true }).then((r) => r.data),
   });
 
   const setMut = useMutation({
@@ -122,7 +124,7 @@ function RouteRow({
             </span>
           }
         >
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <Select
               value={route?.templateId ?? ""}
               onValueChange={(v) => onSet(v)}

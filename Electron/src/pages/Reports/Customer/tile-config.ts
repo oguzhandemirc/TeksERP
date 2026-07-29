@@ -12,7 +12,7 @@ export const customerReportTiles: HubTile[] = [
   {
     key: "alias-stats",
     title: "Alias Eşleştirme",
-    description: "Müşteri renk/ürün alias kullanım istatistiği",
+    description: "Müşteri renk/kumaş alias kullanım istatistiği",
     icon: BookKey,
     to: "/reports/customer/alias-stats",
   },

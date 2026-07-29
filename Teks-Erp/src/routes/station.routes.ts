@@ -20,6 +20,10 @@ const stationService = new BaseService({
     defaultCategory: { select: { id: true, code: true, name: true } },
   },
   uniqueField: "code",
+  duplicateNameField: "name",
+  entityLabel: "istasyon",
+  // Kod backend-authoritative: `IST+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
+  autoCode: { prefix: "IST" },
 });
 
 const stationController = new BaseController(stationService);
@@ -31,6 +35,13 @@ const machineService = new BaseService({
   searchFields: ["code", "name"],
   defaultInclude: { station: true },
   uniqueField: "code",
+  // Makine adı yalnız AYNI istasyon içinde tekil — "Makine 1" farklı
+  // istasyonlarda tekrar edebilir.
+  duplicateNameField: "name",
+  duplicateNameScopeField: "stationId",
+  entityLabel: "makine",
+  // Kod backend-authoritative: `MAK+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
+  autoCode: { prefix: "MAK" },
 });
 
 const machineController = new BaseController(machineService);

@@ -14,6 +14,7 @@ interface BackendPayload {
   address: string | null;
   isActive: boolean;
   isFavorite: boolean;
+  documentProfileId: string | null;
   categoryIds: string[];
 }
 
@@ -28,6 +29,7 @@ const buildPayload = (
   address: v.address?.trim() || null,
   isActive: v.isActive,
   isFavorite: v.isFavorite,
+  documentProfileId: v.documentProfileId ?? null,
   categoryIds: v.categoryIds,
 });
 

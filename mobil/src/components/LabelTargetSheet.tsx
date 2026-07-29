@@ -155,10 +155,12 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
                           {c.customerName}
                           {active ? '  ✓ seçili' : ''}
                         </Text>
+                        {/* Bizdeki ad esas; etikete basılacak müşteri adı etiketli ek. */}
                         <Text style={styles.rowMeta} numberOfLines={1}>
-                          {c.orderNumber} · {c.customerItemName ?? c.itemName}
+                          {c.orderNumber} · {c.itemName}
                           {c.colorName ? ` · ${c.colorName}` : ''}
                           {c.width ? ` · ${c.width}cm` : ''} · açık {Math.round(c.openQty)}m
+                          {c.customerItemName ? ` (Müşteride: ${c.customerItemName})` : ''}
                         </Text>
                       </View>
                     </TouchableRipple>

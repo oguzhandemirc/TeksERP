@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useTabsStore } from "@/store/tabs";
@@ -34,10 +35,9 @@ export function UserFootprintPage() {
   }, [user?.fullName, id]);
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title={user ? `${user.fullName} — Ayak İzi` : "Kullanıcı Ayak İzi"}
-        description="Kullanıcının çalışma oturumları ve her oturum penceresinde yaptığı işlemlerin dökümü."
         onBack={() => navigate("/access/users")}
         actions={
           <RefreshButton
@@ -47,7 +47,7 @@ export function UserFootprintPage() {
         }
       />
 
-      <div className="flex-1 space-y-4 overflow-auto p-6">
+      <PageBody className="space-y-4 p-6">
         {detail.isLoading ? (
           <>
             <Skeleton className="h-28 w-full" />
@@ -63,7 +63,7 @@ export function UserFootprintPage() {
             <SessionHistoryList filter={{ userId: user.id }} variant="user" />
           </>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

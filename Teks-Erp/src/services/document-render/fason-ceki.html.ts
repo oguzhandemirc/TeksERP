@@ -11,6 +11,20 @@
 
 import type { PrintedDocStatus } from "@prisma/client";
 import type { PrintedDocSnapshot } from "../printed-document.service";
+import {
+  resolveDocStyle,
+  docPageCss,
+  docTableCss,
+  scaleDocCss,
+  docLogoHtml,
+  DOC_LOGO_CSS,
+  DOC_STAMPS_CSS,
+  docCopyBadge,
+  docBlocksHtml,
+  docPrintNoteHtml,
+  docStampsBar,
+} from "./doc-style";
+import { buildDocTable } from "./doc-table";
 
 interface FasonCekiRoll {
   sequence: number;
@@ -38,6 +52,9 @@ interface FasonCekiDoc {
   /** Fason talimatı (instruction) — fasoncuya "ne yapılacak" notu. Sevkte donar;
    *  `documents.config sections.dyehouseNote` ile aç/kapa (default açık). */
   instruction?: string | null;
+  /** WO hedef üretim özellikleri (FabricProperty adları) — "bu apreleri uygula".
+   *  Eski donmuş snapshot'larda yok → blok basılmaz. `sections.productionProps` ile aç/kapa. */
+  targetProperties?: string[];
   step: { stepSequence: number; station: { name: string; code: string } };
   rolls: FasonCekiRoll[];
   totals: { rollCount: number; totalQty: number; totalWeight: number };
@@ -48,6 +65,16 @@ interface RenderMeta {
   voidReason?: string | null;
   /** Donmamış canlı önizleme (sevk öncesi) → TASLAK filigranı. */
   draft?: boolean;
+  /** Snapshot logoHash'inin çözülmüş görseli (servis katmanı çözer). */
+  logoDataUrl?: string | null;
+  /** cfg.qr açıksa belge doğrulama karekodu (servis üretir). */
+  qrDataUrl?: string | null;
+  /** Basım damgası (dd.MM.yyyy HH:mm) — cfg.stamps.printedAt açıksa. */
+  printedAtText?: string;
+  /** Basan kullanıcı — cfg.stamps.printedBy açıksa. */
+  printedBy?: string | null;
+  /** Tek seferlik baskı notu (?printNote= — persist edilmez). */
+  printNote?: string | null;
 }
 
 const SLOTS_PER_PAGE = 100; // 5 grup × 20 satır (fiziksel formla aynı)
@@ -81,12 +108,22 @@ function fmtDate(iso: string): string {
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
-/** Tek bir 100 hücreli grid sayfası (rolls[startIdx .. startIdx+99]). */
-function renderGridPage(rolls: FasonCekiRoll[], startIdx: number): string {
+/** Tek bir grid sayfası (rolls[startIdx .. startIdx+99]).
+ *  showWidth: Cm sütunu basılsın mı (açılıp-kapanır). blankWidth: sütun DURUR ama
+ *  değerler boş gelir (elle doldurulur / iş emrinden çekilecek). */
+function renderGridPage(
+  rolls: FasonCekiRoll[],
+  startIdx: number,
+  showWidth: boolean,
+  blankWidth: boolean,
+): string {
   const head =
     "<tr>" +
     Array.from({ length: GROUPS })
-      .map(() => `<th class="c-top">Top</th><th class="c-met">Metre</th><th class="c-cm">Cm</th>`)
+      .map(
+        () =>
+          `<th class="c-top">Top</th><th class="c-met">Metre</th>${showWidth ? `<th class="c-cm">Cm</th>` : ""}`,
+      )
       .join("") +
     "</tr>";
 
@@ -96,10 +133,13 @@ function renderGridPage(rolls: FasonCekiRoll[], startIdx: number): string {
     for (let g = 0; g < GROUPS; g++) {
       const topNo = startIdx + g * ROWS + r + 1; // 1-bazlı sıra no
       const roll = rolls[topNo - 1];
+      const cmCell = showWidth
+        ? `<td class="c-cm">${roll && !blankWidth ? esc(fmtCm(roll.width)) : ""}</td>`
+        : "";
       body +=
         `<td class="c-top">${topNo}</td>` +
         `<td class="c-met">${roll ? esc(fmtMetre(roll.dispatchedQty)) : ""}</td>` +
-        `<td class="c-cm">${roll ? esc(fmtCm(roll.width)) : ""}</td>`;
+        cmCell;
     }
     body += "</tr>";
   }
@@ -112,6 +152,10 @@ export function renderFasonCekiHtml(
 ): string {
   const doc = snapshot.doc as unknown as FasonCekiDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  // Yoğunluk/çizgi stili yalnız alt toplam tablosuna — 100 hücreli grid fiziksel
+  // KUMAŞ İRSALİYESİ formunun birebir kopyası, ona dokunulmaz.
+  const style = resolveDocStyle(cfg.style, { marginMm: 8 });
+  const logo = docLogoHtml(meta.logoDataUrl, cfg);
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
@@ -127,16 +171,24 @@ export function renderFasonCekiHtml(
   // İstenen (hedef) renk öncelikli; yoksa topların mevcut rengi (boyanmış dönüşte).
   const renk = doc.requestedColor ?? doc.rolls[0]?.colorName ?? "";
 
+  // En (Cm) kolonu: grid'de gösterilsin mi (default açık). blankWidths → kolon DURUR
+  // ama değerler boş gelir (elle doldurulur / "iş emrinden çek" kapalıysa).
+  const showGridWidth = cfg.sections?.gridWidth !== false;
+  const blankWidths = cfg.blankWidths === true;
+  // Tüm topların eni aynıysa alt toplam tablosundaki EN hücresi o değeri yazar.
+  const distinctWidths = [...new Set(doc.rolls.map((r) => (r.width != null ? Math.round(r.width) : null)).filter((w): w is number => w != null))];
+  const commonWidth = distinctWidths.length === 1 ? distinctWidths[0] : null;
+
   // Çok sayfa: 100'er hücrelik gridler (çoğu sevk tek sayfa).
   const pageCount = Math.max(1, Math.ceil(doc.rolls.length / SLOTS_PER_PAGE));
   let grids = "";
   for (let p = 0; p < pageCount; p++) {
-    grids += renderGridPage(doc.rolls, p * SLOTS_PER_PAGE);
+    grids += renderGridPage(doc.rolls, p * SLOTS_PER_PAGE, showGridWidth, blankWidths);
   }
 
   // Antet (gönderen) satırları — sadece dolu olanlar.
   const lhLines = showLetterhead
-    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : ""]
+    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : "", ...(lh.extraLines ?? [])]
         .filter((s) => s && s.trim())
         .map((s) => `<div class="lh-line">${esc(s)}</div>`)
         .join("")
@@ -150,18 +202,40 @@ export function renderFasonCekiHtml(
         ? `<div class="wm wm-old">ESKİ KOPYA</div>`
         : "";
 
+  // Araç satırı (Plaka + Şoför) — sections.vehicleInfo !== false ise (default açık).
+  const showVehicleInfo = cfg.sections?.vehicleInfo !== false;
   const vehicleRow =
-    doc.plateNumber || doc.driverName
+    showVehicleInfo && (doc.plateNumber || doc.driverName)
       ? `<div class="meta-row">${doc.plateNumber ? `Plaka: <b>${esc(doc.plateNumber)}</b>` : ""}${
           doc.plateNumber && doc.driverName ? " &nbsp;·&nbsp; " : ""
         }${doc.driverName ? `Şoför: <b>${esc(doc.driverName)}</b>` : ""}</div>`
       : "";
 
+  // Alt bilgi satırı (İstasyon · İş Emri · Hesap) — sections.workOrderInfo !== false ise.
+  const showWorkOrderInfo = cfg.sections?.workOrderInfo !== false;
+  const subLine = showWorkOrderInfo
+    ? `<div class="sub">${esc(doc.step.station.name)} · İş Emri ${esc(doc.workOrder.workOrderNumber)}${
+        doc.subcontractor.code ? ` · Hesap: ${esc(doc.subcontractor.code)}` : ""
+      }</div>`
+    : "";
+
+  // Serbest not bloğu (doc.notes + cfg.footerNote) — sections.notes !== false ise.
+  const showNotes = cfg.sections?.notes !== false;
   const noteBlock =
-    doc.notes || cfg.footerNote
+    showNotes && (doc.notes || cfg.footerNote)
       ? `<div class="note">${esc(doc.notes || "")}${
           doc.notes && cfg.footerNote ? " — " : ""
         }${esc(cfg.footerNote || "")}</div>`
+      : "";
+
+  // Üretim özellikleri bloğu — WO hedef özellikleri (apre vb.) fasoncuya talimattır;
+  // talimat kutusuyla aynı stil. sections.productionProps !== false ise (default açık).
+  const showProps = cfg.sections?.productionProps !== false;
+  const propsBlock =
+    showProps && doc.targetProperties && doc.targetProperties.length
+      ? `<div class="instr"><div class="instr-lbl">İSTENEN ÖZELLİKLER</div><div class="instr-txt">${doc.targetProperties
+          .map(esc)
+          .join(", ")}</div></div>`
       : "";
 
   // Fason talimatı bloğu — sections.dyehouseNote !== false ise (default açık) basılır.
@@ -179,10 +253,29 @@ export function renderFasonCekiHtml(
         .join("")}</div>`
     : "";
 
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8">
-<style>
+  // Alt toplam tablosu — kolonlar cfg.columns.totals ile aç/kapa (boş FİYATI/TUTARI
+  // kolonları gizlenebilir). TOPLAM satırı foot mekanizmasıyla (tr.tot) basılır.
+  // EN hücresi: blankWidths → boş; değilse tüm enler aynıysa o değer, değilse boş.
+  const enCell = blankWidths ? "" : commonWidth != null ? `${commonWidth} cm` : "";
+  const totalsTable = buildDocTable<{ cins: string }>({
+    className: "totals",
+    colCfg: cfg.columns?.totals,
+    footLabel: "TOPLAM",
+    rows: [{ cins: `${esc(cins)}${renk ? ` · ${esc(renk)}` : ""}` }],
+    cols: [
+      { key: "cins", label: "CİNSİ", align: "l", width: "38%", cellClass: "cins", cell: (r) => r.cins },
+      { key: "en", label: "EN", align: "l", cell: () => esc(enCell) },
+      { key: "top", label: "TOP", align: "l", cell: () => esc(doc.totals.rollCount), foot: esc(doc.totals.rollCount) },
+      { key: "metre", label: "METRE", align: "l", cell: () => esc(fmtMetre(doc.totals.totalQty)), foot: esc(fmtMetre(doc.totals.totalQty)) },
+      { key: "fiyat", label: "FİYATI", align: "l", cell: () => "" },
+      { key: "tutar", label: "TUTARI", align: "l", cell: () => "" },
+    ],
+  });
+
+  const css = scaleDocCss(
+    `
   * { box-sizing: border-box; }
-  @page { size: A4; margin: 8mm; }
+  ${docPageCss(style)}
   body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #111; font-size: 11px; }
   .sheet { position: relative; width: 100%; }
   .wm { position: fixed; top: 42%; left: 0; right: 0; text-align: center;
@@ -216,7 +309,7 @@ export function renderFasonCekiHtml(
   .totals th, .totals td { border: 1px solid #000; padding: 5px 8px; font-size: 12px; }
   .totals th { background: #f1f5f9; text-align: left; font-size: 10px; text-transform: uppercase; }
   .totals .cins { font-weight: 700; }
-  .totals .toplam td { font-weight: 800; background: #f8fafc; }
+  .totals .tot td { font-weight: 800; background: #f8fafc; }
   .note { margin-top: 8px; font-size: 11px; white-space: pre-wrap; border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 4px; }
   .instr { margin-top: 8px; border: 2px solid #000; padding: 6px 8px; border-radius: 4px; }
   .instr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #333; }
@@ -225,54 +318,55 @@ export function renderFasonCekiHtml(
   .sign-box { flex: 1; text-align: center; }
   .sign-line { border-top: 1px solid #000; margin-bottom: 3px; }
   .sign-lbl { font-size: 10px; color: #333; }
-</style></head>
+  ${DOC_LOGO_CSS}
+  ${DOC_STAMPS_CSS}
+  ${docTableCss(style, [".totals"])}
+`,
+    style,
+  );
+
+  // Nüsha rozeti + konumlu bloklar + tek seferlik baskı notu + damga/QR çubuğu.
+  const copyBadge = docCopyBadge(cfg, esc);
+  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc);
+  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc);
+  const printNote = docPrintNoteHtml(meta.printNote, esc);
+  const stampsBar = docStampsBar(cfg, meta, esc, { printedAt: "Basım", printedBy: "Basan" });
+
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<style>${css}</style></head>
 <body>
   ${watermark}
   <div class="sheet">
     <header>
       <div class="hl">
+        ${logo.left}
         <div class="company">${esc(company?.name ?? "")}</div>
         ${lhLines}
         <div class="sayin">SAYIN: <b>${esc(doc.subcontractor.name)}</b></div>
-        <div class="sub">${esc(doc.step.station.name)} · İş Emri ${esc(doc.workOrder.workOrderNumber)}${
-          doc.subcontractor.code ? ` · Hesap: ${esc(doc.subcontractor.code)}` : ""
-        }</div>
+        ${subLine}
       </div>
       <div class="hr">
+        ${logo.right}
         <div class="title">${esc(title)}</div>
+        ${copyBadge}
         <div class="ln">İrsaliye No: <b>${esc(doc.dispatchNo)}</b></div>
         <div class="ln">Tarih: <b>${esc(fmtDate(doc.dispatchedAt))}</b></div>
       </div>
     </header>
 
     ${vehicleRow}
+    ${blocksTop}
     ${grids}
 
-    <table class="totals">
-      <thead>
-        <tr><th style="width:42%">CİNSİ</th><th>TOP</th><th>METRE</th><th>FİYATI</th><th>TUTARI</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="cins">${esc(cins)}${renk ? ` · ${esc(renk)}` : ""}</td>
-          <td>${esc(doc.totals.rollCount)}</td>
-          <td>${esc(fmtMetre(doc.totals.totalQty))}</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr class="toplam">
-          <td>TOPLAM</td>
-          <td>${esc(doc.totals.rollCount)}</td>
-          <td>${esc(fmtMetre(doc.totals.totalQty))}</td>
-          <td></td>
-          <td></td>
-        </tr>
-      </tbody>
-    </table>
+    ${totalsTable}
 
+    ${propsBlock}
     ${instrBlock}
     ${noteBlock}
+    ${blocksBottom}
+    ${printNote}
     ${signatures}
+    ${stampsBar}
   </div>
 </body></html>`;
 }

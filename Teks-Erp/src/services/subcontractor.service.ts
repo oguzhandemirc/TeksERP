@@ -49,6 +49,7 @@ import {
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
+import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -1506,6 +1507,7 @@ export class SubcontractorService {
             type: true,
             parameters: true,
             targetColor: { select: { name: true } },
+            targetProperties: { select: { property: { select: { name: true } } } },
             steps: {
               orderBy: { stepSequence: "asc" },
               select: { id: true, stationId: true },
@@ -1580,6 +1582,7 @@ export class SubcontractorService {
         code: step.plannedSubcontractor.code ?? null,
       },
       requestedColor: step.workOrder.targetColor?.name ?? null,
+      targetProperties: step.workOrder.targetProperties.map((p) => p.property.name),
       step: {
         id: step.id,
         stepSequence: step.stepSequence,
@@ -5016,6 +5019,8 @@ function assembleFasonCekiDoc(args: {
   workOrder: { id: string; workOrderNumber: string; parameters: Record<string, unknown> | null; type: string };
   subcontractor: { id: string; name: string; code: string | null };
   requestedColor: string | null;
+  /** WO hedef üretim özellikleri (FabricProperty adları) — boyahaneye "bu özellikleri uygula" der. */
+  targetProperties: string[];
   step: { id: string; stepSequence: number; station: { name: string; code: string } };
   rolls: Array<{
     id: string;
@@ -5043,6 +5048,7 @@ function assembleFasonCekiDoc(args: {
     workOrder: args.workOrder,
     subcontractor: args.subcontractor,
     requestedColor: args.requestedColor,
+    targetProperties: args.targetProperties,
     step: args.step,
     rolls,
     totals: { rollCount: rolls.length, totalQty: args.totalQty, totalWeight },
@@ -5066,6 +5072,8 @@ async function buildFasonDispatchDoc(
           // İstenen renk = boyamanın hedef rengi. Sevkte toplar HAM (renksiz) gider;
           // çeki listesi boyahaneye "şu renge boya" der → WO.targetColor gösterilir.
           targetColor: { select: { name: true } },
+          // Üretim özellikleri de aynı mantıkla çekiye basılır ("bu apreleri uygula").
+          targetProperties: { select: { property: { select: { name: true } } } },
         },
       },
       step: { include: { station: { select: { name: true, code: true } } } },
@@ -5123,6 +5131,7 @@ async function buildFasonDispatchDoc(
         code: dispatch.subcontractor.code ?? null,
       },
       requestedColor: dispatch.workOrder.targetColor?.name ?? null,
+      targetProperties: dispatch.workOrder.targetProperties.map((p) => p.property.name),
       step: {
         id: dispatch.step.id,
         stepSequence: dispatch.step.stepSequence,
@@ -5138,6 +5147,14 @@ registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_DISPATCH, {
   fresh: buildFasonDispatchDoc,
   // Tek-kaynak "KUMAŞ İRSALİYESİ" HTML — mobil + Electron aynısını basar.
   renderHtml: renderFasonCekiHtml,
+  // Belge şablon profili: sevkin fason firmasına atanmış profil (yoksa genel ayar).
+  resolveProfileId: async (db, sourceId) => {
+    const d = await db.subcontractorDispatch.findUnique({
+      where: { id: sourceId },
+      select: { subcontractor: { select: { documentProfileId: true } } },
+    });
+    return d?.subcontractor?.documentProfileId ?? null;
+  },
 });
 
 // =============================================================================
@@ -5154,7 +5171,7 @@ async function buildFasonDirectShipDoc(
   const ds = await db.directShipment.findUnique({
     where: { id: directShipmentId },
     include: {
-      customer: { select: { id: true, name: true, code: true, taxNumber: true } },
+      customer: { select: { id: true, name: true, code: true, taxNumber: true, exportCode: true } },
       branch: { select: { id: true, name: true, code: true } },
       shippedBy: { select: { fullName: true, username: true } },
       dispatch: {
@@ -5245,6 +5262,9 @@ async function buildFasonDirectShipDoc(
         taxNumber: ds.customer.taxNumber ?? null,
         branchName: ds.branch?.name ?? null,
         branchCode: ds.branch?.code ?? null,
+        // Şirket ihracat kodu — tek "İhracat Kodu" satırına şube ihracat kodu
+        // (branchCode) boşsa yedek olarak basılır (branchCode ?? exportCode).
+        exportCode: ds.customer.exportCode ?? null,
       },
       workOrder: {
         id: ds.dispatch.workOrder.id,
@@ -5277,4 +5297,93 @@ registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, {
   fresh: buildFasonDirectShipDoc,
   // Tek-kaynak "DOĞRUDAN SEVK İRSALİYESİ" HTML — getHtml her cihazda aynı çıktıyı verir.
   renderHtml: renderFasonDirectShipHtml,
+  // Belge şablon profili: malın gittiği MÜŞTERİNİN profili (irsaliyenin muhatabı).
+  resolveProfileId: async (db, sourceId) => {
+    const ds = await db.directShipment.findUnique({
+      where: { id: sourceId },
+      select: { customer: { select: { documentProfileId: true } } },
+    });
+    return ds?.customer?.documentProfileId ?? null;
+  },
+});
+
+// =============================================================================
+// RESMİ BELGE — Fason Kabul Makbuzu (PrintedDocument)
+// =============================================================================
+// Fasondan mal DÖNÜŞÜNDE kesilen kabul belgesi. sourceId = SubcontractorReceipt.id.
+// Kabul edilen (yeni doğan) toplar + uygulanan renk/apre + fason firmanın verdiği
+// irsaliye no (manifestNo). Kabul iptali → belge VOIDED.
+async function buildFasonReceiptDoc(
+  db: PrintedDocDb,
+  receiptId: string,
+): Promise<BuiltDocContent | null> {
+  const receipt = await db.subcontractorReceipt.findUnique({
+    where: { id: receiptId },
+    include: {
+      subcontractor: { select: { name: true, code: true } },
+      workOrder: { select: { workOrderNumber: true } },
+      step: { include: { station: { select: { name: true } } } },
+      appliedColor: { select: { name: true } },
+      appliedProperties: { include: { property: { select: { name: true } } } },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          newRoll: {
+            select: {
+              barcode: true,
+              width: true,
+              item: { select: { name: true } },
+              color: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!receipt) return null;
+
+  const rolls = receipt.items.map((it, idx) => ({
+    sequence: idx + 1,
+    barcode: it.newRoll.barcode,
+    itemName: it.newRoll.item?.name ?? "",
+    colorName: it.newRoll.color?.name ?? null,
+    width: it.newRoll.width != null ? Number(it.newRoll.width) : null,
+  }));
+
+  const doc: FasonReceiptDoc = {
+    receiptNo: receipt.receiptNo,
+    manifestNo: receipt.manifestNo ?? null,
+    receivedAt: receipt.receivedAt.toISOString(),
+    notes: receipt.notes ?? null,
+    subcontractor: {
+      name: receipt.subcontractor.name,
+      code: receipt.subcontractor.code ?? null,
+    },
+    workOrder: { workOrderNumber: receipt.workOrder.workOrderNumber },
+    stationName: receipt.step.station.name,
+    appliedColor: receipt.appliedColor?.name ?? null,
+    appliedProperties: receipt.appliedProperties.map((p) => p.property.name),
+    rolls,
+    totals: { rollCount: rolls.length },
+  };
+
+  return {
+    documentNo: receipt.receiptNo,
+    voidInfo: receipt.cancelledAt
+      ? { reason: receipt.cancelReason ?? null, at: receipt.cancelledAt }
+      : null,
+    doc: doc as unknown as Record<string, unknown>,
+  };
+}
+
+registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_RECEIPT, {
+  fresh: buildFasonReceiptDoc,
+  renderHtml: renderFasonReceiptHtml,
+  resolveProfileId: async (db, sourceId) => {
+    const r = await db.subcontractorReceipt.findUnique({
+      where: { id: sourceId },
+      select: { subcontractor: { select: { documentProfileId: true } } },
+    });
+    return r?.subcontractor?.documentProfileId ?? null;
+  },
 });

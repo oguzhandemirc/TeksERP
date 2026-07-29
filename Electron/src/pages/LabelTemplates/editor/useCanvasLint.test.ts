@@ -12,14 +12,17 @@ function lint(elements: LabelElement[]) {
 }
 
 describe("useCanvasLint", () => {
-  it("taranabilir eleman yoksa error", () => {
+  it("okutulabilir eleman yoksa WARN (error değil — statik etiket kaydedilebilir)", () => {
     const issues = lint([{ id: "t1", type: "text", text: "x", x: 5, y: 5 }]);
-    expect(issues.some((i) => i.level === "error")).toBe(true);
+    expect(issues.some((i) => i.level === "error")).toBe(false);
+    expect(
+      issues.some((i) => i.level === "warn" && i.message.includes("Okutulabilir eleman yok")),
+    ).toBe(true);
   });
 
-  it("QR varsa taranabilirlik hatası yok", () => {
+  it("QR varsa taranabilirlik uyarısı yok", () => {
     const issues = lint([{ id: "q", type: "qr", x: 3, y: 3, scale: 5 }]);
-    expect(issues.some((i) => i.level === "error")).toBe(false);
+    expect(issues.some((i) => i.message.includes("Okutulabilir eleman yok"))).toBe(false);
   });
 
   it("tuval taşması warn üretir", () => {

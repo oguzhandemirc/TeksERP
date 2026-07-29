@@ -240,8 +240,17 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
         visible={editOpen}
         onDismiss={() => setEditOpen(false)}
         dismissable={!updateMut.isPending}
+        position="bottom"
       >
-        <View style={[styles.sheet, { width: phone ? winW * 0.94 : winW * 0.5 }]}>
+        {/* position="bottom": alttan sheet klavye açılınca tam yukarı kalkar →
+            2. input (Renk Adı) + Kaydet kısa/yatay ekranda da klavye üstünde
+            kalır. alignSelf:'center' bottom stretch'inde sheet'i yatayda ortalar. */}
+        <View
+          style={[
+            styles.sheet,
+            { width: phone ? winW * 0.94 : winW * 0.5, alignSelf: 'center', maxHeight: winH * 0.9 },
+          ]}
+        >
           <View style={styles.header}>
             <Icon source="pencil" size={22} color="#7c3aed" />
             <Text variant="titleMedium" style={styles.title}>
@@ -255,38 +264,40 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
               style={{ margin: 0 }}
             />
           </View>
-          <Text style={styles.body}>
-            UYARI: Bu OrderLine'a bağlı TÜM rulleri etkiler (sipariş seviyesi).
-            Boş gönderirseniz override silinir, master/default ad geri döner.
-          </Text>
-          <Text style={styles.label}>Müşterideki Ürün Adı</Text>
-          <TextInput
-            mode="outlined"
-            value={editItemName}
-            onChangeText={setEditItemName}
-            placeholder={
-              payload?.itemNameSource === 'MASTER'
-                ? `Master: ${payload?.itemName}`
-                : `Default: ${payload?.itemNameDefault}`
-            }
-            dense
-            style={styles.input}
-          />
-          <Text style={styles.label}>Müşterideki Renk Adı</Text>
-          <TextInput
-            mode="outlined"
-            value={editColorName}
-            onChangeText={setEditColorName}
-            placeholder={
-              payload?.colorNameSource === 'MASTER'
-                ? `Master: ${payload?.colorName}`
-                : payload?.colorNameDefault
-                  ? `Default: ${payload.colorNameDefault}`
-                  : 'Renk yok'
-            }
-            dense
-            style={styles.input}
-          />
+          <ScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1 }}>
+            <Text style={styles.body}>
+              UYARI: Bu OrderLine'a bağlı TÜM rulleri etkiler (sipariş seviyesi).
+              Boş gönderirseniz override silinir, master/default ad geri döner.
+            </Text>
+            <Text style={styles.label}>Müşterideki Ürün Adı</Text>
+            <TextInput
+              mode="outlined"
+              value={editItemName}
+              onChangeText={setEditItemName}
+              placeholder={
+                payload?.itemNameSource === 'MASTER'
+                  ? `Master: ${payload?.itemName}`
+                  : `Default: ${payload?.itemNameDefault}`
+              }
+              dense
+              style={styles.input}
+            />
+            <Text style={styles.label}>Müşterideki Renk Adı</Text>
+            <TextInput
+              mode="outlined"
+              value={editColorName}
+              onChangeText={setEditColorName}
+              placeholder={
+                payload?.colorNameSource === 'MASTER'
+                  ? `Master: ${payload?.colorName}`
+                  : payload?.colorNameDefault
+                    ? `Default: ${payload.colorNameDefault}`
+                    : 'Renk yok'
+              }
+              dense
+              style={styles.input}
+            />
+          </ScrollView>
           <View style={styles.actions}>
             <Button
               mode="outlined"

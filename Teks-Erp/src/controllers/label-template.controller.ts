@@ -33,11 +33,16 @@ const lineStepMmSchema = z.number().min(0).max(20).nullable().optional();
 const qrScaleSchema = z.number().int().min(2).max(15).nullable().optional();
 const lengthBannerSchema = z.boolean().nullable().optional();
 
-const createSchema = z.object({
+/** Test edilebilirlik için dışa açık (controller Zod katmanı = HTTP kontrat sınırı). */
+export const createSchema = z.object({
   name:       z.string().min(1).max(200),
-  kind:       z.nativeEnum(LabelKind),
+  // Türlü şablonda zorunlu; serbest (statik) şablonda verilmez (kind null doğar).
+  // Zorunluluk servis katmanında (standalone değilse kind şart) uygulanır.
+  // nullish: istemci serbest etiket için açıkça kind:null gönderebilir (undefined da geçer).
+  kind:       z.nativeEnum(LabelKind).nullish(),
   isDefault:  z.boolean().optional(),
   isActive:   z.boolean().optional(),
+  standalone: z.boolean().optional(),
   fields:     z.array(fieldSchema).optional(),
   rawCode:    rawCodeSchema.optional(),
   lineStepMm: lineStepMmSchema,
@@ -49,6 +54,7 @@ const updateSchema = z.object({
   name:       z.string().min(1).max(200).optional(),
   isDefault:  z.boolean().optional(),
   isActive:   z.boolean().optional(),
+  standalone: z.boolean().optional(),
   fields:     z.array(fieldSchema).optional(),
   rawCode:    rawCodeSchema.optional(),
   lineStepMm: lineStepMmSchema,
@@ -73,6 +79,8 @@ const canvasPreviewSchema = z.object({
   language: z.enum(["PPLA", "PPLB", "ZPL", "RASTER_HTML"] as [string, ...string[]]).optional(),
   // "Bu Bilgisayar"da seçili Cihaz Kaydı yazıcısı — dil/medya bu cihazdan çözülür.
   peripheralId: z.string().uuid().optional(),
+  // Baskı adedi (test/bağımsız baskı çoğaltma) — verilmedi = 1.
+  copies: z.number().int().min(1).max(100).optional(),
 });
 
 // Boyut varyantı gövdeleri — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
@@ -96,6 +104,29 @@ const contextDefaultSchema = z.object({
   templateId: z.string().uuid().nullable(),
 });
 
+// İçe aktarma zarfı — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
+const importSchema = z.object({
+  template: z.object({
+    name: z.string().min(1).max(200),
+    kind: z.nativeEnum(LabelKind).nullish(),
+    standalone: z.boolean().optional(),
+    fields: z.array(fieldSchema).optional(),
+    rawCode: rawCodeSchema.optional(),
+    lineStepMm: lineStepMmSchema,
+    qrScale: qrScaleSchema,
+    lengthBanner: lengthBannerSchema,
+  }),
+  variants: z.array(
+    z.object({
+      name: z.string().max(60).optional(),
+      widthMm: z.number().min(10).max(500),
+      heightMm: z.number().min(10).max(500),
+      isPrimary: z.boolean().optional(),
+      elements: z.unknown(),
+    }),
+  ),
+});
+
 export class LabelTemplateController {
   private service = new LabelTemplateService();
 
@@ -106,7 +137,11 @@ export class LabelTemplateController {
         ? (kindRaw as LabelKind)
         : undefined;
       const includeInactive = req.query.includeInactive === "true";
-      const result = await this.service.findAll({ kind, includeInactive });
+      // ?standalone=true → baskı seçicisi (yalnız serbest); ?assignable=true → atama
+      // seçicileri (serbest OLMAYAN). Yalnız "true" string'i açar (aksi = undefined).
+      const standalone = req.query.standalone === "true" ? true : undefined;
+      const assignable = req.query.assignable === "true" ? true : undefined;
+      const result = await this.service.findAll({ kind, includeInactive, standalone, assignable });
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -182,6 +217,7 @@ export class LabelTemplateController {
           elements: body.elements,
           language: body.language as PrinterLanguage | undefined,
           peripheralId: body.peripheralId,
+          copies: body.copies,
         });
         res.status(200).json(result);
         return;
@@ -215,6 +251,29 @@ export class LabelTemplateController {
     try {
       const result = await this.service.setDefault(req.params.id as string, req.user?.userId);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- Dışa/İçe aktar + çoğalt (JSON zarf) ----
+
+  exportTemplate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.exportTemplate(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  importTemplate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = importSchema.parse(req.body);
+      const result = await this.service.importTemplate(body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (e) { next(e); }
+  };
+
+  duplicate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.duplicateTemplate(req.params.id as string, req.user?.userId);
+      res.status(201).json(result);
     } catch (e) { next(e); }
   };
 
@@ -279,6 +338,13 @@ export class LabelTemplateController {
   unifiedCatalog = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json(this.service.getUnifiedCatalogResponse());
+    } catch (e) { next(e); }
+  };
+
+  /** Bakım sembolü kataloğu — editör ikon paleti (kategoriler + anahtar/başlık/SVG). */
+  iconCatalog = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(this.service.getIconCatalog());
     } catch (e) { next(e); }
   };
 

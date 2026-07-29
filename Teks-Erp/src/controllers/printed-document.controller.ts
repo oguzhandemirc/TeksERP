@@ -19,6 +19,23 @@ const reissueSchema = z.object({
   reason: z.string().trim().min(3, "Revizyon gerekçesi en az 3 karakter").max(500),
 });
 
+/** Görünüm ayarı — değerler render'da resolveDocStyle ile ayrıca clamp'lenir. */
+const docStyleSchema = z.object({
+  pageSize: z.enum(["A4", "A5"]).optional(),
+  margins: z
+    .object({
+      top: z.number().optional(),
+      right: z.number().optional(),
+      bottom: z.number().optional(),
+      left: z.number().optional(),
+    })
+    .optional(),
+  fontScale: z.number().optional(),
+  fontWeight: z.enum(["light", "normal", "bold"]).optional(),
+  tableDensity: z.enum(["compact", "normal", "relaxed"]).optional(),
+  tableStyle: z.enum(["grid", "zebra", "plain"]).optional(),
+});
+
 /** Belge Şablonu önizlemesi — admin'in düzenlediği taslak içerik ayarı (ResolvedDocConfig). */
 const docConfigSchema = z
   .object({
@@ -28,6 +45,38 @@ const docConfigSchema = z
     signatureLabels: z.array(z.string()).optional(),
     showSignatures: z.boolean().optional(),
     footerNote: z.string().optional(),
+    style: docStyleSchema.optional(),
+    showLogo: z.boolean().optional(),
+    logoPosition: z.enum(["left", "right"]).optional(),
+    columns: z
+      .record(
+        z.string(),
+        z.object({
+          hidden: z.array(z.string()).optional(),
+          order: z.array(z.string()).optional(),
+        }),
+      )
+      .optional(),
+    qr: z.boolean().optional(),
+    stamps: z
+      .object({
+        printedAt: z.boolean().optional(),
+        printedBy: z.boolean().optional(),
+        copyLabel: z.string().max(20).optional(),
+      })
+      .optional(),
+    blocks: z
+      .array(
+        z.object({
+          position: z.enum(["afterHeader", "beforeSignatures"]),
+          text: z.string().max(500),
+        }),
+      )
+      .max(4)
+      .optional(),
+    language: z.enum(["tr", "en", "auto"]).optional(),
+    blankWidths: z.boolean().optional(),
+    footerNotePlacement: z.enum(["top", "bottom"]).optional(),
   })
   .nullable();
 
@@ -54,7 +103,9 @@ export class PrintedDocumentController {
   async getCurrent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { docType, sourceId } = parseParams(req);
-      const result = await printedDocumentService.getCurrent(docType, sourceId);
+      const result = await printedDocumentService.getCurrent(docType, sourceId, {
+        computeTemplateStale: true,
+      });
       res.json(result);
     } catch (err) {
       next(err);
@@ -75,8 +126,18 @@ export class PrintedDocumentController {
           : undefined;
       // ?draft=1 → donmuş belge yoksa canlı TASLAK önizlemesi (sevk öncesi baskı).
       const allowDraft = req.query.draft === "1" || req.query.draft === "true";
+      // ?currentTemplate=1 → içerik donuk kalır, görünüm (şablon+künye) güncel
+      // ayardan çözülür (yeniden baskıda "güncel şablonla" seçeneği).
+      const useCurrentConfig =
+        req.query.currentTemplate === "1" || req.query.currentTemplate === "true";
+      // ?printNote= → tek seferlik baskı notu (persist edilmez, yalnız bu render).
+      const printNote =
+        typeof req.query.printNote === "string" ? req.query.printNote.slice(0, 300) : null;
       const result = await printedDocumentService.getHtml(docType, sourceId, version, {
         allowDraft,
+        useCurrentConfig,
+        printedBy: req.user?.username ?? null,
+        printNote,
       });
       const data = result.data as { html: string } | null;
       if (!data) {

@@ -19,6 +19,8 @@ export const kartelaDispatchColumns: ColumnDef<KartelaDispatchListItem>[] = [
   {
     accessorKey: "dispatchedAt",
     header: "Tarih",
+    // Export'ta ham ISO yerine UI ile aynı biçimlenmiş tarih.
+    meta: { label: "Tarih", exportValue: (r) => safeFormat(r.dispatchedAt, "dd.MM.yyyy HH:mm") },
     cell: ({ row }) => (
       <span className="text-xs">{safeFormat(row.original.dispatchedAt, "dd.MM.yyyy HH:mm")}</span>
     ),
@@ -26,7 +28,7 @@ export const kartelaDispatchColumns: ColumnDef<KartelaDispatchListItem>[] = [
   {
     id: "items",
     header: () => <div className="text-right">Top</div>,
-    meta: { label: "Top" },
+    meta: { label: "Top", exportValue: (r) => r._count.items },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.items}</div>,
   },
   {
@@ -38,12 +40,13 @@ export const kartelaDispatchColumns: ColumnDef<KartelaDispatchListItem>[] = [
   {
     id: "receipts",
     header: () => <div className="text-right">Kabul</div>,
-    meta: { label: "Kabul" },
+    meta: { label: "Kabul", exportValue: (r) => r._count.receipts },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.receipts}</div>,
   },
   {
     id: "durum",
     header: "Durum",
+    meta: { label: "Durum", exportValue: (r) => (r.cancelledAt ? "İptal" : "Aktif") },
     cell: ({ row }) =>
       row.original.cancelledAt ? (
         <Badge variant="destructive">İptal</Badge>
@@ -67,6 +70,8 @@ export const kartelaReceiptColumns: ColumnDef<KartelaReceiptListItem>[] = [
   {
     accessorKey: "receivedAt",
     header: "Tarih",
+    // Export'ta ham ISO yerine UI ile aynı biçimlenmiş tarih.
+    meta: { label: "Tarih", exportValue: (r) => safeFormat(r.receivedAt, "dd.MM.yyyy HH:mm") },
     cell: ({ row }) => (
       <span className="text-xs">{safeFormat(row.original.receivedAt, "dd.MM.yyyy HH:mm")}</span>
     ),
@@ -81,18 +86,19 @@ export const kartelaReceiptColumns: ColumnDef<KartelaReceiptListItem>[] = [
   {
     id: "items",
     header: () => <div className="text-right">Top</div>,
-    meta: { label: "Top" },
+    meta: { label: "Top", exportValue: (r) => r._count.items },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.items}</div>,
   },
   {
     id: "swatches",
     header: () => <div className="text-right">Kartela</div>,
-    meta: { label: "Kartela" },
+    meta: { label: "Kartela", exportValue: (r) => r._count.swatches },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.swatches}</div>,
   },
   {
     id: "durum",
     header: "Durum",
+    meta: { label: "Durum", exportValue: (r) => (r.cancelledAt ? "İptal" : "Aktif") },
     cell: ({ row }) =>
       row.original.cancelledAt ? (
         <Badge variant="destructive">İptal</Badge>

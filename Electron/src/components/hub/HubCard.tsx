@@ -53,8 +53,9 @@ interface HubCardProps {
   dragHandle?: ReactNode;
 }
 
-/** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket. */
-export function HubCard({ to, title, description, icon: Icon, tone, index = 0, dragHandle }: HubCardProps) {
+/** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket.
+ *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
+export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
   const target = useTabTarget(to);
   return (
@@ -94,7 +95,6 @@ export function HubCard({ to, title, description, icon: Icon, tone, index = 0, d
           </div>
           <div className="relative mt-4">
             <div className="font-medium">{title}</div>
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           </div>
         </Card>
       </button>

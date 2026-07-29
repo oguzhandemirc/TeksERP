@@ -17,7 +17,10 @@ import { BaseService } from "./base.service";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { normalizeColorName } from "./helpers/name-normalize.helper";
+import {
+  normalizeColorName,
+  foldColorNameForCompare,
+} from "./helpers/name-normalize.helper";
 
 const TABLE_ALIAS = "CUSTOMER_COLOR_ALIAS";
 
@@ -34,6 +37,33 @@ function assertValidHex(rest: Record<string, unknown>): void {
 }
 
 export class ColorService extends BaseService {
+  /**
+   * Aynı İSİMLİ ikinci renge izin verme (kod zaten @unique). Kontrol normalize
+   * edilmiş ad üzerinden — "mavi" / "Mavi" / "MAVİ" hepsi "MAVİ"ye normalleştiği
+   * için büyük/küçük harf varyantları da yakalanır. Pasif kayıt da sayılır:
+   * aynı adla ikinci satır açmak yerine mevcut pasif renk aktifleştirilmeli
+   * (yoksa restore anında görünmez mükerrer doğar).
+   */
+  private async assertNameAvailable(name: string, excludeId?: string): Promise<void> {
+    if (!name) return;
+    // Ayraç-duyarsız karşılaştırma: canlıdaki eski tireli adlar ("KREM-GÜMÜŞ",
+    // "055-BEYAZ") yeni boşluklu yazımla ("KREM GÜMÜŞ", "beyaz 055") aynı
+    // anahtara düşer — normalize artık boşluğu koruduğundan exact-eq yetmez.
+    const target = foldColorNameForCompare(name);
+    const candidates = await prisma.color.findMany({
+      where: excludeId ? { id: { not: excludeId } } : {},
+      select: { name: true, code: true, isActive: true },
+    });
+    const existing = candidates.find(
+      (c) => foldColorNameForCompare(c.name) === target,
+    );
+    if (!existing) return;
+    throw AppError.conflict(
+      existing.isActive
+        ? `'${name}' adında bir renk zaten var (kod: ${existing.code}). Aynı renk ikinci kez eklenemez.`
+        : `'${name}' adında PASİF bir renk zaten var (kod: ${existing.code}). Yenisini eklemek yerine mevcut rengi aktifleştirin.`,
+    );
+  }
   /**
    * Picker scope süzgeci (her ikisi de `property:read` izniyle, müşteri-alias
    * iznine gerek YOK):
@@ -72,10 +102,22 @@ export class ColorService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
-    // Saha #13: renk adı standardı — BÜYÜK + tire + sayı blokları başta
-    // ("beyaz 055" → "055-BEYAZ").
+    // Saha #13: renk adı standardı — BÜYÜK + sayı blokları başta, boşluk korunur
+    // ("beyaz 055" → "055 BEYAZ").
     if (typeof rest.name === "string") {
-      rest.name = normalizeColorName(rest.name);
+      const name = normalizeColorName(rest.name);
+      rest.name = name;
+      // Aynı isimli renk mükerrerliği yazımdan ÖNCE reddedilir (409). uniqueField
+      // reactivate yolu (aynı code'lu pasif kayıt) diriltilecek kaydın KENDİ
+      // adına takılmasın — pasif kod-eşi hariç tutulur (item.create emsali).
+      const passiveCodeMatch =
+        typeof rest.code === "string" && rest.code.length > 0
+          ? await prisma.color.findFirst({
+              where: { code: rest.code, isActive: false },
+              select: { id: true },
+            })
+          : null;
+      await this.assertNameAvailable(name, passiveCodeMatch?.id);
     }
     assertValidHex(rest);
 
@@ -109,7 +151,21 @@ export class ColorService extends BaseService {
 
     // Saha #13: renk adı standardı (create ile aynı normalize).
     if (typeof rest.name === "string") {
-      rest.name = normalizeColorName(rest.name);
+      const name = normalizeColorName(rest.name);
+      rest.name = name;
+      // Kontrol yalnız ad GERÇEKTEN değişirken (fold bazında) — canlıdaki
+      // fold-eş tarihsel çiftler salt hex/atama düzenlemesinde 409'a takılmasın
+      // (form her kayıtta name gönderir). Kayıt yoksa kontrol atlanır (404 yolu).
+      const current = await prisma.color.findUnique({
+        where: { id },
+        select: { name: true },
+      });
+      if (
+        current &&
+        foldColorNameForCompare(name) !== foldColorNameForCompare(current.name)
+      ) {
+        await this.assertNameAvailable(name, id);
+      }
     }
     assertValidHex(rest);
 

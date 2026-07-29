@@ -33,7 +33,7 @@ const kursunRank = (name: string): number => (/kurşun/i.test(name) ? 0 : 1);
 export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAction }: Props) {
   const [open, setOpen] = useState(false);
 
-  // Perf: OrderLineColorPicker ile ortak ürün cache'i (satır başına tek GET).
+  // Perf: OrderLineColorPicker ile ortak kumaş cache'i (satır başına tek GET).
   const itemQuery = useItemDetail(itemId);
   const allowedIds = useMemo(
     () => (itemQuery.data?.data?.allowedProperties ?? []).map((p) => p.propertyId),
@@ -116,7 +116,7 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAct
           <DialogHeader>
             <DialogTitle>Müşteri İstenen Özellikler</DialogTitle>
             <DialogDescription>
-              Bu sipariş satırı için istenen özellikleri seç. Üründe izinli özelliklerle sınırlı.
+              Bu sipariş satırı için istenen özellikleri seç. Kumaşta izinli özelliklerle sınırlı.
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1">
@@ -128,7 +128,7 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAct
               columns={3}
               emptyHint={
                 candidateProps.length === 0 && allowedIds.length > 0
-                  ? "Bu ürün için tanımlı özellik yok."
+                  ? "Bu kumaş için tanımlı özellik yok."
                   : undefined
               }
             />

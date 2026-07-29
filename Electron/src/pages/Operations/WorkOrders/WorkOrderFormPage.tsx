@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { fireConfetti } from "@/lib/confetti";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTabsStore } from "@/store/tabs";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
@@ -73,6 +74,9 @@ export function WorkOrderFormPage() {
       toast.success("İş emri oluşturuldu.");
       fireConfetti();
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
+      // Siparişten üretim emri açıldı → sipariş listesindeki "İş Emri" rollup
+      // rozeti (workOrderLinks türevi) bayat kalmasın.
+      void qc.invalidateQueries({ queryKey: ["orders"] });
       const newId = res.data?.id;
       // Yeni iş emrinin tam sayfa detayına geç (bu sekmede yerinde).
       navigateActive(newId ? `/operations/work-orders/${newId}` : LIST_PATH);
@@ -86,6 +90,8 @@ export function WorkOrderFormPage() {
       toast.success("İş emri güncellendi.");
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", id] });
+      // Tebdil/güncelleme bağları değiştirebilir → sipariş rollup rozetini tazele.
+      void qc.invalidateQueries({ queryKey: ["orders"] });
       navigateActive(`/operations/work-orders/${id}`);
     },
   });
@@ -100,7 +106,7 @@ export function WorkOrderFormPage() {
   const notFound = isEdit && !detail.isLoading && !wo;
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title={isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}
         description={
@@ -143,6 +149,6 @@ export function WorkOrderFormPage() {
           />
         )}
       </div>
-    </div>
+    </PageShell>
   );
 }

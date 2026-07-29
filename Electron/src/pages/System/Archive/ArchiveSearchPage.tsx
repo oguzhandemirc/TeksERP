@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
 import { systemLogService } from "@/services/systemLogService";
 import type { SystemLogListItem } from "@/types/systemLog";
@@ -39,51 +40,33 @@ export function ArchiveSearchPage() {
   // Perf: ActivityFeed'in React.memo'lu satırları için stabil referans.
   const handleSelect = useCallback((item: SystemLogListItem) => setDetailId(item.id), []);
 
+  const { rootRef, sentinelRef } = useInfiniteScroll({
+    hasMore: query.hasNextPage,
+    isLoading: query.isFetchingNextPage,
+    onLoadMore: () => void query.fetchNextPage(),
+  });
+
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Arşiv Tarama"
-        description="Aktivite Günlüğü'nden arşive taşınmış eski kayıtlar. Burada çıkan veri aktif tabloda artık yok."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
       <ActivityFilters value={filters} onChange={setFilters} />
 
-      <div className="flex-1 overflow-auto">
-        <ActivityFeed
-          items={items}
-          loading={query.isLoading}
-          onSelect={handleSelect}
-        />
-
+      <PageBody ref={rootRef}>
+        <ActivityFeed items={items} loading={query.isLoading} onSelect={handleSelect} />
         {items.length > 0 && (
-          <div className="flex justify-center p-6">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!query.hasNextPage || query.isFetchingNextPage}
-              onClick={() => query.fetchNextPage()}
-              className="gap-2"
-            >
-              {query.isFetchingNextPage ? (
-                "Yükleniyor..."
-              ) : query.hasNextPage ? (
-                <>
-                  <ChevronDown className="h-4 w-4" />
-                  Daha Fazla Yükle
-                </>
-              ) : (
-                "Liste sonu"
-              )}
-            </Button>
-          </div>
+          <AutoLoadMore
+            ref={sentinelRef}
+            hasMore={query.hasNextPage}
+            isFetchingMore={query.isFetchingNextPage}
+            count={items.length}
+          />
         )}
-      </div>
+      </PageBody>
 
-      <ActivityDetailSheet
-        logId={detailId}
-        onClose={() => setDetailId(null)}
-        source="archive"
-      />
-    </div>
+      <ActivityDetailSheet logId={detailId} onClose={() => setDetailId(null)} source="archive" />
+    </PageShell>
   );
 }

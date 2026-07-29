@@ -16,7 +16,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Copy, Download, GripVertical, Inbox, Info, X } from "lucide-react";
+import { Copy, FileText, FileSpreadsheet, GripVertical, Inbox, Info, X } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ContextMenu,
@@ -30,8 +30,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { exportTableToCsv } from "@/lib/table-export";
+import { exportTableToPdf, exportTableToXlsx, exportListName } from "@/lib/table-export";
 import { cn } from "@/lib/utils";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { DataTablePagination } from "./DataTablePagination";
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 
@@ -53,11 +54,16 @@ interface Props<T> {
    * kalıcı: 0 seçimde de görünür ve kullanıcıyı seçime yönlendirir.
    */
   selectionHint?: ReactNode;
+  /** Seçili satır indirmelerinin dosya adı tabanı (ör. "Sevkiyatlar"). Tarih otomatik. */
+  exportName?: string;
   /**
    * Satıra sağ-tık menüsü. Dönen düğümler `ContextMenuContent` içine yerleşir
    * (örn. `ContextMenuItem` / `RowOpenItems`). `null` dönerse o satır menüsüz kalır.
    */
   rowContextMenu?: (row: T) => ReactNode;
+  /** Sayfalama çubuğunun sağına (kalıcı görünür) eklenen aksiyonlar — ör. "Tümünü
+   *  İndir" + "Envanter Özeti". pagination verilmezse gösterilmez. */
+  paginationActions?: ReactNode;
 }
 
 export function DataTable<T>({
@@ -68,7 +74,9 @@ export function DataTable<T>({
   onRowClick,
   bulkActions,
   selectionHint = "Toplu işlem için satırları seçin.",
+  exportName = "Liste",
   rowContextMenu,
+  paginationActions,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
   const selectable = Boolean(table.options.enableRowSelection);
@@ -108,12 +116,31 @@ export function DataTable<T>({
   const visibleColumnIds = table.getVisibleLeafColumns().map((c) => c.id).join(",");
   const columnDefs = table.options.columns;
 
+  // Sonsuz kaydırma: liste dibine gelince pagination.loadMore otomatik tetiklenir
+  // ("Daha Fazla Yükle" butonu kaldırıldı). rootRef = kaydırma kapsayıcısı,
+  // sentinelRef = tablonun sonundaki görünmez eleman.
+  const { rootRef, sentinelRef } = useInfiniteScroll({
+    hasMore: pagination?.hasMore ?? false,
+    isLoading: pagination?.isFetchingMore ?? false,
+    onLoadMore: pagination?.loadMore ?? (() => {}),
+    enabled: Boolean(pagination),
+  });
+
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex-1 overflow-auto">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div ref={rootRef} className="flex-1 overflow-auto">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-card [&_tr]:border-b-2 [&_tr]:border-primary/30">
+          {/* containerClassName="overflow-visible": Table'ın kendi overflow-auto
+              sarmalayıcısı sticky başlığı yutuyordu (thead dış scroll kabına değil
+              iç sarmalayıcıya yapışıp dikeyde kayıyordu). overflow-visible ile
+              tek scroll kabı = rootRef → başlık gerçekten sabit kalır. */}
+          <Table containerClassName="overflow-visible">
+            {/* Mor ayraç çizgisi: <tr> border-b'si `border-collapse: collapse`'te
+                sticky başlıkla YAPIŞMAZ (çökmüş kenarlık gövdeyle boyanıp kayar).
+                Çözüm: çizgiyi th hücrelerinin ARKA PLANINA linear-gradient olarak
+                koy (alt 2px mor, üstü şeffaf) — arka plan çökmüş hücrelerde daima
+                render olur ve th sticky başlıkla birlikte kaydıkça sabit kalır. */}
+            <TableHeader className="sticky top-0 z-10 bg-card [&_th]:bg-[linear-gradient(to_top,hsl(var(--primary)_/_0.3)_2px,transparent_2px)]">
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id}>
                   {selectable && (
@@ -184,6 +211,8 @@ export function DataTable<T>({
             </TableBody>
           </Table>
         </DndContext>
+        {/* Sonsuz kaydırma sentinel'i — görünür olunca sonraki sayfa otomatik yüklenir. */}
+        {pagination ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
       </div>
 
       {/* Seçim çubuğu kalıcı: satır varsa (ve seçim açıksa) hep görünür. 0
@@ -213,25 +242,48 @@ export function DataTable<T>({
                 variant="outline"
                 size="sm"
                 className="ml-auto h-8 gap-1.5"
-                onClick={() => exportTableToCsv(table, "secili-kayitlar", selected)}
+                onClick={() =>
+                  void exportTableToPdf(
+                    table,
+                    selected.map((r) => r.original),
+                    exportListName(exportName, { selected: true }),
+                  )
+                }
               >
-                <Download className="h-3.5 w-3.5" />
-                CSV indir
+                <FileText className="h-3.5 w-3.5 text-destructive" />
+                Seçili PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() =>
+                  void exportTableToXlsx(
+                    table,
+                    selected.map((r) => r.original),
+                    exportListName(exportName, { selected: true }),
+                  )
+                }
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
+                Seçili Excel
               </Button>
             </>
           ) : (
             <>
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <Info className="h-3.5 w-3.5 shrink-0" />
-                {selectionHint}
-              </span>
+              {selectionHint ? (
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <Info className="h-3.5 w-3.5 shrink-0" />
+                  {selectionHint}
+                </span>
+              ) : null}
               {bulkActions ? <div className="ml-auto">{bulkActions([])}</div> : null}
             </>
           )}
         </div>
       )}
 
-      {pagination ? <DataTablePagination pagination={pagination} /> : null}
+      {pagination ? <DataTablePagination pagination={pagination} actions={paginationActions} /> : null}
     </div>
   );
 }

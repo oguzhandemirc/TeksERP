@@ -128,8 +128,9 @@ export function CustomerBranchesPanel({ customerId }: Props) {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{b.name}</span>
                     {b.code && (
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {b.code}
+                      <span className="text-xs text-muted-foreground">
+                        İhracat Kodu:{" "}
+                        <span className="font-mono">{b.code}</span>
                       </span>
                     )}
                     {!b.isActive && <Badge variant="muted">Pasif</Badge>}

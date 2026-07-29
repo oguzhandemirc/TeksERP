@@ -40,7 +40,7 @@ function num(v: number | string | null | undefined): number | null {
 /**
  * İş emri formunun canlı özet kartı — sağ panelde dururken form doldukça anlık
  * güncellenir. Sol "Bağlı Sipariş Kalemleri" paneliyle simetrik (kendi header +
- * scroll body). Ürün/renk/özellik adları ID'den çözülür (picker cache'lerini
+ * scroll body). Kumaş/renk/özellik adları ID'den çözülür (picker cache'lerini
  * paylaşır); rota adımları + bağlı kalemler zaten ad taşır.
  */
 export function WorkOrderLivePreview({
@@ -64,7 +64,7 @@ export function WorkOrderLivePreview({
 
   const firstLine = pickedLines[0] ?? null;
 
-  // Ürün adı/kodu — picker getById cache'i (["item", id]) ile paylaşımlı.
+  // Kumaş adı/kodu — picker getById cache'i (["item", id]) ile paylaşımlı.
   const itemQ = useQuery({
     queryKey: ["item", targetItemId],
     queryFn: () => itemService.getById(targetItemId as string),
@@ -159,7 +159,7 @@ export function WorkOrderLivePreview({
 
         {/* Hedef */}
         <Section title="Hedef" icon={Package} tone="indigo">
-          <Row label="Ürün">
+          <Row label="Kumaş">
             {itemName ? (
               <span className="font-medium">
                 {itemCode && (

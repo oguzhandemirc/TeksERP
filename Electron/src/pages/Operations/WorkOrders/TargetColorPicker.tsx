@@ -7,7 +7,7 @@ import type { WorkOrderFormValues } from "./schema";
 
 /**
  * Hedef Renk picker — paylaşılan `ColorPickerModal`'a ince sarmalayıcı.
- * Ürünün `allowedColors`'ı kısıtlı kümeyi belirler (boş = sınırsız katalog).
+ * Kumaşın `allowedColors`'ı kısıtlı kümeyi belirler (boş = sınırsız katalog).
  * `customerId` verilirse müşterinin renkleri üstte/vurgulu gösterilir.
  */
 export function TargetColorPicker({
@@ -38,7 +38,7 @@ export function TargetColorPicker({
   if (!targetItemId) {
     return (
       <div className="rounded-md border border-dashed px-3 py-2 text-xs italic text-muted-foreground">
-        Önce hedef ürün seç
+        Önce hedef kumaş seç
       </div>
     );
   }

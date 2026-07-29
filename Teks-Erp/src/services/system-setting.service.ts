@@ -4,11 +4,13 @@
 // Runtime'da güncellenebilir konfigürasyon (key-value).
 // =============================================================================
 
+import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import { sanitizeDocStyleConfig, type DocStyleConfig } from "./document-render/doc-style";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -70,6 +72,11 @@ export const SETTING_KEYS = {
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
   SHIPMENT_CONFIRMATION_ENABLED: "shipping.confirmationEnabled",
+  /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
+   *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
+   *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
+   *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ; mevcut branchId verisi korunur. */
+  CUSTOMER_BRANCHES_ENABLED: "customers.branchesEnabled",
   /** Refakat kartı marka/içerik ayarı (JSON): firma adı + hangi bölümler basılsın.
    *  Kart oluşturulurken snapshot'a DONDURULUR → reprint düzeni de sabit kalır. */
   TRAVELER_CARD_CONFIG: "traveler.cardConfig",
@@ -83,6 +90,10 @@ export const SETTING_KEYS = {
    *  hangi bölümler basılsın + başlık/imza/footer override. CANLI okunur (snapshot DEĞİL)
    *  — irsaliye her açıldığında güncel ayarı yansıtır. Map: { [belgeKey]: DocumentConfig }. */
   DOCUMENTS_CONFIG: "documents.config",
+  /** Belge logosu — hash-anahtarlı kütüphane: { current: hash|null, items: {hash: dataUrl} }.
+   *  Snapshot yalnız hash taşır (satır başına base64 kopyası YOK); eski belge kendi
+   *  logosuyla basılır (append-only items), güncel logo `current` ile değişir. */
+  DOCUMENTS_LOGO: "documents.logo",
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi AŞABİLSİN mi. Default TRUE (açık).
    *  Açıkken operatör tambur asıl ölçüm noktası olduğu için kayıtlıdan fazla ölçtüğünde (örn.
    *  100m açık kumaşı 150m top yapma) kabul edilir; aşımda parent top tamamen tüketilir. Admin
@@ -437,6 +448,8 @@ export interface CompanyLetterhead {
   phone: string;
   /** Vergi dairesi / no (boş → basılmaz). */
   taxInfo: string;
+  /** Serbest ek künye satırları (IBAN, Mersis, e-posta, web...) — max 5, boşlar basılmaz. */
+  extraLines?: string[];
 }
 
 export const DEFAULT_COMPANY_LETTERHEAD: CompanyLetterhead = {
@@ -464,6 +477,31 @@ export interface DocumentConfig {
   showSignatures?: boolean;
   /** Belge altına basılan serbest not. */
   footerNote?: string;
+  /** Görünüm ayarı (sayfa/font/tablo) — renderer document-render/doc-style ile çözer. */
+  style?: DocStyleConfig;
+  /** Firma logosu basılsın mı (default true — logo yüklüyse basılır). */
+  showLogo?: boolean;
+  /** Logo konumu: başlık sol bloğu (default) veya sağ blok. */
+  logoPosition?: "left" | "right";
+  /** Tablo kolonu aç/kapa + sıralama: { [tabloKey]: { hidden, order } } —
+   *  renderer document-render/doc-table.ts ile uygular. */
+  columns?: Record<string, { hidden?: string[]; order?: string[] }>;
+  /** Belge doğrulama karekodu (belge no + versiyon) basılsın mı (default false). */
+  qr?: boolean;
+  /** Sayfa altı damgaları: basım zamanı / basan kullanıcı / nüsha etiketi (ASIL, KOPYA...). */
+  stamps?: { printedAt?: boolean; printedBy?: boolean; copyLabel?: string };
+  /** Konumlu serbest metin blokları (yasal ibare vb.) — max 4, her biri ≤500 karakter. */
+  blocks?: { position: "afterHeader" | "beforeSignatures"; text: string }[];
+  /** Belge dili: tr (default) | en | auto (ihracat sevkiyatında EN) — yalnız
+   *  müşteriye giden belgelerde (sevk irsaliyesi, fasondan sevk) uygulanır. */
+  language?: "tr" | "en" | "auto";
+  /** En (genişlik) kolonları basılsın ama değerleri BOŞ gelsin (elle doldurulacak /
+   *  "iş emrinden çek" kapalı). Default false → enler top verisinden çekilir. */
+  blankWidths?: boolean;
+  /** Alt notun (footerNote) konumu: "bottom" (default, tablolardan sonra) veya
+   *  "top" (başlık/araç satırından sonra, tablolardan ÖNCE). Yalnız destekleyen
+   *  renderer'da uygulanır (sevk irsaliyesi). */
+  footerNotePlacement?: "top" | "bottom";
 }
 
 /** Belge ayarları haritası: { [belgeKey]: DocumentConfig }. Ham saklanır, client çözer. */
@@ -495,6 +533,10 @@ export interface FeatureFlags {
   devicePairingRequired: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
+  /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
+   *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
+   *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
+  customerBranchesEnabled: boolean;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */
@@ -643,6 +685,52 @@ export class SystemSettingService {
     return { success: true, data: updated, message: "Ayar güncellendi" };
   }
 
+  /** Güncel belge logosu (yalnız aktif dataUrl — kütüphanenin tamamı değil). */
+  async getDocumentsLogo(): Promise<ApiResponse<{ dataUrl: string | null }>> {
+    const logo = await readDocumentsLogo();
+    return {
+      success: true,
+      data: { dataUrl: logo.current ? (logo.items[logo.current] ?? null) : null },
+    };
+  }
+
+  /**
+   * Belge logosunu günceller. dataUrl=null → logo kaldırılır (current=null);
+   * kütüphane (items) APPEND-ONLY kalır — eski donmuş belgeler hash'leriyle kendi
+   * logolarını basmaya devam eder. Aynı görsel tekrar yüklenirse hash çakışır,
+   * kopya çıkmaz. Logolar nadiren değişir → items pratikte birkaç kayıt.
+   */
+  async setDocumentsLogo(
+    dataUrl: string | null,
+    userId?: string,
+  ): Promise<ApiResponse<{ dataUrl: string | null }>> {
+    const logo = await readDocumentsLogo();
+    let next: DocumentsLogo;
+    if (dataUrl == null || dataUrl === "") {
+      next = { current: null, items: logo.items };
+    } else {
+      if (dataUrl.length > LOGO_MAX_CHARS) {
+        throw AppError.badRequest("Logo çok büyük — en fazla ~100KB görsel yükleyin");
+      }
+      if (!LOGO_DATAURL_RE.test(dataUrl)) {
+        throw AppError.badRequest("Logo PNG, JPEG veya SVG data-url formatında olmalı");
+      }
+      const hash = createHash("sha256").update(dataUrl).digest("hex").slice(0, 16);
+      next = { current: hash, items: { ...logo.items, [hash]: dataUrl } };
+    }
+    await this.set(
+      SETTING_KEYS.DOCUMENTS_LOGO,
+      next as unknown as Prisma.InputJsonValue,
+      "Belge logosu (hash-anahtarlı kütüphane; snapshot yalnız hash taşır)",
+      userId,
+    );
+    return {
+      success: true,
+      data: { dataUrl: next.current ? next.items[next.current] : null },
+      message: next.current ? "Logo güncellendi" : "Logo kaldırıldı",
+    };
+  }
+
   /**
    * Tolerance değerini DB'den okur. Kayıt yoksa default 5m döner.
    * NOT: Bu fonksiyon çok sık çağrılmaz (sevk onayı sırasında); cache'siz kabul.
@@ -699,6 +787,7 @@ export class SystemSettingService {
       fasonNoteMobileEntry: await readFasonNoteMobileEntry(cacheClient),
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
+      customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
       documentsConfig: await readDocumentsConfig(cacheClient),
@@ -862,6 +951,18 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "customerBranchesEnabled")) {
+      if (typeof input.customerBranchesEnabled !== "boolean") {
+        throw AppError.badRequest("customerBranchesEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.CUSTOMER_BRANCHES_ENABLED,
+        input.customerBranchesEnabled,
+        "Müşteri şubeleri (sevk noktaları) özelliğini UI'da göster",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "companyName")) {
       if (typeof input.companyName !== "string") {
         throw AppError.badRequest("companyName metin olmalı");
@@ -899,6 +1000,13 @@ export class SystemSettingService {
           typeof c.addressLine === "string" ? c.addressLine.trim().slice(0, 200) : "",
         phone: typeof c.phone === "string" ? c.phone.trim().slice(0, 60) : "",
         taxInfo: typeof c.taxInfo === "string" ? c.taxInfo.trim().slice(0, 120) : "",
+        extraLines: Array.isArray((c as unknown as Record<string, unknown>).extraLines)
+          ? ((c as unknown as Record<string, unknown>).extraLines as unknown[])
+              .filter((x): x is string => typeof x === "string")
+              .map((x) => x.trim().slice(0, 120))
+              .filter(Boolean)
+              .slice(0, 5)
+          : [],
       };
       await this.set(
         SETTING_KEYS.COMPANY_LETTERHEAD,
@@ -1487,6 +1595,26 @@ export async function readShipmentConfirmationEnabled(
 }
 
 /**
+ * Müşteri şubeleri (sevk noktaları) UI'da açık mı? Default TRUE (açık — mevcut
+ * davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır: Electron
+ * müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
+ * gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ (branchId taşıyan istekler
+ * işlenmeye devam eder, mevcut veri korunur).
+ */
+export async function readCustomerBranchesEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.CUSTOMER_BRANCHES_ENABLED },
+    select: { value: true },
+  });
+  // Default AÇIK: kayıt yoksa true döner (flag eklenmeden önceki davranış).
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
+/**
  * Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi? Default TRUE (açık).
  * Açıkken operatör (tambur asıl ölçüm noktası olduğu için) kayıtlıdan fazla ölçtüğünde
  * kabul edilir — aşımda parent top tamamen tüketilir (currentQty=0), negatif kalan oluşmaz.
@@ -1548,7 +1676,44 @@ export async function readCompanyLetterhead(
     addressLine: typeof o.addressLine === "string" ? o.addressLine : "",
     phone: typeof o.phone === "string" ? o.phone : "",
     taxInfo: typeof o.taxInfo === "string" ? o.taxInfo : "",
+    extraLines: Array.isArray(o.extraLines)
+      ? o.extraLines.filter((x): x is string => typeof x === "string").slice(0, 5)
+      : [],
   };
+}
+
+/** Belge logosu kütüphanesi — bkz. SETTING_KEYS.DOCUMENTS_LOGO. */
+export interface DocumentsLogo {
+  current: string | null;
+  items: Record<string, string>;
+}
+
+const EMPTY_DOCUMENTS_LOGO: DocumentsLogo = { current: null, items: {} };
+
+/** data URL formatı + boyut guard'ı (100KB binary ≈ 137KB base64; üst sınır 160K karakter). */
+const LOGO_DATAURL_RE = /^data:image\/(png|jpeg|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
+const LOGO_MAX_CHARS = 160_000;
+
+/** Belge logosu kütüphanesini okur (yoksa boş). */
+export async function readDocumentsLogo(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<DocumentsLogo> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DOCUMENTS_LOGO },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return EMPTY_DOCUMENTS_LOGO;
+  const o = v as Record<string, unknown>;
+  const items: Record<string, string> = {};
+  if (o.items && typeof o.items === "object" && !Array.isArray(o.items)) {
+    for (const [k, val] of Object.entries(o.items as Record<string, unknown>)) {
+      if (typeof val === "string") items[k] = val;
+    }
+  }
+  const current = typeof o.current === "string" && items[o.current] ? o.current : null;
+  return { current, items };
 }
 
 /**
@@ -1572,7 +1737,7 @@ export async function readDocumentsConfig(
  * Belge ayar map'ini güvenli tipe indirger: bilinmeyen alanları atar, tip uymayan
  * değerleri yok sayar. Saklamadan önce ve okuduktan sonra uygulanır.
  */
-function sanitizeDocumentsConfig(raw: Record<string, unknown>): DocumentsConfig {
+export function sanitizeDocumentsConfig(raw: Record<string, unknown>): DocumentsConfig {
   const out: DocumentsConfig = {};
   for (const [docKey, val] of Object.entries(raw)) {
     if (!val || typeof val !== "object" || Array.isArray(val)) continue;
@@ -1598,6 +1763,66 @@ function sanitizeDocumentsConfig(raw: Record<string, unknown>): DocumentsConfig 
         .filter((x): x is string => typeof x === "string")
         .slice(0, 6)
         .map((x) => x.trim().slice(0, 40));
+    }
+    const style = sanitizeDocStyleConfig(o.style);
+    if (style) cfg.style = style;
+    if (typeof o.showLogo === "boolean") cfg.showLogo = o.showLogo;
+    if (o.logoPosition === "left" || o.logoPosition === "right") {
+      cfg.logoPosition = o.logoPosition;
+    }
+    if (o.columns && typeof o.columns === "object" && !Array.isArray(o.columns)) {
+      const columns: NonNullable<DocumentConfig["columns"]> = {};
+      for (const [tk, tv] of Object.entries(o.columns as Record<string, unknown>)) {
+        if (!tv || typeof tv !== "object" || Array.isArray(tv)) continue;
+        const tvo = tv as Record<string, unknown>;
+        const entry: { hidden?: string[]; order?: string[] } = {};
+        if (Array.isArray(tvo.hidden)) {
+          entry.hidden = tvo.hidden
+            .filter((x): x is string => typeof x === "string")
+            .slice(0, 20);
+        }
+        if (Array.isArray(tvo.order)) {
+          entry.order = tvo.order
+            .filter((x): x is string => typeof x === "string")
+            .slice(0, 20);
+        }
+        if (entry.hidden?.length || entry.order?.length) columns[tk.slice(0, 40)] = entry;
+      }
+      if (Object.keys(columns).length) cfg.columns = columns;
+    }
+    if (typeof o.qr === "boolean") cfg.qr = o.qr;
+    if (o.stamps && typeof o.stamps === "object" && !Array.isArray(o.stamps)) {
+      const so = o.stamps as Record<string, unknown>;
+      const stamps: NonNullable<DocumentConfig["stamps"]> = {};
+      if (typeof so.printedAt === "boolean") stamps.printedAt = so.printedAt;
+      if (typeof so.printedBy === "boolean") stamps.printedBy = so.printedBy;
+      if (typeof so.copyLabel === "string") stamps.copyLabel = so.copyLabel.trim().slice(0, 20);
+      if (Object.keys(stamps).length) cfg.stamps = stamps;
+    }
+    if (Array.isArray(o.blocks)) {
+      const blocks = (o.blocks as unknown[])
+        .filter(
+          (b): b is { position: string; text: string } =>
+            !!b &&
+            typeof b === "object" &&
+            typeof (b as Record<string, unknown>).text === "string" &&
+            ((b as Record<string, unknown>).position === "afterHeader" ||
+              (b as Record<string, unknown>).position === "beforeSignatures"),
+        )
+        .slice(0, 4)
+        .map((b) => ({
+          position: b.position as "afterHeader" | "beforeSignatures",
+          text: b.text.trim().slice(0, 500),
+        }))
+        .filter((b) => b.text);
+      if (blocks.length) cfg.blocks = blocks;
+    }
+    if (o.language === "tr" || o.language === "en" || o.language === "auto") {
+      cfg.language = o.language;
+    }
+    if (typeof o.blankWidths === "boolean") cfg.blankWidths = o.blankWidths;
+    if (o.footerNotePlacement === "top" || o.footerNotePlacement === "bottom") {
+      cfg.footerNotePlacement = o.footerNotePlacement;
     }
     out[docKey] = cfg;
   }

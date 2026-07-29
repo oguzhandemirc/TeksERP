@@ -51,6 +51,8 @@ export function WorkOrderCompleteDialog({
     onSuccess: () => {
       toast.success("İş emri kapatıldı (tamamlandı).");
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
+      // WO COMPLETED → sipariş "İş Emri" rollup rozeti "Üretildi"ye dönsün.
+      void qc.invalidateQueries({ queryKey: ["orders"] });
       if (workOrderId) {
         void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
         void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });

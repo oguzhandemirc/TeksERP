@@ -78,7 +78,7 @@ export function SwatchDetailSheet({ swatch, open, onOpenChange }: Props) {
                   Kumaş Özellikleri
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  <div className="text-xs text-muted-foreground">Ürün</div>
+                  <div className="text-xs text-muted-foreground">Kumaş</div>
                   <div>
                     <span className="font-mono text-xs">{swatch.item?.code}</span>{" "}
                     · {swatch.item?.name}

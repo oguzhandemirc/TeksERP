@@ -10,6 +10,10 @@ export const CANVAS_SCHEMA_VERSION = 1;
 
 export type CanvasFontSize = "sm" | "md" | "lg" | "xl";
 export type CanvasRotation = 0 | 90 | 180 | 270;
+/** Metin yatay hizalama (çapa=x): left=x'ten sağa, center=x'te ortalı, right=x'te biter. */
+export type TextAlign = "left" | "center" | "right";
+/** Metin harf dönüşümü — Türkçe-duyarlı (i/İ). Yok → dokunma. */
+export type TextCase = "upper" | "lower";
 
 export type LabelElementType =
   | "field"
@@ -18,12 +22,18 @@ export type LabelElementType =
   | "code128"
   | "line"
   | "box"
-  | "lengthBanner";
+  | "lengthBanner"
+  | "icon";
 
 interface ElementBase {
   id: string;
   x: number;
   y: number;
+  /** Grup kimliği (opsiyonel) — aynı groupId'li elemanlar editörde birlikte seçilir/taşınır/
+   *  ölçeklenir. Layout JSON'da taşınır; baskı/emit'i ETKİLEMEZ (yalnız editör kolaylığı). */
+  groupId?: string;
+  /** Kilitli mi — tuvalde sürükleme/marquee ile oynatılmaz (katman listesinden seçilir). */
+  locked?: boolean;
 }
 
 export interface FieldElement extends ElementBase {
@@ -41,6 +51,10 @@ export interface FieldElement extends ElementBase {
   /** hMm YOKKEN eski anlam (2x çarpan); hMm doluysa yalnız HTML kalınlığı. */
   bold?: boolean;
   rot?: CanvasRotation;
+  /** Yatay hizalama (çapa=x). Yok → left. */
+  align?: TextAlign;
+  /** Harf dönüşümü (BÜYÜK/küçük). Yok → dokunma. */
+  textCase?: TextCase;
 }
 
 export interface TextElement extends ElementBase {
@@ -51,6 +65,10 @@ export interface TextElement extends ElementBase {
   wr?: number;
   bold?: boolean;
   rot?: CanvasRotation;
+  /** Yatay hizalama (çapa=x). Yok → left. Çok satırda satırlar birbirine hizalanır. */
+  align?: TextAlign;
+  /** Harf dönüşümü (BÜYÜK/küçük). Yok → dokunma. */
+  textCase?: TextCase;
 }
 
 export interface QrElement extends ElementBase {
@@ -92,6 +110,23 @@ export interface LengthBannerElement extends ElementBase {
   hMm?: number;
   /** Değerin dönüşü (0/90/180/270). Yok → 90 (dikey bant). */
   rot?: CanvasRotation;
+  /** "m" (metre) birim eki. Yok → true ("230,5m"); false → yalnız sayı. */
+  unit?: boolean;
+  /** Değer glif yüksekliği (mm, 1-30). Yok → banda otomatik sığdır. Dolu → metin
+   *  elemanlarıyla aynı ortak-payda (en yakın basılabilir kombinasyon). */
+  glyphHMm?: number;
+  /** Değer genişlik oranı (0.25-4) — dar/geniş; "ince/kalın" görünüm (bantta
+   *  kalınlık bununla verilir — reverse modda çift-vuruş yok). */
+  wr?: number;
+}
+
+export interface IconElement extends ElementBase {
+  type: "icon";
+  /** Backend ikon kataloğu anahtarı (config/label-icons.ts — örn. "wash-30"). */
+  icon: string;
+  /** Kare kenar (mm, 3-50). Yok → 8. Genişlik = yükseklik (sembol karedir). */
+  hMm?: number;
+  rot?: CanvasRotation;
 }
 
 export type LabelElement =
@@ -101,7 +136,8 @@ export type LabelElement =
   | Code128Element
   | LineElement
   | BoxElement
-  | LengthBannerElement;
+  | LengthBannerElement
+  | IconElement;
 
 /** Kağıt kenarından güvenli-alan boşluğu (mm) — editör kılavuzu + eleman clamp'i.
  *  Backend'e layout JSON'unda taşınır (validateCanvasLayout korur). Boş → boşluk yok. */
@@ -131,6 +167,10 @@ export const CAPABILITY: Record<LabelElementType, Record<"PPLA" | "PPLB" | "ZPL"
   // lengthBanner: PPLB/ZPL/HTML siyah zemin+beyaz değer; PPLA çerçeveli (DPL
   // reverse güvenilmez) — hepsi basılır ("ok"), yalnız görünüm dolgusu farklı.
   lengthBanner: { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  // icon: vektör bakım sembolü — PPLB (GW inline grafik) + ZPL (^GFA) + HTML basar;
+  // PPLA (DPL) native'de atlanır (grafik kaydı ayrı iş). Raster-modlu cihaz her zaman
+  // basar (raster yolu CAPABILITY'ye bakmaz). Backend CAPABILITY ile birebir.
+  icon:         { PPLA: "skip", PPLB: "ok",   ZPL: "ok", RASTER_HTML: "ok" },
 };
 
 /** Elemanın basılMAdığı diller (rozet metni için). */
@@ -148,4 +188,5 @@ export const elementTypeLabels: Record<LabelElementType, string> = {
   line: "Çizgi / Dolu Kutu",
   box: "Çerçeve",
   lengthBanner: "Metraj Bandı",
+  icon: "Bakım Sembolü",
 };

@@ -16,7 +16,7 @@ export const recipeColumns: ColumnDef<ProductRecipe>[] = [
   },
   {
     id: "item",
-    header: "Ürün",
+    header: "Kumaş",
     cell: ({ row }) =>
       row.original.item?.name ?? <span className="text-muted-foreground">—</span>,
   },

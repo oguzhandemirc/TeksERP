@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { useDataTable } from "@/hooks/useDataTable";
 import { customerService } from "@/pages/Customers/service";
+import { downloadDocsPdf, downloadDocsExcel } from "@/pages/Operations/Shipments/shipmentDocExport";
 import { accountingDispatchService } from "./service";
 import { buildDispatchColumns } from "./columns";
 import { DispatchReceiptDialog } from "./DispatchReceiptDialog";
@@ -52,14 +56,25 @@ export function AccountingDispatchPage() {
     enableSelection: true,
   });
 
-  const { periodMut, busy, progress, exportSelectedSingle, exportSelectedSeparate } =
-    useAccountingExport();
+  const { periodMut, busy, exportSelectedSingle } = useAccountingExport();
+
+  // Seçili sevkiyatların BELGESİ (irsaliye/fiş) — PDF veya Excel, her biri sevk no
+  // adıyla; çoklu → klasöre ayrı ayrı. Hepsi DISPATCHED (liste zaten forceFilter'lı).
+  const handleDocs = async (fmt: "pdf" | "excel", rows: DispatchListItem[]) => {
+    const targets = rows.map((r) => ({
+      id: r.id,
+      shipmentNo: r.shipmentNo,
+      isDirect: r.kind === "DIRECT",
+    }));
+    const res = fmt === "pdf" ? await downloadDocsPdf(targets) : await downloadDocsExcel(targets);
+    if (res.ok) toast.success(`${res.count ?? targets.length} belge indirildi.`);
+    else if (res.error) toast.error(res.error);
+  };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
-        title="Sevk Edilenler (Muhasebe)"
-        description="Sevki tamamlanmış (DISPATCHED) sevkiyatlar — salt-okunur. 'Fiş' ile ürün/çuval/çeki listesini yazdır."
+        title="Sevk Muhasebesi"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -68,9 +83,9 @@ export function AccountingDispatchPage() {
               className="gap-1.5"
               disabled={periodMut.isPending}
               onClick={() => periodMut.mutate()}
-              title="Filtreli dönemin tamamını çok-sayfalı Excel olarak indir"
+              title="Filtreli dönemin tamamını çok-sayfalı Excel olarak indir (muhasebe formatı)"
             >
-              <FileSpreadsheet className="h-4 w-4" /> Excel'e Aktar
+              <FileSpreadsheet className="h-4 w-4" /> Dönem Excel
             </Button>
             <RefreshButton queryKey={QUERY_KEY} />
           </div>
@@ -79,9 +94,9 @@ export function AccountingDispatchPage() {
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sevkiyat no, plaka, sürücü ara..."
+        placeholder="Sevkiyat no, firma, plaka, sürücü ara..."
         table={table}
-        exportName="Sevk Edilenler"
+        exportName="Sevk Muhasebesi"
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
       <DataTable<DispatchListItem>
@@ -89,31 +104,27 @@ export function AccountingDispatchPage() {
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText="Sevk edilmiş sevkiyat bulunamadı."
-        selectionHint="Tek/ayrı Excel için sevkleri seçin."
+        exportName="Sevk Muhasebesi"
+        selectionHint={null}
         bulkActions={(rows) =>
           rows.length === 0 ? null : (
             <>
+              <ExportMenu
+                label={`Belgeler (${rows.length})`}
+                align="start"
+                onPdf={() => handleDocs("pdf", rows)}
+                onExcel={() => handleDocs("excel", rows)}
+              />
               <Button
                 size="sm"
                 variant="outline"
                 className="gap-1.5"
                 disabled={busy !== null}
                 onClick={() => exportSelectedSingle(rows.map((r) => r.id))}
-                title="Seçili sevkleri tek 5-sayfalık Excel'de aktar"
+                title="Seçili sevkleri TEK birleşik 5-sayfalık Excel'de aktar"
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                {busy === "single" ? "Hazırlanıyor…" : "Tek Excel"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                disabled={busy !== null}
-                onClick={() => exportSelectedSeparate(rows)}
-                title="Her seçili sevk için ayrı Excel (sırayla iner)"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                {busy === "separate" ? `Ayrı Dosyalar (${progress}/${rows.length})` : "Ayrı Dosyalar"}
+                {busy === "single" ? "Hazırlanıyor…" : "Birleşik Excel"}
               </Button>
             </>
           )
@@ -121,6 +132,6 @@ export function AccountingDispatchPage() {
       />
 
       <DispatchReceiptDialog receiptFor={receiptFor} onClose={() => setReceiptFor(null)} />
-    </div>
+    </PageShell>
   );
 }

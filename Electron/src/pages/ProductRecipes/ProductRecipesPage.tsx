@@ -3,7 +3,7 @@ import { recipeColumns } from "./columns";
 import { productRecipeService } from "./service";
 import { ProductRecipeFormDialog } from "./ProductRecipeFormDialog";
 import type { ProductRecipe } from "./types";
-import { generateRecipeCode, type RecipeFormValues } from "./schema";
+import { type RecipeFormValues } from "./schema";
 
 interface RecipePropertyCreate {
   propertyId: string;
@@ -21,7 +21,7 @@ interface RecipePayload {
   properties: RecipePropertyCreate[];
 }
 
-function buildPayload(v: RecipeFormValues, isEdit: boolean): RecipePayload {
+function buildPayload(v: RecipeFormValues): RecipePayload {
   const base: RecipePayload = {
     name: v.name,
     itemId: v.targetItemId ?? "",
@@ -32,15 +32,15 @@ function buildPayload(v: RecipeFormValues, isEdit: boolean): RecipePayload {
     isActive: v.isActive,
     properties: (v.targetPropertyIds ?? []).map((id) => ({ propertyId: id })),
   };
-  // Yeni kayıtta kod otomatik üretilir; düzenlemede mevcut kod backend'de değişmez.
-  return isEdit ? base : { ...base, code: generateRecipeCode() };
+  // Kod backend'de üretilir (REC+GGAAYY+NNNN); create'te gönderilmez, edit'te backend korur.
+  return base;
 }
 
 export function ProductRecipesPage() {
   return (
     <CrudPage<ProductRecipe>
       title="İş Emri Şablonları"
-      description="Ürün + renk + özellik + en + rota — iş emri açılışını hızlandıran hazır şablonlar."
+      description="Kumaş + renk + özellik + en + rota — iş emri açılışını hızlandıran hazır şablonlar."
       entityName="İş Emri Şablonu"
       queryKey="product-recipes"
       service={productRecipeService}
@@ -55,7 +55,7 @@ export function ProductRecipesPage() {
           isSubmitting={isSubmitting}
           onSubmit={(values) =>
             onSubmit(
-              buildPayload(values, Boolean(initial)) as unknown as Partial<ProductRecipe>,
+              buildPayload(values) as unknown as Partial<ProductRecipe>,
             )
           }
         />

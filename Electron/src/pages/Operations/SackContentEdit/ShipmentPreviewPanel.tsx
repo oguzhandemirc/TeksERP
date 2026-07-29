@@ -60,7 +60,7 @@ export function ShipmentPreviewPanel({ preview, isLoading }: Props) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-1.5 font-medium">Sipariş · Ürün</th>
+                <th className="px-3 py-1.5 font-medium">Sipariş · Kumaş</th>
                 <th className="px-3 py-1.5 text-right font-medium">İhtiyaç</th>
                 <th className="px-3 py-1.5 text-right font-medium">Bu sevk</th>
               </tr>

@@ -30,7 +30,7 @@ function groupKey(g: KartelaStockGroup): string {
 
 /**
  * Seçerek kartela ekleme — kartelaların fiziksel etiketi olmadığından barkod
- * okutma yerine ürün+renk stok grubu + adet seçilir; backend o gruptan N müsait
+ * okutma yerine kumaş+renk stok grubu + adet seçilir; backend o gruptan N müsait
  * kartelayı atomik claim eder ve çuvala bağlar (stoktan düşer).
  */
 export function AddKartelaDialog({ sackId, onOpenChange }: Props) {
@@ -90,7 +90,7 @@ export function AddKartelaDialog({ sackId, onOpenChange }: Props) {
             <Layers className="h-4 w-4" /> Kartela Ekle
           </DialogTitle>
           <DialogDescription>
-            Ürün + renk seç, adet gir. Seçilen kartelalar stoktan düşülerek bu çuvala eklenir.
+            Kumaş + renk seç, adet gir. Seçilen kartelalar stoktan düşülerek bu çuvala eklenir.
           </DialogDescription>
         </DialogHeader>
 
@@ -99,7 +99,7 @@ export function AddKartelaDialog({ sackId, onOpenChange }: Props) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ürün / renk ara…"
+            placeholder="Kumaş / renk ara…"
             className="pl-8"
             autoFocus
           />

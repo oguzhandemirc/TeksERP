@@ -1,13 +1,13 @@
 /**
- * Unique-friendly otomatik kod üretici.
- * Format: <PREFIX>-YYMMDD-XXXX  (XXXX 4-haneli random)
+ * Unique-friendly otomatik kod üretici (ESKİ format: <PREFIX>-YYMMDD-XXXX).
  *
- * Örnekler:
- *   generateCode("MUS")  → "MUS-260507-4729"
- *   generateCode("ROT")  → "ROT-260507-9182"
+ * ⚠️ MASTER-DATA İÇİN KULLANMA. Renk/İstasyon/Makine/Hata/Rota/Reçete/İade/Özellik
+ * kodları artık BACKEND'de `PREFIX+GGAAYY+NNNN` günlük sıralı üretiliyor
+ * (BaseService `autoCode` config'i) — istemci `code` göndermez. Bu helper yalnız
+ * henüz taşınmamış Fason firma (FSN) ve Fason kategori (KAT) için kaldı; yeni
+ * master-data eklerken de kod gönderme, backend'e `autoCode` ekle.
  *
- * Çakışma riski çok düşük (saniyede 9000 farklı kod). Backend `@unique` ihlal
- * yakalarsa toast'ta hata mesajı görünür, kullanıcı yeniden dener.
+ * Format: <PREFIX>-YYMMDD-XXXX  (XXXX 4-haneli random).
  */
 export function generateCode(prefix: string): string {
   const now = new Date();

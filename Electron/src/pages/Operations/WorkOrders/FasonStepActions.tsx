@@ -58,6 +58,8 @@ export function FasonStepActions({ step, steps, workOrderId, withStationLabel = 
     void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
     void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
     void qc.invalidateQueries({ queryKey: ["work-orders"] });
+    // Fason sevki İE'yi üretime alabilir → sipariş listesi "İş Emri" rozeti tazelensin.
+    void qc.invalidateQueries({ queryKey: ["orders"] });
   };
 
   const bulkMut = useMutation({

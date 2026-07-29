@@ -19,7 +19,7 @@ import { AppError } from "../utils/app-error";
 import { parseQueryParams, buildWhereClause } from "../utils/query-parser";
 
 // listShipments ile aynı whitelist (drift olmaması için aynı değerler).
-const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier"];
+const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier", "customer.name"];
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
 
 // Tek export isteğinde toplanacak en fazla sevkiyat. Aşılırsa kullanıcı aralığı

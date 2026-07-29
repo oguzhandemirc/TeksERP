@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { reportTiles } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
@@ -10,12 +11,11 @@ export function ReportsHubPage() {
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Raporlar"
-        description="Üretim, sipariş, kalite, stok, fason, müşteri ve sistem raporları."
       />
-      <div className="p-6">
+      <PageBody className="p-6">
         <HubGrid>
           {tiles.map((tile, i) => (
             <HubCard
@@ -28,7 +28,7 @@ export function ReportsHubPage() {
             />
           ))}
         </HubGrid>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

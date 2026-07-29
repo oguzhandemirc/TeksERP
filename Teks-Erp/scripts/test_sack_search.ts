@@ -92,6 +92,23 @@ async function main() {
       `match=${rows[0]?.matchRollCount}/${rows[0]?.matchQty} all=${rows[0]?.rollCount}/${rows[0]?.totalQty}`,
     );
 
+    // 1b) Çoklu içerik filtresi: [itemA, itemB] → alan içinde VEYA; iki çuval da döner,
+    //     eşleşen sayaçlar seçilen ürünlerin TOPLAMI (Çuval-1: 3 top / 180m).
+    const byItems = await svc.searchSacks({ itemId: [itemA.id, itemB.id], customerId: customer.id });
+    const multiRows = byItems.data as Array<{ id: string; matchRollCount: number | null; matchQty: number | null }>;
+    check("Çoklu ürün filtresi (VEYA) iki çuvalı da döndürdü", multiRows.length === 2);
+    const m1 = multiRows.find((r) => r.id === sack1.id);
+    check(
+      "Çoklu filtrede eşleşen adet/metre seçimlerin toplamı (3 top / 180m)",
+      m1?.matchRollCount === 3 && m1?.matchQty === 180,
+      `match=${m1?.matchRollCount}/${m1?.matchQty}`,
+    );
+    // 1c) Çoklu müşteri filtresi (IN) — tek gerçek müşteri + uydurma UUID, sonuç değişmez.
+    const byCustomers = await svc.searchSacks({
+      customerId: [customer.id, "00000000-0000-0000-0000-000000000000"],
+    });
+    check("Çoklu müşteri filtresi (IN) çuvalları döndürdü", (byCustomers.data as unknown[]).length === 2);
+
     // 2) sackCode → sackNo vuruşu
     const byCode = await svc.searchSacks({ sackCode: `TEST-SRC-SK2-${ts}` });
     const codeRows = byCode.data as Array<{ id: string; matchRollCount: number | null }>;

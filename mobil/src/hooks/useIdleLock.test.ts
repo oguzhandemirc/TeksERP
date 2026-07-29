@@ -20,6 +20,7 @@ import type { JwtPayload } from '../types/auth';
 jest.mock('./useFeatureFlags', () => ({
   useMobileIdleLockEnabled: () => true,
   useMobileIdleLockMinutes: () => 10,
+  useMobileLockOnBackground: () => true,
 }));
 
 let now = 5_000_000_000;

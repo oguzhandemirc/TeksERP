@@ -29,6 +29,11 @@ export const FONT_MM: Record<CanvasFontSize, { h: number; w: number }> = {
   xl: { h: 3.0, w: 1.75 },
 };
 
+/** Bakım sembolü (icon) kare kenarı (mm) — backend label-elements sınırlarıyla birebir. */
+export const ICON_DEFAULT_MM = 8;
+export const ICON_MIN_MM = 3;
+export const ICON_MAX_MM = 50;
+
 export const snap = (mm: number): number => Math.round(mm / GRID_SNAP_MM) * GRID_SNAP_MM;
 export const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v));
 
@@ -93,22 +98,29 @@ export function estimateBounds(el: LabelElement, canvas: { widthMm: number; heig
     case "field":
     case "text": {
       const sample = el.type === "text" ? el.text : `${el.label ? `${el.label}: ` : ""}Örnek Değer`;
+      // Sabit metinde `\n` = alt alta satırlar (backend expandMultilineText ile birebir).
+      const lines = sample.split("\n");
+      const lineCount = Math.max(1, lines.length);
+      const longest = lines.reduce((a, l) => Math.max(a, l.length), 1);
       let w: number;
-      let h: number;
+      let h1: number; // tek satır yüksekliği
       if (el.hMm != null) {
         // SERBEST boyut: yükseklik birebir; genişlik ≈ karakter × 0.6h × oran.
-        h = el.hMm;
-        w = Math.max(4, sample.length * el.hMm * 0.6 * (el.wr ?? 1));
+        h1 = el.hMm;
+        w = Math.max(4, longest * el.hMm * 0.6 * (el.wr ?? 1));
       } else {
         const font = FONT_MM[el.font ?? "md"];
         const mul = el.bold ? 2 : 1;
-        w = Math.max(8, sample.length * font.w * mul * 0.9);
-        h = font.h * mul;
+        w = Math.max(8, longest * font.w * mul * 0.9);
+        h1 = font.h * mul;
       }
+      const h = lineCount > 1 ? lineCount * h1 * 1.3 : h1; // satır aralığı ×1.3 (backend ile aynı)
       const rot = el.rot ?? 0;
-      return rot === 90 || rot === 270
-        ? { x: el.x, y: el.y, w: h, h: w }
-        : { x: el.x, y: el.y, w, h };
+      if (rot === 90 || rot === 270) return { x: el.x, y: el.y, w: h, h: w };
+      // Hizalama (rot=0/180): kutu çapaya (x) göre kayar — center=−w/2, right=−w.
+      const align = rot === 0 ? (el.align ?? "left") : "left";
+      const ax = align === "center" ? -w / 2 : align === "right" ? -w : 0;
+      return { x: Math.max(0, el.x + ax), y: el.y, w, h };
     }
     case "qr": {
       const s = qrSizeMm(el.scale);
@@ -132,6 +144,11 @@ export function estimateBounds(el: LabelElement, canvas: { widthMm: number; heig
         w: el.wMm ?? 10,
         h: el.hMm ?? Math.max(10, canvas.heightMm - 2 * el.y),
       };
+    case "icon": {
+      // Kare sembol — dönüş boyutu değiştirmez (kare: 90° çevrilse de aynı kutu).
+      const s = el.hMm ?? ICON_DEFAULT_MM;
+      return { x: el.x, y: el.y, w: s, h: s };
+    }
   }
 }
 
@@ -139,6 +156,12 @@ let seq = 0;
 export function newElementId(type: LabelElementType): string {
   seq += 1;
   return `${type}-${Date.now().toString(36)}${seq}`;
+}
+
+/** Yeni grup kimliği — aynı groupId'li elemanlar editörde birlikte hareket eder. */
+export function newGroupId(): string {
+  seq += 1;
+  return `grp-${Date.now().toString(36)}${seq}`;
 }
 
 /**
@@ -178,6 +201,11 @@ export function applyResize(
       const scale = clamp(Math.round((side * 8) / (qrModules(SAMPLE_BC_LEN) + 8)), 2, 15);
       return { scale };
     }
+    case "icon": {
+      // Kare: iki eksenin büyüğü kenar olur (0.5mm snap, 3-50mm clamp).
+      const side = clamp(Math.max(w, h), ICON_MIN_MM, ICON_MAX_MM);
+      return side !== (el.hMm ?? ICON_DEFAULT_MM) ? { hMm: side } : null;
+    }
     case "field":
     case "text": {
       // SERBEST sistem: dikey sürükleme yüksekliği (mm, 0.5 snap), yatay
@@ -203,102 +231,13 @@ export function snapRotation(deg: number): CanvasRotation {
   return norm as CanvasRotation;
 }
 
-// =============================================================================
-// Çoklu seçim: hizalama + boşluk eşitleme (saf fonksiyonlar — tek undo adımı
-// olarak applyPatches ile uygulanır). Sınır kutuları estimateBounds tahminiyle.
-// =============================================================================
-
-export type AlignMode = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
-export type DistributeMode = "h" | "v";
-
-type PatchMap = Record<string, { x?: number; y?: number }>;
-
-function selectedBounds(
-  elements: LabelElement[],
-  ids: string[],
-  canvas: { widthMm: number; heightMm: number },
-): Array<{ el: LabelElement; b: BoundsMm }> {
-  const set = new Set(ids);
-  return elements.filter((e) => set.has(e.id)).map((el) => ({ el, b: estimateBounds(el, canvas) }));
-}
-
-/** Seçimi kendi ortak sınır kutusuna göre hizalar (≥2 eleman). */
-export function alignElements(
-  elements: LabelElement[],
-  ids: string[],
-  mode: AlignMode,
-  canvas: { widthMm: number; heightMm: number },
-): PatchMap {
-  const sel = selectedBounds(elements, ids, canvas);
-  if (sel.length < 2) return {};
-  const minX = Math.min(...sel.map((s) => s.b.x));
-  const maxR = Math.max(...sel.map((s) => s.b.x + s.b.w));
-  const minY = Math.min(...sel.map((s) => s.b.y));
-  const maxB = Math.max(...sel.map((s) => s.b.y + s.b.h));
-  const cx = (minX + maxR) / 2;
-  const cy = (minY + maxB) / 2;
-
-  const patches: PatchMap = {};
-  for (const { el, b } of sel) {
-    let x: number | undefined;
-    let y: number | undefined;
-    switch (mode) {
-      case "left":    x = minX; break;
-      case "hcenter": x = cx - b.w / 2; break;
-      case "right":   x = maxR - b.w; break;
-      case "top":     y = minY; break;
-      case "vcenter": y = cy - b.h / 2; break;
-      case "bottom":  y = maxB - b.h; break;
-    }
-    const patch: { x?: number; y?: number } = {};
-    if (x !== undefined && snap(x) !== el.x) patch.x = Math.max(0, snap(x));
-    if (y !== undefined && snap(y) !== el.y) patch.y = Math.max(0, snap(y));
-    if (patch.x !== undefined || patch.y !== undefined) patches[el.id] = patch;
-  }
-  return patches;
-}
-
-/** Aradaki boşlukları eşitler (≥3 eleman): ilk ve son sabit kalır, aradakiler
- *  eşit aralıkla dizilir (negatif boşluk = bilinçli bindirme, korunur). */
-export function distributeElements(
-  elements: LabelElement[],
-  ids: string[],
-  mode: DistributeMode,
-  canvas: { widthMm: number; heightMm: number },
-): PatchMap {
-  const sel = selectedBounds(elements, ids, canvas);
-  if (sel.length < 3) return {};
-  const pos = (b: BoundsMm) => (mode === "h" ? b.x : b.y);
-  const size = (b: BoundsMm) => (mode === "h" ? b.w : b.h);
-  const sorted = [...sel].sort((a, z) => pos(a.b) - pos(z.b));
-  const first = sorted[0]!;
-  const last = sorted[sorted.length - 1]!;
-  const span = pos(last.b) + size(last.b) - pos(first.b);
-  const total = sorted.reduce((acc, s) => acc + size(s.b), 0);
-  const gap = (span - total) / (sorted.length - 1);
-
-  const patches: PatchMap = {};
-  let cursor = pos(first.b);
-  for (const { el, b } of sorted) {
-    const target = snap(cursor);
-    if (mode === "h") {
-      if (target !== el.x) patches[el.id] = { x: Math.max(0, target) };
-    } else if (target !== el.y) {
-      patches[el.id] = { y: Math.max(0, target) };
-    }
-    cursor += size(b) + gap;
-  }
-  // İlk/son eleman konumu değişmemeli (sabit uçlar) — snap sapması olursa çıkar.
-  delete patches[first.el.id];
-  delete patches[last.el.id];
-  return patches;
-}
+// Çoklu seçim hizalama/boşluk eşitleme → ./canvas-align (300 satır sınırı).
 
 /** Palet fabrikası — tuvale tıklama noktasına makul varsayılanlarla eleman doğurur. */
 export function makeElement(
   type: LabelElementType,
   at: { x: number; y: number },
-  opts?: { bind?: string; label?: string },
+  opts?: { bind?: string; label?: string; icon?: string },
 ): LabelElement {
   const id = newElementId(type);
   const base = { id, x: snap(at.x), y: snap(at.y) };
@@ -319,6 +258,8 @@ export function makeElement(
       return { ...base, type, wMm: 30, hMm: 15, thickMm: 0.5 };
     case "lengthBanner":
       return { ...base, type, wMm: 9, hMm: 40 };
+    case "icon":
+      return { ...base, type, icon: opts?.icon ?? "wash-30", hMm: ICON_DEFAULT_MM };
   }
 }
 
@@ -345,7 +286,7 @@ export function makeBarcodePair(at: { x: number; y: number }): [Code128Element, 
   return [bc, code];
 }
 
-/** Yeni (varyantsız) şablon için başlangıç iskeleti — sol-üst QR + ürün + metraj
+/** Yeni (varyantsız) şablon için başlangıç iskeleti — sol-üst QR + kumaş + metraj
  *  + alt barkod (çubuklar + ayrı kod metni, ikisi bağımsız). Kullanıcı üstünden düzenler. */
 export function starterLayout(canvas: { widthMm: number; heightMm: number }): CanvasLayout {
   const bcY = Math.max(10, canvas.heightMm - 15);

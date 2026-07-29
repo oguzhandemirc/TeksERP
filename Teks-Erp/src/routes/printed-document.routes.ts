@@ -38,6 +38,21 @@ const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     read: ["kartela:read", "kartela:write", "mobile:kartela-sevk", "mobile:kartela-kabul"],
     write: ["kartela:write"],
   },
+  // Fason kabul makbuzu — fason okuma/yazma + mobil fason kabul.
+  SUBCONTRACTOR_RECEIPT: {
+    read: ["workorder:read", "workorder:write", "mobile:fason-kabul", "subcontractor:read"],
+    write: ["workorder:write"],
+  },
+  // Sevkiyat-türevli belge (kalite sertifikası) — sevkiyat izinleri.
+  QUALITY_CERTIFICATE: {
+    read: ["shipping:read", "shipping:write", "mobile:sevkiyat", "report:quality"],
+    write: ["shipping:write"],
+  },
+  // İade irsaliyesi — iade okuma/yazma.
+  RETURN_DISPATCH: {
+    read: ["return:read", "return:write", "mobile:iade"],
+    write: ["return:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */
@@ -127,6 +142,11 @@ router.get(
  *         name: sourceId
  *         required: true
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: currentTemplate
+ *         required: false
+ *         description: "1 → içerik donuk kalır, görünüm (şablon+künye) güncel ayardan çözülür"
+ *         schema: { type: string, enum: ["1", "true"] }
  *     responses:
  *       200: { description: text/html baskı çıktısı }
  *       409: { description: Kaynak henüz taslak (donmuş belge yok) }

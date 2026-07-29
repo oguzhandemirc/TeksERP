@@ -14,6 +14,9 @@ const DOC_TYPE_BY_KEY: Record<string, PrintedDocType> = {
   fasonSevk: "SUBCONTRACTOR_DISPATCH",
   fasonDirectShip: "SUBCONTRACTOR_DIRECT_SHIP",
   kartelaCeki: "KARTELA_DISPATCH",
+  fasonKabul: "SUBCONTRACTOR_RECEIPT",
+  kaliteSertifikasi: "QUALITY_CERTIFICATE",
+  iadeIrsaliyesi: "RETURN_DISPATCH",
 };
 
 /**

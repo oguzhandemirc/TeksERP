@@ -2,8 +2,9 @@
 // Etiket Stüdyosu — eleman paleti (birleşik katalog alanları + yapısal elemanlar)
 // =============================================================================
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Type, QrCode, Barcode, Minus, Square, Ruler, Plus } from "lucide-react";
+import { Type, QrCode, Barcode, Minus, Square, Ruler, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -13,10 +14,12 @@ import {
 } from "@/services/labelTemplateService";
 import type { LabelElementType } from "@/types/label-canvas";
 import { skippedLanguages } from "@/types/label-canvas";
+import { useIconCatalog } from "./useIconCatalog";
 
 interface Props {
   onAddField: (f: UnifiedCatalogField) => void;
   onAddStructural: (type: Exclude<LabelElementType, "field">) => void;
+  onAddIcon: (iconKey: string) => void;
 }
 
 const STRUCTURAL: Array<{
@@ -32,7 +35,64 @@ const STRUCTURAL: Array<{
   { type: "lengthBanner", label: "Metraj Bandı", icon: Ruler },
 ];
 
-export function ElementPalette({ onAddField, onAddStructural }: Props) {
+/** Bakım sembolleri (ISO 3758) — katalog backend registry'sinden; hata → bölüm gizli. */
+function IconPaletteSection({ onAddIcon }: { onAddIcon: (iconKey: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const { categories, icons, isLoading, isError } = useIconCatalog();
+  if (isError) return null;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
+      >
+        {open ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+        <span className="flex-1 text-left">Bakım Sembolleri</span>
+        {icons.length > 0 && <span className="text-[9px] font-normal">({icons.length})</span>}
+      </button>
+      {open &&
+        (isLoading ? (
+          <Skeleton className="mt-1.5 h-10 w-full" />
+        ) : (
+          <div className="mt-1.5 space-y-2">
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              ZPL/HTML tam basar; PPLA/PPLB dilinde atlanır (raster baskı hariç).
+            </p>
+            {categories.map((cat) => {
+              const group = icons.filter((i) => i.category === cat.key);
+              if (group.length === 0) return null;
+              return (
+                <div key={cat.key}>
+                  <h5 className="mb-1 text-[10px] font-medium text-muted-foreground">{cat.label}</h5>
+                  <div className="flex flex-wrap gap-1">
+                    {group.map((ic) => (
+                      <button
+                        key={ic.key}
+                        type="button"
+                        title={ic.label}
+                        onClick={() => onAddIcon(ic.key)}
+                        className="flex h-10 w-10 items-center justify-center rounded-md border p-1 hover:bg-accent"
+                      >
+                        {/* SVG kendi backend'imizden (auth'lu API) — stroke=currentColor tema rengine uyar. */}
+                        <span
+                          className="block h-full w-full [&>svg]:h-full [&>svg]:w-full"
+                          dangerouslySetInnerHTML={{ __html: ic.svg }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+    </div>
+  );
+}
+
+export function ElementPalette({ onAddField, onAddStructural, onAddIcon }: Props) {
   const catalogQ = useQuery({
     queryKey: ["label-unified-catalog"],
     queryFn: () => labelTemplateService.unifiedCatalog(),
@@ -67,6 +127,8 @@ export function ElementPalette({ onAddField, onAddStructural }: Props) {
           })}
         </div>
       </div>
+
+      <IconPaletteSection onAddIcon={onAddIcon} />
 
       <div>
         <h4 className="mb-1.5 text-xs font-semibold text-muted-foreground">

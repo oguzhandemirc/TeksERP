@@ -2,11 +2,12 @@
 // Etiket Stüdyosu — kanvas eleman görseli (yaklaşık; gerçek WYSIWYG backend'te)
 // =============================================================================
 
-import { QrCode, AlertTriangle, RotateCw } from "lucide-react";
+import { QrCode, AlertTriangle, RotateCw, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { LabelElement } from "@/types/label-canvas";
+import type { IconElement, LabelElement } from "@/types/label-canvas";
 import { skippedLanguages } from "@/types/label-canvas";
 import { estimateBounds, FONT_MM } from "./canvas-model";
+import { useIconCatalog } from "./useIconCatalog";
 
 export type HandleMode = "resize" | "rotate";
 
@@ -31,6 +32,8 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, showHan
     top: b.y * zoom,
     width: Math.max(4, b.w * zoom),
     height: Math.max(3, b.h * zoom),
+    // Kilitli → tıklama geçirmez (altındaki eleman seçilebilir; seçim katman listesinden).
+    pointerEvents: el.locked ? "none" : undefined,
   };
   const skipped = skippedLanguages(el.type);
 
@@ -39,10 +42,11 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, showHan
       style={style}
       onPointerDown={(e) => onPointerDown(e, el.id)}
       className={cn(
-        "group cursor-grab select-none touch-none",
+        "group select-none touch-none",
+        el.locked ? "cursor-default" : "cursor-grab",
         selected && "z-10",
       )}
-      title={`${el.id} — ${Math.round(b.x * 10) / 10}, ${Math.round(b.y * 10) / 10} mm`}
+      title={`${el.id} — ${Math.round(b.x * 10) / 10}, ${Math.round(b.y * 10) / 10} mm${el.locked ? " (kilitli)" : ""}`}
     >
       <div
         className={cn(
@@ -69,7 +73,13 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, showHan
           {hasLintWarn ? <AlertTriangle className="h-2.5 w-2.5" /> : "!"}
         </span>
       )}
-      {showHandles && (
+      {el.locked && (
+        <span className="absolute -left-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border bg-background text-amber-600"
+          title="Kilitli — katman listesinden aç">
+          <Lock className="h-2 w-2" />
+        </span>
+      )}
+      {showHandles && !el.locked && (
         <>
           {/* SE köşe: boyutlandırma. Metinde font kademesine (4'lü), QR'da ölçeğe
               (2-15), barkodda bar yüksekliğine oturur — serbest boyut yalnız
@@ -84,10 +94,12 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, showHan
                   ? "Sürükle → QR ölçeği (2-15)"
                   : el.type === "code128"
                     ? "Sürükle → bar yüksekliği"
-                    : "Sürükle → boyutlandır"
+                    : el.type === "icon"
+                      ? "Sürükle → sembol boyutu (3-50 mm, kare)"
+                      : "Sürükle → boyutlandır"
             }
           />
-          {(el.type === "field" || el.type === "text" || el.type === "lengthBanner") && (
+          {(el.type === "field" || el.type === "text" || el.type === "lengthBanner" || el.type === "icon") && (
             <span
               onPointerDown={(e) => onHandlePointerDown(e, el.id, "rotate")}
               className="absolute -top-5 left-1/2 flex h-4 w-4 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-primary bg-background shadow"
@@ -99,6 +111,31 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, showHan
         </>
       )}
     </div>
+  );
+}
+
+/** Bakım sembolü — katalog SVG'si (currentColor). Tuval zemini beyaz olduğundan
+ *  renk siyaha SABİTLENİR (uygulama teması karanlıkta da vuruş siyah kalır).
+ *  Bilinmeyen/yüklenmemiş anahtar → kesikli kutu + anahtar metni. */
+function IconBody({ el }: { el: IconElement }) {
+  const { byKey, isLoading } = useIconCatalog();
+  const info = byKey.get(el.icon);
+  if (!info) {
+    return (
+      <div className="flex h-full w-full items-center justify-center overflow-hidden border border-dashed border-foreground/40 bg-muted/40 p-0.5">
+        <span className="truncate font-mono text-[8px] text-foreground/50">
+          {isLoading ? "…" : el.icon}
+        </span>
+      </div>
+    );
+  }
+  const rot = el.rot ?? 0;
+  return (
+    <div
+      className="h-full w-full [&>svg]:h-full [&>svg]:w-full"
+      style={{ color: "#000", transform: rot ? `rotate(${rot}deg)` : undefined }}
+      dangerouslySetInnerHTML={{ __html: info.svg }}
+    />
   );
 }
 
@@ -118,9 +155,18 @@ function ElementBody({ el, zoom }: { el: LabelElement; zoom: number }) {
         <div
           // Kalın: serbest boyutta gerçek vuruş kalınlığı (backend çift-vuruş/font-weight);
           // eski kademeli modda kalın zaten 2× boyuttan gelir (hMm hesabı), font-bold yok.
-          className={cn("whitespace-nowrap font-mono leading-none text-foreground", el.hMm != null && el.bold && "font-bold")}
+          // Sabit metin `whitespace-pre` → `\n` alt alta gösterilir (backend ile birebir).
+          className={cn(
+            "h-full w-full font-mono leading-tight text-foreground",
+            el.type === "text" ? "whitespace-pre" : "whitespace-nowrap",
+            el.hMm != null && el.bold && "font-bold",
+          )}
           style={{
             fontSize: Math.max(7, hMm * zoom * 0.85),
+            // Hizalama: çok satırda satırları birbirine hizalar (kutu estimateBounds ile çapaya kaydı).
+            textAlign: (el.align ?? "left") as "left" | "center" | "right",
+            // Harf dönüşümü (yaklaşık — backend WYSIWYG önizlemesi Türkçe-duyarlı tamı gösterir).
+            textTransform: el.textCase === "upper" ? "uppercase" : el.textCase === "lower" ? "lowercase" : undefined,
             transform: transforms.length ? transforms.join(" ") : undefined,
             transformOrigin: "top left",
           }}
@@ -170,16 +216,26 @@ function ElementBody({ el, zoom }: { el: LabelElement; zoom: number }) {
           style={{ border: `${Math.max(1, (el.thickMm ?? 0.5) * zoom)}px solid currentColor` }}
         />
       );
-    case "lengthBanner":
+    case "icon":
+      return <IconBody el={el} />;
+    case "lengthBanner": {
+      // Yaklaşık: birim eki + serbest değer boyutu + genişlik oranı yansıtılır
+      // (gerçek WYSIWYG backend önizlemesinde).
+      const bTransforms = [`rotate(${el.rot ?? 90}deg)`];
+      if ((el.wr ?? 1) !== 1) bTransforms.push(`scaleX(${el.wr ?? 1})`);
       return (
         <div className="flex h-full w-full items-center justify-center overflow-hidden bg-foreground text-background">
           <span
-            className="whitespace-nowrap font-mono text-[8px] font-bold"
-            style={{ transform: `rotate(${el.rot ?? 90}deg)` }}
+            className="whitespace-nowrap font-mono font-bold"
+            style={{
+              fontSize: el.glyphHMm != null ? Math.max(6, el.glyphHMm * zoom * 0.85) : 8,
+              transform: bTransforms.join(" "),
+            }}
           >
-            METRAJ
+            {el.unit === false ? "METRAJ" : "METRAJ m"}
           </span>
         </div>
       );
+    }
   }
 }

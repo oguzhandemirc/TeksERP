@@ -34,13 +34,14 @@ export function useCanvasLint(
     const safeB = canvas.heightMm - pd.bottom;
     const hasPad = pd.top || pd.right || pd.bottom || pd.left;
 
-    // Taranabilir alan zorunlu (backend kaydetmeyi reddeder — erken söyle).
+    // Okutulabilir eleman önerilir ama zorunlu DEĞİL (statik etiket — örn. yalnız
+    // bakım sembolleri — kaydedilebilir; rulo/kartela atamasında kullanılamaz).
     const scannable = elements.some((e) => e.type === "qr" || e.type === "code128");
     if (elements.length > 0 && !scannable) {
       issues.push({
-        level: "error",
+        level: "warn",
         elementId: null,
-        message: "Barkod (Code128) veya QR elemanı yok — taranabilir alan zorunlu, kaydedilemez.",
+        message: "Okutulabilir eleman yok — şablon rulo/kartela atamalarında kullanılamaz (statik etiket)",
       });
     }
 

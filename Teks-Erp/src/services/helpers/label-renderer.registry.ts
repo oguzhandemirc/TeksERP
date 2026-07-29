@@ -36,6 +36,11 @@ export interface LabelRenderInput {
    *  varyantı → komut yerine 1bpp bitmap zarfı. Yoksa/false → bugünkü komut yolu
    *  (bayt-aynı). rawCode uzman yolu hiçbir koşulda rasterlenmez. */
   rasterMode?: boolean;
+  /** Tüketici PPLB komut akışına gömülü BINARY ikon GW bloğunu (>0x7F) kaldırabilir mi:
+   *  b64 transport / in-process önizleme / bayt gönderimi → true; ham text HTTP yanıtı
+   *  (UTF-8 decode eden istemci) → false (ikon atlanır, komut temiz ASCII kalır). Yalnız
+   *  PPLB komut-yolu ikonunu etkiler (ZPL ^GFA hex-ASCII; raster zaten binary). */
+  iconGraphicsOk?: boolean;
 }
 
 export interface RenderedLabel {
@@ -75,8 +80,10 @@ const CONTENT_TYPES: Record<PrinterLanguage, string> = {
 
 /** Yazıcı diline göre etiketi render et. Driver yoksa RASTER_HTML'e düşer (failsafe).
  *  Sıra: rawCode (dolu dil HER ŞEYİ ezer) > varyant kanvası > akış-modeli (dual-mode
- *  — varyantı olmayan/henüz dönüştürülmemiş şablonlar) > şablonsuz fallback. */
-export function renderLabel(language: PrinterLanguage, input: LabelRenderInput): RenderedLabel {
+ *  — varyantı olmayan/henüz dönüştürülmemiş şablonlar) > şablonsuz fallback.
+ *  ASYNC (2026-07 icon): kanvas ZPL/raster yolları icon bitmap'i üretir — zincir
+ *  buradan yukarı (label.service / label-template.service) await ile taşınır. */
+export async function renderLabel(language: PrinterLanguage, input: LabelRenderInput): Promise<RenderedLabel> {
   const effective = RENDERERS[language] ? language : PrinterLanguage.RASTER_HTML;
   // Uzman override: şablonda bu dil için raw-code varsa otomatik üretim yerine onu
   // kullan ({{key}} yer-tutucuları payload'dan doldurulur). Yoksa generator çalışır.
@@ -102,7 +109,7 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
     // düşülür → baskı asla raster hatasıyla ölmez.
     if (input.rasterMode && isRasterLanguage(effective) && effective !== PrinterLanguage.RASTER_HTML) {
       try {
-        const { bytes } = renderCanvasRaster(effective as RasterLanguage, {
+        const { bytes } = await renderCanvasRaster(effective as RasterLanguage, {
           payload: input.payload,
           format: input.format,
           copies: input.copies,
@@ -123,11 +130,12 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
             barcodeSvg: input.barcodeSvg,
             qrSvg: input.qrSvg,
           })
-        : emitCanvasNative(effective as "PPLA" | "PPLB" | "ZPL", {
+        : await emitCanvasNative(effective as "PPLA" | "PPLB" | "ZPL", {
             payload: input.payload,
             format: input.format,
             copies: input.copies,
             layout,
+            iconGraphicsOk: input.iconGraphicsOk,
           });
     return { language: effective, content, contentType: CONTENT_TYPES[effective], encoding: "text" };
   }

@@ -107,6 +107,8 @@ async function main() {
     { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
     { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
     { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → iş emri başlat + iş emri yönetimi)" },
+    // Ekran değil, KK1 içi yetenek: yalnız seçili ham giriş operatörlerine verilir.
+    { code: "mobile:kk1-desen", module: "MOBILE", category: "mobile", description: "KK1 ham girişte inline yeni desen (FABRIC kumaş) oluşturma" },
     { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
   ];
 

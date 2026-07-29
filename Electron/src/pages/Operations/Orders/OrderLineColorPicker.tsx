@@ -14,11 +14,11 @@ interface Props {
 }
 
 export function OrderLineColorPicker({ itemId, value, onChange, customerId, disabled, triggerClassName }: Props) {
-  // Perf: LineRequiredPropertiesEditor ile aynı ürünü paylaşan tek cache girdisi
+  // Perf: LineRequiredPropertiesEditor ile aynı kumaşı paylaşan tek cache girdisi
   // (satır başına çift GET yerine tek istek).
   const itemQ = useItemDetail(itemId);
 
-  // Ürünün izinli renkleri (boş = sınırsız → tüm katalog aranabilir).
+  // Kumaşın izinli renkleri (boş = sınırsız → tüm katalog aranabilir).
   const allowedColorIds = useMemo(
     () => (itemQ.data?.data?.allowedColors ?? []).map((c) => c.colorId),
     [itemQ.data?.data?.allowedColors],
@@ -28,7 +28,7 @@ export function OrderLineColorPicker({ itemId, value, onChange, customerId, disa
     return (
       <div className="flex h-9 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
         <Palette className="h-4 w-4 shrink-0" />
-        <span>Önce ürün seçin</span>
+        <span>Önce kumaş seçin</span>
       </div>
     );
   }

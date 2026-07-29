@@ -1,5 +1,6 @@
 import { Cpu, MemoryStick, Server, Activity, HardDrive, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { MetricCard } from "./MetricCard";
@@ -69,10 +70,9 @@ export function ServerStatusPage() {
     data && data.sysTotalMemBytes ? (data.sysUsedMemBytes / data.sysTotalMemBytes) * 100 : null;
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Sunucu Durumu"
-        description="Backend'in CPU/RAM kullanımı, disk, çalışma süresi ve makine kaynakları (5 sn'de bir yenilenir)."
         actions={
           <div className="flex items-center gap-3">
             {data && <BackupButton />}
@@ -96,7 +96,7 @@ export function ServerStatusPage() {
         }
       />
 
-      <div className="space-y-8 overflow-y-auto p-6">
+      <PageBody className="space-y-8 p-6">
         <AlertBanner alerts={alerts} />
 
         {/* Backend prosesinin kendi kullanımı */}
@@ -211,7 +211,7 @@ export function ServerStatusPage() {
             </p>
           )}
         </section>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

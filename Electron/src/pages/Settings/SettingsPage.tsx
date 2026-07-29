@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -19,10 +20,10 @@ export function SettingsPage() {
   const savedViewCount = Object.values(prefs.savedViews ?? {}).reduce((n, v) => n + v.length, 0);
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader title="Ayarlar" description="Görünüm, favoriler ve kişisel tercihler." />
+    <PageShell>
+      <PageHeader title="Ayarlar" />
 
-      <div className="grid gap-6 p-6 lg:grid-cols-2">
+      <PageBody className="grid gap-6 p-6 lg:grid-cols-2">
         <Card className="border-t-2 border-t-primary/50">
           <CardHeader>
             <CardTitle className="text-base">Görünüm</CardTitle>
@@ -107,7 +108,7 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </PageBody>
 
       <ConfirmDialog
         open={resetOpen}
@@ -121,6 +122,6 @@ export function SettingsPage() {
           setResetOpen(false);
         }}
       />
-    </div>
+    </PageShell>
   );
 }

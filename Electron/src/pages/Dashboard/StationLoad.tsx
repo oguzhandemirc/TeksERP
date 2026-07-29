@@ -75,12 +75,14 @@ export function StationLoad() {
         ) : !data || data.length === 0 ? (
           <EmptyState message="Aktif istasyon yok." />
         ) : (
-          <div className="-mx-1 overflow-x-auto px-1 pb-1">
-            <div className="grid grid-flow-col auto-cols-fr gap-3 min-w-min">
-              {sortByFlow(data).map((s) => (
-                <StationCell key={s.id} station={s} />
-              ))}
-            </div>
+          // Çok fazla istasyonda tek satıra sığdırmak yerine SAR: her kart en az
+          // 170px, satırı 1fr ile eşit doldurur, taşınca alt satıra iner (örtüşme
+          // yok). Aşırı fazlada widget dashboard'u ezmesin diye max-yükseklik +
+          // dikey kaydırma; az istasyonda yükseklik zorlanmaz (scroll çıkmaz).
+          <div className="grid max-h-[30rem] grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3 overflow-y-auto pr-0.5">
+            {sortByFlow(data).map((s) => (
+              <StationCell key={s.id} station={s} />
+            ))}
           </div>
         )}
       </CardContent>
@@ -102,7 +104,7 @@ function StationCell({ station }: { station: StationLiveState }) {
   return (
     <div
       className={cn(
-        "min-w-[160px] rounded-md border bg-card/40 p-3 transition-colors",
+        "rounded-md border bg-card/40 p-3 transition-colors",
         isBusy ? "border-border" : "border-border/40",
       )}
     >
@@ -171,9 +173,9 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
 
 function LoadingGrid() {
   return (
-    <div className="grid grid-flow-col auto-cols-fr gap-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <Skeleton key={i} className="h-24 min-w-[160px]" />
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Skeleton key={i} className="h-24" />
       ))}
     </div>
   );

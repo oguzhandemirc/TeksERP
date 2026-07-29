@@ -4,14 +4,14 @@ import { workOrderTypeLabels } from "@/types/enums";
 import type { WorkOrder } from "../types";
 
 /**
- * v3 iş emri künyesi — tam genişlik 4-sütun grid (hedef ürün/renk/en/kat/tip/
+ * v3 iş emri künyesi — tam genişlik 4-sütun grid (hedef kumaş/renk/en/kat/tip/
  * oluşturma/rota/refakat kartı) + ayraç + üretim özellikleri tag'leri.
  */
 export function KunyeCard({ wo }: { wo: WorkOrder }) {
   return (
     <div className="card info">
       <div className="info-grid">
-        <Field label="Hedef Ürün">{wo.targetItem?.name ?? "—"}</Field>
+        <Field label="Hedef Kumaş">{wo.targetItem?.name ?? "—"}</Field>
         <Field label="Renk">
           {wo.targetColor ? (
             <span className="swatch">

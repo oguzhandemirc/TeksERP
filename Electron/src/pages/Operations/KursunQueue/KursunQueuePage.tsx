@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { kursunQueueService } from "./service";
@@ -88,10 +89,9 @@ export function KursunQueuePage() {
   const busy = reorderMut.isPending || urgentMut.isPending;
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Kurşun Sırası"
-        description="Fasondan dönüp Kurşun + KK2 istasyonunda bekleyen iş emirleri. Sıralama operatöre rehberdir; sürükle-bırak ile düzenle, kritik WO'ları acil olarak işaretle."
         actions={
           <RefreshButton queryKey={QUERY_KEY} successMessage="Kuyruk yenilendi" />
         }
@@ -104,7 +104,7 @@ export function KursunQueuePage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      <PageBody className="p-4">
         {query.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -144,7 +144,7 @@ export function KursunQueuePage() {
             </SortableContext>
           </DndContext>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

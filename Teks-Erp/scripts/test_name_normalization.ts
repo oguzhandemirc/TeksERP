@@ -2,9 +2,11 @@
 // Test: Saha #13 — ürün/renk adı normalize standardı
 // Çalıştır: npx tsx scripts/test_name_normalization.ts
 // Doğrulananlar:
-//   1. Saf fonksiyon: ürün uppercase (tr i→İ), renk sayı-başta + tire
+//   1. Saf fonksiyon: ürün uppercase (tr i→İ), renk sayı-başta + BOŞLUK korunur
+//      (2026-07-27: tire standardı kalktı — saha renk adında boşluk istedi;
+//      legacy tireli ad idempotent kalır) + karşılaştırma katlamaları
 //   2. ItemService.create/update adı BÜYÜK yazar
-//   3. ColorService.create/update adı normalize yazar ("beyaz 055"→"055-BEYAZ")
+//   3. ColorService.create/update adı normalize yazar ("beyaz 055"→"055 BEYAZ")
 //   4. İdempotans: normalize edilmiş ad tekrar normalize'de değişmez
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -13,6 +15,8 @@ import { ColorService } from "../src/services/color.service";
 import {
   normalizeItemName,
   normalizeColorName,
+  foldNameForCompare,
+  foldColorNameForCompare,
 } from "../src/services/helpers/name-normalize.helper";
 import { buildWhereClause } from "../src/utils/query-parser";
 
@@ -37,13 +41,26 @@ async function main() {
     normalizeItemName("  ipliği   boyalı  saten ") === "İPLİĞİ BOYALI SATEN",
     normalizeItemName("  ipliği   boyalı  saten "),
   );
-  check("Renk: sayı başa + tire", normalizeColorName("beyaz 055") === "055-BEYAZ");
-  check("Renk: çok kelime tire", normalizeColorName("krem gümüş") === "KREM-GÜMÜŞ");
-  check("Renk: idempotent", normalizeColorName("055-BEYAZ") === "055-BEYAZ");
+  check("Renk: sayı başa + boşluk korunur", normalizeColorName("beyaz 055") === "055 BEYAZ");
+  check("Renk: çok kelime boşluklu", normalizeColorName("krem gümüş") === "KREM GÜMÜŞ");
+  check("Renk: legacy tireli ad idempotent", normalizeColorName("055-BEYAZ") === "055-BEYAZ");
+  check("Renk: yeni biçim idempotent", normalizeColorName("055 BEYAZ") === "055 BEYAZ");
   check(
     "Renk: çoklu sayı sırası korunur",
-    normalizeColorName("12 lacivert 7") === "12-7-LACİVERT",
+    normalizeColorName("12 lacivert 7") === "12 7 LACİVERT",
     normalizeColorName("12 lacivert 7"),
+  );
+  check(
+    "Fold: legacy tireli ≡ yeni boşluklu",
+    foldColorNameForCompare("055-BEYAZ") === foldColorNameForCompare("beyaz 055"),
+  );
+  check(
+    "Fold: KREM-GÜMÜŞ ≡ krem gümüş",
+    foldColorNameForCompare("KREM-GÜMÜŞ") === foldColorNameForCompare("krem gümüş"),
+  );
+  check(
+    "Genel fold: 'Mavi' ≡ ' MAVİ ' (tr i→İ)",
+    foldNameForCompare("Mavi") === foldNameForCompare(" MAVİ "),
   );
 
   // --- 2) Servis yolları ---
@@ -83,17 +100,17 @@ async function main() {
     );
     const color = colorRes.data as { id: string; name: string };
     colorId = color.id;
-    check("ColorService.create normalize etti", color.name === "055-BEYAZ", color.name);
+    check("ColorService.create normalize etti", color.name === "055 BEYAZ", color.name);
 
     await colorSvc.update(color.id, { name: "krem gümüş" }, undefined);
     const colorAfter = await prisma.color.findUnique({
       where: { id: color.id },
       select: { name: true },
     });
-    check("ColorService.update normalize etti", colorAfter?.name === "KREM-GÜMÜŞ", colorAfter?.name ?? "");
+    check("ColorService.update normalize etti", colorAfter?.name === "KREM GÜMÜŞ", colorAfter?.name ?? "");
 
     // --- 3) Arama: tr-upper varyantı (İ/ı katlanmaz, query-parser OR'u kapatır) ---
-    await colorSvc.update(color.id, { name: "tssiyah deneme" }, undefined); // → TSSİYAH-DENEME
+    await colorSvc.update(color.id, { name: "tssiyah deneme" }, undefined); // → TSSİYAH DENEME
     const searchHit = await prisma.color.findMany({
       where: {
         id: color.id,
@@ -101,9 +118,9 @@ async function main() {
       },
       select: { id: true },
     });
-    check("Arama 'tssiyah' BÜYÜK 'TSSİYAH-…' kaydını buldu (tr-upper OR)", searchHit.length === 1);
+    check("Arama 'tssiyah' BÜYÜK 'TSSİYAH …' kaydını buldu (tr-upper OR)", searchHit.length === 1);
 
-    await colorSvc.update(color.id, { name: "tskırmızı deneme" }, undefined); // → TSKIRMIZI-DENEME
+    await colorSvc.update(color.id, { name: "tskırmızı deneme" }, undefined); // → TSKIRMIZI DENEME
     const searchHit2 = await prisma.color.findMany({
       where: {
         id: color.id,
@@ -111,7 +128,7 @@ async function main() {
       },
       select: { id: true },
     });
-    check("Arama 'tskırmızı' BÜYÜK 'TSKIRMIZI-…' kaydını buldu (ı→I)", searchHit2.length === 1);
+    check("Arama 'tskırmızı' BÜYÜK 'TSKIRMIZI …' kaydını buldu (ı→I)", searchHit2.length === 1);
 
     const noVariant = buildWhereClause({}, ["name"], "beyaz") as { OR: unknown[] };
     check("Saf-ascii olmayan harf yoksa ekstra OR clause yok", noVariant.OR.length === 1);

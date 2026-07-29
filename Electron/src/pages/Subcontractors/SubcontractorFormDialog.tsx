@@ -5,6 +5,7 @@ import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MultiSelectCheckboxList } from "@/components/forms/MultiSelectCheckboxList";
+import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import {
   subcontractorFormDefaults,
@@ -36,6 +37,7 @@ export function SubcontractorFormDialog({
         address: initial.address ?? "",
         isActive: initial.isActive,
         isFavorite: initial.isFavorite,
+        documentProfileId: initial.documentProfileId ?? null,
         categoryIds: initial.categories.map((c) => c.categoryId),
       }
     : subcontractorFormDefaults;
@@ -144,6 +146,19 @@ export function SubcontractorFormDialog({
                 />
               )}
             </div>
+          </FormField>
+
+          <FormField
+            label="Belge Şablon Profili"
+            hint="Bu firmaya basılan fason/kartela belgeleri seçili profilin görünümünü kullanır; boş = genel ayar"
+          >
+            <Controller
+              control={form.control}
+              name="documentProfileId"
+              render={({ field }) => (
+                <DocumentProfileSelect value={field.value} onChange={field.onChange} />
+              )}
+            />
           </FormField>
 
           <div className="flex flex-wrap items-center gap-4">

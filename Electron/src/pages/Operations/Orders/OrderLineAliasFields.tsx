@@ -68,7 +68,7 @@ export function OrderLineAliasFields({
     confirmTarget === "item"
       ? {
           title: "Müşteri tanımı var",
-          description: `Müşteride bu ürünün kayıtlı adı "${suggested.item}". Sadece bu sipariş için farklı bir ad girmek istiyor musunuz?`,
+          description: `Müşteride bu kumaşın kayıtlı adı "${suggested.item}". Sadece bu sipariş için farklı bir ad girmek istiyor musunuz?`,
         }
       : confirmTarget === "color"
         ? {
@@ -91,7 +91,7 @@ export function OrderLineAliasFields({
             "text-sm",
             itemLocked && "cursor-pointer bg-muted/40 text-foreground",
           )}
-          placeholder={itemLocked ? (suggested.item ?? "") : "Müşterideki ürün adı (opsiyonel)"}
+          placeholder={itemLocked ? (suggested.item ?? "") : "Müşterideki kumaş adı (opsiyonel)"}
           value={itemName}
           onChange={(e) => onChange({ customerItemName: e.target.value })}
           readOnly={itemLocked}

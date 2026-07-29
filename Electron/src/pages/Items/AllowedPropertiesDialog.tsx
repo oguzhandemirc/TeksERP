@@ -19,7 +19,6 @@ import { FabricPropertyFormDialog } from "@/pages/FabricProperties/FabricPropert
 import type { FabricPropertyFormValues } from "@/pages/FabricProperties/schema";
 import type { FabricProperty } from "@/pages/FabricProperties/types";
 import { nextSortOrder } from "@/lib/sort-order";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 
 interface Props {
   open: boolean;
@@ -56,7 +55,7 @@ export function AllowedPropertiesDialog({
   const createMut = useMutation({
     mutationFn: (values: FabricPropertyFormValues) =>
       fabricPropertyService.create({
-        code: generateCode(CODE_PREFIXES.FABRIC_PROPERTY),
+        // Kod backend'de üretilir (OZL+GGAAYY+NNNN) — istemci göndermez.
         name: values.name.trim(),
         category: values.category || null,
         description: values.description || null,
@@ -91,7 +90,7 @@ export function AllowedPropertiesDialog({
           <DialogHeader>
             <DialogTitle>İzinli Özellikler</DialogTitle>
             <DialogDescription>
-              Bu ürüne uygulanabilecek özellikler. Boş bırakılırsa tüm aktif özellikler serbest.
+              Bu kumaşa uygulanabilecek özellikler. Boş bırakılırsa tüm aktif özellikler serbest.
             </DialogDescription>
           </DialogHeader>
 
@@ -117,7 +116,7 @@ export function AllowedPropertiesDialog({
           </div>
 
           <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-            Not: Hiçbir özellik seçmezseniz bu ürüne <span className="font-medium text-foreground">tüm aktif özellikler</span> serbesttir.
+            Not: Hiçbir özellik seçmezseniz bu kumaşa <span className="font-medium text-foreground">tüm aktif özellikler</span> serbesttir.
           </p>
 
           <DialogFooter>

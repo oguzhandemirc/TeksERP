@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Send, PackageCheck, Package, Palette } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
@@ -97,6 +98,9 @@ export function KartelaPage() {
     columns: rollColumns,
     defaultPageSize: 100,
     forceFilters: rollForceFilters,
+    // Fason sütunları kartela tablosunda anlamsız (AT_KARTELA topta aktif fason
+    // sevki yok) — default gizli; Sütunlar'dan açılırsa "—" gösterir.
+    initialVisibility: { subcontractorCategory: false, subcontractor: false },
     enabled: tab === "rolls",
   });
   const includeFire = searchParams.get("filter[includeFire]") === "true";
@@ -117,10 +121,9 @@ export function KartelaPage() {
           : "kartela";
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Kartela"
-        description="Kartela sevk/kabul belgeleri, fasondaki toplar ve üretilen kartelalar — tek yerden."
         actions={<RefreshButton queryKey={refreshKey} extraKeys={[["kartela"]]} />}
       />
       <KartelaTabBar
@@ -129,7 +132,7 @@ export function KartelaPage() {
         trailing={
           tab === "rolls" ? (
             <>
-              <DataTableTools table={rollsTable.table} exportName="Envanter" />
+              <DataTableTools table={rollsTable.table} exportName="Envanter" fetchAll={rollsTable.fetchAll} />
               <SavedViewsMenu />
               <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
                 <Checkbox
@@ -182,6 +185,6 @@ export function KartelaPage() {
         open={Boolean(scanSwatch)}
         onOpenChange={(o) => !o && setScanSwatch(null)}
       />
-    </div>
+    </PageShell>
   );
 }

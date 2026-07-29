@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE_FLAGS_QUERY_KEY } from "@/hooks/usePricingEnabled";
@@ -52,10 +53,9 @@ export function GeneralSettingsPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Genel Ayarlar"
-        description="Modüle göre ayrılmış özellik anahtarları, cihaz ve sistem ayarları."
         actions={
           <RefreshButton queryKey={FEATURE_FLAGS_QUERY_KEY} successMessage="Ayarlar yenilendi" />
         }
@@ -120,6 +120,6 @@ export function GeneralSettingsPage() {
         </div>
       </Tabs>
       </SettingsDirtyProvider>
-    </div>
+    </PageShell>
   );
 }

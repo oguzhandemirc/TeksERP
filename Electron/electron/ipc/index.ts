@@ -6,6 +6,8 @@ import { registerPowerIpc } from "./power.ipc.js";
 import { registerScannerIpc } from "./scanner.ipc.js";
 import { registerPrinterIpc } from "./printer.ipc.js";
 import { registerScaleIpc } from "./scale.ipc.js";
+import { registerPdfIpc } from "./pdf.ipc.js";
+import { registerFilesIpc } from "./files.ipc.js";
 
 export function registerIpcHandlers(): void {
   registerSecureStoreIpc();
@@ -16,4 +18,6 @@ export function registerIpcHandlers(): void {
   registerScannerIpc();
   registerPrinterIpc();
   registerScaleIpc();
+  registerPdfIpc();
+  registerFilesIpc();
 }

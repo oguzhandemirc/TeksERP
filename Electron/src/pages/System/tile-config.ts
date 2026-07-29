@@ -1,6 +1,6 @@
 import { Activity, Archive, Cpu, DatabaseBackup, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 
-export type SystemTileGroup = "activity" | "archive" | "config";
+export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
 export interface SystemTile {
   key: string;
@@ -23,6 +23,11 @@ export const systemTileSections: SystemTileSection[] = [
     group: "activity",
     title: "Aktivite & Denetim",
     description: "Sistemde ne olduğunu izlemek için canlı log görünümleri",
+  },
+  {
+    group: "monitoring",
+    title: "İzleme & Sağlık",
+    description: "Sunucu kaynakları ve uç-nokta performansı — sistem sağlığı",
   },
   {
     group: "archive",
@@ -87,7 +92,7 @@ export const systemTiles: SystemTile[] = [
     description: "Hangi uç yavaş — route bazında p50/p95, yavaş istek defteri, günlük trend",
     icon: Gauge,
     to: "/system/perf",
-    group: "activity",
+    group: "monitoring",
     adminOnly: true,
   },
   {
@@ -96,7 +101,7 @@ export const systemTiles: SystemTile[] = [
     description: "Backend CPU/RAM kullanımı, çalışma süresi ve makine kaynakları",
     icon: Cpu,
     to: "/system/server-status",
-    group: "config",
+    group: "monitoring",
   },
   {
     key: "backups",

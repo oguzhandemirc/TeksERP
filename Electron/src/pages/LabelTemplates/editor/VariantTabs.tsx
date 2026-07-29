@@ -176,7 +176,7 @@ function NewVariantDialog({ open, onOpenChange, templateId, variants, onCreated 
             <Select value={source} onValueChange={setSource}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="blank" className="text-xs">Boş iskelet (QR + ürün + barkod)</SelectItem>
+                <SelectItem value="blank" className="text-xs">Boş iskelet (QR + kumaş + barkod)</SelectItem>
                 {variants.map((v) => (
                   <SelectItem key={v.id} value={v.id} className="text-xs">
                     "{v.name}" üzerinden kopyala ({v.widthMm}×{v.heightMm})

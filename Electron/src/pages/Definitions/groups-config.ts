@@ -22,8 +22,8 @@ export interface DefinitionGroup {
 export const definitionGroups: DefinitionGroup[] = [
   {
     key: "catalog",
-    title: "Ürün Kataloğu",
-    description: "Ürünler, kumaş özellikleri, renkler ve kalite sınıfları",
+    title: "Kumaş Kataloğu",
+    description: "Kumaşlar, özellikler, renkler ve kalite sınıfları",
     icon: Layers,
   },
   {
@@ -35,7 +35,7 @@ export const definitionGroups: DefinitionGroup[] = [
   {
     key: "production",
     title: "Üretim & Kalite",
-    description: "İstasyonlar, makineler, rotalar ve hata tipleri",
+    description: "İstasyonlar, donanım, rotalar, iş emri şablonları, hata tipleri ve iade nedenleri",
     icon: Factory,
   },
   {

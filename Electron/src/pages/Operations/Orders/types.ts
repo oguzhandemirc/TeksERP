@@ -1,4 +1,4 @@
-import type { OrderStatus } from "@/types/enums";
+import type { OrderStatus, WorkOrderStatus } from "@/types/enums";
 
 export interface OrderLineColor {
   id: string;
@@ -35,7 +35,7 @@ export interface OrderLine {
   quantity: number;
   width: number | null;
   unitPrice: string | null;
-  /** Müşteri-bazlı ürün adı override (1-shot). Boşsa master alias veya default'a düşer. */
+  /** Müşteri-bazlı kumaş adı override (1-shot). Boşsa master alias veya default'a düşer. */
   customerItemName: string | null;
   /** Müşteri-bazlı renk adı override (1-shot). */
   customerColorName: string | null;
@@ -49,10 +49,15 @@ export interface OrderLine {
   openQty?: number;
   shippedQty?: number;
   reservedQty?: number;
-  /** Kalemin bağlandığı WO'lar. Boş veya hepsi CANCELLED ise kalem düzenlenebilir. */
+  /**
+   * Kalemin bağlandığı WO'lar. Boş veya hepsi CANCELLED ise kalem düzenlenebilir.
+   * "İş Emri" rollup rozeti + bağlı-İE listesi de bu bağdan türer → id +
+   * workOrderNumber taşınır. Status inline union yerine WorkOrderStatus:
+   * SUPERSEDED dahil (backend tebdil sonrası gönderebilir).
+   */
   workOrderLinks?: Array<{
     workOrderId: string;
-    workOrder: { status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" };
+    workOrder: { id: string; workOrderNumber: string; status: WorkOrderStatus };
   }>;
 }
 

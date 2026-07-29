@@ -103,6 +103,36 @@ export interface RollStats {
   byQuality: Record<string, number>;
 }
 
+/** Fasonda özet şeridi — GET /api/rolls/subcontractor-summary cevabı. */
+export interface RollSubcontractorSummary {
+  /** Firma kartları. subcontractorId=null → açık sevk kalemi bulunamayan
+   *  AT_SUBCONTRACTOR top (veri anomalisi) — "Bilinmiyor" kartı. */
+  bySubcontractor: Array<{
+    subcontractorId: string | null;
+    name: string;
+    code: string | null;
+    rollCount: number;
+    /** Σ currentQty (mt) — 1 ondalık (F85 yuvarlama kuralı). */
+    totalQty: number;
+    oldestDispatchedAt: Date | null;
+    /** En eski açık sevkin yaşı (gün, floor) — "en eski N gün". */
+    oldestDays: number | null;
+  }>;
+  /** İşlem-tipi chip'leri. categoryId=null → "Bilinmiyor" (kategorisiz adım + anomali).
+   *  Her top tam BİR gruba düşer → "Tümü" chip'i = Σ byCategory. */
+  byCategory: Array<{
+    categoryId: string | null;
+    name: string;
+    rollCount: number;
+    totalQty: number;
+  }>;
+  /** Evren toplamı — frontend "Tümü" chip'i + boş-durum gate'i bunu okur. */
+  total: {
+    rollCount: number;
+    totalQty: number;
+  };
+}
+
 /**
  * İstasyonda takılı (IN_PRODUCTION) top için kurtarma önizlemesi (salt-okunur).
  * eligible yalnız IN_PRODUCTION topta true; açık fason sevki blockReasons'a düşer.
@@ -310,6 +340,49 @@ const ROLL_LIST_INCLUDE = {
   },
   shipment: { select: { id: true, shipmentNo: true, status: true } },
   sack: { select: { id: true, sackNo: true, seq: true } },
+  // Fasonda görünürlüğü: topun AÇIK (dönmemiş) son fason sevk kalemi — liste
+  // "İşlem" + "Fason Firması" kolonlarını besler. Açık-kalem tanımı F85 ile
+  // birebir (iptalsiz + doğrudan-sevksiz dispatch + aktif receipt-item'ı yok)
+  // → dönmüş/eski topta dizi BOŞ döner; kartela emsalinden (findRollById
+  // kartelaDispatchItems) farkı receipt-none koşulu: bu include TÜM sekmelerce
+  // paylaşıldığı için dönmüş STOCK topunda bayat firma göstermemek ŞART.
+  // take:1 → Prisma sayfa başına tek LATERAL sorgu (N+1 yok); rollId +
+  // sourceDispatchItemId indeksli, anti-join ucuz.
+  dispatchItems: {
+    where: {
+      dispatch: { cancelledAt: null, directShippedAt: null },
+      receiptItems: { none: { receipt: { cancelledAt: null } } },
+    },
+    // "En güncel açık kalem" — özet ucu (getRollSubcontractorSummary open_items)
+    // ile hizalı: dispatch.dispatchedAt DESC. Bir topun iki açık kalemi zorunlu
+    // olarak iki AYRI dispatch'te (farklı dispatchedAt) olur (@@unique dispatchId,
+    // rollId) → tek anahtar en güncel kalemi kesin seçer; kolon/detay ile şerit
+    // kartı çoklu-açık-kalem anomalisinde AYNI firmayı gösterir.
+    orderBy: { dispatch: { dispatchedAt: "desc" } },
+    take: 1,
+    select: {
+      dispatch: {
+        select: {
+          dispatchNo: true,
+          dispatchedAt: true,
+          // "İşlem" (kategori) kaynağı: adımın requiredCategory'si BOŞ olabilir
+          // (rota tasarımında girilmemiş) → firmanın kendi kategorisine düşülür
+          // (firma tek kategoriliyse). Frontend activeCategoryOf() bu iki alandan
+          // türetir; özet ucu + filtre de aynı COALESCE(step, firma-tek-kategori)
+          // tanımını paylaşır.
+          subcontractor: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              categories: { select: { category: { select: { id: true, name: true } } } },
+            },
+          },
+          step: { select: { requiredCategory: { select: { id: true, name: true } } } },
+        },
+      },
+    },
+  },
 } as const;
 
 // --- Üretim Akışı (Kanban) panosu — tek-istek aggregate şekli --------------
@@ -624,6 +697,7 @@ export class InventoryService {
         ...buildTurkishSearch<Prisma.RollWhereInput>(search, [
           "item.name",
           "item.code",
+          "color.name",
         ]),
       ];
     }
@@ -872,6 +946,58 @@ export class InventoryService {
       where.markedForKartela = true;
     }
 
+    // --- Fasonda görünürlüğü: firma + işlem (kategori) filtresi ---
+    // "Açık sevk kalemi" tanımı F85 (getOpenDispatches) ile birebir: iptalsiz +
+    // doğrudan-sevksiz dispatch'in aktif (iptalsiz) receipt-item'ı OLMAYAN
+    // kalemi. subcontractor-summary ucu ve ROLL_LIST_INCLUDE.dispatchItems ile
+    // AYNI küme → şerit/kolon/liste sayıları sapmaz. AND'e eklenir (status/
+    // renk scope'larıyla kesişir); sekme tabanı (status=AT_SUBCONTRACTOR)
+    // frontend forceFilters'tan ayrıca gelir. delete where.X ŞART: buildWhereClause
+    // her filter anahtarını düz kolon olarak kopyalar, Roll'da bu kolonlar yok.
+    const subcontractorId =
+      typeof f["subcontractorId"] === "string" && f["subcontractorId"]
+        ? (f["subcontractorId"] as string)
+        : null;
+    delete where.subcontractorId;
+    const subcontractorCategoryId =
+      typeof f["subcontractorCategoryId"] === "string" && f["subcontractorCategoryId"]
+        ? (f["subcontractorCategoryId"] as string)
+        : null;
+    delete where.subcontractorCategoryId;
+    if (subcontractorId || subcontractorCategoryId) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        {
+          dispatchItems: {
+            some: {
+              dispatch: {
+                cancelledAt: null,
+                directShippedAt: null,
+                ...(subcontractorId ? { subcontractorId } : {}),
+                // Kategori: adımın requiredCategory'si eşleşir VEYA adım boşsa
+                // firmanın kategorisi eşleşir (özet COALESCE tanımıyla hizalı —
+                // firma tek kategoriliyse birebir, çok kategoride hafif geniş).
+                ...(subcontractorCategoryId
+                  ? {
+                      OR: [
+                        { step: { requiredCategoryId: subcontractorCategoryId } },
+                        {
+                          step: { requiredCategoryId: null },
+                          subcontractor: {
+                            categories: { some: { categoryId: subcontractorCategoryId } },
+                          },
+                        },
+                      ],
+                    }
+                  : {}),
+              },
+              receiptItems: { none: { receipt: { cancelledAt: null } } },
+            },
+          },
+        },
+      ];
+    }
+
     return where;
   }
 
@@ -900,7 +1026,10 @@ export class InventoryService {
     // CURSOR MODE — dinamik sortBy desteği (utils/cursor.ts dynamic API).
     if (isCursorRequested(req)) {
       const rawLimit = parseInt(req.query.limit as string, 10) || 50;
-      const limit = Math.min(Math.max(1, rawLimit), 200);
+      // Tavan MAX_PAGE_SIZE (500) ile hizalı: "tümünü indir" (fetchAll) 500'lük
+      // sayfa ister → 30k kayıt 60 istekte iner (200 tavanında 150 istek/2.5× daha
+      // yavaştı). Normal liste 100'lük ister; bu tavan yalnız büyük export'u etkiler.
+      const limit = Math.min(Math.max(1, rawLimit), 500);
       const wantTotal = req.query.withTotal === "true";
 
       const sortBy = params.sortBy || "createdAt";
@@ -1212,6 +1341,36 @@ export class InventoryService {
   }
 
   /**
+   * Envanter özeti — N kategori filtresinin her biri için TEK istekte count + metre.
+   * Frontend her kategoriyi kendi filtresiyle (buildRollForceFilters) gönderir; 8 ayrı
+   * HTTP + 8 auth/parse yerine tek çağrı, içeride Promise.all ile paralel aggregate
+   * (getWarehouseScope ile aynı desen). Kategori tanımı tek yerde (frontend) kalır;
+   * backend generic sayım motoru. buildRollWhere liste/özet ile aynı → sapma olmaz.
+   */
+  async getRollStatsBatch(
+    items: Array<{ key: string; filters?: Record<string, unknown> }>,
+  ): Promise<ApiResponse<Array<{ key: string; totalCount: number; totalQty: number }>>> {
+    const data = await Promise.all(
+      items.map(async (it) => {
+        const where = this.buildRollWhere({
+          filters: it.filters ?? {},
+        } as QueryParams) as Prisma.RollWhereInput;
+        const agg = await prisma.roll.aggregate({
+          where,
+          _count: { _all: true },
+          _sum: { currentQty: true },
+        });
+        return {
+          key: it.key,
+          totalCount: agg._count._all,
+          totalQty: Number(agg._sum.currentQty ?? 0),
+        };
+      }),
+    );
+    return { success: true, data };
+  }
+
+  /**
    * Depo kapsam sayaçları — WAREHOUSE topları fiziksel yere göre ayır (ÇUVAL DEPO MODELİ):
    *  - serbest:    shipmentId null + sackId null (satılabilir/okutulabilir gerçek serbest stok)
    *  - çuval depo: shipmentId null + sackId dolu (çuvala konmuş, sevk edilmemiş)
@@ -1242,6 +1401,154 @@ export class InventoryService {
     return {
       success: true,
       data: { free: pick(free), pool: pick(pool), planned: pick(planned) },
+    };
+  }
+
+  /**
+   * Fasonda özet şeridi — AT_SUBCONTRACTOR topların firma + işlem (kategori)
+   * bazlı dağılımı, TEK istekte iki dizi + toplam. Açık-kalem tanımı F85 ile
+   * birebir (reports/subcontract getOpenDispatches): iptalsiz + doğrudan-sevksiz
+   * sevkin, aktif (iptalsiz) receipt-item'ı OLMAYAN kalemi. base ROLL-driven
+   * (1 satır/top) + DISTINCT ON en güncel açık kalemi seçer → fason→fason
+   * transferde/anomalide çift sayım İMKANSIZ; açık kalemi bulunamayan top null
+   * gruba düşer ("Bilinmiyor"). Evren varsayılan FIRE-hariç (liste default'uyla
+   * hizalı: qualityGrade IS NULL OR <> 'FIRE'); includeFire=true iken FIRE toplar
+   * da dahil → "Fire kaliteyi de göster" toggle'ı açıkken şerit sayıları tablo/
+   * Top-Metre ile birebir tutar. LIMIT bilinçli YOK: grup sayısı master tablo
+   * kardinalitesiyle sınırlı, sevk hacmiyle büyümez.
+   */
+  async getRollSubcontractorSummary(
+    includeFire = false,
+  ): Promise<ApiResponse<RollSubcontractorSummary>> {
+    // FIRE dışlama koşulu (liste buildRollWhere ile aynı semantik): includeFire
+    // açıksa boş fragment → FIRE toplar da sayılır.
+    const fireClause = includeFire
+      ? Prisma.empty
+      : Prisma.sql`AND (r."qualityGrade" IS NULL OR r."qualityGrade" <> 'FIRE')`;
+    // Paylaşılan CTE — rolls tarafı @@index([status, createdAt]), kalemler
+    // @@index([rollId]), anti-join @@index([sourceDispatchItemId]) kullanır.
+    const baseCte = Prisma.sql`
+      open_items AS (
+        SELECT DISTINCT ON (sdi."rollId")
+          sdi."rollId"            AS "rollId",
+          sd."subcontractorId"    AS "subcontractorId",
+          sd."dispatchedAt"       AS "dispatchedAt",
+          -- "İşlem" kategorisi: adımın requiredCategory'si; boşsa firmanın kendi
+          -- kategorisine düşülür (yalnız firma TEK kategoriliyse — çok kategorili
+          -- firmada işlem belirsiz → null "Bilinmiyor"). Frontend activeCategoryOf
+          -- + buildRollWhere filtresi AYNI COALESCE tanımını paylaşır.
+          COALESCE(
+            ws."requiredCategoryId",
+            (SELECT MAX(scl."categoryId"::text)::uuid
+             FROM subcontractor_category_links scl
+             WHERE scl."subcontractorId" = sd."subcontractorId"
+             HAVING COUNT(*) = 1)
+          )                       AS "categoryId"
+        FROM rolls r
+        JOIN subcontractor_dispatch_items sdi ON sdi."rollId" = r.id
+        JOIN subcontractor_dispatches sd      ON sd.id = sdi."dispatchId"
+        JOIN work_order_steps ws              ON ws.id = sd."stepId"
+        WHERE r.status = 'AT_SUBCONTRACTOR'
+          AND sd."cancelledAt" IS NULL
+          AND sd."directShippedAt" IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM subcontractor_receipt_items sri
+            JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
+            WHERE sri."sourceDispatchItemId" = sdi.id
+              AND sr."cancelledAt" IS NULL
+          )
+        ORDER BY sdi."rollId", sd."dispatchedAt" DESC, sdi."createdAt" DESC
+      ),
+      base AS (
+        SELECT r.id, r."currentQty", oi."subcontractorId", oi."dispatchedAt", oi."categoryId"
+        FROM rolls r
+        LEFT JOIN open_items oi ON oi."rollId" = r.id
+        WHERE r.status = 'AT_SUBCONTRACTOR'
+          ${fireClause}
+      )
+    `;
+
+    const [firmRows, catRows] = await Promise.all([
+      prisma.$queryRaw<
+        Array<{
+          subcontractorId: string | null;
+          name: string | null;
+          code: string | null;
+          rollCount: bigint;
+          totalQty: number | null;
+          oldestDispatchedAt: Date | null;
+        }>
+      >(Prisma.sql`
+        WITH ${baseCte}
+        SELECT
+          b."subcontractorId"        AS "subcontractorId",
+          s.name                     AS "name",
+          s.code                     AS "code",
+          COUNT(*)                   AS "rollCount",
+          SUM(b."currentQty")::float AS "totalQty",
+          MIN(b."dispatchedAt")      AS "oldestDispatchedAt"
+        FROM base b
+        LEFT JOIN subcontractors s ON s.id = b."subcontractorId"
+        GROUP BY b."subcontractorId", s.name, s.code
+        ORDER BY "rollCount" DESC, s.name ASC NULLS LAST
+      `),
+      prisma.$queryRaw<
+        Array<{
+          categoryId: string | null;
+          name: string | null;
+          rollCount: bigint;
+          totalQty: number | null;
+        }>
+      >(Prisma.sql`
+        WITH ${baseCte}
+        SELECT
+          b."categoryId"             AS "categoryId",
+          c.name                     AS "name",
+          COUNT(*)                   AS "rollCount",
+          SUM(b."currentQty")::float AS "totalQty"
+        FROM base b
+        LEFT JOIN subcontractor_categories c ON c.id = b."categoryId"
+        GROUP BY b."categoryId", c.name
+        ORDER BY "rollCount" DESC, c.name ASC NULLS LAST
+      `),
+    ]);
+
+    const now = Date.now();
+    const round1 = (v: number | null) => Math.round(Number(v ?? 0) * 10) / 10;
+    const byCategory = catRows.map((r) => ({
+      categoryId: r.categoryId,
+      name: r.name ?? "Bilinmiyor",
+      rollCount: Number(r.rollCount),
+      totalQty: round1(r.totalQty),
+    }));
+    // "Tümü" chip'i / boş-durum gate'i: her top tam bir kategori grubuna düştüğü
+    // için total = Σ byCategory (aynı zamanda Σ bySubcontractor).
+    const total = byCategory.reduce(
+      (acc, c) => ({
+        rollCount: acc.rollCount + c.rollCount,
+        totalQty: Math.round((acc.totalQty + c.totalQty) * 10) / 10,
+      }),
+      { rollCount: 0, totalQty: 0 },
+    );
+
+    return {
+      success: true,
+      data: {
+        bySubcontractor: firmRows.map((r) => ({
+          subcontractorId: r.subcontractorId,
+          name: r.name ?? "Bilinmiyor",
+          code: r.code,
+          rollCount: Number(r.rollCount),
+          totalQty: round1(r.totalQty),
+          oldestDispatchedAt: r.oldestDispatchedAt,
+          oldestDays: r.oldestDispatchedAt
+            ? Math.max(0, Math.floor((now - new Date(r.oldestDispatchedAt).getTime()) / 86_400_000))
+            : null,
+        })),
+        byCategory,
+        total,
+      },
     };
   }
 
@@ -1294,6 +1601,37 @@ export class InventoryService {
                 dispatchNo: true,
                 dispatchedAt: true,
                 subcontractor: { select: { id: true, name: true, code: true } },
+              },
+            },
+          },
+        },
+        // AT_SUBCONTRACTOR top için açık (dönmemiş) fason sevk kalemi → detay
+        // panelinde (RollDetailSheet) "Fason Bilgisi" kartı: firma + sevk no +
+        // sevk tarihi + işlem. ROLL_LIST_INCLUDE.dispatchItems ile AYNI tanım (F85)
+        // + AYNI sıralama (dispatch.dispatchedAt DESC, özetle hizalı).
+        dispatchItems: {
+          where: {
+            dispatch: { cancelledAt: null, directShippedAt: null },
+            receiptItems: { none: { receipt: { cancelledAt: null } } },
+          },
+          orderBy: { dispatch: { dispatchedAt: "desc" } },
+          take: 1,
+          select: {
+            dispatch: {
+              select: {
+                dispatchNo: true,
+                dispatchedAt: true,
+                // "İşlem" kategorisi: step.requiredCategory boşsa firmanın
+                // kategorisine düşülür (ROLL_LIST_INCLUDE ile aynı, activeCategoryOf).
+                subcontractor: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    categories: { select: { category: { select: { id: true, name: true } } } },
+                  },
+                },
+                step: { select: { requiredCategory: { select: { id: true, name: true } } } },
               },
             },
           },

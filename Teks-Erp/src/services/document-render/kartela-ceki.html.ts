@@ -13,6 +13,20 @@
 
 import type { PrintedDocStatus } from "@prisma/client";
 import type { PrintedDocSnapshot } from "../printed-document.service";
+import {
+  resolveDocStyle,
+  docPageCss,
+  docTableCss,
+  scaleDocCss,
+  docLogoHtml,
+  DOC_LOGO_CSS,
+  DOC_STAMPS_CSS,
+  docCopyBadge,
+  docBlocksHtml,
+  docPrintNoteHtml,
+  docStampsBar,
+} from "./doc-style";
+import { buildDocTable } from "./doc-table";
 
 interface KartelaCekiRoll {
   sequence: number;
@@ -44,6 +58,16 @@ interface RenderMeta {
   voidReason?: string | null;
   /** Kaynak henüz donmamış (canlı önizleme) → TASLAK filigranı. */
   draft?: boolean;
+  /** Snapshot logoHash'inin çözülmüş görseli (servis katmanı çözer). */
+  logoDataUrl?: string | null;
+  /** cfg.qr açıksa belge doğrulama karekodu (servis üretir). */
+  qrDataUrl?: string | null;
+  /** Basım damgası (dd.MM.yyyy HH:mm) — cfg.stamps.printedAt açıksa. */
+  printedAtText?: string;
+  /** Basan kullanıcı — cfg.stamps.printedBy açıksa. */
+  printedBy?: string | null;
+  /** Tek seferlik baskı notu (?printNote= — persist edilmez). */
+  printNote?: string | null;
 }
 
 function esc(v: unknown): string {
@@ -86,6 +110,8 @@ export function renderKartelaCekiHtml(
 ): string {
   const doc = snapshot.doc as unknown as KartelaCekiDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  const style = resolveDocStyle(cfg.style, { marginMm: 9 });
+  const logo = docLogoHtml(meta.logoDataUrl, cfg);
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
@@ -101,7 +127,7 @@ export function renderKartelaCekiHtml(
   const t = doc.totals;
 
   const lhLines = showLetterhead
-    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : ""]
+    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : "", ...(lh.extraLines ?? [])]
         .filter((s) => s && s.trim())
         .map((s) => `<div class="lh-line">${esc(s)}</div>`)
         .join("")
@@ -133,44 +159,28 @@ export function renderKartelaCekiHtml(
     : "";
   const infoGrid = subBox || vehBox ? `<div class="info">${subBox}${vehBox}</div>` : "";
 
-  // Toplar tablosu.
+  // Toplar tablosu — kolonlar cfg.columns.rollTable ile aç/kapa + sıralanır.
   const rollTable = sectionOn(cfg.sections, "rollTable")
-    ? `<div class="tbl-cap">Gönderilen Toplar (${esc(t.rollCount)})</div>
-       <table class="sec">
-        <thead>
-          <tr>
-            <th class="c" style="width:34px">#</th>
-            <th class="l">BARKOD</th>
-            <th class="l">ÜRÜN / RENK</th>
-            <th class="c" style="width:60px">EN</th>
-            <th class="r" style="width:80px">METRE</th>
-            <th class="r" style="width:70px">KG</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rolls
-            .map(
-              (r) =>
-                `<tr>
-                  <td class="c">${esc(r.sequence)}</td>
-                  <td class="l mono">${esc(r.barcode ?? "—")}</td>
-                  <td class="l">${esc(r.itemName)}${r.colorName ? ` · ${esc(r.colorName)}` : ""}</td>
-                  <td class="c">${r.width != null ? `${esc(Math.round(r.width))} cm` : "—"}</td>
-                  <td class="r">${esc(fmtQty(r.dispatchedQty))}</td>
-                  <td class="r">${r.dispatchedWeight != null ? esc(fmtQty(r.dispatchedWeight)) : "—"}</td>
-                </tr>`,
-            )
-            .join("")}
-          <tr class="tot">
-            <td class="l" colspan="4">TOPLAM</td>
-            <td class="r">${esc(fmtQty(t.totalQty))} m</td>
-            <td class="r">${t.totalWeight > 0 ? `${esc(fmtQty(t.totalWeight))} kg` : "—"}</td>
-          </tr>
-        </tbody>
-      </table>`
+    ? `<div class="tbl-cap">Gönderilen Toplar (${esc(t.rollCount)})</div>` +
+      buildDocTable<(typeof rolls)[number]>({
+        className: "sec",
+        colCfg: cfg.columns?.rollTable,
+        footLabel: "TOPLAM",
+        rows: rolls,
+        cols: [
+          { key: "seq", label: "#", align: "c", width: "34px", cell: (r) => esc(r.sequence) },
+          { key: "barcode", label: "BARKOD", align: "l", cellClass: "mono", cell: (r) => esc(r.barcode ?? "—") },
+          { key: "itemColor", label: "ÜRÜN / RENK", align: "l", cell: (r) => `${esc(r.itemName)}${r.colorName ? ` · ${esc(r.colorName)}` : ""}` },
+          { key: "width", label: "EN", align: "c", width: "60px", cell: (r) => (r.width != null ? `${esc(Math.round(r.width))} cm` : "—") },
+          { key: "meters", label: "METRE", align: "r", width: "80px", cell: (r) => esc(fmtQty(r.dispatchedQty)), foot: `${esc(fmtQty(t.totalQty))} m` },
+          { key: "kg", label: "KG", align: "r", width: "70px", cell: (r) => (r.dispatchedWeight != null ? esc(fmtQty(r.dispatchedWeight)) : "—"), foot: t.totalWeight > 0 ? `${esc(fmtQty(t.totalWeight))} kg` : "—" },
+        ],
+      })
     : "";
 
-  const noteBlock = cfg.footerNote ? `<div class="note">${esc(cfg.footerNote)}</div>` : "";
+  // Serbest not (cfg.footerNote) — sections.notes !== false ise (default açık).
+  const showNotes = sectionOn(cfg.sections, "notes");
+  const noteBlock = showNotes && cfg.footerNote ? `<div class="note">${esc(cfg.footerNote)}</div>` : "";
 
   const signatures = showSignatures
     ? `<div class="sign">${sigLabels
@@ -181,10 +191,10 @@ export function renderKartelaCekiHtml(
         .join("")}</div>`
     : "";
 
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8">
-<style>
+  const css = scaleDocCss(
+    `
   * { box-sizing: border-box; }
-  @page { size: A4; margin: 9mm; }
+  ${docPageCss(style)}
   body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #111; font-size: 11px; }
   .sheet { position: relative; width: 100%; }
   .mono { font-family: ui-monospace, "Courier New", monospace; }
@@ -221,26 +231,48 @@ export function renderKartelaCekiHtml(
   .sign-box { flex: 1; text-align: center; }
   .sign-line { border-top: 1px solid #000; margin-bottom: 3px; margin-top: 28px; }
   .sign-lbl { font-size: 10px; color: #333; }
-</style></head>
+  ${DOC_LOGO_CSS}
+  ${DOC_STAMPS_CSS}
+  ${docTableCss(style, [".sec"])}
+`,
+    style,
+  );
+
+  // Nüsha rozeti + konumlu bloklar + tek seferlik baskı notu + damga/QR çubuğu.
+  const copyBadge = docCopyBadge(cfg, esc);
+  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc);
+  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc);
+  const printNote = docPrintNoteHtml(meta.printNote, esc);
+  const stampsBar = docStampsBar(cfg, meta, esc, { printedAt: "Basım", printedBy: "Basan" });
+
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<style>${css}</style></head>
 <body>
   ${watermark}
   <div class="sheet">
     <header>
       <div class="hl">
+        ${logo.left}
         <div class="company">${esc(company?.name ?? "")}</div>
         ${lhLines}
       </div>
       <div class="hr">
+        ${logo.right}
         <div class="title">${esc(title)}</div>
+        ${copyBadge}
         <div class="ln">Sevk No: <b>${esc(doc.dispatchNo)}</b></div>
         <div class="ln">Tarih: <b>${esc(fmtDate(doc.dispatchedAt))}</b></div>
       </div>
     </header>
 
     ${infoGrid}
+    ${blocksTop}
     ${rollTable}
     ${noteBlock}
+    ${blocksBottom}
+    ${printNote}
     ${signatures}
+    ${stampsBar}
   </div>
 </body></html>`;
 }

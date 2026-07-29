@@ -230,11 +230,13 @@ export function qrFootprintDots(data: string, mag: number): number {
 /** Metraj bandı değeri — TR-formatlı sayı + "m" (metre) son eki, boşluksuz bitişik
  *  ("230,5m"). Dar dikey şeritte kompakt. TÜM diller (PPLB/PPLA/ZPL/HTML) + önizleme
  *  bu tek metni kullanır → gördüğün = basılan. Değer yoksa "" döner (çağıran zaten
- *  present-guard'lı; ham `String(lengthMeters)` binlik-ayıraç + birimsiz veriyordu). */
-export function bannerValueText(payload: LabelPayload): string {
+ *  present-guard'lı; ham `String(lengthMeters)` binlik-ayıraç + birimsiz veriyordu).
+ *  unit=false → yalnız sayı (kanvas LengthBannerElement.unit; akış-modeli hep true). */
+export function bannerValueText(payload: LabelPayload, unit = true): string {
   const v = payload.lengthMeters;
   if (v == null || String(v).trim() === "") return "";
-  return `${formatNumber(v)}m`;
+  const num = formatNumber(v);
+  return unit ? `${num}m` : num;
 }
 
 // Türkçe → ASCII eşlemesi (İ/Ş/Ğ/ç vb.). Native gönderimde KRİTİK: ham 9100 baytları
@@ -379,6 +381,26 @@ export function templateTextLines(
     });
 }
 
+/** Emit-katmanı kopya tavanı — 100 (Etiket Stüdyosu şablon baskısı toplu basabilir).
+ *  Rulo/kartela fabrika akışı 5'te kalır: bulk uçları Zod max(5), tekil uçlar
+ *  label.service clampRollCopies (1-5) girişte kırpar — 100 oraya SIZMAZ. */
 export function clampCopies(copies: number): number {
-  return Math.max(1, Math.min(5, copies || 1));
+  return Math.max(1, Math.min(100, copies || 1));
+}
+
+/** Metin hizalama x-kayması (dot) — çapa (x) referanslı: left=0, center=−w/2, right=−w.
+ *  widthDots = satırın basılacak genişliği. Çok satırlı metin expandMultilineText'te
+ *  satırlara bölünür; her satır kendi genişliğiyle çapaya hizalanır → satırlar hizalı. */
+export function alignOffsetDots(align: "left" | "center" | "right" | undefined, widthDots: number): number {
+  if (align === "center") return -Math.round(widthDots / 2);
+  if (align === "right") return -Math.round(widthDots);
+  return 0;
+}
+
+/** Harf dönüşümü — Türkçe-duyarlı (i↔İ, ı↔I). Yok → dokunma. Native + raster + HTML
+ *  aynı dönüşümü uygular → tüm dillerde aynı metin (sanitize/asciiFold sonradan). */
+export function applyTextCase(text: string, textCase: "upper" | "lower" | undefined): string {
+  if (textCase === "upper") return text.toLocaleUpperCase("tr-TR");
+  if (textCase === "lower") return text.toLocaleLowerCase("tr-TR");
+  return text;
 }

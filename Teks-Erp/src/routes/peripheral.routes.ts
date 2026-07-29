@@ -24,6 +24,11 @@ const service = new PeripheralDeviceService({
   tableName: "PERIPHERAL_DEVICE",
   searchFields: ["code", "name", "address"],
   uniqueField: "code",
+  duplicateNameField: "name",
+  // hardDelete tombstone'u (deletedAt dolu, aktifleştirilemez) aday sayılmasın —
+  // aksi hâlde silinen cihazın adı süresiz bloke olurdu.
+  duplicateNameWhere: { deletedAt: null },
+  entityLabel: "cihaz",
   defaultInclude: {
     machine: { select: { id: true, code: true, name: true } },
     device: { select: { id: true, name: true } },

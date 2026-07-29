@@ -42,7 +42,7 @@ export const returnColumns: ColumnDef<ReturnRow>[] = [
   },
   {
     id: "item",
-    header: "Ürün",
+    header: "Kumaş",
     cell: ({ row }) => (
       <div>
         <div>{row.original.item?.name ?? "—"}</div>

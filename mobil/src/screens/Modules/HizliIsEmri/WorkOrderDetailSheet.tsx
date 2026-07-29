@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Text, Button, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -179,7 +180,14 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         </View>
       ) : mode === 'edit' && edit ? (
         // ── DÜZENLE ──────────────────────────────────────────────────────────
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        // KeyboardAwareScrollView: İş Emri No / Hedef metraj-kg gibi alt alanlar
+        // klavye açılınca altında kalmasın (AppModal bottom lift %90 sheet'te
+        // clamp'li kalır; odaklı input'u klavye üstüne bu scroll çeker).
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
+        >
           <Text style={styles.note}>
             Renk, en, metraj, kat tipi ve parti kodu güncellenir. Fason talimatları rota adımlarında, rota / sipariş bağı değişimi masaüstünden yapılır.
           </Text>
@@ -199,7 +207,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
               Vazgeç
             </Button>
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       ) : mode === 'cancel' ? (
         // ── İPTAL ÖNİZLEME ───────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.body}>

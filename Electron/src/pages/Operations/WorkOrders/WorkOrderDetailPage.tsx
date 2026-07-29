@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { useTabsStore } from "@/store/tabs";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
@@ -16,6 +17,7 @@ import { V3Section } from "./detail-v3/V3Section";
 import { KunyeCard } from "./detail-v3/KunyeCard";
 import { RouteStepline } from "./detail-v3/RouteStepline";
 import { ProducedV3 } from "./detail-v3/ProducedV3";
+import { OrderLinksV3 } from "./detail-v3/OrderLinksV3";
 import "./detail-v3/work-order-detail-v3.css";
 
 const LIST_PATH = "/operations/work-orders";
@@ -63,18 +65,21 @@ export function WorkOrderDetailPage() {
     [sortedSteps],
   );
   const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
+  // Bağlı sipariş bölümü — bağ varsa veya stoğa üretimse (OrderLinksV3 stoğa
+  // üretimi "siparişe bağlı değil" notuyla gösterir). Sheet'teki showOrders ile aynı.
+  const showOrders = hasOrders || wo?.type === "STOCK_PRODUCTION";
   const fulfill = useMemo(() => summarizeLinkedFulfillment(wo?.orderLinks ?? []), [wo?.orderLinks]);
 
   const holdingStep = wipSteps[0];
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <WorkOrderDetailHeader
         wo={wo}
         onBack={() => openTarget(LIST_PATH)}
         autoOpenTravelerCard={autoPrintTravelerCard}
       />
 
-      <div className="wo-v3 flex-1 overflow-auto">
+      <PageBody className="wo-v3">
         <div className="wrap">
           {detail.isLoading && (
             <div className="space-y-3">
@@ -131,10 +136,16 @@ export function WorkOrderDetailPage() {
               <V3Section title="Üretilen Nihai Toplar">
                 <ProducedV3 wo={wo} holdingText={holdingStep ? `${holdingStep.station?.name} adımında` : undefined} />
               </V3Section>
+
+              {showOrders && (
+                <V3Section title="Bağlı Sipariş(ler)">
+                  <OrderLinksV3 wo={wo} />
+                </V3Section>
+              )}
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

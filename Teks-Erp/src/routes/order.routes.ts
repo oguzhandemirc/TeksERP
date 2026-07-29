@@ -27,7 +27,14 @@ const availableQuerySchema = z.object({
 const service = new OrderService({
   modelName: "order",
   tableName: "ORDER",
-  searchFields: ["orderNumber"],
+  // Liste araması picker'la (findAvailableForWorkOrder) aynı kapsamda:
+  // sipariş no + müşteri adı + kalem kumaş adı / müşteri kumaş adı.
+  searchFields: [
+    "orderNumber",
+    "customer.name",
+    "lines.some.item.name",
+    "lines.some.customerItemName",
+  ],
   dateFields: ["createdAt", "deadline"],
   defaultInclude: {
     customer: true,
@@ -43,10 +50,12 @@ const service = new OrderService({
         requiredProperties: { include: { property: true } },
         // Frontend "Kalemler düzenlenebilir mi?" kararı için: kalem bir WO'ya
         // bağlıysa kilit. CANCELLED WO bağı sayılmaz (frontend status'e bakar).
+        // Ayrıca sipariş listesi "İş Emri" rollup rozeti + detay panelindeki
+        // "Bağlı İş Emirleri" listesi bu bağdan türer → id + workOrderNumber lazım.
         workOrderLinks: {
           select: {
             workOrderId: true,
-            workOrder: { select: { status: true } },
+            workOrder: { select: { id: true, workOrderNumber: true, status: true } },
           },
         },
       },
@@ -166,6 +175,40 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await service.getCancelPreview(assertValidUuid(req.params.id));
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/orders/{id}/shipments:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Siparişin sevkiyat drill-down'ı (hangi sevkiyatlarla sevk edildi)
+ *     description: >
+ *       Çuval sevkiyatı (DISPATCHED + PLANNED, CANCELLED hariç) ve fason direkt sevkleri
+ *       birleştirir. dispatchedTotal = order.shippedQty ile mutabık. Bilgilendirici.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ dispatchedTotal, plannedTotal, shipments[] }" }
+ */
+router.get(
+  "/:id/shipments",
+  verifyToken,
+  // Sipariş detayından (satış kullanıcısı) çağrılır → order:read ŞART; sevk verisi
+  // gösterdiği için shipping izinleri de kabul (lojistik kullanıcısı da erişsin).
+  requireAnyPermission("order:read", "shipping:read", "shipping:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await service.getOrderShipments(assertValidUuid(req.params.id));
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -396,6 +439,53 @@ router.post(
       });
       const body = schema.parse(req.body);
       const result = await service.getCoverageForLines(body);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/orders/spec-availability:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Spec (kumaş+renk+en) anlık müsaitlik — sipariş giriş formu ipucu
+ *     description: >
+ *       itemId zorunlu; colorId/width opsiyonel. Depoda serbest (WAREHOUSE, renk+en
+ *       birebir) / Üretimde (canlı WO in-flight) / Ham (STOCK, renk-joker + en-agnostik)
+ *       metrajlarını döner. ANLIK FOTOĞRAF — rezervasyon değildir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: colorId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: width
+ *         schema: { type: number }
+ *     responses:
+ *       200: { description: "{ freeWarehouse, inProduction, freeStock } (metre)" }
+ */
+router.get(
+  "/spec-availability",
+  verifyToken,
+  // Sipariş formundan (satış kullanıcısı) çağrılır → order:read ŞART. Planlamacı
+  // da erişebilsin diye workorder:read eklenir; yalnız workorder:read satışçıya 403.
+  requireAnyPermission("order:read", "order:write", "workorder:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schema = z.object({
+        itemId: z.string().uuid("Geçersiz ürün id"),
+        colorId: z.string().uuid("Geçersiz renk id").optional(),
+        width: z.preprocess(emptyToUndef, z.coerce.number().positive("En pozitif olmalı").optional()),
+      });
+      const q = schema.parse(req.query);
+      const result = await service.getSpecAvailability(q);
       res.json(result);
     } catch (e) {
       next(e);

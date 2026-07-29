@@ -1,15 +1,17 @@
 import { useMemo } from "react";
 import { safeFormat, formatNumber } from "@/lib/format";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { lineOpen } from "../order-fulfillment";
 import type { WorkOrder } from "../types";
 
 /**
  * v3 kurumsal bağlı sipariş(ler) — `OrderLinksCard` ile AYNI içerik (sipariş no +
- * müşteri + termin + kalemler: ürün/renk/en/boy/özellik + Sevk/Açık), v3 token'lı
+ * müşteri + termin + kalemler: kumaş/renk/en/boy/özellik + Sevk/Açık), v3 token'lı
  * `.card`/`.chip`/`.tag`/`.swatch` diliyle. Yan panelde shadcn kartları yerine
  * kullanılır ki panel tam sayfayla tutarlı görünsün.
  */
 export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
+  const openTarget = useOpenTarget();
   const groups = useMemo(() => {
     const links = wo.orderLinks ?? [];
     const map = new Map<string, typeof links>();
@@ -45,15 +47,54 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
               paddingBottom: "8px",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-              <span
-                className="mono"
-                style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent-ink)" }}
+            {orderId.startsWith("__no_order_") ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                <span
+                  className="mono"
+                  style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent-ink)" }}
+                >
+                  {order?.orderNumber ?? "—"}
+                </span>
+                {order?.customer && <span style={{ fontWeight: 600 }}>{order.customer.name}</span>}
+              </div>
+            ) : (
+              <button
+                type="button"
+                title="Siparişi aç"
+                onClick={(e) => openTarget(`/operations/orders?focus=${orderId}`, e)}
+                onAuxClick={(e) => {
+                  if (e.button !== 1) return;
+                  e.preventDefault();
+                  openTarget(`/operations/orders?focus=${orderId}`, e);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  minWidth: 0,
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  font: "inherit",
+                  textAlign: "left",
+                }}
               >
-                {order?.orderNumber ?? "—"}
-              </span>
-              {order?.customer && <span style={{ fontWeight: 600 }}>{order.customer.name}</span>}
-            </div>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "var(--accent-ink)",
+                    textDecoration: "underline",
+                    textUnderlineOffset: "2px",
+                  }}
+                >
+                  {order?.orderNumber ?? "—"}
+                </span>
+                {order?.customer && <span style={{ fontWeight: 600 }}>{order.customer.name}</span>}
+              </button>
+            )}
             {order?.deadline && (
               <span className="pill neutral sm num">{safeFormat(order.deadline, "dd.MM.yyyy")}</span>
             )}

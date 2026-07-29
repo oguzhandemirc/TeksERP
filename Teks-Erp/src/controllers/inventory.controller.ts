@@ -45,6 +45,19 @@ const manualAttributesSchema = z.object({
   reason:       z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
 });
 
+// Envanter özeti — N kategori filtresi (buildRollForceFilters) tek istekte sayılır.
+const statsBatchSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        filters: z.record(z.string(), z.any()).optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
 // Süpervizör "İstasyondan Kurtar" — IN_PRODUCTION takılı topu depoya alır. Zorunlu sebep (audit).
 const rescueSchema = z.object({
   reason: z.string().trim().min(3, "İşlem nedeni en az 3 karakter").max(500),
@@ -90,7 +103,9 @@ export class InventoryController {
     this.findAllRolls = this.findAllRolls.bind(this);
     this.getProductionFlow = this.getProductionFlow.bind(this);
     this.getRollStats = this.getRollStats.bind(this);
+    this.getRollStatsBatch = this.getRollStatsBatch.bind(this);
     this.getWarehouseScope = this.getWarehouseScope.bind(this);
+    this.getSubcontractorSummary = this.getSubcontractorSummary.bind(this);
     this.findRollById = this.findRollById.bind(this);
     this.findRollByBarcode = this.findRollByBarcode.bind(this);
     this.getRelabelContext = this.getRelabelContext.bind(this);
@@ -228,9 +243,43 @@ export class InventoryController {
     }
   }
 
+  /**
+   * POST /api/rolls/stats-batch
+   * Envanter özeti — N kategori filtresi için toplu sayım (top + metre), tek istekte.
+   */
+  async getRollStatsBatch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const parsed = statsBatchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: "Geçersiz istek gövdesi (items)" });
+        return;
+      }
+      const result = await this.service.getRollStatsBatch(parsed.data.items);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getWarehouseScope(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getWarehouseScope();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/subcontractor-summary
+   * Fasonda sekmesi özet şeridi — firma + işlem (kategori) bazlı açık fason dağılımı.
+   */
+  async getSubcontractorSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Şerit, liste "Fire kaliteyi de göster" toggle'ıyla aynı FIRE evrenini
+      // kullansın diye filter[includeFire] okunur (varsayılan: FIRE-hariç).
+      const includeFire = req.query["filter[includeFire]"] === "true";
+      const result = await this.service.getRollSubcontractorSummary(includeFire);
       res.status(200).json(result);
     } catch (error) {
       next(error);

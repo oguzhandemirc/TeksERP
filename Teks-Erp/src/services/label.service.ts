@@ -40,6 +40,7 @@ import { renderLabel, renderedBytes, shouldRasterize, type LabelRenderInput, typ
 import { renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
 import { rasterPreviewHtml } from "./helpers/raster/raster-bmp";
 import { readCanvasLayout } from "../config/label-elements";
+import { mockPayload } from "./helpers/label-rawcode";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import { mmToDots } from "./helpers/native-label.shared";
 import { dispatchNativeSend, type PrinterTransportResult } from "./helpers/printer-transport";
@@ -151,6 +152,14 @@ export interface RollLabelRenderOpts {
   /** İstemci raster (binary/base64) baytları KABUL EDİYOR mu (encoding=b64 gönderdi).
    *  false/yok → eski istemci: raster cihazda bile komut üretilir (bozulmaz). */
   rasterCapable?: boolean;
+}
+
+/** Rulo/kartela FABRİKA AKIŞI kopya tavanı (1-5) — emit-katmanı clampCopies 100'e
+ *  çıktı (Etiket Stüdyosu şablon baskısı); akış uçlarının ?copies= girişi BURADA
+ *  kırpılır ki 100'lük tavan top/kartela hattına SIZMASIN (bulk uçlarda Zod max(5)
+ *  zaten var — burası tekil ?copies= query yolunun kapısı). */
+function clampRollCopies(copies: number): number {
+  return Math.max(1, Math.min(5, Math.floor(copies) || 1));
 }
 
 /**
@@ -661,7 +670,8 @@ export class LabelService {
       ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
       : "";
     // Saha #6: kopya adedi — istek override > bulk-sabit > ayar (default 2).
-    const copies = opts?.copies ?? preloaded?.copies ?? (await readLabelCopies());
+    // Akış tavanı 1-5 (clampRollCopies) — emit clampCopies artık 100 (stüdyo).
+    const copies = clampRollCopies(opts?.copies ?? preloaded?.copies ?? (await readLabelCopies()));
     const meta: LabelResolutionMeta = {
       templateId: template?.id ?? null,
       templateName: template?.name ?? null,
@@ -678,7 +688,7 @@ export class LabelService {
     preloaded?: BulkLabelContext,
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
     const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts, preloaded);
-    const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
+    const html = (await renderLabel(PrinterLanguage.RASTER_HTML, input)).content;
     return { success: true, data: { html, kind } };
   }
 
@@ -694,7 +704,7 @@ export class LabelService {
   ): Promise<ApiResponse<{ ppla: string }>> {
     const { input } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     // İnceleme ucu: HER ZAMAN komut (raster cihazda bile) — dilden-bağımsız PPLA metni.
-    const ppla = renderLabel(PrinterLanguage.PPLA, { ...input, rasterMode: false }).content;
+    const ppla = (await renderLabel(PrinterLanguage.PPLA, { ...input, rasterMode: false })).content;
     return { success: true, data: { ppla } };
   }
 
@@ -710,7 +720,12 @@ export class LabelService {
   ): Promise<ApiResponse<{ content: string; contentB64: string; encoding: "text" | "binary"; language: PrinterLanguage; contentType: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
     const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     // rasterCapable değilse (eski istemci) raster'ı bastır → komut üret (bozulmaz).
-    const r = renderLabel(input.format.language, opts?.rasterCapable ? input : { ...input, rasterMode: false });
+    // rasterCapable (b64) → binary-güvenli → ikon GW emit edilir (iconGraphicsOk); değilse
+    // ham text yolu → ikon atlanır (UTF-8 GW binary'sini bozardı), komut temiz ASCII kalır.
+    const r = await renderLabel(
+      input.format.language,
+      opts?.rasterCapable ? { ...input, iconGraphicsOk: true } : { ...input, rasterMode: false },
+    );
     return {
       success: true,
       data: {
@@ -738,7 +753,7 @@ export class LabelService {
     const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const language = input.format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
-      return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content, kind, meta } };
+      return { success: true, data: { mode: "html", language, content: (await renderLabel(language, input)).content, kind, meta } };
     }
     // RASTER cihaz + kanvas varyantı → önizleme AYNI 1bpp bitmap (BMP data-URI) →
     // önizleme=baskı tanım gereği. Envelope patlarsa (PPLA F0 / font eksik) komut
@@ -747,7 +762,7 @@ export class LabelService {
       const layout = readCanvasLayout(input.variant?.elements);
       if (layout) {
         try {
-          const { bitmap } = renderCanvasRaster(language as RasterLanguage, {
+          const { bitmap } = await renderCanvasRaster(language as RasterLanguage, {
             payload: input.payload, format: input.format, copies: 1, layout,
           });
           return {
@@ -757,7 +772,9 @@ export class LabelService {
         } catch { /* raster envelope başarısız → aşağıdaki komut SVG'sine düş */ }
       }
     }
-    const native = renderLabel(language, input).content;
+    // Önizleme in-process SVG'ye parse edilir (printer'a ham text gitmez) → ikon GW
+    // güvenle emit edilir; PPLB parser'ı GW header'ından ayak-izi placeholder çizer.
+    const native = (await renderLabel(language, { ...input, iconGraphicsOk: true })).content;
     const svg = renderNativePreviewSvg(
       language,
       native,
@@ -804,7 +821,8 @@ export class LabelService {
     opts?: RollLabelRenderOpts & { port?: number },
   ): Promise<ApiResponse<PrinterTransportResult & { kind: LabelKind }>> {
     const { input, kind, routing } = await this.buildRollRenderInput(rollId, undefined, opts);
-    const rendered = renderLabel(input.format.language, input);
+    // RAW TCP (9100) → renderedBytes bayt gönderir (binary-güvenli) → ikon GW emit edilir.
+    const rendered = await renderLabel(input.format.language, { ...input, iconGraphicsOk: true });
     const enabled = await readLabelNativeSendEnabled();
     // F179: çözülen yönlendirme cihazının (explicit peripheralId / tablet deviceId /
     // machineId hepsi routing'de çözüldü) adresi BİRİNCİL hedef; loadMachinePrinter
@@ -841,7 +859,7 @@ export class LabelService {
    */
   async getSampleLabelHtml(peripheralId?: string | null): Promise<ApiResponse<{ html: string }>> {
     const input = await this.buildSampleRenderInput(peripheralId);
-    const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
+    const html = (await renderLabel(PrinterLanguage.RASTER_HTML, input)).content;
     return { success: true, data: { html } };
   }
 
@@ -858,7 +876,7 @@ export class LabelService {
   }): Promise<ApiResponse<PrinterTransportResult>> {
     const input = await this.buildSampleRenderInput(opts.peripheralId);
     const lang = opts.language ?? input.format.language;
-    const rendered = renderLabel(lang, input);
+    const rendered = await renderLabel(lang, { ...input, iconGraphicsOk: true }); // RAW TCP bayt → binary-güvenli
     const enabled = await readLabelNativeSendEnabled();
     const result = await this.dispatchOrGuard(rendered, {
       enabled,
@@ -917,7 +935,7 @@ export class LabelService {
   ): Promise<ApiResponse<{ html: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
-    const copies = opts?.copies ?? (await readLabelCopies());
+    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
 
     // N+1 → O(1): format/template/copies'i bir kez çöz + tüm top + ilişki verisini
     // toplu prefetch et. Render (aşağıdaki döngü) DEĞİŞMEDEN preloaded bağlamı kullanır;
@@ -971,7 +989,7 @@ export class LabelService {
   ): Promise<ApiResponse<{ content: string; contentB64: string; encoding: "text" | "binary"; language: PrinterLanguage; contentType: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
-    const copies = opts?.copies ?? (await readLabelCopies());
+    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
     const ctx = await this.buildBulkContext(ids, copies, {
       peripheralId: opts?.peripheralId,
       deviceId: opts?.deviceId,
@@ -985,8 +1003,12 @@ export class LabelService {
     let yieldedN = 0;
     for (const id of ids) {
       const { input } = await this.buildRollRenderInput(id, undefined, { copies }, ctx);
-      // rasterCapable değilse komut zorla (eski istemci binary alamaz).
-      const r = renderLabel(language, opts?.rasterCapable ? input : { ...input, rasterMode: false });
+      // rasterCapable değilse komut zorla (eski istemci binary alamaz). rasterCapable (b64)
+      // → binary-güvenli → ikon GW emit; değilse ham text → ikon atlanır (temiz ASCII).
+      const r = await renderLabel(
+        language,
+        opts?.rasterCapable ? { ...input, iconGraphicsOk: true } : { ...input, rasterMode: false },
+      );
       contentType = r.contentType;
       // Her blok kendi zarfını taşır (N/GW…/P veya ^XA…^XZ) → karışık raster/komut concat güvenli.
       buffers.push(renderedBytes(r));
@@ -1293,7 +1315,7 @@ export class LabelService {
     const qrSvg = payload.barcode
       ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
       : "";
-    const copies = opts?.copies ?? (await readLabelCopies());
+    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
     // KARTELA v1 KAPSAM DIŞI (Etiket Stüdyosu): variant BİLEREK geçilmez — kartela
     // hattı akış-modelinde bayt-aynı kalır. Kanvas'a alınırsa müşteri plumbing'iyle
     // birlikte ayrı iş (docs/design/KARTELA-TASARIM.md).
@@ -1309,7 +1331,7 @@ export class LabelService {
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
     const { input, kind } = await this.buildSwatchRenderInput(swatchId, opts);
-    const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
+    const html = (await renderLabel(PrinterLanguage.RASTER_HTML, input)).content;
     return { success: true, data: { html, kind } };
   }
 
@@ -1323,10 +1345,215 @@ export class LabelService {
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind }>> {
     const { input, kind } = await this.buildSwatchRenderInput(swatchId, opts);
-    const r = renderLabel(input.format.language, input);
+    const r = await renderLabel(input.format.language, input);
     return {
       success: true,
       data: { content: r.content, language: r.language, contentType: r.contentType, kind },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // SERBEST (STATİK) ETİKET — rulo/kartela bağlamı OLMADAN talep üzerine baskı
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Serbest (statik) etiket seçicisi — aktif `standalone` şablonlar + basılabilir
+   * boyut varyantları. Electron/mobil baskı seçicisi bunu tüketir (atama seçicileri
+   * değil — onlar `label-templates?assignable=true` kullanır).
+   *
+   * `customerId` verilirse liste = o müşteriye BAĞLI serbest etiketler ∪ hiç bağı
+   * olmayan "genel" serbest etiketler (başka müşteriye özel bağlılar dışlanır). Bağ
+   * bir M:N KOLAYLIK bağıdır — rulo/kartela etiket çözümüne (label-routing.resolver /
+   * CustomerTemplateRoute) KATILMAZ; yalnız bu seçiciyi filtreler.
+   */
+  async listStandaloneTemplates(customerId?: string): Promise<
+    ApiResponse<
+      Array<{
+        id: string;
+        name: string;
+        variants: Array<{ id: string; name: string; widthMm: number; heightMm: number; isPrimary: boolean }>;
+      }>
+    >
+  > {
+    const rows = await prisma.labelTemplate.findMany({
+      where: {
+        standalone: true,
+        isActive: true,
+        deletedAt: null,
+        ...(customerId
+          ? {
+              OR: [
+                { customerStandaloneLinks: { some: { customerId } } },
+                { customerStandaloneLinks: { none: {} } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        variants: {
+          select: { id: true, name: true, widthMm: true, heightMm: true, isPrimary: true },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+    return {
+      success: true,
+      data: rows.map((t) => ({
+        id: t.id,
+        name: t.name,
+        variants: t.variants.map((v) => ({
+          id: v.id,
+          name: v.name,
+          widthMm: Number(v.widthMm),
+          heightMm: Number(v.heightMm),
+          isPrimary: v.isPrimary,
+        })),
+      })),
+    };
+  }
+
+  /**
+   * Serbest etiket render girdisi — kaydedilmiş bir LabelTemplate varyantını mock
+   * payload + cihaz bağlamı (dil/medya/raster) ile hazırlar. Rulo/kartela bağlamı
+   * YOK; talep üzerine (şablon + kopya seç) basılır. Roll/kartela native yoluyla
+   * AYNI cihaz→{format, dil, raster} çözümünü (`resolveLabelRouting`) paylaşır;
+   * yalnız şablon/varyant çözünürlüğü farklı (rota değil, çağrının seçtiği varyant).
+   * Baskı seçili varyantın FİZİKSEL tuval boyutunda yapılır (WYSIWYG — kanvas o
+   * tuvalde çizilir, `getCanvasPreview` ile aynı). Kopya 1–100 (akış 1–5 DEĞİL).
+   */
+  private async buildStandaloneRenderInput(opts: {
+    templateId: string;
+    variantId?: string | null;
+    copies?: number | null;
+    peripheralId?: string | null;
+    machineId?: string | null;
+    deviceId?: string | null;
+  }): Promise<{ input: LabelRenderInput; kind: LabelKind; copies: number }> {
+    // Yalnız SERBEST (statik) şablon bağlamsız basılabilir — türlü (rulo/kartela)
+    // şablon örnek veriyle basılırsa izsiz/sahte-barkodlu etiket doğar; bu uç ona
+    // kapalı (o şablonlar kendi rulo/kartela akışından basılır). VAR+AKTİF+silinmemiş.
+    const template = await prisma.labelTemplate.findFirst({
+      where: { id: opts.templateId, standalone: true, isActive: true, deletedAt: null },
+      include: { variants: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } },
+    });
+    if (!template) throw AppError.notFound("Serbest etiket şablonu bulunamadı veya pasif");
+    if (template.variants.length === 0) {
+      throw AppError.badRequest("Bu şablonda basılabilir boyut (varyant) yok");
+    }
+
+    // Varyant: explicit variantId → primary → ilk (sıralama primary önce).
+    let variant: LabelTemplateVariant;
+    if (opts.variantId) {
+      const found = template.variants.find((v) => v.id === opts.variantId);
+      if (!found) throw AppError.badRequest("Belirtilen varyant bu şablonda yok");
+      variant = found;
+    } else {
+      variant = template.variants.find((v) => v.isPrimary) ?? template.variants[0];
+    }
+
+    const kind: LabelKind = template.kind ?? LabelKind.ROLL_FINISHED;
+    const payload = mockPayload(kind);
+
+    // Roll native ile AYNI cihaz çözümü: format (medya/dpi), dil, raster modu.
+    // Şablon/varyant rota kısmı yok sayılır (serbest şablonun rotası olamaz).
+    const routing = await resolveLabelRouting({
+      kind,
+      peripheralId: opts.peripheralId ?? null,
+      machineId: opts.machineId ?? null,
+      deviceId: opts.deviceId ?? null,
+    });
+    const widthMm = Number(variant.widthMm);
+    const heightMm = Number(variant.heightMm);
+    // Serbest baskı seçili varyantın FİZİKSEL boyutunda yapılır (kullanıcı boyutu
+    // açıkça seçti) — kanvas o tuvalde çizilir (getCanvasPreview ile aynı).
+    const format: ResolvedLabelFormat = {
+      ...routing.format,
+      widthMm,
+      heightMm,
+      orientation: widthMm >= heightMm ? "LANDSCAPE" : "PORTRAIT",
+    };
+
+    const barcodeSvg = payload.barcode
+      ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
+      : "";
+    const qrSvg = payload.barcode
+      ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
+      : "";
+    // Serbest baskı çok kopya isteyebilir → 1–100 (akış clampRollCopies 1–5 DEĞİL).
+    const copies = Math.max(1, Math.min(100, Math.floor(opts.copies ?? 1) || 1));
+    const input: LabelRenderInput = {
+      payload,
+      template,
+      variant,
+      barcodeSvg,
+      qrSvg,
+      copies,
+      format,
+      rasterMode: routing.rasterMode,
+    };
+    return { input, kind, copies };
+  }
+
+  /** Serbest etiketin tam HTML'i — `/rolls/:id/html` analoğu (mock payload). */
+  async renderStandaloneTemplateHtml(opts: {
+    templateId: string;
+    variantId?: string | null;
+    copies?: number | null;
+    peripheralId?: string | null;
+    machineId?: string | null;
+    deviceId?: string | null;
+  }): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    const { input, kind } = await this.buildStandaloneRenderInput(opts);
+    const html = (await renderLabel(PrinterLanguage.RASTER_HTML, input)).content;
+    return { success: true, data: { html, kind } };
+  }
+
+  /**
+   * Serbest etiketi SEÇİLİ yazıcı dilinde — `/rolls/:id/native` analoğu (mock
+   * payload). RASTER_HTML → HTML; PPLA/PPLB/ZPL → native komut. b64 zarfı için
+   * `contentB64` (renderedBytes → base64). `count` = basılacak kopya adedi.
+   */
+  async renderStandaloneTemplateNative(opts: {
+    templateId: string;
+    variantId?: string | null;
+    copies?: number | null;
+    peripheralId?: string | null;
+    machineId?: string | null;
+    deviceId?: string | null;
+    /** İstemci b64/binary bayt kabul ediyor mu (encoding=b64) — false → raster bastırılır. */
+    rasterCapable?: boolean;
+  }): Promise<
+    ApiResponse<{
+      content: string;
+      contentB64: string;
+      encoding: "text" | "binary";
+      language: PrinterLanguage;
+      contentType: string;
+      kind: LabelKind;
+      count: number;
+    }>
+  > {
+    const { input, kind, copies } = await this.buildStandaloneRenderInput(opts);
+    // rasterCapable değilse (eski istemci) raster'ı bastır → komut üret (bozulmaz).
+    // rasterCapable (b64) → binary-güvenli → ikon GW emit; değilse ham text → ikon atlanır.
+    const r = await renderLabel(
+      input.format.language,
+      opts.rasterCapable ? { ...input, iconGraphicsOk: true } : { ...input, rasterMode: false },
+    );
+    return {
+      success: true,
+      data: {
+        content: r.content,
+        contentB64: renderedBytes(r).toString("base64"),
+        encoding: r.encoding,
+        language: r.language,
+        contentType: r.contentType,
+        kind,
+        count: copies,
+      },
     };
   }
 

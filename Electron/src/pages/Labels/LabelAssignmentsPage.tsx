@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import {
   Card,
   CardContent,
@@ -37,10 +38,10 @@ export function LabelAssignmentsPage({
     queryKey: [DEFAULTS_KEY],
     queryFn: () => labelTemplateService.listContextDefaults(),
   });
-  // Kind'sız liste = TÜM havuz şablonları; seçenekler aktiflerden süzülür.
+  // Atanabilir havuz = serbest etiketler HARİÇ; seçenekler aktiflerden süzülür.
   const templatesQuery = useQuery({
-    queryKey: [TEMPLATES_KEY, "pool"],
-    queryFn: () => labelTemplateService.list(),
+    queryKey: [TEMPLATES_KEY, "assignable"],
+    queryFn: () => labelTemplateService.list({ assignable: true }),
   });
 
   const setMut = useMutation({
@@ -56,22 +57,21 @@ export function LabelAssignmentsPage({
   });
 
   const actions = (
-    <RefreshButton queryKey={DEFAULTS_KEY} extraKeys={[[TEMPLATES_KEY, "pool"]]} />
+    <RefreshButton queryKey={DEFAULTS_KEY} extraKeys={[[TEMPLATES_KEY, "assignable"]]} />
   );
   const loading = defaultsQuery.isLoading || templatesQuery.isLoading;
   const defaults = defaultsQuery.data ?? [];
   const activeTemplates = (templatesQuery.data?.data ?? []).filter((t) => t.isActive);
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       {!hideHeader && (
         <PageHeader
           title="Etiket Atamaları"
-          description="Bağlam başına varsayılan şablon — müşteri/cihaz ataması yoksa bu basılır."
           actions={actions}
         />
       )}
-      <div className="flex-1 overflow-auto p-4">
+      <PageBody className="p-4">
         {hideHeader && !actionsPortal && (
           <div className="mb-3 flex items-center justify-end gap-2">{actions}</div>
         )}
@@ -119,7 +119,7 @@ export function LabelAssignmentsPage({
             </CardContent>
           </Card>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

@@ -43,6 +43,8 @@ const updateSchema = z.object({
   devicePairingRequired: z.boolean().optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
+  // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
+  customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).
   tamburOverQuantityEnabled: z.boolean().optional(),
   // auth.sessionDurationMinutes — oturum (JWT) ömrü, dakika (1–43200 = 30 gün). Backend ENFORCE (login).
@@ -176,20 +178,12 @@ const updateSchema = z.object({
       taxInfo: z.string().trim().max(120),
     })
     .optional(),
-  // Yazdırılan belge içerik ayarı (bölüm görünürlükleri + başlık/imza/footer). Ham map.
-  documentsConfig: z
-    .record(
-      z.string(),
-      z.object({
-        titleOverride: z.string().trim().max(80).optional(),
-        showLetterhead: z.boolean().optional(),
-        sections: z.record(z.string(), z.boolean()).optional(),
-        signatureLabels: z.array(z.string().trim().max(40)).max(6).optional(),
-        showSignatures: z.boolean().optional(),
-        footerNote: z.string().trim().max(500).optional(),
-      }),
-    )
-    .optional(),
+  // Yazdırılan belge içerik ayarı — ham map. Alan doğrulaması TEK KAYNAK olan servis
+  // katmanı sanitizeDocumentsConfig'te yapılır. Burada alan-alan Zod whitelist'i DRIFT
+  // yaratıyordu: footerNotePlacement/style/logoPosition/columns/qr/stamps/blocks/
+  // language/blankWidths şemada yoktu → Zod bunları SESSİZCE soyup kaydı engelliyordu.
+  // Gevşek record → alanlar geçer, sanitize karar verir (z.any tipi DocumentsConfig'e uyumlu).
+  documentsConfig: z.record(z.string(), z.any()).optional(),
 });
 
 /**
@@ -247,6 +241,78 @@ router.patch(
       const body = updateSchema.parse(req.body);
       const result = await systemSettingService.setFeatureFlags(
         body,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ── Belge logosu ──────────────────────────────────────────────────────────────
+// Base64 data-url tek SystemSetting'de hash-anahtarlı kütüphanede tutulur;
+// FeatureFlags yanıtına bilerek KONMAZ (app-start yükünü şişirmesin) — ayrı uç.
+
+const logoSchema = z.object({
+  dataUrl: z.string().max(200_000).nullable(),
+});
+
+/**
+ * @openapi
+ * /api/feature-flags/documents-logo:
+ *   get:
+ *     tags: [Feature Flags]
+ *     summary: Güncel belge logosu (data-url; yoksa null)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ dataUrl: string|null }" }
+ */
+router.get(
+  "/documents-logo",
+  verifyToken,
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await systemSettingService.getDocumentsLogo();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/documents-logo:
+ *   put:
+ *     tags: [Feature Flags]
+ *     summary: Belge logosunu güncelle/kaldır (admin)
+ *     description: |
+ *       dataUrl=null → logo kaldırılır. PNG/JPEG/SVG base64 data-url, en fazla ~100KB.
+ *       Kütüphane append-only: eski donmuş belgeler kendi logolarıyla basılmaya devam eder.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [dataUrl]
+ *             properties:
+ *               dataUrl: { type: string, nullable: true }
+ *     responses:
+ *       200: { description: Güncel logo }
+ *       400: { description: Format/boyut hatası }
+ */
+router.put(
+  "/documents-logo",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = logoSchema.parse(req.body);
+      const result = await systemSettingService.setDocumentsLogo(
+        body.dataUrl,
         req.user?.userId
       );
       res.status(200).json(result);

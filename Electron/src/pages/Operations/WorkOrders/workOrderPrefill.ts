@@ -7,7 +7,7 @@ import type { WorkOrder } from "./types";
 import type { Order } from "@/pages/Operations/Orders/types";
 
 /**
- * Ürün Dengesi "WO Aç (stoğa üret)" → WO formuna sipariş bağı olmadan hedef
+ * Kumaş Dengesi "WO Aç (stoğa üret)" → WO formuna sipariş bağı olmadan hedef
  * spec + miktar seed'i. Bağlı (siparişlere bağla) mod seedPickedLines kullanır.
  */
 export interface WoSeedTarget {
@@ -78,10 +78,10 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
 }
 
 /**
- * "Bu üründen iş emri oluştur" kısayolu: bir siparişin TEK ürününden (anchor
+ * "Bu kumaştan iş emri oluştur" kısayolu: bir siparişin TEK kumaşından (anchor
  * kalem) WO picker satırları üretir. Tek WO = tek kumaş/renk/en — anchor ile
- * aynı ürün+renk+en'e sahip açık (quantity − shippedQty > 0) kalemler alınır;
- * farklı ürün/renk/en kalemler dışarıda kalır (her biri için ayrı iş emri açılır).
+ * aynı kumaş+renk+en'e sahip açık (quantity − shippedQty > 0) kalemler alınır;
+ * farklı kumaş/renk/en kalemler dışarıda kalır (her biri için ayrı iş emri açılır).
  * openQty kalan (sevk edilmemiş) kadar gelir (link-only — metraj taşımaz).
  */
 export function pickedLinesFromOrderLine(

@@ -44,9 +44,12 @@ export function SystemEventsList({ items, loading, onSelect }: Props) {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="overflow-auto">
+      {/* Gerçek kaydırıcı üst PageBody; burada overflow-auto YOK — böylece sticky
+          başlık (thead) sayfa gövdesine göre yapışır (yoksa asla kaymayan iç kutuya
+          yapışıp içerikle birlikte kayıp giderdi). */}
+      <div>
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-card/80 backdrop-blur">
+          <thead className="sticky top-0 z-10 bg-card/80 backdrop-blur">
             <tr className="border-b text-left text-[11px] uppercase tracking-wider text-muted-foreground">
               <th className="px-6 py-2 font-medium">Tarih</th>
               <th className="px-3 py-2 font-medium">Kategori</th>

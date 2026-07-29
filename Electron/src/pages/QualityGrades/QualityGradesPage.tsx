@@ -1,5 +1,6 @@
 import { Lock } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -17,10 +18,9 @@ export function QualityGradesPage() {
   });
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Kalite Sınıfları"
-        description="Sistem tarafından sabitlenmiş kalite kademeleri."
         actions={<RefreshButton queryKey="quality-grades" />}
       />
 
@@ -43,6 +43,6 @@ export function QualityGradesPage() {
         pagination={pagination}
         emptyText="Kayıt yok."
       />
-    </div>
+    </PageShell>
   );
 }

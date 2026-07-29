@@ -142,6 +142,8 @@ export interface Item {
   name: string;
   itemType?: string;
   isActive?: boolean;
+  /** Saha (KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
+  pendingReview?: boolean;
   allowedColors?: Color[];
   allowedProperties?: FabricProperty[];
 }

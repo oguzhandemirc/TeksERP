@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronRight, Palette, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronRight, Palette, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -27,9 +27,10 @@ import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import type { Item, ItemCreatePayload } from "./types";
 import {
   itemFormDefaults,
-  itemFormSchema,
+  makeItemFormSchema,
   type ItemFormValues,
 } from "./schema";
+import { buildItemPayload } from "./itemPayload.helper";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 
@@ -65,8 +66,9 @@ export function ItemFormDialog({
       }
     : itemFormDefaults;
 
+  const schema = useMemo(() => makeItemFormSchema(isEdit), [isEdit]);
   const form = useForm<ItemFormValues>({
-    resolver: zodResolver(itemFormSchema) as Resolver<ItemFormValues>,
+    resolver: zodResolver(schema) as Resolver<ItemFormValues>,
     defaultValues: defaults,
   });
 
@@ -129,42 +131,45 @@ export function ItemFormDialog({
   }, [allowedPropertyIds, propsQ.data?.data]);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    // Düzenlemede code/itemType backend'de değiştirilemez — payload'dan çıkar.
-    const basePayload = {
-      name: v.name.trim(),
-      unit: unitForItemType[v.itemType] ?? v.unit,
-      isActive: v.isActive,
-      allowedColorIds: v.allowedColorIds,
-      allowedPropertyIds: v.allowedPropertyIds,
-    };
-    const payload: ItemCreatePayload = isEdit
-      ? (basePayload as unknown as ItemCreatePayload)
-      : { ...basePayload, code: v.code.trim(), itemType: v.itemType };
-    await onSubmit(payload);
+    await onSubmit(buildItemPayload(v, isEdit));
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Ürünü Düzenle" : "Yeni Ürün"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Kumaşı Düzenle" : "Yeni Kumaş"}</DialogTitle>
           <DialogDescription>
-            Ürün tanımı. Birim, seçilen tipe göre otomatik atanır.
+            Kumaş tanımı. Birim, seçilen tipe göre otomatik atanır.
           </DialogDescription>
         </DialogHeader>
+
+        {initial?.pendingReview && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Bu desen sahada (ham giriş) oluşturuldu ve onay bekliyor. Bilgileri
+              gözden geçirip <strong>Güncelle</strong>'ye bastığınızda onaylanmış
+              sayılır.
+            </span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Kod"
+              label="Stok Kodu"
               htmlFor="code"
               error={form.formState.errors.code}
-              required={!isEdit}
-              hint={isEdit ? "Ürün oluşturulduktan sonra değiştirilemez." : undefined}
+              hint={
+                isEdit
+                  ? "Kumaş oluşturulduktan sonra değiştirilemez."
+                  : "Boş bırakın — sistem otomatik versin."
+              }
             >
               <Input
                 id="code"
-                placeholder="PATOS"
+                placeholder={isEdit ? undefined : "Otomatik (STK-000123)"}
                 readOnly={isEdit}
                 tabIndex={isEdit ? -1 : 0}
                 className={isEdit ? "cursor-not-allowed bg-muted" : undefined}
@@ -175,7 +180,7 @@ export function ItemFormDialog({
               label="Tip"
               error={form.formState.errors.itemType}
               required={!isEdit}
-              hint={isEdit ? "Ürün oluşturulduktan sonra değiştirilemez." : undefined}
+              hint={isEdit ? "Kumaş oluşturulduktan sonra değiştirilemez." : undefined}
             >
               <Controller
                 control={form.control}

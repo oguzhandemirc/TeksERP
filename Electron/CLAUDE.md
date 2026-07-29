@@ -118,6 +118,59 @@ pages/<Module>/
 ```
 
 
+## Sayfa İskeleti (Ortak Layout — KRİTİK)
+
+Sekme paneli (`TabHost`) HER sayfayı `absolute inset-0 overflow-auto` ile sarar.
+Bu yüzden bir sayfa kendi yüksekliğini kısıtlamazsa **tüm panel kayar** ve sabit
+başlık/footer görünümden çıkar. Her liste/içerik sayfası **tek içsel kaydırma
+bölgesi** + **sabit başlık/araç çubuğu/footer** kalıbını kullanır. Ortak
+primitifler: `src/components/layout/PageShell.tsx`.
+
+```tsx
+<PageShell>                              {/* flex h-full min-h-0 flex-col — paneli doldurur */}
+  <PageHeader ... />                     {/* sabit chrome (shrink-0) */}
+  <SomeToolbar />                        {/* sabit — arama/filtre satırı */}
+  <PageBody className="p-6">…liste…</PageBody>   {/* min-h-0 flex-1 overflow-auto — TEK kaydırıcı */}
+  <PageFooter>…butonlar…</PageFooter>    {/* shrink-0 border-t — alta SABİTLENİR (opsiyonel) */}
+</PageShell>
+```
+
+- **Alttaki butonlar SABİT.** Aksiyon çubuğu `PageBody`'den SONRA, `PageShell`'in
+  son çocuğu olarak `<PageFooter>` içine konur → liste kayarken yerinde kalır.
+  "Kaydet/İptal" gibi eylemleri asla kaydırılan gövdenin içine koyma.
+- **Sadece liste kayar.** Başlık/toolbar/footer `shrink-0`; yalnız `PageBody`
+  scroll eder. `PageBody` `min-h-0` içerir — bu olmadan flex çocuğu içeriğe göre
+  büyür ve panel kayar (en sık hata).
+- **DataTable sayfaları:** `<DataTable>` kendi kaydırma bölgesini + pinlenen
+  pagination footer'ını yönetir → ayrı `PageBody` GEREKMEZ; kök `<PageShell>`
+  yeter, `DataTable` doğrudan `flex-1` çocuk olur. `CrudPage` bunu zaten yapar.
+- **Sonsuz kaydırma = otomatik.** "Daha Fazla Yükle" butonu YOK. Liste dibine
+  gelince sonraki cursor sayfası otomatik yüklenir:
+  - `useDataTable` + `DataTable` kullanan tablolar bunu **hazır** alır
+    (`DataTable` içindeki `useInfiniteScroll` sentinel'i; footer yalnız durum:
+    "Yükleniyor… / Tüm kayıtlar yüklendi").
+  - Özel `useInfiniteQuery` listelerinde (kart grid, feed): `useInfiniteScroll`
+    hook'unu kullan — `rootRef`'i `<PageBody>`'ye, `sentinelRef`'i listenin
+    sonundaki `<AutoLoadMore>` göstergesine bağla (`src/components/data-table/AutoLoadMore.tsx`).
+
+```tsx
+const { rootRef, sentinelRef } = useInfiniteScroll({
+  hasMore: query.hasNextPage,
+  isLoading: query.isFetchingNextPage,
+  onLoadMore: () => void query.fetchNextPage(),
+});
+// …
+<PageBody ref={rootRef} className="p-6">
+  {items.map(...)}
+  <AutoLoadMore ref={sentinelRef} hasMore={query.hasNextPage}
+    isFetchingMore={query.isFetchingNextPage} count={items.length} />
+</PageBody>
+```
+
+Tam-ekran editörler (İş Emri formu, Genel Ayarlar) kökte `PageShell`, altta
+`PageFooter` kullanır; çok-panelli iç flex düzenini bozmadan orta panel kendi
+`overflow-auto`'suyla kayar.
+
 ## Sidebar Kuralı (KRİTİK)
 
 Sidebar'da **her tanım ayrı satır YOK.** Tek "Tanımlar" girişi var; tıklayınca `/definitions` hub sayfası açılır, kart grid'i her tanım modülüne gönderir. Yeni master data eklerken `pages/Definitions/tile-config.ts` → kart ekle, `router.tsx` → route ekle. Sidebar'a ekleme.
@@ -186,6 +239,7 @@ Seed **yalnız `admin / 123123`** üretir (tüm permission'lar atanmış — ~55
 ## Yeni Sayfa Kontrol Listesi
 
 - [ ] `pages/<Module>/` klasörü açıldı, dosyalar parçalı
+- [ ] Kök `<PageShell>`, kaydırılan gövde `<PageBody>`, alt butonlar `<PageFooter>` (bkz. **Sayfa İskeleti**); özel `useInfiniteQuery` listesi ise `useInfiniteScroll` + `<AutoLoadMore>` (manuel "Daha Fazla" YOK)
 - [ ] `service.ts` `createCrudService` ile yazıldı
 - [ ] `schema.ts` zod ile yazıldı, `Partial<T>` payload backend'le uyuyor
 - [ ] `columns.tsx` `ColumnDef<T>[]` döner, hücreler `format`/`Badge` ile temiz

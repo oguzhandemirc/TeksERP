@@ -7,6 +7,10 @@ import type {
   ScannerOpenOpts,
   PrinterSendOpts,
   ScaleReadOpts,
+  PdfSaveOpts,
+  PdfSaveBatchOpts,
+  FilesSaveBatchOpts,
+  FileSaveOpts,
 } from "@shared/ipc-contract";
 
 const api: ApiBridge = {
@@ -57,6 +61,14 @@ const api: ApiBridge = {
   },
   scale: {
     read: (opts: ScaleReadOpts) => ipcRenderer.invoke("scale:read", opts),
+  },
+  pdf: {
+    save: (opts: PdfSaveOpts) => ipcRenderer.invoke("pdf:save", opts),
+    saveBatch: (opts: PdfSaveBatchOpts) => ipcRenderer.invoke("pdf:saveBatch", opts),
+  },
+  files: {
+    save: (opts: FileSaveOpts) => ipcRenderer.invoke("files:save", opts),
+    saveBatch: (opts: FilesSaveBatchOpts) => ipcRenderer.invoke("files:saveBatch", opts),
   },
 };
 

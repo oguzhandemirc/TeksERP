@@ -545,14 +545,14 @@ function BatchLaneCard({
 
         {expanded && (
           <>
-        {/* Partinin topları — barkod · ürün · renk · konum · metraj (açınca doğrudan). */}
+        {/* Partinin topları — barkod · kumaş · renk · konum · metraj (açınca doğrudan). */}
         {batch.rolls.length > 0 ? (
           <div className="overflow-x-auto rounded-md border border-border/40">
             <table className="w-full text-[11px]">
               <thead className="bg-muted/30 text-left text-muted-foreground">
                 <tr>
                   <th className="px-2 py-1 font-medium">Barkod</th>
-                  <th className="px-2 py-1 font-medium">Ürün</th>
+                  <th className="px-2 py-1 font-medium">Kumaş</th>
                   <th className="px-2 py-1 font-medium">Renk</th>
                   <th className="px-2 py-1 font-medium">Konum</th>
                   <th className="px-2 py-1 text-right font-medium">Metraj</th>

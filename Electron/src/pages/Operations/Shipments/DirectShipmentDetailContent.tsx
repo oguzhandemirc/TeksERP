@@ -113,6 +113,10 @@ export function DirectShipmentDetailContent({
                             </Badge>
                           )}
                         </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
+                          {r.width != null ? `${fmt(r.width)} cm` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">{r.qualityGrade ?? "—"}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                           {fmt(r.currentQty)} m
                         </td>

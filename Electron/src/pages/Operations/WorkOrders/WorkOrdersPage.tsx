@@ -1,6 +1,7 @@
 import { useState, type MouseEvent } from "react";
 import { Ban, PanelRight, Pencil, Plus, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
@@ -88,10 +89,9 @@ export function WorkOrdersPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="İş Emirleri"
-        description="Üretim partileri ve rota ilerleyişi."
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
@@ -110,7 +110,7 @@ export function WorkOrdersPage() {
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Parti kodu ara..."
+        placeholder="İş emri, parti, kumaş, müşteri veya sipariş no ara..."
         table={table}
         exportName="İş Emirleri"
       />
@@ -167,6 +167,6 @@ export function WorkOrdersPage() {
         batchNumber={cancelWo?.workOrderNumber}
         onCancelled={() => setCancelWo(null)}
       />
-    </div>
+    </PageShell>
   );
 }

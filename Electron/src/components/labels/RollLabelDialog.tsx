@@ -237,7 +237,7 @@ function LabelEditDialog({
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium">Müşterideki ürün adı</label>
+            <label className="text-xs font-medium">Müşterideki kumaş adı</label>
             <Input
               value={itemName}
               onChange={(e) => setItemName(e.target.value)}

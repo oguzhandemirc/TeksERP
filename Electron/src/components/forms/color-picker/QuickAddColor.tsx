@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ColorPickerInput } from "@/components/forms/ColorPickerInput";
 import { colorService } from "@/pages/Colors/service";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import type { Color } from "@/pages/Colors/types";
 
 /**
@@ -25,7 +24,7 @@ export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }
   const createMut = useMutation({
     mutationFn: () =>
       colorService.create({
-        code: generateCode(CODE_PREFIXES.COLOR),
+        // Kod backend'de üretilir (RNK+GGAAYY+NNNN) — istemci göndermez.
         name: name.trim(),
         hex: /^#[0-9a-fA-F]{6}$/.test(hex.trim()) ? hex.trim() : null,
         isActive: true,
@@ -66,7 +65,8 @@ export function QuickAddColor({ onCreated }: { onCreated: (id: string) => void }
         placeholder="Renk adı (örn. beyaz 055)"
         className="h-8 min-w-[9rem] flex-1 text-sm"
         onKeyDown={(e) => {
-          if (e.key === "Enter" && name.trim()) {
+          // isPending guard: çift-Enter mükerrer POST üretmesin (buton disabled ile aynı koşul).
+          if (e.key === "Enter" && name.trim() && !createMut.isPending) {
             e.preventDefault();
             createMut.mutate();
           }

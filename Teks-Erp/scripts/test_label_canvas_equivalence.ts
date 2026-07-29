@@ -71,22 +71,23 @@ async function main() {
       .filter((x) => x.dv.present && x.dv.role !== "scan");
 
     // NATIVE: değer ASCII'ye katlanır → katlanmış değer çıktıda olmalı (veri düşmez).
+    // (renderLabel 2026-07 icon işiyle ASYNC → await.)
     for (const lang of NATIVE_LANGS) {
-      const out = renderLabel(lang as PrinterLanguage, {
+      const out = (await renderLabel(lang as PrinterLanguage, {
         payload, template: flowTemplate, variant: fakeVariant, barcodeSvg: "", qrSvg: "", copies: 2,
         format: { ...format, language: lang as PrinterLanguage },
-      }).content;
+      })).content;
       const missing = boundValues.filter((x) => !out.includes(asciiFold(x.dv.value))).map((x) => x.key);
       check(`${tag} × ${lang}: kanvas alan değerleri çıktıda (${boundValues.length} alan, veri düşmez)`,
         missing.length === 0, missing.length ? `eksik: ${missing.join(", ")}` : "");
     }
 
     // HTML: değer tam UTF-8 (katlama yok) → escapeHtml'li değer içerikte.
-    const html = renderLabel("RASTER_HTML" as PrinterLanguage, {
+    const html = (await renderLabel("RASTER_HTML" as PrinterLanguage, {
       payload, template: flowTemplate, variant: fakeVariant,
       barcodeSvg: "<svg viewBox=\"0 0 10 10\"></svg>", qrSvg: "<svg viewBox=\"0 0 10 10\"></svg>",
       copies: 1, format: { ...format, language: "RASTER_HTML" as PrinterLanguage },
-    }).content;
+    })).content;
     const missingHtml = boundValues.filter((x) => !html.includes(escapeHtml(asciiFold(x.dv.value)))).map((x) => x.key);
     check(`${tag} × HTML: kanvas alan değerleri içerikte (${boundValues.length} alan)`,
       missingHtml.length === 0, missingHtml.length ? `eksik: ${missingHtml.join(", ")}` : "");
@@ -99,10 +100,10 @@ async function main() {
       .filter((x) => x.dv.role !== "scan" && x.dv.present);
     const dropped = visibleKeys.filter((x) => !layoutBinds.has(x.f.key));
     if (dropped.length > 0) {
-      const flowPplb = renderLabel("PPLB" as PrinterLanguage, {
+      const flowPplb = (await renderLabel("PPLB" as PrinterLanguage, {
         payload, template: flowTemplate, barcodeSvg: "", qrSvg: "", copies: 1,
         format: { ...format, language: "PPLB" as PrinterLanguage },
-      }).content;
+      })).content;
       const wronglyDropped = dropped
         .filter((x) => x.dv.value !== payload.barcode) // barkod değerini taşıyan alanlar hariç
         .filter((x) => flowPplb.includes(asciiFold(x.dv.value)))

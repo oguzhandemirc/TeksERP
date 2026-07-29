@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { itemService } from "@/pages/Items/service";
 
 /**
- * Tek ürün detayını (allowedColors + allowedProperties dahil) TEK cache
+ * Tek kumaş detayını (allowedColors + allowedProperties dahil) TEK cache
  * girdisinde paylaşır. Bir sipariş satırında OrderLineColorPicker ve
  * LineRequiredPropertiesEditor aynı itemId için ayrı key'lerle (`item-allowed-colors`
  * / `item-allowed`) aynı GET /api/items/:id'yi iki kez atıyordu; ortak

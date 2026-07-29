@@ -1074,9 +1074,20 @@ export class WorkOrderService {
     const params = parseQueryParams(req);
     // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
     params.sortBy = resolveSortBy(params.sortBy, WO_SORTABLE_FIELDS);
+    // Arama kapsamı liste kolonlarıyla hizalı: İE no + parti no + kumaş/renk +
+    // sipariş bağı üzerinden müşteri adı VE sipariş no (nested some → EXISTS
+    // subquery). Sipariş no ile de aranabilmesi siparişten üretim emrine
+    // erişimi tamamlar (sipariş listesindeki rollup rozetinin tersi yönü).
     const where = buildWhereClause(
       params.filters,
-      ["workOrderNumber"],
+      [
+        "workOrderNumber",
+        "batches.some.batchNumber",
+        "targetItem.name",
+        "targetColor.name",
+        "orderLinks.some.orderLine.order.customer.name",
+        "orderLinks.some.orderLine.order.orderNumber",
+      ],
       params.search
     );
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);

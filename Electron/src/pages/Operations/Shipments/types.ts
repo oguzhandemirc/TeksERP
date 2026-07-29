@@ -17,6 +17,13 @@ export const shipmentStatusTones: Record<ShipmentStatus, Tone> = {
   CANCELLED: "danger",
 };
 
+export type ShipmentDestination = "DOMESTIC" | "EXPORT";
+
+export const shipmentDestinationLabels: Record<ShipmentDestination, string> = {
+  DOMESTIC: "Yurt İçi",
+  EXPORT: "Yurt Dışı (İhracat)",
+};
+
 /**
  * Global şube lookup öğesi (`/api/customer-branches`) — FilterBar şube filtresi.
  * `code` opsiyonel `string` (LookupItemBase ile uyum için `null` değil; backend null
@@ -49,6 +56,9 @@ export interface ShipmentListItem {
   customer: { id: string; code: string; name: string };
   branch: { id: string; code: string | null; name: string } | null;
   _count: { sacks: number; rolls: number; orders: number; returns: number };
+  /** Yalnız kumaş/renk (içerik) filtresi aktifken dolu — bu sevkiyattaki eşleşen top
+   *  sayısı ("eşleşen: N top" rozeti). Filtre yoksa backend alanı HİÇ göndermez (undefined). */
+  matchRollCount?: number;
 }
 
 /** Fasondan doğrudan sevk (DirectShipment) detayı — birleşik listeden DIRECT satırı açılınca. */
@@ -115,15 +125,17 @@ export interface ShipmentDetailOrder {
 export interface ShipmentDetailRoll {
   id: string;
   barcode: string | null;
-  item: { code: string; name: string } | null;
-  color: { code: string; name: string } | null;
+  item: { id: string; code: string; name: string } | null;
+  color: { id: string; code: string; name: string } | null;
   width: number | null;
   currentQty: number;
+  /** Kalite kararı (snapshot) — kalite istasyonu belirlemediyse null → UI "—". */
+  qualityGrade: string | null;
   /** İçinde bulunduğu çuval (top-level rolls'da döner; içerik/iz sürme için). */
   sackId?: string | null;
 }
 
-/** Çuval içeriğinde ürün (spec) bazlı özet — irsaliyedeki çuval dökümü. */
+/** Çuval içeriğinde kumaş (spec) bazlı özet — irsaliyedeki çuval dökümü. */
 export interface SackProductSummary {
   itemCode: string;
   itemName: string;
@@ -166,12 +178,19 @@ export interface ShipmentReturnedRoll {
   returnedAt: string;
   reasonName: string | null;
   reasonColor: string | null;
+  /** İade anında bulunduğu çuval (RollReturn.prevSackId); sackNo/seq sevkiyatın
+   *  sacks[]'ından çözülür (çuval sevkiyatta kalır, top ayrılır). Legacy'de null. */
+  prevSackId: string | null;
 }
 
 export interface ShipmentDetail {
   id: string;
   shipmentNo: string;
   status: ShipmentStatus;
+  destination: ShipmentDestination;
+  procedureCode: string | null;
+  /** İrsaliye açıklaması — sevkiyata kayıtlı serbest not (annotation). */
+  dispatchNote: string | null;
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;

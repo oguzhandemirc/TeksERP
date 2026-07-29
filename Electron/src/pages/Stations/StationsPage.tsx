@@ -1,5 +1,4 @@
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { stationColumns } from "./columns";
 import { stationService } from "./service";
 import { StationFormDialog } from "./StationFormDialog";
@@ -7,7 +6,8 @@ import type { Station } from "./types";
 import type { StationFormValues } from "./schema";
 
 const buildPayload = (v: StationFormValues, initial: Station | null): Partial<Station> => ({
-  code: initial?.code ?? generateCode(CODE_PREFIXES.STATION),
+  // Kod backend'de üretilir (IST+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+  ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
   type: v.type,
   kind: v.kind,

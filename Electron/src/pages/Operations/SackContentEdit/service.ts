@@ -142,7 +142,7 @@ export const sackHubService = {
       .post<ApiResponse<{ moved: number }>>(`/api/shipping/sacks/${sackId}/move-rolls`, { rollIds, targetSackId })
       .then((r) => r.data),
 
-  /** Kartela stoğu (ürün+renk bazında müsait adet). */
+  /** Kartela stoğu (kumaş+renk bazında müsait adet). */
   listKartelaStock: (search?: string): Promise<ApiResponse<KartelaStockGroup[]>> =>
     apiClient
       .get<ApiResponse<KartelaStockGroup[]>>(`/api/kartela/stock${search ? `?search=${encodeURIComponent(search)}` : ""}`)

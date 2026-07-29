@@ -166,8 +166,8 @@ export function HistoryTable() {
       ) : (
         <>
           <div className="rounded-md border">
-            <Table>
-              <TableHeader>
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead>Kullanıcı</TableHead>
                   <TableHead>Yer</TableHead>

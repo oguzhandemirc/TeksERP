@@ -18,6 +18,10 @@ const service = new ItemService({
     allowedColors: { include: { color: true } },
     allowedProperties: { include: { property: true } },
   },
+  // Create/update ItemService'te custom — assertNameNotDuplicate oradan da
+  // açıkça çağrılır (super.create çağrılmayan yol için).
+  duplicateNameField: "name",
+  entityLabel: "ürün",
 });
 
 const controller = new BaseController(service);
@@ -29,6 +33,17 @@ const addAllowedColorBody = z.object({
 const addAllowedPropertyBody = z.object({
   propertyId: z.string().uuid("Geçersiz özellik ID"),
 });
+
+// Saha (mobil KK1) hızlı desen oluşturma — YALNIZ ad kabul edilir (.strict()):
+// itemType/kod/birim/isActive/izinli listeler istemciden GELMEZ, backend zorlar.
+const quickCreateBody = z
+  .object({
+    name: z
+      .string()
+      .min(1, "Desen adı zorunlu")
+      .max(100, "Desen adı en fazla 100 karakter olabilir"),
+  })
+  .strict();
 
 /**
  * @openapi
@@ -105,9 +120,9 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *         application/json:
  *           schema:
  *             type: object
- *             required: [code, name, itemType]
+ *             required: [name, itemType]
  *             properties:
- *               code: { type: string, example: "MAM-010" }
+ *               code: { type: string, example: "STK-000123", description: "Opsiyonel — boş bırakılırsa STK-NNNNNN otomatik üretilir" }
  *               name: { type: string, example: "Boyalı Saten Kumaş" }
  *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE] }
  *               unit: { type: string, enum: [MT, KG, ADET], default: "MT" }
@@ -118,6 +133,51 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *         description: Kod zaten mevcut
  */
 router.post("/", verifyToken, requirePermission("item:write"), controller.create);
+
+/**
+ * @openapi
+ * /api/items/quick-create:
+ *   post:
+ *     tags: [Items]
+ *     summary: Saha (KK1) hızlı desen oluştur — yalnız ad
+ *     description: >
+ *       Mobil ham giriş operatörünün seçili yetkiyle (mobile:kk1-desen) yeni bir
+ *       FABRIC kumaş (desen) açması için dar uç. Yalnız `name` kabul edilir; kod
+ *       (STK-NNNNNN), birim (MT), itemType (FABRIC) ve isActive backend tarafından
+ *       set edilir. Kayıt `pendingReview=true` ile işaretlenir (admin onayı bekler).
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string, example: "PATOS" }
+ *     responses:
+ *       201:
+ *         description: Desen oluşturuldu (pendingReview=true)
+ *       403:
+ *         description: "'mobile:kk1-desen' yetkisi gerekli"
+ *       409:
+ *         description: Aynı adda ürün zaten var
+ */
+router.post(
+  "/quick-create",
+  verifyToken,
+  requirePermission("mobile:kk1-desen"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { name } = quickCreateBody.parse(req.body);
+      const result = await service.quickCreateFabric(name, req.user?.userId);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * @openapi

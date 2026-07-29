@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
+import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import type { EditorTarget } from "./types";
@@ -35,6 +36,7 @@ export function NewSackDialog({ open, onOpenChange, onCreated }: Props) {
   const qc = useQueryClient();
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
+  const branchesEnabled = useCustomerBranchesEnabled();
 
   useEffect(() => {
     if (!open) {
@@ -92,7 +94,7 @@ export function NewSackDialog({ open, onOpenChange, onCreated }: Props) {
             />
           </label>
 
-          {customerId && (
+          {customerId && branchesEnabled && (
             <label className="block text-sm">
               <span className="mb-1 block text-muted-foreground">Şube (opsiyonel)</span>
               <BranchSelect customerId={customerId} value={branchId} onChange={setBranchId} />

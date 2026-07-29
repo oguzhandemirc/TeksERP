@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import {
   Text,
   TextInput,
@@ -35,6 +35,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 const sackLabel = (sack: { sackNo: string }) => sack.sackNo;
 
 export default function CuvalDuzeltScreen() {
+  const { height: winH } = useWindowDimensions();
   usePortraitLock(useDeviceType() === 'phone');
   const qc = useQueryClient();
 
@@ -339,36 +340,45 @@ export default function CuvalDuzeltScreen() {
         </View>
       </AppModal>
 
-      {/* Saha #4: etiket değiştir (renk / en / kalite) */}
-      <AppModal visible={relabelOpen} onDismiss={() => setRelabelOpen(false)} position="center">
+      {/* Saha #4: etiket değiştir (renk / en / kalite)
+          position="bottom": AppModal alttan sheet'i TAM klavye yüksekliği kadar
+          yukarı kaldırır → "Kalite" (tam QWERTY) input'u + Kaydet butonu yatay
+          tablette de klavye üstünde kalır. Alanlar maxHeight'li ScrollView'da,
+          Kaydet ScrollView DIŞINDA sabit footer (aşırı kısa ekranda erişilir). */}
+      <AppModal visible={relabelOpen} onDismiss={() => setRelabelOpen(false)} position="bottom">
         <View style={styles.sheet}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
             Etiket Değiştir — {roll?.barcode}
           </Text>
-          <TouchableRipple onPress={() => setColorPickOpen(true)} style={styles.relabelField} borderless>
-            <View>
-              <Text variant="labelSmall" style={styles.dim}>Renk</Text>
-              <Text variant="bodyLarge">{rlColorName || 'Renksiz (ham)'}</Text>
-            </View>
-          </TouchableRipple>
-          {rlColorId && (
-            <Button compact onPress={() => { setRlColorId(null); setRlColorName(''); }}>Renksiz yap</Button>
-          )}
-          <TextInput
-            mode="outlined"
-            label="En (cm)"
-            value={rlWidth}
-            onChangeText={setRlWidth}
-            keyboardType="decimal-pad"
-            style={{ marginTop: 8 }}
-          />
-          <TextInput
-            mode="outlined"
-            label="Kalite"
-            value={rlQuality}
-            onChangeText={setRlQuality}
-            style={{ marginTop: 8 }}
-          />
+          <ScrollView
+            style={{ maxHeight: winH * 0.5, flexGrow: 0 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <TouchableRipple onPress={() => setColorPickOpen(true)} style={styles.relabelField} borderless>
+              <View>
+                <Text variant="labelSmall" style={styles.dim}>Renk</Text>
+                <Text variant="bodyLarge">{rlColorName || 'Renksiz (ham)'}</Text>
+              </View>
+            </TouchableRipple>
+            {rlColorId && (
+              <Button compact onPress={() => { setRlColorId(null); setRlColorName(''); }}>Renksiz yap</Button>
+            )}
+            <TextInput
+              mode="outlined"
+              label="En (cm)"
+              value={rlWidth}
+              onChangeText={setRlWidth}
+              keyboardType="decimal-pad"
+              style={{ marginTop: 8 }}
+            />
+            <TextInput
+              mode="outlined"
+              label="Kalite"
+              value={rlQuality}
+              onChangeText={setRlQuality}
+              style={{ marginTop: 8 }}
+            />
+          </ScrollView>
           <Button
             mode="contained"
             style={{ marginTop: 12 }}

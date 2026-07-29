@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ActiveSessionsPanel } from "./ActiveSessionsPanel";
 import { HistoryTable } from "./HistoryTable";
@@ -12,10 +13,9 @@ import { HistoryTable } from "./HistoryTable";
  */
 export function WorkSessionsPage() {
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Çalışma Oturumları"
-        description="Kim hangi makinede — canlı görünüm ve geçmiş (ayak izi). Üretim kayıtlarındaki makine atfı bu oturumlardan gelir."
         actions={<RefreshButton queryKey={["work-sessions"]} successMessage="Oturumlar yenilendi" />}
       />
       <Tabs defaultValue="active" className="flex min-h-0 flex-1 flex-col">
@@ -25,15 +25,15 @@ export function WorkSessionsPage() {
             <TabsTrigger value="history">Geçmiş</TabsTrigger>
           </TabsList>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-6">
+        <PageBody className="p-6">
           <TabsContent value="active" className="mt-0">
             <ActiveSessionsPanel />
           </TabsContent>
           <TabsContent value="history" className="mt-0">
             <HistoryTable />
           </TabsContent>
-        </div>
+        </PageBody>
       </Tabs>
-    </div>
+    </PageShell>
   );
 }

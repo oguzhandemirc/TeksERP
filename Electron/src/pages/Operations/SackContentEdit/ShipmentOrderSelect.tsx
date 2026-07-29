@@ -57,10 +57,12 @@ export function ShipmentOrderSelect({ customerId, branchId, selectedIds, onToggl
                     <span className="text-xs text-muted-foreground">termin {safeFormat(o.order.deadline, "dd.MM.yyyy")}</span>
                   )}
                 </div>
+                {/* Bizdeki ad — sevk kurma akışının geri kalanı (çuval/top listeleri)
+                    bizdeki adı bastığından müşteri override'ı burada kullanılmaz. */}
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {o.lines
                     .slice(0, 2)
-                    .map((l) => `${l.customerItemName ?? l.item.name}${l.color ? ` · ${l.customerColorName ?? l.color.name}` : ""}`)
+                    .map((l) => `${l.item.name}${l.color ? ` · ${l.color.name}` : ""}`)
                     .join(" · ")}
                   {o.lines.length > 2 ? ` +${o.lines.length - 2}` : ""}
                 </div>

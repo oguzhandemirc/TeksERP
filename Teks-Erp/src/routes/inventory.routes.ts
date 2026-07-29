@@ -120,6 +120,18 @@ const router = Router();
  *         name: filter[qtyMax]
  *         schema: { type: number }
  *         description: Roll.currentQty max (mt).
+ *       - in: query
+ *         name: filter[subcontractorId]
+ *         schema: { type: string, format: uuid }
+ *         description: |
+ *           Açık (dönmemiş) fason sevk kalemi bu firmada olan toplar.
+ *           Fasonda sekmesi firma kartı/filtresi — filter[status]=AT_SUBCONTRACTOR ile kullanılır.
+ *       - in: query
+ *         name: filter[subcontractorCategoryId]
+ *         schema: { type: string, format: uuid }
+ *         description: |
+ *           Açık fason sevk kaleminin adım kategorisi (WorkOrderStep.requiredCategoryId)
+ *           bu olan toplar. Fasonda sekmesi işlem chip'i/filtresi.
  *     responses:
  *       200:
  *         description: Sayfalanmış top listesi
@@ -216,6 +228,21 @@ router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_RO
 
 /**
  * @openapi
+ * /api/rolls/stats-batch:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Envanter özeti — N kategori filtresi için toplu sayım (tek istek)
+ *     description: |
+ *       Body `{ items: [{ key, filters }] }`. Her `filters` liste endpointiyle aynı
+ *       filtre setidir (buildRollForceFilters). Her kategori için `{ key, totalCount,
+ *       totalQty }` döner. 8 ayrı `/stats` isteği yerine tek çağrı (Promise.all).
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post("/stats-batch", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.getRollStatsBatch);
+
+/**
+ * @openapi
  * /api/rolls/production-flow:
  *   get:
  *     tags: [Inventory]
@@ -257,6 +284,32 @@ router.get(
   verifyToken,
   requireAnyPermission("roll:read", ...MOBILE_ROLL_READ),
   controller.getWarehouseScope
+);
+
+/**
+ * @openapi
+ * /api/rolls/subcontractor-summary:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Fasonda özeti — firma + işlem (kategori) bazlı açık fason dağılımı
+ *     description: |
+ *       AT_SUBCONTRACTOR topların TEK istekte iki dağılımı: `bySubcontractor`
+ *       (firma kartları — top adedi, Σ metre, en eski açık sevk tarihi/yaşı) +
+ *       `byCategory` (işlem chip'leri — top adedi, Σ metre) + `total`. Açık kalem
+ *       tanımı F85 ile aynı: iptalsiz + doğrudan-sevksiz sevkin aktif receipt-item'ı
+ *       olmayan kalemi. Açık kalemi bulunamayan top null ("Bilinmiyor") grupta.
+ *       Evren FIRE-hariç. "Tümü" = Σ byCategory (her top tam bir kez sayılır).
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: "{ bySubcontractor[], byCategory[], total }"
+ */
+router.get(
+  "/subcontractor-summary",
+  verifyToken,
+  requireAnyPermission("roll:read", ...MOBILE_ROLL_READ),
+  controller.getSubcontractorSummary,
 );
 
 /**

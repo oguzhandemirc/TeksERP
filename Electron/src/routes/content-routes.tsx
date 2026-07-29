@@ -38,6 +38,7 @@ import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelStudioPage } from "@/pages/LabelTemplates/editor/LabelStudioPage";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
+import { FreeDocumentsPage } from "@/pages/FreeDocuments/FreeDocumentsPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
@@ -78,6 +79,8 @@ import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
+import { ShipmentDetailPage } from "@/pages/Operations/Shipments/detail/ShipmentDetailPage";
+import { DirectShipmentDetailPage } from "@/pages/Operations/Shipments/detail/DirectShipmentDetailPage";
 import { SackStorePage } from "@/pages/Operations/SackStore/SackStorePage";
 import { SackContentEditPage } from "@/pages/Operations/SackContentEdit/SackContentEditPage";
 import { RelabelStationPage } from "@/pages/Operations/RelabelStation/RelabelStationPage";
@@ -260,6 +263,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <TravelerCardSettingsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/free-documents",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <FreeDocumentsPage />
       </ProtectedRoute>
     ),
   },
@@ -478,6 +489,24 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="shipping:read">
         <ShipmentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Fasondan doğrudan sevk tam-sayfa detayı — statik "direct" segmenti dinamik
+    // ":id"den önce sıralanır (RR6 ranking) → çuval sevkiyatı detayını gölgelemez.
+    path: "operations/shipments/direct/:id",
+    element: (
+      <ProtectedRoute requirePermission="shipping:read">
+        <DirectShipmentDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/shipments/:id",
+    element: (
+      <ProtectedRoute requirePermission="shipping:read">
+        <ShipmentDetailPage />
       </ProtectedRoute>
     ),
   },

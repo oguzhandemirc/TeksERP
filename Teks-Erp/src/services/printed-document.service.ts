@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { Prisma, PrintedDocType, PrintedDocStatus } from "@prisma/client";
+import bwipjs from "bwip-js";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -22,6 +23,8 @@ import {
   readCompanyName,
   readCompanyLetterhead,
   readDocumentsConfig,
+  readDocumentsLogo,
+  sanitizeDocumentsConfig,
   type CompanyLetterhead,
   type DocumentConfig,
 } from "./system-setting.service";
@@ -38,13 +41,19 @@ const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   SUBCONTRACTOR_DISPATCH: "fasonSevk",
   SUBCONTRACTOR_DIRECT_SHIP: "fasonDirectShip",
   KARTELA_DISPATCH: "kartelaCeki",
+  SUBCONTRACTOR_RECEIPT: "fasonKabul",
+  QUALITY_CERTIFICATE: "kaliteSertifikasi",
+  RETURN_DISPATCH: "iadeIrsaliyesi",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */
 export interface PrintedDocSnapshot {
   schemaVersion: 1;
   frozenAt: string;
-  company: { name: string; letterhead: CompanyLetterhead };
+  /** logoHash: freeze anındaki logo referansı (base64 KOPYASI DEĞİL — kütüphane
+   *  hash'i; DOCUMENTS_LOGO append-only olduğu için eski belge kendi logosunu bulur).
+   *  Eski snapshot'larda alan yok → logo basılmaz. */
+  company: { name: string; letterhead: CompanyLetterhead; logoHash?: string | null };
   /** Freeze anındaki HAM şablon override'ı — client resolveDocConfig ile çözer.
    *  Çözülmüş hali DEĞİL: DOC_DEFS varsayılanları client'ta tek kaynak kalsın
    *  diye (4. manuel senkron noktası açmamak için) ham saklanır. */
@@ -74,11 +83,33 @@ interface BuilderEntry {
    *  `allowDraft` yolu bunu transient (kaydedilmeyen) snapshot'a sarar ve
    *  renderHtml'i `draft:true` ile çağırır. Verilmezse taslak → 409. */
   buildPreview?: PrintedDocBuilder;
+  /** Kaynağın belge şablon PROFİLİNİ çözer (müşteri/fason ataması) — freeze/render
+   *  anında genel config üstüne merge edilir. Verilmezse profil uygulanmaz. */
+  resolveProfileId?: (db: Db, sourceId: string) => Promise<string | null>;
+  /** Kaynağa ait KAYITLI serbest notu (annotation) canlı çözer — render'da
+   *  meta.printNote yerine geçer. Donmuş çekirdeğe GİRMEZ; her an düzenlenebilir,
+   *  tekrar baskıda çıkar. Verilmezse ephemeral ?printNote= kullanılır. Yalnız
+   *  sevk irsaliyesi uygular (shipment.dispatchNote). */
+  resolveLiveNote?: (db: Db, sourceId: string) => Promise<string | null>;
   /** Donmuş snapshot'tan baskı-hazır HTML üretir — TEK KAYNAK format (mobil +
    *  Electron aynı HTML'i basar). Verilmezse o belge tipi için `getHtml` 400 verir. */
   renderHtml?: (
     snapshot: PrintedDocSnapshot,
-    meta: { status?: PrintedDocStatus; voidReason?: string | null; draft?: boolean },
+    meta: {
+      status?: PrintedDocStatus;
+      voidReason?: string | null;
+      draft?: boolean;
+      /** Snapshot'taki logoHash'in çözülmüş görseli (servis katmanı çözer). */
+      logoDataUrl?: string | null;
+      /** cfg.qr açıksa belge no+versiyon karekodu (servis üretir). */
+      qrDataUrl?: string | null;
+      /** Basım anı (dd.MM.yyyy HH:mm) — cfg.stamps.printedAt açıksa basılır. */
+      printedAtText?: string;
+      /** Baskıyı isteyen kullanıcı — cfg.stamps.printedBy açıksa basılır. */
+      printedBy?: string | null;
+      /** Tek seferlik baskı notu (persist edilmez, ?printNote=). */
+      printNote?: string | null;
+    },
   ) => string;
 }
 
@@ -97,19 +128,125 @@ function requireBuilder(docType: PrintedDocType): BuilderEntry {
 async function buildSnapshotEnvelope(
   db: Db,
   docType: PrintedDocType,
-  doc: Record<string, unknown>
+  doc: Record<string, unknown>,
+  sourceId?: string
 ): Promise<PrintedDocSnapshot> {
-  const [companyName, letterhead, documentsConfig] = [
+  const [companyName, letterhead, documentsConfig, logo] = [
     await readCompanyName(db),
     await readCompanyLetterhead(db),
     await readDocumentsConfig(db),
+    await readDocumentsLogo(db),
   ];
+
+  // Çözüm zinciri: genel DOCUMENTS_CONFIG → kaynağın müşteri/fason PROFİLİ.
+  // Merge alan-düzeyi shallow'dur: profilde verilen alan (sections/columns/style
+  // dahil) BÜTÜN olarak genel ayarı ezer. Sonuç ham override olarak donar —
+  // eski belgeler profil sonradan değişse bile kendi görünümüyle basılır.
+  const docKey = DOC_CONFIG_KEYS[docType];
+  let docCfg: DocumentConfig | null = documentsConfig[docKey] ?? null;
+  const resolveProfileId = builders.get(docType)?.resolveProfileId;
+  if (sourceId && resolveProfileId) {
+    const profileId = await resolveProfileId(db, sourceId);
+    if (profileId) {
+      const profile = await db.documentProfile.findUnique({
+        where: { id: profileId },
+        select: { config: true, isActive: true },
+      });
+      if (profile?.isActive && profile.config && typeof profile.config === "object") {
+        const pCfg = sanitizeDocumentsConfig(profile.config as Record<string, unknown>)[docKey];
+        if (pCfg) docCfg = { ...(docCfg ?? {}), ...pCfg };
+      }
+    }
+  }
+
   return {
     schemaVersion: 1,
     frozenAt: new Date().toISOString(),
-    company: { name: companyName, letterhead },
-    docConfigOverride: documentsConfig[DOC_CONFIG_KEYS[docType]] ?? null,
+    company: { name: companyName, letterhead, logoHash: logo.current },
+    docConfigOverride: docCfg,
     doc,
+  };
+}
+
+/** JSON değerini anahtar sırasından bağımsız karşılaştırmak için kanonikleştir
+ *  (jsonb okurken anahtar sırası değişebilir → aksi halde yanlış "farklı" sonucu). */
+function canonicalize(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonicalize);
+  if (v && typeof v === "object") {
+    const src = v as Record<string, unknown>;
+    return Object.keys(src)
+      .sort()
+      .reduce<Record<string, unknown>>((o, k) => {
+        o[k] = canonicalize(src[k]);
+        return o;
+      }, {});
+  }
+  return v;
+}
+const jsonEqual = (a: unknown, b: unknown): boolean =>
+  JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
+
+/** Donmuş görünüm katmanı (docConfigOverride + firma adı/künye/logo) güncel çözülenden
+ *  FARKLI mı? "Güncel görünüm" tuşunu yalnız gerçekten farklıysa göstermek için. İçerik
+ *  (`doc`) donuk kalır, karşılaştırmaya girmez. */
+async function isTemplateStale(
+  db: Db,
+  docType: PrintedDocType,
+  sourceId: string,
+  snap: PrintedDocSnapshot,
+): Promise<boolean> {
+  const fresh = await buildSnapshotEnvelope(db, docType, snap.doc, sourceId);
+  return (
+    !jsonEqual(fresh.docConfigOverride, snap.docConfigOverride) ||
+    fresh.company.name !== snap.company.name ||
+    !jsonEqual(fresh.company.letterhead, snap.company.letterhead) ||
+    (fresh.company.logoHash ?? null) !== (snap.company.logoHash ?? null)
+  );
+}
+
+/** Snapshot'taki logo referansını kütüphaneden çözer (hash yoksa/silinmişse null). */
+async function resolveLogoDataUrl(snapshot: PrintedDocSnapshot): Promise<string | null> {
+  const hash = snapshot.company?.logoHash;
+  if (!hash) return null;
+  const logo = await readDocumentsLogo();
+  return logo.items[hash] ?? null;
+}
+
+/** dd.MM.yyyy HH:mm (Basım damgası). */
+function fmtStampNow(): string {
+  const d = new Date();
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * Render meta ekleri — logo + (cfg.qr açıksa) belge no/versiyon karekodu + basım
+ * damgaları. QR içeriği insan-okur doğrulama satırıdır: "BELGENO vN".
+ */
+async function buildRenderExtras(
+  snapshot: PrintedDocSnapshot,
+  info: { documentNo?: string; version?: number; printedBy?: string | null; printNote?: string | null },
+): Promise<{
+  logoDataUrl: string | null;
+  qrDataUrl: string | null;
+  printedAtText: string;
+  printedBy: string | null;
+  printNote: string | null;
+}> {
+  let qrDataUrl: string | null = null;
+  if (snapshot.docConfigOverride?.qr) {
+    const text = info.documentNo
+      ? `${info.documentNo}${info.version ? ` v${info.version}` : ""}`
+      : "ORNEK-BELGE";
+    const buf = await bwipjs.toBuffer({ bcid: "qrcode", text, scale: 3 });
+    qrDataUrl = `data:image/png;base64,${buf.toString("base64")}`;
+  }
+  return {
+    logoDataUrl: await resolveLogoDataUrl(snapshot),
+    qrDataUrl,
+    printedAtText: fmtStampNow(),
+    printedBy: info.printedBy ?? null,
+    printNote: info.printNote?.trim().slice(0, 300) || null,
   };
 }
 
@@ -129,7 +266,7 @@ export class PrintedDocumentService {
     if (!built) {
       throw AppError.internal(`Belge dondurulamadı — kaynak uygun durumda değil: ${docType}/${sourceId}`);
     }
-    const snapshot = await buildSnapshotEnvelope(tx, docType, built.doc);
+    const snapshot = await buildSnapshotEnvelope(tx, docType, built.doc, sourceId);
     await tx.printedDocument.create({
       data: {
         docType,
@@ -149,18 +286,35 @@ export class PrintedDocumentService {
    * kaynak uygun değilse (örn. Shipment hâlâ hazırlıkta) data:null döner —
    * client TASLAK modunda canlı render eder.
    */
-  async getCurrent(docType: PrintedDocType, sourceId: string): Promise<ApiResponse<unknown>> {
+  async getCurrent(
+    docType: PrintedDocType,
+    sourceId: string,
+    // Yalnız istemciye dönen çağrıda hesapla — getHtml'in iç çağrısı bunu geçmez
+    // (fazladan envelope kurulmasın). templateStale = donmuş görünüm ≠ güncel şablon.
+    opts?: { computeTemplateStale?: boolean },
+  ): Promise<ApiResponse<unknown>> {
     const existing = await prisma.printedDocument.findFirst({
       where: { docType, sourceId },
       orderBy: { version: "desc" },
     });
-    if (existing) return { success: true, data: existing };
+    if (existing) {
+      if (opts?.computeTemplateStale) {
+        const templateStale = await isTemplateStale(
+          prisma,
+          docType,
+          sourceId,
+          existing.snapshot as unknown as PrintedDocSnapshot,
+        );
+        return { success: true, data: { ...existing, templateStale } };
+      }
+      return { success: true, data: existing };
+    }
 
     const entry = requireBuilder(docType);
     const built = await (entry.lazyInit ?? entry.fresh)(prisma, sourceId);
     if (!built) return { success: true, data: null };
 
-    const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc);
+    const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc, sourceId);
     try {
       const created = await prisma.printedDocument.create({
         data: {
@@ -183,7 +337,11 @@ export class PrintedDocumentService {
         recordId: created.id,
         newData: { docType, sourceId, documentNo: built.documentNo, event: "LAZY_RECONSTRUCT" },
       });
-      return { success: true, data: created };
+      // Geriye-dönük kayıt güncel veriden kuruldu → şablonu tanımgereği güncel (stale=false).
+      return {
+        success: true,
+        data: opts?.computeTemplateStale ? { ...created, templateStale: false } : created,
+      };
     } catch (err) {
       // Eşzamanlı iki istek aynı anda lazy-init denerse @@unique(docType,sourceId,version)
       // ikincisini P2002 ile düşürür — kazananın yazdığını oku.
@@ -192,7 +350,11 @@ export class PrintedDocumentService {
           where: { docType, sourceId },
           orderBy: { version: "desc" },
         });
-        return { success: true, data: winner };
+        return {
+          success: true,
+          data:
+            opts?.computeTemplateStale && winner ? { ...winner, templateStale: false } : winner,
+        };
       }
       throw err;
     }
@@ -208,7 +370,14 @@ export class PrintedDocumentService {
     docType: PrintedDocType,
     sourceId: string,
     version?: number,
-    opts?: { allowDraft?: boolean },
+    opts?: {
+      allowDraft?: boolean;
+      useCurrentConfig?: boolean;
+      /** Basan kullanıcı (damga için) — controller req.user'dan geçirir. */
+      printedBy?: string | null;
+      /** Tek seferlik baskı notu — persist edilmez, yalnız bu render'a girer. */
+      printNote?: string | null;
+    },
   ): Promise<ApiResponse<{ html: string } | null>> {
     const entry = requireBuilder(docType);
     if (!entry.renderHtml) {
@@ -216,6 +385,12 @@ export class PrintedDocumentService {
         `Bu belge tipi için HTML çıktısı tanımlı değil: ${docType}`,
       );
     }
+
+    // Kayıtlı not (annotation) tanımlıysa ephemeral ?printNote='ı EZER — donmuş
+    // çekirdeğe girmeden canlı çözülür (tekrar baskıda da çıkar). Yoksa ephemeral.
+    const liveNote = entry.resolveLiveNote
+      ? await entry.resolveLiveNote(prisma, sourceId)
+      : (opts?.printNote ?? null);
 
     // version verilirse o versiyonun HTML'i (Electron versiyon çubuğu); yoksa güncel.
     const res =
@@ -226,12 +401,29 @@ export class PrintedDocumentService {
       snapshot: unknown;
       status: PrintedDocStatus;
       voidReason: string | null;
+      documentNo: string;
+      version: number;
     } | null;
 
     if (rec) {
-      const html = entry.renderHtml(rec.snapshot as PrintedDocSnapshot, {
+      let snapshot = rec.snapshot as PrintedDocSnapshot;
+      // "Güncel şablonla bas" — belge İÇERİĞİ donuk kalır, yalnız görünüm katmanı
+      // (şablon override + firma/künye) canlı ayardan yeniden çözülür. Yeni versiyon
+      // ÜRETMEZ, snapshot'a yazmaz; sadece bu render için geçici zarf kurulur.
+      if (opts?.useCurrentConfig) {
+        const fresh = await buildSnapshotEnvelope(prisma, docType, snapshot.doc, sourceId);
+        snapshot = { ...fresh, frozenAt: snapshot.frozenAt };
+      }
+      const extras = await buildRenderExtras(snapshot, {
+        documentNo: rec.documentNo,
+        version: rec.version,
+        printedBy: opts?.printedBy,
+        printNote: liveNote,
+      });
+      const html = entry.renderHtml(snapshot, {
         status: rec.status,
         voidReason: rec.voidReason,
+        ...extras,
       });
       return { success: true, data: { html } };
     }
@@ -240,8 +432,13 @@ export class PrintedDocumentService {
     if (opts?.allowDraft && version == null && entry.buildPreview) {
       const built = await entry.buildPreview(prisma, sourceId);
       if (built) {
-        const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc);
-        const html = entry.renderHtml(snapshot, { draft: true });
+        const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc, sourceId);
+        const extras = await buildRenderExtras(snapshot, {
+          documentNo: built.documentNo,
+          printedBy: opts?.printedBy,
+          printNote: liveNote,
+        });
+        const html = entry.renderHtml(snapshot, { draft: true, ...extras });
         return { success: true, data: { html } };
       }
     }
@@ -266,7 +463,8 @@ export class PrintedDocumentService {
       );
     }
     const snapshot = await buildSnapshotEnvelope(prisma, docType, doc);
-    return entry.renderHtml(snapshot, { draft: true });
+    const extras = await buildRenderExtras(snapshot, {});
+    return entry.renderHtml(snapshot, { draft: true, ...extras });
   }
 
   /**
@@ -287,18 +485,20 @@ export class PrintedDocumentService {
     if (!doc) {
       throw AppError.badRequest(`Bu belge tipi için örnek veri yok: ${docType}`);
     }
-    const [companyName, letterhead] = [
+    const [companyName, letterhead, logo] = [
       await readCompanyName(prisma),
       await readCompanyLetterhead(prisma),
+      await readDocumentsLogo(prisma),
     ];
     const snapshot: PrintedDocSnapshot = {
       schemaVersion: 1,
       frozenAt: new Date().toISOString(),
-      company: { name: companyName, letterhead },
+      company: { name: companyName, letterhead, logoHash: logo.current },
       docConfigOverride: configOverride,
       doc,
     };
-    return entry.renderHtml(snapshot, { draft: true });
+    const extras = await buildRenderExtras(snapshot, {});
+    return entry.renderHtml(snapshot, { draft: true, ...extras });
   }
 
   /**
@@ -333,7 +533,7 @@ export class PrintedDocumentService {
     if (!built) {
       throw AppError.conflict("Kaynak kayıt belge üretimine uygun durumda değil");
     }
-    const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc);
+    const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc, sourceId);
 
     const created = await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM: gözlenen versiyonu koşullu SUPERSEDED'e çek — eşzamanlı

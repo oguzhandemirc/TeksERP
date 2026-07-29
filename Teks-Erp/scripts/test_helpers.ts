@@ -64,18 +64,19 @@ function testNameNormalize() {
     normalizeItemName("  a   b ") === "A B",
     JSON.stringify(normalizeItemName("  a   b ")),
   );
-  // Renk: sayı bloğu başa, kelimeler tire
-  check("color: sayı başa + tire", normalizeColorName("beyaz 055") === "055-BEYAZ");
-  check("color: çok kelime tire", normalizeColorName("krem gümüş") === "KREM-GÜMÜŞ");
-  check("color: idempotent", normalizeColorName("055-BEYAZ") === "055-BEYAZ");
+  // Renk: sayı bloğu başa, boşluk KORUNUR (2026-07-27 — tire standardı kalktı;
+  // legacy tireli ad idempotent bırakılır)
+  check("color: sayı başa + boşluk korunur", normalizeColorName("beyaz 055") === "055 BEYAZ");
+  check("color: çok kelime boşluklu", normalizeColorName("krem gümüş") === "KREM GÜMÜŞ");
+  check("color: legacy tireli idempotent", normalizeColorName("055-BEYAZ") === "055-BEYAZ");
   check(
     "color: çoklu sayı SIRASI korunur",
-    normalizeColorName("12 lacivert 7") === "12-7-LACİVERT",
+    normalizeColorName("12 lacivert 7") === "12 7 LACİVERT",
     normalizeColorName("12 lacivert 7"),
   );
   check(
-    "color: tire+boşluk karışık ayraç bölünür",
-    normalizeColorName("açık - mavi  03") === "03-AÇIK-MAVİ",
+    "color: boşlukla ayrık yalnız-tire token düşer",
+    normalizeColorName("açık - mavi  03") === "03 AÇIK MAVİ",
     normalizeColorName("açık - mavi  03"),
   );
   check("color: yalnız sayı", normalizeColorName("042") === "042");

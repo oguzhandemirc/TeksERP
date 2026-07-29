@@ -9,6 +9,7 @@ import { BaseService, BaseServiceConfig } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
+import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
 import { OrderStatus } from "@prisma/client";
 import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
@@ -24,6 +25,27 @@ const TAX_NUMBER_REGEX = /^\d{10,15}$/;
 
 /** Müşteri kodu prefix'i — tek-tip kod formatı: `MUS + GGAAYY + NNNN`. */
 const CUSTOMER_CODE_PREFIX = "MUS";
+
+/**
+ * "Her şube = ayrı müşteri" düzeni (2026-07): müşteri kartına taşınan opsiyonel
+ * alanlar. Sınırlar DB kolonlarıyla birebir (schema.prisma Customer) — aşan girdi
+ * Postgres P2000 yerine alan-adlı Türkçe 400 alsın. TEXT kolonlar (address, notes)
+ * inline şube validasyonuyla aynı 500 pratik sınırını kullanır.
+ */
+const CARD_FIELDS = [
+  ["exportCode", "İhracat kodu", 50],
+  ["address", "Adres", 500],
+  ["city", "Şehir", 80],
+  ["district", "İlçe", 80],
+  ["country", "Ülke", 80],
+  ["contactName", "Yetkili adı", 120],
+  ["contactPhone", "Telefon", 40],
+  ["email", "E-posta", 200],
+  ["notes", "Notlar", 500],
+] as const;
+
+/** Kaba e-posta biçimi — boşluksuz `x@y.z`; amaç yazım kazasını yakalamak, RFC değil. */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Sıradaki müşteri kodu: `MUS + GGAAYY + NNNN` (gün başına 1'den artan, 4 hane).
@@ -99,7 +121,11 @@ function validateAndShapeBranches(raw: unknown): InlineBranchData[] | undefined 
   if (raw.length > MAX_INLINE_BRANCHES) {
     throw AppError.badRequest(`Tek seferde en fazla ${MAX_INLINE_BRANCHES} şube eklenebilir`);
   }
-  return raw.map((entry, idx): InlineBranchData => {
+  // Dizi içi ad + kod mükerrer kontrolü (Türkçe-duyarsız) — yeni müşteri
+  // olduğundan mevcut şube yok; iki-adım yolun guard'ı customer-branch.service'te.
+  const seenNames = new Map<string, number>();
+  const seenCodes = new Map<string, number>();
+  const shaped = raw.map((entry, idx): InlineBranchData => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw AppError.badRequest(`${idx + 1}. şube: geçersiz kayıt`);
     }
@@ -114,8 +140,27 @@ function validateAndShapeBranches(raw: unknown): InlineBranchData[] | undefined 
     if (name.length > 100) {
       throw AppError.badRequest(`${idx + 1}. şube: Şube adı en fazla 100 karakter olabilir`);
     }
+    const nameKey = foldNameForCompare(name);
+    const firstIdx = seenNames.get(nameKey);
+    if (firstIdx !== undefined) {
+      throw AppError.badRequest(
+        `${idx + 1}. şube: '${name}' adı ${firstIdx + 1}. şubeyle aynı — şube adları tekrar edemez`,
+      );
+    }
+    seenNames.set(nameKey, idx);
+    const code = optBranchStr(rec.code, "İhracat kodu", 50, idx);
+    if (code) {
+      const codeKey = foldNameForCompare(code);
+      const firstCodeIdx = seenCodes.get(codeKey);
+      if (firstCodeIdx !== undefined) {
+        throw AppError.badRequest(
+          `${idx + 1}. şube: '${code}' ihracat kodu ${firstCodeIdx + 1}. şubeyle aynı — şube ihracat kodları tekrar edemez`,
+        );
+      }
+      seenCodes.set(codeKey, idx);
+    }
     return {
-      code: optBranchStr(rec.code, "Kod", 50, idx),
+      code,
       name,
       address: optBranchStr(rec.address, "Adres", 500, idx),
       city: optBranchStr(rec.city, "Şehir", 80, idx),
@@ -126,6 +171,7 @@ function validateAndShapeBranches(raw: unknown): InlineBranchData[] | undefined 
       isActive: rec.isActive === undefined ? true : Boolean(rec.isActive),
     };
   });
+  return shaped;
 }
 
 export class CustomerService extends BaseService {
@@ -154,6 +200,38 @@ export class CustomerService extends BaseService {
   }
 
   /**
+   * Müşteri kartı opsiyonel alanları: gövdede yoksa dokunma, null/boş → null,
+   * metin değilse veya sınırı aşarsa alan-adlı Türkçe 400. E-posta ek biçim
+   * kontrolünden geçer. Doğrulanan değer data'ya geri yazılır (trim'li).
+   */
+  private applyCardFields(data: Record<string, unknown>): void {
+    for (const [key, label, max] of CARD_FIELDS) {
+      if (!(key in data)) continue;
+      const raw = data[key];
+      if (raw === undefined) continue;
+      if (raw === null) {
+        data[key] = null;
+        continue;
+      }
+      if (typeof raw !== "string") {
+        throw AppError.badRequest(`${label} metin olmalı`);
+      }
+      const trimmed = raw.trim();
+      if (trimmed === "") {
+        data[key] = null;
+        continue;
+      }
+      if (trimmed.length > max) {
+        throw AppError.badRequest(`${label} en fazla ${max} karakter olabilir`);
+      }
+      if (key === "email" && !EMAIL_REGEX.test(trimmed)) {
+        throw AppError.badRequest("E-posta adresi geçersiz görünüyor");
+      }
+      data[key] = trimmed;
+    }
+  }
+
+  /**
    * Name + code (create'te zorunlu, update'te varsa). Trim + max length
    * paylaşımlı validator'dan.
    */
@@ -168,6 +246,28 @@ export class CustomerService extends BaseService {
       required: isCreate,
     });
     if (name !== undefined) data.name = name;
+  }
+
+  /**
+   * Aynı vergi numaralı (VKN/TCKN) ikinci müşteriye izin verme — vergi no tüzel
+   * kişiyi/kişiyi benzersiz tanımlar, mükerrer = aynı firma iki kez. Yalnız
+   * AKTİF kayıtlar sayılır (pasif kayıt false-block yapmasın); değer normalize
+   * (trim) sonrası birebir karşılaştırılır (rakam dizisi — katlama gerekmez).
+   */
+  private async assertTaxNumberAvailable(
+    taxNumber: unknown,
+    excludeId?: string,
+  ): Promise<void> {
+    if (typeof taxNumber !== "string" || taxNumber.trim().length === 0) return;
+    const value = taxNumber.trim();
+    const existing = await prisma.customer.findFirst({
+      where: { taxNumber: value, isActive: true, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      select: { code: true, name: true },
+    });
+    if (!existing) return;
+    throw AppError.conflict(
+      `'${value}' vergi numarası '${existing.name}' (${existing.code}) müşterisinde zaten kayıtlı. Aynı vergi no ile ikinci müşteri açılamaz.`,
+    );
   }
 
   async create(
@@ -188,9 +288,11 @@ export class CustomerService extends BaseService {
     return withBarcodeRetry(async () => {
       data.code = await nextCustomerCode();
       this.applyStringFields(data, true);
+      this.applyCardFields(data);
       const validated = this.validateTaxNumber(data.taxNumber);
       if (validated !== undefined) {
         data.taxNumber = validated;
+        await this.assertTaxNumberAvailable(validated);
       }
       if (branches) data.branches = branches;
       else delete data.branches;
@@ -208,9 +310,19 @@ export class CustomerService extends BaseService {
     // düş: BaseService.update nested-wrap YAPMAZ, ham dizi Prisma update'i bozardı.
     if ("branches" in data) delete data.branches;
     this.applyStringFields(data, false);
+    this.applyCardFields(data);
     const validated = this.validateTaxNumber(data.taxNumber);
     if (validated !== undefined) {
       data.taxNumber = validated;
+      // Yalnız vergi no gerçekten değişirken kontrol — tarihsel mükerrer kayıt
+      // (koruma öncesi) düzenlenebilir kalsın.
+      const current = await prisma.customer.findUnique({
+        where: { id },
+        select: { taxNumber: true },
+      });
+      if (validated && validated !== (current?.taxNumber ?? null)) {
+        await this.assertTaxNumberAvailable(validated, id);
+      }
     }
     return super.update(id, data, userId);
   }

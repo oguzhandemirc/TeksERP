@@ -32,10 +32,10 @@ interface Props {
  *  bağlam→şablon yönlendirmesi. Yalnız kind=LABEL_PRINTER iken render edilir.
  *  "Boyutlar" (LabelFormatProfile) kataloğu emekli — medya artık doğrudan burada. */
 export function PrinterSettingsFields({ form }: Props) {
-  // Şablon yönlendirme select'leri için TEK HAVUZ — aktif şablonların tamamı.
+  // Şablon yönlendirme select'leri için atanabilir havuz — serbest etiketler HARİÇ.
   const templatesQuery = useQuery({
-    queryKey: ["label-templates", "all"],
-    queryFn: () => labelTemplateService.list(),
+    queryKey: ["label-templates", "assignable", "printer-route"],
+    queryFn: () => labelTemplateService.list({ assignable: true }),
   });
   const templates = templatesQuery.data?.data ?? [];
 

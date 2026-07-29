@@ -36,7 +36,7 @@ const fmt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false });
 /**
  * Bağlı sipariş kalemleri için sol panel. Kendi header + scroll body'sini taşır
  * ki ana formdan bağımsız scroll'lansın. Kalem kartları okunaklılık için
- * hiyerarşik: sipariş no + müşteri → ürün/renk → metraj kutusu → termin/özellik.
+ * hiyerarşik: sipariş no + müşteri → kumaş/renk → metraj kutusu → termin/özellik.
  */
 export function LinkedOrderLinesField({
   lines,
@@ -260,7 +260,7 @@ function LineCard({
           </button>
         </div>
 
-        {/* Ürün + renk */}
+        {/* Kumaş + renk */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-medium">{line.itemName}</span>
           {line.itemColorName && (

@@ -130,7 +130,10 @@ export function MultiSelectCheckboxList({
         </Button>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-md border">
+      {/* [contain:content]: Chromium, statik iç scroller'ın içerik yüksekliğini üstteki
+          dialog'un scrollHeight'ına sızdırıyor → modal boşluğa kayıyordu (kalabalık
+          listede "Yeni Renk" scroll hatası). Containment sınırı sızıntıyı keser. */}
+      <div className="flex-1 overflow-auto rounded-md border [contain:content]">
         {totalVisible === 0 ? (
           <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
             {emptyHint ?? "Eşleşen kayıt yok."}

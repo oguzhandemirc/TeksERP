@@ -2,9 +2,10 @@
 // Etiket Stüdyosu — seçili eleman özellik paneli
 // =============================================================================
 
-import { Trash2 } from "lucide-react";
+import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, BringToFront, SendToBack, AlignHorizontalSpaceAround, AlignVerticalSpaceAround } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -14,6 +15,7 @@ import type { CanvasRotation, LabelElement } from "@/types/label-canvas";
 import { elementTypeLabels, skippedLanguages } from "@/types/label-canvas";
 import type { UnifiedCatalogField } from "@/services/labelTemplateService";
 import { achievedTextStyleMm, BC_BASE_MM, FONT_MM } from "./canvas-model";
+import { IconPropsSection } from "./IconPropsSection";
 
 interface Props {
   element: LabelElement | null;
@@ -22,6 +24,14 @@ interface Props {
   catalog: UnifiedCatalogField[];
   onChange: (patch: Partial<LabelElement>) => void;
   onRemove: () => void;
+  /** Seçili elemanı çoğalt (kayık kopya) — başlıktaki Çoğalt butonu. */
+  onDuplicate: () => void;
+  /** Z-sıra: en üste / en alta getir. */
+  onBringToFront: () => void;
+  onSendToBack: () => void;
+  /** Tuvale ortala (yatay/dikey). */
+  onCenterX: () => void;
+  onCenterY: () => void;
 }
 
 const ROTS: CanvasRotation[] = [0, 90, 180, 270];
@@ -47,7 +57,7 @@ function NumField({ label, value, onChange, min = 0, max = 500, step = 0.5 }: {
   );
 }
 
-export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange, onRemove }: Props) {
+export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange, onRemove, onDuplicate, onBringToFront, onSendToBack, onCenterX, onCenterY }: Props) {
   if (!el) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
@@ -70,10 +80,24 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
     <div className="space-y-3 rounded-md border bg-card p-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold">{elementTypeLabels[el.type]}</span>
-        <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-destructive"
-          onClick={onRemove} title="Elemanı sil (Delete)">
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button type="button" size="icon" variant="ghost" className="h-6 w-6"
+            onClick={onBringToFront} title="En üste getir">
+            <BringToFront className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" size="icon" variant="ghost" className="h-6 w-6"
+            onClick={onSendToBack} title="En alta gönder">
+            <SendToBack className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" size="icon" variant="ghost" className="h-6 w-6"
+            onClick={onDuplicate} title="Çoğalt (Ctrl+C, Ctrl+V)">
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-destructive"
+            onClick={onRemove} title="Elemanı sil (Delete)">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
       {skipped.length > 0 && (
         <p className="rounded bg-amber-50 px-2 py-1 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
@@ -84,6 +108,17 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
       <div className="grid grid-cols-2 gap-2">
         <NumField label="X (mm)" value={el.x} onChange={(v) => onChange({ x: v } as Partial<LabelElement>)} />
         <NumField label="Y (mm)" value={el.y} onChange={(v) => onChange({ y: v } as Partial<LabelElement>)} />
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-muted-foreground">Tuvale ortala:</span>
+        <Button type="button" size="sm" variant="outline" className="h-6 gap-1 px-2 text-[10px]"
+          onClick={onCenterX} title="Yatayda tuval ortasına">
+          <AlignHorizontalSpaceAround className="h-3 w-3" /> Yatay
+        </Button>
+        <Button type="button" size="sm" variant="outline" className="h-6 gap-1 px-2 text-[10px]"
+          onClick={onCenterY} title="Dikeyde tuval ortasına">
+          <AlignVerticalSpaceAround className="h-3 w-3" /> Dikey
+        </Button>
       </div>
 
       {el.type === "field" && (
@@ -107,8 +142,9 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
 
       {el.type === "text" && (
         <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Metin</Label>
-          <Input className="h-7 text-xs" value={el.text}
+          <Label className="text-[10px] text-muted-foreground">Metin (Enter = alt satır)</Label>
+          <Textarea className="min-h-14 text-xs leading-tight" rows={3} value={el.text}
+            placeholder={"1. satır\n2. satır"}
             onChange={(e) => onChange({ text: e.target.value } as Partial<LabelElement>)} />
         </div>
       )}
@@ -149,6 +185,40 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
               Kalın
             </label>
           </div>
+          {/* Yatay hizalama — çapa=x (sol/orta/sağ). Çok satırda satırları hizalar. */}
+          <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground">Hizalama (çapa = X)</Label>
+            <div className="flex gap-1">
+              {([
+                ["left", AlignLeft, "Sola"],
+                ["center", AlignCenter, "Ortala"],
+                ["right", AlignRight, "Sağa"],
+              ] as const).map(([val, Icon, title]) => (
+                <Button key={val} type="button" size="icon" variant={(el.align ?? "left") === val ? "default" : "outline"}
+                  className="h-7 w-7" title={title}
+                  onClick={() => onChange({ align: val } as Partial<LabelElement>)}>
+                  <Icon className="h-3.5 w-3.5" />
+                </Button>
+              ))}
+            </div>
+          </div>
+          {/* Harf dönüşümü — Otomatik (dokunma) / BÜYÜK / küçük (Türkçe-duyarlı). */}
+          <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground">Harf</Label>
+            <div className="flex gap-1">
+              {([
+                [undefined, "Otomatik"],
+                ["upper", "BÜYÜK"],
+                ["lower", "küçük"],
+              ] as const).map(([val, label]) => (
+                <Button key={label} type="button" size="sm" variant={(el.textCase ?? undefined) === val ? "default" : "outline"}
+                  className="h-7 flex-1 px-1 text-[10px]"
+                  onClick={() => onChange({ textCase: val } as Partial<LabelElement>)}>
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
           <p className="text-[10px] leading-snug text-muted-foreground">
             ORTAK PAYDA: dört dil (PPLA/PPLB/ZPL/HTML) AYNI boyut kombinasyonunu ve
             AYNI metni (Türkçe→ASCII) basar — eleman dilden dile farklı görünmez.
@@ -162,6 +232,8 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
         <NumField label="QR ölçeği (2-15 · modül/dot)" value={el.scale ?? 5} min={2} max={15} step={1}
           onChange={(v) => onChange({ scale: Math.round(v) } as Partial<LabelElement>)} />
       )}
+
+      {el.type === "icon" && <IconPropsSection element={el} onChange={onChange} />}
 
       {el.type === "code128" && (
         <div className="grid grid-cols-2 items-end gap-2">
@@ -229,6 +301,32 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
             <NumField label="Bant genişliği (mm)" value={el.wMm ?? 9} onChange={(v) => onChange({ wMm: v } as Partial<LabelElement>)} />
             <NumField label="Bant boyu (mm)" value={el.hMm ?? 40} onChange={(v) => onChange({ hMm: v } as Partial<LabelElement>)} />
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <NumField label="Değer yüksekliği (mm)" min={1} max={30} step={0.5}
+              value={el.glyphHMm}
+              onChange={(v) => onChange({ glyphHMm: Math.max(1, Math.min(30, v)) } as Partial<LabelElement>)} />
+            <NumField label="Genişlik oranı" min={0.25} max={4} step={0.05}
+              value={el.wr ?? 1}
+              onChange={(v) => onChange({ wr: Math.max(0.25, Math.min(4, v)) } as Partial<LabelElement>)} />
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="flex h-7 items-center gap-1.5 text-xs">
+              <Checkbox checked={el.unit !== false} onCheckedChange={(v) => onChange({ unit: v === true } as Partial<LabelElement>)} />
+              Birim eki: "m" (örn. 230,5m)
+            </label>
+            {el.glyphHMm != null && (
+              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]"
+                onClick={() => onChange({ glyphHMm: undefined } as Partial<LabelElement>)}>
+                Otomatik boyut
+              </Button>
+            )}
+          </div>
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Değer yüksekliği boş = banda otomatik sığdırılır. Dolu = metin elemanları
+            gibi en yakın basılabilir kombinasyona oturur (dört dilde aynı). İnce/kalın
+            görünümü genişlik oranı verir — ters (siyah zemin) bantta ayrıca "kalın"
+            seçeneği yoktur.
+          </p>
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Değer dönüşü</Label>
             <Select value={String(el.rot ?? 90)} onValueChange={(v) => onChange({ rot: Number(v) as CanvasRotation } as Partial<LabelElement>)}>

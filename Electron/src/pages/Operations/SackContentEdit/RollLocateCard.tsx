@@ -16,7 +16,7 @@ const ROLL_STATUS_LABEL: Record<string, string> = {
 
 /** "Bu top nerede?" cevabı — barkod okutulunca liste üstünde gösterilir. */
 export function RollLocateCard({ roll, onClear }: { roll: LocatedRoll; onClear: () => void }) {
-  // Birleşik ad (ürün + renk + en) — boş parçalar atlanır.
+  // Birleşik ad (kumaş + renk + en) — boş parçalar atlanır.
   const rollName = [
     roll.item.name,
     roll.color?.name,

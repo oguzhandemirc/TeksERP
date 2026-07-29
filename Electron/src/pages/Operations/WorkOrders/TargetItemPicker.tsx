@@ -6,8 +6,8 @@ import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPicker
 import type { WorkOrderFormValues } from "./schema";
 
 /**
- * Hedef Ürün picker — genel arama modalı (EntityPickerModal) üzerine RHF
- * Controller sarmalı. Yüzlerce ürün için sunucu cursor araması + sonsuz kaydırma.
+ * Hedef Kumaş picker — genel arama modalı (EntityPickerModal) üzerine RHF
+ * Controller sarmalı. Yüzlerce kumaş için sunucu cursor araması + sonsuz kaydırma.
  */
 export function TargetItemPicker({
   control,
@@ -16,7 +16,7 @@ export function TargetItemPicker({
   lockedTooltip,
 }: {
   control: Control<WorkOrderFormValues>;
-  /** Ürün değiştiğinde renk ve özellikleri sıfırlamak için. */
+  /** Kumaş değiştiğinde renk ve özellikleri sıfırlamak için. */
   onItemChange?: () => void;
   /** Düzenleme kilitliyse (örn. sevk yapılmış). */
   disabled?: boolean;
@@ -44,8 +44,8 @@ export function TargetItemPicker({
           lockedTooltip={lockedTooltip}
           icon={Package}
           iconClassName="text-primary"
-          title="Hedef Ürün"
-          description="Ürün seç veya aramayla daralt. Atama zorunlu değil."
+          title="Hedef Kumaş"
+          description="Kumaş seç veya aramayla daralt. Atama zorunlu değil."
           placeholder="Atanmadı"
         />
       )}

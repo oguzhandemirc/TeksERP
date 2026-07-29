@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Tags, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle } from "lucide-react";
+import { History, Tag, Tags, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle, Send } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -18,7 +18,7 @@ import { ManualAttributesDialog } from "./ManualAttributesDialog";
 import { RescueStuckDialog } from "./RescueStuckDialog";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
-import { type Roll, shipmentScopeLabels } from "./types";
+import { type Roll, shipmentScopeLabels, categoryOfDispatch } from "./types";
 
 interface Props {
   roll: Roll | null;
@@ -55,6 +55,10 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const latestReturn = detail?.returns?.[0] ?? null;
   // AT_KARTELA top: hangi kartela firmasında olduğunu detay panelinde göster.
   const kartelaDispatch = detail?.kartelaDispatchItems?.[0]?.dispatch ?? null;
+  // AT_SUBCONTRACTOR top: hangi fason firmasında/işlemde — kartela kartı emsali.
+  // Liste cevabı da dispatchItems taşır (fallback) → panel açılır açılmaz dolu görünür.
+  const activeDispatch =
+    detail?.dispatchItems?.[0]?.dispatch ?? roll?.dispatchItems?.[0]?.dispatch ?? null;
   // Sevkiyat rezervasyonu: top bir çuvala/sevkiyata bağlıysa "serbest depo" değildir.
   // Detay endpoint'i shipment+sack döner; liste cevabı da taşıyabilir (fallback).
   const reservedShipment = detail?.shipment ?? roll?.shipment ?? null;
@@ -239,7 +243,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
             <Card>
               <CardContent className="space-y-2 p-3 text-sm">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  <div className="text-xs text-muted-foreground">Ürün</div>
+                  <div className="text-xs text-muted-foreground">Kumaş</div>
                   <div>{roll.item?.name}</div>
                   <div className="text-xs text-muted-foreground">Biçim</div>
                   <div>
@@ -324,6 +328,48 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       </>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Fason bilgisi — top fason firmasında işlemde (AT_SUBCONTRACTOR). */}
+            {roll.status === "AT_SUBCONTRACTOR" && (
+              <Card>
+                <CardContent className="space-y-2 p-3 text-sm">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Send className="h-3.5 w-3.5" /> Fason Bilgisi
+                  </div>
+                  {detailQuery.isLoading && !activeDispatch ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : activeDispatch ? (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <div className="text-xs text-muted-foreground">Firma</div>
+                      <div className="font-medium">
+                        {activeDispatch.subcontractor.name}
+                        {activeDispatch.subcontractor.code
+                          ? ` (${activeDispatch.subcontractor.code})`
+                          : ""}
+                      </div>
+                      {categoryOfDispatch(activeDispatch) && (
+                        <>
+                          <div className="text-xs text-muted-foreground">İşlem</div>
+                          <div className="text-xs">
+                            {categoryOfDispatch(activeDispatch)?.name}
+                          </div>
+                        </>
+                      )}
+                      <div className="text-xs text-muted-foreground">Sevk No</div>
+                      <div className="font-mono text-xs">{activeDispatch.dispatchNo}</div>
+                      <div className="text-xs text-muted-foreground">Gönderim</div>
+                      <div className="text-xs">
+                        {safeFormat(activeDispatch.dispatchedAt, "dd.MM.yyyy HH:mm")}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">
+                      Aktif fason sevki bulunamadı.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

@@ -23,6 +23,8 @@ export const subcontractorFormSchema = z.object({
     .or(z.literal("")),
   isActive: z.boolean(),
   isFavorite: z.boolean(),
+  // Belge şablon profili — boş = genel Belge Şablonları ayarı.
+  documentProfileId: z.string().uuid().nullable().optional(),
   categoryIds: z
     .array(z.string())
     .min(1, "En az bir fason kategorisi seçilmeli"),
@@ -37,5 +39,6 @@ export const subcontractorFormDefaults: SubcontractorFormValues = {
   address: "",
   isActive: true,
   isFavorite: false,
+  documentProfileId: null,
   categoryIds: [],
 };

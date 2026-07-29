@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
+import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import type { Customer } from "@/pages/Customers/types";
 import { workOrderService } from "./service";
 
@@ -47,6 +48,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
   const [customerId, setCustomerId] = useState<string | null>(null);
   // Teslim şubesi — müşteriye bağlı, opsiyonel (siparişsiz sevkte de sorulur).
   const [branchId, setBranchId] = useState<string | null>(null);
+  const branchesEnabled = useCustomerBranchesEnabled();
   // rollId → sevk edilecek metre (varsayılan = topun tam metresi; azsa top bölünür).
   const [rollQtys, setRollQtys] = useState<Record<string, number>>({});
   // Karşılanma metrajı elle düzenlenebilir (input açık) olan sipariş satırları —
@@ -99,6 +101,9 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
       void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
+      // Direkt sevk İE'yi tamamlayabilir + shippedQty değiştirir → sipariş
+      // listesi ("İş Emri" rozeti + Sevk kolonu) tazelensin.
+      void qc.invalidateQueries({ queryKey: ["orders"] });
       onOpenChange(false);
     },
   });
@@ -260,15 +265,17 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                       placeholder="Müşteri seç..."
                     />
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium">Şube</label>
-                    <BranchSelect
-                      customerId={customerId}
-                      value={branchId}
-                      onChange={handleBranchChange}
-                      showCity={false}
-                    />
-                  </div>
+                  {branchesEnabled && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">Şube</label>
+                      <BranchSelect
+                        customerId={customerId}
+                        value={branchId}
+                        onChange={handleBranchChange}
+                        showCity={false}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Sevk edilecek toplar — per-roll seçim */}

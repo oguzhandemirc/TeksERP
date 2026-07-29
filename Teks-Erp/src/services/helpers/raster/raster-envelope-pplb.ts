@@ -19,7 +19,7 @@ const CRLF = "\r\n";
 /** Argox PPLB GW polaritesi: manuel (PPLB_Text_EN.pdf) "1=boş piksel, 0=siyah piksel".
  *  İç bitmap 1=siyah olduğundan bitler INVERT edilir (siyah→0, beyaz→1) → manuelle uyumlu.
  *  Yine de fiziksel testte NEGATİF (siyah zemin) çıkarsa false yap — tek satır. */
-const GW_ONE_IS_WHITE = true;
+export const GW_ONE_IS_WHITE = true;
 
 /** PPLB raster (GW bitmap) — Argox PPLB manueline göre GW komutunun p4 SONRASI VİRGÜLÜ
  *  eklendi (ilk sürüm Zebra EPL2 formatını izliyordu, virgülsüz → Argox BOŞ basıyordu;
@@ -36,26 +36,35 @@ export class PplbRasterUnsupportedError extends Error {
   }
 }
 
+/** TEK GW komut bloğu (Buffer) — `GWx,y,rowBytes,height,` + polarite-düzeltilmiş ham
+ *  bayt. Argox PPLB manueli: p4 SONRASI VİRGÜL, sonra p3×p4 ham bayt (yazıcı tam bu
+ *  kadar okur → içindeki CR/LF veri sayılır, komut sınırı sanılmaz). Polarite manuel:
+ *  1=boş, 0=siyah → iç bitmap (1=siyah) INVERT edilir. Hem tam-raster zarfı hem hibrit
+ *  ikon (emitCanvasPplb — bloğu latin1 string olarak native komut akışına gömer; transport
+ *  latin1→bayt birebir round-trip) BUNU paylaşır → GW kodlaması + polarite TEK KAYNAK. */
+export function pplbGwBlock(bmp: Bitmap1, xDots: number, yDots: number): Buffer {
+  const img = Buffer.from(bmp.data);
+  if (GW_ONE_IS_WHITE) {
+    for (let i = 0; i < img.length; i++) img[i] = ~img[i] & 0xff;
+  }
+  const head = Buffer.from(`GW${xDots},${yDots},${bmp.rowBytes},${bmp.heightDots},`, "latin1");
+  return Buffer.concat([head, img]);
+}
+
 export function wrapPplbRaster(bmp: Bitmap1, format: ResolvedLabelFormat, copies: number): Buffer {
   // Doğrulanmadıkça komuta düş (registry try/catch yakalar → emitCanvasPplb native yolu).
   if (!PPLB_RASTER_VERIFIED) throw new PplbRasterUnsupportedError();
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
 
-  // Görüntü verisi (gerekirse polarite invert edilmiş kopya).
-  const img = Buffer.from(bmp.data);
-  if (GW_ONE_IS_WHITE) {
-    for (let i = 0; i < img.length; i++) img[i] = ~img[i] & 0xff;
-  }
-
   const head = Buffer.from(
     "N" + CRLF +
       `q${d(format.widthMm)}` + CRLF +
       `Q${d(format.heightMm)},${d(format.gapMm)}` + CRLF +
-      "D8" + CRLF +
-      `GW0,0,${bmp.rowBytes},${bmp.heightDots},`, // Argox PPLB: p4 SONRASI VİRGÜL, sonra ham veri
+      "D8" + CRLF,
     "latin1",
   );
+  const gw = pplbGwBlock(bmp, 0, 0); // tüm etiket tek GW bloğu (0,0)
   const tail = Buffer.from(CRLF + `P${clampCopies(copies)}` + CRLF, "latin1");
-  return Buffer.concat([head, img, tail]);
+  return Buffer.concat([head, gw, tail]);
 }

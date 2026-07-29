@@ -16,8 +16,14 @@
 // siparişten" sorusu personelin sevkiyat aday siparişlerinden seçimiyle cevaplanır.
 // =============================================================================
 
-import { Prisma, RollStatus, OrderStatus } from "@prisma/client";
+import { Prisma, RollStatus, OrderStatus, PrintedDocType } from "@prisma/client";
 import prisma from "../lib/prisma";
+import {
+  registerPrintedDocBuilder,
+  type BuiltDocContent,
+  type PrintedDocDb,
+} from "./printed-document.service";
+import { renderReturnDispatchHtml, type ReturnDispatchDoc } from "./document-render/return-dispatch.html";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { readReturnGradingEnabled } from "./system-setting.service";
@@ -56,7 +62,16 @@ function specMatch(
 }
 
 // Rapor filtreleri — serbest metin alanlarında OR-contains + createdAt tarih penceresi.
-const RETURN_SEARCH_FIELDS = ["reasonText", "note"];
+// Arama kapsamı liste kolonlarıyla hizalı: neden/not + müşteri + sipariş no +
+// ürün adı + top barkodu (iade hacmi düşük — contains kabul edilebilir).
+const RETURN_SEARCH_FIELDS = [
+  "reasonText",
+  "note",
+  "customer.name",
+  "order.orderNumber",
+  "item.name",
+  "roll.barcode",
+];
 const RETURN_DATE_FIELDS = ["createdAt"] as const;
 
 export class ReturnService {
@@ -736,3 +751,76 @@ export class ReturnService {
 }
 
 export const returnService = new ReturnService();
+
+// =============================================================================
+// RESMİ BELGE — İade İrsaliyesi (PrintedDocument)
+// =============================================================================
+// Müşteriden dönen topun kabul belgesi. sourceId = RollReturn.id (top-başına).
+// İade iptali (cancelledAt) → belge VOIDED. Belge no yok → createdAt + kısa id'den
+// okunur bir numara türetilir (IADE-GGAAYY-XXXXXX).
+async function buildReturnDispatchDoc(
+  db: PrintedDocDb,
+  returnId: string,
+): Promise<BuiltDocContent | null> {
+  const rr = await db.rollReturn.findUnique({
+    where: { id: returnId },
+    select: {
+      id: true, qty: true, width: true, createdAt: true, reasonText: true, note: true,
+      cancelledAt: true, cancelReason: true,
+      customer: { select: { code: true, name: true } },
+      order: { select: { orderNumber: true } },
+      fromShipment: { select: { shipmentNo: true } },
+      reason: { select: { name: true } },
+      item: { select: { name: true } },
+      color: { select: { name: true } },
+      qualityGrade: { select: { name: true } },
+      roll: { select: { barcode: true } },
+      receivedBy: { select: { fullName: true } },
+    },
+  });
+  if (!rr) return null;
+
+  const d = rr.createdAt;
+  const p = (x: number) => String(x).padStart(2, "0");
+  const documentNo = `IADE-${p(d.getDate())}${p(d.getMonth() + 1)}${String(d.getFullYear()).slice(2)}-${rr.id.slice(0, 6).toUpperCase()}`;
+
+  const doc: ReturnDispatchDoc = {
+    header: {
+      documentNo,
+      customerName: rr.customer.name,
+      customerCode: rr.customer.code,
+      date: rr.createdAt.toISOString(),
+      fromShipmentNo: rr.fromShipment?.shipmentNo ?? null,
+      orderNo: rr.order?.orderNumber ?? null,
+    },
+    line: {
+      barcode: rr.roll?.barcode ?? null,
+      itemName: rr.item.name,
+      colorName: rr.color?.name ?? null,
+      width: rr.width != null ? Number(rr.width) : null,
+      qty: Number(rr.qty),
+      grade: rr.qualityGrade?.name ?? "",
+    },
+    reason: rr.reason?.name ?? rr.reasonText ?? null,
+    note: rr.note ?? null,
+    receivedBy: rr.receivedBy?.fullName ?? null,
+  };
+
+  return {
+    documentNo,
+    voidInfo: rr.cancelledAt ? { reason: rr.cancelReason ?? null, at: rr.cancelledAt } : null,
+    doc: doc as unknown as Record<string, unknown>,
+  };
+}
+
+registerPrintedDocBuilder(PrintedDocType.RETURN_DISPATCH, {
+  fresh: buildReturnDispatchDoc,
+  renderHtml: renderReturnDispatchHtml,
+  resolveProfileId: async (db, sourceId) => {
+    const r = await db.rollReturn.findUnique({
+      where: { id: sourceId },
+      select: { customer: { select: { documentProfileId: true } } },
+    });
+    return r?.customer?.documentProfileId ?? null;
+  },
+});

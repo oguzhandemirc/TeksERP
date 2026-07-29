@@ -35,28 +35,33 @@ check("boş string → null", readTemplateRawCode({ ZPL: "  " }, PrinterLanguage
 check("yok → null", readTemplateRawCode(null, PrinterLanguage.ZPL) === null);
 
 // 3) renderLabel — override varsa kendi kodu, yoksa otomatik üretim
+// (renderLabel 2026-07 icon işiyle ASYNC oldu → await'li main içinde.)
 const fmt = { widthMm: 100, heightMm: 58, marginMm: 3, gapMm: 2, dpi: 203, orientation: "LANDSCAPE", language: "ZPL" } as unknown as LabelRenderInput["format"];
 const base: LabelRenderInput = { payload, template: null, barcodeSvg: "<svg/>", qrSvg: "<svg/>", copies: 1, format: fmt };
 
-const withOverride = renderLabel(PrinterLanguage.ZPL, { ...base, template: { rawCode: { ZPL: "^XA{{barcode}}^XZ" } } as unknown as LabelRenderInput["template"] });
-// Native raw-code CRLF'e normalize edilir + sona CRLF eklenir (yazıcı basar) → trim ile karşılaştır.
-check("override → kendi ZPL kodu basılır", withOverride.content.trim() === "^XABC-123^XZ", JSON.stringify(withOverride.content));
-check("native override sonda CRLF ile biter", withOverride.content.endsWith("\r\n"));
-check("override dil = ZPL", withOverride.language === "ZPL");
+async function main() {
+  const withOverride = await renderLabel(PrinterLanguage.ZPL, { ...base, template: { rawCode: { ZPL: "^XA{{barcode}}^XZ" } } as unknown as LabelRenderInput["template"] });
+  // Native raw-code CRLF'e normalize edilir + sona CRLF eklenir (yazıcı basar) → trim ile karşılaştır.
+  check("override → kendi ZPL kodu basılır", withOverride.content.trim() === "^XABC-123^XZ", JSON.stringify(withOverride.content));
+  check("native override sonda CRLF ile biter", withOverride.content.endsWith("\r\n"));
+  check("override dil = ZPL", withOverride.language === "ZPL");
 
-const noOverride = renderLabel(PrinterLanguage.ZPL, { ...base, template: { rawCode: null } as unknown as LabelRenderInput["template"] });
-check("override yok → otomatik üretim (kendi kodu DEĞİL)", noOverride.content !== "^XABC-123^XZ" && noOverride.content.length > 0);
+  const noOverride = await renderLabel(PrinterLanguage.ZPL, { ...base, template: { rawCode: null } as unknown as LabelRenderInput["template"] });
+  check("override yok → otomatik üretim (kendi kodu DEĞİL)", noOverride.content !== "^XABC-123^XZ" && noOverride.content.length > 0);
 
-// override yalnız o dil için: PPLA isteğinde ZPL override kullanılmaz
-const onlyZpl = renderLabel(PrinterLanguage.PPLA, { ...base, template: { rawCode: { ZPL: "^XA{{barcode}}^XZ" } } as unknown as LabelRenderInput["template"] });
-check("ZPL override PPLA isteğini etkilemez", onlyZpl.content !== "^XABC-123^XZ");
+  // override yalnız o dil için: PPLA isteğinde ZPL override kullanılmaz
+  const onlyZpl = await renderLabel(PrinterLanguage.PPLA, { ...base, template: { rawCode: { ZPL: "^XA{{barcode}}^XZ" } } as unknown as LabelRenderInput["template"] });
+  check("ZPL override PPLA isteğini etkilemez", onlyZpl.content !== "^XABC-123^XZ");
 
-// 4) buildRawCodePreview
-const prev = buildRawCodePreview("ROLL_RAW" as never, PrinterLanguage.ZPL, "{{barcode}}");
-check("preview {{barcode}} → örnek barkod", prev.content.includes("T120726F0001"), prev.content);
-check("preview native contentType text/plain", prev.contentType.startsWith("text/plain"));
-const prevHtml = buildRawCodePreview("ROLL_RAW" as never, PrinterLanguage.RASTER_HTML, "<b>{{itemName}}</b>");
-check("preview HTML ikame + contentType", prevHtml.content === "<b>Cotton Lining 60s</b>" && prevHtml.contentType.startsWith("text/html"), prevHtml.content);
+  // 4) buildRawCodePreview
+  const prev = buildRawCodePreview("ROLL_RAW" as never, PrinterLanguage.ZPL, "{{barcode}}");
+  check("preview {{barcode}} → örnek barkod", prev.content.includes("T120726F0001"), prev.content);
+  check("preview native contentType text/plain", prev.contentType.startsWith("text/plain"));
+  const prevHtml = buildRawCodePreview("ROLL_RAW" as never, PrinterLanguage.RASTER_HTML, "<b>{{itemName}}</b>");
+  check("preview HTML ikame + contentType", prevHtml.content === "<b>Cotton Lining 60s</b>" && prevHtml.contentType.startsWith("text/html"), prevHtml.content);
 
-console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  process.exit(fail > 0 ? 1 : 0);
+}
+
+main().catch((e) => { console.error("HATA:", e); process.exit(1); });

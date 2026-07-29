@@ -76,11 +76,11 @@ const data: AccountingExportData = {
 describe("buildDispatchReportSheets — tek sevk fişi (3 sayfa)", () => {
   const sheets = buildDispatchReportSheets(report);
 
-  it("3 sayfa: Ürün/Çuval/Çeki", () => {
-    expect(sheets.map((s) => s.name)).toEqual(["Ürün Listesi", "Çuval Listesi", "Çeki Listesi"]);
+  it("3 sayfa: Kumaş/Çuval/Çeki", () => {
+    expect(sheets.map((s) => s.name)).toEqual(["Kumaş Listesi", "Çuval Listesi", "Çeki Listesi"]);
   });
 
-  it("Ürün sayfası kolon→veri eşlemesi + TOPLAM satırı", () => {
+  it("Kumaş sayfası kolon→veri eşlemesi + TOPLAM satırı", () => {
     const urun = sheets[0]!;
     expect(urun.columns.map((c) => c.key)).toEqual(["name", "rollCount", "totalMeters"]);
     expect(urun.rows).toEqual(report.products);
@@ -128,11 +128,11 @@ describe("buildDispatchReportSheets — fasondan doğrudan sevk (çuval yok)", (
   const sheets = buildDispatchReportSheets(directReport);
 
   it("yine 3 sayfa üretir; Çuval sayfası boş", () => {
-    expect(sheets.map((s) => s.name)).toEqual(["Ürün Listesi", "Çuval Listesi", "Çeki Listesi"]);
+    expect(sheets.map((s) => s.name)).toEqual(["Kumaş Listesi", "Çuval Listesi", "Çeki Listesi"]);
     expect(sheets[1]!.rows).toEqual([]);
   });
 
-  it("Ürün + Çeki dolu, TOPLAM'lar 250m / 0 kg", () => {
+  it("Kumaş + Çeki dolu, TOPLAM'lar 250m / 0 kg", () => {
     expect(sheets[0]!.rows).toEqual(directReport.products);
     expect(sheets[0]!.totalRow).toMatchObject({ rollCount: 2, totalMeters: 250 });
     expect(sheets[1]!.totalRow).toMatchObject({ totalMeters: 250, totalKg: 0 });
@@ -143,12 +143,12 @@ describe("buildDispatchReportSheets — fasondan doğrudan sevk (çuval yok)", (
 describe("buildAccountingWorkbookSheets — dönem dökümü (5 sayfa)", () => {
   const sheets = buildAccountingWorkbookSheets(data);
 
-  it("5 sayfa: Sevk Listesi/Detay/İcmal·Müşteri/İcmal·Ürün/İade", () => {
+  it("5 sayfa: Sevk Listesi/Detay/İcmal·Müşteri/İcmal·Kumaş/İade", () => {
     expect(sheets.map((s) => s.name)).toEqual([
       "Sevk Listesi",
       "Detay",
       "İcmal · Müşteri",
-      "İcmal · Ürün",
+      "İcmal · Kumaş",
       "İade",
     ]);
   });

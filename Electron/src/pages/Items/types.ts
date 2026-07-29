@@ -24,6 +24,8 @@ export interface Item {
   itemType: ItemType;
   unit: string;
   isActive: boolean;
+  /** Saha (mobil KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
+  pendingReview?: boolean;
   /** Item'a uygulanabilir özellikler (kataloğu). Boşsa = serbest. */
   allowedProperties?: ItemPropertyLink[];
   /** Item'a uygulanabilir renkler (kataloğu). Boşsa = serbest. */
@@ -33,11 +35,14 @@ export interface Item {
 }
 
 export interface ItemCreatePayload {
-  code: string;
+  /** Boş/verilmezse backend STK-NNNNNN otomatik üretir. */
+  code?: string;
   name: string;
   itemType: ItemType;
   unit?: string;
   isActive?: boolean;
+  /** Düzenlemede admin onayı: kaydedince saha işareti temizlenir (false). */
+  pendingReview?: boolean;
   allowedPropertyIds?: string[];
   allowedColorIds?: string[];
 }

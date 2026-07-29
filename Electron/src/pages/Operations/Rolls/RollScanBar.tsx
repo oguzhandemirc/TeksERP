@@ -69,7 +69,7 @@ export function RollScanBar({ openDetail, scanPending }: Props) {
         value={scanBarcode}
         onChange={setScanBarcode}
         onScan={handleScan}
-        placeholder="Barkod okut · ürün ara"
+        placeholder="Barkod okut · kumaş / renk ara"
       />
       <Button
         size="sm"

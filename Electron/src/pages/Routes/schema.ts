@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 
 export const routeStepSchema = z.object({
   // İstemci tarafı geçici id (sortable key) — payload'a girmez
@@ -53,5 +52,3 @@ export function newClientId(): string {
   counter += 1;
   return `step-${Date.now()}-${counter}`;
 }
-
-export const generateRouteCode = (): string => generateCode(CODE_PREFIXES.ROUTE);

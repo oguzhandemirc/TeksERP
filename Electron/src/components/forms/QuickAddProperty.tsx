@@ -10,9 +10,9 @@ import type { FabricProperty } from "@/pages/FabricProperties/types";
 /**
  * Özellik seçicide hızlı özellik ekleme — Tanımlar'a gitmeden ad ile yeni PUBLIC
  * `FabricProperty` yaratır ve hemen seçer (kod OZL-… otomatik). Renk hızlı-eklemesi
- * (QuickAddColor) ile aynı desen. Yalnız ürün özellik KISITI YOKKEN gösterilir
- * (bkz. PropertyChipsField.allowQuickAdd) — kısıtlı üründe yeni global özellik o
- * ürünün izinli listesinde olmayacağı için anlamsız.
+ * (QuickAddColor) ile aynı desen. Yalnız kumaş özellik KISITI YOKKEN gösterilir
+ * (bkz. PropertyChipsField.allowQuickAdd) — kısıtlı kumaşta yeni global özellik o
+ * kumaşın izinli listesinde olmayacağı için anlamsız.
  */
 export function QuickAddProperty({ onCreated }: { onCreated: (id: string) => void }) {
   const qc = useQueryClient();
@@ -61,7 +61,8 @@ export function QuickAddProperty({ onCreated }: { onCreated: (id: string) => voi
         placeholder="Özellik adı (örn. Antibakteriyel)"
         className="h-8 min-w-[9rem] flex-1 text-sm"
         onKeyDown={(e) => {
-          if (e.key === "Enter" && name.trim()) {
+          // isPending guard: çift-Enter mükerrer POST üretmesin (buton disabled ile aynı koşul).
+          if (e.key === "Enter" && name.trim() && !createMut.isPending) {
             e.preventDefault();
             createMut.mutate();
           }

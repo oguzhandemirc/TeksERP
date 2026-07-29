@@ -48,7 +48,7 @@ export function DetailTable<T>({
         </div>
       ) : null}
       <div className="overflow-auto" style={{ maxHeight }}>
-        <Table>
+        <Table containerClassName="overflow-visible">
           <TableHeader className="sticky top-0 z-10 bg-card">
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id}>

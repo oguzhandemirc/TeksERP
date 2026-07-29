@@ -32,7 +32,7 @@ interface Props {
 
 /**
  * Kartela Stoğu — kartelalar sahada tek tek okutulup düşülmediğinden envanter
- * ADET bazlı gösterilir: ürün+renk grubu → kaç adet müsait. "Depoda Patos Mavi
+ * ADET bazlı gösterilir: kumaş+renk grubu → kaç adet müsait. "Depoda Patos Mavi
  * karteladan kaç tane var" sorusunun tek-bakış cevabı. Stok yalnız kabulde (+)
  * ve sevkiyatta (−) değişir; kayıp/hasar/sayım için "Düş" ile elle azaltılır.
  */
@@ -59,7 +59,7 @@ export function SwatchesPanel({ onScanSwatch, swatchLookupPending }: Props) {
     [groups],
   );
 
-  // Tek giriş: kartela barkodu (KRT…) → detay sheet; ürün/renk metni → liste araması.
+  // Tek giriş: kartela barkodu (KRT…) → detay sheet; kumaş/renk metni → liste araması.
   const handleScan = (code: string) => {
     if (classifyBarcode(code).kind === "SWATCH") {
       onScanSwatch(code);

@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
-import { colorService } from "./service";
+import apiClient from "@/services/apiClient";
+import type { ApiResponse } from "@/types/api";
 import type { Color } from "./types";
 
 interface ParsedLine {
@@ -56,12 +56,18 @@ export function BulkColorAddDialog() {
       let created = 0;
       for (const line of lines) {
         try {
-          await colorService.create({
-            code: generateCode(CODE_PREFIXES.COLOR),
-            name: line.name,
-            hex: line.hex,
-            isActive: true,
-          } as Partial<Color>);
+          // suppressErrorToast: satır-başı 409/400 zaten aşağıda inline listeye
+          // düşüyor — global interceptor toast'ı "toast yağmuru" yapmasın.
+          await apiClient.post<ApiResponse<Color>>(
+            "/api/colors",
+            {
+              // Kod backend'de üretilir (RNK+GGAAYY+NNNN) — istemci göndermez.
+              name: line.name,
+              hex: line.hex,
+              isActive: true,
+            },
+            { suppressErrorToast: true },
+          );
           created++;
         } catch (e) {
           const msg =
@@ -99,7 +105,7 @@ export function BulkColorAddDialog() {
             <DialogTitle>Toplu Renk Ekle</DialogTitle>
             <DialogDescription>
               Her satıra bir renk yaz — satır sonuna istersen <span className="font-mono">#RRGGBB</span>{" "}
-              ekle. Adlar otomatik standarda çevrilir (BÜYÜK, sayılar başta: "beyaz 055" → "055-BEYAZ").
+              ekle. Adlar otomatik standarda çevrilir (BÜYÜK, sayılar başta: "beyaz 055" → "055 BEYAZ").
             </DialogDescription>
           </DialogHeader>
           <textarea

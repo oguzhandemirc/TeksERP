@@ -1,6 +1,7 @@
-// Raster kanvas testi (DB'siz): rasterizeCanvasLayout — 7 eleman tipi, present:false
-// atlama (konum kaymaz), tam-dot barkod, QR, banner ters, box çerçeve, 300dpi orantı.
-// Koş: npx tsx scripts/test_raster_canvas.ts
+// Raster kanvas testi (DB'siz): rasterizeCanvasLayout — 8 eleman tipi (icon dahil),
+// present:false atlama (konum kaymaz), tam-dot barkod, QR, banner ters, box çerçeve,
+// 300dpi orantı, ikon ink artışı + rot=90 çökmezliği.
+// Koş: npx tsx scripts/test_raster_canvas.ts (font CWD/assets/fonts — Teks-Erp kökünden)
 
 import { mmToDots } from "../src/services/helpers/native-label.shared";
 import { rasterizeCanvasLayout } from "../src/services/helpers/raster/raster-canvas";
@@ -58,57 +59,104 @@ function totalInk(bmp: Bitmap1): number {
   return n;
 }
 
-const bmp = rasterizeCanvasLayout(mk());
+async function main(): Promise<void> {
+  const bmp = await rasterizeCanvasLayout(mk());
 
-// --- Tuval boyutu = yazıcı DPI'ında mm→dot ---
-check("tuval boyutu 799×480 (100×60mm@203dpi)", bmp.widthDots === mmToDots(100, 203) && bmp.heightDots === mmToDots(60, 203),
-  `${bmp.widthDots}×${bmp.heightDots}`);
-check("toplam ink anlamlı (>2000 px)", totalInk(bmp) > 2000, `${totalInk(bmp)} px`);
+  // --- Tuval boyutu = yazıcı DPI'ında mm→dot ---
+  check("tuval boyutu 799×480 (100×60mm@203dpi)", bmp.widthDots === mmToDots(100, 203) && bmp.heightDots === mmToDots(60, 203),
+    `${bmp.widthDots}×${bmp.heightDots}`);
+  check("toplam ink anlamlı (>2000 px)", totalInk(bmp) > 2000, `${totalInk(bmp)} px`);
 
-// --- Her eleman iz bırakır (bölge bazlı) ---
-check("qr iz bırakır (sol-üst)", regionInk(bmp, 3, 3, 18, 18) > 100);
-check("field t1 (ürün adı, x30y3) iz bırakır", regionInk(bmp, 30, 3, 40, 6) > 30);
-check("text t3 (dikey, x30y20) iz bırakır", regionInk(bmp, 30, 20, 8, 30) > 20);
-check("line (x3y30 90×0.8mm) iz bırakır", regionInk(bmp, 3, 30, 90, 1) > 100);
-check("code128 (alt, x3y46) iz bırakır", regionInk(bmp, 3, 46, 90, 9) > 200);
+  // --- Her eleman iz bırakır (bölge bazlı) ---
+  check("qr iz bırakır (sol-üst)", regionInk(bmp, 3, 3, 18, 18) > 100);
+  check("field t1 (ürün adı, x30y3) iz bırakır", regionInk(bmp, 30, 3, 40, 6) > 30);
+  check("text t3 (dikey, x30y20) iz bırakır", regionInk(bmp, 30, 20, 8, 30) > 20);
+  check("line (x3y30 90×0.8mm) iz bırakır", regionInk(bmp, 3, 30, 90, 1) > 100);
+  check("code128 (alt, x3y46) iz bırakır", regionInk(bmp, 3, 46, 90, 9) > 200);
 
-// --- box: çerçeve siyah, iç boş ---
-check("box çerçeve kenarı siyah (x3y32)", regionInk(bmp, 3, 32, 40, 1) > 20);
-check("box iç boş (merkez ~x20y37)", regionInk(bmp, 18, 36, 8, 2) === 0);
+  // --- box: çerçeve siyah, iç boş ---
+  check("box çerçeve kenarı siyah (x3y32)", regionInk(bmp, 3, 32, 40, 1) > 20);
+  check("box iç boş (merkez ~x20y37)", regionInk(bmp, 18, 36, 8, 2) === 0);
 
-// --- lengthBanner: siyah bant + ters (beyaz) değer içinde ---
-{
-  const bandTotal = mmToDots(9, 203) * mmToDots(50, 203);
-  const bandInk = regionInk(bmp, 88, 3, 9, 50);
-  check("lengthBanner çoğunlukla siyah zemin", bandInk > bandTotal * 0.4, `${bandInk}/${bandTotal}`);
-  check("lengthBanner içinde beyaz değer (bant tam dolu DEĞİL)", bandInk < bandTotal, "ters değer deldi");
+  // --- lengthBanner: siyah bant + ters (beyaz) değer içinde ---
+  {
+    const bandTotal = mmToDots(9, 203) * mmToDots(50, 203);
+    const bandInk = regionInk(bmp, 88, 3, 9, 50);
+    check("lengthBanner çoğunlukla siyah zemin", bandInk > bandTotal * 0.4, `${bandInk}/${bandTotal}`);
+    check("lengthBanner içinde beyaz değer (bant tam dolu DEĞİL)", bandInk < bandTotal, "ters değer deldi");
+  }
+
+  // --- present:false atlama: customerName yoksa t2 düşer, DİĞERLERİ kaymaz ---
+  {
+    const noCust = { ...payload, customerName: undefined } as unknown as LabelPayload;
+    const bmp2 = await rasterizeCanvasLayout(mk({ payload: noCust }));
+    check("customerName yok → toplam ink azalır (t2 düştü)", totalInk(bmp2) < totalInk(bmp));
+    check("t2 bölgesi (x30y12) boşaldı", regionInk(bmp2, 30, 12, 40, 6) === 0);
+    check("QR bölgesi DEĞİŞMEDİ (konum kaymadı)", regionInk(bmp2, 3, 3, 18, 18) === regionInk(bmp, 3, 3, 18, 18));
+    check("barkod bölgesi DEĞİŞMEDİ (konum kaymadı)", regionInk(bmp2, 3, 46, 90, 9) === regionInk(bmp, 3, 46, 90, 9));
+  }
+
+  // --- 300dpi: aynı şablon orantılı büyür ---
+  {
+    const bmp300 = await rasterizeCanvasLayout(mk({ format: { ...format, dpi: 300 } }));
+    check("300dpi tuval büyür", bmp300.widthDots === mmToDots(100, 300) && bmp300.heightDots === mmToDots(60, 300),
+      `${bmp300.widthDots}×${bmp300.heightDots}`);
+    check("300dpi ink 203dpi'dan fazla (daha çok piksel)", totalInk(bmp300) > totalInk(bmp));
+  }
+
+  // --- barkodsuz payload: qr/code128 atlanır, çökme yok ---
+  {
+    const noBc = { ...payload, barcode: undefined } as unknown as LabelPayload;
+    const b = await rasterizeCanvasLayout(mk({ payload: noBc }));
+    check("barkodsuz: QR bölgesi boş", regionInk(b, 3, 3, 18, 18) === 0);
+    check("barkodsuz: yine de metin/line/box var (çökmedi)", totalInk(b) > 200);
+  }
+
+  // --- İKON (bakım sembolü): ekleyince ink artar; rot=90 çökmez, ayak izi sınır içi ---
+  {
+    const iconLayout: CanvasLayout = {
+      v: 1,
+      elements: [
+        ...layout.elements,
+        { id: "ic1", type: "icon", icon: "wash-no", x: 60, y: 34, hMm: 8 },
+      ],
+    };
+    const bIcon = await rasterizeCanvasLayout(mk({ layout: iconLayout }));
+    check("ikon: toplam ink arttı", totalInk(bIcon) > totalInk(bmp), `${totalInk(bIcon)} > ${totalInk(bmp)}`);
+    check("ikon: kendi bölgesinde iz (x60y34 8×8mm)", regionInk(bIcon, 60, 34, 8, 8) > 50);
+    check("ikon: diğer bölgeler DEĞİŞMEDİ (QR aynı)", regionInk(bIcon, 3, 3, 18, 18) === regionInk(bmp, 3, 3, 18, 18));
+
+    // rot=90: çökmez; kare içi dönüş → ayak izi aynı bölgede kalır, ink toplamı eşit.
+    const rotLayout: CanvasLayout = {
+      v: 1,
+      elements: [
+        ...layout.elements,
+        { id: "ic2", type: "icon", icon: "wash-no", x: 60, y: 34, hMm: 8, rot: 90 },
+      ],
+    };
+    const bRot = await rasterizeCanvasLayout(mk({ layout: rotLayout }));
+    check("ikon rot=90: çökmedi + ink arttı", totalInk(bRot) > totalInk(bmp));
+    check("ikon rot=90: ayak izi aynı bölgede (kare içi dönüş)",
+      regionInk(bRot, 60, 34, 8, 8) > 50 && totalInk(bRot) === totalInk(bIcon),
+      `${regionInk(bRot, 60, 34, 8, 8)} px bölgede`);
+
+    // Bilinmeyen ikon anahtarı: sessiz atlanır (ink değişmez, çökme yok).
+    const ghostLayout: CanvasLayout = {
+      v: 1,
+      elements: [
+        ...layout.elements,
+        { id: "icx", type: "icon", icon: "yok-boyle-ikon", x: 60, y: 34, hMm: 8 },
+      ],
+    };
+    const bGhost = await rasterizeCanvasLayout(mk({ layout: ghostLayout }));
+    check("ikon bilinmeyen anahtar: sessiz atlanır (ink aynı)", totalInk(bGhost) === totalInk(bmp));
+  }
+
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  process.exit(fail > 0 ? 1 : 0);
 }
 
-// --- present:false atlama: customerName yoksa t2 düşer, DİĞERLERİ kaymaz ---
-{
-  const noCust = { ...payload, customerName: undefined } as unknown as LabelPayload;
-  const bmp2 = rasterizeCanvasLayout(mk({ payload: noCust }));
-  check("customerName yok → toplam ink azalır (t2 düştü)", totalInk(bmp2) < totalInk(bmp));
-  check("t2 bölgesi (x30y12) boşaldı", regionInk(bmp2, 30, 12, 40, 6) === 0);
-  check("QR bölgesi DEĞİŞMEDİ (konum kaymadı)", regionInk(bmp2, 3, 3, 18, 18) === regionInk(bmp, 3, 3, 18, 18));
-  check("barkod bölgesi DEĞİŞMEDİ (konum kaymadı)", regionInk(bmp2, 3, 46, 90, 9) === regionInk(bmp, 3, 46, 90, 9));
-}
-
-// --- 300dpi: aynı şablon orantılı büyür ---
-{
-  const bmp300 = rasterizeCanvasLayout(mk({ format: { ...format, dpi: 300 } }));
-  check("300dpi tuval büyür", bmp300.widthDots === mmToDots(100, 300) && bmp300.heightDots === mmToDots(60, 300),
-    `${bmp300.widthDots}×${bmp300.heightDots}`);
-  check("300dpi ink 203dpi'dan fazla (daha çok piksel)", totalInk(bmp300) > totalInk(bmp));
-}
-
-// --- barkodsuz payload: qr/code128 atlanır, çökme yok ---
-{
-  const noBc = { ...payload, barcode: undefined } as unknown as LabelPayload;
-  const b = rasterizeCanvasLayout(mk({ payload: noBc }));
-  check("barkodsuz: QR bölgesi boş", regionInk(b, 3, 3, 18, 18) === 0);
-  check("barkodsuz: yine de metin/line/box var (çökmedi)", totalInk(b) > 200);
-}
-
-console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+main().catch((e) => {
+  console.error("❌ Beklenmeyen hata:", e);
+  process.exit(1);
+});

@@ -14,6 +14,7 @@ import { AuditService } from "./audit.service";
 import { AuthService } from "./auth.service";
 import { readLoginMethods } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
+import { foldNameForCompare } from "./helpers/name-normalize.helper";
 
 /**
  * Yeni kullanıcının varsayılan olarak aldığı üretim istasyon izinleri (opt-out'lu).
@@ -410,8 +411,11 @@ export class PermissionManagementService {
     },
     actorUserId: string | undefined
   ) {
-    const exists = await prisma.user.findUnique({
-      where: { username: input.username },
+    // Kullanıcı adı harf-duyarsız benzersiz — "Depocu" ve "depocu" ayrı hesap
+    // olmasın. username ASCII alfanümerik (admin.routes regex ile), bu yüzden
+    // PG mode:'insensitive' burada güvenli (İ/ı lower() sorunu doğamaz).
+    const exists = await prisma.user.findFirst({
+      where: { username: { equals: input.username, mode: "insensitive" } },
       select: { id: true },
     });
     if (exists) throw AppError.conflict("Bu kullanıcı adı zaten kullanılıyor");
@@ -715,6 +719,24 @@ export class PermissionManagementService {
     return unique;
   }
 
+  /**
+   * Yetki şablonu adı Türkçe-duyarsız benzersiz (label-template / master-data
+   * emsali) — DB @unique yalnız birebir eşleşmeyi yakalar ("Depocu" vs "depocu"
+   * ikisi de girerdi). foldNameForCompare tr-BÜYÜK katlamayla çakışmayı önler.
+   */
+  private static async assertTemplateNameAvailable(name: string, excludeId?: string): Promise<void> {
+    const target = foldNameForCompare(name);
+    const candidates = await prisma.permissionTemplate.findMany({
+      where: excludeId ? { id: { not: excludeId } } : {},
+      select: { name: true },
+    });
+    if (candidates.some((t) => foldNameForCompare(t.name) === target)) {
+      throw AppError.conflict(
+        `'${name.trim()}' adında bir yetki şablonu zaten var. Aynı şablon ikinci kez eklenemez.`,
+      );
+    }
+  }
+
   static async createTemplate(
     input: { name: string; description?: string | null; permissionIds: string[] },
     actorUserId: string | undefined
@@ -722,11 +744,14 @@ export class PermissionManagementService {
     if (!input.permissionIds.length) {
       throw AppError.badRequest("Şablon en az bir yetki içermeli");
     }
+    const name = input.name.trim();
+    if (name.length === 0) throw AppError.badRequest("Şablon adı boş olamaz");
+    await this.assertTemplateNameAvailable(name);
     const permissionIds = await this.validatePermissionIds(input.permissionIds);
 
     const created = await prisma.permissionTemplate.create({
       data: {
-        name: input.name,
+        name,
         description: input.description ?? null,
         permissions: {
           create: permissionIds.map((permissionId) => ({ permissionId })),
@@ -757,6 +782,16 @@ export class PermissionManagementService {
     });
     if (!existing) throw AppError.notFound("Şablon bulunamadı");
 
+    // Ad yalnız gerçekten değişirken kontrol (tarihsel mükerrer düzenlenebilir).
+    let nextName: string | undefined;
+    if (input.name !== undefined) {
+      nextName = input.name.trim();
+      if (nextName.length === 0) throw AppError.badRequest("Şablon adı boş olamaz");
+      if (foldNameForCompare(nextName) !== foldNameForCompare(existing.name)) {
+        await this.assertTemplateNameAvailable(nextName, id);
+      }
+    }
+
     // F257: tx'ten ÖNCE doğrula + dedup (geçersiz id → 400, mükerrer → @@unique P2002 önlenir).
     const validatedIds = input.permissionIds
       ? await this.validatePermissionIds(input.permissionIds)
@@ -764,7 +799,7 @@ export class PermissionManagementService {
 
     const updated = await prisma.$transaction(async (tx) => {
       const data: Prisma.PermissionTemplateUpdateInput = {};
-      if (input.name !== undefined) data.name = input.name;
+      if (nextName !== undefined) data.name = nextName;
       if (input.description !== undefined) data.description = input.description;
 
       const t = await tx.permissionTemplate.update({ where: { id }, data });

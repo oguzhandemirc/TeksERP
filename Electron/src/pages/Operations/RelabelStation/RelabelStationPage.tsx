@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { ScanField } from "@/components/scanner/ScanField";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { relabelService } from "./service";
@@ -37,10 +38,9 @@ export function RelabelStationPage() {
   });
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Yeniden Etiketle"
-        description="Barkodu okut → topun spec'ini düzelt ya da farklı müşteri için etiketi yeniden bas."
       />
 
       <ScanField
@@ -56,7 +56,7 @@ export function RelabelStationPage() {
         busyLabel="Getiriliyor…"
       />
 
-      <div className="flex-1 overflow-auto p-6">
+      <PageBody className="p-6">
         {!ctx ? (
           <EmptyState />
         ) : (
@@ -75,7 +75,7 @@ export function RelabelStationPage() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

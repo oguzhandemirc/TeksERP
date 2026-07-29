@@ -8,15 +8,16 @@
 // fallback'i burada YOK). Metin gerçek TTF glifi (Türkçe basılır; asciiFold YOK).
 // =============================================================================
 
-import { mmToDots, resolveQrScale, bannerValueText } from "../native-label.shared";
+import { mmToDots, resolveQrScale, bannerValueText, alignOffsetDots } from "../native-label.shared";
 import { fieldDisplayValue } from "../label-field-values";
 import { elementText, type CanvasRenderInput } from "../label-canvas-native.helper";
 import type { LabelPayload } from "../../label.service";
 import type { ResolvedLabelFormat } from "../label-format.resolver";
-import type { CanvasRotation, LengthBannerElement } from "../../../config/label-elements";
+import { ICON_DEFAULT_MM, expandMultilineText, type CanvasRotation, type LengthBannerElement } from "../../../config/label-elements";
 import { Bitmap1, rotatedSize } from "./raster-bitmap";
 import { drawText, renderTextBitmap, measureText, rasterCleanText } from "./raster-text";
 import { drawCode128, drawQr } from "./raster-barcode";
+import { drawIconOnBitmap } from "./raster-icon";
 
 /** hMm boş (eski 4-kademe) → büyük-harf hedef yüksekliği (mm). EPL_FONT cell mm'iyle
  *  görsel süreklilik; hMm dolu şablonlar bunu kullanmaz (o yol tam mm). Fiziksel
@@ -30,14 +31,16 @@ const HUMAN_DEFAULT_MM = 2.0;
 /** lengthBanner varsayılan genişliği (mm) — native EPL xl.h×3 @203dpi eşdeğeri. */
 const BANNER_DEFAULT_W_MM = 9;
 
-export function rasterizeCanvasLayout(input: CanvasRenderInput): Bitmap1 {
+/** ASYNC (2026-07 icon): drawIconOnBitmap async imzalı (içte sync) — zincir
+ *  renderCanvasRaster → registry/önizleme uçlarına minimal await ile taşınır. */
+export async function rasterizeCanvasLayout(input: CanvasRenderInput): Promise<Bitmap1> {
   const { payload, format, layout } = input;
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
   const bmp = new Bitmap1(d(format.widthMm), d(format.heightMm));
   const bc = payload.barcode ? String(payload.barcode) : "";
 
-  for (const el of layout.elements) {
+  for (const el of expandMultilineText(layout.elements)) {
     const x = d(el.x);
     const y = d(el.y);
     switch (el.type) {
@@ -48,18 +51,18 @@ export function rasterizeCanvasLayout(input: CanvasRenderInput): Bitmap1 {
         const text = rasterCleanText(raw);
         if (!text) break;
         const rot = (el.rot ?? 0) as CanvasRotation;
+        const align = rot === 0 ? el.align : undefined; // hizalama yalnız rot=0
         if (el.hMm != null) {
           // SERBEST boyut: hedef mm TAM (native'in en-yakın-font kuantizasyonu KALKAR).
-          drawText(bmp, x, y, text, {
-            heightDots: d(el.hMm),
-            widthRatio: el.wr ?? 1,
-            bold: el.bold === true,
-            rot,
-          });
+          const opts = { heightDots: d(el.hMm), widthRatio: el.wr ?? 1, bold: el.bold === true };
+          const ax = align ? alignOffsetDots(align, measureText(text, opts).widthDots) : 0;
+          drawText(bmp, Math.max(0, x + ax), y, text, { ...opts, rot });
         } else {
           // ESKİ 4-kademe (bold = ×2 boyut; native legacy anlamı).
           const capMm = (RASTER_FONT_MM[el.font ?? "md"] ?? DEFAULT_FONT_MM) * (el.bold ? 2 : 1);
-          drawText(bmp, x, y, text, { heightDots: d(capMm), rot });
+          const opts = { heightDots: d(capMm) };
+          const ax = align ? alignOffsetDots(align, measureText(text, opts).widthDots) : 0;
+          drawText(bmp, Math.max(0, x + ax), y, text, { ...opts, rot });
         }
         break;
       }
@@ -91,6 +94,15 @@ export function rasterizeCanvasLayout(input: CanvasRenderInput): Bitmap1 {
       case "lengthBanner":
         drawBanner(bmp, el, payload, format, d);
         break;
+      case "icon": {
+        // Bakım sembolü — kare 1bpp damga; rot kare içi dönüş (ayak izi değişmez).
+        // Bilinmeyen anahtar (katalogdan kalkmış eski kayıt) → sessiz atla.
+        const sizeDots = d(el.hMm ?? ICON_DEFAULT_MM);
+        try {
+          await drawIconOnBitmap(bmp, el.icon, x, y, sizeDots, el.rot ?? 0);
+        } catch { /* bilinmeyen ikon → iz bırakmadan geç */ }
+        break;
+      }
     }
   }
   return bmp;
@@ -98,7 +110,9 @@ export function rasterizeCanvasLayout(input: CanvasRenderInput): Bitmap1 {
 
 /** lengthBanner — dolu siyah bant + ORTALANMIŞ BEYAZ değer (bölge inversiyonu = blit
  *  clear). PPLA dahil dört dilde aynı görünüm (komut yolundaki PPLA çerçeve istisnası
- *  raster'da yok). Değer = bannerValueText (TR-formatlı sayı + "m"). */
+ *  raster'da yok). Değer = bannerValueText (TR-formatlı sayı; "m" eki unit'e bağlı).
+ *  glyphHMm dolu → değer yüksekliği TAM mm (raster serbest ölçer); boş → banda sığdır.
+ *  wr → dar/geniş ("ince/kalın") görünüm. */
 function drawBanner(
   bmp: Bitmap1,
   el: LengthBannerElement,
@@ -116,13 +130,13 @@ function drawBanner(
 
   bmp.fillRect(bx, by, bw, bh); // siyah zemin
 
-  const val = rasterCleanText(bannerValueText(payload));
+  const val = rasterCleanText(bannerValueText(payload, el.unit !== false));
   if (!val) return;
   const rot = (el.rot ?? 90) as CanvasRotation;
   const vertical = rot === 90 || rot === 270;
   const cross = vertical ? bw : bh; // glif yüksekliğinin dolduracağı eksen
-  const capH = Math.max(6, Math.round(cross * 0.6));
-  const run = renderTextBitmap(val, { heightDots: capH });
+  const capH = el.glyphHMm != null ? d(el.glyphHMm) : Math.max(6, Math.round(cross * 0.6));
+  const run = renderTextBitmap(val, { heightDots: capH, widthRatio: el.wr ?? 1 });
   const rs = rotatedSize(run.widthDots, run.heightDots, rot);
   const dx = bx + Math.round((bw - rs.w) / 2);
   const dy = by + Math.round((bh - rs.h) / 2);

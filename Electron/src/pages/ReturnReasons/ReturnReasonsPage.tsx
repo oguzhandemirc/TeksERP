@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { nextSortOrder } from "@/lib/sort-order";
 import { returnReasonColumns } from "./columns";
 import { returnReasonService } from "./service";
@@ -27,7 +26,8 @@ export function ReturnReasonsPage() {
     v: ReturnReasonFormValues,
     initial: ReturnReason | null,
   ): Partial<ReturnReason> => ({
-    code: initial?.code ?? generateCode(CODE_PREFIXES.RETURN_REASON),
+    // Kod backend'de üretilir (IADE+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+    ...(initial?.code ? { code: initial.code } : {}),
     name: v.name,
     description: v.description || null,
     color: v.color || null,

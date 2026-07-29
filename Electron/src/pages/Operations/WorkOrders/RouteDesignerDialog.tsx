@@ -48,27 +48,6 @@ export type RouteDesignerResult =
   | { mode: "template"; routeTemplateId: string; fasonPlans: FasonStepPlan[] }
   | { mode: "custom"; customSteps: CustomRouteStep[] };
 
-/**
- * Şablon kodu otomatik üretilir — kullanıcı kod girmez.
- * Format: ad'ın kelime baş harfleri (en fazla 4) + 4 hex karakter.
- * Örn: "Boyahane + Kursun + Tambur" → "BKT-A3F2".
- * Unique constraint (Route.code) çakışmaya karşı güvence.
- */
-function generateRouteCode(name: string): string {
-  const initials = name
-    .split(/\s+/)
-    .map((w) => w.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ0-9]/g, ""))
-    .filter(Boolean)
-    .map((w) => w[0]!.toUpperCase())
-    .slice(0, 4)
-    .join("");
-  const suffix = Math.floor(Math.random() * 0xffff)
-    .toString(16)
-    .toUpperCase()
-    .padStart(4, "0");
-  return initials ? `${initials}-${suffix}` : `RT-${suffix}`;
-}
-
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -132,7 +111,7 @@ export function RouteDesignerDialog({
     mutationFn: async () => {
       const payload = {
         name: templateName.trim(),
-        code: generateRouteCode(templateName),
+        // Kod backend'de üretilir (ROT+GGAAYY+NNNN) — istemci göndermez.
         customerId: forCustomer && customerId ? customerId : null,
         isActive: true,
         isFavorite: false,

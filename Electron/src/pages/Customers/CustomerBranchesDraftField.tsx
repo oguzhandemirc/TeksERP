@@ -84,7 +84,7 @@ export function CustomerBranchesDraftField({ form }: Props) {
                 {isOpen && (
                   <div className="space-y-2 border-t pt-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <FormField label="Kod" error={rowErr?.code}>
+                      <FormField label="İhracat Kodu" error={rowErr?.code}>
                         <Input maxLength={50} placeholder="Opsiyonel" {...register(`branches.${idx}.code`)} />
                       </FormField>
                       <FormField label="İlçe" error={rowErr?.district}>

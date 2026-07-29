@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import { assertTemplateAssignable } from "./label-template.service";
 import type { LabelKind } from "@prisma/client";
 
 const TABLE = "CUSTOMER_TEMPLATE_ROUTE";
@@ -62,6 +63,8 @@ export class CustomerTemplateRouteService {
         select: { id: true },
       });
       if (!tpl) throw AppError.badRequest("Şablon bulunamadı veya pasif");
+      // Statik etiket kuralı: barkodsuz varyantlı şablon müşteriye ATANAMAZ (kaldırma serbest).
+      await assertTemplateAssignable(templateId);
       await prisma.customerTemplateRoute.upsert({
         where: { customerId_kind: { customerId, kind } },
         update: { templateId },

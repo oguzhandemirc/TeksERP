@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { DashboardHero } from "./DashboardHero";
 import { KpiCards } from "./KpiCards";
@@ -45,7 +46,8 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <PageShell>
+      <PageBody className="space-y-6 p-6">
       <DashboardHero
         actions={
           <>
@@ -69,6 +71,7 @@ export function DashboardPage() {
       })}
 
       <DashboardSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

@@ -66,7 +66,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Force reload"
+          aria-label="Sayfayı yeniden yükle"
           title="Sayfayı yeniden yükle (Ctrl+Shift+R)"
           onClick={() => window.location.reload()}
         >

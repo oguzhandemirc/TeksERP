@@ -230,7 +230,7 @@ function DestinationProcedureEditor({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="font-medium text-muted-foreground">Prosedür / İhracat No</span>
+          <span className="font-medium text-muted-foreground">Gümrük/İhracat No</span>
           <PermissionGate
             permission="shipping:write"
             fallback={

@@ -143,10 +143,11 @@ export function formatDate(iso: string): string {
 
 /**
  * Saha #6: çoklu kopya — gövdedeki etiket bloğunu N sayfaya çoğalt (her kopya
- * kendi sayfasında; yazıcı arka arkaya basar). 1-5'e kırpılır.
+ * kendi sayfasında; yazıcı arka arkaya basar). 1-100'e kırpılır (Etiket Stüdyosu
+ * şablon baskısı; rulo/kartela akışı girişte 1-5'e kırpılır — clampCopies notu).
  */
 export function applyCopies(fullHtml: string, copies: number): string {
-  const copiesCount = Math.max(1, Math.min(5, Math.floor(copies)));
+  const copiesCount = Math.max(1, Math.min(100, Math.floor(copies)));
   if (copiesCount <= 1) return fullHtml;
   const bodyOpen = fullHtml.indexOf("<body>") + "<body>".length;
   const bodyClose = fullHtml.indexOf("</body>");

@@ -97,8 +97,29 @@ router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAcc
  *     responses: { 201: { description: Sevkiyat kuruldu } }
  *   get:
  *     tags: [Shipping]
- *     summary: Sevkiyat listesi (filtre + cursor)
+ *     summary: Sevkiyat listesi (içerik/iade/hedef filtresi + sıralama + eşleşme rozeti + cursor)
+ *     description: >
+ *       Shipment + fasondan doğrudan sevk (DirectShipment) birleşik liste. İçerik filtresi
+ *       filter[itemId]/filter[colorId] (csv) TEK TOP eşleşmesi kurar (aynı topun itemId VE
+ *       colorId koşulu). filter[hasReturns]=true iptalsiz iade taşıyan sevkleri süzer;
+ *       filter[destination]=DOMESTIC|EXPORT hedefe göre süzer (ikisi de doğrudan sevkleri
+ *       union'dan düşürür). sortBy=createdAt|shipmentNo + sortOrder=asc|desc. İçerik filtresi
+ *       aktifken her satırda matchRollCount (eşleşen top sayısı) döner.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: mode, schema: { type: string, enum: [cursor] }, description: cursor sayfalama }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+ *       - { in: query, name: withTotal, schema: { type: boolean } }
+ *       - { in: query, name: search, schema: { type: string } }
+ *       - { in: query, name: sortBy, schema: { type: string, enum: [createdAt, shipmentNo] } }
+ *       - { in: query, name: sortOrder, schema: { type: string, enum: [asc, desc] } }
+ *       - { in: query, name: "filter[status]", schema: { type: string } }
+ *       - { in: query, name: "filter[customerId]", schema: { type: string } }
+ *       - { in: query, name: "filter[destination]", schema: { type: string, enum: [DOMESTIC, EXPORT] } }
+ *       - { in: query, name: "filter[hasReturns]", schema: { type: string, enum: ["true"] } }
+ *       - { in: query, name: "filter[itemId]", schema: { type: string }, description: CSV çoklu ürün ID }
+ *       - { in: query, name: "filter[colorId]", schema: { type: string }, description: CSV çoklu renk ID }
  *     responses: { 200: { description: Sevkiyatlar } }
  */
 router.post("/shipments", verifyToken, WRITE, controller.createShipment);
@@ -111,6 +132,8 @@ router.post("/shipments/:id/add-sacks", verifyToken, WRITE, controller.addSacksT
 router.post("/shipments/:id/remove-sack", verifyToken, WRITE, controller.removeSackFromShipment);
 router.post("/shipments/:id/destination", verifyToken, WRITE, controller.setDestination);
 router.post("/shipments/:id/procedure-code", verifyToken, WRITE, controller.setProcedureCode);
+router.get("/shipments/:id/dispatch-note", verifyToken, READ, controller.getDispatchNote);
+router.post("/shipments/:id/dispatch-note", verifyToken, WRITE, controller.setDispatchNote);
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
 router.get("/shipments/:id/cancel-preview", verifyToken, READ, controller.cancelPreview);
 router.post("/shipments/:id/cancel", verifyToken, WRITE, controller.cancelShipment);

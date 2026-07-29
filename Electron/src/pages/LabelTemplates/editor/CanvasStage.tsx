@@ -9,23 +9,30 @@
 // önizlemesinde. Her jest tek undo adımıdır (snapshot jest başında).
 
 import { useRef, useState } from "react";
-import { ZoomIn, ZoomOut, Undo2 } from "lucide-react";
+import { ZoomIn, ZoomOut, Undo2, Redo2, Magnet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CanvasPad, LabelElement } from "@/types/label-canvas";
 import {
-  alignElements,
   applyResize,
   clamp,
-  distributeElements,
   estimateBounds,
   MAX_ZOOM,
   MIN_ZOOM,
   snap,
   snapRotation,
+} from "./canvas-model";
+import {
+  alignElements,
+  distributeElements,
+  scaleElements,
   type AlignMode,
   type DistributeMode,
-} from "./canvas-model";
+} from "./canvas-align";
+import {
+  ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
+} from "@/components/ui/context-menu";
+import { computeSnap } from "./canvas-snap";
 import { CanvasElementView, type HandleMode } from "./CanvasElementView";
 import { AlignmentToolbar } from "./AlignmentToolbar";
 import type { EditorState } from "./useEditorState";
@@ -49,6 +56,10 @@ type DragState =
 export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Sürükleme sırasında beliren hizalama kılavuzları (mm) — pointerUp'ta temizlenir.
+  const [guides, setGuides] = useState<{ vGuides: number[]; hGuides: number[] }>({ vGuides: [], hGuides: [] });
+  // Akıllı hizalama (snap) açık mı — kapalıyken serbest 0.5mm ızgara sürüklemesi.
+  const [snapOn, setSnapOn] = useState(true);
   const warnIds = new Set(lint.filter((i) => i.level !== "info" && i.elementId).map((i) => i.elementId));
 
   // Güvenli alan = tuval − padding. Eleman ORİJİNİ bu banda clamp'lenir (en az 1mm iç
@@ -68,21 +79,35 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
   };
 
   const onElementPointerDown = (e: React.PointerEvent, id: string) => {
+    if (e.button !== 0) return; // yalnız SOL tık sürükler (sağ tık = bağlam menüsü)
     e.stopPropagation();
     stageRef.current?.focus();
-    // Ctrl/Cmd+tık: üyelik toggle — sürükleme başlatmaz.
+    // Ctrl/Cmd+tık: üyelik toggle (gruplu olsa da TEK eleman) — bir grup üyesini
+    // ayrı düzenlemenin kaçış yolu. Sürükleme başlatmaz.
     if (e.ctrlKey || e.metaKey) {
       state.select(id, { toggle: true });
       return;
     }
-    // Seçili bir elemana basıldıysa GRUP taşınır; değilse tekli seçilip taşınır.
-    const ids = state.selectedIds.includes(id) ? state.selectedIds : [id];
-    if (!state.selectedIds.includes(id)) state.select(id);
+    // Gruplu elemana tık → TÜM grup seçilir (birlikte taşınır); değilse tekli.
+    const clicked = state.elements.find((x) => x.id === id);
+    const groupMembers = clicked?.groupId
+      ? state.elements.filter((x) => x.groupId === clicked.groupId).map((x) => x.id)
+      : [id];
+    // Zaten seçili bir elemana basıldıysa mevcut seçim (grup/çoklu) taşınır; değilse
+    // tıklananın grubu (ya da tek eleman) seçilir.
+    const alreadySel = state.selectedIds.includes(id);
+    const ids = alreadySel ? state.selectedIds : groupMembers;
+    if (!alreadySel) {
+      if (groupMembers.length > 1) state.selectMany(groupMembers);
+      else state.select(id);
+    }
+    // Kilitli üyeler sürüklemede yerinde kalır (grup/çoklu seçimde bile oynatılmaz).
+    const dragIds = ids.filter((i) => !state.elements.find((el) => el.id === i)?.locked);
     state.snapshot(); // jest başı undo noktası
     const at = mmFromEvent(e);
     const startPos: Record<string, { x: number; y: number }> = {};
-    for (const el of state.elements) if (ids.includes(el.id)) startPos[el.id] = { x: el.x, y: el.y };
-    setDrag({ mode: "move", ids, startCursor: at, startPos });
+    for (const el of state.elements) if (dragIds.includes(el.id)) startPos[el.id] = { x: el.x, y: el.y };
+    setDrag({ mode: "move", ids: dragIds, startCursor: at, startPos });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -97,6 +122,7 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
 
   // Boş alandan sürükleme = marquee çerçevesi (Ctrl → mevcut seçime EKLE).
   const onStagePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // sağ tık marquee başlatmaz
     const at = mmFromEvent(e);
     const additive = e.ctrlKey || e.metaKey;
     if (!additive) state.select(null);
@@ -109,14 +135,34 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
     const at = mmFromEvent(e);
 
     if (drag.mode === "move") {
-      const dx = at.x - drag.startCursor.x;
-      const dy = at.y - drag.startCursor.y;
+      let dx = at.x - drag.startCursor.x;
+      let dy = at.y - drag.startCursor.y;
+      // Sürüklenen kümenin ham (snap öncesi) ortak sınır kutusu.
+      let bx = Infinity, by = Infinity, br = -Infinity, bb = -Infinity;
+      for (const id of drag.ids) {
+        const start = drag.startPos[id];
+        const el = state.elements.find((e) => e.id === id);
+        if (!start || !el) continue;
+        const eb = estimateBounds(el, canvas);
+        bx = Math.min(bx, start.x + dx); by = Math.min(by, start.y + dy);
+        br = Math.max(br, start.x + dx + eb.w); bb = Math.max(bb, start.y + dy + eb.h);
+      }
+      let gx = false, gy = false;
+      if (snapOn && bx !== Infinity) {
+        const dragSet = new Set(drag.ids);
+        const others = state.elements.filter((e) => !dragSet.has(e.id)).map((e) => estimateBounds(e, canvas));
+        const sr = computeSnap({ x: bx, y: by, w: br - bx, h: bb - by }, others, canvas);
+        dx += sr.dx; dy += sr.dy;
+        gx = sr.vGuides.length > 0; gy = sr.hGuides.length > 0;
+        setGuides({ vGuides: sr.vGuides, hGuides: sr.hGuides });
+      }
+      const q = (v: number) => Math.round(v * 100) / 100; // snap yakalandıysa ızgaraya yuvarlama YOK
       for (const id of drag.ids) {
         const start = drag.startPos[id];
         if (!start) continue;
         state.updateElementLive(id, {
-          x: clampX(snap(start.x + dx)),
-          y: clampY(snap(start.y + dy)),
+          x: clampX(gx ? q(start.x + dx) : snap(start.x + dx)),
+          y: clampY(gy ? q(start.y + dy) : snap(start.y + dy)),
         });
       }
       return;
@@ -139,7 +185,8 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
     const b = estimateBounds(el, canvas);
     const deg = (Math.atan2(at.y - (el.y + b.h / 2), at.x - (el.x + b.w / 2)) * 180) / Math.PI + 90;
     const rot = snapRotation(deg);
-    if (el.type === "field" || el.type === "text") {
+    if (el.type === "field" || el.type === "text" || el.type === "icon") {
+      // icon: kare — 90°'de w/h takası gerekmez, yalnız rot yazılır.
       if (rot !== (el.rot ?? 0)) state.updateElementLive(drag.id, { rot });
     } else if (el.type === "lengthBanner") {
       const prev = el.rot ?? 90;
@@ -170,6 +217,7 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
       if (x2 - x1 > 0.5 || y2 - y1 > 0.5) {
         const hit = state.elements
           .filter((el) => {
+            if (el.locked) return false; // kilitli marquee ile seçilmez
             const b = estimateBounds(el, canvas);
             return b.x < x2 && x1 < b.x + b.w && b.y < y2 && y1 < b.y + b.h;
           })
@@ -178,12 +226,44 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
       }
     }
     setDrag(null);
+    setGuides({ vGuides: [], hGuides: [] }); // sürükleme bitti → kılavuzları temizle
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === "a") {
       e.preventDefault();
       state.selectMany(state.elements.map((el) => el.id));
+      return;
+    }
+    // Geri al / yinele — çok adımlı (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y).
+    if (mod && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      if (e.shiftKey) state.redo();
+      else state.undo();
+      return;
+    }
+    if (mod && e.key.toLowerCase() === "y") {
+      e.preventDefault();
+      state.redo();
+      return;
+    }
+    // Kopyala / yapıştır — seçili elemanları pano üzerinden çoğalt.
+    if (mod && e.key.toLowerCase() === "c") {
+      e.preventDefault();
+      state.copySelected();
+      return;
+    }
+    if (mod && e.key.toLowerCase() === "v") {
+      e.preventDefault();
+      state.paste();
+      return;
+    }
+    // Grupla / grubu çöz.
+    if (mod && e.key.toLowerCase() === "g") {
+      e.preventDefault();
+      if (e.shiftKey) state.ungroupSelected();
+      else state.groupSelected();
       return;
     }
     if (e.key === "Escape") {
@@ -205,7 +285,7 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
       e.preventDefault();
       const patches: Record<string, Partial<LabelElement>> = {};
       for (const el of state.elements) {
-        if (!state.selectedIds.includes(el.id)) continue;
+        if (!state.selectedIds.includes(el.id) || el.locked) continue; // kilitli it'lenmez
         patches[el.id] = {
           x: clampX(snap(el.x + d[0])),
           y: clampY(snap(el.y + d[1])),
@@ -229,20 +309,32 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-[11px] text-muted-foreground">
-          Tuval: <strong>{canvas.widthMm}×{canvas.heightMm} mm</strong> · 0.5mm ızgara ·
-          Ctrl+tık çoklu seç · boş alandan sürükle=çerçeve · Ctrl+A tümü
+          Tuval: <strong>{canvas.widthMm}×{canvas.heightMm} mm</strong> · Ctrl+tık çoklu seç ·
+          Ctrl+A tümü · Ctrl+Z/Y geri-yinele · Ctrl+C/V kopyala · Ctrl+G grupla
         </div>
         <div className="flex items-center gap-1">
           <AlignmentToolbar
             count={state.selectedIds.length}
+            hasGroup={state.elements.some((e) => state.selectedIds.includes(e.id) && !!e.groupId)}
             onAlign={(m: AlignMode) => state.applyPatches(alignElements(state.elements, state.selectedIds, m, canvas))}
             onDistribute={(m: DistributeMode) =>
               state.applyPatches(distributeElements(state.elements, state.selectedIds, m, canvas))
             }
+            onGroup={state.groupSelected}
+            onUngroup={state.ungroupSelected}
+            onScale={(f: number) => state.applyPatches(scaleElements(state.elements, state.selectedIds, f, canvas))}
           />
           <Button type="button" size="icon" variant="ghost" className="h-7 w-7" disabled={!state.canUndo}
-            onClick={state.undo} title="Geri al (tek adım)">
+            onClick={state.undo} title="Geri al (Ctrl+Z)">
             <Undo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" size="icon" variant="ghost" className="h-7 w-7" disabled={!state.canRedo}
+            onClick={state.redo} title="Yinele (Ctrl+Y)">
+            <Redo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" size="icon" variant={snapOn ? "secondary" : "ghost"} className="h-7 w-7"
+            onClick={() => setSnapOn((s) => !s)} title={snapOn ? "Akıllı hizalama AÇIK (kapat)" : "Akıllı hizalama KAPALI (aç)"}>
+            <Magnet className="h-3.5 w-3.5" />
           </Button>
           <Button type="button" size="icon" variant="ghost" className="h-7 w-7"
             onClick={() => onZoom(Math.max(MIN_ZOOM, zoom - 1))} title="Uzaklaş">
@@ -319,17 +411,30 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
             />
           )}
           {state.elements.map((el) => (
-            <CanvasElementView
-              key={el.id}
-              element={el}
-              canvas={canvas}
-              zoom={zoom}
-              selected={state.selectedIds.includes(el.id)}
-              showHandles={state.selectedIds.length === 1 && state.selectedIds[0] === el.id}
-              hasLintWarn={warnIds.has(el.id)}
-              onPointerDown={onElementPointerDown}
-              onHandlePointerDown={onHandlePointerDown}
-            />
+            <ContextMenu key={el.id}>
+              <ContextMenuTrigger onContextMenu={() => { if (!state.selectedIds.includes(el.id)) state.select(el.id); }}>
+                <CanvasElementView
+                  element={el}
+                  canvas={canvas}
+                  zoom={zoom}
+                  selected={state.selectedIds.includes(el.id)}
+                  showHandles={state.selectedIds.length === 1 && state.selectedIds[0] === el.id}
+                  hasLintWarn={warnIds.has(el.id)}
+                  onPointerDown={onElementPointerDown}
+                  onHandlePointerDown={onHandlePointerDown}
+                />
+              </ContextMenuTrigger>
+              <ContextMenuContent className="w-44">
+                <ContextMenuItem onClick={() => state.duplicateElement(el.id)}>Çoğalt</ContextMenuItem>
+                <ContextMenuItem onClick={() => state.bringToFront([el.id])}>En üste getir</ContextMenuItem>
+                <ContextMenuItem onClick={() => state.sendToBack([el.id])}>En alta gönder</ContextMenuItem>
+                <ContextMenuItem onClick={() => state.updateElement(el.id, { locked: !el.locked })}>
+                  {el.locked ? "Kilidi aç" : "Kilitle"}
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem className="text-destructive" onClick={() => state.removeElement(el.id)}>Sil</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
           {marqueeRect && (
             <div
@@ -337,6 +442,15 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint, onPadChange }: 
               style={marqueeRect}
             />
           )}
+          {/* Akıllı hizalama kılavuzları (sürükleme sırasında) — pembe çizgiler. */}
+          {guides.vGuides.map((vx, i) => (
+            <div key={`v${i}`} className="pointer-events-none absolute top-0 bg-pink-500"
+              style={{ left: vx * zoom, width: 1, height: canvas.heightMm * zoom }} />
+          ))}
+          {guides.hGuides.map((hy, i) => (
+            <div key={`h${i}`} className="pointer-events-none absolute left-0 bg-pink-500"
+              style={{ top: hy * zoom, height: 1, width: canvas.widthMm * zoom }} />
+          ))}
           {state.elements.length === 0 && (
             <div className="flex h-full items-center justify-center text-xs italic text-black/40">
               Soldaki paletten eleman ekleyin

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Info, Search, X } from "lucide-react";
+import { Info, Search, Unlink, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -85,7 +85,7 @@ interface LineCompatTarget {
 }
 
 function mismatchReason(anchor: Anchor, line: LineCompatTarget): string | null {
-  if (line.itemId !== anchor.itemId) return "Farklı ürün";
+  if (line.itemId !== anchor.itemId) return "Farklı kumaş";
   if ((line.colorId ?? null) !== (anchor.colorId ?? null)) return "Farklı renk";
   if ((line.width ?? null) !== (anchor.width ?? null)) return "Farklı en";
   return null;
@@ -359,6 +359,14 @@ export function OrderPickerDialog({
     onOpenChange(false);
   };
 
+  // Tek tıkla tüm sipariş bağlarını kaldır ve kapat — bağlı kalemleri tek tek
+  // uncheck etmeye gerek kalmadan iş emrinin sipariş bağını temizler.
+  const handleRemoveAll = () => {
+    clearAllSelected();
+    onConfirm([]);
+    onOpenChange(false);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[88vh] max-h-[88vh] max-w-7xl flex-col gap-0 overflow-hidden p-0">
@@ -593,15 +601,38 @@ export function OrderPickerDialog({
             )}
           </span>
           <div className="flex gap-2">
+            {initialSelected.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={handleRemoveAll}
+              >
+                <Unlink className="h-4 w-4" />
+                Tüm Bağlantıları Kaldır
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               İptal
             </Button>
             <Button
               type="button"
-              disabled={selectedArray.length === 0}
+              // Boş seçim de onaylanabilmeli — başlangıçta sipariş bağlıysa
+              // kullanıcı hepsini kaldırıp bağlantıyı temizleyebilir (aksi halde
+              // tek çare "İptal" olur ve kaldırma geri alınırdı).
+              disabled={selectedArray.length === 0 && initialSelected.length === 0}
+              variant={
+                selectedArray.length === 0 && initialSelected.length > 0
+                  ? "destructive"
+                  : "default"
+              }
               onClick={handleConfirm}
             >
-              {selectedArray.length > 0 ? `${selectedArray.length} Kalemi Ekle` : "Seç"}
+              {selectedArray.length > 0
+                ? `${selectedArray.length} Kalemi Ekle`
+                : initialSelected.length > 0
+                  ? "Bağlantıyı Kaldır"
+                  : "Seç"}
             </Button>
           </div>
         </DialogFooter>

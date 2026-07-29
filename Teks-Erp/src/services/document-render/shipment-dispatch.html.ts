@@ -10,13 +10,115 @@
 //   üst:   firma anteti + SAYIN müşteri (+vergi no/şube) · İrsaliye No · Tarih · Yön
 //   araç:  Plaka / Şoför / Taşıyıcı (varsa)
 //   1) ÜRÜN LİSTESİ : STOK ADI | TOP ADEDİ | TOPLAM METRE
-//   2) ÇUVAL LİSTESİ: AMBALAJ KODU | METRE TOPLAMI | KG TOPLAMI | PAKET SAYISI
+//   2) ÇUVAL LİSTESİ: ÇUVAL NO | METRE TOPLAMI | KG TOPLAMI | TOP ADEDİ
 //   3) ÇEKİ LİSTESİ : ÇUVAL NO | BARKOD | DESEN | VARYANT | METRE | KG
 //   alt:   serbest not + imza kutuları + filigran (TASLAK/İPTAL/ESKİ KOPYA)
 // =============================================================================
 
 import type { PrintedDocStatus } from "@prisma/client";
 import type { PrintedDocSnapshot } from "../printed-document.service";
+import {
+  resolveDocStyle,
+  docPageCss,
+  docTableCss,
+  scaleDocCss,
+  docLogoHtml,
+  DOC_LOGO_CSS,
+  DOC_STAMPS_CSS,
+  docCopyBadge,
+  docBlocksHtml,
+  docPrintNoteHtml,
+  docStampsBar,
+} from "./doc-style";
+import { buildDocTable } from "./doc-table";
+
+/** Belge etiketleri — cfg.language: tr | en | auto (auto → EXPORT sevkiyatta EN). */
+const LABELS = {
+  tr: {
+    title: "SEVK İRSALİYESİ",
+    to: "SAYIN",
+    taxNo: "V.No",
+    branch: "Şube",
+    exportCode: "İhracat Kodu",
+    code: "Kod",
+    docNo: "İrsaliye No",
+    date: "Tarih",
+    direction: "Yön",
+    domestic: "Yurtiçi",
+    export: "Yurtdışı",
+    customsNo: "Gümrük/İhracat No",
+    orders: "Sipariş",
+    plate: "Plaka",
+    driver: "Şoför",
+    carrier: "Taşıyıcı",
+    urunCaption: "ÜRÜN LİSTESİ",
+    stokAdi: "STOK ADI",
+    topAdedi: "TOP ADEDİ",
+    toplamMetre: "TOPLAM METRE",
+    cuvalCaption: "ÇUVAL LİSTESİ",
+    ambalajKodu: "ÇUVAL NO",
+    metreToplami: "METRE TOPLAMI",
+    kgToplami: "KG TOPLAMI",
+    paketSayisi: "TOP ADEDİ",
+    cekiCaption: "ÇEKİ LİSTESİ",
+    cuvalNo: "ÇUVAL NO",
+    barkodNo: "BARKOD NO",
+    desen: "DESEN",
+    varyant: "VARYANT",
+    en: "EN",
+    metre: "METRE",
+    kg: "KG",
+    toplam: "TOPLAM",
+    sigDefaults: ["Teslim Eden", "Teslim Alan"],
+    wmDraft: "TASLAK",
+    wmVoid: "İPTAL",
+    wmOld: "ESKİ KOPYA",
+    printedAt: "Basım",
+    printedBy: "Basan",
+  },
+  en: {
+    title: "DELIVERY NOTE",
+    to: "TO",
+    taxNo: "Tax No",
+    branch: "Branch",
+    exportCode: "Export Code",
+    code: "Code",
+    docNo: "Delivery Note No",
+    date: "Date",
+    direction: "Destination",
+    domestic: "Domestic",
+    export: "Export",
+    customsNo: "Customs/Export No",
+    orders: "Orders",
+    plate: "Plate",
+    driver: "Driver",
+    carrier: "Carrier",
+    urunCaption: "PRODUCT LIST",
+    stokAdi: "ITEM NAME",
+    topAdedi: "ROLL COUNT",
+    toplamMetre: "TOTAL METERS",
+    cuvalCaption: "PACKAGE LIST",
+    ambalajKodu: "PACKAGE NO",
+    metreToplami: "TOTAL METERS",
+    kgToplami: "TOTAL KG",
+    paketSayisi: "ROLL COUNT",
+    cekiCaption: "PACKING LIST",
+    cuvalNo: "PACKAGE NO",
+    barkodNo: "BARCODE",
+    desen: "PATTERN",
+    varyant: "VARIANT",
+    en: "WIDTH",
+    metre: "METERS",
+    kg: "KG",
+    toplam: "TOTAL",
+    sigDefaults: ["Delivered By", "Received By"],
+    wmDraft: "DRAFT",
+    wmVoid: "VOID",
+    wmOld: "SUPERSEDED",
+    printedAt: "Printed",
+    printedBy: "By",
+  },
+} as const;
 
 interface ShipmentDocProduct {
   name: string;
@@ -37,6 +139,8 @@ interface ShipmentDocCeki {
   barcode: string | null;
   desen: string;
   varyant: string;
+  /** En (cm) — eski donmuş snapshot'larda yok (opsiyonel); kolonu açık-kapatılabilir. */
+  width?: number | null;
   meters: number;
   kg: number;
 }
@@ -50,9 +154,14 @@ export interface ShipmentDispatchDoc {
     customerCode: string | null;
     customerTaxNumber: string | null;
     branchName: string | null;
-    /** Müşteri şube kodu (CustomerBranch.code) — ihracatta kullanılır; belgede
-     *  "branchCode" section toggle'ıyla açılıp kapanabilir. */
+    /** ŞUBE ihracat kodu (CustomerBranch.code) — tek "İhracat Kodu" satırının
+     *  ÖNCELİKLİ kaynağı: dolu ise şirket exportCode'unun önüne geçer
+     *  (branchCode ?? customerExportCode). Satır "exportCode" toggle'ına bağlı. */
     branchCode: string | null;
+    /** ŞİRKET ihracat kodu (Customer.exportCode) — şube ihracat kodu boşsa aynı
+     *  "İhracat Kodu" satırına yedek olarak basılır; "exportCode" toggle'ıyla
+     *  açılıp kapanır. Eski donmuş snapshot'larda alan yoktur (opsiyonel). */
+    customerExportCode?: string | null;
     procedureCode: string | null;
     destination: "DOMESTIC" | "EXPORT";
     status: string;
@@ -73,6 +182,16 @@ interface RenderMeta {
   voidReason?: string | null;
   /** Kaynak henüz donmamış (canlı önizleme) → TASLAK filigranı. */
   draft?: boolean;
+  /** Snapshot logoHash'inin çözülmüş görseli (servis katmanı çözer). */
+  logoDataUrl?: string | null;
+  /** cfg.qr açıksa belge doğrulama karekodu (servis üretir). */
+  qrDataUrl?: string | null;
+  /** Basım damgası (dd.MM.yyyy HH:mm) — cfg.stamps.printedAt açıksa. */
+  printedAtText?: string;
+  /** Basan kullanıcı — cfg.stamps.printedBy açıksa. */
+  printedBy?: string | null;
+  /** Tek seferlik baskı notu (?printNote= — persist edilmez). */
+  printNote?: string | null;
 }
 
 function esc(v: unknown): string {
@@ -117,130 +236,152 @@ export function renderShipmentDispatchHtml(
 ): string {
   const doc = snapshot.doc as unknown as ShipmentDispatchDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  const style = resolveDocStyle(cfg.style, { marginMm: 9 });
+  const logo = docLogoHtml(meta.logoDataUrl, cfg);
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = (cfg.titleOverride?.trim() || "SEVK İRSALİYESİ").toUpperCase();
+  const h = doc.header;
+  const t = doc.totals;
+  // Enler boş bırakılsın mı (kolon durur, değer gelmez — elle doldurma).
+  const blankWidths = cfg.blankWidths === true;
+  const lang =
+    cfg.language === "en" || (cfg.language === "auto" && h?.destination === "EXPORT")
+      ? "en"
+      : "tr";
+  const L = LABELS[lang];
+
+  const title = (cfg.titleOverride?.trim() || L.title).toUpperCase();
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels =
     cfg.signatureLabels && cfg.signatureLabels.length
       ? cfg.signatureLabels
-      : ["Teslim Eden", "Teslim Alan"];
-
-  const h = doc.header;
-  const t = doc.totals;
+      : [...L.sigDefaults];
   const products = doc.products ?? [];
   const sacks = doc.sacks ?? [];
   const cekiRows = doc.cekiRows ?? [];
 
   // Antet (gönderen) satırları — sadece dolu olanlar.
   const lhLines = showLetterhead
-    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : ""]
+    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : "", ...(lh.extraLines ?? [])]
         .filter((s) => s && s.trim())
         .map((s) => `<div class="lh-line">${esc(s)}</div>`)
         .join("")
     : "";
 
   const watermark = meta.draft
-    ? `<div class="wm wm-draft">TASLAK</div>`
+    ? `<div class="wm wm-draft">${L.wmDraft}</div>`
     : meta.status === "VOIDED"
-      ? `<div class="wm">İPTAL</div>`
+      ? `<div class="wm">${L.wmVoid}</div>`
       : meta.status === "SUPERSEDED"
-        ? `<div class="wm wm-old">ESKİ KOPYA</div>`
+        ? `<div class="wm wm-old">${L.wmOld}</div>`
         : "";
 
-  // Şube kodu (ihracat) — "branchCode" section toggle'ıyla açılıp kapanabilir (varsayılan açık).
-  const showBranchCode = sectionOn(cfg.sections, "branchCode");
+  // İhracat Kodu — TEK satır: şube kodu doluysa onu, yoksa müşteri ihracat kodunu
+  // bas (branchCode ?? customerExportCode). "exportCode" section toggle'ıyla açılıp
+  // kapanabilir (varsayılan açık); ikisi de boşsa satır zaten basılmaz.
+  // Alan aç/kapa toggle'ları (hepsi varsayılan AÇIK — kapanmadıkça mevcut davranış).
+  const showDocNo = sectionOn(cfg.sections, "docNo");
+  const showDate = sectionOn(cfg.sections, "date");
+  const showExportCode = sectionOn(cfg.sections, "exportCode");
+  const showTaxNo = sectionOn(cfg.sections, "taxNo");
+  const showBranchName = sectionOn(cfg.sections, "branchName");
+  const showCustomerCode = sectionOn(cfg.sections, "customerCode");
+  const showDirection = sectionOn(cfg.sections, "direction");
+  const showProcedure = sectionOn(cfg.sections, "procedureCode");
+  const showOrders = sectionOn(cfg.sections, "orders");
+  const shipCode = h.branchCode ?? h.customerExportCode;
   const customerSub = [
-    h.customerTaxNumber ? `V.No: ${esc(h.customerTaxNumber)}` : "",
-    h.branchName ? `Şube: ${esc(h.branchName)}` : "",
-    showBranchCode && h.branchCode ? `Şube Kodu: ${esc(h.branchCode)}` : "",
-    h.customerCode ? `Kod: ${esc(h.customerCode)}` : "",
+    showTaxNo && h.customerTaxNumber ? `${L.taxNo}: ${esc(h.customerTaxNumber)}` : "",
+    showBranchName && h.branchName ? `${L.branch}: ${esc(h.branchName)}` : "",
+    showExportCode && shipCode ? `${L.exportCode}: ${esc(shipCode)}` : "",
+    showCustomerCode && h.customerCode ? `${L.code}: ${esc(h.customerCode)}` : "",
   ]
     .filter(Boolean)
     .join(" · ");
 
-  const yon = h.destination === "EXPORT" ? "Yurtdışı" : "Yurtiçi";
+  const yon = h.destination === "EXPORT" ? L.export : L.domestic;
   const headRight = [
-    `<div class="ln">İrsaliye No: <b>${esc(h.shipmentNo)}</b></div>`,
-    `<div class="ln">Tarih: <b>${esc(fmtDate(h.date))}</b></div>`,
-    `<div class="ln">Yön: <b>${esc(yon)}</b></div>`,
-    h.procedureCode ? `<div class="ln">Gümrük/İhr. No: <b>${esc(h.procedureCode)}</b></div>` : "",
-    h.orderNos ? `<div class="ln sub">Sipariş: ${esc(h.orderNos)}</div>` : "",
+    showDocNo ? `<div class="ln">${L.docNo}: <b>${esc(h.shipmentNo)}</b></div>` : "",
+    showDate ? `<div class="ln">${L.date}: <b>${esc(fmtDate(h.date))}</b></div>` : "",
+    showDirection ? `<div class="ln">${L.direction}: <b>${esc(yon)}</b></div>` : "",
+    showProcedure && h.procedureCode ? `<div class="ln">${L.customsNo}: <b>${esc(h.procedureCode)}</b></div>` : "",
+    showOrders && h.orderNos ? `<div class="ln sub">${L.orders}: ${esc(h.orderNos)}</div>` : "",
   ]
     .filter(Boolean)
     .join("");
 
-  const vehicleBits = [
-    h.plateNumber ? `Plaka: <b>${esc(h.plateNumber)}</b>` : "",
-    h.driverName ? `Şoför: <b>${esc(h.driverName)}</b>` : "",
-    h.carrier ? `Taşıyıcı: <b>${esc(h.carrier)}</b>` : "",
-  ].filter(Boolean);
+  const vehicleBits = sectionOn(cfg.sections, "vehicleInfo")
+    ? [
+        h.plateNumber ? `${L.plate}: <b>${esc(h.plateNumber)}</b>` : "",
+        h.driverName ? `${L.driver}: <b>${esc(h.driverName)}</b>` : "",
+        h.carrier ? `${L.carrier}: <b>${esc(h.carrier)}</b>` : "",
+      ].filter(Boolean)
+    : [];
   const vehicleRow = vehicleBits.length
     ? `<div class="meta-row">${vehicleBits.join(" &nbsp;·&nbsp; ")}</div>`
     : "";
 
-  // 1) ÜRÜN LİSTESİ
+  // 1) ÜRÜN LİSTESİ — kolonlar cfg.columns.urun ile aç/kapa + sıralanır.
   const urunSection = sectionOn(cfg.sections, "urun")
-    ? `<table class="sec">
-        <thead>
-          <tr><th class="caption" colspan="3">ÜRÜN LİSTESİ</th></tr>
-          <tr><th class="l">STOK ADI</th><th class="r">TOP ADEDİ</th><th class="r">TOPLAM METRE</th></tr>
-        </thead>
-        <tbody>
-          ${products
-            .map(
-              (p) =>
-                `<tr><td class="l">${esc(p.name)}</td><td class="r">${esc(fmtCount(p.rollCount))}</td><td class="r">${esc(fmtQty(p.totalMeters))}</td></tr>`,
-            )
-            .join("")}
-          <tr class="tot"><td class="l">TOPLAM</td><td class="r">${esc(fmtCount(t.totalRolls))}</td><td class="r">${esc(fmtQty(t.totalMeters))}</td></tr>
-        </tbody>
-      </table>`
+    ? buildDocTable<ShipmentDocProduct>({
+        className: "sec",
+        caption: L.urunCaption,
+        colCfg: cfg.columns?.urun,
+        footLabel: L.toplam,
+        rows: products,
+        cols: [
+          { key: "name", label: L.stokAdi, align: "l", cell: (p) => esc(p.name) },
+          { key: "rollCount", label: L.topAdedi, align: "r", cell: (p) => esc(fmtCount(p.rollCount)), foot: esc(fmtCount(t.totalRolls)) },
+          { key: "totalMeters", label: L.toplamMetre, align: "r", cell: (p) => esc(fmtQty(p.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
+        ],
+      })
     : "";
 
   // 2) ÇUVAL LİSTESİ
   const cuvalSection = sectionOn(cfg.sections, "cuval")
-    ? `<table class="sec">
-        <thead>
-          <tr><th class="caption" colspan="4">ÇUVAL LİSTESİ</th></tr>
-          <tr><th class="l">AMBALAJ KODU</th><th class="r">METRE TOPLAMI</th><th class="r">KG TOPLAMI</th><th class="r">PAKET SAYISI</th></tr>
-        </thead>
-        <tbody>
-          ${sacks
-            .map(
-              (s) =>
-                `<tr><td class="l">${esc(s.code)}</td><td class="r">${esc(fmtQty(s.totalMeters))}</td><td class="r">${esc(fmtQty(s.totalKg))}</td><td class="r">${esc(fmtCount(s.packageCount))}</td></tr>`,
-            )
-            .join("")}
-          <tr class="tot"><td class="l">TOPLAM</td><td class="r">${esc(fmtQty(t.totalMeters))}</td><td class="r">${esc(fmtQty(t.totalKg))}</td><td class="r">${esc(fmtCount(t.totalRolls))}</td></tr>
-        </tbody>
-      </table>`
+    ? buildDocTable<ShipmentDocSack>({
+        className: "sec",
+        caption: L.cuvalCaption,
+        colCfg: cfg.columns?.cuval,
+        footLabel: L.toplam,
+        rows: sacks,
+        cols: [
+          { key: "code", label: L.ambalajKodu, align: "l", cell: (s) => esc(s.code) },
+          { key: "totalMeters", label: L.metreToplami, align: "r", cell: (s) => esc(fmtQty(s.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
+          { key: "totalKg", label: L.kgToplami, align: "r", cell: (s) => esc(fmtQty(s.totalKg)), foot: esc(fmtQty(t.totalKg)) },
+          { key: "packageCount", label: L.paketSayisi, align: "r", cell: (s) => esc(fmtCount(s.packageCount)), foot: esc(fmtCount(t.totalRolls)) },
+        ],
+      })
     : "";
 
   // 3) ÇEKİ LİSTESİ
   const cekiSection = sectionOn(cfg.sections, "ceki")
-    ? `<table class="sec">
-        <thead>
-          <tr><th class="caption" colspan="6">ÇEKİ LİSTESİ</th></tr>
-          <tr><th class="l">ÇUVAL NO</th><th class="l">BARKOD NO</th><th class="l">DESEN</th><th class="l">VARYANT</th><th class="r">METRE</th><th class="r">KG</th></tr>
-        </thead>
-        <tbody>
-          ${cekiRows
-            .map(
-              (c) =>
-                `<tr><td class="l">${esc(c.sackCode)}</td><td class="l">${esc(c.barcode ?? "—")}</td><td class="l">${esc(c.desen)}</td><td class="l">${esc(c.varyant)}</td><td class="r">${esc(fmtQty(c.meters))}</td><td class="r">${c.kg > 0 ? esc(fmtQty(c.kg)) : ""}</td></tr>`,
-            )
-            .join("")}
-          <tr class="tot"><td class="l" colspan="4">TOPLAM</td><td class="r">${esc(fmtQty(t.totalMeters))}</td><td class="r">${esc(fmtQty(t.totalKg))}</td></tr>
-        </tbody>
-      </table>`
+    ? buildDocTable<ShipmentDocCeki>({
+        className: "sec",
+        caption: L.cekiCaption,
+        colCfg: cfg.columns?.ceki,
+        footLabel: L.toplam,
+        rows: cekiRows,
+        cols: [
+          { key: "sackCode", label: L.cuvalNo, align: "l", cell: (c) => esc(c.sackCode) },
+          { key: "barcode", label: L.barkodNo, align: "l", cell: (c) => esc(c.barcode ?? "—") },
+          { key: "desen", label: L.desen, align: "l", cell: (c) => esc(c.desen) },
+          { key: "varyant", label: L.varyant, align: "l", cell: (c) => esc(c.varyant) },
+          { key: "width", label: L.en, align: "c", cell: (c) => (blankWidths ? "" : c.width != null ? `${esc(Math.round(c.width))} cm` : "—") },
+          { key: "meters", label: L.metre, align: "r", cell: (c) => esc(fmtQty(c.meters)), foot: esc(fmtQty(t.totalMeters)) },
+          { key: "kg", label: L.kg, align: "r", cell: (c) => (c.kg > 0 ? esc(fmtQty(c.kg)) : ""), foot: esc(fmtQty(t.totalKg)) },
+        ],
+      })
     : "";
 
   const noteBlock = cfg.footerNote
     ? `<div class="note">${esc(cfg.footerNote)}</div>`
     : "";
+  // Alt not konumu (şablon ayarı): "top" → tablolardan ÖNCE, aksi halde (default)
+  // tablolardan sonra imza öncesinde. Tek seferlik baskı notu her zaman altta kalır.
+  const noteAtTop = cfg.footerNotePlacement === "top";
 
   const signatures = showSignatures
     ? `<div class="sign">${sigLabels
@@ -251,10 +392,20 @@ export function renderShipmentDispatchHtml(
         .join("")}</div>`
     : "";
 
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8">
-<style>
+  // Nüsha rozeti + konumlu bloklar + tek seferlik baskı notu + damga/QR çubuğu.
+  const copyBadge = docCopyBadge(cfg, esc);
+  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc);
+  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc);
+  const printNote = docPrintNoteHtml(meta.printNote, esc);
+  const stampsBar = docStampsBar(cfg, meta, esc, {
+    printedAt: L.printedAt,
+    printedBy: L.printedBy,
+  });
+
+  const css = scaleDocCss(
+    `
   * { box-sizing: border-box; }
-  @page { size: A4; margin: 9mm; }
+  ${docPageCss(style)}
   body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #111; font-size: 11px; }
   .sheet { position: relative; width: 100%; }
   .wm { position: fixed; top: 42%; left: 0; right: 0; text-align: center;
@@ -291,29 +442,44 @@ export function renderShipmentDispatchHtml(
   .sign-box { flex: 1; text-align: center; }
   .sign-line { border-top: 1px solid #000; margin-bottom: 3px; margin-top: 28px; }
   .sign-lbl { font-size: 10px; color: #333; }
-</style></head>
+  ${DOC_LOGO_CSS}
+  ${DOC_STAMPS_CSS}
+  ${docTableCss(style, [".sec"])}
+`,
+    style,
+  );
+
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<style>${css}</style></head>
 <body>
   ${watermark}
   <div class="sheet">
     <header>
       <div class="hl">
+        ${logo.left}
         <div class="company">${esc(company?.name ?? "")}</div>
         ${lhLines}
-        <div class="sayin">SAYIN: <b>${esc(h.customerName)}</b></div>
+        <div class="sayin">${L.to}: <b>${esc(h.customerName)}</b></div>
         ${customerSub ? `<div class="sub">${customerSub}</div>` : ""}
       </div>
       <div class="hr">
+        ${logo.right}
         <div class="title">${esc(title)}</div>
+        ${copyBadge}
         ${headRight}
       </div>
     </header>
 
     ${vehicleRow}
+    ${blocksTop}
+    ${noteAtTop ? noteBlock + printNote : ""}
     ${urunSection}
     ${cuvalSection}
     ${cekiSection}
-    ${noteBlock}
+    ${noteAtTop ? "" : noteBlock + printNote}
+    ${blocksBottom}
     ${signatures}
+    ${stampsBar}
   </div>
 </body></html>`;
 }

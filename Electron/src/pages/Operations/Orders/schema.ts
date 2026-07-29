@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const orderLineSchema = z.object({
   clientId: z.string(),
-  itemId: z.string().min(1, "Ürün seçilmeli"),
+  itemId: z.string().min(1, "Kumaş seçilmeli"),
   colorId: z.string().nullable().optional(),
   quantity: z.coerce.number().positive("Miktar 0'dan büyük olmalı"),
   width: z
@@ -16,7 +16,7 @@ export const orderLineSchema = z.object({
   unitPrice: z.string().optional().or(z.literal("")),
   customerItemName: z
     .string()
-    .max(200, "Müşterideki ürün adı en fazla 200 karakter olabilir")
+    .max(200, "Müşterideki kumaş adı en fazla 200 karakter olabilir")
     .optional()
     .or(z.literal("")),
   customerColorName: z

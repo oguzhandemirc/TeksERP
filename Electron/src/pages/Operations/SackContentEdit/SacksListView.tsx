@@ -38,9 +38,10 @@ const SACK_FILTERS: FilterDef[] = [
       { value: "ALL", label: "Tümü" },
     ],
   },
-  { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
-  { kind: "lookup", key: "itemId", label: "Ürün", service: itemService, queryKey: "items" },
-  { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
+  // Çoklu seçim (VEYA): backend virgülle ayrılmış ID'leri IN'e çevirir (searchSacks).
+  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
+  { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
+  { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   { kind: "numberRange", key: "width", label: "En", unit: "cm" },
 ];
 

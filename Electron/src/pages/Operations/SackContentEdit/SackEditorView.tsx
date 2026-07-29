@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Layers, Loader2, Lock, PackageOpen, RefreshCw, Scale, Trash2, UserRound, UserRoundCog, X } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -60,7 +61,7 @@ export function SackEditorView({
   });
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       {/* Başlık */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3">
         <div className="flex items-center gap-3">
@@ -82,9 +83,9 @@ export function SackEditorView({
                 <Badge
                   variant="outline"
                   className="gap-1 border-amber-500/40 font-mono text-[10px] text-amber-600"
-                  title="Şube kodu — ihracatta kullanılır"
+                  title="Şube ihracat kodu — sevk belgesinde 'İhracat Kodu' olarak basılır"
                 >
-                  Şube Kodu: {target.branchCode}
+                  İhracat Kodu: {target.branchCode}
                 </Badge>
               )}
             </div>
@@ -204,6 +205,6 @@ export function SackEditorView({
         initialBranchId={target.branchId}
         onReassigned={onReassigned}
       />
-    </div>
+    </PageShell>
   );
 }

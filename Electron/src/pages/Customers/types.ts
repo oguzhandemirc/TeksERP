@@ -6,6 +6,19 @@ export interface Customer {
   name: string;
   taxNumber: string | null;
   type: CompanyType;
+  // "Her şube = ayrı müşteri" kart alanları (2026-07) — tümü opsiyonel.
+  // exportCode: sevk belgelerinde şube kodu yoksa basılan ihracat kodu.
+  exportCode: string | null;
+  address: string | null;
+  city: string | null;
+  district: string | null;
+  country: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  email: string | null;
+  notes: string | null;
+  /** Belge şablon profili — null = genel Belge Şablonları ayarı. */
+  documentProfileId?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

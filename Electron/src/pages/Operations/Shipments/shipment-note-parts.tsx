@@ -91,7 +91,7 @@ export function ItemTable({ lines, totalQty }: { lines: ItemRow[]; totalQty: num
           <tr className="border-b-2 border-black">
             <Th className="w-8 text-center">#</Th>
             <Th>Sipariş</Th>
-            <Th>Ürün</Th>
+            <Th>Kumaş</Th>
             <Th>Renk</Th>
             <Th className="text-center">En</Th>
             <Th className="text-right">Metre</Th>
@@ -148,7 +148,7 @@ export function SackBreakdown({ sacks, totalKg }: { sacks: ShipmentDocSack[]; to
             <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr className="border-b border-gray-300 text-gray-600">
-                  <Th>Ürün</Th>
+                  <Th>Kumaş</Th>
                   <Th>Renk</Th>
                   <Th className="text-center">En</Th>
                   <Th className="text-right">Metre</Th>

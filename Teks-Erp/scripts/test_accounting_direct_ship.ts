@@ -156,7 +156,9 @@ async function main(): Promise<void> {
     const htmlRes = await printedDocumentService.getHtml(PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, directShipment!.id);
     const htmlStr = (htmlRes.data as { html?: string })?.html ?? "";
     check("fiş HTML: SUBCONTRACTOR_DIRECT_SHIP donmuş irsaliye (DirectShipment.id ile) döndü", Boolean(htmlStr));
-    check("fiş HTML: şube kodu belgede görünür (Şube Kodu: IHR-01)", htmlStr.includes("Şube Kodu") && htmlStr.includes("IHR-01"));
+    // 2026-07-28: belge artık TEK "İhracat Kodu" satırı basıyor (şube ihracat kodu
+    // ?? şirket ihracat kodu). Şube kodu doluysa "İhracat Kodu: IHR-01" görünür.
+    check("fiş HTML: şube ihracat kodu belgede 'İhracat Kodu' olarak görünür", htmlStr.includes("İhracat Kodu") && htmlStr.includes("IHR-01"));
 
     // ---- C) Regresyon: DIRECT'i istemeyen scope (olmayan müşteri) → 0 sevk ----
     const emptyReq = { query: { "filter[customerId]": "00000000-0000-0000-0000-000000000000" } } as unknown as Request;

@@ -103,10 +103,17 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
             .filter((l) => l.thisShipment > 0)
             .map((l) => (
               <View key={l.lineId} style={styles.lineRow}>
+                {/* Bizdeki ad esas; müşteri adı yalnız etiketli ek (Electron
+                    ShipmentDetailSheet ile aynı kural). */}
                 <Text style={styles.lineText} numberOfLines={1}>
-                  {l.customerItemName ?? l.item.name}
-                  {l.color ? ` · ${l.customerColorName ?? l.color.name}` : ''}
+                  {l.item.name}
+                  {l.color ? ` · ${l.color.name}` : ''}
                   {l.width ? ` · ${l.width}cm` : ''}
+                  {l.customerItemName || l.customerColorName
+                    ? ` (Müşteride: ${[l.customerItemName, l.customerColorName]
+                        .filter(Boolean)
+                        .join(' · ')})`
+                    : ''}
                 </Text>
                 <Text style={styles.meta}>{n(l.thisShipment)} m</Text>
               </View>

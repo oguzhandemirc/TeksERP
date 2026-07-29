@@ -3,7 +3,7 @@ import { routeColumns } from "./columns";
 import { routeService } from "./service";
 import { RouteFormDialog } from "./RouteFormDialog";
 import type { ProductionRoute } from "./types";
-import { generateRouteCode, type RouteFormValues } from "./schema";
+import { type RouteFormValues } from "./schema";
 
 interface StepCreate {
   stationId: string;
@@ -46,10 +46,7 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
       : { create: stepCreates },
   };
 
-  // Yeni kayıtta kod otomatik üretilir; düzenlemede mevcut kod backend'de değişmez (alanı göndermiyoruz).
-  if (!isEdit) {
-    return { ...base, code: generateRouteCode() };
-  }
+  // Kod backend'de üretilir (ROT+GGAAYY+NNNN); create'te gönderilmez, edit'te backend korur.
   return base;
 }
 

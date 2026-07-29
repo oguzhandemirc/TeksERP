@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { accessTiles, accessGroups, type AccessTile, type AccessTileGroup } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 
@@ -12,12 +13,11 @@ export function AccessHubPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Yetkilendirme"
-        description="Sisteme kim/ne girebilir — kullanıcı yetkileri ve saha cihazlarının erişimi."
       />
-      <div className="flex flex-col gap-8 p-6">
+      <PageBody className="flex flex-col gap-8 p-6">
         {accessGroups.map((group) => {
           const groupTiles = tilesByGroup.get(group.key);
           if (!groupTiles || groupTiles.length === 0) return null;
@@ -27,9 +27,6 @@ export function AccessHubPage() {
               <div className="mb-3 flex items-baseline gap-2">
                 <group.icon className="h-4 w-4 self-center text-muted-foreground" />
                 <h2 className="text-sm font-semibold">{group.title}</h2>
-                <span className="text-xs text-muted-foreground">
-                  {group.description}
-                </span>
               </div>
               <HubGrid className="xl:grid-cols-4">
                 {groupTiles.map((tile, i) => (
@@ -46,7 +43,7 @@ export function AccessHubPage() {
             </section>
           );
         })}
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

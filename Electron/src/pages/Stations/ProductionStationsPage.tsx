@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -10,7 +11,6 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { loadAllForPicker } from "@/lib/picker-loader";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import type { StationKind } from "@/types/enums";
 
 import { stationService } from "@/pages/Stations/service";
@@ -40,7 +40,8 @@ const PRODUCTION_KINDS: StationKind[] = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBC
 const EMPTY_MACHINES: Machine[] = [];
 
 const buildStationPayload = (v: StationFormValues, initial: Station | null): Partial<Station> => ({
-  code: initial?.code ?? generateCode(CODE_PREFIXES.STATION),
+  // Kod backend'de üretilir (IST+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+  ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
   type: v.type,
   kind: v.kind,
@@ -51,7 +52,8 @@ const buildStationPayload = (v: StationFormValues, initial: Station | null): Par
 
 const buildMachinePayload = (v: MachineFormValues, initial: Machine | null): Partial<Machine> => ({
   stationId: v.stationId,
-  code: initial?.code ?? generateCode(CODE_PREFIXES.MACHINE),
+  // Kod backend'de üretilir (MAK+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+  ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
   // Aktif/pasif form dışında yönetilir (Pasife Al / Aktifleştir aksiyonları).
 });
@@ -227,10 +229,9 @@ export function ProductionStationsPage() {
   const loading = stationsQ.isLoading || machinesQ.isLoading;
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Üretim İstasyonları"
-        description="Üretim akışındaki istasyonlar, makineleri ve (fason) renk/özellik yetenekleri. Tablet/yazıcı/kantar burada değil — Cihazlar/Donanım'da."
         actions={
           <div className="flex gap-2">
             <RefreshButton queryKey="stations" />
@@ -259,7 +260,7 @@ export function ProductionStationsPage() {
         onToggleInactive={() => setShowInactive((v) => !v)}
       />
 
-      <div className="flex-1 overflow-auto p-6">
+      <PageBody className="p-6">
         {loading && <Skeleton className="h-24 w-full" />}
         {!loading && allStations.length === 0 && (
           <div className="text-sm text-muted-foreground">Üretim istasyonu yok.</div>
@@ -292,7 +293,7 @@ export function ProductionStationsPage() {
             ))}
           </div>
         )}
-      </div>
+      </PageBody>
 
       <StationFormDialog
         open={stationDlg.open}
@@ -342,6 +343,6 @@ export function ProductionStationsPage() {
         onConfirm={handleMachineDeactivate}
         isPending={machineMut.removeMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }

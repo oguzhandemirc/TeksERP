@@ -53,6 +53,10 @@ export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
     },
   },
   uniqueField: "code",
+  duplicateNameField: "name",
+  entityLabel: "rota",
+  // Kod backend-authoritative: `ROT+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
+  autoCode: { prefix: "ROT" },
 };
 
 interface IncomingStep {
@@ -151,6 +155,29 @@ export class RouteService extends BaseService {
       });
       if (found.length !== subcontractorIds.length) {
         throw AppError.badRequest("Rota adımında bulunmayan veya pasif fason firma var");
+      }
+    }
+
+    // Planlanan fason firma, adımın gerektirdiği kategoride hizmet vermeli —
+    // planStep (workorder.service) ve fason sevk (subcontractor.service) bu
+    // kuralı zaten dayatıyor; şablon yazım yolu asimetrik biçimde atlıyordu.
+    // Yalnız İKİ alan da dolu adımlar denetlenir (tek bulk sorgu, perf kuralı).
+    const catPairs = steps
+      .map((s) => ({ sub: s.plannedSubcontractorId, cat: s.requiredCategoryId }))
+      .filter((p): p is { sub: string; cat: string } =>
+        typeof p.sub === "string" && p.sub.length > 0 &&
+        typeof p.cat === "string" && p.cat.length > 0,
+      );
+    if (catPairs.length > 0) {
+      const links = await prisma.subcontractorToCategory.findMany({
+        where: { OR: catPairs.map((p) => ({ subcontractorId: p.sub, categoryId: p.cat })) },
+        select: { subcontractorId: true, categoryId: true },
+      });
+      const have = new Set(links.map((l) => `${l.subcontractorId}:${l.categoryId}`));
+      if (catPairs.some((p) => !have.has(`${p.sub}:${p.cat}`))) {
+        throw AppError.badRequest(
+          "Rota adımında seçilen fason firma, adımın gerektirdiği kategoride hizmet vermiyor",
+        );
       }
     }
   }

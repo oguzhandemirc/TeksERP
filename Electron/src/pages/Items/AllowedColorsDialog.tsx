@@ -19,7 +19,6 @@ import { ColorFormDialog } from "@/pages/Colors/ColorFormDialog";
 import type { ColorFormValues } from "@/pages/Colors/schema";
 import type { Color } from "@/pages/Colors/types";
 import { nextSortOrder } from "@/lib/sort-order";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 
 interface Props {
   open: boolean;
@@ -56,7 +55,7 @@ export function AllowedColorsDialog({
   const createMut = useMutation({
     mutationFn: (values: ColorFormValues) =>
       colorService.create({
-        code: generateCode(CODE_PREFIXES.COLOR),
+        // Kod backend'de üretilir (RNK+GGAAYY+NNNN) — istemci göndermez.
         name: values.name.trim(),
         hex: values.hex || null,
         sortOrder: nextSortOrder(colorsQ.data?.data ?? []),
@@ -88,7 +87,7 @@ export function AllowedColorsDialog({
           <DialogHeader>
             <DialogTitle>İzinli Renkler</DialogTitle>
             <DialogDescription>
-              Bu ürün için seçilebilir renkler. Boş bırakılırsa tüm aktif renkler serbest.
+              Bu kumaş için seçilebilir renkler. Boş bırakılırsa tüm aktif renkler serbest.
             </DialogDescription>
           </DialogHeader>
 
@@ -119,7 +118,7 @@ export function AllowedColorsDialog({
           </div>
 
           <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-            Not: Hiçbir renk seçmezseniz bu ürüne <span className="font-medium text-foreground">tüm aktif renkler</span> serbesttir.
+            Not: Hiçbir renk seçmezseniz bu kumaşa <span className="font-medium text-foreground">tüm aktif renkler</span> serbesttir.
           </p>
 
           <DialogFooter>

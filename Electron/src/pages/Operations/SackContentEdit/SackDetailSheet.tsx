@@ -16,7 +16,7 @@ import { shipmentStatusLabels, type SackContentRoll, type SackSearchRow } from "
 const fmtQty = (n: number) =>
   `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
 
-/** İçerik → ürün·renk·en özet grupları (renkli çip için). */
+/** İçerik → kumaş·renk·en özet grupları (renkli çip için). */
 function specGroups(rolls: SackContentRoll[]) {
   const m = new Map<
     string,
@@ -86,7 +86,7 @@ export function SackDetailSheet({ sack, onOpenChange }: Props) {
             </p>
           ) : (
             <>
-              {/* Renkli içerik özeti çipleri (ürün · renk · en). */}
+              {/* Renkli içerik özeti çipleri (kumaş · renk · en). */}
               <div className="mb-3 flex flex-wrap gap-1.5">
                 {groups.map((g, i) => (
                   <span

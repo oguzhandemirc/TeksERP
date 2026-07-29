@@ -62,7 +62,7 @@ export interface SackStoreListResponse {
 // SLIDE-OVER (karta tıklayınca) — çuval + içindeki toplar (lazy)
 // ===========================================================================
 
-/** Çuval içeriği — ürün+renk+en bazında grup (irsaliye-benzeri özet döküm). */
+/** Çuval içeriği — kumaş+renk+en bazında grup (irsaliye-benzeri özet döküm). */
 export interface SackContent {
   itemName: string;
   colorName: string | null;

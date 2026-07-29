@@ -24,7 +24,7 @@ interface Props {
 /**
  * Kartela stoğunu elle düşürme — kayıp/hasar/numune/sayım düzeltmesi için.
  * Kartelalar fungible ADET sayıldığından per-kayıt seçim YOK; onay somut grubu
- * (ürün+renk) + adet + zorunlu gerekçeyi gösterir. Backend FIFO ile N kartelayı
+ * (kumaş+renk) + adet + zorunlu gerekçeyi gösterir. Backend FIFO ile N kartelayı
  * iptal eder (soft-cancel) → stoktan düşer.
  */
 export function ReduceKartelaStockDialog({ group, open, onOpenChange }: Props) {

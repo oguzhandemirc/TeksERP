@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
 import { PanelRight, Trash2 } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -11,6 +11,8 @@ import type { DataTablePagination } from "@/hooks/useDataTable";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
+import { subcontractorService } from "@/pages/Subcontractors/service";
+import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import type { RollStatusTabKey } from "./service";
@@ -31,7 +33,7 @@ const FILTERS: FilterDef[] = [
   {
     kind: "lookup",
     key: "itemId",
-    label: "Ürün",
+    label: "Kumaş",
     service: itemService,
     queryKey: "items",
   },
@@ -61,9 +63,31 @@ const SHIPMENT_SCOPE_FILTER: FilterDef = {
   ],
 };
 
-// Serbest/rezerve filtresi yalnız depo (Bitmiş Depo) sekmesinde gösterilir.
+// Yalnız "Fasonda" sekmesi: aktif fason sevkine göre firma + işlem (kategori)
+// daraltması. Özet şeridi chip/kartları da AYNI filter anahtarlarına yazar —
+// FilterBar dropdown'ı ile chip seçimi tek URL state'inde buluşur.
+const FASON_FILTERS: FilterDef[] = [
+  {
+    kind: "lookup",
+    key: "subcontractorId",
+    label: "Fason Firması",
+    service: subcontractorService,
+    queryKey: "subcontractors",
+  },
+  {
+    kind: "lookup",
+    key: "subcontractorCategoryId",
+    label: "İşlem",
+    service: subcontractorCategoryService,
+    queryKey: "subcontractor-categories",
+  },
+];
+
+// Serbest/rezerve filtresi yalnız depo (Bitmiş Depo); fason filtreleri yalnız Fasonda.
 export function buildRollFilterDefs(tab: RollStatusTabKey): FilterDef[] {
-  return tab === "FINISHED_STOCK" ? [...FILTERS, SHIPMENT_SCOPE_FILTER] : FILTERS;
+  if (tab === "FINISHED_STOCK") return [...FILTERS, SHIPMENT_SCOPE_FILTER];
+  if (tab === "SUBCONTRACTOR") return [...FILTERS, ...FASON_FILTERS];
+  return FILTERS;
 }
 
 interface Props {
@@ -76,6 +100,11 @@ interface Props {
   /** true ise dahili filtre satırı çizilmez — çağıran filtreleri kendi araç
    *  çubuğuna (ör. okutma kutusuyla aynı satıra) taşımak istiyor (Kartela). */
   hideFilterBar?: boolean;
+  /** Seçili satırların PDF/Excel indirme dosya adı öneki (ör. "Envanter"). Verilmezse
+   *  DataTable varsayılanı ("Liste") kullanılır. */
+  exportName?: string;
+  /** Sayfalama çubuğunun sağına eklenen aksiyonlar ("Tümünü İndir" + "Envanter Özeti"). */
+  paginationActions?: ReactNode;
 }
 
 /**
@@ -86,7 +115,7 @@ interface Props {
  * sekme şeridi vb.) yerleştirir; `hideFilterBar` ile bu gövdenin kendi filtre
  * satırı bastırılabilir.
  */
-export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBar = false }: Props) {
+export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBar = false, exportName, paginationActions }: Props) {
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
 
@@ -108,7 +137,12 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
         table={table}
         isLoading={isLoading}
         pagination={pagination}
+        paginationActions={paginationActions}
         emptyText="Top bulunamadı."
+        exportName={exportName}
+        // Seçim çubuğunda ipucu metni yok (sevkiyat ekranlarıyla tutarlı) — "Seçili
+        // PDF/Excel" ve varsa "Stoktan Kaldır" butonları zaten kendini anlatıyor.
+        selectionHint={null}
         onRowClick={setSelected}
         // Ham Stok'ta seçim çubuğuna "Stoktan Kaldır" (iptal) — DataTable bunu
         // alt şeride (Seçimi temizle'nin yanına) koyar; ayrı üst şerit yok.

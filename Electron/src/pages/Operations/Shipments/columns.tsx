@@ -2,13 +2,14 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Undo2 } from "lucide-react";
 import { StatusBadge } from "@/components/operations/StatusBadge";
 import { Badge } from "@/components/ui/badge";
+import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat } from "@/lib/format";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentListItem } from "./types";
 
 export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     accessorKey: "shipmentNo",
-    header: "Sevkiyat No",
+    header: () => <SortableHeader field="shipmentNo" label="Sevkiyat No" />,
     cell: ({ row }) => {
       const s = row.original;
       return (
@@ -71,6 +72,16 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
               <Undo2 className="h-3 w-3" /> {c.returns} iade
             </Badge>
           )}
+          {/* Yalnız kumaş/renk filtresi aktifken: bu sevkiyattaki eşleşen top sayısı. */}
+          {row.original.matchRollCount != null && (
+            <Badge
+              variant="outline"
+              className="gap-0.5 border-amber-500/50 bg-amber-500/10 px-1 py-0 text-[10px] font-medium text-amber-600"
+              title="Kumaş/renk filtresine uyan (eşleşen) top sayısı — detayda vurgulanır"
+            >
+              eşleşen: {row.original.matchRollCount} top
+            </Badge>
+          )}
         </span>
       );
     },
@@ -93,7 +104,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   },
   {
     id: "date",
-    header: "Tarih",
+    header: () => <SortableHeader field="createdAt" label="Tarih" />,
     cell: ({ row }) => {
       const s = row.original;
       const d = s.dispatchedAt ?? s.createdAt;

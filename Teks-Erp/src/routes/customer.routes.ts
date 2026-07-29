@@ -12,13 +12,17 @@ const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:f
 import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
 import templateRouteRoutes from "./customer-template-route.routes";
+import standaloneLabelRoutes from "./customer-standalone-label.routes";
 
 const service = new CustomerService({
   modelName: "customer",
   tableName: "CUSTOMER",
-  searchFields: ["code", "name", "taxNumber"],
+  // exportCode aramada: sevk belgesindeki ihracat kodundan müşteri bulunabilsin.
+  searchFields: ["code", "name", "taxNumber", "exportCode"],
   defaultInclude: undefined,
   uniqueField: "code",
+  duplicateNameField: "name",
+  entityLabel: "müşteri",
   // Tek-adım müşteri+şube: create body'sindeki opsiyonel `branches[]` sanitize'ı
   // geçip Prisma nested-create'e (`{ create: [...] }`) sarılır. CustomerService.create
   // diziyi ÖNCE doğrular/şekillendirir (mass-assignment guard); update'te düşürülür.
@@ -33,6 +37,8 @@ router.use("/:customerId/branches", branchRoutes);
 router.use("/:customerId", aliasRoutes);
 // /api/customers/:customerId/template-routes — müşteriye özel etiket şablonu ataması
 router.use("/:customerId", templateRouteRoutes);
+// /api/customers/:customerId/standalone-labels — müşteriye bağlı serbest etiketler (M:N; rota DEĞİL)
+router.use("/:customerId", standaloneLabelRoutes);
 
 /**
  * @openapi
@@ -107,6 +113,15 @@ router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_
  *               name: { type: string, example: "Yeni Tekstil Ltd." }
  *               taxNumber: { type: string }
  *               type: { type: string, enum: [CUSTOMER, SUPPLIER, SUBCONTRACTOR], default: CUSTOMER }
+ *               exportCode: { type: string, description: "İhracat kodu — sevk belgelerinde şube kodu yoksa basılır" }
+ *               address: { type: string }
+ *               city: { type: string }
+ *               district: { type: string }
+ *               country: { type: string }
+ *               contactName: { type: string }
+ *               contactPhone: { type: string }
+ *               email: { type: string }
+ *               notes: { type: string }
  *     responses:
  *       201:
  *         description: Müşteri oluşturuldu
@@ -137,6 +152,15 @@ router.post("/", verifyToken, requirePermission("customer:write"), controller.cr
  *               name: { type: string }
  *               taxNumber: { type: string }
  *               type: { type: string, enum: [CUSTOMER, SUPPLIER, SUBCONTRACTOR] }
+ *               exportCode: { type: string }
+ *               address: { type: string }
+ *               city: { type: string }
+ *               district: { type: string }
+ *               country: { type: string }
+ *               contactName: { type: string }
+ *               contactPhone: { type: string }
+ *               email: { type: string }
+ *               notes: { type: string }
  *     responses:
  *       200:
  *         description: Güncellendi

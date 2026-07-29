@@ -36,6 +36,18 @@ export const shipmentService = {
   /** Sevkiyatı iptal et (CANCELLED) — çuvallar depoya döner, tahsisler silinir (sipariş bağı kalkar). */
   cancel: (id: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/cancel`, {}).then((r) => r.data),
+
+  /** İrsaliye açıklamasını oku (kayıtlı annotation not). */
+  getDispatchNote: (id: string): Promise<ApiResponse<{ dispatchNote: string | null }>> =>
+    apiClient
+      .get<ApiResponse<{ dispatchNote: string | null }>>(`/api/shipping/shipments/${id}/dispatch-note`)
+      .then((r) => r.data),
+
+  /** İrsaliye açıklamasını kaydet — sürüm doğurmaz, her an düzenlenebilir. */
+  setDispatchNote: (id: string, dispatchNote: string | null): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/dispatch-note`, { dispatchNote })
+      .then((r) => r.data),
 };
 
 /** İptal önizleme yanıtı (backend getCancelPreview ile eşleşir — havuz modeli, rolls[] YOK). */

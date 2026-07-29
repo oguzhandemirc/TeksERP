@@ -55,6 +55,8 @@ import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet'
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
+import StandaloneLabelSheet from '../../../components/labels/StandaloneLabelSheet';
+import { StandaloneLabelPrinter } from '../../../components/labels/StandaloneLabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
 import { tamburService } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
@@ -254,6 +256,12 @@ export default function TamburScreen() {
 
   // Geçmiş çıktı listesi modal state
   const [recentOutputOpen, setRecentOutputOpen] = useState(false);
+
+  // Serbest etiket (topa bağlı olmayan bakım/uyarı etiketi) — sheet + baskı işi.
+  const [standaloneOpen, setStandaloneOpen] = useState(false);
+  const [standaloneJob, setStandaloneJob] = useState<{ templateId: string; copies: number } | null>(
+    null,
+  );
 
   // Yazdırılacak aktif rol — LabelPrinter bu state'i izler ve sıfırlanınca
   // hazır olur. Per-row "Bas" butonu bu state'i set eder.
@@ -1203,6 +1211,7 @@ export default function TamburScreen() {
   const openList = () => drawerQueue.run(() => setListModalOpen(true));
   const openRecentOutput = () => drawerQueue.run(() => setRecentOutputOpen(true));
   const openRecut = () => drawerQueue.run(() => setRecutScannerOpen(true));
+  const openStandalone = () => drawerQueue.run(() => setStandaloneOpen(true));
 
   // Top Kesme akışı: kamera modal'ından tarama → onScan SADECE modal'ı kapatır
   // ve barkod'u pending state'e atar. Asıl resolve modal tamamen kapandıktan
@@ -1688,6 +1697,12 @@ export default function TamburScreen() {
         fill
       />
       <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} fill />
+      <HeaderChip
+        icon="tag-multiple"
+        label="Serbest Etiket"
+        onPress={() => openStandalone()}
+        fill
+      />
     </>
   );
 
@@ -1720,6 +1735,11 @@ export default function TamburScreen() {
                 icon="content-cut"
                 label="Kesme"
                 onPress={() => openRecut()}
+              />
+              <HeaderChip
+                icon="tag-multiple"
+                label="Serbest Etiket"
+                onPress={() => openStandalone()}
               />
             </>
           )}
@@ -2766,6 +2786,18 @@ export default function TamburScreen() {
           }
         }}
       />
+
+      {/* Serbest Etiket Bas — topa bağlı olmayan bakım/uyarı etiketi. Sheet
+          şablon + kopya seçtirir, StandaloneLabelPrinter istasyon yazıcısında basar. */}
+      <StandaloneLabelSheet
+        visible={standaloneOpen}
+        onDismiss={() => setStandaloneOpen(false)}
+        onPrint={(templateId, copies) => {
+          setStandaloneOpen(false);
+          setStandaloneJob({ templateId, copies });
+        }}
+      />
+      <StandaloneLabelPrinter job={standaloneJob} onDone={() => setStandaloneJob(null)} />
 
       {/* Listeden Seç — recut: WO sipariş satırları; ana akış: TÜM müşteriler
           (sipariştekiler önce). Etiket bambaşka müşteriye de basılabilsin diye. */}

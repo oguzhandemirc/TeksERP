@@ -10,6 +10,9 @@
 import bwipjs from "bwip-js";
 import { PrinterLanguage } from "@prisma/client";
 import { qrSymbolModules, dplBarcodeMulToNum, CP1254_TO_UNICODE } from "./native-label.shared";
+import { Bitmap1 } from "./raster/raster-bitmap";
+import { bmpDataUri } from "./raster/raster-bmp";
+import { GW_ONE_IS_WHITE } from "./raster/raster-envelope-pplb";
 
 // EPL2 bitmap font kodu → {w,h} dot (çarpan öncesi). Generator EPL_FONT ile AYNI değerler
 // (native-label.shared) — PPLB/ZPL önizleme metni yazıcı hücresiyle birebir (textLength ile).
@@ -101,11 +104,45 @@ function wrapSvg(W: number, H: number, els: string[]): string | null {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#fff"/>${els.join("")}</svg>`;
 }
 
-/** PPLB/EPL2 komutlarını görsel SVG'ye çevir. Boyut (q/Q) yoksa null. */
+/** Ham PPLB string'inden GW (inline 1bpp grafik) bloklarını ÇIKAR → her biri BMP <image>'e
+ *  çözülür (baskıyla AYNI ikon — placeholder değil). GW binary'si CR/LF baytı içerebilir →
+ *  satır-böl parser'ı bozar; bu yüzden ÖNCE ham string üzerinde bayt-indeksle ayıklanır, kalan
+ *  "clean" satır-satır işlenir. Polarite GW_ONE_IS_WHITE ile emitter'la BİREBİR (1=beyaz iken
+ *  bit ters çevrilir → Bitmap1'in 1=siyah beklentisine döner). */
+function extractPplbGw(raw: string): { clean: string; images: string[] } {
+  const images: string[] = [];
+  const re = /GW(\d+),(\d+),(\d+),(\d+),/g;
+  let clean = "";
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    const rowBytes = +m[3];
+    const height = +m[4];
+    const dataStart = re.lastIndex;
+    const dataLen = rowBytes * height;
+    const dataEnd = dataStart + dataLen;
+    if (rowBytes <= 0 || height <= 0 || dataEnd > raw.length) continue; // bozuk → normal metin gibi kalsın
+    clean += raw.slice(last, m.index); // GW header'ından ÖNCESİ
+    const gfx = new Bitmap1(rowBytes * 8, height);
+    for (let k = 0; k < dataLen; k++) {
+      const byte = raw.charCodeAt(dataStart + k) & 0xff;
+      gfx.data[k] = GW_ONE_IS_WHITE ? (~byte & 0xff) : byte;
+    }
+    images.push(`<image href="${bmpDataUri(gfx)}" x="${m[1]}" y="${m[2]}" width="${rowBytes * 8}" height="${height}"/>`);
+    last = dataEnd;
+    re.lastIndex = dataEnd; // binary'nin İÇİNDE tekrar GW aramasını önle
+  }
+  clean += raw.slice(last);
+  return { clean, images };
+}
+
+/** PPLB/EPL2 komutlarını görsel SVG'ye çevir. Boyut (q/Q) yoksa null. GW ikonları ham
+ *  string'ten ayıklanıp gerçek BMP olarak çizilir; kalan komutlar satır-satır. */
 export function renderPplbToSvg(pplb: string): string | null {
-  const lines = pplb.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const { clean, images } = extractPplbGw(pplb);
+  const lines = clean.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   let W = 0, H = 0;
-  const els: string[] = [];
+  const els: string[] = [...images]; // GW ikonları zemin; metin/barkod üstüne biner
   for (const ln of lines) {
     let m: RegExpMatchArray | null;
     if ((m = ln.match(/^q(\d+)/))) { W = +m[1]; continue; }
@@ -140,7 +177,7 @@ export function renderPplbToSvg(pplb: string): string | null {
       els.push(`<rect x="${m[1]}" y="${m[2]}" width="${+m[4] - +m[1]}" height="${+m[5] - +m[2]}" fill="none" stroke="#000" stroke-width="${m[3]}"/>`);
       continue;
     }
-    // N, D, S, P vb. — çizim üretmez, atla.
+    // N, D, S, P vb. — çizim üretmez, atla. (GW ikon blokları extractPplbGw'de ayıklandı.)
   }
   return wrapSvg(W, H, els);
 }
@@ -226,6 +263,19 @@ export function renderZplToSvg(zpl: string): string | null {
         ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000"/>`
         : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#000" stroke-width="${t}"/>`,
     );
+  }
+  // Satır-içi 1bpp grafik (icon ^GFA): ^FO x,y^GFA,t,t,rowBytes,HEX^FS → BMP data-URI
+  // (bwipImg'in <image> gömme kalıbıyla aynı; raster-bmp kodlayıcı yeniden kullanılır).
+  // Parser TOLERANSLI: bozuk sayaç / eksik hex → sessizce atla (önizleme çökmez).
+  for (const g of zpl.matchAll(/\^FO(\d+),(\d+)\^GFA,(\d+),\d+,(\d+),([0-9A-Fa-f]+)\^FS/g)) {
+    const [, gx, gy, totalStr, rowBytesStr, hexRaw] = g;
+    const total = +totalStr;
+    const rowBytes = +rowBytesStr;
+    if (!total || !rowBytes || total % rowBytes !== 0 || hexRaw.length < total * 2) continue;
+    const rows = total / rowBytes;
+    const gfx = new Bitmap1(rowBytes * 8, rows);
+    gfx.data.set(Buffer.from(hexRaw.slice(0, total * 2), "hex"));
+    els.push(`<image href="${bmpDataUri(gfx)}" x="${gx}" y="${gy}" width="${rowBytes * 8}" height="${rows}"/>`);
   }
   // Metin: ^FO x,y^A0<rot>,h,w[^FR]^FD veri^FS (rot=N/R/I/B; ^FR = ters/beyaz)
   for (const t of zpl.matchAll(/\^FO(\d+),(\d+)\^A0([NRIB]),(\d+),(\d+)(\^FR)?\^FD([\s\S]*?)\^FS/g)) {

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
+import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import type { EditorTarget } from "./types";
@@ -52,6 +53,7 @@ export function ReassignCustomerDialog({
   const qc = useQueryClient();
   const [customerId, setCustomerId] = useState<string | null>(initialCustomerId);
   const [branchId, setBranchId] = useState<string | null>(initialBranchId);
+  const branchesEnabled = useCustomerBranchesEnabled();
 
   // Açılışta mevcut müşteri/şube ile başlat (farklı çuvala geçince tazelensin).
   useEffect(() => {
@@ -108,7 +110,7 @@ export function ReassignCustomerDialog({
             />
           </label>
 
-          {customerId && (
+          {customerId && branchesEnabled && (
             <label className="block text-sm">
               <span className="mb-1 block text-muted-foreground">Şube (opsiyonel)</span>
               <BranchSelect customerId={customerId} value={branchId} onChange={setBranchId} />

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PackagePlus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { SacksListView } from "./SacksListView";
@@ -42,10 +43,9 @@ export function SackContentEditPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
-        title="Çuval Deposu / Paketleme"
-        description="Çuvalları filtrele/ara, tıkla → içeriğini düzenle; depodaki çuvalları seç → havuzdan sevkiyat kur."
+        title="Paketleme / Çuvallar"
         actions={
           <>
             <Button size="sm" onClick={() => setNewOpen(true)} className="gap-1.5">
@@ -61,6 +61,6 @@ export function SackContentEditPage() {
       />
       <SacksListView onEditSack={(s) => setTarget(rowToTarget(s))} />
       <NewSackDialog open={newOpen} onOpenChange={setNewOpen} onCreated={(t) => setTarget(t)} />
-    </div>
+    </PageShell>
   );
 }

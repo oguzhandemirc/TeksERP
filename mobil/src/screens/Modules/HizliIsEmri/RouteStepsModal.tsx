@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Text, TouchableRipple, Icon, TextInput, Button } from 'react-native-paper';
 
 import AppModal from '../../../components/AppModal';
@@ -64,7 +65,11 @@ export default function RouteStepsModal({
         </TouchableRipple>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={90}
+      >
         {steps.length === 0 ? (
           <Text style={styles.empty}>Bu rotada adım tanımlı değil.</Text>
         ) : (
@@ -163,7 +168,7 @@ export default function RouteStepsModal({
           })
         )}
         <View style={{ height: spacing.md }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <View style={styles.footer}>
         <Button mode="contained" onPress={onDismiss} contentStyle={styles.footerBtnContent} style={styles.footerBtn}>

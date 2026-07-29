@@ -17,6 +17,8 @@ const service = new ColorService({
   searchFields: ["code", "name"],
   defaultInclude: undefined,
   uniqueField: "code",
+  // Kod backend-authoritative: `RNK+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
+  autoCode: { prefix: "RNK" },
 });
 
 const controller = new BaseController(service);

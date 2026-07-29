@@ -21,8 +21,8 @@ import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
 import type { Customer } from "@/pages/Customers/types";
-import type { CustomerFormValues } from "@/pages/Customers/schema";
-import { usePricingEnabled } from "@/hooks/usePricingEnabled";
+import { customerCardPayload, type CustomerFormValues } from "@/pages/Customers/schema";
+import { usePricingEnabled, useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { usePulseSync } from "@/hooks/usePulseSync";
 import { currencyService } from "@/services/featureFlagService";
 import { OrderLinesEditor } from "./OrderLinesEditor";
@@ -99,6 +99,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
         (l.workOrderLinks ?? []).every((link) => link.workOrder.status === "CANCELLED"),
       ));
   const pricingEnabled = usePricingEnabled();
+  const branchesEnabled = useCustomerBranchesEnabled();
 
   const currenciesQ = useQuery({
     queryKey: ["currencies"],
@@ -185,20 +186,22 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                 )}
               />
             </FormField>
-            <FormField label="Şube" error={form.formState.errors.branchId}>
-              <Controller
-                control={form.control}
-                name="branchId"
-                render={({ field }) => (
-                  <BranchSelect
-                    customerId={form.watch("customerId") || null}
-                    value={field.value}
-                    onChange={field.onChange}
-                    disabled={headerLocked}
-                  />
-                )}
-              />
-            </FormField>
+            {branchesEnabled && (
+              <FormField label="Şube" error={form.formState.errors.branchId}>
+                <Controller
+                  control={form.control}
+                  name="branchId"
+                  render={({ field }) => (
+                    <BranchSelect
+                      customerId={form.watch("customerId") || null}
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled={headerLocked}
+                    />
+                  )}
+                />
+              </FormField>
+            )}
           </div>
 
           {/* Saha #16: sipariş no görünür + override edilebilir (boş = otomatik).
@@ -329,6 +332,8 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
           // Kod backend'de üretilir (MUS+GGAAYY+NNNN) — istemciden gönderilmez.
           name: v.name,
           taxNumber: v.taxNumber || null,
+          // Kart alanları da iletilir — formda görünen hiçbir girdi düşmesin.
+          ...customerCardPayload(v),
           type: v.type,
           isActive: true,
         } as Partial<Customer>);

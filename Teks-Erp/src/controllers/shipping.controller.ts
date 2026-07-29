@@ -62,6 +62,7 @@ const sackIdsSchema = z.object({ sackIds: z.array(z.string().uuid("Geçersiz çu
 const removeShipmentSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]) });
 const procedureCodeSchema = z.object({ procedureCode: z.string().trim().max(64).nullable().optional() });
+const dispatchNoteSchema = z.object({ dispatchNote: z.string().trim().max(500).nullable().optional() });
 const dispatchSchema = z.object({
   plateNumber: z.string().trim().max(32).optional().nullable(),
   driverName: z.string().trim().max(100).optional().nullable(),
@@ -234,6 +235,21 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  setDispatchNote = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = dispatchNoteSchema.parse(req.body);
+      const result = await this.service.setDispatchNote(req.params.id as string, body.dispatchNote ?? null, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  getDispatchNote = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getDispatchNote(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   dispatchShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = dispatchSchema.parse(req.body);
@@ -328,6 +344,11 @@ export class ShippingController {
         const v = req.query[`filter[${k}]`];
         return typeof v === "string" && v.trim() ? v.trim() : undefined;
       };
+      // Çoklu seçim: FilterBar multi-lookup virgülle ayrılmış ID gönderir → liste.
+      const filtIds = (k: string): string[] | undefined => {
+        const ids = filt(k)?.split(",").map((s) => s.trim()).filter(Boolean);
+        return ids?.length ? ids : undefined;
+      };
       const num = (v: string | undefined): number | undefined => {
         if (v == null || v === "") return undefined;
         const n = Number(v);
@@ -339,11 +360,11 @@ export class ShippingController {
         : undefined;
       const sortOrderRaw = req.query.sortOrder;
       const result = await sackSearchService.searchSacks({
-        itemId: filt("itemId"),
-        colorId: filt("colorId"),
+        itemId: filtIds("itemId"),
+        colorId: filtIds("colorId"),
         widthMin: num(filt("widthMin")),
         widthMax: num(filt("widthMax")),
-        customerId: filt("customerId"),
+        customerId: filtIds("customerId"),
         scope,
         search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
         sortBy: typeof req.query.sortBy === "string" ? req.query.sortBy : undefined,

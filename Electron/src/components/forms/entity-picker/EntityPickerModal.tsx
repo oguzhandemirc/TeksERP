@@ -51,14 +51,14 @@ export interface EntityPickerModalProps<T extends { id: string }> {
   /** Modal içinde "hızlı ekle" butonu göster. Tıklanınca modal kapanır, callback çağrılır. */
   quickAddLabel?: string;
   onQuickAdd?: () => void;
-  /** Toplam sayı etiketi — "5 toplam {countLabel}" şeklinde gösterilir. Örn: "müşteri", "ürün". */
+  /** Toplam sayı etiketi — "5 toplam {countLabel}" şeklinde gösterilir. Örn: "müşteri", "kumaş". */
   countLabel?: string;
 }
 
 /**
  * Genel "ara-ve-seç" modalı. Buton → modal (arama + sonsuz kaydırma). Sunucu
  * tarafı arama/sayfalama ([[useEntityPickerData]]); yüzlerce şablon/istasyon/
- * ürün için ölçeklenir. Renk seçici [[ColorPickerModal]] ile aynı görsel dil.
+ * kumaş için ölçeklenir. Renk seçici [[ColorPickerModal]] ile aynı görsel dil.
  */
 export function EntityPickerModal<T extends { id: string }>({
   value,

@@ -42,7 +42,7 @@ import { rollService, type InitialEntryPayload } from "./service";
 const QUALITY_NONE = "__none__";
 
 const schema = z.object({
-  itemId: z.string().uuid("Ürün seçilmeli"),
+  itemId: z.string().uuid("Kumaş seçilmeli"),
   colorId: z.string().uuid().nullable(),
   initialQty: z.number().positive("Miktar pozitif olmalı"),
   weightKg: z.number().positive("Ağırlık pozitif olmalı").nullable(),
@@ -193,7 +193,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
         </DialogHeader>
 
         <form onSubmit={doSubmit(false)} className="space-y-3">
-          <FormField label="Ürün" error={form.formState.errors.itemId} required>
+          <FormField label="Kumaş" error={form.formState.errors.itemId} required>
             <Controller
               control={form.control}
               name="itemId"
@@ -204,7 +204,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
                   service={itemService}
                   queryKey="items"
                   getLabel={(it) => `${it.code} — ${it.name}`}
-                  placeholder="Ürün ara..."
+                  placeholder="Kumaş ara..."
                 />
               )}
             />

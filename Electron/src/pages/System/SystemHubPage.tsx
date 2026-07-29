@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { systemTiles, systemTileSections } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
@@ -8,9 +9,9 @@ export function SystemHubPage() {
   const visibleTiles = systemTiles.filter((t) => !t.adminOnly || isAdmin);
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader title="Sistem" description="Aktivite, ayarlar ve sistem kayıtları." />
-      <div className="space-y-8 p-6">
+    <PageShell>
+      <PageHeader title="Sistem" />
+      <PageBody className="space-y-8 p-6">
         {systemTileSections.map((section) => {
           const tiles = visibleTiles.filter((t) => t.group === section.group);
           if (tiles.length === 0) return null;
@@ -39,7 +40,7 @@ export function SystemHubPage() {
             </section>
           );
         })}
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

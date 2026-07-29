@@ -13,6 +13,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { dispatchNativeSend } from "./helpers/printer-transport";
 import { readLabelNativeSendEnabled } from "./system-setting.service";
+import { assertTemplateAssignable } from "./label-template.service";
 import { LabelKind, ConnectionType, PrinterLanguage, PeripheralKind } from "@prisma/client";
 import type { ApiResponse } from "../types/api.types";
 
@@ -258,6 +259,8 @@ export class PeripheralDeviceService extends BaseService {
         select: { id: true },
       });
       if (!tpl) throw AppError.badRequest("Şablon bulunamadı veya pasif");
+      // Statik etiket kuralı: barkodsuz varyantlı şablon cihaza ATANAMAZ (kaldırma serbest).
+      await assertTemplateAssignable(templateId);
       await prisma.peripheralTemplateRoute.upsert({
         where: { peripheralId_kind: { peripheralId, kind } },
         update: { templateId },

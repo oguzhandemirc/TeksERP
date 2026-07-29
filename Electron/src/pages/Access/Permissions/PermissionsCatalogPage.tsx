@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, Smartphone, Shield, Search, Info, Asterisk } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,10 +52,9 @@ export function PermissionsCatalogPage() {
   }, [query.data, search]);
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Yetki Kataloğu"
-        description="Sistemdeki tüm yetkilerin referans listesi (salt-okunur)."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
@@ -77,7 +77,7 @@ export function PermissionsCatalogPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
+      <PageBody className="overflow-x-hidden p-6">
         {query.isLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-32 w-full" />
@@ -180,7 +180,7 @@ export function PermissionsCatalogPage() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

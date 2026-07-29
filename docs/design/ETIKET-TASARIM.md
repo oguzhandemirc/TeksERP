@@ -88,10 +88,21 @@ fark glif piksel şekilleri (bitmap kafa vs vektör motor) — boyut/konum/metin
 | line / box | ✓ (DPL font-X) | ✓ | ✓ | ✓ |
 | **barkod okunur satırı** | ✓ ortalı | ✓ ortalı | ✓ ortalı | ✓ ortalı |
 | lengthBanner | **çerçeveli** (DPL reverse güvenilmez) | ✓ siyah/beyaz | ✓ siyah/beyaz | ✓ siyah/beyaz |
+| icon (bakım sembolü) | ✗ skip (DPL grafik ayrı iş) | ✓ **GW** inline | ✓ ^GFA inline | ✓ SVG |
 | logo/görsel | v1'de YOK (karar) | — | — | — |
 
 - **Barkod okunur satırı** dört dilde de firmware'in sola-yasladığı satır KAPATILIP
   manuel olarak barkod ALTINDA ORTALANIR (code128WidthDots ile).
+- **icon / bakım sembolü (2026-07-27 — PPLB sahaya indi):** Metin/barkod NATIVE komut
+  kalır; SADECE ikon 1bpp bitmap olarak gömülür — Bluetooth'ta düşük yük (tüm etiketi
+  raster'a çevirmeye gerek yok). PPLB `GW` (Print Immediate Graphics), ZPL `^GFA`, ikisi
+  de aynı `renderIconBitmap`/`iconBitmap` çıktısını kullanır. PPLB GW kodlaması +
+  polaritesi `pplbGwBlock` ile tam-raster zarfıyla TEK KAYNAK; binary blok komut akışına
+  **latin1 string** olarak gömülür (join(CRLF) bozmaz, transport bayt round-trip). Fiziksel
+  kill-switch: `PPLB_RASTER_VERIFIED` (aynı GW komutu) — Argox GW'yi basmıyorsa false yap →
+  ikon PPLB'de atlanır (rest native basılır), diğer diller etkilenmez. **PPLA (DPL) hâlâ
+  skip** — DPL grafik kaydı ayrı iş. Önizleme: PPLB'de GW header'ından ayak-izi placeholder;
+  ZPL/HTML gerçek çizim. ⚠ GW fiziksel Argox testi (F6) bekliyor.
 - **lengthBanner**: PPLB (saha yazıcısı) / ZPL / HTML'de siyah zemin + beyaz değer
   (reverse). PPLA/DPL'de ters-renk cihaza bağlı ve güvenilmez → değer siyah-üstü-siyah
   görünmez riskine düşmemek için ÇERÇEVELİ (kutu + siyah değer). Fiziksel Argox-PPLA
@@ -100,6 +111,14 @@ fark glif piksel şekilleri (bitmap kafa vs vektör motor) — boyut/konum/metin
   döner (bannerGeom top-sol anchor + CW merkezleme; dört dil aynı model). Dikey bant =
   dar+uzun boyut (9×40) rot 90; yatay bant = geniş+kısa (40×9) rot 0. Yanlış şekilde
   metin bantı taşarsa koordinat 0'a kıstırılır (etikette kalır).
+- **Bant kişiselleştirme (2026-07-27):** `unit` ("m" birim eki; yok → true = "230,5m",
+  false → yalnız sayı — bannerValueText tek kaynak, akış-modeli hep eki basar),
+  `glyphHMm` (değer glif yüksekliği mm 1-30; yok → banda otomatik sığdır; dolu →
+  metin elemanlarıyla AYNI ortak-payda: resolveEplTextStyle en yakın basılabilir
+  kombinasyon, PPLA kendi DPL tablosundan), `wr` (genişlik oranı 0.25-4 — dar/geniş
+  = "ince/kalın" görünüm; ters/reverse modda çift-vuruş XOR'lanacağı için bantta
+  `bold` bilinçli YOK, kalınlık yalnız wr ile). Dört dil + raster + HTML aynı davranır;
+  alanlar boşken çıktı bayt-aynı (geri uyum).
 - Yapısal gerçekler: kanvas yolunda dört dil de ASCII basar; EPL_FONT tablosu
   **203dpi'a gömülü** (saha parkı kabulü — 300dpi cihaz gelirse font/mm
   ölçekleme borcu). PPLA ısı/yoğunluk (H10/D8) fiziksel testle doğrulanacak.

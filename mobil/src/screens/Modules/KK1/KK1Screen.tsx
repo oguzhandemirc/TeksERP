@@ -16,6 +16,7 @@ import {
   Icon,
   TouchableRipple,
   Switch,
+  TextInput as PaperTextInput,
 } from 'react-native-paper';
 import Animated, {
   FadeInUp,
@@ -26,7 +27,10 @@ import Animated, {
   withTiming,
   withRepeat,
 } from 'react-native-reanimated';
-import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import {
+  KeyboardAwareScrollView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import {
   useQuery,
@@ -72,6 +76,7 @@ import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { generateClientUuid } from '../../../offline/barcode';
 import { useIsOnline } from '../../../offline/hooks';
+import { usePermissions } from '../../../hooks/usePermission';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
@@ -81,7 +86,7 @@ import {
   Pulse,
 } from '../../../components/motion';
 import { colors, radius, spacing } from '../../../theme';
-import type { QualityGrade, Roll } from '../../../types/models';
+import type { Item, QualityGrade, Roll } from '../../../types/models';
 
 const RECENT_PAGE_SIZE = 6;
 const HISTORY_PAGE_SIZE = 20;
@@ -100,6 +105,101 @@ const EMPTY_FORM: FormState = {
   width: '',
   qualityGrade: '',
 };
+
+// ── "＋ Yeni Desen" (inline, "Desen Seç" picker'ı içinde) ──────────────────────
+// Yalnız `mobile:kk1-desen` yetkili operatöre gösterilir (parent gate eder).
+// YALNIZ ad girer → backend FABRIC/STK-/MT/pendingReview üretir. Çevrimiçi-only:
+// plain useMutation (global default networkMode 'always') → offline'da KUYRUĞA
+// ALINMAZ, anında ağ hatası verir; ayrıca `disabled` (=!isOnline) ile kilitli.
+// Başarıda onCreated ile yeni desen otomatik seçilir + liste tazelenir.
+function QuickAddDesen({
+  disabled,
+  onCreated,
+}: {
+  disabled: boolean;
+  onCreated: (item: Item) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [name, setName] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: (n: string) => itemService.quickCreateFabric(n),
+    onSuccess: (res) => {
+      if (!res.data) return;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: `Desen eklendi: ${res.data.name}` });
+      setName('');
+      setExpanded(false);
+      onCreated(res.data);
+    },
+    onError: (err: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // api.ts backend TR mesajını err.message'a koyar (409 mükerrer vb.).
+      Toast.show({ type: 'error', text1: 'Desen oluşturulamadı', text2: err.message });
+    },
+  });
+
+  const trimmed = name.trim();
+  const submit = () => {
+    if (!trimmed || mutation.isPending || disabled) return;
+    mutation.mutate(trimmed);
+  };
+
+  if (!expanded) {
+    return (
+      <Button
+        mode="outlined"
+        icon="plus"
+        disabled={disabled}
+        onPress={() => setExpanded(true)}
+        style={quickAddStyles.trigger}
+      >
+        {disabled ? 'Yeni Desen — çevrimiçi gerekir' : 'Yeni Desen'}
+      </Button>
+    );
+  }
+
+  return (
+    <View style={quickAddStyles.row}>
+      <PaperTextInput
+        mode="outlined"
+        dense
+        autoFocus
+        placeholder="Yeni desen adı"
+        value={name}
+        onChangeText={setName}
+        onSubmitEditing={submit}
+        returnKeyType="done"
+        maxLength={100}
+        style={quickAddStyles.input}
+      />
+      <Button
+        mode="contained"
+        onPress={submit}
+        loading={mutation.isPending}
+        disabled={!trimmed || mutation.isPending || disabled}
+      >
+        Ekle
+      </Button>
+      <Button
+        mode="text"
+        onPress={() => {
+          setExpanded(false);
+          setName('');
+        }}
+        disabled={mutation.isPending}
+      >
+        Vazgeç
+      </Button>
+    </View>
+  );
+}
+
+const quickAddStyles = StyleSheet.create({
+  trigger: { alignSelf: 'flex-start' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  input: { flex: 1, backgroundColor: '#fff', height: 44 },
+});
 
 // Koyu header'da etiketli pill aksiyon (Tambur ile aynı stil) — tablette sağ
 // kolon başlığındaki butonları yukarı taşımak için.
@@ -190,6 +290,9 @@ export default function KK1Screen() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const isOnline = useIsOnline();
+  // "＋ Yeni Desen" yalnız seçili operatörlere (mobile:kk1-desen; mobile:*/admin:* devralır).
+  const { has } = usePermissions();
+  const canAddDesen = has('mobile:kk1-desen');
   // Ham kumaşın eni önemsiz → en girişi feature flag'e bağlı (default kapalı).
   // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
   const rawWidthEnabled = useRawWidthEnabled();
@@ -205,12 +308,14 @@ export default function KK1Screen() {
   // YUMUŞAKÇA üstüne kaldır, kapanınca geri indir. useReanimatedKeyboardAnimation
   // (react-native-keyboard-controller) klavyeyle akan bir shared value verir →
   // uygulama genelinde TEK klavye sistemi (App.tsx KeyboardProvider); eski reanimated
-  // useAnimatedKeyboard rakip 2. sistemdi, kaldırıldı. Footer absolute olduğundan
-  // `bottom`'u animasyonluyoruz (edge-to-edge'de pencere küçülmüyor; insets.bottom
-  // ScreenChrome içeriğinde zaten uygulanıyor → onu düş).
+  // useAnimatedKeyboard rakip 2. sistemdi, kaldırıldı. DİKKAT: bu hook'un height'ı
+  // 0 → -klavyeYüksekliği akar (NEGATİF; eski useAnimatedKeyboard pozitifti) —
+  // pozitife çevirip kullan. Footer absolute olduğundan `bottom`'u animasyonluyoruz
+  // (edge-to-edge'de pencere küçülmüyor; insets.bottom ScreenChrome içeriğinde
+  // zaten uygulanıyor → onu düş).
   const keyboard = useReanimatedKeyboardAnimation();
   const footerAnimStyle = useAnimatedStyle(() => ({
-    bottom: Math.max(0, keyboard.height.value - insets.bottom),
+    bottom: Math.max(0, -keyboard.height.value - insets.bottom),
   }));
 
   // Compact'ta sağ panel drawer'a taşınır.
@@ -914,17 +1019,19 @@ export default function KK1Screen() {
         ]}
       >
         {/* ── SOL: Form (kaydırılabilir — küçük ekranda taşmasın) ── */}
-        {/* KAV kullanılmıyor: SDK 54/RN 0.81 edge-to-edge'de KAV & adjustResize
-            klavyeyi güvenilir yönetmiyor. Bunun yerine klavye yüksekliğini elle
-            dinleyip (keyboardHeight) alttaki "Kaydet ve Etiket Bas" footer'ına
-            marginBottom veriyoruz → footer klavyenin üstüne çıkar. */}
+        {/* Sistem-klavyeli inputlar (compact'ta NumpadInput useNativeKeyboard=true
+            ile decimal/number-pad açar) klavye altında kalmasın diye
+            KeyboardAwareScrollView: odaklı input'u klavyenin + yüzen "Kaydet ve
+            Etiket Bas" footer'ının üstüne kaydırır. Footer ScrollView'in DIŞINDA
+            (sibling) olduğundan kendi lift'ini korur — çift telafi yok. */}
         <View style={styles.formCol}>
-        <ScrollView
+        <KeyboardAwareScrollView
           style={styles.formScroll}
           contentContainerStyle={[
             styles.formContent,
             compact ? styles.formContentCompact : styles.formContentTablet,
           ]}
+          bottomOffset={compact ? 80 : 0}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
         >
@@ -1166,7 +1273,7 @@ export default function KK1Screen() {
             )}
           </Surface>
 
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {/* Sticky footer — "Kaydet ve Etiket Bas" forma kaydırmaya gerek
             kalmadan her zaman en altta görünür.
@@ -1319,7 +1426,7 @@ export default function KK1Screen() {
       {/* ── Picker Modal'lar ── */}
       <PickerModal
         visible={pickerOpen === 'item'}
-        title="Ürün Seç"
+        title="Desen Seç"
         options={itemOptions}
         selectedValue={form.itemId}
         loading={itemsQuery.isLoading}
@@ -1333,6 +1440,20 @@ export default function KK1Screen() {
             itemLabel: item ? item.label : '',
           }));
         }}
+        quickAddSlot={
+          canAddDesen ? (
+            <QuickAddDesen
+              disabled={!isOnline}
+              onCreated={(item) => {
+                // Response'tan doğrudan seç (liste refetch/truncation yarışını atla),
+                // listeyi tazele (sonraki açılışta görünsün) ve picker'ı kapat.
+                setForm((f) => ({ ...f, itemId: item.id, itemLabel: item.name }));
+                void itemsQuery.refetch();
+                setPickerOpen(null);
+              }}
+            />
+          ) : undefined
+        }
       />
 
       {/* ── Etiket yazıcı (headless): activePrintRoll set olunca QR + A4 PDF üretir.

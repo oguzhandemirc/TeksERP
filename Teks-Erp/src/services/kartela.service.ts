@@ -1480,4 +1480,12 @@ registerPrintedDocBuilder(PrintedDocType.KARTELA_DISPATCH, {
   fresh: buildKartelaDispatchDoc,
   // Tek-kaynak HTML — Electron iframe/printHtmlString aynı çıktıyı basar.
   renderHtml: renderKartelaCekiHtml,
+  // Belge şablon profili: kartela firmasına atanmış profil (yoksa genel ayar).
+  resolveProfileId: async (db, sourceId) => {
+    const d = await db.kartelaDispatch.findUnique({
+      where: { id: sourceId },
+      select: { subcontractor: { select: { documentProfileId: true } } },
+    });
+    return d?.subcontractor?.documentProfileId ?? null;
+  },
 });

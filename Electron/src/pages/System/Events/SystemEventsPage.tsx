@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
 import { systemLogService } from "@/services/systemLogService";
 import type { SystemLogListItem } from "@/types/systemLog";
@@ -50,47 +51,33 @@ export function SystemEventsPage() {
   // Perf: SystemEventsList'in React.memo'lu satırları için stabil referans.
   const handleSelect = useCallback((item: SystemLogListItem) => setDetailId(item.id), []);
 
+  const { rootRef, sentinelRef } = useInfiniteScroll({
+    hasMore: query.hasNextPage,
+    isLoading: query.isFetchingNextPage,
+    onLoadMore: () => void query.fetchNextPage(),
+  });
+
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Sistem Kayıtları"
-        description="Kimlik doğrulama ve sistem olayları — login, başlatma, beklenmeyen hata."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
       <SystemEventsFilters value={filters} onChange={setFilters} />
 
-      <div className="flex-1 overflow-auto">
-        <SystemEventsList
-          items={items}
-          loading={query.isLoading}
-          onSelect={handleSelect}
-        />
-
+      <PageBody ref={rootRef}>
+        <SystemEventsList items={items} loading={query.isLoading} onSelect={handleSelect} />
         {items.length > 0 && (
-          <div className="flex justify-center p-6">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!query.hasNextPage || query.isFetchingNextPage}
-              onClick={() => query.fetchNextPage()}
-              className="gap-2"
-            >
-              {query.isFetchingNextPage ? (
-                "Yükleniyor..."
-              ) : query.hasNextPage ? (
-                <>
-                  <ChevronDown className="h-4 w-4" />
-                  Daha Fazla Yükle
-                </>
-              ) : (
-                "Liste sonu"
-              )}
-            </Button>
-          </div>
+          <AutoLoadMore
+            ref={sentinelRef}
+            hasMore={query.hasNextPage}
+            isFetchingMore={query.isFetchingNextPage}
+            count={items.length}
+          />
         )}
-      </div>
+      </PageBody>
 
       <SystemEventDetailSheet logId={detailId} onClose={() => setDetailId(null)} />
-    </div>
+    </PageShell>
   );
 }

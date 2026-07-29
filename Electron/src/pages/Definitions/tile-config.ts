@@ -34,7 +34,7 @@ export interface DefinitionTile {
 export const definitionTiles: DefinitionTile[] = [
   {
     key: "items",
-    title: "Ürünler",
+    title: "Kumaşlar",
     description: "Stok kalemleri ve varyantlar",
     icon: Package,
     to: "/definitions/items",
@@ -74,7 +74,8 @@ export const definitionTiles: DefinitionTile[] = [
     description: "Müşteri iadesi neden kataloğu",
     icon: Undo2,
     to: "/definitions/return-reasons",
-    group: "catalog",
+    // Ürün niteliği değil, kalite/iade olay kodu — Hata Tipleri ile aynı grupta.
+    group: "production",
     permission: "return:read",
   },
   {
@@ -143,7 +144,7 @@ export const definitionTiles: DefinitionTile[] = [
   {
     key: "product-recipes",
     title: "İş Emri Şablonları",
-    description: "Ürün + renk + özellik + en + rota — hazır iş emri şablonları",
+    description: "Kumaş + renk + özellik + en + rota — hazır iş emri şablonları",
     icon: FlaskConical,
     to: "/definitions/product-recipes",
     group: "production",
@@ -173,6 +174,15 @@ export const definitionTiles: DefinitionTile[] = [
     description: "Refakat kartında basılan firma adı/künyesi ve görünecek bölümler",
     icon: Printer,
     to: "/definitions/traveler-card",
+    group: "cikti",
+    permission: "admin:settings",
+  },
+  {
+    key: "free-documents",
+    title: "Serbest Belgeler",
+    description: "Sisteme bağlı olmayan serbest belgeler — üst yazı, tutanak, dekont, duyuru",
+    icon: FileText,
+    to: "/definitions/free-documents",
     group: "cikti",
     permission: "admin:settings",
   },

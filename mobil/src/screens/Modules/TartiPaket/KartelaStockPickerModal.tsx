@@ -64,7 +64,7 @@ export function KartelaStockPickerModal({
   });
 
   return (
-    <AppModal visible={visible} onDismiss={onDismiss} position="center" contentStyle={styles.sheet}>
+    <AppModal visible={visible} onDismiss={onDismiss} position="bottom" contentStyle={styles.sheet}>
       <View style={styles.headerRow}>
         <Text variant="titleMedium" style={styles.title}>
           Kartela Ekle
@@ -161,11 +161,15 @@ export function KartelaStockPickerModal({
 }
 
 const styles = StyleSheet.create({
-  sheet: { width: '92%', maxWidth: 480, padding: spacing.md },
+  // position="bottom": alttan sheet klavye açılınca TAM klavye yüksekliği kadar
+  // yukarı çıkar → alttaki "Adet" number-pad input'u + "Ekle" butonu kısa/yatay
+  // ekranda da klavyenin üstünde kalır. alignSelf:'center' bottom wrapper'ın
+  // stretch'inde sheet'i yatayda ortalar (sola yaslanmayı önler).
+  sheet: { width: '92%', maxWidth: 480, padding: spacing.md, alignSelf: 'center' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontWeight: '700' },
   sub: { color: colors.textSecondary },
-  list: { maxHeight: 320, marginTop: spacing.xs },
+  list: { maxHeight: 200, marginTop: spacing.xs },
   center: { paddingVertical: spacing.lg, alignItems: 'center' },
   empty: { textAlign: 'center', color: colors.textSecondary, paddingVertical: spacing.lg },
   row: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },

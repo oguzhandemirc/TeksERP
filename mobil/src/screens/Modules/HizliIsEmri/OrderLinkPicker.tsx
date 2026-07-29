@@ -115,8 +115,10 @@ export default function OrderLinkPicker({
             <Text style={styles.rowTitle} numberOfLines={1}>
               {item.orderNumber} · {item.customerName}
             </Text>
+            {/* Bizdeki ad — iç picker; müşteri override'ı yalnız ilk girildiği
+                siparişte dolu olduğundan basılırsa aynı kumaş iki adla görünür. */}
             <Text style={styles.rowSub} numberOfLines={1}>
-              {item.customerItemName ?? item.itemName}
+              {item.itemName}
               {item.colorName ? ` · ${item.colorName}` : ''}
               {item.width != null ? ` · ${item.width}cm` : ''}
               {inProd > 0 ? ` · ${inProd}m üretimde` : ''}

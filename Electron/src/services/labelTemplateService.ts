@@ -51,6 +51,9 @@ export interface LabelTemplate {
   /** DEPRECATED — tek doğru kaynak bağlam varsayılanları (context-defaults). */
   isDefault: boolean;
   isActive: boolean;
+  /** Serbest etiket — hiçbir bağlama atanamaz, barkodsuz kaydedilebilir, yalnız
+   *  baskı seçicide görünür (rulo/kartela bağı yok). standalone → kind null. */
+  standalone: boolean;
   fields: TemplateField[];
   /** Uzman raw-code override (dil→kod). Boş/yok → o dilde otomatik üretim. */
   rawCode?: RawCodeMap | null;
@@ -106,11 +109,66 @@ export interface CatalogResponse {
   fields: CatalogField[];
 }
 
+/** Bakım sembolü kategorisi (backend config/label-icons.ts aynası). */
+export interface LabelIconCategory {
+  key: string;
+  label: string;
+}
+
+/** Bakım sembolü — svg: backend'in ürettiği standalone `<svg viewBox="0 0 100 100">`
+ *  (stroke="currentColor" — tema rengine uyar; kanvasta siyaha sabitlenir). */
+export interface LabelIconInfo {
+  key: string;
+  label: string;
+  category: string;
+  svg: string;
+}
+
+/** Taşınabilir şablon zarfı (dışa/içe aktar) — backend TemplateEnvelope aynası.
+ *  elements = kanvas layout JSON (backend validateCanvasLayout ile doğrular). */
+export interface TemplateEnvelope {
+  template: {
+    name: string;
+    kind: LabelKind | null;
+    standalone?: boolean;
+    fields?: TemplateField[];
+    rawCode?: RawCodeMap;
+    lineStepMm?: number | null;
+    qrScale?: number | null;
+    lengthBanner?: boolean | null;
+  };
+  variants: Array<{ name?: string; widthMm: number; heightMm: number; isPrimary?: boolean; elements: unknown }>;
+}
+
 export const labelTemplateService = {
-  list: (kind?: LabelKind): Promise<ApiResponse<LabelTemplate[]>> => {
-    const q = kind ? `?kind=${kind}` : "";
+  /** Havuz listesi. `assignable` → serbest etiketleri gizler (atama seçicileri);
+   *  `standalone` → yalnız serbest etiketler (baskı seçicisi). */
+  list: (opts?: {
+    kind?: LabelKind;
+    assignable?: boolean;
+    standalone?: boolean;
+  }): Promise<ApiResponse<LabelTemplate[]>> => {
+    const params = new URLSearchParams();
+    if (opts?.kind) params.set("kind", opts.kind);
+    if (opts?.assignable) params.set("assignable", "true");
+    if (opts?.standalone) params.set("standalone", "true");
+    const q = params.toString();
     return apiClient
-      .get<ApiResponse<LabelTemplate[]>>(`/api/label-templates${q}`)
+      .get<ApiResponse<LabelTemplate[]>>(`/api/label-templates${q ? `?${q}` : ""}`)
+      .then((r) => r.data);
+  },
+
+  /**
+   * Serbest Baskı seçicisi — GET /api/labels/standalone-templates. `customerId`
+   * verilirse o müşteriye BAĞLI ∪ hiç müşteri bağı olmayan (genel) serbest
+   * etiketler döner; verilmezse tüm aktif serbest etiketler. Yanıt {id,name,variants}
+   * (LabelTemplate alt kümesi) — baskı diyaloğu yalnız id/ad/varyant/kind okur,
+   * standalone şablonda kind zaten null → baskıda default'a düşülür.
+   */
+  standalonePrintList: (customerId?: string): Promise<ApiResponse<LabelTemplate[]>> => {
+    const q = customerId ? `?customerId=${encodeURIComponent(customerId)}` : "";
+    return apiClient
+      .get<ApiResponse<LabelTemplate[]>>(`/api/labels/standalone-templates${q}`)
       .then((r) => r.data);
   },
 
@@ -136,9 +194,12 @@ export const labelTemplateService = {
 
   create: (body: {
     name: string;
-    kind: LabelKind;
+    /** Serbest etikette null (bağlam bağı yok). */
+    kind: LabelKind | null;
     fields: TemplateField[];
     isDefault?: boolean;
+    /** true → serbest etiket (atama dışı, barkodsuz kaydedilebilir). */
+    standalone?: boolean;
   }): Promise<ApiResponse<LabelTemplate>> =>
     apiClient
       .post<ApiResponse<LabelTemplate>>(`/api/label-templates`, body)
@@ -175,6 +236,24 @@ export const labelTemplateService = {
   hardRemove: (id: string): Promise<ApiResponse<void>> =>
     apiClient
       .delete<ApiResponse<void>>(`/api/label-templates/${id}/permanent`)
+      .then((r) => r.data),
+
+  /** Şablonu taşınabilir JSON zarfı olarak dışa aktar (şablon + varyantlar). */
+  exportTemplate: (id: string): Promise<TemplateEnvelope> =>
+    apiClient
+      .get<ApiResponse<TemplateEnvelope>>(`/api/label-templates/${id}/export`)
+      .then((r) => r.data.data),
+
+  /** JSON zarfını yeni şablon olarak içe aktar (ad çakışması backend'de dedup). */
+  importTemplate: (env: TemplateEnvelope): Promise<ApiResponse<LabelTemplate>> =>
+    apiClient
+      .post<ApiResponse<LabelTemplate>>(`/api/label-templates/import`, env)
+      .then((r) => r.data),
+
+  /** Şablonu komple çoğalt — "… (kopya)" adıyla (isDefault/atamalar taşınmaz). */
+  duplicate: (id: string): Promise<ApiResponse<LabelTemplate>> =>
+    apiClient
+      .post<ApiResponse<LabelTemplate>>(`/api/label-templates/${id}/duplicate`)
       .then((r) => r.data),
 
   /**
@@ -266,6 +345,8 @@ export const labelTemplateService = {
     language?: RawCodeLang;
     /** "Bu Bilgisayar"da seçili Cihaz Kaydı yazıcısı — dil/medya bu cihazdan çözülür. */
     peripheralId?: string;
+    /** Baskı adedi — yalnız verilirse gövdeye eklenir (test baskısı çoğaltma). */
+    copies?: number;
   }): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string; nativeB64?: string }> =>
     apiClient
       .post<
@@ -278,6 +359,14 @@ export const labelTemplateService = {
     apiClient
       .get<ApiResponse<{ fields: UnifiedCatalogField[] }>>("/api/label-templates/catalog")
       .then((r) => r.data.data.fields),
+
+  /** Bakım sembolü kataloğu (kategoriler + inline SVG) — palet + kanvas görseli. */
+  iconCatalog: (): Promise<{ categories: LabelIconCategory[]; icons: LabelIconInfo[] }> =>
+    apiClient
+      .get<ApiResponse<{ categories: LabelIconCategory[]; icons: LabelIconInfo[] }>>(
+        "/api/label-templates/icons",
+      )
+      .then((r) => r.data.data),
 
   listVariants: (templateId: string): Promise<LabelTemplateVariant[]> =>
     apiClient

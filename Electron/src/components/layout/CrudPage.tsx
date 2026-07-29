@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -223,7 +224,7 @@ export function CrudPage<T extends { id: string }>({
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       {!hideHeader && (
         <PageHeader title={title} description={description} actions={headerActions} />
       )}
@@ -303,6 +304,6 @@ export function CrudPage<T extends { id: string }>({
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

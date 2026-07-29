@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { History, RefreshCw, FileWarning } from "lucide-react";
+import { History, RefreshCw, FileWarning, Paintbrush } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,20 @@ interface Props {
   onSelectVersion: (version: number | null) => void;
   /** Revizyon yetkisi (modülün yazma izni). */
   canReissue: boolean;
+  /** true ise "Revize Et" YALNIZ geriye-dönük (reconstructed) belgelerde çıkar.
+   *  Sevk irsaliyesi gibi kaynağı sevk anında donan ve sonradan düzenlenemeyen
+   *  belgelerde normal revize aynı içeriği yeniden dondurur (boşa v2) → gizlenir;
+   *  yalnız eski sistemden kalan geriye-dönük kayıtları resmîleştirmek için görünür.
+   *  Kartela/fason gibi kaynağı değişebilen belgeler bu prop'u vermez → hep görünür. */
+  reissueOnlyWhenReconstructed?: boolean;
+  /** "Güncel görünüm" modu açık mı — verilirse toggle gösterilir. İçerik donuk kalır,
+   *  yalnız görünüm (şablon+künye) güncel ayardan çözülür. */
+  currentTemplate?: boolean;
+  onCurrentTemplateChange?: (v: boolean) => void;
+  /** Donmuş görünüm güncel şablondan FARKLI mı (backend getCurrent hesaplar). "Güncel
+   *  görünüm" tuşu yalnız farklıysa çıkar (aynıysa toggle anlamsız); mod açıkken tuş
+   *  "Orijinal görünüm" olarak hep durur (geri dönüş). */
+  templateStale?: boolean;
 }
 
 export function DocVersionBar({
@@ -57,34 +71,47 @@ export function DocVersionBar({
   activeVersion,
   onSelectVersion,
   canReissue,
+  reissueOnlyWhenReconstructed = false,
+  currentTemplate,
+  onCurrentTemplateChange,
+  templateStale = false,
 }: Props) {
   const qc = useQueryClient();
   const [reissueOpen, setReissueOpen] = useState(false);
   const viewingOld = current.version !== activeVersion;
   const meta = STATUS_META[current.status];
+  // Bazı belgelerde (sevk irsaliyesi) revize yalnız geriye-dönük kayıtta anlamlı;
+  // güncel dondurulmuş kayıtta aynı içeriği tekrar dondurur → tuşu gizle.
+  const showReissue =
+    canReissue &&
+    current.status !== "VOIDED" &&
+    !viewingOld &&
+    (!reissueOnlyWhenReconstructed || current.reconstructed);
 
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
-      <div className="flex flex-wrap items-center gap-2 text-[12px]">
-        <span className="font-mono font-semibold">{current.documentNo}</span>
-        <Badge variant="outline">Rev.{current.version}</Badge>
-        <Badge variant={meta.variant}>{meta.label}</Badge>
-        {current.reconstructed && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-amber-700">
-            <FileWarning className="h-3.5 w-3.5" /> geriye dönük oluşturuldu
-          </span>
-        )}
-        <span className="text-[11px] text-muted-foreground">
-          donduruldu: {safeFormat(current.snapshot.frozenAt, "dd.MM.yyyy HH:mm")}
-        </span>
-        {current.status === "VOIDED" && current.voidReason && (
-          <span className="text-[11px] text-destructive">— {current.voidReason}</span>
-        )}
-        {current.status === "ACTIVE" && current.reissueReason && (
-          <span className="text-[11px] text-muted-foreground">
-            revizyon: «{current.reissueReason}»
-          </span>
-        )}
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-md border bg-background px-2 py-1.5">
+      <div className="min-w-0">
+        {/* Satır 1 — kimlik + durum (sade). */}
+        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="font-mono font-semibold">{current.documentNo}</span>
+          <Badge variant="outline">Rev.{current.version}</Badge>
+          <Badge variant={meta.variant}>{meta.label}</Badge>
+          {current.reconstructed && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-amber-700">
+              <FileWarning className="h-3.5 w-3.5" /> geriye dönük
+            </span>
+          )}
+        </div>
+        {/* Satır 2 — donma zamanı + revizyon/iptal nedeni (soluk, ikincil). */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+          <span>donduruldu: {safeFormat(current.snapshot.frozenAt, "dd.MM.yyyy HH:mm")}</span>
+          {current.status === "ACTIVE" && current.reissueReason && (
+            <span>· revizyon: «{current.reissueReason}»</span>
+          )}
+          {current.status === "VOIDED" && current.voidReason && (
+            <span className="text-destructive">· iptal: {current.voidReason}</span>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -100,6 +127,32 @@ export function DocVersionBar({
           </Button>
         )}
 
+        {/* "Güncel görünüm" ↔ "Orijinal görünüm" — donmuş belgeyi güncel şablonla
+            basma modu. Kapalıyken tuş YALNIZ şablon gerçekten değiştiyse (templateStale)
+            çıkar; açıkken geri dönüş için hep durur. "Güncel" rozetiyle (sürüm durumu)
+            karışmasın diye "şablon" yerine "görünüm". */}
+        {onCurrentTemplateChange && (currentTemplate || templateStale) && (
+          <Button
+            type="button"
+            size="sm"
+            variant={currentTemplate ? "secondary" : "outline"}
+            className={
+              currentTemplate
+                ? "h-7 gap-1"
+                : "h-7 gap-1 border-primary/50 text-primary hover:bg-primary/5 hover:text-primary"
+            }
+            onClick={() => onCurrentTemplateChange(!currentTemplate)}
+            title={
+              currentTemplate
+                ? "Belgenin donmuş (orijinal) görünümüne dön"
+                : "Belge içeriği donuk kalır; görünüm (şablon/künye) güncel Belge Şablonları ayarıyla basılır"
+            }
+          >
+            <Paintbrush className="h-3.5 w-3.5" />
+            {currentTemplate ? "Orijinal görünüm" : "Güncel görünüm"}
+          </Button>
+        )}
+
         <VersionHistory
           docType={docType}
           sourceId={sourceId}
@@ -107,7 +160,7 @@ export function DocVersionBar({
           onSelectVersion={onSelectVersion}
         />
 
-        {canReissue && current.status !== "VOIDED" && !viewingOld && (
+        {showReissue && (
           <Button
             type="button"
             size="sm"
@@ -160,7 +213,7 @@ function VersionHistory({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" size="sm" variant="ghost" className="h-7 gap-1">
+        <Button type="button" size="sm" variant="outline" className="h-7 gap-1">
           <History className="h-3.5 w-3.5" /> Geçmiş
         </Button>
       </PopoverTrigger>

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Archive, Database, Clock } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,12 +64,12 @@ export function ActivityArchivePage() {
     : "—";
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Aktivite Arşivi"
-        description="Eski sistem loglarını arşiv tablosuna taşıyarak aktif tabloyu küçük tut."
       />
 
+      <PageBody>
       <div className="grid grid-cols-1 gap-3 p-6 md:grid-cols-3">
         <StatCard
           icon={Database}
@@ -145,6 +146,7 @@ export function ActivityArchivePage() {
           )}
         </Card>
       </div>
+      </PageBody>
 
       <ConfirmDialog
         open={confirmOpen}
@@ -158,7 +160,7 @@ export function ActivityArchivePage() {
         }}
         isPending={archiveMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

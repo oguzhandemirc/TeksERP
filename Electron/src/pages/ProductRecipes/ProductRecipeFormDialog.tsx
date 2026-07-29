@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { TargetItemPicker } from "@/pages/Operations/WorkOrders/TargetItemPicker";
@@ -102,13 +101,13 @@ export function ProductRecipeFormDialog({
     setRouteError(null);
   }, [routeSteps]);
 
-  // Hedef ürün/renk picker'ları WorkOrderFormValues'a tipli — alan adları aynı.
+  // Hedef kumaş/renk picker'ları WorkOrderFormValues'a tipli — alan adları aynı.
   const woControl = form.control as unknown as Control<WorkOrderFormValues>;
 
   const createRouteFromSteps = async (name: string): Promise<string> => {
     const res = await routeService.create({
       name: `${name} rotası`,
-      code: generateCode(CODE_PREFIXES.ROUTE),
+      // Kod backend'de üretilir (ROT+GGAAYY+NNNN) — istemci göndermez.
       isActive: true,
       isFavorite: false,
       // Saha #14: fason planlaması (kategori + firma) KORUNMALI. Eskiden buradaki
@@ -141,7 +140,7 @@ export function ProductRecipeFormDialog({
 
   const handleSubmit = form.handleSubmit(async (values) => {
     if (!values.targetItemId) {
-      form.setError("targetItemId", { type: "manual", message: "Ürün seçilmeli." });
+      form.setError("targetItemId", { type: "manual", message: "Kumaş seçilmeli." });
       return;
     }
     if (routeSteps.length > 0 && routeSteps.some((s) => !s.stationId)) {
@@ -165,7 +164,7 @@ export function ProductRecipeFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "İş Emri Şablonunu Düzenle" : "Yeni İş Emri Şablonu"}</DialogTitle>
           <DialogDescription>
-            Ürün + akış (renk/özellik istasyonlarda) + en'i tek isim altında topla.
+            Kumaş + akış (renk/özellik istasyonlarda) + en'i tek isim altında topla.
             İş emri açılışında şablonu seçince hepsi otomatik dolar.
           </DialogDescription>
         </DialogHeader>
@@ -181,7 +180,7 @@ export function ProductRecipeFormDialog({
             <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
               <Input id="name" autoFocus placeholder="Patos Gri 038" {...form.register("name")} />
             </FormField>
-            <FormField label="Hedef Ürün" required error={form.formState.errors.targetItemId}>
+            <FormField label="Hedef Kumaş" required error={form.formState.errors.targetItemId}>
               <TargetItemPicker
                 control={woControl}
                 onItemChange={() => {

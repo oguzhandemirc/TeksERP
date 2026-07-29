@@ -9,6 +9,7 @@ import {
   Clock,
   Tags,
   Layers,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -77,6 +78,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     kind: "company",
   },
   {
+    id: "customers",
+    label: "Müşteriler",
+    icon: UsersRound,
+    description: "Müşteri kartı ve şube (sevk noktası) davranışı.",
+    keywords:
+      "müşteri şube sevk noktası branch ihracat kodu kart firma tedarikçi sevk yeri gizle",
+    kind: "flags",
+    flags: [
+      {
+        key: "customerBranchesEnabled",
+        title: "Müşteri şubeleri (sevk noktaları) özelliğini göster",
+        desc: "Açıkken (varsayılan) müşteri kartında Şubeler sekmesi, yeni müşteri formunda şube taslağı ve sipariş formunda şube seçimi görünür. 'Her şube = ayrı müşteri' düzeninde çalışan firma kapatır — şube ekranları gizlenir; mevcut kayıtlardaki şube verisi ve sipariş bağları KORUNUR, sadece görünmez olur.",
+      },
+    ],
+  },
+  {
     id: "orders",
     label: "Siparişler",
     icon: Banknote,
@@ -125,7 +142,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "rawWidthEnabled",
         group: "KK1 / Kalite",
         title: "KK1 ham kumaş girişinde en (cm) alanını göster",
-        desc: "Kapalıyken mobil KK1 ekranında en alanı gizlenir; operatör isterse 'en gir' ile yine girebilir. Ham kumaşın eni önemsiz — bitmiş topun eni iş emrinden gelir. Ürün Dengesi ham stoğu en'e bakmadan sayar.",
+        desc: "Kapalıyken mobil KK1 ekranında en alanı gizlenir; operatör isterse 'en gir' ile yine girebilir. Ham kumaşın eni önemsiz — bitmiş topun eni iş emrinden gelir. Kumaş Dengesi ham stoğu en'e bakmadan sayar.",
       },
       {
         key: "kk1WeightEntryEnabled",

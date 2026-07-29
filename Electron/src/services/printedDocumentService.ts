@@ -14,7 +14,10 @@ export type PrintedDocType =
   | "SHIPMENT_DISPATCH"
   | "SUBCONTRACTOR_DISPATCH"
   | "SUBCONTRACTOR_DIRECT_SHIP"
-  | "KARTELA_DISPATCH";
+  | "KARTELA_DISPATCH"
+  | "SUBCONTRACTOR_RECEIPT"
+  | "QUALITY_CERTIFICATE"
+  | "RETURN_DISPATCH";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 
@@ -45,6 +48,9 @@ export interface PrintedDocument<TDoc = Record<string, unknown>> {
   printedById: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Yalnız getCurrent döner: donmuş görünüm güncel şablondan farklı mı — "Güncel
+   *  görünüm" tuşunu yalnız gerçekten farklıysa göstermek için (backend hesaplar). */
+  templateStale?: boolean;
 }
 
 /** Hafif versiyon satırı (snapshot içeriği olmadan) — geçmiş listesi. */
@@ -101,18 +107,22 @@ export const printedDocumentService = {
 
   /** Baskı-hazır HTML (TEK KAYNAK) — backend render eder; mobil + Electron aynısını
    *  basar. version verilirse o versiyonun HTML'i. opts.draft → donmuş belge yoksa
-   *  canlı TASLAK önizlemesi (sevk öncesi). text/html döner. */
+   *  canlı TASLAK önizlemesi (sevk öncesi). opts.currentTemplate → içerik donuk
+   *  kalır, görünüm (şablon+künye) güncel ayardan çözülür. text/html döner. */
   getHtml: (
     docType: PrintedDocType,
     sourceId: string,
     version?: number,
-    opts?: { draft?: boolean },
+    opts?: { draft?: boolean; currentTemplate?: boolean; printNote?: string },
   ): Promise<string> =>
     apiClient
       .get<string>(`${base}/${docType}/${sourceId}/html`, {
         params: {
           ...(version != null ? { version } : {}),
           ...(opts?.draft ? { draft: 1 } : {}),
+          ...(opts?.currentTemplate ? { currentTemplate: 1 } : {}),
+          // Tek seferlik baskı notu — persist edilmez, yalnız bu render'a girer.
+          ...(opts?.printNote?.trim() ? { printNote: opts.printNote.trim() } : {}),
         },
         responseType: "text",
         headers: { Accept: "text/html" },

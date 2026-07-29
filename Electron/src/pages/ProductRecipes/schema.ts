@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 
 // Alan adları bilinçli olarak WorkOrderFormValues ile aynı (targetItemId vb.) —
-// böylece WO formundaki hedef ürün/renk/özellik picker'ları aynen yeniden
+// böylece WO formundaki hedef kumaş/renk/özellik picker'ları aynen yeniden
 // kullanılabiliyor (ProductRecipeFormDialog control cast'i ile).
 export const recipeFormSchema = z.object({
   name: z
@@ -42,7 +41,3 @@ export const recipeFormDefaults: RecipeFormValues = {
   foldType: "",
   isActive: true,
 };
-
-export function generateRecipeCode(): string {
-  return generateCode(CODE_PREFIXES.RECIPE);
-}

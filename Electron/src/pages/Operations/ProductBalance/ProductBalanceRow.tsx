@@ -27,7 +27,7 @@ interface Props {
   onOpenWo: (group: BalanceGroup, spec: BalanceSpecRow) => void;
 }
 
-/** Ürün Dengesi tablosunda tek (ürün+renk) grubu + (açıksa) en kırılımı + drill-down.
+/** Kumaş Dengesi tablosunda tek (kumaş+renk) grubu + (açıksa) en kırılımı + drill-down.
  *  Perf: React.memo — arama kutusuna yazarken filtre dışı kalmayan grupların
  *  props'u değişmediğinden yeniden render EDİLMEZ (handler'lar üstte useCallback'li). */
 export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Props) {
@@ -88,7 +88,7 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
         <td className="text-right text-muted-foreground">{fmt(g.uretimde)}</td>
         <td
           className="text-right text-muted-foreground"
-          title="Ham havuzu — ürün+renk için ortak (eni önemsiz). En'lere bölünmez."
+          title="Ham havuzu — kumaş+renk için ortak (eni önemsiz). En'lere bölünmez."
         >
           {fmt(g.ham)}
         </td>
@@ -231,7 +231,7 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
                 </div>
                 {allWos.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    Bu ürün için canlı iş emri yok.
+                    Bu kumaş için canlı iş emri yok.
                   </p>
                 ) : (
                   <ul className="space-y-1">

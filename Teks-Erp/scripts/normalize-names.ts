@@ -2,8 +2,10 @@
 // One-off: Saha #13 — mevcut ürün/renk adlarını standarda taşı
 // Çalıştır: npx tsx scripts/normalize-names.ts          (dry-run, sadece rapor)
 //           npx tsx scripts/normalize-names.ts --apply  (gerçekten yazar)
-// Ürün: HEPSİ BÜYÜK (tr). Renk: BÜYÜK + tire + sayı blokları başta.
-// İdempotent — ikinci koşuda "0 değişiklik" üretir. Audit'e SYSTEM olarak düşer.
+// Ürün: HEPSİ BÜYÜK (tr). Renk: BÜYÜK + sayı blokları başta + BOŞLUK KORUNUR
+// (2026-07-27: tire standardı kalktı; legacy tireli ada DOKUNULMAZ — yalnız
+// case/sayı-sırası/çoklu-boşluk düzelir). İdempotent — ikinci koşuda "0
+// değişiklik" üretir. Audit'e SYSTEM olarak düşer.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import {

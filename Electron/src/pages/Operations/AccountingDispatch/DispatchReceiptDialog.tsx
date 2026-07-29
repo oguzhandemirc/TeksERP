@@ -10,7 +10,7 @@ import { printHtmlString } from "@/lib/print";
 import { labelService } from "@/services/labelService";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { printedDocumentService } from "@/services/printedDocumentService";
-import { buildWorkbook, downloadWorkbook } from "@/lib/xlsx-export";
+import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { accountingDispatchService } from "./service";
 import { buildDispatchReportSheets } from "./accounting-export";
 import type { DispatchListItem } from "./types";
@@ -21,7 +21,7 @@ interface Props {
 }
 
 /**
- * Sevk fişi (ürün/çuval/çeki, 3 bölüm) — yazdır / toplu etiket / Excel.
+ * Sevk fişi (kumaş/çuval/çeki, 3 bölüm) — yazdır / toplu etiket / Excel.
  * TEK KAYNAK: önizleme + baskı backend'in `renderShipmentDispatchHtml` çıktısıdır
  * (SHIPMENT_DISPATCH donmuş belge) → muhasebe fişi ile sevk irsaliyesi BİREBİR aynı.
  * Excel + toplu etiket için yapılandırılmış veri (getReport) ayrıca çekilir.
@@ -92,7 +92,7 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
     if (!report) return;
     try {
       const blob = await buildWorkbook(buildDispatchReportSheets(report));
-      downloadWorkbook(blob, `Sevk_Fisi_${report.header.shipmentNo}`);
+      await saveWorkbook(blob, `Sevk_Fisi_${report.header.shipmentNo}`);
     } catch {
       toast.error("Excel oluşturulamadı");
     }

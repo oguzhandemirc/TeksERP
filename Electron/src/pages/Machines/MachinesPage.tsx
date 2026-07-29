@@ -1,5 +1,4 @@
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { machineColumns } from "./columns";
 import { machineService } from "./service";
 import { MachineFormDialog } from "./MachineFormDialog";
@@ -8,7 +7,8 @@ import type { MachineFormValues } from "./schema";
 
 const buildPayload = (v: MachineFormValues, initial: Machine | null): Partial<Machine> => ({
   stationId: v.stationId,
-  code: initial?.code ?? generateCode(CODE_PREFIXES.MACHINE),
+  // Kod backend'de üretilir (MAK+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+  ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
 });
 

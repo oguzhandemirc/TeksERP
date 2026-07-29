@@ -48,7 +48,9 @@ export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubm
             <FormField label="Şube Adı" htmlFor="name" error={form.formState.errors.name} required className="col-span-2">
               <Input id="name" autoFocus placeholder="Örn. Merkez Depo, Ankara Şubesi" {...form.register("name")} />
             </FormField>
-            <FormField label="Kod" htmlFor="code" error={form.formState.errors.code}>
+            {/* Şube ihracat kodu — sevk belgesinde tek "İhracat Kodu" satırına, dolu
+                ise şirket ihracat kodunun önüne geçerek basılır. */}
+            <FormField label="İhracat Kodu" htmlFor="code" error={form.formState.errors.code}>
               <Input id="code" placeholder="Opsiyonel" {...form.register("code")} />
             </FormField>
           </div>

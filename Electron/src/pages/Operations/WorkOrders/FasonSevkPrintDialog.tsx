@@ -15,6 +15,8 @@ import { printHtmlString } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
+import { PrintNoteField } from "@/components/print/PrintNoteField";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   printedDocumentService,
   type PrintedDocument,
@@ -42,6 +44,11 @@ const DOC_TYPE = "SUBCONTRACTOR_DISPATCH" as const;
 export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange, onBack }: Props) {
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  // "Güncel şablonla" — içerik donuk, görünüm canlı Belge Şablonları ayarından.
+  const [currentTemplate, setCurrentTemplate] = useState(false);
+  // Tek seferlik baskı notu — kalıcı şablona yazılmaz, yalnız bu baskıya girer.
+  const [printNote, setPrintNote] = useState("");
+  const debouncedNote = useDebouncedValue(printNote, 400);
 
   // Donmuş içerik meta'sı (versiyon çubuğu + ACTIVE/VOIDED/SUPERSEDED ayrımı).
   const docQuery = useQuery({
@@ -78,8 +85,12 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange, onBack }:
 
   // ÖNİZLEME + BASKI tek kaynak: donmuş versiyonun backend HTML'i (KUMAŞ İRSALİYESİ).
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", DOC_TYPE, dispatchId, shownVersion],
-    queryFn: () => printedDocumentService.getHtml(DOC_TYPE, dispatchId!, shownVersion ?? undefined),
+    queryKey: ["printed-doc-html", DOC_TYPE, dispatchId, shownVersion, currentTemplate, debouncedNote],
+    queryFn: () =>
+      printedDocumentService.getHtml(DOC_TYPE, dispatchId!, shownVersion ?? undefined, {
+        currentTemplate,
+        printNote: debouncedNote,
+      }),
     enabled: open && Boolean(dispatchId) && shownVersion != null,
     staleTime: 0,
   });
@@ -118,7 +129,11 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange, onBack }:
                 activeVersion={currentDoc?.version ?? shown.version}
                 onSelectVersion={setSelectedVersion}
                 canReissue={hasPermission("workorder:write")}
+                currentTemplate={currentTemplate}
+                onCurrentTemplateChange={setCurrentTemplate}
+                templateStale={currentDoc?.templateStale ?? false}
               />
+              <PrintNoteField value={printNote} onChange={setPrintNote} />
               {/* Fason talimatı editörü — yalnız güncel ACTIVE belgede, kilitli değilse.
                   Kaydet + Revize Et ile yeni versiyon donar; iframe o versiyonu gösterir. */}
               {!viewingOld && shown.status === "ACTIVE" && overlay && (

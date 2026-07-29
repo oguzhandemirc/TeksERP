@@ -17,10 +17,16 @@ import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
-import { normalizeItemName } from "./helpers/name-normalize.helper";
+import {
+  normalizeItemName,
+  foldNameForCompare,
+} from "./helpers/name-normalize.helper";
+import { nextDailySeq } from "../utils/code-format";
+import { withBarcodeRetry } from "../utils/barcode-retry";
 
 export interface ItemCreateInput {
-  code: string;
+  /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
+  code?: string | null;
   name: string;
   itemType: string;
   unit?: string;
@@ -29,25 +35,81 @@ export interface ItemCreateInput {
   allowedPropertyIds?: string[];
 }
 
+/** Stok kodu: `STK-` + 6 hane global artan sıra (tarihsiz — ürün kartı belge değil). */
+const ITEM_CODE_PREFIX = "STK-";
+const ITEM_CODE_DIGITS = 6;
+/** Item.code DB kolonu VarChar(32) — paylaşımlı CODE_MAX_LEN (50) yerine bununla sınırla,
+ * yoksa 33-50 karakterlik kod validator'dan geçip DB'de P2000'e düşer. */
+const ITEM_CODE_MAX_LEN = 32;
+/** Item.name DB kolonu VarChar(100) — paylaşımlı NAME_MAX_LEN (200) ile aynı P2000 tuzağı. */
+const ITEM_NAME_MAX_LEN = 100;
+/** Sayaç taramasında kabul edilen otomatik kod biçimi: en çok 12 hane —
+ * parseInt sonucu her zaman Number.MAX_SAFE_INTEGER altında kalır; legacy/elle
+ * girilmiş dev sayılı bir STK- kaydı float taşmasıyla max+1 === max yapıp
+ * sayacı kilitleyemez. */
+const ITEM_CODE_SCAN_RE = /^STK-\d{1,12}$/;
+
+/**
+ * Sıradaki stok kodu: `STK-000001` gibi. OZL/MUS gündelik-kod deseninin tarihsiz
+ * hali — tek global sayaç, kaynak items tablosunun kendisi (MAX+1). collation-güvenli
+ * sorgu (gte + startsWith); `STK-` ile başlayıp sayısal parse edilemeyen manuel
+ * kodlar max hesabında atlanır (nextDailySeq sözleşmesi). Eşzamanlı çakışma (P2002)
+ * çağırandaki withBarcodeRetry ile taze max okunarak telafi edilir.
+ */
+async function nextItemCode(): Promise<string> {
+  const rows = await prisma.item.findMany({
+    where: { code: { gte: ITEM_CODE_PREFIX, startsWith: ITEM_CODE_PREFIX } },
+    select: { code: true },
+  });
+  const seq = nextDailySeq(
+    rows.map((r) => r.code).filter((c) => ITEM_CODE_SCAN_RE.test(c)),
+    ITEM_CODE_PREFIX,
+  );
+  return `${ITEM_CODE_PREFIX}${String(seq).padStart(ITEM_CODE_DIGITS, "0")}`;
+}
+
 export class ItemService extends BaseService {
   /**
    * Item create — sade CRUD. allowedColors/allowedProperties M:N replace.
+   *
+   * `opts.pendingReview`: yalnız iç çağrı (quickCreateFabric) verir — public
+   * gövdeden GELMEZ. GÜVENLİK İNVARİANTI: bu metot Prisma `data`'yı aşağıda
+   * ALANLARI AÇIKÇA sayarak kurar (super.create'e delege ETMEZ) — böylece
+   * `POST /items` gövdesine sızdırılan bir `pendingReview:true` sessizce düşer.
+   * super.create'e refactor edilirse pendingReview public gövdeden set edilebilir
+   * olur; bu davranışı bozma.
    */
   async create(
     data: Record<string, unknown>,
     userId?: string,
+    opts?: { pendingReview?: boolean },
   ): Promise<ApiResponse<unknown>> {
     const input = data as unknown as ItemCreateInput;
 
-    // Code + name: trim, required, max length (paylaşımlı validator)
-    const validatedCode = validateCode(input.code, {
-      label: "Ürün kodu",
-      required: true,
-    });
-    if (typeof validatedCode === "string") input.code = validatedCode;
+    // Stok kodu hibrit: boş bırakıldıysa backend STK-NNNNNN üretir; kullanıcı
+    // girdiyse manuel kod aynen kabul edilir (trim + regex + max 32).
+    const rawCode = typeof input.code === "string" ? input.code.trim() : input.code;
+    const isAutoCode = rawCode === undefined || rawCode === null || rawCode === "";
+    let manualCode: string | null = null;
+    if (!isAutoCode) {
+      const validatedCode = validateCode(rawCode, {
+        label: "Ürün kodu",
+        required: true,
+        maxLen: ITEM_CODE_MAX_LEN,
+      });
+      if (typeof validatedCode === "string") manualCode = validatedCode;
+      // STK- öneki otomatik sayaca rezerve — manuel STK- kodu hem karışıklık
+      // hem (16+ haneli sayısalda) sayaç zehirlenmesi yaratır.
+      if (manualCode && /^stk-/i.test(manualCode)) {
+        throw AppError.badRequest(
+          "Ürün kodu STK- ile başlayamaz — bu önek otomatik stok kodlarına ayrılmıştır (boş bırakın, sistem üretsin)",
+        );
+      }
+    }
     const validatedName = validateName(input.name, {
       label: "Ürün ismi",
       required: true,
+      maxLen: ITEM_NAME_MAX_LEN,
     });
     if (typeof validatedName === "string") input.name = validatedName;
     // Saha #13: ürün adları HEPSİ BÜYÜK (tr) — filtre/arama tutarlılığı.
@@ -58,14 +120,26 @@ export class ItemService extends BaseService {
     const allowedColorIds = [...new Set(input.allowedColorIds ?? [])];
     const allowedPropertyIds = [...new Set(input.allowedPropertyIds ?? [])];
 
-    // Reactivate kontrolü: aynı code ile pasif kayıt varsa diriltir.
-    const existing = await prisma.item.findFirst({
-      where: { code: input.code.trim() },
-      select: { id: true, isActive: true },
-    });
+    // Reactivate kontrolü (yalnız manuel kod): aynı code ile pasif kayıt varsa
+    // diriltir. Otomatik kod her zaman taze üretilir — mevcutla eşleşemez.
+    const existing = manualCode
+      ? await prisma.item.findFirst({
+          where: { code: manualCode },
+          select: { id: true, isActive: true },
+        })
+      : null;
     if (existing?.isActive) {
-      throw AppError.badRequest("Bu kod ile aktif ürün zaten var");
+      // Swagger sözleşmesi + BaseService F43 standardı: duplicate = 409 Conflict.
+      throw AppError.conflict("Bu kod ile aktif ürün zaten var");
     }
+
+    // Ad-mükerrer koruması — create super.create'e girmeyen custom yol olduğundan
+    // BaseService kancası burada elle çağrılır; reactivate'te diriltilen kaydın
+    // kendi adı hariç tutulur.
+    await this.assertNameNotDuplicate(
+      data,
+      existing && !existing.isActive ? existing.id : undefined,
+    );
 
     if (allowedColorIds.length > 0) {
       const colors = await prisma.color.findMany({
@@ -95,54 +169,74 @@ export class ItemService extends BaseService {
       }
     }
 
-    const created = await prisma.$transaction(async (tx) => {
-      if (existing && !existing.isActive) {
-        // Reactivate: M:N'leri replace + diriltme + güncel veri.
-        await tx.itemAllowedColor.deleteMany({ where: { itemId: existing.id } });
-        await tx.itemAllowedProperty.deleteMany({ where: { itemId: existing.id } });
-        return tx.item.update({
-          where: { id: existing.id },
-          data: {
-            name: input.name.trim(),
-            unit: (input.unit ?? "MT") as ItemUnit,
-            isActive: true,
-            allowedColors:
-              allowedColorIds.length > 0
-                ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
-                : undefined,
-            allowedProperties:
-              allowedPropertyIds.length > 0
-                ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) }
-                : undefined,
-          },
-          include: {
-            allowedColors: { include: { color: true } },
-            allowedProperties: { include: { property: true } },
-          },
+    // Otomatik kodda sequence okuma retry kapsamı İÇİNDE — P2002'de taze max
+    // okunur. Manuel kod P2002'si retry edilmez (hep aynı değeri yazar), error
+    // middleware'i anlamlı 409'a çevirir.
+    const created = await withBarcodeRetry(
+      async () => {
+        const code = manualCode ?? (await nextItemCode());
+        return prisma.$transaction(async (tx) => {
+          if (existing && !existing.isActive) {
+            // Atomik claim: diriltme yalnız hâlâ pasifse — eşzamanlı ikinci istek
+            // count=0 görüp 409 alır (findFirst→if→update check-then-act yasağı).
+            const claimed = await tx.item.updateMany({
+              where: { id: existing.id, isActive: false },
+              data: { isActive: true },
+            });
+            if (claimed.count === 0) {
+              throw AppError.conflict("Bu kod ile aktif ürün zaten var");
+            }
+            // Reactivate: M:N'leri replace + güncel veri.
+            await tx.itemAllowedColor.deleteMany({ where: { itemId: existing.id } });
+            await tx.itemAllowedProperty.deleteMany({ where: { itemId: existing.id } });
+            return tx.item.update({
+              where: { id: existing.id },
+              data: {
+                name: input.name.trim(),
+                unit: (input.unit ?? "MT") as ItemUnit,
+                allowedColors:
+                  allowedColorIds.length > 0
+                    ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
+                    : undefined,
+                allowedProperties:
+                  allowedPropertyIds.length > 0
+                    ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) }
+                    : undefined,
+              },
+              include: {
+                allowedColors: { include: { color: true } },
+                allowedProperties: { include: { property: true } },
+              },
+            });
+          }
+          return tx.item.create({
+            data: {
+              code,
+              name: input.name.trim(),
+              itemType: input.itemType as never,
+              unit: (input.unit ?? "MT") as ItemUnit,
+              isActive: input.isActive ?? true,
+              // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
+              ...(opts?.pendingReview ? { pendingReview: true } : {}),
+              allowedColors:
+                allowedColorIds.length > 0
+                  ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
+                  : undefined,
+              allowedProperties:
+                allowedPropertyIds.length > 0
+                  ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) }
+                  : undefined,
+            },
+            include: {
+              allowedColors: { include: { color: true } },
+              allowedProperties: { include: { property: true } },
+            },
+          });
         });
-      }
-      return tx.item.create({
-        data: {
-          code: input.code.trim(),
-          name: input.name.trim(),
-          itemType: input.itemType as never,
-          unit: (input.unit ?? "MT") as ItemUnit,
-          isActive: input.isActive ?? true,
-          allowedColors:
-            allowedColorIds.length > 0
-              ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
-              : undefined,
-          allowedProperties:
-            allowedPropertyIds.length > 0
-              ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) }
-              : undefined,
-        },
-        include: {
-          allowedColors: { include: { color: true } },
-          allowedProperties: { include: { property: true } },
-        },
-      });
-    });
+      },
+      undefined,
+      () => isAutoCode,
+    );
 
     await AuditService.log({
       userId,
@@ -156,6 +250,7 @@ export class ItemService extends BaseService {
         allowedColorIds,
         allowedPropertyIds,
         ...(existing ? { reactivated: true } : {}),
+        ...(opts?.pendingReview ? { pendingReview: true } : {}),
       },
     });
 
@@ -164,6 +259,23 @@ export class ItemService extends BaseService {
       data: created,
       message: existing ? "Pasif ürün yeniden aktive edildi" : "Ürün oluşturuldu",
     };
+  }
+
+  /**
+   * Saha (mobil KK1) "yeni desen" hızlı oluşturma — YALNIZ ad.
+   * itemType FABRIC'e zorlanır; kod (STK-NNNNNN) otomatik, birim MT (create
+   * default'u), isActive true, izinli renk/özellik boş. `pendingReview:true`
+   * ile işaretlenir (admin gözden geçirir). Tüm doğrulama (ad zorunlu/max,
+   * TR-büyük harf normalize, ad-mükerrer 409) + kod üretimi + audit create()'ten
+   * yeniden kullanılır. `mobile:kk1-desen` yetkisi route'ta zorlanır.
+   */
+  async quickCreateFabric(
+    name: string,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    return this.create({ name, itemType: "FABRIC" }, userId, {
+      pendingReview: true,
+    });
   }
 
   /**
@@ -189,6 +301,7 @@ export class ItemService extends BaseService {
       const validated = validateName(data.name, {
         label: "Ürün ismi",
         required: true,
+        maxLen: ITEM_NAME_MAX_LEN,
       });
       if (typeof validated === "string") data.name = validated;
       // Saha #13: ürün adları HEPSİ BÜYÜK (tr).
@@ -211,6 +324,22 @@ export class ItemService extends BaseService {
       allowedColorIds !== undefined || allowedPropertyIds !== undefined;
     if (!hasListReplace) {
       return super.update(id, restData, userId);
+    }
+
+    // Ad-mükerrer koruması: bu dal super.update'i atladığından base kancası elle —
+    // yalnız ad gerçekten değişiyorsa (tarihsel mükerrer kayıt düzenlenebilir kalsın).
+    if (typeof restData.name === "string") {
+      const current = await prisma.item.findUnique({
+        where: { id },
+        select: { name: true },
+      });
+      // Kayıt yoksa kontrol atlanır — tx'teki update not-found ile düşsün.
+      if (
+        current &&
+        foldNameForCompare(restData.name) !== foldNameForCompare(current.name)
+      ) {
+        await this.assertNameNotDuplicate(restData, id);
+      }
     }
 
     // M-23: replace edilen listeler create() ile AYNI doğrulamadan geçer —

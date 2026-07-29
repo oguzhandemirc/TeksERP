@@ -1,10 +1,9 @@
 // Etiket Stüdyosu — kanvas model yardımcıları birim testleri
 import { describe, expect, it } from "vitest";
 import {
-  alignElements,
   applyResize,
-  distributeElements,
   estimateBounds,
+  ICON_DEFAULT_MM,
   makeElement,
   makeBarcodePair,
   qrSizeMm,
@@ -12,7 +11,8 @@ import {
   snapRotation,
   starterLayout,
 } from "./canvas-model";
-import type { Code128Element, FieldElement, LabelElement, LineElement, QrElement, TextElement } from "@/types/label-canvas";
+import { alignElements, distributeElements } from "./canvas-align";
+import type { Code128Element, FieldElement, IconElement, LabelElement, LineElement, QrElement, TextElement } from "@/types/label-canvas";
 
 const CANVAS = { widthMm: 100, heightMm: 60 };
 
@@ -46,6 +46,15 @@ describe("estimateBounds", () => {
     expect(b.w).toBe(b.h);
     expect(b.w).toBeCloseTo(qrSizeMm(6));
   });
+
+  it("icon: kare — hMm yok → 8mm varsayılan; dönüş boyutu DEĞİŞTİRMEZ (kare)", () => {
+    const el: IconElement = { id: "i", type: "icon", icon: "wash-30", x: 5, y: 5 };
+    const b = estimateBounds(el, CANVAS);
+    expect(b).toEqual({ x: 5, y: 5, w: ICON_DEFAULT_MM, h: ICON_DEFAULT_MM });
+    const rotated = estimateBounds({ ...el, hMm: 12, rot: 90 }, CANVAS);
+    expect(rotated.w).toBe(12);
+    expect(rotated.h).toBe(12);
+  });
 });
 
 describe("makeElement", () => {
@@ -68,6 +77,18 @@ describe("makeElement", () => {
   it("code128: gömülü kod KAPALI (ayrı öğe olacak)", () => {
     const el = makeElement("code128", { x: 3, y: 3 });
     if (el.type === "code128") expect(el.human).toBe(false);
+  });
+
+  it("icon: verilen anahtar + 8mm varsayılan; anahtarsız → wash-30", () => {
+    const el = makeElement("icon", { x: 3.24, y: 3 }, { icon: "bleach-no" });
+    expect(el.type).toBe("icon");
+    expect(el.x).toBe(3);
+    if (el.type === "icon") {
+      expect(el.icon).toBe("bleach-no");
+      expect(el.hMm).toBe(ICON_DEFAULT_MM);
+    }
+    const def = makeElement("icon", { x: 1, y: 1 });
+    if (def.type === "icon") expect(def.icon).toBe("wash-30");
   });
 });
 
@@ -115,6 +136,14 @@ describe("applyResize", () => {
     expect(applyResize({ ...el, hMm: 5 }, 60, 5)).toEqual({ wr: 2 });
     // değişiklik yoksa null
     expect(applyResize({ ...el, hMm: 5, wr: 2 }, 60, 5)).toBeNull();
+  });
+
+  it("icon: kare boyut — büyük eksen kenar olur, 0.5 snap + 3-50 clamp", () => {
+    const el: IconElement = { id: "i", type: "icon", icon: "wash-30", x: 0, y: 0, hMm: 8 };
+    expect(applyResize(el, 10.26, 6)).toEqual({ hMm: 10.5 }); // max(w,h) snap'li
+    expect(applyResize(el, 1, 1)).toEqual({ hMm: 3 });        // alt clamp
+    expect(applyResize(el, 200, 200)).toEqual({ hMm: 50 });   // üst clamp
+    expect(applyResize(el, 8, 8)).toBeNull();                 // değişiklik yok
   });
 
   it("metin: hMm/wr sınır kutusuna birebir yansır", () => {

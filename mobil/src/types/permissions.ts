@@ -11,6 +11,8 @@ export type MobilePermission =
   | 'mobile:kartela-kabul'
   | 'mobile:iade'
   | 'mobile:hizli-is-emri'
+  // Ekran değil, KK1-içi yetenek: seçili operatöre inline yeni desen oluşturma.
+  | 'mobile:kk1-desen'
   | 'mobile:*';
 
 /**

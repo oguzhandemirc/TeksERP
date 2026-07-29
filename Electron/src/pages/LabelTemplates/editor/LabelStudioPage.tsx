@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Save, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -27,11 +28,13 @@ import { useEditorState } from "./useEditorState";
 import { useCanvasLint } from "./useCanvasLint";
 import { CanvasStage } from "./CanvasStage";
 import { ElementPalette } from "./ElementPalette";
+import { LayerPanel } from "./LayerPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { VariantTabs } from "./VariantTabs";
 import { VariantMismatchBanner } from "./VariantMismatchBanner";
 import { CanvasPreview } from "./CanvasPreview";
 import { DEFAULT_ZOOM, makeElement, makeBarcodePair, clamp } from "./canvas-model";
+import { centerOnCanvas } from "./canvas-align";
 import type { CanvasPad, LabelElement, LabelElementType } from "@/types/label-canvas";
 
 export function LabelStudioPage() {
@@ -139,6 +142,8 @@ export function LabelStudioPage() {
     }
     state.addElement(makeElement(type, { x: 5, y: 5 }));
   };
+  const addIcon = (iconKey: string) =>
+    state.addElement(makeElement("icon", { x: 5, y: 5 }, { icon: iconKey }));
 
   const selected =
     state.selectedIds.length === 1
@@ -148,10 +153,9 @@ export function LabelStudioPage() {
   const loading = templateQ.isLoading || variantsQ.isLoading;
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title={template ? `Etiket Stüdyosu: ${template.name}` : "Etiket Stüdyosu"}
-        description="Serbest kanvas tasarım — çıktı 4 dile (PPLA/PPLB/ZPL/HTML) otomatik derlenir; önizleme = baskı."
         onBack={() => navigate("/definitions/labels?tab=templates")}
         actions={
           <>
@@ -232,6 +236,22 @@ export function LabelStudioPage() {
                         <ElementPalette
                           onAddField={(f) => state.addElement(makeElement("field", { x: 5, y: 5 }, { bind: f.key, label: f.defaultLabel }))}
                           onAddStructural={addStructural}
+                          onAddIcon={addIcon}
+                        />
+                      </div>
+                      <div className="border-t pt-3">
+                        <LayerPanel
+                          elements={state.elements}
+                          selectedIds={state.selectedIds}
+                          onSelect={(id) => state.select(id)}
+                          onToggleLock={(id) => {
+                            const el = state.elements.find((e) => e.id === id);
+                            if (el) state.updateElement(id, { locked: !el.locked } as Partial<LabelElement>);
+                          }}
+                          onMoveForward={state.moveForward}
+                          onMoveBackward={state.moveBackward}
+                          onReorder={state.reorder}
+                          onRemove={state.removeElement}
                         />
                       </div>
                     </div>
@@ -247,17 +267,12 @@ export function LabelStudioPage() {
                       <PropertiesPanel element={selected} catalog={catalog}
                         multiCount={state.selectedIds.length}
                         onChange={(patch) => selected && state.updateElement(selected.id, patch)}
-                        onRemove={() => selected && state.removeElement(selected.id)} />
-                      {lint.length > 0 && (
-                        <ul className="space-y-1 rounded-md border p-2 text-[10px]">
-                          {lint.map((i, idx) => (
-                            <li key={idx} className={
-                              i.level === "error" ? "text-destructive" :
-                              i.level === "warn" ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground"
-                            }>• {i.message}</li>
-                          ))}
-                        </ul>
-                      )}
+                        onRemove={() => selected && state.removeElement(selected.id)}
+                        onDuplicate={() => selected && state.duplicateElement(selected.id)}
+                        onBringToFront={() => selected && state.bringToFront([selected.id])}
+                        onSendToBack={() => selected && state.sendToBack([selected.id])}
+                        onCenterX={() => selected && state.updateElement(selected.id, centerOnCanvas(selected, "x", canvas))}
+                        onCenterY={() => selected && state.updateElement(selected.id, centerOnCanvas(selected, "y", canvas))} />
                     </div>
                   </div>
                 )}
@@ -281,10 +296,10 @@ export function LabelStudioPage() {
         fetchNative={(o) =>
           labelTemplateService.canvasPreview({
             kind: previewKind, widthMm: canvas.widthMm, heightMm: canvas.heightMm, elements: state.layout,
-            peripheralId: o?.peripheralId,
+            peripheralId: o?.peripheralId, copies: o?.copies,
           })
         }
       />
-    </div>
+    </PageShell>
   );
 }

@@ -1,8 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, PackageOpen, ChevronDown, CheckCircle2, XCircle, Eraser, Info } from "lucide-react";
+import { Search, PackageOpen, CheckCircle2, XCircle, Eraser, Info } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -121,11 +124,16 @@ export function SackStorePage() {
 
   const scannedCount = Object.keys(scanned).length;
 
+  const { rootRef, sentinelRef } = useInfiniteScroll({
+    hasMore: query.hasNextPage,
+    isLoading: query.isFetchingNextPage,
+    onLoadMore: () => void query.fetchNextPage(),
+  });
+
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Sevk Kapısı"
-        description="Kapıda çuval okut → sevkiyat kartı öne gelir → sevk et / irsaliye bas. Planlı (çıkış bekleyen) sevkler; karta tıkla → çuval ve top dökümü."
         actions={
           <div className="flex items-center gap-2">
             {scannedCount > 0 && (
@@ -212,7 +220,7 @@ export function SackStorePage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <PageBody ref={rootRef} className="p-6">
         {query.isLoading ? (
           <div className="grid gap-3 lg:grid-cols-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -239,29 +247,15 @@ export function SackStorePage() {
                 />
               ))}
             </div>
-            <div className="flex justify-center p-6">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!query.hasNextPage || query.isFetchingNextPage}
-                onClick={() => query.fetchNextPage()}
-                className="gap-2"
-              >
-                {query.isFetchingNextPage ? (
-                  "Yükleniyor..."
-                ) : query.hasNextPage ? (
-                  <>
-                    <ChevronDown className="h-4 w-4" />
-                    Daha Fazla Yükle
-                  </>
-                ) : (
-                  "Liste sonu"
-                )}
-              </Button>
-            </div>
+            <AutoLoadMore
+              ref={sentinelRef}
+              hasMore={query.hasNextPage}
+              isFetchingMore={query.isFetchingNextPage}
+              count={shipments.length}
+            />
           </>
         )}
-      </div>
+      </PageBody>
 
       <ShipmentContentsSheet
         shipment={openShipment}
@@ -293,6 +287,6 @@ export function SackStorePage() {
           setLastOk(null);
         }}
       />
-    </div>
+    </PageShell>
   );
 }

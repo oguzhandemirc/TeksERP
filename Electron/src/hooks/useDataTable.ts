@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   getCoreRowModel,
@@ -181,6 +181,42 @@ export function useDataTable<T>({
 
   const totalEstimate = query.data?.pages[0]?.pagination.totalEstimate;
 
+  // Dışa aktarma için: aktif filtre/sıralama/arama ile SUNUCUDAKİ TÜM kayıtları
+  // (yalnız ekrana yüklenen sayfalar değil) cursor'u sonuna kadar döndürerek çeker.
+  // "Tümünü indir" bunu kullanır → 30.000 top olsa da hepsi iner. Büyük sayfa boyu
+  // (500, backend tavanıyla hizalı) ile istek sayısı az; guard ile kaçak döngü kesilir.
+  // onProgress: her sayfadan sonra (yüklenen, ~toplam) — uzun indirmede ilerleme çubuğu.
+  const fetchAll = useCallback(
+    async (onProgress?: (loaded: number, total?: number) => void): Promise<T[]> => {
+      const all: T[] = [];
+      let cursor: string | null = null;
+      let total: number | undefined;
+      const EXPORT_LIMIT = 500;
+      for (let guard = 0; guard < 1000; guard++) {
+        const page = await fetchFn({
+          cursor,
+          limit: EXPORT_LIMIT,
+          sortBy: baseKey.sortBy,
+          sortOrder: baseKey.sortOrder,
+          filters: baseKey.filters,
+          search: baseKey.search,
+          dateField: baseKey.dateField,
+          dateFrom: baseKey.dateFrom,
+          dateTo: baseKey.dateTo,
+          // Yalnız ilk sayfada toplam tahmini iste (ilerleme "N / ~T" için).
+          withTotal: cursor === null,
+        });
+        if (cursor === null) total = page.pagination.totalEstimate;
+        all.push(...page.data);
+        onProgress?.(all.length, total);
+        cursor = page.pagination.nextCursor;
+        if (!cursor) break;
+      }
+      return all;
+    },
+    [fetchFn, baseKey],
+  );
+
   const table = useReactTable({
     data: flatRows,
     columns,
@@ -202,6 +238,7 @@ export function useDataTable<T>({
     query,
     search,
     setSearch: setSearchInput,
+    fetchAll,
     pagination: {
       loaded: flatRows.length,
       total: totalEstimate,

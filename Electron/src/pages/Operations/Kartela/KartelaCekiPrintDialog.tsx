@@ -14,6 +14,8 @@ import { printHtmlString } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
+import { PrintNoteField } from "@/components/print/PrintNoteField";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   printedDocumentService,
   type PrintedDocument,
@@ -37,6 +39,11 @@ const DOC_TYPE = "KARTELA_DISPATCH" as const;
 export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props) {
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  // "Güncel şablonla" — içerik donuk, görünüm canlı Belge Şablonları ayarından.
+  const [currentTemplate, setCurrentTemplate] = useState(false);
+  // Tek seferlik baskı notu — kalıcı şablona yazılmaz, yalnız bu baskıya girer.
+  const [printNote, setPrintNote] = useState("");
+  const debouncedNote = useDebouncedValue(printNote, 400);
 
   // Donmuş içerik meta'sı (versiyon çubuğu + ACTIVE/VOIDED/SUPERSEDED).
   const docQuery = useQuery({
@@ -61,8 +68,12 @@ export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props
 
   // ÖNİZLEME + BASKI tek kaynak: donmuş versiyonun backend HTML'i.
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", DOC_TYPE, dispatchId, shownVersion],
-    queryFn: () => printedDocumentService.getHtml(DOC_TYPE, dispatchId!, shownVersion ?? undefined),
+    queryKey: ["printed-doc-html", DOC_TYPE, dispatchId, shownVersion, currentTemplate, debouncedNote],
+    queryFn: () =>
+      printedDocumentService.getHtml(DOC_TYPE, dispatchId!, shownVersion ?? undefined, {
+        currentTemplate,
+        printNote: debouncedNote,
+      }),
     enabled: open && Boolean(dispatchId) && shownVersion != null,
     staleTime: 0,
   });
@@ -100,7 +111,13 @@ export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props
                 activeVersion={currentDoc?.version ?? shown.version}
                 onSelectVersion={setSelectedVersion}
                 canReissue={hasPermission("kartela:write")}
+                currentTemplate={currentTemplate}
+                onCurrentTemplateChange={setCurrentTemplate}
+                templateStale={currentDoc?.templateStale ?? false}
               />
+              <div className="mt-2">
+                <PrintNoteField value={printNote} onChange={setPrintNote} />
+              </div>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
               {htmlQuery.isLoading ? (

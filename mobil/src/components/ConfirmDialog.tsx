@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   View,
-  ScrollView,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import AppModal from './AppModal';
 import {
   Text,
@@ -177,10 +177,11 @@ export default function ConfirmDialog(props: Props) {
         {/* Body ScrollView içinde — uzun affected listesi veya uzun açıklama
             butonları ekran dışına itmesin. Sheet'te overflow:'hidden' + sınırlı
             maxHeight olduğu için body'nin shrink+scroll olması şart. */}
-        <ScrollView
+        <KeyboardAwareScrollView
           style={styles.bodyScroll}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
+          bottomOffset={72}
         >
           {typeof props.description === 'string' ? (
             <Text style={styles.descText}>{props.description}</Text>
@@ -217,7 +218,7 @@ export default function ConfirmDialog(props: Props) {
               style={styles.reasonInput}
             />
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={styles.actions}>
           <Button

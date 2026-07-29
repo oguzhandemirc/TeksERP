@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { Download, ClipboardCopy, AlertTriangle, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,10 +31,9 @@ export function BackupsPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Yedekler"
-        description="Veritabanı yedek (.dump) dosyaları — indir veya geri yükleme komutunu kopyala."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={() => void refetch()} title="Yenile">
@@ -44,7 +44,7 @@ export function BackupsPage() {
         }
       />
 
-      <div className="space-y-6 overflow-y-auto p-6">
+      <PageBody className="space-y-6 p-6">
         {/* Geri yükleme uyarısı */}
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -69,8 +69,8 @@ export function BackupsPage() {
 
         <Card>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead>Dosya</TableHead>
                   <TableHead className="w-28">Boyut</TableHead>
@@ -130,7 +130,7 @@ export function BackupsPage() {
             </Table>
           </CardContent>
         </Card>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

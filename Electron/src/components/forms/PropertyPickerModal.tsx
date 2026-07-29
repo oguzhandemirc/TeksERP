@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { PropertyChipsField } from "./PropertyChipsField";
 
 interface Props {
-  /** Seçili Item ID — boşsa tetik pasif ("önce ürün seç"). */
+  /** Seçili Item ID — boşsa tetik pasif ("önce kumaş seç"). */
   itemId: string;
   value: string[];
   onChange: (next: string[]) => void;
@@ -22,14 +22,14 @@ interface Props {
 
 /**
  * Modal çoklu özellik seçici — tetik buton (seçili sayısını gösterir) → modal
- * içinde [[PropertyChipsField]] (ürünün izinli özellikleri, tıkla-seç). Renk
+ * içinde [[PropertyChipsField]] (kumaşın izinli özellikleri, tıkla-seç). Renk
  * seçici (ColorPickerModal) ile AYNI tetik görsel dili → yan yana tutarlı durur.
  */
 export function PropertyPickerModal({ itemId, value, onChange, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const hasItem = Boolean(itemId);
   const triggerText = !hasItem
-    ? "Önce ürün seç"
+    ? "Önce kumaş seç"
     : value.length > 0
       ? `${value.length} özellik seçili`
       : "Özellik seç...";

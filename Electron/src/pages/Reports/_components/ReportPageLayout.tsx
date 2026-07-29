@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { ReportDateRange } from "./ReportDateRange";
 import { ReportSideRail } from "./ReportSideRail";
 
@@ -30,15 +31,15 @@ export function ReportPageLayout({
   children,
 }: Props) {
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell className="overflow-hidden">
       <PageHeader title={title} description={description} actions={actions} />
       {filters ? filters : showDateRange ? <ReportDateRange defaultDays={defaultDays} /> : null}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-auto p-4">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <PageBody className="p-4">
           <div className="mx-auto flex max-w-7xl flex-col gap-4">{children}</div>
-        </div>
+        </PageBody>
         <ReportSideRail />
       </div>
-    </div>
+    </PageShell>
   );
 }

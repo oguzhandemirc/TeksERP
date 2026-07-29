@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { buildWorkbook, downloadWorkbook } from "@/lib/xlsx-export";
+import { buildWorkbook, downloadWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { accountingDispatchService } from "./service";
 import {
   accountingExportFileName,
@@ -37,8 +37,9 @@ export function useAccountingExport() {
           return;
         }
         const blob = await buildWorkbook(buildAccountingWorkbookSheets(data));
-        downloadWorkbook(blob, accountingExportFileName(data.range));
-        toast.success("Excel indirildi");
+        if (await saveWorkbook(blob, accountingExportFileName(data.range))) {
+          toast.success("Excel indirildi");
+        }
       } catch {
         toast.error("Excel oluşturulamadı");
       }
@@ -56,8 +57,9 @@ export function useAccountingExport() {
         return;
       }
       const blob = await buildWorkbook(buildAccountingWorkbookSheets(data));
-      downloadWorkbook(blob, `Sevk_Edilenler_Secili_${data.shipments.length}`);
-      toast.success(`${data.shipments.length} sevk tek Excel'e aktarıldı`);
+      if (await saveWorkbook(blob, `Sevk_Edilenler_Secili_${data.shipments.length}`)) {
+        toast.success(`${data.shipments.length} sevk tek Excel'e aktarıldı`);
+      }
     } catch {
       toast.error("Excel oluşturulamadı");
     } finally {

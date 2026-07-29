@@ -29,7 +29,7 @@ export class ProductRecipeService extends BaseService {
   /** Dış referansların varlık+aktiflik (soft-delete giriş guard'ı) + width pozitif
    *  doğrulaması — bare BaseController Zod taşımadığından serviste (createInitialEntry/
    *  quality-grade desenleriyle aynı hijyen). Yalnız GÖNDERİLEN alanlar denetlenir. */
-  private async validateRefs(data: Record<string, unknown>): Promise<void> {
+  private async validateRefs(data: Record<string, unknown>, recipeId?: string): Promise<void> {
     if (typeof data.itemId === "string" && data.itemId) {
       const item = await prisma.item.findFirst({
         where: { id: data.itemId, isActive: true },
@@ -69,6 +69,53 @@ export class ProductRecipeService extends BaseService {
         }
       }
     }
+
+    // Item.allowedColors/allowedProperties kuralının reçetede de enforce'u —
+    // sipariş satırı (order.service M-24) + KK1 aynı kuralı uyguluyor; reçete
+    // bir prefill şablonu olsa da çelişkili (ürünün izinli listesi dışı renk/
+    // özellik) kayıt üretemesin. PATCH'te itemId gelmese de mevcut reçeteden çözülür.
+    const sentColorId = typeof data.colorId === "string" && data.colorId ? data.colorId : null;
+    const sentPropIds = Array.isArray(data.properties) ? recipePropertyIds(data.properties) : [];
+    if (sentColorId || sentPropIds.length > 0) {
+      const effectiveItemId =
+        typeof data.itemId === "string" && data.itemId
+          ? data.itemId
+          : recipeId
+            ? (
+                await prisma.productRecipe.findUnique({
+                  where: { id: recipeId },
+                  select: { itemId: true },
+                })
+              )?.itemId ?? null
+            : null;
+      if (effectiveItemId) {
+        const item = await prisma.item.findUnique({
+          where: { id: effectiveItemId },
+          select: {
+            name: true,
+            allowedColors: { select: { colorId: true } },
+            allowedProperties: { select: { propertyId: true } },
+          },
+        });
+        if (item) {
+          const allowedColors = new Set(item.allowedColors.map((c) => c.colorId));
+          if (sentColorId && allowedColors.size > 0 && !allowedColors.has(sentColorId)) {
+            throw AppError.badRequest(
+              `Seçilen renk '${item.name}' ürününün izinli renk listesinde değil`,
+            );
+          }
+          const allowedProps = new Set(item.allowedProperties.map((p) => p.propertyId));
+          if (allowedProps.size > 0) {
+            const outside = sentPropIds.find((p) => !allowedProps.has(p));
+            if (outside) {
+              throw AppError.badRequest(
+                `Seçilen özelliklerden biri '${item.name}' ürününün izinli özellik listesinde değil`,
+              );
+            }
+          }
+        }
+      }
+    }
   }
 
   async create(
@@ -91,7 +138,7 @@ export class ProductRecipeService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    await this.validateRefs(data);
+    await this.validateRefs(data, id);
     const next = { ...data };
     canonicalizeFoldTypeInPlace(next); // D-13: reçete foldType kanonik
     if (Array.isArray(next.properties)) {

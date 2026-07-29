@@ -48,7 +48,7 @@ export const reportCategoryTitle: Record<string, string> = {
   inventory: "Stok & Depo",
   subcontract: "Fason",
   customer: "Müşteri",
-  audit: "Sistem",
+  audit: "Denetim",
 };
 
 export const reportTiles: ReportTile[] = [
@@ -102,7 +102,7 @@ export const reportTiles: ReportTile[] = [
   },
   {
     key: "audit",
-    title: "Sistem",
+    title: "Denetim",
     description: "Denetim kaydı özetleri, kullanıcı aktivitesi",
     icon: Activity,
     to: "/reports/audit",

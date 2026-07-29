@@ -50,13 +50,17 @@ async function main() {
   check("ZPL: ^BQN QR", zpl.includes("^BQN"));
   check("ZPL: ^PQ3 (kopya)", zpl.includes("^PQ3"));
 
-  // --- registry dispatch ---
+  // --- registry dispatch (renderLabel 2026-07 icon işiyle ASYNC → await) ---
   const mk = (language: ResolvedLabelFormat["language"]) =>
     renderLabel(language, { payload, template: null, barcodeSvg: "", qrSvg: "", copies: 1, format: { ...format, language } });
-  check("registry RASTER_HTML → html", mk("RASTER_HTML").content.includes("<!doctype html") && mk("RASTER_HTML").contentType.includes("text/html"));
-  check("registry PPLA → STX L", mk("PPLA").content.includes("\x02L") && mk("PPLA").contentType.includes("text/plain"));
-  check("registry PPLB → N/q", /^N/m.test(mk("PPLB").content));
-  check("registry ZPL → ^XA", mk("ZPL").content.includes("^XA"));
+  const rHtml = await mk("RASTER_HTML");
+  const rPpla = await mk("PPLA");
+  const rPplb = await mk("PPLB");
+  const rZpl = await mk("ZPL");
+  check("registry RASTER_HTML → html", rHtml.content.includes("<!doctype html") && rHtml.contentType.includes("text/html"));
+  check("registry PPLA → STX L", rPpla.content.includes("\x02L") && rPpla.contentType.includes("text/plain"));
+  check("registry PPLB → N/q", /^N/m.test(rPplb.content));
+  check("registry ZPL → ^XA", rZpl.content.includes("^XA"));
 
   // --- sanitize: ZPL ^/~ ve PPLB " enjeksiyonu temizlenir ---
   const dirtyZpl = buildRollLabelZpl({ payload: { ...payload, itemName: "A^B~C" } as unknown as LabelPayload, format, copies: 1, template: null });

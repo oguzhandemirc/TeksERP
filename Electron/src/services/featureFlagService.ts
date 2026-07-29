@@ -70,7 +70,7 @@ export interface TravelerCardConfig {
   specFields: TravelerCardSpecFields;
   /** Spec grid'de satır başına sütun sayısı (1–4). */
   specColumns: number;
-  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Renk/Miktar). */
+  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Kumaş/Renk/Miktar). */
   orderFields: TravelerCardOrderFields;
   /** Miktar toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
   orderTotal: TravelerCardSpecField;
@@ -154,6 +154,10 @@ export interface FeatureFlags {
    *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
    *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */
   shipmentConfirmationEnabled: boolean;
+  /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
+   *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
+   *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */
+  customerBranchesEnabled: boolean;
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (true=default/açık).
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma)
    *  onay sonrası kabul edilir; kaynak top tamamen tüketilir. Backend ENFORCE eder. */
@@ -233,6 +237,19 @@ export const featureFlagService = {
   update: (flags: Partial<FeatureFlags>): Promise<ApiResponse<FeatureFlags>> =>
     apiClient
       .patch<ApiResponse<FeatureFlags>>("/api/feature-flags", flags)
+      .then((r) => r.data),
+
+  /** Güncel belge logosu (data-url; yoksa null). FeatureFlags'ten ayrı uç —
+   *  base64 app-start yükünü şişirmesin diye yalnız ihtiyaç anında çekilir. */
+  getDocumentsLogo: (): Promise<ApiResponse<{ dataUrl: string | null }>> =>
+    apiClient
+      .get<ApiResponse<{ dataUrl: string | null }>>("/api/feature-flags/documents-logo")
+      .then((r) => r.data),
+
+  /** Belge logosunu güncelle (dataUrl=null → kaldır). PNG/JPEG/SVG, ~100KB sınırı. */
+  setDocumentsLogo: (dataUrl: string | null): Promise<ApiResponse<{ dataUrl: string | null }>> =>
+    apiClient
+      .put<ApiResponse<{ dataUrl: string | null }>>("/api/feature-flags/documents-logo", { dataUrl })
       .then((r) => r.data),
 };
 

@@ -1,7 +1,7 @@
 // =============================================================================
 // Picker / dropdown "tümünü çek" helper'ı
 // =============================================================================
-// Master data ekranlarındaki picker'lar (renk, özellik, ürün, müşteri, vb.)
+// Master data ekranlarındaki picker'lar (renk, özellik, kumaş, müşteri, vb.)
 // "tümünü tek seferde göster" davranışı kullanır. Tarihsel olarak her sayfada
 // `colorService.getAll({ page: 1, pageSize: 500, ... })` gibi inline kod
 // vardı; backend `MAX_PAGE_SIZE` değiştikçe (100 → 200 → 500) yer yer 400

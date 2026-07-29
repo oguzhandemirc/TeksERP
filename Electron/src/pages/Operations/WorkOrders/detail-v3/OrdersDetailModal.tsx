@@ -39,8 +39,8 @@ export function OrdersDetailModal({
           <DialogTitle>Bağlı Siparişler ({rows.length})</DialogTitle>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-auto">
-          <Table>
-            <TableHeader>
+          <Table containerClassName="overflow-visible">
+            <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
                 <TableHead>Müşteri</TableHead>
                 <TableHead>Sipariş No</TableHead>

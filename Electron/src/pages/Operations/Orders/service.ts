@@ -2,6 +2,7 @@ import apiClient from "@/services/apiClient";
 import { createCrudService } from "@/services/crudService";
 import { buildQueryString } from "@/lib/query-builder";
 import type { ApiResponse, PaginatedResponse, QueryParams } from "@/types/api";
+import type { ShipmentStatus } from "@/pages/Operations/Shipments/types";
 import type { Order } from "./types";
 
 const base = createCrudService<Order>("/api/orders");
@@ -9,6 +10,35 @@ const base = createCrudService<Order>("/api/orders");
 export interface AliasSuggestResponse {
   itemAlias: string | null;
   colorAlias: string | null;
+}
+
+/** Spec (kumaş+renk+en) anlık müsaitlik — sipariş formu ipucu (metre). Rezervasyon DEĞİL. */
+export interface SpecAvailability {
+  freeWarehouse: number;
+  inProduction: number;
+  freeStock: number;
+}
+
+/** Sipariş detayında "hangi sevkiyata ne kadar sevk edildi" satırı. */
+export interface OrderShipmentRow {
+  /** DIRECT legacy toplu satırında boş (tıklanamaz). */
+  shipmentId: string;
+  shipmentNo: string;
+  status: ShipmentStatus;
+  /** SHIPMENT = çuval sevkiyatı; DIRECT = fasondan doğrudan sevk. */
+  kind: "SHIPMENT" | "DIRECT";
+  date: string | null;
+  qty: number;
+  sackCount: number;
+  branchName: string | null;
+}
+
+export interface OrderShipmentsResponse {
+  /** DISPATCHED çuval + fason direkt — sipariş sevk toplamıyla mutabık. */
+  dispatchedTotal: number;
+  /** PLANNED çuval (bekleyen, henüz sevk edilmemiş). */
+  plannedTotal: number;
+  shipments: OrderShipmentRow[];
 }
 
 export type OrderCancelAction = "UNLINK_ONLY" | "CONVERT_TO_STOCK" | "CANCEL_WO";
@@ -97,4 +127,33 @@ export const orderService = {
       )
       .then((r) => r.data);
   },
+
+  /**
+   * Sipariş giriş formunda bir spec (kumaş+renk+en) için "Depoda / Üretimde / Ham"
+   * anlık müsaitlik ipucu. Kaydedilmemiş satır (lineId'siz) için spec-bazlı çeker.
+   * ANLIK FOTOĞRAF — rezervasyon değildir.
+   */
+  getSpecAvailability: (
+    itemId: string,
+    colorId?: string | null,
+    width?: number | null,
+  ): Promise<ApiResponse<SpecAvailability>> => {
+    const params = new URLSearchParams({ itemId });
+    if (colorId) params.set("colorId", colorId);
+    if (width != null) params.set("width", String(width));
+    return apiClient
+      .get<ApiResponse<SpecAvailability>>(
+        `/api/orders/spec-availability?${params.toString()}`,
+      )
+      .then((r) => r.data);
+  },
+
+  /**
+   * Siparişin sevkiyat drill-down'ı — hangi sevkiyatlarla (çuval + fason direkt)
+   * sevk edildi/bekliyor. Bilgilendirici (sevk muhasebesini değiştirmez).
+   */
+  getShipments: (orderId: string): Promise<ApiResponse<OrderShipmentsResponse>> =>
+    apiClient
+      .get<ApiResponse<OrderShipmentsResponse>>(`/api/orders/${orderId}/shipments`)
+      .then((r) => r.data),
 };

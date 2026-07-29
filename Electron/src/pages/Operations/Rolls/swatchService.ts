@@ -51,7 +51,7 @@ export interface SwatchListParams {
   limit?: number;
 }
 
-/** Kartela stoğu: müsait (sevke girmemiş, iptalsiz) kartelaların ürün+renk bazında adedi. */
+/** Kartela stoğu: müsait (sevke girmemiş, iptalsiz) kartelaların kumaş+renk bazında adedi. */
 export interface KartelaStockGroup {
   itemId: string;
   itemCode: string;
@@ -121,7 +121,7 @@ export const swatchService = {
       .then((r) => r.data);
   },
 
-  /** Kartela stoğu — ürün+renk bazında müsait adet ("depoda kaç tane var"). */
+  /** Kartela stoğu — kumaş+renk bazında müsait adet ("depoda kaç tane var"). */
   getStock(params?: {
     search?: string;
     itemId?: string;
@@ -137,7 +137,7 @@ export const swatchService = {
       .then((r) => r.data);
   },
 
-  /** Bir ürün+renk grubundan N kartelayı elle stoktan düş (gerekçeli soft-cancel). */
+  /** Bir kumaş+renk grubundan N kartelayı elle stoktan düş (gerekçeli soft-cancel). */
   reduceStock(body: {
     itemId: string;
     colorId: string | null;

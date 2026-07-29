@@ -3,7 +3,7 @@ import { customerColumns } from "./columns";
 import { customerService } from "./service";
 import { CustomerFormDialog } from "./CustomerFormDialog";
 import type { Customer } from "./types";
-import { branchDraftHasContent, type CustomerFormValues } from "./schema";
+import { branchDraftHasContent, customerCardPayload, type CustomerFormValues } from "./schema";
 
 /** Tek-adım oluşturmada backend'e gönderilen satır-içi şube gövdesi. */
 interface BranchCreatePayload {
@@ -30,6 +30,7 @@ const buildPayload = (v: CustomerFormValues, initial: Customer | null): Customer
     ...(initial ? { code: initial.code } : {}),
     name: v.name,
     taxNumber: v.taxNumber || null,
+    ...customerCardPayload(v),
     type: v.type,
     isActive: v.isActive,
     ...(branchRows.length > 0

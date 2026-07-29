@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useTabsStore } from "@/store/tabs";
@@ -33,10 +34,9 @@ export function DeviceDetailPage() {
   }, [device?.name, id]);
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title={device ? device.name : "Cihaz Detayı"}
-        description="Cihazın oturumları ve her oturum penceresinde yapılan işlemlerin dökümü."
         onBack={() => navigate("/access/devices")}
         actions={
           <RefreshButton
@@ -46,7 +46,7 @@ export function DeviceDetailPage() {
         }
       />
 
-      <div className="flex-1 space-y-4 overflow-auto p-6">
+      <PageBody className="space-y-4 p-6">
         {detail.isLoading ? (
           <>
             <Skeleton className="h-32 w-full" />
@@ -62,7 +62,7 @@ export function DeviceDetailPage() {
             <SessionHistoryList filter={{ deviceId: device.id }} variant="device" />
           </>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

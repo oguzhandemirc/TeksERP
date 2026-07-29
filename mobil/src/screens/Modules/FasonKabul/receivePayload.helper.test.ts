@@ -126,20 +126,37 @@ describe("KOMPOZİT REGRESYON — saha bug'ı (kısmi kabul) ekran-mantığı se
   ];
 
   it('2 top parti → 1 top işaretten çıkınca returns=1 VE newRolls=1 (eski kodda 1 vs 2 olurdu)', () => {
-    // applyParty: tüm toplar işaretli, ön-dolu newRolls = parti topları
+    // applyParty (istisna modu PER_ROLL): tüm toplar işaretli, ön-dolu newRolls = parti topları
     let checked = new Set(['r1', 'r2']);
-    let newRolls = rebuildPrefilledNewRolls([], ROLLS.filter((r) => checked.has(r.rollId)).map((r) => r.qty));
+    let newRolls = rebuildPrefilledNewRolls([], ROLLS.filter((r) => checked.has(r.rollId)).map((r) => r.qty), 'PER_ROLL');
     expect(newRolls).toHaveLength(2);
 
     // updateRow: gelmeyen 2. topu işaretten çıkar → newRolls resync
     checked = new Set(['r1']);
-    newRolls = rebuildPrefilledNewRolls(newRolls, ROLLS.filter((r) => checked.has(r.rollId)).map((r) => r.qty));
+    newRolls = rebuildPrefilledNewRolls(newRolls, ROLLS.filter((r) => checked.has(r.rollId)).map((r) => r.qty), 'PER_ROLL');
     const rows = ROLLS.map((r) => row(r.rollId, checked.has(r.rollId)));
 
     const payload = buildReceivePayload(baseArgs({ selectedParty: PARTY, rows, newRolls }));
     expect(payload).not.toBeNull();
     expect(payload!.returns).toHaveLength(1);
     expect(payload!.newRolls).toHaveLength(1); // ← BUG'da 2 olurdu
+    expect(payload!.newRolls[0].qty).toBe(100);
+  });
+
+  it('SINGLE (varsayılan) zinciri: uncheck sonrası tek parçanın metresi toplamla güncellenir', () => {
+    // applyParty: SINGLE → tek ön-dolu satır 220 (100+120)
+    let checked = new Set(['r1', 'r2']);
+    let newRolls = rebuildPrefilledNewRolls([], ROLLS.filter((r) => checked.has(r.rollId)).map((r) => r.qty), 'SINGLE');
+    expect(newRolls.map((r) => r.qty)).toEqual(['220']);
+
+    // updateRow: 2. top gelmedi → tek satır 100'e iner (bayat 220 kalırsa fazla metraj doğar)
+    checked = new Set(['r1']);
+    newRolls = rebuildPrefilledNewRolls(newRolls, ROLLS.filter((r) => checked.has(r.rollId)).map((r) => r.qty), 'SINGLE');
+    const rows = ROLLS.map((r) => row(r.rollId, checked.has(r.rollId)));
+
+    const payload = buildReceivePayload(baseArgs({ selectedParty: PARTY, rows, newRolls }));
+    expect(payload!.returns).toHaveLength(1);
+    expect(payload!.newRolls).toHaveLength(1);
     expect(payload!.newRolls[0].qty).toBe(100);
   });
 

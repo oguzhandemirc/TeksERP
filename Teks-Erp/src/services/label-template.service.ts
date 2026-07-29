@@ -39,9 +39,11 @@ import {
   getUnifiedCatalog,
   getUnifiedKeys,
 } from "../config/label-fields";
+import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { renderLabel } from "./helpers/label-renderer.registry";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
-import { validateCanvasLayout, CanvasValidationError } from "../config/label-elements";
+import { validateCanvasLayout, readCanvasLayout, CanvasValidationError } from "../config/label-elements";
+import { LABEL_ICON_CATEGORIES, LABEL_ICONS, labelIconSvg } from "../config/label-icons";
 import { mockPayload } from "./helpers/label-rawcode";
 import { fieldDisplayValue } from "./helpers/label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
@@ -71,14 +73,51 @@ function rethrowDefaultConflict(e: unknown): never {
   throw e;
 }
 
+/**
+ * ATAMA GUARD'ı (statik etiket kuralı) — bir şablon rulo/kartela bağlamına atanırken
+ * (bağlam varsayılanı / müşteri şablon rotası / cihaz şablon rotası) çağrılır:
+ * kanvas varyantı olan şablonun HER varyantında ≥1 taranabilir eleman (qr/code128)
+ * olmalı. Taranabilirsiz "statik bakım etiketi" havuzda yaşayabilir ama atanamaz
+ * (basılan rulo etiketi fiziksel iz ister). Varyantsız legacy akış şablonu aynen
+ * geçer (akış modeli her zaman QR+barkod basar). Üç setter + set-default kullanır.
+ */
+export async function assertTemplateAssignable(templateId: string): Promise<void> {
+  const t = await prisma.labelTemplate.findUnique({
+    where: { id: templateId },
+    select: { name: true, standalone: true, variants: { select: { elements: true } } },
+  });
+  // Yok → çağıran setter kendi 404/400'ünü verir.
+  if (!t) return;
+  // Serbest (statik) etiket: barkod içerse BİLE hiçbir bağlama atanamaz — talep
+  // üzerine (şablon+kopya seç) basılır, fiziksel rulo/kartela izi taşımaz.
+  if (t.standalone) {
+    throw AppError.badRequest("Serbest (statik) etiket rulo/kartela bağlamına atanamaz");
+  }
+  // Varyantsız → legacy akış, geç (akış modeli her zaman QR+barkod basar).
+  if (t.variants.length === 0) return;
+  for (const v of t.variants) {
+    const layout = readCanvasLayout(v.elements);
+    if (!layout) continue; // okunamayan varyant baskıda akış-modeline düşer (taranabilir)
+    const scannable = layout.elements.some((e) => e.type === "qr" || e.type === "code128");
+    if (!scannable) {
+      throw AppError.badRequest(
+        `『${t.name}』 şablonunda barkod/QR yok — rulo/kartela atamasında kullanılamaz (statik etiket)`,
+      );
+    }
+  }
+}
+
 /** Uzman raw-code override (dil→kod). Boş string'ler temizlenir = o dilde otomatik. */
 export type RawCodeMap = Partial<Record<"PPLA" | "PPLB" | "ZPL" | "RASTER_HTML", string>>;
 
 export interface LabelTemplateInput {
   name: string;
-  kind: LabelKind;
+  /** Türlü şablonda zorunlu; serbest (statik) şablonda verilmez/null → kind null doğar. */
+  kind?: LabelKind | null;
   isDefault?: boolean;
   isActive?: boolean;
+  /** Serbest (statik) etiket — atanamaz + barkodsuz kaydedilebilir (baskı seçicisinde görünür). */
+  standalone?: boolean;
   /** Boş geçilirse catalog'dan default field listesi üretilir. */
   fields?: TemplateField[];
   rawCode?: RawCodeMap;
@@ -92,11 +131,36 @@ export interface LabelTemplateUpdateInput {
   name?: string;
   isDefault?: boolean;
   isActive?: boolean;
+  standalone?: boolean;
   fields?: TemplateField[];
   rawCode?: RawCodeMap;
   lineStepMm?: number | null;
   qrScale?: number | null;
   lengthBanner?: boolean | null;
+}
+
+/**
+ * Taşınabilir şablon zarfı — dışa/içe aktar + çoğaltma ortak biçimi. id/timestamp/
+ * isDefault taşınmaz (import edilen şablon asla default doğmaz; atama bağları kopmaz).
+ */
+export interface TemplateEnvelope {
+  template: {
+    name: string;
+    kind?: LabelKind | null;
+    standalone?: boolean;
+    fields?: TemplateField[];
+    rawCode?: RawCodeMap;
+    lineStepMm?: number | null;
+    qrScale?: number | null;
+    lengthBanner?: boolean | null;
+  };
+  variants: Array<{
+    name?: string;
+    widthMm: number;
+    heightMm: number;
+    isPrimary?: boolean;
+    elements: unknown;
+  }>;
 }
 
 /** Boş/whitespace dil değerlerini at → { } = tüm diller otomatik üretim. */
@@ -116,12 +180,22 @@ export class LabelTemplateService {
   async findAll(opts?: {
     kind?: LabelKind;
     includeInactive?: boolean;
+    /** true → yalnız serbest (statik) şablonlar (baskı seçicisi). */
+    standalone?: boolean;
+    /** true → yalnız atanabilir şablonlar (serbest OLMAYAN — atama seçicileri). */
+    assignable?: boolean;
   }): Promise<ApiResponse<LabelTemplate[]>> {
     const rows = await prisma.labelTemplate.findMany({
       where: {
         deletedAt: null, // KALICI silinenler hiçbir listede görünmez (pasifler görünür)
         ...(opts?.kind ? { kind: opts.kind } : {}),
         ...(opts?.includeInactive ? {} : { isActive: true }),
+        // standalone önceliklidir; ikisi birlikte gelirse (beklenmez) serbest filtresi kazanır.
+        ...(opts?.standalone === true
+          ? { standalone: true }
+          : opts?.assignable === true
+            ? { NOT: { standalone: true } } // null-safe "serbest değil"
+            : {}),
       },
       // Havuz listesi varyant boyutlarını rozet olarak gösterir — minimal select.
       include: {
@@ -176,27 +250,64 @@ export class LabelTemplateService {
   // MUTATIONS
   // ---------------------------------------------------------------------------
 
+  /**
+   * Ad-mükerrer ön kontrolü (Türkçe-duyarsız) — DB @@unique([name]) yalnız EXACT
+   * eşleşmeyi yakalar ('Standart' vs 'standart' ikisi de girebilirdi). Tombstone
+   * (deletedAt dolu, adı DEL- ile serbest bırakılmış) aday sayılmaz.
+   */
+  private async assertNameAvailable(name: string, excludeId?: string): Promise<void> {
+    const target = foldNameForCompare(name);
+    const candidates = await prisma.labelTemplate.findMany({
+      where: { deletedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      select: { name: true, isActive: true },
+    });
+    const hit = candidates.find((t) => foldNameForCompare(t.name) === target);
+    if (!hit) return;
+    throw AppError.conflict(
+      hit.isActive
+        ? `'${name}' adında bir etiket şablonu zaten var. Aynı şablon ikinci kez eklenemez.`
+        : `'${name}' adında PASİF bir etiket şablonu zaten var. Yenisini eklemek yerine mevcut şablonu aktifleştirin.`,
+    );
+  }
+
   async create(input: LabelTemplateInput, userId?: string): Promise<ApiResponse<LabelTemplate>> {
     const name = input.name.trim();
     if (name.length === 0) throw AppError.badRequest("Template adı boş olamaz");
+    const standalone = input.standalone ?? false;
+    // Serbest (statik) etiket bağlama atanamaz — açılışta varsayılan da yapılamaz
+    // (update/setDefault/setContextDefault assertTemplateAssignable ile bunu zaten
+    // reddeder; create isDefault→LabelContextDefault yazımını burada kapatır).
+    if (standalone && input.isDefault) {
+      throw AppError.badRequest("Serbest (statik) etiket varsayılan yapılamaz");
+    }
+    // Serbest şablon TÜRSÜZ (kind null) doğar — baskı bağlamı yoktur, talep üzerine
+    // basılır. Normal şablonda kind zorunlu (bağlam varsayılanı/rota türe göre çözülür).
+    if (!standalone && !input.kind) {
+      throw AppError.badRequest("Etiket türü (kind) zorunlu");
+    }
+    const kind: LabelKind | null = standalone ? null : input.kind ?? null;
+    await this.assertNameAvailable(name);
 
-    const fields = input.fields ?? buildDefaultFields(input.kind);
-    validateFields(input.kind, fields);
+    // Serbest şablon kanvas-tabanlıdır (alan bind'i yok) → fields boş; türlü şablonda
+    // katalog doğrulaması sürer.
+    const fields = input.fields ?? (kind ? buildDefaultFields(kind) : []);
+    if (kind) validateFields(kind, fields);
 
     const created = await prisma.$transaction(async (tx) => {
       // isDefault=true geliyorsa eski kolonda diğerlerini düşür (çift-yazım geri uyumu).
-      if (input.isDefault) {
+      if (input.isDefault && kind) {
         await tx.labelTemplate.updateMany({
-          where: { kind: input.kind, isDefault: true },
+          where: { kind, isDefault: true },
           data: { isDefault: false },
         });
       }
       const row = await tx.labelTemplate.create({
         data: {
           name,
-          kind: input.kind,
+          kind,
           isDefault: input.isDefault ?? false,
           isActive: input.isActive ?? true,
+          standalone,
           fields: fields as unknown as Prisma.InputJsonValue,
           ...(input.rawCode ? { rawCode: normalizeRawCode(input.rawCode) as Prisma.InputJsonValue } : {}),
           lineStepMm: input.lineStepMm ?? null,
@@ -205,10 +316,10 @@ export class LabelTemplateService {
         },
       });
       // Tek doğru kaynak: bağlam varsayılanını LabelContextDefault'a yaz.
-      if (input.isDefault) {
+      if (input.isDefault && kind) {
         await tx.labelContextDefault.upsert({
-          where: { kind: input.kind },
-          create: { kind: input.kind, templateId: row.id },
+          where: { kind },
+          create: { kind, templateId: row.id },
           update: { templateId: row.id },
         });
       }
@@ -246,9 +357,14 @@ export class LabelTemplateService {
     if (input.name !== undefined) {
       const trimmed = input.name.trim();
       if (trimmed.length === 0) throw AppError.badRequest("Template adı boş olamaz");
+      // Kontrol yalnız ad gerçekten değişirken — mevcut kayıt aynen düzenlenebilir.
+      if (foldNameForCompare(trimmed) !== foldNameForCompare(existing.name)) {
+        await this.assertNameAvailable(trimmed, id);
+      }
       data.name = trimmed;
     }
     if (input.isActive !== undefined) data.isActive = input.isActive;
+    if (input.standalone !== undefined) data.standalone = input.standalone;
     if (input.fields) data.fields = input.fields as unknown as Prisma.InputJsonValue;
     if (input.isDefault !== undefined) data.isDefault = input.isDefault;
     if (input.rawCode !== undefined) data.rawCode = normalizeRawCode(input.rawCode) as Prisma.InputJsonValue;
@@ -260,6 +376,31 @@ export class LabelTemplateService {
       throw AppError.badRequest(
         "Türsüz (havuz) şablonda varsayılan bu uçtan atanamaz — bağlam varsayılanları ekranını kullanın"
       );
+    }
+
+    // Serbest (statik) etiket varsayılan/atanabilir olamaz — aynı çağrıda hem
+    // standalone:true hem isDefault:true gelirse (assertTemplateAssignable eski
+    // DB değerini okuduğundan yakalayamaz) burada kes.
+    if (input.isDefault === true && (input.standalone ?? existing.standalone)) {
+      throw AppError.badRequest("Serbest (statik) etiket varsayılan yapılamaz");
+    }
+
+    // Zaten bir bağlama ATANMIŞ (ya da default olan) şablon serbeste çevrilemez:
+    // aksi halde atama korunurken varyant barkodsuza düşürülebilir → gerçek rulo
+    // için izsiz etiket basılır (assertTemplateAssignable atama ANINDA çalışır,
+    // burada şablonu atamanın altından çekiyoruz). Önce atamalar kaldırılmalı.
+    if (input.standalone === true && !existing.standalone &&
+        (existing.isDefault || (await this.templateHasAssignments(id)))) {
+      throw AppError.badRequest(
+        "Atanmış şablon serbest (statik) yapılamaz — önce bağlam/müşteri/cihaz atamalarını kaldırın",
+      );
+    }
+
+    // Bu uçtan da default atanabildiği için statik-etiket guard'ı burada da şart
+    // (setDefault/setContextDefault ile aynı kural — barkodsuz şablon rulo/kartela
+    // bağlamına atanamaz). Varyantsız legacy şablonda no-op.
+    if (input.isDefault === true) {
+      await assertTemplateAssignable(id);
     }
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -328,6 +469,8 @@ export class LabelTemplateService {
     if (existing.isDefault && current?.templateId === id) {
       return { success: true, data: existing, message: "Zaten default" };
     }
+    // Statik etiket kuralı: barkodsuz varyantlı şablon bağlam varsayılanı olamaz.
+    await assertTemplateAssignable(id);
 
     const updated = await prisma.$transaction(async (tx) => {
       await tx.labelTemplate.updateMany({
@@ -430,6 +573,153 @@ export class LabelTemplateService {
   }
 
   // ---------------------------------------------------------------------------
+  // DIŞA / İÇE AKTAR + ÇOĞALT (JSON zarf)
+  // ---------------------------------------------------------------------------
+
+  /** İstenen ada en yakın SERBEST adı bul (Türkçe-duyarsız). Doluysa " 2", " 3"…
+   *  ekler (VarChar(100) sınırı). Import/duplicate ad çakışmasını sessizce çözer. */
+  private async findAvailableName(desired: string): Promise<string> {
+    const base = (desired.trim() || "Etiket").slice(0, 100);
+    const rows = await prisma.labelTemplate.findMany({ where: { deletedAt: null }, select: { name: true } });
+    const taken = new Set(rows.map((r) => foldNameForCompare(r.name)));
+    if (!taken.has(foldNameForCompare(base))) return base;
+    // Sayısal son-eke (" 999", i<1000) YER AYIR: base'i 95'e kısalt ki `${stem} ${i}`
+    // 100 karakteri taşmasın. Yoksa 100-karakterlik adda ekleme kırpılıp sonsuz çakışır.
+    const stem = base.slice(0, 95);
+    for (let i = 2; i < 1000; i++) {
+      const candidate = `${stem} ${i}`;
+      if (!taken.has(foldNameForCompare(candidate))) return candidate;
+    }
+    throw AppError.conflict("Uygun bir şablon adı bulunamadı");
+  }
+
+  /**
+   * Bir zarftan (import/duplicate ORTAK yolu) yeni şablon + varyantlar üret — TEK
+   * transaction, tek audit. Ad-dedup (findAvailableName), her varyant parseCanvas ile
+   * doğrulanır (tx DIŞINDA → hata atomik kalır), isDefault ASLA taşınmaz (fresh şablon
+   * atanmamış → requireScannable=false; yapı yine doğrulanır). Tam bir primary garanti.
+   */
+  private async createFromEnvelope(
+    env: TemplateEnvelope,
+    opts: { desiredName?: string; event: string },
+    userId?: string,
+  ): Promise<LabelTemplate> {
+    const t = env.template;
+    const standalone = t.standalone ?? false;
+    const kind: LabelKind | null = standalone ? null : (t.kind ?? null);
+    if (!standalone && !kind) throw AppError.badRequest("Şablon türü (kind) eksik — geçersiz zarf");
+    const name = await this.findAvailableName(opts.desiredName ?? t.name);
+    const fields = t.fields ?? (kind ? buildDefaultFields(kind) : []);
+    if (kind) validateFields(kind, fields);
+
+    // Varyantları ÖNCE doğrula (parseCanvas AppError fırlatabilir → tx'e girmeden kes).
+    const parsed = (env.variants ?? []).map((v) => ({
+      name: (v.name?.trim() || `${v.widthMm}×${v.heightMm}`).slice(0, 60),
+      widthMm: v.widthMm,
+      heightMm: v.heightMm,
+      isPrimary: v.isPrimary ?? false,
+      layout: this.parseCanvas(v.elements, v.widthMm, v.heightMm, false),
+    }));
+    // Tam bir primary: hiç yoksa ilk, birden çoksa yalnız ilk.
+    let primarySeen = false;
+    for (const p of parsed) {
+      if (p.isPrimary && !primarySeen) primarySeen = true;
+      else p.isPrimary = false;
+    }
+    if (!primarySeen && parsed.length > 0) parsed[0]!.isPrimary = true;
+
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await tx.labelTemplate.create({
+        data: {
+          name,
+          kind,
+          isDefault: false,
+          isActive: true,
+          standalone,
+          fields: fields as unknown as Prisma.InputJsonValue,
+          ...(t.rawCode ? { rawCode: normalizeRawCode(t.rawCode) as Prisma.InputJsonValue } : {}),
+          lineStepMm: t.lineStepMm ?? null,
+          qrScale: t.qrScale ?? null,
+          lengthBanner: t.lengthBanner ?? null,
+        },
+      });
+      // tx.* seri (pg adapter) — Promise.all YASAK; sıralı for-await.
+      for (const p of parsed) {
+        await tx.labelTemplateVariant.create({
+          data: {
+            templateId: row.id,
+            name: p.name,
+            widthMm: p.widthMm,
+            heightMm: p.heightMm,
+            isPrimary: p.isPrimary,
+            elements: p.layout as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return row;
+    }).catch((e: unknown) => {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw AppError.conflict("Ad veya boyut çakışması oluştu — tekrar deneyin");
+      }
+      throw e;
+    });
+
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: TABLE,
+      recordId: created.id,
+      newData: { event: opts.event, name: created.name, kind: created.kind, variantCount: parsed.length },
+    }).catch(() => undefined);
+    return created;
+  }
+
+  /** Şablon + varyantlarını taşınabilir JSON zarfına çevir (id/timestamp HARİÇ). */
+  async exportTemplate(id: string): Promise<ApiResponse<TemplateEnvelope>> {
+    const t = await prisma.labelTemplate.findUnique({ where: { id } });
+    if (!t || t.deletedAt) throw AppError.notFound("Template bulunamadı");
+    const variants = await prisma.labelTemplateVariant.findMany({
+      where: { templateId: id },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    });
+    const env: TemplateEnvelope = {
+      template: {
+        name: t.name,
+        kind: t.kind,
+        standalone: t.standalone,
+        fields: t.fields as unknown as TemplateField[],
+        rawCode: (t.rawCode as RawCodeMap) ?? undefined,
+        lineStepMm: t.lineStepMm != null ? Number(t.lineStepMm) : null,
+        qrScale: t.qrScale,
+        lengthBanner: t.lengthBanner,
+      },
+      variants: variants.map((v) => ({
+        name: v.name,
+        widthMm: Number(v.widthMm),
+        heightMm: Number(v.heightMm),
+        isPrimary: v.isPrimary,
+        elements: v.elements,
+      })),
+    };
+    return { success: true, data: env };
+  }
+
+  /** JSON zarfını yeni şablon olarak içe aktar (ad çakışması → dedup). */
+  async importTemplate(env: TemplateEnvelope, userId?: string): Promise<ApiResponse<LabelTemplate>> {
+    if (!env?.template?.name?.trim()) throw AppError.badRequest("Geçersiz şablon dosyası (ad yok)");
+    if (!Array.isArray(env.variants)) throw AppError.badRequest("Geçersiz şablon dosyası (varyant listesi yok)");
+    const created = await this.createFromEnvelope(env, { event: "IMPORT" }, userId);
+    return { success: true, data: created, message: "Şablon içe aktarıldı" };
+  }
+
+  /** Şablonu komple çoğalt — "… (kopya)" adıyla; isDefault/atamalar taşınmaz. */
+  async duplicateTemplate(id: string, userId?: string): Promise<ApiResponse<LabelTemplate>> {
+    const { data: env } = await this.exportTemplate(id);
+    const created = await this.createFromEnvelope(env, { desiredName: `${env.template.name} (kopya)`, event: "DUPLICATE" }, userId);
+    return { success: true, data: created, message: "Şablon çoğaltıldı" };
+  }
+
+  // ---------------------------------------------------------------------------
   // BOYUT VARYANTLARI (Etiket Stüdyosu v2 — kanvas yerleşimi varyantta yaşar)
   // ---------------------------------------------------------------------------
 
@@ -463,7 +753,7 @@ export class LabelTemplateService {
   ): Promise<ApiResponse<LabelTemplateVariant>> {
     const template = await prisma.labelTemplate.findUnique({
       where: { id: templateId },
-      select: { id: true, name: true, deletedAt: true, variants: { select: { id: true } } },
+      select: { id: true, name: true, deletedAt: true, standalone: true, variants: { select: { id: true } } },
     });
     if (!template || template.deletedAt) throw AppError.notFound("Template bulunamadı");
 
@@ -479,7 +769,11 @@ export class LabelTemplateService {
     if (elementsRaw == null) {
       throw AppError.badRequest("elements veya copyFromVariantId zorunlu");
     }
-    const layout = this.parseCanvas(elementsRaw, input.widthMm, input.heightMm);
+    // Statik etiket kuralı: atanmamış havuz şablonuna barkodsuz yerleşim kaydedilebilir;
+    // atanmış (bağlam/müşteri/cihaz rotalı) şablonda taranabilir alan zorunlu kalır.
+    // Serbest (statik) etiket HER ZAMAN barkod-muaf (atanamadığından atama da yok).
+    const requireScannable = !template.standalone && (await this.templateHasAssignments(templateId));
+    const layout = this.parseCanvas(elementsRaw, input.widthMm, input.heightMm, requireScannable);
 
     const created = await prisma.labelTemplateVariant
       .create({
@@ -513,7 +807,7 @@ export class LabelTemplateService {
   ): Promise<ApiResponse<LabelTemplateVariant>> {
     const existing = await prisma.labelTemplateVariant.findUnique({
       where: { id: variantId },
-      include: { template: { select: { deletedAt: true, name: true } } },
+      include: { template: { select: { deletedAt: true, name: true, standalone: true } } },
     });
     if (!existing || existing.template.deletedAt) throw AppError.notFound("Varyant bulunamadı");
 
@@ -530,7 +824,10 @@ export class LabelTemplateService {
     // Boyut değişiyorsa mevcut yerleşim de yeni tuvale göre doğrulanmalı.
     const elementsRaw = input.elements !== undefined ? input.elements : (input.widthMm !== undefined || input.heightMm !== undefined) ? existing.elements : undefined;
     if (elementsRaw !== undefined) {
-      const layout = this.parseCanvas(elementsRaw, widthMm, heightMm);
+      // Statik etiket kuralı — createVariant ile aynı: atanmışsa taranabilir zorunlu,
+      // serbest (statik) etiket her zaman barkod-muaf.
+      const requireScannable = !existing.template.standalone && (await this.templateHasAssignments(existing.templateId));
+      const layout = this.parseCanvas(elementsRaw, widthMm, heightMm, requireScannable);
       data.elements = layout as unknown as Prisma.InputJsonValue;
     }
 
@@ -596,10 +893,24 @@ export class LabelTemplateService {
     return { success: true, data: updated, message: "Birincil varyant güncellendi" };
   }
 
-  /** Kanvas doğrulama + bilinen bind kontrolü (Türkçe hatalar → 400). */
-  private parseCanvas(raw: unknown, widthMm: number, heightMm: number) {
+  /** Şablonun herhangi bir atası var mı? (bağlam varsayılanı / müşteri rotası /
+   *  cihaz rotası). Varyant kaydında taranabilir-alan kuralının anahtarı: atanmamış
+   *  havuz şablonu STATİK (barkodsuz) kaydedilebilir; atanmış şablonda kural sürer. */
+  private async templateHasAssignments(templateId: string): Promise<boolean> {
+    const ctx = await prisma.labelContextDefault.count({ where: { templateId } });
+    if (ctx > 0) return true;
+    const cust = await prisma.customerTemplateRoute.count({ where: { templateId } });
+    if (cust > 0) return true;
+    const dev = await prisma.peripheralTemplateRoute.count({ where: { templateId } });
+    return dev > 0;
+  }
+
+  /** Kanvas doğrulama + bilinen bind kontrolü (Türkçe hatalar → 400).
+   *  requireScannable=false → statik (barkodsuz) yerleşim kabul (atanmamış havuz
+   *  şablonu); true → taranabilir alan zorunlu (atanmış şablon / geri uyum). */
+  private parseCanvas(raw: unknown, widthMm: number, heightMm: number, requireScannable = true) {
     try {
-      const layout = validateCanvasLayout(raw, { widthMm, heightMm });
+      const layout = validateCanvasLayout(raw, { widthMm, heightMm, requireScannable });
       const allowed = getUnifiedKeys();
       for (const el of layout.elements) {
         if (el.type === "field" && !allowed.has(el.bind)) {
@@ -655,6 +966,8 @@ export class LabelTemplateService {
       select: { id: true, name: true, kind: true },
     });
     if (!template) throw AppError.badRequest("Şablon bulunamadı veya pasif");
+    // Statik etiket kuralı: barkodsuz varyantlı şablon bağlama ATANAMAZ (kaldırma serbest).
+    await assertTemplateAssignable(templateId);
 
     await prisma.$transaction(async (tx) => {
       await tx.labelContextDefault.upsert({
@@ -691,7 +1004,7 @@ export class LabelTemplateService {
     const format = await resolveLabelFormat({ kind });
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
-    let code = renderLabel(language, { payload, template, barcodeSvg, qrSvg, copies: 1, format }).content;
+    let code = (await renderLabel(language, { payload, template, barcodeSvg, qrSvg, copies: 1, format })).content;
     // Görünen değer → {{key}} (uzun değer önce ki alt-dize çakışması olmasın).
     const pairs = [...getAllowedKeys(kind)]
       .map((k) => [k, fieldDisplayValue(payload, k).value] as const)
@@ -756,10 +1069,10 @@ export class LabelTemplateService {
     const input = { payload, template, barcodeSvg, qrSvg, copies: 1, format };
     const language = format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
-      const html = renderLabel(language, input).content;
+      const html = (await renderLabel(language, input)).content;
       return { success: true, data: { mode: "html", language, content: html, native: html } };
     }
-    const native = renderLabel(language, input).content;
+    const native = (await renderLabel(language, input)).content;
     const svg = renderNativePreviewSvg(
       language,
       native,
@@ -785,6 +1098,9 @@ export class LabelTemplateService {
     /** "Bu Bilgisayar"da seçili Cihaz Kaydı yazıcısı — verilirse dil + medya (dpi)
      *  O CİHAZDAN çözülür (editör Test Baskısı gerçek yazıcı diliyle bassın diye). */
     peripheralId?: string;
+    /** Baskı adedi (1–100, controller doğrular) — native P/Q/^PQ komutu, raster
+     *  zarfı ve HTML çoğaltması (applyCopies) hepsi bunu işler. Verilmedi = 1. */
+    copies?: number;
   }): Promise<
     ApiResponse<{
       mode: "svg" | "html" | "text";
@@ -798,7 +1114,14 @@ export class LabelTemplateService {
   > {
     let layout;
     try {
-      layout = validateCanvasLayout(opts.elements, { widthMm: opts.widthMm, heightMm: opts.heightMm });
+      // ÖNİZLEME yolu: taranabilir-alan kuralı UYGULANMAZ (requireScannable: false)
+      // — statik (barkodsuz) bakım etiketi tasarımı da editörde görülebilmeli;
+      // kural yalnız kayıtta (parseCanvas) ve atamada (assertTemplateAssignable) işler.
+      layout = validateCanvasLayout(opts.elements, {
+        widthMm: opts.widthMm,
+        heightMm: opts.heightMm,
+        requireScannable: false,
+      });
     } catch (e) {
       if (e instanceof CanvasValidationError) throw AppError.badRequest(e.message);
       throw e;
@@ -829,9 +1152,15 @@ export class LabelTemplateService {
     } as unknown as LabelTemplateVariant;
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
-    const input = { payload, template: null, variant: fakeVariant, barcodeSvg, qrSvg, copies: 1, format };
+    const copies = Math.max(1, Math.min(100, Math.floor(opts.copies ?? 1)));
+    // iconGraphicsOk: editör Test Baskısı ikon içeren kanvası da bassın. `native` latin1
+    // olarak dönüp Electron main'de Buffer.from(...,"latin1") ile seri/USB'ye yazılır →
+    // GW binary bit-bire-bir korunur (round-trip: pplbGwBlock→latin1→JSON/UTF-8→IPC→latin1).
+    // Önizleme SVG'si de GW header'ından ikon placeholder'ı çizer. Komut yolu (rasterMode
+    // KAPALI) ikon olmadan yalnız yazı basıyordu — bu bug'ın kök nedeni.
+    const input = { payload, template: null, variant: fakeVariant, barcodeSvg, qrSvg, copies, format, iconGraphicsOk: true };
     if (language === PrinterLanguage.RASTER_HTML) {
-      const html = renderLabel(language, input).content;
+      const html = (await renderLabel(language, input)).content;
       return { success: true, data: { mode: "html", language, content: html, native: html } };
     }
     // RASTER cihaz + kanvas → önizleme AYNI 1bpp bitmap (BMP). "Kod" görünümü insan-okur
@@ -839,7 +1168,7 @@ export class LabelTemplateService {
     // (PPLA F0 / font eksik) komut SVG'sine düşer (dual-mode, baskıyla tutarlı).
     if (rasterMode && isRasterLanguage(language)) {
       try {
-        const { bytes, bitmap } = renderCanvasRaster(language as RasterLanguage, { payload, format, copies: 1, layout });
+        const { bytes, bitmap } = await renderCanvasRaster(language as RasterLanguage, { payload, format, copies, layout });
         return {
           success: true,
           data: {
@@ -852,7 +1181,7 @@ export class LabelTemplateService {
         };
       } catch { /* raster envelope başarısız → aşağıdaki komut SVG'sine düş */ }
     }
-    const native = renderLabel(language, input).content;
+    const native = (await renderLabel(language, input)).content;
     const svg = renderNativePreviewSvg(
       language,
       native,
@@ -861,6 +1190,27 @@ export class LabelTemplateService {
     );
     if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), native } };
     return { success: true, data: { mode: "text", language, content: native, native } };
+  }
+
+  /** Bakım sembolü kataloğu — editör ikon paleti (kategori + anahtar/başlık/SVG).
+   *  SVG editör önizlemesi içindir; baskı yolu AYNI primitifleri raster-icon ile
+   *  1bpp'e döker (önizleme = baskı). Statik katalog — DB'siz. */
+  getIconCatalog(): ApiResponse<{
+    categories: typeof LABEL_ICON_CATEGORIES;
+    icons: Array<{ key: string; label: string; category: string; svg: string }>;
+  }> {
+    return {
+      success: true,
+      data: {
+        categories: LABEL_ICON_CATEGORIES,
+        icons: LABEL_ICONS.map((i) => ({
+          key: i.key,
+          label: i.label,
+          category: i.category,
+          svg: labelIconSvg(i.key) ?? "",
+        })),
+      },
+    };
   }
 }
 

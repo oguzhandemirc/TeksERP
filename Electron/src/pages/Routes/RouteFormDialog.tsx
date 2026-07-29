@@ -146,7 +146,7 @@ export function RouteFormDialog({
             >
               <div className="flex items-center gap-2">
                 <Copy className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <ReferenceSelect<ProductionRoute>
                     value={copySourceId}
                     onChange={(id) => setCopySourceId(id)}

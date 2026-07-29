@@ -4,7 +4,13 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
-import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService } from "@/services/featureFlagService";
 import {
@@ -16,6 +22,8 @@ import {
   type ResolvedDocConfig,
 } from "@/services/documentConfig";
 import { FlagToggle } from "./SettingRow";
+import { DocumentStyleControls } from "./DocumentStyleControls";
+import { DocumentAdvancedControls } from "./DocumentAdvancedControls";
 
 /**
  * Belge Şablonları paneli — yazdırılan irsaliye/çeki listelerinin içerik ayarı.
@@ -23,17 +31,31 @@ import { FlagToggle } from "./SettingRow";
  * + alt not. Ayar CANLI: kaydedince belge bir sonraki açılışta güncel düzeni yansıtır
  * (snapshot değil — refakat kartından farkı budur).
  */
+/** Dış hedef (profil) düzenleme bağlamı — verilirse genel ayar yerine bu düzenlenir. */
+export interface DocConfigExternalTarget {
+  /** Düzenlenen config map'i (örn. profil.config). */
+  value: DocumentsConfig;
+  /** Önizleme merge tabanı (genel ayar) — profil alanları bunun ÜZERİNE biner. */
+  baseline?: DocumentsConfig;
+  saving: boolean;
+  onSave: (cfg: DocumentsConfig) => void;
+  note?: string;
+}
+
 export function DocumentConfigSection({
   onPreview,
+  external,
 }: {
   /** Seçili belge + çözülmüş taslak değiştikçe çağrılır (canlı önizleme için). */
   onPreview?: (docKey: string, cfg: ResolvedDocConfig) => void;
+  external?: DocConfigExternalTarget;
 } = {}) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
   const current = useMemo<DocumentsConfig>(
-    () => flagsQ.data?.data?.documentsConfig ?? {},
-    [flagsQ.data?.data?.documentsConfig],
+    () => external?.value ?? flagsQ.data?.data?.documentsConfig ?? {},
+     
+    [external?.value, flagsQ.data?.data?.documentsConfig],
   );
 
   const [selected, setSelected] = useState(DOC_DEFS[0]?.key ?? "");
@@ -42,12 +64,18 @@ export function DocumentConfigSection({
     setDraft(current);
   }, [current]);
 
-  // Seçili belge / taslak değiştikçe önizlemeyi besle.
+  // Seçili belge / taslak değiştikçe önizlemeyi besle. Profil düzenlenirken
+  // önizleme genel ayar (baseline) ÜZERİNE profil taslağı bindirilerek çözülür —
+  // freeze anındaki merge zinciriyle aynı semantik.
   useEffect(() => {
-    onPreview?.(selected, resolveDocConfig(draft, selected));
-  }, [selected, draft, onPreview]);
+    const base = external?.baseline;
+    const effective: DocumentsConfig = base
+      ? { ...base, [selected]: { ...base[selected], ...draft[selected] } }
+      : draft;
+    onPreview?.(selected, resolveDocConfig(effective, selected));
+  }, [selected, draft, onPreview, external?.baseline]);
 
-  const mut = useMutation({
+  const globalMut = useMutation({
     mutationFn: (documentsConfig: DocumentsConfig) =>
       featureFlagService.update({ documentsConfig }),
     onSuccess: () => {
@@ -55,8 +83,11 @@ export function DocumentConfigSection({
       void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
     },
   });
+  const mut = external
+    ? { isPending: external.saving, mutate: external.onSave }
+    : globalMut;
 
-  if (flagsQ.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (!external && flagsQ.isLoading) return <Skeleton className="h-64 w-full" />;
 
   const def = DOC_DEF_MAP[selected];
   const resolved = resolveDocConfig(draft, selected);
@@ -87,23 +118,21 @@ export function DocumentConfigSection({
       }
     >
       <div className="space-y-5">
-        {/* Belge seçici */}
-        <div className="flex flex-wrap gap-1.5">
-          {DOC_DEFS.map((d) => (
-            <button
-              key={d.key}
-              type="button"
-              onClick={() => setSelected(d.key)}
-              className={cn(
-                "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                selected === d.key
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-              )}
-            >
-              {d.label}
-            </button>
-          ))}
+        {/* Belge seçici — sade dropdown (pill duvarı yerine). */}
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-sm font-medium">Belge:</span>
+          <Select value={selected} onValueChange={setSelected}>
+            <SelectTrigger className="h-9 w-full max-w-xs">
+              <SelectValue placeholder="Belge seç…" />
+            </SelectTrigger>
+            <SelectContent>
+              {DOC_DEFS.map((d) => (
+                <SelectItem key={d.key} value={d.key}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {def && (
@@ -179,13 +208,28 @@ export function DocumentConfigSection({
               )}
             </div>
 
-            {/* Alt not */}
+            {/* Görünüm: sayfa/yazı/tablo stili + logo */}
+            <DocumentStyleControls
+              cfg={draft[selected]}
+              disabled={mut.isPending}
+              patch={patch}
+            />
+
+            {/* Kolonlar + damgalar/QR + metin blokları + dil */}
+            <DocumentAdvancedControls
+              def={def}
+              cfg={draft[selected]}
+              disabled={mut.isPending}
+              patch={patch}
+            />
+
+            {/* Not (+ destekleyen belgede üst/alt konum) */}
             <div>
               <label htmlFor="doc-footer" className="text-sm font-medium">
-                Alt Not
+                {def.supportsNotePlacement ? "Not" : "Alt Not"}
               </label>
               <p className="text-xs text-muted-foreground">
-                Belgenin altına basılan serbest not (boş → basılmaz).
+                Belgeye basılan serbest not (boş → basılmaz).
               </p>
               <textarea
                 id="doc-footer"
@@ -195,6 +239,23 @@ export function DocumentConfigSection({
                 onChange={(e) => patch({ footerNote: e.target.value })}
                 className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
+              {def.supportsNotePlacement && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Not konumu:</span>
+                  <Select
+                    value={resolved.footerNotePlacement}
+                    onValueChange={(v) => patch({ footerNotePlacement: v as "top" | "bottom" })}
+                  >
+                    <SelectTrigger className="h-8 w-52">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bottom">Altta (tablolardan sonra)</SelectItem>
+                      <SelectItem value="top">Üstte (tablolardan önce)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -208,7 +269,8 @@ export function DocumentConfigSection({
             {mut.isPending ? "Kaydediliyor…" : "Kaydet"}
           </Button>
           <span className="text-xs text-muted-foreground">
-            Ayar canlıdır — belge bir sonraki açılışında güncel düzeni yansıtır.
+            {external?.note ??
+              "Ayar canlıdır — belge bir sonraki açılışında güncel düzeni yansıtır."}
           </span>
         </div>
       </div>

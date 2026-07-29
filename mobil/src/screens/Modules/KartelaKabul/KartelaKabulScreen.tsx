@@ -768,7 +768,7 @@ function KartelaRollSheet({
   onClear: () => void;
   onDismiss: () => void;
 }) {
-  const { height } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [count, setCount] = useState('');
   const [defCm, setDefCm] = useState('');
   const [defKg, setDefKg] = useState('');
@@ -865,11 +865,15 @@ function KartelaRollSheet({
           </View>
           {props.length > 0 && <PropChips items={props} limit={8} style={{ marginTop: spacing.xs }} />}
 
-          <ScrollView
-            style={{ maxHeight: height * 0.42, marginTop: spacing.md }}
+          <KeyboardAwareScrollView
+            // Yatayda (kısa yükseklik) iç yüksekliği küçült ki header+ölçüm+footer
+            // klavye üstüne sığsın; KASV odaklı ölçüm alanını klavye üstüne kaydırır
+            // (AppModal center clamp'i yalnız ÜST kenarı korur, altı değil).
+            style={{ maxHeight: (width > height ? height * 0.3 : height * 0.42), marginTop: spacing.md }}
             contentContainerStyle={{ gap: spacing.md, paddingBottom: spacing.sm }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
+            bottomOffset={24}
           >
             {/* Adet */}
             <TextInput
@@ -965,7 +969,7 @@ function KartelaRollSheet({
                 )}
               </View>
             )}
-          </ScrollView>
+          </KeyboardAwareScrollView>
 
           {/* Canlı özet + aksiyonlar */}
           <Text style={styles.liveSummary}>{liveSummary}</Text>

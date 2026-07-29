@@ -58,7 +58,7 @@ export interface SackSearchRow {
   rollCount: number;
   totalQty: number;
   swatchCount: number;
-  /** İçerik filtresi (ürün/renk/en) yokken null — eşleşme sütunu gizlenir. */
+  /** İçerik filtresi (kumaş/renk/en) yokken null — eşleşme sütunu gizlenir. */
   matchRollCount: number | null;
   matchQty: number | null;
 }
@@ -172,7 +172,7 @@ export interface ScanResult {
   currentQty?: number;
 }
 
-/** Kartela stoğu: ürün+renk bazında müsait (çuvala/sevke girmemiş) adet. */
+/** Kartela stoğu: kumaş+renk bazında müsait (çuvala/sevke girmemiş) adet. */
 export interface KartelaStockGroup {
   itemId: string;
   itemCode: string;

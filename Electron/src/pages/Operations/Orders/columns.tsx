@@ -1,16 +1,29 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { AlertTriangle } from "lucide-react";
 import { safeFormat } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { orderStatusLabels } from "@/types/enums";
+import {
+  collectLinkedWorkOrders,
+  deriveWoRollup,
+  woRollupLabels,
+  woRollupTones,
+} from "./work-order-rollup";
+import { deriveDeadlineRisk } from "./deadline-risk";
 import type { Order, OrderLine } from "./types";
 
 /**
- * Sipariş kalemlerindeki benzersiz ürün/renk etiketleri. Müşteri-bazlı ad
- * (customerItemName/customerColorName) varsa onu, yoksa master adı kullanır.
- * Renksiz kalemler renk listesine girmez.
+ * Sipariş kalemlerindeki benzersiz kumaş/renk etiketleri — her zaman BİZDEKİ ad.
+ * Satırdaki müşteri override'ı (customerItemName/customerColorName) burada
+ * bilinçli basılmaz: override yalnız adın ilk girildiği siparişin satırında dolu
+ * olduğundan (sonraki siparişlerde alan kilitli → NULL) aynı kumaş listede iki
+ * farklı adla görünüyordu. Müşterideki ad detay panelinde "Müşteride:" rozetiyle
+ * etiketli gösterilir. Renksiz kalemler renk listesine girmez.
  */
 function distinctLineLabels(
   lines: OrderLine[] | undefined,
@@ -19,11 +32,11 @@ function distinctLineLabels(
   const map = new Map<string, { label: string; hex?: string | null }>();
   for (const l of lines ?? []) {
     if (kind === "item") {
-      const label = l.customerItemName?.trim() || l.item?.name;
+      const label = l.item?.name;
       if (label && !map.has(l.itemId)) map.set(l.itemId, { label });
     } else {
       if (!l.colorId) continue;
-      const label = l.customerColorName?.trim() || l.color?.name;
+      const label = l.color?.name;
       if (label && !map.has(l.colorId)) map.set(l.colorId, { label, hex: l.color?.hex });
     }
   }
@@ -70,6 +83,85 @@ function LineLabelsCell({
           …
         </span>
       )}
+    </div>
+  );
+}
+
+/** Dışa aktarma metni: rollup etiketi + (n) — NONE ise "—". */
+function rollupExportText(order: Order): string {
+  const { state, activeCount } = deriveWoRollup(order.lines);
+  if (state === "NONE") return "—";
+  const label = woRollupLabels[state];
+  return activeCount > 1 ? `${label} (${activeCount})` : label;
+}
+
+/**
+ * "İş Emri" rollup hücresi (named — rules-of-hooks: useOpenTarget hook'u).
+ * Tek aktif WO'da rozet tıklanabilir (İE detayını açar); birden çok WO'da pasif
+ * rozet + sayaç, navigasyon detay panelindeki listeden yapılır.
+ */
+function WorkOrderRollupCell({ order }: { order: Order }) {
+  const openTarget = useOpenTarget();
+  const rollup = deriveWoRollup(order.lines);
+  if (rollup.state === "NONE") {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  // SUPERSEDED rollup'a girmez → tek aktif WO tıklanabilir hedeftir.
+  const active = collectLinkedWorkOrders(order.lines).filter((w) => w.status !== "SUPERSEDED");
+  const single = active.length === 1 ? active[0] : null;
+  const badge = <StatusBadge status={rollup.state} labels={woRollupLabels} tones={woRollupTones} />;
+
+  return (
+    <div className="flex items-center gap-1">
+      {single ? (
+        // stopPropagation ŞART: satır onRowClick sheet açmasın. Yalnız sol/orta
+        // tık dinlenir (onClick + onAuxClick); onContextMenu bağlanmaz → satır
+        // sağ-tık context menüsü çalışmaya devam eder.
+        <button
+          type="button"
+          className="cursor-pointer"
+          title="Sol tık: bu sekmede · Shift/Ctrl+tık: yeni sekmede"
+          onClick={(e) => {
+            e.stopPropagation();
+            openTarget(`/operations/work-orders/${single.id}`, e);
+          }}
+          onAuxClick={(e) => {
+            if (e.button !== 1) return;
+            e.stopPropagation();
+            e.preventDefault();
+            openTarget(`/operations/work-orders/${single.id}`, e);
+          }}
+        >
+          {badge}
+        </button>
+      ) : (
+        badge
+      )}
+      {rollup.activeCount > 1 && <Badge variant="muted">{rollup.activeCount}</Badge>}
+    </div>
+  );
+}
+
+/**
+ * Termin hücresi — DeadlineBadge'in soluna koşullu risk üçgeni. DeadlineBadge'e
+ * dokunulmaz (WorkOrders ile paylaşılan saf tarih bileşeni); risk sinyali
+ * termin + üretim durumu birleşimidir, burada türetilir.
+ */
+function DeadlineCell({ order }: { order: Order }) {
+  const risk = deriveDeadlineRisk(order);
+  return (
+    <div className="flex items-center gap-1.5">
+      {risk && (
+        <span title={risk.label} className="inline-flex shrink-0">
+          <AlertTriangle
+            className={cn(
+              "h-3.5 w-3.5",
+              risk.overdue ? "text-destructive" : "text-warning",
+            )}
+          />
+        </span>
+      )}
+      <DeadlineBadge deadline={order.deadline} />
     </div>
   );
 }
@@ -124,8 +216,8 @@ export const orderColumns: ColumnDef<Order>[] = [
   },
   {
     id: "items",
-    header: "Ürün",
-    meta: { label: "Ürün" },
+    header: "Kumaş",
+    meta: { label: "Kumaş" },
     cell: ({ row }) => <LineLabelsCell lines={row.original.lines} kind="item" />,
   },
   {
@@ -144,7 +236,7 @@ export const orderColumns: ColumnDef<Order>[] = [
     accessorKey: "deadline",
     header: () => <SortableHeader field="deadline" label="Termin" />,
     meta: { label: "Termin" },
-    cell: ({ row }) => <DeadlineBadge deadline={row.original.deadline} />,
+    cell: ({ row }) => <DeadlineCell order={row.original} />,
   },
   {
     id: "lines",
@@ -173,6 +265,15 @@ export const orderColumns: ColumnDef<Order>[] = [
         </span>
       );
     },
+  },
+  {
+    id: "workOrder",
+    header: "İş Emri",
+    meta: {
+      label: "İş Emri",
+      exportValue: (o: Order) => rollupExportText(o),
+    },
+    cell: ({ row }) => <WorkOrderRollupCell order={row.original} />,
   },
   {
     accessorKey: "status",

@@ -13,6 +13,7 @@ import {
   Package,
   Workflow,
 } from "lucide-react";
+import { PageFooter } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,7 +32,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { workOrderService } from "./service";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { LinkedOrderLinesField } from "./LinkedOrderLinesField";
 import { WorkOrderLivePreview } from "./WorkOrderLivePreview";
 import { CoveragePanel } from "./CoveragePanel";
@@ -230,7 +230,7 @@ export function WorkOrderFormView({
     mutationFn: (params: { name: string; forCustomer: boolean }) => {
       const payload = {
         name: params.name,
-        code: generateCode(CODE_PREFIXES.ROUTE),
+        // Kod backend'de üretilir (ROT+GGAAYY+NNNN) — istemci göndermez.
         customerId: params.forCustomer ? pickedLines[0]?.customerId ?? null : null,
         isActive: true,
         isFavorite: false,
@@ -251,7 +251,7 @@ export function WorkOrderFormView({
       const v = form.getValues();
       const routeRes = await routeService.create({
         name: `${name} rotası`,
-        code: generateCode(CODE_PREFIXES.ROUTE),
+        // Kod backend'de üretilir (ROT+GGAAYY+NNNN) — istemci göndermez.
         isActive: true,
         isFavorite: false,
         // Fason planlamasını (kategori + firma) KORUR — bkz. routeStepsToCreatePayload.
@@ -259,7 +259,7 @@ export function WorkOrderFormView({
       } as unknown as Partial<ProductionRoute>);
       const routeId = (routeRes.data as { id: string }).id;
       return productRecipeService.create({
-        code: generateCode(CODE_PREFIXES.RECIPE),
+        // Kod backend'de üretilir (REC+GGAAYY+NNNN) — istemci göndermez.
         name,
         itemId: v.targetItemId,
         colorId: v.targetColorId ?? null,
@@ -296,7 +296,7 @@ export function WorkOrderFormView({
     const res = await productRecipeService.getById(id);
     const r = res.data;
     if (!r) return;
-    // Sipariş bağlıysa ürün/renk/en/özellik siparişten gelir (kilitli) — şablondan
+    // Sipariş bağlıysa kumaş/renk/en/özellik siparişten gelir (kilitli) — şablondan
     // yalnız ROTA + kat tipi al. Stoğa üretimde hepsini doldur.
     const orderBound = pickedLines.length > 0;
     if (!orderBound) {
@@ -354,14 +354,14 @@ export function WorkOrderFormView({
       ? dispatchedQty - Number(watchedQuantity)
       : 0;
 
-  // Stoğa üretimde hedef ürün zorunlu + boşsa → picker'a nabız (dikkat çek).
+  // Stoğa üretimde hedef kumaş zorunlu + boşsa → picker'a nabız (dikkat çek).
   const targetItemMissing = !isOrderProduction && !form.watch("targetItemId");
 
   // "Şablon Kaydet" şablonun ihtiyaç duyduğu alanlar tamam olmadan pasiftir.
   // Hangi eksik yüzünden pasif kaldığını tooltip'te somut göster (disabled
   // buton native title göstermez → Radix Tooltip + span sarmalı kullanılır).
   const templateBlockReason = !form.watch("targetItemId")
-    ? "Önce hedef ürün belirlenmeli."
+    ? "Önce hedef kumaş belirlenmeli."
     : routeSteps.length === 0
       ? "Rotaya en az bir istasyon ekle."
       : routeSteps.some((s) => !s.stationId)
@@ -387,13 +387,13 @@ export function WorkOrderFormView({
               form.setError("batchNumber", { type: "manual", message: "Parti kodu zorunlu" });
               manualErrors.push("Parti kodu zorunlu.");
             }
-            // Sipariş bağlı değil = stoğa üretim; backend hedef ürün zorunlu kılar.
+            // Sipariş bağlı değil = stoğa üretim; backend hedef kumaş zorunlu kılar.
             if (pickedLines.length === 0 && !v.targetItemId) {
               form.setError("targetItemId", {
                 type: "manual",
-                message: "Sipariş bağlı değil — stoğa üretim için hedef ürün seçilmeli.",
+                message: "Sipariş bağlı değil — stoğa üretim için hedef kumaş seçilmeli.",
               });
-              manualErrors.push("Stoğa üretim için hedef ürün seçilmeli.");
+              manualErrors.push("Stoğa üretim için hedef kumaş seçilmeli.");
             }
             // Kat tipi yeni iş emrinde zorunlu — boş bırakılamaz (varsayılan 2-KAT,
             // ama recipe/temizleme ile boşalmışsa burada yakalanır).
@@ -555,17 +555,17 @@ export function WorkOrderFormView({
             </FormSection>
             )}
 
-            {/* 2 — Ne üretilecek? Hedef ürün + ölçüler. */}
+            {/* 2 — Ne üretilecek? Hedef kumaş + ölçüler. */}
             <FormSection
               step={isEdit ? 2 : 1}
-              title="Hedef Ürün & Ölçüler"
+              title="Hedef Kumaş & Ölçüler"
               icon={Package}
               tone="indigo"
               required={!isOrderProduction}
             >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField
-                  label="Hedef Ürün"
+                  label="Hedef Kumaş"
                   required={!isOrderProduction}
                   error={form.formState.errors.targetItemId}
                 >
@@ -877,7 +877,7 @@ export function WorkOrderFormView({
           </aside>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-background px-6 py-3">
+        <PageFooter className="justify-between">
           <Tooltip>
             <TooltipTrigger asChild>
               {/* span: disabled buton hover'ı yutmasın diye tooltip tetikleyici */}
@@ -898,7 +898,7 @@ export function WorkOrderFormView({
                   <PopoverContent align="start" className="w-80 space-y-2">
               <div className="text-xs font-medium">Bu iş emrini şablon olarak kaydet</div>
               <p className="text-[11px] text-muted-foreground">
-                Ürün + renk + özellik + en + akış tek isimle saklanır; sonraki iş
+                Kumaş + renk + özellik + en + akış tek isimle saklanır; sonraki iş
                 emirlerinde "İş emri şablonundan doldur" ile gelir.
               </p>
               <Input
@@ -945,7 +945,7 @@ export function WorkOrderFormView({
                   : "İş Emri Oluştur"}
             </Button>
           </div>
-        </div>
+        </PageFooter>
       </form>
     </TooltipProvider>
   );

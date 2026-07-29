@@ -846,6 +846,10 @@ model Item {
   itemType ItemType // YARN, FABRIC, CONSUMABLE
   unit     ItemUnit @default(MT)
   isActive Boolean  @default(true)
+  /// Saha (mobil KK1) tarafından "yeni desen" olarak açıldı → admin gözden
+  /// geçirmesi/tamamlaması bekleniyor. Aktif ve kullanılabilir; yalnız işaret.
+  /// Admin normal düzenleme/onay ile temizler. Normal admin create'te false kalır.
+  pendingReview Boolean @default(false)
 
   // Relations
   rolls              Roll[]
@@ -1059,8 +1063,28 @@ model Customer {
   code      String      @unique @db.VarChar(32)
   name      String      @db.VarChar(100)
   taxNumber String?
+  // ---------------------------------------------------------------------------
+  // "Her şube = ayrı müşteri" düzeni (2026-07): şube kartında yaşayan alanlar
+  // müşteri kartına taşındı — hepsi opsiyonel, mevcut kayıtlar null kalır.
+  // exportCode: firma ihracat kodu — sevk belgelerinde şube kodundan
+  // (CustomerBranch.code) BAĞIMSIZ ayrı satır; ikisi de kendi section toggle'ıyla
+  // ("branchCode" / "exportCode") basılır. Bkz. document-render üreticileri + DOC_DEFS.
+  // ---------------------------------------------------------------------------
+  exportCode   String? @db.VarChar(50)
+  address      String?
+  city         String? @db.VarChar(80)
+  district     String? @db.VarChar(80)
+  country      String? @db.VarChar(80)
+  contactName  String? @db.VarChar(120)
+  contactPhone String? @db.VarChar(40)
+  email        String? @db.VarChar(200)
+  notes        String?
   type      CompanyType @default(CUSTOMER)
   isActive  Boolean     @default(true)
+
+  /// Belge şablon profili — bu müşteriye basılan belgeler profil override'ını
+  /// kullanır (atanmamışsa genel Belge Şablonları ayarı). Bkz. DocumentProfile.
+  documentProfileId String? @db.Uuid
 
   // Relations
   orders         Order[]
@@ -1073,11 +1097,14 @@ model Customer {
   rollReturns    RollReturn[]
   directShipments DirectShipment[]
   templateRoutes CustomerTemplateRoute[]
+  standaloneLabels CustomerStandaloneLabel[]
+  documentProfile DocumentProfile?       @relation("CustomerDocProfile", fields: [documentProfileId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([type])
+  @@index([documentProfileId])
   @@map("customers")
 }
 
@@ -1090,7 +1117,7 @@ model Customer {
 model CustomerBranch {
   id           String  @id @default(uuid()) @db.Uuid
   customerId   String  @db.Uuid
-  code         String? @db.VarChar(50) // Müşterinin iç şube kodu (opsiyonel)
+  code         String? @db.VarChar(50) // Şube ihracat kodu (opsiyonel) — sevk belgesinde tek "İhracat Kodu" satırına, dolu ise şirket exportCode'unun ÖNÜNE geçerek basılır (branchCode ?? customerExportCode). Kolon adı tarihsel "code"; arama/anahtar değil, salt görüntü.
   name         String  @db.VarChar(100) // "Ankara Şubesi", "Merkez Depo" gibi
   address      String?
   city         String?
@@ -2068,6 +2095,10 @@ model Subcontractor {
   /// İş emri fason adımında firma seçicide default gelir (kategori bazında client eşleşir).
   isFavorite Boolean @default(false)
 
+  /// Belge şablon profili — fason/kartela sevk belgeleri profil override'ını
+  /// kullanır (atanmamışsa genel ayar). Bkz. DocumentProfile.
+  documentProfileId String? @db.Uuid
+
   // Relations
   categories        SubcontractorToCategory[]
   dispatches        SubcontractorDispatch[]   @relation("DispatchSubcontractor")
@@ -2077,10 +2108,12 @@ model Subcontractor {
   plannedRouteSteps RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts   KartelaReceipt[]          @relation("KartelaReceiptSub")
+  documentProfile   DocumentProfile?          @relation("SubcontractorDocProfile", fields: [documentProfileId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([documentProfileId])
   @@map("subcontractors")
 }
 
@@ -2346,6 +2379,10 @@ enum PrintedDocType {
   // NOT: ALTER TYPE ADD VALUE enum'a SONA ekler; sıra DB ile uyumlu kalsın diye
   // (drift-free) en altta. (migration 20260614130000_subcontractor_direct_ship)
   SUBCONTRACTOR_DIRECT_SHIP // Fasondan doğrudan sevk irsaliyesi (son durak fason)
+  // 2026-07-27 belge genişletmesi — hepsi mevcut kaynağa (Receipt/Shipment/RollReturn) bağlı:
+  SUBCONTRACTOR_RECEIPT // Fason kabul makbuzu (SubcontractorReceipt)
+  QUALITY_CERTIFICATE // Kalite/sevk sertifikası (Shipment — kalite özeti)
+  RETURN_DISPATCH // İade irsaliyesi (RollReturn)
 }
 
 enum PrintedDocStatus {
@@ -2383,6 +2420,53 @@ model PrintedDocument {
   @@index([docType, sourceId, status])
   @@index([printedById])
   @@map("printed_documents")
+}
+
+/// Belge şablon PROFİLİ — genel Belge Şablonları ayarının üzerine binen adlandırılmış
+/// override paketi (örn. "İhracat", "Fiyatsız"). `config` = { [belgeKey]: DocumentConfig }
+/// (system-setting.service sanitizeDocumentsConfig şekli). Çözüm zinciri (freeze anında):
+/// kayıt defteri varsayılanı → genel DOCUMENTS_CONFIG → kaynağın müşteri/fason profili
+/// (alan-düzeyi shallow merge; sections/columns/style bütün olarak ezilir).
+/// Soft delete: isActive=false (atamalar bozulmasın diye fiziksel silme yok).
+model DocumentProfile {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @unique @db.VarChar(80)
+  description String? @db.VarChar(300)
+  config      Json
+  isActive    Boolean @default(true)
+
+  customers      Customer[]      @relation("CustomerDocProfile")
+  subcontractors Subcontractor[] @relation("SubcontractorDocProfile")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("document_profiles")
+}
+
+/// SERBEST BELGE — herhangi bir kayda bağlı OLMAYAN, admin'in elle yazdığı belge
+/// (üst yazı, teslim tutanağı, dekont, duyuru vb.). Kaynak yoktur — belge KENDİSİ
+/// kaynaktır; PrintedDocument freeze zincirinden bağımsız, doğrudan düzenlenir.
+/// `config` = tek DocumentConfig (stil/logo/damga/blok/imza) — sanitizeDocStyleConfig
+/// vb. ile süzülür. Baskı: title + recipient + body + bloklar; antet/logo/damga reuse.
+model FreeDocument {
+  id          String  @id @default(uuid()) @db.Uuid
+  documentNo  String  @unique @db.VarChar(64) // SB+GGAAYY+NNNN
+  title       String  @db.VarChar(120)
+  /// Muhatap ("Sayın ...") — opsiyonel; boşsa basılmaz.
+  recipient   String? @db.VarChar(200)
+  /// Serbest gövde metni (çok satırlı).
+  body        String  @db.Text
+  /// Görünüm ayarı (DocumentConfig) — stil/logo/damga/blok/imza.
+  config      Json
+  isActive    Boolean @default(true)
+  /// "Kim oluşturdu" — düşük trafik audit FK'sı (relation YOK, konvansiyon).
+  createdById String? @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("free_documents")
 }
 
 // =============================================================================
@@ -2472,6 +2556,11 @@ model Shipment {
   // Saha #21: sevkiyata özel prosedür / ihracat referans kodu (örn. gümrük beyanname no).
   // Boşsa ekranlarda müşteri/şube `code`'u gösterilir; bu alan sevkiyat bazında override.
   procedureCode String?             @db.VarChar(64)
+
+  // İrsaliye açıklaması — sevkiyata özel, KAYITLI serbest not. Donmuş belge
+  // çekirdeğine GİRMEZ (annotation katmanı): irsaliye basılırken canlı çözülür,
+  // her an düzenlenebilir (SÜRÜM DOĞURMAZ), tekrar baskıda da çıkar. Opsiyonel.
+  dispatchNote  String?             @db.VarChar(500)
 
   // Araç / sürücü (dispatch'te girilir)
   plateNumber String? @db.VarChar(32)
@@ -2824,6 +2913,11 @@ model LabelTemplate {
   /// (eski client geri uyumu). Saha onayı sonrası drop.
   isDefault Boolean    @default(false)
   isActive  Boolean    @default(true)
+  /// Serbest (statik) etiket şablonu — rulo/kartela bağlamına ATANAMAZ (bağlam
+  /// varsayılanı / müşteri rotası / cihaz rotası); barkodsuz kaydedilebilir ve
+  /// talep üzerine (şablon + kopya seç) basılır. Baskı seçicisinde görünür,
+  /// atama seçicilerinde görünmez. kind bu şablonlarda null kalır.
+  standalone Boolean   @default(false)
   /// DEPRECATED (v2): akış-modeli alan listesi — varyantı olmayan şablon için
   /// fail-safe render yolu (dual-mode). Varyantlı şablonda kullanılmaz.
   fields    Json
@@ -2845,6 +2939,7 @@ model LabelTemplate {
   peripheralRoutes PeripheralTemplateRoute[]
   variants         LabelTemplateVariant[]
   customerRoutes   CustomerTemplateRoute[]
+  customerStandaloneLinks CustomerStandaloneLabel[]
   contextDefaults  LabelContextDefault[]
 
   createdAt DateTime @default(now())
@@ -2901,6 +2996,29 @@ model CustomerTemplateRoute {
   @@unique([customerId, kind])
   @@index([templateId])
   @@map("customer_template_routes")
+}
+
+/// Müşteriye bağlı SERBEST (statik) etiketler — M:N kolaylık bağı (customer ⟺
+/// standalone LabelTemplate). ROTA DEĞİL: rulo/kartela etiket çözümüne
+/// (label-routing.resolver / CustomerTemplateRoute) KATILMAZ — yalnız baskı
+/// ekranındaki serbest etiket seçicisini müşteriye göre filtrelemek için.
+/// Bağ OPSİYONEL: hiç bağı olmayan serbest şablon "genel"dir ve her müşteride
+/// görünür; müşteri seçilince liste = o müşterinin bağlı etiketleri ∪ genel.
+/// Yalnız standalone=true şablon bağlanabilir (servis guard). Pivot: sadece
+/// createdAt (M:N konvansiyonu); iki uç da onDelete Cascade.
+model CustomerStandaloneLabel {
+  id         String        @id @default(uuid()) @db.Uuid
+  customerId String        @db.Uuid
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  templateId String        @db.Uuid
+  template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerId, templateId])
+  @@index([templateId])
+  @@index([customerId])
+  @@map("customer_standalone_labels")
 }
 
 /// Bağlam (LabelKind) başına varsayılan şablon — eski "kind-başına isDefault"un

@@ -61,6 +61,8 @@ const service = new BaseService({
   searchFields: ["code", "name", "description"],
   defaultInclude: undefined,
   uniqueField: "code",
+  duplicateNameField: "name",
+  entityLabel: "kalite sınıfı",
 });
 
 const controller = new BaseController(service);

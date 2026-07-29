@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelAssignmentsPage } from "@/pages/Labels/LabelAssignmentsPage";
+import { StandalonePrintPage } from "@/pages/Labels/StandalonePrintPage";
 
 /**
  * Etiketler — tek başlık + içerikte iki sekme (çift PageHeader sorunu giderildi).
@@ -20,7 +22,12 @@ export function EtiketlerPage() {
   // ref-callback state'i: element mount olunca alt sayfalara geçer.
   const [actionsEl, setActionsEl] = useState<HTMLDivElement | null>(null);
   const tabParam = sp.get("tab");
-  const tab = tabParam === "assignments" ? "assignments" : "templates";
+  const tab =
+    tabParam === "assignments"
+      ? "assignments"
+      : tabParam === "freeprint"
+        ? "freeprint"
+        : "templates";
   const setTab = (v: string) => {
     const n = new URLSearchParams(sp);
     n.set("tab", v);
@@ -28,16 +35,16 @@ export function EtiketlerPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Etiketler"
-        description="Etiket düzenleri (alan yerleşimi / uzman kod) ve bağlam atamaları."
         actions={<div ref={setActionsEl} className="flex items-center gap-2" />}
       />
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-4 mt-4 w-fit">
           <TabsTrigger value="templates">Düzenler</TabsTrigger>
           <TabsTrigger value="assignments">Atamalar</TabsTrigger>
+          <TabsTrigger value="freeprint">Serbest Baskı</TabsTrigger>
         </TabsList>
         <TabsContent value="templates" className="mt-0 min-h-0 flex-1 overflow-hidden">
           <LabelTemplatesPage hideHeader actionsPortal={actionsEl} />
@@ -45,7 +52,10 @@ export function EtiketlerPage() {
         <TabsContent value="assignments" className="mt-0 min-h-0 flex-1 overflow-hidden">
           <LabelAssignmentsPage hideHeader actionsPortal={actionsEl} />
         </TabsContent>
+        <TabsContent value="freeprint" className="mt-0 min-h-0 flex-1 overflow-hidden">
+          <StandalonePrintPage hideHeader actionsPortal={actionsEl} />
+        </TabsContent>
       </Tabs>
-    </div>
+    </PageShell>
   );
 }

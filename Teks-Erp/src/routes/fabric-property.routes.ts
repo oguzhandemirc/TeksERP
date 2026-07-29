@@ -24,6 +24,8 @@ const service = new FabricPropertyService({
   tableName: "FABRIC_PROPERTY",
   searchFields: ["code", "name", "category", "description"],
   defaultInclude: undefined,
+  duplicateNameField: "name",
+  entityLabel: "özellik",
 });
 
 const controller = new BaseController(service);

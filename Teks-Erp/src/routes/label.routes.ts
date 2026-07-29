@@ -523,4 +523,112 @@ router.post(
   controller.seedRollLabelSnapshot,
 );
 
+// ---- Serbest (statik) etiket baskısı — rulo/kartela bağlamı olmadan ----
+// NOT: literal /standalone-templates, param'lı /templates/:id/*'tan ÖNCE (segment
+// çakışması yok ama tutarlılık için).
+
+/**
+ * @openapi
+ * /api/labels/standalone-templates:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Serbest (statik) etiket seçicisi — aktif standalone şablonlar + varyantları
+ *     description: |
+ *       Yalnız aktif `standalone` şablonlar; her biri basılabilir boyut
+ *       varyantlarıyla (id/name/widthMm/heightMm/isPrimary) döner. Baskı seçicisi
+ *       bunu tüketir (atama seçicileri `/api/label-templates?assignable=true`).
+ *       `customerId` verilirse liste o müşteriye BAĞLI ∪ hiç bağı olmayan "genel"
+ *       serbest etiketlerle filtrelenir (başka müşteriye özel bağlılar dışlanır);
+ *       geçersiz/eksik → filtresiz. Bu bağ rulo/kartela çözümüne KATILMAZ.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: customerId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *         description: Serbest etiketleri bu müşteriye göre filtrele (bağlı ∪ genel)
+ *     responses:
+ *       200: { description: "{ data: [{ id, name, variants: [...] }] }" }
+ */
+router.get(
+  "/standalone-templates",
+  verifyToken,
+  requireAnyPermission("label:print", "label-template:read", ...MOBILE_LABEL_PRINTERS),
+  controller.listStandaloneTemplates,
+);
+
+/**
+ * @openapi
+ * /api/labels/templates/{id}/native:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Serbest etiketi SEÇİLİ yazıcı dilinde (mock payload) — /rolls/:id/native analoğu
+ *     description: |
+ *       Kaydedilmiş bir şablon varyantını mock payload ile basar (rulo/kartela YOK).
+ *       Varyant seçimi: `?variantId=` → primary → ilk. `?copies=` 1–100 (akış 1–5
+ *       DEĞİL). `?encoding=b64` → base64 JSON zarfı ({ encoding, content, language,
+ *       contentType, count }); aksi → ham native/HTML. Dil `X-Label-Language`
+ *       header'ında. Cihaz/dil/medya `?peripheralId=`/`?machineId=` veya istasyon
+ *       (mobil x-device-id) ile çözülür — `/rolls/:id/native` ile aynı zincir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: variantId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: copies
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *       - in: query
+ *         name: encoding
+ *         schema: { type: string, enum: [b64] }
+ *     responses:
+ *       200: { description: Seçili dilde etiket (JSON zarfı veya ham native/HTML) }
+ *       400: { description: Basılabilir varyant yok / varyant bulunamadı }
+ *       404: { description: Şablon bulunamadı veya pasif }
+ */
+router.get(
+  "/templates/:id/native",
+  verifyToken,
+  requireAnyPermission("label:print", "label-template:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getStandaloneTemplateNative,
+);
+
+/**
+ * @openapi
+ * /api/labels/templates/{id}/html:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Serbest etiketin tam HTML'i (mock payload) — /rolls/:id/html analoğu
+ *     description: |
+ *       Kaydedilmiş bir şablon varyantını mock payload ile HTML olarak basar.
+ *       Varyant seçimi `?variantId=` → primary → ilk; `?copies=` 1–100. Medya
+ *       `?peripheralId=`/`?machineId=` veya istasyon ile çözülür.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: variantId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: copies
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *     responses:
+ *       200: { description: HTML, content: { text/html: { schema: { type: string } } } }
+ *       400: { description: Basılabilir varyant yok / varyant bulunamadı }
+ *       404: { description: Şablon bulunamadı veya pasif }
+ */
+router.get(
+  "/templates/:id/html",
+  verifyToken,
+  requireAnyPermission("label:print", "label-template:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getStandaloneTemplateHtml,
+);
+
 export default router;

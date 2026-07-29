@@ -148,6 +148,11 @@ const DATE_PRESETS = [
 
 const NONE = "__all__";
 
+/** Sayısal aralık gibi YAZILAN filtrelerde URL'e (→ backend fetch) yazmadan önce
+ *  beklenen süre. "1"→"15"→"150" her tuşta 3 istek yerine, yazma durunca TEK
+ *  istek gitsin diye. Tıkla-seç filtreleri (select/lookup) etkilenmez. */
+const FILTER_DEBOUNCE_MS = 500;
+
 export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline = false, size = "sm" }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const dateDef = filters.find((f) => f.kind === "dateRange");
@@ -815,25 +820,45 @@ function NumberRangeFilter({
 }: SubProps<Extract<FilterDef, { kind: "numberRange" }>>) {
   const minKey = `filter[${def.key}Min]`;
   const maxKey = `filter[${def.key}Max]`;
-  const minVal = sp.get(minKey) ?? "";
-  const maxVal = sp.get(maxKey) ?? "";
-  const hasValue = Boolean(minVal || maxVal);
+  const urlMin = sp.get(minKey) ?? "";
+  const urlMax = sp.get(maxKey) ?? "";
 
-  const setMin = (v: string) =>
-    update((next) => {
-      if (!v) next.delete(minKey);
-      else next.set(minKey, v);
-    });
-  const setMax = (v: string) =>
-    update((next) => {
-      if (!v) next.delete(maxKey);
-      else next.set(maxKey, v);
-    });
-  const clear = () =>
+  // Yerel input state — her tuşta ANINDA güncellenir (input akıcı kalır); URL'e
+  // (→ backend fetch) yazma DEBOUNCE edilir ki "1"→"15"→"150" yazarken 3 istek
+  // yerine yazma durunca TEK istek gitsin. URL dışarıdan değişirse (Temizle/geri)
+  // yerel state ona senkronlanır.
+  const [local, setLocal] = useState({ min: urlMin, max: urlMax });
+  const hasValue = Boolean(local.min || local.max);
+
+  // Dışarıdan gelen URL değişimini yerelle senkronla (Temizle butonu, navigasyon,
+  // başka yerden filtre sıfırlama). Yalnız URL değeri değişince çalışır.
+  useEffect(() => {
+    setLocal({ min: urlMin, max: urlMax });
+  }, [urlMin, urlMax]);
+
+  // Yerel değişimi DEBOUNCE ederek URL'e işle — yalnız URL'den farklıysa (mount'ta
+  // ve senkron sonrası eşitken erken çıkar → tek istek, gereksiz fetch yok).
+  useEffect(() => {
+    if (local.min === urlMin && local.max === urlMax) return;
+    const t = setTimeout(() => {
+      update((next) => {
+        if (!local.min) next.delete(minKey);
+        else next.set(minKey, local.min);
+        if (!local.max) next.delete(maxKey);
+        else next.set(maxKey, local.max);
+      });
+    }, FILTER_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [local]);
+
+  const clear = () => {
+    setLocal({ min: "", max: "" });
     update((next) => {
       next.delete(minKey);
       next.delete(maxKey);
     });
+  };
 
   const placeholder = def.unit ? `${def.label} (${def.unit})` : def.label;
 
@@ -851,8 +876,8 @@ function NumberRangeFilter({
         type="number"
         inputMode="decimal"
         step={def.step ?? "any"}
-        value={minVal}
-        onChange={(e) => setMin(e.target.value)}
+        value={local.min}
+        onChange={(e) => setLocal((s) => ({ ...s, min: e.target.value }))}
         className="h-6 w-[68px] border-0 px-1 text-xs shadow-none focus-visible:ring-0"
         placeholder="min"
       />
@@ -861,8 +886,8 @@ function NumberRangeFilter({
         type="number"
         inputMode="decimal"
         step={def.step ?? "any"}
-        value={maxVal}
-        onChange={(e) => setMax(e.target.value)}
+        value={local.max}
+        onChange={(e) => setLocal((s) => ({ ...s, max: e.target.value }))}
         className="h-6 w-[68px] border-0 px-1 text-xs shadow-none focus-visible:ring-0"
         placeholder="max"
       />

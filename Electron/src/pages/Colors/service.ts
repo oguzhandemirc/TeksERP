@@ -32,7 +32,7 @@ export function listPublicColorsCursor(
 }
 
 /**
- * Renk seçici (ürün izinli / kısıtlı mod) için tüm public renkleri tek istekte
+ * Renk seçici (kumaş izinli / kısıtlı mod) için tüm public renkleri tek istekte
  * çek — `loadAllForPicker(colorService)` muadili, `scope=public` ekler.
  */
 export async function loadPublicColorsForPicker(): Promise<PaginatedResponse<Color>> {

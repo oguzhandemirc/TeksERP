@@ -8,7 +8,7 @@ const base = createCrudService<DispatchListItem>("/api/shipping/shipments");
 
 export const accountingDispatchService = {
   ...base,
-  /** Saha #2: 3 bölümlü sevk fişi (ürün/çuval/çeki) — fiş açılınca lazy. */
+  /** Saha #2: 3 bölümlü sevk fişi (kumaş/çuval/çeki) — fiş açılınca lazy. */
   getReport: (id: string): Promise<ApiResponse<DispatchReport>> =>
     apiClient
       .get<ApiResponse<DispatchReport>>(`/api/shipping/shipments/${id}/dispatch-report`)
@@ -16,7 +16,7 @@ export const accountingDispatchService = {
 
   /**
    * Fasondan doğrudan sevk (DirectShipment) fişi — çuval sevkiyatı getReport'u ile AYNI
-   * DispatchReport şeklini döner (çuval yok → Çuval sayfası boş; Ürün/Çeki dolu). Muhasebe
+   * DispatchReport şeklini döner (çuval yok → Çuval sayfası boş; Kumaş/Çeki dolu). Muhasebe
    * listesinde `kind === "DIRECT"` satırlar bu uca gider.
    */
   getDirectReport: (id: string): Promise<ApiResponse<DispatchReport>> =>

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { nextSortOrder } from "@/lib/sort-order";
 import { colorColumns } from "./columns";
 import { colorService } from "./service";
@@ -28,7 +27,8 @@ export function ColorsPage() {
     v: ColorFormValues,
     initial: Color | null,
   ): Partial<Color> => ({
-    code: initial?.code ?? generateCode(CODE_PREFIXES.COLOR),
+    // Kod backend'de üretilir (RNK+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+    ...(initial?.code ? { code: initial.code } : {}),
     name: v.name,
     hex: v.hex || null,
     sortOrder: initial?.sortOrder ?? nextOrder,

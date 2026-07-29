@@ -37,7 +37,7 @@ export function OrderPartyCard({ customer, branch }: Props) {
         )}
       </div>
 
-      {/* Şube + Şube Kodu — aralarında ince ayraç için gap-px + bg-border */}
+      {/* Şube + İhracat Kodu — aralarında ince ayraç için gap-px + bg-border */}
       {branch && (
         <div className="grid grid-cols-2 gap-px border-t bg-border">
           <div className="bg-background px-4 py-2.5">
@@ -53,7 +53,7 @@ export function OrderPartyCard({ customer, branch }: Props) {
           </div>
           <div className="bg-background px-4 py-2.5">
             <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              <Hash className="h-3 w-3" /> Şube Kodu
+              <Hash className="h-3 w-3" /> İhracat Kodu
             </div>
             <div className="mt-0.5 truncate font-mono text-sm font-medium text-foreground">
               {branch.code ?? <span className="text-muted-foreground">—</span>}

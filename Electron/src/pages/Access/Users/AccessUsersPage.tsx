@@ -4,6 +4,7 @@ import { Plus, UserCog, Trash2, Power, PowerOff, History } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -146,10 +147,9 @@ export function AccessUsersPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Kullanıcılar"
-        description="Sistem kullanıcılarını ve yetkilerini yönet."
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
@@ -176,8 +176,8 @@ export function AccessUsersPage() {
         </label>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <Table>
+      <PageBody>
+        <Table containerClassName="overflow-visible">
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
               <TableHead>Kullanıcı</TableHead>
@@ -284,7 +284,7 @@ export function AccessUsersPage() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </PageBody>
 
       <UserFormDialog
         open={formOpen}
@@ -335,6 +335,6 @@ export function AccessUsersPage() {
           if (deletingUser) removeMut.mutate(deletingUser.id);
         }}
       />
-    </div>
+    </PageShell>
   );
 }

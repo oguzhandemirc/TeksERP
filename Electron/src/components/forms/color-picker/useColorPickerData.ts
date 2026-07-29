@@ -18,7 +18,7 @@ const PAGE_LIMIT = 50;
 interface Args {
   open: boolean;
   customerId?: string | null;
-  /** Ürün izinli renk listesi (dolu = kısıtlı mod). */
+  /** Kumaş izinli renk listesi (dolu = kısıtlı mod). */
   allowedColorIds?: string[] | null;
   debouncedSearch: string;
 }

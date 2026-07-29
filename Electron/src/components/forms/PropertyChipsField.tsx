@@ -10,7 +10,7 @@ import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { QuickAddProperty } from "./QuickAddProperty";
 
 interface Props {
-  /** Seçili Item ID — boşsa "önce ürün seç" mesajı gösterilir. */
+  /** Seçili Item ID — boşsa "önce kumaş seç" mesajı gösterilir. */
   itemId: string;
   value: string[];
   onChange: (next: string[]) => void;
@@ -19,9 +19,9 @@ interface Props {
   /** Salt-okunur: çipler ve temizle butonu pasifleşir (örn. kilitli/yetkisiz form). */
   disabled?: boolean;
   /**
-   * "Yeni Özellik Ekle" hızlı-ekleme butonunu göster. Yalnız ürünün özellik KISITI
+   * "Yeni Özellik Ekle" hızlı-ekleme butonunu göster. Yalnız kumaşın özellik KISITI
    * YOKKEN (tüm özellikler uygun) ve `property:write` yetkisi varken görünür —
-   * kısıtlı üründe yeni global özellik izinli listeye girmez (renk deseniyle aynı).
+   * kısıtlı kumaşta yeni global özellik izinli listeye girmez (renk deseniyle aynı).
    */
   allowQuickAdd?: boolean;
 }
@@ -79,7 +79,7 @@ export function PropertyChipsField({
     onChange(Array.from(next));
   };
 
-  // Hızlı-ekleme: ürün özellik KISITI YOK (tüm özellikler uygun) + property:write + izinli çağıran.
+  // Hızlı-ekleme: kumaş özellik KISITI YOK (tüm özellikler uygun) + property:write + izinli çağıran.
   const canQuickAdd =
     allowQuickAdd && !disabled && allowedIds.length === 0 && hasPermission("property:write");
   const addProperty = (id: string) => onChange(Array.from(new Set([...value, id])));
@@ -87,17 +87,17 @@ export function PropertyChipsField({
   if (!itemId) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs italic text-muted-foreground">
-        Önce ürün seçin — sonra uygun özellikler listelenecek.
+        Önce kumaş seçin — sonra uygun özellikler listelenecek.
       </div>
     );
   }
 
   const isEmpty = candidateProps.length === 0;
-  // Uygun özellik yok VE hızlı-ekleme de yoksa (kısıtlı ürün / yetkisiz) → yalın not.
+  // Uygun özellik yok VE hızlı-ekleme de yoksa (kısıtlı kumaş / yetkisiz) → yalın not.
   if (isEmpty && !canQuickAdd) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs italic text-muted-foreground">
-        {emptyHint ?? "Bu ürüne uygulanabilir özellik tanımlı değil."}
+        {emptyHint ?? "Bu kumaşa uygulanabilir özellik tanımlı değil."}
       </div>
     );
   }

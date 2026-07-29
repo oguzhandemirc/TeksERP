@@ -19,6 +19,10 @@ const service = new BaseService({
   searchFields: ["code", "name", "description"],
   defaultInclude: undefined,
   uniqueField: "code",
+  duplicateNameField: "name",
+  entityLabel: "hata tipi",
+  // Kod backend-authoritative: `HATA+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
+  autoCode: { prefix: "HATA" },
 });
 
 const controller = new BaseController(service);

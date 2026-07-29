@@ -67,9 +67,12 @@ const groupKey = (customerId: string, branchId: string | null) => `${customerId}
 // "Sürdür" başta en fazla bu kadar; fazlası aç-kapa ile açılır.
 const POOL_CAP = 5;
 
-// Bizdeki ad + (karşıdaki ad) — alias farklıysa parantezde.
+// Bizdeki ad + etiketli müşteri adı — alias farklıysa "(Müşteride: X)".
+// Çıplak parantez ürün varyantı/kod sanılabiliyordu; Electron'la aynı konvansiyon.
 const dualName = (ourName: string, custName?: string | null) =>
-  custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
+  custName && custName.trim() && custName !== ourName
+    ? `${ourName} (Müşteride: ${custName})`
+    : ourName;
 
 export default function TartiPaketScreen() {
   const compact = useDeviceType() === 'phone';
@@ -303,6 +306,24 @@ export default function TartiPaketScreen() {
       }
       secondRow={compact ? phoneSecondRow : undefined}
     >
+      {/* Arama çubuğu FlashList başlığından ÇIKARILDI: havuz kartları dolunca
+          liste-içi başlıktaki arama kutusu klavye çizgisinin altına iniyordu
+          (kör giriş). Sabit üst çubuk olarak hep klavyenin üstünde kalır. */}
+      <View style={styles.searchBar}>
+        <TextInput
+          mode="outlined"
+          dense
+          value={orderSearch}
+          onChangeText={setOrderSearch}
+          placeholder="Müşteri, sipariş no veya şube ara…"
+          left={<TextInput.Icon icon="magnify" />}
+          right={
+            orderSearch ? <TextInput.Icon icon="close" onPress={() => setOrderSearch('')} /> : null
+          }
+          style={styles.searchBox}
+        />
+      </View>
+      <View style={{ flex: 1 }}>
       <FlashList
         data={orderRows}
         keyExtractor={(r) => (r.kind === 'order' ? r.o.order.id : 'group-sep')}
@@ -382,18 +403,6 @@ export default function TartiPaketScreen() {
               Açık Siparişler
             </Text>
             <Text style={styles.hint}>Tek müşteri + şube seç. Depo karşılaması satırda görünür.</Text>
-            <TextInput
-              mode="outlined"
-              dense
-              value={orderSearch}
-              onChangeText={setOrderSearch}
-              placeholder="Müşteri, sipariş no veya şube ara…"
-              left={<TextInput.Icon icon="magnify" />}
-              right={
-                orderSearch ? <TextInput.Icon icon="close" onPress={() => setOrderSearch('')} /> : null
-              }
-              style={styles.searchBox}
-            />
             {openOrdersQ.isLoading && <ActivityIndicator style={{ marginTop: 24 }} />}
           </View>
         }
@@ -405,6 +414,7 @@ export default function TartiPaketScreen() {
           )
         }
       />
+      </View>
 
       {selected.length > 0 && (
         <View style={styles.footer}>
@@ -451,6 +461,7 @@ const styles = StyleSheet.create({
   },
   headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   scrollContent: { padding: 12, paddingBottom: 32 },
+  searchBar: { paddingHorizontal: 12, paddingTop: 8 },
   searchBox: { marginBottom: 10, backgroundColor: '#fff' },
   bridge: { borderRadius: 10, backgroundColor: '#1e40af', marginBottom: 10 },
   bridgeInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 },

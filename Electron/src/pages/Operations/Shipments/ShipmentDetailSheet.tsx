@@ -1,40 +1,75 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, FileText, Package, Undo2 } from "lucide-react";
+import { Ban, Check, FileText, Maximize2, Search } from "lucide-react";
 import { PermissionGate } from "@/components/PermissionGate";
 import { CancelShipmentDialog } from "./CancelShipmentDialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/operations/StatusBadge";
-import { safeFormat } from "@/lib/format";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
+import { cn } from "@/lib/utils";
 import { shipmentService } from "./service";
 import { shipmentStatusLabels, shipmentStatusTones } from "./types";
 import { ShipmentDispatchNote } from "./ShipmentDispatchNote";
-
-const fmt = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
-const fmtKg = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+import { ShipmentSheetBody } from "./ShipmentSheetBody";
+import { normalizeSearch, rollMatchesQuery, rollMatchesContext, csvIds } from "./roll-search";
 
 interface Props {
   shipmentId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Liste kumaş/renk (içerik) filtresinden gelen bağlam (csv id) — eşleşen toplar
+   *  vurgulanır + "yalnız eşleşenler" süzgeci; "Tam Sayfa"ya da taşınır. */
+  matchItem?: string;
+  matchColor?: string;
 }
 
-export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
+export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem, matchColor }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [onlyMatched, setOnlyMatched] = useState(false);
+  const openTarget = useOpenTarget();
+  const q = normalizeSearch(filter);
+
+  const matchItemIds = useMemo(() => csvIds(matchItem), [matchItem]);
+  const matchColorIds = useMemo(() => csvIds(matchColor), [matchColor]);
+  const hasMatchContext = matchItemIds.length > 0 || matchColorIds.length > 0;
 
   // Lazy — yalnız açılınca detay çekilir. queryKey irsaliye ile paylaşılır (cache).
-  const q = useQuery({
+  const query = useQuery({
     queryKey: ["shipment-detail", shipmentId],
     queryFn: () => shipmentService.getDetail(shipmentId!),
     enabled: open && Boolean(shipmentId),
     staleTime: 30_000,
   });
-  const d = q.data?.data;
-  const sackSeqById = new Map((d?.sacks ?? []).map((s) => [s.id, s.seq]));
+  const d = query.data?.data;
+  const matchCount = useMemo(
+    () => (d ? d.rolls.filter((r) => rollMatchesQuery(r, q)).length : 0),
+    [d, q],
+  );
+  // Liste içerik filtresine uyan top sayısı (aramadan bağımsız — bağlam vurgusu).
+  const matchedTotal = useMemo(
+    () =>
+      d && hasMatchContext
+        ? d.rolls.filter((r) => rollMatchesContext(r, matchItemIds, matchColorIds)).length
+        : 0,
+    [d, hasMatchContext, matchItemIds, matchColorIds],
+  );
+  // Bağlam yoksa "yalnız eşleşenler" anlamsız — kapalı tut.
+  const effectiveOnlyMatched = hasMatchContext && onlyMatched;
+  // Tam sayfaya bağlamı taşı (matchItem/matchColor query) — vurgu orada da açılsın.
+  const fullPageHref = useMemo(() => {
+    if (!shipmentId) return null;
+    const qp = new URLSearchParams();
+    if (matchItem) qp.set("matchItem", matchItem);
+    if (matchColor) qp.set("matchColor", matchColor);
+    const qs = qp.toString();
+    return qs ? `/operations/shipments/${shipmentId}?${qs}` : `/operations/shipments/${shipmentId}`;
+  }, [shipmentId, matchItem, matchColor]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -51,7 +86,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
           </SheetDescription>
         </SheetHeader>
 
-        {q.isLoading ? (
+        {query.isLoading ? (
           <div className="mt-4 space-y-3">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-48 w-full" />
@@ -66,20 +101,27 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                 size="sm"
                 variant="outline"
                 className="gap-1"
-                onClick={() => setNoteOpen(true)}
+                title="Sol tık: bu sekmede · Shift/Ctrl+tık: yeni sekmede"
+                onClick={(e) => {
+                  onOpenChange(false);
+                  if (fullPageHref) openTarget(fullPageHref, e);
+                }}
               >
+                <Maximize2 className="h-3.5 w-3.5" /> Tam Sayfa
+              </Button>
+              {/* Ana aksiyon → mor primary (göze ilk çarpan). */}
+              <Button type="button" size="sm" variant="default" className="gap-1" onClick={() => setNoteOpen(true)}>
                 <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
               </Button>
-              {/* İptal: araç vazgeçti / sipariş komple iptal — cancel-preview'lı yıkıcı onay.
-                  DISPATCHED/CANCELLED dışında. Havuz modelinde sipariş kümesi çuval
-                  tahsislerinden türetilir → elle "Siparişleri Değiştir" (retarget) yok. */}
+              {/* İptal: DISPATCHED/CANCELLED dışında — cancel-preview'lı yıkıcı onay. */}
               {d.status !== "DISPATCHED" && d.status !== "CANCELLED" && (
                 <PermissionGate permission="shipping:write">
+                  {/* Yıkıcı aksiyon → kırmızı-tonlu (belirgin ama primary'yi ezmez). */}
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="gap-1 text-destructive hover:text-destructive"
+                    className="gap-1 border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => setCancelOpen(true)}
                   >
                     <Ban className="h-3.5 w-3.5" /> İptal Et
@@ -88,226 +130,59 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              <SummaryCard label="Top" value={`${d.summary.rollCount}`} />
-              <SummaryCard label="Toplam Metraj" value={`${fmt(d.summary.totalMeters)} m`} />
-              <SummaryCard
-                label="Çuval / Kg"
-                value={`${d.summary.sackCount} · ${fmtKg(d.summary.totalKg)} kg`}
-              />
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Top ara (barkod, kumaş, renk)..."
+                  className="h-8 pl-8 text-sm"
+                />
+                {q && (
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs tabular-nums text-muted-foreground">
+                    {matchCount} eşleşti
+                  </span>
+                )}
+              </div>
+              {/* Liste kumaş/renk filtresinden gelindiyse: eşleşme rozeti + yalnız-eşleşenler. */}
+              {hasMatchContext && (
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="border-amber-500/50 bg-amber-500/10 text-amber-600"
+                    title="Liste kumaş/renk filtresine uyan (eşleşen) top sayısı"
+                  >
+                    {matchedTotal} top eşleşti
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={effectiveOnlyMatched ? "default" : "outline"}
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => setOnlyMatched((v) => !v)}
+                    title="Yalnız eşleşen topları ve onları içeren çuvalları göster"
+                  >
+                    <Check className={cn("h-3.5 w-3.5", effectiveOnlyMatched ? "opacity-100" : "opacity-40")} />
+                    Yalnız eşleşenler
+                  </Button>
+                </div>
+              )}
             </div>
 
-            <Card>
-              <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 text-sm">
-                <Info label="Plaka" value={d.plateNumber} />
-                <Info label="Sürücü" value={d.driverName} />
-                <Info label="Taşıyıcı" value={d.carrier} />
-                <Info
-                  label="Sevk Tarihi"
-                  value={d.dispatchedAt ? safeFormat(d.dispatchedAt, "dd.MM.yyyy HH:mm") : null}
-                />
-              </CardContent>
-            </Card>
-
-            {d.orders.map((o) => (
-              <Card key={o.id}>
-                <CardContent className="p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs">
-                    <span className="font-mono font-semibold">{o.orderNumber}</span>
-                    {o.deadline && (
-                      <span className="text-muted-foreground">
-                        termin {safeFormat(o.deadline, "dd.MM.yyyy")}
-                      </span>
-                    )}
-                  </div>
-                  <table className="w-full text-[11px] tabular-nums">
-                    <thead>
-                      <tr className="text-muted-foreground [&>th]:px-1 [&>th]:py-0.5 [&>th]:font-medium">
-                        <th className="text-left">Ürün</th>
-                        <th className="text-right">İstenen</th>
-                        <th className="text-right">Sevk</th>
-                        <th className="text-right">Açık</th>
-                        <th className="text-right">Bu sevk</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {o.lines.map((l) => (
-                        <tr key={l.lineId} className="border-t [&>td]:px-1 [&>td]:py-0.5">
-                          <td className="text-left">
-                            {l.customerItemName ?? l.item.name}
-                            {l.color ? ` · ${l.customerColorName ?? l.color.name}` : ""}
-                            {l.width ? ` · ${l.width}cm` : ""}
-                          </td>
-                          <td className="text-right text-muted-foreground">{fmt(l.requested)}</td>
-                          <td className="text-right text-muted-foreground">{fmt(l.shipped)}</td>
-                          <td className="text-right text-muted-foreground">{fmt(l.openQty)}</td>
-                          <td className="text-right font-semibold">{fmt(l.thisShipment)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-            ))}
-
-            {d.rolls.length > 0 && (
-              <Card>
-                <CardContent className="p-3">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <Package className="h-3.5 w-3.5" /> Toplar ({d.rolls.length})
-                  </div>
-                  <div className="space-y-0.5 text-[11px]">
-                    {d.rolls.map((r) => (
-                      <div key={r.id} className="flex items-center justify-between gap-2">
-                        <span className="font-mono">{r.barcode ?? "—"}</span>
-                        <span className="truncate text-muted-foreground">
-                          {r.item?.name}
-                          {r.color ? ` · ${r.color.name}` : ""}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
-                          {r.sackId != null && sackSeqById.has(r.sackId) && (
-                            <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground">
-                              Ç#{sackSeqById.get(r.sackId)}
-                            </span>
-                          )}
-                          {fmt(r.currentQty)} m
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {d.summary.returnedCount > 0 && (
-              <Card>
-                <CardContent className="p-3">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <Undo2 className="h-3.5 w-3.5" /> Bu sevkiyattan iade edilenler ({d.summary.returnedCount}
-                    )
-                  </div>
-                  <div className="space-y-0.5 text-[11px]">
-                    {d.returnedRolls.map((r) => (
-                      <div key={r.id} className="flex items-center justify-between gap-2">
-                        <span className="font-mono">{r.barcode ?? "—"}</span>
-                        <span className="truncate text-muted-foreground">
-                          {r.item?.name}
-                          {r.color ? ` · ${r.color.name}` : ""}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
-                          {r.reasonName && (
-                            <span
-                              className="rounded px-1 text-[10px]"
-                              style={
-                                r.reasonColor
-                                  ? { backgroundColor: `${r.reasonColor}22`, color: r.reasonColor }
-                                  : undefined
-                              }
-                            >
-                              {r.reasonName}
-                            </span>
-                          )}
-                          {fmt(r.qty)} m
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-2 border-t pt-1.5 text-[11px] text-muted-foreground">
-                    Gönderilen toplam:{" "}
-                    <span className="font-semibold tabular-nums text-foreground">
-                      {d.summary.rollCount + d.summary.returnedCount} top ·{" "}
-                      {fmt(d.summary.totalMeters + d.summary.returnedMeters)} m
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {d.sacks.length > 0 && (
-              <Card>
-                <CardContent className="p-3">
-                  <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Çuval İçeriği ({d.sacks.length})
-                  </div>
-                  <div className="space-y-2">
-                    {d.sacks.map((s) => (
-                      <div key={s.id} className="rounded border p-2">
-                        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold">
-                          <span>Çuval #{s.seq}</span>
-                          <span className="tabular-nums font-normal text-muted-foreground">
-                            {s.weightKg != null ? `${fmtKg(s.weightKg)} kg` : "tartılmadı"} · {s.rollCount}{" "}
-                            top
-                            {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ""}
-                          </span>
-                        </div>
-                        {s.productSummary.length === 0 && s.swatchCount === 0 ? (
-                          <div className="text-[11px] text-muted-foreground">boş</div>
-                        ) : (
-                          <div className="space-y-0.5 text-[11px]">
-                            {s.productSummary.map((p, i) => (
-                              <div key={i} className="flex items-center justify-between gap-2">
-                                <span className="truncate">
-                                  {p.itemName}
-                                  {p.colorName ? ` · ${p.colorName}` : ""}
-                                  {p.width != null ? ` · ${fmt(p.width)}cm` : ""}
-                                </span>
-                                <span className="shrink-0 tabular-nums text-muted-foreground">
-                                  {fmt(p.totalQty)} m · {p.rollCount} top
-                                </span>
-                              </div>
-                            ))}
-                            {s.swatches.map((sw) => (
-                              <div
-                                key={sw.id}
-                                className="flex items-center justify-between gap-2 text-muted-foreground"
-                              >
-                                <span className="truncate">
-                                  Kartela · {sw.item?.name ?? "—"}
-                                  {sw.color ? ` · ${sw.color.name}` : ""}
-                                </span>
-                                <span className="shrink-0 tabular-nums">
-                                  {sw.length != null ? `${fmt(sw.length)} cm` : ""}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <ShipmentSheetBody
+              d={d}
+              q={q}
+              matchItemIds={matchItemIds}
+              matchColorIds={matchColorIds}
+              onlyMatched={effectiveOnlyMatched}
+            />
           </div>
         )}
 
         <ShipmentDispatchNote shipmentId={shipmentId} open={noteOpen} onOpenChange={setNoteOpen} />
-
-        <CancelShipmentDialog
-          shipmentId={cancelOpen ? shipmentId : null}
-          onOpenChange={(o) => setCancelOpen(o)}
-        />
+        <CancelShipmentDialog shipmentId={cancelOpen ? shipmentId : null} onOpenChange={(o) => setCancelOpen(o)} />
       </SheetContent>
     </Sheet>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="p-3">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="mt-0.5 font-semibold tabular-nums">{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string | null }) {
-  return (
-    <>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div>{value || "—"}</div>
-    </>
   );
 }

@@ -911,7 +911,9 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
                 width: line.width != null ? String(line.width) : '',
               }));
               // Renk adını doğrudan order kaleminden al (gerçek colorId varsa).
-              setOrderColorName(line.colorId ? (line.colorName ?? line.customerColorName ?? null) : null);
+              // customerColorName fallback'i bilinçli yok — etiketsiz müşteri
+              // renk adı bizdeki ad sanılıyordu.
+              setOrderColorName(line.colorId ? (line.colorName ?? null) : null);
             }}
           />
 

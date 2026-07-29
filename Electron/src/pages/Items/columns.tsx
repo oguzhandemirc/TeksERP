@@ -1,8 +1,58 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { itemTypeLabels } from "@/types/enums";
+import { itemService } from "./service";
 import type { Item } from "./types";
+
+/**
+ * Saha (KK1) oluşturulmuş "onay bekliyor" deseni için rozet + inline Onayla.
+ * Onayla → itemService.update(id, { pendingReview:false }) + ["items"] invalidate.
+ * (Alternatif onay yolu: deseni düzenleyip kaydetmek de işareti temizler —
+ * bkz. itemPayload.helper.ts.)
+ */
+function ReviewBadgeCell({ item }: { item: Item }) {
+  const qc = useQueryClient();
+  const approve = useMutation({
+    mutationFn: () =>
+      itemService.update(item.id, { pendingReview: false } as Partial<Item>),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["items"] });
+      toast.success(`Desen onaylandı: ${item.name}`);
+    },
+  });
+
+  if (!item.pendingReview) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <Badge
+        variant="outline"
+        className="border-amber-500 text-amber-600 dark:text-amber-400"
+      >
+        Onay Bekliyor
+      </Badge>
+      <PermissionGate permission="item:write">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 gap-1 px-2 text-xs text-emerald-600 dark:text-emerald-400"
+          disabled={approve.isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            approve.mutate();
+          }}
+        >
+          <Check className="h-3 w-3" /> Onayla
+        </Button>
+      </PermissionGate>
+    </div>
+  );
+}
 
 export const itemColumns: ColumnDef<Item>[] = [
   {
@@ -76,6 +126,14 @@ export const itemColumns: ColumnDef<Item>[] = [
         </div>
       );
     },
+  },
+  {
+    id: "pendingReview",
+    header: "Onay",
+    // Excel/PDF: ham boolean yerine yerelleştirilmiş değer (accessorKey yok →
+    // aksi halde toText(boolean) 'true'/'false' yazardı).
+    meta: { exportValue: (row: Item) => (row.pendingReview ? "Onay Bekliyor" : "") },
+    cell: ({ row }) => <ReviewBadgeCell item={row.original} />,
   },
   {
     accessorKey: "isActive",

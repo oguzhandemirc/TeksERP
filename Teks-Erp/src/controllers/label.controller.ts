@@ -436,4 +436,81 @@ export class LabelController {
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
+
+  // ---- Serbest (statik) etiket baskısı — rulo/kartela bağlamı olmadan ----
+
+  /**
+   * Serbest etiket seçicisi: aktif standalone şablonlar + basılabilir varyantlar.
+   * `?customerId=<uuid>` → o müşteriye bağlı ∪ genel (bağsız) serbest etiketler.
+   * Geçersiz/eksik customerId → filtresiz (tüm aktif standalone) — sessizce yok sayılır.
+   */
+  listStandaloneTemplates = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const raw = typeof req.query.customerId === "string" ? req.query.customerId : undefined;
+      const parsed = raw ? z.string().uuid().safeParse(raw) : undefined;
+      const customerId = parsed?.success ? parsed.data : undefined;
+      res.status(200).json(await this.service.listStandaloneTemplates(customerId));
+    } catch (e) { next(e); }
+  };
+
+  /** Serbest etiketin tam HTML'i (text/html). `/rolls/:id/html` analoğu. */
+  getStandaloneTemplateHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { machineId, peripheralId, deviceId } = await resolveFormatOpts(req);
+      const result = await this.service.renderStandaloneTemplateHtml({
+        templateId: req.params.id as string,
+        variantId: typeof req.query.variantId === "string" ? req.query.variantId : undefined,
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        machineId,
+        peripheralId,
+        deviceId,
+      });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Label-Kind", result.data.kind);
+      res.status(200).send(result.data.html);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * Serbest etiket SEÇİLİ yazıcı dilinde. `/rolls/:id/native` analoğu:
+   * `?encoding=b64` → binary-safe base64 JSON zarfı; aksi → ham native/HTML.
+   */
+  getStandaloneTemplateNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const wantB64 = req.query.encoding === "b64";
+      const { machineId, peripheralId, deviceId } = await resolveFormatOpts(req);
+      const result = await this.service.renderStandaloneTemplateNative({
+        templateId: req.params.id as string,
+        variantId: typeof req.query.variantId === "string" ? req.query.variantId : undefined,
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        rasterCapable: wantB64,
+        machineId,
+        peripheralId,
+        deviceId,
+      });
+      res.setHeader("X-Label-Language", result.data.language);
+      res.setHeader("X-Label-Kind", result.data.kind);
+      if (wantB64) {
+        res.status(200).json({
+          success: true,
+          data: {
+            encoding: "base64",
+            content: result.data.contentB64,
+            language: result.data.language,
+            contentType: result.data.contentType,
+            count: result.data.count,
+          },
+        });
+      } else {
+        res.setHeader("Content-Type", result.data.contentType);
+        res.status(200).send(result.data.content);
+      }
+    } catch (e) { next(e); }
+  };
 }

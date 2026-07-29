@@ -46,6 +46,8 @@ export function WorkOrderCancelDialog({
     onSuccess: () => {
       toast.success("İş emri iptal edildi, bağlı toplar stoğa çekildi.");
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
+      // WO CANCELLED → aktif bağ düşer, sipariş rollup rozeti güncellensin.
+      void qc.invalidateQueries({ queryKey: ["orders"] });
       if (workOrderId) {
         void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
       }

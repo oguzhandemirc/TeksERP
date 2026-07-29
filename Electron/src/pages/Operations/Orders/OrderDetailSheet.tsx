@@ -32,9 +32,12 @@ import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import { OrderPartyCard } from "./OrderPartyCard";
+import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
+import { OrderLineWoChips } from "./OrderLineWoChips";
+import { OrderShipmentsCard } from "./OrderShipmentsCard";
 import type { Order, OrderLine } from "./types";
 
-/** Tek iş emri = tek ürün+renk+en. Kalem imzası bu üçlüden türer. */
+/** Tek iş emri = tek kumaş+renk+en. Kalem imzası bu üçlüden türer. */
 const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ?? ""}`;
 /** Açık (sevk edilmemiş) metre — 0 ise kalem iş emrine alınamaz. */
 const lineRem = (l: OrderLine) =>
@@ -42,7 +45,7 @@ const lineRem = (l: OrderLine) =>
 /** Çapaya göre hangi nitelikler farklı — overlay'de "neden seçilemez" metni için. */
 const diffLabel = (anchor: OrderLine, line: OrderLine) => {
   const parts: string[] = [];
-  if (anchor.itemId !== line.itemId) parts.push("ürün");
+  if (anchor.itemId !== line.itemId) parts.push("kumaş");
   if ((anchor.colorId ?? "") !== (line.colorId ?? "")) parts.push("renk");
   if ((anchor.width ?? "") !== (line.width ?? "")) parts.push("en");
   return parts.length ? `Farklı ${parts.join(" + ")}` : "Farklı spec";
@@ -53,7 +56,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEdit?: (order: Order) => void;
-  /** "Bu üründen iş emri oluştur" — tek ürünün açık kalemlerini WO formuna seed'ler. */
+  /** "Bu kumaştan iş emri oluştur" — tek kumaşın açık kalemlerini WO formuna seed'ler. */
   onCreateWorkOrder?: (lines: PickedOrderLine[]) => void;
 }
 
@@ -95,7 +98,7 @@ export function OrderDetailSheet({
     staleTime: 30_000,
   });
 
-  // Müşterinin kalıcı (master) ürün/renk adları. Kalemdeki 1-shot override boşsa
+  // Müşterinin kalıcı (master) kumaş/renk adları. Kalemdeki 1-shot override boşsa
   // "müşterideki ad" buradan düşer — terfi edilmiş VEYA panelden girilmiş ad fark
   // etmez, ikisi de gösterilir. customer-alias:read yoksa sessizce override'a düşülür.
   const { hasPermission } = useRoleAccess();
@@ -132,14 +135,14 @@ export function OrderDetailSheet({
   const isEditable = order && (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
   const isCancellable = order && order.status !== "COMPLETED" && order.status !== "CANCELLED";
   const canClose = order && (order.status === "PENDING" || order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
-  // İş emri kalem bazında açılır (tek WO = tek ürün/renk/en). Durum uygun + handler
+  // İş emri kalem bazında açılır (tek WO = tek kumaş/renk/en). Durum uygun + handler
   // varsa kalemler seçilebilir; seçimden tek "İş emri oluştur" ile WO başlatılır.
   const woEligible =
     Boolean(onCreateWorkOrder) &&
     Boolean(order) &&
     (order!.status === "APPROVED" || order!.status === "PARTIAL_SHIPPED");
 
-  // Seçili kalemler + "çapa" imza: ilk seçilen kalemin ürün/renk/en imzası. Bu
+  // Seçili kalemler + "çapa" imza: ilk seçilen kalemin kumaş/renk/en imzası. Bu
   // imzaya uymayan açık kalemler söner (tek WO = tek spec).
   const selectedLines = order ? order.lines.filter((l) => selectedLineIds.has(l.id)) : [];
   const anchor = selectedLines[0];
@@ -273,6 +276,18 @@ export function OrderDetailSheet({
               </Card>
             )}
 
+            {/* Bağlı iş emirleri — kaleme WO açıldıysa görünür; tıkta İE detayı
+                açılır (sheet kapanır). Bağ yoksa kart null döner. */}
+            <LinkedWorkOrdersCard lines={order.lines} onNavigate={() => onOpenChange(false)} />
+
+            {/* Sevkiyatlar drill-down — hangi sevkiyatlarla sevk edildi/bekliyor.
+                Bağ yoksa kart null döner. */}
+            <OrderShipmentsCard
+              orderId={order.id}
+              open={open}
+              onNavigate={() => onOpenChange(false)}
+            />
+
             <div>
               <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Sipariş Kalemleri ({order.lines.length})
@@ -281,7 +296,7 @@ export function OrderDetailSheet({
                 <div className="mb-2 flex items-start gap-2 rounded-md border border-info/25 bg-info/10 px-3 py-2 text-xs text-foreground">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <p>
-                    Aynı <span className="font-medium">ürün · renk · en</span> kombinasyonundaki
+                    Aynı <span className="font-medium">kumaş · renk · en</span> kombinasyonundaki
                     kalemleri işaretle, ardından{" "}
                     <span className="font-medium">İş emri oluştur</span>. Uyumsuz kalemler
                     otomatik gri olur.
@@ -294,9 +309,9 @@ export function OrderDetailSheet({
                   const isSel = selectedLineIds.has(line.id);
                   const dimmed =
                     woEligible && open && anchorSig !== null && lineSig(line) !== anchorSig;
-                  // Çapadan farkın nedeni (ürün/renk/en) — overlay metninde gösterilir.
+                  // Çapadan farkın nedeni (kumaş/renk/en) — overlay metninde gösterilir.
                   const reason = dimmed && anchor ? diffLabel(anchor, line) : null;
-                  // Müşterideki ürün/renk adı (1-shot override veya master alias).
+                  // Müşterideki kumaş/renk adı (1-shot override veya master alias).
                   const cust = customerNames(line);
                   return (
                     <li
@@ -387,6 +402,7 @@ export function OrderDetailSheet({
                               ))}
                             </div>
                           )}
+                          <OrderLineWoChips links={line.workOrderLinks} />
                         </div>
                       </div>
                     </li>

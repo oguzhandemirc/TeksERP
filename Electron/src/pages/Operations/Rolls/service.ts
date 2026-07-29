@@ -72,6 +72,39 @@ export interface RollStats {
   byQuality: Record<string, number>;
 }
 
+// --- Fasonda özet şeridi (Envanter → Fasonda sekmesi) -----------------------
+/** İşlem-tipi chip'i — kategori bazında top adedi + Σmetre. Kategorisiz sevkler
+ *  (adımda requiredCategory yok) categoryId:null + name:"Bilinmiyor" kovasında
+ *  toplanır → chip DISABLED (filtrelenemez). */
+export interface FasonSummaryCategory {
+  categoryId: string | null;
+  name: string;
+  rollCount: number;
+  totalQty: number;
+}
+
+/** Firma kartı — firmadaki top adedi + Σmetre + en eski aktif sevkin yaşı.
+ *  subcontractorId:null → açık sevk kalemi bulunamayan AT_SUBCONTRACTOR top
+ *  (veri anomalisi) = "Bilinmiyor" kartı, DISABLED (filtrelenemez). */
+export interface FasonSummaryFirm {
+  subcontractorId: string | null;
+  name: string;
+  code: string | null;
+  rollCount: number;
+  totalQty: number;
+  /** En eski açık sevkin tarihi (ISO) — null yalnız "Bilinmiyor" grubunda. */
+  oldestDispatchedAt: string | null;
+  /** En eski açık sevkin yaşı (gün, backend floor). Frontend BUNU basar,
+   *  yeniden HESAPLAMAZ; null iken "en eski N gün" satırı gizlenir. */
+  oldestDays: number | null;
+}
+
+export interface FasonSummary {
+  total: { rollCount: number; totalQty: number };
+  byCategory: FasonSummaryCategory[];
+  bySubcontractor: FasonSummaryFirm[];
+}
+
 // --- Üretim Akışı (Kanban) — tek-istek pano cevabı ------------------------
 /** Kurşun/Tambur kolonu kartı (adım = bir WO'nun kuyruğu). */
 export interface ProductionFlowQueueCard {
@@ -121,10 +154,29 @@ export const rollService = {
     apiClient
       .get<ApiResponse<RollStats>>(`/api/rolls/stats${buildQueryString(params)}`)
       .then((r) => r.data),
+  /** Envanter özeti — N kategori filtresi için toplu sayım (top + metre) TEK istekte. */
+  getStatsBatch: (
+    items: Array<{ key: string; filters: Record<string, string | string[]> }>,
+  ): Promise<ApiResponse<Array<{ key: string; totalCount: number; totalQty: number }>>> =>
+    apiClient
+      .post<ApiResponse<Array<{ key: string; totalCount: number; totalQty: number }>>>(
+        "/api/rolls/stats-batch",
+        { items },
+      )
+      .then((r) => r.data),
   /** Üretim Akışı (Kanban) panosu — 6 kolon tek istekte (kolon başına ≤10 + toplam). */
   getProductionFlow: (): Promise<ApiResponse<ProductionFlowData>> =>
     apiClient
       .get<ApiResponse<ProductionFlowData>>("/api/rolls/production-flow")
+      .then((r) => r.data),
+  /** Fasonda özet şeridi — işlem chip'leri + firma kartları TEK istekte.
+   *  Evren: AT_SUBCONTRACTOR; includeFire=true iken FIRE toplar da dahil
+   *  ("Fire kaliteyi de göster" toggle'ıyla hizalı — şerit/tablo sayıları tutar). */
+  getSubcontractorSummary: (includeFire = false): Promise<ApiResponse<FasonSummary>> =>
+    apiClient
+      .get<ApiResponse<FasonSummary>>(
+        `/api/rolls/subcontractor-summary${includeFire ? "?filter[includeFire]=true" : ""}`,
+      )
       .then((r) => r.data),
   getByBarcode: (barcode: string): Promise<ApiResponse<Roll>> =>
     apiClient

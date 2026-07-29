@@ -13,6 +13,8 @@ export interface Subcontractor {
   isActive: boolean;
   /** İş emri fason adımında firma seçicide default gelir (kategori bazında). */
   isFavorite: boolean;
+  /** Belge şablon profili — null = genel Belge Şablonları ayarı. */
+  documentProfileId?: string | null;
   categories: SubcontractorCategoryLink[];
   createdAt: string;
   updatedAt: string;

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -72,10 +73,9 @@ export function DevicesPage() {
   const rowPending = revoke.isPending || deactivate.isPending || reactivate.isPending || hardDelete.isPending;
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Cihazlar"
-        description="Sahadaki tablet/telefonlar — kendilerini bildirir, yönetici onaylar. Çalışacağı yeri cihaz oturum açarken seçer (yer onayı / makine QR'ı)."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
@@ -94,7 +94,7 @@ export function DevicesPage() {
         onClear={clearFilters}
       />
 
-      <div className="flex-1 overflow-auto p-6">
+      <PageBody className="p-6">
         {query.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
@@ -103,8 +103,8 @@ export function DevicesPage() {
           <EmptyState />
         ) : (
           <div className="rounded-md border">
-            <Table>
-              <TableHeader>
+            <Table containerClassName="overflow-visible">
+              <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Cihaz</TableHead>
                   <TableHead className="w-24">Tür</TableHead>
@@ -139,7 +139,7 @@ export function DevicesPage() {
             </Table>
           </div>
         )}
-      </div>
+      </PageBody>
 
       <ApproveAssignDialog
         device={assignTarget}
@@ -157,7 +157,7 @@ export function DevicesPage() {
         isPending={hardDelete.isPending}
         onConfirm={() => { if (deleteTarget) hardDelete.mutate(deleteTarget.id); }}
       />
-    </div>
+    </PageShell>
   );
 }
 

@@ -16,8 +16,8 @@ export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
   },
   {
     id: "item",
-    header: "Ürün",
-    meta: { label: "Ürün", exportValue: (r) => r.item.name },
+    header: "Kumaş",
+    meta: { label: "Kumaş", exportValue: (r) => r.item.name },
     cell: ({ row }) => <span className="text-sm">{row.original.item.name}</span>,
   },
   {

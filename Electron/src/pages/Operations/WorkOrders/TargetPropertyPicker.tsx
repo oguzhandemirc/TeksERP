@@ -24,7 +24,7 @@ import type { WorkOrderFormValues } from "./schema";
 /**
  * L2 — Üretim Özellikleri picker. Buton + arama + scrollable çoklu seçim liste.
  *
- * Domain kuralı: ürünün `allowedProperties` boş ise **sınırsız** — tüm özellik
+ * Domain kuralı: kumaşın `allowedProperties` boş ise **sınırsız** — tüm özellik
  * kataloğu seçilebilir. Doluysa sadece o liste.
  */
 export function TargetPropertyPicker({
@@ -114,7 +114,7 @@ export function TargetPropertyPicker({
   if (!targetItemId) {
     return (
       <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-        Hedef ürün seçildikten sonra üretim özellikleri seçilebilir.
+        Hedef kumaş seçildikten sonra üretim özellikleri seçilebilir.
       </div>
     );
   }
@@ -177,7 +177,7 @@ export function TargetPropertyPicker({
                         className="text-[10px]"
                         title={
                           e.orphan
-                            ? "Bu özellik ürünün izinli özellikler listesinde yok. Açık seçim olarak kayıtlı."
+                            ? "Bu özellik kumaşın izinli özellikler listesinde yok. Açık seçim olarak kayıtlı."
                             : undefined
                         }
                       >
@@ -201,7 +201,7 @@ export function TargetPropertyPicker({
                   <DialogTitle>Üretim Özellikleri</DialogTitle>
                   <DialogDescription>
                     {isUnrestricted
-                      ? "Ürünün izinli özellik listesi boş — tüm özellikler seçilebilir."
+                      ? "Kumaşın izinli özellik listesi boş — tüm özellikler seçilebilir."
                       : "Tambur sonrası üretilen rulolarda olacak özellikler. Birden fazla seçilebilir."}
                   </DialogDescription>
                 </DialogHeader>
@@ -224,7 +224,7 @@ export function TargetPropertyPicker({
                         ? fullPropsQ.isLoading
                           ? "Özellikler yükleniyor..."
                           : "Sistemde tanımlı özellik yok."
-                        : "Bu ürüne henüz hiç özellik dahil edilmemiş."}
+                        : "Bu kumaşa henüz hiç özellik dahil edilmemiş."}
                     </div>
                   ) : filtered.length === 0 ? (
                     <div className="p-4 text-center text-xs italic text-muted-foreground">

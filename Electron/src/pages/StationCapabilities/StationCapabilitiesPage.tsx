@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Palette, Sparkles, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -56,10 +57,9 @@ export function StationCapabilitiesPage() {
   }, [query.data, search]);
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="İstasyon Yetenekleri"
-        description="Tüm istasyonların (iç + fason) uygulayabileceği renk ve kazandırabileceği özellikler burada atanır. Buradan geçen ruloya otomatik aktarılır."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
@@ -75,9 +75,9 @@ export function StationCapabilitiesPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <PageBody>
         <TooltipProvider delayDuration={150}>
-          <Table>
+          <Table containerClassName="overflow-visible">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
                 <TableHead>Kod</TableHead>
@@ -181,13 +181,13 @@ export function StationCapabilitiesPage() {
             </TableBody>
           </Table>
         </TooltipProvider>
-      </div>
+      </PageBody>
 
       <CapabilitiesEditSheet
         station={editing}
         open={Boolean(editing)}
         onOpenChange={(open) => !open && setEditing(null)}
       />
-    </div>
+    </PageShell>
   );
 }

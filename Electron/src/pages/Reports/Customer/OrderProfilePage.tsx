@@ -9,7 +9,7 @@ const columns: ColumnDef<CustomerOrderProfileRow>[] = [
   { accessorKey: "customerName", header: "Müşteri" },
   { accessorKey: "orderCount", header: "Sipariş", cell: ({ getValue }) => fmtInt(getValue() as number) },
   { accessorKey: "lineCount", header: "Kalem", cell: ({ getValue }) => fmtInt(getValue() as number) },
-  { accessorKey: "topItemName", header: "Favori Ürün", cell: ({ getValue }) => (getValue() as string) || "—" },
+  { accessorKey: "topItemName", header: "Favori Kumaş", cell: ({ getValue }) => (getValue() as string) || "—" },
   { accessorKey: "topColorName", header: "Favori Renk", cell: ({ getValue }) => (getValue() as string) || "—" },
   {
     accessorKey: "topWidth",
@@ -36,7 +36,7 @@ export function OrderProfilePage() {
   return (
     <ReportPageLayout
       title="Müşteri Sipariş Profili"
-      description="Aktif müşterilerin sipariş özeti — favori ürün, renk, en."
+      description="Aktif müşterilerin sipariş özeti — favori kumaş, renk, en."
       showDateRange={false}
     >
       <div className="grid gap-3 sm:grid-cols-3">

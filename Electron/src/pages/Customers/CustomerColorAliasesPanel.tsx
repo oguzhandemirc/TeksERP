@@ -63,7 +63,7 @@ export function CustomerColorAliasesPanel({ customerId }: Props) {
     <div className="space-y-3">
       <PermissionGate permission="customer-alias:write">
         <div className="flex items-end gap-2 rounded-md border bg-muted/30 p-2">
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <ReferenceSelect<Color>
               value={draftColorId ?? undefined}
               onChange={(v) => setDraftColorId(v ?? null)}

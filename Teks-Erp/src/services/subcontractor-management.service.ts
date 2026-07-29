@@ -11,6 +11,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { validateName, validateCode } from "../lib/string-validators";
+import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -19,6 +20,53 @@ import {
   resolveSortBy,
 } from "../utils/query-parser";
 import { Request } from "express";
+
+/**
+ * Ad-mükerrer koruması (Türkçe-duyarsız; BaseService.assertNameNotDuplicate
+ * emsali — bu servisler BaseService kullanmadığından yerel eş). Pasif kayıt da
+ * sayılır (yenisini eklemek yerine aktifleştirme önerilir); excludeId reactivate/
+ * update'te kaydın kendisini hariç tutar. Master tablolar küçük olduğundan
+ * adaylar tek select ile çekilip JS'te tr-TR katlamayla karşılaştırılır.
+ */
+async function assertSubNameAvailable(
+  model: "subcontractor" | "subcontractorCategory",
+  label: string,
+  name: string,
+  excludeId?: string,
+): Promise<void> {
+  if (!name || name.trim().length === 0) return;
+  const target = foldNameForCompare(name);
+  const where = excludeId ? { id: { not: excludeId } } : {};
+  const select = { name: true, code: true, isActive: true } as const;
+  const candidates: { name: string; code: string; isActive: boolean }[] =
+    model === "subcontractor"
+      ? await prisma.subcontractor.findMany({ where, select })
+      : await prisma.subcontractorCategory.findMany({ where, select });
+  const hit = candidates.find((c) => foldNameForCompare(c.name) === target);
+  if (!hit) return;
+  throw AppError.conflict(
+    hit.isActive
+      ? `'${name.trim()}' adında bir ${label} zaten var (kod: ${hit.code}). Aynı ${label} ikinci kez eklenemez.`
+      : `'${name.trim()}' adında PASİF bir ${label} zaten var (kod: ${hit.code}). Yenisini eklemek yerine mevcut kaydı aktifleştirin.`,
+  );
+}
+
+/**
+ * Aynı vergi numaralı (VKN/TCKN) ikinci fason firmaya izin verme (müşteri
+ * emsali). Yalnız AKTİF kayıtlar; değer normalize sonrası birebir karşılaştırılır.
+ */
+async function assertSubTaxAvailable(taxNumber: unknown, excludeId?: string): Promise<void> {
+  if (typeof taxNumber !== "string" || taxNumber.trim().length === 0) return;
+  const value = taxNumber.trim();
+  const existing = await prisma.subcontractor.findFirst({
+    where: { taxNumber: value, isActive: true, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { code: true, name: true },
+  });
+  if (!existing) return;
+  throw AppError.conflict(
+    `'${value}' vergi numarası '${existing.name}' (${existing.code}) fason firmasında zaten kayıtlı. Aynı vergi no ile ikinci firma açılamaz.`,
+  );
+}
 
 // =============================================================================
 // SUBCONTRACTOR CATEGORY (Boyahane, Yıkama, Zımpara...)
@@ -90,6 +138,12 @@ export class SubcontractorCategoryService {
     if (existing?.isActive) {
       throw AppError.badRequest("Bu kod ile aktif kategori zaten var");
     }
+    await assertSubNameAvailable(
+      "subcontractorCategory",
+      "fason kategorisi",
+      data.name,
+      existing && !existing.isActive ? existing.id : undefined,
+    );
 
     const cat = existing
       ? await prisma.subcontractorCategory.update({
@@ -137,6 +191,15 @@ export class SubcontractorCategoryService {
       where: { id },
       select: { code: true, name: true, description: true, isActive: true, appliesColor: true, appliesProperty: true },
     });
+    // Ad-mükerrer kontrolü yalnız ad gerçekten değişirken (tarihsel mükerrer
+    // kayıt düzenlenebilir kalsın). Kayıt yoksa atla — 409 yerine not-found dönsün.
+    if (
+      typeof data.name === "string" &&
+      before &&
+      foldNameForCompare(data.name) !== foldNameForCompare(before.name)
+    ) {
+      await assertSubNameAvailable("subcontractorCategory", "fason kategorisi", data.name, id);
+    }
     const cat = await prisma.subcontractorCategory.update({ where: { id }, data });
     await AuditService.log({
       userId,
@@ -362,6 +425,18 @@ export class SubcontractorManagementService {
     if (existing?.isActive) {
       throw AppError.badRequest("Bu kod ile aktif fason firma zaten var");
     }
+    await assertSubNameAvailable(
+      "subcontractor",
+      "fason firma",
+      payload.name,
+      existing && !existing.isActive ? existing.id : undefined,
+    );
+    if (payload.taxNumber != null) {
+      await assertSubTaxAvailable(
+        payload.taxNumber,
+        existing && !existing.isActive ? existing.id : undefined,
+      );
+    }
 
     const sub = await prisma.$transaction(async (tx) => {
       let createdId: string;
@@ -462,6 +537,25 @@ export class SubcontractorManagementService {
     }
     if (rest.address !== undefined) {
       rest.address = normalizeAndValidateAddress(rest.address) as string | null;
+    }
+
+    // Ad-mükerrer kontrolü yalnız ad gerçekten değişirken (tarihsel mükerrer
+    // kayıt düzenlenebilir kalsın). Kayıt yoksa atla — 409 yerine not-found dönsün.
+    if (
+      typeof rest.name === "string" &&
+      before &&
+      foldNameForCompare(rest.name) !== foldNameForCompare(before.name)
+    ) {
+      await assertSubNameAvailable("subcontractor", "fason firma", rest.name, id);
+    }
+    // Vergi no yalnız gerçekten değişirken kontrol (tarihsel mükerrer düzenlenebilir).
+    if (
+      typeof rest.taxNumber === "string" &&
+      rest.taxNumber.trim().length > 0 &&
+      before &&
+      rest.taxNumber.trim() !== (before.taxNumber ?? null)
+    ) {
+      await assertSubTaxAvailable(rest.taxNumber, id);
     }
 
     const sub = await prisma.$transaction(async (tx) => {

@@ -77,6 +77,12 @@ export function useShipmentConfirmationEnabled(): boolean {
   return q.data?.data?.shipmentConfirmationEnabled ?? false;
 }
 
+/** Müşteri şubeleri (sevk noktaları) açık mı. Yüklenene kadar true (default açık). */
+export function useCustomerBranchesEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.customerBranchesEnabled ?? true;
+}
+
 /** Oturum (JWT) ömrü, DAKİKA. Yeni key yoksa saat*60'a düşer, o da yoksa 480 (8 saat). */
 export function useSessionDurationMinutes(): number {
   const q = useFeatureFlags();

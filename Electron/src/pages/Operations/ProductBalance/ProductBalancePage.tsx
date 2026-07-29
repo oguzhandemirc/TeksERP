@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
@@ -15,9 +16,9 @@ import type { BalanceGroup, BalanceSpecRow, WoTarget } from "./types";
 
 const QUERY_KEY = "product-balance";
 
-// Ürün → backend (sorguları daraltır). Renk/Durum → client-side (anlık).
+// Kumaş → backend (sorguları daraltır). Renk/Durum → client-side (anlık).
 const FILTERS: FilterDef[] = [
-  { kind: "lookup", key: "itemId", label: "Ürün", service: itemService, queryKey: "items" },
+  { kind: "lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
   { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
     kind: "select",
@@ -103,10 +104,9 @@ export function ProductBalancePage() {
     }), []);
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
-        title="Ürün Dengesi"
-        description="Ürün+renk bazında talep ↔ depo + üretim dengesi. Açık varsa eksik kadar iş emri aç."
+        title="Kumaş Dengesi"
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
@@ -116,35 +116,35 @@ export function ProductBalancePage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ürün, renk, sipariş no, müşteri, parti ara..."
+            placeholder="Kumaş, renk, sipariş no, müşteri, parti ara..."
             className="h-8 pl-8 text-sm"
           />
         </div>
         {!isLoading && (
           <span className="ml-auto text-xs text-muted-foreground">
-            {filtered.length} ürün
+            {filtered.length} kumaş
           </span>
         )}
       </div>
       <FilterBar filters={FILTERS} />
 
-      <div className="flex-1 overflow-auto p-4">
+      <PageBody className="flex flex-col p-4">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Hesaplanıyor…</p>
         ) : groups.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Açık talep veya üretimde ürün yok.
+            Açık talep veya üretimde kumaş yok.
           </p>
         ) : filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Filtreyle eşleşen ürün yok.
+            Filtreyle eşleşen kumaş yok.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="min-h-0 flex-1 overflow-auto rounded-md border">
             <table className="w-full text-sm tabular-nums">
-              <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
                 <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                  <th className="text-left">Ürün</th>
+                  <th className="text-left">Kumaş</th>
                   <th className="text-left" title="En (cm)">En</th>
                   <th className="text-right" title="Açık siparişler (istenen − sevk)">
                     Talep
@@ -153,7 +153,7 @@ export function ProductBalancePage() {
                   <th className="text-right" title="Canlı iş emirlerinde">Üretimde</th>
                   <th
                     className="text-right"
-                    title="İşlenecek ham kumaş — ürün+renk havuzu (eni önemsiz)"
+                    title="İşlenecek ham kumaş — kumaş+renk havuzu (eni önemsiz)"
                   >
                     Ham
                   </th>
@@ -178,16 +178,16 @@ export function ProductBalancePage() {
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
           Üretilecek = Talep − Depo − Üretimde. Fabrika kumaş üretmez, işler —
           ham stok yetmiyorsa "ham açığı" kadar kumaş tedariki gerekir. Ham
-          kumaşın eni önemsizdir: ham havuzu ürün+renk düzeyinde tutulur, en'lere
+          kumaşın eni önemsizdir: ham havuzu kumaş+renk düzeyinde tutulur, en'lere
           bölünmez (renksiz ham boyanacağı için her renge sayılır).
         </p>
-      </div>
+      </PageBody>
 
       <ProductBalanceWoDialog
         spec={woTarget}
         open={woTarget !== null}
         onOpenChange={(o) => !o && setWoTarget(null)}
       />
-    </div>
+    </PageShell>
   );
 }

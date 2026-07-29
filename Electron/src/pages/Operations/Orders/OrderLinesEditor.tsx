@@ -13,6 +13,7 @@ import { ItemFormDialog } from "@/pages/Items/ItemFormDialog";
 import { LineRequiredPropertiesEditor } from "./LineRequiredPropertiesEditor";
 import { OrderLineColorPicker } from "./OrderLineColorPicker";
 import { OrderLineAliasFields } from "./OrderLineAliasFields";
+import { OrderLineAtpHint } from "./OrderLineAtpHint";
 import { newLineClientId, type OrderLineFormValues } from "./schema";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -64,7 +65,7 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
       const created = res.data;
       if (quickAddForLine && created?.id) {
         updateLine(quickAddForLine, { itemId: created.id });
-        toast.success(`Ürün oluşturuldu: ${created.code}`);
+        toast.success(`Kumaş oluşturuldu: ${created.code}`);
       }
       setQuickAddForLine(null);
     },
@@ -130,7 +131,7 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                     pricingEnabled ? "sm:col-span-3" : "sm:col-span-5"
                   }`}
                 >
-                  <div className="flex-1 space-y-1">
+                  <div className="min-w-0 flex-1 space-y-1">
                     <EntityPickerModal<Item>
                       value={line.itemId || null}
                       onChange={(v) =>
@@ -146,9 +147,9 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                       getSubLabel={(i) => i.code}
                       icon={Package}
                       iconClassName="text-primary"
-                      title="Ürün Seç"
-                      description="Ürün/kumaş seç veya aramayla daralt — tüm katalog sunucuda aranır."
-                      placeholder="Ürün seç..."
+                      title="Kumaş Seç"
+                      description="Kumaş seç veya aramayla daralt — tüm katalog sunucuda aranır."
+                      placeholder="Kumaş seç..."
                       triggerClassName={
                         lineErrors?.[idx]?.itemId?.message
                           ? "h-9 border-destructive"
@@ -167,7 +168,7 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                     onClick={() => setQuickAddForLine(line.clientId)}
                   >
                     <PackagePlus className="h-4 w-4" />
-                    Yeni Ürün
+                    Yeni Kumaş
                   </Button>
                 </div>
                 <div className="relative z-10 col-span-12 sm:col-span-3">
@@ -225,6 +226,13 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                     itemName={line.customerItemName ?? ""}
                     colorName={line.customerColorName ?? ""}
                     onChange={(patch) => updateLine(line.clientId, patch)}
+                  />
+                </div>
+                <div className="col-span-12 -mt-1">
+                  <OrderLineAtpHint
+                    itemId={line.itemId}
+                    colorId={line.colorId ?? null}
+                    width={line.width ?? null}
                   />
                 </div>
                 <div className="col-span-12 -mt-1">
@@ -290,7 +298,7 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
       {value.length > 0 && (
         <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>Özellik isteği eklemek için önce o kalemin ürününü seçmelisiniz.</span>
+          <span>Özellik isteği eklemek için önce o kalemin kumaşını seçmelisiniz.</span>
         </div>
       )}
 

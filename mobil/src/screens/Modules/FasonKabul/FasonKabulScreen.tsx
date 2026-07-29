@@ -28,7 +28,6 @@ import {
   useWindowDimensions,
   Pressable,
   Keyboard,
-  Platform,
 } from 'react-native';
 import {
   Text,
@@ -40,9 +39,15 @@ import {
   Checkbox,
   TouchableRipple,
   Icon,
+  SegmentedButtons,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import {
+  KeyboardAwareScrollView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useQuery,
   useInfiniteQuery,
@@ -73,6 +78,7 @@ import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
 import {
   NewRollRow,
+  ReceiveMode,
   makeNewRollRow,
   rebuildPrefilledNewRolls,
 } from './newRolls.helper';
@@ -118,6 +124,12 @@ function formatPartyNo(no: string | null | undefined): string | null {
   return parts.join('-');
 }
 
+// FARK/EKSİK yüzeylerinde metraj gösterimi — eşikle (0.01 m) AYNI hassasiyet,
+// gereksiz sıfırsız: 0.03 → "0.03", 120.5 → "120.5", 100 → "100". toFixed(1)
+// kullanılınca 0.02-0.04 m'lik gerçek fark "FARK +0.0 m" olarak görünüp
+// operatörü "sıfır farka onay" paradoksuna sokuyordu.
+const fmtMeters = (n: number) => String(Math.round(n * 100) / 100);
+
 // İptal Edilebilirler = receipts whose all bornRolls are safe (still cancellable).
 // Geçmiş Kabuller = settled receipts (at least one bornRoll has moved on / been
 // processed). İki sekme ayırması operatörün kafa karışıklığını engeller —
@@ -157,6 +169,13 @@ export default function FasonKabulScreen() {
   const isPhone = device === 'phone';
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const qc = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const keyboard = useReanimatedKeyboardAnimation();
+  const footerAnimStyle = useAnimatedStyle(() => ({
+    // useReanimatedKeyboardAnimation.height NEGATİF (0 → -H); pozitife çevir.
+    // ScreenChrome content'i zaten paddingBottom:insets.bottom uygular → onu düş.
+    bottom: Math.max(0, -keyboard.height.value - insets.bottom),
+  }));
 
   // ── Form state ──
   const [selectedGroup, setSelectedGroup] = useState<PendingReturnGroup | null>(null);
@@ -191,6 +210,12 @@ export default function FasonKabulScreen() {
    * fason kabul terazide tartılmıyor, sonraki istasyon ölçer.
    */
   const [newRolls, setNewRolls] = useState<NewRollRow[]>([]);
+  /**
+   * Kabul modu — varsayılan SINGLE: boyahane topları dikerek TEK parça döndürür,
+   * ön-dolu tek satır = işaretli topların toplam metresi. İstisna (PER_ROLL,
+   * "adet adet geldi"): gittiği parça kadar satır, her biri kendi sevk metresiyle.
+   */
+  const [receiveMode, setReceiveMode] = useState<ReceiveMode>('SINGLE');
 
   // Kabul iptal modalı
   const [cancelTargetReceiptId, setCancelTargetReceiptId] = useState<string | null>(null);
@@ -255,6 +280,9 @@ export default function FasonKabulScreen() {
             }
             if (d.appliedColor) setAppliedColor(d.appliedColor as Color);
             if (Array.isArray(d.appliedProperties)) setAppliedProperties(d.appliedProperties as FabricProperty[]);
+            if (d.receiveMode === 'SINGLE' || d.receiveMode === 'PER_ROLL') {
+              setReceiveMode(d.receiveMode);
+            }
           } else {
             AsyncStorage.removeItem(DRAFT_KEY);
           }
@@ -284,10 +312,11 @@ export default function FasonKabulScreen() {
         newRolls: newRolls.map((r) => ({ qty: r.qty, notes: r.notes, prefilled: r.prefilled })),
         appliedColor,
         appliedProperties,
+        receiveMode,
       }));
     }, 600);
     return () => clearTimeout(t);
-  }, [selectedGroup, selectedParty, rows, manifestNo, notes, newRolls, appliedColor, appliedProperties]);
+  }, [selectedGroup, selectedParty, rows, manifestNo, notes, newRolls, appliedColor, appliedProperties, receiveMode]);
 
   // ── Queries ──
   // staleTime 30sn: ekran focus / tab geçişi tetikli otomatik refetch'leri susturur,
@@ -489,6 +518,7 @@ export default function FasonKabulScreen() {
     setManifestNo('');
     setNotes('');
     setNewRolls([]);
+    setReceiveMode('SINGLE');
     setMismatchConfirmOpen(false);
     setExtrasOpen(false);
     setHighlightedWorkOrderId(null);
@@ -547,11 +577,14 @@ export default function FasonKabulScreen() {
     );
     setAppliedColor(g.workOrder.targetColor ?? null);
     setAppliedProperties(g.workOrder.targetProperties ?? []);
+    // Her parti yüklemesi varsayılan moda döner — SINGLE: dikili tek parça.
+    setReceiveMode('SINGLE');
     setNewRolls(
       party.rolls.length > 0
         ? rebuildPrefilledNewRolls(
             [],
             party.rolls.map((r) => Number(r.currentQty ?? 0)),
+            'SINGLE',
           )
         : [makeNewRollRow()]
     );
@@ -712,6 +745,7 @@ export default function FasonKabulScreen() {
         rebuildPrefilledNewRolls(
           curr,
           nextRows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+          receiveMode,
         ),
       );
     }
@@ -724,8 +758,24 @@ export default function FasonKabulScreen() {
       rebuildPrefilledNewRolls(
         curr,
         nextRows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+        receiveMode,
       ),
     );
+  };
+
+  // Kabul modu değişince ön-dolu satırlar yeni moda göre yeniden kurulur;
+  // operatörün elle eklediği satırlar (prefilled=false) korunur.
+  const changeReceiveMode = (mode: ReceiveMode) => {
+    if (mode === receiveMode) return;
+    setReceiveMode(mode);
+    setNewRolls((curr) =>
+      rebuildPrefilledNewRolls(
+        curr,
+        rows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+        mode,
+      ),
+    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const checkedCount = rows.filter((r) => r.checked).length;
@@ -895,15 +945,26 @@ export default function FasonKabulScreen() {
       }
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
+        {/* Telefon dikey: kart giriş bandı ÜST sabit çubuk olarak — klavye
+            açılınca altında kalmasın (rightCol telefonda render edilmiyor). */}
+        {isPhone && manualBarcodeEntry && (
+          <View style={styles.cardInputWrap}>
+            <ScannerEntryBar
+              value={cardBarcode}
+              onChangeText={setCardBarcode}
+              placeholder="Refakat kartı barkodu okut/yaz..."
+              onResolve={() => handleResolveCard()}
+              resolving={resolvingCard}
+              tone="green"
+            />
+          </View>
+        )}
         {/* ════════ SOL: form ════════ */}
-        {/* Klavye yönetimi: KeyboardAvoidingView (padding) klavye açılınca kolonu
-            klavye kadar aşağıdan kısaltır → Toplar ScrollView'i küçülür, sabit footer
-            (İrsaliye/Kabul Notu) + "Metre" input'ları klavyenin üstüne YUMUŞAKÇA çıkar,
-            kapanınca iner. Bu ekranda hem listede hem footer'da input olduğundan
-            padding-kısaltma seçildi (üst üste binme olmaz); edge-to-edge inset'ini
-            kütüphane kendi hesaplar. */}
-        <KeyboardAvoidingView
-          behavior="padding"
+        {/* Klavye yönetimi: Toplar listesi KeyboardAwareScrollView (klavye kapalıyken
+            düz ScrollView), sabit footer ise footerAnimStyle ile klavyenin üstüne
+            YUMUŞAKÇA çıkar (bottom offset = klavye yüksekliği − alt inset). Kolon
+            seviyesinde KAV YOK — çift telafi olmasın diye düz View. */}
+        <View
           style={[styles.formCol, isPhone && !selectedGroup && styles.formColPhone]}
         >
           {!selectedGroup ? (
@@ -1077,12 +1138,14 @@ export default function FasonKabulScreen() {
                 </TouchableRipple>
               )}
 
-              {/* Toplar listesi. Klavye önleme kolon seviyesinde KeyboardAvoidingView
-                  (padding) ile yapılır → burada düz ScrollView yeterli. */}
-              <ScrollView
+              {/* Toplar listesi. KeyboardAwareScrollView klavye açılınca odaklı
+                  input'u (Metre/Not) üste kaydırır; klavye kapalıyken düz ScrollView
+                  gibi davranır (regresyon yok). */}
+              <KeyboardAwareScrollView
                 style={styles.rollsScroll}
                 contentContainerStyle={styles.rollsContent}
                 keyboardShouldPersistTaps="handled"
+                bottomOffset={120}
               >
                 <View style={styles.rollsHeaderRow}>
                   <View style={styles.statusBadge}>
@@ -1208,8 +1271,9 @@ export default function FasonKabulScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.newRollTitle}>Dönen Açık Kumaş</Text>
                       <Text style={styles.newRollHint}>
-                        İrsaliyede yazılı her parça için metraj gir. KK2/Kurşun ekranı
-                        ve stok bu kayıtlardan beslenir.
+                        {receiveMode === 'SINGLE'
+                          ? 'Toplar dikili TEK parça döndü varsayıldı — metre, işaretli topların toplamı. Parça parça geldiyse "Adet Adet Geldi"yi seç.'
+                          : 'İrsaliyede yazılı her parça için metraj gir. KK2/Kurşun ekranı ve stok bu kayıtlardan beslenir.'}
                       </Text>
                     </View>
                     <Button
@@ -1221,16 +1285,35 @@ export default function FasonKabulScreen() {
                       Parça Ekle
                     </Button>
                   </View>
+                  {/* Varsayılan: dikili tek parça. İstisna: gittiği adet kadar geldi. */}
+                  <SegmentedButtons
+                    value={receiveMode}
+                    onValueChange={(v) => changeReceiveMode(v as ReceiveMode)}
+                    density="small"
+                    style={styles.modeSwitch}
+                    buttons={[
+                      {
+                        value: 'SINGLE',
+                        label: 'Tek Parça (Dikili)',
+                        icon: 'needle',
+                      },
+                      {
+                        value: 'PER_ROLL',
+                        label: 'Adet Adet Geldi',
+                        icon: 'format-list-numbered',
+                      },
+                    ]}
+                  />
                   {hasQtyMismatch && (
                     <Surface style={styles.diffBanner} elevation={0}>
                       <Text style={styles.diffBannerTitle}>
                         {qtyDiff > 0 ? 'FAZLA DÖNEN' : 'EKSİK DÖNEN'}:{' '}
                         {qtyDiff > 0 ? '+' : ''}
-                        {qtyDiff.toFixed(1)} m
+                        {fmtMeters(qtyDiff)} m
                       </Text>
                       <Text style={styles.diffBannerBody}>
-                        Sevk: {sentTotal.toFixed(1)} m  ·  Dönen:{' '}
-                        {returnedTotal.toFixed(1)} m
+                        Sevk: {fmtMeters(sentTotal)} m  ·  Dönen:{' '}
+                        {fmtMeters(returnedTotal)} m
                       </Text>
                     </Surface>
                   )}
@@ -1324,10 +1407,12 @@ export default function FasonKabulScreen() {
                     })
                   )}
                 </View>
-              </ScrollView>
+              </KeyboardAwareScrollView>
 
-              {/* Sabit footer — kolon KeyboardAvoidingView ile kısaldığından klavye
-                  açılınca bu footer yumuşakça klavyenin üstüne çıkar. */}
+              {/* Sabit footer — footerAnimStyle klavye açılınca bu footer'ı
+                  (bottom offset ile) yumuşakça klavyenin üstüne çıkarır, kapanınca
+                  indirir. Animated.View relative flex çocuğu; Surface aynen içinde. */}
+              <Animated.View style={footerAnimStyle}>
               <Surface style={styles.footer} elevation={4}>
                 {/* İrsaliye No / Kabul Notu opsiyonel → varsayılan kapalı. Kapalıyken
                     dolu ise özet, boşsa "ekle" etiketi; tıklayınca açılır. */}
@@ -1404,19 +1489,20 @@ export default function FasonKabulScreen() {
                   {hasMissing
                     ? `Mal Kabulü Yap · ${missingCount} EKSİK`
                     : hasQtyMismatch
-                      ? `Mal Kabulü Yap · FARK ${qtyDiff > 0 ? '+' : ''}${qtyDiff.toFixed(1)} m`
+                      ? `Mal Kabulü Yap · FARK ${qtyDiff > 0 ? '+' : ''}${fmtMeters(qtyDiff)} m`
                       : `Mal Kabulü Yap (${checkedCount} top → ${newRolls.length} parça)`}
                 </Button>
               </Surface>
+              </Animated.View>
             </>
           )}
-        </KeyboardAvoidingView>
+        </View>
 
         {/* ════════ SAĞ: bekleyen + geçmiş (tablet) / sadece manuel input (telefon + kamera arızalı) ════════
             Telefon dikey + kamera-only modda kart okuma, liste ve geçmiş aksiyonları
             header butonlarına taşındı → rightCol komple gizli. Manuel mode aktifse
             sadece input bandı görünür, header butonları input ile birlikte çalışır. */}
-        {!(isPhone && !manualBarcodeEntry) && (
+        {!isPhone && (
         <View style={[styles.rightCol, isPhone && styles.rightColPhone]}>
           <>
           {/* Kart giriş bandı — yalnız "Kamera arızalı" (manuel) modda görünür.
@@ -1606,10 +1692,10 @@ export default function FasonKabulScreen() {
               <View style={styles.mismatchRow}>
                 <Icon source="arrow-expand-vertical" size={18} color="#b45309" />
                 <Text style={styles.mismatchRowText}>
-                  Metraj farkı: Sevk {sentTotal.toFixed(1)} m · Dönen{' '}
-                  {returnedTotal.toFixed(1)} m ·{' '}
+                  Metraj farkı: Sevk {fmtMeters(sentTotal)} m · Dönen{' '}
+                  {fmtMeters(returnedTotal)} m ·{' '}
                   {qtyDiff > 0 ? 'FAZLA +' : 'EKSİK '}
-                  {qtyDiff.toFixed(1)} m
+                  {fmtMeters(qtyDiff)} m
                 </Text>
               </View>
             )}
@@ -1753,6 +1839,14 @@ function CancelReceiptModal({
   onConfirm: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const keyboard = useReanimatedKeyboardAnimation();
+  const sheetKbStyle = useAnimatedStyle(() => {
+    const kb = -keyboard.height.value; // pozitif klavye yüksekliği (0 = kapalı)
+    const maxHeight = Math.min(winH * 0.85, winH - kb - insets.top - insets.bottom - 24);
+    const lift = kb > 0 ? kb / 2 : 0;
+    return { maxHeight, transform: [{ translateY: -lift }] };
+  });
   const canSubmit =
     !submitting &&
     reason.trim().length >= 3 &&
@@ -1767,20 +1861,17 @@ function CancelReceiptModal({
   // İki RNModal aynı anda mount edilince ikincisinin invisible overlay'i
   // ilkinin tıklamalarını yutuyordu (FasonKabul telefon dikey bug'ı).
   return (
-    <KeyboardAvoidingView
-      style={cancelStyles.overlay}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      pointerEvents="auto"
-    >
+    <View style={cancelStyles.overlay} pointerEvents="auto">
       <Pressable
         style={cancelStyles.backdrop}
         onPress={submitting ? undefined : onDismiss}
         accessibilityLabel="Kapat"
       />
-      <View
+      <Animated.View
         style={[
           cancelStyles.sheet,
-          { width: winW * 0.9, maxHeight: winH * 0.85 },
+          { width: winW * 0.9 },
+          sheetKbStyle,
         ]}
       >
         <View style={cancelStyles.header}>
@@ -1898,8 +1989,8 @@ function CancelReceiptModal({
             İptal Et
           </Button>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -2871,6 +2962,7 @@ const styles = StyleSheet.create({
   },
   newRollTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
   newRollHint: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  modeSwitch: { marginBottom: 10 },
   newRollEmpty: {
     backgroundColor: '#fef3c7',
     borderColor: '#f59e0b',

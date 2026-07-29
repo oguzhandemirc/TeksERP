@@ -17,7 +17,7 @@ interface Props {
 }
 
 /**
- * Tek çuvalın SALT-OKUNUR dökümü — kod + kg + içerik ürün-özeti + top/kartela
+ * Tek çuvalın SALT-OKUNUR dökümü — kod + kg + içerik kumaş-özeti + top/kartela
  * listesi. `sackStoreService.shipmentContents` verisinden beslenir; içerik
  * düzenleme (rol çıkar/taşı) burada YOK (o Paketleme havuz ekranında).
  */
@@ -58,7 +58,7 @@ export function ShipmentSackReadonly({ sack, canRemove, onRemove, removing }: Pr
           )}
         </div>
 
-        {/* İçerik ürün-özeti (ürün · renk · en → top/metraj) */}
+        {/* İçerik kumaş-özeti (kumaş · renk · en → top/metraj) */}
         {sack.contents.length > 0 && (
           <ul className="space-y-0.5 rounded border bg-muted/30 p-2 text-xs">
             {sack.contents.map((c) => (

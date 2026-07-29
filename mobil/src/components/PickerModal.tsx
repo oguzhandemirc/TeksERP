@@ -74,6 +74,10 @@ interface BaseProps {
    *  `options` parent'ta zaten anlamlı bir sırayla geliyorsa (örn. rota adım
    *  sırası) o sıra korunur. */
   disableSort?: boolean;
+  /** Arama satırı ile liste ARASINA yerleştirilen opsiyonel içerik (ör. yetkili
+   *  operatöre "＋ Yeni Desen" hızlı ekleme). Verilmezse render edilmez —
+   *  diğer picker kullanıcıları etkilenmez. */
+  quickAddSlot?: React.ReactNode;
 }
 
 interface PaginatedProps extends BaseProps {
@@ -128,6 +132,7 @@ export default function PickerModal(props: Props) {
     pinnedOptions = [],
     pinnedLabel,
     disableSort = false,
+    quickAddSlot,
   } = props;
 
   // Yenileme: ham isFetching yerine standart hook → offline guard + zaman aşımı
@@ -378,6 +383,10 @@ export default function PickerModal(props: Props) {
               })}
             </View>
           )}
+
+        {/* Opsiyonel hızlı ekleme yuvası (ör. KK1 "＋ Yeni Desen") — arama ile
+            liste arasında; verilmediyse hiç render edilmez. */}
+        {quickAddSlot ? <View style={styles.quickAddSlot}>{quickAddSlot}</View> : null}
 
         {/* Liste */}
         <View style={styles.listBox}>
@@ -653,6 +662,7 @@ const styles = StyleSheet.create({
   sortChipText: { fontSize: 12, color: '#475569', fontWeight: '600' },
   sortChipTextActive: { color: '#4f46e5', fontWeight: '700' },
 
+  quickAddSlot: { paddingHorizontal: 2, paddingBottom: 4 },
   listBox: { flex: 1 },
   listRow: { flex: 1, flexDirection: 'row' },
   // Çerçeveli sabit grup (örn. iş emrindeki müşteriler) — listenin üstünde.

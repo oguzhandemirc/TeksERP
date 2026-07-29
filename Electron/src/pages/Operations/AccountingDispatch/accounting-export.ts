@@ -17,7 +17,7 @@ export function accountingExportFileName(range: AccountingExportData["range"]): 
   return ["Sevk_Edilenler", d(range.from), d(range.to)].filter(Boolean).join("_");
 }
 
-/** Dönem dökümü → 5 sayfa (Sevk Listesi / Detay / İcmal·Müşteri / İcmal·Ürün / İade). */
+/** Dönem dökümü → 5 sayfa (Sevk Listesi / Detay / İcmal·Müşteri / İcmal·Kumaş / İade). */
 export function buildAccountingWorkbookSheets(data: AccountingExportData): SheetSpec[] {
   const t = data.totals;
   return [
@@ -30,9 +30,9 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Müşteri", key: "customerName", width: 28 },
         { header: "Vergi No", key: "taxNumber", width: 14 },
         { header: "Şube", key: "branchName", width: 18 },
-        { header: "Şube Kodu", key: "branchCode", width: 12 },
+        { header: "İhracat Kodu", key: "branchCode", width: 14 },
         { header: "Yön", key: "yon", width: 10 },
-        { header: "Gümrük Kodu", key: "procedureCode", width: 16 },
+        { header: "Gümrük/İhracat No", key: "procedureCode", width: 18 },
         { header: "Plaka", key: "plateNumber", width: 12 },
         { header: "Sürücü", key: "driverName", width: 16 },
         { header: "Taşıyıcı", key: "carrier", width: 16 },
@@ -61,7 +61,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Sevk Tarihi", key: "dispatchedAt", width: 18, numFmt: DATE },
         { header: "Müşteri", key: "customerName", width: 28 },
         { header: "Sipariş No", key: "orderNos", width: 20 },
-        { header: "Ürün", key: "itemName", width: 24 },
+        { header: "Kumaş", key: "itemName", width: 24 },
         { header: "Renk", key: "colorName", width: 18 },
         { header: "En (cm)", key: "width", width: 10, numFmt: NUM1 },
         { header: "Top Adedi", key: "rollCount", width: 10, numFmt: INT },
@@ -92,9 +92,9 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
       },
     },
     {
-      name: "İcmal · Ürün",
+      name: "İcmal · Kumaş",
       columns: [
-        { header: "Ürün", key: "itemName", width: 24 },
+        { header: "Kumaş", key: "itemName", width: 24 },
         { header: "Renk", key: "colorName", width: 18 },
         { header: "En (cm)", key: "width", width: 10, numFmt: NUM1 },
         { header: "Top Adedi", key: "rollCount", width: 10, numFmt: INT },
@@ -110,7 +110,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Müşteri", key: "customerName", width: 28 },
         { header: "Geldiği Sevk No", key: "fromShipmentNo", width: 18 },
         { header: "Barkod", key: "barcode", width: 18 },
-        { header: "Ürün", key: "itemName", width: 24 },
+        { header: "Kumaş", key: "itemName", width: 24 },
         { header: "Renk", key: "colorName", width: 18 },
         { header: "En (cm)", key: "width", width: 10, numFmt: NUM1 },
         { header: "Metre", key: "meters", width: 12, numFmt: NUM1 },
@@ -122,12 +122,12 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
   ];
 }
 
-/** Tek sevk fişi → 3 sayfa (Ürün / Çuval / Çeki) — Fiş dialog'undan Excel. */
+/** Tek sevk fişi → 3 sayfa (Kumaş / Çuval / Çeki) — Fiş dialog'undan Excel. */
 export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
   const t = report.totals;
   return [
     {
-      name: "Ürün Listesi",
+      name: "Kumaş Listesi",
       columns: [
         { header: "Stok Adı", key: "name", width: 40 },
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },

@@ -32,21 +32,35 @@ import {
   qrSymbolModules,
   bannerValueText,
   mediaTypeCommand,
+  alignOffsetDots,
+  applyTextCase,
 } from "./native-label.shared";
 import { fieldDisplayValue } from "./label-field-values";
 import {
   elementSupported,
+  expandMultilineText,
+  ICON_DEFAULT_MM,
   type CanvasLayout,
   type LabelElement,
   type FieldElement,
   type TextElement,
+  type LengthBannerElement,
 } from "../../config/label-elements";
+import { Bitmap1, type Rotation } from "./raster/raster-bitmap";
+import { renderIconBitmap, iconBitmap } from "./raster/raster-icon";
+import { pplbGwBlock, PPLB_RASTER_VERIFIED } from "./raster/raster-envelope-pplb";
 
 export interface CanvasRenderInput {
   payload: LabelPayload;
   format: ResolvedLabelFormat;
   copies: number;
   layout: CanvasLayout;
+  /** PPLB ikon GW bloğu BINARY bayt (>0x7F) içerir → yalnız binary-güvenli tüketicide
+   *  emit edilir: b64 transport (mobil printRawBytes / Electron), in-process önizleme
+   *  SVG, ağ/BT bayt gönderimi. Ham text HTTP yanıtı (UTF-8 decode eden eski istemci)
+   *  bunu bozar → o yolda FALSE bırakılır ve ikon atlanır (temiz ASCII komut; bugünkü
+   *  davranış). Varsayılan falsy = güvenli (atla). ZPL ^GFA hex-ASCII olduğu için gate'siz. */
+  iconGraphicsOk?: boolean;
 }
 
 const CRLF = "\r\n";
@@ -70,32 +84,51 @@ function pad3(n: number): string {
  *  Raster boru hattı da (raster-canvas) bunu paylaşır → alan/etiket/present mantığı
  *  komut ve raster yollarında TEK KAYNAK (ham metin; sanitize çağırana ait). */
 export function elementText(el: FieldElement | TextElement, payload: LabelPayload): string | null {
-  if (el.type === "text") return el.text;
-  const dv = fieldDisplayValue(payload, el.bind);
-  if (!dv.present) return null;
-  const label = el.label?.trim();
-  return label ? `${label}: ${dv.value}` : dv.value;
+  let out: string;
+  if (el.type === "text") {
+    out = el.text;
+  } else {
+    const dv = fieldDisplayValue(payload, el.bind);
+    if (!dv.present) return null;
+    const label = el.label?.trim();
+    out = label ? `${label}: ${dv.value}` : dv.value;
+  }
+  // Harf dönüşümü (BÜYÜK/küçük) — native + raster ikisi de bunu kullanır → tek yer.
+  return applyTextCase(out, el.textCase);
 }
 
 /** ÇEVRİLEBİLİR bant geometrisi — value metni ROT (0/90/180/270) ile döner.
- *  Glif yüksekliği bandın metne-DİK (cross) eksenine oturur; metin bant içinde
- *  ORTALANIR. origin(len): top-sol anchor + CW dönüşle merkezlenmiş köşe (üç native
- *  dil + DPL aynı model). pad: PPLB'nin kendi-siyah-bandı için boşluk dolgusu. */
+ *  Glif stili: glyphHMm dolu → metin elemanlarıyla AYNI ortak-payda (en yakın
+ *  basılabilir kombinasyon, resolveEplTextStyle); boş → banda otomatik sığdır
+ *  (bugünkü davranış: xl font, cross'tan çarpan). wr yatay çarpana biner (dar/geniş
+ *  = "ince/kalın"; ters/reverse modda çift-vuruş XOR'lanacağı için bold YOK).
+ *  Metin bant içinde ORTALANIR. origin(len): top-sol anchor + CW dönüşle merkez.
+ *  pad: PPLB'nin kendi-siyah-bandı için boşluk dolgusu. */
 function bannerGeom(
+  el: LengthBannerElement,
   colDots: number,
   rowDots: number,
   wDots: number,
   hDots: number,
   rot: number,
   valLen: number,
+  d: (mm: number) => number,
   xl: { code: string; w: number; h: number } = EPL_FONT.xl,
+  baseFonts?: ReadonlyArray<{ code: string; w: number; h: number }>,
 ) {
   const vertical = rot === 90 || rot === 270;
   const cross = vertical ? wDots : hDots; // glif yüksekliği bunu doldurur
   const along = vertical ? hDots : wDots; // metin ilerlemesi bunu doldurur
-  const mul = Math.max(1, Math.min(4, Math.round(cross / xl.h)));
-  const gh = xl.h * mul;
-  const gw = xl.w * mul;
+  const wr = el.wr ?? 1;
+  let code: string, vmul: number, hmul: number, gh: number, gw: number;
+  if (el.glyphHMm != null) {
+    const st = resolveEplTextStyle(d(el.glyphHMm), wr, 6, baseFonts);
+    code = st.code; vmul = st.vmul; hmul = st.hmul; gh = st.hDots; gw = st.wDots;
+  } else {
+    vmul = Math.max(1, Math.min(4, Math.round(cross / xl.h)));
+    hmul = Math.max(1, Math.min(6, Math.round(vmul * wr)));
+    code = xl.code; gh = xl.h * vmul; gw = xl.w * hmul;
+  }
   const targetChars = Math.max(valLen, Math.floor((along * 0.85) / gw));
   const pad = Math.max(0, Math.floor((targetChars - valLen) / 2));
   const cx = colDots + wDots / 2;
@@ -115,7 +148,7 @@ function bannerGeom(
     // etikette kal (0'a kıstır); değer bantı taşarsa kullanıcı boyut/dönüş ayarlar.
     return { ox: Math.max(0, Math.round(ox)), oy: Math.max(0, Math.round(oy)) };
   };
-  return { mul, gh, gw, pad, paddedLen: valLen + 2 * pad, origin };
+  return { code, vmul, hmul, gh, gw, pad, paddedLen: valLen + 2 * pad, origin };
 }
 
 /** Code128 sembol genişliği (dot) — okunur satırı barkod ALTINDA ortalamak için.
@@ -171,7 +204,7 @@ function eplData(s: string): string {
   return cleanCtlCp1254(s).replace(/"/g, "'");
 }
 
-export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRenderInput): string {
+export function emitCanvasPplb({ payload, format, copies, layout, iconGraphicsOk }: CanvasRenderInput): string {
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
   const lines: string[] = [];
@@ -183,7 +216,7 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
 
   const bc = payload.barcode ? eplData(payload.barcode) : "";
 
-  for (const el of layout.elements) {
+  for (const el of expandMultilineText(layout.elements)) {
     if (!elementSupported(el.type, "PPLB")) continue;
     const x = d(el.x);
     const y = d(el.y);
@@ -193,21 +226,26 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
         const text = elementText(el, payload);
         if (!text) break;
         const rotCode = (el.rot ?? 0) / 90;
+        // Hizalama yalnız rot=0'da (çapa=x; döndürülmüşte sol-çapa kalır — nadir).
+        const align = (el.rot ?? 0) === 0 ? el.align : undefined;
+        const data = eplData(text);
         if (el.hMm != null) {
           // SERBEST boyut: hedef mm → en yakın (font, çarpan) kombinasyonu;
           // wr yatay çarpana biner (EPL2 güvenli aralık maxMul=6).
           const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
+          const ax = alignOffsetDots(align, data.length * st.wDots);
           // KALIN = çift-vuruş: aynı metni +1 dot kaydırıp tekrar bas → çubuklar
           // kalınlaşır (bitmap fontta gerçek bold yok; boyut değişmez). bold yoksa
           // tek satır = bayt-aynı.
-          const emit = (dx: number) => `A${x + dx},${y},${rotCode},${st.code},${st.hmul},${st.vmul},N,"${eplData(text)}"`;
+          const emit = (dx: number) => `A${Math.max(0, x + ax + dx)},${y},${rotCode},${st.code},${st.hmul},${st.vmul},N,"${data}"`;
           lines.push(emit(0));
           if (el.bold) lines.push(emit(1));
         } else {
           // ESKİ 4-kademe yol (bayt-uyum): bold = her iki çarpan ×2.
           const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
           const mul = el.bold ? 2 : 1;
-          lines.push(`A${x},${y},${rotCode},${font.code},${mul},${mul},N,"${eplData(text)}"`);
+          const ax = alignOffsetDots(align, data.length * font.w * mul);
+          lines.push(`A${Math.max(0, x + ax)},${y},${rotCode},${font.code},${mul},${mul},N,"${data}"`);
         }
         break;
       }
@@ -243,6 +281,34 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
         lines.push(`X${x},${y},${t},${x + d(el.wMm)},${y + d(el.hMm)}`);
         break;
       }
+      case "icon": {
+        // Bakım sembolü → GW (Print Immediate Graphics) inline 1bpp grafik. Metin/barkod
+        // yine native komut; SADECE ikon bitmap gider (Bluetooth'ta düşük yük — tüm etiketi
+        // raster'a çevirmeye gerek yok). Blok Buffer olarak üretilip latin1 STRING'e çevrilip
+        // lines'a eklenir → join(CRLF) binary'i BOZMAZ (tek eleman, GW p3×p4 baytı yazıcıda
+        // veri sayılır) + transport latin1→bayt birebir round-trip. Kodlama/polarite
+        // pplbGwBlock'ta (raster zarfıyla TEK KAYNAK). Fiziksel kill-switch: PPLB_RASTER_VERIFIED
+        // (aynı GW komutu) — false ise atla (bugünkü skip; rest native basılır). rot → kare
+        // temp bitmap blit (ayak izi değişmez). Bilinmeyen anahtar → sessiz atla.
+        // iconGraphicsOk: binary-güvenli tüketici mi (b64/preview/bayt-transport)? Ham text
+        // HTTP yolunda FALSE → ikon atlanır (UTF-8 decode GW binary'sini bozardı → tüm etiket
+        // kayar). PPLB_RASTER_VERIFIED: Argox GW fiziksel kill-switch (raster zarfıyla ortak).
+        if (!iconGraphicsOk || !PPLB_RASTER_VERIFIED) break;
+        const sizeDots = d(el.hMm ?? ICON_DEFAULT_MM);
+        let icon: Bitmap1;
+        try {
+          icon = iconBitmap(el.icon, sizeDots);
+        } catch { break; }
+        const rot = (el.rot ?? 0) as Rotation;
+        if (rot) {
+          const tmp = new Bitmap1(icon.widthDots, icon.heightDots);
+          tmp.blit(icon, 0, 0, rot);
+          icon = tmp;
+        }
+        if (icon.rowBytes * icon.heightDots === 0) break;
+        lines.push(pplbGwBlock(icon, x, y).toString("latin1"));
+        break;
+      }
       case "lengthBanner": {
         // SİYAH ZEMİN / BEYAZ DEĞER — ters (R) metin + boşluk dolgusu kendi siyah
         // bandını çizer (Argox XOR gotcha'sı: ayrı LO kutu YOK). Metin ROT ile döner.
@@ -251,11 +317,11 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
         const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
-        const val = eplData(bannerValueText(payload));
-        const g = bannerGeom(x, y, w, h, rot, val.length);
+        const val = eplData(bannerValueText(payload, el.unit !== false));
+        const g = bannerGeom(el, x, y, w, h, rot, val.length, d);
         const padded = " ".repeat(g.pad) + val + " ".repeat(g.pad);
         const o = g.origin(g.paddedLen);
-        lines.push(`A${o.ox},${o.oy},${rot / 90},${EPL_FONT.xl.code},${g.mul},${g.mul},R,"${padded}"`);
+        lines.push(`A${o.ox},${o.oy},${rot / 90},${g.code},${g.hmul},${g.vmul},R,"${padded}"`);
         break;
       }
     }
@@ -298,7 +364,7 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
   const H = d(format.heightMm);
   const flipY = (yTopDots: number, hDots: number) => Math.max(0, H - yTopDots - hDots);
 
-  for (const el of layout.elements) {
+  for (const el of expandMultilineText(layout.elements)) {
     if (!elementSupported(el.type, "PPLA")) continue; // lengthBanner → yok (reverse yok)
     const row = d(el.y); // tuval-üstünden Y (flipY ile Argox alt-orijine çevrilir)
     const col = d(el.x);
@@ -307,14 +373,17 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
       case "text": {
         const text = elementText(el, payload);
         if (!text) break;
+        const align = (el.rot ?? 0) === 0 ? el.align : undefined;
+        const data = cleanCtl(text);
         if (el.hMm != null) {
           // SERBEST boyut: hedef mm → en yakın (font,çarpan). DPL_BASE_FONTS ile seçilir
           // ki seçilen kod+çarpan DPL yazıcıda DOĞRU fiziksel boyu üretsin (EPL2 tabanıyla
           // ~%35 aşıyordu). Çarpan maxMul=6 → tek hane (header hizalı kalır).
           const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6, DPL_BASE_FONTS);
           const fy = flipY(row, st.hDots);
+          const ucol = u(Math.max(0, col + alignOffsetDots(align, data.length * st.wDots)));
           // KALIN = çift-vuruş (+1 birim = 0.254mm ≈ 2 dot); bold yoksa tek satır.
-          const emit = (dc: number) => `${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(u(fy))}${pad4(u(col) + dc)}${cleanCtl(text)}`;
+          const emit = (dc: number) => `${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(u(fy))}${pad4(ucol + dc)}${data}`;
           lines.push(emit(0));
           if (el.bold) lines.push(emit(1));
         } else {
@@ -323,7 +392,8 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
           const font = DPL_FONT[el.font ?? "md"] ?? DPL_FONT.md;
           const mult = el.bold ? "22" : "11";
           const fy = flipY(row, font.h * (el.bold ? 2 : 1));
-          lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(u(fy))}${pad4(u(col))}${cleanCtl(text)}`);
+          const ucol = u(Math.max(0, col + alignOffsetDots(align, data.length * font.w * (el.bold ? 2 : 1))));
+          lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(u(fy))}${pad4(ucol)}${data}`);
         }
         break;
       }
@@ -377,17 +447,17 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * row;
         const boxFy = flipY(row, h);
         lines.push(`1X11000${pad4(u(boxFy))}${pad4(u(col))}b${pad4(u(w))}${pad4(u(h))}${pad4(1)}${pad4(1)}`);
-        // Değer, diğer dillerle AYNI biçim: TR-formatlı sayı + "m" (bannerValueText).
-        const val = cleanCtl(bannerValueText(payload));
-        // g.gw/gh/mul = fiziksel glif metriği (bannerGeom band genişliğine göre çarpanı seçer).
+        // Değer, diğer dillerle AYNI biçim: TR-formatlı sayı + "m" eki (unit'e bağlı).
+        const val = cleanCtl(bannerValueText(payload, el.unit !== false));
+        // g.gw/gh/çarpanlar = fiziksel glif metriği (bannerGeom: glyphHMm/wr veya banda-sığdır).
         // Değeri Argox kutusuna ORTALA — rot=90 metin anchor'dan SOLA+AŞAĞI uzar (fiziksel
         // doğrulama 2026-07-10): anchor = kutu-merkezi + (dikey uzunluk/2, gh/2). Böylece
         // metnin merkezi kutu merkezine oturur. (Banner varsayılan dik/rot=90; diğer rot nadir.)
-        const g = bannerGeom(col, row, w, h, rot, val.length, DPL_FONT.xl);
+        const g = bannerGeom(el, col, row, w, h, rot, val.length, d, DPL_FONT.xl, DPL_BASE_FONTS);
         const advance = val.length * g.gw; // rot=90'da dikey uzunluk
         const valY = boxFy + h / 2 + advance / 2;
         const valX = col + w / 2 + g.gh / 2;
-        lines.push(`${rot / 90 + 1}${DPL_FONT.xl.code}${g.mul}${g.mul}000${pad4(u(valY))}${pad4(u(valX))}${val}`);
+        lines.push(`${rot / 90 + 1}${g.code}${g.hmul}${g.vmul}000${pad4(u(valY))}${pad4(u(valX))}${val}`);
         break;
       }
     }
@@ -409,7 +479,10 @@ function zplData(s: string): string {
 
 const ZPL_ROT: Record<number, string> = { 0: "N", 90: "R", 180: "I", 270: "B" };
 
-export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderInput): string {
+/** ASYNC: icon elemanı ^GFA inline grafik ister (renderIconBitmap async sarıcı). PPLB
+ *  ikonu GW ile SENKRON basar (iconBitmap çekirdeği); PPLA'da icon skip. Çağrı zinciri:
+ *  emitCanvasNative → registry. */
+export async function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderInput): Promise<string> {
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
   const lines: string[] = [];
@@ -423,7 +496,7 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
 
   const bc = payload.barcode ? zplData(payload.barcode) : "";
 
-  for (const el of layout.elements) {
+  for (const el of expandMultilineText(layout.elements)) {
     if (!elementSupported(el.type, "ZPL")) continue;
     const x = d(el.x);
     const y = d(el.y);
@@ -433,20 +506,24 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
         const text = elementText(el, payload);
         if (!text) break;
         const rot = ZPL_ROT[el.rot ?? 0] ?? "N";
+        const align = (el.rot ?? 0) === 0 ? el.align : undefined;
+        const data = zplData(text);
         if (el.hMm != null) {
           // ORTAK PAYDA: ^A0 serbest ölçeklenebilir ama BİLEREK PPLB/PPLA'nın
           // seçtiği kombinasyonun boyutunda basılır — dört dilde AYNI boyut
           // (eleman dilden dile farklı çıktı vermemeli; kullanıcı kararı).
           const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
+          const ax = alignOffsetDots(align, data.length * st.wDots);
           // KALIN = çift-vuruş (+1 dot); bold yoksa tek satır = bayt-aynı.
-          const emit = (dx: number) => `^FO${x + dx},${y}^A0${rot},${st.hDots},${st.wDots}^FD${zplData(text)}^FS`;
+          const emit = (dx: number) => `^FO${Math.max(0, x + ax + dx)},${y}^A0${rot},${st.hDots},${st.wDots}^FD${data}^FS`;
           lines.push(emit(0));
           if (el.bold) lines.push(emit(1));
         } else {
           // ESKİ 4-kademe yol (bayt-uyum).
           const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
           const mul = el.bold ? 2 : 1;
-          lines.push(`^FO${x},${y}^A0${rot},${font.h * mul},${font.w * mul}^FD${zplData(text)}^FS`);
+          const ax = alignOffsetDots(align, data.length * font.w * mul);
+          lines.push(`^FO${Math.max(0, x + ax)},${y}^A0${rot},${font.h * mul},${font.w * mul}^FD${data}^FS`);
         }
         break;
       }
@@ -485,6 +562,28 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
         lines.push(`^FO${x},${y}^GB${d(el.wMm)},${d(el.hMm)},${t}^FS`);
         break;
       }
+      case "icon": {
+        // Bakım sembolü → ^GFA inline 1bpp grafik (raster-envelope-zpl ile aynı
+        // konvansiyon: 1 bit = SİYAH, invert yok, ASCII-hex UPPERCASE). Kare bitmap;
+        // rot → temp Bitmap1 + blit (ayak izi değişmez — frontend in-place kare dönüşü).
+        // Bilinmeyen anahtar (katalogdan kalkmış eski kayıt) → sessiz atla.
+        const sizeDots = d(el.hMm ?? ICON_DEFAULT_MM);
+        let icon: Bitmap1;
+        try {
+          icon = await renderIconBitmap(el.icon, sizeDots);
+        } catch { break; }
+        const rot = (el.rot ?? 0) as Rotation;
+        if (rot) {
+          const tmp = new Bitmap1(icon.widthDots, icon.heightDots);
+          tmp.blit(icon, 0, 0, rot);
+          icon = tmp;
+        }
+        const total = icon.rowBytes * icon.heightDots;
+        if (total === 0) break;
+        const hex = Buffer.from(icon.data).toString("hex").toUpperCase();
+        lines.push(`^FO${x},${y}^GFA,${total},${total},${icon.rowBytes},${hex}^FS`);
+        break;
+      }
       case "lengthBanner": {
         // SİYAH ZEMİN / BEYAZ DEĞER — ^GB dolu siyah kutu + ^FR (field reverse)
         // ORTALANMIŞ değer (glifler beyaza döner). Değer ROT ile döner.
@@ -493,8 +592,8 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
         const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
-        const val = zplData(bannerValueText(payload));
-        const g = bannerGeom(x, y, w, h, rot, val.length);
+        const val = zplData(bannerValueText(payload, el.unit !== false));
+        const g = bannerGeom(el, x, y, w, h, rot, val.length, d);
         const o = g.origin(val.length);
         lines.push(`^FO${x},${y}^GB${w},${h},${Math.min(w, h)},B^FS`); // dolu siyah zemin
         lines.push(`^FO${o.ox},${o.oy}^A0${ZPL_ROT[rot] ?? "R"},${g.gh},${g.gw}^FR^FD${val}^FS`);
@@ -508,11 +607,13 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
   return lines.join("\n") + "\n";
 }
 
-/** Dil anahtarına göre kanvas emit — registry tek noktadan çağırır. */
-export function emitCanvasNative(
+/** Dil anahtarına göre kanvas emit — registry tek noktadan çağırır.
+ *  ASYNC (2026-07 icon): ZPL icon ^GFA üretimi async; PPLA/PPLB içte SENKRON kalır
+ *  (PPLB ikonu GW ile iconBitmap senkron çekirdeğinden basar). */
+export async function emitCanvasNative(
   language: "PPLA" | "PPLB" | "ZPL",
   input: CanvasRenderInput,
-): string {
+): Promise<string> {
   if (language === "PPLA") return emitCanvasPpla(input);
   if (language === "PPLB") return emitCanvasPplb(input);
   return emitCanvasZpl(input);
@@ -521,5 +622,5 @@ export function emitCanvasNative(
 /** Statik metin elemanı için degrade edilen tipler — Electron rozetiyle paylaşılan
  *  bilgi CAPABILITY'de; bu yardımcı editör-dışı tüketiciler (test/rapor) içindir. */
 export function skippedTypesFor(language: string): string[] {
-  return (["line", "box", "lengthBanner"] as const).filter((t) => !elementSupported(t, language));
+  return (["line", "box", "lengthBanner", "icon"] as const).filter((t) => !elementSupported(t, language));
 }

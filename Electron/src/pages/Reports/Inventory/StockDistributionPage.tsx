@@ -7,7 +7,7 @@ import { inventoryReportsApi, type StockDistribution } from "./service";
 type ItemColorRow = StockDistribution["byItemColor"][number];
 
 const columns: ColumnDef<ItemColorRow>[] = [
-  { accessorKey: "itemName", header: "Ürün" },
+  { accessorKey: "itemName", header: "Kumaş" },
   { accessorKey: "colorName", header: "Renk" },
   { accessorKey: "rollCount", header: "Rulo", cell: ({ getValue }) => fmtInt(getValue() as number) },
   { accessorKey: "totalQty", header: "Metraj", cell: ({ getValue }) => fmtMeters(getValue() as number) },
@@ -27,7 +27,7 @@ export function StockDistributionPage() {
   return (
     <ReportPageLayout
       title="Stok Dağılımı"
-      description="Mevcut stokta (WAREHOUSE vb.) renk, ürün ve en kırılımı."
+      description="Mevcut stokta (WAREHOUSE vb.) renk, kumaş ve en kırılımı."
       showDateRange={false}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -53,7 +53,7 @@ export function StockDistributionPage() {
       </ChartCard>
 
       <DetailTable<ItemColorRow>
-        title="Ürün × Renk Detayı"
+        title="Kumaş × Renk Detayı"
         data={itemColorRows}
         columns={columns}
         isLoading={isLoading}

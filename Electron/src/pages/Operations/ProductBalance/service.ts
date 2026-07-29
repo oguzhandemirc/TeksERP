@@ -4,9 +4,9 @@ import type { BalanceGroup } from "./types";
 
 export const productBalanceService = {
   /**
-   * (ürün+renk) grubu başına üretim dengesi (MRP net ihtiyaç). Ham + malzeme
+   * (kumaş+renk) grubu başına üretim dengesi (MRP net ihtiyaç). Ham + malzeme
    * açığı grup düzeyinde; en kırılımı her grubun specs[]'inde.
-   * @param params.itemId Verilirse backend dengeyi yalnız bu ürün için hesaplar
+   * @param params.itemId Verilirse backend dengeyi yalnız bu kumaş için hesaplar
    *   (arz/talep/üretim sorguları daraltılır). Renk/durum/arama client-side.
    */
   getBalance: (params?: {

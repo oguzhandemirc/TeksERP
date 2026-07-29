@@ -30,14 +30,21 @@ interface Props {
  * boyut varyantı orada eklenir ("Yeni boyut": boş iskelet veya BAŞKA şablonun
  * varyantından kopya). Tür artık kimlik değil: önizleme örnek-verisinin bağlamı.
  */
+/** "bound" = rulo/kartela etiketi (bağlama atanabilir); "standalone" = serbest
+ *  (bakım/statik — atama yok, barkodsuz kaydedilebilir). */
+type TemplateType = "bound" | "standalone";
+
 export function NewTemplateDialog({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [templateType, setTemplateType] = useState<TemplateType>("bound");
   const [kind, setKind] = useState<LabelKind>(LabelKind.ROLL_FINISHED);
+  const isStandalone = templateType === "standalone";
 
   useEffect(() => {
     if (open) {
+      setTemplateType("bound");
       setKind(LabelKind.ROLL_FINISHED);
       setName("");
     }
@@ -46,11 +53,20 @@ export function NewTemplateDialog({ open, onOpenChange }: Props) {
   const catalogQ = useQuery({
     queryKey: ["label-template-catalog", kind],
     queryFn: () => labelTemplateService.getCatalog(kind),
-    enabled: open,
+    enabled: open && !isStandalone,
   });
 
   const mut = useMutation({
     mutationFn: () => {
+      // Serbest etiket: alan bağı yok, bağlamsız (kind null) oluşturulur.
+      if (isStandalone) {
+        return labelTemplateService.create({
+          name: name.trim(),
+          kind: null,
+          fields: [],
+          standalone: true,
+        });
+      }
       // fields = eski akış (dual-mode) emniyet düzeni — varyant eklenene kadar
       // şablon bu düzenle basılabilir kalır.
       const catalog = catalogQ.data?.data?.fields ?? [];
@@ -85,31 +101,59 @@ export function NewTemplateDialog({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="space-y-3">
+          <FormField label="Şablon türü">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={templateType === "bound" ? "default" : "outline"}
+                className="h-auto justify-start px-3 py-2 text-left"
+                onClick={() => setTemplateType("bound")}
+              >
+                <span className="text-xs font-medium">Rulo / Kartela etiketi</span>
+              </Button>
+              <Button
+                type="button"
+                variant={isStandalone ? "default" : "outline"}
+                className="h-auto justify-start px-3 py-2 text-left"
+                onClick={() => setTemplateType("standalone")}
+              >
+                <span className="text-xs font-medium">Serbest etiket</span>
+              </Button>
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {isStandalone
+                ? "Bakım/statik etiket — bağlama atanamaz, barkod gerekmez; yalnız Serbest Baskı'da listelenir."
+                : "Bağlama (rulo/kartela) atanabilir; okunabilir barkod gerektirir."}
+            </p>
+          </FormField>
+
           <FormField label="Ad" required>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="örn. Müşteri X Özel"
+              placeholder={isStandalone ? "örn. Yıkama Talimatı" : "örn. Müşteri X Özel"}
               autoFocus
             />
           </FormField>
 
-          <FormField label="Önizleme bağlamı (örnek verinin sözlüğü)">
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as LabelKind)}
-              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-            >
-              {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
-                <option key={k} value={k}>
-                  {labelKindLabels[k]}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              Kimlik değildir — şablon her bağlama atanabilir; bağlam-dışı alanlar baskıda boş kalır.
-            </p>
-          </FormField>
+          {!isStandalone && (
+            <FormField label="Önizleme bağlamı (örnek verinin sözlüğü)">
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value as LabelKind)}
+                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+              >
+                {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
+                  <option key={k} value={k}>
+                    {labelKindLabels[k]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Kimlik değildir — şablon her bağlama atanabilir; bağlam-dışı alanlar baskıda boş kalır.
+              </p>
+            </FormField>
+          )}
         </div>
 
         <DialogFooter>

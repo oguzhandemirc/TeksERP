@@ -29,7 +29,9 @@ const router = Router();
  *     summary: Etiket template listesi
  *     description: |
  *       LabelKind filtresi opsiyonel. includeInactive=true ise pasif olanlar
- *       da döner. Default önce sıralanır.
+ *       da döner. Default önce sıralanır. standalone=true → yalnız serbest
+ *       (statik) şablonlar (baskı seçicisi); assignable=true → yalnız atanabilir
+ *       (serbest OLMAYAN) şablonlar (atama seçicileri).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query
@@ -38,8 +40,14 @@ const router = Router();
  *       - in: query
  *         name: includeInactive
  *         schema: { type: boolean }
+ *       - in: query
+ *         name: standalone
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: assignable
+ *         schema: { type: boolean }
  *     responses:
- *       200: { description: Liste }
+ *       200: { description: Liste (her satır boolean standalone taşır) }
  */
 router.get("/", verifyToken, requirePermission("label-template:read"), controller.list);
 
@@ -141,6 +149,23 @@ router.post("/preview", verifyToken, requirePermission("label-template:read"), c
 
 /**
  * @openapi
+ * /api/label-templates/icons:
+ *   get:
+ *     tags: [Label Templates]
+ *     summary: Bakım sembolü (ikon) kataloğu — kanvas editörünün ikon paleti
+ *     description: |
+ *       Kategoriler (yıkama/ağartma/kurutma/ütü/kuru temizleme) + her sembolün
+ *       anahtar/başlık/SVG'si. SVG editör önizlemesi içindir; baskı aynı
+ *       primitifleri 1bpp'e döker (önizleme = baskı). Statik katalog — DB'siz.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ categories: [{key,label}], icons: [{key,label,category,svg}] }" }
+ */
+// NOT: /:id'den ÖNCE kayıtlı olmalı — aksi halde "icons" bir id sanılır (404/500).
+router.get("/icons", verifyToken, requirePermission("label-template:read"), controller.iconCatalog);
+
+/**
+ * @openapi
  * /api/label-templates/{id}:
  *   get:
  *     tags: [Label Templates]
@@ -154,6 +179,15 @@ router.post("/preview", verifyToken, requirePermission("label-template:read"), c
  */
 router.get("/:id", verifyToken, requirePermission("label-template:read"), controller.findById);
 
+/** Şablonu taşınabilir JSON zarfı olarak dışa aktar (şablon + varyantlar). */
+router.get("/:id/export", verifyToken, requirePermission("label-template:read"), controller.exportTemplate);
+
+/** JSON zarfını yeni şablon olarak içe aktar (ad çakışması → otomatik dedup). */
+router.post("/import", verifyToken, requirePermission("label-template:write"), controller.importTemplate);
+
+/** Şablonu komple çoğalt — "… (kopya)" adıyla; isDefault/atamalar taşınmaz. */
+router.post("/:id/duplicate", verifyToken, requirePermission("label-template:write"), controller.duplicate);
+
 /**
  * @openapi
  * /api/label-templates:
@@ -163,7 +197,9 @@ router.get("/:id", verifyToken, requirePermission("label-template:read"), contro
  *     description: |
  *       fields opsiyonel — verilmezse catalog'tan tüm alanlar visible=true
  *       şekilde default olarak üretilir. isDefault=true verilirse aynı kind'taki
- *       diğer default'lar düşürülür (atomic).
+ *       diğer default'lar düşürülür (atomic). standalone=true → serbest (statik)
+ *       etiket: kind VERİLMEZ (null doğar), atanamaz, barkodsuz kaydedilebilir,
+ *       varsayılan yapılamaz. Türlü (normal) şablonda kind zorunludur.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -171,12 +207,13 @@ router.get("/:id", verifyToken, requirePermission("label-template:read"), contro
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, kind]
+ *             required: [name]
  *             properties:
  *               name:      { type: string, maxLength: 200 }
  *               kind:      { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
  *               isDefault: { type: boolean }
  *               isActive:  { type: boolean }
+ *               standalone: { type: boolean, description: "Serbest (statik) etiket — atanamaz, barkodsuz kaydedilebilir" }
  *               fields:
  *                 type: array
  *                 items:

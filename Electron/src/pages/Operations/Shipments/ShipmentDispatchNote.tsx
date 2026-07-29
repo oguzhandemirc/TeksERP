@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -14,6 +13,7 @@ import { printHtmlString } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
+import { DispatchNoteEditor } from "./DispatchNoteEditor";
 import { printedDocumentService, type PrintedDocument } from "@/services/printedDocumentService";
 
 interface Props {
@@ -31,7 +31,10 @@ const DOC_TYPE = "SHIPMENT_DISPATCH" as const;
  */
 export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) {
   const { hasPermission } = useRoleAccess();
+  const qc = useQueryClient();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  // "Güncel şablonla" — içerik donuk, görünüm canlı Belge Şablonları ayarından.
+  const [currentTemplate, setCurrentTemplate] = useState(false);
 
   // Belge meta'sı (versiyon çubuğu + resmî/taslak ayrımı). data=null → TASLAK aşaması.
   const docQuery = useQuery({
@@ -54,11 +57,16 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
   // Baskı/önizleme HTML'i (tek kaynak). Versiyon seçiliyse o versiyon; değilse
   // güncel (donmuş varsa resmî, yoksa ?draft=1 ile TASLAK).
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", DOC_TYPE, shipmentId, selectedVersion],
+    queryKey: ["printed-doc-html", DOC_TYPE, shipmentId, selectedVersion, currentTemplate],
     queryFn: () =>
       selectedVersion != null
-        ? printedDocumentService.getHtml(DOC_TYPE, shipmentId!, selectedVersion)
-        : printedDocumentService.getHtml(DOC_TYPE, shipmentId!, undefined, { draft: true }),
+        ? printedDocumentService.getHtml(DOC_TYPE, shipmentId!, selectedVersion, {
+            currentTemplate,
+          })
+        : printedDocumentService.getHtml(DOC_TYPE, shipmentId!, undefined, {
+            draft: true,
+            currentTemplate,
+          }),
     enabled: open && Boolean(shipmentId),
     staleTime: 0,
   });
@@ -74,14 +82,12 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-4xl flex-col gap-3">
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex h-[86vh] max-h-[86vh] max-w-5xl flex-col gap-3"
+      >
         <DialogHeader>
           <DialogTitle>Sevk İrsaliyesi</DialogTitle>
-          <DialogDescription>
-            {currentDoc
-              ? "Sevk anında dondurulan resmi belge. Düzeltme için 'Revize Et'."
-              : "Sevkiyat henüz sevk edilmedi — taslak önizleme (sevk edilince resmî belge donar)."}
-          </DialogDescription>
         </DialogHeader>
 
         {!loading && shownMeta && shipmentId && (
@@ -92,6 +98,21 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
             activeVersion={currentDoc?.version ?? shownMeta.version}
             onSelectVersion={setSelectedVersion}
             canReissue={hasPermission("shipping:write")}
+            reissueOnlyWhenReconstructed
+            /* Sevk irsaliyesi içeriği sevk anında donar; sonradan düzenlenemez →
+               normal revize aynı içeriği tekrar dondururdu. Tuş yalnız eski
+               sistemden kalan geriye-dönük belgeyi resmîleştirmek için görünür. */
+            currentTemplate={currentTemplate}
+            onCurrentTemplateChange={setCurrentTemplate}
+            templateStale={currentDoc?.templateStale ?? false}
+          />
+        )}
+        {shipmentId && (
+          <DispatchNoteEditor
+            shipmentId={shipmentId}
+            onSaved={() =>
+              void qc.invalidateQueries({ queryKey: ["printed-doc-html", DOC_TYPE, shipmentId] })
+            }
           />
         )}
 

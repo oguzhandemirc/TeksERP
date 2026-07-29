@@ -415,6 +415,7 @@ function EditReturnModal({
   onClose: () => void;
   onSave: (payload: { reasonId: string | null; reasonText: string | null; note: string | null }) => void;
 }) {
+  const { height } = useWindowDimensions();
   const [reasonId, setReasonId] = useState<string | null>(null);
   const [reasonText, setReasonText] = useState('');
   const [note, setNote] = useState('');
@@ -438,41 +439,50 @@ function EditReturnModal({
           <Text style={styles.editTitle}>İadeyi Düzelt</Text>
           <Text style={styles.editSub}>Yalnız neden ve not değişir — topun durumu etkilenmez.</Text>
 
-          <Text style={styles.editLabel}>İade Nedeni *</Text>
-          <TouchableRipple style={styles.editSelect} onPress={() => setPickerOpen(true)} borderless>
-            <View style={styles.editSelectInner}>
-              <Icon source="alert-circle-outline" size={18} color={reasonId ? ACCENT : colors.textMuted} />
-              <Text style={[styles.editSelectText, !reasonId && styles.editSelectPlaceholder]} numberOfLines={1}>
-                {reasonId ? reasonOptions.find((o) => o.value === reasonId)?.label ?? '—' : 'Neden seçin…'}
-              </Text>
-              {reasonId ? (
-                <IconButton icon="close-circle" size={18} onPress={() => setReasonId(null)} style={{ margin: 0 }} />
-              ) : null}
-            </View>
-          </TouchableRipple>
+          {/* Alanlar maxHeight'li ScrollView'da: multiline inputlar büyüse de
+              (veya tablet yatay kısa yükseklikte) sheet H küçük kalır → AppModal
+              bottom lift'i klavyeyi geçer; Kaydet ScrollView DIŞINDA sabit footer. */}
+          <ScrollView
+            style={{ maxHeight: height * 0.4, flexGrow: 0 }}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: spacing.xs }}
+          >
+            <Text style={styles.editLabel}>İade Nedeni *</Text>
+            <TouchableRipple style={styles.editSelect} onPress={() => setPickerOpen(true)} borderless>
+              <View style={styles.editSelectInner}>
+                <Icon source="alert-circle-outline" size={18} color={reasonId ? ACCENT : colors.textMuted} />
+                <Text style={[styles.editSelectText, !reasonId && styles.editSelectPlaceholder]} numberOfLines={1}>
+                  {reasonId ? reasonOptions.find((o) => o.value === reasonId)?.label ?? '—' : 'Neden seçin…'}
+                </Text>
+                {reasonId ? (
+                  <IconButton icon="close-circle" size={18} onPress={() => setReasonId(null)} style={{ margin: 0 }} />
+                ) : null}
+              </View>
+            </TouchableRipple>
 
-          <TextInput
-            mode="outlined"
-            placeholder="Açıklama (katalog seçmediysen yaz)"
-            value={reasonText}
-            onChangeText={setReasonText}
-            multiline
-            outlineColor={colors.border}
-            activeOutlineColor={ACCENT}
-            style={styles.editInput}
-          />
+            <TextInput
+              mode="outlined"
+              placeholder="Açıklama (katalog seçmediysen yaz)"
+              value={reasonText}
+              onChangeText={setReasonText}
+              multiline
+              outlineColor={colors.border}
+              activeOutlineColor={ACCENT}
+              style={styles.editInput}
+            />
 
-          <Text style={styles.editLabel}>Not</Text>
-          <TextInput
-            mode="outlined"
-            placeholder="Teslim alan notu"
-            value={note}
-            onChangeText={setNote}
-            multiline
-            outlineColor={colors.border}
-            activeOutlineColor={ACCENT}
-            style={styles.editInput}
-          />
+            <Text style={styles.editLabel}>Not</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Teslim alan notu"
+              value={note}
+              onChangeText={setNote}
+              multiline
+              outlineColor={colors.border}
+              activeOutlineColor={ACCENT}
+              style={styles.editInput}
+            />
+          </ScrollView>
 
           <Button
             mode="contained"

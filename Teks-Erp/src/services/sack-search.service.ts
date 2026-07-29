@@ -22,15 +22,21 @@ import { buildTurkishSearch } from "../utils/query-parser";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
+/** Tek değer / dizi → temiz ID dizisi (filtre semantiği: aynı alan içinde VEYA). */
+function toIdList(v: string | string[] | undefined): string[] {
+  return (Array.isArray(v) ? v : v ? [v] : []).map((s) => s.trim()).filter(Boolean);
+}
+
 export type SackSearchScope = "POOL" | "PLANNED" | "DISPATCHED" | "ALL";
 
 export interface SackSearchParams {
-  itemId?: string;
-  colorId?: string;
+  /** Tek ID ya da ID listesi — liste verilirse aynı alan içinde VEYA (IN) uygulanır. */
+  itemId?: string | string[];
+  colorId?: string | string[];
   width?: number;
   widthMin?: number;
   widthMax?: number;
-  customerId?: string;
+  customerId?: string | string[];
   scope?: SackSearchScope;
   shipmentNo?: string;
   sackCode?: string;
@@ -72,9 +78,12 @@ export class SackSearchService {
     const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
 
     // İçerik (rulo düzeyi) filtresi — ürün/renk/en (en tek değer VEYA min-max aralık).
+    // Çoklu ID = alan içinde VEYA (IN); farklı alanlar arasında VE (sektör standardı).
     const rollFilter: Prisma.RollWhereInput = {};
-    if (params.itemId) rollFilter.itemId = params.itemId;
-    if (params.colorId) rollFilter.colorId = params.colorId;
+    const itemIds = toIdList(params.itemId);
+    const colorIds = toIdList(params.colorId);
+    if (itemIds.length) rollFilter.itemId = { in: itemIds };
+    if (colorIds.length) rollFilter.colorId = { in: colorIds };
     if (params.widthMin != null || params.widthMax != null) {
       rollFilter.width = {
         ...(params.widthMin != null ? { gte: params.widthMin } : {}),
@@ -93,7 +102,8 @@ export class SackSearchService {
         : [{ shipmentId: null }, { shipment: { status: { in: PLANNED_STATUSES } } }];
 
     const andClauses: Prisma.SackWhereInput[] = [{ OR: scopeOr }];
-    if (params.customerId) andClauses.push({ customerId: params.customerId });
+    const customerIds = toIdList(params.customerId);
+    if (customerIds.length) andClauses.push({ customerId: { in: customerIds } });
     const shipmentNo = params.shipmentNo?.trim();
     if (shipmentNo) andClauses.push({ shipment: { is: { OR: buildTurkishSearch<Prisma.ShipmentWhereInput>(shipmentNo, ["shipmentNo"]) } } });
     const sackCode = params.sackCode?.trim();

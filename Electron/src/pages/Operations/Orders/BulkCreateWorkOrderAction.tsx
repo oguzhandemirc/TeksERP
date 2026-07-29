@@ -20,7 +20,7 @@ import {
 import type { Order, OrderLine } from "./types";
 
 /**
- * Tek iş emri = tek ürün + renk + en. Bir iş emrine birleştirilebilecek
+ * Tek iş emri = tek kumaş + renk + en. Bir iş emrine birleştirilebilecek
  * kalemler bu üçlüde aynı olmalı (OrderPickerDialog.mismatchReason ile aynı kural).
  */
 function lineSignature(l: OrderLine): string {
@@ -96,8 +96,8 @@ interface Props {
 }
 
 /**
- * Siparişler tablosunun toplu seçim çubuğuna eklenen aksiyon: aynı ürün/renk/en
- * olan birden çok siparişi tek iş emrine taşır. Farklı ürünler birleşemez —
+ * Siparişler tablosunun toplu seçim çubuğuna eklenen aksiyon: aynı kumaş/renk/en
+ * olan birden çok siparişi tek iş emrine taşır. Farklı kumaşlar birleşemez —
  * o durumda engelleyip grupları açıklar.
  */
 export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
@@ -105,7 +105,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
   const [incompatGroups, setIncompatGroups] = useState<GroupInfo[] | null>(null);
 
   // Seçili açık kalemleri (openQty=kalan; link-only) tek iş emri formuna taşır. Yalnız
-  // ilgili spec'in açık kalemleri seed edilir — başka ürün/renk karışmaz.
+  // ilgili spec'in açık kalemleri seed edilir — başka kumaş/renk karışmaz.
   const goToForm = (pickedLines: PickedOrderLine[]) => {
     navigateActive("/operations/work-orders/new", { state: { seedPickedLines: pickedLines } });
     onDone();
@@ -140,7 +140,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
       return;
     }
 
-    // Tek ürün+renk+en — uyumlu tüm açık kalemler tek iş emrine.
+    // Tek kumaş+renk+en — uyumlu tüm açık kalemler tek iş emrine.
     const [only] = groups;
     if (only) goToForm(only.pickedLines);
   };
@@ -169,7 +169,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>Bu siparişler tek iş emrinde birleşemez</DialogTitle>
             <DialogDescription>
-              Bir iş emri yalnızca aynı ürün, renk ve en için açılır. Seçimin{" "}
+              Bir iş emri yalnızca aynı kumaş, renk ve en için açılır. Seçimin{" "}
               {incompatGroups?.length} farklı grup içeriyor — birleştirmek
               istediğin gruba tıkla; o siparişlerle iş emri formu doğrudan açılır.
             </DialogDescription>

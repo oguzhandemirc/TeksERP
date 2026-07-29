@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Plus, Printer, PanelRight } from "lucide-react";
+import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -68,6 +71,7 @@ function ReturnsStatusFilter() {
 
 export function ReturnsPage() {
   const [selected, setSelected] = useState<ReturnRow | null>(null);
+  const [docReturn, setDocReturn] = useState<ReturnRow | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
   const [scanBarcode, setScanBarcode] = useState("");
   const [scanSeed, setScanSeed] = useState<string | undefined>(undefined);
@@ -90,10 +94,9 @@ export function ReturnsPage() {
   const summary = (query.data?.pages?.[0] as ReturnsCursorResponse | undefined)?.summary;
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="İade Takibi"
-        description="Müşteriden dönen toplar — hangi siparişten, hangi üründen, ne kadar."
         actions={
           <div className="flex items-center gap-2">
             <PermissionGate permission="return:write">
@@ -121,7 +124,7 @@ export function ReturnsPage() {
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Neden / not içinde ara..."
+        placeholder="Müşteri, sipariş, kumaş, barkod veya neden ara..."
       />
       <FilterBar filters={FILTERS} leading={<ReturnsStatusFilter />} />
       {summary && summary.count > 0 && (
@@ -142,6 +145,26 @@ export function ReturnsPage() {
         pagination={pagination}
         emptyText="İade kaydı bulunamadı."
         onRowClick={setSelected}
+        rowContextMenu={(r) => (
+          <>
+            <ContextMenuItem onSelect={() => setSelected(r)}>
+              <PanelRight /> Detayı aç
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => setDocReturn(r)}>
+              <Printer /> İade İrsaliyesi
+            </ContextMenuItem>
+          </>
+        )}
+      />
+      <PrintedDocDialog
+        docType="RETURN_DISPATCH"
+        sourceId={docReturn?.id ?? null}
+        open={Boolean(docReturn)}
+        onOpenChange={(o) => !o && setDocReturn(null)}
+        title="İade İrsaliyesi"
+        description="Müşteriden dönen topun kabul belgesi."
+        writePermission="return:write"
       />
       <ReturnsDetailSheet row={selected} onClose={() => setSelected(null)} />
       <ReturnEntryDialog
@@ -152,6 +175,6 @@ export function ReturnsPage() {
         }}
         initialBarcode={scanSeed}
       />
-    </div>
+    </PageShell>
   );
 }

@@ -1,7 +1,8 @@
+// WARP (Çözgü) bilinçli olarak YOK — backend Prisma ItemType enum'unda hiç
+// olmadı (fabrika çözgü/dokuma yapmaz); burada sunulunca create her zaman patlıyordu.
 export const ItemType = {
   FABRIC: "FABRIC",
   YARN: "YARN",
-  WARP: "WARP",
   CONSUMABLE: "CONSUMABLE",
 } as const;
 export type ItemType = (typeof ItemType)[keyof typeof ItemType];
@@ -9,15 +10,13 @@ export type ItemType = (typeof ItemType)[keyof typeof ItemType];
 export const itemTypeLabels: Record<ItemType, string> = {
   FABRIC: "Kumaş",
   YARN: "İplik",
-  WARP: "Çözgü",
   CONSUMABLE: "Sarf Malzeme",
 };
 
-/** Her ürün tipi için kullanılan birim — kullanıcı düzenleyemez. */
+/** Her kumaş tipi için kullanılan birim — kullanıcı düzenleyemez. */
 export const unitForItemType: Record<ItemType, string> = {
   FABRIC: "MT",
   YARN: "KG",
-  WARP: "MT",
   CONSUMABLE: "ADET",
 };
 

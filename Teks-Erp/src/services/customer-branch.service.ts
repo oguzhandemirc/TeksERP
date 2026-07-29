@@ -9,8 +9,62 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import { foldNameForCompare } from "./helpers/name-normalize.helper";
 
 const TABLE = "CUSTOMER_BRANCH";
+
+/**
+ * Aynı MÜŞTERİ içinde aynı adlı ikinci şubeye izin verme (Türkçe-duyarsız;
+ * müşteriler arası aynı şube adı serbest). Pasif şube de sayılır — yenisi
+ * yerine mevcut pasif şube aktifleştirilmeli.
+ */
+async function assertBranchNameAvailable(
+  customerId: string,
+  name: string,
+  excludeId?: string,
+): Promise<void> {
+  if (!name || name.trim().length === 0) return;
+  const target = foldNameForCompare(name);
+  const candidates = await prisma.customerBranch.findMany({
+    where: { customerId, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { name: true, isActive: true },
+  });
+  const hit = candidates.find((b) => foldNameForCompare(b.name) === target);
+  if (!hit) return;
+  throw AppError.conflict(
+    hit.isActive
+      ? `Bu müşteride '${name.trim()}' adında bir şube zaten var. Aynı şube ikinci kez eklenemez.`
+      : `Bu müşteride '${name.trim()}' adında PASİF bir şube zaten var. Yenisini eklemek yerine mevcut şubeyi aktifleştirin.`,
+  );
+}
+
+/**
+ * Aynı müşteride aynı şube İHRACAT KODUNA izin verme (opsiyonel; verilmişse
+ * tekil). Kolon adı tarihsel `code`; kavramsal olarak şube ihracat kodudur —
+ * bir müşterinin iki şubesinde aynı ihracat kodu büyük olasılıkla veri hatası.
+ */
+async function assertBranchCodeAvailable(
+  customerId: string,
+  code: string | null | undefined,
+  excludeId?: string,
+): Promise<void> {
+  if (typeof code !== "string" || code.trim().length === 0) return;
+  const target = foldNameForCompare(code);
+  const candidates = await prisma.customerBranch.findMany({
+    where: { customerId, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { code: true },
+  });
+  if (candidates.some((b) => b.code != null && foldNameForCompare(b.code) === target)) {
+    throw AppError.conflict(`Bu müşteride '${code.trim()}' ihracat kodlu bir şube zaten var.`);
+  }
+}
+
+/** Şube adı: trim + boş reddi (salt-boşluk ad kaydedilmesin — dedup trim'e bağlı). */
+function requireBranchName(raw: unknown): string {
+  const name = typeof raw === "string" ? raw.trim() : "";
+  if (name.length === 0) throw AppError.badRequest("Şube adı zorunlu");
+  return name;
+}
 
 export interface CustomerBranchInput {
   code?: string | null;
@@ -58,11 +112,16 @@ export class CustomerBranchService {
     if (!customer) throw AppError.notFound("Müşteri bulunamadı");
     if (!customer.isActive) throw AppError.badRequest("Müşteri pasif durumda");
 
+    const name = requireBranchName(data.name);
+    const code = typeof data.code === "string" ? data.code.trim() || null : (data.code ?? null);
+    await assertBranchNameAvailable(customerId, name);
+    await assertBranchCodeAvailable(customerId, code);
+
     const created = await prisma.customerBranch.create({
       data: {
         customerId,
-        code: data.code ?? null,
-        name: data.name,
+        code,
+        name,
         address: data.address ?? null,
         city: data.city ?? null,
         district: data.district ?? null,
@@ -95,11 +154,32 @@ export class CustomerBranchService {
     const existing = await prisma.customerBranch.findFirst({ where: { id, customerId } });
     if (!existing) throw AppError.notFound("Şube bulunamadı");
 
+    // Ad verildiyse trim + boş reddi; kod verildiyse trim (boş → null).
+    const name = data.name === undefined ? undefined : requireBranchName(data.name);
+    const code =
+      data.code === undefined
+        ? undefined
+        : typeof data.code === "string"
+          ? data.code.trim() || null
+          : (data.code ?? null);
+
+    // Ad/kod-mükerrer kontrolü yalnız gerçekten değişirken (tarihsel mükerrer
+    // kayıt düzenlenebilir kalsın).
+    if (name !== undefined && foldNameForCompare(name) !== foldNameForCompare(existing.name)) {
+      await assertBranchNameAvailable(customerId, name, id);
+    }
+    if (
+      code !== undefined && code !== null &&
+      foldNameForCompare(code) !== foldNameForCompare(existing.code ?? "")
+    ) {
+      await assertBranchCodeAvailable(customerId, code, id);
+    }
+
     const updated = await prisma.customerBranch.update({
       where: { id },
       data: {
-        code: data.code === undefined ? undefined : data.code,
-        name: data.name,
+        code,
+        name,
         address: data.address === undefined ? undefined : data.address,
         city: data.city === undefined ? undefined : data.city,
         district: data.district === undefined ? undefined : data.district,

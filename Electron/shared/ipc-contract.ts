@@ -30,6 +30,69 @@ export interface SystemApi {
   showInFolder: (path: string) => void;
 }
 
+export interface PdfSaveOpts {
+  /** Basılacak tam HTML belge (backend renderer çıktısı). */
+  html: string;
+  /** Kaydet dialoğunda önerilen dosya adı (.pdf uzantısı otomatik eklenir). */
+  suggestedName: string;
+}
+export interface PdfSaveResult {
+  saved: boolean;
+  path?: string;
+  error?: string;
+}
+export interface PdfBatchItem {
+  /** Basılacak tam HTML belge. */
+  html: string;
+  /** Dosya adı (.pdf otomatik eklenir) — sevk no vb. benzersiz. */
+  name: string;
+}
+export interface PdfSaveBatchOpts {
+  items: PdfBatchItem[];
+}
+/** Toplu klasör-kaydı sonucu (PDF veya dosya). */
+export interface SaveBatchResult {
+  saved: boolean;
+  /** Yazılan klasör. */
+  dir?: string;
+  /** Yazılan dosya sayısı. */
+  count?: number;
+  error?: string;
+}
+export interface PdfApi {
+  /** HTML belgeyi gizli pencerede PDF'e çevirir + kaydet dialoğuyla diske yazar. */
+  save: (opts: PdfSaveOpts) => Promise<PdfSaveResult>;
+  /** N belgeyi seçilen KLASÖRE ayrı ayrı PDF olarak yazar (her biri <name>.pdf). */
+  saveBatch: (opts: PdfSaveBatchOpts) => Promise<SaveBatchResult>;
+}
+
+export interface FilesBatchItem {
+  /** Dosya adı — UZANTI DAHİL (ör. "SVK-2026-0042.xlsx"). */
+  name: string;
+  /** İçerik, base64. */
+  base64: string;
+}
+export interface FilesSaveBatchOpts {
+  items: FilesBatchItem[];
+}
+export interface FileSaveOpts {
+  /** Önerilen dosya adı — UZANTI DAHİL (ör. "Sevkiyatlar.xlsx"). */
+  name: string;
+  base64: string;
+}
+export interface FileSaveResult {
+  saved: boolean;
+  path?: string;
+  error?: string;
+}
+export interface FilesApi {
+  /** Tek dosyayı KAYDET DİALOĞUYLA yazar (pencereye bağlı → arka plan kararır; kullanıcı
+   *  onaylayınca döner). Excel indirmeleri bununla → toast doğru zamanda + karartma var. */
+  save: (opts: FileSaveOpts) => Promise<FileSaveResult>;
+  /** Renderer'ın ürettiği dosyaları (base64) seçilen KLASÖRE yazar (ör. toplu Excel). */
+  saveBatch: (opts: FilesSaveBatchOpts) => Promise<SaveBatchResult>;
+}
+
 export interface PowerApi {
   /** Sistem-geneli boşta kalma süresi (saniye) — Electron powerMonitor.getSystemIdleTime().
    *  Yalnız Electron penceresi değil, TÜM bilgisayarın son fare/klavye girdisinden bu
@@ -164,6 +227,8 @@ export interface ApiBridge {
   scanner: ScannerDeviceApi;
   printer: PrinterTransportApi;
   scale: ScaleApi;
+  pdf: PdfApi;
+  files: FilesApi;
 }
 
 declare global {

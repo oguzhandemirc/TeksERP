@@ -47,53 +47,58 @@ check("shouldRasterize RASTER_HTML → false", shouldRasterize(PrinterLanguage.R
 check("shouldRasterize rawCode dolu → false (uzman komutta)", shouldRasterize(PrinterLanguage.PPLB, mk(true, { template: rawTemplate })) === false);
 check("shouldRasterize varyantsız → false (akış-modeli)", shouldRasterize(PrinterLanguage.PPLB, mk(true, { variant: null })) === false);
 
-// --- renderLabel raster (PPLB) ---
-{
-  const r = renderLabel(PrinterLanguage.PPLB, mk(true));
-  check("PPLB raster → encoding=binary", r.encoding === "binary");
-  check("PPLB raster → content boş, bytes dolu", r.content === "" && !!r.bytes && r.bytes.length > 0);
-  check("PPLB raster → bytes GW zarfı içerir", !!r.bytes && r.bytes.toString("latin1").includes("GW0,0"));
-  check("renderedBytes(raster) = r.bytes", renderedBytes(r) === r.bytes);
+// renderLabel 2026-07 icon işiyle ASYNC oldu → await'li main içinde.
+async function main(): Promise<void> {
+  // --- renderLabel raster (PPLB) ---
+  {
+    const r = await renderLabel(PrinterLanguage.PPLB, mk(true));
+    check("PPLB raster → encoding=binary", r.encoding === "binary");
+    check("PPLB raster → content boş, bytes dolu", r.content === "" && !!r.bytes && r.bytes.length > 0);
+    check("PPLB raster → bytes GW zarfı içerir", !!r.bytes && r.bytes.toString("latin1").includes("GW0,0"));
+    check("renderedBytes(raster) = r.bytes", renderedBytes(r) === r.bytes);
+  }
+
+  // --- renderLabel komut (PPLB, rasterMode=false) BAYT-AYNI ---
+  {
+    const r = await renderLabel(PrinterLanguage.PPLB, mk(false));
+    check("PPLB komut → encoding=text", r.encoding === "text");
+    check("PPLB komut → content native (N ile başlar)", r.content.startsWith("N\r\n"));
+    // Bayt-aynı: registry komut çıktısı = doğrudan emitCanvasPplb.
+    const layout = readCanvasLayout(variant.elements)!;
+    const direct = emitCanvasPplb({ payload, format, copies: 2, layout } as CanvasRenderInput);
+    check("PPLB komut = emitCanvasPplb (bayt-aynı)", r.content === direct);
+    check("renderedBytes(komut) = latin1(content)", renderedBytes(r).equals(Buffer.from(r.content, "latin1")));
+  }
+
+  // --- PPLA raster → envelope fırlatır → KOMUTA düşer (fallback) ---
+  {
+    const r = await renderLabel(PrinterLanguage.PPLA, mk(true));
+    check("PPLA raster → komuta düşer (encoding=text)", r.encoding === "text");
+    check("PPLA fallback → content native DPL komutu (STX)", r.content.includes("\x02") && r.content.length > 20);
+  }
+
+  // --- ZPL raster → binary (^GFA ASCII ama binary yolundan) ---
+  {
+    const r = await renderLabel(PrinterLanguage.ZPL, mk(true));
+    check("ZPL raster → encoding=binary", r.encoding === "binary");
+    check("ZPL raster → bytes ^GFA içerir", !!r.bytes && r.bytes.toString("latin1").includes("^GFA"));
+  }
+
+  // --- rawCode + rasterMode → KOMUT (uzman yolu asla rasterlenmez) ---
+  {
+    const r = await renderLabel(PrinterLanguage.PPLB, mk(true, { template: rawTemplate }));
+    check("rawCode + rasterMode → encoding=text (komut)", r.encoding === "text");
+    check("rawCode → yer-tutucu dolduruldu (PATOS)", r.content.includes("PATOS"));
+  }
+
+  // --- varyantsız + rasterMode → akış-modeli KOMUT ---
+  {
+    const r = await renderLabel(PrinterLanguage.PPLB, mk(true, { variant: null }));
+    check("varyantsız + rasterMode → encoding=text (akış komutu)", r.encoding === "text");
+  }
+
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  process.exit(fail > 0 ? 1 : 0);
 }
 
-// --- renderLabel komut (PPLB, rasterMode=false) BAYT-AYNI ---
-{
-  const r = renderLabel(PrinterLanguage.PPLB, mk(false));
-  check("PPLB komut → encoding=text", r.encoding === "text");
-  check("PPLB komut → content native (N ile başlar)", r.content.startsWith("N\r\n"));
-  // Bayt-aynı: registry komut çıktısı = doğrudan emitCanvasPplb.
-  const layout = readCanvasLayout(variant.elements)!;
-  const direct = emitCanvasPplb({ payload, format, copies: 2, layout } as CanvasRenderInput);
-  check("PPLB komut = emitCanvasPplb (bayt-aynı)", r.content === direct);
-  check("renderedBytes(komut) = latin1(content)", renderedBytes(r).equals(Buffer.from(r.content, "latin1")));
-}
-
-// --- PPLA raster → envelope fırlatır → KOMUTA düşer (fallback) ---
-{
-  const r = renderLabel(PrinterLanguage.PPLA, mk(true));
-  check("PPLA raster → komuta düşer (encoding=text)", r.encoding === "text");
-  check("PPLA fallback → content native DPL komutu (STX)", r.content.includes("\x02") && r.content.length > 20);
-}
-
-// --- ZPL raster → binary (^GFA ASCII ama binary yolundan) ---
-{
-  const r = renderLabel(PrinterLanguage.ZPL, mk(true));
-  check("ZPL raster → encoding=binary", r.encoding === "binary");
-  check("ZPL raster → bytes ^GFA içerir", !!r.bytes && r.bytes.toString("latin1").includes("^GFA"));
-}
-
-// --- rawCode + rasterMode → KOMUT (uzman yolu asla rasterlenmez) ---
-{
-  const r = renderLabel(PrinterLanguage.PPLB, mk(true, { template: rawTemplate }));
-  check("rawCode + rasterMode → encoding=text (komut)", r.encoding === "text");
-  check("rawCode → yer-tutucu dolduruldu (PATOS)", r.content.includes("PATOS"));
-}
-
-// --- varyantsız + rasterMode → akış-modeli KOMUT ---
-{
-  const r = renderLabel(PrinterLanguage.PPLB, mk(true, { variant: null }));
-  check("varyantsız + rasterMode → encoding=text (akış komutu)", r.encoding === "text");
-}
-
-console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+main().catch((e) => { console.error("HATA:", e); process.exit(1); });

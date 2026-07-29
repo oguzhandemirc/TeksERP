@@ -184,7 +184,7 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
 });
 
 describe("RollContextHeader + LastLabelBanner", () => {
-  it("künye: ürün + salt-okunur metraj + konum (sevkiyat/çuval)", () => {
+  it("künye: kumaş + salt-okunur metraj + konum (sevkiyat/çuval)", () => {
     const ctx: RelabelContext = {
       ...baseCtx,
       color: null,

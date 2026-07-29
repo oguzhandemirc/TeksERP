@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -85,10 +86,9 @@ export function TemplatesPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <PageHeader
         title="Yetki Şablonları"
-        description="Yetki kümelerini şablonla, kullanıcılara tek tıkla uygula."
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
@@ -114,8 +114,8 @@ export function TemplatesPage() {
         />
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <Table>
+      <PageBody>
+        <Table containerClassName="overflow-visible">
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
               <TableHead>Ad</TableHead>
@@ -187,7 +187,7 @@ export function TemplatesPage() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </PageBody>
 
       <TemplateFormDialog
         open={formOpen}
@@ -214,6 +214,6 @@ export function TemplatesPage() {
           setRemovingId(null);
         }}
       />
-    </div>
+    </PageShell>
   );
 }

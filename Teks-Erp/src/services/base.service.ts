@@ -26,6 +26,9 @@ import {
 } from "../utils/cursor";
 import { PaginatedResponse, ApiResponse } from "../types/api.types";
 import { Request } from "express";
+import { foldNameForCompare } from "./helpers/name-normalize.helper";
+import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { withBarcodeRetry } from "../utils/barcode-retry";
 
 // Model adı → sıralanabilir (scalar/enum) alan adları. Prisma dmmf'ten lazy build
 // + cache. İstemciden gelen sortBy bu kümede (veya relationSortMap'te) değilse
@@ -139,6 +142,48 @@ export interface BaseServiceConfig {
    * Genelde "code" (Color, Item, Station vb.). User için "username" olabilir.
    */
   uniqueField?: string;
+  /**
+   * Otomatik kod üretimi (backend-authoritative): verilirse create() `field`
+   * (default "code") alanını `PREFIX + GGAAYY + NNNN` günlük sıralı üretir ve
+   * İSTEMCİDEN GELEN kodu YOK SAYAR — customer/fabricProperty deseniyle birebir
+   * (tüm master-data aynı formatı alsın). Eşzamanlı iki create aynı sıra no'yu
+   * okuyup INSERT'te `@unique` çakışırsa (P2002) withBarcodeRetry taze no ile
+   * yeniden dener. autoCode verildiğinde `uniqueField` reactivate yolu KULLANILMAZ
+   * (yeni kod her zaman taze) — ama `uniqueField` yine ad-mükerrer 409 mesajını
+   * mevcut kaydın koduyla zenginleştirir, o yüzden birlikte set edilebilir.
+   */
+  autoCode?: {
+    /** Kod öneki, örn. "RNK". Ardına GGAAYY (gün-ay-yıl) + sıra eklenir. */
+    prefix: string;
+    /** Kodun yazılacağı kolon (default "code"). */
+    field?: string;
+    /** Günlük sıra hane sayısı (default 4 → 9999/gün). */
+    digits?: number;
+  };
+  /**
+   * Ad-mükerrer koruması: verilirse create/update bu kolonda Türkçe-duyarsız
+   * (trim + çoklu-boşluk-tekle + tr-BÜYÜK katlama) eş arar; aktif eş → 409,
+   * pasif eş → "aktifleştirin" 409. DB unique kısıtı bilinçli YOK — canlı
+   * veride tarihsel mükerrerler olabilir; migration patlatmak yerine yalnız
+   * YENİ mükerrer engellenir. Update ad gerçekten değişmedikçe kontrol etmez —
+   * tarihsel mükerrer kayıtlar düzenlenebilir kalır. Modelde `isActive` kolonu
+   * varsayılır (tüm master-data tablolarında var).
+   */
+  duplicateNameField?: string;
+  /**
+   * Ad tekilliğinin kapsam kolonu (örn. Machine için "stationId" — ad yalnız
+   * aynı istasyon içinde tekil olmalı). Update'te payload'da yoksa mevcut
+   * kayıttan okunur.
+   */
+  duplicateNameScopeField?: string;
+  /**
+   * Ad-mükerrer aday sorgusuna eklenen sabit where (örn. PeripheralDevice
+   * için `{ deletedAt: null }` — hard-delete tombstone'ları aday sayılmasın;
+   * tombstone aktifleştirilemediğinden adı süresiz bloke ederdi).
+   */
+  duplicateNameWhere?: Record<string, unknown>;
+  /** 409 mesajlarında görünen Türkçe varlık adı (örn. "istasyon"); yoksa "kayıt". */
+  entityLabel?: string;
   /**
    * İlişki / aggregate alanlarına göre sıralama eşlemesi: sanal `sortBy` anahtarı
    * → Prisma nested orderBy üreten fonksiyon.
@@ -456,11 +501,146 @@ export class BaseService {
     return out;
   }
 
+  /**
+   * `duplicateNameField` kolonunda Türkçe-duyarsız ad eşi arar (bkz. config
+   * yorumu). Master-data tabloları küçük olduğundan adaylar tek select ile
+   * çekilip JS'te tr-TR katlamayla karşılaştırılır — PG lower() İ/ı harflerinde
+   * hatalı olduğundan `mode:'insensitive'` bilinçli kullanılmaz. Custom
+   * create/update yazan alt sınıflar (super.* çağırmayan yollar) bu metodu
+   * kendileri çağırır.
+   */
+  protected async assertNameNotDuplicate(
+    data: Record<string, unknown>,
+    excludeId?: string,
+  ): Promise<void> {
+    const field = this.config.duplicateNameField;
+    if (!field) return;
+    const raw = data[field];
+    if (typeof raw !== "string" || raw.trim().length === 0) return;
+    const target = foldNameForCompare(raw);
+    const label = this.config.entityLabel ?? "kayıt";
+
+    // Kapsamlı tekillik (örn. Machine.stationId): payload'da yoksa mevcut kayıttan.
+    let scopeWhere: Record<string, unknown> = {};
+    const scopeField = this.config.duplicateNameScopeField;
+    if (scopeField) {
+      let scopeVal = data[scopeField];
+      if (scopeVal === undefined && excludeId) {
+        const current = (await this.delegate.findUnique({
+          where: { id: excludeId },
+        })) as Record<string, unknown> | null;
+        scopeVal = current?.[scopeField];
+      }
+      if (scopeVal === undefined || scopeVal === null) return; // kapsam belirsiz — zorunlu alan validasyonu ayrıca yakalar
+      scopeWhere = { [scopeField]: scopeVal };
+    }
+
+    const codeField = this.config.uniqueField;
+    const candidates = (await this.delegate.findMany({
+      where: {
+        ...(this.config.duplicateNameWhere ?? {}),
+        ...scopeWhere,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: {
+        id: true,
+        isActive: true,
+        [field]: true,
+        ...(codeField ? { [codeField]: true } : {}),
+      },
+    })) as Record<string, unknown>[];
+
+    const hit = candidates.find(
+      (c) => typeof c[field] === "string" && foldNameForCompare(c[field] as string) === target,
+    );
+    if (!hit) return;
+    const codePart =
+      codeField && typeof hit[codeField] === "string"
+        ? ` (${codeField === "code" ? "kod" : codeField}: ${hit[codeField]})`
+        : "";
+    throw AppError.conflict(
+      hit.isActive === true
+        ? `'${raw.trim()}' adında bir ${label} zaten var${codePart}. Aynı ${label} ikinci kez eklenemez.`
+        : `'${raw.trim()}' adında PASİF bir ${label} zaten var${codePart}. Yenisini eklemek yerine mevcut kaydı aktifleştirin.`,
+    );
+  }
+
+  /**
+   * Sıradaki otomatik günlük kod: `PREFIX + GGAAYY + NNNN`. `autoCode` config'i
+   * gerektirir. collation-güvenli sorgu (gte + startsWith) + sayısal max+1 —
+   * customer/fabricProperty `nextXxxCode` ile aynı kalıp ([[code-format]]).
+   */
+  protected async nextAutoCode(): Promise<string> {
+    const cfg = this.config.autoCode;
+    if (!cfg) throw new Error("nextAutoCode çağrıldı ama autoCode config'i yok");
+    const field = cfg.field ?? "code";
+    const digits = cfg.digits ?? 4;
+    const fullPrefix = dailyCodePrefix(cfg.prefix);
+    const rows = (await this.delegate.findMany({
+      where: { [field]: { gte: fullPrefix, startsWith: fullPrefix } },
+      select: { [field]: true },
+    })) as Record<string, unknown>[];
+    const seq = nextDailySeq(
+      rows.map((r) => r[field] as string | null | undefined),
+      fullPrefix,
+    );
+    return `${fullPrefix}${String(seq).padStart(digits, "0")}`;
+  }
+
+  /**
+   * Nested-create transform + delegate.create + audit. create() iki yoldan
+   * çağırır (normal + autoCode retry döngüsü) — insert gövdesi tek kaynak.
+   */
+  protected async performInsert(
+    data: Record<string, unknown>,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    // Transform nested array fields to Prisma's { create: [...] } format
+    const prismaData = { ...data };
+    if (this.config.nestedCreateFields) {
+      for (const field of this.config.nestedCreateFields) {
+        if (Array.isArray(prismaData[field])) {
+          prismaData[field] = { create: prismaData[field] };
+        }
+      }
+    }
+
+    const record = (await this.delegate.create({
+      data: prismaData,
+      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+    })) as Record<string, unknown>;
+
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: this.config.tableName,
+      recordId: record.id as string,
+      newData: data,
+    });
+
+    return { success: true, data: record, message: "Kayıt oluşturuldu" };
+  }
+
   async create(
     rawData: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const data = this.sanitizeWriteData(rawData);
+
+    // autoCode: backend-authoritative günlük kod. İstemci kodu DÜŞÜRÜLÜR; kod her
+    // create'te taze üretildiğinden uniqueField reactivate yolu geçersiz — atlanır.
+    // Ad-mükerrer guard'ı retry DIŞINDA bir kez (koddan bağımsız, idempotent);
+    // @unique kod çakışması withBarcodeRetry ile taze sıra no okunarak telafi edilir.
+    if (this.config.autoCode) {
+      const codeField = this.config.autoCode.field ?? "code";
+      delete data[codeField];
+      await this.assertNameNotDuplicate(data);
+      return withBarcodeRetry(async () => {
+        data[codeField] = await this.nextAutoCode();
+        return this.performInsert(data, userId);
+      });
+    }
+
     if (this.config.uniqueField) {
       const key = this.config.uniqueField;
       const incomingValue = data[key];
@@ -477,35 +657,16 @@ export class BaseService {
               `Bu ${key} ile aktif kayıt zaten var`,
             );
           }
+          // Reactivate edilen kaydın kendi adı hariç tutulur — yeni ad başka
+          // bir kayıtla çakışıyorsa reactivate de reddedilir.
+          await this.assertNameNotDuplicate(data, existing.id as string);
           return this.reactivate(existing.id as string, data, userId);
         }
       }
     }
+    await this.assertNameNotDuplicate(data);
 
-    // Transform nested array fields to Prisma's { create: [...] } format
-    const prismaData = { ...data };
-    if (this.config.nestedCreateFields) {
-      for (const field of this.config.nestedCreateFields) {
-        if (Array.isArray(prismaData[field])) {
-          prismaData[field] = { create: prismaData[field] };
-        }
-      }
-    }
-
-    const record = await this.delegate.create({
-      data: prismaData,
-      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
-    }) as Record<string, unknown>;
-
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: this.config.tableName,
-      recordId: record.id as string,
-      newData: data,
-    });
-
-    return { success: true, data: record, message: "Kayıt oluşturuldu" };
+    return this.performInsert(data, userId);
   }
 
   /**
@@ -564,6 +725,30 @@ export class BaseService {
     const data = this.sanitizeWriteData(rawData);
     // Fetch old data for audit
     const oldRecord = await this.delegate.findUnique({ where: { id } });
+
+    // Ad-mükerrer kontrolü yalnız ad (veya kapsam kolonu) GERÇEKTEN değişirken —
+    // canlıdaki tarihsel mükerrer kayıtlar aynen düzenlenebilir kalır. Kayıt hiç
+    // yoksa kontrol atlanır — yanıltıcı 409 yerine Prisma'nın not-found'u dönsün.
+    const dupField = this.config.duplicateNameField;
+    if (dupField && oldRecord) {
+      const old = oldRecord as Record<string, unknown>;
+      const oldName = old[dupField];
+      // Ad payload'da yoksa mevcut ad geçerli kalır (kapsam-taşıma durumu için).
+      const effectiveName =
+        typeof data[dupField] === "string" ? (data[dupField] as string) : oldName;
+      const nameChanged =
+        typeof data[dupField] === "string" &&
+        (typeof oldName !== "string" ||
+          foldNameForCompare(data[dupField] as string) !== foldNameForCompare(oldName));
+      const scopeField = this.config.duplicateNameScopeField;
+      const scopeChanged =
+        !!scopeField &&
+        data[scopeField] !== undefined &&
+        data[scopeField] !== old[scopeField];
+      if ((nameChanged || scopeChanged) && typeof effectiveName === "string") {
+        await this.assertNameNotDuplicate({ ...data, [dupField]: effectiveName }, id);
+      }
+    }
 
     const updated = await this.delegate.update({
       where: { id },

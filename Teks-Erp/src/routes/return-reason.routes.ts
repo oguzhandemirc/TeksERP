@@ -17,6 +17,10 @@ const service = new BaseService({
   searchFields: ["code", "name", "description"],
   defaultInclude: undefined,
   uniqueField: "code",
+  duplicateNameField: "name",
+  entityLabel: "iade nedeni",
+  // Kod backend-authoritative: `IADE+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
+  autoCode: { prefix: "IADE" },
 });
 
 const controller = new BaseController(service);
