@@ -28,6 +28,7 @@ import {
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 import { K18_DEAD_STATUSES } from "./batch.service";
+import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 
 export interface SwatchStats {
   count: number;
@@ -1803,6 +1804,8 @@ export class TamburService {
       where: { id: rollId },
       include: {
         properties: { select: { propertyId: true } },
+        // Çuval kodu — aşağıdaki çuval guard'ının mesajı için (operatör çuvalı bulmalı).
+        sack: { select: { sackNo: true } },
       },
     });
     if (!parent) throw AppError.notFound("Top bulunamadı");
@@ -1822,7 +1825,17 @@ export class TamburService {
       );
     }
     // Çuvala/sevkiyata rezerve top serbest stok DEĞİL — kesilirse sevkiyat içeriği
-    // ve karşılanma bozulur. WAREHOUSE statüsüyle görünse de önce sevkiyattan çıkmalı.
+    // ve karşılanma bozulur. WAREHOUSE statüsüyle görünse de önce çıkarılmalı.
+    // ÇUVAL ÖNCE (2026-07-30): DEPO çuvalındaki topun `shipmentId`'si NULL'dır, o
+    // yüzden aşağıdaki kontrol onu KAÇIRIYORDU. Kesilirse üç şey bozulur:
+    //   (1) parent'ın metrajı çuvalın İÇİNDE sessizce eksilir (aşağıda decrement),
+    //   (2) burada `resetSackWeightsTx` ÇAĞRILMADIĞI için çuvalın brüt kg'si bayatlar,
+    //   (3) çocuk top çuval DIŞINDA doğar → çuval içeriği ile fiziksel gerçek ayrışır.
+    if (parent.sackId) {
+      throw AppError.badRequest(
+        sackBlockMessage(parent.barcode ?? parent.id, parent.sack?.sackNo ?? null, "kesilemez"),
+      );
+    }
     if (parent.shipmentId) {
       throw AppError.badRequest(
         "Bu top bir sevkiyatın çuvalında (rezerve) — kesilemez. Önce sevkiyattan çıkar.",
@@ -1946,19 +1959,22 @@ export class TamburService {
       // Önceki kesim de initialQty=currentQty yaptığı için iki decrement aynı sonucu verir.
       // Aşımda (cutLength > currentQty) decrement negatife düşer → bunun yerine topu
       // tamamen tüket (currentQty/initialQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
-      // F128: guarded-decrement = atomik claim. WHERE'e status + shipmentId:null
-      // eklenerek pre-tx (check-then-act) statü/rezervasyon kontrolü tx içine alınır:
-      // eşzamanlı sevkiyat rezervasyonu (shipping updateMany {id, shipmentId:null,
-      // status:WAREHOUSE}) araya girerse WHERE eşleşmez → P2025 → 409 (rezerve top kesilmez).
+      // F128: guarded-decrement = atomik claim. WHERE'e status + shipmentId:null +
+      // sackId:null eklenerek pre-tx (check-then-act) statü/rezervasyon/çuval kontrolü
+      // tx içine alınır: eşzamanlı sevkiyat rezervasyonu (shipping updateMany {id,
+      // shipmentId:null, status:WAREHOUSE}) ya da ÇUVALA OKUTMA (scanIntoSack
+      // updateMany {id, sackId:null}) araya girerse WHERE eşleşmez → P2025 → 409.
+      // `sackId: null` şart: çuvaldaki topun metrajını eksiltmek çuval içeriğini
+      // sessizce bozar (2026-07-30 hayalet-içerik bulgusu).
       let updatedParent;
       try {
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, status: parent.status, shipmentId: null, currentQty: { gt: 0 } },
+              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null, currentQty: { gt: 0 } },
               data: { currentQty: 0, initialQty: 0 },
             })
           : await tx.roll.update({
-              where: { id: parent.id, status: parent.status, shipmentId: null, currentQty: { gte: data.cutLength } },
+              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null, currentQty: { gte: data.cutLength } },
               data: {
                 currentQty: { decrement: data.cutLength },
                 initialQty: { decrement: data.cutLength },
@@ -1970,7 +1986,7 @@ export class TamburService {
           err.code === "P2025"
         ) {
           throw AppError.conflict(
-            "Top bu sırada değişti (statü değişmiş / sevkiyata rezerve edilmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
+            "Top bu sırada değişti (statü değişmiş / çuvala okutulmuş / sevkiyata rezerve edilmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
           );
         }
         throw err;
@@ -2058,6 +2074,8 @@ export class TamburService {
       where: { id: rollId },
       include: {
         properties: { select: { propertyId: true } },
+        // Çuval kodu — aşağıdaki çuval guard'ının mesajı için.
+        sack: { select: { sackNo: true } },
       },
     });
     if (!parent) throw AppError.notFound("Top bulunamadı");
@@ -2082,9 +2100,22 @@ export class TamburService {
       throw AppError.badRequest(`Top kesime uygun değil (${parent.status})`);
     }
     // Çuvala/sevkiyata rezerve top arşivlenemez (cutWarehouseRoll ile aynı kural).
+    // ÇUVAL ÖNCE (2026-07-30): aşağıdaki mesaj zaten "çuvaldan çıkarın" diyordu ama
+    // ÇUVALI HİÇ KONTROL ETMİYORDU — mesaj doğruydu, kontrol eksikti. DEPO çuvalında
+    // `shipmentId` NULL olduğu için top TAMBUR_CONSUMED'a çekilip çuvalda kalıyordu:
+    // kartela hatasının birebir ikizi (sevkte SHIPPED'e ezilir → çift tüketim).
+    if (parent.sackId) {
+      throw AppError.badRequest(
+        sackBlockMessage(
+          parent.barcode ?? parent.id,
+          parent.sack?.sackNo ?? null,
+          "Top Kesme işlemi bitirilemez",
+        ),
+      );
+    }
     if (parent.shipmentId) {
       throw AppError.badRequest(
-        "Top bir sevkiyata rezerve edilmiş — önce sevkiyattan/çuvaldan çıkarın."
+        "Top bir sevkiyata rezerve edilmiş — önce sevkiyattan çıkarın."
       );
     }
 
@@ -2116,15 +2147,17 @@ export class TamburService {
     const result = await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM (finalize()'daki desen): tüm ön-kontroller tx DIŞINDA —
       // eşzamanlı çift çağrı ikisinde de geçer ve kalan child İKİ kez basılırdı
-      // (uuid barkodlar çakışmaz, P2002 dedup yok). Statü+shipmentId koşulu ile
-      // kaybeden 409 alır; ardışık çift çağrıyı zaten pre-check 400'lüyor.
+      // (uuid barkodlar çakışmaz, P2002 dedup yok). Statü+shipmentId+sackId koşulu
+      // ile kaybeden 409 alır; ardışık çift çağrıyı zaten pre-check 400'lüyor.
+      // `sackId: null` = pre-check'in tx-içi ikizi: araya giren `scanIntoSack` topu
+      // çuvala alırsa WHERE eşleşmez ve top TAMBUR_CONSUMED olarak çuvalda KALMAZ.
       const claim = await tx.roll.updateMany({
-        where: { id: parent.id, status: parent.status, shipmentId: null },
+        where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null },
         data: { status: RollStatus.TAMBUR_CONSUMED },
       });
       if (claim.count === 0) {
         throw AppError.conflict(
-          "Top bu sırada başka bir işlemle değişmiş (eşzamanlı kesim/çift dokunuş olabilir). Listeyi yenileyip tekrar deneyin."
+          "Top bu sırada başka bir işlemle değişmiş (eşzamanlı kesim/çift dokunuş/çuvala okutma olabilir). Listeyi yenileyip tekrar deneyin."
         );
       }
 

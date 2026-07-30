@@ -110,10 +110,50 @@ export interface SackSearchResponse {
   pagination: { nextCursor: string | null; hasMore: boolean; limit: number };
 }
 
+/**
+ * Çuvalda KAYITLI ama fiziksel olarak binada OLMAYAN top statüleri ("hayalet").
+ * Backend tek kaynağın aynası: `Teks-Erp/src/services/helpers/sack-invariants.helper.ts`
+ * → `SACK_ABSENT_STATUSES`. `SHIPPED` BİLİNÇLİ olarak YOK (sevk edilen top çuvalında
+ * kalır ve irsaliyedeki adetle tutarlı sayılır).
+ *
+ * Neden istemcide de var: backend sayım/belge yüzeylerinde bunları zaten dışlar, ama
+ * çuval dökümü onları BİLEREK gösterir — operatörün görüp çıkarabilmesi için. Rozet
+ * o dökümde "bu top burada değil" der. Backend'e yeni statü eklenirse burayı da güncelle.
+ */
+export const SACK_ABSENT_STATUSES = [
+  "CANCELLED",
+  "SCRAP",
+  "IN_PRODUCTION",
+  "AT_SUBCONTRACTOR",
+  "SUBCONTRACTOR_CONSUMED",
+  "AT_KARTELA",
+  "KARTELA_CONSUMED",
+  "TAMBUR_CONSUMED",
+] as const;
+
+/** Kısa Türkçe rozet metni — operatör "nerede?" sorusunu okuyabilsin. */
+export const sackAbsentLabels: Record<string, string> = {
+  CANCELLED: "İptal",
+  SCRAP: "Fire",
+  IN_PRODUCTION: "Üretimde",
+  AT_SUBCONTRACTOR: "Fasonda",
+  SUBCONTRACTOR_CONSUMED: "Fasonda tüketildi",
+  AT_KARTELA: "Kartelada",
+  KARTELA_CONSUMED: "Kartelaya dönüştü",
+  TAMBUR_CONSUMED: "Tamburda tüketildi",
+};
+
+/** Top fiziksel olarak çuvalda mı — `false` ise çıkarılması gerekir. */
+export function isSackAbsent(status: string | undefined): boolean {
+  return !!status && (SACK_ABSENT_STATUSES as readonly string[]).includes(status);
+}
+
 // ── Tek çuval dökümü (GET /sacks/:id/contents) — editör + arama detayı ───────
 export interface SackContentRoll {
   id: string;
   barcode: string | null;
+  /** Top statüsü — hayalet rozeti için (bkz. `isSackAbsent`). */
+  status?: string;
   currentQty: number;
   width: number | null;
   qualityGrade: string;
@@ -137,9 +177,6 @@ export interface SackContents {
   weightKg: number | null;
   /** Çuval yorumu — iç serbest not (tam metin). */
   notes: string | null;
-  /** Çuvalın KENDİ müşteri/şubesi (sevkiyattan bağımsız) — depodaki çuvalda da dolu. */
-  customer: SackCustomerRef | null;
-  branch: { id: string; code: string | null; name: string } | null;
   /** Dolu = sevkiyatta (içerik kilitli); null = depoda. */
   shipment:
     | (SackShipmentRef & {

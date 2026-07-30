@@ -34,6 +34,7 @@ import {
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
 import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
+import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, renderedBytes, shouldRasterize, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
@@ -1402,22 +1403,17 @@ export class LabelService {
    * `SHIPPED` BİLİNÇLİ olarak SAYILIR: sevk edilen top çuvalda kalır ve irsaliyedeki
    * TOP ADEDİ/METRE ile tutarlı olmalı.
    *
-   * Diğer ölü/başka-yerde statüler dışlanır. Bunlar çuvalda GERÇEKTEN bulunabilir —
-   * "çuvala girdikten sonra statüsü bozulan top" yolları var (ör. `kartela.service`
-   * kartelaya alırken `sackId` guard'ı UYGULAMIYOR → top `AT_KARTELA` olup çuvalda
-   * kalıyor). Bu liste olmadan binada olmayan mal çuval etiketine basılırdı.
+   * Diğer ölü/başka-yerde statüler dışlanır. Bunlar çuvalda GERÇEKTEN bulunabilir:
+   * "çuvala girdikten sonra statüsü bozulan top" yolları vardı — `kartela.dispatch`,
+   * `tambur.cutWarehouseRoll`, `tambur.finalizeWarehouseCut` ve `subcontractor`
+   * auto-attach `sackId` guard'ı UYGULAMIYORDU (2026-07-30'da eklendi). Guard'lar
+   * yeni hasarı durdurur ama bu filtre YİNE GEREKLİ: legacy satırlar + eşzamanlı
+   * yarış artığı için son savunma. Olmadan binada olmayan mal çuval etiketine basılır.
+   *
+   * Küme TEK KAYNAK: `helpers/sack-invariants.helper.SACK_ABSENT_STATUSES` — aynı
+   * liste liste/irsaliye/çeki sayımlarında da kullanılır (eskiden burada private bir
+   * kopyaydı ve `shipping.service`'teki kardeşinden ayrışabilirdi).
    */
-  private static readonly SACK_LABEL_EXCLUDED_STATUSES: RollStatus[] = [
-    RollStatus.CANCELLED,
-    RollStatus.SCRAP,
-    RollStatus.IN_PRODUCTION,
-    RollStatus.AT_SUBCONTRACTOR,
-    RollStatus.SUBCONTRACTOR_CONSUMED,
-    RollStatus.AT_KARTELA,
-    RollStatus.KARTELA_CONSUMED,
-    RollStatus.TAMBUR_CONSUMED,
-  ];
-
   async getSackLabel(sackId: string): Promise<ApiResponse<LabelPayload>> {
     const sack = await prisma.sack.findUnique({
       where: { id: sackId },
@@ -1429,7 +1425,7 @@ export class LabelService {
         customer: { select: { name: true } },
         branch: { select: { name: true } },
         rolls: {
-          where: { status: { notIn: LabelService.SACK_LABEL_EXCLUDED_STATUSES } },
+          where: { status: { notIn: SACK_ABSENT_STATUSES } },
           select: { currentQty: true },
         },
       },

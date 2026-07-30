@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import type { SackContentRoll } from "./types";
+import { AlertTriangle } from "lucide-react";
+import { isSackAbsent, sackAbsentLabels, type SackContentRoll } from "./types";
 
 const fmtM = (n: number) => `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
 
@@ -11,8 +12,35 @@ export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
   {
     accessorKey: "barcode",
     header: "Barkod",
-    meta: { label: "Barkod", exportValue: (r) => r.barcode ?? "Açık Kumaş" },
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.barcode ?? "Açık Kumaş"}</span>,
+    meta: {
+      label: "Barkod",
+      exportValue: (r) =>
+        `${r.barcode ?? "Açık Kumaş"}${isSackAbsent(r.status) ? ` (BURADA DEĞİL: ${sackAbsentLabels[r.status!] ?? r.status})` : ""}`,
+    },
+    // HAYALET ROZETİ: backend sayım/belge yüzeylerinde bu topu dışlar ama döküm onu
+    // BİLEREK gösterir — kartela/tambur/fason guard'larının hata mesajı operatörü tam
+    // bu ekrana yönlendiriyor ("Paketleme / Çuvallar ekranından çuvaldan çıkarın").
+    // Rozet olmadan operatör hangi topun sorunlu olduğunu göremez ve mesaj boşa düşer.
+    cell: ({ row }) => {
+      const r = row.original;
+      const absent = isSackAbsent(r.status);
+      return (
+        <span className="inline-flex items-center gap-1.5">
+          <span className={`font-mono text-xs ${absent ? "text-destructive line-through" : ""}`}>
+            {r.barcode ?? "Açık Kumaş"}
+          </span>
+          {absent && (
+            <span
+              title={`Bu top fiziksel olarak çuvalda DEĞİL (${r.status}). Çuvaldan çıkarın — sayımlara ve belgelere girmiyor, ama sevkiyat kurulumunu bloklar.`}
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {sackAbsentLabels[r.status!] ?? r.status}
+            </span>
+          )}
+        </span>
+      );
+    },
   },
   {
     id: "item",

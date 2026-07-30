@@ -20,6 +20,7 @@ import type { CursorPaginatedResponse } from "./base.service";
 import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
 import { isDailyCode } from "../utils/code-format";
 import { buildTurkishSearch } from "../utils/query-parser";
+import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
@@ -160,18 +161,24 @@ export class SackSearchService {
       : null;
 
     // Sayfa kapsamı aggregate'leri: toplam içerik + (filtre aktifse) eşleşen kısım.
+    // HAYALET DIŞLANIR (`SACK_ABSENT_STATUSES`): çuvalda kayıtlı ama fiziksel olarak
+    // binada olmayan top (kartelaya/tambura/fasona gitmiş) sayılırsa liste, çuval
+    // etiketi (label.service — aynı küme) ve irsaliye AYNI çuval için ÜÇ FARKLI top
+    // adedi basardı. Filtre `matchAgg`'a da uygulanır; yoksa içerik filtresi seçili
+    // ürünün hayaletini sayıp "eşleşen > toplam" absürtlüğü doğar.
+    const presentOnly = { status: { notIn: SACK_ABSENT_STATUSES } };
     const [allAgg, matchAgg, swatchAgg] = ids.length
       ? await Promise.all([
           prisma.roll.groupBy({
             by: ["sackId"],
-            where: { sackId: { in: ids } },
+            where: { sackId: { in: ids }, ...presentOnly },
             _count: { _all: true },
             _sum: { currentQty: true },
           }),
           hasContentFilter
             ? prisma.roll.groupBy({
                 by: ["sackId"],
-                where: { sackId: { in: ids }, ...rollFilter },
+                where: { sackId: { in: ids }, ...presentOnly, ...rollFilter },
                 _count: { _all: true },
                 _sum: { currentQty: true },
               })
@@ -232,11 +239,6 @@ export class SackSearchService {
         seq: true,
         weightKg: true,
         notes: true, // tek çuval → tam yorum (liste aksine kırpılmaz)
-        // Çuvalın KENDİ müşteri/şubesi (sevkiyattan bağımsız) — depodaki çuvalda
-        // sevkiyat yok, müşteri yine olabilir. İçerik dökümü başlığı bunu basar;
-        // aksi halde istemci listeden gelen (bayatlayabilen) prop'a mahkûm kalır.
-        customer: { select: { id: true, name: true } },
-        branch: { select: { id: true, code: true, name: true } },
         shipment: {
           select: {
             id: true,
@@ -251,6 +253,11 @@ export class SackSearchService {
           select: {
             id: true,
             barcode: true,
+            // ⚠️ HAYALET GÖRÜNÜRLÜĞÜ — bu ekran (Paketleme / Çuvallar → çuval düzenle)
+            // operatörün hayalet topu GÖRÜP ÇIKARDIĞI yerdir; guard'ların hata mesajı
+            // buraya yönlendirir. Bu yüzden liste BURADA FİLTRELENMEZ ve `status`
+            // döndürülür (istemci rozetler). Filtrelemek kaçış yolunu kapatırdı.
+            status: true,
             currentQty: true,
             width: true,
             qualityGrade: true,
@@ -313,6 +320,11 @@ export class SackSearchService {
           },
         },
         rolls: {
+          // HAYALET DIŞLANIR: çeki listesi sahada "bu çuvalda şu ürünlerden N top
+          // var" diye okunan bir arama kağıdıdır. Kartelaya/tambura gitmiş top
+          // sayılırsa operatör olmayan malı arar ve "top eksik" alarmı verir.
+          // Aynı küme etiket + liste + irsaliyede de kullanılır (tek kaynak).
+          where: { status: { notIn: SACK_ABSENT_STATUSES } },
           select: {
             currentQty: true,
             width: true,
@@ -398,6 +410,10 @@ export class SackSearchService {
         shipment: { select: { id: true, shipmentNo: true, status: true } },
         rolls: {
           orderBy: { createdAt: "asc" },
+          // HAYALET DIŞLANIR — `SACK_ABSENT_STATUSES` (SHIPPED sayılır). Döküm bir
+          // SAYIM/BELGE yüzeyi: çeki listesi ve liste aggregate'leri de aynı kümeyi
+          // eler. Elemezsek liste "3 top" derken döküm 4 satır basar (sessiz çelişki).
+          where: { status: { notIn: SACK_ABSENT_STATUSES } },
           select: {
             id: true,
             barcode: true,

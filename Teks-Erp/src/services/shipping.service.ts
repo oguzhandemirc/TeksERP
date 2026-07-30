@@ -44,6 +44,11 @@ import { readShipmentConfirmationEnabled } from "./system-setting.service";
 import { dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
 import { touchWarehouseSackTx, touchShipmentPlannedTx } from "./helpers/shipment-locks.helper";
 import {
+  NON_SACKABLE_STATUSES,
+  SACK_ABSENT_STATUSES,
+  sackBlockMessage,
+} from "./helpers/sack-invariants.helper";
+import {
   D0,
   distributeSacksToLines,
   type PoolSack,
@@ -83,22 +88,12 @@ const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carr
 const SHIPMENT_FILTER_FIELDS = ["status", "customerId", "branchId", "destination"] as const;
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
 
-// Çuvala okutulamayacak / sevke sokulamayacak top durumları. Kalite/bitmişlik GATE'i
-// YOK — envanterde fiziksel mevcut her top girer (ham STOCK, mamul WAREHOUSE,
-// 2.kalite A1_STOCK, fason dönüşü açık kumaş). Yalnız FİZİKSEL İMKÂNSIZ durumlar bloklu:
-// gitti (SHIPPED), fire (SCRAP), iptal (CANCELLED), makinede (IN_PRODUCTION), bina dışı
-// (AT_SUBCONTRACTOR/AT_KARTELA), emekli/tüketilmiş (*_CONSUMED) → bagajlanırsa çift-sayım.
-const NON_SACKABLE_STATUSES: RollStatus[] = [
-  RollStatus.SHIPPED,
-  RollStatus.SCRAP,
-  RollStatus.CANCELLED,
-  RollStatus.IN_PRODUCTION,
-  RollStatus.AT_SUBCONTRACTOR,
-  RollStatus.AT_KARTELA,
-  RollStatus.TAMBUR_CONSUMED,
-  RollStatus.SUBCONTRACTOR_CONSUMED,
-  RollStatus.KARTELA_CONSUMED,
-];
+// `NON_SACKABLE_STATUSES` + `SACK_ABSENT_STATUSES` artık `helpers/sack-invariants.helper`
+// içinde TEK kaynak (üstte import edilir). Buradaki dosya-yerel kopya kaldırıldı: aynı
+// küme `label.service`'te de (SHIPPED hariç varyantıyla) yaşıyordu ve yeni guard'lar
+// kartela/tambur/fason servislerinden erişecek — üçüncü bir kopya kaçınılmaz olarak
+// ayrışırdı. Sayım/belge yüzeyleri `SACK_ABSENT_STATUSES` (SHIPPED SAYILIR), çuvala
+// giriş/sevk guard'ları `NON_SACKABLE_STATUSES` (SHIPPED de bloklu) kullanır.
 
 // ---------------------------------------------------------------------------
 // Sequence helpers — SVK + GGAAYY + NNNN (sevkiyat), CV + GGAAYY + NNNN (çuval)
@@ -938,18 +933,24 @@ export class ShippingService {
         // operatör hangi çuvalın tartıldığını modal açmadan görmeli.
         id: true, sackNo: true, weightKg: true, weighedAt: true, branchId: true, notes: true,
         branch: { select: { id: true, code: true, name: true } },
-        rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, width: true, currentQty: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true, hex: true } } } },
+        // `status`: hayalet topu (çuvalda kayıtlı ama fiziksel olarak binada olmayan)
+        // istemci işaretleyebilsin. Top ARRAY'İ filtrelenmez — filtrelenirse operatör
+        // onu göremez ve çıkaramaz; sayaçlar aşağıda ayrıca dışlar.
+        rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, status: true, width: true, currentQty: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true, hex: true } } } },
         swatches: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
       },
     });
     const data = sacks.map((sk) => {
-      const totalQty = sk.rolls.reduce((s, r) => s.plus(r.currentQty), D0());
+      // SAYAÇLAR hayaleti DIŞLAR → çuval etiketi (label.service, aynı küme), liste ve
+      // irsaliye aynı adedi/metrajı basar. Görünüm ise hepsini gösterir (üstteki not).
+      const present = sk.rolls.filter((r) => !SACK_ABSENT_STATUSES.includes(r.status));
+      const totalQty = present.reduce((s, r) => s.plus(r.currentQty), D0());
       return {
         id: sk.id, sackNo: sk.sackNo, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
         weighedAt: sk.weighedAt, notes: sk.notes,
         branch: sk.branch,
-        rollCount: sk.rolls.length, swatchCount: sk.swatches.length, totalQty: Number(totalQty),
-        rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, width: r.width != null ? Number(r.width) : null, currentQty: Number(r.currentQty), item: r.item, color: r.color })),
+        rollCount: present.length, swatchCount: sk.swatches.length, totalQty: Number(totalQty),
+        rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, status: r.status, width: r.width != null ? Number(r.width) : null, currentQty: Number(r.currentQty), item: r.item, color: r.color })),
         swatches: sk.swatches.map((s) => ({ id: s.id, barcode: s.barcode, item: s.item, color: s.color })),
       };
     });
@@ -982,6 +983,28 @@ export class ShippingService {
         throw AppError.badRequest("Seçilen çuvallardan biri başka şubeye ait — tek sevkiyat = tek şube.");
       }
     }
+
+    // HAYALET GUARD'I (2026-07-30) — defterin DONMUŞ belgeye girmeden düzeltilebileceği
+    // SON nokta. Bu fonksiyon eskiden yalnız çuval düzeyine bakıyordu (`_count`),
+    // içindeki topların STATÜSÜNE hiç bakmıyordu: çuvalda kayıtlı ama fiziksel olarak
+    // binada olmayan top (kartelaya/tambura/fasona gitmiş) sevkiyata bağlanıyor, sevkte
+    // `SHIPPED`'e eziliyor ve şişmiş metraj irsaliyede donuyordu.
+    // Uyarıp geçmek YETMEZ: yanlış metraj hukuken bağlayıcı belgeye girer → 400.
+    const ghosts = await prisma.roll.findMany({
+      where: { sackId: { in: sackIds }, status: { in: NON_SACKABLE_STATUSES } },
+      select: { barcode: true, status: true, sack: { select: { sackNo: true } } },
+      take: 10,
+    });
+    if (ghosts.length > 0) {
+      throw AppError.badRequest(
+        "Sevkiyat kurulamaz — çuvalda kayıtlı ama fiziksel olarak binada olmayan top var: " +
+          ghosts
+            .map((g) => `${g.sack?.sackNo ?? "?"} / ${g.barcode ?? "(barkodsuz)"} → ${g.status}`)
+            .join(", ") +
+          '. "Paketleme / Çuvallar" ekranından bu topları çuvaldan çıkarın.'
+      );
+    }
+
     return { sacks, customerId: target.customerId, branchId: target.branchId };
   }
 
@@ -1349,6 +1372,31 @@ export class ShippingService {
       },
     });
     if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
+
+    // HAYALET GUARD'I — tx İÇİ, sevkiyat satır kilidi ALINDIKTAN sonra, flip'ten ÖNCE.
+    // Aşağıdaki flip `status: { not: SHIPPED }` ile ÇUVALDAKİ HER TOPU SHIPPED'e çeker;
+    // `AT_KARTELA`/`TAMBUR_CONSUMED` de ezilir ve hatanın tek kanıtı (statü) yok olur,
+    // ardından `freezeForSource` şişmiş metrajı DONDURUR.
+    // ⚠️ NEDEN filtre DEĞİL de assertion: flip'in WHERE'ine `notIn` koymak hayaleti
+    // DISPATCHED çuvalda `AT_KARTELA` olarak bırakır; `removeRollFromSack` sevkiyattaki
+    // çuvalı reddettiği için o top bir daha ÇIKARILAMAZ → onarılamaz çıkmaz. Assertion
+    // ise tx'i geri sarar: ne statü ezilir, ne belge donar, ne veri kirlenir.
+    // Ön guard `loadSacksForShipment`'te; bu, kilit altındaki taze son savunmadır.
+    const ghosts = await tx.roll.findMany({
+      where: { shipmentId, status: { in: SACK_ABSENT_STATUSES } },
+      select: { barcode: true, status: true, sack: { select: { sackNo: true } } },
+      take: 10,
+    });
+    if (ghosts.length > 0) {
+      throw AppError.badRequest(
+        "Sevk edilemez — çuvalda kayıtlı ama fiziksel olarak binada olmayan top var: " +
+          ghosts
+            .map((g) => `${g.sack?.sackNo ?? "?"} / ${g.barcode ?? "(barkodsuz)"} → ${g.status}`)
+            .join(", ") +
+          '. "Paketleme / Çuvallar" ekranından bu topları çuvaldan çıkarıp tekrar deneyin.'
+      );
+    }
+
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
     const flipped = await tx.roll.updateMany({ where: { shipmentId, status: { not: RollStatus.SHIPPED } }, data: { status: RollStatus.SHIPPED } });
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
@@ -1839,7 +1887,11 @@ export class ShippingService {
           orderBy: { seq: "asc" },
           select: {
             id: true, sackNo: true, seq: true, weightKg: true,
-            rolls: { select: { id: true, barcode: true, width: true, currentQty: true, qualityGrade: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
+            // ADLİ/DETAY görünüm — hayalet BURADA FİLTRELENMEZ, aksine `status` ile
+            // görünür kılınır: "ne oldu?" sorusunun cevabı bu ekranda okunur ve
+            // operatörün topu çuvaldan çıkarma yolu buradan geçer. Filtrelemek sorunu
+            // gizler. Sayım/belge yüzeyleri ayrıca dışlar (bkz. collectShipmentDocContent).
+            rolls: { select: { id: true, barcode: true, status: true, width: true, currentQty: true, qualityGrade: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
             swatches: { select: { id: true, barcode: true, length: true, width: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
             allocations: { select: { orderLineId: true, qty: true } },
           },
@@ -1992,7 +2044,9 @@ export class ShippingService {
           orderBy: { seq: "asc" },
           select: {
             id: true, sackNo: true, seq: true, weightKg: true, notes: true,
-            rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, qualityGrade: true, item: { select: { id: true, name: true } }, color: { select: { id: true, name: true, hex: true } } } },
+            // `status`: hayalet top görünür kalsın (array FİLTRELENMEZ — operatörün
+            // görüp çıkarabilmesi için); sayaçlar/gruplar aşağıda dışlar.
+            rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, status: true, currentQty: true, width: true, qualityGrade: true, item: { select: { id: true, name: true } }, color: { select: { id: true, name: true, hex: true } } } },
             swatches: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, item: { select: { id: true, name: true } }, color: { select: { id: true, name: true, hex: true } } } },
           },
         },
@@ -2003,7 +2057,10 @@ export class ShippingService {
     const sacks = sh.sacks.map((sk) => {
       const groups = new Map<string, { itemName: string; colorName: string | null; width: number | null; qty: Prisma.Decimal; rollCount: number }>();
       let sackQty = D0();
-      for (const r of sk.rolls) {
+      // Gruplar + sayaçlar yalnız FİZİKSEL OLARAK ÇUVALDA olan toplardan (etiket ve
+      // irsaliye ile aynı küme); `sk.rolls` görünümde tamamıyla döner.
+      const present = sk.rolls.filter((r) => !SACK_ABSENT_STATUSES.includes(r.status));
+      for (const r of present) {
         const key = `${r.item.name}|${r.color?.name ?? ""}|${r.width ?? ""}`;
         const g = groups.get(key) ?? { itemName: r.item.name, colorName: r.color?.name ?? null, width: r.width ? Number(r.width) : null, qty: D0(), rollCount: 0 };
         g.qty = g.qty.plus(r.currentQty);
@@ -2014,9 +2071,9 @@ export class ShippingService {
       return {
         id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
         notes: sk.notes,
-        rollCount: sk.rolls.length, swatchCount: sk.swatches.length, totalQty: Number(sackQty),
+        rollCount: present.length, swatchCount: sk.swatches.length, totalQty: Number(sackQty),
         contents: [...groups.values()].map((g) => ({ itemName: g.itemName, colorName: g.colorName, width: g.width, qty: Number(g.qty), rollCount: g.rollCount })),
-        rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, qty: Number(r.currentQty), width: r.width != null ? Number(r.width) : null, qualityGrade: r.qualityGrade ?? "", item: r.item, color: r.color })),
+        rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, status: r.status, qty: Number(r.currentQty), width: r.width != null ? Number(r.width) : null, qualityGrade: r.qualityGrade ?? "", item: r.item, color: r.color })),
         swatches: sk.swatches.map((s) => ({ id: s.id, barcode: s.barcode, item: s.item, color: s.color })),
       };
     });
@@ -2196,7 +2253,15 @@ async function collectShipmentDocContent(
       orders: { select: { order: { select: { orderNumber: true } } } },
       sacks: {
         orderBy: { seq: "asc" },
-        select: { seq: true, sackNo: true, weightKg: true, rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, item: { select: { name: true } }, color: { select: { name: true } } } } },
+        // ⚠️ RESMİ BELGE — hayalet toplar DIŞLANIR (`SACK_ABSENT_STATUSES`; `SHIPPED`
+        // SAYILIR). Bu filtre olmadan çuvalda kayıtlı ama fiziksel olarak binada
+        // olmayan top (kartelaya/tambura/fasona gitmiş) irsaliyenin ÇUVAL METRAJINA,
+        // ÜRÜN ÖZETİNE, ÇEKİ satırlarına ve TOPLAM METRAJA giriyordu — ve bu içerik
+        // `freezeForSource` ile DONUYORDU (müşteriye/gümrüğe giden hukuken bağlayıcı
+        // belge). Donmuş eski snapshot'lar etkilenmez (JSON olarak saklı); filtre
+        // yalnız YENİ build'leri etkiler (taslak önizleme, lazy-init reconstruction,
+        // reissue) — reissue'de düzeltilmiş çıkması İSTENEN davranıştır.
+        select: { seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, item: { select: { name: true } }, color: { select: { name: true } } } } },
       },
     },
   });
@@ -2307,7 +2372,9 @@ async function collectShipmentDerived(db: PrintedDocDb, shipmentId: string) {
         orderBy: { seq: "asc" },
         select: {
           seq: true, sackNo: true, weightKg: true,
-          rolls: { orderBy: { createdAt: "asc" }, select: { barcode: true, currentQty: true, width: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, qualityGradeRef: { select: { name: true } } } },
+          // ⚠️ RESMİ BELGE (kalite sertifikası + muhasebe fişi) — irsaliye ile BİREBİR
+          // aynı veriden türemesi zorunlu, dolayısıyla aynı hayalet filtresi.
+          rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { barcode: true, currentQty: true, width: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, qualityGradeRef: { select: { name: true } } } },
           allocations: { select: { qty: true, orderLine: { select: { unitPrice: true, currency: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } } } } } },
         },
       },

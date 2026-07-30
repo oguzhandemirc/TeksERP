@@ -17,6 +17,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
 import {
@@ -645,6 +646,41 @@ export class SubcontractorService {
     // bu adıma attach edilir; operatör ayrıca attach çağrısı yapmak zorunda kalmaz.
     const autoAttachIds = new Set<string>();
 
+    // ÇUVAL/SEVKİYAT GUARD'I (2026-07-30) — `workorder.service.attachRolls` (F5)
+    // emsali. Aşağıdaki auto-attach dalı "serbest stok"a `currentStepId === null &&
+    // status === STOCK` ile karar veriyor; ÇUVALA OKUTULMUŞ ham top da bu tanıma
+    // uyuyor (NON_SACKABLE_STATUSES'ta STOCK YOK → ham top çuvala girebilir) ve
+    // fasona gönderilebiliyordu: top AT_SUBCONTRACTOR olur ama `sackId` çuvalda
+    // kalır → sevkte SHIPPED'e ezilip çift tüketilir. Attach'in normal yolu bunu
+    // F5 ile zaten reddediyordu; açık kalan tek kapı bu auto-attach'ti.
+    // Tüm ihlaller BİRLİKTE bildirilir (operatörü tek tek dolaştırmamak için).
+    const committedRolls = rolls.filter((r) => r.sackId != null || r.shipmentId != null);
+    if (committedRolls.length > 0) {
+      const sackNoById = new Map(
+        (
+          await prisma.sack.findMany({
+            where: {
+              id: { in: committedRolls.map((r) => r.sackId).filter((x): x is string => !!x) },
+            },
+            select: { id: true, sackNo: true },
+          })
+        ).map((s) => [s.id, s.sackNo])
+      );
+      throw AppError.badRequest(
+        committedRolls
+          .map((r) =>
+            r.sackId
+              ? sackBlockMessage(
+                  r.barcode ?? r.id,
+                  sackNoById.get(r.sackId) ?? null,
+                  "fasona gönderilemez"
+                )
+              : `Top ${r.barcode ?? r.id} bir sevkiyatta — fasona gönderilemez. Önce sevkiyattan çıkarın.`
+          )
+          .join(" ")
+      );
+    }
+
     for (const r of rolls) {
       // 1) Serbest stok → otomatik attach uygunluğu
       if (r.currentStepId === null && r.status === RollStatus.STOCK) {
@@ -795,18 +831,23 @@ export class SubcontractorService {
       // & status=STOCK görülmüştü). Arada başka bir tx topu başka bir işe bağladıysa
       // (IN_PRODUCTION / currentStepId dolu) bu guardsız updateMany onu çalardı. WHERE'e
       // serbest-stok koşullarını koyup count'u doğrula → çalınma engellenir.
+      // `sackId`/`shipmentId` null koşulu pre-check'in tx-içi ikizidir: araya giren
+      // `scanIntoSack` ham topu çuvala alırsa WHERE eşleşmez → 409 (bkz. yukarıdaki
+      // çuval guard'ı; F5/attachRolls claim'i ile aynı desen).
       if (autoAttachIds.size > 0) {
         const autoAttached = await tx.roll.updateMany({
           where: {
             id: { in: Array.from(autoAttachIds) },
             status: RollStatus.STOCK,
             currentStepId: null,
+            sackId: null,
+            shipmentId: null,
           },
           data: { currentStepId: data.stepId },
         });
         if (autoAttached.count !== autoAttachIds.size) {
           throw AppError.conflict(
-            "Serbest stok toplardan biri bu sırada başka bir işe bağlandı. Listeyi yenileyip tekrar deneyin."
+            "Serbest stok toplardan biri bu sırada başka bir işe bağlandı ya da bir çuvala okutuldu. Listeyi yenileyip tekrar deneyin."
           );
         }
       }
@@ -1019,17 +1060,23 @@ export class SubcontractorService {
       // topu yanlış adımdan çalabilirdi.) Claim anında her dispatchRollId zaten
       // data.stepId'de: autoAttach toplar yukarıda (claim'den ÖNCE) bu değere
       // çekildi; zaten-bağlı toplar ön-döngüde doğrulandı. Meşru top dışlanmaz.
+      // `sackId`/`shipmentId` null: çuvala okutulmuş / sevkiyata atanmış top fasona
+      // ÇIKAMAZ (2026-07-30 hayalet-içerik guard'ı; pre-check'in tx-içi ikizi).
+      // Meşru top dışlanmaz — iş emrine bağlı top invariant gereği çuvalsızdır
+      // (attachRolls F5 sackId/shipmentId null şartı koyar).
       const claimed = await tx.roll.updateMany({
         where: {
           id: { in: dispatchRollIds },
           status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
           currentStepId: data.stepId,
+          sackId: null,
+          shipmentId: null,
         },
         data: { status: RollStatus.AT_SUBCONTRACTOR },
       });
       if (claimed.count !== dispatchRollIds.length) {
         throw AppError.conflict(
-          "Toplardan biri bu sırada başka bir sevke alınmış veya farklı bir adıma taşınmış. Listeyi yenileyip tekrar deneyin."
+          "Toplardan biri bu sırada başka bir sevke alınmış, farklı bir adıma taşınmış ya da bir çuvala okutulmuş. Listeyi yenileyip tekrar deneyin."
         );
       }
 

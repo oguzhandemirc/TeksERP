@@ -28,6 +28,7 @@ import {
   type PrintedDocDb,
 } from "./printed-document.service";
 import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
+import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -202,6 +203,10 @@ export class KartelaService {
         barcode: true,
         status: true,
         shipmentId: true,
+        // Çuval üyeliği + kod: aşağıdaki çuval guard'ı için (operatöre HANGİ çuval
+        // olduğunu söylemek gerekiyor, yoksa "bir çuvalda" mesajı sahada işe yaramaz).
+        sackId: true,
+        sack: { select: { sackNo: true } },
         currentQty: true,
         weightKg: true,
       },
@@ -252,6 +257,19 @@ export class KartelaService {
           `Top ${r.barcode ?? r.id} bir sevkiyatta — önce sevkiyattan çıkarın.`
         );
       }
+      // ÇUVAL GUARD'I (2026-07-30): "çuvalda mı?" sorusunun cevabı `sackId`'dir.
+      // Üstteki `shipmentId` kontrolü YALNIZ sevkiyata ATANMIŞ çuvalı yakalar; DEPO
+      // çuvalındaki topun `shipmentId`'si NULL olduğu için serbest sanılıyordu →
+      // top AT_KARTELA olup çuvalda kalıyor, çuval etiketi onu saymıyor ama irsaliye
+      // sayıyor, sevkte statü SHIPPED'e eziliyor (çift tüketim + şişmiş donmuş belge).
+      // OTOMATİK ÇIKARMIYORUZ: çıkarmak `resetSackWeightsTx` ile çuvalın brüt kg'sini
+      // de siler (operatörün kantar ölçümü) → yıkıcı, açık onay ister ve bu ekran onu
+      // soramaz. Emsal: `workorder.service.attachRolls` (F5) reddeder, çıkarmaz.
+      if (r.sackId) {
+        throw AppError.badRequest(
+          sackBlockMessage(r.barcode ?? r.id, r.sack?.sackNo ?? null, "kartelaya gönderilemez")
+        );
+      }
     }
 
     const totalQty = rolls.reduce(
@@ -295,21 +313,24 @@ export class KartelaService {
           userId
         );
 
-        // ATOMIK SAHİPLENME: toplar hâlâ depoda (WAREHOUSE) VE bir sevkiyata bağlı
-        // değilse (shipmentId null) AT_KARTELA'ya çek. Okuma ile yazma arasında
-        // biri (sevkiyat okutması / başka kartela sevki) kapmışsa count < beklenen
-        // olur → tüm tx geri sarılır (KartelaDispatch da oluşmaz), çift-bağ engellenir.
+        // ATOMIK SAHİPLENME: toplar hâlâ depoda (WAREHOUSE), bir sevkiyata bağlı
+        // DEĞİL (shipmentId null) VE bir çuvalda DEĞİLSE (sackId null) AT_KARTELA'ya
+        // çek. Okuma ile yazma arasında biri (çuvala okutma / sevkiyat / başka kartela
+        // sevki) kapmışsa count < beklenen olur → tüm tx geri sarılır (KartelaDispatch
+        // da oluşmaz), çift-bağ engellenir. `sackId: null` yukarıdaki pre-check'in
+        // tx-içi ikizidir: pre-check yarışı kapatmaz, bu WHERE kapatır.
         const claimed = await tx.roll.updateMany({
           where: {
             id: { in: data.rollIds },
             status: RollStatus.WAREHOUSE,
             shipmentId: null,
+            sackId: null,
           },
           data: { status: RollStatus.AT_KARTELA },
         });
         if (claimed.count !== data.rollIds.length) {
           throw AppError.conflict(
-            "Toplardan biri az önce başka bir akışa girdi (sevkiyat/başka kartela sevki) — tekrar deneyin."
+            "Toplardan biri az önce başka bir akışa girdi (çuvala okutma/sevkiyat/başka kartela sevki) — tekrar deneyin."
           );
         }
 
