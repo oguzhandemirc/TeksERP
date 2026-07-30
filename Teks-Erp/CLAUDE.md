@@ -156,6 +156,19 @@ Test altyapısı `scripts/test_*.ts` dosyalarıdır — **jest/vitest YOK, kurma
 - Fixture: seed master-data'sı business-key ile çözülür (**hardcoded UUID yazma** — reseed'de kırılır); üretilen veri `TEST-` prefix'li benzersiz kodlarla.
 - Çıktı: ✅/❌ `check(label, ok)` sayaçları + sonda `=== Sonuç: N geçti, M başarısız ===` + `process.exit(fail > 0 ? 1 : 0)`.
 - Cleanup `finally` bloğunda (test kendi yarattığını siler) + `prisma.$disconnect()`.
+- **⚠️ ÇIKIŞ: `$disconnect()` TEK BAŞINA YETMEZ.** `lib/prisma.ts` havuzu
+  `idleTimeoutMillis: 600_000` ile kuruyor → idle client handle'ı event loop'u 10 dk
+  açık tutabilir ve script "bitti ama çıkmadı" durumunda kalır (koşucu 180sn'de
+  SIGTERM'ler, test ZAMAN AŞIMI sayılır). İki geçerli kapanış: `process.exit(fail>0?1:0)`
+  (çoğu test böyle) **ya da** `await prisma.$disconnect(); await pool.end();`. Uzun
+  rapor basan scriptlerde `pool.end()` tercih edilir — `process.exit` boruya yazarken
+  stdout'u kırpabilir. (2026-07-30: `test_qc2_idempotency.ts` CI'da tam bu yüzden
+  180sn takıldı; yerelde görünmedi çünkü dev DB dolu olduğu için erken-dönüş yoluna
+  hiç girilmiyordu.)
+- **Ortamdaki veriye BAĞIMLI OLMA.** `findFirst()` ile "herhangi bir çuval/top" bulup
+  üzerine test kurma — dev DB dolu olduğu için yerelde geçer, TEMİZ CI DB'sinde düşer.
+  Fixture'ı test kendisi yaratır. (CI seed'i `npm run seed` + `npm run seed:fixtures`
+  koşar: ilki temiz fabrika, ikincisi PATOS/MAVI/MUS-001 gibi iş fixture'ları.)
 
 ## Version Gotchas
 

@@ -3,7 +3,7 @@
 // Bittikten sonra script silinebilir.
 
 import { RollOperationType } from "@prisma/client";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 
 // F266: scripts/test_*.ts sözleşmesi — check() sayaçları + '=== Sonuç ===' satırı.
 let pass = 0;
@@ -138,4 +138,13 @@ main()
     console.error(e);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  // ⚠️ `pool.end()` ŞART — `prisma.$disconnect()` TEK BAŞINA YETMEZ: `lib/prisma.ts`
+  // havuzu `idleTimeoutMillis: 600_000` ile kuruyor, yani idle client handle'ı event
+  // loop'u 10 DAKİKA açık tutabiliyor ve süreç "bitti ama çıkmadı" durumunda kalıyor.
+  // CI'da bu, "Test verisi yetersiz" ile ERKEN DÖNEN yolda tetiklendi: mesaj basıldı,
+  // sonra 180sn koşucu zaman aşımı + SIGTERM (boş DB'de birebir üretildi). Yerelde
+  // görünmüyordu çünkü dev DB dolu olduğu için erken-dönüş yoluna hiç girilmiyor.
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end().catch(() => {});
+  });

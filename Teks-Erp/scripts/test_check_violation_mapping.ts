@@ -33,6 +33,8 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const PROBE = "_test_chk_violation_probe";
+/** Testin kendi yarattığı çuval — `finally`'de silinir. */
+let probeSackId: string | null = null;
 
 /**
  * `error.middleware.extractCheckConstraint`'in BİREBİR kopyası. Middleware'den
@@ -73,8 +75,15 @@ async function run(): Promise<void> {
     `ALTER TABLE "sacks" ADD CONSTRAINT "${PROBE}" CHECK ("seq" IS NULL OR "seq" > 0) NOT VALID`,
   );
 
-  const sack = await prisma.sack.findFirst({ select: { id: true } });
-  if (!sack) throw new Error("Fixture yok: en az bir çuval gerekli (npm run seed).");
+  // ⚠️ KENDİ fixture'ını kurar — ortamda hazır çuval OLDUĞUNU VARSAYMAZ. İlk sürüm
+  // `sack.findFirst` ile mevcut bir çuval arıyordu; yerelde çalışıyordu (dev DB dolu)
+  // ama TEMİZ CI veritabanında hiç çuval olmadığı için düşüyordu. Repo kuralı: test
+  // ürettiğini kendisi yaratır ve `finally`'de siler.
+  const sack = await prisma.sack.create({
+    data: { sackNo: `TEST-CHK-${Date.now().toString().slice(-9)}` },
+    select: { id: true },
+  });
+  probeSackId = sack.id;
 
   // ── 1) ORM yolu — çıplak DriverAdapterError ────────────────────────────────
   console.log("\n=== 1) ORM yolu (prisma.sack.update) ===");
@@ -123,8 +132,10 @@ async function run(): Promise<void> {
   let uniqErr: unknown;
   try {
     // P2002 (23505) — farklı bir bütünlük hatası; CHECK dalına DÜŞMEMELİ.
-    const s = await prisma.sack.findFirst({ select: { sackNo: true } });
-    await prisma.sack.create({ data: { sackNo: s!.sackNo } });
+    // KENDİ çuvalımızın kodunu tekrar kullanıyoruz (ortamdaki rastgele bir çuvalı
+    // değil): deterministik ve temiz DB'de de çalışır.
+    const mine = await prisma.sack.findUnique({ where: { id: sack.id }, select: { sackNo: true } });
+    await prisma.sack.create({ data: { sackNo: mine!.sackNo } });
   } catch (e) {
     uniqErr = e;
   }
@@ -153,6 +164,11 @@ run()
   })
   .finally(async () => {
     await dropProbe().catch((e) => console.error("probe temizlenemedi:", e));
+    if (probeSackId) {
+      await prisma.sack.deleteMany({ where: { id: probeSackId } }).catch((e) =>
+        console.error("probe çuvalı silinemedi:", e),
+      );
+    }
     const left = await prisma.$queryRawUnsafe<unknown[]>(
       `SELECT conname FROM pg_constraint WHERE conname = '${PROBE}'`,
     );

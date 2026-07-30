@@ -125,6 +125,8 @@ async function main(): Promise<void> {
   const backupDir = path.join(root, "backups");
   const offsiteDir = path.join(root, "offsite");
   const testStart = new Date();
+  /** 12c-2'de yaratılan geçici top (restore-impact sayımı için) — finally siler. */
+  let impactRollId: string | null = null;
 
   // Env'i import'tan ÖNCE kur (yukarıdaki not).
   process.env.BACKUP_DIR = backupDir;
@@ -328,7 +330,29 @@ async function main(): Promise<void> {
     // --- 12c-2) ÇOK ESKİ cutoff → sayımlar > 0 olmalı.
     // Bu kontrol olmadan 12b trivially geçerdi: bir hata yüzünden tüm sayımlar
     // sessizce 0 dönse de "gelecek cutoff → 0" iddiası tutardı. Burada sorguların
-    // gerçekten koştuğunu ve filtrenin çalıştığını kanıtlıyoruz (seed verisi var).
+    // gerçekten koştuğunu ve filtrenin çalıştığını kanıtlıyoruz.
+    //
+    // ⚠️ TOPU TEST KENDİ YARATIR — eski hâli "seed verisi var" varsayıyordu ama NE
+    // `npm run seed` NE `seed:fixtures` top üretir; dev DB'deki toplar elle/demo
+    // işlerden kalmaydı. Sonuç: yerelde geçiyor, TEMİZ CI DB'sinde "yeni top sayısı > 0"
+    // düşüyordu (2026-07-30 CI bulgusu). `finally` siler.
+    const impactItem = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
+    if (impactItem) {
+      const r = await prisma.roll.create({
+        data: {
+          barcode: `TEST-IMPACT-${Date.now().toString().slice(-9)}`,
+          itemId: impactItem.id,
+          initialQty: 1,
+          currentQty: 1,
+          qualityGrade: "1.KALITE",
+          width: 100,
+          status: "WAREHOUSE",
+          entrySource: "SUPPLIER_RECEIPT",
+        },
+        select: { id: true },
+      });
+      impactRollId = r.id;
+    }
     const ancientName = "elden_2021.dump";
     const ancientPath = path.join(backupDir, ancientName);
     fs.copyFileSync(result.file!, ancientPath);
@@ -417,8 +441,14 @@ async function main(): Promise<void> {
       broken.message,
     );
   } finally {
-    // Test kendi yarattığını siler: geçici klasör + bu koşumun audit satırları.
+    // Test kendi yarattığını siler: geçici klasör + bu koşumun audit satırları
+    // + 12c-2'nin geçici topu.
     fs.rmSync(root, { recursive: true, force: true });
+    if (impactRollId) {
+      await prisma.roll.deleteMany({ where: { id: impactRollId } }).catch(() => {
+        /* best-effort — testi düşürmez */
+      });
+    }
     try {
       await prisma.systemLog.deleteMany({
         where: {
