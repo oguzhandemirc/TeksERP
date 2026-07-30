@@ -2577,8 +2577,12 @@ export class InventoryService {
         opts?.permissions !== undefined &&
         !matchesPermission(opts.permissions, "roll:manual-adjust")
       ) {
+        // Mesaj İKİ kitleye birden konuşur: depo/mobil operatörü için durum bilgisi
+        // ("bu top üretimde, senin yetkin serbest stok içindir"), süpervizör için
+        // eksik izin. Yalnız izin adı yazmak depo operatörünü asla alamayacağı bir
+        // yetkiye yönlendirirdi (2026-07-31 düzeltmesi).
         throw AppError.forbidden(
-          "Bu top serbest satılabilir stokta değil (üretimde) — niteliklerini düzeltmek için 'roll:manual-adjust' yetkisi gerekli.",
+          "Bu top serbest satılabilir stokta değil (üretimde) — yalnız süpervizör düzeltebilir ('roll:manual-adjust' yetkisi).",
         );
       }
       if (!data.reason || data.reason.trim().length < 3) {

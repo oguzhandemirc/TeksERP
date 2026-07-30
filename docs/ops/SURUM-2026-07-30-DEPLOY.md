@@ -10,6 +10,52 @@ migration'ları, doğrulama sorguları ve duman testleri var.
 
 ---
 
+## 0a) ⚠️ BACKEND'İ TEK BAŞINA DEPLOY ETME — Electron ile BİRLİKTE gider
+
+Bu sürümde **iş emri kapatma sözleşmesi değişti**. Eski davranış: istasyonda top
+varsa kapatma reddedilirdi (`canComplete=false`). Yeni davranış: kapatma **engellenmez**,
+her top için karar (dispozisyon) istenir.
+
+**Yalnız backend güncellenirse ne olur:** eski Electron kurulumu `complete-preview`den
+gelen `canComplete=true`yi görüp **"İş emrini kapat" düğmesini AÇAR**, ama gövdesiz
+istek atar ve yeni backend reddeder:
+
+```
+400 — "İşlemde N top var, 0 dispozisyon gönderildi — liste bu sırada değişti."
+```
+
+Operatör için görünen tablo: *düğme aktif ama her basışta anlamsız hata*. Sessiz veri
+bozulması YOK (istek tamamen reddedilir), ama iş emri kapatma **kullanılamaz** hale gelir.
+
+→ **Backend + Electron aynı pencerede deploy edilir.** Mobil bu akışa girmiyor
+(iş emri kapatma yalnız Electron'da), mobil eski sürümde kalabilir.
+
+**Geri alma:** backend rollback yeterli — kapatma sözleşmesi şema değil kod
+seviyesindedir, `20260730170000` index'i kalsa da eski kod çalışır.
+
+---
+
+## 0b) Davranış değişiklikleri — operatöre ÖNCEDEN söyle
+
+Bunlar hata değil, bilinçli değişiklik. Deploy sabahı destek çağrısı gelmesin diye
+vardiya amirine önceden geçilmeli:
+
+| Ne değişti | Eski | Yeni |
+|---|---|---|
+| **İş emri kapatma** | İstasyonda top varsa reddederdi | Her top için karar sorar (ham stok / bitmiş depo / 2. kalite / fire / hatalı kayıt / yeni iş emrine devret). Fasondaki top hâlâ engeller. Karar veriyorsa `roll:manual-adjust` gerekir. |
+| **Konumu Düzelt** | İptal/devredilmiş iş emrinde de çalışırdı → top "canlı ama kimse okutamaz" çıkmazına düşerdi | İptal/devredilmiş iş emrinde **reddedilir** (409) |
+| **Top ekranındaki 3 buton** | "Etiket Bas/Önizle" + "Yeniden Etiketle/Düzenle" + "Manuel Düzelt" | **2 buton**: "Etiket" (önizle/bas/farklı müşteriye bas) ve "Düzelt" (renk/metraj/kalite/en/özellik + gerekiyorsa sebep) |
+| **Envanter tarih kolonu** | "Tarih" = oluşturma | Ham Stok'ta "Giriş", diğer sekmelerde **"Son İşlem"**; liste ona göre sıralı (bugün depoya giren top artık en üstte) |
+| **Metraj kolonu** | `700 / 800` (iki sayı) | Yalnız **700** — giriş metrajı detay panelinde |
+| **Üretimdeki topu düzeltme** | Depo operatörü "serbest stokta değil" hatası alırdı | Yine reddedilir ama **403** + "yalnız süpervizör düzeltebilir". Süpervizör artık üretimdeki topun **metrajını da** düzeltebiliyor (eski boşluk). |
+
+**Yeni permission YOK** — `roll:manual-adjust` zaten seed'de mevcuttu; canlı DB'ye
+INSERT gerekmez. Yalnız kimlerin bu izne sahip olduğunu bir kez gözden geçir:
+üretimdeki topu düzeltebilmesi ve dispozisyonlu kapatma yapabilmesi gereken
+süpervizörlerde olmalı.
+
+---
+
 ## 0) VARDİYA DIŞI ZORUNLU
 
 `20260730170000_roll_status_updatedat_index` **`rolls` tablosuna index ekliyor** →
@@ -139,6 +185,20 @@ FROM "_prisma_migrations" WHERE migration_name LIKE '20260730%' ORDER BY migrati
 - [ ] **Sevk irsaliyesi baskısı** (`resolveLiveRowNotes` — her baskıda koşan yol)
 - [ ] Çuval **arama** + **çeki listesi** + **top konumu**
 - [ ] Envanter sekmelerinde "Son İşlem" sıralaması hızlı (yeni index)
+- [ ] **Depoya alınan top listede ÜSTTE:** bir topu depoya al (kapatma dispozisyonu ya
+      da "İstasyondan Kurtar") → Envanter → Bitmiş Depo'da **1. sırada**. Eski hatanın
+      testi budur: statü doğruydu ama top 5000 satırın altında kalıyordu.
+- [ ] **İş emri kapatma (dispozisyon):** istasyonda topu olan bir iş emrini kapat →
+      her top için karar sorulmalı, sebep zorunlu, karar verilmeden düğme kilitli.
+      "Yeni iş emrine devret" seçilirse ayrıca **açık onay kutusu** çıkmalı.
+- [ ] **Kapatma yetki kapısı:** `roll:manual-adjust` OLMAYAN kullanıcıda aynı diyalog
+      dispozisyon formu yerine yetki uyarısı göstermeli (403'e koşmadan).
+- [ ] **Konumu Düzelt guard'ı:** iptal edilmiş bir iş emrinde konum düzeltmeyi dene →
+      kırmızı blok + düğme kilitli (409).
+- [ ] **Tek "Düzelt" diyaloğu:** barkodLU bir topta ve **barkodSUZ açık kumaşta** açılıyor
+      (ikincisi `GET /api/rolls/:id/relabel-context` yolunu doğrular — eski "Manuel
+      Düzelt"in tek üstünlüğü buydu, kaybolmamalı).
+- [ ] **Etiket diyaloğunda "farklı müşteri için bas"** bölümü görünüyor (istasyondan taşındı).
 - [ ] **Hayalet guard'ı:** çuvaldaki bir topu kartelaya göndermeyi dene → Türkçe 400 + çuval kodu
 - [ ] **Tartı:** ⚖ ile tart → kaydediliyor; Cihaz Kaydı'ndan kantarın "simülasyon"unu AÇ → tartı **400** veriyor, ⋮ → "Elle kg gir" çalışıyor
 - [ ] Çuval detayında tartı **kaynağı rozeti** görünüyor (elle girilende "elle girildi")
