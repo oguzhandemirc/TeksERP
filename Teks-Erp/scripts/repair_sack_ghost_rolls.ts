@@ -31,8 +31,11 @@ import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { touchWarehouseSackTx } from "../src/services/helpers/shipment-locks.helper";
 import { SACK_ABSENT_STATUSES } from "../src/services/helpers/sack-invariants.helper";
+import { shippingService } from "../src/services/shipping.service";
 
 const APPLY = process.argv.includes("--apply");
+/** Sınıf B (PLANNED sevkiyattaki çuval) onarımı — canlı sevkiyatı geçici bozar, opt-in. */
+const REPAIR_PLANNED = process.argv.includes("--planned");
 
 /** Onarımı bir kullanıcıya atfetmek için: --user <userId> (yoksa SYSTEM). */
 function argValue(flag: string): string | undefined {
@@ -160,11 +163,14 @@ async function main() {
   classA.forEach((g) => console.log(line(g)));
 
   console.log(
-    `\n【B】 PLANNED sevkiyattaki çuvalda — ELLE: ${classB.length}` +
+    `\n【B】 PLANNED sevkiyattaki çuvalda — \`--planned\` ile ONARILABİLİR: ${classB.length}` +
       (classB.length
-        ? "\n     Reçete: Sevk Kapısı'ndan çuvalı sevkiyattan ÇIKAR → Paketleme/Çuvallar'dan\n" +
-          "     topu çuvaldan çıkar → çuvalı sevkiyata GERİ EKLE. (Tahsis/kilit yazımı\n" +
-          "     servis işi olduğu için script dokunmuyor.)"
+        ? "\n     Script servisleri sırayla çağırır (ham UPDATE DEĞİL): çuvalı sevkiyattan\n" +
+          "     ÇIKAR → hayaletleri çuvaldan çıkar → çuvalı sevkiyata GERİ EKLE. Böylece\n" +
+          "     tahsisler yeniden hesaplanır (writeShipmentAllocationsTx) ve sipariş\n" +
+          "     karşılanması hayaletin metresiyle şişmiş kalmaz.\n" +
+          "     ⚠️ Canlı sevkiyatı GEÇİCİ bozar (çuval kısa süre depoya döner, seq yeniden\n" +
+          "     atanır, çuvalın brüt kg'si sıfırlanır) → ayrı onay: --apply --planned"
         : "")
   );
   classB.forEach((g) => console.log(line(g)));
@@ -287,7 +293,83 @@ async function main() {
     fixed++;
   }
 
-  console.log(`\n✅ Onarıldı: ${fixed} top çuvaldan çıkarıldı (statüleri değişmedi)`);
+  // ---------------------------------------------------------------------------
+  // Sınıf B — PLANNED sevkiyattaki çuvalda kalan hayaletler (yalnız `--planned`)
+  // ---------------------------------------------------------------------------
+  // `removeRollFromSack` sevkiyattaki çuvalı reddeder → doğrudan onarılamaz. Doğru
+  // yol SERVİS çağrılarını sıralamaktır (ham UPDATE DEĞİL): çuvalı sevkiyattan çıkar
+  // → hayaletleri çuvaldan çıkar → çuvalı sevkiyata geri ekle. Her adım kendi
+  // guard'ından + audit'inden geçer; ÖNEMLİSİ `removeSackFromShipment` ve
+  // `addSacksToShipment` TAHSİSLERİ YENİDEN HESAPLAR (`writeShipmentAllocationsTx`) —
+  // ham UPDATE bunu yapmaz ve sipariş karşılanması hayaletin metresiyle ŞİŞMİŞ kalırdı.
+  //
+  // ⚠️ NEDEN AYRI BAYRAK: bu yol canlı bir sevkiyatı GEÇİCİ olarak bozar (çuval kısa
+  // süre depoya döner, `seq` yeniden atanır, çuvalın brüt kg'si sıfırlanır). Operatör
+  // o sevkiyatla çalışıyorsa görünen içerik değişir → bilinçli opt-in.
+  //
+  // ⚠️ SIRA ÖNEMLİ: çuvaldaki TÜM hayaletler geri eklemeden ÖNCE çıkarılır; aksi halde
+  // `addSacksToShipment` → `loadSacksForShipment` guard'ı kalan hayalet yüzünden 400 verir.
+  //
+  // ⚠️ BU ONARIM KİLİTTEN ÖNCE YAPILMALI: `rolls_sackId_status_present` CHECK'i
+  // eklendikten sonra `removeSackFromShipment`'in `roll.updateMany({shipmentId:null})`
+  // adımı hayalet satıra dokunduğu için 23514 verir ve bu yol TIKANIR.
+  let plannedFixed = 0;
+  if (classB.length > 0 && REPAIR_PLANNED) {
+    console.log(`\n── Sınıf B onarımı (PLANNED sevkiyat) ──`);
+    const bySack = new Map<string, typeof classB>();
+    for (const g of classB) bySack.set(g.sackId!, [...(bySack.get(g.sackId!) ?? []), g]);
+
+    for (const [sackId, ghosts] of bySack) {
+      const first = ghosts[0]!;
+      const shipmentId = first.sack?.shipmentId ?? null;
+      const sackNo = first.sack?.sackNo ?? sackId;
+      if (!shipmentId) {
+        skipped.push({ ref: sackNo, why: "sevkiyat bağı bu sırada kayboldu" });
+        continue;
+      }
+      try {
+        await shippingService.removeSackFromShipment(shipmentId, sackId, ACTOR);
+        for (const g of ghosts) {
+          await shippingService.removeRollFromSack({ rollId: g.id }, ACTOR);
+          await AuditService.log({
+            userId: ACTOR,
+            action: "UPDATE",
+            tableName: "ROLL",
+            recordId: g.id,
+            oldData: { sackId, sackNo, status: g.status, shipmentId },
+            newData: {
+              kind: "SACK_GHOST_REPAIR",
+              sackId: null,
+              status: g.status,
+              script: "repair_sack_ghost_rolls",
+              mode: "planned",
+            },
+          });
+          plannedFixed++;
+        }
+        await shippingService.addSacksToShipment(shipmentId, [sackId], ACTOR);
+        console.log(`  ✅ ${sackNo}: ${ghosts.length} hayalet çıkarıldı → çuval sevkiyata geri eklendi`);
+      } catch (e) {
+        // Yarıda kalırsa çuval DEPODA kalmış olabilir — sessiz bırakma.
+        skipped.push({
+          ref: sackNo,
+          why:
+            `${(e as Error).message} — ⚠️ çuval sevkiyata GERİ EKLENMEMİŞ olabilir; ` +
+            `Sevk Kapısı'ndan kontrol edin`,
+        });
+      }
+    }
+  } else if (classB.length > 0) {
+    console.log(
+      `\nⓘ Sınıf B (${classB.length} top) ONARILMADI — bu yol canlı sevkiyatı geçici bozduğu\n` +
+        `  için ayrı onay ister:  npx tsx scripts/repair_sack_ghost_rolls.ts --apply --planned`,
+    );
+  }
+
+  console.log(
+    `\n✅ Onarıldı: ${fixed} top çuvaldan çıkarıldı (statüleri değişmedi)` +
+      (plannedFixed > 0 ? ` · sınıf B: ${plannedFixed} top` : ""),
+  );
   if (skipped.length) {
     console.log(`⚠️  Atlandı: ${skipped.length}`);
     skipped.forEach((s) => console.log(`  ${s.ref} — ${s.why}`));

@@ -14,6 +14,7 @@
 // Bu yüzden mevcut hiçbir test dosyasının sahibi değil, ayrı dosyada yaşar.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
+import { withSackConstraintSuspended } from "./fixture-sack-constraint";
 import { shippingService } from "../src/services/shipping.service";
 import { kartelaService } from "../src/services/kartela.service";
 import { TamburService } from "../src/services/tambur.service";
@@ -132,7 +133,13 @@ async function makeSackWith(barcodes: string[]): Promise<string> {
  *  çıkarmadan boz (raw update, servis atlanarak). Guard'lar bunu artık üretmez;
  *  ama production'da geçmişten kalmış satırlar var ve savunmalar onları yakalamalı. */
 async function makeGhost(rollId: string, status: RollStatus): Promise<void> {
-  await prisma.roll.update({ where: { id: rollId }, data: { status } });
+  // `rolls_sackId_status_present` CHECK'i eklendiği gün bu yazım imkânsız olur —
+  // yardımcı kilidi o an için askıya alır (kilit yokken hiçbir şey yapmaz). Testin
+  // amacı tam da kilidin ENGELLEYECEĞİ durumu üretip savunmaların onu yakaladığını
+  // kanıtlamak olduğu için bu muafiyet zorunlu.
+  await withSackConstraintSuspended(() =>
+    prisma.roll.update({ where: { id: rollId }, data: { status } }),
+  );
 }
 
 async function run(): Promise<void> {

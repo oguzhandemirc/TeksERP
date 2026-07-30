@@ -180,5 +180,60 @@ Notlar:
       Bu sürümde bilgisayarın kendi "simülasyon" anahtarı KALDIRILDI; yalnız COM
       portu tanımlı PC'ler yerel kantarı kullanmaya devam eder. Sadece-simülasyon
       tanımlı bir PC varsa otomatik olarak Cihaz Kaydı'ndaki kantara düşer.
-- [ ] **DB emniyet kilidi** (`rolls` üzerinde CHECK) henüz EKLENMEDİ. Ön koşulu:
-      §7 taraması **0 satır** çıkmalı. Hata mesajı yolu hazır (23514 → Türkçe 409).
+### DB emniyet kilidi — ÖN KOŞULLAR ÇÖZÜLDÜ, kilit HENÜZ EKLENMEDİ
+
+`rolls_sackId_status_present` CHECK'i ("`sackId` doluysa statü fiziksel-olarak-çuvalda
+olmalı") uygulama guard'larının altına bir kat daha koyar. **Bilerek ertelendi**; açmak
+için gereken her şey hazır:
+
+| Ön koşul | Durum |
+|---|---|
+| 23514 → Türkçe 409 eşlemesi (yoksa opak 500 + teşhis edilemez audit) | ✅ yapıldı, gerçek PG hatasıyla test edildi (`test_check_violation_mapping.ts`) |
+| Hayalet üreten testlerin kilitle yaşayabilmesi | ✅ `scripts/fixture-sack-constraint.ts` — kilit varsa askıya alır, yoksa no-op. Üç test kilit KURULUYKEN de geçiyor (prova edildi) |
+| Sınıf B (PLANNED sevkiyattaki çuval) onarılabilmesi | ✅ `repair_sack_ghost_rolls.ts --apply --planned` — servisleri sırayla çağırır, tahsisler yeniden hesaplanır |
+| **Production §7 taraması = 0 satır** | ⛔ **YAPILMADI** — tek kalan ön koşul |
+
+**Neden §7 sıfır olmalı:** `NOT VALID` mevcut satırları taramaz, yani migration
+PATLAMAZ. Ama kilit konduktan sonra **ihlalli bir satıra dokunan her UPDATE 23514
+verir** — örneğin kartela kabulü (`AT_KARTELA → KARTELA_CONSUMED`) ya da o çuvalın
+sevkiyattan çıkarılması. Yani legacy kirli satır varsa saha ortasında iş durur.
+Hata artık Türkçe ve anlaşılır, ama yine de durur.
+
+**Açma adımları (§7 sıfır çıktıktan SONRA):**
+
+```bash
+# 1) Migration dosyasını oluştur
+mkdir -p Teks-Erp/prisma/migrations/<zaman>_rolls_sack_status_present
+cat > Teks-Erp/prisma/migrations/<zaman>_rolls_sack_status_present/migration.sql <<'SQL'
+-- rolls_sackId_status_present — "sackId doluysa top FİZİKSEL olarak çuvalda olmalı".
+-- Uygulama guard'larının (kartela/tambur×2/fason + createShipment/dispatch) ALTINDA
+-- son emniyet katmanı. Statü kümesi: helpers/sack-invariants.helper.SACK_ABSENT_STATUSES.
+--
+-- NOT VALID: mevcut satırları TARAMAZ → migration patlamaz, kilit hızlı eklenir.
+-- VALIDATE BİLEREK YOK: doğrulama ayrı ve ELLE (aşağıda 3. adım) — deploy'un
+-- geri alınamaz adımına tam tablo taraması bindirmeyiz.
+ALTER TABLE "rolls" ADD CONSTRAINT "rolls_sackId_status_present"
+  CHECK ("sackId" IS NULL OR "status" NOT IN (
+    'CANCELLED','SCRAP','IN_PRODUCTION','AT_SUBCONTRACTOR',
+    'SUBCONTRACTOR_CONSUMED','AT_KARTELA','KARTELA_CONSUMED','TAMBUR_CONSUMED'
+  )) NOT VALID;
+SQL
+
+# 2) SIRA: git add ÖNCE (Teks-Erp/CLAUDE.md kuralı), sonra dev'e uygula
+git add Teks-Erp/prisma/migrations/<zaman>_rolls_sack_status_present
+cd Teks-Erp
+npx prisma db execute --file prisma/migrations/<zaman>_rolls_sack_status_present/migration.sql
+npx prisma migrate resolve --applied <zaman>_rolls_sack_status_present
+
+# 3) test_db_invariants.ts CHECK envanterine EKLE (yoksa "envanter dışı nesne" uyarısı)
+#    { table: "rolls", name: "rolls_sackId_status_present" }
+#    ⚠️ O dosya NOT VALID'i hata sayıyorsa döngüyü de güncelle.
+
+# 4) Testler kilitle geçmeli (fixture yardımcısı devrede)
+npx tsx scripts/run-all-tests.ts sack
+
+# 5) Production'da deploy sonrası ELLE doğrula (isteğe bağlı, tam tarama):
+#    ALTER TABLE "rolls" VALIDATE CONSTRAINT "rolls_sackId_status_present";
+#    → SHARE UPDATE EXCLUSIVE (okuma+yazma devam eder) + tek tam tarama.
+#      İhlal varsa HATA verir; o zaman §7'yi tekrar koş ve onar.
+```

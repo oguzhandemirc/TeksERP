@@ -18,6 +18,7 @@
 
 import { LabelKind, PrinterLanguage, RollStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { withSackConstraintSuspended } from "./fixture-sack-constraint";
 import { LabelService } from "../src/services/label.service";
 import { ShippingService } from "../src/services/shipping.service";
 import { FIELD_CATALOG, SACK_FIELDS, getUnifiedCatalog } from "../src/config/label-fields";
@@ -127,15 +128,24 @@ async function main(): Promise<void> {
     // ── 4) Ölü top sayılmaz ────────────────────────────────────────────────
     const deadBc = await makeRoll(999);
     await ship.scanIntoSack({ sackId, barcode: deadBc });
-    await prisma.roll.update({ where: { barcode: deadBc }, data: { status: RollStatus.CANCELLED } });
+    // ⚠️ HAYALET KASTEN üretiliyor (sayımın onu DIŞLADIĞINI kanıtlamanın tek yolu).
+    // `rolls_sackId_status_present` CHECK'i eklendiği gün bu satır imkânsız olur →
+    // yardımcı kilidi o an için askıya alır. Kilit henüz yokken hiçbir şey yapmaz.
+    await withSackConstraintSuspended(() =>
+      prisma.roll.update({ where: { barcode: deadBc }, data: { status: RollStatus.CANCELLED } }),
+    );
     const p2 = (await labels.getSackLabel(sackId)).data;
     check("4) ⭐ CANCELLED top rollCount/metraja SAYILMADI", p2.rollCount === 2 && p2.lengthMeters === 150, `${p2.rollCount} top / ${p2.lengthMeters}m`);
 
-    // 4b) AT_KARTELA da sayılmamalı: kartela.service `sackId` guard'ı uygulamadığı
-    // için çuvaldaki top kartelaya gidip statüsü bozulabiliyor (bina dışı mal).
+    // 4b) AT_KARTELA da sayılmamalı. NOT: `kartela.service` artık `sackId` guard'ı
+    // UYGULUYOR (2026-07-30) — yani bu durum yeni akışlarda DOĞMAZ; ama production'da
+    // guard öncesinden kalma satırlar olabilir ve filtre son savunmadır. Bu yüzden
+    // hayaleti burada elle üretmeye devam ediyoruz.
     const kartelaBc = await makeRoll(777);
     await ship.scanIntoSack({ sackId, barcode: kartelaBc });
-    await prisma.roll.update({ where: { barcode: kartelaBc }, data: { status: RollStatus.AT_KARTELA } });
+    await withSackConstraintSuspended(() =>
+      prisma.roll.update({ where: { barcode: kartelaBc }, data: { status: RollStatus.AT_KARTELA } }),
+    );
     const p3 = (await labels.getSackLabel(sackId)).data;
     check(
       "4b) ⭐ AT_KARTELA top (çuvalda ama bina dışı) SAYILMADI",

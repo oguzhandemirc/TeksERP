@@ -21,6 +21,7 @@
 
 import { RollStatus, RollEntrySource, ShipmentStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { withSackConstraintSuspended } from "./fixture-sack-constraint";
 import { ShippingService } from "../src/services/shipping.service";
 import { SackSearchService } from "../src/services/sack-search.service";
 import { AppError } from "../src/utils/app-error";
@@ -186,7 +187,11 @@ async function main(): Promise<void> {
     check("7a) hayalet ÖNCESİ: top çuvalda sayılır", withGhost.rollCount === 2, `${withGhost.rollCount}`);
 
     const ghostRoll = (await prisma.roll.findFirst({ where: { barcode: ghostBc }, select: { id: true } }))!;
-    await prisma.roll.update({ where: { id: ghostRoll.id }, data: { status: RollStatus.SCRAP } });
+    // ⚠️ HAYALET KASTEN üretiliyor — `rolls_sackId_status_present` CHECK'i eklenince
+    // bu satır imkânsız olur; yardımcı o an kilidi askıya alır (yokken no-op).
+    await withSackConstraintSuspended(() =>
+      prisma.roll.update({ where: { id: ghostRoll.id }, data: { status: RollStatus.SCRAP } }),
+    );
     const afterGhost = (await dump([sackB.id]))[0]!;
     check("7b) SCRAP top dökümden DÜŞER", afterGhost.rollCount === 1, `${afterGhost.rollCount}`);
     check("7c) hayaletin metresi totalQty'ye girmez",
