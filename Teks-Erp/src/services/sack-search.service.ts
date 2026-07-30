@@ -136,9 +136,12 @@ export class SackSearchService {
         seq: true,
         weightKg: true,
         createdAt: true,
-        // Yorum listede yalnız KIRPILMIŞ önizleme olarak döner (aşağıda notePreview) —
-        // 500 karakterlik metni sayfa başına 100 satır çekmek payload'ı şişirir
-        // (perf kuralı #7). Tam metin çuval detayında / getSackNotes ile alınır.
+        // Yorum listede yalnız KIRPILMIŞ önizleme olarak döner (aşağıda notePreview:
+        // 80 karakter) — YANIT payload'ı 500 karakter × sayfa başına 100 satır
+        // şişmesin diye. ⚠️ DB→uygulama aşamasında tam metin YİNE ÇEKİLİYOR (kırpma
+        // JS'te); kazanç ağ tarafında, sorgu tarafında DEĞİL. Sorguda da kırpmak
+        // `$queryRaw` + `LEFT(notes, N)` ister — bu ölçekte (sayfa başına ≤100 satır)
+        // değmez. Tam metin çuval detayında / `getSackNotes` ile alınır.
         notes: true,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
@@ -242,6 +245,9 @@ export class SackSearchService {
         // (gürültü) ve BELGEYE/ETİKETE hiç girmez (schema.prisma doc'u).
         // NULL = bu alandan önce tartılmış (legacy) → rozet gösterilmez.
         weightSource: true,
+        // Çuvalın ÜSTÜNDEKİ etiket bayat mı (müşteri değişimi → farklı şablon).
+        // Toplarınki `rolls[].labelDirty`; bu, ÇUVALIN KENDİ etiketi.
+        labelDirty: true,
         notes: true, // tek çuval → tam yorum (liste aksine kırpılmaz)
         shipment: {
           select: {

@@ -53,11 +53,6 @@ export function ScaleDeviceSettings() {
   const test = async () => {
     setTesting(true);
     setTestMsg(null);
-    if (cfg.simulate) {
-      setTestMsg({ ok: true, text: "Simülasyon açık — Tart her zaman sahte kg üretir." });
-      setTesting(false);
-      return;
-    }
     if (!cfg.path) {
       setTestMsg({ ok: false, text: "Önce COM portunu seçin/girin." });
       setTesting(false);
@@ -191,16 +186,12 @@ export function ScaleDeviceSettings() {
       )}
       {listErr && <p className="text-xs text-destructive">{listErr}</p>}
 
+      {/* "Simülasyon (sahte kg)" anahtarı KALDIRILDI (2026-07-30): bu PC'ye ait,
+          DB'de kaydı olmayan bir tercihti → backend göremiyor, dolayısıyla simüle
+          kantar korumasını sunucu tarafından uygulayamıyor ve her sevkiyat
+          bilgisayarını elle dolaşmak gerekiyordu. Simülasyon artık TEK yerde:
+          Tanımlar → Cihaz Kaydı (denetlenebilir + audit'li + backend'in gördüğü). */}
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs">
-          <span>Simülasyon (sahte kg — donanımsız test)</span>
-          <input
-            type="checkbox"
-            className="h-5 w-5"
-            checked={cfg.simulate ?? false}
-            onChange={(e) => setCfg({ simulate: e.target.checked })}
-          />
-        </label>
         <Button type="button" size="sm" variant="outline" onClick={() => void test()} disabled={testing}>
           {testing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
           Deneme Tartısı

@@ -110,9 +110,23 @@ export function SackEditorView({
             <RefreshCw className={cn("mr-1 h-4 w-4", contentsQ.isFetching && "animate-spin")} /> Yenile
           </Button>
           {/* Etiket kilitli çuvalda DA basılabilir — baskı içeriği değiştirmez ve
-              sevkteki çuvalın etiketi yırtılırsa yenisi gerekir. */}
-          <Button variant="outline" size="sm" onClick={() => setLabelOpen(true)}>
-            <Tag className="mr-1 h-4 w-4" /> Etiket
+              sevkteki çuvalın etiketi yırtılırsa yenisi gerekir.
+              ÇUVALIN KENDİ etiketi bayatsa (müşteri değişti + müşteriye özel çuval
+              şablonu farklı) tuş uyarı rengine döner: üstteki `StaleLabelsBanner`
+              TOPLARIN etiketini anlatır, bu ayrı bir nesnedir. Baskıda temizlenir
+              (`recordSackPrintEvent`). */}
+          <Button
+            variant={data?.labelDirty ? "default" : "outline"}
+            size="sm"
+            onClick={() => setLabelOpen(true)}
+            title={
+              data?.labelDirty
+                ? "Bu çuvalın etiketi bayat — müşteri değişti ve yeni müşterinin çuval şablonu farklı. Yeniden basın."
+                : undefined
+            }
+          >
+            <Tag className="mr-1 h-4 w-4" />
+            {data?.labelDirty ? "Etiket (yenilenmeli)" : "Etiket"}
           </Button>
           {/* İçerik dökümü — SEÇİM GEREKMEZ, çuvalın tamamını alır. Kilitli çuvalda
               da açık (Etiket/Not ile aynı gerekçe: baskı içeriği değiştirmez).

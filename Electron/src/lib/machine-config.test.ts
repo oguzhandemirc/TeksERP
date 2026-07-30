@@ -34,7 +34,10 @@ describe("machine-config yerel depo", () => {
     const { api } = installStore();
     const cfg: MachineConfig = {
       labelPrinter: { enabled: true, transport: "serial", path: "COM5", baudRate: 9600 },
-      scaleDevice: { path: "COM3", simulate: false },
+      // `simulate` alanı KALDIRILDI (2026-07-30) — yerel/DB'siz simülasyon anahtarı
+      // backend korumasının göremediği bir kaçış yoluydu; simülasyon artık yalnız
+      // Cihaz Kaydı'nda (`PeripheralDevice.simulate`) yaşıyor.
+      scaleDevice: { path: "COM3", baudRate: 9600 },
       scanner: { scanAnywhere: true },
     };
     await setStoredMachineConfig(cfg);

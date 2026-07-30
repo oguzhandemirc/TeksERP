@@ -1,0 +1,24 @@
+-- Sack.labelDirty — çuvalın ÜSTÜNDEKİ fiziksel etiket geçersiz mi (Roll.labelDirty ikizi).
+--
+-- NEDEN: çuval etiketi artık müşteriye özel şablona çözülebiliyor
+-- (`CustomerTemplateRoute` kind=SACK halkası 2026-07-30'da canlandırıldı — öncesinde
+-- ÖLÜYDÜ: admin atıyor, hiç kullanılmıyordu). Dolayısıyla bir çuvalın müşterisi
+-- değişince ÜSTÜNDEKİ basılı etiket yanlış şablonu taşıyabilir. Top etiketleri için
+-- bu işaret zaten vardı (`Roll.labelDirty`); çuvalda yoktu ve durum yalnız
+-- `reassignSackCustomer` yanıt MESAJIYLA söyleniyordu — mesaj kapanınca iz kalmıyordu.
+--
+-- Tetikleyici "müşteri değişti" DEĞİL: eski ve yeni müşteri AYNI şablona çözülüyorsa
+-- (çoğu kurulumda ikisi de rotasız → bağlam varsayılanı) etiket geçerli kalır.
+-- Gereksiz "yeniden bas" uyarısı operatörü körleştirir.
+--
+-- Eklemeli + NOT NULL + DEFAULT false → PostgreSQL 11+ bunu tablo REWRITE ETMEDEN
+-- yapar (default katalogda tutulur); ACCESS EXCLUSIVE kilidi milisaniye mertebesinde.
+-- Mevcut satırlar `false` başlar: bu DOĞRU varsayım — geçmişte müşteri değişimi
+-- olmuş olsa bile o etiketlerin bayat OLDUĞUNU bilmiyoruz (yeni işaret ileriye dönük).
+--
+-- ⚠️ ELLE YAZILDI, `prisma migrate dev` ÜRETMEDİ: `sacks` üstündeki 2 DEFERRABLE
+-- raw-SQL composite FK'yı (rolls/swatches ↔ sacks tutarlılığı) her diff'te DROP etmek
+-- ister. Uygulama: `git add` → `db execute` → `migrate resolve --applied` → DOĞRULA.
+
+-- AlterTable
+ALTER TABLE "sacks" ADD COLUMN "labelDirty" BOOLEAN NOT NULL DEFAULT false;

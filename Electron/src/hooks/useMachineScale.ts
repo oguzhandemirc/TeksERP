@@ -34,7 +34,13 @@ const SERIAL_CONNECTIONS = ["SERIAL_COM", "USB"];
 export function useMachineScale(): { scale: DeviceScale | null; isLoading: boolean } {
   const { config } = useMachineConfig();
   const local = config.scaleDevice;
-  const hasLocal = !!local?.path || !!local?.simulate;
+  // Yalnız GERÇEK yerel kantar (COM portu) backend'i devre dışı bırakır. Eskiden
+  // `|| !!local?.simulate` de vardı: sadece "simülasyon" işaretli bir PC backend'e
+  // hiç sormuyor ve sahte kg üretiyordu — üstelik bu tercih DB'de olmadığı için
+  // sunucu korumasının GÖREMEDİĞİ bir kaçış yoluydu. Simülasyon artık yalnız
+  // Cihaz Kaydı'nda (`PeripheralDevice.simulate`) yaşıyor; port tanımsız PC
+  // otomatik olarak oradaki cihaza düşer.
+  const hasLocal = !!local?.path;
 
   const q = useQuery({
     queryKey: ["peripherals", "for-device", "SCALE"],
@@ -65,7 +71,10 @@ export function useMachineScale(): { scale: DeviceScale | null; isLoading: boole
         unit: "kg",
         timeoutMs: local.timeoutMs ?? null,
         role: "PRIMARY",
-        simulate: local.simulate ?? false,
+        // Yerel kantar ARTIK ASLA simüle olamaz — bu yol yalnız gerçek COM portu
+        // tanımlıyken seçilir (yukarıdaki `hasLocal`). Sahte kg tek yerden gelir:
+        // Cihaz Kaydı'ndaki `PeripheralDevice.simulate` (backend'in gördüğü, audit'li).
+        simulate: false,
       },
       isLoading: false,
     };

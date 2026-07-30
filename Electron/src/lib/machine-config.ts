@@ -50,8 +50,14 @@ export interface ScaleDeviceConfig {
   decimals?: number;
   /** Ham → kg çarpanı (default 1). */
   factor?: number;
-  /** Sahte kg üret (donanımsız test). */
-  simulate?: boolean;
+  // `simulate` KALDIRILDI (2026-07-30): bu PC'ye ait, DB'de KAYDI OLMAYAN bir
+  // simülasyon anahtarıydı → backend onu GÖREMİYOR, dolayısıyla simüle kantar
+  // korumasını (`shipping.simulatedWeightEnabled`) sunucu tarafından uygulayamıyordu
+  // ve her sevkiyat bilgisayarını elle dolaşmak gerekiyordu. Kantar simülasyonu
+  // artık TEK yerde yaşar: Tanımlar → Cihaz Kaydı (`PeripheralDevice.simulate`),
+  // orası hem denetlenebilir hem audit'li hem de backend'in gördüğü yer.
+  // Eski blob'larda kalan `simulate` alanı okunmaz (sessizce yok sayılır); yalnız
+  // COM portu (`path`) tanımlı PC'ler yerel kantarı kullanmaya devam eder.
 }
 
 /** Seri/HID barkod tabancası (klavye-wedge YAPAMAYAN cihaz) — bu istasyona bağlı. */

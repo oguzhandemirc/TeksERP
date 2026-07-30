@@ -2544,6 +2544,13 @@ model Sack {
   /// `document-render/shipment-dispatch.html.ts` kolon setine de eklenmez.
   /// `resetSackWeightsTx` kg'yi sıfırlarken bunu da NULL'lar (bayat kaynak kalmasın).
   weightSource SackWeightSource?
+  /// Çuvalın ÜSTÜNDEKİ fiziksel etiket geçersiz mi. `Roll.labelDirty` ile aynı
+  /// mekanizma: müşteri değişince MÜŞTERİYE ÖZEL çuval şablonu (`CustomerTemplateRoute`
+  /// kind=SACK) farklıysa basılı etiket yanlış şablonu taşır. Tetikleyici "müşteri
+  /// değişti" DEĞİL — eski ve yeni müşteri AYNI şablona çözülüyorsa (ikisi de rotasız
+  /// → bağlam varsayılanı) etiket geçerli kalır ve işaretlenmez; gereksiz "yeniden bas"
+  /// uyarısı operatörü körleştirir. Baskıda temizlenir (`recordSackPrintEvent`).
+  labelDirty  Boolean   @default(false)
   // Çuval yorumu — İÇ serbest not ("kendimiz için"): "ölçü şüpheli", "çuval yırtık,
   // aktarılacak" gibi. Ne ölçüm ne içerik → iki bilinçli sonuç:
   //  1) `resetSackWeightsTx` bu alana DOKUNMAZ (içerik değişince kg bayatlar, not bayatlamaz).

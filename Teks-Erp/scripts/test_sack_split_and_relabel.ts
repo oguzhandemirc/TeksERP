@@ -63,6 +63,8 @@ async function main(): Promise<void> {
   let shipmentId: string | null = null;
   let templateId: string | null = null;
   let routeId: string | null = null;
+  let sackTemplateId: string | null = null;
+  let sackRouteId: string | null = null;
 
   const makeRoll = async (qty: number, colored: boolean): Promise<{ id: string; barcode: string }> => {
     const r = await prisma.roll.create({
@@ -168,6 +170,38 @@ async function main(): Promise<void> {
     check("B3) rotası olmayan kind (renksiz/ROLL_RAW) işaretlenMEDİ", !(await dirtyOf(c2.id)));
     check("B2b) mesaj operatörü yönlendiriyor", /yeniden basılmalı/.test(withRoute.message ?? ""), withRoute.message ?? "");
 
+    // ── B5-B8) ÇUVALIN KENDİ etiketi (Sack.labelDirty) ───────────────────────
+    // Çuval etiketi de müşteriye özel şablona çözülebiliyor (SACK rotası
+    // 2026-07-30'da canlandırıldı) → müşteri değişimi ÇUVAL etiketini de bayatlatır.
+    // Toplarınkinden AYRI nesne: ayrı bayrak, ayrı baskı yolu.
+    const sackDirty = async () =>
+      (await prisma.sack.findUnique({ where: { id: relabelSackId }, select: { labelDirty: true } }))!.labelDirty;
+    check("B5) ROLL rotası çuvalın kendi etiketini ETKİLEMEDİ", !(await sackDirty()));
+
+    // A müşterisine SACK rotası tanımla → B'ye (rotasız) geçişte çuval etiketi bayat.
+    const sackTpl = await prisma.labelTemplate.create({
+      data: { name: `TST-SPL-SACKTPL-${ts}`, kind: LabelKind.SACK, fields: [] },
+      select: { id: true },
+    });
+    sackTemplateId = sackTpl.id;
+    const sackRoute = await prisma.customerTemplateRoute.create({
+      data: { customerId: custA.id, kind: LabelKind.SACK, templateId: sackTpl.id },
+      select: { id: true },
+    });
+    sackRouteId = sackRoute.id;
+    // Şu an çuval A'da (yukarıdaki atama) → B'ye geçir: SACK şablonu A'da var, B'de yok.
+    await ship.reassignSackCustomer(relabelSackId, { customerId: custB.id });
+    check("B6) ⭐ SACK rotası değişince ÇUVALIN etiketi bayat işaretlendi", await sackDirty());
+
+    // Baskı bayrağı temizler (recordSackPrintEvent) — Roll emsali.
+    const { LabelService: LS } = await import("../src/services/label.service");
+    await new LS().recordSackPrintEvent(relabelSackId);
+    check("B7) ⭐ çuval etiketi basılınca bayrak TEMİZLENDİ", !(await sackDirty()));
+
+    // Aynı müşteriye yeniden atama → şablon değişmiyor → DOKUNULMAZ.
+    await ship.reassignSackCustomer(relabelSackId, { customerId: custB.id });
+    check("B8) şablon değişmeyen atama çuval etiketini bayatlatMADI", !(await sackDirty()));
+
     // ── C) ⭐ TOPLU BASKI müşteri bağlamı — tuzağın kapandığı assert ──────────
     // Şablon çözümü ön-yükleme haritasından geliyor (customerTemplateByKey). Hedef
     // müşteri o haritaya tohumlanmazsa baskı SESSİZCE varsayılan şablona düşer.
@@ -208,7 +242,9 @@ async function main(): Promise<void> {
     check("C3) rotası olmayan kind (ROLL_RAW) müşteri şablonuna KAYMADI", !rawForA.includes(MARKER));
   } finally {
     if (routeId) await prisma.customerTemplateRoute.deleteMany({ where: { id: routeId } });
+    if (sackRouteId) await prisma.customerTemplateRoute.deleteMany({ where: { id: sackRouteId } });
     if (templateId) await prisma.labelTemplate.deleteMany({ where: { id: templateId } });
+    if (sackTemplateId) await prisma.labelTemplate.deleteMany({ where: { id: sackTemplateId } });
     if (sackIds.length) await prisma.sack.updateMany({ where: { id: { in: sackIds } }, data: { shipmentId: null, seq: null } });
     if (rollIds.length) await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null, shipmentId: null } });
     if (rollIds.length) await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });

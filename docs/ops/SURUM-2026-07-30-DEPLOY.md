@@ -1,0 +1,184 @@
+# Sürüm 2026-07-30 — Deploy Reçetesi
+
+Bu sürüme **ÖZGÜ**, kopyala-yapıştır reçete. Genel kurallar `MIGRATION-DEPLOY.md`
+(kanonik sıra) ve `URETIM-KONTROL-LISTESI.md`'de; burada yalnız **bu sürümün**
+migration'ları, doğrulama sorguları ve duman testleri var.
+
+> **Neden ayrı dosya:** bu sürüm 5 migration taşıyor ve üçü aylardır bekliyordu
+> (git'e hiç girmemişlerdi). Bilgi üç dokümana dağılmış durumdaydı; deploy anında
+> tek yerden okunabilmeli.
+
+---
+
+## 0) VARDİYA DIŞI ZORUNLU
+
+`20260730170000_roll_status_updatedat_index` **`rolls` tablosuna index ekliyor** →
+yazma kilidi alır. `prisma migrate deploy` bekleyen migration'ları **TOPLU** uygular;
+"ucuzları gündüz, index'i geceye" **mümkün değil** (dosyayı dizinden çıkarmak drift
+yaratır). Dolayısıyla **tüm sürüm gece/hafta sonu**.
+
+`CREATE INDEX CONCURRENTLY` bu mimaride kullanılamaz: `migrate deploy` her migration
+dosyasını tek transaction'da koşar, `CONCURRENTLY` transaction içinde `25001` verir.
+Migration dosyası zaten `SET statement_timeout = 0` ile başlıyor (app DB'sinde
+`statement_timeout=50s` aktif ve uzun DDL'i keserdi).
+
+---
+
+## 1) Geliştirme makinesinde — deploy ÖNCESİ
+
+```bash
+cd /Users/oad/Documents/projeler/AdnanSahin
+
+# Commit hijyeni (migration ya da test commit'lenmemişse deploy SESSİZCE eksik gider)
+node scripts/check-migrations.mjs        # ✅ beklenir
+cd Teks-Erp && npx tsx scripts/test_migration_hygiene.ts
+
+# Temiz-DB provası — bu sürümün migration'ları sıfırdan kuruluyor mu?
+createdb teks_deploy_probe
+DATABASE_URL="postgresql://<kullanıcı>@localhost:5432/teks_deploy_probe?schema=public" \
+  JWT_SECRET="ci-probe-not-a-real-secret" npx prisma migrate deploy
+# → "All migrations have been successfully applied."
+dropdb teks_deploy_probe
+```
+
+---
+
+## 2) Hasar taraması + onarım (deploy'u BEKLEMEZ)
+
+Bu sürüm "hayalet çuval içeriği" hatasını kapatıyor (çuvaldaki top kartelaya/tambura/
+fasona gidebiliyor, çuvalda kayıtlı kalıyor, sevkte `SHIPPED`'e eziliyordu → irsaliye
+metrajı şişiyordu). **Geçmişte olmuş mu bilinmiyor.** Scriptler `tsx` ile koştuğu için
+uygulama deploy'u gerekmez; production DATABASE_URL yeterli.
+
+```bash
+# a) Teşhis — SALT OKUNUR
+psql "$PROD_DATABASE_URL" -f Teks-Erp/scripts/consistency-check.sql
+#    §7  = şu an çuvalda sıkışmış hayaletler
+#    §7b = GEÇMİŞ çift-sayım (sevk edildi VE kartelaya/fasona gitti) → GERİ ALINAMAZ
+#    §7c = simetri kontrolü (normalde 0)
+
+# b) Onarım — önce RAPOR, sonra uygula
+cd Teks-Erp
+DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/repair_sack_ghost_rolls.ts
+#    → A/B/C/D/E sınıfları listelenir; §E tartısı sıfırlanacak çuvalları TEK TEK yazar
+DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/repair_sack_ghost_rolls.ts --apply
+```
+
+> **Zamanlama:** onarımı **deploy penceresinin hemen öncesinde** koş. Guard'lar canlıya
+> çıkana kadar yeni hayalet doğabilir. Kalıntı riski kabul edilebilir: yeni sürümdeki
+> `createShipment`/`dispatch` blokları somut Türkçe mesajla yakalar.
+>
+> **Sınıf D çıkarsa** (sevk edildi VE dışarıya da gitti): geri alınamaz, irsaliye
+> donmuş. Script dokunmaz — düzeltme yalnız `reissue` (gerekçeli revizyon) ile insan
+> kararıdır.
+
+---
+
+## 3) Deploy (production sunucu, vardiya dışı)
+
+```powershell
+# 1) YEDEK — ELLE, ZORUNLU (otomatik premigrate_* artık üretilmiyor)
+#    Panel → Sistem → Yedekler → "Şimdi yedek al" → rotasyondan çıkar:
+Rename-Item ...\backups\tekserp_<zaman>.dump premigrate_2026-07-30_<zaman>.dump
+
+# 2) KANONİK SIRA (build, migrate'ten ÖNCE — geri alınamaz adım en sona)
+git pull
+npm install
+npm run prisma:generate
+npm run build              # ← burada patlarsa DUR: DB'ye HİÇ dokunulmadı, temiz abort
+npm run prisma:migrate     # ← GERİ ALINAMAZ eşik (5 migration birlikte)
+pm2 restart teks-erp-backend
+pm2 save
+```
+
+### Bu sürümdeki migration'lar
+
+| Migration | Ne yapar | Risk |
+|---|---|---|
+| `20260730120000_add_sack_notes` | `sacks.notes` (VarChar 500, nullable) | Yok — rewrite yok |
+| `20260730120500_add_label_kind_sack` | `LabelKind` enum'a `SACK` | Yok — geri alınamaz ama zararsız |
+| `20260730170000_roll_status_updatedat_index` | `rolls(status, updatedAt)` index | **Yazma kilidi** → vardiya dışı |
+| `20260730190000_sack_weight_source` | `SackWeightSource` enum + `sacks.weightSource` | Yok — nullable, DEFAULT yok |
+| `20260730200000_sack_label_dirty` | `sacks.labelDirty` (bool, DEFAULT false) | Yok — PG 11+ rewrite etmez |
+
+---
+
+## 4) Doğrulama SQL'i (salt-okunur)
+
+```sql
+-- a) sacks.notes
+SELECT column_name, data_type, character_maximum_length, is_nullable
+FROM information_schema.columns WHERE table_name='sacks' AND column_name='notes';
+-- beklenen: notes | character varying | 500 | YES
+
+-- b) LabelKind enum'da SACK
+SELECT string_agg(e.enumlabel, ', ' ORDER BY e.enumsortorder) FROM pg_enum e
+JOIN pg_type t ON t.oid=e.enumtypid WHERE t.typname='LabelKind';
+-- beklenen: ROLL_RAW, ROLL_FINISHED, SWATCH, SACK
+
+-- c) index VAR ve GEÇERLİ (yarıda kesilmemiş)
+SELECT c.relname, i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
+WHERE c.relname='rolls_status_updatedAt_idx';
+-- beklenen: t   ← indisvalid=f ise DROP INDEX + yeniden kur
+
+-- d) weightSource + labelDirty
+SELECT column_name, udt_name, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name='sacks' AND column_name IN ('weightSource','labelDirty');
+-- beklenen: weightSource | SackWeightSource | YES | (boş)
+--           labelDirty   | bool             | NO  | false
+
+-- e) BEŞ migration gerçekten KAYITLI ve BİTMİŞ
+SELECT migration_name, applied_steps_count, finished_at, rolled_back_at
+FROM "_prisma_migrations" WHERE migration_name LIKE '20260730%' ORDER BY migration_name;
+-- beklenen: 5 satır · finished_at DOLU · rolled_back_at NULL · applied_steps_count >= 1
+--   ⚠️ applied_steps_count = 0 görürsen SQL KOŞMAMIŞ olabilir (elle `migrate resolve`
+--      izi) — o migration'ın etkisini (a)-(d) ile TEK TEK doğrula.
+```
+
+---
+
+## 5) Duman testi (bu sürümün canlı tüketicileri)
+
+- [ ] `GET /health` → 200, `db: "UP"`, `lastBackup` null DEĞİL
+- [ ] **Mobil Paketleme ekranı açılıyor** (`listCustomerPoolSacks` — `notes` select'i; 500 gelirse migration uygulanmamış)
+- [ ] Çuval **notu** yaz + oku (mobil sheet · Electron dialog)
+- [ ] Çuval **etiketi** önizleme (`LabelKind.SACK`)
+- [ ] **Sevk irsaliyesi baskısı** (`resolveLiveRowNotes` — her baskıda koşan yol)
+- [ ] Çuval **arama** + **çeki listesi** + **top konumu**
+- [ ] Envanter sekmelerinde "Son İşlem" sıralaması hızlı (yeni index)
+- [ ] **Hayalet guard'ı:** çuvaldaki bir topu kartelaya göndermeyi dene → Türkçe 400 + çuval kodu
+- [ ] **Tartı:** ⚖ ile tart → kaydediliyor; Cihaz Kaydı'ndan kantarın "simülasyon"unu AÇ → tartı **400** veriyor, ⋮ → "Elle kg gir" çalışıyor
+- [ ] Çuval detayında tartı **kaynağı rozeti** görünüyor (elle girilende "elle girildi")
+
+---
+
+## 6) Rollback
+
+```powershell
+pm2 stop teks-erp-backend
+git checkout <önceki-sha>
+npm ci
+npm run prisma:generate
+npm run build
+# yedekten geri yükle (ÖNCE eski koda dön, SONRA restore — DEPLOY-RUNBOOK.md §5)
+pg_restore -c -d <db> premigrate_2026-07-30_<zaman>.dump
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+Notlar:
+- `LabelKind.SACK` enum değeri PostgreSQL'de **düşürülemez** — restore etmezsen kalır, zararsızdır.
+- `sacks.notes` / `weightSource` / `labelDirty` kolonları eski kodda okunmaz; bırakılabilir.
+- Index bırakılabilir (yalnız sorgu hızlandırır).
+
+---
+
+## 7) Deploy SONRASI — ayrı iş olarak izlenecek
+
+- [ ] **Sevkiyat bilgisayarları:** kantar simülasyonu artık yalnız Cihaz Kaydı'nda.
+      Bu sürümde bilgisayarın kendi "simülasyon" anahtarı KALDIRILDI; yalnız COM
+      portu tanımlı PC'ler yerel kantarı kullanmaya devam eder. Sadece-simülasyon
+      tanımlı bir PC varsa otomatik olarak Cihaz Kaydı'ndaki kantara düşer.
+- [ ] **DB emniyet kilidi** (`rolls` üzerinde CHECK) henüz EKLENMEDİ. Ön koşulu:
+      §7 taraması **0 satır** çıkmalı. Hata mesajı yolu hazır (23514 → Türkçe 409).

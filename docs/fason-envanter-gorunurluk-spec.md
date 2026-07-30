@@ -1080,7 +1080,7 @@ Not: Kanban "Fason" kolonundan açılan panelde `roll.dispatchItems` olmayabilir
     initialVisibility: { subcontractorCategory: false, subcontractor: false },
 ```
 
-## 9) YENİ DOSYA `/Users/oad/Documents/projeler/AdnanSahin/Electron/src/pages/Operations/Rolls/service.test.ts`
+## 9) `/Users/oad/Documents/projeler/AdnanSahin/Electron/src/pages/Operations/Rolls/service.test.ts`
 
 `swatchService.test.ts` kalıbıyla (aynı dizin) URL sözleşme testi:
 

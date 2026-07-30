@@ -1586,6 +1586,9 @@ export class LabelService {
   async recordSackPrintEvent(sackId: string, userId?: string): Promise<ApiResponse<unknown>> {
     const sack = await prisma.sack.findUnique({ where: { id: sackId }, select: { sackNo: true } });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    // Etiket yeniden basıldı → "bayat" işareti kalkar (Roll.labelDirty emsali:
+    // `updateMany` + `labelDirty: true` koşulu, gereksiz yazma yapmaz).
+    await prisma.sack.updateMany({ where: { id: sackId, labelDirty: true }, data: { labelDirty: false } });
     await AuditService.log({
       userId,
       action: "CREATE",

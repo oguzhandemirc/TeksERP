@@ -191,6 +191,9 @@ export interface SackContents {
   weightKg: number | null;
   /** Tartının kaynağı — rozet için (bkz. `weightSourceBadge`). */
   weightSource?: SackWeightSource | null;
+  /** ÇUVALIN KENDİ etiketi bayat mı (müşteri değişti → farklı çuval şablonu).
+   *  Toplarınki `rolls[].labelDirty` — ayrı nesneler, ayrı baskı yolları. */
+  labelDirty?: boolean;
   /** Çuval yorumu — iç serbest not (tam metin). */
   notes: string | null;
   /** Dolu = sevkiyatta (içerik kilitli); null = depoda. */
