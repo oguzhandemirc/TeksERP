@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabPortalContainer } from "@/components/layout/tabs/tab-portal";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
-import { EscCloseContext, useEscapeTarget } from "@/components/ui/escape-stack";
+import { EscapeRegistrar, EscCloseContext } from "@/components/ui/escape-stack";
 
 /** Sekme içinde slide-over'ı o sekmeye gömer (bkz. Dialog). Dışarıda klasik. */
 function Sheet({ modal, onOpenChange, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
@@ -61,15 +61,12 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
     // Y5 fix: karartma sahipliği — dialog.tsx ile aynı; "herhangi bir overlay"
     // kontrolü başka sekmedeki/kardeş modalın karartmasıyla bu sheet'i kapatıyordu.
     const ownOverlayRef = React.useRef<HTMLDivElement>(null);
-    // O5 fix: Esc yönetimi escape-stack'te (bkz. dialog.tsx).
+    // O5 fix: Esc yönetimi escape-stack'te (bkz. dialog.tsx). Kayıt CONTENT'İN
+    // İÇİNDE yapılır — burada olursa sheet KAPALIYKEN de yığına girer.
     const requestClose = React.useContext(EscCloseContext);
     const isTabActiveRef = React.useRef(isTabActive);
     isTabActiveRef.current = isTabActive;
-    useEscapeTarget(
-      scoped && requestClose != null,
-      requestClose ?? (() => {}),
-      () => isTabActiveRef.current,
-    );
+    const registerEsc = scoped && requestClose != null;
     return (
       <SheetPortal container={scoped ? tabContainer : undefined}>
         {scoped ? (
@@ -108,6 +105,9 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
           className={cn(sheetVariants({ side }), scoped && "absolute", className)}
           {...props}
         >
+          {registerEsc && (
+            <EscapeRegistrar close={requestClose} isActive={() => isTabActiveRef.current} />
+          )}
           {children}
           <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100 focus:outline-none">
             <X className="h-4 w-4" />

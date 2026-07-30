@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabPortalContainer } from "@/components/layout/tabs/tab-portal";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
-import { EscCloseContext, useEscapeTarget } from "@/components/ui/escape-stack";
+import { EscapeRegistrar, EscCloseContext } from "@/components/ui/escape-stack";
 
 /**
  * Sekme içinde açıldığında modal o sekmeye gömülür: `modal={false}` olur (sekme
@@ -59,14 +59,12 @@ const DialogContent = React.forwardRef<
   // O5 fix: scoped dialog'da Esc Radix'e bırakılmaz (Radix yalnız global en-üst
   // layer'a verir — arka plan sekmesindeki dialog aktif sekmenin Esc'ini
   // öldürüyordu). Esc yığını aktif sekmedeki en üst dialog'u kapatır.
+  // Kayıt CONTENT'İN İÇİNDE (<EscapeRegistrar/>) yapılır — burada `useEscapeTarget`
+  // çağrılırsa dialog KAPALIYKEN de yığına girer (bkz. EscapeRegistrar açıklaması).
   const requestClose = React.useContext(EscCloseContext);
   const isTabActiveRef = React.useRef(isTabActive);
   isTabActiveRef.current = isTabActive;
-  useEscapeTarget(
-    scoped && requestClose != null,
-    requestClose ?? (() => {}),
-    () => isTabActiveRef.current,
-  );
+  const registerEsc = scoped && requestClose != null;
   return (
     <DialogPortal container={scoped ? tabContainer : undefined}>
       {scoped ? (
@@ -119,6 +117,9 @@ const DialogContent = React.forwardRef<
         )}
         {...props}
       >
+        {registerEsc && (
+          <EscapeRegistrar close={requestClose} isActive={() => isTabActiveRef.current} />
+        )}
         {children}
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
           <X className="h-4 w-4" />
