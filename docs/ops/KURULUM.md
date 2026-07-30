@@ -150,7 +150,7 @@
 49. **Marka/protokol değişimi = sıfır kod:** Argox→Zebra → cihazın languageOverride'ını değiştir; yeni boyut → cihazın medyası (`labelWidthMm`/`labelHeightMm`/`labelDpi`/`labelGapMm`). 4 dil hazır (`PrinterLanguage` enum: PPLA/PPLB/ZPL/RASTER_HTML).
 
 ### F2. Kantar / Metre — simulate ile başla, gerçeğe geç
-50. **Seed = SİMÜLE BAŞLAR:** Tüm METER/SCALE cihazları `simulate=true` (sahte okur). Seed MAC'leri örnektir.
+50. **Seed = METRE'ler SİMÜLE, KANTAR GERÇEK.** `METER` cihazları `simulate=true` doğar (sahte okur); **`SCALE` (SEVK-KANTAR) `simulate=false`** doğar. Ayrım bilinçli: metre değeri İÇ üretim verisidir ve yeniden ölçülebilir, **kantar kg'si sevk irsaliyesine ve çeki listesine BASILIR** (müşteri/gümrük belgesi). Ayrıca backend ENFORCE eder: `shipping.simulatedWeightEnabled` kapalıyken (varsayılan) simüle kantardan gelen tartı **400** ile reddedilir — elle giriş (⋮ → "Elle kg gir") muaftır. Demo/eğitim kurulumunda hem cihazın `simulate`'ini hem bayrağı açın. Seed MAC'leri örnektir.
 51. **Gerçeğe geçiş:** Admin → Tanımlar → "Cihaz Kaydı" → cihazın `simulate`'ini KAPAT + gerçek `address` + port + protokol (pollCommand/terminator/decimals/scale/unit/role).
 52. **simulate dallandırır:** mobil `if (simulate) return sim()`. simulate=false sonrası cihaz gerçekten bağlı olmalı; yoksa **NET HATA** (sessiz sahte yok).
 53. **BT metre/kantar:** Expo Go'da çalışmaz; önce bonded edilmeli.
@@ -173,7 +173,7 @@
 
 ## ⚠️ KRİTİK TUZAKLAR
 
-- **Migration/generate sırası:** `install → prisma:generate → migrate deploy → (ilk) seed → build → pm2 start ecosystem.config.js`. `prisma generate` atlanırsa derlenmez; `migrate` atlanırsa P2022. **`migrate dev` prod'da ASLA** (reset).
+- **Migration/generate sırası:** `install → prisma:generate → build → migrate deploy → (ilk) seed → pm2 start ecosystem.config.js`. `prisma generate` atlanırsa derlenmez; `migrate` atlanırsa P2022. **`migrate dev` prod'da ASLA** (reset). **`build` neden `migrate`'ten ÖNCE:** `migrate deploy` GERİ ALINAMAZ (rollback = yedekten restore), `build` ise DB'ye dokunmaz ve tsc hatasıyla patlaması normaldir — ters sırada "DB göç etti ama deploy edilebilir kod yok" çıkmazı doğar. Kanonik sıra: `Teks-Erp/MIGRATION-DEPLOY.md` (2026-07-30'da üç doküman arasındaki çelişki bu yönde giderildi).
 - **electron:rebuild:** COM cihazlı her PC'de ZORUNLU; atlanırsa cihaz **sessizce** devre dışı. Electron yükseltme + `npm install` sonrası tekrar.
 - **Yazıcı dili:** Cihaz Kaydı'nda dil ZORUNLU — fiziksel yazıcının firmware diliyle (PPLA/PPLB/ZPL) eşleşmeli. En sık hata: yanlış dil seçmek.
 - **DEMO seed:** bootstrap + demo birlikte yazılır (guard yok). Gerçek fabrikada demo satırlarını temizle. Tam reset = `DROP SCHEMA public CASCADE` → migrate → seed. **Eskiden installer `.seeded` bayrağıyla ikinci seed'i otomatik engelliyordu; pm2 yolunda bu koruma YOK** — güncellemede `npm run seed` çalıştırmamak operatör disiplinine bağlı.

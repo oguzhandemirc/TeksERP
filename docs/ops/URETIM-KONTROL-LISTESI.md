@@ -57,6 +57,16 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
       bayrağı kaldırıldı) → operatör disiplini.
 - [ ] Güncelleme sırası: `git pull → npm install → prisma:generate →
       npm run build → prisma:migrate → pm2 restart teks-erp-backend` (seed yok).
+      **Bu sıra KANONİK** (`Teks-Erp/MIGRATION-DEPLOY.md`): geri alınamaz adım
+      (`migrate deploy`) atomik cut-over'ın hemen öncesinde; `build` DB'ye dokunmaz,
+      patlarsa temiz abort.
+- [ ] **Geliştirme makinesinde `npm run check:migrations` TEMİZ** — commit
+      edilmemiş/değiştirilmiş migration ya da `test_*.ts` yok. Untracked bir
+      migration `migrate deploy` tarafından HİÇ görülmez: deploy "başarılı" der,
+      sonra o kolonu okuyan her yol P2022/500 verir (2026-07-30'da üç migration
+      tam bu şekilde production'a gitmemişti).
+- [ ] **Bu sürümdeki her migration kod commit'inde görünüyor:**
+      `git show --stat <sha> | grep prisma/migrations` boş DÖNMEMELİ.
 - [ ] **Migration ÖNCESİ yedek elle alındı** — otomatik `premigrate_*` artık
       üretilmiyor (installer alıyordu); rollback buna dayanır.
 - [ ] `pm2 restart` sonrası teyit hazır; deploy sonunda **`pm2 save`** koşulacak

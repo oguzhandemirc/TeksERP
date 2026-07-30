@@ -4,17 +4,33 @@ Geliştirme (dev) DB'sine uygulanan migration'lar production'a (üretim DB'si
 `TeksErpDb`, ya da hangi ortamsa) **`prisma migrate deploy` ile** taşınır.
 `migrate dev` PRODUCTION'da ASLA çalıştırılmaz (reset riski).
 
-## Standart deploy sırası (her sürüm güncellemesinde)
+## Standart deploy sırası (KANONİK — `docs/ops/DEPLOY-RUNBOOK.md §3` ile birebir)
 
 ```bash
 # Production sunucuda, uygulama dizininde:
 git pull                       # yeni migration dosyaları gelir
 npm install                    # package.json değiştiyse
-npm run prisma:generate        # = prisma generate (client yenilensin)
-npm run prisma:migrate         # = prisma migrate deploy (pending migration'ları uygular)
-npm run build                  # tsc → dist/ (pm2 derlenmiş dosyayı çalıştırır)
+npm run prisma:generate        # = prisma generate (client yenilensin; tsc buna karşı derler)
+npm run build                  # tsc → dist/   ← DB'ye DOKUNMAZ; patlarsa TEMİZ ABORT
+npm run prisma:migrate         # = prisma migrate deploy  ← GERİ ALINAMAZ, bu yüzden EN SON
 pm2 restart teks-erp-backend
+pm2 save
 ```
+
+> **⚠️ `build`, `migrate`'ten ÖNCE (2026-07-30 kararı — sıra DÜZELTİLDİ).**
+> Bu dosya eskiden `migrate → build` diyordu; `DEPLOY-RUNBOOK.md` ve
+> `URETIM-KONTROL-LISTESI.md` ise `build → migrate`. Doğrusu **`build → migrate`**:
+>
+> | Sıra | `build` patlarsa | `migrate` patlarsa |
+> |---|---|---|
+> | generate→**migrate**→build | **DB göç etmiş, deploy edilebilir kod YOK** → ileri gitmek için tsc'yi sahada düzeltmek, geri gitmek için YEDEKTEN RESTORE gerekir | DB bozulmadı, temiz abort |
+> | generate→**build**→migrate | **DB'ye hiç dokunulmadı, eski süreç koşuyor** (0 risk) | `dist/` yeni ama `pm2 restart` hiç olmadı → eski kod koşuyor, temiz abort |
+>
+> Kural: **geri alınamaz adım (`migrate deploy`) atomik cut-over'ın (`pm2 restart`)
+> hemen öncesine.** `build` (tsc) DB'ye dokunmaz ve tip hatasıyla patlaması normaldir.
+> `migrate` ile `restart` arasındaki pencerede ESKİ kod YENİ şemaya karşı koşar; bu
+> yalnızca EKLEMELİ migration'larda (nullable kolon, enum değeri, index) güvenlidir —
+> kolon/enum SİLEN bir migration varsa önce `pm2 stop`.
 
 `migrate deploy` yalnız `_prisma_migrations` tablosunda OLMAYAN migration'ları,
 dosya sırasıyla uygular. Idempotent — tekrar çalıştırmak güvenli.
@@ -47,6 +63,43 @@ dosya sırasıyla uygular. Idempotent — tekrar çalıştırmak güvenli.
 > **Eski sürüm Linux'a deploy edilmemelidir** (numara çakışması riski).
 > (NOT: eski `AMB%05d`/`AMB{SIRA:5}` çuval manuel-kod şablonu 2026-07-12'de
 > tümüyle kaldırıldı — çuval artık yalnız `sackNo`=CV ile yürür.)
+
+## Elle yazılan migration'ı DEV'e uygulama (`db execute` + `migrate resolve`)
+
+⚠️ **YALNIZ DEV.** Production'da TEK yol `migrate deploy`'dur (yukarıdaki kanonik sıra).
+
+`prisma migrate dev` bu şemada YASAK: `sacks` tablosundaki 2 DEFERRABLE composite FK
+datamodel'de temsil edilemediği için her diff'te DROP edilmek istenir
+(`schema.prisma` `@@unique([id, shipmentId])` bloğu). Bu yüzden migration ELLE yazılır:
+
+```bash
+# 0) ÖNCE GİT — dosya UYGULANMADAN önce izlenir olmalı
+git add prisma/migrations/<zaman>_<ad>/migration.sql
+
+# 1) SQL'i dev DB'sine uygula   (Prisma 7: prisma.config.ts var → --schema VERİLMEZ)
+npx prisma db execute --file prisma/migrations/<zaman>_<ad>/migration.sql
+
+# 2) Prisma'ya "uygulandı" olarak bildir (deploy'da tekrar denemesin)
+npx prisma migrate resolve --applied <zaman>_<ad>
+
+# 3) DOĞRULA — 2. adım SQL'in koştuğunu doğrulaMAZ (aşağıdaki uyarı)
+npx tsx scripts/test_migration_hygiene.ts
+node ../scripts/check-migrations.mjs
+psql "$DATABASE_URL" -c '\d+ <tablo>'      # kolon gerçekten var mı
+```
+
+> **⚠️ 0. ADIM NEDEN VAR (2026-07-30'da kaybedildi):** üç migration dev'e uygulandı
+> ama git'e HİÇ girmedi. Dev tarafında her şey normal görünüyordu (dizinde var +
+> `_prisma_migrations`'ta "uygulandı"); eksik olan tek şey commit'ti ve bunu hiçbir
+> mekanizma söylemiyordu. `migrate deploy` yalnız dizindeki dosyaları uygular →
+> production'da kolon/enum hiç oluşmaz, deploy "All migrations have been successfully
+> applied" der ve o kolonu okuyan HER yol P2022/500 verir. Artık iki bekçi var:
+> `npm run check:migrations` (git tarafı) + `scripts/test_migration_hygiene.ts` (DB tarafı).
+>
+> **⚠️ `migrate resolve --applied` SQL'İN KOŞTUĞUNU DOĞRULAMAZ** — yalnız
+> `_prisma_migrations`'a `applied_steps_count = 0` ile satır yazar. `statement_timeout`
+> ile yarıda kesilen bir DDL de sessizce "uygulandı" görünür (D-23). 3. adım bu yüzden
+> **opsiyonel değildir**; `test_migration_hygiene.ts` elle-resolve edilmişleri listeler.
 
 ## ⚠️ Index-ağırlıklı migration'lar — VARDİYA DIŞINDA
 
