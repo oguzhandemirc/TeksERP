@@ -159,7 +159,7 @@ router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList)
  *             properties:
  *               sackIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 200 }
  *     responses:
- *       200: { description: Çuval başına meta + rolls[] + swatches[] }
+ *       200: { description: "Çuval başına meta + rolls[] + swatches[]" }
  *       400: { description: Seçim boş veya 200 çuvalı aşıyor }
  */
 router.post("/sack-search/content-dump", verifyToken, READ, controller.getContentDump);
