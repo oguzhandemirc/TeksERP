@@ -3058,17 +3058,33 @@ export class WorkOrderService {
             const roll = byId.get(d.rollId)!;
             const target = DISPOSITION_STATUS[d.action];
 
-            // Açık movement'ları FİZİKSEL çıkışla kapat — top metresiyle istasyondan
-            // ayrıldı (softDelete'in "hiç olmadı" semantiği DEĞİL). notes = sebep kodu.
-            await tx.rollMovement.updateMany({
+            // Açık movement'ları FİZİKSEL çıkışla kapat (softDelete'in "hiç olmadı"
+            // semantiği DEĞİL). notes = sebep kodu.
+            //
+            // qtyOut = movement'ın KENDİ qtyIn'i — tambur/kursun finishStep paritesi.
+            // `currentQty` ile kapatmak YANLIŞ olurdu: top daha önce Tambur'da
+            // kesilmişse (currentQty < qtyIn) aradaki fark istasyon iş-hacmi
+            // raporunda HAYALET KAYIP gibi görünürdü (800 girdi / 700 çıktı).
+            // qtyIn ölçülmemişse (0/null — KK1 kenarı) kalan metraja düşülür.
+            const openMoves = await tx.rollMovement.findMany({
               where: { rollId: roll.id, exitedAt: null },
-              data: {
-                exitedAt: new Date(),
-                qtyOut: roll.currentQty,
-                weightOut: roll.weightKg,
-                notes: `WO_CLOSE_${d.action}`,
-              },
+              select: { id: true, qtyIn: true, weightIn: true },
             });
+            for (const m of openMoves) {
+              const qtyOut =
+                m.qtyIn && new Prisma.Decimal(m.qtyIn).greaterThan(0)
+                  ? new Prisma.Decimal(m.qtyIn)
+                  : roll.currentQty;
+              await tx.rollMovement.update({
+                where: { id: m.id },
+                data: {
+                  exitedAt: new Date(),
+                  qtyOut,
+                  weightOut: m.weightIn ?? roll.weightKg,
+                  notes: `WO_CLOSE_${d.action}`,
+                },
+              });
+            }
 
             // Atomik claim: IN_PRODUCTION + serbest (çuval/sevk yok) iken hedefe çek.
             const rollClaim = await tx.roll.updateMany({
@@ -3117,8 +3133,11 @@ export class WorkOrderService {
         await tx.$executeRaw`
           UPDATE roll_movements m
           SET "exitedAt" = now(),
-              "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
-              "weightOut" = COALESCE(m."weightOut", r."weightKg"),
+              -- qtyIn ÖNCE (istasyon iş-hacmi paritesi — yukarıdaki dispozisyon
+              -- kapanışıyla aynı gerekçe): kesilmiş topta currentQty ile kapatmak
+              -- üretim raporunda hayalet kayıp yaratır. qtyIn 0/null ise kalan metraj.
+              "qtyOut" = COALESCE(m."qtyOut", NULLIF(m."qtyIn", 0), r."currentQty"),
+              "weightOut" = COALESCE(m."weightOut", m."weightIn", r."weightKg"),
               notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_MANUAL_COMPLETE'
                            ELSE m.notes || ' | WO_MANUAL_COMPLETE' END
           FROM rolls r

@@ -3172,16 +3172,28 @@ export class InventoryService {
         : null;
       if (woId) await touchWorkOrderTx(tx, woId);
 
-      // Açık hareketleri FİZİKSEL çıkışla kapat (top metresiyle çıktı).
-      await tx.rollMovement.updateMany({
+      // Açık hareketleri FİZİKSEL çıkışla kapat. qtyOut = movement'ın KENDİ qtyIn'i
+      // (tambur/kursun finishStep + WO kapanış dispozisyonu paritesi): top daha önce
+      // kesilmişse (currentQty < qtyIn) `currentQty` ile kapatmak aradaki farkı
+      // istasyon iş-hacmi raporunda HAYALET KAYIP gösterirdi. qtyIn 0/null ise kalan.
+      const openForClose = await tx.rollMovement.findMany({
         where: { rollId, exitedAt: null },
-        data: {
-          exitedAt: new Date(),
-          qtyOut: roll.currentQty,
-          weightOut: roll.weightKg,
-          notes: "RESCUED_FROM_PRODUCTION",
-        },
+        select: { id: true, qtyIn: true, weightIn: true },
       });
+      for (const m of openForClose) {
+        await tx.rollMovement.update({
+          where: { id: m.id },
+          data: {
+            exitedAt: new Date(),
+            qtyOut:
+              m.qtyIn && new Prisma.Decimal(m.qtyIn).greaterThan(0)
+                ? new Prisma.Decimal(m.qtyIn)
+                : roll.currentQty,
+            weightOut: m.weightIn ?? roll.weightKg,
+            notes: "RESCUED_FROM_PRODUCTION",
+          },
+        });
+      }
 
       // Atomik claim — IN_PRODUCTION + serbest (shipment/sack null) iken WAREHOUSE'a çek.
       const claim = await tx.roll.updateMany({

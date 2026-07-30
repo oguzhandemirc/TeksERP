@@ -209,13 +209,20 @@ async function main(): Promise<void> {
 
       const moves = await prisma.rollMovement.findMany({
         where: { rollId: { in: [rStock, rWare, rScrap] } },
-        select: { rollId: true, exitedAt: true, notes: true, qtyOut: true },
+        select: { rollId: true, exitedAt: true, notes: true, qtyOut: true, qtyIn: true },
       });
       check("movement'lar kapandı", moves.length > 0 && moves.every((m) => m.exitedAt !== null), `n=${moves.length}`);
       check("movement notu WO_CLOSE_* sebep kodu taşıyor",
         moves.every((m) => (m.notes ?? "").startsWith("WO_CLOSE_")),
         moves.map((m) => m.notes).join(" | "));
       check("qtyOut fiziksel çıkışla dolduruldu", moves.every((m) => m.qtyOut !== null));
+      // İSTASYON İŞ-HACMİ PARİTESİ: qtyOut = movement'ın KENDİ qtyIn'i olmalı.
+      // `currentQty` ile kapatılırsa daha önce KESİLMİŞ topta (currentQty < qtyIn)
+      // aradaki fark üretim raporunda hayalet kayıp gibi görünür — tambur/kursun
+      // finishStep bu yüzden qtyIn ile kapatıyor, kapanış dispozisyonu da öyle.
+      check("qtyOut = qtyIn (istasyon hacmi eksilmedi)",
+        moves.every((m) => m.qtyIn == null || Number(m.qtyOut) === Number(m.qtyIn)),
+        moves.map((m) => `${m.qtyIn}→${m.qtyOut}`).join(" | "));
 
       const wo = await prisma.workOrder.findUnique({ where: { id: woId }, select: { status: true } });
       check("WO COMPLETED", wo?.status === WorkOrderStatus.COMPLETED, String(wo?.status));
@@ -224,6 +231,31 @@ async function main(): Promise<void> {
         where: { tableName: "ROLL", recordId: { in: [rStock, rWare, rA1, rScrap, rCancel] } },
       });
       check("her top için audit izi yazıldı", audits >= 5, `n=${audits}`);
+    }
+
+    // === C2) KESİLMİŞ TOP: istasyon hacmi eksilmemeli (hayalet kayıp regresyonu) ===
+    console.log("\n=== C2) Kesilmiş top (currentQty < qtyIn) → qtyOut qtyIn kalır ===");
+    {
+      const { woId } = await makeWo();
+      const rId = await attachedRoll(woId, 800); // istasyona 800 m girdi
+      // Tambur kesimi simülasyonu: 100 m ayrıldı, topta 700 kaldı — movement'ın
+      // qtyIn'i 800 OLARAK KALIR (istasyona giren işlenmiş metraj).
+      await prisma.roll.update({ where: { id: rId }, data: { currentQty: 700 } });
+
+      await svc.completeWorkOrder(woId, {
+        reason: "kesilmiş top depoya alındı",
+        dispositions: [{ rollId: rId, action: "WAREHOUSE" }],
+      }, ADMIN);
+
+      const mv = await prisma.rollMovement.findFirst({
+        where: { rollId: rId },
+        select: { qtyIn: true, qtyOut: true },
+      });
+      check("qtyOut = qtyIn = 800 (currentQty 700 DEĞİL)",
+        Number(mv?.qtyOut) === 800 && Number(mv?.qtyIn) === 800,
+        `${mv?.qtyIn}→${mv?.qtyOut}`);
+      const roll = await prisma.roll.findUnique({ where: { id: rId }, select: { currentQty: true } });
+      check("topun kendi metrajı 700 olarak korundu", Number(roll?.currentQty) === 700, String(roll?.currentQty));
     }
 
     // === D) FASON BLOK ===
