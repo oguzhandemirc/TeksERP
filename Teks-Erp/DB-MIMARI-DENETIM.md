@@ -134,10 +134,10 @@ Bir veritabanını mimari olarak değerlendirirken baktığım sekiz boyut. Her 
 - **Not:** Eğer tedarikçi-lot geri çağırma bir iş gereksinimi değilse bu bilinçli bir kapsam kararıdır — o hâlde ARCHITECTURE.md'ye "izlenebilirlik kökü = KK1 girişi" olarak yazılıp bilinçli istisna statüsü kazanmalı.
 
 ### Y-2 — Üretim `C` locale'de ILIKE Türkçe katlamıyor: 34 arama sahasında sessiz eksik sonuç
-- **Boyut:** Collation (ek sonda) · **Konum:** `installer/windows/scripts/manage.ps1:295` + `order/tambur/shipping/subcontractor/inventory/kartela/sack-search/traveler-card.service.ts` (34 saha)
-- **Kanıt:** `manage.ps1:295` → `initdb.exe ... -E UTF8 --locale=C`. Dev DB kanıt sorguları: `'ŞİŞLİ ÇÖZGÜ' COLLATE "C" ILIKE '%çözgü%'` = **false** (ICU default: true); yalnız ASCII katlanıyor. Kodda 34 adet `mode:'insensitive'` → Prisma ILIKE üretir; dokunduğu alanlar: `customer.name`, `item.name/code`, `color.name`, `customerItemName`, `batchNumber`, `shipmentNo/sackNo/manualCode`.
+- **Boyut:** Collation (ek sonda) · **Konum:** ~~`installer/windows/scripts/manage.ps1:295`~~ → **installer 2026-07-30'da kaldırıldı**; `initdb` kararı artık `docs/ops/DEPLOY-RUNBOOK.md §2.1`'de kayıtlı. Kod tarafı: `order/tambur/shipping/subcontractor/inventory/kartela/sack-search/traveler-card.service.ts` (34 saha)
+- **Kanıt:** Eski installer `initdb.exe ... -E UTF8 --locale=C` kullanıyordu. Dev DB kanıt sorguları: `'ŞİŞLİ ÇÖZGÜ' COLLATE "C" ILIKE '%çözgü%'` = **false** (ICU default: true); yalnız ASCII katlanıyor. Kodda 34 adet `mode:'insensitive'` → Prisma ILIKE üretir; dokunduğu alanlar: `customer.name`, `item.name/code`, `color.name`, `customerItemName`, `batchNumber`, `shipmentNo/sackNo/manualCode`.
 - **Etki:** Üretimde (Windows, C locale) sipariş/sevkiyat/tambur/fason/kartela/envanter aramalarında küçük harf Türkçe terim, BÜYÜK saklanan adları **bulamaz** — sonuç sessizce eksik döner, hata yok. Operatör "kayıt yok" sanıp mükerrer müşteri/sipariş açabilir. **Dev'de (ICU en-US) sorun testte hiç görünmez.** Numara/barkod alanları ASCII olduğundan etkilenmez.
-- **Öneri:** İki katman. **(1) Kısa vade (kod):** `query-parser.ts:152-165`'teki tr-upper varyant yaklaşımını ortak bir helper'a çıkar (`buildTurkishSearch(fields, term)`) ve 34 sahada kullan; tetikleyiciyi `/[ıi]/` yerine `search !== trUpper` yap ki C locale'de katlanmayan ğüşöç de kapsansın. **(2) Orta vade (DB):** installer `initdb`'yi `--locale-provider=icu --icu-locale=tr-TR` yap (EDB Windows PG ICU'lu gelir) — yeni kurulumlar Türkçe katlar + doğru sıralar; mevcut kurulumlar dump/restore ister. *citext tuzağı:* o da LC_CTYPE'a göre katlar, C altında çözüm değildir.
+- **Öneri:** İki katman. **(1) Kısa vade (kod):** `query-parser.ts:152-165`'teki tr-upper varyant yaklaşımını ortak bir helper'a çıkar (`buildTurkishSearch(fields, term)`) ve 34 sahada kullan; tetikleyiciyi `/[ıi]/` yerine `search !== trUpper` yap ki C locale'de katlanmayan ğüşöç de kapsansın. **(2) Orta vade (DB):** yeni kurulumlarda `initdb`'yi `--locale-provider=icu --icu-locale=tr-TR` ile çalıştır (EDB Windows PG ICU'lu gelir) — Türkçe katlar + doğru sıralar; mevcut kurulumlar dump/restore ister. **Not:** installer kaldırıldığından bu artık elle kurulum adımıdır (`DEPLOY-RUNBOOK.md §2.1`). *citext tuzağı:* o da LC_CTYPE'a göre katlar, C altında çözüm değildir.
 
 ### Y-3 — İ/i katlaması HER ortamda kırık; tr-upper workaround yalnız generic yolda, 34 sahada yok
 - **Boyut:** Collation (ek sonda) · **Konum:** `src/utils/query-parser.ts:152-165`
@@ -146,10 +146,14 @@ Bir veritabanını mimari olarak değerlendirirken baktığım sekiz boyut. Her 
 - **Öneri:** Y-2'deki ortak helper'ı tek doğruluk kaynağı yap ve tüm elle yazılmış `mode:'insensitive'` bloklarını bundan geçir. İlişkili-alan (nested) aramaları destekle. `scripts/test_*.ts` sözleşmesiyle regresyon kilidi ekle: BÜYÜK saklanan `İĞÜŞÖÇ`'lü fixture'lara küçük harf aramalar.
 
 ### Y-4 — Yedeklerin tamamı DB ile aynı disk/makinede; makine dışı kopya ve PITR yok
-- **Boyut:** Operasyonel · **Konum:** `installer/windows/scripts/manage.ps1:46-49`
+> **DURUM (2026-07-30): offsite kısmı ÇÖZÜLDÜ.** Yedekleme backend'e taşındı
+> (`services/backup.service.ts`); `BACKUP_OFFSITE_DIR` ayarlıysa her yedek ikinci
+> bir ortama kopyalanır, ayarlı değilse açık uyarı üretilir. **PITR/WAL arşivi hâlâ
+> YOK** — kurtarma noktası en iyi senaryoda son gece yedeğidir (24 saate kadar kayıp).
+- **Boyut:** Operasyonel · **Konum:** ~~`manage.ps1:46-49`~~ → `ecosystem.config.js` (`BACKUP_DIR`, `BACKUP_OFFSITE_DIR`)
 - **Kanıt:** `$DataRoot = "C:\ProgramData\TeksERP"`, `$PgData = $DataRoot\pgdata`, `$BackupDir = $DataRoot\backups` — DB verisi ve tüm yedekler aynı volume'de. Gece 03:00 görevi (245-255) ve 14 dosyalık saklama (741) yalnız bu klasöre yazar. `postgresql.conf`'ta `archive_mode`/WAL arşiv ayarı yok; dev DB'de `SHOW archive_mode` → off. Runbook'larda offsite/NAS/USB kopyası geçmiyor.
 - **Etki:** Fabrikanın **tüm** üretim/sevkiyat kaydı tek sunucuda. Disk arızası, ransomware, hırsızlık veya yangında veritabanı **ve** bütün yedekler aynı anda yok olur — yıllarca birikmiş kayıt geri getirilemez. WAL arşivi olmadığından en iyi senaryoda kurtarma noktası son 03:00 yedeği: **24 saate kadar** o günkü tüm KK/tambur/sevkiyat işlemi kaybolur.
-- **Öneri:** Gece yedek görevinin sonuna ikinci ortama otomatik kopya ekle (`robocopy` ile NAS/ağ paylaşımı/USB — `Do-Backup`'a ~5 satır). Runbook'a haftalık "yedek klasörünü başka makineye kopyala" adımı. RPO'yu dakikalara indirmek için `archive_command` / `pg_receivewal` ile LAN içi ikinci makineye WAL arşivi — dışa açılım gerekmez (LAN-only duruşla uyumlu).
+- **Öneri:** ~~Gece yedek görevinin sonuna ikinci ortama otomatik kopya ekle~~ → **YAPILDI** (`backup.service.ts`, `BACKUP_OFFSITE_DIR`; robocopy yerine Node `copyFile` — platform bağımsız). **Kalan iş:** RPO'yu dakikalara indirmek için `archive_command` / `pg_receivewal` ile LAN içi ikinci makineye WAL arşivi — dışa açılım gerekmez (LAN-only duruşla uyumlu). Ayrıca `BACKUP_OFFSITE_DIR`'in üretimde gerçekten **dolu** olduğu deploy kontrol listesinde teyit edilmeli.
 - **Bu raporun en öncelikli tek maddesi.**
 
 ### Y-5 — `statement_timeout` DDL kuralı, kural konduktan SONRAKİ migration'larda ihlal edilmiş
@@ -214,14 +218,33 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 
 ### Ölçek / Operasyonel
 
-**O-15 — Üretim installer PostgreSQL bellek tuning'i yapmıyor (128MB shared_buffers default)**
-`manage.ps1:315-328` yalnız listen/port/timezone/statement_timeout/log yazıyor — **bellek parametresi yok**. Default: `shared_buffers=128MB`, `work_mem=4MB`. 5 yılda `roll_movements ~1M`, `system_logs+arşiv ~4-5M` satıra ulaşınca 4MB work_mem ile rapor aggregate'leri diske taşar, 128MB ile working set cache'lenemez; `statement_timeout=50s` ile birleşince yıllık raporlar iptal olmaya başlar. **Öneri:** conf bloğuna ekle: `shared_buffers` ≈ RAM %25, `effective_cache_size` ≈ RAM %50-75, `work_mem` 16-32MB, `maintenance_work_mem` 256MB.
+**O-15 — Üretim PostgreSQL bellek tuning'i (ÇÖZÜLDÜ — değerler runbook'ta)**
+> **DURUM:** Öneri uygulandı (installer conf'una RAM'e göre ölçekli blok eklenmişti);
+> installer kaldırılınca değerler `docs/ops/DEPLOY-RUNBOOK.md §6`'ya taşındı ve artık
+> **elle uygulanan bir kurulum adımıdır**. Yeni sunucuda atlanırsa aşağıdaki risk geri döner.
 
-**O-16 — Dev PostgreSQL 18.4 ↔ üretim PostgreSQL 16.6 — iki majör sürüm fark**
-`build.ps1:35` → `$PgVersion="16.6-1"`; dev `version()` → 18.4. Tüm migration/raw SQL/planner davranışı yalnız 18'de test ediliyor. 18'e özgü fark üretim 16'da migration patlayana kadar görünmez; dev pg_dump 18 → üretim pg_restore 16 açamayabilir (dump format geriye uyumsuz). **Öneri:** Installer'ı PG 18.x'e yükselt **veya** dev'i 16'ya sabitle — ikisi aynı majörde olsun; kısa vadede en azından 16'nın güncel minor'una çık.
+Özgün bulgu: conf yalnız listen/port/timezone/statement_timeout/log yazıyordu — **bellek parametresi yok**. Default: `shared_buffers=128MB`, `work_mem=4MB`. 5 yılda `roll_movements ~1M`, `system_logs+arşiv ~4-5M` satıra ulaşınca 4MB work_mem ile rapor aggregate'leri diske taşar, 128MB ile working set cache'lenemez; `statement_timeout=50s` ile birleşince yıllık raporlar iptal olmaya başlar. **Öneri:** conf bloğuna ekle: `shared_buffers` ≈ RAM %25, `effective_cache_size` ≈ RAM %50-75, `work_mem` 16-32MB, `maintenance_work_mem` 256MB.
 
-**O-17 — Restore tatbikatı yok, yedek bütünlüğü doğrulanmıyor, secret.json yedeği otomatize değil**
-`manage.ps1:722-748`. `Do-Backup` yalnız pg_dump exit code'una bakar — üretilen `.dump`'ın açılabilirliği hiç test edilmez (`pg_restore --list` bile yok). Bozuk/yarım bir dump 14 dosyalık rotasyonla sağlam yedeklerin yerini alır ve felakete kadar fark edilmez. **Öneri:** `Do-Backup` sonuna `pg_restore --list $out` (bütünlük kontrolü) + `secret.json` kopyası; runbook'a 6 aylık test-restore tatbikatı (`-Action verify-restore` ideali).
+**O-16 — Dev ↔ üretim PostgreSQL majör sürüm farkı (BULGU GEÇERSİZ — bu tespit bayattı)**
+> **DÜZELTME (2026-07-30):** Bulgu `$PgVersion="16.6-1"` diyordu; silinmeden önceki
+> `build.ps1:35` gerçekte **`18.4-1`** ("dev PostgreSQL 18.4 ile parite" yorumuyla)
+> içeriyordu — yani majör fark **yoktu**, tespit güncellenmemiş bir gözlemdi.
+>
+> **Yerine geçen gerçek risk:** installer kaldırıldığı için PostgreSQL artık sunucuya
+> elle kurulur; majör sürüm paritesi **artık otomatik garanti değil**. Ayrıca yedekleme
+> `PG_BIN_DIR` altındaki `pg_dump`/`pg_restore`'u çalıştırır — bu ikili sunucudaki
+> PostgreSQL'den eski bir majorsa yedek alınamaz. Kurulumda ikisi birlikte doğrulanmalı
+> (`DEPLOY-RUNBOOK.md §0`).
+
+**O-17 — Yedek bütünlüğü doğrulanmıyor (ÇÖZÜLDÜ) + restore tatbikatı yok (AÇIK)**
+> **DURUM (2026-07-30):** Bütünlük kontrolü uygulandı ve backend'e taşındı —
+> `services/backup.service.ts` her dump'tan sonra `pg_restore --list` koşar; **doğrulama
+> başarısızsa bozuk dosya SİLİNİR ve rotasyona inmez** (sağlam yedekleri evict etmesin).
+> `secret.json` kavramı kalktı; tek sır kaynağı `.env` (elle yedeklenir — runbook'ta yazılı).
+> **AÇIK KALAN:** periyodik test-restore tatbikatı hâlâ otomatize değil; 6 aylık manuel
+> tatbikat `DEPLOY-RUNBOOK.md §5`'te talimat olarak duruyor.
+
+Özgün bulgu: `Do-Backup` yalnız pg_dump exit code'una bakıyordu — üretilen `.dump`'ın açılabilirliği hiç test edilmiyordu. Bozuk/yarım bir dump 14 dosyalık rotasyonla sağlam yedeklerin yerini alır ve felakete kadar fark edilmez.
 
 **O-18 — Açık hatalı top Tambur'suz rotada karar verilmeden depoya/sevke ilerleyebiliyor**
 `src/services/kursun-qc.service.ts` finishStep (`else` dalı, `finalizeRollsAtLastStep` çağrısı). KK2 finishStep'te sonraki adım yoksa toplar hata kontrolü **olmadan** finalize edilir (`finalizeRollsAtLastStep` → kaliteye göre `WAREHOUSE`; *not: eski* `PRODUCED` *limbosu kaldırıldı, §0.1*) — `RollError.isProcessed` hiç sorgulanmıyor (kod-teyitli: finalize dalında açık-hata guard'ı yok). `inventory.computeStatusBlockReasons` ve `shipping` scan-in de açık hatayı kontrol etmiyor. Rota PROCESS_QC ile bitebiliyor. CLAUDE.md kuralı "RollError Tambur kararıyla kapanır" Tambur'suz rotada **yapısal olarak ihlal**: "60. metrede hata" girilen top, kusur kararı verilmeden sevk edilebilir; hatalar sonsuza dek `isProcessed=false` kalıp dashboard/rapor sayaçlarını kirletir. **Öneri:** İki savunma: (1) finishStep'te nextStep yoksa açık hata varsa 400 veya idari NO_CUT zorunlu; (2) `computeStatusBlockReasons` ve scan-in claim'ine açık-hata kontrolü (`[rollId, isProcessed]` index'i zaten var).
@@ -241,7 +264,7 @@ Yalnız 3 `deletedAt` kolonu `@db.Timestamptz`, diğer tüm DateTime'lar `timest
 `prisma/schema.prisma:895-899` (Roll.sackId yorumu) + `2192-2215` (Sack). Şema yorumu invariantı açıkça tanımlıyor: `sack.shipmentId == roll.shipmentId` (898). Ancak `rolls.sackId → sacks(id)` ve `rolls.shipmentId → shipments(id)` **iki bağımsız FK**; composite FK, CHECK veya trigger yok (psql: 0 trigger, 0 check doğrulandı). Proje başka invariantlar için DB seddi kurmuş (partial unique'ler) — bu korumasız kalmış. Çuval taşıma/geri çekme uçlarından geçen tek bir servis bug'ı, topu A sevkiyatına bağlıyken B'nin çuvalına yazabilir → **irsaliye/çeki listesi yanlış müşteri içeriği basar (yasal belge)**, sessiz bozulma ancak fiziksel sayımda fark edilir. **Öneri:** Raw migration ile `sacks` üzerinde `UNIQUE (id, "shipmentId")` + `rolls`'a (ve `swatches`'a) composite FK `("sackId","shipmentId") REFERENCES sacks(id,"shipmentId")` — çuvala bağlı topun shipmentId'si çuvalınkiyle zorunlu eşleşir. Şema yorumuna belgele (Prisma karşılığı yok).
 
 **O-23 — pg Pool `error` handler'ı yok + çift SIGTERM/SIGINT kaydı (bu iki bulgu benim elle araştırmamdan)** — **[KAPANDI, §0.1: `pool.on("error")` eklendi + shutdown tek noktada]**
-`src/lib/prisma.ts:27-46` + `src/server.ts:104-134`. **(a)** `pool.on('error', ...)` **yok** (elle teyit: `grep pool.on` src'de yalnız `backup.service` child process). `pg` Pool, idle bir bağlantı backend hatası aldığında (PostgreSQL yeniden başlaması, gece yedeği sırasındaki kesinti, Windows update) `'error'` yayınlar; dinleyici yoksa bu `uncaughtException`'a düşer — ki `server.ts:127` handler'ı onu **süreç kapatarak** karşılıyor (NSSM yeniden başlatır). Net etki: **kısa bir DB kesintisi, havuz şeffaf reconnect yerine tüm backend'i restart ettirir**, tüm uçuştaki istekleri düşürür. **(b)** SIGTERM/SIGINT **iki yerde** kayıtlı: `server.ts:104-105` (graceful drain) **ve** `prisma.ts:45-46` (`prisma.$disconnect` + `pool.end` + **`process.exit(0)`**). İki handler yarışır; `prisma.ts`'in `process.exit(0)`'ı `server.ts`'in HTTP drain'ini yarıda kesebilir. **Öneri:** `prisma.ts`'e `pool.on('error', (e)=>logla)` ekle (süreç ayakta kalır, havuz bozuk bağlantıyı atar); shutdown'ı tek noktaya topla — `prisma.ts`'ten `process.exit`'i kaldır, `server.ts`'in `gracefulShutdown`'ı `prisma.$disconnect()`+`pool.end()`'i sırayla çağırsın.
+`src/lib/prisma.ts:27-46` + `src/server.ts:104-134`. **(a)** `pool.on('error', ...)` **yok** (elle teyit: `grep pool.on` src'de yalnız `backup.service` child process). `pg` Pool, idle bir bağlantı backend hatası aldığında (PostgreSQL yeniden başlaması, gece yedeği sırasındaki kesinti, Windows update) `'error'` yayınlar; dinleyici yoksa bu `uncaughtException`'a düşer — ki `server.ts:127` handler'ı onu **süreç kapatarak** karşılıyor (pm2 yeniden başlatır). Net etki: **kısa bir DB kesintisi, havuz şeffaf reconnect yerine tüm backend'i restart ettirir**, tüm uçuştaki istekleri düşürür. **(b)** SIGTERM/SIGINT **iki yerde** kayıtlı: `server.ts:104-105` (graceful drain) **ve** `prisma.ts:45-46` (`prisma.$disconnect` + `pool.end` + **`process.exit(0)`**). İki handler yarışır; `prisma.ts`'in `process.exit(0)`'ı `server.ts`'in HTTP drain'ini yarıda kesebilir. **Öneri:** `prisma.ts`'e `pool.on('error', (e)=>logla)` ekle (süreç ayakta kalır, havuz bozuk bağlantıyı atar); shutdown'ı tek noktaya topla — `prisma.ts`'ten `process.exit`'i kaldır, `server.ts`'in `gracefulShutdown`'ı `prisma.$disconnect()`+`pool.end()`'i sırayla çağırsın.
 
 ---
 
@@ -348,8 +371,8 @@ Doğrulama katmanı 3 ham bulguyu yanlış pozitif olarak çürüttü — kayda 
 ### Hemen (bu hafta) — düşük maliyet, yüksek etki
 1. **Y-4 — Offsite yedek:** `Do-Backup`'a NAS/USB kopyası (~5 satır) + runbook adımı. *Felaket kurtarma — tek en önemli madde.*
 2. **Y-2/Y-3 — Türkçe arama helper'ı:** Ortak `buildTurkishSearch` + 34 sahada kullan + regresyon testi. *Sessiz üretim bug'ı.*
-3. **O-17 — Yedek bütünlük kontrolü:** `pg_restore --list` + `secret.json` kopyası.
-4. **O-15 — Üretim bellek tuning:** `manage.ps1` conf bloğuna 4 parametre.
+3. ~~**O-17 — Yedek bütünlük kontrolü**~~ → **YAPILDI** (2026-07-30, `backup.service.ts`). Kalan: periyodik test-restore tatbikatı.
+4. ~~**O-15 — Üretim bellek tuning**~~ → **YAPILDI**; değerler `DEPLOY-RUNBOOK.md §6`'da, yeni kurulumda elle uygulanır.
 
 ### Kısa vade (bu ay) — sertleştirme
 5. **O-5 — CHECK constraint'ler** (negatif miktar/tarih sırası) — tek raw migration, `SET statement_timeout=0` başlıklı.

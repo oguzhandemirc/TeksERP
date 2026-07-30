@@ -175,6 +175,25 @@ Tam-ekran editörler (İş Emri formu, Genel Ayarlar) kökte `PageShell`, altta
 
 Sidebar'da **her tanım ayrı satır YOK.** Tek "Tanımlar" girişi var; tıklayınca `/definitions` hub sayfası açılır, kart grid'i her tanım modülüne gönderir. Yeni master data eklerken `pages/Definitions/tile-config.ts` → kart ekle, `router.tsx` → route ekle. Sidebar'a ekleme.
 
+## Belge Kolonu Ekleme — iç veri taşıyorsa OPT-IN (2026-07-30)
+
+`DocumentConfig.columns[tablo].hidden` bir **BLOCKLIST**'tir: yeni bir kolon mevcut
+config'lerde `hidden` içinde olmadığı için **varsayılan GÖRÜNÜR** doğar. Bu, iç veri
+(çuval notu gibi) için yanlış varsayılandır — müşteriye giden belgeye sızar.
+
+- **İç/hassas veri kolonu** → `DocTableDef.columns[].defaultHidden: true` (Electron kaydı)
+  **ve** renderer'da `DocCol.defaultHidden: true`. Bu kolonlar **ALLOWLIST** ile açılır:
+  `columns[tablo].shown` içinde adı geçmiyorsa basılmaz ve o kolonda **`hidden` YOK SAYILIR**
+  (tri-state — `document-render/doc-table.ts` `applyColumnCfg`).
+- Backend aynası zorunlu: `system-setting.service.ts` `DocumentConfig.columns` tipi **ve**
+  `sanitizeDocumentsConfig` kayıt kapısı (`entry.hidden?.length || entry.order?.length ||
+  entry.shown?.length`). Kapıya `shown` eklenmezse yalnız opt-in kolon açılmış satır
+  **sessizce atılır**: kullanıcı kolonu açar, ayar kaydolmaz, sebebi hiçbir yerde görünmez.
+- **Tek seferlik baskı bayrağı** (`?rowNotes=1`) kalıcı ayarı **EZER** (pure OR) ve hiçbir
+  yere yazılmaz — ne ayara, ne donmuş snapshot'a; yeni belge versiyonu doğurmaz. OR yalnız
+  renderer'da TEK yerde uygulanır (efektif kolon ayarı kurulurken). Diyalogdaki checkbox
+  `DocDef.supportsRowNotes` ile gösterilir. Referans testler: `Teks-Erp/scripts/test_sack_note_document.ts`.
+
 ## Dosya Boyutu Kuralı
 
 - **Tek dosya 300 satırı geçmesin.** Geçiyorsa parçala.

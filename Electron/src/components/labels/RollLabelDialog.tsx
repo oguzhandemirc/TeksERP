@@ -17,6 +17,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
+import { relabelService } from "@/pages/Operations/RelabelStation/service";
+import { RelabelPrintForCustomer as PrintForCustomerCard } from "./PrintForCustomerCard";
 
 interface Props {
   rollId: string | null;
@@ -49,6 +51,15 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     staleTime: 0,
   });
   const preview = previewQuery.data;
+
+  // Müşteri adayları + son baskı bilgisi için relabel bağlamı (aynı payload, rollId ile).
+  const relabelCtxQuery = useQuery({
+    queryKey: ["relabel-context", "roll", rollId],
+    queryFn: () => relabelService.getContextByRollId(rollId!),
+    enabled: open,
+    staleTime: 0,
+  });
+  const relabelCtx = relabelCtxQuery.data?.data ?? null;
 
   const [editOpen, setEditOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -133,6 +144,12 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                 className="h-[640px] w-full rounded border bg-white"
               />
             )}
+
+            {/* "B müşterisi için bas" — etiket A'ya basılmış ama mal B'ye gidecek.
+                2026-07-30: eskiden "Yeniden Etiketle/Düzenle" diyaloğundaydı; TÜM
+                baskı işleri tek yerde toplansın diye buraya taşındı (veri düzeltme
+                artık "Düzelt" diyaloğunda, baskı burada). */}
+            {relabelCtx && <PrintForCustomerCard ctx={relabelCtx} />}
 
             <DialogFooter className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex gap-2">

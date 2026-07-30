@@ -73,7 +73,12 @@ export function flowTemplateToCanvas(
   const payload = mockPayload(tpl.kind);
   const bc = payload.barcode ?? "";
 
-  const bannerOn = tpl.lengthBanner === true && tpl.kind !== ("SWATCH" as LabelKind);
+  // Metraj bandı yalnız TOP etiketinde (kartela/çuval hariç — label-template.service
+  // getDefaults ile aynı kural).
+  const bannerOn =
+    tpl.lengthBanner === true &&
+    tpl.kind !== ("SWATCH" as LabelKind) &&
+    tpl.kind !== ("SACK" as LabelKind);
   const bannerW = bannerOn ? EPL_FONT.xl.h * BANNER_MUL : 0;
   const contentRight = bannerOn ? right - bannerW - d(2) : right;
 

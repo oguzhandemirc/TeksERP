@@ -925,7 +925,9 @@ export interface UpdateOrderLineCustomerNamesRequest {
 
 // === Label Template ===
 
-export type LabelKind = 'ROLL_RAW' | 'ROLL_FINISHED' | 'SWATCH';
+// ⚠️ Prisma LabelKind enum'undan BAĞIMSIZ — backend'e değer eklemek burayı
+// derleme hatasıyla uyarmaz. SACK = çuval etiketi (barkod/QR = Sack.sackNo).
+export type LabelKind = 'ROLL_RAW' | 'ROLL_FINISHED' | 'SWATCH' | 'SACK';
 
 export type LabelFontSize = 'sm' | 'md' | 'lg' | 'xl';
 

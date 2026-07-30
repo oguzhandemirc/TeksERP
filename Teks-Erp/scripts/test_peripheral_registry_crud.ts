@@ -4,7 +4,7 @@
 // Test verisi üretir, sonunda temizler.
 // =============================================================================
 import { LabelKind, PrinterLanguage } from "@prisma/client";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { PeripheralDeviceService } from "../src/services/peripheral.service";
 
 let pass = 0;
@@ -157,4 +157,8 @@ async function cleanup() {
 
 main()
   .catch((e) => { console.error("HATA:", e); process.exitCode = 1; })
-  .finally(async () => { await cleanup().catch((e) => console.error("Cleanup hatası:", e)); await prisma.$disconnect(); });
+  .finally(async () => {
+    await cleanup().catch((e) => console.error("Cleanup hatası:", e));
+    await prisma.$disconnect();
+    await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
+  });

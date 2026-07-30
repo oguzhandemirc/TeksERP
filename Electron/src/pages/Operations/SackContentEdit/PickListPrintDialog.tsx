@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Printer } from "lucide-react";
+import { Loader2, MessageSquareText, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,10 @@ interface Props {
 export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   const open = !!sackIds && sackIds.length > 0;
   const printRef = useRef<HTMLDivElement>(null);
+  // Çuval notlarını bas — opsiyonel, varsayılan KAPALI. Notlar her yerde opt-in
+  // (irsaliye kolonu, etiket alanı) → burada da aynı davranış: operatör isterse açar.
+  // Diyalog kapanınca sıfırlanır; hiçbir yere kaydedilmez.
+  const [withNotes, setWithNotes] = useState(false);
 
   const fetchMut = useMutation({
     mutationFn: (ids: string[]) => sackHubService.pickList(ids),
@@ -48,6 +52,8 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   const totalKg = rows.reduce((a, r) => a + (r.weightKg ?? 0), 0);
   const totalRolls = rows.reduce((a, r) => a + r.rollCount, 0);
   const customers = [...new Set(rows.map((r) => r.customer?.name).filter((n): n is string => !!n))];
+  // Notu OLAN çuval yoksa tuşu hiç göstermeyelim — boş bir seçenek kafa karıştırır.
+  const notedCount = rows.filter((r) => r.notes).length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -65,7 +71,8 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
         ) : rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Döküm yüklenemedi.</p>
         ) : (
-          <div ref={printRef} className="print-area">
+          <>
+            <div ref={printRef} className="print-area">
             <div className="mb-2">
               <div className="text-base font-semibold">ÇEKİ LİSTESİ (saha arama kağıdı)</div>
               <div className="text-xs text-muted-foreground">
@@ -107,6 +114,13 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                         </div>
                       ))}
                       {r.swatchCount > 0 && <div className="text-muted-foreground">{r.swatchCount} kartela</div>}
+                      {/* Not — İçerik hücresinin altına ayrı satır; tabloyu genişletmez,
+                          uzun not sarar. Yalnız tuş işaretliyse basılır. */}
+                      {withNotes && r.notes && (
+                        <div className="mt-1 whitespace-pre-wrap break-words border-l-2 border-foreground/40 pl-1.5 font-medium">
+                          Not: {r.notes}
+                        </div>
+                      )}
                     </td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{r.rollCount}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{fmtM(r.totalQty)}</td>
@@ -127,7 +141,38 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                 </tr>
               </tfoot>
             </table>
-          </div>
+            </div>
+          </>
+        )}
+
+        {/* Baskı seçeneği — YAZDIR tuşunun hemen üstünde, belirgin kutu içinde.
+            print-area'nın DIŞINDA: aksi halde işaret kutusunun kendisi kağıda basılır.
+            Notu olan çuval yoksa hiç gösterilmez (boş seçenek kafa karıştırır). */}
+        {notedCount > 0 && rows.length > 0 && (
+          <label
+            className={`flex cursor-pointer items-start gap-2.5 rounded-md border p-3 transition-colors ${
+              withNotes
+                ? "border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30"
+                : "border-input bg-muted/40 hover:bg-muted/60"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={withNotes}
+              onChange={(e) => setWithNotes(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                <MessageSquareText className="h-4 w-4 shrink-0" />
+                Çuval notlarını yazdır
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {notedCount} çuvalda not var — işaretlerseniz her çuvalın altına “Not: …”
+                satırı olarak basılır.
+              </span>
+            </span>
+          </label>
         )}
 
         <DialogFooter>

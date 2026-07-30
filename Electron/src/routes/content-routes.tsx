@@ -35,6 +35,7 @@ import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
 import { PerfPage } from "@/pages/System/Perf/PerfPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
+import { DbRestorePage } from "@/pages/System/DbRestore/DbRestorePage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelStudioPage } from "@/pages/LabelTemplates/editor/LabelStudioPage";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
@@ -382,6 +383,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <BackupsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/db-restore",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <DbRestorePage />
       </ProtectedRoute>
     ),
   },

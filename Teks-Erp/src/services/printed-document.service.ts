@@ -91,6 +91,18 @@ interface BuilderEntry {
    *  tekrar baskıda çıkar. Verilmezse ephemeral ?printNote= kullanılır. Yalnız
    *  sevk irsaliyesi uygular (shipment.dispatchNote). */
   resolveLiveNote?: (db: Db, sourceId: string) => Promise<string | null>;
+  /**
+   * SATIR-BAZLI kayıtlı notları (annotation) canlı çözer — anahtar → not.
+   * `resolveLiveNote` belge başına TEK not döner; bu ise tablo satırlarına
+   * eşlenen notlar içindir (sevk irsaliyesi çuval tablosu → sackNo → yorum).
+   *
+   * Donmuş çekirdeğe GİRMEZ (collectShipmentDocContent'e dokunulmaz): sevkten
+   * sonra yazılan yorum da basılabilir, `schemaVersion` artmaz, eski snapshot'lar
+   * etkilenmez. HER baskıda koşar (kolon kapalı olsa da) — ucuz tek sorgu;
+   * görünürlük kararını renderer verir, böylece bu katman belge config'ini
+   * okumak zorunda kalmaz.
+   */
+  resolveLiveRowNotes?: (db: Db, sourceId: string) => Promise<Record<string, string>>;
   /** Donmuş snapshot'tan baskı-hazır HTML üretir — TEK KAYNAK format (mobil +
    *  Electron aynı HTML'i basar). Verilmezse o belge tipi için `getHtml` 400 verir. */
   renderHtml?: (
@@ -109,6 +121,14 @@ interface BuilderEntry {
       printedBy?: string | null;
       /** Tek seferlik baskı notu (persist edilmez, ?printNote=). */
       printNote?: string | null;
+      /** Satır-bazlı kayıtlı notlar (resolveLiveRowNotes çıktısı) — ör. sackNo → yorum. */
+      rowNotes?: Record<string, string>;
+      /**
+       * Tek seferlik "satır notlarını bu baskıda göster" (?rowNotes=1) — kalıcı
+       * kolon ayarını EZER (OR ilişkisi), hiçbir yere YAZILMAZ. Renderer bunu
+       * efektif kolon ayarına çevirir.
+       */
+      forceRowNotes?: boolean;
     },
   ) => string;
 }
@@ -377,6 +397,12 @@ export class PrintedDocumentService {
       printedBy?: string | null;
       /** Tek seferlik baskı notu — persist edilmez, yalnız bu render'a girer. */
       printNote?: string | null;
+      /**
+       * Tek seferlik "satır notlarını bu baskıda göster" (?rowNotes=1). Kalıcı kolon
+       * ayarını EZER (OR); persist EDİLMEZ — ne ayara ne snapshot'a yazılır, yeni
+       * belge versiyonu doğurmaz.
+       */
+      forceRowNotes?: boolean;
     },
   ): Promise<ApiResponse<{ html: string } | null>> {
     const entry = requireBuilder(docType);
@@ -391,6 +417,13 @@ export class PrintedDocumentService {
     const liveNote = entry.resolveLiveNote
       ? await entry.resolveLiveNote(prisma, sourceId)
       : (opts?.printNote ?? null);
+
+    // Satır-bazlı notlar (annotation) — HER baskıda çözülür. Görünürlük kararı
+    // renderer'da (kalıcı kolon ayarı VEYA forceRowNotes); bu katman config okumaz.
+    const rowNotes = entry.resolveLiveRowNotes
+      ? await entry.resolveLiveRowNotes(prisma, sourceId)
+      : undefined;
+    const noteMeta = { rowNotes, forceRowNotes: opts?.forceRowNotes ?? false };
 
     // version verilirse o versiyonun HTML'i (Electron versiyon çubuğu); yoksa güncel.
     const res =
@@ -424,6 +457,7 @@ export class PrintedDocumentService {
         status: rec.status,
         voidReason: rec.voidReason,
         ...extras,
+        ...noteMeta,
       });
       return { success: true, data: { html } };
     }
@@ -438,7 +472,7 @@ export class PrintedDocumentService {
           printedBy: opts?.printedBy,
           printNote: liveNote,
         });
-        const html = entry.renderHtml(snapshot, { draft: true, ...extras });
+        const html = entry.renderHtml(snapshot, { draft: true, ...extras, ...noteMeta });
         return { success: true, data: { html } };
       }
     }

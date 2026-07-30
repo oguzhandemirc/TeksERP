@@ -72,7 +72,7 @@ const previewRawSchema = z.object({
 // doğrulama servistedir (validateCanvasLayout, Türkçe mesajlar). Enum'lar
 // string-literal + as cast (TDZ kuralı: modül-üstü enum ÜYESİ deref yasak).
 const canvasPreviewSchema = z.object({
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as [string, ...string[]]),
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as [string, ...string[]]),
   widthMm: z.number().min(10).max(500),
   heightMm: z.number().min(10).max(500),
   elements: z.unknown(),
@@ -100,7 +100,7 @@ const variantUpdateSchema = z.object({
 });
 
 const contextDefaultSchema = z.object({
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as [string, ...string[]]),
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as [string, ...string[]]),
   templateId: z.string().uuid().nullable(),
 });
 

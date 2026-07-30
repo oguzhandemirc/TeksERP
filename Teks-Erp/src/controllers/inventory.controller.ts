@@ -73,6 +73,10 @@ const relabelSchema = z.object({
   // Metraj (currentQty) düzeltmesi — yanlış girilen ölçüm. Aynı guard'lara tabi
   // (hurda/iptal + commit'li sevkiyat reddi). Kısmen tüketilmiş topta servis reddeder.
   currentQty:   z.number().positive("Metraj pozitif olmalı").max(999_999).optional(),
+  // İşlem nedeni. Serbest satılabilir stokta OPSİYONEL; top üretimdeyse (serbest
+  // stok dışı) servis ZORUNLU kılar ve `roll:manual-adjust` yetkisi arar — böylece
+  // eski `/manual-attributes` ucunun süpervizör kapsamı bu tek uçtan karşılanır.
+  reason:       z.string().trim().min(3, "İşlem nedeni en az 3 karakter olmalı").max(500).optional(),
 });
 
 // Yeni model: KK2 ölçüm yapmaz; totalMeters opsiyonel — verilmezse roll'un
@@ -109,6 +113,7 @@ export class InventoryController {
     this.findRollById = this.findRollById.bind(this);
     this.findRollByBarcode = this.findRollByBarcode.bind(this);
     this.getRelabelContext = this.getRelabelContext.bind(this);
+    this.getRelabelContextById = this.getRelabelContextById.bind(this);
     this.getRollHistory = this.getRollHistory.bind(this);
     this.cancelPreview = this.cancelPreview.bind(this);
     this.softDelete = this.softDelete.bind(this);
@@ -346,7 +351,25 @@ export class InventoryController {
         res.status(400).json({ success: false, message: "Barkod parametresi gerekli" });
         return;
       }
-      const result = await this.service.getRelabelContext(rawBarcode.trim());
+      const result = await this.service.getRelabelContext({ barcode: rawBarcode.trim() });
+      if (!result.success) {
+        res.status(404).json(result);
+        return;
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/:id/relabel-context — aynı bağlam, rollId ile.
+   * Barkodsuz açık kumaş (fason dönüşü / istasyonda bekleyen top) barkodla
+   * bulunamaz; tek "Düzelt" diyaloğu onu da açabilmek için bu ucu kullanır.
+   */
+  async getRelabelContextById(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getRelabelContext({ rollId: req.params.id as string });
       if (!result.success) {
         res.status(404).json(result);
         return;
@@ -406,8 +429,11 @@ export class InventoryController {
   }
 
   /**
-   * PATCH /api/rolls/:id/label — Saha #4: etiket (renk/özellik/en/kalite) değiştir.
-   * Tartı/paket ekranından yanlış/eksik etiketli stok topu düzeltilip yeniden basılır.
+   * PATCH /api/rolls/:id/label — TEK düzeltme ucu (renk/özellik/en/kalite/metraj).
+   *
+   * Kapsam topun durumundan çözülür (servis): serbest satılabilir stokta sebep
+   * opsiyoneldir; top üretimdeyse sebep ZORUNLU + `roll:manual-adjust` aranır.
+   * `permissions` HER ZAMAN geçirilir — güvenlik sınırı burasıdır (F221 deseni).
    */
   async relabel(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -420,8 +446,10 @@ export class InventoryController {
           width: body.width,
           qualityGrade: body.qualityGrade,
           currentQty: body.currentQty,
+          reason: body.reason,
         },
-        req.user?.userId
+        req.user?.userId,
+        { permissions: req.user?.permissions ?? [] },
       );
       res.status(200).json(result);
     } catch (error) {
@@ -459,6 +487,7 @@ export class InventoryController {
           reason: body.reason,
         },
         req.user?.userId,
+        { permissions: req.user?.permissions ?? [] },
       );
       res.status(200).json(result);
     } catch (error) {

@@ -1,21 +1,27 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { MessageSquareText } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
-import { isWarehouseSack, type SackSearchRow } from "./types";
+import { sackStatusLabels, sackStatusOf, type SackSearchRow } from "./types";
 
 const fmtQty = (n: number) =>
   `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
 
-/** LOUD durum rozeti — Depoda (emerald) / Sevkte (violet=planlı) / Sevk Edildi (zinc). */
+/**
+ * LOUD durum rozeti — Depoda (emerald) / Sevkte (violet=planlı) / Sevk Edildi (zinc).
+ * ETİKET metni `sackStatusLabels`'tan (detay paneliyle tek kaynak); RENK burada
+ * bilinçli olarak dolu/loud — listede tarama kolaylığı, panelde tonlu StatusBadge.
+ */
+const STATUS_CLASS: Record<ReturnType<typeof sackStatusOf>, string> = {
+  POOL: "bg-emerald-600 text-white",
+  PLANNED: "bg-violet-600 text-white",
+  DISPATCHED: "bg-zinc-600 text-white",
+};
+
 function statusBadge(sack: SackSearchRow): { label: string; className: string } {
-  if (isWarehouseSack(sack)) return { label: "Depoda", className: "bg-emerald-600 text-white" };
-  switch (sack.shipment!.status) {
-    case "DISPATCHED":
-      return { label: "Sevk Edildi", className: "bg-zinc-600 text-white" };
-    default:
-      return { label: "Sevkte", className: "bg-violet-600 text-white" };
-  }
+  const key = sackStatusOf(sack);
+  return { label: sackStatusLabels[key], className: STATUS_CLASS[key] };
 }
 
 /**
@@ -103,7 +109,10 @@ export const sacksColumns: ColumnDef<SackSearchRow>[] = [
   {
     id: "rolls",
     header: "Top",
-    meta: { label: "Top", exportValue: (s) => `${s.rollCount}${s.swatchCount > 0 ? ` +${s.swatchCount} kartela` : ""}` },
+    // exportValue SAYI olmalı: eski `"5 +2 kartela"` metni summable ile birlikte
+    // rawCellNumber'da rakamlara indirgenip "52" olurdu (5 top + 2 kartela → 52).
+    // Kartela adedi hücrede ve içerik dökümünde görünür; bu kolon top sayar.
+    meta: { label: "Top", summable: true, exportValue: (s) => s.rollCount },
     cell: ({ row }) => {
       const s = row.original;
       return (
@@ -119,7 +128,7 @@ export const sacksColumns: ColumnDef<SackSearchRow>[] = [
   {
     id: "totalQty",
     header: "Metraj",
-    meta: { label: "Metraj" },
+    meta: { label: "Metraj", summable: true },
     cell: ({ row }) => (
       <span className="tabular-nums text-xs">{fmtQty(row.original.totalQty)}</span>
     ),
@@ -127,7 +136,8 @@ export const sacksColumns: ColumnDef<SackSearchRow>[] = [
   {
     id: "weightKg",
     header: "Kg",
-    meta: { label: "Kg" },
+    // Tartılmamış çuval toplamda 0 sayılır (null → 0) — toplam "tartılanların kg'ı".
+    meta: { label: "Kg", summable: true },
     cell: ({ row }) => {
       const kg = row.original.weightKg;
       return kg === null ? (
@@ -135,6 +145,26 @@ export const sacksColumns: ColumnDef<SackSearchRow>[] = [
       ) : (
         <span className="tabular-nums text-xs">
           {kg.toLocaleString("tr-TR", { useGrouping: false })}
+        </span>
+      );
+    },
+  },
+  {
+    id: "note",
+    header: "Not",
+    meta: { label: "Not", exportValue: (s) => s.notePreview ?? "" },
+    cell: ({ row }) => {
+      const s = row.original;
+      // Liste yalnız kırpılmış önizleme alır (notePreview, 80 karakter) — tam metin
+      // çuval editöründe. Yorum yoksa sütun sessiz kalır.
+      if (!s.hasNote) return <span className="text-muted-foreground">—</span>;
+      return (
+        <span
+          className="flex max-w-[220px] items-center gap-1 text-xs text-muted-foreground"
+          title={s.notePreview ?? undefined}
+        >
+          <MessageSquareText className="h-3 w-3 shrink-0" />
+          <span className="truncate italic">{s.notePreview}</span>
         </span>
       );
     },

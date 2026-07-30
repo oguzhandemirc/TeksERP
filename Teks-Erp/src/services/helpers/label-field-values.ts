@@ -93,6 +93,22 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     case "kartelaMark":
       return { value: "KARTELALIK", present: payload.markedForKartela === true, role: "headline" };
 
+    // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
+    // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.
+    case "sackNo":
+      return str(payload.sackNo, "headline");
+    // Top adedi çuval etiketinin en çok bakılan sayısı → headline. Birimsiz ("12").
+    case "rollCount":
+      return payload.rollCount == null
+        ? NONE
+        : { value: formatNumber(payload.rollCount), present: true, role: "headline" };
+    case "branchName":
+      return str(payload.branchName);
+    // Çuval yorumu: normal satır. Boşsa present:false → eleman baskıda ATLANIR
+    // (şablonda alan dursa bile yorumsuz çuvalda yer kaplamaz).
+    case "sackNote":
+      return str(payload.sackNote);
+
     case "printedAt":
       return { value: formatDate(payload.printedAt), present: !!payload.printedAt, role: "row" };
 

@@ -15,7 +15,30 @@ Atamalar (şablonu KİM kullanır):
  └─ CustomerTemplateRoute    (müşteri, kind) → şablon
 ```
 
-- `kind` (ROLL_RAW/ROLL_FINISHED/SWATCH) artık **veri bağlamıdır**, kimlik değil:
+### 4. bağlam: `SACK` (çuval etiketi, 2026-07-30)
+
+`LabelKind.SACK` — çuvala yapışan etiket. Barkod + QR = **`Sack.sackNo`** (CV+GGAAYY+NNNN);
+Sack'e ayrı `barcode` kolonu **eklenmedi** (`utils/code-format.ts` "insan-okur kod = tarama
+barkodu, tek kod" kuralı). Katalog 10 alan: `barcode`, `qrCode`, `sackNo`, `rollCount`,
+`lengthMeters`, `weightKg`, `customerName`, `branchName`, `sackNote`, `printedAt`.
+
+- **Ürün/renk alanı YOK, bilinçli:** bir çuvalda N farklı kumaş/renk olabilir → tek ürün adı
+  karışık çuvalda **sessizce yanlış** olur. Çuval etiketi bir TOPLAM belgesidir.
+- `rollCount`/`lengthMeters` ölü topu (CANCELLED/SCRAP) saymaz; SHIPPED sayar (irsaliyeyle tutarlı).
+- **Baskı FAIL-CLOSED** (`label.service.buildSackRenderInput`): SACK şablonu çözülemezse
+  `400` + yönlendirmeli Türkçe mesaj. Roll/swatch'a **sapmaz** — `label-html-landscape.helper`
+  bilinmeyen kind'ı `ROLL_FINISHED`'a düşürdüğü için şablonsuz baskı sessizce tire dolu bir
+  TOP etiketi basardı. Seed dev paritesi için kanvas varyantlı bir SACK şablonu + bağlam
+  varsayılanı üretir (production'da seed koşmaz → operatör stüdyoda kendisi kurar).
+- `mockPayload(SACK)` çuval alanlarını doldurur — stüdyo önizlemesinin ön koşulu; atlanırsa
+  tasarımcı alanı sürükler, önizlemede boş görür ve "alan çalışmıyor" sanar.
+- **Enum genişletmesi TS ile korunmuyor:** derlemeyi kıran tek yer `config/label-fields.ts`
+  `FIELD_CATALOG`. Electron (`services/labelTemplateService.ts`) ve mobil
+  (`types/models.ts`) kendi bağımsız union'larını taşır; ayrıca **4 literal `z.enum`**
+  (`label.controller:33`, `label-template.controller:75,103`,
+  `customer-template-route.routes:22`) ve swagger enum'ları elle güncellenir.
+
+- `kind` (ROLL_RAW/ROLL_FINISHED/SWATCH/SACK) artık **veri bağlamıdır**, kimlik değil:
   baskı anında veriden türer (`colorId == null → ROLL_RAW`), alan değerlerinin
   sözlüğünü seçer. Şablon her bağlama atanabilir; bağlam-dışı alan **boş kalır**
   (mutlak konumda kayma olmaz).

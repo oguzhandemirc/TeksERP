@@ -40,7 +40,12 @@ import { ManualEntryDialog } from "./ManualEntryDialog";
 import { RollDetailSheet } from "./RollDetailSheet";
 import { useFasonScopeLabel } from "./useFasonScopeLabel";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
-import { rollService, buildRollForceFilters, type RollStatusTabKey } from "./service";
+import {
+  rollService,
+  buildRollForceFilters,
+  rollTabDefaultSortBy,
+  type RollStatusTabKey,
+} from "./service";
 import { downloadInventorySummary } from "./inventorySummary";
 import type { LabelCustomerContext } from "@/services/labelService";
 import type { Roll } from "./types";
@@ -148,13 +153,26 @@ export function RollsPage() {
     columns: rollColumns,
     defaultPageSize: 100,
     forceFilters: tab === "KANBAN" ? {} : buildRollForceFilters(tab),
+    // Ham Stok dışındaki sekmelerde "buraya geliş" ≠ "oluşturma" → son hareket
+    // sıralaması (bkz. rollTabDefaultSortBy). Kolon başlığına basınca URL kazanır.
+    defaultSortBy: tab === "KANBAN" ? undefined : rollTabDefaultSortBy(tab),
     // Fason sütunları ("İşlem" + "Fason Firması") yalnız Fasonda sekmesinde
     // default açık; diğer sekmelerde gizli başlar (Sütunlar'dan açılabilir,
     // hücre "—" gösterir — veri yalnız AT_SUBCONTRACTOR'da dolar).
-    initialVisibility:
-      tab === "SUBCONTRACTOR"
-        ? undefined
-        : { subcontractorCategory: false, subcontractor: false },
+    // "Son Hareket" kolonu YALNIZ ona göre sıralanan sekmelerde açık — sıralama
+    // kolonu görünmezse "eski tarihli top neden en üstte?" karışıklığı doğuyor.
+    // Ham Stok'ta giriş = oluşturma olduğundan gereksiz, gizli başlar.
+    initialVisibility: {
+      // Fason sütunları yalnız Fasonda sekmesinde açık.
+      ...(tab === "SUBCONTRACTOR"
+        ? {}
+        : { subcontractorCategory: false, subcontractor: false }),
+      // TEK tarih kolonu görünür: sıralanan kolonun aynısı. Ham Stok'ta giriş =
+      // oluşturma olduğu için orada "Giriş", diğerlerinde "Son İşlem" gösterilir —
+      // iki tarih birlikte gösterilmez (operatörü karıştırıyor).
+      updatedAt: tab !== "RAW_STOCK",
+      createdAt: tab === "RAW_STOCK",
+    },
     enabled: isTableTab,
   });
 

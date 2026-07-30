@@ -15,7 +15,7 @@
 //   6. geçersiz targetOrderLineId → 400; pasif targetCustomerId → 400.
 
 import { RollStatus, RollEntrySource, Prisma } from "@prisma/client";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { LabelService } from "../src/services/label.service";
 
@@ -175,4 +175,5 @@ main()
   .finally(async () => {
     await cleanup().catch((e) => console.error("Cleanup hatası:", e));
     await prisma.$disconnect();
+    await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
   });

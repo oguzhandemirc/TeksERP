@@ -226,6 +226,10 @@ export interface FeatureFlags {
   companyLetterhead: CompanyLetterhead;
   /** Yazdırılan belgelerin içerik ayarı (canlı). resolveDocConfig ile çözülür. */
   documentsConfig: DocumentsConfig;
+  /** Otomatik gece yedeğinin saati (0-23, SUNUCUNUN yerel saati; default 3).
+   *  Backend ENFORCE eder — zamanlayıcı her turda okur, değişiklik için sunucuyu
+   *  yeniden başlatmak GEREKMEZ (en geç 15 dk içinde geçerli olur). */
+  backupHour: number;
 }
 
 export { DEFAULT_COMPANY_LETTERHEAD };

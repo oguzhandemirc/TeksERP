@@ -64,4 +64,17 @@ export interface RelabelSpecPayload {
   qualityGrade?: string;
   /** Metraj (mt) düzeltmesi — yalnız değiştiyse gönderilir; bütün topta izinli. */
   currentQty?: number;
+  /**
+   * İşlem nedeni. Serbest satılabilir stokta (STOCK/WAREHOUSE/A1_STOCK) opsiyonel;
+   * top üretimdeyse backend ZORUNLU kılar ve `roll:manual-adjust` yetkisi arar.
+   */
+  reason?: string;
+}
+
+/** Serbest satılabilir stok — backend'deki FREE_STOCK kümesinin aynası. */
+export const FREE_STOCK_STATUSES = ["STOCK", "WAREHOUSE", "A1_STOCK"] as const;
+
+/** Bu topu düzeltmek süpervizör kapsamı mı? (sebep zorunlu + roll:manual-adjust) */
+export function needsSupervisorEdit(status: string): boolean {
+  return !(FREE_STOCK_STATUSES as readonly string[]).includes(status);
 }

@@ -35,17 +35,16 @@ function main() {
 
   console.log(`\n=== Backend test suite — ${files.length} dosya ===\n`);
 
-  const results: { file: string; ok: boolean; summary: string; ms: number }[] = [];
+  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean }[] = [];
 
-  for (const file of files) {
-    const start = Date.now();
+  /** Tek test dosyasını koş; exit kodu + özet satırı + tam çıktıyı döndür. */
+  function runOnce(file: string): { ok: boolean; status: number | null; summary: string; out: string } {
     const res = spawnSync("npx", ["tsx", join(SCRIPTS_DIR, file)], {
       encoding: "utf8",
       timeout: PER_TEST_TIMEOUT_MS,
       env: process.env,
       shell: IS_WIN, // Windows npx.cmd çözümü (bkz. IS_WIN notu)
     });
-    const ms = Date.now() - start;
     const out = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;
     // DOĞRULUK KAYNAĞI = exit kodu (her test process.exit(fail>0?1:0)). Özet
     // satırı yalnız görüntü; testler farklı format kullanıyor:
@@ -62,24 +61,59 @@ function main() {
         : ok
           ? "geçti (exit 0)"
           : "BAŞARISIZ";
-    results.push({ file, ok, summary, ms });
-    const icon = ok ? "✅" : "❌";
-    console.log(`${icon} ${file.padEnd(42)} ${summary.padEnd(24)} ${(ms / 1000).toFixed(1)}s`);
-    if (!ok && res.status !== 0) {
+    return { ok, status: res.status, summary, out };
+  }
+
+  /** Başarısız çıktı ALTYAPI arızası mı (DB bağlantısı) yoksa gerçek assertion mı? */
+  function looksInfrastructural(out: string): boolean {
+    return /timeout exceeded when trying to connect|ECONNREFUSED|too many clients|Can't reach database server/i.test(
+      out,
+    );
+  }
+
+  for (const file of files) {
+    const start = Date.now();
+    let r = runOnce(file);
+    let flaky = false;
+
+    // TEK YENİDEN DENEME — yalnız altyapı arızasında. 199 test process'i sırayla
+    // yerel Postgres'e havuz açıyor; makine yüklüyken (dev sunucu + Electron +
+    // Expo) pool'un connectionTimeoutMillis=5s'i ara sıra aşılıyor ve konuyla
+    // ilgisiz bir test düşüyor. Assertion hatası ASLA yeniden denenmez — gerçek
+    // regresyonu maskelemesin.
+    if (!r.ok && looksInfrastructural(r.out)) {
+      console.log(`⏳ ${file.padEnd(42)} altyapı hatası (DB bağlantısı) — 1 kez yeniden deneniyor`);
+      const retry = runOnce(file);
+      if (retry.ok) flaky = true;
+      r = retry;
+    }
+
+    const ms = Date.now() - start;
+    results.push({ file, ok: r.ok, summary: r.summary, ms, flaky });
+    const icon = r.ok ? (flaky ? "⚠️" : "✅") : "❌";
+    const label = flaky ? `${r.summary} (2. denemede)` : r.summary;
+    console.log(`${icon} ${file.padEnd(42)} ${label.padEnd(24)} ${(ms / 1000).toFixed(1)}s`);
+    if (!r.ok && r.status !== 0) {
       // Başarısız testin son satırlarını göster (teşhis). 16 satır: hata mesajı
       // ("Error: <mesaj>" ilk satırda) + stack + {statusCode} objesi sığsın —
       // CI'da bu blok PR yorumuna gider, tek bakışta kök neden görülsün.
-      const tail = out.trim().split("\n").slice(-16).join("\n");
-      console.log(`   ↳ çıkış kodu ${res.status}\n${tail.replace(/^/gm, "   | ")}`);
+      const tail = r.out.trim().split("\n").slice(-16).join("\n");
+      console.log(`   ↳ çıkış kodu ${r.status}\n${tail.replace(/^/gm, "   | ")}`);
     }
   }
 
   const failed = results.filter((r) => !r.ok);
+  const flakes = results.filter((r) => r.flaky);
   const totalMs = results.reduce((s, r) => s + r.ms, 0);
   console.log(`\n=== ÖZET: ${results.length - failed.length}/${results.length} dosya geçti · ${(totalMs / 1000).toFixed(0)}s ===`);
   if (failed.length > 0) {
     console.log("Başarısız:");
     for (const f of failed) console.log(`  ❌ ${f.file} — ${f.summary}`);
+  }
+  // Flake'ler exit kodunu düşürmez ama GİZLENMEZ — hangi test kaç kez koştu görünsün.
+  if (flakes.length > 0) {
+    console.log(`Altyapı flake'i (2. denemede geçti — DB bağlantı timeout'u): ${flakes.length}`);
+    for (const f of flakes) console.log(`  ⚠️  ${f.file}`);
   }
   process.exit(failed.length > 0 ? 1 : 0);
 }

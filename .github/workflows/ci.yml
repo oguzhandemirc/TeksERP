@@ -34,6 +34,12 @@ jobs:
           node-version: 22
       - name: Doküman tutarlılık kontrolü
         run: node scripts/check-docs.mjs
+      # Migration hijyeni — asıl değeri YERELDE (untracked migration/test yakalar).
+      # CI'da checkout temiz olduğu için burada her zaman yeşildir; GATE 3
+      # (migration.sql eksik dizin) yine gerçek koruma sağlar ve adımın varlığı
+      # kuralı dokümante eder. Gerekçe: scripts/check-migrations.mjs başlığı.
+      - name: Migration hijyeni (commit edilmemiş migration/test)
+        run: node scripts/check-migrations.mjs
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test

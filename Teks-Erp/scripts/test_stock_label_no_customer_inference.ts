@@ -15,7 +15,7 @@
 //   5. snapshot.stock=true → no-opts'ta müşteri NULL (stok snapshot korunur).
 
 import { RollStatus, RollEntrySource, Prisma } from "@prisma/client";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { LabelService } from "../src/services/label.service";
 
 const labels = new LabelService();
@@ -179,4 +179,5 @@ main()
   .finally(async () => {
     await cleanup().catch((e) => console.error("Cleanup hatası:", e));
     await prisma.$disconnect();
+    await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
   });

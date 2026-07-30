@@ -13,7 +13,7 @@
 // =============================================================================
 
 import { LabelKind } from "@prisma/client";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { LabelTemplateService } from "../src/services/label-template.service";
 import { LabelService } from "../src/services/label.service";
 import { CustomerStandaloneLabelService } from "../src/services/customer-standalone-label.service";
@@ -178,4 +178,5 @@ main()
   .finally(async () => {
     await cleanup().catch((err) => console.error("Cleanup hatası:", err));
     await prisma.$disconnect();
+    await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
   });

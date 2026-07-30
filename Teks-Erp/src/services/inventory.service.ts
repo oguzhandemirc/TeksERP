@@ -90,6 +90,7 @@ import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-tran
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 
 export interface RollStats {
   totalCount: number;
@@ -1693,9 +1694,16 @@ export class InventoryService {
    * `findRollByBarcode`'tan AYRI tutulur: o lean lookup (depo/Tambur okutması, hot
    * path); bu method üretim-zinciri include'larını yalnız relabel istasyonu için taşır.
    */
-  async getRelabelContext(barcode: string): Promise<ApiResponse<RelabelContext | null>> {
+  /**
+   * Barkod VEYA rollId ile çözülür. rollId yolu şart: barkodsuz açık kumaş
+   * (fason dönüşü / istasyonda bekleyen top) barkodla bulunamaz ama tek "Düzelt"
+   * diyaloğu onu da açmak zorunda (eski ManualAttributesDialog'un tek üstünlüğü buydu).
+   */
+  async getRelabelContext(
+    ref: { barcode: string } | { rollId: string },
+  ): Promise<ApiResponse<RelabelContext | null>> {
     const roll = await prisma.roll.findUnique({
-      where: { barcode },
+      where: "barcode" in ref ? { barcode: ref.barcode } : { id: ref.rollId },
       select: {
         id: true,
         barcode: true,
@@ -2502,6 +2510,10 @@ export class InventoryService {
     rollId: string,
     data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string; currentQty?: number; reason?: string },
     userId?: string,
+    /** F221 deseni: sağlanırsa süpervizör kapsamı için `roll:manual-adjust` ENFORCE
+     *  edilir. Controller `req.user.permissions`'ı HER ZAMAN geçirir; omit =
+     *  güvenilen dahili çağrı (test/servis-içi) → kontrol atlanır. */
+    opts?: { permissions?: readonly string[] },
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
@@ -2526,36 +2538,52 @@ export class InventoryService {
     if (roll.status === RollStatus.SCRAP || roll.status === RollStatus.CANCELLED) {
       throw AppError.badRequest("Hurda/iptal edilmiş topun rengi/özelliği değiştirilemez");
     }
-    // F114: statü kapsamı ÇAĞIRANA göre (mevcut reason↔event ayrımıyla tutarlı —
-    // paylaşılan motor iki farklı ucu karıştırmasın). Süpervizör yolu (/:id/manual-attributes,
-    // reason ZORUNLU): istasyonda açık kumaşı (IN_PRODUCTION) da düzeltebilir;
-    // yalnız gerçekten tehlikeli statüler (fason/kartelada, emekli/lineage veya sevk edilmiş)
-    // bloklanır. Yeniden Etiketle yolu (/:id/label, reason YOK): yalnız serbest satılabilir stok.
-    const isSupervisor = Boolean(data.reason && data.reason.trim());
-    if (isSupervisor) {
-      const SUPERVISOR_BLOCKED: RollStatus[] = [
-        RollStatus.AT_SUBCONTRACTOR,
-        RollStatus.AT_KARTELA,
-        RollStatus.TAMBUR_CONSUMED,
-        RollStatus.SUBCONTRACTOR_CONSUMED,
-        RollStatus.KARTELA_CONSUMED,
-        RollStatus.RETURNED_FROM_SUBCONTRACTOR,
-        RollStatus.SHIPPED,
-      ];
-      if (SUPERVISOR_BLOCKED.includes(roll.status)) {
-        throw AppError.badRequest(
-          "Bu top fason/kartelada, emekliye ayrılmış veya sevk edilmiş — nitelikleri düzeltilemez (sevk↔kabul paritesi ve izlenebilirlik bozulur).",
+    // TEK SÖZLEŞME (2026-07-30, F114 revizyonu): statü kapsamı artık TOPUN DURUMUNA
+    // bakar, `Boolean(reason)`'a DEĞİL. Eski kurgu iki ucu (relabel / manual-attributes)
+    // aynı motoru iki farklı kapsamla çağırıyordu ve iki tuhaflık üretiyordu:
+    //   (a) süpervizör istasyondaki topun rengini düzeltebiliyor ama METRAJINI
+    //       düzeltemiyordu (depo yolu metrajı alıyordu, süpervizör yolu almıyordu);
+    //   (b) kapsamı genişleten şey yetki değil "sebep alanının dolu olması" idi —
+    //       koruma örtüktü (yalnız relabel Zod şemasının reason'ı elemesi sayesinde
+    //       sömürülemezdi).
+    // Yeni kurgu:
+    //   ALWAYS_BLOCKED → hiçbir yolla düzeltilemez (sevk↔kabul paritesi + lineage).
+    //   FREE_STOCK     → serbest düzeltme: sebep OPSİYONEL, ek yetki yok (depo/mobil).
+    //   gerisi (örn. IN_PRODUCTION) → SÜPERVİZÖR: sebep ZORUNLU + `roll:manual-adjust`.
+    const ALWAYS_BLOCKED: RollStatus[] = [
+      RollStatus.AT_SUBCONTRACTOR,
+      RollStatus.AT_KARTELA,
+      RollStatus.TAMBUR_CONSUMED,
+      RollStatus.SUBCONTRACTOR_CONSUMED,
+      RollStatus.KARTELA_CONSUMED,
+      RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+      RollStatus.SHIPPED,
+    ];
+    if (ALWAYS_BLOCKED.includes(roll.status)) {
+      throw AppError.badRequest(
+        "Bu top fason/kartelada, emekliye ayrılmış veya sevk edilmiş — nitelikleri düzeltilemez (sevk↔kabul paritesi ve izlenebilirlik bozulur).",
+      );
+    }
+    const FREE_STOCK: RollStatus[] = [
+      RollStatus.STOCK,
+      RollStatus.WAREHOUSE,
+      RollStatus.A1_STOCK,
+    ];
+    const needsSupervisor = !FREE_STOCK.includes(roll.status);
+    if (needsSupervisor) {
+      // F221 deseni: permissions SAĞLANIRSA enforce edilir; omit = güvenilen dahili
+      // çağrı (test/servis-içi). Güvenlik sınırı controller'dadır.
+      if (
+        opts?.permissions !== undefined &&
+        !matchesPermission(opts.permissions, "roll:manual-adjust")
+      ) {
+        throw AppError.forbidden(
+          "Bu top serbest satılabilir stokta değil (üretimde) — niteliklerini düzeltmek için 'roll:manual-adjust' yetkisi gerekli.",
         );
       }
-    } else {
-      const RELABEL_ALLOWED: RollStatus[] = [
-        RollStatus.STOCK,
-        RollStatus.WAREHOUSE,
-        RollStatus.A1_STOCK,
-      ];
-      if (!RELABEL_ALLOWED.includes(roll.status)) {
+      if (!data.reason || data.reason.trim().length < 3) {
         throw AppError.badRequest(
-          "Bu top serbest/satılabilir stokta değil (fason/üretim/kartela/emekli veya sevk edilmiş) — etiketi ancak STOCK, WAREHOUSE veya A1 durumundaki (serbest ya da açık çuvaldaki) toplarda düzeltebilirsiniz.",
+          "Bu top serbest satılabilir stokta değil (üretimde) — düzeltme için işlem nedeni (en az 3 karakter) zorunludur.",
         );
       }
     }

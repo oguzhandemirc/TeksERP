@@ -14,6 +14,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { SackSearchService } from "../src/services/sack-search.service";
+import { ShippingService } from "../src/services/shipping.service";
 
 let pass = 0;
 let fail = 0;
@@ -156,6 +157,7 @@ async function main() {
       id: string;
       totalQty: number;
       rollCount: number;
+      notes: string | null;
       contents: Array<{ itemName: string; qty: number; rollCount: number }>;
       customer: { name: string } | null;
       shipment: { shipmentNo: string };
@@ -170,6 +172,19 @@ async function main() {
         p1.contents.some((g) => g.qty === 30 && g.rollCount === 1),
     );
     check("Çeki satırında müşteri var (çuval müşterisi)", !!p1?.customer?.name);
+
+    // 8b) Çeki listesi çuval NOTUNU taşır — TAM metin (iç çalışma kağıdı; liste
+    // uçlarındaki 80 karakter kırpması burada yok). Basılması İSTEMCİDE opsiyonel
+    // (PickListPrintDialog "Çuval notlarını yazdır" tuşu, varsayılan kapalı).
+    check("Notsuz çuvalın çeki satırında notes null", p1?.notes === null, String(p1?.notes));
+    const longNote = "Ölçü şüpheli — müşteri kontrol etsin. ".repeat(3).trim();
+    await new ShippingService().setSackNotes(sack1.id, longNote);
+    const pick2 = (await svc.getPickList([sack1.id])).data as Array<{ id: string; notes: string | null }>;
+    check(
+      "⭐ Çeki listesi notun TAM metnini döndürüyor (kırpılmıyor)",
+      pick2[0]?.notes === longNote,
+      `${pick2[0]?.notes?.length ?? 0} karakter`,
+    );
     let pickEmpty = false;
     try {
       await svc.getPickList([]);

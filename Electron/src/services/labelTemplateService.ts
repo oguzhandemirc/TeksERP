@@ -2,10 +2,14 @@ import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { CanvasLayout } from "@/types/label-canvas";
 
+// ⚠️ Bu liste Prisma `LabelKind` enum'undan BAĞIMSIZ (kendi const'u) — backend
+// enum'una değer eklemek burayı DERLEME HATASIYLA UYARMAZ. Yeni bağlam eklerken
+// bu dosya + KINDS dizileri + PeripheralDevices tipleri elle güncellenmeli.
 export const LabelKind = {
   ROLL_RAW: "ROLL_RAW",
   ROLL_FINISHED: "ROLL_FINISHED",
   SWATCH: "SWATCH",
+  SACK: "SACK",
 } as const;
 export type LabelKind = (typeof LabelKind)[keyof typeof LabelKind];
 
@@ -13,6 +17,7 @@ export const labelKindLabels: Record<LabelKind, string> = {
   ROLL_RAW: "Ham Kumaş Etiketi",
   ROLL_FINISHED: "Bitmiş Kumaş Etiketi",
   SWATCH: "Kartela Etiketi",
+  SACK: "Çuval Etiketi",
 };
 
 export type FieldType = "text" | "number" | "date" | "qr" | "barcode" | "table";
@@ -95,6 +100,9 @@ export interface ContextDefaultRow {
 /** Birleşik katalog alanı — kinds: bu alanın değer ürettiği bağlamlar. */
 export interface UnifiedCatalogField extends CatalogField {
   kinds: LabelKind[];
+  /** Bağlama özel başlık — yalnız jenerik addan FARKLI olanlar için dolu
+   *  (ör. `weightKg` → SACK: "Brüt Ağırlık (kg)"). Palet seçili bağlamda bunu gösterir. */
+  labelByKind?: Partial<Record<LabelKind, string>>;
 }
 
 export interface CatalogField {

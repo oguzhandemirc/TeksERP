@@ -146,16 +146,63 @@ export const labelService = {
         language: String(r.data?.data?.language ?? "") as PrinterLanguage,
       })),
 
+  // ── ÇUVAL ETİKETİ — barkod/QR = Sack.sackNo (tek kod) ─────────────────────
+  // SACK şablonu (Bağlam Varsayılanı / cihaz rotası) atanmamışsa backend 400 döner
+  // ve mesaj operatöre ne yapacağını söyler — roll etiketine SAPMAZ (fail-closed).
+
+  /** Çuval etiketi native (diyalogsuz seri/COM baskı için base64). */
+  getSackNative: (
+    sackId: string,
+    peripheralId?: string,
+  ): Promise<{ contentB64: string; language: PrinterLanguage }> =>
+    apiClient
+      .get<ApiResponse<{ encoding: string; content: string; language: string }>>(
+        `/api/labels/sacks/${sackId}/native`,
+        { params: { ...(peripheralId ? { peripheralId } : {}), encoding: "b64" } },
+      )
+      .then((r) => ({
+        contentB64: String(r.data?.data?.content ?? ""),
+        language: String(r.data?.data?.language ?? "") as PrinterLanguage,
+      })),
+
+  /** Çuval etiketi HTML — önizleme + iframe.print yedeği. */
+  getSackHtml: (sackId: string, peripheralId?: string): Promise<string> =>
+    apiClient
+      .get<string>(`/api/labels/sacks/${sackId}/html`, {
+        params: peripheralId ? { peripheralId } : {},
+        responseType: "text",
+        headers: { Accept: "text/html" },
+      })
+      .then((r) => r.data),
+
+  /** Çuval etiketi baskı izi (LABEL_PRINT_EVENT) — yalnız gerçek baskıdan sonra. */
+  recordSackPrintEvent: (sackId: string): Promise<ApiResponse<{ sackId: string }>> =>
+    apiClient
+      .post<ApiResponse<{ sackId: string }>>(`/api/labels/sacks/${sackId}/print-event`, {})
+      .then((r) => r.data),
+
   /** Toplu native (PPLA) tek-job — N farklı top tek seri/COM gönderiminde (diyalogsuz). */
+  /**
+   * @param customerId Verilirse TÜM toplar bu müşteri bağlamıyla basılır (çuval
+   *   müşterisi değişti → yeni müşterinin etiket şablonu). Verilmezse her top kendi
+   *   son baskı bağlamıyla (mevcut davranış).
+   */
   getBulkRollLabelsNative: (
     rollIds: string[],
     copies?: number,
     peripheralId?: string,
+    customerId?: string | null,
   ): Promise<{ contentB64: string; language: PrinterLanguage }> =>
     apiClient
       .post<ApiResponse<{ encoding: string; content: string; language: string; count: number }>>(
         `/api/labels/rolls/bulk-native`,
-        { rollIds, ...(copies ? { copies } : {}), ...(peripheralId ? { peripheralId } : {}), encoding: "b64" },
+        {
+          rollIds,
+          ...(copies ? { copies } : {}),
+          ...(peripheralId ? { peripheralId } : {}),
+          ...(customerId ? { customerId } : {}),
+          encoding: "b64",
+        },
       )
       .then((r) => ({
         contentB64: String(r.data?.data?.content ?? ""),

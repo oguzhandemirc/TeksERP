@@ -1,0 +1,16 @@
+-- LabelKind'a SACK: çuval etiketi. Barkod + QR = Sack.sackNo (CV+GGAAYY+NNNN);
+-- Sack'e ayrı `barcode` kolonu EKLENMEDİ — code-format.ts "insan-okur kod = tarama
+-- barkodu, tek kod" kuralı korunuyor.
+--
+-- ⚠️ AYRI MİGRATION OLMA SEBEBİ: PostgreSQL'de ALTER TYPE ... ADD VALUE, yeni değeri
+-- KULLANAN bir statement ile aynı transaction'da çalışamaz (55P04). prisma migrate
+-- deploy her migration dosyasını tek tx'te koşar → enum ekleme tek başına burada durur.
+-- Emsal: 20260702120000_station_kind_shipping, 20260727210000_documents_expansion.
+--
+-- ⚠️ ELLE YAZILDI, `prisma migrate dev` ÜRETMEDİ (sacks tablosundaki DEFERRABLE
+-- composite FK'ları düşürmek isterdi — schema.prisma:2532-2538). `db execute` +
+-- `migrate resolve` ile uygulanır.
+--
+-- Eklemeli: mevcut satırları/enum değerlerini etkilemez, geri alınamaz (PG enum
+-- değeri düşürülemez) ama zararsızdır — kullanılmayan bir değer kalır.
+ALTER TYPE "LabelKind" ADD VALUE IF NOT EXISTS 'SACK';

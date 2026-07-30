@@ -36,7 +36,7 @@ const router = Router();
  *     parameters:
  *       - in: query
  *         name: kind
- *         schema: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
+ *         schema: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH, SACK] }
  *       - in: query
  *         name: includeInactive
  *         schema: { type: boolean }
@@ -66,7 +66,7 @@ router.get("/", verifyToken, requirePermission("label-template:read"), controlle
  *       - in: path
  *         name: kind
  *         required: true
- *         schema: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
+ *         schema: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH, SACK] }
  *     responses:
  *       200: { description: "{ kind, fields: FieldDef[] }" }
  *       400: { description: Geçersiz kind }
@@ -210,7 +210,7 @@ router.post("/:id/duplicate", verifyToken, requirePermission("label-template:wri
  *             required: [name]
  *             properties:
  *               name:      { type: string, maxLength: 200 }
- *               kind:      { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
+ *               kind:      { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH, SACK] }
  *               isDefault: { type: boolean }
  *               isActive:  { type: boolean }
  *               standalone: { type: boolean, description: "Serbest (statik) etiket — atanamaz, barkodsuz kaydedilebilir" }

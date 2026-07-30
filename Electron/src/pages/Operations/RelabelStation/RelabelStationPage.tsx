@@ -6,7 +6,7 @@ import { ScanField } from "@/components/scanner/ScanField";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { relabelService } from "./service";
 import { RelabelSpecForm } from "./RelabelSpecForm";
-import { RelabelPrintForCustomer } from "./RelabelPrintForCustomer";
+import { RelabelPrintForCustomer } from "@/components/labels/PrintForCustomerCard";
 import { EmptyState, LastLabelBanner, RollContextHeader } from "./RollContextHeader";
 import type { RelabelContext } from "./types";
 

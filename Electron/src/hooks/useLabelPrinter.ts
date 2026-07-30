@@ -65,12 +65,19 @@ export function useLabelPrinter() {
   const printRoll = (rollId: string, opts?: LabelCustomerContext) =>
     send(() => labelService.getRollNative(rollId, opts, peripheralId));
 
-  /** N farklı top tek-job — diyalogsuz toplu seri/COM baskı. */
-  const printRollsBulk = (rollIds: string[], copies?: number) =>
-    send(() => labelService.getBulkRollLabelsNative(rollIds, copies, peripheralId));
+  /**
+   * N farklı top tek-job — diyalogsuz toplu seri/COM baskı.
+   * `customerId`: hepsini o müşterinin etiket şablonuyla bas (çuval müşterisi değişti).
+   */
+  const printRollsBulk = (rollIds: string[], copies?: number, customerId?: string | null) =>
+    send(() => labelService.getBulkRollLabelsNative(rollIds, copies, peripheralId, customerId));
+
+  /** Tek çuval — diyalogsuz seri/COM baskı (barkod = çuval no). */
+  const printSack = (sackId: string) =>
+    send(() => labelService.getSackNative(sackId, peripheralId));
 
   // Önizleme de bu cihazdan çözülsün diye dışa verilir: peripheralId geçilirse
   // backend dili cihazın languageOverride'ından (PPLA/PPLB/ZPL) çözer → önizleme
   // = baskı (WYSIWYG). Geçilmezse global fallback RASTER_HTML (HTML önizleme).
-  return { directEnabled, printRoll, printRollsBulk, peripheralId };
+  return { directEnabled, printRoll, printRollsBulk, printSack, peripheralId };
 }

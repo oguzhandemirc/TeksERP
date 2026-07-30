@@ -44,6 +44,30 @@ export function isWarehouseSack(s: { shipment: SackShipmentRef | null }): boolea
   return s.shipment === null;
 }
 
+/**
+ * Çuval durumu — liste kolonu ve detay paneli PAYLAŞIR. ETİKET metni tek kaynak
+ * (aksi halde iki yerde ayrışır); RENK ayrı: liste dolu/loud rozet kullanır
+ * (`sacksColumns.STATUS_CLASS`), panel tonlu `StatusBadge` (`sackStatusTones`).
+ */
+export type SackStatusKey = "POOL" | "PLANNED" | "DISPATCHED";
+
+export const sackStatusLabels: Record<SackStatusKey, string> = {
+  POOL: "Depoda",
+  PLANNED: "Sevkte",
+  DISPATCHED: "Sevk Edildi",
+};
+
+export const sackStatusTones = {
+  POOL: "success",
+  PLANNED: "progress",
+  DISPATCHED: "muted",
+} as const;
+
+export function sackStatusOf(s: { shipment: SackShipmentRef | null }): SackStatusKey {
+  if (s.shipment === null) return "POOL";
+  return s.shipment.status === "DISPATCHED" ? "DISPATCHED" : "PLANNED";
+}
+
 // ── Arama sonuç satırı (GET /sack-search, cursor) ────────────────────────────
 export interface SackSearchRow {
   id: string;
@@ -58,6 +82,10 @@ export interface SackSearchRow {
   rollCount: number;
   totalQty: number;
   swatchCount: number;
+  /** Çuval yorumu var mı (💬 göstergesi) — listede tam metin dönmez. */
+  hasNote: boolean;
+  /** Yorumun ilk 80 karakteri (satır ipucu); tam metin çuval dökümünde. */
+  notePreview: string | null;
   /** İçerik filtresi (kumaş/renk/en) yokken null — eşleşme sütunu gizlenir. */
   matchRollCount: number | null;
   matchQty: number | null;
@@ -89,6 +117,8 @@ export interface SackContentRoll {
   currentQty: number;
   width: number | null;
   qualityGrade: string;
+  /** Topun ÜSTÜNDEKİ fiziksel etiket geçersiz mi (müşteri şablonu değişti / relabel). */
+  labelDirty?: boolean;
   item: { id: string; name: string };
   color: { id: string; name: string; hex: string | null } | null;
 }
@@ -105,6 +135,11 @@ export interface SackContents {
   sackNo: string;
   seq: number | null;
   weightKg: number | null;
+  /** Çuval yorumu — iç serbest not (tam metin). */
+  notes: string | null;
+  /** Çuvalın KENDİ müşteri/şubesi (sevkiyattan bağımsız) — depodaki çuvalda da dolu. */
+  customer: SackCustomerRef | null;
+  branch: { id: string; code: string | null; name: string } | null;
   /** Dolu = sevkiyatta (içerik kilitli); null = depoda. */
   shipment:
     | (SackShipmentRef & {
@@ -116,38 +151,40 @@ export interface SackContents {
   swatches: SackContentSwatch[];
 }
 
-// ── Müşteri havuzu (GET /pool/sacks) — taşıma hedefleri için ──────────────────
-export interface PoolSackRoll {
+// ── İçerik dökümü (POST /sack-search/content-dump) ────────────────────────────
+// Çeki listesinin (PickListRow) GRUPLU özetinin aksine TOP BAZLI. Sayısal alanlar
+// backend'de Number()'a çevrilmiş gelir → istemcide Number(...) sarmaya gerek yok.
+export interface SackContentDumpRoll {
   id: string;
   barcode: string | null;
+  itemName: string;
+  colorName: string | null;
   width: number | null;
-  currentQty: number;
-  item: { code: string; name: string };
-  color: { code: string; name: string; hex?: string | null } | null;
+  qty: number;
+  qualityGrade: string | null;
 }
 
-export interface PoolSackSwatch {
+export interface SackContentDumpSwatch {
   id: string;
   barcode: string | null;
-  item: { code: string; name: string };
-  color: { code: string; name: string } | null;
+  itemName: string;
+  colorName: string | null;
 }
 
-export interface PoolSack {
+export interface SackContentDumpSack {
   id: string;
   sackNo: string;
+  seq: number | null;
   weightKg: number | null;
+  /** TAM metin — basılması İSTEMCİDE opt-in (varsayılan kapalı). */
+  notes: string | null;
+  customer: SackCustomerRef | null;
   branch: { id: string; code: string | null; name: string } | null;
+  shipment: SackShipmentRef | null;
   rollCount: number;
-  swatchCount: number;
   totalQty: number;
-  rolls: PoolSackRoll[];
-  swatches: PoolSackSwatch[];
-}
-
-export interface CustomerPool {
-  customer: { id: string; code?: string; name: string };
-  sacks: PoolSack[];
+  rolls: SackContentDumpRoll[];
+  swatches: SackContentDumpSwatch[];
 }
 
 /** POST /sacks lean dönüşü. Müşteri artık opsiyonel → nullable. Ad/kod çözülmüş döner
@@ -241,6 +278,8 @@ export interface PickListRow {
   sackNo: string;
   seq: number | null;
   weightKg: number | null;
+  /** Çuval notu (TAM metin) — çeki listesi iç çalışma kağıdı; basılması opsiyonel. */
+  notes: string | null;
   customer?: SackCustomerRef | null;
   branch?: { id: string; code: string | null; name: string } | null;
   shipment: SackShipmentRef | null;

@@ -25,12 +25,13 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 
 - [ ] **`.env` üç değişken set:** `PORT=4000`, `DATABASE_URL`, `JWT_SECRET`.
 - [ ] **`JWT_SECRET` ≥ 32 karakter ve güçlü/rastgele** (backend açılışta enforce
-      eder — kısa secret'ta sunucu açılmaz). Windows installer'da otomatik
-      üretilir; manuel yolda elle güçlü bir değer konur.
+      eder — kısa secret'ta sunucu açılmaz). Elle güçlü bir değer konur
+      (installer'ın otomatik üretimi kaldırıldı).
 - [ ] **`DATABASE_URL` doğru DB'yi gösteriyor** (production = `TeksErpDb`,
       dev/test DB'sine YANLIŞLIKLA bağlanmıyor).
-- [ ] Windows: `C:\ProgramData\TeksERP\secret.json` yedeklendi (DB şifresi +
-      JWT secret burada; kaybolursa DB'ye bağlanılamaz).
+- [ ] **`Teks-Erp/.env` yedeklendi** (DB şifresi + JWT secret burada; kaybolursa
+      DB'ye bağlanılamaz ve yedekten geri yükleme yapılamaz). Eski
+      `C:\ProgramData\TeksERP\secret.json` **kaldırıldı** — tek sır kaynağı `.env`.
 
 ## C) Veritabanı hazırlığı
 
@@ -52,11 +53,14 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 
 - [ ] **İlk kurulum mu, güncelleme mi** netleştirildi.
 - [ ] **`seed` SADECE ilk kurulumda çalıştırılacak** — güncellemede ASLA
-      (dev verisini sıfırlar). Windows: `.seeded` bayrağı bunu garanti eder.
-- [ ] Manuel/Linux yolunda güncelleme sırası: `git pull → npm install →
-      prisma:generate → npm run build → prisma:migrate → servis restart`
-      (seed yok). Windows: yeni `setup.exe`'yi Yönetici olarak çalıştır.
-- [ ] Servis yeniden başlatma sonrası teyit hazır.
+      (verileri sıfırlar). **Otomatik koruma YOK** (eski installer'ın `.seeded`
+      bayrağı kaldırıldı) → operatör disiplini.
+- [ ] Güncelleme sırası: `git pull → npm install → prisma:generate →
+      npm run build → prisma:migrate → pm2 restart teks-erp-backend` (seed yok).
+- [ ] **Migration ÖNCESİ yedek elle alındı** — otomatik `premigrate_*` artık
+      üretilmiyor (installer alıyordu); rollback buna dayanır.
+- [ ] `pm2 restart` sonrası teyit hazır; deploy sonunda **`pm2 save`** koşulacak
+      (yoksa reboot eski süreç listesini geri yükler).
 
 ## E) Deploy sonrası doğrulama
 
@@ -65,14 +69,19 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 - [ ] Giriş çalışıyor (`admin` / belirlenen şifre) ve temel ekranlar açılıyor.
 - [ ] **Disk ve RAM yeterli** — DB + yedekler için yeterli boş alan; sunucu
       Node + PostgreSQL'i rahat taşıyor (yedek rotasyonu son 14 dump'ı tutar).
-- [ ] Log konumları erişilebilir (Windows: `ProgramData\TeksERP\logs\`;
-      Linux: systemd journal / PostgreSQL log) ve hata yığını yok.
+- [ ] Log konumları erişilebilir (`pm2 logs teks-erp-backend`; dosya yolu
+      `ecosystem.config.js` → `out_file`/`error_file`) ve hata yığını yok.
+- [ ] **`pm2-logrotate` kurulu** — pm2 log rotasyonu yapmaz, kurulmazsa dosya
+      sınırsız büyür (NSSM 10MB'da döndürüyordu).
+- [ ] **Yedekleme canlı:** `/health` → `lastBackup` **null DEĞİL**; backend
+      log'unda `[backup] BACKUP_DIR tanımsız` satırı YOK; Panel → Sistem →
+      Yedekler'de kırmızı "Yedekleme kapalı" kutusu YOK.
 
 ## F) Geri dönüş hazırlığı
 
 - [ ] **Geri-dönüş planı hazır** — `migrate deploy` geri alınmaz; rollback =
       migration öncesi yedekten restore + (şema değiştiyse) eski koda dönüş.
-      Yedek dosyasının yeri ve eski sürüm `setup.exe`/commit'i el altında.
+      Yedek dosyasının yeri ve eski sürümün commit'i el altında.
 - [ ] **LAN-only duruşu teyit** — uygulama dışa kapalı (CORS/HTTPS/rate-limit
       bilinçli yok). Dışa AÇILIYORSA bunlar + `User.tokenVersion` token iptali
       eklenmeden deploy EDİLMEZ (bkz. `DEPLOY-RUNBOOK.md §9`).

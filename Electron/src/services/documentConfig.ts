@@ -46,8 +46,14 @@ export interface DocumentConfig {
   showLogo?: boolean;
   /** Logo konumu (default left). */
   logoPosition?: "left" | "right";
-  /** Tablo kolonu aç/kapa + sıralama: { [tabloKey]: { hidden, order } }. */
-  columns?: Record<string, { hidden?: string[]; order?: string[] }>;
+  /**
+   * Tablo kolonu aç/kapa + sıralama: { [tabloKey]: { hidden, order, shown } }.
+   * `hidden` = BLOCKLIST (normal kolonlar; listede yoksa görünür).
+   * `shown`  = ALLOWLIST, yalnız `defaultHidden` kolonlar için (iç veri taşıyanlar,
+   *            ör. çuval yorumu): listede YOKSA basılmaz ve o kolonda `hidden`
+   *            YOK SAYILIR. Yeni kolon eklemek mevcut belgeleri kirletmesin diye.
+   */
+  columns?: Record<string, { hidden?: string[]; order?: string[]; shown?: string[] }>;
   /** Belge doğrulama karekodu (belge no + versiyon) — default kapalı. */
   qr?: boolean;
   /** Sayfa altı damgaları: basım zamanı / basan kullanıcı / nüsha etiketi. */
@@ -102,7 +108,13 @@ export interface DocSectionDef {
 export interface DocTableDef {
   key: string;
   label: string;
-  columns: { key: string; label: string }[];
+  columns: {
+    key: string;
+    label: string;
+    /** OPT-IN kolon: varsayılan KAPALI, `columns[tablo].shown` ile açılır
+     *  (renderer'da `DocCol.defaultHidden`). İç veri taşıyan kolonlar için. */
+    defaultHidden?: boolean;
+  }[];
 }
 
 export interface DocDef {
@@ -119,7 +131,24 @@ export interface DocDef {
   supportsBlankWidths?: boolean;
   /** Alt not için üst/alt konum seçimi gösterilsin mi (renderer'ı konumu uyguluyor). */
   supportsNotePlacement?: boolean;
+  /** Satır-bazlı not (çuval yorumu) kolonu var → baskı diyaloğunda "bu baskıda
+   *  göster" tek-seferlik seçeneği çıkar (?rowNotes=1). */
+  supportsRowNotes?: boolean;
 }
+
+/**
+ * PrintedDocType → DOC_DEFS key. Backend `printed-document.service.ts`
+ * `DOC_CONFIG_KEYS` ile BİREBİR aynı (manuel senkron, FeatureFlags gibi).
+ */
+export const DOC_TYPE_TO_KEY: Record<string, string> = {
+  SHIPMENT_DISPATCH: "shipmentDispatch",
+  SUBCONTRACTOR_DISPATCH: "fasonSevk",
+  SUBCONTRACTOR_DIRECT_SHIP: "fasonDirectShip",
+  KARTELA_DISPATCH: "kartelaCeki",
+  SUBCONTRACTOR_RECEIPT: "fasonKabul",
+  QUALITY_CERTIFICATE: "kaliteSertifikasi",
+  RETURN_DISPATCH: "iadeIrsaliyesi",
+};
 
 /**
  * Belge kayıt defteri — yeni belge eklemek = buraya bir satır (+ renderer'da config
@@ -134,6 +163,7 @@ export const DOC_DEFS: DocDef[] = [
     supportsLanguage: true,
     supportsBlankWidths: true,
     supportsNotePlacement: true,
+    supportsRowNotes: true,
     // Bölüm key'leri renderer'ın sectionOn() anahtarlarıyla birebir aynı olmalı
     // (eski itemTable/sackBreakdown/totals anahtarları renderer'da karşılıksızdı).
     sections: [
@@ -169,6 +199,10 @@ export const DOC_DEFS: DocDef[] = [
           { key: "totalMeters", label: "Metre toplamı" },
           { key: "totalKg", label: "Kg toplamı" },
           { key: "packageCount", label: "Top adedi" },
+          // İÇ not — varsayılan KAPALI (defaultHidden). Baskı sırasında tek seferlik
+          // de açılabilir (?rowNotes=1). Yorumu olmayan çuvalda hücre boş kalır;
+          // hiç yorum yoksa kolon hiç basılmaz.
+          { key: "note", label: "Açıklama (çuval notu)", defaultHidden: true },
         ],
       },
       {

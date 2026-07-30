@@ -39,6 +39,28 @@ const BLOCKING_OPS: RollOperationType[] = [
 
 export type PartyMode = "keep" | "new" | "join";
 
+/**
+ * İş emrinin durumu manuel taşımayı ENGELLİYOR mu? (null = engel yok)
+ *
+ * İptal/devredilmiş WO ÖLÜ bir kayıttır: iptalde refakat kartları VOIDED olur ve
+ * `ensureWorkOrderInProgress` yalnız PLANNED'ı diriltir → taşıma yapılsaydı top
+ * canlı (IN_PRODUCTION) bir istasyonda kalır ama SAHA PERSONELİ DOKUNAMAZDI
+ * (kart okutma "kart aktif değil", Tambur finalize "iptal/devredilmiş iş emrinin
+ * topu finalize edilemez" ile reddeder) — tam bir çıkmaz. COMPLETED farklıdır:
+ * manualMove onu bilinçli olarak IN_PROGRESS'e çekip kartı yeniden aktifleştirir.
+ *
+ * Topu gerçekten kullanmak için doğru yol: yeni bir iş emrine bağlamak.
+ */
+export function manualMoveWoBlockReason(status: WorkOrderStatus): string | null {
+  if (status === WorkOrderStatus.CANCELLED) {
+    return "İptal edilmiş iş emrinde konum düzeltilemez — top canlı kalır ama refakat kartı iptal olduğu için saha personeli okutamaz. Topu yeni bir iş emrine bağlayın.";
+  }
+  if (status === WorkOrderStatus.SUPERSEDED) {
+    return "Devredilmiş iş emrinde konum düzeltilemez (malzemesi yeni iş emrine taşındı) — işlemi devam iş emrinde yapın.";
+  }
+  return null;
+}
+
 interface MoveRoll {
   id: string;
   barcode: string | null;
@@ -326,6 +348,9 @@ export class WorkOrderManualMoveService {
     if (ctx.woStatus === WorkOrderStatus.COMPLETED) {
       warnings.push("Tamamlanmış iş emri — taşıma ile yeniden açılacak (refakat kartı yeniden aktifleşir).");
     }
+    // İptal/devredilmiş WO → HARD-BLOCK (uyarı değil). colorBlocked ile aynı sözleşme:
+    // frontend kırmızı blok + submit engeli gösterir; manualMove ayrıca 409 atar.
+    const woBlockReason = manualMoveWoBlockReason(ctx.woStatus);
     if (t.type === "EXTERNAL") {
       warnings.push("Fason adımına taşınıyor — mal orada üretimde bekler, sevki ayrıca (Fason Sevk) yapılır.");
     }
@@ -414,6 +439,9 @@ export class WorkOrderManualMoveService {
         openDispatches,
         backflush,
         warnings,
+        /** true → iş emri ölü (iptal/devredilmiş); taşıma yapılamaz. */
+        woBlocked: woBlockReason !== null,
+        woBlockReason,
       },
     };
   }
@@ -435,6 +463,13 @@ export class WorkOrderManualMoveService {
       throw AppError.badRequest("Taşıma gerekçesi zorunlu (en az 3 karakter)");
     }
     const ctx = await this.loadContext(workOrderId, input);
+    // ÖLÜ WO GUARD'I: iptal/devredilmiş iş emrinde taşıma, topu "canlı ama kimsenin
+    // dokunamadığı" çıkmaza sokar (kart VOIDED + istasyon guard'ları reddeder).
+    // Tambur/Kurşun finalize guard'larıyla aynı gerekçe; tx-öncesi yeter (durum
+    // geri diriltilemez — CANCELLED/SUPERSEDED terminaldir).
+    const woBlock = manualMoveWoBlockReason(ctx.woStatus);
+    if (woBlock) throw AppError.conflict(woBlock);
+
     const t = ctx.targetStep;
     const partyMode: PartyMode = input.partyMode ?? (ctx.isWholeParty ? "keep" : "new");
 

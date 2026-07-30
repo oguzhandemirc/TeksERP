@@ -63,10 +63,21 @@ import {
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeWoInput } from "./helpers/coverage.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
-import { createBatchTx, K18_DEAD_STATUSES, type CreateBatchResult } from "./batch.service";
+import {
+  createBatchTx,
+  deleteIfEmptyAndTraceless,
+  K18_DEAD_STATUSES,
+  type CreateBatchResult,
+} from "./batch.service";
 import { WorkOrderSplitService } from "./workorder-split.service";
 import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
-import { loadQualityTargetMaps, resolveFinalStatus } from "./helpers/roll-finalize.helper";
+import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
+import {
+  loadQualityTargetMaps,
+  resolveFinalStatus,
+  finalBarcodeType,
+} from "./helpers/roll-finalize.helper";
+import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -79,6 +90,83 @@ import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.serv
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   return typeof v === "number" ? v : Number(v);
+}
+
+// =============================================================================
+// KAPANIŞ DİSPOZİSYONU (WIP disposition) — manuel kapatmada istasyonda kalan top
+// =============================================================================
+// Kapatma artık "işlemde top var" diye reddetmez; kapanışı yapan kişi her top için
+// KARAR verir ve karar sebebiyle audit'e yazılır (sektör pratiği: SAP TECO sonrası
+// WIP dispozisyonu / Oracle-D365 job close). Fiziksel olarak DIŞARIDA olan mal
+// (fason) hâlâ hard-block — ofisten verilen karar kumaşı geri getirmez.
+
+/** Kapanışta istasyonda kalan (in-flight) topa uygulanacak dispozisyon kararı. */
+export type CloseDisposition =
+  | "STOCK" // ham stok — işlem görmemiş mal üretime geri döner (yeni WO'ya sokulabilir)
+  | "WAREHOUSE" // bitmiş depo — satışa/sevke hazır
+  | "A1_STOCK" // 2. kalite satılabilir stok
+  | "SCRAP" // gerçek fire (mal vardı, çöpe gitti)
+  | "CANCELLED" // hatalı kayıt geri alındı (fire DEĞİL — mal hiç yoktu)
+  | "TRANSFER"; // üretim yeni (devam) iş emrinde sürer — statü değişmez
+
+/** Dispozisyonun hedef `RollStatus`'u. TRANSFER burada YOK — statü değiştirmez. */
+const DISPOSITION_STATUS: Record<Exclude<CloseDisposition, "TRANSFER">, RollStatus> = {
+  STOCK: RollStatus.STOCK,
+  WAREHOUSE: RollStatus.WAREHOUSE,
+  A1_STOCK: RollStatus.A1_STOCK,
+  SCRAP: RollStatus.SCRAP,
+  CANCELLED: RollStatus.CANCELLED,
+};
+
+/** Satılabilir final statüler — barkod ("her kumaşa etiket") + kalite bunlarda anlamlı. */
+const SELLABLE_DISPOSITIONS: RollStatus[] = [RollStatus.WAREHOUSE, RollStatus.A1_STOCK];
+
+/**
+ * Fiziksel olarak DIŞARIDA (fason/boyahane) olan statüler — kapanışta hard-block.
+ * `softDelete`'in fason guard'ıyla aynı gerekçe: fason malı ofis kararıyla yer
+ * değiştirmez, önce fason kabul/iade yapılır.
+ */
+const CLOSE_BLOCKED_STATUSES: RollStatus[] = [
+  RollStatus.AT_SUBCONTRACTOR,
+  RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+];
+
+/** Kapanışta "istasyonda/işlemde" sayılan statüler (dispozisyon + blok kümesi). */
+const CLOSE_IN_FLIGHT_STATUSES: RollStatus[] = [
+  RollStatus.IN_PRODUCTION,
+  ...CLOSE_BLOCKED_STATUSES,
+];
+
+/**
+ * Tek kapanışta dispozisyon verilebilecek en fazla top. Aşılırsa kapatma bloklanır
+ * (sessiz kırpma YOK) — bu bir istisna prosedürü, yüz toplu WIP'in yeri değil.
+ */
+const CLOSE_DISPOSITION_MAX_ROLLS = 200;
+
+/** İstemciden gelen tek dispozisyon satırı. */
+export interface CloseDispositionInput {
+  rollId: string;
+  action: CloseDisposition;
+  /** Yalnız WAREHOUSE/A1_STOCK'ta anlamlı; opsiyonel — boş bırakılırsa kalite "—" kalır. */
+  qualityGradeId?: string | null;
+}
+
+/** Uygulanan dispozisyonun audit izi (tx dışında `SystemLog`'a yazılır). */
+interface AppliedDisposition {
+  rollId: string;
+  barcode: string | null;
+  from: RollStatus;
+  to: RollStatus;
+  action: CloseDisposition;
+}
+
+/** Manuel kapatma payload'ı. */
+export interface CompleteWorkOrderInput {
+  /** Dispozisyon varsa zorunlu (min 3 karakter) — audit'e yazılır. */
+  reason?: string;
+  dispositions?: CloseDispositionInput[];
+  /** TRANSFER varsa: yeni iş emri siparişe bağlı kalsın mı ("keep") yoksa stok mu. */
+  transferOrderMode?: "stock" | "keep";
 }
 
 const workOrderSplitService = new WorkOrderSplitService();
@@ -2601,9 +2689,15 @@ export class WorkOrderService {
   }
 
   /**
-   * MANUEL KAPATMA ÖNİZLEMESİ (read-only): kalan (atlanacak) adımlar + kapatmayı
-   * engelleyen in-flight (işlemdeki/fasondaki) top özeti. `canComplete=false` ise
-   * `blockReason` UI'da gösterilir; frontend detaylı onay diyaloğu bunu listeler.
+   * MANUEL KAPATMA ÖNİZLEMESİ (read-only): kalan (atlanacak) adımlar + in-flight
+   * topların DİSPOZİSYON listesi. In-flight toplar iki kümeye ayrılır:
+   *   - `dispositionRolls` → içeride (IN_PRODUCTION, açık fason sevki yok): kapatan
+   *     kişi her biri için karar verir (ham stok / depo / 2. kalite / fire / hatalı
+   *     kayıt / devir).
+   *   - `blockedRolls`     → fasonda ya da açık fason sevkinde: KARAR VERİLEMEZ,
+   *     kapatma bloklanır (mal fiziksel olarak dışarıda).
+   * `canComplete` artık "WIP var" diye false OLMAZ — yalnız blocked küme (ya da WO'nun
+   * kendi durumu) engeller.
    */
   async getCompletePreview(id: string) {
     const wo = await prisma.workOrder.findUnique({
@@ -2613,6 +2707,7 @@ export class WorkOrderService {
           include: { station: { select: { name: true } } },
           orderBy: { stepSequence: "asc" },
         },
+        _count: { select: { orderLinks: true } },
       },
     });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
@@ -2625,17 +2720,80 @@ export class WorkOrderService {
       ? await prisma.roll.findMany({
           where: {
             currentStepId: { in: stepIds },
-            status: {
-              in: [
-                RollStatus.IN_PRODUCTION,
-                RollStatus.AT_SUBCONTRACTOR,
-                RollStatus.RETURNED_FROM_SUBCONTRACTOR,
-              ],
-            },
+            status: { in: CLOSE_IN_FLIGHT_STATUSES },
           },
-          select: { currentQty: true, currentStepId: true },
+          select: {
+            id: true,
+            barcode: true,
+            status: true,
+            currentQty: true,
+            colorId: true,
+            currentStepId: true,
+            entrySource: true,
+            qualityGrade: true,
+            color: { select: { name: true, hex: true } },
+            _count: { select: { properties: true } },
+          },
+          orderBy: { createdAt: "asc" },
         })
       : [];
+
+    // Açık (iptal edilmemiş) fason sevkine bağlı toplar — statüsü IN_PRODUCTION olsa
+    // bile fason izinde sayılır (getRescuePreview'ın guard'ıyla aynı).
+    const openDispatchRollIds = new Set(
+      inFlightRolls.length
+        ? (
+            await prisma.subcontractorDispatchItem.findMany({
+              where: {
+                rollId: { in: inFlightRolls.map((r) => r.id) },
+                dispatch: { cancelledAt: null },
+              },
+              select: { rollId: true },
+            })
+          ).map((d) => d.rollId)
+        : [],
+    );
+
+    const mapRoll = (r: (typeof inFlightRolls)[number]) => ({
+      id: r.id,
+      barcode: r.barcode,
+      status: r.status,
+      currentQty: Number(r.currentQty ?? 0),
+      colorName: r.color?.name ?? null,
+      colorHex: r.color?.hex ?? null,
+      propertyCount: r._count.properties,
+      // "Ham değil" — cancel-impact'teki processed tanımıyla aynı.
+      processed:
+        Boolean(r.colorId) ||
+        r._count.properties > 0 ||
+        r.entrySource === RollEntrySource.SUBCONTRACTOR_RETURN ||
+        CLOSE_BLOCKED_STATUSES.includes(r.status),
+      qualityGrade: r.qualityGrade,
+      stepId: r.currentStepId as string,
+      stationName: stepName.get(r.currentStepId as string) ?? "—",
+      // Fason dönüşü mal ham stoğa DÖNEMEZ (softDelete'in fason invariant'ı).
+      canReturnToStock: r.entrySource !== RollEntrySource.SUBCONTRACTOR_RETURN,
+    });
+
+    type PreviewRoll = ReturnType<typeof mapRoll>;
+    const dispositionRolls: PreviewRoll[] = [];
+    const blockedRolls: (PreviewRoll & { blockReason: string })[] = [];
+    for (const r of inFlightRolls) {
+      const mapped = mapRoll(r);
+      if (r.status !== RollStatus.IN_PRODUCTION) {
+        blockedRolls.push({
+          ...mapped,
+          blockReason: "Fasonda (fiziksel olarak dışarıda) — önce fason kabul/iade yapılmalı",
+        });
+      } else if (openDispatchRollIds.has(r.id)) {
+        blockedRolls.push({
+          ...mapped,
+          blockReason: "Açık bir fason sevkine bağlı — önce fason kapatılmalı",
+        });
+      } else {
+        dispositionRolls.push(mapped);
+      }
+    }
 
     const byStep = new Map<string, { stationName: string; count: number; meters: number }>();
     for (const r of inFlightRolls) {
@@ -2662,10 +2820,14 @@ export class WorkOrderService {
     } else if (wo.status === WorkOrderStatus.PLANNED) {
       blockReason =
         "İş emri henüz üretime başlamadı (Planlandı). Başlamamış iş emrini kapatmak yerine iptal edin.";
-    } else if (inFlightCount > 0) {
+    } else if (blockedRolls.length > 0) {
       blockReason =
-        `${inFlightCount} top hâlâ işlemde/fasonda. Kapatmadan önce bu topların ` +
-        "çözülmesi gerekir (fason kabul / kurtarma / tambur kararı).";
+        `${blockedRolls.length} top fasonda / açık fason sevkinde — mal fiziksel olarak ` +
+        "dışarıda olduğu için kapatılamaz. Önce fason kabul/iade yapılmalı.";
+    } else if (dispositionRolls.length > CLOSE_DISPOSITION_MAX_ROLLS) {
+      blockReason =
+        `${dispositionRolls.length} top işlemde — kapanış dispozisyonu en fazla ` +
+        `${CLOSE_DISPOSITION_MAX_ROLLS} top için yapılabilir. Önce topları istasyonlardan çözün.`;
     }
 
     return {
@@ -2676,28 +2838,41 @@ export class WorkOrderService {
         status: wo.status,
         canComplete: blockReason === null,
         blockReason,
+        /** true ise kapatma isteği her dispozisyon topu için karar taşımak ZORUNDA. */
+        requiresDisposition: dispositionRolls.length > 0,
+        /** Devirde yeni WO'nun sipariş bağı default'u için (bağ varsa "keep"). */
+        orderLinked: wo._count.orderLinks > 0,
         remainingSteps,
         inFlight: {
           count: inFlightCount,
           totalMeters: inFlightMeters,
           byStep: [...byStep.values()],
         },
+        dispositionRolls,
+        blockedRolls,
       },
     };
   }
 
   /**
-   * MANUEL KAPATMA (güvenli varyant): IN_PROGRESS bir iş emrini elle COMPLETED'a
-   * çeker. Yalnız WIP YOKKEN çalışır — herhangi bir top hâlâ işlemde/fasondaysa
-   * REDDEDİLİR (önce çözülmeli, top istasyonda takılı kalmasın). Kalan PENDING/
-   * ACTIVE adımlar SKIPPED(MANUAL_COMPLETE), açık movement'lar kapatılır, ACTIVE
-   * refakat kartları COMPLETED olur. Atomik claim + guard tx-içinde (eşzamanlı
-   * finalize/iptal ile yarış güvenli — cancel deseninin aynısı).
+   * MANUEL KAPATMA + KAPANIŞ DİSPOZİSYONU: IN_PROGRESS bir iş emrini elle COMPLETED'a
+   * çeker. İstasyonda kalan (IN_PRODUCTION) her top için ÇAĞIRAN karar verir
+   * (`data.dispositions`) — kapatma artık "işlemde top var" diye reddedilmez; karar
+   * kapanışın parçasıdır ve sebebiyle audit'e yazılır. Hâlâ hard-block olan tek şey
+   * FASON: mal fiziksel olarak dışarıdaysa ofis kararı onu geri getirmez.
+   *
+   * Kalan PENDING/ACTIVE adımlar SKIPPED(MANUAL_COMPLETE), açık movement'lar kapatılır,
+   * ACTIVE refakat kartları COMPLETED olur. Atomik claim + guard'lar tx-içinde
+   * (eşzamanlı finalize/iptal ile yarış güvenli — cancel deseninin aynısı).
    */
-  async completeWorkOrder(id: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
+  async completeWorkOrder(
+    id: string,
+    data: CompleteWorkOrderInput = {},
+    userId?: string,
+  ): Promise<ApiResponse<WorkOrder>> {
     const existing = await prisma.workOrder.findUnique({
       where: { id },
-      include: { steps: { select: { id: true } } },
+      include: { steps: { select: { id: true, stepSequence: true } } },
     });
     if (!existing) throw AppError.notFound("İş emri bulunamadı");
     if (existing.status === WorkOrderStatus.COMPLETED) {
@@ -2713,46 +2888,229 @@ export class WorkOrderService {
       throw AppError.badRequest("İş emri henüz üretime başlamadı — kapatmak yerine iptal edin");
     }
 
-    const stepIds = existing.steps.map((s) => s.id);
-
-    const updated = await prisma.$transaction(async (tx) => {
-      // ATOMİK CLAIM ÖNCE: WO satırını IN_PROGRESS→COMPLETED koşullu kilitle.
-      // Eşzamanlı son-top finalize (tambur/kursun) ya da iptal WO'yu başka duruma
-      // çekmişse count===0 → 409 (çift geçiş önlenir).
-      const claim = await tx.workOrder.updateMany({
-        where: { id, status: WorkOrderStatus.IN_PROGRESS },
-        data: { status: WorkOrderStatus.COMPLETED },
-      });
-      if (claim.count === 0) {
-        const fresh = await tx.workOrder.findUnique({ where: { id }, select: { status: true } });
-        throw AppError.conflict(
-          `İş emri bu sırada ${
-            fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "değişti"
-          }, kapatılamaz. Sayfayı yenileyin.`,
+    const dispositions = data.dispositions ?? [];
+    const reason = (data.reason ?? "").trim();
+    if (dispositions.length > 0 && reason.length < 3) {
+      throw AppError.badRequest(
+        "Kapanış dispozisyonu için işlem nedeni (en az 3 karakter) zorunludur",
+      );
+    }
+    if (dispositions.length > CLOSE_DISPOSITION_MAX_ROLLS) {
+      throw AppError.badRequest(
+        `Tek kapanışta en fazla ${CLOSE_DISPOSITION_MAX_ROLLS} top için dispozisyon verilebilir`,
+      );
+    }
+    const seenRollIds = new Set<string>();
+    for (const d of dispositions) {
+      if (seenRollIds.has(d.rollId)) {
+        throw AppError.badRequest("Aynı top için birden fazla dispozisyon gönderildi");
+      }
+      seenRollIds.add(d.rollId);
+      if (d.qualityGradeId && d.action !== "WAREHOUSE" && d.action !== "A1_STOCK") {
+        throw AppError.badRequest(
+          "Kalite yalnız depo / 2. kalite dispozisyonunda verilebilir",
         );
       }
+    }
 
-      if (stepIds.length > 0) {
-        // GUARD (claim'den SONRA — cancel deseni): işlemde/fasonda top varsa kapatma.
-        // Trip ederse tüm tx (claim dahil) geri sarılır → WO IN_PROGRESS kalır, mal
-        // "kapalı WO'da istasyonda takılı" limbo'suna düşmez.
-        const inFlight = await tx.roll.count({
-          where: {
-            currentStepId: { in: stepIds },
-            status: {
-              in: [
-                RollStatus.IN_PRODUCTION,
-                RollStatus.AT_SUBCONTRACTOR,
-                RollStatus.RETURNED_FROM_SUBCONTRACTOR,
-              ],
-            },
-          },
+    const stepIds = existing.steps.map((s) => s.id);
+    const stepSeqById = new Map(existing.steps.map((s) => [s.id, s.stepSequence]));
+    // Adımsız WO'da in-flight top olamaz — gelen dispozisyon sessizce yutulmasın.
+    if (stepIds.length === 0 && dispositions.length > 0) {
+      throw AppError.badRequest("İş emrinin adımı yok — dispozisyon verilebilecek top da yok");
+    }
+
+    const { updated, applied, transferredWorkOrderNumber } = await withBarcodeRetry(() =>
+      prisma.$transaction(async (tx) => {
+        // ATOMİK CLAIM ÖNCE: WO satırını IN_PROGRESS→COMPLETED koşullu kilitle.
+        // Eşzamanlı son-top finalize (tambur/kursun) ya da iptal WO'yu başka duruma
+        // çekmişse count===0 → 409 (çift geçiş önlenir).
+        const claim = await tx.workOrder.updateMany({
+          where: { id, status: WorkOrderStatus.IN_PROGRESS },
+          data: { status: WorkOrderStatus.COMPLETED },
         });
-        if (inFlight > 0) {
+        if (claim.count === 0) {
+          const fresh = await tx.workOrder.findUnique({ where: { id }, select: { status: true } });
           throw AppError.conflict(
-            `${inFlight} top hâlâ işlemde/fasonda — iş emri kapatılamaz. Önce bu ` +
-              "topları çözün (fason kabul / kurtarma / tambur kararı).",
+            `İş emri bu sırada ${
+              fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "değişti"
+            }, kapatılamaz. Sayfayı yenileyin.`,
           );
+        }
+
+        const appliedRows: AppliedDisposition[] = [];
+        let transferredWoNumber: string | null = null;
+
+        if (stepIds.length > 0) {
+          // Guard'lar claim'den SONRA (cancel deseni): tripleyince tüm tx (claim dahil)
+          // geri sarılır → WO IN_PROGRESS kalır, mal "kapalı WO'da takılı" limbosuna
+          // düşmez.
+          const inFlight = await tx.roll.findMany({
+            where: {
+              currentStepId: { in: stepIds },
+              status: { in: CLOSE_IN_FLIGHT_STATUSES },
+            },
+            select: {
+              id: true,
+              barcode: true,
+              status: true,
+              currentQty: true,
+              weightKg: true,
+              currentStepId: true,
+              entrySource: true,
+              batchId: true,
+            },
+          });
+
+          // GUARD 1 — FASON: mal fiziksel olarak dışarıda, karar verilemez.
+          const outside = inFlight.filter((r) => CLOSE_BLOCKED_STATUSES.includes(r.status));
+          if (outside.length > 0) {
+            throw AppError.conflict(
+              `${outside.length} top fasonda (fiziksel olarak dışarıda) — iş emri ` +
+                "kapatılamaz. Önce fason kabul/iade yapılmalı.",
+            );
+          }
+
+          // GUARD 1b — statüsü IN_PRODUCTION olsa da açık fason sevkine bağlı toplar
+          // fason izindedir (rescueStuckRoll'un guard'ıyla aynı).
+          if (inFlight.length > 0) {
+            const openDispatchCount = await tx.subcontractorDispatchItem.count({
+              where: {
+                rollId: { in: inFlight.map((r) => r.id) },
+                dispatch: { cancelledAt: null },
+              },
+            });
+            if (openDispatchCount > 0) {
+              throw AppError.conflict(
+                `${openDispatchCount} top açık bir fason sevkine bağlı — iş emri ` +
+                  "kapatılamaz. Önce fason kapatılmalı.",
+              );
+            }
+          }
+
+          // GUARD 2 — KAPSAM: tx içinde TAZE okunan in-flight küme ile gönderilen
+          // dispozisyonlar birebir örtüşmeli. Eksik/fazla → istemcinin gördüğü liste
+          // bayat; sessizce yarım kapatma yapmaktansa reddet.
+          const byId = new Map(inFlight.map((r) => [r.id, r]));
+          if (
+            inFlight.length !== dispositions.length ||
+            dispositions.some((d) => !byId.has(d.rollId))
+          ) {
+            throw AppError.badRequest(
+              `İşlemde ${inFlight.length} top var, ${dispositions.length} dispozisyon ` +
+                "gönderildi — liste bu sırada değişti. Sayfayı yenileyip tekrar deneyin.",
+            );
+          }
+
+          // GUARD 3 — fason dönüşü mal ham stoğa DÖNEMEZ (softDelete invariant'ı).
+          for (const d of dispositions) {
+            const roll = byId.get(d.rollId)!;
+            if (d.action === "STOCK" && roll.entrySource === RollEntrySource.SUBCONTRACTOR_RETURN) {
+              throw AppError.badRequest(
+                `${roll.barcode ?? "Açık kumaş"}: fason dönüşü top ham stoğa çekilemez — ` +
+                  "depo / 2. kalite / fire seçin.",
+              );
+            }
+          }
+
+          // Kalite (opsiyonel) — verilen id'ler aktif katalogda olmalı.
+          const qualityIds = Array.from(
+            new Set(dispositions.map((d) => d.qualityGradeId).filter((q): q is string => !!q)),
+          );
+          const qualityById = new Map<string, { id: string; code: string }>();
+          if (qualityIds.length > 0) {
+            const rows = await tx.qualityGrade.findMany({
+              where: { id: { in: qualityIds }, isActive: true },
+              select: { id: true, code: true },
+            });
+            if (rows.length !== qualityIds.length) {
+              throw AppError.badRequest("Seçilen kalite bulunamadı veya aktif değil");
+            }
+            for (const q of rows) qualityById.set(q.id, q);
+          }
+
+          // 1) DEVİR — üretim yeni (devam) iş emrinde sürsün.
+          const transferRolls = dispositions
+            .filter((d) => d.action === "TRANSFER")
+            .map((d) => byId.get(d.rollId)!);
+          if (transferRolls.length > 0) {
+            transferredWoNumber = await this.transferRollsToNewWorkOrderTx(tx, {
+              sourceWorkOrderId: id,
+              rolls: transferRolls,
+              stepSeqById,
+              orderMode: data.transferOrderMode ?? "stock",
+              userId,
+            });
+            for (const r of transferRolls) {
+              appliedRows.push({
+                rollId: r.id,
+                barcode: r.barcode,
+                from: r.status,
+                to: r.status,
+                action: "TRANSFER",
+              });
+            }
+          }
+
+          // 2) STATÜ DİSPOZİSYONLARI (tx içinde SIRALI — Promise.all yasak).
+          for (const d of dispositions) {
+            if (d.action === "TRANSFER") continue;
+            const roll = byId.get(d.rollId)!;
+            const target = DISPOSITION_STATUS[d.action];
+
+            // Açık movement'ları FİZİKSEL çıkışla kapat — top metresiyle istasyondan
+            // ayrıldı (softDelete'in "hiç olmadı" semantiği DEĞİL). notes = sebep kodu.
+            await tx.rollMovement.updateMany({
+              where: { rollId: roll.id, exitedAt: null },
+              data: {
+                exitedAt: new Date(),
+                qtyOut: roll.currentQty,
+                weightOut: roll.weightKg,
+                notes: `WO_CLOSE_${d.action}`,
+              },
+            });
+
+            // Atomik claim: IN_PRODUCTION + serbest (çuval/sevk yok) iken hedefe çek.
+            const rollClaim = await tx.roll.updateMany({
+              where: {
+                id: roll.id,
+                status: RollStatus.IN_PRODUCTION,
+                shipmentId: null,
+                sackId: null,
+              },
+              data: { status: target, currentStepId: null },
+            });
+            if (rollClaim.count === 0) {
+              throw AppError.conflict(
+                `${roll.barcode ?? "Açık kumaş"} bu sırada başka bir işleme girdi — ` +
+                  "yenileyip tekrar deneyin.",
+              );
+            }
+
+            // "Her kumaşa etiket" (F4): satılabilir final statüde barkodsuz top kalmaz.
+            const quality = d.qualityGradeId ? qualityById.get(d.qualityGradeId)! : null;
+            const newBarcode =
+              roll.barcode == null && SELLABLE_DISPOSITIONS.includes(target)
+                ? await generateRollBarcode(tx, finalBarcodeType(target))
+                : null;
+            if (newBarcode || quality) {
+              await tx.roll.update({
+                where: { id: roll.id },
+                data: {
+                  ...(newBarcode ? { barcode: newBarcode } : {}),
+                  ...(quality ? { qualityGradeId: quality.id, qualityGrade: quality.code } : {}),
+                },
+              });
+            }
+
+            appliedRows.push({
+              rollId: roll.id,
+              barcode: newBarcode ?? roll.barcode,
+              from: roll.status,
+              to: target,
+              action: d.action,
+            });
+          }
         }
 
         // Bayat açık movement kalmışsa kapat (defansif — WIP yok ama iz temiz olsun).
@@ -2775,29 +3133,166 @@ export class WorkOrderService {
           where: { workOrderId: id, status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] } },
           data: { status: StepStatus.SKIPPED, skipReason: "MANUAL_COMPLETE" },
         });
-      }
 
-      // ACTIVE refakat kartları COMPLETED (otomatik-tamamlama yollarıyla aynı).
-      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "COMPLETED");
+        // ACTIVE refakat kartları COMPLETED (otomatik-tamamlama yollarıyla aynı).
+        await setWorkOrderCardStatuses(tx, id, "ACTIVE", "COMPLETED");
 
-      const done = await tx.workOrder.findUnique({ where: { id } });
-      return done!;
-    });
+        const done = await tx.workOrder.findUnique({ where: { id } });
+        return {
+          updated: done!,
+          applied: appliedRows,
+          transferredWorkOrderNumber: transferredWoNumber,
+        };
+      }),
+    );
 
+    // Audit tx DIŞINDA (best-effort). WO satırı + her top için ayrı iz: kapanış
+    // dispozisyonu sabit sebep kodu (`WO_CLOSE_DISPOSITION`) ile ayrıştırılabilir
+    // olmalı — 6 ay sonra "bu top depoda ne arıyor" sorusunun cevabı burada.
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "WORK_ORDER",
       recordId: id,
       oldData: { workOrderNumber: existing.workOrderNumber, status: existing.status },
-      newData: { status: WorkOrderStatus.COMPLETED, manualComplete: true },
+      newData: {
+        status: WorkOrderStatus.COMPLETED,
+        manualComplete: true,
+        ...(applied.length > 0 ? { dispositionCount: applied.length, reason } : {}),
+        ...(transferredWorkOrderNumber ? { transferredTo: transferredWorkOrderNumber } : {}),
+      },
     });
+    for (const a of applied) {
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ROLL",
+        recordId: a.rollId,
+        oldData: { status: a.from },
+        newData: {
+          event: "WO_CLOSE_DISPOSITION",
+          action: a.action,
+          from: a.from,
+          to: a.to,
+          barcode: a.barcode,
+          workOrderNumber: existing.workOrderNumber,
+          ...(a.action === "TRANSFER" && transferredWorkOrderNumber
+            ? { transferredTo: transferredWorkOrderNumber }
+            : {}),
+          reason,
+        },
+      });
+    }
+
+    const messageParts = [`İş emri manuel kapatıldı: ${existing.workOrderNumber}`];
+    if (applied.length > 0) messageParts.push(`${applied.length} top için dispozisyon uygulandı`);
+    if (transferredWorkOrderNumber) {
+      messageParts.push(`devredilen toplar yeni iş emrinde: ${transferredWorkOrderNumber}`);
+    }
 
     return {
       success: true,
       data: updated,
-      message: `İş emri manuel kapatıldı: ${existing.workOrderNumber}`,
+      message: messageParts.join(" — "),
     };
+  }
+
+  /**
+   * DEVİR (dispozisyon: TRANSFER) — kapanan WO'da işlemi bitmemiş topları YENİ bir
+   * (devam) iş emrine taşır. Şablon: workorder-split `undyedMove` (klon + repoint).
+   * Toplar `IN_PRODUCTION` KALIR, barkod/kalite değişmez — üretim sürüyor.
+   *
+   * `reEntryStepSequence` = taşınan topların EN KÜÇÜK adım sırası; klon o adımdan
+   * başlar ve sonrasını içerir, böylece her top `oldToNew` ile kendi adımına oturur.
+   *
+   * `supersedeEmptiedSourceWorkOrderTx` BİLİNÇLİ olarak çağrılmaz: kaynak WO bu
+   * çağrıda COMPLETED'a claim edildi; SUPERSEDED'e çekmek claim'i bozar ve "malzemesi
+   * devredildi" yanlış anlamını verir (burada malzemenin bir kısmı devrediliyor).
+   *
+   * Döner: yeni iş emri numarası.
+   */
+  private async transferRollsToNewWorkOrderTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      sourceWorkOrderId: string;
+      rolls: Array<{
+        id: string;
+        currentStepId: string | null;
+        currentQty: Prisma.Decimal | null;
+        batchId: string | null;
+      }>;
+      stepSeqById: Map<string, number>;
+      orderMode: "stock" | "keep";
+      userId?: string;
+    },
+  ): Promise<string> {
+    const { sourceWorkOrderId, rolls, stepSeqById, orderMode, userId } = params;
+    const rollIds = rolls.map((r) => r.id);
+
+    const sequences = rolls.map((r) => stepSeqById.get(r.currentStepId as string));
+    if (sequences.some((s) => s === undefined)) {
+      throw AppError.conflict("Devredilecek top bu iş emrinin bir adımında değil — listeyi yenileyin");
+    }
+    const reEntryStepSequence = Math.min(...(sequences as number[]));
+    const movedTotalQty = rolls.reduce((s, r) => s + Number(r.currentQty ?? 0), 0);
+
+    const src = await tx.workOrder.findUnique({
+      where: { id: sourceWorkOrderId },
+      select: { targetColorId: true },
+    });
+
+    const { newWo, oldToNew, newReEntryStepId } = await cloneWorkOrderTx(tx, {
+      sourceWorkOrderId,
+      reEntryStepSequence,
+      targetColorId: src?.targetColorId ?? null,
+      orderMode,
+      movedTotalQty,
+      userId,
+    });
+
+    // Her top KENDİ adımının klonuna taşınır (hepsi aynı adımda olmak zorunda değil).
+    for (const roll of rolls) {
+      const newStepId = oldToNew.get(roll.currentStepId as string);
+      if (!newStepId) {
+        throw AppError.conflict("Yeni iş emrinde hedef adım bulunamadı (rota kopyası tutarsız)");
+      }
+      const claim = await tx.roll.updateMany({
+        where: {
+          id: roll.id,
+          status: RollStatus.IN_PRODUCTION,
+          currentStepId: roll.currentStepId,
+          shipmentId: null,
+          sackId: null,
+        },
+        data: { currentStepId: newStepId },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict("Devredilecek top bu sırada değişti — yenileyip tekrar deneyin");
+      }
+    }
+
+    // Ayak izi (movement/operation/error) yeni WO'nun adımlarına repoint — aksi hâlde
+    // kaynak WO'nun adımları "hâlâ bekleyen top var" sanır.
+    await repointRollsTx(tx, rollIds, oldToNew);
+
+    // Kısmi seçim olduğu için parti TAŞINMAZ: yeni WO'da yeni parti doğar, kaynak
+    // parti izsiz boşaldıysa silinir (manual-move'un kısmi taşıma yolu ile aynı).
+    const sourceBatchIds = Array.from(
+      new Set(rolls.map((r) => r.batchId).filter((b): b is string => !!b)),
+    );
+    await createBatchTx(tx, {
+      workOrderId: newWo.id,
+      rollIds,
+      splitFromId: sourceBatchIds.length === 1 ? sourceBatchIds[0] : null,
+      userId,
+    });
+    for (const batchId of sourceBatchIds) {
+      await deleteIfEmptyAndTraceless(tx, batchId);
+    }
+
+    await recomputeStepStatus(tx, newReEntryStepId);
+
+    return newWo.workOrderNumber;
   }
 
   /**
@@ -3022,8 +3517,20 @@ export class WorkOrderService {
       if (candidates.length > 0) {
         const candidateIds = candidates.map((r) => r.id);
 
-        // 3) Atomik bulk update — status guard race condition'ı yakalar.
-        const updateResult = await tx.roll.updateMany({
+        // 3) Atomik bulk claim — status guard race condition'ı yakalar. RETURNING
+        //    ile FİİLEN BİZİM kazandığımız id'ler döner.
+        //
+        //    NEDEN updateManyAndReturn (yeniden-sorgu DEĞİL): eskiden count
+        //    beklenenden azsa kazanan küme `{id in candidateIds, status:
+        //    IN_PRODUCTION, producedInStepId: firstStepId}` ile TAHMİN ediliyordu.
+        //    Bu filtre eşzamanlı ikinci bir attach çağrısının AYNI adıma commit
+        //    ettiği topu bizden ayırt edemez (READ COMMITTED'de commit'li satır
+        //    görünür) → başkasının topu bizim kümemize sızardı. Sonuç: aşağıdaki
+        //    rollMovement.createMany `roll_movements_one_open_per_roll_step_uq`
+        //    partial unique'ine çarpar (P2002) ve TÜM tx düşer — operatör temiz
+        //    "başka işlemde değişti" mesajı yerine 500 görürdü; ayrıca
+        //    createBatchTx sahibi olmadığımız topa batchId damgalardı.
+        const claimed = await tx.roll.updateManyAndReturn({
           where: {
             id: { in: candidateIds },
             status: { in: acceptedRollStatuses },
@@ -3035,24 +3542,18 @@ export class WorkOrderService {
             producedInStepId: firstStepId,
             currentStepId: firstStepId,
           },
+          select: { id: true },
         });
 
-        // 4) Race condition koruması: eğer count beklenenden az,
-        //    hangi ruloların gerçekten güncellendiğini bul.
-        let succeeded = candidates;
-        if (updateResult.count !== candidates.length) {
-          const updatedRolls = await tx.roll.findMany({
-            where: {
-              id: { in: candidateIds },
-              status: RollStatus.IN_PRODUCTION,
-              producedInStepId: firstStepId,
-            },
-            select: { id: true },
-          });
-          const updatedIds = new Set(updatedRolls.map((r) => r.id));
-          succeeded = candidates.filter((r) => updatedIds.has(r.id));
+        // 4) Kaybedilen toplar (varsa) tek tek raporlanır.
+        const claimedIds = new Set(claimed.map((r) => r.id));
+        const succeeded =
+          claimedIds.size === candidates.length
+            ? candidates
+            : candidates.filter((r) => claimedIds.has(r.id));
+        if (claimedIds.size !== candidates.length) {
           for (const r of candidates) {
-            if (!updatedIds.has(r.id)) {
+            if (!claimedIds.has(r.id)) {
               errorMessages.push(
                 `${r.barcode}: Top başka bir işlemde değişti, tekrar deneyin`
               );

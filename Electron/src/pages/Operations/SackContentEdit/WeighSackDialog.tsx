@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Scale } from "lucide-react";
+import { Keyboard } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,8 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useMachineScale } from "@/hooks/useMachineScale";
-import { readWeightFromScale } from "@/lib/scale-read";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 
@@ -30,31 +28,23 @@ function parseKg(raw: string): number | null {
 }
 
 /**
- * Çuval brüt tartısı. Backend geçerli bir kg ister (mühür kavramı kalktı — çuval
- * kodu ayrı alan yok). İçerik değişince kg bayatlar (backend sıfırlar) → yeniden girilir.
+ * Çuval brüt tartısı — ELLE GİRİŞ yolu (⌄ → "Elle kg gir").
+ *
+ * Normal akış araç çubuğundaki "Tart" tuşudur: kantardan okur ve DOĞRUDAN kaydeder,
+ * bu diyalog hiç açılmaz (`useSackWeighAction`). Burası kantar yokken/bozukken
+ * kullanılan kaçış yoludur — o yüzden içinde "Tart" butonu YOK (tek dokunuş yolu
+ * araç çubuğunda; iki yer iki farklı davranış anlamına gelirdi).
+ *
+ * İçerik değişince kg bayatlar (backend sıfırlar) → yeniden girilir.
  */
 export function WeighSackDialog({ sack, onOpenChange }: Props) {
   const qc = useQueryClient();
   const open = !!sack;
   const [kg, setKg] = useState("");
-  const { scale } = useMachineScale();
-  const [weighing, setWeighing] = useState(false);
 
   useEffect(() => {
     if (sack) setKg(sack.weightKg != null ? String(sack.weightKg) : "");
   }, [sack]);
-
-  // Kantardan oku ("Tart"): simulate ise sahte, değilse seri IPC → parse → kg.
-  const handleWeigh = async () => {
-    if (weighing) return;
-    setWeighing(true);
-    try {
-      const v = await readWeightFromScale(scale);
-      if (v != null) setKg(String(v));
-    } finally {
-      setWeighing(false);
-    }
-  };
 
   const weightKg = parseKg(kg);
   const invalid = kg.trim() !== "" && weightKg === null;
@@ -73,26 +63,22 @@ export function WeighSackDialog({ sack, onOpenChange }: Props) {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Scale className="h-4 w-4" /> Çuval {sack?.sackNo} — Tartı
+            <Keyboard className="h-4 w-4" /> Çuval {sack?.sackNo} — Elle Brüt Tartı
           </DialogTitle>
-          <DialogDescription>Brüt tartı (kg). Yurtdışı sevkte tartı zorunludur.</DialogDescription>
+          <DialogDescription>
+            Kantar okunamadığında kullanılır. Kantar çalışıyorsa “Tart” tuşu yeterli.
+          </DialogDescription>
         </DialogHeader>
 
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">Brüt Tartı (kg)</span>
-          <div className="flex gap-2">
-            <Input
-              value={kg}
-              onChange={(e) => setKg(e.target.value)}
-              inputMode="decimal"
-              placeholder="örn. 24,5"
-              autoFocus
-              className="flex-1"
-            />
-            <Button type="button" variant="outline" onClick={handleWeigh} disabled={weighing} title="Kantardan oku">
-              <Scale className="h-4 w-4" /> {weighing ? "..." : "Tart"}
-            </Button>
-          </div>
+          <Input
+            value={kg}
+            onChange={(e) => setKg(e.target.value)}
+            inputMode="decimal"
+            placeholder="örn. 24,5"
+            autoFocus
+          />
           {invalid && <span className="mt-1 block text-xs text-destructive">Geçerli bir kg girin.</span>}
         </label>
 

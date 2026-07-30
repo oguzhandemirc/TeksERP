@@ -1,4 +1,4 @@
-import { Activity, Archive, Cpu, DatabaseBackup, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { Activity, Archive, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -109,6 +109,14 @@ export const systemTiles: SystemTile[] = [
     description: "Veritabanı yedeklerini listele, indir, geri yükleme komutunu kopyala",
     icon: DatabaseBackup,
     to: "/system/backups",
+    group: "config",
+  },
+  {
+    key: "db-restore",
+    title: "Veritabanı Geri Yükleme",
+    description: "Yedeği yeni bir veritabanına geri yükle, doğrula, geçiş yap (canlıya dokunmaz)",
+    icon: DatabaseZap,
+    to: "/system/db-restore",
     group: "config",
   },
   {

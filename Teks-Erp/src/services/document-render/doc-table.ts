@@ -11,6 +11,15 @@
 export interface DocColumnCfg {
   hidden?: string[];
   order?: string[];
+  /**
+   * OPT-IN kolonlar (`DocCol.defaultHidden`) — yalnız burada adı geçenler basılır.
+   * `hidden` bir BLOCKLIST'tir: yeni bir kolon eklendiğinde mevcut config'lerde
+   * `hidden` listesinde olmadığı için VARSAYILAN GÖRÜNÜR doğar. İç veri (çuval
+   * yorumu gibi) taşıyan kolonlar için bu yanlış varsayılan — müşteriye giden
+   * belgeye sızar. O yüzden `defaultHidden` kolonlar ters mantıkla çalışır:
+   * `shown` içermiyorsa basılmaz, `hidden` onlarda YOK SAYILIR.
+   */
+  shown?: string[];
 }
 
 export interface DocCol<R> {
@@ -26,12 +35,23 @@ export interface DocCol<R> {
   cell: (row: R, index: number) => string;
   /** Toplam satırı hücresi (verilmezse boş; footLabel ilk boş görünür hücreye oturur). */
   foot?: string;
+  /**
+   * OPT-IN kolon: varsayılan BASILMAZ, yalnız `cfg.shown` içinde adı geçerse basılır.
+   * İç/hassas veri taşıyan kolonlar (çuval yorumu) için — `hidden` blocklist'i
+   * bu kolonlarda yok sayılır. Bkz. DocColumnCfg.shown.
+   */
+  defaultHidden?: boolean;
 }
 
 /** Config'e göre görünür + sıralı kolon listesi. Tümü gizlenirse tablo boş döner. */
 export function applyColumnCfg<R>(cols: DocCol<R>[], cfg?: DocColumnCfg): DocCol<R>[] {
   const hidden = new Set(cfg?.hidden ?? []);
-  let out = cols.filter((c) => !hidden.has(c.key));
+  const shown = new Set(cfg?.shown ?? []);
+  let out = cols.filter((c) =>
+    // OPT-IN kolon: yalnız `shown` içeriyorsa görünür (`hidden` yok sayılır).
+    // Normal kolon: `hidden` içermiyorsa görünür (mevcut blocklist davranışı).
+    c.defaultHidden ? shown.has(c.key) : !hidden.has(c.key),
+  );
   const order = cfg?.order;
   if (order && order.length) {
     const pos = new Map(order.map((k, i) => [k, i]));

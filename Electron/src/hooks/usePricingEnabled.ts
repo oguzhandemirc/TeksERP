@@ -171,4 +171,10 @@ export function useSameTypeSessionPolicy(): SameTypeSessionPolicy {
   return isSameTypeSessionPolicy(v) ? v : "kick";
 }
 
+/** Otomatik gece yedeğinin saati (sunucu yerel saati). Yüklenene kadar 3 (default). */
+export function useBackupHour(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.backupHour ?? 3;
+}
+
 export const FEATURE_FLAGS_QUERY_KEY = QUERY_KEY;

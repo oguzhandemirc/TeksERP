@@ -188,6 +188,11 @@ export const SETTING_KEYS = {
   AUTH_PIN_LOCKOUT_ESCALATE_AFTER: "auth.pinLockoutEscalateAfter",
   /** Uzun ceza süresi, DAKİKA. Default 15 (1..1440). Escalate eşiğine varınca uygulanır. */
   AUTH_PIN_LOCKOUT_LONG_PENALTY_MIN: "auth.pinLockoutLongPenaltyMin",
+  /** Otomatik gece yedeğinin saati (0-23, yerel). Default 3. Backend ENFORCE eder —
+   *  backup-scheduler her kontrol turunda (15dk) okur, yani admin saati değiştirince
+   *  pm2 restart GEREKMEZ. Kayıt yoksa BACKUP_HOUR env'i, o da yoksa 3 kullanılır.
+   *  Yedek klasörü/offsite yolu bilinçli olarak burada DEĞİL (ops config → env). */
+  BACKUP_HOUR: "backup.hour",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -231,6 +236,11 @@ export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
 /** Hızlı-PIN/kart deneme kilidi varsayılanları + aralıkları. */
 export const DEFAULT_PIN_LOCKOUT_ENABLED = true;
+/** Otomatik gece yedeği saati varsayılanı (yerel saat). Eski Görev Zamanlayıcı da 03:00'tü. */
+export const DEFAULT_BACKUP_HOUR = 3;
+const MIN_BACKUP_HOUR = 0;
+const MAX_BACKUP_HOUR = 23;
+
 export const DEFAULT_PIN_LOCKOUT_ATTEMPTS = 5;
 const MIN_PIN_LOCKOUT_ATTEMPTS = 1;
 const MAX_PIN_LOCKOUT_ATTEMPTS = 20;
@@ -483,9 +493,11 @@ export interface DocumentConfig {
   showLogo?: boolean;
   /** Logo konumu: başlık sol bloğu (default) veya sağ blok. */
   logoPosition?: "left" | "right";
-  /** Tablo kolonu aç/kapa + sıralama: { [tabloKey]: { hidden, order } } —
-   *  renderer document-render/doc-table.ts ile uygular. */
-  columns?: Record<string, { hidden?: string[]; order?: string[] }>;
+  /** Tablo kolonu aç/kapa + sıralama: { [tabloKey]: { hidden, order, shown } } —
+   *  renderer document-render/doc-table.ts ile uygular. `hidden` blocklist (normal
+   *  kolonlar), `shown` allowlist (yalnız `defaultHidden` opt-in kolonlar — çuval
+   *  yorumu gibi iç veri; onlarda `hidden` yok sayılır). */
+  columns?: Record<string, { hidden?: string[]; order?: string[]; shown?: string[] }>;
   /** Belge doğrulama karekodu (belge no + versiyon) basılsın mı (default false). */
   qr?: boolean;
   /** Sayfa altı damgaları: basım zamanı / basan kullanıcı / nüsha etiketi (ASIL, KOPYA...). */
@@ -597,6 +609,10 @@ export interface FeatureFlags {
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
    *  medyası. Yazıcı cihazı seçiliyse onun medyası önceliklidir; bu yalnız fallback. */
   defaultLabelMedia: DefaultLabelMedia;
+  /** Otomatik gece yedeğinin saati (0-23, yerel saat; default 3). Backend ENFORCE eder
+   *  (jobs/backup-scheduler.ts her turda okur → değişiklik restart GEREKTİRMEZ).
+   *  Kayıt yoksa `BACKUP_HOUR` env'ine, o da yoksa 3'e düşer. */
+  backupHour: number;
 }
 
 // =============================================================================
@@ -804,6 +820,7 @@ export class SystemSettingService {
       absoluteSessionCapDays: await readAbsoluteSessionCapDays(cacheClient),
       pinLockoutEnabled: await readPinLockoutEnabled(cacheClient),
       pinLockoutAttempts: await readPinLockoutAttempts(cacheClient),
+      backupHour: await readBackupHour(cacheClient),
       pinLockoutPenaltySec: await readPinLockoutPenaltySec(cacheClient),
       pinLockoutEscalateAfter: await readPinLockoutEscalateAfter(cacheClient),
       pinLockoutLongPenaltyMin: await readPinLockoutLongPenaltyMin(cacheClient),
@@ -1231,6 +1248,27 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED,
         input.pinLockoutEnabled,
         "Hızlı PIN + kart giriş deneme kilidi açık olsun (brute-force koruması)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "backupHour")) {
+      const v = input.backupHour;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < MIN_BACKUP_HOUR ||
+        v > MAX_BACKUP_HOUR
+      ) {
+        throw AppError.badRequest(
+          `Otomatik yedek saati ${MIN_BACKUP_HOUR}–${MAX_BACKUP_HOUR} aralığında bir tam sayı olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.BACKUP_HOUR,
+        v,
+        "Otomatik gece yedeğinin saati (0-23, sunucu yerel saati)",
         userId
       );
     }
@@ -1775,7 +1813,7 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
       for (const [tk, tv] of Object.entries(o.columns as Record<string, unknown>)) {
         if (!tv || typeof tv !== "object" || Array.isArray(tv)) continue;
         const tvo = tv as Record<string, unknown>;
-        const entry: { hidden?: string[]; order?: string[] } = {};
+        const entry: { hidden?: string[]; order?: string[]; shown?: string[] } = {};
         if (Array.isArray(tvo.hidden)) {
           entry.hidden = tvo.hidden
             .filter((x): x is string => typeof x === "string")
@@ -1786,7 +1824,17 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
             .filter((x): x is string => typeof x === "string")
             .slice(0, 20);
         }
-        if (entry.hidden?.length || entry.order?.length) columns[tk.slice(0, 40)] = entry;
+        if (Array.isArray(tvo.shown)) {
+          entry.shown = tvo.shown
+            .filter((x): x is string => typeof x === "string")
+            .slice(0, 20);
+        }
+        // ⚠️ `shown` bu kapıya EKLENMELİ — yoksa yalnız opt-in kolon açılmış bir satır
+        // (hidden/order boş) sessizce atılır: kullanıcı kolonu açar, ayar kaydolmaz,
+        // sebebi hiçbir yerde görünmez.
+        if (entry.hidden?.length || entry.order?.length || entry.shown?.length) {
+          columns[tk.slice(0, 40)] = entry;
+        }
       }
       if (Object.keys(columns).length) cfg.columns = columns;
     }
@@ -2122,6 +2170,33 @@ export async function readPinLockoutAttempts(
   const parsed = asNumber(setting.value);
   if (parsed === null || parsed < MIN_PIN_LOCKOUT_ATTEMPTS) return DEFAULT_PIN_LOCKOUT_ATTEMPTS;
   return Math.min(Math.floor(parsed), MAX_PIN_LOCKOUT_ATTEMPTS);
+}
+
+/**
+ * Otomatik gece yedeğinin saati (0-23, yerel saat).
+ *
+ * Öncelik: SystemSetting (`backup.hour`) → `BACKUP_HOUR` env → 3.
+ * Env fallback'i geriye-uyum içindir: ayar UI'dan hiç kaydedilmemiş kurulumlarda
+ * ecosystem.config.js'deki değer geçerli kalır. Scheduler bunu HER turda okur,
+ * dolayısıyla admin saati değiştirdiğinde süreç yeniden başlatılmaz.
+ */
+export async function readBackupHour(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.BACKUP_HOUR },
+    select: { value: true },
+  });
+  const fromDb = asNumber(setting?.value);
+  if (fromDb !== null && Number.isInteger(fromDb) && fromDb >= MIN_BACKUP_HOUR && fromDb <= MAX_BACKUP_HOUR) {
+    return fromDb;
+  }
+  const fromEnv = Number(process.env.BACKUP_HOUR);
+  if (Number.isInteger(fromEnv) && fromEnv >= MIN_BACKUP_HOUR && fromEnv <= MAX_BACKUP_HOUR) {
+    return fromEnv;
+  }
+  return DEFAULT_BACKUP_HOUR;
 }
 
 /** Kısa ceza süresi, SANİYE (default 60, 5..3600). */

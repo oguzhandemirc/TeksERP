@@ -30,6 +30,19 @@ if (!("IntersectionObserver" in globalThis)) {
   });
 }
 
+// jsdom Pointer Events API'sini uygulamaz; Radix Select/DropdownMenu trigger'ı
+// pointerdown'da hasPointerCapture çağırır ve test "target.hasPointerCapture is not
+// a function" ile patlar. Ayrıca açılan liste seçili öğeye scrollIntoView yapar.
+// No-op stub'lar davranışı değiştirmez, yalnız jsdom boşluğunu kapatır.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 afterEach(() => {
   cleanup();
 });

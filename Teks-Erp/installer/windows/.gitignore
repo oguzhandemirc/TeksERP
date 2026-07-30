@@ -1,9 +1,0 @@
-# Build sırasında indirilen/üretilen ağır çıktılar — repoya girmez.
-.cache/
-.build/
-payload/
-runtime/
-dist/
-*.exe
-# Logodan build sırasında üretilen sihirbaz görseli (kaynak: branding\logo.png)
-branding/wizard-small.bmp

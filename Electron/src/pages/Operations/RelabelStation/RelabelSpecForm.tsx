@@ -19,7 +19,7 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { shipmentStatusLabels, type ShipmentStatus } from "@/pages/Operations/Shipments/types";
 import { relabelService } from "./service";
-import type { RelabelContext } from "./types";
+import { needsSupervisorEdit, type RelabelContext } from "./types";
 
 /**
  * Spec düzeltme — yanlış girilmiş renk/kalite/en/özelliği düzeltir (mevcut
@@ -38,6 +38,13 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   const [metraj, setMetraj] = useState<string>(ctx.currentQty != null ? String(ctx.currentQty) : "");
   const [propertyIds, setPropertyIds] = useState<string[]>(ctx.propertyIds);
   const [marked, setMarked] = useState<boolean>(ctx.markedForKartela);
+  // Süpervizör kapsamı: top serbest satılabilir stokta DEĞİLSE (örn. istasyonda,
+  // IN_PRODUCTION) düzeltme sebep ister + roll:manual-adjust yetkisi arar. Eski
+  // ayrı "Manuel Düzelt" diyaloğunun tek işlevi buydu; buraya taşındı.
+  const supervisorScope = needsSupervisorEdit(ctx.status);
+  const canSupervise = hasAnyPermission(["roll:manual-adjust"]);
+  const [reason, setReason] = useState("");
+  const reasonOk = !supervisorScope || reason.trim().length >= 3;
   // Kaydettikten sonra "fiziksel etiketi de yenile" hatırlatması (bir alan tekrar değişince gizlenir).
   const [savedHint, setSavedHint] = useState(false);
 
@@ -61,6 +68,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
         // "kısmen tüketilmiş" guard'ını (renk-only kayıtlarda) gereksiz tetikleme.
         currentQty:
           metraj.trim() !== "" && Number(metraj) !== ctx.currentQty ? Number(metraj) : undefined,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
       });
       if (canKartela && marked !== ctx.markedForKartela) {
         await relabelService.setMarkedForKartela(ctx.id, marked);
@@ -76,7 +84,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
     },
   });
 
-  const disabled = !canEdit || ctx.specLocked;
+  const disabled = !canEdit || ctx.specLocked || (supervisorScope && !canSupervise);
 
   // Alan setter'larını sararak: kullanıcı yeniden düzenlemeye başlarsa hatırlatma kaybolur.
   const edit =
@@ -187,14 +195,43 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
         </label>
       )}
 
+      {/* SÜPERVİZÖR KAPSAMI: top serbest satılabilir stokta değil (üretimde) →
+          sebep zorunlu + roll:manual-adjust. Yetki yoksa alan yerine net uyarı. */}
+      {supervisorScope && !canSupervise && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          Bu top serbest depoda değil (üretimde) — niteliklerini düzeltmek için{" "}
+          <span className="font-mono">roll:manual-adjust</span> yetkisi gerekiyor.
+        </div>
+      )}
+      {supervisorScope && canSupervise && (
+        <FormField
+          label="İşlem nedeni (zorunlu)"
+          htmlFor="relabel-reason"
+          hint="Top üretimde olduğu için düzeltme gerekçesi kayda geçer."
+        >
+          <Input
+            id="relabel-reason"
+            value={reason}
+            disabled={disabled}
+            placeholder="Örn. KK1'de yanlış renk girilmiş"
+            onChange={(e) => edit(setReason)(e.target.value)}
+          />
+        </FormField>
+      )}
+
       {savedHint && (
         <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
-          ✓ Kaydedildi. Fiziksel etiketi de yenilemek için aşağıdaki <strong>"Bas"</strong>ı kullan.
+          ✓ Kaydedildi. Fiziksel etiketi de yenilemek için <strong>"Etiket"</strong>i kullan.
         </div>
       )}
 
       <div className="flex justify-end pt-1">
-        <Button size="sm" disabled={disabled || mut.isPending} onClick={() => mut.mutate()} className="gap-1">
+        <Button
+          size="sm"
+          disabled={disabled || !reasonOk || mut.isPending}
+          onClick={() => mut.mutate()}
+          className="gap-1"
+        >
           <Save className="h-3.5 w-3.5" />
           {mut.isPending ? "Kaydediliyor..." : "Kaydet"}
         </Button>

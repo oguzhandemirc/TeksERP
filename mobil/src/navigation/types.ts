@@ -5,7 +5,12 @@ export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
   NoAccess: undefined;
+  // Ayarlar bir MENÜ; her başlık kendi alt sayfasını push eder (bkz.
+  // screens/Common/settings/). DevicePairing de bu menünün bir satırıdır.
   Settings: undefined;
+  SettingsServer: undefined;
+  SettingsPlaceHardware: undefined;
+  SettingsScanner: undefined;
   DevicePairing: undefined;
 };
 

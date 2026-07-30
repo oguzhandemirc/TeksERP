@@ -6,6 +6,8 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
 import { foldTypeSchema } from "../services/helpers/fold-type";
+import { matchesPermission } from "../middlewares/rbac.middleware";
+import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
@@ -132,6 +134,25 @@ const manualMoveSchema = z
   .refine((v) => Boolean(v.batchId) || (v.rollIds && v.rollIds.length > 0), {
     message: "batchId veya rollIds gerekli",
   });
+
+// Manuel kapatma: istasyonda kalan her top için dispozisyon kararı (WIP disposition).
+// Kalite yalnız WAREHOUSE/A1_STOCK'ta anlamlı ve OPSİYONEL — servis diğer aksiyonlarda
+// gelirse reddeder. `reason` dispozisyon varsa zorunlu (servis doğrular).
+const completeSchema = z.object({
+  reason: z.string().max(500).optional(),
+  dispositions: z
+    .array(
+      z.object({
+        rollId: z.string().uuid("Geçersiz top ID"),
+        action: z.enum(["STOCK", "WAREHOUSE", "A1_STOCK", "SCRAP", "CANCELLED", "TRANSFER"]),
+        qualityGradeId: z.string().uuid().optional().nullable(),
+      }),
+    )
+    .max(200)
+    .optional(),
+  /** TRANSFER varsa: yeni iş emri siparişe bağlı kalsın mı ("keep") yoksa stok mu. */
+  transferOrderMode: z.enum(["stock", "keep"]).optional(),
+});
 
 const updateStepPlanningSchema = z.object({
   requiredCategoryId: z.string().uuid().nullable().optional(),
@@ -620,12 +641,26 @@ export class WorkOrderController {
 
   /**
    * POST /api/work-orders/:id/complete
-   * Manuel kapatma: IN_PROGRESS WO'yu COMPLETED'a çeker (WIP yoksa).
+   * Manuel kapatma: IN_PROGRESS WO'yu COMPLETED'a çeker. İstasyonda kalan toplar
+   * için `dispositions` taşınır (bkz. completeSchema).
+   *
+   * Koşullu yetki: dispozisyon top statüsü değiştirdiği için `roll:manual-adjust`
+   * de aranır (`workorder:write` route'ta zaten var). RBAC middleware koşullu
+   * çalışmadığından kontrol burada — payload'a bakmak gerekiyor.
    */
   async completeWorkOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const body = completeSchema.parse(req.body ?? {});
+      if (body.dispositions && body.dispositions.length > 0) {
+        if (!matchesPermission(req.user?.permissions ?? [], "roll:manual-adjust")) {
+          throw AppError.forbidden(
+            "İşlemdeki topların statüsüne karar vermek için 'roll:manual-adjust' yetkisi gerekli."
+          );
+        }
+      }
       const result = await this.service.completeWorkOrder(
         req.params.id as string,
+        body,
         req.user?.userId
       );
       res.status(200).json(result);

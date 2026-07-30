@@ -562,7 +562,85 @@ router.get("/:id/rolls", verifyToken, requireAnyPermission("workorder:read", "mo
  */
 router.get("/:id/cancel-impact", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.cancelImpact);
 
-// Manuel kapatma (güvenli varyant): WIP yokken IN_PROGRESS WO'yu COMPLETED'a çeker.
+/**
+ * @openapi
+ * /api/work-orders/{id}/complete-preview:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Manuel kapatma önizleme (atlanacak adımlar + dispozisyon bekleyen toplar)
+ *     description: |
+ *       `dispositionRolls` → istasyonda kalan, kapanışta karar verilecek toplar.
+ *       `blockedRolls`     → fasonda / açık fason sevkinde; kapatmayı ENGELLER.
+ *       `canComplete` yalnız `blockedRolls` (ya da WO durumu) yüzünden false olur.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Kapatma önizlemesi
+ */
+/**
+ * @openapi
+ * /api/work-orders/{id}/complete:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: İş emrini manuel kapat (+ kapanış dispozisyonu)
+ *     description: |
+ *       IN_PROGRESS WO'yu COMPLETED'a çeker. İstasyonda kalan (IN_PRODUCTION) TÜM toplar
+ *       için `dispositions` gönderilmek ZORUNDADIR (önizlemedeki `dispositionRolls` ile
+ *       birebir). Fasondaki toplar hard-block — mal fiziksel olarak dışarıda.
+ *
+ *       Dispozisyon gönderiliyorsa `roll:manual-adjust` yetkisi de aranır.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Dispozisyon varsa zorunlu (min 3 karakter) — audit'e yazılır
+ *               transferOrderMode:
+ *                 type: string
+ *                 enum: [stock, keep]
+ *                 description: TRANSFER varsa yeni iş emrinin sipariş bağı
+ *               dispositions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [rollId, action]
+ *                   properties:
+ *                     rollId: { type: string, format: uuid }
+ *                     action:
+ *                       type: string
+ *                       enum: [STOCK, WAREHOUSE, A1_STOCK, SCRAP, CANCELLED, TRANSFER]
+ *                     qualityGradeId:
+ *                       type: string
+ *                       format: uuid
+ *                       nullable: true
+ *                       description: Opsiyonel; yalnız WAREHOUSE / A1_STOCK'ta verilebilir
+ *     responses:
+ *       200:
+ *         description: İş emri kapatıldı
+ *       400:
+ *         description: Dispozisyon listesi eksik/uyumsuz ya da geçersiz karar
+ *       403:
+ *         description: roll:manual-adjust yetkisi yok
+ *       409:
+ *         description: Fasonda top var ya da kayıt bu sırada değişti
+ */
+// Manuel kapatma: istasyonda kalan toplar için dispozisyon kararıyla kapatır.
 router.get("/:id/complete-preview", verifyToken, requirePermission("workorder:write"), controller.completePreview);
 router.post("/:id/complete", verifyToken, requirePermission("workorder:write"), controller.completeWorkOrder);
 

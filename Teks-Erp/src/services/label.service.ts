@@ -19,7 +19,7 @@
 
 import bwipjs from "bwip-js";
 import { readLabelCopies, readLabelNativeSendEnabled } from "./system-setting.service";
-import { LabelKind, PrinterLanguage, Prisma, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
+import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -94,6 +94,18 @@ export interface LabelPayload {
   lengthCm?: number | null;
   /** Kartelanın doğduğu bitmiş topun barkodu. */
   parentRollBarcode?: string | null;
+
+  // --- SACK (çuval) için opsiyonel alanlar — roll/swatch payload'unda undefined.
+  //     Yalnız `kind === SACK` iken doldurulur. Çuvalda ÜRÜN/RENK alanı YOK
+  //     (karışık içerik → tek ürün adı sessizce yanlış olur). ---
+  /** Çuval kodu (CV+GGAAYY+NNNN) — barkod/QR ile AYNI değer (tek kod kuralı). */
+  sackNo?: string | null;
+  /** Çuvaldaki (ölü olmayan) top adedi. */
+  rollCount?: number | null;
+  /** Çuvalın müşteri şubesi. */
+  branchName?: string | null;
+  /** Çuval yorumu (iç not) — şablona sürüklenmişse basılır, boşsa eleman atlanır. */
+  sackNote?: string | null;
 }
 
 export interface SwatchLabelPayload {
@@ -931,7 +943,9 @@ export class LabelService {
    */
   async getBulkRollLabelsHtml(
     rollIds: string[],
-    opts?: { copies?: number; peripheralId?: string; deviceId?: string },
+    /** `customerId`: TÜM topları bu müşteri bağlamıyla bas (çuval müşterisi değişti
+     *  → yeni müşterinin şablonu/alias'ı). Verilmezse her top kendi snapshot'ıyla. */
+    opts?: { copies?: number; peripheralId?: string; deviceId?: string; customerId?: string | null },
   ): Promise<ApiResponse<{ html: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
@@ -942,10 +956,12 @@ export class LabelService {
     // çıktı per-roll yolla BYTE-IDENTİK (bkz. test_bulk_label_batched.ts).
     // F183: cihaz bağlamı (peripheralId/deviceId) native handler ile parite — iş
     // istasyonunun kendi yazıcı dilinde/şablonunda toplu bassın.
-    const ctx = await this.buildBulkContext(ids, copies, {
-      peripheralId: opts?.peripheralId,
-      deviceId: opts?.deviceId,
-    });
+    const ctx = await this.buildBulkContext(
+      ids,
+      copies,
+      { peripheralId: opts?.peripheralId, deviceId: opts?.deviceId },
+      opts?.customerId ?? null,
+    );
 
     const bodyRe = /<body[^>]*>([\s\S]*?)<\/body>/i;
     let head = "";
@@ -955,7 +971,7 @@ export class LabelService {
     // setImmediate ile check fazına dön → LAN'daki diğer operatörlerin bekleyen soketleri servis edilir.
     let yielded = 0;
     for (const id of ids) {
-      const res = await this.getRollLabelHtml(id, undefined, { copies }, ctx);
+      const res = await this.getRollLabelHtml(id, undefined, { copies, customerId: opts?.customerId ?? undefined }, ctx);
       const full = res.data.html;
       if (!head) {
         // İlk belgenin <head> dahil <body ...> açılışına kadarki kısmı.
@@ -985,15 +1001,18 @@ export class LabelService {
    */
   async getBulkRollLabelsNative(
     rollIds: string[],
-    opts?: { copies?: number; peripheralId?: string; deviceId?: string; rasterCapable?: boolean },
+    /** `customerId`: TÜM topları bu müşteri bağlamıyla bas (bkz. getBulkRollLabelsHtml). */
+    opts?: { copies?: number; peripheralId?: string; deviceId?: string; rasterCapable?: boolean; customerId?: string | null },
   ): Promise<ApiResponse<{ content: string; contentB64: string; encoding: "text" | "binary"; language: PrinterLanguage; contentType: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
     const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
-    const ctx = await this.buildBulkContext(ids, copies, {
-      peripheralId: opts?.peripheralId,
-      deviceId: opts?.deviceId,
-    });
+    const ctx = await this.buildBulkContext(
+      ids,
+      copies,
+      { peripheralId: opts?.peripheralId, deviceId: opts?.deviceId },
+      opts?.customerId ?? null,
+    );
     const language = ctx.format.language;
     let contentType = "text/plain; charset=utf-8";
     const textBlocks: string[] = [];
@@ -1002,7 +1021,12 @@ export class LabelService {
     // F178: getBulkRollLabelsHtml ile aynı — ~25 topta bir event-loop'a nefes aldır.
     let yieldedN = 0;
     for (const id of ids) {
-      const { input } = await this.buildRollRenderInput(id, undefined, { copies }, ctx);
+      const { input } = await this.buildRollRenderInput(
+        id,
+        undefined,
+        { copies, customerId: opts?.customerId ?? undefined },
+        ctx,
+      );
       // rasterCapable değilse komut zorla (eski istemci binary alamaz). rasterCapable (b64)
       // → binary-güvenli → ikon GW emit; değilse ham text → ikon atlanır (temiz ASCII).
       const r = await renderLabel(
@@ -1035,10 +1059,18 @@ export class LabelService {
    * çözümü için getRollLabel'in KENDİSİ (branch ①②③④ tek-doğru-kaynak) kullanılır —
    * dal mantığı KOPYALANMAZ (drift = yanlış etiket riski).
    */
+  /**
+   * @param overrideCustomerId Verilirse TÜM toplar bu müşteri bağlamıyla basılır
+   *   (çuval müşterisi değişince "yeni müşteri için hepsini bas"). Bu müşteri
+   *   `byCustomer`'a ZORLA tohumlanır — aksi halde alias/rota haritalarında
+   *   bulunmaz ve baskı SESSİZCE varsayılan şablona düşer (fiziksel yanlış etiket,
+   *   üstelik labelDirty temizlendiği için uyarı da kaybolur).
+   */
   private async buildBulkContext(
     ids: string[],
     copies: number,
     routing?: { peripheralId?: string; deviceId?: string },
+    overrideCustomerId?: string | null,
   ): Promise<BulkLabelContext> {
     // §1 Sabitler — seri (pg adapter tek-connection; Promise.all yok). Format + şablonlar
     // tekli /native ile AYNI zincirden (resolveLabelRouting): explicit cihaz > tablete-bağlı
@@ -1091,6 +1123,9 @@ export class LabelService {
       });
       for (const o of rows) orderLineById.set(o.id, o);
     }
+    // Override müşteri de lookup'a girer (adı payload'a düşsün + aşağıdaki
+    // rota/alias gruplamasına dahil olsun).
+    if (overrideCustomerId) needCustomerIds.add(overrideCustomerId);
     const customerById = new Map<string, { id: string; name: string }>();
     if (needCustomerIds.size > 0) {
       const rows = await prisma.customer.findMany({
@@ -1120,7 +1155,9 @@ export class LabelService {
     for (const id of ids) {
       const roll = rollById.get(id);
       if (!roll) continue; // var-olmayan top: ana döngüde getRollLabel fallback 404'ler
-      const cid = (await this.getRollLabel(id, {}, partial)).data.customerId;
+      // Override varsa topun KENDİ snapshot müşterisi değil, hedef müşteri gruplanır —
+      // baskı o müşterinin alias'ı + rotasıyla çıkacak.
+      const cid = overrideCustomerId ?? (await this.getRollLabel(id, {}, partial)).data.customerId;
       if (!cid) continue;
       const g = byCustomer.get(cid) ?? { itemIds: new Set<string>(), colorIds: new Set<string>() };
       g.itemIds.add(roll.item.id);
@@ -1350,6 +1387,199 @@ export class LabelService {
       success: true,
       data: { content: r.content, language: r.language, contentType: r.contentType, kind },
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // SACK (ÇUVAL) ETİKETİ — barkod/QR = Sack.sackNo (tek kod kuralı)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Çuval etiketi payload'ı. Barkod = `sackNo` (Sack'te ayrı barcode kolonu YOK).
+   * ÜRÜN/RENK alanı YOK: çuvalda N farklı kumaş olabilir, tek ürün adı basmak
+   * karışık çuvalda sessizce yanlış olur → toplam metriklerle sınırlı.
+   *
+   * `rollCount`/`lengthMeters` FİZİKSEL OLARAK ÇUVALDA OLMAYAN topları saymaz.
+   * `SHIPPED` BİLİNÇLİ olarak SAYILIR: sevk edilen top çuvalda kalır ve irsaliyedeki
+   * TOP ADEDİ/METRE ile tutarlı olmalı.
+   *
+   * Diğer ölü/başka-yerde statüler dışlanır. Bunlar çuvalda GERÇEKTEN bulunabilir —
+   * "çuvala girdikten sonra statüsü bozulan top" yolları var (ör. `kartela.service`
+   * kartelaya alırken `sackId` guard'ı UYGULAMIYOR → top `AT_KARTELA` olup çuvalda
+   * kalıyor). Bu liste olmadan binada olmayan mal çuval etiketine basılırdı.
+   */
+  private static readonly SACK_LABEL_EXCLUDED_STATUSES: RollStatus[] = [
+    RollStatus.CANCELLED,
+    RollStatus.SCRAP,
+    RollStatus.IN_PRODUCTION,
+    RollStatus.AT_SUBCONTRACTOR,
+    RollStatus.SUBCONTRACTOR_CONSUMED,
+    RollStatus.AT_KARTELA,
+    RollStatus.KARTELA_CONSUMED,
+    RollStatus.TAMBUR_CONSUMED,
+  ];
+
+  async getSackLabel(sackId: string): Promise<ApiResponse<LabelPayload>> {
+    const sack = await prisma.sack.findUnique({
+      where: { id: sackId },
+      select: {
+        id: true,
+        sackNo: true,
+        weightKg: true,
+        notes: true,
+        customer: { select: { name: true } },
+        branch: { select: { name: true } },
+        rolls: {
+          where: { status: { notIn: LabelService.SACK_LABEL_EXCLUDED_STATUSES } },
+          select: { currentQty: true },
+        },
+      },
+    });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+
+    // Metraj toplamı Decimal aritmetiğiyle (float toplama YASAK — perf/doğruluk kuralı).
+    let meters = new Prisma.Decimal(0);
+    for (const r of sack.rolls) meters = meters.plus(r.currentQty);
+
+    const payload: LabelPayload = {
+      rollId: sack.id,
+      // Barkod = sackNo: etikette Code128 + QR aynı değeri taşır (tek kod).
+      barcode: sack.sackNo,
+      status: "",
+      qualityGrade: "",
+      widthCm: null,
+      lengthMeters: Number(meters),
+      weightKg: sack.weightKg != null ? Number(sack.weightKg) : null,
+      markedForKartela: false,
+      itemCode: "",
+      itemName: "",
+      itemNameDefault: "",
+      itemNameSource: "DEFAULT",
+      colorCode: null,
+      colorName: null,
+      colorNameDefault: null,
+      colorNameSource: null,
+      customerName: sack.customer?.name ?? null,
+      customerId: null,
+      orderNumber: null,
+      orderLineId: null,
+      batchNumber: null,
+      printedAt: new Date().toISOString(),
+      kind: LabelKind.SACK,
+      sackNo: sack.sackNo,
+      rollCount: sack.rolls.length,
+      branchName: sack.branch?.name ?? null,
+      // Çok satırlı yorum etiket hücresinde satır taşırmasın → tek satıra düzleştir.
+      sackNote: sack.notes ? sack.notes.replace(/\s*\n+\s*/g, " · ").trim() : null,
+    };
+    return { success: true, data: payload };
+  }
+
+  /**
+   * Çuval etiketi render girdisi. FAIL-CLOSED: SACK şablonu çözülemezse HATA verir.
+   *
+   * ⚠️ Neden zorunlu: `label-html-landscape.helper.ts` bilinmeyen `kind`'ı
+   * `ROLL_FINISHED`'a düşürür (`payload.kind ?? template?.kind ?? ROLL_FINISHED`).
+   * Şablonsuz çuval baskısı bu yüzden HATA VERMEZ, tire dolu bir TOP etiketi basar.
+   * Sessiz çöp çıktı yerine operatöre ne yapacağını söyleyen Türkçe hata döneriz.
+   */
+  private async buildSackRenderInput(
+    sackId: string,
+    opts?: RollLabelRenderOpts,
+  ): Promise<{ input: LabelRenderInput; kind: LabelKind }> {
+    const payloadResp = await this.getSackLabel(sackId);
+    const payload = payloadResp.data;
+
+    const routing = await resolveLabelRouting({
+      kind: LabelKind.SACK,
+      peripheralId: opts?.peripheralId,
+      templateId: opts?.templateId,
+      machineId: opts?.machineId,
+      deviceId: opts?.deviceId,
+    });
+    if (!routing.template) {
+      throw AppError.badRequest(
+        "Çuval etiket şablonu tanımlı değil — Tanımlar → Etiket Şablonları'ndan bir " +
+          "Çuval şablonu oluşturup Etiketler → Atamalar'da Bağlam Varsayılanı olarak atayın.",
+      );
+    }
+
+    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
+    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
+    return {
+      // variant GEÇİLİR (swatch aksine) — çuval etiketi kanvas modelinde yaşar.
+      input: {
+        payload,
+        template: routing.template,
+        variant: routing.variant,
+        barcodeSvg,
+        qrSvg,
+        copies,
+        format: routing.format,
+        rasterMode: routing.rasterMode,
+      },
+      kind: LabelKind.SACK,
+    };
+  }
+
+  /** Çuval etiketinin HTML'i — roll `getRollLabelHtml` analoğu. */
+  async getSackLabelHtml(
+    sackId: string,
+    opts?: RollLabelRenderOpts,
+  ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    const { input, kind } = await this.buildSackRenderInput(sackId, opts);
+    const html = (await renderLabel(PrinterLanguage.RASTER_HTML, input)).content;
+    return { success: true, data: { html, kind } };
+  }
+
+  /** Çuval etiketini SEÇİLİ yazıcı dilinde — roll `getRollLabelNative` analoğu. */
+  async getSackLabelNative(
+    sackId: string,
+    opts?: RollLabelRenderOpts & { encoding?: "b64" },
+  ): Promise<
+    ApiResponse<{
+      content: string;
+      contentB64?: string;
+      language: PrinterLanguage;
+      contentType: string;
+      kind: LabelKind;
+      count: number;
+    }>
+  > {
+    const { input, kind } = await this.buildSackRenderInput(sackId, opts);
+    const r = await renderLabel(input.format.language, input);
+    const data: {
+      content: string;
+      contentB64?: string;
+      language: PrinterLanguage;
+      contentType: string;
+      kind: LabelKind;
+      count: number;
+    } = {
+      content: r.content,
+      language: r.language,
+      contentType: r.contentType,
+      kind,
+      count: input.copies,
+    };
+    if (opts?.encoding === "b64") {
+      data.contentB64 = renderedBytes(r).toString("base64");
+    }
+    return { success: true, data };
+  }
+
+  /** Çuval etiketi baskı izi — LABEL_PRINT_EVENT audit (roll recordPrintEvent analoğu). */
+  async recordSackPrintEvent(sackId: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const sack = await prisma.sack.findUnique({ where: { id: sackId }, select: { sackNo: true } });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: TABLE_LABEL_PRINT,
+      recordId: sackId,
+      newData: { kind: LabelKind.SACK, sackNo: sack.sackNo },
+    });
+    return { success: true, data: { sackId, sackNo: sack.sackNo }, message: "Çuval etiketi baskı izi kaydedildi" };
   }
 
   // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { MessageSquareText, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import {
   type PrintedDocType,
   type PrintedDocument,
 } from "@/services/printedDocumentService";
+import { DOC_DEFS, DOC_TYPE_TO_KEY } from "@/services/documentConfig";
 
 // =============================================================================
 // Generic resmi belge görüntüleyici — herhangi bir PrintedDocType + sourceId için
@@ -57,6 +58,12 @@ export function PrintedDocDialog({
   const [currentTemplate, setCurrentTemplate] = useState(false);
   const [printNote, setPrintNote] = useState("");
   const debouncedNote = useDebouncedValue(printNote, 400);
+  // Tek seferlik "çuval yorumlarını bu baskıda göster" — Belge Kişiselleştirme'deki
+  // kalıcı kolon ayarını EZER (OR). Hiçbir yere yazılmaz: diyalog kapanınca sıfırlanır,
+  // sonraki baskı yine kalıcı ayara döner, belge versiyonu doğurmaz.
+  const [rowNotes, setRowNotes] = useState(false);
+  const supportsRowNotes =
+    DOC_DEFS.find((d) => d.key === DOC_TYPE_TO_KEY[docType])?.supportsRowNotes ?? false;
 
   const docQuery = useQuery({
     queryKey: ["printed-doc", docType, sourceId],
@@ -74,11 +81,11 @@ export function PrintedDocDialog({
   });
 
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", docType, sourceId, selectedVersion, currentTemplate, debouncedNote],
+    queryKey: ["printed-doc-html", docType, sourceId, selectedVersion, currentTemplate, debouncedNote, rowNotes],
     queryFn: () =>
       selectedVersion != null
-        ? printedDocumentService.getHtml(docType, sourceId!, selectedVersion, { currentTemplate, printNote: debouncedNote })
-        : printedDocumentService.getHtml(docType, sourceId!, undefined, { draft: allowDraft, currentTemplate, printNote: debouncedNote }),
+        ? printedDocumentService.getHtml(docType, sourceId!, selectedVersion, { currentTemplate, printNote: debouncedNote, rowNotes })
+        : printedDocumentService.getHtml(docType, sourceId!, undefined, { draft: allowDraft, currentTemplate, printNote: debouncedNote, rowNotes }),
     enabled: open && Boolean(sourceId),
     staleTime: 0,
   });
@@ -113,6 +120,19 @@ export function PrintedDocDialog({
           />
         )}
         {!loading && sourceId && <PrintNoteField value={printNote} onChange={setPrintNote} />}
+        {!loading && sourceId && supportsRowNotes && (
+          <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={rowNotes}
+              onChange={(e) => setRowNotes(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            <MessageSquareText className="h-3.5 w-3.5" />
+            Çuval notlarını bu baskıda göster
+            <span className="text-[10px]">(kalıcı ayar değişmez; notu olan çuval yoksa etkisi yok)</span>
+          </label>
+        )}
 
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
           {loading ? (

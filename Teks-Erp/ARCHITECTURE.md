@@ -634,6 +634,8 @@ CREATE INDEX customers_active_code_idx
 
 Prisma şema syntax'ında native değil (yet). Hacme ulaşan tablolar için (Item, Customer, Station) eklenmeli.
 
+> **Eklerken iki adım zorunlu:** (1) şemada `@@index([col])` BIRAK (predicate farkı drift sayılmaz; ama partial **UNIQUE** yazıyorsan şemada `@@unique` kullan — uniqueness farkı drift SAYILIR, `schema.prisma:1603-1605`). (2) **Yeni index'i `scripts/test_db_invariants.ts`'in beklenen listesine ekle** — yoksa ileride bir migration onu sessizce tam index'e çevirdiğinde hiçbir şey yakalamaz (§10'daki `20260611084953` vakası). Guard envanterde olmayan bir partial index bulursa uyarı basar.
+
 ### 9.5 Yüksek Hacimli Tablolar için Cursor Pagination
 
 `BaseService.findAll` `skip/take` (offset) kullanıyor. 100. sayfa = 2000 satır tarama, 1000. sayfa = 20000 satır tarama.
@@ -774,17 +776,43 @@ Tüm hot-path tablolarında indeks durumu:
 | `orders` | `customerId`, `branchId`, `status` |
 | `work_orders` | `status`, `routeTemplateId`, `dyehouseCompanyId` |
 
-### Aktif Partial / Conditional İndeksler (raw SQL migration)
+### Şema-DIŞI DB Nesneleri (raw SQL migration) — kanonik kaynak: `scripts/test_db_invariants.ts`
 
-| İndeks | Tablo | Koşul | Migration |
+`schema.prisma` bunların **hiçbirini** ifade edemez: partial index predicate'i, CHECK constraint, DEFERRABLE composite FK, extended statistics. Yani Prisma'nın ürettiği bir migration onları **sessizce yok edebilir** — ve bu bir kez oldu (bkz. aşağıdaki uyarı).
+
+> ⚠️ **Bu tabloyu elle güvenilir tutmaya çalışma.** Mekanik doğrulama `scripts/test_db_invariants.ts`'te (35 invariant, `npm test`'e dahil, salt-okunur). Bir nesne kaybolursa veya predicate'i düşerse **test düşer**. Tablo insan okuması için; **liste bayatladığında karar mercii test dosyasıdır.**
+>
+> **Neden gerekti:** `20260611084953_native_uuid_pk_fk` FK kolonlarını `DROP COLUMN` + `ADD COLUMN` ile yeniden yarattı → bağımlı **9 partial index düştü** ve Prisma onları TAM index olarak yeniden yazdı (`20260611084953` içindeki düz `CREATE INDEX` satırları). `20260612100000_repartialize_after_native_uuid` elle onardı. O onarımı tetikleyen tek şey bir insanın fark etmesiydi: CI `migrate deploy`'u **boş DB'de** doğrular (index tanımı bozulsa da yeşil kalır) ve `migrate diff` hiçbir otomasyonda koşmuyor.
+
+**25 partial index** (15 `index` + 10 `UNIQUE`) — 2026-07-30'da canlı DB'den `pg_get_expr` ile doğrulandı:
+
+| Tablo | İndeks(ler) | Koşul | Migration |
 |---|---|---|---|
-| `items_active_type_name_idx` | `items` | `WHERE "isActive" = true` üstüne `(itemType, name)` | `20260427150000_add_partial_active_indexes` |
-| `customers_active_type_name_idx` | `customers` | `WHERE "isActive" = true` üstüne `(type, name)` | `20260427150000_add_partial_active_indexes` |
-| `traveler_cards_workOrderId_active_key` | `traveler_cards` | `WHERE status = 'ACTIVE'` üstüne `workOrderId` (unique) | (mevcut) |
-| `rolls` null-yoğun FK partial'ları (`sackId`, `shipmentId`, `parentReceiptId`, `batchId`, `clientToken`...) | `rolls` | `WHERE col IS NOT NULL` | `20260606001717` → UUID geçişi sonrası `20260612100000_repartialize_after_native_uuid` (`batchSplitId` parti-modeli redesign'ıyla kaldırıldı) |
-| `work_order_steps` açık-kart kuyruğu | `work_order_steps` | `(stationId, status, isUrgent, priority, startedAt)` `WHERE status <> 'COMPLETED'` | `20260607010000` |
-| `roll_movements_one_open_per_roll_step_uq` | `roll_movements` | partial **UNIQUE** `(rollId, workOrderStepId)` `WHERE "exitedAt" IS NULL` — **şema-DIŞI bilinçli** (Prisma partial unique desteklemez) | `20260612101000` |
-| swatch/sack partial'ları | `swatches` / `sacks` | `WHERE "cancelledAt" IS NULL` vb. | `20260609120000` |
+| `rolls` | `sackId`, `shipmentId`, `parentReceiptId`, `batchId` | `WHERE col IS NOT NULL` | `20260606001717` → `20260612100000` (onarım); `batchId` `20260713120000` |
+| `rolls` | `markedForKartela_idx` | `WHERE "markedForKartela" = true` | `20260607020000` |
+| `swatches` | `parentReceiptId`, `shipmentId`, `sackId` | `WHERE col IS NOT NULL` | `20260609120000` → `20260612100000` |
+| `swatches` | `createdAt_idx` | `WHERE "cancelledAt" IS NULL` — **indekslenen kolondan FARKLI kolona bakar**, `repartialize` guard bloğu bunu kapsamaz | `20260607030000` |
+| `work_orders` | `splitFromId_idx` | `WHERE IS NOT NULL` | `20260609221328` → `20260612100000` |
+| `batches` | `splitFromId_idx`, `mergedIntoId_idx` | `WHERE IS NOT NULL` | `20260713120000`, `20260715233000` |
+| `work_order_steps` | `stationId_status_isUrgent_priority_started_idx` | `WHERE status <> 'COMPLETED'` — açık-kart kuyruğu | `20260607010000` → `20260612100000` |
+| `roll_movements` | `exitedAt_idx` | `WHERE "exitedAt" IS NOT NULL` | `20260612102000` |
+| `roll_errors` | `isProcessed_idx` | `WHERE "isProcessed" = false` | `20260708130000` |
+| **partial UNIQUE** — şema-DIŞI (Prisma partial unique desteklemez) | | | |
+| `roll_movements` | `one_open_per_roll_step_uq` `(rollId, workOrderStepId)` | `WHERE "exitedAt" IS NULL` — **TEK açık movement seddi**, eşzamanlı çift ilerletmeyi DB'de bloklar | `20260612101000` |
+| `work_sessions` | `active_machine_uq`, `active_device_uq` | `WHERE "endedAt" IS NULL` (+ makine için `AND "machineId" IS NOT NULL`) | `20260702121000` |
+| `label_templates` | `one_default_per_kind` | `WHERE "isDefault" = true` | `20260622120100` → `20260708180000` (yeniden) |
+| `label_template_variants` | `one_primary` | `WHERE "isPrimary" = true` | `20260706090000` |
+| **partial UNIQUE** — şemadaki `@unique`'in predicate'li karşılığı | | | |
+| `rolls`, `orders`, `work_orders`, `swatch_stock_reductions` | `clientToken_key` | `WHERE "clientToken" IS NOT NULL` (idempotency; NULL'lar unique'e girmez) | `20260709100000`, `20260714150000` |
+| `roll_errors` | `roll_meter_defect_uq` | `WHERE "defectTypeId" IS NOT NULL` | `20260623100000` |
+
+**7 CHECK constraint** (`20260708120000_faz4_db_constraint_hardening`, `NOT VALID` → `VALIDATE`): `rolls_currentQty_nonneg`, `rolls_initialQty_nonneg`, `rolls_weightKg_nonneg`, `order_lines_quantity_pos`, `order_lines_shippedQty_nonneg`, `sacks_weightKg_nonneg`, `work_order_steps_time_order`.
+
+**2 DEFERRABLE composite FK** (aynı migration): `rolls_sackId_shipmentId_consistency_fkey`, `swatches_sackId_shipmentId_consistency_fkey` → `sacks(id, "shipmentId")`. `DEFERRED` olmaları load-bearing (tx içinde `sackId`/`shipmentId` ayrı UPDATE'lerle yazılır, ara durum geçici tutarsızdır). **En aktif drift kaynağı** — `migrate dev` her diff'te bunları DROP etmek ister; bkz. `schema.prisma:2557-2558` ve elle yazılmış `20260713120000`/`20260715233000`/`20260715210000`/`20260727120000`.
+
+**1 extended statistics**: `sl_day_exact` on `system_logs` (`DATE_TRUNC('day', "createdAt")::date` planner tahmini, `20260614120000`).
+
+> **Kaldırılanlar** (bu tabloda ARANMASIN): `items_active_type_name_idx` / `customers_active_type_name_idx` **hiç var olmadı** (atfedilen `20260427150000` migration'ı yok; en eski `20260525174522_init`) · `traveler_cards_wo_active_uniq` `20260713120000`'de düştü, yerine düz `traveler_cards_workOrderId_key` (şemayla ALIGNED) · `sacks_shipmentId_idx` `20260708130000`'de düştü · `rolls_batchSplitId_idx`, `rolls_supplierLotNo_idx`, `sacks_manualCode_idx`, `shipment_orders_active_order_uq`, `label_format_profiles_roll_default_key` kolon/tablo düşüşleriyle öldü.
 
 ### Gelecekte Düşünülmesi Gerekenler
 
@@ -807,6 +835,25 @@ Yıllarca yerel sunucuda çalışacak ERP'de tek bir kötü sorgu DB'yi kilitlem
 | `log_lock_waits` | `on` | Lock beklemeleri loglansın (deadlock teşhisi) |
 | `log_temp_files` | `10MB` | Disk'e dökülen büyük sıralama/JOIN'leri kaydet |
 | `MAX_OFFSET` (kod) | `10000` | `skip > 10K` → 400 hatası, kullanıcıyı filtre kullanmaya zorlar (`query-parser.ts`) |
+| `idle_session_timeout` | `0` (kapalı) | **Değiştirme.** Havuz `idleTimeoutMillis: 10dk` ile bağlantıyı sıcak tutar; sunucu tarafı daha kısa bir idle-kill koyarsa bayat-socket hatası doğar |
+
+### Bağlantı havuzu — soğuk connect tuzağı ve ölçümü (2026-07-30)
+
+`connectionTimeoutMillis` bir "bağlanma" bütçesi değil, **havuzdan bağlantı ALMA** bütçesidir: kuyrukta bekleme **artı** gerekiyorsa sıfırdan TCP+auth. Ölçüldü: 30 eşzamanlı bağlantı açmak 135ms, 60 istek hemen bırakılırsa 112ms — ama 40 istek her biri bağlantıyı 6s tutarsa tam 10'u düşer. Yani hata için gereken tek şey **bağlantıların 5s'den uzun tutulması** ya da **soğuk connect'in bütçeye sığmaması**; bağlantı *sayısı* belirleyici değil.
+
+Canlıda iki olay yaşandı (2026-07-23 · 2026-07-28, `system_logs` `recordId='Error'`) ve ikisi de **havuz doluluğu değildi** — ~0,7 istek/dk trafikte, eski `idleTimeoutMillis: 30s` her sessizlikte havuzu boşalttığı için ilk istek soğuk connect ödüyordu. Düzeltme: `idleTimeoutMillis: 10dk` (`src/lib/prisma.ts`).
+
+**`pg-pool`'un `min` seçeneğini kullanma** — yalnız idle-reap tabanı olarak okunur (`index.js:90` → `_isAboveMin()`); havuzu önden DOLDURMAZ ve ölen bağlantıyı YERİNE KOYMAZ, sadece havuzun bir daha asla küçülmemesini sağlar.
+
+**Ölçüm — `/health` (`src/lib/pool-health.ts`):** `poolTotalCount`/`poolIdleCount`/`poolWaitingCount` anlık, `poolWaitingMax` yüksek-su işareti, `poolAcquireTimeouts` + `lastPoolTimeoutError`/`lastPoolTimeoutAt` kümülatif. `dbConnections` bunların yerini TUTMAZ — o `pg_stat_activity` sayımıdır (psql/pgAdmin/pg_dump dahil, idle/busy ayırmaz).
+
+**`poolConnectsTotal` ne işe yarar:** her YENİ fiziksel bağlantıda artar. Havuz sıcaksa bu sayı **durur**; her sessizlik sonrası artıyorsa havuz drenaj oluyor demektir. `idleTimeoutMillis` ayarının etkisini ölçen tek metrik budur → değiştirirken önce/sonra bununla doğrula (oku → bir istek at → 2 dk sessizlik → tekrar oku; değişmemeli). Doğrulandı 2026-07-30: 2 dakika boyunca `connectsTotal` 24'te SABİT kaldı.
+
+**Ölçülen ayak izi (2026-07-30, boot sonrası):** `poolTotalCount=24`, `poolIdleCount=24`, `poolWaitingMax=7`. Yani **açılış patlaması havuzu neredeyse tavana kadar açıyor** (schedulerlar + presence + feature-flag cache aynı anda sorgu atıyor) ve `idleTimeoutMillis: 10dk` ile bu 24 bağlantı sıcak bekliyor. Kapasite: 24-30 (havuz) + `pg_dump` 1 + admin client 1-2 + operatör psql ~5 ≈ **38/97** — güvenli.
+
+> ⚠️ **Uyarı eşiği TOPLAMA değil MEŞGUL bağlantıya konur** (`poolTotalCount − poolIdleCount`). Sıcak havuzda yüksek toplam İSTENEN durumdur; toplama eşik koymak boot sonrası kalıcı yanlış alarm üretir (24/30 = %80). Bu ders ölçümle öğrenildi — `Electron/.../serverHealth.ts` `evaluateAlerts` meşgul sayıyı kullanır.
+
+**Havuz zaman aşımı artık 503 döner** (`error.middleware`, `classifyPoolTimeout`): pg-pool çıplak `Error` fırlattığı ve driver adapter'da Rust havuzu olmadığı için Prisma `P2024` ÜRETMEZ — o dal ölüdür, gerçek hata çıplak `Error` olarak gelir ve ayrı bir dalda yakalanır. Regresyon kilidi: `scripts/test_pool_health.ts` (kurulu pg-pool'dan gerçek hataları üretip sınıflandırıcıyı ve çevresindeki 4xx'leri doğrular).
 
 **Mevcut değeri görmek için:**
 ```sql
@@ -899,7 +946,8 @@ grep "duration:" /var/log/postgresql/postgresql-*.log \
 ## 10.3 Single-process Invariant (load-bearing)
 
 Backend **tek Express process** olarak çalışır (`server.ts` tek `app.listen`;
-cluster / PM2-cluster / worker_threads **yok**). Bu, LAN-only tek-sunucu kurulumda
+cluster / PM2-cluster / worker_threads **yok**; `ecosystem.config.js` `exec_mode:
+"fork"` + `instances: 1` ile bunu zorlar). Bu, LAN-only tek-sunucu kurulumda
 **kasıtlı** bir varsayımdır ve şu bellek-içi mekanizmalar buna bağlıdır:
 
 | Mekanizma | Dosya | 2. worker/replica'da ne bozulur |
@@ -907,6 +955,7 @@ cluster / PM2-cluster / worker_threads **yok**). Bu, LAN-only tek-sunucu kurulum
 | Presence ("şu an online") | `lib/presence.ts` | Her process kendi `Map`'i → toplam sayım parçalanır |
 | Feature-flag agregat cache (30sn TTL) | `system-setting.service.ts` | `invalidate` process-local → diğer process bayat flag servis eder |
 | Audit arşiv scheduler (lastRun check-then-act) | `jobs/archive-scheduler.ts` | İki scheduler yarışır → çift-arşiv (kod yorumunda not var) |
+| Gece yedek scheduler (lastRun + in-process `running`) | `jobs/backup-scheduler.ts` | Aynı gece iki `pg_dump` başlar; `running` bayrağı process-local olduğu için engellemez |
 | JWT iptal (`tokenVersion`) | `auth.middleware.ts` | Etkilenmez — DB-backed (process'ler arası tutarlı) |
 
 **Yatay ölçeklenirse** taşıma katmanı gerekir: presence + feature-flag cache →

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Truck, UserRound } from "lucide-react";
+import { MessageSquareText, Truck, UserRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +40,8 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const qc = useQueryClient();
   const open = !!sacks && sacks.length > 0;
   const rows = useMemo(() => sacks ?? [], [sacks]);
+  // Yorumlu çuvallar — sevk kurulurken operatörün görmesi gereken notlar.
+  const notedRows = useMemo(() => rows.filter((s) => s.hasNote), [rows]);
   const sackIds = useMemo(() => rows.map((s) => s.id), [rows]);
   const sackKey = sackIds.join(",");
 
@@ -143,6 +145,21 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
               {customerConflict
                 ? "Seçili çuvallar farklı müşterilere ait — bir sevkiyat tek müşteriye kurulur."
                 : "Seçili çuvallar farklı şubelere ait — bir sevkiyat tek şubeye kurulur."}
+            </Callout>
+          )}
+
+          {/* Yorumlu çuval uyarısı — sevk kurmadan ÖNCE görülmesi en değerli yer
+              ("bu çuvalı sevke koymayın" gibi notlar). Not sevki ENGELLEMEZ. */}
+          {notedRows.length > 0 && (
+            <Callout tone="warning" icon={MessageSquareText} title={`${notedRows.length} çuvalda not var`}>
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {notedRows.map((s) => (
+                  <li key={s.id}>
+                    <span className="font-mono">{s.sackNo}</span>
+                    <span className="text-muted-foreground"> — {s.notePreview}</span>
+                  </li>
+                ))}
+              </ul>
             </Callout>
           )}
 

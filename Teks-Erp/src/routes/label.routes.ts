@@ -320,7 +320,7 @@ router.post(
  *             type: object
  *             required: [kind, fields]
  *             properties:
- *               kind: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
+ *               kind: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH, SACK] }
  *               fields:
  *                 type: array
  *                 items: { type: object }
@@ -427,6 +427,93 @@ router.get(
   verifyToken,
   requireAnyPermission("label:read", "mobile:tambur", "mobile:tarti-paket"),
   controller.getSwatchLabelNative,
+);
+
+// ===========================================================================
+// ÇUVAL ETİKETİ — barkod/QR = Sack.sackNo (Sack'te ayrı barcode kolonu YOK)
+// ===========================================================================
+// Çuval etiketi bir TOPLAM belgesidir: kaç top, kaç metre, kaç kg, kimin için
+// (+ opsiyonel çuval yorumu). Ürün/renk alanı YOK — karışık içerikte sessizce
+// yanlış olur. FAIL-CLOSED: SACK şablonu atanmamışsa 400 + Türkçe yönlendirme
+// (roll/swatch şablonuna SAPMAZ — yoksa tire dolu top etiketi basılır).
+const SACK_LABEL_READ = requireAnyPermission("label:read", "mobile:tarti-paket", "mobile:sevkiyat");
+
+/**
+ * @openapi
+ * /api/labels/sacks/{id}:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Çuval etiketi payload'ı (JSON)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Çuval etiketi payload'ı }
+ *       404: { description: Çuval bulunamadı }
+ */
+router.get("/sacks/:id", verifyToken, SACK_LABEL_READ, controller.getSackLabel);
+
+/**
+ * @openapi
+ * /api/labels/sacks/{id}/html:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Çuval etiketinin tam HTML'i
+ *     description: |
+ *       `/rolls/:id/html`'in çuval analoğu. Şablon/varyant cihaz + Bağlam Varsayılanı
+ *       ile çözülür. SACK şablonu tanımlı değilse **400** (fail-closed).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: copies, schema: { type: integer } }
+ *     responses:
+ *       200: { description: Çuval etiketi HTML }
+ *       400: { description: Çuval etiket şablonu tanımlı değil }
+ *       404: { description: Çuval bulunamadı }
+ */
+router.get("/sacks/:id/html", verifyToken, SACK_LABEL_READ, controller.getSackLabelHtml);
+
+/**
+ * @openapi
+ * /api/labels/sacks/{id}/native:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Çuval etiketi SEÇİLİ yazıcı dilinde (HTML veya native komut)
+ *     description: |
+ *       RASTER_HTML → text/html; PPLA/PPLB/ZPL → text/plain native komut. Dil
+ *       `X-Label-Language` header'ında. `?encoding=b64` → binary-safe base64 JSON
+ *       (raster bitmap dahil). SACK şablonu yoksa **400**.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: encoding, schema: { type: string, enum: [b64] } }
+ *       - { in: query, name: copies, schema: { type: integer } }
+ *     responses:
+ *       200: { description: Seçili dilde çuval etiketi }
+ *       400: { description: Çuval etiket şablonu tanımlı değil }
+ *       404: { description: Çuval bulunamadı }
+ */
+router.get("/sacks/:id/native", verifyToken, SACK_LABEL_READ, controller.getSackLabelNative);
+
+/**
+ * @openapi
+ * /api/labels/sacks/{id}/print-event:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Çuval etiketi baskı izi (LABEL_PRINT_EVENT)
+ *     description: Yalnız GERÇEK baskı gerçekleştiğinde çağrılır (önizleme iz bırakmaz).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: İz kaydedildi }
+ *       404: { description: Çuval bulunamadı }
+ */
+router.post(
+  "/sacks/:id/print-event",
+  verifyToken,
+  requireAnyPermission("label:print", "mobile:tarti-paket", "mobile:sevkiyat"),
+  controller.recordSackPrintEvent,
 );
 
 /**

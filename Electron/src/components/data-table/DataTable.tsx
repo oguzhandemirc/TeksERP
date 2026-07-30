@@ -57,6 +57,12 @@ interface Props<T> {
   /** Seçili satır indirmelerinin dosya adı tabanı (ör. "Sevkiyatlar"). Tarih otomatik. */
   exportName?: string;
   /**
+   * "Seçili PDF/Excel" tuşlarına tooltip. Bu iki tuş EKRANDAKİ SATIRLARI indirir;
+   * sayfa aynı çubuğa başka bir export menüsü koyuyorsa (ör. çuval "İçerik Dökümü")
+   * ayrımı burada yaz — etiketler kısa olmak zorunda, ipucu hover'da netleştirir.
+   */
+  selectedExportHint?: string;
+  /**
    * Satıra sağ-tık menüsü. Dönen düğümler `ContextMenuContent` içine yerleşir
    * (örn. `ContextMenuItem` / `RowOpenItems`). `null` dönerse o satır menüsüz kalır.
    */
@@ -75,6 +81,7 @@ export function DataTable<T>({
   bulkActions,
   selectionHint = "Toplu işlem için satırları seçin.",
   exportName = "Liste",
+  selectedExportHint,
   rowContextMenu,
   paginationActions,
 }: Props<T>) {
@@ -242,6 +249,7 @@ export function DataTable<T>({
                 variant="outline"
                 size="sm"
                 className="ml-auto h-8 gap-1.5"
+                title={selectedExportHint}
                 onClick={() =>
                   void exportTableToPdf(
                     table,
@@ -257,6 +265,7 @@ export function DataTable<T>({
                 variant="outline"
                 size="sm"
                 className="h-8 gap-1.5"
+                title={selectedExportHint}
                 onClick={() =>
                   void exportTableToXlsx(
                     table,

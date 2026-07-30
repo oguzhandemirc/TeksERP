@@ -16,7 +16,7 @@
 
 import { RollStatus, RollEntrySource, StationType } from "@prisma/client";
 import type { Request } from "express";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 
 const inventory = new InventoryService();
@@ -241,4 +241,5 @@ main()
   .finally(async () => {
     await cleanup().catch((e) => console.error("Cleanup hatası:", e));
     await prisma.$disconnect();
+    await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
   });

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ClipboardList, Eye, PackageOpen, Scale, Truck } from "lucide-react";
+import { ClipboardList, Eye, PackageOpen, Scale, Tag, Truck } from "lucide-react";
+import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
 import { Button } from "@/components/ui/button";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -17,6 +18,8 @@ import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { sackHubService } from "./service";
 import { sacksColumns } from "./sacksColumns";
+import { SackContentDumpMenu } from "./SackContentDumpMenu";
+import { fromDumpRows } from "./sackDump";
 import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
@@ -61,6 +64,7 @@ export function SacksListView({ onEditSack }: Props) {
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
   const [detail, setDetail] = useState<SackSearchRow | null>(null);
   const [weighSack, setWeighSack] = useState<SackSearchRow | null>(null);
+  const [labelSack, setLabelSack] = useState<SackSearchRow | null>(null);
 
   const { table, query, search, setSearch, pagination } = useDataTable<SackSearchRow>({
     queryKey: "sack-search",
@@ -138,6 +142,8 @@ export function SacksListView({ onEditSack }: Props) {
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText="Filtrelerle eşleşen çuval yok."
+        // Toolbar'daki ile AYNI ad — verilmezse seçili indirmeler "Liste (seçili)" olur.
+        exportName="Çuvallar"
         onRowClick={(s) => (isWarehouseSack(s) ? onEditSack(s) : setDetail(s))}
         rowContextMenu={(s) =>
           isWarehouseSack(s) ? (
@@ -148,17 +154,29 @@ export function SacksListView({ onEditSack }: Props) {
               <ContextMenuItem onSelect={() => setWeighSack(s)}>
                 <Scale /> Tart
               </ContextMenuItem>
+              {/* Etiket — barkod/karekod çuval no'yu taşır. Sevkteki çuvalda DA
+                  basılabilir (baskı içeriği değiştirmez; yırtılan etiket yenilenir). */}
+              <ContextMenuItem onSelect={() => setLabelSack(s)}>
+                <Tag /> Etiket Yazdır
+              </ContextMenuItem>
               <ContextMenuItem onSelect={() => setShipSacks([s])}>
                 <Truck /> Sevk Et
               </ContextMenuItem>
             </>
           ) : (
-            <ContextMenuItem onSelect={() => setDetail(s)}>
-              <Eye /> Detayı göster
-            </ContextMenuItem>
+            <>
+              <ContextMenuItem onSelect={() => setDetail(s)}>
+                <Eye /> Detayı göster
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => setLabelSack(s)}>
+                <Tag /> Etiket Yazdır
+              </ContextMenuItem>
+            </>
           )
         }
         selectionHint="Depodaki çuvalları seç → havuzdan sevkiyat kur."
+        // Sağdaki jenerik tuşlar ÇUVAL SATIRLARINI indirir; içerik dökümü ayrı menüde.
+        selectedExportHint="Ekrandaki çuval listesini indirir — çuvalların İÇİNDEKİ topların dökümü için 'İçerik Dökümü'nü kullanın."
         bulkActions={(rows) => (
           <div className="flex gap-2">
             <Button
@@ -174,10 +192,20 @@ export function SacksListView({ onEditSack }: Props) {
               variant="outline"
               className="gap-1.5"
               disabled={rows.length === 0}
+              title="Sahada çuval aramak için gruplu özet (ürün·renk·en) — top barkodu içermez"
               onClick={() => setPickListIds(rows.map((r) => r.id))}
             >
               <ClipboardList className="h-4 w-4" /> Çeki Listesi
             </Button>
+            {/* İçerik dökümü — top bazlı. Döküm YALNIZ aksiyon tıklanınca çekilir
+                (menü açılışı ağ çağrısı yapmaz). hasNote liste satırında zaten var →
+                not onay kutusunun görünürlüğü fetch beklemeden çözülür. */}
+            <SackContentDumpMenu
+              label={`İçerik Dökümü (${rows.length})`}
+              disabled={rows.length === 0}
+              hasNotes={rows.some((r) => r.hasNote)}
+              load={async () => fromDumpRows((await sackHubService.contentDump(rows.map((r) => r.id))).data)}
+            />
           </div>
         )}
       />
@@ -195,6 +223,10 @@ export function SacksListView({ onEditSack }: Props) {
       <WeighSackDialog
         sack={weighSack ? { id: weighSack.id, sackNo: weighSack.sackNo, weightKg: weighSack.weightKg } : null}
         onOpenChange={(o) => !o && setWeighSack(null)}
+      />
+      <SackLabelDialog
+        sack={labelSack ? { id: labelSack.id, sackNo: labelSack.sackNo } : null}
+        onOpenChange={(o) => !o && setLabelSack(null)}
       />
     </div>
   );

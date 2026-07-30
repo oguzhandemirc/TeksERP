@@ -124,7 +124,13 @@
         (j.activeUsers != null ? j.activeUsers + " kullanıcı" : "—") +
         (j.activeDevices != null ? " / " + j.activeDevices + " cihaz" : ""));
       setText("dbsize", dbUp ? fmtBytes(j.dbSizeBytes) : "—");
-      setText("conns", j.dbConnections != null ? j.dbConnections + " bağlantı" : "—");
+      // Havuz (backend'in KENDİ bağlantıları) sunucu tarafı toplamın İÇİNDEDİR;
+      // "8 bağlantı (havuz 3/30)" ikisini tek satırda okunur kılar. Bekleyen istek
+      // varsa eklenir — doygunluk tablet ekranından da görülsün. Eski bir backend
+      // bu alanları göndermezse parantez hiç basılmaz (bozulma yok).
+      var poolPart = j.poolTotalCount != null ? " (havuz " + j.poolTotalCount + "/" + j.poolMax + ")" : "";
+      var waitPart = j.poolWaitingCount ? " • " + j.poolWaitingCount + " bekliyor" : "";
+      setText("conns", j.dbConnections != null ? j.dbConnections + " bağlantı" + poolPart + waitPart : "—");
       setText("cachehit", j.cacheHitPct != null ? "%" + j.cacheHitPct : "—");
       setText("rollsdead", j.rollsDeadPct != null ? "%" + j.rollsDeadPct : "—");
       setText("longestq", j.longestQuerySec != null ? j.longestQuerySec + " sn" : "—");

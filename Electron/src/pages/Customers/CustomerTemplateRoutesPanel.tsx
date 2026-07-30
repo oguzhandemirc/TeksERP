@@ -25,7 +25,7 @@ interface Props {
 }
 
 /** Panel sırası: Ham → Bitmiş → Kartela. */
-const KINDS: LabelKind[] = ["ROLL_RAW", "ROLL_FINISHED", "SWATCH"];
+const KINDS: LabelKind[] = ["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"];
 
 /**
  * Müşteriye özel etiket şablonu atamaları (CustomerTemplateRoute).

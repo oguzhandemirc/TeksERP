@@ -106,20 +106,26 @@ const EMPTY_FORM: FormState = {
   qualityGrade: '',
 };
 
-// ── "＋ Yeni Desen" (inline, "Desen Seç" picker'ı içinde) ──────────────────────
+// ── "Yeni Desen" ad girişi (inline, "Desen Seç" picker'ı içinde) ─────────────
 // Yalnız `mobile:kk1-desen` yetkili operatöre gösterilir (parent gate eder).
 // YALNIZ ad girer → backend FABRIC/STK-/MT/pendingReview üretir. Çevrimiçi-only:
 // plain useMutation (global default networkMode 'always') → offline'da KUYRUĞA
 // ALINMAZ, anında ağ hatası verir; ayrıca `disabled` (=!isOnline) ile kilitli.
 // Başarıda onCreated ile yeni desen otomatik seçilir + liste tazelenir.
-function QuickAddDesen({
+//
+// TETİK BURADA DEĞİL: eskiden bu bileşenin içinde bir "Yeni Desen" outlined
+// butonu vardı; artık tetik picker listesinin ilk hücresindeki mor aksiyon
+// kartıdır (PickerModal `leadingAction`). Bu bileşen sadece o karta basılınca
+// açılan kontrollü ad girişi satırıdır → görünürlüğü parent yönetir.
+function QuickAddDesenRow({
   disabled,
   onCreated,
+  onCancel,
 }: {
   disabled: boolean;
   onCreated: (item: Item) => void;
+  onCancel: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState('');
 
   const mutation = useMutation({
@@ -129,7 +135,6 @@ function QuickAddDesen({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: `Desen eklendi: ${res.data.name}` });
       setName('');
-      setExpanded(false);
       onCreated(res.data);
     },
     onError: (err: Error) => {
@@ -144,20 +149,6 @@ function QuickAddDesen({
     if (!trimmed || mutation.isPending || disabled) return;
     mutation.mutate(trimmed);
   };
-
-  if (!expanded) {
-    return (
-      <Button
-        mode="outlined"
-        icon="plus"
-        disabled={disabled}
-        onPress={() => setExpanded(true)}
-        style={quickAddStyles.trigger}
-      >
-        {disabled ? 'Yeni Desen — çevrimiçi gerekir' : 'Yeni Desen'}
-      </Button>
-    );
-  }
 
   return (
     <View style={quickAddStyles.row}>
@@ -184,8 +175,8 @@ function QuickAddDesen({
       <Button
         mode="text"
         onPress={() => {
-          setExpanded(false);
           setName('');
+          onCancel();
         }}
         disabled={mutation.isPending}
       >
@@ -196,7 +187,6 @@ function QuickAddDesen({
 }
 
 const quickAddStyles = StyleSheet.create({
-  trigger: { alignSelf: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   input: { flex: 1, backgroundColor: '#fff', height: 44 },
 });
@@ -290,9 +280,13 @@ export default function KK1Screen() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const isOnline = useIsOnline();
-  // "＋ Yeni Desen" yalnız seçili operatörlere (mobile:kk1-desen; mobile:*/admin:* devralır).
+  // "Yeni Desen" yalnız seçili operatörlere (mobile:kk1-desen; mobile:*/admin:* devralır).
   const { has } = usePermissions();
   const canAddDesen = has('mobile:kk1-desen');
+  // Desen picker'ındaki mor aksiyon kartına basıldı mı → ad girişi satırı açık.
+  // Picker kapanınca sıfırlanır (onDismiss), böylece bir dahaki açılışta yine
+  // sade liste görünür.
+  const [desenAddOpen, setDesenAddOpen] = useState(false);
   // Ham kumaşın eni önemsiz → en girişi feature flag'e bağlı (default kapalı).
   // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
   const rawWidthEnabled = useRawWidthEnabled();
@@ -1430,7 +1424,10 @@ export default function KK1Screen() {
         options={itemOptions}
         selectedValue={form.itemId}
         loading={itemsQuery.isLoading}
-        onDismiss={() => setPickerOpen(null)}
+        onDismiss={() => {
+          setPickerOpen(null);
+          setDesenAddOpen(false);
+        }}
         onSelect={(value) => {
           const item = itemOptions.find((o) => o.value === value);
           setForm((f) => ({
@@ -1440,15 +1437,31 @@ export default function KK1Screen() {
             itemLabel: item ? item.label : '',
           }));
         }}
+        /* Tetik: listenin ilk hücresindeki MOR kart — diğer desen kartlarıyla aynı
+           geometride ama beyaz yazılı, sıralama/arama ne olursa olsun ilk sırada.
+           Basılınca picker kapanmaz, alttaki ad girişi satırı açılır. */
+        leadingAction={
+          canAddDesen
+            ? {
+                label: 'Yeni Desen',
+                sublabel: isOnline ? 'Listede yok — hemen ekle' : 'Çevrimiçi gerekir',
+                icon: 'plus',
+                disabled: !isOnline,
+                onPress: () => setDesenAddOpen(true),
+              }
+            : undefined
+        }
         quickAddSlot={
-          canAddDesen ? (
-            <QuickAddDesen
+          canAddDesen && desenAddOpen ? (
+            <QuickAddDesenRow
               disabled={!isOnline}
+              onCancel={() => setDesenAddOpen(false)}
               onCreated={(item) => {
                 // Response'tan doğrudan seç (liste refetch/truncation yarışını atla),
                 // listeyi tazele (sonraki açılışta görünsün) ve picker'ı kapat.
                 setForm((f) => ({ ...f, itemId: item.id, itemLabel: item.name }));
                 void itemsQuery.refetch();
+                setDesenAddOpen(false);
                 setPickerOpen(null);
               }}
             />

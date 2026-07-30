@@ -74,7 +74,19 @@ export function ReassignCustomerDialog({
         branchName: res.data.branchName,
         branchCode: res.data.branchCode,
       });
-      toast.success("Çuval müşterisi güncellendi");
+      // Yeni müşterinin ETİKET ŞABLONU farklıysa backend içerideki topları
+      // `labelDirty` işaretler ve sayıyı döner. Sessiz kalmak yanlış müşteri
+      // şablonuyla sevk riski; o yüzden uyarı toast'ı (bilgi değil).
+      const stale = res.data.labelsStale ?? 0;
+      if (stale > 0) {
+        toast.warning(res.message ?? `${stale} topun etiketi yeniden basılmalı`, {
+          description:
+            "Yeni müşterinin kendi etiket şablonu var — bu topların üstündeki etiket artık geçerli değil.",
+          duration: 10_000,
+        });
+      } else {
+        toast.success("Çuval müşterisi güncellendi");
+      }
       onOpenChange(false);
     },
   });

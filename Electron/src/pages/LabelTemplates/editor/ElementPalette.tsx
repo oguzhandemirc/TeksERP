@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   labelTemplateService,
   labelKindLabels,
+  type LabelKind,
   type UnifiedCatalogField,
 } from "@/services/labelTemplateService";
 import type { LabelElementType } from "@/types/label-canvas";
@@ -20,6 +21,18 @@ interface Props {
   onAddField: (f: UnifiedCatalogField) => void;
   onAddStructural: (type: Exclude<LabelElementType, "field">) => void;
   onAddIcon: (iconKey: string) => void;
+  /** Önizleme bağlamı — alan başlıkları bu bağlama göre gösterilir (bkz. fieldLabel). */
+  previewKind: LabelKind;
+}
+
+/**
+ * Alanın SEÇİLİ BAĞLAMDAKİ başlığı. Aynı key farklı bağlamlarda farklı adlanabilir
+ * (`weightKg`: top'ta "Ağırlık (kg)", çuvalda "Brüt Ağırlık (kg)"). Birleşik katalog
+ * ilk tanımı taşıdığı için çuval etiketi tasarlayan kişi jenerik adı görüyordu ve
+ * alanı bulamıyordu → bağlam başlığı varsa o kazanır.
+ */
+export function fieldLabel(f: UnifiedCatalogField, kind: LabelKind): string {
+  return f.labelByKind?.[kind] ?? f.defaultLabel;
 }
 
 const STRUCTURAL: Array<{
@@ -92,7 +105,7 @@ function IconPaletteSection({ onAddIcon }: { onAddIcon: (iconKey: string) => voi
   );
 }
 
-export function ElementPalette({ onAddField, onAddStructural, onAddIcon }: Props) {
+export function ElementPalette({ onAddField, onAddStructural, onAddIcon, previewKind }: Props) {
   const catalogQ = useQuery({
     queryKey: ["label-unified-catalog"],
     queryFn: () => labelTemplateService.unifiedCatalog(),
@@ -156,9 +169,11 @@ export function ElementPalette({ onAddField, onAddStructural, onAddIcon }: Props
                 >
                   <Plus className="h-3 w-3 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs">{f.defaultLabel}</span>
+                    <span className="block truncate text-xs">{fieldLabel(f, previewKind)}</span>
                     <span className="block truncate font-mono text-[9px] text-muted-foreground">
-                      {f.key} · {f.kinds.length === 3 ? "tüm bağlamlar" : f.kinds.map((k) => labelKindLabels[k].split(" ")[0]).join("+")}
+                      {/* "tüm bağlamlar" eşiği bağlam SAYISINDAN türer — hardcoded 3
+                          yeni bağlam (SACK) eklenince sessizce yanlışlanıyordu. */}
+                      {f.key} · {f.kinds.length === Object.keys(labelKindLabels).length ? "tüm bağlamlar" : f.kinds.map((k) => labelKindLabels[k].split(" ")[0]).join("+")}
                     </span>
                   </span>
                 </Button>

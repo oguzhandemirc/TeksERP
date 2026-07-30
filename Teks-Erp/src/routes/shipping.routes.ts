@@ -59,6 +59,39 @@ router.post("/sacks/:id/add-kartela", verifyToken, WRITE, controller.addKartelaT
 router.post("/sacks/:id/weigh", verifyToken, WRITE, controller.weighSack);
 router.post("/sacks/:id/customer", verifyToken, WRITE, controller.reassignSackCustomer);
 router.post("/sacks/:id/remove", verifyToken, WRITE, controller.removeSack);
+
+/**
+ * @openapi
+ * /api/shipping/sacks/{id}/notes:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Çuval notunu oku (iç serbest not)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses: { 200: { description: Yorum }, 404: { description: Çuval bulunamadı } }
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuval notunu yaz/temizle
+ *     description: >
+ *       İç serbest not ("kendimiz için"). Çuvalın durumu FARK ETMEZ — sevkiyata atanmış
+ *       veya sevk edilmiş çuvala da yazılabilir (annotation; dispatchNote ile aynı).
+ *       Boş/whitespace veya null → not temizlenir. Gösterimi etiket/irsaliyede
+ *       opsiyonel ve varsayılan kapalıdır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               notes: { type: string, maxLength: 500, nullable: true }
+ *     responses: { 200: { description: Kaydedildi }, 404: { description: Çuval bulunamadı } }
+ */
+router.get("/sacks/:id/notes", verifyToken, READ, controller.getSackNotes);
+router.post("/sacks/:id/notes", verifyToken, WRITE, controller.setSackNotes);
 // Çuval içeriği düzeltme (rol/kartela çıkar/taşı)
 router.post("/rolls/:rollId/remove-from-sack", verifyToken, WRITE, controller.removeRollFromSack);
 router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollToSack);
@@ -67,11 +100,69 @@ router.post("/swatches/:swatchId/remove-from-sack", verifyToken, WRITE, controll
 router.post("/sacks/:id/distribute", verifyToken, WRITE, controller.distributeSack);
 router.post("/sacks/:id/move-rolls", verifyToken, WRITE, controller.moveRollsToSack);
 
+/**
+ * @openapi
+ * /api/shipping/sacks/{id}/split:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuvalı böl — seçili topları YENİ çuvala ayır (atomik)
+ *     description: >
+ *       Tek transaction: yeni çuval açılır (kaynağın müşteri/şubesini devralır),
+ *       seçili toplar atomik claim ile taşınır, İKİ çuvalın brüt tartısı sıfırlanır
+ *       (bayat kg irsaliyeye gitmesin). Kaynakta en az bir top KALMALI — hepsi
+ *       seçilirse 400. Kaynak sevkiyatta ise 409. Hiç top claim edilemezse yeni
+ *       çuval da YARATILMAZ (tx geri alınır).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollIds]
+ *             properties:
+ *               rollIds: { type: array, items: { type: string, format: uuid } }
+ *     responses:
+ *       201: { description: Yeni çuval oluştu (sackId/sackNo/moved) }
+ *       400: { description: Seçim geçersiz / kaynak boş kalır }
+ *       409: { description: Çuval sevkiyatta veya toplar bu sırada taşınmış }
+ */
+router.post("/sacks/:id/split", verifyToken, WRITE, controller.splitSack);
+
 // ===========================================================================
 // ÇUVAL/TOP ARAMA + salt-okunur raporlar
 // ===========================================================================
 router.get("/sack-search", verifyToken, READ, controller.searchSacks);
 router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList);
+/**
+ * @openapi
+ * /api/shipping/sack-search/content-dump:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: İçerik dökümü — seçili çuvalların TOP BAZLI dökümü
+ *     description: >
+ *       Çeki listesinden (`/sack-search/pick-list`) farkı: orası ürün·renk·en bazında
+ *       GRUPLU özet döner (sahada çuval ararken doğru olan), bu uç her topu ayrı satır
+ *       olarak verir (barkod dahil) — Excel/PDF/yazdır içerik dökümünün kaynağı.
+ *       Salt-okunur; en fazla 200 çuval. Çuval notu TAM metin döner (iç döküm) —
+ *       basılıp basılmayacağına istemci karar verir (opt-in).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sackIds]
+ *             properties:
+ *               sackIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 200 }
+ *     responses:
+ *       200: { description: Çuval başına meta + rolls[] + swatches[] }
+ *       400: { description: Seçim boş veya 200 çuvalı aşıyor }
+ */
+router.post("/sack-search/content-dump", verifyToken, READ, controller.getContentDump);
 router.get("/sacks/:id/contents", verifyToken, READ, controller.getSackContents);
 router.get("/locate-roll", verifyToken, READ, controller.locateRoll);
 

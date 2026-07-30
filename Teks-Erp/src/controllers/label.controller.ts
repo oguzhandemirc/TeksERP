@@ -18,6 +18,10 @@ const bulkLabelsSchema = z.object({
   peripheralId: z.string().uuid("Geçersiz cihaz ID").optional(),
   // "b64" → binary-safe base64 JSON yanıt (raster cihaz desteği). Yoksa ham text (eski istemci).
   encoding: z.enum(["b64"]).optional(),
+  // TÜM topları BU müşteri bağlamıyla bas (çuval müşterisi değişti → yeni müşterinin
+  // etiket şablonu/alias'ı). Verilmezse her top kendi lastLabelSnapshot'ıyla basılır
+  // (mevcut davranış — eklemeli parametre, geriye uyumlu).
+  customerId: z.string().uuid("Geçersiz müşteri ID").optional(),
 });
 
 const updateNamesSchema = z.object({
@@ -30,7 +34,7 @@ const previewSchema = z.object({
   // import yük sırasında "Cannot access 'client_1' before initialization" boot crash
   // riski (bkz. inventory.service.ts MANUAL_STATUS_TRANSITIONS fix). String literal +
   // tip cast: runtime'da düz string dizisi (deref yok), çıktı tipi LabelKind korunur.
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as unknown as [LabelKind, ...LabelKind[]]),
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as unknown as [LabelKind, ...LabelKind[]]),
   fields: z.array(z.object({
     key: z.string().min(1),
     label: z.string().min(1),
@@ -298,6 +302,7 @@ export class LabelController {
         copies: body.copies,
         peripheralId: body.peripheralId, // F183: cihaz-yönlendirme (native handler paritesi)
         deviceId: req.device?.id ?? undefined,
+        customerId: body.customerId ?? null,
       });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(result.data.html);
@@ -315,6 +320,7 @@ export class LabelController {
         peripheralId: body.peripheralId,
         deviceId: req.device?.id ?? undefined,
         rasterCapable: wantB64,
+        customerId: body.customerId ?? null,
       });
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Count", String(result.data.count));
@@ -380,6 +386,76 @@ export class LabelController {
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Kind", result.data.kind);
       res.status(200).send(result.data.content);
+    } catch (e) { next(e); }
+  };
+
+  // ── ÇUVAL ETİKETİ — barkod/QR = Sack.sackNo (tek kod) ────────────────────────
+
+  /** Çuval etiketi payload'ı (JSON) — önizleme/tanılama. */
+  getSackLabel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getSackLabel(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Çuval etiketinin tam HTML'i — `/rolls/:id/html`'in çuval analoğu. */
+  getSackLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getSackLabelHtml(req.params.id as string, {
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        ...(await resolveFormatOpts(req)),
+      });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Label-Kind", result.data.kind);
+      res.status(200).send(result.data.html);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * Çuval etiketi SEÇİLİ yazıcı dilinde. `?encoding=b64` → binary-safe base64 JSON
+   * (raster dahil); yoksa ham text komut (roll `/native` ile aynı sözleşme).
+   */
+  getSackLabelNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const wantB64 = req.query.encoding === "b64";
+      const result = await this.service.getSackLabelNative(req.params.id as string, {
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        ...(wantB64 ? { encoding: "b64" as const } : {}),
+        ...(await resolveFormatOpts(req)),
+      });
+      res.setHeader("X-Label-Language", result.data.language);
+      res.setHeader("X-Label-Kind", result.data.kind);
+      if (wantB64) {
+        res.status(200).json({
+          success: true,
+          data: {
+            encoding: "base64",
+            content: result.data.contentB64,
+            language: result.data.language,
+            contentType: result.data.contentType,
+            kind: result.data.kind,
+            count: result.data.count,
+          },
+        });
+      } else {
+        res.setHeader("Content-Type", result.data.contentType);
+        res.status(200).send(result.data.content);
+      }
+    } catch (e) { next(e); }
+  };
+
+  /** Çuval etiketi baskı izi (LABEL_PRINT_EVENT) — yalnız GERÇEK baskıda çağrılır. */
+  recordSackPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.recordSackPrintEvent(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
     } catch (e) { next(e); }
   };
 

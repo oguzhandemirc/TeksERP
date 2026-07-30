@@ -120,6 +120,26 @@ export const API_URL = 'http://192.168.X.X:4000/api'; // Tablet ve sunucu aynı 
 - **`Card` + `onPress` KULLANMA** — iç `Card.Content` dokunmayı yutuyor; tüm alana tıklamak çalışmıyor. `Card`'ı yalnızca pasif görünüm olarak kullan; tıklanabilir olacaksa **`TouchableRipple` ile sar**.
 - Aynısı modal, picker ve grid hücreleri için de geçerli — operatör hücrenin neresine basarsa bassın seçim olmalı.
 
+### Picker içi "yeni ekle" — `PickerModal.leadingAction` (2026-07-30)
+
+Bir picker'dan seçenek eklenebiliyorsa (ör. KK1 "Desen Seç" → yeni desen) tetik **listenin ilk hücresindeki mor aksiyon kartıdır** (`leadingAction`: diğer kartlarla aynı geometri, `colors.action` zemin + beyaz yazı). Sıralama/aramadan bağımsız her zaman ilk sıradadır, basılınca picker **kapanmaz** — asıl form `quickAddSlot`'ta açılır. Mor bilinçli: marka indigo'su "seçili kart" vurgusu olduğu için aksiyon indigo olamaz. Listenin üstüne ayrı outlined buton koyma.
+
+### Ayarlar = menü + alt sayfa (2026-07-30)
+
+`SettingsScreen` bir **menüdür**: her başlık satırı (ikon + başlık + "şu an ne ayarlı" özeti + chevron) kendi ekranını push eder — `screens/Common/settings/` (ortak koyu tema + Appbar/scroll kabuğu: `settingsUi.tsx` → `SettingsPage`, `settingsStyles`). Yeni ayar bölümü eklerken içeriği ana ekrana açık halde GÖMME; alt sayfa yap, menüye satır ekle (`RootStackParamList` + `RootNavigator`).
+
+### Donanım okuması = TEK DOKUNUŞ + taşan aksiyonlar ⋮'de (2026-07-30)
+
+Kanonik örnek: çuval tartısı (`hooks/useSackWeigh.ts` + `TartiPaket/PaketlemeScreen`).
+
+- **Ölçüm aleti varsa okuma tek dokunuş olmalı:** ⚖ → kantardan oku → **doğrudan kaydet** → kartta göster. Araya input modal'ı KOYMA; operatörün eli maldadır. Yanlışsa tekrar basar (idempotent üzerine yazar).
+- **Fail-closed:** cihaz yok / bond edilemedi / okunamadı / değer ≤ 0 → NET Türkçe toast + mutasyon **HİÇ ÇAĞRILMAZ**. Sessiz sahte değer yok. (Test: `hooks/useSackWeigh.test.ts` 1/2a/2b/2c.)
+- **`simulate` cihazda uyar:** değer uydurulup DOĞRUDAN kaydedildiği için toast'ta açık "SİMÜLASYON" ibaresi şart (canlı fabrika).
+- **Eşzamanlılık:** BT tek soket → `busyRef` ile ikinci dokunuş **sessizce yok sayılır** (kuyruğa alınmaz: hangi ağırlık hangi nesneye gitti karışır). Spinner yalnız işlem gören satırda (`weighingSackId`).
+- **Manuel/ikincil yol ⋮ menüsünde:** kartta yalnız sık kullanılan kalır; "elle gir / etiket bas / not ekle / sil" → `SackActionsSheet` (AppModal `position="bottom"`, satır ≥56dp). Yıkıcı aksiyon menüye taşınsa da **onay diyaloğu korunur**.
+- **Modal içinde sayı girişi:** `NumpadInput` + **`useNativeKeyboard`**. Büyük özel numpad bir `NumpadHost` render edilmesini ister (KK1/Tambur kendi kolonlarında yapıyor) — modalda host yoktur, tuşlar görünmez kalır. `useNativeKeyboard` sistem decimal-pad'ini açar VE virgül→nokta normalizasyonunu korur ("40,5" → 40.5).
+- Çuval mutasyonları (tartı dahil) **online-only** — offline kuyruğa (`offline/mutations.ts`) girmez.
+
 ## Liste Sayfalama — DEFAULT: cursor + infinite scroll
 
 > **Kural:** Bir listeyi sayfalandırman istendiğinde **varsayılan olarak cursor (keyset) + infinite scroll** kullan — offset/`page`+`pageSize` modeli DEĞİL. Offset modeli yalnızca açıkça istenirse veya tablonun hacmi kalıcı olarak küçük kalacaksa (örn. master-data, kalite dereceleri) seçilir. Yüksek hacimli tablolar (`Roll`, `RollMovement`, `RollOperation`, hareket/log geçmişleri) **her zaman** cursor.

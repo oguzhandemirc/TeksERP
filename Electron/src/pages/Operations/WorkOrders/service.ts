@@ -27,16 +27,20 @@ export const workOrderService = {
       .get<ApiResponse<WorkOrderCancelImpact>>(`/api/work-orders/${id}/cancel-impact`)
       .then((r) => r.data),
 
-  /** Manuel kapatma önizleme: atlanacak adımlar + engelleyen in-flight toplar. */
+  /** Manuel kapatma önizleme: atlanacak adımlar + dispozisyon bekleyen/engelleyen toplar. */
   getCompletePreview: (id: string) =>
     apiClient
       .get<ApiResponse<WorkOrderCompletePreview>>(`/api/work-orders/${id}/complete-preview`)
       .then((r) => r.data),
 
-  /** İş emrini manuel kapat (IN_PROGRESS → COMPLETED, WIP yoksa). */
-  complete: (id: string) =>
+  /**
+   * İş emrini manuel kapat (IN_PROGRESS → COMPLETED). İstasyonda kalan toplar için
+   * `dispositions` ZORUNLU (önizlemedeki `dispositionRolls` ile birebir) ve
+   * `roll:manual-adjust` yetkisi gerekir.
+   */
+  complete: (id: string, payload: CompleteWorkOrderPayload = {}) =>
     apiClient
-      .post<ApiResponse<WorkOrder>>(`/api/work-orders/${id}/complete`)
+      .post<ApiResponse<WorkOrder>>(`/api/work-orders/${id}/complete`, payload)
       .then((r) => r.data),
 
   /** Frontend uyarısı için: değişiklik kaç rulo etkiler? */
@@ -480,6 +484,9 @@ export interface ManualMovePreview {
     qualityStaysUnknown: boolean;
   };
   warnings: string[];
+  /** İş emri ölü (iptal/devredilmiş) → taşıma yapılamaz (HARD BLOCK). */
+  woBlocked: boolean;
+  woBlockReason: string | null;
 }
 
 /** Manuel taşıma sonucu. */
@@ -735,19 +742,68 @@ export interface WorkOrderCancelImpact {
   rolls: CancelImpactRoll[];
 }
 
-/** Manuel kapatma önizleme payload'ı — atlanacak adımlar + engelleyen in-flight top. */
+/**
+ * Kapanış dispozisyonu — iş emri kapatılırken istasyonda kalan topa uygulanacak karar.
+ * TRANSFER statü değiştirmez; top yeni (devam) iş emrinde üretime devam eder.
+ */
+export type CloseDisposition =
+  | "STOCK"
+  | "WAREHOUSE"
+  | "A1_STOCK"
+  | "SCRAP"
+  | "CANCELLED"
+  | "TRANSFER";
+
+/** Kapanışta karar bekleyen (ya da kapatmayı engelleyen) tek top. */
+export interface CompletePreviewRoll {
+  id: string;
+  barcode: string | null;
+  status: string;
+  currentQty: number;
+  colorName: string | null;
+  colorHex: string | null;
+  propertyCount: number;
+  /** Ham değil — boyalı/özellikli/fason-dönüşü. */
+  processed: boolean;
+  qualityGrade: string | null;
+  stepId: string;
+  stationName: string;
+  /** false = fason dönüşü mal; ham stoğa çekilemez. */
+  canReturnToStock: boolean;
+}
+
+/** Manuel kapatma önizleme payload'ı — atlanacak adımlar + dispozisyon listesi. */
 export interface WorkOrderCompletePreview {
   workOrderId: string;
   workOrderNumber: string;
   status: string;
   canComplete: boolean;
   blockReason: string | null;
+  /** true ise kapatma isteği her `dispositionRolls` topu için karar taşımak zorunda. */
+  requiresDisposition: boolean;
+  /** Devirde yeni iş emrinin sipariş bağı default'u için. */
+  orderLinked: boolean;
   remainingSteps: { stepId: string; stationName: string; stepSequence: number }[];
   inFlight: {
     count: number;
     totalMeters: number;
     byStep: { stationName: string; count: number; meters: number }[];
   };
+  /** İçeride, karar verilecek toplar. */
+  dispositionRolls: CompletePreviewRoll[];
+  /** Fasonda / açık fason sevkinde — kapatmayı engeller. */
+  blockedRolls: (CompletePreviewRoll & { blockReason: string })[];
+}
+
+/** Kapatma isteği gövdesi. */
+export interface CompleteWorkOrderPayload {
+  reason?: string;
+  dispositions?: {
+    rollId: string;
+    action: CloseDisposition;
+    qualityGradeId?: string | null;
+  }[];
+  transferOrderMode?: "stock" | "keep";
 }
 
 /** Donmuş fason sevk irsaliyesindeki tek top satırı (PrintedDocument.doc.rolls). */

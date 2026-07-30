@@ -99,12 +99,17 @@ describe("buildPeripheralPayload (form → API)", () => {
     expect(buildPeripheralPayload({ ...base, languageOverride: "ZPL" }).languageOverride).toBe("ZPL");
   });
 
-  it("templateRoutes 3-kind; boş templateId → null", () => {
-    const p = buildPeripheralPayload({ ...base, templateFinishedId: "t1" });
-    expect(p.templateRoutes).toHaveLength(3);
+  it("templateRoutes 4-kind (ROLL_RAW/FINISHED/SWATCH/SACK); boş templateId → null", () => {
+    const p = buildPeripheralPayload({ ...base, templateFinishedId: "t1", templateSackId: "t2" });
+    expect(p.templateRoutes).toHaveLength(4);
+    expect(p.templateRoutes.map((r) => r.kind).sort()).toEqual(
+      ["ROLL_FINISHED", "ROLL_RAW", "SACK", "SWATCH"],
+    );
     const finished = p.templateRoutes.find((r) => r.kind === "ROLL_FINISHED");
     const raw = p.templateRoutes.find((r) => r.kind === "ROLL_RAW");
+    const sack = p.templateRoutes.find((r) => r.kind === "SACK");
     expect(finished?.templateId).toBe("t1");
+    expect(sack?.templateId).toBe("t2");
     expect(raw?.templateId).toBeNull();
   });
 

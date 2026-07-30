@@ -14,7 +14,8 @@ interface Props {
   errorMessage?: string;
   /** Başarı mesajı — sağlanırsa yenileme tamamlanınca success toast gösterilir. */
   successMessage?: string;
-  /** Stil override (default variant'ta Animated.View container'a uygulanır). */
+  /** Stil override — default variant'ta Animated.View container'a, headerStyle
+   *  chip modunda TouchableRipple'a (dokunma alanı) uygulanır. */
   containerStyle?: ViewStyle;
   /** İkon boyutu — default 18. */
   size?: number;
@@ -104,7 +105,7 @@ export default function RefreshButton({
     return (
       <TouchableRipple
         onPress={handlePress}
-        style={[hdrStyles.chip, accent && hdrStyles.chipAccent]}
+        style={[hdrStyles.chip, accent && hdrStyles.chipAccent, containerStyle]}
         borderless
         rippleColor="rgba(255,255,255,0.2)"
         accessibilityLabel={label ?? 'Yenile'}

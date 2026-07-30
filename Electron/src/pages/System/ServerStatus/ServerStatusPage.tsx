@@ -68,6 +68,10 @@ export function ServerStatusPage() {
     data && data.sysTotalMemBytes ? (data.procRssBytes / data.sysTotalMemBytes) * 100 : null;
   const sysMemPct =
     data && data.sysTotalMemBytes ? (data.sysUsedMemBytes / data.sysTotalMemBytes) * 100 : null;
+  // Doygunluk MEŞGUL bağlantıyla ölçülür (total − idle): havuz bilinçli olarak
+  // sıcak tutulduğu için yüksek `poolTotalCount` normaldir, baskı değildir.
+  const poolBusy = data ? data.poolTotalCount - data.poolIdleCount : null;
+  const poolPct = data && data.poolMax && poolBusy != null ? (poolBusy / data.poolMax) * 100 : null;
 
   return (
     <PageShell>
@@ -194,6 +198,41 @@ export function ServerStatusPage() {
                 <InfoRow
                   label="Aktif bağlantı"
                   value={data?.dbConnections != null ? String(data.dbConnections) : "—"}
+                />
+                {/* Havuz satırları "Aktif bağlantı"nın hemen ardında: o sayı SUNUCU
+                    tarafını (psql/pg_dump dahil) sayar, bunlar backend'in KENDİ
+                    havuzunu → ikisi birlikte okunmalı. */}
+                <InfoRow
+                  label="Havuz (meşgul / tavan)"
+                  value={
+                    data?.poolTotalCount != null
+                      ? `${poolBusy} / ${data.poolMax} meşgul · ${data.poolIdleCount} sıcak bekliyor`
+                      : "—"
+                  }
+                  danger={levelOf(poolPct, 80, 95) === "crit"}
+                />
+                <InfoRow
+                  label="Bağlantı bekleyen istek"
+                  value={
+                    data?.poolWaitingCount != null
+                      ? `${data.poolWaitingCount} (en yüksek ${data.poolWaitingMax})`
+                      : "—"
+                  }
+                  danger={!!data?.poolWaitingCount}
+                />
+                <InfoRow
+                  label="Havuz zaman aşımı"
+                  value={
+                    data?.poolAcquireTimeouts
+                      ? `${data.poolAcquireTimeouts} kez` +
+                        (data.lastPoolTimeoutAt
+                          ? ` · son ${new Date(data.lastPoolTimeoutAt).toLocaleString("tr-TR")}`
+                          : "")
+                      : data?.poolAcquireTimeouts === 0
+                        ? "yok"
+                        : "—"
+                  }
+                  danger={!!data?.poolAcquireTimeouts}
                 />
                 <InfoRow
                   label="Kilit bekleyen sorgu"

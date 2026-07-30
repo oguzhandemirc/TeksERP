@@ -11,16 +11,6 @@ export function useSackContents(sackId: string | null) {
   });
 }
 
-/** Müşterinin depo çuvalları — editörde "başka çuvala taşı" hedefleri için. */
-export function useCustomerPool(customerId: string | null) {
-  return useQuery({
-    queryKey: ["packing", "pool", customerId],
-    queryFn: () => sackHubService.listCustomerPool(customerId!),
-    enabled: !!customerId,
-    staleTime: 5_000,
-  });
-}
-
 /**
  * Çuval hub'ına dokunan işlemler sonrası ilgili tüm cache'leri tazele. Tek yer:
  * içerik düzenleme (okut/tart/çıkar/taşı/sil) ve sevkiyat kurma aynı ağı besler.

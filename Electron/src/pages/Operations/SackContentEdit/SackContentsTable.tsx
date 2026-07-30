@@ -2,7 +2,7 @@ import { useState } from "react";
 import { getCoreRowModel, useReactTable, type RowSelectionState } from "@tanstack/react-table";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowRightLeft, PackageOpen } from "lucide-react";
+import { ArrowRightLeft, PackageOpen, SplitSquareHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { sackHubService } from "./service";
@@ -16,15 +16,16 @@ interface Props {
   rolls: SackContentRoll[];
   /** Sevkiyata atanmış çuval → salt-okunur (seçim kapalı). */
   locked: boolean;
-  /** Taşıma hedefleri — aynı müşterinin diğer depo çuvalları. */
-  targets: { id: string; sackNo: string }[];
+  /** Kaynak çuvalın müşterisi — hedef seçicide "farklı müşteri" uyarısı için. */
+  sourceCustomerId: string | null;
+  sourceCustomerName: string | null;
 }
 
 /**
  * Çuval içeriği (top) — seçilebilir DataTable. Seçim çubuğundan toplu aksiyon:
  * "Depoya Çıkar" (dağıt) ve "Başka Çuvala Aktar". Kilitli çuvalda seçim kapalı.
  */
-export function SackContentsTable({ sackId, rolls, locked, targets }: Props) {
+export function SackContentsTable({ sackId, rolls, locked, sourceCustomerId, sourceCustomerName }: Props) {
   const qc = useQueryClient();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [moveRollIds, setMoveRollIds] = useState<string[] | null>(null);
@@ -48,6 +49,17 @@ export function SackContentsTable({ sackId, rolls, locked, targets }: Props) {
     },
   });
 
+  // Böl: seçilenlerden YENİ çuval. Backend atomik (çuval aç + taşı + kg sıfırla)
+  // → istemcide openSack+move iki-çağrısı yapılmaz (yarım kalırsa boş çuval kalırdı).
+  const splitMut = useMutation({
+    mutationFn: (rollIds: string[]) => sackHubService.splitSack(sackId, rollIds),
+    onSuccess: (res) => {
+      toast.success(res.message ?? `Yeni çuval: ${res.data.sackNo}`);
+      invalidateSackHub(qc);
+      table.resetRowSelection();
+    },
+  });
+
   return (
     <>
       <DataTable<SackContentRoll>
@@ -66,15 +78,33 @@ export function SackContentsTable({ sackId, rolls, locked, targets }: Props) {
               >
                 <PackageOpen className="h-3.5 w-3.5" /> Depoya Çıkar
               </Button>
+              {/* Hedef listesi DİYALOĞUN İÇİNDE aranır → burada "hedef var mı?"
+                  ön-kontrolü YOK. Eskiden hedefler müşteri havuzundan geliyordu ve
+                  müşterisiz çuvalda liste hep boş kaldığı için buton kalıcı pasifti. */}
               <Button
                 size="sm"
                 variant="outline"
                 className="h-8 gap-1.5"
-                disabled={targets.length === 0}
-                title={targets.length === 0 ? "Aktarılacak başka çuval yok" : undefined}
+                title="Seçili topları başka depo çuvalına aktar"
                 onClick={() => setMoveRollIds(selected.map((r) => r.id))}
               >
                 <ArrowRightLeft className="h-3.5 w-3.5" /> Başka Çuvala Aktar
+              </Button>
+              {/* Böl — hedef çuval GEREKMEZ, yenisi açılır. Hepsi seçiliyken pasif:
+                  kaynakta en az bir top kalmalı (backend de 400 verir). */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                disabled={splitMut.isPending || selected.length >= rolls.length}
+                title={
+                  selected.length >= rolls.length
+                    ? "Tüm toplar seçili — bölmek için en az bir top çuvalda kalmalı"
+                    : "Seçilenleri yeni bir çuvala ayır"
+                }
+                onClick={() => splitMut.mutate(selected.map((r) => r.id))}
+              >
+                <SplitSquareHorizontal className="h-3.5 w-3.5" /> Seçilenlerden Yeni Çuval
               </Button>
             </>
           )
@@ -83,7 +113,8 @@ export function SackContentsTable({ sackId, rolls, locked, targets }: Props) {
       <MoveRollsDialog
         sackId={sackId}
         rollIds={moveRollIds}
-        targets={targets}
+        sourceCustomerId={sourceCustomerId}
+        sourceCustomerName={sourceCustomerName}
         onOpenChange={(o) => !o && setMoveRollIds(null)}
         onDone={() => table.resetRowSelection()}
       />

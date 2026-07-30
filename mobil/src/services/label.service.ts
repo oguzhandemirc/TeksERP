@@ -102,6 +102,47 @@ export const labelService = {
    * tarayıcı/yazıcıda gerçekleşir; bu çağrı SystemLog izi düşer ve baskı
    * bağlamını (orderLineId/customerId) backend'e bildirir (snapshot için).
    */
+  // ── ÇUVAL ETİKETİ — barkod/QR = Sack.sackNo (tek kod) ──────────────────────
+  // Şablon (SACK bağlam varsayılanı) atanmamışsa backend 400 döner ve HATA MESAJI
+  // operatöre ne yapacağını söyler — roll etiketine SAPMAZ (fail-closed).
+
+  /**
+   * Çuval etiketi SEÇİLİ yazıcı dilinde. rasterCapable → base64 JSON zarfı;
+   * yoksa ham text komut (roll `/native` ile aynı sözleşme).
+   */
+  getSackNative: (
+    sackId: string,
+    rasterCapable?: boolean
+  ): Promise<{ content: string; encoding: 'text' | 'base64'; language: string }> => {
+    if (rasterCapable) {
+      return apiClient
+        .get<{ success: boolean; data: { content: string; encoding: string; language: string } }>(
+          `/labels/sacks/${sackId}/native`,
+          { params: { encoding: 'b64' } }
+        )
+        .then((r) => ({
+          content: r.data.data.content,
+          encoding: 'base64' as const,
+          language: r.data.data.language,
+        }));
+    }
+    return apiClient
+      .get<string>(`/labels/sacks/${sackId}/native`, { responseType: 'text' })
+      .then((r) => ({
+        content: r.data,
+        encoding: 'text' as const,
+        language: String(r.headers['x-label-language'] ?? ''),
+      }));
+  },
+
+  /** Çuval etiketinin tam HTML'i — BT yazıcı yokken expo-print fallback'i. */
+  getSackHtml: (sackId: string): Promise<string> =>
+    apiClient.get<string>(`/labels/sacks/${sackId}/html`, { responseType: 'text' }).then((r) => r.data),
+
+  /** Çuval etiketi baskı izi — yalnız GERÇEK baskı tamamlanınca. */
+  recordSackPrintEvent: (sackId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/labels/sacks/${sackId}/print-event`, {}).then((r) => r.data),
+
   recordPrintEvent: (
     rollId: string,
     ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }

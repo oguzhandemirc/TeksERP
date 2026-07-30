@@ -31,7 +31,7 @@ import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders
 import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
-import { OrderPartyCard } from "./OrderPartyCard";
+import { PartyCard } from "@/components/operations/PartyCard";
 import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
@@ -182,7 +182,7 @@ export function OrderDetailSheet({
               />
             )}
           </SheetTitle>
-          {/* a11y açıklaması — görsel kimlik OrderPartyCard'da; burası ekran
+          {/* a11y açıklaması — görsel kimlik PartyCard'da; burası ekran
               okuyucu için kısa özet (Radix Description zorunlu). */}
           <SheetDescription className="sr-only">
             {order?.customer?.name}
@@ -193,7 +193,7 @@ export function OrderDetailSheet({
 
         {order && (
           <div className="mt-4 space-y-4">
-            <OrderPartyCard customer={order.customer} branch={order.branch} />
+            <PartyCard customer={order.customer} branch={order.branch} />
 
             <div className="grid grid-cols-3 gap-2 text-sm">
               <Card>

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import apiClient from "@/services/apiClient";
 
-/** Backend `/health` ucunun döndürdüğü tam şekil. */
+/** Backend `/health` ucundan KULLANILAN alanlar (uç daha fazlasını döner). */
 export interface HealthResponse {
   api: string;
   db: "UP" | "DOWN";
@@ -15,6 +15,21 @@ export interface HealthResponse {
   dbBlockedCount: number | null;
   lastBackup: { name: string; time: string } | null;
   auditWriteFailures: number;
+  // Bağlantı havuzu — backend'in KENDİ havuzu. `dbConnections` ise
+  // `pg_stat_activity` sayımıdır (SUNUCU tarafı: psql/pgAdmin/pg_dump dahil,
+  // idle/busy ayırt etmez). Doygunluk ve zaman aşımı yalnız bu alanlarda görünür.
+  // Sürüm kayması: eski bir backend bu alanları GÖNDERMEZ → tüm okumalar
+  // null/undefined toleranslı olmalı (karşılaştırmalar false'a düşer, alarm çıkmaz).
+  poolMax: number;
+  poolTotalCount: number;
+  poolIdleCount: number;
+  poolWaitingCount: number;
+  poolWaitingMax: number;
+  /** /health'te var; UI'da gösterilmiyor — soğuk-connect doğrulaması için curl'le okunur. */
+  poolConnectsTotal: number;
+  poolAcquireTimeouts: number;
+  lastPoolTimeoutAt: string | null;
+  lastPoolTimeoutError: string | null;
   // Kaynak metrikleri (app.ts)
   cpuCores: number;
   procRssBytes: number;
@@ -140,6 +155,39 @@ export function evaluateAlerts(d: HealthResponse | undefined): Alert[] {
     out.push({
       level: d.dbBlockedCount >= 3 ? "crit" : "warn",
       message: `${d.dbBlockedCount} sorgu kilit bekliyor — işlemler takılmış olabilir.`,
+    });
+
+  // Havuz doygunluğu MEŞGUL bağlantıyla ölçülür (total − idle), toplamla DEĞİL.
+  // Neden: backend havuzu bilinçli olarak SICAK tutuyor (idleTimeoutMillis 10dk)
+  // → açılış patlamasından sonra poolTotalCount uzun süre 24/30 civarında kalır ve
+  // bu İSTENEN durumdur (soğuk connect = 2026-07 olaylarının sebebi). Toplama
+  // eşik koymak kalıcı yanlış alarm üretirdi (ölçüldü: boot sonrası total=24,
+  // idle=24, meşgul=0). Gerçek baskı = meşgul bağlantı + kuyruk.
+  // Eşikler disk (80/90) ve RAM (85/95) ev konvansiyonuyla hizalı.
+  const poolBusy = d.poolTotalCount != null && d.poolIdleCount != null ? d.poolTotalCount - d.poolIdleCount : null;
+  const poolLvl = levelOf(d.poolMax && poolBusy != null ? (poolBusy / d.poolMax) * 100 : null, 80, 95);
+  if (poolLvl !== "ok")
+    out.push({
+      level: poolLvl,
+      message: `Veritabanı bağlantı havuzu doluyor (${poolBusy}/${d.poolMax} meşgul) — istekler sıraya girmek üzere.`,
+    });
+
+  // Anlık kuyruk: bir istek bağlantı bekliyorsa O AN bir kullanıcı bekliyor.
+  // 5+ = havuz fiilen tavanda; connectionTimeoutMillis (5sn) içinde 503 gelmesi
+  // muhtemel → kritik.
+  if (d.poolWaitingCount > 0)
+    out.push({
+      level: d.poolWaitingCount >= 5 ? "crit" : "warn",
+      message: `${d.poolWaitingCount} istek veritabanı bağlantısı bekliyor.`,
+    });
+
+  // Kümülatif: her sayı, kullanıcıya "Sunucu şu anda yoğun" (503) dönmüş bir
+  // istektir → auditWriteFailures gibi >0'da uyarır (5sn poll'de kaçmaz).
+  // Gözlenen taban 5 günde 2 olay; tek uptime'da 10+ = sistemik → kritik.
+  if (d.poolAcquireTimeouts > 0)
+    out.push({
+      level: d.poolAcquireTimeouts >= 10 ? "crit" : "warn",
+      message: `Veritabanı bağlantı havuzu ${d.poolAcquireTimeouts} kez zaman aşımına düştü (istek reddedildi).`,
     });
 
   if (d.auditWriteFailures > 0)

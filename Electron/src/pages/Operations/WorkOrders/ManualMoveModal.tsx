@@ -142,6 +142,7 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
     preview !== null &&
     !blockedInSelection &&
     !bf?.colorBlocked &&
+    !preview.woBlocked &&
     reason.trim().length >= 3 &&
     (!needParty || partyMode !== "join" || Boolean(joinBatchId));
 
@@ -383,6 +384,14 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
                 {bf!.appliesColor && " Renk otomatik uygulanacak."}
                 {bf!.qualityStaysUnknown && " Kalite “Belirsiz” kalır (yalnız kalite istasyonu ölçer)."}
               </div>
+            </div>
+          )}
+          {/* İş emri ölü (iptal/devredilmiş) → HARD BLOCK. Taşıma topu "canlı ama
+              kimsenin okutamadığı" çıkmaza sokardı (kart VOIDED). */}
+          {preview?.woBlocked && (
+            <div className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-[11px] text-destructive">
+              <Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {preview.woBlockReason}
             </div>
           )}
           {/* Renk-veren adım atlanıyor ama hedef renk yok → HARD BLOCK */}

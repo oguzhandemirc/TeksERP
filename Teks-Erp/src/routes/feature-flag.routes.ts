@@ -73,6 +73,9 @@ const updateSchema = z.object({
   pinLockoutEnabled: z.boolean().optional(),
   // auth.pinLockoutAttempts — izin verilen yanlış deneme (default 5, 1–20).
   pinLockoutAttempts: z.number().int().min(1).max(20).optional(),
+  // backup.hour — otomatik gece yedeğinin saati (0–23, sunucu yerel saati; default 3).
+  // Backend ENFORCE eder (backup-scheduler her turda okur → restart gerekmez).
+  backupHour: z.number().int().min(0).max(23).optional(),
   // auth.pinLockoutPenaltySec — kısa ceza süresi, saniye (default 60, 5–3600).
   pinLockoutPenaltySec: z.number().int().min(5).max(3600).optional(),
   // auth.pinLockoutEscalateAfter — kaç turdan sonra uzun cezaya geçilir (default 3, 1–20).

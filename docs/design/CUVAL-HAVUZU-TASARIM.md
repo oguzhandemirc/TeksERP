@@ -88,7 +88,49 @@ siparişlere spec+şube FIFO ile yazılır.
 - **Electron `SackStore` / mobil `SevkiyatScreen`:** PLANNED board → sevk (dispatch).
 - **Sipariş görünümü:** İstenen | Sevk (shippedQty) | Açık (quantity − shippedQty).
 
-## Belge zinciri (değişmedi)
+## Çuval notu + çuval etiketi (2026-07-30)
+
+**`Sack.notes`** (VarChar 500) — çuvalın İÇ serbest notu ("kendimiz için": "ölçü şüpheli",
+"çuval yırtık, aktarılacak"). Uçlar `GET/POST /api/shipping/sacks/:id/notes`.
+
+- **Annotation semantiği** (`Shipment.dispatchNote` ile aynı): çuvalın durumu fark etmez —
+  sevkiyata atanmış / sevk EDİLMİŞ çuvala da yazılır. Bu yüzden `setSackNotes`
+  **`touchWarehouseSackTx` guard'ını kullanmaz** (o guard ölçüm/içerik invariant'ını korur;
+  not ikisi de değil) ve `resetSackWeightsTx` nota dokunmaz. Guard'ı "eksik" sanıp ekleyen
+  bir değişiklik özelliği sessizce 409'a düşürür — kök `CLAUDE.md`'de yazılı istisna.
+- **Gösterimi üç yerde de opsiyonel + varsayılan KAPALI:** (a) çuval etiketinde `sackNote`
+  alanı, (b) sevk irsaliyesi ÇUVAL LİSTESİ'nde "AÇIKLAMA" kolonu, (c) iç ekranlar (mobil
+  ⋮ → Not ekle; Electron çuval editörü + sevkte salt-okunur sheet + sevkiyat kurma uyarısı).
+- Liste uçları notu **kırpılmış** döner (`hasNote` + `notePreview` 80 karakter); tam metin
+  çuval dökümünde / `getSackNotes`'ta.
+
+### Notun hangi belgede göründüğü (2026-07-30 durumu)
+
+| Belge | Görünür mü | Tetik |
+|---|---|---|
+| **Çeki Listesi** (`PickListPrintDialog`) | ✅ | Diyalogda **"Çuval notlarını yazdır"** işaret kutusu — YAZDIR'ın üstünde, belirgin; varsayılan kapalı, notu olan çuval yoksa gizli. Not TAM metin (iç çalışma kağıdı; `getPickList` kırpmaz). |
+| **Sevk İrsaliyesi** | ✅ | ÇUVAL LİSTESİ'nde "AÇIKLAMA" kolonu — kalıcı toggle (`columns.cuval.shown`) **VEYA** baskı diyaloğundaki tek-seferlik `?rowNotes=1` (pure OR). İkisi de varsayılan kapalı. |
+| **Çuval etiketi** | ⚠️ elle | `sackNote` alanı stüdyoda var; **seed şablonunda YOK** (iç not fiziksel etikete varsayılan basılmaz — `test_sack_label` 0. assert'i bunu kilitliyor). |
+| Muhasebe fişi · dispatch-report · accounting-export · kalite sertifikası · fason/kartela/iade belgeleri | ❌ | Not kolonu yalnız `shipment-dispatch` renderer'ında. |
+| Sevk irsaliyesinin İÇİNDEKİ ÇEKİ LİSTESİ tablosu | ❌ | Per-top satır → çuval notu her satırda tekrar ederdi (bilinçli). |
+
+> **SONRAYA (kullanıcı kararı, 2026-07-30):** Yukarıdaki ❌ belgelere de not **istenirse** eklenecek ve **Belge Kişiselleştirme'den aç/kapa** edilecek. Uygulanınca kural aynı: `DocCol.defaultHidden` + `columns[tablo].shown` (opt-in allowlist) — `hidden` blocklist'i kullanılmaz, yoksa yeni kolon mevcut belgelerde varsayılan GÖRÜNÜR doğar ve iç not müşteriye sızar (bkz. `Electron/CLAUDE.md` "Belge Kolonu Ekleme"). Müşteriye giden belgelerde (irsaliye, fatura, kalite sertifikası) varsayılan KAPALI kalmalı; iç belgelerde (çeki, dispatch-report) doğrudan gösterilmesi tartışılabilir.
+
+**Çuval etiketi** — `LabelKind.SACK`, barkod/QR = `sackNo`. Detay:
+`docs/design/ETIKET-TASARIM.md` "4. bağlam: SACK". Çuval kodu top okutma alanına düşerse
+`scanIntoSack`/`locateRoll` anlamlı 400 döner; mobil Paketleme ekranı kodu tanıyıp o çuvalı
+**aktif** yapar (yeni uç gerekmez — liste istemcide).
+
+## Belge zinciri (not kolonu eklendi)
+
+İrsaliyedeki ÇUVAL LİSTESİ'ne **opsiyonel "AÇIKLAMA"** kolonu geldi. Not donmuş çekirdeğe
+(`collectShipmentDocContent`) **girmez** — `BuilderEntry.resolveLiveRowNotes` ile her baskıda
+canlı çözülür (sevkten sonra yazılan not da basılır, sürüm doğmaz, eski snapshot'lar
+etkilenmez). Kolon **opt-in** (`DocCol.defaultHidden` + `columns.cuval.shown`), tek-seferlik
+`?rowNotes=1` bayrağı kalıcı ayarı **ezer** (pure OR) ve hiçbir yere yazılmaz. Hiç not
+yoksa kolon hiç basılmaz. Kural detayı: `Electron/CLAUDE.md` "Belge Kolonu Ekleme".
+
+## Belge zinciri (temel — değişmedi)
 
 İrsaliye + muhasebe fişi + accounting-export tahsis'e DEĞİL, çuval içeriğine (Sack→Roll)
 dayanır (`collectShipmentDocContent`). Depo remodeli belge zincirini bozmaz. İrsaliyedeki

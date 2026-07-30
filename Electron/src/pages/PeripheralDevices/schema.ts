@@ -38,6 +38,7 @@ export const peripheralFormSchema = z.object({
   templateRawId: z.string().optional().default(""),
   templateFinishedId: z.string().optional().default(""),
   templateSwatchId: z.string().optional().default(""),
+  templateSackId: z.string().optional().default(""),
   notes: z.string().trim().max(500).optional().default(""),
   // isActive formdan YÖNETİLMEZ — aktiflik yalnız Pasife Al / Aktifleştir /
   // Kalıcı Sil aksiyonlarından (users kalıbı, f76f855 ile aynı gerekçe).
@@ -112,6 +113,7 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
       { kind: "ROLL_RAW", templateId: nn(v.templateRawId) },
       { kind: "ROLL_FINISHED", templateId: nn(v.templateFinishedId) },
       { kind: "SWATCH", templateId: nn(v.templateSwatchId) },
+      { kind: "SACK", templateId: nn(v.templateSackId) },
     ],
   };
 }
@@ -147,5 +149,6 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   templateRawId: "",
   templateFinishedId: "",
   templateSwatchId: "",
+  templateSackId: "",
   notes: "",
 };

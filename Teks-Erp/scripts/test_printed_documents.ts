@@ -12,7 +12,7 @@
 //      + irsaliye satır metrajı = sevk edilen metraj (alloc geri-indirgeme doğru)
 // Kendi test verisini yaratır ve sonunda temizler (rollback yerine explicit delete).
 
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { PrintedDocType, PrintedDocStatus } from "@prisma/client";
 import { kartelaService } from "../src/services/kartela.service";
 import { shippingService } from "../src/services/shipping.service";
@@ -254,6 +254,7 @@ async function main(): Promise<void> {
     if (customer) await prisma.customer.deleteMany({ where: { id: customer.id } });
     console.log(`\n=== ${pass}/${pass + fail} geçti ===`);
     await prisma.$disconnect();
+    await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
   }
   if (fail > 0) process.exit(1);
 }

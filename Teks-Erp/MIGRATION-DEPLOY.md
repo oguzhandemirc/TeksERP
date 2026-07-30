@@ -1,7 +1,7 @@
 # Production Migration Deploy Notu
 
-Geliştirme (dev) DB'sine uygulanan migration'lar production'a (Windows installer
-DB'si `TeksErpDb`, ya da hangi ortamsa) **`prisma migrate deploy` ile** taşınır.
+Geliştirme (dev) DB'sine uygulanan migration'lar production'a (üretim DB'si
+`TeksErpDb`, ya da hangi ortamsa) **`prisma migrate deploy` ile** taşınır.
 `migrate dev` PRODUCTION'da ASLA çalıştırılmaz (reset riski).
 
 ## Standart deploy sırası (her sürüm güncellemesinde)
@@ -12,7 +12,8 @@ git pull                       # yeni migration dosyaları gelir
 npm install                    # package.json değiştiyse
 npm run prisma:generate        # = prisma generate (client yenilensin)
 npm run prisma:migrate         # = prisma migrate deploy (pending migration'ları uygular)
-# servisi yeniden başlat (Windows servisi / nssm restart)
+npm run build                  # tsc → dist/ (pm2 derlenmiş dosyayı çalıştırır)
+pm2 restart teks-erp-backend
 ```
 
 `migrate deploy` yalnız `_prisma_migrations` tablosunda OLMAYAN migration'ları,
@@ -21,11 +22,10 @@ dosya sırasıyla uygular. Idempotent — tekrar çalıştırmak güvenli.
 > **Sıra teyidi (2026-06-13):** Yukarıdaki dört adım (`git pull → npm install →
 > prisma:generate → prisma:migrate`) güncel package.json script'leriyle birebir
 > uyumludur: `prisma:generate` = `npx prisma generate`, `prisma:migrate` =
-> `npx prisma migrate deploy`. **Windows installer yolunda fark var:** Prisma
-> client kurulum anında DEĞİL, `build.ps1` derleme aşamasında üretilip
-> `node_modules`'a gömülür; bu yüzden `manage.ps1 -Action install` sadece
-> `migrate deploy` (+ ilk kurulumda seed) çalıştırır, ayrıca `generate`
-> ÇAĞIRMAZ. Manuel/Linux yolunda ise `generate` her güncellemede gereklidir.
+> `npx prisma migrate deploy`. **`generate` her güncellemede gereklidir.**
+> (2026-07-30: eskiden Windows installer yolunda Prisma client `build.ps1`
+> derlemesinde `node_modules`'a gömüldüğü için `generate` atlanabiliyordu —
+> installer kaldırıldı, artık tek yol var ve `generate` atlanamaz.)
 
 > **glibc collation NOTU (sıralı numara üreticileri — düzeltildi):** Günlük/
 > ardışık numara üreten servisler (sevkiyat `shipmentNo`=SVK, çuval `sackNo`=CV,

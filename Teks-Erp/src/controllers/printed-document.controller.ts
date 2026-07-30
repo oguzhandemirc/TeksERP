@@ -133,11 +133,15 @@ export class PrintedDocumentController {
       // ?printNote= → tek seferlik baskı notu (persist edilmez, yalnız bu render).
       const printNote =
         typeof req.query.printNote === "string" ? req.query.printNote.slice(0, 300) : null;
+      // ?rowNotes=1 → satır notlarını (çuval yorumu) BU baskıda göster. Kalıcı kolon
+      // ayarını EZER (OR); ayara da snapshot'a da YAZILMAZ, yeni versiyon doğurmaz.
+      const forceRowNotes = req.query.rowNotes === "1" || req.query.rowNotes === "true";
       const result = await printedDocumentService.getHtml(docType, sourceId, version, {
         allowDraft,
         useCurrentConfig,
         printedBy: req.user?.username ?? null,
         printNote,
+        forceRowNotes,
       });
       const data = result.data as { html: string } | null;
       if (!data) {

@@ -1,13 +1,19 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Layers, Loader2, Lock, PackageOpen, RefreshCw, Scale, Trash2, UserRound, UserRoundCog, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Keyboard, Layers, Loader2, Lock, MessageSquareText, PackageOpen, RefreshCw, Scale, Tag, Trash2, UserRound, UserRoundCog, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageShell } from "@/components/layout/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
-import { invalidateSackHub, useCustomerPool, useSackContents } from "./useSackData";
+import { invalidateSackHub, useSackContents } from "./useSackData";
 import { EditorScanBar } from "./EditorScanBar";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { AddKartelaDialog } from "./AddKartelaDialog";
@@ -15,6 +21,12 @@ import { DeleteSackDialog } from "./DeleteSackDialog";
 import { DistributeSackDialog } from "./DistributeSackDialog";
 import { ReassignCustomerDialog, type ReassignPatch } from "./ReassignCustomerDialog";
 import { SackContentsTable } from "./SackContentsTable";
+import { SackContentDumpMenu } from "./SackContentDumpMenu";
+import { fromSackContents } from "./sackDump";
+import { SackNoteDialog } from "./SackNoteDialog";
+import { useSackWeighAction } from "./useSackWeighAction";
+import { StaleLabelsBanner } from "./StaleLabelsBanner";
+import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
 import type { EditorTarget } from "./types";
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
@@ -42,18 +54,15 @@ export function SackEditorView({
   const totalQty = rolls.reduce((a, r) => a + Number(r.currentQty), 0);
   const hasContents = rolls.length > 0 || swatches.length > 0;
 
-  // Taşıma hedefleri — aynı müşterinin diğer depo çuvalları (müşterisizde yok).
-  const poolQ = useCustomerPool(target.customerId);
-  const otherSacks = useMemo(
-    () => (poolQ.data?.data.sacks ?? []).filter((s) => s.id !== target.sackId).map((s) => ({ id: s.id, sackNo: s.sackNo })),
-    [poolQ.data, target.sackId],
-  );
-
   const [weighOpen, setWeighOpen] = useState(false);
   const [kartelaOpen, setKartelaOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [distributeOpen, setDistributeOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [labelOpen, setLabelOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  // Tartı: tek dokunuş (oku → doğrudan kaydet). Elle giriş ⌄ menüsünde.
+  const sackWeigh = useSackWeighAction();
 
   const removeSwatchMut = useMutation({
     mutationFn: (swatchId: string) => sackHubService.removeSwatchFromSack(swatchId),
@@ -100,6 +109,27 @@ export function SackEditorView({
           <Button variant="outline" size="sm" onClick={() => void contentsQ.refetch()} disabled={contentsQ.isFetching}>
             <RefreshCw className={cn("mr-1 h-4 w-4", contentsQ.isFetching && "animate-spin")} /> Yenile
           </Button>
+          {/* Etiket kilitli çuvalda DA basılabilir — baskı içeriği değiştirmez ve
+              sevkteki çuvalın etiketi yırtılırsa yenisi gerekir. */}
+          <Button variant="outline" size="sm" onClick={() => setLabelOpen(true)}>
+            <Tag className="mr-1 h-4 w-4" /> Etiket
+          </Button>
+          {/* İçerik dökümü — SEÇİM GEREKMEZ, çuvalın tamamını alır. Kilitli çuvalda
+              da açık (Etiket/Not ile aynı gerekçe: baskı içeriği değiştirmez).
+              Veri bellekte → ek ağ çağrısı yok. Tek dropdown olduğu için başlığa
+              üç tuş değil bir tuş biner. */}
+          <SackContentDumpMenu
+            label="İçerik Dökümü"
+            disabled={!data || !hasContents}
+            dumps={data ? [fromSackContents(data)] : []}
+          />
+          {/* Yorum kilitli çuvalda DA düzenlenebilir (annotation; içerik/ölçüm değil).
+              Not varsa buton "Notu Düzenle" olur — içerik modalda okunur, ekranda
+              yer kaplamaz. */}
+          <Button variant="outline" size="sm" onClick={() => setNoteOpen(true)}>
+            <MessageSquareText className="mr-1 h-4 w-4" />
+            {data?.notes ? "Notu Düzenle" : "Not Ekle"}
+          </Button>
           {!locked && (
             <>
               <Button variant="outline" size="sm" onClick={() => setReassignOpen(true)}>
@@ -108,9 +138,42 @@ export function SackEditorView({
               <Button variant="outline" size="sm" onClick={() => setKartelaOpen(true)}>
                 <Layers className="mr-1 h-4 w-4" /> Kartela
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setWeighOpen(true)}>
-                <Scale className="mr-1 h-4 w-4" /> Tart
-              </Button>
+              {/* TEK DOKUNUŞ tartı: kantardan oku → doğrudan kaydet (diyalog YOK).
+                  Elle giriş yanındaki ⌄ menüsünde — kantar bozuksa kaçış yolu. */}
+              <div className="flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-r-none border-r-0"
+                  disabled={sackWeigh.busy}
+                  title={
+                    sackWeigh.hasScale
+                      ? "Kantardan oku ve kaydet"
+                      : "Kantar tanımlı değil — ⌄ menüsünden elle girin"
+                  }
+                  onClick={() => data && void sackWeigh.weigh({ id: data.id, sackNo: data.sackNo })}
+                >
+                  <Scale className={cn("mr-1 h-4 w-4", sackWeigh.busy && "animate-pulse")} />
+                  {sackWeigh.busy ? "Tartılıyor…" : "Tart"}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-l-none px-1.5"
+                      aria-label="Tartı seçenekleri"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setWeighOpen(true)}>
+                      <Keyboard className="mr-2 h-4 w-4" /> Elle kg gir
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
               {hasContents && (
                 <Button variant="outline" size="sm" onClick={() => setDistributeOpen(true)}>
                   <PackageOpen className="mr-1 h-4 w-4" /> Dağıt
@@ -124,10 +187,32 @@ export function SackEditorView({
         </div>
       </div>
 
+      {/* Etiketi bayatlayan toplar VARSA uyarı + tek tuşla yeniden bas. Yoksa
+          bileşen null döner, hiç yer kaplamaz. */}
+      <StaleLabelsBanner
+        rolls={rolls}
+        customerId={target.customerId}
+        customerName={target.customerName}
+      />
+
+      {/* Not VARSA tek satırlık şerit — yoksa hiç yer kaplamaz (boş input yok). */}
+      {data?.notes && (
+        <button
+          type="button"
+          onClick={() => setNoteOpen(true)}
+          title="Notu düzenle"
+          className="flex w-full items-start gap-2 border-b bg-amber-50/60 px-6 py-2 text-left text-xs text-amber-900 hover:bg-amber-50 dark:bg-amber-950/20 dark:text-amber-200 dark:hover:bg-amber-950/40"
+        >
+          <MessageSquareText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-pre-wrap break-words italic">{data.notes}</span>
+        </button>
+      )}
+
       {locked ? (
         <div className="px-6 py-3">
           <Callout tone="warning" icon={Lock} title="Bu çuval bir sevkiyata atanmış">
             İçeriği kilitli. Düzenlemek için önce Sevk Kapısı'nda çuvalı sevkiyattan çıkarın.
+            (Yorum yine düzenlenebilir.)
           </Callout>
         </div>
       ) : (
@@ -142,7 +227,13 @@ export function SackEditorView({
           </div>
         ) : (
           <>
-            <SackContentsTable sackId={target.sackId} rolls={rolls} locked={locked} targets={otherSacks} />
+            <SackContentsTable
+              sackId={target.sackId}
+              rolls={rolls}
+              locked={locked}
+              sourceCustomerId={target.customerId}
+              sourceCustomerName={target.customerName}
+            />
 
             {swatches.length > 0 && (
               <div className="border-t">
@@ -183,6 +274,14 @@ export function SackEditorView({
       <WeighSackDialog
         sack={weighOpen && data ? { id: data.id, sackNo: data.sackNo, weightKg: data.weightKg } : null}
         onOpenChange={setWeighOpen}
+      />
+      <SackLabelDialog
+        sack={labelOpen && data ? { id: data.id, sackNo: data.sackNo } : null}
+        onOpenChange={setLabelOpen}
+      />
+      <SackNoteDialog
+        sack={noteOpen && data ? { id: data.id, sackNo: data.sackNo, notes: data.notes } : null}
+        onOpenChange={setNoteOpen}
       />
       <AddKartelaDialog sackId={kartelaOpen ? target.sackId : null} onOpenChange={setKartelaOpen} />
       <DeleteSackDialog

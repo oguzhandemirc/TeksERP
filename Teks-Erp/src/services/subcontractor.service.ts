@@ -2627,7 +2627,9 @@ export class SubcontractorService {
       Array<{
         currentStepId: string;
         roll_count: bigint;
-        total_qty: string | null;
+        // adapter-pg ile SUM(numeric) → Prisma.Decimal döner (string DEĞİL; ölçüldü).
+        // COUNT(*) → bigint, ::float cast'li toplamlar → number.
+        total_qty: Prisma.Decimal | null;
         item_names: string[] | null;
         color_names: string[] | null;
       }>
@@ -3578,19 +3580,20 @@ export class SubcontractorService {
       //    batchId'si = açık sevkin batchId'si" değişmezi (firma çözümü, mobil
       //    kabul gruplaması, undoTransfer bunu okur) kırılırdı. Uyuşmazlıkta 409:
       //    iptal, üyelik eski partiye dönmeden / K15 belge-taşıma gelmeden yapılamaz.
-      const [rollBatchRows, srcDispatchItems] = await Promise.all([
-        tx.roll.findMany({
-          where: { id: { in: rollIds } },
-          select: { id: true, barcode: true, batchId: true },
-        }),
-        tx.subcontractorDispatchItem.findMany({
-          where: {
-            rollId: { in: rollIds },
-            dispatch: { stepId: receipt.stepId, cancelledAt: null, directShippedAt: null },
-          },
-          select: { rollId: true, dispatch: { select: { batchId: true, dispatchNo: true } } },
-        }),
-      ]);
+      //    ⚠️ SIRALI await — `tx.*` üzerinde `Promise.all` YASAK (pg adapter tek
+      //    connection'ı seri çalıştırır; pg@9'da hard-error). Paralellik zaten
+      //    illüzyondu, davranış değişmiyor.
+      const rollBatchRows = await tx.roll.findMany({
+        where: { id: { in: rollIds } },
+        select: { id: true, barcode: true, batchId: true },
+      });
+      const srcDispatchItems = await tx.subcontractorDispatchItem.findMany({
+        where: {
+          rollId: { in: rollIds },
+          dispatch: { stepId: receipt.stepId, cancelledAt: null, directShippedAt: null },
+        },
+        select: { rollId: true, dispatch: { select: { batchId: true, dispatchNo: true } } },
+      });
       const rollBatchById = new Map(rollBatchRows.map((r) => [r.id, r]));
       const mismatches: string[] = [];
       for (const it of srcDispatchItems) {

@@ -105,6 +105,33 @@ export const SWATCH_FIELDS: readonly FieldDef[] = [
 ] as const;
 
 // =============================================================================
+// SACK — Çuval etiketi
+// =============================================================================
+// Çuvala yapışan etiket. Barkod + QR = `Sack.sackNo` (CV+GGAAYY+NNNN) — Sack'te
+// ayrı `barcode` kolonu YOK, "tek kod" kuralı (code-format.ts).
+//
+// ÜRÜN/RENK ALANI YOK, bilinçli: bir çuvalda N farklı kumaş/renk olabilir; tek bir
+// ürün adı basmak karışık çuvalda SESSİZCE yanlış olur. Çuval etiketi bir TOPLAM
+// belgesidir: kaç top, kaç metre, kaç kg, kimin için.
+//
+// Terminoloji kök CLAUDE.md standardı: "ÇUVAL NO" / "TOP ADEDİ".
+// =============================================================================
+export const SACK_FIELDS: readonly FieldDef[] = [
+  { key: "barcode",      defaultLabel: "Barkod",        type: "barcode" },
+  { key: "qrCode",       defaultLabel: "QR Kod",        type: "qr" },
+  { key: "sackNo",       defaultLabel: "Çuval No",      type: "text" },
+  { key: "rollCount",    defaultLabel: "Top Adedi",     type: "number" },
+  { key: "lengthMeters", defaultLabel: "Toplam Metraj", type: "number" },
+  { key: "weightKg",     defaultLabel: "Brüt Ağırlık (kg)", type: "number" },
+  { key: "customerName", defaultLabel: "Müşteri",       type: "text" },
+  { key: "branchName",   defaultLabel: "Şube",          type: "text" },
+  // Çuval notu — iç not. Şablona SÜRÜKLENMEZSE basılmaz (kanvas modeli gereği
+  // varsayılan kapalı); not boşsa eleman baskıda atlanır (present:false).
+  { key: "sackNote",     defaultLabel: "Çuval Notu",    type: "text" },
+  { key: "printedAt",    defaultLabel: "Baskı Tarihi",  type: "date" },
+] as const;
+
+// =============================================================================
 // Aggregation + lookup
 // =============================================================================
 
@@ -112,6 +139,7 @@ export const FIELD_CATALOG: Record<LabelKind, readonly FieldDef[]> = {
   [LabelKind.ROLL_RAW]:      ROLL_RAW_FIELDS,
   [LabelKind.ROLL_FINISHED]: ROLL_FINISHED_FIELDS,
   [LabelKind.SWATCH]:        SWATCH_FIELDS,
+  [LabelKind.SACK]:          SACK_FIELDS,
 };
 
 export function getAllowedKeys(kind: LabelKind): Set<string> {
@@ -150,6 +178,14 @@ export function buildDefaultFields(kind: LabelKind): TemplateField[] {
 export interface UnifiedFieldDef extends FieldDef {
   /** Bu alanın değer ürettiği bağlamlar. */
   kinds: LabelKind[];
+  /**
+   * Bağlama özel başlık — YALNIZ ilk tanımdan FARKLI olan bağlamlar için dolu.
+   * Aynı key birden çok bağlamda yaşayabilir (`weightKg` top'ta "Ağırlık (kg)",
+   * çuvalda "Brüt Ağırlık (kg)"); birleşik katalog ilk tanımı sakladığı için
+   * çuval etiketi tasarlayan kişi jenerik adı görüyor ve alanı bulamıyordu.
+   * Stüdyo paleti seçili bağlamda bunu tercih eder.
+   */
+  labelByKind?: Partial<Record<LabelKind, string>>;
 }
 
 let unifiedCache: UnifiedFieldDef[] | null = null;
@@ -162,6 +198,10 @@ export function getUnifiedCatalog(): UnifiedFieldDef[] {
       const existing = byKey.get(def.key);
       if (existing) {
         existing.kinds.push(kind);
+        // Bağlam başlığı ilk tanımdan farklıysa kaydet (palet onu gösterir).
+        if (def.defaultLabel !== existing.defaultLabel) {
+          existing.labelByKind = { ...existing.labelByKind, [kind]: def.defaultLabel };
+        }
       } else {
         byKey.set(def.key, { ...def, kinds: [kind] });
       }

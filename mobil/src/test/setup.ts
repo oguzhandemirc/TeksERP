@@ -28,6 +28,14 @@ jest.mock("@react-native-community/netinfo", () => ({
   },
 }));
 
+// react-native-keyboard-controller — kütüphanenin RESMİ jest mock'u. AppModal /
+// KeyboardAwareScrollView import zinciri (PickerModal, ekranlar) aksi halde
+// "package doesn't seem to be linked" ile patlar.
+jest.mock("react-native-keyboard-controller", () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("react-native-keyboard-controller/jest"),
+);
+
 // react-native-bluetooth-classic — native köprü testte yok. virtual:true ile
 // modül kurulu olmasa da mock kurulur; BT etiket yolu testlerde no-op kalır.
 jest.mock(

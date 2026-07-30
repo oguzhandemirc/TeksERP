@@ -88,6 +88,10 @@ export interface PoolSackSwatch {
 export interface PoolSack {
   id: string;
   sackNo: string;  weightKg: number | null;
+  /** Tartı izi — kartta "✓ 14:22" (tek dokunuş tartıdan sonra tartıldı göstergesi). */
+  weighedAt: string | null;
+  /** Çuval yorumu — iç serbest not ("kendimiz için"). */
+  notes: string | null;
   branch: { id: string; name: string } | null;
   rollCount: number;
   swatchCount: number;
@@ -326,6 +330,8 @@ export interface SackContentSack {
   id: string;
   sackNo: string;
   seq: number | null;  weightKg: number | null;
+  /** Çuval yorumu — sevkteki çuvalda salt-okunur gösterilir. */
+  notes: string | null;
   rollCount: number;
   swatchCount: number;
   totalQty: number;
@@ -356,7 +362,7 @@ export interface LocatedRoll {
   qualityGrade: string;
   item: { id: string; name: string };
   color: { id: string; name: string; hex: string | null } | null;
-  sack: { id: string; sackNo: string; seq: number | null; weightKg: number | null } | null;
+  sack: { id: string; sackNo: string; seq: number | null; weightKg: number | null; notes: string | null } | null;
   shipment: {
     id: string;
     shipmentNo: string;
@@ -418,6 +424,20 @@ export const packingService = {
   /** Çuval brüt tartısını güncelle (havuz çuvalı). */
   weighSack: (sackId: string, body: { weightKg: number }): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, body).then((r) => r.data),
+
+  /**
+   * Çuval yorumunu yaz/temizle — iç serbest not. Çuvalın DURUMU fark etmez:
+   * sevkiyata atanmış veya sevk edilmiş çuvala da yazılabilir (annotation).
+   * Boş/null → yorum temizlenir.
+   */
+  setSackNotes: (sackId: string, notes: string | null): Promise<ApiResponse<{ sackId: string; notes: string | null }>> =>
+    apiClient
+      .post<ApiResponse<{ sackId: string; notes: string | null }>>(`/shipping/sacks/${sackId}/notes`, { notes })
+      .then((r) => r.data),
+
+  /** Çuval yorumunu oku (tam metin — liste kırpılmış önizleme döner). */
+  getSackNotes: (sackId: string): Promise<ApiResponse<{ notes: string | null }>> =>
+    apiClient.get<ApiResponse<{ notes: string | null }>>(`/shipping/sacks/${sackId}/notes`).then((r) => r.data),
 
   /** Havuz çuvalını sil. withContents=true → dolu çuval içeriğiyle silinir (toplar depoya döner). */
   removeSack: (sackId: string, withContents?: boolean): Promise<ApiResponse<unknown>> =>

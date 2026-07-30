@@ -128,7 +128,7 @@ async function main() {
   let prevConf: { value: unknown } | null | undefined;
   try {
     // 1) Bulunan top → spec doğru
-    const ctx1 = await inv.getRelabelContext(r1.barcode!);
+    const ctx1 = await inv.getRelabelContext({ barcode: r1.barcode! });
     check("Bulundu (success)", ctx1.success === true);
     const d1 = ctx1.data!;
     check("Doğru top (id)", d1?.id === r1.id);
@@ -158,7 +158,7 @@ async function main() {
     check("Serbest top specLocked=false", d1?.specLocked === false && d1?.shipment === null && d1?.sack === null);
 
     // 6) Ham top (color null) toleransı
-    const ctx2 = await inv.getRelabelContext(r2.barcode!);
+    const ctx2 = await inv.getRelabelContext({ barcode: r2.barcode! });
     check("Ham top bulundu", ctx2.success === true);
     check("Ham top color=null (çökmedi)", ctx2.data?.colorId === null && ctx2.data?.color === null);
     check("Ham top aday müşteri yok", ctx2.data?.candidateCustomers.length === 0);
@@ -167,7 +167,7 @@ async function main() {
     const sackId = ((await ship.openSack({ customerId: customer.id })) as { data: { id: string } }).data.id;
     sackIds.push(sackId);
     await ship.scanIntoSack({ sackId, barcode: r3.barcode! });
-    const ctxDepot = await inv.getRelabelContext(r3.barcode!);
+    const ctxDepot = await inv.getRelabelContext({ barcode: r3.barcode! });
     check("Depodaki çuvaldaki top specLocked=false (çuval kilitlemez)", ctxDepot.data?.specLocked === false);
     check("Depo çuvalı sack set + shipment=null", ctxDepot.data?.sack != null && ctxDepot.data?.shipment === null);
 
@@ -179,12 +179,12 @@ async function main() {
     await prisma.systemSetting.upsert({ where: { key: CONF_KEY }, create: { key: CONF_KEY, value: true }, update: { value: true } });
     const shipmentId = ((await ship.createShipment({ sackIds: [sackId], customerId: customer.id })) as { data: { id: string } }).data.id;
     shipmentIds.push(shipmentId);
-    const ctxShipped = await inv.getRelabelContext(r3.barcode!);
+    const ctxShipped = await inv.getRelabelContext({ barcode: r3.barcode! });
     check("Sevkiyattaki top specLocked=true", ctxShipped.data?.specLocked === true);
     check("Sevkiyattaki top shipment.status=PLANNED", ctxShipped.data?.shipment?.status === "PLANNED");
 
     // 7) Bulunamayan barkod
-    const ctxMiss = await inv.getRelabelContext(`TEST-RLBC-YOK-${ts}`);
+    const ctxMiss = await inv.getRelabelContext({ barcode: `TEST-RLBC-YOK-${ts}` });
     check("Bulunamayan → success=false", ctxMiss.success === false && ctxMiss.data === null);
   } finally {
     // Sevk onayı ayarını eski değerine döndür (5b geçici açmıştı).

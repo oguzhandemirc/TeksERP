@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "../services/audit.service";
+import { classifyPoolTimeout, recordPoolTimeout, getPoolHealth } from "../lib/pool-health";
 import "../types/express-augment";
 
 /**
@@ -94,6 +95,37 @@ function extractUniqueColumn(meta: Record<string, unknown> | undefined): string 
   return null;
 }
 
+/**
+ * 503 sözleşmesi TEK KAYNAK. İki dal aynı yanıtı döndürmek zorunda (havuz zaman
+ * aşımı + Prisma P2028); metin ikiye ayrılırsa biri sessizce bayatlar.
+ */
+const SERVER_BUSY_MESSAGE = "Sunucu şu anda yoğun. Lütfen birkaç saniye sonra tekrar deneyin.";
+
+/**
+ * SYSTEM/ERROR audit recordId'si — havuz zaman aşımı. TARİHSEL satırlardan
+ * AYIRT EDİLEBİLİR olması load-bearing: 2026-07-23 ve 2026-07-28 olayları
+ * generic dala düştüğü için `recordId='Error'` ile yazıldı. İki sorgu da çalışır:
+ *   eski:  recordId='Error' AND newData->>'message' ILIKE '%timeout%connect%'
+ *   yeni:  recordId='POOL_TIMEOUT'
+ * (Aynı recordId kullanılsaydı iki dönem birbirine karışırdı.)
+ */
+const POOL_TIMEOUT_RECORD_ID = "POOL_TIMEOUT";
+
+/**
+ * Geçici sunucu tıkanıklığı yanıtı (havuz / transaction zaman aşımı).
+ *
+ * Retry-After bugün HİÇBİR istemci tarafından okunmuyor (Electron react-query
+ * 5xx'te bir kez, mobil `stationRetry` jitter'lı üç kez dener; ikisi de header'a
+ * bakmaz) ve CORS `exposedHeaders` listesinde olmadığı için renderer OKUYAMAZ
+ * bile. Yine de 503'ün standart sözleşmesi budur ve curl/proxy seviyesinde
+ * teşhisi netleştirir. Bir istemci gerçekten uyacaksa app.ts'teki
+ * `exposedHeaders`'a da eklenmeli.
+ */
+function respondServerBusy(res: Response): void {
+  res.setHeader("Retry-After", "3");
+  res.status(503).json({ success: false, message: SERVER_BUSY_MESSAGE });
+}
+
 export const errorHandler = (
   err: Error,
   req: Request,
@@ -126,6 +158,55 @@ export const errorHandler = (
       success: false,
       message: "İstek gövdesi çok büyük (1MB sınırı aşıldı). Daha az kayıtla tekrar deneyin.",
     });
+    return;
+  }
+
+  // ---------------------------------------------------------------------------
+  // pg havuzu zaman aşımı (ÇIPLAK Error) → 503 + tekrar-dene sinyali
+  // ---------------------------------------------------------------------------
+  // Prisma 7 + @prisma/adapter-pg'de Rust query-engine YOK → havuz hatası ASLA
+  // P2024 üretmez; aşağıdaki P2024 dalı bu kurulumda ULAŞILAMAZ (doğrulandı:
+  // `grep -rl P2024 node_modules/@prisma/` → sıfır dosya). pg-pool iki çıplak
+  // `Error` fırlatır, adapter'ın convertDriverError'ı (kod/severity taşımadıkları
+  // için) onları HAM geçirir ve Prisma da sarmalamaz → eskiden en alttaki generic
+  // dala düşüp 500 "Sunucu hatası oluştu." dönüyorlardı.
+  //
+  // Canlıda iki kez yaşandı — 2026-07-23 14:05:34 ve 2026-07-28 23:59:19 — ikisi
+  // de havuz DOLULUĞU değil SOĞUK CONNECT kaynaklı (bkz. lib/prisma.ts havuz
+  // yorumu). İstemci verisi hatası DEĞİL → 503, P2028 ile aynı sözleşme.
+  //
+  // KONUM: AppError / SyntaxError / 413'ten SONRA (onlar önce dönmeli), Prisma
+  // bloğundan ÖNCE. İki dal kanıtlanabilir şekilde AYRIK: classifyPoolTimeout
+  // `err.constructor === Error` istiyor, bir Prisma hatası bunu asla geçemez.
+  const poolTimeoutKind = classifyPoolTimeout(err);
+  if (poolTimeoutKind) {
+    recordPoolTimeout(poolTimeoutKind, err.message);
+    const p = getPoolHealth();
+    console.error(
+      `[error.middleware] Havuz zaman aşımı (${poolTimeoutKind}): ${err.message} — ` +
+        `total=${p.poolTotalCount} idle=${p.poolIdleCount} waiting=${p.poolWaitingCount}/${p.poolMax}`
+    );
+    void AuditService.logEvent({
+      category: "SYSTEM",
+      action: "ERROR",
+      userId: req.user?.userId,
+      recordId: POOL_TIMEOUT_RECORD_ID,
+      ipAddress: req.ip ?? null,
+      payload: {
+        kind: poolTimeoutKind,
+        message: err.message,
+        method: req.method,
+        path: req.originalUrl,
+        // Teşhis kilidi: doygunluk mu soğuk-connect mi? Bir daha "acaba havuz
+        // dolu muydu" diye tahmin etmeyelim — olay anındaki sayaçlar burada.
+        poolTotal: p.poolTotalCount,
+        poolIdle: p.poolIdleCount,
+        poolWaiting: p.poolWaitingCount,
+        poolMax: p.poolMax,
+        stack: err.stack?.split("\n").slice(0, 8).join("\n"),
+      },
+    });
+    respondServerBusy(res);
     return;
   }
 
@@ -257,8 +338,14 @@ export const errorHandler = (
       return;
     }
 
-    // F21: P2024 (bağlantı havuzu zaman aşımı) / P2028 (transaction zaman aşımı) —
-    // sunucu tarafı tıkanıklık → 503 + SYSTEM/ERROR audit (5xx izleme/metriğe düşsün).
+    // F21: P2028 (interaktif transaction zaman aşımı) — sunucu tarafı tıkanıklık
+    // → 503 + SYSTEM/ERROR audit (5xx izleme/metriğe düşsün).
+    //
+    // P2024 (havuz zaman aşımı) bu kurulumda ÖLÜ: driver adapter kullanıldığı için
+    // Rust havuzu yok, Prisma P2024 ÜRETEMEZ (`grep -rl P2024 node_modules/@prisma/`
+    // → sıfır dosya). Testi savunma amaçlı BIRAKTIK (adapter'sız bir yapılandırmaya
+    // dönülürse çalışsın). GERÇEK havuz zaman aşımı yukarıdaki classifyPoolTimeout
+    // dalında yakalanır — ÇIPLAK Error olarak gelir, buraya hiç uğramaz.
     if (prismaErr.code === "P2024" || prismaErr.code === "P2028") {
       console.error(`[error.middleware] Prisma ${prismaErr.code} (sunucu tıkanıklık):`, prismaErr.meta);
       void AuditService.logEvent({
@@ -269,10 +356,7 @@ export const errorHandler = (
         ipAddress: req.ip ?? null,
         payload: { code: prismaErr.code, method: req.method, path: req.originalUrl },
       });
-      res.status(503).json({
-        success: false,
-        message: "Sunucu şu anda yoğun. Lütfen birkaç saniye sonra tekrar deneyin.",
-      });
+      respondServerBusy(res); // gövde/mesaj AYNI (SERVER_BUSY_MESSAGE) + Retry-After
       return;
     }
 

@@ -299,6 +299,7 @@ export const ENUM_LABELS: Record<string, string> = {
   ROLL_RAW: "Ham Top",
   ROLL_FINISHED: "Bitmiş Top",
   SWATCH: "Kartela",
+  SACK: "Çuval",
   RASTER_HTML: "Raster (HTML)",
   DIRECT_THERMAL: "Direkt Termal",
   THERMAL_TRANSFER: "Termal Transfer (Ribonlu)",

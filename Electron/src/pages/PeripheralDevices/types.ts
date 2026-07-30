@@ -11,7 +11,7 @@ export type PeripheralReadMode = "POLL" | "STREAM";
 /** Yönlendirme BAĞLAMI (baskı anındaki iş bağlamı) — şablonun kimliği DEĞİL.
  *  Etiket Stüdyosu v2 tek-havuz modeli: her bağlama havuzdaki HERHANGİ bir
  *  şablon atanabilir (LabelTemplate.kind yalnız legacy bilgi, null olabilir). */
-export type RouteLabelKind = "ROLL_RAW" | "ROLL_FINISHED" | "SWATCH";
+export type RouteLabelKind = "ROLL_RAW" | "ROLL_FINISHED" | "SWATCH" | "SACK";
 
 export interface PeripheralTemplateRouteRef {
   kind: RouteLabelKind;

@@ -151,10 +151,15 @@ enum ScanType {
 /// ROLL_RAW: KK1 ham mal kabul (renksiz, sade alanlar).
 /// ROLL_FINISHED: Tambur sonrası bitmiş kumaş (renk + müşteri + sipariş + alias).
 /// SWATCH: Kartela etiketi.
+/// SACK: Çuval etiketi — barkod/QR = `Sack.sackNo` (CV+GGAAYY+NNNN). Sack'te ayrı
+///   `barcode` kolonu YOK; code-format.ts "insan-okur kod = tarama barkodu, tek kod"
+///   kuralı geçerli. Çuval içeriği karışık olabildiği için ürün/renk alanı YOK —
+///   toplam metraj/kg/top adedi + müşteri + (opsiyonel) çuval yorumu basılır.
 enum LabelKind {
   ROLL_RAW
   ROLL_FINISHED
   SWATCH
+  SACK
 }
 
 /// Yazıcı dili — etiket render driver registry anahtarı. Faz-1: yalnız
@@ -1020,6 +1025,11 @@ model Roll {
   @@index([createdMachineId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
+  // Envanter sekmeleri: status filter + updatedAt desc sort ("son hareket" sıralaması).
+  // Ham Stok DIŞINDAKİ sekmeler bunu kullanır — topun oraya GELİŞ anı createdAt değil
+  // (kurtarma / kapanış dispozisyonu / fason kabulü haftalar önce yaratılmış topu bugün
+  // depoya alır). createdAt sıralı listede o top binlerce satırın altına düşerdi.
+  @@index([status, updatedAt])
   // Ham/işlenmiş filter: WHERE "colorId" IS NULL (ham) — yüksek seçicilikli partial index
   // (Postgres native; Prisma şemasında native değil ama @@index runtime'da partial olmadan
   // eklenir; ileride raw migration ile partial CONCURRENTLY üretmek gerekebilir.)
@@ -2514,6 +2524,17 @@ model Sack {
   // O-19: tartı izi — kim tarttı, ne zaman.
   weighedById String?   @db.Uuid
   weighedAt   DateTime?
+  // Çuval yorumu — İÇ serbest not ("kendimiz için"): "ölçü şüpheli", "çuval yırtık,
+  // aktarılacak" gibi. Ne ölçüm ne içerik → iki bilinçli sonuç:
+  //  1) `resetSackWeightsTx` bu alana DOKUNMAZ (içerik değişince kg bayatlar, not bayatlamaz).
+  //  2) `touchWarehouseSackTx` guard'ı UYGULANMAZ — sevkiyata atanmış/sevk edilmiş çuvala da
+  //     yorum yazılabilir (annotation; `Shipment.dispatchNote` ile aynı gerekçe). Guard'ı
+  //     "eksik" sanıp EKLEME — özelliği sessizce öldürür (kök CLAUDE.md'de yazılı istisna).
+  // Gösterimi üç yerde de OPSİYONEL + varsayılan KAPALI: (a) çuval etiketi (etiket
+  // stüdyosunda `sackNote` alanı), (b) sevk irsaliyesi çuval tablosu "Açıklama" kolonu
+  // (kalıcı toggle VEYA tek-seferlik baskı bayrağı), (c) iç ekranlar (mobil + admin).
+  // Sevk belgesine ANNOTATION olarak girer — donmuş çekirdeğe yazılmaz, baskıda canlı çözülür.
+  notes       String?   @db.VarChar(500)
 
   // Relations
   customer    Customer?        @relation(fields: [customerId], references: [id])

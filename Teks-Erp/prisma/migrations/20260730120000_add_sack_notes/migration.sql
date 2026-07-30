@@ -1,0 +1,12 @@
+-- Çuval yorumu (Sack.notes): çuvala kayıtlı İÇ serbest not — "kendimiz için".
+-- Etikette / sevk irsaliyesinde gösterimi opsiyonel ve VARSAYILAN KAPALI.
+--
+-- Eklemeli + nullable, DEFAULT verilmiyor → tablo rewrite YOK, ACCESS EXCLUSIVE kilidi
+-- milisaniye mertebesinde. CANLI veriye dokunmaz (mevcut satırlar NULL), geri alınabilir.
+--
+-- ⚠️ ELLE YAZILDI, `prisma migrate dev` ÜRETMEDİ. Sebep: `sacks` tablosunda
+-- @@unique([id, shipmentId]) üstüne kurulu 2 adet DEFERRABLE raw-SQL composite FK var
+-- (rolls/swatches ↔ sacks tutarlılık invariant'ı, schema.prisma:2532-2538). Prisma'nın
+-- diff motoru bunları datamodel'de göremediği için her migration'da DROP etmek ister.
+-- Bu migration'ı `db execute` + `migrate resolve` ile uygula; `migrate dev` KOŞMA.
+ALTER TABLE "sacks" ADD COLUMN "notes" VARCHAR(500);

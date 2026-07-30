@@ -1030,7 +1030,9 @@ export class LabelTemplateService {
         fields: buildDefaultFields(kind),
         lineStepMm: 1.5, // satırlar arası dengeli ek boşluk (mm)
         qrScale: 5, // okunur QR (~20mm ayak izi)
-        lengthBanner: kind !== LabelKind.SWATCH, // sağ dikey metraj bandı — top'ta açık
+        // Sağ dikey metraj bandı — yalnız TOP etiketinde anlamlı. Kartelada boy (cm),
+        // çuvalda toplam metraj var ama bant tek-top vurgusu için tasarlandı → kapalı.
+        lengthBanner: kind !== LabelKind.SWATCH && kind !== LabelKind.SACK,
       },
     };
   }

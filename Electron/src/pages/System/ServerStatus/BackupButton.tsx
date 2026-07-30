@@ -7,9 +7,10 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import apiClient from "@/services/apiClient";
 
 /**
- * "Şimdi yedek al" — backend pg_dump ÇALIŞTIRMAZ, gece yedek görevini tetikler
- * (ayrı SYSTEM prosesi). Yalnızca kurulu Windows sunucusunda çalışır; geliştirme
- * ortamında backend 400 + açıklama döner (interceptor toast'lar).
+ * "Şimdi yedek al" — backend yedeği başlatır ve hemen döner; pg_dump ayrı bir child
+ * process'te koşar (backend bloklanmaz). Sonuç Yedekler ekranındaki "son yedek
+ * denemesi" kutusunda görünür. BACKUP_DIR tanımsızsa backend 400 + açıklama döner
+ * (interceptor toast'lar) — geliştirme ortamında beklenen davranış.
  */
 export function BackupButton() {
   const [open, setOpen] = useState(false);
@@ -49,7 +50,7 @@ export function BackupButton() {
         open={open}
         onOpenChange={setOpen}
         title="Şimdi yedek al"
-        description="Veritabanının tam yedeği alınır (gece yedek görevi tetiklenir). İşlem birkaç dakika sürebilir ve sistemi bir miktar yavaşlatabilir — yoğun saatlerde değil, mümkünse mesai dışında almanız önerilir."
+        description="Veritabanının tam yedeği alınır, bütünlüğü doğrulanır ve offsite kopyası atılır. İşlem birkaç dakika sürebilir ve sistemi bir miktar yavaşlatabilir — yoğun saatlerde değil, mümkünse mesai dışında almanız önerilir."
         confirmLabel="Yedeği başlat"
         onConfirm={() => mutation.mutate()}
         isPending={mutation.isPending}

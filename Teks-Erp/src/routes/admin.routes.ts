@@ -11,6 +11,7 @@ import { PermissionManagementService } from "../services/permission-management.s
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
+import { getRestoreImpact } from "../services/backup-impact.service";
 import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
 import {
   getLatencyPersistHealth,
@@ -1119,15 +1120,16 @@ router.put(
  * /api/admin/backup:
  *   post:
  *     tags: [Admin]
- *     summary: Şimdi yedek al (gece yedek görevini tetikler)
+ *     summary: Şimdi yedek al (pg_dump → doğrula → rotasyon → offsite)
  *     description: >
- *       Backend pg_dump çalıştırmaz; kurulumdaki "TeksERP Gece Yedek" Görev
- *       Zamanlayıcı görevini tetikler. Ağır iş ayrı SYSTEM prosesinde koşar.
- *       Yalnızca kurulu Windows sunucusunda çalışır.
+ *       Yedeği başlatır ve HEMEN döner (büyük DB'de dakikalar sürer). pg_dump ayrı
+ *       bir child process'te koşar, backend bloklanmaz. Sonuç GET /api/admin/backups
+ *       yanıtındaki `running` / `lastResult` alanlarından izlenir. BACKUP_DIR ve
+ *       DATABASE_URL tanımlı olmalıdır.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       202: { description: Yedek başlatıldı }
- *       400: { description: Başlatılamadı (Windows değil / görev yok) }
+ *       400: { description: Başlatılamadı (yedek sürüyor / BACKUP_DIR yok / DATABASE_URL çözülemedi) }
  */
 router.post(
   "/backup",
@@ -1135,7 +1137,7 @@ router.post(
   requirePermission("admin:settings"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await triggerManualBackup();
+      const result = triggerManualBackup();
       // İz: kim ne zaman manuel yedek tetikledi (best-effort).
       await AuditService.logEvent({
         category: "SYSTEM",
@@ -1218,6 +1220,67 @@ router.get(
         payload: { name },
       });
       res.download(abs, name);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/backups/{name}/restore-impact:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Bir yedeğe dönülürse ne kaybedilir (geri yükleme etki önizlemesi)
+ *     description: >
+ *       Yedeğin kesim anından SONRA oluşmuş kayıtları sayar ve audit izinden
+ *       toplam değişiklik hacmini çıkarır. Geri yükleme onay dialogu bunu gösterir;
+ *       kök CLAUDE.md'nin "yıkıcı işlemde etkilenen kayıtları somut listele"
+ *       kuralının geri yükleme karşılığıdır. Sayımlar yalnız INSERT'leri yakalar —
+ *       UPDATE'ler audit rollup'ında görünür (yanıttaki `audit` alanı).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Etki önizlemesi }
+ *       403: { description: Yetki yok (admin:settings + admin:users gerekli) }
+ *       404: { description: Yedek dosyası bulunamadı }
+ */
+router.get(
+  "/backups/:name/restore-impact",
+  verifyToken,
+  // Zincir /backups ve /download ile BİREBİR AYNI (F287). Zayıflatmayın: yalnız
+  // her ikisine sahip aktör zaten geri yükleyebilir; ayrı bir eşik bırakmak
+  // "önizleme görünüyor ama komut kurulamıyor" gibi kafa karıştırıcı bir
+  // kısmi-erişim durumu üretir.
+  requirePermission("admin:settings"),
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const name = req.params.name as string;
+      const data = await getRestoreImpact(name);
+      if (!data) {
+        next(AppError.notFound("Yedek dosyası bulunamadı."));
+        return;
+      }
+      // Bu iz KRİTİK: gerçek geri yükleme backend'de çalışmadığı için "kim, hangi
+      // yedeğe dönmeyi düşündü" sorusunun tek cevabı burası. Best-effort.
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "BACKUP_RESTORE_PREVIEW",
+        userId: req.user?.userId ?? null,
+        payload: {
+          name,
+          cutoff: data.cutoff.at,
+          cutoffSource: data.cutoff.source,
+          totalCreated: data.totalCreated,
+          canRestore: data.canRestore,
+        },
+      });
+      res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);
     }

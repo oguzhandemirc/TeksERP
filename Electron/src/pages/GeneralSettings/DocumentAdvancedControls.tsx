@@ -96,28 +96,42 @@ function TableColumnsPanel({
 }) {
   const colCfg = cfg?.columns?.[table.key] ?? {};
   const hidden = new Set(colCfg.hidden ?? []);
+  // OPT-IN (defaultHidden) kolonlar ALLOWLIST'le yönetilir: `shown` içermiyorsa
+  // basılmaz ve o kolonda `hidden` yok sayılır. Böylece yeni bir iç-veri kolonu
+  // eklemek mevcut belgelerde kendiliğinden görünür olmaz.
+  const shown = new Set(colCfg.shown ?? []);
+  const isOn = (c: DocTableDef["columns"][number]) =>
+    c.defaultHidden ? shown.has(c.key) : !hidden.has(c.key);
   // Görünen sıra: order verilmişse ona göre, bilinmeyenler kayıt sırasıyla sona.
   const orderPos = new Map((colCfg.order ?? []).map((k, i) => [k, i]));
   const ordered = [...table.columns].sort(
     (a, b) => (orderPos.get(a.key) ?? 999) - (orderPos.get(b.key) ?? 999),
   );
 
-  const write = (nextHidden: Set<string>, nextOrder: string[]) =>
+  const write = (nextHidden: Set<string>, nextOrder: string[], nextShown: Set<string>) =>
     patch({
       columns: {
         ...cfg?.columns,
         [table.key]: {
           ...(nextHidden.size ? { hidden: [...nextHidden] } : {}),
           ...(nextOrder.length ? { order: nextOrder } : {}),
+          ...(nextShown.size ? { shown: [...nextShown] } : {}),
         },
       },
     });
 
-  const toggle = (key: string) => {
+  const toggle = (c: DocTableDef["columns"][number]) => {
+    if (c.defaultHidden) {
+      const next = new Set(shown);
+      if (next.has(c.key)) next.delete(c.key);
+      else next.add(c.key);
+      write(hidden, colCfg.order ?? [], next);
+      return;
+    }
     const next = new Set(hidden);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    write(next, colCfg.order ?? []);
+    if (next.has(c.key)) next.delete(c.key);
+    else next.add(c.key);
+    write(next, colCfg.order ?? [], shown);
   };
 
   const move = (index: number, dir: -1 | 1) => {
@@ -129,7 +143,7 @@ function TableColumnsPanel({
     if (a === undefined || b === undefined) return;
     keys[index] = b;
     keys[j] = a;
-    write(hidden, keys);
+    write(hidden, keys, shown);
   };
 
   return (
@@ -141,13 +155,18 @@ function TableColumnsPanel({
             <input
               type="checkbox"
               id={`col-${table.key}-${c.key}`}
-              checked={!hidden.has(c.key)}
+              checked={isOn(c)}
               disabled={disabled}
-              onChange={() => toggle(c.key)}
+              onChange={() => toggle(c)}
               className="h-4 w-4"
             />
             <label htmlFor={`col-${table.key}-${c.key}`} className="flex-1">
               {c.label}
+              {c.defaultHidden && (
+                <span className="ml-1 text-[10px] text-muted-foreground">
+                  (varsayılan kapalı — baskı sırasında tek seferlik de açılabilir)
+                </span>
+              )}
             </label>
             <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0"
               disabled={disabled || i === 0} onClick={() => move(i, -1)}>

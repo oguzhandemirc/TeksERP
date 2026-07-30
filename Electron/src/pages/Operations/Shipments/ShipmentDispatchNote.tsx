@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { MessageSquareText, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,10 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   // "Güncel şablonla" — içerik donuk, görünüm canlı Belge Şablonları ayarından.
   const [currentTemplate, setCurrentTemplate] = useState(false);
+  // Tek seferlik "çuval notlarını bu baskıda göster" — Belge Kişiselleştirme'deki
+  // KALICI kolon ayarını EZER (pure OR), hiçbir yere yazılmaz (ne ayara ne snapshot'a),
+  // yeni belge versiyonu doğurmaz. Diyalog kapanınca sıfırlanır.
+  const [rowNotes, setRowNotes] = useState(false);
 
   // Belge meta'sı (versiyon çubuğu + resmî/taslak ayrımı). data=null → TASLAK aşaması.
   const docQuery = useQuery({
@@ -57,15 +61,17 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
   // Baskı/önizleme HTML'i (tek kaynak). Versiyon seçiliyse o versiyon; değilse
   // güncel (donmuş varsa resmî, yoksa ?draft=1 ile TASLAK).
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", DOC_TYPE, shipmentId, selectedVersion, currentTemplate],
+    queryKey: ["printed-doc-html", DOC_TYPE, shipmentId, selectedVersion, currentTemplate, rowNotes],
     queryFn: () =>
       selectedVersion != null
         ? printedDocumentService.getHtml(DOC_TYPE, shipmentId!, selectedVersion, {
             currentTemplate,
+            rowNotes,
           })
         : printedDocumentService.getHtml(DOC_TYPE, shipmentId!, undefined, {
             draft: true,
             currentTemplate,
+            rowNotes,
           }),
     enabled: open && Boolean(shipmentId),
     staleTime: 0,
@@ -114,6 +120,24 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
               void qc.invalidateQueries({ queryKey: ["printed-doc-html", DOC_TYPE, shipmentId] })
             }
           />
+        )}
+        {/* Tek seferlik çuval notu — KALICI kolon ayarını ezer, ayara yazılmaz.
+            Bu diyalog sevk irsaliyesinin TEK baskı yeri; PrintedDocDialog'a
+            SHIPMENT_DISPATCH hiç düşmüyor, o yüzden seçenek burada. */}
+        {shipmentId && (
+          <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={rowNotes}
+              onChange={(e) => setRowNotes(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            <MessageSquareText className="h-3.5 w-3.5" />
+            Çuval notlarını bu baskıda göster
+            <span className="text-[10px]">
+              (kalıcı ayar değişmez; notu olan çuval yoksa etkisi yok)
+            </span>
+          </label>
         )}
 
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">

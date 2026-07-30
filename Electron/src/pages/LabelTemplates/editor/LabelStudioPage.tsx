@@ -27,7 +27,7 @@ import { TemplateTestPrintDialog } from "../TemplateTestPrintDialog";
 import { useEditorState } from "./useEditorState";
 import { useCanvasLint } from "./useCanvasLint";
 import { CanvasStage } from "./CanvasStage";
-import { ElementPalette } from "./ElementPalette";
+import { ElementPalette, fieldLabel } from "./ElementPalette";
 import { LayerPanel } from "./LayerPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { VariantTabs } from "./VariantTabs";
@@ -234,9 +234,19 @@ export function LabelStudioPage() {
                       </div>
                       <div className="border-t pt-3">
                         <ElementPalette
-                          onAddField={(f) => state.addElement(makeElement("field", { x: 5, y: 5 }, { bind: f.key, label: f.defaultLabel }))}
+                          // Eleman başlığı da SEÇİLİ BAĞLAMIN adıyla doğar (çuvalda
+                          // "Brüt Ağırlık (kg)", topta "Ağırlık (kg)").
+                          onAddField={(f) =>
+                            state.addElement(
+                              makeElement("field", { x: 5, y: 5 }, {
+                                bind: f.key,
+                                label: fieldLabel(f, previewKind),
+                              }),
+                            )
+                          }
                           onAddStructural={addStructural}
                           onAddIcon={addIcon}
+                          previewKind={previewKind}
                         />
                       </div>
                       <div className="border-t pt-3">

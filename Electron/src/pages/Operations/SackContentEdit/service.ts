@@ -5,12 +5,12 @@ import type {
   AddKartelaResult,
   CreatedShipment,
   CreateShipmentPreview,
-  CustomerPool,
   KartelaStockGroup,
   LocatedRoll,
   OpenedSack,
   OpenOrder,
   PickListRow,
+  SackContentDumpSack,
   SackContents,
   SackSearchRow,
   ScanResult,
@@ -25,6 +25,13 @@ export interface ReassignResult {
   branchId: string | null;
   branchName: string | null;
   branchCode: string | null;
+  /**
+   * Müşteri değişimi yüzünden etiketi bayatlayan (labelDirty işaretlenen) top adedi.
+   * YALNIZ yeni/eski müşterinin ETİKET ŞABLONU (CustomerTemplateRoute) farklıysa > 0 —
+   * etikete müşteri adı basılmadığı için müşteri değişimi tek başına etiketi
+   * geçersiz kılmaz.
+   */
+  labelsStale?: number;
 }
 
 /**
@@ -59,6 +66,16 @@ export const sackHubService = {
   pickList: (sackIds: string[]): Promise<ApiResponse<PickListRow[]>> =>
     apiClient.post<ApiResponse<PickListRow[]>>(`/api/shipping/sack-search/pick-list`, { sackIds }).then((r) => r.data),
 
+  /**
+   * İçerik dökümü — seçilen çuvalların TOP BAZLI dökümü. Çeki listesinden farkı:
+   * orası ürün·renk·en bazında GRUPLU özet döner, bu uç her topu ayrı satır verir
+   * (barkod dahil). Excel/PDF/yazdır içerik dökümünün kaynağı.
+   */
+  contentDump: (sackIds: string[]): Promise<ApiResponse<SackContentDumpSack[]>> =>
+    apiClient
+      .post<ApiResponse<SackContentDumpSack[]>>(`/api/shipping/sack-search/content-dump`, { sackIds })
+      .then((r) => r.data),
+
   // ── Sipariş rehberi + müşteri havuzu ───────────────────────────────────────
   /** Açık siparişler + depo karşılaması (sevkiyat sipariş seçimi rehberi). */
   listOpenOrders: (params?: { customerId?: string; branchId?: string }): Promise<ApiResponse<OpenOrder[]>> => {
@@ -68,12 +85,6 @@ export const sackHubService = {
     const qs = q.toString();
     return apiClient.get<ApiResponse<OpenOrder[]>>(`/api/shipping/open-orders${qs ? `?${qs}` : ""}`).then((r) => r.data);
   },
-
-  /** Müşterinin depo çuvalları (+içerik) — taşıma hedefleri için. */
-  listCustomerPool: (customerId: string): Promise<ApiResponse<CustomerPool>> =>
-    apiClient
-      .get<ApiResponse<CustomerPool>>(`/api/shipping/pool/sacks?customerId=${encodeURIComponent(customerId)}`)
-      .then((r) => r.data),
 
   // ── Çuval içerik düzenleme (depodaki çuval — her zaman düzenlenebilir) ──────
   /** Yeni depo çuvalı aç — müşteri/şube OPSİYONEL (müşterisiz genel stok da olur). */
@@ -92,6 +103,35 @@ export const sackHubService = {
   /** Çuvalı tart (brüt kg). */
   weighSack: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/api/shipping/sacks/${sackId}/weigh`, { weightKg }).then((r) => r.data),
+
+  /**
+   * Çuvalı böl — seçili topları YENİ çuvala ayır. Backend ATOMİK (tek tx: çuval aç
+   * + taşı + iki çuvalın tartısını sıfırla); istemcide openSack+move iki-çağrısı
+   * yapılmaz, yarım kalırsa ortada boş çuval kalırdı. Kaynakta en az bir top kalmalı.
+   */
+  splitSack: (
+    sackId: string,
+    rollIds: string[],
+  ): Promise<ApiResponse<{ sackId: string; sackNo: string; moved: number }>> =>
+    apiClient
+      .post<ApiResponse<{ sackId: string; sackNo: string; moved: number }>>(
+        `/api/shipping/sacks/${sackId}/split`,
+        { rollIds },
+      )
+      .then((r) => r.data),
+
+  /** Çuval notunu oku (tam metin). */
+  getSackNotes: (sackId: string): Promise<ApiResponse<{ notes: string | null }>> =>
+    apiClient.get<ApiResponse<{ notes: string | null }>>(`/api/shipping/sacks/${sackId}/notes`).then((r) => r.data),
+
+  /**
+   * Çuval notunu yaz/temizle — iç serbest not. Çuvalın DURUMU fark etmez:
+   * sevkiyata atanmış veya sevk edilmiş çuvala da yazılır (annotation, sürüm doğurmaz).
+   */
+  setSackNotes: (sackId: string, notes: string | null): Promise<ApiResponse<{ sackId: string; notes: string | null }>> =>
+    apiClient
+      .post<ApiResponse<{ sackId: string; notes: string | null }>>(`/api/shipping/sacks/${sackId}/notes`, { notes })
+      .then((r) => r.data),
 
   /** Depodaki çuvalın müşterisini/şubesini değiştir (sevkiyata girmemiş çuval; null=müşterisiz).
    *  Yanıt çözülmüş ad/kodu döner → istemci editör rozetini fetch'siz günceller. */

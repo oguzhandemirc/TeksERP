@@ -18,9 +18,13 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
+import { isDailyCode } from "../utils/code-format";
 import { buildTurkishSearch } from "../utils/query-parser";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
+
+/** Çuval-seçimli salt-okunur dökümlerde (çeki listesi, içerik dökümü) üst sınır. */
+const MAX_SELECTED_SACKS = 200;
 
 /** Tek değer / dizi → temiz ID dizisi (filtre semantiği: aynı alan içinde VEYA). */
 function toIdList(v: string | string[] | undefined): string[] {
@@ -131,6 +135,10 @@ export class SackSearchService {
         seq: true,
         weightKg: true,
         createdAt: true,
+        // Yorum listede yalnız KIRPILMIŞ önizleme olarak döner (aşağıda notePreview) —
+        // 500 karakterlik metni sayfa başına 100 satır çekmek payload'ı şişirir
+        // (perf kuralı #7). Tam metin çuval detayında / getSackNotes ile alınır.
+        notes: true,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         shipment: {
@@ -189,6 +197,9 @@ export class SackSearchService {
         seq: s.seq,
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
         createdAt: s.createdAt,
+        // Yorum var mı (💬 göstergesi) + ilk 80 karakter (satır ipucu).
+        hasNote: !!s.notes,
+        notePreview: s.notes ? s.notes.slice(0, 80) : null,
         customer: s.customer,
         branch: s.branch,
         shipment: s.shipment, // null = havuzda; dolu = sevkiyatta
@@ -220,6 +231,12 @@ export class SackSearchService {
         sackNo: true,
         seq: true,
         weightKg: true,
+        notes: true, // tek çuval → tam yorum (liste aksine kırpılmaz)
+        // Çuvalın KENDİ müşteri/şubesi (sevkiyattan bağımsız) — depodaki çuvalda
+        // sevkiyat yok, müşteri yine olabilir. İçerik dökümü başlığı bunu basar;
+        // aksi halde istemci listeden gelen (bayatlayabilen) prop'a mahkûm kalır.
+        customer: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         shipment: {
           select: {
             id: true,
@@ -237,6 +254,9 @@ export class SackSearchService {
             currentQty: true,
             width: true,
             qualityGrade: true,
+            // Etiket bayat mı — müşteri değişimi/relabel sonrası "yeniden bas"
+            // uyarısını ve toplu yeniden-basma aksiyonunu besler.
+            labelDirty: true,
             item: { select: { id: true, name: true } },
             color: { select: { id: true, name: true, hex: true } },
           },
@@ -266,7 +286,9 @@ export class SackSearchService {
   async getPickList(sackIds: string[]): Promise<ApiResponse<unknown>> {
     const ids = [...new Set(sackIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir çuval seçilmeli");
-    if (ids.length > 200) throw AppError.badRequest("Bir çeki listesinde en fazla 200 çuval olabilir");
+    if (ids.length > MAX_SELECTED_SACKS) {
+      throw AppError.badRequest(`Bir çeki listesinde en fazla ${MAX_SELECTED_SACKS} çuval olabilir`);
+    }
 
     const sacks = await prisma.sack.findMany({
       where: { id: { in: ids } },
@@ -277,6 +299,10 @@ export class SackSearchService {
         sackNo: true,
         seq: true,
         weightKg: true,
+        // Çeki listesi bir İÇ çalışma kağıdı (müşteriye gitmez) → notun TAM metni
+        // döner (liste uçlarındaki 80 karakter kırpması burada gereksiz; kapsam
+        // seçili çuvallarla sınırlı, en fazla 200). Basılması İSTEMCİDE opsiyonel.
+        notes: true,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         shipment: {
@@ -322,6 +348,7 @@ export class SackSearchService {
         sackNo: s.sackNo,
         seq: s.seq,
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
+        notes: s.notes,
         customer: s.customer,
         branch: s.branch,
         shipment: s.shipment,
@@ -336,6 +363,98 @@ export class SackSearchService {
   }
 
   /**
+   * İÇERİK DÖKÜMÜ — seçilen çuvalların TOP BAZLI dökümü (Excel/PDF/yazdır kaynağı).
+   *
+   * Çeki listesinden (`getPickList`) farkı: orası ürün·renk·en bazında GRUPLU özet
+   * basar (sahada çuval ararken doğru olan), burası her topu ayrı satır olarak
+   * verir (barkod dahil) — "çuvalda tam olarak ne var" sorusunun cevabı.
+   * Aynı iskelet: aynı ≤200 çuval sınırı, aynı sıralama (sevkiyat + çuval sırası,
+   * sahada aynı sevkin çuvalları yan yana durur), salt-okunur, audit yok.
+   *
+   * Decimal alanlar BURADA `Number()`'a çevrilir — `getSackContents` bunu yapmadığı
+   * için istemci her kullanımda `Number(...)` sarmak zorunda kalıyor; yeni uçta o
+   * tuzak tekrarlanmaz.
+   */
+  async getContentDump(sackIds: string[]): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(sackIds)];
+    if (ids.length === 0) throw AppError.badRequest("En az bir çuval seçilmeli");
+    if (ids.length > MAX_SELECTED_SACKS) {
+      throw AppError.badRequest(`Bir dökümde en fazla ${MAX_SELECTED_SACKS} çuval olabilir`);
+    }
+
+    const sacks = await prisma.sack.findMany({
+      where: { id: { in: ids } },
+      orderBy: [{ shipmentId: "asc" }, { seq: "asc" }],
+      select: {
+        id: true,
+        sackNo: true,
+        seq: true,
+        weightKg: true,
+        // İÇ döküm (müşteriye giden belge değil) → notun TAM metni döner. Basılıp
+        // basılmayacağına İSTEMCİ karar verir (opt-in) — kök CLAUDE.md kuralı.
+        notes: true,
+        customer: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
+        shipment: { select: { id: true, shipmentNo: true, status: true } },
+        rolls: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            barcode: true,
+            currentQty: true,
+            width: true,
+            qualityGrade: true,
+            item: { select: { name: true } },
+            color: { select: { name: true } },
+          },
+        },
+        swatches: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            barcode: true,
+            item: { select: { name: true } },
+            color: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    const data = sacks.map((s) => {
+      const rolls = s.rolls.map((r) => ({
+        id: r.id,
+        barcode: r.barcode,
+        itemName: r.item.name,
+        colorName: r.color?.name ?? null,
+        width: r.width === null ? null : Number(r.width),
+        qty: Number(r.currentQty),
+        qualityGrade: r.qualityGrade,
+      }));
+      return {
+        id: s.id,
+        sackNo: s.sackNo,
+        seq: s.seq,
+        weightKg: s.weightKg === null ? null : Number(s.weightKg),
+        notes: s.notes,
+        customer: s.customer,
+        branch: s.branch,
+        shipment: s.shipment,
+        rollCount: rolls.length,
+        totalQty: rolls.reduce((a, r) => a + r.qty, 0),
+        rolls,
+        swatches: s.swatches.map((w) => ({
+          id: w.id,
+          barcode: w.barcode,
+          itemName: w.item.name,
+          colorName: w.color?.name ?? null,
+        })),
+      };
+    });
+
+    return { success: true, data };
+  }
+
+  /**
    * Top yerini bul — barkod EXACT eşleşme (ILIKE contains seq-scan tuzağına
    * girilmez; barkodlar tam okutulur). Çuvalsız/sevkiyatsız toplar için de
    * konum cevabı verir (statü = depoda/üretimde/sevk edildi).
@@ -343,6 +462,13 @@ export class SackSearchService {
   async locateRoll(barcode: string): Promise<ApiResponse<unknown>> {
     const code = barcode.trim();
     if (!code) throw AppError.badRequest("Barkod gerekli");
+    // Çuval kodu okutulduysa top araması anlamsız — ne yapacağını söyle
+    // (çuval etiketi basılabiliyor, bu okutma kaçınılmaz).
+    if (isDailyCode(code, "CV")) {
+      throw AppError.badRequest(
+        `${code} bir ÇUVAL kodu — bu ekran TOP barkodu bekler. Çuvalı bulmak için çuval aramasını kullanın.`,
+      );
+    }
 
     const roll = await prisma.roll.findFirst({
       where: { barcode: code },
@@ -355,7 +481,7 @@ export class SackSearchService {
         qualityGrade: true,
         item: { select: { id: true, name: true } },
         color: { select: { id: true, name: true, hex: true } },
-        sack: { select: { id: true, sackNo: true, seq: true, weightKg: true } },
+        sack: { select: { id: true, sackNo: true, seq: true, weightKg: true, notes: true } },
         shipment: {
           select: {
             id: true,

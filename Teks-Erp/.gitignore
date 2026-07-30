@@ -4,6 +4,13 @@ node_modules
 .env.local
 .env.docker
 .env.*.local
+# .env YEDEKLERİ — araçlar (dotenvx, editör, elle) `.env.bak-<damga>` üretiyor ve
+# bu ad yukarıdaki kalıpların HİÇBİRİNE uymuyordu → `git add -A` onu commit ederdi.
+# İçinde JWT_SECRET + DATABASE_URL var; git geçmişine giren sır silinse de kalır.
+.env.bak*
+.env.backup*
+.env.save
+.env.orig
 
 /src/generated/prisma
 

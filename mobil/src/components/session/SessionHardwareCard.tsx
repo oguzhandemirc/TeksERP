@@ -7,6 +7,15 @@
 // arıza anında "kabloyu mu kontrol edeyim, ustabaşını mı çağırayım" sorusuna
 // cevap bulur: bağlı/bond durumu, simülasyon rozeti, tek dokunuş eşleştirme
 // (bond — seçim değil) ve giriş cihazları için "Oku" testi.
+//
+// "Yenile" (2026-07-30): admin panelden bu yere YENİ cihaz atandığında kart eski
+// listeyi gösteriyordu (staleTime 60s). Artık sayfaya her girişte tazelenir
+// (refetchOnMount) ve başlıkta manuel yenile var — oturumu, cihaz listesini,
+// diğer for-session tüketicilerinin cache'ini ve BT bond durumunu birlikte
+// yeniler.
+//
+// Kendi kart çerçevesini taşır ama BAŞLIĞI YOK: tek tüketicisi
+// `settings/PlaceHardwareScreen` ve sayfa başlığı zaten "Bu Yerin Donanımı".
 // =============================================================================
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -18,6 +27,8 @@ import { peripheralService, type DevicePeripheral } from '../../services/periphe
 import { isBtSupported, isBonded, listBonded, pairByMac } from '../../services/hal/btClassic.transport';
 import { buildIoFromPeripheral } from '../../hooks/usePeripheralIO';
 import { useSessionStore } from '../../store/sessionStore';
+import { useManualRefresh } from '../../hooks/useManualRefresh';
+import RefreshButton from '../RefreshButton';
 import HardwareScanModal from './HardwareScanModal';
 
 const C = {
@@ -47,6 +58,7 @@ const KIND_ICON: Record<string, string> = {
 
 export default function SessionHardwareCard() {
   const active = useSessionStore((s) => s.active);
+  const initSession = useSessionStore((s) => s.init);
   const btOk = isBtSupported();
   const qc = useQueryClient();
 
@@ -55,6 +67,9 @@ export default function SessionHardwareCard() {
     // Tek çağrı (kind filtresiz): backend oturumun makine/istasyonundaki TÜM cihazları döner.
     queryFn: () => peripheralService.getForSessionAll(),
     staleTime: 60 * 1000,
+    // Teşhis ekranı: açılışta HER ZAMAN sunucudan sor. staleTime yalnız arka plan
+    // gürültüsünü kısar; operatör bu sayfayı "şu an ne atanmış?" diye açar.
+    refetchOnMount: 'always',
     enabled: active != null,
   });
   const rows = useMemo(() => q.data ?? [], [q.data]);
@@ -79,6 +94,25 @@ export default function SessionHardwareCard() {
   useEffect(() => {
     void refreshBonded();
   }, [refreshBonded]);
+
+  // Manuel yenile — dört işi birlikte yapar, hepsi GERÇEKTEN ağa/adaptöre gider:
+  //  1. oturumu yeniden çöz (cihazın makine/istasyon ataması değişmiş olabilir —
+  //     `active.id` değişirse aşağıdaki query zaten yeni anahtarla taze başlar),
+  //  2. bu ekranın cihaz listesini refetch et (staleTime'ı atlar),
+  //  3. diğer for-session tüketicilerini (istasyon ekranlarındaki
+  //     useMachinePeripherals) invalidate et — operatör istasyona dönünce yeni
+  //     metre/kantar orada da görünsün,
+  //  4. BT bond durumunu adaptörden yeniden oku.
+  // Offline guard / zaman aşımı / haptic / toast useManualRefresh'te.
+  const refresh = useManualRefresh(
+    [
+      () => initSession(),
+      () => q.refetch(),
+      () => qc.invalidateQueries({ queryKey: ['peripherals', 'for-session'] }),
+      () => refreshBonded(),
+    ],
+    'Donanım listesi güncellendi',
+  );
 
   const pair = async (r: DevicePeripheral) => {
     if (!r.address) return;
@@ -143,18 +177,33 @@ export default function SessionHardwareCard() {
 
   return (
     <View style={styles.card}>
+      {/* Başlık sayfa Appbar'ında; burada yer bilgisi + "Yenile". */}
       <View style={styles.headRow}>
         <View style={styles.iconBox}>
           <Icon source="connection" size={28} color={C.accentLight} />
         </View>
         <View style={styles.headText}>
-          <Text style={styles.title}>Bu Yerin Donanımı</Text>
+          <Text style={styles.title}>
+            {active
+              ? `${active.station.name}${active.machine ? ` — ${active.machine.name}` : ''}`
+              : 'Yer belirsiz'}
+          </Text>
           <Text style={styles.subtitle}>
             {active
-              ? `${active.station.name}${active.machine ? ` — ${active.machine.name}` : ''} donanımı. Cihaz seçimi yok — donanım yerin özelliğidir; değişiklik Admin → Donanım'dan.`
+              ? "Cihaz seçimi yok — donanım yerin özelliğidir; değişiklik Admin → Donanım'dan."
               : 'Aktif çalışma oturumu yok — donanım, istasyon ekranında yer onayı verilince görünür.'}
           </Text>
         </View>
+        <RefreshButton
+          onPress={refresh.onRefresh}
+          refreshing={refresh.refreshing}
+          isError={refresh.isError}
+          errorMessage={refresh.errorMessage}
+          successMessage={refresh.successMessage}
+          headerStyle
+          label="Yenile"
+          containerStyle={styles.refreshChip}
+        />
       </View>
 
       {!btOk && active != null && (
@@ -267,6 +316,8 @@ const styles = StyleSheet.create({
   headText: { flex: 1, justifyContent: 'center' },
   title: { color: C.text, fontSize: 18, fontWeight: '700' },
   subtitle: { color: C.subtext, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  // Eldivenli parmakla basılabilsin — chip'in kendi iç dolgusu ~36dp'de kalıyor.
+  refreshChip: { minHeight: 48, justifyContent: 'center', alignSelf: 'center' },
   centerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   muted: { color: C.subtext, fontSize: 13, paddingVertical: 4, lineHeight: 18 },
   row: {

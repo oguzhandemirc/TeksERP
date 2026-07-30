@@ -3,7 +3,7 @@
 // =============================================================================
 // DejaVu Sans (normal + bold) — gerçek Türkçe glif kapsamı (İ/Ş/Ğ/ç…) → native
 // yolun asciiFold zorunluluğu raster'da KALKAR. Font dosyaları CWD/assets/fonts
-// altından (app.ts publicDir kalıbı: dev = backend kökü, prod = NSSM AppDirectory).
+// altından (app.ts publicDir kalıbı: dev = backend kökü, prod = pm2 `cwd`).
 // Yüklenemezse Türkçe Error → çağıran (registry) komut moduna düşer (baskı durmaz).
 // =============================================================================
 

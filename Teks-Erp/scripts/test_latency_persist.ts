@@ -14,17 +14,26 @@ import {
   latencyHistoryRoutes,
   getLatencyPersistHealth,
   RETENTION_DAYS,
+  type LatencyHistoryPoint,
 } from "../src/services/latency-persist.service";
+// Persentil ARİTMETİĞİ servisin kendi dışa açık yardımcısından gelir (tek kaynak):
+// test AGGREGATION yolunu doğrular, matematiği KOPYALAMAZ — matematik değişirse
+// kıyas da onunla değişir, test sessizce bayatlamaz.
+import {
+  BUCKET_BOUNDS_MS,
+  bucketIndex,
+  percentileFromBuckets,
+} from "../src/services/latency-stats.service";
 
 let pass = 0;
 let fail = 0;
-function check(label: string, ok: boolean): void {
+function check(label: string, ok: boolean, extra = ""): void {
   if (ok) {
     pass++;
-    console.log(`✅ ${label}`);
+    console.log(`✅ ${label}${extra ? " — " + extra : ""}`);
   } else {
     fail++;
-    console.log(`❌ ${label}`);
+    console.log(`❌ ${label}${extra ? " — " + extra : ""}`);
   }
 }
 
@@ -40,6 +49,68 @@ function localDay(offsetDays = 0): Date {
   const d = new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
   d.setUTCDate(d.getUTCDate() + offsetDays);
   return d;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+type TodayRow = { routeKey: string; count: number; errCount: number; maxMs: number; buckets: unknown };
+interface Folded {
+  count: number;
+  errCount: number;
+  maxMs: number;
+  buckets: number[];
+}
+
+/** Bugünün TÜM satırları — latencyHistory'nin okuduğu kümenin AYNISI (oracle girdisi). */
+async function readTodayRows(): Promise<TodayRow[]> {
+  return prisma.endpointLatencyDaily.findMany({
+    where: { day: localDay() },
+    select: { routeKey: true, count: true, errCount: true, maxMs: true, buckets: true },
+  });
+}
+
+/**
+ * Servisin gün-içi katlamasının BİREBİR aynısı (latency-persist.service
+ * latencyHistory byDay döngüsü): count/errCount toplanır, maxMs maksimum alınır,
+ * bucket'lar MAX-UZUNLUK ile indeks indeks toplanır (uzun dizinin kuyruğu düşmesin).
+ */
+function foldRows(rows: TodayRow[]): Folded {
+  const f: Folded = { count: 0, errCount: 0, maxMs: 0, buckets: BUCKET_BOUNDS_MS.map(() => 0) };
+  for (const r of rows) {
+    f.count += r.count;
+    f.errCount += r.errCount;
+    f.maxMs = Math.max(f.maxMs, r.maxMs);
+    const b = r.buckets as number[];
+    for (let i = 0; i < Math.max(f.buckets.length, b.length); i++) {
+      f.buckets[i] = (f.buckets[i] ?? 0) + (b[i] ?? 0);
+    }
+  }
+  return f;
+}
+
+/**
+ * OKU–ÇAĞIR–OKU sandviçi. Canlı dev sunucusu AYNI tabloya YAZAR (kendi 5dk'lık
+ * flush'ı) ve latencyHistory ayrı bir statement = ayrı MVCC snapshot'ı okur →
+ * history ile oracle okuması arasında satır değişirse TAM EŞİTLİK kıyası anlamsız
+ * olur. İki okumanın parmak izi eşitse pencere KARARLI sayılır; değilse beklenip
+ * yeniden denenir (4×150ms tek bir flush'ı garantiyle aşar). Kararsızlıkta test
+ * SESSİZCE GEÇMEZ — nedeni yazan bir check düşer.
+ */
+async function readStableUnion(
+  dayLabel: string
+): Promise<{ rows: TodayRow[]; oracle: Folded; point: LatencyHistoryPoint | undefined } | null> {
+  const fp = (f: Folded): string => `${f.count}|${f.errCount}|${f.maxMs}|${f.buckets.join(",")}`;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const before = foldRows(await readTodayRows());
+    const series = await latencyHistory(7); // route filtresi YOK
+    const rows = await readTodayRows();
+    const oracle = foldRows(rows);
+    if (fp(before) === fp(oracle)) {
+      return { rows, oracle, point: series.find((s) => s.day === dayLabel) };
+    }
+    await sleep(150);
+  }
+  return null;
 }
 
 async function main(): Promise<void> {
@@ -121,13 +192,92 @@ async function main(): Promise<void> {
 
     // --- Route'suz history: farklı uçların bucket'ları GÜN İÇİNDE birleşir ----
     const ROUTE2 = `/api/TEST-perf-b-${RUN}`;
+    const KEY2 = `GET ${ROUTE2}`;
     for (let i = 0; i < 20; i++) noteLatencyDelta("GET", ROUTE2, 200, 3_000); // yavaş uç
     await flushLatencyNow();
-    const all = await latencyHistory(7); // route filtresi YOK
-    const today = all.find((s) => s.day === todayLocal);
-    // Dev DB'de başka satır olabilir — en azından iki TEST ucunun toplamını kapsamalı
-    check("route'suz seri iki ucu da kapsıyor (count ≥ 173)", (today?.count ?? 0) >= 173);
-    check("birleşik p95 yavaş ucu görüyor (≥ 400)", (today?.p95Ms ?? 0) >= 400);
+
+    // AMBIENT-DUYARSIZLIĞIN KENDİ KANITI: güne 20.000 hızlı örneklik gürültü satırı
+    // ekle (finally'deki `contains: "TEST-perf"` temizliğine takılır). Eski mutlak
+    // eşik testi ("p95 ≥ 400") bu satır varken KESİN düşerdi; aşağıdaki oracle
+    // kıyası etkilenmez. Ayrıca birleşik persentili HER satırın tek-başına
+    // persentilinden UZAĞA iter → "birleşik histogramdan mı okundu, yoksa tek
+    // satırdan/satır-başı ortalamadan mı?" ayrımı ölçülebilir hale gelir.
+    const noiseBuckets = BUCKET_BOUNDS_MS.map(() => 0);
+    noiseBuckets[0] = 20_000; // ≤1ms bucket'ı
+    await prisma.endpointLatencyDaily.create({
+      data: {
+        day: localDay(),
+        routeKey: `GET /api/TEST-perf-noise-${RUN}`,
+        count: 20_000,
+        errCount: 0,
+        maxMs: 1,
+        buckets: noiseBuckets,
+      },
+    });
+
+    const union = await readStableUnion(todayLocal);
+    if (!union) {
+      check(
+        "bugünün satırları KARARLI okundu (oracle kıyası için şart)",
+        false,
+        "4 denemede de okuma penceresinde satır değişti — canlı sunucu yazmayı sürdürüyor"
+      );
+    } else {
+      const { rows, oracle, point } = union;
+      const r1 = rows.find((r) => r.routeKey === KEY);
+      const r2 = rows.find((r) => r.routeKey === KEY2);
+
+      // ÇAPA: kendi satırlarımız gerçekten yazıldı mı? Bu olmadan "seri = oracle"
+      // eşitliği, iki TEST satırı hiç yazılmasa da ambient'e karşı doğru çıkardı.
+      check(
+        "iki TEST ucu da bugünün satırlarında (153 + 20)",
+        r1?.count === 153 && r2?.count === 20,
+        `k1=${r1?.count} k2=${r2?.count} satır=${rows.length}`
+      );
+      // Yazım yolu: 3000ms doğru bucket'a düştü (bucketIndex hizası korunuyor).
+      check(
+        "yavaş uç 3000ms doğru bucket'a yazıldı (20 örnek)",
+        ((r2?.buckets as number[] | undefined)?.[bucketIndex(3_000)] ?? 0) === 20,
+        `idx=${bucketIndex(3_000)} sayaç=${(r2?.buckets as number[] | undefined)?.[bucketIndex(3_000)]}`
+      );
+
+      // BİRLEŞME KANITI (eski `count >= 173` yerine): route'suz seri günün TÜM
+      // satırlarının toplamıdır — tek satır ya da satır-başı ortalama DEĞİL.
+      // `>= 173` BOŞTU: kirlilikte monoton olduğu için testin kendi satırları hiç
+      // yazılmasa bile ambient tek başına geçiriyordu.
+      check(
+        "route'suz seri günün tüm satırlarını birleştirdi (count)",
+        point?.count === oracle.count,
+        `seri=${point?.count} oracle=${oracle.count}`
+      );
+      check(
+        "birleşimde errCount de toplandı",
+        point?.errCount === oracle.errCount,
+        `seri=${point?.errCount} oracle=${oracle.errCount}`
+      );
+      check(
+        "birleşik maxMs satırların maksimumu",
+        point?.maxMs === oracle.maxMs,
+        `seri=${point?.maxMs} oracle=${oracle.maxMs}`
+      );
+      // Yavaş uç agregada var mı? maxMs hacimden BAĞIMSIZ (monoton) → sağlam.
+      check("birleşik seri yavaş ucu kapsıyor (maxMs ≥ 3000)", (point?.maxMs ?? 0) >= 3_000, `max=${point?.maxMs}`);
+      // Yavaş bucket birleşmeden SAĞ ÇIKTI mı — "yavaş ucu görüyor"un dürüst hâli.
+      check(
+        "yavaş bucket (3000ms) birleşik histogramda duruyor",
+        (oracle.buckets[bucketIndex(3_000)] ?? 0) >= 20,
+        `birleşik=${oracle.buckets[bucketIndex(3_000)]}`
+      );
+
+      // Persentiller BİRLEŞİK bucket'tan: servisin kendi dışa açık yardımcısıyla
+      // kıyaslanır. Mutlak eşik KULLANILMAZ — birleşik p95 ambient trafiğin
+      // ŞEKLİNE bağlıdır (yeterince hızlı örnekle 1ms bucket'ına yakınsar), yani
+      // sıfır dışında sağlam hiçbir alt sınır yoktur.
+      const expP50 = percentileFromBuckets(oracle.buckets, oracle.count, 0.5, oracle.maxMs);
+      const expP95 = percentileFromBuckets(oracle.buckets, oracle.count, 0.95, oracle.maxMs);
+      check("birleşik p50 = birleşik bucket'ın p50'si", point?.p50Ms === expP50, `seri=${point?.p50Ms} beklenen=${expP50}`);
+      check("birleşik p95 = birleşik bucket'ın p95'i", point?.p95Ms === expP95, `seri=${point?.p95Ms} beklenen=${expP95}`);
+    }
 
     // --- Sağlık: başarılı akışta failure yok -------------------------------------
     const health = getLatencyPersistHealth();

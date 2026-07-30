@@ -11,6 +11,8 @@ import { setupSwagger } from "./config/swagger";
 import { errorHandler } from "./middlewares/error.middleware";
 import { installDecimalNumberSerializer } from "./utils/json-replacer";
 import prisma from "./lib/prisma";
+import { readAppDiskMetrics } from "./lib/disk-metrics";
+import { getPoolHealth } from "./lib/pool-health";
 import { AuditService } from "./services/audit.service";
 
 // Tüm res.json() çıktısında Prisma Decimal → number çevirir
@@ -58,6 +60,7 @@ import returnReasonRoutes from "./routes/return-reason.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import adminRoutes from "./routes/admin.routes";
+import dbCopyRoutes from "./routes/db-copy.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
@@ -97,7 +100,7 @@ app.use(compression({ threshold: 1024 }));
 // F16: 1MB limit — toplu uçlar (yüzlerce rollId) 100kb default'u aşınca generic
 // 500/İngilizce 'entity.too.large' yerine error.middleware net 413 Türkçe döner.
 app.use(express.json({ limit: "1mb" }));
-// F17: production'da 'combined' (tarih/IP/UA — NSSM dosya log'una ANSI'siz),
+// F17: production'da 'combined' (tarih/IP/UA — pm2 dosya log'una ANSI'siz),
 // dev'de renkli kısa 'dev'.
 const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
 app.use(morgan(isProd ? "combined" : "dev"));
@@ -124,13 +127,14 @@ setupSwagger(app);
 // bir durum sayfası gösterilir: API + DB bağlantısı OK mu değil mi. Sayfa
 // public/ altındaki statik dosyalardan gelir (index.html + status.js + logo.png) —
 // helmet'in varsayılan CSP'si inline script'i bloklar; harici 'self' dosyalar geçer.
-// CWD = backend kökü (dev) veya app\ (kurulumda NSSM AppDirectory) → her ikisinde
-// de public\ klasörü bunun altındadır.
+// CWD = backend kökü (dev) veya app\ (üretimde pm2 `cwd`) → her ikisinde de
+// public\ klasörü bunun altındadır.
 const publicDir = path.join(process.cwd(), "public");
 app.use(express.static(publicDir));
 
-// Sürüm bilgisi (durum sayfasında gösterilir). NSSM node'u doğrudan çalıştırdığı
-// için `npm_package_version` env'i serviste tanımsızdır — package.json'dan oku.
+// Sürüm bilgisi (durum sayfasında gösterilir). pm2 derlenmiş server.js'i doğrudan
+// çalıştırır (npm script üzerinden değil) → `npm_package_version` env'i üretimde
+// tanımsızdır; package.json'dan oku.
 let appVersion = "1.0.0";
 try {
   const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
@@ -139,9 +143,10 @@ try {
   /* package.json okunamazsa varsayılan sürümle devam */
 }
 
-// Yedek klasörü: manage.ps1 backend servisini kaydederken BACKUP_DIR env'i verir
-// (C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası son yedek zamanını
-// gösterir. Dev ortamında tanımsızdır → son yedek alanı null döner.
+// Yedek klasörü: BACKUP_DIR üretimde pm2 ortamından gelir (ecosystem.config env
+// veya .env — tipik değer C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası
+// son yedek zamanını gösterir. Dev ortamında tanımsızdır → son yedek alanı null
+// döner. DİKKAT: tanımsız kalırsa yedek listesi ve "son yedek" SESSİZCE boş döner.
 const backupDir = process.env.BACKUP_DIR;
 
 // Son yedeğin (.dump) adını ve zamanını döndürür. Klasör yoksa/erişilemezse null.
@@ -212,33 +217,11 @@ let lastSysCpu = sampleSysCpu();
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
 eventLoopMonitor.enable();
 
-// Disk: fs.statfs ucuz bir syscall ama disk hızlı değişmez → 30sn cache. Çok
-// sayıda istemci 5sn'de bir yoklasa bile statfs en fazla 30sn'de bir çalışır.
-let diskCache: { diskTotalBytes: number; diskFreeBytes: number; diskUsedPct: number } | null = null;
-let diskCacheAt = 0;
-const DISK_CACHE_MS = 30_000;
-
-function readDiskMetrics(): {
-  diskTotalBytes: number | null;
-  diskFreeBytes: number | null;
-  diskUsedPct: number | null;
-} {
-  const now = Date.now();
-  if (diskCache && now - diskCacheAt < DISK_CACHE_MS) return diskCache;
-  try {
-    // DB verisi + yedekler kurulumda aynı sürücüde (ProgramData/AppDir) → cwd'nin
-    // bulunduğu sürücüyü ölç. statfs unprivileged kullanılabilir blok (bavail) verir.
-    const s = fs.statfsSync(process.cwd());
-    const total = s.blocks * s.bsize;
-    const free = s.bavail * s.bsize;
-    const usedPct = s.blocks > 0 ? Math.round((1 - s.bfree / s.blocks) * 1000) / 10 : 0;
-    diskCache = { diskTotalBytes: total, diskFreeBytes: free, diskUsedPct: usedPct };
-    diskCacheAt = now;
-    return diskCache;
-  } catch {
-    return { diskTotalBytes: null, diskFreeBytes: null, diskUsedPct: null };
-  }
-}
+// Disk: fs.statfs ucuz bir syscall ama disk hızlı değişmez → yol başına 30sn
+// cache. Çok sayıda istemci 5sn'de bir yoklasa bile statfs en fazla 30sn'de bir
+// çalışır. Mantık `lib/disk-metrics.ts`'e taşındı — geri yükleme kopyası akışı da
+// disk ölçmek zorunda (PGDATA volume'ünü doldurmak canlı DB'yi durdurur).
+// DB verisi + yedekler kurulumda aynı sürücüde (ProgramData/AppDir) → cwd ölçülür.
 
 function readResourceMetrics() {
   // --- Backend prosesinin CPU%'si (makinenin TÜM kapasitesine oranla, 0-100) ---
@@ -305,6 +288,8 @@ app.get("/health", async (_req: Request, res: Response) => {
   let rollsDeadPct: number | null = null;
   let longestQuerySec: number | null = null;
   let dbBlockedCount: number | null = null;
+  let restoreCopyCount: number | null = null;
+  let restoreCopyBytes: number | null = null;
   try {
     // Tek round-trip: DB canlılığı + boyut + bağlantı + ucuz sağlık metrikleri
     // (cache isabeti, rolls ölü-satır oranı, en uzun aktif sorgu süresi). Hepsi
@@ -318,9 +303,17 @@ app.get("/health", async (_req: Request, res: Response) => {
         rolls_dead: number | null;
         longest_sec: number | null;
         blocked: bigint;
+        copy_count: bigint;
+        copy_bytes: bigint;
       }>
     >`
       SELECT pg_database_size(current_database()) AS size,
+             -- Unutulmuş geri yükleme kopyaları disk yer: ServerStatus'un mevcut
+             -- 5sn poll'unda görünsün diye buraya eklendi (yeni round-trip YOK).
+             (SELECT count(*) FROM pg_database
+               WHERE datname LIKE current_database() || '\_restore\_%') AS copy_count,
+             (SELECT COALESCE(sum(pg_database_size(datname)), 0) FROM pg_database
+               WHERE datname LIKE current_database() || '\_restore\_%') AS copy_bytes,
              (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()) AS conns,
              (SELECT round(100.0 * sum(blks_hit) / NULLIF(sum(blks_hit + blks_read), 0), 1)
                 FROM pg_stat_database WHERE datname = current_database())::float8 AS cache_hit,
@@ -342,6 +335,8 @@ app.get("/health", async (_req: Request, res: Response) => {
       longestQuerySec =
         rows[0].longest_sec != null ? Math.round(Number(rows[0].longest_sec)) : null;
       dbBlockedCount = Number(rows[0].blocked);
+      restoreCopyCount = Number(rows[0].copy_count);
+      restoreCopyBytes = Number(rows[0].copy_bytes);
     }
   } catch {
     db = "DOWN";
@@ -362,9 +357,18 @@ app.get("/health", async (_req: Request, res: Response) => {
     rollsDeadPct,
     longestQuerySec,
     dbBlockedCount, // lock bekleyen oturum sayısı (>0 = bir şey takılmış olabilir)
+    restoreCopyCount, // unutulmuş geri yükleme kopyası sayısı
+    restoreCopyBytes, // bu kopyaların toplam disk kullanımı
     lastBackup: latestBackupInfo(),
+    // Havuzun KENDİ durumu + kümülatif zaman aşımı sayacı. Yukarıdaki
+    // `dbConnections` `pg_stat_activity` sayımıdır → SUNUCU tarafını sayar
+    // (psql/pgAdmin/pg_dump dahil), idle/busy ayırt etmez ve havuzun kaç bağlantı
+    // tuttuğunu / KİMİN BEKLEDİĞİNİ bilmez. Havuz doygunluğu yalnız burada görünür.
+    // Senkron getter (SORGU YOK) ve try/catch DIŞINDA → DB DOWN iken de doğru
+    // değer döner; havuz durumu tam o anda en çok gereken şeydir.
+    ...getPoolHealth(),
     // Disk doluluğu (DB + yedeklerin bulunduğu sürücü) — 30sn cache
-    ...readDiskMetrics(),
+    ...readAppDiskMetrics(),
     // Anlık online kullanıcı + bağlı cihaz (bellekte, son 5 dk)
     ...getPresence(),
     // Audit kaybı izleme (0 = sağlıklı; >0 ise log yazımı başarısız oluyor)
@@ -416,6 +420,9 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
+// db-copies GENEL admin router'ından ÖNCE: Express 5 prefix eşleşmesinde daha
+// spesifik olan önce gelmeli, yoksa admin.routes içindeki bir yakalayıcı öne geçebilir.
+app.use("/api/admin/db-copies", dbCopyRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);

@@ -21,7 +21,7 @@
   5 dk'da bir (throttle, `inFlush` guard'lı, `setImmediate` ile istek yolunun DIŞINDA)
   birikmiş delta'lar bugünün satırlarına merge-upsert edilir. Best-effort: hata isteği
   düşürmez, audit-health gibi sayaca düşer. `gracefulShutdown`'a 2sn tavanlı son flush eklenir
-  (nodemon/NSSM restart'ında son dakikalar kaybolmasın).
+  (nodemon/pm2 restart'ında son dakikalar kaybolmasın).
 - **Migration MANUEL akışla** (proje kuralı): SQL psql ile uygulanır + `prisma migrate resolve
   --applied` + `npm run prisma:generate`. DİKKAT: merge'e kadar ana ağaçta `prisma migrate dev`
   KOŞULMAMALI (klasörde olmayan migration DB'de kayıtlı görünür → reset ister).

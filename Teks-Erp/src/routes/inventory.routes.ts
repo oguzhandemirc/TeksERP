@@ -192,6 +192,34 @@ router.get(
   controller.getRelabelContext,
 );
 
+/**
+ * @openapi
+ * /api/rolls/{id}/relabel-context:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Aynı bağlam, rollId ile (barkodsuz açık kumaş için)
+ *     description: |
+ *       `/barcode/{barcode}/relabel-context` ile AYNI payload. Barkodsuz açık kumaş
+ *       (fason dönüşü / istasyonda bekleyen top) barkodla bulunamaz; tek "Düzelt"
+ *       diyaloğu onu da açabilmek için bu ucu kullanır. Salt-okunur.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: RelabelContext }
+ *       404: { description: Top bulunamadı }
+ */
+router.get(
+  "/:id/relabel-context",
+  verifyToken,
+  requireAnyPermission("roll:read", "roll:write", "label:read", "label:edit", ...MOBILE_ROLL_READ),
+  controller.getRelabelContextById,
+);
+
 // `/barcode` veya `/barcode/` (boş param) — Express trailing slash'i strip
 // edip `/barcode` route'una yönlendirir; ardından `/:id` route'u "barcode"
 // string'ini UUID olarak doğrulamaya çalışır (BUG-17 sonrası 400 verir

@@ -19,7 +19,7 @@ const router = Router({ mergeParams: true });
 
 // Enum string-literal (TDZ kuralı — modül-üstü enum üyesi deref yasak).
 const setSchema = z.object({
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as [string, ...string[]]),
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as [string, ...string[]]),
   templateId: z.string().uuid().nullable(),
 });
 

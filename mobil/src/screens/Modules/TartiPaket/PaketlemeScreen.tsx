@@ -34,12 +34,11 @@ import {
 import { isWorkSessionLost } from '../../../services/api';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import {
-  useMachinePeripherals,
-  primaryScaleFor,
-} from '../../../hooks/useMachinePeripherals';
-import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
-import { isBonded, pairByMac } from '../../../services/hal/btClassic.transport';
+import { useSackWeigh } from '../../../hooks/useSackWeigh';
+import SackActionsSheet, { type SackAction } from './SackActionsSheet';
+import SackNoteSheet from './SackNoteSheet';
+import SackManualWeightSheet from './SackManualWeightSheet';
+import { SackLabelPrinter, type SackLabelJob } from '../../../components/labels/SackLabelPrinter';
 import {
   useShipmentConfirmationEnabled,
   FLAGS_KEY,
@@ -57,6 +56,16 @@ import type { MainStackParamList } from '../../../navigation/types';
 // =============================================================================
 
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
+// Çuval kodu mu (CV + GGAAYY + NNNN)? Çuval etiketi basıldığı için operatör bunu
+// top okutma alanına okutabilir — top barkodu (T…H/F…) ile ayırt edilir.
+const isSackCode = (code: string) => /^CV\d{10}$/i.test(code.trim());
+// Tartı zamanı — yalnız saat:dakika (tarih kartta gürültü; çuval aynı gün tartılır).
+const hhmm = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 // Metraj — GERÇEK değeri göster (44,5 → "44,5"). tr-TR ondalık = virgül.
 const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
@@ -93,89 +102,11 @@ export default function PaketlemeScreen() {
   const [showAllSacks, setShowAllSacks] = useState(false);
   const SACK_WINDOW = 20;
 
-  const [weighTarget, setWeighTarget] = useState<{ id: string; label: string } | null>(null);
-  const [weighKg, setWeighKg] = useState('');
-  // Kantar (HAL): bu telefonun atandığı makinenin SCALE cihaz(lar)ı.
-  const scalePeripherals = useMachinePeripherals('SCALE');
-  const [weighing, setWeighing] = useState(false);
-
-  // "Tart": kantardan brüt kg oku. Cihaz yoksa/okunamazsa NET Türkçe hata + null.
-  const weighFromMachine = async (): Promise<number | null> => {
-    const simWeigh = () => Math.round((10 + Math.random() * 90) * 10) / 10;
-    const p = primaryScaleFor(scalePeripherals);
-    if (!p) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kantar tanımlı değil',
-        text2: 'Admin → Cihaz Kaydı’ndan bu makineye SCALE ekleyin (veya kg’yi elle girin).',
-        visibilityTime: 6000,
-      });
-      return null;
-    }
-    if (p.simulate) return simWeigh();
-    const io = buildIoFromPeripheral(p);
-    if (!io.supported || !io.transport || !io.codec) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kantar okunamıyor',
-        text2: 'Bu derlemede/bağlantı türünde desteklenmiyor (native build / connectionType).',
-        visibilityTime: 6000,
-      });
-      return null;
-    }
-    if (p.connectionType === 'BLUETOOTH_SPP' && p.address) {
-      try {
-        if (!(await isBonded(p.address))) {
-          Toast.show({
-            type: 'info',
-            text1: 'Kantar ilk kez eşleştiriliyor',
-            text2: 'PIN sorulursa girin (ör. 1234) — sonraki tartılarda otomatik bağlanır.',
-            visibilityTime: 8000,
-          });
-          await pairByMac(p.address);
-        }
-      } catch (e) {
-        Toast.show({
-          type: 'error',
-          text1: 'Kantar eşleştirilemedi',
-          text2: e instanceof Error ? e.message : 'Kantar açık ve menzilde mi? PIN girildi mi?',
-          visibilityTime: 6000,
-        });
-        return null;
-      }
-    }
-    try {
-      const raw = await io.transport.read({
-        readMode: p.readMode,
-        pollCommand: p.pollCommand ?? undefined,
-        terminator: p.terminator ?? undefined,
-        timeoutMs: p.timeoutMs ?? undefined,
-        framePattern: p.identifyPattern ?? undefined,
-      });
-      const v = io.codec.decode(raw);
-      if (v != null && v > 0) return v;
-      throw new Error('Geçerli tartı gelmedi');
-    } catch (e) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kantar okunamadı',
-        text2: e instanceof Error ? e.message : 'Kantar kapalı/menzil dışı veya komut yanlış olabilir',
-        visibilityTime: 6000,
-      });
-      return null;
-    }
-  };
-
-  const handleWeigh = async () => {
-    if (weighing) return;
-    setWeighing(true);
-    try {
-      const v = await weighFromMachine();
-      if (v != null) setWeighKg(String(v));
-    } finally {
-      setWeighing(false);
-    }
-  };
+  // ⋮ taşan aksiyonlar + yorum + elle kg sheet'leri.
+  const [actionsTarget, setActionsTarget] = useState<PoolSack | null>(null);
+  const [noteTarget, setNoteTarget] = useState<{ id: string; label: string; notes: string | null } | null>(null);
+  const [manualWeighTarget, setManualWeighTarget] = useState<{ id: string; label: string; weightKg: number | null } | null>(null);
+  const [printJob, setPrintJob] = useState<SackLabelJob | null>(null);
 
   const [moveTarget, setMoveTarget] = useState<{ rollId: string; fromSackId: string; label: string } | null>(null);
   // Dolu çuval silme onayı — içindeki toplar (depoya dönecekler) somut listelenir.
@@ -202,6 +133,9 @@ export default function PaketlemeScreen() {
   sacksRef.current = sacks;
 
   const refreshPool = () => void qc.invalidateQueries({ queryKey: ['pool-sacks', customerId] });
+
+  // Tartı: TEK DOKUNUŞ (oku → doğrudan kaydet). Modal yok; elle giriş ⋮ menüsünde.
+  const sackWeigh = useSackWeigh(refreshPool);
 
   const refresh = useManualRefresh(
     () => {
@@ -293,21 +227,6 @@ export default function PaketlemeScreen() {
     },
   });
 
-  const weighSackMut = useMutation({
-    mutationFn: ({ sackId, kg }: { sackId: string; kg: number }) =>
-      packingService.weighSack(sackId, { weightKg: kg }),
-    onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setWeighTarget(null);
-      setWeighKg('');
-      refreshPool();
-    },
-    onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return;
-      Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: e.message });
-    },
-  });
-
   const moveRollMut = useMutation({
     mutationFn: ({ rollId, sackId }: { rollId: string; sackId: string }) =>
       packingService.moveRollToSack(rollId, sackId),
@@ -390,6 +309,29 @@ export default function PaketlemeScreen() {
     scanBusy.current = true;
     processingCodeRef.current = code;
     try {
+      // ÇUVAL BARKODU (CV+GGAAYY+NNNN) okutulduysa bunu bir TOP sanıp backend'e
+      // göndermek yanıltıcı "Top bulunamadı" verir. Çuval etiketi basılabildiği
+      // için operatör kaçınılmaz olarak bunu okutacak → burada yakalanır ve o
+      // çuval AKTİF yapılır (tamamen istemci; liste ve setActiveSack zaten elde).
+      if (isSackCode(code)) {
+        const target = sacksRef.current.find(
+          (s) => s.sackNo.toLocaleUpperCase('tr') === code.toLocaleUpperCase('tr'),
+        );
+        if (target) {
+          setActiveSack(target.id);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Toast.show({ type: 'success', text1: 'Çuval seçildi', text2: `${target.sackNo} artık aktif` });
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Toast.show({
+            type: 'error',
+            text1: 'Çuval bu havuzda değil',
+            text2: `${code} bu müşterinin depo çuvalları arasında yok (sevk edilmiş olabilir).`,
+            visibilityTime: 6000,
+          });
+        }
+        return;
+      }
       const sackId = await ensureActiveSack();
       const res = await packingService.scanIntoSack(sackId, code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -445,10 +387,42 @@ export default function PaketlemeScreen() {
   else if (requireWeigh && unweighed.length > 0)
     shipHint = `${unweighed.length} çuval tartısız (yurtdışı — tartı zorunlu).`;
 
-  const openWeigh = (sk: PoolSack) => {
-    setWeighTarget({ id: sk.id, label: sackCode(sk) });
-    setWeighKg(sk.weightKg != null ? String(sk.weightKg) : '');
-  };
+  // ⋮ menüsü — kartta yer kaplamayan taşan aksiyonlar. Sık kullanılan (dokun=aktif,
+  // ⚖=tart) kartta kalır; gerisi buraya. Silme onayı DEĞİŞMEZ: dolu çuval yine
+  // etkilenen topları tek tek listeleyen onaydan geçer (yıkıcı-işlem kuralı).
+  const buildSackActions = (sk: PoolSack): SackAction[] => [
+    {
+      key: 'manual-kg',
+      icon: 'keyboard-outline',
+      label: 'Elle kg gir',
+      hint: sackWeigh.hasScale ? 'Kantar okunamazsa' : 'Bu yerde kantar tanımlı değil',
+      onPress: () => setManualWeighTarget({ id: sk.id, label: sackCode(sk), weightKg: sk.weightKg }),
+    },
+    {
+      key: 'label',
+      icon: 'tag-outline',
+      label: 'Etiket bas',
+      hint: 'Barkod = çuval no · okutunca bu çuval aktif olur',
+      onPress: () => setPrintJob({ sackId: sk.id, label: sackCode(sk) }),
+    },
+    {
+      key: 'note',
+      icon: 'comment-text-outline',
+      label: sk.notes ? 'Notu düzenle' : 'Not ekle',
+      hint: 'Kendimiz için — istenirse belgede de çıkar',
+      onPress: () => setNoteTarget({ id: sk.id, label: sackCode(sk), notes: sk.notes }),
+    },
+    {
+      key: 'delete',
+      icon: 'trash-can-outline',
+      label: 'Çuvalı sil',
+      danger: true,
+      onPress: () =>
+        sk.rollCount > 0 || sk.swatchCount > 0
+          ? setRemoveSackTarget(sk)
+          : removeSackMut.mutate({ sackId: sk.id }),
+    },
+  ];
 
   const loadingReal = poolQ.isLoading || !pool;
 
@@ -624,29 +598,42 @@ export default function PaketlemeScreen() {
                                 </View>
                                 <Text style={styles.sackMeta}>
                                   {s.rollCount} top
-                                  {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''} · {kgText(s.weightKg)}
+                                  {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''} ·{' '}
+                                  <Text style={s.weightKg != null ? styles.kgOk : undefined}>
+                                    {kgText(s.weightKg)}
+                                  </Text>
+                                  {/* Tartı izi — tek dokunuş tartıdan sonra "hangi çuval tartıldı"
+                                      modal açmadan görünür. */}
+                                  {s.weightKg != null && s.weighedAt ? ` ✓ ${hhmm(s.weighedAt)}` : ''}
                                 </Text>
                                 <Text style={styles.sackMeta}>{s.sackNo}</Text>
+                                {/* Not GÖSTERGESİ — dokunulamaz, yer kaplamaz; düzenleme ⋮'de. */}
+                                {s.notes ? (
+                                  <View style={styles.noteRow}>
+                                    <Icon source="comment-text-outline" size={12} color={colors.textSecondary} />
+                                    <Text style={styles.noteText} numberOfLines={1}>
+                                      {s.notes}
+                                    </Text>
+                                  </View>
+                                ) : null}
                               </View>
                             </View>
                           </TouchableRipple>
+                          {/* TEK DOKUNUŞ tartı: kantardan oku → doğrudan kaydet. Modal YOK. */}
                           <IconButton
-                            icon="scale"
+                            icon={sackWeigh.weighingSackId === s.id ? 'progress-clock' : 'scale'}
                             size={22}
                             iconColor={colors.textSecondary}
-                            onPress={() => openWeigh(s)}
-                            accessibilityLabel="Çuvalı tart"
+                            disabled={sackWeigh.busy}
+                            onPress={() => void sackWeigh.weigh({ id: s.id, label: sackCode(s) })}
+                            accessibilityLabel="Çuvalı tart (kantardan oku ve kaydet)"
                           />
                           <IconButton
-                            icon="trash-can-outline"
+                            icon="dots-vertical"
                             size={22}
-                            iconColor={colors.danger}
-                            onPress={() =>
-                              s.rollCount > 0 || s.swatchCount > 0
-                                ? setRemoveSackTarget(s)
-                                : removeSackMut.mutate({ sackId: s.id })
-                            }
-                            accessibilityLabel="Çuvalı sil"
+                            iconColor={colors.textSecondary}
+                            onPress={() => setActionsTarget(s)}
+                            accessibilityLabel="Çuval işlemleri"
                           />
                         </View>
 
@@ -813,54 +800,26 @@ export default function PaketlemeScreen() {
         onAdd={addKartelaFromStock}
       />
 
-      {/* Çuval brüt tartısı. */}
-      <AppModal
-        visible={weighTarget !== null}
-        onDismiss={() => setWeighTarget(null)}
-        contentStyle={{ marginBottom: 160 }}
-      >
-        <Surface style={styles.sheet} elevation={4}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            {weighTarget?.label} — Brüt Tartı
-          </Text>
-          <TextInput
-            mode="outlined"
-            label="Brüt ağırlık (kg)"
-            keyboardType="decimal-pad"
-            value={weighKg}
-            onChangeText={setWeighKg}
-            autoFocus
-            style={{ marginTop: spacing.md }}
-            right={
-              <TextInput.Icon
-                icon={weighing ? 'progress-clock' : 'scale'}
-                onPress={handleWeigh}
-                disabled={weighing}
-              />
-            }
-          />
-          <View style={styles.actions}>
-            <Button onPress={() => setWeighTarget(null)} style={styles.actionBtn}>
-              İptal
-            </Button>
-            <Button
-              mode="contained"
-              icon="check"
-              buttonColor={colors.successDark}
-              style={styles.actionBtn}
-              loading={weighSackMut.isPending}
-              disabled={weighSackMut.isPending || !(parseFloat(weighKg) > 0)}
-              onPress={() =>
-                weighTarget &&
-                parseFloat(weighKg) > 0 &&
-                weighSackMut.mutate({ sackId: weighTarget.id, kg: parseFloat(weighKg) })
-              }
-            >
-              Kaydet
-            </Button>
-          </View>
-        </Surface>
-      </AppModal>
+      {/* ⋮ taşan aksiyonlar (elle kg / yorum / sil) — tartı buradan DEĞİL, kartta tek dokunuş. */}
+      <SackActionsSheet
+        target={actionsTarget ? { id: actionsTarget.id, label: sackCode(actionsTarget) } : null}
+        actions={actionsTarget ? buildSackActions(actionsTarget) : []}
+        onDismiss={() => setActionsTarget(null)}
+      />
+
+      <SackNoteSheet target={noteTarget} onDismiss={() => setNoteTarget(null)} onSaved={refreshPool} />
+
+      <SackLabelPrinter job={printJob} onDone={() => setPrintJob(null)} />
+
+      <SackManualWeightSheet
+        target={manualWeighTarget}
+        onDismiss={() => setManualWeighTarget(null)}
+        onSave={(kg) =>
+          manualWeighTarget
+            ? sackWeigh.saveManual({ id: manualWeighTarget.id, label: manualWeighTarget.label }, kg)
+            : Promise.resolve(false)
+        }
+      />
 
       {/* Aktarma modalı — topu başka açık çuvala taşı */}
       <AppModal visible={moveTarget !== null} onDismiss={() => setMoveTarget(null)}>
@@ -1139,6 +1098,10 @@ const styles = StyleSheet.create({
   scanBtnLabel: { fontSize: typography.size.base, fontWeight: '700', letterSpacing: 0.3 },
 
   // ── Modal'lar ──
+  // Tartılmış çuvalın kg'si vurgulu — operatör tek bakışta hangisi eksik görsün.
+  kgOk: { color: colors.successDark, fontWeight: '700' },
+  noteRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  noteText: { flex: 1, color: colors.textSecondary, fontSize: 11, fontStyle: 'italic' },
   sheet: { width: '100%', borderRadius: radius.lg, padding: spacing.lg, backgroundColor: colors.surface },
   sheetTitle: { fontWeight: '700', marginBottom: spacing.xs, color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },

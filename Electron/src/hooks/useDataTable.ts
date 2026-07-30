@@ -29,6 +29,18 @@ interface Options<T> {
   defaultPageSize?: number;
   /** Backend'e her durumda yollanan ek filtreler (URL override edemez). */
   forceFilters?: Record<string, string | string[]>;
+  /**
+   * VARSAYILAN sıralama kolonu (URL'de `sortBy` yoksa geçerli; kullanıcı kolon
+   * başlığına basınca URL kazanır). Varsayılan `createdAt`.
+   *
+   * Neden gerekli: "oluşturma" ile "buraya geliş" aynı şey değil. Depoya bugün
+   * giren bir top haftalar önce yaratılmış olabilir (kurtarma, kapanış
+   * dispozisyonu, fason kabulü) — `createdAt` sıralı listede binlerce satırın
+   * altına düşer ve operatör "gitmedi" sanır.
+   */
+  defaultSortBy?: string;
+  /** Varsayılan sıralama yönü (URL'de `sortOrder` yoksa). Varsayılan `desc`. */
+  defaultSortOrder?: "asc" | "desc";
   /** Satır seçimi (toplu işlem) — varsayılan açık. `boolean` tüm satırlara uygulanır;
    *  predicate verilirse satır-bazlı karar (yalnız uygun satırlar seçilebilir, örn.
    *  yalnız depodaki çuvallar). Doğrudan `enableRowSelection`'a geçer. */
@@ -55,6 +67,8 @@ export function useDataTable<T>({
   columns,
   defaultPageSize = 50,
   forceFilters,
+  defaultSortBy,
+  defaultSortOrder,
   enableSelection = true,
   initialVisibility,
   enabled = true,
@@ -63,8 +77,13 @@ export function useDataTable<T>({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const urlParams = useMemo(
-    () => parseUrlToQueryParams(searchParams.toString(), { pageSize: defaultPageSize }),
-    [searchParams, defaultPageSize],
+    () =>
+      parseUrlToQueryParams(searchParams.toString(), {
+        pageSize: defaultPageSize,
+        ...(defaultSortBy ? { sortBy: defaultSortBy } : {}),
+        ...(defaultSortOrder ? { sortOrder: defaultSortOrder } : {}),
+      }),
+    [searchParams, defaultPageSize, defaultSortBy, defaultSortOrder],
   );
 
   const filters = useMemo(

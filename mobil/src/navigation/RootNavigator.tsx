@@ -17,6 +17,9 @@ import LoginScreen from '../screens/Auth/LoginScreen';
 import AwaitingAssignmentScreen from '../screens/Auth/AwaitingAssignmentScreen';
 import NoAccessScreen from '../screens/Common/NoAccessScreen';
 import SettingsScreen from '../screens/Common/SettingsScreen';
+import ServerSettingsScreen from '../screens/Common/settings/ServerSettingsScreen';
+import PlaceHardwareScreen from '../screens/Common/settings/PlaceHardwareScreen';
+import ScannerSettingsScreen from '../screens/Common/settings/ScannerSettingsScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
 import { rootNavigationRef } from './navigationRef';
@@ -185,9 +188,25 @@ export default function RootNavigator() {
         ) : (
           <Stack.Screen name="Main" component={MainNavigator} />
         )}
+        {/* Ayarlar menüsü + alt sayfaları — hepsi sağdan kayar (menü → detay). */}
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="SettingsServer"
+          component={ServerSettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="SettingsPlaceHardware"
+          component={PlaceHardwareScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="SettingsScanner"
+          component={ScannerSettingsScreen}
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen

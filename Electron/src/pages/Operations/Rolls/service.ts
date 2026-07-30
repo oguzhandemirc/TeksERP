@@ -196,6 +196,23 @@ export type RollStatusTabKey = keyof typeof ROLL_STATUS_TABS;
  * (useDataTable) ve üst-satır özeti (useRollStats) AYNI tabanı paylaşsın diye
  * tek kaynak — yoksa liste ile "Top/Metre" toplamı birbirinden sapar.
  */
+/**
+ * Sekmenin VARSAYILAN sıralama kolonu.
+ *
+ * `createdAt` yalnız "oluşturma = buraya geliş" olan sekmede doğrudur (Ham Stok:
+ * KK1 girişi). Diğer sekmelerde top oraya SONRADAN gelir — depoya bugün giren bir
+ * top haftalar önce yaratılmış olabilir (kurtarma, kapanış dispozisyonu, fason
+ * kabulü, finalize). `createdAt` sıralı listede binlerce satırın altına düşer ve
+ * operatör "depoya gitmedi" sanır (2026-07-30 saha bulgusu: 700/1200/800 m toplar
+ * 5280 satırlık Bitmiş Depo listesinin 5271-5279. sırasındaydı).
+ *
+ * `updatedAt` "son hareket" vekilidir — kesin giriş anı değil ama operatörün
+ * aradığı şeye kıyasla dramatik biçimde daha yakın.
+ */
+export function rollTabDefaultSortBy(tab: RollStatusTabKey): string {
+  return tab === "RAW_STOCK" ? "createdAt" : "updatedAt";
+}
+
 export function buildRollForceFilters(
   tab: RollStatusTabKey,
 ): Record<string, string | string[]> {

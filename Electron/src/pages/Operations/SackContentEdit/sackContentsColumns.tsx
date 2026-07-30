@@ -44,8 +44,10 @@ export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
   },
   {
     id: "qty",
+    // summable → Excel'e SAYI olarak yazılır + altta TOPLAM satırı doğar. Eskiden
+    // exportValue "700 m" METNİ dönüyordu; Excel'de toplanamıyor, TOPLAM hiç çıkmıyordu.
+    meta: { label: "Metre", summable: true, exportValue: (r) => Number(r.currentQty) },
     header: "Metre",
-    meta: { label: "Metre", exportValue: (r) => fmtM(Number(r.currentQty)) },
     cell: ({ row }) => <span className="text-sm tabular-nums">{fmtM(Number(row.original.currentQty))}</span>,
   },
   {

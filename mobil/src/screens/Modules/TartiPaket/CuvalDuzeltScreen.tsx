@@ -19,6 +19,9 @@ import { packingService, SHIPMENT_STATUS_TR, type LocatedRoll } from '../../../s
 import { rollService } from '../../../services/roll.service';
 import { colorService } from '../../../services/color.service';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
+import SackNoteSheet from './SackNoteSheet';
+import SackManualWeightSheet from './SackManualWeightSheet';
+import { useSackWeigh } from '../../../hooks/useSackWeigh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import type { Roll } from '../../../types/models';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
@@ -44,8 +47,12 @@ export default function CuvalDuzeltScreen() {
   const [scanOpen, setScanOpen] = useState(false);
   // Taşıma: hedef çuvaldan bir top okutma modu.
   const [moveScanOpen, setMoveScanOpen] = useState(false);
-  const [weighOpen, setWeighOpen] = useState(false);
-  const [weighKg, setWeighKg] = useState('');
+  const [manualWeighTarget, setManualWeighTarget] = useState<{
+    id: string;
+    label: string;
+    weightKg: number | null;
+  } | null>(null);
+  const [noteTarget, setNoteTarget] = useState<{ id: string; label: string; notes: string | null } | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; desc: string; run: () => void } | null>(null);
   // Saha #4: etiket değiştirme
   const [relabelOpen, setRelabelOpen] = useState(false);
@@ -96,16 +103,11 @@ export default function CuvalDuzeltScreen() {
   });
 
   // İçerik düzeltmesi tartıyı sıfırlar — yeniden tartı aynı ekrandan.
-  const weighMut = useMutation({
-    mutationFn: (kg: number) => packingService.weighSack(roll!.sack!.id, { weightKg: kg }),
-    onSuccess: () => {
-      Toast.show({ type: 'success', text1: 'Çuval tartısı kaydedildi' });
-      setWeighOpen(false);
-      setWeighKg('');
-      invalidate();
-      relocate();
-    },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: e.message }),
+  // Tartı: TEK DOKUNUŞ (kantardan oku → doğrudan kaydet). Elle giriş ayrı sheet'te.
+  // Paketleme ekranıyla AYNI hook → iki ekran arasında davranış ayrışmaz.
+  const sackWeigh = useSackWeigh(() => {
+    invalidate();
+    relocate();
   });
 
   // Saha #4: etiket (renk/en/kalite) değiştir — başarınca yeniden etiket bas.
@@ -271,14 +273,46 @@ export default function CuvalDuzeltScreen() {
                 >
                   Başka Çuvala Taşı
                 </Button>
+                {/* TEK DOKUNUŞ tartı — Paketleme ekranıyla parite: kantardan oku →
+                    doğrudan kaydet. Elle giriş ayrı (yanındaki) buton. */}
                 <Button
                   mode={roll.sack?.weightKg == null ? 'contained' : 'contained-tonal'}
-                  icon="scale"
-                  disabled={weighMut.isPending}
-                  onPress={() => setWeighOpen(true)}
+                  icon={sackWeigh.busy ? 'progress-clock' : 'scale'}
+                  disabled={sackWeigh.busy}
+                  onPress={() =>
+                    roll.sack && void sackWeigh.weigh({ id: roll.sack.id, label: sackLabel(roll.sack) })
+                  }
                   style={styles.actionBtn}
                 >
-                  Çuvalı Tart
+                  {sackWeigh.busy ? 'Tartılıyor…' : 'Çuvalı Tart'}
+                </Button>
+                <Button
+                  mode="contained-tonal"
+                  icon="keyboard-outline"
+                  onPress={() =>
+                    roll.sack &&
+                    setManualWeighTarget({
+                      id: roll.sack.id,
+                      label: sackLabel(roll.sack),
+                      weightKg: roll.sack.weightKg,
+                    })
+                  }
+                  style={styles.actionBtn}
+                >
+                  Elle kg
+                </Button>
+                {/* Yorum — Paketleme ekranıyla parite (asimetri olmasın). Sevkiyattaki
+                    çuvalda da çalışır: backend yorumda touchWarehouseSackTx guard'ı uygulamaz. */}
+                <Button
+                  mode="contained-tonal"
+                  icon="comment-text-outline"
+                  onPress={() =>
+                    roll.sack &&
+                    setNoteTarget({ id: roll.sack.id, label: sackLabel(roll.sack), notes: roll.sack.notes })
+                  }
+                  style={styles.actionBtn}
+                >
+                  {roll.sack?.notes ? 'Notu Düzenle' : 'Not Ekle'}
                 </Button>
                 {/* Saha #4: etiket değiştir (renk/en/kalite) + yeniden bas */}
                 <Button
@@ -315,30 +349,16 @@ export default function CuvalDuzeltScreen() {
         title="Hedef Çuvaldaki Bir Topu Okut"
       />
 
-      {/* Çuval tartısı — içerik düzeltmesi sonrası yeniden tartı */}
-      <AppModal visible={weighOpen} onDismiss={() => setWeighOpen(false)} position="center">
-        <View style={styles.sheet}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            {roll?.sack ? sackLabel(roll.sack) : 'Çuval'} — Brüt Tartı
-          </Text>
-          <TextInput
-            mode="outlined"
-            label="Kg"
-            value={weighKg}
-            onChangeText={setWeighKg}
-            keyboardType="decimal-pad"
-            autoFocus
-          />
-          <Button
-            mode="contained"
-            style={{ marginTop: 12 }}
-            disabled={!(parseFloat(weighKg.replace(',', '.')) > 0) || weighMut.isPending}
-            onPress={() => weighMut.mutate(parseFloat(weighKg.replace(',', '.')))}
-          >
-            Kaydet
-          </Button>
-        </View>
-      </AppModal>
+      {/* Elle kg — kantar okunamadığında; Paketleme ekranıyla AYNI sheet. */}
+      <SackManualWeightSheet
+        target={manualWeighTarget}
+        onDismiss={() => setManualWeighTarget(null)}
+        onSave={(kg) =>
+          manualWeighTarget
+            ? sackWeigh.saveManual({ id: manualWeighTarget.id, label: manualWeighTarget.label }, kg)
+            : Promise.resolve(false)
+        }
+      />
 
       {/* Saha #4: etiket değiştir (renk / en / kalite)
           position="bottom": AppModal alttan sheet'i TAM klavye yüksekliği kadar
@@ -413,6 +433,15 @@ export default function CuvalDuzeltScreen() {
         onDone={(printed) =>
           setReprintRoll((cur) => (cur?.id === printed.id ? null : cur))
         }
+      />
+
+      <SackNoteSheet
+        target={noteTarget}
+        onDismiss={() => setNoteTarget(null)}
+        // Kayıt sonrası topu yeniden konumlandır → roll.sack.notes tazelenir.
+        onSaved={() => {
+          if (roll) locate.mutate(roll.barcode);
+        }}
       />
 
       <ConfirmDialog

@@ -6,39 +6,30 @@
 
 ## A. SUNUCU (Backend + PostgreSQL)
 
-İki yol var: **Windows installer (fabrika için ÖNERİLEN)** veya **Linux/manuel**.
+**Tek yol: elle kurulum + pm2.** (2026-07-30: Inno Setup/NSSM installer'ı — `setup.exe`, `manage.ps1` — **tamamen kaldırıldı**. Ayrıntılı runbook: `DEPLOY-RUNBOOK.md`.)
 
-### A0. Ön koşullar (her iki yol)
-1. **Node.js 22.x** (CI: `node-version: 22`; installer'a gömülü 22.13.1) ve **PostgreSQL 18.x** (gömülü 18.4) kur. `package.json`'da `engines` yok — sürüm operasyonel gerekliliktir.
+### A0. Ön koşullar
+1. **Node.js 22.x** (CI: `node-version: 22`), **PostgreSQL 18.x** (dev 18.4 ile parite) ve **pm2** (`npm i -g pm2`) kur. `package.json`'da `engines` yok — sürüm operasyonel gerekliliktir.
 2. Boş bir PostgreSQL veritabanı + login rolü oluştur. **Rol CREATEDB yetkili olmalı** — Prisma 7 `migrate deploy` bağlanınca DB'yi oluşturmayı dener; yetki yoksa "permission denied to create database" ile patlar.
+3. **`postgresql.conf` TeksERP ayarlarını uygula** — `listen_addresses='127.0.0.1'`, `statement_timeout='50s'`, `log_min_duration_statement=500`, timezone ve bellek tuning'i. Bu değerlerin **tek kalan kaydı** `DEPLOY-RUNBOOK.md §6`'dır (installer'dan taşındı); atlanırsa default `work_mem=4MB`/`shared_buffers=128MB` ile yıllık raporlar `statement_timeout`'a takılır.
 
-### A1. Windows installer yolu (ÖNERİLEN)
-3. Build makinesinde `setup.exe` üret: `powershell -File installer\windows\build.ps1` (gömülü: Node 22.13.1, PostgreSQL 18.4-1, NSSM 2.24).
-4. Saha sunucusunda: `.\manage.ps1 -Action install`. Bu tek komut otomatik yapar:
-   - PostgreSQL'i **TeksErpDB** servisi yapar (**port 5433**, sadece `127.0.0.1`)
-   - **TeksErpDb** DB + **tekserp** rolü (rastgele şifre)
-   - `migrate deploy`
-   - İLK kurulumsa (`.seeded` bayrağı yoksa) **seed** çalıştırır → **DİKKAT: demo veri de girer, bkz. A4/C-uyarı**
-   - Backend'i **NSSM ile TeksErpBackend** servisi (port 4000, firewall açık)
-   - `statement_timeout = 50s`
-   - Gece 03:00 otomatik yedek görevi
-   - Secret'lar `C:\ProgramData\TeksERP\secret.json`'da rastgele üretilir → **bu dosyayı yedekle; kaybolursa DB'ye bağlanılamaz**.
-5. Yönetim: `.\manage.ps1 -Action status|start|stop|restart|backup|restore|studio`.
-6. Güncelleme: aynı `setup.exe`'yi çalıştır → veri korunur, `migrate deploy` koşar, **seed atlanır** (`.seeded` var).
-
-### A2. Linux/manuel yol — ENV hazırla (`Teks-Erp/.env`)
-7. Üç değişkeni yaz (`example-env.txt` şablon):
+### A1. ENV hazırla (`Teks-Erp/.env` — sırlar; git'e girmez)
+4. İki değişkeni yaz:
    ```
-   PORT=4000
-   DATABASE_URL="postgresql://<user>:<pass>@<host>:5432/<db>?schema=public"
+   DATABASE_URL="postgresql://<user>:<pass>@127.0.0.1:<port>/<db>?schema=public"
    JWT_SECRET="<en az 32 karakter rastgele>"
    ```
+   - **`DATABASE_URL` yedeklemenin de kaynağıdır** — `backup.service.ts` host/port/user/db/şifreyi buradan çözer.
+   - Eski `secret.json` **artık yok**; tek sır kaynağı `.env` → **yedekle**.
    - `DATABASE_URL` set değilse açılışta throw (`src/lib/prisma.ts`).
    - `JWT_SECRET` yok veya <32 karakter ise **backend AÇILMAZ** (`auth.service.ts`, modül-yükleme anında throw). `example-env.txt`'teki demo değeri prod'da kullanma — rastgele ≥32 hex üret.
    - `PORT` (default 4000) ve `HOST` (default `0.0.0.0` = tüm LAN) opsiyonel.
 
-### A3. Şemayı kur (migration — Linux yolunda manuel)
-8. Sırasıyla:
+### A2. Ortam ayarları (`Teks-Erp/ecosystem.config.js` — sır DEĞİL; git'te)
+5. Yedekleme ve port ayarları burada durur. **`BACKUP_DIR` tanımsızsa gece yedeği ÇALIŞMAZ** — deploy sonrası backend log'unda `[backup] BACKUP_DIR tanımsız` satırının **olmadığını** teyit et. Diğerleri: `BACKUP_OFFSITE_DIR` (makine dışı kopya; boşsa yedekler DB ile aynı diskte), `BACKUP_HOUR` (default 3), `PG_BIN_DIR` (`pg_dump`/`pg_restore` konumu — Windows'ta PATH'te olmaz).
+
+### A3. Şemayı kur (migration)
+6. Sırasıyla:
    ```
    npm ci
    npm run prisma:generate     # = npx prisma generate (her kurulum+güncellemede ZORUNLU)
@@ -47,14 +38,15 @@
    - `migrate deploy` boş DB'de hatasız doğrulanmış (`MIGRATION-DEPLOY.md`).
    - **`migrate dev`'i ASLA prod'da çalıştırma** — reset riski. Sıfırdan kurulumda `migrate deploy` yeterli (reset etmez).
    - `migrate deploy` geri alınmaz; tek rollback = yedekten restore.
-9. DB-level (migration ile DEĞİL, manuel, önerilir):
+   - **`npm ci --omit=dev` kullanıyorsan:** `prisma.config.ts` yüklenmesi `ts-node`'a (devDependency) bağlı → `migrate deploy` patlar. Çözüm: `copy deploy\prisma.config.prod.js prisma.config.js`. devDeps kuruluysa kopyalama.
+7. DB-level (migration ile DEĞİL, manuel, önerilir):
    ```
    ALTER DATABASE <db> SET statement_timeout = '50s';
    ```
    (+ `idle_in_transaction_session_timeout=5min`, `log_min_duration_statement=500ms` — `ARCHITECTURE.md`).
 
 ### A4. Seed (yalnızca İLK kurulumda) — DEMO içerir
-10. `npm run seed` (= `npx prisma db seed`).
+8. `npm run seed` (= `npx prisma db seed`).
     - **Tek `main()`, `create` ile yazar → ikinci kez çalıştırılamaz** (unique hatası). Güncellemelerde ASLA.
     - **Bootstrap (prod-temel, gerekli):** 55 permission, 15 permission template, 1 kullanıcı (yalnız admin/123123), 3 kalite sınıfı (1.KALITE/A1/FIRE), 6 iade nedeni, 3 hata tipi, sistem varsayılan etiket medyası (`label.defaultMedia` = 100×58, 203dpi — ayrı "format profili" kataloğu YOK), 3 label template default (ROLL_RAW/ROLL_FINISHED/SWATCH).
     - **AYNI ZAMANDA DEMO master-data (NODE_ENV guard'ı YOK):** 4 müşteri, 6 renk, 7 özellik, 3 fason kategori (BOYA/ZIMPARA/KARTELA) + 3 fason firma, 6 istasyon, 3 makine, peripheral'lar (ağ yazıcıları + metre/kantar), 3 rota, Patos ürünü, alias'lar, 3 şube.
@@ -63,16 +55,15 @@
       - (b) Tam temiz: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` → `migrate deploy` → `seed` → demo temizle.
     - **Seed'i tamamen atlama önerilmez** — izin/kalite/etiket template gelmez, sistem açılmaz.
 
-### A5. Derle + çalıştır (tek-process)
-11. ```
-    npm run build              # = tsc -> dist/
-    node dist/src/server.js    # tek-process prod
-    ```
-    - `package.json`'da `start`/`prod` script'i **YOK** — elle çalıştır.
-    - **TEK-PROCESS invariant:** PM2 **cluster** / `cluster` modülü / 2. replica EKLEME — presence sayımı + feature-flag cache + archive-scheduler sessizce bozulur. systemd / pm2 **fork modu** / nohup ile sarmala (cluster DEĞİL).
+### A5. Derle + pm2 ile çalıştır (tek-process)
+9. `npm run build` (= `tsc` → `dist/`). `package.json`'da `start`/`prod` script'i **YOK**; süreci pm2 yönetir.
+10. `pm2 start ecosystem.config.js` → `pm2 status` ile `online` teyit et, `pm2 logs teks-erp-backend` ile açılış bannerını gör.
+    - **TEK-PROCESS invariant:** PM2 **cluster** / `cluster` modülü / 2. replica EKLEME — presence sayımı + feature-flag cache + archive-scheduler + backup-scheduler sessizce bozulur (çift arşiv, çift gece yedeği). `ecosystem.config.js` `exec_mode: "fork"` + `instances: 1` ile gelir; **değiştirme**.
+    - **Log rotasyonu pm2'de otomatik DEĞİL:** `pm2 install pm2-logrotate` + `max_size 10M` / `retain 14`. Kurulmazsa log dosyası sınırsız büyür (NSSM bunu kendisi yapıyordu).
+11. **Reboot kalıcılığı:** `pm2 save` (her deploy sonrası tekrar). `pm2 startup` **Windows'u desteklemez** — listeyi geri yükleyecek ayrı bir tetikleyici (pm2-installer / Görev Zamanlayıcı `pm2 resurrect`) gerekir. Bu sunucuda çalışan mekanizmanın tespiti: `DEPLOY-RUNBOOK.md §7`.
 
 ### A6. Sağlık doğrulama
-12. `curl -s http://localhost:4000/health` → **200 + `db:"UP"`**. Endpoint **`GET /health`**, `/api/health` DEĞİL.
+12. `curl -s http://localhost:4000/health` → **200 + `db:"UP"`**. Endpoint **`GET /health`**, `/api/health` DEĞİL. Yanıttaki **`lastBackup` null ise yedekleme yapılandırması bozuktur** (A2).
 
 ---
 
@@ -182,14 +173,15 @@
 
 ## ⚠️ KRİTİK TUZAKLAR
 
-- **Migration/generate sırası:** `install → prisma:generate → migrate deploy → (ilk) seed → build → node dist/src/server.js`. `prisma generate` atlanırsa derlenmez; `migrate` atlanırsa P2022. **`migrate dev` prod'da ASLA** (reset).
+- **Migration/generate sırası:** `install → prisma:generate → migrate deploy → (ilk) seed → build → pm2 start ecosystem.config.js`. `prisma generate` atlanırsa derlenmez; `migrate` atlanırsa P2022. **`migrate dev` prod'da ASLA** (reset).
 - **electron:rebuild:** COM cihazlı her PC'de ZORUNLU; atlanırsa cihaz **sessizce** devre dışı. Electron yükseltme + `npm install` sonrası tekrar.
 - **Yazıcı dili:** Cihaz Kaydı'nda dil ZORUNLU — fiziksel yazıcının firmware diliyle (PPLA/PPLB/ZPL) eşleşmeli. En sık hata: yanlış dil seçmek.
-- **DEMO seed:** bootstrap + demo birlikte yazılır (guard yok); installer ilk kurulumda da. Gerçek fabrikada demo satırlarını temizle. Tam reset = `DROP SCHEMA public CASCADE` → migrate → seed.
+- **DEMO seed:** bootstrap + demo birlikte yazılır (guard yok). Gerçek fabrikada demo satırlarını temizle. Tam reset = `DROP SCHEMA public CASCADE` → migrate → seed. **Eskiden installer `.seeded` bayrağıyla ikinci seed'i otomatik engelliyordu; pm2 yolunda bu koruma YOK** — güncellemede `npm run seed` çalıştırmamak operatör disiplinine bağlı.
 - **JWT_SECRET <32:** Backend açılmaz; rastgele ≥32 üret.
 - **TEK-PROCESS:** cluster/2. replica EKLEME — presence + cache + scheduler bozulur. Fork modu.
 - **/health (alias yok):** `GET /health`.
-- **secret.json (Windows):** `C:\ProgramData\TeksERP\secret.json` yedekle; kaybolursa DB'ye bağlanılamaz. DB portu **5433**, 127.0.0.1.
+- **`.env` yedekle:** Tek sır kaynağı (`DATABASE_URL` + `JWT_SECRET`); kaybolursa DB'ye bağlanılamaz ve geri yükleme yapılamaz. Eski `secret.json` **kaldırıldı**. DB `127.0.0.1` dinler (installer **5433** kullanıyordu — sunucudaki gerçek portu `.env`'den teyit et).
+- **`BACKUP_DIR` (pm2):** Tanımsızsa gece yedeği sessizce çalışmaz. Panel → Sistem → Yedekler bunu kırmızı kutuyla bildirir; `/health` → `lastBackup` null olur.
 - **simulate→false:** Fiziksel donanım gerçekten bağlı olmalı; yoksa NET HATA.
 - **Cihaz eşleştirme akışı:** announce→PENDING→(Cihazlar sayfası) Onayla&Ata→APPROVED. PairingCode / 6-haneli kod akışı KALDIRILDI; `DevicePairingSection` yalnız `devicePairingRequired` zorunluluk bayrağını aç/kapar.
 

@@ -28,6 +28,8 @@ const reassignSackCustomerSchema = z.object({
   branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
 });
 const removeSackSchema = z.object({ withContents: z.boolean().optional() });
+// Çuval notu — iç serbest not; boş/whitespace veya null → temizle.
+const sackNotesSchema = z.object({ notes: z.string().trim().max(500, "Not en fazla 500 karakter").nullable().optional() });
 const distributeSackSchema = z.object({
   rollIds: z.array(z.string().uuid()).optional(),
   swatchIds: z.array(z.string().uuid()).optional(),
@@ -36,11 +38,21 @@ const moveRollsSchema = z.object({
   rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçilmeli"),
   targetSackId: z.string().uuid(),
 });
+// Çuval böl — seçili toplar YENİ çuvala ayrılır (hedef çuval verilmez, açılır).
+const splitSackSchema = z.object({
+  rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top seçilmeli").max(500),
+});
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 
 // Sevkiyat kur — depodan çuval seç + müşteri/şube ata + (opsiyonel) sipariş seç.
 const createShipmentSchema = z.object({
-  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçilmeli"),
+  // .max(500) — önizleme (previewShipmentSchema) ve sackIdsSchema zaten 500'de
+  // sınırlıydı, YAZAN yol sınırsızdı: express.json({limit:"1mb"}) ≈ 26.000 UUID
+  // geçirir ve createShipment çuval-BAŞINA sıralı updateMany + tahsis +
+  // freezeForSource (tüm sevkiyat ağacının snapshot'ı) yapar → hepsi TEK
+  // transaction'da, yani bir havuz bağlantısını 20sn Prisma tavanına kadar tutar.
+  // Uygulamanın en uzun tx'i buydu; asimetri kapatıldı.
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçilmeli").max(500),
   customerId: z.string().uuid("Geçersiz müşteri ID"),
   branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
   orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).optional(),
@@ -113,6 +125,32 @@ export class ShippingController {
         { customerId: body.customerId ?? null, branchId: body.branchId ?? null },
         req.user?.userId,
       );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  splitSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = splitSackSchema.parse(req.body);
+      const result = await this.service.splitSack(
+        { sackId: req.params.id as string, rollIds: body.rollIds },
+        req.user?.userId,
+      );
+      res.status(201).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setSackNotes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = sackNotesSchema.parse(req.body ?? {});
+      const result = await this.service.setSackNotes(req.params.id as string, body.notes ?? null, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  getSackNotes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getSackNotes(req.params.id as string);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -388,6 +426,15 @@ export class ShippingController {
     try {
       const body = z.object({ sackIds: z.array(z.string().uuid()).min(1).max(200) }).parse(req.body);
       const result = await sackSearchService.getPickList(body.sackIds);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** İçerik dökümü — çeki listesinin GRUPLU özeti değil, TOP BAZLI döküm. */
+  getContentDump = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = z.object({ sackIds: z.array(z.string().uuid()).min(1).max(200) }).parse(req.body);
+      const result = await sackSearchService.getContentDump(body.sackIds);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

@@ -113,7 +113,7 @@ export const printedDocumentService = {
     docType: PrintedDocType,
     sourceId: string,
     version?: number,
-    opts?: { draft?: boolean; currentTemplate?: boolean; printNote?: string },
+    opts?: { draft?: boolean; currentTemplate?: boolean; printNote?: string; rowNotes?: boolean },
   ): Promise<string> =>
     apiClient
       .get<string>(`${base}/${docType}/${sourceId}/html`, {
@@ -123,6 +123,9 @@ export const printedDocumentService = {
           ...(opts?.currentTemplate ? { currentTemplate: 1 } : {}),
           // Tek seferlik baskı notu — persist edilmez, yalnız bu render'a girer.
           ...(opts?.printNote?.trim() ? { printNote: opts.printNote.trim() } : {}),
+          // Tek seferlik "satır notlarını (çuval yorumu) göster" — kalıcı kolon
+          // ayarını EZER (OR); ayara/snapshot'a YAZILMAZ, versiyon doğurmaz.
+          ...(opts?.rowNotes ? { rowNotes: 1 } : {}),
         },
         responseType: "text",
         headers: { Accept: "text/html" },

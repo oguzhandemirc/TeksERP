@@ -60,6 +60,7 @@ const LABELS = {
     metreToplami: "METRE TOPLAMI",
     kgToplami: "KG TOPLAMI",
     paketSayisi: "TOP ADEDİ",
+    aciklama: "AÇIKLAMA",
     cekiCaption: "ÇEKİ LİSTESİ",
     cuvalNo: "ÇUVAL NO",
     barkodNo: "BARKOD NO",
@@ -102,6 +103,7 @@ const LABELS = {
     metreToplami: "TOTAL METERS",
     kgToplami: "TOTAL KG",
     paketSayisi: "ROLL COUNT",
+    aciklama: "REMARKS",
     cekiCaption: "PACKING LIST",
     cuvalNo: "PACKAGE NO",
     barkodNo: "BARCODE",
@@ -192,6 +194,16 @@ interface RenderMeta {
   printedBy?: string | null;
   /** Tek seferlik baskı notu (?printNote= — persist edilmez). */
   printNote?: string | null;
+  /**
+   * Çuval yorumları (annotation) — `sackNo` → yorum. Donmuş snapshot'ta YOK,
+   * her baskıda canlı çözülür (sevkten sonra yazılan yorum da çıkar).
+   */
+  rowNotes?: Record<string, string>;
+  /**
+   * Tek seferlik "yorumları bu baskıda göster" (?rowNotes=1) — kalıcı kolon
+   * ayarını EZER (OR). Hiçbir yere yazılmaz.
+   */
+  forceRowNotes?: boolean;
 }
 
 function esc(v: unknown): string {
@@ -340,11 +352,25 @@ export function renderShipmentDispatchHtml(
     : "";
 
   // 2) ÇUVAL LİSTESİ
+  //
+  // "AÇIKLAMA" (çuval yorumu) kolonu OPT-IN'dir (`defaultHidden`): varsayılan
+  // BASILMAZ — iç not müşteriye giden irsaliyeye kazayla sızmasın. İki yolla açılır
+  // ve aralarında OR vardır:
+  //   (a) kalıcı: Belge Kişiselleştirme → columns.cuval.shown içinde "note"
+  //   (b) tek seferlik: ?rowNotes=1 → meta.forceRowNotes (hiçbir yere yazılmaz)
+  // OR yalnız BURADA uygulanır (tek yer) — aşağıdaki efektif kolon ayarında.
+  const rowNotes = meta.rowNotes ?? {};
+  const hasAnyRowNote = sacks.some((s) => !!rowNotes[s.code]);
+  const cuvalColCfg =
+    meta.forceRowNotes && hasAnyRowNote
+      ? { ...cfg.columns?.cuval, shown: [...(cfg.columns?.cuval?.shown ?? []), "note"] }
+      : cfg.columns?.cuval;
+
   const cuvalSection = sectionOn(cfg.sections, "cuval")
     ? buildDocTable<ShipmentDocSack>({
         className: "sec",
         caption: L.cuvalCaption,
-        colCfg: cfg.columns?.cuval,
+        colCfg: cuvalColCfg,
         footLabel: L.toplam,
         rows: sacks,
         cols: [
@@ -352,6 +378,21 @@ export function renderShipmentDispatchHtml(
           { key: "totalMeters", label: L.metreToplami, align: "r", cell: (s) => esc(fmtQty(s.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
           { key: "totalKg", label: L.kgToplami, align: "r", cell: (s) => esc(fmtQty(s.totalKg)), foot: esc(fmtQty(t.totalKg)) },
           { key: "packageCount", label: L.paketSayisi, align: "r", cell: (s) => esc(fmtCount(s.packageCount)), foot: esc(fmtCount(t.totalRolls)) },
+          // Kolon açık AMA hiçbir çuvalda yorum yoksa boş sütun basmayalım:
+          // `defaultHidden` + shown zinciri açsa da hasAnyRowNote false ise düşürülür.
+          ...(hasAnyRowNote
+            ? [
+                {
+                  key: "note",
+                  label: L.aciklama,
+                  align: "l" as const,
+                  width: "32%",
+                  cellClass: "wrap",
+                  defaultHidden: true,
+                  cell: (s: ShipmentDocSack) => esc(rowNotes[s.code] ?? ""),
+                },
+              ]
+            : []),
         ],
       })
     : "";
@@ -435,6 +476,9 @@ export function renderShipmentDispatchHtml(
   .sec thead th:not(.caption) { background: #f1f5f9; font-weight: 700; font-size: 10px; }
   .sec .l { text-align: left; }
   .sec .r { text-align: right; }
+  /* Serbest metin hücresi (çuval yorumu) — uzun/çok satırlı not tablo düzenini
+     bozmasın: satır sonları korunur, uzun kelime kırılır. */
+  .sec td.wrap { white-space: pre-wrap; word-break: break-word; font-size: 10px; }
   .sec .tot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #000; }
   .note { margin-top: 8px; font-size: 11px; white-space: pre-wrap;
           border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 4px; }

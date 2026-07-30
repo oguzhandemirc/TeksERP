@@ -73,7 +73,7 @@ vi.mock("@/components/forms/entity-picker/EntityPickerModal", () => ({
 }));
 
 import { RelabelSpecForm } from "./RelabelSpecForm";
-import { RelabelPrintForCustomer } from "./RelabelPrintForCustomer";
+import { RelabelPrintForCustomer } from "@/components/labels/PrintForCustomerCard";
 import { RollContextHeader, LastLabelBanner } from "./RollContextHeader";
 
 const baseCtx: RelabelContext = {

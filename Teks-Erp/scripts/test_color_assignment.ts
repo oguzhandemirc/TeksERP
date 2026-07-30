@@ -12,7 +12,7 @@
 //   7. Atama kaldırma: alias'lı satır KORUNUR → assigned=false, alias durur.
 
 import type { Request } from "express";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { ColorService } from "../src/services/color.service";
 import { CustomerAliasService } from "../src/services/customer-alias.service";
 import { assertColorsAssignableToCustomer } from "../src/services/helpers/color-assignment.helper";
@@ -228,4 +228,7 @@ main()
     console.error(e);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
+  });

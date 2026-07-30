@@ -16,7 +16,8 @@
     "lint": "eslint src",
     "test": "tsx scripts/run-all-tests.ts",
     "test:load": "tsx scripts/load_test.ts",
-    "check:docs": "node ../scripts/check-docs.mjs"
+    "check:docs": "node ../scripts/check-docs.mjs",
+    "check:migrations": "node ../scripts/check-migrations.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",

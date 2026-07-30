@@ -109,7 +109,7 @@ export function NewTemplateDialog({ open, onOpenChange }: Props) {
                 className="h-auto justify-start px-3 py-2 text-left"
                 onClick={() => setTemplateType("bound")}
               >
-                <span className="text-xs font-medium">Rulo / Kartela etiketi</span>
+                <span className="text-xs font-medium">Rulo / Kartela / Çuval etiketi</span>
               </Button>
               <Button
                 type="button"
@@ -123,7 +123,7 @@ export function NewTemplateDialog({ open, onOpenChange }: Props) {
             <p className="mt-1 text-[10px] text-muted-foreground">
               {isStandalone
                 ? "Bakım/statik etiket — bağlama atanamaz, barkod gerekmez; yalnız Serbest Baskı'da listelenir."
-                : "Bağlama (rulo/kartela) atanabilir; okunabilir barkod gerektirir."}
+                : "Bağlama (rulo/kartela/çuval) atanabilir; okunabilir barkod gerektirir."}
             </p>
           </FormField>
 

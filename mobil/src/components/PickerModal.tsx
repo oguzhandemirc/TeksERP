@@ -18,6 +18,7 @@ import {
   Button,
   TouchableRipple,
   ActivityIndicator,
+  Icon,
 } from 'react-native-paper';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
@@ -39,6 +40,30 @@ export interface SortOption {
   label: string;
   icon?: string;
 }
+
+/**
+ * Listenin BAŞINA sabitlenen aksiyon kartı (ör. KK1 "Yeni Desen").
+ *
+ * Diğer seçeneklerle aynı kart geometrisinde görünür ama seçenek DEĞİLDİR:
+ * mor zemin + beyaz yazı ile ayrışır, alfabetik sıralama ve arama filtresi ne
+ * olursa olsun **her zaman ilk hücredir**. Basılınca `onSelect`/`onDismiss`
+ * ÇAĞRILMAZ — picker açık kalır, parent akışı sürdürür (ör. `quickAddSlot`
+ * içindeki inline formu açar).
+ */
+export interface PickerLeadingAction {
+  label: string;
+  /** Kartın altındaki küçük açıklama (ör. "Listede yok — hemen ekle"). */
+  sublabel?: string;
+  /** MaterialCommunityIcons adı — etiketin soluna beyaz ikon. */
+  icon?: string;
+  onPress: () => void;
+  /** Dokunmayı kapatır + kartı soluklaştırır (ör. offline'da). */
+  disabled?: boolean;
+}
+
+/** Aksiyon kartının veri içindeki sentinel `value`'su — gerçek bir seçenek id'si
+ *  ile çakışmaması için ayraçlı. */
+const LEADING_ACTION_VALUE = '__picker_leading_action__';
 
 interface BaseProps {
   visible: boolean;
@@ -75,9 +100,12 @@ interface BaseProps {
    *  sırası) o sıra korunur. */
   disableSort?: boolean;
   /** Arama satırı ile liste ARASINA yerleştirilen opsiyonel içerik (ör. yetkili
-   *  operatöre "＋ Yeni Desen" hızlı ekleme). Verilmezse render edilmez —
+   *  operatöre "＋ Yeni Desen" hızlı ekleme formu). Verilmezse render edilmez —
    *  diğer picker kullanıcıları etkilenmez. */
   quickAddSlot?: React.ReactNode;
+  /** Listenin ilk hücresine sabitlenen mor aksiyon kartı — bkz.
+   *  `PickerLeadingAction`. Verilmezse hiç render edilmez. */
+  leadingAction?: PickerLeadingAction;
 }
 
 interface PaginatedProps extends BaseProps {
@@ -133,6 +161,7 @@ export default function PickerModal(props: Props) {
     pinnedLabel,
     disableSort = false,
     quickAddSlot,
+    leadingAction,
   } = props;
 
   // Yenileme: ham isFetching yerine standart hook → offline guard + zaman aşımı
@@ -194,18 +223,45 @@ export default function PickerModal(props: Props) {
     );
   }, [paginated, sortedOptions, clientSearch]);
 
-  // A-Z hızlı indeks (yalnız client mode) — listData zaten alfabetik sıralı, her
+  // Aksiyon kartı listenin BİRİNCİ HÜCRESİ olarak veriye enjekte edilir.
+  // (ListHeaderComponent olmazdı: header tüm satır genişliğini kaplar, grid
+  // hücresi olmaz.) Sıralama ve arama filtresinden SONRA eklendiği için
+  // alfabetik sıraya karışmaz ve arama yazılsa bile ilk sırada kalır — zaten
+  // "aradığını bulamadın, ekle" akışının tam gerekli olduğu an.
+  //
+  // `onPress` ref'ten okunur: parent inline nesne verse bile (her render'da yeni
+  // kimlik) memo bağımlılıkları primitive kalır, FlashList boşuna yenilenmez.
+  const leadingActionRef = useRef(leadingAction);
+  leadingActionRef.current = leadingAction;
+  const leadLabel = leadingAction?.label;
+  const leadSublabel = leadingAction?.sublabel;
+  const leadIcon = leadingAction?.icon;
+  const leadDisabled = leadingAction?.disabled === true;
+
+  const dataWithLeading = useMemo(() => {
+    if (leadLabel == null) return listData;
+    return [
+      { value: LEADING_ACTION_VALUE, label: leadLabel, sublabel: leadSublabel },
+      ...listData,
+    ];
+  }, [leadLabel, leadSublabel, listData]);
+
+  // A-Z hızlı indeks (yalnız client mode) — liste zaten alfabetik sıralı, her
   // harfin ilk görünümünün index'ini tutarız. Operatör harfe basınca o gruba
-  // atlar (arama kutusuna yazmak yerine — onlarca üründe pratik).
+  // atlar (arama kutusuna yazmak yerine — onlarca üründe pratik). Index'ler
+  // FlashList'e verilen dizide (aksiyon kartı dahil) hesaplanır — aksiyon kartı
+  // her şeyi 1 kaydırdığı için listData üzerinden hesaplamak yanlış satıra
+  // atlardı; kartın kendisi indekse GİRMEZ.
   const azIndex = useMemo(() => {
     if (paginated) return [] as { letter: string; index: number }[];
     const seen = new Map<string, number>();
-    listData.forEach((o, i) => {
+    dataWithLeading.forEach((o, i) => {
+      if (o.value === LEADING_ACTION_VALUE) return;
       const ch = (o.label?.trim()?.[0] ?? '').toLocaleUpperCase('tr');
       if (ch && !seen.has(ch)) seen.set(ch, i);
     });
     return Array.from(seen.entries()).map(([letter, index]) => ({ letter, index }));
-  }, [paginated, listData]);
+  }, [paginated, dataWithLeading]);
 
   const jumpToLetter = (index: number) => {
     Haptics.selectionAsync().catch(() => {});
@@ -223,6 +279,12 @@ export default function PickerModal(props: Props) {
     },
     [onSelect, onDismiss, paginated],
   );
+
+  // Aksiyon kartı: seçim DEĞİL → onSelect/onDismiss çağrılmaz, picker açık kalır.
+  const handleLeadingPress = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    leadingActionRef.current?.onPress();
+  }, []);
 
   // Çerçeveli sabit grup — aramayla birlikte filtrelenir, alfabetik sıralanmaz.
   const filteredPinned = useMemo(() => {
@@ -262,14 +324,23 @@ export default function PickerModal(props: Props) {
   // Kararlı renderItem — yalnız seçim değişince kimliği değişir; PickerCard
   // React.memo olduğundan sadece eski/yeni seçili kart yeniden render olur.
   const renderItem = useCallback(
-    ({ item }: { item: PickerOption }) => (
-      <PickerCard
-        option={item}
-        selected={item.value === selectedValue}
-        onPress={handlePick}
-      />
-    ),
-    [selectedValue, handlePick],
+    ({ item }: { item: PickerOption }) =>
+      item.value === LEADING_ACTION_VALUE ? (
+        <ActionCard
+          label={item.label}
+          sublabel={item.sublabel}
+          icon={leadIcon}
+          disabled={leadDisabled}
+          onPress={handleLeadingPress}
+        />
+      ) : (
+        <PickerCard
+          option={item}
+          selected={item.value === selectedValue}
+          onPress={handlePick}
+        />
+      ),
+    [selectedValue, handlePick, leadIcon, leadDisabled, handleLeadingPress],
   );
 
   // Paginated submit handler
@@ -384,8 +455,9 @@ export default function PickerModal(props: Props) {
             </View>
           )}
 
-        {/* Opsiyonel hızlı ekleme yuvası (ör. KK1 "＋ Yeni Desen") — arama ile
-            liste arasında; verilmediyse hiç render edilmez. */}
+        {/* Opsiyonel hızlı ekleme yuvası — arama ile liste arasında. Tipik akış:
+            listedeki mor `leadingAction` kartı bu yuvadaki formu açar (KK1 "Yeni
+            Desen" ad girişi). Verilmezse hiç render edilmez. */}
         {quickAddSlot ? <View style={styles.quickAddSlot}>{quickAddSlot}</View> : null}
 
         {/* Liste */}
@@ -394,49 +466,56 @@ export default function PickerModal(props: Props) {
             <View style={styles.loading}>
               <ActivityIndicator size="large" color="#4f46e5" />
             </View>
-          ) : listData.length === 0 && filteredPinned.length === 0 ? (
-            <Text style={styles.empty}>{emptyText}</Text>
           ) : (
-            <View style={styles.listRow}>
-              <View style={{ flex: 1 }}>
-                <FlashList
-                  ref={listRef}
-                  data={listData}
-                  keyExtractor={keyExtractor}
-                  numColumns={effectiveColumns}
-                  ListHeaderComponent={pinnedHeader}
-                  renderItem={renderItem}
-                  onEndReachedThreshold={0.5}
-                  onEndReached={
-                    paginated ? (props as PaginatedProps).onEndReached : undefined
-                  }
-                  ListFooterComponent={
-                    paginated && (props as PaginatedProps).loadingMore ? (
-                      <View style={styles.loadingMore}>
-                        <ActivityIndicator size="small" color="#4f46e5" />
-                      </View>
-                    ) : undefined
-                  }
-                />
-              </View>
-              {/* A-Z hızlı indeks — client modda, yeterli kayıt varsa */}
-              {azIndex.length > 1 && (
-                <View style={styles.azStrip}>
-                  {azIndex.map(({ letter, index }) => (
-                    <TouchableRipple
-                      key={letter}
-                      borderless
-                      rippleColor="rgba(79, 70, 229, 0.15)"
-                      onPress={() => jumpToLetter(index)}
-                      style={styles.azLetterTouch}
-                      accessibilityLabel={`${letter} harfine git`}
-                    >
-                      <Text style={styles.azLetter}>{letter}</Text>
-                    </TouchableRipple>
-                  ))}
+            <>
+              {/* "Seçenek yok" bilgisi aksiyon kartını GİZLEMEZ — arama boş
+                  döndüğünde asıl yapılacak iş genelde "yeni ekle"dir. */}
+              {listData.length === 0 && filteredPinned.length === 0 ? (
+                <Text style={styles.empty}>{emptyText}</Text>
+              ) : null}
+              {dataWithLeading.length > 0 || filteredPinned.length > 0 ? (
+                <View style={styles.listRow}>
+                  <View style={{ flex: 1 }}>
+                    <FlashList
+                      ref={listRef}
+                      data={dataWithLeading}
+                      keyExtractor={keyExtractor}
+                      numColumns={effectiveColumns}
+                      ListHeaderComponent={pinnedHeader}
+                      renderItem={renderItem}
+                      onEndReachedThreshold={0.5}
+                      onEndReached={
+                        paginated ? (props as PaginatedProps).onEndReached : undefined
+                      }
+                      ListFooterComponent={
+                        paginated && (props as PaginatedProps).loadingMore ? (
+                          <View style={styles.loadingMore}>
+                            <ActivityIndicator size="small" color="#4f46e5" />
+                          </View>
+                        ) : undefined
+                      }
+                    />
+                  </View>
+                  {/* A-Z hızlı indeks — client modda, yeterli kayıt varsa */}
+                  {azIndex.length > 1 && (
+                    <View style={styles.azStrip}>
+                      {azIndex.map(({ letter, index }) => (
+                        <TouchableRipple
+                          key={letter}
+                          borderless
+                          rippleColor="rgba(79, 70, 229, 0.15)"
+                          onPress={() => jumpToLetter(index)}
+                          style={styles.azLetterTouch}
+                          accessibilityLabel={`${letter} harfine git`}
+                        >
+                          <Text style={styles.azLetter}>{letter}</Text>
+                        </TouchableRipple>
+                      ))}
+                    </View>
+                  )}
                 </View>
-              )}
-            </View>
+              ) : null}
+            </>
           )}
         </View>
 
@@ -584,6 +663,57 @@ const PickerCard = React.memo(function PickerCard({
   );
 });
 
+/**
+ * Listenin ilk hücresindeki aksiyon kartı — normal seçenek kartıyla AYNI
+ * geometri (grid'e oturur), farkı mor zemin + beyaz yazı. Seçim durumu yok:
+ * hiçbir zaman "seçili" görünmez, dokununca picker kapanmaz.
+ */
+const ActionCard = React.memo(function ActionCard({
+  label,
+  sublabel,
+  icon,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  sublabel?: string;
+  icon?: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View style={styles.cardWrap}>
+      <TouchableRipple
+        onPress={disabled ? undefined : onPress}
+        disabled={disabled}
+        borderless
+        rippleColor="rgba(255,255,255,0.24)"
+        style={[styles.card, styles.actionCard, disabled && styles.actionCardDisabled]}
+        accessibilityRole="button"
+        accessibilityLabel={sublabel ? `${label} — ${sublabel}` : label}
+      >
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            {icon ? <Icon source={icon} size={20} color="#fff" /> : null}
+            <Text
+              variant="titleMedium"
+              style={[styles.cardLabel, styles.actionCardLabel]}
+              numberOfLines={2}
+            >
+              {label}
+            </Text>
+          </View>
+          {sublabel ? (
+            <Text variant="bodySmall" style={styles.actionCardSublabel} numberOfLines={2}>
+              {sublabel}
+            </Text>
+          ) : null}
+        </View>
+      </TouchableRipple>
+    </View>
+  );
+});
+
 const SEARCH_HEIGHT = 40;
 
 const styles = StyleSheet.create({
@@ -718,6 +848,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardRich: { minHeight: 96 },
+  // Mor aksiyon kartı (liste başı "yeni ekle"). Marka indigo'su seçili-kart
+  // vurgusunda kullanıldığı için bilinçli olarak mor.
+  actionCard: {
+    backgroundColor: colors.action,
+    borderColor: colors.actionDark,
+    borderWidth: 1,
+  },
+  actionCardDisabled: { opacity: 0.5 },
+  actionCardLabel: { color: '#fff' },
+  actionCardSublabel: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   cardSelected: {
     borderColor: '#4f46e5',
     backgroundColor: '#eef2ff',

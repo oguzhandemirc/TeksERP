@@ -4,6 +4,7 @@ import os from "os";
 import app from './app';
 import prisma, { pool } from './lib/prisma';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
+import { startBackupScheduler } from './jobs/backup-scheduler';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
@@ -39,6 +40,8 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
 //   - presence (lib/presence.ts) → her process kendi Map'i (sayım parçalanır)
 //   - feature-flag cache (system-setting.service.ts) → invalidate process-local
 //   - archive-scheduler (jobs/archive-scheduler.ts) → lastRun check-then-act çift-arşiv
+//   - backup-scheduler (jobs/backup-scheduler.ts) → aynı desen; 2. process aynı gece
+//     ikinci bir pg_dump başlatır (in-process `running` bayrağı process-local)
 // Yatay ölçeklenirse taşıma katmanı gerekir: presence/cache → Redis (pub/sub
 // invalidation), scheduler → DB advisory lock veya ayrı tek worker. Bu varsayım
 // LAN-only tek-sunucu kurulumda kasıtlıdır (ARCHITECTURE.md "Single-process").
@@ -75,6 +78,7 @@ const server = app.listen(Number(PORT), HOST, () => {
     console.log("");
 
     startArchiveScheduler();
+    startBackupScheduler();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -90,7 +94,7 @@ const server = app.listen(Number(PORT), HOST, () => {
 });
 
 // L (düşük bulgu): graceful shutdown — eskiden hiç handler yoktu, restart'ta
-// (nssm/servis güncellemesi, Ctrl+C) uçuştaki istekler TCP düzeyinde kopuyordu.
+// (pm2 restart/deploy, Ctrl+C) uçuştaki istekler TCP düzeyinde kopuyordu.
 // server.close() yeni bağlantıyı reddedip mevcut istekleri bitirir; 5s'de
 // kapanmazsa zorla çıkılır (asılı keep-alive bağlantıları sonsuza dek bekletmesin).
 let shuttingDown = false;
@@ -128,6 +132,14 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
 }
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+// pm2 + Windows: Windows'ta gerçek POSIX sinyali gönderilemez, bu yüzden pm2
+// `shutdown_with_message: true` (ecosystem.config.js) ile IPC üzerinden "shutdown"
+// mesajı yollar. Bu dinleyici OLMADAN `pm2 restart/stop` prosesi HARD KILL eder →
+// yukarıdaki graceful shutdown hiç çalışmaz: uçuştaki istekler TCP düzeyinde kopar
+// ve son gecikme delta'ları kaybolur.
+process.on("message", (msg) => {
+    if (msg === "shutdown") gracefulShutdown("pm2 shutdown");
+});
 
 // L (düşük bulgu, silent-failure): eskiden process-seviyesi hata yakalayıcı yoktu.
 // Yakalanmamış bir promise reddi / senkron istisna, ana akışın dışında (timer,
@@ -137,7 +149,7 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 //   - unhandledRejection: süreç hâlâ tanımlı durumda → logla, AYAKTA KAL
 //     (LAN-only tek-process; gereksiz restart vardiyayı keser).
 //   - uncaughtException: süreç tanımsız/bozuk durumda olabilir → logla + temiz
-//     kapan; servis yöneticisi (nssm) otomatik yeniden başlatır.
+//     kapan; süreç yöneticisi (pm2) otomatik yeniden başlatır.
 process.on("unhandledRejection", (reason) => {
     console.error("UnhandledRejection:", reason);
     void AuditService.logEvent({
@@ -152,8 +164,8 @@ process.on("unhandledRejection", (reason) => {
 process.on("uncaughtException", (err) => {
     console.error("UncaughtException:", err);
     // F12: crash izini (kim/ne patlattı) boşta senaryoda bile kaydet — audit
-    // yazımını ~2sn tavanla BEKLE, sonra exitCode=1 ile kapan (nssm/servis
-    // yöneticisi crash'i normal restart'tan ayırt edebilsin; forceTimer'ın
+    // yazımını ~2sn tavanla BEKLE, sonra exitCode=1 ile kapan (pm2 crash'i
+    // normal restart'tan ayırt edebilsin; forceTimer'ın
     // exit(1)'iyle de tutarlı).
     const auditDone = AuditService.logEvent({
         category: "SYSTEM",

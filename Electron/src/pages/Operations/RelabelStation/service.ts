@@ -11,6 +11,12 @@ export const relabelService = {
       )
       .then((r) => r.data),
 
+  /** Aynı bağlam, rollId ile — barkodsuz açık kumaş barkodla bulunamaz. */
+  getContextByRollId: (rollId: string): Promise<ApiResponse<RelabelContext>> =>
+    apiClient
+      .get<ApiResponse<RelabelContext>>(`/api/rolls/${rollId}/relabel-context`)
+      .then((r) => r.data),
+
   /** Spec düzelt (renk/kalite/en/özellik) — mevcut applyManualProperties ucu. */
   applySpec: (rollId: string, body: RelabelSpecPayload): Promise<ApiResponse<unknown>> =>
     apiClient

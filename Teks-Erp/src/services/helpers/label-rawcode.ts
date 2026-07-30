@@ -94,7 +94,7 @@ export function buildRawCodePreview(
 }
 
 export function mockPayload(kind: LabelKind): LabelPayload {
-  return {
+  const base = {
     rollId: "preview", barcode: "T120726F0001", status: "STOCK", qualityGrade: "1. Kalite",
     widthCm: 152, lengthMeters: 47.5, weightKg: 14.8, markedForKartela: true,
     itemCode: "PA-60S", itemName: "Cotton Lining 60s", itemNameDefault: "Pamuk Astar 60s", itemNameSource: "OVERRIDE",
@@ -102,5 +102,27 @@ export function mockPayload(kind: LabelKind): LabelPayload {
     customerName: "Demo Tekstil A.S.", customerId: "preview", orderNumber: "SIP1207260001", orderLineId: "preview",
     batchNumber: "P1207260001", printedAt: new Date().toISOString(),
     kind, cardNumber: "KRT1207260001", lengthCm: 30, parentRollBarcode: "T120726H0001",
-  } as LabelPayload;
+  };
+  // SACK dalı ŞART: stüdyo önizlemesi bu payload'ı kullanır. Çuval alanları
+  // doldurulmazsa tasarımcı alanı sürükler, önizlemede boş görür ve "alan
+  // çalışmıyor" sanar (present:false → eleman atlanır).
+  // `LabelKind` bu dosyada `import type` ile geldiği için değer olarak kullanılamaz
+  // → literal karşılaştırma (label-flow-to-canvas.ts ile aynı desen).
+  if (kind === ("SACK" as LabelKind)) {
+    return {
+      ...base,
+      barcode: "CV1207260001",
+      sackNo: "CV1207260001",
+      rollCount: 12,
+      lengthMeters: 1284.5,
+      weightKg: 312.4,
+      branchName: "Merkez Şube",
+      sackNote: "Ölçü şüpheli — müşteri kontrol etsin",
+      // Çuvalda ürün/renk YOK (karışık içerik) — önizleme de bunu yansıtsın.
+      itemCode: "", itemName: "", itemNameDefault: "",
+      colorCode: null, colorName: null, colorNameDefault: null, colorNameSource: null,
+      qualityGrade: "", widthCm: null, markedForKartela: false,
+    } as LabelPayload;
+  }
+  return base as LabelPayload;
 }

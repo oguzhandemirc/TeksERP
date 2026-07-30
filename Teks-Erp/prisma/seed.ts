@@ -620,7 +620,56 @@ async function main() {
       fields: buildDefaultFields("SWATCH") as unknown as object,
     },
   });
-  console.log("✅ 3 label template (ROLL_RAW + ROLL_FINISHED + SWATCH default)");
+  // ÇUVAL etiketi — KANVAS varyantı + Bağlam Varsayılanı ile birlikte doğar.
+  // Neden diğerlerinden farklı: çuval baskısı FAIL-CLOSED (şablon çözülemezse 400).
+  // Sebebi label-html-landscape.helper: bilinmeyen kind'ı ROLL_FINISHED'a düşürür →
+  // şablonsuz çuval baskısı sessizce tire dolu bir TOP etiketi basardı. Bu satırlar
+  // yalnız DEV paritesi içindir (production'da seed koşmaz; orada operatör Etiket
+  // Stüdyosu'nda kendi çuval şablonunu kurar).
+  const sackTpl = await prisma.labelTemplate.create({
+    data: {
+      name: "Standart Çuval Etiketi", kind: "SACK",
+      // ESKİ AKIŞ (flow) blob'u — asıl tasarım aşağıdaki KANVAS varyantı; varyant
+      // varken bu blob HİÇ OKUNMAZ (label-renderer.registry.ts:105). Yine de tutarlı
+      // bırakılıyor: 10 alanın hepsi açık kalırsa varsayılan medyaya (100×58) sığmıyor
+      // ve PPLB emitter'ı son satırları KIRPIYOR (test_label_canvas_equivalence yakalar).
+      // sackNote burada da kapalı — iç not fiziksel etikete varsayılan basılmaz.
+      fields: buildDefaultFields("SACK").map((f) =>
+        ["branchName", "sackNote", "printedAt"].includes(f.key) ? { ...f, isVisible: false } : f,
+      ) as unknown as object,
+      variants: {
+        create: {
+          name: "100x70", widthMm: 100, heightMm: 70, isPrimary: true,
+          // ⚠️ Her elemanda `id` ZORUNLU (`label-elements.validateCanvasLayout`).
+          // Render yolu (`readCanvasLayout`) id'siz kanvası tolere eder, AMA stüdyo
+          // id ile çalışır: id'siz eleman SEÇİLEMEZ/düzenlenemez ve Kaydet
+          // "Eleman id zorunlu" ile reddedilir. Seed şablonu düzenlenebilir kalmalı.
+          elements: {
+            v: 1,
+            elements: [
+              { id: "code128-seed1", type: "code128", x: 5, y: 5, wMm: 62, hMm: 16 },
+              { id: "qr-seed2", type: "qr", x: 72, y: 5, wMm: 22, hMm: 22 },
+              { id: "field-seed3", type: "field", x: 5, y: 26, bind: "sackNo", label: "Çuval No", bold: true },
+              { id: "field-seed4", type: "field", x: 5, y: 34, bind: "customerName", label: "Müşteri" },
+              { id: "field-seed5", type: "field", x: 5, y: 42, bind: "rollCount", label: "Top Adedi" },
+              { id: "field-seed6", type: "field", x: 40, y: 42, bind: "lengthMeters", label: "Metraj" },
+              { id: "field-seed7", type: "field", x: 5, y: 50, bind: "weightKg", label: "Brüt" },
+              // ⚠️ `sackNote` KASTEN YOK. İç not ("kendimiz için") müşteriye giden
+              // FİZİKSEL etikete varsayılan olarak BASILMAMALI — schema.prisma
+              // Sack.notes ve label-fields.ts SACK_FIELDS'teki "varsayılan KAPALI"
+              // taahhüdü bu. İsteyen kurulum stüdyodan elle ekler.
+              // Flow blob'undaki isVisible:false bu varyantta ETKİSİZDİR: renderer
+              // kanvası ÖNCE okur (label-renderer.registry.ts:105) ve flow alanlarına
+              // hiç bakmaz → tek gerçek koruma elemanın YOKLUĞU.
+            ],
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+  await prisma.labelContextDefault.create({ data: { kind: "SACK", templateId: sackTpl.id } });
+  console.log("✅ 4 label template (ROLL_RAW + ROLL_FINISHED + SWATCH + SACK kanvas/bağlam-varsayılanı)");
 
   console.log("\n🎉 Seed tamamlandı.\n");
   console.log("Kullanıcı:");

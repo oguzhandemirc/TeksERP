@@ -196,14 +196,13 @@ export const rollColumns: ColumnDef<Roll>[] = [
     accessorKey: "currentQty",
     header: () => <SortableHeader field="currentQty" label="Metre" />,
     meta: { label: "Metre", summable: true },
+    // SADECE topun şu anki metrajı. Giriş metrajı ve "kesik" işareti listede
+    // GÖSTERİLMEZ — sahada kafa karıştırıyordu (eski `700 / 800` gösterimi
+    // "hangisi elimde, 800 hedef mi?" diye okunuyordu). Giriş metrajı ve doluluk
+    // detay panelinde durur (izlenebilirlik yüzeyi).
     cell: ({ row }) => (
-      <div className="text-right">
-        <span className="tabular-nums">{row.original.currentQty.toLocaleString("tr-TR", { useGrouping: false })}</span>
-        {row.original.currentQty !== row.original.initialQty && (
-          <span className="ml-1 text-[10px] text-muted-foreground">
-            / {row.original.initialQty.toLocaleString("tr-TR", { useGrouping: false })}
-          </span>
-        )}
+      <div className="text-right tabular-nums">
+        {row.original.currentQty.toLocaleString("tr-TR", { useGrouping: false })}
       </div>
     ),
   },
@@ -339,10 +338,35 @@ export const rollColumns: ColumnDef<Roll>[] = [
     },
   },
   {
+    // TEK görünür tarih = SON İŞLEM (envanter listesi standardı: "bu top ne zaman
+    // buraya geldi / en son ne zaman dokunuldu"). Oluşturma tarihi operatörün
+    // günlük kararına girmez — detay panelinde ("Oluşturma · Son güncelleme") ve
+    // aşağıdaki opt-in "Giriş" kolonunda duruyor.
+    //
+    // DİKKAT: `updatedAt` gerçek "hareket" değil, satırın son değişme anıdır
+    // (etiket yeniden basımı / not düzenlemesi de günceller). Bu yüzden kolon
+    // "Son Hareket" DEĞİL "Son İşlem" diye adlandırıldı. Gerçek stok yaşlandırma
+    // (FIFO "en eski topu önce sevk et") istenirse yalnız statü geçişlerinde
+    // damgalanan ayrı bir kolon gerekir.
+    accessorKey: "updatedAt",
+    header: () => <SortableHeader field="updatedAt" label="Son İşlem" />,
+    meta: { label: "Son İşlem", exportValue: (r) => safeFormat(r.updatedAt, "dd.MM.yyyy HH:mm") },
+    cell: ({ row }) => {
+      const d = row.original.updatedAt;
+      return (
+        <span className="text-xs tabular-nums leading-tight">
+          {safeFormat(d, "dd.MM.yyyy")}
+          <span className="ml-1 text-muted-foreground">{safeFormat(d, "HH:mm")}</span>
+        </span>
+      );
+    },
+  },
+  {
+    // Oluşturma tarihi — varsayılan GİZLİ, "Sütunlar" menüsünden açılır. İzlenebilirlik
+    // sorusu ("bu top fabrikaya ne zaman girdi") için duruyor, günlük listeyi meşgul etmiyor.
     accessorKey: "createdAt",
-    header: () => <SortableHeader field="createdAt" label="Tarih" />,
-    // Export'ta ham ISO yerine UI ile aynı biçimlenmiş yerel tarih.
-    meta: { label: "Tarih", exportValue: (r) => safeFormat(r.createdAt, "dd.MM.yyyy HH:mm") },
+    header: () => <SortableHeader field="createdAt" label="Giriş" />,
+    meta: { label: "Giriş", exportValue: (r) => safeFormat(r.createdAt, "dd.MM.yyyy HH:mm") },
     cell: ({ row }) => {
       const d = row.original.createdAt;
       return (

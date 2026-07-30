@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Tags, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle, Send } from "lucide-react";
+import { History, Tag, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle, Send } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -13,8 +13,7 @@ import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadg
 import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
-import { RelabelDialog } from "@/pages/Operations/RelabelStation/RelabelDialog";
-import { ManualAttributesDialog } from "./ManualAttributesDialog";
+import { RollEditDialog } from "./RollEditDialog";
 import { RescueStuckDialog } from "./RescueStuckDialog";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
@@ -28,13 +27,13 @@ interface Props {
 
 export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const [labelRollId, setLabelRollId] = useState<string | null>(null);
-  const [relabelBarcode, setRelabelBarcode] = useState<string | null>(null);
-  const [manualAttrRollId, setManualAttrRollId] = useState<string | null>(null);
+  const [editRollId, setEditRollId] = useState<string | null>(null);
   const [rescueRollId, setRescueRollId] = useState<string | null>(null);
-  const { hasAnyPermission, hasPermission } = useRoleAccess();
-  const canRelabel = hasAnyPermission(["roll:write", "label:edit"]);
+  const { hasPermission } = useRoleAccess();
   const canManualAdjust = hasPermission("roll:manual-adjust");
-  // Manuel nitelik düzeltme: hurda/iptal dışı her top (backend de guard'lar).
+  // "Düzelt": hurda/iptal dışı her top. Yetki/sebep kararı diyaloğun içinde —
+  // serbest depoda roll:write|label:edit yeter, üretimdeki topta roll:manual-adjust
+  // aranır (backend de aynı guard'ı uygular).
   const canEditAttributes =
     !!roll && roll.status !== "SCRAP" && roll.status !== "CANCELLED";
   // "İstasyondan Kurtar" yalnız makinede/istasyonda takılı (IN_PRODUCTION) top için.
@@ -83,28 +82,21 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 className="gap-1"
                 onClick={() => setLabelRollId(roll.id)}
               >
-                <Tag className="h-3.5 w-3.5" /> Etiket Bas/Önizle
+                <Tag className="h-3.5 w-3.5" /> Etiket
               </Button>
             </PermissionGate>
-            {canRelabel && roll.barcode && (
+            {/* TEK "Düzelt": renk/metraj/kalite/en/özellik. Üretimdeki topta sebep +
+                roll:manual-adjust ister (diyalog kendi içinde yönetir). Eskiden bu iş
+                "Yeniden Etiketle/Düzenle" + "Manuel Düzelt" diye iki butondaydı ve
+                ikisi de aynı backend motorunu çağırıyordu. */}
+            {canEditAttributes && (
               <Button
                 type="button"
                 size="sm"
                 className="gap-1"
-                onClick={() => setRelabelBarcode(roll.barcode)}
+                onClick={() => setEditRollId(roll.id)}
               >
-                <Tags className="h-3.5 w-3.5" /> Yeniden Etiketle/Düzenle
-              </Button>
-            )}
-            {canManualAdjust && canEditAttributes && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-1"
-                onClick={() => setManualAttrRollId(roll.id)}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Manuel Düzelt
+                <Pencil className="h-3.5 w-3.5" /> Düzelt
               </Button>
             )}
             {canManualAdjust && canRescue && (
@@ -125,13 +117,9 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
           rollId={labelRollId}
           onOpenChange={(open) => !open && setLabelRollId(null)}
         />
-        <RelabelDialog
-          barcode={relabelBarcode}
-          onOpenChange={(open) => !open && setRelabelBarcode(null)}
-        />
-        <ManualAttributesDialog
-          rollId={manualAttrRollId}
-          onOpenChange={(open) => !open && setManualAttrRollId(null)}
+        <RollEditDialog
+          rollId={editRollId}
+          onOpenChange={(open) => !open && setEditRollId(null)}
           onSaved={() => void detailQuery.refetch()}
         />
         <RescueStuckDialog

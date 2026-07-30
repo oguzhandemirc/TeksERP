@@ -22,6 +22,7 @@ import {
   ShipmentStatus,
   ShipmentDestination,
   PrintedDocType,
+  LabelKind,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -40,7 +41,7 @@ import { renderQualityCertificateHtml, type QualityCertificateDoc } from "./docu
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { p2002Mentions } from "../utils/p2002";
 import { readShipmentConfirmationEnabled } from "./system-setting.service";
-import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
 import { touchWarehouseSackTx, touchShipmentPlannedTx } from "./helpers/shipment-locks.helper";
 import {
   D0,
@@ -274,19 +275,81 @@ export class ShippingService {
     });
     if (claimed.count !== 1) throw AppError.conflict("Çuval az önce bir sevkiyata girdi — yenileyin.");
 
+    // Müşteri değişince İÇİNDEKİ topların etiketi bayatlar MI? Tetikleyici "müşteri
+    // değişti" DEĞİL: etikete müşteri adı basılmıyor, tek fark MÜŞTERİYE ÖZEL ŞABLON
+    // (CustomerTemplateRoute). Eski ve yeni müşteri aynı şablona çözülüyorsa (ikisi
+    // de rotasız → bağlam varsayılanı) fiziksel etiket geçerli kalır, dokunmayız.
+    const labelsStale =
+      sack.customerId === customerId
+        ? 0
+        : await this.markSackLabelsStaleOnCustomerChange(sackId, sack.customerId, customerId);
+
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "SACK",
       recordId: sackId,
       oldData: { customerId: sack.customerId, branchId: sack.branchId },
-      newData: { customerId, branchId },
+      newData: { customerId, branchId, labelsStale },
     });
     return {
       success: true,
-      data: { id: sackId, customerId, customerName, branchId, branchName, branchCode },
-      message: "Çuval müşterisi güncellendi",
+      data: { id: sackId, customerId, customerName, branchId, branchName, branchCode, labelsStale },
+      message: labelsStale > 0
+        ? `Çuval müşterisi güncellendi — ${labelsStale} topun etiketi yeni müşterinin şablonuyla yeniden basılmalı`
+        : "Çuval müşterisi güncellendi",
     };
+  }
+
+  /**
+   * Müşteri değişiminde çuvaldaki topların etiketini "bayat" işaretler — YALNIZ
+   * etkin şablon değişiyorsa. Döner: işaretlenen top adedi.
+   *
+   * Etkin şablon = `CustomerTemplateRoute(müşteri, kind)` ?? bağlam varsayılanı.
+   * Kind topun renginden türer (renksiz → ROLL_RAW, renkli → ROLL_FINISHED,
+   * `label-routing.resolver` ile aynı kural). Eski ve yeni müşterinin rotası aynı
+   * şablona çıkıyorsa (çoğu kurulumda ikisi de rotasız) HİÇBİR ŞEY yapılmaz —
+   * gereksiz "yeniden bas" uyarısı operatörü körleştirir.
+   */
+  private async markSackLabelsStaleOnCustomerChange(
+    sackId: string,
+    oldCustomerId: string | null,
+    newCustomerId: string | null,
+  ): Promise<number> {
+    const rolls = await prisma.roll.findMany({
+      where: { sackId },
+      select: { id: true, colorId: true },
+    });
+    if (rolls.length === 0) return 0;
+
+    const kinds = [
+      ...new Set(rolls.map((r) => (r.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED))),
+    ];
+    const routesFor = async (cid: string | null): Promise<Map<LabelKind, string>> => {
+      if (!cid) return new Map();
+      const rows = await prisma.customerTemplateRoute.findMany({
+        where: { customerId: cid, kind: { in: kinds } },
+        select: { kind: true, templateId: true },
+      });
+      return new Map(rows.map((r) => [r.kind, r.templateId]));
+    };
+    const [oldRoutes, newRoutes] = [await routesFor(oldCustomerId), await routesFor(newCustomerId)];
+
+    // Şablonu DEĞİŞEN kind'lar (yok → bağlam varsayılanı; iki taraf da yok = değişmedi).
+    const changed = new Set(kinds.filter((k) => (oldRoutes.get(k) ?? null) !== (newRoutes.get(k) ?? null)));
+    if (changed.size === 0) return 0;
+
+    const affected = rolls
+      .filter((r) => changed.has(r.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED))
+      .map((r) => r.id);
+    if (affected.length === 0) return 0;
+    // Yalnız henüz işaretsizleri güncelle (count gerçek değişimi yansıtsın).
+    return (
+      await prisma.roll.updateMany({
+        where: { id: { in: affected }, labelDirty: false },
+        data: { labelDirty: true },
+      })
+    ).count;
   }
 
   /**
@@ -305,6 +368,15 @@ export class ShippingService {
     if (sack.shipmentId != null) throw AppError.conflict("Çuval bir sevkiyata atanmış — içerik değiştirilemez");
 
     const code = data.barcode.trim();
+    // ÇUVAL KODU okutulduysa (CV+GGAAYY+NNNN) bu bir top DEĞİL. Çuval etiketi
+    // basılabildiği için operatör kaçınılmaz olarak bunu top alanına okutur;
+    // yanıltıcı "Bu barkodla top bulunamadı" yerine ne olduğunu söyleyelim.
+    // (İstemci bunu zaten yakalayıp çuvalı aktif yapar; bu sunucu tarafı ağdır.)
+    if (isDailyCode(code, "CV")) {
+      throw AppError.badRequest(
+        `${code} bir ÇUVAL kodu, top barkodu değil — çuvala eklemek için TOP barkodunu okutun.`,
+      );
+    }
     const roll = await prisma.roll.findUnique({
       where: { barcode: code },
       select: { id: true, status: true, shipmentId: true, sackId: true, barcode: true, currentQty: true, sack: { select: { shipmentId: true } } },
@@ -592,6 +664,98 @@ export class ShippingService {
   }
 
   /**
+   * ÇUVAL BÖL — seçili topları YENİ bir çuvala ayır (tek atomik işlem).
+   *
+   * Neden tek uç: istemcide `openSack` + `moveRollsToSack` diye iki çağrı yapmak,
+   * arada hata olursa ORTADA BOŞ ÇUVAL bırakır ve iki çuvalın tartı sıfırlaması
+   * yarım kalır. Tek tx: yeni çuval aç → topları claim et → iki çuvalın kg'sini
+   * sıfırla. Hiç top taşınamazsa (yarış) yeni çuval da yaratılmaz.
+   *
+   * Yeni çuval kaynağın müşteri/şubesini devralır (bölme, müşteri değiştirmez).
+   * Kaynak çuvalda en az bir top KALMALI — hepsini seçmek "bölme" değil, bu durumda
+   * yapılacak şey yok (400) çünkü sonuç sadece boş bir çuval + kopya olurdu.
+   */
+  async splitSack(
+    data: { sackId: string; rollIds: string[] },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (!data.rollIds?.length) throw AppError.badRequest("Ayrılacak top seçilmedi");
+    const source = await prisma.sack.findUnique({
+      where: { id: data.sackId },
+      select: { id: true, shipmentId: true, customerId: true, branchId: true, _count: { select: { rolls: true } } },
+    });
+    if (!source) throw AppError.notFound("Çuval bulunamadı");
+    if (source.shipmentId != null) {
+      throw AppError.conflict("Çuval sevkiyatta — bölmek için önce sevkiyattan çıkarın");
+    }
+    // Pre-tx UX guard'ı (kilit altında taze sayımla tekrar doğrulanır). Seçimin
+    // KESİŞİMİ sayılır — id listesi bu çuvala ait olmayan top içerebilir (istemci
+    // bayat liste gönderdi); ham `selected.size` ile karşılaştırmak o durumda
+    // meşru isteği yanlış mesajla reddediyordu.
+    const selected = new Set(data.rollIds);
+    const inSack = await prisma.roll.count({
+      where: { id: { in: [...selected] }, sackId: data.sackId, shipmentId: null },
+    });
+    if (inSack === 0) throw AppError.badRequest("Seçili topların hiçbiri bu çuvalda değil");
+    if (inSack >= source._count.rolls) {
+      throw AppError.badRequest(
+        "Çuvaldaki tüm toplar seçili — bölmek için en az bir top kaynak çuvalda kalmalı.",
+      );
+    }
+
+    let newSackId = "";
+    let newSackNo = "";
+    let moved = 0;
+    // sackNo HER ZAMAN otomatik üretilir (manuel kod yolu yok) → tüm P2002 retry
+    // edilebilir; predicate gerekmez (openSack'ten farkı: orada manuel kod olabiliyor).
+    await withBarcodeRetry(async () => {
+      await prisma.$transaction(async (tx) => {
+          await touchWarehouseSackTx(tx, data.sackId);
+          // Kilit ALTINDA taze sayım — bayat `_count` tuzağı (removeSack ile aynı ders).
+          const fresh = await tx.roll.count({ where: { sackId: data.sackId, shipmentId: null } });
+          const claimable = await tx.roll.count({
+            where: { id: { in: [...selected] }, sackId: data.sackId, shipmentId: null },
+          });
+          if (claimable === 0) throw AppError.conflict("Seçili toplar bu sırada taşınmış/çıkarılmış — yenileyin");
+          if (claimable >= fresh) {
+            throw AppError.badRequest("Bölme sonrası kaynak çuval boş kalır — en az bir top kalmalı.");
+          }
+          const created = await tx.sack.create({
+            data: {
+              sackNo: await nextSackNo(),
+              customerId: source.customerId,
+              branchId: source.branchId,
+            },
+            select: { id: true, sackNo: true },
+          });
+          newSackId = created.id;
+          newSackNo = created.sackNo;
+          moved = (
+            await tx.roll.updateMany({
+              where: { id: { in: [...selected] }, sackId: data.sackId, shipmentId: null },
+              data: { sackId: created.id },
+            })
+          ).count;
+        // İçerik değişti → iki çuvalın da bayat kg'si düşer (irsaliyeye gitmesin).
+        await this.resetSackWeightsTx(tx, [data.sackId, created.id]);
+      });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "SACK",
+      recordId: newSackId,
+      newData: { kind: "SACK_SPLIT", fromSackId: data.sackId, sackNo: newSackNo, moved },
+    });
+    return {
+      success: true,
+      data: { sackId: newSackId, sackNo: newSackNo, moved },
+      message: `${moved} top yeni çuvala ayrıldı: ${newSackNo}`,
+    };
+  }
+
+  /**
    * Çuval brüt tartısını güncelle (depodaki çuval — sevkiyata atanmamış).
    */
   async weighSack(
@@ -770,7 +934,9 @@ export class ShippingService {
       where: { customerId, shipmentId: null },
       orderBy: { createdAt: "asc" },
       select: {
-        id: true, sackNo: true, weightKg: true, branchId: true,
+        // weighedAt: kartta "✓ 14:22" (tartıldı izi) — tek-dokunuş tartıdan sonra
+        // operatör hangi çuvalın tartıldığını modal açmadan görmeli.
+        id: true, sackNo: true, weightKg: true, weighedAt: true, branchId: true, notes: true,
         branch: { select: { id: true, code: true, name: true } },
         rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, width: true, currentQty: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true, hex: true } } } },
         swatches: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
@@ -780,6 +946,7 @@ export class ShippingService {
       const totalQty = sk.rolls.reduce((s, r) => s.plus(r.currentQty), D0());
       return {
         id: sk.id, sackNo: sk.sackNo, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
+        weighedAt: sk.weighedAt, notes: sk.notes,
         branch: sk.branch,
         rollCount: sk.rolls.length, swatchCount: sk.swatches.length, totalQty: Number(totalQty),
         rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, width: r.width != null ? Number(r.width) : null, currentQty: Number(r.currentQty), item: r.item, color: r.color })),
@@ -1135,6 +1302,28 @@ export class ShippingService {
     const s = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchNote: true } });
     if (!s) throw AppError.notFound("Sevkiyat bulunamadı");
     return { success: true, data: { dispatchNote: s.dispatchNote } };
+  }
+
+  /**
+   * Çuval yorumu (annotation) — çuvalın DURUMU fark etmez, her an düzenlenir.
+   * `touchWarehouseSackTx` BİLİNÇLİ OLARAK YOK: o guard ölçüm/içerik invariant'ını korur
+   * (sevkiyata atanmış çuvalın kg'si/içeriği değişmesin), yorum ise ne ölçüm ne içerik —
+   * sevk edilmiş çuvala da "müşteri şikayet etti" yazılabilmeli (dispatchNote ile aynı
+   * gerekçe). Guard'ı "eksik" sanıp eklemeyin. Boş/whitespace → temizlenir (NULL).
+   */
+  async setSackNotes(sackId: string, notes: string | null, userId?: string): Promise<ApiResponse<unknown>> {
+    const value = notes?.trim().slice(0, 500) || null;
+    const updated = await prisma.sack.updateMany({ where: { id: sackId }, data: { notes: value } });
+    if (updated.count === 0) throw AppError.notFound("Çuval bulunamadı");
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: sackId, newData: { kind: "SACK_NOTES", notes: value } });
+    return { success: true, data: { sackId, notes: value }, message: value ? "Çuval notu kaydedildi" : "Çuval notu temizlendi" };
+  }
+
+  /** Çuval yorumunu oku — yorum sheet'i içerik listesi çekmeden notu alsın. */
+  async getSackNotes(sackId: string): Promise<ApiResponse<{ notes: string | null }>> {
+    const s = await prisma.sack.findUnique({ where: { id: sackId }, select: { notes: true } });
+    if (!s) throw AppError.notFound("Çuval bulunamadı");
+    return { success: true, data: { notes: s.notes } };
   }
 
   /**
@@ -1802,7 +1991,7 @@ export class ShippingService {
         sacks: {
           orderBy: { seq: "asc" },
           select: {
-            id: true, sackNo: true, seq: true, weightKg: true,
+            id: true, sackNo: true, seq: true, weightKg: true, notes: true,
             rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, qualityGrade: true, item: { select: { id: true, name: true } }, color: { select: { id: true, name: true, hex: true } } } },
             swatches: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, item: { select: { id: true, name: true } }, color: { select: { id: true, name: true, hex: true } } } },
           },
@@ -1824,6 +2013,7 @@ export class ShippingService {
       }
       return {
         id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
+        notes: sk.notes,
         rollCount: sk.rolls.length, swatchCount: sk.swatches.length, totalQty: Number(sackQty),
         contents: [...groups.values()].map((g) => ({ itemName: g.itemName, colorName: g.colorName, width: g.width, qty: Number(g.qty), rollCount: g.rollCount })),
         rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, qty: Number(r.currentQty), width: r.width != null ? Number(r.width) : null, qualityGrade: r.qualityGrade ?? "", item: r.item, color: r.color })),
@@ -2084,6 +2274,19 @@ registerPrintedDocBuilder(PrintedDocType.SHIPMENT_DISPATCH, {
       select: { dispatchNote: true },
     });
     return s?.dispatchNote ?? null;
+  },
+  // Çuval yorumları — irsaliye ÇUVAL LİSTESİ'ndeki opsiyonel "AÇIKLAMA" kolonunu besler.
+  // Annotation: donmuş çekirdeğe (collectShipmentDocContent) GİRMEZ → sevkten sonra
+  // yazılan yorum da basılır, sürüm doğmaz, eski snapshot'lar etkilenmez. Anahtar
+  // `sackNo`, çünkü snapshot satırındaki `code` alanı da sackNo'dur.
+  resolveLiveRowNotes: async (db, sourceId) => {
+    const rows = await db.sack.findMany({
+      where: { shipmentId: sourceId, notes: { not: null } },
+      select: { sackNo: true, notes: true },
+    });
+    const out: Record<string, string> = {};
+    for (const r of rows) if (r.notes) out[r.sackNo] = r.notes;
+    return out;
   },
 });
 
