@@ -238,6 +238,10 @@ export class SackSearchService {
         sackNo: true,
         seq: true,
         weightKg: true,
+        // Tartının kaynağı — İÇ iz, yalnız DETAY yüzeyinde. Listeye eklenmedi
+        // (gürültü) ve BELGEYE/ETİKETE hiç girmez (schema.prisma doc'u).
+        // NULL = bu alandan önce tartılmış (legacy) → rozet gösterilmez.
+        weightSource: true,
         notes: true, // tek çuval → tam yorum (liste aksine kırpılmaz)
         shipment: {
           select: {

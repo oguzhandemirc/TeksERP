@@ -257,9 +257,11 @@ async function main() {
         }
 
         // Bayat brüt kg — removeRollFromSack ile aynı davranış.
+        // `resetSackWeightsTx`'in ELLE kopyası — orada bir alan eklenirse BURAYA DA
+        // eklenmeli (aksi halde onarım sonrası "kg yok ama kaynağı dolu" kalır).
         await tx.sack.updateMany({
           where: { id: sackId, weightKg: { not: null } },
-          data: { weightKg: null, weighedById: null, weighedAt: null },
+          data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null },
         });
       });
     } catch (e) {

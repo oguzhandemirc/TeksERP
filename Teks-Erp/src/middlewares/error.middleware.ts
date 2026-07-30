@@ -111,6 +111,65 @@ const SERVER_BUSY_MESSAGE = "Sunucu şu anda yoğun. Lütfen birkaç saniye sonr
  */
 const POOL_TIMEOUT_RECORD_ID = "POOL_TIMEOUT";
 
+/** CHECK ihlali audit'inde ayırt edici recordId (POOL_TIMEOUT emsali). */
+const CHECK_VIOLATION_RECORD_ID = "CHECK_VIOLATION";
+
+/**
+ * PostgreSQL CHECK constraint ihlali (SQLSTATE 23514) → constraint adı.
+ *
+ * ⚠️ İKİ FARKLI ŞEKİL var, ikisi de canlı DB'de ölçüldü (tahmin DEĞİL):
+ *   • ORM yolu (`prisma.sack.update` vb.) → ÇIPLAK `DriverAdapterError`:
+ *     `code`/`meta` YOK, bilgi `err.cause.code === "23514"` içinde. Bu yüzden
+ *     `PrismaClientKnownRequestError` dalına HİÇ girmez ve eskiden generic 500'e
+ *     düşerdi: operatör "Sunucu hatası oluştu." görür, audit'e
+ *     `recordId='DriverAdapterError'` yazılır ve HANGİ kuralın patladığı ne yanıtta
+ *     ne audit'te bulunurdu.
+ *   • Ham sorgu yolu (`$executeRaw`) → `PrismaClientKnownRequestError` (P2010),
+ *     bilgi `meta.driverAdapterError.cause.code` içinde.
+ *
+ * ⚠️ `cause.detail` İHLAL EDEN SATIRIN TÜM KOLON DEĞERLERİNİ taşır ("Failing row
+ * contains (...)") → ASLA yanıta konmaz; yalnız sunucu log'una/audit'e gider.
+ */
+function extractCheckConstraint(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as Record<string, unknown>;
+  const causes: Record<string, unknown>[] = [];
+  // ORM yolu: hatanın kendisi DriverAdapterError.
+  const own = e.cause;
+  if (own && typeof own === "object") causes.push(own as Record<string, unknown>);
+  // Ham sorgu yolu: PrismaClientKnownRequestError.meta.driverAdapterError.cause
+  const meta = e.meta;
+  if (meta && typeof meta === "object") {
+    const dae = (meta as Record<string, unknown>).driverAdapterError;
+    if (dae && typeof dae === "object") {
+      const c = (dae as Record<string, unknown>).cause;
+      if (c && typeof c === "object") causes.push(c as Record<string, unknown>);
+    }
+  }
+  for (const c of causes) {
+    if (c.code !== "23514" && c.originalCode !== "23514") continue;
+    const msg = String(c.originalMessage ?? c.message ?? "");
+    // '... violates check constraint "rolls_currentQty_nonneg"'
+    return /check constraint "([^"]+)"/.exec(msg)?.[1] ?? "";
+  }
+  return null;
+}
+
+/**
+ * Constraint adı → operatörün anlayacağı Türkçe sebep. Bilinmeyen constraint için
+ * `null` → generic mesaj + constraint adı (ad teknik ama SABİT ve greplenebilir;
+ * "bilinmeyen hata"dan iyidir).
+ */
+const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
+  rolls_currentQty_nonneg: "Top metrajı negatif olamaz.",
+  rolls_initialQty_nonneg: "Topun giriş metrajı negatif olamaz.",
+  rolls_weightKg_nonneg: "Top ağırlığı negatif olamaz.",
+  sacks_weightKg_nonneg: "Çuval tartısı negatif olamaz.",
+  order_lines_quantity_pos: "Sipariş satırı miktarı pozitif olmalı.",
+  "order_lines_shippedQty_nonneg": "Sevk edilen miktar negatif olamaz.",
+  work_order_steps_time_order: "Adımın bitiş zamanı başlangıcından önce olamaz.",
+};
+
 /**
  * Geçici sunucu tıkanıklığı yanıtı (havuz / transaction zaman aşımı).
  *
@@ -207,6 +266,42 @@ export const errorHandler = (
       },
     });
     respondServerBusy(res);
+    return;
+  }
+
+  // CHECK constraint ihlali (23514) — Prisma known-error dalından ÖNCE, çünkü ORM
+  // yolunda hata ÇIPLAK DriverAdapterError olarak gelir ve o dala hiç girmez.
+  //
+  // Statü seçimi: 400 "doğrulama hatası" DEĞİL. 23514 istemci verisinin biçim hatası
+  // değil, "uygulama guard'ı eksik ya da satır zaten kirli" demektir — 400 demek
+  // teşhisi körleştirir ve operatöre "girdini düzelt" der (düzeltecek bir girdi yok).
+  // 409 Conflict: "veri bu işleme uygun durumda değil". Her durumda SYSTEM/ERROR
+  // audit'e yazılır ki canlıda kaç kez tetiklendiği ÖLÇÜLEBİLSİN.
+  const checkConstraint = extractCheckConstraint(err);
+  if (checkConstraint !== null) {
+    const friendly = CHECK_CONSTRAINT_MESSAGES[checkConstraint];
+    const message = friendly
+      ? `${friendly} İşlem tamamlanmadı.`
+      : `Veri bütünlüğü kuralı engelledi (${checkConstraint || "bilinmeyen kural"}) — işlem tamamlanmadı. ` +
+        "Kayıt beklenmeyen bir durumda; yöneticinize bu kuralın adını iletin.";
+    console.error(`[error.middleware] CHECK ihlali (23514): ${checkConstraint} — ${err.message}`);
+    void AuditService.logEvent({
+      category: "SYSTEM",
+      action: "ERROR",
+      userId: req.user?.userId,
+      recordId: CHECK_VIOLATION_RECORD_ID,
+      ipAddress: req.ip ?? null,
+      payload: {
+        constraint: checkConstraint,
+        method: req.method,
+        path: req.originalUrl,
+        // `detail` (ihlal eden satırın TÜM kolon değerleri) BİLEREK alınmıyor —
+        // audit'e de girse operatör ekranına sızma yüzeyi büyür; constraint adı
+        // + istek yolu teşhis için yeterli.
+        message: err.message?.slice(0, 300),
+      },
+    });
+    res.status(409).json({ success: false, message });
     return;
   }
 

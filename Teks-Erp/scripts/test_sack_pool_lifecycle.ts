@@ -290,6 +290,33 @@ async function main() {
   }
 
   await setFlag(false);
+
+  console.log("\n--- L: listCustomerPoolSacks — SIRA sözleşmesi + tavan bayrağı ---");
+  {
+    // ⚠️ Bu uç HİÇ TEST EDİLMİYORDU; mobil Paketleme ekranının canlı kaynağı ve
+    // AKTİF ÇUVALI listenin SONUNDAN seçiyor (`list[list.length - 1]`). Sıra
+    // sözleşmesi (createdAt ASC) bozulursa operatör yanlış çuvala okutur — ve bu
+    // sessizce olur. Tavan `desc + take + reverse` ile eklendiği için sözleşmenin
+    // korunduğu MEKANİK olarak kanıtlanmalı.
+    const s1 = await filledSack([await makeRoll(11, 150)]);
+    const s2 = await filledSack([await makeRoll(12, 150)]);
+    const s3 = await filledSack([await makeRoll(13, 150)]);
+    const res = (await ship.listCustomerPoolSacks(customerId)).data as {
+      sacks: { id: string }[];
+      truncated: boolean;
+      limit: number;
+    };
+    const ids = res.sacks.map((s) => s.id);
+    const [i1, i2, i3] = [ids.indexOf(s1), ids.indexOf(s2), ids.indexOf(s3)];
+    check("L1 üç çuval da listede", i1 >= 0 && i2 >= 0 && i3 >= 0);
+    check("L2 ⭐ sıra ESKİDEN YENİYE (asc) — en yeni SONDA", i1 < i2 && i2 < i3, `${i1},${i2},${i3}`);
+    check(
+      "L3 en son açılan çuval listenin SONUNDA (mobil aktif çuval seçimi)",
+      ids[ids.length - 1] === s3,
+    );
+    check("L4 tavan bayrağı yanıtta var ve bugün ısırmıyor", res.truncated === false, `limit=${res.limit}`);
+  }
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 

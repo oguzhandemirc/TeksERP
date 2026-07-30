@@ -19,6 +19,7 @@
 import {
   Prisma,
   RollStatus,
+  SackWeightSource,
   ShipmentStatus,
   ShipmentDestination,
   PrintedDocType,
@@ -100,9 +101,32 @@ const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
 // ---------------------------------------------------------------------------
 // Günlük sıralı numara — collation-güvenli (gte+startsWith; U+FFFF sentinel glibc'de
 // ignorable olduğundan yasak). Sayısal max+1 → gün içi monotonik.
-async function nextShipmentNo(): Promise<string> {
+//
+// ⚠️ `tx` ZORUNLU ve İLK parametre (emsaller: `subcontractor.service.nextDirectShipmentNo`,
+// `nextPrefixedSequence`, `kartela.service.nextKartelaDocSequence`/`nextSwatchSequence`).
+// Üç çağrı yerinin ÜÇÜ DE bir `prisma.$transaction` callback'inin içinde; eskiden global
+// `prisma` client'ından okunuyordu ve bunun iki sonucu vardı:
+//   1) HAVUZ: interaktif tx bir pg bağlantısını TUTARKEN ikinci bir bağlantı ödünç
+//      alınıyordu (`lib/prisma.ts` max:30). Yoğunlukta kendi kendini bekleme riski.
+//   2) GÖRÜNÜRLÜK: aynı tx'in KENDİ commit edilmemiş satırını göremiyordu → aynı tx'te
+//      iki çuval açan bir yol yazılsaydı ikisi AYNI numarayı alır, `sackNo @unique`
+//      P2002 verir, `withBarcodeRetry` deterministik olarak aynı çakışmayı 5 kez
+//      tekrarlar ve 409 ile biterdi. Bugün öyle bir yol YOK (sack.create yalnız
+//      `openSack` + `splitSack`, ikisi de tek çuval) — yani bu değişiklik bir davranışı
+//      bozmuyor, kilitli bir kapıyı açıyor.
+// İZOLASYON NOTU: tüm tx'ler READ COMMITTED (repoda `isolationLevel` kullanılmıyor) →
+// BAŞKA tx'lerin commit'lerini görme davranışı global client ile BİREBİR AYNI kalır;
+// okuma düz SELECT (kilit almaz), deadlock profili değişmez.
+//
+// ⚠️ ÇAĞRIYI TX CALLBACK'İNİN DIŞINA TAŞIMA: `withBarcodeRetry` her denemede `fn`'i
+// baştan çağırır ve o sırada YENİ bir tx açılır; numara okuması içeride kaldığı sürece
+// her denemede TAZE olur. Dışarı hoist edilirse retry aynı numarayı sonsuza tekrarlar.
+//
+// `export` ETME: modül-private kalmalı — export edilirse başka servisler tx'siz
+// çağırabilir ve "tx içinde global client" sorunu başka dosyada yeniden doğar.
+async function nextShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
   const prefix = dailyCodePrefix("SVK");
-  const todays = await prisma.shipment.findMany({
+  const todays = await tx.shipment.findMany({
     where: { shipmentNo: { gte: prefix, startsWith: prefix } },
     select: { shipmentNo: true },
   });
@@ -110,9 +134,9 @@ async function nextShipmentNo(): Promise<string> {
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
-async function nextSackNo(): Promise<string> {
+async function nextSackNo(tx: Prisma.TransactionClient): Promise<string> {
   const prefix = dailyCodePrefix("CV");
-  const todays = await prisma.sack.findMany({
+  const todays = await tx.sack.findMany({
     where: { sackNo: { gte: prefix, startsWith: prefix } },
     select: { sackNo: true },
   });
@@ -168,7 +192,7 @@ export class ShippingService {
     const manualSackNo = data.sackNo?.trim() || null;
     const sack = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
-        const sackNo = manualSackNo ?? (await nextSackNo());
+        const sackNo = manualSackNo ?? (await nextSackNo(tx));
         return tx.sack.create({
           data: {
             sackNo,
@@ -177,7 +201,14 @@ export class ShippingService {
             shipmentId: null,
             seq: null,
             weightKg: data.weightKg != null ? new Prisma.Decimal(data.weightKg) : null,
-            ...(data.weightKg != null ? { weighedById: userId ?? null, weighedAt: new Date() } : {}),
+            // Açılışta kg verilirse kaynağı MANUAL sayılır: bu yol bir kantar okuması
+            // DEĞİL (operatörün formda yazdığı değer) ve simüle guard'ından geçmez.
+            // Kaynağı boş bırakmak "tartılmış ama kaynağı bilinmiyor" satırı üretirdi.
+            // NOT: bugün hiçbir istemci burada weightKg göndermiyor (mobil/Electron
+            // tartıyı ayrı `weighSack` ucundan yazıyor) — yol geri uyum için duruyor.
+            ...(data.weightKg != null
+              ? { weightSource: SackWeightSource.MANUAL, weighedById: userId ?? null, weighedAt: new Date() }
+              : {}),
           },
           select: { id: true, sackNo: true, weightKg: true, customerId: true, branchId: true },
         });
@@ -731,7 +762,7 @@ export class ShippingService {
           }
           const created = await tx.sack.create({
             data: {
-              sackNo: await nextSackNo(),
+              sackNo: await nextSackNo(tx),
               customerId: source.customerId,
               branchId: source.branchId,
             },
@@ -806,8 +837,12 @@ export class ShippingService {
     // `weighedById` + audit ile izlenebilir. `DEVICE_PAIRING_REQUIRED`'ın kabul ettiği
     // güven seviyesiyle aynı.
     const declaredSource = data.source ?? "MANUAL";
+    // ⚠️ `simulated` blok DIŞINDA: kolona ÇÖZÜLMÜŞ kaynak yazılacak, beyan edilen
+    // değil. Aksi halde bayrak AÇIKKEN (demo/eğitim) sunucu çapraz kontrolü cihazı
+    // simüle bulup isteği GEÇİRDİĞİNDE kolona "SCALE" yazılırdı — yani kolonun tek
+    // varlık sebebi (simüle 47.3 ≠ gerçek 47.3) kaybolurdu.
+    let simulated = declaredSource === "SIMULATED";
     if (declaredSource !== "MANUAL") {
-      let simulated = declaredSource === "SIMULATED";
       if (!simulated && (stamp?.machineId || stamp?.stationId)) {
         const scale = await prisma.peripheralDevice.findFirst({
           where: {
@@ -839,22 +874,28 @@ export class ShippingService {
     // findUnique ile update arasında çuval bir sevkiyata claim edilebilirdi
     // (check-then-act; tartı DISPATCH sırasında yazılırdı). Otorite kilitte:
     // touchWarehouseSackTx WHERE shipmentId IS NULL, atanmışsa 409.
+    // ÇÖZÜLMÜŞ kaynak — beyan edilen DEĞİL. Sunucu cihazı simüle bulduysa (ve bayrak
+    // açık olduğu için istek geçtiyse) kolona SIMULATED yazılır; aksi halde kolon
+    // "SCALE" der ve simüle 47.3 ile gerçek 47.3 yine ayırt edilemezdi.
+    const resolvedSource: SackWeightSource = simulated
+      ? SackWeightSource.SIMULATED
+      : (declaredSource as SackWeightSource);
+
     await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, data.sackId);
       await tx.sack.update({
         where: { id: data.sackId },
         data: {
           weightKg: new Prisma.Decimal(data.weightKg!),
+          weightSource: resolvedSource,
           weighedBy: userId ? { connect: { id: userId } } : { disconnect: true },
           weighedAt: new Date(),
         },
       });
     });
-    // `source` audit'e yazılır: DB'de kg'nin kaynağını gösteren KOLON YOK (`Sack`'te
-    // yalnız weightKg/weighedById/weighedAt) → simüle 47.3 ile gerçek 47.3 bit-bit
-    // aynı. Kalıcı kolon (`weightSource`) migration ister ve kapsam dışı; audit
-    // izi en azından "bu kg nereden geldi?" sorusuna cevap bırakır.
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId, newData: { kind: "WEIGH", weightKg: data.weightKg, source: declaredSource } });
+    // Kaynak hem KOLONA (sorgulanabilir, kalıcı) hem AUDİT'e (kim/ne zaman bağlamıyla)
+    // yazılır. Kolon iç izdir: belgeye/etikete BASILMAZ (bkz. schema.prisma doc).
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId, newData: { kind: "WEIGH", weightKg: data.weightKg, source: resolvedSource } });
     return { success: true, data: {}, message: "Çuval tartısı güncellendi" };
   }
 
@@ -918,7 +959,9 @@ export class ShippingService {
     if (ids.length === 0) return;
     await tx.sack.updateMany({
       where: { id: { in: ids }, weightKg: { not: null } },
-      data: { weightKg: null, weighedById: null, weighedAt: null },
+      // `weightSource` de NULL'lanır: kg gidince kaynak bilgisi bayatlar ve
+      // "kg yok ama kaynağı SCALE" gibi tutarsız bir çift kalırdı.
+      data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null },
     });
   }
 
@@ -999,9 +1042,21 @@ export class ShippingService {
   async listCustomerPoolSacks(customerId: string): Promise<ApiResponse<unknown>> {
     const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, code: true, name: true } });
     if (!customer) throw AppError.notFound("Müşteri bulunamadı");
-    const sacks = await prisma.sack.findMany({
+    // GÜVENLİK TAVANI (2026-07-30) — sorgu eskiden LİMİTSİZDİ. Kardeşi `listPool`
+    // `take: 2000` taşıyor; sınırsız sorgu bir tavan kadar bile korumasızdır (perf
+    // kuralı #5). Ölçüm: bugün en kalabalık müşterinin 3 havuz çuvalı var (toplam
+    // 369 çuval) → tavan bugün ISIRMIYOR, büyümeye karşı emniyet supabı.
+    //
+    // ⚠️ YÖN KRİTİK: `orderBy asc` + düz `take` EN YENİ çuvalları keserdi. Mobil
+    // Paketleme ekranı AKTİF ÇUVALI listenin SONUNDAN seçiyor (`ensureActiveSack`
+    // → `list[list.length - 1]`), yani tavan ısırsaydı yeni açılan çuval görünmez
+    // olur ve operatör farkında olmadan ESKİ bir çuvala okuturdu. Bu yüzden `desc`
+    // çekip sayfayı `reverse()` ile asc'e döndürüyoruz: kesilen uç ESKİ olanlar.
+    const POOL_SACK_CAP = 2000;
+    const sacksDesc = await prisma.sack.findMany({
       where: { customerId, shipmentId: null },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
+      take: POOL_SACK_CAP,
       select: {
         // weighedAt: kartta "✓ 14:22" (tartıldı izi) — tek-dokunuş tartıdan sonra
         // operatör hangi çuvalın tartıldığını modal açmadan görmeli.
@@ -1014,6 +1069,9 @@ export class ShippingService {
         swatches: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
       },
     });
+    // Sözleşme KORUNUR: istemciler `createdAt asc` bekliyor (mobil aktif çuvalı sondan
+    // seçiyor). `desc + take` ile en yeniler alındı, burada asc'e döndürülüyor.
+    const sacks = sacksDesc.reverse();
     const data = sacks.map((sk) => {
       // SAYAÇLAR hayaleti DIŞLAR → çuval etiketi (label.service, aynı küme), liste ve
       // irsaliye aynı adedi/metrajı basar. Görünüm ise hepsini gösterir (üstteki not).
@@ -1028,7 +1086,17 @@ export class ShippingService {
         swatches: sk.swatches.map((s) => ({ id: s.id, barcode: s.barcode, item: s.item, color: s.color })),
       };
     });
-    return { success: true, data: { customer, sacks: data } };
+    // `truncated`: tavan ısırdıysa SESSİZ KALMA. Bu ekranda kesilen çuval yalnız
+    // görünmez olmuyor — sevkiyata GİRMİYOR, KPI'lardan düşüyor ve aramada bile
+    // bulunamıyor (arama bellekteki dizide çalışıyor). İstemci bunu bir uyarı
+    // şeridine çevirmeli. Alan EKLEMELİ olduğu için eski istemcileri kırmaz.
+    const truncated = sacksDesc.length === POOL_SACK_CAP;
+    if (truncated) {
+      console.warn(
+        `[listCustomerPoolSacks] müşteri ${customerId}: havuz çuvalı ${POOL_SACK_CAP} tavanına ulaştı — en eskiler kesildi.`,
+      );
+    }
+    return { success: true, data: { customer, sacks: data, truncated, limit: POOL_SACK_CAP } };
   }
 
   // =========================================================================
@@ -1198,7 +1266,7 @@ export class ShippingService {
 
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
-        const shipmentNo = await nextShipmentNo();
+        const shipmentNo = await nextShipmentNo(tx);
         const created = await tx.shipment.create({
           data: { shipmentNo, customerId: data.customerId, branchId, status: ShipmentStatus.PLANNED, destination, procedureCode: data.procedureCode?.trim() || null },
           select: { id: true, shipmentNo: true },

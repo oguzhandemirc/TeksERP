@@ -170,11 +170,27 @@ export interface SackContentSwatch {
   color: { id: string; name: string; hex: string | null } | null;
 }
 
+/**
+ * Çuval brüt tartısının KAYNAĞI (backend `Sack.weightSource`) — İÇ iz.
+ * `null` = bu alan eklenmeden önce tartılmış (legacy, kaynağı gerçekten bilinmiyor).
+ * ⚠️ Belgeye/etikete BASILMAZ; yalnız detay yüzeyinde rozet olarak gösterilir.
+ */
+export type SackWeightSource = "SCALE" | "MANUAL" | "SIMULATED";
+
+/** Rozet metni — `SCALE` için rozet GÖSTERİLMEZ (normal durum, gürültü olurdu). */
+export const weightSourceBadge: Record<SackWeightSource, string | null> = {
+  SCALE: null,
+  MANUAL: "elle girildi",
+  SIMULATED: "SİMÜLASYON",
+};
+
 export interface SackContents {
   id: string;
   sackNo: string;
   seq: number | null;
   weightKg: number | null;
+  /** Tartının kaynağı — rozet için (bkz. `weightSourceBadge`). */
+  weightSource?: SackWeightSource | null;
   /** Çuval yorumu — iç serbest not (tam metin). */
   notes: string | null;
   /** Dolu = sevkiyatta (içerik kilitli); null = depoda. */

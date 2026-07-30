@@ -76,6 +76,28 @@ function symMatches(line, sym, word) {
   return new RegExp(`(^|[^A-Za-z0-9_])${esc}([^A-Za-z0-9_]|$)`).test(line);
 }
 
+// [İLERİ REFERANS] Bir spec "## 4) YENİ DOSYA `x/y.tsx`" diyorsa o dosyanın HENÜZ
+// OLMAMASI normaldir — gate'in amacı TAŞINMIŞ/SİLİNMİŞ dosyaya atıf yakalamak, henüz
+// yazılmamış dosyayı planlamak değil. Bu, gerçek bir yanlış-pozitif SINIFI.
+//
+// Kapsam BİLEREK dar tutuldu (her genişletme gate'i deler):
+//   • YALNIZ AYNI SATIR — ±1 satır penceresi muafiyet yüzeyini üçe katlar ve tipik
+//     spec düzeninde "YENİ DOSYA" başlığının hemen altındaki açıklama satırı MEVCUT
+//     dosyalara atıf yapar (ölçüldü: bedava genişleyen kör nokta).
+//   • YALNIZ BÜYÜK HARF "YENİ/YENI DOSYA" — küçük harfe ya da "eklenecek/oluşturulacak"
+//     gibi ifadelere açılırsa VAR OLAN 6 dosya atfı da kalıcı muafiyete girer (ölçüldü:
+//     Teks-Erp/CLAUDE.md:125, docs/design/CUVAL-HAVUZU-TASARIM.md:117,
+//     docs/fason-envanter-gorunurluk-spec.md:161/170/591).
+//   • YALNIZ MARKDOWN BAŞLIĞINDA — kırık bir linki "YENİ DOSYA" yazarak susturma
+//     yüzeyini daraltır.
+//   • Sentinel yolun ÖNÜNDE olmalı (aynı satırda sonradan gelen atıf muaf değil).
+//
+// ⚠️ BİLİNEN KÖR NOKTA: ileri referans GERÇEKLEŞİP dosya sonradan taşınırsa gate
+// sessiz kalır. Bu yüzden muafiyet SESSİZCE ATLANMAZ — INFO olarak listelenir ve
+// hedef ARTIK VARSA "başlık fosilleşti" uyarısı basılır (kör nokta kendini tasfiye eder).
+const PLANNED_SENTINEL = /^#{1,6}\s.*\bYEN[İI] DOSYA\b/;
+const plannedLinks = [];
+
 const deadLinks = [];
 const advisories = [];
 const mdFiles = walkMd(REPO_ROOT);
@@ -88,13 +110,34 @@ for (const file of mdFiles) {
     [lines[i - 2], lines[i - 1], lines[i], lines[i + 1], lines[i + 2]]
       .some((l) => l && REMOVAL_MARKER.test(l));
 
-  lines.forEach((line, i) => {
+  lines.forEach((rawLine, i) => {
+    // Sentinel araması ve PATH_RE eşleşmesi AYNI string üzerinde olmalı: biri
+    // normalize edilip diğeri edilmezse NFD girdide index'ler kayar ve aşağıdaki
+    // "sentinel yoldan ÖNCE mi" kontrolü sessizce yanlış sonuç verir.
+    const line = rawLine.normalize("NFC");
+    const plannedAt = line.search(PLANNED_SENTINEL) === 0 ? line.search(/YEN[İI] DOSYA/) : -1;
+
     // [GATE] Ölü doküman-link
     for (const m of line.matchAll(PATH_RE)) {
       const p = m[0];
       if (p.includes("*") || p.includes("...") || p.includes("<")) continue;
-      if (!existsSync(join(REPO_ROOT, p))) {
-        deadLinks.push({ file: rel, line: i + 1, path: p, text: line.trim().slice(0, 130) });
+      if (existsSync(join(REPO_ROOT, p))) continue;
+      // İleri referans: "YENİ DOSYA" başlığı, atfın ÖNÜNDE.
+      if (plannedAt >= 0 && plannedAt < (m.index ?? 0)) {
+        plannedLinks.push({ file: rel, line: i + 1, path: p });
+        continue;
+      }
+      deadLinks.push({ file: rel, line: i + 1, path: p, text: line.trim().slice(0, 130) });
+    }
+    // İleri referans GERÇEKLEŞMİŞ mi (dosya artık var) — başlık fosilleşmiş demektir;
+    // muafiyet o satırda artık kör nokta yaratıyor, bakım sinyali olarak bildir.
+    if (plannedAt >= 0) {
+      for (const m of line.matchAll(PATH_RE)) {
+        const p = m[0];
+        if (p.includes("*") || p.includes("...") || p.includes("<")) continue;
+        if (plannedAt < (m.index ?? 0) && existsSync(join(REPO_ROOT, p))) {
+          plannedLinks.push({ file: rel, line: i + 1, path: p, materialized: true });
+        }
       }
     }
     // [ADVISORY] Kaldırılmış-sembol (removal-context'siz)
@@ -106,6 +149,23 @@ for (const file of mdFiles) {
       }
     }
   });
+}
+
+// --- INFO: ileri referans muafiyetleri (CI'ı etkilemez, ama SESSİZ DEĞİL) ---
+if (plannedLinks.length) {
+  const fossils = plannedLinks.filter((p) => p.materialized);
+  const pending = plannedLinks.filter((p) => !p.materialized);
+  if (pending.length) {
+    console.log(`ℹ️  İLERİ REFERANS — ${pending.length} "YENİ DOSYA" atfı muaf tutuldu (henüz yazılmamış, beklenen):`);
+    for (const p of pending) console.log(`    ${p.file}:${p.line}  ${p.path}`);
+    console.log("");
+  }
+  if (fossils.length) {
+    console.log(`ℹ️  FOSİLLEŞMİŞ BAŞLIK — ${fossils.length} "YENİ DOSYA" atfının hedefi ARTIK VAR:`);
+    for (const p of fossils) console.log(`    ${p.file}:${p.line}  ${p.path}`);
+    console.log("    → Başlıktaki 'YENİ DOSYA' ibaresini kaldırın; o satır artık gate'in KÖR NOKTASI");
+    console.log("      (dosya sonradan taşınırsa/silinirse ölü link yakalanmaz).\n");
+  }
 }
 
 // --- ADVISORY (CI'ı etkilemez) ---

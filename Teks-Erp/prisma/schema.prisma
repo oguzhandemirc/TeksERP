@@ -61,6 +61,14 @@ enum RollEntrySource {
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
 }
 
+/// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
+enum SackWeightSource {
+  SCALE // Fiziksel kantardan okundu (mobil BT-SPP / Electron seri port)
+  MANUAL // Operatör elle girdi — kantarsız/arızalı durumun kaçış yolu
+  SIMULATED // Simüle cihaz (uydurma değer). `shipping.simulatedWeightEnabled` AÇIKKEN
+  // yazılabilir; varsayılan KAPALI'da backend 400 ile reddeder (demo/eğitim kurulumu).
+}
+
 enum RollStatus {
   STOCK
   IN_PRODUCTION
@@ -2524,6 +2532,18 @@ model Sack {
   // O-19: tartı izi — kim tarttı, ne zaman.
   weighedById String?   @db.Uuid
   weighedAt   DateTime?
+  /// Tartının KAYNAĞI. Bu alan olmadan simüle 47.3 kg ile gerçek 47.3 kg DB'de
+  /// BİT-BİT AYNIYDI (2026-07-30) — çuval kg'si sevk irsaliyesine ve çeki listesine
+  /// basıldığı için (müşteri/gümrük belgesi) "bu sayı nereden geldi?" sorusunun
+  /// cevabı kalıcı olmalı. NULL = bu alandan ÖNCE tartılmış (tarihsel) — DEFAULT
+  /// verilmedi ve VERİLMEMELİ: mevcut canlı satırların kaynağı gerçekten BİLİNMİYOR,
+  /// `DEFAULT 'MANUAL'` geçmişi uydururdu.
+  /// ⚠️ İÇ İZ — BELGEYE/ETİKETE BASILMAZ: `config/label-fields.ts` SACK_FIELDS bir
+  /// ALLOWLIST'tir, oraya EKLEME (eklenirse Etiket Stüdyosu'nda sürüklenebilir hale
+  /// gelir ve müşteriye giden çuval etiketine iç iz sızar). Aynı şekilde
+  /// `document-render/shipment-dispatch.html.ts` kolon setine de eklenmez.
+  /// `resetSackWeightsTx` kg'yi sıfırlarken bunu da NULL'lar (bayat kaynak kalmasın).
+  weightSource SackWeightSource?
   // Çuval yorumu — İÇ serbest not ("kendimiz için"): "ölçü şüpheli", "çuval yırtık,
   // aktarılacak" gibi. Ne ölçüm ne içerik → iki bilinçli sonuç:
   //  1) `resetSackWeightsTx` bu alana DOKUNMAZ (içerik değişince kg bayatlar, not bayatlamaz).

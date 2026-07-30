@@ -81,6 +81,12 @@ async function kgOf(sackId: string): Promise<number | null> {
   return s?.weightKg == null ? null : Number(s.weightKg);
 }
 
+/** Kalıcı kaynak kolonu (`Sack.weightSource`) — audit'ten BAĞIMSIZ doğrulama. */
+async function srcOfSack(sackId: string): Promise<string | null> {
+  const s = await prisma.sack.findUnique({ where: { id: sackId }, select: { weightSource: true } });
+  return s?.weightSource ?? null;
+}
+
 async function run(): Promise<void> {
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   STATION = need(
@@ -182,10 +188,41 @@ async function run(): Promise<void> {
   const s6 = await makeSack();
   await shippingService.weighSack({ sackId: s6, weightKg: 66.6, source: "SIMULATED" }, ADMIN);
   check("bayrak açıkken simüle kg kaydedildi", (await kgOf(s6)) === 66.6, `${await kgOf(s6)}`);
+
+  // 6b) ⭐ KOLON YALAN SÖYLEMEZ: bayrak AÇIKKEN istemci "SCALE" beyan etse bile,
+  // sunucu oturumun kantarını SİMÜLE bulursa kolona SIMULATED yazılmalı. Aksi halde
+  // (beyan edilen değer yazılırsa) kolonun tek varlık sebebi — simüle 47.3 ile gerçek
+  // 47.3'ü ayırmak — kaybolurdu. `simulated` bayrağı if-bloğunun DIŞINA alındı.
+  await prisma.peripheralDevice.update({ where: { id: simDevice.id }, data: { simulate: true } });
+  const s6b = await makeSack();
+  await shippingService.weighSack(
+    { sackId: s6b, weightKg: 77.7, source: "SCALE" },
+    ADMIN,
+    { machineId: null, stationId: STATION },
+  );
+  check("bayrak açıkken simüle cihaz + SCALE beyanı kaydedildi", (await kgOf(s6b)) === 77.7);
+  check(
+    "⭐ kolon ÇÖZÜLMÜŞ kaynağı yazdı (SIMULATED) — beyanı (SCALE) DEĞİL",
+    (await srcOfSack(s6b)) === "SIMULATED",
+    `${await srcOfSack(s6b)}`,
+  );
+  await prisma.peripheralDevice.update({ where: { id: simDevice.id }, data: { simulate: false } });
   await setFlag(false);
 
-  // ─────────────────────────── 7) Audit izi kaynağı taşıyor (DB'de kolon YOK)
-  console.log("\n=== 7) Audit `source` taşıyor (Sack'te kaynak kolonu YOK) ===");
+  // ─────────────────── 6c) KOLON: kaynak kalıcı ve sorgulanabilir; reset temizler
+  console.log("\n=== 6c) `Sack.weightSource` kolonu ===");
+  check("MANUAL tartıda kolon = MANUAL", (await srcOfSack(s1)) === "MANUAL", `${await srcOfSack(s1)}`);
+  check("gerçek kantar tartısında kolon = SCALE", (await srcOfSack(s5)) === "SCALE", `${await srcOfSack(s5)}`);
+  check("beyansız (legacy istemci) tartıda kolon = MANUAL", (await srcOfSack(s3)) === "MANUAL");
+  // İçerik değişince kg sıfırlanır → kaynak da NULL olmalı ("kg yok ama kaynak dolu"
+  // tutarsız çifti kalmasın). resetSackWeightsTx'i removeRollFromSack tetikler.
+  const rollInS5 = await prisma.roll.findFirst({ where: { sackId: s5 }, select: { id: true } });
+  if (rollInS5) await shippingService.removeRollFromSack({ rollId: rollInS5.id }, ADMIN);
+  check("içerik değişti → kg NULL", (await kgOf(s5)) === null);
+  check("⭐ içerik değişti → weightSource da NULL (bayat kaynak kalmaz)", (await srcOfSack(s5)) === null, `${await srcOfSack(s5)}`);
+
+  // ─────────────────────────── 7) Audit izi de kaynağı taşıyor (kolonla birlikte)
+  console.log("\n=== 7) Audit `source` taşıyor (kolonun yanında, kim/ne zaman bağlamıyla) ===");
   const audits = await prisma.systemLog.findMany({
     where: { tableName: "SACK", recordId: { in: [s1, s5, s6] }, action: "UPDATE" },
     select: { recordId: true, newData: true },

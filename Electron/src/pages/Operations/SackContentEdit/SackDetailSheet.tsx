@@ -22,6 +22,7 @@ import {
   sackStatusOf,
   sackStatusTones,
   shipmentStatusLabels,
+  weightSourceBadge,
   type SackSearchRow,
 } from "./types";
 
@@ -54,6 +55,8 @@ export function SackDetailSheet({ sack, onOpenChange }: Props) {
   const rolls = contents.data?.data.rolls ?? [];
   const swatches = contents.data?.data.swatches ?? [];
   const notes = contents.data?.data.notes ?? null;
+  // Tartı kaynağı yalnız içerik dökümünde döner (liste satırında yok — iç iz).
+  const weightSource = contents.data?.data.weightSource ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -114,6 +117,19 @@ export function SackDetailSheet({ sack, onOpenChange }: Props) {
                       <span className="text-xs font-normal text-muted-foreground">tartılmadı</span>
                     )}
                   </div>
+                  {/* Kaynak rozeti — yalnız SCALE DIŞINDA gösterilir (kantar okuması
+                      normal durum, rozetlemek gürültü olurdu). SİMÜLASYON kırmızı:
+                      bu kg gerçek ölçüm değil ve irsaliyeye/çeki listesine basılıyor.
+                      `null` (legacy tartı) → rozet yok. Belgeye HİÇ girmez. */}
+                  {sack.weightKg != null && weightSource && weightSourceBadge[weightSource] && (
+                    <div
+                      className={`mt-0.5 text-[10px] font-medium ${
+                        weightSource === "SIMULATED" ? "text-destructive" : "text-muted-foreground"
+                      }`}
+                    >
+                      {weightSourceBadge[weightSource]}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
