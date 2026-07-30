@@ -223,7 +223,13 @@ export async function exportTableToPdf<T>(
 
   const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><style>
     @page { size: A4 landscape; margin: 12mm; }
+    /* Belge KENDİ zeminini taşır: printToPDF printBackground:true ile koşuyor ve
+       koyu zeminli bir pencerede render edilirse zemin devralınıp koyu-üstüne-koyu
+       okunmaz bir PDF çıkar. color-scheme:light UA'nın karanlık mod dönüşümünü de
+       kapatır. (Bu blok bir template literal içinde — backtick KULLANMA.) */
+    :root { color-scheme: light; }
     * { box-sizing: border-box; }
+    html, body { background: #fff; }
     body { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 10px; color: #111; margin: 0; }
     h1 { font-size: 14px; margin: 0 0 10px; }
     .meta { font-size: 10px; color: #555; margin-bottom: 8px; }
