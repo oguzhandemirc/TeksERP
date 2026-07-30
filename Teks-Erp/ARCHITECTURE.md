@@ -853,6 +853,14 @@ Canlıda iki olay yaşandı (2026-07-23 · 2026-07-28, `system_logs` `recordId='
 
 > ⚠️ **Uyarı eşiği TOPLAMA değil MEŞGUL bağlantıya konur** (`poolTotalCount − poolIdleCount`). Sıcak havuzda yüksek toplam İSTENEN durumdur; toplama eşik koymak boot sonrası kalıcı yanlış alarm üretir (24/30 = %80). Bu ders ölçümle öğrenildi — `Electron/.../serverHealth.ts` `evaluateAlerts` meşgul sayıyı kullanır.
 
+**İstek-başı fan-out — ölçüldü, bounding YAPILMADI (2026-07-30).** Uygulamanın en geniş tek-istek fan-out'u `getProductionFlow` (`GET /api/rolls/production-flow`): 6 kolon paralel, her kolon içinde ayrıca `Promise.all([findMany, count])` → **12 eşzamanlı checkout**. Yine de eşzamanlılık sınırlaması **yapılmadı, çünkü ölçüm tersini söylüyor**:
+- Gerçek trafik **8 günde 7 istek** (`staleTime: 30_000`, `refetchInterval` YOK — talep üzerine yükleniyor).
+- Duvar saati **141-172ms** ama altındaki SQL toplamı **<10ms**. Fark eşzamanlılık değil, `ROLL_LIST_INCLUDE`'un ~9 ilişkisinin sırayla çekilmesi (`schema.prisma`'da `previewFeatures` yok → `relationJoins` kapalı).
+- Dolayısıyla 12'yi 4'e bölmek 3 dalga demek → **~350-450ms, 2,5-3× REGRESYON**.
+- `count` kaldırılamaz: `RollsKanban.tsx`'in `+{N} daha` göstergesini besliyor — kolonun 10'da kesildiğinin tek sinyali.
+
+**Bu uç için doğru kaldıraç eşzamanlılık DEĞİL**, Kanban önizlemesi (10 kart) için `ROLL_LIST_INCLUDE`'un kırpılmasıdır — hem gecikmeyi hem bağlantı-tutma süresini düşürür; bounding ise gecikmeyi kötüleştirip yalnız tepe genişliği azaltır. Sayı kıpırdarsa (`/health` `poolWaitingMax`) o zaman bakılır. Dış çağıranın genişliği kontrol ettiği tek uç (`POST /api/rolls/stats-batch`) ise cap ile kapatıldı (50 → 12; gerçek genişlik 8).
+
 **Havuz zaman aşımı artık 503 döner** (`error.middleware`, `classifyPoolTimeout`): pg-pool çıplak `Error` fırlattığı ve driver adapter'da Rust havuzu olmadığı için Prisma `P2024` ÜRETMEZ — o dal ölüdür, gerçek hata çıplak `Error` olarak gelir ve ayrı bir dalda yakalanır. Regresyon kilidi: `scripts/test_pool_health.ts` (kurulu pg-pool'dan gerçek hataları üretip sınıflandırıcıyı ve çevresindeki 4xx'leri doğrular).
 
 **Mevcut değeri görmek için:**

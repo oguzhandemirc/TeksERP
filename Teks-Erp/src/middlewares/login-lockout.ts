@@ -13,13 +13,7 @@
 // =============================================================================
 
 import type { Request } from "express";
-import {
-  readPinLockoutEnabled,
-  readPinLockoutAttempts,
-  readPinLockoutPenaltySec,
-  readPinLockoutEscalateAfter,
-  readPinLockoutLongPenaltyMin,
-} from "../services/system-setting.service";
+import { readPinLockoutConfig } from "../services/system-setting.service";
 import "../types/express-augment";
 
 /** Anahtar başına deneme durumu: ardışık yanlış (fails), toplam ceza turu
@@ -62,14 +56,13 @@ export function resolveLoginLockoutKey(req: Request): string {
 export async function reserveLoginAttempt(
   key: string,
 ): Promise<{ blocked: boolean; retryAfterSec: number }> {
-  const enabled = await readPinLockoutEnabled();
+  // Beş ayar TEK sorguda (readPinLockoutConfig). Önbellek YOK — her denemede canlı
+  // DB okunur, yani "middleware tazeliği" garantisi aynen korunur; yalnız
+  // round-trip 5→1 iner. Ayrıca bu, aşağıdaki SENKRON BÖLGE invariant'ını
+  // GÜÇLENDİRİR: iki await aşaması (enabled, sonra Promise.all) yerine tek
+  // interleaving noktası kalır.
+  const { enabled, attempts, penaltySec, escalateAfter, longPenaltyMin } = await readPinLockoutConfig();
   if (!enabled) return { blocked: false, retryAfterSec: 0 };
-  const [attempts, penaltySec, escalateAfter, longPenaltyMin] = await Promise.all([
-    readPinLockoutAttempts(),
-    readPinLockoutPenaltySec(),
-    readPinLockoutEscalateAfter(),
-    readPinLockoutLongPenaltyMin(),
-  ]);
 
   // --- SENKRON BÖLGE: buradan sonra await YOK → paralel N istek seri işlenir. ---
   const now = Date.now();

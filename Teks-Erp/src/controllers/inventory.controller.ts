@@ -55,7 +55,15 @@ const statsBatchSchema = z.object({
       }),
     )
     .min(1)
-    .max(50),
+    // .max(12) — her kalem KENDİ `roll.aggregate`'ini paralel koşar, yani bu sayı
+    // doğrudan eşzamanlı havuz checkout'u demek (havuz tavanı 30). Gerçek genişlik
+    // 8: tek çağıran Electron envanter özeti ve `RollsPage.tsx` TABS'ın 9
+    // kaleminden KANBAN'ı çıkarıp gönderiyor (`KARTELA_SENT` sanal anahtar, uca
+    // hiç gelmiyor). Eski 50 cap'i meşru kullanımın 6,25 katıydı ve bu uç
+    // `requireAnyPermission("roll:read", ...MOBILE_ROLL_READ)` ile korunuyor —
+    // yani 9 mobil saha izninden herhangi biri fan-out genişliğini kontrol
+    // ediyordu. 12 = 8 + pay. (Aynı gerekçe: createShipment sackIds .max(500).)
+    .max(12),
 });
 
 // Süpervizör "İstasyondan Kurtar" — IN_PRODUCTION takılı topu depoya alır. Zorunlu sebep (audit).

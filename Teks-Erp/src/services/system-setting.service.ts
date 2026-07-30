@@ -2288,6 +2288,69 @@ export async function readPinLockoutLongPenaltyMin(
 }
 
 /**
+ * Giriş kilidi yapılandırmasının TAMAMI — TEK sorguda.
+ *
+ * NEDEN: `login-lockout.ts` her PIN/kart giriş denemesinde bu beş ayarı beş ayrı
+ * `findUnique` ile okuyordu. Beşi tek `findMany`'ye iner.
+ *
+ * ⚠️ BU BİR ÖNBELLEK DEĞİL. Yukarıdaki (bkz. featureFlagsCache notu) "per-flag
+ * enforcement reader'ları KASITEN cache'siz kalır — middleware tazeliği aynen
+ * korunur" kuralı burada da geçerli: bu fonksiyon HER çağrıda canlı DB'yi okur,
+ * TTL yok, invalidation yok. Yönetici kilidi sıkılaştırdığında bir sonraki
+ * denemede geçerlidir. Sadece round-trip sayısı 5→1 düşer.
+ *
+ * Desen `getFeatureFlags`'tan alındı (findMany + Map + sentetik findUnique
+ * client'ı) — parse/clamp/default mantığı KOPYALANMAZ, tek kaynak yine
+ * okuyucuların kendisidir. Fark: burada `key: { in: [...] }` filtresi var, çünkü
+ * ayar tablosu büyüdükçe gereksiz satır çekmenin anlamı yok.
+ *
+ * 🔒 `valueByKey.has(...)` KONTROLÜ LOAD-BEARING — `.get(...) ?? null` YAZMA.
+ * `value` sütunu jsonb ve JSON `null` saklanabilir; eksik anahtar için `null`
+ * yerine `{ value: null }` döndüren bir shim `readPinLockoutEnabled`'ı bozar:
+ * satır YOKKEN doğru cevap DEFAULT (=true, kilit AÇIK) ama `asBoolean(null)`
+ * `false` (kilit KAPALI) verir. Canlı DB'de o satır seed'lenmiyor → giriş kilidi
+ * her temiz kurulumda SESSİZCE devre dışı kalırdı. Diğer dört okuyucuda ikisi de
+ * DEFAULT'a düşer (zararsız); ayrışma yalnız `enabled`'da.
+ */
+export async function readPinLockoutConfig(tx?: Pick<typeof prisma, "systemSetting">): Promise<{
+  enabled: boolean;
+  attempts: number;
+  penaltySec: number;
+  escalateAfter: number;
+  longPenaltyMin: number;
+}> {
+  const client = tx ?? prisma;
+  const keys = [
+    SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED,
+    SETTING_KEYS.AUTH_PIN_LOCKOUT_ATTEMPTS,
+    SETTING_KEYS.AUTH_PIN_LOCKOUT_PENALTY_SEC,
+    SETTING_KEYS.AUTH_PIN_LOCKOUT_ESCALATE_AFTER,
+    SETTING_KEYS.AUTH_PIN_LOCKOUT_LONG_PENALTY_MIN,
+  ];
+  const rows = await client.systemSetting.findMany({
+    where: { key: { in: keys } },
+    select: { key: true, value: true },
+  });
+  const valueByKey = new Map(rows.map((r) => [r.key, r.value] as const));
+  const oneShot = {
+    systemSetting: {
+      findUnique: (args: { where: { key: string } }) =>
+        Promise.resolve(
+          valueByKey.has(args.where.key) ? { value: valueByKey.get(args.where.key) } : null,
+        ),
+    },
+  } as unknown as Pick<typeof prisma, "systemSetting">;
+
+  return {
+    enabled: await readPinLockoutEnabled(oneShot),
+    attempts: await readPinLockoutAttempts(oneShot),
+    penaltySec: await readPinLockoutPenaltySec(oneShot),
+    escalateAfter: await readPinLockoutEscalateAfter(oneShot),
+    longPenaltyMin: await readPinLockoutLongPenaltyMin(oneShot),
+  };
+}
+
+/**
  * Mobil giriş yöntemlerini okur: { enabled, primary }. Backend ENFORCE eder —
  * login-card yalnız "card", login-quick-pin yalnız "pin" etkinken çalışır
  * (kapalıyken ilgili altyapı saldırı yüzeyi açmaz); klasik /auth/login HEP açık.

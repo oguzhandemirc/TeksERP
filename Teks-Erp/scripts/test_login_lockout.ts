@@ -22,7 +22,11 @@ import {
 } from "../src/middlewares/login-lockout";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
+import {
+  SETTING_KEYS,
+  invalidateFeatureFlagsCache,
+  readPinLockoutConfig,
+} from "../src/services/system-setting.service";
 
 let pass = 0,
   fail = 0;
@@ -206,6 +210,38 @@ async function main() {
     // reserveLoginAttempt de kapalıyken no-op → controller da bloklamaz.
     const disLogin = await invoke(AuthController.loginQuickPin, { body: { pin: wrongPin }, ip: ipDis });
     check("5c kilit KAPALI → controller 429 vermez (401)", is401(disLogin.nextError));
+
+    // =====================================================================
+    // 6) GÜVENLİK KİLİDİ: pinLockoutEnabled satırı YOKKEN kilit AÇIK olmalı
+    // =====================================================================
+    // `readPinLockoutConfig` beş ayarı tek findMany ile okur ve eksik anahtarı
+    // sentetik client'ta `null` döndürür (`valueByKey.has(...)`). Biri onu
+    // `.get(...) ?? null` diye "sadeleştirirse" eksik satır `{ value: null }`
+    // olur, `asBoolean(null)` → false, ve giriş kilidi HER TEMİZ KURULUMDA
+    // sessizce devre dışı kalır (doğru cevap DEFAULT = true). Seed bu satırı
+    // yazmıyor, yani üretimde gerçekten YOK → bu tam olarak canlı senaryo.
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED } });
+    invalidateFeatureFlagsCache();
+    const cfgNoRow = await readPinLockoutConfig();
+    check("6a satır YOK → enabled DEFAULT (true), kilit AÇIK", cfgNoRow.enabled === true, `enabled=${cfgNoRow.enabled}`);
+    // `.has()`'in İKİ dalı birlikte: eksik anahtar DEFAULT'a düşerken, VAR OLAN
+    // anahtarlar canlı değerlerini korumalı. Bu test yukarıda attempts=3,
+    // penaltySec=5 (satır 176'da güncellendi), escalateAfter=2, longPenaltyMin=15
+    // yazdı — batch okuma onları DB'den aynen getirmeli. Toptan default'a düşen
+    // bir shim bu satırda yakalanır (o da ayrı bir bozulma biçimidir).
+    check(
+      "6b var olan anahtarlar canlı değerini korudu (yalnız eksik olan default'a düştü)",
+      cfgNoRow.attempts === 3 &&
+        cfgNoRow.penaltySec === 5 &&
+        cfgNoRow.escalateAfter === 2 &&
+        cfgNoRow.longPenaltyMin === 15,
+      JSON.stringify(cfgNoRow),
+    );
+    // Uçtan uca: satır yokken kilit gerçekten devreye giriyor mu?
+    const ipNoRow = `norow-${ts}`; usedKeys.push(ipNoRow);
+    for (let i = 0; i < 5; i++) await reserveLoginAttempt(ipNoRow);
+    const noRowBlocked = await reserveLoginAttempt(ipNoRow);
+    check("6c satır YOKKEN eşik aşılınca bloklanıyor", noRowBlocked.blocked, `retryAfter=${noRowBlocked.retryAfterSec}`);
   } finally {
     for (const k of usedKeys) resetLoginLockout(k);
     // Oturum + audit temizliği (başarılı login'ler session/log yazdı).
