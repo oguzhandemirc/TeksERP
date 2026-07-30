@@ -22,7 +22,7 @@ import { DistributeSackDialog } from "./DistributeSackDialog";
 import { ReassignCustomerDialog, type ReassignPatch } from "./ReassignCustomerDialog";
 import { SackContentsTable } from "./SackContentsTable";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
-import { fromSackContents } from "./sackDump";
+import { fromDumpRows } from "./sackDump";
 import { SackNoteDialog } from "./SackNoteDialog";
 import { useSackWeighAction } from "./useSackWeighAction";
 import { StaleLabelsBanner } from "./StaleLabelsBanner";
@@ -116,12 +116,19 @@ export function SackEditorView({
           </Button>
           {/* İçerik dökümü — SEÇİM GEREKMEZ, çuvalın tamamını alır. Kilitli çuvalda
               da açık (Etiket/Not ile aynı gerekçe: baskı içeriği değiştirmez).
-              Veri bellekte → ek ağ çağrısı yok. Tek dropdown olduğu için başlığa
-              üç tuş değil bir tuş biner. */}
+              Tek dropdown olduğu için başlığa üç tuş değil bir tuş biner.
+
+              Bellekteki `contentsQ` verisi DEĞİL, liste ekranıyla AYNI uç kullanılır:
+              (a) "top fiziksel olarak çuvalda mı" kararı tek yerde (backend
+              `SACK_ABSENT_STATUSES`) kalır — editör tablosu hayalet topu bilerek
+              GÖSTERİR, belge ise saymaz; istemcide statü listesi kopyalamayız.
+              (b) baskı her seferinde TAZE veriyle çıkar (çeki listesi diyaloğuyla
+              aynı gerekçe: bayat kg/içerik kağıda gitmesin). */}
           <SackContentDumpMenu
             label="İçerik Dökümü"
             disabled={!data || !hasContents}
-            dumps={data ? [fromSackContents(data)] : []}
+            hasNotes={!!data?.notes}
+            load={async () => fromDumpRows((await sackHubService.contentDump([target.sackId])).data)}
           />
           {/* Yorum kilitli çuvalda DA düzenlenebilir (annotation; içerik/ölçüm değil).
               Not varsa buton "Notu Düzenle" olur — içerik modalda okunur, ekranda

@@ -7,7 +7,6 @@ export {
   dumpRowCount,
   dumpTotalQty,
   fromDumpRows,
-  fromSackContents,
   type SackDump,
   type SackDumpOptions,
   type SackDumpRoll,

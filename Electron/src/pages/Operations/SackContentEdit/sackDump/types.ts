@@ -10,7 +10,7 @@
 // GRUPLU özettir (sahada çuval aramak için), burası TOP BAZLI dökümdür.
 // =============================================================================
 
-import type { SackContentDumpSack, SackContents } from "../types";
+import type { SackContentDumpSack } from "../types";
 
 /** Döküm satırı — tek top. */
 export interface SackDumpRoll {
@@ -54,37 +54,13 @@ export const dumpRowCount = (dumps: SackDump[]): number =>
 export const dumpHasNotes = (dumps: SackDump[]): boolean => dumps.some((d) => !!d.notes);
 
 /**
- * Editör kaynağı — bellekteki tek çuval dökümü. `SackContents.customer/branch`
- * çuvalın KENDİ müşterisidir (sevkiyattan bağımsız); sevkiyata atanmış çuvalda
- * bile doğru ad basılır.
+ * TEK kaynak — `content-dump` yanıtı (sayısal alanlar zaten Number).
+ *
+ * Editör de liste de bu ucu kullanır; bilinçli olarak bellekteki `getSackContents`
+ * verisinden döküm ÜRETİLMEZ: "top fiziksel olarak çuvalda mı" kararı backend'de
+ * `SACK_ABSENT_STATUSES` ile verilir (editör tablosu hayalet topu bilerek gösterir,
+ * belge saymaz) ve o statü kümesi istemciye KOPYALANMAMALIDIR.
  */
-export function fromSackContents(data: SackContents): SackDump {
-  return {
-    sackNo: data.sackNo,
-    customerName: data.customer?.name ?? null,
-    branchName: data.branch?.name ?? null,
-    branchCode: data.branch?.code ?? null,
-    // Decimal alanlar bu uçta string gelebilir (getSackContents Number()'a çevirmiyor).
-    weightKg: data.weightKg == null ? null : Number(data.weightKg),
-    notes: data.notes,
-    shipmentNo: data.shipment?.shipmentNo ?? null,
-    rolls: data.rolls.map((r) => ({
-      barcode: r.barcode,
-      itemName: r.item.name,
-      colorName: r.color?.name ?? null,
-      width: r.width == null ? null : Number(r.width),
-      qty: Number(r.currentQty),
-      qualityGrade: r.qualityGrade || null,
-    })),
-    swatches: data.swatches.map((s) => ({
-      barcode: s.barcode,
-      itemName: s.item.name,
-      colorName: s.color?.name ?? null,
-    })),
-  };
-}
-
-/** Liste kaynağı — `content-dump` yanıtı (sayısal alanlar zaten Number). */
 export function fromDumpRows(rows: SackContentDumpSack[]): SackDump[] {
   return rows.map((s) => ({
     sackNo: s.sackNo,

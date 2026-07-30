@@ -12,8 +12,8 @@
 //   5. Müşterisiz (genel stok) çuval → customer null, hata YOK
 //   6. Boş seçim → 400; 201 çuval → 400 (üst sınır)
 //   7. Sıralama: sevkiyat bazında GRUPLU (sevkiyata bağlı önce, depodaki sonda)
-//   8. ⭐ getSackContents artık çuvalın KENDİ customer/branch'ini döner (sevkiyat
-//      yokken de) — editör dökümü bayat prop'a mahkûm kalmasın
+//   8. ⭐ HAYALET toplar (SACK_ABSENT_STATUSES) dökümden düşer — çeki listesi ve
+//      liste aggregate.leriyle BİREBİR aynı sayım (sessiz çelişki olmasın)
 //   9. ⭐ REGRESYON: moveRollsToSack FARKLI müşterinin depo çuvalına taşımayı KABUL
 //      eder — UI hedef seçicisi bu davranışa dayanıyor (müşteri eşleşmesi aramaz);
 //      sevkiyattaki çuvala 409
@@ -176,20 +176,32 @@ async function main(): Promise<void> {
     const dupe = await dump([sackA.id, sackA.id, sackA.id]);
     check("6c) mükerrer id tekilleşir", dupe.length === 1, `${dupe.length}`);
 
-    // ── 7) getSackContents kendi müşteri/şubesini döner ───────────────────────
-    const contentsB = (await search.getSackContents(sackB.id)).data as {
-      customer: unknown; branch: unknown; shipment: unknown;
-    };
-    check("7a) müşterisiz+sevkiyatsız çuvalda customer alanı VAR (null)",
-      "customer" in contentsB && contentsB.customer === null);
-    check("7b) branch alanı VAR (null)", "branch" in contentsB && contentsB.branch === null);
+    // ── 7) HAYALET toplar DIŞLANIR (sayım/belge yüzeyi sözleşmesi) ────────────
+    // `SACK_ABSENT_STATUSES`: kayıtta çuvalda ama fiziksel olarak binada değil.
+    // Çeki listesi ve liste aggregate'leri de eler → döküm onlarla TUTARLI olmalı;
+    // aksi halde liste "1 top" derken döküm 2 satır basar.
+    const ghostBc = await makeRoll(999, 280);
+    await ship.scanIntoSack({ sackId: sackB.id, barcode: ghostBc });
+    const withGhost = (await dump([sackB.id]))[0]!;
+    check("7a) hayalet ÖNCESİ: top çuvalda sayılır", withGhost.rollCount === 2, `${withGhost.rollCount}`);
 
-    const contentsA = (await search.getSackContents(sackA.id)).data as {
-      customer: { id: string } | null; branch: { id: string; code: string | null } | null;
-    };
-    check("7c) çuvalın KENDİ müşterisi döner (sevkiyattan bağımsız)", contentsA.customer?.id === customer.id);
-    check("7d) çuvalın KENDİ şubesi + kodu döner",
-      contentsA.branch?.id === branch.id && contentsA.branch?.code === branch.code);
+    const ghostRoll = (await prisma.roll.findFirst({ where: { barcode: ghostBc }, select: { id: true } }))!;
+    await prisma.roll.update({ where: { id: ghostRoll.id }, data: { status: RollStatus.SCRAP } });
+    const afterGhost = (await dump([sackB.id]))[0]!;
+    check("7b) SCRAP top dökümden DÜŞER", afterGhost.rollCount === 1, `${afterGhost.rollCount}`);
+    check("7c) hayaletin metresi totalQty'ye girmez",
+      Math.abs(afterGhost.totalQty - 520) < 0.001, `${afterGhost.totalQty}`);
+    check("7d) hayalet satırı rolls[] içinde YOK",
+      !afterGhost.rolls.some((r) => r.barcode === ghostBc));
+
+    // Çeki listesiyle birebir aynı sayım (iki belge yüzeyi çelişmemeli)
+    const pick = ((await search.getPickList([sackB.id])).data as { rollCount: number; totalQty: number }[])[0]!;
+    check("7e) çeki listesiyle AYNI sayım",
+      pick.rollCount === afterGhost.rollCount && Math.abs(pick.totalQty - afterGhost.totalQty) < 0.001,
+      `çeki=${pick.rollCount}/${pick.totalQty} döküm=${afterGhost.rollCount}/${afterGhost.totalQty}`);
+
+    // Temizlik: hayaleti çuvaldan çıkar (kalan adımlar sayıma güvenir)
+    await prisma.roll.update({ where: { id: ghostRoll.id }, data: { sackId: null } });
 
     // ── 8) REGRESYON: cross-customer taşıma SERBEST ───────────────────────────
     // Sevkiyat kurulmadan ÖNCE koşar: sevk onayı varsayılan KAPALI olduğu için
