@@ -24,6 +24,10 @@ export interface FeatureFlags {
   /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi (default false).
    *  Backend ENFORCE eder — kapalıyken gönderilen weightKg reddedilir. */
   kk1WeightEntryEnabled: boolean;
+  /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (default false).
+   *  Backend ENFORCE eder — kapalıyken SIMULATED beyanlı tartı 400 döner. Elle
+   *  giriş (MANUAL) muaftır. Yalnız demo/eğitim kurulumu açar. */
+  shippingSimulatedWeightEnabled: boolean;
   /** İade kabulünde personel kaliteyi değiştirebilsin mi (default false). */
   returnGradingEnabled: boolean;
   /** Kartela kabulünde cm/kg ölçü alanları gösterilsin mi (default false → yalnız adet). */
@@ -63,6 +67,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   targetQuantityEnabled: false,
   rawWidthEnabled: false,
   kk1WeightEntryEnabled: false,
+  shippingSimulatedWeightEnabled: false,
   returnGradingEnabled: false,
   kartelaMeasurementEnabled: false,
   fasonNoteMobileEntry: false,

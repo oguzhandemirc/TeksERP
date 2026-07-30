@@ -421,8 +421,16 @@ export const packingService = {
       )
       .then((r) => r.data),
 
-  /** Çuval brüt tartısını güncelle (havuz çuvalı). */
-  weighSack: (sackId: string, body: { weightKg: number }): Promise<ApiResponse<unknown>> =>
+  /**
+   * Çuval brüt tartısını güncelle (havuz çuvalı).
+   * `source` = tartının KAYNAĞI; backend simüle kantar korumasının girdisi
+   * (`shipping.simulatedWeightEnabled` kapalıyken SIMULATED → 400). Verilmezse
+   * backend MANUAL varsayar (eski istemci geri uyumu).
+   */
+  weighSack: (
+    sackId: string,
+    body: { weightKg: number; source?: 'SCALE' | 'MANUAL' | 'SIMULATED' },
+  ): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, body).then((r) => r.data),
 
   /**

@@ -183,6 +183,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         title: "İade kabulünde personel kaliteyi değiştirebilsin",
         desc: "Kapalıyken mobil İade ekranında 'kalite belirt' kontrolü gizlenir; top çıktığı kaliteyle döner. Açıkken teslim alan personel topun kalitesini düzeltebilir (etiket değişir; iade yine Hazır Depo'ya iner). Kapalıyken backend gönderilen kalite override'ını yok sayar.",
       },
+      {
+        key: "shippingSimulatedWeightEnabled",
+        title: "Simüle kantardan gelen çuval tartısı kaydedilebilsin (demo/eğitim)",
+        desc: "Kapalıyken (varsayılan) cihaz kaydında “simülasyon” açık bir kantardan okunan kg backend tarafından REDDEDİLİR (400) — simüle kantar 10-100 kg arası rastgele değer üretir ve çuval kg'si sevk irsaliyesine + çeki listesine basılır (müşteri/gümrük belgesi). Elle giriş (⋮ → “Elle kg gir”) bu ayardan ETKİLENMEZ; kantarsız/arızalı durumun kaçış yoludur. Yalnızca demo/eğitim kurulumunda açın.",
+      },
     ],
   },
   {

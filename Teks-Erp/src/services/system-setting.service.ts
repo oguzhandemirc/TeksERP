@@ -64,6 +64,14 @@ export const SETTING_KEYS = {
   /** Sahadaki operatör Fason Sevk'te fason talimatını telefondan girebilsin mi.
    *  Default false (kapalı) → talimat yalnızca adım notundan gelir; mobil alan gizli. */
   FASON_NOTE_MOBILE_ENTRY: "fason.noteMobileEntry",
+  /** SİMÜLE kantardan gelen çuval tartısı KAYDEDİLEBİLSİN mi. Default false = ENFORCE:
+   *  simüle okuma `weighSack`'te 400 ile reddedilir. Yalnız demo/eğitim kurulumu açar.
+   *  Diğer bayrakların çoğunun aksine backend ENFORCE eder, çünkü çuval kg'si sevk
+   *  irsaliyesine ve çeki listesine BASILIR (müşteri/gümrük belgesi) — uydurulmuş bir
+   *  sayının oraya girmesi geri alınamaz. Elle giriş (`source: MANUAL`) MUAF: operatör
+   *  kg'yi kendi yazmıştır, kantarın simüle olması onu ilgilendirmez (kantarsız/arızalı
+   *  kaçış yolu). Emsal: KK1_WEIGHT_ENTRY_ENABLED. */
+  SHIPPING_SIMULATED_WEIGHT_ENABLED: "shipping.simulatedWeightEnabled",
   /** Mobil cihaz eşleştirmesi ZORUNLU mu. Default false (pasif) → eşleşmemiş
    *  tabletler de giriş yapıp çalışabilir (makine atfı NULL kalır). True iken
    *  eşleşmemiş/pasif cihaz device.middleware'de 401 ile kesilir. ENFORCE edilir. */
@@ -534,6 +542,10 @@ export interface FeatureFlags {
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken gelen weightKg reddedilir). */
   kk1WeightEntryEnabled: boolean;
+  /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi. Default false;
+   *  backend ENFORCE eder (kapalıyken simüle okuma `weighSack`'te 400).
+   *  Demo/eğitim kurulumu açar — çuval kg'si irsaliyeye/çeki listesine basılır. */
+  shippingSimulatedWeightEnabled: boolean;
   returnGradingEnabled: boolean;
   /** Kartela kabulünde cm/kg ölçü alanları + kartela listelerinde ölçü gösterimi
    *  açık mı (default false — yalnız ADET). */
@@ -797,6 +809,7 @@ export class SystemSettingService {
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
+      shippingSimulatedWeightEnabled: await readSimulatedWeightEnabled(cacheClient),
       returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
       kartelaMeasurementEnabled: await readKartelaMeasurementEnabled(cacheClient),
       partyCodeAuto: await readPartyCodeAuto(cacheClient),
@@ -892,6 +905,18 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_WEIGHT_ENTRY_ENABLED,
         input.kk1WeightEntryEnabled,
         "KK1 ham kumaş girişinde ağırlık (kg) alanını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingSimulatedWeightEnabled")) {
+      if (typeof input.shippingSimulatedWeightEnabled !== "boolean") {
+        throw AppError.badRequest("shippingSimulatedWeightEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_SIMULATED_WEIGHT_ENABLED,
+        input.shippingSimulatedWeightEnabled,
+        "Simüle kantardan gelen çuval tartısını kaydetmeye izin ver (demo/eğitim)",
         userId
       );
     }
@@ -1526,6 +1551,24 @@ export async function readKk1WeightEntryEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.KK1_WEIGHT_ENTRY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Simüle kantardan gelen çuval tartısı kaydedilebilir mi? Default false = ENFORCE.
+ * Backend `weighSack`'te zorlanır (yalnız UI rehberi DEĞİL) — çuval kg'si sevk
+ * irsaliyesine/çeki listesine basıldığı için uydurulmuş sayı oraya girmemeli.
+ * Demo/eğitim kurulumu açar; sahada gerçek MAC eşleştirilince `peripheral.service`
+ * cihazın `simulate`'ini zaten `false` yapar.
+ */
+export async function readSimulatedWeightEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_SIMULATED_WEIGHT_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

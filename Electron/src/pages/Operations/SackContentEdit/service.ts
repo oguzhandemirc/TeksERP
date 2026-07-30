@@ -100,9 +100,22 @@ export const sackHubService = {
   scanIntoSack: (sackId: string, barcode: string): Promise<ApiResponse<ScanResult>> =>
     apiClient.post<ApiResponse<ScanResult>>(`/api/shipping/sacks/${sackId}/scan`, { barcode }).then((r) => r.data),
 
-  /** Çuvalı tart (brüt kg). */
-  weighSack: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
-    apiClient.post<ApiResponse<unknown>>(`/api/shipping/sacks/${sackId}/weigh`, { weightKg }).then((r) => r.data),
+  /**
+   * Çuvalı tart (brüt kg). `source` = tartının KAYNAĞI; backend simüle kantar
+   * korumasının girdisi (`shipping.simulatedWeightEnabled` kapalıyken SIMULATED → 400).
+   * Verilmezse backend MANUAL varsayar (geri uyum) — elle giriş yolu bunu kullanır.
+   */
+  weighSack: (
+    sackId: string,
+    weightKg: number,
+    source?: "SCALE" | "MANUAL" | "SIMULATED",
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/sacks/${sackId}/weigh`, {
+        weightKg,
+        ...(source ? { source } : {}),
+      })
+      .then((r) => r.data),
 
   /**
    * Çuvalı böl — seçili topları YENİ çuvala ayır. Backend ATOMİK (tek tx: çuval aç

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ShippingService } from "../services/shipping.service";
 import { sackSearchService, type SackSearchScope } from "../services/sack-search.service";
 import { buildDispatchAccountingExport } from "../services/accounting-export.service";
+import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
 // ---- Zod şemaları ----------------------------------------------------------
@@ -21,6 +22,13 @@ const addKartelaSchema = z.object({
 });
 const weighSackSchema = z.object({
   weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük"),
+  /**
+   * Tartının KAYNAĞI. Verilmezse `MANUAL` varsayılır (eski istemci geri uyumu).
+   * İstemci beyanı SCALE için tek sinyal DEĞİL: mobil oturumda backend cihazı
+   * `getStampContext` ile kendi çözüp `simulate`'i çapraz kontrol eder. Electron'da
+   * kantar yerel tercihlerden gelebildiği (DB kaydı yok) için orada beyan TEK sinyaldir.
+   */
+  source: z.enum(["SCALE", "MANUAL", "SIMULATED"]).optional(),
 });
 // Çuval müşterisi değiştir — müşteri/şube OPSİYONEL (null = müşterisiz genel stok).
 const reassignSackCustomerSchema = z.object({
@@ -112,7 +120,15 @@ export class ShippingController {
   weighSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = weighSackSchema.parse(req.body);
-      const result = await this.service.weighSack({ sackId: req.params.id as string, weightKg: body.weightKg }, req.user?.userId);
+      // Oturumun makine/istasyonu — simüle kantar çapraz kontrolü için (mobil).
+      // Web/Electron'da `req.device` yoksa null döner ve guard yalnız istemci
+      // beyanına bakar (o platformda kantar yerel tercih olabilir, DB'de yoktur).
+      const stamp = await getStampContext(req);
+      const result = await this.service.weighSack(
+        { sackId: req.params.id as string, weightKg: body.weightKg, ...(body.source ? { source: body.source } : {}) },
+        req.user?.userId,
+        stamp ? { machineId: stamp.machineId, stationId: stamp.stationId } : undefined
+      );
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

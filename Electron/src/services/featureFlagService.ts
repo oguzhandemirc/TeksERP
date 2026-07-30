@@ -140,6 +140,9 @@ export interface FeatureFlags {
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
   kk1WeightEntryEnabled: boolean;
+  /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi — default false;
+   *  backend ENFORCE eder (kapalıyken simüle okuma 400). Yalnız demo/eğitim. */
+  shippingSimulatedWeightEnabled: boolean;
   returnGradingEnabled: boolean;
   /** Kartela kabulünde cm/kg ölçü alanları + listelerde ölçü gösterimi (false=default, yalnız adet). */
   kartelaMeasurementEnabled: boolean;

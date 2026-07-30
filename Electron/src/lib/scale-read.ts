@@ -2,13 +2,25 @@ import { toast } from "sonner";
 import { parseWeight } from "@/lib/weight-codec";
 import type { DeviceScale } from "@/hooks/useMachineScale";
 
+/** Tartının kaynağı — backend'e beyan edilir (`weighSack.source`). */
+export type WeighSource = "SCALE" | "MANUAL" | "SIMULATED";
+
 /**
- * Kantardan tek brüt-tartı okuması (kg). Cihazın `simulate` bayrağı açıksa sahte
- * değer (test/donanımsız); değilse seri IPC ile oku + parse. Her hata yolunda NET
- * Türkçe toast + null döner — sessiz sahte değer YOK (KK1 `measureFromMachine`
- * deseni). Mobil HAL ile aynı disiplin.
+ * Kantardan tek brüt-tartı okuması. Cihazın `simulate` bayrağı açıksa sahte değer
+ * (test/donanımsız); değilse seri IPC ile oku + parse. Her hata yolunda NET Türkçe
+ * toast + null döner — sessiz sahte değer YOK (KK1 `measureFromMachine` deseni).
+ * Mobil HAL ile aynı disiplin.
+ *
+ * `source` de döner: simüle değer backend'e `SIMULATED` olarak BEYAN edilir ve
+ * `shipping.simulatedWeightEnabled` kapalıyken (default) 400 ile reddedilir. Çuval
+ * kg'si sevk irsaliyesine/çeki listesine basıldığı için uydurma değer canlı veriye
+ * girmemeli. ⚠️ Electron'da bu beyan TEK sinyaldir: kantar yerel tercihlerden
+ * (`machine-config`, DB kaydı OLMAYAN "local-scale") çözülebildiği için backend o
+ * cihazı göremez ve çapraz kontrol yapamaz.
  */
-export async function readWeightFromScale(scale: DeviceScale | null): Promise<number | null> {
+export async function readWeightFromScale(
+  scale: DeviceScale | null,
+): Promise<{ kg: number; source: WeighSource } | null> {
   if (!scale) {
     toast.error("Kantar tanımlı değil", {
       description: "Cihaz Kaydı'ndan SCALE ekleyin veya bu PC'yi sevkiyat makinesine atayın.",
@@ -16,7 +28,17 @@ export async function readWeightFromScale(scale: DeviceScale | null): Promise<nu
     return null;
   }
   // Cihazın simülasyon bayrağı açıksa (admin) sahte kg (10–100).
-  if (scale.simulate) return Math.round((10 + Math.random() * 90) * 10) / 10;
+  // ⚠️ UYARI BURADA veriliyor — eskiden Electron'da HİÇ uyarı yoktu: tek uyarı
+  // mutasyon BAŞARILI olduktan SONRA `useSackWeighAction` içindeydi, yani uydurma
+  // değer önce DB'ye yazılıyordu. Mobil paritesi (`useSackWeigh`).
+  if (scale.simulate) {
+    const v = Math.round((10 + Math.random() * 90) * 10) / 10;
+    toast.warning("SİMÜLASYON tartısı", {
+      description: `${v} kg gerçek ölçüm DEĞİL — cihaz kaydında "simülasyon" açık. Kaydetmek için Cihaz Kaydı'ndan kapatın ya da elle girin.`,
+      duration: 8000,
+    });
+    return { kg: v, source: "SIMULATED" };
+  }
 
   if (!window.api?.scale) {
     toast.error("Kantar okunamıyor", { description: "Bu derlemede seri köprü yok (native build)." });
@@ -48,5 +70,5 @@ export async function readWeightFromScale(scale: DeviceScale | null): Promise<nu
     toast.error("Geçerli tartı gelmedi", { description: `Ham yanıt: "${res.raw.trim().slice(0, 40)}"` });
     return null;
   }
-  return v;
+  return { kg: v, source: "SCALE" };
 }

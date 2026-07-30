@@ -40,7 +40,7 @@ import {
 import { renderQualityCertificateHtml, type QualityCertificateDoc } from "./document-render/quality-certificate.html";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { p2002Mentions } from "../utils/p2002";
-import { readShipmentConfirmationEnabled } from "./system-setting.service";
+import { readShipmentConfirmationEnabled, readSimulatedWeightEnabled } from "./system-setting.service";
 import { dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
 import { touchWarehouseSackTx, touchShipmentPlannedTx } from "./helpers/shipment-locks.helper";
 import {
@@ -752,14 +752,70 @@ export class ShippingService {
 
   /**
    * Çuval brüt tartısını güncelle (depodaki çuval — sevkiyata atanmamış).
+   *
+   * `source` = tartının KAYNAĞI. Verilmezse `MANUAL` varsayılır (eski istemci geri
+   * uyumu). SİMÜLE kantar koruması buna bağlıdır — bkz. aşağıdaki guard.
+   * `stamp` = oturumun makine/istasyon bağlamı (`getStampContext`); sunucunun cihazı
+   * kendi çözüp istemci beyanını çapraz kontrol etmesi için.
    */
   async weighSack(
-    data: { sackId: string; weightKg?: number | null },
-    userId?: string
+    data: {
+      sackId: string;
+      weightKg?: number | null;
+      source?: "SCALE" | "MANUAL" | "SIMULATED";
+    },
+    userId?: string,
+    stamp?: { machineId?: string | null; stationId?: string | null }
   ): Promise<ApiResponse<unknown>> {
     const hasWeight = data.weightKg !== undefined && data.weightKg !== null;
     if (!hasWeight) throw AppError.badRequest("Tartı girilmeli");
     if (!(data.weightKg! > 0)) throw AppError.badRequest("Geçerli bir kg girilmeli");
+
+    // ── SİMÜLE KANTAR KORUMASI ────────────────────────────────────────────────
+    // Çuval kg'si sevk irsaliyesine VE çeki listesine basılır (müşteri/gümrük
+    // belgesi) → uydurulmuş bir sayı buraya girmemeli. `PeripheralDevice.simulate`
+    // açık bir kantar 10–100 kg arası RASTGELE değer üretiyor ve tek-dokunuş tartı
+    // onu DOĞRUDAN kaydediyordu; tek koruma bir toast'tı.
+    //
+    // İKİ SİNYAL (derinlemesine savunma):
+    //  (a) İSTEMCİ BEYANI (`source`) — Electron'da TEK sinyal olmak zorunda:
+    //      `useMachineScale` kantarı yerel tercihlerden çözebiliyor (DB kaydı OLMAYAN
+    //      "local-scale") → backend o cihazı GÖREMEZ.
+    //  (b) SUNUCU ÇÖZÜMÜ — mobil oturumda cihaz makine/istasyondan çözülür; cihazın
+    //      `simulate`'i açıksa beyan ne olursa olsun reddedilir (istemci yalanına kapalı).
+    //
+    // `MANUAL` MUAF: operatör kg'yi elle yazmıştır, kantarın simüle olması onu
+    // ilgilendirmez — kantarsız/arızalı durumun kaçış yolu bu ve kapatılmamalı.
+    //
+    // İstemci yalanı (SIMULATED'ı MANUAL diye göndermek) bilinçli kabul: tehdit modeli
+    // kötü niyet değil OPERATÖR KAFA KARIŞIKLIĞI (LAN-only kurulum) ve kalan yüzey
+    // `weighedById` + audit ile izlenebilir. `DEVICE_PAIRING_REQUIRED`'ın kabul ettiği
+    // güven seviyesiyle aynı.
+    const declaredSource = data.source ?? "MANUAL";
+    if (declaredSource !== "MANUAL") {
+      let simulated = declaredSource === "SIMULATED";
+      if (!simulated && (stamp?.machineId || stamp?.stationId)) {
+        const scale = await prisma.peripheralDevice.findFirst({
+          where: {
+            kind: "SCALE",
+            isActive: true,
+            deletedAt: null,
+            ...(stamp.machineId
+              ? { machineId: stamp.machineId }
+              : { stationId: stamp.stationId!, machineId: null }),
+          },
+          orderBy: { createdAt: "asc" },
+          select: { simulate: true },
+        });
+        if (scale?.simulate) simulated = true;
+      }
+      if (simulated && !(await readSimulatedWeightEnabled())) {
+        throw AppError.badRequest(
+          'Simüle kantarla tartı kaydedilemez — Tanımlar → Cihaz Kaydı\'ndan bu kantarın ' +
+            '"simülasyon" bayrağını kapatın, ya da ⋮ → "Elle kg gir" ile girin.'
+        );
+      }
+    }
 
     const sack = await prisma.sack.findUnique({ where: { id: data.sackId }, select: { id: true, shipmentId: true } });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
@@ -780,7 +836,11 @@ export class ShippingService {
         },
       });
     });
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId, newData: { kind: "WEIGH", weightKg: data.weightKg } });
+    // `source` audit'e yazılır: DB'de kg'nin kaynağını gösteren KOLON YOK (`Sack`'te
+    // yalnız weightKg/weighedById/weighedAt) → simüle 47.3 ile gerçek 47.3 bit-bit
+    // aynı. Kalıcı kolon (`weightSource`) migration ister ve kapsam dışı; audit
+    // izi en azından "bu kg nereden geldi?" sorusuna cevap bırakır.
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId, newData: { kind: "WEIGH", weightKg: data.weightKg, source: declaredSource } });
     return { success: true, data: {}, message: "Çuval tartısı güncellendi" };
   }
 

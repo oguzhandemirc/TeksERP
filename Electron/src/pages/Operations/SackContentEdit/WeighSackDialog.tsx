@@ -42,15 +42,25 @@ export function WeighSackDialog({ sack, onOpenChange }: Props) {
   const open = !!sack;
   const [kg, setKg] = useState("");
 
+  // ⚠️ Bağımlılık PRİMİTİF olmalı (D6): çağıran `sack`'i her render'da YENİ bir
+  // object literal olarak veriyor (`SackEditorView`: `sack={open && data ? {...} : null}`)
+  // → `[sack]` ile effect HER RENDER koşuyor ve operatör "24,5" yazarken herhangi bir
+  // üst-render (tartı spinner'ı, `invalidateSackHub` sonrası refetch) girdisini SİLİYORDU.
+  // Doğru emsal aynı klasörde: `SackNoteDialog` `[sack?.id, saved]` kullanıyor.
   useEffect(() => {
     if (sack) setKg(sack.weightKg != null ? String(sack.weightKg) : "");
-  }, [sack]);
+    // `sack`'i bağımlılığa eklemek TAM OLARAK düzeltilen hatadır (yeni obje referansı).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sack?.id, sack?.weightKg]);
 
   const weightKg = parseKg(kg);
   const invalid = kg.trim() !== "" && weightKg === null;
 
   const mut = useMutation({
-    mutationFn: () => sackHubService.weighSack(sack!.id, weightKg!),
+    // `source: MANUAL` — bu diyalog ELLE giriş yoludur ve simüle kantar korumasından
+    // MUAFTIR (operatör değeri kendi yazdı; kantarın simüle olması onu ilgilendirmez).
+    // Kantarsız/arızalı durumun kaçış yolu budur.
+    mutationFn: () => sackHubService.weighSack(sack!.id, weightKg!, "MANUAL"),
     onSuccess: () => {
       toast.success(`Çuval ${sack!.sackNo} tartıldı`);
       invalidateSackHub(qc);

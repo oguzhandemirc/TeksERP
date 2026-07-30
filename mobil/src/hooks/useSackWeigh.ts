@@ -28,6 +28,14 @@ interface SackWeighTarget {
   label: string;
 }
 
+/**
+ * Tartının kaynağı — backend'e BEYAN edilir (`weighSack.source`). Backend
+ * `shipping.simulatedWeightEnabled` kapalıyken (default) SIMULATED'ı 400 ile
+ * reddeder; MANUAL muaftır (kantarsız/arızalı kaçış yolu). Çuval kg'si sevk
+ * irsaliyesine ve çeki listesine basıldığı için uydurma değer kabul edilmez.
+ */
+export type WeighSource = 'SCALE' | 'MANUAL' | 'SIMULATED';
+
 export function useSackWeigh(onSaved: () => void) {
   // Bu telefonun atandığı oturumun (makine/istasyon) SCALE cihaz(lar)ı.
   const scalePeripherals = useMachinePeripherals('SCALE');
@@ -36,8 +44,13 @@ export function useSackWeigh(onSaved: () => void) {
   // Render'dan bağımsız meşgul bayrağı — hızlı çift dokunuşu state gecikmeden önce yakalar.
   const busyRef = useRef(false);
 
-  /** Kantardan brüt kg oku. Cihaz yoksa/okunamazsa NET Türkçe hata + null. */
-  const readFromScale = async (): Promise<number | null> => {
+  /**
+   * Kantardan brüt kg oku. Cihaz yoksa/okunamazsa NET Türkçe hata + null.
+   * `source` de döner: simüle cihazın ürettiği değer backend'e SIMULATED olarak
+   * beyan edilir ve (bayrak kapalıysa) 400 ile reddedilir — istemci sahte değeri
+   * "gerçek ölçüm" gibi göndermez.
+   */
+  const readFromScale = async (): Promise<{ kg: number; source: WeighSource } | null> => {
     const p = primaryScaleFor(scalePeripherals);
     if (!p) {
       Toast.show({
@@ -49,8 +62,10 @@ export function useSackWeigh(onSaved: () => void) {
       return null;
     }
     if (p.simulate) {
-      // Simülasyon cihazı: değer UYDURULUR ve artık DOĞRUDAN kaydedilir → operatör
-      // gerçek tartı sandığı bir sayıyı irsaliyeye taşımasın diye açıkça uyar.
+      // Simülasyon cihazı: değer UYDURULUR → backend'e SIMULATED olarak BEYAN edilir
+      // ve `shipping.simulatedWeightEnabled` kapalıyken (default) 400 ile reddedilir.
+      // Yani bu değer artık canlı veriye SESSİZCE girmez; yalnız demo/eğitim
+      // kurulumunda (bayrak açık) kaydedilir. Toast operatöre durumu söyler.
       const v = Math.round((10 + Math.random() * 90) * 10) / 10;
       Toast.show({
         type: 'info',
@@ -58,7 +73,7 @@ export function useSackWeigh(onSaved: () => void) {
         text2: `${v} kg gerçek ölçüm DEĞİL — cihaz kaydında “simulate” açık.`,
         visibilityTime: 6000,
       });
-      return v;
+      return { kg: v, source: 'SIMULATED' };
     }
     const io = buildIoFromPeripheral(p);
     if (!io.supported || !io.transport || !io.codec) {
@@ -100,7 +115,7 @@ export function useSackWeigh(onSaved: () => void) {
         framePattern: p.identifyPattern ?? undefined,
       });
       const v = io.codec.decode(raw);
-      if (v != null && v > 0) return v;
+      if (v != null && v > 0) return { kg: v, source: 'SCALE' };
       throw new Error('Geçerli tartı gelmedi');
     } catch (e) {
       Toast.show({
@@ -114,12 +129,19 @@ export function useSackWeigh(onSaved: () => void) {
   };
 
   const saveMut = useMutation({
-    mutationFn: ({ sackId, kg }: { sackId: string; kg: number }) =>
-      packingService.weighSack(sackId, { weightKg: kg }),
+    // `source`: tartının KAYNAĞI — backend simüle kantar korumasının girdisi
+    // (`shipping.simulatedWeightEnabled` kapalıyken SIMULATED 400 döner). MANUAL
+    // muaftır. Mobilde backend ayrıca oturumun kantarını kendi çözüp çapraz kontrol
+    // eder → SCALE beyanı tek başına yeterli/güvenilir sinyal değildir, olması da
+    // gerekmiyor.
+    mutationFn: ({ sackId, kg, source }: { sackId: string; kg: number; source: WeighSource }) =>
+      packingService.weighSack(sackId, { weightKg: kg, source }),
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
       // 409 = çuval bu sırada bir sevkiyata atandı (touchWarehouseSackTx guard'ı).
-      Toast.show({ type: 'error', text1: 'Tartı kaydedilemedi', text2: e.message });
+      // 400 = simüle kantar reddi → backend'in Türkçe mesajı doğrudan gösterilir
+      // ("…simülasyon bayrağını kapatın, ya da ⋮ → Elle kg gir").
+      Toast.show({ type: 'error', text1: 'Tartı kaydedilemedi', text2: e.message, visibilityTime: 6000 });
     },
   });
 
@@ -129,14 +151,14 @@ export function useSackWeigh(onSaved: () => void) {
     busyRef.current = true;
     setWeighingSackId(sack.id);
     try {
-      const kg = await readFromScale();
-      if (kg == null) {
+      const read = await readFromScale();
+      if (read == null) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return; // hata toast'ı readFromScale içinde verildi; DB'ye HİÇ gitmedik
       }
-      await saveMut.mutateAsync({ sackId: sack.id, kg });
+      await saveMut.mutateAsync({ sackId: sack.id, kg: read.kg, source: read.source });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: `${kg.toLocaleString('tr-TR')} kg`, text2: sack.label });
+      Toast.show({ type: 'success', text1: `${read.kg.toLocaleString('tr-TR')} kg`, text2: sack.label });
       onSaved();
     } catch {
       // saveMut.onError toast'ladı; burada yutuyoruz (mutateAsync reject eder).
@@ -147,10 +169,26 @@ export function useSackWeigh(onSaved: () => void) {
     }
   };
 
-  /** ⋮ → "Elle kg gir" yolu — kantarsız/arızalı durum için. */
+  /**
+   * ⋮ → "Elle kg gir" yolu — kantarsız/arızalı durum için. `source: MANUAL` beyan
+   * edilir ve simüle korumasından MUAFTIR (operatör değeri kendi yazmıştır).
+   */
   const saveManual = async (sack: SackWeighTarget, kg: number): Promise<boolean> => {
+    // D10: `busyRef` kontrolü — kantar okuması SÜRERKEN ⋮ → elle giriş aynı çuvala
+    // İKİNCİ bir weighSack atıyordu; son yazan kazanıyor ve hangi değerin (kantar mı
+    // elle mi) kaldığı belirsizleşiyordu. ⚖ tuşları `busy` ile pasifleşiyor ama ⋮
+    // yolu ona bağlı değildi.
+    if (busyRef.current) {
+      Toast.show({
+        type: 'info',
+        text1: 'Kantar okuması sürüyor',
+        text2: 'Bitmesini bekleyip tekrar deneyin.',
+      });
+      return false;
+    }
+    busyRef.current = true;
     try {
-      await saveMut.mutateAsync({ sackId: sack.id, kg });
+      await saveMut.mutateAsync({ sackId: sack.id, kg, source: 'MANUAL' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: `${kg.toLocaleString('tr-TR')} kg (elle)`, text2: sack.label });
       onSaved();
@@ -158,6 +196,8 @@ export function useSackWeigh(onSaved: () => void) {
     } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return false;
+    } finally {
+      busyRef.current = false;
     }
   };
 

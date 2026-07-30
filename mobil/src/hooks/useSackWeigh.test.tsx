@@ -128,12 +128,13 @@ describe("useSackWeigh — tek dokunuş tartı", () => {
     expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ text1: "Kantar okunamıyor" }));
   });
 
-  it("3) başarılı okuma → okunan kg DOĞRUDAN kaydedilir + onSaved", async () => {
+  it("3) başarılı okuma → okunan kg DOĞRUDAN kaydedilir + onSaved (source=SCALE)", async () => {
     const { result, onSaved } = setup();
     await act(async () => {
       await result.current.weigh({ id: "s1", label: "CV1" });
     });
-    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: 42.5 });
+    // `source: 'SCALE'` beyanı ZORUNLU: backend simüle kantar korumasının girdisi.
+    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: 42.5, source: "SCALE" });
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
   });
 
@@ -159,22 +160,28 @@ describe("useSackWeigh — tek dokunuş tartı", () => {
     });
     // Yalnız İLK çuval kaydedildi.
     expect(mockWeighSack).toHaveBeenCalledTimes(1);
-    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: 42.5 });
+    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: 42.5, source: "SCALE" });
   });
 
-  it("5) simulate cihazda kaydeder AMA SİMÜLASYON uyarısı verir (canlı fabrika)", async () => {
+  it("5) simulate cihazda değeri SIMULATED olarak BEYAN eder (backend reddeder)", async () => {
+    // ⚠️ SÖZLEŞME DEĞİŞTİ (2026-07-30): eskiden bu test "simüle değer kaydedilir,
+    // yalnız toast uyarır" davranışını sabitliyordu. Çuval kg'si sevk irsaliyesine ve
+    // çeki listesine basıldığı için (müşteri/gümrük belgesi) uydurma değerin canlı
+    // veriye girmesi kabul edilemez. İstemci artık `source: 'SIMULATED'` BEYAN eder;
+    // backend `shipping.simulatedWeightEnabled` kapalıyken (default) 400 döner ve
+    // Türkçe mesajı `saveMut.onError` gösterir. Demo/eğitim kurulumu bayrağı açar.
     mockPeripheralRows = [{ ...SCALE, simulate: true }];
     const { result } = setup();
     await act(async () => {
       await result.current.weigh({ id: "s1", label: "CV1" });
     });
-    expect(mockWeighSack).toHaveBeenCalledTimes(1);
+    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: expect.any(Number), source: "SIMULATED" });
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ text1: expect.stringContaining("SİMÜLASYON") }),
     );
   });
 
-  it("6) saveManual verilen kg'yi yazar (kantara hiç gitmez)", async () => {
+  it("6) saveManual verilen kg'yi yazar (kantara hiç gitmez, source=MANUAL)", async () => {
     mockReadImpl = async () => {
       throw new Error("kantar kapalı");
     };
@@ -184,6 +191,38 @@ describe("useSackWeigh — tek dokunuş tartı", () => {
       ok = await result.current.saveManual({ id: "s1", label: "CV1" }, 17.25);
     });
     expect(ok).toBe(true);
-    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: 17.25 });
+    // MANUAL, simüle korumasından MUAF — kantarsız/arızalı durumun kaçış yolu.
+    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: 17.25, source: "MANUAL" });
+  });
+
+  it("7) kantar okuması sürerken saveManual İKİNCİ yazma yapmaz (D10)", async () => {
+    // ⚖ tuşları `busy` ile pasifleşiyor ama ⋮ → "Elle kg gir" yolu ona bağlı DEĞİLDİ:
+    // okuma sürerken elle giriş aynı çuvala ikinci weighSack atıyor, son yazan
+    // kazanıyor ve hangi değerin (kantar mı elle mi) kaldığı belirsizleşiyordu.
+    let release: (v: string) => void = () => {};
+    mockReadImpl = () => new Promise<string>((res) => { release = res; });
+    const { result } = setup();
+
+    let first: Promise<void>;
+    act(() => {
+      first = result.current.weigh({ id: "s1", label: "CV1" });
+    });
+    let ok = true;
+    await act(async () => {
+      ok = await result.current.saveManual({ id: "s1", label: "CV1" }, 99.9);
+    });
+    expect(ok).toBe(false);
+    expect(mockWeighSack).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ text1: expect.stringContaining("Kantar okuması sürüyor") }),
+    );
+
+    await act(async () => {
+      release("42.5");
+      await first!;
+    });
+    // Yalnız kantar okuması yazıldı; elle giriş hiç gitmedi.
+    expect(mockWeighSack).toHaveBeenCalledTimes(1);
+    expect(mockWeighSack).toHaveBeenCalledWith("s1", { weightKg: 42.5, source: "SCALE" });
   });
 });

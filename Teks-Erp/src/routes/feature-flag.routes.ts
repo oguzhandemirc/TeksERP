@@ -32,6 +32,9 @@ const updateSchema = z.object({
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),
+  // Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (false=default → backend
+  // ENFORCE, 400). Yalnız demo/eğitim kurulumu açar; kg irsaliyeye/çekiye basılır.
+  shippingSimulatedWeightEnabled: z.boolean().optional(),
   returnGradingEnabled: z.boolean().optional(),
   // Kartela kabulünde cm/kg ölçü alanları + listelerde ölçü gösterimi (false=default, yalnız adet).
   kartelaMeasurementEnabled: z.boolean().optional(),

@@ -541,13 +541,22 @@ async function main() {
   // doğrudan Bluetooth Classic (BT-SPP) ile bağlanır. Sevkiyat MAKİNESİZ istasyon
   // (SHIPPING) — kantar doğrudan İSTASYONA bağlı (stationId), oturum-kapsamlı çözülür.
   // address = HC-06 MAC; pollCommand = istek-cevap komutu (tam komut + format sahada
-  // Cihaz Kaydı'ndan girilir). Faz-1 simüle (simulate=true).
+  // Cihaz Kaydı'ndan girilir).
+  //
+  // ⚠️ `simulate: false` — METRE cihazlarının AKSİNE (onlar simüle doğar). Ayrım
+  // bilinçli: metre değeri İÇ üretim verisidir ve yeniden ölçülebilir; KANTAR kg'si
+  // sevk irsaliyesine ve çeki listesine BASILIR (müşteri/gümrük belgesi). Simüle
+  // kantar 10–100 kg arası RASTGELE değer üretiyor ve tek-dokunuş tartı onu doğrudan
+  // kaydediyor → ilk kurulumda seed simüle bir kantar bırakırsa uydurma kg belgeye
+  // gider. Backend ayrıca ENFORCE eder (`shipping.simulatedWeightEnabled`, default
+  // kapalı → simüle okuma `weighSack`'te 400); bu satır ilk kurulumu da temiz başlatır.
+  // Demo/eğitim kurulumunda Cihaz Kaydı'ndan açılıp flag ile birlikte kullanılır.
   await prisma.peripheralDevice.create({
     data: {
       code: "SEVK-KANTAR", name: "Sevkiyat Kantarı",
       kind: "SCALE", connectionType: "BLUETOOTH_SPP",
       address: "00:23:09:01:2A:3C", role: "PRIMARY",
-      pollCommand: "P", terminator: "\r\n", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true,
+      pollCommand: "P", terminator: "\r\n", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: false,
       stationId: sevk.id,
     },
   });

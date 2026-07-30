@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useMachineScale } from "@/hooks/useMachineScale";
-import { readWeightFromScale } from "@/lib/scale-read";
+import { readWeightFromScale, type WeighSource } from "@/lib/scale-read";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 
@@ -23,8 +23,9 @@ export function useSackWeighAction() {
   const busyRef = useRef(false);
 
   const mut = useMutation({
-    mutationFn: ({ sackId, kg }: { sackId: string; kg: number }) =>
-      sackHubService.weighSack(sackId, kg),
+    // `source`: tartının KAYNAĞI — backend simüle kantar korumasının girdisi.
+    mutationFn: ({ sackId, kg, source }: { sackId: string; kg: number; source: WeighSource }) =>
+      sackHubService.weighSack(sackId, kg, source),
     onSuccess: () => invalidateSackHub(qc),
   });
 
@@ -34,19 +35,17 @@ export function useSackWeighAction() {
     busyRef.current = true;
     setWeighingSackId(sack.id);
     try {
-      const kg = await readWeightFromScale(scale);
-      if (kg == null) return; // hata toast'ı readWeightFromScale içinde verildi
-      await mut.mutateAsync({ sackId: sack.id, kg });
-      // Simülasyon cihazında değer UYDURULUR ve doğrudan kaydedilir → açıkça uyar.
-      if (scale?.simulate) {
-        toast.warning(`${sack.sackNo}: ${kg.toLocaleString("tr-TR")} kg (SİMÜLASYON)`, {
-          description: "Gerçek ölçüm değil — Cihaz Kaydı'nda “simulate” açık.",
-        });
-      } else {
-        toast.success(`${sack.sackNo} tartıldı — ${kg.toLocaleString("tr-TR")} kg`);
-      }
+      const read = await readWeightFromScale(scale);
+      if (read == null) return; // hata toast'ı readWeightFromScale içinde verildi
+      // Simülasyon UYARISI artık okuma anında (readWeightFromScale) veriliyor —
+      // eskiden buradaydı, yani uydurma değer ÖNCE DB'ye yazılıp SONRA uyarılıyordu.
+      // Backend `shipping.simulatedWeightEnabled` kapalıyken bu çağrıyı 400'ler ve
+      // Türkçe mesajı aşağıdaki catch gösterir.
+      await mut.mutateAsync({ sackId: sack.id, kg: read.kg, source: read.source });
+      toast.success(`${sack.sackNo} tartıldı — ${read.kg.toLocaleString("tr-TR")} kg`);
     } catch (e) {
       // 409 = çuval bu sırada bir sevkiyata atandı (touchWarehouseSackTx guard'ı).
+      // 400 = simüle kantar reddi (backend'in Türkçe yönlendirmesi gösterilir).
       toast.error("Tartı kaydedilemedi", { description: (e as Error).message });
     } finally {
       busyRef.current = false;
