@@ -260,7 +260,9 @@ export class PeripheralDeviceService extends BaseService {
       });
       if (!tpl) throw AppError.badRequest("Şablon bulunamadı veya pasif");
       // Statik etiket kuralı: barkodsuz varyantlı şablon cihaza ATANAMAZ (kaldırma serbest).
-      await assertTemplateAssignable(templateId);
+      // `kind` geçilir: tür şartı yok (tek havuz) ama bağlamın KİMLİK alanını basamayan
+      // şablon reddedilir — bkz. `helpers/label-context-fit.ts`.
+      await assertTemplateAssignable(templateId, kind);
       await prisma.peripheralTemplateRoute.upsert({
         where: { peripheralId_kind: { peripheralId, kind } },
         update: { templateId },

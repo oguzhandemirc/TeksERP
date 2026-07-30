@@ -57,14 +57,15 @@ export class CustomerTemplateRouteService {
     if (!templateId) {
       await prisma.customerTemplateRoute.deleteMany({ where: { customerId, kind } });
     } else {
-      // Tek havuz: tür şartı yok — yalnız var + aktif + kalıcı-silinmemiş.
+      // Tek havuz: tür şartı yok — yalnız var + aktif + kalıcı-silinmemiş. Ama
+      // bağlamın KİMLİK alanını basamayan şablon reddedilir (label-context-fit).
       const tpl = await prisma.labelTemplate.findFirst({
         where: { id: templateId, isActive: true, deletedAt: null },
         select: { id: true },
       });
       if (!tpl) throw AppError.badRequest("Şablon bulunamadı veya pasif");
       // Statik etiket kuralı: barkodsuz varyantlı şablon müşteriye ATANAMAZ (kaldırma serbest).
-      await assertTemplateAssignable(templateId);
+      await assertTemplateAssignable(templateId, kind);
       await prisma.customerTemplateRoute.upsert({
         where: { customerId_kind: { customerId, kind } },
         update: { templateId },

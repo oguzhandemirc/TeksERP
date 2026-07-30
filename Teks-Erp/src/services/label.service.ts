@@ -35,6 +35,7 @@ import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
 import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
+import { assertContextRenderable } from "./helpers/label-context-fit";
 import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, renderedBytes, shouldRasterize, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
@@ -1422,6 +1423,9 @@ export class LabelService {
         sackNo: true,
         weightKg: true,
         notes: true,
+        // `customerId`: müşteriye özel çuval şablonu rotası (`CustomerTemplateRoute`)
+        // için — EXPLICIT kolon, tahmin DEĞİL (bkz. buildSackRenderInput yorumu).
+        customerId: true,
         customer: { select: { name: true } },
         branch: { select: { name: true } },
         rolls: {
@@ -1455,7 +1459,7 @@ export class LabelService {
       colorNameDefault: null,
       colorNameSource: null,
       customerName: sack.customer?.name ?? null,
-      customerId: null,
+      customerId: sack.customerId,
       orderNumber: null,
       orderLineId: null,
       batchNumber: null,
@@ -1487,6 +1491,14 @@ export class LabelService {
 
     const routing = await resolveLabelRouting({
       kind: LabelKind.SACK,
+      // MÜŞTERİ ROTASI HALKASI (2026-07-30) — eskiden geçilmiyordu, dolayısıyla
+      // `CustomerTemplateRoute(müşteri, SACK)` ÖLÜ bir ayardı: admin panelden
+      // müşteriye özel çuval şablonu atıyor, hiç kullanılmıyor, uyarı da yoktu.
+      // "Müşteri TAHMİNİ yasak" kuralı ihlal EDİLMİYOR: yasak olan WO'dan müşteri
+      // türetmek (`test_stock_label_no_customer_inference`); `Sack.customerId`
+      // AÇIKÇA atanmış bir kolondur. Müşterisiz depo çuvalında null → halka
+      // hiç sorgulanmaz ve cihaz rotası/bağlam varsayılanına düşer.
+      customerId: payload.customerId,
       peripheralId: opts?.peripheralId,
       templateId: opts?.templateId,
       machineId: opts?.machineId,
@@ -1498,6 +1510,12 @@ export class LabelService {
           "Çuval şablonu oluşturup Etiketler → Atamalar'da Bağlam Varsayılanı olarak atayın.",
       );
     }
+    // ARKA KAPI KAPANIŞI: üstteki guard yalnız "şablon var mı?" diye sorar. Üç atama
+    // yüzeyi de tür şartı koymadığı için ÇUVAL bağlamına ROLL şablonu atanabiliyor ve
+    // `routing.template` DOLU dönüyordu → guard geçiliyor, sonra ya ROLL düzeni
+    // basılıyor (varyantsız şablon; emitter'da SACK dalı yok) ya da çuval numarası
+    // hiç basılmayan yarı boş etiket çıkıyordu. Sessiz çöp yerine Türkçe 400.
+    assertContextRenderable(routing.template, LabelKind.SACK);
 
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });

@@ -43,6 +43,7 @@ import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { renderLabel } from "./helpers/label-renderer.registry";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { validateCanvasLayout, readCanvasLayout, CanvasValidationError } from "../config/label-elements";
+import { assertContextRenderable } from "./helpers/label-context-fit";
 import { LABEL_ICON_CATEGORIES, LABEL_ICONS, labelIconSvg } from "../config/label-icons";
 import { mockPayload } from "./helpers/label-rawcode";
 import { fieldDisplayValue } from "./helpers/label-field-values";
@@ -81,10 +82,23 @@ function rethrowDefaultConflict(e: unknown): never {
  * (basılan rulo etiketi fiziksel iz ister). Varyantsız legacy akış şablonu aynen
  * geçer (akış modeli her zaman QR+barkod basar). Üç setter + set-default kullanır.
  */
-export async function assertTemplateAssignable(templateId: string): Promise<void> {
+export async function assertTemplateAssignable(
+  templateId: string,
+  /**
+   * Atanacak BAĞLAM. Verilirse bağlam-uyum kontrolü de koşar (`label-context-fit`).
+   * ⚠️ Bu bir *kind* kontrolü DEĞİL — "tek havuz" bozulmuyor: şablonun TÜRÜ hâlâ
+   * önemsiz; sorulan tek şey "bu şablon bu bağlamın KİMLİĞİNİ basabiliyor mu".
+   * Şu an yalnız ÇUVAL'da kimlik alanı tanımlı (`sackNo`); diğer bağlamlarda engel
+   * yok. Baskı anında zaten 400 verecek bir atamayı atama anında kabul etmek
+   * operatörü sonradan cezalandırmak olurdu.
+   */
+  targetKind?: LabelKind,
+): Promise<void> {
   const t = await prisma.labelTemplate.findUnique({
     where: { id: templateId },
-    select: { name: true, standalone: true, variants: { select: { elements: true } } },
+    // `id`/`variants.id` gerekli: label-context-fit TemplateLike bekliyor.
+    // `kind` BİLİNÇLİ olarak seçilmiyor — deprecated kolonu canlandırmıyoruz.
+    select: { id: true, name: true, standalone: true, variants: true },
   });
   // Yok → çağıran setter kendi 404/400'ünü verir.
   if (!t) return;
@@ -93,6 +107,11 @@ export async function assertTemplateAssignable(templateId: string): Promise<void
   if (t.standalone) {
     throw AppError.badRequest("Serbest (statik) etiket rulo/kartela bağlamına atanamaz");
   }
+  // Bağlam uyumu — kimlik alanı tanımlı bağlamlarda (şu an yalnız SACK) ENGELLER;
+  // diğerlerinde `ok` döner (gerekirse `warning` ile, çağıran onu yansıtabilir).
+  // Varyantsızlık kontrolünden ÖNCE: çuval etiketi kanvas modelinde yaşar, varyantsız
+  // şablon o bağlamda ROLL düzeni basar — "legacy akış geç" muafiyeti burada geçersiz.
+  if (targetKind) assertContextRenderable(t, targetKind);
   // Varyantsız → legacy akış, geç (akış modeli her zaman QR+barkod basar).
   if (t.variants.length === 0) return;
   for (const v of t.variants) {
@@ -967,7 +986,9 @@ export class LabelTemplateService {
     });
     if (!template) throw AppError.badRequest("Şablon bulunamadı veya pasif");
     // Statik etiket kuralı: barkodsuz varyantlı şablon bağlama ATANAMAZ (kaldırma serbest).
-    await assertTemplateAssignable(templateId);
+    // `kind` geçilir: tür şartı YOK (tek havuz) ama bağlamın KİMLİK alanını basamayan
+    // şablon reddedilir — bkz. `helpers/label-context-fit.ts`.
+    await assertTemplateAssignable(templateId, kind);
 
     await prisma.$transaction(async (tx) => {
       await tx.labelContextDefault.upsert({
