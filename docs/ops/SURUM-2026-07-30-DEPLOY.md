@@ -43,34 +43,26 @@ dropdb teks_deploy_probe
 
 ---
 
-## 2) Hasar taraması + onarım (deploy'u BEKLEMEZ)
+## 2) Hasar taraması — deploy'dan ÖNCE (salt okunur, güvenli)
 
 Bu sürüm "hayalet çuval içeriği" hatasını kapatıyor (çuvaldaki top kartelaya/tambura/
 fasona gidebiliyor, çuvalda kayıtlı kalıyor, sevkte `SHIPPED`'e eziliyordu → irsaliye
-metrajı şişiyordu). **Geçmişte olmuş mu bilinmiyor.** Scriptler `tsx` ile koştuğu için
-uygulama deploy'u gerekmez; production DATABASE_URL yeterli.
+metrajı şişiyordu). **Geçmişte olmuş mu bilinmiyor** — bu tarama onu ölçer.
 
 ```bash
-# a) Teşhis — SALT OKUNUR
 psql "$PROD_DATABASE_URL" -f Teks-Erp/scripts/consistency-check.sql
-#    §7  = şu an çuvalda sıkışmış hayaletler
+#    §7  = ŞU AN çuvalda sıkışmış hayaletler        → onarılabilir (adım 6)
 #    §7b = GEÇMİŞ çift-sayım (sevk edildi VE kartelaya/fasona gitti) → GERİ ALINAMAZ
 #    §7c = simetri kontrolü (normalde 0)
-
-# b) Onarım — önce RAPOR, sonra uygula
-cd Teks-Erp
-DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/repair_sack_ghost_rolls.ts
-#    → A/B/C/D/E sınıfları listelenir; §E tartısı sıfırlanacak çuvalları TEK TEK yazar
-DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/repair_sack_ghost_rolls.ts --apply
 ```
 
-> **Zamanlama:** onarımı **deploy penceresinin hemen öncesinde** koş. Guard'lar canlıya
-> çıkana kadar yeni hayalet doğabilir. Kalıntı riski kabul edilebilir: yeni sürümdeki
-> `createShipment`/`dispatch` blokları somut Türkçe mesajla yakalar.
->
-> **Sınıf D çıkarsa** (sevk edildi VE dışarıya da gitti): geri alınamaz, irsaliye
-> donmuş. Script dokunmaz — düzeltme yalnız `reissue` (gerekçeli revizyon) ile insan
-> kararıdır.
+**Saf SQL — hiçbir yeni kolon/enum kullanmıyor**, dolayısıyla migration'dan ÖNCE,
+eski şemada güvenle koşar. Dosya yeni olduğu için sunucuda `git pull` gerekir;
+`git pull` TEK BAŞINA çalışan süreci ETKİLEMEZ (pm2 derlenmiş `dist/`'i koşar,
+`npm run build` çalışmadan davranış değişmez).
+
+Bu adımın amacı **büyüklüğü önceden bilmek**: §7 doluysa deploy penceresine onarım
+süresi ekleyin; §7b doluysa bu bir muhasebe/hukuk konusu (aşağıya bakın).
 
 ---
 
@@ -150,6 +142,43 @@ FROM "_prisma_migrations" WHERE migration_name LIKE '20260730%' ORDER BY migrati
 - [ ] **Hayalet guard'ı:** çuvaldaki bir topu kartelaya göndermeyi dene → Türkçe 400 + çuval kodu
 - [ ] **Tartı:** ⚖ ile tart → kaydediliyor; Cihaz Kaydı'ndan kantarın "simülasyon"unu AÇ → tartı **400** veriyor, ⋮ → "Elle kg gir" çalışıyor
 - [ ] Çuval detayında tartı **kaynağı rozeti** görünüyor (elle girilende "elle girildi")
+
+---
+
+## 5b) Hayalet ONARIMI — deploy'dan SONRA, AYNI pencerede
+
+⚠️ **Onarım scripti deploy'dan ÖNCE koşamaz:** `repair_sack_ghost_rolls.ts` çuvalın
+tartısını sıfırlarken `weightSource` kolonuna da dokunuyor; o kolon migration'dan önce
+DB'de de Prisma client'ında da YOK → P2022 verir. (Adım 2'deki SQL taraması saf SQL
+olduğu için ondan önce koşar; ayrım budur.)
+
+**İyi tarafı:** onarım deploy'dan sonra koştuğu için guard'lar ARTIK CANLI → onarım ile
+deploy arasında yeni hayalet doğamaz.
+**Dikkat:** deploy ile onarım arasındaki pencerede, legacy hayalet içeren bir çuvalla
+sevkiyat kurulmak istenirse yeni hard-block 400 verir (somut Türkçe mesaj + çuval kodu).
+Bu yüzden onarımı **aynı pencerede, hemen** koşun.
+
+```bash
+cd Teks-Erp
+# a) RAPOR (yazmaz) — A/B/C/D/E sınıfları + §E'de tartısı sıfırlanacak çuvallar TEK TEK
+npx tsx scripts/repair_sack_ghost_rolls.ts
+
+# b) Sınıf A (depo çuvalı) onarımı
+npx tsx scripts/repair_sack_ghost_rolls.ts --apply
+
+# c) Sınıf B (PLANNED sevkiyattaki çuval) — AYRI ONAY:
+#    çuvalı sevkiyattan çıkarır → hayaleti çıkarır → geri ekler (tahsisler yeniden
+#    hesaplanır). Canlı sevkiyatı geçici bozar: seq yeniden atanır, brüt kg sıfırlanır.
+npx tsx scripts/repair_sack_ghost_rolls.ts --apply --planned
+
+# d) Doğrula — §7 boş kalmalı (kalırsa yalnız sınıf C satırları)
+psql "$PROD_DATABASE_URL" -f scripts/consistency-check.sql
+```
+
+- **Sınıf C (DISPATCHED çuval):** rapor-only. Sevkiyat kapanmış, belge donmuş.
+- **Sınıf D (§7b):** GERİ ALINAMAZ — aynı mal müşteriye faturalandı VE dışarıya çıktı.
+  Script belgeye DOKUNMAZ; düzeltme yalnız `reissue` (gerekçeli revizyon) ile insan kararı.
+- **§E listesi:** tartısı sıfırlanan çuvallar yeniden tartılmalı + etiketleri yeniden basılmalı.
 
 ---
 
