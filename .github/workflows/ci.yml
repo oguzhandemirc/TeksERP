@@ -80,8 +80,17 @@ jobs:
         run: npx prisma generate
       - name: Migrate deploy (tüm migration'ları uygula)
         run: npx prisma migrate deploy
-      - name: Seed (business-key fixture'ları)
+      - name: Seed (temel kurulum — admin, istasyonlar, şablonlar)
         run: set -o pipefail; npm run seed 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+      # ⚠️ AYRI ADIM ve ZORUNLU: `npm run seed` TEMİZ FABRİKA kurar (müşteri/renk/ürün
+      # YOK — üretimde fabrika kendi ekler). Test scriptlerinin business-key ile
+      # çözdüğü iş fixture'ları (PATOS ürünü, MAVI renk, MUS-001 müşterisi, IST şubesi)
+      # YALNIZ `seed:fixtures`'ta doğar. Bu adım eksikti → backend testlerinin 73'ü
+      # "Seed fixture eksik: PATOS" ile düşüyordu ve bu, CI zaten lint'te kırmızı
+      # olduğu için ~2 hafta GÖRÜLMEDİ. Idempotent (code üzerinden upsert).
+      - name: Seed fixtures (test iş verisi — PATOS/MAVI/MUS-001)
+        run: set -o pipefail; npm run seed:fixtures 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
       - name: Lint
         run: set -o pipefail; npm run lint 2>&1 | tee -a /tmp/ci-backend.log
@@ -151,8 +160,13 @@ jobs:
         run: npx prisma generate
       - name: Migrate deploy
         run: npx prisma migrate deploy
-      - name: Seed (business-key fixture'ları)
+      - name: Seed (temel kurulum)
         run: npm run seed
+      # Backend job'ıyla aynı gerekçe: iş fixture'ları ayrı seed'de doğar. Yük testi
+      # bugün PATOS'a bağlı olmasa bile ortamı aynı tutmak (ölçüm karşılaştırılabilir
+      # kalsın) ve ileride veri-bağımlı bir senaryo eklenince sessizce düşmemek için.
+      - name: Seed fixtures (test iş verisi)
+        run: npm run seed:fixtures
       - name: Yük testi (npm run test:load)
         run: npm run test:load
 
