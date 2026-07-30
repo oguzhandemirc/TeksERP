@@ -80,6 +80,61 @@ async function main(): Promise<void> {
     await expectErr("7) sevkiyattaki çuval → 409", () => shipping.reassignSackCustomer(sackId, { customerId: custB.id }, undefined), 409);
     // Çuvalı geri depoya al (cleanup öncesi FK için).
     await prisma.sack.update({ where: { id: sackId }, data: { shipmentId: null } });
+
+    // 8) ATOMİKLİK (D1): müşteri claim'i ile etiket bayatlaması TEK transaction'da.
+    // Eskiden ayrıydı: claim commit oluyor, sonra sarılmamış bayatlama çağrısı geliyordu
+    // → bayatlama patlarsa müşteri DEĞİŞMİŞ ama labelDirty işaretsiz + audit yok kalıyor
+    // ve yeni müşterinin şablonuyla basılması gereken etiketler ESKİ şablonla sevke
+    // gidiyordu. Hatayı bayatlama YOLUNDAN tetikliyoruz: `customer_template_routes`
+    // sorgusu tx içinde patlarsa TÜM tx geri sarmalı (müşteri DEĞİŞMEMELİ).
+    await prisma.sack.update({ where: { id: sackId }, data: { customerId: custA.id, branchId: null } });
+    const item = await prisma.item.create({
+      data: { code: `TST-RSA-I-${ts}`, name: `RSA Test Ürün ${ts}`, itemType: "FABRIC" },
+      select: { id: true },
+    });
+    const roll = await prisma.roll.create({
+      data: {
+        barcode: `TST-RSA-R-${ts}`,
+        itemId: item.id,
+        initialQty: 10,
+        currentQty: 10,
+        qualityGrade: "1.KALITE",
+        width: 150,
+        status: "WAREHOUSE",
+        sackId,
+      },
+      select: { id: true },
+    });
+    // Rota tablosunu geçici olarak ERİŞİLEMEZ yap → bayatlama adımı patlar.
+    // ⚠️ Bu adım şemaya dokunur. `finally` geri alır; ayrıca önceki bir koşum SERT
+    // öldürülmüşse (SIGKILL — finally koşmaz) tablo asılı kalmış olabilir → önce
+    // kendini onar. Aksi halde bir sonraki koşum "tablo yok" ile çöker ve dev DB
+    // bozuk kalırdı.
+    await prisma.$executeRawUnsafe(
+      `DO $$ BEGIN
+         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='customer_template_routes_tmp')
+            AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='customer_template_routes')
+         THEN ALTER TABLE "customer_template_routes_tmp" RENAME TO "customer_template_routes"; END IF;
+       END $$;`,
+    );
+    await prisma.$executeRawUnsafe(`ALTER TABLE "customer_template_routes" RENAME TO "customer_template_routes_tmp"`);
+    let threw = false;
+    try {
+      await shipping.reassignSackCustomer(sackId, { customerId: custB.id, branchId: null }, undefined);
+    } catch {
+      threw = true;
+    } finally {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "customer_template_routes_tmp" RENAME TO "customer_template_routes"`);
+    }
+    check("8a) bayatlama patlarsa çağrı hata verir", threw);
+    const after = await prisma.sack.findUnique({ where: { id: sackId }, select: { customerId: true } });
+    check(
+      "8b) ⭐ müşteri DEĞİŞMEDİ (tx geri sarıldı — yarım durum yok)",
+      after?.customerId === custA.id,
+      after?.customerId === custA.id ? "" : "müşteri değişmiş → claim ayrı commit olmuş",
+    );
+    await prisma.roll.deleteMany({ where: { id: roll.id } });
+    await prisma.item.deleteMany({ where: { id: item.id } });
   } finally {
     await prisma.sack.deleteMany({ where: { id: sackId } });
     if (shipmentId) await prisma.shipment.deleteMany({ where: { id: shipmentId } });

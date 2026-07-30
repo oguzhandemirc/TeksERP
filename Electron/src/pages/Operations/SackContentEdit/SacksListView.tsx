@@ -25,7 +25,7 @@ import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
-import { isWarehouseSack, type LocatedRoll, type SackSearchRow } from "./types";
+import { isWarehouseSack, scopeLabels, type LocatedRoll, type SackSearchRow, type SackSearchScope } from "./types";
 
 // Filtreler URL-driven (FilterBar → useSearchParams → useDataTable cursor reset).
 // Kapsam omit edilirse backend POOL+PLANNED (sevk edilmemiş) döner — sağlıklı varsayılan.
@@ -34,12 +34,14 @@ const SACK_FILTERS: FilterDef[] = [
     kind: "select",
     key: "scope",
     label: "Kapsam",
-    options: [
-      { value: "POOL", label: "Depoda" },
-      { value: "PLANNED", label: "Planlı/Kapıda" },
-      { value: "DISPATCHED", label: "Sevk edildi" },
-      { value: "ALL", label: "Tümü" },
-    ],
+    // Etiketler `scopeLabels`'tan (TEK KAYNAK) — elle kopyalanmıyor. Buradaki eski
+    // kopya "Planlı/Kapıda" diyordu; KAPI ÖNÜ ARA ADIMI KALDIRILDI (PLANNED →
+    // DISPATCHED, kök CLAUDE.md) → operatöre artık var olmayan bir aşama gösteriyordu.
+    // String kopyalamak aynı bayatlamayı tekrar doğurur.
+    options: (Object.keys(scopeLabels) as SackSearchScope[]).map((v) => ({
+      value: v,
+      label: scopeLabels[v],
+    })),
   },
   // Çoklu seçim (VEYA): backend virgülle ayrılmış ID'leri IN'e çevirir (searchSacks).
   { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },

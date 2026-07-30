@@ -263,21 +263,30 @@ export class ShippingService {
       branchCode = branch.code ?? null;
     }
 
-    // Atomik claim — hâlâ depoda (shipmentId=null) olmalı.
-    const claimed = await prisma.sack.updateMany({
-      where: { id: sackId, shipmentId: null },
-      data: { customerId, branchId },
-    });
-    if (claimed.count !== 1) throw AppError.conflict("Çuval az önce bir sevkiyata girdi — yenileyin.");
+    // ⚠️ TEK TRANSACTION (D1, 2026-07-30): müşteri claim'i ile etiket bayatlaması
+    // ESKİDEN AYRI çalışıyordu — claim commit oluyor, ardından sarılmamış bayatlama
+    // çağrısı geliyordu. Bayatlama patlarsa (DB timeout, bağlantı düşmesi) sonuç:
+    // müşteri DEĞİŞMİŞ ama `labelDirty` işaretsiz + audit HİÇ yazılmamış + istemci
+    // 500 görüp "değişmedi" sanıyor → yeni müşterinin şablonuyla basılması gereken
+    // etiketler ESKİ şablonla sevke gidiyor ve hatanın izi de yok. Emsal: `splitSack`
+    // her şeyi tek tx'te yapıyor. Audit tx DIŞINDA kalır ve bu DOĞRU: tx geri sararsa
+    // hiçbir şey değişmemiştir, audit de olmamalıdır.
+    const labelsStale = await prisma.$transaction(async (tx) => {
+      // Atomik claim — hâlâ depoda (shipmentId=null) olmalı.
+      const claimed = await tx.sack.updateMany({
+        where: { id: sackId, shipmentId: null },
+        data: { customerId, branchId },
+      });
+      if (claimed.count !== 1) throw AppError.conflict("Çuval az önce bir sevkiyata girdi — yenileyin.");
 
-    // Müşteri değişince İÇİNDEKİ topların etiketi bayatlar MI? Tetikleyici "müşteri
-    // değişti" DEĞİL: etikete müşteri adı basılmıyor, tek fark MÜŞTERİYE ÖZEL ŞABLON
-    // (CustomerTemplateRoute). Eski ve yeni müşteri aynı şablona çözülüyorsa (ikisi
-    // de rotasız → bağlam varsayılanı) fiziksel etiket geçerli kalır, dokunmayız.
-    const labelsStale =
-      sack.customerId === customerId
+      // Müşteri değişince İÇİNDEKİ topların etiketi bayatlar MI? Tetikleyici "müşteri
+      // değişti" DEĞİL: etikete müşteri adı basılmıyor, tek fark MÜŞTERİYE ÖZEL ŞABLON
+      // (CustomerTemplateRoute). Eski ve yeni müşteri aynı şablona çözülüyorsa (ikisi
+      // de rotasız → bağlam varsayılanı) fiziksel etiket geçerli kalır, dokunmayız.
+      return sack.customerId === customerId
         ? 0
-        : await this.markSackLabelsStaleOnCustomerChange(sackId, sack.customerId, customerId);
+        : await this.markSackLabelsStaleOnCustomerChange(tx, sackId, sack.customerId, customerId);
+    });
 
     await AuditService.log({
       userId,
@@ -307,11 +316,14 @@ export class ShippingService {
    * gereksiz "yeniden bas" uyarısı operatörü körleştirir.
    */
   private async markSackLabelsStaleOnCustomerChange(
+    /** ⚠️ tx ZORUNLU: müşteri claim'i ile AYNI transaction'da koşmalı (D1) — ayrı
+     *  koşarsa claim commit olur ama bayatlama/audit kaybolabilir. */
+    tx: Prisma.TransactionClient,
     sackId: string,
     oldCustomerId: string | null,
     newCustomerId: string | null,
   ): Promise<number> {
-    const rolls = await prisma.roll.findMany({
+    const rolls = await tx.roll.findMany({
       where: { sackId },
       select: { id: true, colorId: true },
     });
@@ -322,13 +334,15 @@ export class ShippingService {
     ];
     const routesFor = async (cid: string | null): Promise<Map<LabelKind, string>> => {
       if (!cid) return new Map();
-      const rows = await prisma.customerTemplateRoute.findMany({
+      const rows = await tx.customerTemplateRoute.findMany({
         where: { customerId: cid, kind: { in: kinds } },
         select: { kind: true, templateId: true },
       });
       return new Map(rows.map((r) => [r.kind, r.templateId]));
     };
-    const [oldRoutes, newRoutes] = [await routesFor(oldCustomerId), await routesFor(newCustomerId)];
+    // SIRALI await (tx client'ta Promise.all YASAK — pg adapter tek connection).
+    const oldRoutes = await routesFor(oldCustomerId);
+    const newRoutes = await routesFor(newCustomerId);
 
     // Şablonu DEĞİŞEN kind'lar (yok → bağlam varsayılanı; iki taraf da yok = değişmedi).
     const changed = new Set(kinds.filter((k) => (oldRoutes.get(k) ?? null) !== (newRoutes.get(k) ?? null)));
@@ -340,7 +354,7 @@ export class ShippingService {
     if (affected.length === 0) return 0;
     // Yalnız henüz işaretsizleri güncelle (count gerçek değişimi yansıtsın).
     return (
-      await prisma.roll.updateMany({
+      await tx.roll.updateMany({
         where: { id: { in: affected }, labelDirty: false },
         data: { labelDirty: true },
       })
