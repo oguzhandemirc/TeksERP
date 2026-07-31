@@ -88,6 +88,26 @@ elle INSERT edilir, yoksa Admin dışı hiçbir kullanıcı ekranı açamaz (403
 Route'lar `requireAnyPermission("workorder:distribute", "mobile:kursun-dagitim")` kullanır
 → saha kullanıcısına **yalnız mobil kodu** vermek yeterlidir.
 
+### ✅ ÖNERİLEN YOL: tek komut (elle SQL yazma)
+
+```bash
+cd <backend dizini>
+npx tsx scripts/sync-kursun-bypass-permissions.ts
+```
+
+Script **idempotent**'tir (hepsi upsert, tekrar tekrar koşulabilir) ve şunları yapar:
+iki izni ekler · "Mobil — Kurşun Dağıtım" template'ini kurar veya eksik item'larını
+tamamlar · ikisini de `admin` kullanıcısına bağlar. Ardından **ön koşulları teşhis
+eder**: aktif `PROCESS_QC` istasyonlarını KURSUN yeteneğiyle birlikte listeler ve
+bayrağın durumunu yazar — yani (b) ve (c) adımlarında neyin eksik olduğunu sana
+önceden söyler. Mevcut açıklamaları EZMEZ (elle düzeltilmiş olabilir).
+
+> Script yalnız İZİN tarafını kurar. Fiziksel kurşun istasyonları fabrikaya özgü
+> veridir (kaç makine, hangi ad) → panelden açılır, script yaratmaz.
+
+Aşağıdaki elle SQL, script'in koşamadığı durumlar (Node yok, yalnız `psql` erişimi
+var, ya da tek tek doğrulamak isteniyor) için **yedek yoldur**.
+
 ### Kolon adları (schema.prisma'dan doğrulandı)
 
 - `permissions(id, code, module, category, description, "createdAt", "updatedAt")`
