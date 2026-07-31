@@ -365,7 +365,11 @@ function setPhase(phase: CopyPhase, message?: string): void {
  * Kopya işini BAŞLATIR ve hemen döner (202 sözleşmesi). İş arka planda ilerler;
  * istemci `GET /api/admin/db-copies` yanıtındaki `job` alanını yoklar.
  */
-export async function startCopyJob(backupName: string): Promise<StartCopyResult> {
+export async function startCopyJob(
+  backupName: string,
+  /** @internal test kancası — üretim çağrısında verilmez (tek çağıran db-copy.routes). */
+  deps: { list?: typeof listDbCopies; run?: typeof runCopyJob } = {},
+): Promise<StartCopyResult> {
   if (currentJob) {
     return { started: false, message: "Zaten bir kopya işlemi sürüyor." };
   }
@@ -382,15 +386,6 @@ export async function startCopyJob(backupName: string): Promise<StartCopyResult>
   const conn = liveConn();
   if (!conn) return { started: false, message: "DATABASE_URL çözümlenemedi." };
 
-  const listing = await listDbCopies();
-  if (listing.capabilityError) return { started: false, message: listing.capabilityError };
-  if (listing.capabilities && !listing.capabilities.enabled) {
-    return { started: false, message: listing.capabilities.reason ?? "Yetki yok." };
-  }
-  if (listing.disk && !listing.disk.ok) {
-    return { started: false, message: listing.disk.blockReason ?? "Disk alanı yetersiz." };
-  }
-
   const copyName = restoreDbName(conn.database, new Date());
   if (exceedsIdentifierLimit(copyName)) {
     return {
@@ -401,6 +396,11 @@ export async function startCopyJob(backupName: string): Promise<StartCopyResult>
     };
   }
 
+  // ATOMİK CLAIM — buraya kadar hiç await yok (üstteki kontrollerin tümü senkron),
+  // tek thread'de iki istek bu satırı aynı anda geçemez. Async doğrulamalar claim'den
+  // SONRA koşar ve başarısızlıkta claim geri bırakılır. Claim await'lerin arkasındayken
+  // `await listDbCopies()` penceresinde ikinci istek de currentJob'u null görüp paralel
+  // ikinci pg_restore başlatabiliyordu (2026-07-31 veri bütünlüğü denetimi A2).
   const now = new Date().toISOString();
   currentJob = {
     copyName,
@@ -413,7 +413,28 @@ export async function startCopyJob(backupName: string): Promise<StartCopyResult>
     message: null,
     failedPhase: null,
   };
-  void runCopyJob(abs, backupName, copyName, conn.database);
+
+  let listing: Awaited<ReturnType<typeof listDbCopies>>;
+  try {
+    listing = await (deps.list ?? listDbCopies)();
+  } catch (err) {
+    currentJob = null;
+    throw err;
+  }
+  if (listing.capabilityError) {
+    currentJob = null;
+    return { started: false, message: listing.capabilityError };
+  }
+  if (listing.capabilities && !listing.capabilities.enabled) {
+    currentJob = null;
+    return { started: false, message: listing.capabilities.reason ?? "Yetki yok." };
+  }
+  if (listing.disk && !listing.disk.ok) {
+    currentJob = null;
+    return { started: false, message: listing.disk.blockReason ?? "Disk alanı yetersiz." };
+  }
+
+  void (deps.run ?? runCopyJob)(abs, backupName, copyName, conn.database);
   return { started: true, message: `Kopya oluşturuluyor: ${copyName}`, copyName };
 }
 

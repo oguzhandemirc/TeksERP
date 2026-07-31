@@ -250,6 +250,8 @@ export class PermissionManagementService {
 
     // F253: bulk set admin:users'ı ÇIKARIYORSA (mevcut var, hedef yok) sistemde
     // başka efektif admin kalmasını zorunlu kıl — son admin kendini kilitlemesin.
+    // Guard mutasyonla AYNI tx'te, advisory kilit altında koşar (A1) — tx dışında
+    // iki eşzamanlı admin-söküm isteği birbirini "hâlâ admin" sayıp geçebiliyordu.
     const adminPerms = await prisma.permission.findMany({
       where: { code: { in: [...PermissionManagementService.ADMIN_CODES] } },
       select: { id: true },
@@ -257,11 +259,13 @@ export class PermissionManagementService {
     const adminPermIds = new Set(adminPerms.map((p) => p.id));
     const currentHasAdmin = existing.some((e) => adminPermIds.has(e.permissionId));
     const targetHasAdmin = permissionIds.some((id) => adminPermIds.has(id));
-    if (currentHasAdmin && !targetHasAdmin) {
-      await PermissionManagementService.assertAdminCoverageAfterChange(userId, false);
-    }
+    const removesAdmin = currentHasAdmin && !targetHasAdmin;
 
     await prisma.$transaction(async (tx) => {
+      if (removesAdmin) {
+        await PermissionManagementService.acquireAdminGuardLock(tx);
+        await PermissionManagementService.assertAdminCoverageAfterChange(tx, userId, false);
+      }
       if (toRemove.length) {
         await tx.userPermission.deleteMany({
           where: { id: { in: toRemove.map((r) => r.id) } },
@@ -323,26 +327,32 @@ export class PermissionManagementService {
     });
     if (!existing) throw AppError.notFound("Yetki ataması bulunamadı");
 
-    // F253: son admin:users yetkisi revoke ile sökülüp sistem kilitlenmesin.
-    if ((PermissionManagementService.ADMIN_CODES as readonly string[]).includes(existing.permission.code)) {
-      const now = new Date();
-      const otherGrant = await prisma.userPermission.findFirst({
-        where: {
-          userId,
-          permissionId: { not: permissionId },
-          ...PermissionManagementService.effectiveAdminWindow(now),
-        },
-        select: { id: true },
-      });
-      await PermissionManagementService.assertAdminCoverageAfterChange(userId, !!otherGrant);
-    }
+    const revokesAdminCode = (PermissionManagementService.ADMIN_CODES as readonly string[])
+      .includes(existing.permission.code);
 
     // F255: silme + tokenVersion bump ATOMİK (ikinci yazım düşerse "iptal ANINDA
-    // geçerli" invaryantı bozulmasın). Coverage guard tx'ten ÖNCE, audit SONRA.
-    await prisma.$transaction([
-      prisma.userPermission.delete({ where: { id: existing.id } }),
-      prisma.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } }),
-    ]);
+    // geçerli" invaryantı bozulmasın). F253 coverage guard'ı da AYNI tx'te, advisory
+    // kilit altında (A1) — tx öncesi guard iki eşzamanlı admin-söküm isteğinde
+    // birbirini göremiyordu. Audit tx SONRASI (best-effort konvansiyonu).
+    await prisma.$transaction(async (tx) => {
+      if (revokesAdminCode) {
+        await PermissionManagementService.acquireAdminGuardLock(tx);
+        const now = new Date();
+        const otherGrant = await tx.userPermission.findFirst({
+          where: {
+            userId,
+            permissionId: { not: permissionId },
+            ...PermissionManagementService.effectiveAdminWindow(now),
+          },
+          select: { id: true },
+        });
+        await PermissionManagementService.assertAdminCoverageAfterChange(tx, userId, !!otherGrant);
+      }
+      // deleteMany (delete DEĞİL): satır eşzamanlı başka bir akışta silindiyse
+      // P2025 yerine no-op — bump yine koşar, davranış idempotent kalır.
+      await tx.userPermission.deleteMany({ where: { id: existing.id } });
+      await tx.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
+    });
 
     await AuditService.log({
       userId: actorUserId,
@@ -540,16 +550,31 @@ export class PermissionManagementService {
     };
   }
 
+  /** Admin-coverage guard'larının seri kapısı — tx-ömürlü advisory lock. Read
+   *  Committed'da iki eşzamanlı "son admin var mı" sayımı birbirinin commit'ini
+   *  GÖREMEZ (ikisi de öbür admini hâlâ aktif sayar, ikisi de geçer → sistem
+   *  yöneticisiz kalır; 2026-07-31 veri bütünlüğü denetimi A1). Efektif admin'i
+   *  AZALTABİLECEK her mutasyon guard'ıyla birlikte bu kilidin altında koşar;
+   *  kilit commit/rollback'te kendiliğinden düşer. Admin-yetki mutasyonları nadir
+   *  → serileşmenin ölçülebilir maliyeti yok. */
+  private static async acquireAdminGuardLock(tx: Prisma.TransactionClient): Promise<void> {
+    // void dönüşü alt sorguda gizlenir — pg driver adapter void kolonu
+    // deserialize edemiyor (UnsupportedNativeDataType), dışarı yalnız int çıkar.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('perm-admin-guard'))) AS l`;
+  }
+
   /** F253: Bir admin yetkisi sökülürken (revoke/set) sistemde efektif admin:users
    *  KALMAYACAKSA blokla. willTargetRetainAdmin=true ise hedefte başka efektif admin
-   *  grant'ı kaldığından kontrol atlanır. */
+   *  grant'ı kaldığından kontrol atlanır. Mutasyonla AYNI tx'te,
+   *  acquireAdminGuardLock SONRASI çağrılır (tx dışı çağrı yarış penceresini geri açar). */
   private static async assertAdminCoverageAfterChange(
+    tx: Prisma.TransactionClient,
     targetUserId: string,
     willTargetRetainAdmin: boolean,
   ): Promise<void> {
     if (willTargetRetainAdmin) return;
     const now = new Date();
-    const other = await prisma.user.findFirst({
+    const other = await tx.user.findFirst({
       where: {
         id: { not: targetUserId },
         isActive: true,
@@ -565,16 +590,20 @@ export class PermissionManagementService {
   }
 
   /** Pasifleştirilecek kullanıcı SON aktif admin:users sahibiyse blokla —
-   *  kimse kullanıcı yönetimine giremez hale gelmesin. F254: efektif pencere uygulanır. */
-  private static async assertNotLastActiveAdmin(targetId: string): Promise<void> {
+   *  kimse kullanıcı yönetimine giremez hale gelmesin. F254: efektif pencere uygulanır.
+   *  Pasifleştirmeyle AYNI tx'te, acquireAdminGuardLock SONRASI çağrılır. */
+  private static async assertNotLastActiveAdmin(
+    tx: Prisma.TransactionClient,
+    targetId: string,
+  ): Promise<void> {
     const now = new Date();
     const window = this.effectiveAdminWindow(now);
-    const targetHasAdmin = await prisma.userPermission.findFirst({
+    const targetHasAdmin = await tx.userPermission.findFirst({
       where: { userId: targetId, ...window },
       select: { id: true },
     });
     if (!targetHasAdmin) return;
-    const otherActiveAdmin = await prisma.user.findFirst({
+    const otherActiveAdmin = await tx.user.findFirst({
       where: {
         id: { not: targetId },
         isActive: true,
@@ -604,13 +633,19 @@ export class PermissionManagementService {
     if (existing.deletedAt) throw AppError.badRequest("Bu kullanıcı silinmiş — pasife alınamaz");
 
     this.assertNotSelfDeactivation(id, actorUserId);
-    await this.assertNotLastActiveAdmin(id);
 
-    const user = await prisma.user.update({
-      where: { id },
-      // tokenVersion++ → açık oturumları düşür (pasif kullanıcı çalışmaya devam etmesin).
-      data: { isActive: false, tokenVersion: { increment: 1 } },
-      select: USER_SELECT,
+    // Son-admin guard'ı + pasifleştirme TEK tx'te, advisory kilit altında (A1).
+    // Eskiden guard tx'siz check-then-act'ti: tam 2 aktif admin varken eşzamanlı
+    // iki pasifleştirme isteği ikisi de "diğeri hâlâ aktif" görüp geçebiliyordu.
+    const user = await prisma.$transaction(async (tx) => {
+      await PermissionManagementService.acquireAdminGuardLock(tx);
+      await PermissionManagementService.assertNotLastActiveAdmin(tx, id);
+      return tx.user.update({
+        where: { id },
+        // tokenVersion++ → açık oturumları düşür (pasif kullanıcı çalışmaya devam etmesin).
+        data: { isActive: false, tokenVersion: { increment: 1 } },
+        select: USER_SELECT,
+      });
     });
     await SessionRegistryService.revokeAllForUser(id, "DEACTIVATED").catch(
       () => undefined,
@@ -659,20 +694,25 @@ export class PermissionManagementService {
     if (existing.deletedAt) return existing; // idempotent — zaten silinmiş
 
     if (actorUserId === id) throw AppError.badRequest("Kendi hesabınızı silemezsiniz");
-    await this.assertNotLastActiveAdmin(id);
 
     const freedUsername = `del_${randomBytes(3).toString("hex")}_${existing.username}`.slice(0, 50);
-    const user = await prisma.user.update({
-      where: { id },
-      data: {
-        isActive: false,
-        deletedAt: new Date(),
-        username: freedUsername,
-        quickPin: null,
-        cardToken: null,
-        tokenVersion: { increment: 1 },
-      },
-      select: USER_SELECT,
+    // Son-admin guard'ı + silme TEK tx'te, advisory kilit altında (A1) —
+    // deactivateUser ile aynı yarış sınıfı (eşzamanlı iki son-admin sökümü).
+    const user = await prisma.$transaction(async (tx) => {
+      await PermissionManagementService.acquireAdminGuardLock(tx);
+      await PermissionManagementService.assertNotLastActiveAdmin(tx, id);
+      return tx.user.update({
+        where: { id },
+        data: {
+          isActive: false,
+          deletedAt: new Date(),
+          username: freedUsername,
+          quickPin: null,
+          cardToken: null,
+          tokenVersion: { increment: 1 },
+        },
+        select: USER_SELECT,
+      });
     });
     await SessionRegistryService.revokeAllForUser(id, "DELETED").catch(
       () => undefined,
