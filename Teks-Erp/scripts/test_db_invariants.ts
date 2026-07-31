@@ -126,6 +126,25 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
   { table: "sacks", name: "sacks_weightKg_nonneg" },
   { table: "work_order_steps", name: "work_order_steps_time_order" },
+  // 2026-07-31 denetimi (A6+G-9) — migration 20260731120000_audit_check_hardening:
+  { table: "roll_movements", name: "roll_movements_qtyIn_nonneg" },
+  { table: "roll_movements", name: "roll_movements_qtyOut_nonneg" },
+  { table: "roll_movements", name: "roll_movements_weightIn_nonneg" },
+  { table: "roll_movements", name: "roll_movements_weightOut_nonneg" },
+  { table: "roll_errors", name: "roll_errors_startMeter_nonneg" },
+  { table: "sack_allocations", name: "sack_allocations_qty_pos" },
+  { table: "subcontractor_direct_ship_allocations", name: "subcontractor_direct_ship_allocations_qty_pos" },
+  { table: "work_order_to_order_lines", name: "work_order_to_order_lines_allocatedQty_nonneg" },
+  { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
+  { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
+  { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },
+  { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedWeight_nonneg" },
+  { table: "kartela_receipt_items", name: "kartela_receipt_items_kartelaCount_pos" },
+  { table: "swatch_stock_reductions", name: "swatch_stock_reductions_count_pos" },
+  { table: "direct_shipments", name: "direct_shipments_totalQty_pos" },
+  { table: "direct_shipments", name: "direct_shipments_rollCount_pos" },
+  { table: "roll_returns", name: "roll_returns_qty_pos" },
+  { table: "work_orders", name: "work_orders_stockprod_targetItem" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

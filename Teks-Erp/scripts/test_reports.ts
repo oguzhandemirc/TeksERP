@@ -321,7 +321,9 @@ async function main() {
     if (!station) throw new Error("Seed station yok (npm run seed)");
 
     const wo = await prisma.workOrder.create({
-      data: { workOrderNumber: `TEST-RPT-WO-${ts}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS" },
+      // ORDER_PRODUCTION: rapor (istasyon hata oranı) WO tipine duyarsız; STOCK_PRODUCTION
+      // artık DB CHECK'i ile targetItemId ister (migration 20260731120000).
+      data: { workOrderNumber: `TEST-RPT-WO-${ts}`, type: "ORDER_PRODUCTION", status: "IN_PROGRESS" },
       select: { id: true },
     });
     workOrderId = wo.id;

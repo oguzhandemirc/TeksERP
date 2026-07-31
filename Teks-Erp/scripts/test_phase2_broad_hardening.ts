@@ -90,7 +90,10 @@ async function makeWoWithCard(): Promise<string> {
   const wo = await prisma.workOrder.create({
     data: {
       workOrderNumber: `TST-P2-WO-${woIds.length}-${Date.now().toString().slice(-5)}`,
-      type: "STOCK_PRODUCTION",
+      // ORDER_PRODUCTION: senaryo (kart void claim) WO tipine duyarsız; STOCK_PRODUCTION
+      // artık DB CHECK'i ile targetItemId ister (work_orders_stockprod_targetItem,
+      // migration 20260731120000) — fixture'a gereksiz item bağımlılığı eklememek için tip değişti.
+      type: "ORDER_PRODUCTION",
       status: WorkOrderStatus.IN_PROGRESS,
       width: 150,
       targetQuantity: 100,
