@@ -31,7 +31,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
-import TamburBypassConfirmModal from './TamburBypassConfirmModal';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
@@ -201,6 +200,71 @@ function HeaderChip({
   );
 }
 
+/**
+ * KURŞUN BYPASS — SESSİZ KAPANIŞ (Tambur operatörü HİÇBİR ŞEY ONAYLAMAZ).
+ *
+ * Kurşun makinelerinde tablet yoktur: iş, Kurşun Dağıtım ekranından fiziksel bir
+ * kurşun MAKİNESİNE atanır ve toplar Kurşun/KK2 adımında AÇIK bekler. Tambur
+ * tabletinde kart okutulduğunda `by-card` ucu "bu adımda açık top yok" diye 400
+ * atar; context ucu ise `bypassPending` döner. O noktada operatöre soru SORMAK
+ * yanlıştı — kurşunu yapan o değil, kararı çoktan dağıtımcı verdi ve önizlemede
+ * "onaylamayacağı" hiçbir şey yok. Bu yüzden adım burada sessizce kapatılır ve
+ * kart normal Tambur işi olarak açılır; operatöre yalnız BİLGİ toast'ı gösterilir.
+ *
+ * `rollIds` ÖNİZLEMEDEN gider — backend kapsam paritesini tx içinde birebir
+ * doğrular (eksik/fazla liste 409, yarım kapanış yok). Nadir yarışta (önizleme
+ * ile kapanış arasında adıma yeni top girdi) kapsam tazelenip BİR KEZ yeniden
+ * denenir; ikinci deneme de düşerse hata operatöre gösterilir.
+ *
+ * Dönüş:
+ *  • `none`  → bu kartta bekleyen kurşun dağıtımı yok (çağıran kendi hatasını basar)
+ *  • `done`  → adım kapandı ya da zaten kapalıydı → kart açılabilir
+ *  • `error` → iki denemede de kapanmadı, mesaj operatöre gösterilir
+ */
+type SilentBypassResult =
+  | { kind: 'none' }
+  | { kind: 'done'; movedRollCount: number; alreadyDone: boolean }
+  | { kind: 'error'; message: string };
+
+async function completeKursunBypassSilently(
+  barcode: string,
+): Promise<SilentBypassResult> {
+  // Context ucu bypass dışı sebeplerle de patlayabilir (ağ / yetki) — o durumda
+  // "bekleyen dağıtım yok" deyip çağıranın ASIL hatasını göstermesi doğrudur.
+  const readPending = () =>
+    tamburService
+      .getContext(barcode)
+      .then((r) => (r.data as TamburContext | null)?.bypassPending ?? null)
+      .catch(() => null);
+
+  let pending = await readPending();
+  if (!pending) return { kind: 'none' };
+
+  let lastError: Error | null = null;
+  // İki deneme: ilki önizlemedeki kapsamla, ikincisi TAZELENMİŞ kapsamla.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!pending) {
+      // Yarışın kaybedeni olduk ama iş bitti (başka cihaz kapattı) — kart açılır.
+      return { kind: 'done', movedRollCount: 0, alreadyDone: true };
+    }
+    try {
+      const res = await tamburService.bypassComplete(
+        barcode,
+        pending.rolls.map((r) => r.rollId),
+      );
+      return {
+        kind: 'done',
+        movedRollCount: res.data.movedRollCount,
+        alreadyDone: res.data.alreadyDone,
+      };
+    } catch (e) {
+      lastError = e as Error;
+      pending = await readPending();
+    }
+  }
+  return { kind: 'error', message: lastError?.message ?? 'Bilinmeyen hata' };
+}
+
 export default function TamburScreen() {
   // Telefon ekranında landscape kilidi kaldırılır + sağ panel drawer'a alınır.
   // Tabletlerde önceki davranış aynen korunur.
@@ -237,10 +301,6 @@ export default function TamburScreen() {
 
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
-  // KURŞUN BYPASS — okutulan kartta bekleyen Kurşun Dağıtım işi varsa kart normal
-  // yolla çözülemez (toplar hâlâ kurşun adımında). Barkod burada tutulur, onay
-  // modalı açılır; onaydan sonra kart normal sekme olarak açılır.
-  const [bypassCard, setBypassCard] = useState<string | null>(null);
   const [openJobs, setOpenJobs] = useState<OpenJob[]>([]);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
@@ -472,6 +532,11 @@ export default function TamburScreen() {
       return;
     }
 
+    // Sessiz bypass kapanışından sonra kartı YENİDEN çözmek gerekir; recursive
+    // çağrı `finally` in-flight guard'ı temizlemeden yapılırsa kendi guard'ına
+    // takılıp sessizce hiçbir şey yapmaz. Bu yüzden niyet burada işaretlenir,
+    // çağrı try/catch/finally BİTTİKTEN sonra yapılır.
+    let reopenAfterBypass = false;
     resolveInFlightRef.current = true;
     setResolvingCard(true);
     try {
@@ -507,29 +572,54 @@ export default function TamburScreen() {
       });
     } catch (err) {
       // KURŞUN BYPASS — kart Kurşun Dağıtım'a verilmişse toplar hâlâ kurşun
-      // adımındadır; `by-card` "bu adımda açık top yok" diye 400 atar. Context
-      // ucu bu durumda bypass önizlemesi döner: hata TOAST'I ATMA, onay modalını
-      // aç. Bekleyen iş yoksa (veya context de patlarsa) davranış AYNEN eskisi.
-      const bypass = await tamburService
-        .getContext(barcode)
-        .then((r) => (r.data as TamburContext | null)?.bypassPending ?? null)
-        .catch(() => null);
-      if (bypass) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setBypassCard(barcode);
+      // adımındadır; `by-card` "bu adımda açık top yok" diye 400 atar. Bu durumda
+      // kurşun adımı SESSİZCE kapatılır (operatöre soru sorulmaz) ve kart normal
+      // yolla yeniden açılır. Bekleyen dağıtım yoksa davranış AYNEN eskisi.
+      const bypass = await completeKursunBypassSilently(barcode);
+      if (bypass.kind === 'done') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Onay DEĞİL, bilgi: operatör kurşun adımının ne zaman kapandığını
+        // görmezse kartın neden birden açıldığını da anlamaz.
+        Toast.show(
+          bypass.alreadyDone
+            ? {
+                type: 'info',
+                text1: 'Kurşun/KK2 bypass zaten tamamlanmış',
+                text2: 'Kart Tambur işi olarak açılıyor',
+              }
+            : {
+                type: 'info',
+                text1: 'Kurşun/KK2 bypass ile tamamlandı',
+                text2: `${bypass.movedRollCount} top Tambur'a alındı`,
+              },
+        );
+        void qc.invalidateQueries({ queryKey: ['tambur'] });
+        void qc.invalidateQueries({ queryKey: ['rolls'] });
+        void qc.invalidateQueries({ queryKey: ['work-orders'] });
+        reopenAfterBypass = true;
         if (fromInput) setCardBarcode('');
-        return;
+      } else if (bypass.kind === 'error') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Toast.show({
+          type: 'error',
+          text1: 'Kurşun bypass tamamlanamadı',
+          text2: bypass.message,
+        });
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Toast.show({
+          type: 'error',
+          text1: 'Kart çözülemedi',
+          text2: (err as Error).message,
+        });
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({
-        type: 'error',
-        text1: 'Kart çözülemedi',
-        text2: (err as Error).message,
-      });
     } finally {
       setResolvingCard(false);
       resolveInFlightRef.current = false;
     }
+
+    // Guard temizlendi — kart artık normal Tambur işi olarak açılabilir.
+    if (reopenAfterBypass) await resolveCard(barcode, false);
   };
 
   const handleResolveCard = () => resolveCard(cardBarcode.trim(), true);
@@ -2648,17 +2738,10 @@ export default function TamburScreen() {
         onDismiss={() => setNoteModalOpen(false)}
       />
 
-      {/* Kurşun Bypass onayı — kart kurşun adımında bekliyorsa okutmada açılır.
-          Onaydan sonra kart normal sekme olarak çözülür (in-flight guard çifti
-          engeller). */}
-      <TamburBypassConfirmModal
-        cardBarcode={bypassCard}
-        onDismiss={() => setBypassCard(null)}
-        onDone={(barcode) => {
-          setBypassCard(null);
-          void resolveCard(barcode, false);
-        }}
-      />
+      {/* Kurşun Bypass'ın ONAY MODALI YOKTUR (2026-08-01): kart okutulunca kurşun
+          adımı `resolveCard` içinde sessizce kapanır ve kart normal Tambur işi
+          olarak açılır. Tambur operatörü kurşunu yapan kişi değildir — ona
+          onaylatacak bir karar yok, yalnız bilgi toast'ı gösterilir. */}
 
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
       <LabelPrintModal

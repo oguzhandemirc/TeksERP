@@ -4,11 +4,21 @@
 // Tek FARK: backend `Date` döner, JSON serileştirmesi sonrası tel üzerinde
 // ISO `string` olur — burada tarih alanları `string` tiplenir.
 
-/** Fiziksel kurşun istasyonu seçeneği (payload ile GELİR — ayrı istasyon çağrısı YOK). */
-export interface KursunBypassStationOption {
+/**
+ * Dağıtım hedefi = fiziksel kurşun MAKİNESİ (payload ile GELİR — ayrı makine
+ * çağrısı YOK).
+ *
+ * ⚠️ Atama İSTASYONA değil MAKİNEYE yapılır: fabrikada PROCESS_QC türünde TEK
+ * istasyon (Kurşun + KK2) var, altında N adet fiziksel kurşun makinesi duruyor.
+ * `stationId`/`stationName` yalnız BAĞLAM (yetenek okuması backend'de makinenin
+ * istasyonundan yapılır) — gruplama/ayırt etme anahtarı `id`'dir.
+ */
+export interface KursunBypassMachineOption {
   id: string;
   code: string;
   name: string;
+  stationId: string;
+  stationName: string;
 }
 
 /** Dağıtım ekranındaki bir satırın ORTAK gövdesi (bekleyen + dağıtılmış). */
@@ -42,6 +52,11 @@ export interface KursunDistributionWaitingRow extends KursunDistributionRowBase 
 
 export interface KursunDistributionAssignedRow extends KursunDistributionRowBase {
   assignmentId: string;
+  /** ATANAN fiziksel kurşun makinesi — izleme/gruplama bu alanla yapılır. */
+  machineId: string;
+  machineCode: string;
+  machineName: string;
+  /** Makinenin istasyonu (pratikte hep aynı PROCESS_QC istasyonu) — bağlam. */
   stationId: string;
   stationName: string;
   assignedAt: string;
@@ -55,7 +70,8 @@ export interface KursunDistributionAssignedRow extends KursunDistributionRowBase
 export interface KursunDistributionPayload {
   /** `production.kursunBypassEnabled` — false ise YALNIZ yeni atama kapalıdır. */
   flagEnabled: boolean;
-  stations: KursunBypassStationOption[];
+  /** Atama hedefleri: PROCESS_QC istasyonuna bağlı AKTİF kurşun makineleri. */
+  machines: KursunBypassMachineOption[];
   waiting: KursunDistributionWaitingRow[];
   assigned: KursunDistributionAssignedRow[];
 }
@@ -70,6 +86,9 @@ export interface KursunBypassCompletePreview {
   assignmentId: string;
   workOrderId: string;
   workOrderNumber: string;
+  /** İşin ATANDIĞI kurşun makinesi — onay ekranı "hangi makinede" yazar. */
+  machineName: string;
+  /** Makinenin istasyonu — bağlam bilgisi. */
   stationName: string;
   isLastStep: boolean;
   canComplete: boolean;
@@ -93,17 +112,22 @@ export interface KursunBypassAssignResult {
   workOrderId: string;
   workOrderNumber: string;
   workOrderStepId: string;
+  machineId: string;
+  machineName: string;
   stationId: string;
   stationName: string;
   isLastStep: boolean;
-  /** true = zaten dağıtılmıştı, istasyon değiştirildi. */
+  /** true = zaten dağıtılmıştı, MAKİNE değiştirildi (iş başka makineye taşındı). */
   reassigned: boolean;
 }
 
+/**
+ * İptal YALNIZ atama satırını kapatır. "Adımın istasyonu geri yüklendi mi"
+ * diye bir alan YOK: atama makine bazında yapılır, `WorkOrderStep.stationId`
+ * hiç değiştirilmez → geri yüklenecek bir şey de yoktur.
+ */
 export interface KursunBypassCancelResult {
   assignmentId: string;
-  /** Adımın istasyonu atama öncesine geri yüklendi mi (false = arada elle değişmiş). */
-  stationRestored: boolean;
   workOrderId: string;
 }
 

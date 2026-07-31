@@ -77,7 +77,7 @@ import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
 import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDetailPage";
 import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
-import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
+import { KursunQueueRouteGate } from "@/pages/Operations/KursunQueue/KursunQueueRouteGate";
 import { KursunDagitimPage } from "@/pages/Operations/KursunDagitim/KursunDagitimPage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
@@ -483,8 +483,10 @@ export const contentRoutes: RouteObject[] = [
     element: (
       // Kuyruğu kaliteci sıralar; kurşun dağıtımcısı da izler (backend GET /queue
       // aynı iki izne açık — dağıtım kararı bu kuyruğun üstüne kurulur).
+      // Bayrak (kursunBypassEnabled) AÇIKSA ekran hiç render EDİLMEZ: sırayı
+      // okuyacak kurşun tableti kalmıyor → `KursunQueueRouteGate` hub'a yönlendirir.
       <ProtectedRoute requireAnyPermission={["quality:write", "workorder:distribute"]}>
-        <KursunQueuePage />
+        <KursunQueueRouteGate />
       </ProtectedRoute>
     ),
   },

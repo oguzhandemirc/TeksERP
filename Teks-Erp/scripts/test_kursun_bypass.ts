@@ -1,23 +1,34 @@
 // =============================================================================
 // Kurşun Dağıtım (Kurşun Bypass) — kapsamlı entegrasyon testi
 // =============================================================================
-// Fabrika kurşun istasyonlarına TABLET KOYMUYOR: kurşun fiziksel olarak yapılır
+// Fabrika kurşun makinelerine TABLET KOYMUYOR: kurşun fiziksel olarak yapılır
 // ama dijital izlenmez (hatalar kâğıtta). Yetkili personel kurşun adımını
-// fiziksel bir istasyona ATAR; adım ya Tambur'da refakat kartı okutmasıyla
-// (TAMBUR_SCAN) ya da kurşun rotanın SON adımıysa dağıtım ekranındaki
-// "İşi Bitir" ile (DISTRIBUTION_LAST_STEP) kapanır.
+// fiziksel bir kurşun MAKİNESİNE ATAR; adım ya Tambur'da refakat kartı
+// okutmasıyla (TAMBUR_SCAN) ya da kurşun rotanın SON adımıysa dağıtım
+// ekranındaki "İşi Bitir" ile (DISTRIBUTION_LAST_STEP) kapanır.
+//
+// ⚠️ ATAMA MAKİNE BAZINDADIR — İSTASYON BAZINDA DEĞİL. PROCESS_QC türünde TEK
+// istasyon vardır (KURSUN_KK2) ve altında N fiziksel kurşun MAKİNESİ durur.
+// Bunun test açısından üç sonucu var ve üçü de burada MEKANİK olarak korunur:
+//   • `WorkOrderStep.stationId` HİÇ DEĞİŞMEZ (repoint yok; iptalde de "geri
+//     yükleme" yok). Test bunu atama, yeniden atama ve iptal sonrasında ölçer.
+//   • Kapanan kurşun movement'ları `RollMovement.machineId = ATANAN MAKİNE` ile
+//     damgalanır → makine bazlı hacim raporları bypass işlerini de görür.
+//   • Tambur adımına AÇILAN giriş movement'ları `machineId = NULL` kalır — o
+//     damgayı Tambur FINISH'i koyar (kurşun makinesini oraya yazmak yalan olurdu).
 //
 // ⚠️ BU "SKIPPED" DEĞİLDİR — movement'lar normal şekilde kapanır ve adım
 // COMPLETED olur; fark `RollOperation` yazılmaması + `RollError` açılmamasıdır.
 //
 // Kapsanan senaryolar:
-//   1  Bayrak kapalı → assign 400; bayrak açık → assign OK + adım REPOINT
-//   2  Re-assign (originalStationId sabit) + iptal (istasyon geri yüklenir)
+//   1  Bayrak kapalı → assign 400; bayrak açık → assign OK + adım REPOINT YOK
+//   2  Re-assign (makine A → makine B) + iptal (adımın istasyonu yine sabit)
+//  2B  Makine seçimi redleri (pasif · PROCESS_QC değil · KURSUN yeteneği yok · yok)
 //   3  Yarım-başlama redleri (QC2 op / RollError / bypass-dışı kapanış / qtyIn=0)
 //   4  Tablet guard'ları (finishStep · completeQc2 · reportError · kursunFinish)
-//   5  getTamburContext 400 ATMIYOR + `bypassPending` dolu
+//   5  getTamburContext 400 ATMIYOR + `bypassPending` dolu (makine adıyla)
 //   8  Kapsam uyuşmazlığı (fazladan/eksik rollId) → 409 + tam rollback
-//   6  Happy path completeFromTambur (marker, yetenek, kalite NULL, COMPLETED)
+//   6  Happy path completeFromTambur (marker, MAKİNE DAMGASI, yetenek, kalite NULL)
 //   7  İdempotency (tekrar çağrı → alreadyDone, mükerrer movement YOK)
 //  11  Çok-tur: 2. parti geldiğinde aynı adım YENİDEN dağıtılabilir
 //  12  Bayrak tamamlamayı kapılamıyor (dağıtım sonrası kapatılsa da biter)
@@ -25,9 +36,11 @@
 //  10  Eşzamanlılık: paralel assign tek satır bırakır + partial unique seddi
 //
 // Fixture'ı TEST KENDİ YARATIR (master data business-key ile çözülür, hardcoded
-// UUID yok); `TEST-` prefix'li her şey finally'de sökülür. Global ayar
-// (`production.kursunBypassEnabled`) test başında yedeklenip sonunda ESKİ HÂLİNE
-// döndürülür — dev DB'sinin konfigürasyonu bozulmaz.
+// UUID yok); `TEST-` prefix'li her şey finally'de sökülür. Seed istasyonlarına /
+// makinelerine DOKUNULMAZ — testin kendi PROCESS_QC istasyonu ve o istasyona
+// bağlı kendi makineleri vardır (fabrika modeliyle birebir: tek istasyon, N
+// makine). Global ayar (`production.kursunBypassEnabled`) test başında
+// yedeklenip sonunda ESKİ HÂLİNE döndürülür — dev DB'sinin konfigürasyonu bozulmaz.
 //
 // Koşum: npx tsx scripts/test_kursun_bypass.ts
 // =============================================================================
@@ -114,6 +127,7 @@ let woSeq = 0;
 const createdWoIds: string[] = [];
 const createdRollIds: string[] = [];
 const createdStationIds: string[] = [];
+const createdMachineIds: string[] = [];
 
 interface Fixture {
   woId: string;
@@ -128,7 +142,8 @@ interface Fixture {
 
 interface MasterData {
   itemId: string;
-  seedKursunStationId: string;
+  /** Testin KENDİ PROCESS_QC istasyonu — rota adımı BURAYA bağlanır ve hiç değişmez. */
+  kursunStationId: string;
   tamburStationId: string;
   kursunPropertyId: string;
   defectTypeId: string;
@@ -156,9 +171,9 @@ async function makeFixture(
       targetItemId: md.itemId,
       steps: {
         create: opts.lastStep
-          ? [{ stationId: md.seedKursunStationId, stepSequence: 1, status: StepStatus.ACTIVE }]
+          ? [{ stationId: md.kursunStationId, stepSequence: 1, status: StepStatus.ACTIVE }]
           : [
-              { stationId: md.seedKursunStationId, stepSequence: 1, status: StepStatus.ACTIVE },
+              { stationId: md.kursunStationId, stepSequence: 1, status: StepStatus.ACTIVE },
               { stationId: md.tamburStationId, stepSequence: 2, status: StepStatus.PENDING },
             ],
       },
@@ -225,6 +240,46 @@ async function addRollToStep(
   return roll.id;
 }
 
+/** TEST istasyonu yaratır (teardown söker). */
+async function makeStation(
+  suffix: string,
+  name: string,
+  kind: StationKind,
+): Promise<string> {
+  const st = await prisma.station.create({
+    data: {
+      code: `TEST-KB-${suffix}-${STAMP}`.slice(0, 32),
+      name,
+      type: "INTERNAL",
+      kind,
+      department: "KALITE",
+    },
+    select: { id: true },
+  });
+  createdStationIds.push(st.id);
+  return st.id;
+}
+
+/** TEST makinesi yaratır (teardown söker). */
+async function makeMachine(
+  stationId: string,
+  suffix: string,
+  name: string,
+  isActive = true,
+): Promise<string> {
+  const m = await prisma.machine.create({
+    data: {
+      stationId,
+      code: `TEST-KBM-${suffix}-${STAMP}`.slice(0, 32),
+      name,
+      isActive,
+    },
+    select: { id: true },
+  });
+  createdMachineIds.push(m.id);
+  return m.id;
+}
+
 /** Bayrağı doğrudan DB'ye yazar (readKursunBypassEnabled cache'siz okur). */
 async function setFlag(enabled: boolean): Promise<void> {
   await prisma.systemSetting.upsert({
@@ -245,6 +300,15 @@ async function pendingAssignment(stepId: string) {
   });
 }
 
+/** Adımın (tek, sabit) istasyonunu döner — "repoint yok" invariantının ölçüm noktası. */
+async function stepStationId(stepId: string): Promise<string> {
+  const s = await prisma.workOrderStep.findUniqueOrThrow({
+    where: { id: stepId },
+    select: { stationId: true },
+  });
+  return s.stationId;
+}
+
 // -----------------------------------------------------------------------------
 
 async function main(): Promise<void> {
@@ -252,10 +316,6 @@ async function main(): Promise<void> {
   const item = await need(
     await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } }),
     "aktif Item",
-  );
-  const seedKursun = await need(
-    await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }),
-    "Station KURSUN_KK2",
   );
   const tamburStation = await need(
     await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }),
@@ -274,55 +334,47 @@ async function main(): Promise<void> {
     "admin kullanıcısı",
   );
 
+  // ── Testin KENDİ fabrikası: TEK PROCESS_QC istasyonu + altında N MAKİNE ────
+  // Seed istasyon/makinelerine dokunmuyoruz (paylaşılan dev DB'si kirlenmesin).
+  // `stationKursun` KURSUN yeteneğini taşır → bypass kapanışında topa RollProperty
+  // olarak geçmeli (6f). Rota adımı da BU istasyona bağlanır; testin en önemli
+  // invariantı "bu bağ hiç değişmez"dir.
+  const stationKursunId = await makeStation("S", "TEST Kurşun İstasyonu", StationKind.PROCESS_QC);
+  await prisma.stationProperty.create({
+    data: { stationId: stationKursunId, propertyId: kursunProperty.id },
+  });
+  const machineA = await makeMachine(stationKursunId, "A", "TEST Kurşun Makinesi A");
+  const machineB = await makeMachine(stationKursunId, "B", "TEST Kurşun Makinesi B");
+  const machinePasif = await makeMachine(stationKursunId, "P", "TEST Kurşun Makinesi (pasif)", false);
+
+  // Yetenek redi için: PROCESS_QC ama KURSUN özelliği TANIMSIZ istasyon.
+  const stationNoCapId = await makeStation("N", "TEST Yeteneksiz Kurşun İstasyonu", StationKind.PROCESS_QC);
+  const machineNoCap = await makeMachine(stationNoCapId, "N", "TEST Yeteneksiz Makine");
+
+  // Yanlış tür redi için: TAMBUR istasyonuna bağlı makine (rota adımı DEĞİL).
+  const stationWrongKindId = await makeStation("T", "TEST Tambur İstasyonu", StationKind.TAMBUR);
+  const machineWrongKind = await makeMachine(stationWrongKindId, "T", "TEST Tambur Makinesi");
+
   const md: MasterData = {
     itemId: item.id,
-    seedKursunStationId: seedKursun.id,
+    kursunStationId: stationKursunId,
     tamburStationId: tamburStation.id,
     kursunPropertyId: kursunProperty.id,
     defectTypeId: defect.id,
     adminUserId: admin.id,
   };
 
-  // Test'e ait FİZİKSEL kurşun istasyonları (seed'de tek PROCESS_QC var; re-assign
-  // senaryosu ikincisini gerektiriyor). A istasyonu KURSUN yeteneğini taşır →
-  // bypass kapanışında topa RollProperty olarak geçmeli.
-  const stationA = await prisma.station.create({
-    data: {
-      code: `TEST-KB-A-${STAMP}`.slice(0, 32),
-      name: "TEST Kurşun İstasyonu A",
-      type: "INTERNAL",
-      kind: StationKind.PROCESS_QC,
-      department: "KALITE",
-    },
-    select: { id: true },
-  });
-  createdStationIds.push(stationA.id);
-  await prisma.stationProperty.create({
-    data: { stationId: stationA.id, propertyId: md.kursunPropertyId },
-  });
-  const stationB = await prisma.station.create({
-    data: {
-      code: `TEST-KB-B-${STAMP}`.slice(0, 32),
-      name: "TEST Kurşun İstasyonu B",
-      type: "INTERNAL",
-      kind: StationKind.PROCESS_QC,
-      department: "KALITE",
-    },
-    select: { id: true },
-  });
-  createdStationIds.push(stationB.id);
-
   // ===========================================================================
-  // 1) BAYRAK KAPALI → assign 400 · BAYRAK AÇIK → assign OK + REPOINT
+  // 1) BAYRAK KAPALI → assign 400 · BAYRAK AÇIK → assign OK · REPOINT YOK
   // ===========================================================================
-  section("1) Bayrak kapısı + atama + adım repoint");
+  section("1) Bayrak kapısı + makineye atama + adım istasyonu SABİT");
   await setFlag(false);
   const fx1 = await makeFixture(md);
 
   await expectError(
     "1a Bayrak KAPALI iken assign 400",
     400,
-    () => bypassSvc.assign({ workOrderId: fx1.woId, stationId: stationA.id }, md.adminUserId),
+    () => bypassSvc.assign({ workOrderId: fx1.woId, machineId: machineA }, md.adminUserId),
     /kapalı/i,
   );
   check(
@@ -332,22 +384,28 @@ async function main(): Promise<void> {
 
   await setFlag(true);
   const assign1 = await bypassSvc.assign(
-    { workOrderId: fx1.woId, stationId: stationA.id, notes: "TEST dağıtım notu" },
+    { workOrderId: fx1.woId, machineId: machineA, notes: "TEST dağıtım notu" },
     md.adminUserId,
   );
   check("1b Bayrak AÇIK iken assign başarılı", assign1.success === true);
   check("1b isLastStep=false (rota Tambur'a çıkıyor)", assign1.data.isLastStep === false);
   check("1b reassigned=false (ilk atama)", assign1.data.reassigned === false);
+  check("1b Yanıt ATANAN makineyi taşıyor", assign1.data.machineId === machineA);
+  check(
+    "1b Yanıt makinenin İSTASYONUNU taşıyor (yetenek okuması oradan)",
+    assign1.data.stationId === stationKursunId,
+  );
 
-  const step1 = await prisma.workOrderStep.findUniqueOrThrow({
-    where: { id: fx1.kursunStepId },
-    select: { stationId: true },
-  });
-  check("1c Adımın istasyonu ATANAN istasyona REPOINT edildi", step1.stationId === stationA.id);
+  // ⚠️ TERSİNE ÇEVRİLDİ (2026-07-31): eski tasarım adımın istasyonunu ATANAN
+  // istasyona repoint ediyordu. Makine bazlı atamada istasyon zaten TEK ve
+  // değişmiyor — atama bilgisi ADIMDA değil ATAMA SATIRINDA yaşar.
+  check(
+    "1c Adımın istasyonu DEĞİŞMEDİ (REPOINT YOK)",
+    (await stepStationId(fx1.kursunStepId)) === stationKursunId,
+  );
 
   const a1 = await need(await pendingAssignment(fx1.kursunStepId), "atama satırı");
-  check("1c originalStationId = atama ÖNCESİ istasyon", a1.originalStationId === md.seedKursunStationId);
-  check("1c stationId = atanan istasyon", a1.stationId === stationA.id);
+  check("1c machineId = atanan MAKİNE", a1.machineId === machineA);
   check("1c assignedById dolduruldu", a1.assignedById === md.adminUserId);
   check("1c notes kaydedildi", a1.notes === "TEST dağıtım notu");
   check("1c completedAt/cancelledAt boş (açık atama)", a1.completedAt === null && a1.cancelledAt === null);
@@ -357,16 +415,25 @@ async function main(): Promise<void> {
     orderBy: { createdAt: "desc" },
     select: { newData: true },
   });
-  check(
-    "1d Audit izi yazıldı (KURSUN_BYPASS_ASSIGN)",
-    (auditAssign?.newData as Record<string, unknown> | null)?.event === "KURSUN_BYPASS_ASSIGN",
-  );
+  const auditAssignData = auditAssign?.newData as Record<string, unknown> | null;
+  check("1d Audit izi yazıldı (KURSUN_BYPASS_ASSIGN)", auditAssignData?.event === "KURSUN_BYPASS_ASSIGN");
+  check("1d Audit gövdesinde machineId var", auditAssignData?.machineId === machineA);
 
   // EK) Dağıtım ekranı payload'ı bu işi "dağıtılmış" olarak gösteriyor mu?
   const listed = await bypassSvc.listDistribution();
   check("1e listDistribution flagEnabled=true", listed.data.flagEnabled === true);
+  const machineIds = new Set(listed.data.machines.map((m) => m.id));
+  check("1e Atanabilir makine listesi A + B'yi içeriyor", machineIds.has(machineA) && machineIds.has(machineB));
+  check(
+    "1e Pasif makine ve PROCESS_QC olmayan makine listede YOK",
+    !machineIds.has(machinePasif) && !machineIds.has(machineWrongKind),
+  );
   const assignedRow = listed.data.assigned.find((r) => r.workOrderStepId === fx1.kursunStepId);
-  check("1e Dağıtılmış satır `assigned` listesinde", !!assignedRow, assignedRow?.stationName ?? "yok");
+  check("1e Dağıtılmış satır `assigned` listesinde", !!assignedRow, assignedRow?.machineName ?? "yok");
+  check(
+    "1e Satırda ATANAN makine yazılı",
+    assignedRow?.machineId === machineA && assignedRow?.machineName === "TEST Kurşun Makinesi A",
+  );
   check(
     "1e Dağıtılmış satır `waiting` listesinde YOK",
     !listed.data.waiting.some((r) => r.workOrderStepId === fx1.kursunStepId),
@@ -378,42 +445,42 @@ async function main(): Promise<void> {
   );
 
   // ===========================================================================
-  // 2) RE-ASSIGN + İPTAL
+  // 2) RE-ASSIGN (MAKİNE A → MAKİNE B) + İPTAL
   // ===========================================================================
-  section("2) Re-assign + iptal (istasyon geri yükleme)");
+  section("2) Re-assign (makine taşıma) + iptal — adım istasyonu yine SABİT");
   const assign2 = await bypassSvc.assign(
-    { workOrderId: fx1.woId, stationId: stationB.id },
+    { workOrderId: fx1.woId, machineId: machineB },
     md.adminUserId,
   );
   check("2a Re-assign başarılı (reassigned=true)", assign2.data.reassigned === true);
   check("2a Aynı atama satırı güncellendi (yeni satır YOK)", assign2.data.assignmentId === a1.id);
-
-  const step2 = await prisma.workOrderStep.findUniqueOrThrow({
-    where: { id: fx1.kursunStepId },
-    select: { stationId: true },
-  });
-  check("2a Adım 2. istasyona REPOINT edildi", step2.stationId === stationB.id);
+  check("2a Yanıt yeni makineyi gösteriyor", assign2.data.machineId === machineB);
 
   const a2 = await need(await pendingAssignment(fx1.kursunStepId), "atama satırı (re-assign)");
-  check("2a originalStationId DEĞİŞMEDİ", a2.originalStationId === md.seedKursunStationId);
-  check("2a stationId = 2. istasyon", a2.stationId === stationB.id);
+  check("2a Atama satırı MAKİNE B'ye taşındı", a2.machineId === machineB);
+  check(
+    "2a Adımın istasyonu re-assign sonrası da DEĞİŞMEDİ",
+    (await stepStationId(fx1.kursunStepId)) === stationKursunId,
+  );
   check(
     "2a Adımda hâlâ TEK atama satırı var",
     (await prisma.kursunBypassAssignment.count({ where: { workOrderStepId: fx1.kursunStepId } })) === 1,
   );
 
   const cancelled = await bypassSvc.cancelAssignment(a2.id, { reason: "TEST iptal" }, md.adminUserId);
-  check("2b İptal başarılı + istasyon geri yüklendi", cancelled.data.stationRestored === true);
-  const step2b = await prisma.workOrderStep.findUniqueOrThrow({
-    where: { id: fx1.kursunStepId },
-    select: { stationId: true },
-  });
-  check("2b Adımın istasyonu ORİJİNALE döndü", step2b.stationId === md.seedKursunStationId);
+  check("2b İptal başarılı", cancelled.success === true && cancelled.data.assignmentId === a2.id);
+  // ⚠️ TERSİNE ÇEVRİLDİ: eskiden iptal adımın istasyonunu "geri yüklüyordu".
+  // Repoint hiç yapılmadığı için geri yüklenecek bir şey de yok.
+  check(
+    "2b Adımın istasyonu İPTAL sonrası da AYNI (geri yükleme diye bir şey yok)",
+    (await stepStationId(fx1.kursunStepId)) === stationKursunId,
+  );
 
   const a2b = await prisma.kursunBypassAssignment.findUniqueOrThrow({ where: { id: a2.id } });
   check("2b Satır SİLİNMEDİ (soft-cancel)", a2b.cancelledAt !== null);
   check("2b cancelReason yazıldı", a2b.cancelReason === "TEST iptal");
   check("2b cancelledById yazıldı", a2b.cancelledById === md.adminUserId);
+  check("2b İptal makine bağını KOPARMADI (iz kalıcı)", a2b.machineId === machineB);
   check("2b Adımda AÇIK atama kalmadı", (await pendingAssignment(fx1.kursunStepId)) === null);
 
   await expectError(
@@ -421,6 +488,49 @@ async function main(): Promise<void> {
     409,
     () => bypassSvc.cancelAssignment(a2.id, {}, md.adminUserId),
     /iptal edilmiş/i,
+  );
+
+  // ===========================================================================
+  // 2B) MAKİNE SEÇİMİ REDLERİ
+  // ===========================================================================
+  section("2B) Makine seçimi redleri (pasif · yanlış istasyon türü · yeteneksiz · yok)");
+  const fx2b = await makeFixture(md, { qtys: [110] });
+
+  await expectError(
+    "2d PASİF makine → 400",
+    400,
+    () => bypassSvc.assign({ workOrderId: fx2b.woId, machineId: machinePasif }, md.adminUserId),
+    /pasif/i,
+  );
+  await expectError(
+    "2e PROCESS_QC OLMAYAN istasyonun makinesi → 400",
+    400,
+    () => bypassSvc.assign({ workOrderId: fx2b.woId, machineId: machineWrongKind }, md.adminUserId),
+    /bağlı değil/i,
+  );
+  await expectError(
+    "2f Makinenin istasyonunda KURSUN yeteneği yok → 400",
+    400,
+    () => bypassSvc.assign({ workOrderId: fx2b.woId, machineId: machineNoCap }, md.adminUserId),
+    /kurşun uygulayamıyor/i,
+  );
+  await expectError(
+    "2g Var olmayan makine → 404",
+    404,
+    () =>
+      bypassSvc.assign(
+        { workOrderId: fx2b.woId, machineId: "00000000-0000-4000-8000-000000000000" },
+        md.adminUserId,
+      ),
+    /Makine bulunamadı/i,
+  );
+  check(
+    "2h Reddedilen makine seçimleri atama satırı bırakmadı",
+    (await prisma.kursunBypassAssignment.count({ where: { workOrderId: fx2b.woId } })) === 0,
+  );
+  check(
+    "2h Reddedilen seçimler adımın istasyonuna dokunmadı",
+    (await stepStationId(fx2b.kursunStepId)) === stationKursunId,
   );
 
   // ===========================================================================
@@ -440,7 +550,7 @@ async function main(): Promise<void> {
   await expectError(
     "3a QC2_COMPLETED kaydı olan adım → 409",
     409,
-    () => bypassSvc.assign({ workOrderId: fx3a.woId, stationId: stationA.id }, md.adminUserId),
+    () => bypassSvc.assign({ workOrderId: fx3a.woId, machineId: machineA }, md.adminUserId),
     /KK2 kaydı/i,
   );
 
@@ -458,7 +568,7 @@ async function main(): Promise<void> {
   await expectError(
     "3b RollError açılmış adım → 409",
     409,
-    () => bypassSvc.assign({ workOrderId: fx3b.woId, stationId: stationA.id }, md.adminUserId),
+    () => bypassSvc.assign({ workOrderId: fx3b.woId, machineId: machineA }, md.adminUserId),
     /hata kaydı/i,
   );
 
@@ -477,7 +587,7 @@ async function main(): Promise<void> {
   await expectError(
     "3c Bypass DIŞI kapanmış movement → 409",
     409,
-    () => bypassSvc.assign({ workOrderId: fx3c.woId, stationId: stationA.id }, md.adminUserId),
+    () => bypassSvc.assign({ workOrderId: fx3c.woId, machineId: machineA }, md.adminUserId),
     /bypass dışı/i,
   );
 
@@ -486,7 +596,7 @@ async function main(): Promise<void> {
   await expectError(
     "3d qtyIn=0 açık movement → 400",
     400,
-    () => bypassSvc.assign({ workOrderId: fx3d.woId, stationId: stationA.id }, md.adminUserId),
+    () => bypassSvc.assign({ workOrderId: fx3d.woId, machineId: machineA }, md.adminUserId),
     /ölçümsüz/i,
   );
 
@@ -502,7 +612,7 @@ async function main(): Promise<void> {
   // ===========================================================================
   section("4) Tablet yazma yolları dağıtılmış adımda reddediliyor");
   const fx4 = await makeFixture(md, { qtys: [120] });
-  await bypassSvc.assign({ workOrderId: fx4.woId, stationId: stationA.id }, md.adminUserId);
+  await bypassSvc.assign({ workOrderId: fx4.woId, machineId: machineA }, md.adminUserId);
 
   await expectError(
     "4a completeQc2 → 409",
@@ -559,9 +669,9 @@ async function main(): Promise<void> {
 
   const stepSummary = await qcSvc.getByCardBarcode(fx4.cardBarcode);
   check(
-    "4g getByCardBarcode bypassAssignment bilgisini taşıyor",
-    stepSummary.data.bypassAssignment?.stationName === "TEST Kurşun İstasyonu A",
-    stepSummary.data.bypassAssignment?.stationName ?? "null",
+    "4g getByCardBarcode ATANAN MAKİNEYİ taşıyor",
+    stepSummary.data.bypassAssignment?.machineName === "TEST Kurşun Makinesi A",
+    stepSummary.data.bypassAssignment?.machineName ?? "null",
   );
 
   // ===========================================================================
@@ -584,8 +694,14 @@ async function main(): Promise<void> {
       ctx.data.bypassPending.rolls[0].rollId === fx4.rollIds[0],
   );
   check(
-    "5c bypassPending.stationName = atanan istasyon",
-    ctx.data.bypassPending?.stationName === "TEST Kurşun İstasyonu A",
+    "5c bypassPending ATANAN MAKİNEYİ gösteriyor",
+    ctx.data.bypassPending?.machineId === machineA &&
+      ctx.data.bypassPending?.machineName === "TEST Kurşun Makinesi A",
+    ctx.data.bypassPending?.machineName ?? "null",
+  );
+  check(
+    "5c bypassPending.stationName makinenin istasyonu (bağlam)",
+    ctx.data.bypassPending?.stationId === stationKursunId,
   );
   check("5c Tambur adımında henüz açık kumaş YOK", ctx.data.openFabricRolls.length === 0);
 
@@ -595,7 +711,7 @@ async function main(): Promise<void> {
   section("8) Kapsam uyuşmazlığı → 409 + tam rollback");
   const fx6 = await makeFixture(md, { qtys: [150, 250] });
   const assign6 = await bypassSvc.assign(
-    { workOrderId: fx6.woId, stationId: stationA.id },
+    { workOrderId: fx6.woId, machineId: machineA },
     md.adminUserId,
   );
 
@@ -631,6 +747,12 @@ async function main(): Promise<void> {
     })) === 2,
   );
   check(
+    "8c Rollback sonrası makine damgası da yazılmadı",
+    (await prisma.rollMovement.count({
+      where: { workOrderStepId: fx6.kursunStepId, machineId: { not: null } },
+    })) === 0,
+  );
+  check(
     "8c Tambur adımında movement doğmadı (rollback)",
     (await prisma.rollMovement.count({ where: { workOrderStepId: fx6.tamburStepId! } })) === 0,
   );
@@ -649,7 +771,16 @@ async function main(): Promise<void> {
 
   const closed6 = await prisma.rollMovement.findMany({
     where: { workOrderStepId: fx6.kursunStepId },
-    select: { rollId: true, qtyIn: true, qtyOut: true, weightIn: true, weightOut: true, exitedAt: true, notes: true },
+    select: {
+      rollId: true,
+      qtyIn: true,
+      qtyOut: true,
+      weightIn: true,
+      weightOut: true,
+      exitedAt: true,
+      notes: true,
+      machineId: true,
+    },
   });
   check("6b Kurşun movement'larının hepsi kapandı", closed6.length === 2 && closed6.every((m) => m.exitedAt !== null));
   check(
@@ -665,12 +796,20 @@ async function main(): Promise<void> {
     "6b Tek TUR = tek marker uuid'si (satır başına farklı uuid YOK)",
     new Set(closed6.map((m) => m.notes)).size === 1,
   );
+  // ⚠️ TERSİNE ÇEVRİLDİ (2026-07-31): atama makine bazına indiği için işi HANGİ
+  // fiziksel kurşun makinesinin yaptığı BİLİNİYOR → damga konur. Eski test bu
+  // alanın NULL kalmasını bekliyordu ("iş-takipli makinede yapılmadı" gerekçesi).
+  check(
+    "6b KAPANAN kurşun movement'ları ATANAN MAKİNE ile damgalandı",
+    closed6.every((m) => m.machineId === machineA),
+    closed6.map((m) => m.machineId ?? "null").join(", "),
+  );
 
   const kursunStep6 = await prisma.workOrderStep.findUniqueOrThrow({
     where: { id: fx6.kursunStepId },
     select: { stationId: true, status: true },
   });
-  check("6c Kapanan movement'ın adımı ATANAN istasyona ait", kursunStep6.stationId === stationA.id);
+  check("6c Kapanışta da adımın istasyonu DEĞİŞMEDİ", kursunStep6.stationId === stationKursunId);
   check("6c Kurşun adımı COMPLETED (SKIPPED DEĞİL)", kursunStep6.status === StepStatus.COMPLETED);
 
   const tamburOpen6 = await prisma.rollMovement.findMany({
@@ -683,7 +822,7 @@ async function main(): Promise<void> {
     tamburOpen6.every((m) => closed6.some((c) => c.rollId === m.rollId && c.qtyIn.equals(m.qtyIn))),
   );
   check(
-    "6d Kapanan kurşun movement'ına makine damgası YAZILMADI",
+    "6d Tambur'a AÇILAN giriş movement'ları makine damgasız (NULL) — damgayı Tambur FINISH'i koyar",
     tamburOpen6.every((m) => m.machineId === null),
   );
 
@@ -702,7 +841,7 @@ async function main(): Promise<void> {
     where: { rollId: { in: fx6.rollIds }, propertyId: md.kursunPropertyId },
     select: { rollId: true },
   });
-  check("6f KURSUN istasyon yeteneği toplara GEÇTİ", props6.length === 2);
+  check("6f KURSUN yeteneği (MAKİNENİN İSTASYONUNDAN) toplara GEÇTİ", props6.length === 2);
 
   check(
     "6g Bu adımda YENİ RollOperation YOK (QC2/KURSUN op yazılmaz)",
@@ -725,10 +864,9 @@ async function main(): Promise<void> {
     orderBy: { createdAt: "desc" },
     select: { newData: true },
   });
-  check(
-    "6i Audit: KURSUN_BYPASS_TAMBUR_COMPLETE",
-    (audit6?.newData as Record<string, unknown> | null)?.event === "KURSUN_BYPASS_TAMBUR_COMPLETE",
-  );
+  const audit6Data = audit6?.newData as Record<string, unknown> | null;
+  check("6i Audit: KURSUN_BYPASS_TAMBUR_COMPLETE", audit6Data?.event === "KURSUN_BYPASS_TAMBUR_COMPLETE");
+  check("6i Audit gövdesinde damgalanan makine yazılı", audit6Data?.machineId === machineA);
 
   // ===========================================================================
   // 7) İDEMPOTENCY
@@ -804,13 +942,16 @@ async function main(): Promise<void> {
   });
   check("11a Yeni parti gelince adım ACTIVE'e döndü", step11.status === StepStatus.ACTIVE);
 
+  // 2. tur BAŞKA bir makineye dağıtılıyor (vardiya değişimi emsali) — damga
+  // tur bazında ayrışmalı: 1. turun movement'ları A, 2. turunkiler B olmalı.
   const assign11 = await bypassSvc.assign(
-    { workOrderId: fx6.woId, stationId: stationA.id },
+    { workOrderId: fx6.woId, machineId: machineB },
     md.adminUserId,
   );
   check("11b 2. tur assign BAŞARILI (bypass marker muafiyeti)", assign11.success === true);
   check("11b YENİ atama satırı doğdu", assign11.data.assignmentId !== assign6.data.assignmentId);
   check("11b reassigned=false (yeni satır, güncelleme değil)", assign11.data.reassigned === false);
+  check("11b 2. tur MAKİNE B'ye dağıtıldı", assign11.data.machineId === machineB);
   check(
     "11c Adımda toplam 2 atama satırı (1 tamamlanmış + 1 açık)",
     (await prisma.kursunBypassAssignment.count({ where: { workOrderStepId: fx6.kursunStepId } })) === 2,
@@ -837,15 +978,27 @@ async function main(): Promise<void> {
     "12b Tambur adımında toplam 3 movement (2 + 1)",
     (await prisma.rollMovement.count({ where: { workOrderStepId: fx6.tamburStepId! } })) === 3,
   );
+  const mv12 = await prisma.rollMovement.findFirstOrThrow({
+    where: { workOrderStepId: fx6.kursunStepId, rollId: roll11 },
+    select: { machineId: true },
+  });
+  check("12b 2. tur kapanışı MAKİNE B ile damgalandı (tur bazında ayrışıyor)", mv12.machineId === machineB);
+  check(
+    "12b 1. turun damgası değişmedi (hâlâ MAKİNE A)",
+    (await prisma.rollMovement.count({
+      where: { workOrderStepId: fx6.kursunStepId, machineId: machineA },
+    })) === 2,
+  );
   const step12 = await prisma.workOrderStep.findUniqueOrThrow({
     where: { id: fx6.kursunStepId },
-    select: { status: true },
+    select: { status: true, stationId: true },
   });
   check("12b Kurşun adımı yeniden COMPLETED", step12.status === StepStatus.COMPLETED);
+  check("12b İki turdan sonra da adımın istasyonu SABİT", step12.stationId === stationKursunId);
   await expectError(
     "12c Bayrak KAPALI iken YENİ dağıtım hâlâ 400",
     400,
-    () => bypassSvc.assign({ workOrderId: fx1.woId, stationId: stationA.id }, md.adminUserId),
+    () => bypassSvc.assign({ workOrderId: fx1.woId, machineId: machineA }, md.adminUserId),
     /kapalı/i,
   );
 
@@ -856,7 +1009,7 @@ async function main(): Promise<void> {
   await setFlag(true);
   const fx9 = await makeFixture(md, { lastStep: true, qtys: [80, 60] });
   const assign9 = await bypassSvc.assign(
-    { workOrderId: fx9.woId, stationId: stationA.id },
+    { workOrderId: fx9.woId, machineId: machineA },
     md.adminUserId,
   );
   check("9a isLastStep=true", assign9.data.isLastStep === true);
@@ -864,6 +1017,7 @@ async function main(): Promise<void> {
   const preview9 = await bypassSvc.getCompletePreview(assign9.data.assignmentId);
   check("9b Önizleme canComplete=true", preview9.data.canComplete === true);
   check("9b Önizleme isLastStep=true", preview9.data.isLastStep === true);
+  check("9b Önizleme ATANAN makineyi yazıyor", preview9.data.machineName === "TEST Kurşun Makinesi A");
   check("9b Önizleme 2 top / 140 m", preview9.data.rollCount === 2 && preview9.data.totalMeters === 140);
   check("9b Üretilecek barkod adedi = 2", preview9.data.willFinalize.barcodesToGenerate === 2);
   check("9b workOrderWillComplete=true", preview9.data.workOrderWillComplete === true);
@@ -887,6 +1041,22 @@ async function main(): Promise<void> {
   check("9d İşi Bitir başarılı", done9.data.alreadyDone === false && done9.data.finalizedRollCount === 2);
   check("9d 2 barkod üretildi", done9.data.barcodesGenerated === 2);
 
+  const closed9 = await prisma.rollMovement.findMany({
+    where: { workOrderStepId: fx9.kursunStepId },
+    select: { machineId: true, exitedAt: true, notes: true },
+  });
+  check(
+    "9d Son-adım kapanışı da ATANAN MAKİNE ile damgalandı",
+    closed9.length === 2 &&
+      closed9.every(
+        (m) =>
+          m.exitedAt !== null &&
+          m.machineId === machineA &&
+          m.notes?.startsWith(`${KURSUN_BYPASS_MARKER_PREFIX}:`),
+      ),
+    closed9.map((m) => m.machineId ?? "null").join(", "),
+  );
+
   const rolls9 = await prisma.roll.findMany({
     where: { id: { in: fx9.rollIds } },
     select: { status: true, barcode: true, qualityGrade: true, qualityGradeId: true, currentStepId: true, form: true },
@@ -896,13 +1066,20 @@ async function main(): Promise<void> {
   check("9e Kalite NULL kaldı", rolls9.every((r) => r.qualityGradeId === null && r.qualityGrade === null));
   check("9e currentStepId temizlendi", rolls9.every((r) => r.currentStepId === null));
   check("9e form = ACIK", rolls9.every((r) => r.form === RollForm.ACIK));
+  check(
+    "9e KURSUN yeteneği son-adım yolunda da geçti",
+    (await prisma.rollProperty.count({
+      where: { rollId: { in: fx9.rollIds }, propertyId: md.kursunPropertyId },
+    })) === 2,
+  );
 
   const wo9 = await prisma.workOrder.findUniqueOrThrow({
     where: { id: fx9.woId },
-    select: { status: true, steps: { select: { status: true } } },
+    select: { status: true, steps: { select: { status: true, stationId: true } } },
   });
   check("9f İş emri COMPLETED", wo9.status === WorkOrderStatus.COMPLETED);
   check("9f Kurşun adımı COMPLETED", wo9.steps.every((s) => s.status === StepStatus.COMPLETED));
+  check("9f Adımın istasyonu son-adım yolunda da SABİT", wo9.steps.every((s) => s.stationId === stationKursunId));
   const card9 = await prisma.travelerCard.findFirstOrThrow({
     where: { workOrderId: fx9.woId },
     select: { status: true },
@@ -935,8 +1112,8 @@ async function main(): Promise<void> {
   const fx10 = await makeFixture(md, { qtys: [70] });
 
   const parallel = await Promise.allSettled([
-    bypassSvc.assign({ workOrderId: fx10.woId, stationId: stationA.id }, md.adminUserId),
-    bypassSvc.assign({ workOrderId: fx10.woId, stationId: stationB.id }, md.adminUserId),
+    bypassSvc.assign({ workOrderId: fx10.woId, machineId: machineA }, md.adminUserId),
+    bypassSvc.assign({ workOrderId: fx10.woId, machineId: machineB }, md.adminUserId),
   ]);
   const fulfilled = parallel.filter((r) => r.status === "fulfilled");
   const created = fulfilled.filter(
@@ -958,12 +1135,11 @@ async function main(): Promise<void> {
   );
   check("10a Yalnız BİR satır YARATILDI (diğeri taşıma ya da 409)", created.length === 1);
   const a10 = await need(await pendingAssignment(fx10.kursunStepId), "10a atama");
-  const step10 = await prisma.workOrderStep.findUniqueOrThrow({
-    where: { id: fx10.kursunStepId },
-    select: { stationId: true },
-  });
-  check("10a Adımın istasyonu kazanan atamayla TUTARLI", step10.stationId === a10.stationId);
-  check("10a originalStationId hâlâ seed istasyonu", a10.originalStationId === md.seedKursunStationId);
+  check("10a Kazanan atama A ya da B makinesinde", [machineA, machineB].includes(a10.machineId));
+  check(
+    "10a Eşzamanlı yarışta da adımın istasyonu DEĞİŞMEDİ",
+    (await stepStationId(fx10.kursunStepId)) === stationKursunId,
+  );
 
   // 10b — DB SEDDİ: partial unique iki eşzamanlı AÇIK atamayı geçirmez.
   await bypassSvc.cancelAssignment(a10.id, { reason: "TEST 10b hazırlık" }, md.adminUserId);
@@ -972,8 +1148,7 @@ async function main(): Promise<void> {
       data: {
         workOrderId: fx10.woId,
         workOrderStepId: fx10.kursunStepId,
-        stationId: stationA.id,
-        originalStationId: md.seedKursunStationId,
+        machineId: machineA,
         assignedById: md.adminUserId,
       },
       select: { id: true },
@@ -992,7 +1167,8 @@ async function main(): Promise<void> {
 }
 
 // -----------------------------------------------------------------------------
-// Teardown — test kendi yarattığını söker (FK sırası: atama → iz → top → WO)
+// Teardown — test kendi yarattığını söker
+// (FK sırası: atama → iz → top → WO → MAKİNE → istasyon)
 // -----------------------------------------------------------------------------
 async function teardown(originalFlag: Prisma.JsonValue | null): Promise<void> {
   try {
@@ -1021,6 +1197,8 @@ async function teardown(originalFlag: Prisma.JsonValue | null): Promise<void> {
     await prisma.systemLog.deleteMany({
       where: { recordId: { in: [...createdWoIds, ...allRollIds, ...assignmentIds] } },
     });
+    // Makineler İSTASYONLARDAN ÖNCE silinir (Machine.stationId FK RESTRICT).
+    await prisma.machine.deleteMany({ where: { id: { in: createdMachineIds } } });
     await prisma.stationProperty.deleteMany({ where: { stationId: { in: createdStationIds } } });
     await prisma.station.deleteMany({ where: { id: { in: createdStationIds } } });
 
@@ -1035,7 +1213,9 @@ async function teardown(originalFlag: Prisma.JsonValue | null): Promise<void> {
         data: { value: originalFlag as Prisma.InputJsonValue },
       });
     }
-    console.log("\n(temizlendi — TEST- iş emirleri / toplar / istasyonlar silindi, bayrak geri alındı)");
+    console.log(
+      "\n(temizlendi — TEST- iş emirleri / toplar / makineler / istasyonlar silindi, bayrak geri alındı)",
+    );
   } catch (e) {
     console.error("TEMİZLİK HATASI:", e instanceof Error ? e.message : e);
   }

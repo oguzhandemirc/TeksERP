@@ -12,15 +12,16 @@ import type {
 const BASE = "/api/kursun-bypass";
 
 export const kursunDagitimService = {
-  /** Ekranın TEK payload'ı: bayrak + istasyonlar + bekleyen + dağıtılmış. */
+  /** Ekranın TEK payload'ı: bayrak + makineler + bekleyen + dağıtılmış. */
   getDistribution: (): Promise<ApiResponse<KursunDistributionPayload>> =>
     apiClient
       .get<ApiResponse<KursunDistributionPayload>>(`${BASE}/distribution`)
       .then((r) => r.data),
 
+  /** Hedef fiziksel kurşun MAKİNESİDİR (istasyon değil) — backend `machineId` bekler. */
   assign: (input: {
     workOrderId: string;
-    stationId: string;
+    machineId: string;
     notes?: string;
   }): Promise<ApiResponse<KursunBypassAssignResult>> =>
     apiClient

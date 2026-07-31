@@ -331,13 +331,15 @@ router.get(
  *     tags: [Tambur]
  *     summary: Kurşun Dağıtım'ı Tambur okutmasıyla tamamla (kurşun bypass)
  *     description: |
- *       Kurşun istasyonlarında tablet YOKTUR. İş, Kurşun Dağıtım ekranından
- *       fiziksel bir kurşun istasyonuna atanır; Tambur operatörü refakat kartını
- *       okutup (`GET /api/tambur/context/{cardBarcode}` → `bypassPending`)
+ *       Kurşun istasyonunda tablet YOKTUR. İş, Kurşun Dağıtım ekranından fiziksel
+ *       bir kurşun MAKİNESİNE atanır (istasyon tektir ve değişmez); Tambur
+ *       operatörü refakat kartını okutup
+ *       (`GET /api/tambur/context/{cardBarcode}` → `bypassPending`)
  *       önizlemeyi onayladığında bu uç çağrılır:
  *       - Kurşun/KK2 adımının açık movement'ları `KURSUN_BYPASS_FINISHED:<uuid>`
- *         marker'ıyla kapanır (adım COMPLETED olur — **SKIPPED DEĞİL**),
- *       - istasyon yetenekleri (KURSUN) toplara kopyalanır,
+ *         marker'ıyla kapanır (adım COMPLETED olur — **SKIPPED DEĞİL**) ve
+ *         `RollMovement.machineId` = ATANAN MAKİNE damgalanır,
+ *       - istasyon yetenekleri (KURSUN) makinenin istasyonundan toplara kopyalanır,
  *       - toplar Tambur adımına giriş movement'ı ile geçer.
  *
  *       `RollOperation` (QC2_COMPLETED/KURSUN_APPLIED) YAZILMAZ ve `RollError`

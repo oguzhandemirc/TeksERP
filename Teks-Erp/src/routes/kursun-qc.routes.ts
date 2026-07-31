@@ -296,7 +296,14 @@ router.get(
  *     description: |
  *       Planlama drag-drop sayfası ve tablet operatörü tarafından okunur.
  *       Sıra: önce acil (isUrgent desc, urgentMarkedAt asc), sonra priority asc, sonra startedAt asc.
- *       Her satırda `bypassAssigned` bayrağı gelir (kurşun dağıtımına verilmiş adım).
+ *
+ *       Her satırda `bypassAssigned` (bool) + `bypassMachineName` (atanan fiziksel
+ *       kurşun makinesinin adı, dağıtılmamışsa null) gelir. Bu alanlar
+ *       BİLGİLENDİRMEDİR: liste makine bazında GRUPLANMAZ — Kurşun Sırası ekranı
+ *       `production.kursunBypassEnabled` açıkken zaten gizlenir (sırayı okuyan
+ *       tablet kalmaz); alanların amacı karışık rejimde hangi işin dağıtıldığını
+ *       ayırt etmektir. Makine bazlı izleme/gruplama Kurşun Dağıtım ucundadır
+ *       (`GET /api/kursun-bypass/distribution`).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Kuyruk listesi }

@@ -84,7 +84,7 @@ export function KursunDagitimCompleteDialog({
           </DialogTitle>
           <DialogDescription>
             <span className="font-mono">{row?.workOrderNumber ?? "İş emri"}</span> ·{" "}
-            {preview?.stationName ?? row?.stationName ?? "—"} istasyonu
+            {preview?.machineName ?? row?.machineName ?? "—"} makinesi
           </DialogDescription>
         </DialogHeader>
 
@@ -119,8 +119,8 @@ export function KursunDagitimCompleteDialog({
 
               <div className="bg-muted/20 rounded-md border p-3 text-xs">
                 <span className="font-medium">{preview.rollCount} top</span> ·{" "}
-                {formatNumber(preview.totalMeters, 0)} m — atanan istasyon:{" "}
-                <span className="font-medium">{preview.stationName}</span>
+                {formatNumber(preview.totalMeters, 0)} m — atanan makine:{" "}
+                <span className="font-medium">{preview.machineName}</span>
               </div>
 
               <div>

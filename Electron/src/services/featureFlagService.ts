@@ -165,12 +165,14 @@ export interface FeatureFlags {
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma)
    *  onay sonrası kabul edilir; kaynak top tamamen tüketilir. Backend ENFORCE eder. */
   tamburOverQuantityEnabled: boolean;
-  /** Kurşun bypass düzeni açık mı (false=default). Kurşun istasyonunda tablet YOK:
+  /** Kurşun bypass düzeni açık mı (false=default). Kurşun makinelerinde tablet YOK:
    *  iş fiziksel olarak yapılır ama dijital izlenmez; yetkili "Kurşun Dağıtım"
-   *  ekranından işi fiziksel istasyona atar, Tambur kartı okutunca kurşun adımı
-   *  tamamlanmış sayılır. Backend YALNIZ YENİ ATAMA oluşturmayı kapılar —
-   *  dağıtılmış iş emirleri bayrak kapansa da bypass ile bitirilir (rejim atama
-   *  satırında kalıcıdır). */
+   *  ekranından işi fiziksel bir kurşun MAKİNESİNE atar (istasyon değil — PROCESS_QC
+   *  türünde tek istasyon vardır, altındaki makinelerden biri seçilir), Tambur kartı
+   *  okutunca kurşun adımı SESSİZCE tamamlanır (operatör onayı yok).
+   *  Açıkken "Kurşun Sırası" ekranı gizlenir (karo + route). Backend YALNIZ YENİ ATAMA
+   *  oluşturmayı kapılar — dağıtılmış iş emirleri bayrak kapansa da bypass ile
+   *  bitirilir (rejim atama satırında kalıcıdır). */
   kursunBypassEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat; 1..43200 = 30 gün). Giriş
    *  sonrası token kaç dakika geçerli kalır; süre dolunca (aktif kullanırken bile)

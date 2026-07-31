@@ -4,6 +4,8 @@
 export interface KursunQueueItem {
   /// WorkOrderStep.id — reorder/urgent endpoint'leri bu id'yi alır.
   workOrderStepId: string;
+  /// Adımın İSTASYONU. Fabrikada PROCESS_QC türünde TEK istasyon var → bu alan
+  /// pratikte her satırda AYNIDIR; gruplama anahtarı DEĞİL, yalnız bağlamdır.
   stationName: string;
   workOrderId: string;
   batchNumber: string;
@@ -19,10 +21,15 @@ export interface KursunQueueItem {
   isUrgent: boolean;
   urgentMarkedAt: string | null;
   /**
-   * Bu adım kurşun dağıtımına (bypass) verilmiş mi — satırda "bypass" rozeti.
-   * Dağıtılan iş kuyrukta KALIR (izleme yüzeyi): kaybolsaydı "iş kayboldu"
-   * paniği doğardı. Ayrı bir "atanan istasyon" alanı YOK — atama adımın
-   * istasyonunu zaten atanan istasyona çevirir, `stationName` odur.
+   * Bu adım kurşun dağıtımına (bypass) verilmiş mi — satırda "Bypass" rozeti.
+   *
+   * ⚠️ GRUPLAMA ANAHTARI DEĞİL, KARIŞIK REJİM BİLGİSİDİR. Bu ekran bypass
+   * bayrağı AÇIKKEN tamamen gizlenir; alan yalnız bayrağın yeni açıldığı ara
+   * dönemde (hâlâ tablet rejiminde bekleyen işler varken) planlamacı hangisinin
+   * dağıtıldığını ayırt edebilsin diye taşınır. İzleme/gruplama yüzeyi Kurşun
+   * Dağıtım ekranıdır.
    */
-  bypassAssigned?: boolean;
+  bypassAssigned: boolean;
+  /** Dağıtımın atandığı fiziksel kurşun makinesinin adı; null = dağıtılmamış. */
+  bypassMachineName: string | null;
 }

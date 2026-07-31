@@ -153,7 +153,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     permission: 'mobile:kursun-dagitim',
     label: 'Kurşun Dağıtım',
     icon: 'clipboard-flow-outline',
-    description: 'Fason dönüşü iş emirlerini kurşun istasyonlarına dağıt',
+    description: 'Fason dönüşü iş emirlerini fiziksel kurşun makinelerine dağıt',
   },
 ];
 

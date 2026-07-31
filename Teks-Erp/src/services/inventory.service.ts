@@ -2945,11 +2945,13 @@ export class InventoryService {
       if (fs.status === StepStatus.COMPLETED || fs.status === StepStatus.SKIPPED) {
         throw AppError.conflict(`Adım bu sırada kapandı (${fs.status}) — açık kumaş açılamaz`);
       }
-      // Kurşun bypass: adım fiziksel kurşun istasyonuna dağıtılmışsa iş kâğıtta
+      // Kurşun bypass: adım fiziksel kurşun MAKİNESİNE dağıtılmışsa iş kâğıtta
       // yürüyor ve kapsamı DAĞITIM ANINDA dondu. Buraya yeni bir açık kumaş topu
       // eklemek iki şeyi bozar: (a) `assign` "ölçümsüz açık kumaş yok" kontrolünü
       // geçmiş bir kümeye qtyIn=0'lı top sokar → metraj bir daha sorulmaz,
-      // (b) Tambur bypass onayı önizlemede görülmemiş bir topu da kapatır.
+      // (b) Tambur okutması kurşun adımını SESSİZCE kapattığı için (operatör onayı
+      // YOK — 2026-07-31) dağıtım sonrası eklenen top, hiçbir yüzeyde görülmeden
+      // kapanır ve `RollMovement.machineId` ile o makineye mal edilir.
       // Doğru yol: dağıtımı iptal et, topu aç, yeniden dağıt. Guard WO kilidinin
       // (touchWorkOrderTx) ALTINDA — `assign` de aynı kilidi alır, yarış serileşir.
       await assertStepNotBypassAssigned(tx, data.stepId, "açık kumaş açma");

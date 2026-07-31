@@ -4468,16 +4468,14 @@ export class WorkOrderService {
           // kayıt var — silme guard'ının güncelleme simetriği). Not/kategori/
           // planlanan firma serbest kalır.
           //
-          // KURŞUN BYPASS ETKİLEŞİMİ (bilinçli — bu guard'ı GEVŞETME): dağıtım
-          // adımın `stationId`'sini fiziksel kurşun istasyonuna repoint eder
-          // (orijinali `KursunBypassAssignment.originalStationId`'de saklı). Bayat
-          // bir düzenleme formu (dağıtımdan ÖNCE açılmış, eski istasyonu taşıyan)
-          // kaydedilirse repoint sessizce geri alınır ve atama, üzerinde durduğu
-          // adımı kaybederdi. Dağıtım "adımda AÇIK movement olması" şartına bağlı
-          // olduğu için dağıtılmış adım daima ACTIVE'dir (PENDING değil) → bu guard
-          // tam da o bayat formu 409 ile reddeder, sessiz geri alma olmaz.
-          // Doğru yol: dağıtımı iptal et (adıma orijinal istasyon geri yüklenir),
-          // sonra rotayı düzenle.
+          // KURŞUN BYPASS ETKİLEŞİMİ (2026-07-31 — atama MAKİNE bazına geçti):
+          // dağıtım artık adımın `stationId`'sini DEĞİŞTİRMEZ. Tek bir PROCESS_QC
+          // istasyonu (KURŞUN+KK2) vardır ve atama o istasyonun altındaki fiziksel
+          // MAKİNEYE yapılır (`KursunBypassAssignment.machineId`) — istasyon repoint'i
+          // ve geri-yükleme zinciri tamamen kalktı. Yani bu guard'ın kurşun bypass'a
+          // özel bir görevi KALMADI; kendi gerekçesiyle (başlamış adımın üzerinde açık
+          // movement/geçmiş kayıt var) ayakta duruyor. Rota düzenlemesi bir atamayı
+          // sessizce bozamaz, çünkü atama adımın istasyonunda değil kendi satırında yaşar.
           const old = existingStepById.get(incoming.id)!;
           if (old.status !== "PENDING" && old.stationId !== incoming.stationId) {
             throw AppError.conflict(

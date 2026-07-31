@@ -9,9 +9,9 @@ import { colors, spacing, radius } from '../../../theme';
 
 // =============================================================================
 // BEKLEYEN — kurşun adımında açık topu olan, henüz bir fiziksel kurşun
-// istasyonuna dağıtılmamış iş emirleri.
+// MAKİNESİNE dağıtılmamış iş emirleri.
 //
-// Etkileşim TEK dokunuş: karta bas → istasyon seçici → DOĞRUDAN atama. Araya
+// Etkileşim TEK dokunuş: karta bas → makine seçici → DOĞRUDAN atama. Araya
 // "detay ekranı" koymuyoruz; dağıtım bir planlama refleksidir, form değil.
 // `eligible=false` satırlar dokunulamaz ama LİSTEDEN DÜŞMEZ — planlamacı neden
 // dağıtamadığını (blockReason) görmeli, satır sessizce kaybolmamalı.
@@ -21,13 +21,13 @@ interface Props {
   rows: KursunDistributionWaitingRow[];
   /** `production.kursunBypassEnabled` — false ise YENİ atama yapılamaz. */
   flagEnabled: boolean;
-  /** PROCESS_QC istasyonu hiç tanımlı değil → dağıtım hedefi yok. */
-  stationsEmpty: boolean;
+  /** Kurşun (PROCESS_QC) istasyonuna bağlı hiç makine yok → dağıtım hedefi yok. */
+  machinesEmpty: boolean;
   loading: boolean;
   refreshing: boolean;
   onRefresh: () => void;
-  /** Karta dokunma — parent istasyon seçiciyi açar. */
-  onPickStation: (row: KursunDistributionWaitingRow) => void;
+  /** Karta dokunma — parent makine seçiciyi açar. */
+  onPickMachine: (row: KursunDistributionWaitingRow) => void;
   onToggleUrgent: (row: KursunDistributionWaitingRow) => void;
   /** Acil mutasyonu süren adım (spinner yalnız o kartta). */
   urgentBusyStepId: string | null;
@@ -36,16 +36,16 @@ interface Props {
 export default function EligibleList({
   rows,
   flagEnabled,
-  stationsEmpty,
+  machinesEmpty,
   loading,
   refreshing,
   onRefresh,
-  onPickStation,
+  onPickMachine,
   onToggleUrgent,
   urgentBusyStepId,
 }: Props) {
   // Dağıtımı topyekûn engelleyen iki durum — kart bazlı `eligible`'dan bağımsız.
-  const globallyBlocked = stationsEmpty || !flagEnabled;
+  const globallyBlocked = machinesEmpty || !flagEnabled;
 
   const renderItem = useCallback(
     ({ item }: { item: KursunDistributionWaitingRow }) => {
@@ -59,10 +59,10 @@ export default function EligibleList({
           ]}
         >
           <TouchableRipple
-            onPress={disabled ? undefined : () => onPickStation(item)}
+            onPress={disabled ? undefined : () => onPickMachine(item)}
             disabled={disabled}
             rippleColor="rgba(79,70,229,0.10)"
-            accessibilityLabel={`${item.workOrderNumber} — kurşun istasyonuna dağıt`}
+            accessibilityLabel={`${item.workOrderNumber} — kurşun makinesine dağıt`}
           >
             <View style={cardStyles.cardBody}>
               <WorkOrderSummary
@@ -83,7 +83,7 @@ export default function EligibleList({
                   <Text style={[styles.hintText, disabled && styles.hintTextMuted]}>
                     {globallyBlocked
                       ? 'Şu an dağıtılamaz'
-                      : 'Dokun → kurşun istasyonu seç'}
+                      : 'Dokun → kurşun makinesi seç'}
                   </Text>
                 </View>
               )}
@@ -92,7 +92,7 @@ export default function EligibleList({
         </View>
       );
     },
-    [globallyBlocked, onPickStation, onToggleUrgent, urgentBusyStepId]
+    [globallyBlocked, onPickMachine, onToggleUrgent, urgentBusyStepId]
   );
 
   return (
@@ -105,11 +105,11 @@ export default function EligibleList({
       onRefresh={onRefresh}
       ListHeaderComponent={
         <>
-          {stationsEmpty && (
+          {machinesEmpty && (
             <Banner
               tone="danger"
               icon="factory"
-              text="Kurşun (PROCESS_QC) istasyonu tanımlı değil — yönetim panelinden ekleyin."
+              text="Kurşun istasyonuna bağlı MAKİNE tanımlı değil — yönetim panelinden ekleyin."
             />
           )}
           {!flagEnabled && (

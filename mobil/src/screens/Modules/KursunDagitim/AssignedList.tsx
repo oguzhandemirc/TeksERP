@@ -15,23 +15,24 @@ import {
 import { colors, spacing, radius } from '../../../theme';
 
 // =============================================================================
-// DAĞITILMIŞ — fiziksel kurşun istasyonlarına atanmış iş emirleri, İSTASYON
+// DAĞITILMIŞ — fiziksel kurşun MAKİNELERİNE atanmış iş emirleri, MAKİNE
 // BAŞLIKLI bölümler hâlinde.
 //
-// Neden istasyona göre gruplu: sahadaki soru "hangi iş nerede?" değil, "şu
-// makinede ne var?" — planlamacı bir istasyonun yükünü tek bakışta görmeli.
-// Başlıkta iş adedi + toplam metraj rollup'ı bu yüzden var.
+// Neden makineye göre gruplu: PROCESS_QC istasyonu TEKTİR — istasyona göre
+// gruplamak tek başlık altında düz bir liste demek olurdu. Sahadaki soru "şu
+// MAKİNEDE ne var, ne kadar sıra bekliyor?" — planlamacı bir makinenin yükünü
+// tek bakışta görmeli. Başlıkta iş adedi + toplam metraj rollup'ı bu yüzden var.
 //
 // "İşi Bitir" YALNIZ `isLastStep` satırında çıkar: kurşun son adım değilse
-// kapanış Tambur tabletinde refakat kartı okutularak yapılır (backend 400 döner),
-// dolayısıyla burada buton göstermek yanlış vaat olurdu.
+// kapanış Tambur tabletinde refakat kartı okutulunca SESSİZCE olur (operatör
+// onay vermez), dolayısıyla burada buton göstermek yanlış vaat olurdu.
 // =============================================================================
 
 type Entry =
   | {
       kind: 'header';
       key: string;
-      stationName: string;
+      machineName: string;
       woCount: number;
       totalMeters: number;
     }
@@ -64,24 +65,24 @@ export default function AssignedList({
   onComplete,
   busyAssignmentId,
 }: Props) {
-  // İstasyona göre grupla — grup sırası istasyon adına göre, grup içi sıra
+  // MAKİNEYE göre grupla — grup sırası makine adına göre, grup içi sıra
   // backend'den geldiği gibi (atama zamanı artan) korunur.
   const entries = useMemo<Entry[]>(() => {
     const groups = new Map<string, { name: string; items: KursunDistributionAssignedRow[] }>();
     for (const r of rows) {
-      const g = groups.get(r.stationId);
+      const g = groups.get(r.machineId);
       if (g) g.items.push(r);
-      else groups.set(r.stationId, { name: r.stationName, items: [r] });
+      else groups.set(r.machineId, { name: r.machineName, items: [r] });
     }
     const sorted = [...groups.entries()].sort((a, b) =>
       a[1].name.localeCompare(b[1].name, 'tr')
     );
     const out: Entry[] = [];
-    for (const [stationId, g] of sorted) {
+    for (const [machineId, g] of sorted) {
       out.push({
         kind: 'header',
-        key: `h:${stationId}`,
-        stationName: g.name,
+        key: `h:${machineId}`,
+        machineName: g.name,
         woCount: g.items.length,
         totalMeters: g.items.reduce((s, r) => s + r.totalMeters, 0),
       });
@@ -97,7 +98,7 @@ export default function AssignedList({
           <View style={styles.sectionHeader}>
             <Icon source="factory" size={18} color={colors.textOnDarkMuted} />
             <Text style={styles.sectionTitle} numberOfLines={1}>
-              {item.stationName}
+              {item.machineName}
             </Text>
             <Text style={styles.sectionRollup}>
               {item.woCount} iş · {fmtMeters(item.totalMeters)} m
@@ -120,7 +121,7 @@ export default function AssignedList({
             <View style={styles.assignInfo}>
               <Icon source="account-arrow-right" size={15} color={colors.textMuted} />
               <Text style={styles.assignInfoText} numberOfLines={2}>
-                {fmtAssignedAt(row.assignedAt)} · {row.stationName}
+                {fmtAssignedAt(row.assignedAt)} · {row.machineName}
                 {row.assignedByName ? ` · ${row.assignedByName}` : ''}
               </Text>
             </View>
@@ -176,7 +177,7 @@ export default function AssignedList({
         loading ? (
           <ActivityIndicator style={styles.loading} color={colors.brand} />
         ) : (
-          <ListPlaceholder text="Kurşun istasyonlarına dağıtılmış iş yok." />
+          <ListPlaceholder text="Kurşun makinelerine dağıtılmış iş yok." />
         )
       }
     />

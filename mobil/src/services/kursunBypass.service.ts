@@ -5,11 +5,19 @@ import type { ApiResponse } from '../types/api';
 // Kurşun Dağıtım (Kurşun Bypass) — mobil servis katmanı.
 // Backend: Teks-Erp/src/services/kursun-bypass.service.ts (+ routes/kursun-bypass.routes.ts)
 //
-// Fabrika kurşun istasyonlarına TABLET KOYMUYOR: kurşun işlemi fiziksel olarak
+// Fabrika kurşun makinelerine TABLET KOYMUYOR: kurşun işlemi fiziksel olarak
 // yapılır ama dijital izlenmez (hatalar kâğıtta). Yetkili personel bekleyen iş
-// emrini fiziksel bir kurşun istasyonuna ATAR; adım sonradan iki yoldan kapanır:
-//   • Tambur tabletinde refakat kartı okutulur (Tambur ekranının işi), ya da
+// emrini fiziksel bir kurşun MAKİNESİNE ATAR; adım sonradan iki yoldan kapanır:
+//   • Tambur tabletinde refakat kartı okutulur → kurşun adımı SESSİZCE kapanır
+//     (Tambur operatörü hiçbir şey onaylamaz), ya da
 //   • Kurşun rotanın SON adımıysa bu ekrandaki "İşi Bitir" (complete).
+//
+// ⚠️ ATAMA MAKİNE BAZINDADIR — İSTASYON BAZINDA DEĞİL. Fabrikada PROCESS_QC
+// türünde TEK istasyon vardır (KURSUN_KK2) ve altında N adet fiziksel kurşun
+// MAKİNESİ durur; dağıtımcının seçtiği şey o makinelerden biridir. Adımın
+// `stationId`'si DEĞİŞTİRİLMEZ (istasyon zaten tek); atama bilgisi atama
+// satırında yaşar ve üretim atfı kapanan movement'ın `RollMovement.machineId`
+// damgasıyla tutulur → makine bazlı hacim raporları çalışır.
 //
 // ⚠️ Bu SKIPPED DEĞİLDİR — adım atlanmaz, movement'lar normal kapanır ve adım
 // COMPLETED olur. Fark: QC2/Kurşun RollOperation'ı yazılmaz, hata kaydı açılmaz.
@@ -21,11 +29,18 @@ import type { ApiResponse } from '../types/api';
 // Yetki: `workorder:distribute` (web) VEYA `mobile:kursun-dagitim` (mobil ikizi).
 // =============================================================================
 
-/** Dağıtım hedefi olabilecek fiziksel kurşun istasyonu (StationKind.PROCESS_QC). */
-export interface KursunBypassStationOption {
+/**
+ * Dağıtım hedefi olabilecek fiziksel kurşun MAKİNESİ — PROCESS_QC istasyonuna
+ * bağlı, aktif. Makinenin kendi "kind"i yoktur; tür ve yetenekler bağlı olduğu
+ * istasyondan (`stationId`) okunur.
+ */
+export interface KursunBypassMachineOption {
   id: string;
   code: string;
   name: string;
+  /** Makinenin bağlı olduğu istasyon — yetenek okuması bu id üzerinden yapılır. */
+  stationId: string;
+  stationName: string;
 }
 
 /** Bekleyen + dağıtılmış satırların ORTAK gövdesi. */
@@ -60,6 +75,11 @@ export interface KursunDistributionWaitingRow extends KursunDistributionRowBase 
 
 export interface KursunDistributionAssignedRow extends KursunDistributionRowBase {
   assignmentId: string;
+  /** ATANAN fiziksel kurşun makinesi — izleme/gruplama bu alan üzerinden yapılır. */
+  machineId: string;
+  machineCode: string;
+  machineName: string;
+  /** Makinenin istasyonu (pratikte hep tek PROCESS_QC istasyonu) — bağlam bilgisi. */
   stationId: string;
   stationName: string;
   assignedAt: string;
@@ -73,14 +93,15 @@ export interface KursunDistributionAssignedRow extends KursunDistributionRowBase
 export interface KursunDistributionPayload {
   /** `production.kursunBypassEnabled` — false ise YALNIZ yeni atama kapalıdır. */
   flagEnabled: boolean;
-  stations: KursunBypassStationOption[];
+  /** Atama hedefleri: PROCESS_QC istasyonuna bağlı AKTİF kurşun makineleri. */
+  machines: KursunBypassMachineOption[];
   waiting: KursunDistributionWaitingRow[];
   assigned: KursunDistributionAssignedRow[];
 }
 
 export interface KursunBypassAssignRequest {
   workOrderId: string;
-  stationId: string;
+  machineId: string;
   notes?: string | null;
 }
 
@@ -89,17 +110,23 @@ export interface KursunBypassAssignResult {
   workOrderId: string;
   workOrderNumber: string;
   workOrderStepId: string;
+  machineId: string;
+  machineName: string;
+  /** Makinenin istasyonu — bağlam bilgisi (adımın istasyonu değişmedi). */
   stationId: string;
   stationName: string;
   isLastStep: boolean;
-  /** true: zaten dağıtılmıştı, istasyon DEĞİŞTİRİLDİ (yeni atama değil). */
+  /** true: zaten dağıtılmıştı, MAKİNE değiştirildi (yeni atama değil). */
   reassigned: boolean;
 }
 
+/**
+ * İptal yanıtı. "İstasyon geri yüklendi mi" alanı YOK: atama makine bazındadır
+ * ve adımın istasyonu atama sırasında hiç değiştirilmedi — geri yüklenecek bir
+ * şey de yok. Yalnız atama satırı soft-cancel edilir.
+ */
 export interface KursunBypassCancelResult {
   assignmentId: string;
-  /** Adımın istasyonu atama öncesi istasyona geri yüklenebildi mi. */
-  stationRestored: boolean;
   workOrderId: string;
 }
 
@@ -113,6 +140,9 @@ export interface KursunBypassCompletePreview {
   assignmentId: string;
   workOrderId: string;
   workOrderNumber: string;
+  /** İşin ATANDIĞI kurşun makinesi ("hangi makinede yapıldı"). */
+  machineName: string;
+  /** Makinenin istasyonu — bağlam bilgisi (tek PROCESS_QC istasyonu). */
   stationName: string;
   isLastStep: boolean;
   canComplete: boolean;
@@ -147,13 +177,13 @@ export interface KursunQueueUrgentResult {
 }
 
 export const kursunBypassService = {
-  /** Ekranın TEK payload'ı: bayrak + istasyonlar + bekleyenler + dağıtılmışlar. */
+  /** Ekranın TEK payload'ı: bayrak + makineler + bekleyenler + dağıtılmışlar. */
   getDistribution: (): Promise<ApiResponse<KursunDistributionPayload>> =>
     apiClient
       .get<ApiResponse<KursunDistributionPayload>>('/kursun-bypass/distribution')
       .then((r) => r.data),
 
-  /** İş emrinin kurşun adımını fiziksel istasyona dağıt (dağıtılmışsa TAŞI). */
+  /** İş emrinin kurşun adımını fiziksel MAKİNEYE dağıt (dağıtılmışsa TAŞI). */
   assign: (
     data: KursunBypassAssignRequest
   ): Promise<ApiResponse<KursunBypassAssignResult>> =>

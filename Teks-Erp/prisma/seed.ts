@@ -58,7 +58,7 @@ async function main() {
     { code: "roll:read", module: "PRODUCTION", category: "web", description: "Top (rulo) listesi/detay görüntüleme" },
     { code: "roll:write", module: "PRODUCTION", category: "web", description: "Top oluşturma/durum güncelleme" },
     { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
-    { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü iş emrini fiziksel kurşun istasyonuna atama + son-adım tamamlama" },
+    { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü iş emrini fiziksel kurşun makinesine atama + son-adım tamamlama" },
     { code: "station:read", module: "PRODUCTION", category: "web", description: "Üretim istasyonu listesi/detay görüntüleme" },
     { code: "station:write", module: "PRODUCTION", category: "web", description: "Üretim istasyonu tanımlama/düzenleme" },
     { code: "item:read", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı listesi/detay görüntüleme" },
@@ -164,14 +164,15 @@ async function main() {
     },
     {
       // Kurşun bypass düzeni (production.kursunBypassEnabled): fabrika kurşun
-      // istasyonlarına tablet KOYMUYOR — yetkili personel, kurşun adımında bekleyen
-      // iş emrini fiziksel kurşun istasyonuna atar. Ekran görünürlüğü
+      // makinelerine tablet KOYMUYOR — yetkili personel, kurşun adımında bekleyen
+      // iş emrini fiziksel kurşun MAKİNESİNE atar (tek PROCESS_QC istasyonunun
+      // altındaki `Machine` satırlarından birine — istasyona DEĞİL). Ekran görünürlüğü
       // `mobile:kursun-dagitim` ile; route'lar `requireAnyPermission("workorder:distribute",
       // "mobile:kursun-dagitim")` kullanır. Web ikizi `workorder:distribute` BİLİNÇLİ olarak
       // buraya konmadı (mobil şablon, saha kullanıcısına masaüstü yetkisi taşımasın);
       // planlama/süpervizör kullanıcısına admin panelinden tek tek verilir.
       name: "Mobil — Kurşun Dağıtım",
-      description: "Kurşun dağıtım ekranı (iş emrini fiziksel kurşun istasyonuna ata + son adımsa işi bitir)",
+      description: "Kurşun dağıtım ekranı (iş emrini fiziksel kurşun makinesine ata + son adımsa işi bitir)",
       codes: [
         "mobile:kursun-dagitim",
         "workorder:read",

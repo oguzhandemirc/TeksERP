@@ -28,11 +28,14 @@ export function OperationsHubPage() {
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
   // Kurşun bypass kapalıyken (varsayılan) kurşun tabletten işlenir → "Kurşun
   // Dağıtım" karosu gizlenir. Route açık kalır: dağıtılmış işler bitirilebilsin.
+  // AÇIKKEN ise ters yön işler: "Kurşun Sırası" karosu gizlenir (sırayı okuyacak
+  // kurşun tableti kalmadı) ve o ekranın ROUTE'u da kapanır.
   const kursunBypassEnabled = useKursunBypassEnabled();
 
   const visible = operationsTiles.filter((t) => {
     if (t.requiresShipmentConfirmation && !shipmentConfirmationEnabled) return false;
     if (t.requiresKursunBypass && !kursunBypassEnabled) return false;
+    if (t.hiddenWhenKursunBypass && kursunBypassEnabled) return false;
     return t.permissionAny
       ? hasAnyPermission(t.permissionAny)
       : !t.permission || hasPermission(t.permission);

@@ -1,6 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -10,14 +23,22 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatNumber } from "@/lib/format";
 import { kursunQueueService } from "./service";
 import type { KursunQueueItem } from "./types";
-import {
-  KursunQueueStationGroup,
-  groupQueueByStation,
-} from "./KursunQueueStationGroup";
-import { reorderWithinStation } from "./queue-reorder";
+import { KursunQueueRow } from "./KursunQueueRow";
+import { reorderQueue } from "./queue-reorder";
 
 const QUERY_KEY = "kursun-queue";
 
+/**
+ * Kurşun Sırası — kurşun tabletinin okuyacağı DÜZ kuyruk. Gruplama YOKTUR:
+ * fabrikada PROCESS_QC türünde tek istasyon var, bu ekran o tek istasyonun
+ * bekleyenlerini sıralar.
+ *
+ * ⚠️ Bu ekran kurşun bypass bayrağı AÇIKKEN hiç açılmaz (`KursunQueueRouteGate`):
+ * sıralamanın tek tüketicisi kurşun tabletiydi, bypass rejiminde kurşunda tablet
+ * yok. İzleme + acil işaretleme Kurşun Dağıtım ekranında (aynı sıralamayla) yapılır.
+ * Satırdaki "Bypass" rozeti yalnız KARIŞIK REJİM içindir (bayrak yeni açıldı ve
+ * bir kısım iş hâlâ tablet akışında bekliyor).
+ */
 export function KursunQueuePage() {
   const qc = useQueryClient();
   // Sıralama backend'de `quality:write` ister; dağıtımcı (workorder:distribute)
@@ -37,8 +58,13 @@ export function KursunQueuePage() {
     setItems(query.data?.data ?? []);
   }, [query.data]);
 
-  const groups = useMemo(() => groupQueueByStation(items), [items]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   const totalQty = items.reduce((sum, i) => sum + i.totalCurrentQty, 0);
+  const bypassCount = items.filter((i) => i.bypassAssigned).length;
 
   const reorderMut = useMutation({
     mutationFn: kursunQueueService.reorder,
@@ -60,17 +86,12 @@ export function KursunQueuePage() {
     },
   });
 
-  /** Sıralama İSTASYON GRUBU içinde yapılır — hesap `reorderWithinStation`'da. */
-  const handleDragEnd = (stationName: string, event: DragEndEvent) => {
+  /** Sıra + priority hesabı `reorderQueue`'da (saf fonksiyon — birim testli). */
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
 
-    const result = reorderWithinStation(
-      items,
-      stationName,
-      String(active.id),
-      String(over.id),
-    );
+    const result = reorderQueue(items, String(active.id), String(over.id));
     if (!result) return;
 
     setItems(result.next);
@@ -91,12 +112,11 @@ export function KursunQueuePage() {
       <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-3 py-2 text-xs">
         <span>
           <span className="text-foreground font-medium">{items.length}</span> bekleyen
-          iş emri
+          iş emri · {formatNumber(totalQty, 0)} m
         </span>
-        <span>
-          <span className="text-foreground font-medium">{groups.length}</span> istasyon ·{" "}
-          {formatNumber(totalQty, 0)} m
-        </span>
+        {bypassCount > 0 && (
+          <span>{bypassCount} iş kurşun dağıtımına verilmiş (tablette okutulmaz)</span>
+        )}
         {!canReorder && <span>Salt izleme — sıralama için kalite yetkisi gerekir.</span>}
       </div>
 
@@ -107,28 +127,39 @@ export function KursunQueuePage() {
               <Skeleton key={i} className="h-16 w-full" />
             ))}
           </div>
-        ) : groups.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="text-muted-foreground flex h-32 items-center justify-center rounded-md border border-dashed text-sm">
             Kurşun istasyonunda bekleyen iş emri yok.
           </div>
         ) : (
-          <div className="space-y-3">
-            {groups.map((group) => (
-              <KursunQueueStationGroup
-                key={group.stationName}
-                group={group}
-                busy={busy}
-                canReorder={canReorder}
-                onDragEnd={handleDragEnd}
-                onToggleUrgent={(item) =>
-                  urgentMut.mutate({
-                    id: item.workOrderStepId,
-                    isUrgent: !item.isUrgent,
-                  })
-                }
-              />
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={items.map((i) => i.workOrderStepId)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="space-y-2">
+                {items.map((item, idx) => (
+                  <KursunQueueRow
+                    key={item.workOrderStepId}
+                    item={item}
+                    index={idx}
+                    busy={busy}
+                    canReorder={canReorder}
+                    onToggleUrgent={() =>
+                      urgentMut.mutate({
+                        id: item.workOrderStepId,
+                        isUrgent: !item.isUrgent,
+                      })
+                    }
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
         )}
       </PageBody>
     </PageShell>

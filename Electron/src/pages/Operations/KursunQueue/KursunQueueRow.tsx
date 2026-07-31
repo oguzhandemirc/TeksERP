@@ -10,7 +10,7 @@ import type { KursunQueueItem } from "./types";
 
 interface Props {
   item: KursunQueueItem;
-  /** İstasyon GRUBU içindeki sıra (global değil — kuyruk istasyona göre bölünür). */
+  /** Kuyruktaki sıra (düz liste — gruplama yok). */
   index: number;
   onToggleUrgent: () => void;
   busy: boolean;
@@ -63,13 +63,18 @@ export function KursunQueueRow({
             </Badge>
           )}
 
+          {/* KARIŞIK REJİM rozeti: bayrak yeni açıldı, bir kısım iş hâlâ tablet
+              akışında bekliyor. Makine adı da yazılır — planlamacı hangi işin
+              hangi kurşun makinesine düştüğünü satırdan görsün (gruplama YOK,
+              o yüzey Kurşun Dağıtım ekranıdır). */}
           {item.bypassAssigned && (
             <Badge
               variant="outline"
               className="gap-1 text-[10px]"
               title="Bu iş kurşun dağıtımına verildi — kurşun/KK2 tablette okutulmayacak, Tambur kartı okuttuğunda tamamlanmış sayılacak."
             >
-              <Share2 className="h-3 w-3" /> Bypass
+              <Share2 className="h-3 w-3" />
+              {item.bypassMachineName ? `Bypass · ${item.bypassMachineName}` : "Bypass"}
             </Badge>
           )}
 

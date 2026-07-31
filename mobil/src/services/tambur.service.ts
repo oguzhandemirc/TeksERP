@@ -129,14 +129,16 @@ export const tamburService = {
       .then((r) => r.data),
 
   /**
-   * KURŞUN BYPASS kapanışı — kurşun istasyonlarında tablet yoktur; iş Kurşun
-   * Dağıtım ekranından fiziksel istasyona atanır, Tambur operatörü refakat
-   * kartını okutup önizlemeyi onaylayınca Kurşun/KK2 adımı COMPLETED olur
-   * (SKIPPED DEĞİL) ve toplar Tambur adımına geçer. Kalite NULL kalır.
+   * KURŞUN BYPASS kapanışı — kurşun makinelerinde tablet yoktur; iş Kurşun
+   * Dağıtım ekranından fiziksel bir kurşun MAKİNESİNE atanır. Tambur tabletinde
+   * refakat kartı okutulunca bu uç SESSİZCE çağrılır (operatör hiçbir şey
+   * onaylamaz): Kurşun/KK2 adımı COMPLETED olur (SKIPPED DEĞİL) ve toplar
+   * Tambur adımına geçer. Kalite NULL kalır — kaliteyi Tambur belirler.
    *
-   * `rollIds` KAPSAM sözleşmesidir: önizlemede görülen toplar BİREBİR
-   * gönderilir — kapsam bu sırada değiştiyse backend 409 döner (yarım kapanış
-   * yok). Online-only: offline kuyruğuna girmez (applyUndo ile aynı sınıf).
+   * `rollIds` KAPSAM sözleşmesidir: `bypassPending.rolls` BİREBİR gönderilir —
+   * kapsam bu sırada değiştiyse backend 409 döner (yarım kapanış yok) ve çağıran
+   * kapsamı tazeleyip bir kez yeniden dener. Online-only: offline kuyruğuna
+   * girmez (applyUndo ile aynı sınıf).
    */
   bypassComplete: (
     cardBarcode: string,

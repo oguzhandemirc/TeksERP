@@ -2954,6 +2954,13 @@ export class TamburService {
        * Bu iş emrinde bekleyen KURŞUN DAĞITIM (bypass) işi. Non-null ise Tambur
        * ekranı "Kurşun adımını tamamla" önizlemesi + onayı gösterir ve
        * `POST /api/tambur/bypass-complete` ile kapatır. null = normal akış.
+       *
+       * Payload `kursun-bypass.service.findPendingForTambur`'un dönüşüdür ve
+       * OLDUĞU GİBİ iletilir (burada yeniden şekillendirme YOK — alan eklemek
+       * gerekirse tek kaynak orasıdır). Operatöre gösterilecek yer bilgisi
+       * `machineName`'dir (atanan fiziksel kurşun makinesi); `stationName` tek
+       * PROCESS_QC istasyonunun adıdır ve bağlam olarak taşınır — ekranda
+       * "hangi makinede yapıldı" sorusunu YANITLAMAZ.
        */
       bypassPending?: KursunBypassTamburContext | null;
     }>

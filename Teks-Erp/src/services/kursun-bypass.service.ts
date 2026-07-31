@@ -1,15 +1,26 @@
 // =============================================================================
 // TeksERP — Kurşun Dağıtım (Kurşun Bypass) Service
 // =============================================================================
-// Fabrika kurşun istasyonlarına TABLET KOYMUYOR. Kurşun işlemi fiziksel olarak
+// Fabrika kurşun makinelerine TABLET KOYMUYOR. Kurşun işlemi fiziksel olarak
 // yapılır ama dijital izlenmez (hatalar kâğıda yazılır). Yetkili personel,
 // kurşun adımında bekleyen iş emrini bu ekrandan fiziksel bir kurşun
-// istasyonuna ATAR; adım daha sonra iki yoldan biriyle kapanır:
+// MAKİNESİNE ATAR; adım daha sonra iki yoldan biriyle kapanır:
 //   • Tambur tabletinde refakat kartının karekodu okutulur → önizleme + onay
 //     (completeFromTambur) → toplar Tambur adımına geçer, KALİTE NULL kalır
 //     (kaliteyi Tambur belirler).
 //   • Kurşun rotanın SON adımıysa dağıtım ekranındaki "İşi Bitir"
 //     (completeFromDistribution) → finalizeRollsAtLastStep → WAREHOUSE.
+//
+// ⚠️ ATAMA MAKİNE BAZINDADIR — İSTASYON BAZINDA DEĞİL. Fabrikada PROCESS_QC
+// türünde TEK istasyon vardır (KURSUN_KK2) ve altında N adet fiziksel kurşun
+// MAKİNESİ (`Machine`) durur; dağıtımcının seçtiği şey o makinelerden biridir.
+// Üç sonucu:
+//   • `WorkOrderStep.stationId` REPOINT EDİLMEZ. İstasyon tek olduğu için adımın
+//     istasyonu hiç değişmiyor; atama bilgisi ADIMDA değil ATAMA SATIRINDA
+//     yaşar. (`WorkOrderStep`'e `machineId` kolonu da EKLENMEDİ — bilinçli.)
+//   • Kapanan kurşun movement'ı `RollMovement.machineId = ATANAN MAKİNE` ile
+//     damgalanır → makine bazlı hacim raporları hiçbir ek kod olmadan çalışır.
+//   • İstasyon yetenekleri MAKİNENİN İSTASYONUNDAN okunur (`machine.stationId`).
 //
 // ⚠️ BU "SKIPPED" DEĞİLDİR. Adım atlanmaz: `RollMovement`'lar normal şekilde
 // kapanır (qtyOut=qtyIn) ve `recomputeStepStatus` adımı COMPLETED yapar. Fark:
@@ -80,13 +91,17 @@ const ASSIGNABLE_WO_STATUSES: WorkOrderStatus[] = [
 
 // -----------------------------------------------------------------------------
 // Payload tipleri (Electron + mobil AYNI payload'ı tüketir — mobile'a ayrı
-// istasyon servisi gerekmesin diye istasyon listesi de bu yanıtta gelir).
+// makine servisi gerekmesin diye MAKİNE listesi de bu yanıtta gelir).
 // -----------------------------------------------------------------------------
 
-export interface KursunBypassStationOption {
+/** Dağıtılabilir fiziksel kurşun makinesi (PROCESS_QC istasyonuna bağlı, aktif). */
+export interface KursunBypassMachineOption {
   id: string;
   code: string;
   name: string;
+  /** Makinenin bağlı olduğu istasyon — yetenek okuması bu id üzerinden yapılır. */
+  stationId: string;
+  stationName: string;
 }
 
 /** Dağıtım ekranındaki bir satırın ORTAK gövdesi (waiting + assigned). */
@@ -124,6 +139,11 @@ export interface KursunDistributionWaitingRow extends KursunDistributionRowBase 
 
 export interface KursunDistributionAssignedRow extends KursunDistributionRowBase {
   assignmentId: string;
+  /** ATANAN fiziksel kurşun makinesi — izleme/gruplama bu alan üzerinden yapılır. */
+  machineId: string;
+  machineCode: string;
+  machineName: string;
+  /** Makinenin istasyonu (pratikte hep tek PROCESS_QC istasyonu) — bağlam bilgisi. */
   stationId: string;
   stationName: string;
   assignedAt: Date;
@@ -137,7 +157,8 @@ export interface KursunDistributionAssignedRow extends KursunDistributionRowBase
 export interface KursunDistributionPayload {
   /** `production.kursunBypassEnabled` — false ise YENİ atama yapılamaz (mevcutlar biter). */
   flagEnabled: boolean;
-  stations: KursunBypassStationOption[];
+  /** Atama hedefleri: PROCESS_QC istasyonlarına bağlı AKTİF kurşun makineleri. */
+  machines: KursunBypassMachineOption[];
   waiting: KursunDistributionWaitingRow[];
   assigned: KursunDistributionAssignedRow[];
 }
@@ -152,6 +173,9 @@ export interface KursunBypassCompletePreview {
   assignmentId: string;
   workOrderId: string;
   workOrderNumber: string;
+  /** İşin ATANDIĞI kurşun makinesi (onay ekranında "hangi makinede" yazar). */
+  machineName: string;
+  /** Makinenin istasyonu — bağlam bilgisi (tek PROCESS_QC istasyonu). */
   stationName: string;
   isLastStep: boolean;
   canComplete: boolean;
@@ -182,6 +206,10 @@ export interface KursunBypassTamburRoll {
 export interface KursunBypassTamburContext {
   assignmentId: string;
   stepId: string;
+  /** İşin ATANDIĞI kurşun makinesi — Tambur onay ekranı bunu gösterir. */
+  machineId: string;
+  machineName: string;
+  /** Makinenin istasyonu — bağlam bilgisi (tek PROCESS_QC istasyonu). */
   stationId: string;
   stationName: string;
   assignedAt: Date;
@@ -287,18 +315,35 @@ export class KursunBypassService {
   // LİSTE
   // ---------------------------------------------------------------------------
   /**
-   * Kurşun Dağıtım ekranının TEK payload'ı: bayrak + istasyonlar + bekleyenler +
+   * Kurşun Dağıtım ekranının TEK payload'ı: bayrak + MAKİNELER + bekleyenler +
    * dağıtılmışlar. Electron ve mobil AYNI yanıtı tüketir (mobile'ın ayrıca
-   * istasyon servisi çağırması gerekmesin).
+   * makine servisi çağırması gerekmesin).
    */
   async listDistribution(): Promise<ApiResponse<KursunDistributionPayload>> {
     const flagEnabled = await readKursunBypassEnabled();
 
-    const stationRows = await prisma.station.findMany({
-      where: { kind: StationKind.PROCESS_QC, isActive: true },
-      select: { id: true, code: true, name: true },
+    // ATAMA HEDEFLERİ = PROCESS_QC istasyonuna bağlı AKTİF makineler.
+    // Filtre `assign`'ın kabul koşuluyla BİREBİR aynı tutulur (aktif makine +
+    // istasyon kind'ı PROCESS_QC) — aksi halde listede görünen bir makine
+    // seçildiğinde 400 alınır ve dağıtımcı sebebi anlamaz.
+    const machineRows = await prisma.machine.findMany({
+      where: { isActive: true, station: { kind: StationKind.PROCESS_QC } },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        stationId: true,
+        station: { select: { name: true } },
+      },
       orderBy: [{ name: "asc" }],
     });
+    const machines: KursunBypassMachineOption[] = machineRows.map((m) => ({
+      id: m.id,
+      code: m.code,
+      name: m.name,
+      stationId: m.stationId,
+      stationName: m.station.name,
+    }));
 
     // AÇIK atamalar liste kaynağıdır (adımın açık topu kalmasa / adım kapansa
     // bile satır GÖRÜNMELİ — planlamacı "stale" rozetiyle iptal edebilsin).
@@ -307,10 +352,17 @@ export class KursunBypassService {
       select: {
         id: true,
         workOrderStepId: true,
-        stationId: true,
+        machineId: true,
         assignedAt: true,
         notes: true,
-        station: { select: { name: true } },
+        machine: {
+          select: {
+            code: true,
+            name: true,
+            stationId: true,
+            station: { select: { name: true } },
+          },
+        },
         assignedBy: { select: { fullName: true } },
       },
       orderBy: { assignedAt: "asc" },
@@ -446,8 +498,11 @@ export class KursunBypassService {
       assigned.push({
         ...base,
         assignmentId: a.id,
-        stationId: a.stationId,
-        stationName: a.station.name,
+        machineId: a.machineId,
+        machineCode: a.machine.code,
+        machineName: a.machine.name,
+        stationId: a.machine.stationId,
+        stationName: a.machine.station.name,
         assignedAt: a.assignedAt,
         assignedByName: a.assignedBy?.fullName ?? null,
         notes: a.notes,
@@ -458,7 +513,7 @@ export class KursunBypassService {
 
     return {
       success: true,
-      data: { flagEnabled, stations: stationRows, waiting, assigned },
+      data: { flagEnabled, machines, waiting, assigned },
     };
   }
 
@@ -506,17 +561,18 @@ export class KursunBypassService {
   // ATAMA
   // ---------------------------------------------------------------------------
   /**
-   * İş emrinin kurşun adımını fiziksel bir kurşun istasyonuna ATAR (ya da zaten
-   * dağıtılmışsa başka istasyona TAŞIR).
+   * İş emrinin kurşun adımını fiziksel bir kurşun MAKİNESİNE atar (ya da zaten
+   * dağıtılmışsa başka makineye TAŞIR).
    *
-   * NEDEN `step.stationId` REPOINT EDİLİYOR: movement'lar istasyonu ADIM
-   * üzerinden çözer. Adımın istasyonunu atanan istasyona çevirince istasyon
-   * hacim raporları ve kurşun kuyruğu (`[stationId, status, isUrgent, priority,
-   * startedAt]` index'i) hiçbir ek kod yazmadan doğru çalışır. Atama öncesi
-   * istasyon `originalStationId`'de saklanır ve iptalde geri yüklenir.
+   * NEDEN `step.stationId` REPOINT EDİLMİYOR: PROCESS_QC türünde tek istasyon
+   * var, adımın istasyonu zaten hiç değişmiyor. Atamanın taşıdığı tek yeni bilgi
+   * MAKİNEDİR ve o bilgi bu satırda (`machineId`) yaşar; üretim atfı ise
+   * movement kapanışında `RollMovement.machineId` damgasıyla tutulur
+   * (`closeBypassMovementsTx`). Adımın istasyonuna dokunulmadığı için iptalde
+   * "geri yükleme" diye bir şey de yoktur.
    */
   async assign(
-    input: { workOrderId: string; stationId: string; notes?: string | null },
+    input: { workOrderId: string; machineId: string; notes?: string | null },
     userId?: string,
   ): Promise<
     ApiResponse<{
@@ -524,6 +580,8 @@ export class KursunBypassService {
       workOrderId: string;
       workOrderNumber: string;
       workOrderStepId: string;
+      machineId: string;
+      machineName: string;
       stationId: string;
       stationName: string;
       isLastStep: boolean;
@@ -548,14 +606,14 @@ export class KursunBypassService {
             id: true,
             status: true,
             workOrderNumber: true,
-            targetProperties: { select: { propertyId: true } },
+            // `stationId` ÇEKİLMEZ: adımın istasyonuna ne yazılıyor ne de
+            // okunuyor (repoint kalktı) — rota kararları yalnız kind üzerinden.
             steps: {
               orderBy: { stepSequence: "asc" },
               select: {
                 id: true,
                 stepSequence: true,
                 status: true,
-                stationId: true,
                 station: { select: { kind: true, name: true } },
               },
             },
@@ -589,10 +647,10 @@ export class KursunBypassService {
         // 4) Zaten dağıtılmış mı?
         const existingPending = await findPendingBypassAssignmentTx(tx, step.id);
 
-        // 5) BAYRAK YALNIZ YENİ ATAMAYI KAPILAR. Var olan atamanın istasyonunu
+        // 5) BAYRAK YALNIZ YENİ ATAMAYI KAPILAR. Var olan atamanın MAKİNESİNİ
         //    değiştirmek (re-assign) bayrak kapansa da çalışır: rejim atama
         //    satırında kalıcıdır, aksi halde bayrağı kapatmak sahadaki yarım işi
-        //    kilitlerdi.
+        //    kilitlerdi (iş bir makineden diğerine alınamazdı).
         if (!existingPending) {
           const enabled = await readKursunBypassEnabled(tx);
           if (!enabled) {
@@ -667,83 +725,58 @@ export class KursunBypassService {
         }
         const isLastStep = next === null;
 
-        // 7) Hedef istasyon
-        const station = await tx.station.findUnique({
-          where: { id: input.stationId },
-          select: { id: true, name: true, isActive: true, kind: true },
+        // 7) Hedef MAKİNE — istasyonu da birlikte çözülür: yetenek okuması ve
+        //    tür kontrolü makinenin İSTASYONU üzerinden yapılır (makinenin kendi
+        //    "kind"i yoktur, istasyonundan miras alır).
+        const machine = await tx.machine.findUnique({
+          where: { id: input.machineId },
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+            stationId: true,
+            station: { select: { name: true, kind: true } },
+          },
         });
-        if (!station) throw AppError.notFound("İstasyon bulunamadı");
-        if (!station.isActive) throw AppError.badRequest("Seçilen istasyon pasif");
-        if (station.kind !== StationKind.PROCESS_QC) {
+        if (!machine) throw AppError.notFound("Makine bulunamadı");
+        if (!machine.isActive) throw AppError.badRequest("Seçilen makine pasif");
+        if (machine.station.kind !== StationKind.PROCESS_QC) {
           throw AppError.badRequest(
-            "Seçilen istasyon Kurşun + KK2 (PROCESS_QC) tipinde değil",
+            `Seçilen makine Kurşun + KK2 (PROCESS_QC) istasyonuna bağlı değil (bağlı olduğu istasyon: ${machine.station.name})`,
           );
         }
 
-        // 8) YETENEK KONTROLÜ — WO'nun hedef özelliklerinden ORİJİNAL istasyonun
-        //    uygulayabildiklerini ATANAN istasyon da uygulayabilmeli.
-        //    NEDEN: bypass kapanışında `copyStationCapabilitiesToRoll` ATANAN
-        //    istasyonun yeteneklerini kopyalar. Atanan istasyon KURSUN veremiyorsa
-        //    özellik topa hiç geçmez ve `computeWorkOrderLocks` "bu özelliği veren
-        //    adım tamamlandı" derken top özelliksiz kalır → WO kilit modeli yalan söyler.
-        //    Re-assign'da orijinal = atama ÖNCESİ istasyon (step.stationId artık
-        //    önceki atanan istasyondur).
-        const originalStationId = existingPending
-          ? (
-              await tx.kursunBypassAssignment.findUniqueOrThrow({
-                where: { id: existingPending.id },
-                select: { originalStationId: true },
-              })
-            ).originalStationId
-          : step.stationId;
-
-        const targetPropertyIds = new Set(wo.targetProperties.map((p) => p.propertyId));
-        const originalCaps = await tx.stationProperty.findMany({
-          where: { stationId: originalStationId },
-          select: { propertyId: true },
+        // 8) YETENEK KONTROLÜ — makinenin İSTASYONU kurşun uygulayabiliyor mu?
+        //    NEDEN: bypass kapanışında `copyStationCapabilitiesToRoll` bu
+        //    istasyonun yeteneklerini toplara kopyalar. İstasyonda KURSUN
+        //    özelliği tanımlı değilse özellik topa hiç geçmez, buna karşılık
+        //    `computeWorkOrderLocks` "bu özelliği veren adım tamamlandı" der →
+        //    WO kilit modeli yalan söyler. Atama makine bazına indiği için
+        //    kontrol de sadeleşti: istasyon zaten tek, "hangi istasyon neyi
+        //    karşılıyor" karşılaştırması anlamsız — tek soru kaldı, sebebini
+        //    dağıtımcıya söylemek yine değerli.
+        const kursunCap = await tx.stationProperty.findFirst({
+          where: { stationId: machine.stationId, property: { code: "KURSUN" } },
+          select: { id: true },
         });
-        const requiredPropertyIds = originalCaps
-          .map((c) => c.propertyId)
-          .filter((id) => targetPropertyIds.has(id));
-        if (requiredPropertyIds.length > 0) {
-          const newCaps = await tx.stationProperty.findMany({
-            where: { stationId: station.id, propertyId: { in: requiredPropertyIds } },
-            select: { propertyId: true },
-          });
-          const covered = new Set(newCaps.map((c) => c.propertyId));
-          const missing = requiredPropertyIds.filter((id) => !covered.has(id));
-          if (missing.length > 0) {
-            const names = await tx.fabricProperty.findMany({
-              where: { id: { in: missing } },
-              select: { name: true },
-            });
-            throw AppError.badRequest(
-              `Seçilen istasyon bu iş emrinin gerektirdiği özelliği uygulayamıyor: ${names
-                .map((n) => n.name)
-                .join(", ")}. Özelliği verebilen bir kurşun istasyonu seçin.`,
-            );
-          }
+        if (!kursunCap) {
+          throw AppError.badRequest(
+            `Seçilen makinenin istasyonu (${machine.station.name}) kurşun uygulayamıyor — istasyon yeteneklerine KURSUN özelliğini ekleyin.`,
+          );
         }
 
-        // 9) Satır + ADIM REPOINT (ikisi de ATOMİK CLAIM — check-then-act yok).
+        // 9) Atama satırı. ADIM REPOINT YOK — adımın istasyonu (tek PROCESS_QC
+        //    istasyonu) değişmiyor; atamanın tek bilgisi makinedir ve o bu
+        //    satırda yaşar. Yazma ATOMİK CLAIM ile yapılır (check-then-act yok).
         let assignmentId: string;
         if (existingPending) {
           const claim = await tx.kursunBypassAssignment.updateMany({
             where: { id: existingPending.id, completedAt: null, cancelledAt: null },
-            data: { stationId: station.id, notes },
+            data: { machineId: machine.id, notes },
           });
           if (claim.count === 0) {
             throw AppError.conflict(
               "Bu dağıtım az önce tamamlandı/iptal edildi — listeyi yenileyin.",
-            );
-          }
-          const repoint = await tx.workOrderStep.updateMany({
-            where: { id: step.id, stationId: existingPending.stationId },
-            data: { stationId: station.id },
-          });
-          if (repoint.count === 0) {
-            throw AppError.conflict(
-              "Adımın istasyonu bu sırada değişti — listeyi yenileyin.",
             );
           }
           assignmentId = existingPending.id;
@@ -752,22 +785,12 @@ export class KursunBypassService {
             data: {
               workOrderId: wo.id,
               workOrderStepId: step.id,
-              stationId: station.id,
-              originalStationId: step.stationId,
+              machineId: machine.id,
               assignedById: userId,
               notes,
             },
             select: { id: true },
           });
-          const repoint = await tx.workOrderStep.updateMany({
-            where: { id: step.id, stationId: step.stationId },
-            data: { stationId: station.id },
-          });
-          if (repoint.count === 0) {
-            throw AppError.conflict(
-              "Adımın istasyonu bu sırada değişti — listeyi yenileyin.",
-            );
-          }
           assignmentId = created.id;
         }
 
@@ -776,11 +799,13 @@ export class KursunBypassService {
           workOrderId: wo.id,
           workOrderNumber: wo.workOrderNumber,
           workOrderStepId: step.id,
-          stationId: station.id,
-          stationName: station.name,
+          machineId: machine.id,
+          machineName: machine.name,
+          stationId: machine.stationId,
+          stationName: machine.station.name,
           isLastStep,
           reassigned: existingPending !== null,
-          previousStationId: existingPending?.stationId ?? null,
+          previousMachineId: existingPending?.machineId ?? null,
         };
       });
     } catch (err) {
@@ -802,9 +827,11 @@ export class KursunBypassService {
         workOrderId: result.workOrderId,
         workOrderNumber: result.workOrderNumber,
         workOrderStepId: result.workOrderStepId,
+        machineId: result.machineId,
+        machineName: result.machineName,
         stationId: result.stationId,
         stationName: result.stationName,
-        previousStationId: result.previousStationId,
+        previousMachineId: result.previousMachineId,
         reassigned: result.reassigned,
         isLastStep: result.isLastStep,
         notes,
@@ -818,14 +845,16 @@ export class KursunBypassService {
         workOrderId: result.workOrderId,
         workOrderNumber: result.workOrderNumber,
         workOrderStepId: result.workOrderStepId,
+        machineId: result.machineId,
+        machineName: result.machineName,
         stationId: result.stationId,
         stationName: result.stationName,
         isLastStep: result.isLastStep,
         reassigned: result.reassigned,
       },
       message: result.reassigned
-        ? `${result.workOrderNumber} dağıtımı "${result.stationName}" istasyonuna taşındı`
-        : `${result.workOrderNumber} "${result.stationName}" istasyonuna dağıtıldı`,
+        ? `${result.workOrderNumber} dağıtımı "${result.machineName}" makinesine taşındı`
+        : `${result.workOrderNumber} "${result.machineName}" makinesine dağıtıldı`,
     };
   }
 
@@ -833,16 +862,20 @@ export class KursunBypassService {
   // İPTAL
   // ---------------------------------------------------------------------------
   /**
-   * Açık dağıtımı iptal eder ve adımın istasyonunu atama ÖNCESİ istasyona geri
-   * yükler → iş normal (tabletli) akışa döner.
+   * Açık dağıtımı iptal eder → iş normal (tabletli) akışa döner.
+   *
+   * YALNIZ ATAMA SATIRI soft-cancel edilir; başka HİÇBİR ŞEYE dokunulmaz.
+   * NEDEN: atama makine bazındadır ve adımın istasyonu (tek PROCESS_QC
+   * istasyonu) atama sırasında hiç değiştirilmedi — dolayısıyla geri
+   * yüklenecek bir istasyon da yok. Makine atfı yalnız FİİLEN yapılmış işin
+   * izinde, yani kapanan movement'ın `machineId` damgasında tutulur; iptal
+   * edilen atamada öyle bir iş hiç olmadığı için silinecek damga da yoktur.
    */
   async cancelAssignment(
     assignmentId: string,
     input: { reason?: string | null },
     userId?: string,
-  ): Promise<
-    ApiResponse<{ assignmentId: string; stationRestored: boolean; workOrderId: string }>
-  > {
+  ): Promise<ApiResponse<{ assignmentId: string; workOrderId: string }>> {
     const reason = input.reason?.trim() ? input.reason.trim().slice(0, 200) : null;
 
     const result = await prisma.$transaction(async (tx) => {
@@ -868,30 +901,23 @@ export class KursunBypassService {
         throw AppError.conflict("Bu dağıtım zaten iptal edilmiş");
       }
 
+      // Audit gövdesi için atamanın kimliği (iptal SONRASI okunur — satır
+      // append-only, claim dışında hiçbir alanı değişmiyor).
       const row = await tx.kursunBypassAssignment.findUniqueOrThrow({
         where: { id: assignmentId },
         select: {
           workOrderId: true,
           workOrderStepId: true,
-          stationId: true,
-          originalStationId: true,
+          machineId: true,
+          machine: { select: { name: true } },
         },
-      });
-
-      // İSTASYONU GERİ YÜKLE — yalnız hâlâ BİZİM atadığımız istasyondaysa.
-      // 0 satır = istasyon bu arada başka yolla değişmiş (manuel düzeltme):
-      // HATA DEĞİL (iptal geri alınamaz, mal da yerinde) — audit'e not düşülür.
-      const restore = await tx.workOrderStep.updateMany({
-        where: { id: row.workOrderStepId, stationId: row.stationId },
-        data: { stationId: row.originalStationId },
       });
 
       return {
         workOrderId: row.workOrderId,
         workOrderStepId: row.workOrderStepId,
-        stationId: row.stationId,
-        originalStationId: row.originalStationId,
-        stationRestored: restore.count > 0,
+        machineId: row.machineId,
+        machineName: row.machine.name,
       };
     });
 
@@ -904,23 +930,15 @@ export class KursunBypassService {
         event: "KURSUN_BYPASS_UNASSIGN",
         workOrderId: result.workOrderId,
         workOrderStepId: result.workOrderStepId,
-        stationId: result.stationId,
-        originalStationId: result.originalStationId,
-        stationRestored: result.stationRestored,
-        stationRestoreNote: result.stationRestored
-          ? null
-          : "Adımın istasyonu iptal anında atanan istasyon değildi — geri yükleme yapılmadı",
+        machineId: result.machineId,
+        machineName: result.machineName,
         reason,
       },
     });
 
     return {
       success: true,
-      data: {
-        assignmentId,
-        stationRestored: result.stationRestored,
-        workOrderId: result.workOrderId,
-      },
+      data: { assignmentId, workOrderId: result.workOrderId },
       message: "Dağıtım iptal edildi",
     };
   }
@@ -940,7 +958,7 @@ export class KursunBypassService {
         workOrderStepId: true,
         completedAt: true,
         cancelledAt: true,
-        station: { select: { name: true } },
+        machine: { select: { name: true, station: { select: { name: true } } } },
         workOrder: {
           select: {
             workOrderNumber: true,
@@ -1008,7 +1026,8 @@ export class KursunBypassService {
         assignmentId: a.id,
         workOrderId: a.workOrderId,
         workOrderNumber: a.workOrder.workOrderNumber,
-        stationName: a.station.name,
+        machineName: a.machine.name,
+        stationName: a.machine.station.name,
         isLastStep,
         canComplete: blockReason === null,
         blockReason,
@@ -1069,13 +1088,20 @@ export class KursunBypassService {
         return { alreadyDone: true, finalized: [] as Awaited<ReturnType<typeof finalizeRollsAtLastStep>> };
       }
 
-      const closed = await this.closeBypassMovementsTx(tx, a.workOrderStepId, rollIds);
+      const closed = await this.closeBypassMovementsTx(
+        tx,
+        a.workOrderStepId,
+        rollIds,
+        a.machineId,
+      );
       const closedRollIds = closed.map((m) => m.rollId);
 
       // İstasyon yetenekleri (KURSUN vb.) — bypass'ta da kopyalanır: iş fiziksel
-      // olarak YAPILDI. SIRALI (tx'te Promise.all YASAK — pg tek bağlantı).
+      // olarak YAPILDI. Yetenekler ATANAN MAKİNENİN İSTASYONUNDAN okunur
+      // (makinenin kendi özellik listesi yok). SIRALI (tx'te Promise.all YASAK
+      // — pg tek bağlantı).
       for (const rollId of closedRollIds) {
-        await copyStationCapabilitiesToRoll(tx, { stationId: a.stationId, rollId });
+        await copyStationCapabilitiesToRoll(tx, { stationId: a.machineStationId, rollId });
       }
 
       const finalized = await finalizeRollsAtLastStep(tx, closedRollIds);
@@ -1104,7 +1130,10 @@ export class KursunBypassService {
         workOrderId: a.workOrderId,
         workOrderNumber: a.workOrder.workOrderNumber,
         workOrderStepId: a.workOrderStepId,
-        stationId: a.stationId,
+        // Kapanan kurşun movement'larına damgalanan makine (RollMovement.machineId).
+        machineId: a.machineId,
+        machineName: a.machineName,
+        stationId: a.machineStationId,
         rollIds,
         rollCount: result.finalized.length,
         barcodesGenerated,
@@ -1138,10 +1167,12 @@ export class KursunBypassService {
       select: {
         id: true,
         workOrderStepId: true,
-        stationId: true,
+        machineId: true,
         assignedAt: true,
         notes: true,
-        station: { select: { name: true } },
+        machine: {
+          select: { name: true, stationId: true, station: { select: { name: true } } },
+        },
         assignedBy: { select: { fullName: true } },
       },
       orderBy: { assignedAt: "desc" },
@@ -1172,8 +1203,10 @@ export class KursunBypassService {
     return {
       assignmentId: a.id,
       stepId: a.workOrderStepId,
-      stationId: a.stationId,
-      stationName: a.station.name,
+      machineId: a.machineId,
+      machineName: a.machine.name,
+      stationId: a.machine.stationId,
+      stationName: a.machine.station.name,
       assignedAt: a.assignedAt,
       assignedByName: a.assignedBy?.fullName ?? null,
       notes: a.notes,
@@ -1281,18 +1314,30 @@ export class KursunBypassService {
         );
         if (!claimed) return { alreadyDone: true, moved: 0 };
 
-        const closed = await this.closeBypassMovementsTx(tx, a.workOrderStepId, rollIds);
+        const closed = await this.closeBypassMovementsTx(
+          tx,
+          a.workOrderStepId,
+          rollIds,
+          a.machineId,
+        );
         const closedRollIds = closed.map((m) => m.rollId);
 
-        // İstasyon yetenekleri (KURSUN) — iş fiziksel olarak yapıldı. SIRALI.
+        // İstasyon yetenekleri (KURSUN) — iş fiziksel olarak yapıldı; yetenekler
+        // ATANAN MAKİNENİN İSTASYONUNDAN okunur. SIRALI.
         for (const rollId of closedRollIds) {
-          await copyStationCapabilitiesToRoll(tx, { stationId: a.stationId, rollId });
+          await copyStationCapabilitiesToRoll(tx, {
+            stationId: a.machineStationId,
+            rollId,
+          });
         }
 
-        // Tambur adımına GİRİŞ movement'ları. `machineId` BİLİNÇLİ olarak
-        // yazılmaz: giriş kaydının makine damgası Tambur FINISH'inde konur
-        // (kursun-qc.finishStep ile aynı sözleşme). Çift açılışa karşı DB seddi
-        // partial unique `roll_movements_one_open_per_roll_step_uq`.
+        // Tambur adımına GİRİŞ movement'ları. `machineId` BURADA BİLİNÇLİ olarak
+        // yazılmaz — kurşun makinesi damgası KAPANAN kurşun movement'ına konur;
+        // AÇILAN Tambur girişinin makine damgası Tambur FINISH'inde konacaktır
+        // (kursun-qc.finishStep ile aynı sözleşme). Buraya kurşun makinesini
+        // yazmak "bu top Tambur'da şu kurşun makinesinde işlendi" yalanı olurdu.
+        // Çift açılışa karşı DB seddi partial unique
+        // `roll_movements_one_open_per_roll_step_uq`.
         await tx.rollMovement.createMany({
           data: closed.map((m) => ({
             rollId: m.rollId,
@@ -1347,12 +1392,16 @@ export class KursunBypassService {
         workOrderNumber: a.workOrder.workOrderNumber,
         workOrderStepId: a.workOrderStepId,
         tamburStepId: tamburStep.id,
-        stationId: a.stationId,
+        // ATANAN kurşun makinesi — kapanan kurşun movement'larına damgalanan
+        // makine budur (dağıtımı yapan kişi makineyi seçti, atıf BİLİNİYOR).
+        machineId: a.machineId,
+        machineName: a.machineName,
+        stationId: a.machineStationId,
         cardBarcode: input.cardBarcode,
         rollIds,
         rollCount: result.moved,
-        // Kapanan kurşun movement'ına makine YAZILMAZ (iş takipli makinede
-        // yapılmadı) — okutmanın yapıldığı cihaz yalnız denetim izine düşer.
+        // Okutmanın yapıldığı TAMBUR cihazının makinesi — kurşun makinesiyle
+        // karıştırılmasın diye ayrı alanda, yalnız denetim izi olarak durur.
         scannedOnMachineId: machineId ?? null,
         completedVia: KursunBypassCompletionSource.TAMBUR_SCAN,
       },
@@ -1425,7 +1474,13 @@ export class KursunBypassService {
     };
   }
 
-  /** Tamamlama yollarının ortak ön-yüklemesi (atama + adım + WO rotası). */
+  /**
+   * Tamamlama yollarının ortak ön-yüklemesi (atama + MAKİNE + adım + WO rotası).
+   *
+   * Düzleştirilmiş `machineStationId`/`machineName` alanları çağıranların iki
+   * ihtiyacını karşılar: yetenek kopyalaması makinenin İSTASYONUNU ister
+   * (`copyStationCapabilitiesToRoll`), movement damgası ise MAKİNENİN kendisini.
+   */
   private async loadAssignmentForCompletion(assignmentId: string) {
     const a = await prisma.kursunBypassAssignment.findUnique({
       where: { id: assignmentId },
@@ -1433,7 +1488,8 @@ export class KursunBypassService {
         id: true,
         workOrderId: true,
         workOrderStepId: true,
-        stationId: true,
+        machineId: true,
+        machine: { select: { name: true, stationId: true } },
         completedAt: true,
         cancelledAt: true,
         workOrder: {
@@ -1455,7 +1511,12 @@ export class KursunBypassService {
     });
     if (!a) throw AppError.notFound("Dağıtım kaydı bulunamadı");
     if (a.cancelledAt) throw AppError.conflict("Bu dağıtım iptal edilmiş");
-    return { ...a, assignmentId: a.id };
+    return {
+      ...a,
+      assignmentId: a.id,
+      machineName: a.machine.name,
+      machineStationId: a.machine.stationId,
+    };
   }
 
   /**
@@ -1538,12 +1599,18 @@ export class KursunBypassService {
    * • Marker uuid'si UYGULAMADA üretilir: `gen_random_uuid()` VOLATILE olup
    *   çok-satırlı UPDATE'te SATIR BAŞINA farklı değer üretir ve "tur" kimliğini
    *   bozardı (F161 dersi).
-   * • `machineId`'ye DOKUNULMAZ — kurşun işi iş-takipli bir makinede yapılmadı.
+   * • `machineId` = ATANAN MAKİNE. Atama makine bazında yapıldığı için işi
+   *   hangi fiziksel kurşun makinesinin yaptığı BİLİNİYOR — dağıtımı yapan kişi
+   *   onu seçti. Damga bu yüzden konur; makine bazlı hacim raporları (kurşun
+   *   makinesi başına metraj) bu sayede bypass işlerini de görür. Koşulsuz
+   *   yazılır: satır zaten `exitedAt IS NULL` olduğundan bu tur bu adımda
+   *   makine damgası koyan İLK ve TEK yazımdır.
    */
   private async closeBypassMovementsTx(
     tx: Prisma.TransactionClient,
     stepId: string,
     rollIds: string[],
+    machineId: string,
   ): Promise<
     Array<{ rollId: string; qtyIn: Prisma.Decimal; weightIn: Prisma.Decimal | null }>
   > {
@@ -1555,6 +1622,7 @@ export class KursunBypassService {
       SET "qtyOut" = "qtyIn",
           "weightOut" = "weightIn",
           "exitedAt" = NOW(),
+          "machineId" = ${machineId}::uuid,
           "notes" = ${marker}
       WHERE "workOrderStepId" = ${stepId}::uuid
         AND "exitedAt" IS NULL

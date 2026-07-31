@@ -1,10 +1,12 @@
 // =============================================================================
 // TeksERP — Kurşun Bypass Guard Helper
 // =============================================================================
-// Kurşun bypass düzeninde (fabrika kurşun istasyonuna tablet KOYMUYOR) bir
+// Kurşun bypass düzeninde (fabrika kurşun makinelerine tablet KOYMUYOR) bir
 // PROCESS_QC adımı "dağıtılmış" olabilir: yetkili personel adımı fiziksel bir
-// kurşun istasyonuna atar, adım daha sonra Tambur'da kart okutmasıyla ya da
-// (kurşun son adımsa) dağıtım ekranından kapanır.
+// kurşun MAKİNESİNE atar, adım daha sonra Tambur'da kart okutmasıyla ya da
+// (kurşun son adımsa) dağıtım ekranından kapanır. Atama MAKİNE bazındadır —
+// PROCESS_QC istasyonu tektir, altındaki N makineden biri seçilir; adımın
+// `stationId`'sine HİÇ dokunulmaz.
 //
 // NEDEN AYRI DOSYA: bu üç fonksiyonu `kursun-qc.service`, `inventory.service` ve
 // `workorder.service` çağırır. Onlar `kursun-bypass.service`'i import etseydi
@@ -39,7 +41,8 @@ export const KURSUN_BYPASS_MARKER_PREFIX = "KURSUN_BYPASS_FINISHED";
 /** Bir adımın AÇIK bypass atamasının minimum kimliği. */
 export interface PendingBypassAssignment {
   id: string;
-  stationId: string;
+  /** ATANAN fiziksel kurşun makinesi (atamanın taşıdığı tek yeni bilgi). */
+  machineId: string;
   workOrderId: string;
 }
 
@@ -54,7 +57,7 @@ export async function findPendingBypassAssignmentTx(
 ): Promise<PendingBypassAssignment | null> {
   const row = await db.kursunBypassAssignment.findFirst({
     where: { workOrderStepId: stepId, completedAt: null, cancelledAt: null },
-    select: { id: true, stationId: true, workOrderId: true },
+    select: { id: true, machineId: true, workOrderId: true },
   });
   return row;
 }
@@ -68,6 +71,8 @@ export async function findPendingBypassAssignmentTx(
  * QC2_STEP_FINISHED) birbirine karışır. Tek doğru çıkış: ya dağıtımı iptal et,
  * ya Tambur'da kartı okut.
  *
+ * Hata metninde "makine" denir — dağıtımcı ekranda bir MAKİNE seçmiştir.
+ *
  * @param actionLabel Kullanıcıya gösterilecek eylem adı ("KK2 tamamlama" gibi).
  */
 export async function assertStepNotBypassAssigned(
@@ -78,7 +83,7 @@ export async function assertStepNotBypassAssigned(
   const pending = await findPendingBypassAssignmentTx(db, stepId);
   if (pending) {
     throw AppError.conflict(
-      `Bu iş emri kurşun istasyonuna dağıtılmış (bypass) — ${actionLabel} yapılamaz. Dağıtımı iptal edin ya da Tambur'da kartı okutun.`,
+      `Bu iş emri kurşun makinesine dağıtılmış (bypass) — ${actionLabel} yapılamaz. Dağıtımı iptal edin ya da Tambur'da kartı okutun.`,
     );
   }
 }
@@ -125,11 +130,12 @@ export async function hasBypassClosureOnProcessQcTx(
  *    Manuel taşıma emsali: mal kurşun adımından elle çekilince atama anlamsız
  *    kalır, ama adım hâlâ ACTIVE ise (bir kısmı taşındı) atama YAŞAMALI.
  *
- * İSTASYON GERİ YÜKLENMEZ (`step.stationId` olduğu gibi kalır). Gerekçe: bu yol
- * çoğunlukla adım KAPANDIKTAN sonra çalışır ve kapanmış movement'ların istasyon
- * atfı adım üzerinden çözülür — istasyonu geri almak, işi fiilen yapan kurşun
- * istasyonunun hacim raporundan o partiyi geriye dönük SİLERDİ. Elle iptal
- * (`cancelAssignment`) adım hâlâ açıkken çalıştığı için orada geri yükleme yapılır.
+ * YALNIZ ATAMA SATIRI güncellenir; adıma/movement'lara DOKUNULMAZ. Atama makine
+ * bazında olduğu için ortada geri alınacak bir `step.stationId` repoint'i yok
+ * (adımın istasyonu hiç değişmedi). Kapanmış movement'ların `machineId` damgası
+ * da SİLİNMEZ: o damga fiilen yapılmış işin atfıdır, bayat atamanın iptali onu
+ * geçmişe dönük yalanlamaz — aksi halde işi yapan makinenin hacim raporundan o
+ * parti sessizce düşerdi.
  */
 export async function voidStalePendingBypassAssignmentsTx(
   tx: TxClient,

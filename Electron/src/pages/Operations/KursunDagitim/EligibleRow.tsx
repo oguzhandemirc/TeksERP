@@ -12,36 +12,42 @@ import {
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
 import { RowIdentity } from "./RowIdentity";
-import type { KursunBypassStationOption, KursunDistributionWaitingRow } from "./types";
+import type { KursunBypassMachineOption, KursunDistributionWaitingRow } from "./types";
 
 interface Props {
   row: KursunDistributionWaitingRow;
-  /** İstasyon listesi payload'dan gelir — ReferenceSelect'e gerek YOK. */
-  stations: KursunBypassStationOption[];
+  /** Makine listesi payload'dan gelir — ReferenceSelect'e gerek YOK. */
+  machines: KursunBypassMachineOption[];
   busy: boolean;
   /** Bayrak kapalıysa sayfa bu bölümü hiç göstermez; ek güvenlik için de kapatılır. */
   flagEnabled: boolean;
-  onAssign: (stationId: string) => void;
+  onAssign: (machineId: string) => void;
   onToggleUrgent: () => void;
 }
 
 /**
- * Dağıtım BEKLEYEN bir iş emri satırı. İstasyon seçimi SATIR İÇİNDE yapılır —
+ * Dağıtım BEKLEYEN bir iş emri satırı. MAKİNE seçimi SATIR İÇİNDE yapılır —
  * planlamacı "seç → ata" akışını modal açmadan, listeden gözünü ayırmadan yürütür.
+ *
+ * Seçim hedefi İSTASYON DEĞİL MAKİNEDİR: kurşun tek istasyon, altındaki fiziksel
+ * makineler farklı. İstasyon adı yalnız parantezde bağlam olarak yazılır.
  *
  * `eligible=false` ise seçim ve "Ata" pasiftir ve `blockReason` SOMUT olarak
  * gösterilir (butonun sessizce çalışmaması en kötü davranış).
  */
 export function EligibleRow({
   row,
-  stations,
+  machines,
   busy,
   flagEnabled,
   onAssign,
   onToggleUrgent,
 }: Props) {
-  const [stationId, setStationId] = useState<string>("");
+  const [machineId, setMachineId] = useState<string>("");
   const blocked = !row.eligible || !flagEnabled;
+  // İstasyon adı yalnız AYIRT EDİCİYSE parantezde yazılır. Fabrikada tek
+  // PROCESS_QC istasyonu var → her satıra aynı adı basmak saf gürültü olurdu.
+  const showStationHint = new Set(machines.map((m) => m.stationId)).size > 1;
 
   return (
     <li>
@@ -58,17 +64,20 @@ export function EligibleRow({
           <PermissionGate permission="workorder:distribute">
             <div className="flex shrink-0 items-center gap-2">
               <Select
-                value={stationId}
-                onValueChange={setStationId}
-                disabled={blocked || busy || stations.length === 0}
+                value={machineId}
+                onValueChange={setMachineId}
+                disabled={blocked || busy || machines.length === 0}
               >
-                <SelectTrigger className="h-8 w-48 text-xs">
-                  <SelectValue placeholder="İstasyon seç" />
+                <SelectTrigger className="h-8 w-52 text-xs">
+                  <SelectValue placeholder="Makine seç" />
                 </SelectTrigger>
                 <SelectContent>
-                  {stations.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
+                  {machines.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                      {showStationHint && (
+                        <span className="text-muted-foreground"> ({m.stationName})</span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -78,8 +87,8 @@ export function EligibleRow({
                 type="button"
                 size="sm"
                 className="gap-1"
-                disabled={blocked || busy || !stationId}
-                onClick={() => onAssign(stationId)}
+                disabled={blocked || busy || !machineId}
+                onClick={() => onAssign(machineId)}
               >
                 <Send className="h-3.5 w-3.5" />
                 Ata

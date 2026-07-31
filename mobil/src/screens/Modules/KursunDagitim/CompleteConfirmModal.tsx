@@ -120,11 +120,11 @@ export default function CompleteConfirmModal({ row, onDismiss, onDone }: Props) 
           <Text style={styles.blockText}>⛔ {(previewQ.error as Error).message}</Text>
         ) : preview ? (
           <ScrollView contentContainerStyle={styles.body}>
-            {/* Fiziksel bağlam — iş hangi makinede yapıldı. */}
+            {/* Fiziksel bağlam — iş hangi MAKİNEDE yapıldı (atama makine bazında). */}
             <View style={styles.stationRow}>
               <Icon source="factory" size={16} color={colors.textSecondary} />
               <Text style={styles.stationText}>
-                Kurşun istasyonu: <Text style={styles.strong}>{preview.stationName}</Text>
+                Kurşun makinesi: <Text style={styles.strong}>{preview.machineName}</Text>
               </Text>
             </View>
 

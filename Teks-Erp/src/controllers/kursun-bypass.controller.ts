@@ -19,7 +19,9 @@ import "../types/express-augment";
 // zaten `?? null` ile servise normalize ediyor.
 const assignSchema = z.object({
   workOrderId: z.string().uuid("Geçersiz iş emri ID"),
-  stationId: z.string().uuid("Geçersiz istasyon ID"),
+  // ATAMA MAKİNE BAZINDA: PROCESS_QC istasyonu tektir, dağıtımcı o istasyona
+  // bağlı fiziksel kurşun MAKİNELERİNDEN birini seçer.
+  machineId: z.string().uuid("Geçersiz makine ID"),
   // KursunBypassAssignment.notes VarChar(500)
   notes: z.string().trim().max(500, "Not en fazla 500 karakter olabilir").nullish(),
 });
@@ -64,7 +66,7 @@ export class KursunBypassController {
       const result = await this.service.assign(
         {
           workOrderId: body.workOrderId,
-          stationId: body.stationId,
+          machineId: body.machineId,
           notes: body.notes ?? null,
         },
         req.user?.userId,

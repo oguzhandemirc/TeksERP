@@ -9,17 +9,17 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { formatNumber } from "@/lib/format";
 import { kursunDagitimService } from "./service";
 import { EligibleRow } from "./EligibleRow";
-import { AssignedStationGroup, groupAssignedByStation } from "./AssignedStationGroup";
+import { AssignedMachineGroup, groupAssignedByMachine } from "./AssignedMachineGroup";
 import { KursunDagitimCompleteDialog } from "./KursunDagitimCompleteDialog";
 import type { KursunDistributionAssignedRow } from "./types";
 
 const QUERY_KEY = ["kursun-bypass", "distribution"];
 
 /**
- * Kurşun Dağıtım — kurşun istasyonlarında tablet YOK; işi planlamacı buradan
- * fiziksel istasyonlara dağıtır. İki bölüm ÜST ÜSTE durur (sekme DEĞİL):
- * planlamacı "ne bekliyor" ile "hangi istasyon ne kadar dolu" sorularını aynı
- * anda görmeden dağıtım kararı veremez.
+ * Kurşun Dağıtım — kurşun makinelerinde tablet YOK; işi planlamacı buradan
+ * fiziksel kurşun MAKİNELERİNE dağıtır (istasyon tek, makineler N tane). İki
+ * bölüm ÜST ÜSTE durur (sekme DEĞİL): planlamacı "ne bekliyor" ile "hangi
+ * makine ne kadar dolu" sorularını aynı anda görmeden karar veremez.
  */
 export function KursunDagitimPage() {
   const qc = useQueryClient();
@@ -36,18 +36,18 @@ export function KursunDagitimPage() {
 
   const data = query.data?.data;
   const flagEnabled = data?.flagEnabled ?? false;
-  const stations = data?.stations ?? [];
+  const machines = data?.machines ?? [];
   const waiting = data?.waiting ?? [];
   // `?? []` her render'da YENİ dizi doğurur → useMemo bağımlılığı olarak
   // kullanılamaz (gruplama her render'da yeniden koşar). Referansı sabitle.
   const assigned = useMemo(() => data?.assigned ?? [], [data]);
-  const groups = useMemo(() => groupAssignedByStation(assigned), [assigned]);
+  const groups = useMemo(() => groupAssignedByMachine(assigned), [assigned]);
 
   const eligibleCount = waiting.filter((w) => w.eligible).length;
   const staleCount = assigned.filter((a) => a.stale).length;
   const assignedMeters = assigned.reduce((s, a) => s + a.totalMeters, 0);
 
-  /** Dağıtım kurşun kuyruğunun istasyonunu da değiştirir → ikisi birlikte tazelenir. */
+  /** Dağıtım kurşun kuyruğunun bypass rozetini de değiştirir → ikisi birlikte tazelenir. */
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["kursun-bypass"] });
     void qc.invalidateQueries({ queryKey: ["kursun-queue"] });
@@ -56,7 +56,7 @@ export function KursunDagitimPage() {
   const assignMut = useMutation({
     mutationFn: kursunDagitimService.assign,
     onSuccess: (res) => {
-      toast.success(res.message ?? "İş emri istasyona dağıtıldı.");
+      toast.success(res.message ?? "İş emri makineye dağıtıldı.");
       refresh();
     },
   });
@@ -84,7 +84,7 @@ export function KursunDagitimPage() {
     <PageShell>
       <PageHeader
         title="Kurşun Dağıtım"
-        description="Kurşun adımında bekleyen iş emirlerini fiziksel kurşun istasyonlarına dağıt."
+        description="Kurşun adımında bekleyen iş emirlerini fiziksel kurşun makinelerine dağıt."
         actions={
           <RefreshButton queryKey={QUERY_KEY} successMessage="Dağıtım listesi yenilendi" />
         }
@@ -97,7 +97,7 @@ export function KursunDagitimPage() {
         </span>
         <span>
           <span className="text-foreground font-medium">{assigned.length}</span> dağıtılmış
-          · {groups.length} istasyon · {formatNumber(assignedMeters, 0)} m
+          · {groups.length} makine · {formatNumber(assignedMeters, 0)} m
         </span>
         {staleCount > 0 && (
           <span className="text-warning-foreground">{staleCount} bayat dağıtım</span>
@@ -136,11 +136,11 @@ export function KursunDagitimPage() {
                       <EligibleRow
                         key={row.workOrderStepId}
                         row={row}
-                        stations={stations}
+                        machines={machines}
                         busy={busy}
                         flagEnabled={flagEnabled}
-                        onAssign={(stationId) =>
-                          assignMut.mutate({ workOrderId: row.workOrderId, stationId })
+                        onAssign={(machineId) =>
+                          assignMut.mutate({ workOrderId: row.workOrderId, machineId })
                         }
                         onToggleUrgent={() =>
                           urgentMut.mutate({
@@ -156,16 +156,16 @@ export function KursunDagitimPage() {
             )}
 
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold">İstasyonlara Dağıtılmış</h2>
+              <h2 className="text-sm font-semibold">Makinelere Dağıtılmış</h2>
               {groups.length === 0 ? (
                 <div className="text-muted-foreground flex h-24 items-center justify-center rounded-md border border-dashed text-sm">
-                  Hiçbir istasyona dağıtılmış iş emri yok.
+                  Hiçbir makineye dağıtılmış iş emri yok.
                 </div>
               ) : (
                 <div className="space-y-3">
                   {groups.map((group) => (
-                    <AssignedStationGroup
-                      key={group.stationId}
+                    <AssignedMachineGroup
+                      key={group.machineId}
                       group={group}
                       busy={busy}
                       onCancel={(row) => cancelMut.mutate(row.assignmentId)}

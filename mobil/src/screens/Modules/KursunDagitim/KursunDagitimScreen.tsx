@@ -23,19 +23,25 @@ import { fmtMeters } from './dagitimUi';
 import { colors, spacing, radius } from '../../../theme';
 
 // =============================================================================
-// KURŞUN DAĞITIM — kurşun istasyonlarına TABLET KOYULMAYAN düzenin ofis ekranı.
+// KURŞUN DAĞITIM — kurşun makinelerine TABLET KOYULMAYAN düzenin ofis ekranı.
 //
 // Fabrika kurşun işlemini fiziksel olarak yapar ama dijital izlemez (hatalar
 // kâğıtta). Yetkili personel burada, kurşun adımında bekleyen iş emrini bir
-// fiziksel kurşun istasyonuna ATAR. Adım sonradan iki yoldan kapanır:
-//   • Tambur tabletinde refakat kartı okutulur (Tambur ekranının işi), ya da
+// fiziksel kurşun MAKİNESİNE ATAR. Adım sonradan iki yoldan kapanır:
+//   • Tambur tabletinde refakat kartı okutulur → kurşun adımı SESSİZCE kapanır
+//     (Tambur operatörü hiçbir şey onaylamaz), ya da
 //   • Kurşun rotanın SON adımıysa buradaki "İşi Bitir" → toplar depoya.
+//
+// ⚠️ ATAMA MAKİNE BAZINDADIR. Fabrikada PROCESS_QC türünde TEK istasyon vardır
+// (KURSUN_KK2) ve altında N adet fiziksel kurşun makinesi durur — seçilen şey o
+// makinelerden biridir. Adımın istasyonu DEĞİŞMEZ; atama bilgisi atama satırında
+// yaşar, üretim atfı ise kapanan movement'ın `RollMovement.machineId` damgasında.
 //
 // ⚠️ Bu SKIPPED DEĞİLDİR — adım normal şekilde COMPLETED olur, yalnız QC2/Kurşun
 // operasyon kaydı yazılmaz ve hata açılmaz.
 //
 // TASARIM KARARLARI
-// • TEK useQuery: bayrak + istasyonlar + bekleyen + dağıtılmış aynı payload'ta
+// • TEK useQuery: bayrak + makineler + bekleyen + dağıtılmış aynı payload'ta
 //   gelir (backend `listDistribution`). İki liste ayrı sorgulansa aralarında
 //   tutarsız an oluşurdu ("bekleyen"de de "dağıtılmış"ta da görünen iş emri).
 // • Yön kilidi YOK — bu gezici bir ekran (ofis/süpervizör), istasyon tableti değil.
@@ -63,7 +69,7 @@ export default function KursunDagitimScreen() {
   const payload = distQ.data?.data;
   const waiting = useMemo(() => payload?.waiting ?? [], [payload]);
   const assigned = useMemo(() => payload?.assigned ?? [], [payload]);
-  const stations = useMemo(() => payload?.stations ?? [], [payload]);
+  const machines = useMemo(() => payload?.machines ?? [], [payload]);
   const flagEnabled = payload?.flagEnabled ?? false;
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['kursun-bypass'] });
@@ -73,14 +79,14 @@ export default function KursunDagitimScreen() {
 
   // ── Mutasyonlar (online-only; hata toast'ı bileşende) ──────────────────────
   const assignMut = useMutation({
-    mutationFn: (v: { workOrderId: string; stationId: string }) =>
-      kursunBypassService.assign({ workOrderId: v.workOrderId, stationId: v.stationId }),
+    mutationFn: (v: { workOrderId: string; machineId: string }) =>
+      kursunBypassService.assign({ workOrderId: v.workOrderId, machineId: v.machineId }),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
-        text1: res.data.reassigned ? 'İstasyon değiştirildi' : 'İş kurşuna dağıtıldı',
-        text2: `${res.data.workOrderNumber} → ${res.data.stationName}`,
+        text1: res.data.reassigned ? 'Makine değiştirildi' : 'İş kurşuna dağıtıldı',
+        text2: `${res.data.workOrderNumber} → ${res.data.machineName}`,
       });
       void refresh();
     },
@@ -94,14 +100,14 @@ export default function KursunDagitimScreen() {
   const cancelMut = useMutation({
     mutationFn: (v: { assignmentId: string; reason?: string }) =>
       kursunBypassService.cancel(v.assignmentId, { reason: v.reason ?? null }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // "İstasyon geri yüklendi mi" diye bir bilgi YOK — atama makine bazında
+      // yapıldığı için adımın istasyonuna hiç dokunulmadı.
       Toast.show({
         type: 'success',
         text1: 'Dağıtım kaldırıldı',
-        text2: res.data.stationRestored
-          ? 'Adım eski istasyonuna döndü — normal tabletli akış.'
-          : 'Adımın istasyonu bu arada başka yolla değişmiş, geri yükleme yapılmadı.',
+        text2: 'İş normal tabletli Kurşun + KK2 akışına döndü.',
       });
       setCancelTarget(null);
       void refresh();
@@ -137,9 +143,11 @@ export default function KursunDagitimScreen() {
   const toggleUrgent = (row: { workOrderStepId: string; isUrgent: boolean }) =>
     urgentMut.mutate({ stepId: row.workOrderStepId, isUrgent: !row.isUrgent });
 
-  const stationOptions = useMemo(
-    () => stations.map((s) => ({ value: s.id, label: s.name, sublabel: s.code })),
-    [stations]
+  // Makine kartı: ad + kod. İstasyon adı YAZILMAZ — PROCESS_QC istasyonu tektir,
+  // her karta aynı satırı basmak gürültüden başka bir şey olmazdı.
+  const machineOptions = useMemo(
+    () => machines.map((m) => ({ value: m.id, label: m.name, sublabel: m.code })),
+    [machines]
   );
 
   const loading = distQ.isLoading;
@@ -148,11 +156,11 @@ export default function KursunDagitimScreen() {
     <EligibleList
       rows={waiting}
       flagEnabled={flagEnabled}
-      stationsEmpty={stations.length === 0}
+      machinesEmpty={machines.length === 0}
       loading={loading}
       refreshing={manualRefresh.refreshing}
       onRefresh={manualRefresh.onRefresh}
-      onPickStation={setAssignTarget}
+      onPickMachine={setAssignTarget}
       onToggleUrgent={toggleUrgent}
       urgentBusyStepId={urgentBusyStepId}
     />
@@ -229,20 +237,20 @@ export default function KursunDagitimScreen() {
         </View>
       )}
 
-      {/* İSTASYON SEÇ → doğrudan atama (araya form/onay koymuyoruz). */}
+      {/* MAKİNE SEÇ → doğrudan atama (araya form/onay koymuyoruz). */}
       <PickerModal
         visible={assignTarget !== null}
         title={
           assignTarget
-            ? `${assignTarget.workOrderNumber} → Kurşun İstasyonu`
-            : 'Kurşun İstasyonu'
+            ? `${assignTarget.workOrderNumber} → Kurşun Makinesi`
+            : 'Kurşun Makinesi'
         }
-        options={stationOptions}
-        emptyText="Kurşun (PROCESS_QC) istasyonu tanımlı değil — yönetim panelinden ekleyin."
-        onSelect={(stationId) => {
+        options={machineOptions}
+        emptyText="Kurşun istasyonuna bağlı MAKİNE tanımlı değil — yönetim panelinden ekleyin."
+        onSelect={(machineId) => {
           const target = assignTarget;
           setAssignTarget(null);
-          if (target) assignMut.mutate({ workOrderId: target.workOrderId, stationId });
+          if (target) assignMut.mutate({ workOrderId: target.workOrderId, machineId });
         }}
         onDismiss={() => setAssignTarget(null)}
       />
@@ -268,7 +276,7 @@ export default function KursunDagitimScreen() {
                 kurşun dağıtımı kaldırılacak.
               </Text>
               <Text style={styles.confirmLine}>
-                İstasyon: <Text style={styles.confirmStrong}>{cancelTarget.stationName}</Text>
+                Makine: <Text style={styles.confirmStrong}>{cancelTarget.machineName}</Text>
               </Text>
               <Text style={styles.confirmLine}>
                 Etkilenen iş:{' '}
@@ -280,8 +288,9 @@ export default function KursunDagitimScreen() {
                   : ''}
               </Text>
               <Text style={styles.confirmNote}>
-                Adım atama öncesi istasyonuna döner ve NORMAL tabletli Kurşun + KK2 akışına
-                geri girer. Toplara dokunulmaz, hiçbir kayıt silinmez.
+                İş NORMAL tabletli Kurşun + KK2 akışına geri girer. Adımın istasyonu zaten
+                hiç değişmedi (atama makine bazındadır) — yalnız makine ataması kalkar.
+                Toplara dokunulmaz, hiçbir kayıt silinmez.
               </Text>
             </View>
           ) : (

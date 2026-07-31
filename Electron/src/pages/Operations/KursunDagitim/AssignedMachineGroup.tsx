@@ -10,28 +10,29 @@ import { formatNumber, safeFormat } from "@/lib/format";
 import { RowIdentity } from "./RowIdentity";
 import type { KursunDistributionAssignedRow } from "./types";
 
-export interface AssignedStationGroupData {
-  stationId: string;
-  stationName: string;
+export interface AssignedMachineGroupData {
+  machineId: string;
+  machineName: string;
   rows: KursunDistributionAssignedRow[];
 }
 
 /**
- * Dağıtılmış satırları İSTASYONA göre gruplar. Sıra: payload sırası korunur
- * (backend acil + öncelik sırasıyla döner), grup sırası ilk görülen istasyon.
+ * Dağıtılmış satırları MAKİNEYE göre gruplar (istasyona DEĞİL: kurşun tek
+ * istasyon, iş yükü makineler arasında bölünür). Sıra: payload sırası korunur
+ * (backend acil + öncelik sırasıyla döner), grup sırası ilk görülen makine.
  */
-export function groupAssignedByStation(
+export function groupAssignedByMachine(
   rows: KursunDistributionAssignedRow[],
-): AssignedStationGroupData[] {
-  const groups = new Map<string, AssignedStationGroupData>();
+): AssignedMachineGroupData[] {
+  const groups = new Map<string, AssignedMachineGroupData>();
   for (const row of rows) {
-    const existing = groups.get(row.stationId);
+    const existing = groups.get(row.machineId);
     if (existing) {
       existing.rows.push(row);
     } else {
-      groups.set(row.stationId, {
-        stationId: row.stationId,
-        stationName: row.stationName,
+      groups.set(row.machineId, {
+        machineId: row.machineId,
+        machineName: row.machineName,
         rows: [row],
       });
     }
@@ -40,7 +41,7 @@ export function groupAssignedByStation(
 }
 
 interface Props {
-  group: AssignedStationGroupData;
+  group: AssignedMachineGroupData;
   busy: boolean;
   onCancel: (row: KursunDistributionAssignedRow) => void;
   onToggleUrgent: (row: KursunDistributionAssignedRow) => void;
@@ -48,11 +49,11 @@ interface Props {
 }
 
 /**
- * PLANLAMACI MONİTÖRÜ — bir fiziksel kurşun istasyonunun yükü. Başlıkta rollup
- * (iş emri adedi / top / metraj) var çünkü dağıtım kararı "hangi istasyon boş"
+ * PLANLAMACI MONİTÖRÜ — bir fiziksel kurşun MAKİNESİNİN yükü. Başlıkta rollup
+ * (iş emri adedi / top / metraj) var çünkü dağıtım kararı "hangi makine boş"
  * sorusuna dayanır; satır satır toplamak zorunda kalmak kararı geciktirir.
  */
-export function AssignedStationGroup({
+export function AssignedMachineGroup({
   group,
   busy,
   onCancel,
@@ -70,7 +71,7 @@ export function AssignedStationGroup({
     <div className="rounded-md border">
       <div className="bg-muted/40 flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2">
         <Factory className="text-muted-foreground h-4 w-4 shrink-0" />
-        <span className="font-medium">{group.stationName}</span>
+        <span className="font-medium">{group.machineName}</span>
         <span className="text-muted-foreground text-xs tabular-nums">
           {group.rows.length} iş emri · {totalRolls} top ·{" "}
           {formatNumber(totalMeters, 0)} m
@@ -168,13 +169,13 @@ export function AssignedStationGroup({
         title="Dağıtımı kaldır"
         description={
           cancelTarget
-            ? `${cancelTarget.workOrderNumber} iş emrinin kurşun dağıtımı "${group.stationName}" istasyonundan kaldırılacak.\n\n` +
+            ? `${cancelTarget.workOrderNumber} iş emrinin kurşun dağıtımı "${group.machineName}" makinesinden kaldırılacak.\n\n` +
               `Kapsam: ${cancelTarget.openRollCount} top · ${formatNumber(cancelTarget.totalMeters, 0)} m` +
               (cancelTarget.batchNumbers.length > 0
                 ? `\nParti: ${cancelTarget.batchNumbers.join(", ")}`
                 : "") +
               `\nKart: ${cancelTarget.travelerCardNumber ?? "—"}\n\n` +
-              "İş normal (tabletli) kurşun akışına döner, adımın istasyonu atama öncesine geri yüklenir. Toplara DOKUNULMAZ."
+              "İş normal (tabletli) kurşun akışına döner. Adımın istasyonuna ve toplara DOKUNULMAZ."
             : undefined
         }
         confirmLabel="Dağıtımı kaldır"

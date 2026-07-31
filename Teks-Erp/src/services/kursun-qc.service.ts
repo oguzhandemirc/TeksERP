@@ -89,9 +89,13 @@ interface StepSummary {
   stepNote: string | null;
   /// Bu adım kurşun bypass'ına DAĞITILMIŞ mı (açık atama)? Doluysa tabletteki
   /// tüm yazma yolları 409 verir (assertStepNotBypassAssigned). Tablet ham 409
-  /// beklemek yerine kartı okutur okutmaz "bu iş <istasyon>'a dağıtıldı, kâğıtla
+  /// beklemek yerine kartı okutur okutmaz "bu iş <makine>'ye dağıtıldı, kâğıtla
   /// işleniyor" bilgi ekranını gösterebilsin diye okuma yanıtında taşınır.
-  bypassAssignment: { stationName: string; assignedAt: Date } | null;
+  ///
+  /// MAKİNE adı taşınır, İSTASYON adı DEĞİL: atama makine bazındadır ve bu
+  /// adımın istasyonu zaten tabletin bulunduğu tek PROCESS_QC istasyonudur —
+  /// istasyon adını basmak operatöre "kendi istasyonuna dağıtıldı" dedirtirdi.
+  bypassAssignment: { machineName: string; assignedAt: Date } | null;
   rolls: RollSummary[];
 }
 
@@ -99,6 +103,9 @@ export interface KursunQueueItem {
   /// WorkOrderStep.id — reorder/urgent endpoint'leri bu id'yi alır.
   /// Tablet `open-cards` listesi ve Electron Kurşun Sırası ortak okur.
   workOrderStepId: string;
+  /// Adımın İSTASYONU. Fabrikada PROCESS_QC türünde TEK istasyon var → bu alan
+  /// pratikte her satırda AYNIDIR; gruplama/ayırt etme anahtarı DEĞİLDİR,
+  /// yalnızca bağlam/başlık bilgisidir.
   stationName: string;
   workOrderId: string;
   batchNumber: string;
@@ -120,13 +127,29 @@ export interface KursunQueueItem {
   isUrgent: boolean;
   urgentMarkedAt: Date | null;
   /**
-   * Bu adım kurşun bypass'ına dağıtılmış mı (açık atama var mı)? Planlamacı
-   * ekranında "bypass" rozeti için. AYRI bir `assignedStationName` alanı
-   * BİLİNÇLİ olarak YOK: atama `step.stationId`'yi atanan istasyona repoint
-   * ettiği için yukarıdaki `stationName` zaten ATANAN istasyondur — ikinci alan
-   * ikisini ayrı sanan bir okuyucu doğururdu.
+   * Bu adım kurşun dağıtımına (bypass) verilmiş mi — açık atama var mı?
+   *
+   * ⚠️ BU ALAN GRUPLAMA ANAHTARI DEĞİL, BİLGİLENDİRME BAYRAĞIDIR. Kurşun Sırası
+   * ekranı bypass AÇIKKEN tamamen gizlenir (kuyruk sıralamasının tek tüketicisi
+   * kurşun tabletiydi; bypass rejiminde kurşunda tablet yok, izleme + acil
+   * işaretleme Kurşun Dağıtım ekranına taşındı). Bu alanların tek anlamı KARIŞIK
+   * REJİMDİR: bayrak yeni açıldığında hâlâ tablet rejiminde bekleyen işler
+   * varken planlamacı hangisinin dağıtıldığını ayırt edebilsin. Bu yüzden
+   * listQueue MAKİNE BAZINDA GRUPLAMA YAPMAZ — gruplama/sıra izleme yüzeyi
+   * Kurşun Dağıtım ekranıdır.
    */
   bypassAssigned: boolean;
+  /**
+   * Dağıtımın atandığı fiziksel kurşun makinesinin adı (rozet metni).
+   * null = dağıtılmamış (`bypassAssigned === false`).
+   *
+   * İki alan da AYNI sorgunun AYNI satırından türer (aşağıdaki nested select) —
+   * ayrı kaynaklardan gelmedikleri için birbirine göre bayatlayamazlar; ad ayrı
+   * taşınır çünkü UI rozeti "dağıtıldı" demekle yetinmeyip "hangi makinede"yi
+   * yazar. Makine `id`'si BİLİNÇLİ olarak taşınmaz: id yalnız gruplama anahtarı
+   * olarak işe yarardı ve bu ekranda gruplama yok.
+   */
+  bypassMachineName: string | null;
 }
 
 export class KursunQcService {
@@ -341,7 +364,7 @@ export class KursunQcService {
     });
 
     const op = await prisma.$transaction(async (tx) => {
-      // Kurşun bypass: adım fiziksel bir kurşun istasyonuna dağıtılmışsa iş
+      // Kurşun bypass: adım fiziksel bir kurşun MAKİNESİNE dağıtılmışsa iş
       // KÂĞITTA yürüyor — tablet KK2 kaydı yazamaz. Guard tx İÇİNDE ve ilk
       // sırada: `existedBefore` / `hasKursunCap` okumaları tx DIŞINDA yapıldığı
       // için pencerede araya giren `assign` bu QC2 op'unu commit ettirirdi.
@@ -1285,7 +1308,7 @@ export class KursunQcService {
       // (kursun_bypass_one_pending_per_step_uq) en fazla bir satır garanti eder.
       prisma.kursunBypassAssignment.findFirst({
         where: { workOrderStepId: stepId, ...PENDING_BYPASS_WHERE },
-        select: { assignedAt: true, station: { select: { name: true } } },
+        select: { assignedAt: true, machine: { select: { name: true } } },
       }),
     ]);
 
@@ -1332,7 +1355,7 @@ export class KursunQcService {
         appliesKursun: !!kursunCap,
         stepNote: step.notes,
         bypassAssignment: bypass
-          ? { stationName: bypass.station.name, assignedAt: bypass.assignedAt }
+          ? { machineName: bypass.machine.name, assignedAt: bypass.assignedAt }
           : null,
         rolls,
       },
@@ -1351,6 +1374,15 @@ export class KursunQcService {
    * Filtre: station.kind = PROCESS_QC + status != COMPLETED + en az 1 açık top.
    * Sıralama: önce isUrgent, sonra urgentMarkedAt, sonra priority, son
    * startedAt (en eski adım önce).
+   *
+   * ⚠️ BYPASS REJİMİ: Kurşun Sırası ekranı `production.kursunBypassEnabled`
+   * AÇIKKEN tamamen GİZLENİR. Buradaki sıralamanın (priority / drag-drop) tek
+   * tüketicisi kurşun TABLETİYDİ (`listOpenCards` aynı orderBy'ı okur); bypass
+   * düzeninde kurşunda tablet yoktur, dolayısıyla sırayı okuyacak kimse kalmaz —
+   * izleme ve acil işaretleme Kurşun Dağıtım ekranında (aynı sıralamayla) yapılır.
+   * Bu yüzden burada MAKİNE BAZLI GRUPLAMA YOKTUR; satırdaki `bypassAssigned` +
+   * `bypassMachineName` yalnız KARIŞIK REJİM içindir (bayrak yeni açıldı, bir
+   * kısım iş hâlâ tablet rejiminde bekliyor → planlamacı ayırt edebilsin).
    */
   async listQueue(): Promise<ApiResponse<KursunQueueItem[]>> {
     const steps = await prisma.workOrderStep.findMany({
@@ -1392,14 +1424,19 @@ export class KursunQcService {
             },
           },
         },
-        // Kurşun bypass rozeti: adımın AÇIK ataması var mı? Kuyruk satırı
+        // Kurşun bypass: adımın AÇIK ataması hangi MAKİNEDE? Kuyruk satırı
         // dağıtılmış olsa da LİSTEDE KALIR (listOpenCards'ın aksine) — burası
         // planlamacının izleme yüzeyi, seçim yüzeyi değil: dağıtılan işin
         // kuyruktan sessizce kaybolması "iş kayboldu" paniği doğururdu.
         // `take: 1` yeter (partial unique en fazla bir açık satır bırakır).
+        //
+        // NESTED SELECT = TEK SORGU: makine adı için satır başına ayrı çağrı
+        // YOK (N+1 yasağı) — Prisma bunu tek round-trip'te join'ler. Açık
+        // atamanın yüklemi (`completedAt IS NULL AND cancelledAt IS NULL`)
+        // PENDING_BYPASS_WHERE ile tek kaynaktan gelir.
         kursunBypasses: {
           where: PENDING_BYPASS_WHERE,
-          select: { id: true },
+          select: { machine: { select: { name: true } } },
           take: 1,
         },
       },
@@ -1430,6 +1467,7 @@ export class KursunQcService {
       );
       const batch = s.movements[0]?.roll.batch ?? null;
       const card = s.workOrder.travelerCards[0] ?? null;
+      const bypass = s.kursunBypasses[0] ?? null;
       return {
         workOrderStepId: s.id,
         stationName: s.station.name,
@@ -1446,7 +1484,8 @@ export class KursunQcService {
         priority: s.priority,
         isUrgent: s.isUrgent,
         urgentMarkedAt: s.urgentMarkedAt,
-        bypassAssigned: s.kursunBypasses.length > 0,
+        bypassAssigned: bypass !== null,
+        bypassMachineName: bypass?.machine.name ?? null,
       };
     });
 

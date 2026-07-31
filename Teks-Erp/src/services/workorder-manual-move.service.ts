@@ -365,7 +365,10 @@ export class WorkOrderManualMoveService {
     // (force YOK → yalnız terminale düşen adım).
     const pendingBypasses = await prisma.kursunBypassAssignment.findMany({
       where: { workOrderId, completedAt: null, cancelledAt: null },
-      select: { workOrderStepId: true, station: { select: { name: true } } },
+      // Atama MAKİNE bazındadır (istasyon değil) — uyarıda dağıtımcının seçtiği
+      // fiziksel kurşun makinesinin adı yazar, "Kurşun + KK2" gibi tek istasyon
+      // adı değil (tek istasyon adı hangi işin iptal olduğunu ayırt ettirmezdi).
+      select: { workOrderStepId: true, machine: { select: { name: true } } },
     });
     if (pendingBypasses.length > 0) {
       const movableIds = movable.map((r) => r.id);
@@ -399,7 +402,7 @@ export class WorkOrderManualMoveService {
           willVoid = remaining === 0;
         }
         if (willVoid) {
-          warnings.push(`Kurşun dağıtımı iptal olacak — ${b.station.name}`);
+          warnings.push(`Kurşun dağıtımı iptal olacak — ${b.machine.name}`);
         }
       }
     }

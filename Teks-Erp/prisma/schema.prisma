@@ -498,9 +498,9 @@ model Station {
   propertyCapabilities StationProperty[]
   peripherals          PeripheralDevice[] // MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.)
   workSessions         WorkSession[]
-  // Kurşun bypass: bu istasyona ATANAN işler / bu istasyondan devralınan adımlar
-  kursunBypassAssigned KursunBypassAssignment[] @relation("KursunBypassAssignedStation")
-  kursunBypassOriginal KursunBypassAssignment[] @relation("KursunBypassOriginalStation")
+  // NOT: Kurşun bypass ataması İSTASYONA değil MAKİNEYE yapılır
+  // (Machine.kursunBypasses) — PROCESS_QC istasyonu tektir, altındaki
+  // fiziksel kurşun makineleri N adettir. Bu yüzden Station'da karşı-ilişki YOK.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -526,6 +526,9 @@ model Machine {
   rollMovements  RollMovement[]
   workSessions   WorkSession[]
   rollsCreated   Roll[]             @relation("RollCreatedMachine") // KK1 girişi makine atfı
+  /// Kurşun bypass: bu MAKİNEYE atanan işler. Atama makine bazındadır — tek
+  /// PROCESS_QC istasyonu altında N fiziksel kurşun makinesi vardır.
+  kursunBypasses KursunBypassAssignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1489,11 +1492,24 @@ enum KursunBypassCompletionSource {
   DISTRIBUTION_LAST_STEP
 }
 
-/// Kurşun bypass ataması — fabrika kurşun istasyonlarına tablet KOYMUYOR. Kurşun
+/// Kurşun bypass ataması — fabrika kurşun makinelerine tablet KOYMUYOR. Kurşun
 /// işlemi fiziksel olarak yapılır ama dijital izlenmez (hatalar kâğıtta): yetkili
-/// personel, kurşun adımında bekleyen iş emrini bir fiziksel kurşun istasyonuna
+/// personel, kurşun adımında bekleyen iş emrini bir fiziksel kurşun MAKİNESİNE
 /// ATAR; adım daha sonra Tambur'da kart okutmasıyla ya da (kurşun rotanın son
 /// adımıysa) dağıtım ekranından tamamlanır.
+///
+/// ⚠️ ATAMA MAKİNE BAZINDADIR, İSTASYON BAZINDA DEĞİL. Fabrikada TEK bir
+/// PROCESS_QC istasyonu (KURSUN_KK2) vardır ve altında N adet fiziksel kurşun
+/// makinesi (`Machine`) durur — dağıtımcının seçtiği şey o makinedir. Bunun üç
+/// sonucu var:
+///   1. `WorkOrderStep.stationId` **REPOINT EDİLMEZ** (eski tasarımdaki
+///      `stationId`/`originalStationId` çifti bu yüzden DÜŞTÜ). İstasyon zaten
+///      tek ve değişmiyor; atama bilgisi adımda değil, BU SATIRDA yaşar.
+///      `WorkOrderStep`'te `machineId` alanı da YOKTUR ve eklenmeyecektir.
+///   2. Makine atfı `RollMovement.machineId`'ye damgalanır (bypass kapanışında
+///      atanan makine yazılır) — makine bazlı hacim raporları böylece çalışır.
+///   3. İstasyon yetenekleri (KURŞUN `StationProperty`) makinenin İSTASYONUNDAN
+///      okunur: `copyStationCapabilitiesToRoll(machine.stationId)`.
 ///
 /// ⚠️ Bu SKIPPED DEĞİLDİR: adım atlanmaz, `RollMovement`'lar normal şekilde
 /// kapanır ve adım COMPLETED olur. Fark, `RollOperation` (KURSUN_APPLIED /
@@ -1505,7 +1521,8 @@ enum KursunBypassCompletionSource {
 /// TASARIM — satır APPEND-ONLY + SOFT-CANCEL'dir:
 /// • Tamamlanan satır silinmez; `completedAt`/`completedById`/`completedVia` ile
 ///   damgalanır. İptal edilen satır `cancelledAt`/`cancelledById`/`cancelReason`
-///   alır ve `originalStationId` adıma geri yazılır (atama öncesi istasyon).
+///   alır — adımda geri yüklenecek bir şey YOKTUR (istasyon hiç değişmedi),
+///   iptal yalnız bu satırı kapatır.
 /// • `workOrderStepId`'ye @unique KOYULMADI — fason çok-parti gerçeği: parti 1
 ///   bypass ile biter, parti 2 haftalar sonra gelir ve AYNI adım için YENİ bir
 ///   atama satırı gerekir. Teklik yalnız AÇIK atamada anlamlıdır.
@@ -1522,13 +1539,13 @@ enum KursunBypassCompletionSource {
 ///   ataması var mı" sorgusu hem dağıtım ekranının hem Tambur önizlemesinin sıcak
 ///   yolu — join'siz tek index taraması için tutulur.
 model KursunBypassAssignment {
-  id                String @id @default(uuid()) @db.Uuid
-  workOrderId       String @db.Uuid
-  workOrderStepId   String @db.Uuid
-  /// ATANAN fiziksel kurşun istasyonu (Station.kind = PROCESS_QC).
-  stationId         String @db.Uuid
-  /// Atama anındaki `step.stationId` — iptalde adıma geri yüklenir.
-  originalStationId String @db.Uuid
+  id              String @id @default(uuid()) @db.Uuid
+  workOrderId     String @db.Uuid
+  workOrderStepId String @db.Uuid
+  /// ATANAN fiziksel kurşun makinesi (station.kind = PROCESS_QC olan makine).
+  /// Yetenek okuması `machine.stationId` üzerinden yapılır; movement kapanışında
+  /// `RollMovement.machineId` bu değerle damgalanır.
+  machineId       String @db.Uuid
 
   assignedById String   @db.Uuid
   assignedAt   DateTime @default(now()) @db.Timestamptz
@@ -1544,13 +1561,16 @@ model KursunBypassAssignment {
   cancelReason  String?   @db.VarChar(200)
 
   // Relations
-  workOrder       WorkOrder     @relation(fields: [workOrderId], references: [id])
-  workOrderStep   WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
-  station         Station       @relation("KursunBypassAssignedStation", fields: [stationId], references: [id])
-  originalStation Station       @relation("KursunBypassOriginalStation", fields: [originalStationId], references: [id])
-  assignedBy      User          @relation("KursunBypassAssignedBy", fields: [assignedById], references: [id])
-  completedBy     User?         @relation("KursunBypassCompletedBy", fields: [completedById], references: [id])
-  cancelledBy     User?         @relation("KursunBypassCancelledBy", fields: [cancelledById], references: [id])
+  workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id])
+  workOrderStep WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
+  machine       Machine       @relation(fields: [machineId], references: [id])
+  assignedBy    User          @relation("KursunBypassAssignedBy", fields: [assignedById], references: [id])
+  // onDelete: Restrict AÇIKÇA yazılı — DB'de (migration 20260731120000) RESTRICT
+  // yaratıldı ama Prisma opsiyonel ilişkide varsayılan olarak SetNull sayıyordu →
+  // datamodel/DB drift'i. Niyet RESTRICT: bypass izi, "kim tamamladı/kim iptal etti"
+  // bilgisi kullanıcı kaydı üzerinden koparılamaz (satır append-only).
+  completedBy   User?         @relation("KursunBypassCompletedBy", fields: [completedById], references: [id], onDelete: Restrict)
+  cancelledBy   User?         @relation("KursunBypassCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1558,8 +1578,8 @@ model KursunBypassAssignment {
   // WO bazlı açık-atama lookup'ı (denormalize kolon sayesinde join'siz)
   @@index([workOrderId])
   @@index([workOrderStepId])
-  // Dağıtım ekranı: "bu kurşun istasyonuna atanmış işler" listesi
-  @@index([stationId])
+  // Dağıtım/izleme ekranı: "bu kurşun MAKİNESİNE atanmış işler" listesi
+  @@index([machineId])
   @@map("kursun_bypass_assignments")
 }
 

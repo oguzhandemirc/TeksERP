@@ -34,6 +34,15 @@ export interface OperationsTile {
    *  akışta tabletten işlenir, dağıtım ekranı anlamsız → menüden gizlenir. Bayrak
    *  kapatılsa da ekranın ROUTE'u açık kalır: dağıtılmış işler bitirilebilsin. */
   requiresKursunBypass?: boolean;
+  /** `requiresKursunBypass`'in TERSİ: bayrak AÇIKKEN karo GİZLENİR.
+   *
+   *  Kurşun Sırası içindir. Kuyruk sıralamasının (drag-drop priority) tek
+   *  tüketicisi kurşun TABLETİYDİ; bypass düzeninde kurşunda tablet yok, yani
+   *  sırayı okuyan kimse kalmıyor — izleme ve acil işaretleme Kurşun Dağıtım
+   *  ekranına (aynı sıralamayla) taşındı. Burada karo gizlemek YETMEZ: ROUTE da
+   *  kapatılır (`KursunQueueRouteGate`), yoksa komut paletinden / doğrudan
+   *  adresle ekran hâlâ açılırdı. */
+  hiddenWhenKursunBypass?: boolean;
 }
 
 export const operationsTiles: OperationsTile[] = [
@@ -150,11 +159,13 @@ export const operationsTiles: OperationsTile[] = [
     // Route ile hizalı: kalitecinin yanında kurşun dağıtımcısı da kuyruğu izler
     // (dağıtım kararı bu kuyruğun üstüne kurulur — bkz. Kurşun Dağıtım).
     permissionAny: ["quality:write", "workorder:distribute"],
+    // Bypass AÇIKKEN bu ekran yoktur: sırayı okuyacak kurşun tableti kalmıyor.
+    hiddenWhenKursunBypass: true,
   },
   {
     key: "kursun-dagitim",
     title: "Kurşun Dağıtım",
-    description: "Fasondan kabul edilen iş emirlerini kurşun istasyonlarına dağıt",
+    description: "Fasondan kabul edilen iş emirlerini fiziksel kurşun makinelerine dağıt",
     icon: Share2,
     to: "/operations/kursun-dagitim",
     group: "production",

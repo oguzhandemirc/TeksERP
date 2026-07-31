@@ -791,8 +791,8 @@ export interface TamburContextOpenFabric {
 }
 
 /**
- * Kurşun Dağıtım (bypass) önizlemesinde gösterilen top — `bypassPending.rolls`.
- * Onay çağrısına gidecek `rollIds` KAPSAM sözleşmesinin de kaynağıdır (backend
+ * Kurşun Dağıtım (bypass) kapanışına giren top — `bypassPending.rolls`.
+ * Kapanış çağrısına gidecek `rollIds` KAPSAM sözleşmesinin kaynağıdır (backend
  * kapsam paritesini doğrular: eksik/fazla liste 409).
  */
 export interface TamburBypassPendingRoll {
@@ -806,18 +806,21 @@ export interface TamburBypassPendingRoll {
 }
 
 /**
- * Kurşun istasyonlarında tablet YOKTUR: iş, Kurşun Dağıtım ekranından fiziksel
- * bir kurşun istasyonuna atanır. Tambur operatörü refakat kartını okuttuğunda
- * bu blok doluysa "Kurşun Bypass Onayı" önizlemesi açılır ve onay
- * `POST /api/tambur/bypass-complete` ile Kurşun/KK2 adımını COMPLETED yapar
- * (SKIPPED DEĞİL). null = normal akış.
+ * Kurşun makinelerinde tablet YOKTUR: iş, Kurşun Dağıtım ekranından fiziksel
+ * bir kurşun MAKİNESİNE atanır. Tambur operatörü refakat kartını okuttuğunda bu
+ * blok doluysa Kurşun/KK2 adımı `POST /api/tambur/bypass-complete` ile SESSİZCE
+ * COMPLETED yapılır (SKIPPED DEĞİL) ve kart normal Tambur işi olarak açılır —
+ * operatöre soru SORULMAZ. null = normal akış.
  */
 export interface TamburBypassPending {
   assignmentId: string;
   /** Kurşun/KK2 adımı (WorkOrderStep) — kapanacak olan adım. */
   stepId: string;
+  /** İşin ATANDIĞI fiziksel kurşun makinesi (atama makine bazındadır). */
+  machineId: string;
+  machineName: string;
+  /** Makinenin istasyonu — bağlam bilgisi (tek PROCESS_QC istasyonu). */
   stationId: string;
-  /** Fiziksel kurşun istasyonunun adı — operatöre "hangi tezgâh" bilgisi. */
   stationName: string;
   assignedAt: string;
   assignedByName: string | null;
@@ -840,7 +843,7 @@ export interface TamburContext {
   stepNote?: string | null;
   orders: TamburContextOrder[];
   openFabricRolls: TamburContextOpenFabric[];
-  /** Bekleyen Kurşun Dağıtım işi (bypass önizleme + onay verisi). */
+  /** Bekleyen Kurşun Dağıtım işi (sessiz bypass kapanışının kapsam kaynağı). */
   bypassPending?: TamburBypassPending | null;
 }
 
