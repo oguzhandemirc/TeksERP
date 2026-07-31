@@ -234,6 +234,11 @@ async function testSwapCommand(): Promise<void> {
     code.filter((l) => l.includes("Write-Host")).every((l) => /^[\x20-\x7E]*$/.test(l)),
   );
   check("pg_terminate_backend varsayılan KAPALI", f.includes("$force = $false"));
+  // PM2 daemon SYSTEM olarak koşuyor → normal shell'de EPERM. Guard olmazsa
+  // backend ayakta kalır ve rename'ler "database is being accessed" ile düşer.
+  check("pm2 stop çıkış kodu guard'lı", f.includes("$stopped = ($LASTEXITCODE -eq 0)"));
+  check("takas $stopped'a bağlı", f.includes("$go = $stopped -and"));
+  check("yönetici shell uyarısı var", /YONETICI/.test(f));
   check("açık oturum varsa LİSTELENİR", f.includes("application_name"));
   // Geri alma bloğu ileri bloğun tersi + kendi otomatik geri alması
   check("geri alma: old → live", c.rollback.includes(`"TeksErpDb_old_20260730_151020" RENAME TO "TeksErpDb"`));

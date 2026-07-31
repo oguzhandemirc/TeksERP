@@ -74,7 +74,7 @@ export function AccountingDispatchPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Sevk Muhasebesi"
+        title="Sevkiyatlar (Muhasebe)"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -96,7 +96,7 @@ export function AccountingDispatchPage() {
         onSearchChange={setSearch}
         placeholder="Sevkiyat no, firma, plaka, sürücü ara..."
         table={table}
-        exportName="Sevk Muhasebesi"
+        exportName="Sevkiyatlar (Muhasebe)"
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
       <DataTable<DispatchListItem>
@@ -104,7 +104,7 @@ export function AccountingDispatchPage() {
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText="Sevk edilmiş sevkiyat bulunamadı."
-        exportName="Sevk Muhasebesi"
+        exportName="Sevkiyatlar (Muhasebe)"
         selectionHint={null}
         bulkActions={(rows) =>
           rows.length === 0 ? null : (

@@ -107,6 +107,20 @@ async function runIfDue(): Promise<void> {
 
 export function startBackupScheduler(): void {
   if (timer) return;
+  // 2026-07-31: Sahadaki sunucuda gece yedeğini BAĞIMSIZ bir Windows Görev
+  // Zamanlayıcı script'i alıyor (`TeksERP-DB-Backup` → `yedekle.ps1`, 02:00).
+  // Bunun bilinçli bir üstünlüğü var: backend çökmüş/kapalıyken bile yedek
+  // alınır — tam da en çok ihtiyaç duyulan anda. O yüzden orada backend
+  // zamanlayıcısı KAPATILIR (`BACKUP_SCHEDULE_ENABLED=false`); panelin elle
+  // yedek / önizleme / kopya özellikleri çalışmaya devam eder.
+  // İkisi birden açık kalırsa her gece İKİ yedek alınır.
+  if (process.env.BACKUP_SCHEDULE_ENABLED === "false") {
+    console.log(
+      "[backup] scheduler KAPALI (BACKUP_SCHEDULE_ENABLED=false) — gece yedeği " +
+        "harici bir zamanlanmış görev tarafından alınıyor olmalı.",
+    );
+    return;
+  }
   if (!process.env.BACKUP_DIR) {
     // Dev ortamında normal. Üretimde bu satır log'da görünüyorsa YEDEK ALINMIYOR.
     console.warn("[backup] BACKUP_DIR tanımsız — otomatik gece yedeği DEVRE DIŞI.");

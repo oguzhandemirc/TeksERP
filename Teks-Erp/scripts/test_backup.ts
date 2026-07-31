@@ -141,11 +141,20 @@ async function main(): Promise<void> {
     // -------------------------------------------------------------------------
     // Rotasyon en yeni 14 `tekserp_*`'i tutar; `premigrate_*` rotasyon DIŞI.
     fs.mkdirSync(backupDir, { recursive: true });
-    const old = Date.now() - 90 * 24 * 60 * 60 * 1000; // 90 gün önce
+    const old = Date.now() - 90 * 24 * 60 * 60 * 1000; // 90 gün önce → saklama dışı
     for (let i = 0; i < 20; i++) {
       const f = path.join(backupDir, `tekserp_2026010${(i % 10)}_00000${i % 10}_${i}.dump`);
       fs.writeFileSync(f, "sahte");
       const t = new Date(old + i * 60_000); // her biri 1dk daha yeni
+      fs.utimesSync(f, t, t);
+    }
+    // Saklama penceresi İÇİNDE 5 dosya (10 günlük) — gün bazlı rotasyonun
+    // bunlara DOKUNMAMASI gerekir. Sayı bazlı eski davranış bunları silerdi.
+    const recent = Date.now() - 10 * 24 * 60 * 60 * 1000;
+    for (let i = 0; i < 5; i++) {
+      const f = path.join(backupDir, `tekserp_2026072${i}_120000.dump`);
+      fs.writeFileSync(f, "sahte");
+      const t = new Date(recent + i * 60_000);
       fs.utimesSync(f, t, t);
     }
     // Rotasyon DIŞI ön ekler: migration öncesi + geri yükleme öncesi güvenlik yedeği.
@@ -192,7 +201,19 @@ async function main(): Promise<void> {
     const nightly = after.filter((f) => f.startsWith("tekserp_"));
     const premigrate = after.filter((f) => f.startsWith("premigrate_"));
     const preRestore = after.filter((f) => f.startsWith("pre-restore_"));
-    check("rotasyon 14 günlük yedek bıraktı", nightly.length === 14, `bulunan=${nightly.length}`);
+    // GÜN bazlı saklama (varsayılan 30): 90 günlük 20 dosya silinir, saklama
+    // penceresindeki 5 dosya + bu koşumun yeni yedeği KALIR. Ayrıca MIN_KEEP
+    // tabanı gereği en yeni 3 dosya yaşına bakılmaksızın korunur.
+    check(
+      "gün bazlı rotasyon: saklama içindeki dosyalara DOKUNMADI",
+      nightly.length >= 6,
+      `bulunan=${nightly.length} (beklenen ≥6: 5 taze + 1 yeni)`,
+    );
+    check(
+      "gün bazlı rotasyon: 30 günden eskiler silindi",
+      !nightly.some((f) => f.startsWith("tekserp_2026010")),
+      `kalan eskiler=${nightly.filter((f) => f.startsWith("tekserp_2026010")).join(",")}`,
+    );
     check("premigrate_* rotasyondan MUAF (2 dosya korundu)", premigrate.length === 2, `bulunan=${premigrate.length}`);
     // Bölüm 11: güvenlik yedeği invariant'ı. Bu düşerse geri yükleme güvenlik ağı
     // sessizce yok olur — dosyalar en eski mtime'a sahip, yani rotasyon onları

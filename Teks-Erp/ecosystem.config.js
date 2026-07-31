@@ -14,7 +14,7 @@
 //
 // ⚠ Log klasörü ÖNCEDEN var olmalı — pm2 out_file/error_file dizinini kendisi
 // OLUŞTURMAZ, yoksa log yazamaz:
-//     mkdir C:\ProgramData\TeksERP\logs
+//     mkdir C:\Etkili-Yazilim\logs
 //
 // Ayrıntı ve reboot kalıcılığı: docs/ops/DEPLOY-RUNBOOK.md
 //
@@ -27,7 +27,7 @@
 module.exports = {
   apps: [
     {
-      name: "teks-erp-backend",
+      name: "tekserp-backend",
       // tsconfig: rootDir=./src, outDir=./dist → çıktı `dist/server.js`
       // (`dist/src/server.js` DEĞİL — yanlış yol pm2'yi hiç başlatmaz).
       script: "dist/server.js",
@@ -68,8 +68,8 @@ module.exports = {
       // -----------------------------------------------------------------------
       // morgan 'combined' üretimde ANSI'siz yazar (app.ts F17) → dosya temiz kalır.
       // Rotasyonu pm2 kendisi YAPMAZ: pm2-logrotate modülü gerekir (runbook).
-      out_file: "C:/ProgramData/TeksERP/logs/backend-out.log",
-      error_file: "C:/ProgramData/TeksERP/logs/backend-err.log",
+      out_file: "C:/Etkili-Yazilim/logs/backend-out.log",
+      error_file: "C:/Etkili-Yazilim/logs/backend-err.log",
       time: true,
 
       env: {
@@ -80,10 +80,26 @@ module.exports = {
         HOST: "0.0.0.0",
 
         // --- Yedekleme (services/backup.service.ts + jobs/backup-scheduler.ts)
-        // BACKUP_DIR TANIMSIZSA GECE YEDEĞİ ÇALIŞMAZ. Eskiden bu env NSSM servis
-        // kaydından geliyordu; pm2'ye geçişte düştüğü fark edilmezse sistem
-        // sessizce yedeksiz kalır — bu yüzden burada açıkça duruyor.
-        BACKUP_DIR: "C:/ProgramData/TeksERP/backups",
+        //
+        // ⚠ SAHADAKİ SUNUCUDA (SAHINSRV) GECE YEDEĞİNİ BACKEND ALMIYOR.
+        // Bağımsız bir Windows Görev Zamanlayıcı görevi alıyor:
+        //   TeksERP-DB-Backup → C:\Etkili-Yazilim\yedekle.ps1, her gece 02:00,
+        //   C:\Etkili-Yazilim\backups, 30 gün saklama.
+        // Bunun bilinçli üstünlüğü: backend ÇÖKMÜŞ ya da KAPALIYKEN bile yedek
+        // alınır. Bu yüzden orada scheduler KAPATILIR — ikisi birden açık kalırsa
+        // her gece İKİ dump alınır (çift disk, çift I/O).
+        // Panelin elle yedek / önizleme / kopya özellikleri kapalıyken de çalışır.
+        BACKUP_SCHEDULE_ENABLED: "false",
+
+        // BACKUP_DIR TANIMSIZSA panel yedekleri göremez ve elle yedek alınamaz.
+        // Sahadaki değer: C:/Etkili-Yazilim/backups
+        BACKUP_DIR: "C:/Etkili-Yazilim/backups",
+
+        // Saklama GÜN bazlı (varsayılan 30) — sahadaki `yedekle.ps1` politikasıyla
+        // AYNI olmalı. Eskiden "en yeni 14 dosya"ydı; aynı klasöre/aynı `tekserp_*`
+        // desenine yazdığı için 30 günlük geçmişi 14 dosyaya indirip ~16 günü
+        // SESSİZCE silerdi. Yaşına bakılmaksızın en yeni 3 dosya her zaman korunur.
+        BACKUP_RETENTION_DAYS: "30",
         // Offsite ikinci kopya (NAS/UNC/harici disk). BOŞ BIRAKILIRSA tüm yedekler
         // DB ile aynı diskte kalır (tek disk arızası = veri + yedek gider).
         BACKUP_OFFSITE_DIR: "",
@@ -96,7 +112,8 @@ module.exports = {
         // ⚠ Sunucudaki PostgreSQL'in MAJOR sürümüyle eşleşmeli; bu ikili
         // sunucudan ESKİ bir majorsa pg_dump çalışmayı reddeder. Gerçek yolu
         // teyit et: Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory
-        PG_BIN_DIR: "C:/Program Files/PostgreSQL/18/bin",
+        // Sahadaki değer (PostgreSQL 16.9 native kurulum):
+        PG_BIN_DIR: "C:/Etkili-Yazilim/pgsql/bin",
 
         // --- Kopyaya geri yükleme (Sistem → Veritabanı Geri Yükleme)
         // PGDATA_DIR: disk guard'ının ölçeceği birim. Verilmezse tablespace
@@ -106,7 +123,7 @@ module.exports = {
         //   veritabanı (varsayılan `postgres`).
         // PG_RESTORE_JOBS: pg_restore paralelliği. Varsayılan 1 — canlı
         //   vardiyada diski boğmasın diye bilinçli olarak kapalı.
-        // PGDATA_DIR: "C:/ProgramData/TeksERP/pgdata",
+        // PGDATA_DIR: "C:/Etkili-Yazilim/pgdata",
         // PG_MAINTENANCE_DB: "postgres",
         // PG_RESTORE_JOBS: "1",
 

@@ -27,7 +27,7 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 - [ ] **`JWT_SECRET` ≥ 32 karakter ve güçlü/rastgele** (backend açılışta enforce
       eder — kısa secret'ta sunucu açılmaz). Elle güçlü bir değer konur
       (installer'ın otomatik üretimi kaldırıldı).
-- [ ] **`DATABASE_URL` doğru DB'yi gösteriyor** (production = `TeksErpDb`,
+- [ ] **`DATABASE_URL` doğru DB'yi gösteriyor** (production = `tekserp`,
       dev/test DB'sine YANLIŞLIKLA bağlanmıyor).
 - [ ] **`Teks-Erp/.env` yedeklendi** (DB şifresi + JWT secret burada; kaybolursa
       DB'ye bağlanılamaz ve yedekten geri yükleme yapılamaz). Eski
@@ -56,7 +56,7 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
       (verileri sıfırlar). **Otomatik koruma YOK** (eski installer'ın `.seeded`
       bayrağı kaldırıldı) → operatör disiplini.
 - [ ] Güncelleme sırası: `git pull → npm install → prisma:generate →
-      npm run build → prisma:migrate → pm2 restart teks-erp-backend` (seed yok).
+      npm run build → prisma:migrate → pm2 restart tekserp-backend` (seed yok).
       **Bu sıra KANONİK** (`Teks-Erp/MIGRATION-DEPLOY.md`): geri alınamaz adım
       (`migrate deploy`) atomik cut-over'ın hemen öncesinde; `build` DB'ye dokunmaz,
       patlarsa temiz abort.
@@ -79,7 +79,7 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 - [ ] Giriş çalışıyor (`admin` / belirlenen şifre) ve temel ekranlar açılıyor.
 - [ ] **Disk ve RAM yeterli** — DB + yedekler için yeterli boş alan; sunucu
       Node + PostgreSQL'i rahat taşıyor (yedek rotasyonu son 14 dump'ı tutar).
-- [ ] Log konumları erişilebilir (`pm2 logs teks-erp-backend`; dosya yolu
+- [ ] Log konumları erişilebilir (`pm2 logs tekserp-backend`; dosya yolu
       `ecosystem.config.js` → `out_file`/`error_file`) ve hata yığını yok.
 - [ ] **`pm2-logrotate` kurulu** — pm2 log rotasyonu yapmaz, kurulmazsa dosya
       sınırsız büyür (NSSM 10MB'da döndürüyordu).

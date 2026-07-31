@@ -125,7 +125,7 @@ npm install
 npm run prisma:generate
 npm run build              # ← burada patlarsa DUR: DB'ye HİÇ dokunulmadı, temiz abort
 npm run prisma:migrate     # ← GERİ ALINAMAZ eşik (5 migration birlikte)
-pm2 restart teks-erp-backend
+pm2 restart tekserp-backend
 pm2 save
 ```
 
@@ -245,7 +245,7 @@ psql "$PROD_DATABASE_URL" -f scripts/consistency-check.sql
 ## 6) Rollback
 
 ```powershell
-pm2 stop teks-erp-backend
+pm2 stop tekserp-backend
 git checkout <önceki-sha>
 npm ci
 npm run prisma:generate

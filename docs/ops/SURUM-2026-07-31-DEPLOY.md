@@ -76,7 +76,7 @@ Yeni permission YOK; SystemSetting değişikliği YOK.
 ## 1) Bekleyen migration setini gör (salt-okunur)
 
 ```sql
--- psql -U <user> -d TeksErpDb  (psql yolu: DEPLOY-RUNBOOK §0)
+-- psql -U <user> -d tekserp  (psql yolu: DEPLOY-RUNBOOK §0)
 SELECT migration_name FROM _prisma_migrations ORDER BY migration_name DESC LIMIT 10;
 ```
 
@@ -126,7 +126,7 @@ UNION ALL SELECT 'username lower dup', count(*) FROM (SELECT lower(username) FRO
 UNION ALL SELECT 'template lower dup', count(*) FROM (SELECT lower(name) FROM permission_templates GROUP BY 1 HAVING count(*)>1) w;
 ```
 
-**2c. Genel hasar taraması:** `psql -d TeksErpDb -f Teks-Erp/scripts/consistency-check.sql > tutarlilik-oncesi.log`
+**2c. Genel hasar taraması:** `psql -d tekserp -f Teks-Erp/scripts/consistency-check.sql > tutarlilik-oncesi.log`
 — §1-§19 tamamı. Çıkan satırlar deploy'u durdurmaz (yalnız 2a/2b durdurur) ama
 İLK GERÇEK ENVANTERDİR; sınıflandırma rehberi raporun "Dev DB Koşum Sonuçları"
 tablosunda (§10 = Kurtar adayı; §12 = 64263fc cutover'ı öncesi kalıntı olabilir;
@@ -146,7 +146,7 @@ git pull
 npm install            # package.json değişmedi ama zararsız
 npm run prisma:generate
 npm run prisma:migrate # = migrate deploy → 3 migration (+ bekleyen eski sürüm varsa onlar)
-pm2 restart teks-erp-backend
+pm2 restart tekserp-backend
 ```
 
 **Doğrulama (migrate deploy "başarılı" demesi YETMEZ — D-23):**
@@ -173,7 +173,7 @@ Sonra: `npx tsx scripts/test_db_invariants.ts` → **55/55** (canlıda güvenli 
 ## 5) Deploy SONRASI duman
 
 - `GET /health` — havuz metrikleri + audit sayacı normal.
-- `pm2 logs teks-erp-backend --lines 50` — P2022/başlangıç hatası yok;
+- `pm2 logs tekserp-backend --lines 50` — P2022/başlangıç hatası yok;
   `[backup] scheduler aktif` satırı var (BACKUP_DIR uyarısı GÖRÜNMEMELİ).
 - `URETIM-KONTROL-LISTESI.md` duman adımları (salt-okunur olanlar).
 - Mobil APK + Electron dağıtımı kullanıcının; backend doğrulanmadan başlatmasın.

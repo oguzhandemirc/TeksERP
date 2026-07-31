@@ -169,7 +169,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": true,
+      "_perMachine_note": "2026-07-31: true → false. Per-user kurulum (%LOCALAPPDATA%) UAC istemez; ileride electron-updater eklenirse güncellemeler sessiz geçer. perMachine=true iken her güncelleme UAC onayı ister ve operatör admin değilse orada takılır. DİKKAT: per-user kurulum Windows HESABI başınadır — bir PC'de birden fazla Windows hesabıyla çalışılıyorsa her hesap kendi kurulumunu yapar. Geri dönmek isterseniz her PC'de kaldır+yeniden kur gerekir.",
+      "perMachine": false,
       "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,

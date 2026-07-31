@@ -16,14 +16,38 @@ Bu doküman backend'i (`Teks-Erp/`, Express 5 + Prisma 7 + PostgreSQL) bir
 
 ---
 
+## SAHADAKİ KURULUM — yetkili değerler (SAHINSRV, 192.168.1.250)
+
+Bu belgedeki genel anlatım herhangi bir sunucu içindir; **fabrikadaki gerçek
+kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
+
+| Ne | Değer |
+|---|---|
+| PostgreSQL | **16.9**, servis `postgresql-tekserp`, port **5432**, initdb UTF8 / **C locale** |
+| PG yolları | `C:\Etkili-Yazilim\pgsql\bin` · veri `C:\Etkili-Yazilim\pgdata` |
+| Veritabanı / kullanıcı | **`tekserp`** / `tekserp` · superuser `postgres` |
+| Backend | `C:\Etkili-Yazilim\tekserp\Teks-Erp` · pm2 adı **`tekserp-backend`** |
+| pm2 daemon | **SYSTEM** hesabı → **pm2 komutları YÖNETİCİ shell ister** (`EPERM \\.\pipe\rpc.sock` alıyorsanız sebebi budur) |
+| Boot | Görev **`TeksERP-Backend-Boot`** → `pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
+| Gece yedeği | Görev **`TeksERP-DB-Backup`**, **02:00**, `yedekle.ps1` → `C:\Etkili-Yazilim\backups`, **30 gün** |
+| Backend scheduler | **KAPALI** (`BACKUP_SCHEDULE_ENABLED=false`) — gece yedeğini yukarıdaki görev alır |
+
+> **Neden gece yedeğini backend almıyor:** bağımsız görev, **backend çökmüş ya da
+> kapalıyken bile** yedek alır — backend'e bağlı bir zamanlayıcının veremeyeceği
+> garanti. İkisi birden açık kalırsa her gece iki dump alınır.
+
+Deploy talimatı ve doğrulama listesi: **`docs/ops/PM2-GECIS-DEVIR-NOTU.md`**.
+
+---
+
 ## 0) Ön-koşullar
 
 | Bileşen | Sürüm | Not |
 |---|---|---|
 | Node.js | **22.x** | Sunucuya kurulu olmalı (artık gömülü Node yok) |
 | pm2 | güncel | `npm i -g pm2` |
-| PostgreSQL | **18.x** | Dev 18.4; silinen installer da 18.4-1 gömüyordu (parite korunmalı) |
-| Disk | yeterli boş alan | DB + yedekler büyür; otomatik yedek son 14 dosyayı tutar |
+| PostgreSQL | **15+** | Sahada **16.9** · dev 18.4. Kod her ikisini destekler (`datlocale`/`daticulocale` sürüm dalı). Yükseltme şu an gerekmiyor |
+| Disk | yeterli boş alan | DB + yedekler büyür; saklama **30 gün** (`BACKUP_RETENTION_DAYS`) |
 | RAM | makul | Node backend + PostgreSQL aynı makinede |
 
 > **Not:** `package.json`'da `engines` alanı tanımlı değil — Node 22 bir
@@ -31,9 +55,14 @@ Bu doküman backend'i (`Teks-Erp/`, Express 5 + Prisma 7 + PostgreSQL) bir
 
 > **⚠ PG major sürümü ve `PG_BIN_DIR` aynı majoru göstermeli.** Yedekleme
 > `PG_BIN_DIR` altındaki `pg_dump`/`pg_restore`'u çalıştırır; bu ikili sunucudaki
-> PostgreSQL'den **eski** bir majorsa dump alınamaz. Sunucudaki sürümü
-> (`psql -c "select version()"`) ve `ecosystem.config.js` → `PG_BIN_DIR`'i
-> birlikte teyit edin.
+> PostgreSQL'den **eski** bir majorsa dump alınamaz. Sahada ikisi de 16.9
+> (`C:\Etkili-Yazilim\pgsql\bin`).
+
+> **Dev (18.4) ↔ üretim (16.9) sürüm farkı — bilinçli olarak kabul edildi.**
+> Riskli yön yalnızca "dev dump'ını üretimde açmak"; öyle bir akış yok (üretim
+> kendi dump'ını kendi açar) ve ters yön (üretim dump'ı → dev'de aç) çalışır.
+> Kalan risk: yeni SQL/migration'lar yalnız 18'de test ediliyor. Index/raw SQL
+> içeren migration'ları üretim öncesi bir PG16 kopyasında deneyin.
 
 ---
 
@@ -52,7 +81,7 @@ JWT_SECRET="<en az 32 karakter güçlü rastgele>"
 - **`JWT_SECRET` ≥ 32 karakter ZORUNLU.** Backend açılışta **enforce eder**
   (`src/services/auth.service.ts`): kısa/eksik secret ile sunucu açılmaz.
 - **`DATABASE_URL`** — ortam başına farklı DB adı: dev = `adnansahin_db`,
-  üretim = `TeksErpDb`. **Yedekleme bu URL'yi kullanır** — `backup.service.ts`
+  üretim = `tekserp`. **Yedekleme bu URL'yi kullanır** — `backup.service.ts`
   host/port/user/db/şifreyi buradan çözer. Bozuksa yedek alınmaz.
 - Eski `secret.json` **artık yok** (installer üretiyordu). Tek yetkili sır
   kaynağı `.env`'dir — **yedekleyin**; kaybolursa mevcut DB'ye bağlanılamaz.
@@ -99,7 +128,7 @@ Sunucuya PostgreSQL kurun, sonra `postgresql.conf`'a TeksERP ayarlarını uygula
 kullanıcıyı oluşturun:
 
 ```sql
-CREATE DATABASE "TeksErpDb" ENCODING 'UTF8';
+CREATE DATABASE "tekserp" ENCODING 'UTF8';
 ```
 
 > **Collation kararı:** eski installer `initdb ... -E UTF8 --locale=C` kullanıyordu.
@@ -117,7 +146,7 @@ cd C:\...\Teks-Erp
 
 # Log klasörü — pm2 out_file/error_file dizinini KENDİSİ OLUŞTURMAZ.
 # Yoksa süreç kalkar ama log yazamaz (sessiz teşhis kaybı).
-mkdir C:\ProgramData\TeksERP\logs -Force
+mkdir C:\Etkili-Yazilim\logs -Force
 
 npm ci                          # tüm bağımlılıklar
 npm run prisma:generate         # client üret
@@ -171,7 +200,7 @@ npm install                     # package.json değiştiyse
 npm run prisma:generate         # client yenilensin (her güncellemede)
 npm run build                   # tsc derle (dist\ güncellensin)
 npm run prisma:migrate          # = prisma migrate deploy — yalnız pending'leri uygular
-pm2 restart teks-erp-backend
+pm2 restart tekserp-backend
 # seed YOK
 ```
 
@@ -182,12 +211,12 @@ sırasıyla uygular; tekrar çalıştırmak güvenli.
 > alıyordu (`premigrate_<eskiSürüm>_<zaman>.dump`). pm2 yolunda **elle almanız şart**
 > — §9 rollback buna dayanır.
 >
-> **⚠ Panelden aldığınız yedek `tekserp_*` adıyla kaydedilir ve 14'lük rotasyona
-> DAHİLDİR** — 14 yedek sonra silinir. Rollback noktasının kalıcı olmasını
+> **⚠ Panelden aldığınız yedek `tekserp_*` adıyla kaydedilir ve saklama rotasyonuna
+> DAHİLDİR** — saklama süresi dolunca silinir. Rollback noktasının kalıcı olmasını
 > istiyorsanız yedek bittikten sonra dosyayı **yeniden adlandırın**:
 >
 > ```powershell
-> Rename-Item C:\ProgramData\TeksERP\backups\tekserp_20260730_143000.dump `
+> Rename-Item C:\Etkili-Yazilim\backups\tekserp_20260730_143000.dump `
 >             premigrate_2.0.0_20260730_143000.dump
 > ```
 >
@@ -215,7 +244,7 @@ curl -s http://localhost:4000/health
   rolls ölü-satır %, en uzun aktif sorgu sn, kilitli sorgu sayısı).
 - API çalışıyorsa HTTP her zaman 200 döner; DB ayrı test edilir (`db: "DOWN"`
   ise DB bağlantısı yok). Deploy sonrası `db: "UP"` ve 200 beklenir.
-- `pm2 status` / `pm2 logs teks-erp-backend` süreç tarafını gösterir.
+- `pm2 status` / `pm2 logs tekserp-backend` süreç tarafını gösterir.
 - **`lastBackup` null dönüyorsa** yedekleme yapılandırması bozuktur (§1 uyarısı).
 
 ---
@@ -229,9 +258,12 @@ curl -s http://localhost:4000/health
 
 1. `pg_dump -Fc` → `BACKUP_DIR\tekserp_<zaman>.dump`
 2. **Bütünlük doğrulama** (`pg_restore --list`) — bozuk dump **silinir** ve
-   rotasyona inmez. Gerekçe: bozuk bir dosya 14'lük rotasyonla sağlam yedekleri
+   rotasyona inmez. Gerekçe: bozuk bir dosya rotasyonla sağlam yedekleri
    evict ederse felakete kadar fark edilmez.
-3. **Saklama rotasyonu** — en yeni **14** `tekserp_*` tutulur; `premigrate_*` hariç.
+3. **Saklama rotasyonu (GÜN bazlı)** — `BACKUP_RETENTION_DAYS` (varsayılan **30**)
+   gününden eski `tekserp_*` silinir; `premigrate_*` ve `pre-restore_*` **hariç**.
+   Yaşına bakılmaksızın **en yeni 3 dosya her hâlükârda korunur** (sistem saati
+   ileri kayarsa gün hesabı hepsini "eski" sayıp silerdi).
 4. **Offsite kopya** — `BACKUP_OFFSITE_DIR`'e kopyalanır; ayarlı değilse uyarı üretir.
 
 > **⚠ Offsite bir ağ paylaşımıysa (`\\NAS\yedek`) hangi hesap yazıyor?** Kopyayı
@@ -331,23 +363,23 @@ Kopyalanan blok:
 
 ```powershell
 # 1) Backend'i durdur - pg_restore --clean acik baglantiyla semayi dusuremez
-pm2 stop teks-erp-backend
+pm2 stop tekserp-backend
 $env:PGPASSWORD = "<veritabani-sifresi>"      # .env icindeki DATABASE_URL'den
 
 # 2) GUVENLIK YEDEGI - yanlis yedege donulurse geri donus noktasi
-$safe = "C:\ProgramData\TeksERP\backups\pre-restore_20260730_142312.dump"
+$safe = "C:\Etkili-Yazilim\backups\pre-restore_20260730_142312.dump"
 $LASTEXITCODE = 1
-pg_dump -h 127.0.0.1 -p 5432 -U postgres -d TeksErpDb -Fc -f "$safe"
+pg_dump -h 127.0.0.1 -p 5432 -U postgres -d tekserp -Fc -f "$safe"
 $ok = ($LASTEXITCODE -eq 0) -and (Test-Path "$safe")
 if ($ok) { pg_restore --list "$safe" > $null; $ok = ($LASTEXITCODE -eq 0) }
 
 # 3) YALNIZ guvenlik yedegi dogrulandiysa geri yukle
 if (-not $ok) { Write-Host "GUVENLIK YEDEGI ALINAMADI - GERI YUKLEME YAPILMADI." -ForegroundColor Red }
-if ($ok) { pg_restore -h 127.0.0.1 -p 5432 -U postgres -d TeksErpDb --clean --if-exists "...\tekserp_....dump" }
+if ($ok) { pg_restore -h 127.0.0.1 -p 5432 -U postgres -d tekserp --clean --if-exists "...\tekserp_....dump" }
 
 # 4) Her durumda: sifreyi temizle, backend'i baslat
 Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
-pm2 start teks-erp-backend
+pm2 start tekserp-backend
 ```
 
 > **⚠ Bloğu "sadeleştirmeyin".** Üç satır load-bearing ve sebepleri sezgiye aykırı:
@@ -422,7 +454,7 @@ binlerce satırlık üretim DB'sinde rapor aggregate'lerini diske taşırır; `5
 Ek olarak DB-level (conf değil) ayar:
 
 ```sql
-ALTER DATABASE "TeksErpDb" SET statement_timeout = '50s';
+ALTER DATABASE "tekserp" SET statement_timeout = '50s';
 ```
 
 - **⚠️ Index-ağır migration tuzağı:** Büyük tabloda `CREATE INDEX`, 50s sınırını
@@ -462,7 +494,7 @@ süreç listesini geri yükler.
 
 | Ortam | Backend log | DB / slow query log |
 |---|---|---|
-| Windows (pm2) | `ecosystem.config.js` → `out_file` / `error_file` (`C:\ProgramData\TeksERP\logs\`); ayrıca `pm2 logs` | `<pgdata>\log\` |
+| Windows (pm2) | `ecosystem.config.js` → `out_file` / `error_file` (`C:\Etkili-Yazilim\logs\`); ayrıca `pm2 logs` | `<pgdata>\log\` |
 | Linux (pm2) | `~/.pm2/logs/` veya `out_file`/`error_file`; `pm2 logs` | PostgreSQL `log_directory` |
 
 > **⚠ pm2 log rotasyonu YAPMAZ.** NSSM 10MB'da dosyayı döndürüyordu; pm2'de bu
@@ -481,13 +513,13 @@ süreç listesini geri yükler.
 > **`prisma migrate deploy` GERİ ALINMAZ.** Prisma down-migration üretmez.
 > Tek güvenli geri dönüş = **migration öncesi yedeğinden restore**.
 
-1. `pm2 stop teks-erp-backend`
+1. `pm2 stop tekserp-backend`
 2. Migration öncesi yedeği geri yükle (§3'te **elle** almış olmanız gerekir —
    otomatik `premigrate_*` artık üretilmiyor).
 3. Şema değişen bir sürümden dönüyorsan **kodu da eski sürüme al** (eski commit'e
    `git checkout` + `npm ci` + `npm run build`), SONRA restore et — yeni kod eski
    şemayla, eski kod yeni şemayla uyumsuz olabilir.
-4. `pm2 start teks-erp-backend`, `/health` ile `db: "UP"` + 200 teyit et.
+4. `pm2 start tekserp-backend`, `/health` ile `db: "UP"` + 200 teyit et.
 
 ---
 
