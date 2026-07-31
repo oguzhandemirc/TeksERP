@@ -194,6 +194,49 @@ router.post(
 router.get("/rolls/:rollId", verifyToken, requireAnyPermission("quality:read", "mobile:tambur"), controller.getRollForDecision);
 
 /**
+ * @swagger
+ * /api/tambur/rolls/{rollId}/undo-preview:
+ *   get:
+ *     summary: Tambur geri alma önizlemesi (salt-okunur)
+ *     description: >
+ *       rollId çocuk parça da olabilir kaynak top da — mod sunucuda çözülür.
+ *       SINGLE = seri sürerken tek parça iptali; FULL = finalize'ı tümden geri al
+ *       (tüm parçalar iptal, kaynak top Tambur adımına döner, kapatılan hatalar
+ *       yeniden açılır, tamamlanmış iş emri dirilir). Etkilenen her kayıt
+ *       barkoduyla listelenir; engelliyse blockReason döner (yıkıcı-işlem onay kuralı).
+ *     tags: [Tambur]
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/rolls/:rollId/undo-preview",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  controller.getUndoPreview,
+);
+
+/**
+ * @swagger
+ * /api/tambur/rolls/{rollId}/undo:
+ *   post:
+ *     summary: Tambur kesim/finalize geri al (önizleme onaylı akış)
+ *     description: >
+ *       Önizlemedeki mod tx içinde TAZE yeniden çözülür; parçalardan biri bu
+ *       arada çuvala/sevke/yeni iş emrine kaçtıysa 409 + tam rollback. Depo
+ *       kesimi kapanışı (kalıcı iz yazmayan yol) bilinçli kapsam dışıdır.
+ *     tags: [Tambur]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Geri alındı — iptal edilen parçalar + dönen metraj }
+ *       409: { description: Engelli parça / yarış — hiçbir şey değişmedi }
+ */
+router.post(
+  "/rolls/:rollId/undo",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:tambur"),
+  controller.applyUndo,
+);
+
+/**
  * @openapi
  * /api/tambur/finalize:
  *   post:

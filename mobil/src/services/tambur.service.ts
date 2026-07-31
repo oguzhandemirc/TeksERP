@@ -1,6 +1,19 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type { RollCursorPage } from './roll.service';
+
+/** GET /tambur/rolls/:id/undo-preview yanıtı (backend TamburUndoService). */
+export interface TamburUndoPreview {
+  mode: 'SINGLE' | 'FULL';
+  canApply: boolean;
+  blockReason: string | null;
+  parent: { id: string; barcode: string | null; status: string; currentQty: number; initialQty: number };
+  restoredQty: number;
+  children: Array<{ id: string; barcode: string | null; status: string; qty: number; blockReason: string | null }>;
+  reopenErrorCount: number;
+  workOrder: { id: string; workOrderNumber: string; status: string; willRevive: boolean } | null;
+  warnings: string[];
+}
 import type {
   TamburStepSummary,
   TamburOpenCard,
@@ -63,6 +76,25 @@ export const tamburService = {
 
   // NOT: createSwatch kaldırıldı — kartela artık Tambur'da kesilmiyor, fason
   // dönüşünden doğuyor (kartelaService). Bkz. docs/design/KARTELA-TASARIM.md.
+
+  /**
+   * GERİ AL önizlemesi (salt-okunur) — rollId çocuk da olabilir kaynak top da;
+   * mod (SINGLE = tek parça iptali / FULL = finalize'ı tümden geri al) sunucuda
+   * çözülür. canApply=false ise blockReason gösterilir, apply çağrılmaz.
+   */
+  undoPreview: (rollId: string): Promise<ApiResponse<TamburUndoPreview>> =>
+    apiClient
+      .get<ApiResponse<TamburUndoPreview>>(`/tambur/rolls/${rollId}/undo-preview`)
+      .then((r) => r.data),
+
+  /** GERİ AL uygula — backend tx-içi taze guard'larla korur (yarışta 409). */
+  applyUndo: (rollId: string): Promise<ApiResponse<{ mode: string; cancelledChildIds: string[]; restoredQty: number }>> =>
+    apiClient
+      .post<ApiResponse<{ mode: string; cancelledChildIds: string[]; restoredQty: number }>>(
+        `/tambur/rolls/${rollId}/undo`,
+        {},
+      )
+      .then((r) => r.data),
 
   // Tambur'dan çıkmış son toplar — etiket yeniden basımı için liste
   // Cursor-paginated + aramalı. Modal infinite scroll için (RollCursorPage).

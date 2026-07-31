@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { TamburService } from "../services/tambur.service";
+import { TamburUndoService } from "../services/tambur-undo.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { FOLD_TYPES, foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
@@ -111,9 +112,13 @@ const finalizeWarehouseCutSchema = z.object({
 
 export class TamburController {
   private service: TamburService;
+  private undoService: TamburUndoService;
 
   constructor() {
     this.service = new TamburService();
+    this.undoService = new TamburUndoService();
+    this.getUndoPreview = this.getUndoPreview.bind(this);
+    this.applyUndo = this.applyUndo.bind(this);
     this.getPendingRolls = this.getPendingRolls.bind(this);
     this.getRollForDecision = this.getRollForDecision.bind(this);
     this.getByCardBarcode = this.getByCardBarcode.bind(this);
@@ -130,6 +135,26 @@ export class TamburController {
     this.cutWarehouseRoll = this.cutWarehouseRoll.bind(this);
     this.finalizeWarehouseCut = this.finalizeWarehouseCut.bind(this);
     this.getTamburContext = this.getTamburContext.bind(this);
+  }
+
+  /** GET /api/tambur/rolls/:rollId/undo-preview — geri alma önizlemesi (salt-okunur) */
+  async getUndoPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const rollId = z.string().uuid("Geçersiz top ID").parse(req.params.rollId);
+      res.status(200).json(await this.undoService.getUndoPreview(rollId));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/tambur/rolls/:rollId/undo — kesim/finalize geri al (önizleme onaylı akış) */
+  async applyUndo(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const rollId = z.string().uuid("Geçersiz top ID").parse(req.params.rollId);
+      res.status(200).json(await this.undoService.applyUndo(rollId, req.user?.userId));
+    } catch (error) {
+      next(error);
+    }
   }
 
   /** POST /api/tambur/:id/cut-warehouse */

@@ -58,7 +58,7 @@ import { LabelPrinter } from '../../../components/LabelPrinter';
 import StandaloneLabelSheet from '../../../components/labels/StandaloneLabelSheet';
 import { StandaloneLabelPrinter } from '../../../components/labels/StandaloneLabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
-import { tamburService } from '../../../services/tambur.service';
+import { tamburService, type TamburUndoPreview } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
 import { customerService } from '../../../services/customer.service';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
@@ -3516,10 +3516,13 @@ const noteModalStyles = StyleSheet.create({
 function RelabelRollRow({
   roll,
   onPress,
+  onUndo,
   stacked,
 }: {
   roll: Roll;
   onPress: () => void;
+  /** "Geri Al" ikonu — Tambur işlemini iptal akışını açar (önizleme onaylı). */
+  onUndo?: () => void;
   /** Telefon-dik: tek satır sığmaz → okunur 3 satırlı kart. */
   stacked?: boolean;
 }) {
@@ -3547,6 +3550,16 @@ function RelabelRollRow({
             <Text style={relabelStyles.rowStackedBarcode} numberOfLines={1}>
               {roll.barcode ?? '—'}
             </Text>
+            {onUndo && (
+              <IconButton
+                icon="undo-variant"
+                size={22}
+                iconColor="#b45309"
+                onPress={onUndo}
+                style={{ margin: 0 }}
+                accessibilityLabel="İşlemi geri al"
+              />
+            )}
             <Icon source="chevron-right" size={22} color="#94a3b8" />
           </View>
           <View style={relabelStyles.rowStackedLine}>
@@ -3597,6 +3610,16 @@ function RelabelRollRow({
         <Text style={relabelStyles.rowQty} numberOfLines={1}>
           {qtyText}
         </Text>
+        {onUndo && (
+          <IconButton
+            icon="undo-variant"
+            size={22}
+            iconColor="#b45309"
+            onPress={onUndo}
+            style={{ margin: 0 }}
+            accessibilityLabel="İşlemi geri al"
+          />
+        )}
         <Icon source="chevron-right" size={24} color="#94a3b8" />
       </View>
     </TouchableRipple>
@@ -3737,6 +3760,9 @@ function RecentOutputModal({
   // snapshot/effective cascade). Liste açık kalır; önizleme üstüne (Portal) açılır.
   const [previewRoll, setPreviewRoll] = useState<Roll | null>(null);
 
+  // "Geri Al" — Tambur kesim/finalize iptali (önizleme onaylı, yıkıcı-işlem kuralı).
+  const [undoTarget, setUndoTarget] = useState<Roll | null>(null);
+
   // Kameradan barkod okut → o topun önizlemesini aç (oradan Bas / Yeni Etiket).
   // onModalHide deseni: tarama modalı tam kapanınca çöz (RNModal çakışması yok).
   const [scanOpen, setScanOpen] = useState(false);
@@ -3839,6 +3865,7 @@ function RecentOutputModal({
             roll={roll}
             stacked={isCompactPortrait}
             onPress={() => setPreviewRoll(roll)}
+            onUndo={() => setUndoTarget(roll)}
           />
         )}
         emptyIcon="package-variant"
@@ -3872,6 +3899,17 @@ function RecentOutputModal({
           const r = previewRoll;
           setPreviewRoll(null);
           if (r) onPrintStock(r);
+        }}
+      />
+
+      {/* Geri Al — önizleme onaylı Tambur iptali. Bitince liste tazelenir. */}
+      <TamburUndoConfirmModal
+        rollId={undoTarget?.id ?? null}
+        barcode={undoTarget?.barcode ?? null}
+        onDismiss={() => setUndoTarget(null)}
+        onDone={() => {
+          setUndoTarget(null);
+          void q.refetch();
         }}
       />
 
@@ -4746,6 +4784,166 @@ function TamburNoteModal({
     </AppModal>
   );
 }
+
+/**
+ * Tambur GERİ AL onay modalı — yıkıcı-işlem kuralı: etkilenen HER kayıt somut
+ * listelenir (parça barkodları + dönen metraj + yeniden açılacak hatalar + WO
+ * diriltme uyarısı). Mod (SINGLE/FULL) backend'de çözülür; canApply=false ise
+ * yalnız sebep gösterilir, uygula düğmesi kapalıdır.
+ */
+function TamburUndoConfirmModal({
+  rollId,
+  barcode,
+  onDismiss,
+  onDone,
+}: {
+  rollId: string | null;
+  barcode: string | null;
+  onDismiss: () => void;
+  onDone: () => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const phone = winW < 600;
+  const qc = useQueryClient();
+
+  const previewQ = useQuery({
+    queryKey: ['tambur', 'undo-preview', rollId],
+    queryFn: () => tamburService.undoPreview(rollId!),
+    enabled: !!rollId,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const preview: TamburUndoPreview | null = previewQ.data?.data ?? null;
+
+  const applyMut = useMutation({
+    mutationFn: () => tamburService.applyUndo(rollId!),
+    onSuccess: (res) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'İşlem geri alındı', text2: res.message });
+      void qc.invalidateQueries({ queryKey: ['tambur'] });
+      void qc.invalidateQueries({ queryKey: ['rolls'] });
+      void qc.invalidateQueries({ queryKey: ['work-orders'] });
+      onDone();
+    },
+    onError: (e: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: e.message });
+      // Yarışta durum değişmiş olabilir — önizlemeyi tazele, operatör görsün.
+      void previewQ.refetch();
+    },
+  });
+
+  const modeText =
+    preview?.mode === 'FULL'
+      ? 'İşlem TÜMDEN geri alınacak — tüm parçalar iptal olur, metraj kaynak topa döner.'
+      : 'Yalnız bu parça iptal edilecek — metrajı kaynak topa geri döner.';
+
+  return (
+    <AppModal
+      visible={rollId !== null}
+      onDismiss={() => {
+        if (!applyMut.isPending) onDismiss();
+      }}
+    >
+      <View
+        style={[
+          undoStyles.sheet,
+          { width: phone ? winW * 0.94 : Math.min(560, winW * 0.55), maxHeight: winH * 0.85 },
+        ]}
+      >
+        <View style={undoStyles.header}>
+          <View style={undoStyles.headerIcon}>
+            <Icon source="undo-variant" size={20} color="#7c2d12" />
+          </View>
+          <Text style={undoStyles.title}>Tambur İşlemini Geri Al</Text>
+          <IconButton icon="close" size={22} onPress={onDismiss} disabled={applyMut.isPending} style={{ margin: 0 }} />
+        </View>
+
+        {previewQ.isLoading ? (
+          <View style={undoStyles.loading}>
+            <ActivityIndicator color="#b45309" />
+          </View>
+        ) : previewQ.isError ? (
+          <Text style={undoStyles.blockText}>{(previewQ.error as Error).message}</Text>
+        ) : preview ? (
+          <ScrollView contentContainerStyle={undoStyles.body}>
+            <Text style={undoStyles.modeText}>{modeText}</Text>
+            {barcode ? <Text style={undoStyles.rowLine}>Dokunulan parça: {barcode}</Text> : null}
+
+            <Text style={undoStyles.sectionTitle}>Kaynak top</Text>
+            <Text style={undoStyles.rowLine}>
+              {preview.parent.barcode ?? preview.parent.id} — geri dönecek metraj: {preview.restoredQty} m
+            </Text>
+
+            <Text style={undoStyles.sectionTitle}>İptal edilecek parçalar ({preview.children.length})</Text>
+            {preview.children.map((c) => (
+              <Text key={c.id} style={[undoStyles.rowLine, c.blockReason ? undoStyles.blockedRow : null]}>
+                • {c.barcode ?? c.id} — {c.qty} m{c.blockReason ? `  ⛔ ${c.blockReason}` : ''}
+              </Text>
+            ))}
+
+            {preview.reopenErrorCount > 0 && (
+              <Text style={undoStyles.warnText}>
+                {preview.reopenErrorCount} kapatılmış hata kaydı yeniden açılacak
+              </Text>
+            )}
+            {preview.workOrder?.willRevive && (
+              <Text style={undoStyles.warnText}>
+                {preview.workOrder.workOrderNumber} yeniden AÇILACAK (refakat kartı tekrar aktif)
+              </Text>
+            )}
+            {preview.warnings.map((w) => (
+              <Text key={w} style={undoStyles.warnText}>⚠ {w}</Text>
+            ))}
+            {preview.blockReason && <Text style={undoStyles.blockText}>⛔ {preview.blockReason}</Text>}
+          </ScrollView>
+        ) : null}
+
+        <View style={undoStyles.actions}>
+          <Button mode="outlined" onPress={onDismiss} disabled={applyMut.isPending} style={undoStyles.actionBtn}>
+            Vazgeç
+          </Button>
+          <Button
+            mode="contained"
+            buttonColor="#b45309"
+            loading={applyMut.isPending}
+            disabled={!preview?.canApply || applyMut.isPending}
+            onPress={() => applyMut.mutate()}
+            style={undoStyles.actionBtn}
+          >
+            Geri Al
+          </Button>
+        </View>
+      </View>
+    </AppModal>
+  );
+}
+
+const undoStyles = StyleSheet.create({
+  sheet: { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#ffedd5',
+  },
+  headerIcon: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: '#fed7aa',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  title: { flex: 1, fontSize: 17, fontWeight: '800', color: '#7c2d12' },
+  loading: { padding: 28, alignItems: 'center' },
+  body: { paddingHorizontal: 16, paddingVertical: 12, gap: 4 },
+  modeText: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 4 },
+  sectionTitle: { fontSize: 13, fontWeight: '800', color: '#64748b', marginTop: 10, textTransform: 'uppercase' },
+  rowLine: { fontSize: 15, color: '#334155', paddingVertical: 2 },
+  blockedRow: { color: '#b91c1c' },
+  warnText: { fontSize: 14, color: '#b45309', fontWeight: '600', marginTop: 6 },
+  blockText: { fontSize: 15, color: '#b91c1c', fontWeight: '700', marginTop: 10, paddingHorizontal: 4 },
+  actions: {
+    flexDirection: 'row', gap: 10, padding: 14,
+    borderTopWidth: 1, borderTopColor: '#f1f5f9',
+  },
+  actionBtn: { flex: 1, minHeight: 48, justifyContent: 'center' },
+});
 
 // Kamera-only modda sağdaki aksiyon hücresi — ikon + altında etiket. Operatör
 // hangi butonun ne olduğunu (liste / tara / çıkan / kesme) karıştırmasın.
