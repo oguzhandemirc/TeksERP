@@ -53,7 +53,22 @@ const OFFSITE_DIR = process.env.BACKUP_OFFSITE_DIR;
 // ile patlar ya da bazı nesneleri atlayarak EKSİK bir yedek üretir — ikincisi sessizdir.
 // Eski installer yedekleri `postgres` süper kullanıcısıyla alıyordu. Uygulama kullanıcısı
 // sahibi değilse bu ikisini set edin.
-const RETENTION_COUNT = 14; // en yeni 14 günlük yedek tutulur
+// =============================================================================
+// Saklama politikası — GÜN bazlı (2026-07-31)
+// =============================================================================
+// Eskiden "en yeni 14 dosya" idi. Sahadaki sunucuda yedekleri bağımsız bir
+// Windows Görev Zamanlayıcı script'i (`yedekle.ps1`) alıyor ve **30 gün**
+// saklıyor; aynı klasöre ve aynı `tekserp_*` desenine yazıyor. Sayı bazlı
+// rotasyon o geçmişi 14 dosyaya indirip ~16 günü SESSİZCE silerdi.
+// Politika artık gün bazlı ve sahadakiyle aynı varsayılana sahip.
+const DEFAULT_RETENTION_DAYS = 30;
+/** Yaşına bakılmaksızın korunacak en yeni dosya sayısı (saat kayması sigortası). */
+const RETENTION_MIN_KEEP = 3;
+
+function retentionDays(): number {
+  const raw = Number(process.env.BACKUP_RETENTION_DAYS);
+  return Number.isInteger(raw) && raw >= 1 && raw <= 3650 ? raw : DEFAULT_RETENTION_DAYS;
+}
 
 // =============================================================================
 // Bağlantı bilgisi — DATABASE_URL'den çözülür
@@ -244,9 +259,10 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
       );
     }
 
-    // --- 3) Saklama rotasyonu
+    // --- 3) Saklama rotasyonu (GÜN bazlı)
     // Yalnız günlük (tekserp_*) yedekler rotasyona girer; migration öncesi
-    // (premigrate_*) yedekler geri dönüş noktasıdır, otomatik silinmez.
+    // (premigrate_*) ve geri yükleme öncesi (pre-restore_) yedekler geri dönüş
+    // noktasıdır, otomatik silinmez.
     const warnings: string[] = [];
     try {
       const names = (await fs.promises.readdir(BACKUP_DIR)).filter(
@@ -258,9 +274,12 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
           mtime: (await fs.promises.stat(path.join(BACKUP_DIR, name))).mtimeMs,
         })),
       );
-      const doomed = withTime
-        .sort((a, b) => b.mtime - a.mtime)
-        .slice(RETENTION_COUNT);
+      const newestFirst = withTime.sort((a, b) => b.mtime - a.mtime);
+      const cutoffMs = Date.now() - retentionDays() * 24 * 60 * 60 * 1000;
+      // MIN_KEEP tabanı: sistem saati ileri kayarsa (BIOS pili, NTP hatası) gün
+      // bazlı hesap TÜM yedekleri "eski" sayıp silerdi. En yeni N dosya yaşına
+      // BAKILMAKSIZIN korunur — tek bir saat hatası yedeksiz bırakmasın.
+      const doomed = newestFirst.slice(RETENTION_MIN_KEEP).filter((f) => f.mtime < cutoffMs);
       for (const f of doomed) {
         await fs.promises.rm(path.join(BACKUP_DIR, f.name), { force: true });
       }
@@ -416,6 +435,6 @@ export function resolveBackupPath(name: string): string | null {
   return abs;
 }
 
-export { RETENTION_COUNT };
+export { DEFAULT_RETENTION_DAYS, RETENTION_MIN_KEEP, retentionDays };
 // Ön ekler için kanonik kaynak `helpers/backup-naming.helper.ts`'tir — buradan
 // yeniden ihraç ETMİYORUZ ki iki kaynak izlenimi doğmasın.

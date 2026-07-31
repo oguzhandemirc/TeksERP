@@ -4,7 +4,7 @@ import { Text, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import ScreenChrome from '../../components/ScreenChrome';
-import { usePermissions } from '../../hooks/usePermission';
+import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 import { SCREEN_BY_KEY, MobileScreenKey } from '../../types/permissions';
 
 interface ModulePlaceholderProps {
@@ -13,10 +13,10 @@ interface ModulePlaceholderProps {
 
 function ModulePlaceholder({ screenKey }: ModulePlaceholderProps) {
   const meta = SCREEN_BY_KEY[screenKey];
-  const { hasMultipleMobileScreens } = usePermissions();
+  const { hasMultipleVisibleScreens } = useVisibleScreens();
   const nav = useNavigation<any>();
 
-  const canGoBack = hasMultipleMobileScreens && nav.canGoBack();
+  const canGoBack = hasMultipleVisibleScreens && nav.canGoBack();
 
   return (
     <ScreenChrome

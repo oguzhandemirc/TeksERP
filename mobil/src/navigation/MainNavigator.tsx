@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MainStackParamList } from './types';
-import { usePermissions } from '../hooks/usePermission';
+import { useVisibleScreens } from '../hooks/useVisibleScreens';
 import { useSessionStore } from '../store/sessionStore';
 import { withWorkSession } from '../components/session/SessionGate';
 import {
@@ -30,6 +30,7 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = 
   KartelaKabul: () => require('../screens/Modules/KartelaKabul/KartelaKabulScreen').default,
   IadeGirisi: () => require('../screens/Modules/IadeGirisi/IadeGirisiScreen').default,
   HizliIsEmri: () => require('../screens/Modules/HizliIsEmri/HizliIsEmriScreen').default,
+  KursunDagitim: () => require('../screens/Modules/KursunDagitim/KursunDagitimScreen').default,
 };
 
 // Oturumlu ekranlar (KK1/KursunQc/Tambur/TartiPaket) SessionGate ile sarılır —
@@ -47,8 +48,11 @@ function componentLoaderFor(key: MobileScreenKey): () => React.ComponentType<any
 }
 
 export default function MainNavigator() {
-  const { allowedScreens, hasMultipleMobileScreens } = usePermissions();
-  const hasSessionScreens = allowedScreens.some((s) => isSessionScreen(s.key));
+  // GÖRÜNÜR ekranlar (izin ∖ bayrağı kapalı olanlar) — kayıt da ilk rota da BUNDAN
+  // türer. Ham izinle kaydetseydik bayrak kapalıyken tek ekranı Kurşun Dağıtım olan
+  // kullanıcı gizlemek istediğimiz ekrana düşerdi.
+  const { visibleScreens } = useVisibleScreens();
+  const hasSessionScreens = visibleScreens.some((s) => isSessionScreen(s.key));
   const sessionLoaded = useSessionStore((s) => s.isLoaded);
   const active = useSessionStore((s) => s.active);
   const lastPlace = useSessionStore((s) => s.lastPlace);
@@ -69,10 +73,11 @@ export default function MainNavigator() {
     );
   }
 
-  // Tek ekran yetkisi varsa direkt o ekrana git, ModuleSelect'i atla.
-  let initialRouteName: keyof MainStackParamList = hasMultipleMobileScreens
-    ? 'ModuleSelect'
-    : (allowedScreens[0]?.key ?? 'ModuleSelect');
+  // Tek ekran görünüyorsa direkt o ekrana git, ModuleSelect'i atla. Sıfır görünür
+  // ekran (izin var ama düzen bayrağı kapalı) da ModuleSelect'e düşer — boş grid
+  // "burada bir şey yok" der; kapalı ekrana zorla girilmez.
+  const soloScreen = visibleScreens.length === 1 ? visibleScreens[0] : null;
+  let initialRouteName: keyof MainStackParamList = soloScreen?.key ?? 'ModuleSelect';
 
   // Login-sonrası kısayol: aktif oturum ya da cihazın SON yeri izinli bir oturumlu
   // ekrana işaret ediyorsa doğrudan o ekran açılır — gate tek dokunuş onayı gösterir
@@ -80,7 +85,7 @@ export default function MainNavigator() {
   const hintKind = active?.station.kind ?? lastPlace?.station.kind;
   if (isSessionStationKind(hintKind)) {
     const target = SCREEN_BY_STATION_KIND[hintKind];
-    if (allowedScreens.some((s) => s.key === target)) initialRouteName = target;
+    if (visibleScreens.some((s) => s.key === target)) initialRouteName = target;
   }
 
   return (
@@ -94,7 +99,7 @@ export default function MainNavigator() {
         animationDuration: 260,
       }}
     >
-      {hasMultipleMobileScreens && (
+      {!soloScreen && (
         // Ana sayfaya dönüş yumuşak fade ile (kayma değil) — "üst seviye" hissi.
         <Stack.Screen
           name="ModuleSelect"
@@ -102,7 +107,7 @@ export default function MainNavigator() {
           options={{ animation: 'fade' }}
         />
       )}
-      {allowedScreens.map((s) => (
+      {visibleScreens.map((s) => (
         <Stack.Screen key={s.key} name={s.key} getComponent={componentLoaderFor(s.key)} />
       ))}
       {/* Alt sayfalar — Tartı/Paket & Sevkiyat'tan push edilir (modül değil, yetki-bağımsız). */}

@@ -60,6 +60,11 @@ export interface FeatureFlags {
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
    *  Açıkken WYSIWYG ama ~40KB binary HC-06'dan gider; sahada yavaşsa admin kapatır. */
   mobileRasterEnabled: boolean;
+  /** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı (default false).
+   *  Backend ENFORCE eder ama YALNIZ yeni atama oluşturmayı kapılar — dağıtılmış iş
+   *  emirleri bayrak kapansa da bypass rejiminde biter (rejim atama satırında kalıcı).
+   *  Mobilde ayrıca "Kurşun Dağıtım" ekranını gizler (bkz. hooks/useVisibleScreens). */
+  kursunBypassEnabled: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -82,6 +87,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   mobileIdleLockMinutes: 10,
   mobileLockOnBackground: true,
   mobileRasterEnabled: false,
+  kursunBypassEnabled: false,
 };
 
 export const featureFlagService = {

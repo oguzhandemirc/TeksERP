@@ -50,6 +50,10 @@ const updateSchema = z.object({
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).
   tamburOverQuantityEnabled: z.boolean().optional(),
+  // production.kursunBypassEnabled — kurşun istasyonuna tablet konulmayan düzen (default false).
+  // ENFORCE edilir ama yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış iş emirleri
+  // bayrak kapansa da bypass rejiminde biter.
+  kursunBypassEnabled: z.boolean().optional(),
   // auth.sessionDurationMinutes — oturum (JWT) ömrü, dakika (1–43200 = 30 gün). Backend ENFORCE (login).
   sessionDurationMinutes: z.number().int().min(1).max(43200).optional(),
   // auth.sessionDurationHours — oturum (JWT) ömrü, saat (1–720). GERİYE-UYUM (dakika alanı öncelikli).

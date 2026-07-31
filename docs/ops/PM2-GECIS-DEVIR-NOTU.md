@@ -1,359 +1,204 @@
-# NSSM → pm2 Geçişi — Devir ve Sunucu Denetim Notu
+# Yedekleme & Geri Yükleme — Sunucu Deploy ve Denetim Notu
 
-**Tarih:** 2026-07-30 · **Yapan:** Claude (geliştirme makinesi) · **Durum:** kod tarafı bitti, **sunucu tarafı doğrulanmadı**
-
----
-
-## 0) Bu dosya kime, ne için
-
-Bu not **fabrika sunucusundaki (ya da başka bir makinedeki) Claude oturumu için**
-yazıldı. Amaç: `git pull` ile bu değişiklikleri çektikten sonra **repodaki
-beklenen durum ile makinedeki gerçek durumu karşılaştırmak** ve farkları kapatmak.
-
-Geliştirme makinesinde yapılanlar kod ve dokümana yazıldı. **Sunucuda hiçbir şey
-çalıştırılmadı** — aşağıdaki §4 denetimi henüz kimse koşmadı. Sunucudaki Claude'un
-işi: denetimi koşmak, farkları raporlamak, gerekli düzeltmeleri yapmak ve §8'i
-doldurmak.
-
-> **ÖNEMLİ — bu değişiklikler push edilmiş olmalı.** Geliştirme makinesinde
-> commit **atılmadı**; `git pull` ile bu notu görüyorsan commit+push yapılmış
-> demektir. Göremiyorsan geliştirme makinesinde henüz commit edilmemiştir.
+**Son güncelleme:** 2026-07-31 · **Hedef sunucu:** SAHINSRV (192.168.1.250)
+**Durum:** kod tarafı bitti ve geliştirme makinesinde test edildi; **sunucuda henüz deploy edilmedi**
 
 ---
 
-## 1) Ne değişti — tek paragraf
+## 0) Bu dosya kime
 
-Backend eskiden Inno Setup + gömülü Node/PostgreSQL/**NSSM** installer'ıyla
-kurulup NSSM ile Windows servisi olarak koşuyordu. Kullanıcı bunu bıraktı ve
-**pm2** ile ayağa kaldırmaya geçti. Ancak installer yalnız süreci başlatmıyordu:
-**gece yedeği** de ona bağlıydı (`manage.ps1 -Action backup` + "TeksERP Gece
-Yedek" Görev Zamanlayıcı görevi + panelden `schtasks /run` tetiklemesi). pm2'ye
-geçişle bu zincir **koptu**. Bu yüzden yedekleme mantığı **backend'e taşındı**,
-installer silindi, ve NSSM'e atıfta bulunan tüm kod/doküman güncellendi.
+Fabrika sunucusunda `git pull` yapıp **Claude Code CLI ile deploy edecek** oturum için.
+Sırasıyla: §1 (neyin değiştiği) → §2 (sunucunun gerçek durumu) → §3 (deploy öncesi
+ZORUNLU env) → §4 (deploy adımları) → §5 (deploy sonrası doğrulama) → §6 (açık işler).
 
-### Neden bu bir "sessiz bozulma" riski taşıyor
-
-Eski akışta `BACKUP_DIR` ortam değişkeni **NSSM servis kaydından** geliyordu.
-pm2'ye geçerken bu env taşınmadıysa:
-
-- `backup.service.ts` eski hâlinde `catch` ile **boş liste** dönüyordu → panelde
-  "Henüz yedek yok" görünürdü, hata görünmezdi
-- `/health` → `lastBackup` **null** dönerdi
-- Gece yedeği görevi de `manage.ps1` gittiği için çalışmazdı
-
-Yani **fabrika bir süredir yedeksiz kalmış olabilir.** §4'ün ilk maddesi bunu
-ölçer ve denetimin en yüksek öncelikli parçasıdır.
+> **⚠ ÖNCE BUNU OKU — 2026-07-30 tarihli önceki sürümdeki teşhis YANLIŞTI.**
+> O sürüm "pm2'ye geçişte gece yedeği zinciri koptu, fabrika yedeksiz olabilir"
+> diyordu. **Bu sunucu için doğru değil.** Yedekleme 2026-07-16'da installer'dan
+> bağımsız olarak sıfırdan kurulmuş ve **çalışıyor** (§2). Eski teşhise dayanıp
+> `TeksERP-DB-Backup` görevini bozmayın.
 
 ---
 
-## 2) Yeni yedekleme tasarımı (davranış sözleşmesi)
+## 1) Ne değişti (kodda)
 
-`Teks-Erp/src/services/backup.service.ts` + `Teks-Erp/src/jobs/backup-scheduler.ts`
+Kaynak kurulumda yedekleme mantığı silinen Inno Setup/NSSM installer'ının
+`manage.ps1`'ine bağlıydı; o installer repodan kaldırıldı ve mantık backend'e
+taşındı. **Bu sunucuda o zincir zaten kullanılmıyordu** — dolayısıyla buradaki
+etki "kayıp bir özelliğin geri gelmesi" değil, **yeni özelliklerin eklenmesi**:
 
-| Konu | Davranış |
+| Yeni | Ne işe yarıyor |
 |---|---|
-| Çalıştırma | `pg_dump -Fc` **ayrı child process**'te; backend yalnız `close` event'ini bekler → event loop bloklanmaz |
-| Bütünlük | Her dump sonrası `pg_restore --list`; **başarısızsa dosya SİLİNİR** ve rotasyona inmez (sağlam yedekleri evict etmesin) |
-| Rotasyon | En yeni **14** `tekserp_*.dump` tutulur; `premigrate_*` **hariç** (silinmez) |
-| Offsite | `BACKUP_OFFSITE_DIR` doluysa kopyalanır; boşsa **açık uyarı** üretilir |
-| Zamanlama | Her gün, saat **panelden ayarlanır** (Sistem → Yedekler → "Otomatik yedek saati" → `SystemSetting backup.hour`; öncelik DB → `BACKUP_HOUR` env → 3). Zamanlayıcı her turda okur → **restart gerekmez**. Sunucu o saatte kapalıysa **açılışta telafi eder** |
-| Son çalışma | `SystemSetting` → `backup.lastNightlyAt` (damga işin **başında** yazılır → başarısızlıkta 15dk'da bir retry spam'i olmaz) |
-| Eşzamanlılık | In-process `running` bayrağı (schtasks serileştirmesi gitti, backend engellemek zorunda) |
-| Bağlantı | `DATABASE_URL`'den çözülür (host/port/user/şifre/db). Eski `secret.json` **yok** |
-| Şifre | Child'a yalnız `PGPASSWORD` env'i ile geçer — komut satırına yazılmaz, log'a düşmez |
-| İz | `SystemLog` → `BACKUP_COMPLETED` / `BACKUP_FAILED` (best-effort) |
-| Geri yükleme | **Backend'de DEĞİL** — bilinçli. Panel üç katmanlı onaydan (kayıp önizlemesi → yazarak onaylama → doğrulanmış güvenlik yedeği) sonra komut bloğunu kopyalatır (şifre yer tutucu) |
-| Geri yükleme güvenliği | `GET /backups/:name/restore-impact` kayıp sayımı + audit rollup · `TypeToConfirm` DB adı · blok `if ($ok)` guard'ıyla güvenlik yedeği doğrulanmadan `pg_restore` ÇALIŞTIRMAZ |
+| Yedek bütünlük doğrulaması | Her dump sonrası `pg_restore --list`; bozuksa dosya silinir, rotasyona inmez |
+| Kayıp önizlemesi | "Bu yedeğe dönersem ne kaybederim" — model model sayım + audit izinden UPDATE hacmi |
+| Yazarak onaylama | Geri yükleme komutu, DB adı elle yazılmadan kopyalanamaz |
+| Güvenlik yedeği | Geri yükleme bloğu, `pg_restore --clean`'den ÖNCE doğrulanmış bir yedek alır |
+| **Kopyaya geri yükleme** | Yedeği CANLI DB'ye değil yeni bir DB'ye yükler, doğrular, sonra takas → **geri alınabilir** |
+| Yedek saati paneli | `SystemSetting backup.hour` — restart gerekmez |
+| `/health` | `restoreCopyCount` / `restoreCopyBytes` eklendi (unutulmuş kopyalar görünür) |
 
-**Geri yükleme neden backend'de değil:** `pg_restore --clean` şemayı düşürür;
-backend'in kendi bağlantı havuzu ayaktayken kendini durdurup bunu yapması
-güvenilir değil.
+**Panelde artık geri yükleme AKIŞI var** (komut üretimi + kopya-restore). Eski
+notunuzdaki *"GERİ YÜKLEME panelde YOKTUR (güvenlik)"* satırı bu sürümle
+güncelliğini yitirdi — ama geri yüklemeyi hâlâ **backend çalıştırmıyor**; panel
+yalnız doğrular, onaylatır ve komutu hazırlar.
 
 ---
 
-## 3) Dosya manifestosu
+## 2) Sunucunun gerçek durumu (2026-07-16 kurulum notlarından)
 
-### Eklendi
-
-| Dosya | Amaç |
+| Ne | Değer |
 |---|---|
-| `Teks-Erp/src/jobs/backup-scheduler.ts` | Gece yedeği zamanlayıcı (`archive-scheduler` kalıbı); saati `SystemSetting backup.hour`'dan her turda okur |
-| `Teks-Erp/scripts/test_backup.ts` | Entegrasyon testi — gerçek `pg_dump` ile 31 doğrulama (`npm test backup`) |
-| `Electron/src/pages/System/Backups/BackupScheduleCard.tsx` | "Otomatik yedek saati" seçici (Yedekler ekranı) |
-| `Teks-Erp/ecosystem.config.js` | pm2 üretim başlatıcısı (fork modu, env, log yolları) |
-| `Teks-Erp/deploy/prisma.config.prod.js` | `installer/windows/`'dan **taşındı** — ts-node'suz sunucuda `migrate deploy` için |
-| `docs/ops/PM2-GECIS-DEVIR-NOTU.md` | bu dosya |
+| PostgreSQL | **16.9**, native Windows servisi `postgresql-tekserp`, port **5432** |
+| PG programları / veri | `C:\Etkili-Yazilim\pgsql\bin` · `C:\Etkili-Yazilim\pgdata` |
+| initdb | UTF8, **C locale**, scram |
+| Veritabanı / kullanıcı | **`tekserp`** / `tekserp` (superuser: `postgres`) |
+| Backend projesi | `C:\Etkili-Yazilim\tekserp\Teks-Erp` (repo kökü `...\tekserp`) |
+| pm2 uygulama adı | **`tekserp-backend`** |
+| pm2 daemon | **SYSTEM** hesabıyla koşar → **pm2 komutları YÖNETİCİ shell ister** (yoksa `EPERM \\.\pipe\rpc.sock`) |
+| Boot kalıcılığı | Görev Zamanlayıcı **`TeksERP-Backend-Boot`** → `C:\Etkili-Yazilim\pm2-boot.cmd` → `pm2 resurrect` (SYSTEM, **sistem açılışında**) |
+| Gece yedeği | Görev **`TeksERP-DB-Backup`**, her gece **02:00**, SYSTEM → `C:\Etkili-Yazilim\yedekle.ps1` |
+| Yedek klasörü / saklama | `C:\Etkili-Yazilim\backups` · **30 gün** · log `backup.log` |
+| Güncelleme script'i | `C:\Etkili-Yazilim\guncelle.ps1` |
+| Firewall | "TeksERP Backend 4000" |
 
-### Silindi — `Teks-Erp/installer/windows/` (tamamı, 11 dosya)
-
-`build.ps1` · `setup.iss` · `scripts/manage.ps1` · `README-KURULUM.md` ·
-`REHBER.md` · `tray/tray.ps1` · `tray/tray-launch.vbs` · `branding/*` ·
-`tsconfig.bundle.json` · `.gitignore`
-
-> Silmeden önce kurtarılan iki şey: **(a)** `prisma.config.prod.js` (yukarıda),
-> **(b)** `postgresql.conf` ayarları → `docs/ops/DEPLOY-RUNBOOK.md §6`. Bu conf
-> değerlerinin **tek kalan kaydı** artık o bölümdür.
-
-### Değişti — kod
-
-| Dosya | Değişiklik |
-|---|---|
-| `Teks-Erp/src/services/backup.service.ts` | **Yeniden yazıldı** (§2) |
-| `Teks-Erp/src/server.ts` | `startBackupScheduler()` çağrısı · **`process.on("message")` → pm2 graceful shutdown** · tek-process invariant yorumuna backup-scheduler eklendi · NSSM→pm2 yorumları |
-| `Teks-Erp/src/app.ts` | NSSM→pm2 yorumları · `BACKUP_DIR` yorumuna sessiz-boşluk uyarısı |
-| `Teks-Erp/src/routes/admin.routes.ts` | `triggerManualBackup()` artık **senkron** (`await` kaldırıldı) · Swagger açıklaması güncellendi |
-| `Teks-Erp/src/services/helpers/raster/raster-font.ts` | yorum: NSSM AppDirectory → pm2 `cwd` |
-| `Electron/src/pages/System/Backups/service.ts` | `manageScriptPath` **kaldırıldı** → `restoreTarget` + `pm2AppName` + `running` + `lastResult`; `restoreCommand()` artık `pg_restore` bloğu üretir |
-| `Electron/src/pages/System/Backups/BackupsPage.tsx` | `secret.json`/tepsi menüsü metni kaldırıldı · "Yedekleme kapalı" kırmızı kutusu · "son yedek denemesi" sonucu · "yedek alınıyor" göstergesi |
-| `Electron/src/pages/System/ServerStatus/BackupButton.tsx` | açıklama metinleri yeni davranışa göre |
-
-> **API kırılması:** `GET /api/admin/backups` yanıtından `manageScriptPath` **çıktı**,
-> yerine `restoreTarget`/`pm2AppName`/`running`/`lastResult` **girdi**. Backend ve
-> Electron birlikte deploy edilmeli — eski Electron yeni backend'le geri-yükleme
-> komutunu yanlış kurar.
-
-### Değişti — doküman
-
-`docs/ops/DEPLOY-RUNBOOK.md` (**baştan yazıldı**) · `docs/ops/KURULUM.md` (§A
-tamamen) · `docs/ops/URETIM-KONTROL-LISTESI.md` · `Teks-Erp/MIGRATION-DEPLOY.md` ·
-`Teks-Erp/CLAUDE.md` · `Teks-Erp/ARCHITECTURE.md` (§10.3) ·
-`Teks-Erp/DB-MIMARI-DENETIM.md` · `docs/history/SAHA-DAYANIKLILIK-FAZ3.md`
-
-**Denetim belgesinde durum değişiklikleri:**
-- **O-15** (bellek tuning yok) → **ÇÖZÜLDÜ**, değerler runbook §6'da, artık elle uygulanır
-- **O-17** (yedek bütünlüğü doğrulanmıyor) → **ÇÖZÜLDÜ** kod tarafı; *test-restore tatbikatı hâlâ açık*
-- **Y-4** (offsite kopya yok) → offsite **ÇÖZÜLDÜ**; *PITR/WAL arşivi hâlâ yok*
-- **O-16** (dev PG 18.4 ↔ üretim 16.6) → **BULGU GEÇERSİZ.** Silinen `build.ps1:35`
-  gerçekte `18.4-1` idi; tespit bayatmış. Yerine yeni risk yazıldı: PG artık elle
-  kurulduğu için parite otomatik garanti değil.
+**Boot mekanizması oturum açılışına değil sistem açılışına bağlı** — kimse giriş
+yapmasa da backend kalkar. NSSM işin içinde yok.
 
 ---
 
-## 4) SUNUCU DENETİMİ — koşulacak komutlar
+## 3) Deploy ÖNCESİ zorunlu env değişiklikleri
 
-> Hepsi **okuma**dır, hiçbir şeyi değiştirmez. Çıktıları §8 tablosuna yaz.
+`C:\Etkili-Yazilim\tekserp\Teks-Erp\ecosystem.config.js` (ya da `.env`) içine:
 
-### 4.1 EN ÖNCELİKLİ — yedek gerçekten alınıyor mu?
-
-```powershell
-# En yeni yedek dosyası ne zamandan? (boş çıkarsa YEDEK YOK)
-Get-ChildItem C:\ProgramData\TeksERP\backups\tekserp_*.dump -ErrorAction SilentlyContinue |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 5 Name,LastWriteTime,Length
-
-# Eski Görev Zamanlayıcı görevi hâlâ duruyor mu, son ne zaman koştu, sonucu ne?
-Get-ScheduledTaskInfo "TeksERP Gece Yedek" -ErrorAction SilentlyContinue |
-  Select-Object TaskName,LastRunTime,LastTaskResult,NextRunTime
-
-# Backend'in gördüğü yedek durumu
-curl -s http://localhost:4000/health
+```js
+BACKUP_SCHEDULE_ENABLED: "false",   // ← EN KRİTİK, aşağıdaki gerekçe
+BACKUP_RETENTION_DAYS: "30",        // sizin yedekle.ps1 politikanızla aynı
+PG_BIN_DIR: "C:/Etkili-Yazilim/pgsql/bin",
+PGDATA_DIR: "C:/Etkili-Yazilim/pgdata",
+BACKUP_PG_USER: "postgres",         // kopya oluşturma CREATEDB ister
+BACKUP_PG_PASSWORD: "<postgres sifresi>",   // ⚠ sır → .env'e koyun, ecosystem git'te
 ```
 
-**Yorum:** En yeni dump'ın tarihi pm2'ye geçiş tarihinden **eskiyse**, geçişten
-beri yedek alınmamış. `LastTaskResult` 0 değilse görev hata veriyor.
+Ardından **`pm2 restart tekserp-backend --update-env`** (yönetici shell).
 
-### 4.2 pm2 ortamı — env taşındı mı?
+> **`BACKUP_SCHEDULE_ENABLED=false` NEDEN ZORUNLU:** backend artık kendi gece
+> yedeğini alabiliyor. Açık bırakılırsa `TeksERP-DB-Backup` **ve** backend her
+> gece ayrı ayrı yedek alır (çift dump, çift disk, çift I/O). Sizin görevinizi
+> birincil tutma kararı bilinçli: **backend çökmüşken bile yedek alınır** —
+> backend'e bağlı bir zamanlayıcının sağlayamayacağı garanti.
 
-```powershell
-pm2 list
-pm2 env 0 | Select-String 'BACKUP_DIR|BACKUP_OFFSITE_DIR|BACKUP_HOUR|PG_BIN_DIR|DATABASE_URL|PORT|NODE_ENV'
-pm2 describe 0 | Select-String 'exec mode|instances|script path|exec cwd|name'
-```
+> **Saklama çakışması (kodda çözüldü, yine de bilin):** rotasyon eskiden "en yeni
+> 14 dosya"ydı ve aynı klasöre/aynı `tekserp_*` desenine yazdığı için sizin 30
+> günlük geçmişinizi 14 dosyaya indirip ~16 günü **sessizce silerdi**. Artık gün
+> bazlı (`BACKUP_RETENTION_DAYS`, varsayılan 30) ve "en yeni 3 dosya yaşına
+> bakılmaksızın korunur" tabanı var (saat kayması sigortası).
 
-**Beklenen:** `exec mode: fork`, `instances: 1`, `name: teks-erp-backend`,
-`BACKUP_DIR` **dolu**. `exec mode: cluster` görürsen **DUR** — tek-process
-invariant'ı ihlal (§6).
-
-### 4.3 Reboot kalıcılığı — hangi mekanizma?
-
-Kullanıcı "reboot sonrası çalışıyor ama ne yaptığımızı hatırlamıyorum" dedi.
-Tespit et:
-
-```powershell
-Get-CimInstance Win32_Service | Where-Object { $_.Name -match 'pm2|node|teks' } |
-  Select-Object Name,State,StartMode,PathName
-Get-ScheduledTask | Where-Object { $_.TaskName -match 'pm2|node|teks|resurrect' } |
-  Select-Object TaskName,State
-Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue
-Test-Path "$env:USERPROFILE\.pm2\dump.pm2"
-```
-
-**Dikkat:** `PathName` içinde `nssm.exe` görürsen — `pm2-installer` pm2'yi NSSM
-ile servis yapar. O durumda **NSSM runtime'da hâlâ kullanımdadır**; "NSSM tamamen
-kaldırıldı" ifadesi yalnızca *bizim installer'ımız* için doğrudur. Bunu §8'e yaz.
-
-### 4.4 PostgreSQL — sürüm, port, locale, conf
-
-```powershell
-psql -c "select version()"
-psql -c "show port"
-psql -c "select datname, datcollate, datctype from pg_database where datname='TeksErpDb'"
-psql -c "select name,setting from pg_settings where name in
-  ('statement_timeout','shared_buffers','work_mem','effective_cache_size',
-   'maintenance_work_mem','log_min_duration_statement','listen_addresses','archive_mode')"
-```
-
-**Beklenen (runbook §6):** `statement_timeout=50s` · `log_min_duration_statement=500`
-· `listen_addresses=127.0.0.1` · `work_mem=16MB` · `shared_buffers` ≈ RAM %25 ·
-`effective_cache_size` ≈ RAM %60. Major sürüm dev ile aynı (**18.x**).
-
-### 4.5 `pg_dump` erişilebilir mi + hangi kullanıcıyla koşacak
-
-```powershell
-& "$($env:PG_BIN_DIR)\pg_dump.exe" --version    # ya da ecosystem.config.js'deki yol
-```
-
-**Beklenen:** çalışıyor **ve** sürümü sunucudaki PostgreSQL'den eski değil.
-Bulunamazsa yedek alınamaz.
-
-Ayrıca **DB sahipliği** kontrol edilmeli — `pg_dump` varsayılan olarak
-`DATABASE_URL`'deki uygulama kullanıcısıyla koşar; o kullanıcı sahibi/superuser
-değilse dump patlar **ya da sessizce eksik** çıkar:
-
-```sql
-SELECT datname, pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datname = 'TeksErpDb';
-```
-
-`owner` ≠ `DATABASE_URL` kullanıcısı ise `BACKUP_PG_USER=postgres` +
-`BACKUP_PG_PASSWORD=...` gerekir (şifre `.env`'e, `ecosystem.config.js`'e DEĞİL).
-
-### 4.8 pm2 gerçekten doğru dosyayı mı çalıştırıyor + destekleyici ayarlar
-
-```powershell
-Test-Path Teks-Erp\dist\server.js         # True olmalı (dist\src\server.js DEĞİL)
-Test-Path C:\ProgramData\TeksERP\logs     # True olmalı (pm2 dizini oluşturmaz)
-Get-NetFirewallRule | Where-Object DisplayName -match 'TeksERP|4000' |
-  Select-Object DisplayName,Enabled,Direction,Action
-psql -c "show port"                        # .env DATABASE_URL portuyla AYNI olmalı
-```
-
-**Not:** Tabletler/Electron PC'ler şu an bağlanabiliyorsa firewall kuralı zaten
-vardır (installer açıyordu). Yoksa `New-NetFirewallRule ... -LocalPort 4000` ile
-açılır — runbook §2.2'de komut hazır.
-
-### 4.6 pm2 log rotasyonu
-
-```powershell
-pm2 list | Select-String logrotate
-Get-ChildItem C:\ProgramData\TeksERP\logs\*.log | Select-Object Name,Length
-```
-
-**Beklenen:** `pm2-logrotate` kurulu. Değilse log dosyaları sınırsız büyür
-(NSSM 10MB'da döndürüyordu).
-
-### 4.7 Makinedeki kod sürümü bu değişiklikleri içeriyor mu?
-
-```powershell
-Test-Path Teks-Erp\ecosystem.config.js        # True olmalı
-Test-Path Teks-Erp\src\jobs\backup-scheduler.ts # True olmalı
-Test-Path Teks-Erp\installer\windows            # FALSE olmalı
-git log --oneline -5
-```
-
-`installer\windows` hâlâ varsa veya `ecosystem.config.js` yoksa **pull tam
-gelmemiş** — geçiş öncesi koda bakıyorsun, §5'i uygulama.
+**Elle yedek davranışı değişti:** panelin "Şimdi yedek al" düğmesi artık
+`schtasks /run` ile sizin görevinizi tetiklemiyor; backend kendi `pg_dump`'ını
+koşuyor (bütünlük doğrulaması + offsite desteğiyle). `BACKUP_TASK_NAME` env'i
+artık **kullanılmıyor**, zararsız şekilde durabilir.
 
 ---
 
-## 5) Bulunabilecek farklar ve ne yapmalı
+## 4) Deploy adımları
 
-| Bulgu | Yapılacak |
-|---|---|
-| **Geçişten beri yedek yok** | Hemen elle yedek al (panel "Şimdi yedek al" veya `POST /api/admin/backup`). Sonra `BACKUP_DIR`'i düzelt ve tekrar dene. **Bu ilk iş.** |
-| Eski "TeksERP Gece Yedek" görevi **hâlâ kayıtlı** | **Kaldır** — artık silinmiş `manage.ps1`'i çağırıyor, her gece sessizce hata veriyor: `Unregister-ScheduledTask -TaskName "TeksERP Gece Yedek" -Confirm:$false` |
-| `BACKUP_DIR` pm2 env'inde yok | `ecosystem.config.js`'e yaz → `pm2 restart teks-erp-backend --update-env` → `pm2 save`. Açılış log'unda `[backup] BACKUP_DIR tanımsız` satırının **kalmadığını** teyit et |
-| `BACKUP_OFFSITE_DIR` boş | Kullanıcıya sor: NAS/UNC/harici disk yolu var mı? Boş kalırsa tüm yedekler DB ile aynı diskte (tek arıza = veri + yedek birlikte gider) |
-| `PG_BIN_DIR` yanlış/bulunamıyor | Gerçek yolu bul (`Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory`) ve düzelt |
-| DB sahibi ≠ `DATABASE_URL` kullanıcısı | `.env`'e `BACKUP_PG_USER=postgres` + `BACKUP_PG_PASSWORD=...` ekle → `pm2 restart --update-env`. Sonra **elle bir yedek al ve boyutunu kontrol et** (sessiz eksik dump riski) |
-| `dist\server.js` yok ama `dist\src\server.js` var | Eski/yanlış build. `npm run build` tekrar koş; `ecosystem.config.js` `dist/server.js` bekler |
-| `C:\ProgramData\TeksERP\logs` yok | `mkdir` — pm2 dizini oluşturmaz, log sessizce yazılmaz |
-| 4000 için firewall kuralı yok | Tabletler bağlanıyorsa vardır. Yoksa runbook §2.2'deki `New-NetFirewallRule` |
-| `postgresql.conf` portu ≠ `DATABASE_URL` portu | **Portu DEĞİŞTİRME** — çalışan kurulumun portunu koru, tutarsız olanı `.env` tarafında düzelt. Runbook §6 uyarısı |
-| `exec mode: cluster` veya `instances > 1` | **Kritik.** `fork`/`1`'e çevir. Sebep §6 |
-| pm2 app adı `teks-erp-backend` değil | İki seçenek: pm2 tarafını yeniden adlandır, **veya** dokunma — backend `process.env.name`'i okuyup panele doğru adı bildirir. Sadece §8'e yaz |
-| `pm2-logrotate` yok | `pm2 install pm2-logrotate` + `pm2 set pm2-logrotate:max_size 10M` + `pm2 set pm2-logrotate:retain 14` |
-| PG conf değerleri eksik | Runbook §6'daki bloğu uygula, PostgreSQL'i yeniden başlat (vardiya dışında) |
-| DB locale `C` | Bilinen açık bulgu (**Y-2**): `ILIKE` Türkçe katlamıyor, aramalar sessizce eksik sonuç veriyor. Kod tarafı düzeltmesi henüz yapılmadı — **bu geçişin kapsamı değil**, ayrı iş olarak raporla |
-| `archive_mode=off` | Bilinen açık bulgu (**Y-4 kalanı**): PITR yok, kurtarma noktası son gece yedeği. Ayrı iş |
+```powershell
+# YÖNETİCİ PowerShell
+cd C:\Etkili-Yazilim\tekserp
+git pull
+cd Teks-Erp
+npm ci
+npx prisma generate
+npm run build            # ← DB'ye DOKUNMAZ; patlarsa temiz abort
+npx prisma migrate deploy
+pm2 restart tekserp-backend --update-env
+pm2 save
+```
 
----
+> **⚠ `guncelle.ps1` bu sırada DEĞİL.** Mevcut script `migrate deploy → build`
+> yapıyor. Doğrusu **`build → migrate`**: `build` (tsc) DB'ye dokunmaz ve tip
+> hatasıyla patlaması normaldir — o sırada DB'ye hiç dokunulmamış olur, temiz
+> abort edersiniz. Ters sırada tsc patlarsa **DB göç etmiş ama deploy edilebilir
+> kod yok**; ileri gitmek için sahada tsc düzeltmek, geri gitmek için yedekten
+> dönmek gerekir. Script'i düzeltmek ayrı bir iş (§6).
 
-## 6) Kesinlikle YAPILMAYACAKLAR
+**Bu sürümde migration YOK** — şema değişmiyor, `migrate deploy` "no pending"
+demeli. Geri dönüş kolay.
 
-- **`npm run seed` ÇALIŞTIRMA.** Verileri sıfırlar. Eski installer'ın `.seeded`
-  bayrağı koruması **kaldırıldı** — artık hiçbir otomatik engel yok.
-- **pm2 cluster modu / `instances > 1` / 2. replica EKLEME.** Şunlar process-local
-  durum tutar ve **sessizce** bozulur: presence sayımı, feature-flag cache,
-  `archive-scheduler` (çift arşiv), `backup-scheduler` (aynı gece iki `pg_dump`).
-- **`prisma migrate dev` ÇALIŞTIRMA** (reset riski). Üretimde yalnız `migrate deploy`.
-- **`deploy/prisma.config.prod.js`'i gereksiz kopyalama.** Yalnız
-  `npm ci --omit=dev` ile kurulmuş sunucuda `prisma.config.js` olarak kopyalanır.
-  devDependencies kuruluysa kopyalanırsa hangi config'in okunduğu belirsizleşir.
-- **Migration öncesi yedeği atlama.** Otomatik `premigrate_*` **artık üretilmiyor**
-  (installer alıyordu); rollback stratejisi elle alınan yedeğe dayanıyor.
+> **⚠ API kırılması — backend ve Electron BİRLİKTE gitmeli.**
+> `GET /api/admin/backups` yanıtından `manageScriptPath` **çıktı**; yerine
+> `restoreTarget` / `pm2AppName` / `running` / `lastResult` / `kind` girdi.
+> Eski bir Electron paneli yeni backend'le geri yükleme komutunu yanlış kurar.
+> (2026-07-16 notunda Electron kurulumu "henüz yapılmadı" görünüyor — fabrikada
+> panel kurulu değilse bu risk yok; **kurulu mu, önce teyit edin**.)
 
 ---
 
-## 7) Geliştirme makinesinde doğrulananlar / doğrulanmayanlar
+## 5) Deploy sonrası doğrulama
 
-**Doğrulandı:** backend `npx tsc --noEmit` temiz · Electron `npm run typecheck`
-temiz · `npm run check:docs` düzenlenen dosyalarda ölü link bulmadı.
+```powershell
+# 1) Servis ayakta ve DB bağlı
+curl http://localhost:4000/health          # status UP, db UP
 
-**Doğrulanmadı (sunucuda test edilmeli):**
-- `pg_dump`/`pg_restore` child process'i Windows'ta gerçekten koşuyor mu
-  (yol boşluk içeriyor: `C:\Program Files\...`; `spawn` argümanları ayrı geçtiği
-  için doğru olması **beklenir** ama saha testi yapılmadı)
-- Gece zamanlayıcının 03:00 tetiklemesi ve telafi davranışı
-- `pm2 restart` sırasında `process.on("message")` graceful shutdown'ının fiilen
-  çalışması (`shutdown_with_message: true` ile eşleşmesi gerekiyor)
-- Offsite kopyanın UNC yoluna (`\\NAS\...`) yazabilmesi — pm2'nin koştuğu
-  hesabın o paylaşıma erişimi olmalı
-- **Önceden var olan ve bana ait olmayan iki sorun:**
-  `Teks-Erp/src/services/subcontractor.service.ts:3582,3586` lint hatası ve
-  `docs/fason-envanter-gorunurluk-spec.md:736` ölü linki. Dokunulmadı.
+# 2) Scheduler KAPALI olmalı (çift yedek olmasın)
+pm2 logs tekserp-backend --lines 50 | Select-String "backup"
+#    beklenen: "[backup] scheduler KAPALI (BACKUP_SCHEDULE_ENABLED=false)"
+#    GÖRÜLMEMESİ gereken: "[backup] scheduler aktif"
 
----
+# 3) Sizin göreviniz bozulmadı
+(Get-ScheduledTask -TaskName "TeksERP-DB-Backup" | Get-ScheduledTaskInfo).NextRunTime
+dir C:\Etkili-Yazilim\backups\*.dump | Select-Object -Last 3
 
-## 8) DENETİM SONUCU — sunucudaki Claude bunu doldursun
+# 4) Yeni yetenekler görünüyor mu
+curl http://localhost:4000/health          # restoreCopyCount / restoreCopyBytes alanları
+```
 
-> Denetimi koştuktan sonra bu bölümü gerçek çıktılarla doldur, tarih at ve
-> commit et. Sonraki oturum buradan devam edecek.
+**Panelden (Electron kuruluysa):** Sistem → Yedekler listelenmeli, `lastBackup`
+dolu olmalı. Sistem → **Veritabanı Geri Yükleme** açılıp "yetkiler" kutusunda
+`CREATEDB` yeşil görünmeli; değilse `ALTER ROLE "postgres" CREATEDB;` talimatı
+çıkar (postgres zaten superuser olduğu için sorun beklenmiyor).
 
-**Denetim tarihi:** _(doldur)_
-
-| Kontrol | Beklenen | Gerçek | Sonuç |
-|---|---|---|---|
-| En yeni yedek tarihi | son 24 saat içinde | | |
-| Eski "TeksERP Gece Yedek" görevi | kayıtlı DEĞİL | | |
-| `BACKUP_DIR` (pm2 env) | dolu | | |
-| `BACKUP_OFFSITE_DIR` | dolu (tercihen) | | |
-| `PG_BIN_DIR` + `pg_dump --version` | çalışıyor, sürüm uyumlu | | |
-| pm2 `exec mode` / `instances` | `fork` / `1` | | |
-| pm2 app adı | `teks-erp-backend` | | |
-| Reboot mekanizması | **tespit edilecek** | | |
-| `pm2-logrotate` | kurulu | | |
-| PostgreSQL major | 18.x | | |
-| PostgreSQL port | `.env` ile tutarlı | | |
-| DB locale | (C ise Y-2 açık) | | |
-| `statement_timeout` | `50s` | | |
-| Bellek parametreleri (§4.4) | runbook §6 ile uyumlu | | |
-| `/health` → `lastBackup` | null DEĞİL | | |
-| `dist\server.js` | var | | |
-| Log klasörü | var | | |
-| Firewall 4000 | açık | | |
-| DB sahibi vs `DATABASE_URL` kullanıcısı | aynı (değilse override) | | |
-| `postgresql.conf` port = `.env` port | aynı | | |
-
-**Yapılan düzeltmeler:** _(doldur)_
-
-**Açık kalanlar / kullanıcıya sorulacaklar:** _(doldur)_
+**İlk kopya denemesi — mesai dışında:** bir yedek seçip "Kopya oluştur".
+Bu, **PG 16'ya özgü kod dalının ilk gerçek koşumudur** (`pg_database.datlocale`
+PG17+'da var, 16'da `daticulocale` — sürüm dalı yazıldı ama gerçek PG16'da hiç
+çalışmadı). Hata verirse doğrulama raporundaki mesajı buraya not edin.
 
 ---
 
-## 9) İlgili dokümanlar
+## 6) Açık işler (öncelik sırasıyla)
 
-- `docs/ops/DEPLOY-RUNBOOK.md` — kurulum/güncelleme/yedek/rollback; **§6 = PG conf
-  değerlerinin tek kaydı**, **§7 = reboot kalıcılığı**
-- `docs/ops/KURULUM.md` §A — sıfırdan sunucu kurulumu (pm2)
-- `docs/ops/URETIM-KONTROL-LISTESI.md` — deploy öncesi/sonrası kontrol listesi
-- `Teks-Erp/DB-MIMARI-DENETIM.md` — Y-2 (locale/ILIKE), Y-4 (PITR) açık bulguları
-- `Teks-Erp/CLAUDE.md` — "Yedekleme backend'e ait" maddesi
+1. **Offsite yedek** — yedekler DB ile aynı diskte; disk arızası/ransomware
+   ikisini birden götürür. `BACKUP_OFFSITE_DIR` ile ikinci bir diske/paylaşıma
+   otomatik kopya alınır. **Not:** pm2 SYSTEM olarak koştuğu için UNC
+   paylaşımına erişemeyebilir (SYSTEM'in ağ kimliği yoktur) — ikinci bir yerel
+   disk daha güvenli.
+2. **Gerçek reboot testi** — boot görevi elle tetiklenip doğrulanmış ama makine
+   hiç yeniden başlatılmamış. Boot'ta pm2, `postgresql-tekserp` servisinden önce
+   kalkabilir; backend bunu tolere eder (Prisma havuzu tembel bağlanır, `/health`
+   bir süre `db: DOWN` der ve kendini onarır) ama sahada doğrulanmadı.
+3. **`guncelle.ps1` sırasını düzelt** — `build` → `migrate deploy` (§4 gerekçe).
+4. **Y-2 / C locale** — initdb `--locale=C` yapıldığı için `ILIKE` Türkçe
+   katlamıyor: `'ŞİŞLİ' ILIKE '%şişli%'` **false**. Müşteri/ürün/renk aramaları
+   sessizce eksik sonuç veriyor olabilir. Kod tarafı düzeltmesi ayrı bir iş;
+   ayrıntı `Teks-Erp/DB-MIMARI-DENETIM.md` (Y-2).
+5. **PITR / WAL arşivi yok** — kurtarma noktası en iyi ihtimalle son gece yedeği.
+6. **PostgreSQL 16 → 18 yükseltmesi ŞU AN GEREKMİYOR** — 16 destekli, kod 16'da
+   çalışacak şekilde yazıldı. Yapılırsa ayrı bir proje olarak planlanmalı.
+
+---
+
+## 7) Denetim sonucu — sunucudaki oturum doldursun
+
+**Deploy tarihi:** _(doldur)_
+
+| Kontrol | Beklenen | Gerçek |
+|---|---|---|
+| `/health` status/db | UP / UP | |
+| `[backup] scheduler KAPALI` log satırı | var | |
+| `TeksERP-DB-Backup` NextRunTime | dolu | |
+| En yeni dump tarihi | son 24 saat | |
+| `restoreCopyCount` | 0 | |
+| Electron paneli kurulu mu | ? | |
+| İlk kopya denemesi (PG16 dalı) | başarılı | |
+| `guncelle.ps1` sırası düzeltildi mi | ? | |
+
+**Karşılaşılan sorunlar:** _(doldur)_

@@ -70,14 +70,17 @@ describe("restoreCommand", () => {
     const lines = cmd.split("\n");
     const code = lines.filter((l) => l.trim() && !l.trim().startsWith("#"));
 
-    it("pm2 stop en başta, pm2 start en sonda", () => {
-      expect(code[0]).toBe("pm2 stop teks-erp-backend");
+    it("pm2 stop ilk iş, pm2 start en sonda", () => {
+      // İlk satır artık `$LASTEXITCODE = 1` (stop'un çıkış kodu guard'lanıyor),
+      // pm2 stop hemen ardından gelir.
+      expect(code.slice(0, 3).some((l) => l === "pm2 stop teks-erp-backend")).toBe(true);
       expect(code[code.length - 1]).toBe("pm2 start teks-erp-backend");
     });
 
     it("KRİTİK: pg_dump'tan ÖNCE $LASTEXITCODE sıfırlanır", () => {
-      const resetIdx = code.findIndex((l) => l.includes("$LASTEXITCODE = 1"));
-      const dumpIdx = code.findIndex((l) => l.startsWith("pg_dump "));
+      const dumpIdx = code.findIndex((l) => l.includes("pg_dump "));
+      const resetIdx = code.slice(0, dumpIdx).map((l) => l.includes("$LASTEXITCODE = 1")).lastIndexOf(true);
+      expect(dumpIdx).toBeGreaterThan(0);
       expect(resetIdx).toBeGreaterThanOrEqual(0);
       expect(dumpIdx).toBeGreaterThan(resetIdx);
     });
@@ -106,7 +109,8 @@ describe("restoreCommand", () => {
 
     it("güvenlik yedeği pm2 stop'tan SONRA alınır", () => {
       const stopIdx = code.findIndex((l) => l.startsWith("pm2 stop"));
-      const dumpIdx = code.findIndex((l) => l.startsWith("pg_dump "));
+      const dumpIdx = code.findIndex((l) => l.includes("pg_dump "));
+      expect(stopIdx).toBeGreaterThanOrEqual(0);
       expect(dumpIdx).toBeGreaterThan(stopIdx);
     });
 
@@ -170,6 +174,20 @@ describe("restoreCommand", () => {
 
     it("migrate deploy backend cwd'sinde koşar (backend'den gelen yol)", () => {
       expect(cmd).toContain(`Set-Location "${IMPACT.backendCwd}"`);
+    });
+
+    it("KRİTİK: pm2 stop guard'lı — SYSTEM daemon'a normal shell'den erişilemez", () => {
+      // PM2 daemon boot'ta SYSTEM olarak kalkıyor; normal pencerede pm2 komutları
+      // EPERM ile düşer. Guard yoksa backend ayakta kalır ve `--clean` şemayı
+      // açık bağlantılarla yarım düşürür.
+      expect(cmd).toContain("$stopped = ($LASTEXITCODE -eq 0)");
+      const dump = code.find((l) => l.includes("pg_dump "))!;
+      expect(dump.startsWith("if ($stopped) {")).toBe(true);
+      expect(cmd).toContain("$ok = $stopped -and");
+    });
+
+    it("yönetici shell uyarısı blokta yazıyor", () => {
+      expect(cmd).toMatch(/YONETICI/);
     });
 
     it("stderr bastırılmaz (yalnız --list stdout'u susturulur)", () => {

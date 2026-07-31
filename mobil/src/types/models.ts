@@ -790,6 +790,43 @@ export interface TamburContextOpenFabric {
   errors: TamburContextOpenFabricError[];
 }
 
+/**
+ * Kurşun Dağıtım (bypass) önizlemesinde gösterilen top — `bypassPending.rolls`.
+ * Onay çağrısına gidecek `rollIds` KAPSAM sözleşmesinin de kaynağıdır (backend
+ * kapsam paritesini doğrular: eksik/fazla liste 409).
+ */
+export interface TamburBypassPendingRoll {
+  rollId: string;
+  /** Fason dönüşü açık kumaşta barkod henüz yoktur → null olabilir. */
+  barcode: string | null;
+  currentQty: number;
+  receiptNo: string | null;
+  colorCode: string | null;
+  colorName: string | null;
+}
+
+/**
+ * Kurşun istasyonlarında tablet YOKTUR: iş, Kurşun Dağıtım ekranından fiziksel
+ * bir kurşun istasyonuna atanır. Tambur operatörü refakat kartını okuttuğunda
+ * bu blok doluysa "Kurşun Bypass Onayı" önizlemesi açılır ve onay
+ * `POST /api/tambur/bypass-complete` ile Kurşun/KK2 adımını COMPLETED yapar
+ * (SKIPPED DEĞİL). null = normal akış.
+ */
+export interface TamburBypassPending {
+  assignmentId: string;
+  /** Kurşun/KK2 adımı (WorkOrderStep) — kapanacak olan adım. */
+  stepId: string;
+  stationId: string;
+  /** Fiziksel kurşun istasyonunun adı — operatöre "hangi tezgâh" bilgisi. */
+  stationName: string;
+  assignedAt: string;
+  assignedByName: string | null;
+  notes: string | null;
+  rollCount: number;
+  totalMeters: number;
+  rolls: TamburBypassPendingRoll[];
+}
+
 export interface TamburContext {
   workOrderId: string;
   batchNumber: string;
@@ -803,6 +840,8 @@ export interface TamburContext {
   stepNote?: string | null;
   orders: TamburContextOrder[];
   openFabricRolls: TamburContextOpenFabric[];
+  /** Bekleyen Kurşun Dağıtım işi (bypass önizleme + onay verisi). */
+  bypassPending?: TamburBypassPending | null;
 }
 
 /** `POST /api/tambur/:id/cut` — açık kumaşta tek kesim */

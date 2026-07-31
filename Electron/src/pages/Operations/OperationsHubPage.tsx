@@ -1,7 +1,10 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
+import {
+  useKursunBypassEnabled,
+  useShipmentConfirmationEnabled,
+} from "@/hooks/usePricingEnabled";
 import { operationsTiles, type OperationsTile } from "./tile-config";
 import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
@@ -13,6 +16,7 @@ const TILE_TONES: Record<string, string> = {
   "product-balance": "text-station-fason",
   rolls: "text-station-depo",
   "kursun-queue": "text-station-process",
+  "kursun-dagitim": "text-station-process",
   shipments: "text-success",
 };
 
@@ -22,9 +26,13 @@ export function OperationsHubPage() {
   // "Sevk onayı adımı" kapalıyken (varsayılan) sevkler doğrudan çıkar → "Sevk Kapısı"
   // karosu gizlenir (tile.requiresShipmentConfirmation). Açılınca flag invalidate → geri gelir.
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
+  // Kurşun bypass kapalıyken (varsayılan) kurşun tabletten işlenir → "Kurşun
+  // Dağıtım" karosu gizlenir. Route açık kalır: dağıtılmış işler bitirilebilsin.
+  const kursunBypassEnabled = useKursunBypassEnabled();
 
   const visible = operationsTiles.filter((t) => {
     if (t.requiresShipmentConfirmation && !shipmentConfirmationEnabled) return false;
+    if (t.requiresKursunBypass && !kursunBypassEnabled) return false;
     return t.permissionAny
       ? hasAnyPermission(t.permissionAny)
       : !t.permission || hasPermission(t.permission);

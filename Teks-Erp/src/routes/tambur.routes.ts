@@ -326,6 +326,59 @@ router.get(
 
 /**
  * @openapi
+ * /api/tambur/bypass-complete:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Kurşun Dağıtım'ı Tambur okutmasıyla tamamla (kurşun bypass)
+ *     description: |
+ *       Kurşun istasyonlarında tablet YOKTUR. İş, Kurşun Dağıtım ekranından
+ *       fiziksel bir kurşun istasyonuna atanır; Tambur operatörü refakat kartını
+ *       okutup (`GET /api/tambur/context/{cardBarcode}` → `bypassPending`)
+ *       önizlemeyi onayladığında bu uç çağrılır:
+ *       - Kurşun/KK2 adımının açık movement'ları `KURSUN_BYPASS_FINISHED:<uuid>`
+ *         marker'ıyla kapanır (adım COMPLETED olur — **SKIPPED DEĞİL**),
+ *       - istasyon yetenekleri (KURSUN) toplara kopyalanır,
+ *       - toplar Tambur adımına giriş movement'ı ile geçer.
+ *
+ *       `RollOperation` (QC2_COMPLETED/KURSUN_APPLIED) YAZILMAZ ve `RollError`
+ *       açılmaz (hatalar kâğıtta). **Kalite NULL kalır** — kaliteyi Tambur belirler.
+ *
+ *       `rollIds` KAPSAM sözleşmesidir: önizlemede görülen toplar birebir
+ *       gönderilir; kapsam bu sırada değiştiyse 409 döner (yarım kapanış yok).
+ *       Idempotent: dağıtım zaten tamamlanmışsa `alreadyDone=true`.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [cardBarcode, rollIds]
+ *             properties:
+ *               cardBarcode:
+ *                 type: string
+ *                 description: Refakat kartı karekodu (İş Emri No)
+ *               rollIds:
+ *                 type: array
+ *                 minItems: 1
+ *                 items: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Kurşun adımı tamamlandı, toplar Tambur'a alındı (veya idempotent tekrar)" }
+ *       400: { description: Geçersiz gövde / kart aktif değil }
+ *       401: { description: Yetkisiz }
+ *       404: { description: Refakat kartı bulunamadı veya bekleyen kurşun dağıtımı yok }
+ *       409: { description: Kapsam değişmiş, rota Tambur'a çıkmıyor ya da iş emri ölü }
+ *       500: { description: Sunucu hatası }
+ */
+router.post(
+  "/bypass-complete",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:tambur"),
+  controller.completeKursunBypass,
+);
+
+/**
+ * @openapi
  * /api/tambur/{id}/cut:
  *   post:
  *     tags: [Tambur]

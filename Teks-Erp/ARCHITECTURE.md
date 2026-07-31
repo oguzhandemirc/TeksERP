@@ -28,7 +28,7 @@
 Teks-Erp/
 ├── prisma/
 │   ├── schema.prisma          # ~78 model, ~35 enum (kanonik kaynak — sayı yaklaşık)
-│   ├── seed.ts                # Tek dosya: 55 permission + 15 template + 1 kullanıcı (admin) + 3 kalite + master demo
+│   ├── seed.ts                # Tek dosya: 58 permission + 16 template + 1 kullanıcı (admin) + 3 kalite + master demo
 │   └── migrations/            # ~114 migration (son: 20260714151000_dispatch_item_unique_dispatch_roll)
 │
 ├── src/
@@ -293,12 +293,12 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ## 6. RBAC Permission Kodları
 
-`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **55 permission**, 10 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
+`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **58 permission**, 10 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
 
 | Modül | Permissions |
 |---|---|
 | SALES | `order:read`, `order:write`, `customer:read`, `customer:write`, `customer-alias:read`, `customer-alias:write` |
-| PRODUCTION | `workorder:read`, `workorder:write`, `roll:read`, `roll:write`, `roll:manual-adjust`, `station:read`, `station:write` |
+| PRODUCTION | `workorder:read`, `workorder:write`, `workorder:distribute`, `roll:read`, `roll:write`, `roll:manual-adjust`, `station:read`, `station:write` |
 | MASTER_DATA | `item:read`, `item:write` |
 | QUALITY | `quality:read`, `quality:write`, `property:read`, `property:write` |
 | SUBCONTRACTOR | `subcontractor:read`, `subcontractor:write` |
@@ -306,13 +306,15 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 | LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read`, `label-template:write`, `shipping:read`, `shipping:write`, `return:read`, `return:write` |
 | REPORTS | `report:production`, `report:sales`, `report:quality`, `report:inventory`, `report:subcontract`, `report:customer`, `report:audit` |
 | ADMIN | `admin:users`, `admin:settings`, `admin:*` (wildcard) |
-| MOBILE | `mobile:kk1`, `mobile:kk2-kursun`, `mobile:tambur`, `mobile:depo`, `mobile:fason-sevk`, `mobile:fason-kabul`, `mobile:kartela-sevk`, `mobile:kartela-kabul`, `mobile:tarti-paket`, `mobile:sevkiyat`, `mobile:iade`, `mobile:hizli-is-emri`, `mobile:*` (wildcard) |
+| MOBILE | `mobile:kk1`, `mobile:kk2-kursun`, `mobile:tambur`, `mobile:depo`, `mobile:fason-sevk`, `mobile:fason-kabul`, `mobile:kartela-sevk`, `mobile:kartela-kabul`, `mobile:tarti-paket`, `mobile:sevkiyat`, `mobile:iade`, `mobile:hizli-is-emri`, `mobile:kursun-dagitim`, `mobile:kk1-desen`, `mobile:*` (wildcard) |
 
 > Eski `LOGISTICS | shipment:*, allocation:*` permission'ları 2026-05-25'te sevkiyat modülüyle birlikte silindi; yeni sevkiyat yazımıyla LOGISTICS'e `shipping:*` + `return:*`, MOBILE'a 6 yeni ekran izni eklendi.
 
+> **Kurşun bypass (2026-07-31):** `workorder:distribute` (web) + `mobile:kursun-dagitim` (mobil ekran ikizi) çifti Kurşun Dağıtım ekranını kapılar — fabrika kurşun istasyonlarına tablet koymuyor, yetkili personel kurşun adımındaki iş emrini fiziksel bir kurşun istasyonuna atıyor. Ekranın açılması ayrıca `production.kursunBypassEnabled` bayrağına bağlıdır (varsayılan KAPALI; bayrak yalnız YENİ atamayı kapılar). Canlı DB'ye INSERT reçetesi: `docs/ops/KURSUN-BYPASS-DEPLOY.md`.
+
 ### Seed Sonrası Yetki Dağılımı
 
-`seed.ts` **yalnız `admin`'i (tüm 55 permission) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
+`seed.ts` **yalnız `admin`'i (tüm 58 permission) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
 
 ### Yeni Endpoint Yazarken
 
@@ -1003,7 +1005,7 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 | Username | Şifre | Yetkiler |
 |---|---|---|
-| `admin` | `123123` | ✅ TÜM 55 permission (seed §4) |
+| `admin` | `123123` | ✅ TÜM 58 permission (seed §4) |
 
 > **2026-07-03:** Seed'de YALNIZ `admin` var. Eski ek test kullanıcıları (mehmet.planlama, ali.operator, ...) KALDIRILDI — her reseed'de tek tek silinmeleri gerekiyordu. Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; yeni kullanıcı varsayılan olarak üretim istasyon izinlerini (KK1/KK2/Tambur) + mobil kimlik (hızlı PIN + QR kart) alır (opt-out'lu). 0-izinli RBAC testleri kendi geçici kullanıcısını üretip temizler.
 

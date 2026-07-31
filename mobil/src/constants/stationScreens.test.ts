@@ -28,7 +28,7 @@ describe('stationScreens registry', () => {
   });
 
   it('gezici ekranlar oturumlu DEĞİL', () => {
-    for (const key of ['Depo', 'Sevkiyat', 'FasonSevk', 'FasonKabul', 'KartelaSevk', 'IadeGirisi', 'HizliIsEmri'] as const) {
+    for (const key of ['Depo', 'Sevkiyat', 'FasonSevk', 'FasonKabul', 'KartelaSevk', 'IadeGirisi', 'HizliIsEmri', 'KursunDagitim'] as const) {
       expect(isSessionScreen(key)).toBe(false);
     }
   });

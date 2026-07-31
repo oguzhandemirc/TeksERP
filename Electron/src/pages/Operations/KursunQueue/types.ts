@@ -18,4 +18,11 @@ export interface KursunQueueItem {
   priority: number;
   isUrgent: boolean;
   urgentMarkedAt: string | null;
+  /**
+   * Bu adım kurşun dağıtımına (bypass) verilmiş mi — satırda "bypass" rozeti.
+   * Dağıtılan iş kuyrukta KALIR (izleme yüzeyi): kaybolsaydı "iş kayboldu"
+   * paniği doğardı. Ayrı bir "atanan istasyon" alanı YOK — atama adımın
+   * istasyonunu zaten atanan istasyona çevirir, `stationName` odur.
+   */
+  bypassAssigned?: boolean;
 }

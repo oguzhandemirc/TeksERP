@@ -89,6 +89,26 @@ export default function ModuleSelectScreen() {
     />
   );
 
+  // İzin var ama görünür bölüm yok — tek yetkisi kapalı bir düzene (örn. kurşun
+  // bypass bayrağı kapalı) bağlı kullanıcı buraya düşer. Boş grid yerine NE
+  // olduğunu söyle: operatör "uygulama bozuldu" sanmasın.
+  if (count === 0) {
+    return (
+      <ScreenChrome title="Adnan Şahin Tekstil" subtitle="Bölüm Seçimi">
+        <View style={styles.empty}>
+          <MaterialCommunityIcons name="folder-off-outline" size={64} color={colors.textMuted} />
+          <Text variant="titleMedium" style={styles.emptyTitle}>
+            Görünür bölüm yok
+          </Text>
+          <Text style={styles.emptyText}>
+            Yetkili olduğun bölüm şu an yönetim panelinden kapatılmış. Açıldığında burada
+            kendiliğinden görünür.
+          </Text>
+        </View>
+      </ScreenChrome>
+    );
+  }
+
   return (
     <ScreenChrome title="Adnan Şahin Tekstil" subtitle="Bölüm Seçimi">
       {isPhone ? (
@@ -149,6 +169,21 @@ const ModuleCard = React.memo(function ModuleCard({
 const styles = StyleSheet.create({
   scroll: { padding: spacing.md },
   tabletArea: { flex: 1, padding: spacing.lg },
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xxl,
+    gap: spacing.sm,
+  },
+  emptyTitle: { fontWeight: '700', color: colors.text },
+  emptyText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 420,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,

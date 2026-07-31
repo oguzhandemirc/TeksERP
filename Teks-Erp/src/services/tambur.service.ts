@@ -54,6 +54,14 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { generateRollBarcode } from "./helpers/roll-barcode.helper";
+// ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
+// `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
+// import etmez — ortak guard'lar `helpers/kursun-bypass-guard.helper.ts`'te
+// yaşar. Bu kural bozulursa statik import döngüsü doğar (lazy import gerekir).
+import {
+  KursunBypassService,
+  type KursunBypassTamburContext,
+} from "./kursun-bypass.service";
 
 
 /**
@@ -205,6 +213,9 @@ interface TamburStepSummary {
 }
 
 export class TamburService {
+  /** Kurşun Dağıtım (bypass) okuma yolu — yalnız `getTamburContext` kullanır. */
+  private readonly bypassService = new KursunBypassService();
+
   /**
    * Get rolls pending at Tambur station.
    *
@@ -2894,6 +2905,8 @@ export class TamburService {
    *   - WO bilgisi
    *   - WO'ya bağlı orderlar + her order için shippedQty / orderedQty progress
    *   - Tambur step'indeki açık kumaş Roll'ları LIFO sıralı + RollError'lar
+   *   - KURŞUN BYPASS: iş emri Kurşun Dağıtım'a verilmişse `bypassPending`
+   *     (önizleme + onay verisi) — bkz. aşağıdaki blok.
    */
   async getTamburContext(
     cardBarcode: string,
@@ -2937,6 +2950,12 @@ export class TamburService {
         kursunFinishedAt: string | null;
         errors: TamburRollErrorSummary[];
       }>;
+      /**
+       * Bu iş emrinde bekleyen KURŞUN DAĞITIM (bypass) işi. Non-null ise Tambur
+       * ekranı "Kurşun adımını tamamla" önizlemesi + onayı gösterir ve
+       * `POST /api/tambur/bypass-complete` ile kapatır. null = normal akış.
+       */
+      bypassPending?: KursunBypassTamburContext | null;
     }>
   > {
     const card = await prisma.travelerCard.findUnique({
@@ -2949,7 +2968,45 @@ export class TamburService {
       throw AppError.badRequest(`Bu refakat kartı aktif değil (durum: ${card.status})`);
     }
 
-    const { stepId } = await assertWoAtStepKind(card.workOrderId, StationKind.TAMBUR);
+    // ── KURŞUN BYPASS ────────────────────────────────────────────────────────
+    // Kurşun Dağıtım'a verilmiş bir iş emrinde toplar HENÜZ kurşun adımında açık
+    // durur (Tambur adımında hiç movement yoktur) → `assertWoAtStepKind` "bu
+    // adımda açık top yok" diye 400 atardı ve operatör kartı okutamazdı. Bekleyen
+    // dağıtım varsa Tambur adımını doğrudan çözer, önizleme+onay verisini
+    // `bypassPending` ile ekrana iletiriz.
+    //
+    // Dağıtım BAŞARILI assert'te de iliştirilir: çok partili senaryoda 1. parti
+    // Tambur'da işlenirken 2. parti kurşunda bekliyor olabilir (ekran hem açık
+    // kumaşları hem bekleyen kurşun işini aynı anda göstermeli).
+    const pendingBypass = await this.bypassService.findPendingForTambur(card.workOrderId);
+    // `rollCount === 0` = "stale" atama (adımda açık top kalmamış). Onaylanacak iş
+    // olmadığı için ekranda ölü bir onay butonu doğurur — Dağıtım ekranındaki
+    // stale rozetiyle planlamacı iptal eder, Tambur burada YOK sayar.
+    const bypassPending = pendingBypass && pendingBypass.rollCount > 0 ? pendingBypass : null;
+
+    let stepId: string;
+    try {
+      ({ stepId } = await assertWoAtStepKind(card.workOrderId, StationKind.TAMBUR));
+    } catch (err) {
+      // Bekleyen dağıtım YOKSA davranış birebir eskisi gibi — hata aynen çıkar.
+      // Altyapı hatası (DB/bağlantı) da MASKELENMEZ: yalnız assert'in kendi
+      // iş kuralı hataları (AppError) bypass yoluna düşürülür.
+      if (!bypassPending || !(err instanceof AppError)) throw err;
+      // Rotanın ilk Tambur adımı (assertWoAtStepKind ile aynı seçim kuralı).
+      const tamburStep = await prisma.workOrderStep.findFirst({
+        where: {
+          workOrderId: card.workOrderId,
+          station: { kind: StationKind.TAMBUR },
+        },
+        select: { id: true },
+        orderBy: { stepSequence: "asc" },
+      });
+      // Rotada Tambur adımı hiç yoksa (assert'in 404'ü) bypass da kurtaramaz:
+      // kapanış Kurşun Dağıtım ekranındaki "İşi Bitir" ile yapılır.
+      if (!tamburStep) throw err;
+      stepId = tamburStep.id;
+    }
+
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
@@ -3128,6 +3185,7 @@ export class TamburService {
         stepNote: step.notes,
         orders,
         openFabricRolls,
+        bypassPending,
       },
     };
   }

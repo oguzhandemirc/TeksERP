@@ -19,7 +19,7 @@ import { useRoute } from '@react-navigation/native';
 import AppModal from '../AppModal';
 import PlaceConfirmView from './PlaceConfirmView';
 import { useSessionStore } from '../../store/sessionStore';
-import { usePermissions } from '../../hooks/usePermission';
+import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 import { workSessionService } from '../../services/workSession.service';
 import { placesOfKind } from './placeSuggest';
 import { STATION_KIND_BY_SCREEN, type SessionStationKind } from '../../constants/stationScreens';
@@ -31,7 +31,9 @@ export function usePlaceActions(): {
   showStation: boolean;
 } {
   const route = useRoute();
-  const { hasMultipleMobileScreens } = usePermissions();
+  // "Bölüm değiştir" maddesi de ModuleSelect'e gider → GÖRÜNÜR ekran sayısına
+  // bakar (ham izne değil): gidilecek grid yoksa madde de olmamalı.
+  const { hasMultipleVisibleScreens } = useVisibleScreens();
   const active = useSessionStore((s) => s.active);
 
   const expectedKind = STATION_KIND_BY_SCREEN[route.name as MobileScreenKey];
@@ -54,7 +56,7 @@ export function usePlaceActions(): {
   return {
     expectedKind,
     showMachine: sessionMatches && optionCount > 1,
-    showStation: hasMultipleMobileScreens && route.name !== 'ModuleSelect',
+    showStation: hasMultipleVisibleScreens && route.name !== 'ModuleSelect',
   };
 }
 

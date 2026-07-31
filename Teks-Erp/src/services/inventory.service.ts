@@ -86,6 +86,10 @@ import {
   completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import {
+  assertStepNotBypassAssigned,
+  hasBypassClosureOnProcessQcTx,
+} from "./helpers/kursun-bypass-guard.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
@@ -2941,6 +2945,14 @@ export class InventoryService {
       if (fs.status === StepStatus.COMPLETED || fs.status === StepStatus.SKIPPED) {
         throw AppError.conflict(`Adım bu sırada kapandı (${fs.status}) — açık kumaş açılamaz`);
       }
+      // Kurşun bypass: adım fiziksel kurşun istasyonuna dağıtılmışsa iş kâğıtta
+      // yürüyor ve kapsamı DAĞITIM ANINDA dondu. Buraya yeni bir açık kumaş topu
+      // eklemek iki şeyi bozar: (a) `assign` "ölçümsüz açık kumaş yok" kontrolünü
+      // geçmiş bir kümeye qtyIn=0'lı top sokar → metraj bir daha sorulmaz,
+      // (b) Tambur bypass onayı önizlemede görülmemiş bir topu da kapatır.
+      // Doğru yol: dağıtımı iptal et, topu aç, yeniden dağıt. Guard WO kilidinin
+      // (touchWorkOrderTx) ALTINDA — `assign` de aynı kilidi alır, yarış serileşir.
+      await assertStepNotBypassAssigned(tx, data.stepId, "açık kumaş açma");
 
       const created = await tx.roll.create({
         data: {
@@ -3336,6 +3348,22 @@ export class InventoryService {
             "Roll PROCESS_QC adımını zaten bitirmiş (idempotent retry).",
         };
       }
+      // KURŞUN BYPASS ikinci sondası: bypass kapanışı QC2_COMPLETED YAZMAZ, bu
+      // yüzden yukarıdaki sonda onu göremez. İş dağıtılıp Tambur'da kapandıysa
+      // adım GERÇEKTEN tamamlanmıştır — tabletin offline kuyruğundan geç gelen
+      // istek teknik bir 400 değil, idempotent başarı almalı.
+      if (await hasBypassClosureOnProcessQcTx(prisma, rollId)) {
+        return {
+          success: true,
+          data: {
+            rollId,
+            totalMeters: Number(roll.currentQty),
+            nextStepId: roll.currentStepId,
+          },
+          message:
+            "Kurşun adımı dağıtım (bypass) ile kapatılmış — bu istek yok sayıldı (idempotent retry).",
+        };
+      }
       if (!roll.currentStep) {
         throw AppError.badRequest("Roll bir step'te değil");
       }
@@ -3405,6 +3433,16 @@ export class InventoryService {
       // F162: O-2 write-skew guard (finishStep paritesi) — son-adım WO oto-tamamlama
       // sayımını eşzamanlı fason receive/cancel/finalize ile serileştir.
       await touchWorkOrderTx(tx, woId);
+
+      // Kurşun bypass: ÜÇÜNCÜ tablet yazma yolu (kursun-qc finishStep/completeQc2
+      // ile aynı işi tek çağrıda yapar — metraj + QC2/KURSUN op + movement kapama
+      // + Tambur'a ilerletme). Adım dağıtılmışsa hepsi yasak: bypass rejiminde
+      // KK2 kaydı YAZILMAZ ve kapanış marker'ı KURSUN_BYPASS_FINISHED olmalıdır.
+      // WO kilidinin altında — `assign` de aynı kilidi alır, yarış serileşir.
+      // İdempotent erken dönüş (roll PROCESS_QC'yi çoktan bırakmış + geçmiş
+      // QC2_COMPLETED var → `priorFinish` dalı) tx'e hiç girmeden çalışır, yani
+      // zaten bitmiş işin retry'ı 409 gürültüsü yapmaz.
+      await assertStepNotBypassAssigned(tx, stepId, "kurşun bitirme");
 
       // 1) Roll metraj güncelle
       await tx.roll.update({

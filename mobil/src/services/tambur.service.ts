@@ -129,6 +129,38 @@ export const tamburService = {
       .then((r) => r.data),
 
   /**
+   * KURŞUN BYPASS kapanışı — kurşun istasyonlarında tablet yoktur; iş Kurşun
+   * Dağıtım ekranından fiziksel istasyona atanır, Tambur operatörü refakat
+   * kartını okutup önizlemeyi onaylayınca Kurşun/KK2 adımı COMPLETED olur
+   * (SKIPPED DEĞİL) ve toplar Tambur adımına geçer. Kalite NULL kalır.
+   *
+   * `rollIds` KAPSAM sözleşmesidir: önizlemede görülen toplar BİREBİR
+   * gönderilir — kapsam bu sırada değiştiyse backend 409 döner (yarım kapanış
+   * yok). Online-only: offline kuyruğuna girmez (applyUndo ile aynı sınıf).
+   */
+  bypassComplete: (
+    cardBarcode: string,
+    rollIds: string[]
+  ): Promise<
+    ApiResponse<{
+      alreadyDone: boolean;
+      movedRollCount: number;
+      tamburStepId: string | null;
+      workOrderId: string;
+    }>
+  > =>
+    apiClient
+      .post<
+        ApiResponse<{
+          alreadyDone: boolean;
+          movedRollCount: number;
+          tamburStepId: string | null;
+          workOrderId: string;
+        }>
+      >('/tambur/bypass-complete', { cardBarcode, rollIds })
+      .then((r) => r.data),
+
+  /**
    * Açık kumaşta tek kesim — child Roll (barkodlu) oluşur, parent açık kumaşın
    * currentQty'i kalan metreye düşer. Status WAREHOUSE/SCRAP/A1_STOCK.
    */

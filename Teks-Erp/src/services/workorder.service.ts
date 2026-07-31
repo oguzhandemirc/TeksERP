@@ -61,6 +61,10 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+// Kurşun bypass (kurşun istasyonunda tablet YOK): WO yaşam döngüsü olayları açık
+// dağıtım atamalarını bayat bırakmasın. Guard helper hiçbir servise bağlı değil —
+// `kursun-bypass.service`'i import etmek burada döngü yaratırdı.
+import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { computeWoInput } from "./helpers/coverage.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import {
@@ -2665,6 +2669,15 @@ export class WorkOrderService {
         });
       }
 
+      // Kurşun bypass: iş emri artık YOK → açık kurşun dağıtımı da yok. `force`
+      // ile TÜM açık atamalar iptal edilir (adım durumuna bakılmaz): yukarıdaki
+      // blok adımları zaten SKIPPED'a çekiyor ama `stepIds` boşsa hiç çalışmıyor,
+      // ve bayat kalan bir atama dağıtım ekranında "bu iş bizde bekliyor" diye
+      // sonsuza dek görünür + partial unique yüzünden adım yeniden kullanılamazdı.
+      // İSTASYON GERİ YÜKLENMEZ (helper sözleşmesi) — kapanmış movement'ların
+      // istasyon atfı, işi fiilen yapan kurşun istasyonunda kalmalı.
+      await voidStalePendingBypassAssignmentsTx(tx, id, "WO_CANCELLED", { force: true });
+
       // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
       await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_CANCELLED" });
 
@@ -3152,6 +3165,13 @@ export class WorkOrderService {
           where: { workOrderId: id, status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] } },
           data: { status: StepStatus.SKIPPED, skipReason: "MANUAL_COMPLETE" },
         });
+
+        // Kurşun bypass: kapanış dispozisyonu WO'yu terminal duruma çeker → açık
+        // kurşun dağıtımı anlamsız kalır (Tambur'da okutulacak kart artık yok).
+        // `force` gerekçesi iptaldeki ile aynı: adımsız/atlanmış hallerde de temizle.
+        // İSTASYON GERİ YÜKLENMEZ — kapanmış movement'ların atfı, tablet akışıyla
+        // birebir aynı kalsın (dağıtılan kurşun istasyonu hacmi geriye dönük silinmez).
+        await voidStalePendingBypassAssignmentsTx(tx, id, "WO_CLOSE", { force: true });
 
         // ACTIVE refakat kartları COMPLETED (otomatik-tamamlama yollarıyla aynı).
         await setWorkOrderCardStatuses(tx, id, "ACTIVE", "COMPLETED");
@@ -4382,6 +4402,11 @@ export class WorkOrderService {
               producedRolls: true,
               detectedErrors: true,
               processedErrors: true,
+              // Kurşun bypass atamaları (append-only, iptal edilse bile satır kalır):
+              // sayılmazsa PENDING görünen bir kurşun adımı silinmeye çalışılır ve
+              // FK ihlali ham P2003/500 olarak dışarı sızardı. Burada sayılınca
+              // aşağıdaki "bağlı kayıt var" 409'una düşer.
+              kursunBypasses: true,
             },
           },
         },
@@ -4404,7 +4429,7 @@ export class WorkOrderService {
         const refCount = Object.values(old._count).reduce((a, b) => a + (b as number), 0);
         if (refCount > 0) {
           throw AppError.conflict(
-            `${old.stepSequence}. adım silinemez — bu adıma bağlı rulo, hareket veya sevk kaydı var.`,
+            `${old.stepSequence}. adım silinemez — bu adıma bağlı rulo, hareket, sevk veya kurşun dağıtım kaydı var.`,
           );
         }
         await tx.workOrderStep.delete({ where: { id: old.id } });
@@ -4442,6 +4467,17 @@ export class WorkOrderService {
           // Başlamış adımın İSTASYONU değişemez (üzerinde açık movement/geçmiş
           // kayıt var — silme guard'ının güncelleme simetriği). Not/kategori/
           // planlanan firma serbest kalır.
+          //
+          // KURŞUN BYPASS ETKİLEŞİMİ (bilinçli — bu guard'ı GEVŞETME): dağıtım
+          // adımın `stationId`'sini fiziksel kurşun istasyonuna repoint eder
+          // (orijinali `KursunBypassAssignment.originalStationId`'de saklı). Bayat
+          // bir düzenleme formu (dağıtımdan ÖNCE açılmış, eski istasyonu taşıyan)
+          // kaydedilirse repoint sessizce geri alınır ve atama, üzerinde durduğu
+          // adımı kaybederdi. Dağıtım "adımda AÇIK movement olması" şartına bağlı
+          // olduğu için dağıtılmış adım daima ACTIVE'dir (PENDING değil) → bu guard
+          // tam da o bayat formu 409 ile reddeder, sessiz geri alma olmaz.
+          // Doğru yol: dağıtımı iptal et (adıma orijinal istasyon geri yüklenir),
+          // sonra rotayı düzenle.
           const old = existingStepById.get(incoming.id)!;
           if (old.status !== "PENDING" && old.stationId !== incoming.stationId) {
             throw AppError.conflict(

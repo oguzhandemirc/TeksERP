@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import { usePermissions } from './usePermission';
+import { useVisibleScreens } from './useVisibleScreens';
 import { preferencesService, type PreferenceBlob } from '../services/preferences.service';
 import type { MobileScreenKey, MobileScreenMeta } from '../types/permissions';
 
@@ -38,7 +38,11 @@ function applyOrder(
 }
 
 export function useModuleOrder() {
-  const { allowedScreens } = usePermissions();
+  // Grid'in kaynağı GÖRÜNÜR ekranlar (izin ∖ bayrağı kapalı) — MainNavigator hangi
+  // route'ları kaydediyorsa kart da onları gösterir. Gizliyken yapılan sürükleme
+  // o anahtarı sıradan düşürür; bayrak sonradan açılınca ekran (izni yeni verilmiş
+  // ekran gibi) grid'in SONUNA eklenir ve kullanıcı istediği yere taşır.
+  const { visibleScreens } = useVisibleScreens();
   const qc = useQueryClient();
 
   const prefsQuery = useQuery({
@@ -53,8 +57,8 @@ export function useModuleOrder() {
   }, [prefsQuery.data]);
 
   const orderedScreens = useMemo(
-    () => applyOrder(allowedScreens, storedOrder),
-    [allowedScreens, storedOrder],
+    () => applyOrder(visibleScreens, storedOrder),
+    [visibleScreens, storedOrder],
   );
 
   const saveMutation = useMutation({
