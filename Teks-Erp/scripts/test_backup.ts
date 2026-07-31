@@ -321,8 +321,24 @@ async function main(): Promise<void> {
       check("impact: audit.available invariant'ı tutuyor", impPast.audit.available === expectedAvailable, `available=${impPast.audit.available} oldest=${impPast.audit.oldestLogAt} cutoff=${impPast.cutoff.at}`);
       if (impPast.audit.available) {
         const row = impPast.audit.byTable.find((t) => t.tableName === "TEST_IMPACT");
-        check("impact: audit rollup TEST_IMPACT satırını buldu", !!row, JSON.stringify(impPast.audit.byTable.slice(0, 3)));
-        check("impact: rollup CREATE=2 UPDATE=1", row?.created === 2 && row?.updated === 1, JSON.stringify(row));
+        if (row) {
+          // Sakin ortam (CI'ın temiz DB'si dahil): fixture listede → katı doğrulama.
+          check("impact: audit rollup TEST_IMPACT satırını buldu", true);
+          check("impact: rollup CREATE=2 UPDATE=1", row.created === 2 && row.updated === 1, JSON.stringify(row));
+        } else {
+          // byTable BİLİNÇLİ top-12 (backup-impact.service slice(0,12) — UI kararı).
+          // Yoğun dev DB'de aynı 5dk penceresine 12+ tabloya audit yazan koşular
+          // (örn. ardışık tam test paketleri) fixture'ı listeden MEŞRU şekilde iter
+          // — "ortam verisine bağımlı olma" kuralı gereği yokluk hata değil,
+          // yokluğun SEBEBİ doğrulanır: liste dolu VE en küçüğü fixture'dan yoğun.
+          const totals = impPast.audit.byTable.map((t) => t.total);
+          const min = totals.length ? Math.min(...totals) : 0;
+          check(
+            "impact: TEST_IMPACT top-12 dışı — listedekilerin hepsi daha yoğun (slice meşru)",
+            impPast.audit.byTable.length === 12 && min >= 3,
+            JSON.stringify({ listLen: impPast.audit.byTable.length, minTotal: min }),
+          );
+        }
         check("impact: rollup UPDATE'leri sayıyor (INSERT-only sınırının telafisi)", impPast.audit.updated >= 1);
       }
     }

@@ -50,10 +50,12 @@ sahadaki mevcut APK token GÖNDERMİYOR. Yalnız backend güncellenirse:
 (grep 2026-07-31) ama 2026-07-30 sürümü bekliyorsa Electron da zorunlu (0a orada).
 Diğer yeni token'lar (`openSack`/`createShipment`) OPSİYONEL — eski istemci bozulmaz.
 
-**APK HAZIR (2026-07-31 Mac'te derlendi):** `TeksERP-mobil-2.1.1-vc6.apk`
-(Mac Desktop'ta + `mobil/android/app/build/outputs/apk/release/app-release.apk`).
-Sürüm 2.1.1 / versionCode 6; `EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api`
-gömülü (bundle'da doğrulandı — sunucu IP'si bu DEĞİLSE yeniden derleme gerekir!).
+**APK HAZIR (2026-07-31 Mac'te derlendi):** `TeksERP-mobil-2.1.2-vc7.apk`
+(Mac Desktop'ta + `mobil/android/app/build/outputs/apk/release/app-release.apk`;
+eski 2.1.1-vc6 SİLİNDİ — tek geçerli APK bu). Sürüm 2.1.2 / versionCode 7;
+içerik: token'lar + **Tambur GERİ AL** (Üretilen Toplar → geri al ikonu);
+`EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api` gömülü (bundle'da doğrulandı —
+sunucu IP'si bu DEĞİLSE yeniden derleme gerekir!).
 İmza: debug keystore (repo standardı — önceki sideload APK'larla aynı yol).
 Tablette güncelleme "imza uyuşmazlığı" ile reddedilirse: kaldır + yeniden kur
 (operatör yeniden login olur, cihaz kaydı `deviceId` upsert'i sayesinde korunur).
