@@ -32,6 +32,7 @@ import {
   type ShipmentDestination,
 } from '../../../services/packing.service';
 import { isWorkSessionLost } from '../../../services/api';
+import { generateClientUuid } from '../../../offline/barcode';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useSackWeigh } from '../../../hooks/useSackWeigh';
@@ -119,6 +120,13 @@ export default function PaketlemeScreen() {
   const scanBusy = useRef(false);
   const ensureSackRef = useRef<Promise<string> | null>(null);
 
+  // İdempotency (A4): token mantıksal "çuval aç" denemesi başına BİR kez üretilir —
+  // timeout-retry AYNI token'la gider, backend mükerrer boş çuval yerine ilkini döner.
+  // BAŞARIDA döndürülür (rotate) ki operatörün bilinçli "yeni çuval" isteği taze
+  // token alsın; hatada korunur (retry koruması). HizliSiparisScreen emsali.
+  const openSackTokenRef = useRef(generateClientUuid());
+  const shipTokenRef = useRef(generateClientUuid());
+
   const poolQ = useQuery({
     queryKey: ['pool-sacks', customerId],
     queryFn: () => packingService.listCustomerPoolSacks(customerId),
@@ -167,8 +175,9 @@ export default function PaketlemeScreen() {
     }
     if (ensureSackRef.current) return ensureSackRef.current;
     const p = packingService
-      .openSack({ customerId, branchId })
+      .openSack({ customerId, branchId, clientToken: openSackTokenRef.current })
       .then((res) => {
+        openSackTokenRef.current = generateClientUuid(); // başarı → sonraki açılış taze token
         const sid = res.data.id;
         setActiveSack(sid);
         return sid;
@@ -214,8 +223,9 @@ export default function PaketlemeScreen() {
   }, [sackKey]);
 
   const openSackMut = useMutation({
-    mutationFn: () => packingService.openSack({ customerId, branchId }),
+    mutationFn: () => packingService.openSack({ customerId, branchId, clientToken: openSackTokenRef.current }),
     onSuccess: (res) => {
+      openSackTokenRef.current = generateClientUuid(); // başarı → sonraki açılış taze token
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setActiveSack(res.data.id);
       Toast.show({ type: 'success', text1: 'Çuval açıldı', text2: 'Topları bu çuvala okut.' });
@@ -280,10 +290,12 @@ export default function PaketlemeScreen() {
         branchId,
         orderIds: undefined,
         destination,
+        clientToken: shipTokenRef.current,
       });
       return created.data;
     },
     onSuccess: (data) => {
+      shipTokenRef.current = generateClientUuid(); // başarı → taze token (ekran zaten kapanır)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',

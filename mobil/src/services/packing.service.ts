@@ -397,11 +397,14 @@ export const packingService = {
   // ÇUVAL DEPO — çuval aç / okut / tart (sevkiyattan bağımsız)
   // =========================================================================
 
-  /** Yeni (boş) havuz çuvalı aç. Müşteri opsiyonel (müşterisiz havuz da olur). */
+  /** Yeni (boş) havuz çuvalı aç. Müşteri opsiyonel (müşterisiz havuz da olur).
+   *  clientToken: mantıksal deneme başına BİR kez üretilir, retry AYNI token'la
+   *  gider — timeout-retry'de mükerrer boş çuval önlenir (backend replay). */
   openSack: (body: {
     customerId?: string | null;
     branchId?: string | null;
     weightKg?: number | null;
+    clientToken?: string;
   }): Promise<ApiResponse<OpenedSack>> =>
     apiClient.post<ApiResponse<OpenedSack>>('/shipping/sacks', body).then((r) => r.data),
 
@@ -505,6 +508,8 @@ export const packingService = {
     plateNumber?: string | null;
     driverName?: string | null;
     carrier?: string | null;
+    /** İdempotency — deneme başına bir üretilir, retry aynı token'la (backend replay). */
+    clientToken?: string;
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments', body).then((r) => r.data),
 

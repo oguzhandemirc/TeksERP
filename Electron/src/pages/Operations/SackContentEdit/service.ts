@@ -87,12 +87,15 @@ export const sackHubService = {
   },
 
   // ── Çuval içerik düzenleme (depodaki çuval — her zaman düzenlenebilir) ──────
-  /** Yeni depo çuvalı aç — müşteri/şube OPSİYONEL (müşterisiz genel stok da olur). */
-  openSack: (body: { customerId?: string | null; branchId?: string | null }): Promise<ApiResponse<OpenedSack>> =>
+  /** Yeni depo çuvalı aç — müşteri/şube OPSİYONEL (müşterisiz genel stok da olur).
+   *  clientToken: deneme başına bir kez üretilir; retry aynı token'la → backend
+   *  mükerrer boş çuval yerine ilk açılanı döner (idempotent replay, A4). */
+  openSack: (body: { customerId?: string | null; branchId?: string | null; clientToken?: string }): Promise<ApiResponse<OpenedSack>> =>
     apiClient
       .post<ApiResponse<OpenedSack>>(`/api/shipping/sacks`, {
         ...(body.customerId ? { customerId: body.customerId } : {}),
         ...(body.branchId ? { branchId: body.branchId } : {}),
+        ...(body.clientToken ? { clientToken: body.clientToken } : {}),
       })
       .then((r) => r.data),
 
@@ -233,6 +236,8 @@ export const sackHubService = {
     orderIds?: string[];
     destination?: ShipmentDestination;
     procedureCode?: string | null;
+    /** İdempotency — deneme başına bir üretilir, retry aynı token'la (backend replay, A4). */
+    clientToken?: string;
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient
       .post<ApiResponse<CreatedShipment>>(`/api/shipping/shipments`, {
@@ -242,6 +247,7 @@ export const sackHubService = {
         ...(body.orderIds && body.orderIds.length ? { orderIds: body.orderIds } : {}),
         ...(body.destination ? { destination: body.destination } : {}),
         ...(body.procedureCode ? { procedureCode: body.procedureCode } : {}),
+        ...(body.clientToken ? { clientToken: body.clientToken } : {}),
       })
       .then((r) => r.data),
 };

@@ -149,15 +149,42 @@ export class ShippingService {
   // ÇUVAL DEPO HAVUZU — çuval aç / okut / tart (sevkiyattan bağımsız)
   // =========================================================================
 
+  /** A4 replay: token'la daha önce açılmış çuvalı openSack yanıt şekliyle döner. */
+  private async readOpenSackReplay(clientToken: string): Promise<ApiResponse<unknown> | null> {
+    const s = await prisma.sack.findUnique({
+      where: { clientToken },
+      select: {
+        id: true, sackNo: true, weightKg: true, customerId: true, branchId: true,
+        customer: { select: { name: true } },
+        branch: { select: { name: true, code: true } },
+      },
+    });
+    if (!s) return null;
+    return {
+      success: true,
+      data: {
+        id: s.id, sackNo: s.sackNo, weightKg: s.weightKg, customerId: s.customerId, branchId: s.branchId,
+        customerName: s.customer?.name ?? null, branchName: s.branch?.name ?? null, branchCode: s.branch?.code ?? null,
+      },
+      message: "Çuval açıldı",
+    };
+  }
+
   /**
    * Yeni çuval aç (depoda). shipmentId NULL, seq NULL. Müşteri OPSİYONEL — bilinen sipariş
    * için atanabilir, yoksa boş (genel stok); müşteri/şube sevk kurulurken de atanır. Çuval
    * sistem kodu (sackNo) otomatik üretilir. Mühür yok — depoda her an düzenlenebilir.
    */
   async openSack(
-    data: { customerId?: string | null; branchId?: string | null; weightKg?: number | null; sackNo?: string | null },
+    data: { customerId?: string | null; branchId?: string | null; weightKg?: number | null; sackNo?: string | null; clientToken?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // İdempotent replay (A4): aynı token'la tekrar gelen istek (timeout-retry /
+    // çift dokunuş) yeni BOŞ çuval açmaz — ilk denemede açılan çuvalı döner.
+    if (data.clientToken) {
+      const cached = await this.readOpenSackReplay(data.clientToken);
+      if (cached) return cached;
+    }
     if (data.weightKg != null && !(data.weightKg > 0)) {
       throw AppError.badRequest("Geçerli bir kg girilmeli");
     }
@@ -190,12 +217,15 @@ export class ShippingService {
     }
 
     const manualSackNo = data.sackNo?.trim() || null;
-    const sack = await withBarcodeRetry(() =>
+    let sack: { id: string; sackNo: string; weightKg: Prisma.Decimal | null; customerId: string | null; branchId: string | null };
+    try {
+      sack = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const sackNo = manualSackNo ?? (await nextSackNo(tx));
         return tx.sack.create({
           data: {
             sackNo,
+            clientToken: data.clientToken ?? null,
             customerId,
             branchId,
             shipmentId: null,
@@ -214,19 +244,28 @@ export class ShippingService {
         });
       }),
       undefined,
-      manualSackNo
-        ? (err) => {
-            // F61 emsali: manuel sackNo P2002'si retry EDİLMEZ (retry hep aynı sabit
-            // değeri yazar; 5 tur sonra yanıltıcı "Barkod üretimi 5 denemede başarısız"
-            // dönerdi) — doğrudan anlamlı 409. Otomatik modda predicate yok: sackNo
-            // sequence yarışı taze nextSackNo ile retry edilir (mevcut davranış).
-            if (p2002Mentions(err, /sackNo/i)) {
-              throw AppError.conflict(`Bu çuval kodu zaten kullanılıyor: ${manualSackNo}`);
-            }
-            return true;
-          }
-        : undefined,
+      (err) => {
+        // clientToken P2002'si retry EDİLMEZ (retry hep aynı token'ı yazar) —
+        // propagate edilir, aşağıdaki catch replay yanıtına çevirir (WO create emsali).
+        if (p2002Mentions(err, /clientToken/i)) return false;
+        // F61 emsali: manuel sackNo P2002'si retry EDİLMEZ (retry hep aynı sabit
+        // değeri yazar; 5 tur sonra yanıltıcı "Barkod üretimi 5 denemede başarısız"
+        // dönerdi) — doğrudan anlamlı 409. Otomatik modda sackNo sequence yarışı
+        // taze nextSackNo ile retry edilir (mevcut davranış).
+        if (manualSackNo && p2002Mentions(err, /sackNo/i)) {
+          throw AppError.conflict(`Bu çuval kodu zaten kullanılıyor: ${manualSackNo}`);
+        }
+        return true;
+      },
     );
+    } catch (err) {
+      // Yarış replay'i: pre-check ile create arası aynı token'lı ikinci istek kazandıysa.
+      if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
+        const cached = await this.readOpenSackReplay(data.clientToken);
+        if (cached) return cached;
+      }
+      throw err;
+    }
     await AuditService.log({
       userId,
       action: "CREATE",
@@ -1260,10 +1299,32 @@ export class ShippingService {
    * (müşterisiz çuvala backfill). Seçili siparişlere (opsiyonel) spec-FIFO tahsis yazılır;
    * shippedQty yalnız DISPATCH'te terfi eder. Fazla/eşleşmeyen/siparişsiz sevk edilebilir.
    */
+  /** A4 replay: token'la daha önce kurulmuş sevkiyatı createShipment yanıt şekliyle döner. */
+  private async readCreateShipmentReplay(clientToken: string): Promise<ApiResponse<unknown> | null> {
+    const sh = await prisma.shipment.findUnique({
+      where: { clientToken },
+      select: { id: true, shipmentNo: true, status: true },
+    });
+    if (!sh) return null;
+    const dispatched = sh.status === ShipmentStatus.DISPATCHED;
+    return {
+      success: true,
+      data: { id: sh.id, shipmentNo: sh.shipmentNo, status: sh.status, dispatched },
+      message: dispatched ? `Sevk edildi: ${sh.shipmentNo}` : `Sevkiyat kuruldu (onay bekliyor): ${sh.shipmentNo}`,
+    };
+  }
+
   async createShipment(
-    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; destination?: ShipmentDestination; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null },
+    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; destination?: ShipmentDestination; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // İdempotent replay (A4): timeout-retry aynı token'la gelir — çuvallar ilk
+    // (başarılı ama yanıtı kaybolmuş) denemede claim'lendiği için token'sız retry
+    // kör 409 alıyordu; artık kurulmuş sevkiyatın kendisi döner.
+    if (data.clientToken) {
+      const cached = await this.readCreateShipmentReplay(data.clientToken);
+      if (cached) return cached;
+    }
     const sackIds = [...new Set(data.sackIds)];
     if (sackIds.length === 0) throw AppError.badRequest("En az bir çuval seçilmeli");
     if (!data.customerId) throw AppError.badRequest("Müşteri seçilmeli");
@@ -1276,11 +1337,13 @@ export class ShippingService {
     // Sevk onayı KAPALI (varsayılan) → aynı adımda dispatch; AÇIK → PLANNED kalır (Sevk Kapısı).
     const confirmationEnabled = await readShipmentConfirmationEnabled();
 
-    const result = await withBarcodeRetry(() =>
+    let result: { id: string; shipmentNo: string };
+    try {
+      result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const shipmentNo = await nextShipmentNo(tx);
         const created = await tx.shipment.create({
-          data: { shipmentNo, customerId: data.customerId, branchId, status: ShipmentStatus.PLANNED, destination, procedureCode: data.procedureCode?.trim() || null },
+          data: { shipmentNo, clientToken: data.clientToken ?? null, customerId: data.customerId, branchId, status: ShipmentStatus.PLANNED, destination, procedureCode: data.procedureCode?.trim() || null },
           select: { id: true, shipmentNo: true },
         });
         // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
@@ -1302,8 +1365,22 @@ export class ShippingService {
           await this.performDispatchTx(tx, created.id, { plateNumber: data.plateNumber, driverName: data.driverName, carrier: data.carrier }, userId);
         }
         return created;
-      })
+      }),
+      undefined,
+      (err) => {
+        // clientToken P2002'si retry EDİLMEZ (retry hep aynı token'ı yazar) —
+        // propagate edilir, catch replay'e çevirir; shipmentNo yarışı retry edilir.
+        if (p2002Mentions(err, /clientToken/i)) return false;
+        return true;
+      },
     );
+    } catch (err) {
+      if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
+        const cached = await this.readCreateShipmentReplay(data.clientToken);
+        if (cached) return cached;
+      }
+      throw err;
+    }
     const dispatched = !confirmationEnabled;
     await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, destination, dispatched } });
     return {

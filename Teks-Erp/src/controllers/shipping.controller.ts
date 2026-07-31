@@ -13,6 +13,9 @@ const openSackSchema = z.object({
   branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
   weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük").optional().nullable(),
   sackNo: z.string().trim().min(1).max(64).optional().nullable(),
+  // İdempotency (A4): istemci mantıksal deneme başına bir kez üretir; retry'de
+  // aynı token → mevcut çuval cached döner. Opsiyonel (eski istemci geri uyumu).
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 const scanSchema = z.object({ barcode: z.string().trim().min(1, "Barkod gerekli").max(64) });
 const addKartelaSchema = z.object({
@@ -70,6 +73,9 @@ const createShipmentSchema = z.object({
   plateNumber: z.string().trim().max(32).nullable().optional(),
   driverName: z.string().trim().max(100).nullable().optional(),
   carrier: z.string().trim().max(100).nullable().optional(),
+  // İdempotency (A4): timeout-retry aynı token'la kurulmuş sevkiyatı geri alır
+  // (kör 409 yerine). Opsiyonel (eski istemci geri uyumu).
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 // Sevk önizleme — çuval + (opsiyonel) müşteri/şube/sipariş; salt-okunur.
 const previewShipmentSchema = z.object({
@@ -96,7 +102,7 @@ export class ShippingController {
   openSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = openSackSchema.parse(req.body);
-      const result = await this.service.openSack({ customerId: body.customerId ?? null, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo }, req.user?.userId);
+      const result = await this.service.openSack({ customerId: body.customerId ?? null, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo, clientToken: body.clientToken ?? null }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
@@ -244,7 +250,7 @@ export class ShippingController {
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createShipmentSchema.parse(req.body);
-      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null }, req.user?.userId);
+      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };

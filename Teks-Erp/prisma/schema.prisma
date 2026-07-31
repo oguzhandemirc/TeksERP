@@ -2522,6 +2522,10 @@ enum ShipmentDestination {
 model Sack {
   id          String    @id @default(uuid()) @db.Uuid
   sackNo      String    @unique @db.VarChar(64) // Sistem çuval kodu — CV + GGAAYY + NNNN (insan-okur = tarama)
+  /// İdempotency anahtarı (A4, 2026-07-31 denetimi) — istemci mantıksal deneme
+  /// başına BİR kez üretir; ağ-retry'de mükerrer BOŞ çuval açılmasını önler
+  /// (openSack replay). Token'sız eski istemci → NULL (davranış değişmez).
+  clientToken String?   @unique @db.Uuid
   // Çuval müşterisi OPSİYONEL — oluştururken atanabilir (bilinen sipariş için), yoksa
   // sevk kurarken atanır. Depoda müşterisiz çuval = genel stok.
   customerId  String?   @db.Uuid
@@ -2596,6 +2600,10 @@ model Sack {
 model Shipment {
   id            String              @id @default(uuid()) @db.Uuid
   shipmentNo    String              @unique @db.VarChar(64)
+  /// İdempotency anahtarı (A4, 2026-07-31 denetimi) — timeout-retry'de istemci
+  /// kör 409 yerine kurulmuş sevkiyatın kendisini geri alır (createShipment
+  /// replay). Token'sız eski istemci → NULL.
+  clientToken   String?             @unique @db.Uuid
   customerId    String              @db.Uuid
   branchId      String?             @db.Uuid
   status        ShipmentStatus      @default(PLANNED)

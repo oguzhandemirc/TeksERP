@@ -36,17 +36,22 @@ export function NewSackDialog({ open, onOpenChange, onCreated }: Props) {
   const qc = useQueryClient();
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
+  // İdempotency (A4) — ManualEntryDialog emsali: her açılışta taze token, deneme
+  // içinde sabit → retry mükerrer boş çuval açmaz (backend replay).
+  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
   const branchesEnabled = useCustomerBranchesEnabled();
 
   useEffect(() => {
     if (!open) {
       setCustomerId(null);
       setBranchId(null);
+    } else {
+      setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
     }
   }, [open]);
 
   const mut = useMutation({
-    mutationFn: () => sackHubService.openSack({ customerId, branchId }),
+    mutationFn: () => sackHubService.openSack({ customerId, branchId, clientToken }),
     onSuccess: (res) => {
       invalidateSackHub(qc);
       toast.success(`Çuval açıldı: ${res.data.sackNo}`);

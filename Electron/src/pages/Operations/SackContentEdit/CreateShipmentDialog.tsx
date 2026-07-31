@@ -60,6 +60,9 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const [orderless, setOrderless] = useState(false);
   const [orderIds, setOrderIds] = useState<Set<string>>(new Set());
   const [destination, setDestination] = useState<ShipmentDestination>("DOMESTIC");
+  // İdempotency (A4) — ManualEntryDialog emsali: açılış başına taze token, deneme
+  // içinde sabit → timeout-retry kurulmuş sevkiyatı geri alır (kör 409 yerine).
+  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +71,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     setOrderless(false);
     setOrderIds(new Set());
     setDestination("DOMESTIC");
+    setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sackKey]);
 
@@ -101,6 +105,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         branchId: effBranchId ?? null,
         orderIds: activeOrderIds,
         destination,
+        clientToken,
       }),
     onSuccess: (res) => {
       // Sevk onayı KAPALIYKEN (varsayılan) backend oluşturur oluşturmaz sevk eder
