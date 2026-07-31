@@ -2011,7 +2011,20 @@ export class OrderService extends BaseService {
       }
 
       if (Object.keys(cleanData).length > 0) {
-        await tx.order.update({ where: { id }, data: cleanData });
+        // A10 (2026-07-31 denetimi): header yazımı tx-içi TAZE durum claim'iyle —
+        // pre-tx status okuması (1763) ile commit arasında eşzamanlı cancel/
+        // manual-close/kısmi-sevk araya girerse müşteri/şube/termin yazımı
+        // terminal veya kısıtlı duruma sızmasın. Beklenen durum pre-tx okunandır;
+        // değiştiyse 409 — istemci taze veriyle tekrar dener.
+        const claimed = await tx.order.updateMany({
+          where: { id, status: current.status },
+          data: cleanData,
+        });
+        if (claimed.count === 0) {
+          throw AppError.conflict(
+            "Sipariş durumu bu sırada değişti — sayfayı yenileyip tekrar deneyin.",
+          );
+        }
       }
 
       // Satırlar değiştiyse denormalize sevk toplamı + durumu YENİDEN HESAPLA.

@@ -33,6 +33,12 @@ const STARTUP_DELAY_MS = 60 * 1000; // server start'tan sonra ilk kontrole kadar
 
 let timer: NodeJS.Timeout | null = null;
 let checking = false;
+let checkingSince: number | null = null;
+// A9 (2026-07-31 denetimi): runBackupJob hiç settle olmazsa (asılı pg_dump /
+// offsite kopya — ağ paylaşımı donması) finally koşmaz, `checking` sonsuza dek
+// true kalır ve scheduler SESSİZCE kalıcı devre dışı düşerdi (yedek alınmamaya
+// başlar, alarm yok). Normal koşum dakikalar sürer; 3 saat = kesin asılma.
+const WATCHDOG_MS = 3 * 60 * 60 * 1000;
 
 async function getLastRun(): Promise<Date | null> {
   const row = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEY } });
@@ -54,8 +60,20 @@ async function setLastRun(at: Date): Promise<void> {
 }
 
 async function runIfDue(): Promise<void> {
-  if (checking) return;
+  if (checking) {
+    if (checkingSince !== null && Date.now() - checkingSince > WATCHDOG_MS) {
+      console.error(
+        `[backup] WATCHDOG: önceki koşum ${Math.round((Date.now() - checkingSince) / 60000)} dk'dır ` +
+          "bitmedi — bayrak zorla bırakılıyor. Asılı pg_dump/offsite kopya olabilir, elle kontrol edin.",
+      );
+      checking = false;
+      checkingSince = null;
+    } else {
+      return;
+    }
+  }
   checking = true;
+  checkingSince = Date.now();
   try {
     const now = new Date();
     // Hedef saat HER TURDA okunur (SystemSetting `backup.hour` → env → 3): admin
@@ -83,6 +101,7 @@ async function runIfDue(): Promise<void> {
     console.error("[backup] zamanlayıcı çalışması başarısız:", err);
   } finally {
     checking = false;
+    checkingSince = null;
   }
 }
 

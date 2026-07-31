@@ -363,7 +363,7 @@ export class CustomerService extends BaseService {
     });
     if (!existing) return { success: false, data: null, message: "Müşteri bulunamadı" };
 
-    const [orderCount, shipmentCount, returnCount, branchCount, sackCount] = await Promise.all([
+    const [orderCount, shipmentCount, returnCount, branchCount, sackCount, routeCount] = await Promise.all([
       prisma.order.count({ where: { customerId: id } }),
       prisma.shipment.count({ where: { customerId: id } }),
       prisma.rollReturn.count({ where: { customerId: id } }),
@@ -371,6 +371,9 @@ export class CustomerService extends BaseService {
       // sacks_customerId_fkey artık ON DELETE SET NULL (2026-07-15 drift düzeltmesi,
       // eskiden RESTRICT idi) — o P2003'ü artık fırlatmaz, guard burada EXPLICIT olmalı.
       prisma.sack.count({ where: { customerId: id } }),
+      // routes.customerId de ON DELETE SET NULL (A5, 2026-07-31 denetimi) — müşteriye
+      // özel varsayılan rota, guard'sız silmede sessizce "genel" rotaya dönerdi.
+      prisma.route.count({ where: { customerId: id } }),
     ]);
 
     const blockers: string[] = [];
@@ -379,6 +382,7 @@ export class CustomerService extends BaseService {
     if (returnCount > 0) blockers.push(`${returnCount} iade`);
     if (branchCount > 0) blockers.push(`${branchCount} şube`);
     if (sackCount > 0) blockers.push(`${sackCount} çuval`);
+    if (routeCount > 0) blockers.push(`${routeCount} müşteriye özel rota`);
 
     if (blockers.length > 0) {
       throw AppError.conflict(

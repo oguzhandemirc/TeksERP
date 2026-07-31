@@ -25,6 +25,10 @@ const MAX_BATCHES_PER_RUN = 200; // sonsuz döngü guard'ı
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
+let runningSince: number | null = null;
+// A9 (2026-07-31 denetimi): backup-scheduler ile aynı watchdog — arşiv batch'i
+// hiç settle olmazsa bayrak sonsuza dek true kalır ve arşivleyici sessizce ölür.
+const WATCHDOG_MS = 3 * 60 * 60 * 1000;
 
 async function getLastRun(): Promise<Date | null> {
   const row = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEY } });
@@ -46,8 +50,20 @@ async function setLastRun(at: Date): Promise<void> {
 }
 
 async function runIfDue(): Promise<void> {
-  if (running) return;
+  if (running) {
+    if (runningSince !== null && Date.now() - runningSince > WATCHDOG_MS) {
+      console.error(
+        `[audit-archive] WATCHDOG: önceki koşum ${Math.round((Date.now() - runningSince) / 60000)} dk'dır ` +
+          "bitmedi — bayrak zorla bırakılıyor, elle kontrol edin.",
+      );
+      running = false;
+      runningSince = null;
+    } else {
+      return;
+    }
+  }
   running = true;
+  runningSince = Date.now();
   try {
     const last = await getLastRun();
     if (last) {
@@ -75,6 +91,7 @@ async function runIfDue(): Promise<void> {
     console.error("[audit-archive] çalışma başarısız:", err);
   } finally {
     running = false;
+    runningSince = null;
   }
 }
 

@@ -579,7 +579,7 @@ router.post("/", verifyToken, requirePermission("order:write"), controller.creat
  *         application/json:
  *           schema:
  *             type: object
- *             required: [customerId, rollIds]
+ *             required: [customerId, rollIds, clientToken]
  *             properties:
  *               customerId: { type: string, format: uuid }
  *               branchId: { type: string, format: uuid, nullable: true }
@@ -601,7 +601,11 @@ router.post(
         rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top okutulmalı").max(500),
         // İdempotency anahtarı — mobil form-oturumu başına üretir; timeout-replay
         // aynı token'la gelir → create cached siparişi döner (mükerrer önlenir).
-        clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+        // ZORUNLU (A3, 2026-07-31): tümü-WAREHOUSE top yolunda STOCK-claim bloğu
+        // atlanır ve TEK koruma bu token'dır — token'sız replay birebir aynı satırlı
+        // ikinci siparişi açardı. Tek çağıran mobil (HizliSiparisScreen) zaten gönderiyor;
+        // Electron'da çağıran yok (grep 2026-07-31).
+        clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
       });
       const body = schema.parse(req.body);
       const result = await service.quickOrderFromRolls(body, req.user?.userId);

@@ -527,4 +527,27 @@ export class ItemService extends BaseService {
 
     return { success: true, data: created, message: "Özellik dahil edildi" };
   }
+
+  /**
+   * KALICI SİLME guard'ı (A5, 2026-07-31 denetimi): `work_orders.targetItemId`
+   * FK'sı ON DELETE SET NULL → generic hardDelete'in P2003 yakalayıcısı bu
+   * bağı GÖREMEZ ve WO'nun "ne üretiyorduk" izi sessizce null'lanırdı. Roll/
+   * OrderLine gibi Restrict bağlar P2003 ile zaten bloklanır (super yakalar);
+   * yalnız SetNull bağ burada EXPLICIT sayılır (customer.service Sack emsali).
+   */
+  async hardDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const existing = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) return { success: false, data: null, message: "Kumaş bulunamadı" };
+
+    const woCount = await prisma.workOrder.count({ where: { targetItemId: id } });
+    if (woCount > 0) {
+      throw AppError.conflict(
+        `Bu kumaşı hedefleyen ${woCount} iş emri var — kalıcı silinemez. Kumaşı pasife alın.`,
+      );
+    }
+    return super.hardDelete(id, userId);
+  }
 }

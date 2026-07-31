@@ -129,5 +129,137 @@ FROM swatches w
 JOIN sacks s ON s.id = w."sackId"
 WHERE w."cancelledAt" IS NOT NULL;
 
+-- =============================================================================
+-- §8-§19: 2026-07-31 veri bütünlüğü denetimi eklemeleri (Bölüm E —
+-- docs/audit/VERI-BUTUNLUGU-RAPORU-2026-07-31.md). Tümü salt-okunur.
+-- =============================================================================
+
+\echo ''
+\echo '== 8) Barkodsuz satılabilir top (WAREHOUSE/A1_STOCK ama barcode NULL) =='
+\echo '   (satır varsa: finalize/kapanış dispozisyonu barkod atamayı atlamış)'
+SELECT id, status, "currentQty", "updatedAt"
+FROM rolls
+WHERE status IN ('WAREHOUSE','A1_STOCK') AND barcode IS NULL;
+
+\echo ''
+\echo '== 9) SHIPPED top ama çuvalı yok / çuvalın sevkiyatı DISPATCHED değil =='
+SELECT r.id, r.barcode, r.status, r."sackId", s."shipmentId", sh.status AS sevk_durumu
+FROM rolls r
+LEFT JOIN sacks s ON s.id = r."sackId"
+LEFT JOIN shipments sh ON sh.id = s."shipmentId"
+WHERE r.status = 'SHIPPED'
+  AND (r."sackId" IS NULL OR sh.status IS DISTINCT FROM 'DISPATCHED');
+
+\echo ''
+\echo '== 10) IN_PRODUCTION top ama currentStepId NULL veya WO CANCELLED/SUPERSEDED =='
+\echo '   ("canlı ama okutulamayan" top — çıkanlar süpervizör "Kurtar" adayıdır)'
+SELECT r.id, r.barcode, r.status, r."currentStepId", wos."workOrderId", wo.status AS wo_durumu
+FROM rolls r
+LEFT JOIN work_order_steps wos ON wos.id = r."currentStepId"
+LEFT JOIN work_orders wo ON wo.id = wos."workOrderId"
+WHERE r.status = 'IN_PRODUCTION'
+  AND (r."currentStepId" IS NULL OR wo.id IS NULL OR wo.status IN ('CANCELLED','SUPERSEDED'));
+
+\echo ''
+\echo '== 11) Açık movement + top artık orada değil / ölü statüde (hayalet movement) =='
+SELECT rm.id AS movement_id, rm."rollId", r.barcode, r.status AS top_durumu,
+       rm."workOrderStepId", r."currentStepId", rm."enteredAt"
+FROM roll_movements rm
+JOIN rolls r ON r.id = rm."rollId"
+WHERE rm."exitedAt" IS NULL
+  AND (r.status IN ('SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED','CANCELLED')
+       OR r."currentStepId" IS DISTINCT FROM rm."workOrderStepId");
+
+\echo ''
+\echo '== 12) Kapanmış movement''ta qtyOut <> qtyIn =='
+\echo '   (kural: qtyOut = qtyIn — commit 64263fc, 2026-07-30. O tarihten ÖNCEKİ'
+\echo '    satırlar bilinen kalıntı olabilir; exitedAt dağılımına göre ayır.)'
+SELECT rm.id, rm."rollId", rm."workOrderStepId", rm."qtyIn", rm."qtyOut", rm."exitedAt"
+FROM roll_movements rm
+WHERE rm."exitedAt" IS NOT NULL
+  AND rm."qtyOut" IS DISTINCT FROM rm."qtyIn"
+ORDER BY rm."exitedAt" DESC;
+
+\echo ''
+\echo '== 13) currentQty > initialQty (top yalnız kesimle azalır, artamaz) =='
+SELECT id, barcode, "initialQty", "currentQty", status
+FROM rolls
+WHERE "currentQty" > "initialQty";
+
+\echo ''
+\echo '== 14) Yarım fason kabul (top tüketildi ama receipt''ten çocuk doğmamış) =='
+SELECT r.id AS tuketilen_top_id, r.barcode, r."updatedAt",
+       sr.id AS receipt_id, sr."receiptNo"
+FROM rolls r
+JOIN subcontractor_receipt_items sri ON sri."newRollId" = r.id
+JOIN subcontractor_receipts sr ON sr.id = sri."receiptId" AND sr."cancelledAt" IS NULL
+WHERE r.status = 'SUBCONTRACTOR_CONSUMED'
+  AND NOT EXISTS (SELECT 1 FROM rolls child WHERE child."parentReceiptId" = sr.id);
+
+\echo ''
+\echo '== 15) AT_SUBCONTRACTOR top ama açık fason sevk kaydı yok =='
+\echo '   (NOT: seed''li DEV ortamında yanlış pozitif — seed statüyü dispatch''siz yazar;'
+\echo '    üretimde her satır gerçek anomalidir)'
+SELECT r.id, r.barcode, r."updatedAt"
+FROM rolls r
+WHERE r.status = 'AT_SUBCONTRACTOR'
+  AND NOT EXISTS (
+    SELECT 1 FROM subcontractor_dispatch_items sdi
+    JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
+    WHERE sdi."rollId" = r.id AND sd."cancelledAt" IS NULL
+  );
+
+\echo ''
+\echo '== 16) Kartsız iş emri (kart WO açılışında doğar — 2026-07-14 sonrası) =='
+\echo '   (workorder.service.create tx''i kartı koşulsuz doğurur; satır çıkması ya'
+\echo '    doğrudan-SQL/restore artığı ya da yeni bir kart-atlama yoludur)'
+SELECT wo.id, wo."workOrderNumber", wo.status, wo."createdAt"
+FROM work_orders wo
+LEFT JOIN traveler_cards tc ON tc."workOrderId" = wo.id
+WHERE tc.id IS NULL
+  AND wo."createdAt" >= '2026-07-14';  -- kart-redesign cutover; öncesi legacy
+
+\echo ''
+\echo '== 17) Açık (isProcessed=false) RollError ama top ölü/emekli statüde =='
+SELECT re.id AS hata_id, re."rollId", r.barcode, r.status, re."detectedAt"
+FROM roll_errors re
+JOIN rolls r ON r.id = re."rollId"
+WHERE re."isProcessed" = false
+  AND r.status IN ('SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED','CANCELLED','SCRAP');
+
+\echo ''
+\echo '== 18) Master-data ad mükerrer (aktif, case/boşluk-duyarsız) =='
+\echo '   (DB unique bilinçli yok — app-level guard; bu yalnız GÖZLEM satırıdır,'
+\echo '    otomatik birleştirme/silme ÖNERİLMEZ)'
+SELECT 'items' AS tablo, lower(trim(name)) AS ad, COUNT(*) AS adet, array_agg(id) AS kayitlar
+FROM items WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'colors', lower(trim(name)), COUNT(*), array_agg(id)
+FROM colors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'customers', lower(trim(name)), COUNT(*), array_agg(id)
+FROM customers GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'subcontractors', lower(trim(name)), COUNT(*), array_agg(id)
+FROM subcontractors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'routes', lower(trim(name)), COUNT(*), array_agg(id)
+FROM routes GROUP BY 2 HAVING COUNT(*) > 1;
+
+\echo ''
+\echo '== 19) Fason sevk / doğrudan-sevk snapshot toplamı vs kalem toplamı =='
+SELECT 'subcontractor_dispatches' AS tablo, sd.id::text AS kayit, sd."totalQty" AS kayitli,
+       COALESCE(SUM(sdi."dispatchedQty"), 0) AS hesaplanan
+FROM subcontractor_dispatches sd
+LEFT JOIN subcontractor_dispatch_items sdi ON sdi."dispatchId" = sd.id
+GROUP BY sd.id, sd."totalQty"
+HAVING sd."totalQty" <> COALESCE(SUM(sdi."dispatchedQty"), 0)
+UNION ALL
+SELECT 'direct_shipments', ds.id::text, ds."totalQty", COALESCE(SUM(dsa.qty), 0)
+FROM direct_shipments ds
+LEFT JOIN subcontractor_direct_ship_allocations dsa ON dsa."directShipmentId" = ds.id
+GROUP BY ds.id, ds."totalQty"
+HAVING ds."totalQty" <> COALESCE(SUM(dsa.qty), 0);
+
 \echo ''
 \echo '== Tutarlılık kontrolü bitti. Yukarıda hiç satır YOKSA sistem sağlıklı. =='

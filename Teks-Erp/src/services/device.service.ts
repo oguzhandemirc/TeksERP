@@ -283,6 +283,18 @@ export class DeviceService {
         "Cihazın çalışma oturumu geçmişi var — kalıcı silinemez, pasife alın.",
       );
     }
+    // peripheral_devices.deviceId ON DELETE SET NULL + device_peripherals pivot'u Cascade
+    // (A5, 2026-07-31 denetimi) — guard'sız silmede donanımın hangi cihaza bağlı/
+    // yönlendirilmiş olduğu izi sessizce kaybolurdu. Önce bağı çözün (unpair), sonra silin.
+    const [peripheralCount, pivotCount] = await Promise.all([
+      prisma.peripheralDevice.count({ where: { deviceId: id } }),
+      prisma.devicePeripheral.count({ where: { deviceId: id } }),
+    ]);
+    if (peripheralCount + pivotCount > 0) {
+      throw AppError.badRequest(
+        `Cihaza bağlı ${peripheralCount + pivotCount} çevre birimi bağı (terazi/yazıcı) var — önce bağlantıyı kaldırın.`,
+      );
+    }
     await prisma.device.delete({ where: { id } });
     await AuditService.log({
       userId, action: "DELETE", tableName: "devices", recordId: id,
