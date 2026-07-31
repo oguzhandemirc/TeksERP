@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useLockStore } from '../store/lockStore';
-import { usePermissions } from '../hooks/usePermission';
+import { useVisibleScreens } from '../hooks/useVisibleScreens';
 import { useDeviceType, useIsPortrait } from '../hooks/useDeviceType';
 import { useLogout } from '../hooks/useLogout';
 import LogoutModals from './LogoutModals';
@@ -50,7 +50,11 @@ export default function ScreenChrome({
 }: Props) {
   const user = useAuthStore((s) => s.user);
   const lock = useLockStore((s) => s.lock);
-  const { hasMultipleMobileScreens } = usePermissions();
+  // GÖRÜNÜR ekran sayısı (izin değil): ev tuşu ancak ModuleSelect gerçekten
+  // KAYITLIYSA çıkmalı — MainNavigator tek görünür ekranda onu kaydetmez,
+  // ham izne baksaydık bayrağı kapalı ikinci ekranı olan kullanıcıda tuş
+  // görünür ama popTo('ModuleSelect') hiçbir yere gitmezdi.
+  const { hasMultipleVisibleScreens } = useVisibleScreens();
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
@@ -68,7 +72,7 @@ export default function ScreenChrome({
   const isTablet = useDeviceType() === 'tablet';
   const isPortrait = useIsPortrait();
   const onHomeScreen = route.name === 'ModuleSelect';
-  const showHome = hasMultipleMobileScreens && !onBack && !onHomeScreen && !isTablet;
+  const showHome = hasMultipleVisibleScreens && !onBack && !onHomeScreen && !isTablet;
   // Telefonda ana sayfada (dashboard = ModuleSelect) profil tuşunda isim GİZLİ —
   // dar ekranda modül grid'i başlığıyla sıkışmasın; yalnız ikon kalır. Aynı sebeple
   // Fason Sevk'te de dikey konumdayken gizli (form alanları + header pill'leri dar

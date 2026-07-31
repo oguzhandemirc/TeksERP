@@ -58,6 +58,7 @@ async function main() {
     { code: "roll:read", module: "PRODUCTION", category: "web", description: "Top (rulo) listesi/detay görüntüleme" },
     { code: "roll:write", module: "PRODUCTION", category: "web", description: "Top oluşturma/durum güncelleme" },
     { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
+    { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü iş emrini fiziksel kurşun istasyonuna atama + son-adım tamamlama" },
     { code: "station:read", module: "PRODUCTION", category: "web", description: "Üretim istasyonu listesi/detay görüntüleme" },
     { code: "station:write", module: "PRODUCTION", category: "web", description: "Üretim istasyonu tanımlama/düzenleme" },
     { code: "item:read", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı listesi/detay görüntüleme" },
@@ -107,6 +108,7 @@ async function main() {
     { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
     { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
     { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → iş emri başlat + iş emri yönetimi)" },
+    { code: "mobile:kursun-dagitim", module: "MOBILE", category: "mobile", description: "Mobil — Kurşun Dağıtım ekranı" },
     // Ekran değil, KK1 içi yetenek: yalnız seçili ham giriş operatörlerine verilir.
     { code: "mobile:kk1-desen", module: "MOBILE", category: "mobile", description: "KK1 ham girişte inline yeni desen (FABRIC kumaş) oluşturma" },
     { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
@@ -158,6 +160,23 @@ async function main() {
         "item:read", "property:read", "station:read",
         "subcontractor:read", "order:read", "customer:read",
         "label:print",
+      ],
+    },
+    {
+      // Kurşun bypass düzeni (production.kursunBypassEnabled): fabrika kurşun
+      // istasyonlarına tablet KOYMUYOR — yetkili personel, kurşun adımında bekleyen
+      // iş emrini fiziksel kurşun istasyonuna atar. Ekran görünürlüğü
+      // `mobile:kursun-dagitim` ile; route'lar `requireAnyPermission("workorder:distribute",
+      // "mobile:kursun-dagitim")` kullanır. Web ikizi `workorder:distribute` BİLİNÇLİ olarak
+      // buraya konmadı (mobil şablon, saha kullanıcısına masaüstü yetkisi taşımasın);
+      // planlama/süpervizör kullanıcısına admin panelinden tek tek verilir.
+      name: "Mobil — Kurşun Dağıtım",
+      description: "Kurşun dağıtım ekranı (iş emrini fiziksel kurşun istasyonuna ata + son adımsa işi bitir)",
+      codes: [
+        "mobile:kursun-dagitim",
+        "workorder:read",
+        "roll:read",
+        "station:read",
       ],
     },
     { name: "Mobil — Tüm Ekranlar",          description: "Tüm mobil ekranlar (wildcard)",  codes: ["mobile:*"] },
@@ -384,6 +403,9 @@ async function main() {
     { key: "return.gradingEnabled", value: false },
     { key: "device.pairingRequired", value: false },
     { key: "shipping.confirmationEnabled", value: false },
+    // Kurşun bypass — varsayılan KAPALI. Panelden açılır (Genel Ayarlar → Üretim).
+    // Yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış işler bayrak kapansa da biter.
+    { key: "production.kursunBypassEnabled", value: false },
     { key: "auth.sessionDurationMinutes", value: 480 },
     { key: "auth.idleTimeoutMinutes", value: 0 },
     { key: "workSession.idleTimeoutMinutes", value: 0 },

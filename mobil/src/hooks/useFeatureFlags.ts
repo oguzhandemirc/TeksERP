@@ -82,3 +82,10 @@ export function useMobileLockOnBackground(): boolean {
 export function useMobileRasterEnabled(): boolean {
   return useFeatureFlags().data?.mobileRasterEnabled ?? false;
 }
+
+/** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı? Default FALSE.
+ *  Yüklenene kadar / hata halinde false → "Kurşun Dağıtım" ekranı gizli kalır
+ *  (fail-closed; flag geldiğinde ekran kendiliğinden belirir). */
+export function useKursunBypassEnabled(): boolean {
+  return useFeatureFlags().data?.kursunBypassEnabled ?? false;
+}

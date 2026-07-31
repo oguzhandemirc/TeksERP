@@ -135,7 +135,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "Üretim — Saha",
     icon: Factory,
     description: "Sahadaki mobil istasyon ekranlarının davranışı.",
-    keywords: "KK1 ham en genişlik cm fason talimat boyahane notu sevk mobil operatör saha kalite tambur metraj aşım fazla ölçüm açık kumaş top",
+    keywords:
+      "KK1 ham en genişlik cm fason talimat boyahane notu sevk mobil operatör saha kalite tambur metraj aşım fazla ölçüm açık kumaş top " +
+      "kurşun dağıtım bypass istasyon atama kağıt fason dönüş tambur onay",
     kind: "flags",
     flags: [
       {
@@ -155,6 +157,12 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",
         desc: "Kapalıyken (varsayılan) sahadaki operatör mobil Fason Sevk ekranında talimat giremez; talimat yalnızca iş emrindeki fason adımının notundan gelir. Açıkken operatör sevk sırasında telefondan talimat girebilir/değiştirebilir (boş bırakırsa adım notu kullanılır).",
+      },
+      {
+        key: "kursunBypassEnabled",
+        group: "Kurşun",
+        title: "Kurşun istasyonunda tablet yok — işi dağıtımla yürüt (kurşun bypass)",
+        desc: "Kapalıyken (varsayılan) kurşun + KK2 normal akışta, tabletten okutularak işlenir. Açıkken kurşun fiziksel olarak yapılır ama dijital izlenmez (hatalar kâğıtta kalır): yetkili personel 'Kurşun Dağıtım' ekranından bekleyen iş emrini fiziksel bir kurşun istasyonuna atar; Tambur refakat kartını okuttuğunda kurşun/KK2 adımı önizleme+onay ile TAMAMLANMIŞ sayılır ve toplar Tambur'a geçer (kalite Tambur'da belirlenir, kurşunda 'Belirsiz' kalır). Kurşun rotanın son adımıysa iş dağıtım ekranındaki 'İşi Bitir' ile kapanır ve toplar depoya iner. Bu ayar YALNIZCA yeni dağıtım yapılmasını kapılar — kapatsan da hâlihazırda dağıtılmış iş emirleri bypass ile bitirilir; adım ATLANMAZ, normal şekilde tamamlanır.",
       },
       {
         key: "tamburOverQuantityEnabled",

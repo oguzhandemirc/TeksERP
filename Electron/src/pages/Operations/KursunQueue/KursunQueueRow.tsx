@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertOctagon, GripVertical, Package } from "lucide-react";
+import { AlertOctagon, GripVertical, Package, Share2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,22 @@ import type { KursunQueueItem } from "./types";
 
 interface Props {
   item: KursunQueueItem;
+  /** İstasyon GRUBU içindeki sıra (global değil — kuyruk istasyona göre bölünür). */
   index: number;
   onToggleUrgent: () => void;
   busy: boolean;
+  /** Sıralama yetkisi (quality:write). Yoksa sürükleme kapatılır — backend 403 döner. */
+  canReorder: boolean;
 }
 
-export function KursunQueueRow({ item, index, onToggleUrgent, busy }: Props) {
-  const sortable = useSortable({ id: item.workOrderStepId });
+export function KursunQueueRow({
+  item,
+  index,
+  onToggleUrgent,
+  busy,
+  canReorder,
+}: Props) {
+  const sortable = useSortable({ id: item.workOrderStepId, disabled: !canReorder });
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -32,15 +41,17 @@ export function KursunQueueRow({ item, index, onToggleUrgent, busy }: Props) {
         )}
       >
         <CardContent className="flex items-center gap-3 p-3">
-          <button
-            type="button"
-            {...sortable.attributes}
-            {...sortable.listeners}
-            className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
-            aria-label="Sürükle"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          {canReorder && (
+            <button
+              type="button"
+              {...sortable.attributes}
+              {...sortable.listeners}
+              className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
+              aria-label="Sürükle"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          )}
 
           <div className="bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-md font-mono text-xs">
             {index + 1}
@@ -49,6 +60,16 @@ export function KursunQueueRow({ item, index, onToggleUrgent, busy }: Props) {
           {item.isUrgent && (
             <Badge variant="destructive" className="gap-1 text-[10px]">
               <AlertOctagon className="h-3 w-3" /> ACİL
+            </Badge>
+          )}
+
+          {item.bypassAssigned && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-[10px]"
+              title="Bu iş kurşun dağıtımına verildi — kurşun/KK2 tablette okutulmayacak, Tambur kartı okuttuğunda tamamlanmış sayılacak."
+            >
+              <Share2 className="h-3 w-3" /> Bypass
             </Badge>
           )}
 

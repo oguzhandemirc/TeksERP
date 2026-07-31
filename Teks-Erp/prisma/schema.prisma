@@ -327,6 +327,9 @@ model User {
   directShipments            DirectShipment[]        @relation("DirectShipmentShippedBy")
   weighedSacks               Sack[]                  @relation("SackWeighedBy")
   swatchStockReductions      SwatchStockReduction[]  @relation("SwatchStockReductionCreatedBy")
+  kursunBypassAssigned       KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
+  kursunBypassCompleted      KursunBypassAssignment[] @relation("KursunBypassCompletedBy")
+  kursunBypassCancelled      KursunBypassAssignment[] @relation("KursunBypassCancelledBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -495,6 +498,9 @@ model Station {
   propertyCapabilities StationProperty[]
   peripherals          PeripheralDevice[] // MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.)
   workSessions         WorkSession[]
+  // Kurşun bypass: bu istasyona ATANAN işler / bu istasyondan devralınan adımlar
+  kursunBypassAssigned KursunBypassAssignment[] @relation("KursunBypassAssignedStation")
+  kursunBypassOriginal KursunBypassAssignment[] @relation("KursunBypassOriginalStation")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1355,6 +1361,7 @@ model WorkOrder {
   targetProperties WorkOrderTargetProperty[]
   splitFrom        WorkOrder?                @relation("WorkOrderSplitLineage", fields: [splitFromId], references: [id])
   splitChildren    WorkOrder[]               @relation("WorkOrderSplitLineage")
+  kursunBypasses   KursunBypassAssignment[] // Kurşun bypass atamaları (append-only)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1451,6 +1458,9 @@ model WorkOrderStep {
   processedErrors      RollError[]             @relation("RollErrorProcessedAt")
   requiredCategory     SubcontractorCategory?  @relation("StepRequiredCategory", fields: [requiredCategoryId], references: [id])
   plannedSubcontractor Subcontractor?          @relation("StepPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
+  // Kurşun bypass: bu adım için açılmış atamalar (aynı adıma çok-parti nedeniyle
+  // birden fazla satır düşebilir; AÇIK olanın tekliği partial unique ile korunur)
+  kursunBypasses       KursunBypassAssignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1467,6 +1477,90 @@ model WorkOrderStep {
   // predicate'i drift saymaz. Migration: 20260607010000.
   @@index([stationId, status, isUrgent, priority, startedAt])
   @@map("work_order_steps")
+}
+
+/// Kurşun bypass atamasının hangi yoldan TAMAMLANDIĞI.
+///   TAMBUR_SCAN            — Tambur tabletinde refakat kartının karekodu okutuldu,
+///                            operatör önizlemeyi onayladı → Kurşun/KK2 adımı COMPLETED.
+///   DISTRIBUTION_LAST_STEP — Kurşun rotanın SON adımıydı; Kurşun Dağıtım ekranındaki
+///                            "İşi Bitir" ile tamamlandı (finalizeRollsAtLastStep → WAREHOUSE).
+enum KursunBypassCompletionSource {
+  TAMBUR_SCAN
+  DISTRIBUTION_LAST_STEP
+}
+
+/// Kurşun bypass ataması — fabrika kurşun istasyonlarına tablet KOYMUYOR. Kurşun
+/// işlemi fiziksel olarak yapılır ama dijital izlenmez (hatalar kâğıtta): yetkili
+/// personel, kurşun adımında bekleyen iş emrini bir fiziksel kurşun istasyonuna
+/// ATAR; adım daha sonra Tambur'da kart okutmasıyla ya da (kurşun rotanın son
+/// adımıysa) dağıtım ekranından tamamlanır.
+///
+/// ⚠️ Bu SKIPPED DEĞİLDİR: adım atlanmaz, `RollMovement`'lar normal şekilde
+/// kapanır ve adım COMPLETED olur. Fark, `RollOperation` (KURSUN_APPLIED /
+/// QC2_COMPLETED) YAZILMAMASI ve `RollError` açılmamasıdır. İstasyon yetenekleri
+/// (copyStationCapabilitiesToRoll) YİNE kopyalanır — KURŞUN özelliği kaybolmasın.
+/// İz üçlüsü: movement notes marker'ı (`KURSUN_BYPASS_FINISHED:<uuid>`) + bu satır
+/// + audit kaydı.
+///
+/// TASARIM — satır APPEND-ONLY + SOFT-CANCEL'dir:
+/// • Tamamlanan satır silinmez; `completedAt`/`completedById`/`completedVia` ile
+///   damgalanır. İptal edilen satır `cancelledAt`/`cancelledById`/`cancelReason`
+///   alır ve `originalStationId` adıma geri yazılır (atama öncesi istasyon).
+/// • `workOrderStepId`'ye @unique KOYULMADI — fason çok-parti gerçeği: parti 1
+///   bypass ile biter, parti 2 haftalar sonra gelir ve AYNI adım için YENİ bir
+///   atama satırı gerekir. Teklik yalnız AÇIK atamada anlamlıdır.
+/// • Onun yerine ŞEMA-DIŞI partial unique kullanılır (migration
+///   `20260731120000_add_kursun_bypass_assignment`):
+///     kursun_bypass_one_pending_per_step_uq ("workOrderStepId")
+///       WHERE "completedAt" IS NULL AND "cancelledAt" IS NULL
+///   = "bir adımda EN FAZLA BİR açık atama" invariant'ının DB seddi; eşzamanlı
+///   atama yarışının kaybedeni P2002 alır (servis 409'a çevirir). Partial UNIQUE
+///   `@@unique` ile ifade edilemediğinden şemada karşılığı bilinçli olarak YOK
+///   (`roll_movements_one_open_per_roll_step_uq` emsali). Envanteri
+///   `scripts/test_db_invariants.ts` tutar — silinirse test DÜŞER.
+/// • `workOrderId` DENORMALİZE'dir (adımdan türetilebilir): "bu WO'nun açık bypass
+///   ataması var mı" sorgusu hem dağıtım ekranının hem Tambur önizlemesinin sıcak
+///   yolu — join'siz tek index taraması için tutulur.
+model KursunBypassAssignment {
+  id                String @id @default(uuid()) @db.Uuid
+  workOrderId       String @db.Uuid
+  workOrderStepId   String @db.Uuid
+  /// ATANAN fiziksel kurşun istasyonu (Station.kind = PROCESS_QC).
+  stationId         String @db.Uuid
+  /// Atama anındaki `step.stationId` — iptalde adıma geri yüklenir.
+  originalStationId String @db.Uuid
+
+  assignedById String   @db.Uuid
+  assignedAt   DateTime @default(now()) @db.Timestamptz
+  /// Dağıtımcının serbest notu ("2. vardiyaya kaldı" gibi) — opsiyonel.
+  notes        String?  @db.VarChar(500)
+
+  completedAt   DateTime?                     @db.Timestamptz
+  completedById String?                       @db.Uuid
+  completedVia  KursunBypassCompletionSource?
+
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(200)
+
+  // Relations
+  workOrder       WorkOrder     @relation(fields: [workOrderId], references: [id])
+  workOrderStep   WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
+  station         Station       @relation("KursunBypassAssignedStation", fields: [stationId], references: [id])
+  originalStation Station       @relation("KursunBypassOriginalStation", fields: [originalStationId], references: [id])
+  assignedBy      User          @relation("KursunBypassAssignedBy", fields: [assignedById], references: [id])
+  completedBy     User?         @relation("KursunBypassCompletedBy", fields: [completedById], references: [id])
+  cancelledBy     User?         @relation("KursunBypassCancelledBy", fields: [cancelledById], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // WO bazlı açık-atama lookup'ı (denormalize kolon sayesinde join'siz)
+  @@index([workOrderId])
+  @@index([workOrderStepId])
+  // Dağıtım ekranı: "bu kurşun istasyonuna atanmış işler" listesi
+  @@index([stationId])
+  @@map("kursun_bypass_assignments")
 }
 
 /// Join table: WorkOrder ↔ OrderLine (N:N)

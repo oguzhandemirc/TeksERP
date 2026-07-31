@@ -11,6 +11,9 @@ export type MobilePermission =
   | 'mobile:kartela-kabul'
   | 'mobile:iade'
   | 'mobile:hizli-is-emri'
+  // Kurşun Dağıtım ekranı — web ikizi `workorder:distribute` (backend uçları
+  // requireAnyPermission ile ikisini de kabul eder).
+  | 'mobile:kursun-dagitim'
   // Ekran değil, KK1-içi yetenek: seçili operatöre inline yeni desen oluşturma.
   | 'mobile:kk1-desen'
   | 'mobile:*';
@@ -43,7 +46,8 @@ export type MobileScreenKey =
   | 'KartelaSevk'
   | 'KartelaKabul'
   | 'IadeGirisi'
-  | 'HizliIsEmri';
+  | 'HizliIsEmri'
+  | 'KursunDagitim';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -141,6 +145,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Hızlı İş Emri',
     icon: 'rocket-launch-outline',
     description: 'Topu okutup iş emri başlat/yönet',
+  },
+  {
+    // Ofis/süpervizör ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).
+    // Ayrıca `kursunBypassEnabled` bayrağı kapalıyken gizlenir (useVisibleScreens).
+    key: 'KursunDagitim',
+    permission: 'mobile:kursun-dagitim',
+    label: 'Kurşun Dağıtım',
+    icon: 'clipboard-flow-outline',
+    description: 'Fason dönüşü iş emirlerini kurşun istasyonlarına dağıt',
   },
 ];
 

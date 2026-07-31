@@ -77,6 +77,13 @@ export function useShipmentConfirmationEnabled(): boolean {
   return q.data?.data?.shipmentConfirmationEnabled ?? false;
 }
 
+/** Kurşun bypass düzeni açık mı. Yüklenene kadar false (default kapalı).
+ *  Yalnız YENİ dağıtımı kapılar — dağıtılmış iş emirleri bayrak kapansa da biter. */
+export function useKursunBypassEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.kursunBypassEnabled ?? false;
+}
+
 /** Müşteri şubeleri (sevk noktaları) açık mı. Yüklenene kadar true (default açık). */
 export function useCustomerBranchesEnabled(): boolean {
   const q = useFeatureFlags();

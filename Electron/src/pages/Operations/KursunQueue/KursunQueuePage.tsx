@@ -1,33 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import type { DragEndEvent } from "@dnd-kit/core";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { formatNumber } from "@/lib/format";
 import { kursunQueueService } from "./service";
 import type { KursunQueueItem } from "./types";
-import { KursunQueueRow } from "./KursunQueueRow";
+import {
+  KursunQueueStationGroup,
+  groupQueueByStation,
+} from "./KursunQueueStationGroup";
+import { reorderWithinStation } from "./queue-reorder";
 
 const QUERY_KEY = "kursun-queue";
 
 export function KursunQueuePage() {
   const qc = useQueryClient();
+  // Sıralama backend'de `quality:write` ister; dağıtımcı (workorder:distribute)
+  // kuyruğu yalnız İZLER — yetkisiz sürükleme 403 üretirdi.
+  const { hasPermission } = useRoleAccess();
+  const canReorder = hasPermission("quality:write");
 
   const query = useQuery({
     queryKey: [QUERY_KEY],
@@ -41,10 +37,8 @@ export function KursunQueuePage() {
     setItems(query.data?.data ?? []);
   }, [query.data]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const groups = useMemo(() => groupQueueByStation(items), [items]);
+  const totalQty = items.reduce((sum, i) => sum + i.totalCurrentQty, 0);
 
   const reorderMut = useMutation({
     mutationFn: kursunQueueService.reorder,
@@ -66,24 +60,21 @@ export function KursunQueuePage() {
     },
   });
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  /** Sıralama İSTASYON GRUBU içinde yapılır — hesap `reorderWithinStation`'da. */
+  const handleDragEnd = (stationName: string, event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIdx = items.findIndex((i) => i.workOrderStepId === active.id);
-    const newIdx = items.findIndex((i) => i.workOrderStepId === over.id);
-    if (oldIdx < 0 || newIdx < 0) return;
+    if (!over) return;
 
-    const next = arrayMove(items, oldIdx, newIdx);
-    setItems(next);
+    const result = reorderWithinStation(
+      items,
+      stationName,
+      String(active.id),
+      String(over.id),
+    );
+    if (!result) return;
 
-    // Acil işaretli WO'lar otomatik üste pinlendiği için onları reorder
-    // payload'ından dışta tutuyoruz. priority asc → küçük = üstte.
-    const reorderable = next.filter((i) => !i.isUrgent);
-    const payload = reorderable.map((i, idx) => ({
-      id: i.workOrderStepId,
-      priority: idx * 10,
-    }));
-    if (payload.length > 0) reorderMut.mutate(payload);
+    setItems(result.next);
+    if (result.payload.length > 0) reorderMut.mutate(result.payload);
   };
 
   const busy = reorderMut.isPending || urgentMut.isPending;
@@ -97,11 +88,16 @@ export function KursunQueuePage() {
         }
       />
 
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="text-muted-foreground text-xs">
-          <span className="text-foreground font-medium">{items.length}</span>{" "}
-          bekleyen iş emri
-        </div>
+      <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-3 py-2 text-xs">
+        <span>
+          <span className="text-foreground font-medium">{items.length}</span> bekleyen
+          iş emri
+        </span>
+        <span>
+          <span className="text-foreground font-medium">{groups.length}</span> istasyon ·{" "}
+          {formatNumber(totalQty, 0)} m
+        </span>
+        {!canReorder && <span>Salt izleme — sıralama için kalite yetkisi gerekir.</span>}
       </div>
 
       <PageBody className="p-4">
@@ -111,38 +107,28 @@ export function KursunQueuePage() {
               <Skeleton key={i} className="h-16 w-full" />
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : groups.length === 0 ? (
           <div className="text-muted-foreground flex h-32 items-center justify-center rounded-md border border-dashed text-sm">
             Kurşun istasyonunda bekleyen iş emri yok.
           </div>
         ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={items.map((i) => i.workOrderStepId)}
-              strategy={verticalListSortingStrategy}
-            >
-              <ul className="space-y-2">
-                {items.map((item, idx) => (
-                  <KursunQueueRow
-                    key={item.workOrderStepId}
-                    item={item}
-                    index={idx}
-                    busy={busy}
-                    onToggleUrgent={() =>
-                      urgentMut.mutate({
-                        id: item.workOrderStepId,
-                        isUrgent: !item.isUrgent,
-                      })
-                    }
-                  />
-                ))}
-              </ul>
-            </SortableContext>
-          </DndContext>
+          <div className="space-y-3">
+            {groups.map((group) => (
+              <KursunQueueStationGroup
+                key={group.stationName}
+                group={group}
+                busy={busy}
+                canReorder={canReorder}
+                onDragEnd={handleDragEnd}
+                onToggleUrgent={(item) =>
+                  urgentMut.mutate({
+                    id: item.workOrderStepId,
+                    isUrgent: !item.isUrgent,
+                  })
+                }
+              />
+            ))}
+          </div>
         )}
       </PageBody>
     </PageShell>

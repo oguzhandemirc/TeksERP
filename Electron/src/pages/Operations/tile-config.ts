@@ -11,6 +11,7 @@ import {
   ClipboardList,
   ScanBarcode,
   PackageOpen,
+  Share2,
   type LucideIcon,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -29,6 +30,10 @@ export interface OperationsTile {
   /** Yalnız "Sevk onayı adımı" AÇIKKEN görünür — kapalıyken (varsayılan) sevkler
    *  doğrudan çıkar, bu ekran anlamsız → menüden gizlenir. */
   requiresShipmentConfirmation?: boolean;
+  /** Yalnız "kurşun bypass" AÇIKKEN görünür — kapalıyken (varsayılan) kurşun normal
+   *  akışta tabletten işlenir, dağıtım ekranı anlamsız → menüden gizlenir. Bayrak
+   *  kapatılsa da ekranın ROUTE'u açık kalır: dağıtılmış işler bitirilebilsin. */
+  requiresKursunBypass?: boolean;
 }
 
 export const operationsTiles: OperationsTile[] = [
@@ -109,8 +114,8 @@ export const operationsTiles: OperationsTile[] = [
   },
   {
     key: "accounting-dispatch",
-    // "Sevkiyatlar" ile karışmasın: bu salt-okunur sevk muhasebesi/export ekranı.
-    title: "Sevk Muhasebesi",
+    // Ana "Sevkiyatlar" ekranından ayrı: bu salt-okunur muhasebe/export ekranı.
+    title: "Sevkiyatlar (Muhasebe)",
     description: "Sevki tamamlananlar — salt-okunur + kumaş/çuval/çeki fişi",
     icon: ClipboardList,
     to: "/operations/accounting-dispatch",
@@ -142,6 +147,18 @@ export const operationsTiles: OperationsTile[] = [
     icon: Layers,
     to: "/operations/kursun-queue",
     group: "production",
-    permission: "quality:write",
+    // Route ile hizalı: kalitecinin yanında kurşun dağıtımcısı da kuyruğu izler
+    // (dağıtım kararı bu kuyruğun üstüne kurulur — bkz. Kurşun Dağıtım).
+    permissionAny: ["quality:write", "workorder:distribute"],
+  },
+  {
+    key: "kursun-dagitim",
+    title: "Kurşun Dağıtım",
+    description: "Fasondan kabul edilen iş emirlerini kurşun istasyonlarına dağıt",
+    icon: Share2,
+    to: "/operations/kursun-dagitim",
+    group: "production",
+    permission: "workorder:distribute",
+    requiresKursunBypass: true,
   },
 ];

@@ -67,7 +67,16 @@ const migEntries = existsSync(join(REPO_ROOT, MIGRATIONS_DIR))
   : [];
 
 const untrackedMig = migEntries.filter((e) => e.code === "??");
-const changedMig = migEntries.filter((e) => e.code !== "??");
+// "A " = index'e EKLENMİŞ, çalışma kopyası temiz YENİ dosya. Bu, kuralın TAM
+// OLARAK istediği ara durumdur (CLAUDE.md: `git add` → `prisma db execute` →
+// `migrate resolve --applied` → doğrula → commit) ve GATE 2'ye girmez:
+//   • GATE 1 sağlanır — dosya artık izleniyor, `migrate deploy` onu görecek.
+//   • GATE 2 kavramsal olarak UYGULANMIŞ (yani commit'li geçmişte var olan) bir
+//     dosyanın değiştirilmesini kovalar; henüz commit edilmemiş YENİ bir dosyanın
+//     "checksum'ı bozuldu" diye kilitleyeceği bir deploy yok.
+// "AM" (eklendikten SONRA düzenlenmiş) ve " M"/" D" hâlâ GATE 2'ye düşer —
+// tam da `db execute` sonrası dosyayı kurcalayan tehlikeli hâl budur.
+const changedMig = migEntries.filter((e) => e.code !== "??" && e.code !== "A ");
 
 if (untrackedMig.length) {
   problems.push({

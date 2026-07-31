@@ -166,4 +166,7 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   KartelaKabul: { tint: '#c026d3', bg: '#fae8ff' },
   IadeGirisi: { tint: '#dc2626', bg: '#fee2e2' },
   HizliIsEmri: { tint: '#4f46e5', bg: '#e0e7ff' },
+  // Kurşun ailesi (amber) ama KursunQc'den KOYU tonla ayrışır: aynı işin planlama
+  // yüzü olduğu anlaşılsın, istasyon ekranıyla karıştırılmasın.
+  KursunDagitim: { tint: '#b45309', bg: '#fde68a' },
 };

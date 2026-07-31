@@ -78,6 +78,7 @@ import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDeta
 import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
+import { KursunDagitimPage } from "@/pages/Operations/KursunDagitim/KursunDagitimPage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { ShipmentDetailPage } from "@/pages/Operations/Shipments/detail/ShipmentDetailPage";
@@ -480,8 +481,20 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "operations/kursun-queue",
     element: (
-      <ProtectedRoute requirePermission="quality:write">
+      // Kuyruğu kaliteci sıralar; kurşun dağıtımcısı da izler (backend GET /queue
+      // aynı iki izne açık — dağıtım kararı bu kuyruğun üstüne kurulur).
+      <ProtectedRoute requireAnyPermission={["quality:write", "workorder:distribute"]}>
         <KursunQueuePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/kursun-dagitim",
+    element: (
+      // Bayrak (kursunBypassEnabled) route'u KAPATMAZ — kapatıldığında yalnız yeni
+      // dağıtım durur; dağıtılmış iş emirleri bu ekrandan bitirilmeye devam eder.
+      <ProtectedRoute requirePermission="workorder:distribute">
+        <KursunDagitimPage />
       </ProtectedRoute>
     ),
   },

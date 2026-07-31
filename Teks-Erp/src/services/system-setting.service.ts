@@ -108,6 +108,15 @@ export const SETTING_KEYS = {
    *  kapatırsa çıkış ≤ giriş zorunlu olur (aşan giriş 400 ile reddedilir). Diğer flag'lerin
    *  aksine backend ENFORCE eder (guard bu flag'e bağlı). */
   TAMBUR_OVER_QUANTITY_ENABLED: "tambur.overQuantityEnabled",
+  /** Kurşun bypass (kurşun istasyonuna tablet KOYULMAYAN fabrika düzeni) açık mı.
+   *  Default FALSE (kapalı). Diğer flag'lerin çoğunun aksine backend ENFORCE eder,
+   *  ama ENFORCE kapsamı DAR: yalnız YENİ ATAMA OLUŞTURMAYI kapılar (bayrak kapalıyken
+   *  "kurşun dağıt" 400 döner). Zaten dağıtılmış iş emirleri bayrak sonradan kapansa da
+   *  bypass rejiminde KALIR — iptal / son-adım tamamlama / Tambur kart okutma onayı
+   *  çalışmaya devam eder. Gerekçe: rejim ATAMA SATIRINDA kalıcıdır (KursunBypassAssignment),
+   *  ayarda değil; bayrağı kapatmak sahada yarım kalmış işi kilitleyemez (topların kurşun
+   *  adımı fiziksel olarak yapılmış ama dijital karşılığı açık kalırdı). */
+  KURSUN_BYPASS_ENABLED: "production.kursunBypassEnabled",
   /** Oturum (JWT token) ömrü, SAAT. Default 8. Giriş yaptıktan sonra token kaç saat
    *  geçerli kalır — süre dolunca (aktif kullanırken bile) yeniden giriş gerekir.
    *  Backend ENFORCE eder: login'de jwt.sign expiresIn buradan okunur. Değişiklik
@@ -570,6 +579,10 @@ export interface FeatureFlags {
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
    *  Diğer flag'lerin aksine ENFORCE edilir — tambur kesim guard'ı bu flag'e bağlı. */
   tamburOverQuantityEnabled: boolean;
+  /** Kurşun bypass düzeni açık mı (default FALSE/kapalı). ENFORCE edilir ama YALNIZ
+   *  yeni atama oluşturmayı kapılar; dağıtılmış iş emirleri bayrak kapansa da bypass
+   *  rejiminde biter (rejim atama satırında kalıcıdır). */
+  kursunBypassEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat). Dakika-granüler ayar; UI bunu
    *  yönetir. Backend ENFORCE eder (login'de jwt.sign expiresIn = ×60 sn). */
   sessionDurationMinutes: number;
@@ -836,6 +849,7 @@ export class SystemSettingService {
       companyLetterhead: await readCompanyLetterhead(cacheClient),
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
+      kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       sessionDurationMinutes: sessionMinutes,
       sessionDurationHours: Math.max(1, Math.round(sessionMinutes / 60)),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
@@ -1004,6 +1018,18 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
         input.shipmentConfirmationEnabled,
         "Sevk için ayrı 'ambar aldı / çıkış' onay adımı zorunlu olsun (kapalıyken paketleyen direkt sevk eder)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kursunBypassEnabled")) {
+      if (typeof input.kursunBypassEnabled !== "boolean") {
+        throw AppError.badRequest("kursunBypassEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KURSUN_BYPASS_ENABLED,
+        input.kursunBypassEnabled,
+        "Kurşun bypass — kurşun istasyonuna tablet konulmayan düzen (yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış işler bypass ile biter)",
         userId
       );
     }
@@ -1685,6 +1711,33 @@ export async function readShipmentConfirmationEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Kurşun bypass düzeni açık mı? Default FALSE (KAPALI). Fabrika kurşun istasyonlarına
+ * tablet koymuyorsa açılır: kurşun fiziksel olarak yapılır, dijital izlenmez (hatalar
+ * kâğıtta) ve yetkili personel kurşun adımındaki iş emrini fiziksel bir kurşun
+ * istasyonuna ATAR; adım Tambur'da kart okutmasıyla (ya da kurşun son adımsa dağıtım
+ * ekranından) COMPLETED olur.
+ *
+ * ENFORCE edilir ama kapsamı DAR — yalnız YENİ ATAMA OLUŞTURMAYI kapılar. Zaten
+ * dağıtılmış iş emirleri bayrak sonradan kapansa da bypass rejiminde biter (iptal /
+ * son-adım tamamlama / Tambur onayı çalışır): rejim ATAMA SATIRINDA kalıcıdır
+ * (`KursunBypassAssignment`), ayarda değil. Aksi halde bayrağı kapatmak, kurşunu
+ * fiziksel olarak görmüş ama dijital karşılığı açık kalmış işleri sahada kilitlerdi.
+ *
+ * UNCACHED (enforcement yolu — `getFeatureFlags` cache'i üzerinden okunmaz); kayıt
+ * yoksa false. `getFeatureFlags` bu fonksiyonu in-memory client ile çağırır.
+ */
+export async function readKursunBypassEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -296,15 +296,25 @@ router.get(
  *     description: |
  *       Planlama drag-drop sayfası ve tablet operatörü tarafından okunur.
  *       Sıra: önce acil (isUrgent desc, urgentMarkedAt asc), sonra priority asc, sonra startedAt asc.
+ *       Her satırda `bypassAssigned` bayrağı gelir (kurşun dağıtımına verilmiş adım).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Kuyruk listesi }
  *       500: { description: Sunucu hatası }
  */
+// Yetki: kalite/tablet okuyucularına EK OLARAK kurşun dağıtımcısı. Planlamacı
+// `quality:read` almadan kuyruğu izleyebilmeli — dağıtım ekranı bu kuyruğun
+// üzerine kuruluyor ve "kurşunu izleyen kişi = kaliteci" varsayımı bu fabrikada
+// artık geçerli değil (kurşun istasyonunda tablet YOK).
 router.get(
   "/queue",
   verifyToken,
-  requireAnyPermission("quality:read", "mobile:kk2-kursun"),
+  requireAnyPermission(
+    "quality:read",
+    "mobile:kk2-kursun",
+    "workorder:distribute",
+    "mobile:kursun-dagitim",
+  ),
   controller.listQueue,
 );
 
@@ -340,6 +350,10 @@ router.get(
  *       401: { description: Yetkisiz }
  *       500: { description: Sunucu hatası }
  */
+// Yetki BİLİNÇLİ olarak DAR (`quality:write`) — `priority` TABLET akışının
+// çalışma sırasıdır (`open-cards` bu alanla sıralanır) ve dağıtılmış adımlar o
+// listede zaten görünmez. Dağıtımcının sıralayacak bir şeyi yok; kuyruğu
+// izlemesi (GET /queue) ve acil işaretlemesi yeterli.
 router.patch(
   "/queue/reorder",
   verifyToken,
@@ -375,10 +389,17 @@ router.patch(
  *       404: { description: Adım bulunamadı }
  *       500: { description: Sunucu hatası }
  */
+// Yetki: "acil" bir PLANLAMA kararıdır, kalite kararı değil — dağıtımcı
+// (`workorder:distribute` / mobil ikizi) kuyruğu izlerken doğrudan
+// işaretleyebilmeli. Yazma ucu olduğu için `quality:read` yeterli DEĞİL.
 router.patch(
   "/queue/:stepId/urgent",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission(
+    "quality:write",
+    "workorder:distribute",
+    "mobile:kursun-dagitim",
+  ),
   controller.setQueueUrgent,
 );
 

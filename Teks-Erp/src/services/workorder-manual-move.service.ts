@@ -25,6 +25,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { createBatchTx, deleteIfEmptyAndTraceless, isBatchLockedTx, K18_DEAD_STATUSES } from "./batch.service";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
+import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
 
@@ -353,6 +354,54 @@ export class WorkOrderManualMoveService {
     const woBlockReason = manualMoveWoBlockReason(ctx.woStatus);
     if (t.type === "EXTERNAL") {
       warnings.push("Fason adımına taşınıyor — mal orada üretimde bekler, sevki ayrıca (Fason Sevk) yapılır.");
+    }
+
+    // KURŞUN BYPASS uyarısı: taşıma bir kurşun adımını BOŞALTIRSA (ya da ileri
+    // atlamada o adımı atlarsa) adım recompute ile COMPLETED/SKIPPED'a düşer ve
+    // `manualMove` sonundaki `voidStalePendingBypassAssignmentsTx` o adımın açık
+    // dağıtımını iptal eder. Bu önizlemede söylenmezse dağıtımcı işi hâlâ kurşuna
+    // verilmiş sanır ve Tambur'da okutmayı bekler — kimse bir şey okutmaz.
+    // Uyarı kapsamı manualMove'un iptal kapsamıyla BİREBİR aynı mantığı taşır
+    // (force YOK → yalnız terminale düşen adım).
+    const pendingBypasses = await prisma.kursunBypassAssignment.findMany({
+      where: { workOrderId, completedAt: null, cancelledAt: null },
+      select: { workOrderStepId: true, station: { select: { name: true } } },
+    });
+    if (pendingBypasses.length > 0) {
+      const movableIds = movable.map((r) => r.id);
+      const forwardSkippedStepIds = new Set(
+        isForward
+          ? ctx.steps
+              .filter((s) => s.stepSequence > minSourceSeq && s.stepSequence < t.stepSequence)
+              .map((s) => s.id)
+          : [],
+      );
+      for (const b of pendingBypasses) {
+        // Hedefin KENDİSİ dağıtılmış adımsa mal oraya GİRİYOR → atama yaşar.
+        if (b.workOrderStepId === t.id) continue;
+        let willVoid = forwardSkippedStepIds.has(b.workOrderStepId);
+        if (!willVoid && movable.some((r) => r.currentStepId === b.workOrderStepId)) {
+          // Adımda taşınmayan üretim topu KALMIYORSA adım kapanır → atama iptal.
+          // Kalıyorsa (kısmi taşıma) adım ACTIVE kalır ve dağıtım devam eder.
+          const remaining = await prisma.roll.count({
+            where: {
+              currentStepId: b.workOrderStepId,
+              id: { notIn: movableIds },
+              status: {
+                in: [
+                  RollStatus.IN_PRODUCTION,
+                  RollStatus.AT_SUBCONTRACTOR,
+                  RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+                ],
+              },
+            },
+          });
+          willVoid = remaining === 0;
+        }
+        if (willVoid) {
+          warnings.push(`Kurşun dağıtımı iptal olacak — ${b.station.name}`);
+        }
+      }
     }
 
     // 'join' adayları: aynı WO'da KİLİTSİZ + birleşmemiş (K17) diğer partiler.
@@ -749,6 +798,21 @@ export class WorkOrderManualMoveService {
           reopened = true;
         }
 
+        // 5) Kurşun bypass: taşıma sonrası BAYAT kalan dağıtım atamalarını iptal et.
+        //    `force` YOK — kapsamı adımın TAZE durumu belirlesin (bu yüzden recompute
+        //    ve backflush SKIP damgasından SONRA çalışır):
+        //      • adım COMPLETED/SKIPPED'a düştü (mal kurşundan tamamen çekildi ya da
+        //        ileri-atlamada adım atlandı) → atama anlamsız, iptal.
+        //      • adım ACTIVE/PENDING kaldı (kısmi taşıma, ya da GERİ taşımada mal
+        //        kurşuna dönüyor) → atama YAŞAR; toplar geldiğinde bypass devam eder
+        //        ve Tambur'da kart okutulunca normal şekilde kapanır.
+        //    İSTASYON GERİ YÜKLENMEZ (helper sözleşmesi).
+        const bypassVoided = await voidStalePendingBypassAssignmentsTx(
+          tx,
+          workOrderId,
+          "MANUAL_MOVE",
+        );
+
         return {
           newBatchNumber,
           deletedSourceBatches,
@@ -757,6 +821,7 @@ export class WorkOrderManualMoveService {
           synthesizedColorId,
           synthColorRollIds,
           qcVoided,
+          bypassVoided,
         };
       }),
     );
@@ -785,6 +850,9 @@ export class WorkOrderManualMoveService {
         synthColorRollIds: result.synthColorRollIds,
         qcBypassed: result.skippedStepIds.length > 0,
         qcVoided: result.qcVoided,
+        // Kurşun dağıtımı bu taşıma yüzünden iptal olduysa iz bırak — "işi kurşuna
+        // dağıtmıştık, neden listede yok?" sorusunun cevabı burası.
+        ...(result.bypassVoided > 0 ? { kursunBypassVoided: result.bypassVoided } : {}),
       },
     });
 

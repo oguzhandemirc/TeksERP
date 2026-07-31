@@ -34,6 +34,19 @@ import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-tran
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
+import { assertStepNotBypassAssigned } from "./helpers/kursun-bypass-guard.helper";
+
+/**
+ * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
+ * içindeki `findPendingBypassAssignmentTx` ile BİREBİR aynı tanım
+ * (`completedAt IS NULL AND cancelledAt IS NULL`). Helper tekil adım sorgusu
+ * döndürdüğü için `some`/`none` filtrelerinde ve nested select'lerde
+ * kullanılamıyor; yüklemin üç yerde elle kopyalanmaması için tek sabit.
+ */
+const PENDING_BYPASS_WHERE: Prisma.KursunBypassAssignmentWhereInput = {
+  completedAt: null,
+  cancelledAt: null,
+};
 
 interface RollDefectSummary {
   id: string;
@@ -74,6 +87,11 @@ interface StepSummary {
   /// (rotadaki RouteStep.defaultNotes'tan WO açılırken kopyalanır). Operatöre
   /// kart açıkken üstte sticky şerit olarak gösterilir (Tambur stepNote ile aynı).
   stepNote: string | null;
+  /// Bu adım kurşun bypass'ına DAĞITILMIŞ mı (açık atama)? Doluysa tabletteki
+  /// tüm yazma yolları 409 verir (assertStepNotBypassAssigned). Tablet ham 409
+  /// beklemek yerine kartı okutur okutmaz "bu iş <istasyon>'a dağıtıldı, kâğıtla
+  /// işleniyor" bilgi ekranını gösterebilsin diye okuma yanıtında taşınır.
+  bypassAssignment: { stationName: string; assignedAt: Date } | null;
   rolls: RollSummary[];
 }
 
@@ -101,6 +119,14 @@ export interface KursunQueueItem {
   priority: number;
   isUrgent: boolean;
   urgentMarkedAt: Date | null;
+  /**
+   * Bu adım kurşun bypass'ına dağıtılmış mı (açık atama var mı)? Planlamacı
+   * ekranında "bypass" rozeti için. AYRI bir `assignedStationName` alanı
+   * BİLİNÇLİ olarak YOK: atama `step.stationId`'yi atanan istasyona repoint
+   * ettiği için yukarıdaki `stationName` zaten ATANAN istasyondur — ikinci alan
+   * ikisini ayrı sanan bir okuyucu doğururdu.
+   */
+  bypassAssigned: boolean;
 }
 
 export class KursunQcService {
@@ -195,6 +221,13 @@ export class KursunQcService {
         station: { kind: StationKind.PROCESS_QC },
         status: { not: "COMPLETED" },
         currentRolls: { some: {} },
+        // Kurşun bypass'a DAĞITILMIŞ adımlar bu listede GÖRÜNMEZ: bu liste
+        // "kamera simülasyonu" seçim listesidir ve seçilen her kart tabletin
+        // yazma akışına (completeQc2 → finishStep) girer. Dağıtılmış adımda o
+        // akışın her adımı 409 döner → operatöre seçtirip sonra reddetmek
+        // yerine hiç göstermiyoruz. (Fiziksel kart yine okutulabilir; o yolda
+        // getByCardBarcode `bypassAssignment` ile durumu açıklar.)
+        kursunBypasses: { none: PENDING_BYPASS_WHERE },
       },
       select: {
         id: true,
@@ -308,6 +341,14 @@ export class KursunQcService {
     });
 
     const op = await prisma.$transaction(async (tx) => {
+      // Kurşun bypass: adım fiziksel bir kurşun istasyonuna dağıtılmışsa iş
+      // KÂĞITTA yürüyor — tablet KK2 kaydı yazamaz. Guard tx İÇİNDE ve ilk
+      // sırada: `existedBefore` / `hasKursunCap` okumaları tx DIŞINDA yapıldığı
+      // için pencerede araya giren `assign` bu QC2 op'unu commit ettirirdi.
+      // (Ters yön zaten kapalı: `assign` de adımda fiilen yapılmış QC2 op'u
+      // görürse dağıtımı reddediyor — iki yön birbirini eler.)
+      await assertStepNotBypassAssigned(tx, data.stepId, "KK2 tamamlama");
+
       const qc2Op = await tx.rollOperation.upsert({
         where: {
           rollId_workOrderStepId_operationType: {
@@ -440,6 +481,15 @@ export class KursunQcService {
     }
 
     await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
+
+    // Kurşun bypass: dağıtılmış adımda hatalar KÂĞITTA tutulur (fabrika kurşun
+    // istasyonuna tablet koymuyor). Dijital RollError açmak iki soruna yol açar:
+    // (a) Tambur bypass onayı hatasız bir iş bekler, (b) `assign` de "bu adımda
+    // hata kaydı var" diye dağıtımı reddediyor — ters yönde açılan kayıt o
+    // kontrolü anlamsızlaştırırdı. Guard idempotent clientErrorId dönüşünden
+    // SONRA: zaten kayıtlı hatanın replay'i 409'a düşmemeli (kayıt ya dağıtım
+    // öncesinde açıldı ya da yarışı kaybetti; ikisinde de yeni yazma yok).
+    await assertStepNotBypassAssigned(prisma, data.stepId, "hata kaydı");
 
     // Mükerrer engeli: aynı top + aynı metre + aynı hata tipi tekrar girilemez.
     // Aynı metrede FARKLI tip serbest (50. metrede hem delik hem leke olabilir).
@@ -631,6 +681,15 @@ export class KursunQcService {
       };
     }
 
+    // Kurşun bypass guard'ı — MESAJ SIRASI için burada, TX'te yeniden (aşağıda 0b).
+    // Aşağıdaki "QC2 tamamlanmamış N top var" 400'ü dağıtılmış adımda HER ZAMAN
+    // önce düşerdi: bypass rejiminde QC2 kaydı yazılmaz (`assign` zaten QC2 op'u
+    // varsa dağıtımı reddediyor), dolayısıyla tablet "işi bitir"e bastığında
+    // gerçek sebep yerine yanıltıcı bir kalite mesajı görürdü. Guard'ın tx içindeki
+    // ikizi KALDIRILMADI: burası tx dışı olduğu için eşzamanlı `assign` ile yarışır,
+    // asıl serileşme WO kilidinin altındaki kopyada sağlanır.
+    await assertStepNotBypassAssigned(prisma, step.id, "tablet adım kapatma");
+
     // Tüm açık rollerde QC2_COMPLETED olmalı — tek IN sorgusuyla kontrol et.
     // Tambur kalıtım kayıtları sayılmaz — sadece bu step'te fiilen yapılan QC2.
     const rollIds = openMovements.map((m) => m.rollId);
@@ -668,6 +727,25 @@ export class KursunQcService {
       //    mal fasondayken COMPLETED'a kaçar ya da tüm adımlar bittiği halde
       //    IN_PROGRESS'te asılı kalır. Lock sırası WO→movement/roll (kardeşlerle tutarlı).
       await touchWorkOrderTx(tx, step.workOrderId);
+
+      // 0b) Kurşun bypass guard'ı — WO kilidinden SONRA (assign de aynı kilidi
+      //     alır, böylece "dağıtım mı önce, kapanış mı önce" yarışı serileşir)
+      //     ve movement'lara dokunmadan ÖNCE. Adım dağıtılmışsa tablet kapanışı
+      //     (QC2_STEP_FINISHED marker'ı) bypass kapanışının (KURSUN_BYPASS_FINISHED)
+      //     altından malı çekerdi; iki marker karışınca reopen hangi turu geri
+      //     alacağını bilemez.
+      //
+      //     SIRA GEREKÇESİ (idempotency): "0 açık movement → başarı" erken dönüşü
+      //     bu guard'dan ÖNCE, tx'e hiç girmeden çalışır (yukarıdaki
+      //     `openMovements.length === 0` dalı). Bilinçli:
+      //       • Dağıtılmış ve HÂLÂ AÇIK adımda tablet retry'ı buraya ulaşır → 409
+      //         alır; doğru davranış, çünkü ortada gerçekten yapılmaya çalışılan
+      //         bir yazma var.
+      //       • Zaten kapanmış adımda (bypass kapanışı da movement'ları kapatır)
+      //         hiç yazma yok → guard'ı önce koşturmak offline kuyruğun geç gelen
+      //         mükerrer isteğine gereksiz 409 üretirdi. Erken dönüş sessizce
+      //         "zaten kapalı" der ve tablet kuyruğu temizler.
+      await assertStepNotBypassAssigned(tx, step.id, "tablet adım kapatma");
 
       // 1) Açık movement'leri ATOMİK kapat (qty/weight per-row eşitlik) + RETURNING
       //    ile fiilen BİZİM kapattığımız rolleri al. `exitedAt IS NULL` guard'ı:
@@ -1177,7 +1255,7 @@ export class KursunQcService {
     });
 
     const rollIds = openMovements.map((m) => m.roll.id);
-    const [qc2Ops, errors, kursunCap] = await Promise.all([
+    const [qc2Ops, errors, kursunCap, bypass] = await Promise.all([
       // Tambur kalıtım kayıtları sayılmaz — bu step'te fiilen yapılan QC2.
       prisma.rollOperation.findMany({
         where: {
@@ -1202,6 +1280,12 @@ export class KursunQcService {
       prisma.stationProperty.findFirst({
         where: { stationId: step.stationId, property: { code: "KURSUN" } },
         select: { id: true },
+      }),
+      // Kurşun bypass: adımın AÇIK ataması (varsa). Partial unique
+      // (kursun_bypass_one_pending_per_step_uq) en fazla bir satır garanti eder.
+      prisma.kursunBypassAssignment.findFirst({
+        where: { workOrderStepId: stepId, ...PENDING_BYPASS_WHERE },
+        select: { assignedAt: true, station: { select: { name: true } } },
       }),
     ]);
 
@@ -1247,6 +1331,9 @@ export class KursunQcService {
         status: step.status,
         appliesKursun: !!kursunCap,
         stepNote: step.notes,
+        bypassAssignment: bypass
+          ? { stationName: bypass.station.name, assignedAt: bypass.assignedAt }
+          : null,
         rolls,
       },
     };
@@ -1305,6 +1392,16 @@ export class KursunQcService {
             },
           },
         },
+        // Kurşun bypass rozeti: adımın AÇIK ataması var mı? Kuyruk satırı
+        // dağıtılmış olsa da LİSTEDE KALIR (listOpenCards'ın aksine) — burası
+        // planlamacının izleme yüzeyi, seçim yüzeyi değil: dağıtılan işin
+        // kuyruktan sessizce kaybolması "iş kayboldu" paniği doğururdu.
+        // `take: 1` yeter (partial unique en fazla bir açık satır bırakır).
+        kursunBypasses: {
+          where: PENDING_BYPASS_WHERE,
+          select: { id: true },
+          take: 1,
+        },
       },
       orderBy: [
         { isUrgent: "desc" },
@@ -1349,6 +1446,7 @@ export class KursunQcService {
         priority: s.priority,
         isUrgent: s.isUrgent,
         urgentMarkedAt: s.urgentMarkedAt,
+        bypassAssigned: s.kursunBypasses.length > 0,
       };
     });
 

@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
+import TamburBypassConfirmModal from './TamburBypassConfirmModal';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
@@ -236,6 +237,10 @@ export default function TamburScreen() {
 
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
+  // KURŞUN BYPASS — okutulan kartta bekleyen Kurşun Dağıtım işi varsa kart normal
+  // yolla çözülemez (toplar hâlâ kurşun adımında). Barkod burada tutulur, onay
+  // modalı açılır; onaydan sonra kart normal sekme olarak açılır.
+  const [bypassCard, setBypassCard] = useState<string | null>(null);
   const [openJobs, setOpenJobs] = useState<OpenJob[]>([]);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
@@ -501,6 +506,20 @@ export default function TamburScreen() {
         text2: `${step.batchNumber} · ${step.rolls.length} top`,
       });
     } catch (err) {
+      // KURŞUN BYPASS — kart Kurşun Dağıtım'a verilmişse toplar hâlâ kurşun
+      // adımındadır; `by-card` "bu adımda açık top yok" diye 400 atar. Context
+      // ucu bu durumda bypass önizlemesi döner: hata TOAST'I ATMA, onay modalını
+      // aç. Bekleyen iş yoksa (veya context de patlarsa) davranış AYNEN eskisi.
+      const bypass = await tamburService
+        .getContext(barcode)
+        .then((r) => (r.data as TamburContext | null)?.bypassPending ?? null)
+        .catch(() => null);
+      if (bypass) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setBypassCard(barcode);
+        if (fromInput) setCardBarcode('');
+        return;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({
         type: 'error',
@@ -2627,6 +2646,18 @@ export default function TamburScreen() {
         visible={noteModalOpen}
         note={activeJob?.context?.stepNote ?? null}
         onDismiss={() => setNoteModalOpen(false)}
+      />
+
+      {/* Kurşun Bypass onayı — kart kurşun adımında bekliyorsa okutmada açılır.
+          Onaydan sonra kart normal sekme olarak çözülür (in-flight guard çifti
+          engeller). */}
+      <TamburBypassConfirmModal
+        cardBarcode={bypassCard}
+        onDismiss={() => setBypassCard(null)}
+        onDone={(barcode) => {
+          setBypassCard(null);
+          void resolveCard(barcode, false);
+        }}
       />
 
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}

@@ -52,7 +52,7 @@ function norm(s: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1) PARTIAL INDEXLER (25) — ad + predicate + uniqueness
+// 1) PARTIAL INDEXLER (26) — ad + predicate + uniqueness
 //    uniq alanı KRİTİK: `schema.prisma:1603-1605` predicate farkını drift
 //    saymaz ama index↔unique farkını SAYAR ("aksi halde migrate dev sonsuz
 //    CREATE üretir"). Bu yüzden ikisi ayrı ayrı doğrulanır.
@@ -85,6 +85,14 @@ const PARTIAL_INDEXES: Array<{
     uniq: false,
     predicate: `(status <> 'COMPLETED'::"StepStatus")`,
     why: "açık-kart kuyruğu; COMPLETED yığını indekslenmez",
+  },
+  // kursun_bypass_assignments — LOAD-BEARING unique (migration 20260731120000_add_kursun_bypass_assignment)
+  {
+    table: "kursun_bypass_assignments",
+    index: "kursun_bypass_one_pending_per_step_uq",
+    uniq: true,
+    predicate: `(("completedAt" IS NULL) AND ("cancelledAt" IS NULL))`,
+    why: "adım başına TEK AÇIK bypass ataması — düz @unique DEĞİL, çünkü fason çok-partide aynı adıma yeni atama gerekir",
   },
   // roll_movements — biri LOAD-BEARING unique
   { table: "roll_movements", index: "roll_movements_exitedAt_idx", uniq: false, predicate: `("exitedAt" IS NOT NULL)`, why: "kapanmış movement raporu" },

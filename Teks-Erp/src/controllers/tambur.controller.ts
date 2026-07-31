@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { TamburService } from "../services/tambur.service";
 import { TamburUndoService } from "../services/tambur-undo.service";
+import { KursunBypassService } from "../services/kursun-bypass.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { FOLD_TYPES, foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
@@ -103,6 +104,17 @@ const cutWarehouseRollSchema = z.object({
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 
+// Kurşun Dağıtım (bypass) kapanışı — Tambur tabletinde refakat kartı okutulur,
+// önizleme onaylanır. `rollIds` KAPSAM sözleşmesidir: önizlemede görülen toplar
+// birebir gönderilir (servis kapsam paritesini doğrular, sessizce daha az iş
+// yapmaz). Yıkıcı-onay ilkesi: kapsam UI'da somut listelenir.
+const bypassCompleteSchema = z.object({
+  cardBarcode: z.string().trim().min(1, "Refakat kartı barkodu gereklidir"),
+  rollIds: z
+    .array(z.string().uuid("Geçersiz top ID"))
+    .min(1, "En az bir top seçilmelidir"),
+});
+
 const finalizeWarehouseCutSchema = z.object({
   remainingAction: z
     .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
@@ -113,10 +125,13 @@ const finalizeWarehouseCutSchema = z.object({
 export class TamburController {
   private service: TamburService;
   private undoService: TamburUndoService;
+  /** Kurşun Dağıtım kapanışı Tambur'dan tetiklenir — servis DOĞRUDAN çağrılır. */
+  private bypassService: KursunBypassService;
 
   constructor() {
     this.service = new TamburService();
     this.undoService = new TamburUndoService();
+    this.bypassService = new KursunBypassService();
     this.getUndoPreview = this.getUndoPreview.bind(this);
     this.applyUndo = this.applyUndo.bind(this);
     this.getPendingRolls = this.getPendingRolls.bind(this);
@@ -135,6 +150,7 @@ export class TamburController {
     this.cutWarehouseRoll = this.cutWarehouseRoll.bind(this);
     this.finalizeWarehouseCut = this.finalizeWarehouseCut.bind(this);
     this.getTamburContext = this.getTamburContext.bind(this);
+    this.completeKursunBypass = this.completeKursunBypass.bind(this);
   }
 
   /** GET /api/tambur/rolls/:rollId/undo-preview — geri alma önizlemesi (salt-okunur) */
@@ -217,6 +233,25 @@ export class TamburController {
     try {
       const cardBarcode = req.params.cardBarcode as string;
       const result = await this.service.getTamburContext(cardBarcode);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/tambur/bypass-complete — kurşun dağıtımını Tambur okutmasıyla kapat */
+  async completeKursunBypass(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = bypassCompleteSchema.parse(req.body);
+      // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
+      // (Makine damgası kapanan kurşun movement'ına YAZILMAZ — iş takipli makinede
+      // yapılmadı; yalnız denetim izine düşer.)
+      const stamp = await getStampContext(req, { enforceForMobile: true });
+      const result = await this.bypassService.completeFromTambur(
+        { cardBarcode: body.cardBarcode, rollIds: body.rollIds },
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);
