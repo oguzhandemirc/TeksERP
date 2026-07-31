@@ -732,6 +732,21 @@ export class SystemSettingService {
     dataUrl: string | null,
     userId?: string,
   ): Promise<ApiResponse<{ dataUrl: string | null }>> {
+    // A8 (2026-07-31 denetimi): read-merge-write süreç-içi kuyrukla serileşir —
+    // eşzamanlı iki farklı yükleme birbirinin items eklemesini kaybettiremez.
+    // Tek Express process invariant'ı (server.ts) altında DB kilidi gerekmez.
+    const task = documentsLogoWriteQueue.then(() => this.applyDocumentsLogo(dataUrl, userId));
+    documentsLogoWriteQueue = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    return task;
+  }
+
+  private async applyDocumentsLogo(
+    dataUrl: string | null,
+    userId?: string,
+  ): Promise<ApiResponse<{ dataUrl: string | null }>> {
     const logo = await readDocumentsLogo();
     let next: DocumentsLogo;
     if (dataUrl == null || dataUrl === "") {
@@ -1774,6 +1789,9 @@ const EMPTY_DOCUMENTS_LOGO: DocumentsLogo = { current: null, items: {} };
 /** data URL formatı + boyut guard'ı (100KB binary ≈ 137KB base64; üst sınır 160K karakter). */
 const LOGO_DATAURL_RE = /^data:image\/(png|jpeg|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
 const LOGO_MAX_CHARS = 160_000;
+// A8: setDocumentsLogo read-merge-write kuyruğu — süreç-içi seri (yalnız method
+// gövdesinde okunur; modül değerlendirmesi bittiğinde tanımlı).
+let documentsLogoWriteQueue: Promise<unknown> = Promise.resolve();
 
 /** Belge logosu kütüphanesini okur (yoksa boş). */
 export async function readDocumentsLogo(

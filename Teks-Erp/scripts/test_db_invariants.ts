@@ -164,6 +164,16 @@ const DEFERRABLE_FKS: Array<{ table: string; name: string }> = [
 // ─────────────────────────────────────────────────────────────────────────────
 const EXT_STATS: Array<{ name: string; table: string }> = [{ name: "sl_day_exact", table: "system_logs" }];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 5) EXPRESSION UNIQUE'ler (2) — migration 20260731160000_lowprio_unique_hardening
+//    Prisma expression index modelleyemez → şema-dışı. App-level case-insensitive
+//    ad kontrolünün (mode:'insensitive') YARIŞ penceresini kapatan DB seddi (A7).
+// ─────────────────────────────────────────────────────────────────────────────
+const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string }> = [
+  { table: "users", index: "users_username_lower_uq", expr: "lower(username)" },
+  { table: "permission_templates", index: "permission_templates_name_lower_uq", expr: "lower(name)" },
+];
+
 async function main(): Promise<void> {
   console.log("\n=== Şema-dışı DB invariant guard'ı ===");
   console.log(
@@ -318,6 +328,44 @@ async function main(): Promise<void> {
         ? `${live.table_name} — DATE_TRUNC('day') planner tahmini`
         : `statistics nesnesi YOK (${exp.table}) — günlük audit sorgusu yanlış plan seçebilir`
     );
+  }
+
+  // ── 5) Expression unique'ler ──
+  console.log("\n── 5) Expression unique'ler (var + UNIQUE + ifade) ──");
+  const liveExpr = await prisma.$queryRaw<
+    Array<{ table_name: string; index_name: string; is_unique: boolean; expr: string | null }>
+  >`
+    SELECT t.relname AS table_name,
+           c.relname AS index_name,
+           i.indisunique AS is_unique,
+           pg_get_expr(i.indexprs, i.indrelid) AS expr
+    FROM pg_index i
+    JOIN pg_class c ON c.oid = i.indexrelid
+    JOIN pg_class t ON t.oid = i.indrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND i.indexprs IS NOT NULL
+  `;
+  // pg_get_expr "lower((username)::text)" döner — cast/paren/boşluk fold'la karşılaştır.
+  const foldExpr = (s: string) => s.toLowerCase().replace(/::text/g, "").replace(/[()\s]/g, "");
+  const exprByName = new Map(liveExpr.map((r) => [r.index_name, r]));
+  for (const exp of EXPRESSION_UNIQUES) {
+    const live = exprByName.get(exp.index);
+    if (!live) {
+      check(exp.index, false, `expression index YOK (${exp.table}) — case yarışı seddi kayıp`);
+      continue;
+    }
+    const exprOk = live.expr != null && foldExpr(live.expr) === foldExpr(exp.expr);
+    const uniqOk = live.is_unique;
+    if (exprOk && uniqOk) {
+      check(exp.index, true, exp.expr);
+    } else {
+      check(
+        exp.index,
+        false,
+        (!uniqOk ? "UNIQUE düşmüş — sed kayboldu. " : "") +
+          (!exprOk ? `ifade DEĞİŞMİŞ: beklenen ${exp.expr}, canlı ${live.expr ?? "?"}` : ""),
+      );
+    }
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${warn > 0 ? `, ${warn} uyarı` : ""} ===`);

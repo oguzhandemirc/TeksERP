@@ -788,7 +788,11 @@ model RouteStep {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([routeId, sequence])
+  // UNIQUE (2026-07-31 denetimi, Bölüm C-A): aynı rotada iki adım aynı sıraya
+  // sahip olamaz — kardeş WorkOrderStep'in D-12 seddiyle simetri. Bugünkü tek
+  // yazma yolu (nested replace, in-memory Set) zaten güvenli; sed gelecekteki
+  // ikinci yazma yolunu ve elle SQL'i korur.
+  @@unique([routeId, sequence])
   // K7: stationId lider-kolon index'i — "bu istasyon hangi rotalarda?" sorguları
   // (station hardRemove guard'ı dahil) composite'in 2. kolonunu kullanamıyordu.
   @@index([stationId])
@@ -1155,6 +1159,10 @@ model CustomerBranch {
   updatedAt DateTime @updatedAt
 
   @@index([customerId, isActive])
+  // UNIQUE (2026-07-31 denetimi): müşteri-içi şube kodu tekil — diğer master-data'nın
+  // code @unique backstop'unun buradaki karşılığı. code NULL'ken serbest (PG'de
+  // NULL'lar çakışmaz — partial gerekmez); ad-dup bilinçli app-level (kök CLAUDE.md).
+  @@unique([customerId, code])
   @@map("customer_branches")
 }
 

@@ -790,20 +790,31 @@ export async function getSwapCommands(copyName: string): Promise<
   };
 }
 
+// A8 (2026-07-31 denetimi): kayıt dosyasının read-modify-write'ı süreç-içi
+// kuyrukla serileşir — aynı ada eşzamanlı iki verify birbirinin yazımını ezemez.
+let copyRecordsWriteQueue: Promise<unknown> = Promise.resolve();
+
 /** Mevcut bir kopyayı yeniden doğrular (idempotent). */
 export async function reverifyCopy(copyName: string): Promise<VerificationReport> {
   const report = await verifyCopy(copyName);
-  const records = await readCopyRecords();
-  const prev = records[copyName];
-  records[copyName] = {
-    sourceBackup: prev?.sourceBackup ?? "(bilinmiyor)",
-    startedAt: prev?.startedAt ?? new Date().toISOString(),
-    finishedAt: new Date().toISOString(),
-    state: report.ok ? "ready" : "failed",
-    message: report.ok ? "Yeniden doğrulandı." : "Yeniden doğrulama başarısız.",
-    verification: report,
-  };
-  await writeCopyRecords(records, await listExistingDbNames());
+  const task = copyRecordsWriteQueue.then(async () => {
+    const records = await readCopyRecords();
+    const prev = records[copyName];
+    records[copyName] = {
+      sourceBackup: prev?.sourceBackup ?? "(bilinmiyor)",
+      startedAt: prev?.startedAt ?? new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      state: report.ok ? "ready" : "failed",
+      message: report.ok ? "Yeniden doğrulandı." : "Yeniden doğrulama başarısız.",
+      verification: report,
+    };
+    await writeCopyRecords(records, await listExistingDbNames());
+  });
+  copyRecordsWriteQueue = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  await task;
   void AuditService.logEvent({
     category: "SYSTEM",
     action: "DB_COPY_VERIFIED",
