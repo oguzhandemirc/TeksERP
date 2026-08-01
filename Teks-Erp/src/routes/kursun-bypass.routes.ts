@@ -117,7 +117,7 @@ router.post("/:id/cancel", verifyToken, canDistribute, controller.cancelAssignme
  * /api/kursun-bypass/{id}/complete-preview:
  *   get:
  *     tags: [KursunBypass]
- *     summary: "İşi Bitir" öncesi salt-okunur önizleme
+ *     summary: '"İşi Bitir" öncesi salt-okunur önizleme'
  *     description: |
  *       Hiçbir şeyi değiştirmez. `canComplete=false` ise `blockReason` somut
  *       sebebi söyler. `willFinalize` toplara ne olacağını gösterir (WAREHOUSE,
