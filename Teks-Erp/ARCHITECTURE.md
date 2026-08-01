@@ -28,7 +28,7 @@
 Teks-Erp/
 ├── prisma/
 │   ├── schema.prisma          # ~78 model, ~35 enum (kanonik kaynak — sayı yaklaşık)
-│   ├── seed.ts                # Tek dosya: 58 permission + 16 template + 1 kullanıcı (admin) + 3 kalite + master demo
+│   ├── seed.ts                # Tek dosya: 58 permission (katalog src/constants/permission-catalog.ts'ten) + 16 template + 1 kullanıcı (admin) + 3 kalite + master demo
 │   └── migrations/            # ~114 migration (son: 20260714151000_dispatch_item_unique_dispatch_roll)
 │
 ├── src/
@@ -37,6 +37,14 @@ Teks-Erp/
 │   │
 │   ├── config/
 │   │   └── swagger.ts         # OpenAPI 3.0
+│   │
+│   ├── constants/
+│   │   └── permission-catalog.ts  # İZİN KATALOĞU — TEK KAYNAK (seed + boot uzlaştırma + bekçi testi okur)
+│   │
+│   ├── jobs/
+│   │   ├── archive-scheduler.ts       # SystemLog arşivi (start +60sn, 24 saatte bir)
+│   │   ├── backup-scheduler.ts        # pg_dump + rotasyon (SystemSetting backup.hour)
+│   │   └── permission-catalog.job.ts  # Açılışta katalog↔DB uzlaştırması (yalnız EKLER)
 │   │
 │   ├── lib/
 │   │   └── prisma.ts          # PrismaClient singleton (pg adapter, pool max=30)
@@ -316,11 +324,16 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 `seed.ts` **yalnız `admin`'i (tüm 58 permission) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
 
-### Yeni Endpoint Yazarken
+### Yeni Endpoint Yazarken (2026-08-01 — TEK DOSYA)
 
-Yeni `requirePermission(code)` çağrısında:
-1. `code` `seed.ts`'in `permissionData` listesinde **olmalı** — yoksa Admin dışı kullanıcılar 403 alır
-2. Hem `seed.ts`'i güncelle hem de canlı DB'ye yeni permission INSERT + ihtiyacı olan kullanıcı/template'lere bağla
+Yeni `requirePermission(code)` çağrısında `code` **`src/constants/permission-catalog.ts`'teki `PERMISSION_CATALOG` dizisinde olmalı** — yoksa Admin dışı kullanıcılar 403 alır. Yapılacak tek şey o diziye bir satır eklemektir; liste artık `seed.ts` içinde DEĞİL (eski `permissionData` kaldırıldı).
+
+Katalogu üç tüketici okur — kopyalanacak ikinci bir liste yok:
+1. **`prisma/seed.ts`** — taze kurulumun ilk yazımı (idempotent: `createMany({ skipDuplicates })`).
+2. **`src/jobs/permission-catalog.job.ts`** — backend her açılışta DB'deki EKSİK satırları yazar (mevcut fabrikalar; "kodu deploy etmek = katalogu getirmek"). Yalnız EKLER: silmez, mevcut satırın alanlarını ezmez.
+3. **`scripts/test_permission_catalog.ts`** — `npm test` içinde koşan bekçi; kodda geçip katalogda olmayan izni (yazım hatası dahil) düşürür.
+
+Geriye kalan **tek elle iş ATAMA**dır (kim bu izne sahip): panelden ya da `scripts/sync-*-permissions.ts`. Kural: *katalog koda, atama script'e.* Detay + gerekçe: `CLAUDE.md` → "RBAC Permission Kodları".
 
 ---
 
@@ -1045,4 +1058,4 @@ npx tsc --noEmit             # Type-check (build'siz)
 - [ ] Transaction içinde `Promise.all([tx.*])` yok mu?
 - [ ] `any` type kullanılmadı mı?
 - [ ] Zod `z.record()` iki arg ile mi çağrıldı?
-- [ ] Yeni endpoint için RBAC permission kodu seçildi mi (seed'de tanımlı olduğu doğrulandı mı)?
+- [ ] Yeni endpoint için RBAC permission kodu seçildi mi (`src/constants/permission-catalog.ts`'te tanımlı mı — `npm test` bekçisi doğrular)?

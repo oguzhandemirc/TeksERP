@@ -5,6 +5,7 @@ import app from './app';
 import prisma, { pool } from './lib/prisma';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { startBackupScheduler } from './jobs/backup-scheduler';
+import { startPermissionCatalogReconciler } from './jobs/permission-catalog.job';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
@@ -79,6 +80,14 @@ const server = app.listen(Number(PORT), HOST, () => {
 
     startArchiveScheduler();
     startBackupScheduler();
+    // İzin kataloğu uzlaştırması BOOT-TIME'dır çünkü tek alternatifi olan "elle SQL
+    // / veri migration'ı yaz" adımı UNUTULABİLİR bir adımdır ve 2026-08-01'de fiilen
+    // unutuldu (kurşun bypass ekranı canlıya çıktı, izin satırı olmadığı için Admin
+    // dışı herkes 403 aldı, teşhis saatler sürdü). Burada koştuğunda denklem şu olur:
+    // KODU DEPLOY ETMEK = KATALOGU GETİRMEK. Yalnız EKLER — hiçbir satırı silmez ya
+    // da güncellemez, dolayısıyla kimsenin yetkisi sessizce düşmez. Best-effort:
+    // başarısız olursa sunucuyu düşürmez, gürültülü loglar.
+    startPermissionCatalogReconciler();
 
     void AuditService.logEvent({
         category: "SYSTEM",

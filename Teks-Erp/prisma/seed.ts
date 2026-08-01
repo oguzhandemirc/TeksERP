@@ -3,6 +3,8 @@
 // =============================================================================
 // Tek dosya, "boş DB'den sıfır kurulum" akışı. Her şey `create` ile yazılır;
 // ikinci kez çalıştırılırsa unique constraint hatası verir — bu beklenen.
+// (TEK İSTİSNA: izin satırları — onların ikinci bir yazarı var, backend'in
+//  boot-time uzlaştırması; gerekçe 1. adımın başında.)
 // Yeniden yüklemek için:
 //
 //   PGPASSWORD=... psql -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
@@ -10,7 +12,8 @@
 //   npm run seed
 //
 // Yüklenenler (TEMİZ FABRİKA KURULUMU — müşteri/renk/ürün/sipariş/top YOK):
-//   1. 55 permission (web + mobil + admin — roll:manual-adjust dahil)
+//   1. 58 permission (web + mobil + admin — roll:manual-adjust dahil)
+//      TEK KAYNAK: `src/constants/permission-catalog.ts` (liste artık burada değil)
 //   2. 15 permission template (Admin Tam Yetki + mobil/masaüstü roller)
 //   3. 1 kullanıcı (yalnız admin)
 //   4. Admin'e tüm yetkiler atanır
@@ -27,6 +30,7 @@ import { Pool } from "pg";
 import * as bcrypt from "bcryptjs";
 import "dotenv/config";
 import { buildDefaultFields } from "../src/config/label-fields";
+import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -42,83 +46,34 @@ async function main() {
   // ===========================================================================
   // 1. PERMISSIONS
   // ===========================================================================
-  const permissionData: {
-    code: string;
-    module: string;
-    category: "web" | "mobile" | "admin";
-    description?: string;
-  }[] = [
-    // ----- WEB / API endpoint izinleri -----
-    { code: "order:read", module: "SALES", category: "web", description: "Sipariş listesi/detay görüntüleme" },
-    { code: "order:write", module: "SALES", category: "web", description: "Sipariş oluşturma/düzenleme/iptal" },
-    { code: "customer:read", module: "SALES", category: "web", description: "Müşteri listesi/detay görüntüleme" },
-    { code: "customer:write", module: "SALES", category: "web", description: "Müşteri oluşturma/düzenleme" },
-    { code: "workorder:read", module: "PRODUCTION", category: "web", description: "İş emri listesi/detay görüntüleme" },
-    { code: "workorder:write", module: "PRODUCTION", category: "web", description: "İş emri oluşturma/düzenleme/finalize etme" },
-    { code: "roll:read", module: "PRODUCTION", category: "web", description: "Top (rulo) listesi/detay görüntüleme" },
-    { code: "roll:write", module: "PRODUCTION", category: "web", description: "Top oluşturma/durum güncelleme" },
-    { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
-    { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü iş emrini fiziksel kurşun makinesine atama + son-adım tamamlama" },
-    { code: "station:read", module: "PRODUCTION", category: "web", description: "Üretim istasyonu listesi/detay görüntüleme" },
-    { code: "station:write", module: "PRODUCTION", category: "web", description: "Üretim istasyonu tanımlama/düzenleme" },
-    { code: "item:read", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı listesi/detay görüntüleme" },
-    { code: "item:write", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı oluşturma/düzenleme" },
-    { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
-    { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
-    { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },
-    { code: "property:write", module: "QUALITY", category: "web", description: "Özellik tanımlama/düzenleme" },
-    { code: "subcontractor:read", module: "SUBCONTRACTOR", category: "web", description: "Fason firma listesi/detay görüntüleme" },
-    { code: "subcontractor:write", module: "SUBCONTRACTOR", category: "web", description: "Fason firma oluşturma/düzenleme" },
-    { code: "kartela:read", module: "KARTELA", category: "web", description: "Kartela sevk/kabul takibi" },
-    { code: "kartela:write", module: "KARTELA", category: "web", description: "Kartela sevk/kabul + iptal" },
-    { code: "customer-alias:read", module: "SALES", category: "web", description: "Müşteriye özel renk/isim eşlemesini görüntüleme" },
-    { code: "customer-alias:write", module: "SALES", category: "web", description: "Müşteriye özel renk/isim eşlemesi tanımlama" },
-    { code: "label:read", module: "LOGISTICS", category: "web", description: "Etiket payload'unu görüntüleme" },
-    { code: "label:print", module: "LOGISTICS", category: "web", description: "Etiket basma aksiyonu" },
-    { code: "label:edit", module: "LOGISTICS", category: "web", description: "Sipariş satırı bazlı müşteri ismi/renk override" },
-    { code: "label-template:read", module: "LOGISTICS", category: "web", description: "Etiket şablonu listele" },
-    { code: "label-template:write", module: "LOGISTICS", category: "web", description: "Etiket şablonu oluşturma/düzenleme/silme" },
-    { code: "shipping:read", module: "LOGISTICS", category: "web", description: "Sevkiyat/çuval listesi/detay görüntüleme" },
-    { code: "shipping:write", module: "LOGISTICS", category: "web", description: "Çuval/irsaliye oluşturma, tartı/kapama, sevk" },
-    { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
-    { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu oluşturma/düzenleme/silme" },
-    { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
-    { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
-    { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
-    { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
-    { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş raporları" },
-    { code: "report:quality", module: "REPORTS", category: "web", description: "Kalite raporları" },
-    { code: "report:inventory", module: "REPORTS", category: "web", description: "Stok & depo raporları" },
-    { code: "report:subcontract", module: "REPORTS", category: "web", description: "Fason raporları" },
-    { code: "report:customer", module: "REPORTS", category: "web", description: "Müşteri / satış profil raporları" },
-    { code: "report:audit", module: "REPORTS", category: "web", description: "Sistem / audit raporları" },
-
-    // ----- MOBİL EKRAN izinleri -----
-    // Route'larda `requireAnyPermission("web:perm", "mobile:xxx")` ile web
-    // yetkilerine alternatif kabul edilir.
-    { code: "mobile:kk1", module: "MOBILE", category: "mobile", description: "KK1 ham giriş ekranı" },
-    { code: "mobile:kk2-kursun", module: "MOBILE", category: "mobile", description: "Kurşun + KK2 ekranı" },
-    { code: "mobile:tambur", module: "MOBILE", category: "mobile", description: "Tambur karar ekranı" },
-    { code: "mobile:depo", module: "MOBILE", category: "mobile", description: "Depo ekranı" },
-    { code: "mobile:fason-sevk", module: "MOBILE", category: "mobile", description: "Fason sevk ekranı" },
-    { code: "mobile:fason-kabul", module: "MOBILE", category: "mobile", description: "Fason mal kabul ekranı" },
-    { code: "mobile:kartela-sevk", module: "MOBILE", category: "mobile", description: "Kartela sevk ekranı" },
-    { code: "mobile:kartela-kabul", module: "MOBILE", category: "mobile", description: "Kartela mal kabul ekranı" },
-    { code: "mobile:tarti-paket", module: "MOBILE", category: "mobile", description: "Tartı & Paketleme ekranı" },
-    { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
-    { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
-    { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → iş emri başlat + iş emri yönetimi)" },
-    { code: "mobile:kursun-dagitim", module: "MOBILE", category: "mobile", description: "Mobil — Kurşun Dağıtım ekranı" },
-    // Ekran değil, KK1 içi yetenek: yalnız seçili ham giriş operatörlerine verilir.
-    { code: "mobile:kk1-desen", module: "MOBILE", category: "mobile", description: "KK1 ham girişte inline yeni desen (FABRIC kumaş) oluşturma" },
-    { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
-  ];
-
-  const permissions = await Promise.all(
-    permissionData.map((p) => prisma.permission.create({ data: p }))
-  );
+  // Liste burada DEĞİL — TEK KAYNAK `src/constants/permission-catalog.ts`.
+  // Aynı katalogu backend açılışta da okur ve DB'de eksik satırları yazar
+  // (boot-time uzlaştırma, `src/jobs/permission-catalog.job.ts`); seed yalnız
+  // taze kurulumun ilk yazımıdır. Yeni izin eklerken buraya DEĞİL, katalog
+  // dosyasına yaz.
+  //
+  // ⚠️ Bu ADIM bilinçli olarak İDEMPOTENT — seed'in geri kalanının aksine.
+  // Neden: artık izin satırlarının İKİ yazarı var (seed + boot-time uzlaştırma).
+  // Taze kurulumda backend seed'den ÖNCE bir kez ayağa kalkarsa (dev'de
+  // `npm run dev`, sahada servis otomatik başlarsa) katalog DB'ye zaten gelmiş
+  // olur; `create` bunu P2002 sayıp seed'i daha ilk adımda düşürürdü ve DB
+  // yarım kalırdı. `skipDuplicates` iki yazarı da aynı tek kaynağa yazdığı için
+  // güvenli — çakışan satırın içeriği zaten aynı katalogdan gelmiştir.
+  const { count: yeniIzinSayisi } = await prisma.permission.createMany({
+    data: PERMISSION_CATALOG.map((p) => ({
+      code: p.code,
+      module: p.module,
+      category: p.category,
+      description: p.description,
+    })),
+    skipDuplicates: true,
+  });
+  const permissions = await prisma.permission.findMany({ select: { id: true, code: true } });
   const permByCode = new Map(permissions.map((p) => [p.code, p]));
-  console.log(`✅ ${permissions.length} permission`);
+  console.log(
+    `✅ ${permissions.length} permission (${yeniIzinSayisi} yeni yazıldı, ` +
+      `${permissions.length - yeniIzinSayisi} zaten vardı)`
+  );
 
   // ===========================================================================
   // 2. PERMISSION TEMPLATES (Admin + mobil roller)
@@ -127,7 +82,7 @@ async function main() {
     {
       name: "Admin (Tam Yetki)",
       description: "Tüm web + mobil + admin yetkileri",
-      codes: permissionData.map((p) => p.code),
+      codes: PERMISSION_CATALOG.map((p) => p.code),
     },
     {
       // Yeni kullanıcının varsayılan aldığı üretim paketi (KK1↔KK2↔Tambur rotasyonu).
@@ -217,13 +172,13 @@ async function main() {
   // ===========================================================================
   // Diğer kullanıcılar yetkisiz başlar; admin web UI'sından kademeli atayacak.
   await prisma.userPermission.createMany({
-    data: permissionData.map((p) => ({
+    data: PERMISSION_CATALOG.map((p) => ({
       userId: adminUser.id,
       permissionId: permByCode.get(p.code)!.id,
       grantedById: adminUser.id,
     })),
   });
-  console.log(`✅ Admin'e ${permissionData.length} yetki atandı`);
+  console.log(`✅ Admin'e ${PERMISSION_CATALOG.length} yetki atandı`);
 
   // ===========================================================================
   // 5. QUALITY GRADES — 1.KALITE / A1 / FIRE

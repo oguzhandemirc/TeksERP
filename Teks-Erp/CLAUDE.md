@@ -89,14 +89,29 @@ Sadece bunlar. Alternatif tanıtma.
 
 > Eski `shipment:*` ve `allocation:*` permission'ları 2026-05-25'te silindi; yeni sevkiyat yazımıyla `shipping:read/write` + `return:read/write` (LOGISTICS) ve mobil ekran izinleri geldi.
 
-Yeni endpoint yazarken `requirePermission(code)`'daki `code` **DB'de olmalı** (yoksa Admin dışı kullanıcılar 403 alır). Yeni permission eklerken **İKİ** dosyaya yaz:
+### Yeni izin eklemek — TEK DOSYA (2026-08-01 kalıcı çözümü)
 
-1. **`seed.ts`** — taze kurulum için (seed yalnız ilk kurulumda koşar).
-2. **Bir veri migration'ı** — mevcut fabrikalar için. `INSERT ... ON CONFLICT ("code") DO NOTHING` ile idempotent. Emsal: `20260801020000_kursun_bypass_permission_catalog`.
+Yeni endpoint yazarken `requirePermission(code)`'daki `code` **DB'de olmalı** (yoksa Admin dışı kullanıcılar 403 alır ve hata mesajı sebebi söylemez). Bunu artık **unutmak mümkün değil** — izin eklemenin TEK adımı var:
 
-**Neden migration (2026-08-01'de değişti):** izin kodu, `requirePermission` yazıldığı anda kodun sözleşmesinin parçası olur ve ortama göre değişmez — yani şema gibi davranır. Eskiden kural "canlı DB'ye elle INSERT et" idi; o adım **unutulabilir bir adımdı ve fiilen unutuldu** (kurşun bypass ekranı canlıya çıktı ama izin satırı olmadığı için kimse göremedi, teşhis saatler aldı). `migrate deploy` zaten deploy'un parçası → katalog kendiliğinden gelir. Migration'da veri değiştirmek repo'da zaten emsalli (`20260713092000_drop_produced_roll_status` toplu `UPDATE` yapıyor).
+> **`src/constants/permission-catalog.ts` → `PERMISSION_CATALOG` dizisine bir satır ekle. Başka hiçbir yere kopyalama.**
 
-**Migration'a NE GİRMEZ:** kullanıcı→izin ATAMALARI ve fabrikanın düzenlemiş olabileceği şablon içerikleri — bunlar ortama özgüdür, panelden veya `scripts/sync-*-permissions.ts` deseniyle verilir. Kural: *katalog migration'a, atama script'e.*
+Üç parça o tek listeden beslenir:
+
+| Parça | Dosya | İşi |
+|---|---|---|
+| 1. **Tek kaynak** | `src/constants/permission-catalog.ts` | 58 izin satırı. `category` Prisma `PermissionCategory` enum'una bağlı → yazım hatası **derlemede** düşer. |
+| 2. **Boot-time uzlaştırma** | `src/jobs/permission-catalog.job.ts` (`server.ts`'ten çağrılır) | Backend **her açılışta** katalogla DB'yi karşılaştırır, EKSİK satırları yazar. Denklem: **kodu deploy etmek = katalogu getirmek.** |
+| 3. **Mekanik bekçi** | `scripts/test_permission_catalog.ts` (`npm test`) | Route/controller/servislerdeki izin kodlarını TS AST ile tarar; katalogda olmayanı **geliştirme anında** düşürür. Ayrıca katalog ⊆ DB'yi doğrular (kırmızıysa "uzlaştırma bu DB'de koşmamış" sinyali). |
+
+**Artık GEREKMEYEN iki adım:** ~~canlı DB'ye elle INSERT~~ ve ~~her izin için ayrı veri migration'ı~~. İkisi de "unutulabilir bir adımdı ve fiilen unutuldu" (2026-08-01: kurşun bypass ekranı canlıya çıktı, izin satırı olmadığı için kimse göremedi, teşhis saatler aldı). Boot uzlaştırması ikisinin de işini yapar; `pm2 restart` zaten deploy'un parçasıdır.
+
+> `20260801020000_kursun_bypass_permission_catalog` migration'ı **duruyor ve silinmeyecek** (uygulanmış migration IMMUTABLE'dır; ayrıca kendisi `ON CONFLICT DO NOTHING` ile idempotenttir). Yalnız **emsal olmaktan çıktı** — yeni izin için benzerini YAZMA. Çift kaynak riski yok: migration ile uzlaştırma aynı katalog satırını yazar, ikincisi çakışanı atlar.
+
+**Uzlaştırma yalnız EKLER — silmez, güncellemez.** Katalogdan bir kodu çıkarmak onu DB'den kaldırmaz (kullanıcı atamaları sessizce düşmesin diye); mevcut satırın `description`/`module` alanları da ezilmez (fabrika panelden düzeltmiş olabilir). Gerçekten kaldırmak/yeniden adlandırmak **bilinçli bir veri migration'ı** ister.
+
+**Katalog NE İÇERMEZ:** kullanıcı→izin ATAMALARI ve fabrikanın düzenlemiş olabileceği şablon içerikleri — bunlar ortama özgüdür (bir kurulumda planlamacı Ahmet, diğerinde Mehmet), panelden veya `scripts/sync-*-permissions.ts` deseniyle verilir. Kural: *katalog koda, atama script'e.* Yeni bir ekran canlıda görünmüyorsa sırayla bak: (1) satır DB'de mi (boot log'u: `[permission-catalog] ...`), (2) kullanıcıya **atanmış** mı, (3) kullanıcı yeniden giriş yaptı mı (JWT'deki izin listesi bayat olabilir).
+
+> **Mobil ayrı union taşır:** `mobil/src/types/permissions.ts` bağımsız bir projedir, bu katalogu import edemez — mobil ekran izni eklerken oradaki liste elle güncellenir (bekçi orayı taramaz).
 
 Detay: ARCHITECTURE.md §6.
 
@@ -145,7 +160,7 @@ Detay: ARCHITECTURE.md §6.
 - [ ] `prisma generate` çalıştırıldı
 - [ ] Service: transaction + `AuditService.log()` her CUD'de
 - [ ] Controller: Zod validate + service çağır
-- [ ] Route: `verifyToken` + `requirePermission(seed'de olan kod)` + Swagger JSDoc
+- [ ] Route: `verifyToken` + `requirePermission(kod)` + Swagger JSDoc — kod `src/constants/permission-catalog.ts`'te **olmalı** (bekçi: `scripts/test_permission_catalog.ts`)
 - [ ] `app.ts`'e `app.use("/api/...", routes)` eklendi
 - [ ] Fiziksel DELETE değil `isActive: false` veya status değişikliği
 - [ ] `any` yok
