@@ -19,9 +19,11 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import "dotenv/config";
+// Oturumu UTC-ye sabitler — adapter-pg timestamptz-i UTC varsayar (bkz. src/lib/pg-session.ts).
+import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 
 const P = "DEMO-"; // marker prefix — temizlik bu prefix'e göre çalışır
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, options: PG_SESSION_OPTIONS });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 

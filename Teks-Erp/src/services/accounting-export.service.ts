@@ -127,6 +127,15 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
   //  • DÖNEM: ids yok → HER ZAMAN sınırlı tarih penceresi. Aralık verilmezse son
   //    DEFAULT_DAYS gün uygulanır ("filtresiz tüm-zaman" çekimi İMKANSIZ); verilirse
   //    MAX_RANGE'i aşamaz. dateField geçersizse dispatchedAt'e düşer.
+  //
+  // SAAT DİLİMİ SÖZLEŞMESİ (2026-08-01, kolonlar timestamptz): `dateFrom`/`dateTo`
+  // MUTLAK AN'lardır — takvim günü DEĞİL. Muhasebe dönemini kapatan gün sınırını
+  // İSTEMCİ çizer (Electron tarih seçicisi, YEREL 00:00 / 23:59:59.999 anını ISO
+  // olarak gönderir). Backend burada gün başına YUVARLAMA YAPMAZ: yaparsa aynı
+  // niyet iki kez yorumlanır ve dönem uçlarındaki sevkler ya çift ya hiç sayılır.
+  // Bu ayrım muhasebe için kritik — ay sonu 23:00'te yapılan bir sevkin hangi aya
+  // yazıldığı istemcinin gönderdiği pencereyle belirlenir, sunucunun `TZ`'siyle değil.
+  // Varsayılan pencere (son DEFAULT_DAYS gün) bilinçli olarak MUTLAK'tır.
   const idsRaw = typeof req.query.ids === "string" ? req.query.ids.trim() : "";
   const idList = idsRaw
     ? idsRaw.split(",").map((s) => s.trim()).filter((s) => UUID_RE.test(s))

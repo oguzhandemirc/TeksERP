@@ -16,15 +16,33 @@
 // - Checksum/Crockford YOK: etiketler her zaman OKUTULUR (elle yazılmaz) ve
 //   Code128/QR sembolünün kendi check-digit'i yanlış okumayı zaten yakalar.
 //   İnsan-okur kod = tarama barkodu (tek kod) — kartta iki ayrı kod basılmaz.
+// - "Gün" = FABRİKA takvim günü (Europe/Istanbul) — `src/constants/time.ts`.
+//   Sayaç GÜN başına sıfırlandığı için bu bir gün SINIRI kararıdır, gösterim değil.
 // =============================================================================
 
-/** Türkiye sırasıyla tarih: GGAAYY (gün-ay-yıl). Örn 12 Temmuz 2026 → "120726". */
+import { factoryYmd } from "../constants/time";
+
+/**
+ * Türkiye sırasıyla tarih: GGAAYY (gün-ay-yıl). Örn 12 Temmuz 2026 → "120726".
+ *
+ * GÜN = FABRİKA TAKVİM GÜNÜ (`Europe/Istanbul`), süreç saat dilimi DEĞİL.
+ * Bu bir gösterim tercihi değil, gün sınırı kararıdır: kod hem etikette basılan
+ * insan-okur numaradır hem de günlük sıra sayacının anahtarıdır
+ * (`where: { startsWith: prefix }`). Gece 01:30'da okutulan topun barkodu
+ * operatörün takvimine göre BUGÜNÜ göstermeli ve sayaç o gün 0001'den
+ * başlamalıdır.
+ *
+ * Eski hâli `date.getDate()/getMonth()/getFullYear()` ile süreç saat dilimine
+ * (`TZ` env) yaslanıyordu ve bunu hiçbir yerde YAZMIYORDU. Sahadaki Windows
+ * sunucu Europe/Istanbul olduğu için sonuç DOĞRUYDU — ama UTC kurulan/konteynere
+ * alınan bir sunucuda her gece 00:00–03:00 arasında üretilen belge numaraları
+ * BİR ÖNCEKİ günün GGAAYY'sini taşır ve o günün sayacına eklenirdi. Bugün
+ * Europe/Istanbul host'ta bu değişiklik DAVRANIŞ DEĞİŞTİRMEZ (birebir aynı çıktı);
+ * yaptığı tek şey kararı örtük olmaktan çıkarmaktır. Bkz. constants/time.ts.
+ */
 export function ddmmyy(date: Date = new Date()): string {
-  return (
-    String(date.getDate()).padStart(2, "0") +
-    String(date.getMonth() + 1).padStart(2, "0") +
-    String(date.getFullYear()).slice(2)
-  );
+  const ymd = factoryYmd(date); // "YYYY-MM-DD" (fabrika takvim günü)
+  return `${ymd.slice(8, 10)}${ymd.slice(5, 7)}${ymd.slice(2, 4)}`;
 }
 
 /**

@@ -20,6 +20,7 @@
 //     TAVANLI kalır: ~150-200 satır/gün × 90 gün).
 
 import prisma from "../lib/prisma";
+import { factoryDayKeyUtcMidnight } from "../constants/time";
 import {
   BUCKET_BOUNDS_MS,
   bucketIndex,
@@ -53,14 +54,22 @@ let lastFlushError: string | null = null;
 let lastFlushOkAt: number | null = null;
 
 /**
- * Fabrika-YEREL takvim günü, UTC-midnight Date olarak. NEDEN UTC-midnight:
- * Prisma 7 + adapter-pg, DateTime'ı UTC'ye çevirip DATE kolonuna UTC
- * gün-parçasını yazar — local-midnight verilseydi (UTC+3'te önceki gün 21:00Z)
- * her satır 1 gün geri etiketlenirdi (denetimde canlı probla kanıtlandı).
- * Yerel Y/M/D + Date.UTC → kolonda tam yerel takvim günü durur.
+ * Fabrika takvim günü (Europe/Istanbul), UTC-midnight Date olarak.
+ *
+ * NEDEN UTC-midnight: Prisma 7 + adapter-pg, DateTime'ı UTC'ye çevirip DATE
+ * kolonuna UTC gün-parçasını yazar — local-midnight verilseydi (UTC+3'te önceki
+ * gün 21:00Z) her satır 1 gün geri etiketlenirdi (denetimde canlı probla
+ * kanıtlandı). Yerel Y/M/D + Date.UTC → kolonda tam yerel takvim günü durur.
+ *
+ * NEDEN AÇIK SAAT DİLİMİ: `EndpointLatencyDaily.day` bilinçli olarak `@db.Date`
+ * (timestamptz'ye çevrilmedi — CLAUDE.md O-11'deki tek istisna), yani saat
+ * TAŞIMAZ; hangi güne yazıldığı tamamen bu fonksiyonun kararıdır. Eski hâli
+ * `now.getFullYear()/getMonth()/getDate()` ile SÜREÇ saat dilimini kullanıyordu
+ * ve bunu hiçbir yerde yazmıyordu → UTC kurulan bir sunucuda rollup anahtarı
+ * kayar, aynı günün 00:00–03:00 trafiği bir önceki günün satırına eklenirdi.
  */
 function localDay(now = new Date()): Date {
-  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  return factoryDayKeyUtcMidnight(now);
 }
 
 /** DB'den dönen day her zaman UTC-midnight → ISO gün parçası doğru etiket. */

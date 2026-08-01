@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { AppError } from "../../utils/app-error";
+import { factoryDayStart, factoryYmd } from "../../constants/time";
 
 const DAY_MS = 86_400_000;
 const DEFAULT_RANGE_DAYS = 30;
@@ -32,7 +33,19 @@ export interface DateRange {
   to: Date;
 }
 
-/** Boş gelirse son 30 gün uygula; aralık > 366 gün ise 400. */
+/**
+ * Boş gelirse son 30 gün uygula; aralık > 366 gün ise 400.
+ *
+ * SAAT DİLİMİ SÖZLEŞMESİ: `dateFrom`/`dateTo` MUTLAK AN'lardır (ISO 8601, offset
+ * taşır) — takvim günü değil. Gün sınırını İSTEMCİ çizer: Electron rapor filtresi
+ * seçilen takvim gününün YEREL 00:00.000 / 23:59:59.999 anını ISO'ya çevirip
+ * gönderir (`Electron/src/pages/Reports/_hooks/useReportDateRange.ts`). Burada
+ * ekstra bir gün yuvarlaması YAPILMAZ; aksi halde istemcinin niyeti iki kez
+ * yorumlanır. Sorgu İÇİNDEKİ günlük gruplama ise ayrı bir sorudur ve fabrika
+ * takvim gününe göre kesilir (bkz. `constants/time.ts` → `factoryDaySql`).
+ * Varsayılan aralık (son 30 gün) bilinçli olarak MUTLAK penceredir: "şu andan
+ * geriye 30×24 saat" — gün başına yuvarlanmaz.
+ */
 export function resolveDateRange(input: DateRangeInput): DateRange {
   const now = new Date();
   const from = input.dateFrom
@@ -65,23 +78,34 @@ export function reportEnvelope<T>(data: T, range: DateRange): ReportResponse<T> 
   };
 }
 
-/** Bucketed seri için günleri tek tek dolduran yardımcı. */
+/**
+ * Bucketed seri için günleri tek tek dolduran yardımcı — boş günleri sıfırla
+ * doldurmak isteyen grafikler için (şu an çağıran yok, ama SQL tarafındaki
+ * gün kesme sözleşmesiyle hizalı kalmalı ki ilk kullanan kayık seri üretmesin).
+ *
+ * GÜN = FABRİKA TAKVİM GÜNÜ (Europe/Istanbul) — SQL tarafındaki `factoryDaySql`
+ * ile AYNI sınır. Eskiden `setHours(0,0,0,0)` ile SÜREÇ saat dilimine (TZ env)
+ * bağlıydı: sunucu UTC kurulursa seri etiketleri SQL'in ürettiği günlerden
+ * kayardı ve grafik "boş gün" uydururdu.
+ */
 export function* eachDay(range: DateRange): Generator<Date> {
-  const start = new Date(range.from);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(range.to);
-  end.setHours(0, 0, 0, 0);
-  const cur = new Date(start);
+  const start = factoryDayStart(range.from);
+  const end = factoryDayStart(range.to);
+  let cur = start;
   while (cur <= end) {
-    yield new Date(cur);
-    cur.setDate(cur.getDate() + 1);
+    yield cur;
+    // Bir sonraki takvim günü: 26 saat ileri atıp tekrar güne oturt. DST'de
+    // 23/25 saatlik günler olabileceği için sabit +24sa eklemek gün ATLAYABİLİR
+    // ya da AYNI günü iki kez üretebilir (Türkiye'de yaz saati yok, ama bu
+    // yardımcı saat dilimi sabitine bağlı — varsayımı koda gömme).
+    cur = factoryDayStart(new Date(cur.getTime() + 26 * 3_600_000));
   }
 }
 
-/** YYYY-MM-DD (local). Chart kategorisi olarak kullanılır. */
+/**
+ * YYYY-MM-DD — chart kategorisi. FABRİKA takvim gününe göre (süreç saat dilimine
+ * göre DEĞİL); raw SQL'in döndürdüğü gün etiketiyle aynı sözleşme.
+ */
 export function ymdLocal(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return factoryYmd(d);
 }

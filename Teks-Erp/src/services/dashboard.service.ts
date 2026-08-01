@@ -7,6 +7,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { factoryDayStart } from "../constants/time";
 
 export interface DefectsSummary {
   /** isProcessed = false (Tambur'da kapatılmamış) açık hata sayısı. */
@@ -29,10 +30,21 @@ export interface StationLiveStateRow {
   todayDispatchedCount: number;
 }
 
+/**
+ * Dashboard'ın TÜM "bugün" sayaçlarının ortak sınırı: FABRİKA takvim gününün
+ * başlangıcı (Europe/Istanbul 00:00), mutlak an olarak.
+ *
+ * NEDEN AÇIK SAAT DİLİMİ: bu sayaçları vardiya başındaki operatör okuyor —
+ * "bugün" onun duvar saatidir. Kolonlar timestamptz olduğu için sınırı MUTLAK
+ * bir an olarak vermek zorundayız; hangi anın "bugünün başı" olduğu ise bir iş
+ * kararıdır. Eski `new Date().setHours(0,0,0,0)` deseni bu kararı hiçbir yerde
+ * YAZMIYORDU: cevabı süreç saat dilimine (`TZ` env) devrediyordu. Sunucu
+ * Europe/Istanbul olduğu sürece doğru sonuç veriyor ama UTC kurulan/konteynere
+ * alınan bir sunucuda gün 03:00'te başlar ve gece vardiyası sayaçlardan düşerdi.
+ * Bkz. constants/time.ts.
+ */
 function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return factoryDayStart();
 }
 
 export class DashboardService {

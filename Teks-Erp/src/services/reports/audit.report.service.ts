@@ -8,6 +8,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
+import { factoryDaySql } from "../../constants/time";
 
 // ---------- 1) System Log Summary --------------------------------------------
 
@@ -19,12 +20,20 @@ export interface SystemLogSummary {
 }
 
 export async function getSystemLogSummary(range: DateRange): Promise<SystemLogSummary> {
+  // GÜN SORUSU = TAKVİM GÜNÜ (fabrika saati, Europe/Istanbul — constants/time.ts).
+  // Audit "hangi gün kaç kayıt değişti" sorusudur; denetçi/yönetici bunu kendi
+  // takviminden okur. "createdAt" timestamptz olduğu için çıplak DATE_TRUNC günü
+  // OTURUM saat diliminde (UTC) keserdi → gece 00:00–03:00 arasındaki her işlem
+  // BİR ÖNCEKİ günün çubuğuna düşerdi.
+  //
   // PERF (Faz C2 — ÖLÇÜLDÜ, bkz. docs/history/SCALE-REPORT.md §8): system_logs en hızlı
   // büyüyen tablo; 365-gün worst-case'de bu rapor tabloyu tarar. Worst-case
   // toplam ~2.66× hızlandı (p50 1064→400ms, 430k satır). Üç katman:
-  //   0) ASIL KAZANÇ (2.14×) KODDA DEĞİL: `daily` sorgusunun
-  //      GROUP BY DATE_TRUNC('day',"createdAt")::date ifadesi için EKLENEN ifade
-  //      istatistiği (migration 20260614120000_system_log_daily_stats). Onsuz
+  //   0) ASIL KAZANÇ (2.14×) KODDA DEĞİL: `daily` sorgusunun GROUP BY ifadesi
+  //      için EKLENEN ifade istatistiği (migration 20260614120000 →
+  //      2026-08-01'de 20260801050000_system_log_daily_stats_tz ile fabrika
+  //      saat dilimli ifadeye TAŞINDI; ifade birebir eşleşmezse stats devre
+  //      dışı kalır ve sorgu sessizce yavaş plana düşer). Onsuz
   //      planner grup sayısını yanlış (≈satır sayısı) tahmin edip diske-taşan
   //      tek-thread Sort+GroupAggregate seçer (258ms); statsla gerçek günü (≤366)
   //      bilir → paralel in-memory HashAggregate (113ms). ⚠️ daily'nin WHERE/
@@ -62,7 +71,7 @@ export async function getSystemLogSummary(range: DateRange): Promise<SystemLogSu
       Array<{ day: Date; createCount: bigint; updateCount: bigint; deleteCount: bigint }>
     >(Prisma.sql`
       SELECT
-        DATE_TRUNC('day', "createdAt")::date           AS day,
+        ${factoryDaySql('"createdAt"')}                AS day,
         COUNT(*) FILTER (WHERE action = 'CREATE')      AS "createCount",
         COUNT(*) FILTER (WHERE action = 'UPDATE')      AS "updateCount",
         COUNT(*) FILTER (WHERE action = 'DELETE')      AS "deleteCount"

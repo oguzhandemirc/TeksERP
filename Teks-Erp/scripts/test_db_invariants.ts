@@ -204,7 +204,12 @@ const DEFERRABLE_FKS: Array<{ table: string; name: string }> = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4) EXTENDED STATISTICS (1) — migration 20260614120000_system_log_daily_stats
+// 4) EXTENDED STATISTICS (1) — migration 20260614120000_system_log_daily_stats,
+//    ifadesi 20260801050000_system_log_daily_stats_tz ile fabrika saat dilimine
+//    taşındı (audit "daily" serisi artık Europe/Istanbul takvim günü keser).
+//    ⚠️ Bu bekçi yalnız nesnenin VARLIĞINI görür — ifade servisteki
+//    `factoryDaySql` metniyle uyuşmazsa istatistik sessizce devre dışı kalır
+//    (sonuç doğru, sorgu ~2x yavaş). İfadeyi değiştirirsen migration'ı da yaz.
 // ─────────────────────────────────────────────────────────────────────────────
 const EXT_STATS: Array<{ name: string; table: string }> = [{ name: "sl_day_exact", table: "system_logs" }];
 

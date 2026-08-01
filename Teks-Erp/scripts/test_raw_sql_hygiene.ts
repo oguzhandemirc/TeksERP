@@ -2,28 +2,41 @@
 // HAM SQL SAAT HİJYENİ BEKÇİSİ — `$queryRaw`/`$executeRaw` içinde ÇIPLAK
 // `NOW()` / `CURRENT_TIMESTAMP` var mı?
 //
-// ── NEDEN VAR (2026-08-01 denetim bulgusu, SESSİZ veri bozulması) ────────────
-// Şemadaki tarih kolonlarının neredeyse tamamı `timestamp WITHOUT time zone`
-// (yalnız 12 kolon `timestamptz` — O-11 sonrası açılanlar). Prisma bu kolonlara
-// HER ZAMAN UTC yazar. Postgres'in `NOW()` / `CURRENT_TIMESTAMP` fonksiyonu ise
-// `timestamptz` üretir; tz'siz bir kolona atanırken oturumun `TimeZone` ayarına
-// (sahada `Europe/Istanbul`) göre YEREL saate düşürülür.
+// ── NEDEN DOĞDU (2026-08-01 denetim bulgusu, SESSİZ veri bozulması) ──────────
+// O gün şemadaki tarih kolonlarının neredeyse tamamı `timestamp WITHOUT time
+// zone` idi. Prisma bu kolonlara HER ZAMAN UTC yazar; Postgres'in `NOW()` /
+// `CURRENT_TIMESTAMP` fonksiyonu ise `timestamptz` üretir ve tz'siz bir kolona
+// atanırken oturumun `TimeZone` ayarına (sahada `Europe/Istanbul`) göre YEREL
+// saate düşürülür.
 //
 // Sonuç: AYNI KOLONDA iki farklı saat. Dev DB'de ölçüldü —
 //   roll_movements.enteredAt max = 01:25  (Prisma yazdı, UTC)
 //   roll_movements.exitedAt  max = 04:25  (raw NOW() yazdı, yerel, +3 saat)
 // `AVG(EXTRACT(EPOCH FROM (exitedAt - enteredAt)))` ile hesaplanan istasyon
-// süresi raw yolla kapanan her harekette +10800 sn şişer; dashboard'ın "bugün"
-// sayaçları gün sınırında yanlış tarafa düşer. Hiçbir hata, hiçbir log yok.
+// süresi raw yolla kapanan her harekette +10800 sn şişti. Hata yok, log yok.
 //
-// Aynı tuzak OKUMA tarafında da var: `tzsiz_kolon < NOW()` karşılaştırmasında
-// kolon timestamptz'e YÜKSELTİLİR ve içindeki UTC değeri yerel saat sanılır →
-// eşik 3 saat kayar (geciken sipariş listesi, stok yaşlandırma kovaları).
+// ── BUGÜNKÜ GERÇEK — KUTUP DEĞİŞTİ, DİKKAT ──────────────────────────────────
+// ⚠️ Yukarıdaki teşhis TARİHSELDİR. `20260801040000_timestamptz_conversion` ile
+//    183 kolon `timestamptz` oldu (şemada 192 alan; tek istisna `@db.Date` olan
+//    `EndpointLatencyDaily.day`). Bugün DURUM TERSİNE DÖNDÜ:
 //
-// DOĞRU KULLANIM (CLAUDE.md → Operasyonel Bakım, O-11):
-//     (now() AT TIME ZONE 'UTC')
-// STABLE'dır (index kullanımını bozmaz) ve `timestamp` döner → tz'siz kolonla
-// hem yazımda hem karşılaştırmada aynı hizada.
+//      • ÇIPLAK `now()` / `CURRENT_TIMESTAMP` artık KOŞULSUZ DOĞRUDUR.
+//        timestamptz mutlak an saklar; oturum saat dilimi yalnız gösterimi
+//        etkiler. TERCİH EDİLEN YAZIM BUDUR.
+//
+//      • `(now() AT TIME ZONE 'UTC')` — eski "doğru kullanım" — bugün yalnız
+//        KİMLİK DÖNÜŞÜMÜDÜR ve doğruluğu OTURUM SAAT DİLİMİNE bağlar:
+//        `timestamptz → timestamp → timestamptz` turunda ikinci çevrim oturum
+//        tz'sinde yorumlanır. UTC oturumda sapma 0 (ölçüldü), Istanbul
+//        oturumunda −3 saat. Yani artık KIRILGAN OLAN TARAF BU. Yeni kod bunu
+//        YAZMASIN; kalan 10 yazma noktası (`SET "exitedAt" = ...`) temizlenmeyi
+//        bekleyen tarihsel artıktır.
+//
+//    Bu dosya yine de ÇIPLAK `NOW()`'ı işaretler ve gerekçe ister. Sebebi artık
+//    "yanlış olabilir" değil, TUTARLILIK: her ham zaman fonksiyonu kullanımının
+//    yanında hangi kolona yazdığının ve neden doğru olduğunun YAZILI olması.
+//    Kolon tipini SQL metninden çıkaramayan bir bekçi için ulaşılabilir en iyi
+//    garanti budur. Asıl yapısal güvence `test_timestamptz_contract.ts`tedir.
 //
 // ── KAPSAM ───────────────────────────────────────────────────────────────────
 // `src/` altındaki tüm `.ts`. Tarama TypeScript AST ile yapılır (regex değil):
@@ -37,24 +50,19 @@
 //     `scale_report.ts`) dev-only sentetik veri/analiz üretir, canlı iş verisine
 //     yazmaz. Genişletmek istersen TARANAN_DIZINLER'e "scripts" ekle.
 //   • `prisma/migrations/*.sql` — uygulanmış migration IMMUTABLE'dır (CLAUDE.md),
-//     düzeltilemez; bir kısmı zaten `AT TIME ZONE 'UTC'` kullanıyor. YENİ migration
-//     yazarken kuralı ELLE uygula.
-//   • KOLON VARSAYILANLARI — bekçi SQL metnine bakar, şemaya değil. ~90 tz'siz
-//     kolon `DEFAULT CURRENT_TIMESTAMP` taşır (Prisma'nın `@default(now())`
-//     karşılığı) ve bu varsayılan tetiklenirse YEREL saat yazar. Bugün kaçak YOK:
-//     Prisma değeri istemci tarafında üretip INSERT'e koyduğu için varsayılan hiç
-//     devreye girmiyor (kanıt: `roll_movements.enteredAt` max 01:25 = UTC, oysa
-//     kolonun varsayılanı CURRENT_TIMESTAMP) ve `src/` içindeki TEK ham INSERT
-//     (`roll-barcode.helper.ts`) zaman kolonu olmayan bir sayaç tablosuna yazıyor.
-//     TUZAK: ham SQL ile INSERT yazıp `createdAt`/`enteredAt` gibi bir kolonu
-//     ATLARSAN o satır sessizce +3 saat ileri damgalanır — ya kolonu açıkça
-//     `(now() AT TIME ZONE 'UTC')` ile doldur ya da Prisma ile yaz.
+//     düzeltilemez. YENİ migration yazarken çıplak `now()` kullan (kolonlar
+//     timestamptz).
+//   • KOLON VARSAYILANLARI — artık RİSK DEĞİL. Eskiden ~90 tz'siz kolonun
+//     `DEFAULT CURRENT_TIMESTAMP` değeri tetiklenirse YEREL saat yazardı; bu
+//     yüzden "ham INSERT'te zaman kolonunu atlama" bir tuzaktı. timestamptz
+//     dönüşümüyle o delik KAPANDI: default tetiklense de doğru mutlak anı yazar.
 //
 // ── MUAFİYET ─────────────────────────────────────────────────────────────────
-// Hedef kolon gerçekten `timestamptz` ise `NOW()` DOĞRUDUR (örn. pg katalog
-// görünümleri: `pg_stat_activity.query_start`). Böyle bir yer için SQL'in
-// içine gerekçeli işaret koy — aynı satıra ya da hemen ÜSTÜNDEKİ salt-yorum
-// bloğunun herhangi bir satırına:
+// Hedef kolon `timestamptz` ise `NOW()` DOĞRUDUR — ki dönüşümden sonra bu artık
+// İSTİSNA DEĞİL KURALDIR (bizim kolonlarımızın tamamı + pg katalog görünümleri,
+// örn. `pg_stat_activity.query_start`). İşaret bir "kaçamak" değil, kararın
+// yazıya dökülmesidir. SQL'in içine gerekçeli işaret koy — aynı satıra ya da
+// hemen ÜSTÜNDEKİ salt-yorum bloğunun herhangi bir satırına:
 //     -- tz-ok: <neden doğru olduğunun kısa gerekçesi>
 // Gerekçesiz `-- tz-ok` KABUL EDİLMEZ (test düşer): muafiyet sessiz olmasın.
 // Muafların TAMAMI her koşumda listelenir.
@@ -353,7 +361,9 @@ function dosyaTara(goreliAd: string, kaynak: string): TaramaSonucu {
     const satir = satirNo(pos);
     const bulgu: Bulgu = { dosya: goreliAd, satir, token: m[0], satirMetni: satirMetni(pos) };
 
-    // (a) Açık dönüşüm var mı? `now() AT TIME ZONE 'UTC'` → doğru kullanım.
+    // (a) Açık dönüşüm var mı? `now() AT TIME ZONE 'UTC'` → TARİHSEL yazım.
+    //     Bugün kimlik dönüşümü (kolonlar timestamptz) — yanlış değil ama
+    //     doğruluğu oturum tz'sine bağlıyor. Yeni kod çıplak now() yazmalı.
     const kalan = temiz.slice(pos + m[0].length);
     const tz = AT_TIME_ZONE_RE.exec(kalan);
     if (tz) {
@@ -535,12 +545,15 @@ function main(): void {
         ? " — sarmalayıcı adı değişmiş olabilir, SQL_ETIKETLERI/SQL_FONKSIYONLARI'nı güncelle"
         : ""),
   );
-  // Tarayıcının SQL'i gerçekten OKUDUĞUNU kanıtlayan zemin: repoda düzeltilmiş
-  // `AT TIME ZONE 'UTC'` kullanımları var; hiç görünmüyorsa maskeleme bozulmuştur.
+  // Tarayıcının SQL'i gerçekten OKUDUĞUNU kanıtlayan zemin: repoda `AT TIME ZONE
+  // 'UTC'` yazımları var; hiç görünmüyorsa maskeleme bozulmuştur.
+  // NOT: sayaç sıfıra düşerse bu kontrol düşer — ama o gün SEBEP muhtemelen
+  // "tarayıcı bozuldu" değil, "10 tarihsel yazma noktası temizlendi" olacaktır.
+  // Öyleyse doğru tepki tarayıcıyı onarmak değil, bu zemini KALDIRMAKTIR.
   check(
-    "doğru kullanım (`AT TIME ZONE 'UTC'`) tarayıcı tarafından görülüyor",
+    "tarihsel `AT TIME ZONE 'UTC'` yazımı tarayıcı tarafından görülüyor",
     utcDuzeltmeSayisi >= 1,
-    `${utcDuzeltmeSayisi} yer`,
+    `${utcDuzeltmeSayisi} yer (temizlenmeyi bekleyen tarihsel artık)`,
   );
 
   console.log("\n── 3) Çıplak NOW() / CURRENT_TIMESTAMP ──");

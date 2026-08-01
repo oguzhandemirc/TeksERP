@@ -7,6 +7,7 @@
 // siler, flush hataları isteği düşürmez (sağlık sayacı).
 
 import prisma from "../src/lib/prisma";
+import { factoryYmd } from "../src/constants/time";
 import {
   noteLatencyDelta,
   flushLatencyNow,
@@ -181,14 +182,17 @@ async function main(): Promise<void> {
     const routes = await latencyHistoryRoutes(7);
     check("route listesi anahtarı içeriyor", routes.includes(KEY));
 
-    // --- MUTLAK takvim günü (denetim bulgusu): DB'deki day::text YEREL bugüne
+    // --- MUTLAK takvim günü (denetim bulgusu): DB'deki day::text FABRİKA bugününe
     // eşit olmalı — localDay yanlış üretse round-trip yine tutar, bu tutmaz.
-    const n = new Date();
-    const todayLocal = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+    // Beklenen değer SÜREÇ saat diliminden (`getFullYear()` vb.) DEĞİL, sözleşmenin
+    // kendisinden (constants/time.ts → factoryYmd) türetilir: aksi halde UTC koşan
+    // CI'da 21:00Z sonrası bu iddia kendi kendine yanlışlanırdı ve "yerel"in hangi
+    // yerel olduğu bir kez daha yazılmamış olurdu.
+    const todayFactory = factoryYmd();
     const rawDay = await prisma.$queryRaw<Array<{ d: string }>>`
       SELECT day::text AS d FROM endpoint_latency_daily WHERE "routeKey" = ${KEY}`;
-    check(`DB'deki gün etiketi YEREL bugün (${todayLocal})`, rawDay[0]?.d === todayLocal);
-    check("history etiketi de yerel bugün", series[0]?.day === todayLocal);
+    check(`DB'deki gün etiketi FABRİKA bugünü (${todayFactory})`, rawDay[0]?.d === todayFactory);
+    check("history etiketi de fabrika bugünü", series[0]?.day === todayFactory);
 
     // --- Route'suz history: farklı uçların bucket'ları GÜN İÇİNDE birleşir ----
     const ROUTE2 = `/api/TEST-perf-b-${RUN}`;
@@ -215,7 +219,7 @@ async function main(): Promise<void> {
       },
     });
 
-    const union = await readStableUnion(todayLocal);
+    const union = await readStableUnion(todayFactory);
     if (!union) {
       check(
         "bugünün satırları KARARLI okundu (oracle kıyası için şart)",

@@ -9,6 +9,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import dotenv from "dotenv";
+import { PG_SESSION_OPTIONS } from "./pg-session";
 
 dotenv.config();
 
@@ -58,11 +59,17 @@ if (!connectionString) {
 //             classifyPoolTimeout dalı bunu 503 + tekrar-dene mesajına çevirir ve
 //             /health `poolAcquireTimeouts` sayacını artırır.
 //   statement_timeout: zaten DB-level (50s) ayarlı, app-level pool'u beklemez
+//   options (PG_SESSION_OPTIONS = "-c timezone=UTC"): ⚠️ LOAD-BEARING — SİLME.
+//             `@prisma/adapter-pg` timestamptz ile çalışırken oturumun UTC
+//             olduğunu VARSAYAR; Istanbul oturumunda okumalar +3sa, yazmalar
+//             −3sa kayar (ikisi de ölçüldü). Tam gerekçe + ölçümler:
+//             src/lib/pg-session.ts. Bekçi: scripts/test_timestamptz_contract.ts
 const pool = new Pool({
   connectionString,
   max: 30,
   idleTimeoutMillis: 600_000,
   connectionTimeoutMillis: 5_000,
+  options: PG_SESSION_OPTIONS,
 });
 
 // O3-2: pg Pool idle-client hata olayı. DB bağlantı düşürürse (network drop,

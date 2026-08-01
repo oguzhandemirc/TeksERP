@@ -130,8 +130,19 @@ export interface LateDeliveryRow {
 }
 
 /**
- * Snapshot: bugün itibariyle deadline geçmiş + henüz COMPLETED/CANCELLED olmayan
+ * Snapshot: ŞU AN itibariyle deadline geçmiş + henüz COMPLETED/CANCELLED olmayan
  * siparişler. Tarih aralığı uygulanmaz (anlık operasyonel görüş).
+ *
+ * GÜN SORUSU DEĞİL — MUTLAK AN karşılaştırması: "termin anı geçti mi". Bu yüzden
+ * saat dilimi devreye GİRMEZ ve bilinçli olarak takvim gününe çevrilmedi.
+ *
+ * ⚠️ AÇIK İŞ SORUSU (davranış bugün DEĞİŞMEDİ): `Order.deadline` bir AN'dır,
+ * takvim günü değil. Panelden tarih seçilerek girilen bir termin yerel 00:00
+ * damgası taşır → sipariş, termin GÜNÜNÜN sabahında "geciken" listesine düşer;
+ * oysa saha "o günün sonuna kadar" diye okuyor olabilir. Gün-sonu semantiği
+ * istenirse karşılaştırma `o.deadline < <fabrika-bugün-başlangıcı>` biçimine
+ * çevrilmelidir (constants/time.ts → factoryDayStart) — bu, listeden bir günlük
+ * bir dilim çıkaracağı için fabrikaya SORULMADAN yapılmamalıdır.
  */
 export async function getLateDeliveries(): Promise<LateDeliveryRow[]> {
   const rows = await prisma.$queryRaw<
@@ -157,13 +168,13 @@ export async function getLateDeliveries(): Promise<LateDeliveryRow[]> {
     JOIN customers c ON o."customerId" = c.id
     LEFT JOIN order_lines ol ON ol."orderId" = o.id
     WHERE o.deadline IS NOT NULL
-      -- O-11: "deadline" tz'siz timestamp kolonu ve içinde UTC duruyor. Çıplak NOW()
-      -- timestamptz olduğu için kolon YEREL saat sanılır → Europe/Istanbul'da
-      -- siparişler termininden 3 saat ÖNCE "geciken" listesine düşerdi (ve
-      -- daysLate JS tarafında UTC'ye göre hesaplandığı için iki uç çelişirdi).
-      -- now() AT TIME ZONE 'UTC' STABLE'dır → deadline index'i kullanılabilir.
-      -- Bekçi: scripts/test_raw_sql_hygiene.ts
-      AND o.deadline < (now() AT TIME ZONE 'UTC')
+      -- tz-ok: MUTLAK AN karşılaştırması (takvim günü değil). "deadline"
+      -- 2026-08-01'den beri timestamptz → çıplak now() ile karşılaştırma oturum
+      -- saat diliminden BAĞIMSIZ doğrudur ve STABLE olduğu için deadline index'i
+      -- kullanılabilir. (Eski now() AT TIME ZONE 'UTC' sarmalayıcısı kolon tz'siz
+      --  iken gerekliydi; bugün sonucu oturum tz'sine geri bağlardı — kaldırıldı.
+      --  JS tarafındaki daysLate de aynı mutlak anı kullanır, iki uç hizalı.)
+      AND o.deadline < now()
       AND o.status IN ('PENDING','APPROVED','PARTIAL_SHIPPED')
     GROUP BY o.id, o."orderNumber", c.name, o.status, o.deadline, o."shippedQty"
     ORDER BY o.deadline ASC

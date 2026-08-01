@@ -8,6 +8,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
+import { factoryDaySql } from "../../constants/time";
 
 
 // ---------- 1) Roll Aging (snapshot) -----------------------------------------
@@ -28,12 +29,13 @@ export async function getRollAging(): Promise<RollAgingSummary> {
     WITH aged AS (
       SELECT
         r."currentQty",
-        -- O-11: "updatedAt" tz'siz timestamp kolonu ve içinde UTC duruyor (Prisma
-        -- öyle yazar). Çıplak NOW() timestamptz olduğu için karşılaştırmada kolon YEREL
-        -- saat sanılır → Europe/Istanbul'da her top 3 saat DAHA YAŞLI görünür ve
-        -- kova sınırındakiler (3/7/14/30 gün) yanlış kovaya düşer. Bekçi:
-        -- scripts/test_raw_sql_hygiene.ts
-        EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - r."updatedAt")) / 86400.0 AS age_days
+        -- tz-ok: MUTLAK PENCERE — takvim günü DEĞİL. "3/7/14/30 gün" kovaları
+        -- geçen SÜREYİ ölçer (3 gün = 72 saat), takvim sınırını değil; saat
+        -- diliminden bağımsızdır. "updatedAt" 2026-08-01'den beri timestamptz →
+        -- çıplak now() ile farkı almak oturum saat dilimine BAKMAKSIZIN doğrudur.
+        -- (Eskiden kolon tz'siz olduğu için now() AT TIME ZONE 'UTC' gerekiyordu;
+        --  o sarmalayıcı bugün sonucu oturum tz'sine geri bağlardı — kaldırıldı.)
+        EXTRACT(EPOCH FROM (now() - r."updatedAt")) / 86400.0 AS age_days
       FROM rolls r
       WHERE r.status = 'WAREHOUSE'
     )
@@ -59,9 +61,10 @@ export async function getRollAging(): Promise<RollAgingSummary> {
     ORDER BY 2
   `),
     prisma.$queryRaw<Array<{ oldestDays: number | null }>>(Prisma.sql`
-    -- O-11 (yukarıdaki kova sorgusuyla aynı gerekçe): tz'siz kolonla karşılaştırma
-    -- UTC tarafında yapılır, yoksa "en eski" 3 saat şişer.
-    SELECT MAX(EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - r."updatedAt")) / 86400.0)::float AS "oldestDays"
+    -- tz-ok: yukarıdaki kova sorgusuyla aynı gerekçe — MUTLAK PENCERE (geçen süre),
+    -- takvim günü değil. Kolon timestamptz, çıplak now() ile fark saat diliminden
+    -- bağımsız doğrudur.
+    SELECT MAX(EXTRACT(EPOCH FROM (now() - r."updatedAt")) / 86400.0)::float AS "oldestDays"
     FROM rolls r
     WHERE r.status = 'WAREHOUSE'
   `),
@@ -190,11 +193,15 @@ export interface DailyMovementRow {
 }
 
 export async function getDailyMovements(range: DateRange): Promise<DailyMovementRow[]> {
+  // GÜN SORUSU = TAKVİM GÜNÜ (fabrika saati). "Hangi gün hangi istasyondan kaç
+  // hareket geçti" vardiya raporudur; gece 00:00–03:00 arasındaki hareketler
+  // UTC'de kesilseydi bir önceki güne yazılır ve operatörün kendi vardiya
+  // sayımıyla tutmazdı.
   const rows = await prisma.$queryRaw<
     Array<{ day: Date; stationName: string; movementCount: bigint }>
   >(Prisma.sql`
     SELECT
-      DATE_TRUNC('day', rm."enteredAt")::date AS day,
+      ${factoryDaySql('rm."enteredAt"')}      AS day,
       s.name                                  AS "stationName",
       COUNT(*)                                AS "movementCount"
     FROM roll_movements rm

@@ -8,6 +8,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
+import { factoryDaySql } from "../../constants/time";
 
 // ---------- 1) Defect Distribution -------------------------------------------
 
@@ -180,11 +181,16 @@ export interface KursunApplicationSummary {
 export async function getKursunApplication(range: DateRange): Promise<KursunApplicationSummary> {
   // F243: totalsRow KALDIRILDI — total = Σ daily (aynı WHERE ile roll_operations'ı
   // ikinci kez taramaya gerek yok; audit raporu deseni). Tek grup-tarama yeter.
+  //
+  // GÜN SORUSU = TAKVİM GÜNÜ (fabrika saati). Günlük kurşun/QC2 oranı vardiya
+  // performansı okumasıdır. Gün UTC'de kesilseydi gece 00:00–03:00 arası yapılan
+  // işlemler bir önceki güne yazılır ve o günün oranını (pay/payda ayrı ayrı
+  // kayabildiği için) hem dünü hem bugünü YANLIŞ gösterirdi.
   const dailyRows = await prisma.$queryRaw<
     Array<{ day: Date; qc2: bigint; kursun: bigint }>
   >(Prisma.sql`
     SELECT
-      DATE_TRUNC('day', ro."createdAt")::date AS day,
+      ${factoryDaySql('ro."createdAt"')}      AS day,
       COUNT(*) FILTER (WHERE ro."operationType" = 'QC2_COMPLETED')  AS qc2,
       COUNT(*) FILTER (WHERE ro."operationType" = 'KURSUN_APPLIED') AS kursun
     FROM roll_operations ro

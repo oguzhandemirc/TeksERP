@@ -15,6 +15,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
+import { factoryDaySql } from "../../constants/time";
 
 // ---------- 1) Station Efficiency --------------------------------------------
 
@@ -327,11 +328,17 @@ export interface ScrapSummary {
 
 export async function getScrapSummary(range: DateRange): Promise<ScrapSummary> {
   // SCRAP statüsündeki rulolar — updatedAt range içinde (status değişimi proxy'si)
+  //
+  // GÜN SORUSU = TAKVİM GÜNÜ (fabrika saati). "Hangi gün fire verdik" sorusunun
+  // muhatabı üretim müdürü ve cevabı onun duvar saatiyle okunur. `updatedAt`
+  // timestamptz olduğu için DATE_TRUNC oturum saat diliminde (UTC) keserdi →
+  // gece vardiyasında 00:00–03:00 arası hurdaya ayrılan toplar BİR ÖNCEKİ günün
+  // çubuğuna düşerdi. `factoryDaySql` günü Europe/Istanbul'da keser.
   const dailyRows = await prisma.$queryRaw<
     Array<{ day: Date; count: bigint; qty: number | null }>
   >(Prisma.sql`
     SELECT
-      DATE_TRUNC('day', r."updatedAt")::date AS day,
+      ${factoryDaySql('r."updatedAt"')}      AS day,
       COUNT(*)                               AS count,
       SUM(r."currentQty")::float             AS qty
     FROM rolls r

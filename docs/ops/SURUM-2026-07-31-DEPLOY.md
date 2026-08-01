@@ -140,8 +140,9 @@ SELECT migration_name FROM _prisma_migrations ORDER BY migration_name DESC LIMIT
 ```
 
 Bu sürümün migration'ları (dizinde var, canlıda henüz yok olmalı). **Not (2026-08-01):**
-bu tablo başta ÜÇ satırdı; kurşun bypass işi ve denetim düzeltmeleri aynı pencereye
-girdiği için **YEDİ**ye çıktı. Kanonik liste her zaman `ls Teks-Erp/prisma/migrations`
+bu tablo başta ÜÇ satırdı; kurşun bypass işi, denetim düzeltmeleri ve timestamptz
+dönüşümü aynı pencereye girdiği için **SEKİZ**e çıktı. Kanonik liste her zaman
+`ls Teks-Erp/prisma/migrations`
 + `npx prisma migrate status` çıktısıdır — tabloya değil, ona güven.
 
 | Migration | İçerik | Risk notu |
@@ -153,9 +154,134 @@ girdiği için **YEDİ**ye çıktı. Kanonik liste her zaman `ls Teks-Erp/prisma
 | `20260731210000_kursun_bypass_machine_assignment` | bypass ataması istasyon→MAKİNE bazına | Kurşun bypass işine ait |
 | `20260801020000_kursun_bypass_permission_catalog` | bypass izin satırları (`ON CONFLICT DO NOTHING`) | İdempotent; boot uzlaştırması da aynı işi yapar |
 | `20260801030000_sack_customer_fk_setnull` | `sacks_customerId_fkey` → `ON DELETE SET NULL` | **Yalnız constraint tanımı** — satır okumaz/yazmaz, rewrite YOK. Canlıda aylardır `RESTRICT`'ti (şema `SET NULL` diyordu); kayıp migration'ın telafisi. Dev'de no-op. |
+| `20260801040000_timestamptz_conversion` | 80 tablo / **183 kolon** `timestamp` → `timestamptz` | **⚠️ TEK AĞIR MİGRATION — TAM TABLO YENİDEN YAZIMI + ACCESS EXCLUSIVE kilit.** Bkz. §1b. |
+| `20260801050000_system_log_daily_stats_tz` | `sl_day_exact` ifade istatistiği fabrika saat dilimli ifadeye taşındı | **Yalnız katalog + `ANALYZE system_logs`** — DDL yok, tabloya kilit yok, satır okumaz/yazmaz. Bkz. §1c. |
 
 Hepsi dev'de uygulanıp doğrulandı; `migrate deploy` aynı SQL'i koşar.
 Hepsinin başında `SET statement_timeout = 0` var (canlıdaki 50s limiti DDL'i kesmesin).
+
+### 1b) `20260801040000_timestamptz_conversion` — ayrı okunacak
+
+**Ne yapar:** tüm tarih kolonlarını saat dilimi TAŞIYAN tipe çevirir. Böylece kim yazarsa
+yazsın (Prisma / ham `NOW()` / kolon DEFAULT'u) aynı mutlak an kaydedilir; 2026-08-01
+gecesi `roll_movements."exitedAt"`te yaşanan "tek kolonda iki saat / +10800 sn şişme"
+hata sınıfı **yapısal olarak** kapanır (öncesi yalnız disiplin bekçisiydi).
+
+**Neden şimdi:** fabrikada henüz gerçek üretim verisi yok (tanımlar + siparişler).
+Tablolar boşken her ALTER anlık; veri biriktikten sonra `roll_movements` gibi tablolarda
+bu iş vardiya durdurur. **Bu pencere ilk gerçek top girdiği gün kapanır — erteleme.**
+
+**Vardiya dışında koş** (CLAUDE.md DB kuralı 14). Canlıda tablolar boşsa saniyeler sürer.
+
+**Ne kadar sürer — ÖLÇÜLDÜ (2026-08-01, dolu dev DB kopyası):** 183 kolonun tamamı
+**≈ 2,1 sn** (aynı turda geri+ileri 384 ALTER = 4,26 sn). Dev DB'de `system_logs` 38 267
+satır / 21 MB, `rolls` 15 133 satır / 12 MB idi; tek tek ALTER'lar 1–5 ms, yalnız
+`system_logs`'un iki kolonu 401 ms ve 489 ms sürdü. **Maliyet satır sayısıyla doğrusal
+büyür** (tam tablo yeniden yazımı): fabrikada `roll_movements` milyona çıktığında bu iş
+saniyeler değil dakikalar olur ve o süre boyunca tablo ACCESS EXCLUSIVE kilitlidir —
+yani vardiya durur. Bugün canlıda tablolar boş; **bu yüzden şimdi koşuluyor.**
+
+**Uygulama SONRASI doğrulama — atlanamaz:**
+
+```sql
+-- (1) tz'siz kolon KALMAMALI → 0 dönmeli
+SELECT count(*) FROM information_schema.columns
+ WHERE table_schema='public' AND data_type='timestamp without time zone';
+-- (2) tarih kolonları timestamptz olmalı → 192 (+3 _prisma_migrations)
+SELECT count(*) FROM information_schema.columns
+ WHERE table_schema='public' AND data_type='timestamp with time zone';
+```
+
+```bash
+# (3) sözleşme bekçisi — DB + şema + havuz oturumu + ham SQL/ORM mutabakatı
+npx tsx scripts/test_timestamptz_contract.ts
+```
+
+**⚠️ EPOCH KORUNUR — ama yalnız `USING` sayesinde.** Migration'daki her ALTER
+`USING "kolon" AT TIME ZONE 'UTC'` taşır ("bu değerler UTC'dir" beyanı, çünkü Prisma UTC
+yazmıştı). `USING` düşerse PG değerleri oturum saat diliminde yorumlar ve **her tarihi
+3 saat kaydırır**. Dosyayı elle düzenleme. Dev'de doğrulandı: 183 kolonun
+count/sum/min/max epoch parmak izi dönüşüm öncesi/sonrası birebir aynı (md5 eşit).
+
+**⚠️ BİRLİKTE GİDEN KOD ŞART — migration'ı tek başına deploy etme.** `@prisma/adapter-pg`
+timestamptz ile çalışırken oturumun UTC olduğunu **varsayar**; `src/lib/pg-session.ts` +
+havuzdaki `options: "-c timezone=UTC"` olmadan Istanbul sunucusunda **okumalar +3 saat,
+yazmalar −3 saat kayar** (ikisi de ölçüldü, hata/log ÇIKMAZ). Backend bu commit'le
+birlikte deploy edilmezse dönüşüm faydadan çok zarar getirir.
+
+**Geri alma — yedekten restore GEREKMEZ, ama iki şart var (2026-08-01'de ÖLÇÜLDÜ, ilk
+yazılan hâli YANLIŞTI).** Ters çevirme listesi `... TYPE timestamp USING "kolon" AT TIME
+ZONE 'UTC'` epoch'u korur, fakat **düz koşturulursa PATLAR**:
+
+```
+ERROR: check constraint "work_order_steps_time_order" of relation
+       "work_order_steps" is violated by some row
+```
+
+**Neden (sezgiye aykırı, bir kez anla yeter):** `work_order_steps_time_order` iki tarih
+kolonunu karşılaştırır — `completedAt >= startedAt`. ALTER'lar kolon kolon koştuğu için
+arada **karışık tip** anı doğar: bir kolon çevrilmiş, diğeri değil. PG böyle bir
+karşılaştırmada tz'siz olanı **oturumun saat diliminde** yorumlar. Istanbul (UTC+3)
+oturumunda:
+
+| Yön | Ara durumda ne olur | Sonuç |
+|---|---|---|
+| **İleri** (`timestamp`→`timestamptz`) | Alfabetik sırada `completedAt` önce çevrilir; henüz tz'siz olan `startedAt` 3 saat ERKEN görünür | Kısıt **daha kolay** sağlanır → **SORUNSUZ** (doğrulandı: Istanbul oturumunda ileri migration temiz koştu) |
+| **Geri** (`timestamptz`→`timestamp`) | Bu kez çevrilmiş `completedAt` 3 saat ERKEN görünür | `completedAt >= startedAt` **BOZULUR** → gerçek gap'i 3 saatten kısa olan her satır kısıtı ihlal eder |
+
+Yani **ileri yön güvenli, geri yön değil.** Geri alma gerekirse:
+
+```sql
+SET statement_timeout = 0;
+SET timezone = 'UTC';   -- ⬅️ ZORUNLU. Bu satır olmadan yukarıdaki hatayı alırsın.
+BEGIN;                  -- ⬅️ ZORUNLU. Yarıda patlarsa DB yarı-çevrilmiş KALMASIN.
+--   ... 183 ters ALTER ...
+COMMIT;
+```
+
+`SET timezone='UTC'` promosyonu kimlik dönüşümüne indirir, kısıt hiç bozulmaz. Dolu dev
+DB'sinde geri+ileri tam tur koşuldu: **epoch birebir korundu** (`rolls`, `system_logs`,
+`roll_movements.enteredAt/exitedAt`, `work_order_steps.completedAt`, `orders` üzerinde
+count+sum karşılaştırıldı) ve DB `ROLLBACK` ile aynen bırakıldı.
+
+> Ders daha geneldir: **iki tarih kolonunu karşılaştıran her CHECK, tip geçişlerinde
+> oturum saat dilimine duyarlıdır.** Bugün böyle tek kısıt var (`work_order_steps_time_order`);
+> yenisini eklersen bu bölümü güncelle.
+
+### 1c) Gün sınırı artık AÇIK — **operatöre söylenecek DAVRANIŞ DEĞİŞİKLİĞİ**
+
+timestamptz'ye geçince "bu olay hangi GÜNE ait" sorusu örtük olmaktan çıktı. `DATE_TRUNC`
+günü **oturum** saat diliminde keser ve havuz oturumu (bilinçli olarak) UTC → gün sınırı
+sessizce UTC'ye bağlanmıştı. Türkiye UTC+3 olduğu için bu, **yerel 00:00–03:00 arasındaki
+her olayı bir ÖNCEKİ güne** yazıyordu — yani gece vardiyasının tam ortasını. Artık gün
+`Europe/Istanbul` takvimine göre kesiliyor (`Teks-Erp/src/constants/time.ts` TEK KAYNAK).
+
+**Sahaya söylenecek:** aşağıdaki GÜNLÜK GRAFİKLERDE gece 00:00–03:00 arasında kaydedilen
+işlemler **artık doğru güne** düşüyor; eski ekran görüntüleriyle kıyaslanırsa o saat
+dilimindeki hareketler bir gün ileri kaymış görünecek. **Toplamlar DEĞİŞMEZ**, yalnız
+çubuklar arasındaki dağılım düzelir.
+
+| Rapor | Etkilenen alan |
+|---|---|
+| Üretim → Fire & Hurda | günlük fire serisi (`daily`) |
+| Envanter → Günlük Hareketler | gün × istasyon kırılımı |
+| Kalite → Kurşun Uygulama Oranı | günlük seri (pay/payda ayrı ayrı kayabildiği için ORAN da düzelir) |
+| Denetim → Sistem Log Özeti | günlük C/U/D serisi |
+
+**Değişmeyenler** (mutlak pencere soruları — bilinçli): stok yaşlandırma kovaları
+(3/7/14/30 gün), geciken siparişler, fason `daysOpen`, istasyon ortalama süreleri.
+Dashboard "bugün" sayaçları ve belge numarası GGAAYY'si de **sahadaki sunucuda aynı
+kalır** (sunucu zaten Europe/Istanbul); değişen tek şey kararın artık `TZ` env'ine değil
+koda yazılmış olması.
+
+**Doğrulama:** `npx tsx Teks-Erp/scripts/test_report_day_boundary.ts` — ayrıca bu
+migration'ın gerçekten koştuğunu (yalnız `migrate resolve` etiketini değil) şu sorgu
+kanıtlar:
+
+```sql
+SELECT pg_get_statisticsobjdef(oid) FROM pg_statistic_ext WHERE stxname='sl_day_exact';
+-- çıktı 'Europe/Istanbul' İÇERMELİ; içermiyorsa audit raporu ~2x yavaşlar (sonuç doğru)
+```
 
 ## 2) Deploy ÖNCESİ ön-tarama — SALT-OKUNUR, hepsi 0 dönmeli
 
