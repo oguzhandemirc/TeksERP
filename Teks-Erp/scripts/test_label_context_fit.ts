@@ -56,8 +56,11 @@ let prevSackDefault: string | null = null;
 
 /** Kanvas varyantlı şablon — verilen bind'lerle field elemanları + zorunlu barkod. */
 async function makeTemplate(name: string, binds: string[], kind: LabelKind = LabelKind.SACK): Promise<string> {
+  // NOT: `widthMm`/`heightMm` `LabelTemplateInput`'ta YOK — buraya yazılınca
+  // sessizce yok sayılıyordu (ölçü şablonda değil VARYANTTA yaşıyor). Gerçek
+  // ölçü aşağıda `labelTemplateVariant` kaydına yazılan 100×60'tır.
   const created = (await templates.create(
-    { name: `${name} ${TS}`, kind, widthMm: 100, heightMm: 60 },
+    { name: `${name} ${TS}`, kind },
     ADMIN
   )) as unknown as { data: { id: string } };
   const id = created.data.id;
@@ -99,8 +102,9 @@ async function makeTemplate(name: string, binds: string[], kind: LabelKind = Lab
 
 /** VARYANTSIZ (legacy akış) şablon — kanvas yok. */
 async function makeVariantlessTemplate(name: string): Promise<string> {
+  // (Yukarıdakiyle aynı: ölçü alanları `LabelTemplateInput`'ta yok, yok sayılıyordu.)
   const created = (await templates.create(
-    { name: `${name} ${TS}`, kind: LabelKind.SACK, widthMm: 100, heightMm: 60 },
+    { name: `${name} ${TS}`, kind: LabelKind.SACK },
     ADMIN
   )) as unknown as { data: { id: string } };
   const id = created.data.id;

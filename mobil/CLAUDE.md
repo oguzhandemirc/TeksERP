@@ -16,6 +16,52 @@ npx tsc --noEmit                # Type check
 > **Önemli:** BLE (`react-native-ble-plx`) Expo Go'da çalışmaz.
 > Development build zorunlu: `npx expo run:android`
 
+## APK derleme (sahaya kurulacak paket) — TEK KOMUT
+
+```bash
+EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run build:apk
+npm run build:apk:check     # yalnız adresi çöz + doğrula (derleme YOK, saniyeler)
+npm run build:apk:verify    # mevcut APK'nın gömülü adresini denetle
+```
+
+**`cd android && ./gradlew assembleRelease` ELLE ÇAĞIRMA.** Script
+(`scripts/build-apk.mjs`) sırasıyla: adresi çözer → doğrular → bundle
+önbelleklerini siler → `assembleRelease` koşar → **üretilen APK'nın içindeki
+bundle'ı açıp gömülü adresi tekrar okur** → sürüm/SHA basar. Doğrulama düşerse
+paket `app-release.DOGRULANMADI.apk` adına taşınır ve exit 1 döner.
+
+**Adres nereden geliyor:** `EXPO_PUBLIC_API_URL` → `src/constants/api.ts` →
+axios `baseURL`. Değer **derleme anında koda gömülür**, sonradan değişmez
+(uygulama içi "API Adresi" ayarı yalnız o tek cihazı düzeltir). Sahadaki
+yetkili sunucu değeri: `docs/ops/DEPLOY-RUNBOOK.md` → "SAHADAKİ KURULUM".
+Çözüm sırası: `--api-url` argümanı → ortam değişkeni → `.env*` dosyaları
+(Expo ile aynı öncelik). Script değeri Gradle'a **açıkça** geçirir; `@expo/env`
+sistem ortamının üstüne yazmadığı için `.env.local` (localhost, USB geliştirme
+içindir) sahaya giden paketi sessizce ele geçiremez.
+
+**Neden bu kadar bekçi var** (2026-08-01, ikisi de sessizce ısırdı):
+
+| Tuzak | Neden sessiz | Bekçi |
+|---|---|---|
+| Bayat sunucu IP'si dokümandan kopyalandı | APK açılır, sadece "bağlanamıyor" der | Derleme sonrası bundle'dan adres okunur |
+| `EXPO_PUBLIC_API_URL` değişti ama Gradle bundle görevini geçersiz kılmaz | Build 29 sn'de "başarılı" biter, APK **eski** adresi taşır | Bundle görev çıktıları + ara ürünler silinir |
+| Metro transform önbelleği env değerini anahtarına almaz | Görev yeniden koşsa bile eski gömülü değer önbellekten döner | `os.tmpdir()/metro-cache` silinir |
+| `localhost` / `/api` soneki eksik adres | Uygulama açılır, her istek 404 | Derleme öncesi biçim kontrolü, gürültülü hata |
+| Adres biçimsel olarak geçerli ama o makine yok | Ölü IP de "geçerli IP"dir | Derleme öncesi `GET <kök>/health` yoklaması — **uyarı**, derlemeyi durdurmaz (derleyen Mac fabrika ağında olmayabilir) |
+
+> Metro satırı **ölçüldü** (2026-08-01, `expo export:embed`, aynı bayraklar, yalnız
+> env değişti): sıcak önbellek + yeni adres → bundle'da **ESKİ** adres çıktı (17,9 sn);
+> önbellek silinip aynı komut → **yeni** adres (69,9 sn). "Hızlı biten build" tam da
+> budur — hız iyi haber değil, önbellekten gelen bayat adrestir.
+
+> **Doğrulama tuzağı:** release bundle **Hermes bytecode**'dur. Saf ASCII dizeler
+> string tablosunda düz metin durur ve aranabilir; **Türkçe özel karakterli
+> dizeler UTF-16 tablosuna gider ve grep BULMAZ**. Bir şeyi bundle'da ararken
+> hep ASCII bir dizeyi (URL, kod, sabit) kullan — Türkçe metin arayıp "yok"
+> sonucuna varmak yanlış alarmdır. Ayrıca dizeler **uç uca paketlenir**
+> (sonlandırıcı bayt yok), bu yüzden "aradığım dizeden sonra harf gelmesin"
+> gibi bir sondaj gerçek eşleşmeyi de eler.
+
 ## Klasör Yapısı
 
 ```

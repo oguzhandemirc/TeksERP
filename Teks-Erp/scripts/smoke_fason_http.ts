@@ -53,7 +53,7 @@ async function makeWo(): Promise<{ woId: string; zimparaStep: string; boyaStep: 
   const stamp = `${Date.now()}`.slice(-6) + woIds.length;
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `TST-SMK-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
+      workOrderNumber: `TST-SMK-${stamp}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: WIDTH, targetQuantity: 1000, targetItemId: ITEM,
       steps: { create: [
         { stationId: ST_ZIMPARA, stepSequence: 1, status: "PENDING", plannedSubcontractorId: SUB_KESTEL },
         { stationId: ST_BOYA, stepSequence: 2, status: "PENDING", plannedSubcontractorId: SUB_BOYER },

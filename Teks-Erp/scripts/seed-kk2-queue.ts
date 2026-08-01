@@ -109,7 +109,7 @@ async function createStockRolls(opts: {
     );
     const wo = woRes.data;
     const fasonStepId = (wo as unknown as { steps: { id: string }[] }).steps[0].id;
-    console.log(`[WO ${w + 1}] ${wo.batchNumber}  ·  ${p.item.name}  ·  en ${p.width}  ·  ${p.count} top → fasona`);
+    console.log(`[WO ${w + 1}] ${wo.workOrderNumber}  ·  ${p.item.name}  ·  en ${p.width}  ·  ${p.count} top → fasona`);
 
     // 2) Stok rulolar + WO'ya bağla (ilk adım fason → henüz movement yok).
     const rolls = await createStockRolls({
@@ -146,7 +146,7 @@ async function createStockRolls(opts: {
       where: { workOrderId: wo.id, status: "ACTIVE" },
       select: { barcode: true },
     });
-    summary.push({ batch: wo.batchNumber, card: card?.barcode ?? null, item: p.item.name, openRolls: p.newRollQtys.length });
+    summary.push({ batch: wo.workOrderNumber, card: card?.barcode ?? null, item: p.item.name, openRolls: p.newRollQtys.length });
   }
 
   // ── Doğrulama: KK2 açık kartlar listesi ────────────────────────────────

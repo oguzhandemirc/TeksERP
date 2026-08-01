@@ -26,10 +26,53 @@ const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 // cmd.exe üzerinden çözer; Linux/CI'da (shell:false) doğrudan çalışır.
 const IS_WIN = process.platform === "win32";
 
+/**
+ * TİP KONTROLÜ GEÇİDİ — paketten ÖNCE koşar (~28sn).
+ *
+ * NEDEN GEÇİT: `scripts/` uzun süre HİÇBİR tsconfig'in `include`'unda değildi
+ * (kök config `src/**\/*` ile sınırlı, `npm run lint` de `eslint src`). Sonuç:
+ * bir servisin imzası ya da bir enum değişince `src` yeşil kalıyor, testler de
+ * yeşil kalıyor — ama testin doğruladığı ŞEY sessizce boşa düşüyordu. 2026-08-01
+ * denetiminde bulunan 87 tip hatasının içinde şunlar vardı: var olmayan bir enum
+ * üyesiyle süzme (Prisma `undefined` koşulu atar → süzgeç no-op), yanlış ilişki
+ * adıyla `deleteMany` (+ `.catch(() => {})` → temizlik sessizce hiç koşmadı),
+ * `typeof err` ile `never`'a inen hata gövdesi kontrolleri, zorunlu hâle gelmiş
+ * bir parametrenin `undefined` gitmesi. Hepsi YEŞİL test olarak raporlanıyordu.
+ *
+ * Tip hatası varken paketi koşmak yanıltıcıdır (yeşil ama anlamsız) → HIZLI DÜŞ.
+ * Tek test koşarken (filtre argümanı) geçit ATLANIR — iterasyon hızlı kalsın.
+ * Acil durumda: `SKIP_TYPECHECK=1 npm test`.
+ */
+function typecheckGate(): boolean {
+  const started = Date.now();
+  console.log("→ Tip kontrolü (scripts + prisma + src) …");
+  const res = spawnSync("npx", ["tsc", "--noEmit", "-p", "tsconfig.scripts.json"], {
+    encoding: "utf8",
+    cwd: join(SCRIPTS_DIR, ".."),
+    env: process.env,
+    shell: IS_WIN,
+    maxBuffer: MAX_OUTPUT_BYTES,
+  });
+  const secs = ((Date.now() - started) / 1000).toFixed(1);
+  if (res.status === 0 && !res.error) {
+    console.log(`✅ Tip kontrolü temiz (${secs}s)\n`);
+    return true;
+  }
+  console.log(`❌ TİP KONTROLÜ BAŞARISIZ (${secs}s) — test paketi KOŞULMADI.`);
+  console.log("   Tip hatası varken testler yeşil görünse bile doğruladıkları şey");
+  console.log("   sessizce boşa düşmüş olabilir. Önce aşağıdakileri düzelt:\n");
+  console.log(`${(res.stdout ?? "") + (res.stderr ?? "")}`.trimEnd().replace(/^/gm, "   | "));
+  console.log("\n   (Yalnız tip kontrolü: npm run typecheck:scripts)");
+  return false;
+}
+
 function main() {
   // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
   const filter = process.argv[2];
+
+  if (!filter && !process.env.SKIP_TYPECHECK && !typecheckGate()) process.exit(1);
+
   const files = readdirSync(SCRIPTS_DIR)
     .filter((f) => /^test_.*\.ts$/.test(f))
     .filter((f) => !filter || f.includes(filter))

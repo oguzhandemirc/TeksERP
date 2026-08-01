@@ -11,9 +11,20 @@
 ## İLK 5 DAKİKA (sunucuda oturum açar açmaz)
 
 1. Bu dosyayı SONUNA KADAR oku; sonra `DEPLOY-RUNBOOK.md §3` (güncelleme akışı).
-2. `git log --oneline -10` — şu 7 commit gelmiş olmalı (gelmediyse DUR, pull sorunu):
-   `docs(denetim)` → `fix(yarış)` → `feat(db) 18 constraint` → `fix(denetim) A3/A5/A9/A10`
-   → `feat(idempotency) Sack+Shipment` → `fix(denetim düşük-öncelik)` → bu reçete.
+2. Pull'un tam geldiğini **sayıyla değil, içerikle** doğrula. (Buradaki eski "şu 7
+   commit gelmiş olmalı" listesi 2026-08-01'de bayatladı: kurşun bypass işi +
+   denetim düzeltmeleri aynı pencereye girdi, sayı artık tutmuyor. Bayat sayı
+   "DUR" dedirtip deploy'u boş yere durdurur.) Mekanik kontrol:
+
+   ```bash
+   git status                      # temiz olmalı (untracked/modified YOK)
+   npx prisma migrate status       # "Following migrations have not yet been applied"
+   node scripts/check-migrations.mjs   # commit edilmemiş migration/test/script referansı YOK
+   ```
+
+   `check-migrations.mjs` GATE 5'i özellikle önemli: commit'li `package.json`'un
+   çağırdığı bir dosya (ör. `tsconfig.scripts.json`, `mobil/scripts/build-apk.mjs`)
+   pull'a girmemişse `npm test` / `npm run build:apk` ilk satırda ölür.
 3. Canlı DB'de bekleyen migration setini gör (aşağıdaki §1 sorgusu) — **2026-07-30
    sürümü de bekliyorsa** `SURUM-2026-07-30-DEPLOY.md` reçetesi DE geçerlidir
    (özellikle oradaki 0a: iş emri kapatma sözleşmesi → Electron'suz backend deploy'u
@@ -29,7 +40,13 @@
 - **`npm test` CANLIDA ASLA** — test scriptleri fixture YARATIR (TEST- kayıtları
   canlı DB'ye yazılır; `test_admin_guard_race` gerçek admin'leri geçici pasifler!).
   Canlıda koşması güvenli tek test: `npx tsx scripts/test_db_invariants.ts`
-  (salt pg-katalog okur, 55 kontrol) — deploy sonrası KOŞ.
+  (salt pg-katalog okur, **61 kontrol** — 2026-08-01'de 56'dan çıktı: envanter-DIŞI
+  nesne tespiti artık 5 bölümün 5'inde de KIRMIZI veriyor, eskiden `exit 0`'lı
+  sessiz bir ⚠️ idi). Deploy sonrası KOŞ.
+  **`scripts/test_schema_drift.ts` de canlıda güvenlidir** (salt `migrate diff`,
+  yazma yok) — deploy sonrası koş: repo şeması ile canlı DB arasında yalnız 2
+  bilinen DEFERRABLE composite FK farkı kalmalı. Bu bekçi olmasaydı yukarıdaki
+  `sacks_customerId_fkey` sapması bulunamazdı.
 - Toplu `DELETE`/`UPDATE` yok; veri düzeltmesi gerekirse dry-run script + kullanıcı onayı.
 - `db-copy`/restore akışları canlı DB'yi hedeflemez (kopya DB'ye çalışır).
 - Tarama sorguları salt-okunur; sonuçları dosyaya logla, yorumla, DOKUNMA.
@@ -50,12 +67,25 @@ sahadaki mevcut APK token GÖNDERMİYOR. Yalnız backend güncellenirse:
 (grep 2026-07-31) ama 2026-07-30 sürümü bekliyorsa Electron da zorunlu (0a orada).
 Diğer yeni token'lar (`openSack`/`createShipment`) OPSİYONEL — eski istemci bozulmaz.
 
-**APK HAZIR (2026-07-31 Mac'te derlendi):** `TeksERP-mobil-2.1.2-vc7.apk`
-(Mac Desktop'ta + `mobil/android/app/build/outputs/apk/release/app-release.apk`;
-eski 2.1.1-vc6 SİLİNDİ — tek geçerli APK bu). Sürüm 2.1.2 / versionCode 7;
-içerik: token'lar + **Tambur GERİ AL** (Üretilen Toplar → geri al ikonu);
-`EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api` gömülü (bundle'da doğrulandı —
-sunucu IP'si bu DEĞİLSE yeniden derleme gerekir!).
+**APK** — güncel paket `mobil/android/app/build/outputs/apk/release/app-release.apk`.
+Sürüm için `android/app/build.gradle`'daki `versionName`/`versionCode` geçerlidir;
+`npm run build:apk` derleme sonunda ikisini de ekrana basar. Gömülü sunucu adresi
+**`http://192.168.1.250:4000/api`** (SAHINSRV — `DEPLOY-RUNBOOK.md` "SAHADAKİ
+KURULUM"). Kurmadan önce **doğrula**, tahmin etme:
+
+```bash
+cd mobil && EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run build:apk:verify
+```
+
+> ⚠ **DÜZELTME (2026-08-01):** bu satırlarda daha önce `192.168.1.50` yazıyordu —
+> **yanlıştı**, gerçek sunucu `.250`. Bir APK bu bayat adrese gömülü derlendi ve
+> hata vermeden sahada "bağlanamıyor" oldu. Ayrıca `EXPO_PUBLIC_API_URL`
+> değişikliği Gradle'ın bundle görevini geçersiz kılmadığı için env'i değiştirip
+> `assembleRelease` koşmak **yetmiyor** (eski bundle yeniden paketleniyor).
+> Bu yüzden APK artık yalnız `npm run build:apk` ile derlenir: önbellekleri siler,
+> derler ve üretilen paketin İÇİNDEN adresi tekrar okur. Ayrıntı ve tuzaklar:
+> `mobil/CLAUDE.md` → "APK derleme".
+
 İmza: debug keystore (repo standardı — önceki sideload APK'larla aynı yol).
 Tablette güncelleme "imza uyuşmazlığı" ile reddedilirse: kaldır + yeniden kur
 (operatör yeniden login olur, cihaz kaydı `deviceId` upsert'i sayesinde korunur).
@@ -68,8 +98,37 @@ Tablette güncelleme "imza uyuşmazlığı" ile reddedilirse: kaldır + yeniden 
 | Kalıcı silme guard'ları | Kumaş (hedefleyen İE varsa) / müşteri (özel rotası varsa) / cihaz (bağlı terazi-yazıcı varsa) için yeni, anlamlı engel mesajları |
 | Sevkiyat/çuval retry | Yeni istemcilerde timeout-retry artık "zaten sürüyor/409" yerine kurulan kaydın kendisini döndürür |
 | Son admin koruması | Davranış aynı (son admin pasife alınamaz), artık eşzamanlı istekte de delinemez |
+| **Saat dilimi düzeltmesi (O-11) — RAPOR RAKAMLARINI DEĞİŞTİRİR** | Aşağıya bak; operatöre **deploy'dan ÖNCE** söylenmeli |
 
 Yeni permission YOK; SystemSetting değişikliği YOK.
+
+### ⚠️ O-11 saat dilimi düzeltmesi — operatöre ÖNCEDEN söyle
+
+Ham SQL 13 noktada `roll_movements."exitedAt"` gibi **tz'siz** kolonlara çıplak
+`NOW()` yazıyor/okuyordu. PostgreSQL sunucusu `Europe/Istanbul` olduğu için bu
+**yerel** saat yazıyordu, Prisma ise aynı kolona **UTC** yazıyor → tek kolonda iki
+saat. Sonuç: her istasyon geçişi süresi **tam +3 saat (10800 sn) şişik**. Hata yok,
+log yok, kimse görmedi. Düzeltildi (`now() AT TIME ZONE 'UTC'`); ölçüldü: düzeltme
+sonrası yeni bir kapanışta `exitedAt − enteredAt = 0,04 sn` (eskiden 10800 sn).
+
+**Operatörün göreceği şey — bu bir hata değil, düzelmedir:**
+
+| Rapor | Deploy sonrası ne olur |
+|---|---|
+| İstasyon/makine **süre** raporları (ortalama işlem süresi) | Yeni hareketler **3 saat DAHA KISA** görünür. Eski hareketler şişik KALIR → geçiş döneminde rapor **karışık** (eski+yeni) olur. |
+| **Top yaşlandırma** (`getRollAging`, 0-3/3-7/14-30 gün kovaları) | Toplar 3 saat **daha genç** sayılır; kova sınırındakiler bir alt kovaya kayar. |
+| **Geciken siparişler** (`getLateDeliveries`) | Sipariş artık termininden **3 saat önce** değil, tam zamanında "geciken"e düşer → liste birkaç satır **kısalabilir**. |
+
+**GEÇMİŞ VERİ BİLİNÇLİ OLARAK DÜZELTİLMEDİ** (canlı veriye dokunma kararı, kullanıcı
+onaylı). Eski `roll_movements` satırları hâlâ +3 saat şişik duruyor. Yani:
+
+> Deploy'dan sonra "süre raporu neden düştü / yaşlandırma neden değişti" sorusu
+> gelirse cevap: **eski rakamlar yanlıştı, yenisi doğru.** Kıyaslama yapan bir
+> operatör varsa (ör. aylık istasyon verimliliği) deploy tarihini kırılma noktası
+> olarak not etsin — o tarihten öncesi ve sonrası aynı grafikte karşılaştırılamaz.
+
+Geriye dönük düzeltme istenirse ayrı bir iş: dry-run script + kullanıcı onayı
+(kök kural — toplu UPDATE bu sürümün kapsamında DEĞİL).
 
 ---
 
@@ -80,15 +139,22 @@ Yeni permission YOK; SystemSetting değişikliği YOK.
 SELECT migration_name FROM _prisma_migrations ORDER BY migration_name DESC LIMIT 10;
 ```
 
-Bu sürümün ÜÇ migration'ı (dizinde var, canlıda henüz yok olmalı):
+Bu sürümün migration'ları (dizinde var, canlıda henüz yok olmalı). **Not (2026-08-01):**
+bu tablo başta ÜÇ satırdı; kurşun bypass işi ve denetim düzeltmeleri aynı pencereye
+girdiği için **YEDİ**ye çıktı. Kanonik liste her zaman `ls Teks-Erp/prisma/migrations`
++ `npx prisma migrate status` çıktısıdır — tabloya değil, ona güven.
 
 | Migration | İçerik | Risk notu |
 |---|---|---|
 | `20260731120000_audit_check_hardening` | 18 CHECK (NOT VALID + VALIDATE) | **VALIDATE ihlalde DÜŞER** → §2 ön-taraması ŞART |
+| `20260731120000_add_kursun_bypass_assignment` | `kursun_bypass_assignments` tablosu | Yeni tablo; kırıcı değil |
 | `20260731150000_sack_shipment_client_token` | sacks+shipments `clientToken` kolon + unique | Küçük/hızlı; kırıcı değil |
 | `20260731160000_lowprio_unique_hardening` | route_steps/customer_branches unique + users/permission_templates `lower()` unique | **CREATE UNIQUE ihlalde DÜŞER** → §2 ön-taraması ŞART |
+| `20260731210000_kursun_bypass_machine_assignment` | bypass ataması istasyon→MAKİNE bazına | Kurşun bypass işine ait |
+| `20260801020000_kursun_bypass_permission_catalog` | bypass izin satırları (`ON CONFLICT DO NOTHING`) | İdempotent; boot uzlaştırması da aynı işi yapar |
+| `20260801030000_sack_customer_fk_setnull` | `sacks_customerId_fkey` → `ON DELETE SET NULL` | **Yalnız constraint tanımı** — satır okumaz/yazmaz, rewrite YOK. Canlıda aylardır `RESTRICT`'ti (şema `SET NULL` diyordu); kayıp migration'ın telafisi. Dev'de no-op. |
 
-Üçü de dev'de bugünkü elle-akışla uygulanıp doğrulandı; `migrate deploy` aynı SQL'i koşar.
+Hepsi dev'de uygulanıp doğrulandı; `migrate deploy` aynı SQL'i koşar.
 Hepsinin başında `SET statement_timeout = 0` var (canlıdaki 50s limiti DDL'i kesmesin).
 
 ## 2) Deploy ÖNCESİ ön-tarama — SALT-OKUNUR, hepsi 0 dönmeli

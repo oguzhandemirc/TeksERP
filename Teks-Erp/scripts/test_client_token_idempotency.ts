@@ -13,7 +13,7 @@ import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { kartelaService } from "../src/services/kartela.service";
-import { RollStatus, StationKind } from "@prisma/client";
+import { RollStatus, StationType } from "@prisma/client";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -55,7 +55,21 @@ async function main(): Promise<void> {
   const item2 = await prisma.item.create({ data: { code: `TST-CT-I2-${ts}`, name: "CT KUMAŞ 2", itemType: "FABRIC", unit: "MT" }, select: { id: true } });
   const customer = await prisma.customer.create({ data: { code: `TST-CT-C-${ts}`, name: "CT MÜŞTERİ" }, select: { id: true } });
   const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
-  const station = await prisma.station.findFirst({ where: { kind: { not: StationKind.EXTERNAL }, isActive: true }, select: { id: true } });
+  // NEDEN `type` (kind DEĞİL): aşağıdaki hata mesajının da dediği gibi burada istenen
+  // INTERNAL bir istasyon; "fason mu" ayrımının kanonik kaynağı `Station.type`'tır
+  // (`subcontractor.service.ts` her yerde `station.type !== StationType.EXTERNAL` ile bakar).
+  // Eskiden `kind: { not: StationKind.EXTERNAL }` yazıyordu — `StationKind`'da EXTERNAL
+  // ÜYESİ YOK (o `StationType`'ta). Runtime'da `undefined` olduğu ve Prisma `undefined`
+  // koşulu tamamen ATTIĞI için süzgeç sessizce `{ isActive: true }`'e düşüyor, yani
+  // "fason olmayan" garantisi hiç uygulanmıyordu; CT3/CT4/CT6'nın kurduğu iş emirleri
+  // pekâlâ bir boyahane adımı üzerine kurulabilirdi. `orderBy` determinizm için:
+  // sırasız `findFirst` DB'nin fiziksel satır sırasına kalır (bu projede geri-yükleme
+  // kopya-DB'ye pg_restore ile yapılıyor → sıra garanti değil).
+  const station = await prisma.station.findFirst({
+    where: { type: { not: StationType.EXTERNAL }, isActive: true },
+    orderBy: [{ createdAt: "asc" }, { code: "asc" }],
+    select: { id: true },
+  });
   if (!admin || !station) throw new Error("Seed fixture eksik (admin / INTERNAL station) — önce 'npm run seed'");
   ITEM = item.id; ITEM2 = item2.id; CUSTOMER = customer.id; ADMIN = admin.id; STATION = station.id;
 

@@ -52,7 +52,12 @@ export const ROLL_STATUS_LABEL: Record<string, string> = {
   RETURNED_FROM_SUBCONTRACTOR: 'Fasondan Döndü',
   WAREHOUSE: 'Depo',
   SHIPPED: 'Sevk Edildi',
-  DELIVERED: 'Teslim Edildi',
+  // NOT (2026-07-31 denetimi): burada bir `DELIVERED: 'Teslim Edildi'` satırı vardı —
+  // backend `RollStatus` enum'unda BÖYLE BİR DEĞER YOK (hayalet ayna satırı) ve
+  // hiçbir yerden okunmuyordu. Sessiz zarar: harita `Record<string, string>`
+  // olduğu için derleyici uydurma anahtarı yakalamaz; bakım yapan kişi "demek ki
+  // teslim diye bir statü var" sanıp gerçekte hiç dönmeyecek bir dal yazar.
+  // Yeni satır eklerken schema.prisma → `enum RollStatus`'a bak.
   A1_STOCK: '2. Kalite',
   SCRAP: 'Fire',
   CANCELLED: 'İptal Edildi',

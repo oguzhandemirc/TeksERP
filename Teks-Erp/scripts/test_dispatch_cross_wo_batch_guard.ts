@@ -189,14 +189,19 @@ async function main(): Promise<void> {
 
   // ── 4) KRİTİK: WO-B'den doğrudan sevk (auto-attach) → FOREIGN_BATCH 400 ──
   console.log("\nKRİTİK: WO-A partili STOCK topu WO-B sevkine sokma denemesi");
-  let err: (Error & { statusCode?: number; details?: { code?: string } }) | null = null;
+  // NEDEN adlandırılmış tip (`typeof err` DEĞİL): `typeof err` catch içinde akış
+  // daraltmasıyla `null`'a iner → `e as typeof err` = `e as null` → aşağıdaki
+  // statusCode/details kontrolleri `never` üzerinde çalışır ve FOREIGN_BATCH
+  // guard'ının 400 gövdesi derleme tarafında hiç doğrulanmazdı.
+  type DispatchErr = Error & { statusCode?: number; details?: { code?: string } };
+  let err: DispatchErr | null = null;
   try {
     await sub.dispatch(
       { workOrderId: woB.id, stepId: woB.boyaStep, subcontractorId: SUB_BOYER, rollIds: [r1.id] },
       ADMIN,
     );
   } catch (e) {
-    err = e as typeof err;
+    err = e as DispatchErr;
   }
   check("Sevk REDDEDİLDİ (hata fırladı)", err !== null, err?.message ?? "hata yok!");
   check("400 badRequest", err?.statusCode === 400, `statusCode=${err?.statusCode}`);
@@ -214,7 +219,9 @@ async function main(): Promise<void> {
 
   // ── 5) MERGE stratejisi guard'ı bypass EDEMEZ ──
   const rFree = await stockRoll(200);
-  let errMerge: (Error & { details?: { code?: string } }) | null = null;
+  // (Yukarıdakiyle aynı gerekçe — `typeof errMerge` catch'te `null`'a inerdi.)
+  type MergeErr = Error & { details?: { code?: string } };
+  let errMerge: MergeErr | null = null;
   try {
     await sub.dispatch(
       {
@@ -227,7 +234,7 @@ async function main(): Promise<void> {
       ADMIN,
     );
   } catch (e) {
-    errMerge = e as typeof errMerge;
+    errMerge = e as MergeErr;
   }
   check("MERGE ile de FOREIGN_BATCH", errMerge?.details?.code === "FOREIGN_BATCH", errMerge?.message ?? "hata yok!");
 

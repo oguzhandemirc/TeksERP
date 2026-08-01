@@ -25,7 +25,23 @@ const specFieldObj = z.object({
 });
 const specFieldSchema = specFieldObj.default(DEF_SPEC_FIELD);
 
-const updateSchema = z.object({
+// NEDEN `strictObject` (2026-07-31 denetimi): düz `z.object` şemada OLMAYAN bir
+// anahtarı SESSİZCE atar. Sonuç: panel yeni bir bayrağı PATCH eder, uç 200 +
+// "kaydedildi" der, DB'ye hiçbir şey yazılmaz ve hata/log hiçbir yerde görünmez.
+// Bu gece fiilen ısırdı — yeni bayrak eklenip bu şemaya yazılmayınca ayar kayboldu.
+// `strictObject` ile bilinmeyen anahtar artık 400 + anahtarın ADI ile patlar.
+//
+// SÖZLEŞME: buradaki alan kümesi Electron `src/services/featureFlagService.ts`
+// `FeatureFlags` arayüzü ile BİREBİR aynı olmalı. Yeni bayrak eklerken üç yer
+// birlikte güncellenir: (1) bu şema, (2) `system-setting.service.setFeatureFlags`
+// yazma dalı + `getFeatureFlags` okuma dalı, (3) Electron `FeatureFlags` arayüzü.
+// Biri eksik kalırsa artık sessiz kalmaz: eksik (1) → 400, eksik (2) → yazılmaz.
+//
+// İç içe nesneler (travelerCardConfig / defaultLabelMedia / loginMethods) BİLEREK
+// gevşek: onların tek kaynağı servisteki normalize/sanitize fonksiyonlarıdır ve
+// eski kayıtlardan gelen geriye-uyum alanlarını (örn. `showOrderTotal`) okurlar —
+// strict yapılırsa eski istemci/round-trip yükleri 400 alır.
+const updateSchema = z.strictObject({
   // ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli).
   companyName: z.string().trim().max(120).optional(),
   pricingEnabled: z.boolean().optional(),
@@ -186,6 +202,16 @@ const updateSchema = z.object({
       addressLine: z.string().trim().max(200),
       phone: z.string().trim().max(60),
       taxInfo: z.string().trim().max(120),
+      // NEDEN sonradan eklendi (2026-07-31 denetimi): servis `setFeatureFlags`
+      // `extraLines`'ı zaten temizleyip kaydediyordu ama Zod şemasında alan
+      // OLMADIĞI için parse aşamasında sessizce atılıyordu → panelden girilen
+      // IBAN/Mersis/web satırları "kaydedildi" deyip kayboluyordu. Şema aynası
+      // eksik kalınca servisteki mantık HİÇ çalışmıyor. Sınırlar Electron
+      // formuyla aynı (en fazla 5 satır × 120 karakter).
+      extraLines: z
+        .array(z.string().max(120, "Ek künye satırı en fazla 120 karakter olabilir"))
+        .max(5, "En fazla 5 ek künye satırı girilebilir")
+        .optional(),
     })
     .optional(),
   // Yazdırılan belge içerik ayarı — ham map. Alan doğrulaması TEK KAYNAK olan servis
@@ -194,6 +220,14 @@ const updateSchema = z.object({
   // language/blankWidths şemada yoktu → Zod bunları SESSİZCE soyup kaydı engelliyordu.
   // Gevşek record → alanlar geçer, sanitize karar verir (z.any tipi DocumentsConfig'e uyumlu).
   documentsConfig: z.record(z.string(), z.any()).optional(),
+}, {
+  // Türkçe mesaj + hangi anahtarın tanınmadığını SÖYLE (rota kuralı: hata
+  // mesajları Türkçe). Diğer issue kodlarında `undefined` → Zod varsayılanı.
+  error: (issue) =>
+    issue.code === "unrecognized_keys"
+      ? `Tanınmayan ayar anahtarı: ${issue.keys.join(", ")}. ` +
+        "Bu alan feature-flag şemasına eklenmemiş — eklemeden gönderilirse kaydedilmez."
+      : undefined,
 });
 
 /**

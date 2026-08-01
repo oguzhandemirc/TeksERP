@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { LabelKind } from "@prisma/client";
+import { labelKindSchema } from "../config/label-kind.schema";
 import { LabelService } from "../services/label.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
@@ -30,11 +31,12 @@ const updateNamesSchema = z.object({
 });
 
 const previewSchema = z.object({
-  // TDZ guard: enum ÜYESİ (LabelKind.ROLL_RAW) top-level deref → tam-server döngülü
-  // import yük sırasında "Cannot access 'client_1' before initialization" boot crash
-  // riski (bkz. inventory.service.ts MANUAL_STATUS_TRANSITIONS fix). String literal +
-  // tip cast: runtime'da düz string dizisi (deref yok), çıktı tipi LabelKind korunur.
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as unknown as [LabelKind, ...LabelKind[]]),
+  // NEDEN paylaşılan şema (2026-07-31 denetimi): burada eskiden elle yazılmış
+  // ["ROLL_RAW", ...] listesi vardı ve aynı liste 3 yerde daha tekrarlanıyordu →
+  // Prisma'ya yeni LabelKind eklenince biri unutuluyor, uç yeni türü SESSİZCE
+  // reddediyordu. Tek kaynak: config/label-kind.schema.ts (TDZ kuralı da orada
+  // açıklandı — deref yaprak modülde yapılır, burada değil).
+  kind: labelKindSchema,
   fields: z.array(z.object({
     key: z.string().min(1),
     label: z.string().min(1),

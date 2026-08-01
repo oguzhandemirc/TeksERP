@@ -11,7 +11,13 @@ export type StationKind =
   | 'TAMBUR'
   | 'SUBCONTRACTOR'
   | 'OTHER';
-export type StepStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED' | 'CANCELLED';
+// ⚠️ BACKEND `StepStatus` İLE ELLE SENKRON (schema.prisma → `enum StepStatus`).
+// NEDEN 'CANCELLED' ÇIKARILDI (2026-07-31 denetimi): backend enum'unda yalnız
+// PENDING/ACTIVE/COMPLETED/SKIPPED var — 'CANCELLED' hayalet bir ayna değeriydi ve
+// hiçbir yerde okunmuyordu. İş emri iptalinde ADIM iptal olmaz; kart VOIDED olur.
+// Hayalet değer sessizce zarar verir: `step.status === 'CANCELLED'` yazan kod
+// derlenir ama koşulu ASLA sağlanmaz, dolayısıyla ölü dal hata vermeden yaşar.
+export type StepStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
 export type WorkOrderStatus =
   | 'PLANNED'
   | 'IN_PROGRESS'
@@ -25,16 +31,40 @@ export type WorkOrderType =
   | 'SAMPLE_PRODUCTION'
   | 'REPAIR_REWORK';
 
+// ⚠️ BACKEND `RollStatus` İLE ELLE SENKRON — değiştirmeden önce
+// `Teks-Erp/prisma/schema.prisma` → `enum RollStatus`'a BAK.
+// Mobil ayrı bir projedir, backend Prisma enum'unu import EDEMEZ; bu union bir
+// AYNADIR ve derleyici aynanın eksik olduğunu SÖYLEMEZ.
+//
+// NEDEN önemli (2026-07-31 denetimi): burada DÖRT gerçek değer EKSİKTİ —
+// CANCELLED, RETURNED_FROM_SUBCONTRACTOR, AT_KARTELA, KARTELA_CONSUMED. Backend
+// bu statülerdeki topu pekâlâ döndürüyor (operatör iptali, fason dönüşü, kartela
+// sevki/kabulü). Eksikliğin SESSİZ olmasının sebebi: veri yolunda hiçbir şey
+// patlamıyor (`ROLL_STATUS_LABEL` bir `Record<string, string>`, 13 değerin
+// hepsini zaten tanıyor ve doğru Türkçe etiketi basıyor). Kırılan yer TİP
+// YÜZEYİ: eksik değer TypeScript için "imkânsız" olduğundan
+//   • `roll.status === 'AT_KARTELA'` yazmak TS2367 derleme hatası verir —
+//     yani o statüyü ele alan kod YAZILAMAZ,
+//   • `Record<RollStatus, X>` / switch gibi kapsayıcı yapılar o dalları
+//     sessizce dışarıda bırakır (eksiklik "tamam" görünür).
+// Sonuç: kartelaya çıkmış ya da iptal edilmiş top için özel davranış
+// eklenemiyordu ve bunun sebebi hiçbir hata mesajında görünmüyordu.
+//
+// Sıra backend enum'uyla aynı tutuldu ki gözle karşılaştırmak kolay olsun.
 export type RollStatus =
   | 'STOCK'
   | 'IN_PRODUCTION'
-  | 'WAREHOUSE'
-  | 'SHIPPED'
-  | 'SCRAP'
+  | 'SCRAP' // Gerçek fire
+  | 'CANCELLED' // Operatör iptali (yanlış kayıt) — fire değil
   | 'AT_SUBCONTRACTOR'
   | 'A1_STOCK'
+  | 'RETURNED_FROM_SUBCONTRACTOR' // Fason dönüşü — eski top kapandı, yenileri doğdu
+  | 'WAREHOUSE'
+  | 'SHIPPED'
   | 'TAMBUR_CONSUMED'
-  | 'SUBCONTRACTOR_CONSUMED';
+  | 'SUBCONTRACTOR_CONSUMED'
+  | 'AT_KARTELA' // Bitmiş top kartela fasonunda
+  | 'KARTELA_CONSUMED'; // Kartela kabulünde kapandı — metraj Swatch'lara gitti
 
 // Backend enum'uyla (Teks-Erp RollEntrySource) birebir — SUPPLIER_RECEIPT = mobil
 // KK1 istasyon taraması, MANUAL_ENTRY = Electron admin "Manuel Top Ekle" (2026-07-15

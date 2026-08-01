@@ -1791,7 +1791,9 @@ export class SubcontractorService {
       const cancelTag = `CANCEL:${dispatch.dispatchNo}`;
       await tx.$executeRaw`
         UPDATE "roll_movements"
-        SET "exitedAt" = NOW(),
+        -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+        -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+        SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
             "notes" = CASE
               WHEN "notes" IS NULL OR "notes" = '' THEN ${cancelTag}
               ELSE "notes" || ' | ' || ${cancelTag}
@@ -2252,7 +2254,9 @@ export class SubcontractorService {
         UPDATE "roll_movements" rm
         SET "qtyOut"   = r."currentQty",
             "weightOut" = r."weightKg",
-            "exitedAt"  = NOW(),
+            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+            "exitedAt"  = (now() AT TIME ZONE 'UTC'),
             "notes"     = ${`RETURNED_VIA_RECEIPT:${receiptNo}`}
         FROM "rolls" r
         WHERE rm."rollId" = r."id"
@@ -4783,7 +4787,9 @@ export class SubcontractorService {
         UPDATE "roll_movements" rm
         SET "qtyOut" = r."currentQty",
             "weightOut" = r."weightKg",
-            "exitedAt" = NOW(),
+            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+            "exitedAt" = (now() AT TIME ZONE 'UTC'),
             "notes" = CASE
               WHEN rm."notes" IS NULL OR rm."notes" = '' THEN ${tag}
               ELSE rm."notes" || ' | ' || ${tag}
@@ -4871,7 +4877,9 @@ export class SubcontractorService {
         if (completeWorkOrder) {
           await tx.$executeRaw`
             UPDATE "roll_movements"
-            SET "exitedAt" = NOW(),
+            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+            SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
                 "notes" = CASE WHEN "notes" IS NULL OR "notes" = '' THEN 'FASON_DIRECT_SHIP'
                                ELSE "notes" || ' | FASON_DIRECT_SHIP' END
             WHERE "workOrderStepId" IN (

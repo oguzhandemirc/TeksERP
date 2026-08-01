@@ -73,7 +73,9 @@ async function main() {
 
     // 3) yeniden tartı → en son tartan kazanır
     await shipping.weighSack({ sackId: sack1, weightKg: 60 }, uid2);
-    s = await prisma.sack.findUnique({ where: { id: sack1 }, select: { weighedById: true } });
+    // `weighedAt` select'te KALMALI: `s` yukarıdaki ilk sorgudan tipini alıyor,
+    // dar select onu uyumsuz kılıyordu (bu kontrol yalnız weighedById'ye bakar).
+    s = await prisma.sack.findUnique({ where: { id: sack1 }, select: { weighedById: true, weighedAt: true } });
     check("3) yeniden tartı → en son tartan kazanır", s?.weighedById === uid2);
 
     // 5) dispatchShipment → Shipment.dispatchedById (çuval depodan seçilerek sevkiyata girer)

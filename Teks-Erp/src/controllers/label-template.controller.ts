@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { LabelKind, PrinterLanguage } from "@prisma/client";
+import { labelKindSchema } from "../config/label-kind.schema";
 import { LabelTemplateService } from "../services/label-template.service";
 import { buildRawCodePreview } from "../services/helpers/label-rawcode";
 import "../types/express-augment";
@@ -69,10 +70,14 @@ const previewRawSchema = z.object({
 });
 
 // Kanvas önizleme gövdesi (Etiket Stüdyosu v2) — hafif kabuk; eleman-düzeyi
-// doğrulama servistedir (validateCanvasLayout, Türkçe mesajlar). Enum'lar
-// string-literal + as cast (TDZ kuralı: modül-üstü enum ÜYESİ deref yasak).
+// doğrulama servistedir (validateCanvasLayout, Türkçe mesajlar).
+// NEDEN `labelKindSchema` (2026-07-31 denetimi): burada elle yazılmış LabelKind
+// listesi vardı ve `as [string, ...string[]]` cast'i yüzünden çıktı tipi `string`e
+// düşüyordu — yani yeni bir LabelKind eklenip liste unutulsa DERLEME de uyarmazdı,
+// uç yeni türü sessizce reddederdi. Tek kaynak: config/label-kind.schema.ts.
+// (PrinterLanguage aynası hâlâ elle — ayrı bulgu, bu deploy kapsamı dışı.)
 const canvasPreviewSchema = z.object({
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as [string, ...string[]]),
+  kind: labelKindSchema,
   widthMm: z.number().min(10).max(500),
   heightMm: z.number().min(10).max(500),
   elements: z.unknown(),
@@ -99,8 +104,10 @@ const variantUpdateSchema = z.object({
   elements: z.unknown().optional(),
 });
 
+// Bağlam varsayılanı ("bu tür etikette hangi şablon") — kind tek kaynaktan gelir
+// (bkz. config/label-kind.schema.ts); elle liste tutulmaz.
 const contextDefaultSchema = z.object({
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as [string, ...string[]]),
+  kind: labelKindSchema,
   templateId: z.string().uuid().nullable(),
 });
 
@@ -211,7 +218,8 @@ export class LabelTemplateController {
       if (req.body && typeof req.body === "object" && "elements" in req.body) {
         const body = canvasPreviewSchema.parse(req.body);
         const result = await this.service.getCanvasPreview({
-          kind: body.kind as LabelKind,
+          // cast GEREKMEZ — labelKindSchema doğrudan LabelKind döndürür.
+          kind: body.kind,
           widthMm: body.widthMm,
           heightMm: body.heightMm,
           elements: body.elements,
@@ -327,7 +335,8 @@ export class LabelTemplateController {
     try {
       const body = contextDefaultSchema.parse(req.body);
       const result = await this.service.setContextDefault(
-        body.kind as LabelKind,
+        // cast GEREKMEZ — labelKindSchema doğrudan LabelKind döndürür.
+        body.kind,
         body.templateId,
         req.user?.userId,
       );

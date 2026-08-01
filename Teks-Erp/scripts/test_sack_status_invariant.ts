@@ -22,7 +22,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { LabelService } from "../src/services/label.service";
 import { SackSearchService } from "../src/services/sack-search.service";
 import { AppError } from "../src/utils/app-error";
-import { RollStatus, ShipmentStatus } from "@prisma/client";
+import { Prisma, RollStatus, ShipmentStatus } from "@prisma/client";
 import { createManualMoveFixture, type ManualMoveFixture } from "./fixture-manual-move";
 
 let pass = 0,
@@ -53,7 +53,10 @@ const labels = new LabelService();
 // Sevk onayı varsayılan KAPALI → createShipment doğrudan DISPATCHED eder. Senaryo 7
 // PLANNED sevkiyatta dispatch guard'ını kanıtladığından onayı geçici AÇARIZ.
 const CONF_KEY = "shipping.confirmationEnabled";
-let prevConf: string | null | undefined;
+// `SystemSetting.value` şemada `Json` — `string` DEĞİL. Yanlış tip yüzünden bu
+// "ayarı yedekle/geri yükle" bloğu hiç derlenmiyordu; geri yüklemede ham `null`
+// yazmak da Prisma'da çalışmaz (Json kolonda `Prisma.JsonNull` gerekir).
+let prevConf: Prisma.JsonValue | undefined;
 
 let ADMIN = "";
 let CUSTOMER = "";
@@ -411,7 +414,11 @@ async function teardown(): Promise<void> {
     if (prevConf === undefined) {
       await prisma.systemSetting.deleteMany({ where: { key: CONF_KEY } });
     } else {
-      await prisma.systemSetting.update({ where: { key: CONF_KEY }, data: { value: prevConf } });
+      await prisma.systemSetting.update({
+        where: { key: CONF_KEY },
+        // Json kolonda JS `null` kabul edilmez → `Prisma.JsonNull`.
+        data: { value: prevConf === null ? Prisma.JsonNull : prevConf },
+      });
     }
   } catch {
     /* ayar geri alınamadıysa sessiz geç — test verisi değil */

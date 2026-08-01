@@ -76,6 +76,10 @@ async function main() {
           },
         });
         await AuditService.log({
+          // `userId` imzada ZORUNLU (`string | undefined`) — atlanınca derlenmiyordu.
+          // Bu bir bakım script'i, arkasında kullanıcı yok → açıkça `undefined`
+          // (AuditService bunu `userId: null` olarak yazar: "sistem yaptı").
+          userId: undefined,
           action: "CREATE",
           tableName: "LABEL_TEMPLATE_VARIANT",
           recordId: variant.id,

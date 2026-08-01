@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `DEMO-FASON-${stamp}`,
+      workOrderNumber: `DEMO-FASON-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS",
       width: WIDTH,
@@ -67,10 +67,10 @@ async function main(): Promise<void> {
     });
   }
 
-  console.log(`\n✅ Demo iş emri hazır: ${wo.batchNumber}`);
+  console.log(`\n✅ Demo iş emri hazır: ${wo.workOrderNumber}`);
   console.log(`   Rota: Zımpara (KESTEL) → Boyahane (BOYER) → Tambur`);
   console.log(`   3 top (300 m) Zımpara adımında BEKLİYOR (sevke hazır).`);
-  console.log(`\n   Electron'da İş Emirleri listesinde "${wo.batchNumber}" ara, aç, test et.\n`);
+  console.log(`\n   Electron'da İş Emirleri listesinde "${wo.workOrderNumber}" ara, aç, test et.\n`);
 }
 
 main()

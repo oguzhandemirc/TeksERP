@@ -793,7 +793,9 @@ export class KursunQcService {
         UPDATE "roll_movements"
         SET "qtyOut" = "qtyIn",
             "weightOut" = "weightIn",
-            "exitedAt" = NOW(),
+            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+            "exitedAt" = (now() AT TIME ZONE 'UTC'),
             "machineId" = COALESCE(${machineId ?? null}::uuid, "machineId"),
             "notes" = ${finishMarker}
         WHERE "workOrderStepId" = ${step.id}::uuid

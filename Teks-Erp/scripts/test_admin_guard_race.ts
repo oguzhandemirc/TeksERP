@@ -12,6 +12,7 @@
 // Yarıda kesilirse: finally koşmazsa admin'ler pasif kalabilir — dev/CI DB'de
 // kabul edilebilir; üretimde bu script koşulmaz.
 // =============================================================================
+import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { PermissionManagementService } from "../src/services/permission-management.service";
 
@@ -30,14 +31,20 @@ function check(label: string, ok: boolean, extra = "") {
 const STAMP = Date.now().toString(36);
 const ADMIN_CODES = ["admin:users", "admin:*"];
 
-function effectiveAdminWhere(now: Date) {
+// Dönüş tipi AÇIKÇA Prisma'nın where tipi: eskiden `as const` vardı ve ürettiği
+// `readonly` demet Prisma'nın beklediği MUTABLE diziye atanamıyordu. Bu, "guard
+// hangi izni admin sayıyor" tanımını tip kontrolünün dışında bırakıyordu — alan
+// adı yanlış yazılsa (örn. `validUnitl`) Prisma o koşulu görmezden gelir ve
+// sayım sessizce YANLIŞ olurdu. Açık tip hem `as const` sorununu çözer hem de
+// alan adlarını tanım yerinde doğrular.
+function effectiveAdminWhere(now: Date): Prisma.UserPermissionWhereInput {
   return {
     permission: { code: { in: ADMIN_CODES } },
     AND: [
       { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
       { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
     ],
-  } as const;
+  };
 }
 
 async function countActiveEffectiveAdmins(): Promise<number> {

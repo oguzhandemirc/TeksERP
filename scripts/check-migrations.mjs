@@ -25,7 +25,14 @@
 //   [GATE 3] her migration dizini `migration.sql` içeriyor mu (boş/yarım dizin).
 //   [GATE 4] scripts/test_*.ts UNTRACKED → FAIL. Test commit edilmezse CI'ın
 //            P2022 gate'i kaybolur.
+//   [GATE 5] package.json script'lerinin ANDIĞI yerel dosya UNTRACKED/EKSİK → FAIL.
+//            2026-08-01 denetiminde tam bu boşluk yakalandı: `tsconfig.scripts.json`
+//            ve `mobil/scripts/build-apk.mjs` commit EDİLMİŞ package.json'lardan
+//            çağrılıyordu ama kendileri untracked'ti. Yerelde her şey yeşil (dosya
+//            diskte var), temiz checkout'ta `npm test` ve `npm run build:apk` ilk
+//            satırda ölür. GATE 1/4 ile aynı hata sınıfı, farklı dizin.
 //
+
 // Çalıştır: node scripts/check-migrations.mjs      (Teks-Erp: npm run check:migrations)
 // Çıkış kodu: ihlal varsa 1, yoksa 0.
 //
@@ -35,8 +42,8 @@
 // =============================================================================
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, dirname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -134,6 +141,61 @@ if (untrackedTests.length) {
       "  Test de commit edilmezse o gate kaybolur ve hata production'da bulunur.",
     items: untrackedTests.map((e) => e.path),
     fix: `git add ${SCRIPTS_DIR}/test_*.ts`,
+  });
+}
+
+// --- GATE 5: package.json script'lerinin andığı yerel dosyalar --------------
+// NEDEN: `npm test` → `tsx scripts/run-all-tests.ts` → `tsc -p tsconfig.scripts.json`
+// zinciri commit'li package.json'dan başlar. Zincirdeki BİR dosya untracked'se
+// zincir yalnız bu makinede çalışır; CI/temiz klon/production'da kopar. Migration
+// untracked'liğiyle aynı sessiz başarısızlık: "bende çalışıyordu".
+const PKG_JSONS = ["package.json", "Teks-Erp/package.json", "mobil/package.json", "Electron/package.json"];
+// Yalnız yerel dosya gibi görünen token'lar: bilinen uzantı + glob YOK.
+// (`eslint src`, `expo start`, `2>&1` gibi token'lar elenir.)
+const FILE_TOKEN = /^[.\w/-]+\.(?:ts|tsx|js|mjs|cjs|json)$/;
+
+/** git index'te izleniyor mu? (staged-ama-commit'siz dosyalar da izleniyor SAYILIR) */
+function isTracked(repoRelPath) {
+  return git(["ls-files", "--", repoRelPath]).trim().length > 0;
+}
+
+const scriptRefProblems = [];
+for (const pkgRel of PKG_JSONS) {
+  const pkgAbs = join(REPO_ROOT, pkgRel);
+  if (!existsSync(pkgAbs)) continue;
+  const pkgDir = dirname(pkgRel); // "." | "Teks-Erp" | ...
+  let scripts;
+  try {
+    scripts = JSON.parse(readFileSync(pkgAbs, "utf8")).scripts ?? {};
+  } catch {
+    continue; // bozuk package.json bu bekçinin işi değil
+  }
+  for (const [name, cmd] of Object.entries(scripts)) {
+    for (const raw of String(cmd).split(/\s+/)) {
+      const token = raw.replace(/^["']|["']$/g, "");
+      if (!FILE_TOKEN.test(token) || /[*?]/.test(token)) continue;
+      // package.json'ın KENDİ dizinine göre çöz, sonra repo köküne indir.
+      const repoRel = normalize(join(pkgDir, token)).replace(/\\/g, "/");
+      if (repoRel.startsWith("..")) continue; // repo dışına çıkan referans (yok ama güvenli)
+      const abs = join(REPO_ROOT, repoRel);
+      if (!existsSync(abs)) {
+        scriptRefProblems.push(`${repoRel}  (EKSİK — ${pkgRel} → "${name}")`);
+      } else if (!isTracked(repoRel)) {
+        scriptRefProblems.push(`${repoRel}  (UNTRACKED — ${pkgRel} → "${name}")`);
+      }
+    }
+  }
+}
+
+if (scriptRefProblems.length) {
+  problems.push({
+    gate: "GATE 5 — package.json'un ANDIĞI DOSYA COMMIT EDİLMEMİŞ/EKSİK",
+    why:
+      "package.json commit'li ama çağırdığı dosya git'te YOK. Bu makinede çalışır,\n" +
+      "  temiz klonda / CI'da / production'da komut ilk satırda ölür (`npm test`,\n" +
+      "  `npm run build:apk` gibi). Migration untracked'liğiyle aynı hata sınıfı.",
+    items: [...new Set(scriptRefProblems)],
+    fix: "git add <dosya>  (ya da package.json'daki referansı kaldır)",
   });
 }
 

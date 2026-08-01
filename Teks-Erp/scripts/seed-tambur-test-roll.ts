@@ -5,7 +5,7 @@
 //   npx ts-node scripts/seed-tambur-test-roll.ts --clean  → bu script'in ürettiği test verisini sil
 //
 // Ne kurar (gerçek üretim akışıyla AYNI şekil):
-//   • WorkOrder (IN_PROGRESS) — batchNumber "TAMBUR-TEST-..."
+//   • WorkOrder (IN_PROGRESS) — gerçek İE formatında numara, parameters.seedScript işaretli
 //   • WorkOrderStep — Tambur istasyonunda, status=ACTIVE
 //   • Roll — renkli AÇIK KUMAŞ (barcode=null), IN_PRODUCTION, currentStepId=Tambur step, 100 mt
 //   • RollMovement — Tambur step'inde açık (exitedAt=null) → ekranda görünür
@@ -24,9 +24,33 @@ import {
 } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { TravelerCardService } from "../src/services/traveler-card.service";
+import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../src/utils/code-format";
 
-const BATCH_PREFIX = "TAMBUR-TEST-";
+// Bu script'in ürettiği veriyi `--clean` için bulunabilir kılan işaret.
+//
+// NEDEN `workOrderNumber` ÖN EKİ DEĞİL (eski hâli "TAMBUR-TEST-…" idi):
+// refakat kartında tek-kod kuralı geçerli → `cardNumber = barcode = workOrderNumber`,
+// ve okutma yolu `TravelerCardService.scan()` girişte `isCardCode()` ile
+// İE+GGAAYY+NNNN formatını DAYATIR. Serbest metinli bir numara kartı sessizce
+// okutulamaz hâle getirirdi — oysa script'in birincil kullanımı tam olarak
+// "Kart Barkod (okut)". Bu yüzden numara gerçek İE formatında üretilir, "test
+// verisi" işareti ise WorkOrder'ın serbest-meta alanı `parameters`'a yazılır.
+const SEED_MARKER = "seed-tambur-test-roll";
 const ROLL_QTY = 100; // açık kumaşın metresi — testte 150 yazıp aşımı dene
+
+/**
+ * Bugünün sırasındaki ilk boş İE numarası. Gerçek servis `withBarcodeRetry` +
+ * tx-içi sequence ile üretir; burada tek kullanıcılı dev script olduğu için
+ * max+1 yeterli (yarış yok).
+ */
+async function nextWorkOrderNumber(): Promise<string> {
+  const full = dailyCodePrefix("IE");
+  const todays = await prisma.workOrder.findMany({
+    where: { workOrderNumber: { gte: full, startsWith: full } },
+    select: { workOrderNumber: true },
+  });
+  return buildDailyCode("IE", nextDailySeq(todays.map((w) => w.workOrderNumber), full));
+}
 
 const travelerCards = new TravelerCardService();
 
@@ -70,18 +94,18 @@ async function seed() {
   });
 
   const station = await getTamburStation();
-  const stamp = `${Date.now()}`.slice(-7);
 
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `${BATCH_PREFIX}${stamp}`,
+      workOrderNumber: await nextWorkOrderNumber(),
       status: WorkOrderStatus.IN_PROGRESS,
       width: 150,
       foldType: "2-KAT",
       targetItemId: item.id,
       targetColorId: color?.id ?? null,
+      parameters: { seedScript: SEED_MARKER },
     },
-    select: { id: true, batchNumber: true },
+    select: { id: true, workOrderNumber: true },
   });
 
   const step = await prisma.workOrderStep.create({
@@ -129,7 +153,7 @@ async function seed() {
   const card = cardRes.data;
 
   console.log("\n✅ Tambur'a kadar gelmiş test topu hazır.\n");
-  console.log("  İş Emri (Parti)   :", wo.batchNumber);
+  console.log("  İş Emri No        :", wo.workOrderNumber);
   console.log("  Ürün              :", item.name);
   console.log("  Renk              :", color?.name ?? "(ham/renksiz)");
   console.log("  Açık kumaş metresi:", `${ROLL_QTY} mt`);
@@ -145,9 +169,12 @@ async function seed() {
 }
 
 async function clean() {
+  // İşaret `parameters` JSON'unda; index YOK → seq scan. Dev-only temizlik
+  // script'i olduğu için kabul edilebilir (CLAUDE.md'nin GIN-index kuralı
+  // sorgulanan ENDPOINT'ler içindir, elle koşulan bakım script'i için değil).
   const wos = await prisma.workOrder.findMany({
-    where: { batchNumber: { startsWith: BATCH_PREFIX } },
-    select: { id: true, batchNumber: true },
+    where: { parameters: { path: ["seedScript"], equals: SEED_MARKER } },
+    select: { id: true, workOrderNumber: true },
   });
   if (wos.length === 0) {
     console.log("Temizlenecek test verisi yok.");
@@ -204,7 +231,7 @@ async function clean() {
   await prisma.workOrderStep.deleteMany({ where: { id: { in: stepIds } } }).catch(() => {});
   await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
 
-  console.log(`Temizlendi: ${wos.length} test iş emri (${wos.map((w) => w.batchNumber).join(", ")}).`);
+  console.log(`Temizlendi: ${wos.length} test iş emri (${wos.map((w) => w.workOrderNumber).join(", ")}).`);
 }
 
 const isClean = process.argv.includes("--clean");

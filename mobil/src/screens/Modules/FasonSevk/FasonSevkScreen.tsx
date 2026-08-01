@@ -383,14 +383,13 @@ export default function FasonSevkScreen() {
   const externalSteps = useMemo<WorkOrderStep[]>(() => {
     const steps = woDetailQuery.data?.data?.steps ?? [];
     // Çoklu sevk: COMPLETED fason adımı da seçilebilir (ek parti gönderilince
-    // backend adımı yeniden ACTIVE'e açar). Sadece SKIPPED/CANCELLED hariç.
+    // backend adımı yeniden ACTIVE'e açar). Sadece SKIPPED hariç.
+    // NOT (2026-07-31 denetimi): burada bir `s.status !== 'CANCELLED'` koşulu daha
+    // vardı — backend `StepStatus` enum'unda CANCELLED YOK (DB kolonu bu değeri
+    // tutamaz), yani koşul HER ZAMAN doğruydu: filtreleme yaptığını sanan ölü kod.
+    // Adım iptali diye bir şey yok; iş emri iptalinde kart VOIDED olur.
     return steps
-      .filter(
-        (s) =>
-          s.station?.type === 'EXTERNAL' &&
-          s.status !== 'SKIPPED' &&
-          s.status !== 'CANCELLED'
-      )
+      .filter((s) => s.station?.type === 'EXTERNAL' && s.status !== 'SKIPPED')
       .sort((a, b) => a.stepSequence - b.stepSequence);
   }, [woDetailQuery.data]);
 
@@ -453,13 +452,12 @@ export default function FasonSevkScreen() {
       // Çoklu sevk: açık sevk olması artık kart okutmayı engellemez — boyahaneye
       // ek parti gönderilebilir (aynı topu iki kez gönderme backend per-roll
       // status kontrolüyle zaten engelli).
-      // Picker filtresiyle aynı: sevke uygun (SKIPPED/CANCELLED olmayan) en az
-      // bir EXTERNAL adım olmalı; COMPLETED adım ek parti için yeniden açılır.
+      // Picker filtresiyle aynı: sevke uygun (SKIPPED olmayan) en az bir EXTERNAL
+      // adım olmalı; COMPLETED adım ek parti için yeniden açılır.
+      // (Buradaki `!== 'CANCELLED'` de yukarıdakiyle aynı sebeple kaldırıldı —
+      // backend StepStatus'ta CANCELLED yok, koşul her zaman doğruydu.)
       const hasOpenExternal = (wo.steps ?? []).some(
-        (s) =>
-          s.station?.type === 'EXTERNAL' &&
-          s.status !== 'SKIPPED' &&
-          s.status !== 'CANCELLED',
+        (s) => s.station?.type === 'EXTERNAL' && s.status !== 'SKIPPED',
       );
       if (!hasOpenExternal) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);

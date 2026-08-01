@@ -2324,6 +2324,14 @@ export class WorkOrderService {
       newColorId?: string | null;
       orderMode?: "stock" | "keep";
       rollIds?: string[];
+      /**
+       * Tebdil sebebi (opsiyonel) — audit'e/parti kaydına yazılır.
+       * Bu ince cephe (facade) tipi `reason`'ı TAŞIMIYORDU: hem controller'ın Zod
+       * şeması hem de asıl `workOrderSplitService.splitBranch` onu kabul edip
+       * DB'ye yazdığı için HTTP yolu doğru çalışıyor, yalnız doğrudan TS
+       * çağrıcıları (testler) "fazla alan" hatası alıyordu. Tip driftiydi.
+       */
+      reason?: string;
     },
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
@@ -2651,7 +2659,9 @@ export class WorkOrderService {
       if (stepIds.length > 0) {
         await tx.$executeRaw`
           UPDATE roll_movements m
-          SET "exitedAt" = now(),
+          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
               "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
               "weightOut" = COALESCE(m."weightOut", r."weightKg"),
               notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_CANCELLED'
@@ -3145,7 +3155,9 @@ export class WorkOrderService {
         // Bayat açık movement kalmışsa kapat (defansif — WIP yok ama iz temiz olsun).
         await tx.$executeRaw`
           UPDATE roll_movements m
-          SET "exitedAt" = now(),
+          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
               -- qtyIn ÖNCE (istasyon iş-hacmi paritesi — yukarıdaki dispozisyon
               -- kapanışıyla aynı gerekçe): kesilmiş topta currentQty ile kapatmak
               -- üretim raporunda hayalet kayıp yaratır. qtyIn 0/null ise kalan metraj.
@@ -3412,7 +3424,9 @@ export class WorkOrderService {
         // terminal duruma çek (softDelete ile aynı gerekçe).
         await tx.$executeRaw`
           UPDATE roll_movements m
-          SET "exitedAt" = now(),
+          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
               "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
               "weightOut" = COALESCE(m."weightOut", r."weightKg"),
               notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_ARCHIVED'
@@ -5011,7 +5025,9 @@ export class WorkOrderService {
       //    Tek sorgu = O(1) (eski per-roll updateMany yerine).
       await tx.$executeRaw`
         UPDATE roll_movements m
-        SET "exitedAt" = now(),
+        -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
+        -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
+        SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
             "qtyOut" = r."currentQty",
             "weightOut" = r."weightKg",
             notes = 'DETACHED_FROM_WO'

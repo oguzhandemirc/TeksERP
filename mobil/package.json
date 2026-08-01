@@ -8,6 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build:apk": "node scripts/build-apk.mjs",
+    "build:apk:check": "node scripts/build-apk.mjs --check",
+    "build:apk:verify": "node scripts/build-apk.mjs --verify-only",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "lint": "expo lint"

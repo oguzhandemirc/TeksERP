@@ -8,6 +8,14 @@
 -- Rezerv/packedQty YOK (mühür + rebalance kaldırıldı) → düşüş yalnız sevkte. PLANNED
 -- tahsis shippedQty'ye sayılmaz.
 --
+-- ⚠️ MEKANİK İKİZİ VAR: `scripts/test_consistency.ts` aşağıdaki sorguları AYNEN
+--    koşar ve her bölümü bir check()'e bağlar → `npm test` ile otomatik, drift =
+--    KIRMIZI. Gerekçe: `psql` HER durumda `exit 0` verir, yani bu dosyayı elle
+--    koşmak "sorunlu satırları" basar ama hiçbir otomasyon farkı göremez.
+--    Bu dosya operatörün satırları GÖZLE görmesi için duruyor. Bir bölümün mantığı
+--    değişecekse ÖNCE burada değişir, sonra test'e kopyalanır (iki yüzey tek gerçek).
+--    Test ayrıca burada olmayan bir §20 taşır: WorkOrderStep.status mutabakatı.
+--
 -- Ne zaman: 3 ayda bir (ARCHITECTURE.md §10.2 ile) veya şüphe anında. Salt-okunur.
 --           §7 için EK OLARAK: kartela / tambur / fason akışına dokunan her sürümden
 --           sonra (çuval üyeliği ile top statüsü ayrışabilir — bkz. §7 başlığı).

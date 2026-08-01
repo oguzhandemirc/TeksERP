@@ -95,8 +95,18 @@ jobs:
       - name: Lint
         run: set -o pipefail; npm run lint 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
-      - name: Type-check
+      - name: Type-check (yalnız src)
         run: set -o pipefail; npx tsc --noEmit 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+      # scripts/ + prisma/ AYRI adım: kök tsconfig `include: ["src/**/*"]` ile sınırlı
+      # olduğu için 222 test dosyası uzun süre HİÇ derlenmedi → bir servisin imzası ya
+      # da bir enum değişince src yeşil kalıyor, testler de yeşil kalıyor, ama testin
+      # doğruladığı ŞEY sessizce boşa düşüyordu (2026-08-01 denetimi: 87 tip hatası).
+      # `npm test` bunu zaten geçit olarak koşar; burada AYRI adım olmasının sebebi
+      # teşhis: kırmızı olan şeyin "tip driftı" mi "gerçek test regresyonu" mu olduğu
+      # adım adından okunsun.
+      - name: Type-check (scripts + prisma)
+        run: set -o pipefail; npm run typecheck:scripts 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
       - name: Test suite (scripts/test_*.ts runner)
         run: set -o pipefail; npm test 2>&1 | tee -a /tmp/ci-backend.log

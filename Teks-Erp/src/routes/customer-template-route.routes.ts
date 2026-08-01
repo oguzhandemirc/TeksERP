@@ -11,15 +11,19 @@ import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { CustomerTemplateRouteService } from "../services/customer-template-route.service";
-import type { LabelKind } from "@prisma/client";
+import { labelKindSchema } from "../config/label-kind.schema";
 import "../types/express-augment";
 
 const service = new CustomerTemplateRouteService();
 const router = Router({ mergeParams: true });
 
-// Enum string-literal (TDZ kuralı — modül-üstü enum üyesi deref yasak).
+// NEDEN paylaşılan şema (2026-07-31 denetimi): burada elle yazılmış LabelKind
+// listesi vardı — dördüncü kopya. Yeni bir etiket bağlamı eklendiğinde bu satırı
+// güncellemeyi unutmak SESSİZ kırılmaydı (müşteriye şablon atama ucu yeni türü
+// reddeder, sebebi hiçbir log'da görünmez). Tek kaynak: config/label-kind.schema.ts
+// — TDZ kuralı orada korunuyor (Prisma deref'i yaprak modülde, burada değil).
 const setSchema = z.object({
-  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"] as [string, ...string[]]),
+  kind: labelKindSchema,
   templateId: z.string().uuid().nullable(),
 });
 
@@ -68,7 +72,8 @@ router.put(
       const body = setSchema.parse(req.body);
       const result = await service.set(
         req.params.customerId as string,
-        body.kind as LabelKind,
+        // cast GEREKMEZ — labelKindSchema doğrudan LabelKind döndürür.
+        body.kind,
         body.templateId,
         req.user?.userId,
       );

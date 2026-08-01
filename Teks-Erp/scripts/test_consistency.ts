@@ -1,0 +1,509 @@
+// =============================================================================
+// VERİ TUTARLILIK KAPISI — `scripts/consistency-check.sql`'in mekanik ikizi
+//
+// NEDEN VAR (2026-07-31 denetim bulgusu): o SQL dosyası **elle** ve "3 ayda bir"
+// koşuluyordu (`psql <db> -f scripts/consistency-check.sql`), üstelik `psql` HER
+// durumda `exit 0` veriyordu. Yani:
+//   • Kimse koşmazsa drift kimsenin haberi olmadan aylarca birikiyordu.
+//   • Koşulsa bile çıktı "sorunlu satırları" basıyor ama süreç BAŞARILI dönüyordu —
+//     çıkışa bakan hiçbir otomasyon (CI, deploy adımı) farkı göremiyordu.
+// Denormalize alanlar (`Order.shippedQty`, `OrderLine.shippedQty`) DB seddi
+// olmayan tek defter kalemidir: drift olursa karşılanma/MRP **sessizce** yanlışlanır.
+//
+// Bu dosya aynı sorguları `$queryRaw` ile koşar ve her bölümü `check()`e bağlar →
+// drift = KIRMIZI = `npm test` düşer.
+//
+// ⚠️ SORGULAR `consistency-check.sql`'DEN AYNEN ALINDI. Davranış kaymasın diye
+// yeniden yazılmadılar; bir bölümün mantığı değişecekse ÖNCE o dosyada değişmeli,
+// sonra buraya kopyalanmalı (iki yüzey tek gerçeği söylesin — psql ile elle koşan
+// operatör ile CI aynı sonucu görmeli).
+//
+// EK BÖLÜM §20 (`WorkOrderStep.status` mutabakatı) SQL dosyasında YOKTU: adım
+// durumu `recomputeStepStatus` ile movement'lardan TÜRETİLEN bir alandır ve hiçbir
+// mutabakat sorgusu yoktu. Kuralları `src/services/helpers/roll-step.helper.ts`
+// içindeki fonksiyondan birebir SQL'e çevrildi (aşağıda satır satır eşleşme notu).
+//
+// Salt-okunur: hiçbir yazma/fixture yok. Üretim DB'sine karşı da koşulabilir —
+// nitekim asıl değeri orada (`DATABASE_URL=<canlı> npx tsx scripts/test_consistency.ts`).
+// Koşum: npx tsx scripts/test_consistency.ts
+// =============================================================================
+import { Prisma } from "@prisma/client";
+import prisma from "../src/lib/prisma";
+
+let pass = 0,
+  fail = 0;
+function check(label: string, ok: boolean, extra = ""): void {
+  if (ok) {
+    pass++;
+    console.log(`✅ ${label}${extra ? " — " + extra : ""}`);
+  } else {
+    fail++;
+    console.log(`❌ ${label}${extra ? " — " + extra : ""}`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORTAM GÜRÜLTÜSÜ FİLTRESİ — neden var ve nerede MEŞRU
+//
+// Bu test paylaşılan bir dev DB'sinde ve CI'da koşar; ikisinde de backend test
+// paketinin kendi ürettiği veri birikir. `CLAUDE.md → Test Scriptleri` sözleşmesi
+// gereği test verisi **`TEST-`/`TST-` ön ekli benzersiz iş anahtarlarıyla** doğar
+// (demo seed'leri `DEMO-` kullanır). Temizlik `finally`de yapılır ama bazen YARIM
+// kalır: örn. bir test `travelerCard`'ı siler, ardından `workOrder.delete` bir FK'ya
+// takılır → kartsız iş emri kalıntısı. Ölçüldü (2026-08-01, dev DB): §15'in 219
+// satırının 219'u, §16'nın 579 satırının 545'i, §20'nin 305 satırının 305'i test
+// fixture'ıydı; ÜRETİM formatlı (IE…) tek bir satır bile drift göstermiyordu.
+//
+// Filtre bilinçli olarak DAR: üretim iş anahtarları asla bu ön ekleri taşımaz
+// (iş emri `İE+GGAAYY+NNNN`, top barkodu `T+…`), yani canlı DB'de filtre hiçbir
+// satırı elemez — kapı orada TAM güçtedir. Filtresiz bırakılsaydı test dev/CI'da
+// sürekli kırmızı olur ve ilk haftasında devre dışı bırakılırdı; asıl kaybedilen
+// şey kapının kendisi olurdu.
+//
+// KURAL: yeni bir bölüm eklerken filtreyi ÖNCE ekleme — önce filtresiz ölç. Filtre
+// yalnız "bu satırları test paketi üretti" KANITLANDIĞINDA eklenir ve gerekçesi
+// `why` alanına yazılır.
+// ─────────────────────────────────────────────────────────────────────────────
+const FIXTURE_PREFIXES = ["TEST-", "TST-", "DEMO-"];
+
+/** `<kolon>` test/demo fixture ön eki taşımıyor mu? (NULL = üretim sayılır, elenmez) */
+function notFixture(column: string): string {
+  const conds = FIXTURE_PREFIXES.map((p) => `${column} NOT LIKE '${p}%'`).join(" AND ");
+  return `(${column} IS NULL OR (${conds}))`;
+}
+
+interface Section {
+  /** consistency-check.sql'deki bölüm numarası (izlenebilirlik için birebir) */
+  id: string;
+  title: string;
+  /** consistency-check.sql'den AYNEN kopyalanan sorgu (psql \echo satırları hariç) */
+  sql: string;
+  /**
+   * Dış filtre — verbatim sorgu bir ALT SORGU olarak sarılır, filtre DIŞARIDAN
+   * uygulanır. Böylece orijinal sorgunun metni hiç değişmez (kopya kaymaz) ama
+   * ortam gürültüsü elenir.
+   */
+  noise?: { where: string; why: string };
+}
+
+const SECTIONS: Section[] = [
+  {
+    id: "1",
+    title: "OrderLine.shippedQty vs Σ(SackAllocation[DISPATCHED] + DirectShipAllocation)",
+    sql: `
+SELECT ol.id AS order_line_id,
+       ol."shippedQty" AS kayitli,
+       COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0) AS hesaplanan,
+       ol."shippedQty" - (COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0)) AS fark
+FROM order_lines ol
+LEFT JOIN (
+  SELECT sal."orderLineId", SUM(sal.qty) AS toplam
+  FROM sack_allocations sal
+  JOIN sacks sk ON sk.id = sal."sackId"
+  JOIN shipments sh ON sh.id = sk."shipmentId"
+  WHERE sh.status = 'DISPATCHED'
+  GROUP BY sal."orderLineId"
+) sa ON sa."orderLineId" = ol.id
+LEFT JOIN (SELECT "orderLineId", SUM(qty) AS toplam FROM subcontractor_direct_ship_allocations GROUP BY "orderLineId") dsa
+       ON dsa."orderLineId" = ol.id
+WHERE ol."shippedQty" <> COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0)`,
+  },
+  {
+    id: "2",
+    title: "Order.shippedQty vs Σ(OrderLine.shippedQty)",
+    sql: `
+SELECT o.id AS order_id,
+       o."shippedQty" AS shipped_kayitli, COALESCE(SUM(ol."shippedQty"), 0) AS shipped_hesap
+FROM orders o
+LEFT JOIN order_lines ol ON ol."orderId" = o.id
+GROUP BY o.id, o."shippedQty"
+HAVING o."shippedQty" <> COALESCE(SUM(ol."shippedQty"), 0)`,
+  },
+  {
+    id: "3",
+    title: "Negatif miktar/metraj/kg (CHECK backstop)",
+    sql: `
+SELECT 'rolls' AS tablo, id::text AS kayit FROM rolls
+  WHERE "currentQty" < 0 OR "initialQty" < 0 OR ("weightKg" IS NOT NULL AND "weightKg" < 0)
+UNION ALL
+SELECT 'order_lines', id::text FROM order_lines WHERE "quantity" <= 0 OR "shippedQty" < 0
+UNION ALL
+SELECT 'sack_allocations', id::text FROM sack_allocations WHERE qty <= 0`,
+  },
+  {
+    id: "4",
+    title: "Roll ↔ Sack ↔ Shipment tutarlılık (O-22 FK backstop)",
+    sql: `
+SELECT r.id AS roll_id, r."sackId", r."shipmentId" AS roll_shipment, s."shipmentId" AS sack_shipment
+FROM rolls r
+JOIN sacks s ON r."sackId" = s.id
+WHERE r."shipmentId" IS DISTINCT FROM s."shipmentId"`,
+  },
+  {
+    id: "5",
+    title: "shipment_orders.isActive vs shipment.status (denorm drift)",
+    sql: `
+SELECT so."shipmentId", so."orderId", so."isActive" AS bayrak, s.status AS gercek_durum
+FROM shipment_orders so
+JOIN shipments s ON s.id = so."shipmentId"
+WHERE so."isActive" <> (s.status = 'PLANNED')`,
+  },
+  {
+    id: "6",
+    title: "Çuval seq ↔ shipmentId tutarlılığı (depoda seq YOK, sevkiyatta seq VAR)",
+    sql: `
+SELECT sk.id AS sack_id, sk."shipmentId", sk.seq
+FROM sacks sk
+WHERE (sk."shipmentId" IS NULL AND sk.seq IS NOT NULL)
+   OR (sk."shipmentId" IS NOT NULL AND sk.seq IS NULL)`,
+  },
+  {
+    id: "7",
+    title: "Çuvalda KAYITLI ama binada OLMAYAN top (hayalet içerik)",
+    sql: `
+SELECT r.id AS roll_id, r.barcode, r.status, r."currentQty",
+       s."sackNo", s."weightKg" AS cuval_kg,
+       sh."shipmentNo", sh.status AS sevkiyat_durumu,
+       r."updatedAt"
+FROM rolls r
+JOIN sacks s ON s.id = r."sackId"
+LEFT JOIN shipments sh ON sh.id = s."shipmentId"
+WHERE r.status IN ('CANCELLED','SCRAP','IN_PRODUCTION','AT_SUBCONTRACTOR',
+                   'SUBCONTRACTOR_CONSUMED','AT_KARTELA','KARTELA_CONSUMED','TAMBUR_CONSUMED')
+ORDER BY s."sackNo", r.barcode`,
+  },
+  {
+    id: "7b",
+    title: "SEVK EDİLMİŞ ama kartelaya/fasona DA gönderilmiş top (geçmiş çift-sayım)",
+    sql: `
+SELECT r.id AS roll_id, r.barcode, r."currentQty",
+       s."sackNo", sh."shipmentNo", sh."dispatchedAt",
+       kd."dispatchNo" AS kartela_sevk, NULL AS fason_sevk
+FROM rolls r
+JOIN sacks s ON s.id = r."sackId"
+JOIN shipments sh ON sh.id = s."shipmentId" AND sh.status = 'DISPATCHED'
+JOIN kartela_dispatch_items kdi ON kdi."rollId" = r.id
+JOIN kartela_dispatches kd ON kd.id = kdi."dispatchId" AND kd."cancelledAt" IS NULL
+WHERE r.status = 'SHIPPED'
+UNION ALL
+SELECT r.id, r.barcode, r."currentQty",
+       s."sackNo", sh."shipmentNo", sh."dispatchedAt",
+       NULL, sd."dispatchNo"
+FROM rolls r
+JOIN sacks s ON s.id = r."sackId"
+JOIN shipments sh ON sh.id = s."shipmentId" AND sh.status = 'DISPATCHED'
+JOIN subcontractor_dispatch_items sdi ON sdi."rollId" = r.id
+JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId" AND sd."cancelledAt" IS NULL
+WHERE r.status = 'SHIPPED'`,
+  },
+  {
+    id: "7c",
+    title: "İPTAL EDİLMİŞ kartela hâlâ çuvalda (simetri kontrolü)",
+    sql: `
+SELECT w.id AS swatch_id, w.barcode, s."sackNo", w."cancelledAt"
+FROM swatches w
+JOIN sacks s ON s.id = w."sackId"
+WHERE w."cancelledAt" IS NOT NULL`,
+  },
+  {
+    id: "8",
+    title: "Barkodsuz satılabilir top (WAREHOUSE/A1_STOCK ama barcode NULL)",
+    sql: `
+SELECT id, status, "currentQty", "updatedAt"
+FROM rolls
+WHERE status IN ('WAREHOUSE','A1_STOCK') AND barcode IS NULL`,
+  },
+  {
+    id: "9",
+    title: "SHIPPED top ama çuvalı yok / çuvalın sevkiyatı DISPATCHED değil",
+    sql: `
+SELECT r.id, r.barcode, r.status, r."sackId", s."shipmentId", sh.status AS sevk_durumu
+FROM rolls r
+LEFT JOIN sacks s ON s.id = r."sackId"
+LEFT JOIN shipments sh ON sh.id = s."shipmentId"
+WHERE r.status = 'SHIPPED'
+  AND (r."sackId" IS NULL OR sh.status IS DISTINCT FROM 'DISPATCHED')`,
+  },
+  {
+    id: "10",
+    title: "IN_PRODUCTION top ama currentStepId NULL veya WO CANCELLED/SUPERSEDED",
+    sql: `
+SELECT r.id, r.barcode, r.status, r."currentStepId", wos."workOrderId", wo.status AS wo_durumu
+FROM rolls r
+LEFT JOIN work_order_steps wos ON wos.id = r."currentStepId"
+LEFT JOIN work_orders wo ON wo.id = wos."workOrderId"
+WHERE r.status = 'IN_PRODUCTION'
+  AND (r."currentStepId" IS NULL OR wo.id IS NULL OR wo.status IN ('CANCELLED','SUPERSEDED'))`,
+    noise: {
+      where: `WHERE ${notFixture(`drift.barcode`)}`,
+      why: "manuel-taşıma testleri (TEST-MM-…) adımsız top bırakır; üretim barkodu 'T…' formatındadır",
+    },
+  },
+  {
+    id: "11",
+    title: "Açık movement + top artık orada değil / ölü statüde (hayalet movement)",
+    sql: `
+SELECT rm.id AS movement_id, rm."rollId", r.barcode, r.status AS top_durumu,
+       rm."workOrderStepId", r."currentStepId", rm."enteredAt"
+FROM roll_movements rm
+JOIN rolls r ON r.id = rm."rollId"
+WHERE rm."exitedAt" IS NULL
+  AND (r.status IN ('SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED','CANCELLED')
+       OR r."currentStepId" IS DISTINCT FROM rm."workOrderStepId")`,
+  },
+  {
+    id: "12",
+    title: "Kapanmış movement'ta qtyOut <> qtyIn",
+    sql: `
+SELECT rm.id, rm."rollId", rm."workOrderStepId", rm."qtyIn", rm."qtyOut", rm."exitedAt"
+FROM roll_movements rm
+WHERE rm."exitedAt" IS NOT NULL
+  AND rm."qtyOut" IS DISTINCT FROM rm."qtyIn"`,
+    noise: {
+      // Bu üç kapanış İSTASYON BİTİRMESİ DEĞİLDİR, dolayısıyla "qtyOut = qtyIn"
+      // kuralının (commit 64263fc) konusu da değildir:
+      //   WO_CLOSE_*      → kapanış dispozisyonu; kalan metraj yazılır, giren değil
+      //                     (workorder.service.ts:3099)
+      //   MANUAL_MOVE_OUT → manuel taşımada hayalet movement kapatılır, ölçüm yok
+      //                     (workorder-manual-move.service.ts:628)
+      //   REDYE_REWIND    → redye/parti geri sarmada movement iptal edilir
+      //                     (workorder-split.service.ts:356,473)
+      // Üçünde de qtyOut bilinçli olarak yazılmaz/farklıdır. Kapı bu üçü dışındaki
+      // her kapanışa uygulanır — asıl korunan şey normal istasyon FINISH'idir.
+      where: `WHERE NOT EXISTS (
+                SELECT 1 FROM roll_movements rm_n
+                WHERE rm_n.id = drift.id
+                  AND (rm_n.notes LIKE 'WO_CLOSE\\_%' OR rm_n.notes IN ('MANUAL_MOVE_OUT','REDYE_REWIND')))`,
+      why: "kapanış dispozisyonu / manuel taşıma / redye geri sarma istasyon bitirmesi değildir",
+    },
+  },
+  {
+    id: "13",
+    title: "currentQty > initialQty (top yalnız kesimle azalır, artamaz)",
+    sql: `
+SELECT id, barcode, "initialQty", "currentQty", status
+FROM rolls
+WHERE "currentQty" > "initialQty"`,
+  },
+  {
+    id: "14",
+    title: "Yarım fason kabul (top tüketildi ama receipt'ten çocuk doğmamış)",
+    sql: `
+SELECT r.id AS tuketilen_top_id, r.barcode, r."updatedAt",
+       sr.id AS receipt_id, sr."receiptNo"
+FROM rolls r
+JOIN subcontractor_receipt_items sri ON sri."newRollId" = r.id
+JOIN subcontractor_receipts sr ON sr.id = sri."receiptId" AND sr."cancelledAt" IS NULL
+WHERE r.status = 'SUBCONTRACTOR_CONSUMED'
+  AND NOT EXISTS (SELECT 1 FROM rolls child WHERE child."parentReceiptId" = sr.id)`,
+  },
+  {
+    id: "15",
+    title: "AT_SUBCONTRACTOR top ama açık fason sevk kaydı yok",
+    sql: `
+SELECT r.id, r.barcode, r."updatedAt"
+FROM rolls r
+WHERE r.status = 'AT_SUBCONTRACTOR'
+  AND NOT EXISTS (
+    SELECT 1 FROM subcontractor_dispatch_items sdi
+    JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
+    WHERE sdi."rollId" = r.id AND sd."cancelledAt" IS NULL
+  )`,
+    noise: {
+      where: `WHERE ${notFixture(`drift.barcode`)}`,
+      why: "SQL dosyasının kendi notu: seed'li/test'li ortamda statü dispatch'siz yazılır — üretimde her satır gerçek anomalidir",
+    },
+  },
+  {
+    id: "16",
+    title: "Kartsız iş emri (kart WO açılışında doğar — 2026-07-14 sonrası)",
+    sql: `
+SELECT wo.id, wo."workOrderNumber", wo.status, wo."createdAt"
+FROM work_orders wo
+LEFT JOIN traveler_cards tc ON tc."workOrderId" = wo.id
+WHERE tc.id IS NULL
+  AND wo."createdAt" >= '2026-07-14'`,
+    noise: {
+      // İki ayrı kalıntı sınıfı elenir:
+      //  (a) TST-/TEST-/DEMO- numaralı fixture iş emirleri.
+      //  (b) ADIMSIZ iş emirleri: `workorder.service.create` rota adımlarını kartla
+      //      AYNI tx'te yazar → adımsız bir WO hiç doğmaz. Adımsız + kartsız kayıt,
+      //      temizliği yarım kalmış bir testin izidir (adımlar + kart silinmiş, WO
+      //      bir FK'ya takıldığı için kalmış). Gerçek bir "kart atlama" regresyonu
+      //      adımları OLAN bir WO üretir, yani kapı zayıflamaz.
+      where: `WHERE ${notFixture(`drift."workOrderNumber"`)}
+                AND EXISTS (SELECT 1 FROM work_order_steps s WHERE s."workOrderId" = drift.id)`,
+      why: "fixture WO'ları + adımı silinmiş (yarım temizlenmiş) test kalıntıları",
+    },
+  },
+  {
+    id: "17",
+    title: "Açık (isProcessed=false) RollError ama top ölü/emekli statüde",
+    sql: `
+SELECT re.id AS hata_id, re."rollId", r.barcode, r.status, re."detectedAt"
+FROM roll_errors re
+JOIN rolls r ON r.id = re."rollId"
+WHERE re."isProcessed" = false
+  AND r.status IN ('SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED','CANCELLED','SCRAP')`,
+  },
+  {
+    id: "18",
+    title: "Master-data ad mükerrer (aktif, case/boşluk-duyarsız)",
+    sql: `
+SELECT 'items' AS tablo, lower(trim(name)) AS ad, COUNT(*) AS adet, array_agg(id) AS kayitlar
+FROM items WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'colors', lower(trim(name)), COUNT(*), array_agg(id)
+FROM colors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'customers', lower(trim(name)), COUNT(*), array_agg(id)
+FROM customers GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'subcontractors', lower(trim(name)), COUNT(*), array_agg(id)
+FROM subcontractors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'routes', lower(trim(name)), COUNT(*), array_agg(id)
+FROM routes GROUP BY 2 HAVING COUNT(*) > 1`,
+  },
+  {
+    id: "19",
+    title: "Fason sevk / doğrudan-sevk snapshot toplamı vs kalem toplamı",
+    sql: `
+SELECT 'subcontractor_dispatches' AS tablo, sd.id::text AS kayit, sd."totalQty" AS kayitli,
+       COALESCE(SUM(sdi."dispatchedQty"), 0) AS hesaplanan
+FROM subcontractor_dispatches sd
+LEFT JOIN subcontractor_dispatch_items sdi ON sdi."dispatchId" = sd.id
+GROUP BY sd.id, sd."totalQty"
+HAVING sd."totalQty" <> COALESCE(SUM(sdi."dispatchedQty"), 0)
+UNION ALL
+SELECT 'direct_shipments', ds.id::text, ds."totalQty", COALESCE(SUM(dsa.qty), 0)
+FROM direct_shipments ds
+LEFT JOIN subcontractor_direct_ship_allocations dsa ON dsa."directShipmentId" = ds.id
+GROUP BY ds.id, ds."totalQty"
+HAVING ds."totalQty" <> COALESCE(SUM(dsa.qty), 0)`,
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // §20 — YENİ. `consistency-check.sql`'de KARŞILIĞI YOK.
+  //
+  // `WorkOrderStep.status` TÜRETİLMİŞ bir alandır: tek yazıcısı
+  // `roll-step.helper.ts → recomputeStepStatus`, girdisi o adımın movement'ları.
+  // Denormalize + sedsiz + mutabakatsız üçlüsü tam olarak `shippedQty`'nin
+  // durumuydu (D-9) — orada bir sorgu vardı, burada hiç yoktu. Adım durumu
+  // bozulursa istasyon kuyruğu, "açık kart" listesi ve WO tamamlama koşulu
+  // sessizce yanlışlanır: operatör kartı okutur ama iş görünmez.
+  //
+  // recomputeStepStatus → SQL eşlemesi (helper'daki sırayla):
+  //   satır 45  : `status = SKIPPED` ise DOKUNULMAZ            → WHERE status <> 'SKIPPED'
+  //   satır 54  : openCount   = açık movement, top CANCELLED değil
+  //   satır 61  : closedCount = kapalı movement, top CANCELLED değil
+  //   satır 73  : pendingRolls= bu WO'nun herhangi bir adımında movement'ı OLAN,
+  //               bu adımda movement'ı OLMAYAN ve hâlâ üretimde
+  //               (IN_PRODUCTION | AT_SUBCONTRACTOR | RETURNED_FROM_SUBCONTRACTOR) toplar
+  //   satır 92-103: karar ağacı
+  //        open > 0                        → ACTIVE
+  //        closed = 0                      → PENDING   (pending>0 olsa da: satır 102'nin
+  //                                          `closedCount > 0 ? ACTIVE : PENDING` dalı)
+  //        closed > 0 ve pending = 0       → COMPLETED
+  //        closed > 0 ve pending > 0       → ACTIVE
+  //   NOT: `roll: { status: { not: CANCELLED } }` zorunlu relation üzerinde
+  //        INNER JOIN + `<>` üretir; SQL karşılığı birebir odur.
+  // ───────────────────────────────────────────────────────────────────────────
+  {
+    id: "20",
+    title: "WorkOrderStep.status vs movement'lardan türetilen değer (recomputeStepStatus)",
+    sql: `
+WITH adim AS (
+  SELECT s.id, s.status::text AS kayitli, s."workOrderId", wo."workOrderNumber",
+    (SELECT COUNT(*) FROM roll_movements rm JOIN rolls r ON r.id = rm."rollId"
+      WHERE rm."workOrderStepId" = s.id AND rm."exitedAt" IS NULL AND r.status <> 'CANCELLED') AS acik,
+    (SELECT COUNT(*) FROM roll_movements rm JOIN rolls r ON r.id = rm."rollId"
+      WHERE rm."workOrderStepId" = s.id AND rm."exitedAt" IS NOT NULL AND r.status <> 'CANCELLED') AS kapali,
+    (SELECT COUNT(*) FROM rolls r
+      WHERE r.status IN ('IN_PRODUCTION','AT_SUBCONTRACTOR','RETURNED_FROM_SUBCONTRACTOR')
+        AND EXISTS (SELECT 1 FROM roll_movements rm2
+                    JOIN work_order_steps s2 ON s2.id = rm2."workOrderStepId"
+                    WHERE rm2."rollId" = r.id AND s2."workOrderId" = s."workOrderId")
+        AND NOT EXISTS (SELECT 1 FROM roll_movements rm3
+                        WHERE rm3."rollId" = r.id AND rm3."workOrderStepId" = s.id)) AS bekleyen
+  FROM work_order_steps s
+  JOIN work_orders wo ON wo.id = s."workOrderId"
+  WHERE s.status <> 'SKIPPED'
+)
+SELECT a.id, a."workOrderNumber", a.kayitli, a.acik, a.kapali, a.bekleyen,
+       CASE WHEN a.acik > 0 THEN 'ACTIVE'
+            WHEN a.kapali = 0 THEN 'PENDING'
+            WHEN a.bekleyen = 0 THEN 'COMPLETED'
+            ELSE 'ACTIVE' END AS beklenen
+FROM adim a
+WHERE a.kayitli <> (CASE WHEN a.acik > 0 THEN 'ACTIVE'
+                         WHEN a.kapali = 0 THEN 'PENDING'
+                         WHEN a.bekleyen = 0 THEN 'COMPLETED'
+                         ELSE 'ACTIVE' END)`,
+    noise: {
+      where: `WHERE ${notFixture(`drift."workOrderNumber"`)}`,
+      why: "fixture WO'ları: testler adım durumunu doğrudan yazar / yarım temizler (ölçüm: 305 driftin 305'i fixture)",
+    },
+  },
+];
+
+async function driftCount(s: Section): Promise<number> {
+  const sql = `SELECT COUNT(*)::int AS n FROM (${s.sql}\n) drift\n${s.noise?.where ?? ""}`;
+  const rows = await prisma.$queryRaw<Array<{ n: number }>>(Prisma.raw(sql));
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** Drift varsa teşhis için ilk birkaç satır — "N satır" tek başına iş görmez. */
+async function driftSamples(s: Section): Promise<string[]> {
+  const sql = `SELECT * FROM (${s.sql}\n) drift\n${s.noise?.where ?? ""}\nLIMIT 3`;
+  const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.raw(sql));
+  return rows.map((r) =>
+    Object.entries(r)
+      .map(([k, v]) => `${k}=${v === null ? "∅" : String(v)}`)
+      .join(", ")
+  );
+}
+
+async function main(): Promise<void> {
+  console.log("\n=== Veri tutarlılık kapısı (consistency-check.sql'in mekanik ikizi) ===");
+  console.log(`${SECTIONS.length} bölüm · her bölümde drift satırı sayısı 0 olmalı\n`);
+
+  for (const s of SECTIONS) {
+    let n: number;
+    try {
+      n = await driftCount(s);
+    } catch (e) {
+      // Sorgu patlarsa bunu "drift yok" diye okumak en tehlikeli sessizlik olurdu
+      // (şema değişmiş olabilir) → açıkça başarısızlık.
+      check(`§${s.id} ${s.title}`, false, `SORGU HATASI: ${e instanceof Error ? e.message : String(e)}`);
+      continue;
+    }
+    const suffix = s.noise ? ` [gürültü filtresi: ${s.noise.why}]` : "";
+    check(`§${s.id} ${s.title}`, n === 0, n === 0 ? `drift yok${suffix}` : `${n} DRIFT SATIRI${suffix}`);
+    if (n > 0) {
+      const samples = await driftSamples(s).catch(() => []);
+      for (const line of samples) console.log(`      ↳ ${line}`);
+      if (n > samples.length) console.log(`      ↳ … +${n - samples.length} satır daha`);
+    }
+  }
+
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  if (fail > 0) {
+    console.log(
+      "\nDÜŞTÜYSE: bir denormalize alan defterden kopmuş ya da bir akış nesneyi\n" +
+        "yarım bırakmış. ÖNCE hangi kod yolunun ürettiğini bul — geçmiş satırları\n" +
+        "toplu UPDATE ile 'düzeltmek' kök nedeni gizler ve drift geri gelir.\n" +
+        "Aynı sorguları elle koşmak için: psql <db> -f scripts/consistency-check.sql"
+    );
+  }
+}
+
+main()
+  .catch((e) => {
+    console.error("HATA:", e);
+    fail++;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+    process.exit(fail > 0 ? 1 : 0);
+  });

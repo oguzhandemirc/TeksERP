@@ -1,0 +1,33 @@
+// =============================================================================
+// Tip kontrolü kapsamı — `src` DIŞINDAKİ TypeScript'i de derler.
+//
+// NEDEN VAR: kök `tsconfig.json` `include: ["src/**/*"]` ile sınırlı ve
+// `npm run lint` de `eslint src` ile. Sonuç: `scripts/` altındaki 222 test
+// dosyası + `prisma/` seed'leri HİÇ derlenmiyordu. Bir servisin imzası ya da bir
+// enum değişince `src` yeşil kalıyor, testler de yeşil kalıyor — ama testin
+// doğruladığı ŞEY sessizce boşa düşüyordu.
+//
+// Somut vaka (2026-08-01 denetimi): iki test `StationKind.EXTERNAL` ile istasyon
+// süzüyordu. Böyle bir enum üyesi YOK (`EXTERNAL` `StationType`'ta). Runtime'da
+// `undefined` olduğu için Prisma o koşulu tamamen ATIYOR → süzgeç sessizce
+// no-op'a düşüyor, test yeşil kalıyor ama "fason olmayan istasyon seç"
+// garantisi ortadan kalkıyordu. `tsc` bunu ilk saniyede yakalar; kimse
+// çalıştırmıyordu.
+//
+// `noEmit: true` — bu config yalnız DOĞRULAR, çıktı üretmez. Build hâlâ kök
+// `tsconfig.json` ile yapılır (`rootDir: ./src` → `dist/` düzeni korunur;
+// buradaki genişletilmiş `include` ile derlemek `dist/` altına `scripts/`
+// ve `prisma/` klasörleri ekleyip o düzeni bozardı).
+// =============================================================================
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // `rootDir`'ı kaldırmak ZORUNLU: kök config `./src` diyor, biz onun dışına
+    // çıkıyoruz → "is not under rootDir" hatası alınırdı. noEmit olduğu için
+    // rootDir'ın zaten bir işlevi yok (yalnız çıktı düzenini belirler).
+    "rootDir": "."
+  },
+  "include": ["scripts/**/*", "prisma/**/*", "src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

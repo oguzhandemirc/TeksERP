@@ -157,7 +157,13 @@ export async function getLateDeliveries(): Promise<LateDeliveryRow[]> {
     JOIN customers c ON o."customerId" = c.id
     LEFT JOIN order_lines ol ON ol."orderId" = o.id
     WHERE o.deadline IS NOT NULL
-      AND o.deadline < NOW()
+      -- O-11: "deadline" tz'siz timestamp kolonu ve içinde UTC duruyor. Çıplak NOW()
+      -- timestamptz olduğu için kolon YEREL saat sanılır → Europe/Istanbul'da
+      -- siparişler termininden 3 saat ÖNCE "geciken" listesine düşerdi (ve
+      -- daysLate JS tarafında UTC'ye göre hesaplandığı için iki uç çelişirdi).
+      -- now() AT TIME ZONE 'UTC' STABLE'dır → deadline index'i kullanılabilir.
+      -- Bekçi: scripts/test_raw_sql_hygiene.ts
+      AND o.deadline < (now() AT TIME ZONE 'UTC')
       AND o.status IN ('PENDING','APPROVED','PARTIAL_SHIPPED')
     GROUP BY o.id, o."orderNumber", c.name, o.status, o.deadline, o."shippedQty"
     ORDER BY o.deadline ASC

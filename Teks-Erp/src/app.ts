@@ -320,6 +320,10 @@ app.get("/health", async (_req: Request, res: Response) => {
                 FROM pg_stat_database WHERE datname = current_database())::float8 AS cache_hit,
              (SELECT round(100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0), 1)
                 FROM pg_stat_user_tables WHERE relname = 'rolls')::float8 AS rolls_dead,
+             -- tz-ok: query_start (pg_stat_activity) timestamptz; iki timestamptz
+             -- çıkarılıyor, tz'siz kolona yazım/karşılaştırma yok.
+             -- clock_timestamp() de bilinçli: tx başlangıcı değil ŞU AN gerekli
+             -- (en uzun süren sorgunun anlık yaşı ölçülüyor).
              (SELECT COALESCE(max(extract(epoch FROM (clock_timestamp() - query_start))), 0)
                 FROM pg_stat_activity
                 WHERE datname = current_database() AND state = 'active'

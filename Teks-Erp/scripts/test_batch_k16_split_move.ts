@@ -27,6 +27,7 @@ import prisma from "../src/lib/prisma";
 import { PrintedDocStatus, PrintedDocType, RollStatus, StationKind, StationType, WorkOrderStatus } from "@prisma/client";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { isBatchLockedTx, createBatchTx, mergeBatches, moveRolls, splitBatch } from "../src/services/batch.service";
+import { withBarcodeRetry } from "../src/utils/barcode-retry";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -120,8 +121,12 @@ async function main() {
     });
     return r;
   };
+  // `withBarcodeRetry` ŞART (gerekçe: test_batch_k15_merge.ts) — `generateBatchNumberTx`
+  // kilitsiz max+1 okur, paralel bir yazar aynı P kodunu üretirse P2002 düşer.
   const mkBatch = async (workOrderId: string, rollIds: string[]) => {
-    const { batch } = await prisma.$transaction((tx) => createBatchTx(tx, { workOrderId, rollIds }));
+    const { batch } = await withBarcodeRetry(() =>
+      prisma.$transaction((tx) => createBatchTx(tx, { workOrderId, rollIds })),
+    );
     return batch;
   };
   const locked = (batchId: string) => prisma.$transaction((tx) => isBatchLockedTx(tx, batchId));
@@ -415,9 +420,13 @@ async function main() {
         .catch(() => [] as { id: string }[])
     ).map((d) => d.id);
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispIdsAll } } }).catch(() => {});
-    await prisma.rollOperation.deleteMany({ where: { workOrderStep: { workOrderId: { in: woIds } } } }).catch(() => {});
+    // NEDEN `step` (`workOrderStep` DEĞİL): ilişki alanının adı `step`
+    // (`workOrderStepId` skaler kolon). Yanlış ad Prisma'ya doğrulama hatası
+    // attırıyor, `.catch(() => {})` yutuyordu → temizlik sessizce hiç koşmuyordu.
+    // Ayrıntılı gerekçe: test_batch_k15_merge.ts (bu dosya onun desenini izler).
+    await prisma.rollOperation.deleteMany({ where: { step: { workOrderId: { in: woIds } } } }).catch(() => {});
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: allRollIds } } }).catch(() => {});
-    await prisma.rollMovement.deleteMany({ where: { workOrderStep: { workOrderId: { in: woIds } } } }).catch(() => {});
+    await prisma.rollMovement.deleteMany({ where: { step: { workOrderId: { in: woIds } } } }).catch(() => {});
     await prisma.subcontractorReceiptProperty.deleteMany({ where: { receipt: { workOrderId: { in: woIds } } } }).catch(() => {});
     await prisma.subcontractorReceiptItem.deleteMany({ where: { receipt: { workOrderId: { in: woIds } } } }).catch(() => {});
     // Born toplar receipt'lere FK ile bağlı — receipt'lerden ÖNCE silinmeli.

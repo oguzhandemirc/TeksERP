@@ -23,7 +23,7 @@
 // Koşum: npx tsx scripts/test_pool_health.ts
 // =============================================================================
 import express, { Request, Response, NextFunction } from "express";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { AddressInfo } from "node:net";
 import { ZodError, z } from "zod";
 import dotenv from "dotenv";
@@ -60,7 +60,10 @@ function keepAlive(): NodeJS.Timeout {
 async function provokeAcquireTimeout(): Promise<unknown> {
   const ka = keepAlive();
   const p = new Pool({ connectionString: CONN, max: 1, connectionTimeoutMillis: 250 });
-  let held: Awaited<ReturnType<typeof p.connect>> | null = null;
+  // NEDEN doğrudan `PoolClient`: `p.connect` AŞIRI YÜKLÜ (promise + callback
+  // biçimleri) ve `ReturnType<>` son overload'ı (`void` dönen callback biçimi)
+  // seçiyor → `held` `void`/`never` oluyor, `held?.release()` de derlenmiyordu.
+  let held: PoolClient | null = null;
   try {
     held = await p.connect(); // tek slotu tut, BIRAKMA
     await p.connect(); // kuyruğa girer → 250ms sonra düşer

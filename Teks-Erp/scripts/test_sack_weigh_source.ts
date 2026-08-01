@@ -15,7 +15,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
 import { AppError } from "../src/utils/app-error";
-import { RollStatus } from "@prisma/client";
+import { Prisma, RollStatus } from "@prisma/client";
 
 let pass = 0,
   fail = 0;
@@ -37,7 +37,10 @@ const msgOf = (e: unknown) => (e instanceof AppError ? e.message : String(e));
 
 const TS = Date.now().toString().slice(-6);
 const FLAG = "shipping.simulatedWeightEnabled";
-let prevFlag: string | null | undefined;
+// `SystemSetting.value` şemada `Json` — `string` DEĞİL. Yanlış tip yüzünden bu
+// "ayarı yedekle/geri yükle" bloğu hiç derlenmiyordu; geri yüklemede ham `null`
+// yazmak da Prisma'da çalışmaz (Json kolonda `Prisma.JsonNull` gerekir).
+let prevFlag: Prisma.JsonValue | undefined;
 
 let ADMIN = "";
 let CUSTOMER = "";
@@ -241,7 +244,12 @@ async function run(): Promise<void> {
 async function teardown(): Promise<void> {
   try {
     if (prevFlag === undefined) await prisma.systemSetting.deleteMany({ where: { key: FLAG } });
-    else await prisma.systemSetting.update({ where: { key: FLAG }, data: { value: prevFlag } });
+    else
+      await prisma.systemSetting.update({
+        where: { key: FLAG },
+        // Json kolonda JS `null` kabul edilmez → `Prisma.JsonNull`.
+        data: { value: prevFlag === null ? Prisma.JsonNull : prevFlag },
+      });
   } catch {
     /* ayar geri alınamadıysa geç */
   }

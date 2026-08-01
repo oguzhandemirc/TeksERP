@@ -43,10 +43,17 @@ async function main(): Promise<void> {
   // ── 409 MULTI_BATCH: P1 + P2 birlikte, strateji yok ──
   const p1 = await attachWave(ITEM, GRADE, ADMIN, 2);
   const p2 = await attachWave(ITEM, GRADE, ADMIN, 2);
-  let err: { message: string; details?: { code?: string; batches?: { batchNumber: string; oldest: boolean }[] } } | null = null;
+  // NEDEN adlandırılmış tip (`typeof err` DEĞİL): `typeof err` catch bloğunda akış
+  // daraltmasına tabidir — o noktada `err`'e yalnız `null` atanmış olduğu için
+  // `typeof err` = `null`'a iner, yani `e as typeof err` fiilen `e as null` olur.
+  // Sonuç: aşağıdaki üç kontrol `never` üzerinde çalışır ve 409 gövdesi
+  // (code/batches) derleme tarafında HİÇ doğrulanmaz. Runtime'da JS umursamadığı
+  // için test yeşil kalıyordu — tam da bu görevin aradığı sessiz iptal.
+  type MultiBatchErr = { message: string; details?: { code?: string; batches?: { batchNumber: string; oldest: boolean }[] } };
+  let err: MultiBatchErr | null = null;
   try {
     await sub.bulkDispatchStep({ workOrderId: woId, stepId: zimpara, rollIds: [...p1.rollIds, ...p2.rollIds] }, ADMIN);
-  } catch (e) { err = e as typeof err; }
+  } catch (e) { err = e as MultiBatchErr; }
   check("çok-parti + stratejisiz → 409", !!err && err.message.includes("birden fazla partiden"), err?.message ?? "hata yok");
   check("409 payload code=MULTI_BATCH", err?.details?.code === "MULTI_BATCH", err?.details?.code);
   check("409 payload en eski parti işaretli", !!err?.details?.batches?.find((b) => b.oldest), JSON.stringify(err?.details?.batches?.map((b) => `${b.batchNumber}:${b.oldest}`)));

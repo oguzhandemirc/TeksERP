@@ -166,7 +166,9 @@ async function main() {
         colorId: r1Cur!.colorId,
         propertyIds: r1Cur!.properties.map((p) => p.propertyId),
         width: r1Cur!.width != null ? Number(r1Cur!.width) : null,
-        qualityGrade: r1Cur!.qualityGrade,
+        // `applyManualProperties` `qualityGrade?: string` bekler (nullable DEĞİL).
+        // Bu noktada değer "A1" (yukarıda doğrulandı) → dönüşüm davranışı değiştirmez.
+        qualityGrade: r1Cur!.qualityGrade ?? undefined,
       },
       undefined,
     );

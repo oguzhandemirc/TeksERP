@@ -5,7 +5,7 @@
 // Çalıştır: npx tsx scripts/test_traveler_scan_dedup.ts
 import prisma from "../src/lib/prisma";
 import { TravelerCardService } from "../src/services/traveler-card.service";
-import { ScanType, StationKind } from "@prisma/client";
+import { ScanType, StationType } from "@prisma/client";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -25,7 +25,21 @@ async function main(): Promise<void> {
   const item = await prisma.item.findFirst({ where: { itemType: "FABRIC" }, select: { id: true } });
   const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
   // Kart okutmada matchingStep için istasyonun WO adımıyla eşleşmesi gerekmez (null olabilir).
-  const station = await prisma.station.findFirst({ where: { kind: { not: StationKind.EXTERNAL }, isActive: true }, select: { id: true } });
+  // NEDEN `type` (kind DEĞİL): "fason mu" ayrımının kanonik kaynağı `Station.type`'tır
+  // (`subcontractor.service.ts` her yerde `station.type !== StationType.EXTERNAL` ile bakar).
+  // Burada eskiden `kind: { not: StationKind.EXTERNAL }` yazıyordu — `StationKind`'da
+  // EXTERNAL ÜYESİ YOK (o `StationType`'ta). Runtime'da `undefined` olduğu ve Prisma
+  // `undefined` koşulu tamamen ATTIĞI için süzgeç sessizce `{ isActive: true }`'e
+  // düşüyordu: test yeşil kalıyor ama "fason olmayan istasyon seç" garantisi yok
+  // oluyordu. `scripts/` hiç derlenmediği için tsc bunu 1 saniyede söyleyemedi
+  // (bkz. tsconfig.scripts.json). `orderBy` determinizm için: `findFirst` sırasız
+  // çalışırsa DB'nin fiziksel satır sırasına kalır ve geri-yükleme/VACUUM sonrası
+  // sessizce BAŞKA bir istasyon seçilebilir.
+  const station = await prisma.station.findFirst({
+    where: { type: { not: StationType.EXTERNAL }, isActive: true },
+    orderBy: [{ createdAt: "asc" }, { code: "asc" }],
+    select: { id: true },
+  });
   if (!item || !admin || !station) throw new Error("Seed fixture eksik — önce 'npm run seed'");
   ADMIN = admin.id; stationId = station.id;
 

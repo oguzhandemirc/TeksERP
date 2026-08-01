@@ -37,11 +37,11 @@ async function makeCard(opts: {
   width: number;
   qtys: number[];
   label: string;
-}): Promise<{ woId: string; batchNumber: string; cardBarcode: string | null; kk2StepId: string; rolls: { barcode: string; qty: number }[] }> {
+}): Promise<{ woId: string; workOrderNumber: string; cardBarcode: string | null; kk2StepId: string; rolls: { barcode: string; qty: number }[] }> {
   const stamp = `${Date.now()}`.slice(-5) + bc;
   const wo = await prisma.workOrder.create({
     data: {
-      batchNumber: `KK2T-${opts.label}-${stamp}`,
+      workOrderNumber: `KK2T-${opts.label}-${stamp}`,
       type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS",
       width: opts.width,
@@ -93,7 +93,7 @@ async function makeCard(opts: {
     rolls.push({ barcode: bcode, qty });
   }
 
-  return { woId: wo.id, batchNumber: wo.batchNumber, cardBarcode: card?.barcode ?? null, kk2StepId, rolls };
+  return { woId: wo.id, workOrderNumber: wo.workOrderNumber, cardBarcode: card?.barcode ?? null, kk2StepId, rolls };
 }
 
 (async () => {
@@ -152,12 +152,12 @@ async function makeCard(opts: {
   console.log(`Ürün: ${item.name} · Renk: ${color.name} · KK2: ${kk2.name} · Tambur: ${tambur.name}\n`);
 
   console.log("── KART A (barkodlu, KK2'de AÇIK) — offline leke / metraj / KK2 Tamamla / Adımı Kapat ──");
-  console.log(`  İş emri : ${A.batchNumber}`);
+  console.log(`  İş emri : ${A.workOrderNumber}`);
   console.log(`  KART BARKODU: ${A.cardBarcode}`);
   A.rolls.forEach((r, i) => console.log(`    Top ${i + 1}: ${r.barcode}  ·  ${r.qty} mt  (metraj testi: ${r.qty + 50} gir → reddedilmeli)`));
 
   console.log("\n── KART B (KK2 adımı finishStep ile KAPATILDI) — reopen testi ──");
-  console.log(`  İş emri : ${B.batchNumber}`);
+  console.log(`  İş emri : ${B.workOrderNumber}`);
   console.log(`  KART BARKODU: ${B.cardBarcode}`);
   console.log(`  finishStep → ${finishRes.message}`);
   console.log(`  [PROBE] getByCardBarcode(re-scan): ${scanResult}`);

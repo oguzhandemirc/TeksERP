@@ -23,11 +23,18 @@ const payload = {
 } as unknown as LabelPayload;
 
 // 1) applyRawCode — ikame
-check("{{barcode}} ikame edilir", applyRawCode("^FD{{barcode}}^FS", payload) === "^FDBC-123^FS");
-check("{{itemName}} ikame edilir", applyRawCode("[{{itemName}}]", payload) === "[Pamuk]");
-check("{{lengthMeters}} formatlı (birim m)", applyRawCode("{{lengthMeters}}", payload) === "47,5 m", applyRawCode("{{lengthMeters}}", payload));
-check("bilinmeyen {{foo}} → boş", applyRawCode("a{{foo}}b", payload) === "ab");
-check("boşluklu {{ barcode }} de çalışır", applyRawCode("{{ barcode }}", payload) === "BC-123");
+// NEDEN 3. argüman: `applyRawCode` sonradan zorunlu `language` parametresi aldı
+// (değer dile göre sanitize ediliyor: ZPL'de `^`/`~`, PPLB'de `"` ayıklanır).
+// Test çağrıları 2 argümanda kaldığı için `language` runtime'da `undefined` oluyor
+// ve sanitize `default` dalına düşüyordu — yani bu beş kontrol ZPL yolunu DEĞİL,
+// dilsiz yolu ölçüyordu. (Aşağıdaki değerlerde `^`/`~` bulunmadığı için sonuçlar
+// aynı çıkıyordu; bu yüzden kimse fark etmedi.) Dosyanın geri kalanı da ZPL
+// varsayıyor (readTemplateRawCode + fmt.language) → tutarlı olan ZPL.
+check("{{barcode}} ikame edilir", applyRawCode("^FD{{barcode}}^FS", payload, PrinterLanguage.ZPL) === "^FDBC-123^FS");
+check("{{itemName}} ikame edilir", applyRawCode("[{{itemName}}]", payload, PrinterLanguage.ZPL) === "[Pamuk]");
+check("{{lengthMeters}} formatlı (birim m)", applyRawCode("{{lengthMeters}}", payload, PrinterLanguage.ZPL) === "47,5 m", applyRawCode("{{lengthMeters}}", payload, PrinterLanguage.ZPL));
+check("bilinmeyen {{foo}} → boş", applyRawCode("a{{foo}}b", payload, PrinterLanguage.ZPL) === "ab");
+check("boşluklu {{ barcode }} de çalışır", applyRawCode("{{ barcode }}", payload, PrinterLanguage.ZPL) === "BC-123");
 
 // 2) readTemplateRawCode
 check("readTemplateRawCode ZPL döner", readTemplateRawCode({ ZPL: "^XA" }, PrinterLanguage.ZPL) === "^XA");

@@ -53,7 +53,9 @@ async function main() {
   }) as unknown as typeof svc.listDbCopies;
   const fakeRun = (async () => {
     runCount++;
-  }) as unknown as Parameters<typeof svc.startCopyJob>[1]["run"];
+    // `startCopyJob`'un 2. parametresi OPSİYONEL → tipi `{...} | undefined`.
+    // `NonNullable` olmadan `["run"]` ile indekslenemez.
+  }) as unknown as NonNullable<Parameters<typeof svc.startCopyJob>[1]>["run"];
 
   try {
     // --- 1) Yarış ---

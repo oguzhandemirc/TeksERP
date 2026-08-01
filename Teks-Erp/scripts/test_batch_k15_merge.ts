@@ -26,6 +26,7 @@ import { PrintedDocStatus, PrintedDocType, RollStatus, StationKind, StationType,
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { createBatchTx, mergeBatches, moveRolls } from "../src/services/batch.service";
+import { withBarcodeRetry } from "../src/utils/barcode-retry";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -127,8 +128,17 @@ async function main() {
     });
     return r;
   };
+  // `withBarcodeRetry` ŞART — `batch.service.ts`'in sözleşmesi bunu açıkça yazıyor:
+  // "Çağıran tx'i `withBarcodeRetry(() => prisma.$transaction(...))` ile sarmalı".
+  // `generateBatchNumberTx` günün NUMERIC max'ı + 1 okur; bu bir check-then-act'tir
+  // ve kilit almaz. Aynı anda BAŞKA biri (paralel bir test/script, paylaşılan dev
+  // DB'si) parti yaratırsa iki taraf aynı P kodunu hesaplar → `@unique` ihlali
+  // (P2002). Sarmalayıcı yokken bu test tam olarak öyle düştü (2026-08-01 koşusu);
+  // tek başına koşarken görünmüyor çünkü yarışacak kimse yok.
   const mkBatch = async (workOrderId: string, rollIds: string[]) => {
-    const { batch } = await prisma.$transaction((tx) => createBatchTx(tx, { workOrderId, rollIds }));
+    const { batch } = await withBarcodeRetry(() =>
+      prisma.$transaction((tx) => createBatchTx(tx, { workOrderId, rollIds })),
+    );
     return batch;
   };
 
@@ -136,7 +146,9 @@ async function main() {
     // ═══ Senaryo a: 4 parti aynı adımda aynı firmada fasonda → merge ═══
     const stepA1 = woA.steps[0]!.id;
     const rollsA = [await mkRoll(stepA1), await mkRoll(stepA1), await mkRoll(stepA1), await mkRoll(stepA1)];
-    const batchesA = [];
+    // Tip `mkBatch`'ten türetilir — boş `[]` implicit `any[]` doğuruyordu, yani
+    // aşağıdaki `b.id` / `b.batchNumber` erişimleri hiç kontrol edilmiyordu.
+    const batchesA: Awaited<ReturnType<typeof mkBatch>>[] = [];
     for (const r of rollsA) batchesA.push(await mkBatch(woA.id, [r.id]));
     const dispA: string[] = [];
     for (const r of rollsA) {
@@ -184,7 +196,9 @@ async function main() {
     check("a8: lane survivor locked=true + rollCount=4", survLane?.locked === true && survLane.rollCount === 4);
     check(
       "a9: kaynak lane'ler rollCount=0 + mergedInto dolu",
-      srcLanes.length === 3 && srcLanes.every((l) => l.rollCount === 0 && l.mergedInto?.id === batchesA[0].id && l.mergedInto.batchNumber === mergeA.survivorNumber),
+      // `?.` ikinci erişimde de: `mergedInto` null olsaydı ilk koşul zaten false
+      // olup kısa devre yapardı — davranış AYNI, yalnız tip güvenli.
+      srcLanes.length === 3 && srcLanes.every((l) => l.rollCount === 0 && l.mergedInto?.id === batchesA[0].id && l.mergedInto?.batchNumber === mergeA.survivorNumber),
     );
 
     // ═══ Senaryo b: merge SONRASI receive (tam dönüş, konsolide sevkin tüm topları) ═══
@@ -439,9 +453,16 @@ async function main() {
         .catch(() => [] as { id: string }[])
     ).map((d) => d.id);
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: dispIdsAll } } }).catch(() => {});
-    await prisma.rollOperation.deleteMany({ where: { workOrderStep: { workOrderId: { in: woIds } } } }).catch(() => {});
+    // NEDEN `step` (`workOrderStep` DEĞİL): RollOperation/RollMovement üzerindeki
+    // ilişki alanının ADI `step`'tir (`workOrderStepId` skaler kolonun adıdır).
+    // Burada eskiden `workOrderStep:` yazıyordu → Prisma her çağrıda
+    // PrismaClientValidationError atıyor, `.catch(() => {})` de onu YUTUYORDU:
+    // temizlik hiç koşmadı, WO adımları/işlem log'ları ve peşi sıra istasyonlar
+    // dev DB'sinde birikti (denetim anında 200 aktif istasyonun çoğu bu artıktı).
+    // Hata değil, SESSİZ SIZINTI — `scripts/` derlenmediği için görünmüyordu.
+    await prisma.rollOperation.deleteMany({ where: { step: { workOrderId: { in: woIds } } } }).catch(() => {});
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: allRollIds } } }).catch(() => {});
-    await prisma.rollMovement.deleteMany({ where: { workOrderStep: { workOrderId: { in: woIds } } } }).catch(() => {});
+    await prisma.rollMovement.deleteMany({ where: { step: { workOrderId: { in: woIds } } } }).catch(() => {});
     await prisma.subcontractorReceiptProperty.deleteMany({ where: { receipt: { workOrderId: { in: woIds } } } }).catch(() => {});
     await prisma.subcontractorReceiptItem.deleteMany({ where: { receipt: { workOrderId: { in: woIds } } } }).catch(() => {});
     // Born toplar receipt'lere FK ile bağlı — receipt'lerden ÖNCE silinmeli.

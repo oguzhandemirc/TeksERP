@@ -21,7 +21,7 @@ function startMock(): Promise<Mock> {
   return new Promise((resolve) => {
     let buf = Buffer.alloc(0);
     const server = net.createServer((sock) => {
-      sock.on("data", (d) => { buf = Buffer.concat([buf, d]); });
+      sock.on("data", (d: Buffer) => { buf = Buffer.concat([buf, d]); });
     });
     server.listen(0, "127.0.0.1", () => {
       const port = (server.address() as net.AddressInfo).port;

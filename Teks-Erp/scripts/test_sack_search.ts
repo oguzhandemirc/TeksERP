@@ -135,10 +135,11 @@ async function main() {
     check("Dökümde sevkiyat başlığı var", c.shipment.shipmentNo === `TEST-SRC-${ts}`);
 
     // 6) locateRoll
-    const loc = await svc.locateRoll(r4.barcode);
+    // `!`: `mkRoll` barkodu her zaman literal yazar (şemada `Roll.barcode` nullable).
+    const loc = await svc.locateRoll(r4.barcode!);
     const lr = loc.data as { sack: { id: string } | null; shipment: { id: string } | null };
     check("locateRoll çuvaldaki topu buldu (çuval+sevkiyat)", lr.sack?.id === sack2.id && lr.shipment?.id === shipment.id);
-    const locFree = await svc.locateRoll(r5.barcode);
+    const locFree = await svc.locateRoll(r5.barcode!);
     const lf = locFree.data as { sack: unknown; shipment: unknown; status: string };
     check("locateRoll çuvalsız top → sack/shipment null + statü", lf.sack === null && lf.shipment === null && lf.status === "WAREHOUSE");
 

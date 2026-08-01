@@ -28,7 +28,12 @@ export async function getRollAging(): Promise<RollAgingSummary> {
     WITH aged AS (
       SELECT
         r."currentQty",
-        EXTRACT(EPOCH FROM (NOW() - r."updatedAt")) / 86400.0 AS age_days
+        -- O-11: "updatedAt" tz'siz timestamp kolonu ve içinde UTC duruyor (Prisma
+        -- öyle yazar). Çıplak NOW() timestamptz olduğu için karşılaştırmada kolon YEREL
+        -- saat sanılır → Europe/Istanbul'da her top 3 saat DAHA YAŞLI görünür ve
+        -- kova sınırındakiler (3/7/14/30 gün) yanlış kovaya düşer. Bekçi:
+        -- scripts/test_raw_sql_hygiene.ts
+        EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - r."updatedAt")) / 86400.0 AS age_days
       FROM rolls r
       WHERE r.status = 'WAREHOUSE'
     )
@@ -54,7 +59,9 @@ export async function getRollAging(): Promise<RollAgingSummary> {
     ORDER BY 2
   `),
     prisma.$queryRaw<Array<{ oldestDays: number | null }>>(Prisma.sql`
-    SELECT MAX(EXTRACT(EPOCH FROM (NOW() - r."updatedAt")) / 86400.0)::float AS "oldestDays"
+    -- O-11 (yukarıdaki kova sorgusuyla aynı gerekçe): tz'siz kolonla karşılaştırma
+    -- UTC tarafında yapılır, yoksa "en eski" 3 saat şişer.
+    SELECT MAX(EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - r."updatedAt")) / 86400.0)::float AS "oldestDays"
     FROM rolls r
     WHERE r.status = 'WAREHOUSE'
   `),

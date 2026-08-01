@@ -122,7 +122,9 @@ async function main() {
     //    kurulur → dispatch → 200cm satıra (renk-null spec) shippedQty terfi eder.
     const sackId = ((await ship.openSack({ customerId: customer.id })).data as { id: string }).id;
     createdSacks.push(sackId);
-    await ship.scanIntoSack({ sackId, barcode: r3.barcode });
+    // `!`: `mkRoll` her toparlamada barkodu literal olarak yazar (`Roll.barcode`
+    // şemada nullable olduğu için tip `string | null` geliyor).
+    await ship.scanIntoSack({ sackId, barcode: r3.barcode! });
     await ship.weighSack({ sackId, weightKg: 20 });
 
     // Depodan çuval + sipariş seç → sevk. Onay KAPALI (varsayılan) → createShipment

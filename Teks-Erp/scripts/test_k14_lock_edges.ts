@@ -13,6 +13,7 @@ import prisma from "../src/lib/prisma";
 import { RollStatus, StationKind, StationType, WorkOrderStatus } from "@prisma/client";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { isBatchLockedTx, createBatchTx } from "../src/services/batch.service";
+import { withBarcodeRetry } from "../src/utils/barcode-retry";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -80,8 +81,10 @@ async function main() {
     for (const r of [r1, r2]) {
       await prisma.rollMovement.create({ data: { rollId: r.id, workOrderStepId: stepId, qtyIn: 100, operatorId: admin.id } });
     }
-    const { batch } = await prisma.$transaction((tx) =>
-      createBatchTx(tx, { workOrderId: wo.id, rollIds: [r1.id, r2.id] }),
+    // `withBarcodeRetry` ŞART (gerekçe: test_batch_k15_merge.ts) — `generateBatchNumberTx`
+    // kilitsiz max+1 okur, paralel bir yazar aynı P kodunu üretirse P2002 düşer.
+    const { batch } = await withBarcodeRetry(() =>
+      prisma.$transaction((tx) => createBatchTx(tx, { workOrderId: wo.id, rollIds: [r1.id, r2.id] })),
     );
     cleanupBatchIds.push(batch.id);
     await sub.dispatch({ workOrderId: wo.id, stepId, subcontractorId: firm.id, rollIds: [r1.id, r2.id] }, admin.id);
@@ -115,8 +118,8 @@ async function main() {
     const r3 = await mkRoll(3);
     cleanupRollIds.push(r3.id);
     await prisma.rollMovement.create({ data: { rollId: r3.id, workOrderStepId: stepId, qtyIn: 100, operatorId: admin.id } });
-    const { batch: batch2 } = await prisma.$transaction((tx) =>
-      createBatchTx(tx, { workOrderId: wo.id, rollIds: [r3.id] }),
+    const { batch: batch2 } = await withBarcodeRetry(() =>
+      prisma.$transaction((tx) => createBatchTx(tx, { workOrderId: wo.id, rollIds: [r3.id] })),
     );
     cleanupBatchIds.push(batch2.id);
     await sub.dispatch({ workOrderId: wo.id, stepId, subcontractorId: firm.id, rollIds: [r3.id] }, admin.id);

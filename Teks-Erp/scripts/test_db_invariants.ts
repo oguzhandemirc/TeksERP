@@ -24,14 +24,19 @@
 // yazılmalı — böylece envanter TEK ve DOĞRULANAN yerde yaşar (bayatlayan
 // dokümantasyon tablosu yerine).
 //
+// KAPI İKİ YÖNLÜDÜR (2026-08-01): beklenen nesnenin KAYBI kadar, envanterde
+// OLMAYAN bir nesnenin VARLIĞI da testi düşürür. Beş bölümün beşinde de
+// `checkNoExtras()` koşar. Tek yönlü olsaydı envanter sessizce eksik kalırdı ve
+// "envanter tek ve doğrulanan yerde yaşar" iddiası kâğıt üstünde kalırdı — nitekim
+// eski sürümde tespit yalnız 2 bölümde vardı ve o ikisi de `exit 0`'lı ⚠️ basıyordu.
+//
 // Salt-okunur: hiçbir yazma/fixture yok, herhangi bir ortamda güvenle koşar.
 // Koşum: npx tsx scripts/test_db_invariants.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
 
 let pass = 0,
-  fail = 0,
-  warn = 0;
+  fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
   if (ok) {
     pass++;
@@ -41,9 +46,40 @@ function check(label: string, ok: boolean, extra = ""): void {
     console.log(`❌ ${label}${extra ? " — " + extra : ""}`);
   }
 }
-function warnLine(msg: string): void {
-  warn++;
-  console.log(`⚠️  ${msg}`);
+
+/**
+ * ENVANTER-DIŞI NESNE TESPİTİ — beş bölümün ortak kapısı.
+ *
+ * NEDEN `check()` ve NEDEN UYARI DEĞİL (2026-08-01 denetim düzeltmesi): bu tespit
+ * eskiden `warnLine()` ile ⚠️ basıyordu ve süreç yine `exit 0` veriyordu. İki kat
+ * sessizdi:
+ *   1. Uyarı çıkış kodunu düşürmediği için `npm test` YEŞİL kalıyordu.
+ *   2. `run-all-tests.ts` özet satırını yalnız "N geçti, M başarısız" regex'inden
+ *      kazıdığı için uyarı metni toplu koşum çıktısında HİÇ görünmüyordu — yani
+ *      uyarıyı okuyacak bir insan bile yoktu.
+ * Sonuç: beklenen listede olmayan bir partial index / CHECK sessizce geçiyordu ve
+ * bu dosyanın var oluş sebebi ("envanter TEK ve DOĞRULANAN yerde yaşasın") fiilen
+ * çürüyordu. Artık envanter-dışı nesne = KIRMIZI.
+ *
+ * Bu bilinçli olarak "gürültülü" bir kapıdır: yeni bir partial index / CHECK /
+ * DEFERRABLE FK / statistics eklediğinde test DÜŞER ve seni bu dosyaya yazmaya
+ * zorlar. Doğru tepki nesneyi SİLMEK değil, beklenen listeye EKLEMEKtir.
+ */
+function checkNoExtras(
+  sectionLabel: string,
+  liveNames: string[],
+  expectedNames: Set<string>,
+  describe: (name: string) => string
+): void {
+  const extras = liveNames.filter((n) => !expectedNames.has(n));
+  check(
+    `${sectionLabel}: envanter-dışı nesne yok`,
+    extras.length === 0,
+    extras.length === 0
+      ? `${liveNames.length} canlı nesnenin tamamı beklenen listede`
+      : `${extras.length} nesne bu dosyadaki beklenen listede YOK → ekle (silme!): ` +
+        extras.map(describe).join(" · ")
+  );
 }
 
 /** Predicate karşılaştırması: PG sürüm/parantez farkına dayanıklı normalize. */
@@ -242,14 +278,24 @@ async function main(): Promise<void> {
       check(`${exp.index}`, false, problems.join(" | "));
     }
   }
-  // Envanter dışı yeni partial index → uyarı (hata değil)
-  const expectedIdxNames = new Set(PARTIAL_INDEXES.map((e) => e.index));
-  for (const live of liveIdx) {
-    if (!expectedIdxNames.has(live.index_name))
-      warnLine(
-        `Envanterde OLMAYAN partial index: ${live.table_name}.${live.index_name} WHERE ${live.predicate} → bu dosyaya ekle`
-      );
-  }
+  // Envanter dışı partial index → KIRMIZI.
+  // Bir index hem partial hem expression olabilir (indpred + indexprs birlikte);
+  // öyle bir nesne iki sorgudan da döner. Sahipliği tek bölüme bağlamak için
+  // karşı envanter burada muaf tutulur — aksi halde aynı nesne iki bölümde birden
+  // "envanter dışı" sayılır ve düzeltmesi imkânsız bir çifte hata üretir.
+  const expectedIdxNames = new Set([
+    ...PARTIAL_INDEXES.map((e) => e.index),
+    ...EXPRESSION_UNIQUES.map((e) => e.index),
+  ]);
+  checkNoExtras(
+    "1) Partial indexler",
+    liveIdx.map((r) => r.index_name),
+    expectedIdxNames,
+    (n) => {
+      const l = idxByName.get(n);
+      return `${l?.table_name}.${n} WHERE ${l?.predicate}`;
+    }
+  );
 
   // ── 2) CHECK constraintler ──
   console.log("\n── 2) CHECK constraintler (var + validated) ──");
@@ -277,11 +323,15 @@ async function main(): Promise<void> {
     }
     check(exp.name, true, live.def.replace(/\s+/g, " ").slice(0, 62));
   }
-  const expectedCheckNames = new Set(CHECK_CONSTRAINTS.map((e) => e.name));
-  for (const live of liveChecks) {
-    if (!expectedCheckNames.has(live.name))
-      warnLine(`Envanterde OLMAYAN CHECK: ${live.table_name}.${live.name} → bu dosyaya ekle`);
-  }
+  // NOT: `contype='c'` yalnız gerçek CHECK'leri getirir. PostgreSQL 18'de NOT NULL
+  // kısıtları da kataloğa girdi ama `contype='n'` ile — bu sorguya sızmazlar
+  // (dev PG 18.4 / CI PG 16'da sayım birebir aynı çıktı: 25).
+  checkNoExtras(
+    "2) CHECK constraintler",
+    liveChecks.map((r) => r.name),
+    new Set(CHECK_CONSTRAINTS.map((e) => e.name)),
+    (n) => `${checkByName.get(n)?.table_name}.${n}`
+  );
 
   // ── 3) DEFERRABLE composite FK'lar ──
   console.log("\n── 3) DEFERRABLE composite FK'lar ──");
@@ -318,6 +368,18 @@ async function main(): Promise<void> {
     }
     check(exp.name, true, "DEFERRABLE INITIALLY DEFERRED");
   }
+  // Envanter-dışı DEFERRABLE FK → KIRMIZI. Karşılaştırma kümesi TÜM FK'lar değil,
+  // yalnız `condeferrable` olanlardır: sıradan FK'ları Prisma datamodel'den üretir
+  // ve `test_schema_drift.ts` doğrular; buranın konusu Prisma'nın temsil EDEMEDİĞİ
+  // ertelenmiş kısıtlardır. Yeni bir DEFERRABLE FK sessizce doğarsa (ya da mevcut
+  // biri elle DEFERRABLE yapılırsa) `migrate dev` onu her diff'te DROP etmek ister
+  // ve kimse bunu bilmez — o yüzden burada tespit ediliyor.
+  checkNoExtras(
+    "3) DEFERRABLE FK'lar",
+    liveFks.filter((r) => r.deferrable).map((r) => r.name),
+    new Set(DEFERRABLE_FKS.map((e) => e.name)),
+    (n) => `${fkByName.get(n)?.table_name}.${n} — ${fkByName.get(n)?.def}`
+  );
 
   // ── 4) Extended statistics ──
   console.log("\n── 4) Extended statistics ──");
@@ -337,6 +399,15 @@ async function main(): Promise<void> {
         : `statistics nesnesi YOK (${exp.table}) — günlük audit sorgusu yanlış plan seçebilir`
     );
   }
+  // Envanter-dışı statistics → KIRMIZI. Bir CREATE STATISTICS raw migration'la
+  // gelir ve `schema.prisma` onu bilmez; envantere yazılmazsa bir sonraki
+  // Prisma-üretimi migration onu sessizce düşürebilir (bu dosyanın kuruluş hikâyesi).
+  checkNoExtras(
+    "4) Extended statistics",
+    liveStats.map((r) => r.name),
+    new Set(EXT_STATS.map((e) => e.name)),
+    (n) => `${statByName.get(n)?.table_name}.${n}`
+  );
 
   // ── 5) Expression unique'ler ──
   console.log("\n── 5) Expression unique'ler (var + UNIQUE + ifade) ──");
@@ -375,14 +446,31 @@ async function main(): Promise<void> {
       );
     }
   }
+  // Envanter-dışı expression index → KIRMIZI. Partial envanteri burada muaf
+  // (bkz. 1. bölümdeki karşılıklı muafiyet notu — nesnenin sahibi tek bölüm olsun).
+  checkNoExtras(
+    "5) Expression index'ler",
+    liveExpr.map((r) => r.index_name),
+    new Set([...EXPRESSION_UNIQUES.map((e) => e.index), ...PARTIAL_INDEXES.map((e) => e.index)]),
+    (n) => {
+      const l = exprByName.get(n);
+      return `${l?.table_name}.${n} ON (${l?.expr})`;
+    }
+  );
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${warn > 0 ? `, ${warn} uyarı` : ""} ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) {
     console.log(
-      "\nDÜŞTÜYSE: bir migration şema-dışı bir DB nesnesini yok etmiş olabilir.\n" +
-        "Onarım deseni: 20260612100000_repartialize_after_native_uuid — DROP INDEX + \n" +
-        "CREATE INDEX ... WHERE ... ile predicate'i geri koy. Nesne KASTEN kaldırıldıysa\n" +
-        "bu dosyadaki beklenen listeden de çıkar."
+      "\nDÜŞTÜYSE iki ayrı senaryo var — mesaj hangisi olduğunu söylüyor:\n" +
+        "  (a) BEKLENEN NESNE KAYIP/BOZUK → bir migration şema-dışı bir DB nesnesini yok\n" +
+        "      etmiş. Onarım deseni: 20260612100000_repartialize_after_native_uuid —\n" +
+        "      DROP INDEX + CREATE INDEX ... WHERE ... ile predicate'i geri koy. Nesne\n" +
+        "      KASTEN kaldırıldıysa bu dosyadaki beklenen listeden de çıkar.\n" +
+        "  (b) ENVANTER-DIŞI NESNE → DB'de beklenen listede olmayan bir nesne var.\n" +
+        "      Doğru tepki nesneyi SİLMEK DEĞİL: yeni eklediğin partial index/CHECK/\n" +
+        "      DEFERRABLE FK/statistics ise bu dosyadaki ilgili diziye yaz (gerekçe\n" +
+        "      cümlesiyle). Sen eklemediysen nereden geldiğini bul — elle açılmış bir\n" +
+        "      nesne bir sonraki Prisma migration'ında sessizce kaybolur."
     );
   }
 }

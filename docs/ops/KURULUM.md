@@ -117,7 +117,8 @@
     - **GERÇEK TUZAK (2026-07-31, doğrulandı):** `build.nsis` (ve genel olarak `build`) bloğuna **tanınmayan anahtar eklenemez** — electron-builder şemayı katı doğrular ve derleme daha başlamadan `Invalid configuration object … has an unknown property` ile düşer. Yani **`package.json`'a yorum amaçlı `_note` alanı koymayın**; gerekçeyi bu dokümana yazın. (Bir kez `_perMachine_note` eklendi ve `build:win`'i tamamen kırdı — kırık hâli `72e79fb` ile origin/main'e de gitmişti.)
     - **`perMachine: true` bilinçli:** kurulum `Program Files`'a gider ve PC'deki **tüm Windows hesaplarına** görünür. Per-user (`false`) olsaydı yalnız kurulumu yapan hesap görürdü — admin hesabıyla kurup operatör başka hesapla girince uygulama ortada olmazdı. Bedeli: kurulum UAC ister (elden kurulumda sorun değil) ve ileride `electron-updater` eklenirse her güncelleme de UAC ister. Değiştirmek her PC'de kaldır+yeniden kur demektir.
 36. **Kur, aç.** İlk açılışta API adresi default `localhost:4000` — düzeltmelisin.
-37. **API adresini gir:** Login → sağ-üst **dişli** → **ApiEndpointDialog** → `http://192.168.1.50:4000` (**`/api` SUFFIX'i YAZILMAZ**) → "Bağlantıyı Test Et" (GET /health) → "Kaydet". Secure-store'a yazılır, **restart gerekmez**, makineye özeldir.
+37. **API adresini gir:** Login → sağ-üst **dişli** → **ApiEndpointDialog** → `http://192.168.1.250:4000` (**`/api` SUFFIX'i YAZILMAZ**) → "Bağlantıyı Test Et" (GET /health) → "Kaydet". Secure-store'a yazılır, **restart gerekmez**, makineye özeldir.
+    - **Adres tek kaynak:** `DEPLOY-RUNBOOK.md` → "SAHADAKİ KURULUM — yetkili değerler" (SAHINSRV **192.168.1.250**). Bu dokümandaki örnekler oradan kopyalanır; çelişki görürsen runbook geçerlidir. (2026-08-01'e kadar burada bayat bir `192.168.1.50` yazıyordu ve bir APK ölü adrese gömülü derlendi.)
 38. **Diyalogsuz etiket yazıcısı:** Electron → Genel Ayarlar → Cihazlar → "Diyalogsuz seri/COM baskı (Argox)" → **"Portları Tara"** → COM seç → Baud (9600) → **"Bağlantıyı Test Et"** (zararsız CR). serialport eksikse → ADIM 34. Yerel/per-PC tercih (`prefs.labelPrinter`). BT modüllü Argox = sanal COM; USB de COM.
 
 ---
@@ -127,11 +128,12 @@
 39. **Bağımlılıklar:** `npm install`. **`overrides` korunmalı** (`expo-font: ~14.0.11` pinli — bozulursa release APK çöker).
 40. **NATIVE BUILD ZORUNLU** (BLE Expo Go'da çalışmaz):
     - Test: `npx expo run:android`
-    - Release: `cd android && ./gradlew assembleRelease` → `android/app/build/outputs/apk/release/`
+    - **Release: `EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run build:apk`** (mobil/ içinde) → `android/app/build/outputs/apk/release/app-release.apk`
+    - **`./gradlew assembleRelease` ELLE ÇAĞIRMA.** Script adresi doğrular, bundle önbelleklerini siler, derler ve **üretilen APK'nın içindeki gömülü adresi tekrar okuyup** doğrular; düşerse exit 1 + paketi `app-release.DOGRULANMADI.apk` adına taşır. Ayrıntı: `mobil/CLAUDE.md` → "APK derleme".
 41. **API_URL** (mobilde **`/api` SUFFIX'i DAHİL**):
-    - Build-time: `.env.local` → `EXPO_PUBLIC_API_URL=http://192.168.1.50:4000/api`
-    - Runtime: uygulama içi SettingsScreen → özel URL (restart gerekmez).
-    - **TUZAK:** Release APK build-time IP'yi gömer; her saha farklı IP → build öncesi `.env.local` değiştir veya operatör override etsin. Tablet ↔ sunucu aynı LAN.
+    - Build-time: `EXPO_PUBLIC_API_URL` (yukarıdaki komut). Yetkili değer `DEPLOY-RUNBOOK.md` → "SAHADAKİ KURULUM" (**192.168.1.250**).
+    - Runtime: uygulama içi SettingsScreen → özel URL (restart gerekmez) — ama **yalnız o tek cihazı** düzeltir.
+    - **TUZAK:** Release APK build-time IP'yi gömer; her saha farklı IP. `.env.local` **USB geliştirme içindir** (`localhost` + `adb reverse`) ve sahaya giden pakette anlamsızdır — `build:apk` localhost'u reddeder. İki büyük sessiz tuzak (bayat adres + bayat bundle) ve bekçileri: `mobil/CLAUDE.md` → "APK derleme". Tablet ↔ sunucu aynı LAN.
 42. **İzinler (runtime):** CAMERA, BLUETOOTH/ADMIN/CONNECT/SCAN, **ACCESS_FINE_LOCATION + COARSE** (BLE taraması için ZORUNLU). Konum reddedilirse BT cihaz bağlanmaz.
 43. **Cihaz onay / allowlist + makineye atama** (PairingCode KALDIRILDI):
     1. Tablet boot'ta UUID üretir + otomatik `POST /api/devices/announce` → backend Device tablosuna **status=PENDING** upsert. Elle Device girmek gerekmez.

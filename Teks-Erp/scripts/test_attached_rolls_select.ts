@@ -29,6 +29,21 @@ function need<T>(v: T | null | undefined, what: string): T {
   return v;
 }
 
+// `getAttachedRolls()` sözleşmesi `ApiResponse<unknown[]>` döndürür — servis dar
+// bir `select` yapıyor ama şeklini dışarı vermiyor. Bu yüzden testin doğruladığı
+// şekil BURADA açıkça yazılır: aşağıdaki alan kontrolleri artık `unknown`/`{}`
+// üzerinde değil, somut bir tip üzerinde derlenir. (Alan adı yanlış yazılırsa
+// tsc söyler; eskiden `scripts/` hiç derlenmediği için sessizce geçerdi.)
+type AttachedRoll = {
+  id: string;
+  barcode: string | null;
+  status: string;
+  currentQty: unknown; // Prisma Decimal — testte yalnız null-değil kontrolü var
+  colorId: string | null;
+  item: { id: string; name: string } | null;
+  color: { id: string; code: string; name: string; hex: string | null } | null;
+};
+
 const svc = new WorkOrderService();
 let ITEM = "",
   COLOR = "",
@@ -89,7 +104,7 @@ async function main(): Promise<void> {
     await mkRoll("current", null); // OR dalı 2 (renksiz ham)
 
     const res = await svc.getAttachedRolls(wo.id);
-    const rolls = res.data;
+    const rolls = res.data as AttachedRoll[];
     check("iki OR dalı da döndü (produced + current)", rolls.length === 2, `count=${rolls.length}`);
 
     const withColor = rolls.find((r) => r.colorId === COLOR);
