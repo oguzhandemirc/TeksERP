@@ -89,7 +89,16 @@ Sadece bunlar. Alternatif tanıtma.
 
 > Eski `shipment:*` ve `allocation:*` permission'ları 2026-05-25'te silindi; yeni sevkiyat yazımıyla `shipping:read/write` + `return:read/write` (LOGISTICS) ve mobil ekran izinleri geldi.
 
-Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmalı** (yoksa Admin dışı kullanıcılar 403 alır). Yeni permission ekliyorsan: hem `seed.ts`'i güncelle, hem de canlı DB'ye permission + ilgili kullanıcı/template atamalarını INSERT et. Detay: ARCHITECTURE.md §6.
+Yeni endpoint yazarken `requirePermission(code)`'daki `code` **DB'de olmalı** (yoksa Admin dışı kullanıcılar 403 alır). Yeni permission eklerken **İKİ** dosyaya yaz:
+
+1. **`seed.ts`** — taze kurulum için (seed yalnız ilk kurulumda koşar).
+2. **Bir veri migration'ı** — mevcut fabrikalar için. `INSERT ... ON CONFLICT ("code") DO NOTHING` ile idempotent. Emsal: `20260801020000_kursun_bypass_permission_catalog`.
+
+**Neden migration (2026-08-01'de değişti):** izin kodu, `requirePermission` yazıldığı anda kodun sözleşmesinin parçası olur ve ortama göre değişmez — yani şema gibi davranır. Eskiden kural "canlı DB'ye elle INSERT et" idi; o adım **unutulabilir bir adımdı ve fiilen unutuldu** (kurşun bypass ekranı canlıya çıktı ama izin satırı olmadığı için kimse göremedi, teşhis saatler aldı). `migrate deploy` zaten deploy'un parçası → katalog kendiliğinden gelir. Migration'da veri değiştirmek repo'da zaten emsalli (`20260713092000_drop_produced_roll_status` toplu `UPDATE` yapıyor).
+
+**Migration'a NE GİRMEZ:** kullanıcı→izin ATAMALARI ve fabrikanın düzenlemiş olabileceği şablon içerikleri — bunlar ortama özgüdür, panelden veya `scripts/sync-*-permissions.ts` deseniyle verilir. Kural: *katalog migration'a, atama script'e.*
+
+Detay: ARCHITECTURE.md §6.
 
 ## Database Performance Rules (her zaman uygula)
 

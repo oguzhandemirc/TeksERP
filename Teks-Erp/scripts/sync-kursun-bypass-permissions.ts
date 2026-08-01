@@ -1,8 +1,17 @@
-// Idempotent: kurşun bypass düzeninin İKİ iznini + "Mobil — Kurşun Dağıtım"
-// template'ini canlı DB'ye ekler ve admin kullanıcısına bağlar (re-seed
-// gerektirmeden — seed YALNIZ ilk kurulumda koşar, canlıda asla).
+// Kurşun bypass — kullanıcı ATAMALARI + ön koşul teşhisi.
 //
 // Çalıştırma:  npx tsx scripts/sync-kursun-bypass-permissions.ts
+//
+// ⚠️ KAPSAM DEĞİŞTİ (2026-08-01): izin KATALOĞU artık bu script'e BAĞLI DEĞİL —
+// `20260801020000_kursun_bypass_permission_catalog` migration'ı iki izni ve
+// "Mobil — Kurşun Dağıtım" şablonunu idempotent olarak getiriyor. Yani
+// `prisma migrate deploy` koştuysa katalog ZATEN yerindedir.
+//
+// Bu script'in kalan işi ORTAMA ÖZGÜ olan kısım: izinleri `admin` kullanıcısına
+// bağlamak (diğer kullanıcılara panelden verilir) ve dağıtımın çalışması için
+// gereken VERİ ön koşullarını (istasyon yeteneği + makineler + bayrak) teşhis
+// etmek. Katalog upsert'leri emniyet ağı olarak DURUYOR — migration'dan önce
+// koşulursa da script anlamlı çalışsın diye; ikisi de idempotent.
 //
 // Emsal: sync-quick-wo-permission.ts. Tekrar tekrar koşulabilir — hepsi upsert.
 //

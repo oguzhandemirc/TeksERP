@@ -116,10 +116,13 @@ salt pg-katalog okur). Partial unique envanterine bu index eklenmiş olmalı.
 
 ---
 
-## (a) Permission INSERT — seed canlıda KOŞMAZ
+## (a) Permission — KATALOG MIGRATION'LA GELİR, elle INSERT YOK
 
-`prisma/seed.ts` **yalnız ilk kurulumda** koşar. Canlı DB'de iki yeni permission
-elle INSERT edilir, yoksa Admin dışı hiçbir kullanıcı ekranı açamaz (403):
+> **2026-08-01'de değişti.** Eskiden bu bölüm "canlı DB'ye elle INSERT et" diyordu ve
+> o adım **unutulabilir bir adımdı — fiilen unutuldu** (ekran canlıya çıktı, izin satırı
+> olmadığı için kimse göremedi). Artık katalog `20260801020000_kursun_bypass_permission_catalog`
+> migration'ıyla geliyor: **`prisma migrate deploy` koştuysa iki izin ve
+> "Mobil — Kurşun Dağıtım" şablonu ZATEN yerindedir.** Ayrı bir komut gerekmez.
 
 | Kod | Modül | Kategori | Ne işe yarar |
 |---|---|---|---|
@@ -129,7 +132,18 @@ elle INSERT edilir, yoksa Admin dışı hiçbir kullanıcı ekranı açamaz (403
 Route'lar `requireAnyPermission("workorder:distribute", "mobile:kursun-dagitim")` kullanır
 → saha kullanıcısına **yalnız mobil kodu** vermek yeterlidir.
 
-### ✅ ÖNERİLEN YOL: tek komut (elle SQL yazma)
+**Doğrulama (migrate deploy sonrası):**
+
+```sql
+SELECT code, module, category FROM permissions
+ WHERE code IN ('workorder:distribute','mobile:kursun-dagitim');   -- 2 satır dönmeli
+```
+
+### Geriye kalan TEK iş: ATAMA (ortama özgü, migration'a giremez)
+
+Katalog geldi ama "kim bu izne sahip" fabrikaya özgüdür. Aşağıdaki komut izinleri
+`admin`'e bağlar ve **veri ön koşullarını teşhis eder** (istasyon KURSUN yeteneği,
+tanımlı makineler, bayrak durumu). Diğer kullanıcılara izin panelden verilir.
 
 ```bash
 cd <backend dizini>
