@@ -3,6 +3,7 @@
 // testler bu katmanları atlar; bu smoke gerçek HTTP üzerinden doğrular.
 // ÖN KOŞUL: backend ayakta olmalı. Çalıştır: npx tsx scripts/smoke_fason_http.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
 
@@ -38,8 +39,8 @@ async function fx(): Promise<void> {
   ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
-  SUB_KESTEL = need(await prisma.subcontractor.findFirst({ where: { code: "KESTEL" }, select: { id: true } }), "KESTEL");
-  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "BOYER");
+  SUB_KESTEL = (await ensureTestSander()).id;
+  SUB_BOYER = (await ensureTestDyeHouse()).id;
 }
 async function rollAtStep(qty: number, stepId: string): Promise<string> {
   const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.IN_PRODUCTION, currentStepId: stepId, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });

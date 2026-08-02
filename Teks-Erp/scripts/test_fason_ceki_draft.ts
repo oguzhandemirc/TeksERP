@@ -1,6 +1,7 @@
 // TEST: previewDownstreamFasonCeki — erken TASLAK boyahane çekisi, durum DEĞİŞTİRMEZ.
 // Çalıştır: npx tsx scripts/test_fason_ceki_draft.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
@@ -16,8 +17,8 @@ async function resolveFixtures(): Promise<void> {
   ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
-  SUB_KESTEL = need(await prisma.subcontractor.findFirst({ where: { code: "KESTEL" }, select: { id: true } }), "KESTEL");
-  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true, name: true } }), "BOYER");
+  SUB_KESTEL = (await ensureTestSander()).id;
+  SUB_BOYER = (await ensureTestDyeHouse()).id;
 }
 let BOYER_NAME = "";
 
@@ -45,7 +46,7 @@ const stepIds: string[] = [];
 
 async function main(): Promise<void> {
   await resolveFixtures();
-  BOYER_NAME = (await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { name: true } }))!.name;
+  BOYER_NAME = (await ensureTestDyeHouse()).name;
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {

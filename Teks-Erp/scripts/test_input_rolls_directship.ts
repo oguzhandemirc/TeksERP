@@ -12,6 +12,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -43,7 +44,7 @@ async function resolveFixtures(): Promise<void> {
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
-  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "BOYER");
+  SUB_BOYER = (await ensureTestDyeHouse()).id;
   CUSTOMER = need(await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } }), "MUS-001");
 }
 

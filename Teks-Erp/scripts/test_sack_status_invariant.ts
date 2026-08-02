@@ -14,6 +14,7 @@
 // Bu yüzden mevcut hiçbir test dosyasının sahibi değil, ayrı dosyada yaşar.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
+import { ensureTestKartela, ensureTestSander } from "./fixture-subcontractor";
 import { withSackConstraintSuspended } from "./fixture-sack-constraint";
 import { shippingService } from "../src/services/shipping.service";
 import { kartelaService } from "../src/services/kartela.service";
@@ -73,18 +74,11 @@ async function setup(): Promise<void> {
     await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }),
     "admin"
   ).id;
-  KARTELA_FIRM = need(
-    await prisma.subcontractor.findFirst({ where: { code: "KARTELAAS" }, select: { id: true } }),
-    "KARTELAAS firması"
-  ).id;
-  // Fason sevki için zımpara/fason kategorisine uygun herhangi bir aktif firma.
-  FASON_FIRM = need(
-    await prisma.subcontractor.findFirst({
-      where: { isActive: true, code: { not: "KARTELAAS" } },
-      select: { id: true },
-    }),
-    "aktif fason firması"
-  ).id;
+  KARTELA_FIRM = (await ensureTestKartela()).id;
+  // Fason sevki için zımpara firması. Eski "herhangi bir aktif firma" araması
+  // ortamdaki firma listesine bağlıydı (yanlış kategorideki firma testi yanlış
+  // şeyi doğrulayarak geçirebilirdi) — fixture SABİT ve aktifliği garantili.
+  FASON_FIRM = (await ensureTestSander()).id;
   CUSTOMER = (
     await prisma.customer.create({
       data: { code: `TEST-SINV-C-${TS}`, name: `Invariant Test Müşteri ${TS}` },

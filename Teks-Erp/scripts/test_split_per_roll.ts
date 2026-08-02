@@ -16,6 +16,7 @@
 //
 // Çalıştır: npx tsx scripts/test_split_per_roll.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -53,11 +54,11 @@ const woIds: string[] = [];
 
 async function main(): Promise<void> {
   await resolveFixtures();
-  const dye = await prisma.subcontractorCategory.findFirst({ where: { appliesColor: true }, select: { id: true } });
-  if (!dye) throw new Error("appliesColor kategori yok");
-  const link = await prisma.subcontractorToCategory.findFirst({ where: { categoryId: dye.id }, select: { subcontractorId: true } });
-  if (!link) throw new Error("renk veren firma yok");
-  const SUB = link.subcontractorId;
+  // Firma + kategori TEK kaynaktan (fixture) — eski "appliesColor kategorisine bağlı
+  // HERHANGİ bir firma" araması pasif seed firmasını (BOYER) seçip düşüyordu.
+  const dyeHouse = await ensureTestDyeHouse();
+  const dye = { id: dyeHouse.categoryId };
+  const SUB = dyeHouse.id;
   const kk1 = await prisma.station.findFirst({ where: { kind: "RAW_QC" }, select: { id: true } });
   if (!kk1) throw new Error("KK1 yok");
   const colors = await prisma.color.findMany({ where: { isActive: true }, take: 2, select: { id: true, name: true } });

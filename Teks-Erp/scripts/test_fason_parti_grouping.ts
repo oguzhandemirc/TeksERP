@@ -10,6 +10,7 @@
 //
 // Çalıştır: npx ts-node scripts/test_fason_parti_grouping.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus } from "@prisma/client";
@@ -33,7 +34,7 @@ async function resolveFixtures(): Promise<void> {
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "User admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "Station TAMBUR_1");
-  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "Subcontractor BOYER");
+  SUB_BOYER = (await ensureTestDyeHouse()).id;
 }
 
 const sub = new SubcontractorService();

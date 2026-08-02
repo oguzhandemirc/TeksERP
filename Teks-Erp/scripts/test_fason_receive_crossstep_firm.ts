@@ -12,6 +12,7 @@
 //
 // Çalıştır: npx tsx scripts/test_fason_receive_crossstep_firm.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
@@ -37,8 +38,8 @@ async function resolveFixtures(): Promise<void> {
   ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "Station ZIMPARA_FASON");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "Station TAMBUR_1");
-  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "Subcontractor BOYER");
-  SUB_KESTEL = need(await prisma.subcontractor.findFirst({ where: { code: "KESTEL" }, select: { id: true } }), "Subcontractor KESTEL");
+  SUB_BOYER = (await ensureTestDyeHouse()).id;
+  SUB_KESTEL = (await ensureTestSander()).id;
 }
 
 const sub = new SubcontractorService();

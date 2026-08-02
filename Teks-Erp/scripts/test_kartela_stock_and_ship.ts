@@ -12,6 +12,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { ensureTestKartela } from "./fixture-subcontractor";
 import { kartelaService } from "../src/services/kartela.service";
 import { shippingService } from "../src/services/shipping.service";
 import { AppError } from "../src/utils/app-error";
@@ -79,10 +80,7 @@ async function makeWarehouseRoll(colorId: string | null): Promise<string> {
 
 async function setup(): Promise<void> {
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
-  FIRM = need(
-    await prisma.subcontractor.findFirst({ where: { code: "KARTELAAS" }, select: { id: true } }),
-    "KARTELAAS firması",
-  ).id;
+  FIRM = (await ensureTestKartela()).id;
 
   // İzole TEST müşterisi — sevkiyat sadece kendi çuvallarımıza dokunsun.
   CUSTOMER = (

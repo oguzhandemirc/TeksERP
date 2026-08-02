@@ -10,6 +10,7 @@
 //
 // Çalıştır: npx tsx scripts/test_fason_kabul_partial_overlap.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
@@ -79,8 +80,8 @@ async function main(): Promise<void> {
   const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
   const boya = await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } });
   const kursun = await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } });
-  const boyer = await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } });
-  if (!item || !admin || !boya || !kursun || !boyer) throw new Error("Seed fixture eksik — önce 'npm run seed'");
+  const boyer = await ensureTestDyeHouse();
+  if (!item || !admin || !boya || !kursun) throw new Error("Seed fixture eksik — önce 'npm run seed'");
   ITEM = item.id; ADMIN = admin.id; ST_BOYA = boya.id; ST_KURSUN = kursun.id; SUB_BOYER = boyer.id;
 
   // ═══ PO1 — TAM-KÜME REPLAY (mevcut davranış korunur) ═══

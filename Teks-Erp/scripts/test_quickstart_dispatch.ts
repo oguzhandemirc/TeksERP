@@ -17,6 +17,7 @@
 // Çalıştır: npx tsx scripts/test_quickstart_dispatch.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { RollStatus } from "@prisma/client";
@@ -83,10 +84,7 @@ async function resolveFixtures(): Promise<void> {
     "INTERNAL istasyon",
   ).id;
 
-  const boyer = need(
-    await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true, name: true } }),
-    "Subcontractor BOYER",
-  );
+  const boyer = await ensureTestDyeHouse();
   SUB_BOYER = boyer.id;
   SUB_BOYER_NAME = boyer.name;
 

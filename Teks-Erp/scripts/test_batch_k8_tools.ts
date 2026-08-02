@@ -7,6 +7,7 @@
 //   K17: kaynak parti SİLİNMEZ, mergedIntoId=survivor tarihçe satırı kalır.
 // Çalıştır: npx tsx scripts/test_batch_k8_tools.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestSander } from "./fixture-subcontractor";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { moveRolls, mergeBatches, splitBatch, deleteIfEmptyAndTraceless } from "../src/services/batch.service";
@@ -40,7 +41,7 @@ async function main(): Promise<void> {
   const GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
   const ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
-  const SUB = need(await prisma.subcontractor.findFirst({ where: { code: "KESTEL" }, select: { id: true } }), "KESTEL");
+  const SUB = (await ensureTestSander()).id;
 
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({

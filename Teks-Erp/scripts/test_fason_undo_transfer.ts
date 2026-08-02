@@ -3,6 +3,7 @@
 // korunarak) AT_SUBCONTRACTOR döner; born toplar CANCELLED; dallar temiz.
 // Çalıştır: npx tsx scripts/test_fason_undo_transfer.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -20,8 +21,8 @@ async function fx(): Promise<void> {
   ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
-  SUB_KESTEL = need(await prisma.subcontractor.findFirst({ where: { code: "KESTEL" }, select: { id: true } }), "KESTEL");
-  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "BOYER");
+  SUB_KESTEL = (await ensureTestSander()).id;
+  SUB_BOYER = (await ensureTestDyeHouse()).id;
 }
 
 const sub = new SubcontractorService();

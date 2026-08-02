@@ -13,6 +13,7 @@
 // =============================================================================
 import type { Request } from "express";
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { ShippingService } from "../src/services/shipping.service";
@@ -56,7 +57,7 @@ async function main(): Promise<void> {
   const GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade");
   const ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
-  const SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "BOYER");
+  const SUB_BOYER = (await ensureTestDyeHouse()).id;
   const WIDTH = 250;
 
   // Taze müşteri + renk → export scope'u yalnız bizim doğrudan sevke inhisar etsin.

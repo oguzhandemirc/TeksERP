@@ -15,6 +15,7 @@ import type { AddressInfo } from "net";
 import bcrypt from "bcryptjs";
 import app from "../src/app";
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { RollStatus } from "@prisma/client";
 
 let pass = 0;
@@ -79,8 +80,8 @@ async function main(): Promise<void> {
       select: { id: true, defaultCategory: { select: { id: true } } },
     });
     const internal = await prisma.station.findFirst({ where: { type: "INTERNAL", isActive: true }, select: { id: true } });
-    const boyer = await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } });
-    if (!item || !grade || !admin || !boya?.defaultCategory || !internal || !boyer) {
+    const boyer = await ensureTestDyeHouse();
+    if (!item || !grade || !admin || !boya?.defaultCategory || !internal) {
       throw new Error("Seed fixture eksik (önce 'npm run seed')");
     }
 

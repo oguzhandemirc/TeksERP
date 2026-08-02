@@ -215,6 +215,28 @@ Test altyapısı `scripts/test_*.ts` dosyalarıdır — **jest/vitest YOK, kurma
 
 - Server'sız entegrasyon: service sınıfı + prisma doğrudan import edilir, HTTP yok; `npx tsx scripts/test_X.ts` ile tek tek koşar. **Toplu koşucu:** `npm test` = `tsx scripts/run-all-tests.ts` (tüm `test_*.ts`'i toplar).
 - Fixture: seed master-data'sı business-key ile çözülür (**hardcoded UUID yazma** — reseed'de kırılır); üretilen veri `TEST-` prefix'li benzersiz kodlarla.
+  - **⚠️ Business-key "var" demek, "KULLANILABİLİR" demek DEĞİL (2026-08-02).** Fabrika
+    paneli master-data'yı pasife alabilir; `findFirst({ code: "X" })` kaydı yine bulur, test
+    kurulumu geçer, ilk servis çağrısı "… pasif durumda" ile patlar. **Fason firma** bu yüzden
+    seed'den ÇÖZÜLMEZ, `scripts/fixture-subcontractor.ts` ile test tarafından ÜRETİLİR
+    (`ensureTestDyeHouse()` = eski `BOYER`, `ensureTestSander()` = eski `KESTEL`,
+    `ensureTestKartela()` = eski `KARTELAAS`) — sabit `TEST-FASON-*` kodlu, idempotent
+    `upsert`, kalıcı (paylaşılan olduğu için SİLİNMEZ; dosya başındaki gerekçeye bak).
+  - **"Herhangi bir aktif firma bul" ÇÖZÜM DEĞİLDİR** — belirsizlik açık kırmızıdan
+    tehlikelidir: yanlış kategorideki firma testi yanlış şeyi doğrulayarak GEÇİRİR.
+    Filtresiz varyantı daha da kötüdür ve sahada ısırdı: dört test firmasını
+    `subcontractorToCategory.findFirst({ categoryId: <appliesColor kategorisi> })` ile
+    seçiyordu — `isActive` süzgeci YOK — ve tam da pasif `BOYER`'i buluyordu
+    (`test_split_card_lineage`, `test_split_per_roll`, `test_wo_branch_redye`,
+    `test_wo_branch_split`). Bu dosyalar `code:"BOYER"` aramadıkları için "BOYER'e bağlı
+    testler" taramasına da YAKALANMIYORDU. Fason/kartela firması artık **yalnız** fixture
+    yardımcısından çözülür; `requiredCategoryId` de aynı yardımcının döndürdüğü
+    `categoryId`'den yazılır (tek kaynak → "firma bu kategoride değil" sapması imkânsız).
+  - Aynı sınıf kırılganlık **`admin` / `123123`** için hâlâ AÇIK: `test_direct_ship_api`,
+    `test_quickstart_dispatch_api`, `test_http_api`, `smoke_fason_http` HTTP login'i seed
+    şifresine güveniyor; bu geliştirme DB'sinde şifre değiştirilmiş ve dördü de düşüyor.
+    Doğru çözüm aynı desen: test kendi kullanıcısını yaratıp onunla login olsun
+    (`test_direct_ship_api` "izinsiz kullanıcı" için bunu zaten yapıyor).
 - Çıktı: ✅/❌ `check(label, ok)` sayaçları + sonda `=== Sonuç: N geçti, M başarısız ===` + `process.exit(fail > 0 ? 1 : 0)`.
 - Cleanup `finally` bloğunda (test kendi yarattığını siler) + `prisma.$disconnect()`.
 - **⚠️ ÇIKIŞ: `$disconnect()` TEK BAŞINA YETMEZ.** `lib/prisma.ts` havuzu

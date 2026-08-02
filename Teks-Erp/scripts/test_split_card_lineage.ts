@@ -21,6 +21,7 @@
 //
 // Çalıştır: npx tsx scripts/test_split_card_lineage.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -84,9 +85,11 @@ async function bornRollsOf(receiptId: string): Promise<Array<{ id: string; color
 
 async function main(): Promise<void> {
   await resolveFixtures();
-  const dye = await prisma.subcontractorCategory.findFirst({ where: { appliesColor: true }, select: { id: true } });
-  const link = await prisma.subcontractorToCategory.findFirst({ where: { categoryId: dye!.id }, select: { subcontractorId: true } });
-  const SUB = link!.subcontractorId;
+  // Firma + kategori TEK kaynaktan (fixture) — eski "appliesColor kategorisine bağlı
+  // HERHANGİ bir firma" araması pasif seed firmasını (BOYER) seçip düşüyordu.
+  const dyeHouse = await ensureTestDyeHouse();
+  const dye = { id: dyeHouse.categoryId };
+  const SUB = dyeHouse.id;
   const kk1 = await prisma.station.findFirst({ where: { kind: "RAW_QC" }, select: { id: true } });
   const colors = await prisma.color.findMany({ where: { isActive: true }, take: 3, select: { id: true, name: true } });
   if (colors.length < 3) throw new Error("En az 3 aktif renk gerekli");
