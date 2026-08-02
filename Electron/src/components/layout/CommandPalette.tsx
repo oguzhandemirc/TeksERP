@@ -10,6 +10,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { useFavorites } from "@/hooks/useFavorites";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { useAuthStore } from "@/store/auth";
@@ -25,6 +26,11 @@ interface Props {
 export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
+  // Operasyon karolarının duruma bağlı görünürlüğü palette de geçerlidir — aksi
+  // halde hub'da gizlenen ekran buradan hâlâ açılırdı. "Kurşun Sırası"nda bu
+  // somut bir hataydı: route kapısı aynı koşulu uyguladığı için paletten seçen
+  // kullanıcı sayfa yerine hub'a atılıyordu.
+  const visibilityCtx = useOperationsVisibilityContext();
   const { favorites } = useFavorites();
   const { prefs, setPreference } = usePreferences();
   const { theme, setTheme } = useTheme();
@@ -52,6 +58,9 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   };
 
   const isVisible = (entry: CommandEntry) => {
+    // Durum süzgeci İZİNDEN ÖNCE: yüklem "bu ekranın şu an yapacağı iş var mı"
+    // sorusunu yanıtlar, izinden bağımsızdır ve ikisi VE ile birleşir.
+    if (entry.visibleWhen && !entry.visibleWhen(visibilityCtx)) return false;
     if (entry.permissionAny) return hasAnyPermission(entry.permissionAny);
     if (entry.permission) return hasPermission(entry.permission);
     if (entry.adminOnly) return isAdmin;

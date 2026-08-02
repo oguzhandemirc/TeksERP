@@ -89,6 +89,33 @@ const ASSIGNABLE_WO_STATUSES: WorkOrderStatus[] = [
   WorkOrderStatus.IN_PROGRESS,
 ];
 
+/**
+ * AÇIK (bekleyen) atama = ne tamamlanmış ne iptal edilmiş. TEK KAYNAK —
+ * `listDistribution` liste kaynağı ile `getVisibility` sayacı aynı kümeyi
+ * saymalı, aksi halde menü "iş var" derken liste boş çıkar.
+ */
+const PENDING_ASSIGNMENT_WHERE = {
+  completedAt: null,
+  cancelledAt: null,
+} satisfies Prisma.KursunBypassAssignmentWhereInput;
+
+/**
+ * `waiting` kümesinin ORTAK gövdesi: kurşun adımı + adımda açık top var + WO
+ * canlı (terminal CANCELLED/SUPERSEDED ve kapanmış COMPLETED dışarıda).
+ *
+ * "Açık atama YOK" koşulu BİLİNÇLİ olarak burada DEĞİL — iki çağıran onu iki
+ * farklı yoldan ifade eder ve ikisi de doğrudur:
+ *   • `listDistribution` açık atamaları zaten satır satır yüklediği için
+ *     `id: { notIn: pendingStepIds }` ile eler (ekstra sorgu yok).
+ *   • `getVisibility` hiçbir satır yüklemez → `kursunBypasses: { none: ... }`
+ *     ile tek sorguda eler (LIST_CAP kırpmasına da bağımlı değildir).
+ */
+const WAITING_STEP_BASE_WHERE = {
+  station: { kind: StationKind.PROCESS_QC },
+  movements: { some: { exitedAt: null } },
+  workOrder: { status: { in: ASSIGNABLE_WO_STATUSES } },
+} satisfies Prisma.WorkOrderStepWhereInput;
+
 // -----------------------------------------------------------------------------
 // Payload tipleri (Electron + mobil AYNI payload'ı tüketir — mobile'a ayrı
 // makine servisi gerekmesin diye MAKİNE listesi de bu yanıtta gelir).
@@ -161,6 +188,36 @@ export interface KursunDistributionPayload {
   machines: KursunBypassMachineOption[];
   waiting: KursunDistributionWaitingRow[];
   assigned: KursunDistributionAssignedRow[];
+}
+
+/**
+ * MENÜ ÇİZME payload'ı — iki ekranın "koşullu göster" kararı için üç sayı.
+ *
+ * NEDEN AYRI BİR UÇ: iki arayüz de (Electron karo listesi + mobil ana ekran)
+ * menüyü çizerken bunu çağırır; `listDistribution`'ın ağır gövdesini (makineler,
+ * satır satır uygunluk/stale hesabı, parti numaraları, metraj toplamları) menü
+ * için ödemek anlamsız olurdu. Burada sorgu YALNIZ iki `count`'tur.
+ *
+ * KARAR KURALLARI (kullanıcı kararı, 2026-08-02):
+ *   • "Kurşun Sırası"   görünür  ⇔  `!flagEnabled || tabletRegimeCount > 0`
+ *   • "Kurşun Dağıtım"  görünür  ⇔  `flagEnabled  || pendingAssignmentCount > 0`
+ * Yani her iki ekran da "işi kaldıysa durur, bitince kendiliğinden kaybolur".
+ * Kuralı BACKEND uygulamaz (ham sayı döner) — iki istemcinin de kendi menü
+ * mantığı var ve karo görünürlüğü bir yetki kararı değil, ergonomi kararıdır.
+ */
+export interface KursunBypassVisibility {
+  /** `production.kursunBypassEnabled` — YENİ atama açık mı. */
+  flagEnabled: boolean;
+  /** Açık dağıtım sayısı (`completedAt IS NULL AND cancelledAt IS NULL`). */
+  pendingAssignmentCount: number;
+  /**
+   * TABLET REJİMİNDE bekleyen kurşun adımı sayısı: `waiting` kümesiyle BİREBİR
+   * aynı where (kurşun adımı + açık top + canlı WO + açık atama YOK) — ama
+   * uygunluk/blockReason HESAPLANMAZ, yalnız sayılır. Uygun olmayan (dijital iz
+   * taşıyan) adım da bu sayıya girer: o adım tam olarak "tablette işlenecek iş"
+   * demektir ve planlamacının sırasını görebilmesi gereken şeydir.
+   */
+  tabletRegimeCount: number;
 }
 
 export interface KursunBypassPreviewRoll {
@@ -312,6 +369,40 @@ function isBypassClosure(notes: string | null): boolean {
 
 export class KursunBypassService {
   // ---------------------------------------------------------------------------
+  // GÖRÜNÜRLÜK (menü çizme)
+  // ---------------------------------------------------------------------------
+  /**
+   * İki ekranın "koşullu göster" kararı için ÜÇ SAYI — bkz. `KursunBypassVisibility`.
+   *
+   * HAFİFLİK SÖZLEŞMESİ: burada `findMany` YOK, satır materyalize edilmez, N+1
+   * yok. Bir ayar okuması + iki `count`. Menü her çizildiğinde çağrıldığı için
+   * bu uca liste alanı EKLEME — ihtiyaç doğarsa `listDistribution`'ı çağır.
+   *
+   * Havuz üzerinde `Promise.all` serbesttir (tx DEĞİL — ESLint guard'ı yalnız
+   * `tx` client'ını yakalar; üç sorgu üç bağlantıda paralel koşar).
+   */
+  async getVisibility(): Promise<ApiResponse<KursunBypassVisibility>> {
+    const [flagEnabled, pendingAssignmentCount, tabletRegimeCount] = await Promise.all([
+      readKursunBypassEnabled(),
+      prisma.kursunBypassAssignment.count({ where: PENDING_ASSIGNMENT_WHERE }),
+      prisma.workOrderStep.count({
+        where: {
+          ...WAITING_STEP_BASE_WHERE,
+          // Dağıtılmış iş TABLET rejiminde değildir — kurşun makinesinde,
+          // kâğıtla yürüyor. `listDistribution`'ın `notIn` elemesiyle aynı
+          // küme, tek sorguda ve LIST_CAP kırpmasından bağımsız.
+          kursunBypasses: { none: PENDING_ASSIGNMENT_WHERE },
+        },
+      }),
+    ]);
+
+    return {
+      success: true,
+      data: { flagEnabled, pendingAssignmentCount, tabletRegimeCount },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // LİSTE
   // ---------------------------------------------------------------------------
   /**
@@ -348,7 +439,7 @@ export class KursunBypassService {
     // AÇIK atamalar liste kaynağıdır (adımın açık topu kalmasa / adım kapansa
     // bile satır GÖRÜNMELİ — planlamacı "stale" rozetiyle iptal edebilsin).
     const pendingRows = await prisma.kursunBypassAssignment.findMany({
-      where: { completedAt: null, cancelledAt: null },
+      where: PENDING_ASSIGNMENT_WHERE,
       select: {
         id: true,
         workOrderStepId: true,
@@ -387,9 +478,7 @@ export class KursunBypassService {
     // satırı olarak göstermek gürültü olurdu; oraya dağıtım zaten anlamsız.
     const waitingSteps = await loadDistributionSteps(
       {
-        station: { kind: StationKind.PROCESS_QC },
-        movements: { some: { exitedAt: null } },
-        workOrder: { status: { in: ASSIGNABLE_WO_STATUSES } },
+        ...WAITING_STEP_BASE_WHERE,
         ...(pendingStepIds.length ? { id: { notIn: pendingStepIds } } : {}),
       },
       // listQueue ile aynı sıra: acil önce, sonra planlama önceliği.

@@ -483,8 +483,10 @@ export const contentRoutes: RouteObject[] = [
     element: (
       // Kuyruğu kaliteci sıralar; kurşun dağıtımcısı da izler (backend GET /queue
       // aynı iki izne açık — dağıtım kararı bu kuyruğun üstüne kurulur).
-      // Bayrak (kursunBypassEnabled) AÇIKSA ekran hiç render EDİLMEZ: sırayı
-      // okuyacak kurşun tableti kalmıyor → `KursunQueueRouteGate` hub'a yönlendirir.
+      // `KursunQueueRouteGate` karoyla AYNI koşulu uygular (tek kaynak:
+      // `tile-config.ts` → `kursunQueueTileVisible`): bayrak KAPALI ya da tablet
+      // rejiminde iş VARSA sayfa açılır; bayrak açık + tablette iş kalmamışsa
+      // sırayı okuyacak kimse yoktur → hub'a yönlendirir.
       <ProtectedRoute requireAnyPermission={["quality:write", "workorder:distribute"]}>
         <KursunQueueRouteGate />
       </ProtectedRoute>
@@ -495,6 +497,9 @@ export const contentRoutes: RouteObject[] = [
     element: (
       // Bayrak (kursunBypassEnabled) route'u KAPATMAZ — kapatıldığında yalnız yeni
       // dağıtım durur; dağıtılmış iş emirleri bu ekrandan bitirilmeye devam eder.
+      // KARO artık bununla hizalı: bayrak kapalı olsa bile bekleyen dağıtım varken
+      // menüde durur (`tile-config.ts` → `kursunDagitimTileVisible`), yani "sayfa
+      // çalışıyor ama menüde yok" tuhaflığı kalmadı.
       <ProtectedRoute requirePermission="workorder:distribute">
         <KursunDagitimPage />
       </ProtectedRoute>

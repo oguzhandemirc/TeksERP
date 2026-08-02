@@ -76,6 +76,23 @@ export interface KursunDistributionPayload {
   assigned: KursunDistributionAssignedRow[];
 }
 
+/**
+ * MENÜ ÇİZME payload'ı (`GET /api/kursun-bypass/visibility`) — üç sayı, gövde yok.
+ *
+ * İki ekranın karosu artık salt bayrağa değil "işi kaldı mı" sorusuna bağlı:
+ *   • "Kurşun Sırası"  görünür ⇔ `!flagEnabled || tabletRegimeCount > 0`
+ *   • "Kurşun Dağıtım" görünür ⇔ `flagEnabled  || pendingAssignmentCount > 0`
+ * Kuralı BACKEND uygulamaz (ham sayı döner) — bkz. `tile-config.ts`.
+ */
+export interface KursunBypassVisibility {
+  /** `production.kursunBypassEnabled` — YENİ atama açık mı. */
+  flagEnabled: boolean;
+  /** Açık dağıtım sayısı (`completedAt IS NULL AND cancelledAt IS NULL`). */
+  pendingAssignmentCount: number;
+  /** Tablet rejiminde bekleyen kurşun adımı sayısı (dağıtım `waiting` kümesiyle aynı where). */
+  tabletRegimeCount: number;
+}
+
 export interface KursunBypassPreviewRoll {
   rollId: string;
   barcode: string | null;

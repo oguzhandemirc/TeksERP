@@ -99,6 +99,29 @@ export interface KursunDistributionPayload {
   assigned: KursunDistributionAssignedRow[];
 }
 
+/**
+ * MENÜ ÇİZME payload'ı — "Kurşun Dağıtım" karosunun KOŞULLU görünürlüğü için üç
+ * sayı. Ayrı bir uç olmasının sebebi maliyet: `distribution` ucunun ağır gövdesi
+ * (makineler, satır satır uygunluk/stale hesabı, parti numaraları, metraj
+ * toplamları) menü çizmek için ödenmez — burada backend yalnız bir ayar okuması
+ * + iki `count` koşturur.
+ *
+ * Kuralı BACKEND UYGULAMAZ (ham sayı döner), karar istemcidedir:
+ *   • "Kurşun Dağıtım" görünür ⇔ `flagEnabled || pendingAssignmentCount > 0`
+ *
+ * `tabletRegimeCount` Electron'daki "Kurşun Sırası" karosunun kuralıdır
+ * (`!flagEnabled || tabletRegimeCount > 0`); mobilde o planlama ekranı YOK ama
+ * alan, backend sözleşmesini eksiksiz yansıtsın diye tipte duruyor.
+ */
+export interface KursunBypassVisibility {
+  /** `production.kursunBypassEnabled` — YENİ atama açık mı. */
+  flagEnabled: boolean;
+  /** Açık dağıtım sayısı (tamamlanmamış + iptal edilmemiş atamalar). */
+  pendingAssignmentCount: number;
+  /** Tablet rejiminde bekleyen kurşun adımı sayısı (mobil kullanmaz — bkz. üst not). */
+  tabletRegimeCount: number;
+}
+
 export interface KursunBypassAssignRequest {
   workOrderId: string;
   machineId: string;
@@ -177,6 +200,12 @@ export interface KursunQueueUrgentResult {
 }
 
 export const kursunBypassService = {
+  /** Menü görünürlüğü için ÜÇ SAYI — hafif uç (gövde yok, sorgu parametresi yok). */
+  getVisibility: (): Promise<ApiResponse<KursunBypassVisibility>> =>
+    apiClient
+      .get<ApiResponse<KursunBypassVisibility>>('/kursun-bypass/visibility')
+      .then((r) => r.data),
+
   /** Ekranın TEK payload'ı: bayrak + makineler + bekleyenler + dağıtılmışlar. */
   getDistribution: (): Promise<ApiResponse<KursunDistributionPayload>> =>
     apiClient

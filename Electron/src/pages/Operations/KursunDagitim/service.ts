@@ -5,6 +5,7 @@ import type {
   KursunBypassCancelResult,
   KursunBypassCompletePreview,
   KursunBypassCompleteResult,
+  KursunBypassVisibility,
   KursunDistributionPayload,
   KursunQueueUrgentResult,
 } from "./types";
@@ -12,6 +13,23 @@ import type {
 const BASE = "/api/kursun-bypass";
 
 export const kursunDagitimService = {
+  /**
+   * MENÜ ÇİZME ucu — üç sayı, ağır `distribution` payload'ı yok. İki KARO'nun
+   * (Kurşun Sırası + Kurşun Dağıtım) görünürlüğü buna bağlı, o yüzden bu ekranın
+   * değil `useKursunVisibility` hook'unun tükettiği bir uçtur; API yüzeyi aynı
+   * `/api/kursun-bypass` olduğu için servis burada durur.
+   *
+   * `suppressErrorToast`: menü çizerken koşan arka plan isteği — 403/500 hâlinde
+   * kullanıcıya toast atmak anlamsız (kimse bir şey istemedi); hook sayaçları 0
+   * kabul eder ve davranış saf bayrak kuralına düşer.
+   */
+  getVisibility: (): Promise<ApiResponse<KursunBypassVisibility>> =>
+    apiClient
+      .get<ApiResponse<KursunBypassVisibility>>(`${BASE}/visibility`, {
+        suppressErrorToast: true,
+      })
+      .then((r) => r.data),
+
   /** Ekranın TEK payload'ı: bayrak + makineler + bekleyen + dağıtılmış. */
   getDistribution: (): Promise<ApiResponse<KursunDistributionPayload>> =>
     apiClient

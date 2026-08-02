@@ -33,11 +33,13 @@ const QUERY_KEY = "kursun-queue";
  * fabrikada PROCESS_QC türünde tek istasyon var, bu ekran o tek istasyonun
  * bekleyenlerini sıralar.
  *
- * ⚠️ Bu ekran kurşun bypass bayrağı AÇIKKEN hiç açılmaz (`KursunQueueRouteGate`):
- * sıralamanın tek tüketicisi kurşun tabletiydi, bypass rejiminde kurşunda tablet
- * yok. İzleme + acil işaretleme Kurşun Dağıtım ekranında (aynı sıralamayla) yapılır.
- * Satırdaki "Bypass" rozeti yalnız KARIŞIK REJİM içindir (bayrak yeni açıldı ve
- * bir kısım iş hâlâ tablet akışında bekliyor).
+ * ⚠️ Bu ekran bypass bayrağı AÇIKKEN yalnız KARIŞIK REJİM sürerken açılır
+ * (`KursunQueueRouteGate` → `kursunQueueTileVisible`): tablette dokunulmuş işler
+ * dağıtılamaz, tablet akışında kalır ve planlamacının onları sıralayıp acil
+ * işaretleyebilmesi gerekir. O işler bitince (tablet rejimi sayacı 0) ekran
+ * kapanır — sıralamanın tek tüketicisi kurşun tabletiydi, bypass rejiminde
+ * kurşunda tablet yok. İzleme + acil işaretleme Kurşun Dağıtım ekranında (aynı
+ * sıralamayla) sürer. Satırdaki "Bypass" rozeti de tam bu karışık rejim içindir.
  */
 export function KursunQueuePage() {
   const qc = useQueryClient();

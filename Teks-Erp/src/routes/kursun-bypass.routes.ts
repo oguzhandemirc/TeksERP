@@ -19,6 +19,80 @@ const canDistribute = requireAnyPermission(
 );
 
 /**
+ * MENÜ ÇİZME ucu için BİLİNÇLİ OLARAK GENİŞ kapsam.
+ *
+ * `canDistribute` burada YANLIŞ olurdu: "Kurşun Sırası" karosu `quality:*`
+ * kullanıcılarına da görünüyor ve o karonun görünürlüğü artık bu ucun
+ * `tabletRegimeCount`'una bağlı. Dar tutulsaydı planlamacı/kalite kullanıcısı
+ * 403 alır, istemci sayıyı çözemez ve karo ya hep gizli ya hep görünür kalırdı
+ * (yani özellik sessizce ölürdü).
+ *
+ * Genişletmenin bedeli yok: uç ÜÇ SAYI döndürür — iş emri numarası, müşteri,
+ * metraj, makine, kişi adı YOK. Hassas veri sızmaz; yalnız "şu an kaç iş var"
+ * bilgisi verilir ve o bilgiyi zaten iki ekranın herhangi birini görebilen
+ * herkes görüyor.
+ */
+const canSeeVisibility = requireAnyPermission(
+  "quality:read",
+  "quality:write",
+  "workorder:distribute",
+  "mobile:kk2-kursun",
+  "mobile:kursun-dagitim",
+);
+
+/**
+ * @openapi
+ * /api/kursun-bypass/visibility:
+ *   get:
+ *     tags: [KursunBypass]
+ *     summary: Menü görünürlüğü için üç sayı (bayrak + açık dağıtım + tablet rejimi)
+ *     description: |
+ *       ÇOK HAFİF uç — iki arayüz de menüyü çizerken çağırır. Gövdesi bir ayar
+ *       okuması + iki `count`'tur; `distribution` ucunun ağır payload'ını
+ *       (makineler, satır satır uygunluk/stale hesabı) menü için ödemez.
+ *
+ *       Alanlar:
+ *       * `flagEnabled` — `production.kursunBypassEnabled` (YENİ atama açık mı).
+ *       * `pendingAssignmentCount` — açık dağıtım sayısı
+ *         (`completedAt IS NULL AND cancelledAt IS NULL`).
+ *       * `tabletRegimeCount` — tablet rejiminde bekleyen kurşun adımı sayısı:
+ *         `distribution` ucundaki `waiting` kümesiyle BİREBİR aynı where
+ *         (PROCESS_QC adımı + açık movement + WO durumu PLANNED/IN_PROGRESS +
+ *         açık atama YOK), ama uygunluk/`blockReason` HESAPLANMAZ. Terminal
+ *         iş emirleri (CANCELLED/SUPERSEDED) ve kapanmış (COMPLETED) iş
+ *         emirleri sayılmaz.
+ *
+ *       Görünürlük kuralını BACKEND uygulamaz (ham sayı döner). İstemci kuralı:
+ *       "Kurşun Sırası" görünür ⇔ `!flagEnabled || tabletRegimeCount > 0`;
+ *       "Kurşun Dağıtım" görünür ⇔ `flagEnabled || pendingAssignmentCount > 0`.
+ *
+ *       YETKİ bilinçli olarak GENİŞ (`quality:read` / `quality:write` /
+ *       `workorder:distribute` / `mobile:kk2-kursun` / `mobile:kursun-dagitim`):
+ *       "Kurşun Sırası" karosu kalite kullanıcılarına da görünür ve görünürlüğü
+ *       bu uca bağlıdır. Hassas veri döndürülmez — yalnız üç sayı.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Görünürlük sayaçları
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     flagEnabled:            { type: boolean, example: false }
+ *                     pendingAssignmentCount: { type: integer, example: 2 }
+ *                     tabletRegimeCount:      { type: integer, example: 7 }
+ *       401: { description: Yetkisiz }
+ *       403: { description: Yetki yok }
+ *       500: { description: Sunucu hatası }
+ */
+router.get("/visibility", verifyToken, canSeeVisibility, controller.getVisibility);
+
+/**
  * @openapi
  * /api/kursun-bypass/distribution:
  *   get:

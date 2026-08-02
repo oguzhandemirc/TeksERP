@@ -16,6 +16,63 @@ import {
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
 
+/**
+ * Kurşun ekranlarının görünürlüğünü belirleyen durum. AYRI bir tip: Kurşun Sırası
+ * ROUTE kapısı da aynı yüklemi çağırıyor ve orada sevk onayı bayrağının bir
+ * karşılığı yok — daha geniş bir bağlam istemek, kapıyı kararı etkilemeyen sahte
+ * bir alan uydurmaya zorlardı.
+ *
+ * Sayaçlar `useKursunVisibility` ile gelir; veri yokken (yükleniyor / hata /
+ * yetkisiz) 0'dır ve kural saf bayrak davranışına düşer.
+ */
+export interface KursunTileVisibility {
+  /** `production.kursunBypassEnabled` — YENİ kurşun dağıtımı açık mı. */
+  kursunBypassEnabled: boolean;
+  /** Açık (bekleyen) kurşun dağıtımı sayısı. */
+  kursunPendingAssignmentCount: number;
+  /** Tablet rejiminde bekleyen kurşun adımı sayısı. */
+  kursunTabletRegimeCount: number;
+}
+
+/** Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumunun tamamı (hub kullanır). */
+export interface OperationsVisibilityContext extends KursunTileVisibility {
+  /** `shipping.confirmationEnabled` — sevk onayı ara adımı. */
+  shipmentConfirmationEnabled: boolean;
+}
+
+/**
+ * Kurşun Sırası görünürlüğü — KARO ve ROUTE kapısının PAYLAŞTIĞI tek kural:
+ *   görünür ⇔ bayrak KAPALI **VEYA** tablet rejiminde açık kurşun adımı VAR.
+ *
+ * Eski kural salt "bayrak açıksa gizle" idi ve bir boşluk bırakıyordu: bayrak
+ * açıldığı anda tablette DOKUNULMUŞ (KK2 kaydı / hata kaydı / kapanmış hareket
+ * taşıyan) iş emirleri dağıtılamıyor, tablet rejiminde kalıyordu. Karo gizlenince
+ * planlamacı onların SIRASINI değiştiremiyor, acil işaretleyemiyordu — iş durmuyor
+ * (tablet operatörü kendi "Açık Kartlar" listesini ayrı uçtan sıralı görüyor),
+ * yalnız önceliklendirme körleşiyordu. Artık ekran o işler bitene kadar durur,
+ * biter bitmez kendiliğinden kaybolur.
+ *
+ * Ayrı isimli fonksiyon (karo nesnesine gömülü anonim yüklem DEĞİL): route kapısı
+ * bunu `import` eder. Karoyu `key` ile arayıp yüklemini okumak, anahtar değişince
+ * kapıyı sessizce "her zaman açık"a düşürürdü.
+ */
+export const kursunQueueTileVisible = (ctx: KursunTileVisibility): boolean =>
+  !ctx.kursunBypassEnabled || ctx.kursunTabletRegimeCount > 0;
+
+/**
+ * Kurşun Dağıtım görünürlüğü:
+ *   görünür ⇔ bayrak AÇIK **VEYA** bekleyen (açık) dağıtım VAR.
+ *
+ * Eski kural salt "bayrak kapalıysa gizle" idi; ROUTE bilinçli olarak açık
+ * bırakılmıştı (dağıtılmış işler bitirilebilsin) ve ortaya tuhaf bir durum
+ * çıkıyordu: sayfa çalışıyor ama menüde yok, yalnız komut paletinden/adresle
+ * girilebiliyordu. Artık menü route ile hizalı — dağıtılmış iş kaldığı sürece karo
+ * durur, son atama bitince kendiliğinden kaybolur. ROUTE'a DOKUNULMADI: kapı hâlâ
+ * yalnız izne bakar (bkz. `routes/content-routes.tsx`).
+ */
+export const kursunDagitimTileVisible = (ctx: KursunTileVisibility): boolean =>
+  ctx.kursunBypassEnabled || ctx.kursunPendingAssignmentCount > 0;
+
 export interface OperationsTile {
   key: string;
   title: string;
@@ -27,22 +84,24 @@ export interface OperationsTile {
   permission?: string;
   /** Birden çok izinden HERHANGİ biri yeterli (route requireAnyPermission ile hizalı). */
   permissionAny?: string[];
-  /** Yalnız "Sevk onayı adımı" AÇIKKEN görünür — kapalıyken (varsayılan) sevkler
-   *  doğrudan çıkar, bu ekran anlamsız → menüden gizlenir. */
-  requiresShipmentConfirmation?: boolean;
-  /** Yalnız "kurşun bypass" AÇIKKEN görünür — kapalıyken (varsayılan) kurşun normal
-   *  akışta tabletten işlenir, dağıtım ekranı anlamsız → menüden gizlenir. Bayrak
-   *  kapatılsa da ekranın ROUTE'u açık kalır: dağıtılmış işler bitirilebilsin. */
-  requiresKursunBypass?: boolean;
-  /** `requiresKursunBypass`'in TERSİ: bayrak AÇIKKEN karo GİZLENİR.
+  /**
+   * Duruma bağlı görünürlük — verilmezse karo her zaman görünür (izin filtresi ayrı).
    *
-   *  Kurşun Sırası içindir. Kuyruk sıralamasının (drag-drop priority) tek
-   *  tüketicisi kurşun TABLETİYDİ; bypass düzeninde kurşunda tablet yok, yani
-   *  sırayı okuyan kimse kalmıyor — izleme ve acil işaretleme Kurşun Dağıtım
-   *  ekranına (aynı sıralamayla) taşındı. Burada karo gizlemek YETMEZ: ROUTE da
-   *  kapatılır (`KursunQueueRouteGate`), yoksa komut paletinden / doğrudan
-   *  adresle ekran hâlâ açılırdı. */
-  hiddenWhenKursunBypass?: boolean;
+   * NEDEN BAYRAK ALANI DEĞİL DE FONKSİYON (2026-08-02 kararı):
+   * Eski üç alan (`requiresShipmentConfirmation` / `requiresKursunBypass` /
+   * `hiddenWhenKursunBypass`) hub'da ard arda `if (…) return false` ile
+   * uygulanıyordu; yani alanlar sessizce **VE** ile birleşiyordu. Yeni kurallar
+   * ise **VEYA**'dır ("bayrak açık VEYA işi kaldı"). Bunu alan olarak ifade etmek
+   * için iki alan daha (`visibleWhenPendingAssignments`,
+   * `visibleWhenTabletRegime`) eklemek gerekirdi ve hangi alanın VE hangisinin
+   * VEYA ile bağlandığı bilgisi karonun yanında değil, hub'ın filtre gövdesinde
+   * kalırdı — düzeltmeye çalıştığımız hatanın ta kendisi. Tek bir saf yüklem,
+   * kuralı karonun YANINDA tutar, hub'ı aptallaştırır (izin + yüklem) ve
+   * doğrudan birim testine açar (`tile-visibility.test.ts`).
+   *
+   * Yüklem SAF olmalı: React hook'u çağırmaz, yalnız `ctx`'e bakar.
+   */
+  visibleWhen?: (ctx: OperationsVisibilityContext) => boolean;
 }
 
 export const operationsTiles: OperationsTile[] = [
@@ -100,7 +159,15 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/sack-store",
     group: "shipping",
     permission: "shipping:read",
-    requiresShipmentConfirmation: true,
+    // Sevk onayı adımı KAPALIYKEN (varsayılan) sevkler doğrudan çıkar → bu ekranın
+    // yapacağı iş yok. DAVRANIŞ AYNEN KORUNDU (eski `requiresShipmentConfirmation`
+    // alanının birebir karşılığı) — yalnız ifade biçimi yükleme taşındı.
+    // NOT: kurşun karolarındaki "işi kaldıysa durur" koşulunun benzeri buraya
+    // BİLİNÇLİ eklenmedi (kapsam dışı). Onay açıkken kurulmuş PLANNED sevkiyat
+    // varken bayrak kapatılırsa çıkış onayı yalnız bu ekrandan yapıldığı için
+    // aynı sınıf boşluk burada da doğar; istenirse `ctx`'e bekleyen PLANNED
+    // sevkiyat sayacı eklenip aynı VEYA kalıbı uygulanır.
+    visibleWhen: (ctx) => ctx.shipmentConfirmationEnabled,
   },
   {
     key: "sack-content-edit",
@@ -159,8 +226,10 @@ export const operationsTiles: OperationsTile[] = [
     // Route ile hizalı: kalitecinin yanında kurşun dağıtımcısı da kuyruğu izler
     // (dağıtım kararı bu kuyruğun üstüne kurulur — bkz. Kurşun Dağıtım).
     permissionAny: ["quality:write", "workorder:distribute"],
-    // Bypass AÇIKKEN bu ekran yoktur: sırayı okuyacak kurşun tableti kalmıyor.
-    hiddenWhenKursunBypass: true,
+    // Kural + gerekçe: `kursunQueueTileVisible` (yukarıda). ROUTE kapısı da AYNI
+    // fonksiyonu çağırır — karo gizlemek yetmez, komut paleti ve doğrudan adres
+    // route'u yine açardı.
+    visibleWhen: kursunQueueTileVisible,
   },
   {
     key: "kursun-dagitim",
@@ -170,6 +239,7 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/kursun-dagitim",
     group: "production",
     permission: "workorder:distribute",
-    requiresKursunBypass: true,
+    // Kural + gerekçe: `kursunDagitimTileVisible` (yukarıda).
+    visibleWhen: kursunDagitimTileVisible,
   },
 ];

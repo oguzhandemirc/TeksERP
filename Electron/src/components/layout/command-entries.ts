@@ -2,7 +2,10 @@ import type { LucideIcon } from "lucide-react";
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
-import { operationsTiles } from "@/pages/Operations/tile-config";
+import {
+  operationsTiles,
+  type OperationsVisibilityContext,
+} from "@/pages/Operations/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
 import { systemTiles } from "@/pages/System/tile-config";
 import { SETTINGS_CATEGORIES } from "@/pages/GeneralSettings/settings-config";
@@ -19,6 +22,17 @@ export interface CommandEntry {
   adminOnly?: boolean;
   /** Görünmeyen ek arama anahtarları (cmdk eşleşme değerine eklenir). */
   keywords?: string;
+  /**
+   * Operasyon karolarının DURUMA BAĞLI görünürlüğü (`OperationsTile.visibleWhen`
+   * ile AYNI yüklem — kopyalanmaz, taşınır).
+   *
+   * NEDEN PALET DE SÜZÜLÜR: hub karosu gizlendiğinde palet girişi kalırsa üçüncü
+   * bir giriş kapısı kuralla çelişir. "Kurşun Sırası"nda bu somut bir hataya
+   * dönüşüyordu — route kapısı da aynı koşulu uyguladığı için paletten seçen
+   * kullanıcı sayfa yerine hub'a atılıyor ve sebebini hiçbir yerde göremiyordu.
+   * (`OperationsTile` dışındaki girişlerde bu alan yoktur → her zaman görünür.)
+   */
+  visibleWhen?: (ctx: OperationsVisibilityContext) => boolean;
 }
 
 export interface CommandSection {
@@ -48,6 +62,8 @@ export const commandSections: CommandSection[] = [
       to: tile.to,
       permission: tile.permission,
       permissionAny: tile.permissionAny,
+      // Karo ile AYNI yüklem nesnesi — palet hub'dan ayrışamaz.
+      visibleWhen: tile.visibleWhen,
     })),
   },
   ...definitionGroups.map<CommandSection>((group) => ({

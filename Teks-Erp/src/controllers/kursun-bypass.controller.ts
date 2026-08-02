@@ -42,11 +42,25 @@ export class KursunBypassController {
 
   constructor() {
     this.service = new KursunBypassService();
+    this.getVisibility = this.getVisibility.bind(this);
     this.listDistribution = this.listDistribution.bind(this);
     this.assign = this.assign.bind(this);
     this.cancelAssignment = this.cancelAssignment.bind(this);
     this.getCompletePreview = this.getCompletePreview.bind(this);
     this.complete = this.complete.bind(this);
+  }
+
+  /**
+   * GET /api/kursun-bypass/visibility — menü çizme ucu (üç sayı, gövde yok).
+   * Sorgu parametresi ALMAZ: Zod şeması da yok, her istemci aynı yanıtı alır.
+   */
+  async getVisibility(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getVisibility();
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
   }
 
   /** GET /api/kursun-bypass/distribution */
