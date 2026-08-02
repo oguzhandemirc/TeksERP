@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search, Undo2 } from "lucide-react";
+import { FileText, Search, Undo2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { formatNumber, safeFormat } from "@/lib/format";
 import { normalizeSearch } from "../roll-search";
 import type { ShipmentDetail } from "../types";
@@ -43,6 +44,10 @@ export function ReturnsModal({
   const [dateTo, setDateTo] = useState("");
   const [sortField, setSortField] = useState<ReturnSortField | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // returnedRolls[].id = RollReturn.id = RETURN_DISPATCH belgesinin sourceId'si.
+  // Sevk irsaliyesi iadeyle DEĞİŞMEZ (sevk anını gösterir); iadenin resmi karşılığı
+  // bu ayrı belgedir — zincirin görünür olduğu yer burası.
+  const [docReturnId, setDocReturnId] = useState<string | null>(null);
   const q = normalizeSearch(search);
   const sackById = useMemo(() => new Map(d.sacks.map((s) => [s.id, s])), [d.sacks]);
   const toggleSort = (f: ReturnSortField) => {
@@ -136,6 +141,7 @@ export function ReturnsModal({
   }, [rows, sortField, sortDir, sackById]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] max-w-5xl flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
@@ -211,6 +217,7 @@ export function ReturnsModal({
                   <SortableTh field="width" label="En" align="right" activeField={sortField} dir={sortDir} onSort={toggleSort} />
                   <SortableTh field="qty" label="Metraj" align="right" activeField={sortField} dir={sortDir} onSort={toggleSort} />
                   <SortableTh field="date" label="Tarih" align="right" activeField={sortField} dir={sortDir} onSort={toggleSort} />
+                  <th className="px-2 py-1.5 text-right font-medium">Belge</th>
                 </tr>
               </thead>
               <tbody>
@@ -256,6 +263,16 @@ export function ReturnsModal({
                       <td className="text-right text-muted-foreground">
                         {safeFormat(r.returnedAt, "dd.MM.yyyy")}
                       </td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          onClick={() => setDocReturnId(r.id)}
+                          title="İade irsaliyesini aç"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <FileText className="h-3 w-3" /> İrsaliye
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -265,5 +282,15 @@ export function ReturnsModal({
         </div>
       </DialogContent>
     </Dialog>
+    <PrintedDocDialog
+      docType="RETURN_DISPATCH"
+      sourceId={docReturnId}
+      open={Boolean(docReturnId)}
+      onOpenChange={(o) => !o && setDocReturnId(null)}
+      title="İade İrsaliyesi"
+      description="Müşteriden dönen topun kabul belgesi."
+      writePermission="return:write"
+    />
+    </>
   );
 }

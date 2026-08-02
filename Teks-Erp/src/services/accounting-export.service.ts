@@ -7,6 +7,14 @@
 // çuval/top/vergi no/yön). Gruplama mantığı shipping.service.getDispatchReport
 // ile aynı (ürün = item + color + width; çuval kg brüt).
 //
+// ⚠️ SEVK SATIRLARI BRÜT'TÜR (sevk anı) — iade DÜŞÜLMEZ; iadeler yalnız kendi
+// "İade" sayfasında durur. Böylece "sevk − iade = net" aritmetiği doğrudur.
+// (Eskiden satırlar canlı okunduğu için ZATEN net idi ve ayrıca iade sayfası
+// vardı → muhasebeci aynı metrajı iki kez düşüyordu.) İki kümenin kapsamı
+// bilinçli olarak FARKLI ve bu bir hata değildir: sevk satırları DÖNEMDE SEVK
+// EDİLEN'i, iade satırları DÖNEMDE İADE ALINAN'ı gösterir — temmuzda iade edilen
+// bir haziran sevkiyatı temmuz dökümünde yalnız iade tarafında görünür.
+//
 // Filtre yolu listShipments ile birebir: parseQueryParams → buildWhereClause →
 // applyDateRange. status zorla DISPATCHED. Perf: tek nested sorgu + JS toplama
 // (bounded set); shipment sayısı eşiği aşarsa 400 ("aralığı daraltın").
@@ -201,6 +209,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     where,
     orderBy: [{ dispatchedAt: "desc" }, { createdAt: "desc" }],
     select: {
+      id: true,
       shipmentNo: true,
       dispatchedAt: true,
       createdAt: true,
@@ -228,6 +237,39 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     },
   });
 
+  // ⚠️ BRÜT GERİ-EKLEME — çift düşmenin panzehiri.
+  // Sevkiyat satırları canlı çuval içeriğinden toplanır; iade alınmış top ise
+  // `sackId`'si boşaldığı için o toplamlardan DÜŞMÜŞ durumdadır. Aynı veri setinde
+  // ayrıca bir "İade" sayfası + `returnMeters` toplamı olduğu için, muhasebeci
+  // "sevk − iade" yaptığında aynı metraj İKİ KEZ düşüyordu. Çözüm: sevk satırlarını
+  // sevk anındaki BRÜT değere geri getir, iadeyi yalnız kendi sayfasında göster →
+  // "sevk − iade = net" aritmetiği artık DOĞRU.
+  //
+  // Neden snapshot'tan değil de RollReturn'den: `getDispatchReport` tek sevkiyat için
+  // donmuş belgeyi okur (kesin), ama dönem export'u MAX_SHIPMENTS=2000 sevkiyatı
+  // kapsayabilir ve her snapshot çeki satırlarıyla birlikte yüz KB'a ulaşır (perf
+  // kuralı 13: snapshot JSON'unu toplu sorguda çekme). `RollReturn` satırı iade anını
+  // DONDURULMUŞ olarak taşır (`qty`/`itemId`/`colorId`/`width` sonradan değişmez) ve
+  // `roll_returns_fromShipmentId_idx` + `roll_returns_itemId_colorId_width_idx` ile
+  // ucuzdur — canlı + iade = sevk anı.
+  const returnBackfill = await prisma.rollReturn.findMany({
+    where: { cancelledAt: null, fromShipmentId: { in: shipments.map((s) => s.id) } },
+    select: {
+      fromShipmentId: true,
+      qty: true,
+      width: true,
+      item: { select: { id: true, name: true } },
+      color: { select: { id: true, name: true } },
+    },
+  });
+  const backfillByShipment = new Map<string, typeof returnBackfill>();
+  for (const rb of returnBackfill) {
+    if (!rb.fromShipmentId) continue;
+    const list = backfillByShipment.get(rb.fromShipmentId);
+    if (list) list.push(rb);
+    else backfillByShipment.set(rb.fromShipmentId, [rb]);
+  }
+
   const shipmentRows: ShipmentRow[] = [];
   const detailRows: DetailRow[] = [];
   const byCustomer = new Map<string, CustomerAgg>();
@@ -244,29 +286,64 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     let rollCount = 0;
     const prodMap = new Map<string, ProductAgg>();
 
+    // F251: İD bazlı anahtar — Item.name/Color.name DB'de unique DEĞİL; aynı ada sahip
+    // iki farklı ürün/renk icmalde birleşmesin (metre yanlış atfedilmesin). Adlar yalnız
+    // görüntüleme için taşınır.
+    const addProduct = (
+      spec: { itemId: string; itemName: string; colorId: string | null; colorName: string; width: number | null },
+      meters: Prisma.Decimal | number,
+    ) => {
+      const key = `${spec.itemId}|${spec.colorId ?? ""}|${spec.width ?? ""}`;
+      const seed = () => ({
+        itemName: spec.itemName,
+        colorName: spec.colorName,
+        width: spec.width,
+        rollCount: 0,
+        totalMeters: D0(),
+      });
+      for (const map of [prodMap, byProduct]) {
+        const g = map.get(key) ?? seed();
+        g.rollCount += 1;
+        g.totalMeters = g.totalMeters.plus(meters);
+        map.set(key, g);
+      }
+    };
+
     for (const sk of sh.sacks) {
       if (sk.weightKg != null) sKg = sKg.plus(sk.weightKg);
       for (const r of sk.rolls) {
         rollCount += 1;
         sMeters = sMeters.plus(r.currentQty);
-        const itemName = r.item.name;
-        const colorName = r.color?.name ?? "";
-        const widthNum = r.width != null ? Number(r.width) : null;
-        // F251: İD bazlı anahtar — Item.name/Color.name DB'de unique DEĞİL; aynı ada sahip
-        // iki farklı ürün/renk icmalde birleşmesin (metre yanlış atfedilmesin). Adlar yalnız
-        // görüntüleme için taşınır.
-        const key = `${r.item.id}|${r.color?.id ?? ""}|${widthNum ?? ""}`;
-
-        const g = prodMap.get(key) ?? { itemName, colorName, width: widthNum, rollCount: 0, totalMeters: D0() };
-        g.rollCount += 1;
-        g.totalMeters = g.totalMeters.plus(r.currentQty);
-        prodMap.set(key, g);
-
-        const pg = byProduct.get(key) ?? { itemName, colorName, width: widthNum, rollCount: 0, totalMeters: D0() };
-        pg.rollCount += 1;
-        pg.totalMeters = pg.totalMeters.plus(r.currentQty);
-        byProduct.set(key, pg);
+        addProduct(
+          {
+            itemId: r.item.id,
+            itemName: r.item.name,
+            colorId: r.color?.id ?? null,
+            colorName: r.color?.name ?? "",
+            width: r.width != null ? Number(r.width) : null,
+          },
+          r.currentQty,
+        );
       }
+    }
+
+    // Sevk anına geri getir (yukarıdaki BRÜT GERİ-EKLEME notu). Çuval kg'ı iade ile
+    // DEĞİŞMEZ (`RollReturn` sack.weightKg'a dokunmaz, `resetSackWeightsTx` çağrılmaz)
+    // → yalnız metraj/top adedi geri eklenir. Çuval adedi de değişmez: içeriği tamamen
+    // iade edilmiş çuval sevkiyatta kalır.
+    for (const rb of backfillByShipment.get(sh.id) ?? []) {
+      rollCount += 1;
+      sMeters = sMeters.plus(rb.qty);
+      addProduct(
+        {
+          itemId: rb.item.id,
+          itemName: rb.item.name,
+          colorId: rb.color?.id ?? null,
+          colorName: rb.color?.name ?? "",
+          width: rb.width != null ? Number(rb.width) : null,
+        },
+        rb.qty,
+      );
     }
 
     const sackCount = sh.sacks.length;

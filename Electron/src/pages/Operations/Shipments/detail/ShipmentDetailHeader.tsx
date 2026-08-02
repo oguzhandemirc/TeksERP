@@ -74,7 +74,12 @@ export function ShipmentDetailHeader({
         }
       />
 
-      <ShipmentDispatchNote shipmentId={shipmentId} open={noteOpen} onOpenChange={setNoteOpen} />
+      <ShipmentDispatchNote
+        shipmentId={shipmentId}
+        open={noteOpen}
+        onOpenChange={setNoteOpen}
+        returns={d ? { count: d.summary.returnedCount, meters: d.summary.returnedMeters } : undefined}
+      />
       <CancelShipmentDialog
         shipmentId={cancelOpen ? shipmentId : null}
         onOpenChange={(o) => setCancelOpen(o)}

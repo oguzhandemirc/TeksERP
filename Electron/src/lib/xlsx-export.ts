@@ -20,6 +20,11 @@ export interface SheetSpec {
   rows: Array<Record<string, unknown>>;
   /** Opsiyonel kalın TOPLAM satırı (kolon key'lerine göre). */
   totalRow?: Record<string, unknown>;
+  /** Tablonun ALTINA (boş satırdan sonra) basılan açıklama satırları — italik/gri.
+   *  Sayı değil BAĞLAM taşır: "bu rakamlar sevk anına aittir, iade düşülmemiştir"
+   *  gibi. Rakamın nasıl okunacağını söyleyen not, rakamla aynı dosyada durmalı —
+   *  aksi halde Excel elden ele dolaşırken bağlam kaybolur. */
+  notes?: string[];
 }
 
 const HEADER_FILL = "FFEFEFEF"; // açık gri başlık zemini
@@ -51,6 +56,14 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
     if (spec.totalRow) {
       const tr = ws.addRow(spec.totalRow);
       tr.font = { bold: true };
+    }
+
+    if (spec.notes?.length) {
+      ws.addRow([]); // notları TOPLAM'dan ayır (autoFilter aralığına yapışmasın)
+      for (const n of spec.notes) {
+        const nr = ws.addRow([n]);
+        nr.font = { italic: true, color: { argb: "FF666666" } };
+      }
     }
 
     ws.views = [{ state: "frozen", ySplit: 1 }];

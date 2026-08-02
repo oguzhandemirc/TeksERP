@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquareText, Printer } from "lucide-react";
+import { MessageSquareText, Printer, Undo2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,16 +20,51 @@ interface Props {
   shipmentId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Bu sevkiyattan sonra alınan (iptal edilmemiş) iadeler — çağıran zaten yüklü
+   *  sevkiyat detayından geçirir (`summary.returnedCount/Meters`), ekstra istek yok.
+   *  Verilmezse bant çıkmaz. */
+  returns?: { count: number; meters: number };
 }
 
 const DOC_TYPE = "SHIPMENT_DISPATCH" as const;
+
+const fmtM = (v: number) =>
+  v.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/**
+ * "Sevk sonrası iade" bandı — belge ile CANLI durumun neden ayrıştığını söyler.
+ *
+ * İrsaliye sevk anında DONAR ve iade onu değiştirmez (doğru davranış: müşteriye/
+ * gümrüğe giden belge malın çıktığı anı gösterir, iade ayrı belgeyle kapanır).
+ * Ama ekranda hiçbir işaret yoksa kullanıcı belgedeki metrajı listedeki/Excel'deki
+ * canlı metrajla karşılaştırıp "hangisi doğru" diye takılıyor — üstelik versiyon
+ * rozetindeki "Güncel" ifadesi "içerik güncel" diye okunuyor (aslında "en son
+ * versiyon, hiç revize edilmedi" demek). Bant tam bu boşluğu kapatır.
+ */
+function ReturnsNotice({ returns }: { returns: { count: number; meters: number } }) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2 text-xs">
+      <Undo2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+      <div className="min-w-0">
+        <span className="font-medium">
+          Bu belge sevk anına aittir — sonrasında {returns.count} top ({fmtM(returns.meters)} m)
+          iade alınmıştır.
+        </span>{" "}
+        <span className="text-muted-foreground">
+          İade belgedeki rakamlardan düşülmez (fatura irsaliyeden kesilir, iade ayrı
+          belgeyle kapanır). Dökümü sevkiyat detayındaki “İadeler” bölümünde.
+        </span>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Sevk İrsaliyesi — TEK KAYNAK: önizleme + baskı backend `renderShipmentDispatchHtml`
  * çıktısıdır (muhasebe "Sevk Fişi" ile BİREBİR aynı). Donmuş belge varsa resmî;
  * yoksa ?draft=1 ile canlı TASLAK. Versiyon çubuğu (revize/geçmiş) belge meta'sından.
  */
-export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) {
+export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }: Props) {
   const { hasPermission } = useRoleAccess();
   const qc = useQueryClient();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
@@ -113,6 +148,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
             templateStale={currentDoc?.templateStale ?? false}
           />
         )}
+        {returns && returns.count > 0 && <ReturnsNotice returns={returns} />}
         {shipmentId && (
           <DispatchNoteEditor
             shipmentId={shipmentId}

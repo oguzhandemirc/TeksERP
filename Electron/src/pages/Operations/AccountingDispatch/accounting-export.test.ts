@@ -26,6 +26,10 @@ const report: DispatchReport = {
     { rollId: "r2", sackCode: "AMB1", barcode: "B2", desen: "MC 156", varyant: "BEYAZ", meters: 40, kg: 0 },
   ],
   totals: { totalRolls: 2, totalMeters: 100, totalKg: 50, sackCount: 1 },
+  frozen: true,
+  docStatus: "ACTIVE",
+  docVersion: 1,
+  returns: { count: 0, meters: 0 },
 };
 
 const data: AccountingExportData = {
@@ -122,6 +126,10 @@ const directReport: DispatchReport = {
     { rollId: "r2", sackCode: "—", barcode: "B2", desen: "PATOS", varyant: "LACIVERT", meters: 150, kg: 0 },
   ],
   totals: { totalRolls: 2, totalMeters: 250, totalKg: 0, sackCount: 0 },
+  frozen: true,
+  docStatus: "ACTIVE",
+  docVersion: 1,
+  returns: { count: 0, meters: 0 },
 };
 
 describe("buildDispatchReportSheets — fasondan doğrudan sevk (çuval yok)", () => {
@@ -137,6 +145,54 @@ describe("buildDispatchReportSheets — fasondan doğrudan sevk (çuval yok)", (
     expect(sheets[0]!.totalRow).toMatchObject({ rollCount: 2, totalMeters: 250 });
     expect(sheets[1]!.totalRow).toMatchObject({ totalMeters: 250, totalKg: 0 });
     expect(sheets[2]!.rows).toHaveLength(2);
+  });
+});
+
+// Fiş SEVK ANINI gösterir (donmuş belge); sonradan alınan iade rakamlardan
+// DÜŞÜLMEZ, yalnız dipnotla bildirilir. Dipnot Excel'in İÇİNDE durmalı — dosya
+// elden ele dolaşırken "501 mi 452 mi" sorusunun cevabı orada olsun.
+describe("buildDispatchReportSheets — brüt/iade dipnotu", () => {
+  const notesOf = (r: DispatchReport) => buildDispatchReportSheets(r)[0]!.notes ?? [];
+
+  it("donmuş + iadesiz: yalnız 'sevk anı (brüt)' notu", () => {
+    const n = notesOf(report);
+    expect(n).toHaveLength(1);
+    expect(n[0]).toContain("SEVK ANINDAKİ");
+    expect(n.join(" ")).not.toContain("iade");
+  });
+
+  it("iade varsa adet+metraj yazar ve DÜŞÜLMEDİĞİNİ söyler", () => {
+    const n = notesOf({ ...report, returns: { count: 1, meters: 49 } });
+    const joined = n.join(" ");
+    expect(joined).toContain("1 top");
+    expect(joined).toContain("49,0 m");
+    expect(joined).toContain("DÜŞÜLMEMİŞTİR");
+    // Rakamlar brüt kalmalı — dipnot toplamı değiştirmez.
+    expect(buildDispatchReportSheets({ ...report, returns: { count: 1, meters: 49 } })[0]!
+      .totalRow).toMatchObject({ totalMeters: 100 });
+  });
+
+  it("donmamış fiş TASLAK olarak işaretlenir", () => {
+    const n = notesOf({ ...report, frozen: false, docStatus: null, docVersion: null });
+    expect(n[0]).toContain("TASLAK");
+  });
+
+  it("iptal edilmiş irsaliye uyarısı basılır", () => {
+    const n = notesOf({ ...report, docStatus: "VOIDED" });
+    expect(n.join(" ")).toContain("İPTAL");
+  });
+
+  // Alanlar HTTP'den gelir; eski yanıt / farklı üretici bunları taşımayabilir.
+  // Not basılmaması kabul edilebilir — export'un ÇÖKMESİ değil.
+  it("alanları taşımayan yanıtta çökmez, sessizce not basmaz", () => {
+    const legacy = { ...report } as Partial<DispatchReport>;
+    delete legacy.frozen;
+    delete legacy.returns;
+    delete legacy.docStatus;
+    const sheets = buildDispatchReportSheets(legacy as DispatchReport);
+    expect(sheets).toHaveLength(3);
+    expect(sheets[0]!.notes).toEqual([]);
+    expect(sheets[0]!.totalRow).toMatchObject({ totalMeters: 100 });
   });
 });
 
@@ -159,6 +215,12 @@ describe("buildAccountingWorkbookSheets — dönem dökümü (5 sayfa)", () => {
     expect(row.yon).toBe("Yurtdışı");
     expect(row.dispatchedAt).toBeInstanceOf(Date);
     expect(sevk.totalRow).toMatchObject({ totalMeters: 100, totalKg: 50 });
+  });
+
+  it("Sevk Listesi brüt olduğunu ve net hesabını dipnotta söyler (çift düşme koruması)", () => {
+    const joined = (sheets[0]!.notes ?? []).join(" ");
+    expect(joined).toContain("brüt");
+    expect(joined).toContain("Net = Sevk − İade");
   });
 
   it("İade sayfası: tarih Date + iade metre toplamı", () => {

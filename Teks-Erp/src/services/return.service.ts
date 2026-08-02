@@ -19,6 +19,7 @@
 import { Prisma, RollStatus, OrderStatus, PrintedDocType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import {
+  printedDocumentService,
   registerPrintedDocBuilder,
   type BuiltDocContent,
   type PrintedDocDb,
@@ -353,6 +354,18 @@ export class ReturnService {
         },
         select: { id: true },
       });
+      // RESMİ BELGE — iade irsaliyesini iade ANINDA dondur (sevk irsaliyesiyle aynı
+      // desen: `shipping.service` dispatch tx'i). Eskiden belge yalnız biri ekranı
+      // AÇTIĞINDA lazy-init ile kuruluyordu; yani hiç açılmayan iadenin resmi kaydı
+      // hiç doğmuyordu (SVK2007260001'in 20.07.2026 iadesinde `printed_documents`
+      // satırı yoktu) ve künye/şablon "ilk açan kişinin gününe" göre donuyordu.
+      // Tx İÇİNDE: iade başarısızsa belge de geri sarılır.
+      await printedDocumentService.freezeForSource(
+        tx,
+        PrintedDocType.RETURN_DISPATCH,
+        rr.id,
+        userId,
+      );
       return rr;
     });
 
@@ -662,6 +675,17 @@ export class ReturnService {
         where: { id: rr.id },
         data: { cancelledAt: new Date(), cancelReason: trimmedReason, cancelledById: userId },
       });
+      // Belge de iptale gitsin (baskıda İPTAL filigranı). Belge artık iade ANINDA
+      // donduruluyor; bu satır olmadan iptal edilmiş iadenin irsaliyesi ACTIVE kalır
+      // ve geçerli bir belge gibi basılabilirdi. (Eskiden belge lazy kurulduğu için
+      // `buildReturnDispatchDoc`'un `voidInfo`'su bu işi yapıyordu — o yol yalnız
+      // HİÇ dondurulmamış eski kayıtlar için ayakta.)
+      await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.RETURN_DISPATCH,
+        rr.id,
+        trimmedReason,
+      );
     });
 
     await AuditService.log({

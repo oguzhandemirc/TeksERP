@@ -23,6 +23,7 @@ import {
   ShipmentStatus,
   ShipmentDestination,
   PrintedDocType,
+  PrintedDocStatus,
   LabelKind,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -2312,11 +2313,47 @@ export class ShippingService {
     return { success: true, data: { id: sh.id, shipmentNo: sh.shipmentNo, status: sh.status, plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, customer: sh.customer, branch: sh.branch, sackCount: sh.sacks.length, sacks } };
   }
 
-  /** Muhasebe sevk fişi — collectShipmentDocContent (irsaliye ile birebir). */
+  /**
+   * Muhasebe sevk fişi — SEVK ANINDAKİ BRÜT değerler.
+   *
+   * ⚠️ Kaynak DONMUŞ belgedir (`PrintedDocument.snapshot`), canlı çuval sorgusu
+   * DEĞİL. Sevkten SONRA gelen iade (`RollReturn` topun `sackId`'sini boşaltır)
+   * ya da metraj düzeltmesi bu fişi GERİYE DÖNÜK değiştirmemeli: aksi halde aynı
+   * sevk fişi geçen ay 501 m, bugün 452 m der — aynı belge numarasıyla — ve fatura
+   * mutabakatı sessizce bozulur. Sektör standardı: fatura sevk irsaliyesinden
+   * kesilir, iade AYRI belgeyle (iade irsaliyesi + iade faturası) kapanır.
+   * Böylece fiş ile irsaliye (`renderShipmentDispatchHtml`) aynı snapshot'tan
+   * beslenir ve tanım gereği BİREBİR aynı kalır.
+   *
+   * Donmuş belge YOKSA canlı içeriğe düşülür ve `frozen:false` işaretlenir —
+   * meşru iki hal: (a) sevkiyat henüz PLANNED (irsaliye doğmadı → taslak fiş),
+   * (b) eski kayıt; (b)'de `getCurrent` zaten lazy-init ile belgeyi kurar
+   * (idempotent + audit'li), yani ikinci okumada `frozen:true` olur.
+   *
+   * İadeler bu fişte DÜŞÜLMEZ; yalnız `returns` özetiyle bildirilir (istemci
+   * dipnot basar). Dökümü sevkiyat detayındaki "İadeler" ve muhasebe dönem
+   * export'unun "İade" sayfasındadır.
+   */
   async getDispatchReport(shipmentId: string): Promise<ApiResponse<unknown>> {
-    const content = await collectShipmentDocContent(prisma, shipmentId, { requireDispatched: false });
+    const doc = (
+      await printedDocumentService.getCurrent(PrintedDocType.SHIPMENT_DISPATCH, shipmentId)
+    ).data as { snapshot: { doc: unknown }; status: string; version: number } | null;
+
+    const content = doc
+      ? (doc.snapshot.doc as ShipmentDispatchDoc)
+      : await collectShipmentDocContent(prisma, shipmentId, { requireDispatched: false });
     if (!content) throw AppError.notFound("Sevkiyat bulunamadı");
-    return { success: true, data: content };
+
+    return {
+      success: true,
+      data: {
+        ...content,
+        frozen: Boolean(doc),
+        docStatus: doc?.status ?? null,
+        docVersion: doc?.version ?? null,
+        returns: await summarizeShipmentReturns(prisma, shipmentId),
+      },
+    };
   }
 
   /**
@@ -2394,6 +2431,20 @@ export class ShippingService {
         sacks: [],
         cekiRows,
         totals: { totalRolls: ds.rolls.length, totalMeters: Number(totalMeters), totalKg: 0, sackCount: 0 },
+        // Çuval sevkiyatı fişiyle AYNI kontrat — istemci tek `DispatchReport` tipiyle
+        // çalışır ve alan eksik gelirse Excel dipnotu `returns.count` okurken PATLAR.
+        //
+        // `frozen: true` burada "snapshot'tan okundu" demek DEĞİL (yukarısı canlı
+        // sorgu); "bu rakam sevk anının değişmez kaydıdır" demek — doğrudan sevkte
+        // iki yol da kapalı olduğu için geçerli: (1) iade YOLU YOK, `RollReturn.
+        // fromShipmentId` Shipment'a bakar, DirectShipment'a değil; (2) sevk edilmiş
+        // topun metrajı düzeltilemez (`ALWAYS_BLOCKED` — sevkteki top). Bu iki
+        // koşuldan biri değişirse (ör. fason sevkine iade eklenirse) burası gerçek
+        // özet döndürmeli, yoksa fiş sessizce geriye dönük değişmeye başlar.
+        frozen: true,
+        docStatus: PrintedDocStatus.ACTIVE,
+        docVersion: 1,
+        returns: { count: 0, meters: 0 },
       },
     };
   }
@@ -2463,12 +2514,35 @@ export class ShippingService {
 
 export const shippingService = new ShippingService();
 
+/**
+ * Bir sevkiyattan İPTAL EDİLMEMİŞ iadelerin özeti (adet + metraj).
+ *
+ * Fişte/irsaliyede rakamı DÜŞMEK için değil, "bu belge sevk anına aittir, sonrasında
+ * iade olmuş" dipnotunu bastırmak için. İptal edilen iade (`cancelledAt`) sayılmaz —
+ * top sevkiyata geri döndüğü için zaten donmuş belgeyle tutarlıdır.
+ */
+async function summarizeShipmentReturns(
+  db: PrintedDocDb,
+  shipmentId: string,
+): Promise<{ count: number; meters: number }> {
+  const agg = await db.rollReturn.aggregate({
+    where: { fromShipmentId: shipmentId, cancelledAt: null },
+    _count: { _all: true },
+    _sum: { qty: true },
+  });
+  return { count: agg._count._all, meters: Number(agg._sum.qty ?? 0) };
+}
+
 // =============================================================================
 // RESMİ BELGE — Sevk İrsaliyesi snapshot builder'ı (PrintedDocument)
 // =============================================================================
 // Tek üretici: freeze (dispatch tx'i), reissue (revizyon), lazy-init. `collectShipmentDocContent`
-// çuval içeriğinden (Sack→Roll) üretir — tahsis/allocation'a DOKUNMAZ. Muhasebe fişi ile
-// sevk irsaliyesi BİREBİR aynı veriden gelir.
+// çuval içeriğinden (Sack→Roll) üretir — tahsis/allocation'a DOKUNMAZ.
+//
+// ⚠️ Bu fonksiyon CANLI okur; "sevk anı" garantisini veren şey donma (freeze) adımıdır.
+// Muhasebe fişi (`getDispatchReport`) ile irsaliye BİREBİR aynı kalsın diye ikisi de
+// donmuş SNAPSHOT'tan beslenir — buradan DEĞİL. Yeni bir "sevk içeriği" yüzeyi eklerken
+// aynı kuralı uygula: sevk edilmiş bir sevkiyatın rakamını canlı sorgudan üretme.
 async function collectShipmentDocContent(
   db: PrintedDocDb,
   shipmentId: string,

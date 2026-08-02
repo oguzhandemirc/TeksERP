@@ -44,6 +44,15 @@ export interface DispatchReport {
     kg: number;
   }>;
   totals: { totalRolls: number; totalMeters: number; totalKg: number; sackCount: number };
+  /** İçerik DONMUŞ belgeden mi geldi (sevk anı, irsaliyeyle birebir)? false =
+   *  sevkiyat henüz sevk edilmemiş → TASLAK fiş (canlı çuval içeriği). */
+  frozen: boolean;
+  /** Donmuş belgenin durumu/versiyonu (frozen=false ise null). VOIDED = sevkiyat iptal. */
+  docStatus: string | null;
+  docVersion: number | null;
+  /** Bu sevkiyattan SONRA alınan (iptal edilmemiş) iadeler. Fişteki rakamlardan
+   *  DÜŞÜLMEZ — yalnız dipnot basmak için; iade ayrı belgeyle izlenir. */
+  returns: { count: number; meters: number };
 }
 
 /**

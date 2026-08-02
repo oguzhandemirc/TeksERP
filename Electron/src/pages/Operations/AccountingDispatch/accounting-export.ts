@@ -53,6 +53,12 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         totalMeters: t.totalMeters,
         totalKg: t.totalKg,
       },
+      // Brüt/net ayrımını dosyanın içine yaz: bu iki satır olmadan muhasebeci
+      // "sevk − iade" yaptığında iadeyi ikinci kez düşme riski taşır.
+      notes: [
+        "* Rakamlar SEVK ANINDAKİ (brüt) değerlerdir — iade DÜŞÜLMEMİŞTİR. Net = Sevk − İade (bkz. \"İade\" sayfası).",
+        "* \"İade\" sayfası DÖNEM İÇİNDE İADE ALINAN topları listeler; bunlar bu dönemde sevk edilmiş olmayabilir.",
+      ],
     },
     {
       name: "Detay",
@@ -122,6 +128,42 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
   ];
 }
 
+/**
+ * Fiş dipnotları — rakamın NASIL okunacağını Excel'in içine yazar.
+ *
+ * Fiş sevk anındaki BRÜT değerleri gösterir (donmuş belgeden); sonradan alınan
+ * iade DÜŞÜLMEZ. Dosya elden ele dolaştığında bu bağlam kaybolmasın diye not
+ * rakamla aynı sayfada durur — "501 mi 452 mi" sorusunun cevabı burada.
+ */
+function dispatchReportNotes(report: DispatchReport): string[] {
+  const notes: string[] = [];
+  // Alanlar HTTP'den gelir: eski bir yanıt ya da yeni bir üretici (fasondan doğrudan
+  // sevk fişi gibi) bunları taşımayabilir. Not BASILMAMASI kabul edilebilir, muhasebe
+  // export'unun ÇÖKMESİ değil → iddia edemediğimiz yerde susarız.
+  if (report.returns == null || report.frozen == null) return notes;
+  if (report.frozen) {
+    notes.push(
+      "* Bu fiş sevkiyatın SEVK ANINDAKİ (brüt) değerlerini gösterir — sevk irsaliyesiyle birebir aynıdır.",
+    );
+  } else {
+    notes.push("* TASLAK — sevkiyat henüz sevk edilmedi; rakamlar sevke kadar değişebilir.");
+  }
+  if (report.docStatus === "VOIDED") {
+    notes.push("* DİKKAT: Bu sevkiyatın irsaliyesi İPTAL edilmiştir.");
+  }
+  if (report.returns.count > 0) {
+    notes.push(
+      `* Bu sevkiyattan sonra ${report.returns.count} top / ` +
+        `${report.returns.meters.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m ` +
+        `iade alınmıştır. İade yukarıdaki rakamlardan DÜŞÜLMEMİŞTİR.`,
+    );
+    notes.push(
+      "  İade dökümü: sevkiyat detayındaki \"İadeler\" bölümü ve muhasebe dönem dökümünün \"İade\" sayfası.",
+    );
+  }
+  return notes;
+}
+
 /** Tek sevk fişi → 3 sayfa (Kumaş / Çuval / Çeki) — Fiş dialog'undan Excel. */
 export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
   const t = report.totals;
@@ -135,6 +177,7 @@ export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
       ],
       rows: report.products,
       totalRow: { name: "TOPLAM", rollCount: t.totalRolls, totalMeters: t.totalMeters },
+      notes: dispatchReportNotes(report),
     },
     {
       name: "Çuval Listesi",
