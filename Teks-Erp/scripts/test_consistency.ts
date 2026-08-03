@@ -260,7 +260,7 @@ FROM roll_movements rm
 WHERE rm."exitedAt" IS NOT NULL
   AND rm."qtyOut" IS DISTINCT FROM rm."qtyIn"`,
     noise: {
-      // Bu üç kapanış İSTASYON BİTİRMESİ DEĞİLDİR, dolayısıyla "qtyOut = qtyIn"
+      // Bu dört kapanış İSTASYON BİTİRMESİ DEĞİLDİR, dolayısıyla "qtyOut = qtyIn"
       // kuralının (commit 64263fc) konusu da değildir:
       //   WO_CLOSE_*      → kapanış dispozisyonu; kalan metraj yazılır, giren değil
       //                     (workorder.service.ts:3099)
@@ -268,13 +268,23 @@ WHERE rm."exitedAt" IS NOT NULL
       //                     (workorder-manual-move.service.ts:628)
       //   REDYE_REWIND    → redye/parti geri sarmada movement iptal edilir
       //                     (workorder-split.service.ts:356,473)
-      // Üçünde de qtyOut bilinçli olarak yazılmaz/farklıdır. Kapı bu üçü dışındaki
-      // her kapanışa uygulanır — asıl korunan şey normal istasyon FINISH'idir.
+      //   CANCEL:<sevkNo> → fason SEVK İPTALİ; top hiç çıkmadan STOCK'a geri döner
+      //                     (subcontractor.service.ts:1953). qtyOut yazmak, hiç
+      //                     yapılmamış bir işin çıktısını UYDURMAK olurdu — kasıtlı
+      //                     olarak boş bırakılır. (2026-08-03 eklendi; marker'ın tek
+      //                     yazarı orasıdır ve mevcut nota " | " ile EKLENİR, bu
+      //                     yüzden eşitlik değil iki LIKE deseni gerekir.)
+      // Dördünde de qtyOut bilinçli olarak yazılmaz/farklıdır. Kapı bu dördü
+      // dışındaki her kapanışa uygulanır — asıl korunan şey normal istasyon
+      // FINISH'idir.
       where: `WHERE NOT EXISTS (
                 SELECT 1 FROM roll_movements rm_n
                 WHERE rm_n.id = drift.id
-                  AND (rm_n.notes LIKE 'WO_CLOSE\\_%' OR rm_n.notes IN ('MANUAL_MOVE_OUT','REDYE_REWIND')))`,
-      why: "kapanış dispozisyonu / manuel taşıma / redye geri sarma istasyon bitirmesi değildir",
+                  AND (rm_n.notes LIKE 'WO_CLOSE\\_%'
+                       OR rm_n.notes IN ('MANUAL_MOVE_OUT','REDYE_REWIND')
+                       OR rm_n.notes LIKE 'CANCEL:%'
+                       OR rm_n.notes LIKE '%| CANCEL:%'))`,
+      why: "kapanış dispozisyonu / manuel taşıma / redye geri sarma / fason sevk iptali istasyon bitirmesi değildir",
     },
   },
   {
@@ -425,7 +435,14 @@ WITH adim AS (
                     JOIN work_order_steps s2 ON s2.id = rm2."workOrderStepId"
                     WHERE rm2."rollId" = r.id AND s2."workOrderId" = s."workOrderId")
         AND NOT EXISTS (SELECT 1 FROM roll_movements rm3
-                        WHERE rm3."rollId" = r.id AND rm3."workOrderStepId" = s.id)) AS bekleyen
+                        WHERE rm3."rollId" = r.id AND rm3."workOrderStepId" = s.id)
+        -- FASON DÖNÜŞÜ ÇOCUĞU: bu adımın makbuzundan doğan top o adımın ÇIKTISIDIR,
+        -- adıma hiç girmez, dolayısıyla "bekleyen" DEĞİLDİR. Ürün kodundaki aynı
+        -- istisnanın aynası: roll-step.helper.ts icindeki pendingRolls sorgusu
+        -- NOT parentReceipt.stepId ile ayni dislamayi yapar. İkisi AYRI kalırsa
+        -- bekçi ya yanlış alarm verir ya gerçek drift'i kaçırır.
+        AND NOT EXISTS (SELECT 1 FROM subcontractor_receipts sr
+                        WHERE sr.id = r."parentReceiptId" AND sr."stepId" = s.id)) AS bekleyen
   FROM work_order_steps s
   JOIN work_orders wo ON wo.id = s."workOrderId"
   WHERE s.status <> 'SKIPPED'

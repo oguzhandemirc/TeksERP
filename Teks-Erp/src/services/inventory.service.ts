@@ -430,6 +430,9 @@ export class InventoryService {
    *
    * Fabrikaya gelen ham kumaş girişi: barkod + temel meta veri. Top hep STOCK'a
    * düşer; iş emrine bağlama daha sonra `attach-rolls` ile yapılır.
+   *
+   * ⚠️ Bu metot iki farklı niyete hizmet eder ve ayrım 5. parametre (`opts`)
+   * ile YAPILIR, renkle DEĞİL — bkz. `opts.forcedStatus` gerekçesi.
    */
   async createInitialEntry(
     data: {
@@ -456,7 +459,49 @@ export class InventoryService {
      *  yoksa Electron admin panelinden mi ("Manuel Top Ekle")? entrySource bunu
      *  ayırt eder (controller `Boolean(req.device)` ile çözer — Electron ASLA
      *  x-device-id göndermez). */
-    isMobileOrigin?: boolean
+    isMobileOrigin?: boolean,
+    /**
+     * KK1-DIŞI (bitmiş ürün) çağrılarının açık niyeti. Verilmezse metot bugünkü
+     * KK1 davranışını BİREBİR korur — üç alanın hiçbiri KK1 create payload'ına
+     * girmez (spread ile koşullu eklenir).
+     */
+    opts?: {
+      /**
+       * Topun doğacağı statü — **renk sezgisini BYPASS eder**.
+       *
+       * KK1 yolunda statü renkten çıkarılır (`colorId != null ? WAREHOUSE : STOCK`)
+       * ve orada DOĞRUDUR: renksiz kumaş ham demektir, üretime girecektir. Ama
+       * "bitmiş ürünü acilen depoya al" niyetinde bu sezgi SESSİZCE YANLIŞTIR —
+       * renksiz (ham beyaz) bitmiş bir top Ham Stok'a düşer, operatör onu Bitmiş
+       * Depo'da arar ve bulamaz. Bu yüzden bitmiş-ürün çağrıları statüyü AÇIKÇA
+       * söyler; sezgi yalnız söylenmediğinde çalışır.
+       *
+       * Barkod tip damgası (H/F) da bu statüden türer (`finalBarcodeType`) —
+       * renkten değil; renksiz bitmiş top "H" (ham) damgalı barkod ALMAZ.
+       */
+      forcedStatus?: RollStatus;
+      /** Kartelalık işareti — yalnız WAREHOUSE'a doğan topta anlamlı (Tambur emsali). */
+      markedForKartela?: boolean;
+      /**
+       * Topun GİRİŞ YERİ — `isMobileOrigin` sezgisini BYPASS eder.
+       *
+       * Sezgi iki kapı bilir: eşleşmiş mobil cihaz = KK1 istasyon taraması
+       * (`SUPPLIER_RECEIPT`), cihazsız istek = Electron admin paneli
+       * (`MANUAL_ENTRY`). Tambur'un "Manuel Ekle" modu bu ikisine de UYMAZ —
+       * istek mobilden gelir ama KK1 taraması DEĞİLDİR; sezgiye bırakılırsa
+       * kartsız üretilen bitmiş top envanterde ham tedarikçi girişi gibi görünür
+       * ve topun detay panelindeki "giriş yeri" YANLIŞ olur. O yüzden o yol
+       * kendi değerini (`TAMBUR_MANUAL`) AÇIKÇA söyler; sezgi yalnız
+       * söylenmediğinde çalışır.
+       */
+      forcedEntrySource?: RollEntrySource;
+      /**
+       * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
+       * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
+       * (`helpers/label-intent.helper`) — burada DB okuması yok.
+       */
+      labelIntentSnapshot?: Prisma.InputJsonValue;
+    },
   ): Promise<ApiResponse<Roll>> {
     // KK1 istasyonunda ağırlık (kg) girişi admin ayarıyla kapatılabilir (default kapalı).
     // UI alanı gizlemek yetmez — kapalıyken gelen ağırlık payload'ını (yanlışlıkla ya da
@@ -529,17 +574,13 @@ export class InventoryService {
       }
     }
 
-    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcode) — offline istemci
-    // sırayı bilemez. Tip damgası: renkli manuel giriş = hazır/işlenmiş → depoya → "F"
-    // (final kumaş); renksiz = ham (üretime girer) → "H". Mükerrer-top koruması artık
-    // clientToken (@unique) ile — barkod DEDUP ANCHOR'I DEĞİL (aşağıdaki catch).
-    const rollType: RollBarcodeType = data.colorId != null ? "F" : "H";
-
-    // Mobil KK1 istasyonundan (eşleşmiş cihaz) mı, Electron admin'den elle mi
-    // girildi — "Ham Giriş" / "Manuel Giriş" ayrımı raporlama için kritik.
-    const entrySource: RollEntrySource = isMobileOrigin
-      ? RollEntrySource.SUPPLIER_RECEIPT
-      : RollEntrySource.MANUAL_ENTRY;
+    // Giriş yeri: çağıran AÇIKÇA söylediyse o (Tambur "Manuel Ekle" yolu),
+    // söylemediyse cihaz sezgisi — mobil KK1 istasyonundan (eşleşmiş cihaz) mı,
+    // Electron admin'den elle mi girildi. "Ham Giriş" / "Manuel Giriş" /
+    // "Tambur (Manuel)" ayrımı raporlama ve top detayı için kritik.
+    const entrySource: RollEntrySource =
+      opts?.forcedEntrySource ??
+      (isMobileOrigin ? RollEntrySource.SUPPLIER_RECEIPT : RollEntrySource.MANUAL_ENTRY);
 
     // Operatör explicit kalite verdiyse SIKI doğrula (katalog + aktif —
     // soft-delete giriş guard'ı; typo'lu kod byQuality istatistiklerini
@@ -552,11 +593,21 @@ export class InventoryService {
       ? await resolveQualityGradeIdStrict(trimmedQuality)
       : null;
 
-    // Renkli manuel giriş = hazır/işlenmiş kumaş (dışarıdan boyalı/işlemli geldi),
-    // doğrudan depoya gider. Renksiz giriş = ham kumaş, üretim akışına girecek
-    // (STOCK'ta bekler, KK1/Kurşun/Tambur'da işlenir).
+    // Statü: çağıran AÇIKÇA söylediyse o (bitmiş ürün yolu), söylemediyse KK1
+    // sezgisi. Renkli manuel giriş = hazır/işlenmiş kumaş (dışarıdan boyalı/işlemli
+    // geldi), doğrudan depoya gider. Renksiz giriş = ham kumaş, üretim akışına
+    // girecek (STOCK'ta bekler, KK1/Kurşun/Tambur'da işlenir).
     const initialStatus =
-      data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK;
+      opts?.forcedStatus ?? (data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK);
+
+    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcode) — offline istemci
+    // sırayı bilemez. Tip damgası STATÜDEN türer ("F" = final/depoya inen, "H" = ham):
+    // `finalBarcodeType` zaten bu eşlemenin tek kaynağı ve KK1 yolunda eski
+    // renk-sezgisiyle BİREBİR aynı sonucu verir (renkli→WAREHOUSE→"F", renksiz→
+    // STOCK→"H") — yani bu satır KK1 davranışını değiştirmez, ikinci hüristiği
+    // kaldırır. Mükerrer-top koruması clientToken (@unique) ile — barkod DEDUP
+    // ANCHOR'I DEĞİL (aşağıdaki catch).
+    const rollType: RollBarcodeType = finalBarcodeType(initialStatus);
 
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {
@@ -579,6 +630,15 @@ export class InventoryService {
             entrySource,
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
+            // `form` YAZILMAZ → şema varsayılanı TOP. KK1 girişi de, bitmiş-ürün
+            // girişi de fiziksel olarak bir TOP'tur (açık kumaş yalnız istasyon
+            // çıktısı olarak doğar — `roll-finalize.helper` ACIK yazan tek yer).
+            ...(opts?.markedForKartela && initialStatus === RollStatus.WAREHOUSE
+              ? { markedForKartela: true }
+              : {}),
+            ...(opts?.labelIntentSnapshot !== undefined
+              ? { lastLabelSnapshot: opts.labelIntentSnapshot }
+              : {}),
           },
           include: {
             item: true,
@@ -1913,7 +1973,7 @@ export class InventoryService {
 
     // Top'un sisteme nasıl girdiğine göre başlık — itemType'tan değil entrySource'tan türer.
     // NOT: eskiden SUBCONTRACTOR_RETURN da `default`'a düşüp yanlışlıkla "Ham Giriş"
-    // gösteriyordu — dört değer de artık AÇIK case'le eşleniyor.
+    // gösteriyordu — beş değer de artık AÇIK case'le eşleniyor.
     const entryTitle = ((): string => {
       switch (roll.entrySource) {
         case RollEntrySource.TAMBUR_SPLIT:
@@ -1922,6 +1982,8 @@ export class InventoryService {
           return "Fason Dönüşü";
         case RollEntrySource.MANUAL_ENTRY:
           return "Manuel Giriş";
+        case RollEntrySource.TAMBUR_MANUAL:
+          return "Tambur (Manuel)";
         case RollEntrySource.SUPPLIER_RECEIPT:
         default:
           return "Ham Giriş";

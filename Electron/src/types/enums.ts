@@ -195,16 +195,22 @@ export const RollEntrySource = {
   MANUAL_ENTRY: "MANUAL_ENTRY",
   TAMBUR_SPLIT: "TAMBUR_SPLIT",
   SUBCONTRACTOR_RETURN: "SUBCONTRACTOR_RETURN",
+  TAMBUR_MANUAL: "TAMBUR_MANUAL",
 } as const;
 export type RollEntrySource = (typeof RollEntrySource)[keyof typeof RollEntrySource];
 
 // SUPPLIER_RECEIPT = mobil KK1 istasyonundan taranan/girilen top; MANUAL_ENTRY =
 // Electron admin panelinden "Manuel Top Ekle" ile elle girilen top (istasyon
 // taraması DEĞİL) — 2026-07-15 ayrıştırıldı, eskiden ikisi de SUPPLIER_RECEIPT'ti.
+// TAMBUR_MANUAL = Tambur tabletinde "Manuel Ekle" modunda, refakat kartı OLMADAN
+// üretilip doğrudan bitmiş depoya yazılan top (2026-08-03). MANUAL_ENTRY'den ayrı
+// tutulur: ikisi de elle girilir ama GİRİŞ YERİ farklıdır ve envanterde ayırt
+// edilebilmesi gerekir.
 export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
   SUPPLIER_RECEIPT: "Ham Giriş",
   MANUAL_ENTRY: "Manuel Giriş",
   TAMBUR_SPLIT: "Tambur Kesim",
   SUBCONTRACTOR_RETURN: "Fason Dönüşü",
+  TAMBUR_MANUAL: "Tambur (Manuel)",
 };
 

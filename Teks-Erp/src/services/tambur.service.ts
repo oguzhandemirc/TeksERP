@@ -53,6 +53,7 @@ import {
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
+import { resolveLabelIntent } from "./helpers/label-intent.helper";
 import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 // ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
 // `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
@@ -64,35 +65,13 @@ import {
 } from "./kursun-bypass.service";
 
 
-/**
- * Kesim etiket NİYETİNİ çözer (pre-tx): hedef sipariş kalemi / müşteri var-mı +
- * (müşteri) isActive doğrular; hiçbiri yoksa stok. Dönüş `buildIntentSnapshot`'a
- * verilip child'ın `lastLabelSnapshot`'ına yazılır (gevşek model: BAĞ değil,
- * baskı-anı bağlamı). DB okuması tx DIŞINDA yapılır (tx içi I/O yasak).
- */
-async function resolveCutLabelIntent(data: {
-  targetOrderLineId?: string | null;
-  targetCustomerId?: string | null;
-}): Promise<{ orderLineId?: string; customerId?: string; stock?: boolean }> {
-  if (data.targetOrderLineId) {
-    const ol = await prisma.orderLine.findUnique({
-      where: { id: data.targetOrderLineId },
-      select: { id: true },
-    });
-    if (!ol) throw AppError.badRequest("Hedef sipariş kalemi bulunamadı");
-    return { orderLineId: ol.id };
-  }
-  if (data.targetCustomerId) {
-    const cust = await prisma.customer.findUnique({
-      where: { id: data.targetCustomerId },
-      select: { id: true, isActive: true },
-    });
-    if (!cust) throw AppError.badRequest("Hedef müşteri bulunamadı");
-    if (!cust.isActive) throw AppError.badRequest("Hedef müşteri pasif — etikete atanamaz");
-    return { customerId: cust.id };
-  }
-  return { stock: true };
-}
+// Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
+// hiçbiri yoksa stok) `helpers/label-intent.helper.ts`'te yaşar — eskiden bu
+// dosyanın yerel `resolveCutLabelIntent` fonksiyonuydu, 2026-08-03'te TAŞINDI:
+// aynı çözümü Tambur MANUEL ÜRETİMİ de (`tambur-manual.service.produceFinishedRoll`)
+// çağırıyor ve ikinci bir kopya "pasif müşteri etikete atanamaz" guard'ının tek
+// yolda kalmasıyla biterdi. Sonuç `buildIntentSnapshot`'a verilip child'ın
+// `lastLabelSnapshot`'ına yazılır (gevşek model: BAĞ değil, baskı-anı bağlamı).
 
 
 interface ErrorDecision {
@@ -1881,7 +1860,7 @@ export class TamburService {
     // (üretime devam) child stok etiketle doğar.
     const cutIntentSnapshot =
       childStatus === RollStatus.WAREHOUSE
-        ? buildIntentSnapshot(await resolveCutLabelIntent(data))
+        ? buildIntentSnapshot(await resolveLabelIntent(data))
         : buildIntentSnapshot({ stock: true });
 
     let result: { child: Roll; newParentQty: number; updatedParent: Roll };
@@ -2398,7 +2377,7 @@ export class TamburService {
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
     const childBarcode = await generateRollBarcode(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
-    const cutIntentSnapshot = buildIntentSnapshot(await resolveCutLabelIntent(data));
+    const cutIntentSnapshot = buildIntentSnapshot(await resolveLabelIntent(data));
 
     // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); sistem-türetimli
     // ("1.KALITE"/"A1"/"FIRE" sabitleri) lenient kalır.

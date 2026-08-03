@@ -30,6 +30,7 @@ beforeEach(() => {
     lastRouteTemplateId: null,
     kk1ManualEntry: false,
     tamburCutMode: 'manual',
+    tamburManualMode: false,
     isLoaded: false,
   });
 });
@@ -75,6 +76,67 @@ describe('deviceSettingsStore — metraj giriş tercihi', () => {
     expect(useDeviceSettingsStore.getState().tamburCutMode).toBe('manual');
   });
 
+  it('eski cihaz ayarları (barkod/rota) bu eklemeden etkilenmez', async () => {
+    fakeDisk({ device_manual_barcode_entry: 'true', device_quick_wo_last_route: 'r-1' });
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect(s.manualBarcodeEntry).toBe(true);
+    expect(s.lastRouteTemplateId).toBe('r-1');
+  });
+});
+
+// Tambur "MANUEL EKLE" modu — kart okutmadan bitmiş top girişi. Kart izini
+// atlattığı için varsayılanı KAPALI olmalı ve diskteki her belirsiz değer
+// KAPALI'ya düşmeli (bir yazım hatası modu sessizce açmamalı).
+describe('deviceSettingsStore — Tambur manuel mod anahtarı', () => {
+  it('kayıt yokken KAPALI (kart bekleyen normal akış)', async () => {
+    fakeDisk();
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburManualMode).toBe(false);
+  });
+
+  it('diske yazılır ve SONRAKİ açılışta geri gelir', async () => {
+    const disk = fakeDisk();
+    await useDeviceSettingsStore.getState().setTamburManualMode(true);
+    expect(disk['device_tambur_manual_mode']).toBe('true');
+
+    useDeviceSettingsStore.setState({ tamburManualMode: false, isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburManualMode).toBe(true);
+  });
+
+  it('kapatma da kalıcıdır (açık kalıp sessizce geri gelmez)', async () => {
+    const disk = fakeDisk({ device_tambur_manual_mode: 'true' });
+    await useDeviceSettingsStore.getState().setTamburManualMode(false);
+    expect(disk['device_tambur_manual_mode']).toBe('false');
+
+    useDeviceSettingsStore.setState({ tamburManualMode: true, isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburManualMode).toBe(false);
+  });
+
+  it('diskteki değer bozuksa KAPALI kalır (mod sessizce açılmaz)', async () => {
+    fakeDisk({ device_tambur_manual_mode: 'TRUE' });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburManualMode).toBe(false);
+  });
+
+  it('state ANINDA döner (disk yazımı beklenmez)', () => {
+    fakeDisk();
+    void useDeviceSettingsStore.getState().setTamburManualMode(true);
+    expect(useDeviceSettingsStore.getState().tamburManualMode).toBe(true);
+  });
+
+  it('kesim modu (tamburCutMode) ile birbirini ETKİLEMEZ — ayrı anahtarlar', async () => {
+    fakeDisk({ device_tambur_manual_mode: 'true', device_tambur_cut_mode: 'auto' });
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect(s.tamburManualMode).toBe(true);
+    expect(s.tamburCutMode).toBe('auto');
+  });
+});
+
+describe('deviceSettingsStore — geriye dönük uyum', () => {
   it('eski cihaz ayarları (barkod/rota) bu eklemeden etkilenmez', async () => {
     fakeDisk({ device_manual_barcode_entry: 'true', device_quick_wo_last_route: 'r-1' });
     await useDeviceSettingsStore.getState().init();

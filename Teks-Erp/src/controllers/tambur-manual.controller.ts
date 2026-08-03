@@ -70,6 +70,38 @@ const manualRollSchema = z.object({
     .optional(),
 });
 
+// KARTSIZ BİTMİŞ ÜRÜN ("Manuel Mod") — `manualRollSchema`in PARENT-SIZ hâli.
+// `targetStepId` YOKTUR ve olmayacaktır: bu ucun ayırt edici özelliği tam olarak
+// kart/adım gerektirmemesidir (opsiyonel bir adım alanı eklemek iki niyeti tek
+// gövdede birleştirir). `itemId` buna karşılık ZORUNLU — miras alınacak iş emri yok.
+const produceSchema = z.object({
+  itemId: z.string().uuid("Geçersiz ürün ID"),
+  colorId: z.string().uuid("Geçersiz renk ID").optional().nullable(),
+  initialQty: z.number().positive("Metraj pozitif olmalı").max(999_999, "Metraj gerçekçi değil"),
+  qualityGrade: z.string().trim().max(50).optional(),
+  width: z
+    .number()
+    .positive("En pozitif olmalı")
+    .max(999_999, "En gerçekçi değil")
+    .optional()
+    .nullable(),
+  weightKg: z
+    .number()
+    .positive("Ağırlık pozitif olmalı")
+    .max(999_999, "Ağırlık gerçekçi değil")
+    .optional(),
+  // Etiket niyeti ("Kime?") — ikisi de boşsa stok. Kesim uçlarıyla aynı alan adları.
+  targetOrderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").optional().nullable(),
+  targetCustomerId: z.string().uuid("Geçersiz müşteri ID").optional().nullable(),
+  markedForKartela: z.boolean().optional(),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "İşlem nedeni en az 3 karakter olmalı")
+    .max(500, "İşlem nedeni çok uzun"),
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
+});
+
 export class TamburManualController {
   private service: TamburManualService;
 
@@ -78,6 +110,7 @@ export class TamburManualController {
     this.getBringPreview = this.getBringPreview.bind(this);
     this.bringRoll = this.bringRoll.bind(this);
     this.createManualRoll = this.createManualRoll.bind(this);
+    this.produceFinishedRoll = this.produceFinishedRoll.bind(this);
   }
 
   /** POST /api/tambur/manual/bring-preview — ne olacağını söyler, hiçbir şeyi değiştirmez. */
@@ -121,6 +154,27 @@ export class TamburManualController {
       const stamp = await getStampContext(req, { enforceForMobile: true });
       res.status(201).json(
         await this.service.createManualRoll(body, {
+          userId: req.user?.userId,
+          machineId: stamp?.machineId ?? req.device?.machineId ?? null,
+          stationId: stamp?.stationId ?? null,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/tambur/manual/produce — kartsız BİTMİŞ ürün (Manuel Mod).
+   * Oturum damgası burada da ZORUNLU (mobil): iş emri izi olmadığı için tek
+   * sorumluluk çapası operatör + makine/istasyon + sebeptir.
+   */
+  async produceFinishedRoll(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = produceSchema.parse(req.body);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
+      res.status(201).json(
+        await this.service.produceFinishedRoll(body, {
           userId: req.user?.userId,
           machineId: stamp?.machineId ?? req.device?.machineId ?? null,
           stationId: stamp?.stationId ?? null,

@@ -48,6 +48,7 @@ import { RollStatus, StepStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderManualMoveService } from "../src/services/workorder-manual-move.service";
+import { recomputeStepStatus } from "../src/services/helpers/roll-step.helper";
 import { createManualMoveFixture, type ManualMoveFixture } from "./fixture-manual-move";
 import { ensureTestDyeHouse, type TestSubcontractor } from "./fixture-subcontractor";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -252,6 +253,38 @@ async function scenarioMainFlow(userId: string): Promise<void> {
   check("S1b: kabul BAŞARILI", !!receipt2.id && receipt2.id !== receipt1Id, receipt2.receiptNo);
   const born2Count = await prisma.roll.count({ where: { parentReceiptId: receipt2.id } });
   check("S1b: tam 1 born roll doğdu (mükerrer/öksüz yok)", born2Count === 1, String(born2Count));
+
+  // --- S1c: kabul edilen fason adımı COMPLETED'ta KALIR (2026-08-03 regresyonu) ---
+  //
+  // BULUNAN HATA: `recomputeStepStatus`in "bu adıma henüz girmemiş toplar" sayacı,
+  // makbuzdan doğan çocuğu da sayıyordu. Çocuk fason adımının ÇIKTISIDIR — o adıma
+  // hiç girmez, dolayısıyla koşulu SONSUZA DEK sağlar. Sonuç: adım COMPLETED'tan
+  // ACTIVE'e geri dönüyor, `ensureWorkOrderInProgress` iş emrini IN_PROGRESS'e
+  // çekiyor ve `completeWorkOrderIfStepsDone` o WO'yu BİR DAHA ASLA kapatamıyordu.
+  //
+  // Kabul ANINDA görünmüyordu (recompute çocuklar bağlanmadan önce koşuyor); hatayı
+  // SONRAKİ herhangi bir recompute tetikliyordu. Bu yüzden test recompute'u AÇIKÇA
+  // ikinci kez çağırır — düzeltme geri alınırsa burası kırmızı verir. Sonuç dönüşüne
+  // değil DB'ye bakılır: fonksiyon durumu yazan taraftır, dönüş değeri değil.
+  const stepAfter = await prisma.$transaction((tx) => recomputeStepStatus(tx, boya));
+  const stepRow = await prisma.workOrderStep.findUnique({
+    where: { id: boya },
+    select: { status: true },
+  });
+  check(
+    "S1c: kabul sonrası tekrar recompute → fason adımı COMPLETED KALIR (ACTIVE'e dönmez)",
+    stepAfter === "COMPLETED" && stepRow?.status === "COMPLETED",
+    `donen=${stepAfter} db=${stepRow?.status ?? "-"}`,
+  );
+  const woAfter = await prisma.workOrder.findUnique({
+    where: { id: fx.woId },
+    select: { status: true },
+  });
+  check(
+    "S1c: iş emri recompute yüzünden diriltilmedi",
+    woAfter?.status !== "COMPLETED" ? woAfter?.status === "IN_PROGRESS" : true,
+    String(woAfter?.status ?? "-"),
+  );
 
   // --- S2: iptal edilmemiş makbuz varken kart okutma ---
   console.log("\n── S2: yanlış iş emrine kabul şüphesi ──");

@@ -70,12 +70,34 @@ export async function recomputeStepStatus(
   //   - currentStepId bu step'ten farklı ve
   //   - bu step için hiç movement kaydı yok (ne açık ne kapalı)
   // Böyle roller varsa step henüz bitmemiş, ACTIVE/PENDING'te kalmalı.
+  //
+  // ⚠️ FASON DÖNÜŞÜ ÇOCUĞU İSTİSNASI (2026-08-03, `test_consistency` §20 ile bulundu):
+  // Fason kabulünde orijinal top SUBCONTRACTOR_CONSUMED ile emekliye ayrılır ve
+  // makbuzdan YENİ açık-kumaş toplar doğar. Bu çocuklar fason adımının ÇIKTISIDIR —
+  // o adıma hiç girmezler ve giremezler, dolayısıyla "bu step için movement yok"
+  // koşulunu SONSUZA DEK sağlarlar. İstisna olmadan sonuç şuydu: kabul biten fason
+  // adımı `closedCount>0 && pendingRolls>0` dalına düşüp COMPLETED'tan **ACTIVE'e geri
+  // dönüyor**, `ensureWorkOrderInProgress` iş emrini IN_PROGRESS'e çekiyor ve
+  // `completeWorkOrderIfStepsDone` o WO'yu bir daha ASLA kapatamıyordu — hata da log
+  // da yok, iş emri sessizce açık kalıyordu. (Kabul anında ortaya çıkmıyor: recompute
+  // çocuklar bağlanmadan önce koşuyor. Sonraki HERHANGİ bir recompute — manuel taşıma,
+  // kabul iptali, aşağı adım kapanışı — tetikliyordu.)
+  //
+  // Dışlama DAR tutuldu: yalnız **bu adımın** makbuzundan doğan çocuk sayılmaz.
+  // Aynı çocuk, henüz ulaşmadığı AŞAĞI adımlar için hâlâ "bekleyen"dir (orada
+  // gerçekten beklemektedir) — `parentReceipt.stepId` eşitliği bunu ayırır.
   const pendingRolls = await tx.roll.count({
     where: {
       // İş emrine bağlı = en az bir movement'i bu iş emrinin adımlarından birinde olmalı
       movements: { some: { step: { workOrderId: step.workOrderId } } },
-      // Bu step için movement yok
-      NOT: { movements: { some: { workOrderStepId: stepId } } },
+      NOT: [
+        // Bu step için movement yok
+        { movements: { some: { workOrderStepId: stepId } } },
+        // ...ve bu step'in fason makbuzundan doğmuş bir çocuk değil (yukarıdaki istisna).
+        // parentReceiptId null olan toplar bu negasyondan ETKİLENMEZ (ilişki yoksa
+        // koşul zaten sağlanmaz) — normal üretim topları eskisi gibi sayılır.
+        { parentReceipt: { stepId } },
+      ],
       // Hala aktif üretimdeyse
       status: {
         in: [

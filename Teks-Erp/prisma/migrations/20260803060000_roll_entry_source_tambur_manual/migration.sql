@@ -1,0 +1,18 @@
+-- `RollEntrySource` enum'ına TAMBUR_MANUAL değeri eklenir.
+--
+-- NEDEN AYRI DEĞER: Tambur ekranındaki "Manuel Ekle" modu, refakat kartı OLMADAN
+-- bitmiş top üretip doğrudan depoya yazar. Bu da elle giriştir ama GİRİŞ YERİ
+-- `MANUAL_ENTRY`den (Electron admin paneli) farklıdır. Aynı değeri paylaşsalardı
+-- envanterde ayırt edilemezlerdi ve topun detay panelinde "giriş yeri" sorusunun
+-- cevabı yanlış olurdu. Bu değer, "her top bir kaynağa dayanır" zincirinde
+-- bilinçli açılan tek deliğin okunabilir etiketidir.
+--
+-- GÜVENLİ: yalnız EKLEME. Mevcut satırlara dokunulmaz, hiçbir kolon/kısıt
+-- değişmez, geriye dönük kırılma yok. Enum değeri eklemek anlık bir işlemdir
+-- (tablo rewrite YOK) — vardiya saati kısıtı bu migration için geçerli değil.
+--
+-- ⚠️ PostgreSQL kuralı: `ALTER TYPE ... ADD VALUE` ile eklenen değer AYNI
+-- transaction içinde KULLANILAMAZ. Bu migration değeri yalnız EKLER, hiçbir
+-- yerde kullanmaz (ilk kullanım uygulama kodundadır) → sorun çıkmaz. Aynı
+-- migration'a bu değeri yazan bir UPDATE/INSERT EKLEME.
+ALTER TYPE "RollEntrySource" ADD VALUE IF NOT EXISTS 'TAMBUR_MANUAL';

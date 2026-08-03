@@ -394,7 +394,14 @@ router.post(
 // STEP_NOT_TAMBUR, STATION_MISMATCH, WORKORDER_DEAD, ROLL_NOT_FOUND, ROLL_DEAD,
 // ROLL_IN_SACK, ROLL_IN_SHIPMENT, ROLL_AT_SUBCONTRACTOR, ROLL_STATUS_NOT_MOVABLE,
 // ROLL_OTHER_WORKORDER, ROLL_ALREADY_HERE, ROLL_STATE_CHANGED, REASON_REQUIRED,
-// QTY_REQUIRED, ITEM_REQUIRED, MOVE_REJECTED.
+// QTY_REQUIRED, ITEM_REQUIRED, MOVE_REJECTED · `/manual/produce` ek kodları:
+// ORDER_LINE_NOT_FOUND, CUSTOMER_NOT_FOUND, CUSTOMER_INACTIVE, ENTRY_REJECTED,
+// CLIENT_TOKEN_COLLISION.
+//
+// ÜÇ UÇ, İKİ NİYET: `/manual/bring*` ve `/manual/roll` KART VARSAYAR (`targetStepId`
+// zorunlu → çıktı iş emri adımına bağlanır, IN_PRODUCTION). `/manual/produce` kartın
+// YOKLUĞUNU varsayar (adım alanı YOK → doğrudan Bitmiş Depo). Aynı uca opsiyonel
+// `targetStepId` EKLEME: kapsam "alan dolu mu"ya bağlanır ve iki niyet karışır.
 
 /**
  * @openapi
@@ -533,6 +540,77 @@ router.post(
   verifyToken,
   requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt"),
   manualController.createManualRoll,
+);
+
+/**
+ * @openapi
+ * /api/tambur/manual/produce:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: "Manuel Mod — kartsız BİTMİŞ ürün üret (doğrudan Bitmiş Depo)"
+ *     description: |
+ *       Tambur ekranını **refakat kartı olmadan** kullandırır: operatör ekrandaki
+ *       kumaş / metraj / müşteri seçimini yapar, çıkan top doğrudan **Bitmiş Depo**'ya
+ *       (`RollStatus.WAREHOUSE`) yazılır. Hiçbir iş emrine, adıma, partiye ya da
+ *       `RollMovement`'a bağlanmaz (`currentStepId = null`).
+ *
+ *       **`POST /manual/roll` ile karıştırma:** orada `targetStepId` ZORUNLUDUR ve
+ *       çıktı bir iş emri adımına bağlanır (`IN_PRODUCTION`) — o uç *"kart var ama
+ *       top ekranda yok"* içindir. Burada kart YOKTUR (acil durum: top bir yerde
+ *       takıldı ya da elde kalan bitmiş mal acilen sisteme alınacak).
+ *
+ *       **KK1 girişinin kopyası DEĞİLDİR.** KK1 = ham top girişi (olağan iş akışı);
+ *       bu uç = bitmiş ürün (istisna). Fark tek satırda somuttur: statü **AÇIKÇA**
+ *       `WAREHOUSE` verilir, `createInitialEntry`in renk sezgisine bırakılmaz —
+ *       aksi halde **renksiz** (ham beyaz) bitmiş top sessizce Ham Stok'a düşer ve
+ *       operatör onu Bitmiş Depo'da bulamaz. Barkod tip damgası da (H/F) statüden
+ *       türer → renksiz bitmiş top "F" (final) barkod alır.
+ *
+ *       Kalıcı iz: `Roll.entrySource = TAMBUR_MANUAL` (kendi enum değeri; istek
+ *       Tambur tabletinden gelse bile `SUPPLIER_RECEIPT`, Electron'dan gelmediği
+ *       için de `MANUAL_ENTRY` DAMGALANMAZ — top detayında "Tambur (Manuel)") + audit
+ *       `event = TAMBUR_MANUAL_PRODUCE` (sebep + operatör + makine + istasyon).
+ *       `form = TOP` (Tambur bitmiş top üretir; şema varsayılanı).
+ *
+ *       Müşteri/sipariş **niyeti** topun `lastLabelSnapshot`'ına yazılır — gevşek
+ *       model: BAĞ değil, baskı-anı bağlamı (Tambur kesimiyle AYNI çözümleyici).
+ *       İkisi de boşsa `{stock:true}`. `clientToken` ZORUNLUDUR: ağ-retry'de
+ *       mükerrer top doğmasın (`Roll.clientToken @unique`); tekrar denemede aynı
+ *       top döner ve yanıt `idempotentReplay: true` taşır.
+ *
+ *       Ağırlık, KK1 ağırlık girişi ayarı kapalıysa reddedilir (tüm giriş
+ *       yollarının ortak choke-point'i).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId, initialQty, reason, clientToken]
+ *             properties:
+ *               itemId:            { type: string, format: uuid, description: "ZORUNLU — miras alınacak iş emri yok" }
+ *               colorId:           { type: string, format: uuid, nullable: true, description: "Boş = renksiz; statüyü ETKİLEMEZ" }
+ *               initialQty:        { type: number, description: "Metraj (m) — zorunlu" }
+ *               qualityGrade:      { type: string, description: "Katalog kodu; verilmezse kalite Belirsiz" }
+ *               width:             { type: number, nullable: true }
+ *               weightKg:          { type: number }
+ *               targetOrderLineId: { type: string, format: uuid, nullable: true, description: "Etiket niyeti — müşteriye önceliklidir" }
+ *               targetCustomerId:  { type: string, format: uuid, nullable: true }
+ *               markedForKartela:  { type: boolean }
+ *               reason:            { type: string, minLength: 3, maxLength: 500 }
+ *               clientToken:       { type: string, format: uuid, description: "İdempotency anahtarı — MANTIKSAL deneme başına bir kez üretilir" }
+ *     responses:
+ *       201: { description: "Bitmiş top Bitmiş Depo'ya eklendi (rollId/barcode/status/idempotentReplay)" }
+ *       400: { description: "Geçersiz gövde / sebep-metraj-ürün eksik / müşteri pasif / ağırlık girişi kapalı" }
+ *       404: { description: "Ürün, renk ya da kalite bulunamadı (pasif dahil)" }
+ *       409: { description: "Çalışma oturumu yok (mobil) ya da clientToken farklı bir topla kullanılmış" }
+ */
+router.post(
+  "/manual/produce",
+  verifyToken,
+  requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt"),
+  manualController.produceFinishedRoll,
 );
 
 /**

@@ -46,14 +46,44 @@ async function main() {
   const zimpara = await prisma.station.findUnique({ where: { code: "ZIMPARA_FASON" } });
   if (!kursun || !zimpara) throw new Error("Seed istasyonları eksik (npm run seed)");
 
-  const beyaz = await prisma.color.findUnique({ where: { code: "BEYAZ" } });
-  const siyah = await prisma.color.findUnique({ where: { code: "SIYAH" } });
-  const lacivert = await prisma.color.findUnique({ where: { code: "LACIVERT" } });
-  const propA = await prisma.fabricProperty.findUnique({ where: { code: "ANTIBAKTERIYEL" } });
-  const propB = await prisma.fabricProperty.findUnique({ where: { code: "ZIMPARALI" } });
-  if (!beyaz || !siyah || !lacivert || !propA || !propB) {
-    throw new Error("Seed renk/özellikleri eksik (npm run seed)");
-  }
+  // ⚠️ Renk/özellik seed'den ÇÖZÜLMEZ, test tarafından ÜRETİLİR (2026-08-03).
+  // Emsal: fixture-subcontractor.ts / fixture-test-user.ts — aynı kırılganlık sınıfı.
+  // Eskiden BEYAZ/SIYAH/LACIVERT + ANTIBAKTERIYEL/ZIMPARALI seed'den business-key ile
+  // çözülüyordu. Kayıt "var" olması KULLANILABİLİR olduğu anlamına GELMİYOR: fabrika
+  // paneli bir tanımı pasife alabilir, `findUnique` onu yine bulur, kurulum geçer ve
+  // ilk `setCapabilities` çağrısı "Bazı özellikler bulunamadı veya pasif" ile patlar.
+  // Sahada tam bu oldu — ANTIBAKTERIYEL pasife alınmıştı ve test dosyanın TAMAMINI
+  // düşürüyordu (ölçtüğü 30+ iddianın hiçbiri koşmuyordu, sebebi de görünmüyordu).
+  //
+  // Kodlar ALFABETİK SIRAYI korur (A < B < C) çünkü iddialar `.sort()` edilmiş kod
+  // dizileriyle karşılaştırıyor; beklenen diziler aşağıda bu nesnelerin KENDİ
+  // kodlarından kurulur, hiçbir yere sabit kod yazılmaz.
+  const [beyaz, lacivert, siyah] = await Promise.all([
+    prisma.color.create({
+      data: { code: `TEST-STCAP-A-${ts}`, name: `TEST Renk A ${ts}` },
+      select: { id: true, code: true },
+    }),
+    prisma.color.create({
+      data: { code: `TEST-STCAP-B-${ts}`, name: `TEST Renk B ${ts}` },
+      select: { id: true, code: true },
+    }),
+    prisma.color.create({
+      data: { code: `TEST-STCAP-C-${ts}`, name: `TEST Renk C ${ts}` },
+      select: { id: true, code: true },
+    }),
+  ]);
+  const [propA, propB] = await Promise.all([
+    prisma.fabricProperty.create({
+      data: { code: `TEST-STCAP-P1-${ts}`, name: `TEST Özellik 1 ${ts}` },
+      select: { id: true, code: true },
+    }),
+    prisma.fabricProperty.create({
+      data: { code: `TEST-STCAP-P2-${ts}`, name: `TEST Özellik 2 ${ts}` },
+      select: { id: true, code: true },
+    }),
+  ]);
+  /** Beklenen kod dizisi — fixture'ın kendi kodlarından, sabit yazım YOK. */
+  const codes = (...xs: Array<{ code: string }>): string[] => xs.map((x) => x.code).sort();
 
   // --- TEST fixture: kendi istasyonumuz + kendi pasif renk/özelliğimiz ---
   // Kategorisiz INTERNAL istasyon → canApplyColor/Property türetimi true.
@@ -111,13 +141,13 @@ async function main() {
     const colorCodes1 = r1.data.colors.map((c) => c.code).sort();
     check(
       "setCapabilities renk+özellik ekledi",
-      JSON.stringify(colorCodes1) === JSON.stringify(["BEYAZ", "SIYAH"]) &&
+      JSON.stringify(colorCodes1) === JSON.stringify(codes(beyaz, siyah)) &&
         r1.data.properties.length === 1 &&
-        r1.data.properties[0].code === "ANTIBAKTERIYEL",
+        r1.data.properties[0].code === propA.code,
       `colors=${colorCodes1.join(",")} props=${r1.data.properties.map((p) => p.code).join(",")}`,
     );
 
-    // 3) replace semantics: BEYAZ çıkar, LACIVERT gir; özellik aynı kalır
+    // 3) replace semantics: A rengi çıkar, B rengi gir; özellik aynı kalır
     const r2 = await svc.setCapabilities(
       testStation.id,
       { colorIds: [siyah.id, lacivert.id], propertyIds: [propA.id, propB.id] },
@@ -126,9 +156,9 @@ async function main() {
     const colorCodes2 = r2.data.colors.map((c) => c.code).sort();
     const propCodes2 = r2.data.properties.map((p) => p.code).sort();
     check(
-      "setCapabilities replace (ekle+sil, eski BEYAZ gitti)",
-      JSON.stringify(colorCodes2) === JSON.stringify(["LACIVERT", "SIYAH"]) &&
-        JSON.stringify(propCodes2) === JSON.stringify(["ANTIBAKTERIYEL", "ZIMPARALI"]),
+      "setCapabilities replace (ekle+sil, eski A rengi gitti)",
+      JSON.stringify(colorCodes2) === JSON.stringify(codes(lacivert, siyah)) &&
+        JSON.stringify(propCodes2) === JSON.stringify(codes(propA, propB)),
       `colors=${colorCodes2.join(",")} props=${propCodes2.join(",")}`,
     );
     // DB satır sayısı da replace edilmiş olmalı (hayalet satır yok)
@@ -167,9 +197,9 @@ async function main() {
     check(
       "listAllDetailed detayı döner (renk/özellik kodları)",
       !!mineD &&
-        mineD.colors.map((c) => c.code).sort().join(",") === "BEYAZ,LACIVERT" &&
+        mineD.colors.map((c) => c.code).sort().join(",") === codes(beyaz, lacivert).join(",") &&
         mineD.properties.length === 1 &&
-        mineD.properties[0].code === "ZIMPARALI",
+        mineD.properties[0].code === propB.code,
       mineD ? `colors=${mineD.colors.map((c) => c.code).join(",")}` : "yok",
     );
     check(
@@ -254,7 +284,7 @@ async function main() {
     const zr = await svc.setCapabilities(zimpara.id, { colorIds: [], propertyIds: [propB.id] }, undefined);
     check(
       "kategori-kapısı: ZIMPARA_FASON'a özellik atanır (appliesProperty=true)",
-      zr.data.properties.length === 1 && zr.data.properties[0].code === "ZIMPARALI",
+      zr.data.properties.length === 1 && zr.data.properties[0].code === propB.code,
       `props=${zr.data.properties.map((p) => p.code).join(",")}`,
     );
   } finally {
@@ -265,6 +295,16 @@ async function main() {
     await prisma.station.delete({ where: { id: inactiveStation.id } }).catch(() => {});
     await prisma.color.delete({ where: { id: inactiveColor.id } }).catch(() => {});
     await prisma.fabricProperty.delete({ where: { id: inactiveProp.id } }).catch(() => {});
+    // Testin kendi ürettiği aktif renk/özellikler (seed'e bağımlılığı kaldıran
+    // fixture'lar). Station silindiği için StationColor/StationProperty satırları
+    // Cascade ile zaten gitti; kalan tek bağ ZIMPARA_FASON'a yazılan propB satırı
+    // ve o yukarıda temizleniyor.
+    await prisma.color
+      .deleteMany({ where: { id: { in: [beyaz.id, lacivert.id, siyah.id] } } })
+      .catch(() => {});
+    await prisma.fabricProperty
+      .deleteMany({ where: { id: { in: [propA.id, propB.id] } } })
+      .catch(() => {});
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

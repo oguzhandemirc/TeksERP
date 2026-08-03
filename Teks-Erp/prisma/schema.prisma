@@ -57,6 +57,12 @@ enum ItemType {
 enum RollEntrySource {
   SUPPLIER_RECEIPT // Mobil KK1 istasyonundan taranarak/girilerek gelen mal kabul (kumaş, yarn, consumable)
   MANUAL_ENTRY // Electron admin panelinden "Manuel Top Ekle" ile elle girilen top — istasyon taraması DEĞİL
+  /// Tambur ekranından "Manuel Ekle" modunda, refakat kartı OLMADAN üretilip doğrudan
+  /// bitmiş stoğa (WAREHOUSE) yazılan top. `MANUAL_ENTRY`den AYRI bir değer: ikisi de
+  /// elle girilir ama GİRİŞ YERİ farklıdır ve envanterde ayırt edilebilmesi gerekir
+  /// (detay panelinde "Tambur (Manuel)" yazar). Bu, "her top bir kaynağa dayanır"
+  /// zincirinde bilinçli açılan tek delik — o yüzden kendi adıyla işaretli.
+  TAMBUR_MANUAL
   TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
 }

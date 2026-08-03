@@ -1,10 +1,17 @@
 // =============================================================================
 // TeksERP — TAMBUR SAHA DÜZELTMESİ (operatör self-servis)
 // =============================================================================
-// Tambur operatörü sahada tıkandığında panel başındaki birini beklemesin diye iki
+// Tambur operatörü sahada tıkandığında panel başındaki birini beklemesin diye üç
 // yetenek: (1) MEVCUT TOPU BURAYA AL — sistemde olan bir topu bu Tambur adımına
 // getir; (2) MANUEL TOP EKLE — sistemde HİÇ olmayan bir topu elle yarat ve doğrudan
-// Tambur adımına bağla. İzin: `mobile:tambur-duzelt` (ya da `roll:manual-adjust`).
+// Tambur adımına bağla; (3) KARTSIZ BİTMİŞ ÜRÜN ("Manuel Mod") — refakat kartı
+// olmadan bitmiş top üret, doğrudan Bitmiş Depo'ya yaz.
+// İzin: `mobile:tambur-duzelt` (ya da `roll:manual-adjust`).
+//
+// (1) ve (2) KART VARSAYAR (`targetStepId` zorunlu, çıktı iş emri adımına bağlanır).
+// (3) kartın YOKLUĞUNU varsayar: hiçbir WO/adım/parti/harekete dokunmaz. Sınır bu —
+// üçünü tek uçta birleştirmek, kapsamı "hangi alan dolu" gibi örtük bir şeye
+// bağlardı (bkz. produceFinishedRoll doc'u).
 //
 // -----------------------------------------------------------------------------
 // NEDEN AYRI SERVİS — ve neden burada TAŞIMA MANTIĞI YOK
@@ -61,6 +68,7 @@
 import prisma from "../lib/prisma";
 import {
   Prisma,
+  RollEntrySource,
   RollStatus,
   StationKind,
   TravelerCardStatus,
@@ -79,6 +87,8 @@ import {
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { resolveLabelIntent } from "./helpers/label-intent.helper";
+import { buildIntentSnapshot } from "./label.service";
 
 /**
  * Elle eklenen topun giriş hareketine yazılan marker ÖN EKİ (tam değer
@@ -90,6 +100,14 @@ export const TAMBUR_MANUAL_ROLL_MARKER = "TAMBUR_MANUAL_ROLL";
 
 /** "Buraya al" audit olayı — MANUAL_MOVE'un saha varyantını ayırt eder. */
 export const TAMBUR_MANUAL_BRING_EVENT = "TAMBUR_MANUAL_BRING";
+
+/**
+ * KARTSIZ BİTMİŞ ÜRÜN audit olayı — `TAMBUR_MANUAL_ROLL`dan AYRI tutulur.
+ * İkisi farklı sorulara cevap verir ve karıştırılırsa denetim yanılır:
+ *   • `TAMBUR_MANUAL_ROLL`    → "kart VAR, top ekranda yoktu" (iş emri adımına bağlandı, IN_PRODUCTION)
+ *   • `TAMBUR_MANUAL_PRODUCE` → "kart YOK" (hiçbir iş emrine bağlanmadı, doğrudan Bitmiş Depo)
+ */
+export const TAMBUR_MANUAL_PRODUCE_EVENT = "TAMBUR_MANUAL_PRODUCE";
 
 /** Operatörün istekte topu gösterme biçimi — barkod (okutma) ya da ID (listeden seçim). */
 export interface RollRef {
@@ -793,6 +811,197 @@ export class TamburManualService {
         reopenedWorkOrder: attach.reopened,
       },
       message: `Top elle eklendi ve "${step.station.name}" adımına alındı. Barkod: ${roll.barcode}`,
+    };
+  }
+
+  // ===========================================================================
+  // 3) KARTSIZ BİTMİŞ ÜRÜN ("Manuel Mod") — iş emri YOK
+  // ===========================================================================
+
+  /**
+   * Tambur ekranını **refakat kartı olmadan** kullandırır: operatör ekrandaki
+   * kumaş/metraj/müşteri seçimini yapar, çıkan top DOĞRUDAN **Bitmiş Depo**'ya
+   * (`WAREHOUSE`) yazılır. Hiçbir iş emrine, adıma, partiye ya da harekete
+   * bağlanmaz.
+   *
+   * ---------------------------------------------------------------------------
+   * NEDEN `POST /manual/roll` (createManualRoll) BU İŞE YARAMAZ
+   * ---------------------------------------------------------------------------
+   * O uçta `targetStepId` ZORUNLUDUR ve çıktıyı bir iş emri adımına bağlar
+   * (`IN_PRODUCTION` + açık hareket). Cevapladığı soru: *"kart var ama top ekranda
+   * görünmüyor"*. Buradaki soru bambaşka: *"kart YOK"* — top bir yerde takıldı ya
+   * da elde kalan bitmiş mal acilen sisteme alınacak. Aynı uca opsiyonel bir
+   * `targetStepId` eklemek iki niyeti tek gövdede birleştirirdi ve kapsam yine
+   * "alan dolu mu" gibi örtük bir şeye bağlanırdı (top-düzeltme ucunun
+   * `Boolean(reason)` hatasının aynısı — bkz. kök CLAUDE.md "Top düzeltme = TEK
+   * sözleşme"). Ayrı uç = ayrı niyet = ayrı audit olayı.
+   *
+   * ---------------------------------------------------------------------------
+   * BU KK1'İN KOPYASI DEĞİL
+   * ---------------------------------------------------------------------------
+   * KK1 = **ham top girişi**, işin OLAĞAN parçası (üretime girecek mal). Bu uç =
+   * **bitmiş ürün**, ACİL DURUM. Ayrım tek bir alanda somutlaşır: statü
+   * `WAREHOUSE` olarak AÇIKÇA verilir, `createInitialEntry`in renk sezgisine
+   * BIRAKILMAZ. Sezgi (`colorId != null ? WAREHOUSE : STOCK`) KK1'de doğrudur ama
+   * burada sessizce yanlıştır — ham beyaz (renksiz) bitmiş bir top Ham Stok'a
+   * düşer, operatör onu Bitmiş Depo'da arar, bulamaz ve "sistem kaydetmedi" der.
+   *
+   * İZ (şemaya kolon EKLENMEDİ — WO kapanış dispozisyonu deseni):
+   *   1. `Roll.entrySource = TAMBUR_MANUAL` (indeksli kolon) — cihaz sezgisi
+   *      BYPASS edilir (`forcedEntrySource`). Sezginin iki cevabı da yanlış olurdu:
+   *      istek Tambur tabletinden gelir ama KK1 istasyon taraması DEĞİL
+   *      (`SUPPLIER_RECEIPT` → envanterde "tedarikçi girişi" görünürdü), Electron
+   *      admin panelinden de gelmiyor (`MANUAL_ENTRY` → giriş YERİ yanlış olurdu).
+   *      Kendi değeri var ki topun detay panelinde "Tambur (Manuel)" yazsın —
+   *      "her top bir kaynağa dayanır" zincirinde bilinçli açılan bu tek delik
+   *      envanterde AYIRT EDİLEBİLİR kalsın.
+   *   2. Audit `event = TAMBUR_MANUAL_PRODUCE` → sebep + operatör + makine + istasyon.
+   *   3. `form = TOP` — Tambur bitmiş TOP üretir (şema varsayılanı da TOP; açık
+   *      kumaş yalnız istasyon finalize'ında doğar). Bilinçli olarak yazılmıyor.
+   *
+   * Hareket (`RollMovement`) AÇILMAZ: hareket bir istasyondan geçişi anlatır,
+   * burada geçilen istasyon yok. `currentStepId` null kalır → top serbest depoda.
+   */
+  async produceFinishedRoll(
+    input: {
+      itemId: string;
+      colorId?: string | null;
+      initialQty: number;
+      qualityGrade?: string;
+      width?: number | null;
+      weightKg?: number;
+      /** Etiket niyeti — "Kime?" bölümü. İkisi de boşsa stok (müşterisiz). */
+      targetOrderLineId?: string | null;
+      targetCustomerId?: string | null;
+      markedForKartela?: boolean;
+      reason: string;
+      clientToken: string;
+    },
+    ctx: TamburFieldContext = {},
+  ): Promise<ApiResponse<unknown>> {
+    const reason = input.reason?.trim() ?? "";
+    if (reason.length < 3) {
+      throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {
+        code: "REASON_REQUIRED",
+      });
+    }
+    if (!(input.initialQty > 0)) {
+      throw AppError.badRequest("Metraj pozitif olmalı", { code: "QTY_REQUIRED" });
+    }
+    // Ürün ZORUNLU: miras alınacak bir iş emri YOK (createManualRoll'un
+    // `targetItemId` mirası burada yok — kart olmadığı için hedef de yok).
+    const itemId = input.itemId?.trim();
+    if (!itemId) {
+      throw AppError.badRequest(
+        "Ürün seçilmeli — kartsız üretimde miras alınacak iş emri yok.",
+        { code: "ITEM_REQUIRED" },
+      );
+    }
+
+    // Etiket niyeti pre-tx çözülür (müşteri var-mı + isActive) — Tambur kesim
+    // siteleriyle AYNI yardımcı; kopya çözümleyici yok.
+    const intent = await resolveLabelIntent({
+      targetOrderLineId: input.targetOrderLineId,
+      targetCustomerId: input.targetCustomerId,
+    });
+
+    // İdempotent tekrar mı? (`clientToken @unique` — asıl koruma create'te; bu
+    // okuma yalnız CEVABI dürüst etiketlemek için. Yarışta iki eşzamanlı istek de
+    // "yeni" der; zararsız — top yine TEK doğar, `createInitialEntry` P2002'yi
+    // yakalayıp mevcut kaydı döner.)
+    const priorRoll = await prisma.roll.findUnique({
+      where: { clientToken: input.clientToken },
+      select: { id: true },
+    });
+
+    let created;
+    try {
+      created = await this.inventoryService.createInitialEntry(
+        {
+          itemId,
+          colorId: input.colorId ?? null,
+          initialQty: input.initialQty,
+          weightKg: input.weightKg,
+          qualityGrade: input.qualityGrade,
+          width: input.width ?? null,
+          clientToken: input.clientToken,
+        },
+        ctx.userId,
+        ctx.machineId ?? null,
+        // isMobileOrigin cevabı bu yolda ANLAMSIZ — giriş yeri aşağıda AÇIKÇA
+        // veriliyor (`forcedEntrySource`), sezgi hiç danışılmıyor.
+        false,
+        {
+          // ⚠️ Statü RENKTEN, giriş yeri CİHAZDAN çıkarılmaz — kararın tamamı
+          // bu iki satırda (yukarıdaki iz #1).
+          forcedStatus: RollStatus.WAREHOUSE,
+          forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+          markedForKartela: input.markedForKartela,
+          labelIntentSnapshot: buildIntentSnapshot(intent),
+        },
+      );
+    } catch (err) {
+      // Alt katman (ürün pasif / kalite kodu geçersiz / kg girişi kapalı) kod
+      // TAŞIMAZ; mesajı koru, makine-okunur kod ekle (mobil onu okur).
+      if (err instanceof AppError) {
+        throw new AppError(err.message, err.statusCode, err.isOperational, {
+          ...(err.details ?? {}),
+          code: (err.details?.code as string | undefined) ?? "ENTRY_REJECTED",
+        });
+      }
+      throw err;
+    }
+    const roll = created.data;
+    const idempotentReplay = priorRoll !== null;
+
+    // Zincir-dışı doğumun KALICI sebep izi (iz #2). Tekrar denemede de yazılır —
+    // "operatör bunu iki kez denedi" saha teşhisinde bilgidir; `idempotentReplay`
+    // bayrağı satırı ayırt eder.
+    await AuditService.log({
+      userId: ctx.userId,
+      action: "CREATE",
+      tableName: "ROLL",
+      recordId: roll.id,
+      newData: {
+        event: TAMBUR_MANUAL_PRODUCE_EVENT,
+        reason,
+        barcode: roll.barcode,
+        itemId,
+        colorId: roll.colorId,
+        initialQty: Number(roll.initialQty),
+        weightKg: roll.weightKg !== null ? Number(roll.weightKg) : null,
+        width: roll.width !== null ? Number(roll.width) : null,
+        qualityGrade: roll.qualityGrade,
+        status: roll.status,
+        form: roll.form,
+        entrySource: roll.entrySource,
+        markedForKartela: roll.markedForKartela,
+        labelIntent: intent,
+        clientToken: input.clientToken,
+        machineId: ctx.machineId ?? null,
+        sessionStationId: ctx.stationId ?? null,
+        idempotentReplay,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        rollId: roll.id,
+        barcode: roll.barcode,
+        status: roll.status,
+        form: roll.form,
+        itemId: roll.itemId,
+        colorId: roll.colorId,
+        currentQty: Number(roll.currentQty),
+        qualityGrade: roll.qualityGrade,
+        markedForKartela: roll.markedForKartela,
+        labelIntent: intent,
+        idempotentReplay,
+      },
+      message: idempotentReplay
+        ? `Bu top zaten kayıtlıydı (tekrar deneme). Barkod: ${roll.barcode}`
+        : `Bitmiş top depoya eklendi. Barkod: ${roll.barcode}`,
     };
   }
 }

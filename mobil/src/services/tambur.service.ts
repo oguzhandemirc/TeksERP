@@ -115,6 +115,53 @@ export interface TamburManualRollRequest {
   qualityGrade?: string;
 }
 
+/**
+ * `POST /tambur/manual/produce` gövdesi — KARTSIZ BİTMİŞ ürün ("Manuel Mod").
+ *
+ * **`TamburManualRollRequest` ile KARIŞTIRMA.** Orada `targetStepId` ZORUNLUDUR
+ * ve çıktı bir iş emri adımına bağlanır (`IN_PRODUCTION`) — o uç "kart var ama
+ * top ekranda yok" içindir. Burada `targetStepId` YOKTUR ve olmayacaktır: ucun
+ * ayırt edici özelliği tam olarak kart/adım gerektirmemesidir. Buna karşılık
+ * `itemId` ZORUNLU — miras alınacak iş emri yok.
+ *
+ * Çıkan top doğrudan **Bitmiş Depo**'ya (`WAREHOUSE`) yazılır; statü RENKTEN
+ * çözülmez → renksiz (ham beyaz) bitmiş top da depoya iner, ham stoğa DÜŞMEZ.
+ */
+export interface TamburManualProduceRequest {
+  /** ZORUNLU — kart olmadığı için miras alınacak hedef ürün yok. */
+  itemId: string;
+  /** null / gönderilmemiş = renksiz. Statüyü ETKİLEMEZ (her hâlükârda depo). */
+  colorId?: string | null;
+  initialQty: number;
+  /** Katalog kodu; verilmezse kalite "Belirsiz" kalır. */
+  qualityGrade?: string;
+  width?: number | null;
+  weightKg?: number;
+  /** Etiket niyeti ("Kime?") — ikisi de boşsa stok. Kesim uçlarıyla aynı adlar. */
+  targetOrderLineId?: string | null;
+  targetCustomerId?: string | null;
+  markedForKartela?: boolean;
+  /** Min 3 karakter — audit'e kalıcı yazılır (zincir-dışı doğumun gerekçesi). */
+  reason: string;
+  /** İdempotency anahtarı — MANTIKSAL deneme başına BİR kez üretilir. ZORUNLU. */
+  clientToken: string;
+}
+
+/** `POST /tambur/manual/produce` yanıtı (mobilin TÜKETTİĞİ alanlar). */
+export interface TamburManualProduceResult {
+  rollId: string;
+  barcode: string | null;
+  /** Her zaman `WAREHOUSE` — backend statüyü AÇIKÇA verir, renkten çözmez. */
+  status: string;
+  itemId: string;
+  colorId: string | null;
+  currentQty: number;
+  qualityGrade: string | null;
+  markedForKartela: boolean;
+  /** true = aynı clientToken ile tekrar denendi; YENİ top DOĞMADI, eskisi döndü. */
+  idempotentReplay: boolean;
+}
+
 // Tambur (final + karar) operatör akışı.
 // Backend: src/services/tambur.service.ts
 
@@ -353,5 +400,20 @@ export const tamburService = {
   ): Promise<ApiResponse<TamburManualRollResult>> =>
     apiClient
       .post<ApiResponse<TamburManualRollResult>>('/tambur/manual/roll', data)
+      .then((r) => r.data),
+
+  /**
+   * "MANUEL EKLE" modu — KARTSIZ bitmiş ürün. Hiçbir iş emrine / adıma / partiye
+   * bağlanmaz, top doğrudan Bitmiş Depo'ya yazılır. Barkod SUNUCUDA üretilir;
+   * `entrySource=TAMBUR_MANUAL` (KK1'in `SUPPLIER_RECEIPT`'inden ve Electron
+   * panelinin `MANUAL_ENTRY`'sinden AYRI değer — istek mobilden gelir ama KK1
+   * taraması değildir) + audit `TAMBUR_MANUAL_PRODUCE` ile sebep kalıcı
+   * kaydedilir. Online-only (barkod sunucudan gelir) — offline kuyruğuna girmez.
+   */
+  produceFinishedRoll: (
+    data: TamburManualProduceRequest
+  ): Promise<ApiResponse<TamburManualProduceResult>> =>
+    apiClient
+      .post<ApiResponse<TamburManualProduceResult>>('/tambur/manual/produce', data)
       .then((r) => r.data),
 };

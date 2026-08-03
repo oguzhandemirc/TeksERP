@@ -61,9 +61,15 @@ import { LabelPrinter } from '../../../components/LabelPrinter';
 import StandaloneLabelSheet from '../../../components/labels/StandaloneLabelSheet';
 import { StandaloneLabelPrinter } from '../../../components/labels/StandaloneLabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
-import { tamburService, type TamburUndoPreview } from '../../../services/tambur.service';
+import {
+  tamburService,
+  type TamburManualProduceRequest,
+  type TamburUndoPreview,
+} from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
 import { customerService } from '../../../services/customer.service';
+import { itemService } from '../../../services/item.service';
+import { colorService } from '../../../services/color.service';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { formatRelativeWait } from '../../../utils/relativeTime';
 import {
@@ -170,6 +176,18 @@ const EMPTY_WORK: RollWorkState = {
   errorEntry: EMPTY_ERROR_ENTRY,
 };
 
+/** Manuel Mod sebep alanı alt sınırı — backend de aynı sınırı uygular. */
+const MANUAL_MIN_REASON = 3;
+/**
+ * Manuel Mod otomatik ölçümünde `measureFromMachine`e verilen "kalan" değeri.
+ * Manuel modda PARENT TOP YOKTUR, yani gerçek bir kalan da yok; bu sayı YALNIZ
+ * simüle cihazın ürettiği sahte değerin üst sınırını besler (gerçek HC-06
+ * okumasında hiç kullanılmaz). 0 geçilseydi simüle metre 0 döndürür ve giriş
+ * "metraj pozitif olmalı" ile düşerdi — seed'de METER cihazları simüle doğduğu
+ * için bu, sahada ilk denemede karşılaşılacak bir hataydı.
+ */
+const MANUAL_SIM_METER_BOUND = 100;
+
 // Koyu header'da etiketli aksiyon pill'i (ikon + ne olduğu yazısı). Salt-ikon
 // yerine her aksiyonun adı görünür. `accent` = ayrık birincil aksiyon (Etiket
 // Değiştir) için hafif vurgu.
@@ -179,6 +197,7 @@ function HeaderChip({
   onPress,
   accent,
   fill,
+  active,
 }: {
   icon: string;
   label: string;
@@ -186,18 +205,37 @@ function HeaderChip({
   accent?: boolean;
   /** true: 2. kat satırını (secondRow) eşit paylaşır — taşmaz, kaydırma gerekmez. */
   fill?: boolean;
+  /**
+   * AÇIK bir MODU temsil eden chip (aksiyon değil, durum): dolu amber zemin +
+   * koyu yazı. Aksiyon chip'lerinin translucent dilinden bilinçli olarak ayrışır
+   * — operatör hangi modda olduğunu tek bakışta görmeli (yanlış modda üretim
+   * sessiz hataya döner).
+   */
+  active?: boolean;
 }) {
   return (
     <TouchableRipple
       onPress={onPress}
-      style={[styles.headerChip, accent && styles.headerChipAccent, fill && styles.headerChipFill]}
+      style={[
+        styles.headerChip,
+        accent && styles.headerChipAccent,
+        fill && styles.headerChipFill,
+        active && styles.headerChipOn,
+      ]}
       borderless
-      rippleColor="rgba(255,255,255,0.2)"
+      rippleColor={active ? 'rgba(15,23,42,0.18)' : 'rgba(255,255,255,0.2)'}
       accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={active === undefined ? undefined : { selected: active }}
     >
       <View style={[styles.headerChipInner, fill && styles.headerChipInnerFill]}>
-        <Icon source={icon} size={18} color="#fff" />
-        <Text style={styles.headerChipText} numberOfLines={1}>{label}</Text>
+        <Icon source={icon} size={18} color={active ? '#78350f' : '#fff'} />
+        <Text
+          style={[styles.headerChipText, active && styles.headerChipTextOn]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
       </View>
     </TouchableRipple>
   );
@@ -326,6 +364,21 @@ export default function TamburScreen() {
   // sunucuda çözülür) — offline kuyruğuna girmez; modal bunu banda yazar.
   const isOnline = useOnlineStatus();
 
+  // ── MANUEL EKLE modu (kartsız bitmiş ürün) ────────────────────────────────
+  // Tambur ekranı normalde refakat KARTI bekler. Bu anahtar AÇIKKEN kart hiç
+  // okutulmaz: operatör ürün/metraj/müşteri seçer ve çıkan top DOĞRUDAN Bitmiş
+  // Depo'ya yazılır (`POST /tambur/manual/produce`). ACİL DURUM yoludur (top bir
+  // yerde takıldı / elde kalan bitmiş mal acilen sisteme alınacak) — KK1 ham
+  // girişinin kopyası DEĞİL (o olağan iş akışı, bu istisna).
+  //
+  // ⚠️ Tercih CİHAZDA kalıcı (tamburCutMode emsali) ama izin OTURUMDAN gelir:
+  // render kararı her zaman `manualMode` (= tercih ∧ yetki) üzerinden verilir.
+  // Ham tercihe bakılsaydı, anahtar açıkken yetkisi alınan bir operatör "manuel
+  // ekran + 403 veren buton + moddan çıkış yolu yok" çıkmazında kalırdı.
+  const tamburManualPref = useDeviceSettingsStore((s) => s.tamburManualMode);
+  const setTamburManualPref = useDeviceSettingsStore((s) => s.setTamburManualMode);
+  const manualMode = tamburManualPref && canFieldFix;
+
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
   const [openJobs, setOpenJobs] = useState<OpenJob[]>([]);
@@ -362,6 +415,21 @@ export default function TamburScreen() {
   // Yazdırılacak aktif rol — LabelPrinter bu state'i izler ve sıfırlanınca
   // hazır olur. Per-row "Bas" butonu bu state'i set eder.
   const [activePrintRoll, setActivePrintRoll] = useState<Roll | null>(null);
+  // Etiket TÜRÜ normalde RENKTEN çözülür (renksiz = ham kumaş → ROLL_RAW).
+  // Manuel Mod BİTMİŞ ürün üretir ve renk OPSİYONELDİR → renksiz manuel top ham
+  // etiketle basılırdı. Bu yüzden tür baskı İŞİNE bağlanır: null = renkten çöz
+  // (eski davranış, tüm mevcut yollar), değer = o iş için sabitlenmiş tür.
+  // Global "manuel moddayken hep ROLL_FINISHED" YANLIŞ olurdu — mod açıkken
+  // "Çıkanlar"dan yeniden basılan ESKİ bir ham top da bitmiş etiket alırdı.
+  const [printKind, setPrintKind] = useState<'ROLL_RAW' | 'ROLL_FINISHED' | null>(null);
+  /** Tek giriş kapısı: baskı slotunu ve (varsa) tür sabitlemesini birlikte yazar. */
+  const startPrint = (
+    roll: Roll,
+    kind: 'ROLL_RAW' | 'ROLL_FINISHED' | null = null,
+  ) => {
+    setPrintKind(kind);
+    setActivePrintRoll(roll);
+  };
 
   // Kartelalık işareti — bu kesimde doğan çıktı topları depoda kartela sevki için
   // işaretlensin (yalnız WAREHOUSE çıktılarda etkili; sevki engellemez). Aynı topu
@@ -471,7 +539,26 @@ export default function TamburScreen() {
   const [errorsModalOpen, setErrorsModalOpen] = useState(false);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
 
-
+  // ── Manuel Mod formu ──────────────────────────────────────────────────────
+  // Kart YOK → iş emrinden miras da YOK: ürün ZORUNLU, renk operatörün kararı.
+  // Metraj / "Kime?" / Kalite AYRI state tutmaz — ana kesim akışının state'ini
+  // (`cutMode`, `work.voluntaryEntry`) aynen paylaşır; ikinci bir hafıza aynı
+  // alanın iki farklı değerini üretirdi.
+  const [manualItemId, setManualItemId] = useState<string | null>(null);
+  const [manualItemLabel, setManualItemLabel] = useState<string | null>(null);
+  const [manualColorId, setManualColorId] = useState<string | null>(null);
+  const [manualColorLabel, setManualColorLabel] = useState<string | null>(null);
+  const [manualReason, setManualReason] = useState('');
+  const [manualPicker, setManualPicker] = useState<'item' | 'color' | null>(null);
+  // Kataloglar YALNIZ picker açılınca çekilir: ürün/renk listeleri ayrı yetki
+  // ister (`item:read` / `property:read`) ve saf Tambur operatöründe olmayabilir
+  // (TamburManualRollModal ile aynı gerekçe) — boşuna 403 üretme.
+  const [manualItemCatalogWanted, setManualItemCatalogWanted] = useState(false);
+  const [manualColorCatalogWanted, setManualColorCatalogWanted] = useState(false);
+  // İdempotency: token MANTIKSAL DENEME başına bir kez üretilir. Hata sonrası
+  // aynı payload'la tekrar basış AYNI token'ı gönderir (mükerrer top doğmaz);
+  // payload değişirse bu artık başka bir denemedir → aşağıdaki effect düşürür.
+  const manualTokenRef = useRef<string | null>(null);
 
   // ── Kataloglar ──
   const defectTypesQuery = useQuery({
@@ -487,6 +574,57 @@ export default function TamburScreen() {
     staleTime: 10 * 60 * 1000,
   });
   const qualityGrades = qualityGradesQuery.data?.data ?? [];
+
+  // Manuel Mod ürün/renk katalogları — picker açılmadan İSTENMEZ (yetki + ağ).
+  const manualItemsQuery = useQuery({
+    queryKey: ['items', 'tambur-manual-mode', 'FABRIC'],
+    queryFn: () =>
+      itemService.getAll({
+        page: 1,
+        pageSize: 500,
+        sortBy: 'code',
+        sortOrder: 'asc',
+        filters: { isActive: 'true', itemType: 'FABRIC' },
+      }),
+    enabled: manualItemCatalogWanted,
+    retry: false,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const manualColorsQuery = useQuery({
+    queryKey: ['colors', 'tambur-manual-mode-public'],
+    queryFn: () =>
+      colorService.listPublicForPicker({
+        page: 1,
+        pageSize: 300,
+        sortBy: 'name',
+        sortOrder: 'asc',
+      }),
+    enabled: manualColorCatalogWanted,
+    retry: false,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const manualItemOptions = useMemo<PickerOption[]>(
+    () =>
+      (manualItemsQuery.data?.data ?? []).map((i) => ({
+        value: i.id,
+        label: i.name,
+        sublabel: i.code,
+      })),
+    [manualItemsQuery.data],
+  );
+
+  const manualColorOptions = useMemo<PickerOption[]>(
+    () =>
+      (manualColorsQuery.data?.data ?? []).map((c) => ({
+        value: c.id,
+        label: c.name,
+        sublabel: c.code ?? undefined,
+        badge: c.hex ? { text: ' ', color: c.hex } : undefined,
+      })),
+    [manualColorsQuery.data],
+  );
 
   const openCardsQuery = useQuery({
     queryKey: ['tambur', 'open-cards'],
@@ -749,7 +887,7 @@ export default function TamburScreen() {
   // basar (yeni hedef seçilmez). Müşteri değiştirmek = "Etiket Değiştir" akışı.
   const reprintLabel = (roll: Roll) => {
     setLabelContext(undefined);
-    setActivePrintRoll(roll);
+    startPrint(roll);
   };
 
   // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. labelContext={stock:true}
@@ -757,7 +895,7 @@ export default function TamburScreen() {
   // reprint'inde tek dokunuşta müşterisiz etiket.
   const reprintLabelStock = (roll: Roll) => {
     setLabelContext({ stock: true });
-    setActivePrintRoll(roll);
+    startPrint(roll);
   };
 
   // ── Mutations ──
@@ -848,7 +986,7 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        setActivePrintRoll(data.childRoll);
+        startPrint(data.childRoll);
       }
       // Uzunluk input'unu sıfırla; kalite/sipariş aynen kalsın (seri kesim).
       setWork((w) => ({
@@ -1072,7 +1210,7 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        setActivePrintRoll(data.childRoll);
+        startPrint(data.childRoll);
       }
       // Parent metraj güncelle (sticky header anında yansır) — yalnız aynı top.
       if (isCurrent && data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
@@ -1162,6 +1300,68 @@ export default function TamburScreen() {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Bitirilemedi', text2: err.message });
+    },
+  });
+
+  // MANUEL EKLE — kartsız bitmiş ürün. Hiçbir iş emrine/adıma/partiye bağlanmaz;
+  // top doğrudan Bitmiş Depo'ya yazılır. Online-only (barkodu sunucu üretir) →
+  // offline kuyruğuna GİRMEZ, bu yüzden mutationKey yok.
+  const produceManualRollMutation = useMutation({
+    mutationFn: (data: TamburManualProduceRequest) =>
+      tamburService.produceFinishedRoll(data),
+    onSuccess: (res, variables) => {
+      // Deneme kapandı — sıradaki giriş taze token alır.
+      manualTokenRef.current = null;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ['rolls'] });
+      const d = res.data;
+      Toast.show({
+        type: d.idempotentReplay ? 'info' : 'success',
+        text1: d.idempotentReplay
+          ? 'Bu top zaten eklenmişti (tekrar deneme)'
+          : 'Bitmiş top depoya eklendi',
+        text2: `Barkod: ${d.barcode ?? '—'}`,
+      });
+      // Etiket hedefi kesim akışlarıyla AYNI kural: "Kime?" bölümünde seçili olan
+      // hedefe bas, tekrar SORMA; hiçbir şey seçili değilse explicit stok
+      // (müşterisiz) — yoksa backend eski snapshot/WO tahminini basardı.
+      setLabelContext(
+        variables.targetCustomerId
+          ? { customerId: variables.targetCustomerId }
+          : variables.targetOrderLineId
+            ? { orderLineId: variables.targetOrderLineId }
+            : { stock: true },
+      );
+      // LabelPrinter topun yalnız `id`'sini kullanır; gövde yanıttan kurulur
+      // (ek istek yok). Tür SABİTLENİR: manuel mod bitmiş ürün üretir, renksiz
+      // olsa bile ham etiket basılmamalı (bkz. printKind gerekçesi).
+      startPrint(
+        {
+          id: d.rollId,
+          barcode: d.barcode,
+          itemId: d.itemId,
+          colorId: d.colorId,
+          initialQty: d.currentQty,
+          currentQty: d.currentQty,
+          weightKg: null,
+          width: null,
+          qualityGrade: d.qualityGrade ?? '',
+          status: 'WAREHOUSE',
+          markedForKartela: d.markedForKartela,
+        },
+        'ROLL_FINISHED',
+      );
+      // Metraj sıfırlanır (sıradaki top), ürün/renk/kalite/sebep KALIR: aynı
+      // sebeple arka arkaya birkaç top girmek tipik saha davranışı.
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: { ...w.voluntaryEntry, length: '' },
+      }));
+    },
+    onError: (err: Error) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Top eklenemedi', text2: err.message });
     },
   });
 
@@ -1391,7 +1591,21 @@ export default function TamburScreen() {
   const openScanner = () => drawerQueue.run(() => setScannerOpen(true));
   const openList = () => drawerQueue.run(() => setListModalOpen(true));
   const openRecentOutput = () => drawerQueue.run(() => setRecentOutputOpen(true));
-  const openRecut = () => drawerQueue.run(() => setRecutScannerOpen(true));
+  // Top Kesme ile Manuel Mod DIŞLAYAN modlardır ve manuel dal formCol
+  // zincirinde önce gelir: manuel mod açıkken recut başlatılsa ekranda hiç
+  // görünmez, ama arka planda bir top "kesim oturumuna" bağlanırdı. Tetikler
+  // zaten gizleniyor; bu guard programatik yolu da kapatır (sessiz hâl yok).
+  const openRecut = () => {
+    if (manualMode) {
+      Toast.show({
+        type: 'info',
+        text1: 'Manuel mod açık',
+        text2: 'Top Kesme için önce manuel modu kapatın',
+      });
+      return;
+    }
+    drawerQueue.run(() => setRecutScannerOpen(true));
+  };
   const openStandalone = () => drawerQueue.run(() => setStandaloneOpen(true));
   const openFieldFix = () => drawerQueue.run(() => setFieldFixOpen(true));
 
@@ -1546,12 +1760,193 @@ export default function TamburScreen() {
     }
   };
 
+  // ── MANUEL EKLE modu: form sıfırlama + anahtar + gönderim ─────────────────
+
+  /**
+   * Manuel giriş idempotency token'ı — MANTIKSAL DENEME başına BİR kez üretilir
+   * (`takeCutToken` ile aynı sözleşme, orada anahtar rollId'dir; burada top
+   * henüz YOK, deneme payload'ıyla tanımlanır → payload değişince effect düşürür).
+   */
+  const takeManualToken = (): string => {
+    if (!manualTokenRef.current) manualTokenRef.current = generateClientUuid();
+    return manualTokenRef.current;
+  };
+
+  /** Manuel forma özgü alanlar (paylaşılan `work` state'ine DOKUNMAZ). */
+  const resetManualForm = () => {
+    setManualItemId(null);
+    setManualItemLabel(null);
+    setManualColorId(null);
+    setManualColorLabel(null);
+    setManualReason('');
+    setManualPicker(null);
+    manualTokenRef.current = null;
+  };
+
+  /**
+   * Mod anahtarı. İki yönde de "Kime?" hedefini ve metraj girişini TEMİZLER:
+   * mod değişimi bir bağlam değişimidir ve iki akış aynı state'i paylaşır —
+   * kart işinden kalan müşteri seçimi manuel topa (ya da tersi) sessizce
+   * sızarsa etiket yanlış müşteriye basılır.
+   */
+  const toggleManualMode = () => {
+    const next = !manualMode;
+    void setTamburManualPref(next);
+    resetManualForm();
+    setWork((w) => ({
+      ...w,
+      voluntaryEntry: {
+        ...w.voluntaryEntry,
+        length: '',
+        targetOrderLineId: null,
+        targetCustomerId: null,
+        targetCustomerName: undefined,
+      },
+    }));
+    // Kartelalık işareti akışa özgüdür (resetRecut ile aynı gerekçe) — moddan
+    // çıkarken taşınırsa sonraki kesimler sessizce kartelalık işaretlenirdi.
+    setMarkAsKartela(false);
+    // Kart bağımlı yüzeyler manuel modda gizleniyor; açık kalan modal arkada
+    // asılı kalmasın.
+    setFieldFixOpen(false);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Toast.show({
+      type: 'info',
+      text1: next ? 'MANUEL MOD AÇIK' : 'Manuel mod kapandı',
+      text2: next
+        ? 'Kart okutulmaz — çıkan top doğrudan Bitmiş Depo’ya yazılır'
+        : 'Normal akış: refakat kartı okutulur',
+    });
+  };
+
+  // Payload değişti → bu ARTIK aynı mantıksal deneme değildir, token düşer.
+  // (Aynı token'la farklı içerik göndermek backend'de mükerrer koruma sayesinde
+  // ESKİ topu geri döndürürdü: operatör 120 m yazıp gönderemez, 150 yapıp tekrar
+  // dener ve sistemde sessizce 120 m'lik top kalırdı.)
+  useEffect(() => {
+    manualTokenRef.current = null;
+  }, [
+    manualItemId,
+    manualColorId,
+    manualReason,
+    work.voluntaryEntry.length,
+    work.voluntaryEntry.qualityGrade,
+    work.voluntaryEntry.targetCustomerId,
+    work.voluntaryEntry.targetOrderLineId,
+    markAsKartela,
+  ]);
+
+  /**
+   * Manuel modda seçilebilir kalite kataloğu — YALNIZ hedefi Bitmiş Depo olan
+   * dereceler. Gerekçe: bu uç statüyü AÇIKÇA `WAREHOUSE` yazar (renk sezgisine
+   * bırakmaz), yani kesim akışındaki "kalite → hedef statü" eşlemesi burada
+   * ÇALIŞMAZ. Filtre olmasaydı FIRE seçen operatörün fiyresi Bitmiş Depo'ya
+   * 1. kalite rafına düşerdi — hata yok, uyarı yok, sessiz yanlış. Seed'de üç
+   * derecenin de hedefi WAREHOUSE olduğu için bugün filtre no-op'tur; admin
+   * hedefi değiştirdiği gün devreye girer ve aşağıdaki not sebebi söyler.
+   */
+  const manualQualityGrades = useMemo(
+    () => qualityGrades.filter((qg) => qg.targetStatus === 'WAREHOUSE'),
+    [qualityGrades],
+  );
+  const manualGradeNote =
+    manualQualityGrades.length < qualityGrades.length
+      ? 'Hedefi Bitmiş Depo olmayan dereceler (fire / 2. kalite) manuel modda seçilemez — o kararlar normal kesim akışında verilir.'
+      : null;
+  /** Seçili kalite manuel modda GEÇERLİ mi (filtreden önce seçilmiş olabilir). */
+  const manualGradeValid = manualQualityGrades.some(
+    (qg) => qg.code === work.voluntaryEntry.qualityGrade,
+  );
+
+  /** Manuel modda eksik olan zorunlu alanlar — footer üstünde somut listelenir. */
+  const manualMissing = useMemo(() => {
+    const miss: string[] = [];
+    if (!manualItemId) miss.push('ürün');
+    if (cutMode === 'manual' && work.voluntaryEntry.length.trim() === '') {
+      miss.push('metraj');
+    }
+    if (!manualGradeValid) miss.push('kalite');
+    if (manualReason.trim().length < MANUAL_MIN_REASON) miss.push('sebep');
+    return miss;
+  }, [manualItemId, cutMode, work.voluntaryEntry, manualGradeValid, manualReason]);
+
+  const submitManualProduce = (lengthOverride?: number) => {
+    if (!manualItemId) {
+      Toast.show({ type: 'error', text1: 'Ürün seçin', text2: 'Kart yok — ürün miras alınmaz' });
+      return;
+    }
+    // Manuel modda BOŞ input "kalanı kes" DEĞİLDİR (kesilecek bir parent yok) —
+    // metraj her zaman açıkça girilir ya da makineden ölçülür.
+    const trimmed = work.voluntaryEntry.length.trim();
+    const qty = lengthOverride ?? (trimmed === '' ? NaN : parseFloat(trimmed));
+    if (!Number.isFinite(qty) || qty <= 0) {
+      Toast.show({ type: 'error', text1: 'Metraj pozitif sayı olmalı' });
+      return;
+    }
+    if (!manualGradeValid) {
+      Toast.show({
+        type: 'error',
+        text1: 'Kalite seçin',
+        text2: 'Manuel modda yalnız hedefi Bitmiş Depo olan dereceler geçerli',
+      });
+      return;
+    }
+    const reason = manualReason.trim();
+    if (reason.length < MANUAL_MIN_REASON) {
+      Toast.show({
+        type: 'error',
+        text1: 'İşlem nedeni zorunlu',
+        text2: `En az ${MANUAL_MIN_REASON} karakter — "bu top nereden geldi" sorusunun cevabı bu`,
+      });
+      return;
+    }
+    produceManualRollMutation.mutate({
+      itemId: manualItemId,
+      // null = AÇIKÇA renksiz. Statüyü etkilemez: backend her hâlükârda
+      // WAREHOUSE yazar (renksiz bitmiş top ham stoğa düşmesin).
+      colorId: manualColorId,
+      initialQty: qty,
+      qualityGrade: work.voluntaryEntry.qualityGrade,
+      targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
+      targetCustomerId: work.voluntaryEntry.targetCustomerId,
+      markedForKartela: markAsKartela,
+      reason,
+      clientToken: takeManualToken(),
+    });
+  };
+
+  /** Manuel modda "Depoya Ekle" — manuel: input; otomatik: makineden ölçülen. */
+  const handleManualProduce = async () => {
+    if (cutMode === 'auto') {
+      if (measuring) return;
+      setMeasuring(true);
+      try {
+        // Ölçüm cihazı ana kesimle AYNI yoldan çözülür (work.foldType → role);
+        // manuel modda kat seçimi gösterilmediği için varsayılan 2-KAT metresi
+        // (yoksa rolsüz cihaz) kullanılır — bkz. meterPeripheralFor.
+        const measured = await measureFromMachine(MANUAL_SIM_METER_BOUND);
+        if (measured == null) return; // okunamadı → hata gösterildi, kayıt yapma
+        submitManualProduce(measured);
+      } finally {
+        setMeasuring(false);
+      }
+    } else {
+      submitManualProduce();
+    }
+  };
+
   // "Kime" picker seçenekleri — recut akışında topa uyan TÜM açık satırlar
   // (getAvailableOrderLines), açık-kumaşta WO'ya bağlı sipariş satırları.
   // Bu WO'nun siparişlerindeki müşteri id'leri — picker'da öne alınır.
+  // MANUEL MODDA BOŞ: kart yok, dolayısıyla "bu iş emrinde siparişi olan
+  // müşteriler" diye bir küme de yok (arkada açık kalmış bir kart varsa onun
+  // müşterileri manuel topa öne çıkarılmamalı).
   const orderCustomerIds = useMemo(
-    () => new Set((activeJob?.context?.orders ?? []).map((o) => o.customerId)),
-    [activeJob],
+    () =>
+      new Set<string>(
+        manualMode ? [] : (activeJob?.context?.orders ?? []).map((o) => o.customerId),
+      ),
+    [manualMode, activeJob],
   );
   // Tüm müşteriler — "Listeden Seç" açıkken çekilir (recut + ana akış). Recut'ta da
   // sipariş-dışı müşteriye kesebilmek için gerekir.
@@ -1721,6 +2116,156 @@ export default function TamburScreen() {
     </TouchableRipple>
   );
 
+  // ── Kesim formunun ORTAK parçaları (ana kesim ⟷ MANUEL MOD) ───────────────
+  // Kopya DEĞİL: birebir aynı bileşenler + aynı state (`cutMode`,
+  // `work.voluntaryEntry`). Top Kesme (recut) kendi metraj/kalite state'ini
+  // taşıdığı için bu blokları kullanmaz — orası ayrı bir top üzerinde çalışır.
+
+  /** Uzunluk girişi + Manuel/Otomatik metraj kaynağı toggle'ı (metre cihazı dahil). */
+  const renderCutLength = (placeholder: string) => (
+    <View style={styles.lengthModeRow}>
+      <View style={styles.lengthCol}>
+        {cutMode === 'manual' ? (
+          <View style={styles.cutInputRow}>
+            <View style={{ flex: 1 }}>
+              <NumpadInput
+                mode="outlined"
+                value={work.voluntaryEntry.length}
+                onChangeText={(v) =>
+                  setWork((w) => ({
+                    ...w,
+                    voluntaryEntry: { ...w.voluntaryEntry, length: v },
+                  }))
+                }
+                numpadLabel="Kesim uzunluğu"
+                allowDecimal
+                autoActivate
+                numpadMaxLength={8}
+                placeholder={placeholder}
+                dense
+                style={styles.input}
+                useNativeKeyboard={compact}
+              />
+            </View>
+            <IconButton
+              icon="backspace-outline"
+              mode="contained-tonal"
+              size={24}
+              iconColor="#475569"
+              containerColor="#e2e8f0"
+              onPress={() =>
+                setWork((w) => ({
+                  ...w,
+                  voluntaryEntry: { ...w.voluntaryEntry, length: '' },
+                }))
+              }
+              disabled={!work.voluntaryEntry.length}
+              accessibilityLabel="Uzunluğu temizle"
+              style={{ margin: 0 }}
+            />
+          </View>
+        ) : (
+          // Otomatik: uzunluk makineden gelir. Büyük "Uzunluk" etiketi,
+          // toggle'ın neyi kontrol ettiğini netleştirir.
+          <View style={styles.autoLengthBox}>
+            <Icon source="ruler" size={24} color="#7c3aed" />
+            <Text style={styles.autoLengthLabel}>Uzunluk</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.cutModeToggle}>
+        {(['manual', 'auto'] as const).map((m) => {
+          const active = cutMode === m;
+          return (
+            <TouchableRipple
+              key={m}
+              borderless
+              onPress={() => void setCutMode(m)}
+              style={[styles.cutModeChip, active && styles.cutModeChipActive]}
+            >
+              <Text
+                style={[
+                  styles.cutModeChipText,
+                  active && styles.cutModeChipTextActive,
+                ]}
+              >
+                {m === 'manual' ? 'Manuel' : 'Otomatik'}
+              </Text>
+            </TouchableRipple>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  /**
+   * "Kime?" + "Kalite" YAN YANA; her biri kendi içinde dikey liste. Kime uzarsa
+   * kendi sütununda scroll olur, Kalite'yi etkilemez.
+   *
+   * `orderShortcuts` yalnız KART akışında verilir — manuel modda iş emri yoktur,
+   * dolayısıyla sipariş kısayolu da yoktur (hedef "Listeden Seç" ile seçilir).
+   * `grades` parametreli çünkü manuel mod kalite kataloğunu daraltır (bkz.
+   * `manualQualityGrades` gerekçesi).
+   */
+  const renderKimeKalite = (opts: {
+    orderShortcuts?: React.ReactNode;
+    grades: QualityGrade[];
+    gradeNote?: string | null;
+  }) => (
+    <View style={styles.kimeKaliteRow}>
+      <View style={styles.kimeCol}>
+        <Text style={styles.cutSubLabel}>Kime?</Text>
+        {/* Açık "Stok" seçeneği — hiç seçim yokken aktif görünür. */}
+        {stokChip}
+        {/* SABİT — scroll'la kaymaz; tüm müşteriler (sipariştekiler önce) */}
+        {kimeListChip}
+        {opts.orderShortcuts}
+      </View>
+
+      <View style={styles.kaliteCol}>
+        <Text style={styles.cutSubLabel}>Kalite</Text>
+        <View style={styles.optionList}>
+          {opts.grades.map((qg) => {
+            const active = work.voluntaryEntry.qualityGrade === qg.code;
+            return (
+              <TouchableRipple
+                key={qg.id}
+                borderless
+                onPress={() =>
+                  setWork((w) => ({
+                    ...w,
+                    voluntaryEntry: {
+                      ...w.voluntaryEntry,
+                      qualityGrade: active ? '' : qg.code,
+                      qualityName: active ? undefined : qg.name,
+                    },
+                  }))
+                }
+                style={[
+                  styles.listOption,
+                  active && styles.listOptionActive,
+                  active && qg.color
+                    ? { backgroundColor: qg.color, borderColor: qg.color }
+                    : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.listOptionText,
+                    active && styles.listOptionTextActive,
+                  ]}
+                >
+                  {qg.name}
+                </Text>
+              </TouchableRipple>
+            );
+          })}
+        </View>
+        {!!opts.gradeNote && <Text style={styles.gradeNote}>{opts.gradeNote}</Text>}
+      </View>
+    </View>
+  );
+
   const resetRecut = () => {
     // X kapat: kesim yapıldıysa parent etiketini otomatik basım kuyruğuna at —
     // operatör fiziksel etiketi söküp güncel metraj/barkodlu yenisini yapıştırır.
@@ -1744,7 +2289,50 @@ export default function TamburScreen() {
     qc.invalidateQueries({ queryKey: ['rolls'] });
   };
 
-  const renderRightContent = () => (
+  const renderRightContent = () => {
+    // MANUEL MOD: kart okutma çubuğu, açık iş sekmeleri ve top kuyruğu HİÇ
+    // çizilmez — üçü de refakat kartına dayanır ve bu modda hiçbiri işletilmez.
+    // Yerine ne olduğunu söyleyen bir panel + moddan çıkış (telefonda drawer'ın
+    // içinden de ulaşılabilen ikinci kapı).
+    if (manualMode) {
+      return (
+        <View style={styles.manualPane}>
+          <Icon source="hand-back-right-outline" size={44} color="#f59e0b" />
+          <Text style={styles.manualPaneTitle}>Manuel mod açık</Text>
+          <Text style={styles.manualPaneHint}>
+            Refakat kartı okutulmaz. Soldaki formdan ürün, metraj ve müşteri seçip
+            “Depoya Ekle” dediğinde top doğrudan Bitmiş Depo’ya yazılır.
+          </Text>
+          <View style={styles.actionsCompactRow}>
+            <CompactAction
+              icon="printer-search"
+              label="Çıkanlar"
+              bg="#e0f2fe"
+              color="#0369a1"
+              onPress={() => openRecentOutput()}
+            />
+            <CompactAction
+              icon="tag-multiple"
+              label="Serbest Etiket"
+              bg="#ede9fe"
+              color="#6d28d9"
+              onPress={() => openStandalone()}
+            />
+          </View>
+          <Button
+            mode="contained"
+            icon="close"
+            buttonColor="#b45309"
+            onPress={toggleManualMode}
+            style={styles.manualPaneExit}
+            contentStyle={styles.manualPaneExitContent}
+          >
+            Manuel modu kapat
+          </Button>
+        </View>
+      );
+    }
+    return (
     <>
       {/* HID/manuel modda kart barkodu metin girişi sağ panelde kalır (bir input,
           header'a taşınamaz). Tablet'te aksiyon butonları header'a alındı; bunlar
@@ -1880,14 +2468,36 @@ export default function TamburScreen() {
         />
       )}
     </>
-  );
+    );
+  };
 
   // Telefonda "Açık İşler" (operatörün açtığı kart sekmeleri), "Açık Kartlar"
   // ve "Tara" erişimi Kurşun/Ham Giriş ile aynı desende: header'da sıkışan tek
   // ikon yerine, başlığın ALTINDAKİ 2. katta yan yana üç etiketli chip
   // (secondRow) — hepsi drawer açmadan doğrudan erişilir. Çıkanlar/Kesme
   // telefonda drawer içinde kalır.
-  const phoneSecondRow = (
+  // MANUEL MODDA kart chip'leri (Açık İşler / Açık Kartlar / Tara) ÇİZİLMEZ:
+  // üçü de refakat kartına dayanır, modda hiçbiri işletilmez ve basıldığında
+  // görünmeyen bir iş açarlar. Yerine moddan çıkış chip'i gelir — dar telefon
+  // satırında mod anahtarı okunabilir kalsın diye (aksi hâlde 5 chip eşit
+  // bölüşür ve etiketler tek harfe kırpılır).
+  const phoneSecondRow = manualMode ? (
+    <>
+      <HeaderChip
+        icon="hand-back-right"
+        label="MANUEL MOD AÇIK — kapat"
+        onPress={toggleManualMode}
+        active
+        fill
+      />
+      <HeaderChip
+        icon="tag-multiple"
+        label="Serbest Etiket"
+        onPress={() => openStandalone()}
+        fill
+      />
+    </>
+  ) : (
     <>
       <HeaderChip
         icon="clipboard-list-outline"
@@ -1908,6 +2518,14 @@ export default function TamburScreen() {
         onPress={() => openStandalone()}
         fill
       />
+      {canFieldFix && (
+        <HeaderChip
+          icon="hand-back-right-outline"
+          label="Manuel Ekle"
+          onPress={toggleManualMode}
+          fill
+        />
+      )}
     </>
   );
 
@@ -1925,22 +2543,30 @@ export default function TamburScreen() {
               chip'lerden (phoneSecondRow) + drawer içinden. */}
           {!compact && (
             <>
-              <HeaderChip
-                icon="format-list-bulleted"
-                label="Liste"
-                onPress={() => openList()}
-              />
-              <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} />
+              {/* Kart aksiyonları — MANUEL MODDA çizilmez (kart okutulmuyor). */}
+              {!manualMode && (
+                <>
+                  <HeaderChip
+                    icon="format-list-bulleted"
+                    label="Liste"
+                    onPress={() => openList()}
+                  />
+                  <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} />
+                </>
+              )}
               <HeaderChip
                 icon="printer-search"
                 label="Çıkanlar"
                 onPress={() => openRecentOutput()}
               />
-              <HeaderChip
-                icon="content-cut"
-                label="Kesme"
-                onPress={() => openRecut()}
-              />
+              {/* Top Kesme, Manuel Mod ile DIŞLAYAN bir moddur — birlikte açılamaz. */}
+              {!manualMode && (
+                <HeaderChip
+                  icon="content-cut"
+                  label="Kesme"
+                  onPress={() => openRecut()}
+                />
+              )}
               <HeaderChip
                 icon="tag-multiple"
                 label="Serbest Etiket"
@@ -1949,12 +2575,26 @@ export default function TamburScreen() {
               {/* Saha düzeltmesi — yalnız yetkili operatörde ve açık iş varken
                   (iki uç da ekrandaki Tambur ADIMINI hedef alır; iş yoksa hedef
                   yok). Yetkisizde hiç çizilmez, gri buton bırakılmaz. */}
-              {canFieldFix && activeJob && (
+              {canFieldFix && activeJob && !manualMode && (
                 <HeaderChip
                   icon="wrench-outline"
                   label="Düzelt"
                   onPress={() => openFieldFix()}
                   accent
+                />
+              )}
+              {/* MANUEL EKLE anahtarı — aynı yetki kapısı (`canFieldFix`)
+                  arkasında: backend ucu `roll:manual-adjust` /
+                  `mobile:tambur-duzelt` ister, yetkisiz operatöre 403 verecek
+                  gri buton gösterilmez. AÇIKKEN dolu amber: operatör hangi modda
+                  olduğunu bir bakışta görmeli. (Telefonda karşılığı 2. kattaki
+                  chip — bkz. phoneSecondRow.) */}
+              {canFieldFix && (
+                <HeaderChip
+                  icon={manualMode ? 'hand-back-right' : 'hand-back-right-outline'}
+                  label={manualMode ? 'MANUEL MOD AÇIK' : 'Manuel Ekle'}
+                  onPress={toggleManualMode}
+                  active={manualMode}
                 />
               )}
             </>
@@ -1990,7 +2630,246 @@ export default function TamburScreen() {
       >
         {/* ════════ SOL: form ════════ */}
         <View style={styles.formCol}>
-          {recutResolvedRollId && recutRollMeta ? (
+          {manualMode ? (
+            // ══ MANUEL EKLE — kartsız BİTMİŞ ürün ══════════════════════════
+            // Top Kesme ile aynı sınıfta EXCLUSIVE bir mod: kabuk aynı (band +
+            // kaydırılabilir form + sticky CutActionBar), fark girdide. Kart
+            // olmadığı için iş emrinden miras YOK → ürün/renk operatörün
+            // kararıdır; hata noktaları / kat / adım notu / sipariş kısayolları
+            // gibi karta dayanan her yüzey burada YOKTUR (veri de yok).
+            // "Bitir" YOK: tüketilecek bir parent top yok, her giriş kendi
+            // başına tamamlanmış bir topu depoya yazar.
+            <>
+              <Surface
+                style={[
+                  styles.headerBand,
+                  styles.headerBandManual,
+                  compact && styles.headerBandCompact,
+                ]}
+                elevation={2}
+              >
+                <View
+                  style={[styles.headerTitleCol, !compact && styles.headerTitleFlex]}
+                >
+                  <View style={styles.manualTag}>
+                    <Icon source="hand-back-right" size={13} color="#78350f" />
+                    <Text style={styles.manualTagText}>MANUEL MOD · KART YOK</Text>
+                  </View>
+                  <Text style={styles.headerBarcode} numberOfLines={1}>
+                    {manualItemLabel ?? 'Ürün seçilmedi'}
+                  </Text>
+                  <Text style={styles.headerSub} numberOfLines={2}>
+                    {manualColorId ? manualColorLabel : 'Renksiz'} · çıkan top
+                    doğrudan Bitmiş Depo’ya yazılır
+                  </Text>
+                </View>
+                <View
+                  style={[styles.headerBoxes, compact && styles.headerBoxesCompact]}
+                >
+                  <View
+                    style={[
+                      styles.headerBox,
+                      styles.headerBoxGreen,
+                      compact && styles.headerBoxFlex,
+                    ]}
+                  >
+                    <Text style={styles.headerBoxValue}>
+                      {cutMode === 'auto'
+                        ? 'OTO'
+                        : work.voluntaryEntry.length.trim() === ''
+                          ? '—'
+                          : work.voluntaryEntry.length.trim()}
+                    </Text>
+                    <Text style={styles.headerBoxSub}>
+                      {cutMode === 'auto' ? 'makineden' : 'mt'}
+                    </Text>
+                  </View>
+                  <IconButton
+                    icon="close"
+                    size={22}
+                    iconColor="#78350f"
+                    onPress={toggleManualMode}
+                    accessibilityLabel="Manuel modu kapat"
+                    style={{ margin: 0 }}
+                  />
+                </View>
+              </Surface>
+
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Surface style={styles.section} elevation={1}>
+                  {/* Ürün + Renk — kart yok, iş emrinden MİRAS YOK. Ürün zorunlu. */}
+                  <View style={styles.manualPickRow}>
+                    <View style={styles.manualPickCol}>
+                      <Text style={styles.cutSubLabel}>
+                        Ürün <Text style={styles.manualReq}>*</Text>
+                      </Text>
+                      <TouchableRipple
+                        borderless
+                        onPress={() => {
+                          setManualItemCatalogWanted(true);
+                          setManualPicker('item');
+                        }}
+                        style={[
+                          styles.manualSelect,
+                          !!manualItemId && styles.manualSelectFilled,
+                        ]}
+                      >
+                        <View style={styles.manualSelectInner}>
+                          <Text
+                            style={[
+                              styles.manualSelectText,
+                              !manualItemId && styles.manualSelectTextMuted,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {manualItemLabel ?? 'Kumaş seç…'}
+                          </Text>
+                          <Icon source="chevron-down" size={20} color="#64748b" />
+                        </View>
+                      </TouchableRipple>
+                      {manualItemsQuery.isError && (
+                        <Text style={styles.manualErrorNote}>
+                          Ürün listesi açılamadı (
+                          {manualItemsQuery.error instanceof Error
+                            ? manualItemsQuery.error.message
+                            : 'yetki yok'}
+                          ).
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.manualPickCol}>
+                      <Text style={styles.cutSubLabel}>Renk</Text>
+                      <View style={styles.manualColorRow}>
+                        <TouchableRipple
+                          borderless
+                          onPress={() => {
+                            setManualColorCatalogWanted(true);
+                            setManualPicker('color');
+                          }}
+                          style={[
+                            styles.manualSelect,
+                            { flex: 1 },
+                            !!manualColorId && styles.manualSelectFilled,
+                          ]}
+                        >
+                          <View style={styles.manualSelectInner}>
+                            <Text
+                              style={[
+                                styles.manualSelectText,
+                                !manualColorId && styles.manualSelectTextMuted,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {manualColorLabel ?? 'Renksiz (ham)'}
+                            </Text>
+                            <Icon source="chevron-down" size={20} color="#64748b" />
+                          </View>
+                        </TouchableRipple>
+                        {!!manualColorId && (
+                          <IconButton
+                            icon="close"
+                            size={18}
+                            mode="contained-tonal"
+                            containerColor="#e2e8f0"
+                            iconColor="#475569"
+                            onPress={() => {
+                              setManualColorId(null);
+                              setManualColorLabel(null);
+                            }}
+                            accessibilityLabel="Rengi temizle (renksiz)"
+                            style={{ margin: 0 }}
+                          />
+                        )}
+                      </View>
+                      {manualColorsQuery.isError && (
+                        <Text style={styles.manualErrorNote}>
+                          Renk listesi açılamadı (
+                          {manualColorsQuery.error instanceof Error
+                            ? manualColorsQuery.error.message
+                            : 'yetki yok'}
+                          ).
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Sebep — ZORUNLU ve bilinçli olarak formun ÜST yarısında:
+                      tablette sistem klavyesi açılınca alt yarı kapanıyor,
+                      alanı aşağı koymak operatörü kör yazmaya zorlardı. */}
+                  <View>
+                    <Text style={styles.cutSubLabel}>
+                      İşlem nedeni <Text style={styles.manualReq}>*</Text>
+                    </Text>
+                    <TextInput
+                      mode="outlined"
+                      dense
+                      value={manualReason}
+                      onChangeText={setManualReason}
+                      placeholder="Örn: Depoda barkodsuz kalmış top, acil sisteme alındı"
+                      maxLength={500}
+                      style={styles.input}
+                    />
+                    <Text style={styles.manualHint}>
+                      En az {MANUAL_MIN_REASON} karakter. Bu top hiçbir ham girişe /
+                      fason makbuzuna / kesime dayanmıyor — sayım tutmadığında “bu
+                      top nereden geldi” sorusunun cevabı bu not.
+                    </Text>
+                  </View>
+
+                  {/* Metraj + Manuel/Otomatik — ana kesimle AYNI blok ve AYNI
+                      cihaz tercihi (metre makinesinden okuma dahil). */}
+                  {renderCutLength('Metraj (metre)')}
+
+                  {/* Kime? + Kalite — ana kesimle AYNI blok. Sipariş kısayolu
+                      verilmez: kart yok, iş emri yok. */}
+                  {renderKimeKalite({
+                    grades: manualQualityGrades,
+                    gradeNote: manualGradeNote,
+                  })}
+                </Surface>
+              </ScrollView>
+
+              {/* Eksikleri SOMUT söyle — CutActionBar yalnız griye döner, sebebini
+                  söylemez; operatör "buton çalışmıyor" diye takılmasın. */}
+              {manualMissing.length > 0 && (
+                <View style={styles.manualMissingStrip}>
+                  <Icon source="alert-circle-outline" size={16} color="#b45309" />
+                  <Text style={styles.manualMissingText}>
+                    Eksik: {manualMissing.join(' · ')}
+                  </Text>
+                </View>
+              )}
+              {!isOnline && (
+                <View style={styles.manualMissingStrip}>
+                  <Icon source="wifi-off" size={16} color="#b45309" />
+                  <Text style={styles.manualMissingText}>
+                    Çevrimdışı — manuel giriş kuyruğa alınmaz (barkodu sunucu
+                    üretir), bağlantı gelince tekrar deneyin.
+                  </Text>
+                </View>
+              )}
+
+              {/* Sticky footer — "Bitir" YOK (tüketilecek parent top yok). */}
+              <CutActionBar
+                compact={compact}
+                kartelaOn={markAsKartela}
+                onToggleKartela={() => setMarkAsKartela((v) => !v)}
+                onKes={handleManualProduce}
+                kesLoading={produceManualRollMutation.isPending || measuring}
+                kesDisabled={manualMissing.length > 0 || !isOnline}
+                kesLabel={
+                  cutMode === 'auto'
+                    ? 'Makineden Ölç — Depoya Ekle'
+                    : 'Depoya Ekle'
+                }
+              />
+            </>
+          ) : recutResolvedRollId && recutRollMeta ? (
             // Top Kesme akışı — sağdaki "Top Kesme" tetikleyince top okutulur.
             // Normal Tambur akışıyla AYNI kabuk: flush header + kaydırılabilir
             // form + sticky footer (CutActionBar). activeJob/refakat kartından
@@ -2524,98 +3403,17 @@ export default function TamburScreen() {
                     })}
                   </View>
 
-                  {/* Uzunluk girişi + Manuel/Otomatik yan yana. Otomatik modda
-                      sol sütunda büyük "Uzunluk" etiketi durur, toggle sağda. */}
-                  <View style={styles.lengthModeRow}>
-                    <View style={styles.lengthCol}>
-                      {cutMode === 'manual' ? (
-                        <View style={styles.cutInputRow}>
-                          <View style={{ flex: 1 }}>
-                            <NumpadInput
-                              mode="outlined"
-                              value={work.voluntaryEntry.length}
-                              onChangeText={(v) =>
-                                setWork((w) => ({
-                                  ...w,
-                                  voluntaryEntry: { ...w.voluntaryEntry, length: v },
-                                }))
-                              }
-                              numpadLabel="Kesim uzunluğu"
-                              allowDecimal
-                              autoActivate
-                              numpadMaxLength={8}
-                              placeholder="Boş = kalanı kes (metre)"
-                              dense
-                              style={styles.input}
-                              useNativeKeyboard={compact}
-                            />
-                          </View>
-                          <IconButton
-                            icon="backspace-outline"
-                            mode="contained-tonal"
-                            size={24}
-                            iconColor="#475569"
-                            containerColor="#e2e8f0"
-                            onPress={() =>
-                              setWork((w) => ({
-                                ...w,
-                                voluntaryEntry: { ...w.voluntaryEntry, length: '' },
-                              }))
-                            }
-                            disabled={!work.voluntaryEntry.length}
-                            accessibilityLabel="Uzunluğu temizle"
-                            style={{ margin: 0 }}
-                          />
-                        </View>
-                      ) : (
-                        // Otomatik: uzunluk makineden gelir. Büyük "Uzunluk"
-                        // etiketi, toggle'ın neyi kontrol ettiğini netleştirir.
-                        <View style={styles.autoLengthBox}>
-                          <Icon source="ruler" size={24} color="#7c3aed" />
-                          <Text style={styles.autoLengthLabel}>Uzunluk</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.cutModeToggle}>
-                      {(['manual', 'auto'] as const).map((m) => {
-                        const active = cutMode === m;
-                        return (
-                          <TouchableRipple
-                            key={m}
-                            borderless
-                            onPress={() => void setCutMode(m)}
-                            style={[
-                              styles.cutModeChip,
-                              active && styles.cutModeChipActive,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.cutModeChipText,
-                                active && styles.cutModeChipTextActive,
-                              ]}
-                            >
-                              {m === 'manual' ? 'Manuel' : 'Otomatik'}
-                            </Text>
-                          </TouchableRipple>
-                        );
-                      })}
-                    </View>
-                  </View>
+                  {/* Uzunluk girişi + Manuel/Otomatik metraj kaynağı — MANUEL
+                      MOD ile ORTAK blok (aynı bileşen, aynı state; kopya değil). */}
+                  {renderCutLength('Boş = kalanı kes (metre)')}
 
-                  {/* Kime + Kalite YAN YANA; her biri kendi içinde dikey liste.
-                      Kime uzarsa kendi sütununda scroll olur, Kalite'yi etkilemez. */}
-                  <View style={styles.kimeKaliteRow}>
-                    <View style={styles.kimeCol}>
-                      <Text style={styles.cutSubLabel}>
-                        Kime?
-                      </Text>
-                      {/* Açık "Stok" seçeneği — hiç seçim yokken aktif görünür. */}
-                      {stokChip}
-                      {/* SABİT — scroll'la kaymaz; tüm müşteriler (sipariştekiler önce) */}
-                      {kimeListChip}
-                      {/* Sipariş kısayolları — kendi içinde scroll; 2. tık seçimi
-                          kaldırır (seçim yok = stok). */}
+                  {/* Kime? + Kalite — MANUEL MOD ile ORTAK blok. Tek fark
+                      sipariş kısayolları: kart akışında iş emrinin sipariş
+                      satırları tek dokunuşla hedef seçilir (2. tık seçimi
+                      kaldırır = stok). Manuel modda iş emri yok → kısayol yok. */}
+                  {renderKimeKalite({
+                    grades: qualityGrades,
+                    orderShortcuts: (
                       <ScrollView
                         style={styles.kimeScroll}
                         nestedScrollEnabled
@@ -2665,50 +3463,8 @@ export default function TamburScreen() {
                           })}
                         </View>
                       </ScrollView>
-                    </View>
-
-                    <View style={styles.kaliteCol}>
-                      <Text style={styles.cutSubLabel}>Kalite</Text>
-                      <View style={styles.optionList}>
-                        {qualityGrades.map((qg) => {
-                          const active =
-                            work.voluntaryEntry.qualityGrade === qg.code;
-                          return (
-                            <TouchableRipple
-                              key={qg.id}
-                              borderless
-                              onPress={() =>
-                                setWork((w) => ({
-                                  ...w,
-                                  voluntaryEntry: {
-                                    ...w.voluntaryEntry,
-                                    qualityGrade: active ? '' : qg.code,
-                                    qualityName: active ? undefined : qg.name,
-                                  },
-                                }))
-                              }
-                              style={[
-                                styles.listOption,
-                                active && styles.listOptionActive,
-                                active && qg.color
-                                  ? { backgroundColor: qg.color, borderColor: qg.color }
-                                  : null,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.listOptionText,
-                                  active && styles.listOptionTextActive,
-                                ]}
-                              >
-                                {qg.name}
-                              </Text>
-                            </TouchableRipple>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  </View>
+                    ),
+                  })}
                 </Surface>
 
               </ScrollView>
@@ -3011,18 +3767,24 @@ export default function TamburScreen() {
       )}
 
       {/* Aktif yazdırma — LabelPrinter expo-print ile PDF/sistem yazdırma açar.
-          Renksiz top = ham kumaş → ham etiket (ROLL_RAW); renkli/boyanmış =
-          bitmiş (ROLL_FINISHED). Tambur ham kesim parçaları renksiz olduğundan
-          ham etiketle basılır. */}
+          VARSAYILAN tür renkten çözülür: renksiz top = ham kumaş → ham etiket
+          (ROLL_RAW); renkli/boyanmış = bitmiş (ROLL_FINISHED). Tambur ham kesim
+          parçaları renksiz olduğundan ham etiketle basılır.
+          İSTİSNA: Manuel Mod çıktısı BİTMİŞ üründür (backend statüyü açıkça
+          WAREHOUSE yazar) — renksiz olsa da bitmiş etiket basılmalı; o iş türü
+          `startPrint(roll, 'ROLL_FINISHED')` ile sabitler (printKind). */}
       <LabelPrinter
         roll={activePrintRoll}
-        kind={activePrintRoll?.colorId == null ? 'ROLL_RAW' : 'ROLL_FINISHED'}
+        kind={
+          printKind ?? (activePrintRoll?.colorId == null ? 'ROLL_RAW' : 'ROLL_FINISHED')
+        }
         labelContext={labelContext}
         onDone={(printed) => {
           // Yalnız HÂLÂ güncel slotu temizle: baskı uçuştayken slota yeni top
           // (B) atandıysa onun işi kuyruktadır — A'nın bitişi B'yi ezmesin.
           if (activePrintRoll?.id === printed.id) {
             setActivePrintRoll(null);
+            setPrintKind(null);
             setLabelContext(undefined);
           }
         }}
@@ -3063,6 +3825,47 @@ export default function TamburScreen() {
         }
       />
 
+      {/* MANUEL MOD — ürün / renk seçimi (kart yok → iş emrinden miras yok). */}
+      <PickerModal
+        visible={manualPicker === 'item'}
+        title="Kumaş Seç"
+        options={manualItemOptions}
+        selectedValue={manualItemId}
+        loading={manualItemsQuery.isLoading}
+        numColumns={compact ? 1 : 2}
+        emptyText={
+          manualItemsQuery.isError ? 'Ürün listesi açılamadı' : 'Ürün bulunamadı'
+        }
+        onSelect={(value) => {
+          setManualItemId(value);
+          setManualItemLabel(
+            manualItemOptions.find((o) => o.value === value)?.label ?? null,
+          );
+          setManualPicker(null);
+        }}
+        onDismiss={() => setManualPicker(null)}
+      />
+
+      <PickerModal
+        visible={manualPicker === 'color'}
+        title="Renk Seç"
+        options={manualColorOptions}
+        selectedValue={manualColorId}
+        loading={manualColorsQuery.isLoading}
+        numColumns={compact ? 1 : 2}
+        emptyText={
+          manualColorsQuery.isError ? 'Renk listesi açılamadı' : 'Renk bulunamadı'
+        }
+        onSelect={(value) => {
+          setManualColorId(value);
+          setManualColorLabel(
+            manualColorOptions.find((o) => o.value === value)?.label ?? null,
+          );
+          setManualPicker(null);
+        }}
+        onDismiss={() => setManualPicker(null)}
+      />
+
       {/* Etiket kime? — kesim/yönlendir/son-toplar sonrası baskı hedefi */}
       <LabelTargetSheet
         roll={
@@ -3090,7 +3893,7 @@ export default function TamburScreen() {
           setLabelContext(
             ctx.orderLineId || ctx.customerId || ctx.stock ? ctx : undefined,
           );
-          setActivePrintRoll(r);
+          startPrint(r);
         }}
       />
 
@@ -5247,6 +6050,13 @@ const styles = StyleSheet.create({
   headerChipFill: { flex: 1, marginLeft: 0 },
   headerChipInnerFill: { justifyContent: 'center' },
   headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  // AÇIK MOD chip'i (Manuel Ekle) — translucent aksiyon dilinden bilinçli
+  // ayrışma: dolu amber + koyu yazı. Durum, aksiyon değil.
+  headerChipOn: {
+    backgroundColor: '#fbbf24',
+    borderColor: '#fcd34d',
+  },
+  headerChipTextOn: { color: '#78350f', fontWeight: '800' },
   reprintBadge: { position: 'absolute', top: 4, right: 2, backgroundColor: '#dc2626' },
 
   formCol: { flex: 1.4 },
@@ -5275,6 +6085,27 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#0f172a',
     gap: 8,
+  },
+  // MANUEL MOD bandı — koyu lacivert yerine amber: operatör ekranın tepesine
+  // baktığında "normal iş değil" bilgisini renkten okur (yanlış modda üretim
+  // sessiz hataya döner). Header chip'i ile aynı amber ailesi.
+  headerBandManual: { backgroundColor: '#b45309' },
+  manualTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#fcd34d',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  manualTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#78350f',
+    letterSpacing: 0.4,
   },
   // Telefon (dik): başlık üstte tam genişlik, kutular altında tek satır.
   // Tablette satır düzeni aynen korunur (orada zaten yer bol).
@@ -5594,8 +6425,65 @@ const styles = StyleSheet.create({
   kimeCol: { flex: 3 },
   kaliteCol: { flex: 2 },
   cutSubLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 },
+  // Kalite listesinin altındaki gerekçe notu (manuel modda daraltılmış katalog).
+  gradeNote: { fontSize: 11, color: '#b45309', lineHeight: 15, marginTop: 6 },
   // Sütun içi dikey seçenek listesi.
   optionList: { gap: 6 },
+
+  // ── MANUEL MOD formu ──
+  manualReq: { color: '#dc2626' },
+  manualPickRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  manualPickCol: { flex: 1, minWidth: 0 },
+  manualColorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  manualSelect: {
+    minHeight: 48,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  manualSelectFilled: { borderColor: '#7c3aed', backgroundColor: '#f5f3ff' },
+  manualSelectInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  manualSelectText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#0f172a' },
+  manualSelectTextMuted: { color: '#94a3b8', fontWeight: '400' },
+  manualHint: { fontSize: 11, color: '#64748b', lineHeight: 15, marginTop: 4 },
+  manualErrorNote: { fontSize: 11, color: '#b91c1c', lineHeight: 15, marginTop: 4 },
+  // Footer üstü uyarı şeridi — "buton neden kapalı" sorusunun somut cevabı.
+  manualMissingStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fffbeb',
+    borderTopWidth: 1,
+    borderTopColor: '#fde68a',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  manualMissingText: { flex: 1, fontSize: 12, fontWeight: '700', color: '#b45309' },
+  // Sağ panel (tablet kolonu / telefon drawer'ı) manuel modda bilgilendirir.
+  manualPane: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 12,
+  },
+  manualPaneTitle: { fontSize: 18, fontWeight: '800', color: '#b45309' },
+  manualPaneHint: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 19,
+    maxWidth: 340,
+  },
+  manualPaneExit: { alignSelf: 'stretch', borderRadius: 10 },
+  manualPaneExitContent: { minHeight: 56 },
   // Kime listesi uzayınca kendi sütununda scroll olur (Kalite'yi itmez).
   kimeScroll: { maxHeight: 220 },
   // Tam genişlik dikey liste satırı (chip değil).
