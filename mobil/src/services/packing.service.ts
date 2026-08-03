@@ -187,6 +187,19 @@ export interface SackRoll {
   currentQty: number;
   item: { code: string; name: string };
   color: { code: string; name: string } | null;
+  /**
+   * DOLUYSA: sevk edildi ama sonradan iade alındı. Satır çuval içeriğinde KALIR —
+   * "hangi çuvalda ne gitti" sevk anının sorusudur ve iade onu geriye dönük
+   * değiştiremez (kök CLAUDE.md brüt kuralı). Mobil bugün per-top satır basmıyor;
+   * alan sözleşmenin parçası olsun ve satır basan bir ekran eklendiğinde işaret
+   * hazır olsun diye tanımlı.
+   */
+  returned?: {
+    returnId: string;
+    returnedAt: string;
+    reasonName: string | null;
+    reasonColor: string | null;
+  } | null;
 }
 export interface SackSwatch {
   id: string;
@@ -210,10 +223,16 @@ export interface ShipmentSack {
   sackNo: string;
   seq: number | null;
   /** Operatörün çuval üstüne yazdığı kod. */  weightKg: number | null;
+  /** BRÜT: hâlâ çuvalda olanlar + bu çuvaldan iade alınanlar (`returned` dolu). */
   rolls: SackRoll[];
   swatches: SackSwatch[];
   productSummary: SackProductSummary[];
+  /** BRÜT top adedi — sevk anında bu çuvalda ne gittiyse o (iade onu düşürmez). */
   rollCount: number;
+  /** Bunların kaçı sonradan iade alındı — çuval başlığındaki "N iade" işareti. */
+  returnedCount: number;
+  /** İade alınan metraj; `rollCount`/`productSummary` toplamının İÇİNDEDİR. */
+  returnedQty: number;
   swatchCount: number;
 }
 /** Bu sevkiyattan iade edilmiş top (RollReturn'den). */

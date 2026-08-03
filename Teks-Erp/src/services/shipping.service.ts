@@ -2397,7 +2397,13 @@ export class ShippingService {
             // görünür kılınır: "ne oldu?" sorusunun cevabı bu ekranda okunur ve
             // operatörün topu çuvaldan çıkarma yolu buradan geçer. Filtrelemek sorunu
             // gizler. Sayım/belge yüzeyleri ayrıca dışlar (bkz. collectShipmentDocContent).
-            rolls: { select: { id: true, barcode: true, status: true, width: true, currentQty: true, qualityGrade: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
+            // orderBy AÇIK: iade satırları listenin SONUNA eklenecek (aşağıda) ve
+            // "önce elindeki mal" sırası ancak canlı taraf da deterministikse
+            // anlamlı olur. Eskiden orderBy yoktu → sıra DB'nin keyfiydi.
+            rolls: {
+              orderBy: { createdAt: "asc" },
+              select: { id: true, barcode: true, status: true, width: true, currentQty: true, qualityGrade: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } },
+            },
             swatches: { select: { id: true, barcode: true, length: true, width: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
             allocations: { select: { orderLineId: true, qty: true } },
           },
@@ -2437,12 +2443,98 @@ export class ShippingService {
       }),
     }));
 
-    const totalMeters = shipment.rolls.reduce((s, r) => s.plus(r.currentQty), D0());
+    // ─────────────────────────────────────────────────────────────────────────
+    // İADELER — SACKS'TEN ÖNCE OKUNUR (2026-08-03)
+    //
+    // NEDEN: iade `RollReturn` satırı yazıp topun `sackId`/`shipmentId` FK'larını
+    // NULL'lar (return.service.ts:322-325). Bu yüzden canlı `sacks[].rolls` ve
+    // `shipment.rolls` iadeden SONRA eksilir — sevk EDİLMİŞ bir sevkiyatın
+    // "hangi çuvalda ne gitti" cevabı geriye dönük değişirdi (saha vakası
+    // SVK0308260001: 4 top iade alındı, detay ekranı "0 top · 0 m" dedi).
+    //
+    // Kök CLAUDE.md 2026-08-02 kuralı: "sevk rakamı BRÜT'tür; iade onu geriye
+    // dönük değiştiremez." O gün fiş/irsaliye/liste/muhasebe brüte çekildi; ÇUVAL
+    // İÇERİĞİ yüzeyi atlanmıştı. Burası o boşluğun kapatılması.
+    //
+    // Kaynak SNAPSHOT DEĞİL `RollReturn`: satır iade anını zaten donmuş taşıyor
+    // (qty/width/prevQualityGrade/prevSackId) ve `attachTotals` (:2147) ile
+    // `accounting-export.service.ts:257` aynı kaynağı seçti — üçüncü bir kaynak
+    // üçüncü bir rakam demekti. Ek sorgu YOK: bu findMany zaten koşuyordu,
+    // yalnız yukarı taşındı ve select'i genişledi.
+    const returnRows = await prisma.rollReturn.findMany({
+      where: { fromShipmentId: id, cancelledAt: null },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, qty: true, width: true, createdAt: true, reasonText: true,
+        prevSackId: true,
+        // rollId: satır kimliği (`id` RollReturn'ün kendi id'si — canlı topla
+        // aynı uzayda DEĞİL; dedup ve React key için gerçek top id'si lazım).
+        rollId: true,
+        // prevQualityGrade: iade anındaki kalite. Canlı `roll.qualityGrade`
+        // okunamaz — iade topu WAREHOUSE'a çekerken kaliteyi değiştirebilir.
+        prevQualityGrade: true,
+        roll: { select: { barcode: true } },
+        // ⚠️ `id` ŞART: Electron facet süzgeci (useShipmentDetailFilter) kumaş/renk
+        // eşleşmesini ID ile yapar. id olmadan iade satırları "Kumaş" filtresi
+        // seçilir seçilmez tablodan DÜŞER — üst sayaç brüt kalırken tablo nete
+        // dönerdi, yani düzeltmeye çalıştığımız hastalığın aynısı.
+        item: { select: { id: true, code: true, name: true } },
+        color: { select: { id: true, code: true, name: true } },
+        reason: { select: { name: true, color: true } },
+      },
+    });
+
+    // YARIŞ KORUMASI: `shipment.findUnique` ile bu findMany AYRI sorgulardır (tx
+    // yok). İkisi arasında bir iade commit olursa aynı top HEM canlı `sk.rolls`
+    // içinde HEM iade satırı olarak gelir → çuval ve sevkiyat sayaçları şişer.
+    // Canlı id kümesiyle dedup, o pencereyi kapatır.
+    const liveRollIds = new Set<string>(shipment.rolls.map((r) => r.id));
+    for (const sk of shipment.sacks) for (const r of sk.rolls) liveRollIds.add(r.id);
+    const freshReturnRows = returnRows.filter((rr) => !liveRollIds.has(rr.rollId));
+
+    /** Çuval içinde basılacak iade satırı — canlı top satırıyla AYNI şekil + `returned`. */
+    const toReturnedRow = (rr: (typeof freshReturnRows)[number]) => ({
+      id: rr.rollId,
+      barcode: rr.roll.barcode,
+      item: rr.item,
+      color: rr.color,
+      width: rr.width,
+      currentQty: rr.qty,
+      qualityGrade: rr.prevQualityGrade,
+      // `sackId` TAŞINIR: üst `rolls` dizisinde "çuvalsız" ayrımı bu alandan
+      // yapılıyor; yazılmazsa `undefined == null` ile iade satırı hem çuvalın
+      // içinde hem "çuvalsız" kümesinde görünürdü.
+      sackId: rr.prevSackId,
+      // Tek ayrım noktası. `status` alanına ikinci anlam YÜKLENMEZ — o alan
+      // hayalet-top (SACK_ABSENT) sözleşmesine ait, karıştırmak sonraki
+      // geliştirici için sessiz tuzak olur.
+      returned: {
+        returnId: rr.id,
+        returnedAt: rr.createdAt,
+        reasonName: rr.reason?.name ?? rr.reasonText ?? null,
+        reasonColor: rr.reason?.color ?? null,
+      },
+    });
+
+    const returnsBySack = new Map<string, ReturnType<typeof toReturnedRow>[]>();
+    for (const rr of freshReturnRows) {
+      if (!rr.prevSackId) continue; // legacy (kolon 2026-06'da eklendi) → çuvala düşmez
+      const arr = returnsBySack.get(rr.prevSackId);
+      if (arr) arr.push(toReturnedRow(rr));
+      else returnsBySack.set(rr.prevSackId, [toReturnedRow(rr)]);
+    }
+
     const totalKg = shipment.sacks.reduce((s, sk) => s.plus(sk.weightKg ?? 0), D0());
 
     const sacks = shipment.sacks.map((sk) => {
+      // Çuvalın BRÜT içeriği = hâlâ içindeki toplar + bu çuvaldan iade alınanlar.
+      // İade satırları SONA eklenir: operatörün elindeki mal önce okunur, iade
+      // edilen mal artık orada değildir.
+      const sackReturned = returnsBySack.get(sk.id) ?? [];
+      const grossRolls = [...sk.rolls, ...sackReturned];
+
       const summaryMap = new Map<string, { itemCode: string; itemName: string; colorCode: string | null; colorName: string | null; width: Prisma.Decimal | null; totalQty: Prisma.Decimal; rollCount: number }>();
-      for (const r of sk.rolls) {
+      for (const r of grossRolls) {
         const key = `${r.item.code}|${r.color?.code ?? ""}|${r.width == null ? "" : new Prisma.Decimal(r.width).toString()}`;
         let e = summaryMap.get(key);
         if (!e) {
@@ -2452,18 +2544,38 @@ export class ShippingService {
         e.totalQty = e.totalQty.plus(r.currentQty);
         e.rollCount += 1;
       }
-      return { id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg, rolls: sk.rolls, swatches: sk.swatches, productSummary: [...summaryMap.values()], rollCount: sk.rolls.length, swatchCount: sk.swatches.length };
+      return {
+        id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg,
+        rolls: grossRolls,
+        swatches: sk.swatches,
+        productSummary: [...summaryMap.values()],
+        rollCount: grossRolls.length,
+        // Ayrı sayaç: satır basmayan yüzeyler (mobil çuval kartı) rozeti bundan
+        // kurar — orada `rolls` dizisi hiç render edilmiyor, yalnız bu iki sayı
+        // okunuyor. Olmasaydı mobilde işaretsiz şişmiş rakam doğardı.
+        returnedCount: sackReturned.length,
+        returnedQty: sackReturned.reduce((s, r) => s.plus(r.currentQty), D0()),
+        swatchCount: sk.swatches.length,
+      };
     });
 
-    const returnRows = await prisma.rollReturn.findMany({
-      where: { fromShipmentId: id, cancelledAt: null },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, qty: true, width: true, createdAt: true, reasonText: true, prevSackId: true, roll: { select: { barcode: true } }, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } }, reason: { select: { name: true, color: true } } },
-    });
     // prevSackId = iade anındaki çuval (top artık o çuvalda değil ama iz burada); UI
     // sackNo/seq'i sevkiyatın YÜKLÜ sacks[]'ından çözer (çuval sevkiyatta kalır).
+    // Bu dizi ekrandaki "BU SEVKİYATTAN İADE EDİLENLER" kartını besler ve AYNEN
+    // KALIR — sektör standardındaki ayrı "iade defteri"nin karşılığıdır; çuval
+    // içindeki rozetli satır onun yerine geçmez, konumunu söyler.
     const returnedRolls = returnRows.map((rr) => ({ id: rr.id, barcode: rr.roll.barcode, item: rr.item, color: rr.color, width: rr.width, qty: rr.qty, returnedAt: rr.createdAt, reasonName: rr.reason?.name ?? rr.reasonText ?? null, reasonColor: rr.reason?.color ?? null, prevSackId: rr.prevSackId }));
     const returnedMeters = returnRows.reduce((s, r) => s.plus(r.qty), D0());
+
+    // ⚠️ TEK KAYNAK: brüt top dizisi BİR KEZ kurulur, hem payload'daki `rolls`
+    // hem `summary` ONDAN türetilir. İkisini ayrı ayrı toplamak (canlı + iade)
+    // klasik çift-sayım tuzağıdır — mobilin bugün yaptığı hatanın (istemcide
+    // `rollCount + returnedCount`) backend ikizi olurdu.
+    const grossShipmentRolls = [
+      ...shipment.rolls.map((r) => ({ id: r.id, barcode: r.barcode, item: r.item, color: r.color, width: r.width, currentQty: r.currentQty, qualityGrade: r.qualityGrade, sackId: r.sackId })),
+      ...freshReturnRows.map(toReturnedRow),
+    ];
+    const totalMeters = grossShipmentRolls.reduce((s, r) => s.plus(r.currentQty), D0());
 
     return {
       success: true,
@@ -2481,11 +2593,17 @@ export class ShippingService {
         customer: shipment.customer,
         branch: shipment.branch,
         orders,
-        rolls: shipment.rolls.map((r) => ({ id: r.id, barcode: r.barcode, item: r.item, color: r.color, width: r.width, currentQty: r.currentQty, qualityGrade: r.qualityGrade, sackId: r.sackId })),
+        rolls: grossShipmentRolls,
         swatches: shipment.swatches,
         sacks,
         returnedRolls,
-        summary: { rollCount: shipment.rolls.length, swatchCount: shipment.swatches.length, totalMeters, sackCount: shipment.sacks.length, totalKg, returnedCount: returnedRolls.length, returnedMeters },
+        // rollCount/totalMeters artık BRÜT — `attachTotals` (liste) ile birebir
+        // aynı anlam. Eskiden liste "4 top / 212 m" derken detay "0 top / 0 m"
+        // diyordu; alan adları aynı kaldı, anlamları BİRLEŞTİ. Net isteyen
+        // `rollCount − returnedCount` yapar (ikisi de yanıtta).
+        // `totalKg` DEĞİŞMEZ: iade `Sack.weightKg`'a dokunmuyor → zaten brüt;
+        // geri-ekleme yapmak çift sayardı.
+        summary: { rollCount: grossShipmentRolls.length, swatchCount: shipment.swatches.length, totalMeters, sackCount: shipment.sacks.length, totalKg, returnedCount: returnedRolls.length, returnedMeters },
       },
     };
   }

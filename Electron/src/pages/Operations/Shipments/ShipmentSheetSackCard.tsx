@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import type { ShipmentDetailSack, ShipmentDetailRoll } from "./types";
+import { ReturnedRollBadge } from "./ReturnedRollBadge";
 
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 
@@ -42,6 +43,11 @@ export function ShipmentSheetSackCard({
         </span>
         <span className="shrink-0 tabular-nums text-[11px] font-normal text-muted-foreground">
           {sack.weightKg != null ? `${num(sack.weightKg)} kg` : "tartılmadı"} · {rolls.length} top
+          {sack.returnedCount > 0 ? (
+            <span className="text-amber-700 dark:text-amber-400">
+              {" "}· {sack.returnedCount} iade
+            </span>
+          ) : null}
           {sack.swatchCount > 0 ? ` · ${sack.swatchCount} kartela` : ""}
         </span>
       </button>
@@ -49,7 +55,7 @@ export function ShipmentSheetSackCard({
       {isOpen && (
         <div className="border-t px-2 py-1.5">
           {rolls.length === 0 ? (
-            <div className="text-[11px] text-muted-foreground">Eşleşen top yok.</div>
+            <div className="text-[11px] text-muted-foreground">Top yok.</div>
           ) : (
             <table className="w-full text-[11px] tabular-nums">
               <thead>
@@ -64,13 +70,24 @@ export function ShipmentSheetSackCard({
               <tbody>
                 {rolls.map((r) => (
                   <tr
-                    key={r.id}
+                    key={r.returned?.returnId ?? r.id}
                     className={cn(
                       "border-t [&>td]:px-1 [&>td]:py-0.5",
                       matchedIds?.has(r.id) && "bg-amber-500/10",
+                      // İade satırı soluk: mal fiziksel olarak burada DEĞİL, ama
+                      // sevk anında bu çuvalda gitti — o yüzden satır duruyor.
+                      r.returned && "text-muted-foreground",
                     )}
                   >
-                    <td className="text-left font-mono">{r.barcode ?? "—"}</td>
+                    <td className="text-left font-mono">
+                      {r.returned && (
+                        <ReturnedRollBadge
+                          returnedAt={r.returned.returnedAt}
+                          reasonName={r.returned.reasonName}
+                        />
+                      )}
+                      {r.barcode ?? "—"}
+                    </td>
                     <td className="text-left">
                       {r.item?.name ?? "—"}
                       {r.color ? (

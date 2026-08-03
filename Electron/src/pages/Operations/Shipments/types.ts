@@ -146,6 +146,22 @@ export interface ShipmentDetailRoll {
   qualityGrade: string | null;
   /** İçinde bulunduğu çuval (top-level rolls'da döner; içerik/iz sürme için). */
   sackId?: string | null;
+  /**
+   * DOLUYSA bu satır sevk edildi ama SONRADAN İADE ALINDI (2026-08-03).
+   *
+   * Satır çuval içeriğinde DURMAYA DEVAM EDER — "hangi çuvalda ne gitti" sorusu
+   * sevk anının sorusudur ve iade onu geriye dönük değiştiremez (kök CLAUDE.md
+   * 2026-08-02 brüt kuralı). Backend bu satırları `RollReturn`'den kurar; canlı
+   * `Roll.sackId` iadede NULL'lanmış olduğu için veritabanında artık o çuvalda
+   * DEĞİLDİR. Bu yüzden satır SALT OKUNURDUR: "çuvaldan çıkar" gibi aksiyonlar
+   * açılmaz (top zaten çuvalda değil).
+   */
+  returned?: {
+    returnId: string;
+    returnedAt: string;
+    reasonName: string | null;
+    reasonColor: string | null;
+  } | null;
 }
 
 /** Çuval içeriğinde kumaş (spec) bazlı özet — irsaliyedeki çuval dökümü. */
@@ -173,10 +189,16 @@ export interface ShipmentDetailSack {
   sackNo: number | string;
   seq: number;
   weightKg: number | null;
+  /** BRÜT: hâlâ çuvalda olanlar + bu çuvaldan iade alınanlar (sonda, `returned` dolu). */
   rolls: ShipmentDetailRoll[];
   swatches: SackContentSwatch[];
   productSummary: SackProductSummary[];
+  /** BRÜT top adedi (iadeler dahil) — sevk anında bu çuvalda ne gittiyse o. */
   rollCount: number;
+  /** Bunların kaçı sonradan iade alındı (satır basmayan yüzeyler rozeti bundan kurar). */
+  returnedCount: number;
+  /** İade alınan metraj — `rollCount`/`productSummary` toplamının İÇİNDEDİR. */
+  returnedQty: number;
   swatchCount: number;
 }
 

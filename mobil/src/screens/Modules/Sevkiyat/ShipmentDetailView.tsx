@@ -140,8 +140,13 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
               Çuval {s.seq}
               {s.sackNo ? ` · ${s.sackNo}` : ''}
             </Text>
+            {/* `rollCount` BRÜT (sevk anında bu çuvalda ne gittiyse o). Mobil
+                çuval kartı per-top satır BASMADIĞI için rozeti buraya koyamayız —
+                işaret çuval başlığındaki "N iade" sayısıdır; onsuz şişmiş rakam
+                işaretsiz kalırdı. */}
             <Text style={styles.meta}>
               {s.weightKg != null ? `${n(s.weightKg)} kg` : 'tartılmadı'} · {s.rollCount} top
+              {s.returnedCount > 0 ? ` · ${s.returnedCount} iade` : ''}
               {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''}
             </Text>
           </View>
@@ -190,9 +195,15 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
               </Text>
             </View>
           ))}
+          {/* ⚠️ ELLE TOPLAMA YOK (2026-08-03): backend `rollCount`/`totalMeters`
+              artık BRÜT döner (iadeler dahil) — burada `+ returnedCount` yapmak
+              ÇİFT SAYARDI (4 top → 8). Sayıyı üreten tek yer backend. */}
           <Text style={[styles.summary, { marginTop: 8 }]}>
-            Gönderilen toplam: {d.summary.rollCount + d.summary.returnedCount} top ·{' '}
-            {n(d.summary.totalMeters + d.summary.returnedMeters)} m
+            Gönderilen toplam: {d.summary.rollCount} top · {n(d.summary.totalMeters)} m
+          </Text>
+          <Text style={[styles.meta, { marginTop: 2 }]}>
+            Sevk sonrası {d.summary.returnedCount} top ({n(d.summary.returnedMeters)} m) iade
+            alınmıştır — çuvallarda işaretli.
           </Text>
         </>
       )}

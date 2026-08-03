@@ -5,6 +5,7 @@ import { formatNumber } from "@/lib/format";
 import { compareRolls, type RollSortField } from "../roll-search";
 import type { RollSort } from "./useShipmentDetailFilter";
 import type { ShipmentDetailRoll, ShipmentDetailSack, SackProductSummary } from "../types";
+import { ReturnedRollBadge } from "../ReturnedRollBadge";
 
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 
@@ -108,6 +109,9 @@ export function SackRow({
         <span className="shrink-0 font-mono text-xs text-muted-foreground">{sack.sackNo}</span>
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {sack.weightKg != null ? `${num(sack.weightKg)} kg` : "tartılmadı"} · {rolls.length} top
+          {sack.returnedCount > 0 && (
+            <span className="text-amber-700 dark:text-amber-400"> · {sack.returnedCount} iade</span>
+          )}
         </span>
         {hint && <span className="min-w-0 truncate text-xs text-muted-foreground">{hint}</span>}
         {isFiltering && (
@@ -135,8 +139,22 @@ export function SackRow({
                 </thead>
                 <tbody>
                   {sortedRolls.map((r) => (
-                    <tr key={r.id} className="border-t [&>td]:px-2 [&>td]:py-1">
+                    <tr
+                      key={r.returned?.returnId ?? r.id}
+                      className={cn(
+                        "border-t [&>td]:px-2 [&>td]:py-1",
+                        // Sevk anında bu çuvaldaydı, sonradan iade alındı — satır
+                        // duruyor ama mal burada değil (bkz. ReturnedRollBadge).
+                        r.returned && "text-muted-foreground",
+                      )}
+                    >
                       <td className="text-left font-mono">
+                        {r.returned && (
+                          <ReturnedRollBadge
+                            returnedAt={r.returned.returnedAt}
+                            reasonName={r.returned.reasonName}
+                          />
+                        )}
                         {r.barcode ?? <span className="italic text-muted-foreground/60">açık kumaş</span>}
                       </td>
                       <td className="text-left">
