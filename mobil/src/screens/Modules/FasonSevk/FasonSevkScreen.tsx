@@ -24,7 +24,7 @@ import {
   keepPreviousData,
   onlineManager,
 } from '@tanstack/react-query';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -105,6 +105,9 @@ interface ScannedRoll {
 export default function FasonSevkScreen() {
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const route = useRoute<RouteProp<MainStackParamList, 'FasonSevk'>>();
+  // Fason Kabul → "Fason Sevk'e Git" ile gelen iş emri (yoksa null).
+  const routeWorkOrderId = route.params?.workOrderId ?? null;
   const device = useDeviceType();
   const isPhone = device === 'phone';
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
@@ -203,6 +206,13 @@ export default function FasonSevkScreen() {
 
   // Mount: daha önce kaydedilmiş taslak varsa ve 8 saatten genç ise geri yükle.
   useEffect(() => {
+    // Fason Kabul'den iş emri seçili gelindiyse taslak GERİ YÜKLENMEZ: AsyncStorage
+    // okuması asenkron olduğu için route parametresinden SONRA döner ve eski
+    // taslağın iş emrini üzerine yazardı — operatörün şu anki niyeti kaybolurdu.
+    if (route.params?.workOrderId) {
+      draftRestoredRef.current = true;
+      return;
+    }
     AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
       if (raw) {
         try {
@@ -251,6 +261,25 @@ export default function FasonSevkScreen() {
     return () => clearTimeout(t);
   }, [workOrderId, workOrderLabel, stepId, subcontractorId, subcontractorLabel,
       plannedSubId, scannedRolls, plateNumber, driverName, notes, instruction]);
+
+  // ── Fason Kabul'den yönlendirme: iş emri seçili gel ──
+  // Kabul ekranı "mal henüz sevk edilmemiş" (NEEDS_DISPATCH) teşhisini koyduğunda
+  // operatörü buraya iş emriyle gönderir. Doldurma sırası handleCardScan ile AYNI
+  // olmak ZORUNDA: WO seç → adım/firma sıfırla → paneli aç. Aksi hâlde önceki
+  // seçimden kalan adım/firma yeni iş emrine yapışır ve sevk yanlış adıma gider.
+  // Parametre uygulandıktan sonra temizlenir; ekrana geri dönüşte tekrar tetiklenmez.
+  useEffect(() => {
+    if (!routeWorkOrderId) return;
+    setWorkOrderId(routeWorkOrderId);
+    setWorkOrderLabel('');
+    setStepId('');
+    setSubcontractorId('');
+    setSubcontractorLabel('');
+    setPlannedSubId(null);
+    setCardInput('');
+    snapTo(SHEET_MIDDLE_H);
+    nav.setParams({ workOrderId: undefined });
+  }, [routeWorkOrderId, snapTo, SHEET_MIDDLE_H, nav]);
 
   // ── WO picker server-side state ──
   const WO_PAGE_SIZE = 30;

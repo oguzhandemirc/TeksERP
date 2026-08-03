@@ -61,6 +61,7 @@ import { LabelPrinter } from '../../../components/LabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
 import { useSessionEntriesStore } from '../../../store/sessionEntriesStore';
 import { useSessionStore } from '../../../store/sessionStore';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { itemService } from '../../../services/item.service';
 import {
   rollService,
@@ -319,7 +320,11 @@ export default function KK1Screen() {
   const [pulling, setPulling] = useState(false);
   // Manuel mod: makine arızasında operatör mt + kg'yi elle girer. Varsayılan
   // kapalı (normalde değerler "Kaydet"e basınca makineden çekilir).
-  const [manualMode, setManualMode] = useState(false);
+  // CİHAZDA KALICI: metre makinesi arızalı bir istasyonda operatör her top
+  // girişinde anahtarı yeniden açmak zorunda kalmasın — tercih son bıraktığı
+  // gibi geri gelir (deviceSettingsStore; oturum değil CİHAZ ömürlü).
+  const manualMode = useDeviceSettingsStore((s) => s.kk1ManualEntry);
+  const setManualMode = useDeviceSettingsStore((s) => s.setKk1ManualEntry);
   const [manualQty, setManualQty] = useState('');
   const [manualWeight, setManualWeight] = useState('');
   // "Bu oturumda girilenler" — GİRİŞ OTURUMU ömürlü store (sessionEntriesStore):
@@ -761,11 +766,12 @@ export default function KK1Screen() {
     widthRef.current?.focus();
   }, []);
 
-  // Manuel modu aç (Manuel Giriş anahtarından).
+  // Manuel modu aç (Manuel Giriş anahtarından). Kalıcılaştırma diske yazar →
+  // beklenmez (void): anahtar anında döner, yazma arka planda biter.
   const openManual = useCallback(() => {
-    setManualMode(true);
+    void setManualMode(true);
     requestAnimationFrame(() => manualQtyRef.current?.focus());
-  }, []);
+  }, [setManualMode]);
 
   // Otomatik modda metrajı makineden oku (HAL). Cihaz yoksa/okunamazsa NET
   // Türkçe hata gösterir ve null döner — sessiz sahte değer YOK (Tambur deseni).
@@ -1053,7 +1059,10 @@ export default function KK1Screen() {
             <TouchableRipple
               borderless
               rippleColor="rgba(217,119,6,0.12)"
-              onPress={() => (manualMode ? setManualMode(false) : openManual())}
+              onPress={() => {
+                if (manualMode) void setManualMode(false);
+                else openManual();
+              }}
               style={styles.manualBarTouch}
             >
               <View style={[styles.manualBarInner, !compact && styles.manualBarInnerTablet]}>

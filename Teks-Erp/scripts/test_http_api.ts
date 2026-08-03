@@ -18,6 +18,7 @@ import type { Server } from "http";
 import type { AddressInfo } from "net";
 import app from "../src/app";
 import prisma from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -71,19 +72,23 @@ async function main() {
 
   try {
     // ---- 1) AUTH: login başarılı ----
+    // Kimlik seed'in `admin`'inden DEĞİL, testin kendi ürettiği fixture'dan gelir:
+    // dev DB fabrikanın canlı yedeği olabilir ve orada `admin` şifresi bizimki
+    // değildir (bkz. scripts/fixture-test-user.ts başlığı).
+    const cred = await ensureTestAdmin();
     const ok = await call("POST", "/api/auth/login", {
-      body: { username: "admin", password: "123123" },
+      body: { username: cred.username, password: cred.password },
     });
     const data = (ok.body.data ?? {}) as Record<string, unknown>;
     const adminToken = data.token as string | undefined;
-    check("login admin/123123 → 200", ok.status === 200, `status=${ok.status}`);
+    check(`login ${cred.username} → 200`, ok.status === 200, `status=${ok.status}`);
     check("login → data.token döner", typeof adminToken === "string" && (adminToken?.length ?? 0) > 20);
     const perms = ((data.user as Record<string, unknown>)?.permissions ?? []) as string[];
-    check("login → admin permissions[] dolu", Array.isArray(perms) && perms.length > 0, `n=${perms.length}`);
+    check("login → permissions[] dolu", Array.isArray(perms) && perms.length > 0, `n=${perms.length}`);
 
     // ---- 2) AUTH: yanlış şifre → 401 ----
     const badPw = await call("POST", "/api/auth/login", {
-      body: { username: "admin", password: "YANLIS-SIFRE" },
+      body: { username: cred.username, password: "YANLIS-SIFRE" },
     });
     check("login yanlış şifre → 401", badPw.status === 401, `status=${badPw.status}`);
     check("401 gövdesi success:false", badPw.body.success === false);
@@ -207,7 +212,18 @@ async function main() {
     }
     if (lowUserId) {
       await prisma.userPermission.deleteMany({ where: { userId: lowUserId } }).catch(() => {});
-      await prisma.user.delete({ where: { id: lowUserId } }).catch(() => {});
+      // ⚠️ ÖNCE OTURUMLAR. `sessions_userId_fkey` RESTRICT'tir ve test bu
+      // kullanıcıyla login olduğu için bir session satırı doğar → user.delete
+      // P2003 ile patlar. Eskiden hata `.catch(() => {})` ile YUTULUYORDU:
+      // temizlik sessizce başarısız oluyor, her koşum `users` tablosunda bir
+      // `httprbac*` satırı bırakıyordu (2026-08-02'de 6 artık sayıldı).
+      await prisma.session.deleteMany({ where: { userId: lowUserId } }).catch(() => {});
+      // Sessiz yutma YOK: temizlik düşerse artık görünür (fabrika DB'sinde
+      // biriken artık, gerçek bir bulguyu gürültüye gömer).
+      await prisma.user.delete({ where: { id: lowUserId } }).catch((e: unknown) => {
+        console.warn(`  ⚠️  temizlik: test kullanıcısı silinemedi (${lowUserId}):`,
+          e instanceof Error ? e.message.split("\n")[0] : String(e));
+      });
     }
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await prisma.$disconnect();

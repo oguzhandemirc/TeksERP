@@ -55,7 +55,20 @@ export interface ShipmentListItem {
   reason?: string | null;
   customer: { id: string; code: string; name: string };
   branch: { id: string; code: string | null; name: string } | null;
+  /**
+   * ⚠️ BRÜT (sevk anı) — iade DÜŞÜLMEZ. `_count.rolls` ve `totalMeters` iptal edilmemiş
+   * iadeler geri eklenerek üretilir; böylece liste, donmuş irsaliye ve muhasebe Excel'i
+   * AYNI rakamı söyler (kök CLAUDE.md 2026-08-02, SVK2007260001). İade bilgisi ayrı
+   * alanda (`_count.returns`) durur ve listede rozet olarak gösterilir.
+   */
   _count: { sacks: number; rolls: number; orders: number; returns: number };
+  /** Brüt toplam metraj (m). DIRECT satırlarda `DirectShipment.totalQty`. */
+  totalMeters: number;
+  /** Çuval brüt tartısı toplamı (kg). Doğrudan sevkte çuval yok → 0. */
+  totalKg: number;
+  /** Fatura izi — dış muhasebe programındaki belge no/tarihi (ERP fatura kesmez). */
+  invoiceNo: string | null;
+  invoicedAt: string | null;
   /** Yalnız kumaş/renk (içerik) filtresi aktifken dolu — bu sevkiyattaki eşleşen top
    *  sayısı ("eşleşen: N top" rozeti). Filtre yoksa backend alanı HİÇ göndermez (undefined). */
   matchRollCount?: number;

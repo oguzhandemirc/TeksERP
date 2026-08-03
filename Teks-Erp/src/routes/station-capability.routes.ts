@@ -14,7 +14,10 @@ const service = new StationCapabilityService();
 const router = Router();
 
 const setCapabilitiesSchema = z.object({
-  colorIds: z.array(z.string().uuid()).default([]),
+  // colorIds OPSİYONEL — gönderilmezse renk satırlarına dokunulmaz. `.default([])`
+  // OLMAZ: renk artık kısıt olmadığı için panel bu alanı hiç göndermiyor, default
+  // devreye girseydi her kayıtta istasyonun tüm renk atamaları sessizce silinirdi.
+  colorIds: z.array(z.string().uuid()).optional(),
   propertyIds: z.array(z.string().uuid()).default([]),
 });
 

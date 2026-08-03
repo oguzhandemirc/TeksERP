@@ -2910,6 +2910,13 @@ export class TamburService {
    */
   async getTamburContext(
     cardBarcode: string,
+    /**
+     * `allowEmptyStep`: Tambur adımında açık top olmasa da kartı AÇ (boş bağlam).
+     * Yalnız saha düzeltmesi yetkisi olan operatör için controller true geçer —
+     * "Topu Buraya Al / Manuel Top Ekle" gerektiği anda ulaşılabilir olsun diye.
+     * Yetkisiz operatörde false → davranış eskisi gibi (hata).
+     */
+    opts?: { allowEmptyStep?: boolean },
   ): Promise<
     ApiResponse<{
       workOrderId: string;
@@ -2963,6 +2970,12 @@ export class TamburService {
        * "hangi makinede yapıldı" sorusunu YANITLAMAZ.
        */
       bypassPending?: KursunBypassTamburContext | null;
+      /**
+       * Adımda AÇIK TOP YOK ama kart yetkili operatör için yine de açıldı.
+       * Ekran bunu görünce "bekleyen top yok" bandı basıp yalnız saha
+       * düzeltmesini sunar (kesim/finalize aksiyonları anlamsızdır).
+       */
+      emptyStep?: boolean;
     }>
   > {
     const card = await prisma.travelerCard.findUnique({
@@ -2992,13 +3005,24 @@ export class TamburService {
     const bypassPending = pendingBypass && pendingBypass.rollCount > 0 ? pendingBypass : null;
 
     let stepId: string;
+    let emptyStep = false;
     try {
       ({ stepId } = await assertWoAtStepKind(card.workOrderId, StationKind.TAMBUR));
     } catch (err) {
-      // Bekleyen dağıtım YOKSA davranış birebir eskisi gibi — hata aynen çıkar.
-      // Altyapı hatası (DB/bağlantı) da MASKELENMEZ: yalnız assert'in kendi
-      // iş kuralı hataları (AppError) bypass yoluna düşürülür.
-      if (!bypassPending || !(err instanceof AppError)) throw err;
+      // Bekleyen dağıtım YOKSA **ve** saha düzeltmesi yetkisi YOKSA davranış birebir
+      // eskisi gibi — hata aynen çıkar. Altyapı hatası (DB/bağlantı) hiçbir durumda
+      // MASKELENMEZ: yalnız assert'in kendi iş kuralı hataları (AppError) bu yollara düşer.
+      //
+      // ⚠️ `allowEmptyStep` (2026-08-03): Tambur adımında AÇIK TOP YOKKEN kart hiç
+      // açılamıyordu ve "Topu Buraya Al / Manuel Top Ekle" saha aksiyonları TAM DA
+      // gerektikleri anda ulaşılamaz kalıyordu (aksiyonlar `activeJob`'a bağlı, o da
+      // karta). Yetkili operatör (`mobile:tambur-duzelt` / `roll:manual-adjust`) için
+      // kartı BOŞ olarak açıyoruz: `emptyStep: true` ile ekran "bu adımda bekleyen top
+      // yok" bandını gösterip yalnız saha düzeltmesini sunar. Yetkisiz operatörde
+      // davranış DEĞİŞMEZ — boş kart kafa karıştırır, hata doğru cevaptır.
+      if (!(err instanceof AppError)) throw err;
+      if (!bypassPending && !opts?.allowEmptyStep) throw err;
+      if (!bypassPending) emptyStep = true;
       // Rotanın ilk Tambur adımı (assertWoAtStepKind ile aynı seçim kuralı).
       const tamburStep = await prisma.workOrderStep.findFirst({
         where: {
@@ -3193,6 +3217,7 @@ export class TamburService {
         orders,
         openFabricRolls,
         bypassPending,
+        emptyStep,
       },
     };
   }

@@ -10,6 +10,8 @@ import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
+import { useHideCancelled } from "@/hooks/useHideCancelled";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -71,11 +73,14 @@ export function WorkOrdersPage() {
   const openTarget = useOpenTarget();
   const navigateActive = useTabsStore((s) => s.navigateActive);
 
+  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
+
   const { table, query, search, setSearch, pagination } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
     fetchFn: workOrderService.listCursor,
     columns: workOrderColumns,
     defaultPageSize: 50,
+    forceFilters,
     initialVisibility: {
       targetQuantity: targetQuantityEnabled,
     },
@@ -113,6 +118,14 @@ export function WorkOrdersPage() {
         placeholder="İş emri, parti, kumaş, müşteri veya sipariş no ara..."
         table={table}
         exportName="İş Emirleri"
+        actions={
+          <ToolbarToggle
+            checked={showCancelled}
+            onCheckedChange={setShowCancelled}
+            label="İptalleri göster"
+            title="İptal edilmiş iş emirleri varsayılan olarak gizlidir."
+          />
+        }
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
       <DataTable<WorkOrder>

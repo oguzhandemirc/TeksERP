@@ -63,6 +63,9 @@ interface ShipmentRow {
   rollCount: number;
   totalMeters: number;
   totalKg: number;
+  /** Dış muhasebe programındaki fatura izi — ERP fatura kesmez, yalnız işaretler. */
+  invoiceNo: string;
+  invoicedAt: Date | null;
 }
 
 interface DetailRow {
@@ -218,6 +221,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       plateNumber: true,
       driverName: true,
       carrier: true,
+      invoiceNo: true,
+      invoicedAt: true,
       customer: { select: { code: true, name: true, taxNumber: true } },
       branch: { select: { code: true, name: true } },
       orders: { select: { order: { select: { orderNumber: true } } } },
@@ -368,6 +373,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       rollCount,
       totalMeters: Number(sMeters),
       totalKg: Number(sKg),
+      invoiceNo: sh.invoiceNo ?? "",
+      invoicedAt: sh.invoicedAt,
     });
 
     for (const g of prodMap.values()) {
@@ -419,6 +426,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       shipmentNo: true,
       shippedAt: true,
       createdAt: true,
+      invoiceNo: true,
+      invoicedAt: true,
       customer: { select: { code: true, name: true, taxNumber: true } },
       branch: { select: { code: true, name: true } },
       allocations: { select: { orderLine: { select: { order: { select: { orderNumber: true } } } } } },
@@ -480,6 +489,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       rollCount,
       totalMeters: Number(sMeters),
       totalKg: 0,
+      invoiceNo: ds.invoiceNo ?? "",
+      invoicedAt: ds.invoicedAt,
     });
 
     for (const g of prodMap.values()) {

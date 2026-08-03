@@ -16,6 +16,8 @@ const emptyToUndef = (v: unknown) => (v === "" || v == null ? undefined : v);
 const availableQuerySchema = z.object({
   itemId: z.string().uuid("Geçersiz ürün id").optional(),
   colorId: z.string().uuid("Geçersiz renk id").optional(),
+  customerId: z.string().uuid("Geçersiz müşteri id").optional(),
+  specOfLineId: z.string().uuid("Geçersiz referans kalem id").optional(),
   width: z.preprocess(emptyToUndef, z.coerce.number().positive("En pozitif olmalı").optional()),
   search: z.preprocess(emptyToUndef, z.string().optional()),
   cursor: z.preprocess(emptyToUndef, z.string().optional()),
@@ -389,6 +391,8 @@ router.get(
       const result = await service.findAvailableOrderLines({
         itemId: q.itemId,
         colorId: q.colorId,
+        customerId: q.customerId,
+        specOfLineId: q.specOfLineId,
         width: q.width,
         withInProduction: q.withInProduction,
         search: q.search,

@@ -137,6 +137,8 @@ async function logTravelerScan(
 /** Frontend'in iptal preview ekranında listelediği her bornRoll için döner. */
 export interface BornRollPreviewItem {
   id: string;
+  /** Operatörün gerçekten okuyabildiği kimlik. UUID basmak teşhis değil gürültü. */
+  barcode: string | null;
   itemCode: string;
   itemName: string;
   colorName: string | null;
@@ -244,6 +246,166 @@ function buildPendingParties<
     return at - bt;
   });
   return parties;
+}
+
+// -----------------------------------------------------------------------------
+// "Sevk bekliyor" — fason adımında DURAN ama fasona ÇIKMAMIŞ top
+// -----------------------------------------------------------------------------
+
+/**
+ * Fason adımında bulunup henüz sevk edilmemiş topun statüleri. "Konumu Düzelt"
+ * (manuel taşıma) topu fason adımına koyar ama — TASARIM GEREĞİ —
+ * `AT_SUBCONTRACTOR` YAPMAZ: mal fiziksel olarak dışarı çıkmadan "dışarıda"
+ * işaretlemek envanteri yalanlar. Çıkış ayrıca **Fason Sevk** ile yapılır.
+ *
+ * TEK KAYNAK: kart-okutma teşhisi (`NEEDS_DISPATCH`), "Bekleyen" listesi ve grup
+ * detayı aynı diziyi okur — elle statü listesi kopyalama.
+ */
+const AWAITING_DISPATCH_STATUSES: RollStatus[] = [
+  RollStatus.IN_PRODUCTION,
+  RollStatus.STOCK,
+];
+
+/**
+ * Aynı dizinin ham-SQL karşılığı (enum literal — değerler TS enum üyeleridir,
+ * kullanıcı girdisi DEĞİL). Elle `'IN_PRODUCTION','STOCK'` yazmak iki kaynağı
+ * sessizce ayrıştırırdı.
+ */
+const awaitingStatusSql = Prisma.join(
+  AWAITING_DISPATCH_STATUSES.map((s) => Prisma.raw(`'${s}'`)),
+);
+
+// -----------------------------------------------------------------------------
+// Mesaj hijyeni — hata metinlerinde ham UUID yerine barkod
+// -----------------------------------------------------------------------------
+
+/** Barkodsuz açık kumaş topun hata metnindeki karşılığı. */
+const UNBARCODED_ROLL_LABEL = "(barkodsuz açık kumaş)";
+
+/**
+ * Verilen top id'leri için "insan okunur etiket" haritası: barkod varsa barkod,
+ * yoksa `(barkodsuz açık kumaş)`. Operatöre `9f3c1a7e-…` gibi bir UUID göstermek
+ * teşhis değil gürültüdür — tabletteki kimse o id ile topu bulamaz.
+ *
+ * Yalnız HATA yolunda çağrılır (mutlu yolda ek sorgu yok).
+ */
+async function resolveRollLabels(
+  client: Prisma.TransactionClient | typeof prisma,
+  ids: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+  const rows = await client.roll.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, barcode: true },
+  });
+  return new Map(rows.map((r) => [r.id, r.barcode ?? UNBARCODED_ROLL_LABEL] as const));
+}
+
+/** Etiket haritasında olmayan id (silinmiş/uydurma) için son çare kısaltma. */
+function rollLabel(labels: Map<string, string>, id: string): string {
+  return labels.get(id) ?? `${id.slice(0, 8)}…`;
+}
+
+// -----------------------------------------------------------------------------
+// K14 parti-tutarlılık — TEK KAYNAK (iptal önizlemesi + tx içi guard)
+// -----------------------------------------------------------------------------
+
+/** Kabul iptalini engelleyen tek bir parti uyuşmazlığı satırı. */
+export interface ReceiptBatchMismatchItem {
+  rollId: string;
+  /** Barkod; barkodsuz açık kumaşta `(barkodsuz açık kumaş)`. */
+  barcode: string;
+  dispatchNo: string;
+  /** Topun ŞU ANKİ partisi (merge/move sonrası). */
+  rollBatchNumber: string | null;
+  /** Sevk kaydının bağlı olduğu parti. */
+  dispatchBatchNumber: string | null;
+}
+
+/**
+ * K14 parti-tutarlılık kontrolü. Kabul iptali orijinalleri yeniden
+ * AT_SUBCONTRACTOR yapar ve kaynak sevk(ler) yeniden OUTSTANDING olur; K14
+ * dönmüş partiyi K8 araçlarına (merge/move) açtığından top bu arada BAŞKA
+ * partiye taşınmış olabilir. O halde "AT_SUB topun batchId'si = açık sevkin
+ * batchId'si" değişmezi (firma çözümü, mobil kabul gruplaması, undoTransfer
+ * bunu okur) kırılır.
+ *
+ * ⚠️ Bu fonksiyon HEM `getCancelPreview` HEM `cancelReceipt`'in tx-içi guard'ı
+ * tarafından çağrılır — sorgu ikiye kopyalanırsa drift olur ve operatör
+ * `allSafe: true` görüp 409 yer. Tek kaynak burasıdır.
+ *
+ * ⚠️ SIRALI await — `tx.*` üzerinde `Promise.all` YASAK (pg adapter tek
+ * connection'ı seri çalıştırır).
+ */
+async function computeReceiptBatchMismatches(
+  client: Prisma.TransactionClient | typeof prisma,
+  rollIds: string[],
+  stepId: string,
+): Promise<ReceiptBatchMismatchItem[]> {
+  if (rollIds.length === 0) return [];
+  const rollBatchRows = await client.roll.findMany({
+    where: { id: { in: rollIds } },
+    select: {
+      id: true,
+      barcode: true,
+      batchId: true,
+      batch: { select: { batchNumber: true } },
+    },
+  });
+  const srcDispatchItems = await client.subcontractorDispatchItem.findMany({
+    where: {
+      rollId: { in: rollIds },
+      dispatch: { stepId, cancelledAt: null, directShippedAt: null },
+    },
+    select: {
+      rollId: true,
+      dispatch: {
+        select: { batchId: true, dispatchNo: true, batch: { select: { batchNumber: true } } },
+      },
+    },
+  });
+  const rollBatchById = new Map(rollBatchRows.map((r) => [r.id, r] as const));
+  const mismatches: ReceiptBatchMismatchItem[] = [];
+  for (const it of srcDispatchItems) {
+    const roll = rollBatchById.get(it.rollId);
+    if (roll && roll.batchId !== it.dispatch.batchId) {
+      mismatches.push({
+        rollId: roll.id,
+        barcode: roll.barcode ?? UNBARCODED_ROLL_LABEL,
+        dispatchNo: it.dispatch.dispatchNo,
+        rollBatchNumber: roll.batch?.batchNumber ?? null,
+        dispatchBatchNumber: it.dispatch.batch?.batchNumber ?? null,
+      });
+    }
+  }
+  return mismatches;
+}
+
+/**
+ * K14 uyuşmazlık mesajı — önizleme ve guard AYNI metni kullanır.
+ * Parti NUMARALARI şart: operatör hangi iki partiyi birleştireceğini bilmeden
+ * "birleştirin" demek yönlendirme değil, bilmece olur.
+ */
+function buildBatchMismatchMessage(items: ReceiptBatchMismatchItem[]): string {
+  const detail = items
+    .map(
+      (m) =>
+        `${m.barcode} topu artık ${m.rollBatchNumber ?? "partisiz"} partisinde ` +
+        `ama sevk ${m.dispatchNo} → ${m.dispatchBatchNumber ?? "partisiz"} partisine bağlı`,
+    )
+    .join("; ");
+  const pairs = [
+    ...new Set(
+      items.map((m) => `${m.dispatchBatchNumber ?? "partisiz"} + ${m.rollBatchNumber ?? "partisiz"}`),
+    ),
+  ].join(", ");
+  return (
+    `Kabul iptal edilemez — topların parti üyeliği kabulden sonra değişmiş ` +
+    `(birleştirme/taşıma): ${detail}. ` +
+    `Panelden İş Emri → Partiler → Birleştir ile şu partileri birleştirin: ${pairs}. ` +
+    `Sonra iptali tekrar deneyin.`
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -2137,20 +2299,34 @@ export class SubcontractorService {
     });
     const outstandingIds = new Set(outstandingRolls.map((r) => r.id));
 
-    // Giriş doğrulaması
+    // Giriş doğrulaması — hatalı id'ler ÖNCE toplanır, mesaj sonra barkodla
+    // kurulur. Ham UUID basmak operatöre hiçbir şey söylemiyordu; barkod
+    // sorgusu yalnız hata yolunda koşar (mutlu yolda ek sorgu yok).
     const returnIds = new Set<string>();
+    const duplicateIds: string[] = [];
+    const notOutstandingIds: string[] = [];
     for (const r of data.returns) {
       if (returnIds.has(r.rollId)) {
-        throw AppError.badRequest(
-          "Aynı top dönüş listesinde iki kez geçiyor"
-        );
+        duplicateIds.push(r.rollId);
+        continue;
       }
       returnIds.add(r.rollId);
       if (!outstandingIds.has(r.rollId)) {
+        notOutstandingIds.push(r.rollId);
+      }
+    }
+    if (duplicateIds.length > 0 || notOutstandingIds.length > 0) {
+      const labels = await resolveRollLabels(prisma, [...duplicateIds, ...notOutstandingIds]);
+      if (duplicateIds.length > 0) {
         throw AppError.badRequest(
-          `Top ${r.rollId} bu adımda fasona gönderilmemiş veya zaten dönmüş`
+          `Aynı top dönüş listesinde iki kez geçiyor: ` +
+            `${duplicateIds.map((id) => rollLabel(labels, id)).join(", ")}`,
         );
       }
+      throw AppError.badRequest(
+        `Şu toplar bu adımda fasona gönderilmemiş veya zaten dönmüş: ` +
+          `${notOutstandingIds.map((id) => rollLabel(labels, id)).join(", ")}`,
+      );
     }
 
     // F74: dönen topların kaynak sevk firması, seçilen firmayla (data.subcontractorId)
@@ -2560,7 +2736,10 @@ export class SubcontractorService {
         where: { workOrderId: { in: woIds }, station: { kind: "SUBCONTRACTOR" } },
       });
       if (subStepCount === 0) {
-        throw AppError.notFound("Bu iş emrinde fason adımı tanımlı değil");
+        throw AppError.notFound("Bu iş emrinde fason adımı tanımlı değil", {
+          code: "NO_SUBCONTRACTOR_STEP",
+          workOrderId: woId,
+        });
       }
 
       const pendingCount = await prisma.roll.count({
@@ -2571,26 +2750,120 @@ export class SubcontractorService {
       });
 
       if (pendingCount === 0) {
+        // ── TEŞHİS SIRASI (jenerik mesaj EN SONA) ────────────────────────────
+        // Eski davranış tek bir cümle basıyordu ve o cümle kendini yalanlıyordu:
+        // "fason adımında bekleyen rulo yok. Mevcut konum: Boyahane (Fason) (1
+        // rulo)". Operatör ne yapacağını hiçbir yerden öğrenemiyordu.
+
+        // (a) MAL İÇERİDE BEKLİYOR — "Konumu Düzelt" topu fason adımına taşır ama
+        //     tasarım gereği AT_SUBCONTRACTOR YAPMAZ (mal fiziksel olarak dışarı
+        //     çıkmadan "dışarıda" işaretlemek envanteri yalanlar). Çıkış ayrıca
+        //     Fason Sevk ile yapılır → doğru yönlendirme: önce sevk, sonra kabul.
+        const awaitingRows = await prisma.roll.groupBy({
+          by: ["currentStepId"],
+          where: {
+            status: { in: AWAITING_DISPATCH_STATUSES },
+            currentStep: {
+              workOrderId: { in: woIds },
+              station: { kind: StationKind.SUBCONTRACTOR },
+            },
+          },
+          _count: { _all: true },
+        });
+        if (awaitingRows.length > 0) {
+          const awaitingCountByStep = new Map(
+            awaitingRows
+              .filter((r): r is typeof r & { currentStepId: string } => !!r.currentStepId)
+              .map((r) => [r.currentStepId, r._count._all] as const),
+          );
+          const awaitingSteps = await prisma.workOrderStep.findMany({
+            where: { id: { in: [...awaitingCountByStep.keys()] } },
+            select: {
+              id: true,
+              workOrderId: true,
+              stepSequence: true,
+              station: { select: { name: true } },
+            },
+            orderBy: { stepSequence: "asc" },
+          });
+          const target = awaitingSteps[0];
+          if (target) {
+            throw AppError.badRequest(
+              `Toplar '${target.station.name}' adımında ama henüz fasona SEVK EDİLMEMİŞ ` +
+                `(konum düzeltmesi sonrası mal içeride bekliyor). ` +
+                `Önce Fason Sevk yapın, sonra kabul edin.`,
+              {
+                code: "NEEDS_DISPATCH",
+                workOrderId: target.workOrderId,
+                stepId: target.id,
+                stationName: target.station.name,
+                rollCount: awaitingCountByStep.get(target.id) ?? 0,
+              },
+            );
+          }
+        }
+
+        // (b) YANLIŞ İŞ EMRİNE KABUL — kayıt burada, mal fiziksel olarak hâlâ
+        //     fasonda. Doğru araç "Konumu Düzelt" DEĞİL, KABUL İPTALİ: o,
+        //     orijinalleri AT_SUBCONTRACTOR'a döndürür ve sevki yeniden açar.
+        const openReceipt = await prisma.subcontractorReceipt.findFirst({
+          where: {
+            workOrderId: { in: woIds },
+            cancelledAt: null,
+            step: { station: { kind: StationKind.SUBCONTRACTOR } },
+          },
+          orderBy: { receivedAt: "desc" },
+          select: { id: true, receiptNo: true, receivedAt: true },
+        });
+        if (openReceipt) {
+          throw AppError.badRequest(
+            `Bu iş emrinde ${openReceipt.receiptNo} makbuzuyla kabul yapılmış. ` +
+              `Malı yanlış iş emrine kabul ettiyseniz o makbuzu iptal edin — ` +
+              `toplar fasona geri döner.`,
+            {
+              code: "MAYBE_WRONG_RECEIPT",
+              receiptId: openReceipt.id,
+              receiptNo: openReceipt.receiptNo,
+              receivedAt: openReceipt.receivedAt,
+            },
+          );
+        }
+
+        // (c) Gerçekten başka bir istasyondayız. Jenerik mesaj KALIR ama "mevcut
+        //     konum" listesinden FASON adımları ÇIKARILIR — aksi halde cümle
+        //     kendini yalanlar (yukarıdaki saha bulgusu).
         const stepsWithRolls = await prisma.workOrderStep.findMany({
-          where: { workOrderId: { in: woIds }, currentRolls: { some: {} } },
+          where: {
+            workOrderId: { in: woIds },
+            currentRolls: { some: {} },
+            station: { kind: { not: StationKind.SUBCONTRACTOR } },
+          },
           select: {
+            id: true,
             station: { select: { name: true } },
             _count: { select: { currentRolls: true } },
           },
           orderBy: { stepSequence: "asc" },
         });
+        const currentSteps = stepsWithRolls.map((s) => ({
+          stepId: s.id,
+          stationName: s.station.name,
+          rollCount: s._count.currentRolls,
+        }));
 
-        if (stepsWithRolls.length === 0) {
+        if (currentSteps.length === 0) {
           throw AppError.badRequest(
             "Bu iş emrinin fason adımında bekleyen rulo yok ve şu an aktif başka adım da yok. (Üretim henüz başlamamış veya tamamlanmış.)",
+            { code: "WO_NOT_AT_SUBCONTRACTOR", currentSteps },
           );
         }
 
-        const stepNames = stepsWithRolls
-          .map((s) => `${s.station.name} (${s._count.currentRolls} rulo)`)
+        const stepNames = currentSteps
+          .map((s) => `${s.stationName} (${s.rollCount} rulo)`)
           .join(", ");
         throw AppError.badRequest(
           `Bu iş emrinin fason adımında bekleyen rulo yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
+          { code: "WO_NOT_AT_SUBCONTRACTOR", currentSteps },
         );
       }
 
@@ -2674,6 +2947,14 @@ export class SubcontractorService {
     // colorNames, cardNumbers) client-side arama içindir — operatör parti no
     // dışında kumaş/renk/refakat kart no ile de filtreleyebilsin. Seçim anında
     // rolls /pending-returns/step/:stepId ile lazy-load.
+    //
+    // "SEVK BEKLİYOR" satırları (awaiting_*): fason adımında DURAN ama henüz
+    // fasona çıkmamış toplar. Manuel taşıma ("Konumu Düzelt") bunları üretir ve
+    // eskiden liste yalnız AT_SUBCONTRACTOR aradığı için iş emri **hata bile
+    // vermeden kayboluyordu**. Aynı adımda iki kova yan yana durabilir (kısmi
+    // sevk) → tek satırda FILTER'lı iki agregat; grup anahtarı yine stepId
+    // (frontend key'i bölünmez). Bu satırlar kabul akışına SOKULMAZ — rollCount
+    // yalnız AT_SUBCONTRACTOR sayar, rolls lazy-load'u da öyle.
     const rollStats = await prisma.$queryRaw<
       Array<{
         currentStepId: string;
@@ -2681,21 +2962,44 @@ export class SubcontractorService {
         // adapter-pg ile SUM(numeric) → Prisma.Decimal döner (string DEĞİL; ölçüldü).
         // COUNT(*) → bigint, ::float cast'li toplamlar → number.
         total_qty: Prisma.Decimal | null;
+        awaiting_count: bigint;
+        awaiting_qty: Prisma.Decimal | null;
         item_names: string[] | null;
         color_names: string[] | null;
       }>
     >`
+      WITH pending_src AS (
+        -- (1) Gerçek kabul kuyruğu: fasondaki toplar. Orijinal sorgunun planı
+        --     korunur (status seçici, tek tablo).
+        SELECT r."currentStepId" AS step_id, r."currentQty" AS qty,
+               r."itemId" AS item_id, r."colorId" AS color_id, TRUE AS at_sub
+        FROM rolls r
+        WHERE r.status = 'AT_SUBCONTRACTOR' AND r."currentStepId" IS NOT NULL
+        UNION ALL
+        -- (2) "Sevk bekliyor". AYRI dal olması bilinçli: tek sorguda OR yazmak
+        --     birinci dalın (asıl kabul kuyruğu) planını da bozardı. Bu dal
+        --     ADIM tarafından yazıldı ki planlayıcının elinde fason istasyon →
+        --     adım → @@index([currentStepId, status]) nested loop seçeneği
+        --     olsun; küme zaten CANLI envanterle sınırlı (IN_PRODUCTION/STOCK
+        --     tarihçeyle büyümez, WAREHOUSE/SHIPPED büyür). Hacim artınca
+        --     EXPLAIN ile tekrar bak — plan seçimi satır tahminine bağlıdır.
+        SELECT r."currentStepId", r."currentQty", r."itemId", r."colorId", FALSE
+        FROM work_order_steps wos
+        JOIN stations st ON st.id = wos."stationId" AND st.kind = 'SUBCONTRACTOR'
+        JOIN rolls r ON r."currentStepId" = wos.id AND r.status IN (${awaitingStatusSql})
+      )
       SELECT
-        r."currentStepId" AS "currentStepId",
-        COUNT(*) AS roll_count,
-        SUM(r."currentQty") AS total_qty,
+        s.step_id AS "currentStepId",
+        COUNT(*) FILTER (WHERE s.at_sub) AS roll_count,
+        SUM(s.qty) FILTER (WHERE s.at_sub) AS total_qty,
+        COUNT(*) FILTER (WHERE NOT s.at_sub) AS awaiting_count,
+        SUM(s.qty) FILTER (WHERE NOT s.at_sub) AS awaiting_qty,
         ARRAY_AGG(DISTINCT i.name) AS item_names,
         ARRAY_AGG(DISTINCT c.name) FILTER (WHERE c.name IS NOT NULL) AS color_names
-      FROM rolls r
-      JOIN items i ON i.id = r."itemId"
-      LEFT JOIN colors c ON c.id = r."colorId"
-      WHERE r.status = 'AT_SUBCONTRACTOR' AND r."currentStepId" IS NOT NULL
-      GROUP BY r."currentStepId"
+      FROM pending_src s
+      JOIN items i ON i.id = s.item_id
+      LEFT JOIN colors c ON c.id = s.color_id
+      GROUP BY s.step_id
     `;
 
     if (rollStats.length === 0) return { success: true, data: [] };
@@ -2767,6 +3071,12 @@ export class SubcontractorService {
         lastDispatch,
         rollCount: Number(stat?.roll_count ?? 0),
         totalQty: new Prisma.Decimal(stat?.total_qty ?? "0"),
+        // "Sevk bekliyor" rozeti — fason adımında duran ama fasona ÇIKMAMIŞ top.
+        // Kabul akışına GİRMEZ (rollCount/rolls yalnız AT_SUBCONTRACTOR sayar);
+        // amaç iş emrinin listeden sessizce kaybolmaması.
+        awaitingDispatch: Number(stat?.awaiting_count ?? 0) > 0,
+        awaitingDispatchRollCount: Number(stat?.awaiting_count ?? 0),
+        awaitingDispatchQty: new Prisma.Decimal(stat?.awaiting_qty ?? "0"),
         // Arama özetleri (client-side filtre için)
         itemNames: stat?.item_names ?? [],
         colorNames: stat?.color_names ?? [],
@@ -2783,7 +3093,7 @@ export class SubcontractorService {
       where: { id: stepId },
       select: {
         id: true, stepSequence: true, notes: true,
-        station: { select: { id: true, code: true, name: true, type: true } },
+        station: { select: { id: true, code: true, name: true, type: true, kind: true } },
         workOrder: {
           select: {
             id: true, workOrderNumber: true, status: true,
@@ -2832,6 +3142,19 @@ export class SubcontractorService {
     });
     const lastDispatch = dispatches[0] ?? null;
 
+    // "Sevk bekliyor": fason adımında DURAN ama fasona ÇIKMAMIŞ toplar (manuel
+    // taşıma sonrası). Kabul akışına GİRMEZ — `rolls`/`parties`/`rollCount`
+    // yalnız AT_SUBCONTRACTOR sayar; bu blok sadece görünürlük içindir.
+    const awaiting =
+      step.station.kind === StationKind.SUBCONTRACTOR
+        ? await prisma.roll.aggregate({
+            where: { currentStepId: stepId, status: { in: AWAITING_DISPATCH_STATUSES } },
+            _count: { _all: true },
+            _sum: { currentQty: true },
+          })
+        : null;
+    const awaitingCount = awaiting?._count._all ?? 0;
+
     const totalQty = rolls.reduce((s, r) => s.plus(r.currentQty), new Prisma.Decimal(0));
 
     return {
@@ -2854,6 +3177,9 @@ export class SubcontractorService {
         rolls,
         rollCount: rolls.length,
         totalQty,
+        awaitingDispatch: awaitingCount > 0,
+        awaitingDispatchRollCount: awaitingCount,
+        awaitingDispatchQty: new Prisma.Decimal(awaiting?._sum.currentQty ?? 0),
       },
     };
   }
@@ -3389,6 +3715,17 @@ export class SubcontractorService {
       receiptNo: string;
       receivedAt: Date;
       bornRolls: BornRollPreviewItem[];
+      /**
+       * K14 parti-tutarlılık engeli — `cancelReceipt`'in tx-içi guard'ıyla AYNI
+       * yardımcıdan gelir. Eskiden önizleme bunu hiç sormuyordu: operatör
+       * `allSafe: true` görüp butona basıyor, sonra 409 yiyordu.
+       */
+      batchMismatch: {
+        blocked: boolean;
+        items: ReceiptBatchMismatchItem[];
+        /** Guard'ın basacağı metnin birebir aynısı (null = engel yok). */
+        message: string | null;
+      };
       allSafe: boolean;
       totalBornRolls: number;
     }>
@@ -3400,10 +3737,13 @@ export class SubcontractorService {
         receiptNo: true,
         receivedAt: true,
         cancelledAt: true,
+        stepId: true,
+        items: { select: { newRollId: true } },
         workOrder: { select: { status: true } },
         bornRolls: {
           select: {
             id: true,
+            barcode: true,
             currentQty: true,
             status: true,
             item: { select: { code: true, name: true } },
@@ -3432,6 +3772,7 @@ export class SubcontractorService {
       const blockingReasons = computeBornRollBlockingReasons(roll);
       return {
         id: roll.id,
+        barcode: roll.barcode,
         itemCode: roll.item.code,
         itemName: roll.item.name,
         colorName: roll.color?.name ?? null,
@@ -3442,13 +3783,27 @@ export class SubcontractorService {
       };
     });
 
+    // K14'ü ÖNE AL — guard ile aynı yardımcı, aynı metin (drift yok).
+    const mismatchItems = await computeReceiptBatchMismatches(
+      prisma,
+      receipt.items.map((it) => it.newRollId),
+      receipt.stepId,
+    );
+
     return {
       success: true,
       data: {
         receiptNo: receipt.receiptNo,
         receivedAt: receipt.receivedAt,
         bornRolls,
-        allSafe: bornRolls.every((b) => b.safeToCancel),
+        batchMismatch: {
+          blocked: mismatchItems.length > 0,
+          items: mismatchItems,
+          message: mismatchItems.length > 0 ? buildBatchMismatchMessage(mismatchItems) : null,
+        },
+        // Önizleme bayat olabilir ama "güvenli" demeden önce bilinen TÜM
+        // engelleri saymak zorunda.
+        allSafe: bornRolls.every((b) => b.safeToCancel) && mismatchItems.length === 0,
         totalBornRolls: bornRolls.length,
       },
     };
@@ -3483,6 +3838,7 @@ export class SubcontractorService {
         bornRolls: {
           select: {
             id: true,
+            barcode: true,
             currentStepId: true,
             status: true,
             operations: { select: { id: true }, take: 1 },
@@ -3527,7 +3883,7 @@ export class SubcontractorService {
         const reasons = computeBornRollBlockingReasons(roll);
         if (reasons.length > 0) {
           throw AppError.conflict(
-            `Top işlenmiş, iptal güvenli değil (Roll ${roll.id.slice(0, 8)}…): ${reasons.join(", ")}`,
+            `Top işlenmiş, iptal güvenli değil — ${roll.barcode ?? UNBARCODED_ROLL_LABEL}: ${reasons.join(", ")}`,
           );
         }
       }
@@ -3546,6 +3902,7 @@ export class SubcontractorService {
           where: { id: { in: bornRollIds } },
           select: {
             id: true,
+            barcode: true,
             currentStepId: true,
             status: true,
             operations: { select: { id: true }, take: 1 },
@@ -3558,7 +3915,7 @@ export class SubcontractorService {
           const reasons = computeBornRollBlockingReasons(roll);
           if (reasons.length > 0) {
             throw AppError.conflict(
-              `Top bu sırada işlenmiş, iptal güvenli değil (Roll ${roll.id.slice(0, 8)}…): ${reasons.join(", ")}`,
+              `Top bu sırada işlenmiş, iptal güvenli değil — ${roll.barcode ?? UNBARCODED_ROLL_LABEL}: ${reasons.join(", ")}`,
             );
           }
         }
@@ -3634,31 +3991,15 @@ export class SubcontractorService {
       //    ⚠️ SIRALI await — `tx.*` üzerinde `Promise.all` YASAK (pg adapter tek
       //    connection'ı seri çalıştırır; pg@9'da hard-error). Paralellik zaten
       //    illüzyondu, davranış değişmiyor.
-      const rollBatchRows = await tx.roll.findMany({
-        where: { id: { in: rollIds } },
-        select: { id: true, barcode: true, batchId: true },
-      });
-      const srcDispatchItems = await tx.subcontractorDispatchItem.findMany({
-        where: {
-          rollId: { in: rollIds },
-          dispatch: { stepId: receipt.stepId, cancelledAt: null, directShippedAt: null },
-        },
-        select: { rollId: true, dispatch: { select: { batchId: true, dispatchNo: true } } },
-      });
-      const rollBatchById = new Map(rollBatchRows.map((r) => [r.id, r]));
-      const mismatches: string[] = [];
-      for (const it of srcDispatchItems) {
-        const roll = rollBatchById.get(it.rollId);
-        if (roll && roll.batchId !== it.dispatch.batchId) {
-          mismatches.push(`${roll.barcode ?? roll.id.slice(0, 8)} (sevk ${it.dispatch.dispatchNo})`);
-        }
-      }
+      //    ⚠️ Guard KALIR (son savunma hattı; önizleme bayat olabilir) ama sorgu
+      //    artık `getCancelPreview` ile ORTAK yardımcıdan gelir — iki kopya
+      //    kaçınılmaz olarak ayrışır ve operatör "güvenli" görüp 409 yerdi.
+      const mismatches = await computeReceiptBatchMismatches(tx, rollIds, receipt.stepId);
       if (mismatches.length > 0) {
-        throw AppError.conflict(
-          `Kabul iptal edilemez — topların parti üyeliği kabulden sonra değişmiş ` +
-            `(birleştirme/taşıma): ${mismatches.join(", ")}. Sevk kaydı eski partiye ` +
-            `bağlı; iptal parti/sevk tutarlılığını bozar.`,
-        );
+        throw AppError.conflict(buildBatchMismatchMessage(mismatches), {
+          code: "BATCH_MISMATCH",
+          items: mismatches,
+        });
       }
 
       // 3) Orijinal Roll'ları SUBCONTRACTOR_CONSUMED'dan AT_SUBCONTRACTOR'a geri

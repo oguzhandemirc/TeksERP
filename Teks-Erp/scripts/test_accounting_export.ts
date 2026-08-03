@@ -2,13 +2,16 @@
 // Test: Muhasebe Excel dökümü (accounting-export.service)
 // Çalıştır: npx tsx scripts/test_accounting_export.ts
 // Kurulum: 1 müşteri (vergi no'lu), 2 ürün (A/B), 1 renk, 1 DISPATCHED sevkiyat
-//   (EXPORT, 2 çuval). Çuval-1: 2 top (A, renkli, 150cm, 35'er m, 65,8kg),
-//   Çuval-2: 1 top (A, 150cm, 35m) + 1 top (B, ensiz, 40m, 40kg). + 1 iade (A, 10m).
+//   (EXPORT, 2 çuval). Sevk ANINDA 5 top / 155m:
+//     Çuval-1: 2 top (A, renkli, 150cm, 35'er m, 65,8kg) + iade edilen top (A, 150cm, 10m)
+//     Çuval-2: 1 top (A, 150cm, 35m) + 1 top (B, ensiz, 40m, 40kg)
+//   Sonra 10m'lik top İADE alınır → sevkiyattan KOPARILIR (aşağıdaki nota bak) →
+//   canlı çuval içeriği 4 top / 145m'e düşer, brüt geri-ekleme onu 5/155'e döndürür.
 // Doğrulananlar:
-//   1. shipments: tek satır, çuval/top/metre/kg/vergi no/yön doğru
-//   2. detail: ürün+renk+en grubu (A=3 top/105m, B=1 top/40m)
-//   3. byCustomer: müşteri icmali (1 sevk, 145m, 105,8kg)
-//   4. byProduct: ürün icmali (A 105m, B 40m)
+//   1. shipments: tek satır, çuval/top/metre/kg/vergi no/yön doğru (BRÜT)
+//   2. detail: ürün+renk+en grubu (A=4 top/115m brüt, B=1 top/40m)
+//   3. byCustomer: müşteri icmali (1 sevk, 155m brüt, 105,8kg)
+//   4. byProduct: ürün icmali (A 115m brüt, B 40m)
 //   5. returns + returnMeters (iade A, 10m)
 //   6. totals tutarlı; filtre (filter[customerId]) scope eder
 // =============================================================================
@@ -53,20 +56,32 @@ async function main() {
   const someUser = await prisma.user.findFirst({ select: { id: true } });
   if (!someUser) throw new Error("Seed kullanıcı yok — önce npm run seed");
 
+  // ⚠️ FIXTURE ADLARI ÇAKIŞAMAZ. Bu test master-data'yı `prisma.*.create` ile
+  // DOĞRUDAN yazar — Item/ColorService'in ad-mükerrer guard'ı devreye girmez, yani
+  // gerçekçi bir ad sessizce İKİNCİ AKTİF KAYIT doğurur. Eskiden "MC 156" /
+  // "NEPS VUAL" / "BEYAZ-GÜMÜŞ" kullanılıyordu; fabrikanın canlı verisinde
+  // `nepsvual` (aktif ürün) ve `RNK-260717-6696` "BEYAZ-GÜMÜŞ" (aktif renk) ZATEN
+  // VAR → test koştuğu sürece `test_consistency` §18 mükerrer-ad bekçisi haklı
+  // olarak kırmızıya döner, koşum çökerse artık kalıcı olur. Adlar artık `ts` ile
+  // benzersiz; doğrulanan şey (ürün+renk+en gruplaması) aynen sınanır.
+  const NAME_A = `TEST-AEX KUMAŞ A ${ts}`;
+  const NAME_B = `TEST-AEX KUMAŞ B ${ts}`;
+  const NAME_CUST = `TEST-AEX MÜŞTERİ ${ts}`;
+
   const customer = await prisma.customer.create({
-    data: { code: `TST-AEX-${ts}`, name: "TEST MUHASEBE MÜŞTERİ", taxNumber: "1234567890" },
+    data: { code: `TST-AEX-${ts}`, name: NAME_CUST, taxNumber: "1234567890" },
     select: { id: true },
   });
   const itemA = await prisma.item.create({
-    data: { code: `TST-AEX-A-${ts}`, name: "MC 156", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-AEX-A-${ts}`, name: NAME_A, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const itemB = await prisma.item.create({
-    data: { code: `TST-AEX-B-${ts}`, name: "NEPS VUAL", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-AEX-B-${ts}`, name: NAME_B, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const color = await prisma.color.create({
-    data: { code: `TST-AEX-C-${ts}`, name: "BEYAZ-GÜMÜŞ" },
+    data: { code: `TST-AEX-C-${ts}`, name: `TEST-AEX RENK ${ts}` },
     select: { id: true },
   });
   const shipment = await prisma.shipment.create({
@@ -110,10 +125,30 @@ async function main() {
   const r2 = await mkRoll(2, itemA.id, color.id, sack1.id, 35, 150);
   const r3 = await mkRoll(3, itemA.id, color.id, sack2.id, 35, 150);
   const r4 = await mkRoll(4, itemB.id, null, sack2.id, 40, null);
+  // 5. top: sevk edildi, SONRA iade alındı. Ayrı bir top olması ŞART — iade
+  // TAMAMEN TOP BAZLIDIR (`return.service.createReturn`: `qty = roll.currentQty`),
+  // kısmi metraj iadesi diye bir şey yok.
+  const r5 = await mkRoll(5, itemA.id, color.id, sack1.id, 10, 150);
+
+  // ⚠️ İADE = TOPU SEVKİYATTAN KOPARIR. `createReturn` tx'i topu
+  // `shipmentId: null, sackId: null, status: WAREHOUSE` yapar → iade edilen top
+  // çuvalın CANLI içeriğinden düşer. Muhasebe dökümü bunu `RollReturn`'den geri
+  // ekleyerek sevk anını (BRÜT) kurar.
+  //
+  // Bu iki satır fixture'ın en kritik parçasıdır: bunlar olmadan top hem çuvalda
+  // (35+35+35+40+10=155) hem de geri-eklemede (+10) sayılırdı; toplam yine 155
+  // çıktığı için test YEŞİL kalır ama artık HİÇBİR ŞEYİ ayırt etmez — geri-ekleme
+  // "kopmuş topu geri getiriyor" mu yoksa "duran topu ikinci kez sayıyor" mu,
+  // sonuçlar birebir aynı olur. Gerçek akışta üretilemeyen bir duruma göre
+  // beklenti yazmak, testi sessizce kör bırakır.
+  await prisma.roll.update({
+    where: { id: r5.id },
+    data: { status: "WAREHOUSE", shipmentId: null, sackId: null },
+  });
 
   const ret = await prisma.rollReturn.create({
     data: {
-      rollId: r1.id,
+      rollId: r5.id,
       fromShipmentId: shipment.id,
       customerId: customer.id,
       itemId: itemA.id,
@@ -127,6 +162,23 @@ async function main() {
   });
 
   try {
+    // 0) FIXTURE SEDDİ — brüt rakamın NEREDEN geldiğini sabitler.
+    // Çuvalların CANLI içeriği iadeden sonra 4 top / 145m olmalı. Bu doğrulanmazsa
+    // aşağıdaki "5 top / 155m" beklentisi iki bambaşka sebeple de sağlanabilirdi
+    // (geri-ekleme çalıştı / iade edilen top hiç kopmadı ve iki kez sayıldı) ve
+    // test hangisi olduğunu SÖYLEYEMEZDİ. Burası kırmızıysa sorun serviste değil,
+    // fixture'ın gerçek `createReturn` davranışını taklit etmeyi bırakmasındadır.
+    const live = await prisma.roll.aggregate({
+      where: { shipmentId: shipment.id, sackId: { not: null } },
+      _count: { _all: true },
+      _sum: { currentQty: true },
+    });
+    check(
+      "fixture: iade sonrası çuvalların CANLI içeriği 4 top / 145m (brüt geri-eklemeden ÖNCE)",
+      live._count._all === 4 && Number(live._sum.currentQty ?? 0) === 145,
+      `${live._count._all}/${Number(live._sum.currentQty ?? 0)}`
+    );
+
     // filter[customerId] ile scope — gerçek query yolu (parseQueryParams).
     const req = { query: { "filter[customerId]": customer.id } } as unknown as Request;
     const res = await buildDispatchAccountingExport(req);
@@ -135,48 +187,56 @@ async function main() {
     // 1) shipments
     check("shipments: tek satır", d.shipments.length === 1, `${d.shipments.length}`);
     const s = d.shipments[0];
+    // ⚠️ SEVK SATIRLARI BRÜT'TÜR — iade edilen 10m'lik top sevk rakamından
+    // DÜŞÜLMEZ, `RollReturn` üzerinden geri eklenir. Fixture sevk anında 5 top /
+    // 155m gönderir, sonra 1 top / 10m iade alınır (canlı içerik 4/145'e düşer,
+    // yukarıdaki fixture seddi bunu kanıtlar). Net = 155 − 10 = 145'i muhasebeci
+    // "sevk − iade" ile kendisi bulur. Eskiden satırlar net idi VE ayrıca iade
+    // sayfası vardı → aynı metraj iki kez düşüyordu. Bu testi "145" beklemeye geri
+    // çevirmek o çift-düşümü diriltir.
     check(
-      "shipment: 2 çuval / 4 top / 145m / 105,8kg",
-      s?.sackCount === 2 && s?.rollCount === 4 && s?.totalMeters === 145 && Math.abs(s.totalKg - 105.8) < 0.001,
+      "shipment BRÜT: 2 çuval / 5 top / 155m / 105,8kg",
+      s?.sackCount === 2 && s?.rollCount === 5 && s?.totalMeters === 155 && Math.abs(s.totalKg - 105.8) < 0.001,
       `${s?.sackCount}/${s?.rollCount}/${s?.totalMeters}/${s?.totalKg}`
     );
     check("shipment: vergi no + yön", s?.taxNumber === "1234567890" && s?.destination === "EXPORT", `${s?.taxNumber}/${s?.destination}`);
 
     // 2) detail (ürün+renk+en grubu)
-    const dA = d.detail.find((r) => r.itemName === "MC 156");
-    const dB = d.detail.find((r) => r.itemName === "NEPS VUAL");
-    check("detail: MC 156 3 top / 105m / 150cm", dA?.rollCount === 3 && dA?.meters === 105 && dA?.width === 150, `${dA?.rollCount}/${dA?.meters}/${dA?.width}`);
-    check("detail: NEPS VUAL 1 top / 40m / ensiz", dB?.rollCount === 1 && dB?.meters === 40 && dB?.width === null);
+    const dA = d.detail.find((r) => r.itemName === NAME_A);
+    const dB = d.detail.find((r) => r.itemName === NAME_B);
+    check("detail BRÜT: kumaş A 4 top / 115m / 150cm", dA?.rollCount === 4 && dA?.meters === 115 && dA?.width === 150, `${dA?.rollCount}/${dA?.meters}/${dA?.width}`);
+    check("detail: kumaş B 1 top / 40m / ensiz", dB?.rollCount === 1 && dB?.meters === 40 && dB?.width === null);
 
     // 3) byCustomer
     check("byCustomer: tek müşteri", d.byCustomer.length === 1);
     const c = d.byCustomer[0];
     check(
-      "byCustomer: 1 sevk / 4 top / 2 çuval / 145m / 105,8kg",
-      c?.shipmentCount === 1 && c?.rollCount === 4 && c?.sackCount === 2 && c?.totalMeters === 145 && Math.abs(c.totalKg - 105.8) < 0.001
+      "byCustomer BRÜT: 1 sevk / 5 top / 2 çuval / 155m / 105,8kg",
+      c?.shipmentCount === 1 && c?.rollCount === 5 && c?.sackCount === 2 && c?.totalMeters === 155 && Math.abs(c.totalKg - 105.8) < 0.001
     );
 
     // 4) byProduct
-    const pA = d.byProduct.find((p) => p.itemName === "MC 156");
-    const pB = d.byProduct.find((p) => p.itemName === "NEPS VUAL");
-    check("byProduct: MC 156 105m / 3 top", pA?.totalMeters === 105 && pA?.rollCount === 3);
-    check("byProduct: NEPS VUAL 40m / 1 top", pB?.totalMeters === 40 && pB?.rollCount === 1);
+    const pA = d.byProduct.find((p) => p.itemName === NAME_A);
+    const pB = d.byProduct.find((p) => p.itemName === NAME_B);
+    check("byProduct BRÜT: kumaş A 115m / 4 top", pA?.totalMeters === 115 && pA?.rollCount === 4);
+    check("byProduct: kumaş B 40m / 1 top", pB?.totalMeters === 40 && pB?.rollCount === 1);
 
     // 5) returns
     check("returns: 1 iade satırı", d.returns.length === 1, `${d.returns.length}`);
     const rr = d.returns[0];
     check(
       "return: ürün/müşteri/sevk/metre/neden",
-      rr?.itemName === "MC 156" && rr?.customerName === "TEST MUHASEBE MÜŞTERİ" && rr?.fromShipmentNo === `TEST-AEX-${ts}` && rr?.meters === 10 && rr?.reason === "Test iade"
+      rr?.itemName === NAME_A && rr?.customerName === NAME_CUST && rr?.fromShipmentNo === `TEST-AEX-${ts}` && rr?.meters === 10 && rr?.reason === "Test iade"
     );
 
     // 6) totals
+    // Brüt sevk + ayrı iade satırı → muhasebeci "155 − 10 = 145" ile net'i bulur.
     check(
-      "totals: 1 sevk / 2 çuval / 4 top / 145m / 105,8kg / iade 10m",
+      "totals BRÜT: 1 sevk / 2 çuval / 5 top / 155m / 105,8kg / iade 10m",
       d.totals.shipmentCount === 1 &&
         d.totals.sackCount === 2 &&
-        d.totals.rollCount === 4 &&
-        d.totals.totalMeters === 145 &&
+        d.totals.rollCount === 5 &&
+        d.totals.totalMeters === 155 &&
         Math.abs(d.totals.totalKg - 105.8) < 0.001 &&
         d.totals.returnMeters === 10,
       `${d.totals.shipmentCount}/${d.totals.sackCount}/${d.totals.rollCount}/${d.totals.totalMeters}/${d.totals.totalKg}/${d.totals.returnMeters}`
@@ -217,7 +277,7 @@ async function main() {
     check("selection: geçersiz ids → 400 (500 değil)", badIdsRejected);
   } finally {
     await prisma.rollReturn.delete({ where: { id: ret.id } }).catch(() => {});
-    await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id, r4.id] } } });
+    await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id, r4.id, r5.id] } } });
     await prisma.sack.deleteMany({ where: { shipmentId: shipment.id } });
     await prisma.shipment.delete({ where: { id: shipment.id } }).catch(() => {});
     await prisma.color.delete({ where: { id: color.id } }).catch(() => {});

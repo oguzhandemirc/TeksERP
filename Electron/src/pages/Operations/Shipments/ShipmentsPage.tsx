@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { PanelRight, Award } from "lucide-react";
+import { PanelRight, Award, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -11,10 +11,17 @@ import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { RowOpenItems, CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { RefreshButton } from "@/components/RefreshButton";
+import { PermissionGate } from "@/components/PermissionGate";
+// Fatura dialog'u Muhasebe Sevkiyat klasöründe yaşıyor ama yapısal tip alır
+// (`InvoiceTarget`) — iki ekran TEK dialog + TEK uç kullansın diye kopyalanmadı.
+import { InvoiceDialog } from "@/pages/Operations/AccountingDispatch/InvoiceDialog";
+import { BulkInvoiceAction } from "@/pages/Operations/AccountingDispatch/BulkInvoiceAction";
 import { downloadDocsPdf, downloadDocsExcel, type DocTarget } from "./shipmentDocExport";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import type { PrintedDocType } from "@/services/printedDocumentService";
 import { useDataTable } from "@/hooks/useDataTable";
+import { useHideCancelled } from "@/hooks/useHideCancelled";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { customerService } from "@/pages/Customers/service";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -39,6 +46,17 @@ const FILTERS: FilterDef[] = [
       { value: "PLANNED", label: shipmentStatusLabels.PLANNED },
       { value: "DISPATCHED", label: shipmentStatusLabels.DISPATCHED },
       { value: "CANCELLED", label: shipmentStatusLabels.CANCELLED },
+    ],
+  },
+  {
+    // Muhasebenin asıl sorusu: "hangi sevkin faturası kesilmedi?" Backend
+    // `filter[invoiced]` ile invoicedAt NULL/NOT NULL ayırır (listShipments).
+    kind: "select",
+    key: "invoiced",
+    label: "Fatura",
+    options: [
+      { value: "true", label: "Kesildi" },
+      { value: "false", label: "Kesilmedi" },
     ],
   },
   {
@@ -110,6 +128,7 @@ const SHIPMENT_DOCS: { docType: PrintedDocType; label: string; title: string; ic
 export function ShipmentsPage() {
   const [selected, setSelected] = useState<ShipmentListItem | null>(null);
   const [docView, setDocView] = useState<{ docType: PrintedDocType; sourceId: string; title: string } | null>(null);
+  const [invoiceRow, setInvoiceRow] = useState<ShipmentListItem | null>(null);
   const [searchParams] = useSearchParams();
 
   // Liste→detay bağlam taşıma: aktif kumaş/renk (içerik) filtresi VARSA detay path'ine
@@ -129,12 +148,15 @@ export function ShipmentsPage() {
     return qs ? `${base}?${qs}` : base;
   };
 
+  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
+
   const { table, query, search, setSearch, pagination } = useDataTable<ShipmentListItem>({
     queryKey: QUERY_KEY,
     fetchFn: shipmentService.listCursor,
     columns: shipmentColumns,
     defaultPageSize: 50,
     enableSelection: true,
+    forceFilters,
   });
 
   // Belge (irsaliye/fiş) YALNIZ sevk edilmiş (DISPATCHED) sevkiyatta var — donmuş.
@@ -172,6 +194,14 @@ export function ShipmentsPage() {
         placeholder="Sevkiyat no, firma, plaka, sürücü ara..."
         table={table}
         exportName="Sevkiyatlar"
+        actions={
+          <ToolbarToggle
+            checked={showCancelled}
+            onCheckedChange={setShowCancelled}
+            label="İptalleri göster"
+            title="İptal edilmiş sevkiyatlar varsayılan olarak gizlidir."
+          />
+        }
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
       <DataTable<ShipmentListItem>
@@ -183,15 +213,27 @@ export function ShipmentsPage() {
         exportName="Sevkiyatlar"
         selectionHint={null}
         bulkActions={(rows) => {
-          const docCount = rows.filter((r) => r.status === "DISPATCHED").length;
+          // Bu liste PLANNED/CANCELLED satır da içerir; backend faturalamayı
+          // DISPATCHED'a kilitler (planlı sevkiyatın malı çıkmadı → ona kesilen
+          // fatura sahte olurdu). Uygun olmayanları ÖNCEDEN süz: aksi halde
+          // kullanıcı 5 satır seçip "2 başarısız" uyarısı alır ve sebebini
+          // ekranda göremez. Belge dışa aktarımı da aynı statüyle sınırlı.
+          const dispatched = rows.filter((r) => r.status === "DISPATCHED");
           return (
-            <ExportMenu
-              label={`Belgeler (${docCount})`}
-              align="start"
-              disabled={docCount === 0}
-              onPdf={() => handleDocs("pdf", rows)}
-              onExcel={() => handleDocs("excel", rows)}
-            />
+            <>
+              <BulkInvoiceAction
+                rows={dispatched}
+                queryKey={QUERY_KEY}
+                onDone={() => table.resetRowSelection()}
+              />
+              <ExportMenu
+                label={`Belgeler (${dispatched.length})`}
+                align="start"
+                disabled={dispatched.length === 0}
+                onPdf={() => handleDocs("pdf", rows)}
+                onExcel={() => handleDocs("excel", rows)}
+              />
+            </>
           );
         }}
         rowContextMenu={(s) => {
@@ -215,12 +257,25 @@ export function ShipmentsPage() {
                   ))}
                 </>
               )}
+              {/* Fatura işareti — yalnız ÇIKMIŞ sevkiyatta anlamlı (sevk edilmemiş
+                  mal faturalanmaz). Aynı işaret Muhasebe Sevkiyat ekranından da
+                  verilebilir; ikisi de tek dialog + tek ucu kullanır. */}
+              {s.status === "DISPATCHED" && (
+                <PermissionGate permission="shipping:invoice">
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => setInvoiceRow(s)}>
+                    <Receipt /> {s.invoiceNo ? "Fatura bilgisini düzenle" : "Faturalandı işaretle"}
+                  </ContextMenuItem>
+                </PermissionGate>
+              )}
               <ContextMenuSeparator />
               <CopyMenuItem label="Sevkiyat No" value={s.shipmentNo} />
             </>
           );
         }}
       />
+
+      <InvoiceDialog row={invoiceRow} onClose={() => setInvoiceRow(null)} queryKey={QUERY_KEY} />
       <PrintedDocDialog
         docType={docView?.docType ?? "QUALITY_CERTIFICATE"}
         sourceId={docView?.sourceId ?? null}

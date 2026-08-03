@@ -135,6 +135,27 @@ export function docTableCss(s: ResolvedDocStyle, selectors: string[]): string {
   return rules.join("\n  ");
 }
 
+/**
+ * Çok sayfaya taşan tablolar için sayfalama hijyeni. HER belgede geçerli, ayara
+ * bağlı değil — bunlar tercih değil, doğru baskının koşulu.
+ *
+ *  • `thead { table-header-group }` — tablo sayfa sınırını aşınca başlık satırı
+ *    (ve `buildDocTable`'ın thead'e bastığı BAŞLIK hücresi, ör. "ÇUVAL LİSTESİ")
+ *    devam sayfasında TEKRAR eder. Bu kural yokken 1,5 sayfalık çuval listesinin
+ *    ikinci sayfası başlıksız, kolon adları olmayan çıplak sayı bloğu olarak
+ *    basılıyordu — okuyan hangi kolonun ne olduğunu bilmiyordu.
+ *  • `tr { break-inside: avoid }` — bir satır iki sayfaya BÖLÜNMEZ.
+ *  • `.tot` (toplam satırı) tbody'nin sonunda; kendi başına sayfa açmasın diye
+ *    üstündeki satırla birlikte tutulur.
+ *
+ * `page-break-*` eşlenikleri eski WebKit yolu için birlikte basılır (Chromium
+ * ikisini de tanır; expo-print ve Electron aynı motoru kullanır).
+ */
+export const DOC_PAGINATION_CSS = `
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  tr.tot { break-before: avoid; page-break-before: avoid; }`;
+
 /** Logo CSS'i — her belgenin taban CSS'ine eklenir (logo yoksa da zararsız). */
 export const DOC_LOGO_CSS = `
   .doc-logo { display: block; max-height: 44px; max-width: 170px; object-fit: contain; margin-bottom: 4px; }

@@ -29,8 +29,13 @@ import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-gua
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
 
-/** Taşınabilir statüler — fasondaki/tüketilmiş/iptal/sevkli hariç (çuval/sevk ayrıca guard'lı). */
-const MOVABLE_STATUSES: RollStatus[] = [RollStatus.IN_PRODUCTION, RollStatus.STOCK, RollStatus.WAREHOUSE];
+/**
+ * Taşınabilir statüler — fasondaki/tüketilmiş/iptal/sevkli hariç (çuval/sevk ayrıca guard'lı).
+ * EXPORT: Tambur saha düzeltmesi ("Mevcut Topu Buraya Al") aynı kümeye bakar —
+ * elle kopyalanan ikinci bir liste, biri güncellenip diğeri unutulduğunda önizleme
+ * ile uygulamanın SESSİZCE ayrışmasına yol açardı.
+ */
+export const MOVABLE_STATUSES: RollStatus[] = [RollStatus.IN_PRODUCTION, RollStatus.STOCK, RollStatus.WAREHOUSE];
 /** Geri taşımada engelleyen işlemler — kesim/kalite kararı (fason logistiği hariç). */
 const BLOCKING_OPS: RollOperationType[] = [
   RollOperationType.KURSUN_APPLIED,
@@ -354,6 +359,25 @@ export class WorkOrderManualMoveService {
     const woBlockReason = manualMoveWoBlockReason(ctx.woStatus);
     if (t.type === "EXTERNAL") {
       warnings.push("Fason adımına taşınıyor — mal orada üretimde bekler, sevki ayrıca (Fason Sevk) yapılır.");
+      // YANLIŞ İŞ EMRİNE KABUL uyarısı: mal fiziksel olarak fasondayken kabul yanlış
+      // WO'ya girilmişse doğru araç "Konumu Düzelt" DEĞİL, KABUL İPTALİ'dir — iptal
+      // orijinal topları AT_SUBCONTRACTOR'a döndürür ve sevki yeniden açar (mal dışarıda
+      // kalır). Manuel taşıma ise — tasarım gereği — topu fabrika İÇİNE (IN_PRODUCTION)
+      // koyar; mal dışarıdayken bu envanteri yalanlar ve operatör tıkanır. Bu yüzden
+      // HEDEF fason adımında iptal edilmemiş makbuz varsa önden söyle.
+      // Kapsam hedef ADIMDIR (WO geneli değil): başka bir fason adımının makbuzunu iptal
+      // etmek topları buraya döndürmez — o uyarı yanlış yere yönlendirirdi.
+      // Tek findFirst — önizleme sık çağrılıyor; @@index([stepId]) kapsıyor.
+      const openReceipt = await prisma.subcontractorReceipt.findFirst({
+        where: { workOrderId, stepId: t.id, cancelledAt: null },
+        select: { receiptNo: true },
+        orderBy: { receivedAt: "desc" },
+      });
+      if (openReceipt) {
+        warnings.push(
+          `Bu iş emrinde kabul edilmiş bir makbuz var (${openReceipt.receiptNo}). Mal fiziksel olarak fasondaysa (yanlış iş emrine kabul yapıldıysa) "Konumu Düzelt" değil KABUL İPTALİ kullanın.`,
+        );
+      }
     }
 
     // KURŞUN BYPASS uyarısı: taşıma bir kurşun adımını BOŞALTIRSA (ya da ileri

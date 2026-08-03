@@ -1,8 +1,13 @@
 // =============================================================================
 // TeksERP - Station Capability Service
 // =============================================================================
-// Bir istasyonun uygulayabileceği renk + özellik yetkinliklerini yönetir.
+// Bir istasyonun uygulayabileceği ÖZELLİK yetkinliklerini yönetir.
 // İç istasyon ve fason istasyonu ayrımı YOK — her istasyon buradan yönetilir.
+//
+// ⚠️ RENK ARTIK KISIT DEĞİL (2026-08-02). `colors` alanı okuma yanıtlarında
+// geriye dönük uyum için duruyor ama hiçbir yer onu filtre olarak KULLANMAZ:
+// rota adımının renk seçicisi tüm aktif renk kataloğunu gösterir. Gerekçe ve
+// kalıcı not: `schema.prisma` → StationColor. Buraya renk kısıtı geri ekleme.
 //
 // Davranış: Bir istasyondan geçen rulo, o istasyonun propertyCapabilities
 // listesindeki tüm özellikleri otomatik kazanır (per-roll action içinde
@@ -43,8 +48,12 @@ export interface StationCapabilityDto {
  * Renk/özellik uygulayabilirliği — kategori varsa bayraklarından türetilir
  * (fason kabul otomatik kopyalama mekanizması için anlamlı), yoksa ikisi de
  * açık kabul edilir (operatör manuel atayabilir).
+ *
+ * EXPORT: `fabric-property.service` özellik doğarken istasyon bağını kurarken
+ * aynı kuralı uygular. Kuralı ORAYA KOPYALAMA — "kategori yoksa açık" davranışı
+ * iki yerde ayrı yazılırsa biri değişince sessizce ayrışır.
  */
-function deriveCapabilityFlags(station: {
+export function deriveCapabilityFlags(station: {
   kind: StationKind;
   defaultCategory: { appliesColor: boolean; appliesProperty: boolean } | null;
 }): {
@@ -144,10 +153,15 @@ export class StationCapabilityService {
    * Bir istasyonun renk + özellik yetkinliklerini topluca değiştirir.
    * Eski liste silinip yeni liste yazılır (replace semantics).
    * Audit'e tek CUD logu yazılır (yetkinlik bütünü tek kayıt gibi davranır).
+   *
+   * ⚠️ `colorIds` OPSİYONEL (2026-08-02): renk artık istasyon bazlı kısıt DEĞİL
+   * (bkz. StationColor deprecation notu). Alan gönderilmezse mevcut renk
+   * satırlarına DOKUNULMAZ — `[]` göndermekle karıştırma, `[]` hepsini SİLER
+   * ve canlıdaki geçmiş atamalar geri dönülemez şekilde gider.
    */
   async setCapabilities(
     stationId: string,
-    data: { colorIds: string[]; propertyIds: string[] },
+    data: { colorIds?: string[]; propertyIds: string[] },
     userId?: string,
   ): Promise<ApiResponse<StationCapabilityDto>> {
     const station = await prisma.station.findUnique({
@@ -172,7 +186,7 @@ export class StationCapabilityService {
     // bayraklarına bağlıdır (kategori yoksa ikisi de açık). Boş listeye izin
     // var (mevcut kayıtları silmek için).
     const { canApplyColor, canApplyProperty } = deriveCapabilityFlags(station);
-    if (data.colorIds.length > 0 && !canApplyColor) {
+    if (data.colorIds && data.colorIds.length > 0 && !canApplyColor) {
       throw AppError.badRequest(
         "Bu istasyona renk atanamaz — atanmış kategori 'renk veren' (appliesColor=true) değil",
       );
@@ -184,7 +198,7 @@ export class StationCapabilityService {
     }
 
     // Renk + özellik referans doğrulaması (her biri DB'de var ve aktif mi?)
-    if (data.colorIds.length > 0) {
+    if (data.colorIds && data.colorIds.length > 0) {
       const colors = await prisma.color.findMany({
         where: { id: { in: data.colorIds }, isActive: true },
         select: { id: true },
@@ -224,14 +238,18 @@ export class StationCapabilityService {
       // yerine `notIn` sil + createMany(skipDuplicates). İki eşzamanlı PUT bayat
       // diff'le birbirinin yazımını ezmez; sonuç her zaman data.colorIds/propertyIds.
       // notIn: [] Prisma'da "tümü" demek → hedef boşsa hepsi silinir (istenen).
-      await tx.stationColor.deleteMany({
-        where: { stationId, colorId: { notIn: data.colorIds } },
-      });
-      if (data.colorIds.length > 0) {
-        await tx.stationColor.createMany({
-          data: data.colorIds.map((colorId) => ({ stationId, colorId })),
-          skipDuplicates: true,
+      // colorIds hiç gönderilmediyse renk tarafı BÜTÜNÜYLE atlanır.
+      if (data.colorIds) {
+        const colorIds = data.colorIds;
+        await tx.stationColor.deleteMany({
+          where: { stationId, colorId: { notIn: colorIds } },
         });
+        if (colorIds.length > 0) {
+          await tx.stationColor.createMany({
+            data: colorIds.map((colorId) => ({ stationId, colorId })),
+            skipDuplicates: true,
+          });
+        }
       }
 
       await tx.stationProperty.deleteMany({
@@ -251,11 +269,11 @@ export class StationCapabilityService {
       tableName: "STATION_CAPABILITY",
       recordId: stationId,
       oldData: {
-        colorIds: oldColors.map((r) => r.colorId),
+        ...(data.colorIds ? { colorIds: oldColors.map((r) => r.colorId) } : {}),
         propertyIds: oldProperties.map((r) => r.propertyId),
       },
       newData: {
-        colorIds: data.colorIds,
+        ...(data.colorIds ? { colorIds: data.colorIds } : {}),
         propertyIds: data.propertyIds,
       },
     });

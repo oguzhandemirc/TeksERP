@@ -12,6 +12,10 @@ const READ = requireAnyPermission("shipping:read", "shipping:write", "mobile:tar
 const WRITE = requireAnyPermission("shipping:write", "mobile:tarti-paket", "mobile:sevkiyat");
 // Muhasebe okuma: sevk fişi + Excel export (satış raporu izni de erişebilir).
 const ACCOUNTING_READ = requireAnyPermission("shipping:read", "shipping:write", "report:sales");
+// Fatura işareti: muhasebeciye `shipping:write` VERİLMEZ (o izin sevkiyat iptalini de
+// açardı) → ayrı, dar kapsamlı izin. `shipping:write` de kabul edilir: sevkiyatçının
+// mevcut yetkisi daralmasın.
+const INVOICE_WRITE = requireAnyPermission("shipping:invoice", "shipping:write");
 
 // ===========================================================================
 // SİPARİŞ SEÇİM — açık siparişler + depo karşılaması (paketleme rehberi)
@@ -174,6 +178,55 @@ router.get("/shipments/:id/sack-contents", verifyToken, READ, controller.getShip
 router.get("/shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, controller.getDispatchReport);
 router.get("/direct-shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, controller.getDirectShipmentDispatchReport);
 router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAccountingExport);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/invoice:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyatı faturalandı olarak işaretle (muhasebe)
+ *     description: >
+ *       Dış muhasebe programındaki fatura no + tarihini sevkiyata iliştirir. ERP fatura
+ *       KESMEZ, yalnız izini tutar. `invoiceNo` null/boş gönderilirse işaret kaldırılır.
+ *       Yalnız DISPATCHED sevkiyat faturalandırılabilir.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               invoiceNo: { type: string, nullable: true, maxLength: 64 }
+ *               invoicedAt: { type: string, format: date-time, nullable: true }
+ *     responses:
+ *       200: { description: Güncellendi }
+ *       400: { description: Sevkiyat henüz sevk edilmedi }
+ *       403: { description: Yetki yok }
+ *       404: { description: Sevkiyat bulunamadı }
+ */
+router.post("/shipments/:id/invoice", verifyToken, INVOICE_WRITE, controller.setShipmentInvoice);
+
+/**
+ * @openapi
+ * /api/shipping/direct-shipments/{id}/invoice:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Fasondan doğrudan sevki faturalandı olarak işaretle (muhasebe)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Güncellendi }
+ *       403: { description: Yetki yok }
+ *       404: { description: Kayıt bulunamadı }
+ */
+router.post("/direct-shipments/:id/invoice", verifyToken, INVOICE_WRITE, controller.setDirectShipmentInvoice);
 
 // ===========================================================================
 // SEVKİYAT — havuzdan çuval seçerek kur + yaşam döngüsü

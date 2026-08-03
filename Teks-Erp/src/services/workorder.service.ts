@@ -66,6 +66,10 @@ import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-loc
 // `kursun-bypass.service`'i import etmek burada döngü yaratırdı.
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { computeWoInput } from "./helpers/coverage.helper";
+import {
+  buildHideCancelledWhere,
+  HIDE_CANCELLED_FILTER,
+} from "./helpers/hidden-status.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import {
   createBatchTx,
@@ -703,6 +707,35 @@ export class WorkOrderService {
           );
         }
       }
+
+      // ── Özellik başına rota kapsaması ────────────────────────────────────
+      // 2026-08-02: bu kontrol eskiden YALNIZ replace/updateTargetProperties'te
+      // vardı. Asimetri şuna yol açıyordu: API'den ZIMPARALI hedefiyle iş emri
+      // AÇILABİLİYOR ama aynı iş emrine sonradan EKLENEMİYOR (409). Yukarıdaki
+      // kategori kontrolü "özellik veren bir adım var mı" der; bu blok "ŞU
+      // özelliği veren bir adım var mı" der — ikisi farklı sorular (rotada
+      // boyahane olması zımparanın uygulanacağı anlamına gelmez).
+      // Create'te tüm adımlar PENDING olduğu için uygun küme = rotadaki tüm
+      // istasyonların yetenekleri; locks helper'ının COMPLETED elemesine gerek yok.
+      if (targetPropertyIds.length > 0) {
+        const routeStationIds = [...new Set(finalSteps.map((s) => s.stationId))];
+        const caps = await prisma.stationProperty.findMany({
+          where: { stationId: { in: routeStationIds } },
+          select: { propertyId: true },
+        });
+        const applicable = new Set(caps.map((c) => c.propertyId));
+        const uncoveredIds = targetPropertyIds.filter((pid) => !applicable.has(pid));
+        if (uncoveredIds.length > 0) {
+          const uncovered = await prisma.fabricProperty.findMany({
+            where: { id: { in: uncoveredIds } },
+            select: { name: true },
+          });
+          const names = uncovered.map((p) => p.name).join(", ");
+          throw AppError.badRequest(
+            `Şu özelliği uygulayabilecek istasyon rotada yok: ${names}. Uygun istasyonu rotaya ekleyin ya da o istasyonun yetenek listesine bu özelliği tanımlayın.`,
+          );
+        }
+      }
     }
 
     // ── workOrderNumber / İş Emri No ─────────────────────────────────────────
@@ -1166,6 +1199,14 @@ export class WorkOrderService {
     const params = parseQueryParams(req);
     // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
     params.sortBy = resolveSortBy(params.sortBy, WO_SORTABLE_FIELDS);
+    // İptal gizleme bayrağı: buildWhereClause BU serviste allowlist'ten geçmeyen
+    // her filtre anahtarını body'ye kopyalar (Order'daki safeFilters süzgeci burada
+    // YOK) → bayrak `where.hideCancelled` olarak Prisma'ya sızar ve "Unknown
+    // argument" 500'ü verirdi. Okuyup filtre kümesinden ÇIKARIYORUZ.
+    const hideCancelledWhere = buildHideCancelledWhere(params.filters, [
+      WorkOrderStatus.CANCELLED,
+    ]);
+    delete params.filters[HIDE_CANCELLED_FILTER];
     // Arama kapsamı liste kolonlarıyla hizalı: İE no + parti no + kumaş/renk +
     // sipariş bağı üzerinden müşteri adı VE sipariş no (nested some → EXISTS
     // subquery). Sipariş no ile de aranabilmesi siparişten üretim emrine
@@ -1183,6 +1224,7 @@ export class WorkOrderService {
       params.search
     );
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
+    if (hideCancelledWhere) Object.assign(where, hideCancelledWhere);
     // Arşivli (isActive=false) WO'lar default'ta gizli — ?withArchived=true override
     if (req.query.withArchived !== "true") {
       (where as Record<string, unknown>).isActive = true;

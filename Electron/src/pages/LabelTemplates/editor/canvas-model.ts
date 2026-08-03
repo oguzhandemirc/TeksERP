@@ -10,6 +10,7 @@ import type {
   CanvasLayout,
   CanvasRotation,
   Code128Element,
+  ElementCondition,
   FieldElement,
   LabelElement,
   LabelElementType,
@@ -232,6 +233,41 @@ export function snapRotation(deg: number): CanvasRotation {
 }
 
 // Çoklu seçim hizalama/boşluk eşitleme → ./canvas-align (300 satır sınırı).
+
+// --- Koşullu basım (showIf) yardımcıları ---------------------------------
+
+/** Koşulu insan diline çevir — rozet/ipucu metni. Kod → ad çevrimi `gradeName`
+ *  ile (kalite kataloğu); ad bulunamazsa KOD basılır (silinmiş/pasif derece
+ *  sessizce kaybolmasın, tasarımcı ölü koşulu görsün). */
+export function describeCondition(
+  cond: ElementCondition,
+  gradeName: (code: string) => string | undefined,
+): string {
+  const names = cond.values.map((c) => gradeName(c) ?? c).join(", ");
+  return cond.op === "notIn" ? `${names} DIŞINDA basılır` : `Yalnız ${names} basılır`;
+}
+
+/**
+ * İki koşul aynı anda sağlanabilir mi? Hayırsa elemanlar hiçbir baskıda birlikte
+ * ÇIKMAZ → çakışma uyarısı yanlış alarmdır (asıl kullanım: "1. KALİTE" ve
+ * "2. KALİTE" damgalarını AYNI noktaya koymak). Kesin cevap yalnız aynı alanda +
+ * aynı `in`/`notIn` yönünde verilebilir; karışık yönlerde temkinli davranıp
+ * "birlikte çıkabilir" deriz (yanlış alarm, sessiz kaçırmaya yeğdir).
+ */
+export function conditionsMutuallyExclusive(a?: ElementCondition, b?: ElementCondition): boolean {
+  if (!a || !b || a.field !== b.field) return false;
+  // Yerel-BAĞIMSIZ (backend normalizeConditionValue aynası): kod kimliktir, Türkçe
+  // büyük harf kuralı "1.kalite"yi "1.KALİTE" yapıp eşleşmeyi bozar.
+  const norm = (v: string) => v.trim().toUpperCase();
+  const av = new Set(a.values.map(norm));
+  const bv = b.values.map(norm);
+  // in ∩ in = ∅  → ikisi de basılamaz (kalite tek değerdir).
+  if (a.op === "in" && b.op === "in") return !bv.some((v) => av.has(v));
+  // in ⊆ notIn   → biri basılırken diğeri kesin basılmaz.
+  if (a.op === "in" && b.op === "notIn") return a.values.map(norm).every((v) => bv.includes(v));
+  if (a.op === "notIn" && b.op === "in") return bv.every((v) => av.has(v));
+  return false; // notIn + notIn: ikisi de sağlanan bir kalite hemen hemen her zaman vardır
+}
 
 /** Palet fabrikası — tuvale tıklama noktasına makul varsayılanlarla eleman doğurur. */
 export function makeElement(

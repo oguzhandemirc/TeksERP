@@ -77,6 +77,7 @@ export const PERMISSION_CATALOG = [
   { code: "label-template:write", module: "LOGISTICS", category: "web", description: "Etiket şablonu oluşturma/düzenleme/silme" },
   { code: "shipping:read", module: "LOGISTICS", category: "web", description: "Sevkiyat/çuval listesi/detay görüntüleme" },
   { code: "shipping:write", module: "LOGISTICS", category: "web", description: "Çuval/irsaliye oluşturma, tartı/kapama, sevk" },
+  { code: "shipping:invoice", module: "LOGISTICS", category: "web", description: "Sevkiyatı faturalandı olarak işaretleme (muhasebe)" },
   { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
   { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu oluşturma/düzenleme/silme" },
   { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
@@ -108,5 +109,9 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:kursun-dagitim", module: "MOBILE", category: "mobile", description: "Mobil — Kurşun Dağıtım ekranı" },
   // Ekran değil, KK1 içi yetenek: yalnız seçili ham giriş operatörlerine verilir.
   { code: "mobile:kk1-desen", module: "MOBILE", category: "mobile", description: "KK1 ham girişte inline yeni desen (FABRIC kumaş) oluşturma" },
+  // Ekran değil, Tambur içi yetenek: envanter zincirinde DELİK açar (elle top
+  // yaratma) → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.
+  // Bu yüzden hiçbir PermissionTemplate'e de eklenmedi (katalog koda, atama panele).
+  { code: "mobile:tambur-duzelt", module: "MOBILE", category: "mobile", description: "Tambur — saha düzeltmesi (mevcut topu Tambur'a al + manuel top ekle)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];

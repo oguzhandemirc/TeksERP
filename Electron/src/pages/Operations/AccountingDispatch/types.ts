@@ -16,7 +16,27 @@ export interface DispatchListItem {
   createdAt: string;
   customer: { id: string; code?: string; name: string };
   branch: { id: string; code: string | null; name: string } | null;
+  /** ⚠️ BRÜT — iade düşülmez; fiş/irsaliye ile birebir (bkz. ShipmentListItem). */
   _count: { sacks: number; rolls: number; orders: number; returns: number };
+  totalMeters: number;
+  totalKg: number;
+  invoiceNo: string | null;
+  invoicedAt: string | null;
+}
+
+/** Dönem bandı — filtreli kümenin TAMAMI (`?withSummary=true`), sayfa toplamı değil. */
+export interface DispatchListSummary {
+  shipmentCount: number;
+  totalMeters: number;
+  totalKg: number;
+}
+
+/** listCursor yanıtı + muhasebe özeti (ilk sayfada gelir; ReturnsCursorResponse deseni). */
+export interface DispatchCursorResponse {
+  success: boolean;
+  data: DispatchListItem[];
+  summary?: DispatchListSummary;
+  pagination: { nextCursor: string | null; hasMore: boolean; limit: number; totalEstimate?: number };
 }
 
 export interface DispatchReport {
@@ -85,6 +105,9 @@ export interface AccountingExportData {
     rollCount: number;
     totalMeters: number;
     totalKg: number;
+    /** Fatura izi — işaretlenmemişse boş string / null. */
+    invoiceNo: string;
+    invoicedAt: string | null;
   }>;
   detail: Array<{
     shipmentNo: string;

@@ -16,6 +16,7 @@ import { elementTypeLabels, skippedLanguages } from "@/types/label-canvas";
 import type { UnifiedCatalogField } from "@/services/labelTemplateService";
 import { achievedTextStyleMm, BC_BASE_MM, FONT_MM } from "./canvas-model";
 import { IconPropsSection } from "./IconPropsSection";
+import { ConditionSection } from "./ConditionSection";
 
 interface Props {
   element: LabelElement | null;
@@ -351,6 +352,10 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
           </p>
         </>
       )}
+
+      {/* Koşullu basım — her eleman tipinde geçerli (veri alanı, damga metni, çerçeve).
+          key: eleman değişince "bekleyen mod" paneli sıfırlansın (bkz. condition-edit.ts). */}
+      <ConditionSection key={el.id} element={el} onChange={onChange} />
     </div>
   );
 }

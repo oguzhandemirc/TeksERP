@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useLockStore } from '../store/lockStore';
 import { useVisibleScreens } from '../hooks/useVisibleScreens';
-import { useDeviceType, useIsPortrait } from '../hooks/useDeviceType';
+import { useDeviceType } from '../hooks/useDeviceType';
 import { useLogout } from '../hooks/useLogout';
 import LogoutModals from './LogoutModals';
 import PlaceChip from './session/PlaceChip';
@@ -70,18 +70,14 @@ export default function ScreenChrome({
   // TABLETTE ev ikonu hiç çıkmaz: bölüm değiştirme, profil menüsünde
   // ("Bölüm değiştir" — Ayarlar'ın altında). Telefon eski davranışı korur.
   const isTablet = useDeviceType() === 'tablet';
-  const isPortrait = useIsPortrait();
   const onHomeScreen = route.name === 'ModuleSelect';
   const showHome = hasMultipleVisibleScreens && !onBack && !onHomeScreen && !isTablet;
-  // Telefonda ana sayfada (dashboard = ModuleSelect) profil tuşunda isim GİZLİ —
-  // dar ekranda modül grid'i başlığıyla sıkışmasın; yalnız ikon kalır. Aynı sebeple
-  // Fason Sevk'te de dikey konumdayken gizli (form alanları + header pill'leri dar
-  // ekranda sıkışıyor); yatayda veya tablette isim yazılır (isim menüde tekrarlanmaz).
-  const onFasonSevkScreen = route.name === 'FasonSevk';
-  const showUserName = !(
-    (!isTablet && onHomeScreen) ||
-    (!isTablet && onFasonSevkScreen && isPortrait)
-  );
+  // TELEFONDA profil tuşu yalnız İKONDUR; isim menünün ilk satırında yazar.
+  // Dar ekranda başlık + header pill'leri + isim aynı bara sığmıyor ve ad
+  // kırpılıyordu. Tablette isim butonda kalır (yer var, tek dokunuş bilgi).
+  // 2026-08-03: eskiden yalnız dashboard ve Fason Sevk-dikey için geçerliydi,
+  // yani aynı telefonda ekrandan ekrana buton geometrisi değişiyordu.
+  const showUserName = isTablet;
   // popTo, navigate DEĞİL: v7'de navigate() stack'teki mevcut ekrana geri sarmaz,
   // hep YENİ kopya push eder — her bölüm değişimi eski istasyon ekranlarını mount
   // bırakıp stack'i sınırsız büyütüyordu (arka planda canlı gate/effect yükü).
@@ -165,12 +161,11 @@ export default function ScreenChrome({
               style={styles.userTrigger}
               accessibilityLabel="Kullanıcı menüsü"
             >
-              <View style={styles.userTriggerInner}>
+              <View style={[styles.userTriggerInner, !showUserName && styles.userTriggerIconOnly]}>
                 {/* size 18: pill iç yüksekliği yazı satırıyla (13px→~18) eş kalsın —
                     diğer header pill'leriyle piksel-eş boy. */}
                 <Icon source="account-circle" size={18} color="#fff" />
-                {/* Kullanıcı adı — telefonda dashboard'da gizli (yalnız ikon);
-                    tablet + diğer ekranlarda yazılır. */}
+                {/* Kullanıcı adı — YALNIZ tablette. Telefonda buton salt ikon. */}
                 {showUserName && (
                   <Text style={styles.userTriggerName} numberOfLines={1}>
                     {operatorName}
@@ -180,9 +175,9 @@ export default function ScreenChrome({
             </TouchableRipple>
           }
         >
-          {/* İlk satır — HANGİ KULLANICI olduğun. YALNIZ tetik butonunda ad gizliyken
-              (telefon dashboard / Fason Sevk dikey — orada sadece ikon var). Ad zaten
-              butonda yazıyorsa menüde TEKRAR ETME (çift isim olmasın). */}
+          {/* İlk satır — HANGİ KULLANICI olduğun. Telefonda tetik salt ikon olduğu
+              için adın görünebildiği TEK yer burasıdır. Tablette ad zaten butonda
+              yazıyor → menüde TEKRAR ETME (çift isim olmasın). */}
           {!showUserName && (
             <>
               <View style={styles.menuHeader}>
@@ -333,6 +328,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  // Ad gizliyken (telefon) yatay iç boşluk dikeyle eşitlenir → 36×36 KARE buton.
+  // Metin için ayarlanmış 12px yatay boşluk tek ikonla 42×36 dikdörtgen bırakıyor
+  // ve "yazısı silinmiş buton" gibi duruyordu.
+  userTriggerIconOnly: { paddingHorizontal: 9 },
   userTriggerName: { color: '#fff', fontWeight: '700', fontSize: 13, maxWidth: 160 },
   // Menü ilk satırı — giriş yapan operatörün adı (kim olduğun). Menü yüzeyi beyaz →
   // koyu metin. Ad + (varsa) @kullanıcı-adı alt satır.

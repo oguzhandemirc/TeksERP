@@ -46,12 +46,45 @@ export type LabelElementType =
   | "lengthBanner" // dikey ters metraj bandı (siyah zemin/beyaz değer) — PPLA'da BASILMAZ
   | "icon";        // bakım sembolü (label-icons kataloğu) — PPLB GW/ZPL/raster/HTML; PPLA'da BASILMAZ
 
+// =============================================================================
+// Koşullu basım (showIf) — TEK KAYNAK
+// =============================================================================
+// Saha ihtiyacı: "kalite YALNIZ 2. kalitede yazsın" — 1. kalite topun üstünde
+// kalite satırı hiç görünmesin (ya da tersi). Koşul PAYLOAD'da değil ELEMANDA
+// yaşar: aynı top, farklı şablon → farklı görünürlük.
+//
+// Karşılaştırma değeri = `QualityGrade.code`, ad DEĞİL. `Roll.qualityGrade`
+// snapshot'ı da koddur (schema.prisma: "yazıldığı andaki kalite kodu"); ad
+// panelden serbestçe düzenlenir, kod master-data kimliğidir. UI kullanıcıya
+// ADI gösterir, JSON'a KODU yazar.
+//
+// KALİTESİZ TOPTA KOŞULLU ELEMAN BASILMAZ (op fark etmez, fail-closed): koşul
+// kaliteye bir soru sorar, kalite yoksa cevap yoktur. Aksi halde `notIn` ile
+// kurulmuş bir "1. KALİTE" damgası, kalitesi hiç belirlenmemiş topun (fason
+// dönüşü / açık kumaş — root CLAUDE.md "qualityGrade NULLABLE") üstüne basardı.
+// =============================================================================
+
+/** Koşulun baktığı payload alanı — bugün tek değer. Yeni alan eklerken: burası +
+ *  `elementConditionMet` dalı + Electron aynası (`types/label-canvas.ts`). */
+export type ConditionField = "qualityGrade";
+
+export interface ElementCondition {
+  field: ConditionField;
+  /** `in` = YALNIZ listedeki değerlerde bas · `notIn` = listedekiler DIŞINDA bas. */
+  op: "in" | "notIn";
+  /** Karşılaştırma değerleri — `qualityGrade` için `QualityGrade.code` (1-20 adet). */
+  values: string[];
+}
+
 interface ElementBase {
   /** Editör kimliği (kararlı; sürükle/seç için). */
   id: string;
   /** mm — tuval sol-üst orijinden. */
   x: number;
   y: number;
+  /** Koşullu basım — YOKSA eleman her zaman basılır (bugünkü davranış). Emit
+   *  katmanı `prepareElements` ile uygular; editör tuvalde rozet gösterir. */
+  showIf?: ElementCondition;
   /** Grup kimliği (opsiyonel) — aynı groupId'li elemanlar editörde birlikte seçilir/taşınır/
    *  ölçeklenir. JSON'da taşınır; emit/baskı groupId'i YOK SAYAR (yalnız editör kolaylığı). */
   groupId?: string;
@@ -247,6 +280,10 @@ export function elementSupported(type: LabelElementType, language: string): bool
 // =============================================================================
 
 export const MAX_ELEMENTS = 80;
+/** Bir koşulda seçilebilecek en fazla değer (kalite kodu) — katalog bu boyu aşmaz. */
+export const MAX_CONDITION_VALUES = 20;
+const CONDITION_FIELDS: readonly string[] = ["qualityGrade"];
+const CONDITION_OPS: readonly string[] = ["in", "notIn"];
 const FONTS: readonly string[] = ["sm", "md", "lg", "xl"];
 const ROTS: readonly number[] = [0, 90, 180, 270];
 const TYPES: readonly string[] = ["field", "text", "qr", "code128", "line", "box", "lengthBanner", "icon"];
@@ -265,6 +302,31 @@ function checkMm(v: unknown, what: string, max = MAX_MM): number {
   if (n < 0) bad(`${what} negatif olamaz`);
   if (n > max) bad(`${what} en fazla ${max} mm olabilir`);
   return n;
+}
+
+/** Koşullu basım (showIf) doğrulaması — boş değer listesi REDDEDİLİR: "koşul var
+ *  ama hiçbir değer seçilmemiş" iki farklı şeye okunabilir (hep bas / hiç basma);
+ *  belirsizliği kaydetmek yerine UI'da koşulu kapattırırız (showIf yok = hep bas). */
+function checkCondition(raw: unknown, elId: string): void {
+  if (!raw || typeof raw !== "object") bad(`'${elId}' showIf nesne olmalı`);
+  const c = raw as Record<string, unknown>;
+  if (typeof c.field !== "string" || !CONDITION_FIELDS.includes(c.field)) {
+    bad(`'${elId}' showIf.field geçersiz. İzinli: ${CONDITION_FIELDS.join(", ")}`);
+  }
+  if (typeof c.op !== "string" || !CONDITION_OPS.includes(c.op)) {
+    bad(`'${elId}' showIf.op geçersiz. İzinli: ${CONDITION_OPS.join(", ")}`);
+  }
+  if (!Array.isArray(c.values) || c.values.length === 0) {
+    bad(`'${elId}' showIf.values en az 1 değer içermeli (koşulu kaldırmak için showIf'i sil)`);
+  }
+  const values = c.values as unknown[];
+  if (values.length > MAX_CONDITION_VALUES) {
+    bad(`'${elId}' showIf.values en fazla ${MAX_CONDITION_VALUES} değer içerebilir`);
+  }
+  for (const v of values) {
+    if (typeof v !== "string" || v.trim().length === 0) bad(`'${elId}' showIf.values boş olmayan metinlerden oluşmalı`);
+    if ((v as string).length > 32) bad(`'${elId}' showIf.values değerleri en fazla 32 karakter olabilir`);
+  }
 }
 
 /**
@@ -318,6 +380,7 @@ export function validateCanvasLayout(
     if (el.groupId !== undefined && (typeof el.groupId !== "string" || (el.groupId as string).length > 40)) {
       bad(`'${el.id}' groupId metin olmalı (en fazla 40 karakter)`);
     }
+    if (el.showIf !== undefined) checkCondition(el.showIf, el.id as string);
     if (el.locked !== undefined && typeof el.locked !== "boolean") {
       bad(`'${el.id}' locked boolean olmalı`);
     }
@@ -483,6 +546,52 @@ export function expandMultilineText(elements: LabelElement[]): LabelElement[] {
     });
   }
   return out;
+}
+
+// =============================================================================
+// Koşullu basım — değerlendirme + emit ön hazırlığı (5 dil ORTAK)
+// =============================================================================
+
+/** Koşul değeri normalizasyonu: kenar boşluğu + YEREL-BAĞIMSIZ büyük harf.
+ *  `toLocaleUpperCase("tr-TR")` KULLANMA — kalite KODU bir kimliktir, görüntü
+ *  metni değil: Türkçe kuralı "1.kalite"yi "1.KALİTE" (noktalı İ) yapar ve
+ *  katalogdaki "1.KALITE" ile eşleşmez; yani büyük/küçük harf toleransı tam da
+ *  Türkçe kodlarda sessizce kaybolurdu. Ad ↔ kod ayrımı: ad Türkçe metindir,
+ *  kod ASCII kimliktir. */
+function normalizeConditionValue(v: string): string {
+  return v.trim().toUpperCase();
+}
+
+/** Koşulun okuduğu payload alanları — `LabelPayload`'un yapısal alt kümesi
+ *  (config → service import'u olmasın diye tam tip İSTENMEZ). */
+export interface ConditionContext {
+  qualityGrade?: string | null;
+}
+
+/** Eleman bu payload'da basılacak mı? Koşulsuz eleman → daima true. */
+export function elementConditionMet(el: LabelElement, ctx: ConditionContext): boolean {
+  const c = el.showIf;
+  if (!c) return true;
+  // field bugün tek değer; yeni alan eklenirse burası genişler (union → exhaustive).
+  const raw = c.field === "qualityGrade" ? ctx.qualityGrade : null;
+  const value = typeof raw === "string" ? normalizeConditionValue(raw) : "";
+  if (!value) return false; // kalitesiz top → fail-closed (dosya başlığındaki gerekçe)
+  const hit = c.values.some((v) => normalizeConditionValue(v) === value);
+  return c.op === "notIn" ? !hit : hit;
+}
+
+/**
+ * Emit öncesi TEK giriş noktası: koşulu düşen elemanları ele + çok satırlı metni
+ * genişlet. BEŞ render yolu (kanvas HTML, PPLA/PPLB/ZPL, raster) bunu çağırır —
+ * biri doğrudan `expandMultilineText` çağırırsa koşul O DİLDE sessizce çalışmaz
+ * (yeni bir dil/emitter eklerken bu satırı kopyala, `expandMultilineText`'i değil).
+ * Koşulsuz şablonda dizi AYNEN geçer (bayt-uyum: bugünkü çıktı değişmez).
+ */
+export function prepareElements(elements: LabelElement[], ctx: ConditionContext): LabelElement[] {
+  const visible = elements.some((el) => el.showIf)
+    ? elements.filter((el) => elementConditionMet(el, ctx))
+    : elements;
+  return expandMultilineText(visible);
 }
 
 /** Varyant JSON'ından kanvas yerleşimini oku — geçersiz/boş → null (emit katmanı

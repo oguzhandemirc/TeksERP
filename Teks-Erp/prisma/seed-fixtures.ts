@@ -50,11 +50,18 @@ async function main() {
   // ---------------------------------------------------------------------------
   // RENKLER
   // ---------------------------------------------------------------------------
+  // ⚠️ ADLAR "Fixture" ÖNEKLİ — testler bu renkleri KODLA çözer (`code: "MAVI"`),
+  // ada göre değil. Önek, dev veritabanı fabrikanın canlı yedeğiyle çalışırken
+  // gerçek master-data ile AD ÇAKIŞMASINI önler: fabrikada zaten "BEYAZ" adlı bir
+  // renk var ve düz "Beyaz" fixture'ı `test_consistency` §18'i (aktif master-data
+  // ad mükerreri) kalıcı kırmızıya çeviriyordu. Kodları DEĞİŞTİRME — çözüm anahtarı
+  // onlar. Aynı adlar `scripts/seed-demo-shipments.ts`'te de kullanılıyor; orayı da
+  // birlikte güncelle, yoksa demo seed'i bu adları geri ezer.
   const colors = [
-    { code: "MAVI", name: "Mavi", hex: "#2563eb", sortOrder: 10 },
-    { code: "BEYAZ", name: "Beyaz", hex: "#f8fafc", sortOrder: 20 },
-    { code: "SIYAH", name: "Siyah", hex: "#111827", sortOrder: 30 },
-    { code: "LACIVERT", name: "Lacivert", hex: "#1e3a8a", sortOrder: 40 },
+    { code: "MAVI", name: "Fixture Mavi", hex: "#2563eb", sortOrder: 10 },
+    { code: "BEYAZ", name: "Fixture Beyaz", hex: "#f8fafc", sortOrder: 20 },
+    { code: "SIYAH", name: "Fixture Siyah", hex: "#111827", sortOrder: 30 },
+    { code: "LACIVERT", name: "Fixture Lacivert", hex: "#1e3a8a", sortOrder: 40 },
   ];
   for (const c of colors) {
     await prisma.color.upsert({

@@ -38,7 +38,7 @@ import {
 import { fieldDisplayValue } from "./label-field-values";
 import {
   elementSupported,
-  expandMultilineText,
+  prepareElements,
   ICON_DEFAULT_MM,
   type CanvasLayout,
   type LabelElement,
@@ -216,7 +216,7 @@ export function emitCanvasPplb({ payload, format, copies, layout, iconGraphicsOk
 
   const bc = payload.barcode ? eplData(payload.barcode) : "";
 
-  for (const el of expandMultilineText(layout.elements)) {
+  for (const el of prepareElements(layout.elements, payload)) {
     if (!elementSupported(el.type, "PPLB")) continue;
     const x = d(el.x);
     const y = d(el.y);
@@ -364,7 +364,7 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
   const H = d(format.heightMm);
   const flipY = (yTopDots: number, hDots: number) => Math.max(0, H - yTopDots - hDots);
 
-  for (const el of expandMultilineText(layout.elements)) {
+  for (const el of prepareElements(layout.elements, payload)) {
     if (!elementSupported(el.type, "PPLA")) continue; // lengthBanner → yok (reverse yok)
     const row = d(el.y); // tuval-üstünden Y (flipY ile Argox alt-orijine çevrilir)
     const col = d(el.x);
@@ -496,7 +496,7 @@ export async function emitCanvasZpl({ payload, format, copies, layout }: CanvasR
 
   const bc = payload.barcode ? zplData(payload.barcode) : "";
 
-  for (const el of expandMultilineText(layout.elements)) {
+  for (const el of prepareElements(layout.elements, payload)) {
     if (!elementSupported(el.type, "ZPL")) continue;
     const x = d(el.x);
     const y = d(el.y);

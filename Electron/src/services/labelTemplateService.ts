@@ -355,6 +355,9 @@ export const labelTemplateService = {
     peripheralId?: string;
     /** Baskı adedi — yalnız verilirse gövdeye eklenir (test baskısı çoğaltma). */
     copies?: number;
+    /** Örnek topun kalite KODU — koşullu (showIf) elemanların önizlemedeki
+     *  davranışını görmek için. Boş metin = kalitesi belirsiz top senaryosu. */
+    qualityGrade?: string;
   }): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string; nativeB64?: string }> =>
     apiClient
       .post<

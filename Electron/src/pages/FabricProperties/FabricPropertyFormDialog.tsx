@@ -3,6 +3,7 @@ import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { ColorPickerInput } from "@/components/forms/ColorPickerInput";
+import { PropertyStationsField } from "@/components/forms/PropertyStationsField";
 import {
   fabricPropertyFormDefaults,
   fabricPropertyFormSchema,
@@ -31,6 +32,7 @@ export function FabricPropertyFormDialog({
         category: initial.category ?? "",
         description: initial.description ?? "",
         color: initial.color ?? "",
+        stationIds: (initial.stationCapabilities ?? []).map((c) => c.stationId),
         isActive: initial.isActive,
       }
     : fabricPropertyFormDefaults;
@@ -74,6 +76,25 @@ export function FabricPropertyFormDialog({
           </FormField>
           <FormField label="Açıklama" htmlFor="description" error={form.formState.errors.description}>
             <Input id="description" {...form.register("description")} />
+          </FormField>
+          <FormField
+            label="Bu özelliği uygulayan istasyonlar"
+            error={form.formState.errors.stationIds}
+            required
+            hint="İş emri rotasında bu istasyonlardan biri varsa özellik seçilebilir. Boş bırakılamaz — istasyonsuz özellik hiçbir iş emrinde görünmez."
+          >
+            <Controller
+              control={form.control}
+              name="stationIds"
+              render={({ field }) => (
+                <div className="h-56">
+                  <PropertyStationsField
+                    value={field.value ?? []}
+                    onChange={field.onChange}
+                  />
+                </div>
+              )}
+            />
           </FormField>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif

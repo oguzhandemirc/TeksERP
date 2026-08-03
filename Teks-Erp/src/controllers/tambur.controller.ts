@@ -7,6 +7,7 @@ import { z } from "zod";
 import { TamburService } from "../services/tambur.service";
 import { TamburUndoService } from "../services/tambur-undo.service";
 import { KursunBypassService } from "../services/kursun-bypass.service";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { FOLD_TYPES, foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
@@ -232,7 +233,15 @@ export class TamburController {
   async getTamburContext(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const cardBarcode = req.params.cardBarcode as string;
-      const result = await this.service.getTamburContext(cardBarcode);
+      // Saha düzeltmesi yetkisi olan operatör, adımda AÇIK TOP OLMASA DA kartı
+      // açabilir (boş bağlam + `emptyStep: true`). Aksi halde "Topu Buraya Al /
+      // Manuel Top Ekle" tam da gerektikleri anda ulaşılamaz kalıyordu: iki aksiyon
+      // da açık karta bağlı, kart ise adım boşken hiç açılmıyordu.
+      // Yetkisiz operatörde davranış DEĞİŞMEZ — boş kart kafa karıştırır, hata
+      // doğru cevaptır.
+      const allowEmptyStep = matchesPermission(req.user?.permissions ?? [], "mobile:tambur-duzelt")
+        || matchesPermission(req.user?.permissions ?? [], "roll:manual-adjust");
+      const result = await this.service.getTamburContext(cardBarcode, { allowEmptyStep });
       res.status(200).json(result);
     } catch (err) {
       next(err);

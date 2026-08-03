@@ -136,12 +136,28 @@ export class PrintedDocumentController {
       // ?rowNotes=1 → satır notlarını (çuval yorumu) BU baskıda göster. Kalıcı kolon
       // ayarını EZER (OR); ayara da snapshot'a da YAZILMAZ, yeni versiyon doğurmaz.
       const forceRowNotes = req.query.rowNotes === "1" || req.query.rowNotes === "true";
+      // ?sections=urun,cuval → yalnız seçili listeleri bas (tek seferlik; kalıcı
+      // bölüm ayarını EZER, hiçbir yere yazılmaz). Boş/geçersiz → yok sayılır ve
+      // kalıcı ayar geçerli kalır; "hiçbirini basma" bilinçli olarak MÜMKÜN DEĞİL
+      // (gövdesiz belge üretmesin — renderer da aynı kuralı uygular).
+      const listSections =
+        typeof req.query.sections === "string" && req.query.sections.trim()
+          ? req.query.sections
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .slice(0, 10)
+          : undefined;
+      // ?merge=1 → listeleri aynı sayfada akıt. Varsayılan AYRI sayfa.
+      const mergeSections = req.query.merge === "1" || req.query.merge === "true";
       const result = await printedDocumentService.getHtml(docType, sourceId, version, {
         allowDraft,
         useCurrentConfig,
         printedBy: req.user?.username ?? null,
         printNote,
         forceRowNotes,
+        listSections,
+        mergeSections,
       });
       const data = result.data as { html: string } | null;
       if (!data) {

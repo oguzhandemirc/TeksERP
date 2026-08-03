@@ -186,6 +186,26 @@ Kanonik örnek: çuval tartısı (`hooks/useSackWeigh.ts` + `TartiPaket/Paketlem
 - **Modal içinde sayı girişi:** `NumpadInput` + **`useNativeKeyboard`**. Büyük özel numpad bir `NumpadHost` render edilmesini ister (KK1/Tambur kendi kolonlarında yapıyor) — modalda host yoktur, tuşlar görünmez kalır. `useNativeKeyboard` sistem decimal-pad'ini açar VE virgül→nokta normalizasyonunu korur ("40,5" → 40.5).
 - Çuval mutasyonları (tartı dahil) **online-only** — offline kuyruğa (`offline/mutations.ts`) girmez.
 
+### Manuel/Otomatik metraj tercihi CİHAZDA kalıcı (2026-08-02)
+
+Metraj kaynağı seçimi (elle gir ↔ makineden oku) artık ekran state'i değil **cihaz
+ayarıdır** — `deviceSettingsStore.kk1ManualEntry` (KK1 "Manuel Giriş" anahtarı) ve
+`deviceSettingsStore.tamburCutMode` (Tambur). Saha gerekçesi: metre makinesi arızalı
+bir istasyonda operatör **her top girişinde** anahtarı yeniden açıyordu; seçim aslında
+tek bir gerçeği ("bu istasyonda makine çalışıyor mu") yansıtıyor ve vardiya boyunca
+değişmiyor. Oturum değil CİHAZ ömürlü: operatör değişse de kalır (barkod manuel giriş
+bayrağıyla aynı gerekçe).
+
+- **Tambur'un iki geçişi (ana kesim + "Top Kesme" modalı) TEK tercihi paylaşır** —
+  `recutMode = cutMode`. İkisi aynı metre makinesini kullanır; ayrı hafıza tutmak
+  "ana kesimde Otomatik'e geçtim ama modal Manuel açıldı" şaşkınlığı üretirdi.
+  Yan etki bilinçli: modalda modu değiştirmek ana kesimi de değiştirir.
+- Varsayılanlar korundu (KK1 manuel KAPALI, Tambur MANUEL) ve diskteki bozuk değer
+  güvenli varsayılana düşer. Setter önce state'i, sonra diski yazar — anahtar takılmaz.
+- Ayarlar ekranına satır **eklenmedi** (bilinçli): tercih ekrandaki anahtarla değişir.
+- Test: `store/deviceSettingsStore.test.ts` (kalıcılığı bozan sondayla kırmızı verdiği
+  doğrulandı). **Sahaya çıkması için yeni APK derlemesi gerekir.**
+
 ## Liste Sayfalama — DEFAULT: cursor + infinite scroll
 
 > **Kural:** Bir listeyi sayfalandırman istendiğinde **varsayılan olarak cursor (keyset) + infinite scroll** kullan — offset/`page`+`pageSize` modeli DEĞİL. Offset modeli yalnızca açıkça istenirse veya tablonun hacmi kalıcı olarak küçük kalacaksa (örn. master-data, kalite dereceleri) seçilir. Yüksek hacimli tablolar (`Roll`, `RollMovement`, `RollOperation`, hareket/log geçmişleri) **her zaman** cursor.

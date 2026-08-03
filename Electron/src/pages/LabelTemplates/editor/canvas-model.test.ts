@@ -2,6 +2,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyResize,
+  conditionsMutuallyExclusive,
+  describeCondition,
   estimateBounds,
   ICON_DEFAULT_MM,
   makeElement,
@@ -216,5 +218,45 @@ describe("starterLayout", () => {
       expect(el.x).toBeGreaterThanOrEqual(0);
       expect(el.y).toBeLessThanOrEqual(CANVAS.heightMm);
     }
+  });
+});
+
+describe("describeCondition", () => {
+  const names: Record<string, string> = { "1.KALITE": "1. Kalite", A1: "A1 (Alt Kalite)" };
+  const nameOf = (c: string) => names[c];
+
+  it("kodları ADA çevirir (in / notIn ayrı okunur)", () => {
+    expect(describeCondition({ field: "qualityGrade", op: "in", values: ["A1"] }, nameOf))
+      .toBe("Yalnız A1 (Alt Kalite) basılır");
+    expect(describeCondition({ field: "qualityGrade", op: "notIn", values: ["1.KALITE"] }, nameOf))
+      .toBe("1. Kalite DIŞINDA basılır");
+  });
+
+  it("katalogda olmayan kodu KODUYLA gösterir (ölü koşul görünür kalsın)", () => {
+    expect(describeCondition({ field: "qualityGrade", op: "in", values: ["SILINMIS"] }, nameOf))
+      .toBe("Yalnız SILINMIS basılır");
+  });
+});
+
+describe("conditionsMutuallyExclusive", () => {
+  const inC = (...values: string[]) => ({ field: "qualityGrade" as const, op: "in" as const, values });
+  const notInC = (...values: string[]) => ({ field: "qualityGrade" as const, op: "notIn" as const, values });
+
+  it("ayrık in kümeleri birlikte basılamaz (çakışma uyarısı bastırılır)", () => {
+    expect(conditionsMutuallyExclusive(inC("1.KALITE"), inC("A1"))).toBe(true);
+    // Kesişiyorlar: karşılaştırma YEREL-BAĞIMSIZ büyük harfle yapılır (Türkçe kuralı
+    // "1.kalite"yi "1.KALİTE" yapıp bu iki kodu YANLIŞLIKLA ayrık gösterirdi).
+    expect(conditionsMutuallyExclusive(inC("1.kalite"), inC("1.KALITE"))).toBe(false);
+  });
+
+  it("in ⊆ notIn ise dışlarlar", () => {
+    expect(conditionsMutuallyExclusive(inC("A1"), notInC("A1"))).toBe(true);
+    expect(conditionsMutuallyExclusive(notInC("A1", "FIRE"), inC("A1"))).toBe(true);
+    expect(conditionsMutuallyExclusive(inC("A1"), notInC("FIRE"))).toBe(false);
+  });
+
+  it("koşulsuz eleman ya da notIn+notIn → dışlama YOK (temkinli)", () => {
+    expect(conditionsMutuallyExclusive(undefined, inC("A1"))).toBe(false);
+    expect(conditionsMutuallyExclusive(notInC("A1"), notInC("FIRE"))).toBe(false);
   });
 });

@@ -78,36 +78,55 @@ async function main() {
   let itemId: string | null = null;
   let colorId: string | null = null;
 
+  // Çökmüş bir önceki koşumdan kalan fixture varsa temizle. YALNIZ kendi kod
+  // önekimiz silinir — fabrika master-verisine dokunulmaz.
+  await prisma.color.deleteMany({ where: { code: { startsWith: "TST-NRM-C-" } } }).catch(() => {});
+  await prisma.item.deleteMany({ where: { code: { startsWith: "TST-NRM-" } } }).catch(() => {});
+
   try {
+    // ⚠️ Fixture adları ÇAKIŞAMAZ olmalı. Eskiden "krem gümüş" / "beyaz 055" gibi
+    // gerçekçi adlar kullanılıyordu; dev DB fabrikanın canlı yedeğiyle değiştirilince
+    // gerçek bir "KREM GÜMÜŞ" rengiyle (RNK-260717-3376) çakıştı ve ad-mükerrer
+    // guard'ı testi komple düşürdü. "TSNRM" öneki fabrika verisinde bulunamaz;
+    // normalize kuralları (boşluk korunur, tr-BÜYÜK, salt-rakam blok başa) aynen
+    // sınanmaya devam eder.
     const itemRes = await itemSvc.create(
-      { code: `TST-NRM-${ts}`, name: "test saha ürünü", itemType: "FABRIC", unit: "MT" },
+      { code: `TST-NRM-${ts}`, name: "tsnrm saha ürünü", itemType: "FABRIC", unit: "MT" },
       undefined,
     );
     const item = itemRes.data as { id: string; name: string };
     itemId = item.id;
-    check("ItemService.create adı BÜYÜK yazdı", item.name === "TEST SAHA ÜRÜNÜ", item.name);
+    check("ItemService.create adı BÜYÜK yazdı", item.name === "TSNRM SAHA ÜRÜNÜ", item.name);
 
-    await itemSvc.update(item.id, { name: "güncel isim" }, undefined);
+    await itemSvc.update(item.id, { name: "tsnrm güncel isim" }, undefined);
     const itemAfter = await prisma.item.findUnique({
       where: { id: item.id },
       select: { name: true },
     });
-    check("ItemService.update adı BÜYÜK yazdı", itemAfter?.name === "GÜNCEL İSİM", itemAfter?.name ?? "");
+    check(
+      "ItemService.update adı BÜYÜK yazdı",
+      itemAfter?.name === "TSNRM GÜNCEL İSİM",
+      itemAfter?.name ?? "",
+    );
 
     const colorRes = await colorSvc.create(
-      { code: `TST-NRM-C-${ts}`, name: "beyaz 055" },
+      { code: `TST-NRM-C-${ts}`, name: "tsnrmbeyaz 055" },
       undefined,
     );
     const color = colorRes.data as { id: string; name: string };
     colorId = color.id;
-    check("ColorService.create normalize etti", color.name === "055 BEYAZ", color.name);
+    check("ColorService.create normalize etti", color.name === "055 TSNRMBEYAZ", color.name);
 
-    await colorSvc.update(color.id, { name: "krem gümüş" }, undefined);
+    await colorSvc.update(color.id, { name: "tsnrm krem gümüş" }, undefined);
     const colorAfter = await prisma.color.findUnique({
       where: { id: color.id },
       select: { name: true },
     });
-    check("ColorService.update normalize etti", colorAfter?.name === "KREM GÜMÜŞ", colorAfter?.name ?? "");
+    check(
+      "ColorService.update normalize etti",
+      colorAfter?.name === "TSNRM KREM GÜMÜŞ",
+      colorAfter?.name ?? "",
+    );
 
     // --- 3) Arama: tr-upper varyantı (İ/ı katlanmaz, query-parser OR'u kapatır) ---
     await colorSvc.update(color.id, { name: "tssiyah deneme" }, undefined); // → TSSİYAH DENEME

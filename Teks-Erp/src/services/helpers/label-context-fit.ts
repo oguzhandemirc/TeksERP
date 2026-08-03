@@ -58,14 +58,17 @@ export function getKindExclusiveKeys(kind: LabelKind): Set<string> {
   );
 }
 
-/** Şablonun (tüm varyantlarında) kanvas `field` elemanlarının bağladığı anahtarlar. */
+/** Şablonun (tüm varyantlarında) kanvas `field` elemanlarının bağladığı anahtarlar.
+ *  KOŞULLU eleman (`showIf`) SAYILMAZ: bu küme "şablon bu bağlamın kimliğini basar
+ *  mı" sorusunun cevabıdır ve koşullu alan yalnız BAZI baskılarda çıkar → garanti
+ *  vermez. Fail-closed guard'ın (assertContextRenderable) dayanağı budur. */
 export function collectBoundKeys(t: TemplateLike): Set<string> {
   const keys = new Set<string>();
   for (const v of t.variants ?? []) {
     const layout = readCanvasLayout(v.elements);
     if (!layout) continue;
     for (const el of layout.elements) {
-      if (el.type === "field" && typeof el.bind === "string") keys.add(el.bind);
+      if (el.type === "field" && typeof el.bind === "string" && !el.showIf) keys.add(el.bind);
     }
   }
   return keys;

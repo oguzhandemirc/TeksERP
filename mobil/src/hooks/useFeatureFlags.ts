@@ -83,9 +83,11 @@ export function useMobileRasterEnabled(): boolean {
   return useFeatureFlags().data?.mobileRasterEnabled ?? false;
 }
 
-/** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı? Default FALSE.
- *  Yüklenene kadar / hata halinde false → "Kurşun Dağıtım" ekranı gizli kalır
- *  (fail-closed; flag geldiğinde ekran kendiliğinden belirir). */
+/** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı? Default FALSE
+ *  (yüklenene kadar / hata halinde de false — fail-closed).
+ *  ⚠️ "Kurşun Dağıtım" ekranının görünürlüğü artık YALNIZ buna bağlı DEĞİL: bayrak
+ *  kapalı olsa da bekleyen dağıtım varsa ekran görünür (bkz. useVisibleScreens +
+ *  useKursunBypassVisibility). Bu bayrak "yeni atama yapılabilir mi"yi söyler. */
 export function useKursunBypassEnabled(): boolean {
   return useFeatureFlags().data?.kursunBypassEnabled ?? false;
 }

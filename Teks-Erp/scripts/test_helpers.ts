@@ -410,10 +410,13 @@ type StepFix = {
   id: string;
   status: string;
   stationId: string | null;
+  /// Renk kilidinin TEK kaynağı (2026-08-02). Eskiden station.colorCapabilities
+  /// idi; hedef renk hiçbir istasyon listesinde değilse boya bittiği hâlde renk
+  /// kilitlenmiyordu — bkz. aşağıdaki "listede olmayan renk" vakası.
+  requiredCategory: { appliesColor: boolean } | null;
   station: {
     id: string;
     kind: string;
-    colorCapabilities: { colorId: string }[];
     propertyCapabilities: { propertyId: string }[];
   } | null;
 };
@@ -447,7 +450,7 @@ async function testWorkOrderLocks() {
       id: "w1",
       targetColorId: null,
       targetProperties: [],
-      steps: [{ id: "st1", status: "PENDING", stationId: "stn1", station: { id: "stn1", kind: "PROCESS_QC", colorCapabilities: [], propertyCapabilities: [] } }],
+      steps: [{ id: "st1", status: "PENDING", stationId: "stn1", requiredCategory: null, station: { id: "stn1", kind: "PROCESS_QC", propertyCapabilities: [] } }],
       activeDispatches: 0,
     });
     const r = await computeWorkOrderLocks(db, "w1");
@@ -459,7 +462,7 @@ async function testWorkOrderLocks() {
       id: "w2",
       targetColorId: null,
       targetProperties: [],
-      steps: [{ id: "st1", status: "ACTIVE", stationId: "stn1", station: { id: "stn1", kind: "PROCESS_QC", colorCapabilities: [], propertyCapabilities: [] } }],
+      steps: [{ id: "st1", status: "ACTIVE", stationId: "stn1", requiredCategory: null, station: { id: "stn1", kind: "PROCESS_QC", propertyCapabilities: [] } }],
       activeDispatches: 0,
     });
     const r = await computeWorkOrderLocks(db, "w2");
@@ -473,23 +476,26 @@ async function testWorkOrderLocks() {
       id: "w3",
       targetColorId: null,
       targetProperties: [],
-      steps: [{ id: "st1", status: "PENDING", stationId: "stn1", station: { id: "stn1", kind: "PROCESS_QC", colorCapabilities: [], propertyCapabilities: [] } }],
+      steps: [{ id: "st1", status: "PENDING", stationId: "stn1", requiredCategory: null, station: { id: "stn1", kind: "PROCESS_QC", propertyCapabilities: [] } }],
       activeDispatches: 2,
     });
     const r = await computeWorkOrderLocks(db, "w3");
     check("locks: aktif fason sevki → materialCommitted", r.materialCommitted === true);
   }
-  // Renk kilidi: targetColor'u uygulayan istasyon var ve COMPLETED → renk kilitli
+  // Renk kilidi: "renk veren" adım COMPLETED → renk kilitli.
+  // Rengin hiçbir istasyon listesinde olması GEREKMEZ (2026-08-02) — bu vaka
+  // eski StationColor-tabanlı kurguda targetColor=false veriyordu, yani boya
+  // bittikten sonra renk hâlâ değiştirilebiliyordu.
   {
     const db = makeLocksDb({
       id: "w4",
       targetColorId: "col-mavi",
       targetProperties: [],
-      steps: [{ id: "st1", status: "COMPLETED", stationId: "stn1", station: { id: "stn1", kind: "PROCESS_QC", colorCapabilities: [{ colorId: "col-mavi" }], propertyCapabilities: [] } }],
+      steps: [{ id: "st1", status: "COMPLETED", stationId: "stn1", requiredCategory: { appliesColor: true }, station: { id: "stn1", kind: "PROCESS_QC", propertyCapabilities: [] } }],
       activeDispatches: 0,
     });
     const r = await computeWorkOrderLocks(db, "w4");
-    check("locks: boya adımı COMPLETED → renk kilitli", r.targetColor === true && !!r.reasons.targetColor);
+    check("locks: boya adımı COMPLETED → renk kilitli (renk hiçbir istasyon listesinde olmasa da)", r.targetColor === true && !!r.reasons.targetColor);
   }
   // Renk: boya adımı henüz açık (ACTIVE) → renk editable
   {
@@ -497,11 +503,24 @@ async function testWorkOrderLocks() {
       id: "w5",
       targetColorId: "col-mavi",
       targetProperties: [],
-      steps: [{ id: "st1", status: "ACTIVE", stationId: "stn1", station: { id: "stn1", kind: "PROCESS_QC", colorCapabilities: [{ colorId: "col-mavi" }], propertyCapabilities: [] } }],
+      steps: [{ id: "st1", status: "ACTIVE", stationId: "stn1", requiredCategory: { appliesColor: true }, station: { id: "stn1", kind: "PROCESS_QC", propertyCapabilities: [] } }],
       activeDispatches: 0,
     });
     const r = await computeWorkOrderLocks(db, "w5");
     check("locks: boya adımı açıkken renk editable", r.targetColor === false);
+  }
+  // Renk vermeyen adım (ör. Tambur/Zımpara) COMPLETED olsa da renk kilitlenmez —
+  // "her COMPLETED adım rengi dondurur" sapmasının bekçisi.
+  {
+    const db = makeLocksDb({
+      id: "w5b",
+      targetColorId: "col-mavi",
+      targetProperties: [],
+      steps: [{ id: "st1", status: "COMPLETED", stationId: "stn1", requiredCategory: { appliesColor: false }, station: { id: "stn1", kind: "PROCESS_QC", propertyCapabilities: [] } }],
+      activeDispatches: 0,
+    });
+    const r = await computeWorkOrderLocks(db, "w5b");
+    check("locks: renk VERMEYEN adım COMPLETED → renk hâlâ editable", r.targetColor === false);
   }
   // Kat tipi: TAMBUR adımı PENDING değil → foldType kilitli
   {
@@ -509,7 +528,7 @@ async function testWorkOrderLocks() {
       id: "w6",
       targetColorId: null,
       targetProperties: [],
-      steps: [{ id: "st1", status: "ACTIVE", stationId: "stn-t", station: { id: "stn-t", kind: "TAMBUR", colorCapabilities: [], propertyCapabilities: [] } }],
+      steps: [{ id: "st1", status: "ACTIVE", stationId: "stn-t", requiredCategory: null, station: { id: "stn-t", kind: "TAMBUR", propertyCapabilities: [] } }],
       activeDispatches: 0,
     });
     const r = await computeWorkOrderLocks(db, "w6");
@@ -522,8 +541,8 @@ async function testWorkOrderLocks() {
       targetColorId: null,
       targetProperties: [{ propertyId: "prop-kursun" }, { propertyId: "prop-other" }],
       steps: [
-        { id: "st1", status: "COMPLETED", stationId: "stn1", station: { id: "stn1", kind: "PROCESS_QC", colorCapabilities: [], propertyCapabilities: [{ propertyId: "prop-kursun" }] } },
-        { id: "st2", status: "PENDING", stationId: "stn2", station: { id: "stn2", kind: "PROCESS_QC", colorCapabilities: [], propertyCapabilities: [{ propertyId: "prop-other" }] } },
+        { id: "st1", status: "COMPLETED", stationId: "stn1", requiredCategory: null, station: { id: "stn1", kind: "PROCESS_QC", propertyCapabilities: [{ propertyId: "prop-kursun" }] } },
+        { id: "st2", status: "PENDING", stationId: "stn2", requiredCategory: null, station: { id: "stn2", kind: "PROCESS_QC", propertyCapabilities: [{ propertyId: "prop-other" }] } },
       ],
       activeDispatches: 0,
     });

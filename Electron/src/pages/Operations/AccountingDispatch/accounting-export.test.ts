@@ -52,6 +52,8 @@ const data: AccountingExportData = {
       rollCount: 2,
       totalMeters: 100,
       totalKg: 50,
+      invoiceNo: "FTR2026000118",
+      invoicedAt: "2026-06-11T09:30:00.000Z",
     },
   ],
   detail: [
@@ -215,6 +217,17 @@ describe("buildAccountingWorkbookSheets — dönem dökümü (5 sayfa)", () => {
     expect(row.yon).toBe("Yurtdışı");
     expect(row.dispatchedAt).toBeInstanceOf(Date);
     expect(sevk.totalRow).toMatchObject({ totalMeters: 100, totalKg: 50 });
+  });
+
+  it("Sevk Listesi: fatura izi kolonları var ve tarih gerçek Date", () => {
+    const sevk = sheets[0]!;
+    const keys = sevk.columns.map((c) => c.key);
+    expect(keys).toContain("invoiceNo");
+    expect(keys).toContain("invoicedAt");
+    const row = sevk.rows[0] as { invoiceNo: string; invoicedAt: unknown };
+    expect(row.invoiceNo).toBe("FTR2026000118");
+    // Excel'de tarih hücresi olsun diye string DEĞİL Date basılır (dispatchedAt ile aynı).
+    expect(row.invoicedAt).toBeInstanceOf(Date);
   });
 
   it("Sevk Listesi brüt olduğunu ve net hesabını dipnotta söyler (çift düşme koruması)", () => {

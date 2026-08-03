@@ -15,6 +15,7 @@ import type { AddressInfo } from "net";
 import bcrypt from "bcryptjs";
 import app from "../src/app";
 import prisma from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { RollStatus } from "@prisma/client";
 
@@ -108,7 +109,12 @@ async function main(): Promise<void> {
 
     // ════════════════════════ SMOKE ════════════════════════
     console.log("\n── SMOKE: çekirdek akış ──");
-    const login = await call("POST", "/api/auth/login", { body: { username: "admin", password: "123123" } });
+    // Kimlik testin kendi fixture'ından (bkz. scripts/fixture-test-user.ts) —
+    // dev DB fabrika yedeği olduğunda seed'in `admin/123123`'ü geçerli değildir.
+    const cred = await ensureTestAdmin();
+    const login = await call("POST", "/api/auth/login", {
+      body: { username: cred.username, password: cred.password },
+    });
     const token = ((login.json?.data as { token?: string } | undefined)?.token) ?? "";
     check("login admin → 200 + token", login.status === 200 && token.length > 20, `status=${login.status}`);
 

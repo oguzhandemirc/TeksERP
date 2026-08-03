@@ -32,6 +32,12 @@ export interface AvailableOrderLine {
   inProduction?: number;
   /** Net açık = açık − üretimdeki (withInProduction). Yoksa openQty kullan. */
   netOpenQty?: number;
+  /**
+   * Bu KALEME (spec havuzuna değil) canlı bir iş emri bağlı mı — iptal/devredilmiş
+   * WO sayılmaz. Yalnız cursor modda döner. `inProduction` ile karıştırma: o,
+   * aynı kumaş+renk+en havuzundaki BAŞKA kalemler yüzünden de dolu olabilir.
+   */
+  hasWorkOrder?: boolean;
 }
 
 /** Cursor (keyset) sayfa cevabı — "sipariş-önce" aramalı liste infinite scroll. */
@@ -72,8 +78,16 @@ export const orderService = {
   },
 
   /**
-   * "Sipariş-önce" aramalı liste — itemId opsiyonel (verilmezse tüm açık kalemler).
-   * Cursor (keyset) + arama (sipariş no / müşteri / ürün). Hızlı İş Emri picker'ı.
+   * Açık sipariş kalemleri — cursor (keyset) + BACKEND araması (sipariş no /
+   * müşteri / ürün / müşteri ürün adı; `buildTurkishSearch`).
+   *
+   * `itemId` opsiyonel: verilirse o kumaşın kalemleri (top-önce), verilmezse tüm
+   * açık kalemler (sipariş-önce). Hızlı İş Emri picker'ı İKİ durumda da bunu
+   * kullanır — sayfasız varyant (`getAvailableOrderLines`) sınırsız payload
+   * döndürüyordu ve aramayı hiç desteklemiyordu.
+   *
+   * `withInProduction` yalnız `itemId` ile anlamlıdır (havuz kumaş bazlı); broad
+   * modda backend zaten atlar.
    */
   getAvailableOrderLinesCursor: (params: {
     itemId?: string | null;
@@ -81,13 +95,26 @@ export const orderService = {
     cursor?: string | null;
     limit?: number;
     withTotal?: boolean;
+    withInProduction?: boolean;
+    customerId?: string | null;
+    colorId?: string | null;
+    /**
+     * "Bu kalemle aynı iş emrinde üretilebilecekler" — backend verilen satırın
+     * spec'ini (kumaş + renk + en) okuyup listeyi ona daraltır; kumaş/renk/en
+     * parametrelerini EZER. Uyumsuz kalemler istemciye hiç inmez.
+     */
+    specOfLineId?: string | null;
   }): Promise<AvailableOrderLinesCursorPage> => {
     const q = new URLSearchParams();
     if (params.itemId) q.set('itemId', params.itemId);
+    if (params.customerId) q.set('customerId', params.customerId);
+    if (params.colorId) q.set('colorId', params.colorId);
+    if (params.specOfLineId) q.set('specOfLineId', params.specOfLineId);
     if (params.search) q.set('search', params.search);
     if (params.cursor) q.set('cursor', params.cursor);
     q.set('limit', String(params.limit ?? 20));
     if (params.withTotal) q.set('withTotal', 'true');
+    if (params.withInProduction) q.set('withInProduction', 'true');
     return apiClient
       .get<AvailableOrderLinesCursorPage>(`/orders/order-lines/available?${q.toString()}`)
       .then((r) => r.data);

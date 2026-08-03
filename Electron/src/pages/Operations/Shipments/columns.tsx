@@ -1,9 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Undo2 } from "lucide-react";
 import { StatusBadge } from "@/components/operations/StatusBadge";
+import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
-import { safeFormat } from "@/lib/format";
+import { safeFormat, formatNumber } from "@/lib/format";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentListItem } from "./types";
 
 export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
@@ -63,15 +63,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
           {isDirect
             ? `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`
             : `${c.orders} sipariş · ${c.rolls} top · ${c.sacks} çuval`}
-          {c.returns > 0 && (
-            <Badge
-              variant="outline"
-              className="gap-0.5 border-amber-500/40 px-1 py-0 text-[10px] font-normal text-amber-600"
-              title="Bu sevkiyattan iade edilen top sayısı (detayda dökümü var)"
-            >
-              <Undo2 className="h-3 w-3" /> {c.returns} iade
-            </Badge>
-          )}
+          <ReturnsBadge count={c.returns} />
           {/* Yalnız kumaş/renk filtresi aktifken: bu sevkiyattaki eşleşen top sayısı. */}
           {row.original.matchRollCount != null && (
             <Badge
@@ -81,6 +73,21 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
             >
               eşleşen: {row.original.matchRollCount} top
             </Badge>
+          )}
+        </span>
+      );
+    },
+  },
+  {
+    id: "totals",
+    header: "Metraj / Kg",
+    cell: ({ row }) => {
+      const s = row.original;
+      return (
+        <span className="whitespace-nowrap text-xs tabular-nums">
+          {formatNumber(s.totalMeters, 0)} m
+          {s.totalKg > 0 && (
+            <span className="text-muted-foreground"> · {formatNumber(s.totalKg, 1)} kg</span>
           )}
         </span>
       );
@@ -110,6 +117,37 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
       const d = s.dispatchedAt ?? s.createdAt;
       return (
         <span className="whitespace-nowrap text-xs tabular-nums">{safeFormat(d, "dd.MM.yyyy HH:mm")}</span>
+      );
+    },
+  },
+  {
+    // FATURA İZİ — ERP fatura KESMEZ; bu kolon dış muhasebe programındaki belgenin
+    // izini gösterir. Yalnız ÇIKMIŞ sevkiyat faturalanabilir: PLANNED satırda soru
+    // henüz anlamsız olduğu için "—" basılır (kırmızı "Kesilmedi" rozetini iş
+    // listesi sanmasınlar diye — sevk edilmemiş mal zaten faturalanmaz).
+    id: "invoice",
+    header: "Fatura",
+    cell: ({ row }) => {
+      const s = row.original;
+      if (s.status !== "DISPATCHED") {
+        return <span className="text-xs text-muted-foreground">—</span>;
+      }
+      if (!s.invoiceNo) {
+        return (
+          <Badge variant="outline" className="whitespace-nowrap text-[10px] text-muted-foreground">
+            Kesilmedi
+          </Badge>
+        );
+      }
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="whitespace-nowrap text-xs font-medium tabular-nums">{s.invoiceNo}</span>
+          {s.invoicedAt && (
+            <span className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">
+              {safeFormat(s.invoicedAt, "dd.MM.yyyy")}
+            </span>
+          )}
+        </div>
       );
     },
   },

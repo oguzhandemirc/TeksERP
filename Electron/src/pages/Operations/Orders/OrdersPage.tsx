@@ -13,6 +13,8 @@ import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
+import { useHideCancelled } from "@/hooks/useHideCancelled";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { usePricingEnabled } from "@/hooks/usePricingEnabled";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { buildOrderColumns } from "./columns";
@@ -273,11 +275,14 @@ export function OrdersPage() {
   const pricingEnabled = usePricingEnabled();
   const columns = useMemo(() => buildOrderColumns(pricingEnabled), [pricingEnabled]);
 
+  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
+
   const { table, query, search, setSearch, pagination } = useDataTable<Order>({
     queryKey: QUERY_KEY,
     fetchFn: orderService.listCursor,
     columns,
     defaultPageSize: 50,
+    forceFilters,
   });
 
   const isEmpty = query.isSuccess && !search && pagination.total === 0;
@@ -342,6 +347,14 @@ export function OrdersPage() {
         placeholder="Sipariş no, firma veya kumaş ara..."
         table={table}
         exportName="Siparişler"
+        actions={
+          <ToolbarToggle
+            checked={showCancelled}
+            onCheckedChange={setShowCancelled}
+            label="İptalleri göster"
+            title="İptal edilmiş siparişler varsayılan olarak gizlidir."
+          />
+        }
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
 

@@ -406,6 +406,15 @@ export interface PendingReturnGroup {
   rolls: Roll[];
   rollCount: number;
   totalQty: number;
+  /**
+   * Fason adımında DURAN ama fasona ÇIKMAMIŞ top var mı ("Konumu Düzelt" sonrası
+   * mal içeride bekliyor). Kabul akışına GİRMEZ — `rolls`/`parties`/`rollCount`
+   * yalnız `AT_SUBCONTRACTOR` sayar; bu bayrak yalnız görünürlük içindir, yoksa
+   * iş emri listeden sessizce kaybolur. Eski backend'lerde alan YOK.
+   */
+  awaitingDispatch?: boolean;
+  awaitingDispatchRollCount?: number;
+  awaitingDispatchQty?: number;
 }
 
 /** Bekleyen kabul grubu içindeki tek bir sevk partisi (kaynak dispatch lane'i). */
@@ -449,6 +458,10 @@ export interface PendingReturnSummary {
   } | null;
   rollCount: number;
   totalQty: number;
+  /** Bkz. `PendingReturnGroup.awaitingDispatch` — satır "SEVK BEKLİYOR" rozeti alır. */
+  awaitingDispatch?: boolean;
+  awaitingDispatchRollCount?: number;
+  awaitingDispatchQty?: number;
   /** Client-side arama özetleri — gruptaki rulolardan distinct (rolls taşınmaz). */
   itemNames: string[];
   colorNames: string[];
@@ -553,11 +566,37 @@ export interface BornRollPreviewItem {
   safeToCancel: boolean;
 }
 
+/**
+ * K14 parti-tutarlılık engelinin tek satırı — kabul iptali topların parti
+ * üyeliği değiştiği için (birleştirme/taşıma) yapılamıyor.
+ */
+export interface ReceiptBatchMismatchItem {
+  rollId: string;
+  /** Barkod; barkodsuz açık kumaşta backend `(barkodsuz açık kumaş)` yazar. */
+  barcode: string;
+  dispatchNo: string;
+  /** Topun ŞU ANKİ partisi. */
+  rollBatchNumber: string | null;
+  /** Sevk kaydının bağlı olduğu parti. */
+  dispatchBatchNumber: string | null;
+}
+
 export interface ReceiptCancelPreview {
   receiptNo: string;
   receivedAt: string;
   bornRolls: BornRollPreviewItem[];
-  /** Tüm bornRoll'ları cascade iptal güvenli mi. False ise iptal butonu disabled. */
+  /**
+   * K14 parti uyuşmazlığı — `cancelReceipt`'in tx-içi guard'ıyla AYNI kaynaktan.
+   * Eskiden önizleme bunu hiç sormuyordu: operatör `allSafe: true` görüp butona
+   * basıyor, sonra 409 yiyordu. Eski backend'lerde alan YOK → guard'lı oku.
+   */
+  batchMismatch?: {
+    blocked: boolean;
+    items: ReceiptBatchMismatchItem[];
+    /** Guard'ın basacağı metnin birebir aynısı (null = engel yok). */
+    message: string | null;
+  };
+  /** Tüm bornRoll'ları cascade iptal güvenli mi (K14 dahil). False ise iptal butonu disabled. */
   allSafe: boolean;
   totalBornRolls: number;
 }
@@ -875,6 +914,13 @@ export interface TamburContext {
   openFabricRolls: TamburContextOpenFabric[];
   /** Bekleyen Kurşun Dağıtım işi (sessiz bypass kapanışının kapsam kaynağı). */
   bypassPending?: TamburBypassPending | null;
+  /**
+   * Tambur adımında AÇIK TOP YOK ama kart yine de açıldı — backend bunu yalnız
+   * saha düzeltmesi yetkisi olan operatöre yapar (2026-08-03). Ekran bu durumda
+   * "bekleyen top yok" bandı basar ve YALNIZ saha düzeltmesini sunar; kesim /
+   * finalize aksiyonları anlamsızdır. Yetkisiz operatörde kart zaten açılmaz.
+   */
+  emptyStep?: boolean;
 }
 
 /** `POST /api/tambur/:id/cut` — açık kumaşta tek kesim */

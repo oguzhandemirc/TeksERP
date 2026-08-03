@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, TouchableRipple, Icon, Appbar } from 'react-native-paper';
+import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
@@ -16,8 +16,9 @@ export default function HizliIsEmriScreen() {
   const [view, setView] = useState<View2>('list');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  // "Yeni" formundaki "Listeden Seç" modalı — header simge butonundan açılır.
-  const [rollListOpen, setRollListOpen] = useState(false);
+  // Sihirbaz adımı kabukta tutulur: Appbar geri tuşu bir ADIM geri gitsin,
+  // yalnız ilk adımda listeye dönsün (native geri hareketiyle aynı beklenti).
+  const [step, setStep] = useState(0);
 
   return (
     <ScreenChrome
@@ -25,25 +26,18 @@ export default function HizliIsEmriScreen() {
       onStepBack={
         view === 'new'
           ? () => {
-              setRollListOpen(false);
+              if (step > 0) {
+                setStep((s) => s - 1);
+                return;
+              }
               setView('list');
             }
           : undefined
       }
-      headerExtras={
-        view === 'new' ? (
-          <Appbar.Action
-            icon="format-list-checks"
-            color="#fff"
-            onPress={() => setRollListOpen(true)}
-            accessibilityLabel="Listeden top seç"
-          />
-        ) : undefined
-      }
     >
       <View style={styles.root}>
         {view === 'new' ? (
-          <NewWorkOrderView rollListOpen={rollListOpen} onRollListOpenChange={setRollListOpen} />
+          <NewWorkOrderView step={step} onStepChange={setStep} />
         ) : (
           <>
             <View style={styles.listWrap}>
@@ -54,7 +48,10 @@ export default function HizliIsEmriScreen() {
             <View style={[styles.bottomBar, { paddingBottom: insets.bottom, marginBottom: -insets.bottom }]}>
               <View style={styles.barContent}>
                 <TouchableRipple
-                  onPress={() => setView('new')}
+                  onPress={() => {
+                    setStep(0);
+                    setView('new');
+                  }}
                   style={styles.newBtn}
                   rippleColor="rgba(255,255,255,0.25)"
                   accessibilityLabel="Yeni iş emri"

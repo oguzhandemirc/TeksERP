@@ -4,10 +4,13 @@
 
 import { Router } from "express";
 import { TamburController } from "../controllers/tambur.controller";
+import { TamburManualController } from "../controllers/tambur-manual.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const controller = new TamburController();
+/** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
+const manualController = new TamburManualController();
 const router = Router();
 
 /**
@@ -377,6 +380,159 @@ router.post(
   verifyToken,
   requireAnyPermission("quality:write", "mobile:tambur"),
   controller.completeKursunBypass,
+);
+
+// =============================================================================
+// SAHA DÜZELTMESİ (`/manual/*`) — operatör self-servis
+// =============================================================================
+// Yetki: `roll:manual-adjust` (süpervizör) VEYA `mobile:tambur-duzelt` (panelden
+// SEÇİLİ Tambur operatörüne verilir; varsayılan operatör paketinde YOKTUR).
+// Rota sırası: `/manual/*` sabit segmentleri `/:id/cut` gibi parametreli
+// rotalarla ÇAKIŞMAZ (ikinci segmentler farklı), yine de niyet açık olsun diye
+// parametreli blokların ÖNÜNE konmuştur.
+// Hata gövdeleri makine-okunur `code` taşır (mobil onu okur): STEP_NOT_FOUND,
+// STEP_NOT_TAMBUR, STATION_MISMATCH, WORKORDER_DEAD, ROLL_NOT_FOUND, ROLL_DEAD,
+// ROLL_IN_SACK, ROLL_IN_SHIPMENT, ROLL_AT_SUBCONTRACTOR, ROLL_STATUS_NOT_MOVABLE,
+// ROLL_OTHER_WORKORDER, ROLL_ALREADY_HERE, ROLL_STATE_CHANGED, REASON_REQUIRED,
+// QTY_REQUIRED, ITEM_REQUIRED, MOVE_REJECTED.
+
+/**
+ * @openapi
+ * /api/tambur/manual/bring-preview:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: "Mevcut Topu Buraya Al — ÖNİZLEME (salt-okunur)"
+ *     description: |
+ *       Barkodu okutulan (ya da listeden seçilen) topun bu Tambur adımına
+ *       alınmasının SOMUT etkilerini döner; hiçbir şeyi değiştirmez:
+ *       top hangi iş emri/adımdan gelecek, hedef-sonrası kalite/kurşun kararı
+ *       VOID olacak mı, ileri atlamada hangi adımlar SKIPPED olacak, yeni parti
+ *       numarası doğacak mı, tamamlanmış iş emri yeniden açılacak mı.
+ *
+ *       Taşımanın kendisi `POST /api/work-orders/{id}/manual-move` ile AYNI
+ *       motordur (`WorkOrderManualMoveService`) — saha yolu paralel bir mantık
+ *       taşımaz. Saha kapsamı iki kuralla DAHA DARDIR: başka iş emrine bağlı top
+ *       reddedilir (`ROLL_OTHER_WORKORDER`) ve hedef adım oturumun istasyonuyla
+ *       eşleşmelidir (`STATION_MISMATCH`).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [targetStepId]
+ *             properties:
+ *               targetStepId: { type: string, format: uuid, description: "Ekrandaki Tambur adımı (WorkOrderStep)" }
+ *               barcode:      { type: string, description: "Top barkodu (okutma) — rollId ile birlikte en az biri zorunlu" }
+ *               rollId:       { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Önizleme — canApply/blockCode/blockReason/warnings/effects" }
+ *       400: { description: "Geçersiz gövde / adım Tambur tipinde değil" }
+ *       404: { description: "Top ya da adım bulunamadı" }
+ *       409: { description: "Oturum başka istasyonda ya da iş emri iptal/devredilmiş" }
+ */
+router.post(
+  "/manual/bring-preview",
+  verifyToken,
+  requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt"),
+  manualController.getBringPreview,
+);
+
+/**
+ * @openapi
+ * /api/tambur/manual/bring:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: "Mevcut Topu Buraya Al — UYGULA (önizleme onaylı akış)"
+ *     description: |
+ *       Topu bu Tambur adımına taşır. SEBEP ZORUNLUDUR (en az 3 karakter) ve
+ *       audit'e yazılır (`event=TAMBUR_MANUAL_BRING` — panel taşımasının
+ *       `MANUAL_MOVE` izine EK olarak, saha yolunu makine/istasyonla ayırt eder).
+ *
+ *       Reddedilenler: ölü statüler (tüketilmiş/iptal), çuvaldaki/sevkiyattaki top,
+ *       fasondaki top, iptal/devredilmiş iş emri, başka iş emrine bağlı top.
+ *       Yarış durumunda taşıma servisi atomik claim ile 409 döner (hiçbir şey
+ *       değişmez); mesaj korunur, gövdeye `code: MOVE_REJECTED` eklenir.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [targetStepId, reason]
+ *             properties:
+ *               targetStepId: { type: string, format: uuid }
+ *               barcode:      { type: string }
+ *               rollId:       { type: string, format: uuid }
+ *               reason:       { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: "Top adıma alındı" }
+ *       400: { description: "Geçersiz gövde / sebep eksik" }
+ *       404: { description: "Top ya da adım bulunamadı" }
+ *       409: { description: "Engelli top / yarış / ölü iş emri — hiçbir şey değişmedi" }
+ */
+router.post(
+  "/manual/bring",
+  verifyToken,
+  requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt"),
+  manualController.bringRoll,
+);
+
+/**
+ * @openapi
+ * /api/tambur/manual/roll:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: "Manuel Top Ekle — sistemde olmayan topu elle yarat + Tambur'a bağla"
+ *     description: |
+ *       **Bu uç envanter zincirindeki tek DELİKTİR** (diğer her top KK1 girişine,
+ *       fason kabul makbuzuna ya da bir topun kesilmesine dayanır) — bu yüzden
+ *       delik açıkça işaretlenir ve sebebi kalıcı olarak saklanır:
+ *       - `Roll.entrySource = MANUAL_ENTRY` (kolon; "elle eklenenler" raporu tek filtre),
+ *       - audit `event = TAMBUR_MANUAL_ROLL` (sebep + operatör + makine + istasyon + iş emri),
+ *       - giriş hareketinde `notes = "TAMBUR_MANUAL_ROLL: <sebep>"` (operasyonel iz;
+ *         finalize bu notu ezer — kalıcı çapa ilk ikisidir).
+ *
+ *       Barkod SUNUCUDA üretilir (istemci gönderemez). `clientToken` ZORUNLUDUR:
+ *       offline/ağ-retry'de mükerrer top doğmasın (`Roll.clientToken @unique`).
+ *       Ürün/renk verilmezse iş emrinin hedefinden miras alınır; `colorId: null`
+ *       açıkça "renksiz" demektir. Ağırlık, KK1 ağırlık girişi ayarı kapalıysa
+ *       reddedilir (tüm giriş yollarında ortak choke-point).
+ *
+ *       Doğan top doğrudan `IN_PRODUCTION` + bu Tambur adımına bağlanır (açık
+ *       hareketle) → operatör hemen kesebilir. Tamamlanmış iş emri bu işlemle
+ *       yeniden açılır ve refakat kartı aktifleşir.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [targetStepId, initialQty, reason, clientToken]
+ *             properties:
+ *               targetStepId: { type: string, format: uuid }
+ *               initialQty:   { type: number, description: "Metraj (m) — zorunlu" }
+ *               reason:       { type: string, minLength: 3, maxLength: 500 }
+ *               clientToken:  { type: string, format: uuid, description: "İdempotency anahtarı — MANTIKSAL deneme başına bir kez üretilir" }
+ *               itemId:       { type: string, format: uuid, description: "Verilmezse iş emrinin hedef ürünü" }
+ *               colorId:      { type: string, format: uuid, nullable: true, description: "Verilmezse iş emrinin hedef rengi; null = renksiz" }
+ *               width:        { type: number, nullable: true }
+ *               qualityGrade: { type: string }
+ *               weightKg:     { type: number }
+ *     responses:
+ *       201: { description: "Top oluşturuldu ve Tambur adımına bağlandı" }
+ *       400: { description: "Geçersiz gövde / sebep-metraj eksik / ürün çözülemedi / ağırlık girişi kapalı" }
+ *       404: { description: "Adım bulunamadı" }
+ *       409: { description: "Oturum başka istasyonda, iş emri ölü ya da idempotency çakışması" }
+ */
+router.post(
+  "/manual/roll",
+  verifyToken,
+  requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt"),
+  manualController.createManualRoll,
 );
 
 /**

@@ -147,6 +147,16 @@ router.get(
  *         required: false
  *         description: "1 → içerik donuk kalır, görünüm (şablon+künye) güncel ayardan çözülür"
  *         schema: { type: string, enum: ["1", "true"] }
+ *       - in: query
+ *         name: sections
+ *         required: false
+ *         description: "Tek seferlik liste seçimi (CSV). Sevk irsaliyesi: urun,cuval,ceki. Kalıcı bölüm ayarını EZER, hiçbir yere yazılmaz. Boş/geçersiz → kalıcı ayar geçerli."
+ *         schema: { type: string, example: "cuval,ceki" }
+ *       - in: query
+ *         name: merge
+ *         required: false
+ *         description: "1 → listeler aynı sayfada akar. Varsayılan: her liste kendi sayfasından başlar."
+ *         schema: { type: string, enum: ["1", "true"] }
  *     responses:
  *       200: { description: text/html baskı çıktısı }
  *       409: { description: Kaynak henüz taslak (donmuş belge yok) }

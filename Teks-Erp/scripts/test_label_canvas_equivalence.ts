@@ -94,6 +94,19 @@ async function main() {
 
     // Sığma gerçeği: şablonun görünür alanlarından kanvasa GİREMEYENLER (medya boyu)
     // native akışta da basılmıyordu — dönüştürücü hatası DEĞİL, fit gerçeği.
+    //
+    // ⚠️ BURADA DEĞER ARAMA (`output.includes(value)`) KULLANILMAZ — 2026-08-02'de
+    // tam da o yüzden iki YANLIŞ kırmızı veriyordu: mock `batchNumber` "P1207260001",
+    // mock `orderNumber` ise "SIP1207260001" ve birincisi ikincisinin ALT DİZGİSİ.
+    // Akış batchNumber'ı hiç basmadığı hâlde `includes` sipariş numarasının içinde
+    // buluyor, test "dönüştürücü alan düşürdü" diye suçluyordu. Alt-dizgi eşleşmesi
+    // ters yönde daha da tehlikelidir: gerçekten düşen bir alan, değeri başka bir
+    // alanın içinde geçtiği için sessizce AKLANIR.
+    //
+    // Doğru ölçüm KÜME karşılaştırmasıdır: akış (`templateTextLines` + PPLB döngüsü)
+    // ile dönüştürücü (`flowTemplateToCanvas`) AYNI sıralı listeyi gezer ve ilk taşan
+    // alanda `break` eder → her ikisinin bastığı küme, listenin bir ÖN EKİdir. Akışın
+    // ön ek uzunluğu, çıktıdaki metin komutu sayısıdır.
     const visibleKeys = ((t.fields as unknown as TemplateField[]) ?? [])
       .filter((f) => f.isVisible)
       .map((f) => ({ f, dv: fieldDisplayValue(payload, f.key) }))
@@ -104,9 +117,24 @@ async function main() {
         payload, template: flowTemplate, barcodeSvg: "", qrSvg: "", copies: 1,
         format: { ...format, language: "PPLB" as PrinterLanguage },
       })).content;
-      const wronglyDropped = dropped
-        .filter((x) => x.dv.value !== payload.barcode) // barkod değerini taşıyan alanlar hariç
-        .filter((x) => flowPplb.includes(asciiFold(x.dv.value)))
+      // PPLB metin komutu: `A<x>,<y>,<rot>,<font>,...`. Alan satırları rot=0 ile
+      // çıkar; sağ dikey metraj bandı rot=1'dir (alan değil) → sayıma girmez.
+      // QR (`b…`) ve alt barkod (`B…`) zaten farklı komutlar.
+      const flowTextCmds = flowPplb
+        .split(/\r?\n/)
+        .filter((l) => /^A\d+,\d+,0,/.test(l));
+      const flowOrdered = [...visibleKeys].sort((a, b) => a.f.order - b.f.order);
+      // KÖRLÜK ZEMİNİ: komut biçimi değişip regex tutmazsa sayı 0'a düşer ve
+      // "hiçbir alan yanlış düşmemiş" YEŞİLİ vakumen doğru olurdu. Ayrıştırma
+      // kendisi doğrulanır — bu satır olmadan test sessizce hiçbir şey ölçmez.
+      check(
+        `${tag}: akış metin satırları ayrıştırıldı (ön ek ölçülebilir)`,
+        flowTextCmds.length > 0 && flowTextCmds.length <= flowOrdered.length,
+        `basılan=${flowTextCmds.length} / aday=${flowOrdered.length}`,
+      );
+      const printedByFlow = flowOrdered.slice(0, flowTextCmds.length);
+      const wronglyDropped = printedByFlow
+        .filter((x) => !layoutBinds.has(x.f.key))
         .map((x) => x.f.key);
       check(
         `${tag}: sığmayan ${dropped.length} alan native akışta da yoktu (${dropped.map((x) => x.f.key).join(", ")})`,

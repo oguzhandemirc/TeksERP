@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Palette, Sparkles, Settings2 } from "lucide-react";
+import { Sparkles, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -85,11 +85,6 @@ export function StationCapabilitiesPage() {
                 <TableHead>Tür</TableHead>
                 <TableHead>
                   <span className="flex items-center gap-1.5">
-                    <Palette className="h-3.5 w-3.5" /> Renk
-                  </span>
-                </TableHead>
-                <TableHead>
-                  <span className="flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5" /> Özellik
                   </span>
                 </TableHead>
@@ -100,7 +95,7 @@ export function StationCapabilitiesPage() {
               {query.isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-full" />
                       </TableCell>
@@ -109,13 +104,14 @@ export function StationCapabilitiesPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     İstasyon bulunamadı.
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map((cap) => {
-                  const editable = cap.canApplyColor || cap.canApplyProperty;
+                  // Renk artık kısıt değil → düzenlenecek tek şey özellik listesi.
+                  const editable = cap.canApplyProperty;
                   return (
                     <TableRow
                       key={cap.stationId}
@@ -125,15 +121,6 @@ export function StationCapabilitiesPage() {
                       <TableCell className="font-medium">{cap.stationName}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {stationKindLabels[cap.stationKind]}
-                      </TableCell>
-                      <TableCell>
-                        {cap.canApplyColor ? (
-                          <Badge variant={cap.colorCount === 0 ? "secondary" : "muted"}>
-                            {cap.colorCount}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
                       </TableCell>
                       <TableCell>
                         {cap.canApplyProperty ? (

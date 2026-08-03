@@ -95,7 +95,13 @@ const router = Router();
  *     responses:
  *       200: { description: Sayfalanmış kalite derecesi listesi }
  */
-router.get("/", verifyToken, requireAnyPermission("quality:read", ...MOBILE_QUALITY_READ), controller.findAll);
+// `label-template:read`: Etiket Stüdyosu'nun koşullu basımı ("yalnız 2. kalitede
+// yazsın") kaliteleri ADIYLA listeler ama şablona KODU yazar → tasarımcının bu
+// katalogu OKUMASI şart, ayrıca `quality:read` verilmesi gerekmesin. Yalnız LİSTE
+// ucunda; yazma uçları `quality:write` ile kapalı kalır. Kod LİTERAL yazılır —
+// sabite alınırsa `test_permission_catalog` AST tarayıcısı statik çözemez ve
+// "BEYANSIZ" diye düşer (mekanik bekçi, 2026-08-02'de tam bunu yakaladı).
+router.get("/", verifyToken, requireAnyPermission("quality:read", "label-template:read", ...MOBILE_QUALITY_READ), controller.findAll);
 
 /**
  * @openapi

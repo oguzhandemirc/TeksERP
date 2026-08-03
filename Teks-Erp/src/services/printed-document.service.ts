@@ -129,6 +129,10 @@ interface BuilderEntry {
        * efektif kolon ayarına çevirir.
        */
       forceRowNotes?: boolean;
+      /** Tek seferlik liste seçimi (?sections=) — tanımayan renderer yok sayar. */
+      listSections?: string[];
+      /** Listeleri aynı sayfada akıt (?merge=1) — varsayılan ayrı sayfalar. */
+      mergeSections?: boolean;
     },
   ) => string;
 }
@@ -403,6 +407,14 @@ export class PrintedDocumentService {
        * belge versiyonu doğurmaz.
        */
       forceRowNotes?: boolean;
+      /**
+       * Tek seferlik LİSTE seçimi (?sections=) — "sadece çuval listesi bas".
+       * Kalıcı bölüm ayarını EZER, persist EDİLMEZ. Belge tipi tanımıyorsa
+       * renderer bunu sessizce yok sayar.
+       */
+      listSections?: string[];
+      /** Üç listeyi aynı sayfada akıt (?merge=1). Varsayılan: ayrı sayfalar. */
+      mergeSections?: boolean;
     },
   ): Promise<ApiResponse<{ html: string } | null>> {
     const entry = requireBuilder(docType);
@@ -423,7 +435,12 @@ export class PrintedDocumentService {
     const rowNotes = entry.resolveLiveRowNotes
       ? await entry.resolveLiveRowNotes(prisma, sourceId)
       : undefined;
-    const noteMeta = { rowNotes, forceRowNotes: opts?.forceRowNotes ?? false };
+    const noteMeta = {
+      rowNotes,
+      forceRowNotes: opts?.forceRowNotes ?? false,
+      listSections: opts?.listSections,
+      mergeSections: opts?.mergeSections ?? false,
+    };
 
     // version verilirse o versiyonun HTML'i (Electron versiyon çubuğu); yoksa güncel.
     const res =

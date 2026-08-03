@@ -13,7 +13,7 @@ import { fieldDisplayValue } from "../label-field-values";
 import { elementText, type CanvasRenderInput } from "../label-canvas-native.helper";
 import type { LabelPayload } from "../../label.service";
 import type { ResolvedLabelFormat } from "../label-format.resolver";
-import { ICON_DEFAULT_MM, expandMultilineText, type CanvasRotation, type LengthBannerElement } from "../../../config/label-elements";
+import { ICON_DEFAULT_MM, prepareElements, type CanvasRotation, type LengthBannerElement } from "../../../config/label-elements";
 import { Bitmap1, rotatedSize } from "./raster-bitmap";
 import { drawText, renderTextBitmap, measureText, rasterCleanText } from "./raster-text";
 import { drawCode128, drawQr } from "./raster-barcode";
@@ -40,7 +40,7 @@ export async function rasterizeCanvasLayout(input: CanvasRenderInput): Promise<B
   const bmp = new Bitmap1(d(format.widthMm), d(format.heightMm));
   const bc = payload.barcode ? String(payload.barcode) : "";
 
-  for (const el of expandMultilineText(layout.elements)) {
+  for (const el of prepareElements(layout.elements, payload)) {
     const x = d(el.x);
     const y = d(el.y);
     switch (el.type) {

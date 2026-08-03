@@ -57,6 +57,7 @@ import {
   type SackAllocLine,
 } from "./helpers/allocation.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
@@ -84,11 +85,29 @@ export {
 } from "./helpers/allocation.helper";
 
 // Sevkiyat liste filtreleri (Electron FilterBar + arama).
-const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier", "customer.name"];
+// `orders.some.order.orderNumber`: muhasebeci müşteriden gelen soruyu SİPARİŞ NO ile
+// arar (sevk no'yu bilmez). ShipmentOrder to-many pivot → `.some.` zorunlu;
+// buildTurkishSearch nokta-notasyonunu ve some'ı destekler (query-parser.ts:159).
+const SHIPMENT_SEARCH_FIELDS = [
+  "shipmentNo",
+  "plateNumber",
+  "driverName",
+  "carrier",
+  "customer.name",
+  "orders.some.order.orderNumber",
+];
 // destination = Shipment skaler alanı (DOMESTIC|EXPORT) → buildWhereClause halleder.
-// itemId/colorId/hasReturns BİLİNÇLİ dışarıda: relation alt-sorgusu (some) olarak elle kurulur.
+// itemId/colorId/hasReturns/invoiced BİLİNÇLİ dışarıda: relation alt-sorgusu (some) ya da
+// türetilmiş null-testi olarak elle kurulur.
 const SHIPMENT_FILTER_FIELDS = ["status", "customerId", "branchId", "destination"] as const;
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
+
+/** Muhasebe dönem bandı — filtreli kümenin tamamı (`?withSummary=true` ile istenir). */
+export interface ShipmentListSummary {
+  shipmentCount: number;
+  totalMeters: number;
+  totalKg: number;
+}
 
 // `NON_SACKABLE_STATUSES` + `SACK_ABSENT_STATUSES` artık `helpers/sack-invariants.helper`
 // içinde TEK kaynak (üstte import edilir). Buradaki dosya-yerel kopya kaldırıldı: aynı
@@ -1552,6 +1571,78 @@ export class ShippingService {
     return { success: true, data: { shipmentId, dispatchNote: value }, message: "İrsaliye açıklaması güncellendi" };
   }
 
+  /**
+   * FATURA İŞARETİ — "bu sevkin faturası kesildi mi" (muhasebe ekranı).
+   *
+   * ERP fatura KESMEZ: burada saklanan yalnız dış muhasebe programındaki belgenin
+   * numarası + tarihi. `invoiceNo: null` → işaret kaldırılır (yanlış no girilmiş olabilir),
+   * tarih de birlikte temizlenir — "numarasız ama faturalı" ara durum YOK.
+   *
+   * Yalnız SEVK EDİLMİŞ sevkiyat faturalanır: planlı sevkiyatın malı daha çıkmadı,
+   * ona kesilen fatura sahte olurdu. Kontrol `updateMany WHERE {id, status}` ile ATOMİK
+   * yapılır (check-then-act yasağı) → 0 satır = ya kayıt yok ya statü uygun değil.
+   */
+  async setShipmentInvoice(
+    shipmentId: string,
+    invoiceNo: string | null,
+    invoicedAt: Date | null,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const value = invoiceNo?.trim().slice(0, 64) || null;
+    const stamp = value ? (invoicedAt ?? new Date()) : null;
+    const updated = await prisma.shipment.updateMany({
+      where: { id: shipmentId, status: ShipmentStatus.DISPATCHED },
+      data: { invoiceNo: value, invoicedAt: stamp, invoicedById: value ? (userId ?? null) : null },
+    });
+    if (updated.count === 0) {
+      // Ayrımı kullanıcıya söyle: "bulunamadı" ile "henüz sevk edilmedi" farklı hatalar.
+      const exists = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { status: true } });
+      if (!exists) throw AppError.notFound("Sevkiyat bulunamadı");
+      throw AppError.badRequest("Yalnız sevk edilmiş (DISPATCHED) sevkiyat faturalandırılabilir");
+    }
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SHIPMENT",
+      recordId: shipmentId,
+      newData: { kind: "INVOICE_MARK", invoiceNo: value, invoicedAt: stamp },
+    });
+    return {
+      success: true,
+      data: { shipmentId, invoiceNo: value, invoicedAt: stamp },
+      message: value ? "Fatura bilgisi kaydedildi" : "Fatura işareti kaldırıldı",
+    };
+  }
+
+  /** Fasondan doğrudan sevk fatura işareti — çuval sevkiyatıyla AYNI sözleşme.
+   *  DirectShipment'ta statü yok (kayıt doğduğu an sevk edilmiştir) → statü guard'ı yok. */
+  async setDirectShipmentInvoice(
+    directShipmentId: string,
+    invoiceNo: string | null,
+    invoicedAt: Date | null,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const value = invoiceNo?.trim().slice(0, 64) || null;
+    const stamp = value ? (invoicedAt ?? new Date()) : null;
+    const updated = await prisma.directShipment.updateMany({
+      where: { id: directShipmentId },
+      data: { invoiceNo: value, invoicedAt: stamp, invoicedById: value ? (userId ?? null) : null },
+    });
+    if (updated.count === 0) throw AppError.notFound("Fasondan sevk kaydı bulunamadı");
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "DIRECT_SHIPMENT",
+      recordId: directShipmentId,
+      newData: { kind: "INVOICE_MARK", invoiceNo: value, invoicedAt: stamp },
+    });
+    return {
+      success: true,
+      data: { directShipmentId, invoiceNo: value, invoicedAt: stamp },
+      message: value ? "Fatura bilgisi kaydedildi" : "Fatura işareti kaldırıldı",
+    };
+  }
+
   /** İrsaliye açıklamasını oku — irsaliye modalı notu ağır getDetail'siz alsın. */
   async getDispatchNote(shipmentId: string): Promise<ApiResponse<{ dispatchNote: string | null }>> {
     const s = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchNote: true } });
@@ -1753,7 +1844,12 @@ export class ShippingService {
   // LİSTE / DETAY
   // =========================================================================
 
-  async listShipments(req: Request): Promise<ApiResponse<unknown> | CursorPaginatedResponse<unknown>> {
+  async listShipments(
+    req: Request,
+  ): Promise<
+    | (ApiResponse<unknown> & { summary?: ShipmentListSummary })
+    | (CursorPaginatedResponse<unknown> & { summary?: ShipmentListSummary })
+  > {
     const params = parseQueryParams(req);
     const safeFilters: Record<string, string | string[]> = {};
     for (const [k, v] of Object.entries(params.filters)) {
@@ -1765,6 +1861,17 @@ export class ShippingService {
     const rawStatus = req.query.status as string | undefined;
     if (rawStatus && Object.values(ShipmentStatus).includes(rawStatus as ShipmentStatus)) {
       where.status = rawStatus as ShipmentStatus;
+    }
+
+    // İptal edilmiş sevkiyatları gizle (panel varsayılanı). SHIPMENT_FILTER_FIELDS
+    // allowlist'i bayrağı zaten `safeFilters`'a almaz — ham params.filters'tan
+    // okunur. `rawStatus` (üstteki tekil ?status=) de açık niyet sayılır: varsa
+    // dışlama uygulanmaz, yoksa çelişip listeyi boşaltırdı.
+    if (!rawStatus) {
+      const hideCancelled = buildHideCancelledWhere(params.filters, [
+        ShipmentStatus.CANCELLED,
+      ]);
+      if (hideCancelled) where.status = hideCancelled.status as Prisma.EnumShipmentStatusFilter;
     }
     const rawCustomerId = req.query.customerId as string | undefined;
     if (rawCustomerId) where.customerId = rawCustomerId;
@@ -1792,25 +1899,45 @@ export class ShippingService {
     const hasReturnsFilter = params.filters.hasReturns === "true";
     if (hasReturnsFilter) where.returns = { some: { cancelledAt: null } };
 
+    // --- FATURA FİLTRESİ (muhasebe) — türetilmiş null-testi, skaler eşitlik DEĞİL →
+    // FILTER_FIELDS whitelist'ine konmaz (hasReturns ile aynı gerekçe).
+    const invoicedRaw = params.filters.invoiced;
+    const invoicedFilter =
+      invoicedRaw === "true" ? true : invoicedRaw === "false" ? false : null;
+    if (invoicedFilter !== null) {
+      where.invoicedAt = invoicedFilter ? { not: null } : null;
+    }
+
     // destination (DOMESTIC|EXPORT) buildWhereClause tarafından where'e YAZILDI;
     // DirectShipment'ta destination YOK → aktifse doğrudan sevkler union'dan düşer.
     const hasDestinationFilter = safeFilters.destination != null;
 
-    // --- SIRALAMA (whitelist) — createdAt|shipmentNo (ikisi de her iki tabloda
-    // NON-NULL var → union keyset güvenli). dispatchedAt BİLİNÇLİ dışarıda: PLANNED'da
-    // null olduğundan NULLS sıralaması union keyset'i bozar.
-    const SORTABLE = ["createdAt", "shipmentNo"] as const;
+    // --- SIRALAMA (whitelist) — createdAt|shipmentNo|dispatchedAt.
+    // dispatchedAt PLANNED'da NULL'dur; keyset'i bozmadan sıralamak için nulls-last
+    // + `dynamicCursorWhere(..., sortNullable=true)` (cursor.ts:214 null kuyruk fazı)
+    // kullanılır. Muhasebe ekranı bunu ister: liste "Sevk Tarihi" basıp createdAt'e
+    // göre dizilince pazartesi kurulup cuma sevk edilen sevkiyat yanlış yere düşüyordu.
+    // ⚠️ DirectShipment'ta bu alanın adı `shippedAt` (NON-NULL) — direct dalındaki
+    // orderBy/cursor AYRI kurulur, Shipment'ınki paylaşılamaz.
+    const SORTABLE = ["createdAt", "shipmentNo", "dispatchedAt"] as const;
     type ShipSortField = (typeof SORTABLE)[number];
     const sortField = resolveSortBy(params.sortBy, SORTABLE, "createdAt") as ShipSortField;
     const sortDir: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
+    // Direct tablosundaki karşılık — union'ın iki tarafında alan adı farklı.
+    const directSortField = sortField === "dispatchedAt" ? "shippedAt" : sortField;
+    const sortNullable = sortField === "dispatchedAt";
     const shipOrderBy: Prisma.ShipmentOrderByWithRelationInput[] =
       sortField === "shipmentNo"
         ? [{ shipmentNo: sortDir }, { id: sortDir }]
-        : [{ createdAt: sortDir }, { id: sortDir }];
+        : sortField === "dispatchedAt"
+          ? [{ dispatchedAt: { sort: sortDir, nulls: "last" } }, { id: sortDir }]
+          : [{ createdAt: sortDir }, { id: sortDir }];
     const directOrderBy: Prisma.DirectShipmentOrderByWithRelationInput[] =
       sortField === "shipmentNo"
         ? [{ shipmentNo: sortDir }, { id: sortDir }]
-        : [{ createdAt: sortDir }, { id: sortDir }];
+        : sortField === "dispatchedAt"
+          ? [{ shippedAt: sortDir }, { id: sortDir }]
+          : [{ createdAt: sortDir }, { id: sortDir }];
 
     const select = {
       id: true,
@@ -1821,6 +1948,8 @@ export class ShippingService {
       carrier: true,
       dispatchedAt: true,
       createdAt: true,
+      invoiceNo: true,
+      invoicedAt: true,
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
       _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: { cancelledAt: null } } } },
@@ -1837,14 +1966,24 @@ export class ShippingService {
       shippedAt: true,
       createdAt: true,
       rollCount: true,
+      totalQty: true,
       reason: true,
+      invoiceNo: true,
+      invoicedAt: true,
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
       _count: { select: { allocations: true } },
     } as const;
     type ShipRow = Prisma.ShipmentGetPayload<{ select: typeof select }>;
     type DirectRow = Prisma.DirectShipmentGetPayload<{ select: typeof directSelect }>;
-    const mapShip = (s: ShipRow) => ({ kind: "SHIPMENT" as const, ...s });
+    // totalMeters/totalKg: SHIPMENT satırlarında `attachTotals` doldurur (toplama
+    // gerektirir); DIRECT'te metraj zaten denormalize (`DirectShipment.totalQty`) → sorgu yok.
+    const mapShip = (s: ShipRow) => ({
+      kind: "SHIPMENT" as const,
+      ...s,
+      totalMeters: 0,
+      totalKg: 0,
+    });
     const mapDirect = (d: DirectRow) => ({
       kind: "DIRECT" as const,
       id: d.id,
@@ -1856,8 +1995,12 @@ export class ShippingService {
       dispatchedAt: d.shippedAt,
       createdAt: d.createdAt,
       reason: d.reason,
+      invoiceNo: d.invoiceNo,
+      invoicedAt: d.invoicedAt,
       customer: d.customer,
       branch: d.branch,
+      totalMeters: Number(d.totalQty),
+      totalKg: 0, // doğrudan sevkte çuval/tartı yok
       _count: { sacks: 0, rolls: d.rollCount, orders: d._count.allocations, returns: 0 },
     });
     type UnifiedRow = ReturnType<typeof mapShip> | ReturnType<typeof mapDirect>;
@@ -1866,6 +2009,20 @@ export class ShippingService {
     // DAİMA id, aynı yönde (dynamicCursorWhere tie-break'iyle simetrik).
     const dir = sortDir === "asc" ? 1 : -1;
     const cmp = (a: UnifiedRow, b: UnifiedRow): number => {
+      // NULL kuyruğu: dispatchedAt sıralamasında null'lar YÖNDEN BAĞIMSIZ olarak sonda
+      // durur (Prisma `nulls: "last"` ile birebir) → `dir` ile çarpılmaz.
+      if (sortField === "dispatchedAt") {
+        const av = a.dispatchedAt;
+        const bv = b.dispatchedAt;
+        if (av === null && bv !== null) return 1;
+        if (bv === null && av !== null) return -1;
+        if (av !== null && bv !== null) {
+          const d = av.getTime() - bv.getTime();
+          if (d !== 0) return dir * d;
+        }
+        const idcN = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+        return dir * idcN;
+      }
       const primary =
         sortField === "shipmentNo"
           ? a.shipmentNo < b.shipmentNo
@@ -1907,8 +2064,18 @@ export class ShippingService {
       if (params.search)
         directBaseWhere.OR = buildTurkishSearch<Prisma.DirectShipmentWhereInput>(
           params.search,
-          ["shipmentNo", "reason", "customer.name"]
+          [
+            "shipmentNo",
+            "reason",
+            "customer.name",
+            // Sipariş no ile arama — Shipment tarafındaki `orders.some.order.orderNumber`
+            // karşılığı; doğrudan sevkte sipariş bağı allocation üzerinden kurulur.
+            "allocations.some.orderLine.order.orderNumber",
+          ]
         );
+      if (invoicedFilter !== null) {
+        directBaseWhere.invoicedAt = invoicedFilter ? { not: null } : null;
+      }
       if (params.dateField && (params.dateFrom || params.dateTo)) {
         const range: { gte?: Date; lte?: Date } = {};
         if (params.dateFrom) range.gte = params.dateFrom;
@@ -1961,14 +2128,79 @@ export class ShippingService {
       }));
     };
 
+    // --- BRÜT TOPLAMLAR (metraj / kg / top adedi) -----------------------------
+    // ⚠️ SEVK RAKAMI BRÜT'TÜR (kök CLAUDE.md 2026-08-02, saha vakası SVK2007260001).
+    // İade `Roll.shipmentId`'yi NULL'lar (`return.service.ts:324-325`) → CANLI sayım
+    // NET verir ve liste, donmuş irsaliyeden FARKLI bir sayı söyler. Bu yüzden iptal
+    // edilmemiş iadeler metraja ve top adedine GERİ EKLENİR; dört yüzey (PDF, liste,
+    // fiş, muhasebe Excel'i) aynı rakamı basar. İade bilgisi kaybolmaz — `_count.returns`
+    // ayrı alan olarak duruyor ve listede rozet olarak gösteriliyor.
+    //
+    // Donmuş `PrintedDocument.snapshot` OKUNMAZ: perf kuralı 13 (liste sorgusunda
+    // snapshot JSON çekilmez) — `accounting-export.service.ts:255` de aynı sebeple
+    // geri-ekleme yolunu seçti. Kg geri-ekleme İSTEMEZ: iade `Sack.weightKg`'a
+    // dokunmaz (tartı sevk anında donmuş brüt değerdir).
+    //
+    // `attachBadges` ile aynı yerleşim: merge/slice SONRASI, yalnız sayfadaki ≤limit
+    // id üzerinde; tx dışı salt-okuma (`prisma.*` global) → `Promise.all` serbest.
+    // DIRECT satırlar sorguya girmez — `DirectShipment.totalQty`/`rollCount` denormalize.
+    const attachTotals = async <T extends UnifiedRow>(rows: T[]): Promise<T[]> => {
+      const shipIds = rows.filter((r) => r.kind === "SHIPMENT").map((r) => r.id);
+      if (shipIds.length === 0) return rows;
+      const [rollGroups, sackGroups, returnGroups] = await Promise.all([
+        prisma.roll.groupBy({
+          by: ["shipmentId"],
+          where: { shipmentId: { in: shipIds } },
+          _sum: { currentQty: true },
+        }),
+        prisma.sack.groupBy({
+          by: ["shipmentId"],
+          where: { shipmentId: { in: shipIds } },
+          _sum: { weightKg: true },
+        }),
+        prisma.rollReturn.groupBy({
+          by: ["fromShipmentId"],
+          where: { fromShipmentId: { in: shipIds }, cancelledAt: null },
+          _sum: { qty: true },
+        }),
+      ]);
+      const liveMeters = new Map(rollGroups.map((g) => [g.shipmentId, g._sum.currentQty ?? D0()]));
+      const kg = new Map(sackGroups.map((g) => [g.shipmentId, g._sum.weightKg ?? D0()]));
+      const returnedMeters = new Map(returnGroups.map((g) => [g.fromShipmentId, g._sum.qty ?? D0()]));
+      return rows.map((r) => {
+        if (r.kind !== "SHIPMENT") return r;
+        const gross = (liveMeters.get(r.id) ?? D0()).plus(returnedMeters.get(r.id) ?? D0());
+        return {
+          ...r,
+          totalMeters: Number(gross),
+          totalKg: Number(kg.get(r.id) ?? D0()),
+          // Brüt top adedi: canlı (iade sonrası eksilmiş) + iade edilmiş adet.
+          // İade sayısı zaten `_count.returns` ile geldi (aynı `cancelledAt: null`
+          // süzgeci) → ayrı sorgu gerekmez.
+          _count: { ...r._count, rolls: r._count.rolls + r._count.returns },
+        };
+      });
+    };
+
     if (isCursorRequested(req)) {
       const rawLimit = parseInt(req.query.limit as string, 10) || 50;
       const limit = Math.min(Math.max(1, rawLimit), 200);
       const wantTotal = req.query.withTotal === "true";
+      // Muhasebe ekranının dönem bandı — filtreli KÜMENİN TAMAMI (sayfa değil).
+      // Bayrak olmadan ek sorgu koşmaz → operasyon ekranı bedel ödemez.
+      const wantSummary = req.query.withSummary === "true";
       const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
-      const cw = cursor ? dynamicCursorWhere(cursor, sortField, sortDir) : null;
+      const cw = cursor ? dynamicCursorWhere(cursor, sortField, sortDir, sortNullable) : null;
+      // Direct tarafı AYRI cursor ister: union'ın iki tablosunda sıralama kolonunun adı
+      // farklı (dispatchedAt ↔ shippedAt). Aynı `cw` nesnesini paylaşmak DirectShipment'ta
+      // var olmayan bir alana filtre yazmak olurdu.
+      const directCw = cursor
+        ? directSortField === sortField
+          ? cw
+          : dynamicCursorWhere(cursor, directSortField, sortDir) // shippedAt NON-NULL → sortNullable YOK
+        : null;
       const shipWhere = cw ? { AND: [where, cw] } : where;
-      const directWhere = cw ? { AND: [directBaseWhere, cw] } : directBaseWhere;
+      const directWhere = directCw ? { AND: [directBaseWhere, directCw] } : directBaseWhere;
       const [shipItems, directItems, shipTotal, directTotal] = await Promise.all([
         prisma.shipment.findMany({ where: shipWhere, orderBy: shipOrderBy, take: limit + 1, select }),
         includeDirect
@@ -1983,8 +2215,16 @@ export class ShippingService {
       const last = dataRows[dataRows.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, sortField) : null;
       const totalEstimate = shipTotal !== undefined ? shipTotal + (directTotal ?? 0) : undefined;
-      const data = await attachBadges(dataRows);
-      return { success: true, data, pagination: { nextCursor, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) } };
+      const data = await attachTotals(await attachBadges(dataRows));
+      const summary = wantSummary
+        ? await this.buildShipmentListSummary(where, includeDirect ? directBaseWhere : null)
+        : undefined;
+      return {
+        success: true,
+        data,
+        ...(summary ? { summary } : {}),
+        pagination: { nextCursor, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) },
+      };
     }
 
     const [shipments, directs] = await Promise.all([
@@ -1994,8 +2234,42 @@ export class ShippingService {
         : Promise.resolve([] as DirectRow[]),
     ]);
     const merged: UnifiedRow[] = [...shipments.map(mapShip), ...directs.map(mapDirect)].sort(cmp).slice(0, 200);
-    const data = await attachBadges(merged);
+    const data = await attachTotals(await attachBadges(merged));
     return { success: true, data };
+  }
+
+  /**
+   * Muhasebe dönem bandı — filtrelenmiş KÜMENİN TAMAMI için sevk adedi + brüt
+   * metraj + kg. Sayfa toplamı DEĞİL: muhasebeci "bu ay kaç metre sevk ettik"
+   * sorusunu Excel indirmeden yanıtlayabilsin diye.
+   *
+   * Metraj `attachTotals` ile AYNI brüt sözleşmesini taşır (canlı + iptal edilmemiş
+   * iade geri-eklemesi) — yoksa banttaki toplam ile satırların toplamı tutmazdı.
+   */
+  private async buildShipmentListSummary(
+    where: Prisma.ShipmentWhereInput,
+    directWhere: Prisma.DirectShipmentWhereInput | null,
+  ): Promise<ShipmentListSummary> {
+    const [shipCount, rollAgg, sackAgg, returnAgg, directAgg] = await Promise.all([
+      prisma.shipment.count({ where }),
+      prisma.roll.aggregate({ where: { shipment: where }, _sum: { currentQty: true } }),
+      prisma.sack.aggregate({ where: { shipment: where }, _sum: { weightKg: true } }),
+      prisma.rollReturn.aggregate({
+        where: { cancelledAt: null, fromShipment: where },
+        _sum: { qty: true },
+      }),
+      directWhere
+        ? prisma.directShipment.aggregate({ where: directWhere, _sum: { totalQty: true }, _count: { _all: true } })
+        : Promise.resolve(null),
+    ]);
+    const meters = (rollAgg._sum.currentQty ?? D0())
+      .plus(returnAgg._sum.qty ?? D0())
+      .plus(directAgg?._sum.totalQty ?? D0());
+    return {
+      shipmentCount: shipCount + (directAgg?._count._all ?? 0),
+      totalMeters: Number(meters),
+      totalKg: Number(sackAgg._sum.weightKg ?? D0()),
+    };
   }
 
   /** Fasondan doğrudan sevk (DirectShipment) detayı — birleşik Sevkiyatlar

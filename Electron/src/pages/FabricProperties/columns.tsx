@@ -35,6 +35,35 @@ export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
       ),
   },
   {
+    id: "stations",
+    header: "Uygulayan İstasyonlar",
+    // Bağsız özellik = hiçbir iş emrinde seçilemez. Eskiden bu durum hiçbir
+    // yüzeyde görünmüyordu ve ZIMPARALI iki hafta fark edilmeden kullanılamadı.
+    cell: ({ row }) => {
+      const caps = row.original.stationCapabilities ?? [];
+      if (caps.length === 0) {
+        return (
+          <Badge
+            variant="outline"
+            className="border-warning/60 text-warning"
+            title="Bu özellik hiçbir istasyona bağlı değil — hiçbir iş emrinde seçilemez. Düzenle'den istasyon ata."
+          >
+            İstasyon atanmamış
+          </Badge>
+        );
+      }
+      return (
+        <div className="flex flex-wrap gap-1">
+          {caps.map((c) => (
+            <Badge key={c.stationId} variant="muted" className="text-[10px]">
+              {c.station.name}
+            </Badge>
+          ))}
+        </div>
+      );
+    },
+  },
+  {
     accessorKey: "sortOrder",
     header: () => <SortableHeader field="sortOrder" label="Sıra" />,
   },

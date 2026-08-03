@@ -24,6 +24,7 @@ import {
   scaleDocCss,
   docLogoHtml,
   DOC_LOGO_CSS,
+  DOC_PAGINATION_CSS,
   DOC_STAMPS_CSS,
   docCopyBadge,
   docBlocksHtml,
@@ -204,6 +205,17 @@ interface RenderMeta {
    * ayarını EZER (OR). Hiçbir yere yazılmaz.
    */
   forceRowNotes?: boolean;
+  /**
+   * Tek seferlik LİSTE seçimi (?sections=urun,cuval,ceki) — "sadece çuval
+   * listesi bas" gibi. Verilmezse kalıcı ayar geçerli. Hiçbir yere yazılmaz.
+   */
+  listSections?: string[];
+  /**
+   * Üç listeyi AYNI sayfada akıt (?merge=1). Varsayılan AYRI: her liste kendi
+   * sayfasından başlar — çuval listesi 1,5 sayfa tuttuğunda çeki listesi kalan
+   * yarım sayfaya sıkışmaz. Hiçbir yere yazılmaz.
+   */
+  mergeSections?: boolean;
 }
 
 function esc(v: unknown): string {
@@ -240,6 +252,35 @@ function fmtDate(iso: string | null): string {
 /** Bir bölüm açık mı — yalnız açıkça false ise gizle (varsayılan: göster). */
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {
   return sections?.[key] !== false;
+}
+
+/** Belgenin üç veri listesi — baskı diyaloğunda tek tek seçilebilir. */
+export const DISPATCH_LIST_SECTIONS = ["urun", "cuval", "ceki"] as const;
+export type DispatchListSection = (typeof DISPATCH_LIST_SECTIONS)[number];
+
+/**
+ * Bir LİSTE bölümü basılacak mı.
+ *
+ * İki katman, öncelik sırasıyla:
+ *  1. `meta.listSections` — TEK SEFERLİK seçim (baskı diyaloğundaki tikler,
+ *     `?sections=cuval` gibi). Verilmişse KALICI ayarı tamamen EZER ve hiçbir
+ *     yere yazılmaz — `?rowNotes=1` ile aynı sözleşme.
+ *  2. `cfg.sections` — Belge Kişiselleştirme'deki kalıcı ayar.
+ *
+ * Boş dizi ile "hiçbiri" DEMEK MÜMKÜN DEĞİL: seçim boş gelirse (kullanıcı üç tiki
+ * de kapatmış) 1. katman yok sayılır, yoksa belge gövdesiz basılırdı. Diyalog da
+ * son tikin kapanmasına izin vermez — iki tarafta da aynı kural.
+ */
+function listSectionOn(
+  cfg: { sections?: Record<string, boolean> },
+  meta: RenderMeta,
+  key: DispatchListSection,
+): boolean {
+  const picked = meta.listSections?.filter((s) =>
+    (DISPATCH_LIST_SECTIONS as readonly string[]).includes(s),
+  );
+  if (picked && picked.length > 0) return picked.includes(key);
+  return sectionOn(cfg.sections, key);
 }
 
 export function renderShipmentDispatchHtml(
@@ -335,10 +376,21 @@ export function renderShipmentDispatchHtml(
     ? `<div class="meta-row">${vehicleBits.join(" &nbsp;·&nbsp; ")}</div>`
     : "";
 
+  // Sayfa ayrımı: BASILAN listelerin ilki hariç hepsi yeni sayfadan başlar.
+  // Sayaç yalnız gerçekten render edilen bölümde artar (kapalı bölüm sayfa
+  // açmaz) — üç bölüm kaynak sırasıyla değerlendirildiği için sıra garantili.
+  const splitPages = meta.mergeSections !== true;
+  let renderedSections = 0;
+  const secClass = (): string => {
+    const cls = splitPages && renderedSections > 0 ? "sec pgb" : "sec";
+    renderedSections++;
+    return cls;
+  };
+
   // 1) ÜRÜN LİSTESİ — kolonlar cfg.columns.urun ile aç/kapa + sıralanır.
-  const urunSection = sectionOn(cfg.sections, "urun")
+  const urunSection = listSectionOn(cfg, meta, "urun")
     ? buildDocTable<ShipmentDocProduct>({
-        className: "sec",
+        className: secClass(),
         caption: L.urunCaption,
         colCfg: cfg.columns?.urun,
         footLabel: L.toplam,
@@ -366,9 +418,9 @@ export function renderShipmentDispatchHtml(
       ? { ...cfg.columns?.cuval, shown: [...(cfg.columns?.cuval?.shown ?? []), "note"] }
       : cfg.columns?.cuval;
 
-  const cuvalSection = sectionOn(cfg.sections, "cuval")
+  const cuvalSection = listSectionOn(cfg, meta, "cuval")
     ? buildDocTable<ShipmentDocSack>({
-        className: "sec",
+        className: secClass(),
         caption: L.cuvalCaption,
         colCfg: cuvalColCfg,
         footLabel: L.toplam,
@@ -398,9 +450,9 @@ export function renderShipmentDispatchHtml(
     : "";
 
   // 3) ÇEKİ LİSTESİ
-  const cekiSection = sectionOn(cfg.sections, "ceki")
+  const cekiSection = listSectionOn(cfg, meta, "ceki")
     ? buildDocTable<ShipmentDocCeki>({
-        className: "sec",
+        className: secClass(),
         caption: L.cekiCaption,
         colCfg: cfg.columns?.ceki,
         footLabel: L.toplam,
@@ -488,6 +540,21 @@ export function renderShipmentDispatchHtml(
   .sign-lbl { font-size: 10px; color: #333; }
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
+  ${DOC_PAGINATION_CSS}
+  /* Sayfa ayrımı — .pgb taşıyan liste kendi sayfasından başlar. İlk liste bu
+     sınıfı ALMAZ (belge boş bir sayfayla açılmasın). ?merge=1 ile sınıf hiç
+     basılmaz, listeler eskisi gibi akar. */
+  .pgb { break-before: page; page-break-before: always; }
+  /* Önizleme iframe'i tek uzun akış çizer; @page/break yalnız BASKI'da görünür.
+     Kural görünmezse kullanıcı "yine tek sayfa" sanır — bu yüzden EKRANDA sayfa
+     sınırını çiziyoruz. Baskıda bu blok yok sayılır (media=screen). */
+  @media screen {
+    table.pgb { margin-top: 26px; border-top: 3px double #b6bcc6; }
+    table.pgb thead th.caption::before {
+      content: "— yeni sayfa —"; display: block; margin-bottom: 5px;
+      font-size: 9px; font-weight: 400; letter-spacing: .08em; color: #94a3b8;
+    }
+  }
   ${docTableCss(style, [".sec"])}
 `,
     style,

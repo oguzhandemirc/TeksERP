@@ -63,7 +63,9 @@ export interface FeatureFlags {
   /** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı (default false).
    *  Backend ENFORCE eder ama YALNIZ yeni atama oluşturmayı kapılar — dağıtılmış iş
    *  emirleri bayrak kapansa da bypass rejiminde biter (rejim atama satırında kalıcı).
-   *  Mobilde ayrıca "Kurşun Dağıtım" ekranını gizler (bkz. hooks/useVisibleScreens). */
+   *  Mobilde "Kurşun Dağıtım" ekranının görünürlüğünü ETKİLER ama tek başına
+   *  BELİRLEMEZ: bayrak kapalıyken de bekleyen dağıtım varsa ekran görünür
+   *  (bkz. hooks/useVisibleScreens + hooks/useKursunBypassVisibility). */
   kursunBypassEnabled: boolean;
 }
 

@@ -27,6 +27,7 @@ import {
 import { registerStationMutationDefaults } from './src/offline/mutations';
 import { isPersistedQueryKey, shouldPersistMutation } from './src/offline/persistPolicy';
 import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
+import { KURSUN_VISIBILITY_KEY } from './src/hooks/useKursunBypassVisibility';
 import { colors } from './src/theme/tokens';
 import { recordActivity } from './src/store/lockStore';
 import IdleLockGate from './src/components/lock/IdleLockGate';
@@ -57,11 +58,14 @@ const theme = {
 };
 
 export default function App() {
-  // Uygulama arka plandan/inaktiften ÖNE döndüğünde feature flag'leri tazele.
+  // Uygulama arka plandan/inaktiften ÖNE döndüğünde MENÜYÜ ÇİZEN verileri tazele.
   // Admin Electron'dan bir flag'i toggle edince (örn. boyahane notu mobil giriş),
   // operatör uygulamayı öne getirince 5 dk staleTime'ı beklemeden yansır.
   // invalidate aktif observer'ı hemen refetch'e zorlar; offline ise (queries
   // networkMode='online') refetch beklemeye alınır, son persisted değer korunur.
+  // Kurşun görünürlük sayacı da aynı sepette: planlamacı Electron'dan iş dağıtınca
+  // "Kurşun Dağıtım" karosu bayrak kapalı olsa da öne dönüşte belirir (izni
+  // olmayan kullanıcıda sorgu enabled:false olduğu için invalidate no-op'tur).
   const appState = useRef(AppState.currentState);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
@@ -69,6 +73,7 @@ export default function App() {
       appState.current = next;
       if (next === 'active' && prev !== 'active') {
         void queryClient.invalidateQueries({ queryKey: FLAGS_KEY });
+        void queryClient.invalidateQueries({ queryKey: KURSUN_VISIBILITY_KEY });
       }
     });
     return () => sub.remove();

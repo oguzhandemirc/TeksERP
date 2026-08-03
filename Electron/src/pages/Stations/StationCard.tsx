@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Pencil, Palette, Sparkles } from "lucide-react";
+import { Pencil, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,7 +56,9 @@ export const StationCard = memo(function StationCard({
   onEditCap,
 }: Props) {
   const tone = toneFor(s.type, s.kind);
-  const capEditable = !!(cap && (cap.canApplyColor || cap.canApplyProperty));
+  // Renk artık istasyon bazlı kısıt değil (bkz. schema.prisma → StationColor);
+  // düzenlenecek tek yetenek özellik listesi.
+  const capEditable = !!cap?.canApplyProperty;
 
   return (
     <Card className="overflow-hidden shadow-sm">
@@ -122,20 +124,11 @@ export const StationCard = memo(function StationCard({
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-                {cap!.canApplyColor && (
-                  <span className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs">
-                    <Palette className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-semibold">{cap!.colorCount}</span>
-                    <span className="text-muted-foreground">renk</span>
-                  </span>
-                )}
-                {cap!.canApplyProperty && (
-                  <span className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs">
-                    <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-semibold">{cap!.propertyCount}</span>
-                    <span className="text-muted-foreground">özellik</span>
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs">
+                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-semibold">{cap!.propertyCount}</span>
+                  <span className="text-muted-foreground">özellik</span>
+                </span>
               </div>
             </div>
           )}

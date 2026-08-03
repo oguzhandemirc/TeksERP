@@ -1,13 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TextInput, TouchableRipple, Icon } from 'react-native-paper';
-import { useQuery } from '@tanstack/react-query';
-import PickerModal, { type PickerOption } from '../../../components/PickerModal';
-import { colorService } from '../../../services/color.service';
-import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
+import ColorSelectField from '../../../components/ColorSelectField';
 import { colors, spacing, radius } from '../../../theme';
 
-// Gelişmiş mod + Düzenle formu ortak alanları (rota/sipariş HARİÇ — onlar New'e özel).
+// İş emri "Düzenle" formunun ortak alanları. (Hızlı İş Emri sihirbazı bu bileşeni
+// KULLANMAZ — orada alanlar rotaya göre koşullu çıkar; bkz. wizard/StepProduction.)
 export interface WoHeaderFieldValues {
   targetColorId: string | null;
   width: string;
@@ -28,115 +26,27 @@ export const EMPTY_HEADER_FIELDS: WoHeaderFieldValues = {
   batchNumber: '',
 };
 
-const FOLD_OPTIONS = ['2-KAT', '4-KAT'];
+export const FOLD_OPTIONS = ['2-KAT', '4-KAT'];
 
 interface Props {
   value: WoHeaderFieldValues;
   onChange: (patch: Partial<WoHeaderFieldValues>) => void;
-  /** Parti kodu alanı gösterilsin mi (Yeni'de otomatik olduğundan gizli, Düzenle'de açık). */
+  /** Parti kodu alanı gösterilsin mi. */
   showBatchNumber?: boolean;
-  /** Seçili hedef renk adı çözümlendiğinde üst bileşene bildir (özet satırı için). */
-  onColorLabelResolved?: (label: string | null) => void;
-  /** Sipariş bağlıyken renk + en sipariş kaleminden gelir ve kilitlenir (backend
-   *  bağlı siparişte farklı spec kabul etmiyor). */
-  lockColorWidth?: boolean;
-  /** Renk adını dışarıdan dayat (sipariş kaleminden gelen ad) — public picker'da
-   *  olmayan müşteri-özel renkte de doğru ad görünsün, round-trip beklenmesin. */
-  colorLabelOverride?: string | null;
 }
 
-export default function WorkOrderHeaderFields({
-  value,
-  onChange,
-  showBatchNumber,
-  onColorLabelResolved,
-  lockColorWidth,
-  colorLabelOverride,
-}: Props) {
-  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber }: Props) {
   // Hedef metraj/kg nadiren kullanılır → varsayılan kapalı; değer varsa açık gelir.
   const [qtyOpen, setQtyOpen] = useState(() => !!(value.targetQuantity || value.targetWeight));
 
-  // scope=public → müşteriye özel (assigned) renkler listelenmez. Hızlı İş Emri
-  // stok üretimidir (müşterisiz); exclusive renkler burada çıkmamalı.
-  const colorsQuery = useQuery({
-    queryKey: ['colors', 'wo-picker-public'],
-    queryFn: () =>
-      colorService.listPublicForPicker({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc' }),
-    staleTime: 10 * 60 * 1000,
-  });
-
-  useTruncationWarning(colorsQuery.data?.pagination, 'Renk');
-
-  const colorOptions: PickerOption[] = useMemo(
-    () =>
-      (colorsQuery.data?.data ?? []).map((c) => ({
-        value: c.id,
-        label: c.name,
-        sublabel: c.code ?? undefined,
-        badge: c.hex ? { text: ' ', color: c.hex } : undefined,
-      })),
-    [colorsQuery.data],
-  );
-
-  // Seçili renk public listede mi? Değilse (örn. stok roldan türetilen müşteriye
-  // özel renk) tek-renk fallback ile adını çek — yoksa başlık boş ("seç") görünür.
-  const inPublicList = useMemo(
-    () => colorOptions.some((o) => o.value === value.targetColorId),
-    [colorOptions, value.targetColorId],
-  );
-  const fallbackColorQuery = useQuery({
-    queryKey: ['color', value.targetColorId],
-    queryFn: () => colorService.getById(value.targetColorId as string),
-    enabled: !!value.targetColorId && !inPublicList && !colorsQuery.isLoading,
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const selectedColorLabel = useMemo(() => {
-    if (!value.targetColorId) return null;
-    const fromList = colorOptions.find((o) => o.value === value.targetColorId)?.label;
-    return fromList ?? fallbackColorQuery.data?.data?.name ?? null;
-  }, [value.targetColorId, colorOptions, fallbackColorQuery.data]);
-
-  // Dışarıdan dayatılan ad (sipariş kalemi) öncelikli; yoksa picker/fallback çözümü.
-  const effectiveColorLabel = colorLabelOverride ?? selectedColorLabel;
-
-  // Özet satırı için üst bileşene çözümlenen renk adını bildir.
-  useEffect(() => {
-    onColorLabelResolved?.(effectiveColorLabel);
-  }, [effectiveColorLabel, onColorLabelResolved]);
-
   return (
     <View style={styles.root}>
-      {lockColorWidth ? (
-        <View style={styles.lockHint}>
-          <Icon source="lock" size={13} color={colors.textMuted} />
-          <Text style={styles.lockHintText}>
-            Renk ve en sipariş kaleminden gelir, değiştirilemez.
-          </Text>
-        </View>
-      ) : null}
-
       {/* Renk */}
       <Text style={styles.label}>Hedef Renk</Text>
-      <View style={styles.rowGap}>
-        <TouchableRipple
-          onPress={() => setColorPickerOpen(true)}
-          disabled={lockColorWidth}
-          style={[styles.selectField, lockColorWidth && styles.fieldLocked]}
-          borderless
-          rippleColor="rgba(79,70,229,0.12)"
-        >
-          <Text style={[styles.selectText, !effectiveColorLabel && styles.placeholder]} numberOfLines={1}>
-            {effectiveColorLabel ?? 'Renksiz / Ham (seç)'}
-          </Text>
-        </TouchableRipple>
-        {value.targetColorId && !lockColorWidth ? (
-          <TouchableRipple onPress={() => onChange({ targetColorId: null })} style={styles.clearBtn} borderless>
-            <Text style={styles.clearText}>Temizle</Text>
-          </TouchableRipple>
-        ) : null}
-      </View>
+      <ColorSelectField
+        value={value.targetColorId}
+        onChange={(id) => onChange({ targetColorId: id })}
+      />
 
       {/* En + Kat tipi */}
       <View style={styles.twoCol}>
@@ -149,7 +59,6 @@ export default function WorkOrderHeaderFields({
             value={value.width}
             onChangeText={(t) => onChange({ width: t.replace(',', '.') })}
             placeholder="örn. 150"
-            disabled={lockColorWidth}
             style={styles.input}
           />
         </View>
@@ -228,18 +137,6 @@ export default function WorkOrderHeaderFields({
           />
         </>
       ) : null}
-
-      <PickerModal
-        visible={colorPickerOpen}
-        title="Hedef Renk Seç"
-        options={colorOptions}
-        selectedValue={value.targetColorId}
-        loading={colorsQuery.isLoading}
-        onSelect={(v) => onChange({ targetColorId: v })}
-        onDismiss={() => setColorPickerOpen(false)}
-        onRefresh={() => colorsQuery.refetch()}
-        emptyText="Renk bulunamadı"
-      />
     </View>
   );
 }
@@ -248,23 +145,6 @@ const styles = StyleSheet.create({
   root: { gap: spacing.xs },
   label: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginTop: spacing.sm, marginBottom: 2 },
   req: { color: colors.danger },
-  rowGap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  selectField: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    backgroundColor: colors.surface,
-  },
-  selectText: { fontSize: 15, color: colors.text, fontWeight: '600' },
-  placeholder: { color: colors.textMuted, fontWeight: '400' },
-  fieldLocked: { backgroundColor: colors.surfaceMuted },
-  lockHint: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
-  lockHintText: { fontSize: 11, color: colors.textMuted, fontWeight: '600', flex: 1 },
-  clearBtn: { paddingHorizontal: spacing.sm, paddingVertical: 10 },
-  clearText: { color: colors.danger, fontWeight: '700', fontSize: 13 },
   twoCol: { flexDirection: 'row', gap: spacing.md },
   col: { flex: 1 },
   toggleRow: { marginTop: spacing.sm, borderRadius: radius.sm, alignSelf: 'flex-start' },

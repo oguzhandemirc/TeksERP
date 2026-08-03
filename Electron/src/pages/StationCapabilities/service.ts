@@ -13,14 +13,18 @@ export const stationCapabilityService = {
       .get<ApiResponse<StationCapabilityDetail>>(`/api/station-capabilities/${stationId}`)
       .then((r) => r.data),
 
+  /**
+   * Yalnız ÖZELLİK yetkinliklerini yazar. `colorIds` bilinçli olarak
+   * GÖNDERİLMEZ — renk artık istasyon bazlı kısıt değil ve backend alanı
+   * opsiyonel karşılar; boş dizi göndermek istasyonun geçmiş renk atamalarını
+   * silerdi.
+   */
   setCapabilities: (
     stationId: string,
-    colorIds: string[],
     propertyIds: string[],
   ): Promise<ApiResponse<StationCapabilityDetail>> =>
     apiClient
       .put<ApiResponse<StationCapabilityDetail>>(`/api/station-capabilities/${stationId}`, {
-        colorIds,
         propertyIds,
       })
       .then((r) => r.data),

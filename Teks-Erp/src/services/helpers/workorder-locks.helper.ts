@@ -14,9 +14,16 @@
 //   kullanıcı kasıtlı olarak yeni hedef girebilir; frontend sevk edilen >
 //   yeni hedef ise uyarı gösterir, fazla dönen Tambur'da stok olarak kalır.
 //
-// Renk: WO'nun targetColorId'sini uygulayabilecek bir istasyon (StationColor
-// pivot) WO rotasında VARSA ve o adımın status'u COMPLETED ise — boya kazana
-// indi, renk değişmez. Aksi halde renk editable (telefonla değiştirilebilir).
+// Renk: "renk veren" bir adım (requiredCategory.appliesColor=true) WO rotasında
+// VARSA ve o adımın status'u COMPLETED ise — boya kazana indi, renk değişmez.
+// Aksi halde renk editable (telefonla değiştirilebilir).
+//
+// ⚠️ Kaynak bilinçli olarak StationColor DEĞİL (2026-08-02). Eskiden "bu rengi
+// uygulayabilen istasyon" StationColor pivotundan çözülüyordu; hedef renk hiçbir
+// istasyonun listesinde değilse dyedSteps BOŞ kalıyor ve boya adımı tamamlansa
+// bile renk kilitlenmiyordu (sahada 58 aktif renkten 8'i tam bu durumdaydı).
+// Boyahane fiziksel olarak her rengi boyar — kilidi belirleyen şey adımın renk
+// veren bir kategoride olması, o rengin bir listede işaretli olması değil.
 //
 // Özellik (per property): StationProperty pivot'una göre o özelliği
 // uygulayabilecek istasyon WO rotasında VARSA ve o adımın status'u COMPLETED
@@ -95,11 +102,11 @@ export async function computeWorkOrderLocks(
           id: true,
           status: true,
           stationId: true,
+          requiredCategory: { select: { appliesColor: true } },
           station: {
             select: {
               id: true,
               kind: true,
-              colorCapabilities: { select: { colorId: true } },
               propertyCapabilities: { select: { propertyId: true } },
             },
           },
@@ -142,15 +149,11 @@ export async function computeWorkOrderLocks(
   }
 
   // ── Renk kilidi ────────────────────────────────────────────────────────
-  // WO targetColor'unu uygulayabilen herhangi bir istasyon route'ta varsa ve
-  // o adım COMPLETED ise renk sabit.
+  // Rotada "renk veren" bir adım varsa ve o adım COMPLETED ise renk sabit.
   let targetColor = false;
   if (wo.targetColorId) {
     const dyedSteps = wo.steps.filter(
-      (s) =>
-        s.station?.colorCapabilities.some(
-          (cc) => cc.colorId === wo.targetColorId,
-        ) ?? false,
+      (s) => s.requiredCategory?.appliesColor ?? false,
     );
     if (dyedSteps.length > 0 && dyedSteps.every((s) => s.status === "COMPLETED")) {
       // Tüm renk uygulayan adımlar bittiyse: artık değiştirilemez. (Birden fazla

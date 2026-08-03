@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Plus, Pencil, Trash2, RotateCcw, PowerOff } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -240,13 +240,12 @@ export function CrudPage<T extends { id: string }>({
           <>
             {hideHeader && !actionsPortal && headerActions}
             {filterBar}
-            <label className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
-              <Checkbox
-                checked={showInactive}
-                onCheckedChange={(c) => setShowInactive(Boolean(c))}
-              />
-              Pasifleri göster
-            </label>
+            <ToolbarToggle
+              checked={showInactive}
+              onCheckedChange={setShowInactive}
+              label="Pasifleri göster"
+              title="Pasife alınmış kayıtlar varsayılan olarak gizlidir."
+            />
           </>
         }
       />

@@ -13,7 +13,7 @@ import { fieldDisplayValue } from "./label-field-values";
 import { escapeHtml, applyCopies } from "./label-html.shared";
 import { asciiFold, qrFootprintDots, bannerValueText, resolveEplTextStyle, EPL_FONT, applyTextCase } from "./native-label.shared";
 import type { FieldElement, TextElement } from "../../config/label-elements";
-import { elementSupported, expandMultilineText, ICON_DEFAULT_MM } from "../../config/label-elements";
+import { elementSupported, prepareElements, ICON_DEFAULT_MM } from "../../config/label-elements";
 import { labelIconSvg } from "../../config/label-icons";
 
 export interface CanvasHtmlInput extends CanvasRenderInput {
@@ -73,7 +73,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
   const dotsPerMm = (format.dpi || 203) / 25.4;
   const els: string[] = [];
 
-  for (const el of expandMultilineText(layout.elements)) {
+  for (const el of prepareElements(layout.elements, payload)) {
     if (!elementSupported(el.type, "RASTER_HTML")) continue;
     switch (el.type) {
       case "field":

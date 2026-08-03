@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquareText, Printer, Undo2 } from "lucide-react";
+import { Printer, Undo2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
 import { DispatchNoteEditor } from "./DispatchNoteEditor";
+import {
+  DispatchPrintOptions,
+  DEFAULT_DISPATCH_PRINT_OPTS,
+  DISPATCH_LISTS,
+  type DispatchPrintOpts,
+} from "./DispatchPrintOptions";
 import { printedDocumentService, type PrintedDocument } from "@/services/printedDocumentService";
 
 interface Props {
@@ -70,10 +76,13 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   // "Güncel şablonla" — içerik donuk, görünüm canlı Belge Şablonları ayarından.
   const [currentTemplate, setCurrentTemplate] = useState(false);
-  // Tek seferlik "çuval notlarını bu baskıda göster" — Belge Kişiselleştirme'deki
-  // KALICI kolon ayarını EZER (pure OR), hiçbir yere yazılmaz (ne ayara ne snapshot'a),
-  // yeni belge versiyonu doğurmaz. Diyalog kapanınca sıfırlanır.
-  const [rowNotes, setRowNotes] = useState(false);
+  // Tek seferlik baskı seçenekleri (liste seçimi + sayfa birleştirme + çuval notu).
+  // Hiçbiri Belge Kişiselleştirme ayarına ya da donmuş snapshot'a YAZILMAZ ve yeni
+  // belge versiyonu doğurmaz; diyalog kapanınca sıfırlanır.
+  const [printOpts, setPrintOpts] = useState<DispatchPrintOpts>(DEFAULT_DISPATCH_PRINT_OPTS);
+  const { sections, merge, rowNotes } = printOpts;
+  // Üçü de seçiliyse "seçim yok" demektir → backend kalıcı ayarı uygular.
+  const sectionParam = sections.length === DISPATCH_LISTS.length ? undefined : sections;
 
   // Belge meta'sı (versiyon çubuğu + resmî/taslak ayrımı). data=null → TASLAK aşaması.
   const docQuery = useQuery({
@@ -96,17 +105,30 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
   // Baskı/önizleme HTML'i (tek kaynak). Versiyon seçiliyse o versiyon; değilse
   // güncel (donmuş varsa resmî, yoksa ?draft=1 ile TASLAK).
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", DOC_TYPE, shipmentId, selectedVersion, currentTemplate, rowNotes],
+    queryKey: [
+      "printed-doc-html",
+      DOC_TYPE,
+      shipmentId,
+      selectedVersion,
+      currentTemplate,
+      rowNotes,
+      sections.join(","),
+      merge,
+    ],
     queryFn: () =>
       selectedVersion != null
         ? printedDocumentService.getHtml(DOC_TYPE, shipmentId!, selectedVersion, {
             currentTemplate,
             rowNotes,
+            sections: sectionParam,
+            merge,
           })
         : printedDocumentService.getHtml(DOC_TYPE, shipmentId!, undefined, {
             draft: true,
             currentTemplate,
             rowNotes,
+            sections: sectionParam,
+            merge,
           }),
     enabled: open && Boolean(shipmentId),
     staleTime: 0,
@@ -157,23 +179,28 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
             }
           />
         )}
-        {/* Tek seferlik çuval notu — KALICI kolon ayarını ezer, ayara yazılmaz.
-            Bu diyalog sevk irsaliyesinin TEK baskı yeri; PrintedDocDialog'a
-            SHIPMENT_DISPATCH hiç düşmüyor, o yüzden seçenek burada. */}
+        {/* Tek seferlik baskı seçenekleri — hepsi KALICI ayarı ezer, hiçbir yere
+            yazılmaz. Bu diyalog sevk irsaliyesinin TEK baskı yeri; PrintedDocDialog'a
+            SHIPMENT_DISPATCH hiç düşmüyor, o yüzden seçenekler burada. */}
         {shipmentId && (
-          <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={rowNotes}
-              onChange={(e) => setRowNotes(e.target.checked)}
-              className="h-3.5 w-3.5"
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <DispatchPrintOptions
+              value={printOpts}
+              onChange={setPrintOpts}
+              /* Çuval notu tiki yalnız çuval listesi basılacaksa anlamlı. */
+              showRowNotes={sections.includes("cuval")}
             />
-            <MessageSquareText className="h-3.5 w-3.5" />
-            Çuval notlarını bu baskıda göster
-            <span className="text-[10px]">
-              (kalıcı ayar değişmez; notu olan çuval yoksa etkisi yok)
-            </span>
-          </label>
+            {!merge && sections.length > 1 && (
+              <span className="text-[11px] text-muted-foreground">
+                {sections.length} liste, her biri ayrı sayfada
+              </span>
+            )}
+            {merge && (
+              <span className="text-[11px] text-muted-foreground">
+                Listeler aynı sayfada akıyor
+              </span>
+            )}
+          </div>
         )}
 
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">

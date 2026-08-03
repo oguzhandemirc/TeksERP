@@ -267,6 +267,12 @@ router.post(
  *   get:
  *     tags: [Subcontractor]
  *     summary: Fasonda bekleyen sevkler (özet — rolls dahil değil)
+ *     description: |
+ *       `rollCount`/`totalQty` yalnız AT_SUBCONTRACTOR topları sayar (kabul akışı).
+ *       `awaitingDispatch=true` olan satırlar fason adımında DURAN ama henüz
+ *       fasona ÇIKMAMIŞ topları işaret eder (konum düzeltmesi sonrası) —
+ *       kabul akışına girmez, yalnız "sevk bekliyor" rozetiyle görünür;
+ *       adedi `awaitingDispatchRollCount` alanındadır.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Bekleyen sevk gruplari (rollCount+totalQty aggregate) }
@@ -554,8 +560,11 @@ router.post(
  *     description: |
  *       Receipt'ten türeyen "açık kumaş" Roll'larını ve her birinin downstream
  *       durumunu (operasyon/movement/tambur split/başka dispatch) listeler.
+ *       Ayrıca K14 parti-tutarlılık engelini (`batchMismatch`) döner — iptal
+ *       tx'indeki guard ile AYNI yardımcıdan gelir, aynı metni basar.
  *       Frontend, allSafe=true ise cascade iptal onayı sunar; false ise hangi
- *       roll'lar üzerinde işlem yapıldığını gösterip iptali engeller.
+ *       roll'lar üzerinde işlem yapıldığını / hangi partilerin birleştirilmesi
+ *       gerektiğini gösterip iptali engeller.
  *     parameters:
  *       - in: path
  *         name: id

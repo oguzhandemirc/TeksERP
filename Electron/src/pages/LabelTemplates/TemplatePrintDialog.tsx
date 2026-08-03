@@ -73,6 +73,7 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
   const kind = template.kind ?? LabelKind.ROLL_FINISHED;
   const noVariants = variantsQ.isFetched && variants.length === 0;
   const hasFieldBinds = Boolean(variant?.elements.elements.some((e) => e.type === "field"));
+  const hasConditions = Boolean(variant?.elements.elements.some((e) => e.showIf));
   const canPrint = Boolean(variant) && !sending;
 
   const fetchOutput = (opts: { language?: RawCodeLang; peripheralId?: string }) => {
@@ -199,6 +200,17 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
             {hasFieldBinds && (
               <Callout tone="info">
                 Alan bağları örnek veriyle basılır (bu baskı gerçek rulo verisi taşımaz).
+              </Callout>
+            )}
+
+            {/* Koşullu (showIf) eleman örnek topun kalitesine göre değerlendirilir →
+                bu örnek baskıda görünmeyebilir. Sessiz kalırsa "tasarım bozuk" sanılır. */}
+            {hasConditions && (
+              <Callout tone="info">
+                Bu tasarımda kaliteye bağlı (koşullu) eleman var — örnek baskı örnek
+                topun kalitesini kullanır, o yüzden koşullu eleman burada
+                çıkmayabilir. Koşulu denemek için Etiket Stüdyosu'ndaki önizlemede
+                "Örnek: kalite" seçimini değiştirin.
               </Callout>
             )}
 

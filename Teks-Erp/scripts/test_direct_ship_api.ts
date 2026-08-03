@@ -8,6 +8,7 @@
 import type { AddressInfo } from "net";
 import app from "../src/app";
 import prisma from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -86,7 +87,10 @@ async function main(): Promise<void> {
   };
 
   try {
-    const adminTok = await login("admin", "123123");
+    // Kimlik testin kendi fixture'ından (bkz. scripts/fixture-test-user.ts) —
+    // dev DB fabrika yedeği olduğunda seed'in `admin/123123`'ü geçerli değildir.
+    const cred = await ensureTestAdmin();
+    const adminTok = await login(cred.username, cred.password);
     const noPermTok = await login(NOPERM_USERNAME, "test123456");
     check("admin login → token", adminTok != null);
     check("izinsiz kullanıcı login → token", noPermTok != null);

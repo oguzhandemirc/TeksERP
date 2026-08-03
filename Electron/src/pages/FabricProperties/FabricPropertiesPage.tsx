@@ -33,8 +33,12 @@ export function FabricPropertiesPage() {
     description: v.description?.trim() || null,
     color: v.color?.trim() || null,
     sortOrder: initial?.sortOrder ?? nextOrder,
+    // Backend `stationIds`'i StationProperty bağlarına çevirir (create'te zorunlu,
+    // update'te replace). `Partial<FabricProperty>` şeklinde bir alan değil —
+    // bilinçli olarak payload'a ek olarak taşınıyor.
+    stationIds: v.stationIds,
     isActive: v.isActive,
-  });
+  } as Partial<FabricProperty> & { stationIds: string[] });
 
   return (
     <CrudPage<FabricProperty>

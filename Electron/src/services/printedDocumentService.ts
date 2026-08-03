@@ -113,7 +113,16 @@ export const printedDocumentService = {
     docType: PrintedDocType,
     sourceId: string,
     version?: number,
-    opts?: { draft?: boolean; currentTemplate?: boolean; printNote?: string; rowNotes?: boolean },
+    opts?: {
+      draft?: boolean;
+      currentTemplate?: boolean;
+      printNote?: string;
+      rowNotes?: boolean;
+      /** Tek seferlik liste seçimi (ör. ["cuval"]) — kalıcı bölüm ayarını EZER. */
+      sections?: string[];
+      /** Listeleri aynı sayfada akıt. Varsayılan: her liste kendi sayfasında. */
+      merge?: boolean;
+    },
   ): Promise<string> =>
     apiClient
       .get<string>(`${base}/${docType}/${sourceId}/html`, {
@@ -126,6 +135,9 @@ export const printedDocumentService = {
           // Tek seferlik "satır notlarını (çuval yorumu) göster" — kalıcı kolon
           // ayarını EZER (OR); ayara/snapshot'a YAZILMAZ, versiyon doğurmaz.
           ...(opts?.rowNotes ? { rowNotes: 1 } : {}),
+          // Tek seferlik liste seçimi / sayfa birleştirme — ikisi de persist EDİLMEZ.
+          ...(opts?.sections?.length ? { sections: opts.sections.join(",") } : {}),
+          ...(opts?.merge ? { merge: 1 } : {}),
         },
         responseType: "text",
         headers: { Accept: "text/html" },

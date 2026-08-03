@@ -59,8 +59,23 @@ async function main(): Promise<void> {
   GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE").id;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   STATION = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON").id;
-  const allowed = await prisma.itemAllowedColor.findFirst({ where: { itemId: ITEM }, select: { colorId: true } });
-  COLOR = allowed ? allowed.colorId : need(await prisma.color.findFirst({ where: { isActive: true }, select: { id: true } }), "renk").id;
+  // ⚠️ Renk ORTAMDAN SEÇİLMEZ, test kendisi üretir. Eskiden "PATOS'un izinli
+  // rengi, yoksa herhangi bir aktif renk" (findFirst) alınıyordu; fabrikanın
+  // canlı verisinde seçilen rengin `hex`'i NULL olduğu için "color.hex string"
+  // kontrolü düşüyordu — testin doğrulamak istediği şey (select'in hex'i taşıması)
+  // ortamdaki rastgele bir kaydın alanına bağlanmıştı. Sabit hex ile artık
+  // gerçekten select sözleşmesi sınanıyor.
+  // Çökmüş bir önceki koşumun artığını temizle — YALNIZ kendi kod önekimiz.
+  // (Sıra önemli: toplar renge FK ile bağlı, önce onlar gider.) Bu olmadan her
+  // düşen koşum dev DB'sinde bir renk bırakır ve artıklar birikir.
+  await prisma.roll.deleteMany({ where: { barcode: { startsWith: "TST-AR-R" } } }).catch(() => {});
+  await prisma.color.deleteMany({ where: { code: { startsWith: "TST-AR-C-" } } }).catch(() => {});
+  COLOR = (
+    await prisma.color.create({
+      data: { code: `TST-AR-C-${stamp}`, name: `TST-AR RENK ${stamp}`, hex: "#123456" },
+      select: { id: true },
+    })
+  ).id;
 
   const wo = await prisma.workOrder.create({
     data: {
@@ -134,6 +149,8 @@ async function main(): Promise<void> {
     await prisma.roll.deleteMany({ where: { id: { in: rolls.map((r) => r.id) } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
+    // Renk toplardan SONRA silinir (rolls.colorId FK). Kendi ürettiğimiz kayıt.
+    if (COLOR) await prisma.color.delete({ where: { id: COLOR } }).catch(() => {});
     console.log("(test verisi temizlendi)");
   }
 

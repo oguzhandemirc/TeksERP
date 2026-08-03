@@ -199,6 +199,40 @@ async function main() {
       `colors=${afterErr.data.colors.length} props=${afterErr.data.properties.length}`,
     );
 
+    // 8b) colorIds HİÇ gönderilmezse renk satırlarına dokunulmaz (2026-08-02).
+    // Panel renk göndermeyi bıraktı; `[]` ile "gönderilmedi" karışırsa istasyonun
+    // geçmiş renk atamaları ilk özellik kaydında sessizce silinir.
+    const beforeOmit = await svc.findByStation(testStation.id);
+    const omitted = await svc.setCapabilities(
+      testStation.id,
+      { propertyIds: [propA.id] },
+      undefined,
+    );
+    check(
+      "colorIds gönderilmedi → mevcut renkler KORUNDU (özellik yazıldı)",
+      omitted.data.colors.length === beforeOmit.data.colors.length &&
+        omitted.data.colors.length > 0 &&
+        omitted.data.properties.length === 1,
+      `colors=${omitted.data.colors.length} (önce ${beforeOmit.data.colors.length}) props=${omitted.data.properties.length}`,
+    );
+    // Karşıt sonda: AÇIKÇA [] göndermek hâlâ siler (iki yol karışmasın).
+    const cleared = await svc.setCapabilities(
+      testStation.id,
+      { colorIds: [], propertyIds: [propA.id] },
+      undefined,
+    );
+    check(
+      "colorIds: [] AÇIKÇA gönderildi → renkler silindi (iki yol ayrı)",
+      cleared.data.colors.length === 0,
+      `colors=${cleared.data.colors.length}`,
+    );
+    // Sonraki adımların beklediği duruma geri getir (2 renk + 1 özellik).
+    await svc.setCapabilities(
+      testStation.id,
+      { colorIds: [beyaz.id, lacivert.id], propertyIds: [propA.id] },
+      undefined,
+    );
+
     // 9) olmayan istasyon reddi → 404
     await expectErr("findByStation olmayan istasyon → 404", "İstasyon bulunamadı", () =>
       svc.findByStation(NIL),

@@ -10,6 +10,8 @@ import { easeOut } from "@/lib/motion";
 import { toneFor } from "@/lib/station-colors";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
+import { QuickAddProperty } from "@/components/forms/QuickAddProperty";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
 import { subcontractorService } from "@/pages/Subcontractors/service";
@@ -57,6 +59,8 @@ export function RouteStepDetail({
 }: Props) {
   const isExternal = step.stationType === "EXTERNAL";
   const tone = toneFor(step.stationType, step.stationKind);
+  const { hasPermission } = useRoleAccess();
+  const canWriteProperty = hasPermission("property:write");
 
   const capQ = useQuery({
     queryKey: ["station-capabilities", step.stationId],
@@ -80,20 +84,25 @@ export function RouteStepDetail({
     target.onProperties(Array.from(next));
   };
 
-  // Bu istasyonun uygulayabildiği renkler = picker'ın izinli kümesi (kısıtlı mod).
-  const stationColorIds = useMemo(
-    () => (cap?.colors ?? []).map((c) => c.id),
-    [cap?.colors],
-  );
+  // Renk KISITLANMAZ (2026-08-02): boyahane her rengi boyar. Adımda renk seçici
+  // "bu adım renk veren bir kategoride mi" sorusuna göre çıkar (backend'in
+  // `appliesColor` kuralıyla aynı kaynak), ve tüm aktif katalog gösterilir.
+  // İstasyonun StationColor listesi artık okunmuyor — geri ekleme, yeni tanımlanan
+  // renk hiçbir listede olmadığı için tekrar görünmez olur.
+  const appliesColor = Boolean(cap?.hasDefaultCategory && cap.canApplyColor);
 
   const subFilter = step.requiredCategoryId
     ? { categoryId: step.requiredCategoryId }
     : undefined;
 
-  const appliesNothing =
-    !cap ||
-    ((!cap.canApplyColor || cap.colors.length === 0) &&
-      (!cap.canApplyProperty || cap.properties.length === 0));
+  // "Uygulamaz" ile "listesi boş" AYRI şeyler. Eskiden ikisi de aynı cümleyi
+  // basıyordu ("Bu istasyon renk/özellik uygulamaz — sadece işlem yapar") ve
+  // yetenek listesi hiç doldurulmamış bir istasyon, sistemin öyle tasarlandığı
+  // sanılarak geçiliyordu. Zımpara (Fason) tam bu durumdaydı.
+  const appliesNothing = !cap || (!appliesColor && !cap.canApplyProperty);
+  const propertyListEmpty = Boolean(
+    cap && !appliesNothing && cap.canApplyProperty && cap.properties.length === 0,
+  );
 
   return (
     <motion.div
@@ -197,7 +206,7 @@ export function RouteStepDetail({
           </div>
         ) : (
           <div className="space-y-2.5">
-            {cap!.canApplyColor && cap!.colors.length > 0 && (
+            {appliesColor && (
               <div className="space-y-1">
                 <label className="text-[11px] text-muted-foreground">
                   Bu istasyonda uygulanan renk
@@ -206,7 +215,6 @@ export function RouteStepDetail({
                   value={target.colorId}
                   onChange={(id) => target.onColor(id)}
                   customerId={target.customerId}
-                  allowedColorIds={stationColorIds}
                   disabled={target.colorLocked}
                   lockedTooltip="Renk kilitli (bağlı sipariş satırından geliyor)"
                   triggerClassName="h-8 text-xs"
@@ -214,28 +222,52 @@ export function RouteStepDetail({
                 />
               </div>
             )}
-            {cap!.canApplyProperty && cap!.properties.length > 0 && (
+            {cap!.canApplyProperty && (
               <div className="space-y-1">
                 <label className="text-[11px] text-muted-foreground">
                   Bu istasyonda uygulanan özellikler
                 </label>
-                <div className="flex flex-wrap gap-1">
-                  {cap!.properties.map((p) => {
-                    const on = selectedProps.has(p.id);
-                    const locked = lockedSet.has(p.id);
-                    return (
-                      <Badge
-                        key={p.id}
-                        variant={on ? "default" : "outline"}
-                        className={cn("cursor-pointer gap-1 text-[10px]", locked && "cursor-not-allowed opacity-50")}
-                        onClick={() => toggleProp(p.id)}
-                      >
-                        {on && <Check className="h-3 w-3" />}
-                        {p.name}
-                      </Badge>
-                    );
-                  })}
-                </div>
+                {propertyListEmpty ? (
+                  <div className="text-[11px] italic text-muted-foreground">
+                    Bu istasyonun yetenek listesi boş — henüz hiçbir özellik
+                    tanımlanmamış. Aşağıdan ekleyebilir ya da Tanımlar → Kumaş
+                    Özellikleri'nden bu istasyona atayabilirsiniz.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {cap!.properties.map((p) => {
+                      const on = selectedProps.has(p.id);
+                      const locked = lockedSet.has(p.id);
+                      return (
+                        <Badge
+                          key={p.id}
+                          variant={on ? "default" : "outline"}
+                          className={cn("cursor-pointer gap-1 text-[10px]", locked && "cursor-not-allowed opacity-50")}
+                          onClick={() => toggleProp(p.id)}
+                        >
+                          {on && <Check className="h-3 w-3" />}
+                          {p.name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Asıl otomasyon: istasyon zaten belli, yeni özellik ona
+                    BAĞLI doğar ve anında seçili gelir — ikinci ekran yok. */}
+                {canWriteProperty && (
+                  <div className="pt-1">
+                    <QuickAddProperty
+                      label="Yeni özellik tanımla"
+                      defaultStationId={step.stationId}
+                      onCreated={(id) => {
+                        void capQ.refetch();
+                        if (!selectedProps.has(id)) {
+                          target.onProperties([...target.propertyIds, id]);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>

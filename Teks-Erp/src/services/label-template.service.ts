@@ -1124,6 +1124,10 @@ export class LabelTemplateService {
     /** Baskı adedi (1–100, controller doğrular) — native P/Q/^PQ komutu, raster
      *  zarfı ve HTML çoğaltması (applyCopies) hepsi bunu işler. Verilmedi = 1. */
     copies?: number;
+    /** Örnek topun kalite KODU — koşullu (showIf) elemanlar önizlemede de gerçek
+     *  kuralla değerlendirilsin diye. Verilmedi → mock varsayılanı; boş metin →
+     *  "kalitesi belirsiz top" (koşullu eleman basılmaz, fail-closed görülür). */
+    qualityGrade?: string;
   }): Promise<
     ApiResponse<{
       mode: "svg" | "html" | "text";
@@ -1150,6 +1154,7 @@ export class LabelTemplateService {
       throw e;
     }
     const payload = mockPayload(opts.kind);
+    if (opts.qualityGrade !== undefined) payload.qualityGrade = opts.qualityGrade;
     // Cihaz seçiliyse medya (dpi/gap) + dil O CİHAZDAN çözülür — "Bu Bilgisayar"da
     // seçili Cihaz Kaydı yazıcısı (ör. Argox PPLB) editör Test Baskısı'nda da gerçek
     // dille bassın diye. Dil önceliği: explicit language > cihaz languageOverride >

@@ -3,6 +3,7 @@
 // testler bu katmanları atlar; bu smoke gerçek HTTP üzerinden doğrular.
 // ÖN KOŞUL: backend ayakta olmalı. Çalıştır: npx tsx scripts/smoke_fason_http.ts
 import prisma from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
@@ -26,6 +27,7 @@ async function api(method: string, path: string, body?: unknown, auth = true): P
 }
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_ZIMPARA = "", ST_BOYA = "", ST_TAMBUR = "", SUB_KESTEL = "", SUB_BOYER = "";
+let ADMIN_USERNAME = "", ADMIN_PASSWORD = "";
 const WIDTH = 250;
 let bc = 0;
 function barcode(): string { bc++; return `TST-SMK-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bc}`; }
@@ -35,7 +37,12 @@ async function fx(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`Seed eksik: ${l}`); return v.id; };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
   GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
-  ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
+  // Kimlik seed'in `admin`'inden DEĞİL, testin kendi fixture'ından gelir — hem
+  // login şifresi hem "işlemi yapan" FK'sı için (bkz. scripts/fixture-test-user.ts).
+  const cred = await ensureTestAdmin();
+  ADMIN = cred.id;
+  ADMIN_USERNAME = cred.username;
+  ADMIN_PASSWORD = cred.password;
   ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
@@ -72,7 +79,7 @@ async function main(): Promise<void> {
   await fx();
 
   // ── AUTH ──
-  const login = await api("POST", "/api/auth/login", { username: "admin", password: "123123" }, false);
+  const login = await api("POST", "/api/auth/login", { username: ADMIN_USERNAME, password: ADMIN_PASSWORD }, false);
   TOKEN = login.json?.data?.token ?? login.json?.token ?? "";
   check("login 200 + token", login.status === 200 && TOKEN.length > 0, `status=${login.status}`);
 

@@ -324,7 +324,9 @@ model User {
   workSessions               WorkSession[]
   sessions                   Session[]
   dispatchedShipments        Shipment[]              @relation("ShipmentDispatchedBy")
+  invoicedShipments          Shipment[]              @relation("ShipmentInvoicedBy")
   directShipments            DirectShipment[]        @relation("DirectShipmentShippedBy")
+  invoicedDirectShipments    DirectShipment[]        @relation("DirectShipmentInvoicedBy")
   weighedSacks               Sack[]                  @relation("SackWeighedBy")
   swatchStockReductions      SwatchStockReduction[]  @relation("SwatchStockReductionCreatedBy")
   kursunBypassAssigned       KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
@@ -2069,10 +2071,17 @@ model DirectShipment {
   shippedAt   DateTime @default(now()) @db.Timestamptz
   shippedById String?  @db.Uuid
 
+  /// Fatura izi — çuval sevkiyatındakiyle AYNI sözleşme (bkz. Shipment.invoiceNo).
+  /// Doğrudan sevkler muhasebe listesinde aynı akışta göründüğü için burada da tutulur.
+  invoiceNo    String?   @db.VarChar(64)
+  invoicedAt   DateTime? @db.Timestamptz
+  invoicedById String?   @db.Uuid
+
   dispatch    SubcontractorDispatch              @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
   customer    Customer                           @relation(fields: [customerId], references: [id], onDelete: Restrict)
   branch      CustomerBranch?                    @relation(fields: [branchId], references: [id])
   shippedBy   User?                              @relation("DirectShipmentShippedBy", fields: [shippedById], references: [id])
+  invoicedBy  User?                              @relation("DirectShipmentInvoicedBy", fields: [invoicedById], references: [id])
   rolls       Roll[]
   allocations SubcontractorDirectShipAllocation[]
 
@@ -2749,9 +2758,18 @@ model Shipment {
   // O-19: operatör izi — kim sevk etti (kalıcı, best-effort audit yerine).
   dispatchedById String?   @db.Uuid
 
+  // FATURA İZİ (2026-08-02) — muhasebeci "bu sevkin faturası kesildi mi" sorusunu
+  // ERP'de yanıtlasın diye. ERP fatura KESMEZ: burada tutulan yalnız dış muhasebe
+  // programındaki belgenin numarası + tarihi (mali alan yok — miktar-odaklı kural).
+  // Bir sevk = bir fatura varsayımı; kısmi faturalama modellenmedi.
+  invoiceNo    String?   @db.VarChar(64)
+  invoicedAt   DateTime? @db.Timestamptz
+  invoicedById String?   @db.Uuid
+
   // Relations
   customer     Customer        @relation(fields: [customerId], references: [id])
   dispatchedBy User?           @relation("ShipmentDispatchedBy", fields: [dispatchedById], references: [id])
+  invoicedBy   User?           @relation("ShipmentInvoicedBy", fields: [invoicedById], references: [id])
   branch       CustomerBranch? @relation(fields: [branchId], references: [id])
   sacks        Sack[]
   orders       ShipmentOrder[] // Donmuş tahsislerden türetilen sipariş kümesi (denorm; irsaliye orderNos)
@@ -2765,6 +2783,9 @@ model Shipment {
   @@index([customerId, status])
   @@index([branchId])
   @@index([status, createdAt])
+  // Muhasebe listesi sevk tarihine göre sıralanır (status=DISPATCHED sabit filtre) →
+  // eşitlik kolonu önce, sıralama kolonu sonra (perf kuralı 2).
+  @@index([status, dispatchedAt])
   @@map("shipments")
 }
 
@@ -3251,8 +3272,19 @@ model RollProperty {
   @@map("roll_properties")
 }
 
-/// İstasyon ↔ Color M:N — bir istasyonun uygulayabileceği renkler.
-/// WO planlamada hedef rengin atandığı adımın bu yetkinliğe sahip olması ZORUNLUDUR.
+/// İstasyon ↔ Color M:N — DEPRECATED (2026-08-02), okuyan kod YOK.
+///
+/// Eskiden rota adımındaki renk seçicisini kısıtlıyordu. Kaldırıldı: boyahane
+/// fiziksel olarak HER rengi boyar — renk bir reçetedir, makine kısıtı değil.
+/// Backend zaten bu tabloya hiç bakmıyordu (WO doğrulaması `Item.allowedColors`
+/// + `SubcontractorCategory.appliesColor` üzerinden); kısıt yalnız panelde
+/// yaşıyordu ve yeni eklenen renk hiçbir istasyonun listesinde olmadığı için
+/// rota adımında GÖRÜNMÜYORDU. "Renk veren adım var mı" sorusunun tek kaynağı
+/// artık `appliesColor` bayrağı.
+///
+/// Tablo ve satırları BİLİNÇLİ olarak duruyor (canlı veri; ileride "bu boyahane
+/// bu rengi tutturamıyor" gibi bir tedarikçi-kalite kaydı gerekirse zemin hazır).
+/// `setCapabilities` bu tarafa yalnız `colorIds` AÇIKÇA gönderilirse dokunur.
 model StationColor {
   id        String @id @default(uuid()) @db.Uuid
   stationId String @db.Uuid
@@ -3271,6 +3303,26 @@ model StationColor {
 
 /// İstasyon ↔ FabricProperty M:N — bir istasyonun uygulayabileceği özellikler.
 /// WO planlamada hedef özelliğin atandığı adımın bu yetkinliğe sahip olması ZORUNLUDUR.
+///
+/// ⚠️ Renkten FARKLI: bu KALDIRILMADI, çünkü özellik gerçek bir proses kısıtıdır
+/// (boyahane zımpara yapamaz). Kaldırılan şey kısıtın BOŞ DOĞMASIYDI — yeni
+/// `FabricProperty` artık `stationIds` ZORUNLU olarak yaratılır ve bağ aynı
+/// insert'te kurulur (bkz. `fabric-property.service.ts`).
+///
+/// ⚠️ BU TABLO İKİ AYRI İŞ YAPAR — yeni kod yazarken hangisini kastettiğini bil:
+///   1. **Planlama filtresi** — "bu istasyon şu özelliği verebilir": WO create'te
+///      (`workorder.service` özellik-başına rota kapsaması) ve edit'te
+///      (`workorder-locks.applicablePropertyIds`) hedef özellik kümesini sınırlar.
+///   2. **Otomatik uygulama** — `copyStationCapabilitiesToRoll`: bu istasyondan
+///      GEÇEN her top listedeki TÜM özellikleri kazanır. Çağıranlar bugün yalnız
+///      Kurşun/QC2 yolları (kursun-qc, inventory.kursunFinish, kursun-bypass);
+///      fason kabul bu tabloyu KULLANMAZ, `WO.targetProperties`'tan kopyalar.
+/// Bugün ikisi tesadüfen ayrışmış (Boyahane satırları yalnız 1, Kurşun satırı
+/// yalnız 2 için kullanılıyor) ama sözleşme bunu garanti ETMEZ: Kurşun'un
+/// listesine ikinci bir özellik eklendiği gün o özellik oradan geçen HER TOPA
+/// sessizce yazılır. İkisini gerçekten ayırmak gerekirse buraya `autoApply
+/// Boolean @default(false)` eklenir ve mevcut satırlar `true` ile taşınır
+/// (bugünkü davranışı birebir korur).
 model StationProperty {
   id         String @id @default(uuid()) @db.Uuid
   stationId  String @db.Uuid

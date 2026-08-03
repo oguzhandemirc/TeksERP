@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save, Palette, Sparkles, Lock } from "lucide-react";
+import { Save, Sparkles, Lock } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelectCheckboxList, type MultiSelectItem } from "@/components/forms/MultiSelectCheckboxList";
-import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { stationCapabilityService } from "./service";
 import type { StationCapabilitySummary } from "./types";
@@ -21,18 +19,15 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-function emptyStateMessage(station: StationCapabilitySummary): string {
-  if (!station.hasDefaultCategory) {
-    return "Bu istasyonun atanmış kategorisi yok. Kategori atanmadan da renk/özellik atanabilir — sayfayı yenileyin.";
-  }
-  return "Atanmış kategori renk veren (appliesColor) veya özellik veren (appliesProperty) değil. Kategori bayraklarını Fason Kategorileri sayfasından değiştirin.";
-}
-
+/**
+ * İstasyonun kazandırdığı ÖZELLİKLER. Renk sekmesi 2026-08-02'de kaldırıldı:
+ * boyahane her rengi boyar, renk istasyon bazlı kısıt değil (bkz.
+ * `schema.prisma` → StationColor). Buraya renk seçimi geri eklenirse yeni
+ * tanımlanan renkler yine rota adımında görünmez olur.
+ */
 export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
   const qc = useQueryClient();
-  const canApplyColor = !!station?.canApplyColor;
-  const canApplyProperty = !!station?.canApplyProperty;
-  const editable = canApplyColor || canApplyProperty;
+  const editable = !!station?.canApplyProperty;
 
   const detail = useQuery({
     queryKey: [QUERY_KEY, station?.stationId],
@@ -40,20 +35,6 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
     enabled: open && Boolean(station?.stationId) && editable,
     refetchOnMount: "always",
     staleTime: 0,
-  });
-
-  const colorsQuery = useQuery({
-    queryKey: ["colors", "all-active"],
-    queryFn: () =>
-      colorService.getAll({
-        page: 1,
-        pageSize: 500,
-        sortBy: "sortOrder",
-        sortOrder: "asc",
-        filters: { isActive: "true" },
-      }),
-    staleTime: 60_000,
-    enabled: open && canApplyColor,
   });
 
   const propsQuery = useQuery({
@@ -67,39 +48,23 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         filters: { isActive: "true" },
       }),
     staleTime: 60_000,
-    enabled: open && canApplyProperty,
+    enabled: open && editable,
   });
 
-  const [colorIds, setColorIds] = useState<string[]>([]);
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
-  const [initialColorIds, setInitialColorIds] = useState<string[]>([]);
   const [initialPropertyIds, setInitialPropertyIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (detail.data) {
-      const c = detail.data.data.colors.map((x) => x.id);
       const p = detail.data.data.properties.map((x) => x.id);
-      setColorIds(c);
       setPropertyIds(p);
-      setInitialColorIds(c);
       setInitialPropertyIds(p);
     }
   }, [detail.data]);
 
-  // Perf: türetilmiş dizileri memoize et. MultiSelectCheckboxList grouping/filter
+  // Perf: türetilmiş diziyi memoize et. MultiSelectCheckboxList grouping/filter
   // işini `items` referansına göre memoize eder; her render'da yeni dizi verilince
   // (her checkbox toggle'ında) o memo geçersizleşip ~500 satırı yeniden gruplardı.
-  const colorItems = useMemo<MultiSelectItem[]>(
-    () =>
-      (colorsQuery.data?.data ?? []).map((c) => ({
-        id: c.id,
-        label: c.name,
-        hint: c.code,
-        swatch: c.hex,
-      })),
-    [colorsQuery.data?.data],
-  );
-
   const propertyItems = useMemo<MultiSelectItem[]>(
     () =>
       (propsQuery.data?.data ?? []).map((p) => ({
@@ -113,16 +78,13 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
   );
 
   const dirty =
-    colorIds.length !== initialColorIds.length ||
     propertyIds.length !== initialPropertyIds.length ||
-    colorIds.some((id) => !initialColorIds.includes(id)) ||
-    initialColorIds.some((id) => !colorIds.includes(id)) ||
     propertyIds.some((id) => !initialPropertyIds.includes(id)) ||
     initialPropertyIds.some((id) => !propertyIds.includes(id));
 
   const mutation = useMutation({
     mutationFn: () =>
-      stationCapabilityService.setCapabilities(station!.stationId, colorIds, propertyIds),
+      stationCapabilityService.setCapabilities(station!.stationId, propertyIds),
     onSuccess: () => {
       toast.success("İstasyon yetkinlikleri güncellendi.");
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
@@ -130,12 +92,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
     },
   });
 
-  const loading =
-    detail.isLoading ||
-    (canApplyColor && colorsQuery.isLoading) ||
-    (canApplyProperty && propsQuery.isLoading);
-
-  const defaultTab = canApplyColor ? "colors" : "properties";
+  const loading = detail.isLoading || propsQuery.isLoading;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -143,17 +100,18 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         <SheetHeader>
           <SheetTitle>{station?.stationName ?? "—"}</SheetTitle>
           <SheetDescription>
-            <span className="font-medium text-foreground">{station?.stationName}</span>
-            {" · "}İstasyonun uygulayabileceği renkleri ve kazandırabileceği özellikleri seç.
+            Bu istasyondan geçen topların kazanacağı özellikleri seç. Renk seçimi
+            burada yapılmaz — her renk her boyahanede uygulanabilir.
           </SheetDescription>
         </SheetHeader>
 
         {!editable ? (
           <div className="mt-8 flex flex-col items-center justify-center gap-3 rounded-md border border-dashed p-8 text-center">
             <Lock className="h-8 w-8 text-muted-foreground" />
-            <div className="text-sm font-medium">Bu istasyon için yetkinlik atanamaz</div>
+            <div className="text-sm font-medium">Bu istasyon özellik kazandırmaz</div>
             <div className="max-w-sm text-xs text-muted-foreground">
-              {station ? emptyStateMessage(station) : null}
+              Atanmış kategori "özellik veren" (appliesProperty) değil. Kategori
+              bayrağını Fason Kategorileri sayfasından değiştirin.
             </div>
           </div>
         ) : loading ? (
@@ -163,52 +121,23 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
           </div>
         ) : (
           <div className="mt-4 flex h-[calc(100vh-230px)] flex-col">
-            <Tabs defaultValue={defaultTab} className="flex flex-1 flex-col min-h-0">
-              <TabsList>
-                {canApplyColor && (
-                  <TabsTrigger value="colors" className="gap-1.5">
-                    <Palette className="h-3.5 w-3.5" />
-                    Renkler
-                    <Badge variant="muted" className="ml-1 text-[10px]">
-                      {colorIds.length}
-                    </Badge>
-                  </TabsTrigger>
-                )}
-                {canApplyProperty && (
-                  <TabsTrigger value="properties" className="gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Özellikler
-                    <Badge variant="muted" className="ml-1 text-[10px]">
-                      {propertyIds.length}
-                    </Badge>
-                  </TabsTrigger>
-                )}
-              </TabsList>
+            <div className="mb-3 flex items-center gap-1.5 text-sm font-medium">
+              <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+              Özellikler
+              <Badge variant="muted" className="ml-1 text-[10px]">
+                {propertyIds.length}
+              </Badge>
+            </div>
 
-              {canApplyColor && (
-                <TabsContent value="colors" className="flex-1 mt-3 min-h-0">
-                  <MultiSelectCheckboxList
-                    items={colorItems}
-                    value={colorIds}
-                    onChange={setColorIds}
-                    placeholder="Renk ara..."
-                    emptyHint="Tanımlı renk yok."
-                  />
-                </TabsContent>
-              )}
-
-              {canApplyProperty && (
-                <TabsContent value="properties" className="flex-1 mt-3 min-h-0">
-                  <MultiSelectCheckboxList
-                    items={propertyItems}
-                    value={propertyIds}
-                    onChange={setPropertyIds}
-                    placeholder="Özellik ara..."
-                    emptyHint="Tanımlı özellik yok."
-                  />
-                </TabsContent>
-              )}
-            </Tabs>
+            <div className="min-h-0 flex-1">
+              <MultiSelectCheckboxList
+                items={propertyItems}
+                value={propertyIds}
+                onChange={setPropertyIds}
+                placeholder="Özellik ara..."
+                emptyHint="Tanımlı özellik yok."
+              />
+            </div>
 
             <div className="mt-3 flex items-center justify-between border-t pt-3">
               <Button
@@ -216,10 +145,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
                 variant="destructive"
                 size="sm"
                 disabled={!dirty || mutation.isPending}
-                onClick={() => {
-                  setColorIds(initialColorIds);
-                  setPropertyIds(initialPropertyIds);
-                }}
+                onClick={() => setPropertyIds(initialPropertyIds)}
               >
                 Sıfırla
               </Button>

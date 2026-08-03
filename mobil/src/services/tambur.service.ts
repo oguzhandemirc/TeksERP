@@ -1,6 +1,16 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type { RollCursorPage } from './roll.service';
+import type {
+  TamburStepSummary,
+  TamburOpenCard,
+  TamburFinalizeRequest,
+  TamburReportErrorRequest,
+  TamburContext,
+  TamburCutRequest,
+  TamburFinalizeOpenFabricRequest,
+  Roll,
+} from '../types/models';
 
 /** GET /tambur/rolls/:id/undo-preview yanıtı (backend TamburUndoService). */
 export interface TamburUndoPreview {
@@ -14,16 +24,96 @@ export interface TamburUndoPreview {
   workOrder: { id: string; workOrderNumber: string; status: string; willRevive: boolean } | null;
   warnings: string[];
 }
-import type {
-  TamburStepSummary,
-  TamburOpenCard,
-  TamburFinalizeRequest,
-  TamburReportErrorRequest,
-  TamburContext,
-  TamburCutRequest,
-  TamburFinalizeOpenFabricRequest,
-  Roll,
-} from '../types/models';
+// =============================================================================
+// SAHA DÜZELTMESİ (`/tambur/manual/*`) — backend `TamburManualService`
+// =============================================================================
+// İki uç: (1) mevcut topu bu Tambur adımına al, (2) sistemde HİÇ olmayan topu
+// elle yarat + adıma bağla. Yetki: `mobile:tambur-duzelt` VEYA `roll:manual-adjust`.
+// Hata gövdeleri makine-okunur `code` taşır (bkz. TAMBUR_MANUAL_BLOCK_CODES).
+
+/** Saha ekranının topu tanıması için minimum özet (backend `FieldRollSummary`). */
+export interface TamburFieldRoll {
+  id: string;
+  barcode: string | null;
+  itemCode: string;
+  itemName: string;
+  colorName: string | null;
+  currentQty: number;
+  status: string;
+  batchNumber: string | null;
+  /** Topun ŞU ANKİ konumu — istasyon adı, yoksa depo/stok etiketi. */
+  currentLocation: string;
+  /** Topun bağlı olduğu iş emri (varsa). */
+  workOrderNumber: string | null;
+}
+
+/** `POST /tambur/manual/bring-preview` — salt-okunur, hiçbir şeyi değiştirmez. */
+export interface TamburBringPreview {
+  roll: TamburFieldRoll;
+  targetStep: {
+    id: string;
+    stationName: string;
+    workOrderId: string;
+    workOrderNumber: string;
+  };
+  canApply: boolean;
+  blockCode: string | null;
+  blockReason: string | null;
+  warnings: string[];
+  effects: {
+    /** forward = ileri atlama (aradaki adımlar SKIPPED), backward = geri çekme. */
+    direction: 'forward' | 'backward';
+    fromStepName: string | null;
+    skippedStepNames: string[];
+    qualityWillVoid: boolean;
+    qualityStaysUnknown: boolean;
+    colorWillApply: boolean;
+    newParty: boolean;
+  } | null;
+}
+
+export interface TamburBringResult {
+  rollId: string;
+  barcode: string | null;
+  targetStepId: string;
+  workOrderNumber: string;
+}
+
+export interface TamburManualRollResult {
+  rollId: string;
+  barcode: string | null;
+  itemId: string;
+  colorId: string | null;
+  /** OPERATOR = operatör seçti · WORKORDER = iş emrinden miras · NONE = renksiz. */
+  colorSource: 'OPERATOR' | 'WORKORDER' | 'NONE';
+  currentQty: number;
+  targetStepId: string;
+  workOrderNumber: string;
+  /** true = aynı clientToken ile tekrar denendi, top zaten adımdaydı. */
+  alreadyAttached: boolean;
+  /** true = tamamlanmış iş emri bu işlemle yeniden açıldı. */
+  reopenedWorkOrder: boolean;
+}
+
+/**
+ * `POST /tambur/manual/roll` gövdesi.
+ *
+ * `colorId` ÜÇ DEĞERLİDİR ve üçü de farklı anlam taşır — alanı koşullu kur:
+ *   • alan HİÇ gönderilmez → iş emrinin hedef rengi miras alınır
+ *   • `null`               → AÇIKÇA renksiz (miras uygulanmaz)
+ *   • uuid                 → operatörün seçtiği renk
+ */
+export interface TamburManualRollRequest {
+  targetStepId: string;
+  initialQty: number;
+  reason: string;
+  /** İdempotency anahtarı — MANTIKSAL deneme başına BİR kez üretilir. ZORUNLU. */
+  clientToken: string;
+  itemId?: string;
+  colorId?: string | null;
+  width?: number | null;
+  qualityGrade?: string;
+}
 
 // Tambur (final + karar) operatör akışı.
 // Backend: src/services/tambur.service.ts
@@ -219,5 +309,49 @@ export const tamburService = {
         `/tambur/${rollId}/finalize-warehouse-cut`,
         data
       )
+      .then((r) => r.data),
+
+  // ── Saha düzeltmesi (`/manual/*`) ─────────────────────────────────────────
+
+  /**
+   * "Topu Buraya Al" ÖNİZLEMESİ — salt-okunur. Topun nereden geleceğini, hangi
+   * adımların atlanacağını, kalite kararının VOID olup olmayacağını ve yeni parti
+   * doğup doğmayacağını döner. `canApply=false` ise `blockReason` gösterilir ve
+   * `bringRoll` HİÇ çağrılmaz (önizlemesiz uygulama yok).
+   */
+  bringPreview: (data: {
+    targetStepId: string;
+    barcode?: string;
+    rollId?: string;
+  }): Promise<ApiResponse<TamburBringPreview>> =>
+    apiClient
+      .post<ApiResponse<TamburBringPreview>>('/tambur/manual/bring-preview', data)
+      .then((r) => r.data),
+
+  /**
+   * "Topu Buraya Al" UYGULA — sebep ZORUNLU (min 3 karakter, audit'e yazılır).
+   * Taşımanın kendisi backend'de panel taşımasıyla AYNI motordur.
+   * Online-only: offline kuyruğuna girmez (bypassComplete ile aynı sınıf).
+   */
+  bringRoll: (data: {
+    targetStepId: string;
+    barcode?: string;
+    rollId?: string;
+    reason: string;
+  }): Promise<ApiResponse<TamburBringResult>> =>
+    apiClient
+      .post<ApiResponse<TamburBringResult>>('/tambur/manual/bring', data)
+      .then((r) => r.data),
+
+  /**
+   * "Manuel Top Ekle" — sistemde HİÇ olmayan topu yaratır ve doğrudan bu Tambur
+   * adımına bağlar. Barkod SUNUCUDA üretilir; top `entrySource=MANUAL_ENTRY` ile
+   * kalıcı olarak işaretlenir ve sebep audit'e yazılır. `clientToken` zorunlu.
+   */
+  createManualRoll: (
+    data: TamburManualRollRequest
+  ): Promise<ApiResponse<TamburManualRollResult>> =>
+    apiClient
+      .post<ApiResponse<TamburManualRollResult>>('/tambur/manual/roll', data)
       .then((r) => r.data),
 };

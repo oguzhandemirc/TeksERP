@@ -16,6 +16,11 @@ export type MobilePermission =
   | 'mobile:kursun-dagitim'
   // Ekran değil, KK1-içi yetenek: seçili operatöre inline yeni desen oluşturma.
   | 'mobile:kk1-desen'
+  // Ekran değil, Tambur-içi yetenek: saha düzeltmesi (mevcut topu Tambur adımına
+  // al + sistemde olmayan topu elle ekle). Varsayılan operatör paketinde YOKTUR;
+  // panelden SEÇİLİ Tambur operatörüne verilir. Backend uçları bunu ya da
+  // süpervizör yetkisi `roll:manual-adjust`'ı kabul eder (requireAnyPermission).
+  | 'mobile:tambur-duzelt'
   | 'mobile:*';
 
 /**
@@ -148,7 +153,8 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
   },
   {
     // Ofis/süpervizör ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).
-    // Ayrıca `kursunBypassEnabled` bayrağı kapalıyken gizlenir (useVisibleScreens).
+    // Ayrıca KOŞULLU görünür: `kursunBypassEnabled` bayrağı kapalı VE bekleyen
+    // dağıtım yoksa gizlenir (useVisibleScreens + useKursunBypassVisibility).
     key: 'KursunDagitim',
     permission: 'mobile:kursun-dagitim',
     label: 'Kurşun Dağıtım',

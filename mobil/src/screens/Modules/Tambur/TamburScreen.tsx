@@ -31,6 +31,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
+import TamburFieldFix from './TamburFieldFix';
+import { usePermissions } from '../../../hooks/usePermission';
+import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
@@ -299,6 +302,30 @@ export default function TamburScreen() {
 
   const qc = useQueryClient();
 
+  // ── Saha düzeltmesi kapısı ────────────────────────────────────────────────
+  // "Topu Buraya Al" + "Manuel Top Ekle" YALNIZ yetkili operatörde çizilir.
+  // Devre dışı gri buton GÖSTERİLMEZ: yetkisi olmayan operatörde "neden
+  // çalışmıyor" sorusu üretir; backend zaten 403 döner (UI ikinci kapı değil).
+  //
+  // ⚠️ ERİŞİM SINIRI (backend kaynaklı, mobilde çözülemez): iki uç da hedef
+  // olarak bir `targetStepId` ister ve mobilin adım kimliğini öğrenebildiği TEK
+  // yol kartı çözmektir (`by-card` / `context`). İkisi de `assertWoAtStepKind`
+  // üzerinden geçtiği için Tambur adımında AÇIK TOP YOKSA 400 atar ("… adımında
+  // şu an açık top yok. Mevcut konum: Kurşun (3 rulo)"). Yani kart hiç
+  // açılamadığında bu iki aksiyon da görünmez — tam da en çok istendikleri
+  // durumda. Kartı bir kez açabilen operatör (adımda başka top varken ya da
+  // hepsini finalize ettikten sonra sekme açık kalırken) sorunsuz kullanır.
+  // Kalıcı çözüm backend tarafındadır: karttan Tambur adımını açık-top şartı
+  // OLMADAN çözen bir okuma yolu (ör. `context`e `allowEmpty` dalı). Buraya
+  // uydurma bir stepId türetme — yanlış adıma top bağlamak sessiz hatadır.
+  const { has: hasPermission } = usePermissions();
+  const canFieldFix =
+    hasPermission('mobile:tambur-duzelt') || hasPermission('roll:manual-adjust');
+  const [fieldFixOpen, setFieldFixOpen] = useState(false);
+  // Saha düzeltmesi uçları ONLINE-ONLY (barkodu sunucu üretir, taşıma tx'i
+  // sunucuda çözülür) — offline kuyruğuna girmez; modal bunu banda yazar.
+  const isOnline = useOnlineStatus();
+
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
   const [openJobs, setOpenJobs] = useState<OpenJob[]>([]);
@@ -310,7 +337,11 @@ export default function TamburScreen() {
   const [work, setWork] = useState<RollWorkState>(EMPTY_WORK);
   // Kesim uzunluğu kaynağı. Faz 1'de MANUEL varsayılan (gerçek makine yok);
   // Otomatik'te uzunluk makineden ölçülür → input + numpad gizlenir.
-  const [cutMode, setCutMode] = useState<'manual' | 'auto'>('manual');
+  // CİHAZDA KALICI (deviceSettingsStore) ve "Top Kesme" ile AYNI tercih: seçim
+  // aslında "bu istasyonda metre makinesi çalışıyor mu" gerçeğini yansıtır, o da
+  // tek bir gerçektir — iki ayrı hafıza tutmak operatörü şaşırtırdı.
+  const cutMode = useDeviceSettingsStore((s) => s.tamburCutMode);
+  const setCutMode = useDeviceSettingsStore((s) => s.setTamburCutMode);
   
   const pendingRecutCleanupRef = useRef<{ remainingChild: Roll | null } | null>(null);
 
@@ -371,8 +402,11 @@ export default function TamburScreen() {
     status: string;
   } | null>(null);
   const [recutCutLength, setRecutCutLength] = useState('');
-  // Recut (Top Kesme) — açık kumaş akışıyla aynı: manuel/otomatik mod.
-  const [recutMode, setRecutMode] = useState<'manual' | 'auto'>('manual');
+  // Recut (Top Kesme) — açık kumaş akışıyla aynı: manuel/otomatik mod. AYNI
+  // cihaz tercihini paylaşır (ayrı state DEĞİL): modalda değiştirilen mod ana
+  // kesime de yansır, çünkü ikisi aynı metre makinesini kullanır.
+  const recutMode = cutMode;
+  const setRecutMode = setCutMode;
   // Ham (renksiz STOCK) top kesiminde her parçanın hedefi: STOCK = üretime devam
   // (yeni iş emrine bağlanır), WAREHOUSE = sevke hazır ham-bitmiş. Bitmiş/renkli
   // top kesiminde yok sayılır.
@@ -606,12 +640,50 @@ export default function TamburScreen() {
           text2: bypass.message,
         });
       } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Toast.show({
-          type: 'error',
-          text1: 'Kart çözülemedi',
-          text2: (err as Error).message,
-        });
+        // BOŞ ADIM — saha düzeltmesi yolu (2026-08-03). Tambur adımında açık top
+        // yoksa `by-card` 400 atar ve kart hiç açılmazdı; "Topu Buraya Al /
+        // Manuel Top Ekle" TAM DA gerektikleri anda ulaşılamaz kalıyordu.
+        // Backend artık yetkili operatöre kartı BOŞ açtırıyor (`emptyStep: true`);
+        // yetkisiz operatörde 400 aynen döner, yani aşağıdaki dal hiç çalışmaz.
+        const emptyCtx = canFieldFix
+          ? await tamburService
+              .getContext(barcode)
+              .then((r) => r.data as TamburContext | null)
+              .catch(() => null)
+          : null;
+        if (emptyCtx?.emptyStep) {
+          const newJob: OpenJob = {
+            cardId: barcode,
+            cardBarcode: barcode,
+            // Boş adımda `by-card` özeti yok; ekranın ihtiyaç duyduğu asgari
+            // alanlar context'ten kurulur. `rolls: []` → kesim/finalize
+            // aksiyonları zaten kendiliğinden kapalı kalır.
+            stepSummary: {
+              workOrderStepId: emptyCtx.stepId,
+              stationName: emptyCtx.stationName,
+              batchNumber: emptyCtx.batchNumber ?? '—',
+              rolls: [],
+            } as unknown as TamburStepSummary,
+            context: emptyCtx,
+            selectedRollId: null,
+          };
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setOpenJobs((prev) => [...prev, newJob]);
+          setActiveCardId(newJob.cardId);
+          if (fromInput) setCardBarcode('');
+          Toast.show({
+            type: 'info',
+            text1: 'Bu adımda bekleyen top yok',
+            text2: 'Saha düzeltmesi yapabilirsiniz (Topu Buraya Al / Manuel Top Ekle)',
+          });
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Toast.show({
+            type: 'error',
+            text1: 'Kart çözülemedi',
+            text2: (err as Error).message,
+          });
+        }
       }
     } finally {
       setResolvingCard(false);
@@ -1321,6 +1393,7 @@ export default function TamburScreen() {
   const openRecentOutput = () => drawerQueue.run(() => setRecentOutputOpen(true));
   const openRecut = () => drawerQueue.run(() => setRecutScannerOpen(true));
   const openStandalone = () => drawerQueue.run(() => setStandaloneOpen(true));
+  const openFieldFix = () => drawerQueue.run(() => setFieldFixOpen(true));
 
   // Top Kesme akışı: kamera modal'ından tarama → onScan SADECE modal'ı kapatır
   // ve barkod'u pending state'e atar. Asıl resolve modal tamamen kapandıktan
@@ -1709,6 +1782,19 @@ export default function TamburScreen() {
               >
                 Top Kesme
               </Button>
+              {/* Saha düzeltmesi — yalnız yetkili operatörde ve açık iş varken
+                  (iki uç da bir Tambur ADIMINI hedef alır). */}
+              {canFieldFix && activeJob && (
+                <Button
+                  mode="outlined"
+                  icon="wrench-outline"
+                  compact
+                  onPress={() => openFieldFix()}
+                  textColor="#6d28d9"
+                >
+                  Düzelt
+                </Button>
+              )}
             </View>
           )}
         </View>
@@ -1732,6 +1818,16 @@ export default function TamburScreen() {
               color="#b91c1c"
               onPress={() => openRecut()}
             />
+            {/* Saha düzeltmesi — yalnız yetkili operatörde ve açık iş varken. */}
+            {canFieldFix && activeJob && (
+              <CompactAction
+                icon="wrench-outline"
+                label="Düzelt"
+                bg="#ede9fe"
+                color="#6d28d9"
+                onPress={() => openFieldFix()}
+              />
+            )}
           </View>
         </View>
       ) : null}
@@ -1850,6 +1946,17 @@ export default function TamburScreen() {
                 label="Serbest Etiket"
                 onPress={() => openStandalone()}
               />
+              {/* Saha düzeltmesi — yalnız yetkili operatörde ve açık iş varken
+                  (iki uç da ekrandaki Tambur ADIMINI hedef alır; iş yoksa hedef
+                  yok). Yetkisizde hiç çizilmez, gri buton bırakılmaz. */}
+              {canFieldFix && activeJob && (
+                <HeaderChip
+                  icon="wrench-outline"
+                  label="Düzelt"
+                  onPress={() => openFieldFix()}
+                  accent
+                />
+              )}
             </>
           )}
         </View>
@@ -1993,7 +2100,7 @@ export default function TamburScreen() {
                           <TouchableRipple
                             key={m}
                             borderless
-                            onPress={() => setRecutMode(m)}
+                            onPress={() => void setRecutMode(m)}
                             style={[styles.cutModeChip, active && styles.cutModeChipActive]}
                           >
                             <Text
@@ -2476,7 +2583,7 @@ export default function TamburScreen() {
                           <TouchableRipple
                             key={m}
                             borderless
-                            onPress={() => setCutMode(m)}
+                            onPress={() => void setCutMode(m)}
                             style={[
                               styles.cutModeChip,
                               active && styles.cutModeChipActive,
@@ -2737,6 +2844,26 @@ export default function TamburScreen() {
         note={activeJob?.context?.stepNote ?? null}
         onDismiss={() => setNoteModalOpen(false)}
       />
+
+      {/* Saha düzeltmesi (Topu Buraya Al / Manuel Top Ekle) — kardeş dosyada.
+          Yetki + açık iş yoksa hiç mount edilmez: hedef adım (targetStepId)
+          olmadan iki ucun da anlamı yok. */}
+      {canFieldFix && activeJob && (
+        <TamburFieldFix
+          visible={fieldFixOpen}
+          onDismiss={() => setFieldFixOpen(false)}
+          targetStepId={activeJob.stepSummary.workOrderStepId}
+          stationName={activeJob.stepSummary.stationName}
+          qualityGrades={qualityGrades}
+          online={isOnline}
+          onApplied={() => {
+            // Mevcut Tambur desenİ: adım + context tazelenir. Ayrıca top
+            // listeleri (Listeden Seç / Çıkanlar) bayat kalmasın.
+            void refetchActiveJob();
+            qc.invalidateQueries({ queryKey: ['rolls'] });
+          }}
+        />
+      )}
 
       {/* Kurşun Bypass'ın ONAY MODALI YOKTUR (2026-08-01): kart okutulunca kurşun
           adımı `resolveCard` içinde sessizce kapanır ve kart normal Tambur işi

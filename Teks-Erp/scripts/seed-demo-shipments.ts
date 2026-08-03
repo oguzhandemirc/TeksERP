@@ -20,13 +20,17 @@ const FABRICS = [
   { code: "GABARDIN", name: "Gabardin" },
   { code: "POPLIN", name: "Poplin" },
 ];
+// Adlar "Fixture" önekli — gerekçe `prisma/seed-fixtures.ts` içinde (fabrikanın
+// canlı verisiyle AD çakışması → §18 mükerrer kırmızısı). Kodlar çözüm anahtarı,
+// onlara dokunma. Bu liste seed-fixtures ile aynı adları yazmalı; ayrışırsa
+// hangisi en son koştuysa diğerinin adını ezer.
 const COLORS = [
-  { code: "MAVI", name: "Mavi", hex: "#2563eb" },
-  { code: "KIRMIZI", name: "Kırmızı", hex: "#dc2626" },
-  { code: "SIYAH", name: "Siyah", hex: "#111827" },
-  { code: "BEYAZ", name: "Beyaz", hex: "#e5e7eb" },
-  { code: "YESIL", name: "Yeşil", hex: "#16a34a" },
-  { code: "LACIVERT", name: "Lacivert", hex: "#1e3a8a" },
+  { code: "MAVI", name: "Fixture Mavi", hex: "#2563eb" },
+  { code: "KIRMIZI", name: "Fixture Kırmızı", hex: "#dc2626" },
+  { code: "SIYAH", name: "Fixture Siyah", hex: "#111827" },
+  { code: "BEYAZ", name: "Fixture Beyaz", hex: "#e5e7eb" },
+  { code: "YESIL", name: "Fixture Yeşil", hex: "#16a34a" },
+  { code: "LACIVERT", name: "Fixture Lacivert", hex: "#1e3a8a" },
 ];
 const QUALITIES: (string | null)[] = ["1.KALITE", "1.KALITE", "2.KALITE", null];
 const WIDTHS = [140, 150, 150, 160, 180];

@@ -89,6 +89,12 @@ const removeShipmentSackSchema = z.object({ sackId: z.string().uuid("Geçersiz �
 const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]) });
 const procedureCodeSchema = z.object({ procedureCode: z.string().trim().max(64).nullable().optional() });
 const dispatchNoteSchema = z.object({ dispatchNote: z.string().trim().max(500).nullable().optional() });
+// Fatura işareti — `invoiceNo: null` (ya da boş) işareti KALDIRIR; tarih verilmezse
+// servis "şimdi"yi damgalar. Tutar/KDV alanı YOK (muhasebe yüzeyi miktar-odaklı).
+const invoiceSchema = z.object({
+  invoiceNo: z.string().trim().max(64).nullable().optional(),
+  invoicedAt: z.coerce.date().nullable().optional(),
+});
 const dispatchSchema = z.object({
   plateNumber: z.string().trim().max(32).optional().nullable(),
   driverName: z.string().trim().max(100).optional().nullable(),
@@ -306,6 +312,32 @@ export class ShippingController {
   getDispatchNote = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.getDispatchNote(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setShipmentInvoice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = invoiceSchema.parse(req.body);
+      const result = await this.service.setShipmentInvoice(
+        req.params.id as string,
+        body.invoiceNo ?? null,
+        body.invoicedAt ?? null,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setDirectShipmentInvoice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = invoiceSchema.parse(req.body);
+      const result = await this.service.setDirectShipmentInvoice(
+        req.params.id as string,
+        body.invoiceNo ?? null,
+        body.invoicedAt ?? null,
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

@@ -177,7 +177,11 @@ export function RouteEditor({
   for (const r of capResults) {
     const cap = r.data?.data;
     if (!cap) continue;
-    if (cap.canApplyColor && cap.colors.length > 0) hasColorStation = true;
+    // Renk kısıtı yok — "renk veren adım var mı" sorusu yalnız kategori bayrağına
+    // bakar (backend `appliesColor` kuralıyla aynı). Eskiden istasyonun renk
+    // listesi de dolu olmak zorundaydı → yeni renk seçilince rota doğruyken bile
+    // "karşılayan istasyon yok" uyarısı çıkıyordu.
+    if (cap.hasDefaultCategory && cap.canApplyColor) hasColorStation = true;
     if (cap.canApplyProperty) for (const p of cap.properties) coveredProps.add(p.id);
   }
   const uncoveredPropIds = target.propertyIds.filter((id) => !coveredProps.has(id));

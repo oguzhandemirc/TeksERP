@@ -21,6 +21,11 @@ export const fabricPropertyFormSchema = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/, "Renk kodu #RRGGBB formatında olmalı (örn. #1A2B3C)")
     .optional()
     .or(z.literal("")),
+  // Özelliği uygulayacak istasyon(lar) — ZORUNLU. Backend de reddeder; buradaki
+  // kural istemci tarafındaki ikizi, gevşetme (bkz. PropertyStationsField).
+  stationIds: z
+    .array(z.string())
+    .min(1, "Özelliği uygulayacak en az bir istasyon seçilmeli"),
   isActive: z.boolean(),
 });
 
@@ -31,5 +36,6 @@ export const fabricPropertyFormDefaults: FabricPropertyFormValues = {
   category: "",
   description: "",
   color: "",
+  stationIds: [],
   isActive: true,
 };

@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Lock, Unlock, ChevronUp, ChevronDown, Trash2, GripVertical } from "lucide-react";
+import { Lock, Unlock, ChevronUp, ChevronDown, Trash2, GripVertical, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { LabelElement } from "@/types/label-canvas";
@@ -67,6 +67,10 @@ function LayerRow({ el, selected, onSelect, onToggleLock, onMoveForward, onMoveB
         {elementTypeLabels[el.type]}
       </span>
       <span className="flex-1 truncate">{describe(el)}</span>
+      {/* Koşullu basım — katman listesinde de görünsün (tuvalde eleman hep çizilir). */}
+      {el.showIf && (
+        <Filter className="h-3 w-3 shrink-0 text-sky-600" aria-label="Koşullu basım" />
+      )}
       <Button type="button" size="icon" variant="ghost" className="h-5 w-5 shrink-0"
         title={el.locked ? "Kilidi aç" : "Kilitle"}
         onClick={(e) => { e.stopPropagation(); onToggleLock(el.id); }}>

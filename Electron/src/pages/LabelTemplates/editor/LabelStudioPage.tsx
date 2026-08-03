@@ -33,6 +33,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { VariantTabs } from "./VariantTabs";
 import { VariantMismatchBanner } from "./VariantMismatchBanner";
 import { CanvasPreview } from "./CanvasPreview";
+import { useSampleGrade } from "./useSampleGrade";
 import { DEFAULT_ZOOM, makeElement, makeBarcodePair, clamp } from "./canvas-model";
 import { centerOnCanvas } from "./canvas-align";
 import type { CanvasPad, LabelElement, LabelElementType } from "@/types/label-canvas";
@@ -72,7 +73,12 @@ export function LabelStudioPage() {
     heightMm: activeVariant?.heightMm ?? 60,
     pad: state.pad,
   };
-  const lint = useCanvasLint(state.elements, canvas);
+  // Örnek top kalitesi: canlı önizleme ile Test Baskısı AYNI seçimi kullanır — ayrı
+  // tutulsaydı önizlemede görünen koşullu eleman test baskısında sessizce çıkmazdı.
+  const sample = useSampleGrade(state.elements);
+  // Katalog kodları lint'e de gider: koşulda ÖLÜ kalite kodu kalırsa uyarı çıksın.
+  const sampleGradeCodes = useMemo(() => sample.grades.map((g) => g.code), [sample.grades]);
+  const lint = useCanvasLint(state.elements, canvas, sampleGradeCodes);
 
   // Kenar boşluğu değişince: pad'i güncelle + mevcut elemanları yeni güvenli alana İT
   // (padding büyüyünce dışarıda kalanlar tek "Geri Al" adımıyla içeri çekilir).
@@ -273,7 +279,7 @@ export function LabelStudioPage() {
 
                     {/* SAĞ: önizleme + seçili eleman özellikleri + lint */}
                     <div className="space-y-3 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
-                      <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} />
+                      <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} sample={sample} />
                       <PropertiesPanel element={selected} catalog={catalog}
                         multiCount={state.selectedIds.length}
                         onChange={(patch) => selected && state.updateElement(selected.id, patch)}
@@ -306,7 +312,7 @@ export function LabelStudioPage() {
         fetchNative={(o) =>
           labelTemplateService.canvasPreview({
             kind: previewKind, widthMm: canvas.widthMm, heightMm: canvas.heightMm, elements: state.layout,
-            peripheralId: o?.peripheralId, copies: o?.copies,
+            peripheralId: o?.peripheralId, copies: o?.copies, qualityGrade: sample.qualityGrade,
           })
         }
       />

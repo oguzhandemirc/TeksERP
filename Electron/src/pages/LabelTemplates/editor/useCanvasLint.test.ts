@@ -59,3 +59,35 @@ describe("useCanvasLint", () => {
     expect(issues.filter((i) => i.level === "warn")).toHaveLength(0);
   });
 });
+
+describe("useCanvasLint — koşullu basım", () => {
+  const withGrades = (elements: LabelElement[], codes?: string[]) =>
+    renderHook(() => useCanvasLint(elements, CANVAS, codes)).result.current;
+
+  const stamp = (id: string, values: string[]): LabelElement => ({
+    id, type: "text", text: id, x: 10, y: 10,
+    showIf: { field: "qualityGrade", op: "in", values },
+  });
+
+  it("katalogda olmayan kalite kodu WARN üretir (ölü koşul = eleman hiç basılmaz)", () => {
+    const issues = withGrades([{ id: "q", type: "qr", x: 60, y: 40, scale: 4 }, stamp("d", ["ESKI_KOD"])], ["1.KALITE", "A1"]);
+    expect(issues.some((i) => i.level === "warn" && i.elementId === "d" && i.message.includes("ESKI_KOD"))).toBe(true);
+  });
+
+  it("katalogdaki kod (harf farkı dahil) uyarı üretmez", () => {
+    const issues = withGrades([{ id: "q", type: "qr", x: 60, y: 40, scale: 4 }, stamp("d", ["a1"])], ["1.KALITE", "A1"]);
+    expect(issues.some((i) => i.message.includes("katalogda olmayan"))).toBe(false);
+  });
+
+  it("katalog yüklenmeden (kod listesi boş) ölü-koşul uyarısı VERİLMEZ", () => {
+    const issues = withGrades([{ id: "q", type: "qr", x: 60, y: 40, scale: 4 }, stamp("d", ["ESKI_KOD"])]);
+    expect(issues.some((i) => i.message.includes("katalogda olmayan"))).toBe(false);
+  });
+
+  it("birbirini dışlayan koşullu elemanlar üst üste binse de uyarı yok", () => {
+    const a: LabelElement = { ...stamp("a", ["1.KALITE"]), x: 10, y: 10 };
+    const b: LabelElement = { ...stamp("b", ["A1"]), x: 10, y: 10 };
+    const issues = withGrades([{ id: "q", type: "qr", x: 60, y: 40, scale: 4 }, a, b], ["1.KALITE", "A1"]);
+    expect(issues.some((i) => i.message.includes("binme"))).toBe(false);
+  });
+});

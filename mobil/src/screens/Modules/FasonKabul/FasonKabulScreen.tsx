@@ -56,6 +56,8 @@ import {
   useQueryClient,
   onlineManager,
 } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
@@ -70,8 +72,14 @@ import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
+import { useVisibleScreens } from '../../../hooks/useVisibleScreens';
 import { ReceiptRow, ReceiptDetailModal } from '../../../components/receipt';
-import { subcontractorService } from '../../../services/subcontractor.service';
+import {
+  subcontractorService,
+  type PendingReturnErrorDetails,
+  type NeedsDispatchDetails,
+  type MaybeWrongReceiptDetails,
+} from '../../../services/subcontractor.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import SyncStatusChip from '../../../components/SyncStatusChip';
@@ -94,6 +102,7 @@ import type {
   FabricProperty,
   ReceiptCancelPreview,
 } from '../../../types/models';
+import type { MainStackParamList } from '../../../navigation/types';
 
 const RECEIPTS_PAGE_SIZE = 12;
 const DRAFT_KEY = 'fason_kabul_draft_v1';
@@ -112,6 +121,15 @@ interface RollRow {
   notes: string;
   noteOpen: boolean;
 }
+
+/**
+ * Kart okutmada aksiyona ÇEVRİLEBİLEN backend teşhisi. Yalnız operatörün tek
+ * dokunuşla çözebileceği iki kod kartı hak eder; gerisi (ör. iş emri gerçekten
+ * başka istasyonda) bilgi mesajıdır ve toast olarak kalır.
+ */
+type ScanActionState =
+  | { kind: 'NEEDS_DISPATCH'; message: string; details: NeedsDispatchDetails }
+  | { kind: 'MAYBE_WRONG_RECEIPT'; message: string; details: MaybeWrongReceiptDetails };
 
 // Sevk/parti numarasını gösterirken baştaki gereksiz sıfırları at:
 // "SD-2606-000013" → "SD-2606-13". Depolanan değer sıralama/benzersizlik için
@@ -169,6 +187,12 @@ export default function FasonKabulScreen() {
   const isPhone = device === 'phone';
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const qc = useQueryClient();
+  const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  // Fason Sevk'e yönlendirme YALNIZ ekran görünürse sunulur — yetkisi olmayanda
+  // rota hiç kayıtlı değildir (MainNavigator visibleScreens'ten kaydeder), buton
+  // "gezinme hedefi bulunamadı" ile patlardı.
+  const { visibleScreens } = useVisibleScreens();
+  const canGoFasonSevk = visibleScreens.some((s) => s.key === 'FasonSevk');
   const insets = useSafeAreaInsets();
   const keyboard = useReanimatedKeyboardAnimation();
   const footerAnimStyle = useAnimatedStyle(() => ({
@@ -220,6 +244,15 @@ export default function FasonKabulScreen() {
   // Kabul iptal modalı
   const [cancelTargetReceiptId, setCancelTargetReceiptId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+
+  /**
+   * Kart okutmada backend'in koyduğu TEŞHİS — toast değil KALICI aksiyon kartı.
+   * Toast 4 saniyede kaybolur; operatör "ne yapacağım?" sorusuyla baş başa kalır
+   * (saha bulgusu: sabit "Yanlış istasyon" başlığı üstelik yanlıştı — mal doğru
+   * istasyondaydı, sadece henüz sevk edilmemişti). Kart boş-durum bloğunda
+   * render edilir → tablette de telefonda da TEK yerde çalışır.
+   */
+  const [scanAction, setScanAction] = useState<ScanActionState | null>(null);
 
   // ── Right column ──
   const [rightTab, setRightTab] = useState<RightTab>('pending');
@@ -465,9 +498,15 @@ export default function FasonKabulScreen() {
     }) => subcontractorService.cancelReceipt(id, { reason, cascadeRollIds }),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Mal kabul iptal edildi' });
+      Toast.show({
+        type: 'success',
+        text1: 'Mal kabul iptal edildi',
+        text2: 'Toplar fasona geri döndü — kartı tekrar okutabilirsiniz',
+      });
       setCancelTargetReceiptId(null);
       setCancelReason('');
+      // Teşhis kartı ("bu iş emrinde kabul zaten yapılmış") artık doğru değil.
+      setScanAction(null);
       qc.invalidateQueries({ queryKey: ['receipts'] });
       qc.invalidateQueries({ queryKey: ['pending-returns'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
@@ -495,6 +534,17 @@ export default function FasonKabulScreen() {
       });
       return;
     }
+    // K14 parti uyuşmazlığı ayrı bir sebep — "toplar işlenmiş" mesajı burada
+    // YANLIŞ yönlendirir (yapılacak iş panelden parti birleştirmektir).
+    if (cancelPreview?.batchMismatch?.blocked) {
+      Toast.show({
+        type: 'error',
+        text1: 'Parti uyuşmazlığı',
+        text2: 'Panelden partileri birleştirin, sonra iptali tekrar deneyin',
+        visibilityTime: 6000,
+      });
+      return;
+    }
     if (cancelPreview && !cancelPreview.allSafe) {
       Toast.show({
         type: 'error',
@@ -512,6 +562,7 @@ export default function FasonKabulScreen() {
 
   // ── Handlers ──
   const resetForm = () => {
+    setScanAction(null);
     setSelectedGroup(null);
     setSelectedParty(null);
     setRows([]);
@@ -602,6 +653,8 @@ export default function FasonKabulScreen() {
 
   const selectGroup = async (summary: PendingReturnSummary | PendingReturnGroup) => {
     if (groupLoading) return;
+    // Bir grup seçildiği an teşhis kartı geçersiz — operatör başka yoldan devam etti.
+    setScanAction(null);
 
     // PendingReturnGroup (rolls mevcut) ise doğrudan kullan — refakat kartı akışı.
     // PendingReturnSummary (rolls yok) ise backend'den lazy-load.
@@ -620,6 +673,29 @@ export default function FasonKabulScreen() {
       } finally {
         setGroupLoading(false);
       }
+    }
+
+    // "Sevk bekliyor" satırı: adımda top VAR ama fasona çıkmamış (konum düzeltmesi
+    // sonrası içeride bekliyor). Kabul formu açılırsa operatör boş bir forma bakar
+    // ve neden kabul edemediğini yine anlamaz — teşhis kartına yönlendir.
+    // Kart okutma yolundaki NEEDS_DISPATCH ile AYNI aksiyon.
+    if (g.rollCount === 0 && g.awaitingDispatch) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setScanAction({
+        kind: 'NEEDS_DISPATCH',
+        message:
+          `Toplar '${g.step.station.name}' adımında ama henüz fasona SEVK EDİLMEMİŞ ` +
+          `(konum düzeltmesi sonrası mal içeride bekliyor). ` +
+          `Önce Fason Sevk yapın, sonra kabul edin.`,
+        details: {
+          code: 'NEEDS_DISPATCH',
+          workOrderId: g.workOrder.id,
+          stepId: g.step.id,
+          stationName: g.step.station.name,
+          rollCount: g.awaitingDispatchRollCount ?? 0,
+        },
+      });
+      return;
     }
 
     const parties = g.parties ?? [];
@@ -656,6 +732,8 @@ export default function FasonKabulScreen() {
   const handleResolveCard = async (overrideBarcode?: string) => {
     const barcode = (overrideBarcode ?? cardBarcode).trim();
     if (!barcode) return;
+    // Yeni okutma = önceki teşhis geçersiz; kart eskiyi ekranda bırakmasın.
+    setScanAction(null);
     setResolvingCard(true);
     try {
       const res = await travelerCardService.findByBarcode(barcode);
@@ -675,18 +753,36 @@ export default function FasonKabulScreen() {
         return;
       }
 
-      // Refactor 5 — backend WO için bekleyen kabul yoksa net mesajla 400 atar
-      // ("Mevcut konum: Kurşun + KK2 (4 rulo)..."). Banner'da göster.
+      // Backend bekleyen kabul yoksa SEBEBİ söyleyen 400 atar ve `details.code`
+      // ile doğru aksiyonu bildirir. Eski kod her sebebi sabit "Yanlış istasyon"
+      // başlığıyla gösteriyordu — mal doğru istasyonda, sadece sevk edilmemişken
+      // bile. Aksiyonu olan iki kod kalıcı karta, gerisi dürüst başlıklı toast'a.
       let matching: PendingReturnGroup[];
       try {
         const pr = await subcontractorService.pendingReturnsByWorkOrder(card.workOrderId);
         matching = pr.data ?? [];
       } catch (err) {
+        const e = err as Error & { details?: PendingReturnErrorDetails };
+        const details = e.details;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        if (details?.code === 'NEEDS_DISPATCH') {
+          setCardBarcode('');
+          setScanAction({ kind: 'NEEDS_DISPATCH', message: e.message, details });
+          return;
+        }
+        if (details?.code === 'MAYBE_WRONG_RECEIPT') {
+          setCardBarcode('');
+          setScanAction({ kind: 'MAYBE_WRONG_RECEIPT', message: e.message, details });
+          return;
+        }
         Toast.show({
           type: 'error',
-          text1: 'Yanlış istasyon',
-          text2: (err as Error).message,
+          text1:
+            details?.code === 'WO_NOT_AT_SUBCONTRACTOR'
+              ? 'Bu iş emri fasonda değil'
+              : 'Bekleyen kabul bulunamadı',
+          text2: e.message,
+          visibilityTime: 6000,
         });
         return;
       }
@@ -968,15 +1064,39 @@ export default function FasonKabulScreen() {
           style={[styles.formCol, isPhone && !selectedGroup && styles.formColPhone]}
         >
           {!selectedGroup ? (
-            <View style={styles.emptyState}>
-              <Icon source="package-down" size={64} color="#cbd5e1" />
-              <Text style={styles.emptyTitle}>Sevk seçilmedi</Text>
-              <Text style={styles.emptyHint}>
-                {isPhone
-                  ? 'Alttan "Bekleyen"e basıp bir sevk seçin veya "Kamera ile Okut" ile refakat kartını okutun'
-                  : 'Sağdan bekleyen bir sevke tıklayın veya refakat kartını okutun'}
-              </Text>
-            </View>
+            scanAction ? (
+              /* ════ Kart okutuldu ama kabul edilemez — SEBEP + AKSİYON ════ */
+              <ScanActionCard
+                action={scanAction}
+                canGoFasonSevk={canGoFasonSevk}
+                onGoFasonSevk={() => {
+                  const woId =
+                    scanAction.kind === 'NEEDS_DISPATCH'
+                      ? scanAction.details.workOrderId
+                      : null;
+                  setScanAction(null);
+                  nav.navigate('FasonSevk', woId ? { workOrderId: woId } : undefined);
+                }}
+                onCancelReceipt={() => {
+                  if (scanAction.kind !== 'MAYBE_WRONG_RECEIPT') return;
+                  // Hazır iptal akışını kullan (yeni akış YOK): hedef makbuzu set et,
+                  // CancelReceiptModal önizlemesiyle birlikte açılsın.
+                  setCancelReason('');
+                  setCancelTargetReceiptId(scanAction.details.receiptId);
+                }}
+                onDismiss={() => setScanAction(null)}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Icon source="package-down" size={64} color="#cbd5e1" />
+                <Text style={styles.emptyTitle}>Sevk seçilmedi</Text>
+                <Text style={styles.emptyHint}>
+                  {isPhone
+                    ? 'Alttan "Bekleyen"e basıp bir sevk seçin veya "Kamera ile Okut" ile refakat kartını okutun'
+                    : 'Sağdan bekleyen bir sevke tıklayın veya refakat kartını okutun'}
+                </Text>
+              </View>
+            )
           ) : showPartyChooser ? (
             /* ════ Çoklu sevk: ÖNCE hangi parti geldi teyidi ════ */
             <>
@@ -1817,6 +1937,155 @@ export default function FasonKabulScreen() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Kart okutma teşhis kartı — "hata" değil, YAPILACAK İŞ.
+// ─────────────────────────────────────────────────────────────────────────────
+// Saha bulgusu (2026-08-02/03): kabul edilemeyen kart okutulduğunda ekran sabit
+// "Yanlış istasyon" toast'ı basıyordu. Mesaj hem yanlıştı (mal doğru istasyonda,
+// yalnız fasona SEVK EDİLMEMİŞTİ) hem de kayboluyordu. Burada sebep kalıcı durur
+// ve tek dokunuşluk doğru aksiyon sunulur.
+function ScanActionCard({
+  action,
+  canGoFasonSevk,
+  onGoFasonSevk,
+  onCancelReceipt,
+  onDismiss,
+}: {
+  action: ScanActionState;
+  canGoFasonSevk: boolean;
+  onGoFasonSevk: () => void;
+  onCancelReceipt: () => void;
+  onDismiss: () => void;
+}) {
+  const needsDispatch = action.kind === 'NEEDS_DISPATCH';
+  return (
+    // ScrollView: telefon dikeyde (üstte kart bandı, altta sabit aksiyon barı)
+    // metin + iki buton ekrana sığmayabilir — kaydırılabilir olmazsa buton
+    // görünmez kalır ve kart yine "yapılacak iş" söylemekten çıkar.
+    <ScrollView
+      style={scanActionStyles.wrap}
+      contentContainerStyle={scanActionStyles.wrapContent}
+    >
+      <Surface style={scanActionStyles.card} elevation={2}>
+        <View style={scanActionStyles.header}>
+          <Icon
+            source={needsDispatch ? 'truck-alert' : 'receipt-text-remove'}
+            size={26}
+            color="#b45309"
+          />
+          <Text style={scanActionStyles.title}>
+            {needsDispatch
+              ? 'Önce Fason Sevk yapılmalı'
+              : 'Bu iş emrinde kabul zaten yapılmış'}
+          </Text>
+        </View>
+
+        <Text style={scanActionStyles.message}>{action.message}</Text>
+
+        {needsDispatch ? (
+          <View style={scanActionStyles.metaBox}>
+            <Text style={scanActionStyles.metaText}>
+              {action.details.stationName} · {action.details.rollCount} top içeride
+              bekliyor
+            </Text>
+            <Text style={scanActionStyles.metaHint}>
+              Konum düzeltmesi malı fabrikadan ÇIKARMAZ; çıkış yalnız Fason Sevk ile
+              olur. Sevkten sonra bu kartı tekrar okutun.
+            </Text>
+          </View>
+        ) : (
+          <View style={scanActionStyles.metaBox}>
+            <Text style={scanActionStyles.metaText}>
+              Makbuz {action.details.receiptNo} ·{' '}
+              {dayjs(action.details.receivedAt).format('DD.MM.YYYY HH:mm')}
+            </Text>
+            <Text style={scanActionStyles.metaHint}>
+              Mal fiziksel olarak hâlâ fasondaysa (kabul yanlış iş emrine yapıldıysa)
+              doğru araç "Konumu Düzelt" DEĞİL, kabul iptalidir: toplar fasona geri
+              döner ve sevk yeniden açılır.
+            </Text>
+          </View>
+        )}
+
+        <View style={scanActionStyles.actions}>
+          {needsDispatch ? (
+            canGoFasonSevk ? (
+              <Button
+                mode="contained"
+                icon="truck-fast"
+                buttonColor="#b45309"
+                onPress={onGoFasonSevk}
+                contentStyle={scanActionStyles.btnContent}
+                labelStyle={scanActionStyles.btnLabel}
+              >
+                Fason Sevk'e Git
+              </Button>
+            ) : (
+              // Yetkisi yoksa buton YOK (rota kayıtlı değil) — ama ne yapılacağı yazılı.
+              <Text style={scanActionStyles.noPermText}>
+                Fason Sevk yetkiniz yok — sevki yapacak kişiye iletin.
+              </Text>
+            )
+          ) : (
+            <Button
+              mode="contained"
+              icon="close-circle-outline"
+              buttonColor="#dc2626"
+              onPress={onCancelReceipt}
+              contentStyle={scanActionStyles.btnContent}
+              labelStyle={scanActionStyles.btnLabel}
+            >
+              Makbuzu İptal Et
+            </Button>
+          )}
+          <Button
+            mode="outlined"
+            onPress={onDismiss}
+            contentStyle={scanActionStyles.btnContent}
+            labelStyle={scanActionStyles.btnLabel}
+          >
+            Kapat
+          </Button>
+        </View>
+      </Surface>
+    </ScrollView>
+  );
+}
+
+const scanActionStyles = StyleSheet.create({
+  wrap: { flex: 1 },
+  wrapContent: { flexGrow: 1, justifyContent: 'center', padding: 16 },
+  card: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 14,
+    padding: 16,
+    gap: 12,
+    maxWidth: 560,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  title: { fontSize: 18, fontWeight: '700', color: '#78350f', flexShrink: 1 },
+  message: { fontSize: 15, color: '#0f172a', lineHeight: 21 },
+  metaBox: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
+  metaText: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  metaHint: { fontSize: 13, color: '#57534e', lineHeight: 18 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // 56dp dokunma hedefi (fabrika eldiveni) — kök UI kuralı.
+  btnContent: { height: 56, paddingHorizontal: 12 },
+  btnLabel: { fontSize: 16, fontWeight: '700' },
+  noPermText: { fontSize: 14, color: '#92400e', flex: 1, lineHeight: 19 },
+});
+
 function CancelReceiptModal({
   visible,
   preview,
@@ -1847,12 +2116,14 @@ function CancelReceiptModal({
     const lift = kb > 0 ? kb / 2 : 0;
     return { maxHeight, transform: [{ translateY: -lift }] };
   });
+  // `allSafe` backend'de K14'ü zaten içerir; `batchMismatch` ayrıca okunur ki
+  // alan gelen ama allSafe'i bayat bir sürümde de buton kilitli kalsın.
   const canSubmit =
     !submitting &&
     reason.trim().length >= 3 &&
     !previewLoading &&
     !previewError &&
-    (preview ? preview.allSafe : true);
+    (preview ? preview.allSafe && !preview.batchMismatch?.blocked : true);
 
   if (!visible) return null;
 
@@ -1904,6 +2175,44 @@ function CancelReceiptModal({
             <View style={cancelStyles.errorBox}>
               <Icon source="alert" size={16} color="#dc2626" />
               <Text style={cancelStyles.errorText}>{previewError}</Text>
+            </View>
+          )}
+
+          {/* K14 parti uyuşmazlığı — born-roll uyarılarının YANINDA, ayrı sebep.
+              Birleştirme butonu bilinçli olarak YOK: birleştirme geri alınamaz ve
+              hayatta kalan parti (en eski) mobilde seçilemiyor → panele yönlendir. */}
+          {preview?.batchMismatch?.blocked && (
+            <View style={cancelStyles.mismatchBox}>
+              <View style={cancelStyles.bornHeader}>
+                <Icon source="call-split" size={18} color="#b91c1c" />
+                <Text style={cancelStyles.mismatchTitle}>
+                  Parti uyuşmazlığı — iptal edilemez
+                </Text>
+              </View>
+              {preview.batchMismatch.items.map((m) => (
+                <View key={m.rollId} style={cancelStyles.rollRow}>
+                  <Text style={cancelStyles.mismatchRollText}>
+                    {m.barcode} → şu an{' '}
+                    <Text style={cancelStyles.mismatchStrong}>
+                      {m.rollBatchNumber ?? 'partisiz'}
+                    </Text>{' '}
+                    partisinde
+                  </Text>
+                  <Text style={cancelStyles.mismatchRollMeta}>
+                    Sevk {m.dispatchNo} →{' '}
+                    <Text style={cancelStyles.mismatchStrong}>
+                      {m.dispatchBatchNumber ?? 'partisiz'}
+                    </Text>{' '}
+                    partisine bağlı
+                  </Text>
+                </View>
+              ))}
+              <Text style={cancelStyles.mismatchHint}>
+                Toplar kabulden sonra başka bir partiye taşınmış/birleştirilmiş.
+                Panelden İş Emri → Partiler → Birleştir ile bu partileri birleştirin,
+                sonra iptali tekrar deneyin. (Birleştirme geri alınamaz — bu yüzden
+                tablette yapılmaz.)
+              </Text>
             </View>
           )}
 
@@ -2052,6 +2361,20 @@ const cancelStyles = StyleSheet.create({
   bornHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bornTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a', flexShrink: 1 },
 
+  mismatchBox: {
+    padding: 12,
+    backgroundColor: '#fef2f2',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    gap: 8,
+  },
+  mismatchTitle: { fontSize: 13, fontWeight: '700', color: '#b91c1c', flexShrink: 1 },
+  mismatchRollText: { fontSize: 13, color: '#0f172a' },
+  mismatchRollMeta: { fontSize: 12, color: '#64748b' },
+  mismatchStrong: { fontWeight: '700', color: '#0f172a' },
+  mismatchHint: { fontSize: 12, color: '#991b1b', lineHeight: 17 },
+
   rollRow: {
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -2181,12 +2504,29 @@ function PendingDispatchRow({
   onPress: () => void;
 }) {
   const fabric = fabricLabel(group);
+  // Fason adımında DURAN ama fasona ÇIKMAMIŞ top ("Konumu Düzelt" sonrası mal
+  // içeride bekliyor). Rozetsiz bırakılırsa satır normal bir bekleyen sevkten
+  // ayırt edilemez; operatör kabul sanıp basar ve ancak teşhis kartında öğrenir.
+  const awaitingCount = group.awaitingDispatch ? (group.awaitingDispatchRollCount ?? 0) : 0;
+  // rollCount === 0 → satır HİÇ kabul edilemez (önce sevk). rollCount > 0 →
+  // kabul edilebilir bir kısım VAR, geri kalanı sevk bekliyor (kısmi uyarı).
+  const awaitingOnly = awaitingCount > 0 && group.rollCount === 0;
   return (
     <Surface style={cameraStyles.row} elevation={1}>
       <TouchableRipple borderless onPress={onPress} style={cameraStyles.rowTouch}>
         <View style={cameraStyles.rowInner}>
           <View style={{ flex: 1 }}>
             <Text style={cameraStyles.rowBatch}>{group.workOrder.batchNumber}</Text>
+            {awaitingCount > 0 && (
+              <View style={cameraStyles.awaitingBadge}>
+                <Icon source="truck-alert" size={12} color="#78350f" />
+                <Text style={cameraStyles.awaitingBadgeText} numberOfLines={2}>
+                  {awaitingOnly
+                    ? `SEVK BEKLİYOR · ${awaitingCount} top içeride`
+                    : `+${awaitingCount} top sevk bekliyor`}
+                </Text>
+              </View>
+            )}
             {fabric && (
               <View style={cameraStyles.rowMeta}>
                 <Icon source="palette" size={12} color="#475569" />
@@ -2554,6 +2894,19 @@ function PendingCard({
               {group.lastDispatch?.subcontractor?.name ?? '—'}
             </Text>
           </View>
+          {/* Fason adımında DURAN ama fasona ÇIKMAMIŞ top ("Konumu Düzelt"
+              sonrası mal içeride bekliyor). Rozetsiz satır normal bir bekleyen
+              sevkten ayırt edilemez; operatör kabul sanıp basar. */}
+          {!!group.awaitingDispatch && (group.awaitingDispatchRollCount ?? 0) > 0 && (
+            <View style={styles.pendingAwaiting}>
+              <Icon source="truck-alert" size={12} color="#78350f" />
+              <Text style={styles.pendingAwaitingText} numberOfLines={2}>
+                {group.rollCount === 0
+                  ? `SEVK BEKLİYOR · ${group.awaitingDispatchRollCount} top içeride`
+                  : `+${group.awaitingDispatchRollCount} top sevk bekliyor`}
+              </Text>
+            </View>
+          )}
           <View style={styles.pendingFooter}>
             <Text style={styles.pendingQty}>
               {group.rollCount} parça · {Number(group.totalQty ?? 0).toFixed(1)} mt
@@ -3201,6 +3554,21 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   pendingFlagText: { fontSize: 9, fontWeight: '700', color: '#fff' },
+  // Teşhis kartıyla AYNI amber dili — aynı sorunun listedeki yüzü.
+  pendingAwaiting: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    marginTop: 3,
+  },
+  pendingAwaitingText: { fontSize: 10, fontWeight: '700', color: '#78350f', flexShrink: 1 },
   pendingMidRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pendingStep: { fontSize: 11, color: '#475569', fontWeight: '600', flex: 1 },
   pendingCompany: { fontSize: 11, color: '#475569', flex: 1 },
@@ -3284,6 +3652,22 @@ const cameraStyles = StyleSheet.create({
   },
   rowQty: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   rowDate: { fontSize: 11, color: '#94a3b8' },
+  // "Sevk bekliyor" rozeti — teşhis kartıyla aynı amber dili (aynı sorunun
+  // listedeki yüzü; ayrı renk kullanmak iki ayrı sorun izlenimi verirdi).
+  awaitingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    marginBottom: 4,
+  },
+  awaitingBadgeText: { fontSize: 11, fontWeight: '700', color: '#78350f', flexShrink: 1 },
 
   searchRow: {
     flexDirection: 'row',

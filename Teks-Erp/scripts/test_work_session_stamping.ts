@@ -192,7 +192,20 @@ async function main() {
     );
     peripheralIds.push((scale.data as { id: string }).id);
 
-    // Makine-oturumu (KK1-M1) → makineye sabit donanım (seed: KK1-METRE)
+    // ⚠️ Makineye bağlı METRE cihazını test KENDİSİ üretir — eskiden seed'in
+    // "KK1-METRE" kaydına güveniliyordu ve fabrikanın canlı verisinde o kayıt yok
+    // (adet=0 → kontrol düşüyordu). İstasyona bağlı SCALE zaten yukarıda üretiliyor;
+    // bu, makine dalını ona simetrik hale getirir.
+    const meter = await peripherals.create(
+      {
+        code: `TST-WSS-METER-${ts}`, name: "TEST STAMP Metre", kind: "METER",
+        connectionType: "BLUETOOTH_SPP", address: "00:AA:BB:CC:DD:F1", machineId: kk1Machine.id,
+      },
+      admin.id,
+    );
+    peripheralIds.push((meter.data as { id: string }).id);
+
+    // Makine-oturumu (KK1-M1) → makineye sabit donanım
     const meters = await peripherals.getForSession({ machineId: kk1Machine.id, stationId: null }, "METER");
     check(
       "makine-oturumu → makine donanımı (KK1 metre)",

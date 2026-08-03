@@ -2,12 +2,13 @@
 // Etiket Stüdyosu — kanvas eleman görseli (yaklaşık; gerçek WYSIWYG backend'te)
 // =============================================================================
 
-import { QrCode, AlertTriangle, RotateCw, Lock } from "lucide-react";
+import { QrCode, AlertTriangle, RotateCw, Lock, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IconElement, LabelElement } from "@/types/label-canvas";
 import { skippedLanguages } from "@/types/label-canvas";
-import { estimateBounds, FONT_MM } from "./canvas-model";
+import { describeCondition, estimateBounds, FONT_MM } from "./canvas-model";
 import { useIconCatalog } from "./useIconCatalog";
+import { useQualityGrades } from "./useQualityGrades";
 
 export type HandleMode = "resize" | "rotate";
 
@@ -26,6 +27,9 @@ interface Props {
 
 export function CanvasElementView({ element: el, canvas, zoom, selected, showHandles, hasLintWarn, onPointerDown, onHandlePointerDown }: Props) {
   const b = estimateBounds(el, canvas);
+  // Koşullu basım rozeti — tuvalde ELEMAN HEP GÖRÜNÜR (tasarım yüzeyi), rozet
+  // "bu her baskıda çıkmaz" der. Gerçek görünürlük backend önizlemesindedir.
+  const { nameByCode } = useQualityGrades();
   const style: React.CSSProperties = {
     position: "absolute",
     left: b.x * zoom,
@@ -77,6 +81,12 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, showHan
         <span className="absolute -left-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border bg-background text-amber-600"
           title="Kilitli — katman listesinden aç">
           <Lock className="h-2 w-2" />
+        </span>
+      )}
+      {el.showIf && (
+        <span className="absolute -bottom-1.5 -left-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border bg-background text-sky-600"
+          title={`Koşullu basım — ${describeCondition(el.showIf, nameByCode)}`}>
+          <Filter className="h-2 w-2" />
         </span>
       )}
       {showHandles && !el.locked && (

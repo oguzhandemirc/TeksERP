@@ -22,12 +22,15 @@ import {
 } from "@/services/labelTemplateService";
 import type { CanvasLayout } from "@/types/label-canvas";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
+import { NO_GRADE, type SampleGrade } from "./useSampleGrade";
 
 interface Props {
   kind: LabelKind;
   widthMm: number;
   heightMm: number;
   layout: CanvasLayout;
+  /** Örnek top kalitesi (koşullu eleman değerlendirmesi) — stüdyo kabuğunda tutulur. */
+  sample: SampleGrade;
 }
 
 /** Önizleme kutusu üst sınırı (px) — dar/uzun etiketler bunda sınırlanır. */
@@ -35,7 +38,7 @@ const PREVIEW_MAX_H = 460;
 /** CSS mm → px (ekran 96dpi): buildCanvasLabelHtml `.label` fiziksel mm basar. */
 const PX_PER_MM = 96 / 25.4;
 
-export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
+export function CanvasPreview({ kind, widthMm, heightMm, layout, sample }: Props) {
   const [view, setView] = useState<"visual" | "code">("visual");
   const [lang, setLang] = useState<"active" | RawCodeLang>("active");
   // "Aktif dil" → bu bilgisayara seçili Cihaz Kaydı yazıcısının dili (PPLA/PPLB/ZPL);
@@ -69,8 +72,13 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
   const hPx = heightMm * PX_PER_MM;
   const fitScale = wPx > 0 ? boxW / wPx : 1;
 
+  // Örnek top kalitesi ÜST BİLEŞENDEN gelir (useSampleGrade) — Test Baskısı da
+  // AYNI seçimi kullansın diye; ayrı tutulsaydı önizlemede görünen koşullu eleman
+  // test baskısında sessizce çıkmazdı.
+  const { grades, hasConditions, value: gradeChoice, setValue: setSampleGrade, qualityGrade: grade } = sample;
+
   // 350ms debounce — her sürükleme adımında backend'e gitmesin.
-  const liveKey = JSON.stringify({ kind, widthMm, heightMm, layout, lang, peripheralId });
+  const liveKey = JSON.stringify({ kind, widthMm, heightMm, layout, lang, peripheralId, grade });
   const [debouncedKey, setDebouncedKey] = useState(liveKey);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedKey(liveKey), 350);
@@ -83,7 +91,7 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
   // toast'u) üretiyordu. Boş yük hiç istek atmaz.
   const debounced = JSON.parse(debouncedKey) as {
     kind: LabelKind; widthMm: number; heightMm: number; layout: CanvasLayout;
-    lang: "active" | RawCodeLang; peripheralId?: string;
+    lang: "active" | RawCodeLang; peripheralId?: string; grade?: string;
   };
   const previewQ = useQuery({
     queryKey: ["label-canvas-preview", debouncedKey],
@@ -96,6 +104,7 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
         language: debounced.lang === "active" ? undefined : debounced.lang,
         // Aktif dil için: seçili yazıcının languageOverride'ı (yoksa RASTER_HTML).
         peripheralId: debounced.peripheralId,
+        qualityGrade: debounced.grade,
       }),
     enabled: debounced.layout.elements.length > 0,
     staleTime: 0,
@@ -119,6 +128,21 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
           </button>
         </div>
         <div className="flex items-center gap-1">
+          {hasConditions && (
+            <Select value={gradeChoice} onValueChange={setSampleGrade}>
+              <SelectTrigger className="h-6 w-[150px] text-[10px]" title="Örnek topun kalitesi — koşullu elemanlar buna göre basılır">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {grades.map((g) => (
+                  <SelectItem key={g.code} value={g.code} className="text-xs">
+                    Örnek: {g.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value={NO_GRADE} className="text-xs">Örnek: kalitesiz top</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Select value={lang} onValueChange={(v) => setLang(v as "active" | RawCodeLang)}>
             <SelectTrigger className="h-6 w-[130px] text-[10px]"><SelectValue /></SelectTrigger>
             <SelectContent>

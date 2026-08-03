@@ -428,6 +428,28 @@ async function teardown(): Promise<void> {
   await prisma.shipment.deleteMany({ where: { customerId: CUSTOMER } });
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+  // KARTELA ZİNCİRİ — bu test `kartela.dispatch` çağırıyor ve başarılı olan
+  // çağrılar `kartela_dispatch_items` satırı bırakıyor. O FK RESTRICT: temizlenmezse
+  // aşağıdaki `roll.deleteMany` PATLAR, hata `teardown().catch(...)` ile loglanıp
+  // YUTULUR ve test YEŞİL kalır — ama her koşum dev DB'sinde 9 top + 1 ürün bırakır.
+  // Ölçüldü (2026-08-02): birikmiş 45 hayalet top WAREHOUSE/AT_KARTELA statüsünde
+  // Envanter ekranlarında gerçek stok gibi görünüyordu. Sıra ZORUNLU: makbuz kalemi
+  // → sevk kalemi → sevk başlığı → kartela.
+  const kdItems = await prisma.kartelaDispatchItem.findMany({
+    where: { rollId: { in: rollIds } },
+    select: { id: true, dispatchId: true },
+  });
+  if (kdItems.length > 0) {
+    const kdItemIds = kdItems.map((i) => i.id);
+    const dispatchIds = [...new Set(kdItems.map((i) => i.dispatchId))];
+    await prisma.kartelaReceiptItem.deleteMany({
+      where: { OR: [{ consumedRollId: { in: rollIds } }, { sourceDispatchItemId: { in: kdItemIds } }] },
+    });
+    await prisma.swatch.deleteMany({ where: { parentRollId: { in: rollIds } } });
+    await prisma.kartelaDispatchItem.deleteMany({ where: { id: { in: kdItemIds } } });
+    await prisma.kartelaReceipt.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
+    await prisma.kartelaDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
+  }
   await prisma.roll.deleteMany({ where: { parentRollId: { in: rollIds } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   if (fixture) await fixture.teardown();

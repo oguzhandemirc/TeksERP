@@ -86,6 +86,10 @@ const canvasPreviewSchema = z.object({
   peripheralId: z.string().uuid().optional(),
   // Baskı adedi (test/bağımsız baskı çoğaltma) — verilmedi = 1.
   copies: z.number().int().min(1).max(100).optional(),
+  // Örnek topun kalite KODU — koşullu (showIf) elemanların önizlemede nasıl
+  // davrandığını görmek için. Boş metin = "kalitesi belirsiz top" senaryosu
+  // (koşullu eleman basılmaz) → `.optional()` ile "gönderilmedi"den ayrılır.
+  qualityGrade: z.string().max(32).optional(),
 });
 
 // Boyut varyantı gövdeleri — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
@@ -226,6 +230,7 @@ export class LabelTemplateController {
           language: body.language as PrinterLanguage | undefined,
           peripheralId: body.peripheralId,
           copies: body.copies,
+          qualityGrade: body.qualityGrade,
         });
         res.status(200).json(result);
         return;

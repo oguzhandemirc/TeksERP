@@ -40,10 +40,14 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },
         { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
         { header: "Toplam Kg", key: "totalKg", width: 12, numFmt: NUM1 },
+        // Fatura izi — "hangi sevkin faturası kesilmedi" dönem kapanışında burada okunur.
+        { header: "Fatura No", key: "invoiceNo", width: 18 },
+        { header: "Fatura Tarihi", key: "invoicedAt", width: 14, numFmt: DATE },
       ],
       rows: data.shipments.map((s) => ({
         ...s,
         dispatchedAt: toDate(s.dispatchedAt),
+        invoicedAt: toDate(s.invoicedAt),
         yon: yon(s.destination),
       })),
       totalRow: {

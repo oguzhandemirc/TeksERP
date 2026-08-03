@@ -53,6 +53,7 @@ import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
+import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { CustomerAliasService } from "./customer-alias.service";
 import {
   applyDateRange,
@@ -254,6 +255,11 @@ export class OrderService extends BaseService {
 
     const woCond = buildWoStateWhere(filters.woState);
     if (woCond) conds.push(woCond);
+
+    // İptal edilmiş siparişleri gizle (panel varsayılanı). `safeFilters` bu
+    // anahtarı skaler süzgeçte düşürür — burada ham filters'tan okunur.
+    const hideCancelled = buildHideCancelledWhere(filters, [OrderStatus.CANCELLED]);
+    if (hideCancelled) conds.push(hideCancelled);
 
     if (conds.length === 0) return undefined;
     return conds.length === 1 ? conds[0] : { AND: conds };
@@ -713,14 +719,45 @@ export class OrderService extends BaseService {
     cursor?: string | null;
     limit?: number | null;
     withTotal?: boolean;
+    /** Mobil picker "detaylı filtre" — müşteri bazlı daraltma. */
+    customerId?: string | null;
+    /**
+     * "Bu kalemle AYNI iş emrinde üretilebilecek kalemler" — verilen satırın
+     * spec'ini (kumaş + renk + en) okur ve listeyi ona daraltır.
+     *
+     * Neden ham `colorId`/`width` değil: spec'in parçaları NULL olabilir
+     * (renksiz/ham kalem, eni girilmemiş kalem) ve "renk yok" ile "renk filtresi
+     * yok" sorgu dizesinde aynı görünür — istemci NULL'ı kodlamaya çalışsa
+     * eninde sonunda birini diğeri sanardı. Satır id'si tek parça, belirsizlik yok.
+     */
+    specOfLineId?: string | null;
   }): Promise<ApiResponse<unknown> | CursorPaginatedResponse<unknown>> {
     // Ortak WHERE — itemId artık OPSİYONEL (cursor modda sipariş-önce için).
-    const baseWhere: Prisma.OrderLineWhereInput = {
-      order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
+    const orderWhere: Prisma.OrderWhereInput = {
+      status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
     };
-    if (params.itemId) baseWhere.itemId = params.itemId;
-    if (params.colorId) baseWhere.colorId = params.colorId;
-    if (params.width != null) baseWhere.width = params.width;
+    if (params.customerId) orderWhere.customerId = params.customerId;
+    const baseWhere: Prisma.OrderLineWhereInput = { order: orderWhere };
+
+    // Spec çapası varsa kumaş/renk/en'i O BELİRLER (istemciden geleni ezer).
+    let resolvedItemId: string | null = params.itemId ?? null;
+    if (params.specOfLineId) {
+      const anchor = await prisma.orderLine.findUnique({
+        where: { id: params.specOfLineId },
+        select: { itemId: true, colorId: true, width: true },
+      });
+      if (!anchor) throw AppError.badRequest("Referans sipariş kalemi bulunamadı");
+      // NULL'lar BİLEREK aynen yazılır: renksiz çapa yalnız renksiz kalemleri,
+      // ensiz çapa yalnız ensiz kalemleri getirsin.
+      baseWhere.itemId = anchor.itemId;
+      baseWhere.colorId = anchor.colorId;
+      baseWhere.width = anchor.width;
+      resolvedItemId = anchor.itemId;
+    } else {
+      if (params.itemId) baseWhere.itemId = params.itemId;
+      if (params.colorId) baseWhere.colorId = params.colorId;
+      if (params.width != null) baseWhere.width = params.width;
+    }
     const term = params.search?.trim();
     if (term) {
       baseWhere.OR = buildTurkishSearch<Prisma.OrderLineWhereInput>(term, [
@@ -740,13 +777,16 @@ export class OrderService extends BaseService {
         ...baseWhere,
         quantity: { gt: prisma.orderLine.fields.shippedQty },
       };
+      // EN YENİ SİPARİŞ ÖNCE (desc). Saha gerekçesi: picker'ı açan kişi genelde
+      // az önce girilen siparişi arıyor; artan sırada o kalem sayfalar sonundaydı.
+      // Keyset tie-break de desc olmalı — `dynamicCursorWhere` "lt" üretir.
       const cur = decodeDynamicCursor(params.cursor ?? undefined);
       const where = cur
-        ? { AND: [whereOpen, dynamicCursorWhere(cur, "createdAt", "asc")] }
+        ? { AND: [whereOpen, dynamicCursorWhere(cur, "createdAt", "desc")] }
         : whereOpen;
       const rows = await prisma.orderLine.findMany({
         where,
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit + 1,
         select: {
           id: true,
@@ -781,8 +821,26 @@ export class OrderService extends BaseService {
       // F152: cursor mod da withInProduction'ı hesaplasın (eskiden 0 hardcode idi).
       // Yalnız itemId sabitlendiğinde anlamlı (spec-havuz item bazlı); broad modda atlanır.
       let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
-      if (params.withInProduction && params.itemId) {
-        inProdBySpec = await this.computeInProdBySpec(params.itemId);
+      if (params.withInProduction && resolvedItemId) {
+        inProdBySpec = await this.computeInProdBySpec(resolvedItemId);
+      }
+      // "Bu kaleme iş emri açılmış mı" — SATIR bazlı gerçek bağ (pivot).
+      // `inProduction`'dan FARKLIDIR: o spec-havuz (kumaş|renk|en) bazında hesaplanır,
+      // yani aynı spec'teki BAŞKA bir kalem üretimdeyse de dolu gelir. Rozet satırın
+      // kendi bağını göstermeli. İptal/devredilmiş WO sayılmaz (mal o emirde değil).
+      const woLinked = new Set<string>();
+      if (page.length > 0) {
+        const links = await prisma.workOrderToOrderLine.findMany({
+          where: {
+            orderLineId: { in: page.map((l) => l.id) },
+            workOrder: {
+              status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
+            },
+          },
+          select: { orderLineId: true },
+          distinct: ["orderLineId"],
+        });
+        for (const l of links) woLinked.add(l.orderLineId);
       }
       const data = page.map((l) => {
         // Açık = quantity − sevk (rezerv yok; düşüş yalnız sevkte).
@@ -813,6 +871,7 @@ export class OrderService extends BaseService {
           openQty,
           inProduction,
           netOpenQty,
+          hasWorkOrder: woLinked.has(l.id),
         };
       });
       return {

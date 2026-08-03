@@ -84,6 +84,57 @@ export interface ItemMismatchDetails {
   }>;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fason KABUL — kart okutma teşhis kodları
+// ─────────────────────────────────────────────────────────────────────────────
+// `listPendingReturns` (WO'ya özel dal) bekleyen top bulamazsa artık jenerik
+// "yanlış istasyon" demiyor; SEBEBİ söylüyor ve `details.code` ile hangi aksiyonun
+// doğru olduğunu bildiriyor. Ekran bunlara göre KALICI aksiyon kartı çizer —
+// toast kaybolur, operatör ne yapacağını yine bilmez.
+// Şekiller backend `subcontractor.service.ts` `pendingCount === 0` dalından birebir.
+
+/**
+ * Kayıt fason adımında ama mal fasona **sevk edilmemiş** — "Konumu Düzelt"
+ * topu tasarım gereği `AT_SUBCONTRACTOR` yapmaz (mal içeride bekler).
+ * Doğru aksiyon: önce Fason Sevk, sonra kabul.
+ */
+export interface NeedsDispatchDetails {
+  code: 'NEEDS_DISPATCH';
+  workOrderId: string;
+  stepId: string;
+  stationName: string;
+  rollCount: number;
+}
+
+/**
+ * Bu iş emrinde iptal edilmemiş bir kabul makbuzu var. Mal fiziksel olarak hâlâ
+ * fasondaysa doğru araç "Konumu Düzelt" DEĞİL, **kabul iptali**: orijinaller
+ * `AT_SUBCONTRACTOR`'a döner ve sevk yeniden açılır.
+ */
+export interface MaybeWrongReceiptDetails {
+  code: 'MAYBE_WRONG_RECEIPT';
+  receiptId: string;
+  receiptNo: string;
+  /** ISO tarih (backend `Date` serialize eder). */
+  receivedAt: string;
+}
+
+/**
+ * Gerçekten başka bir istasyondayız. `currentSteps` fason adımlarını İÇERMEZ —
+ * eski mesaj "fasonda bekleyen yok. Mevcut konum: Boyahane (Fason)" diyerek
+ * kendini yalanlıyordu.
+ */
+export interface WoNotAtSubcontractorDetails {
+  code: 'WO_NOT_AT_SUBCONTRACTOR';
+  currentSteps: { stepId: string; stationName: string; rollCount: number }[];
+}
+
+/** Kart okutma hatasının `err.details` birleşimi (bilinmeyen kod = undefined). */
+export type PendingReturnErrorDetails =
+  | NeedsDispatchDetails
+  | MaybeWrongReceiptDetails
+  | WoNotAtSubcontractorDetails;
+
 export interface CancelDispatchRequest {
   reason: string;
 }

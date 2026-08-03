@@ -8,7 +8,7 @@
 import { useMemo } from "react";
 import type { CanvasPad, LabelElement } from "@/types/label-canvas";
 import { skippedLanguages } from "@/types/label-canvas";
-import { estimateBounds, type BoundsMm } from "./canvas-model";
+import { conditionsMutuallyExclusive, estimateBounds, type BoundsMm } from "./canvas-model";
 
 export type LintLevel = "error" | "warn" | "info";
 
@@ -25,9 +25,15 @@ function overlaps(a: BoundsMm, b: BoundsMm): boolean {
 export function useCanvasLint(
   elements: LabelElement[],
   canvas: { widthMm: number; heightMm: number; pad?: CanvasPad },
+  /** Kalite kataloğundaki kodlar — koşulda geçen ÖLÜ kodu yakalamak için. Boş/eksik
+   *  (katalog daha yüklenmedi) → o kontrol ATLANIR; yoksa açılışta her koşul
+   *  yanlışlıkla "ölü" damgası yerdi. */
+  knownGradeCodes?: string[],
 ): LintIssue[] {
+  const codesKey = (knownGradeCodes ?? []).join("|");
   return useMemo(() => {
     const issues: LintIssue[] = [];
+    const known = new Set((knownGradeCodes ?? []).map((c) => c.trim().toUpperCase()));
     // Güvenli alan = tuval − padding (padding varsa taşma buna göre uyarılır).
     const pd = canvas.pad ?? { top: 0, right: 0, bottom: 0, left: 0 };
     const safeR = canvas.widthMm - pd.right;
@@ -58,6 +64,23 @@ export function useCanvasLint(
             : `Eleman tuvali taşıyor (~${Math.round(b.x + b.w)}×${Math.round(b.y + b.h)}mm > ${canvas.widthMm}×${canvas.heightMm}mm) — yazıcı taşan kısmı kırpar.`,
         });
       }
+      // ÖLÜ KOŞUL: katalogda olmayan kalite kodu → koşul hiçbir topta eşleşmez ve
+      // eleman SESSİZCE hiç basılmaz. Tipik sebep: kalite kodunun panelden
+      // değiştirilmesi/silinmesi (şablon eski kodu taşımaya devam eder).
+      if (el.showIf && known.size > 0) {
+        const dead = el.showIf.values.filter((v) => !known.has(v.trim().toUpperCase()));
+        if (dead.length > 0) {
+          issues.push({
+            level: "warn",
+            elementId: el.id,
+            message:
+              `Koşulda katalogda olmayan kalite kodu var (${dead.join(", ")}) — ` +
+              `bu kod hiçbir topta eşleşmez, eleman ` +
+              (el.showIf.op === "in" ? "HİÇ basılmaz." : "koşulu daraltmaz.") +
+              ` Kalite kodu değişmiş ya da silinmiş olabilir.`,
+          });
+        }
+      }
       // Dil degrade bilgisi
       const skipped = skippedLanguages(el.type);
       if (skipped.length > 0) {
@@ -74,6 +97,9 @@ export function useCanvasLint(
       for (let j = i + 1; j < bounds.length; j++) {
         const a = bounds[i];
         const b = bounds[j];
+        // Koşulları birbirini dışlayan elemanlar aynı baskıda ASLA birlikte çıkmaz
+        // (örn. "1. KALİTE" ve "2. KALİTE" damgaları aynı noktada) → uyarma.
+        if (a && b && conditionsMutuallyExclusive(a.el.showIf, b.el.showIf)) continue;
         if (a && b && overlaps(a.b, b.b)) {
           issues.push({
             level: "warn",
@@ -85,5 +111,6 @@ export function useCanvasLint(
     }
 
     return issues;
-  }, [elements, canvas.widthMm, canvas.heightMm, canvas.pad]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- codesKey, knownGradeCodes dizisinin kararlı özeti
+  }, [elements, canvas.widthMm, canvas.heightMm, canvas.pad, codesKey]);
 }

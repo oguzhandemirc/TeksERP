@@ -25,10 +25,29 @@ export type LabelElementType =
   | "lengthBanner"
   | "icon";
 
+/** Koşulun baktığı alan — backend `ConditionField` aynası (bugün tek değer). */
+export type ConditionField = "qualityGrade";
+
+/**
+ * Koşullu basım — eleman yalnız koşul sağlanınca basılır ("kaliteyi YALNIZ
+ * 2. kalitede yaz"). Değerler `QualityGrade.code`'dur (ad DEĞİL: ad panelden
+ * düzenlenir, kod kimliktir) — UI adı gösterir, kodu saklar.
+ *
+ * KALİTESİZ TOPTA KOŞULLU ELEMAN BASILMAZ (op fark etmez) — backend fail-closed.
+ */
+export interface ElementCondition {
+  field: ConditionField;
+  /** `in` = yalnız listedekilerde bas · `notIn` = listedekiler dışında bas. */
+  op: "in" | "notIn";
+  values: string[];
+}
+
 interface ElementBase {
   id: string;
   x: number;
   y: number;
+  /** Koşullu basım — yoksa eleman her zaman basılır (bugünkü davranış). */
+  showIf?: ElementCondition;
   /** Grup kimliği (opsiyonel) — aynı groupId'li elemanlar editörde birlikte seçilir/taşınır/
    *  ölçeklenir. Layout JSON'da taşınır; baskı/emit'i ETKİLEMEZ (yalnız editör kolaylığı). */
   groupId?: string;

@@ -9,7 +9,7 @@ import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { FabricPropertyService } from "../services/fabric-property.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 // Kod (`OZL+GGAAYY+NNNN`) backend'de üretilir — bkz. FabricPropertyService.create.
 // `uniqueField` BİLEREK verilmedi: kod backend-üretimli olduğundan generic create'in
@@ -19,11 +19,25 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 // düşer → P2002 → withBarcodeRetry taze sıra no ile kendini onarır (order/shipment/
 // çuval üreteçleriyle aynı desen). Pasif-kayıt reactivate yolu zaten ölüydü
 // (taze üretilen kod hiçbir eski kodla eşleşmez).
+// `stationCapabilities` nested-create olarak beyan edilir: özellik ve onu
+// uygulayacak istasyon bağları TEK insert'te doğar (bkz. FabricPropertyService
+// başlığı — bağsız özellik ara durumu doğmasın).
+// `defaultInclude` istasyon bağlarını listeye de taşır; panelin "hiçbir istasyona
+// bağlı değil" rozetini basabilmesi buna dayanır. Tablo master-data ölçeğinde
+// (onlarca satır) olduğu için join maliyeti ihmal edilebilir.
 const service = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
   searchFields: ["code", "name", "category", "description"],
-  defaultInclude: undefined,
+  nestedCreateFields: ["stationCapabilities"],
+  defaultInclude: {
+    stationCapabilities: {
+      select: {
+        stationId: true,
+        station: { select: { id: true, code: true, name: true, isActive: true } },
+      },
+    },
+  },
   duplicateNameField: "name",
   entityLabel: "özellik",
 });
@@ -60,7 +74,15 @@ const router = Router();
  *     responses:
  *       200: { description: Sayfalanmış özellik listesi }
  */
-router.get("/", verifyToken, requirePermission("property:read"), controller.findAll);
+// Hızlı İş Emri (mobil) hedef özellik seçicisi bu listeyi okur — saha kullanıcısında
+// `property:read` yok. `color.routes.ts` GET'i ile aynı genişletme; yazma uçları
+// yalnız `property:write` olarak kalır.
+router.get(
+  "/",
+  verifyToken,
+  requireAnyPermission("property:read", "mobile:hizli-is-emri"),
+  controller.findAll,
+);
 
 /**
  * @openapi
@@ -78,7 +100,12 @@ router.get("/", verifyToken, requirePermission("property:read"), controller.find
  *       200: { description: Özellik detayı }
  *       404: { description: Bulunamadı }
  */
-router.get("/:id", verifyToken, requirePermission("property:read"), controller.findById);
+router.get(
+  "/:id",
+  verifyToken,
+  requireAnyPermission("property:read", "mobile:hizli-is-emri"),
+  controller.findById,
+);
 
 /**
  * @openapi
@@ -93,16 +120,22 @@ router.get("/:id", verifyToken, requirePermission("property:read"), controller.f
  *         application/json:
  *           schema:
  *             type: object
- *             required: [code, name]
+ *             required: [name, stationIds]
  *             properties:
- *               code:        { type: string, example: "YANMAZLIK" }
  *               name:        { type: string, example: "Yanmazlık" }
+ *               stationIds:
+ *                 type: array
+ *                 description: >
+ *                   Özelliği uygulayacak istasyon(lar). ZORUNLU ve en az bir eleman —
+ *                   istasyonsuz özellik hiçbir iş emrinde seçilemez.
+ *                 items: { type: string, format: uuid }
  *               category:    { type: string, example: "Dayanıklılık" }
  *               description: { type: string }
  *               color:       { type: string, example: "#dc2626" }
  *               sortOrder:   { type: integer, default: 0 }
  *     responses:
  *       201: { description: Oluşturuldu }
+ *       400: { description: stationIds eksik/boş veya istasyon özellik kazandıramıyor }
  *       409: { description: Kod zaten mevcut }
  */
 router.post("/", verifyToken, requirePermission("property:write"), controller.create);
@@ -126,6 +159,12 @@ router.post("/", verifyToken, requirePermission("property:write"), controller.cr
  *             type: object
  *             properties:
  *               name:        { type: string }
+ *               stationIds:
+ *                 type: array
+ *                 description: >
+ *                   Verilirse istasyon bağları replace edilir (yine en az bir eleman).
+ *                   Hiç verilmezse bağlara DOKUNULMAZ.
+ *                 items: { type: string, format: uuid }
  *               category:    { type: string }
  *               description: { type: string }
  *               color:       { type: string }
