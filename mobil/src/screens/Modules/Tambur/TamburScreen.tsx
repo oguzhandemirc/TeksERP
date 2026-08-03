@@ -882,12 +882,32 @@ export default function TamburScreen() {
   const queueLabel = (roll: Roll, defaultLineId: string | null = null) =>
     setPendingTargetRolls((q) => [...q, { roll, defaultLineId }]);
 
+  /**
+   * Etiket türünü topun KENDİ kimliğinden çöz — renginden DEĞİL.
+   *
+   * Varsayılan (null) yol türü RENKTEN çıkarır: renksiz = ham kumaş → ROLL_RAW.
+   * Bu, istasyondan çıkan ham kesim parçaları için doğrudur ama depoya inmiş bir
+   * top için sessizce YANLIŞTIR: renksiz (ham beyaz) bitmiş bir topun etiketi ham
+   * etiket olarak basılır. Yeni üretimde bu tuzağa `startPrint(roll,'ROLL_FINISHED')`
+   * ile giriliyordu; YENİDEN BASIMDA ise açıkta kalıyordu — "Çıkanlar"dan basılan
+   * WAREHOUSE topu türü yine renkten çözüyordu.
+   *
+   * Kural backend ile aynı kaynağa dayanır: `finalBarcodeType` satılabilire
+   * (WAREHOUSE/A1_STOCK) inen topu "F" (final) damgalar. Yani barkodunda F yazan
+   * top bitmiş etiket alır — iki yüzey artık aynı şeyi söyler.
+   *
+   * `null` dönüşü BİLİNÇLİ: depoya inmemiş top (üretime devam eden ham kesim
+   * parçası) için eski davranış birebir korunur.
+   */
+  const printKindForRoll = (roll: Roll): 'ROLL_RAW' | 'ROLL_FINISHED' | null =>
+    roll.status === 'WAREHOUSE' || roll.status === 'A1_STOCK' ? 'ROLL_FINISHED' : null;
+
   // "Etiketi Tekrar Bas" — varolan etiketi AYNEN bas, "kime?" SORMA.
   // labelContext=undefined → backend topun mevcut snapshot/effective etiketini
   // basar (yeni hedef seçilmez). Müşteri değiştirmek = "Etiket Değiştir" akışı.
   const reprintLabel = (roll: Roll) => {
     setLabelContext(undefined);
-    startPrint(roll);
+    startPrint(roll, printKindForRoll(roll));
   };
 
   // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. labelContext={stock:true}
@@ -895,7 +915,7 @@ export default function TamburScreen() {
   // reprint'inde tek dokunuşta müşterisiz etiket.
   const reprintLabelStock = (roll: Roll) => {
     setLabelContext({ stock: true });
-    startPrint(roll);
+    startPrint(roll, printKindForRoll(roll));
   };
 
   // ── Mutations ──
@@ -986,7 +1006,13 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        startPrint(data.childRoll);
+        // Tür topun kendi kimliğinden (bkz. printKindForRoll): depoya inen renksiz
+
+        // çocuk da bitmiş etiket alır. Üretime devam eden STOCK parçasında null
+
+        // döner → renkten çözülen eski davranış birebir korunur.
+
+        startPrint(data.childRoll, printKindForRoll(data.childRoll));
       }
       // Uzunluk input'unu sıfırla; kalite/sipariş aynen kalsın (seri kesim).
       setWork((w) => ({
@@ -1210,7 +1236,13 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        startPrint(data.childRoll);
+        // Tür topun kendi kimliğinden (bkz. printKindForRoll): depoya inen renksiz
+
+        // çocuk da bitmiş etiket alır. Üretime devam eden STOCK parçasında null
+
+        // döner → renkten çözülen eski davranış birebir korunur.
+
+        startPrint(data.childRoll, printKindForRoll(data.childRoll));
       }
       // Parent metraj güncelle (sticky header anında yansır) — yalnız aynı top.
       if (isCurrent && data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
@@ -3893,7 +3925,9 @@ export default function TamburScreen() {
           setLabelContext(
             ctx.orderLineId || ctx.customerId || ctx.stock ? ctx : undefined,
           );
-          startPrint(r);
+          // Tür yine topun kendi kimliğinden — "Yeni Etiket" hedefi değiştirir,
+          // topun ham/bitmiş olmasını değiştirmez (bkz. printKindForRoll).
+          startPrint(r, printKindForRoll(r));
         }}
       />
 
@@ -4574,6 +4608,12 @@ function RelabelRollRow({
   const grade = roll.qualityGrade ?? '—';
   const gradeBg =
     grade === 'FIRE' ? '#fee2e2' : grade === 'A1' ? '#fef3c7' : '#dcfce7';
+  // "Manuel Ekle" modunda kartsız doğan top. Listede kesim çocuklarıyla YAN YANA
+  // durur (ikisi de Tambur çıktısı, ikisinin de etiketi buradan yeniden basılır),
+  // ama kimlikleri farklı: birinin arkasında bir iş emri var, diğerinin yok.
+  // İşaret olmasaydı operatör "bu top hangi işten çıktı" sorusuna listeye bakarak
+  // yanlış cevap verirdi — satırdaki iş emri alanı manuel topta boştur.
+  const isManual = roll.entrySource === 'TAMBUR_MANUAL';
   const itemText = `${roll.item?.name ?? '—'}${color?.name ? ` · ${color.name}` : ''}`;
   const qtyText =
     (roll.currentQty != null ? `${Number(roll.currentQty).toFixed(1)} m` : '—') +
@@ -4594,6 +4634,11 @@ function RelabelRollRow({
             <Text style={relabelStyles.rowStackedBarcode} numberOfLines={1}>
               {roll.barcode ?? '—'}
             </Text>
+            {isManual && (
+              <View style={relabelStyles.manualPill}>
+                <Text style={relabelStyles.manualPillText}>MANUEL</Text>
+              </View>
+            )}
             {onUndo && (
               <IconButton
                 icon="undo-variant"
@@ -4640,6 +4685,11 @@ function RelabelRollRow({
         <Text style={relabelStyles.rowBarcode} numberOfLines={1}>
           {roll.barcode ?? '—'}
         </Text>
+        {isManual && (
+          <View style={relabelStyles.manualPill}>
+            <Text style={relabelStyles.manualPillText}>MANUEL</Text>
+          </View>
+        )}
         {color && (
           <View
             style={[
@@ -4699,6 +4749,20 @@ const relabelStyles = StyleSheet.create({
     alignItems: 'center',
   },
   gradePillText: { fontSize: 12, fontWeight: '800', color: '#0f172a' },
+  // "MANUEL" rozeti — kalite hapıyla aynı geometri, ama mor (aksiyon rengi):
+  // kalite bir ÖLÇÜM, bu bir KÖKEN işareti; aynı renkte olsalardı operatör
+  // ikisini aynı sınıf bilgi sanardı. `flexShrink: 0` → uzun ürün adı rozeti
+  // ezmesin (satırda daralan taraf ürün metnidir).
+  manualPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#ede9fe',
+    borderWidth: 1,
+    borderColor: '#c4b5fd',
+    flexShrink: 0,
+  },
+  manualPillText: { fontSize: 10, fontWeight: '800', color: '#5b21b6' },
   rowBarcode: {
     flexShrink: 0,
     fontFamily: 'monospace',

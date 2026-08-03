@@ -1216,10 +1216,25 @@ export class TamburService {
     withTotal?: boolean;
   }): Promise<ApiResponse<Roll[]> | CursorPaginatedResponse<Roll>> {
     const where: Prisma.RollWhereInput = {
-      entrySource: RollEntrySource.TAMBUR_SPLIT,
+      // Tambur istasyonundan ÇIKAN her top — iki doğum yolu var:
+      //   TAMBUR_SPLIT  → kesim çocuğu (kart okutulmuş normal akış)
+      //   TAMBUR_MANUAL → "Manuel Ekle" modu, kartsız bitmiş top
+      //
+      // ⚠️ TAMBUR_MANUAL 2026-08-03'te EKLENDİ ve bu bir hata düzeltmesidir:
+      // liste yalnız TAMBUR_SPLIT gösterdiği için manuel eklenen top buraya HİÇ
+      // düşmüyordu. Bu ekranda etiketi yeniden basmanın TEK yolu Çıkanlar
+      // önizlemesindeki "Bas / Yeni Etiket" olduğundan, yazıcı hata verdiğinde
+      // operatörün elinde tek çıkar yol topu SIFIRDAN tekrar girmekti — yani
+      // envantere mükerrer ("yalancı kopya") stok yazmak. Kaydın kendisi
+      // doğruydu, kayıp olan şey ONA ULAŞMAKTI.
+      entrySource: { in: [RollEntrySource.TAMBUR_SPLIT, RollEntrySource.TAMBUR_MANUAL] },
       // Sonradan tüketilen/iptal edilen çocuk (re-cut'ta TAMBUR_CONSUMED,
       // kartela/fason tüketimi, CANCELLED) fiziksel top değil — etiket basılmaz.
       status: { notIn: K18_DEAD_STATUSES },
+      // İş emri süzgeci verilirse manuel toplar DOĞAL OLARAK düşer
+      // (`producedInStepId` null — hiçbir WO'nun çıktısı değiller). Bu doğru:
+      // "şu iş emrinden ne çıktı" sorusunun cevabı onlar değil. Mobil Çıkanlar
+      // modalı bu süzgeci GEÇMEZ, o yüzden manuel toplar orada görünür.
       ...(params?.workOrderId
         ? { producedInStep: { workOrderId: params.workOrderId } }
         : {}),
