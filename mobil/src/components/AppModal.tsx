@@ -58,9 +58,23 @@ const SPRING_BACK_MS = 160;
 // kapan" flicker'ı yapıyordu. Burada TEK `progress` shared value hem backdrop'u
 // hem içeriği sürer → ikisi her zaman senkron, flicker yapısal olarak imkânsız.
 //
-// NEDEN Portal: ağaç-içi render (ayrı native pencere YOK) → modal üstüne modal /
-// drawer stack çakışması olmaz, edge-to-edge backdrop boşluğu olmaz. Kök App.tsx'te
+// NEDEN Portal: ayrı native pencere YOK → modal üstüne modal / drawer stack
+// çakışması olmaz, edge-to-edge backdrop boşluğu olmaz. Kök App.tsx'te
 // PaperProvider var, Portal.Host hazır.
+//
+// ⚠️⚠️ İÇERİK BU AĞAÇTA RENDER EDİLMEZ — UYGULAMA CONTEXT'LERİ GÖRÜNMEZ.
+// Paper `Portal` çocukları `Portal.Host`a TAŞIR; React context ağaca bağlı
+// olduğu için modal içeriği, AppModal'ı çağıran ekranın sağladığı hiçbir
+// context'i göremez. Bugüne kadar İKİ kez ısırdı:
+//   • `useNavigation()` → portal içinde fırlatır (bkz. navigation/navigationRef.ts)
+//   • `useNumpadContext()` → 2026-08-04, Tambur → Düzelt → Manuel Top Ekle:
+//     `FATAL EXCEPTION: mqt_v_native` ile uygulama komple çöktü (logcat ile
+//     doğrulandı). Çözüm: `NumpadInput` artık `useOptionalNumpadContext` ile
+//     okuyor ve provider yoksa sistem klavyesine düşüyor (fail-soft).
+// Modal içinde bir hook ekliyorsan ÖNCE sor: bu hook ekranın provider'ına mı
+// bakıyor? Bakıyorsa portal içinde ÇALIŞMAZ. Çözüm ya opsiyonel-context yolu ya
+// da provider'ı `PaperProvider`ın ÜSTÜNE almaktır (App.tsx'te `KeyboardProvider`
+// bilinçli olarak orada durur — AppModal'ın klavye hook'u bu yüzden çalışıyor).
 // =============================================================================
 const IN_MS = 200;
 const OUT_MS = 170;

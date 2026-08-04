@@ -12,7 +12,7 @@ import { Button, Surface, Text } from 'react-native-paper';
 import AppModal from './AppModal';
 import Numpad from './Numpad';
 
-interface NumpadTarget {
+export interface NumpadTarget {
   id: string;
   label?: string;
   allowDecimal: boolean;
@@ -55,8 +55,24 @@ interface NumpadContextValue {
 
 const NumpadContext = createContext<NumpadContextValue | null>(null);
 
+/**
+ * Provider YOKSA null döner — FIRLATMAZ.
+ *
+ * NEDEN GEREKLİ (2026-08-04 saha çökmesi): `AppModal` içeriğini react-native-paper
+ * `Portal`ı ile render eder; Portal çocukları `Portal.Host` altında, yani AĞACIN
+ * BAŞKA YERİNDE canlanır. React context ağaca bağlı olduğu için modal içindeki
+ * bileşen ekranın `NumpadProvider`ını GÖRMEZ. `useNumpadContext` fırlatınca bu
+ * "sağlam bir hata" değil, uygulamayı komple düşüren FATAL EXCEPTION oluyordu
+ * (Tambur → Düzelt → Manuel Top Ekle: `mqt_v_native` çöküşü, logcat ile
+ * doğrulandı). Modal içindeki bir metraj alanı, ekrandaki büyük numpad'e
+ * ulaşamadığı için uygulamayı öldürmemeli — sistem klavyesine düşmeli.
+ */
+export function useOptionalNumpadContext(): NumpadContextValue | null {
+  return useContext(NumpadContext);
+}
+
 export function useNumpadContext(): NumpadContextValue {
-  const ctx = useContext(NumpadContext);
+  const ctx = useOptionalNumpadContext();
   if (!ctx) throw new Error('useNumpadContext must be used inside NumpadProvider');
   return ctx;
 }

@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useId, useRef } from 'react'
 import { TextInput as RNTextInput } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import type { TextInputProps } from 'react-native-paper';
-import { useNumpadContext } from './NumpadProvider';
+import { useOptionalNumpadContext, type NumpadTarget } from './NumpadProvider';
 
 export interface NumpadInputProps
   extends Omit<TextInputProps, 'showSoftInputOnFocus' | 'onFocus' | 'value' | 'onChangeText'> {
@@ -26,6 +26,13 @@ export interface NumpadInputProps
 
 const ACTIVE_COLOR = '#4f46e5';
 
+// ⚠️ MODÜL SEVİYESİNDE sabit — provider yokken kullanılan no-op'lar. Bileşen
+// içinde `() => {}` yazmak KİMLİĞİ her render'da değiştirir ve aşağıdaki
+// useEffect/useCallback bağımlılıklarını sürekli tetikler (2026-08-04'te tam
+// bunu yapıp "Maximum update depth exceeded" sonsuz döngüsü ürettim).
+const NOOP_NOTIFY = (_id: string) => {};
+const NOOP_OPEN = (_target: NumpadTarget) => {};
+
 const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInput(
   {
     value,
@@ -39,8 +46,29 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
   },
   ref
 ) {
-  // Stable callbacks via destructure (her ikisi de provider'da useCallback([])'lı)
-  const { openTarget, notifyChange, target } = useNumpadContext();
+  // Stable callbacks via destructure (her ikisi de provider'da useCallback([])'lı).
+  //
+  // ⚠️ OPSİYONEL BAĞLAM (2026-08-04 saha çökmesi): `AppModal` içeriğini Paper
+  // `Portal`ı ile ağacın BAŞKA YERİNDE render eder → modal içindeki NumpadInput
+  // ekranın `NumpadProvider`ını GÖRMEZ. Eskiden `useNumpadContext()` burada
+  // fırlatıyordu ve uygulama komple çöküyordu (Tambur → Düzelt → Manuel Top Ekle;
+  // logcat: `FATAL EXCEPTION: mqt_v_native — useNumpadContext must be used inside
+  // NumpadProvider`). Aynı tuzak çuval "elle tartı" sheet'inde de duruyordu.
+  const numpad = useOptionalNumpadContext();
+  // KARARLI referanslara ayrıştır — bağımlılık dizilerine `numpad` NESNESİNİ
+  // koyma: context value'sunun kimliği `target` her değiştiğinde yenilenir,
+  // dolayısıyla efekt kendini tetikler. Provider bu ikisini `useCallback([])`
+  // ile stabil veriyor; yokken modül sabiti no-op'lara düşülür.
+  const notifyChange = numpad?.notifyChange ?? NOOP_NOTIFY;
+  const openTarget = numpad?.openTarget ?? NOOP_OPEN;
+  const target = numpad?.target ?? null;
+
+  // FAIL-SOFT: provider yoksa büyük numpad ZATEN çizilemez (host da yok) →
+  // sistem klavyesine düş. Operatör metrajı yine girer; ekran ölmez. Bu, modal
+  // yazarken `useNativeKeyboard` bayrağını koymayı unutmayı da AFFEDER — bayrak
+  // hâlâ anlamlı (telefonda bilinçli tercih) ama artık tek savunma hattı değil.
+  const nativeMode = useNativeKeyboard || numpad === null;
+
   const id = useId();
   const isActive = target?.id === id;
 
@@ -54,7 +82,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
   }, [value, notifyChange, id]);
 
   const handleFocus = useCallback(() => {
-    if (useNativeKeyboard) return;
+    if (nativeMode) return;
     openTarget({
       id,
       label: numpadLabel,
@@ -63,13 +91,13 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
       getValue: () => valueRef.current,
       onChange: (next) => onChangeRef.current(next),
     });
-  }, [openTarget, id, numpadLabel, allowDecimal, numpadMaxLength, useNativeKeyboard]);
+  }, [openTarget, nativeMode, id, numpadLabel, allowDecimal, numpadMaxLength]);
 
   // autoActivate: mount edildiğinde + props değiştiğinde numpad'i bu input'a
   // bağla. Kullanıcı input'a dokunmadan tuşlara basabilir.
   useEffect(() => {
-    if (autoActivate && !useNativeKeyboard) handleFocus();
-  }, [autoActivate, handleFocus, useNativeKeyboard]);
+    if (autoActivate && !nativeMode) handleFocus();
+  }, [autoActivate, handleFocus, nativeMode]);
 
   // Native klavye modu: iOS/Android decimal-pad açılır. Karakter filtresiyle
   // harf/sembol girişini engelle (Android'in numeric kbd'si bazı semboller
@@ -89,7 +117,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
     [allowDecimal, numpadMaxLength, onChangeText]
   );
 
-  if (useNativeKeyboard) {
+  if (nativeMode) {
     return (
       <TextInput
         {...rest}
