@@ -93,6 +93,25 @@ export interface TamburManualRollResult {
   alreadyAttached: boolean;
   /** true = tamamlanmış iş emri bu işlemle yeniden açıldı. */
   reopenedWorkOrder: boolean;
+  /** Bağlandığı parti — tek açık parti varsa backend SORMADAN bağlar. */
+  batchId?: string | null;
+  /** Parti numarası (P+GGAAYY+NNNN) — operatöre geri söylenir. */
+  batchNumber?: string | null;
+}
+
+/**
+ * `BATCH_REQUIRED` hatasının `details` gövdesi — iş emrinde BİRDEN FAZLA açık
+ * parti olduğunda backend hiçbirini varsaymaz ve seçenekleri buraya koyar.
+ *
+ * Neden hata üzerinden ve neden ön yüklemeyle DEĞİL: "açık parti" tanımı veriye
+ * dayanır (o partide hâlâ canlı top var mı) ve yalnız backend bilir. Listeyi
+ * mobil ayrıca çözmeye kalkarsa iki kaynak doğar; operatör ekranda gördüğü
+ * partiyi seçer ama backend onu kapanmış sayıp reddeder. Seçenekler her zaman
+ * reddeden tarafın ağzından gelir.
+ */
+export interface BatchRequiredDetails {
+  code: 'BATCH_REQUIRED';
+  batches: { id: string; batchNumber: string }[];
 }
 
 /**
@@ -113,6 +132,13 @@ export interface TamburManualRollRequest {
   colorId?: string | null;
   width?: number | null;
   qualityGrade?: string;
+  /**
+   * Topun bağlanacağı parti. GÖNDERİLMEZSE backend çözer: tek açık parti varsa
+   * ona bağlar, birden fazlaysa `BATCH_REQUIRED` ile seçenekleri döner, hiç
+   * yoksa partisiz bırakır. Yani ilk istek bilerek partisiz gider — operatöre
+   * cevabı zaten belli olan bir soru sordurmamak için.
+   */
+  batchId?: string | null;
 }
 
 /**
@@ -137,6 +163,12 @@ export interface TamburManualProduceRequest {
   qualityGrade?: string;
   width?: number | null;
   weightKg?: number;
+  /**
+   * KAT — Manuel Mod'da OPERATÖRDEN SORULUR (mobilde zorunlu, API'de opsiyonel).
+   * Bu yolda hiç bağlam yok (iş emri/adım/parent yok) → sorulmazsa top kalıcı
+   * olarak katsız kalır ve sonradan türetilemez.
+   */
+  foldType?: string | null;
   /** Etiket niyeti ("Kime?") — ikisi de boşsa stok. Kesim uçlarıyla aynı adlar. */
   targetOrderLineId?: string | null;
   targetCustomerId?: string | null;

@@ -22,7 +22,7 @@
 // yazılmaz (emsal: `CutActionBar.tsx`).
 // =============================================================================
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import {
   Button,
@@ -31,36 +31,49 @@ import {
   Surface,
   Text,
   TextInput,
-  TouchableRipple,
 } from 'react-native-paper';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 import AppModal from '../../../components/AppModal';
 import NumpadInput from '../../../components/NumpadInput';
-import PickerModal, { type PickerOption } from '../../../components/PickerModal';
+import PickerModal from '../../../components/PickerModal';
 import { isWorkSessionLost } from '../../../services/api';
-import { itemService } from '../../../services/item.service';
-import { colorService } from '../../../services/color.service';
 import {
   tamburService,
   type TamburManualRollRequest,
 } from '../../../services/tambur.service';
 import { generateClientUuid } from '../../../offline/barcode';
+import {
+  MANUAL_REASON_PRESETS,
+  MANUAL_MIN_REASON,
+} from '../../../constants/manualReasons';
 import { colors, radius, spacing } from '../../../theme';
 import type { QualityGrade } from '../../../types/models';
 
-/** Sebep alanı — backend de aynı alt sınırı uygular (min 3 karakter). */
-const MIN_REASON = 3;
+/** Sebep alt sınırı — "Manuel Mod" ile ORTAK (backend de aynısını uygular). */
+const MIN_REASON = MANUAL_MIN_REASON;
 
-/**
- * Renk ÜÇ DEĞERLİDİR ve üçü de ayrı anlam taşır:
- *   inherit → alan gönderilmez, iş emrinin hedef rengi miras alınır
- *   none    → `colorId: null` — AÇIKÇA renksiz ("boyasız geldi" susturulmasın)
- *   pick    → operatörün seçtiği renk
- */
-type ColorMode = 'inherit' | 'none' | 'pick';
+/** `BATCH_REQUIRED` hatasında backend'in sunduğu parti seçeneği. */
+interface BatchChoice {
+  id: string;
+  batchNumber: string;
+}
+
+/** Hata gövdesinden parti seçeneklerini güvenle çıkarır (tip daralt + doğrula). */
+function readBatchChoices(err: unknown): BatchChoice[] | null {
+  const details = (err as { details?: Record<string, unknown> } | null)?.details;
+  if (!details || details.code !== 'BATCH_REQUIRED') return null;
+  const raw = details.batches;
+  if (!Array.isArray(raw)) return null;
+  const list = raw.filter(
+    (b): b is BatchChoice =>
+      typeof (b as BatchChoice)?.id === 'string' &&
+      typeof (b as BatchChoice)?.batchNumber === 'string',
+  );
+  return list.length > 0 ? list : null;
+}
 
 interface Props {
   visible: boolean;
@@ -89,35 +102,25 @@ export default function TamburManualRollModal({
   const [phase, setPhase] = useState<'form' | 'confirm'>('form');
   const [qty, setQty] = useState('');
   const [reason, setReason] = useState('');
-  const [optionalOpen, setOptionalOpen] = useState(false);
-  const [itemId, setItemId] = useState<string | null>(null);
-  const [itemLabel, setItemLabel] = useState<string | null>(null);
-  const [colorMode, setColorMode] = useState<ColorMode>('inherit');
-  const [colorId, setColorId] = useState<string | null>(null);
-  const [colorLabel, setColorLabel] = useState<string | null>(null);
-  const [width, setWidth] = useState('');
-  const [qualityCode, setQualityCode] = useState<string | null>(null);
-  const [picker, setPicker] = useState<'item' | 'color' | null>(null);
-  // Kataloglar YALNIZ operatör picker'ı açınca çekilir: ürün/renk listeleri ayrı
-  // yetki ister (`item:read` / `property:read`) ve saf Tambur operatöründe
-  // olmayabilir. Boşuna 403 üretme; istenirse iste, olmazsa net söyle.
-  const [itemCatalogWanted, setItemCatalogWanted] = useState(false);
-  const [colorCatalogWanted, setColorCatalogWanted] = useState(false);
+  // Sebep artık hazır kataloğdan seçilir; serbest yazım "Diğer" ile ikinci planda.
+  const [reasonPickerOpen, setReasonPickerOpen] = useState(false);
+  const [reasonFreeOpen, setReasonFreeOpen] = useState(false);
+  const [reasonDraft, setReasonDraft] = useState('');
+  // PARTİ — ilk istek bilerek partisiz gider; backend birden fazla açık parti
+  // görürse BATCH_REQUIRED ile seçenekleri döner ve bu ikisi dolar.
+  const [batchChoices, setBatchChoices] = useState<BatchChoice[] | null>(null);
+  const [batch, setBatch] = useState<BatchChoice | null>(null);
   const tokenRef = useRef<string | null>(null);
 
   const reset = () => {
     setPhase('form');
     setQty('');
     setReason('');
-    setOptionalOpen(false);
-    setItemId(null);
-    setItemLabel(null);
-    setColorMode('inherit');
-    setColorId(null);
-    setColorLabel(null);
-    setWidth('');
-    setQualityCode(null);
-    setPicker(null);
+    setReasonPickerOpen(false);
+    setReasonFreeOpen(false);
+    setReasonDraft('');
+    setBatchChoices(null);
+    setBatch(null);
     tokenRef.current = null;
   };
 
@@ -125,56 +128,6 @@ export default function TamburManualRollModal({
   useEffect(() => {
     if (!visible) reset();
   }, [visible]);
-
-  const itemsQuery = useQuery({
-    queryKey: ['items', 'tambur-manual', 'FABRIC'],
-    queryFn: () =>
-      itemService.getAll({
-        page: 1,
-        pageSize: 500,
-        sortBy: 'code',
-        sortOrder: 'asc',
-        filters: { isActive: 'true', itemType: 'FABRIC' },
-      }),
-    enabled: itemCatalogWanted,
-    retry: false,
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const colorsQuery = useQuery({
-    queryKey: ['colors', 'tambur-manual-public'],
-    queryFn: () =>
-      colorService.listPublicForPicker({
-        page: 1,
-        pageSize: 300,
-        sortBy: 'name',
-        sortOrder: 'asc',
-      }),
-    enabled: colorCatalogWanted,
-    retry: false,
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const itemOptions = useMemo<PickerOption[]>(
-    () =>
-      (itemsQuery.data?.data ?? []).map((i) => ({
-        value: i.id,
-        label: i.name,
-        sublabel: i.code,
-      })),
-    [itemsQuery.data],
-  );
-
-  const colorOptions = useMemo<PickerOption[]>(
-    () =>
-      (colorsQuery.data?.data ?? []).map((c) => ({
-        value: c.id,
-        label: c.name,
-        sublabel: c.code ?? undefined,
-        badge: c.hex ? { text: ' ', color: c.hex } : undefined,
-      })),
-    [colorsQuery.data],
-  );
 
   const createMutation = useMutation({
     mutationFn: (payload: TamburManualRollRequest) => tamburService.createManualRoll(payload),
@@ -184,6 +137,8 @@ export default function TamburManualRollModal({
       Toast.show({
         type: 'success',
         text1: res.data.alreadyAttached ? 'Top zaten eklenmişti' : 'Top elle eklendi',
+        // Backend mesajı parti numarasını İÇERİR (tek açık parti sessizce
+        // bağlandığında operatörün tek geri bildirimi budur) — ezme.
         text2: res.message ?? `Barkod: ${res.data.barcode ?? '—'}`,
         visibilityTime: 6000,
       });
@@ -192,6 +147,17 @@ export default function TamburManualRollModal({
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor zaten bildirdi
+      // BATCH_REQUIRED bir HATA DEĞİL, cevaplanmamış bir SORUDUR: iş emrinde
+      // birden fazla açık parti var ve backend hiçbirini varsaymıyor. Toast
+      // basıp operatörü çıkmaza sokmak yerine seçenekleri ekrana koyuyoruz.
+      // Token DÜŞMEZ: bu dalda hiçbir top yaratılmadı (parti kontrolü FAZ 1'den
+      // önce çalışır), dolayısıyla aynı mantıksal deneme sürüyor.
+      const choices = readBatchChoices(err);
+      if (choices) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setBatchChoices(choices);
+        return;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Top eklenemedi', text2: err.message });
     },
@@ -199,12 +165,10 @@ export default function TamburManualRollModal({
 
   const qtyNum = Number(qty);
   const qtyValid = Number.isFinite(qtyNum) && qtyNum > 0;
-  const widthNum = width.trim() ? Number(width) : null;
-  const widthValid = widthNum === null || (Number.isFinite(widthNum) && widthNum > 0);
   const reasonValid = reason.trim().length >= MIN_REASON;
-  // Renkte "yarım seçim" durumu YOK: `pick` moduna yalnız picker'da bir renk
-  // seçilince geçilir (vazgeçilirse önceki mod korunur) → ek doğrulama gereksiz.
-  const formValid = qtyValid && widthValid && reasonValid;
+  // Form artık YALNIZ metraj + sebep sorar (2026-08-04): ürün/renk iş emrinden
+  // gelir, kalite Tambur kararında, en sonraki ölçümde belirlenir.
+  const formValid = qtyValid && reasonValid;
 
   const goConfirm = () => {
     if (!formValid) return;
@@ -227,30 +191,24 @@ export default function TamburManualRollModal({
       initialQty: qtyNum,
       reason: reason.trim(),
       clientToken: tokenRef.current,
+      // Parti YALNIZ operatör seçtiyse gider. Gönderilmezse backend çözer
+      // (tek açık parti → sessizce bağla · birden fazla → BATCH_REQUIRED).
+      ...(batch ? { batchId: batch.id } : {}),
     };
-    if (itemId) payload.itemId = itemId;
-    if (colorMode === 'none') payload.colorId = null;
-    else if (colorMode === 'pick' && colorId) payload.colorId = colorId;
-    if (widthNum !== null) payload.width = widthNum;
-    if (qualityCode) payload.qualityGrade = qualityCode;
+    // ⚠️ itemId / colorId / width / qualityGrade GÖNDERİLMEZ (2026-08-04 kararı):
+    // ürün ve renk İŞ EMRİNDEN gelir ve operatör değiştiremez (backend guard'ı da
+    // farklı değer gelirse ITEM_MISMATCH / COLOR_MISMATCH ile reddeder); kalite
+    // Tambur kararında, en ise sonraki ölçümde belirlenir. Uç bu alanları hâlâ
+    // KABUL EDER (API sözleşmesi bozulmadı) — form artık sormuyor.
     createMutation.mutate(payload);
   };
 
   const busy = createMutation.isPending;
-  const colorSummary =
-    colorMode === 'none'
-      ? 'Renksiz (operatör seçti)'
-      : colorMode === 'pick'
-        ? `${colorLabel ?? 'Seçilen renk'} (operatör seçti)`
-        : 'İş emrinin hedef rengi';
-  const qualityName = qualityCode
-    ? (qualityGrades.find((q) => q.code === qualityCode)?.name ?? qualityCode)
-    : 'Belirsiz (kalite girilmedi)';
 
   return (
     <>
       <AppModal
-        visible={visible && picker === null}
+        visible={visible}
         onDismiss={onDismiss}
         // İşlem uçuştayken perde/geri tuşu kapatmaz (AppModal dismissable=false
         // iken backdrop'u da devre dışı bırakır) — top yaratılırken modal
@@ -316,143 +274,27 @@ export default function TamburManualRollModal({
                   />
                 </View>
 
-                {/* ── Zorunlu: sebep ── */}
+                {/* ── Zorunlu: sebep — hazır kategoriden TEK DOKUNUŞ ──
+                    Serbest yazım kaldırılmadı, "Diğer"in altına alındı: eldivenli
+                    operatör tablet klavyesiyle uğraşınca "aaa" gibi doldurmalar
+                    üretiyordu ve o, boş bırakmaktan daha kötüdür (denetimde cevap
+                    varmış gibi görünür). Aynı katalog "Manuel Mod" ile ORTAK. */}
                 <View>
                   <Text style={styles.label}>
                     İşlem nedeni <Text style={styles.req}>*</Text>
                   </Text>
-                  <TextInput
-                    mode="outlined"
-                    multiline
-                    numberOfLines={2}
-                    value={reason}
-                    onChangeText={setReason}
-                    placeholder="Örn: Sistemde kaydı yok, ham giriş atlanmış"
-                    maxLength={500}
+                  <Button
+                    mode="contained-tonal"
+                    icon={reasonValid ? 'check-circle-outline' : 'clipboard-text-outline'}
+                    contentStyle={styles.pickBtnContent}
+                    labelStyle={styles.pickBtnLabel}
                     disabled={busy}
-                    style={styles.input}
-                  />
-                  <Text style={styles.hintSmall}>
-                    En az {MIN_REASON} karakter — sayım tutmadığında "bu top nereden geldi"
-                    sorusunun cevabı bu.
-                  </Text>
+                    onPress={() => setReasonPickerOpen(true)}
+                  >
+                    {reasonValid ? reason.trim() : 'Sebep seç'}
+                  </Button>
                 </View>
 
-                {/* ── Opsiyonel alanlar ── */}
-                <TouchableRipple
-                  onPress={() => setOptionalOpen((o) => !o)}
-                  style={styles.toggleRow}
-                  borderless
-                >
-                  <View style={styles.toggleInner}>
-                    <Icon
-                      source={optionalOpen ? 'chevron-down' : 'chevron-right'}
-                      size={20}
-                      color={colors.textSecondary}
-                    />
-                    <Text style={styles.toggleText}>
-                      Ürün / renk / kalite / en {optionalOpen ? '' : '(opsiyonel)'}
-                    </Text>
-                  </View>
-                </TouchableRipple>
-
-                {optionalOpen && (
-                  <View style={styles.optionalBox}>
-                    {/* Ürün */}
-                    <Text style={styles.label}>Ürün</Text>
-                    <SelectRow
-                      text={itemLabel ?? 'İş emrinin hedef ürünü'}
-                      muted={!itemLabel}
-                      disabled={busy}
-                      onPress={() => {
-                        setItemCatalogWanted(true);
-                        setPicker('item');
-                      }}
-                      onClear={itemId ? () => { setItemId(null); setItemLabel(null); } : undefined}
-                    />
-                    {itemsQuery.isError && (
-                      <Text style={styles.errorNote}>
-                        Ürün listesi açılamadı ({itemsQuery.error instanceof Error
-                          ? itemsQuery.error.message
-                          : 'yetki yok'}) — iş emrinin hedef ürünü kullanılacak.
-                      </Text>
-                    )}
-
-                    {/* Renk — üç değerli */}
-                    <Text style={styles.label}>Renk</Text>
-                    <View style={styles.chipRow}>
-                      <ModeChip
-                        label="İş emri rengi"
-                        active={colorMode === 'inherit'}
-                        disabled={busy}
-                        onPress={() => {
-                          setColorMode('inherit');
-                          setColorId(null);
-                          setColorLabel(null);
-                        }}
-                      />
-                      <ModeChip
-                        label="Renksiz"
-                        active={colorMode === 'none'}
-                        disabled={busy}
-                        onPress={() => {
-                          setColorMode('none');
-                          setColorId(null);
-                          setColorLabel(null);
-                        }}
-                      />
-                      <ModeChip
-                        label={colorMode === 'pick' && colorLabel ? colorLabel : 'Renk seç…'}
-                        active={colorMode === 'pick'}
-                        disabled={busy}
-                        onPress={() => {
-                          setColorCatalogWanted(true);
-                          setPicker('color');
-                        }}
-                      />
-                    </View>
-                    {colorsQuery.isError && (
-                      <Text style={styles.errorNote}>
-                        Renk listesi açılamadı ({colorsQuery.error instanceof Error
-                          ? colorsQuery.error.message
-                          : 'yetki yok'}) — iş emrinin hedef rengi kullanılacak.
-                      </Text>
-                    )}
-
-                    {/* Kalite */}
-                    <Text style={styles.label}>Kalite</Text>
-                    <View style={styles.chipRow}>
-                      <ModeChip
-                        label="Belirsiz"
-                        active={qualityCode === null}
-                        disabled={busy}
-                        onPress={() => setQualityCode(null)}
-                      />
-                      {qualityGrades.map((qg) => (
-                        <ModeChip
-                          key={qg.id}
-                          label={qg.name}
-                          active={qualityCode === qg.code}
-                          disabled={busy}
-                          onPress={() => setQualityCode(qg.code)}
-                        />
-                      ))}
-                    </View>
-
-                    {/* En */}
-                    <Text style={styles.label}>En (cm)</Text>
-                    <NumpadInput
-                      mode="outlined"
-                      dense
-                      useNativeKeyboard
-                      value={width}
-                      onChangeText={setWidth}
-                      placeholder="opsiyonel — örn. 150"
-                      disabled={busy}
-                      style={styles.input}
-                    />
-                  </View>
-                )}
               </>
             ) : (
               /* ── ONAY: ne yaratılacağını SOMUT yaz ── */
@@ -463,11 +305,16 @@ export default function TamburManualRollModal({
                 </View>
                 <View style={styles.summaryBox}>
                   <SummaryRow label="Metraj" value={`${qtyNum} m`} />
-                  <SummaryRow label="Ürün" value={itemLabel ?? 'İş emrinin hedef ürünü'} />
-                  <SummaryRow label="Renk" value={colorSummary} />
-                  <SummaryRow label="Kalite" value={qualityName} />
-                  <SummaryRow label="En" value={widthNum !== null ? `${widthNum} cm` : 'Girilmedi'} />
+                  {/* Ürün/renk BİLEREK yazılmıyor: ikisi de iş emrinden gelir ve
+                      operatör değiştiremez (2026-08-04 kararı) — ekranda göstermek
+                      "seçebilirim" izlenimi verirdi. Kalite/en de sorulmuyor;
+                      kalite Tambur kararında, en sonraki ölçümde belirlenir. */}
                   <SummaryRow label="Sebep" value={reason.trim()} />
+                  {/* Parti YALNIZ operatör seçtiyse yazılır. Seçilmediğinde
+                      "PARTİSİZ" YAZMA: backend tek açık partiyi sessizce
+                      bağlayabilir ve o cümle YALAN olurdu. Gerçek cevap
+                      başarıdaki toast'ta (backend mesajı parti no taşır). */}
+                  {batch ? <SummaryRow label="Parti" value={batch.batchNumber} /> : null}
                 </View>
                 <View style={styles.noticeBox}>
                   <Icon source="information-outline" size={16} color={colors.infoText} />
@@ -521,35 +368,99 @@ export default function TamburManualRollModal({
         </Surface>
       </AppModal>
 
+      {/* ── İŞLEM NEDENİ — hazır katalog + "Diğer" serbest metin ── */}
       <PickerModal
-        visible={picker === 'item'}
-        title="Ürün Seç"
-        options={itemOptions}
-        selectedValue={itemId}
-        loading={itemsQuery.isLoading}
-        emptyText={itemsQuery.isError ? 'Ürün listesi açılamadı' : 'Ürün bulunamadı'}
-        onSelect={(value) => {
-          setItemId(value);
-          setItemLabel(itemOptions.find((o) => o.value === value)?.label ?? null);
-          setPicker(null);
+        visible={reasonPickerOpen}
+        title="İşlem Nedeni"
+        options={MANUAL_REASON_PRESETS.map((r) => ({ value: r, label: r }))}
+        selectedValue={reason.trim() || null}
+        numColumns={1}
+        emptyText="Hazır sebep yok"
+        leadingAction={{
+          label: 'Diğer — kendim yazayım',
+          sublabel: 'Listede olmayan bir durum',
+          icon: 'pencil-outline',
+          onPress: () => {
+            // Kutu BOŞ açılır: seçili hazır sebep taşınmaz. "Diğer" demek
+            // "listedekiler değil" demektir; hazır metni düzenletmek operatörü
+            // önce silmeye zorlardı.
+            setReasonDraft('');
+            setReasonFreeOpen(true);
+          },
         }}
-        onDismiss={() => setPicker(null)}
+        quickAddSlot={
+          reasonFreeOpen ? (
+            <View style={styles.reasonFreeBox}>
+              <TextInput
+                mode="outlined"
+                dense
+                autoFocus
+                value={reasonDraft}
+                onChangeText={setReasonDraft}
+                placeholder="Sebebi yaz (en az 3 karakter)"
+                maxLength={500}
+                style={styles.input}
+              />
+              <View style={styles.reasonFreeActions}>
+                <Button mode="outlined" onPress={() => setReasonFreeOpen(false)}>
+                  Vazgeç
+                </Button>
+                <Button
+                  mode="contained"
+                  disabled={reasonDraft.trim().length < MIN_REASON}
+                  onPress={() => {
+                    setReason(reasonDraft.trim());
+                    setReasonFreeOpen(false);
+                    setReasonPickerOpen(false);
+                  }}
+                >
+                  Kaydet
+                </Button>
+              </View>
+            </View>
+          ) : null
+        }
+        onSelect={(value) => {
+          setReason(value);
+          setReasonFreeOpen(false);
+          setReasonPickerOpen(false);
+        }}
+        onDismiss={() => {
+          setReasonFreeOpen(false);
+          setReasonPickerOpen(false);
+        }}
       />
 
+      {/* ── PARTİ SEÇİMİ — yalnız backend sorduğunda ──
+          Bu picker ÖNCEDEN açılmaz. "Açık parti" tanımı veriye dayanır (o
+          partide hâlâ canlı top var mı) ve tek bilen backend'dir; mobil listeyi
+          ayrıca çözerse iki kaynak doğar ve operatör ekranda gördüğü partiyi
+          seçip reddedilir. Seçenekler her zaman reddeden tarafın ağzından
+          gelir — bu yüzden akış "gönder → sorulursa cevapla" biçimindedir. */}
       <PickerModal
-        visible={picker === 'color'}
-        title="Renk Seç"
-        options={colorOptions}
-        selectedValue={colorId}
-        loading={colorsQuery.isLoading}
-        emptyText={colorsQuery.isError ? 'Renk listesi açılamadı' : 'Renk bulunamadı'}
+        visible={Boolean(batchChoices)}
+        title="Hangi partiye eklensin?"
+        options={(batchChoices ?? []).map((b) => ({
+          value: b.id,
+          label: b.batchNumber,
+        }))}
+        selectedValue={batch?.id ?? null}
+        numColumns={1}
+        emptyText="Açık parti yok"
         onSelect={(value) => {
-          setColorId(value);
-          setColorLabel(colorOptions.find((o) => o.value === value)?.label ?? null);
-          setColorMode('pick');
-          setPicker(null);
+          const chosen = (batchChoices ?? []).find((b) => b.id === value) ?? null;
+          setBatchChoices(null);
+          setBatch(chosen);
+          // Seçimden sonra OTOMATİK göndermiyoruz: operatör onay ekranında
+          // artık "Parti" satırını da görüp bilerek onaylasın (yıkıcı-onay
+          // ilkesi — özet ile gönderilen içerik birebir aynı olmalı).
         }}
-        onDismiss={() => setPicker(null)}
+        onDismiss={() => {
+          // Vazgeçti: soru cevapsız kaldı, gönderim YAPILMAZ. Token duruyor,
+          // aynı mantıksal deneme sürüyor — tekrar "Evet, ekle" derse backend
+          // aynı soruyu sorar.
+          setBatchChoices(null);
+        }}
       />
     </>
   );
@@ -557,64 +468,7 @@ export default function TamburManualRollModal({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SelectRow({
-  text,
-  muted,
-  disabled,
-  onPress,
-  onClear,
-}: {
-  text: string;
-  muted?: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-  onClear?: () => void;
-}) {
-  return (
-    <View style={styles.selectRow}>
-      <TouchableRipple
-        onPress={disabled ? undefined : onPress}
-        style={[styles.selectBox, disabled && styles.selectBoxDisabled]}
-        borderless
-      >
-        <View style={styles.selectInner}>
-          <Text style={[styles.selectText, muted && styles.selectTextMuted]} numberOfLines={1}>
-            {text}
-          </Text>
-          <Icon source="chevron-down" size={20} color={colors.textSecondary} />
-        </View>
-      </TouchableRipple>
-      {onClear && (
-        <IconButton icon="close" size={18} onPress={onClear} accessibilityLabel="Temizle" />
-      )}
-    </View>
-  );
-}
 
-function ModeChip({
-  label,
-  active,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableRipple
-      onPress={disabled ? undefined : onPress}
-      style={[styles.chip, active && styles.chipActive, disabled && styles.chipDisabled]}
-      borderless
-      rippleColor="rgba(79,70,229,0.12)"
-    >
-      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
-        {label}
-      </Text>
-    </TouchableRipple>
-  );
-}
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
@@ -727,6 +581,12 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   summaryLabel: { width: 78, fontSize: 13, color: colors.textSecondary },
   summaryValue: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text },
+
+  pickBtnContent: { height: 52, justifyContent: 'flex-start' },
+  pickBtnLabel: { fontSize: 15, fontWeight: '700' },
+
+  reasonFreeBox: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  reasonFreeActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
 
   actions: { flexDirection: 'row', gap: spacing.sm },
   actionBtn: { flex: 1 },

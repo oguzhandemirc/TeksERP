@@ -63,6 +63,8 @@ const manualRollSchema = z.object({
   colorId: z.string().uuid("Geçersiz renk ID").optional().nullable(),
   width: z.number().positive("En pozitif olmalı").max(999_999, "En gerçekçi değil").optional().nullable(),
   qualityGrade: z.string().trim().max(50).optional(),
+  // Parti — verilmezse tek acik partiye baglanir; birden fazlaysa 400 BATCH_REQUIRED.
+  batchId: z.string().uuid("Gecersiz parti ID").optional().nullable(),
   weightKg: z
     .number()
     .positive("Ağırlık pozitif olmalı")

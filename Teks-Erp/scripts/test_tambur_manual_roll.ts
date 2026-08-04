@@ -19,7 +19,7 @@
 //      uygulandığında top Tambur adımına geçer, açık hareket doğar, KAYNAK ADIM
 //      recompute edilir (hareket kapanır → adım COMPLETED) · ÖLÜ statülü top
 //      409 ROLL_DEAD · ÇUVALDAKİ top 409 ROLL_IN_SACK.
-//   3) MANUEL EKLE — 201, barkod SUNUCUDA üretildi, `entrySource=MANUAL_ENTRY`,
+//   3) MANUEL EKLE — 201, barkod SUNUCUDA üretildi, `entrySource=TAMBUR_MANUAL`,
 //      top Tambur adımında IN_PRODUCTION, ürün iş emrinden miras alındı,
 //      izlenebilirlik işaretleri YAZILDI (hareket marker'ı + audit event'i +
 //      SEBEP + HTTP kimliği), sebep/metraj eksikse 400, AYNI clientToken ile
@@ -178,7 +178,7 @@ async function main(): Promise<void> {
 
     const wo = await prisma.workOrder.findUniqueOrThrow({
       where: { id: fx.woId },
-      select: { targetItemId: true, workOrderNumber: true },
+      select: { targetItemId: true, targetColorId: true, workOrderNumber: true },
     });
 
     // ---- KİMLİKLER ---------------------------------------------------------
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
       afterForbidden.currentStepId === kursunStepId,
     );
     const strayRolls = await prisma.roll.count({
-      where: { entrySource: "MANUAL_ENTRY", currentStepId: tamburStepId },
+      where: { entrySource: "TAMBUR_MANUAL", currentStepId: tamburStepId },
     });
     check("403 sonrası Tambur adımında elle eklenmiş top doğmadı", strayRolls === 0);
 
@@ -416,7 +416,13 @@ async function main(): Promise<void> {
       initialQty: 137.5,
       reason: manualReason,
       clientToken: manualToken,
-      colorId: null, // AÇIKÇA renksiz → iş emrinin hedef rengi miras alınmaz
+      // PARTİ AÇIKÇA verilir (2026-08-04): iş emrinde birden fazla açık parti
+      // varsa backend BATCH_REQUIRED ile sorar — testin ölçtüğü şey o değil.
+      batchId: fx.batchId,
+      // ⚠️ 2026-08-04: ürün/renk ARTIK GÖNDERİLMİYOR. Bu uç topu ŞU iş emrinin
+      // adımına bağladığı için ikisi de iş emrinden gelir; operatör değiştiremez.
+      // (Mobil form da bu alanları hiç sormuyor.) Sapma denemeleri aşağıda ayrıca
+      // sınanır — ITEM_MISMATCH / COLOR_MISMATCH.
     };
     const created = await call("POST", "/api/tambur/manual/roll", {
       token: fieldToken,
@@ -433,10 +439,56 @@ async function main(): Promise<void> {
       `itemId=${String(createdData.itemId)}`,
     );
     check(
-      "renk kaynağı operatör kararı (colorId:null → renksiz)",
-      createdData.colorSource === "OPERATOR" && createdData.colorId === null,
-      `colorSource=${String(createdData.colorSource)}`,
+      "renk iş emrinin hedefinden geldi (operatör seçemez)",
+      createdData.colorSource === "WORKORDER" && createdData.colorId === wo.targetColorId,
+      `colorSource=${String(createdData.colorSource)} colorId=${String(createdData.colorId)}`,
     );
+
+    // ── ÜRÜN/RENK KİLİDİ (2026-08-04) — sapma denemeleri REDDEDİLİR ──────────
+    // Mobil form bu alanları hiç sormuyor; buradaki guard eski APK'lı tablete ve
+    // doğrudan API çağrısına karşı ikinci savunma hattıdır. Sapma serbest
+    // bırakılsaydı, o iş emrine ait OLMAYAN bir top onun çıktısına yazılır ve
+    // üretim muhasebesi (ÇIKAN metriği) sessizce kayardı.
+    const otherItem = await prisma.item.findFirst({
+      where: { isActive: true, id: { not: wo.targetItemId ?? undefined } },
+      select: { id: true },
+    });
+    if (otherItem) {
+      const mismatch = await call("POST", "/api/tambur/manual/roll", {
+        token: fieldToken,
+        body: {
+          targetStepId: tamburStepId,
+          initialQty: 50,
+          reason: "TEST — farklı ürün denemesi reddedilmeli",
+          clientToken: randomUUID(),
+          itemId: otherItem.id,
+        },
+      });
+      check("farklı ÜRÜN → 400", mismatch.status === 400, `status=${mismatch.status}`);
+      check(
+        "farklı ÜRÜN → code=ITEM_MISMATCH",
+        codeOf(mismatch) === "ITEM_MISMATCH",
+        String(codeOf(mismatch)),
+      );
+    }
+    if (wo.targetColorId) {
+      const colorless = await call("POST", "/api/tambur/manual/roll", {
+        token: fieldToken,
+        body: {
+          targetStepId: tamburStepId,
+          initialQty: 50,
+          reason: "TEST — renksiz denemesi reddedilmeli",
+          clientToken: randomUUID(),
+          colorId: null,
+        },
+      });
+      check("RENKSİZ denemesi → 400", colorless.status === 400, `status=${colorless.status}`);
+      check(
+        "RENKSİZ denemesi → code=COLOR_MISMATCH",
+        codeOf(colorless) === "COLOR_MISMATCH",
+        String(codeOf(colorless)),
+      );
+    }
 
     if (typeof manualRollId === "string") {
       const mRoll = await prisma.roll.findUniqueOrThrow({
@@ -464,8 +516,8 @@ async function main(): Promise<void> {
         `${String(createdData.barcode)} / ${String(mRoll.barcode)}`,
       );
       check(
-        "entrySource=MANUAL_ENTRY (zincir-dışı doğumun makine-okunur işareti)",
-        mRoll.entrySource === "MANUAL_ENTRY",
+        "entrySource=TAMBUR_MANUAL (Electron manuel girişinden AYRI — Tambur tabletinden)",
+        mRoll.entrySource === "TAMBUR_MANUAL",
         String(mRoll.entrySource),
       );
       check(
@@ -478,7 +530,11 @@ async function main(): Promise<void> {
         Number(mRoll.currentQty) === 137.5 && Number(mRoll.initialQty) === 137.5,
         `${Number(mRoll.initialQty)} → ${Number(mRoll.currentQty)}`,
       );
-      check("renksiz doğdu (miras uygulanmadı)", mRoll.colorId === null);
+      check(
+        "iş emrinin hedef rengiyle doğdu (miras uygulandı)",
+        mRoll.colorId === wo.targetColorId,
+        `${String(mRoll.colorId)} vs hedef ${String(wo.targetColorId)}`,
+      );
       check("clientToken kayda yazıldı", mRoll.clientToken === manualToken);
       check(
         "topu yaratan HTTP kimliği damgalandı",
@@ -521,7 +577,7 @@ async function main(): Promise<void> {
       );
       check(
         "audit entrySource işaretini taşıyor",
-        mData.entrySource === "MANUAL_ENTRY",
+        mData.entrySource === "TAMBUR_MANUAL",
         String(mData.entrySource ?? "-"),
       );
       check("audit HTTP kimliğini taşıyor", mLog?.userId === fieldUser.id, String(mLog?.userId));

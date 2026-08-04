@@ -7,7 +7,7 @@
 //   3) Uygulama: top Tambur adımına geçer, açık hareket doğar, SAHA audit'i yazılır
 //   4) Saha kapsam daraltmaları: zaten burada / ölü top / BAŞKA İŞ EMRİ
 //   5) Sebep zorunluluğu (her iki uçta)
-//   6) Manuel top: barkod SUNUCUDA, entrySource=MANUAL_ENTRY, adıma bağlı,
+//   6) Manuel top: barkod SUNUCUDA, entrySource=TAMBUR_MANUAL, adıma bağlı,
 //      hareket marker'ı + audit event'i (SEBEP burada kalıcı durur)
 //   7) İdempotency: aynı clientToken ile 2. çağrı MÜKERRER TOP DOĞURMAZ
 //   8) Ölü iş emri (CANCELLED) reddi
@@ -190,8 +190,6 @@ interface PreviewData {
         initialQty: 50,
         reason: "x",
         clientToken: randomUUID(),
-        itemId: item.id,
-        colorId: null,
       }),
     );
 
@@ -202,8 +200,8 @@ interface PreviewData {
         initialQty: 123.5,
         reason: "saha: sistemde olmayan top elde bulundu",
         clientToken: token,
-        itemId: item.id,
-        colorId: null,
+        // Parti açıkça — birden fazla açık parti varsa backend sorar (BATCH_REQUIRED).
+        batchId: fx.batchId,
       },
       { machineId: null, stationId: null },
     )).data as { rollId: string; barcode: string | null; alreadyAttached: boolean; colorSource: string };
@@ -221,13 +219,16 @@ interface PreviewData {
       },
     });
     ok(mRoll.barcode !== null && mRoll.barcode.length > 0, `barkod SUNUCUDA üretildi (${mRoll.barcode})`);
-    ok(mRoll.entrySource === "MANUAL_ENTRY", `entrySource=MANUAL_ENTRY (${mRoll.entrySource})`);
+    ok(mRoll.entrySource === "TAMBUR_MANUAL", `entrySource=TAMBUR_MANUAL (${mRoll.entrySource})`);
     ok(
       mRoll.status === "IN_PRODUCTION" && mRoll.currentStepId === tamburStepId,
       `doğan top Tambur adımına bağlandı (${mRoll.status})`,
     );
     ok(Number(mRoll.currentQty) === 123.5, `metraj korundu (${Number(mRoll.currentQty)})`);
-    ok(created.colorSource === "OPERATOR", `renk kaynağı operatör kararı (${created.colorSource})`);
+    // 2026-08-04: renk (ve ürün) İŞ EMRİNDEN gelir — operatör seçemez. Eskiden
+    // burada `colorId: null` gönderilip "OPERATOR" bekleniyordu; o yol artık
+    // COLOR_MISMATCH ile reddediliyor (bkz. test_tambur_manual_roll).
+    ok(created.colorSource === "WORKORDER", `renk kaynağı iş emri (${created.colorSource})`);
 
     const mMove = await p.rollMovement.findFirst({
       where: { rollId: created.rollId, workOrderStepId: tamburStepId, exitedAt: null },
@@ -258,8 +259,7 @@ interface PreviewData {
         initialQty: 123.5,
         reason: "saha: sistemde olmayan top elde bulundu",
         clientToken: token,
-        itemId: item.id,
-        colorId: null,
+        batchId: fx.batchId,
       },
       { machineId: null, stationId: null },
     )).data as { rollId: string; alreadyAttached: boolean };
@@ -280,8 +280,6 @@ interface PreviewData {
         initialQty: 10,
         reason: "ölü iş emrine ekleme denemesi",
         clientToken: randomUUID(),
-        itemId: item.id,
-        colorId: null,
       }),
     );
     await expectCode("iptal edilmiş iş emri (buraya al)", "WORKORDER_DEAD", () =>

@@ -239,6 +239,8 @@ export class TamburManualService {
             workOrderNumber: true,
             targetItemId: true,
             targetColorId: true,
+            // EN: elle eklenen top bunu miras alir (operatore sorulmaz).
+            width: true,
           },
         },
       },
@@ -627,6 +629,19 @@ export class TamburManualService {
       width?: number | null;
       qualityGrade?: string;
       weightKg?: number;
+      /**
+       * Topun bağlanacağı PARTİ (2026-08-04 saha bulgusu).
+       *
+       * Parti izlenebilirliğin birimidir ("üretime aynı anda giren top grubu");
+       * partisiz top, "bu top hangi partiden geldi / şu partide sorun çıktı,
+       * hangi toplar etkilendi" sorularını cevapsız bırakır ve ekranlarda
+       * PARTİSİZ grubuna düşüp iş emri detayında görünmez.
+       *
+       * Verilmezse: o adımda TEK açık parti varsa ona bağlanır (sessiz doğru
+       * cevap), birden fazlaysa 400 + `BATCH_REQUIRED` (operatör seçmeli),
+       * hiç yoksa NULL kalır (parti kavramı işlememiş iş emri).
+       */
+      batchId?: string | null;
     },
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
@@ -641,19 +656,99 @@ export class TamburManualService {
     }
     const step = await this.resolveTamburStep(input.targetStepId, ctx.stationId);
 
-    const itemId = input.itemId ?? step.workOrder.targetItemId;
+    // ─────────────────────────────────────────────────────────────────────────
+    // ÜRÜN + RENK İŞ EMRİNDEN GELİR — OPERATÖR DEĞİŞTİREMEZ (2026-08-04 kararı)
+    //
+    // Bu uç topu ŞU iş emrinin Tambur adımına BAĞLAR. Dolayısıyla eklenen top
+    // tanım gereği o iş emrinin malıdır: başka bir ürün ya da başka bir renk
+    // seçilebilmesi, o iş emrine ait OLMAYAN bir topu onun çıktısına yazmak
+    // demekti — üretim muhasebesini (ÇIKAN metriği, `producedOutputWhere` kümesi)
+    // sessizce kaydırırdı. Eskiden hiçbir doğrulama YOKTU: katalogdaki her ürün
+    // ve her renk kabul ediliyordu.
+    //
+    // Mobil form bu alanları artık HİÇ SORMUYOR (operatör zaten iş emrinin malını
+    // ekliyor, ekranda göstermeye de gerek yok). Buradaki guard ikinci savunma
+    // hattıdır: eski APK'lı tablet ya da doğrudan API çağrısı kuralı delemesin.
+    const targetItemId = step.workOrder.targetItemId;
+    if (input.itemId && targetItemId && input.itemId !== targetItemId) {
+      throw AppError.badRequest(
+        "Bu iş emrine farklı ürünle top eklenemez — eklenen top iş emrinin hedef ürünü olmalıdır. " +
+          "Gerçekten başka bir ürün eklenecekse o topu ayrı bir iş emrine bağlayın.",
+        { code: "ITEM_MISMATCH", expectedItemId: targetItemId, receivedItemId: input.itemId },
+      );
+    }
+    const itemId = targetItemId ?? input.itemId;
     if (!itemId) {
       throw AppError.badRequest(
         "Ürün seçilmeli — bu iş emrinin hedef ürünü tanımlı değil, elle top eklerken ürün zorunlu.",
         { code: "ITEM_REQUIRED" },
       );
     }
-    // `undefined` = operatör renk belirtmedi → iş emrinin hedef rengi miras alınır.
-    // `null`     = operatör "renksiz" dedi → miras UYGULANMAZ.
-    const colorId =
-      input.colorId === undefined ? (step.workOrder.targetColorId ?? null) : input.colorId;
-    const colorSource: "OPERATOR" | "WORKORDER" | "NONE" =
-      input.colorId !== undefined ? "OPERATOR" : colorId ? "WORKORDER" : "NONE";
+
+    // Renk: hedef renk TANIMLIYSA kilitlidir — "renksiz" (explicit null) dahil
+    // hiçbir sapmaya izin verilmez (ürün kararı: iş emri kırmızı hedefliyorsa o
+    // adımda doğan top kırmızıdır). Hedef renk YOKSA operatörün verdiği değer
+    // (renk ya da renksiz) aynen geçer.
+    const targetColorId = step.workOrder.targetColorId ?? null;
+    if (targetColorId && input.colorId !== undefined && input.colorId !== targetColorId) {
+      throw AppError.badRequest(
+        "Bu iş emrine farklı renkte (ya da renksiz) top eklenemez — renk iş emrinin hedef renginden gelir.",
+        { code: "COLOR_MISMATCH", expectedColorId: targetColorId, receivedColorId: input.colorId },
+      );
+    }
+    const colorId = targetColorId ?? (input.colorId === undefined ? null : input.colorId);
+    const colorSource: "OPERATOR" | "WORKORDER" | "NONE" = targetColorId
+      ? "WORKORDER"
+      : colorId
+        ? "OPERATOR"
+        : "NONE";
+
+    // ── PARTİ ÇÖZÜMÜ — ÜRÜN/RENK DOĞRULAMASINDAN SONRA ──────────────────────
+    // Sıra önemli: parti kontrolü öne alınırsa yanlış ürün gönderen istemci
+    // ITEM_MISMATCH yerine BATCH_REQUIRED alır ve asıl hatasını göremez.
+    // Genel kural: payload'ın KENDİ tutarlılığı önce, bağlam çözümü sonra.
+    // ── PARTİ ÇÖZÜMÜ ────────────────────────────────────────────────────────
+    // Adımdaki AÇIK partiler: bu iş emrine ait ve hâlâ canlı topu olanlar.
+    // "Açık" tanımı listeye değil VERİYE dayanır — kapalı/tüketilmiş partiye
+    // yeni top eklemek partinin metraj muhasebesini geriye dönük bozar.
+    const openBatches = await prisma.batch.findMany({
+      where: {
+        workOrderId: step.workOrderId,
+        rolls: { some: { status: { notIn: K18_DEAD_STATUSES } } },
+      },
+      select: { id: true, batchNumber: true },
+      orderBy: { createdAt: "asc" },
+    });
+    let resolvedBatchId: string | null = null;
+    let resolvedBatchNumber: string | null = null;
+    if (input.batchId) {
+      // Operatörün seçtiği parti GERÇEKTEN bu iş emrinin mi? Aksi halde top
+      // başka bir iş emrinin partisine yazılır ve iki iş emrinin muhasebesi karışır.
+      const chosen = openBatches.find((b) => b.id === input.batchId);
+      if (!chosen) {
+        throw AppError.badRequest(
+          "Seçilen parti bu iş emrine ait değil (ya da kapanmış) — listeyi yenileyip tekrar seçin.",
+          { code: "BATCH_INVALID", batchId: input.batchId },
+        );
+      }
+      resolvedBatchId = chosen.id;
+      resolvedBatchNumber = chosen.batchNumber;
+    } else if (openBatches.length === 1) {
+      // TEK parti → sessizce ona bağla. Operatöre tek seçenekli soru sormak
+      // sürtünmedir; mobil onay ekranı hangi partiye gittiğini ZATEN yazar.
+      resolvedBatchId = openBatches[0].id;
+      resolvedBatchNumber = openBatches[0].batchNumber;
+    } else if (openBatches.length > 1) {
+      throw AppError.badRequest(
+        "Bu iş emrinde birden fazla açık parti var — topun hangi partiye ekleneceğini seçin.",
+        {
+          code: "BATCH_REQUIRED",
+          batches: openBatches.map((b) => ({ id: b.id, batchNumber: b.batchNumber })),
+        },
+      );
+    }
+    // openBatches.length === 0 → parti hiç kullanılmamış; NULL meşrudur.
+
 
     // FAZ 1 — topun kendisi. `isMobileOrigin=false` BİLİNÇLİ: istek Tambur
     // tabletinden (eşleşmiş cihaz) gelse de bu bir KK1 istasyon taraması DEĞİL,
@@ -666,12 +761,36 @@ export class TamburManualService {
         initialQty: input.initialQty,
         weightKg: input.weightKg,
         qualityGrade: input.qualityGrade,
-        width: input.width ?? null,
+        // EN: operatöre SORULMAZ, iş emrinden MİRAS alınır (2026-08-04 kararı).
+        // Gerekçe ürün/renkle aynı: bu top ŞU iş emrinin malı ve o iş emrinin eni
+        // sabittir; operatöre tekrar sordurmak hem gereksiz sürtünme hem de
+        // iş emriyle çelişen bir değer girme riski. Operatör açıkça bir değer
+        // gönderirse (eski istemci) o kullanılır; hiçbiri yoksa NULL kalır.
+        width: input.width ?? (step.workOrder.width != null ? Number(step.workOrder.width) : null),
         clientToken: input.clientToken,
       },
       ctx.userId,
       ctx.machineId ?? null,
+      // isMobileOrigin cevabı bu yolda ANLAMSIZ — giriş yeri aşağıda AÇIKÇA
+      // veriliyor; sezgi hiç danışılmıyor.
       false,
+      {
+        // GİRİŞ YERİ: TAMBUR_MANUAL (2026-08-04 saha bulgusu).
+        //
+        // Eskiden sezgiye bırakılıyordu ve `MANUAL_ENTRY` yazılıyordu — yani
+        // Electron admin panelinden elle girilmiş gibi. Oysa bu top TAMBUR
+        // TABLETİNDEN, bir iş emrinin adımına eklendi. Envanter detayında
+        // "Manuel Giriş" yazması operatörü yanlış yere bakmaya iterdi.
+        //
+        // Kartsız üretimle (`produceFinishedRoll`) AYNI değer bilinçli: ikisi de
+        // "Tambur'da elle yaratıldı" demek. Aralarındaki fark (iş emrine bağlı mı
+        // değil mi) topun `currentStep`/iş emri bağından ZATEN okunuyor, ayrıca
+        // audit olayları da ayrı (`TAMBUR_MANUAL_ROLL` ↔ `TAMBUR_MANUAL_PRODUCE`).
+        forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+        // Sebep artık TOPUN ÜZERİNDE kalıcı kolonda (audit'e ek olarak): audit
+        // 6 ayda bir arşivleniyor, oradan okumak sebebi zamanla kaybettiriyordu.
+        entryReason: reason,
+      },
     );
     const roll = created.data;
 
@@ -722,7 +841,13 @@ export class TamburManualService {
           shipmentId: null,
           currentStepId: null,
         },
-        data: { currentStepId: step.id, status: RollStatus.IN_PRODUCTION },
+        data: {
+          currentStepId: step.id,
+          status: RollStatus.IN_PRODUCTION,
+          // PARTİ — yukarıda çözüldü. FAZ 1 (createInitialEntry) partiyi bilmez
+          // (genel envanter girişidir); bağlama FAZ 2'nin işidir.
+          ...(resolvedBatchId ? { batchId: resolvedBatchId } : {}),
+        },
       });
       if (claim.count === 0) {
         throw AppError.conflict(
@@ -793,6 +918,11 @@ export class TamburManualService {
         sessionStationId: ctx.stationId ?? null,
         alreadyAttached: attach.alreadyAttached,
         reopenedWorkOrder: attach.reopened,
+        batchId: resolvedBatchId,
+        batchNumber: resolvedBatchNumber,
+        // Parti OPERATÖRÜN seçimi mi, sistemin tek-seçenekten türettiği mi?
+        // Sonradan "yanlış partiye yazılmış" denirse cevabı bu ayrım verir.
+        batchSource: input.batchId ? "OPERATOR" : resolvedBatchId ? "AUTO_SINGLE" : "NONE",
       },
     });
 
@@ -809,8 +939,16 @@ export class TamburManualService {
         workOrderNumber: step.workOrder.workOrderNumber,
         alreadyAttached: attach.alreadyAttached,
         reopenedWorkOrder: attach.reopened,
+        // Parti operatöre GERİ SÖYLENİR. Tek açık parti varsa backend onu
+        // SORMADAN bağlar (sürtünmesiz doğru cevap) — ama sessiz kalırsa
+        // operatör topun partisiz gittiğini sanır; ekranda PARTİSİZ grubunu
+        // görene kadar da fark etmez. Bu alan o boşluğu kapatır.
+        batchId: resolvedBatchId,
+        batchNumber: resolvedBatchNumber,
       },
-      message: `Top elle eklendi ve "${step.station.name}" adımına alındı. Barkod: ${roll.barcode}`,
+      message: `Top elle eklendi ve "${step.station.name}" adımına alındı${
+        resolvedBatchNumber ? ` (parti: ${resolvedBatchNumber})` : ""
+      }. Barkod: ${roll.barcode}`,
     };
   }
 
@@ -936,6 +1074,8 @@ export class TamburManualService {
           // bu iki satırda (yukarıdaki iz #1).
           forcedStatus: RollStatus.WAREHOUSE,
           forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+          // Sebep kalıcı kolonda (audit'e EK olarak — audit arşivleniyor).
+          entryReason: reason,
           markedForKartela: input.markedForKartela,
           labelIntentSnapshot: buildIntentSnapshot(intent),
         },
