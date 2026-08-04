@@ -441,8 +441,16 @@ WITH adim AS (
         -- istisnanın aynası: roll-step.helper.ts icindeki pendingRolls sorgusu
         -- NOT parentReceipt.stepId ile ayni dislamayi yapar. İkisi AYRI kalırsa
         -- bekçi ya yanlış alarm verir ya gerçek drift'i kaçırır.
-        AND NOT EXISTS (SELECT 1 FROM subcontractor_receipts sr
-                        WHERE sr.id = r."parentReceiptId" AND sr."stepId" = s.id)) AS bekleyen
+        -- GİRİŞ NOKTASI KURALI: topun bu iş emrindeki EN ERKEN hareketi hangi
+        -- adımdaysa, ondan ÖNCEKİ adımlar için o top hiç beklemedi (fason dönüşü
+        -- çocuğu, elle eklenen top, aşağıdan katılan her şey). Ürün kodundaki
+        -- ayni kuralin aynasi: roll-step.helper.ts icindeki pendingRolls filtresi.
+        AND COALESCE((
+              SELECT s2."stepSequence" FROM roll_movements rm4
+              JOIN work_order_steps s2 ON s2.id = rm4."workOrderStepId"
+              WHERE rm4."rollId" = r.id AND s2."workOrderId" = s."workOrderId"
+              ORDER BY rm4."enteredAt" ASC LIMIT 1
+            ), -1) <= s."stepSequence") AS bekleyen
   FROM work_order_steps s
   JOIN work_orders wo ON wo.id = s."workOrderId"
   WHERE s.status <> 'SKIPPED'

@@ -269,7 +269,11 @@ function makeStepTx(opts: {
   let movementCountCall = 0;
   const tx = {
     workOrderStep: {
-      findUnique: async () => opts.step,
+      // stepSequence senaryolarda ayrı ayrı verilmiyor: "giriş noktası" kuralı
+      // için tek gereken, sahte hareketlerin sırasının (0) bu adımdan KÜÇÜK
+      // olması — yani tüm adaylar geçerli bekleyen sayılsın ki bu birim testi
+      // eskisi gibi yalnız durum makinesinin dallarını ölçsün.
+      findUnique: async () => (opts.step ? { stepSequence: 1, ...opts.step } : opts.step),
       update: async (args: { data: Record<string, unknown> }) => {
         stepUpdates.push(args.data);
         if (opts.step && args.data.status) opts.step.status = args.data.status as string;
@@ -284,7 +288,20 @@ function makeStepTx(opts: {
       },
     },
     roll: {
-      count: async () => opts.pendingRolls,
+      // 2026-08-04: helper artık `count` değil `findMany` kullanıyor — her aday
+      // topun İŞ EMRİNE GİRİŞ ADIMI (bu iş emrindeki en erken hareketinin
+      // stepSequence'i) ile bu adımın sırası karşılaştırılıyor ("giriş noktası
+      // kuralı": aşağıdan katılan top, yukarıdaki adımlar için hiç beklemedi).
+      // Sahte veri TÜMÜNÜ geçerli bekleyen sayacak şekilde üretilir
+      // (entrySeq = 0, her adım sırasından küçük) — bu birim testi durum
+      // makinesinin dallarını ölçer, kuralın kendisini değil. Kural GERÇEK veri
+      // üzerinde test_consistency §20 ve test_fason_wrong_station_guidance S1c
+      // ile doğrulanıyor.
+      findMany: async () =>
+        Array.from({ length: opts.pendingRolls }, (_, i) => ({
+          id: "fake-" + i,
+          movements: [{ step: { stepSequence: 0 } }],
+        })),
     },
     workOrder: {
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {

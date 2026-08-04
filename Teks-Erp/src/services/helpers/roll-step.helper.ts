@@ -37,6 +37,8 @@ export async function recomputeStepStatus(
       status: true,
       workOrderId: true,
       startedAt: true,
+      // Giris-noktasi kurali icin (asagida): topun katildigi adim sirasi ile karsilastirilir.
+      stepSequence: true,
     },
   });
   if (!step) return StepStatus.PENDING;
@@ -67,38 +69,37 @@ export async function recomputeStepStatus(
   });
 
   // Bu step'e henüz girmemiş ama iş emrinin üretimine dahil olan roller var mı?
-  //   - currentStepId bu step'ten farklı ve
-  //   - bu step için hiç movement kaydı yok (ne açık ne kapalı)
   // Böyle roller varsa step henüz bitmemiş, ACTIVE/PENDING'te kalmalı.
   //
-  // ⚠️ FASON DÖNÜŞÜ ÇOCUĞU İSTİSNASI (2026-08-03, `test_consistency` §20 ile bulundu):
-  // Fason kabulünde orijinal top SUBCONTRACTOR_CONSUMED ile emekliye ayrılır ve
-  // makbuzdan YENİ açık-kumaş toplar doğar. Bu çocuklar fason adımının ÇIKTISIDIR —
-  // o adıma hiç girmezler ve giremezler, dolayısıyla "bu step için movement yok"
-  // koşulunu SONSUZA DEK sağlarlar. İstisna olmadan sonuç şuydu: kabul biten fason
-  // adımı `closedCount>0 && pendingRolls>0` dalına düşüp COMPLETED'tan **ACTIVE'e geri
-  // dönüyor**, `ensureWorkOrderInProgress` iş emrini IN_PROGRESS'e çekiyor ve
-  // `completeWorkOrderIfStepsDone` o WO'yu bir daha ASLA kapatamıyordu — hata da log
-  // da yok, iş emri sessizce açık kalıyordu. (Kabul anında ortaya çıkmıyor: recompute
-  // çocuklar bağlanmadan önce koşuyor. Sonraki HERHANGİ bir recompute — manuel taşıma,
-  // kabul iptali, aşağı adım kapanışı — tetikliyordu.)
+  // ⚠️ "GİRİŞ NOKTASI" KURALI (2026-08-04) — bir top, İŞ EMRİNE GİRDİĞİ ADIMDAN
+  // ÖNCEKİ adımlar için ASLA "bekleyen" değildir.
   //
-  // Dışlama DAR tutuldu: yalnız **bu adımın** makbuzundan doğan çocuk sayılmaz.
-  // Aynı çocuk, henüz ulaşmadığı AŞAĞI adımlar için hâlâ "bekleyen"dir (orada
-  // gerçekten beklemektedir) — `parentReceipt.stepId` eşitliği bunu ayırır.
-  const pendingRolls = await tx.roll.count({
+  // Neden gerekli: bu sorgu naif hâliyle "bu adımda hareketi yok + hâlâ üretimde"
+  // diyordu ve iş emrine AŞAĞIDAN katılan topları yukarıdaki adımlar için sonsuza
+  // dek bekleyen sayıyordu. İki gerçek vaka:
+  //   • FASON DÖNÜŞÜ ÇOCUĞU — kabulde orijinal top emekliye ayrılır, makbuzdan
+  //     yeni açık-kumaş toplar doğar. Bunlar fason adımının ÇIKTISIDIR; o adıma
+  //     hiç girmediler ve giremezler. (2026-08-03, test_consistency §20)
+  //   • ELLE EKLENEN TOP — "Düzelt → Manuel Top Ekle" topu doğrudan Tambur
+  //     adımına yazar; yukarıdaki Kurşun/Boyahane adımlarına hiç uğramaz.
+  //     (2026-08-04, aynı bekçi yine kırmızı verdi)
+  // Sonuç her ikisinde de aynıydı: kapanmış adım `closedCount>0 && pendingRolls>0`
+  // dalına düşüp COMPLETED'tan ACTIVE'e GERİ DÖNÜYOR, `ensureWorkOrderInProgress`
+  // iş emrini IN_PROGRESS'e çekiyor ve `completeWorkOrderIfStepsDone` o iş emrini
+  // BİR DAHA ASLA kapatamıyordu — hata da log da yok.
+  //
+  // Genel kural özel yamaların yerini aldı: topun iş emrine GİRİŞ NOKTASI = bu iş
+  // emrindeki EN ERKEN hareketinin adım sırası. O sıra bu adımdan BÜYÜKSE top
+  // aşağıdan katılmıştır ve bu adım için hiç bekleme yaşamamıştır. Aynı top,
+  // henüz ULAŞMADIĞI aşağı adımlar için hâlâ bekleyendir (orada gerçekten
+  // bekliyor) — karşılaştırma bunu korur.
+  const candidates = await tx.roll.findMany({
     where: {
-      // İş emrine bağlı = en az bir movement'i bu iş emrinin adımlarından birinde olmalı
+      // İş emrine bağlı = en az bir movement'i bu iş emrinin adımlarından birinde
       movements: { some: { step: { workOrderId: step.workOrderId } } },
-      NOT: [
-        // Bu step için movement yok
-        { movements: { some: { workOrderStepId: stepId } } },
-        // ...ve bu step'in fason makbuzundan doğmuş bir çocuk değil (yukarıdaki istisna).
-        // parentReceiptId null olan toplar bu negasyondan ETKİLENMEZ (ilişki yoksa
-        // koşul zaten sağlanmaz) — normal üretim topları eskisi gibi sayılır.
-        { parentReceipt: { stepId } },
-      ],
-      // Hala aktif üretimdeyse
+      // Bu step için movement yok
+      NOT: { movements: { some: { workOrderStepId: stepId } } },
+      // Hâlâ aktif üretimdeyse
       status: {
         in: [
           RollStatus.IN_PRODUCTION,
@@ -107,7 +108,23 @@ export async function recomputeStepStatus(
         ],
       },
     },
+    select: {
+      id: true,
+      movements: {
+        where: { step: { workOrderId: step.workOrderId } },
+        select: { step: { select: { stepSequence: true } } },
+        orderBy: { enteredAt: "asc" },
+        take: 1,
+      },
+    },
   });
+  const pendingRolls = candidates.filter((r) => {
+    const entrySeq = r.movements[0]?.step?.stepSequence;
+    // Giriş noktası çözülemiyorsa (veri tuhaflığı) ESKİ davranış: bekleyen say.
+    // Fail-safe yön bilinçli — adımı erken COMPLETED yapmak, geç yapmaktan kötüdür.
+    if (entrySeq === undefined) return true;
+    return entrySeq <= step.stepSequence;
+  }).length;
 
   let nextStatus: StepStatus = step.status;
 
