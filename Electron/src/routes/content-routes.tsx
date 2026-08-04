@@ -31,6 +31,7 @@ import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage
 import { SystemEventsPage } from "@/pages/System/Events/SystemEventsPage";
 import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage";
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
+import RollArchivePage from "@/pages/System/RollArchivePage";
 import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
 import { PerfPage } from "@/pages/System/Perf/PerfPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
@@ -425,6 +426,17 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <ActivityArchivePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Top Arşivi — admin:settings ile kilitli (Sistem hub'ının tamamı gibi).
+    // Envanter sekmesindeki eski hâli roll:read ile açıktı; taşıma yetkiyi de
+    // daralttı, bu bilinçli.
+    path: "system/roll-archive",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <RollArchivePage />
       </ProtectedRoute>
     ),
   },

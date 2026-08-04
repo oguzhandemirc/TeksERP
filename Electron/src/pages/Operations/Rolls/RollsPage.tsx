@@ -64,15 +64,16 @@ const TABS: Array<{ key: RollTabKey; label: string; Icon: typeof Package }> = [
   { key: "SUBCONTRACTOR",  label: "Fasonda",         Icon: Send },
   { key: "KURSUN_PENDING", label: "Kurşun Bekleyen", Icon: FlaskConical },
   { key: "TAMBUR_PENDING", label: "Tambur Bekleyen", Icon: Disc3 },
-  // Arşiv varsayılan olarak en sonda — nadiren bakılır. Kullanıcı sürükleyerek
-  // değiştirebilir; sıra tercihte (backend) saklanır.
-  { key: "ARCHIVE",        label: "Arşiv",           Icon: Archive },
 ];
+// ⚠️ "Arşiv" sekmesi 2026-08-05'te BURADAN KALDIRILDI → Sistem → Top Arşivi
+// (`/system/roll-archive`, admin:settings). Kullanıcı kararı: "arşiv oradan
+// kalksın, kimsenin tıklamayacağı zor bulunan bir yere koyalım."
+// STATUS_GROUPS.ARCHIVE anahtarı DURUYOR ve yeni sayfa onu kullanıyor —
+// silinirse tip hatası verir (`RollStatusTabKey` union'ı) ve arşiv statüleri
+// için tek kaynak kaybolur.
 
 const TAB_KEYS = new Set<RollTabKey>(TABS.map((t) => t.key));
-// Arşiv reorder dışında — sağ kenara sabit, "çöp kutusu" gibi ayrı tutulur.
-const REORDERABLE_KEYS = TABS.filter((t) => t.key !== "ARCHIVE").map((t) => t.key);
-const ARCHIVE_TAB = TABS.find((t) => t.key === "ARCHIVE")!;
+const REORDERABLE_KEYS = TABS.map((t) => t.key);
 
 function isRollTabKey(v: string | null): v is RollTabKey {
   return v !== null && TAB_KEYS.has(v as RollTabKey);
@@ -295,7 +296,6 @@ export function RollsPage() {
       />
       <ReorderableTabBar
         tabs={orderedTabs}
-        pinnedTab={ARCHIVE_TAB}
         activeKey={tab}
         onSelect={(k) => selectTab(k as RollTabKey)}
         onReorder={reorder}

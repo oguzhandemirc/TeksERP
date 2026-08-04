@@ -69,6 +69,18 @@ export const systemTiles: SystemTile[] = [
     adminOnly: true,
   },
   {
+    // 2026-08-05: Envanter sekme şeridinden buraya taşındı. Başlık "TOP
+    // Arşivi" — komşusu "Aktivite Arşivi" (SystemLog) ve ikisi tamamen farklı
+    // şeyler; tek kelimelik "Arşiv" ikisini de karşılar ve yanlış tıklatır.
+    key: "roll-archive",
+    title: "Top Arşivi",
+    description: "Emekli toplar — kesilmiş, fasonda/kartelada tüketilmiş kayıtlar",
+    icon: Archive,
+    to: "/system/roll-archive",
+    group: "archive",
+    adminOnly: true,
+  },
+  {
     key: "archive",
     title: "Aktivite Arşivi",
     description: "Eski log'ları arşive taşı; tablo boyutu istatistikleri",
