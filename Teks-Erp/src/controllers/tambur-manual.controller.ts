@@ -14,6 +14,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { TamburManualService } from "../services/tambur-manual.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
 
 /** Top referansı: okutma (barkod) ya da listeden seçim (rollId). En az biri zorunlu. */
@@ -63,6 +64,14 @@ const manualRollSchema = z.object({
   colorId: z.string().uuid("Geçersiz renk ID").optional().nullable(),
   width: z.number().positive("En pozitif olmalı").max(999_999, "En gerçekçi değil").optional().nullable(),
   qualityGrade: z.string().trim().max(50).optional(),
+  // KAT — kalıcı kolon (Roll.foldType). ⚠️ 2026-08-04te bu alan bir süre
+  // ŞEMADA YOKTU: mobil "Manuel Mod" katı operatöre SORUYOR ve gönderiyordu,
+  // Zod ise tanımadığı anahtarı SESSİZCE SİLİYORDU (z.object varsayılanı
+  // strip). Yani operatör zorunlu bir alanı dolduruyor, veri hiçbir yere
+  // ulaşmıyordu — hata da log da yok. Yeni alan eklerken kapıyı UNUTMA.
+  // foldTypeSchema kanonikleştirmeyi (.transform) kendisi yapar: "4 kat" da
+  // "4KAT" da "4-KAT" olarak yazılır, yoksa filtre sessizce 0 satır döner.
+  foldType: foldTypeSchema,
   // Parti — verilmezse tek acik partiye baglanir; birden fazlaysa 400 BATCH_REQUIRED.
   batchId: z.string().uuid("Gecersiz parti ID").optional().nullable(),
   weightKg: z
@@ -92,6 +101,14 @@ const produceSchema = z.object({
     .positive("Ağırlık pozitif olmalı")
     .max(999_999, "Ağırlık gerçekçi değil")
     .optional(),
+  // KAT — kalıcı kolon (Roll.foldType). ⚠️ 2026-08-04te bu alan bir süre
+  // ŞEMADA YOKTU: mobil "Manuel Mod" katı operatöre SORUYOR ve gönderiyordu,
+  // Zod ise tanımadığı anahtarı SESSİZCE SİLİYORDU (z.object varsayılanı
+  // strip). Yani operatör zorunlu bir alanı dolduruyor, veri hiçbir yere
+  // ulaşmıyordu — hata da log da yok. Yeni alan eklerken kapıyı UNUTMA.
+  // foldTypeSchema kanonikleştirmeyi (.transform) kendisi yapar: "4 kat" da
+  // "4KAT" da "4-KAT" olarak yazılır, yoksa filtre sessizce 0 satır döner.
+  foldType: foldTypeSchema,
   // Etiket niyeti ("Kime?") — ikisi de boşsa stok. Kesim uçlarıyla aynı alan adları.
   targetOrderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").optional().nullable(),
   targetCustomerId: z.string().uuid("Geçersiz müşteri ID").optional().nullable(),

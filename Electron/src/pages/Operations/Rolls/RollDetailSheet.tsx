@@ -31,6 +31,10 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const [rescueRollId, setRescueRollId] = useState<string | null>(null);
   const { hasPermission } = useRoleAccess();
   const canManualAdjust = hasPermission("roll:manual-adjust");
+  // YASAM DONGUSU bolumu AYRI bir izinle korunur (urun karari, 2026-08-05).
+  // Izin yoksa bolum HIC CIZILMEZ — bos bir kutu gostermek "bu topun gecmisi
+  // yok" yalani olurdu; oysa gecmis var, kullanicinin gorme yetkisi yok.
+  const canSeeHistory = hasPermission("roll:history");
   // "Düzelt": hurda/iptal dışı her top. Yetki/sebep kararı diyaloğun içinde —
   // serbest depoda roll:write|label:edit yeter, üretimdeki topta roll:manual-adjust
   // aranır (backend de aynı guard'ı uygular).
@@ -45,6 +49,15 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
     queryKey: ["roll-detail", roll?.id],
     queryFn: () => rollService.getById(roll!.id),
     enabled: open && !!roll?.id,
+    staleTime: 30_000,
+  });
+  // Ayrı sorgu, ayrı izin: detay ucu (roll:read) herkesin günlük işi, yaşam
+  // döngüsü (roll:history) izlenebilirlik verisi. Yetkisiz kullanıcıda istek
+  // HİÇ ATILMAZ (enabled) — 403 üretip konsolu kirletmez.
+  const historyQuery = useQuery({
+    queryKey: ["roll-history", roll?.id],
+    queryFn: () => rollService.getHistory(roll!.id),
+    enabled: open && !!roll?.id && canSeeHistory,
     staleTime: 30_000,
   });
   // Detay endpoint'i liste cevabında olmayan alanları (operation log, iade, kartela,
@@ -253,14 +266,48 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       ] ?? roll.entrySource}
                     </Badge>
                   </div>
-                  {/* ELLE EKLENEN TOPUN SEBEBİ (2026-08-04). Şemada kolon değil,
-                      audit'ten (SystemLog.newData.reason) okunuyor — backend
-                      `findRollById` yanıtına `manualReason` olarak ekliyor.
+                  {/* ELLE EKLENEN TOPUN SEBEBİ.
+                      ⚠️ `detail`'den okunur, `roll`'dan DEĞİL — 2026-08-04'te bir
+                      gün boyunca `roll.manualReason` yazıyordu ve alan HİÇBİR
+                      ZAMAN dolmuyordu: `manualReason` yalnız DETAY ucunda döner
+                      (`GET /rolls/:id`), liste satırında yoktur. Yani özellik
+                      yazıldı, test edildi, commit edildi — ve kullanıcıya hiç
+                      ulaşmadı. Kolon `Roll.entryReason` olarak ŞEMADA VARDIR
+                      (migration 20260804210000); "audit'ten okunuyor" diyen eski
+                      yorum yanlıştı.
                       Yalnız elle doğan topta dolu; diğerlerinde satır çizilmez. */}
-                  {roll.manualReason && (
+                  {detail?.manualReason && (
                     <>
                       <div className="text-xs text-muted-foreground">Ekleme Nedeni</div>
-                      <div className="text-xs">{roll.manualReason}</div>
+                      <div className="text-xs">{detail.manualReason}</div>
+                    </>
+                  )}
+                  {/* KİM EKLEDİ (2026-08-05). Veri backend'de en baştan vardı
+                      (`Roll.createdById` kolonu, %97 dolu) ama hiçbir yüzeyde
+                      basılmıyordu. Makine atfı varsa aynı satırda birleştirilir —
+                      "Ahmet · Sarım-2" tek okumada hem kişiyi hem yeri söyler. */}
+                  {(detail?.createdBy || detail?.createdMachine) && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Ekleyen</div>
+                      <div className="text-xs">
+                        {detail?.createdBy?.fullName ??
+                          detail?.createdBy?.username ??
+                          "—"}
+                        {detail?.createdMachine?.name ? ` · ${detail.createdMachine.name}` : ""}
+                      </div>
+                    </>
+                  )}
+                  {/* BULUNDUĞU İSTASYON — yalnız bir adımda duran topta anlamlı.
+                      Depo/ham stok topunda alan null'dur ve satır çizilmez. */}
+                  {detail?.currentStep?.station && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Bulunduğu İstasyon</div>
+                      <div className="text-xs">
+                        {detail.currentStep.station.name}
+                        {detail.currentStep.workOrder?.workOrderNumber
+                          ? ` · ${detail.currentStep.workOrder.workOrderNumber}`
+                          : ""}
+                      </div>
                     </>
                   )}
                   {roll.weightKg != null && (
@@ -504,40 +551,79 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               </Card>
             )}
 
-            <Card>
-              <CardContent className="p-3">
-                <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <History className="h-3.5 w-3.5" /> İşlem Geçmişi
-                </div>
-                {detailQuery.isLoading ? (
-                  <div className="space-y-2">
-                    {[0, 1, 2].map((i) => (
-                      <Skeleton key={i} className="h-9 w-full" />
-                    ))}
+            {/* İŞLEM GEÇMİŞİ — 2026-08-05te KAYNAĞI DEĞİŞTİ.
+
+                Eskiden `detail.operations` (RollOperation tablosu) okunuyordu ve
+                panel operatörlerin en sık baktığı toplarda KALICI OLARAK BOŞTU.
+                Sebep kablolama hatası değildi: RollOperation bir "yaşam döngüsü
+                günlüğü" değil, İSTASYON İŞLEM LOG'udur — yalnız 5 olay tipi
+                taşır (kurşun/QC2/Tambur/fason sevk-dönüş) ve her satırı bir iş
+                emri adımı ZORUNLU kılar. Depo topu, ham stok topu, elle eklenen
+                top ve Tambur kesim çocuğu tanım gereği hiç satır üretmez
+                (ölçüm: 72 topun 45'inde hiç kayıt yok). Yani "Henüz işlem kaydı
+                yok" cümlesi doğruydu ama YANILTICIYDI — geçmiş vardı, bu tablo
+                onu tutmuyordu.
+
+                Artık `/api/rolls/:id/history` okunuyor: movement + operation +
+                fason sevk/kabul + doğum + kesim soyağacı BİRLEŞTİRİLMİŞ hâli.
+                Bu uç zaten vardı ve mobil Depo ekranı onu kullanıyordu; Electron
+                hiç çağırmıyordu. */}
+            {canSeeHistory && (
+              <Card>
+                <CardContent className="p-3">
+                  <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <History className="h-3.5 w-3.5" /> İşlem Geçmişi
                   </div>
-                ) : (detailQuery.data?.data.operations?.length ?? 0) === 0 ? (
-                  <p className="text-xs text-muted-foreground">Henüz işlem kaydı yok.</p>
-                ) : (
-                  <ol className="relative ml-1 space-y-3 border-l border-border pl-4">
-                    {(detailQuery.data?.data.operations ?? []).map((op) => (
-                      <li key={op.id} className="relative">
-                        <span
-                          className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
-                          aria-hidden
-                        />
-                        <div className="text-sm font-medium leading-tight">
-                          {rollOperationTypeLabels[op.operationType] ?? op.operationType}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-muted-foreground">
-                          {op.operator?.fullName ?? "—"} ·{" "}
-                          {safeFormat(op.createdAt, "dd.MM.yyyy HH:mm")}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </CardContent>
-            </Card>
+                  {historyQuery.isLoading ? (
+                    <div className="space-y-2">
+                      {[0, 1, 2].map((i) => (
+                        <Skeleton key={i} className="h-9 w-full" />
+                      ))}
+                    </div>
+                  ) : historyQuery.isError ? (
+                    <p className="text-xs text-destructive">Geçmiş yüklenemedi.</p>
+                  ) : (historyQuery.data?.data?.events?.length ?? 0) === 0 ? (
+                    <p className="text-xs text-muted-foreground">Henüz hareket kaydı yok.</p>
+                  ) : (
+                    <ol className="relative ml-1 space-y-3 border-l border-border pl-4">
+                      {(historyQuery.data?.data?.events ?? []).map((ev, i) => (
+                        <li key={`${ev.kind}-${ev.at}-${i}`} className="relative">
+                          <span
+                            className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
+                            aria-hidden
+                          />
+                          <div className="text-sm font-medium leading-tight">{ev.title}</div>
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            {[ev.stationName, ev.operatorName].filter(Boolean).join(" · ") || "—"}
+                            {" · "}
+                            {safeFormat(ev.at, "dd.MM.yyyy HH:mm")}
+                          </div>
+                          {/* details serbest bir sözlüktür (olay tipine göre
+                              değişir); ham JSON basmak yerine yalnız METİN/SAYI
+                              değerleri okunur — nesne/dizi alanlar atlanır ki
+                              panelde "[object Object]" çıkmasın. */}
+                          {(() => {
+                            const bits = Object.entries(ev.details ?? {})
+                              .filter(
+                                ([, v]) =>
+                                  (typeof v === "string" && v.trim()) ||
+                                  typeof v === "number",
+                              )
+                              .slice(0, 4)
+                              .map(([k, v]) => `${k}: ${v}`);
+                            return bits.length ? (
+                              <div className="mt-0.5 text-[11px] text-muted-foreground/80">
+                                {bits.join(" · ")}
+                              </div>
+                            ) : null;
+                          })()}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <div className="text-[11px] text-muted-foreground">
               Oluşturma: {safeFormat(roll.createdAt, "dd.MM.yyyy HH:mm")} ·

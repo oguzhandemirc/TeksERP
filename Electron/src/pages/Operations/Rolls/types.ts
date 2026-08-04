@@ -84,10 +84,30 @@ export interface Roll {
   entrySource: string;
   /**
    * Elle eklenen topun sebebi — YALNIZ detay ucunda (`GET /rolls/:id`) döner,
-   * liste yanıtında YOK (her satır için audit sorgusu koşmasın). Şemada kolon
-   * değildir; backend audit'ten okur (bkz. `readManualEntryReason`).
+   * liste yanıtında YOK.
+   *
+   * ⚠️ Bu JSDoc bir süre "şemada kolon değildir; backend audit'ten okur" diyordu
+   * ve YANLIŞTI: `Roll.entryReason` şemada kolondur (migration 20260804210000).
+   * Yanlış olan yalnız yorum da değildi — panel bu alanı liste satırından
+   * (`roll`) okuyordu ve alan orada hiç bulunmadığı için özellik hiç görünmedi.
+   * Okuyacak yer `detail`'dir.
    */
   manualReason?: string | null;
+  /** Topu sisteme giren kullanıcı — YALNIZ detay ucunda döner. */
+  createdBy?: { id: string; fullName?: string | null; username?: string | null } | null;
+  /** Girişin yapıldığı makine (varsa) — YALNIZ detay ucunda döner. */
+  createdMachine?: { id: string; name: string; code?: string | null } | null;
+  /**
+   * Topun ŞU AN bulunduğu iş emri adımı + istasyonu. Liste VE detay ucunda döner
+   * (2026-08-05). Bir adımda değilse (depo, ham stok, çuval) null'dur — kolon
+   * orada "—" basar ve bu doğrudur.
+   */
+  currentStep?: {
+    id: string;
+    stepSequence: number;
+    station: { id: string; code: string; name: string; kind: string } | null;
+    workOrder: { id: string; workOrderNumber: string } | null;
+  } | null;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */
   parentReceiptId: string | null;

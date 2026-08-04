@@ -31,6 +31,7 @@ import {
   Surface,
   Text,
   TextInput,
+  TouchableRipple,
 } from 'react-native-paper';
 import { useMutation } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
@@ -102,6 +103,11 @@ export default function TamburManualRollModal({
   const [phase, setPhase] = useState<'form' | 'confirm'>('form');
   const [qty, setQty] = useState('');
   const [reason, setReason] = useState('');
+  // KAT — varsayılan YOK, operatör seçmeli. Ön seçim yapılsaydı acele eden
+  // operatör "2-KAT" yazılı bir topu farkında olmadan onaylardı; yanlış bir kat
+  // değeri, boş bir kat değerinden zararlıdır (envanterde filtrelenir, güvenilir
+  // sanılır). "Kat sorulsun" kullanıcı kararı (2026-08-05).
+  const [foldType, setFoldType] = useState<string | null>(null);
   // Sebep artık hazır kataloğdan seçilir; serbest yazım "Diğer" ile ikinci planda.
   const [reasonPickerOpen, setReasonPickerOpen] = useState(false);
   const [reasonFreeOpen, setReasonFreeOpen] = useState(false);
@@ -116,6 +122,7 @@ export default function TamburManualRollModal({
     setPhase('form');
     setQty('');
     setReason('');
+    setFoldType(null);
     setReasonPickerOpen(false);
     setReasonFreeOpen(false);
     setReasonDraft('');
@@ -168,7 +175,7 @@ export default function TamburManualRollModal({
   const reasonValid = reason.trim().length >= MIN_REASON;
   // Form artık YALNIZ metraj + sebep sorar (2026-08-04): ürün/renk iş emrinden
   // gelir, kalite Tambur kararında, en sonraki ölçümde belirlenir.
-  const formValid = qtyValid && reasonValid;
+  const formValid = qtyValid && reasonValid && foldType !== null;
 
   const goConfirm = () => {
     if (!formValid) return;
@@ -191,6 +198,7 @@ export default function TamburManualRollModal({
       initialQty: qtyNum,
       reason: reason.trim(),
       clientToken: tokenRef.current,
+      foldType,
       // Parti YALNIZ operatör seçtiyse gider. Gönderilmezse backend çözer
       // (tek açık parti → sessizce bağla · birden fazla → BATCH_REQUIRED).
       ...(batch ? { batchId: batch.id } : {}),
@@ -274,6 +282,31 @@ export default function TamburManualRollModal({
                   />
                 </View>
 
+                {/* ── Zorunlu: kat ── */}
+                <View>
+                  <Text style={styles.label}>
+                    Kat <Text style={styles.req}>*</Text>
+                  </Text>
+                  <View style={styles.foldRow}>
+                    {(['2-KAT', '4-KAT'] as const).map((ft) => {
+                      const active = foldType === ft;
+                      return (
+                        <TouchableRipple
+                          key={ft}
+                          borderless
+                          disabled={busy}
+                          onPress={() => setFoldType(ft)}
+                          style={[styles.foldChip, active && styles.foldChipOn]}
+                        >
+                          <Text style={[styles.foldChipText, active && styles.foldChipTextOn]}>
+                            {ft === '2-KAT' ? '2 Kat' : '4 Kat'}
+                          </Text>
+                        </TouchableRipple>
+                      );
+                    })}
+                  </View>
+                </View>
+
                 {/* ── Zorunlu: sebep — hazır kategoriden TEK DOKUNUŞ ──
                     Serbest yazım kaldırılmadı, "Diğer"in altına alındı: eldivenli
                     operatör tablet klavyesiyle uğraşınca "aaa" gibi doldurmalar
@@ -309,6 +342,7 @@ export default function TamburManualRollModal({
                       operatör değiştiremez (2026-08-04 kararı) — ekranda göstermek
                       "seçebilirim" izlenimi verirdi. Kalite/en de sorulmuyor;
                       kalite Tambur kararında, en sonraki ölçümde belirlenir. */}
+                  <SummaryRow label="Kat" value={foldType === '4-KAT' ? '4 Kat' : '2 Kat'} />
                   <SummaryRow label="Sebep" value={reason.trim()} />
                   {/* Parti YALNIZ operatör seçtiyse yazılır. Seçilmediğinde
                       "PARTİSİZ" YAZMA: backend tek açık partiyi sessizce
@@ -581,6 +615,21 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   summaryLabel: { width: 78, fontSize: 13, color: colors.textSecondary },
   summaryValue: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text },
+
+  foldRow: { flexDirection: 'row', gap: spacing.sm },
+  foldChip: {
+    flex: 1,
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+  },
+  foldChipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  foldChipText: { fontSize: 15, fontWeight: '700', color: colors.textSecondary },
+  foldChipTextOn: { color: colors.textOnDark },
 
   pickBtnContent: { height: 52, justifyContent: 'flex-start' },
   pickBtnLabel: { fontSize: 15, fontWeight: '700' },
