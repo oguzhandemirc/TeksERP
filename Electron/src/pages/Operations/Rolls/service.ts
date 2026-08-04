@@ -144,6 +144,22 @@ export interface ProductionFlowData {
   sevk: { shipments: ProductionFlowSackCard[]; total: number };
 }
 
+/** Tek bir yasam dongusu olayi — backend RollHistoryEvent ile birebir. */
+export interface RollHistoryEvent {
+  kind: string;
+  subKind?: string;
+  at: string;
+  title: string;
+  stationName: string | null;
+  details: Record<string, unknown>;
+  operatorName: string | null;
+}
+
+export interface RollHistoryPayload {
+  roll: { id: string; barcode: string | null; status: string };
+  events: RollHistoryEvent[];
+}
+
 export const rollService = {
   ...base,
   getAll: (params: QueryParams): Promise<PaginatedResponse<Roll>> =>
@@ -185,6 +201,18 @@ export const rollService = {
   getByBarcode: (barcode: string): Promise<ApiResponse<Roll>> =>
     apiClient
       .get<ApiResponse<Roll>>(`/api/rolls/barcode/${encodeURIComponent(barcode)}`)
+      .then((r) => r.data),
+  /**
+   * Topun TAM YASAM DONGUSU — olusturuldu, istasyon giris/cikislari, fason
+   * sevk/kabul, kesim soyagaci, depo. Detay panelindeki operations dizisinden
+   * FARKLIDIR: o dizi RollOperation tablosudur ve yalniz 5 istasyon olayi
+   * tasir; bu uc movement + operation + fason + dogum + soyagacini BIRLESTIRIR.
+   * Depo/ham stok/elle eklenen topta operations tanim geregi bostur, bu uc
+   * dolu doner — panelin yillardir bos gorunmesinin sebebi buydu.
+   */
+  getHistory: (id: string): Promise<ApiResponse<RollHistoryPayload | null>> =>
+    apiClient
+      .get<ApiResponse<RollHistoryPayload | null>>(`/api/rolls/${id}/history`)
       .then((r) => r.data),
   createInitialEntry: (payload: InitialEntryPayload): Promise<ApiResponse<Roll>> =>
     apiClient

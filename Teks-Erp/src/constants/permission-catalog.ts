@@ -55,6 +55,13 @@ export const PERMISSION_CATALOG = [
   { code: "roll:read", module: "PRODUCTION", category: "web", description: "Top (rulo) listesi/detay görüntüleme" },
   { code: "roll:write", module: "PRODUCTION", category: "web", description: "Top oluşturma/durum güncelleme" },
   { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
+  // 2026-08-05: topun TAM YAŞAM DÖNGÜSÜ zaman çizelgesi (kim ekledi, hangi
+  // istasyonda ne zaman durdu, fasona gitti/döndü, kesildi, depoya indi).
+  // `roll:read`ten AYRI bir izin olması ürün kararıdır: liste/detay herkesin
+  // günlük işi, izlenebilirlik geçmişi ise denetim verisidir ve operatör
+  // ekranını gereksiz yere derinleştirir. İzin YOKSA Electron o bölümü HİÇ
+  // ÇİZMEZ — boş bir kutu göstermek "veri yok" yalanı olurdu.
+  { code: "roll:history", module: "PRODUCTION", category: "web", description: "Top yaşam döngüsü (işlem geçmişi) zaman çizelgesi — izlenebilirlik" },
   { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü iş emrini fiziksel kurşun makinesine atama + son-adım tamamlama" },
   { code: "station:read", module: "PRODUCTION", category: "web", description: "Üretim istasyonu listesi/detay görüntüleme" },
   { code: "station:write", module: "PRODUCTION", category: "web", description: "Üretim istasyonu tanımlama/düzenleme" },
@@ -106,6 +113,10 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
   { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
   { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → iş emri başlat + iş emri yönetimi)" },
+  // Telefondan müşteri siparişi AÇMA (satış/planlama). `order:write`'ın mobil
+  // ikizi — ama YALNIZ sipariş yaratmayı açar: iptal/manuel-kapatma/düzenleme
+  // uçları hâlâ `order:write` ister (satış temsilcisine sipariş iptal ettirme).
+  { code: "mobile:siparis", module: "MOBILE", category: "mobile", description: "Mobil — Yeni Sipariş ekranı (müşteri siparişi aç)" },
   { code: "mobile:kursun-dagitim", module: "MOBILE", category: "mobile", description: "Mobil — Kurşun Dağıtım ekranı" },
   // Ekran değil, KK1 içi yetenek: yalnız seçili ham giriş operatörlerine verilir.
   { code: "mobile:kk1-desen", module: "MOBILE", category: "mobile", description: "KK1 ham girişte inline yeni desen (FABRIC kumaş) oluşturma" },

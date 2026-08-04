@@ -232,6 +232,37 @@ export const rollColumns: ColumnDef<Roll>[] = [
       ),
   },
   {
+    // BULUNDUĞU İSTASYON (2026-08-05 saha talebi: "Üretimde sekmesi hangi
+    // kumaşın hangi istasyonda olduğunu göstermiyor").
+    //
+    // Varsayılan GÖRÜNÜR — Kat kolonundan farklı olarak: "Üretimde" sekmesinde
+    // operatörün SORDUĞU İLK SORU budur, gizli kolon onu cevaplamaz. Depo/ham
+    // stok sekmelerinde alan null gelir ve "—" basar (top bir adımda değildir,
+    // bu doğru cevaptır).
+    //
+    // Sıralanabilir DEĞİL: backend ROLL_SORTABLE_FIELDS düz Roll kolonlarını
+    // sıralar, ilişki üzerinden sıralama desteklenmiyor. SortableHeader koymak
+    // "tıkla, hiçbir şey olmasın ve üstüne mevcut sıralamayı boz" demekti —
+    // aynı hata Kat kolonunda yapılmıştı (bkz. ROLL_SORTABLE_FIELDS notu).
+    id: "currentStation",
+    header: "İstasyon",
+    meta: { label: "İstasyon" },
+    cell: ({ row }) => {
+      const step = row.original.currentStep;
+      if (!step?.station) return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="min-w-0">
+          <div className="truncate text-xs font-medium">{step.station.name}</div>
+          {step.workOrder?.workOrderNumber && (
+            <div className="truncate font-mono text-[10px] text-muted-foreground">
+              {step.workOrder.workOrderNumber}
+            </div>
+          )}
+        </div>
+      );
+    },
+  },
+  {
     accessorKey: "qualityGrade",
     header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
     meta: { label: "Kalite" },

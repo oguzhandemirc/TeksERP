@@ -384,7 +384,12 @@ router.get("/:id", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL
  *       404:
  *         description: Top bulunamadı
  */
-router.get("/:id/history", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.getRollHistory);
+// 2026-08-05: "roll:history" eklendi — Electron top detayindaki yasam dongusu
+// bolumu bu izinle korunuyor (izin yoksa bolum HIC cizilmez). "roll:read" DE
+// kabul edilmeye devam ediyor: mobil Depo ekrani bu ucu bugunku izniyle
+// kullaniyor ve saha kullanicilarina yeni bir izin atatmak, atanmasi unutulacak
+// bir adim daha demekti (2026-08-01 kursun bypass vakasi).
+router.get("/:id/history", verifyToken, requireAnyPermission("roll:read", "roll:history", ...MOBILE_ROLL_READ), controller.getRollHistory);
 
 /**
  * @openapi

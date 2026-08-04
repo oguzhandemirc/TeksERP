@@ -16,6 +16,7 @@ import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/se
 import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import type { RollStatusTabKey } from "./service";
+import { stationService } from "@/pages/Stations/service";
 import type { Roll } from "./types";
 
 const FILTERS: FilterDef[] = [
@@ -74,6 +75,20 @@ const FILTERS: FilterDef[] = [
       { value: "TAMBUR_MANUAL", label: "Tambur (Manuel)" },
       { value: "MANUAL_ENTRY", label: "Manuel Giriş" },
     ],
+  },
+  // İSTASYON (2026-08-05): "şu makinede ne var" sorusu. Backend
+  // filter[currentStationId] ile karşılanıyor — o blok bu filtre için yazıldı;
+  // öncesinde yalnız istasyon TÜRÜ filtresi vardı (currentStepKind) ve o da
+  // kullanıcıya hiç açılmamıştı, yalnız sabit sekmelerde kullanılıyordu.
+  //
+  // Tür değil KİMLİK filtreleniyor: tür iki ayrı boyahaneyi tek seçenekte
+  // birleştirirdi, oysa operatör belirli bir makineyi soruyor.
+  {
+    kind: "lookup",
+    key: "currentStationId",
+    label: "İstasyon",
+    service: stationService,
+    queryKey: "stations",
   },
 ];
 
