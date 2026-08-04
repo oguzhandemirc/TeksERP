@@ -142,7 +142,7 @@ const updateSchema = z.strictObject({
       companyName: z.string().trim().max(120),
       addressLine: z.string().trim().max(200).default(""),
       phone: z.string().trim().max(60).default(""),
-      pageSize: z.enum(["A4", "A5"]).default("A4"),
+      pageSize: z.enum(["A4", "A5"]).default("A5"),
       margins: z
         .object({
           top: z.number().min(0).max(40),
@@ -193,6 +193,23 @@ const updateSchema = z.strictObject({
           quantity: DEF_SPEC_FIELD,
         }),
       orderTotal: specFieldObj.default({ show: true, size: "md", weight: "bold" }),
+      // Partiler tablosu — İÇERİK baskı anında canlı çözülür (kart iş emri
+      // açılışında donar, parti sonra doğar); burada yalnız GÖRÜNÜM kararı.
+      showBatches: z.boolean().default(true),
+      batchFields: z
+        .object({
+          batchNumber: specFieldSchema,
+          rollCount: specFieldSchema,
+          quantity: specFieldSchema,
+          dispatch: specFieldSchema,
+        })
+        .default({
+          batchNumber: DEF_SPEC_FIELD,
+          rollCount: DEF_SPEC_FIELD,
+          quantity: DEF_SPEC_FIELD,
+          dispatch: DEF_SPEC_FIELD,
+        }),
+      batchTotal: specFieldObj.default({ show: true, size: "md", weight: "bold" }),
       footerNote: z.string().trim().max(500).default(""),
     })
     .optional(),

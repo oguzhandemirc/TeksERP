@@ -17,8 +17,10 @@ import {
   type TravelerCardSpecField,
   type TravelerCardSpecFields,
   type TravelerCardOrderFields,
+  type TravelerCardBatchFields,
 } from "@/services/featureFlagService";
 import { FlagToggle } from "./SettingRow";
+import { TravelerCardTotalRow } from "./TravelerCardTotalRow";
 
 const SIZE_OPTS: { value: TravelerCardFieldSize; label: string }[] = [
   { value: "sm", label: "Küçük (sm)" },
@@ -79,6 +81,12 @@ const ORDER_FIELDS: { key: keyof TravelerCardOrderFields; label: string }[] = [
   { key: "item", label: "Kumaş" },
   { key: "color", label: "Renk" },
   { key: "quantity", label: "Miktar" },
+];
+const BATCH_FIELDS: { key: keyof TravelerCardBatchFields; label: string }[] = [
+  { key: "batchNumber", label: "Parti No" },
+  { key: "rollCount", label: "Top Adedi" },
+  { key: "quantity", label: "Metraj" },
+  { key: "dispatch", label: "Sevk (firma · irsaliye)" },
 ];
 const SPEC_COLUMN_OPTS = [1, 2, 3, 4];
 const clampMm = (v: string): number => Math.min(40, Math.max(0, Math.round(Number(v) || 0)));
@@ -176,6 +184,10 @@ export function TravelerCardConfigSection({
     ORDER_FIELDS.map((o) => o.key),
     rawCfg?.orderFields,
   ) as unknown as TravelerCardOrderFields;
+  const batchFields = coerceSpecFields(
+    BATCH_FIELDS.map((b) => b.key),
+    rawCfg?.batchFields,
+  ) as unknown as TravelerCardBatchFields;
   const current: TravelerCardConfig = {
     ...DEFAULT_TRAVELER_CARD_CONFIG,
     ...(rawCfg ?? {}),
@@ -183,6 +195,12 @@ export function TravelerCardConfigSection({
     orderFields,
     orderTotal: coerceSpecField(rawCfg?.orderTotal ?? DEFAULT_TRAVELER_CARD_CONFIG.orderTotal),
     specColumns: Math.min(4, Math.max(1, Math.round(rawCfg?.specColumns ?? 3) || 3)),
+    // Parti alanları backend'e SONRADAN eklendi → kayıtlı ayarda yok; coerce
+    // hepsini açık default'a çözer (rawCfg spread'i undefined yazamasın diye
+    // spread'DEN SONRA gelir).
+    batchFields,
+    showBatches: rawCfg?.showBatches !== false,
+    batchTotal: coerceSpecField(rawCfg?.batchTotal ?? DEFAULT_TRAVELER_CARD_CONFIG.batchTotal),
   };
 
   const [draft, setDraft] = useState<TravelerCardConfig>(current);
@@ -198,6 +216,13 @@ export function TravelerCardConfigSection({
     }));
   const updateTotal = (patch: Partial<TravelerCardSpecField>) =>
     setDraft((d) => ({ ...d, orderTotal: { ...d.orderTotal, ...patch } }));
+  const updateBatch = (key: keyof TravelerCardBatchFields, patch: Partial<TravelerCardSpecField>) =>
+    setDraft((d) => ({
+      ...d,
+      batchFields: { ...d.batchFields, [key]: { ...d.batchFields[key], ...patch } },
+    }));
+  const updateBatchTotal = (patch: Partial<TravelerCardSpecField>) =>
+    setDraft((d) => ({ ...d, batchTotal: { ...d.batchTotal, ...patch } }));
   const currentKey = JSON.stringify(current);
   useEffect(() => {
     setDraft(current);
@@ -463,43 +488,42 @@ export function TravelerCardConfigSection({
               onChange={updateOrder}
             />
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <label className="flex cursor-pointer select-none items-center gap-2 text-sm">
-              <Checkbox
-                checked={draft.orderTotal.show}
-                disabled={mut.isPending}
-                onCheckedChange={(v) => updateTotal({ show: v === true })}
-              />
-              Alt toplam satırı (miktar toplamı)
-            </label>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              Boyut
-              <select
-                value={draft.orderTotal.size}
-                disabled={mut.isPending || !draft.orderTotal.show}
-                onChange={(e) => updateTotal({ size: e.target.value as TravelerCardFieldSize })}
-                className={SELECT_CLS}
-              >
-                {SIZE_OPTS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              Kalınlık
-              <select
-                value={draft.orderTotal.weight}
-                disabled={mut.isPending || !draft.orderTotal.show}
-                onChange={(e) => updateTotal({ weight: e.target.value as TravelerCardFontWeight })}
-                className={SELECT_CLS}
-              >
-                {WEIGHT_OPTS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <TravelerCardTotalRow
+            label="Alt toplam satırı (miktar toplamı)"
+            value={draft.orderTotal}
+            disabled={mut.isPending}
+            onChange={updateTotal}
+          />
+        </div>
+
+        <div>
+          <div className="text-sm font-medium">Partiler — Sütunlar</div>
+          <p className="text-xs text-muted-foreground">
+            Partiler her baskıda <strong>güncel</strong> okunur (kart iş emri açılışında
+            donar, parti sonra doğar). İş emrinin partisi yoksa blok hiç basılmaz.
+          </p>
+          <div className="mt-2">
+            <FlagToggle
+              title="Partiler tablosu"
+              desc="Parti no + top adedi + metraj + açık fason sevki."
+              checked={draft.showBatches}
+              disabled={mut.isPending}
+              onChange={(v) => setDraft((d) => ({ ...d, showBatches: v }))}
+            />
+          </div>
+          <div className={cn("mt-2", !draft.showBatches && "pointer-events-none opacity-50")}>
+            <FieldTable
+              rows={BATCH_FIELDS}
+              values={draft.batchFields}
+              disabled={mut.isPending || !draft.showBatches}
+              onChange={updateBatch}
+            />
+            <TravelerCardTotalRow
+              label="Alt toplam satırı (top + metraj toplamı)"
+              value={draft.batchTotal}
+              disabled={mut.isPending || !draft.showBatches}
+              onChange={updateBatchTotal}
+            />
           </div>
         </div>
 

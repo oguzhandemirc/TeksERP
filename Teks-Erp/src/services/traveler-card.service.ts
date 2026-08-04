@@ -23,12 +23,20 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { isDailyCode } from "../utils/code-format";
-import { readTravelerCardConfig, type TravelerCardConfig } from "./system-setting.service";
+// NOT: `readTravelerCardConfig` artık BURADAN çağrılmıyor — kart config'i
+// şablon çözümünden gelir (`travelerTemplateService.resolveForPrint`, şablon
+// yoksa o zaten sistem ayarına düşer). Tip hâlâ gerekli.
+import { type TravelerCardConfig } from "./system-setting.service";
 import bwipjs from "bwip-js";
 import {
-  renderTravelerCardHtml,
+  renderTravelerCard,
   type TravelerCardSnapshot,
+  type TravelerBatchLine,
 } from "./document-render/traveler-card.html";
+import { travelerTemplateService } from "./traveler-template.service";
+import type { TravelerPageSize } from "./document-render/traveler-card.density";
+// Ölü top kümesi TEK KAYNAK — parti sayımında elle statü listesi kopyalama (K18).
+import { K18_DEAD_STATUSES } from "./batch.service";
 import { parseQueryParams, buildPagination, resolveSortBy, buildTurkishSearch } from "../utils/query-parser";
 import {
   Prisma,
@@ -91,6 +99,17 @@ const SAMPLE_TRAVELER_SNAPSHOT: Omit<TravelerCardSnapshot, "config"> = {
     },
   ],
 };
+
+/** Önizleme partileri — gerçek veri DEĞİL (canlı kartta resolveLiveBatches çözer). */
+const SAMPLE_TRAVELER_BATCHES: TravelerBatchLine[] = [
+  {
+    batchNumber: "P1207260001",
+    rollCount: 4,
+    quantity: 1240,
+    dispatch: { dispatchNo: "FS1207260001", subcontractorName: "Yıldız Boyahane", moreCount: 0 },
+  },
+  { batchNumber: "P1207260002", rollCount: 2, quantity: 610, dispatch: null },
+];
 
 export class TravelerCardService {
   /**
@@ -543,10 +562,87 @@ export class TravelerCardService {
   }
 
   /**
+   * İş emrinin PARTİLERİNİ baskı anında CANLI çözer (kart snapshot'ında DEĞİL).
+   *
+   * Neden canlı: kart WO AÇILIŞINDA donar, parti `attachRolls`'ta doğar — Hızlı
+   * İş Emri'nde sıra create → attach → dispatch. Snapshot'a yazılsaydı parti
+   * kartta HER ZAMAN boş çıkardı (özelliğin en çok istendiği akışta tam olarak
+   * işe yaramazdı). Parti ayrıca bölünüp birleşebilir; kart malla gezen
+   * operasyon kâğıdıdır, donmuş muhasebe belgesi değil.
+   *
+   * Üç kural:
+   *   • `mergedIntoId != null` partiler ATLANIR — başkasının altına birleşmiş
+   *     parti tarihçedir, sahada o numarayla bir mal yoktur (K15).
+   *   • Top sayımı/metrajı K18 ölü statülerini (tüketilmiş/iptal) DIŞLAR.
+   *   • Sevk yalnız iptal EDİLMEMİŞ olanlardan; en yenisi basılır, ondan
+   *     öncekiler `(+N)` ile sayılır (çok fason adımlı rotada parti birden çok
+   *     kez dışarı çıkabilir).
+   */
+  private async resolveLiveBatches(workOrderId: string): Promise<TravelerBatchLine[]> {
+    const batches = await prisma.batch.findMany({
+      where: { workOrderId, mergedIntoId: null },
+      orderBy: { batchNumber: "asc" },
+      select: { id: true, batchNumber: true },
+    });
+    if (batches.length === 0) return [];
+    const ids = batches.map((b) => b.id);
+
+    const rollAgg = await prisma.roll.groupBy({
+      by: ["batchId"],
+      where: { batchId: { in: ids }, status: { notIn: K18_DEAD_STATUSES } },
+      _count: { _all: true },
+      _sum: { currentQty: true },
+    });
+    const aggByBatch = new Map(
+      rollAgg.map((r) => [
+        r.batchId,
+        { count: r._count._all, qty: r._sum.currentQty == null ? null : Number(r._sum.currentQty) },
+      ]),
+    );
+
+    // En yeni önce → ilk görülen partinin "canlı" sevki, sonrakiler sayılır.
+    const dispatches = await prisma.subcontractorDispatch.findMany({
+      where: { batchId: { in: ids }, cancelledAt: null },
+      orderBy: { dispatchedAt: "desc" },
+      select: { batchId: true, dispatchNo: true, subcontractor: { select: { name: true } } },
+    });
+    const dispByBatch = new Map<string, TravelerBatchLine["dispatch"]>();
+    for (const d of dispatches) {
+      const seen = dispByBatch.get(d.batchId);
+      if (seen) {
+        seen.moreCount += 1;
+        continue;
+      }
+      dispByBatch.set(d.batchId, {
+        dispatchNo: d.dispatchNo,
+        subcontractorName: d.subcontractor?.name ?? "—",
+        moreCount: 0,
+      });
+    }
+
+    return batches.map((b) => {
+      const agg = aggByBatch.get(b.id);
+      return {
+        batchNumber: b.batchNumber,
+        rollCount: agg?.count ?? 0,
+        quantity: agg?.qty ?? null,
+        dispatch: dispByBatch.get(b.id) ?? null,
+      };
+    });
+  }
+
+  /**
    * Refakat kartının resmi HTML çıktısı — TEK KAYNAK (Electron + mobil aynı HTML).
    * İçerik kartın DONMUŞ snapshot'ından; yoksa WO'dan canlı kurulur. QR = barkod (İE).
+   * Partiler snapshot'ta değil, canlı çözülür (bkz. resolveLiveBatches).
+   *
+   * `opts.pageSize` = TEK SEFERLİK sayfa boyutu ezmesi (baskı diyaloğundan). Kalıcı
+   * ayarı da donmuş snapshot'ı da EZER ama HİÇBİR YERE YAZILMAZ ve yeni kart
+   * versiyonu doğurmaz — belge kolonu `?rowNotes=1` bayrağıyla aynı sözleşme.
+   * Meşru sayılmasının sebebi: sayfa boyutu SUNUM kararıdır, belgenin İÇERİĞİ
+   * değil — kart hangi kâğıda basılırsa basılsın aynı şeyi söyler.
    */
-  async getCardHtml(cardId: string): Promise<string> {
+  async getCardHtml(cardId: string, opts?: { pageSize?: TravelerPageSize }): Promise<string> {
     const card = await prisma.travelerCard.findUnique({
       where: { id: cardId },
       select: {
@@ -562,9 +658,14 @@ export class TravelerCardService {
     });
     if (!card) throw new AppError("Refakat kartı bulunamadı", 404);
 
-    const snapshot =
+    const frozen =
       (card.snapshot as unknown as TravelerCardSnapshot | null) ??
       ((await this.buildSnapshot(prisma, card.workOrderId)) as unknown as TravelerCardSnapshot);
+    // Tek seferlik ezme yalnız BU render'ın kopyasına uygulanır — `card.snapshot`
+    // satırına dokunulmaz (donmuş belge korunur).
+    const snapshot: TravelerCardSnapshot = opts?.pageSize
+      ? { ...frozen, config: { ...(frozen.config ?? {}), pageSize: opts.pageSize } as TravelerCardConfig }
+      : frozen;
 
     let qrSvg: string | null = null;
     try {
@@ -573,7 +674,7 @@ export class TravelerCardService {
       qrSvg = null;
     }
 
-    return renderTravelerCardHtml(snapshot, {
+    return renderTravelerCard(snapshot, {
       cardNumber: card.cardNumber,
       barcode: card.barcode,
       version: card.version,
@@ -581,27 +682,36 @@ export class TravelerCardService {
       status: card.status,
       voidReason: card.voidReason,
       qrSvg,
+      batches: await this.resolveLiveBatches(card.workOrderId),
     });
   }
 
   /**
    * ÖRNEK HTML — "Refakat Kartı Ayarları" panelindeki canlı önizleme.
+   * Örnek partiler bilerek KARIŞIK: biri fasona çıkmış, biri içeride — ayarı
+   * yapan kişi "Sevk" sütununun dolu ve boş hâlini aynı anda görsün.
    */
-  async renderSampleHtml(config: TravelerCardConfig): Promise<string> {
-    const snapshot: TravelerCardSnapshot = { ...SAMPLE_TRAVELER_SNAPSHOT, config };
+  async renderSampleHtml(
+    config: TravelerCardConfig,
+    /** Stüdyo taslağı — KAYDEDİLMEDEN önizlenir (uzman modunda ham HTML dahil).
+     *  Verilmezse yerleşik kart. Önizleme = gerçek baskı yolu (aynı dağıtıcı). */
+    template?: TravelerCardSnapshot["template"],
+  ): Promise<string> {
+    const snapshot: TravelerCardSnapshot = { ...SAMPLE_TRAVELER_SNAPSHOT, config, template };
     let qrSvg: string | null = null;
     try {
       qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: SAMPLE_TRAVELER_BARCODE, scale: 3, backgroundcolor: "FFFFFF" });
     } catch {
       qrSvg = null;
     }
-    return renderTravelerCardHtml(snapshot, {
+    return renderTravelerCard(snapshot, {
       cardNumber: SAMPLE_TRAVELER_BARCODE,
       barcode: SAMPLE_TRAVELER_BARCODE,
       version: 1,
       printedAt: "2026-06-07T10:30:00.000Z",
       qrSvg,
       draft: true,
+      batches: SAMPLE_TRAVELER_BATCHES,
     });
   }
 
@@ -659,10 +769,18 @@ export class TravelerCardService {
       },
     });
     if (!wo) return {};
-    const config = await readTravelerCardConfig(client);
+    // ŞABLON BURADA DONAR (Faz 2). Kart basıldıktan sonra şablon düzenlense de
+    // bu kart aynı çıkar; `reprint` snapshot'ı tazelediği için YENİ şablonu alır
+    // — yani "şablonu değiştirdim, sahadaki kartlar niye değişmedi?" sorusunun
+    // cevabı tasarım gereği "yeniden bas"tır.
+    // `config` artık sistem ayarından DEĞİL şablondan gelir; şablon yoksa
+    // resolveForPrint zaten sistem ayarına düşer → şablonsuz kurulumda davranış
+    // Faz 2 öncesiyle birebir aynı.
+    const { template, config } = await travelerTemplateService.resolveForPrint(null, client);
     const num = (d: Prisma.Decimal | null) => (d == null ? null : Number(d));
     return {
       config,
+      template,
       workOrderNumber: wo.workOrderNumber, // İş Emri no (İE…) — kartta iri kimlik
       type: wo.type,
       width: num(wo.width),

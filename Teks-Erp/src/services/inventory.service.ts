@@ -12,7 +12,10 @@ import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
-import { readKk1WeightEntryEnabled } from "./system-setting.service";
+import {
+  readKk1WeightEntryEnabled,
+  readKk1DuplicateGuardEnabled,
+} from "./system-setting.service";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -23,6 +26,14 @@ import {
   resolveSortBy,
   buildTurkishSearch,
 } from "../utils/query-parser";
+
+/**
+ * Mükerrer ham giriş tuzağının penceresi. 90 sn: bir operatörün "kaydolmadı"
+ * sanıp tekrar basma refleksi saniyeler içindedir; gerçek iki ayrı topun
+ * ölçülüp girilmesi ise pratikte daha uzun sürer. Pencereyi büyütmek yanlış
+ * pozitifi (meşru arka arkaya aynı top) artırır.
+ */
+const DUPLICATE_ENTRY_WINDOW_MS = 90_000;
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
 
@@ -501,6 +512,19 @@ export class InventoryService {
        * (`helpers/label-intent.helper`) — burada DB okuması yok.
        */
       labelIntentSnapshot?: Prisma.InputJsonValue;
+      /**
+       * MÜKERRER TOP TUZAĞI — **yalnız HTTP yolu geçer** (controller doldurur).
+       *
+       * F221 deseni: alan verilmezse enforcement ATLANIR. Bu bilinçlidir —
+       * `createInitialEntry`'nin dahili çağıranları var (`tambur-manual.service`
+       * ×2) ve onlar programatik olarak arka arkaya birebir aynı topu
+       * üretebilir (eşit parçaya bölme); koşulsuz bir tuzak o akışları kırardı.
+       *
+       * `confirmed: true` = operatör "evet, bu gerçekten ayrı bir top" dedi →
+       * kontrol atlanır. Tuzak ayrıca `kk1.duplicateGuardEnabled` bayrağına
+       * bağlıdır (default KAPALI — bkz. system-setting.service).
+       */
+      duplicateGuard?: { confirmed: boolean };
     },
   ): Promise<ApiResponse<Roll>> {
     // KK1 istasyonunda ağırlık (kg) girişi admin ayarıyla kapatılabilir (default kapalı).
@@ -608,6 +632,60 @@ export class InventoryService {
     // kaldırır. Mükerrer-top koruması clientToken (@unique) ile — barkod DEDUP
     // ANCHOR'I DEĞİL (aşağıdaki catch).
     const rollType: RollBarcodeType = finalBarcodeType(initialStatus);
+
+    // ── MÜKERRER TOP TUZAĞI (2026-08-03 saha vakası) ────────────────────────
+    // `clientToken` istemcinin DÜRÜST olmasına bağlıdır: token'ı her basışta
+    // yenileyen bir istemci (ki tam bu yüzden N kopya doğdu) korumayı boşa
+    // düşürür. Bu kontrol istemciye GÜVENMEZ — farklı cihaz, uygulama yeniden
+    // kurulumu, hatta doğrudan API çağrısı da yakalanır.
+    //
+    // ENGELLEME DEĞİL ONAYLATMA: tekstilde arka arkaya birebir aynı top
+    // gerçekten gelir (aynı partiden eşit metrajlı toplar). Bu yüzden 409 +
+    // açık `confirmDuplicate` ile geçilir; sessizce reddedilmez.
+    //
+    // Maliyet: `@@index([entrySource, createdAt])` üstünden 90 sn'lik pencere —
+    // yeni index gerekmez. Bayrak kapalıyken sorgu HİÇ koşmaz.
+    if (opts?.duplicateGuard && !opts.duplicateGuard.confirmed) {
+      if (await readKk1DuplicateGuardEnabled()) {
+        const since = new Date(Date.now() - DUPLICATE_ENTRY_WINDOW_MS);
+        const twin = await prisma.roll.findFirst({
+          where: {
+            entrySource,
+            createdAt: { gte: since },
+            itemId: data.itemId,
+            colorId: data.colorId ?? null,
+            initialQty: new Prisma.Decimal(data.initialQty),
+            width: data.width ?? null,
+            // Aynı ELDEN çıkmış olmalı — iki operatörün aynı anda benzer top
+            // girmesi meşrudur ve uyarılmamalıdır.
+            createdById: userId ?? null,
+            createdMachineId: machineId ?? null,
+            // İptal/fire edilmiş top yeniden girilebilir — o bir kopya değil,
+            // düzeltmedir.
+            status: { notIn: [RollStatus.CANCELLED, RollStatus.SCRAP] },
+            // Aynı token zaten idempotent yoldan (P2002) dönecek; onu kopya sayma.
+            ...(data.clientToken ? { clientToken: { not: data.clientToken } } : {}),
+          },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, barcode: true, createdAt: true },
+        });
+        if (twin) {
+          throw AppError.conflict(
+            `Bu top az önce girilmiş olabilir (barkod ${twin.barcode}). Gerçekten ayrı bir topsa onaylayın.`,
+            {
+              code: "POSSIBLE_DUPLICATE",
+              barcode: twin.barcode,
+              existing: {
+                id: twin.id,
+                barcode: twin.barcode,
+                createdAt: twin.createdAt,
+              },
+              windowSeconds: DUPLICATE_ENTRY_WINDOW_MS / 1000,
+            },
+          );
+        }
+      }
+    }
 
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {

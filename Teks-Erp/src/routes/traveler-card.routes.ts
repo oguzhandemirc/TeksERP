@@ -222,12 +222,22 @@ travelerCardRouter.get(
  *     description: |
  *       Kartın donmuş snapshot'ından üretilen baskıya hazır HTML (text/html).
  *       Electron printHtmlString/iframe ve mobil expo-print aynı çıktıyı basar.
+ *       Partiler snapshot'ta değil, baskı anında CANLI çözülür (kart iş emri
+ *       açılışında donar, parti sonra doğar).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: pageSize
+ *         required: false
+ *         description: |
+ *           Tek seferlik sayfa boyutu ezmesi. Kalıcı ayarı ve kartın donmuş
+ *           config'ini EZER, hiçbir yere YAZILMAZ, yeni versiyon doğurmaz.
+ *           Geçersiz değer yok sayılır.
+ *         schema: { type: string, enum: [A4, A5] }
  *     responses:
  *       200: { description: HTML belge, content: { text/html: {} } }
  *       404: { description: Kart bulunamadı }

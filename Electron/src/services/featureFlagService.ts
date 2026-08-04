@@ -37,6 +37,17 @@ export interface TravelerCardSpecFields {
   startDate: TravelerCardSpecField;
   endDate: TravelerCardSpecField;
 }
+/**
+ * Partiler tablosu sütunları — her biri tek tek. İÇERİK baskı anında canlı
+ * çözülür (kart iş emri açılışında donar, parti sonra doğar); burada yalnız
+ * GÖRÜNÜM kararı yaşar. Backend aynası: `system-setting.service.ts`.
+ */
+export interface TravelerCardBatchFields {
+  batchNumber: TravelerCardSpecField;
+  rollCount: TravelerCardSpecField;
+  quantity: TravelerCardSpecField;
+  dispatch: TravelerCardSpecField;
+}
 /** Bağlı siparişler tablosu sütunları — her biri tek tek. */
 export interface TravelerCardOrderFields {
   orderNumber: TravelerCardSpecField;
@@ -74,6 +85,12 @@ export interface TravelerCardConfig {
   orderFields: TravelerCardOrderFields;
   /** Miktar toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
   orderTotal: TravelerCardSpecField;
+  /** Partiler tablosu basılsın mı (iş emrinin partisi yoksa zaten basılmaz). */
+  showBatches: boolean;
+  /** Partiler tablosu sütunları (Parti No/Top/Metraj/Sevk). */
+  batchFields: TravelerCardBatchFields;
+  /** Parti toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
+  batchTotal: TravelerCardSpecField;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -82,7 +99,8 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   companyName: "Adnan Şahin Tekstil",
   addressLine: "",
   phone: "",
-  pageSize: "A4",
+  // Backend `DEFAULT_TRAVELER_CARD_CONFIG` ile aynı olmalı — kart varsayılan A5.
+  pageSize: "A5",
   margins: { top: 8, right: 8, bottom: 8, left: 8 },
   fontScale: 1,
   fontWeight: "normal",
@@ -108,6 +126,14 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     quantity: { show: true, size: "md", weight: "normal" },
   },
   orderTotal: { show: true, size: "md", weight: "bold" },
+  showBatches: true,
+  batchFields: {
+    batchNumber: { show: true, size: "md", weight: "normal" },
+    rollCount: { show: true, size: "md", weight: "normal" },
+    quantity: { show: true, size: "md", weight: "normal" },
+    dispatch: { show: true, size: "md", weight: "normal" },
+  },
+  batchTotal: { show: true, size: "md", weight: "bold" },
   footerNote: "",
 };
 
@@ -140,6 +166,7 @@ export interface FeatureFlags {
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
   kk1WeightEntryEnabled: boolean;
+  kk1DuplicateGuardEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi — default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma 400). Yalnız demo/eğitim. */
   shippingSimulatedWeightEnabled: boolean;

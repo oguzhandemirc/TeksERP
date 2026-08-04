@@ -75,7 +75,16 @@ import {
 import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { STATION_MUT } from '../../../offline/mutations';
-import { generateClientUuid } from '../../../offline/barcode';
+import {
+  IDLE_ATTEMPT,
+  isAmbiguousFailure,
+  isRetrying,
+  onAttemptFailed,
+  onAttemptSucceeded,
+  onCollisionResolvedAsNew,
+  tokenForSubmit,
+  type EntryAttemptState,
+} from '../../../offline/entryAttempt';
 import { useIsOnline } from '../../../offline/hooks';
 import { usePermissions } from '../../../hooks/usePermission';
 import SyncStatusChip from '../../../components/SyncStatusChip';
@@ -336,6 +345,28 @@ export default function KK1Screen() {
   const sessionCount = sessionRolls.length + (sessionBucket?.pending ?? 0);
   // Kaydet sonrası kısa "✓ Kaydedildi" başarı flaşı (CTA).
   const [justSaved, setJustSaved] = useState(false);
+  // İDEMPOTENCY (2026-08-03 saha vakası): mantıksal kayıt denemesinin durumu.
+  // `idle` → basış yeni bir topu anlatır (taze token); `failed` → basış bilinen
+  // başarısız denemenin TEKRARIDIR (aynı token) ve CTA "Tekrar Dene"ye döner.
+  // Sözleşmenin tamamı + neden "yapışkan tek ref" olmadığı: offline/entryAttempt.ts
+  const [attempt, setAttempt] = useState<EntryAttemptState>(IDLE_ATTEMPT);
+  // Backend'in İKİ 409'u da aynı soruyu sorar: "aradığın top zaten var mı?"
+  //  • CLIENT_TOKEN_COLLISION → önceki deneme aslında COMMIT olmuştu
+  //  • POSSIBLE_DUPLICATE     → sunucu tuzağı "az önce birebir aynısı girildi" dedi
+  // İkisinde de karar operatörün: var olanın etiketini bas, ya da "bu ayrı bir
+  // top" deyip devam et. Tek modal, iki metin.
+  const [conflict, setConflict] = useState<{
+    kind: 'TOKEN_COLLISION' | 'POSSIBLE_DUPLICATE';
+    barcode: string | null;
+    vars: InitialEntryRequest;
+  } | null>(null);
+  /** Ortada tekrarlanmayı bekleyen düşmüş bir deneme var mı (CTA'yı değiştirir). */
+  const retrying = isRetrying(attempt);
+  // Düşen denemenin payload'ı — "Tekrar Dene" formu/makineyi YENİDEN OKUMAZ,
+  // bunu birebir gönderir. Otomatik modda yeniden okumak metrajı değiştirir
+  // (kumaş bu arada oynamış olabilir) → aynı token + farklı payload = gereksiz
+  // 409 çakışması. Aynı deneme = aynı bayt.
+  const failedVarsRef = useRef<InitialEntryRequest | null>(null);
   // Listede yeni beliren topu kısa süre vurgulamak için.
   const [flashRollId, setFlashRollId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -570,7 +601,8 @@ export default function KK1Screen() {
   // ── Mutation ──
   // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
   // app restart'ında resolve. Client-üretimi idempotency anahtarı (UUID clientToken)
-  // handleSubmit içinde üretilip vars'a gömülür — backend clientToken @unique + P2002
+  // `tokenForSubmit` ile ÇÖZÜLÜP vars'a gömülür (ARTIK her basışta yeniden
+  // ÜRETİLMEZ — 2026-08-03 saha vakası) — backend clientToken @unique + P2002
   // catch → cached Roll (mükerrer top yok). Barkod SUNUCU'da sıralı atanır.
   // onMutate'te form anında temizlenir. onError'da form geri yüklenir. Etiket basımı
   // onSuccess'te (res.data'nın gerçek barkoduyla) tetiklenir — offline'da paused
@@ -611,7 +643,15 @@ export default function KK1Screen() {
         prevManualWeight,
       };
     },
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
+      // Sunucu onayladı → yapışkanlık bırakılır, SIRADAKİ gerçek top taze token
+      // alır. `res.data` boş gelse bile bırakılır: başarı başarıdır, aksi hâlde
+      // operatör bir sonraki topu ölü bir token'la göndermeye devam ederdi.
+      if (vars.clientToken) {
+        const token = vars.clientToken;
+        setAttempt((s) => onAttemptSucceeded(s, token));
+      }
+      failedVarsRef.current = null;
       if (!res.data) return;
       // "Kaydet ve Etiket Bas" — başarılı kayıttan sonra otomatik etiket basımı.
       // Offline'da pause olduysa burası ancak online dönünce çalışır.
@@ -622,9 +662,11 @@ export default function KK1Screen() {
       useSessionEntriesStore.getState().confirmRoll('RAW_QC', res.data as Roll);
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
-    onError: (err, _vars, context) => {
+    onError: (err, vars, context) => {
       // Kayıt reddedildi → oturum sayacındaki pending geri alınır (sayaç şişmesin).
       useSessionEntriesStore.getState().failPending('RAW_QC');
+      // CTA "Kaydedildi ✓" flaşında takılı kalmasın — hata durumunu ezerdi.
+      setJustSaved(false);
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // "Ürün ... pasif/silinmiş" → ürün başka yerden soft-delete edilmiş.
       // Seçimi temizle ki operatör aynı silinmiş ürünle tekrar tekrar
@@ -645,12 +687,53 @@ export default function KK1Screen() {
         setManualWeight(context.prevManualWeight);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+      // Sunucunun iki 409'u da "aradığın top zaten var" der. Sessiz toast
+      // YETMEZ — operatörün görmesi gereken şey BARKOD ve bir karar. Modal.
+      const e = err as Error & {
+        status?: number;
+        details?: Record<string, unknown>;
+      };
+      const code = e.details?.code;
+      if (
+        e.status === 409 &&
+        (code === 'CLIENT_TOKEN_COLLISION' || code === 'POSSIBLE_DUPLICATE')
+      ) {
+        const barcode =
+          typeof e.details?.barcode === 'string' ? e.details.barcode : null;
+        setConflict({
+          kind: code === 'POSSIBLE_DUPLICATE' ? 'POSSIBLE_DUPLICATE' : 'TOKEN_COLLISION',
+          barcode,
+          vars,
+        });
+        // Var olan kayıt listeye düşsün ki operatör oradan da görebilsin.
+        qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
+        return; // toast YOK — modal konuşuyor
+      }
+
+      // YAPIŞKANLIK YALNIZ BELİRSİZ SONUÇTA. Ağ hatası / zaman aşımı / 5xx →
+      // sunucu COMMIT etmiş OLABİLİR, o yüzden sonraki basış aynı token'la
+      // gitmeli (kopya değil retry). Kesin 4xx'te (ürün pasif, doğrulama, izin)
+      // hiçbir şey yazılmadığı KESİNDİR — orada yapışmak, aynı payload'ı sonsuza
+      // dek yeniden gönderen bir "Tekrar Dene" döngüsü kurardı: operatör silinmiş
+      // ürünü değiştiremeden aynı hatayı alırdı.
+      const ambiguous = isAmbiguousFailure(e);
+      if (ambiguous && vars.clientToken) {
+        const token = vars.clientToken;
+        setAttempt((s) => onAttemptFailed(s, token));
+        failedVarsRef.current = vars; // retry BUNU birebir gönderir
+      } else {
+        setAttempt(IDLE_ATTEMPT);
+        failedVarsRef.current = null;
+      }
       Toast.show({
         type: 'error',
         text1: itemDeleted ? 'Ürün silinmiş' : 'Kayıt başarısız',
         text2: itemDeleted
           ? 'Seçili ürün artık aktif değil — lütfen yeniden seçin'
-          : err.message,
+          : ambiguous
+            ? `${err.message} — "Tekrar Dene" ile AYNI kayıt yeniden gönderilir.`
+            : err.message,
       });
     },
   });
@@ -825,6 +908,13 @@ export default function KK1Screen() {
 
   const handleSubmit = async () => {
     if (pulling) return; // makineden okuma sürerken çift tetikleme yok
+    // TEKRAR DENE: düşen deneme birebir yeniden gönderilir — form okunmaz,
+    // makineye gidilmez, doğrulama tekrarlanmaz (payload zaten geçerliydi).
+    // Aynı token + aynı içerik → backend idempotent yolu → kopya doğmaz.
+    if (retrying && failedVarsRef.current) {
+      createMutation.mutate(failedVarsRef.current);
+      return;
+    }
     if (!form.itemId) {
       Toast.show({ type: 'error', text1: 'Ürün seçimi zorunlu' });
       return;
@@ -868,11 +958,14 @@ export default function KK1Screen() {
       }
     }
 
-    // Offline-aware idempotency: clientToken burada üretilir. Mutate paused olursa
-    // persist edilen vars sabit kalır → retry'da aynı token gönderilir → backend
-    // clientToken @unique P2002 yakalayıp cached Roll döner (idempotent). Barkod
-    // artık SUNUCU'da sıralı atanır (TEKS+YYMMDD+H/F+A001..); etiket res.data ile basılır.
-    const clientToken = generateClientUuid();
+    // Offline-aware idempotency: clientToken ÜRETİLMEZ, ÇÖZÜLÜR (2026-08-03 saha
+    // vakası — eskiden her basış yeni token üretiyordu ve koruma hiç devreye
+    // girmiyordu). Ortada düşmüş bir deneme varsa AYNI token gider → backend
+    // clientToken @unique P2002 yakalayıp cached Roll döner (mükerrer top yok);
+    // yoksa taze token → yeni top. Mutate paused olursa persist edilen vars sabit
+    // kalır → resume'da da aynı token. Barkod SUNUCU'da sıralı atanır
+    // (TEKS+YYMMDD+H/F+A001..); etiket res.data ile basılır.
+    const clientToken = tokenForSubmit(attempt);
     createMutation.mutate({
       itemId: form.itemId,
       initialQty: qty,
@@ -881,6 +974,61 @@ export default function KK1Screen() {
       qualityGrade: form.qualityGrade || undefined,
       clientToken,
     });
+  };
+
+  // ── 409 çakışma çözümü (iki kod da buraya düşer) ───────────────────────────
+  // Modal DİSMISS EDİLEMEZ (iki net çıkış): ya var olan topun etiketi basılır
+  // (operatörün asıl derdi genelde budur), ya da "bu ayrı bir top" denip kayıt
+  // sürdürülür. Sessiz kapanış bilinçli olarak yok — belirsiz çıkış ya sonsuz
+  // 409 döngüsü ya da farkında olunmayan kopya üretirdi.
+  const [conflictPrinting, setConflictPrinting] = useState(false);
+
+  const clearConflict = () => {
+    setAttempt(onCollisionResolvedAsNew());
+    failedVarsRef.current = null;
+    setConflict(null);
+  };
+
+  const printConflictingRoll = async () => {
+    const barcode = conflict?.barcode;
+    if (!barcode) {
+      clearConflict();
+      return;
+    }
+    setConflictPrinting(true);
+    try {
+      const res = await rollService.getByBarcode(barcode);
+      if (!res.data) throw new Error('Top bulunamadı');
+      enqueuePrint(res.data);
+      clearConflict();
+    } catch {
+      // Etiket çekilemedi → modal AÇIK kalır; operatör diğer yolu seçebilir.
+      Toast.show({
+        type: 'error',
+        text1: 'Etiket alınamadı',
+        text2: `${barcode} — "Son Kayıtlar" listesinden de basabilirsiniz`,
+      });
+    } finally {
+      setConflictPrinting(false);
+    }
+  };
+
+  /** "Bu ayrı bir top" — kaydı sürdür. İki kodun çözümü FARKLI:
+   *   • TOKEN_COLLISION  → önceki kayıt var; kimlik tükenmiş → TAZE token
+   *   • POSSIBLE_DUPLICATE → hiçbir şey yazılmadı; kimlik hâlâ geçerli →
+   *     AYNI token + `confirmDuplicate` (tuzağı açık onayla geç) */
+  const saveConflictAsNew = () => {
+    if (!conflict) return;
+    const { kind, vars } = conflict;
+    setConflict(null);
+    const next = onCollisionResolvedAsNew();
+    setAttempt(next);
+    failedVarsRef.current = null;
+    createMutation.mutate(
+      kind === 'POSSIBLE_DUPLICATE'
+        ? { ...vars, confirmDuplicate: true }
+        : { ...vars, clientToken: tokenForSubmit(next) },
+    );
   };
 
   const handlePrintLabel = (roll: Roll) => {
@@ -1282,7 +1430,11 @@ export default function KK1Screen() {
             kalmadan her zaman en altta görünür.
             OFFLINE-AWARE: mutation'a disabled binding YOK — paused mutation
             isPending kalsa da sıradaki kayıt engellenmesin. Yalnız `pulling`
-            (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz. */}
+            (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz.
+            RETRY DURUMU (2026-08-03): son deneme düştüyse CTA "Tekrar Dene"ye
+            döner ve AYNI token'ı gönderir. Operatörün refleksi zaten "aynı büyük
+            tuşa basmak" — o refleks artık kopya değil retry üretir. Ayrı bir
+            "tekrar" butonu KOYULMADI: kimse onu aramaz, herkes büyük tuşa basar. */}
         <Animated.View
           style={[
             styles.submitFooter,
@@ -1293,11 +1445,21 @@ export default function KK1Screen() {
         >
           <Button
             mode="contained"
-            icon={pulling ? undefined : justSaved ? 'check-bold' : 'package-check'}
+            icon={
+              pulling
+                ? undefined
+                : justSaved
+                  ? 'check-bold'
+                  : retrying
+                    ? 'refresh'
+                    : 'package-check'
+            }
             onPress={handleSubmit}
             loading={pulling}
             disabled={pulling}
-            buttonColor={justSaved ? colors.success : undefined}
+            buttonColor={
+              justSaved ? colors.success : retrying ? colors.warningDark : undefined
+            }
             style={styles.submitBtn}
             contentStyle={[styles.submitBtnContent, !compact && styles.submitBtnContentTablet]}
             labelStyle={[styles.submitBtnLabel, !compact && styles.submitBtnLabelTablet]}
@@ -1306,7 +1468,9 @@ export default function KK1Screen() {
               ? 'Makineden okunuyor…'
               : justSaved
                 ? 'Kaydedildi ✓'
-                : 'Kaydet ve Etiket Bas'}
+                : retrying
+                  ? 'Tekrar Dene (aynı top)'
+                  : 'Kaydet ve Etiket Bas'}
           </Button>
         </Animated.View>
         </View>
@@ -1504,6 +1668,15 @@ export default function KK1Screen() {
         loading={scrapMutation.isPending}
         onDismiss={() => setScrapTarget(null)}
         onConfirm={confirmScrap}
+      />
+
+      <EntryConflictModal
+        kind={conflict?.kind ?? 'TOKEN_COLLISION'}
+        barcode={conflict?.barcode ?? null}
+        visible={!!conflict}
+        printing={conflictPrinting}
+        onPrintExisting={printConflictingRoll}
+        onSaveAsNew={saveConflictAsNew}
       />
 
     </ScreenChrome>
@@ -2048,6 +2221,97 @@ const qmStyles = StyleSheet.create({
 
 // ── Scrap onay modal'ı ──
 // Native Alert telefon yönüyle birlikte dönmüyordu (yan kalıyordu); kendi modal'ımız.
+// =============================================================================
+// EntryConflictModal — backend'in İKİ 409'unun ortak yüzü
+// =============================================================================
+// Her ikisi de aynı soruyu sorar: "aradığın top zaten var mı?"
+//   • CLIENT_TOKEN_COLLISION — düştü sandığımız önceki deneme COMMIT olmuştu.
+//     Kayıt VAR. Operatörün derdi genelde etikettir.
+//   • POSSIBLE_DUPLICATE — sunucu tuzağı "az önce birebir aynısı girildi" dedi.
+//     Bu kayıt YAZILMADI; onaylanırsa yazılır (engelleme değil onaylatma —
+//     aynı partiden eşit metrajlı toplar arka arkaya meşru olarak girilir).
+//
+// Operatörün ekranda görmesi gereken şey hata metni değil, ARADIĞI TOPUN BARKODU.
+//
+// Kapatılamaz (dismissable={false}): iki çıkış da veri açısından güvenli ve
+// açıktır. Belirsiz bir "kapat" ya sonsuz 409 döngüsü (aynı istek tekrar gider)
+// ya da operatörün farkında olmadığı bir kopya üretirdi.
+//
+// Görsel dil `scrapStyles` ile paylaşılır — stil adları jeneriktir (sheet/title/
+// infoBox/actions) ve ikinci bir kopya blok bakımı zorlaştırırdı.
+// =============================================================================
+interface EntryConflictModalProps {
+  kind: 'TOKEN_COLLISION' | 'POSSIBLE_DUPLICATE';
+  barcode: string | null;
+  visible: boolean;
+  printing: boolean;
+  onPrintExisting: () => void;
+  onSaveAsNew: () => void;
+}
+
+function EntryConflictModal({
+  kind,
+  barcode,
+  visible,
+  printing,
+  onPrintExisting,
+  onSaveAsNew,
+}: EntryConflictModalProps) {
+  const { width: winW } = useWindowDimensions();
+  const sheetWidth = Math.min(winW * 0.9, 460);
+  const suspected = kind === 'POSSIBLE_DUPLICATE';
+
+  return (
+    <AppModal visible={visible} onDismiss={() => {}} dismissable={false}>
+      <View style={[scrapStyles.sheet, { width: sheetWidth }]}>
+        <View style={[scrapStyles.iconCircle, { backgroundColor: '#fffbeb' }]}>
+          <Icon source="content-duplicate" size={36} color={colors.warningDark} />
+        </View>
+        <Text variant="titleLarge" style={scrapStyles.title}>
+          {suspected ? 'Bu top az önce girilmiş olabilir' : 'Bu top zaten kaydedilmiş'}
+        </Text>
+
+        <View style={scrapStyles.infoBox}>
+          <View style={scrapStyles.infoRow}>
+            <Text style={scrapStyles.infoLabel}>Barkod</Text>
+            <Text style={scrapStyles.infoValue}>{barcode ?? '—'}</Text>
+          </View>
+        </View>
+
+        <Text style={scrapStyles.hint}>
+          {suspected
+            ? 'Aynı kumaş, metraj ve en kısa süre önce kaydedilmiş. Gerçekten ayrı bir topsa onaylayın.'
+            : 'Az önce gönderilemedi sanılan kayıt sunucuya ulaşmış. Yeni bir top oluşturulmadı — mükerrer kayıt önlendi.'}
+        </Text>
+
+        <View style={scrapStyles.actions}>
+          <Button
+            mode="contained"
+            icon="printer"
+            onPress={onPrintExisting}
+            loading={printing}
+            disabled={printing}
+            style={scrapStyles.actionBtn}
+            contentStyle={scrapStyles.actionBtnContent}
+          >
+            Etiketi Bas
+          </Button>
+          <Button
+            mode="outlined"
+            icon="plus"
+            onPress={onSaveAsNew}
+            disabled={printing}
+            style={scrapStyles.actionBtn}
+            contentStyle={scrapStyles.actionBtnContent}
+          >
+            {suspected ? 'Evet, Ayrı Bir Top' : 'Bu Farklı Bir Top'}
+          </Button>
+        </View>
+      </View>
+    </AppModal>
+  );
+}
+
 interface ScrapConfirmModalProps {
   roll: Roll | null;
   /** Backend iptal önizlemesi (null = henüz gelmedi). */

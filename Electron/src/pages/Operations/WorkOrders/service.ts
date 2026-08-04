@@ -77,21 +77,28 @@ export const workOrderService = {
 
   /** Refakat kartının baskı-hazır HTML'i (TEK KAYNAK) — backend render eder; mobil
    *  + Electron birebir aynısını basar. QR sunucuda gömülü, text/html döner. */
-  getTravelerCardHtml: (cardId: string) =>
+  /** `pageSize` verilirse SADECE BU BASKI için sayfa boyutunu ezer — kalıcı ayara
+   *  ve kartın donmuş snapshot'ına yazılmaz (backend sözleşmesi). */
+  getTravelerCardHtml: (cardId: string, pageSize?: "A4" | "A5") =>
     apiClient
       .get<string>(`/api/traveler-cards/${cardId}/html`, {
         responseType: "text",
         headers: { Accept: "text/html" },
+        params: pageSize ? { pageSize } : undefined,
       })
       .then((r) => r.data),
 
   /** Refakat Kartı Ayarları canlı önizlemesi — örnek veri + DÜZENLENEN taslak config
    *  ile gerçek backend HTML (TASLAK filigranlı). Önizleme = gerçek baskı (tek kaynak). */
-  getTravelerCardSampleHtml: (config: TravelerCardConfig) =>
+  getTravelerCardSampleHtml: (
+    config: TravelerCardConfig,
+    /** Stüdyo taslağı — kaydedilmeden önizlenir. Yoksa yerleşik kart. */
+    template?: { mode: "BUILTIN" | "SECTIONS" | "RAW_HTML"; html?: string | null; name?: string },
+  ) =>
     apiClient
       .post<string>(
         "/api/traveler-cards/sample-html",
-        { config },
+        { config, template },
         { responseType: "text", headers: { Accept: "text/html" } },
       )
       .then((r) => r.data),

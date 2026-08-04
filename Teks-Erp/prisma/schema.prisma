@@ -3419,3 +3419,48 @@ model EndpointLatencyDaily {
   @@unique([day, routeKey])
   @@map("endpoint_latency_daily")
 }
+
+/// Refakat kartı ŞABLONU — üç kademeli kişiselleştirme (2026-08-03).
+///
+///   BUILTIN  : yerleşik yerleşim. Kart bugünkü gibi basılır; `config` yalnız
+///              marka/görünürlük ayarını taşır (SystemSetting ile aynı şekil).
+///   SECTIONS : Şablon Stüdyosu — bölümlerin SIRASI ve açık/kapalısı değişir
+///              (`config.sections`). Yerleşik CSS ve blok üreticileri kullanılır.
+///   RAW_HTML : uzman modu — `html` alanındaki tam HTML basılır, {{alan}} ve
+///              {{#liste}}…{{/liste}} ile veri gömülür. Yerleşik CSS YÜKLENMEZ.
+///
+/// Şablon karta BASIM ANINDA DONAR (`TravelerCard.snapshot.template`): şablon
+/// sonradan düzenlense de basılmış kart aynı çıkar; `reprint` yeni şablonu alır.
+/// Bu yüzden şablon satırını silmek geçmiş kartları etkilemez (soft delete).
+model TravelerCardTemplate {
+  id       String               @id @default(uuid()) @db.Uuid
+  name     String               @db.VarChar(80)
+  mode     TravelerTemplateMode @default(SECTIONS)
+  /// Baskıda açıkça şablon seçilmediğinde kullanılan şablon. DB'de ŞEMA-DIŞI
+  /// partial unique — traveler_card_templates_one_default WHERE isDefault=true
+  /// (label_templates_one_default_per_kind emsali). Şemada @@unique olarak durur
+  /// çünkü Prisma 7 index↔unique farkını drift SAYAR (perf kuralı 4).
+  isDefault Boolean             @default(false)
+  isActive  Boolean             @default(true)
+  /// SECTIONS/BUILTIN: TravelerCardConfig (+ sections[]). RAW_HTML'de de tutulur
+  /// (sayfa boyutu/kenar payı oradan okunur — ham HTML @page'i yönetmez).
+  config    Json
+  /// RAW_HTML gövdesi. Diğer modlarda null.
+  html      String?
+  /// KALICI silinme damgası — dolu=silinmiş: listede görünmez, seçilemez.
+  deletedAt DateTime?           @db.Timestamptz
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([name])
+  @@unique([isDefault])
+  @@index([isActive])
+  @@map("traveler_card_templates")
+}
+
+enum TravelerTemplateMode {
+  BUILTIN
+  SECTIONS
+  RAW_HTML
+}

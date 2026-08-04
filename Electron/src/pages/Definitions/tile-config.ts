@@ -17,6 +17,7 @@ import {
   FileText,
   Printer,
   Ruler,
+  LayoutTemplate,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -174,6 +175,15 @@ export const definitionTiles: DefinitionTile[] = [
     description: "Refakat kartında basılan firma adı/künyesi ve görünecek bölümler",
     icon: Printer,
     to: "/definitions/traveler-card",
+    group: "cikti",
+    permission: "admin:settings",
+  },
+  {
+    key: "traveler-card-studio",
+    title: "Refakat Kartı Şablonları",
+    description: "Bölümleri sırala/aç-kapa ya da uzman modunda kartın tüm HTML'ini kendin yaz",
+    icon: LayoutTemplate,
+    to: "/definitions/traveler-card-studio",
     group: "cikti",
     permission: "admin:settings",
   },

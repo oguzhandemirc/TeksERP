@@ -62,6 +62,10 @@ export interface InitialEntryPayload {
   /** İdempotency anahtarı — timeout sonrası tekrar denemede mükerrer (hayalet)
    *  top yaratılmasını önler (backend Roll.clientToken @unique; mobil KK1 emsali). */
   clientToken?: string;
+  /** Backend mükerrer tuzağı 409 POSSIBLE_DUPLICATE döndükten sonra kullanıcının
+   *  açık onayı ("evet, bu gerçekten ayrı bir top"). Tuzak `kk1.duplicateGuardEnabled`
+   *  ile açılır (varsayılan kapalı). */
+  confirmDuplicate?: boolean;
 }
 
 export interface RollStats {

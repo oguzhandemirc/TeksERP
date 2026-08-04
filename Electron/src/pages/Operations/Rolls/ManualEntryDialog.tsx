@@ -41,6 +41,27 @@ import { rollService, type InitialEntryPayload } from "./service";
 // Radix Select boş string value kabul etmez → "Belirsiz" için sentinel.
 const QUALITY_NONE = "__none__";
 
+/**
+ * Backend mükerrer tuzağının 409'unu tanır → var olan topun barkodu (yoksa null).
+ *
+ * Tuzak `kk1.duplicateGuardEnabled` ile açılır (varsayılan KAPALI): 90 sn içinde
+ * aynı elden birebir aynı ürün/metraj/en girilirse sunucu bunu "az önce basılan
+ * tuşun tekrarı olabilir" diye işaretler. ENGELLEME DEĞİL ONAYLATMA — tekstilde
+ * arka arkaya birebir aynı top gerçekten gelir, o yüzden çıkış yolu açık kalır.
+ * `readSessionConflict` (lib/session-auth) ile aynı okuma deseni.
+ */
+function readDuplicateConflict(error: unknown): string | null {
+  const resp = (
+    error as {
+      response?: { status?: number; data?: { details?: { code?: string; barcode?: string } } };
+    }
+  )?.response;
+  if (!resp || resp.status !== 409) return null;
+  const details = resp.data?.details;
+  if (details?.code !== "POSSIBLE_DUPLICATE") return null;
+  return details.barcode ?? "—";
+}
+
 const schema = z.object({
   itemId: z.string().uuid("Kumaş seçilmeli"),
   colorId: z.string().uuid().nullable(),
@@ -111,8 +132,14 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
   // tekrar basış aynı token'ı gönderir → backend cached top döner (hayalet stok
   // önlenir). Dialog her açılışta + başarıda yenilenir (yeni oturum).
   const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
+  // Mükerrer tuzağı 409 verdiyse var olan topun barkodu — satır-içi onay yolunu
+  // açar. Dialog her açılışta temizlenir (yeni form oturumu = temiz sayfa).
+  const [dupWarn, setDupWarn] = useState<string | null>(null);
   useEffect(() => {
-    if (open) setClientToken(crypto.randomUUID());
+    if (open) {
+      setClientToken(crypto.randomUUID());
+      setDupWarn(null);
+    }
   }, [open]);
 
   const grades = useMemo(() => gradesQ.data?.data ?? [], [gradesQ.data?.data]);
@@ -127,6 +154,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
     }) => rollService.createInitialEntry(args.payload),
     onSuccess: (res, vars) => {
       const roll = res.data;
+      setDupWarn(null);
       toast.success(`Top oluşturuldu: ${roll?.barcode ?? "-"}`);
       // Y1 fix: ["rolls:STOCK"] ölü key'di (STOCK sekmesi RAW/FINISHED'a bölündü)
       // — liste hiç tazelenmiyordu. ["rolls"] tüm sekme tablolarını + stats'ı kapsar.
@@ -136,9 +164,17 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
       onOpenChange(false);
       if (vars.printAfter && roll?.id) onCreatedForPrint?.(roll.id, vars.printCtx);
     },
+    // Toast YOK (proje kuralı — interceptor backend mesajını zaten gösterir).
+    // Burada yalnız mükerrer tuzağının 409'unu tanıyıp satır-içi onay yolunu
+    // açarız: kullanıcı çıkışsız kalmasın, ama "yine de kaydet" AÇIK bir eylem olsun.
+    onError: (err) => {
+      setDupWarn(readDuplicateConflict(err));
+    },
   });
 
-  const doSubmit = (printAfter: boolean) =>
+  /** `confirmDuplicate` yalnız kullanıcı "Yine de Kaydet"e bastığında true olur —
+   *  normal kaydetme yolunda tuzak hep devrededir. */
+  const doSubmit = (printAfter: boolean, confirmDuplicate = false) =>
     form.handleSubmit((v) => {
       // Bitmiş Depo hedefi WAREHOUSE ister → backend bunu yalnız colorId ile üretir.
       // Renksiz gönderim STOCK'a düşer (Ham Stok'ta çıkar, kullanıcı depoda arar) →
@@ -158,6 +194,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           qualityGrade: v.qualityGrade || undefined,
           propertyIds: v.propertyIds,
           clientToken,
+          ...(confirmDuplicate ? { confirmDuplicate: true } : {}),
         },
         printAfter,
         // Müşteri seçildiyse serbest müşteri (orderLineId yok → master alias cascade);
@@ -328,6 +365,31 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
                 )}
               />
             </FormField>
+          )}
+
+          {/* Mükerrer tuzağı: sunucu "bu top az önce girilmiş olabilir" dedi.
+              Engel DEĞİL — arka arkaya birebir aynı top gerçekten gelir; çıkış
+              yolu açık ama AÇIK bir eylem olarak duruyor. */}
+          {dupWarn && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
+              <p className="font-medium text-amber-900 dark:text-amber-200">
+                Bu top az önce girilmiş olabilir — barkod {dupWarn}
+              </p>
+              <p className="mt-1 text-amber-800 dark:text-amber-300">
+                Aynı kumaş, metraj ve en, kısa süre önce sizin tarafınızdan
+                kaydedilmiş. Gerçekten ayrı bir topsa onaylayın.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                disabled={mutation.isPending}
+                onClick={doSubmit(false, true)}
+              >
+                Evet, ayrı bir top — yine de kaydet
+              </Button>
+            </div>
           )}
 
           <DialogFooter className="pt-2">

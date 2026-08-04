@@ -21,6 +21,18 @@
 export function printHtmlString(html: string): void {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
+  // GÜVENLİK (2026-08-03, refakat kartı Faz 2): basılan HTML artık KULLANICI
+  // YAZIMI olabiliyor (Şablon Stüdyosu uzman modu). Sandbox'sız bir iframe'de
+  // gömülü <script> Electron renderer'ında ÇALIŞIR — ölçüldü, varsayılmadı.
+  //
+  // İki izin de LOAD-BEARING, kırpma:
+  //   allow-same-origin → parent'ın contentDocument'a erişip doc.write ile
+  //                       belgeyi yazması için. Yoksa iframe opak origin olur ve
+  //                       aşağıdaki doc.open() sessizce null'a düşer (baskı ölür).
+  //   allow-modals      → win.print() yazdırma diyaloğunu açabilsin diye.
+  // allow-scripts BİLEREK YOK → gömülü script çalışmaz. (Sunucu tarafında ayrıca
+  // sanitizeTemplateHtml script'i ayıklar; bu ikinci savunma hattıdır.)
+  iframe.setAttribute("sandbox", "allow-same-origin allow-modals");
   iframe.style.position = "fixed";
   iframe.style.right = "0";
   iframe.style.bottom = "0";
@@ -73,6 +85,10 @@ export function printDocumentArea(root: HTMLElement | null): void {
 
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
+  // Bu yol uygulamanın KENDİ DOM'unu klonlar (kullanıcı HTML'i taşımaz), ama
+  // baskı yüzeyini tek bir güvenlik duruşunda tutmak için aynı sandbox uygulanır
+  // — "biri korumalı, öteki değil" hâli ileride yanlış tarafa örnek olur.
+  iframe.setAttribute("sandbox", "allow-same-origin allow-modals");
   iframe.style.position = "fixed";
   iframe.style.right = "0";
   iframe.style.bottom = "0";

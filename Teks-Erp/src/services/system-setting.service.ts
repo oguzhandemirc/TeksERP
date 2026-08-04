@@ -11,6 +11,8 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { sanitizeDocStyleConfig, type DocStyleConfig } from "./document-render/doc-style";
+import { resolveConfigPageSize } from "./document-render/traveler-card.density";
+import { resolveSectionOrder, type TravelerSection } from "./document-render/traveler-card.sections";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -46,6 +48,13 @@ export const SETTING_KEYS = {
   /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi. Default false.
    *  Backend ENFORCE eder — kapalıyken weightKg gelirse 400 (yanlış/kötü niyetli giriş reddi). */
   KK1_WEIGHT_ENTRY_ENABLED: "kk1.weightEntryEnabled",
+  /** Ham girişte "az önce birebir aynısı girildi" tuzağı açık mı. Default FALSE.
+   *  Açıkken 90 sn içinde aynı ürün+metraj+en aynı operatör/makineden yeniden
+   *  gelirse 409 POSSIBLE_DUPLICATE döner; geçmek için `confirmDuplicate: true`
+   *  gerekir (ENGELLEME DEĞİL ONAYLATMA — tekstilde birebir aynı top gerçekten
+   *  arka arkaya gelir). ⚠️ Bunu açmadan ÖNCE sahadaki tabletler 409'u tanıyan
+   *  APK'ya güncellenmeli; eski APK hatayı çıkışsız gösterir. */
+  KK1_DUPLICATE_GUARD_ENABLED: "kk1.duplicateGuardEnabled",
   /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
    *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
   RETURN_GRADING_ENABLED: "return.gradingEnabled",
@@ -326,6 +335,19 @@ export interface TravelerCardOrderFields {
   quantity: TravelerCardSpecField;
 }
 
+/**
+ * Partiler tablosu sütunları — her biri tek tek (göster/boyut/kalınlık).
+ * İçerik baskı anında CANLI çözülür (parti kart donduktan SONRA doğar); burada
+ * yalnız GÖRÜNÜM kararı yaşar. Bkz. `document-render/traveler-card.html`.
+ */
+export interface TravelerCardBatchFields {
+  batchNumber: TravelerCardSpecField;
+  rollCount: TravelerCardSpecField;
+  quantity: TravelerCardSpecField;
+  /** Partinin açık fason sevki (firma · irsaliye no) — mal dışarıdayken kartta görünür. */
+  dispatch: TravelerCardSpecField;
+}
+
 /** Ham değeri (boolean eski şekil | nesne | undefined) tam spec alanına çözer. */
 export function coerceSpecField(v: unknown): TravelerCardSpecField {
   if (v === false) return { show: false, size: "md", weight: "normal" };
@@ -370,6 +392,18 @@ export interface TravelerCardConfig {
   orderFields: TravelerCardOrderFields;
   /** Miktar toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
   orderTotal: TravelerCardSpecField;
+  /** Partiler tablosu basılsın mı (parti yoksa zaten basılmaz). */
+  showBatches: boolean;
+  /** Partiler tablosu sütunları (Parti No/Top/Metraj/Sevk tek tek). */
+  batchFields: TravelerCardBatchFields;
+  /** Parti toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
+  batchTotal: TravelerCardSpecField;
+  /**
+   * Bölüm SIRASI + açık/kapalı (Şablon Stüdyosu). Yoksa varsayılan sıra —
+   * yerleşik kart. Tanınmayan anahtar atılır, eksik bölüm sona eklenir
+   * (`document-render/traveler-card.sections.resolveSectionOrder`).
+   */
+  sections?: TravelerSection[];
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -378,7 +412,11 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   companyName: "Adnan Şahin Tekstil",
   addressLine: "",
   phone: "",
-  pageSize: "A4",
+  // Varsayılan A5: kart tek yaprak, malla birlikte gezen operasyon kâğıdıdır —
+  // A4'e ihtiyaç duyan (çok adımlı rota + uzun sipariş listesi) kurulumlar
+  // panelden/baskı diyaloğundan A4'e çeker. Sayfa boyutuna bağlı ölçüler:
+  // `document-render/traveler-card.density.ts`.
+  pageSize: "A5",
   margins: { top: 8, right: 8, bottom: 8, left: 8 },
   fontScale: 1,
   fontWeight: "normal",
@@ -404,6 +442,14 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     quantity: { show: true, size: "md", weight: "normal" },
   },
   orderTotal: { show: true, size: "md", weight: "bold" },
+  showBatches: true,
+  batchFields: {
+    batchNumber: { show: true, size: "md", weight: "normal" },
+    rollCount: { show: true, size: "md", weight: "normal" },
+    quantity: { show: true, size: "md", weight: "normal" },
+    dispatch: { show: true, size: "md", weight: "normal" },
+  },
+  batchTotal: { show: true, size: "md", weight: "bold" },
   footerNote: "",
 };
 
@@ -418,6 +464,7 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
   const m = (o.margins && typeof o.margins === "object" ? o.margins : {}) as Record<string, unknown>;
   const sf = (o.specFields && typeof o.specFields === "object" ? o.specFields : {}) as Record<string, unknown>;
   const of = (o.orderFields && typeof o.orderFields === "object" ? o.orderFields : {}) as Record<string, unknown>;
+  const bf = (o.batchFields && typeof o.batchFields === "object" ? o.batchFields : {}) as Record<string, unknown>;
   return {
     companyName:
       typeof o.companyName === "string" && o.companyName.trim()
@@ -425,7 +472,9 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
         : D.companyName,
     addressLine: typeof o.addressLine === "string" ? o.addressLine.trim().slice(0, 200) : "",
     phone: typeof o.phone === "string" ? o.phone.trim().slice(0, 60) : "",
-    pageSize: o.pageSize === "A5" ? "A5" : "A4",
+    // AYAR katmanı → varsayılan A5. RENDER katmanı (donmuş snapshot) bilerek A4'e
+    // düşer; ikisinin neden farklı olduğu: `document-render/traveler-card.density.ts`.
+    pageSize: resolveConfigPageSize(o.pageSize),
     margins: {
       top: mm(m.top, D.margins.top),
       right: mm(m.right, D.margins.right),
@@ -463,6 +512,22 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
     },
     // Toplam: yeni orderTotal nesnesi > eski showOrderTotal boolean; varsayılan KALIN.
     orderTotal: coerceSpecField(o.orderTotal ?? { show: o.showOrderTotal !== false, size: "md", weight: "bold" }),
+    // Parti bloğu: bu alanları taşımayan ESKİ kayıtlı ayarlar `!== false` /
+    // coerceSpecField sayesinde AÇIK doğar — blok iç veri değil sahanın kendi
+    // partisidir (müşteriye giden belge değil), opt-in gerekmez.
+    showBatches: o.showBatches !== false,
+    batchFields: {
+      batchNumber: coerceSpecField(bf.batchNumber),
+      rollCount: coerceSpecField(bf.rollCount),
+      quantity: coerceSpecField(bf.quantity),
+      dispatch: coerceSpecField(bf.dispatch),
+    },
+    batchTotal: coerceSpecField(o.batchTotal ?? { show: true, size: "md", weight: "bold" }),
+    // `sections` YALNIZ açıkça verilmişse yazılır — `undefined` bırakmak
+    // "yerleşik sıra" demektir ve donmuş eski snapshot'larla aynı anlamı taşır.
+    // Her config'e varsayılan sırayı YAZMAK cazip ama yanlış olurdu: o zaman
+    // yarın eklenecek bir bölüm, bugün kaydedilmiş her kartta eksik kalırdı.
+    ...(o.sections === undefined ? {} : { sections: resolveSectionOrder(o.sections) }),
     footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
   };
 }
@@ -551,6 +616,10 @@ export interface FeatureFlags {
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken gelen weightKg reddedilir). */
   kk1WeightEntryEnabled: boolean;
+  /** Ham girişte mükerrer top tuzağı açık mı (default false). Backend ENFORCE
+   *  eder: 90 sn içinde birebir aynı giriş 409 POSSIBLE_DUPLICATE alır ve ancak
+   *  açık onayla (`confirmDuplicate`) geçer. */
+  kk1DuplicateGuardEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma `weighSack`'te 400).
    *  Demo/eğitim kurulumu açar — çuval kg'si irsaliyeye/çeki listesine basılır. */
@@ -837,6 +906,7 @@ export class SystemSettingService {
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
+      kk1DuplicateGuardEnabled: await readKk1DuplicateGuardEnabled(cacheClient),
       shippingSimulatedWeightEnabled: await readSimulatedWeightEnabled(cacheClient),
       returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
       kartelaMeasurementEnabled: await readKartelaMeasurementEnabled(cacheClient),
@@ -934,6 +1004,18 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_WEIGHT_ENTRY_ENABLED,
         input.kk1WeightEntryEnabled,
         "KK1 ham kumaş girişinde ağırlık (kg) alanını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kk1DuplicateGuardEnabled")) {
+      if (typeof input.kk1DuplicateGuardEnabled !== "boolean") {
+        throw AppError.badRequest("kk1DuplicateGuardEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED,
+        input.kk1DuplicateGuardEnabled,
+        "Ham girişte mükerrer top uyarısı",
         userId
       );
     }
@@ -1592,6 +1674,26 @@ export async function readKk1WeightEntryEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.KK1_WEIGHT_ENTRY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Ham girişte mükerrer top tuzağı açık mı? Default false.
+ *
+ * SAHA VAKASI (2026-08-03): sunucu restart edildi, operatör etiket çıkmayınca
+ * "Kaydet ve Etiket Bas"a defalarca bastı; her basış yeni bir `clientToken`
+ * ürettiği için sunucu N ayrı top yazdı. Asıl düzeltme istemcidedir (token artık
+ * mantıksal denemeye bağlı) — bu bayrak İSTEMCİYE GÜVENMEYEN ikinci hattır:
+ * farklı cihaz, yeniden kurulum, doğrudan API çağrısı da yakalanır.
+ */
+export async function readKk1DuplicateGuardEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

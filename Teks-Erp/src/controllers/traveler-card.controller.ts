@@ -41,7 +41,19 @@ const travelerCardConfigSchema = z
   })
   .partial();
 
-const sampleHtmlSchema = z.object({ config: travelerCardConfigSchema.optional() });
+// Önizleme, Şablon Stüdyosu'nun KAYDEDİLMEMİŞ taslağını da alabilir — böylece
+// uzman modundaki ham HTML kaydedilmeden görülür. `html` burada sanitize
+// EDİLMEZ; render yolundaki `renderRawTemplate` her durumda temizler (tek nokta).
+const sampleHtmlSchema = z.object({
+  config: travelerCardConfigSchema.optional(),
+  template: z
+    .object({
+      mode: z.enum(["BUILTIN", "SECTIONS", "RAW_HTML"]),
+      html: z.string().max(200_000).nullable().optional(),
+      name: z.string().max(80).optional(),
+    })
+    .optional(),
+});
 
 const reprintSchema = z.object({
   reason: z.string().trim().min(3, "Gerekçe en az 3 karakter olmalı").max(500),
@@ -160,10 +172,17 @@ export class TravelerCardController {
     }
   }
 
-  /** GET /api/traveler-cards/:id/html — tek-kaynak refakat kartı HTML'i (text/html) */
+  /**
+   * GET /api/traveler-cards/:id/html — tek-kaynak refakat kartı HTML'i (text/html)
+   * `?pageSize=A4|A5` TEK SEFERLİK ezmedir: kalıcı ayara/snapshot'a YAZILMAZ.
+   * Geçersiz değer sessizce yok sayılır (kartın kendi boyutuyla basılır) — baskı
+   * yolunu bir yazım hatası yüzünden 400'e düşürmek sahada kâğıtsız bırakır.
+   */
   async getCardHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const html = await this.service.getCardHtml(req.params.id as string);
+      const raw = req.query.pageSize;
+      const pageSize = raw === "A4" || raw === "A5" ? raw : undefined;
+      const html = await this.service.getCardHtml(req.params.id as string, { pageSize });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(html);
     } catch (error) {
@@ -174,10 +193,13 @@ export class TravelerCardController {
   /** POST /api/traveler-cards/sample-html — Belge Şablonu önizlemesi (örnek veri + taslak config) */
   async getSampleHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { config } = sampleHtmlSchema.parse(req.body ?? {});
+      const { config, template } = sampleHtmlSchema.parse(req.body ?? {});
       // normalize → eksik/kısmi alanlar (margins/specFields) güvenli default'a çözülür.
       const html = await this.service.renderSampleHtml(
         normalizeTravelerCardConfig((config ?? {}) as Record<string, unknown>),
+        template
+          ? { id: null, name: template.name ?? "Taslak", mode: template.mode, html: template.html ?? null }
+          : undefined,
       );
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(html);

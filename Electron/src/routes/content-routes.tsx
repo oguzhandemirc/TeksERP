@@ -41,6 +41,7 @@ import { LabelStudioPage } from "@/pages/LabelTemplates/editor/LabelStudioPage";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
 import { FreeDocumentsPage } from "@/pages/FreeDocuments/FreeDocumentsPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
+import { TravelerCardStudioPage } from "@/pages/Definitions/TravelerCardStudio/TravelerCardStudioPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
@@ -265,6 +266,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <TravelerCardSettingsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/traveler-card-studio",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <TravelerCardStudioPage />
       </ProtectedRoute>
     ),
   },

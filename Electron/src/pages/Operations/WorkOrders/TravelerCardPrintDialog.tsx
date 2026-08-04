@@ -41,14 +41,22 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
     return cards.find((c) => c.status === "ACTIVE") ?? cards[0] ?? null;
   }, [cardQuery.data?.data]);
 
+  // Sayfa boyutu ezmesi TEK SEFERLİKTİR: yalnız bu baskıyı etkiler, kalıcı ayara
+  // ve kartın donmuş snapshot'ına yazılmaz. `undefined` = kartın kendi boyutu.
+  const [pageSize, setPageSize] = useState<"A4" | "A5" | undefined>(undefined);
+
   // ÖNİZLEME + BASKI tek kaynak: kartın backend HTML'i.
   const htmlQuery = useQuery({
-    queryKey: ["traveler-card-html", activeCard?.id],
-    queryFn: () => workOrderService.getTravelerCardHtml(activeCard!.id),
+    queryKey: ["traveler-card-html", activeCard?.id, pageSize ?? "default"],
+    queryFn: () => workOrderService.getTravelerCardHtml(activeCard!.id, pageSize),
     enabled: open && Boolean(activeCard?.id),
     staleTime: 0,
   });
   const html = htmlQuery.data ?? null;
+  // Kartın kendi (donmuş) boyutu — segmentte hangi düğmenin "varsayılan" olduğunu
+  // göstermek için HTML'in @page kuralından okunur; ayrı bir istek açmaya değmez.
+  const cardPageSize = /@page \{ size: (A4|A5)/.exec(html ?? "")?.[1] as "A4" | "A5" | undefined;
+  const effectiveSize = pageSize ?? cardPageSize;
 
   const handleRefresh = () => {
     void cardQuery.refetch();
@@ -64,6 +72,7 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
           <DialogTitle>Refakat Kartı — Önizleme</DialogTitle>
           <DialogDescription>
             Basım anında dondurulan resmi kart — önizleme baskıyla birebir aynı.
+            Partiler her baskıda güncel okunur.
           </DialogDescription>
         </DialogHeader>
 
@@ -93,6 +102,10 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
             <iframe
               title="Refakat Kartı Önizleme"
               srcDoc={html}
+              // sandbox: belge HTML'i ileride kullanıcı-yazımı olabilecek (Faz 2
+              // uzman modu) — script çalıştırma yüzeyini şimdiden kapat. Boş
+              // sandbox tüm yetenekleri kaldırır; kart yalnız statik HTML+CSS.
+              sandbox=""
               className="h-full w-full border-0 bg-white"
             />
           ) : (
@@ -102,7 +115,30 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
+          {/* Tek seferlik sayfa boyutu — kalıcı ayarı DEĞİŞTİRMEZ (etiket bunu söyler). */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Bu baskı için:</span>
+            <div className="inline-flex overflow-hidden rounded-md border">
+              {(["A5", "A4"] as const).map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setPageSize(sz === cardPageSize ? undefined : sz)}
+                  disabled={!html}
+                  className={
+                    "px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
+                    (effectiveSize === sz
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted")
+                  }
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
           <Button
             type="button"
             variant="outline"
@@ -129,6 +165,7 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
           >
             <Printer className="h-4 w-4" /> Yazdır
           </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

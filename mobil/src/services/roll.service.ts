@@ -95,6 +95,13 @@ export interface InitialEntryRequest {
    * cached Roll döner (mükerrer top önlenir). Etiket sunucudan dönen barkodla basılır.
    */
   clientToken?: string;
+  /**
+   * Backend mükerrer tuzağı (`kk1.duplicateGuardEnabled`, varsayılan KAPALI)
+   * 409 POSSIBLE_DUPLICATE döndükten sonra operatörün açık onayı: "evet, bu
+   * gerçekten ayrı bir top". Tuzak ENGELLEMEZ, ONAYLATIR — aynı partiden
+   * birebir eşit metrajlı toplar arka arkaya meşru olarak girilebilir.
+   */
+  confirmDuplicate?: boolean;
 }
 
 export const rollService = {

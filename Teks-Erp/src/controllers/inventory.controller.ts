@@ -24,6 +24,9 @@ const initialEntrySchema = z.object({
   // Offline KK1 / ağ-retry idempotency anahtarı (UUID) — barkod artık sunucuda sıralı
   // atanır; aynı token'la 2. çağrı cached Roll döner (mükerrer-top önlenir).
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+  /** Mükerrer tuzağı 409 döndükten sonra operatörün açık onayı ("evet, ayrı bir
+   *  top"). Yalnız bu uçta anlamlı — dahili çağrılar tuzağa hiç girmez. */
+  confirmDuplicate: z.boolean().optional(),
 });
 
 const openFabricSchema = z.object({
@@ -194,7 +197,7 @@ export class InventoryController {
    */
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = initialEntrySchema.parse(req.body);
+      const { confirmDuplicate, ...body } = initialEntrySchema.parse(req.body);
       // KK1 makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
       const stamp = await getStampContext(req, { enforceForMobile: true });
       // entrySource ayrımı: Electron ASLA x-device-id göndermez (bkz. Electron
@@ -204,6 +207,9 @@ export class InventoryController {
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null,
         Boolean(req.device),
+        // Mükerrer tuzağı YALNIZ bu HTTP yolunda çalışır — dahili çağıranlar
+        // (tambur-manual) `opts` vermediği için etkilenmez (F221 deseni).
+        { duplicateGuard: { confirmed: confirmDuplicate === true } },
       );
       res.status(201).json(result);
     } catch (error) {
