@@ -8,6 +8,7 @@
 
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
+import { normalizeFoldType } from "./helpers/fold-type";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
@@ -507,6 +508,18 @@ export class InventoryService {
        */
       forcedEntrySource?: RollEntrySource;
       /**
+       * Elle eklenen topun SEBEBİ — kalıcı kolona (`Roll.entryReason`) yazılır.
+       * Zincire dayanan yollar (KK1 / kesim / fason) bunu VERMEZ; onların sebebi
+       * belgesidir ve alan NULL kalır. Audit kaydı ayrıca yazılmaya devam eder
+       * (bağlamıyla birlikte) — kolon görünen/raporlanan kaynaktır.
+       */
+      entryReason?: string | null;
+      /**
+       * Kaç kat sarıldığı ("2-KAT" | "4-KAT"). MİRAS ALINMAZ: çağıran o an
+       * geçerli olan değeri AÇIKÇA verir; verilmezse NULL ("bilinmiyor").
+       */
+      foldType?: string | null;
+      /**
        * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
        * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
        * (`helpers/label-intent.helper`) — burada DB okuması yok.
@@ -711,6 +724,8 @@ export class InventoryService {
             // `form` YAZILMAZ → şema varsayılanı TOP. KK1 girişi de, bitmiş-ürün
             // girişi de fiziksel olarak bir TOP'tur (açık kumaş yalnız istasyon
             // çıktısı olarak doğar — `roll-finalize.helper` ACIK yazan tek yer).
+            ...(opts?.entryReason ? { entryReason: opts.entryReason.slice(0, 500) } : {}),
+            ...(opts?.foldType ? { foldType: opts.foldType } : {}),
             ...(opts?.markedForKartela && initialStatus === RollStatus.WAREHOUSE
               ? { markedForKartela: true }
               : {}),
@@ -928,6 +943,27 @@ export class InventoryService {
       applyStatusScope(RollStatus.IN_PRODUCTION);
     } else if (processingStatus === "finished") {
       applyStatusScope(RollStatus.WAREHOUSE);
+    }
+
+    // ── KAT (foldType) FİLTRESİ — KANONİKLEŞTİRİLEREK kurulur ────────────────
+    //
+    // ⚠️ SESSİZ HATA TUZAĞI: `buildWhereClause` (query-parser.ts:123-133) tanımadığı
+    // HER filtre anahtarını ham string olarak `where`'e kopyalar. Kat kolonunda
+    // DB'de kanonik değer var ("4-KAT"); istemci "4 kat" / "4kat" gönderirse
+    // Prisma eşitlik araması 0 satır döner — HATA YOK, LOG YOK, liste boş.
+    // Operatör "bu kumaştan hiç yok" sanır. Bu yüzden anahtar burada AÇIKÇA
+    // ele alınır (colorId/qualityGrade emsali) ve `normalizeFoldType`'tan geçer.
+    const foldTypeRaw = readList(f["foldType"]);
+    delete where.foldType;
+    if (foldTypeRaw.length > 0) {
+      const canonical = foldTypeRaw
+        .map((v) => normalizeFoldType(v))
+        .filter((v): v is string => v !== null);
+      // Tümü boş/whitespace ise filtre HİÇ uygulanmaz (yanlışlıkla her şeyi
+      // eleyen boş `in: []` üretmeyelim).
+      if (canonical.length > 0) {
+        where.foldType = canonical.length === 1 ? canonical[0] : { in: canonical };
+      }
     }
 
     const qualityGradeFilter =
@@ -1698,6 +1734,49 @@ export class InventoryService {
   /**
    * Get a single roll by ID with all relations.
    */
+  /**
+   * ELLE EKLENEN TOPUN SEBEBİ — audit'ten okunur (2026-08-04).
+   *
+   * Sebep şemada kolon DEĞİL, `SystemLog.newData.reason` içinde durur (WO kapanış
+   * dispozisyonu deseni: canlı fabrikada tek bir alan için tablo yeniden yazımı
+   * yapılmaz). Ama YALNIZ audit'te kalması "yazılıyor ama okunmuyor" demekti —
+   * operatör topa bakarken sebebi göremiyor, Aktivite Günlüğü'nde doğru satırı
+   * bulup JSON'a bakması gerekiyordu. "Bu top nereden geldi" sorusu TOPA
+   * BAKARKEN sorulur; cevabı da orada olmalı.
+   *
+   * Yalnız elle doğan iki kaynakta sorgulanır — diğer toplarda ek sorgu KOŞMAZ.
+   */
+  private async readManualEntryReason(
+    rollId: string,
+    entrySource: RollEntrySource,
+  ): Promise<string | null> {
+    if (
+      entrySource !== RollEntrySource.TAMBUR_MANUAL &&
+      entrySource !== RollEntrySource.MANUAL_ENTRY
+    ) {
+      return null;
+    }
+    // Önce KOLON — asıl kaynak burasıdır (2026-08-04'ten sonra doğan toplar).
+    const own = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: { entryReason: true },
+    });
+    if (own?.entryReason?.trim()) return own.entryReason.trim();
+
+    // GEÇİŞ DÖNEMİ: kolondan ÖNCE doğmuş toplar için audit'e düş. Bu dal geriye
+    // doldurma script'i koştuktan sonra pratikte boş döner ama KALIR — audit
+    // arşivlenmemiş eski kayıtlar için son şans (arşive BAKMAZ; oraya düşmüş
+    // sebep zaten geri getirilemez, doğrusu backfill'i zamanında koşmaktır).
+    const log = await prisma.systemLog.findFirst({
+      where: { tableName: "ROLL", recordId: rollId, action: "CREATE" },
+      orderBy: { createdAt: "asc" },
+      select: { newData: true },
+    });
+    const data = (log?.newData ?? null) as Record<string, unknown> | null;
+    const r = data?.reason;
+    return typeof r === "string" && r.trim() ? r.trim() : null;
+  }
+
   async findRollById(id: string): Promise<ApiResponse<Roll | null>> {
     const roll = await prisma.roll.findUnique({
       where: { id },
@@ -1708,6 +1787,11 @@ export class InventoryService {
         // Rezervasyon bilgisi — detay panelinde "çuvalda/sevkiyatta" gösterimi.
         shipment: { select: { id: true, shipmentNo: true, status: true } },
         sack: { select: { id: true, sackNo: true, seq: true } },
+        // KİM GİRDİ (2026-08-04): detay panelinde operatör hiç görünmüyordu —
+        // `createdById` şemada vardı ama detay ucu ilişkiyi HİÇ çekmiyordu.
+        // Elle eklenen topta "kim ekledi" sorusu sebep kadar önemli.
+        createdBy: { select: { id: true, fullName: true, username: true } },
+        createdMachine: { select: { id: true, name: true, code: true } },
         operations: {
           select: {
             id: true,
@@ -1786,7 +1870,8 @@ export class InventoryService {
       return { success: false, data: null, message: "Top bulunamadı" };
     }
 
-    return { success: true, data: roll };
+    const manualReason = await this.readManualEntryReason(roll.id, roll.entrySource);
+    return { success: true, data: { ...roll, manualReason } as unknown as Roll };
   }
 
   /**
@@ -2091,6 +2176,19 @@ export class InventoryService {
       }
       : null;
 
+    // ELLE EKLENEN TOPUN SEBEBİ (2026-08-04) — audit'ten okunur.
+    //
+    // NEDEN BURADAN: sebep şemada kolon DEĞİL, `SystemLog.newData.reason` içinde
+    // (kolon eklemek yerine WO kapanış dispozisyonu deseni izlendi). Ama yalnız
+    // audit'te durması "yazılıyor ama okunmuyor" demekti: operatör bir topa
+    // bakarken sebebi göremiyor, görmek için Aktivite Günlüğü'ne gidip doğru
+    // satırı bulup JSON'a bakması gerekiyordu. "Bu top nereden geldi" sorusu
+    // TOPA BAKARKEN sorulur — cevabı da orada olmalı.
+    //
+    // Yalnız elle doğan toplarda sorgulanır (iki event) — diğer topların
+    // geçmişinde gereksiz sorgu koşmasın.
+    const manualEntryReason = await this.readManualEntryReason(roll.id, roll.entrySource);
+
     events.push({
       kind: "CREATED",
       at: roll.createdAt.toISOString(),
@@ -2105,6 +2203,7 @@ export class InventoryService {
         itemType: roll.item?.itemType,
         entrySource: roll.entrySource,
         qualityGrade: roll.qualityGrade,
+        ...(manualEntryReason ? { manualReason: manualEntryReason } : {}),
         ...(parentInfo ? { parent: parentInfo } : {}),
       },
       operatorName: roll.createdBy?.fullName ?? roll.createdBy?.username ?? null,

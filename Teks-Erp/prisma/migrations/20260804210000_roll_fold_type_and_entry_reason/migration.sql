@@ -1,0 +1,46 @@
+-- Roll'a İKİ KALICI ÖZELLİK: kat (foldType) + elle giriş sebebi (entryReason).
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 1) foldType — "2-KAT" | "4-KAT"
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Kat TOPUN KENDİ ÖZELLİĞİ (2026-08-04 ürün kararı). Önceden yalnız iki dolaylı
+-- yerde duruyordu: `WorkOrderStep.stepData` (adım seviyesi — her finalize ezer,
+-- topa özgü değil) ve `RollOperation.metadata` (finalize notu; JSON + indekssiz,
+-- perf kuralı 6 gereği sorgulanamaz). Sonuç: bir topun kaç kat sarıldığı hiçbir
+-- ekranda GÖRÜNMÜYOR ve FİLTRELENEMİYORDU.
+--
+-- ⚠️ MİRAS ALINMAZ: kesimde doğan çocuk ebeveyninin katını devralmaz — "top
+-- kesilerek yeni bir kat değeri kazanabilir". Yazan her kod yolu değeri AÇIKÇA
+-- verir; boş bırakılan yol NULL üretir ve bu dürüst cevaptır.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 2) entryReason — elle eklenen topun sebebi
+-- ─────────────────────────────────────────────────────────────────────────────
+-- `entrySource` NEREDEN geldiğini, bu alan NEDEN var olduğunu söyler. Yalnız elle
+-- doğan toplarda dolar; zincire dayanan toplarda (KK1 / kesim / fason kabulü)
+-- NULL kalır — onların sebebi zaten belgesidir.
+--
+-- ÖNCEKİ TERCİH (yalnız audit'e yazmak) YANLIŞTI, dört sebeple:
+--   a) Audit 6 AYDA BİR ARŞİVLENİYOR (archive-scheduler, MONTHS_TO_KEEP=6):
+--      satır `system_logs`'tan `system_log_archives`'a TAŞINIR. Yalnız audit'ten
+--      okuyan ekran, altı ay sonra sebebi SESSİZCE kaybederdi.
+--   b) Raporlanacak veri iş verisidir. "Manuel girişlerin %70'i etiket kopması"
+--      sorusu JSON audit alanından ancak GIN index ile cevaplanır (perf kuralı 6
+--      — bugün hiçbir JSON alanı sorgulanmıyor). Kolonla GROUP BY yeter.
+--   c) Sektör standardı: sebep işlem kaydının ÜZERİNDE durur (SAP'de malzeme
+--      belgesi satırındaki hareket sebebi gibi). Audit adli izdir, iş verisi değil.
+--   d) Maliyet gerekçesi dayanaksızdı: nullable kolon eklemek PG11+'da tablo
+--      yeniden yazımı YAPMAZ. ÖLÇÜLDÜ (2026-08-04, PG18 dev / saha PG16.9):
+--      bu tabloda **6 ms**, yalnız katalog güncellemesi. "ALTER = ACCESS
+--      EXCLUSIVE rewrite" kaygısı TİP değişimleri içindir (timestamptz emsali).
+-- Audit kaydı KALDIRILMADI — orada operatör/makine/istasyon/iş emri bağlamıyla
+-- durmaya devam eder; kolon GÖRÜNEN ve RAPORLANAN kaynaktır.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- GÜVENLİK: ikisi de NULLABLE ve VARSAYILANSIZ → tablo yeniden yazımı YOK, kilit
+-- anlık. Mevcut satırlar NULL kalır ("bilinmiyor" — uydurma varsayılan YAZILMAZ,
+-- yanlış bir kat değeri boş değerden zararlıdır). Vardiya saati kısıtı bu
+-- migration için geçerli DEĞİL.
+ALTER TABLE "rolls" ADD COLUMN "entryReason" VARCHAR(500);
+ALTER TABLE "rolls" ADD COLUMN "foldType" VARCHAR(64);
+

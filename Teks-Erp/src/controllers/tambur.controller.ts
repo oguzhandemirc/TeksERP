@@ -73,6 +73,12 @@ const cutOpenFabricSchema = z.object({
   // kalıcı. İkisi de boş = stok (müşterisiz). Var-mı/isActive servis katmanında.
   targetOrderLineId: z.string().uuid().optional().nullable(),
   targetCustomerId: z.string().uuid().optional().nullable(),
+  // KAT — bu kesimde doğan ÇOCUĞUN kalıcı özelliği (2026-08-04).
+  // Kesim anında seçilen değer kazanır: aynı topun iki parçası farklı kat
+  // taşıyabilir ("top kesilerek yeni bir kat değeri kazanabilir"). Alan
+  // GÖNDERİLMEZSE servis parent → iş emri planı sırasıyla fallback uygular
+  // (eski APK'lar kırılmasın); bu MİRAS değil geri-uyumluluk fallback'idir.
+  foldType: foldTypeSchema,
   // Offline/ağ-retry idempotency anahtarı (UUID) — barkod sunucuda sıralı atanır.
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
@@ -97,6 +103,8 @@ const cutWarehouseRollSchema = z.object({
   // Ham (renksiz STOCK) kesiminde çıkan parçanın hedefi. Bitmiş depo topu
   // kesiminde yok sayılır.
   rawDestination: z.enum(["STOCK", "WAREHOUSE"]).optional(),
+  // Parcanin kati — verilmezse parent devralinir (bu yolda is emri yok).
+  foldType: foldTypeSchema,
   // Etiket NİYETİ — bkz. cutOpenFabricSchema. WAREHOUSE child'a yazılır; raw→STOCK
   // child (üretime devam) için stok'a düşülür (servis WAREHOUSE guard'ıyla).
   targetOrderLineId: z.string().uuid().optional().nullable(),

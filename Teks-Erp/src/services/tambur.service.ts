@@ -1791,6 +1791,8 @@ export class TamburService {
        * Bitmiş depo topu (WAREHOUSE parent) kesiminde YOK SAYILIR — çıktı her zaman WAREHOUSE.
        */
       rawDestination?: "STOCK" | "WAREHOUSE";
+      /** Parçanın katı — verilmezse parent'tan devralınır (bu yolda WO yok). */
+      foldType?: string | null;
       /** Etiket niyeti — WAREHOUSE child'ın `lastLabelSnapshot`'ına yazılır;
        *  raw→STOCK (üretime devam) child stok'a düşer. İkisi de boş = stok. */
       targetOrderLineId?: string | null;
@@ -1888,6 +1890,9 @@ export class TamburService {
           itemId: parent.itemId,
           colorId: parent.colorId,
           width: parent.width,
+          // KAT — kesim anında seçilen değer KAZANIR. Bu yolda iş emri/adım YOK
+          // (depo topu kesimi), tek bağlam parent → fallback yalnız parent.
+          foldType: data.foldType !== undefined ? data.foldType : (parent.foldType ?? null),
           initialQty: data.cutLength,
           currentQty: data.cutLength,
           weightKg: null,
@@ -2186,6 +2191,9 @@ export class TamburService {
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,
+            // KAT — bu "kalan" parçadır, aynı sarımın devamı: parent'ın katını
+            // DEVRALIR (kesilen parça yeni değer alabilir, kalan almaz).
+            foldType: parent.foldType,
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: null,
@@ -2320,6 +2328,12 @@ export class TamburService {
        *  İkisi de boş = stok (müşterisiz). */
       targetOrderLineId?: string | null;
       targetCustomerId?: string | null;
+      /**
+       * Bu kesimde doğan ÇOCUĞUN katı (kalıcı özellik, 2026-08-04).
+       * Verilmezse parent → iş emri planı sırasıyla fallback uygulanır — bu
+       * MİRAS değil, alanı göndermeyen eski istemciler için geri-uyumluluktur.
+       */
+      foldType?: string | null;
       /** Offline/ağ-retry idempotency anahtarı (UUID) — cutWarehouseRoll ile aynı. */
       clientToken?: string;
     },
@@ -2335,7 +2349,8 @@ export class TamburService {
         currentStep: {
           include: {
             station: { select: { kind: true } },
-            workOrder: { select: { status: true } },
+            // WO.foldType = PLANLAMA değeri; istemci ve parent susarsa son fallback.
+            workOrder: { select: { status: true, foldType: true } },
           },
         },
         properties: { select: { propertyId: true } },
@@ -2425,6 +2440,14 @@ export class TamburService {
           itemId: parent.itemId,
           colorId: parent.colorId,
           width: parent.width,
+          // KAT — kesim anında seçilen değer KAZANIR (kullanıcı kararı: "top
+          // kesilerek yeni bir kat değeri kazanabilir"). `undefined` = istemci
+          // alanı hiç GÖNDERMEDİ → parent, o da yoksa iş emri planı (eski APK
+          // geri-uyumluluğu; MİRAS DEĞİL). `null` = istemci açıkça "kat yok" dedi.
+          foldType:
+            data.foldType !== undefined
+              ? data.foldType
+              : (parent.foldType ?? parent.currentStep?.workOrder?.foldType ?? null),
           initialQty: data.lengthMeters,
           currentQty: data.lengthMeters,
           weightKg: null,
@@ -2752,6 +2775,10 @@ export class TamburService {
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,
+            // KAT — `actualFoldType` bu fonksiyonda zaten hesaplı (operatör
+            // kararı, yoksa WO planı); eskiden YALNIZ RollOperation.metadata'ya
+            // yazılıyordu, artık topun kendi kolonuna da yazılır.
+            foldType: actualFoldType,
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: null,

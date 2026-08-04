@@ -47,6 +47,34 @@ const FILTERS: FilterDef[] = [
   },
   { kind: "numberRange", key: "width", label: "En", unit: "cm" },
   { kind: "numberRange", key: "qty", label: "Boy", unit: "mt" },
+  // KAT — backend değeri KANONİKLEŞTİRİLMİŞ tutuyor ("4-KAT"); serbest metin
+  // göndermek sessizce 0 sonuç verirdi, o yüzden seçenekli filtre.
+  {
+    kind: "select",
+    key: "foldType",
+    label: "Kat",
+    options: [
+      { value: "2-KAT", label: "2 Kat" },
+      { value: "4-KAT", label: "4 Kat" },
+    ],
+  },
+  // GİRİŞ KAYNAĞI (2026-08-04): "elle eklenen toplar" tek filtreyle çıksın.
+  // Zincir-dışı doğan topları (Tambur manuel / Electron manuel) saymak ve
+  // sebeplerine bakmak için — manuel giriş bir semptomdur, ölçülmeden
+  // kaynağındaki sorun (etiket kopması, kayıt atlanması) çözülemez.
+  // Backend filtresi HAZIRDI: buildWhereClause düz Roll alanlarını geçiriyor.
+  {
+    kind: "select",
+    key: "entrySource",
+    label: "Giriş Kaynağı",
+    options: [
+      { value: "SUPPLIER_RECEIPT", label: "Ham Giriş" },
+      { value: "TAMBUR_SPLIT", label: "Tambur Kesim" },
+      { value: "SUBCONTRACTOR_RETURN", label: "Fason Dönüşü" },
+      { value: "TAMBUR_MANUAL", label: "Tambur (Manuel)" },
+      { value: "MANUAL_ENTRY", label: "Manuel Giriş" },
+    ],
+  },
 ];
 
 export const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;

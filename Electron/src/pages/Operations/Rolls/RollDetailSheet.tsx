@@ -239,6 +239,12 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       {roll.form === "ACIK" ? "Açık Kumaş" : "Top"}
                     </Badge>
                   </div>
+                  {roll.foldType && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Kat</div>
+                      <div className="text-xs">{roll.foldType}</div>
+                    </>
+                  )}
                   <div className="text-xs text-muted-foreground">Giriş Kaynağı</div>
                   <div>
                     <Badge variant="muted" className="text-[10px]">
@@ -247,6 +253,16 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       ] ?? roll.entrySource}
                     </Badge>
                   </div>
+                  {/* ELLE EKLENEN TOPUN SEBEBİ (2026-08-04). Şemada kolon değil,
+                      audit'ten (SystemLog.newData.reason) okunuyor — backend
+                      `findRollById` yanıtına `manualReason` olarak ekliyor.
+                      Yalnız elle doğan topta dolu; diğerlerinde satır çizilmez. */}
+                  {roll.manualReason && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Ekleme Nedeni</div>
+                      <div className="text-xs">{roll.manualReason}</div>
+                    </>
+                  )}
                   {roll.weightKg != null && (
                     <>
                       <div className="text-xs text-muted-foreground">Ağırlık</div>

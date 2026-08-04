@@ -218,6 +218,20 @@ export const rollColumns: ColumnDef<Roll>[] = [
       ),
   },
   {
+    // KAT — topun kalıcı fiziksel özelliği (2026-08-04). Varsayılan GİZLİ:
+    // "Sütunlar" menüsünden açılır. Gerekçe: her operatörü ilgilendirmiyor ve
+    // liste yüzeyi anlık karar için sade kalmalı; ihtiyaç duyan açar.
+    accessorKey: "foldType",
+    header: () => <SortableHeader field="foldType" label="Kat" />,
+    meta: { label: "Kat" },
+    cell: ({ row }) =>
+      row.original.foldType ? (
+        <span className="text-xs">{row.original.foldType}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     accessorKey: "qualityGrade",
     header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
     meta: { label: "Kalite" },

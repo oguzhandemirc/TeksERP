@@ -79,7 +79,15 @@ export interface Roll {
   markedForKartela?: boolean;
   /** Etiket bayat mı — veri/metraj düzeltildi ama fiziksel etiket yeniden basılmadı. */
   labelDirty?: boolean;
+  /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"). Kalıcı özellik; NULL = kayıtlı değil. */
+  foldType?: string | null;
   entrySource: string;
+  /**
+   * Elle eklenen topun sebebi — YALNIZ detay ucunda (`GET /rolls/:id`) döner,
+   * liste yanıtında YOK (her satır için audit sorgusu koşmasın). Şemada kolon
+   * değildir; backend audit'ten okur (bkz. `readManualEntryReason`).
+   */
+  manualReason?: string | null;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */
   parentReceiptId: string | null;
