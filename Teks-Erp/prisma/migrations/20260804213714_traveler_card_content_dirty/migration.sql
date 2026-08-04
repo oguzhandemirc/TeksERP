@@ -1,0 +1,37 @@
+-- Refakat kartına "basılı kâğıt bayat mı" bayrağı.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- NEDEN
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Kart iş emri AÇILIŞINDA doğar ve basılabilir; parti (Batch) ise `attachRolls`'ta,
+-- yani SONRA doğar. Bilgisayardan iş emri açıp kartı hemen basan operatörün elinde
+-- parti no'su OLMAYAN bir kâğıt kalıyordu — ve hiçbir yer bunu söylemiyordu.
+-- Aynı sessizlik kısmi fason sevkinde de var: kalan toplar YENİ parti numarası alır
+-- (`splitRemainder`), çok partili sevkte K11 merge kaynak partileri yutar; her iki
+-- durumda da basılı kart yanlışlanır.
+--
+-- Sistem bu problemi TOP ETİKETİ için zaten çözmüştü (`Roll.labelDirty`,
+-- `Sack.labelDirty` — "fiziksel etiketteki Parti No bayat → yeniden bas uyarısı").
+-- Kartta karşılığı yoktu; bu kolon o boşluğu kapatır. Tek yazma noktası:
+-- `services/helpers/traveler-card-dirty.helper.markTravelerCardDirtyTx`.
+-- Temizleyen: `POST /api/traveler-cards/:id/print-event` ve `reprint`.
+--
+-- ⚠️ K18 KURALI BURAYA KOPYALANMAZ. Rol etiketinde "ilk parti ataması bayraklanmaz"
+-- denir, çünkü etiket henüz parti numarasıyla basılmamıştır. Kartta TERSİ geçerlidir:
+-- kart parti doğmadan basılabildiği için ilk parti doğuşu asıl bayatlatan olaydır.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- GÜVENLİK
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PG11+ SABİT (non-volatile) varsayılanlı kolon eklemeyi de METADATA-ONLY yapar —
+-- tablo yeniden yazılmaz, kilit anlık. `traveler_cards` zaten küçük (WO başına 1
+-- satır). Mevcut kartlar `false` ile başlar: geçmişe dönük "bayat" iddiası
+-- üretmiyoruz; bayrak bundan sonraki ilk gerçek değişiklikte doğar.
+ALTER TABLE "traveler_cards" ADD COLUMN "contentDirty" BOOLEAN NOT NULL DEFAULT false;
+
+-- NOT: Prisma bu diff'e `rolls_sackId_shipmentId_consistency_fkey` ve
+-- `swatches_sackId_shipmentId_consistency_fkey` için DropForeignKey satırları
+-- ekledi; İKİSİ DE SİLİNDİ. Bunlar datamodel'de temsil edilemeyen DEFERRABLE
+-- composite FK'lardır ve `migrate dev` HER diff'te düşürmek ister (bkz.
+-- schema.prisma:2557-2558 + CLAUDE.md "sacks composite FK drift'i"). Bırakılsaydı
+-- çuval/sevkiyat tutarlılık seddi sessizce kalkardı.

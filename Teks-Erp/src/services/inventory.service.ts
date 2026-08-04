@@ -41,6 +41,10 @@ const ROLL_DATE_FIELDS = ["createdAt"] as const;
 // Rolls listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) +
 // createdAt/id kararlı tie-break. Whitelist dışı sortBy → createdAt'e düşer
 // (bilinmeyen kolon 500'ünü ve indekssiz keyfi sortu engeller).
+// Filtre değerlerinde UUID doğrulaması — ham string doğrudan Prisma where'ine
+// düşerse "Inconsistent column data" ile 500 olur (istemci hatası 500 olmamalı).
+const ROLL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const ROLL_SORTABLE_FIELDS = [
   "createdAt",
   "updatedAt",
@@ -50,6 +54,12 @@ const ROLL_SORTABLE_FIELDS = [
   "width",
   "qualityGrade",
   "status",
+  // 2026-08-04: kolon "Kat" başlığıyla SortableHeader olarak basılıyor. Bu
+  // listede olmasaydı tıklama SESSİZCE iki şey yapardı: sıralama olmaz VE
+  // query-parser bilinmeyen alanı fallback'e ("createdAt") düşürdüğü için
+  // sekmenin updatedAt-desc varsayılanı da kaybolurdu ("Buraya geliş ≠
+  // oluşturma" kuralının ihlali) — hata yok, log yok.
+  "foldType",
 ] as const;
 
 function readList(value: string | string[] | undefined): string[] {
@@ -357,6 +367,29 @@ const ROLL_LIST_INCLUDE = {
   },
   shipment: { select: { id: true, shipmentNo: true, status: true } },
   sack: { select: { id: true, sackNo: true, seq: true } },
+  // TOPUN ŞU AN BULUNDUĞU ADIM/İSTASYON (2026-08-04 saha talebi).
+  //
+  // Eskiden liste yanıtı bu veriyi HİÇ taşımıyordu — yani "Üretimde" sekmesinde
+  // operatörün ilk sorusu ("hangi kumaş hangi istasyonda?") frontend'de
+  // cevaplanamıyordu; kolon yazılamazdı çünkü veri yoktu. Aynı boşluk detay
+  // panelinde de vardı.
+  //
+  // İlişki TEKİLDİR (to-one) → Prisma bunu sayfa başına tek ek sorguyla çözer,
+  // N+1 doğmaz (dispatchItems'ın LATERAL take:1 emsaliyle aynı maliyet sınıfı).
+  // Alanlar `select` ile daraltıldı (perf kuralı 7): istasyon kimliği + adım
+  // sırası + iş emri numarası — kolon, filtre ve "hangi işe ait" sorusu için
+  // gereken asgari küme.
+  //
+  // ⚠️ Ham Stok / Bitmiş Depo / Çuvalda sekmelerinde bu alan HER ZAMAN null'dur
+  // (o toplar bir adımda değildir) — kolon oralarda "—" basar ve bu doğrudur.
+  currentStep: {
+    select: {
+      id: true,
+      stepSequence: true,
+      station: { select: { id: true, code: true, name: true, kind: true } },
+      workOrder: { select: { id: true, workOrderNumber: true } },
+    },
+  },
   // Fasonda görünürlüğü: topun AÇIK (dönmemiş) son fason sevk kalemi — liste
   // "İşlem" + "Fason Firması" kolonlarını besler. Açık-kalem tanımı F85 ile
   // birebir (iptalsiz + doğrudan-sevksiz dispatch + aktif receipt-item'ı yok)
@@ -1001,6 +1034,33 @@ export class InventoryService {
     ) {
       where.currentStep = {
         is: { station: { kind: currentStepKindRaw as StationKind } },
+      };
+    }
+
+    // İSTASYON KİMLİĞİ filtresi (2026-08-04) — TÜR filtresinden AYRI bir sorudur.
+    //
+    // currentStepKind "hangi TÜR istasyon" der (PROCESS_QC, TAMBUR…) ve iki ayrı
+    // boyahaneyi tek seçenekte birleştirir. Operatörün sorduğu soru ise "ŞU
+    // makinede ne var" — yani kimlik. İkisi birlikte de gelebilir.
+    //
+    // ⚠️ buildWhereClause tanımadığı filtre anahtarını HAM geçirir: bu blok
+    // olmasaydı filter[currentStationId]=<uuid> doğrudan where içine düşer ve
+    // Prisma "Unknown argument" ile 500 verirdi (foldType'taki "sessiz 0 satır"
+    // tuzağının gürültülü kardeşi). Anahtar her hâlükârda silinir.
+    const currentStationIdRaw = f["currentStationId"] as string | undefined;
+    delete where.currentStationId;
+    if (currentStationIdRaw && ROLL_UUID_RE.test(currentStationIdRaw)) {
+      const prev = (where.currentStep as { is?: Record<string, unknown> } | undefined)?.is;
+      where.currentStep = {
+        is: {
+          ...(prev ?? {}),
+          // Tür filtresi de varsa istasyon koşulları BİRLEŞTİRİLİR — üstüne
+          // yazmak iki filtreden birini sessizce yok saymak olurdu.
+          station: {
+            ...((prev?.station as Record<string, unknown> | undefined) ?? {}),
+            id: currentStationIdRaw,
+          },
+        },
       };
     }
 
@@ -1735,14 +1795,15 @@ export class InventoryService {
    * Get a single roll by ID with all relations.
    */
   /**
-   * ELLE EKLENEN TOPUN SEBEBİ — audit'ten okunur (2026-08-04).
+   * ELLE EKLENEN TOPUN SEBEBİ — KOLONDAN okunur, audit yalnız geçiş fallback'i.
    *
-   * Sebep şemada kolon DEĞİL, `SystemLog.newData.reason` içinde durur (WO kapanış
-   * dispozisyonu deseni: canlı fabrikada tek bir alan için tablo yeniden yazımı
-   * yapılmaz). Ama YALNIZ audit'te kalması "yazılıyor ama okunmuyor" demekti —
-   * operatör topa bakarken sebebi göremiyor, Aktivite Günlüğü'nde doğru satırı
-   * bulup JSON'a bakması gerekiyordu. "Bu top nereden geldi" sorusu TOPA
-   * BAKARKEN sorulur; cevabı da orada olmalı.
+   * ⚠️ Bu başlık 2026-08-04'te bir kez YANLIŞ yazıldı ("sebep şemada kolon
+   * DEĞİL") ve aynı yanlış cümle Electron'daki iki dosyaya da kopyalandı.
+   * Doğrusu: `Roll.entryReason` ŞEMADA KOLONDUR (`schema.prisma`, migration
+   * `20260804210000`) ve asıl kaynak odur. Sebebin yalnız audit'te durması
+   * kabul edilemezdi çünkü `archive-scheduler` 6 ayda bir (MONTHS_TO_KEEP=6)
+   * SystemLog satırlarını `system_log_archives`'e TAŞIR — altı ay sonra
+   * "bu top nereden geldi" sorusunun cevabı sessizce kaybolurdu.
    *
    * Yalnız elle doğan iki kaynakta sorgulanır — diğer toplarda ek sorgu KOŞMAZ.
    */
@@ -1767,14 +1828,26 @@ export class InventoryService {
     // doldurma script'i koştuktan sonra pratikte boş döner ama KALIR — audit
     // arşivlenmemiş eski kayıtlar için son şans (arşive BAKMAZ; oraya düşmüş
     // sebep zaten geri getirilemez, doğrusu backfill'i zamanında koşmaktır).
-    const log = await prisma.systemLog.findFirst({
+    // ⚠️ EN ESKİ CREATE'İ ALMA — o satırda sebep YOKTUR. Elle ekleme İKİ audit
+    // kaydı doğurur: önce `createInitialEntry`'nin generic CREATE'i (sebep
+    // taşımaz), milisaniyeler sonra `TAMBUR_MANUAL_ROLL` olayı (sebep ONDA).
+    // `orderBy: asc` + `findFirst` her seferinde SEBEPSİZ olanı seçiyordu, yani
+    // fallback pratikte ÖLÜYDÜ ve hep null dönüyordu (dev DB'de dört topta
+    // birebir ölçüldü). Doğrusu: CREATE kayıtlarını gez, sebebi TAŞIYANI bul.
+    // Aynı tuzak `scripts/backfill_roll_fold_and_reason.ts`de de yaşandı ve
+    // orada düzeltilmişti; bu, o düzeltmenin servise taşınmış hâlidir.
+    const logs = await prisma.systemLog.findMany({
       where: { tableName: "ROLL", recordId: rollId, action: "CREATE" },
       orderBy: { createdAt: "asc" },
       select: { newData: true },
+      take: 10,
     });
-    const data = (log?.newData ?? null) as Record<string, unknown> | null;
-    const r = data?.reason;
-    return typeof r === "string" && r.trim() ? r.trim() : null;
+    for (const log of logs) {
+      const data = (log.newData ?? null) as Record<string, unknown> | null;
+      const r = data?.reason;
+      if (typeof r === "string" && r.trim()) return r.trim();
+    }
+    return null;
   }
 
   async findRollById(id: string): Promise<ApiResponse<Roll | null>> {
@@ -1792,6 +1865,16 @@ export class InventoryService {
         // Elle eklenen topta "kim ekledi" sorusu sebep kadar önemli.
         createdBy: { select: { id: true, fullName: true, username: true } },
         createdMachine: { select: { id: true, name: true, code: true } },
+        // TOPUN BULUNDUĞU ADIM/İSTASYON — liste include'uyla AYNI şekil.
+        // İkisi ayrışırsa panel ile satır aynı top için farklı şey söyler.
+        currentStep: {
+          select: {
+            id: true,
+            stepSequence: true,
+            station: { select: { id: true, code: true, name: true, kind: true } },
+            workOrder: { select: { id: true, workOrderNumber: true } },
+          },
+        },
         operations: {
           select: {
             id: true,
@@ -2579,21 +2662,32 @@ export class InventoryService {
       // Açık RollMovement'ları topla — sonra status recompute için step ID'leri lazım
       const openMovements = await tx.rollMovement.findMany({
         where: { rollId: id, exitedAt: null },
-        select: { id: true, workOrderStepId: true },
+        select: { id: true, workOrderStepId: true, notes: true },
       });
       const affectedStepIds = new Set<string>();
       for (const m of openMovements) affectedStepIds.add(m.workOrderStepId);
       if (existing.currentStepId) affectedStepIds.add(existing.currentStepId);
 
-      // Açık movement'ları kapat
-      if (openMovements.length > 0) {
-        await tx.rollMovement.updateMany({
-          where: { rollId: id, exitedAt: null },
+      // Açık movement'ları kapat.
+      //
+      // qtyOut = 0 LOAD-BEARING: "mal bu istasyondan HİÇ geçmedi" (storno).
+      // Kurtarma/dispozisyonun qtyOut = qtyIn semantiğinden bilinçli farklıdır —
+      // orada mal gerçekten vardı ve çıktı, burada kayıt baştan hatalıydı.
+      //
+      // ⚠️ NOT EZİLMİYOR (2026-08-04): eskiden notes körlemesine "CANCELLED"
+      // yazılıyordu ve elle eklenen topun hareketindeki "TAMBUR_MANUAL_ROLL:
+      // <sebep>" izi SİLİNİYORDU. Topun entryReason kolonu ve audit'i kalsa da
+      // hareket geçmişi "neden vardı" sorusunu cevaplayamaz hâle geliyordu —
+      // tam da iptal edilen bir kaydı sonradan incelerken en çok gereken bilgi.
+      // Artık eski not parantez içinde korunur.
+      for (const m of openMovements) {
+        await tx.rollMovement.update({
+          where: { id: m.id },
           data: {
             exitedAt: new Date(),
             qtyOut: 0,
             weightOut: 0,
-            notes: "CANCELLED",
+            notes: m.notes?.trim() ? `CANCELLED (${m.notes.trim()})`.slice(0, 500) : "CANCELLED",
           },
         });
       }

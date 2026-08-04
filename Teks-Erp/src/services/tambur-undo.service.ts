@@ -25,13 +25,32 @@
 // HER kaydı somut listeler; apply tx-içi TAZE guard'larla (atomik claim) korunur.
 // =============================================================================
 
-import { Prisma, RollStatus, RollOperationType, WorkOrderStatus } from "@prisma/client";
+import { Prisma, RollStatus, RollOperationType, RollEntrySource, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { recomputeStepStatus } from "./helpers/roll-step.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { InventoryService } from "./inventory.service";
+
+/**
+ * Elle eklenen topu geri alırken İKİNCİ BİR İPTAL MOTORU YAZILMAZ.
+ *
+ * Doğru semantik zaten softDelete'te yaşıyor: CANCELLED + açık hareket
+ * qtyOut=0 ile kapanır ("mal bu istasyondan hiç geçmedi" = storno). İkinci bir
+ * yol açmak "üçüncü kaynak üçüncü rakam" hatasının ta kendisi olurdu —
+ * guard'lar, audit ve adım recompute'u zamanla ayrışırdı.
+ */
+const inventoryService = new InventoryService();
+
+/** MANUAL modda geri alınabilir statüler — top henüz hiçbir yere bağlanmamış. */
+const MANUAL_UNDOABLE_STATUSES: RollStatus[] = [
+  RollStatus.IN_PRODUCTION, // "Düzelt → Manuel Top Ekle" (adıma bağlı)
+  RollStatus.WAREHOUSE,     // "Manuel Mod" (kartsız bitmiş ürün)
+  RollStatus.A1_STOCK,
+  RollStatus.STOCK,
+];
 
 /** Çocuğun iptal edilebilir olduğu statüler — dokunulmamış Tambur çıktıları. */
 const CHILD_CANCELABLE_STATUSES: RollStatus[] = [
@@ -41,7 +60,18 @@ const CHILD_CANCELABLE_STATUSES: RollStatus[] = [
   RollStatus.SCRAP,
 ];
 
-type UndoMode = "SINGLE" | "FULL";
+/**
+ * SINGLE = tek kesim parçası · FULL = finalize tümden · MANUAL = elle eklenen
+ * topun kaydını geri alma (2026-08-04).
+ *
+ * MANUAL neden BU serviste: operatörün elindeki buton zaten burada ("Son Çıkan
+ * Toplar" satırındaki Geri Al) ve o buton elle eklenen topta da GÖRÜNÜYORDU —
+ * yalnız backend 400 veriyordu ("Bu top bir Tambur kesim/finalize işleminin
+ * parçası değil"). Yani operatör "Geri Al" yazan modalda çıkmaza giriyordu.
+ * Ayrı bir uç/ekran açmak yerine var olan yüzey doğru cevabı verir hâle
+ * getirildi; yeni izin kodu da doğmadı (2026-08-01 kurşun bypass dersi).
+ */
+type UndoMode = "SINGLE" | "FULL" | "MANUAL";
 
 interface ChildRow {
   id: string;
@@ -89,6 +119,7 @@ export class TamburUndoService {
     if (!ctx.canApply) {
       throw AppError.conflict(ctx.blockReason ?? "Bu işlem geri alınamaz");
     }
+    if (ctx.mode === "MANUAL") return this.applyManual(ctx.parentId, userId);
     if (ctx.mode === "SINGLE") return this.applySingle(ctx.parentId, ctx.children[0].id, userId);
     return this.applyFull(ctx.parentId, userId);
   }
@@ -130,6 +161,10 @@ export class TamburUndoService {
       if (!parent) throw AppError.notFound("Kaynak top bulunamadı");
       parentId = parent.id;
       mode = parent.status === RollStatus.TAMBUR_CONSUMED ? "FULL" : "SINGLE";
+    } else if (roll.entrySource === RollEntrySource.TAMBUR_MANUAL) {
+      // ELLE EKLENEN TOP — kesim soyağacı yok, olamaz da. Geri alma burada
+      // "kaydı yok say" demektir, "kesimi geri al" değil.
+      return this.resolveManualContext(rollId);
     } else {
       throw AppError.badRequest("Bu top bir Tambur kesim/finalize işleminin parçası değil");
     }
@@ -307,6 +342,154 @@ export class TamburUndoService {
   // SINGLE — tek parça iptali (parent yaşıyor)
   // ───────────────────────────────────────────────────────────────────────────
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // MANUAL — elle eklenen topun kaydını geri al (2026-08-04)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Kapsam BİLEREK DAR: yalnız elle eklenmiş ve HENÜZ HİÇ İŞLEM GÖRMEMİŞ top.
+   *
+   * "Hiç işlem görmemiş"in üç ölçütü var ve üçü de gerçek bir soruya karşılık
+   * gelir: (a) kesilmemiş — çocuğu varsa metraj başka kayıtlara dağılmıştır;
+   * (b) istasyon işlemi görmemiş — kurşun/QC2/Tambur kararı yazılmışsa o karar
+   * da geri alınmalıdır ve bu, bu ucun işi değildir; (c) çuval/sevkiyata
+   * girmemiş. Bunlardan biri bile ihlal edilmişse operatör düzeltemez — iş
+   * süpervizörün "Düzelt"/dispozisyon yollarına aittir ve blockReason bunu
+   * AÇIKÇA söyler (çıkmaz bırakmak, yanlış işlem yaptırmaktan sonra en kötüsü).
+   */
+  private async resolveManualContext(rollId: string): Promise<Awaited<ReturnType<TamburUndoService["resolveContext"]>>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true, barcode: true, status: true, currentQty: true, initialQty: true,
+        entryReason: true, currentStepId: true, sackId: true, shipmentId: true,
+        directShipmentId: true, batchId: true,
+        batch: { select: { batchNumber: true } },
+        currentStep: {
+          select: {
+            workOrder: { select: { id: true, workOrderNumber: true, status: true } },
+          },
+        },
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    const warnings: string[] = [];
+    let blockReason: string | null = null;
+
+    if (roll.status === RollStatus.CANCELLED) {
+      blockReason = "Bu top zaten iptal edilmiş";
+    } else if (roll.sackId) {
+      blockReason = "Çuvala okutulmuş — önce çuvaldan çıkarın";
+    } else if (roll.shipmentId || roll.directShipmentId) {
+      blockReason = "Sevkiyata girmiş — geri alınamaz";
+    } else if (!MANUAL_UNDOABLE_STATUSES.includes(roll.status)) {
+      blockReason = `Bu durumda geri alınamaz (${roll.status})`;
+    }
+
+    if (!blockReason) {
+      const [childCount, opCount, movementCount] = await Promise.all([
+        prisma.roll.count({ where: { parentRollId: rollId } }),
+        prisma.rollOperation.count({ where: { rollId } }),
+        prisma.rollMovement.count({ where: { rollId } }),
+      ]);
+      if (childCount > 0) {
+        blockReason = "Bu top kesilmiş (parçaları var) — önce kesimi geri alın";
+      } else if (opCount > 0) {
+        blockReason =
+          "Bu top istasyon işlemi görmüş (kurşun/kalite/Tambur kararı yazılmış) — " +
+          "operatör geri alamaz, süpervizöre başvurun";
+      } else if (movementCount > 1) {
+        // Elle ekleme TEK açık hareket doğurur. Fazlası, topun istasyonlar
+        // arasında gezdiği anlamına gelir.
+        blockReason =
+          "Bu top eklendikten sonra istasyon değiştirmiş — operatör geri alamaz, " +
+          "süpervizöre başvurun";
+      }
+    }
+
+    if (!blockReason && roll.barcode) {
+      warnings.push(`Basılmış ${roll.barcode} etiketi varsa imha edilmeli`);
+    }
+    if (!blockReason && roll.batch?.batchNumber) {
+      // Parti bağı iptalde TOPTA KALIR (softDelete batchId'ye dokunmaz) — bu
+      // bilinçlidir: "hangi partiye yanlış top yazılmıştı" izi korunur.
+      warnings.push(`${roll.batch.batchNumber} partisinden düşecek`);
+    }
+
+    const wo = roll.currentStep?.workOrder ?? null;
+    return {
+      mode: "MANUAL",
+      canApply: blockReason === null,
+      blockReason,
+      parentId: roll.id,
+      parent: {
+        id: roll.id,
+        barcode: roll.barcode,
+        status: roll.status,
+        currentQty: Number(roll.currentQty),
+        initialQty: Number(roll.initialQty),
+      },
+      restoredQty: 0,
+      // Tek kayıt etkileniyor ve o da topun KENDİSİ — yıkıcı-işlem kuralı
+      // gereği somut listelenir ("1 kayıt etkilenecek" gibi soyut sayı yetmez).
+      children: [
+        {
+          id: roll.id,
+          barcode: roll.barcode,
+          status: roll.status,
+          qty: Number(roll.currentQty),
+          blockReason,
+        },
+      ],
+      reopenErrorCount: 0,
+      // İş emri DİRİLTİLMEZ/kapatılmaz: bu top oraya hiç ait olmamalıydı.
+      // willRevive=false — önizleme yanlış vaat etmesin.
+      workOrder: wo
+        ? { id: wo.id, workOrderNumber: wo.workOrderNumber, status: wo.status, willRevive: false }
+        : null,
+      warnings,
+    };
+  }
+
+  /**
+   * Uygulama: motor `InventoryService.softDelete` — burada YENİDEN YAZILMAZ.
+   * `confirmActive` veriyoruz çünkü top bilerek istasyonda aktif olabilir
+   * (IN_PRODUCTION); onayı zaten önizleme + operatörün butonu temsil ediyor.
+   * softDelete adım/WO durumunu kendi recompute eder.
+   */
+  private async applyManual(rollId: string, userId?: string): Promise<ApiResponse<unknown>> {
+    // Tazeleme: önizleme ile uygulama arasında top kesilmiş/çuvala girmiş
+    // olabilir. Guard'ı tekrar koştur (yıkıcı-işlem kuralı: apply kendi
+    // guard'ına sahiptir, preview'a güvenmez).
+    const fresh = await this.resolveManualContext(rollId);
+    if (!fresh.canApply) {
+      throw AppError.conflict(fresh.blockReason ?? "Bu işlem geri alınamaz");
+    }
+    const res = await inventoryService.softDelete(rollId, userId, { confirmActive: true });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: rollId,
+      newData: {
+        event: "TAMBUR_MANUAL_ROLL_UNDO",
+        barcode: fresh.parent.barcode,
+        qty: fresh.parent.currentQty,
+        previousStatus: fresh.parent.status,
+        workOrderNumber: fresh.workOrder?.workOrderNumber ?? null,
+      },
+    });
+
+    return {
+      success: true,
+      data: { rollId, barcode: fresh.parent.barcode, mode: "MANUAL" as const },
+      message: `Elle eklenen top geri alındı (iptal edildi)${
+        fresh.parent.barcode ? `: ${fresh.parent.barcode}` : ""
+      }. ${res.message ?? ""}`.trim(),
+    };
+  }
   private async applySingle(parentId: string, childId: string, userId?: string): Promise<ApiResponse<unknown>> {
     const result = await prisma.$transaction(async (tx) => {
       const child = await tx.roll.findUnique({

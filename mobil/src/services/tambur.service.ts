@@ -14,7 +14,16 @@ import type {
 
 /** GET /tambur/rolls/:id/undo-preview yanıtı (backend TamburUndoService). */
 export interface TamburUndoPreview {
-  mode: 'SINGLE' | 'FULL';
+  /**
+   * SINGLE = tek kesim parçası · FULL = finalize tümden · MANUAL = elle eklenen
+   * topun kaydını geri al (2026-08-05).
+   *
+   * MANUAL'de "kaynak top" ve "geri dönecek metraj" kavramları YOKTUR: top
+   * bir kesimden doğmadı, yoktan yaratıldı. Backend o alanları uyumluluk için
+   * doldurur (parent = topun kendisi, restoredQty = 0) — ekran onları MANUAL'de
+   * BASMAMALI, yoksa "0 m geri dönecek" gibi anlamsız bir cümle çıkar.
+   */
+  mode: 'SINGLE' | 'FULL' | 'MANUAL';
   canApply: boolean;
   blockReason: string | null;
   parent: { id: string; barcode: string | null; status: string; currentQty: number; initialQty: number };
@@ -139,6 +148,14 @@ export interface TamburManualRollRequest {
    * cevabı zaten belli olan bir soru sordurmamak için.
    */
   batchId?: string | null;
+  /**
+   * KAT — topun KALICI özelliği. Operatöre SORULUR (miras alınmaz): "o top
+   * kesilerek yeni bir kat değeri kazanabilir" (2026-08-04 ürün kararı).
+   * Gönderilmezse backend parent → iş emri planı sırasını uygular; elle
+   * eklemede parent yoktur, yani sorulmazsa top kalıcı olarak katsız kalır
+   * ve envanterin kat filtresinde hiç görünmez.
+   */
+  foldType?: string | null;
 }
 
 /**

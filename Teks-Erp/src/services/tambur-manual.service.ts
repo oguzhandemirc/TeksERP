@@ -642,6 +642,11 @@ export class TamburManualService {
        * hiç yoksa NULL kalır (parti kavramı işlememiş iş emri).
        */
       batchId?: string | null;
+      /**
+       * KAT (2-KAT / 4-KAT / TÜP…) — topun KALICI özelliği (Roll.foldType).
+       * Verilmezse NULL kalır; miras ALINMAZ, operatörün o an seçtiği değerdir.
+       */
+      foldType?: string | null;
     },
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
@@ -750,10 +755,36 @@ export class TamburManualService {
     // openBatches.length === 0 → parti hiç kullanılmamış; NULL meşrudur.
 
 
+    // ⚠️ İPTAL EDİLMİŞ TOPUN TOKEN'I REPLAY EDİLEMEZ (2026-08-04) —
+    // `produceFinishedRoll`'daki ikizinin aynısı. Orada cevap sessizce YANLIŞ
+    // oluyordu; burada FAZ 2 claim'i (status in [STOCK, WAREHOUSE]) sayesinde
+    // zaten 409 dönüyordu ama mesaj "Top bu sırada başka bir işleme girdi"
+    // diyordu — operatör ekranı yenileyip tekrar deniyor ve aynı duvara
+    // çarpıyordu. Gerçek sebep başka: bu deneme iptalle KAPANMIŞTIR.
+    const priorRoll = await prisma.roll.findUnique({
+      where: { clientToken: input.clientToken },
+      select: { id: true, status: true, barcode: true },
+    });
+    if (
+      priorRoll &&
+      (priorRoll.status === RollStatus.CANCELLED || priorRoll.status === RollStatus.SCRAP)
+    ) {
+      throw AppError.conflict(
+        "Bu kayıt daha önce oluşturulup iptal edilmiş — yeniden eklemek için formu " +
+          "yeniden açın (aynı işlem tekrar gönderilemez).",
+        { code: "ENTRY_CANCELLED", rollId: priorRoll.id, barcode: priorRoll.barcode },
+      );
+    }
+
     // FAZ 1 — topun kendisi. `isMobileOrigin=false` BİLİNÇLİ: istek Tambur
     // tabletinden (eşleşmiş cihaz) gelse de bu bir KK1 istasyon taraması DEĞİL,
-    // elle girilen bir kayıttır → `entrySource` MANUAL_ENTRY kalmalı (zincir dışı
-    // doğumun makine-okunur işareti). `Boolean(req.device)` mantığı burada geçersiz.
+    // elle girilen bir kayıttır → `entrySource` zincir-dışı doğumun makine-okunur
+    // işaretini taşımalı. `Boolean(req.device)` mantığı burada geçersiz.
+    //
+    // ⚠️ Değer TAMBUR_MANUAL'dir, MANUAL_ENTRY DEĞİL (aşağıda `forcedEntrySource`).
+    // Bu yorum bir süre tersini söyledi ve okuyanı yanılttı: MANUAL_ENTRY,
+    // Electron panelinden elle top girişine ait; Tambur'un iki manuel yolu
+    // (adıma bağlı + kartsız) TAMBUR_MANUAL yazar.
     const created = await this.inventoryService.createInitialEntry(
       {
         itemId,
@@ -790,6 +821,8 @@ export class TamburManualService {
         // Sebep artık TOPUN ÜZERİNDE kalıcı kolonda (audit'e ek olarak): audit
         // 6 ayda bir arşivleniyor, oradan okumak sebebi zamanla kaybettiriyordu.
         entryReason: reason,
+        // KAT — operatörün o an seçtiği değer (miras DEĞİL).
+        foldType: input.foldType ?? null,
       },
     );
     const roll = created.data;
@@ -1014,6 +1047,11 @@ export class TamburManualService {
       markedForKartela?: boolean;
       reason: string;
       clientToken: string;
+      /**
+       * KAT (2-KAT / 4-KAT / TÜP…) — topun KALICI özelliği (Roll.foldType).
+       * Verilmezse NULL kalır; miras ALINMAZ, operatörün o an seçtiği değerdir.
+       */
+      foldType?: string | null;
     },
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
@@ -1049,8 +1087,31 @@ export class TamburManualService {
     // yakalayıp mevcut kaydı döner.)
     const priorRoll = await prisma.roll.findUnique({
       where: { clientToken: input.clientToken },
-      select: { id: true },
+      select: { id: true, status: true, barcode: true },
     });
+
+    // ⚠️ İPTAL EDİLMİŞ TOPUN TOKEN'I REPLAY EDİLEMEZ (2026-08-04).
+    //
+    // Eskiden bu dal yoktu: operatör Manuel Mod'la top ekler, sonra onu geri
+    // alır (CANCELLED), ardından aynı ekrandan "Tekrar Dene" derse istemci AYNI
+    // clientToken'ı gönderirdi. `createInitialEntry` unique çakışmasını yakalayıp
+    // MEVCUT (iptal edilmiş) topu döndürür, uç da `success: true` +
+    // `idempotentReplay: true` + O TOPUN BARKODU ile cevap verirdi. Operatör
+    // "top eklendi" görür, envanterde top YOKTUR — 409'dan daha kötüsü, çünkü
+    // sessizce yanlış bir cevaptır ve stok eksik kalır.
+    //
+    // Doğru cevap NET HATA: mantıksal deneme iptalle KAPANMIŞTIR; yeni top
+    // isteniyorsa yeni bir denemedir ve yeni token ister.
+    if (
+      priorRoll &&
+      (priorRoll.status === RollStatus.CANCELLED || priorRoll.status === RollStatus.SCRAP)
+    ) {
+      throw AppError.conflict(
+        "Bu kayıt daha önce oluşturulup iptal edilmiş — yeniden eklemek için formu " +
+          "yeniden açın (aynı işlem tekrar gönderilemez).",
+        { code: "ENTRY_CANCELLED", rollId: priorRoll.id, barcode: priorRoll.barcode },
+      );
+    }
 
     let created;
     try {
@@ -1076,6 +1137,9 @@ export class TamburManualService {
           forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
           // Sebep kalıcı kolonda (audit'e EK olarak — audit arşivleniyor).
           entryReason: reason,
+          // KAT — Manuel Mod bunu operatöre ZORUNLU soruyor; Zod eksikken
+          // veri buraya hiç ulaşmıyordu.
+          foldType: input.foldType ?? null,
           markedForKartela: input.markedForKartela,
           labelIntentSnapshot: buildIntentSnapshot(intent),
         },

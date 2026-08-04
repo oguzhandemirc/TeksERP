@@ -213,7 +213,11 @@ router.get("/rolls/:rollId", verifyToken, requireAnyPermission("quality:read", "
 router.get(
   "/rolls/:rollId/undo-preview",
   verifyToken,
-  requireAnyPermission("quality:read", "mobile:tambur"),
+  // "mobile:tambur-duzelt" 2026-08-04te eklendi: elle eklenen topu GERI ALMA
+  // (MANUAL modu) da bu uctan gecer ve karar "ekleyen kendisi geri alsin" oldu.
+  // Yaratma izni bu kod; iptal izni baska bir kumede kalsaydi yaratabilen kisi
+  // hatasini duzeltemez, vardiya ortasinda birini beklerdi.
+  requireAnyPermission("quality:read", "mobile:tambur", "mobile:tambur-duzelt"),
   controller.getUndoPreview,
 );
 
@@ -235,7 +239,7 @@ router.get(
 router.post(
   "/rolls/:rollId/undo",
   verifyToken,
-  requireAnyPermission("quality:write", "mobile:tambur"),
+  requireAnyPermission("quality:write", "mobile:tambur", "mobile:tambur-duzelt"),
   controller.applyUndo,
 );
 

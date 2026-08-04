@@ -6364,8 +6364,10 @@ function TamburUndoConfirmModal({
     },
   });
 
-  const modeText =
-    preview?.mode === 'FULL'
+  const isManualUndo = preview?.mode === 'MANUAL';
+  const modeText = isManualUndo
+    ? 'Elle eklenen bu topun KAYDI geri alınacak — top iptal edilir, sanki hiç eklenmemiş gibi olur.'
+    : preview?.mode === 'FULL'
       ? 'İşlem TÜMDEN geri alınacak — tüm parçalar iptal olur, metraj kaynak topa döner.'
       : 'Yalnız bu parça iptal edilecek — metrajı kaynak topa geri döner.';
 
@@ -6386,7 +6388,9 @@ function TamburUndoConfirmModal({
           <View style={undoStyles.headerIcon}>
             <Icon source="undo-variant" size={20} color="#7c2d12" />
           </View>
-          <Text style={undoStyles.title}>Tambur İşlemini Geri Al</Text>
+          <Text style={undoStyles.title}>
+            {isManualUndo ? 'Elle Eklenen Topu Geri Al' : 'Tambur İşlemini Geri Al'}
+          </Text>
           <IconButton icon="close" size={22} onPress={onDismiss} disabled={applyMut.isPending} style={{ margin: 0 }} />
         </View>
 
@@ -6399,14 +6403,28 @@ function TamburUndoConfirmModal({
         ) : preview ? (
           <ScrollView contentContainerStyle={undoStyles.body}>
             <Text style={undoStyles.modeText}>{modeText}</Text>
-            {barcode ? <Text style={undoStyles.rowLine}>Dokunulan parça: {barcode}</Text> : null}
+            {barcode && !isManualUndo ? (
+              <Text style={undoStyles.rowLine}>Dokunulan parça: {barcode}</Text>
+            ) : null}
 
-            <Text style={undoStyles.sectionTitle}>Kaynak top</Text>
-            <Text style={undoStyles.rowLine}>
-              {preview.parent.barcode ?? preview.parent.id} — geri dönecek metraj: {preview.restoredQty} m
+            {/* MANUAL modda "kaynak top" ve "geri dönecek metraj" YOKTUR — top bir
+                kesimden doğmadı. O blokları basmak "0 m geri dönecek" gibi anlamsız
+                bir cümle üretirdi. Yıkıcı-işlem kuralı yine de sağlanıyor: iptal
+                edilecek kayıt aşağıda barkodu ve metrajıyla SOMUT listeleniyor. */}
+            {!isManualUndo && (
+              <>
+                <Text style={undoStyles.sectionTitle}>Kaynak top</Text>
+                <Text style={undoStyles.rowLine}>
+                  {preview.parent.barcode ?? preview.parent.id} — geri dönecek metraj: {preview.restoredQty} m
+                </Text>
+              </>
+            )}
+
+            <Text style={undoStyles.sectionTitle}>
+              {isManualUndo
+                ? 'İptal edilecek kayıt'
+                : `İptal edilecek parçalar (${preview.children.length})`}
             </Text>
-
-            <Text style={undoStyles.sectionTitle}>İptal edilecek parçalar ({preview.children.length})</Text>
             {preview.children.map((c) => (
               <Text key={c.id} style={[undoStyles.rowLine, c.blockReason ? undoStyles.blockedRow : null]}>
                 • {c.barcode ?? c.id} — {c.qty} m{c.blockReason ? `  ⛔ ${c.blockReason}` : ''}
