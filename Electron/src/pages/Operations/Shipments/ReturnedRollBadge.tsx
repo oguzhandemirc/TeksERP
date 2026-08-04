@@ -1,5 +1,5 @@
 import { Undo2 } from "lucide-react";
-import { formatDate } from "@/lib/format";
+import { safeFormat } from "@/lib/format";
 
 /**
  * "İADE" rozeti — çuval içeriğinde, sevk edildikten SONRA iade alınmış topun
@@ -27,8 +27,8 @@ export function ReturnedRollBadge({
       className="mr-1 inline-flex shrink-0 items-center gap-0.5 rounded border border-amber-500/40 bg-amber-500/10 px-1 py-px align-middle text-[9px] font-semibold uppercase leading-none text-amber-700 dark:text-amber-400"
       title={
         reasonName
-          ? `${formatDate(returnedAt)} tarihinde iade alındı — ${reasonName}`
-          : `${formatDate(returnedAt)} tarihinde iade alındı`
+          ? `${safeFormat(returnedAt, "dd.MM.yyyy HH:mm")} tarihinde iade alındı — ${reasonName}`
+          : `${safeFormat(returnedAt, "dd.MM.yyyy HH:mm")} tarihinde iade alındı`
       }
     >
       <Undo2 className="h-2.5 w-2.5" />
