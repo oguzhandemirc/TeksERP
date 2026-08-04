@@ -333,6 +333,8 @@ export interface Roll {
   qualityGrade: string;
   status: RollStatus;
   entrySource?: RollEntrySource;
+  /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"); NULL = kayıtlı değil. */
+  foldType?: string | null;
   parentReceiptId?: string | null;
   item?: { id: string; code: string; name: string };
   color?: Color | null;
@@ -801,14 +803,25 @@ export interface TamburSplitRollLabel {
 
 export interface TamburOpenCard {
   cardId: string;
+  /** = iş emri numarası (TravelerCard.cardNumber şemada workOrderNumber'dır). */
   cardNumber: string;
   cardBarcode: string;
   workOrderId: string;
+  /**
+   * ⚠️ ADI YANILTICI: parti değil, İŞ EMRİ NUMARASI taşır
+   * (backend `tambur.service.ts` → `batchNumber: s.workOrder.workOrderNumber`).
+   * Yani `cardNumber` ile AYNI değerdir; listede ikisini birden basmak iş emri
+   * numarasını iki kez yazdırıyordu (2026-08-04'te UI'dan kaldırıldı).
+   */
   batchNumber: string;
   stepId: string;
   stationName: string;
   stationCode: string;
   openRollCount: number;
+  /** İş emrinin hedef kumaşı/rengi — liste satırında sütun olarak gösterilir. */
+  itemName?: string | null;
+  colorName?: string | null;
+  colorHex?: string | null;
   /** Tambur adımına ilk roll'un giriş tarihi — liste'de "ne zamandır bekliyor". */
   oldestEnteredAt?: string | null;
 }
@@ -938,6 +951,12 @@ export interface TamburCutRequest {
   targetCustomerId?: string | null;
   /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
   markedForKartela?: boolean;
+  /**
+   * Bu kesimde doğan ÇOCUĞUN katı — topun KALICI özelliği (2026-08-04).
+   * Kesim anında seçilen değer kazanır: aynı topun iki parçası farklı kat
+   * taşıyabilir. Gönderilmezse backend parent → iş emri planı fallback'i uygular.
+   */
+  foldType?: string | null;
   /** Offline/ağ-retry idempotency anahtarı (UUID). Barkod sunucuda sıralı atanır;
    *  aynı token'la 2. çağrı backend'de idempotent döner (çift kesim/decrement YOK). */
   clientToken?: string;

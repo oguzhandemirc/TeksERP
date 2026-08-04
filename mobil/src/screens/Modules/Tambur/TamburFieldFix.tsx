@@ -38,6 +38,13 @@ interface Props {
   /** Ekrandaki Tambur adımı (WorkOrderStep) — iki uç da bunu hedef alır. */
   targetStepId: string;
   stationName: string;
+  /**
+   * Hedef iş emri numarası — MENÜDE AÇIKÇA YAZILIR (2026-08-04 saha geri bildirimi).
+   * Önceki hâl "iş emrinden bağımsız bir ekleme yapılıyor" hissi veriyordu; oysa
+   * her iki aksiyon da TAM OLARAK bu iş emrinin Tambur adımına yazar (ürün ve renk
+   * de ondan miras alınır, operatör değiştiremez).
+   */
+  workOrderNumber?: string | null;
   qualityGrades: QualityGrade[];
   online: boolean;
   /** Başarılı işlem sonrası — ekran Tambur listesini tazeler. */
@@ -49,6 +56,7 @@ export default function TamburFieldFix({
   onDismiss,
   targetStepId,
   stationName,
+  workOrderNumber,
   qualityGrades,
   online,
   onApplied,
@@ -74,18 +82,32 @@ export default function TamburFieldFix({
             {stationName} — elindeki mal ekranda görünmüyorsa buradan çöz.
           </Text>
 
-          <ActionRow
-            icon="arrow-left-bold-box-outline"
-            tint={colors.brand}
-            label="Topu Buraya Al"
-            hint="Sistemde kayıtlı bir topu bu Tambur adımına getir (önce ne olacağını gösterir)"
+          {/* HEDEF İŞ EMRİ — en üstte, vurgulu. Her iki aksiyon da topu BU iş
+              emrinin Tambur adımına yazar; ürün ve renk de ondan gelir. Bunu
+              yazmadan ekran "bağımsız bir ekleme" gibi okunuyordu. */}
+          {workOrderNumber && (
+            <View style={styles.targetBand}>
+              <Icon source="clipboard-text-outline" size={18} color={colors.brand} />
+              <Text style={styles.targetText}>
+                Hedef iş emri: <Text style={styles.targetStrong}>{workOrderNumber}</Text>
+                {'  ·  eklenen top bu iş emrine yazılır'}
+              </Text>
+            </View>
+          )}
+
+          {/* Açıklama satırları KALDIRILDI (2026-08-04): hedef iş emri yukarıdaki
+              bantta zaten yazıyor, buton adları da ne yaptığını söylüyor. İkisi
+              DOLU ve FARKLI renk — yan yana karışmasınlar. */}
+          <ActionButton
+            icon="database-arrow-right-outline"
+            bg="#1d4ed8"
+            label="Sistemdeki Topu Bu İşe Aktar"
             onPress={() => setMode('bring')}
           />
-          <ActionRow
+          <ActionButton
             icon="plus-box-outline"
-            tint={colors.action}
-            label="Manuel Top Ekle"
-            hint="Sistemde hiç kaydı olmayan topu elle ekle — metraj + sebep zorunlu"
+            bg="#b45309"
+            label="Bu İşe Elle Yeni Top Ekle"
             onPress={() => setMode('manual')}
           />
 
@@ -117,28 +139,35 @@ export default function TamburFieldFix({
   );
 }
 
-function ActionRow({
+/**
+ * Dolu renkli aksiyon butonu — beyaz ikon + beyaz yazı. İki aksiyon FARKLI renk
+ * taşır (mavi = mevcut topu aktar, amber = yoktan yeni top): renk tek başına da
+ * ayırt edici olsun, operatör metni okumadan doğru tuşa gitsin.
+ */
+function ActionButton({
   icon,
-  tint,
+  bg,
   label,
-  hint,
   onPress,
 }: {
   icon: string;
-  tint: string;
+  bg: string;
   label: string;
-  hint: string;
   onPress: () => void;
 }) {
   return (
-    <TouchableRipple onPress={onPress} style={styles.row} borderless>
+    <TouchableRipple
+      onPress={onPress}
+      style={[styles.actionBtn, { backgroundColor: bg }]}
+      borderless
+      rippleColor="rgba(255,255,255,0.24)"
+    >
       <View style={styles.rowInner}>
-        <Icon source={icon} size={26} color={tint} />
-        <View style={styles.rowText}>
-          <Text style={styles.rowLabel}>{label}</Text>
-          <Text style={styles.rowHint}>{hint}</Text>
-        </View>
-        <Icon source="chevron-right" size={22} color={colors.textMuted} />
+        <Icon source={icon} size={26} color="#fff" />
+        <Text style={styles.actionLabel} numberOfLines={2}>
+          {label}
+        </Text>
+        <Icon source="chevron-right" size={22} color="rgba(255,255,255,0.85)" />
       </View>
     </TouchableRipple>
   );
@@ -159,8 +188,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     marginBottom: spacing.sm,
   },
+  // Hedef iş emri bandı — menünün en üstünde, aksiyonlardan önce okunur.
+  targetBand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  targetText: { flex: 1, fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
+  targetStrong: { fontWeight: '800', color: colors.text, fontFamily: 'monospace' },
   // 56dp+ dokunma hedefi (fabrika eldiveni) — mobil/CLAUDE.md.
-  row: { borderRadius: radius.md, minHeight: 64, justifyContent: 'center' },
+  actionBtn: {
+    borderRadius: radius.md,
+    minHeight: 68,
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  actionLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 21,
+  },
   rowInner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -168,8 +224,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
   },
-  rowText: { flex: 1, minWidth: 0 },
-  rowLabel: { fontSize: 16, fontWeight: '700', color: colors.text },
-  rowHint: { fontSize: 12, color: colors.textSecondary, marginTop: 2, lineHeight: 16 },
   close: { marginTop: spacing.xs },
 });
