@@ -12,9 +12,38 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { systemSettingService } from "../services/system-setting.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import {
+  DOCUMENT_DESIGN_FLAG_KEYS,
+  DOCUMENT_DESIGN_WRITE,
+} from "../constants/document-design";
 
 const router = Router();
+
+/**
+ * PATCH gövdesine göre DEĞİŞEN yetki kapısı (2026-08-05).
+ *
+ * Bu uç sistemin TÜM ayarlarını taşır ama Belge Şablonları / Refakat Kartı
+ * ekranları da buraya yazar. Ucu tümüyle `document-template:write`e açmak,
+ * şablon tasarımcısına oturum ömrünü, yedek saatini ve kk1 tuzağını da
+ * vermek olurdu; kapalı bırakmak ise dar iznin hiçbir işe yaramaması demekti.
+ *
+ * Kural: gövde YALNIZ belge tasarım anahtarlarını taşıyorsa dar izin yeter.
+ * Tek bir yabancı anahtar (ya da BOŞ gövde) → `admin:settings`. FAIL-CLOSED:
+ * tanınmayan/beklenmeyen her şey geniş izne düşer, Zod `strictObject`
+ * doğrulaması ise bu kapıdan SONRA koşar (kapı yalnız anahtar ADLARINA bakar,
+ * değerlere değil — bu yüzden `__proto__` gibi tuhaf anahtarlar da yabancı
+ * sayılır ve dar yolu açmaz).
+ */
+const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void => {
+  const keys = Object.keys((req.body ?? {}) as Record<string, unknown>);
+  const onlyDocumentKeys =
+    keys.length > 0 && keys.every((k) => DOCUMENT_DESIGN_FLAG_KEYS.has(k));
+  const guard = onlyDocumentKeys
+    ? requireAnyPermission(...DOCUMENT_DESIGN_WRITE)
+    : requirePermission("admin:settings");
+  guard(req, res, next);
+};
 
 // Tek spec alanı — göster + boyut + kalınlık (default'larla tam nesne üretir).
 const DEF_SPEC_FIELD = { show: true, size: "md" as const, weight: "normal" as const };
@@ -297,7 +326,9 @@ router.get(
  *     tags: [Feature Flags]
  *     summary: Feature flag toggle (admin)
  *     description: |
- *       Verilmeyen flag'ler dokunulmaz. admin:settings yetkisi gerekli.
+ *       Verilmeyen flag'ler dokunulmaz. Kural olarak `admin:settings` gerekli;
+ *       gövde YALNIZ belge tasarım anahtarlarını (documentsConfig,
+ *       travelerCardConfig) taşıyorsa `document-template:write` de yeterlidir.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -313,7 +344,7 @@ router.get(
 router.patch(
   "/",
   verifyToken,
-  requirePermission("admin:settings"),
+  flagWriteGuard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = updateSchema.parse(req.body);
@@ -382,6 +413,11 @@ router.get(
  *       200: { description: Güncel logo }
  *       400: { description: Format/boyut hatası }
  */
+// ⚠️ BİLEREK `admin:settings` — `document-template:write` buraya EKLENMEDİ.
+// Logo firmanın KİMLİĞİDİR, bir şablon ayarı değil; ayrıca onu yazan tek ekran
+// (Genel Ayarlar → Firma) zaten `admin:settings` arkasında, yani dar izinli
+// kullanıcının bu uca ulaşacağı bir yol yok. Aynı gerekçe `companyName` ve
+// `companyLetterhead` için de geçerli (bkz. constants/document-design.ts).
 router.put(
   "/documents-logo",
   verifyToken,

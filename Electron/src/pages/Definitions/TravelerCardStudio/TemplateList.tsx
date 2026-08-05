@@ -25,6 +25,7 @@ export function TemplateList({
   onClearDefault,
   onDelete,
   busy,
+  readOnly = false,
 }: {
   templates: TravelerTemplate[];
   selectedId: string | null;
@@ -34,6 +35,12 @@ export function TemplateList({
   onClearDefault: () => void;
   onDelete: (t: TravelerTemplate) => void;
   busy?: boolean;
+  /**
+   * Salt-okunur (yalnız `document-template:read`) — YAZMA aksiyonları çizilmez.
+   * `disabled` değil GİZLEME: bunlar saf yazma eylemleridir, gri bir "Sil"
+   * butonu kullanıcıya olmayan bir yolu vaat eder. Liste gezilebilir kalır.
+   */
+  readOnly?: boolean;
 }) {
   const anyDefault = templates.some((t) => t.isDefault);
 
@@ -43,9 +50,11 @@ export function TemplateList({
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Şablonlar
         </span>
-        <Button type="button" size="sm" variant="outline" className="h-7 gap-1" disabled={busy} onClick={onNew}>
-          <Plus className="h-3.5 w-3.5" /> Yeni
-        </Button>
+        {!readOnly && (
+          <Button type="button" size="sm" variant="outline" className="h-7 gap-1" disabled={busy} onClick={onNew}>
+            <Plus className="h-3.5 w-3.5" /> Yeni
+          </Button>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 space-y-1.5 overflow-auto pr-1">
@@ -94,7 +103,7 @@ export function TemplateList({
                   {!t.isActive && " · pasif"}
                 </p>
               </button>
-              {selectedId === t.id && (
+              {selectedId === t.id && !readOnly && (
                 <div className="mt-2 flex gap-1">
                   <Button
                     type="button"
@@ -123,7 +132,7 @@ export function TemplateList({
         })}
       </div>
 
-      {anyDefault && (
+      {anyDefault && !readOnly && (
         <Button
           type="button"
           size="sm"

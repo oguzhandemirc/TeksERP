@@ -11,6 +11,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
+import { DOCUMENT_DESIGN_WRITE } from "@/lib/permissions";
 import {
   Select,
   SelectContent,
@@ -97,17 +99,21 @@ export function ProfileBar({
           ) : null}
         </button>
       ))}
-      <Button type="button" size="sm" variant="outline" className="h-7 gap-1"
-        onClick={() => setCreateOpen(true)}>
-        <Plus className="h-3.5 w-3.5" /> Profil
-      </Button>
-      {selected && (
-        <Button type="button" size="sm" variant="ghost"
-          className="h-7 gap-1 text-destructive hover:text-destructive"
-          onClick={() => setConfirmDeactivate(true)}>
-          <Trash2 className="h-3.5 w-3.5" /> Pasifleştir
+      {/* Profil oluşturma/pasifleştirme YAZMA'dır — salt-okunur kullanıcı
+          profilleri seçip inceleyebilir ama kataloğu değiştiremez. */}
+      <PermissionGate anyOf={DOCUMENT_DESIGN_WRITE}>
+        <Button type="button" size="sm" variant="outline" className="h-7 gap-1"
+          onClick={() => setCreateOpen(true)}>
+          <Plus className="h-3.5 w-3.5" /> Profil
         </Button>
-      )}
+        {selected && (
+          <Button type="button" size="sm" variant="ghost"
+            className="h-7 gap-1 text-destructive hover:text-destructive"
+            onClick={() => setConfirmDeactivate(true)}>
+            <Trash2 className="h-3.5 w-3.5" /> Pasifleştir
+          </Button>
+        )}
+      </PermissionGate>
       <span className="ml-auto text-[11px] text-muted-foreground">
         Profil, genel ayarın üzerine biner; müşteri/fason kartından atanır.
       </span>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
+import { DOCUMENT_DESIGN_WRITE } from "@/lib/permissions";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { safeFormat } from "@/lib/format";
 import { freeDocumentService, type FreeDocument, type FreeDocumentRow } from "@/services/freeDocumentService";
@@ -52,7 +53,7 @@ export function FreeDocumentsPage() {
         title="Serbest Belgeler"
         actions={
           <div className="flex items-center gap-2">
-            <PermissionGate permission="admin:settings">
+            <PermissionGate anyOf={DOCUMENT_DESIGN_WRITE}>
               <Button size="sm" onClick={openNew}>
                 <Plus className="mr-1 h-4 w-4" /> Yeni Belge
               </Button>
@@ -84,7 +85,7 @@ export function FreeDocumentsPage() {
                 <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={() => setPrintDoc(r)}>
                   <Printer className="h-3.5 w-3.5" /> Yazdır
                 </Button>
-                <PermissionGate permission="admin:settings">
+                <PermissionGate anyOf={DOCUMENT_DESIGN_WRITE}>
                   <Button type="button" size="sm" variant="ghost" className="gap-1" onClick={() => openEdit(r.id)}>
                     <Pencil className="h-3.5 w-3.5" /> Düzenle
                   </Button>

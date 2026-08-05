@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { DOCUMENT_DESIGN_WRITE } from "@/lib/permissions";
 import { TravelerCardPreview } from "../DocumentTemplates/TravelerCardPreview";
 import { travelerTemplateService } from "./service";
 import { TemplateList } from "./TemplateList";
@@ -29,6 +31,9 @@ const QK = ["traveler-templates"];
  */
 export function TravelerCardStudioPage() {
   const qc = useQueryClient();
+  // Salt-okunur (yalnız `document-template:read`): şablonlar gezilebilir ve
+  // önizlenebilir, ama oluştur/kaydet/varsayılan-yap/sil çizilmez.
+  const canWrite = useRoleAccess().hasAnyPermission(DOCUMENT_DESIGN_WRITE);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [toDelete, setToDelete] = useState<TravelerTemplate | null>(null);
@@ -91,7 +96,7 @@ export function TravelerCardStudioPage() {
   const busy =
     saveMut.isPending || defaultMut.isPending || clearDefaultMut.isPending || deleteMut.isPending;
   const editing = creating || Boolean(selected);
-  const canSave = editing && draft.name.trim().length > 0 && dirty && !busy;
+  const canSave = canWrite && editing && draft.name.trim().length > 0 && dirty && !busy;
 
   return (
     <PageShell>
@@ -117,6 +122,7 @@ export function TravelerCardStudioPage() {
               onSetDefault={(id) => defaultMut.mutate(id)}
               onClearDefault={() => clearDefaultMut.mutate()}
               onDelete={(t) => setToDelete(t)}
+              readOnly={!canWrite}
             />
           </div>
 
@@ -145,6 +151,12 @@ export function TravelerCardStudioPage() {
                     <Save className="h-3.5 w-3.5" /> Kaydet
                   </Button>
                 </div>
+                {!canWrite && (
+                  <p className="mb-3 shrink-0 text-xs text-muted-foreground">
+                    Salt-okunur — şablonu değiştirmek için &quot;belge şablonu düzenleme&quot;
+                    yetkisi gerekli.
+                  </p>
+                )}
 
                 <Tabs
                   value={draft.mode === "RAW_HTML" ? "html" : "sections"}

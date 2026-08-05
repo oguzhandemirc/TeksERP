@@ -2,13 +2,15 @@
 // TeksERP - Document Profile Routes (belge şablon profilleri)
 // =============================================================================
 // Okuma: auth-only (müşteri/fason formlarındaki profil seçici için — SALES/
-// SUBCONTRACTOR yazarları da listeler). Yazma: admin:settings.
+// SUBCONTRACTOR yazarları da listeler). Yazma: DOCUMENT_DESIGN_WRITE
+// (`admin:settings` VEYA `document-template:write` — constants/document-design.ts).
 // Controller'sız ince route (bilinçli istisna) — Zod parse + servise delege.
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission } from "../middlewares/rbac.middleware";
+import { DOCUMENT_DESIGN_WRITE } from "../constants/document-design";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { documentProfileService } from "../services/document-profile.service";
 // NOT: assertValidUuid saf fonksiyondur (middleware değil) — handler içinde çağrılır.
@@ -71,7 +73,7 @@ router.get(
 router.post(
   "/",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission(...DOCUMENT_DESIGN_WRITE),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = upsertSchema.parse(req.body);
@@ -93,7 +95,7 @@ router.post(
 router.put(
   "/:id",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission(...DOCUMENT_DESIGN_WRITE),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = upsertSchema.parse(req.body);
@@ -115,7 +117,7 @@ router.put(
 router.delete(
   "/:id",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission(...DOCUMENT_DESIGN_WRITE),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.json(await documentProfileService.deactivate(assertValidUuid(req.params.id), req.user?.userId));

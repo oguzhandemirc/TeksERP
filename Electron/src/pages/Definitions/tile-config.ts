@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
+import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
 
 export interface DefinitionTile {
   key: string;
@@ -30,6 +31,12 @@ export interface DefinitionTile {
   to: string;
   group: DefinitionGroupKey;
   permission?: string;
+  /**
+   * Bunlardan HERHANGİ biri yeterli. `permission` ile birlikte verilmez —
+   * route guard'ıyla (`ProtectedRoute requireAnyPermission`) aynı listeyi
+   * taşımalı, yoksa kart görünür ama tıklayınca /forbidden'a düşer.
+   */
+  permissionAny?: string[];
 }
 
 export const definitionTiles: DefinitionTile[] = [
@@ -167,7 +174,7 @@ export const definitionTiles: DefinitionTile[] = [
     icon: FileText,
     to: "/definitions/document-templates",
     group: "cikti",
-    permission: "admin:settings",
+    permissionAny: DOCUMENT_DESIGN_READ,
   },
   {
     key: "traveler-card",
@@ -176,7 +183,7 @@ export const definitionTiles: DefinitionTile[] = [
     icon: Printer,
     to: "/definitions/traveler-card",
     group: "cikti",
-    permission: "admin:settings",
+    permissionAny: DOCUMENT_DESIGN_READ,
   },
   {
     key: "traveler-card-studio",
@@ -185,7 +192,7 @@ export const definitionTiles: DefinitionTile[] = [
     icon: LayoutTemplate,
     to: "/definitions/traveler-card-studio",
     group: "cikti",
-    permission: "admin:settings",
+    permissionAny: DOCUMENT_DESIGN_READ,
   },
   {
     key: "free-documents",
@@ -194,6 +201,6 @@ export const definitionTiles: DefinitionTile[] = [
     icon: FileText,
     to: "/definitions/free-documents",
     group: "cikti",
-    permission: "admin:settings",
+    permissionAny: DOCUMENT_DESIGN_READ,
   },
 ];

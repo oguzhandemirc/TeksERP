@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { DOCUMENT_DESIGN_READ, DOCUMENT_DESIGN_WRITE } from "@/lib/permissions";
 import {
   Select,
   SelectContent,
@@ -52,6 +54,10 @@ export function DocumentConfigSection({
 } = {}) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
+  // Salt-okunur mod: ekran açılır (READ), Kaydet kapalıdır. Girdi alanları
+  // BİLEREK açık bırakılıyor — kullanıcı ayarı kurcalayıp canlı önizlemede
+  // sonucunu görebilsin diye; hiçbir şey sunucuya gitmez.
+  const canWrite = useRoleAccess().hasAnyPermission(DOCUMENT_DESIGN_WRITE);
   const current = useMemo<DocumentsConfig>(
     () => external?.value ?? flagsQ.data?.data?.documentsConfig ?? {},
      
@@ -110,10 +116,10 @@ export function DocumentConfigSection({
 
   return (
     <PermissionGate
-      permission="admin:settings"
+      anyOf={DOCUMENT_DESIGN_READ}
       fallback={
         <div className="text-sm text-muted-foreground">
-          Bu ayarı değiştirmek için yetkin yok.
+          Bu ayarı görüntülemek için yetkin yok.
         </div>
       }
     >
@@ -263,14 +269,16 @@ export function DocumentConfigSection({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
-            disabled={!dirty || mut.isPending}
+            disabled={!canWrite || !dirty || mut.isPending}
             onClick={() => mut.mutate(draft)}
           >
             {mut.isPending ? "Kaydediliyor…" : "Kaydet"}
           </Button>
           <span className="text-xs text-muted-foreground">
-            {external?.note ??
-              "Ayar canlıdır — belge bir sonraki açılışında güncel düzeni yansıtır."}
+            {!canWrite
+              ? "Salt-okunur — düzenlemek için 'belge şablonu düzenleme' yetkisi gerekli."
+              : (external?.note ??
+                "Ayar canlıdır — belge bir sonraki açılışında güncel düzeni yansıtır.")}
           </span>
         </div>
       </div>

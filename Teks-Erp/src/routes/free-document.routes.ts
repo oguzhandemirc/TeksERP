@@ -1,13 +1,15 @@
 // =============================================================================
 // TeksERP - Free Document Routes (serbest belge)
 // =============================================================================
-// Okuma: label:read benzeri geniş (belge listeleme). Yazma/baskı: admin:settings.
+// Okuma+baskı: DOCUMENT_DESIGN_READ · Yazma: DOCUMENT_DESIGN_WRITE
+// (ikisi de `admin:settings`i OR ile kapsar — bkz. constants/document-design.ts).
 // Controller'sız ince route (bilinçli istisna) — Zod parse + servise delege.
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission } from "../middlewares/rbac.middleware";
+import { DOCUMENT_DESIGN_READ, DOCUMENT_DESIGN_WRITE } from "../constants/document-design";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { freeDocumentService } from "../services/free-document.service";
 import "../types/express-augment";
@@ -22,7 +24,7 @@ const upsertSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-router.get("/", verifyToken, requirePermission("admin:settings"), async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", verifyToken, requireAnyPermission(...DOCUMENT_DESIGN_READ), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await freeDocumentService.list(req.query.withInactive === "true"));
   } catch (err) {
@@ -30,7 +32,7 @@ router.get("/", verifyToken, requirePermission("admin:settings"), async (req: Re
   }
 });
 
-router.get("/:id", verifyToken, requirePermission("admin:settings"), async (req: Request, res: Response, next: NextFunction) => {
+router.get("/:id", verifyToken, requireAnyPermission(...DOCUMENT_DESIGN_READ), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await freeDocumentService.get(assertValidUuid(req.params.id)));
   } catch (err) {
@@ -39,7 +41,7 @@ router.get("/:id", verifyToken, requirePermission("admin:settings"), async (req:
 });
 
 /** Baskı-hazır HTML (text/html). ?printNote= tek seferlik not. */
-router.get("/:id/html", verifyToken, requirePermission("admin:settings"), async (req: Request, res: Response, next: NextFunction) => {
+router.get("/:id/html", verifyToken, requireAnyPermission(...DOCUMENT_DESIGN_READ), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const printNote = typeof req.query.printNote === "string" ? req.query.printNote.slice(0, 300) : null;
     const result = await freeDocumentService.renderHtml(assertValidUuid(req.params.id), {
@@ -52,7 +54,7 @@ router.get("/:id/html", verifyToken, requirePermission("admin:settings"), async 
   }
 });
 
-router.post("/", verifyToken, requirePermission("admin:settings"), async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", verifyToken, requireAnyPermission(...DOCUMENT_DESIGN_WRITE), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.status(201).json(await freeDocumentService.create(upsertSchema.parse(req.body), req.user?.userId));
   } catch (err) {
@@ -60,7 +62,7 @@ router.post("/", verifyToken, requirePermission("admin:settings"), async (req: R
   }
 });
 
-router.put("/:id", verifyToken, requirePermission("admin:settings"), async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", verifyToken, requireAnyPermission(...DOCUMENT_DESIGN_WRITE), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await freeDocumentService.update(assertValidUuid(req.params.id), upsertSchema.parse(req.body), req.user?.userId));
   } catch (err) {
@@ -68,7 +70,7 @@ router.put("/:id", verifyToken, requirePermission("admin:settings"), async (req:
   }
 });
 
-router.delete("/:id", verifyToken, requirePermission("admin:settings"), async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/:id", verifyToken, requireAnyPermission(...DOCUMENT_DESIGN_WRITE), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await freeDocumentService.deactivate(assertValidUuid(req.params.id), req.user?.userId));
   } catch (err) {

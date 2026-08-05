@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
@@ -258,9 +259,13 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // Belge tasarım ekranları (4 adet) — `admin:settings` VEYA
+    // `document-template:read|write`. Liste `lib/permissions.ts`te tek kaynak;
+    // `tile-config.ts` kartları AYNI listeyle süzer (ayrışırsa kart görünür
+    // ama tıklayınca /forbidden'a düşer).
     path: "definitions/document-templates",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
         <DocumentTemplatesPage />
       </ProtectedRoute>
     ),
@@ -268,7 +273,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "definitions/traveler-card",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
         <TravelerCardSettingsPage />
       </ProtectedRoute>
     ),
@@ -276,7 +281,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "definitions/traveler-card-studio",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
         <TravelerCardStudioPage />
       </ProtectedRoute>
     ),
@@ -284,7 +289,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "definitions/free-documents",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
         <FreeDocumentsPage />
       </ProtectedRoute>
     ),

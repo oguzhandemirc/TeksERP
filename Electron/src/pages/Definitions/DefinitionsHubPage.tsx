@@ -6,11 +6,17 @@ import { definitionGroups, type DefinitionGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 
 export function DefinitionsHubPage() {
-  const { isAdmin, hasPermission } = useRoleAccess();
+  const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
 
-  const visibleTiles = definitionTiles.filter(
-    (t) => isAdmin || !t.permission || hasPermission(t.permission),
-  );
+  // `isAdmin` kısa devresi KORUNUYOR: admin (admin:users | admin:settings |
+  // admin:*) her kartı görür. `permissionAny` taşıyan kartlar için tek tek
+  // izin aranır — belge tasarım kartları böyle, çünkü dar izinli kullanıcı
+  // (document-template:*) admin DEĞİLDİR ve kısa devreden faydalanamaz.
+  const visibleTiles = definitionTiles.filter((t) => {
+    if (isAdmin) return true;
+    if (t.permissionAny) return hasAnyPermission(t.permissionAny);
+    return !t.permission || hasPermission(t.permission);
+  });
 
   const tilesByGroup = new Map<DefinitionGroupKey, DefinitionTile[]>();
   for (const tile of visibleTiles) {

@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/PermissionGate";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { DOCUMENT_DESIGN_READ, DOCUMENT_DESIGN_WRITE } from "@/lib/permissions";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import {
   featureFlagService,
@@ -173,6 +175,9 @@ export function TravelerCardConfigSection({
 } = {}) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
+  // Salt-okunur mod: ekran açılır (READ), Kaydet kapalıdır — DocumentConfigSection
+  // ile aynı desen (girdiler açık kalır, canlı önizleme çalışır, hiçbir şey gitmez).
+  const canWrite = useRoleAccess().hasAnyPermission(DOCUMENT_DESIGN_WRITE);
   // Eksik/bayat-cache üst-düzey alanlara karşı default'la birleştir; spec/sipariş alanlarını
   // coerce et (eski boolean şekli de → {show,size,weight}).
   const rawCfg = flagsQ.data?.data?.travelerCardConfig;
@@ -252,10 +257,10 @@ export function TravelerCardConfigSection({
 
   return (
     <PermissionGate
-      permission="admin:settings"
+      anyOf={DOCUMENT_DESIGN_READ}
       fallback={
         <div className="text-sm text-muted-foreground">
-          Bu ayarı değiştirmek için yetkin yok.
+          Bu ayarı görüntülemek için yetkin yok.
         </div>
       }
     >
@@ -547,7 +552,7 @@ export function TravelerCardConfigSection({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
-            disabled={!dirty || !trimmed || mut.isPending}
+            disabled={!canWrite || !dirty || !trimmed || mut.isPending}
             onClick={() =>
               mut.mutate({
                 ...draft,
@@ -558,8 +563,9 @@ export function TravelerCardConfigSection({
             {mut.isPending ? "Kaydediliyor…" : "Kaydet"}
           </Button>
           <span className="text-xs text-muted-foreground">
-            Değişiklik yalnızca bundan sonra basılan kartlara işler — mevcut kartlar
-            basım anında dondurulmuştur.
+            {!canWrite
+              ? "Salt-okunur — düzenlemek için 'belge şablonu düzenleme' yetkisi gerekli."
+              : "Değişiklik yalnızca bundan sonra basılan kartlara işler — mevcut kartlar basım anında dondurulmuştur."}
           </span>
         </div>
       </div>
