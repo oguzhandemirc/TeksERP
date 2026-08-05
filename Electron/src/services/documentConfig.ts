@@ -78,6 +78,9 @@ export interface DocumentConfig {
   /** Fason çeki grid'inde satır başına grup sayısı (3|4|5; default 5 = fiziksel
    *  form). Az grup = geniş hücre → A5'te punto büyütülebilir. */
   gridGroups?: number;
+  /** Fason çeki grid'inde GRUP BAŞINA SATIR (1–40; default 10).
+   *  Sayfa başına top = gridGroups × gridRows (varsayılan 5 × 10 = 50). */
+  gridRows?: number;
 }
 
 /** Alan bazlı yazı ayarı — backend `document-render/doc-style.ts` ile aynı sözleşme. */
@@ -151,6 +154,7 @@ export interface ResolvedDocConfig {
   fields: NonNullable<DocumentConfig["fields"]>;
   placements: NonNullable<DocumentConfig["placements"]>;
   gridGroups?: number;
+  gridRows?: number;
 }
 
 export interface DocSectionDef {
@@ -732,5 +736,6 @@ export function resolveDocConfig(
     fields: raw.fields ?? {},
     placements: raw.placements ?? {},
     gridGroups: raw.gridGroups,
+    gridRows: raw.gridRows,
   };
 }

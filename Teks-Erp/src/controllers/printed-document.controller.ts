@@ -92,6 +92,7 @@ const docConfigSchema = z
       .optional(),
     placements: z.record(z.string(), z.enum(["left", "right"])).optional(),
     gridGroups: z.number().optional(),
+    gridRows: z.number().optional(),
   })
   .nullable();
 // ⚠️ BU ŞEMA BİR SESSİZ AYRIŞMA KAPISI. `z.object` tanımadığı anahtarı hata

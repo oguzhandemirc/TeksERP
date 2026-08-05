@@ -5,7 +5,8 @@
 // basar → format her yerde birebir aynı. Donmuş PrintedDocument snapshot'ından
 // (envelope + doc) üretilir; fiziksel KUMAŞ İRSALİYESİ formuna uyar:
 //   üst: SAYIN (fason firma) + gönderen antet + İrsaliye No + Tarih [+ Parti No]
-//   orta: 100 hücreli Top/Metre/Cm gridi (5 grup × 20 satır, sayfa başına)
+//   orta: Top/Metre/Cm gridi — sayfa başına top adedi AYARLANIR (grup × satır;
+//         varsayılan 5 × 10 = 50; fiziksel form 5 × 20 = 100 idi)
 //   alt:  CİNSİ | TOP | METRE | FİYATI | TUTARI + TOPLAM  (fason'da fiyat YOK → boş)
 //
 // ── 2026-08-05: KİŞİSELLEŞTİRME KATMANI ─────────────────────────────────────
@@ -40,10 +41,10 @@ import {
 } from "./doc-style";
 import {
   FASON_DENSITY,
-  GRID_ROWS,
   gridColWidths,
   resolveFasonPageSize,
   resolveGridGroups,
+  resolveGridRows,
   type GridGroups,
 } from "./fason-ceki.density";
 import { fasonFieldCss } from "./fason-ceki.fields";
@@ -156,6 +157,7 @@ function renderGridPage(
   showWidth: boolean,
   blankWidth: boolean,
   groups: GridGroups,
+  rows: number,
 ): string {
   const head =
     "<tr>" +
@@ -168,10 +170,10 @@ function renderGridPage(
     "</tr>";
 
   let body = "";
-  for (let r = 0; r < GRID_ROWS; r++) {
+  for (let r = 0; r < rows; r++) {
     body += "<tr>";
     for (let g = 0; g < groups; g++) {
-      const topNo = startIdx + g * GRID_ROWS + r + 1; // 1-bazlı sıra no
+      const topNo = startIdx + g * rows + r + 1; // 1-bazlı sıra no
       const roll = rolls[topNo - 1];
       const cmCell = showWidth
         ? `<td class="c-cm">${roll && !blankWidth ? esc(fmtCm(roll.width)) : ""}</td>`
@@ -231,14 +233,15 @@ export function renderFasonCekiHtml(
   // Grid grup sayısı (varsayılan 5 = fiziksel form). 3/4, A5'te punto büyütmek
   // isteyen kullanıcıya yer açar — 15 kolon 132mm'ye sığmıyor.
   const groups = resolveGridGroups(cfg.gridGroups);
-  const slotsPerPage = groups * GRID_ROWS;
+  const rows = resolveGridRows(cfg.gridRows);
+  const slotsPerPage = groups * rows;
   const col = gridColWidths(groups);
 
   // Çok sayfa: slotsPerPage'lik gridler (çoğu sevk tek sayfa).
   const pageCount = Math.max(1, Math.ceil(doc.rolls.length / slotsPerPage));
   let grids = "";
   for (let p = 0; p < pageCount; p++) {
-    grids += renderGridPage(doc.rolls, p * slotsPerPage, showGridWidth, blankWidths, groups);
+    grids += renderGridPage(doc.rolls, p * slotsPerPage, showGridWidth, blankWidths, groups, rows);
   }
 
   // Antet (gönderen) satırları — sadece dolu olanlar.

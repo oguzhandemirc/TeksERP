@@ -101,14 +101,18 @@ function GridGroupsPanel({
   disabled: boolean;
   patch: (next: Partial<DocumentConfig>) => void;
 }) {
-  const current = cfg?.gridGroups ?? 5;
+  const groups = cfg?.gridGroups ?? 5;
+  const rows = cfg?.gridRows ?? 10;
+  const slots = groups * rows;
   return (
     <div className="rounded-md border p-3">
-      <div className="pb-1 text-sm font-medium">Grid grup sayısı</div>
+      <div className="pb-1 text-sm font-medium">Top listesi (grid)</div>
       <p className="pb-2 text-xs text-muted-foreground">
-        Bir satırda kaç adet Top/Metre/Cm üçlüsü olsun.
+        Sayfada kaç top satırı basılacağını siz belirlersiniz.
       </p>
-      <div className="flex gap-2">
+
+      <label className="text-xs text-muted-foreground">Bir satırdaki grup sayısı</label>
+      <div className="mt-1 flex gap-2">
         {[3, 4, 5].map((g) => (
           <button
             key={g}
@@ -116,7 +120,7 @@ function GridGroupsPanel({
             disabled={disabled}
             onClick={() => patch({ gridGroups: g })}
             className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium ${
-              current === g
+              groups === g
                 ? "border-primary bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-muted/70"
             }`}
@@ -125,9 +129,42 @@ function GridGroupsPanel({
           </button>
         ))}
       </div>
+
+      <div className="mt-3 flex items-end gap-3">
+        <div className="w-32">
+          <label htmlFor="grid-rows" className="text-xs text-muted-foreground">
+            Grup başına satır
+          </label>
+          <input
+            id="grid-rows"
+            type="number"
+            min={1}
+            max={40}
+            value={rows}
+            disabled={disabled}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "") return;
+              patch({ gridRows: Math.min(40, Math.max(1, Math.round(Number(raw)))) });
+            }}
+            className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+        {/* Kullanıcının gerçekten önemsediği sayı bu — grup × satır kafadan
+            hesaplatılmamalı. */}
+        <div className="pb-1 text-sm">
+          = sayfa başına <b>{slots} top</b>
+          <span className="ml-1 text-xs text-muted-foreground">
+            ({groups} grup × {rows} satır)
+          </span>
+        </div>
+      </div>
+
       <p className="mt-2 text-xs text-muted-foreground">
-        5 grup fiziksel KUMAŞ İRSALİYESİ formunun aynısıdır (sayfa başına {current * 20} top).
-        A5'te yazıyı büyütecekseniz 3–4 grup seçin: 15 kolon dar sayfaya sığmaz ve metin kırpılır.
+        Hücreler elle doldurulan boş kutulardır — sevkte 8 top varsa kalan kutular boş basılır.
+        Varsayılan <b>50</b>; eski form 100'dü ve çoğu kutu boş kalıyordu. Sevkte bu sayıdan
+        fazla top varsa liste kendiliğinden ikinci sayfaya devam eder. A5'te yazıyı
+        büyütecekseniz grubu 3–4'e düşürün: 15 kolon dar sayfaya sığmaz ve metin kırpılır.
       </p>
     </div>
   );

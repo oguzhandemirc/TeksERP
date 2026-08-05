@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.html";
 import { FASON_FIELDS } from "../src/services/document-render/fason-ceki.fields";
+import { sanitizeDocumentsConfig } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -76,6 +77,17 @@ function countOccur(hay: string, needle: string): number {
   return hay.split(needle).length - 1;
 }
 
+/**
+ * Grid'de N numaralı SLOT var mı.
+ *
+ * ⚠️ Düz `includes(">100<")` ARAMA — metraj hücresi de `>100<` üretiyor ve test
+ * yanlış sebeple yeşil kalıyordu (varsayılan 50'ye indikten sonra "slot 100 var"
+ * hâlâ geçiyordu). Slot no'su yalnız `c-top` hücresinde durur.
+ */
+function hasSlot(html: string, n: number): boolean {
+  return html.includes(`<td class="c-top">${n}</td>`);
+}
+
 // ── 1) Temel yapı + fotoğraf örneği (115/100/83 → 298) ──────────────────────
 function testBasic(): void {
   console.log("\n── 1) Temel yapı / fotoğraf örneği ──");
@@ -96,27 +108,33 @@ function testBasic(): void {
   check("FİYATI/TUTARI başlıkları (boş kolon)", html.includes("FİYATI") && html.includes("TUTARI"));
 }
 
-// ── 2) 100 hücreli grid yapısı ──────────────────────────────────────────────
+// ── 2) Varsayılan grid yapısı (5 grup × 10 satır = 50) ──────────────────────
+// Sayfa başına top 2026-08-06'da 100'den 50'ye indi (kullanıcı kararı).
 function testGrid(): void {
-  console.log("\n── 2) 100 hücreli grid (5×20) ──");
+  console.log("\n── 2) Varsayılan grid (5×10 = 50 slot) ──");
   const html = renderFasonCekiHtml(makeSnap());
-  // Sıra no'ları: slot 1..100 (boş hücreler bile numaralı). Köşe değerleri:
-  check("slot 1 var", html.includes(">1<"));
-  check("slot 20 var", html.includes(">20<"));
-  check("slot 21 var (2. grup)", html.includes(">21<"));
-  check("slot 100 var", html.includes(">100<"));
-  check("slot 101 YOK (tek sayfa)", !html.includes(">101<"));
+  // Sıra no'ları: slot 1..50 (boş hücreler bile numaralı). Köşe değerleri:
+  check("slot 1 var", hasSlot(html, 1));
+  check("slot 10 var (1. grubun sonu)", hasSlot(html, 10));
+  check("slot 11 var (2. grubun başı)", hasSlot(html, 11));
+  check("slot 50 var (son slot)", hasSlot(html, 50));
+  check("slot 51 YOK (tek sayfa)", !hasSlot(html, 51));
+  check("slot 100 YOK (eski form değil)", !hasSlot(html, 100));
   check("tek grid tablosu", countOccur(html, '<table class="grid"') === 1);
 }
 
-// ── 3) Çok sayfa (>100 top) ─────────────────────────────────────────────────
+// ── 3) Çok sayfa ────────────────────────────────────────────────────────────
+// Sayfa başına slot 2026-08-06'da 100 → 50 oldu, yani 150 top artık ÜÇ grid.
 function testMultiPage(): void {
-  console.log("\n── 3) Çok sayfa (150 top → 2 grid) ──");
+  console.log("\n── 3) Çok sayfa (150 top → 3 grid, sayfa başına 50) ──");
   const rolls = Array.from({ length: 150 }, (_, i) => roll(i + 1, 50, 150));
   const html = renderFasonCekiHtml(makeSnap({ rolls }));
-  check("2 grid sayfası", countOccur(html, '<table class="grid"') === 2);
-  check("slot 150 var", html.includes(">150<"));
-  check("toplam 150 top", html.includes(">150<"));
+  check("3 grid sayfası (150 / 50)", countOccur(html, '<table class="grid"') === 3);
+  check("slot 150 var", hasSlot(html, 150));
+  check("slot 151 YOK (fazla kutu basılmaz)", !hasSlot(html, 151));
+  // Eski 100'lük forma dönülünce 2 grid — ayarın gerçekten sayfalamayı sürdüğü.
+  const old = renderFasonCekiHtml(makeSnap({ rolls, docConfigOverride: { gridRows: 20 } }));
+  check("gridRows=20 → 2 grid (eski davranış)", countOccur(old, '<table class="grid"') === 2);
 }
 
 // ── 4) Sayı/tarih formatlama kenar durumları ────────────────────────────────
@@ -464,27 +482,49 @@ function testGridGroups(): void {
   console.log("\n── 15) Grid grup sayısı ──");
   const def = renderFasonCekiHtml(makeSnap());
   check("varsayılan 5 grup (satırda 5 'Top' başlığı)", countOccur(def, '<th class="c-top">Top</th>') === 5);
-  check("varsayılan sayfa başına 100 slot", def.includes(">100<") && !def.includes(">101<"));
+  // ⚠️ VARSAYILAN 2026-08-06'da 100 → 50 (kullanıcı kararı; 5 grup × 10 satır).
+  // Hücreler elle doldurulan BOŞ kutulardır, veri değil — 100'lük formda çoğu
+  // boş basılıyordu. Eski donmuş çekiler de yeniden basılınca 50 kutu çizer.
+  check("varsayılan sayfa başına 50 slot", hasSlot(def, 50) && !hasSlot(def, 51));
   check("varsayılan sütun genişlikleri değişmedi", def.includes("width: 4.5%") && def.includes("width: 9%"));
 
   const g3 = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 3 } }));
   check("gridGroups=3 → satırda 3 grup", countOccur(g3, '<th class="c-top">Top</th>') === 3);
-  check("gridGroups=3 → sayfa başına 60 slot", g3.includes(">60<") && !g3.includes(">61<"));
+  check("gridGroups=3 → sayfa başına 30 slot", hasSlot(g3, 30) && !hasSlot(g3, 31));
   check("gridGroups=3 → sütunlar genişler (7.5% / 15%)",
     g3.includes("width: 7.5%") && g3.includes("width: 15%"));
 
   const g4 = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 4 } }));
-  check("gridGroups=4 → 80 slot", g4.includes(">80<") && !g4.includes(">81<"));
+  check("gridGroups=4 → 40 slot", hasSlot(g4, 40) && !hasSlot(g4, 41));
 
-  // 61 top / 3 grup → ikinci tablo doğar ve numara 61'den devam eder.
-  const many = Array.from({ length: 61 }, (_, i) => roll(i + 1, 100, 150));
-  const g3many = renderFasonCekiHtml(makeSnap({ rolls: many, docConfigOverride: { gridGroups: 3 } }));
-  check("61 top / 3 grup → iki grid tablosu", countOccur(g3many, '<table class="grid">') === 2);
-  check("ikinci tabloda 61. slot", g3many.includes(">61<"));
+  // SATIR SAYISI ayarlanabilir — sayfa başına top adedini asıl belirleyen bu.
+  const r20 = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridRows: 20 } }));
+  check("gridRows=20 → eski 100’lük form geri gelir", hasSlot(r20, 100) && !hasSlot(r20, 101));
+  const r5 = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridRows: 5 } }));
+  check("gridRows=5 → 25 slot", hasSlot(r5, 25) && !hasSlot(r5, 26));
+  const mix = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 3, gridRows: 4 } }));
+  check("grup × satır çarpılır (3 × 4 = 12)", hasSlot(mix, 12) && !hasSlot(mix, 13));
+  // Grid TABLOSUNUN İÇİNDEKİ satırları say — belgede başka tablolar da var
+  // (alt toplam), tüm HTML'de <tr> saymak onları da toplardı.
+  const gridOnly = mix.slice(mix.indexOf('<table class="grid">'), mix.indexOf("</table>"));
+  check("satır sayısı gerçekten satır üretir (1 başlık + 4 gövde)",
+    countOccur(gridOnly, "<tr>") === 1 + 4, `${countOccur(gridOnly, "<tr>")} tr`);
 
-  // Geçersiz değer sessizce 5'e düşer (baskı yolunu yazım hatası düşürmemeli).
-  const bad = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 9 } }));
-  check("geçersiz gridGroups → varsayılan 5 (çıktı birebir)", bad === def);
+  // 51 top / varsayılan 50 → ikinci tablo doğar ve numara 51'den devam eder.
+  const many = Array.from({ length: 51 }, (_, i) => roll(i + 1, 100, 150));
+  const manyHtml = renderFasonCekiHtml(makeSnap({ rolls: many }));
+  check("51 top → iki grid tablosu", countOccur(manyHtml, '<table class="grid">') === 2);
+  check("ikinci tabloda 51. slot", hasSlot(manyHtml, 51));
+
+  // SÖZLEŞME: sayı olan değer ARALIĞA KIRPILIR, sayı olmayan değer VARSAYILANA
+  // düşer. İkisi de baskı yolunu düşürmez — bir yazım hatası yüzünden vardiyayı
+  // kâğıtsız bırakmak, biraz tuhaf yerleşimli bir çekiden kötüdür.
+  const bad = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 9, gridRows: "abc" } }));
+  check("sayı olmayan grup/satır → varsayılan (çıktı birebir)", bad === def);
+  const clampHi = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridRows: 999 } }));
+  check("gridRows 40’a kırpılır (5 × 40 = 200)", hasSlot(clampHi, 200) && !hasSlot(clampHi, 201));
+  const clampLo = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridRows: 0 } }));
+  check("gridRows 1’e kırpılır (5 × 1 = 5)", hasSlot(clampLo, 5) && !hasSlot(clampLo, 6));
 }
 
 // ── 16) ELECTRON AYNASI — alan kataloğu iki tarafta BİREBİR ────────────────
@@ -567,6 +607,43 @@ function testPreviewSchemaParity(): void {
   check("önizleme şemasında eksik alan YOK (ayar sessizce yutulur)", eksik.length === 0, eksik.join(", "));
 }
 
+// ── 18) KAYIT KAPISI — sanitizeDocumentsConfig ayarı YUTMAMALI ────────────
+// §17 önizleme şemasını doğruluyor; bu ise SAKLAMA tarafını. İkisi ayrı kapı ve
+// ayrı sessiz başarısızlık: şema düşerse ayar kaydolur ama önizlemede görünmez,
+// KAYIT kapısı düşerse kullanıcı ayarlar, Kaydet'e basar, istek 200 döner ve
+// hiçbir şey olmaz — sebebi de hiçbir yerde yazmaz.
+// (Bu bölüm eklenmeden önce kapı silinince HİÇBİR test kırmızı vermiyordu —
+// negatif sondayla ölçüldü.)
+function testStorageGate(): void {
+  console.log("\n── 18) Kayıt kapısı (sanitizeDocumentsConfig) ──");
+  const out = sanitizeDocumentsConfig({
+    fasonSevk: {
+      fields: { gridMetre: { size: 14, weight: "bold" } },
+      placements: { batchInfo: "left" },
+      gridGroups: 3,
+      gridRows: 12,
+    },
+  });
+  const cfg = out.fasonSevk ?? {};
+  check("fields kaydedilir", cfg.fields?.gridMetre?.size === 14 && cfg.fields?.gridMetre?.weight === "bold");
+  check("placements kaydedilir", cfg.placements?.batchInfo === "left");
+  check("gridGroups kaydedilir", cfg.gridGroups === 3);
+  check("gridRows kaydedilir", cfg.gridRows === 12);
+
+  // Kırpma/eleme kapıda da uygulanır (istemciye güvenilmez).
+  const clamped = sanitizeDocumentsConfig({
+    fasonSevk: { gridRows: 999, gridGroups: 9, fields: { x: { size: 1000 } }, placements: { batchInfo: "orta" } },
+  }).fasonSevk;
+  check("gridRows 40'a kırpılır", clamped?.gridRows === 40);
+  check("geçersiz gridGroups atılır", clamped?.gridGroups === undefined);
+  check("alan puntosu 48'e kırpılır", clamped?.fields?.x?.size === 48);
+  check("geçersiz konum atılır", clamped?.placements === undefined);
+
+  // Boş/anlamsız girdi kayda GİRMEZ (yarım `{}` birikmesin).
+  const empty = sanitizeDocumentsConfig({ fasonSevk: { fields: { y: {} } } }).fasonSevk;
+  check("boş alan kaydı atılır", empty?.fields === undefined);
+}
+
 function main(): void {
   testBasic();
   testGrid();
@@ -585,6 +662,7 @@ function main(): void {
   testGridGroups();
   testElectronMirror();
   testPreviewSchemaParity();
+  testStorageGate();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

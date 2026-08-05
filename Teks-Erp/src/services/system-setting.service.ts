@@ -629,6 +629,11 @@ export interface DocumentConfig {
    *  fiziksel KUMAŞ İRSALİYESİ formu). Daha az grup = daha geniş hücre → A5'te
    *  punto büyütülebilir. Grup başına satır (20) ayarlanmaz. */
   gridGroups?: number;
+  /** Fason çeki grid'inde GRUP BAŞINA SATIR (1–40; default 10).
+   *  SAYFA BAŞINA TOP = gridGroups × gridRows (varsayılan 5 × 10 = 50).
+   *  Hücreler elle doldurulan BOŞ kutulardır; eski 100'lük formda kutuların
+   *  çoğu boş basılıyordu ve A5'te iyice sıkışıktı. */
+  gridRows?: number;
 }
 
 /** Belge ayarları haritası: { [belgeKey]: DocumentConfig }. Ham saklanır, client çözer. */
@@ -2213,6 +2218,9 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
     }
     if (o.gridGroups === 3 || o.gridGroups === 4 || o.gridGroups === 5) {
       cfg.gridGroups = o.gridGroups;
+    }
+    if (typeof o.gridRows === "number" && Number.isFinite(o.gridRows)) {
+      cfg.gridRows = Math.min(40, Math.max(1, Math.round(o.gridRows)));
     }
     out[docKey] = cfg;
   }

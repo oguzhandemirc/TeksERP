@@ -220,7 +220,30 @@ export const FASON_DENSITY: Record<FasonPageSize, FasonDensity> = { A4, A5 };
 export const GRID_GROUP_CHOICES = [3, 4, 5] as const;
 export type GridGroups = (typeof GRID_GROUP_CHOICES)[number];
 
-export const GRID_ROWS = 20; // grup başına satır — fiziksel formla aynı, ayarlanmaz
+/**
+ * Grup başına SATIR sayısı — sayfa başına top adedini bu belirler
+ * (`sayfa başına top = grup × satır`).
+ *
+ * ⚠️ VARSAYILAN 2026-08-06'da 20'den **10'a** indi (100 → **50 top/sayfa**),
+ * kullanıcı kararı. Gerekçe: hücreler ELLE DOLDURULAN boş kutulardır ve tipik bir
+ * fason sevkinde 100 kutunun büyük kısmı boş basılıyordu — A5'te iyice sıkışıktı.
+ *
+ * ⚠️ BU DEĞİŞİKLİK ESKİ DONMUŞ ÇEKİLERİ DE ETKİLER: anahtar taşımayan snapshot
+ * varsayılana düşer, yani 2026-08-06 öncesi bir çeki yeniden basılınca 100 değil
+ * 50 kutu çizilir (60+ toplu bir sevk artık iki sayfa olur). Bilinçli: kutular
+ * VERİ değil, elle doldurulacak boş form alanıdır — topların kendisi, metrajı ve
+ * toplamı birebir aynı basılır. Geçmiş görünümü birebir korumak isteniyorsa
+ * çözüm bu varsayılanı geri almak değil, o belgeler için `gridRows: 20` yazmaktır.
+ */
+export const DEFAULT_GRID_ROWS = 10;
+export const GRID_ROWS_MIN = 1;
+export const GRID_ROWS_MAX = 40;
+
+/** Ham ayarı geçerli satır sayısına indirger (varsayılan 10). */
+export function resolveGridRows(v: unknown): number {
+  if (typeof v !== "number" || !Number.isFinite(v)) return DEFAULT_GRID_ROWS;
+  return Math.min(GRID_ROWS_MAX, Math.max(GRID_ROWS_MIN, Math.round(v)));
+}
 
 const BASE_COL = { top: 4.5, met: 9, cm: 5 } as const;
 
