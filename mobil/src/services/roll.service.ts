@@ -42,6 +42,16 @@ export interface RollCancelPreview {
     batchNumber: string | null;
   } | null;
   openMovementCount: number;
+  /**
+   * Topun ÜSTÜNDE fiziksel etiket var mı. true ise iptal AYRI bir onay + SEBEP
+   * ister: kayıt ölür ama kâğıt topun üstünde kalır ("ölü etiket"), sonraki
+   * okutma yalnız "stokta değil" der ve kimse sebebini bilmez.
+   * `requiresConfirm`'den AYRI eksen — biri "mal istasyonda mı", diğeri
+   * "sahaya geçersiz kimlik bırakıyor muyum". İkisi birden çıkabilir.
+   */
+  labelPrinted: boolean;
+  /** Etiketin basıldığı an (ISO) — "10:48'de bastınız" diyebilmek için. */
+  labelPrintedAt: string | null;
 }
 
 export interface RollCursorPage {
@@ -138,11 +148,37 @@ export const rollService = {
    * için backend `confirmActive=true` ŞART — önce getCancelPreview ile operatöre
    * gösterilir, onaylanırsa confirmActive geçilir.
    */
-  scrap: (id: string, confirmActive = false): Promise<ApiResponse<Roll>> =>
+  scrap: (
+    id: string,
+    confirmActive = false,
+    /**
+     * Etiketi basılmış topun iptali için AYRI onay + sebep. Backend bunlar
+     * olmadan 409 `LABEL_PRINTED` / 400 `CANCEL_REASON_REQUIRED` döner —
+     * fail-closed, çünkü guard'ın var olma sebebi uyarısız iptali durdurmak.
+     */
+    labelOpts?: { confirmLabelPrinted?: boolean; reason?: string },
+  ): Promise<ApiResponse<Roll>> => {
+    const qs = new URLSearchParams();
+    if (confirmActive) qs.set('confirmActive', 'true');
+    if (labelOpts?.confirmLabelPrinted) qs.set('confirmLabelPrinted', 'true');
+    if (labelOpts?.reason) qs.set('reason', labelOpts.reason);
+    const q = qs.toString();
+    return apiClient
+      .delete<ApiResponse<Roll>>(`/rolls/${id}${q ? `?${q}` : ''}`)
+      .then((r) => r.data);
+  },
+
+  /**
+   * İptali GERİ AL — `CANCELLED` → iptalden önceki raf.
+   *
+   * Var olma sebebi: geri dönüş yolu olmayınca operatörün tek çaresi topu
+   * YENİDEN GİRMEK olur ve o, aynı fiziksel top için ikinci bir barkod doğurur
+   * (2026-08-05: T050826H0033 öldü → T050826H0072 doğdu → topta iki etiket).
+   * Kapsam dar; engelliyse backend somut Türkçe sebep döner (`RESTORE_BLOCKED`).
+   */
+  restoreCancel: (id: string, reason?: string): Promise<ApiResponse<Roll>> =>
     apiClient
-      .delete<ApiResponse<Roll>>(
-        `/rolls/${id}${confirmActive ? '?confirmActive=true' : ''}`,
-      )
+      .post<ApiResponse<Roll>>(`/rolls/${id}/restore-cancel`, reason ? { reason } : {})
       .then((r) => r.data),
 
   /** İptal önizlemesi — silmeden önce somut etki (hangi istasyon/iş emri). */

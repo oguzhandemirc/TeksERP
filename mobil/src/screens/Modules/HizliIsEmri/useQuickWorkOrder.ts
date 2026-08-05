@@ -8,6 +8,7 @@ import { routeService } from '../../../services/route.service';
 import { subcontractorService } from '../../../services/subcontractor.service';
 import { workOrderService, type QuickStartRequest } from '../../../services/workOrder.service';
 import { fabricPropertyService } from '../../../services/fabricProperty.service';
+import { signalScan } from '../../../services/scanFeedback';
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { generateClientUuid } from '../../../offline/barcode';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
@@ -21,7 +22,25 @@ export interface ScannedRoll {
   itemId: string;
   itemName: string;
   qty: number;
+  /** Topun eni — parti homojenliği uyarısı için (bkz. `widthWarning`). */
+  width: number | null;
 }
+
+/**
+ * Kabul EDİLMEYEN okuma. Toast 3 sn'de kaybolduğu için sebep tarayıcı şeridinde
+ * kısa süre GÖRÜNÜR kalır: operatör topu bırakıp döndüğünde "neden almadı"
+ * sorusunun cevabı hâlâ ekranda olmalı (WMS'te istisna kaybolmaz).
+ */
+export interface ScanReject {
+  id: number;
+  barcode: string;
+  reason: string;
+}
+
+/** Ret satırının şeritte kalma süresi. */
+const REJECT_TTL_MS = 10_000;
+/** Mükerrer okumada mevcut satırın vurgulanma süresi. */
+const DUPLICATE_FLASH_MS = 1400;
 
 export interface QuickWoResult {
   /**
@@ -37,6 +56,17 @@ export interface QuickWoResult {
   errors: string[];
   woId: string;
   dispatch: { id: string; dispatchNo: string } | null;
+  /**
+   * Sonuç ekranında basılan üretim özeti — kumaş / en / top adedi / metraj.
+   *
+   * Değerler burada DONDURULUR, sonuç ekranı canlı forma bakmaz: "Yeni İş Emri"
+   * (`resetAll`) formu temizlediği anda kart hâlâ ekrandaysa alanlar boşalırdı.
+   * Kaynak sırası: backend'in kaydettiği değer > formdaki değer — kâğıda/karta
+   * giden şey backend'in yazdığıdır.
+   */
+  itemName: string | null;
+  width: number | null;
+  totalQty: number;
 }
 
 const toPositiveNum = (s: string): number | null => {
@@ -80,6 +110,13 @@ export function useQuickWorkOrder() {
 
   // ── Toplar ────────────────────────────────────────────────────────────────
   const [scanned, setScanned] = useState<ScannedRoll[]>([]);
+  /**
+   * Okutulan barkod İPTAL EDİLMİŞ çıktı — teşhis paneli bununla açılır
+   * (`CancelledRollSheet`). Ret listesine düşürülmez: iptal, diğer retlerden
+   * farklı olarak GERİ ALINABİLİR bir durumdur ve operatörün oradan çıkacak bir
+   * yolu vardır. Ret satırı olarak göstermek onu yine çıkmaza kilitlerdi.
+   */
+  const [cancelledScan, setCancelledScan] = useState<Roll | null>(null);
   // İdempotency anahtarı — form-oturumu kimliği. Mount'ta üretilir; timeout sonrası
   // tekrar basış aynı token'ı gönderir → backend cached WO döner (quickStart
   // replay-guard'ı attach/telafi'yi atlar). resetAll'da (yeni WO) yenilenir.
@@ -134,6 +171,23 @@ export function useQuickWorkOrder() {
   const lockedItemName = scanned[0]?.itemName ?? null;
   const totalQty = useMemo(() => scanned.reduce((s, r) => s + r.qty, 0), [scanned]);
   const orderLinked = orderLineIds.length > 0;
+
+  /**
+   * Farklı ENDE toplar aynı iş emrine girdi mi?
+   *
+   * Ürün kilitli ama en DEĞİL — 180 ile 220 cm tek partiye karışabiliyordu ve
+   * hiçbir yerde yazmıyordu. SAP'nin *batch characteristics* mantığı: parti,
+   * önemli olan özelliklerde homojen olmalı. UYARI, engel DEĞİL — fabrika
+   * bilerek karıştırıyor olabilir, karar operatörün; sessizlik ise kimsenin
+   * kararı değildir.
+   */
+  const mixedWidths = useMemo(() => {
+    const set = new Set<number>();
+    for (const s of scanned) if (s.width != null) set.add(s.width);
+    return set.size > 1 ? [...set].sort((a, b) => a - b) : [];
+  }, [scanned]);
+  const widthWarning =
+    mixedWidths.length > 1 ? `Farklı en okutuldu: ${mixedWidths.join(' / ')} cm` : null;
 
   // ── Master data ───────────────────────────────────────────────────────────
   const routesQuery = useQuery({
@@ -314,65 +368,126 @@ export function useQuickWorkOrder() {
   // ve mesajı olduğu gibi gösteririz.)
   const applyMissing = targetColorId && !canApplyColor ? 'renk veren (boyahane)' : null;
 
-  // ── Top ekleme (tarama + liste ortak) ─────────────────────────────────────
-  const reject = (text2: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-    Toast.show({ type: 'error', text1: 'Top eklenmedi', text2 });
-  };
+  // ── Okuma geri bildirimi (kabul / mükerrer / ret) ─────────────────────────
+  // Üç sonucun da AYRI sinyali var (services/scanFeedback). Mükerrer eskiden
+  // tamamen sessizdi: operatör "okumadı" sanıp tekrar okutuyordu.
+  const [rejects, setRejects] = useState<ScanReject[]>([]);
+  const [duplicateBarcode, setDuplicateBarcode] = useState<string | null>(null);
+  const rejectSeqRef = useRef(0);
+  const dupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const addRolls = useCallback((incoming: Roll[]) => {
-    const prev = scannedRef.current;
-    const have = new Set(prev.map((s) => s.barcode));
-    // Sipariş-önce: ürün siparişten kilitli → okutulan toplar ona uymak zorunda.
-    let lock = orderDerivedItemIdRef.current ?? prev[0]?.itemId ?? null;
-    const additions: ScannedRoll[] = [];
-    const rejects: string[] = [];
-
-    for (const roll of incoming) {
-      if (!roll.barcode) {
-        rejects.push('Barkodsuz top eklenemez');
-        continue;
-      }
-      if (have.has(roll.barcode)) continue; // mükerrer → sessiz
-      if (roll.status !== 'STOCK') {
-        rejects.push(`${roll.barcode} stokta değil (${trLabel(ROLL_STATUS_LABEL, roll.status)})`);
-        continue;
-      }
-      if (lock && roll.itemId !== lock) {
-        rejects.push(`${roll.barcode} farklı ürün`);
-        continue;
-      }
-      if (!lock) lock = roll.itemId;
-      have.add(roll.barcode);
-      additions.push({
-        id: roll.id,
-        barcode: roll.barcode,
-        itemId: roll.itemId,
-        itemName: roll.item?.name ?? 'Ürün',
-        qty: Number(roll.currentQty) || 0,
-      });
+  const pushRejects = useCallback((items: { barcode: string; reason: string }[]) => {
+    if (items.length === 0) return;
+    for (const it of items) {
+      const id = ++rejectSeqRef.current;
+      setRejects((cur) => [{ id, ...it }, ...cur].slice(0, 20));
+      // Her satır KENDİ ömrünü sayar — tek ortak zamanlayıcı, arka arkaya gelen
+      // retlerden ilkinin süresi dolduğunda hepsini birden silerdi.
+      setTimeout(() => setRejects((cur) => cur.filter((r) => r.id !== id)), REJECT_TTL_MS);
     }
-
-    if (additions.length > 0) {
-      // Fonksiyonel updater + tekrar dedup (ref gecikmesine karşı emniyet).
-      setScanned((cur) => {
-        const seen = new Set(cur.map((s) => s.barcode));
-        const fresh = additions.filter((a) => !seen.has(a.barcode));
-        return fresh.length ? [...cur, ...fresh] : cur;
-      });
-      setSubmitError(null);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      Toast.show({
-        type: 'success',
-        text1: additions.length === 1 ? 'Eklendi' : `${additions.length} top eklendi`,
-        text2: additions.length === 1 ? additions[0].barcode : undefined,
-        visibilityTime: 900,
-      });
-    }
-    if (rejects.length > 0) {
-      reject(rejects.length === 1 ? rejects[0] : `${rejects.length} top eklenmedi: ${rejects[0]}`);
-    }
+    signalScan('reject');
   }, []);
+
+  const flashDuplicate = useCallback((barcode: string) => {
+    setDuplicateBarcode(barcode);
+    if (dupTimerRef.current) clearTimeout(dupTimerRef.current);
+    dupTimerRef.current = setTimeout(() => setDuplicateBarcode(null), DUPLICATE_FLASH_MS);
+    signalScan('duplicate');
+  }, []);
+
+  const dismissReject = useCallback(
+    (id: number) => setRejects((cur) => cur.filter((r) => r.id !== id)),
+    [],
+  );
+
+  // ── Top ekleme (tarama + liste ortak) ─────────────────────────────────────
+  const addRolls = useCallback(
+    (incoming: Roll[]) => {
+      const prev = scannedRef.current;
+      const have = new Set(prev.map((s) => s.barcode));
+      // Sipariş-önce: ürün siparişten kilitli → okutulan toplar ona uymak zorunda.
+      let lock = orderDerivedItemIdRef.current ?? prev[0]?.itemId ?? null;
+      const additions: ScannedRoll[] = [];
+      const rejected: { barcode: string; reason: string }[] = [];
+      const duplicates: string[] = [];
+
+      for (const roll of incoming) {
+        if (!roll.barcode) {
+          rejected.push({ barcode: '—', reason: 'Barkodsuz top eklenemez' });
+          continue;
+        }
+        if (have.has(roll.barcode)) {
+          duplicates.push(roll.barcode);
+          continue;
+        }
+        // İPTAL EDİLMİŞ TOP = ÇIKMAZ DEĞİL (2026-08-05). Eskiden burası da düz bir
+        // "Stokta değil (İptal)" satırı basıyordu. Elinde fiziksel mal olan
+        // operatör için bu, sebebini söylemeyen bir duvardır ve doğaçlamaya iter —
+        // sahada tam olarak öyle oldu: ikinci kayıt açıldı, ikinci etiket basıldı,
+        // topun üstünde iki kimlik kaldı. Teşhis panelini aç: neden iptal edildiğini
+        // gösterir ve kapsam uygunsa tek dokunuşla geri aldırır.
+        if (roll.status === 'CANCELLED') {
+          setCancelledScan(roll);
+          continue;
+        }
+        if (roll.status !== 'STOCK') {
+          rejected.push({
+            barcode: roll.barcode,
+            reason: `Stokta değil (${trLabel(ROLL_STATUS_LABEL, roll.status)})`,
+          });
+          continue;
+        }
+        if (lock && roll.itemId !== lock) {
+          rejected.push({ barcode: roll.barcode, reason: 'Farklı ürün' });
+          continue;
+        }
+        if (!lock) lock = roll.itemId;
+        have.add(roll.barcode);
+        additions.push({
+          id: roll.id,
+          barcode: roll.barcode,
+          itemId: roll.itemId,
+          itemName: roll.item?.name ?? 'Ürün',
+          qty: Number(roll.currentQty) || 0,
+          width: roll.width != null ? Number(roll.width) : null,
+        });
+      }
+
+      if (additions.length > 0) {
+        // Fonksiyonel updater + tekrar dedup (ref gecikmesine karşı emniyet).
+        setScanned((cur) => {
+          const seen = new Set(cur.map((s) => s.barcode));
+          const fresh = additions.filter((a) => !seen.has(a.barcode));
+          return fresh.length ? [...cur, ...fresh] : cur;
+        });
+        setSubmitError(null);
+        signalScan('accept');
+        Toast.show({
+          type: 'success',
+          text1: additions.length === 1 ? 'Eklendi' : `${additions.length} top eklendi`,
+          text2: additions.length === 1 ? additions[0].barcode : undefined,
+          visibilityTime: 900,
+        });
+      }
+      if (rejected.length > 0) {
+        pushRejects(rejected);
+        Toast.show({
+          type: 'error',
+          text1: 'Top eklenmedi',
+          text2:
+            rejected.length === 1
+              ? `${rejected[0].barcode} · ${rejected[0].reason}`
+              : `${rejected.length} top eklenmedi: ${rejected[0].reason}`,
+        });
+      }
+      // Mükerrer sinyali yalnız BAŞKA hiçbir şey olmadıysa — kabul/ret sinyalinin
+      // üstüne binerse operatör hangi sesi duyduğunu ayırt edemez.
+      if (duplicates.length > 0 && additions.length === 0 && rejected.length === 0) {
+        flashDuplicate(duplicates[0]);
+      }
+    },
+    [pushRejects, flashDuplicate],
+  );
 
   // K-A4 fix: çözümleme sürerken gelen okuma SESSİZCE düşüyordu (yavaş ağda
   // operatör art arda okutur, kamera ✓ verir, top listeye girmez). Paketleme'deki
@@ -383,7 +498,12 @@ export function useQuickWorkOrder() {
     async (raw: string) => {
       const barcode = raw.trim();
       if (!barcode) return;
-      if (scannedRef.current.some((s) => s.barcode === barcode)) return; // bilinen mükerrer → sessiz, ağ çağrısı yok
+      if (scannedRef.current.some((s) => s.barcode === barcode)) {
+        // Bilinen mükerrer: ağ çağrısı YOK ama SESSİZ de değil. Eskiden hiçbir
+        // şey olmuyordu ve operatör "okumadı" sanıp tekrar tekrar okutuyordu.
+        flashDuplicate(barcode);
+        return;
+      }
       if (resolvingRef.current) {
         if (!pendingScanQueueRef.current.includes(barcode)) {
           pendingScanQueueRef.current.push(barcode);
@@ -396,19 +516,21 @@ export function useQuickWorkOrder() {
         const res = await rollService.getByBarcode(barcode);
         const roll = res.data;
         if (!roll) {
-          reject(`${barcode} bulunamadı`);
+          pushRejects([{ barcode, reason: 'Bulunamadı' }]);
+          Toast.show({ type: 'error', text1: 'Top eklenmedi', text2: `${barcode} bulunamadı` });
           return;
         }
         addRolls([roll]);
       } catch {
-        reject(`${barcode} okunamadı`);
+        pushRejects([{ barcode, reason: 'Okunamadı' }]);
+        Toast.show({ type: 'error', text1: 'Top eklenmedi', text2: `${barcode} okunamadı` });
       } finally {
         resolvingRef.current = false;
         const next = pendingScanQueueRef.current.shift();
         if (next) void handleScan(next);
       }
     },
-    [addRolls],
+    [addRolls, pushRejects, flashDuplicate],
   );
 
   const removeRoll = useCallback(
@@ -418,8 +540,32 @@ export function useQuickWorkOrder() {
   const clearScanned = useCallback(() => setScanned([]), []);
 
   // ── Sipariş bağı ──────────────────────────────────────────────────────────
+  // Seçilen kalemlerin AÇIK metrajı (lineId → net açık) — tarayıcıdaki
+  // "okutulan / istenen" sayacının kaynağı. Picker seçim kaldırmayı yalnız
+  // `changeOrderLines` ile bildirdiği için harita orada budanır.
+  const [lineTargets, setLineTargets] = useState<Record<string, number>>({});
+  const orderTargetQty = useMemo(() => {
+    if (orderLineIds.length === 0) return null;
+    let sum = 0;
+    let known = false;
+    for (const id of orderLineIds) {
+      const v = lineTargets[id];
+      if (v != null) {
+        sum += v;
+        known = true;
+      }
+    }
+    return known ? sum : null;
+  }, [orderLineIds, lineTargets]);
+
   /** Bir kalem seçildiğinde ürün/renk/en/özellikleri siparişten doldur. */
   const applyOrderLine = useCallback((line: AvailableOrderLine) => {
+    // Net açık = açık − üretimdeki (backend `withInProduction`). Yoksa ham açık —
+    // picker satırı da aynı sırayı kullanıyor, iki yüzey ayrışmasın.
+    const target = Number(line.netOpenQty ?? line.openQty);
+    if (Number.isFinite(target) && target > 0) {
+      setLineTargets((cur) => ({ ...cur, [line.lineId]: target }));
+    }
     setOrderDerivedItemId(line.itemId);
     setTargetColorId(line.colorId);
     // Renk adını doğrudan order kaleminden al (gerçek colorId varsa).
@@ -433,6 +579,11 @@ export function useQuickWorkOrder() {
 
   const changeOrderLines = useCallback((ids: string[]) => {
     setOrderLineIds(ids);
+    setLineTargets((cur) => {
+      const next: Record<string, number> = {};
+      for (const id of ids) if (cur[id] != null) next[id] = cur[id];
+      return next;
+    });
     if (ids.length === 0) {
       setOrderColorName(null);
       setOrderWidth(null);
@@ -458,6 +609,9 @@ export function useQuickWorkOrder() {
         errors: data.errors,
         woId: data.workOrder.id,
         dispatch: data.dispatch ?? null,
+        itemName: data.workOrder.targetItem?.name ?? lockedItemName,
+        width: data.workOrder.width ?? toPositiveNum(width),
+        totalQty,
       });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
@@ -564,6 +718,9 @@ export function useQuickWorkOrder() {
 
   const resetAll = useCallback(() => {
     setScanned([]);
+    setRejects([]);
+    setDuplicateBarcode(null);
+    setLineTargets({});
     // Son rotayı koru (saha kolaylığı); gerisini temizle.
     setRouteTemplateId(lastRouteTemplateId);
     setTargetColorId(null);
@@ -590,9 +747,18 @@ export function useQuickWorkOrder() {
     lockedItemId,
     lockedItemName,
     addRolls,
+    // iptalli okutma teşhisi — panel açılır, geri alınırsa top listeye girer
+    cancelledScan,
+    dismissCancelledScan: () => setCancelledScan(null),
     handleScan,
     removeRoll,
     clearScanned,
+    // okuma geri bildirimi
+    rejects,
+    dismissReject,
+    duplicateBarcode,
+    mixedWidths,
+    widthWarning,
     // rota
     routeTemplateId,
     routeLabel,
@@ -623,6 +789,7 @@ export function useQuickWorkOrder() {
     // sipariş
     orderLineIds,
     orderLinked,
+    orderTargetQty,
     changeOrderLines,
     applyOrderLine,
     // fason

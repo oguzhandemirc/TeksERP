@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Text, Button, TouchableRipple, Icon, Surface, ActivityIndicator } from 'react-native-paper';
@@ -16,12 +16,22 @@ import StepRolls from './wizard/StepRolls';
 import StepProduction from './wizard/StepProduction';
 import StepConfirm from './wizard/StepConfirm';
 import ScannedRollsModal from './wizard/ScannedRollsModal';
+import ScannerRollStrip from './wizard/ScannerRollStrip';
+import CancelledRollSheet from '../../../components/CancelledRollSheet';
+import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
 import { colors, spacing, radius } from '../../../theme';
 
 interface NewWorkOrderViewProps {
   /** Aktif adım (0-tabanlı) — kabuk tutar ki Appbar geri tuşu adım geri gidebilsin. */
   step: number;
   onStepChange: (step: number) => void;
+  /**
+   * Başarı ekranı açıldı/kapandı. Kabuk buna göre iki şey yapar: (a) geri tuşu
+   * sihirbaz adımlarına geri saymak yerine doğrudan listeye döner — iş bitmiş,
+   * formuna geri dönmenin anlamı yok ve operatör üç kez geri basıyordu;
+   * (b) listeye dönüşte tazeleme + başa sarma tetiklenir.
+   */
+  onResultChange?: (hasResult: boolean) => void;
 }
 
 /**
@@ -31,7 +41,11 @@ interface NewWorkOrderViewProps {
  * (ProductRecipe), elle İş Emri No, hedef metraj/kg. Tüm durum + kurallar
  * `useQuickWorkOrder` hook'unda; burası yalnız gezinme ve iskelet.
  */
-export default function NewWorkOrderView({ step, onStepChange }: NewWorkOrderViewProps) {
+export default function NewWorkOrderView({
+  step,
+  onStepChange,
+  onResultChange,
+}: NewWorkOrderViewProps) {
   const wo = useQuickWorkOrder();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [rollListOpen, setRollListOpen] = useState(false);
@@ -44,6 +58,14 @@ export default function NewWorkOrderView({ step, onStepChange }: NewWorkOrderVie
   const [printing, setPrinting] = useState(false);
   const [printingCeki, setPrintingCeki] = useState(false);
   const online = useOnlineStatus();
+  // Ayarlar → "Kamera arızalı" — listeden seçim kaçış yollarının tek kaynağı.
+  const cameraUnusable = useCameraUnusable();
+
+  // Başarı ekranı durumunu kabuğa bildir (geri tuşu + liste tazeleme için).
+  const hasResult = !!wo.result;
+  useEffect(() => {
+    onResultChange?.(hasResult);
+  }, [hasResult, onResultChange]);
 
   const goTo = useCallback(
     (i: number) => onStepChange(Math.max(0, Math.min(STEP_TITLES.length - 1, i))),
@@ -118,7 +140,27 @@ export default function NewWorkOrderView({ step, onStepChange }: NewWorkOrderVie
               <Text style={styles.successParti}>{r.batchNumber}</Text>
             </>
           ) : null}
-          <Text style={styles.successMeta}>{r.attached} top bağlandı</Text>
+          {/* Üretim özeti — operatör kartı basmadan/ekrandan ayrılmadan "ne
+              açtım" sorusunu cevaplayabilmeli. Değerler `wo.result`te DONMUŞ;
+              canlı formdan okunsaydı "Yeni İş Emri"ne basıldığı an boşalırdı. */}
+          <View style={styles.specBox}>
+            <View style={styles.specRow}>
+              <Text style={styles.specLabel}>KUMAŞ</Text>
+              <Text style={styles.specValue} numberOfLines={2}>
+                {r.itemName ?? '—'}
+              </Text>
+            </View>
+            <View style={styles.specRow}>
+              <Text style={styles.specLabel}>EN</Text>
+              <Text style={styles.specValue}>{r.width != null ? `${r.width} cm` : '—'}</Text>
+            </View>
+            <View style={[styles.specRow, styles.specRowLast]}>
+              <Text style={styles.specLabel}>TOP</Text>
+              <Text style={styles.specValue}>
+                {r.attached} top · {Math.round(r.totalQty)} m
+              </Text>
+            </View>
+          </View>
           {r.errors.length > 0 ? (
             <Text style={styles.successWarn}>{r.errors.length} top bağlanamadı</Text>
           ) : null}
@@ -262,17 +304,43 @@ export default function NewWorkOrderView({ step, onStepChange }: NewWorkOrderVie
       </View>
 
       {/* Sürekli tarayıcı — kendi kabul/ret titreşimimiz var, yakalama haptiği kapalı.
-          onPickFromList (O15): kamera çalışmasa/etiket okunmasa da akış kilitlenmesin —
-          "Listeden Seç" tam da sorunun fark edildiği yerde durur. */}
+          trigger="tap": kamera KENDİLİĞİNDEN okumaz (2026-08-05 saha bulgusu —
+          operatör telefonu yığının üzerinde gezdirirken komşu topların barkodları
+          da iş emrine giriyordu). bkz. BarcodeScannerView.trigger.
+          onPickFromList (O15) artık "kamera arızalı" bayrağına bağlı: kameranın
+          altındaki yeri son okutulanlar şeridi aldı ve buton her okutmada
+          gözükmesi gereken bir şey değil — kaçış yolu operatörün Ayarlar'daki
+          beyanıyla açılır (aynı bayrak Adım-1'deki "Listeden Ekle"yi de açar).
+          counter: sipariş bağlıysa "okutulan / istenen" bandı — operatör
+          "yeter mi" sorusunu OKUTURKEN cevaplamalı, üç adım sonra onay
+          ekranında değil (pick-to-order). notice: farklı en uyarısı. */}
       <BarcodeScannerModal
         visible={scannerOpen}
         onDismiss={() => setScannerOpen(false)}
         onScan={(b) => void wo.handleScan(b)}
         title="Stok Topu Okut"
         continuous
+        trigger="tap"
         captureHaptic={false}
         barcodeTypes={['qr', 'code128']}
-        onPickFromList={() => setPendingRollList(true)}
+        onPickFromList={cameraUnusable ? () => setPendingRollList(true) : undefined}
+        counter={
+          wo.orderTargetQty != null
+            ? { scanned: wo.totalQty, expected: wo.orderTargetQty }
+            : undefined
+        }
+        notice={wo.widthWarning ?? undefined}
+        footer={
+          <ScannerRollStrip
+            rolls={wo.scanned}
+            totalQty={wo.totalQty}
+            onRemove={wo.removeRoll}
+            rejects={wo.rejects}
+            onDismissReject={wo.dismissReject}
+            duplicateBarcode={wo.duplicateBarcode}
+            showWidth={wo.mixedWidths.length > 1}
+          />
+        }
         onModalHide={() => {
           if (!pendingRollList) return;
           setPendingRollList(false);
@@ -299,6 +367,17 @@ export default function NewWorkOrderView({ step, onStepChange }: NewWorkOrderVie
         title="Stok Topu Seç"
         subtitle={wo.lockedItemName ? `${wo.lockedItemName} — serbest stok` : 'Serbest stok topları'}
         emptyText="Uygun serbest stok topu yok"
+      />
+
+      {/* Okutulan barkod İPTAL EDİLMİŞ — sebebi göster, kapsam uygunsa geri aldır.
+          Sahada bu panel yoktu: ekran "stokta değil" deyip susuyordu ve operatör
+          malı sevk edebilmek için ikinci bir kayıt/etiket üretiyordu. Geri alınan
+          top DOĞRUDAN listeye girer — operatörü tekrar okutmaya göndermek, çözülen
+          sürtünmeyi geri koymak olurdu. */}
+      <CancelledRollSheet
+        roll={wo.cancelledScan}
+        onDismiss={wo.dismissCancelledScan}
+        onRestored={(roll) => wo.addRolls([roll])}
       />
 
       {/* Okutulanların tam listesi + tekil silme */}
@@ -389,7 +468,26 @@ const styles = StyleSheet.create({
   // Parti, iş emrinden görsel olarak ayrışsın diye farklı ton — aynı renkte iki
   // büyük numara "hangisi hangisi" karışıklığı üretiyordu.
   successParti: { fontSize: 22, fontWeight: '800', color: colors.successDark, marginTop: 2 },
-  successMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 8 },
+  specBox: {
+    alignSelf: 'stretch',
+    marginTop: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.appBg,
+    paddingHorizontal: spacing.md,
+  },
+  specRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  specRowLast: { borderBottomWidth: 0 },
+  specLabel: { width: 62, fontSize: 10, fontWeight: '800', letterSpacing: 0.6, color: colors.textMuted },
+  specValue: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text, textAlign: 'right' },
   successWarn: { fontSize: 13, color: colors.warningDark, fontWeight: '700' },
   successDispatch: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 2 },
   successBtn: { borderRadius: radius.md, alignSelf: 'stretch', marginTop: spacing.sm },

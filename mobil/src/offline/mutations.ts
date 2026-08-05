@@ -212,8 +212,18 @@ export function registerStationMutationDefaults(): void {
   // confirmActive=false gider — top bu arada bir istasyonda aktifleştiyse
   // backend conflict atar, replay'de optimistic kaldırma rollback olur.
   queryClient.setMutationDefaults(STATION_MUT.KK1_SCRAP, {
-    mutationFn: withAuthGuard((vars: { id: string; confirmActive: boolean }) =>
-      rollService.scrap(vars.id, vars.confirmActive)),
+    mutationFn: withAuthGuard(
+      (vars: { id: string; confirmActive: boolean; reason?: string }) =>
+        rollService.scrap(
+          vars.id,
+          vars.confirmActive,
+          // Sebep VARSA bu, etiketi basılmış bir topun iptalidir ve operatör
+          // uyarıyı görüp onaylamıştır → onay bayrağı sebeple BİRLİKTE gider.
+          // İkisini ayrı taşımak, kuyruktan flush edilen bir isteğin sebebi
+          // taşıyıp onayı taşımaması gibi anlamsız bir ara duruma izin verirdi.
+          vars.reason ? { confirmLabelPrinted: true, reason: vars.reason } : undefined,
+        ),
+    ),
     ...OFFLINE_AWARE,
   });
   // Fason Kabul — boyahaneden dönen malın kabul kaydı. Backend idempotent:

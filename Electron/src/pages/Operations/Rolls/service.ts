@@ -218,6 +218,19 @@ export const rollService = {
     apiClient
       .post<ApiResponse<Roll>>("/api/rolls/initial-entry", payload)
       .then((r) => r.data),
+
+  /**
+   * İptali GERİ AL — `CANCELLED` → iptalden önceki raf.
+   *
+   * Var olma sebebi (2026-08-05 saha vakası): geri dönüş yolu olmadığında tek
+   * çare topu YENİDEN GİRMEKtir ve o, aynı fiziksel top için ikinci bir barkod
+   * doğurur. Kapsam dar; engelliyse backend somut Türkçe sebep döner ve panel
+   * butonu zaten çizmez (`canRestore` aynı yüklemden gelir).
+   */
+  restoreCancel: (id: string, reason?: string): Promise<ApiResponse<Roll>> =>
+    apiClient
+      .post<ApiResponse<Roll>>(`/api/rolls/${id}/restore-cancel`, reason ? { reason } : {})
+      .then((r) => r.data),
 };
 
 export const ROLL_STATUS_TABS = STATUS_GROUPS;

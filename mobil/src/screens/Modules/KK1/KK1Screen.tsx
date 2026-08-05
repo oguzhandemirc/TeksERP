@@ -48,6 +48,7 @@ import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
+import { CANCEL_REASON_PRESETS, CANCEL_MIN_REASON } from '../../../constants/cancelReasons';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -870,7 +871,9 @@ export default function KK1Screen() {
   const scrapMutation = useMutation<
     Awaited<ReturnType<typeof rollService.scrap>>,
     Error,
-    { id: string; confirmActive: boolean },
+    // `reason` doluysa etiketi basılmış topun iptalidir → backend ayrıca
+    // confirmLabelPrinted bekler; ikisi birlikte gider (bkz. offline/mutations).
+    { id: string; confirmActive: boolean; reason?: string },
     { snapshots: [readonly unknown[], unknown][] }
   >({
     mutationKey: STATION_MUT.KK1_SCRAP,
@@ -938,15 +941,18 @@ export default function KK1Screen() {
     }
   }, [drainPendingScrap]);
 
-  const confirmScrap = useCallback(() => {
-    if (!scrapTarget) return;
-    // Hard-block (fason/sevkiyat/zaten iptal) → hiç gönderme.
-    if (cancelPreview && !cancelPreview.canCancel) return;
-    // İstasyonda aktif top için bilinçli onay bayrağı.
-    const confirmActive = cancelPreview?.requiresConfirm ?? false;
-    scrapMutation.mutate({ id: scrapTarget.id, confirmActive });
-    setScrapTarget(null);
-  }, [scrapTarget, cancelPreview, scrapMutation]);
+  const confirmScrap = useCallback(
+    (reason?: string) => {
+      if (!scrapTarget) return;
+      // Hard-block (fason/sevkiyat/zaten iptal) → hiç gönderme.
+      if (cancelPreview && !cancelPreview.canCancel) return;
+      // İstasyonda aktif top için bilinçli onay bayrağı.
+      const confirmActive = cancelPreview?.requiresConfirm ?? false;
+      scrapMutation.mutate({ id: scrapTarget.id, confirmActive, reason });
+      setScrapTarget(null);
+    },
+    [scrapTarget, cancelPreview, scrapMutation],
+  );
 
   // ── Actions ──
   // En'i tek tuşla temizle — operatör değiştirmek isterse defalarca silmesin.
@@ -2500,7 +2506,8 @@ interface ScrapConfirmModalProps {
   offline: boolean;
   loading: boolean;
   onDismiss: () => void;
-  onConfirm: () => void;
+  /** Etiketli iptalde sebep taşınır; etiketsizde `undefined`. */
+  onConfirm: (reason?: string) => void;
 }
 
 /** "X iş emrinin Y adımında aktif" gibi okunur cümle. */
@@ -2527,12 +2534,36 @@ function ScrapConfirmModal({
   // Önizleme henüz gelmedi → güvenli tarafta kal (onay butonu beklemede).
   const blocked = !offline && !!preview && !preview.canCancel;
   const needsConfirm = !!preview && preview.canCancel && preview.requiresConfirm;
+
+  // ── ÖLÜ ETİKET EKSENİ (2026-08-05) ────────────────────────────────────────
+  // `needsConfirm`'den AYRI soru: o "mal bir istasyonda mı" (sistem içi etki),
+  // bu "sahaya geçersiz bir kâğıt bırakıyor muyum" (sistem DIŞI etki). Bir top
+  // ikisini birden tetikleyebilir; ikisi de kendi uyarısını gösterir.
+  const labelPrinted = !offline && !!preview && preview.canCancel && preview.labelPrinted;
+  const [reason, setReason] = useState('');
+  const [otherOpen, setOtherOpen] = useState(false);
+  // Modal her açılışta temiz başlamalı — önceki topun sebebi yenisine sızmasın.
+  useEffect(() => {
+    if (roll) {
+      setReason('');
+      setOtherOpen(false);
+    }
+  }, [roll?.id]);
+  const reasonOk = reason.trim().length >= CANCEL_MIN_REASON;
+
   // Hard-block iken hiç gönderme. Önizleme yüklenirken de butonu kilitle ki
   // operatör requiresConfirm bilinmeden iptal etmesin. Offline'da önizleme yok →
   // butonu kilitleme (kuyruğa alınır, backend replay'de güvenliği uygular).
-  const confirmDisabled = loading || (!offline && previewLoading) || blocked;
+  // Etiketli topta sebep girilmeden buton açılmaz (backend zaten reddeder;
+  // burada kilitlemek operatörü boş bir 400'e yürütmemek içindir).
+  const confirmDisabled =
+    loading || (!offline && previewLoading) || blocked || (labelPrinted && !reasonOk);
   // Onay rengi/etiketi duruma göre.
-  const accent = blocked ? colors.danger : needsConfirm ? colors.warningDark : '#dc2626';
+  const accent = blocked
+    ? colors.danger
+    : needsConfirm || labelPrinted
+      ? colors.warningDark
+      : '#dc2626';
 
   return (
     <AppModal visible={!!roll} onDismiss={onDismiss} dismissable={!loading}>
@@ -2629,6 +2660,81 @@ function ScrapConfirmModal({
           </>
         )}
 
+        {/* ── ÖLÜ ETİKET UYARISI + SEBEP ──────────────────────────────────────
+            Etiket basmak fiziksel dünyada geri alınamaz; kayıt geri alınabilir.
+            Bu kutu tam o farkı operatöre söyler: kâğıt topun üstünde KALACAK.
+            Sahada olan buydu — uyarı yoktu, kayıt öldü, kâğıt kaldı, aynı top
+            saatler sonra ikinci bir barkodla yeniden girildi. */}
+        {labelPrinted && (
+          <View style={scrapStyles.deadLabelBox}>
+            <View style={scrapStyles.deadLabelHead}>
+              <Icon source="label-off-outline" size={18} color={colors.warningDark} />
+              <Text style={scrapStyles.deadLabelTitle}>Bu topun etiketi basıldı</Text>
+            </View>
+            <Text style={scrapStyles.warnSub}>
+              Kâğıt büyük ihtimalle topun üstünde. İptal edersen orada GEÇERSİZ bir
+              etiket kalır — sonraki okutmada &quot;stokta değil&quot; der.
+              {'\n'}Önce etiketi toptan sök.
+            </Text>
+
+            <Text style={scrapStyles.reasonLabel}>İptal sebebi (zorunlu)</Text>
+            <View style={scrapStyles.reasonChips}>
+              {CANCEL_REASON_PRESETS.map((p) => {
+                const selected = reason === p && !otherOpen;
+                return (
+                  <TouchableRipple
+                    key={p}
+                    onPress={() => {
+                      setReason(p);
+                      setOtherOpen(false);
+                    }}
+                    style={[scrapStyles.reasonChip, selected && scrapStyles.reasonChipOn]}
+                    borderless
+                  >
+                    <Text
+                      style={[
+                        scrapStyles.reasonChipText,
+                        selected && scrapStyles.reasonChipTextOn,
+                      ]}
+                    >
+                      {p}
+                    </Text>
+                  </TouchableRipple>
+                );
+              })}
+              {/* Serbest yazım kaldırılmadı, "Diğer"in altına alındı: hazır
+                  seçenek sürtünmeyi kaldırır ve veriyi sayılabilir yapar, ama
+                  katalog dışı gerçek durumlar da olur. */}
+              <TouchableRipple
+                onPress={() => {
+                  setOtherOpen(true);
+                  setReason('');
+                }}
+                style={[scrapStyles.reasonChip, otherOpen && scrapStyles.reasonChipOn]}
+                borderless
+              >
+                <Text
+                  style={[scrapStyles.reasonChipText, otherOpen && scrapStyles.reasonChipTextOn]}
+                >
+                  Diğer…
+                </Text>
+              </TouchableRipple>
+            </View>
+            {otherOpen && (
+              <PaperTextInput
+                mode="outlined"
+                dense
+                autoFocus
+                placeholder="Sebebi yaz (en az 3 karakter)"
+                value={reason}
+                onChangeText={setReason}
+                maxLength={500}
+                style={scrapStyles.reasonInput}
+              />
+            )}
+          </View>
+        )}
+
         <View style={scrapStyles.actions}>
           <Button
             mode="outlined"
@@ -2642,16 +2748,20 @@ function ScrapConfirmModal({
           {!blocked && (
             <Button
               mode="contained"
-              buttonColor={needsConfirm ? colors.warningDark : '#dc2626'}
+              buttonColor={needsConfirm || labelPrinted ? colors.warningDark : '#dc2626'}
               textColor="#fff"
               icon="trash-can-outline"
-              onPress={onConfirm}
+              onPress={() => onConfirm(labelPrinted ? reason.trim() : undefined)}
               loading={loading}
               disabled={confirmDisabled}
               style={scrapStyles.actionBtn}
               contentStyle={scrapStyles.actionBtnContent}
             >
-              {needsConfirm ? 'Yine de İptal Et' : 'İptal Et'}
+              {labelPrinted
+                ? 'Etiketi Söktüm, İptal Et'
+                : needsConfirm
+                  ? 'Yine de İptal Et'
+                  : 'İptal Et'}
             </Button>
           )}
         </View>
@@ -2750,6 +2860,33 @@ const scrapStyles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 3,
   },
+  // ── Ölü etiket kutusu ──
+  deadLabelBox: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  deadLabelHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  deadLabelTitle: { fontSize: 14, fontWeight: '800', color: '#92400e' },
+  reasonLabel: { fontSize: 12, fontWeight: '700', color: '#92400e', marginTop: 2 },
+  reasonChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  reasonChip: {
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    // 40dp: modal içi ikincil seçim; ana aksiyonlar (Vazgeç/İptal Et) 56dp kalır.
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  reasonChipOn: { backgroundColor: colors.warningDark, borderColor: colors.warningDark },
+  reasonChipText: { fontSize: 12.5, color: '#92400e', fontWeight: '600' },
+  reasonChipTextOn: { color: '#fff' },
+  reasonInput: { backgroundColor: '#fff' },
 });
 
 // ── Liste satırı: Roll + kim girdi + ne zaman ──

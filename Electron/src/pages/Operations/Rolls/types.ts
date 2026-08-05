@@ -79,6 +79,24 @@ export interface Roll {
   markedForKartela?: boolean;
   /** Etiket bayat mı — veri/metraj düzeltildi ama fiziksel etiket yeniden basılmadı. */
   labelDirty?: boolean;
+  /**
+   * Etiketin BASILDIĞI an. `labelDirty` ile farklı soru: o "basılı etiket
+   * veriyle uyuşuyor mu", bu "ortada fiziksel bir kâğıt VAR mı". İptal edilmiş
+   * topta bu alan doluysa sahada ÖLÜ ETİKET dolaşıyor demektir.
+   */
+  labelPrintedAt?: string | null;
+  /** İptal izi — topun kendi satırından (audit'ten değil; 6 ayda arşivlenir). */
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  cancelledBy?: { id: string; username: string; fullName: string } | null;
+  /**
+   * İptal geri alınabilir mi — BACKEND'in yüklemi (`roll-cancel-restore.helper`).
+   * Panelde yeniden hesaplanmaz: ayrışırsa buton çizilir ama uç 409 verir.
+   * `undefined` = top zaten iptal değil.
+   */
+  canRestore?: boolean;
+  /** Geri alınamıyorsa somut Türkçe sebep. */
+  restoreBlockReason?: string | null;
   /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"). Kalıcı özellik; NULL = kayıtlı değil. */
   foldType?: string | null;
   entrySource: string;

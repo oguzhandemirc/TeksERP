@@ -370,6 +370,27 @@ export interface Roll {
   /** Top Tambur'da kartela sevki için işaretlendi mi (depo "kartelalık" rozeti). */
   markedForKartela?: boolean;
   createdAt?: string;
+
+  // ── ÖLÜ ETİKET TEŞHİSİ (2026-08-05) ────────────────────────────────────────
+  // Okutma yüzeyi iptal edilmiş barkodda eskiden yalnız "stokta değil" deyip
+  // SUSUYORDU. Operatörün elinde fiziksel top, önünde akan vardiya varken bu
+  // sessizlik doğaçlamaya davettir — sahada tam olarak öyle oldu: kayıt öldü,
+  // mal gitmek zorundaydı, ikinci bir barkod basıldı ve topta iki etiket kaldı.
+  /** Etiketin basıldığı an — doluysa topun üstünde fiziksel bir kâğıt VAR. */
+  labelPrintedAt?: string | null;
+  /** İptal anı (yalnız CANCELLED topta dolu). */
+  cancelledAt?: string | null;
+  /** İptal gerekçesi — topun KENDİ satırından gelir, audit'ten değil. */
+  cancelReason?: string | null;
+  cancelledBy?: { id: string; username: string; fullName: string } | null;
+  /**
+   * İptal GERİ ALINABİLİR mi. Backend ile AYNI yüklemden gelir — istemci kendi
+   * kuralını kurmaz, yoksa buton çizilir ama uç 409 verir.
+   * `undefined` = top zaten iptal değil (teşhis hiç koşmadı).
+   */
+  canRestore?: boolean;
+  /** Geri alınamıyorsa somut Türkçe sebep (operatöre ne yapacağını söyler). */
+  restoreBlockReason?: string | null;
 }
 
 export interface RollLabelSnapshot {

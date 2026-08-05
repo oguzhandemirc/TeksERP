@@ -15,6 +15,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
 import { RollEditDialog } from "./RollEditDialog";
 import { RescueStuckDialog } from "./RescueStuckDialog";
+import { RollCancelCard } from "./RollCancelCard";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
 import { type Roll, shipmentScopeLabels, categoryOfDispatch } from "./types";
@@ -197,6 +198,12 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 </CardContent>
               </Card>
             )}
+
+            {/* İPTAL BİLGİSİ — kimliğin hemen ardında, teknik gridden ÖNCE.
+                İptal edilmiş bir topta "kaç metre / hangi en" sorusu ikincildir;
+                asıl soru "bu neden ölü ve düzeltebilir miyim"dir. Detay ucundan
+                gelen alanlarla çizilir (liste satırı bunları taşımaz). */}
+            {detail?.status === "CANCELLED" && <RollCancelCard roll={detail} />}
 
             <div className="grid grid-cols-3 gap-2 text-sm">
               <Card>

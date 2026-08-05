@@ -1,11 +1,25 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Tags } from "lucide-react";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat } from "@/lib/format";
 import { rollStatusLabels, RollStatus, rollEntrySourceLabels } from "@/types/enums";
 import { type Roll, shipmentScopeLabels, activeDispatchOf, activeCategoryOf } from "./types";
+
+/**
+ * Kaydı ÖLÜ statüler — basılmış etiketin artık hiçbir yerde kabul edilmeyeceği
+ * durumlar. `SHIPPED` ve `SCRAP` bilinçli olarak YOK: sevk edilen topun etiketi
+ * müşteriyle birlikte gitti ve geçerlidir; fire kararında da kâğıt malla birlikte
+ * çöpe gider. Backend tarafındaki karşılığı `scripts/find_dead_labels.ts` —
+ * ikisi ayrışırsa ekran ile rapor aynı fabrika için farklı sayı söyler.
+ */
+const DEAD_LABEL_STATUSES = new Set<string>([
+  RollStatus.CANCELLED,
+  RollStatus.SUBCONTRACTOR_CONSUMED,
+  RollStatus.KARTELA_CONSUMED,
+  RollStatus.TAMBUR_CONSUMED,
+]);
 
 /**
  * Roll'un fiziksel/işlenmiş durumunu renk ve duruma göre türet.
@@ -366,6 +380,21 @@ export const rollColumns: ColumnDef<Roll>[] = [
             <AlertTriangle
               className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
               aria-label="Etiket güncel değil"
+            />
+          </span>
+        )}
+        {/* ÖLÜ ETİKET: kayıt öldü ama KÂĞIT basılmıştı — büyük ihtimalle hâlâ
+            topun üstünde. `labelDirty`den farklı sınıf: orada etiket YANLIŞ,
+            burada etiket GEÇERSİZ. Sahada bulunup sökülmesi gerekir; yoksa
+            okutulmaya devam eder ve her seferinde reddedilir (2026-08-05). */}
+        {row.original.labelPrintedAt && DEAD_LABEL_STATUSES.has(row.original.status) && (
+          <span
+            title="Ölü etiket — kayıt iptal/emekli ama etiketi basılmıştı. Topun üstünde duruyorsa sökün."
+            className="inline-flex"
+          >
+            <Tags
+              className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400"
+              aria-label="Ölü etiket"
             />
           </span>
         )}
