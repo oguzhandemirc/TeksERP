@@ -12,6 +12,7 @@ import { orderService } from '../../../services/order.service';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { emptyOrProblemText } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
 import type { DraftLine } from './useNewOrder';
 
@@ -36,10 +37,6 @@ interface Props {
 
 type OpenPicker = 'item' | 'color' | null;
 
-// "Boş liste" ile "listeyi alamadım" AYRI cümlelerdir — varsayılan "Seçenek yok"
-// metni sunucu düştüğünde operatöre "bu kumaş tanımlı değil" der (2026-08-05'te
-// tam bu yaşandı: backend kapalıyken müşteri picker'ı "Seçenek yok" gösterdi).
-const NET_ERROR_TEXT = 'Liste alınamadı — sunucuya ulaşılamıyor. Bağlantıyı kontrol edip ↻ ile yenileyin.';
 
 export default function OrderLineSheet({ target, customerId, onDismiss, onSave, onSaveAndNext }: Props) {
   const open = target !== null;
@@ -325,7 +322,7 @@ export default function OrderLineSheet({ target, customerId, onDismiss, onSave, 
         options={itemOptions}
         selectedValue={itemId}
         loading={itemsQuery.isLoading}
-        emptyText={itemsQuery.isError ? NET_ERROR_TEXT : 'Kumaş bulunamadı'}
+        emptyText={emptyOrProblemText(itemsQuery, 'Kumaş bulunamadı')}
         onRefresh={() => void itemsQuery.refetch()}
         onSelect={(value) => {
           setItemId(value);
@@ -350,13 +347,15 @@ export default function OrderLineSheet({ target, customerId, onDismiss, onSave, 
         pinnedLabel="Müşteri Renkleri"
         selectedValue={colorId}
         loading={publicColorsQuery.isLoading}
-        emptyText={
-          publicColorsQuery.isError || customerColorsQuery.isError
-            ? NET_ERROR_TEXT
-            : allowedColorIds.size > 0
-              ? 'Bu kumaş için tanımlı renk yok'
-              : 'Renk yok'
-        }
+        emptyText={emptyOrProblemText(
+          // İki sorgudan HANGİSİ düşerse düşsün liste eksik olur; ikisini tek
+          // "sorun" sinyalinde birleştir.
+          {
+            isError: publicColorsQuery.isError || customerColorsQuery.isError,
+            isPaused: publicColorsQuery.isPaused || customerColorsQuery.isPaused,
+          },
+          allowedColorIds.size > 0 ? 'Bu kumaş için tanımlı renk yok' : 'Renk yok',
+        )}
         onRefresh={() => {
           void publicColorsQuery.refetch();
           void customerColorsQuery.refetch();

@@ -16,6 +16,7 @@ import { RollStatus, RollEntrySource, WorkOrderStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { computeWoMaterial } from "../src/services/helpers/coverage.helper";
+import { readBatchShortNumberEnabled } from "../src/services/system-setting.service";
 
 const svc = new WorkOrderService();
 
@@ -139,6 +140,74 @@ async function main() {
   // Refakat kartı oluştu mu?
   const cardCount = await prisma.travelerCard.count({ where: { workOrderId: res.data!.workOrder.id } });
   check("Basit: refakat kartı oluştu", cardCount >= 1, `kart=${cardCount}`);
+
+  // ── PARTİ (2026-08-05) ────────────────────────────────────────────────────
+  // Mobil sonuç ekranı parti numarasını gösterir. Önceden `quickStart` yanıtında
+  // parti HİÇ YOKTU: istemci alanı `batchNumber` diye adlandırıp içine İŞ EMRİ
+  // numarasını yazıyordu, yani ekranda "parti" sanılan şey iş emri no'suydu ve
+  // operatör kartta/lanede o numarayı arayınca bulamıyordu. İkisi ayrı kavram
+  // (kök CLAUDE.md "İş Emri No ≠ Parti") — test ayrımı kilitler.
+  const qsBatch = res.data?.batch ?? null;
+  check("Parti: quickStart yanıtında parti DÖNÜYOR", qsBatch !== null, `batch=${JSON.stringify(qsBatch)}`);
+  // ⚠️ Parti no biçimi REJİME BAĞLIDIR (`batch.shortNumberEnabled`, 2026-08-05):
+  //   • AÇIK (varsayılan) → `P01…P99` — kısa, DÖNEN, benzersiz DEĞİL.
+  //   • KAPALI            → `P + GGAAYY + sayaç`, sayaç SIFIR-DOLGUSUZ
+  //     (`buildDailyCode(..., digits: 1)`) → uzunluk değişken: P05082629 da
+  //     P0508260019 da geçerli.
+  // Tek bir kalıp sabitlemek bu testi rejim değişince kırar (fiilen kırdı). Bayrağı
+  // OKUYUP ona göre doğrular — böylece iki rejimde de anlamlı kalır ve "yanlış
+  // rejimin numarası üretildi" hatasını da yakalar.
+  const shortRegime = await readBatchShortNumberEnabled();
+  check(
+    `Parti: numara ${shortRegime ? "P01…P99 (kısa/dönen)" : "P+GGAAYY+sayaç"} kalıbında`,
+    (shortRegime ? /^P(0[1-9]|[1-9][0-9])$/ : /^P\d{7,}$/).test(qsBatch?.batchNumber ?? ""),
+    qsBatch?.batchNumber ?? "—",
+  );
+  check(
+    "Parti: İŞ EMRİ numarasından FARKLI (asıl karışıklık buydu)",
+    !!qsBatch && qsBatch.batchNumber !== res.data!.workOrder.workOrderNumber,
+    `parti=${qsBatch?.batchNumber} · ie=${res.data!.workOrder.workOrderNumber}`,
+  );
+  // Dönen parti gerçekten bu WO'nun ve okutulan topları taşıyor mu — numara
+  // doğru kalıpta ama başka bir partininki olsaydı yukarıdaki üç kontrol de geçerdi.
+  const batchRow = qsBatch
+    ? await prisma.batch.findUnique({
+        where: { id: qsBatch.id },
+        select: { workOrderId: true, mergedIntoId: true },
+      })
+    : null;
+  check("Parti: bu iş emrine ait", batchRow?.workOrderId === res.data!.workOrder.id);
+  check("Parti: birleştirilmiş (tarihçe) değil", batchRow?.mergedIntoId === null);
+  const batchRollCount = qsBatch
+    ? await prisma.roll.count({ where: { batchId: qsBatch.id, id: { in: [r1.id, r2.id, r3.id] } } })
+    : 0;
+  check("Parti: okutulan 3 top partide", batchRollCount === 3, `partide=${batchRollCount}`);
+
+  // Replay dalı: timeout sonrası tekrar gönderimde attach HİÇ koşmaz, dolayısıyla
+  // parti attachRolls'tan gelemez — WO üzerinden çözülmeli. Operatör sonuç
+  // ekranını çoğu zaman TAM BU YOLDA ilk kez görür; parti burada boş kalırsa
+  // özellik en çok gerektiği anda kaybolur.
+  {
+    const t1 = await makeStockRoll(itemA.id, 60);
+    const token = crypto.randomUUID();
+    const first = await svc.quickStart({ steps, rollBarcodes: [t1.barcode], clientToken: token }, undefined);
+    if (first.data?.workOrder) createdWoIds.push(first.data.workOrder.id);
+    const replay = await svc.quickStart({ steps, rollBarcodes: [t1.barcode], clientToken: token }, undefined);
+    check(
+      "Parti/replay: aynı clientToken aynı WO'yu döndürdü",
+      replay.data?.workOrder.id === first.data?.workOrder.id,
+    );
+    check(
+      "Parti/replay: parti YİNE dönüyor (null değil)",
+      !!replay.data?.batch,
+      `batch=${JSON.stringify(replay.data?.batch ?? null)}`,
+    );
+    check(
+      "Parti/replay: ilk çağrıyla AYNI parti",
+      replay.data?.batch?.id === first.data?.batch?.id,
+      `ilk=${first.data?.batch?.batchNumber} · replay=${replay.data?.batch?.batchNumber}`,
+    );
+  }
 
   // "Üretime giren" (committed) attach anında dolu olmalı — ilk adım INTERNAL ise
   // movement'la, EXTERNAL ise currentStepId=ilk adım (B-set) ile. 3×100 = 300.

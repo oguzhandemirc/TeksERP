@@ -24,7 +24,15 @@ export interface ScannedRoll {
 }
 
 export interface QuickWoResult {
-  batchNumber: string;
+  /**
+   * İŞ EMRİ numarası (İE+GGAAYY+NNNN). Eskiden bu alan `batchNumber` adını
+   * taşıyordu ama içine `workOrder.workOrderNumber` yazılıyordu — sonuç ekranı
+   * "parti" sanılan bir numarayı basıyordu. İkisi AYRI kavramdır (kök CLAUDE.md
+   * "İş Emri No ≠ Parti"): operatör kartta/lanede parti arayınca bulamıyordu.
+   */
+  workOrderNumber: string;
+  /** PARTİ numarası (P+GGAAYY+NNNN) — attachRolls'ta doğar. Backend çözemezse null. */
+  batchNumber: string | null;
   attached: number;
   errors: string[];
   woId: string;
@@ -444,7 +452,8 @@ export function useQuickWorkOrder() {
       // Son kullanılan rotayı cihaza yaz (sonraki açılışta hazır gelsin).
       void setLastRouteTemplateId(routeTemplateId);
       setResult({
-        batchNumber: data.workOrder.workOrderNumber,
+        workOrderNumber: data.workOrder.workOrderNumber,
+        batchNumber: data.batch?.batchNumber ?? null,
         attached: data.attached,
         errors: data.errors,
         woId: data.workOrder.id,

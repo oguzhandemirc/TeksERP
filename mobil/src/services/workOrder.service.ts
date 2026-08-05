@@ -70,6 +70,13 @@ export interface QuickStartResult {
   errors: string[];
   /** Otomatik fason sevki yapıldıysa oluşan sevk (çeki listesi basımı için). */
   dispatch?: { id: string; dispatchNo: string } | null;
+  /**
+   * Topların bağlandığı PARTİ (P+GGAAYY+NNNN) — `attachRolls`ta doğar, sonuç
+   * ekranında iş emri numarasının YANINDA gösterilir. İş Emri No ile aynı şey
+   * DEĞİLDİR (kök CLAUDE.md "İş Emri No ≠ Parti"). Eski APK'lar bu alanı
+   * göndermeyen backend'e karşı çalışabilsin diye opsiyonel.
+   */
+  batch?: { id: string; batchNumber: string } | null;
 }
 
 /** GET /work-orders/:id/cancel-impact cevabı (iptal önizleme). */

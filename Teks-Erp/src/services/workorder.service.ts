@@ -183,6 +183,28 @@ const workOrderManualMoveService = new WorkOrderManualMoveService();
 const travelerCardService = new TravelerCardService();
 
 /**
+ * `quickStart` idempotent-replay dalları için partiyi ÇÖZ.
+ *
+ * Normal akışta parti `attachRolls`'un yanıtından gelir; replay'de attach hiç
+ * koşmadığı için WO üzerinden okunur. Timeout sonrası tekrar denemede operatör
+ * sonuç ekranını İLK KEZ görür — parti orada boş kalırsa özellik tam da en çok
+ * gerektiği anda kaybolur.
+ *
+ * `mergedIntoId != null` olan parti TARİHÇEDİR (başka partiye katılmış), canlı
+ * kimlik değildir → dışlanır. Hızlı İş Emri tek parti üretir; yine de en YENİsi
+ * alınır ki elle bölünmüş/eklenmiş WO'da güncel olan dönsün.
+ */
+async function resolveQuickStartBatch(
+  workOrderId: string,
+): Promise<{ id: string; batchNumber: string } | null> {
+  return prisma.batch.findFirst({
+    where: { workOrderId, mergedIntoId: null },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, batchNumber: true },
+  });
+}
+
+/**
  * plannedStartDate / plannedEndDate default'ları:
  *   - Başlangıç verilmediyse şimdi.
  *   - Termin verilmediyse başlangıç + N gün (N tanımlardan
@@ -971,6 +993,8 @@ export class WorkOrderService {
       attached: number;
       errors: string[];
       dispatch: { id: string; dispatchNo: string } | null;
+      /** Topların bağlandığı PARTİ — İş Emri No ile AYRI kavram. Çözülemezse null. */
+      batch: { id: string; batchNumber: string } | null;
     }>
   > {
     const { rollBarcodes, dispatchFirstStep, ...woInput } = data;
@@ -999,7 +1023,13 @@ export class WorkOrderService {
         });
         return {
           success: true,
-          data: { workOrder: existing, attached, errors: [], dispatch: null },
+          data: {
+            workOrder: existing,
+            attached,
+            errors: [],
+            dispatch: null,
+            batch: await resolveQuickStartBatch(existing.id),
+          },
           message: `İş emri zaten başlatılmış (idempotent retry): ${existing.workOrderNumber}`,
         };
       }
@@ -1076,7 +1106,13 @@ export class WorkOrderService {
       });
       return {
         success: true,
-        data: { workOrder, attached, errors: [], dispatch: null },
+        data: {
+          workOrder,
+          attached,
+          errors: [],
+          dispatch: null,
+          batch: await resolveQuickStartBatch(workOrder.id),
+        },
         message: `İş emri zaten başlatılmış (idempotent retry): ${workOrder.workOrderNumber}`,
       };
     }
@@ -1084,6 +1120,11 @@ export class WorkOrderService {
     // ── 3) Topları bağla + 4) telafi (zero-attach → WO'yu arşivle) ──────────
     let attached = 0;
     let errors: string[] = [];
+    // Parti, attachRolls'ta doğar (P+GGAAYY+NNNN). Eskiden yanıta konmuyordu ve
+    // mobil sonuç ekranı parti yerine İŞ EMRİ numarasını basıyordu — iki kavram
+    // ayrı (bkz. kök CLAUDE.md "İş Emri No ≠ Parti"), operatör kartta/lanede
+    // parti arayınca bulamıyordu.
+    let batch: { id: string; batchNumber: string } | null = null;
     // Telafi (zero-attach → WO'yu arşivle) başarısız OLURSA artık sessizce
     // yutulmuyor: telafi hardDelete patlarsa kullanıcıya "oluşturulmadı" denirken
     // canlı yetim PLANNED WO + ACTIVE refakat kartı kalır — bunu loglayıp iz bırak
@@ -1099,6 +1140,7 @@ export class WorkOrderService {
       const attachRes = await this.attachRolls(workOrder.id, barcodes, userId);
       attached = attachRes.data?.attached ?? 0;
       errors = attachRes.data?.errors ?? [];
+      batch = attachRes.data?.batch ?? null;
     } catch (err) {
       await this.hardDelete(workOrder.id, userId).catch(logOrphanCleanupFailure);
       throw err;
@@ -1175,9 +1217,10 @@ export class WorkOrderService {
 
     return {
       success: true,
-      data: { workOrder, attached, errors, dispatch },
+      data: { workOrder, attached, errors, dispatch, batch },
       message:
         `İş emri ${workOrder.workOrderNumber} başlatıldı — ${attached} top bağlandı` +
+        (batch ? ` (Parti ${batch.batchNumber})` : "") +
         (errors.length ? `, ${errors.length} top bağlanamadı.` : ".") +
         (dispatch ? ` Fasona sevk edildi: ${dispatch.dispatchNo}.` : "") +
         (dispatchWarning ? ` ${dispatchWarning}` : ""),

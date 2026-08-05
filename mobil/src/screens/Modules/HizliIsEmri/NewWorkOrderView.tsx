@@ -107,7 +107,17 @@ export default function NewWorkOrderView({ step, onStepChange }: NewWorkOrderVie
             <Icon source="check-circle" size={56} color={colors.success} />
           </View>
           <Text style={styles.successTitle}>İş Emri Başlatıldı</Text>
-          <Text style={styles.successBatch}>{r.batchNumber}</Text>
+          {/* İki numara AYRI kavram, bu yüzden ETİKETLİ basılır: üstteki büyük
+              numara eskiden etiketsizdi ve "parti" sanılıyordu (alan adı da
+              `batchNumber`'dı ama içinde iş emri no vardı). */}
+          <Text style={styles.successLabel}>İŞ EMRİ NO</Text>
+          <Text style={styles.successBatch}>{r.workOrderNumber}</Text>
+          {r.batchNumber ? (
+            <>
+              <Text style={[styles.successLabel, styles.successLabelSpaced]}>PARTİ NO</Text>
+              <Text style={styles.successParti}>{r.batchNumber}</Text>
+            </>
+          ) : null}
           <Text style={styles.successMeta}>{r.attached} top bağlandı</Text>
           {r.errors.length > 0 ? (
             <Text style={styles.successWarn}>{r.errors.length} top bağlanamadı</Text>
@@ -367,8 +377,19 @@ const styles = StyleSheet.create({
   },
   successIcon: { marginBottom: spacing.xs },
   successTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  successLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: colors.textMuted,
+    marginTop: 6,
+  },
+  successLabelSpaced: { marginTop: 10 },
   successBatch: { fontSize: 24, fontWeight: '800', color: colors.brand, marginTop: 2 },
-  successMeta: { fontSize: 14, color: colors.textSecondary },
+  // Parti, iş emrinden görsel olarak ayrışsın diye farklı ton — aynı renkte iki
+  // büyük numara "hangisi hangisi" karışıklığı üretiyordu.
+  successParti: { fontSize: 22, fontWeight: '800', color: colors.successDark, marginTop: 2 },
+  successMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 8 },
   successWarn: { fontSize: 13, color: colors.warningDark, fontWeight: '700' },
   successDispatch: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 2 },
   successBtn: { borderRadius: radius.md, alignSelf: 'stretch', marginTop: spacing.sm },

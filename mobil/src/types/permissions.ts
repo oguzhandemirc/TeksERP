@@ -15,6 +15,10 @@ export type MobilePermission =
   // DAR mobil ikizi: yalnız okuma ve yaratma uçlarında kabul edilir —
   // düzenleme/iptal/silme hâlâ `order:write` ister.
   | 'mobile:siparis'
+  // Telefondan KUMAŞ TANIMI ekleme. `item:write`ten AYRI (o, web'de düzenleme +
+  // pasifleştirmeyi de açar); KK1-içi `mobile:kk1-desen`den de ayrı (o yalnız ad
+  // alıp `pendingReview` işaretleyen hızlı desen açmadır).
+  | 'mobile:kumas'
   // Kurşun Dağıtım ekranı — web ikizi `workorder:distribute` (backend uçları
   // requireAnyPermission ile ikisini de kabul eder).
   | 'mobile:kursun-dagitim'
@@ -57,6 +61,7 @@ export type MobileScreenKey =
   | 'IadeGirisi'
   | 'HizliIsEmri'
   | 'Siparis'
+  | 'Kumas'
   | 'KursunDagitim';
 
 export interface MobileScreenMeta {
@@ -165,6 +170,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Sipariş',
     icon: 'clipboard-text-outline',
     description: 'Sipariş listesi + yeni müşteri siparişi aç',
+  },
+  {
+    // Master-data ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).
+    // Electron'daki ürün formunun mobil ikizi; alan kümesi birebir aynı.
+    key: 'Kumas',
+    permission: 'mobile:kumas',
+    label: 'Kumaş Ekle',
+    icon: 'shape-square-plus',
+    description: 'Yeni kumaş/ürün tanımı (kod · tip · izinli renk ve özellik)',
   },
   {
     // Ofis/süpervizör ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).

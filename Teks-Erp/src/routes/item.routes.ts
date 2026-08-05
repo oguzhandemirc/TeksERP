@@ -83,7 +83,7 @@ const quickCreateBody = z
  *       401:
  *         description: Yetkisiz erişim
  */
-router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1", "mobile:siparis"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1", "mobile:siparis", "mobile:kumas"), controller.findAll);
 
 /**
  * @openapi
@@ -132,7 +132,10 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *       409:
  *         description: Kod zaten mevcut
  */
-router.post("/", verifyToken, requirePermission("item:write"), controller.create);
+// Mobil "Kumaş Ekle" ekranı da bu ucu kullanır. `mobile:kumas` YALNIZ buraya
+// (yaratma) eklenir — PATCH/DELETE hâlâ `item:write` ister, yoksa saha
+// kullanıcısı mevcut kumaşı düzenleyip pasife de alabilirdi.
+router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), controller.create);
 
 /**
  * @openapi

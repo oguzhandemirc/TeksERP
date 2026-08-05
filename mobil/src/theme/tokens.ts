@@ -168,6 +168,8 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   HizliIsEmri: { tint: '#4f46e5', bg: '#e0e7ff' },
   // Satış tarafı — üretim/lojistik tonlarından ayrışsın diye teal.
   Siparis: { tint: '#0d9488', bg: '#ccfbf1' },
+  // Master-data (tanım) ekranı — operasyon ekranlarından ayrışsın diye taş grisi.
+  Kumas: { tint: '#57534e', bg: '#e7e5e4' },
   // Kurşun ailesi (amber) ama KursunQc'den KOYU tonla ayrışır: aynı işin planlama
   // yüzü olduğu anlaşılsın, istasyon ekranıyla karıştırılmasın.
   KursunDagitim: { tint: '#b45309', bg: '#fde68a' },

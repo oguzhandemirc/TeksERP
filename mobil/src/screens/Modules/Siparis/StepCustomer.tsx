@@ -8,6 +8,7 @@ import PickerModal, { type PickerOption } from '../../../components/PickerModal'
 import { customerService } from '../../../services/customer.service';
 import { customerBranchService } from '../../../services/customerBranch.service';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { emptyOrProblemText } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
 import { DEADLINE_CHOICES, type NewOrderState } from './useNewOrder';
 
@@ -74,11 +75,6 @@ export default function StepCustomer({ state, branchesEnabled }: Props) {
       })),
     [branches],
   );
-
-  // "Boş liste" ile "listeyi alamadım" AYRI cümlelerdir. Varsayılan "Seçenek yok"
-  // metni sunucuya ulaşılamadığında operatöre "bu fabrikada müşteri yok" der ve
-  // o kişi kaydı aramaya başlar. Hata metni sebebi + çözümü söyler.
-  const NET_ERROR_TEXT = 'Liste alınamadı — sunucuya ulaşılamıyor. Bağlantıyı kontrol edip ↻ ile yenileyin.';
 
   const deadlinePreview =
     state.deadlineDays == null
@@ -152,7 +148,7 @@ export default function StepCustomer({ state, branchesEnabled }: Props) {
         options={custOptions}
         selectedValue={state.customerId}
         loading={custQuery.isLoading}
-        emptyText={custQuery.isError ? NET_ERROR_TEXT : 'Müşteri bulunamadı'}
+        emptyText={emptyOrProblemText(custQuery, 'Müşteri bulunamadı')}
         onRefresh={() => void custQuery.refetch()}
         paginated
         searchValue={custSearch}
@@ -170,7 +166,7 @@ export default function StepCustomer({ state, branchesEnabled }: Props) {
         options={branchOptions}
         selectedValue={state.branchId}
         loading={branchQuery.isLoading}
-        emptyText={branchQuery.isError ? NET_ERROR_TEXT : 'Bu müşterinin tanımlı şubesi yok'}
+        emptyText={emptyOrProblemText(branchQuery, 'Bu müşterinin tanımlı şubesi yok')}
         onRefresh={() => void branchQuery.refetch()}
         onSelect={(value) => {
           state.selectBranch(value, branchOptions.find((o) => o.value === value)?.label ?? '');

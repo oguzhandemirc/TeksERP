@@ -103,6 +103,20 @@ export const PERMISSION_CATALOG = [
   // uygulamasının bir yeteneği (Electron `hasAdminAccess` bu kodu saymaz →
   // taşıyan kişi "Yönetim" menüsünü ve Sistem hub'ını GÖRMEZ).
   { code: "settings:workstation", module: "ADMIN", category: "web", description: "Bu bilgisayarın yerel ayarları (etiket yazıcısı / kantar / tabanca / sunucu adresi) — sistem geneli ayarlar HARİÇ" },
+  // 2026-08-05: Tanımlar → Çıktılar altındaki belge/kart TASARIM ekranları
+  // (Belge Şablonları, Refakat Kartı, Refakat Kartı Şablonları, Serbest
+  // Belgeler). `admin:settings`ten AYRI olması ürün kararıdır — `settings:
+  // workstation` ile aynı gerekçe: bu dört ekran baskı ÇIKTISININ görünümünü
+  // belirler, sistem yönetimiyle (oturum politikası, yedek saati, cihaz onayı,
+  // log arşivi) hiçbir ilgisi yoktur. Şablonu düzenleyen büro personeli çoğu
+  // kurulumda sistem yöneticisi DEĞİLDİR.
+  // Kategorisi `admin` DEĞİL `web`: Electron `hasAdminAccess` bu kodları
+  // saymaz → taşıyan kişi "Yönetim" menüsünü ve Sistem hub'ını GÖRMEZ.
+  // ⚠️ `admin:settings` bu ekranları AÇMAYA DEVAM EDER (guard'lar OR) —
+  // uzlaştırma izni DB'ye getirir ama kimseye ATAMAZ; sıkı ayrım deploy
+  // anında admin dahil herkesi dışarıda bırakırdı. Küme: constants/document-design.ts
+  { code: "document-template:read", module: "ADMIN", category: "web", description: "Belge şablonları / refakat kartı ayarı / serbest belgeleri görüntüleme (salt-okunur)" },
+  { code: "document-template:write", module: "ADMIN", category: "web", description: "Belge şablonu + refakat kartı ayarı/şablonu + serbest belge oluşturma/düzenleme/silme" },
   { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
   { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
   { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş raporları" },
@@ -132,6 +146,12 @@ export const PERMISSION_CATALOG = [
   // iptal / manuel-kapatma / silme uçları hâlâ `order:write` ister — satış
   // temsilcisine sipariş sildirmemek için (bekçi: test_mobile_order_permission).
   { code: "mobile:siparis", module: "MOBILE", category: "mobile", description: "Mobil — Sipariş ekranı (sipariş listesi + yeni sipariş açma)" },
+  // Telefondan KUMAŞ TANIMI ekleme (Electron'daki ürün formunun mobil ikizi).
+  // `item:write`ten AYRI, ürün kararı: master-data yazma yetkisi web'de ürün
+  // DÜZENLEME/pasifleştirmeyi de açar; mobil ekran yalnız YENİ tanım ekler.
+  // KK1-içi `mobile:kk1-desen` ile de karıştırılmamalı — o, yalnız ad alan ve
+  // `pendingReview=true` işaretleyen hızlı desen açma yeteneğidir.
+  { code: "mobile:kumas", module: "MOBILE", category: "mobile", description: "Mobil — Kumaş (ürün) tanımı ekleme ekranı" },
   { code: "mobile:kursun-dagitim", module: "MOBILE", category: "mobile", description: "Mobil — Kurşun Dağıtım ekranı" },
   // Ekran değil, KK1 içi yetenek: yalnız seçili ham giriş operatörlerine verilir.
   { code: "mobile:kk1-desen", module: "MOBILE", category: "mobile", description: "KK1 ham girişte inline yeni desen (FABRIC kumaş) oluşturma" },

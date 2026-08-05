@@ -9,6 +9,7 @@ import { orderService } from '../../../services/order.service';
 import type { Order } from '../../../types/models';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/labels';
+import { queryProblem, QUERY_PROBLEM_TEXT } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
 
 // =============================================================================
@@ -76,6 +77,8 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
 
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
   const total = q.data?.pages[0]?.pagination.totalEstimate;
+  // Elde veri VARSA sorunu gösterme — bayat liste, boş ekrandan iyidir.
+  const problem = items.length === 0 ? queryProblem(q) : null;
 
   const renderItem = ({ item }: { item: Order }) => {
     const statusColor = ORDER_STATUS_COLOR[item.status] ?? colors.textMuted;
@@ -173,15 +176,17 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
-      ) : q.isError ? (
-        // "Boş liste" ile "listeyi alamadım" AYRI cümlelerdir — hatayı boş-durum
-        // metniyle göstermek operatöre "hiç sipariş yok" yalanını söylerdi.
+      ) : problem ? (
+        // "Boş liste" ile "listeyi alamadım" AYRI cümlelerdir. ⚠️ `isError` TEK
+        // BAŞINA YETMEZ: cihaz çevrimdışıyken React Query sorguyu duraklatır
+        // (isPaused), hata VERMEZ — o hâlde bu dal atlanır ve ekran "hiç sipariş
+        // yok" yalanını söylerdi (2026-08-05 saha vakası). Bkz. utils/queryState.
         <View style={styles.center}>
           <Icon source="wifi-off" size={44} color={colors.dangerText} />
-          <Text style={styles.errorTitle}>Liste alınamadı</Text>
-          <Text style={styles.errorText}>
-            Sunucuya ulaşılamıyor. Bağlantıyı kontrol edip aşağı çekerek yenileyin.
+          <Text style={styles.errorTitle}>
+            {problem === 'offline' ? 'Çevrimdışısınız' : 'Liste alınamadı'}
           </Text>
+          <Text style={styles.errorText}>{QUERY_PROBLEM_TEXT[problem]}</Text>
           <TouchableRipple onPress={() => void q.refetch()} style={styles.retryBtn} borderless>
             <Text style={styles.retryText}>Tekrar dene</Text>
           </TouchableRipple>

@@ -80,7 +80,7 @@ const router = Router();
 router.get(
   "/",
   verifyToken,
-  requireAnyPermission("property:read", "mobile:hizli-is-emri"),
+  requireAnyPermission("property:read", "mobile:hizli-is-emri", "mobile:kumas"),
   controller.findAll,
 );
 
@@ -103,7 +103,7 @@ router.get(
 router.get(
   "/:id",
   verifyToken,
-  requireAnyPermission("property:read", "mobile:hizli-is-emri"),
+  requireAnyPermission("property:read", "mobile:hizli-is-emri", "mobile:kumas"),
   controller.findById,
 );
 
