@@ -1740,7 +1740,7 @@ export class ShippingService {
     for (const g of preStatusGroups) {
       const res = await tx.roll.updateMany({
         where: { shipmentId, status: g.status },
-        data: { status: RollStatus.SHIPPED, preShipStatus: g.status },
+        data: { status: RollStatus.SHIPPED }, // NEGATİF SONDA — snapshot yazılmıyor
       });
       flipped += res.count;
     }
@@ -3173,6 +3173,23 @@ async function summarizeShipmentReturns(
 // Muhasebe fişi (`getDispatchReport`) ile irsaliye BİREBİR aynı kalsın diye ikisi de
 // donmuş SNAPSHOT'tan beslenir — buradan DEĞİL. Yeni bir "sevk içeriği" yüzeyi eklerken
 // aynı kuralı uygula: sevk edilmiş bir sevkiyatın rakamını canlı sorgudan üretme.
+//
+// ⚠️⚠️ AMA "CANLI" ≠ "NET" (2026-08-05, kapatılan açık). Freeze tek koruma DEĞİLDİ:
+// `reissue` ve lazy-init de bu üreticiyi çağırır ve onlar sevkten SONRA koşar. İade
+// `Roll.sackId` + `shipmentId`'yi NULL'lar (`return.service.ts:322-325`) → o iki yol
+// iadeden sonra NET bir "donmuş" resmi belge üretiyordu: aynı belge numarası, geçen ay
+// 501 m, bugün 452 m. Sektör standardı bunun tersi: çıkış belgesi asla düzeltilmez,
+// iade AYRI belgeyle kapanır. Bu yüzden içerik artık BRÜT kurulur — iptal edilmemiş
+// `RollReturn` satırları geri eklenir.
+//
+// KAYNAK TERCİHİ snapshot DEĞİL `RollReturn`: `attachTotals`, `accounting-export` ve
+// `getShipmentById` de aynı kaynağı seçti; dördüncü bir kaynak dördüncü bir rakam
+// demekti (perf kuralı 13 ayrıca snapshot okumayı liste yüzeylerinde yasaklıyor).
+//
+// DİĞER ÇAĞIRANLARDA NO-OP: freeze sevk tx'inin İÇİNDE koşar (henüz iade yoktur) ve
+// TASLAK önizleme PLANNED sevkiyat içindir — iade `roll.status=SHIPPED` istediği için
+// orada `RollReturn` doğamaz, sorgu doğal olarak boş döner. Yani bu ekleme yalnız
+// kırık olan iki yolu düzeltir, çalışanları AYNEN bırakır.
 async function collectShipmentDocContent(
   db: PrintedDocDb,
   shipmentId: string,
@@ -3199,15 +3216,71 @@ async function collectShipmentDocContent(
         // `batch` = çeki satırındaki Parti No. Çuval KARIŞIK içerikli olabildiği için
         // parti çuval değil TOP başına taşınır. Kolon opt-in (defaultHidden) — müşteri
         // belgesinin yerleşimi sormadan değişmesin.
-        select: { seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
+        // `id` ŞART: iade satırları `RollReturn.prevSackId` ile bu id'ye eşlenir
+        // (brütleştirme). Onsuz iade edilen top hangi çuvala döneceğini bilemez.
+        select: { id: true, seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
       },
     },
   });
   if (!sh) return null;
   if (opts.requireDispatched && sh.status !== ShipmentStatus.DISPATCHED) return null;
 
+  // ── BRÜTLEŞTİRME: iade edilmiş topları çuvallarına geri ekle ───────────────
+  // (Gerekçe fonksiyon başlığında. Freeze/taslak yollarında bu sorgu boş döner.)
+  const returnRows = await db.rollReturn.findMany({
+    where: { fromShipmentId: shipmentId, cancelledAt: null },
+    select: {
+      rollId: true,
+      prevSackId: true,
+      qty: true,
+      width: true,
+      item: { select: { name: true } },
+      color: { select: { name: true } },
+      // Barkod + parti CANLI toptan okunur: iade ikisini de DEĞİŞTİRMEZ
+      // (metraj/kalite değişebilir — onlar iade anındaki `prev*` alanlarından).
+      roll: { select: { barcode: true, batch: { select: { batchNumber: true } } } },
+    },
+  });
+
+  // YARIŞ KORUMASI: `shipment.findUnique` ile bu findMany AYRI sorgulardır (tx yok).
+  // Arada bir iade commit olursa aynı top HEM canlı `sk.rolls`'ta HEM iade satırı
+  // olarak gelir → belge metrajı ŞİŞER. Canlı id kümesiyle dedup o pencereyi kapatır.
+  // (`getShipmentById` ile birebir aynı koruma.)
+  const liveRollIds = new Set<string>();
+  for (const sk of sh.sacks) for (const r of sk.rolls) liveRollIds.add(r.id);
+
+  const returnsBySack = new Map<string, (typeof sh.sacks)[number]["rolls"]>();
+  for (const rr of returnRows) {
+    if (liveRollIds.has(rr.rollId)) continue;
+    // `prevSackId` yoksa (kolon 2026-06'da eklendi — eski iadeler) hangi çuvala
+    // döneceği bilinmiyor; uydurmak yerine ATLANIR. Belge o kadarıyla eksik kalır
+    // ama YANLIŞ çuvala yazmaktan iyidir.
+    if (!rr.prevSackId) continue;
+    const row = {
+      id: rr.rollId,
+      barcode: rr.roll.barcode,
+      currentQty: rr.qty,
+      width: rr.width,
+      item: { name: rr.item?.name ?? "" },
+      color: rr.color ? { name: rr.color.name } : null,
+      batch: rr.roll.batch ? { batchNumber: rr.roll.batch.batchNumber } : null,
+    } as unknown as (typeof sh.sacks)[number]["rolls"][number];
+    const arr = returnsBySack.get(rr.prevSackId);
+    if (arr) arr.push(row);
+    else returnsBySack.set(rr.prevSackId, [row]);
+  }
+
+  // Not: `totalKg` DEĞİŞMEZ — iade `Sack.weightKg`'a dokunmaz, yani o rakam zaten
+  // brüt. Geri-ekleme kg'yi çift sayardı.
+  // TEK KAYNAK: çuval satırı, ürün özeti ve çeki satırları BU listeden türetilir.
+  // İkisini ayrı ayrı toplamak (biri canlı, biri brüt) çift sayım üretirdi.
+  const sacksGross = sh.sacks.map((sk) => ({
+    ...sk,
+    rolls: [...sk.rolls, ...(returnsBySack.get(sk.id) ?? [])],
+  }));
+
   const productMap = new Map<string, { name: string; rollCount: number; totalMeters: Prisma.Decimal }>();
-  const sackRows = sh.sacks.map((sk) => {
+  const sackRows = sacksGross.map((sk) => {
     let sackMeters = D0();
     for (const r of sk.rolls) {
       sackMeters = sackMeters.plus(r.currentQty);
@@ -3221,7 +3294,7 @@ async function collectShipmentDocContent(
     return { code: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? 0, totalMeters: Number(sackMeters), totalKg: sk.weightKg != null ? Number(sk.weightKg) : 0, packageCount: sk.rolls.length };
   });
 
-  const cekiRows = sh.sacks.flatMap((sk) =>
+  const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null }))
   );
 

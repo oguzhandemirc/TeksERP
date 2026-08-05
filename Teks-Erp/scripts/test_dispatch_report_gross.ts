@@ -49,6 +49,13 @@ interface AccountingShape {
   totals: { rollCount: number; totalMeters: number; returnMeters: number };
 }
 
+/** Donmuş sevk irsaliyesi payload'ının test için gereken kısmı. */
+interface ShipmentDocShape {
+  sacks: Array<{ code: string; totalMeters: number; totalKg: number; packageCount: number }>;
+  cekiRows: Array<{ rollId: string; meters: number }>;
+  totals: { totalRolls: number; totalMeters: number; totalKg: number; sackCount: number };
+}
+
 /** parseQueryParams yalnız `req.query` okur — sahte Request yeterli. */
 const fakeReq = (query: Record<string, string>) => ({ query }) as unknown as Request;
 
@@ -155,6 +162,63 @@ async function main() {
     check("REGRESYON: fiş hâlâ 2 top", after.totals.totalRolls === 2, `${after.totals.totalRolls}`);
     check("fiş iade özetini bildiriyor (1 top)", after.returns.count === 1, `${after.returns.count}`);
     check("fiş iade metrajını bildiriyor (49 m)", after.returns.meters === 49, `${after.returns.meters}`);
+
+    // ---------------------------------------------------------------------
+    // 2026-08-05'e kadar AÇIK KALAN DELİK. Yukarıdaki [2] yalnız `getDispatchReport`'u
+    // (donmuş snapshot okur) korumuştu. Ama BELGE ÜRETİCİSİ (`collectShipmentDocContent`)
+    // canlı okumaya devam ediyordu ve onu iki yol sevkten SONRA çağırır:
+    //   • reissue    — gerekçeli revizyon
+    //   • lazy-init  — donmuş belgesi olmayan eski kayıt ilk kez açıldığında
+    // Yani iadeden sonra üretilen "donmuş" resmi belge NET (452) doğuyordu: ekran
+    // düzelmişti, BELGE YOLU düzelmemişti. Sektör standardı: çıkış belgesi asla
+    // düzeltilmez, iade ayrı belgeyle kapanır.
+    console.log("\n[2b] REISSUE / LAZY-INIT de BRÜT üretmeli (belge yolu)");
+    const reissued = await printedDocumentService.reissue(
+      PrintedDocType.SHIPMENT_DISPATCH,
+      shipment.id,
+      "TEST — belge yolu brüt mü",
+      user.id,
+    );
+    const reDoc = (reissued as { data?: { snapshot?: { doc?: ShipmentDocShape } } }).data;
+    const reContent = reDoc?.snapshot?.doc;
+    check("reissue belge üretti", reContent != null);
+    check(
+      "REGRESYON: yeni versiyon BRÜT 501 m (net 452 DEĞİL)",
+      reContent?.totals.totalMeters === 501,
+      `${reContent?.totals.totalMeters}`,
+    );
+    check(
+      "REGRESYON: yeni versiyon BRÜT 2 top",
+      reContent?.totals.totalRolls === 2,
+      `${reContent?.totals.totalRolls}`,
+    );
+    check(
+      "çeki listesi 2 satır (iade edilen top da irsaliyede)",
+      reContent?.cekiRows.length === 2,
+      `${reContent?.cekiRows.length}`,
+    );
+    check(
+      "çuval metrajı da brüt (501)",
+      reContent?.sacks[0]?.totalMeters === 501,
+      `${reContent?.sacks[0]?.totalMeters}`,
+    );
+    check(
+      "çuval top adedi brüt (2)",
+      reContent?.sacks[0]?.packageCount === 2,
+      `${reContent?.sacks[0]?.packageCount}`,
+    );
+    // kg iadeden ETKİLENMEZ (`Sack.weightKg`'a dokunulmaz) → geri-ekleme çift saymamalı.
+    check("kg ÇİFT SAYILMADI (50)", reContent?.totals.totalKg === 50, `${reContent?.totals.totalKg}`);
+    // Aynı topun hem canlı hem iade satırı olarak gelmesi (yarış) → dedup.
+    const rollIds = (reContent?.cekiRows ?? []).map((c) => c.rollId);
+    check("çeki satırlarında mükerrer top YOK", new Set(rollIds).size === rollIds.length);
+    // Fiş de aynı rakamı söylemeli — revizyon sonrası ekran/belge ayrışmasın.
+    const afterReissue = (await shippingService.getDispatchReport(shipment.id)).data as DispatchReportShape;
+    check(
+      "fiş revizyon sonrası da 501 m",
+      afterReissue.totals.totalMeters === 501,
+      `${afterReissue.totals.totalMeters}`,
+    );
 
     // ---------------------------------------------------------------------
     console.log("\n[3] İade irsaliyesi iade ANINDA dondu");
