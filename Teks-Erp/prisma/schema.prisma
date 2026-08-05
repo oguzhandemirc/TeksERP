@@ -1500,9 +1500,15 @@ model WorkOrder {
 // "Dal" (eski batchSplitId=dispatch.id) kavramının yerini alır. Detay: PARTI-MODELI-TASARIM.md.
 model Batch {
   id          String @id @default(uuid()) @db.Uuid
-  /// Parti numarası: P + GGAAYY + NNNN (günlük sıra). Tek-kod: etikette/kartta
-  /// yazılan da taranabilir referans da budur.
-  batchNumber String @unique @db.VarChar(64)
+  /// Parti numarası. İKİ BİÇİM, `batch.shortNumberEnabled` bayrağına göre:
+  ///   • AÇIK (varsayılan) → `P01 … P99`, 99'dan sonra P01'e SARAR.
+  ///   • KAPALI            → `P + GGAAYY + günlük sıra` (dolgusuz, eski biçim).
+  /// ⚠️ BENZERSİZ DEĞİLDİR — `@unique` 2026-08-05'te KALDIRILDI (migration
+  /// `20260805120000_batch_short_number`): kısa numara tanım gereği birkaç günde
+  /// bir yeniden kullanılır (fabrika numaralı fiziksel parti plakası kullanıyor).
+  /// Partinin KİMLİĞİ `id`'dir; hiçbir yerde `batchNumber` ile lookup YAPMA.
+  /// Yarış koruması artık kısıt değil, `generateBatchNumberTx`'teki advisory lock.
+  batchNumber String @db.VarChar(64)
   workOrderId String @db.Uuid
 
   /// Parti soy bağı — kısmi sevk kalanı / elle bölme / redye'da kaynak parti.
@@ -1530,6 +1536,9 @@ model Batch {
   @@index([splitFromId])
   // Null-yoğun — batch_merged_into migration'da partial (IS NOT NULL, drift-free)
   @@index([mergedIntoId])
+  // Kısa parti sayacının kaynağı: "en son doğan kısa parti" (`createdAt DESC LIMIT 1`).
+  // batchNumber ile SIRALANAMAZ — numara sarıyor, en büyük numara "en yeni" demek değil.
+  @@index([createdAt])
   @@map("batches")
 }
 

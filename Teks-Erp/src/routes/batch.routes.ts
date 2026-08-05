@@ -8,10 +8,35 @@
 import { Router } from "express";
 import { BatchController } from "../controllers/batch.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 
 const controller = new BatchController();
 const router = Router();
+
+/**
+ * @openapi
+ * /api/batches/number-state:
+ *   get:
+ *     tags: [Batches]
+ *     summary: Kısa parti sayacının durumu (salt-okunur)
+ *     description: >
+ *       `batch.shortNumberEnabled` açıkken en son kullanılan ve sıradaki parti
+ *       numarasını döner. `next` bir ÖNİZLEMEDİR (rezervasyon değil) — kilit
+ *       dışında okunur, arada bir parti doğarsa gerçekleşen numara farklı olur.
+ *       Bayrak kapalıyken sayaç yoktur ve numara alanları null döner.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ enabled, min, max, last, next, lastCode, nextCode }" }
+ */
+// `admin:settings` DE kabul edilir: göstergenin tüketicisi Genel Ayarlar ekranı ve
+// oradaki yönetici `workorder:read` taşımak zorunda değil. Tersi kurgu göstergeyi
+// panelde sessizce boş bırakırdı.
+router.get(
+  "/number-state",
+  verifyToken,
+  requireAnyPermission("workorder:read", "admin:settings"),
+  controller.numberState,
+);
 
 /**
  * @openapi

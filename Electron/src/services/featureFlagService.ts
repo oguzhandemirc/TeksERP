@@ -205,6 +205,13 @@ export interface FeatureFlags {
    *  oluşturmayı kapılar — dağıtılmış iş emirleri bayrak kapansa da bypass ile
    *  bitirilir (rejim atama satırında kalıcıdır). */
   kursunBypassEnabled: boolean;
+  /** Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
+   *  Backend ENFORCE eder (`generateBatchNumberTx`). Kapalıyken eski
+   *  `P + GGAAYY + günlük sıra` kalıbına düşülür.
+   *  ⚠️ Açıkken parti no BENZERSİZ DEĞİLDİR — numara birkaç günde bir yeniden
+   *  kullanılır (fabrika numaralı fiziksel parti plakası kullanıyor). Partinin
+   *  kimliği `id`'dir; hiçbir yerde `batchNumber` ile eşleştirme yapma. */
+  batchShortNumberEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat; 1..43200 = 30 gün). Giriş
    *  sonrası token kaç dakika geçerli kalır; süre dolunca (aktif kullanırken bile)
    *  yeniden giriş gerekir. Backend ENFORCE eder (yalnız sonraki girişlere uygulanır;
@@ -277,6 +284,22 @@ export interface FeatureFlags {
 
 export { DEFAULT_COMPANY_LETTERHEAD };
 
+/**
+ * Kısa parti sayacının anlık durumu (`GET /api/batches/number-state`).
+ * Bayrak kapalıyken `enabled:false` gelir ve numara alanları `null`'dır.
+ */
+export interface BatchNumberState {
+  enabled: boolean;
+  min: number;
+  max: number;
+  /** En son kullanılan numara; hiç kısa parti doğmadıysa null. */
+  last: number | null;
+  /** Sıradaki numara — ÖNİZLEME, rezervasyon değil. */
+  next: number | null;
+  lastCode: string | null;
+  nextCode: string | null;
+}
+
 export const featureFlagService = {
   get: (): Promise<ApiResponse<FeatureFlags>> =>
     apiClient.get<ApiResponse<FeatureFlags>>("/api/feature-flags").then((r) => r.data),
@@ -284,6 +307,20 @@ export const featureFlagService = {
   update: (flags: Partial<FeatureFlags>): Promise<ApiResponse<FeatureFlags>> =>
     apiClient
       .patch<ApiResponse<FeatureFlags>>("/api/feature-flags", flags)
+      .then((r) => r.data),
+
+  /**
+   * Kısa parti sayacının durumu — Genel Ayarlar'daki göstergeyi besler.
+   *
+   * FeatureFlags'ten AYRI uç: bu bir ayar değil türetilmiş bir DEĞER (canlı veriden
+   * okunur) ve her uygulama açılışında ödenmesi gereksiz bir sorgu olurdu.
+   *
+   * ⚠️ `next` ÖNİZLEMEDİR, rezervasyon DEĞİL — arada bir parti doğarsa gerçekleşen
+   * numara farklı olur. Yüzey bunu "sıradaki" der, "ayrılmış" demez.
+   */
+  getBatchNumberState: (): Promise<ApiResponse<BatchNumberState>> =>
+    apiClient
+      .get<ApiResponse<BatchNumberState>>("/api/batches/number-state")
       .then((r) => r.data),
 
   /** Güncel belge logosu (data-url; yoksa null). FeatureFlags'ten ayrı uç —

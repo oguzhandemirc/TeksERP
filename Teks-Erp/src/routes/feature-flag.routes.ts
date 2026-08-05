@@ -82,6 +82,11 @@ export const updateSchema = z.strictObject({
   // ENFORCE edilir ama yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış iş emirleri
   // bayrak kapansa da bypass rejiminde biter.
   kursunBypassEnabled: z.boolean().optional(),
+  // batch.shortNumberEnabled — parti no kısa ve DÖNEN (P01…P99) mi (default TRUE/AÇIK).
+  // Backend ENFORCE eder (generateBatchNumberTx). Kapalıyken eski P+GGAAYY+sıra kalıbı.
+  // ⚠️ Bu satır ACİL KAPATMA anahtarıdır — kısa numara sahada sorun çıkarırsa tek
+  // geri dönüş yolu budur (kk1DuplicateGuardEnabled ile aynı gerekçe).
+  batchShortNumberEnabled: z.boolean().optional(),
   // auth.sessionDurationMinutes — oturum (JWT) ömrü, dakika (1–43200 = 30 gün). Backend ENFORCE (login).
   sessionDurationMinutes: z.number().int().min(1).max(43200).optional(),
   // auth.sessionDurationHours — oturum (JWT) ömrü, saat (1–720). GERİYE-UYUM (dakika alanı öncelikli).

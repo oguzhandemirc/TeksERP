@@ -12,7 +12,9 @@ import {
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
+import type { ComponentType } from "react";
 import type { FeatureFlags } from "@/services/featureFlagService";
+import { BatchNumberHint } from "./BatchNumberHint";
 
 /** FeatureFlags'in yalnızca BOOLEAN değerli anahtarları (toggle edilebilenler).
  *  travelerCardConfig gibi nesne ayarları bu listeden hariçtir — kendi paneli var. */
@@ -31,6 +33,12 @@ export interface FlagDef {
    * blok olur; verilmezse başlıksız düz liste (geriye uyumlu).
    */
   group?: string;
+  /**
+   * Toggle'ın ALTINA çizilen canlı bilgi bloğu (opsiyonel). Statik `desc`'ten farkı:
+   * sunucudan okunan bir DEĞERİ gösterir (örn. parti sayacının bulunduğu numara).
+   * Bileşen kendi sorgusunu yönetir ve gösterecek bir şey yoksa `null` döner.
+   */
+  hint?: ComponentType;
 }
 
 /**
@@ -135,7 +143,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: ClipboardList,
     description: "İş emri formundaki alanlar, parti kodu davranışı ve varsayılan planlama süresi.",
     keywords:
-      "iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan",
+      "iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan parti no kısa dönen 99 plaka numara",
     kind: "flags",
     flags: [
       {
@@ -146,7 +154,13 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "partyCodeAuto",
         title: "İş emri parti kodunu otomatik üret",
-        desc: "Kapalıyken (varsayılan) iş emri formunda İş Emri No elle girilir ve zorunludur. Açıkken sistem otomatik üretir (İE1207260001 — İE + GGAAYY + sıra); formda 'elle gir' ile yine değiştirilebilir. Not: partinin kendi numarası (P1207261) her zaman otomatiktir, bu ayardan etkilenmez.",
+        desc: "Kapalıyken (varsayılan) iş emri formunda İş Emri No elle girilir ve zorunludur. Açıkken sistem otomatik üretir (İE1207260001 — İE + GGAAYY + sıra); formda 'elle gir' ile yine değiştirilebilir. Not: partinin kendi numarası her zaman otomatiktir, bu ayardan etkilenmez — biçimini aşağıdaki 'Parti no kısa ve dönen olsun' ayarı belirler.",
+      },
+      {
+        key: "batchShortNumberEnabled",
+        title: "Parti no kısa ve dönen olsun (P01…P99)",
+        desc: "Açıkken (varsayılan) parti numarası P01'den başlar, P99'a kadar gider ve sonra tekrar P01'e döner — fabrikadaki numaralı fiziksel parti plakası düzenine karşılık gelir. ⚠️ Bu numara BENZERSİZ DEĞİLDİR: aynı numara birkaç günde bir yeniden kullanılır ve sistem numaranın o an başka bir partide olup olmadığına BAKMAZ. Partiyi kayıt olarak birbirinden ayıran şey numara değil, iş emri + tarihtir; parti no ile arama bu yüzden birden çok sonuç döndürür. Kapatırsan eski biçime dönülür: P + gün-ay-yıl + günlük sıra (P0508261) — o biçim benzersizdir. Ayarı değiştirmek MEVCUT partilerin numarasını değiştirmez, yalnız bundan sonra doğacakları etkiler.",
+        hint: BatchNumberHint,
       },
     ],
   },

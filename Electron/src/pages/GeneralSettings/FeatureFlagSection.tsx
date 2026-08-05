@@ -139,6 +139,11 @@ export function FeatureFlagSection({
         ) : (
           <ReadOnlyRow title={flag.title} enabled={server?.[flag.key] ?? false} />
         )}
+        {/* Canlı bilgi bloğu (opsiyonel) — statik `desc`'ten farkı sunucudan okunan
+            bir DEĞERİ göstermesi. Bileşen gösterecek şey yoksa kendisi null döner.
+            TASLAK değil SUNUCU değerine bakar: gösterge kaydedilmiş durumu anlatır,
+            kaydedilmemiş bir toggle'ın vaadini değil. */}
+        {flag.hint && (server?.[flag.key] ?? false) ? <flag.hint /> : null}
       </div>
     );
   };

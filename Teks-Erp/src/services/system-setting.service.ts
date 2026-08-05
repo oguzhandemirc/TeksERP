@@ -131,6 +131,13 @@ export const SETTING_KEYS = {
    *  ayarda değil; bayrağı kapatmak sahada yarım kalmış işi kilitleyemez (topların kurşun
    *  adımı fiziksel olarak yapılmış ama dijital karşılığı açık kalırdı). */
   KURSUN_BYPASS_ENABLED: "production.kursunBypassEnabled",
+  /** Parti no KISA ve DÖNEN mi olsun (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
+   *  Backend ENFORCE eder (`batch.service.generateBatchNumberTx`). Kapalıyken eski
+   *  `P + GGAAYY + sıra` günlük kalıbına düşülür — birebir eski davranış.
+   *  ⚠️ Açıkken parti no BENZERSİZ DEĞİLDİR: numara birkaç günde bir yeniden
+   *  kullanılır (2026-08-05 kullanıcı kararı — numaralı fiziksel parti plakası).
+   *  Bu yüzden `batches.batchNumber` üzerindeki `@unique` kaldırıldı; kimlik `Batch.id`. */
+  BATCH_SHORT_NUMBER_ENABLED: "batch.shortNumberEnabled",
   /** Oturum (JWT token) ömrü, SAAT. Default 8. Giriş yaptıktan sonra token kaç saat
    *  geçerli kalır — süre dolunca (aktif kullanırken bile) yeniden giriş gerekir.
    *  Backend ENFORCE eder: login'de jwt.sign expiresIn buradan okunur. Değişiklik
@@ -660,6 +667,9 @@ export interface FeatureFlags {
    *  yeni atama oluşturmayı kapılar; dağıtılmış iş emirleri bayrak kapansa da bypass
    *  rejiminde biter (rejim atama satırında kalıcıdır). */
   kursunBypassEnabled: boolean;
+  /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
+   *  Kapalıyken eski `P + GGAAYY + sıra` kalıbı. Açıkken parti no benzersiz DEĞİLDİR. */
+  batchShortNumberEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat). Dakika-granüler ayar; UI bunu
    *  yönetir. Backend ENFORCE eder (login'de jwt.sign expiresIn = ×60 sn). */
   sessionDurationMinutes: number;
@@ -929,6 +939,7 @@ export class SystemSettingService {
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
+      batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       sessionDurationMinutes: sessionMinutes,
       sessionDurationHours: Math.max(1, Math.round(sessionMinutes / 60)),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
@@ -1133,6 +1144,18 @@ export class SystemSettingService {
         SETTING_KEYS.KURSUN_BYPASS_ENABLED,
         input.kursunBypassEnabled,
         "Kurşun bypass — kurşun istasyonuna tablet konulmayan düzen (yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış işler bypass ile biter)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "batchShortNumberEnabled")) {
+      if (typeof input.batchShortNumberEnabled !== "boolean") {
+        throw AppError.badRequest("batchShortNumberEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.BATCH_SHORT_NUMBER_ENABLED,
+        input.batchShortNumberEnabled,
+        "Parti no kısa ve dönen (P01…P99, sonra başa sarar) — kapalıyken P + GGAAYY + günlük sıra",
         userId
       );
     }
@@ -1885,6 +1908,31 @@ export async function readKursunBypassEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/**
+ * Parti no KISA ve DÖNEN mi (P01…P99, 99'dan sonra P01)? Default TRUE/AÇIK.
+ *
+ * UNCACHED (enforcement yolu) — `generateBatchNumberTx` her parti doğuşunda tx
+ * İÇİNDE okur. Maliyeti önemsiz: parti doğuşu günde onlarca kez olur, binlerce değil.
+ *
+ * ⚠️ Kayıt YOKSA `true` döner. Diğer çoğu bayraktan farklı olarak varsayılan AÇIK
+ * (2026-08-05 kullanıcı kararı: "bayrak varsayılan olarak açık gelsin") — yani
+ * deploy edildiği an panele hiç dokunulmadan yeni biçime geçilir. Bu satır aynı
+ * zamanda ACİL KAPATMA anahtarıdır: kısa numara sahada sorun çıkarırsa tek geri
+ * dönüş yolu bayrağı kapatmaktır (eski `P + GGAAYY + sıra` kalıbına düşülür).
+ */
+export async function readBatchShortNumberEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.BATCH_SHORT_NUMBER_ENABLED },
+    select: { value: true },
+  });
+  // Default AÇIK: kayıt yoksa true.
+  if (!setting) return true;
+  return asBoolean(setting.value);
 }
 
 /**

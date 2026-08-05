@@ -20,8 +20,18 @@
 
 import { Prisma, PrintedDocType, RollStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import {
+  SHORT_BATCH_MAX,
+  SHORT_BATCH_MIN,
+  buildDailyCode,
+  buildShortBatchCode,
+  dailyCodePrefix,
+  nextDailySeq,
+  nextShortBatchSeq,
+  parseShortBatchCode,
+} from "../utils/code-format";
 import { AuditService } from "./audit.service";
+import { readBatchShortNumberEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { AppError } from "../utils/app-error";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
@@ -53,30 +63,52 @@ export interface CreateBatchResult {
 }
 
 /**
- * Parti no üretici (P + GGAAYY + SIRA) — tx İÇİNDE, sequence okuması closure içinde
- * (withBarcodeRetry kapsamında). `batches` tablosundan günün NUMERIC max'ı +1
- * (O-4 deseni: gte index seek + startsWith collation-bağımsız + Number.isFinite).
+ * Parti no üretiminin `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
  *
- * ⚠️ SIRA DOLGUSUZDUR (2026-08-05, kullanıcı kararı): `P0508261`, `P05082619`,
- * `P050826123`… Diğer tüm belge/barkod kodları 4 hane zero-pad'lidir; parti no
- * TEK İSTİSNADIR ve bunun meşruiyeti şu: parti no OKUTULMAZ (barkod/QR değil,
- * kâğıda basılan iz), yani sabit uzunluğa dayanan hiçbir tarayıcı/parser yolu
- * yok — `isDailyCode` "P" ile hiç çağrılmıyor. Yan kazanç: 9999/gün tavanı düşer.
+ * KK1'in 8021'inden AYRI: aynı uzayda olsalardı ham giriş tuzağı ile parti
+ * numaralandırma birbirini sessizce serileştirirdi (yanlış sonuç değil, teşhisi
+ * imkânsız gecikme). 1-argümanlı uzay ise `session-registry` /
+ * `permission-management` tarafından kullanılıyor.
+ */
+// Tip `number` (literal DEĞİL) — bekçi bunu KK1'in namespace'iyle karşılaştırıyor ve
+// literal tiplerde TS "örtüşme yok" diye derlemede düşürürdü. Namespace kimliği bir
+// sayıdır; literal daraltmanın burada hiçbir değeri yok.
+export const BATCH_NUMBER_LOCK_NS: number = 8022;
+
+/** Parti sayacı TEK ve GLOBAL → tek anahtar yeter (hashtext'e gerek yok). */
+const BATCH_NUMBER_LOCK_KEY = 1;
+
+/**
+ * Parti no üretici — tx İÇİNDE, sequence okuması closure içinde
+ * (çağıran `withBarcodeRetry(() => prisma.$transaction(...))` ile sarar).
  *
- * ESKİ DOLGULU KAYITLAR (2026-08-05 öncesi `P0508260019`) OLDUĞU GİBİ DURUR ve
- * geriye dönük düzeltilmez (canlı veri + o numaralar kâğıda basıldı). Karışım
- * güvenlidir: prefix `P`+GGAAYY sabit 7 karakter olduğu için `nextDailySeq`
- * kuyruğu `parseInt` ile okur ("0019" → 19) — aynı gün içinde format değişse
- * bile sayaç kaldığı yerden devam eder (P0508260019 → P05082620).
+ * İKİ REJİM, tek kapı. `batch.shortNumberEnabled` bayrağı:
+ *   • AÇIK (varsayılan)  → `P01 … P99`, 99'dan sonra P01'e SARAR. Tarih taşımaz,
+ *     BENZERSİZ DEĞİLDİR (2026-08-05 kullanıcı kararı; fabrika numaralı fiziksel
+ *     parti plakası kullanıyor). Sayacın kaynağı: en son doğan KISA parti.
+ *   • KAPALI → eski `P + GGAAYY + SIRA` (dolgusuz günlük sıra), birebir korunur.
  *
- * ⚠️ Bedeli: SÖZLÜKSEL sıra ≠ SAYISAL sıra (`P05082610` < `P0508262`). Parti
- * listeleyen hiçbir yer `orderBy: batchNumber` kullanmaz — hepsi `createdAt`
- * ile sıralar (traveler-card `resolveLiveBatches` dahil). Yeni yüzeyde aynısını yap.
+ * ⚠️⚠️ KİLİT HER İKİ REJİMİ DE KAPSAR ve SIRASI LOAD-BEARING — okumalardan ÖNCE
+ * alınır. Eskiden günlük yolun yarışını `batches.batchNumber` üzerindeki `@unique`
+ * + `withBarcodeRetry` (P2002 → tekrar dene) çözüyordu. Kısa parti no tanım gereği
+ * tekrarlandığı için o kısıt KALDIRILDI (migration
+ * `20260805120000_batch_short_number`) — yani günlük yol da korumasız kaldı ve
+ * kilit onun yerini alıyor. Kilitsiz bırakılsaydı aynı gün doğan iki parti sessizce
+ * aynı `P05082629` kodunu alırdı: hata yok, log yok, iki ayrı mal tek numarada.
+ *
+ * ⚠️ Kilit `generateBatchNumberTx`'in İLK ifadesidir; sonraya alınırsa hiçbir şey
+ * kazanılmaz (klasik TOCTOU — KK1 guard'ında birebir aynı hata yaşandı).
  */
 export async function generateBatchNumberTx(
   tx: Prisma.TransactionClient,
   date: Date,
 ): Promise<string> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BATCH_NUMBER_LOCK_NS}::int, ${BATCH_NUMBER_LOCK_KEY}::int)`;
+
+  if (await readBatchShortNumberEnabled(tx)) {
+    return buildShortBatchCode(nextShortBatchSeq(await readLastShortBatchSeqTx(tx)));
+  }
+
   const prefix = dailyCodePrefix("P", date);
   const todays = await tx.batch.findMany({
     where: { batchNumber: { gte: prefix, startsWith: prefix } },
@@ -88,6 +120,72 @@ export async function generateBatchNumberTx(
   );
   // digits=1 → padStart(1) seq ≥ 1 için no-op: dolgu yok, hane serbest.
   return buildDailyCode("P", seq, date, 1);
+}
+
+/**
+ * Sayacın KAYNAĞI: en son doğan kısa parti numarası (yoksa `null` → P01'den başlar).
+ *
+ * Neden saklanan bir sayaç DEĞİL de veriden türetme: bu repo tüm sıra üretimini
+ * veriden türetiyor (`nextDailySeq`, `nextPrefixedSequence`) ve saklanan sayaç
+ * "ayar ne diyor" ile "veri ne diyor" diye ikinci bir doğruluk kaynağı açardı.
+ * Türetilmiş sayaç kendi kendini onarır ve yedekten geri yüklemede tutarlı gelir.
+ *
+ * ⚠️ Regex SADECE kısa biçimi kabul eder (`P01`-`P99`) — eski günlük kodlar
+ * (`P0508260019`) ve `P00` dışarıda kalır. Günlük kodlar sızsaydı bayrak ilk
+ * açıldığında sayaç P01 yerine "son günlük sıra + 1"den başlardı.
+ *
+ * Sıralama `createdAt DESC` — `batchNumber` ile SIRALANAMAZ (numara sarıyor, en
+ * büyük numara "en son" demek değil; P99'dan sonra doğan P01 en yenisidir).
+ * Destek index: `batches_createdAt_idx` (aynı migration).
+ */
+async function readLastShortBatchSeqTx(tx: Prisma.TransactionClient): Promise<number | null> {
+  const rows = await tx.$queryRaw<Array<{ batchNumber: string }>>`
+    SELECT "batchNumber" FROM batches
+    WHERE "batchNumber" ~ '^P(0[1-9]|[1-9][0-9])$'
+    ORDER BY "createdAt" DESC
+    LIMIT 1`;
+  return parseShortBatchCode(rows[0]?.batchNumber);
+}
+
+/**
+ * Panelde gösterilecek sayaç durumu (`GET /api/batches/number-state`).
+ *
+ * ⚠️ `next` bir ÖNİZLEMEDİR, REZERVASYON DEĞİL: kilit dışında okunur ve arada bir
+ * parti doğarsa gerçekleşen numara farklı olur. Yüzey bunu "sıradaki" diye sunar,
+ * "ayrılmış" diye değil.
+ */
+export async function getBatchNumberState(): Promise<{
+  enabled: boolean;
+  min: number;
+  max: number;
+  last: number | null;
+  next: number | null;
+  lastCode: string | null;
+  nextCode: string | null;
+}> {
+  const enabled = await readBatchShortNumberEnabled();
+  if (!enabled) {
+    return {
+      enabled,
+      min: SHORT_BATCH_MIN,
+      max: SHORT_BATCH_MAX,
+      last: null,
+      next: null,
+      lastCode: null,
+      nextCode: null,
+    };
+  }
+  const last = await readLastShortBatchSeqTx(prisma as unknown as Prisma.TransactionClient);
+  const next = nextShortBatchSeq(last);
+  return {
+    enabled,
+    min: SHORT_BATCH_MIN,
+    max: SHORT_BATCH_MAX,
+    last,
+    next,
+    lastCode: last === null ? null : buildShortBatchCode(last),
+    nextCode: buildShortBatchCode(next),
+  };
 }
 
 /**

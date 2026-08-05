@@ -12,6 +12,7 @@ import {
   moveRolls as svcMoveRolls,
   mergeBatches as svcMergeBatches,
   splitBatch as svcSplitBatch,
+  getBatchNumberState as svcGetBatchNumberState,
 } from "../services/batch.service";
 
 const moveSchema = z.object({
@@ -30,6 +31,25 @@ export class BatchController {
     this.moveRolls = this.moveRolls.bind(this);
     this.mergeBatches = this.mergeBatches.bind(this);
     this.splitBatch = this.splitBatch.bind(this);
+    this.numberState = this.numberState.bind(this);
+  }
+
+  /**
+   * GET /api/batches/number-state — kısa parti sayacının durumu (salt-okunur).
+   *
+   * Genel Ayarlar'daki bayrağın yanında "şu an: P42 · sıradaki: P43" göstergesi
+   * için. Körlemesine sarma seçildiği için bu, fabrikanın FİZİKSEL plaka setiyle
+   * sistemi karşılaştırabileceği tek yüzey.
+   *
+   * ⚠️ `next` ÖNİZLEMEDİR, rezervasyon DEĞİL — kilit dışında okunur; arada bir
+   * parti doğarsa gerçekleşen numara başka olur.
+   */
+  async numberState(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json({ success: true, data: await svcGetBatchNumberState() });
+    } catch (e) {
+      next(e);
+    }
   }
 
   /** POST /api/batches/move-rolls — topları başka sevksiz partiye taşı. */
