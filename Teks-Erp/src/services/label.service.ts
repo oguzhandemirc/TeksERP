@@ -1870,9 +1870,25 @@ export class LabelService {
     // Niyet kalıcılaştırma (snapshot) — audit'ten ayrı primitif.
     await this.seedRollLabelSnapshot(rollId, userId, opts);
 
-    // Etiket bayat bayrağını temizle — fiziksel etiket az önce basıldı → veriyle uyumlu.
-    // Yalnız bayat iken yaz (gereksiz update yok).
-    await prisma.roll.updateMany({ where: { id: rollId, labelDirty: true }, data: { labelDirty: false } });
+    // Etiket bayat bayrağını temizle + FİZİKSEL etiketin doğduğu anı damgala.
+    //
+    // ⚠️ İKİ ALAN, İKİ FARKLI SORU — birini diğerinden türetme:
+    //   `labelDirty`     → "basılı etiket veriyle uyuşuyor mu" (baskıda temizlenir)
+    //   `labelPrintedAt` → "ortada fiziksel bir etiket VAR mı" (baskıda damgalanır,
+    //                       bir daha silinmez — kâğıt basıldıysa basılmıştır)
+    // İptal yolu (`inventory.softDelete`) ikincisine bakar: etiketi basılmış topu
+    // sessizce iptal etmek sahaya ÖLÜ ETİKET bırakır (2026-08-05 vakası).
+    //
+    // ⚠️ Koşul KALDIRILDI (eskiden `where: { labelDirty: true }`): damga her baskıda
+    // yazılmalı, yoksa bayat OLMAYAN bir topun ilk baskısı hiç damgalanmaz ve iptal
+    // guard'ı tam da en sık durumda (KK1 girişi → hemen etiket) kör kalırdı.
+    //
+    // Burası TEK YAZMA NOKTASI. `seedRollLabelSnapshot` DEĞİL: o yazıcısız/iptal
+    // edilmiş baskı niyetinde de koşar ve "kâğıt çıktı" demez.
+    await prisma.roll.update({
+      where: { id: rollId },
+      data: { labelDirty: false, labelPrintedAt: new Date() },
+    });
 
     // Çözülen şablon/varyant izi (BEST-EFFORT): reprint şablonu DONDURMADIĞINDAN
     // "o an hangi atama geçerliydi" audit'ten okunur — baskı davranışıyla aynı

@@ -13,7 +13,12 @@ import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
+import { FACTORY_TIMEZONE } from "../constants/time";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
+import {
+  resolveRollRestoreBlockReason,
+  resolveRestoreTargetStatus,
+} from "./helpers/roll-cancel-restore.helper";
 import {
   readKk1WeightEntryEnabled,
   readKk1DuplicateGuardEnabled,
@@ -298,6 +303,32 @@ export interface RollCancelPreview {
   } | null;
   /** Kapanmamış (açık) hareket sayısı. */
   openMovementCount: number;
+  /**
+   * Topun ÜSTÜNDE fiziksel etiket var mı (`labelPrintedAt != null`). true ise
+   * iptal `confirmLabelPrinted` + SEBEP ister: kayıt ölür ama kâğıt topun üstünde
+   * kalır → sonraki okutma "stokta değil" der ve kimse sebebini bilmez.
+   * `requiresConfirm`'den AYRI bir eksen: o "mal bir istasyonda mı", bu "sahada
+   * ölü etiket bırakıyor muyum". Bir top ikisini birden tetikleyebilir.
+   */
+  labelPrinted: boolean;
+  /** Etiketin basıldığı an (varsa) — operatöre "10:48'de bastınız" diyebilmek için. */
+  labelPrintedAt: Date | null;
+}
+
+/**
+ * Operatöre gösterilecek tarih-saat — FABRİKA saat diliminde (`Europe/Istanbul`).
+ * Süreç `TZ`'sine yaslanmaz: mesaj sahadaki insana "10:48'de bastınız" demeli ve
+ * sunucu UTC'ye kurulsa da aynı şeyi demeli (bkz. `constants/time.ts`).
+ */
+function formatFactoryDateTime(at: Date): string {
+  return at.toLocaleString("tr-TR", {
+    timeZone: FACTORY_TIMEZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function operationLabel(type: RollOperationType): string {
@@ -1961,6 +1992,9 @@ export class InventoryService {
         // `createdById` şemada vardı ama detay ucu ilişkiyi HİÇ çekmiyordu.
         // Elle eklenen topta "kim ekledi" sorusu sebep kadar önemli.
         createdBy: { select: { id: true, fullName: true, username: true } },
+        // İPTALİ KİM YAPTI — `findRollByBarcode` ile AYNI şekil (ayrışırsa panel ile
+        // okutma aynı top için farklı şey söyler).
+        cancelledBy: { select: { id: true, fullName: true, username: true } },
         createdMachine: { select: { id: true, name: true, code: true } },
         // GİRİŞ İSTASYONU — liste include'uyla AYNI şekil.
         entryStation: { select: { id: true, code: true, name: true } },
@@ -2053,7 +2087,55 @@ export class InventoryService {
     }
 
     const manualReason = await this.readManualEntryReason(roll.id, roll.entrySource);
-    return { success: true, data: { ...roll, manualReason } as unknown as Roll };
+    // Okutma ucuyla AYNI teşhis — Electron detay panelinde "İptali Geri Al"
+    // butonunun çizilip çizilmeyeceğini bu belirler.
+    const cancelDiag = await this.buildCancelDiagnostics(roll);
+    return {
+      success: true,
+      data: { ...roll, manualReason, ...(cancelDiag ?? {}) } as unknown as Roll,
+    };
+  }
+
+  /**
+   * İPTAL TEŞHİSİ — "bu barkod neden kabul edilmedi, ne yapmalıyım".
+   *
+   * Okutma yüzeyleri eskiden yalnız `status`'ü görüyordu ve ekranda "stokta değil
+   * (İptal)" yazıp SUSUYORDU. Operatörün elinde fiziksel bir top, önünde akan bir
+   * vardiya varken bu sessizlik doğaçlamaya davettir — 2026-08-05'te tam olarak
+   * öyle oldu (kayıt öldü, mal gitmek zorundaydı, ikinci bir barkod basıldı).
+   *
+   * ⚠️ Yalnız `CANCELLED` topta koşar. Beş sayım sorgusu barkod okutmanın SICAK
+   * yolunda; her okutmada koşturmak o yolu bedelsiz yere yavaşlatırdı ve iptal
+   * edilmiş top okutma vakalarının çok küçük bir azınlığıdır.
+   */
+  private async buildCancelDiagnostics(
+    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null },
+  ): Promise<{ canRestore: boolean; restoreBlockReason: string | null } | null> {
+    if (roll.status !== RollStatus.CANCELLED) return null;
+    const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
+      await Promise.all([
+        prisma.rollMovement.count({ where: { rollId: roll.id } }),
+        prisma.rollOperation.count({ where: { rollId: roll.id } }),
+        prisma.roll.count({ where: { parentRollId: roll.id } }),
+        prisma.subcontractorDispatchItem.count({ where: { rollId: roll.id } }),
+        prisma.kartelaDispatchItem.count({ where: { rollId: roll.id } }),
+      ]);
+    // Ekran ile uç AYNI yüklemi çağırır — kopyalanırsa arayüz "Geri Al" çizerken
+    // uç 409 döner ve operatör çıkmaza girer.
+    const restoreBlockReason = resolveRollRestoreBlockReason({
+      status: roll.status,
+      preCancelStatus: roll.preCancelStatus,
+      batchId: roll.batchId,
+      sackId: roll.sackId,
+      shipmentId: roll.shipmentId,
+      currentStepId: roll.currentStepId,
+      movementCount,
+      operationCount,
+      childCount,
+      dispatchItemCount,
+      kartelaItemCount,
+    });
+    return { canRestore: restoreBlockReason === null, restoreBlockReason };
   }
 
   /**
@@ -2069,6 +2151,11 @@ export class InventoryService {
         // Rezervasyon bilgisi — barkod okutmada "bu top çuvalda/sevkiyatta" uyarısı.
         shipment: { select: { id: true, shipmentNo: true, status: true } },
         sack: { select: { id: true, sackNo: true, seq: true } },
+        // İPTALİ KİM YAPTI — okutma yüzeyi "05.08 10:56 · HamGiris" diyebilsin.
+        // Sebep/tarih topun kendi kolonlarında (`cancelReason`/`cancelledAt`), yalnız
+        // insan adı ilişkiden gelir. Küçük join; hot path'e ölçülebilir yük katmaz
+        // (nullable FK, satır başına en fazla bir kullanıcı).
+        cancelledBy: { select: { id: true, fullName: true, username: true } },
         // En güncel iade kaydı — Tambur/depo barkod okutmada iade notu/nedeni görünür.
         returns: {
           orderBy: { createdAt: "desc" },
@@ -2090,7 +2177,11 @@ export class InventoryService {
       return { success: false, data: null, message: "Barkod bulunamadı" };
     }
 
-    return { success: true, data: roll };
+    // İptal edilmiş topta "neden + geri alınabilir mi" teşhisi. Okutan yüzey
+    // artık "stokta değil" deyip susmak zorunda değil.
+    const cancelDiag = await this.buildCancelDiagnostics(roll);
+
+    return { success: true, data: { ...roll, ...(cancelDiag ?? {}) } as unknown as Roll };
   }
 
   /**
@@ -2551,6 +2642,7 @@ export class InventoryService {
         currentStepId: true,
         shipmentId: true,
         sackId: true,
+        labelPrintedAt: true,
         item: { select: { name: true } },
         color: { select: { name: true } },
         currentStep: {
@@ -2663,6 +2755,8 @@ export class InventoryService {
         requiresConfirm,
         activeAt,
         openMovementCount,
+        labelPrinted: roll.labelPrintedAt != null,
+        labelPrintedAt: roll.labelPrintedAt,
       },
     };
   }
@@ -2670,7 +2764,16 @@ export class InventoryService {
   async softDelete(
     id: string,
     userId?: string,
-    opts?: { confirmActive?: boolean },
+    opts?: {
+      confirmActive?: boolean;
+      /**
+       * Etiketi basılmış topu iptal etmek için BİLİNÇLİ onay. Olmadan 409
+       * `LABEL_PRINTED` — bkz. aşağıdaki guard'ın gerekçesi.
+       */
+      confirmLabelPrinted?: boolean;
+      /** İptal gerekçesi. Etiketi basılmış topta ZORUNLU (min 3 karakter). */
+      reason?: string;
+    },
   ): Promise<ApiResponse<Roll>> {
     const existing = await prisma.roll.findUnique({ where: { id } });
     if (!existing) {
@@ -2757,6 +2860,42 @@ export class InventoryService {
       }
     }
 
+    // ── ÖLÜ ETİKET GUARD'I (2026-08-05) ──────────────────────────────────────
+    // Etiket basmak FİZİKSEL dünyada geri alınamaz bir olaydır; kayıt ise geri
+    // alınabilir. İkisi arasında bağ yoktu ve saha bunu şöyle ödedi: T050826H0033
+    // 10:48:30'da basıldı → 10:56:02'de iptal edildi → kâğıt topun üstünde kaldı →
+    // aynı fiziksel top saatler sonra İKİNCİ bir barkodla (T050826H0072) yeniden
+    // kaydedilip boyahaneye gitti. Bir top, iki kimlik, biri ölü.
+    //
+    // Guard `requiresConfirm`'den AYRI bir eksendir ve ondan SONRA gelir:
+    // o "mal bir istasyonda mı" (sistem içi etki), bu "sahaya ölü kâğıt bırakıyor
+    // muyum" (sistem DIŞI etki). Bir top ikisini birden tetikleyebilir; ikisi de
+    // kendi onayını ister. Hard-block DEĞİL — onay + sebeple geçilir, çünkü meşru
+    // durum var: etiket henüz topa yapıştırılmamış olabilir.
+    //
+    // Sebep neden burada ZORUNLU ama diğer iptallerde değil: ölü etiket sahada
+    // dolaşmaya devam eder ve onu bulan kişinin ilk sorusu "bu neden iptal edilmiş"
+    // olur. Cevabı `Roll.cancelReason`'da durur — audit'te DEĞİL (archive-scheduler
+    // 6 ayda bir system_logs'u taşır, `Roll.entryReason` dersinin aynısı).
+    const reason = opts?.reason?.trim() || null;
+    if (existing.labelPrintedAt) {
+      if (!opts?.confirmLabelPrinted) {
+        throw AppError.conflict(
+          `Bu topun etiketi basıldı (${formatFactoryDateTime(existing.labelPrintedAt)}) ve ` +
+            "büyük ihtimalle topun üstünde. İptal edersen sahada ÖLÜ ETİKET kalır: " +
+            "kayıt ölür, kâğıt durur, sonraki okutma sebebini söyleyemez. " +
+            "Önce etiketi toptan sök, sonra onaylayarak iptal et.",
+          { code: "LABEL_PRINTED", labelPrintedAt: existing.labelPrintedAt },
+        );
+      }
+      if (!reason || reason.length < 3) {
+        throw AppError.badRequest(
+          "Etiketi basılmış topun iptali için sebep zorunlu (en az 3 karakter).",
+          { code: "CANCEL_REASON_REQUIRED" },
+        );
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       // Açık RollMovement'ları topla — sonra status recompute için step ID'leri lazım
       const openMovements = await tx.rollMovement.findMany({
@@ -2804,6 +2943,13 @@ export class InventoryService {
           currentStepId: null,
           shipmentId: null,
           sackId: null,
+          // İptal izi topun KENDİ satırında (audit'te değil — 6 ayda arşivlenir).
+          // `preCancelStatus` = geri almanın döneceği raf; `preShipStatus` emsali,
+          // körlemesine STOCK'a dönmek A1_STOCK/WAREHOUSE topunu yanlış rafa yazardı.
+          cancelledAt: new Date(),
+          cancelledById: userId ?? null,
+          cancelReason: reason,
+          preCancelStatus: existing.status,
         },
       });
       if (cancelClaim.count === 0) {
@@ -2833,6 +2979,8 @@ export class InventoryService {
       newData: {
         status: RollStatus.CANCELLED,
         cancelled: true,
+        reason,
+        labelPrinted: existing.labelPrintedAt != null,
       },
     });
 
@@ -2840,6 +2988,123 @@ export class InventoryService {
       success: true,
       data: updated,
       message: `Top iptal edildi: ${existing.barcode}`,
+    };
+  }
+
+  /**
+   * Bir topun iptalini GERİ AL — `CANCELLED` → iptalden önceki raf.
+   *
+   * NEDEN VAR: iptalin geri dönüşü olmadığı sürece tek çare "yeniden giriş"tir ve
+   * yeniden giriş aynı fiziksel top için İKİNCİ bir barkod doğurur. 2026-08-05
+   * sahasında tam bu oldu — T050826H0033 iptal edildi, mal kapıdaydı, operatör
+   * doğaçlama yaptı, top T050826H0072 olarak gitti ve üstünde iki etiket kaldı.
+   * Buradaki tek amaç o ikinci barkodun HİÇ doğmaması.
+   *
+   * Kapsam ve gerekçeleri `helpers/roll-cancel-restore.helper` içinde (saf yüklem,
+   * ekran ve uç aynı fonksiyonu çağırır). İzin `softDelete` ile AYNI kümedir:
+   * iptali yapan kişi geri de alabilmeli, yoksa hata yapan operatör vardiya
+   * ortasında birini beklemek zorunda kalır — ve beklemez, doğaçlar (elle eklenen
+   * topun geri alınmasında verilen kararın aynısı).
+   *
+   * ⚠️ `hardDelete` ("Arşivle") ile karışabilir: o da topu `CANCELLED` yapar ama
+   * `preCancelStatus` yazmaz → burada `STOCK`'a düşer. Kabul edilebilir: arşivleme
+   * zaten yalnız `STOCK` topa uygulanıyor.
+   */
+  async restoreCancelledRoll(
+    id: string,
+    userId?: string,
+    opts?: { reason?: string },
+  ): Promise<ApiResponse<Roll>> {
+    const existing = await prisma.roll.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        preCancelStatus: true,
+        batchId: true,
+        sackId: true,
+        shipmentId: true,
+        currentStepId: true,
+        cancelReason: true,
+      },
+    });
+    if (!existing) throw AppError.notFound("Top bulunamadı");
+
+    // Sinyaller tek turda toplanır; yüklem hiçbir şey okumaz.
+    const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
+      await Promise.all([
+        prisma.rollMovement.count({ where: { rollId: id } }),
+        prisma.rollOperation.count({ where: { rollId: id } }),
+        prisma.roll.count({ where: { parentRollId: id } }),
+        prisma.subcontractorDispatchItem.count({ where: { rollId: id } }),
+        prisma.kartelaDispatchItem.count({ where: { rollId: id } }),
+      ]);
+
+    const blockReason = resolveRollRestoreBlockReason({
+      status: existing.status,
+      preCancelStatus: existing.preCancelStatus,
+      batchId: existing.batchId,
+      sackId: existing.sackId,
+      shipmentId: existing.shipmentId,
+      currentStepId: existing.currentStepId,
+      movementCount,
+      operationCount,
+      childCount,
+      dispatchItemCount,
+      kartelaItemCount,
+    });
+    if (blockReason) {
+      throw AppError.conflict(blockReason, { code: "RESTORE_BLOCKED" });
+    }
+
+    const target = resolveRestoreTargetStatus(existing.preCancelStatus);
+
+    // ATOMİK CLAIM: guard'lar tx dışında okundu; pencerede başka bir işlem topu
+    // değiştirdiyse (ör. arşivleme, yeniden iptal) kaybeden 409 alır.
+    const claim = await prisma.roll.updateMany({
+      where: { id, status: RollStatus.CANCELLED },
+      data: {
+        status: target,
+        // İz TEMİZLENİR: top artık iptal değil. Sebep audit'te kalır (aşağıda),
+        // yani "bir zamanlar iptal edilmişti" bilgisi kaybolmaz — ama satır
+        // "şu an iptal" demeyi bırakır, çünkü değil.
+        cancelledAt: null,
+        cancelledById: null,
+        cancelReason: null,
+        preCancelStatus: null,
+      },
+    });
+    if (claim.count === 0) {
+      throw AppError.conflict(
+        "Top bu sırada başka bir işleme girdi — listeyi yenileyip tekrar deneyin.",
+      );
+    }
+
+    const restored = await prisma.roll.findUniqueOrThrow({ where: { id } });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: id,
+      oldData: {
+        status: RollStatus.CANCELLED,
+        cancelReason: existing.cancelReason,
+      },
+      newData: {
+        status: target,
+        event: "CANCEL_RESTORED",
+        reason: opts?.reason?.trim() || null,
+      },
+    });
+
+    return {
+      success: true,
+      data: restored,
+      message: `İptal geri alındı — top ${existing.barcode ?? ""} tekrar ${
+        target === RollStatus.STOCK ? "ham stokta" : "envanterde"
+      }.`.trim(),
     };
   }
 

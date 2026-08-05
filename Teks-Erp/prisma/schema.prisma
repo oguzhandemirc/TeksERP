@@ -322,6 +322,7 @@ model User {
   detectedRollErrors         RollError[]              @relation("RollErrorDetectedBy")
   processedRollErrors        RollError[]              @relation("RollErrorProcessedBy")
   createdRolls               Roll[]                   @relation("RollCreatedBy")
+  cancelledRolls             Roll[]                   @relation("RollCancelledBy")
   manualClosedOrders         Order[]                  @relation("OrderManualClosedBy")
   systemSettingsUpdates      SystemSetting[]
   preference                 UserPreference?
@@ -1112,6 +1113,49 @@ model Roll {
   // filtre/index yok — detay/context/liste select'inde döner, "yeniden bas" uyarısını besler.
   labelDirty Boolean @default(false)
 
+  /// Topun ÜSTÜNDEKİ fiziksel etiketin BASILDIĞI an (NULL = hiç basılmadı).
+  ///
+  /// `labelDirty` ile KARIŞTIRMA — ikisi FARKLI soruları yanıtlar: o "basılı etiket
+  /// veriyle uyuşuyor mu", bu "ortada bir etiket VAR mı". Bayat olmayan bir etiket de
+  /// fiziksel olarak topun üstünde durur, ve iptalin sorduğu soru budur.
+  ///
+  /// İptal yolu (`softDelete`) buna bakar: etiketi basılmış topu sessizce iptal etmek
+  /// sahaya ÖLÜ ETİKET bırakır — kayıt ölür, kâğıt topun üstünde kalır, sonraki okutma
+  /// "stokta değil" der ve kimse sebebini bilmez (2026-08-05 saha vakası: T050826H0033
+  /// 10:48:30'da basıldı, 10:56:02'de iptal edildi, aynı fiziksel top saatler sonra
+  /// ikinci bir barkodla — T050826H0072 — yeniden kaydedilip boyahaneye gitti).
+  ///
+  /// ⚠️ Audit'ten (LABEL_PRINT_EVENT) OKUNMAZ ve okunmamalı: `archive-scheduler`
+  /// 6 ayda bir `system_logs`'u arşive TAŞIR → altı ay sonra "bu topun etiketi basıldı
+  /// mı" sorusunun cevabı sessizce kaybolur. `Roll.entryReason` dersinin birebir aynısı:
+  /// kararın kendisi kaydın KENDİ satırında yaşar, denetim log'unda değil. Audit yazımı
+  /// kaldırılmadı (iki ayrı soru: *kim ne zaman bastı* ↔ *basılı etiket var mı*).
+  ///
+  /// Tek yazma noktası: `label.service.recordPrintEvent` (niyet kaydı
+  /// `seedRollLabelSnapshot` DEĞİL — o yazıcısız/iptal edilmiş baskıda da koşar).
+  /// Index YOK: `rolls` zaten en çok indeksli tablo ve bu alan her zaman `status`
+  /// ile birlikte süzülür (ölü etiket raporu), tek başına aranmaz.
+  labelPrintedAt DateTime? @db.Timestamptz
+
+  /// ── İPTAL (STORNO) İZİ ────────────────────────────────────────────────────
+  /// `softDelete` yazar, `restoreCancelledRoll` okuyup NULL'lar. Emsal:
+  /// `SubcontractorDispatch.cancelledAt/cancelledById/cancelReason`.
+  ///
+  /// Sebep AUDIT'TE DEĞİL BURADA: iptal edilmiş bir kaydı inceleyen kişinin ilk
+  /// sorusu "bu neden iptal edildi" ve cevabı altı ay sonra da durmalı (bkz.
+  /// `labelPrintedAt` notundaki arşivleme tuzağı).
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(500)
+
+  /// İptalden ÖNCEKİ statü — geri alma (`restoreCancelledRoll`) buraya döner.
+  /// `preShipStatus` emsalinin birebir aynısı ve aynı sebeple: körlemesine `STOCK`'a
+  /// döndürmek 2. kalite (`A1_STOCK`) ya da depo (`WAREHOUSE`) topunu sessizce yanlış
+  /// rafa yazardı. NULL = bu karardan önce iptal edilmiş top; geri almada `STOCK`
+  /// varsayılır (iptal edilebilir statülerin çoğunluğu odur ve kapsam guard'ı zaten
+  /// hareketsiz/partisiz topa daraltır).
+  preCancelStatus RollStatus?
+
   // Relations
   item                 Item                        @relation(fields: [itemId], references: [id])
   color                Color?                      @relation(fields: [colorId], references: [id])
@@ -1133,6 +1177,7 @@ model Roll {
   currentStep          WorkOrderStep?              @relation("RollCurrentStep", fields: [currentStepId], references: [id])
   producedInStep       WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
   createdBy            User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
+  cancelledBy          User?                       @relation("RollCancelledBy", fields: [cancelledById], references: [id])
   createdMachine       Machine?                    @relation("RollCreatedMachine", fields: [createdMachineId], references: [id])
   entryStation         Station?                    @relation("RollEntryStation", fields: [entryStationId], references: [id])
   properties           RollProperty[]
@@ -1959,12 +2004,16 @@ model TravelerCard {
   /// çünkü top etiketi henüz parti numarasıyla basılmamıştır. KARTTA TERSİ geçerlidir —
   /// kart iş emri AÇILIŞINDA (henüz top/parti yokken) basılabildiği için ilk parti
   /// doğuşu tam da kâğıdı yanlışlayan olaydır. K18 mantığını buraya kopyalama.
-  /// Tek yazma noktası: `traveler-card.service.markCardDirtyTx`.
+  /// Tek yazma noktası: `services/helpers/traveler-card-dirty.helper.markTravelerCardDirtyTx`.
   contentDirty Boolean @default(false)
 
-  /// Basım anında DONDURULAN içerik (ürün/renk/rota/sipariş + render config). Değişken
-  /// veriler (top sayısı/metraj) BASILMAZ. Reprint güncel WO'dan yeniden dondurur —
-  /// karekod aynı kalır, içerik tazelenir. Sorgulanmıyor → GIN yok (detay/print'te okunur).
+  /// SON BASILAN kopyanın kaydı (ürün/renk/rota/sipariş + render config). Değişken
+  /// veriler (top sayısı/metraj/parti) BURAYA GİRMEZ — baskı anında canlı çözülür.
+  /// ⚠️ 2026-08-05'ten beri "doğuşta donan içerik" DEĞİLDİR: ACTIVE kart her baskıda
+  /// iş emrinin GÜNCEL hâlinden basılır (`resolvePrintPlan`) ve baskı olayı bu alanı
+  /// tazeler; içerik gerçekten değiştiyse `version++` olur (otomatik revizyon).
+  /// Kartın SUNUMU (şablon/config) bunun dışındadır — donmuş kalır, yalnız `reprint`
+  /// tazeler. Sorgulanmıyor → GIN yok (detay/print'te okunur).
   snapshot Json?
 
   // Relations

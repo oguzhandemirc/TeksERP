@@ -83,6 +83,14 @@ const rescueSchema = z.object({
   reason: z.string().trim().min(3, "İşlem nedeni en az 3 karakter").max(500),
 });
 
+// İptali geri al. Sebep OPSİYONEL (iptalin kendisinden farklı, bilinçli): geri alma
+// zaten düzeltici bir işlemdir ve önündeki tek engel kapsam guard'ıdır — sürtünme
+// eklemek operatörü yine "yeniden giriş" doğaçlamasına iter, ki bu özelliğin tam
+// olarak önlemek için var olduğu şeydir.
+const restoreCancelSchema = z.object({
+  reason: z.string().trim().min(3).max(500).optional(),
+});
+
 // Saha #4: top etiketi değiştir (renk/özellik/en/kalite). Tümü opsiyonel; renk
 // null=renksiz. propertyIds verilirse TAM liste (replace).
 const relabelSchema = z.object({
@@ -137,6 +145,7 @@ export class InventoryController {
     this.getRollHistory = this.getRollHistory.bind(this);
     this.cancelPreview = this.cancelPreview.bind(this);
     this.softDelete = this.softDelete.bind(this);
+    this.restoreCancelled = this.restoreCancelled.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.createOpenFabric = this.createOpenFabric.bind(this);
     this.kursunFinish = this.kursunFinish.bind(this);
@@ -434,10 +443,37 @@ export class InventoryController {
     try {
       // İstasyonda aktif top için bilinçli onay: ?confirmActive=true.
       const confirmActive = req.query.confirmActive === "true";
+      // Etiketi basılmış top için AYRI onay + sebep (ölü etiket guard'ı).
+      // Query'de taşınıyor çünkü uç `DELETE` — gövdeli DELETE bazı ara katmanlarda
+      // (proxy/fetch varyantları) sessizce düşer; iki alan da kısa ve URL-güvenli.
+      // ⚠️ Eski istemci ikisini de göndermez → etiketi basılmış topta 409 alır ve
+      // bu İSTENEN davranıştır (fail-closed): guard'ın var olma sebebi tam olarak
+      // "uyarısız iptal"i durdurmak.
+      const confirmLabelPrinted = req.query.confirmLabelPrinted === "true";
+      const reason = typeof req.query.reason === "string" ? req.query.reason : undefined;
       const result = await this.service.softDelete(
         req.params.id as string,
         req.user?.userId,
-        { confirmActive }
+        { confirmActive, confirmLabelPrinted, reason }
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/rolls/:id/restore-cancel
+   * İptali geri al — `CANCELLED` → iptalden önceki raf. Kapsam dar (hareketsiz,
+   * partisiz, çuvalsız top); engel varsa 409 + somut Türkçe sebep.
+   */
+  async restoreCancelled(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = restoreCancelSchema.parse(req.body ?? {});
+      const result = await this.service.restoreCancelledRoll(
+        req.params.id as string,
+        req.user?.userId,
+        { reason: body.reason }
       );
       res.status(200).json(result);
     } catch (error) {

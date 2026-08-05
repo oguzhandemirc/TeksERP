@@ -509,6 +509,53 @@ router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_
 
 /**
  * @openapi
+ * /api/rolls/{id}/restore-cancel:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Top iptalini geri al (storno'nun storno'su)
+ *     description: |
+ *       İptal edilmiş bir topu iptalden ÖNCEKİ rafına (`preCancelStatus`) döndürür.
+ *       Kapsam DAR ve bilinçli: yalnız hiç hareket görmemiş, partisiz, çuvalsız,
+ *       kesilmemiş top. Engel varsa 409 + somut Türkçe sebep (`RESTORE_BLOCKED`).
+ *
+ *       Var olma sebebi: geri dönüş yolu olmayınca tek çare "yeniden giriş"tir ve
+ *       o, aynı fiziksel top için İKİNCİ bir barkod doğurur (2026-08-05 saha vakası).
+ *
+ *       İzin kümesi `DELETE /:id` (iptal) ile BİREBİR AYNIDIR — iptali yapan kişi
+ *       geri de alabilmeli; ayrıştırmak hata yapan operatörü vardiya ortasında
+ *       beklemeye ve yine doğaçlamaya iter.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200:
+ *         description: İptal geri alındı
+ *       409:
+ *         description: Kapsam dışı (RESTORE_BLOCKED) veya yarış kaybı
+ *       404:
+ *         description: Top bulunamadı
+ */
+router.post(
+  "/:id/restore-cancel",
+  verifyToken,
+  requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1),
+  controller.restoreCancelled,
+);
+
+/**
+ * @openapi
  * /api/rolls/{id}/permanent:
  *   delete:
  *     tags: [Inventory]
