@@ -60,7 +60,7 @@ interface Props {
  * sevkteki çuvallar salt-okunur önizleme sheet'ine düşer.
  */
 export function SacksListView({ onEditSack }: Props) {
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [located, setLocated] = useState<LocatedRoll | null>(null);
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
@@ -111,6 +111,28 @@ export function SacksListView({ onEditSack }: Props) {
     toast.info(`Sevk edilmiş çuval arandı: ${code}`);
   });
 
+  // "SEVK EDİLMİŞLERDE ARA" İPUCU — varsayılan kapsam POOL+PLANNED olduğu için sevk
+  // edilmiş bir çuval aranınca liste BOŞ döner ve ekran sebebini söylemez; operatör
+  // "böyle bir çuval yok" sanır. Okutma yolunda bu telafi zaten vardı
+  // (`scanCodeDispatched`), yazarak arama yolunda YOKTU. Varsayılan kapsam
+  // DEĞİŞTİRİLMEDİ (bilinçli): "depoda ne var" sorusu sevk edilmişlerle bulanmasın.
+  const scopeFilter = searchParams.get("filter[scope]") ?? "";
+  const showDispatchedHint =
+    !query.isLoading &&
+    search.trim().length > 0 &&
+    table.getRowModel().rows.length === 0 &&
+    scopeFilter !== "DISPATCHED" &&
+    scopeFilter !== "ALL";
+  const applyDispatchedScope = () =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("filter[scope]", "DISPATCHED");
+        return next;
+      },
+      { replace: true },
+    );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* TEK satır: birleşik ara/okut kutusu + filtreler + Sütunlar/Görünümler. */}
@@ -138,6 +160,18 @@ export function SacksListView({ onEditSack }: Props) {
       />
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
+
+      {showDispatchedHint && (
+        <div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-md border border-info/40 bg-info/5 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            Bu kapsamda sonuç yok — aradığınız çuval <strong>sevk edilmiş</strong> olabilir.
+            Liste varsayılan olarak yalnız depodaki ve planlı sevkiyattaki çuvalları gösterir.
+          </span>
+          <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={applyDispatchedScope}>
+            Sevk Edilmiş kapsamında göster
+          </Button>
+        </div>
+      )}
 
       <DataTable<SackSearchRow>
         table={table}

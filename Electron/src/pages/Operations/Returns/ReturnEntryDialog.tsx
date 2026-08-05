@@ -24,8 +24,14 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { useReturnGradingEnabled } from "@/hooks/usePricingEnabled";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
-import { returnsService, type ReturnLookupResult } from "./service";
+import { classifyBarcode } from "@/lib/scanner/barcode-kind";
+import {
+  returnsService,
+  type ReturnLookupResult,
+  type SackReturnLookupResult,
+} from "./service";
 import { ReturnRollCard } from "./ReturnRollCard";
+import { ReturnSackCard } from "./ReturnSackCard";
 
 const TEXTAREA_CLS =
   "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -38,9 +44,14 @@ interface Props {
 }
 
 /**
- * Masaüstünden iade girişi — mobil İade Girişi'nin karşılığı. Barkod sorgula →
- * top + aday siparişler gelir → neden (zorunlu) + sipariş + kalite + not → İade Al.
- * İade rafı (FİRE→hurda vb.) backend'de returnGradingEnabled'a göre belirlenir.
+ * Masaüstünden iade girişi — mobil İade Girişi'nin karşılığı. Kod sorgula →
+ * top/çuval + aday siparişler gelir → neden (zorunlu) + sipariş + kalite + not →
+ * İade Al. İade rafı (FİRE→hurda vb.) backend'de returnGradingEnabled'a göre belirlenir.
+ *
+ * İKİ MOD, TEK KUTU (2026-08-05): kutuya top barkodu da çuval kodu da okutulabilir;
+ * tür `classifyBarcode` ile prefix'ten çözülür (CV… = çuval). Çuval modunda çuvalın
+ * sevk edilmiş topları listelenir, seçilenler TEK nedenle ve TEK irsaliyeyle iade
+ * alınır — 20 toplu çuvalı 20 kez okutmak yerine.
  */
 export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props) {
   const qc = useQueryClient();
@@ -48,6 +59,8 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
 
   const [barcode, setBarcode] = useState("");
   const [result, setResult] = useState<ReturnLookupResult | null>(null);
+  const [sackResult, setSackResult] = useState<SackReturnLookupResult | null>(null);
+  const [selectedRollIds, setSelectedRollIds] = useState<Set<string>>(new Set());
   const [orderId, setOrderId] = useState<string | null>(null);
   const [reasonId, setReasonId] = useState<string | null>(null);
   const [reasonText, setReasonText] = useState("");
@@ -76,6 +89,8 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
   const reset = () => {
     setBarcode("");
     setResult(null);
+    setSackResult(null);
+    setSelectedRollIds(new Set());
     setOrderId(null);
     setReasonId(null);
     setReasonText("");
@@ -83,19 +98,47 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
     setQualityGradeId(null);
   };
 
+  // Yeni sorgu → form alanlarını sıfırla (iki mod da aynı davranış).
+  const afterLookup = (candidates: { id: string }[]) => {
+    setOrderId(candidates.length === 1 ? candidates[0]!.id : null);
+    setReasonId(null);
+    setReasonText("");
+    setNote("");
+    setQualityGradeId(null);
+  };
+
   const lookupMut = useMutation({
-    mutationFn: (code: string) => returnsService.lookup(code.trim()),
-    onSuccess: (res) => {
-      const data = res.data;
-      setResult(data);
-      const single = data.candidateOrders.length === 1 ? data.candidateOrders[0] : null;
-      setOrderId(single ? single.id : null);
-      setReasonId(null);
-      setReasonText("");
-      setNote("");
-      setQualityGradeId(null);
+    mutationFn: async (raw: string) => {
+      // Tür PREFIX'ten çözülür (CV… = çuval). Deneme-yanılma (önce top, olmazsa
+      // çuval) yapılmaz: her başarısız deneme interceptor'dan bir hata toast'ı
+      // düşürür ve operatör doğru kodu okuttuğu hâlde kırmızı görürdü.
+      const { kind, code } = classifyBarcode(raw);
+      if (kind === "SACK") {
+        const res = await returnsService.lookupSack(code);
+        return { mode: "SACK" as const, sack: res.data };
+      }
+      const res = await returnsService.lookup(raw.trim());
+      return { mode: "ROLL" as const, roll: res.data };
     },
-    onError: () => setResult(null),
+    onSuccess: (out) => {
+      if (out.mode === "SACK") {
+        setResult(null);
+        setSackResult(out.sack);
+        // Varsayılan TÜMÜ SEÇİLİ — çuvalı komple geri almak yaygın durum.
+        setSelectedRollIds(new Set(out.sack.rolls.map((r) => r.id)));
+        afterLookup(out.sack.candidateOrders);
+        return;
+      }
+      setSackResult(null);
+      setSelectedRollIds(new Set());
+      setResult(out.roll);
+      afterLookup(out.roll.candidateOrders);
+    },
+    onError: () => {
+      setResult(null);
+      setSackResult(null);
+      setSelectedRollIds(new Set());
+    },
   });
 
   // Tabancayla okutularak açıldıysa barkodu bir kez otomatik sorgula.
@@ -117,7 +160,9 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
   const createMut = useMutation({
     mutationFn: () =>
       returnsService.create({
-        rollId: result!.roll.id,
+        ...(sackResult
+          ? { rollIds: [...selectedRollIds] }
+          : { rollId: result!.roll.id }),
         orderId,
         reasonId,
         reasonText: reasonText.trim() || null,
@@ -131,9 +176,15 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
           : res.data.appliedStatus === "A1_STOCK"
             ? "2. kalite stoğa"
             : "Hazır Depo'ya";
-      toast.success(`İade alındı — top ${shelf} eklendi.`);
+      const n = res.data.rollCount ?? 1;
+      toast.success(
+        n > 1
+          ? `İade alındı — ${n} top ${shelf} eklendi (tek irsaliye).`
+          : `İade alındı — top ${shelf} eklendi.`,
+      );
       void qc.invalidateQueries({ queryKey: ["returns"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
+      void qc.invalidateQueries({ queryKey: ["shipment-detail"] });
       reset();
       onOpenChange(false);
     },
@@ -141,9 +192,18 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
 
   const roll = result?.roll;
   const hasReason = !!reasonId || reasonText.trim().length > 0;
-  const candidates = result?.candidateOrders ?? [];
+  const candidates = (sackResult ?? result)?.candidateOrders ?? [];
   const orderOk = candidates.length === 0 || !!orderId;
-  const canSubmit = !!result && hasReason && orderOk && !createMut.isPending;
+  const hasTarget = sackResult ? selectedRollIds.size > 0 : !!result;
+  const canSubmit = hasTarget && hasReason && orderOk && !createMut.isPending;
+
+  const toggleRoll = (rollId: string) =>
+    setSelectedRollIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rollId)) next.delete(rollId);
+      else next.add(rollId);
+      return next;
+    });
 
   return (
     <Dialog
@@ -157,18 +217,19 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
         <DialogHeader>
           <DialogTitle>İade Girişi</DialogTitle>
           <DialogDescription>
-            Sevk edilmiş bir topun barkodunu sorgulayın; iade alınınca top doğrudan iade
-            rafına (Hazır Depo / kaliteye göre) iner. Sevk muhasebesine dokunulmaz.
+            Sevk edilmiş bir <strong>top barkodu</strong> veya <strong>çuval kodu</strong>{" "}
+            sorgulayın; iade alınınca toplar iade rafına (Hazır Depo / kaliteye göre) iner.
+            Sevk muhasebesine dokunulmaz.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          {/* Barkod sorgula */}
-          <FormField label="Top Barkodu" required>
+          {/* Barkod / çuval kodu sorgula */}
+          <FormField label="Top Barkodu veya Çuval Kodu" required>
             <div className="flex gap-2">
               <Input
                 autoFocus
-                placeholder="Sevk edilmiş top barkodu..."
+                placeholder="Sevk edilmiş top barkodu ya da çuval kodu (CV…)"
                 value={barcode}
                 onChange={(e) => setBarcode(e.target.value)}
                 onKeyDown={(e) => {
@@ -194,12 +255,30 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
             </div>
           </FormField>
 
-          {roll && result && (
+          {sackResult && (
+            <ReturnSackCard
+              result={sackResult}
+              selected={selectedRollIds}
+              onToggle={toggleRoll}
+              onToggleAll={(checked) =>
+                setSelectedRollIds(checked ? new Set(sackResult.rolls.map((r) => r.id)) : new Set())
+              }
+            />
+          )}
+
+          {((roll && result) || sackResult) && (
             <>
-              <ReturnRollCard result={result} />
+              {roll && result && <ReturnRollCard result={result} />}
 
               {/* Sipariş atfı */}
-              <FormField label="Sipariş">
+              <FormField
+                label="Sipariş"
+                hint={
+                  sackResult
+                    ? "Seçilen TÜM toplara uygulanır; yalnız hepsine uyan siparişler listelenir."
+                    : undefined
+                }
+              >
                 {candidates.length === 0 ? (
                   <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -249,10 +328,17 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
               </FormField>
 
               {gradingEnabled && (
-                <FormField label="Kalite" hint="Seçilmezse top çıktığı kaliteyle döner.">
+                <FormField
+                  label="Kalite"
+                  hint={
+                    sackResult
+                      ? "Seçilirse TÜM seçili toplara uygulanır; seçilmezse her top çıktığı kaliteyle döner."
+                      : "Seçilmezse top çıktığı kaliteyle döner."
+                  }
+                >
                   <Select value={qualityGradeId ?? ""} onValueChange={(v) => setQualityGradeId(v || null)}>
                     <SelectTrigger>
-                      <SelectValue placeholder={`Mevcut: ${roll.qualityGrade}`} />
+                      <SelectValue placeholder={roll ? `Mevcut: ${roll.qualityGrade}` : "Değiştirme"} />
                     </SelectTrigger>
                     <SelectContent>
                       {grades.map((g) => (

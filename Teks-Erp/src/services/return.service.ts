@@ -770,6 +770,10 @@ export class ReturnService {
         fromShipment: { select: { id: true, shipmentNo: true } },
         receivedBy: { select: { id: true, fullName: true } },
         cancelledBy: { select: { id: true, fullName: true } },
+        // ⚠️ `withDocumentSourceId` bu alana bakar; select'ten düşerse `undefined`
+        // olur ve `?? id` sessizce satırın KENDİ id'sini döndürür → üye satırdan
+        // irsaliye açılamaz (belge lidere bağlı). Bekçi: test_return_bulk_group §6.
+        returnGroupId: true,
       },
     });
     if (!r) throw AppError.notFound("İade kaydı bulunamadı");

@@ -1740,7 +1740,7 @@ export class ShippingService {
     for (const g of preStatusGroups) {
       const res = await tx.roll.updateMany({
         where: { shipmentId, status: g.status },
-        data: { status: RollStatus.SHIPPED }, // NEGATİF SONDA — snapshot yazılmıyor
+        data: { status: RollStatus.SHIPPED, preShipStatus: g.status },
       });
       flipped += res.count;
     }
