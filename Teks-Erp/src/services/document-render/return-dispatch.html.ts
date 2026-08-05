@@ -13,6 +13,8 @@ import {
   DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
+import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
+import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 
 interface ReturnLine {
   barcode: string | null;
@@ -72,6 +74,8 @@ function sectionOn(sections: Record<string, boolean> | undefined, key: string): 
 export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: RenderMeta = {}): string {
   const doc = snapshot.doc as unknown as ReturnDispatchDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  const pageSize = resolveDocPageSize(cfg.style?.pageSize);
+  const d = DOC_DENSITY[pageSize];
   const style = resolveDocStyle(cfg.style, { marginMm: 9 });
   const logo = docLogoHtml(meta.logoDataUrl, cfg);
   const company = snapshot.company;
@@ -148,28 +152,22 @@ export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: Ren
     `
   * { box-sizing: border-box; }
   ${docPageCss(style)}
-  body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #111; font-size: 11px; }
-  .sheet { position: relative; width: 100%; } .mono { font-family: ui-monospace, "Courier New", monospace; }
-  .wm { position: fixed; top: 42%; left: 0; right: 0; text-align: center; font-size: 96px; font-weight: 800; color: rgba(220,38,38,0.16); transform: rotate(-22deg); letter-spacing: 8px; z-index: 0; }
-  .wm-old { color: rgba(100,116,139,0.18); } .wm-draft { color: rgba(100,116,139,0.16); }
-  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; gap: 12px; }
-  .hl { flex: 1; min-width: 0; } .company { font-size: 16px; font-weight: 800; text-transform: uppercase; } .lh-line { font-size: 10px; color: #333; }
-  .sayin { margin-top: 6px; font-size: 13px; } .sayin b { font-size: 15px; text-transform: uppercase; } .sub { font-size: 10px; color: #444; margin-top: 1px; }
-  .hr { text-align: right; white-space: nowrap; } .title { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
-  .hr .ln { margin-top: 3px; font-size: 11px; } .hr .ln b { font-size: 12px; }
-  .meta-row { margin: 4px 0 8px; font-size: 11px; }
-  table { border-collapse: collapse; width: 100%; }
-  .sec { margin-top: 6px; } .sec th, .sec td { border: 1px solid #000; padding: 3px 6px; font-size: 11px; }
-  .sec th.caption { background: #e2e8f0; text-align: center; font-size: 12px; font-weight: 800; letter-spacing: 1px; padding: 5px; }
-  .sec thead th:not(.caption) { background: #f1f5f9; font-weight: 700; font-size: 10px; }
-  .sec .l { text-align: left; } .sec .r { text-align: right; } .sec .c { text-align: center; }
-  .box { margin-top: 10px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 8px; }
-  .box .row { display: grid; grid-template-columns: 92px 1fr; gap: 6px; font-size: 11px; margin-top: 2px; } .box .row span { color: #555; }
-  .note { margin-top: 8px; font-size: 11px; white-space: pre-wrap; border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 4px; }
-  .sign { display: flex; gap: 24px; margin-top: 28px; } .sign-box { flex: 1; text-align: center; } .sign-line { border-top: 1px solid #000; margin-bottom: 3px; margin-top: 28px; } .sign-lbl { font-size: 10px; color: #333; }
+  ${docChromeCss(d, { boxLabelA4: 92, totRow: false })}
+  /* ── İade irsaliyesine ÖZEL — ortak chrome'dan SONRA basılır ki kazansın.
+     Buradaki .box bir FLEX ÇOCUĞU DEĞİL, tek başına duran bir kutudur (iade
+     sebebi): ortak kuraldaki flex/min-width yerine kendi üst boşluğunu kullanır.
+     totRow:false → bu belgede toplam satırı vurgusu HİÇ YOKTU; ortak katman
+     uğruna canlı bir resmi belgenin görünümü sormadan değiştirilmedi.
+     (Şablonun içinde BACKTICK kullanma — literal'i ortadan böler.) */
+  .sec { margin-top: ${scaleW(d, 6)}px; }
+  .sec th.caption { background: #e2e8f0; text-align: center; font-size: ${d.secCaption}px; font-weight: 800; letter-spacing: 1px; padding: ${scaleW(d, 5)}px; }
+  .sec thead th:not(.caption) { background: #f1f5f9; font-weight: 700; font-size: ${d.secHead}px; text-transform: none; }
+  .box { flex: none; margin-top: ${scaleW(d, 10)}px; }
+  .box .row { margin-top: 2px; }
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
   ${docTableCss(style, [".sec"])}
+  ${docFieldCss(cfg.fields, DOC_FIELD_CATALOGS["iadeIrsaliyesi"], d)}
 `,
     style,
   );

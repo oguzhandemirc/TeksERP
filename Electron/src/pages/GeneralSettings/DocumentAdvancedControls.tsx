@@ -31,6 +31,10 @@ export function DocumentAdvancedControls({
         />
       ))}
       {def.supportsBlankWidths && <WidthModePanel cfg={cfg} disabled={disabled} patch={patch} />}
+      {def.supportsGridGroups && <GridGroupsPanel cfg={cfg} disabled={disabled} patch={patch} />}
+      {def.supportsPlacements?.length ? (
+        <PlacementsPanel def={def} cfg={cfg} disabled={disabled} patch={patch} />
+      ) : null}
       <StampsPanel cfg={cfg} disabled={disabled} patch={patch} />
       <BlocksPanel cfg={cfg} disabled={disabled} patch={patch} />
       {def.supportsLanguage && <LanguagePanel cfg={cfg} disabled={disabled} patch={patch} />}
@@ -38,7 +42,7 @@ export function DocumentAdvancedControls({
   );
 }
 
-/** En (genişlik) kaynağı — iş emrinden çek (dolu) veya boş bırak (elle doldur). */
+/** EN (genişlik) kaynağı — sistemden mi gelsin, elle mi yazılsın (saha sorusu). */
 function WidthModePanel({
   cfg,
   disabled,
@@ -51,7 +55,10 @@ function WidthModePanel({
   const blank = cfg?.blankWidths === true;
   return (
     <div className="rounded-md border p-3">
-      <div className="pb-2 text-sm font-medium">En (genişlik) değerleri</div>
+      <div className="pb-1 text-sm font-medium">EN değeri nereden gelsin?</div>
+      <p className="pb-2 text-xs text-muted-foreground">
+        Bu bir şablon ayarıdır — baskı sırasında ayrıca sorulmaz.
+      </p>
       <div className="flex gap-2">
         <button
           type="button"
@@ -61,7 +68,7 @@ function WidthModePanel({
             !blank ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/70"
           }`}
         >
-          İş emrinden çek (dolu)
+          Sistemden al
         </button>
         <button
           type="button"
@@ -71,12 +78,104 @@ function WidthModePanel({
             blank ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/70"
           }`}
         >
-          Boş bırak (elle doldur)
+          Elle yazılacak (boş bas)
         </button>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        "İş emrinden çek": en değerleri topların ölçüsünden gelir. "Boş bırak": en kolonları belgede
-        yer alır ama boş basılır (fason/müşteri elle doldurur).
+        <b>Sistemden al:</b> EN değerleri topların kayıtlı ölçüsünden basılır.{" "}
+        <b>Elle yazılacak:</b> EN kolonları belgede yer alır ama boş çıkar — fason firma
+        kendi ölçüp doldurur. Kolonu tamamen kaldırmak için “Grid'de En (Cm) kolonu”
+        bölümünü kapatın.
+      </p>
+    </div>
+  );
+}
+
+/** Grid'de satır başına grup sayısı — az grup = geniş hücre (punto büyütülebilir). */
+function GridGroupsPanel({
+  cfg,
+  disabled,
+  patch,
+}: {
+  cfg: DocumentConfig | undefined;
+  disabled: boolean;
+  patch: (next: Partial<DocumentConfig>) => void;
+}) {
+  const current = cfg?.gridGroups ?? 5;
+  return (
+    <div className="rounded-md border p-3">
+      <div className="pb-1 text-sm font-medium">Grid grup sayısı</div>
+      <p className="pb-2 text-xs text-muted-foreground">
+        Bir satırda kaç adet Top/Metre/Cm üçlüsü olsun.
+      </p>
+      <div className="flex gap-2">
+        {[3, 4, 5].map((g) => (
+          <button
+            key={g}
+            type="button"
+            disabled={disabled}
+            onClick={() => patch({ gridGroups: g })}
+            className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium ${
+              current === g
+                ? "border-primary bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted/70"
+            }`}
+          >
+            {g} grup{g === 5 ? " (varsayılan)" : ""}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        5 grup fiziksel KUMAŞ İRSALİYESİ formunun aynısıdır (sayfa başına {current * 20} top).
+        A5'te yazıyı büyütecekseniz 3–4 grup seçin: 15 kolon dar sayfaya sığmaz ve metin kırpılır.
+      </p>
+    </div>
+  );
+}
+
+/** Konumlandırılabilir bölümler (bugün: parti no sol/sağ). */
+function PlacementsPanel({
+  def,
+  cfg,
+  disabled,
+  patch,
+}: {
+  def: DocDef;
+  cfg: DocumentConfig | undefined;
+  disabled: boolean;
+  patch: (next: Partial<DocumentConfig>) => void;
+}) {
+  const placements = cfg?.placements ?? {};
+  return (
+    <div className="rounded-md border p-3">
+      <div className="pb-2 text-sm font-medium">Konum</div>
+      <div className="space-y-2">
+        {def.supportsPlacements?.map((p) => {
+          const value = placements[p.key] === "left" ? "left" : "right";
+          return (
+            <div key={p.key} className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-xs">{p.label}</span>
+              {(["left", "right"] as const).map((side) => (
+                <button
+                  key={side}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => patch({ placements: { ...placements, [p.key]: side } })}
+                  className={`w-20 shrink-0 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                    value === side
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted/70"
+                  }`}
+                >
+                  {side === "left" ? "Sol" : "Sağ"}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Başlığın sol bloğu firma/alıcı bilgisini, sağ bloğu belge no ve tarihi taşır.
       </p>
     </div>
   );

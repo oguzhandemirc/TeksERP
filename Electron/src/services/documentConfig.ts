@@ -67,6 +67,57 @@ export interface DocumentConfig {
   /** Alt notun konumu: "bottom" (default, tablolardan sonra) | "top" (tablolardan
    *  önce). Yalnız supportsNotePlacement belgelerde (sevk irsaliyesi) etkilidir. */
   footerNotePlacement?: "top" | "bottom";
+  /** ALAN BAZLI yazı ayarı: { [alanKey]: { size, weight } }. `style.fontScale` /
+   *  `style.fontWeight` TÜM belgeye uygulanır; bu ise tek alanı (ör. grid'deki
+   *  METRE değeri) ayrı ayarlar — genel ayar bunun ÜSTÜNE biner. Alan kataloğu
+   *  belgeye özeldir (`DocDef.fields`). */
+  fields?: Record<string, DocFieldStyle>;
+  /** Konumlandırılabilir bölümler: { [bölümKey]: "left" | "right" }. Bugün yalnız
+   *  `batchInfo` (parti no — başlığın sol/sağ bloğu; default "right"). */
+  placements?: Record<string, "left" | "right">;
+  /** Fason çeki grid'inde satır başına grup sayısı (3|4|5; default 5 = fiziksel
+   *  form). Az grup = geniş hücre → A5'te punto büyütülebilir. */
+  gridGroups?: number;
+}
+
+/** Alan bazlı yazı ayarı — backend `document-render/doc-style.ts` ile aynı sözleşme. */
+export type DocFieldWeight = "light" | "normal" | "medium" | "bold" | "black";
+
+export interface DocFieldStyle {
+  /** Yazı boyu px. Verilmezse alanın (sayfa boyutuna bağlı) tabanı geçerlidir. */
+  size?: number;
+  /** Yazı kalınlığı. Verilmezse alanın taban kalınlığı geçerlidir. */
+  weight?: DocFieldWeight;
+}
+
+export const DOC_FIELD_WEIGHT_LABELS: { value: DocFieldWeight; label: string }[] = [
+  { value: "light", label: "İnce" },
+  { value: "normal", label: "Normal" },
+  { value: "medium", label: "Orta" },
+  { value: "bold", label: "Kalın" },
+  { value: "black", label: "Çok kalın" },
+];
+
+/** Backend `doc-style.ts` ile aynı sınırlar — panel de aynısını gösterir. */
+export const DOC_FIELD_SIZE_MIN = 5;
+export const DOC_FIELD_SIZE_MAX = 48;
+
+export type DocFieldGroup = "header" | "grid" | "table" | "totals" | "boxes" | "footer";
+
+export const DOC_FIELD_GROUP_LABELS: Record<DocFieldGroup, string> = {
+  header: "Başlık bandı",
+  grid: "Top / Metre / Cm gridi",
+  table: "Tablolar",
+  totals: "Alt toplam tablosu",
+  boxes: "Kutular ve not",
+  footer: "İmza ve damga",
+};
+
+/** Panelde tek tek ayarlanabilen alan. `key` backend kataloğuyla BİREBİR aynıdır. */
+export interface DocFieldDef {
+  key: string;
+  label: string;
+  group: DocFieldGroup;
 }
 
 /** { [belgeKey]: DocumentConfig } — ham saklanır. */
@@ -96,6 +147,10 @@ export interface ResolvedDocConfig {
   language: "tr" | "en" | "auto";
   blankWidths: boolean;
   footerNotePlacement: "top" | "bottom";
+  /** Ham geçişler — sample-html önizlemesi backend renderer'a aynen taşır. */
+  fields: NonNullable<DocumentConfig["fields"]>;
+  placements: NonNullable<DocumentConfig["placements"]>;
+  gridGroups?: number;
 }
 
 export interface DocSectionDef {
@@ -149,7 +204,57 @@ export interface DocDef {
   /** Satır-bazlı not (çuval yorumu) kolonu var → baskı diyaloğunda "bu baskıda
    *  göster" tek-seferlik seçeneği çıkar (?rowNotes=1). */
   supportsRowNotes?: boolean;
+  /** Alan bazlı punto/kalınlık kataloğu — backend renderer'ının alan kataloğunun
+   *  AYNASI (Electron backend'i import edemez, `permissions.ts` ile aynı durum).
+   *  Verilmezse "Alan Ayarları" paneli hiç çizilmez. */
+  fields?: DocFieldDef[];
+  /** Sol/sağ konumu seçilebilen bölüm key'leri (renderer `placements`'i okuyor). */
+  supportsPlacements?: { key: string; label: string }[];
+  /** Grid grup sayısı (3/4/5) seçilebilir mi — yalnız fason çekide. */
+  supportsGridGroups?: boolean;
+  /** Belgenin varsayılan kenar boşluğu (mm) — backend renderer'ındaki
+   *  `resolveDocStyle(..., { marginMm })` değerinin aynası. Verilmezse 9.
+   *  YALNIZ önizleme çerçevesini çizmek için kullanılır; sapma baskıyı etkilemez
+   *  (baskıda gerçek değer backend'den gelir). */
+  defaultMarginMm?: number;
 }
+
+/**
+ * Fason sevk çeki alan kataloğu — backend `document-render/fason-ceki.fields.ts`
+ * `FASON_FIELDS` dizisinin AYNASI (key + label + group). Sıra panelde göründüğü
+ * sıradır. ⚠️ İki taraf birlikte değişir: burada olmayan bir key panelde
+ * ayarlanamaz, backend'de olmayan bir key ise basımda sessizce yok sayılır.
+ */
+export const FASON_FIELD_DEFS: DocFieldDef[] = [
+  { key: "company", label: "Firma adı", group: "header" },
+  { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+  { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+  { key: "sayin", label: "Fason firma adı", group: "header" },
+  { key: "subLine", label: "İstasyon · iş emri satırı", group: "header" },
+  { key: "title", label: "Belge başlığı", group: "header" },
+  { key: "docNo", label: "İrsaliye no", group: "header" },
+  { key: "docDate", label: "Tarih", group: "header" },
+  { key: "batchNo", label: "Parti no", group: "header" },
+  { key: "lnLabel", label: "Satır etiketleri (İrsaliye No: / Tarih: / Parti No:)", group: "header" },
+  { key: "vehicle", label: "Plaka / şoför satırı", group: "header" },
+  { key: "fabricLine", label: "Kumaş adı + renkler (üst blok)", group: "header" },
+
+  { key: "gridHead", label: "Grid başlıkları (Top / Metre / Cm)", group: "grid" },
+  { key: "gridTop", label: "Grid — top sıra no", group: "grid" },
+  { key: "gridMetre", label: "Grid — METRE değeri", group: "grid" },
+  { key: "gridCm", label: "Grid — EN (cm) değeri", group: "grid" },
+
+  { key: "totalsHead", label: "Alt tablo başlıkları (CİNSİ / EN / TOP …)", group: "totals" },
+  { key: "totalsCell", label: "Alt tablo değerleri", group: "totals" },
+  { key: "totalsFoot", label: "TOPLAM satırı", group: "totals" },
+
+  { key: "boxLabel", label: "Kutu etiketi (İSTENEN ÖZELLİKLER / FASON TALİMATI)", group: "boxes" },
+  { key: "boxText", label: "Kutu metni", group: "boxes" },
+  { key: "note", label: "Not / alt bilgi", group: "boxes" },
+
+  { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+  { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+];
 
 /**
  * PrintedDocType → DOC_DEFS key. Backend `printed-document.service.ts`
@@ -169,11 +274,140 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
  * Belge kayıt defteri — yeni belge eklemek = buraya bir satır (+ renderer'da config
  * okuması). Panel ve resolver bu listeyi tek kaynak olarak kullanır.
  */
+/**
+ * 6 belgenin alan kataloğu — backend `document-render/doc-fields.ts`
+ * `DOC_FIELD_CATALOGS` sabitinin AYNASI (key + label + group). Electron
+ * backend'i import EDEMEZ (ayrı proje). Bu blok backend kaynağından ÜRETİLDİ;
+ * elle düzenlerken iki tarafı BİRLİKTE değiştir — bekçi birebirliği mekanik
+ * doğrular. (Fason sevk çekinin kendi kataloğu ayrı: FASON_FIELD_DEFS.)
+ */
+export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
+  shipmentDispatch: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+    { key: "wrapCell", label: "Açıklama hücresi (çuval yorumu)", group: "table" },
+  ],
+  fasonDirectShip: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "tblCap", label: "Tablo üstü başlık", group: "table" },
+  ],
+  fasonKabul: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "tblCap", label: "Tablo üstü başlık", group: "table" },
+  ],
+  kartelaCeki: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "tblCap", label: "Tablo üstü başlık", group: "table" },
+  ],
+  kaliteSertifikasi: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "tblCap", label: "Tablo üstü başlık", group: "table" },
+    { key: "decl", label: "Beyan metni", group: "footer" },
+  ],
+  iadeIrsaliyesi: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+};
+
 export const DOC_DEFS: DocDef[] = [
   {
     key: "shipmentDispatch",
     label: "Sevk İrsaliyesi",
     defaultTitle: "Sevk İrsaliyesi",
+    fields: DOC_FIELD_CATALOGS.shipmentDispatch,
     defaultSignatures: ["Sevkeden", "Sürücü", "Teslim Alan"],
     supportsLanguage: true,
     supportsBlankWidths: true,
@@ -242,17 +476,27 @@ export const DOC_DEFS: DocDef[] = [
     defaultTitle: "Fason Sevk İrsaliyesi",
     defaultSignatures: ["Sevkeden", "Sürücü", "Teslim Alan"],
     supportsBlankWidths: true,
+    defaultMarginMm: 8,
     sections: [
-      { key: "subcontractorInfo", label: "Fason firma bilgisi" },
+      { key: "subcontractorInfo", label: "Fason firma satırı (SAYIN)" },
       { key: "workOrderInfo", label: "İş emri / istasyon satırı" },
+      // OPT-IN: saha "hesap no kaldır" dedi. Anahtar taşımayan (2026-08-05 öncesi)
+      // donmuş belgeler de bu satırı artık basmaz — bilinçli, bkz. renderer notu.
+      { key: "accountNo", label: "Hesap no (fason firma kodu)", defaultHidden: true },
       { key: "batchInfo", label: "Parti no" },
       { key: "vehicleInfo", label: "Sevk / araç bilgisi" },
-      { key: "requestedColor", label: "İstenen renk kutusu" },
+      { key: "requestedColor", label: "Renk bilgisi (üst blok + CİNSİ hücresi)" },
+      // OPT-IN: yeni blok `sections` blocklist'inde varsayılan AÇIK doğsaydı,
+      // sahadaki her eski çeki yeniden basıldığında sormadan yeni satır kazanırdı.
+      { key: "fabricHeader", label: "Kumaş adı + renkler (üst blok)", defaultHidden: true },
       { key: "productionProps", label: "İstenen özellikler kutusu" },
       { key: "dyehouseNote", label: "Fason talimatı kutusu" },
       { key: "notes", label: "Not / alt bilgi" },
       { key: "gridWidth", label: "Grid'de En (Cm) kolonu" },
     ],
+    fields: FASON_FIELD_DEFS,
+    supportsPlacements: [{ key: "batchInfo", label: "Parti no" }],
+    supportsGridGroups: true,
     tables: [
       {
         key: "totals",
@@ -272,6 +516,7 @@ export const DOC_DEFS: DocDef[] = [
     key: "fasonDirectShip",
     label: "Fasondan Sevk İrsaliyesi",
     defaultTitle: "Fasondan Sevk İrsaliyesi",
+    fields: DOC_FIELD_CATALOGS.fasonDirectShip,
     defaultSignatures: ["Sevkeden", "Sürücü", "Teslim Alan"],
     sections: [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
@@ -315,6 +560,7 @@ export const DOC_DEFS: DocDef[] = [
     key: "kartelaCeki",
     label: "Kartela Çeki Listesi",
     defaultTitle: "Kartela Çeki Listesi",
+    fields: DOC_FIELD_CATALOGS.kartelaCeki,
     defaultSignatures: ["Gönderen", "Sürücü", "Teslim Alan"],
     sections: [
       { key: "subcontractorInfo", label: "Kartela firma bilgisi" },
@@ -341,6 +587,7 @@ export const DOC_DEFS: DocDef[] = [
     key: "fasonKabul",
     label: "Fason Kabul Makbuzu",
     defaultTitle: "Fason Kabul Makbuzu",
+    fields: DOC_FIELD_CATALOGS.fasonKabul,
     defaultSignatures: ["Teslim Eden (Fason)", "Teslim Alan"],
     sections: [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
@@ -369,6 +616,7 @@ export const DOC_DEFS: DocDef[] = [
     key: "kaliteSertifikasi",
     label: "Kalite Sertifikası",
     defaultTitle: "Kalite Sertifikası",
+    fields: DOC_FIELD_CATALOGS.kaliteSertifikasi,
     defaultSignatures: ["Kalite Sorumlusu", "Teslim Alan"],
     sections: [
       { key: "shipmentNo", label: "Sevkiyat no" },
@@ -408,6 +656,7 @@ export const DOC_DEFS: DocDef[] = [
     key: "iadeIrsaliyesi",
     label: "İade İrsaliyesi",
     defaultTitle: "İade İrsaliyesi",
+    fields: DOC_FIELD_CATALOGS.iadeIrsaliyesi,
     defaultSignatures: ["Teslim Eden (Müşteri)", "Teslim Alan"],
     sections: [
       { key: "documentNo", label: "İade no" },
@@ -476,5 +725,12 @@ export function resolveDocConfig(
     language: raw.language ?? "tr",
     blankWidths: raw.blankWidths === true,
     footerNotePlacement: raw.footerNotePlacement === "top" ? "top" : "bottom",
+    // ⚠️ HAM geçirilir (çözülmez): tabanları backend'in yoğunluk profilinde
+    // yaşıyor ve `sample-html` önizlemesi bu nesneleri olduğu gibi renderer'a
+    // taşıyor. Burada "varsayılanı doldurmak", panelin hiç dokunmadığı alanları
+    // da kalıcı ayara yazmak olurdu.
+    fields: raw.fields ?? {},
+    placements: raw.placements ?? {},
+    gridGroups: raw.gridGroups,
   };
 }

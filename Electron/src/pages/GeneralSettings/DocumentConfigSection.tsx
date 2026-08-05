@@ -25,6 +25,7 @@ import {
 } from "@/services/documentConfig";
 import { FlagToggle } from "./SettingRow";
 import { DocumentStyleControls } from "./DocumentStyleControls";
+import { DocumentFieldStyleControls } from "./DocumentFieldStyleControls";
 import { DocumentAdvancedControls } from "./DocumentAdvancedControls";
 
 /**
@@ -216,6 +217,14 @@ export function DocumentConfigSection({
 
             {/* Görünüm: sayfa/yazı/tablo stili + logo */}
             <DocumentStyleControls
+              cfg={draft[selected]}
+              disabled={mut.isPending}
+              patch={patch}
+            />
+
+            {/* Alan bazlı punto/kalınlık — yalnız DocDef.fields taşıyan belgede */}
+            <DocumentFieldStyleControls
+              def={def}
               cfg={draft[selected]}
               disabled={mut.isPending}
               patch={patch}

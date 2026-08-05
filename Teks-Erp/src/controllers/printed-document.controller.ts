@@ -54,6 +54,9 @@ const docConfigSchema = z
         z.object({
           hidden: z.array(z.string()).optional(),
           order: z.array(z.string()).optional(),
+          // OPT-IN kolon allowlist'i (çuval notu gibi iç veri). Eksikti: panelde
+          // açılan opt-in kolon ÖNİZLEMEDE görünmüyordu — bkz. aşağıdaki uyarı.
+          shown: z.array(z.string()).optional(),
         }),
       )
       .optional(),
@@ -77,8 +80,27 @@ const docConfigSchema = z
     language: z.enum(["tr", "en", "auto"]).optional(),
     blankWidths: z.boolean().optional(),
     footerNotePlacement: z.enum(["top", "bottom"]).optional(),
+    // Alan bazlı punto/kalınlık + konum + grid grup sayısı (fason çeki).
+    fields: z
+      .record(
+        z.string(),
+        z.object({
+          size: z.number().optional(),
+          weight: z.enum(["light", "normal", "medium", "bold", "black"]).optional(),
+        }),
+      )
+      .optional(),
+    placements: z.record(z.string(), z.enum(["left", "right"])).optional(),
+    gridGroups: z.number().optional(),
   })
   .nullable();
+// ⚠️ BU ŞEMA BİR SESSİZ AYRIŞMA KAPISI. `z.object` tanımadığı anahtarı hata
+// vermeden ATAR (Zod varsayılanı). Yeni bir DocumentConfig alanı eklerken buraya
+// da yazılmazsa: ayar KAYDEDİLİR, gerçek baskıda GÖRÜNÜR, ama Belge Şablonları
+// ekranının canlı önizlemesinde GÖRÜNMEZ — yani "önizleme = gerçek baskı" tek
+// kaynak sözleşmesi tam da ayarı yapan kişinin gözü önünde bozulur ve hiçbir
+// yerde hata çıkmaz. Kayıt kapısı (`sanitizeDocumentsConfig`) ile BİRLİKTE
+// güncellenir. (`columns.shown` 2026-07-30'da tam bu yüzden eksik kalmıştı.)
 
 const sampleHtmlSchema = z.object({ config: docConfigSchema.optional() });
 

@@ -24,7 +24,6 @@ import {
   scaleDocCss,
   docLogoHtml,
   DOC_LOGO_CSS,
-  DOC_PAGINATION_CSS,
   DOC_STAMPS_CSS,
   docCopyBadge,
   docBlocksHtml,
@@ -32,6 +31,14 @@ import {
   docStampsBar,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
+import {
+  DOC_DENSITY,
+  docChromeCss,
+  resolveDocPageSize,
+  scaleF,
+  scaleW,
+} from "./doc-density";
+import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 
 /** Belge etiketleri — cfg.language: tr | en | auto (auto → EXPORT sevkiyatta EN). */
 const LABELS = {
@@ -296,6 +303,9 @@ export function renderShipmentDispatchHtml(
 ): string {
   const doc = snapshot.doc as unknown as ShipmentDispatchDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  // Yoğunluk profili sayfa boyutundan çözülür; ortak chrome CSS'i oradan beslenir.
+  const pageSize = resolveDocPageSize(cfg.style?.pageSize);
+  const d = DOC_DENSITY[pageSize];
   const style = resolveDocStyle(cfg.style, { marginMm: 9 });
   const logo = docLogoHtml(meta.logoDataUrl, cfg);
   const company = snapshot.company;
@@ -509,48 +519,23 @@ export function renderShipmentDispatchHtml(
     `
   * { box-sizing: border-box; }
   ${docPageCss(style)}
-  body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #111; font-size: 11px; }
-  .sheet { position: relative; width: 100%; }
-  .wm { position: fixed; top: 42%; left: 0; right: 0; text-align: center;
-        font-size: 96px; font-weight: 800; color: rgba(220,38,38,0.16);
-        transform: rotate(-22deg); letter-spacing: 8px; z-index: 0; }
-  .wm-old { color: rgba(100,116,139,0.18); }
-  .wm-draft { color: rgba(100,116,139,0.16); }
-  header { display: flex; justify-content: space-between; align-items: flex-start;
-           border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; gap: 12px; }
-  .hl { flex: 1; min-width: 0; }
-  .company { font-size: 16px; font-weight: 800; text-transform: uppercase; }
-  .lh-line { font-size: 10px; color: #333; }
-  .sayin { margin-top: 6px; font-size: 13px; }
-  .sayin b { font-size: 15px; text-transform: uppercase; }
-  .sub { font-size: 10px; color: #444; margin-top: 1px; }
-  .hr { text-align: right; white-space: nowrap; }
-  .title { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
-  .hr .ln { margin-top: 3px; font-size: 11px; }
-  .hr .ln b { font-size: 12px; }
-  .hr .ln.sub { font-size: 10px; color: #444; white-space: normal; max-width: 240px; }
-  .meta-row { margin: 4px 0 8px; font-size: 11px; }
-  table { border-collapse: collapse; width: 100%; }
-  .sec { margin-bottom: 12px; }
-  .sec th, .sec td { border: 1px solid #000; padding: 3px 6px; font-size: 11px; }
-  .sec th.caption { background: #e2e8f0; text-align: center; font-size: 12px;
-                    font-weight: 800; letter-spacing: 1px; padding: 5px; }
-  .sec thead th:not(.caption) { background: #f1f5f9; font-weight: 700; font-size: 10px; }
-  .sec .l { text-align: left; }
-  .sec .r { text-align: right; }
+  ${docChromeCss(d)}
+  /* ── Sevk irsaliyesine ÖZEL — ortak chrome'dan SONRA basılır ki kazansın ──
+     Ölçüler A4 sayısı olarak yazılır, profil oranını scaleW/scaleF uygular;
+     böylece A4 çıktısı birebir korunur, A5'te birlikte küçülürler.
+     (Bu şablonun içinde BACKTICK kullanma — literal'i ortadan böler.) */
+  .hr .ln.sub { font-size: ${d.sub}px; color: #444; white-space: normal; max-width: ${scaleW(d, 240)}px; }
+  .sec { margin-bottom: ${scaleW(d, 12)}px; }
+  .sec th.caption { background: #e2e8f0; text-align: center; font-size: ${d.secCaption}px;
+                    font-weight: 800; letter-spacing: 1px; padding: ${scaleW(d, 5)}px; }
+  /* :not(.caption) — başlık hücresi bilerek DAHA BÜYÜK kalır; ortak kuraldan
+     daha özgül olduğu için punto/arka planı o kazanır. */
+  .sec thead th:not(.caption) { background: #f1f5f9; font-weight: 700; font-size: ${d.secHead}px; }
   /* Serbest metin hücresi (çuval yorumu) — uzun/çok satırlı not tablo düzenini
      bozmasın: satır sonları korunur, uzun kelime kırılır. */
-  .sec td.wrap { white-space: pre-wrap; word-break: break-word; font-size: 10px; }
-  .sec .tot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #000; }
-  .note { margin-top: 8px; font-size: 11px; white-space: pre-wrap;
-          border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 4px; }
-  .sign { display: flex; gap: 24px; margin-top: 28px; }
-  .sign-box { flex: 1; text-align: center; }
-  .sign-line { border-top: 1px solid #000; margin-bottom: 3px; margin-top: 28px; }
-  .sign-lbl { font-size: 10px; color: #333; }
+  .sec td.wrap { white-space: pre-wrap; word-break: break-word; font-size: ${scaleF(d, 10)}px; }
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
-  ${DOC_PAGINATION_CSS}
   /* Sayfa ayrımı — .pgb taşıyan liste kendi sayfasından başlar. İlk liste bu
      sınıfı ALMAZ (belge boş bir sayfayla açılmasın). ?merge=1 ile sınıf hiç
      basılmaz, listeler eskisi gibi akar. */
@@ -566,6 +551,7 @@ export function renderShipmentDispatchHtml(
     }
   }
   ${docTableCss(style, [".sec"])}
+  ${docFieldCss(cfg.fields, DOC_FIELD_CATALOGS["shipmentDispatch"], d)}
 `,
     style,
   );

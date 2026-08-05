@@ -9,6 +9,15 @@ import { FlagToggle } from "./SettingRow";
 
 const FONT_SCALES = [0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4] as const;
 
+type MarginSide = "top" | "right" | "bottom" | "left";
+
+const MARGIN_SIDES: { side: MarginSide; label: string }[] = [
+  { side: "top", label: "Üst" },
+  { side: "right", label: "Sağ" },
+  { side: "bottom", label: "Alt" },
+  { side: "left", label: "Sol" },
+];
+
 export function DocumentStyleControls({
   cfg,
   disabled,
@@ -23,8 +32,23 @@ export function DocumentStyleControls({
   const patchStyle = (next: Partial<DocStyleConfig>) =>
     patch({ style: { ...style, ...next } });
 
-  // Tek "kenar boşluğu" alanı — dört kenara aynı değer (boş → belge varsayılanı).
-  const marginValue = style.margins?.top ?? "";
+  const margins = style.margins;
+  /** Tek kenarı yazar; diğer kenarlar dokunulmadan kalır (boş → belge varsayılanı). */
+  const patchMargin = (side: MarginSide, raw: string) => {
+    const next = { ...(margins ?? {}) };
+    if (raw === "") delete next[side];
+    else next[side] = Math.min(40, Math.max(0, Number(raw)));
+    patchStyle({ margins: Object.keys(next).length ? next : undefined });
+  };
+  /** "Tümüne uygula" — dört kenara aynı değer (eski tek-alan davranışı). */
+  const applyAll = (raw: string) => {
+    if (raw === "") {
+      patchStyle({ margins: undefined });
+      return;
+    }
+    const n = Math.min(40, Math.max(0, Number(raw)));
+    patchStyle({ margins: { top: n, right: n, bottom: n, left: n } });
+  };
 
   return (
     <div className="rounded-md border p-3">
@@ -40,27 +64,6 @@ export function DocumentStyleControls({
           ]}
           onChange={(v) => patchStyle({ pageSize: v === "A5" ? "A5" : "A4" })}
         />
-        <div>
-          <label className="text-xs text-muted-foreground">Kenar boşluğu (mm)</label>
-          <input
-            type="number"
-            min={0}
-            max={40}
-            value={marginValue}
-            placeholder="varsayılan"
-            disabled={disabled}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (raw === "") {
-                patchStyle({ margins: undefined });
-                return;
-              }
-              const n = Math.min(40, Math.max(0, Number(raw)));
-              patchStyle({ margins: { top: n, right: n, bottom: n, left: n } });
-            }}
-            className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        </div>
         <SelectField
           label="Yazı ölçeği"
           value={String(style.fontScale ?? 1)}
@@ -104,6 +107,47 @@ export function DocumentStyleControls({
           ]}
           onChange={(v) => patchStyle({ tableStyle: v as DocStyleConfig["tableStyle"] })}
         />
+      </div>
+
+      {/* Kenar boşlukları KENAR KENAR — eskiden tek alan vardı ve dördüne aynı
+          değeri yazıyordu, yani "üstten şu kadar, alttan bu kadar" denemiyordu
+          (saha isteği). Backend `sanitizeDocStyleConfig` zaten kenar bazlıydı. */}
+      <div className="mt-3 border-t pt-3">
+        <div className="flex items-center justify-between pb-2">
+          <span className="text-xs font-medium">Kenar boşluğu (mm)</span>
+          <input
+            type="number"
+            min={0}
+            max={40}
+            placeholder="tümüne"
+            disabled={disabled}
+            value=""
+            onChange={(e) => applyAll(e.target.value)}
+            title="Yazılan değer dört kenara birden uygulanır"
+            className="h-7 w-20 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {MARGIN_SIDES.map((s) => (
+            <div key={s.side}>
+              <label className="text-xs text-muted-foreground">{s.label}</label>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={margins?.[s.side] ?? ""}
+                placeholder="varsayılan"
+                disabled={disabled}
+                onChange={(e) => patchMargin(s.side, e.target.value)}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Boş bırakılan kenar belgenin kendi varsayılanını kullanır. Yazıcının kendi
+          basılamayan alanı bunun üstüne eklenir — kâğıtta ölçüp ayarlayın.
+        </p>
       </div>
 
       <div className="mt-3 border-t pt-3">

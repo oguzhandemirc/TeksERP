@@ -10,7 +10,12 @@ import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { sanitizeDocStyleConfig, type DocStyleConfig } from "./document-render/doc-style";
+import {
+  sanitizeDocFields,
+  sanitizeDocStyleConfig,
+  type DocFieldStyle,
+  type DocStyleConfig,
+} from "./document-render/doc-style";
 import { resolveConfigPageSize } from "./document-render/traveler-card.density";
 import { resolveSectionOrder, type TravelerSection } from "./document-render/traveler-card.sections";
 
@@ -608,6 +613,22 @@ export interface DocumentConfig {
    *  "top" (başlık/araç satırından sonra, tablolardan ÖNCE). Yalnız destekleyen
    *  renderer'da uygulanır (sevk irsaliyesi). */
   footerNotePlacement?: "top" | "bottom";
+  /** ALAN BAZLI yazı ayarı: { [alanKey]: { size, weight } }. Belge geneli
+   *  `style.fontScale/fontWeight` TÜM belgeye uygulanır; bu ise tek bir alanı
+   *  (ör. grid'deki METRE değeri) ayrı ayarlar ve genel ayar onun üstüne biner.
+   *  Alan kataloğu belgeye özeldir — `document-render/doc-fields.ts` (altı belge)
+   *  ve `document-render/fason-ceki.fields.ts`. Bilinmeyen anahtar basımda
+   *  sessizce atlanır (yazım hatası vardiyayı durdurmasın). */
+  fields?: Record<string, DocFieldStyle>;
+  /** Konumlandırılabilir bölümler: { [bölümKey]: "left" | "right" }. Bugün yalnız
+   *  `batchInfo` (fason çekide parti no — başlığın sol veya sağ bloğu; default
+   *  "right" = bugünkü çıktı). Genel harita, çünkü ikinci bir alan için ikinci
+   *  bir tekil anahtar açmak aynı kavramı iki yere bölerdi. */
+  placements?: Record<string, "left" | "right">;
+  /** Fason çeki grid'inde satır başına grup sayısı (3 | 4 | 5; default 5 =
+   *  fiziksel KUMAŞ İRSALİYESİ formu). Daha az grup = daha geniş hücre → A5'te
+   *  punto büyütülebilir. Grup başına satır (20) ayarlanmaz. */
+  gridGroups?: number;
 }
 
 /** Belge ayarları haritası: { [belgeKey]: DocumentConfig }. Ham saklanır, client çözer. */
@@ -2177,6 +2198,21 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
     if (typeof o.blankWidths === "boolean") cfg.blankWidths = o.blankWidths;
     if (o.footerNotePlacement === "top" || o.footerNotePlacement === "bottom") {
       cfg.footerNotePlacement = o.footerNotePlacement;
+    }
+    // ⚠️ AŞAĞIDAKİ ÜÇ ALAN BU KAPIDAN GEÇMEZSE AYAR SESSİZCE KAYBOLUR: kullanıcı
+    // panelde ayarlar, Kaydet'e basar, istek 200 döner ve hiçbir şey olmaz —
+    // sebebi de hiçbir yerde yazmaz. (`columns.shown` bu tuzağa bir kez düştü.)
+    const fields = sanitizeDocFields(o.fields);
+    if (fields) cfg.fields = fields;
+    if (o.placements && typeof o.placements === "object" && !Array.isArray(o.placements)) {
+      const placements: Record<string, "left" | "right"> = {};
+      for (const [pk, pv] of Object.entries(o.placements as Record<string, unknown>)) {
+        if (pv === "left" || pv === "right") placements[pk.slice(0, 40)] = pv;
+      }
+      if (Object.keys(placements).length) cfg.placements = placements;
+    }
+    if (o.gridGroups === 3 || o.gridGroups === 4 || o.gridGroups === 5) {
+      cfg.gridGroups = o.gridGroups;
     }
     out[docKey] = cfg;
   }

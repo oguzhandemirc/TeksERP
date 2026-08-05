@@ -5,7 +5,10 @@
 // Gerçek DB/sunucu GEREKMEZ — renderFasonCekiHtml saf: snapshot → HTML string.
 // Tüm cihazlar (mobil + Electron) bunu basar; format regresyonlarını anında yakalar.
 // =============================================================================
+import fs from "fs";
+import path from "path";
 import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.html";
+import { FASON_FIELDS } from "../src/services/document-render/fason-ceki.fields";
 
 let pass = 0;
 let fail = 0;
@@ -235,6 +238,335 @@ function testBatchNumber(): void {
   check("parti no escape edilir", !evil.includes("<script>x</script>") && evil.includes("&lt;script&gt;"));
 }
 
+// ── Yardımcı: CSS kural gövdesini seçiciye göre çıkar ───────────────────────
+// `(?:^|\n)\s*` ile SATIR BAŞINA çıpalanır — aksi halde `.title` araması
+// `.hr .title` satırını da yakalar ve yanlış kuralı ölçerdi.
+function rule(html: string, selector: string): string {
+  const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m = new RegExp(`(?:^|\\n)\\s*${esc}\\s*\\{([^}]*)\\}`).exec(html);
+  return m ? m[1].replace(/\s+/g, " ").trim() : "";
+}
+
+// ── 11) A4 PARMAK İZİ (2026-08-05 yoğunluk profili) ────────────────────────
+// Profil (`fason-ceki.density.ts`) devreye girerken A4 çıktısı DEĞİŞMEMELİYDİ:
+// sahadaki her fason çeki bugüne kadar bu ölçülerle basıldı. A4 sütunundaki bir
+// sayıyı "düzeltmek" buradan kırmızı verir — kasıtlıysa bu referans da güncellenir.
+function testA4Fingerprint(): void {
+  console.log("\n── 11) A4 parmak izi (yoğunluk profili A4 sütunu) ──");
+  const html = renderFasonCekiHtml(makeSnap());
+
+  check("@page A4 + 8mm kenar", html.includes("@page { size: A4; margin: 8mm 8mm 8mm 8mm; }"));
+  check("gövde tabanı 11px", rule(html, "body").includes("font-size: 11px"));
+  check("firma adı 16px", rule(html, ".company").includes("font-size: 16px"));
+  check("başlık 18px", rule(html, ".title").includes("font-size: 18px"));
+  check("SAYIN 13px / firma 15px", rule(html, ".sayin").includes("font-size: 13px") && rule(html, ".sayin b").includes("font-size: 15px"));
+  check("alt satır 10px", rule(html, ".sub").includes("font-size: 10px"));
+  check("ln 11px / ln b 13px", rule(html, ".ln").includes("font-size: 11px") && rule(html, ".ln b").includes("font-size: 13px"));
+
+  const grid = rule(html, ".grid th, .grid td");
+  check("grid satır yüksekliği 18px", grid.includes("height: 18px"), grid);
+  check("grid punto 10px", grid.includes("font-size: 10px"));
+  check("grid padding 0 2px", grid.includes("padding: 0 2px"));
+  check("sütun genişlikleri 4.5% / 9% / 5%",
+    rule(html, ".grid .c-top").includes("width: 4.5%") &&
+      rule(html, ".grid .c-met").includes("width: 9%") &&
+      rule(html, ".grid .c-cm").includes("width: 5%"));
+
+  const totals = rule(html, ".totals th, .totals td");
+  check("alt tablo 12px / padding 5px 8px", totals.includes("font-size: 12px") && totals.includes("padding: 5px 8px"));
+  check("alt tablo başlığı 10px", rule(html, ".totals th").includes("font-size: 10px"));
+  check("kutu etiketi 10px / metni 12px", rule(html, ".instr-lbl").includes("font-size: 10px") && rule(html, ".instr-txt").includes("font-size: 12px"));
+  check("not 11px", rule(html, ".note").includes("font-size: 11px"));
+  check("imza gap 24px / üst 26px", rule(html, ".sign").includes("gap: 24px") && rule(html, ".sign").includes("margin-top: 26px"));
+  check("imza etiketi 10px", rule(html, ".sign-lbl").includes("font-size: 10px"));
+  check("filigran 96px", rule(html, ".wm").includes("font-size: 96px"));
+
+  // Sayfalama hijyeni — çok sayfalı çekide 2. sayfa başlıksız çıkmasın ve satır
+  // sayfa sınırında BÖLÜNMESİN. Tercih değil, doğru baskının koşulu.
+  check("thead sayfa başına tekrar eder", html.includes("thead { display: table-header-group; }"));
+  check("satır sayfa sınırında bölünmez", html.includes("tr { break-inside: avoid; page-break-inside: avoid; }"));
+}
+
+// ── 12) A5 YOĞUNLUK PROFİLİ ────────────────────────────────────────────────
+// Ölçüldü (headless Chrome, 2026-08-05): profil ÖNCESİ A5'te içerik 773px / yazı
+// alanı 733px → %105, imza bloğu İKİNCİ SAYFAYA düşüyordu (sahadaki "üste
+// dayamıyor alta dayıyor" şikâyeti). Profil sonrası 588px → %80.
+function testA5Density(): void {
+  console.log("\n── 12) A5 yoğunluk profili ──");
+  const a5 = renderFasonCekiHtml(makeSnap({ docConfigOverride: { style: { pageSize: "A5" } } }));
+  const a4 = renderFasonCekiHtml(makeSnap());
+
+  check("@page A5", a5.includes("@page { size: A5;"));
+
+  const num = (css: string, prop: string): number => {
+    const m = new RegExp(`${prop}:\\s*([\\d.]+)px`).exec(css);
+    return m ? Number(m[1]) : NaN;
+  };
+  const rowA5 = num(rule(a5, ".grid th, .grid td"), "height");
+  const rowA4 = num(rule(a4, ".grid th, .grid td"), "height");
+  check("grid satır yüksekliği A5 < A4", rowA5 < rowA4, `${rowA5} < ${rowA4}`);
+  check("grid puntosu A5 < A4",
+    num(rule(a5, ".grid th, .grid td"), "font-size") < num(rule(a4, ".grid th, .grid td"), "font-size"));
+  check("gövde tabanı A5 < A4", num(rule(a5, "body"), "font-size") < num(rule(a4, "body"), "font-size"));
+  check("imza üstü boşluğu A5 < A4",
+    num(rule(a5, ".sign"), "margin-top") < num(rule(a4, ".sign"), "margin-top"));
+
+  // Kaba yükseklik bütçesi: A5 yazı alanı 194mm ≈ 733px. Satır yüksekliği tek
+  // başına bütçenin yarısını yememeli (21 satır × yükseklik).
+  check("21 grid satırı A5 bütçesinin yarısını aşmaz", 21 * rowA5 < 733 / 2, `${(21 * rowA5).toFixed(0)}px`);
+
+  // A5 yalnız YOĞUNLUĞU değiştirir — içerik/yapı aynı kalır.
+  check("A5'te de çeki gövdesi tam", a5.includes("KUMAŞ İRSALİYESİ") && a5.includes("TOPLAM"));
+}
+
+// ── 13) ALAN BAZLI PUNTO / KALINLIK ────────────────────────────────────────
+// Saha isteği: "metre ve cm verilerinin büyüklüğü kalınlığı ayrıca belirlenemiyor".
+function testFieldStyles(): void {
+  console.log("\n── 13) Alan bazlı punto / kalınlık ──");
+  const plain = renderFasonCekiHtml(makeSnap());
+
+  // KURAL 1 — override yoksa TEK BAYT ek CSS basılmaz.
+  const emptyFields = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: {} } }));
+  check("fields:{} → çıktı birebir aynı", plain === emptyFields);
+  const unknownOnly = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { yokBoyleAlan: { size: 20 } } } }));
+  check("bilinmeyen alan → çıktı birebir aynı (sessizce atlanır)", plain === unknownOnly);
+
+  // METRE ve CM AYRI ayarlanabilmeli — asıl istek buydu.
+  const metre = renderFasonCekiHtml(
+    makeSnap({ docConfigOverride: { fields: { gridMetre: { size: 16, weight: "black" } } } }),
+  );
+  check("gridMetre kuralı basılır", metre.includes(".sheet .grid tbody .c-met {"));
+  check("gridMetre puntosu uygulanır", rule(metre, ".sheet .grid tbody .c-met").includes("font-size: 16px"));
+  check("gridMetre kalınlığı uygulanır", rule(metre, ".sheet .grid tbody .c-met").includes("font-weight: 800"));
+  check("gridMetre CM'ye DOKUNMAZ", !metre.includes(".sheet .grid tbody .c-cm {"));
+
+  const cm = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { gridCm: { size: 7 } } } }));
+  check("gridCm ayrı ayarlanır", rule(cm, ".sheet .grid tbody .c-cm").includes("font-size: 7px"));
+  check("gridCm METRE'ye DOKUNMAZ", !cm.includes(".sheet .grid tbody .c-met {"));
+
+  // Özgüllük: alan kuralı `.sheet ` önekiyle taban kuralı EZER. Önek düşerse
+  // `.grid tbody .c-met` yine kazanırdı ama `.company` gibi tek-sınıflı alanlar
+  // yalnız sıraya güvenirdi — bu kontrol öneki kilitler.
+  const comp = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { company: { size: 22 } } } }));
+  check("tek sınıflı alan da .sheet ile öneklenir", comp.includes(".sheet .company {"));
+
+  // KURAL 2 — nihai px DÜZ yazılır; `calc()`/`var()` kullanılırsa belge geneli
+  // "Yazı ölçeği" ayarı bu alanlarda SESSİZCE çalışmaz olurdu.
+  const scaled = renderFasonCekiHtml(
+    makeSnap({ docConfigOverride: { fields: { gridMetre: { size: 10 } }, style: { fontScale: 1.2 } } }),
+  );
+  check("alan CSS'inde calc()/var() YOK", !scaled.includes("calc(") && !scaled.includes("var(--"));
+  check("fontScale alan override'ının ÜSTÜNE biner (10 × 1.2 = 12)",
+    rule(scaled, ".sheet .grid tbody .c-met").includes("font-size: 12px"),
+    rule(scaled, ".sheet .grid tbody .c-met"));
+
+  // Yalnız verilen özellik yazılır (punto verildi, kalınlık verilmedi → taban).
+  const sizeOnly = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { note: { size: 14 } } } }));
+  check("yalnız punto verilince kalınlık yazılmaz",
+    rule(sizeOnly, ".sheet .note").includes("font-size: 14px") && !rule(sizeOnly, ".sheet .note").includes("font-weight"));
+  const weightOnly = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { note: { weight: "light" } } } }));
+  check("yalnız kalınlık verilince punto yazılmaz",
+    rule(weightOnly, ".sheet .note").includes("font-weight: 300") && !rule(weightOnly, ".sheet .note").includes("font-size"));
+
+  // Deterministik sıra: aynı ayar her seferinde aynı CSS'i üretmeli (aksi halde
+  // `isTemplateStale` gibi karşılaştırmalar yanlış "değişmiş" derdi).
+  const a = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { note: { size: 12 }, company: { size: 20 } } } }));
+  const b = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { company: { size: 20 }, note: { size: 12 } } } }));
+  check("anahtar sırası çıktıyı DEĞİŞTİRMEZ (deterministik)", a === b);
+}
+
+// ── 14) YENİ BÖLÜMLER: kumaş üst bloğu · hesap no · parti konumu ───────────
+function testNewSections(): void {
+  console.log("\n── 14) Kumaş üst bloğu / hesap no / parti konumu ──");
+
+  // (a) HESAP NO — artık OPT-IN. Saha "kaldır" dedi; anahtar taşımayan ESKİ
+  // donmuş belgeler de basmaz (bilinçli — iç firma kodu, resmi rakam değil).
+  const plain = renderFasonCekiHtml(makeSnap());
+  check("hesap no varsayılan BASILMAZ", !plain.includes("Hesap:"));
+  const acc = renderFasonCekiHtml(makeSnap({ docConfigOverride: { sections: { accountNo: true } } }));
+  check("sections.accountNo=true → basılır", acc.includes("Hesap: BOYER"));
+  const accOff = renderFasonCekiHtml(makeSnap({ docConfigOverride: { sections: { accountNo: false } } }));
+  check("sections.accountNo=false → basılmaz", !accOff.includes("Hesap:"));
+  check("hesap no kapalıyken istasyon/iş emri satırı DURUR", plain.includes("Boyahane"));
+
+  // (b) KUMAŞ + RENKLER üst bloğu — OPT-IN (yeni blok eski belgelere sızmasın).
+  check("üst blok varsayılan BASILMAZ", !plain.includes("fabline"));
+  const rolls = [
+    roll(1, 100, 150, { itemName: "PATOS", colorName: "LACİVERT" }),
+    roll(2, 120, 150, { itemName: "MUS-001", colorName: "SİYAH" }),
+    roll(3, 90, 150, { itemName: "PATOS", colorName: "LACİVERT" }),
+  ];
+  const fab = renderFasonCekiHtml(
+    makeSnap({ rolls, doc: { requestedColor: null }, docConfigOverride: { sections: { fabricHeader: true } } }),
+  );
+  check("üst blok açılır", fab.includes('class="fabline"'));
+  check("TÜM kumaşlar listelenir (yinelenen tekilleşir)", fab.includes("PATOS, MUS-001"));
+  check("TÜM renkler listelenir", fab.includes("LACİVERT, SİYAH"));
+  check("üst blok CSS'i yalnız blok AÇIKKEN basılır",
+    fab.includes(".fabline {") && !plain.includes(".fabline {"));
+  // ⚠️ Kapalı blok GÖVDEYE BOŞ SATIR BIRAKMAMALI: koşullu parça kendi satır
+  // başını taşır, gövdede kendi satırında `${...}` olarak DURMAZ. Aksi halde
+  // ayarı hiç açmamış her belgenin çıktısı sessizce bir satır kayardı.
+  const offExplicit = renderFasonCekiHtml(makeSnap({ docConfigOverride: { sections: { fabricHeader: false } } }));
+  check("blok kapalı → çıktı ayarsızla BİREBİR aynı", plain === offExplicit);
+  // Koşullu parça KENDİ satır başını taşır: açıkken gövdeye TAM 1 satır ekler,
+  // kapalıyken 0. Gövdede kendi satırında `${...}` olarak dursaydı kapalıyken de
+  // 1 satır eklerdi ve ayarı hiç açmamış her belgenin çıktısı sessizce kayardı.
+  const bodyLines = (s: string) => s.slice(s.indexOf("<body>")).split("\n").length;
+  const fhOff = renderFasonCekiHtml(makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: false } } }));
+  const fhOn = renderFasonCekiHtml(makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true } } }));
+  check("açık blok gövdeye TAM 1 satır ekler, kapalı blok 0",
+    bodyLines(fhOn) === bodyLines(fhOff) + 1,
+    `${bodyLines(fhOff)} → ${bodyLines(fhOn)}`);
+  // Hedef renk varsa listenin BAŞINDA olmalı (fasoncuya "şu renge boya" der).
+  const fabTarget = renderFasonCekiHtml(
+    makeSnap({ rolls, doc: { requestedColor: "BEJ" }, docConfigOverride: { sections: { fabricHeader: true } } }),
+  );
+  check("hedef renk listenin başında", fabTarget.includes("BEJ, LACİVERT, SİYAH"));
+  // Renk bilgisi kapalıysa üst blokta da renk YOK (tek anahtar, iki yüzey).
+  const fabNoColor = renderFasonCekiHtml(
+    makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true, requestedColor: false } } }),
+  );
+  check("requestedColor=false → üst blokta RENK yok", !fabNoColor.includes("RENK:") && fabNoColor.includes("KUMAŞ:"));
+
+  // (c) ÖLÜ TOGGLE'LAR artık gerçekten çalışıyor (2026-08-05'e kadar panel
+  // kapatıyor, belge basmaya devam ediyordu).
+  const noSub = renderFasonCekiHtml(makeSnap({ docConfigOverride: { sections: { subcontractorInfo: false } } }));
+  check("sections.subcontractorInfo=false → SAYIN satırı gider", !noSub.includes("SAYIN:"));
+  check("SAYIN varsayılan basılır", plain.includes("SAYIN:"));
+  const noColor = renderFasonCekiHtml(makeSnap({ docConfigOverride: { sections: { requestedColor: false } } }));
+  check("sections.requestedColor=false → CİNSİ hücresinde renk yok",
+    !noColor.includes("· BEYAZ") && plain.includes("· BEYAZ"));
+
+  // (d) PARTİ NO SOL/SAĞ.
+  const withBatch = { doc: { batchNumber: "P07" } };
+  const right = renderFasonCekiHtml(makeSnap(withBatch));
+  const left = renderFasonCekiHtml(
+    makeSnap({ ...withBatch, docConfigOverride: { placements: { batchInfo: "left" } } }),
+  );
+  const hlIdx = (h: string) => h.indexOf('<div class="hl">');
+  const hrIdx = (h: string) => h.indexOf('<div class="hr">');
+  const batIdx = (h: string) => h.indexOf("ln-batch");
+  check("varsayılan SAĞ blokta", batIdx(right) > hrIdx(right));
+  check("placements.batchInfo=left → SOL bloğa taşınır",
+    batIdx(left) > hlIdx(left) && batIdx(left) < hrIdx(left));
+  check("sol/sağ yalnız KONUMU değiştirir, değeri değil", left.includes("P07") && right.includes("P07"));
+  const rightExplicit = renderFasonCekiHtml(
+    makeSnap({ ...withBatch, docConfigOverride: { placements: { batchInfo: "right" } } }),
+  );
+  check("placements.batchInfo=right → varsayılanla BİREBİR aynı", rightExplicit === right);
+}
+
+// ── 15) GRID GRUP SAYISI ───────────────────────────────────────────────────
+// A5'te 15 kolon 132mm'ye sıkışıyor; punto büyütmek metni kırpıyordu. Grup
+// sayısını düşürmek "yazıyı büyütmek istiyorum" isteğinin yapısal karşılığı.
+function testGridGroups(): void {
+  console.log("\n── 15) Grid grup sayısı ──");
+  const def = renderFasonCekiHtml(makeSnap());
+  check("varsayılan 5 grup (satırda 5 'Top' başlığı)", countOccur(def, '<th class="c-top">Top</th>') === 5);
+  check("varsayılan sayfa başına 100 slot", def.includes(">100<") && !def.includes(">101<"));
+  check("varsayılan sütun genişlikleri değişmedi", def.includes("width: 4.5%") && def.includes("width: 9%"));
+
+  const g3 = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 3 } }));
+  check("gridGroups=3 → satırda 3 grup", countOccur(g3, '<th class="c-top">Top</th>') === 3);
+  check("gridGroups=3 → sayfa başına 60 slot", g3.includes(">60<") && !g3.includes(">61<"));
+  check("gridGroups=3 → sütunlar genişler (7.5% / 15%)",
+    g3.includes("width: 7.5%") && g3.includes("width: 15%"));
+
+  const g4 = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 4 } }));
+  check("gridGroups=4 → 80 slot", g4.includes(">80<") && !g4.includes(">81<"));
+
+  // 61 top / 3 grup → ikinci tablo doğar ve numara 61'den devam eder.
+  const many = Array.from({ length: 61 }, (_, i) => roll(i + 1, 100, 150));
+  const g3many = renderFasonCekiHtml(makeSnap({ rolls: many, docConfigOverride: { gridGroups: 3 } }));
+  check("61 top / 3 grup → iki grid tablosu", countOccur(g3many, '<table class="grid">') === 2);
+  check("ikinci tabloda 61. slot", g3many.includes(">61<"));
+
+  // Geçersiz değer sessizce 5'e düşer (baskı yolunu yazım hatası düşürmemeli).
+  const bad = renderFasonCekiHtml(makeSnap({ docConfigOverride: { gridGroups: 9 } }));
+  check("geçersiz gridGroups → varsayılan 5 (çıktı birebir)", bad === def);
+}
+
+// ── 16) ELECTRON AYNASI — alan kataloğu iki tarafta BİREBİR ────────────────
+// Electron backend'i import EDEMEZ (ayrı proje) ve kataloğu elle aynalar.
+// Ayrışmanın iki yönü de SESSİZDİR ve ikisi de kullanıcıyı çıkmaza sokar:
+//   • panelde var / backend'de yok → kullanıcı ayarlar, kaydeder, baskı DEĞİŞMEZ
+//   • backend'de var / panelde yok → alan hiçbir yerden ayarlanamaz
+function testElectronMirror(): void {
+  console.log("\n── 16) Electron alan kataloğu aynası ──");
+  const SRC = path.resolve(__dirname, "../../Electron/src/services/documentConfig.ts");
+  if (!fs.existsSync(SRC)) {
+    console.log(`  ⚠️  Electron kaynağı bulunamadı, ayna kontrolü atlandı: ${SRC}`);
+    return;
+  }
+  const src = fs.readFileSync(SRC, "utf8");
+  const block = /export const FASON_FIELD_DEFS: DocFieldDef\[\] = \[([\s\S]*?)\n\];/.exec(src);
+  check("Electron FASON_FIELD_DEFS okunabildi", block !== null);
+  if (!block) return;
+
+  const uiKeys = [...block[1].matchAll(/\{\s*key:\s*"([^"]+)"/g)].map((m) => m[1]);
+  const beKeys = FASON_FIELDS.map((f) => f.key);
+
+  // KÖRLÜK ZEMİNİ: regex bir refactor'da boşa düşerse "fark yok" ile "hiçbir
+  // şeye bakılmadı" aynı yeşile çıkardı.
+  check("ayna listesi anlamlı büyüklükte (>15 alan)", uiKeys.length > 15, `${uiKeys.length} alan`);
+
+  const eksik = beKeys.filter((k) => !uiKeys.includes(k));
+  const fazla = uiKeys.filter((k) => !beKeys.includes(k));
+  check("panelde eksik alan YOK (backend'de var, ayarlanamaz)", eksik.length === 0, eksik.join(", "));
+  check("panelde fazla alan YOK (ayarlanır ama baskıyı etkilemez)", fazla.length === 0, fazla.join(", "));
+  check("sıra da aynı (panel = belge okuma sırası)", uiKeys.join(",") === beKeys.join(","));
+
+  // Grup adları da aynalanır — bilinmeyen grup paneldeki satırı GÖRÜNMEZ yapar
+  // (DocumentFieldStyleControls yalnız tanıdığı grupları çizer).
+  const uiGroups = new Set([...block[1].matchAll(/group:\s*"([^"]+)"/g)].map((m) => m[1]));
+  const beGroups = new Set(FASON_FIELDS.map((f) => f.group));
+  check("grup adları birebir",
+    [...beGroups].every((g) => uiGroups.has(g)) && [...uiGroups].every((g) => beGroups.has(g as never)),
+    `backend: ${[...beGroups].join(",")} | panel: ${[...uiGroups].join(",")}`);
+}
+
+// ── 17) ÖNİZLEME KAPISI — sample-html Zod şeması ayarı YUTMAMALI ──────────
+// `docConfigSchema` bir `z.object`tir: tanımadığı anahtarı HATA VERMEDEN ATAR.
+// Bir DocumentConfig alanı oraya yazılmazsa ayar kaydedilir, GERÇEK BASKIDA
+// görünür, ama Belge Şablonları ekranının canlı önizlemesinde GÖRÜNMEZ — yani
+// "önizleme = gerçek baskı" sözleşmesi ayarı yapan kişinin gözü önünde bozulur
+// ve hiçbir yerde hata çıkmaz. (`columns.shown` tam bu yüzden eksik kalmıştı.)
+function testPreviewSchemaParity(): void {
+  console.log("\n── 17) Önizleme şeması ↔ kayıt kapısı hizası ──");
+  const CTRL = path.resolve(__dirname, "../src/controllers/printed-document.controller.ts");
+  const SETTINGS = path.resolve(__dirname, "../src/services/system-setting.service.ts");
+  if (!fs.existsSync(CTRL) || !fs.existsSync(SETTINGS)) {
+    console.log("  ⚠️  kaynak bulunamadı, hiza kontrolü atlandı");
+    return;
+  }
+  const ctrl = fs.readFileSync(CTRL, "utf8");
+  const block = /const docConfigSchema = z\n?\s*\.object\(\{([\s\S]*?)\n  \}\)/.exec(ctrl);
+  check("docConfigSchema okunabildi", block !== null);
+  if (!block) return;
+
+  // Kayıt kapısındaki (sanitizeDocumentsConfig) DocumentConfig alan listesi.
+  const typeBlock = /export interface DocumentConfig \{([\s\S]*?)\n\}/.exec(
+    fs.readFileSync(SETTINGS, "utf8"),
+  );
+  check("DocumentConfig tipi okunabildi", typeBlock !== null);
+  if (!typeBlock) return;
+
+  const typeKeys = [...typeBlock[1].matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
+  // Tam 4 boşluk = şemanın ÜST düzey alanı (iç içe nesnelerin alanları daha
+  // derin girintili). Değer `z.…` da olabilir, adlandırılmış bir şema da
+  // (`style: docStyleSchema`) — bu yüzden `z` değil `\S` aranır.
+  const schemaKeys = [...block[1].matchAll(/^ {4}(\w+):\s*\S/gm)].map((m) => m[1]);
+
+  // KÖRLÜK ZEMİNİ — regex bir refactor'da boşa düşerse "fark yok" ile "hiçbir
+  // şeye bakılmadı" aynı yeşile çıkardı.
+  check("tip listesi anlamlı büyüklükte (>12 alan)", typeKeys.length > 12, `${typeKeys.length} alan`);
+  check("şema listesi anlamlı büyüklükte (>12 alan)", schemaKeys.length > 12, `${schemaKeys.length} alan`);
+
+  const eksik = typeKeys.filter((k) => !schemaKeys.includes(k));
+  check("önizleme şemasında eksik alan YOK (ayar sessizce yutulur)", eksik.length === 0, eksik.join(", "));
+}
+
 function main(): void {
   testBasic();
   testGrid();
@@ -246,6 +578,13 @@ function main(): void {
   testDocConfig();
   testColorFallback();
   testBatchNumber();
+  testA4Fingerprint();
+  testA5Density();
+  testFieldStyles();
+  testNewSections();
+  testGridGroups();
+  testElectronMirror();
+  testPreviewSchemaParity();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

@@ -29,6 +29,8 @@ import {
   docStampsBar,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
+import { DOC_DENSITY, docChromeCss, resolveDocPageSize } from "./doc-density";
+import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 
 interface DirectShipRoll {
   sequence: number;
@@ -145,6 +147,9 @@ export function renderFasonDirectShipHtml(
 ): string {
   const doc = snapshot.doc as unknown as DirectShipDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  // Yoğunluk profili sayfa boyutundan çözülür; ortak chrome CSS'i oradan beslenir.
+  const pageSize = resolveDocPageSize(cfg.style?.pageSize);
+  const d = DOC_DENSITY[pageSize];
   const style = resolveDocStyle(cfg.style, { marginMm: 9 });
   const logo = docLogoHtml(meta.logoDataUrl, cfg);
   const company = snapshot.company;
@@ -288,45 +293,11 @@ export function renderFasonDirectShipHtml(
     `
   * { box-sizing: border-box; }
   ${docPageCss(style)}
-  body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #111; font-size: 11px; }
-  .sheet { position: relative; width: 100%; }
-  .mono { font-family: ui-monospace, "Courier New", monospace; }
-  .wm { position: fixed; top: 42%; left: 0; right: 0; text-align: center;
-        font-size: 96px; font-weight: 800; color: rgba(220,38,38,0.16);
-        transform: rotate(-22deg); letter-spacing: 8px; z-index: 0; }
-  .wm-old { color: rgba(100,116,139,0.18); }
-  .wm-draft { color: rgba(100,116,139,0.16); }
-  header { display: flex; justify-content: space-between; align-items: flex-start;
-           border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; gap: 12px; }
-  .hl { flex: 1; min-width: 0; }
-  .company { font-size: 16px; font-weight: 800; text-transform: uppercase; }
-  .lh-line { font-size: 10px; color: #333; }
-  .hr { text-align: right; white-space: nowrap; }
-  .title { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
-  .hr .ln { margin-top: 3px; font-size: 11px; }
-  .hr .ln b { font-size: 12px; }
-  .info { display: flex; gap: 12px; margin: 8px 0; }
-  .box { flex: 1; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 8px; }
-  .box-t { font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 3px; }
-  .box .row { display: grid; grid-template-columns: 72px 1fr; gap: 6px; font-size: 11px; }
-  .box .row span { color: #555; }
-  .tbl-cap { font-size: 11px; font-weight: 700; text-transform: uppercase; margin: 6px 0 3px; }
-  table { border-collapse: collapse; width: 100%; }
-  .sec th, .sec td { border: 1px solid #000; padding: 3px 6px; font-size: 11px; }
-  .sec thead th { background: #f1f5f9; font-weight: 700; font-size: 10px; text-transform: uppercase; }
-  .sec .l { text-align: left; }
-  .sec .r { text-align: right; }
-  .sec .c { text-align: center; }
-  .sec .tot td { font-weight: 800; background: #f8fafc; border-top: 2px solid #000; }
-  .note { margin-top: 8px; font-size: 11px; white-space: pre-wrap;
-          border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 4px; }
-  .sign { display: flex; gap: 24px; margin-top: 28px; }
-  .sign-box { flex: 1; text-align: center; }
-  .sign-line { border-top: 1px solid #000; margin-bottom: 3px; margin-top: 28px; }
-  .sign-lbl { font-size: 10px; color: #333; }
+  ${docChromeCss(d, { boxLabelA4: 72 })}
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
   ${docTableCss(style, [".sec"])}
+  ${docFieldCss(cfg.fields, DOC_FIELD_CATALOGS["fasonDirectShip"], d)}
 `,
     style,
   );

@@ -27,6 +27,62 @@ export interface DocStyleConfig {
   tableStyle?: "grid" | "zebra" | "plain";
 }
 
+/**
+ * ALAN BAZLI yazı ayarı — `DocumentConfig.fields[<alanKey>]`.
+ *
+ * `DocStyleConfig.fontScale/fontWeight` BELGE GENELİNE uygulanır; bu ise tek bir
+ * alanı ("grid metre değeri", "parti no", "imza etiketi") ayrı ayarlar. İkisi
+ * çakışmaz: alan ayarı TABANI belirler, genel ayar onun ÜSTÜNE biner (renderer
+ * nihai px'i yazar, `scaleDocCss` sonra çarpar).
+ *
+ * ⚠️ Alan kataloğu belgeye özeldir (bugün yalnız fason çeki —
+ * `fason-ceki.fields.ts`); burada duran şey yalnız ORTAK tip + kayıt kapısıdır.
+ */
+export type DocFieldWeight = "light" | "normal" | "medium" | "bold" | "black";
+
+export interface DocFieldStyle {
+  /** Yazı boyu px. Verilmezse alanın yoğunluk profilindeki tabanı geçerlidir. */
+  size?: number;
+  /** Yazı kalınlığı. Verilmezse alanın taban kalınlığı geçerlidir. */
+  weight?: DocFieldWeight;
+}
+
+/** Etiket → CSS font-weight. `scaleDocCss`'in ±100 kaydırması bunun üstüne biner. */
+export const DOC_FIELD_WEIGHTS: Record<DocFieldWeight, number> = {
+  light: 300,
+  normal: 400,
+  medium: 500,
+  bold: 700,
+  black: 800,
+};
+
+/** Alan yazı boyu sınırları — panel de aynı sınırı gösterir. */
+export const DOC_FIELD_SIZE_MIN = 5;
+export const DOC_FIELD_SIZE_MAX = 48;
+
+/**
+ * İstemciden gelen ham alan haritasını güvenli tipe indirger (saklama öncesi).
+ * Boş/anlamsız girdi ATILIR — yarım bir `{}` kaydı, "ayarladım ama bir şey
+ * olmadı" hissini kalıcılaştırırdı. Sonuç boşsa `undefined` döner.
+ */
+export function sanitizeDocFields(raw: unknown): Record<string, DocFieldStyle> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, DocFieldStyle> = {};
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!val || typeof val !== "object" || Array.isArray(val)) continue;
+    const o = val as Record<string, unknown>;
+    const entry: DocFieldStyle = {};
+    if (typeof o.size === "number" && Number.isFinite(o.size)) {
+      entry.size = Math.min(DOC_FIELD_SIZE_MAX, Math.max(DOC_FIELD_SIZE_MIN, o.size));
+    }
+    if (typeof o.weight === "string" && o.weight in DOC_FIELD_WEIGHTS) {
+      entry.weight = o.weight as DocFieldWeight;
+    }
+    if (entry.size != null || entry.weight != null) out[key.slice(0, 40)] = entry;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export interface ResolvedDocStyle {
   pageSize: "A4" | "A5";
   margins: { top: number; right: number; bottom: number; left: number };
@@ -240,6 +296,13 @@ export function docStampsBar(
  * Bitmiş CSS üzerinde yazı ölçeği + kalınlık kaydırması (refakat kartı paterni).
  * Yalnız `font-size: Npx` ve `font-weight: N` değerlerine dokunur; mm/padding
  * gibi layout değerleri korunur → oran bozulmaz.
+ *
+ * ⚠️ BU REGEX BİR SÖZLEŞMEDİR: yazı boyu üreten her yol düz `font-size: 13.2px`
+ * basmalı. `calc(10px * var(--x))` ya da `font-size: 1.2em` yazan bir yol bu
+ * desene TAKILMAZ → belge geneli "Yazı ölçeği" ayarı o alanlarda SESSİZCE
+ * çalışmaz (hata yok, log yok; sahadan gelen tek belirti "ölçeği değiştiriyorum,
+ * bazı yazılar büyümüyor" olur). Alan bazlı ayar (`DocFieldStyle`) bu yüzden
+ * nihai px'i TS'te hesaplar. Bekçi: `test_fason_ceki_html.ts` §13.
  */
 export function scaleDocCss(css: string, s: ResolvedDocStyle): string {
   let out = css;
