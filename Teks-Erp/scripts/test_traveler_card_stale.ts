@@ -279,10 +279,10 @@ async function testAutoRevision(woId: string): Promise<void> {
     "önizleyip kapatan kullanıcı hiçbir şey yazmaz",
   );
 
-  // SUNUM sondası: kartın donmuş sayfa boyutunu, `resolveForPrint`'in döndüreceğinin
-  // TERSİNE çevir. Baskı yolu sunumu karttan taşımak yerine yeniden çözerse bu değer
-  // sessizce geri döner — kontrol (e) ancak bu ayrım kurulduğunda kırmızı verebilir
-  // (fixture'da şablon satırı yok; iki yol da aynı config'i üretir → kontrol kör kalırdı).
+  // SUNUM sondası: kartın kayıtlı sayfa boyutunu, `resolveForPrint`'in döndüreceğinin
+  // TERSİNE çevir. Baskı sunumu karttan taşısaydı bu bozuk değer kâğıda geçerdi;
+  // güncel çözüm onu düzeltmeli. Ayrım kurulmazsa kontrol KÖR kalır (fixture'da
+  // şablon satırı yok, iki yol da aynı config'i üretir).
   const cfgStored = ((card0.snapshot as Record<string, unknown> | null)?.config ?? {}) as Record<
     string,
     unknown
@@ -308,12 +308,20 @@ async function testAutoRevision(woId: string): Promise<void> {
   check("içerik değişmişse baskı sürümü ARTIRIR", after?.version === nextV, `v${after?.version}`);
   check("basılan plan snapshot'a kaydedilir", snap?.width === 155, "snapshot = son basılan kopya");
 
-  // (e) SUNUM baskı yolunda TAZELENMEZ — şablon/sayfa yalnız `reprint` ile değişir
-  //     ("şablonu değiştirdim, sahadaki kartlar niye değişmedi?" kuralı).
+  // (e) SUNUM her baskıda GÜNCEL — eski kart da yeni tasarımla basar (2026-08-06).
+  //     Kartın kayıtlı boyutu yukarıda bozulmuştu; baskı onu güncel ayara çekmeli.
   check(
-    "baskı SUNUMU (şablon/config) tazelemez",
-    (snap?.config as Record<string, unknown> | undefined)?.pageSize === flipped,
-    "sunum kartta donmuş kalır — yalnız reprint tazeler",
+    "baskı SUNUMU'nu (şablon/sayfa) GÜNCELLER",
+    (snap?.config as Record<string, unknown> | undefined)?.pageSize !== flipped,
+    "eski kart da yeni tasarımla basar",
+  );
+
+  // (e2) …ama tasarım tazelemek REVİZYON DEĞİLDİR: yukarıdaki sürüm nextV'de kaldı.
+  //      Aksi halde tek bir punto düzenlemesi sahadaki her kartı sürüm atlatırdı.
+  check(
+    "sunum tazelemek SÜRÜM ARTIRMAZ",
+    after?.version === nextV,
+    "tasarım değişikliği revizyon sayılmaz",
   );
 
   // (f) Aynı içerikte ikinci baskı yine düz kopyadır

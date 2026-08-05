@@ -181,14 +181,32 @@ async function run(): Promise<void> {
   const html1 = await cards.getCardHtml(card.id);
   check("E1 kart varsayılan şablonla basıldı", html1.includes("SÜRÜM-BİR"));
 
-  // Şablonu DEĞİŞTİR — basılmış kart etkilenmemeli.
+  // Şablonu DEĞİŞTİR — ESKİ kart da yeni tasarımla basmalı.
+  //
+  // ⚠️ 2026-08-06'da BU KURAL TERSİNE ÇEVRİLDİ (eski E2: "basılmış kart eski şablonla
+  // basmaya devam eder"). Gerekçe: aynı kararın diğer yarısı tasarım değişikliğini
+  // revizyon SAYMIYOR (`planKey` config/template'i atar); revizyon olmayan bir şeyi
+  // dondurmanın işi yok, yalnız yan etkisi var — tasarımı değiştirme sebebi genelde
+  // "sahada okunmuyor"dur ve donmuş sunum düzeltmeyi tam da düzeltilmesi gereken
+  // kâğıtlara ulaştırmaz (ölçüm: 30 aktif kartın 11'i bir haftadan eskiydi).
+  // İÇERİK tarafı bundan etkilenmez: geçersiz kartın içeriği hâlâ donmuş kalır
+  // (bkz. test_traveler_card_stale §6g) ve tasarım değişikliği sürüm ARTIRMAZ (§6).
   await templates.update(tpl.id, { html: `<h1>SÜRÜM-İKİ {{workOrderNumber}}</h1>` }, ADMIN);
   const html2 = await cards.getCardHtml(card.id);
-  check("E2 basılmış kart ESKİ şablonla basılmaya devam ediyor (donmuş)", html2.includes("SÜRÜM-BİR") && !html2.includes("SÜRÜM-İKİ"));
+  check("E2 basılmış kart GÜNCEL şablonla basıyor (sunum donmaz)", html2.includes("SÜRÜM-İKİ") && !html2.includes("SÜRÜM-BİR"));
 
+  const ver = async (): Promise<number> =>
+    (await prisma.travelerCard.findUnique({ where: { id: card.id }, select: { version: true } }))
+      ?.version ?? -1;
+  const vBefore = await ver();
   await cards.reprint(w1, "şablon güncellendi", ADMIN);
   const html3 = await cards.getCardHtml(card.id);
   check("E3 reprint YENİ şablonu alıyor", html3.includes("SÜRÜM-İKİ"));
+  check(
+    "E4 sürümü artıran şey GEREKÇELİ reprint'tir (tasarım değişikliği tek başına artırmaz)",
+    (await ver()) === vBefore + 1,
+    `v${vBefore} → v${vBefore + 1}`,
+  );
 
   console.log("\n=== F) Fail-closed çözüm ===");
   const gone = await templates

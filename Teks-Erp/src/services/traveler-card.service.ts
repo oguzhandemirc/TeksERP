@@ -23,10 +23,10 @@
 //   — SAP PP'nin "değişiklik baskısı" (Änderungsdruck) davranışı. `snapshot` artık
 //   "doğuşta dondurulan plan" değil **son BASILAN kopyanın kaydıdır**; baskı olayı
 //   onu tazeler ve içerik gerçekten değiştiyse `version++` eder (otomatik revizyon).
-//   Kartın SUNUMU (şablon + sayfa/config) buna DAHİL DEĞİLDİR: o donmuş kalır ve
-//   yalnız açık `reprint` ile tazelenir ("şablonu değiştirdim, sahadaki kartlar niye
-//   değişmedi?" cevabı hâlâ "yeniden bas"tır). Tek karar noktası: `resolvePrintPlan`
-//   — önizleme, baskı ve versiyon numarası ondan beslenir; ayrıştırırsan önizleme
+//   Kartın SUNUMU (şablon + sayfa/config) sürüm hesabına DAHİL DEĞİLDİR ama
+//   2026-08-06'dan beri o da HER BASKIDA GÜNCELDİR — "şablon karta donar" kuralı
+//   kaldırıldı (gerekçe: `resolvePrintPlan` başlığı). Tek karar noktası odur;
+//   önizleme, baskı ve versiyon numarası ondan beslenir — ayrıştırırsan önizleme
 //   "v2" der, baskı "v3" yazar.
 // =============================================================================
 
@@ -246,11 +246,11 @@ export class TravelerCardService {
    * Karekod (İE) DEĞİŞMEZ. Yalnız ACTIVE kart yeniden basılabilir (iptal/tamamlanmış
    * WO'da 409).
    *
-   * ⚠️ İÇERİK için ARTIK GEREKLİ DEĞİL (2026-08-05): düz baskı zaten güncel planı
-   * basıp gerekiyorsa otomatik revize ediyor. Bu yolun kalan tek farkı SUNUMU da
-   * tazelemesi (`buildSnapshot` → güncel şablon/config) ve gerekçe istemesi — yani
-   * "şablonu/puntoyu değiştirdim, bu kart da yeni tasarımla bassın" durumu.
-   * Bugün hiçbir istemci çağırmıyor; sunumu tazelemenin arayüzde karşılığı yok.
+   * ⚠️ ARTIK GEREKLİ DEĞİL ve hiçbir istemci çağırmıyor: düz baskı hem güncel planı
+   * basıyor (gerekirse otomatik revizyon) hem de güncel tasarımı kullanıyor
+   * (2026-08-06). Geriye kalan tek farkı, içerik değişmese bile gerekçeyle sürüm
+   * atlatması. Uç KALDIRILMADI çünkü "bu kartı gerekçeli olarak yeniden yayınladım"
+   * ihtiyacı doğarsa hazır; yeni bir işlev için buna yamamak yerine gerekçesini yaz.
    */
   async reprint(
     workOrderId: string,
@@ -780,12 +780,24 @@ export class TravelerCardService {
    * tanımlamaz olur (revizyon kontrolünün tamamı bu eşitliğe dayanır):
    *
    *   ① İÇERİK — ACTIVE kartta iş emrinin GÜNCEL hâli (yürürlükteki plan sahaya iner).
-   *   ② SUNUM  — şablon + sayfa/config kartta DONMUŞ kalır; yalnız `reprint` tazeler.
+   *   ② SUNUM  — şablon + sayfa/config HER ZAMAN GÜNCEL (kartın yaşına bakılmaz).
    *   ③ SÜRÜM  — içerik gerçekten değiştiyse +1 (revizyon), aksi halde aynı.
    *
+   * ⚠️ SUNUM NEDEN DONMUYOR (2026-08-06 — "şablon karta donar" kuralı KALDIRILDI):
+   * Aynı kararın diğer yarısı zaten "tasarım değişikliği revizyon SAYILMAZ" diyor
+   * (`planKey` config/template'i dışlar). Bir şey revizyon değilse dondurmanın da
+   * işi kalmaz — dondurmak yalnız yan etkisini bırakırdı: tasarımı değiştirme
+   * sebebi genelde *"sahada okunmuyor"*dur ve donmuş sunum, düzeltmeyi tam da
+   * düzeltilmesi gereken kâğıtlara ulaştırmaz (ölçüm 2026-08-06: 30 aktif kartın
+   * 11'i bir haftadan eski — haftalarca eski tasarımla basmaya devam ederlerdi).
+   * Sayfa boyutu da buna dahildir; baskı başına A4/A5 ezmesi diyalogda duruyor.
+   * ⚠️ Bu, eski `test_traveler_template` E2 kuralının BİLİNÇLİ tersi — geri almadan
+   * önce yukarıdaki gerekçeyi çürüt.
+   *
    * ⚠️ ACTIVE OLMAYAN kart (VOIDED/COMPLETED/REPRINTED) **hiç revize edilmez**:
-   * elde olan tarihsel bir kopyadır, iptal edilmiş kartın içeriğini bugünkü planla
-   * tazelemek belgeyi geçmişe dönük değiştirmek olurdu.
+   * elde olan tarihsel bir kopyadır, iptal edilmiş kartın İÇERİĞİNİ bugünkü planla
+   * tazelemek belgeyi geçmişe dönük değiştirmek olurdu. Sunumu yine de güncel gelir —
+   * o belgenin kaydı değil, kâğıda nasıl çizildiğidir.
    *
    * ⚠️ İş emri okunamazsa (silinmiş/erişilemez) **eldeki snapshot'a düşülür**:
    * baskı yolunu düşürmek, biraz eski bir kâğıt basmaktan kötüdür.
@@ -800,30 +812,30 @@ export class TravelerCardService {
     workOrderId: string;
   }): Promise<{ snapshot: TravelerCardSnapshot; version: number; revised: boolean }> {
     const stored = card.snapshot as unknown as TravelerCardSnapshot | null;
-    const frozen = async (): Promise<TravelerCardSnapshot> =>
-      stored ??
-      ((await this.buildSnapshot(prisma, card.workOrderId)) as unknown as TravelerCardSnapshot);
+    // SUNUM her yolda GÜNCEL — tek çözüm noktası, dallardan ÖNCE (aşağıdaki her
+    // dönüş onu kullanır; dala kopyalanırsa biri sessizce donmuş kalır).
+    const { template, config } = await travelerTemplateService.resolveForPrint(null, prisma);
+    const dress = (base: TravelerCardSnapshot): TravelerCardSnapshot =>
+      ({ ...base, config, template }) as TravelerCardSnapshot;
+
+    // İçeriği donmuş dal: geçersiz kart (tarihsel kopya) ya da okunamayan iş emri.
+    const keepContent = async (): Promise<TravelerCardSnapshot> =>
+      dress(
+        stored ??
+          ((await this.buildSnapshot(prisma, card.workOrderId)) as unknown as TravelerCardSnapshot),
+      );
 
     if (card.status !== TravelerCardStatus.ACTIVE) {
-      return { snapshot: await frozen(), version: card.version, revised: false };
+      return { snapshot: await keepContent(), version: card.version, revised: false };
     }
 
     const plan = await this.buildPlan(prisma, card.workOrderId);
-    if (!plan) return { snapshot: await frozen(), version: card.version, revised: false };
+    if (!plan) return { snapshot: await keepContent(), version: card.version, revised: false };
 
-    // SUNUM donmuş kalır — şablon düzenlemesi sahadaki kartı kendiliğinden
-    // değiştirmez ("yeniden bas" kuralı). Kartta sunum yoksa (eski/boş snapshot)
-    // güncel şablon çözülür, aksi halde kart hiç basılamazdı.
-    const presentation =
-      stored?.template && stored?.config
-        ? { template: stored.template, config: stored.config }
-        : await travelerTemplateService.resolveForPrint(null, prisma);
-
-    const snapshot = {
-      config: presentation.config,
-      template: presentation.template,
-      ...plan,
-    } as unknown as TravelerCardSnapshot;
+    const snapshot = dress({ config, template, ...plan } as unknown as TravelerCardSnapshot);
+    // Karşılaştırma yalnız İÇERİĞE bakar (planKey config/template'i atar) — tasarım
+    // değişikliği sürüm ARTIRMAZ, yoksa tek bir punto düzenlemesi sahadaki her kartı
+    // bir sonraki baskıda revize göstermiş olurdu.
     const revised = stored != null && planKey(stored) !== planKey(snapshot);
     return { snapshot, version: card.version + (revised ? 1 : 0), revised };
   }
@@ -1036,17 +1048,12 @@ export class TravelerCardService {
   }
 
   /**
-   * Kartın TAM snapshot'ı = plan + SUNUM (şablon/config).
+   * Kartın TAM snapshot'ı = plan + SUNUM (şablon/config). Kart doğuşu ve `reprint`
+   * için; baskı yolu `resolvePrintPlan` üzerinden gider (o da sunumu aynı şekilde
+   * güncel çözer, yani ikisi ayrışmaz).
    *
-   * Şablon burada DONAR (Faz 2): kart basıldıktan sonra şablon düzenlense de bu kart
-   * aynı çıkar; sunumu tazeleyen tek yol `reprint`'tir — yani "şablonu değiştirdim,
-   * sahadaki kartlar niye değişmedi?" sorusunun cevabı tasarım gereği "yeniden bas".
    * `config` sistem ayarından DEĞİL şablondan gelir; şablon yoksa `resolveForPrint`
    * zaten sistem ayarına düşer → şablonsuz kurulumda davranış Faz 2 öncesiyle aynı.
-   *
-   * ⚠️ Baskı yolunda ÇAĞRILMAZ (`resolvePrintPlan` sunumu karttan taşır) — burada
-   * kullanılırsa donmuş şablon sessizce güncel şablonla değişir. Kart doğuşu ve
-   * `reprint` için, yani sunumun MEŞRUEN tazelendiği iki nokta için vardır.
    */
   private async buildSnapshot(
     client: Prisma.TransactionClient,
