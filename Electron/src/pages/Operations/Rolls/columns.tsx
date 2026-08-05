@@ -4,7 +4,7 @@ import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadg
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat } from "@/lib/format";
-import { rollStatusLabels, RollStatus } from "@/types/enums";
+import { rollStatusLabels, RollStatus, rollEntrySourceLabels } from "@/types/enums";
 import { type Roll, shipmentScopeLabels, activeDispatchOf, activeCategoryOf } from "./types";
 
 /**
@@ -257,6 +257,47 @@ export const rollColumns: ColumnDef<Roll>[] = [
             <div className="truncate font-mono text-[10px] text-muted-foreground">
               {step.workOrder.workOrderNumber}
             </div>
+          )}
+        </div>
+      );
+    },
+  },
+  {
+    // GİRİŞ KAYNAĞI (2026-08-05): "bu top sisteme nereden girdi".
+    // Filtresi 2026-08-04'te eklenmişti ama SÜTUNU yoktu — yani filtreleyip
+    // sonucu görebiliyor, listede tek tek hangi topun ne olduğunu göremiyordun.
+    // Varsayılan GİZLİ ("Sütunlar"dan açılır): izlenebilirlik verisi, operatörün
+    // anlık kararına girmez. Veri liste yanıtında ZATEN geliyordu.
+    accessorKey: "entrySource",
+    header: "Giriş Kaynağı",
+    meta: { label: "Giriş Kaynağı" },
+    cell: ({ row }) => {
+      const src = row.original.entrySource;
+      if (!src) return <span className="text-muted-foreground">—</span>;
+      return (
+        <Badge variant="muted" className="text-[10px] whitespace-nowrap">
+          {rollEntrySourceLabels[src as keyof typeof rollEntrySourceLabels] ?? src}
+        </Badge>
+      );
+    },
+  },
+  {
+    // YAPAN PERSONEL (2026-08-05). Veri en baştan vardı (Roll.createdById kolonu,
+    // dev/prod ölçümü %97 dolu) ve liste yanıtında ZATEN geliyordu — hiçbir
+    // yüzeyde basılmıyordu, o kadar. Sunucu tarafında iş yok.
+    // Makine atfı ikinci satırda: "kim" ile "nerede" tek okumada görünsün.
+    id: "createdBy",
+    header: "Ekleyen",
+    meta: { label: "Ekleyen" },
+    cell: ({ row }) => {
+      const u = row.original.createdBy;
+      const m = row.original.createdMachine;
+      if (!u && !m) return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="min-w-0">
+          <div className="truncate text-xs">{u?.fullName ?? u?.username ?? "—"}</div>
+          {m?.name && (
+            <div className="truncate text-[10px] text-muted-foreground">{m.name}</div>
           )}
         </div>
       );

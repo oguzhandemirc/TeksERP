@@ -28,6 +28,10 @@ import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapa
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
 import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
+import {
+  SETTINGS_ADMIN_PERMISSION,
+  WORKSTATION_PERMISSION,
+} from "@/pages/GeneralSettings/settings-config";
 import { SystemEventsPage } from "@/pages/System/Events/SystemEventsPage";
 import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage";
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
@@ -79,7 +83,6 @@ import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
 import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDetailPage";
 import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
-import { KursunQueueRouteGate } from "@/pages/Operations/KursunQueue/KursunQueueRouteGate";
 import { KursunDagitimPage } from "@/pages/Operations/KursunDagitim/KursunDagitimPage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
@@ -406,9 +409,13 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // Sayfanın kapısı GENİŞ, içerik DAR: `settings:workstation` taşıyan personel
+    // girer ama yalnız "Bu Bilgisayar" kategorisini görür (sayfa kategorileri
+    // `visibleSettingsCategories` ile süzer). Sistem geneli ayarlar hâlâ
+    // `admin:settings` ister ve listeye bile girmez.
     path: "system/settings",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={[SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION]}>
         <GeneralSettingsPage />
       </ProtectedRoute>
     ),
@@ -500,28 +507,21 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // ESKİ "Kurşun Sırası" adresi — 2026-08-05'te ekran Kurşun Planlama ile
+    // birleşti. Route SİLİNMEDİ yönlendirildi: kayıtlı sekme / eski komut paleti
+    // girişi / kullanıcının ezberlediği adres boş sayfaya düşmesin.
     path: "operations/kursun-queue",
-    element: (
-      // Kuyruğu kaliteci sıralar; kurşun dağıtımcısı da izler (backend GET /queue
-      // aynı iki izne açık — dağıtım kararı bu kuyruğun üstüne kurulur).
-      // `KursunQueueRouteGate` karoyla AYNI koşulu uygular (tek kaynak:
-      // `tile-config.ts` → `kursunQueueTileVisible`): bayrak KAPALI ya da tablet
-      // rejiminde iş VARSA sayfa açılır; bayrak açık + tablette iş kalmamışsa
-      // sırayı okuyacak kimse yoktur → hub'a yönlendirir.
-      <ProtectedRoute requireAnyPermission={["quality:write", "workorder:distribute"]}>
-        <KursunQueueRouteGate />
-      </ProtectedRoute>
-    ),
+    element: <Navigate to="/operations/kursun-dagitim" replace />,
   },
   {
     path: "operations/kursun-dagitim",
     element: (
-      // Bayrak (kursunBypassEnabled) route'u KAPATMAZ — kapatıldığında yalnız yeni
-      // dağıtım durur; dağıtılmış iş emirleri bu ekrandan bitirilmeye devam eder.
-      // KARO artık bununla hizalı: bayrak kapalı olsa bile bekleyen dağıtım varken
-      // menüde durur (`tile-config.ts` → `kursunDagitimTileVisible`), yani "sayfa
-      // çalışıyor ama menüde yok" tuhaflığı kalmadı.
-      <ProtectedRoute requirePermission="workorder:distribute">
+      // Kurşun Planlama = eski Kurşun Sırası + Kurşun Dağıtım. Kaliteci sırayı
+      // yönetir, dağıtımcı makineye verir → iki izinden HERHANGİ biri yeterli
+      // (karo ile birebir aynı kapı). Bayrak (kursunBypassEnabled) route'u
+      // KAPATMAZ ve karoyu da etkilemez; yalnız ekranın içindeki dağıtım
+      // kontrollerini açar/kapatır.
+      <ProtectedRoute requireAnyPermission={["quality:write", "workorder:distribute"]}>
         <KursunDagitimPage />
       </ProtectedRoute>
     ),

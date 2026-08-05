@@ -1,11 +1,12 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type {
+  KursunBulkAssignResult,
+  KursunBulkCancelResult,
   KursunBypassAssignResult,
   KursunBypassCancelResult,
   KursunBypassCompletePreview,
   KursunBypassCompleteResult,
-  KursunBypassVisibility,
   KursunDistributionPayload,
   KursunQueueUrgentResult,
 } from "./types";
@@ -13,22 +14,10 @@ import type {
 const BASE = "/api/kursun-bypass";
 
 export const kursunDagitimService = {
-  /**
-   * MENÜ ÇİZME ucu — üç sayı, ağır `distribution` payload'ı yok. İki KARO'nun
-   * (Kurşun Sırası + Kurşun Dağıtım) görünürlüğü buna bağlı, o yüzden bu ekranın
-   * değil `useKursunVisibility` hook'unun tükettiği bir uçtur; API yüzeyi aynı
-   * `/api/kursun-bypass` olduğu için servis burada durur.
-   *
-   * `suppressErrorToast`: menü çizerken koşan arka plan isteği — 403/500 hâlinde
-   * kullanıcıya toast atmak anlamsız (kimse bir şey istemedi); hook sayaçları 0
-   * kabul eder ve davranış saf bayrak kuralına düşer.
-   */
-  getVisibility: (): Promise<ApiResponse<KursunBypassVisibility>> =>
-    apiClient
-      .get<ApiResponse<KursunBypassVisibility>>(`${BASE}/visibility`, {
-        suppressErrorToast: true,
-      })
-      .then((r) => r.data),
+  // `GET /visibility` (menü sayaçları) 2026-08-05'te KALDIRILDI: Kurşun Sırası +
+  // Kurşun Dağıtım "Kurşun Planlama"da birleşti ve karo bayrak/sayaçtan bağımsız
+  // hale geldi (yalnız izinle süzülüyor) → onu tüketen `useKursunVisibility`
+  // hook'u ile birlikte silindi. Backend ucu duruyor (eski APK uyumluluğu).
 
   /** Ekranın TEK payload'ı: bayrak + makineler + bekleyen + dağıtılmış. */
   getDistribution: (): Promise<ApiResponse<KursunDistributionPayload>> =>
@@ -44,6 +33,31 @@ export const kursunDagitimService = {
   }): Promise<ApiResponse<KursunBypassAssignResult>> =>
     apiClient
       .post<ApiResponse<KursunBypassAssignResult>>(`${BASE}/assign`, input)
+      .then((r) => r.data),
+
+  /**
+   * TOPLU dağıtım / makineler arası TOPLU taşıma — ikisi de aynı uç
+   * (`assign` yeniden-atamayı taşıma olarak ele alır).
+   *
+   * ⚠️ Sonuç PARÇALI olabilir: `failed` boş değilse bazı satırlar atlanmıştır.
+   * Çağıran onları GÖSTERMEK zorunda (`useKursunDistribution.reportBulk`).
+   */
+  assignBulk: (input: {
+    workOrderIds: string[];
+    machineId: string;
+    notes?: string;
+  }): Promise<ApiResponse<KursunBulkAssignResult>> =>
+    apiClient
+      .post<ApiResponse<KursunBulkAssignResult>>(`${BASE}/assign-bulk`, input)
+      .then((r) => r.data),
+
+  /** Seçilenleri TOPLUCA havuza döndürür. `assignBulk` ile aynı parçalı sözleşme. */
+  cancelBulk: (input: {
+    assignmentIds: string[];
+    reason?: string;
+  }): Promise<ApiResponse<KursunBulkCancelResult>> =>
+    apiClient
+      .post<ApiResponse<KursunBulkCancelResult>>(`${BASE}/cancel-bulk`, input)
       .then((r) => r.data),
 
   cancel: (
@@ -92,5 +106,23 @@ export const kursunDagitimService = {
       .patch<
         ApiResponse<KursunQueueUrgentResult>
       >(`/api/kursun-qc/queue/${stepId}/urgent`, { isUrgent })
+      .then((r) => r.data),
+
+  /**
+   * SIRALAMA — `urgent` ile aynı kurşun kuyruğu ucu. Ayrı bir bypass ucu YOK:
+   * sıralanan alan `WorkOrderStep.priority` ve onu kurşun tabletinin `open-cards`
+   * listesi de okuyor; ikinci bir yazma yolu iki sıralama doğururdu.
+   *
+   * Gövde YALNIZ bekleyen (dağıtılmamış) satırları taşır — dağıtılmış iş artık
+   * kuyrukta değil, makinede. Backend zaten yalnız açık PROCESS_QC adımlarını
+   * günceller; kapsam daralması burada BİLİNÇLİ (bkz. `reorderWaiting`).
+   */
+  reorder: (
+    items: { id: string; priority: number }[],
+  ): Promise<ApiResponse<{ updated: number }>> =>
+    apiClient
+      .patch<ApiResponse<{ updated: number }>>("/api/kursun-qc/queue/reorder", {
+        items,
+      })
       .then((r) => r.data),
 };

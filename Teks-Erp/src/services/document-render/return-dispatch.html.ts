@@ -31,7 +31,14 @@ export interface ReturnDispatchDoc {
     fromShipmentNo: string | null;
     orderNo: string | null;
   };
+  /** Tekil iade kalemi. ESKİ SNAPSHOT'LARIN TEK ALANI — kaldırılamaz. */
   line: ReturnLine;
+  /**
+   * ÇOK KALEMLİ iade (çuval bazlı toplu kabul) — yalnız grup iadelerinde yazılır.
+   * Yoksa `[line]` kullanılır → 2026-08-05 öncesi donmuş belgeler bayt-bayt aynı
+   * basılır (tablo zaten `buildDocTable` ile çiziliyordu, satır sayısı değişti).
+   */
+  lines?: ReturnLine[];
   reason: string | null;
   note: string | null;
   receivedBy: string | null;
@@ -97,18 +104,29 @@ export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: Ren
   ].filter(Boolean);
   const refRow = showReferences && refBits.length ? `<div class="meta-row">${refBits.join(" &nbsp;·&nbsp; ")}</div>` : "";
 
+  // Çok kalemli iade → `lines`; eski/tekil snapshot → `[line]`. Toplam satırı YALNIZ
+  // çok kalemlide basılır (`footLabel` yoksa `buildDocTable` foot satırını hiç
+  // üretmez) → tek kalemli belgenin çıktısı bayt-bayt korunur.
+  const lines = doc.lines?.length ? doc.lines : [doc.line];
+  const multiLine = lines.length > 1;
+  const totalQty = lines.reduce((s, l) => s + (Number(l.qty) || 0), 0);
   const table = sectionOn(cfg.sections, "rollTable")
     ? buildDocTable<ReturnLine>({
         className: "sec",
-        caption: "İADE EDİLEN TOP",
+        caption: multiLine ? "İADE EDİLEN TOPLAR" : "İADE EDİLEN TOP",
         colCfg: cfg.columns?.rollTable,
-        rows: [doc.line],
+        rows: lines,
+        footLabel: multiLine ? `TOPLAM (${lines.length} top)` : undefined,
         cols: [
           { key: "barcode", label: "BARKOD", align: "l", cellClass: "mono", cell: (r) => esc(r.barcode ?? "—") },
           { key: "itemColor", label: "ÜRÜN / RENK", align: "l", cell: (r) => `${esc(r.itemName)}${r.colorName ? ` · ${esc(r.colorName)}` : ""}` },
           { key: "width", label: "EN", align: "c", width: "60px", cell: (r) => (r.width != null ? `${esc(Math.round(r.width))} cm` : "—") },
           { key: "grade", label: "KALİTE", align: "c", width: "70px", cell: (r) => esc(r.grade || "—") },
-          { key: "qty", label: "METRE", align: "r", width: "80px", cell: (r) => esc(fmtQty(r.qty)) },
+          {
+            key: "qty", label: "METRE", align: "r", width: "80px",
+            cell: (r) => esc(fmtQty(r.qty)),
+            foot: multiLine ? esc(fmtQty(totalQty)) : undefined,
+          },
         ],
       })
     : "";

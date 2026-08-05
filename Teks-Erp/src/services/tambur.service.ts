@@ -19,6 +19,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
+import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { readTamburOverQuantityEnabled } from "./system-setting.service";
 import {
   decodeDynamicCursor,
@@ -519,6 +520,9 @@ export class TamburService {
           select: {
             id: true,
             workOrderId: true,
+            // stationId 2026-08-05te EKLENDI: kesim cocuklarinin entryStationId
+            // damgasi buradan cozulur. Ek sorgu YOK — ayni select.
+            stationId: true,
             station: { select: { kind: true } },
             workOrder: {
               select: {
@@ -947,6 +951,10 @@ export class TamburService {
             // Parti (batch) kimliğini parent'tan kalıt → bölünen toplar depoya
             // gitse bile hangi partiden geldiği lane'de izlenir.
             batchId: roll.batchId,
+            // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
+            // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
+            // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
+            entryStationId: resolveEntryStationId({ stepStationId: roll.currentStep?.stationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             // Sadece depoya giden (WAREHOUSE) çıktılar kartelalık işaretlenir;
             // fire/scrap işaretlenmez (zaten sevke uygun değil).
@@ -1802,6 +1810,14 @@ export class TamburService {
       clientToken?: string;
     },
     userId?: string,
+    /**
+     * Aktif çalışma oturumunun istasyonu — çıkan parçanın GİRİŞ İSTASYONU damgası.
+     *
+     * Bu yolda İŞ EMRİ/ADIM YOKTUR (depo topu kesimi), dolayısıyla adım kaynağı
+     * kullanılamaz ve tek doğru kaynak oturumdur. Verilmezse damga NULL kalır —
+     * eski istemciler ve dahili çağrılar kırılmaz.
+     */
+    sessionStationId?: string | null,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
@@ -1903,6 +1919,10 @@ export class TamburService {
           parentRollId: parent.id,
           // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
           batchId: parent.batchId,
+          // GİRİŞ İSTASYONU — bu yolda ADIM YOK (depo topu kesimi) → oturum tek kaynak.
+          // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
+          // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
+          entryStationId: resolveEntryStationId({ sessionStationId }),
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
           // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
@@ -2079,6 +2099,8 @@ export class TamburService {
       notes?: string | null;
     },
     userId?: string,
+    /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
+    sessionStationId?: string | null,
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> {
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
@@ -2204,6 +2226,10 @@ export class TamburService {
             parentRollId: parent.id,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
+            // GİRİŞ İSTASYONU — kesilen parçayla AYNI kaynak — ikisi aynı kesimin ürünü.
+            // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
+            // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
+            entryStationId: resolveEntryStationId({ sessionStationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
@@ -2458,6 +2484,10 @@ export class TamburService {
           parentRollId: parent.id,
           // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
           batchId: parent.batchId,
+          // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
+          // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
+          // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
+          entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
           // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
@@ -2789,6 +2819,10 @@ export class TamburService {
             parentRollId: parent.id,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
+            // GİRİŞ İSTASYONU — kalan parça da aynı kesimin ürünü.
+            // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
+            // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
+            entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.

@@ -105,6 +105,8 @@ const { isAdmin, hasPermission, hasAnyPermission, hasAllPermissions } = useRoleA
 
 **Uygulamaya kabul (`canEnterApp`):** Kullanıcının en az bir **mobil-olmayan (masaüstü) izni** olmalı — yalnız `mobile:*` izinli hesaplar panele giremez (backend `login`'de `clientType='electron'` iken 403 döner, token bile üretmez). Admin-only sayfalar `<ProtectedRoute requirePermission="admin:*">` ile kilitli.
 
+**Genel Ayarlar = geniş kapı, dar içerik (2026-08-05):** `/system/settings` route'u `admin:settings` **veya** `settings:workstation` ile açılır; sayfa kategorileri `visibleSettingsCategories` ile SÜZER — dar izinli kullanıcı yalnız **"Bu Bilgisayar"** (yazıcı/kantar/tabanca/sunucu adresi) kategorisini görür, sistem geneli kategoriler salt-okunur bile olsa listeye GİRMEZ. Gerekçe: bu sekmedeki ayarların hiçbiri sunucuya yazılmaz (yerel `machine-config`), etkisi tek makineyle sınırlıdır. Yeni kategori eklerken varsayılan DARdır (`permissionAny` verilmezse `admin:settings`) — izin yazmayı unutmak kategoriyi gizler, sızdırmaz. ⚠️ Sistem hub'ı (`/system`) hâlâ `admin:settings` ister; dar izinli kullanıcının ekrana ULAŞTIĞI yol kişisel **Ayarlar** sayfasındaki "Bu Bilgisayar" kartıdır — yeni bir dar-izin ekranı eklerken "izni verdim ama yolu vermedim" tuzağını hatırla. Bekçi: `Teks-Erp/scripts/test_workstation_permission.ts` (Electron sabiti ile backend kodunun birebirliğini de kilitler).
+
 ## CRUD Pattern (yeni Master Data sayfası 5 dosya)
 
 ```

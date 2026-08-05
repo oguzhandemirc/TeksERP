@@ -14,7 +14,10 @@ const controller = new PrintedDocumentController();
 const router = Router();
 
 // docType → izin eşlemesi (kaynak modüllerin route'larıyla aynı kodlar).
-const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
+// EXPORT: `scripts/test_workorder_documents.ts` bunu okuyup belge LİSTESİ izniyle
+// BASKI iznini karşılaştırır — ayrışırlarsa operatör satırı görür, basamaz ve
+// hiçbir yerde sebep görünmez (sessiz 403).
+export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
   SHIPMENT_DISPATCH: {
     read: ["shipping:read", "shipping:write", "mobile:tarti-paket", "mobile:sevkiyat"],
     write: ["shipping:write"],
@@ -31,7 +34,16 @@ const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     write: ["workorder:write"],
   },
   SUBCONTRACTOR_DIRECT_SHIP: {
-    read: ["workorder:read", "workorder:write", "mobile:fason-sevk", "mobile:fason-kabul"],
+    // mobile:hizli-is-emri — `GET /work-orders/:id/documents` bu belgeyi listeler;
+    // listede GÖRÜNÜP basılamayan belge sessiz bir 403 kapanıdır (operatör satıra
+    // basar, hiçbir şey olmaz). Liste izniyle baskı izni HİZALI tutulmalı.
+    read: [
+      "workorder:read",
+      "workorder:write",
+      "mobile:fason-sevk",
+      "mobile:fason-kabul",
+      "mobile:hizli-is-emri",
+    ],
     write: ["workorder:write"],
   },
   KARTELA_DISPATCH: {
@@ -39,8 +51,16 @@ const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     write: ["kartela:write"],
   },
   // Fason kabul makbuzu — fason okuma/yazma + mobil fason kabul.
+  // mobile:hizli-is-emri: yukarıdaki DIRECT_SHIP ile aynı gerekçe (liste ↔ baskı hizası).
   SUBCONTRACTOR_RECEIPT: {
-    read: ["workorder:read", "workorder:write", "mobile:fason-kabul", "subcontractor:read"],
+    read: [
+      "workorder:read",
+      "workorder:write",
+      "mobile:fason-kabul",
+      "mobile:fason-sevk",
+      "mobile:hizli-is-emri",
+      "subcontractor:read",
+    ],
     write: ["workorder:write"],
   },
   // Sevkiyat-türevli belge (kalite sertifikası) — sevkiyat izinleri.

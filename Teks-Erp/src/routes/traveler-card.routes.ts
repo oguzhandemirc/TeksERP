@@ -258,6 +258,41 @@ travelerCardRouter.get(
 
 /**
  * @openapi
+ * /api/traveler-cards/{id}/print-event:
+ *   post:
+ *     tags: [TravelerCards]
+ *     summary: Baskı olayı — "kart fiziksel olarak basıldı" (bayat işaretini temizler)
+ *     description: >
+ *       İstemci baskı BAŞARIYLA tamamlandıktan sonra çağırır. `contentDirty`
+ *       temizlenir, `printedAt` tazelenir. Yeni versiyon doğurmaz, snapshot'a
+ *       dokunmaz. GET /html bunu YAPMAZ — o uç önizleme tarafından da çağrılır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Baskı kaydedildi }
+ *       404: { description: Kart bulunamadı }
+ */
+travelerCardRouter.post(
+  "/:id/print-event",
+  verifyToken,
+  // Kartı BASABİLEN herkes baskı olayını da bildirebilmeli — izin kümesi
+  // /:id/html ile BİREBİR aynı; ayrışırsa saha kartı basar ama rozet kalıcı olur.
+  requireAnyPermission(
+    "workorder:read",
+    "workorder:write",
+    "mobile:kk1",
+    "mobile:fason-sevk",
+    "mobile:hizli-is-emri",
+  ),
+  controller.recordPrintEvent
+);
+
+/**
+ * @openapi
  * /api/traveler-cards/{id}/void:
  *   post:
  *     tags: [TravelerCards]

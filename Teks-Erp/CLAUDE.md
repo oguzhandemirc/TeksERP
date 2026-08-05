@@ -88,7 +88,7 @@ Sadece bunlar. Alternatif tanıtma.
 
 ## RBAC Permission Kodları
 
-`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **59 permission**, **10 modül**:
+`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **63 permission**, **10 modül**:
 
 | Modül | Permissions |
 |---|---|
@@ -100,7 +100,7 @@ Sadece bunlar. Alternatif tanıtma.
 | KARTELA | `kartela:read/write` |
 | LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read/write`, `shipping:read/write`, `shipping:invoice` (muhasebe fatura işareti — `shipping:write` VERMEDEN), `return:read/write` |
 | REPORTS | `report:production/sales/quality/inventory/subcontract/customer/audit` |
-| ADMIN | `admin:users`, `admin:settings`, `admin:*` (wildcard) |
+| ADMIN | `admin:users`, `admin:settings`, `admin:*` (wildcard), `settings:workstation` (kategori **web** — "Bu Bilgisayar" yerel donanım sekmesi: yazıcı/kantar/tabanca/sunucu adresi; sunucuya HİÇBİR ŞEY yazmaz, `admin:*` bunu **vermez**) |
 | MOBILE | `mobile:kk1/kk2-kursun/tambur/depo/fason-sevk/fason-kabul/kartela-sevk/kartela-kabul/tarti-paket/sevkiyat/iade/hizli-is-emri`, `mobile:kursun-dagitim` (Kurşun Dağıtım ekranı — `workorder:distribute`'in mobil ikizi), `mobile:kk1-desen` (KK1-içi yetenek: seçili operatöre yeni desen oluşturma), `mobile:*` (wildcard) |
 
 > Eski `shipment:*` ve `allocation:*` permission'ları 2026-05-25'te silindi; yeni sevkiyat yazımıyla `shipping:read/write` + `return:read/write` (LOGISTICS) ve mobil ekran izinleri geldi.

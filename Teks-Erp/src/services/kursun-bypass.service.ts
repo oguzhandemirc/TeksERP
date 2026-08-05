@@ -68,6 +68,12 @@ import {
   findPendingBypassAssignmentTx,
   KURSUN_BYPASS_MARKER_PREFIX,
 } from "./helpers/kursun-bypass-guard.helper";
+import {
+  loadBypassEligibilitySignals,
+  nextNonSkippedStep,
+  resolveBypassBlockReason,
+  type RouteStepRef,
+} from "./helpers/kursun-bypass-eligibility.helper";
 
 /**
  * Bypass kapanışının movement notes marker ÖN EKİ. Tur kimliği (uuid) suffix
@@ -165,6 +171,15 @@ export interface KursunDistributionWaitingRow extends KursunDistributionRowBase 
 }
 
 export interface KursunDistributionAssignedRow extends KursunDistributionRowBase {
+  /**
+   * `WorkOrderStep.priority` — MAKİNE İÇİ sıra. Sürükle-bırak bunu yeniden yazar
+   * (`PATCH /kursun-qc/queue/reorder`, `waiting` ile AYNI uç ve AYNI alan).
+   *
+   * Çakışma YOK: bir adım aynı anda ya bekleyendir ya bir makinededir ya da
+   * tablet `open-cards` listesindedir — üçü birbirini dışlar. Sıralama yalnız o
+   * kümenin kendi satırlarını yeniden numaralar.
+   */
+  priority: number;
   assignmentId: string;
   /** ATANAN fiziksel kurşun makinesi — izleme/gruplama bu alan üzerinden yapılır. */
   machineId: string;
@@ -191,19 +206,21 @@ export interface KursunDistributionPayload {
 }
 
 /**
- * MENÜ ÇİZME payload'ı — iki ekranın "koşullu göster" kararı için üç sayı.
+ * Üç sayılık hafif sayaç ucu — `listDistribution`'ın ağır gövdesini (makineler,
+ * satır satır uygunluk/stale hesabı, parti numaraları, metraj toplamları)
+ * ödemeden "ne kadar iş var" sorusunu yanıtlar. Sorgu YALNIZ iki `count`.
  *
- * NEDEN AYRI BİR UÇ: iki arayüz de (Electron karo listesi + mobil ana ekran)
- * menüyü çizerken bunu çağırır; `listDistribution`'ın ağır gövdesini (makineler,
- * satır satır uygunluk/stale hesabı, parti numaraları, metraj toplamları) menü
- * için ödemek anlamsız olurdu. Burada sorgu YALNIZ iki `count`'tur.
+ * ⚠️ ARTIK MENÜ ÇİZMİYOR (2026-08-05). Eskiden iki kurşun karosunun koşullu
+ * görünürlüğünü sürüyordu:
+ *   • "Kurşun Sırası"   görünür ⇔ `!flagEnabled || tabletRegimeCount > 0`
+ *   • "Kurşun Dağıtım"  görünür ⇔ `flagEnabled  || pendingAssignmentCount > 0`
+ * İki ekran "Kurşun Planlama"da birleşti ve karo BAYRAKTAN BAĞIMSIZ hale geldi
+ * (yalnız izinle süzülür) → kural her iki istemciden de kalktı.
  *
- * KARAR KURALLARI (kullanıcı kararı, 2026-08-02):
- *   • "Kurşun Sırası"   görünür  ⇔  `!flagEnabled || tabletRegimeCount > 0`
- *   • "Kurşun Dağıtım"  görünür  ⇔  `flagEnabled  || pendingAssignmentCount > 0`
- * Yani her iki ekran da "işi kaldıysa durur, bitince kendiliğinden kaybolur".
- * Kuralı BACKEND uygulamaz (ham sayı döner) — iki istemcinin de kendi menü
- * mantığı var ve karo görünürlüğü bir yetki kararı değil, ergonomi kararıdır.
+ * UÇ BİLİNÇLİ OLARAK DURUYOR: sahadaki ESKİ APK'lar bu ucu hâlâ çağırıyor
+ * (uygulama öne geldiğinde + modül seçim ekranında). Silmek, backend deploy'u
+ * ile APK dağıtımı arasındaki pencerede o tabletlerde 404 üretirdi. Yeni
+ * istemciler çağırmaz.
  */
 export interface KursunBypassVisibility {
   /** `production.kursunBypassEnabled` — YENİ atama açık mı. */
@@ -296,6 +313,10 @@ async function loadDistributionSteps(
       stationId: true,
       isUrgent: true,
       urgentMarkedAt: true,
+      // Planlama sırası. `waiting` bunu `orderBy` ile kullanıyor; `assigned`
+      // MAKİNE İÇİ sıralama için JS'te sıralanıyor (aşağıdaki `sortByPlanOrder`)
+      // — atamalar `assignedAt asc` ile yüklendiği için orderBy yetmez.
+      priority: true,
       workOrder: {
         select: {
           id: true,
@@ -337,27 +358,32 @@ async function loadDistributionSteps(
 
 type DistributionStepRow = Awaited<ReturnType<typeof loadDistributionSteps>>[number];
 
-/** Rotadaki bir adımın sıralı listesi için minimum şekil (kind + status yeter). */
-interface RouteStepRef {
-  id: string;
-  stepSequence: number;
-  status: StepStatus;
-  station: { kind: StationKind; name: string };
-}
+// `RouteStepRef` + `nextNonSkippedStep` + UYGUNLUK KURALI artık
+// `helpers/kursun-bypass-eligibility.helper.ts`'te yaşıyor: aynı kuralı kurşun
+// TABLETİ de soruyor (salt-okunur bilgi ekranı + yazma guard'ı) ve iki kopya
+// zamanla ayrışırdı. Buradan yalnız kullanılır.
 
 /**
- * Verilen adımdan SONRAKİ ilk NON-SKIPPED adım (yoksa null = son adım).
+ * PLANLAMA SIRASI karşılaştırıcısı — `waiting` listesinin Prisma `orderBy`'ıyla
+ * BİREBİR aynı kural, JS tarafında: acil önce → acil işaretleme anı → planlama
+ * önceliği → (son eşitlik bozucu) dağıtım anı.
  *
- * SKIPPED atlanır çünkü SKIPPED terminaldir: `recomputeStepStatus` ona dokunmaz,
- * oraya bağlanan top akışta görünmez ve WO tamamlanamaz (F76 emsali).
+ * `null` acil damgası SONA gider (`nulls: "last"` karşılığı) — aksi halde hiç
+ * acil işaretlenmemiş bir satır, acil olanların önüne geçerdi.
  */
-function nextNonSkippedStep(
-  steps: RouteStepRef[],
-  stepId: string,
-): RouteStepRef | null {
-  const idx = steps.findIndex((s) => s.id === stepId);
-  if (idx < 0) return null;
-  return steps.slice(idx + 1).find((s) => s.status !== StepStatus.SKIPPED) ?? null;
+function sortByPlanOrder(
+  a: { isUrgent: boolean; urgentMarkedAt: Date | null; priority: number; assignedAt: Date },
+  b: { isUrgent: boolean; urgentMarkedAt: Date | null; priority: number; assignedAt: Date },
+): number {
+  if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
+  if (a.urgentMarkedAt || b.urgentMarkedAt) {
+    if (!a.urgentMarkedAt) return 1;
+    if (!b.urgentMarkedAt) return -1;
+    const d = a.urgentMarkedAt.getTime() - b.urgentMarkedAt.getTime();
+    if (d !== 0) return d;
+  }
+  if (a.priority !== b.priority) return a.priority - b.priority;
+  return a.assignedAt.getTime() - b.assignedAt.getTime();
 }
 
 /** Kapanmış movement BYPASS turuna mı ait? (marker ön eki ile başlıyor mu) */
@@ -496,70 +522,14 @@ export class KursunBypassService {
     }
 
     // ── Uygunluk sinyalleri (yalnız bekleyenler için; toplu sorgu, N+1 yok) ──
+    // Sorgular da kural da `helpers/kursun-bypass-eligibility.helper`'da: kurşun
+    // TABLETİ aynı kuralı tekil olarak soruyor ve iki kopya ayrışırdı.
     const waitingIds = waitingSteps.map((s) => s.id);
-
-    // BYPASS-DIŞI kapanmış movement: KK2 finish / manuel taşıma / WO kapanışı izi.
-    // `notes IS NULL` AYRI dal — SQL'de `NOT (notes LIKE 'x%')` null'da NULL döner
-    // ve satırı sessizce ELER; oysa notsuz kapanış da bypass-dışıdır.
-    const closedNonBypass = waitingIds.length
-      ? await prisma.rollMovement.findMany({
-          where: {
-            workOrderStepId: { in: waitingIds },
-            exitedAt: { not: null },
-            OR: [
-              { notes: null },
-              { notes: { not: { startsWith: KURSUN_BYPASS_MARKER_PREFIX } } },
-            ],
-          },
-          select: { workOrderStepId: true },
-          distinct: ["workOrderStepId"],
-        })
-      : [];
-    const closedNonBypassSteps = new Set(closedNonBypass.map((m) => m.workOrderStepId));
-
-    const qc2Ops = waitingIds.length
-      ? await prisma.rollOperation.findMany({
-          where: {
-            workOrderStepId: { in: waitingIds },
-            operationType: RollOperationType.QC2_COMPLETED,
-            inheritedFromParentRollId: null,
-          },
-          select: { workOrderStepId: true },
-          distinct: ["workOrderStepId"],
-        })
-      : [];
-    const qc2Steps = new Set(qc2Ops.map((o) => o.workOrderStepId));
-
-    const errorRows = waitingIds.length
-      ? await prisma.rollError.findMany({
-          where: { detectedAtStepId: { in: waitingIds } },
-          select: { detectedAtStepId: true },
-          distinct: ["detectedAtStepId"],
-        })
-      : [];
-    const errorSteps = new Set(
-      errorRows.map((e) => e.detectedAtStepId).filter((x): x is string => !!x),
-    );
+    const signals = await loadBypassEligibilitySignals(prisma, waitingIds);
 
     const waiting: KursunDistributionWaitingRow[] = waitingSteps.map((step) => {
       const base = this.buildRowBase(step);
-      const next = nextNonSkippedStep(step.workOrder.steps, step.id);
-      let blockReason: string | null = null;
-
-      if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
-        blockReason = "Adım kapanmış (tamamlandı/atlandı)";
-      } else if (step.movements.some((m) => m.qtyIn.lte(0))) {
-        blockReason = "Ölçümsüz açık kumaş var (metrajı girilmemiş top)";
-      } else if (closedNonBypassSteps.has(step.id)) {
-        blockReason = "Bu adımda bypass dışı kapanmış hareket var (KK2 kapatma / manuel taşıma)";
-      } else if (qc2Steps.has(step.id)) {
-        blockReason = "Bu adımda KK2 kaydı var — iş dijital olarak işlenmiş";
-      } else if (errorSteps.has(step.id)) {
-        blockReason = "Bu adımda hata kaydı açılmış — kâğıt akışına çevrilemez";
-      } else if (next && next.station.kind !== StationKind.TAMBUR) {
-        blockReason = `Kurşundan sonraki adım Tambur değil (${next.station.name}) — bypass kapanışını yapacak istasyon yok`;
-      }
-
+      const blockReason = resolveBypassBlockReason(step, signals);
       return { ...base, eligible: blockReason === null, blockReason };
     });
 
@@ -597,8 +567,19 @@ export class KursunBypassService {
         notes: a.notes,
         stale: staleReason !== null,
         staleReason,
+        priority: step.priority,
       });
     }
+
+    // MAKİNE İÇİ SIRA (2026-08-05). Atamalar `assignedAt asc` ile yükleniyor —
+    // yani liste "ne zaman dağıtıldı" sırasındaydı ve planlamacının makinedeki
+    // işleri sürükleyip sıralaması EKRANA HİÇ YANSIMAZDI. Artık `waiting` ile
+    // AYNI planlama sırası uygulanır; son eşitlik bozucu `startedAt` değil
+    // `assignedAt`'tir (dağıtılmış iş için anlamlı olan odur).
+    //
+    // Sıralama JS'te: kaynak `pendingRows` (atamalar), sıralama anahtarları ise
+    // adımda (`WorkOrderStep`) — tek `orderBy` ile ifade edilemez.
+    assigned.sort(sortByPlanOrder);
 
     return {
       success: true,
@@ -944,6 +925,116 @@ export class KursunBypassService {
       message: result.reassigned
         ? `${result.workOrderNumber} dağıtımı "${result.machineName}" makinesine taşındı`
         : `${result.workOrderNumber} "${result.machineName}" makinesine dağıtıldı`,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // TOPLU İŞLEMLER (2026-08-05)
+  // ---------------------------------------------------------------------------
+  /**
+   * ÇOK İŞ EMRİNİ tek çağrıda bir makineye dağıtır (havuzdan seçip atama ve
+   * makineler arası TAŞIMA aynı uçtur — `assign` zaten yeniden-atamayı taşıma
+   * olarak ele alıyor).
+   *
+   * ⚠️ TEK BİR TRANSACTION DEĞİL — her iş emri KENDİ tx'inde işlenir ve sonuç
+   * PARÇALI olabilir. İki gerekçe:
+   *  1. `assign` iş emri satırını kilitliyor (`touchWorkOrderTx`). 50 iş emrini
+   *     tek tx'e almak 50 satırı işlem boyunca kilitli tutar — kök kural 10
+   *     ("transaction süresi kısa") ihlali ve gerçek bir deadlock riski.
+   *  2. Hepsi-ya-hiç yanlış semantik olurdu: listedeki bir iş emri bu arada
+   *     uygunluğunu yitirdiyse (tablette dokunuldu, iptal edildi, kapandı)
+   *     diğer 49'un dağıtımını geri almak planlamacının niyetine aykırıdır.
+   *     Dağıtım zaten geri alınabilir bir karardır (Kaldır).
+   *
+   * Bu yüzden yanıt SESSİZ DEĞİLDİR: başarısız her satır kendi somut sebebiyle
+   * `failed` dizisinde döner ve arayüz onları tek tek gösterir. "42 atandı"
+   * demek ama 8'inin neden atlandığını söylememek, en kötü davranıştır.
+   */
+  async assignBulk(
+    input: { workOrderIds: string[]; machineId: string; notes?: string | null },
+    userId?: string,
+  ): Promise<
+    ApiResponse<{
+      assigned: number;
+      /** Bunlardan kaçı BAŞKA bir makineden taşındı (yeni atama değil). */
+      moved: number;
+      failed: Array<{ workOrderId: string; message: string }>;
+    }>
+  > {
+    if (!userId) throw AppError.unauthorized();
+
+    let assigned = 0;
+    let moved = 0;
+    const failed: Array<{ workOrderId: string; message: string }> = [];
+
+    // SIRALI koşar (Promise.all DEĞİL): aynı makineye eş zamanlı atama, WO
+    // kilitlerini rastgele sırada alıp deadlock üretebilir; ayrıca havuz
+    // seçimleri onlarca satırlık olur, yüzlerce değil.
+    for (const workOrderId of input.workOrderIds) {
+      try {
+        const res = await this.assign(
+          { workOrderId, machineId: input.machineId, notes: input.notes ?? null },
+          userId,
+        );
+        assigned++;
+        if (res.data.reassigned) moved++;
+      } catch (e) {
+        // Beklenmeyen hata (DB düştü, bug) YUTULMAZ — tüm çağrıyı düşürür.
+        // Yalnız iş kuralı redleri satır bazında raporlanır.
+        if (!(e instanceof AppError)) throw e;
+        failed.push({ workOrderId, message: e.message });
+      }
+    }
+
+    return {
+      success: true,
+      data: { assigned, moved, failed },
+      message:
+        failed.length === 0
+          ? `${assigned} iş emri dağıtıldı`
+          : `${assigned} iş emri dağıtıldı, ${failed.length} tanesi atlandı`,
+    };
+  }
+
+  /**
+   * ÇOK DAĞITIMI tek çağrıda iptal eder → işler havuza (bekleyen kuyruğa) döner.
+   *
+   * `assignBulk` ile AYNI sözleşme: her satır kendi tx'inde, sonuç parçalı
+   * olabilir, atlanan her satır somut sebebiyle döner. Burada hepsi-ya-hiç
+   * daha da yanlış olurdu — iptal zaten "geri al" yönüdür; bir satırın çoktan
+   * tamamlanmış olması diğerlerinin havuza dönmesini engellememeli.
+   */
+  async cancelBulk(
+    input: { assignmentIds: string[]; reason?: string | null },
+    userId?: string,
+  ): Promise<
+    ApiResponse<{
+      cancelled: number;
+      failed: Array<{ assignmentId: string; message: string }>;
+    }>
+  > {
+    if (!userId) throw AppError.unauthorized();
+
+    let cancelled = 0;
+    const failed: Array<{ assignmentId: string; message: string }> = [];
+
+    for (const assignmentId of input.assignmentIds) {
+      try {
+        await this.cancelAssignment(assignmentId, { reason: input.reason ?? null }, userId);
+        cancelled++;
+      } catch (e) {
+        if (!(e instanceof AppError)) throw e;
+        failed.push({ assignmentId, message: e.message });
+      }
+    }
+
+    return {
+      success: true,
+      data: { cancelled, failed },
+      message:
+        failed.length === 0
+          ? `${cancelled} dağıtım kaldırıldı`
+          : `${cancelled} dağıtım kaldırıldı, ${failed.length} tanesi atlandı`,
     };
   }
 

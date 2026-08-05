@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle, Send } from "lucide-react";
+import { History, Tag, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle, Send, LogIn } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -258,45 +258,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       <div className="text-xs">{roll.foldType}</div>
                     </>
                   )}
-                  <div className="text-xs text-muted-foreground">Giriş Kaynağı</div>
-                  <div>
-                    <Badge variant="muted" className="text-[10px]">
-                      {rollEntrySourceLabels[
-                        roll.entrySource as keyof typeof rollEntrySourceLabels
-                      ] ?? roll.entrySource}
-                    </Badge>
-                  </div>
-                  {/* ELLE EKLENEN TOPUN SEBEBİ.
-                      ⚠️ `detail`'den okunur, `roll`'dan DEĞİL — 2026-08-04'te bir
-                      gün boyunca `roll.manualReason` yazıyordu ve alan HİÇBİR
-                      ZAMAN dolmuyordu: `manualReason` yalnız DETAY ucunda döner
-                      (`GET /rolls/:id`), liste satırında yoktur. Yani özellik
-                      yazıldı, test edildi, commit edildi — ve kullanıcıya hiç
-                      ulaşmadı. Kolon `Roll.entryReason` olarak ŞEMADA VARDIR
-                      (migration 20260804210000); "audit'ten okunuyor" diyen eski
-                      yorum yanlıştı.
-                      Yalnız elle doğan topta dolu; diğerlerinde satır çizilmez. */}
-                  {detail?.manualReason && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Ekleme Nedeni</div>
-                      <div className="text-xs">{detail.manualReason}</div>
-                    </>
-                  )}
-                  {/* KİM EKLEDİ (2026-08-05). Veri backend'de en baştan vardı
-                      (`Roll.createdById` kolonu, %97 dolu) ama hiçbir yüzeyde
-                      basılmıyordu. Makine atfı varsa aynı satırda birleştirilir —
-                      "Ahmet · Sarım-2" tek okumada hem kişiyi hem yeri söyler. */}
-                  {(detail?.createdBy || detail?.createdMachine) && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Ekleyen</div>
-                      <div className="text-xs">
-                        {detail?.createdBy?.fullName ??
-                          detail?.createdBy?.username ??
-                          "—"}
-                        {detail?.createdMachine?.name ? ` · ${detail.createdMachine.name}` : ""}
-                      </div>
-                    </>
-                  )}
                   {/* BULUNDUĞU İSTASYON — yalnız bir adımda duran topta anlamlı.
                       Depo/ham stok topunda alan null'dur ve satır çizilmez. */}
                   {detail?.currentStep?.station && (
@@ -340,6 +301,72 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                           </Badge>
                         ))}
                       </div>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* GİRİŞ BİLGİLERİ — "bu top sisteme nereden, ne zaman, kim
+                tarafından girdi" sorusunun TEK yeri (2026-08-05 kullanıcı
+                talebi: "sidepanelde de rahatça gözüksün").
+
+                Bu alanlar önce teknik özelliklerin (kumaş/en/kat/ağırlık/renk)
+                arasına dağılmıştı ve okunmuyordu. İki farklı soruya cevap
+                veriyorlar: teknik grid "bu top NEDİR", bu kart "NEREDEN GELDİ".
+                Ayrı kart = ayrı soru.
+
+                ⚠️ Liste sütunları bu üçü için varsayılan GİZLİ (envanter
+                standardı: liste yüzeyi anlık karar için sade kalır) — bu kart
+                onların HER ZAMAN görünen karşılığıdır. */}
+            <Card>
+              <CardContent className="p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <LogIn className="h-3.5 w-3.5" /> Giriş Bilgileri
+                </div>
+                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-sm">
+                  <div className="text-xs text-muted-foreground">Giriş Kaynağı</div>
+                  <div>
+                    <Badge variant="muted" className="text-[10px]">
+                      {rollEntrySourceLabels[
+                        roll.entrySource as keyof typeof rollEntrySourceLabels
+                      ] ?? roll.entrySource}
+                    </Badge>
+                  </div>
+
+                  {/* GİRİŞ İSTASYONU — topun DOĞDUĞU istasyon. "Bulunduğu
+                      İstasyon"dan (yukarıdaki teknik kart) FARKLIDIR: o, topun
+                      ŞU AN nerede olduğunu söyler ve depodaki topta boştur.
+                      Bu alan bir daha DEĞİŞMEZ. */}
+                  <div className="text-xs text-muted-foreground">Giriş İstasyonu</div>
+                  <div className="text-xs">
+                    {detail?.entryStation?.name ?? (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">Ekleyen</div>
+                  <div className="text-xs">
+                    {detail?.createdBy?.fullName ?? detail?.createdBy?.username ?? (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                    {detail?.createdMachine?.name ? (
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {detail.createdMachine.name}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">Giriş Tarihi</div>
+                  <div className="text-xs">{safeFormat(roll.createdAt, "dd.MM.yyyy HH:mm")}</div>
+
+                  {/* Sebep YALNIZ elle eklenen topta dolu — diğerlerinde satır
+                      hiç çizilmez (boş "Ekleme Nedeni: —" gürültüdür). */}
+                  {detail?.manualReason && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Ekleme Nedeni</div>
+                      <div className="text-xs">{detail.manualReason}</div>
                     </>
                   )}
                 </div>

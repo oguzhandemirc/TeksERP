@@ -491,7 +491,7 @@ export class LabelService {
       customerId: "preview",
       orderNumber: "SIP1207260001",
       orderLineId: "preview",
-      batchNumber: "P1207260001",
+      batchNumber: "P1207261",
       printedAt: new Date().toISOString(),
       // SWATCH önizlemesinde kartela alanları görünsün (roll düzeninde yok sayılır).
       kind: input.kind,
@@ -568,7 +568,7 @@ export class LabelService {
       customerId: "preview",
       orderNumber: "SIP1207260001",
       orderLineId: "preview",
-      batchNumber: "P1207260001",
+      batchNumber: "P1207261",
       printedAt: new Date().toISOString(),
       kind: input.kind,
       cardNumber: "KRT1207260001",
@@ -924,7 +924,7 @@ export class LabelService {
       customerId: null,
       orderNumber: "SIP1207260001",
       orderLineId: null,
-      batchNumber: "P1207260001",
+      batchNumber: "P1207261",
       printedAt: new Date().toISOString(),
     };
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);

@@ -72,7 +72,15 @@ export interface StampContext {
  * - Aktif oturum yok/idle düştü → null; `enforceForMobile` açıksa 409
  *   WORK_SESSION_REQUIRED — mobil interceptor yer onayı ekranını yeniden açar.
  *   DESKTOP (Electron) cihazlar zorunluluktan MUAF — panel akışları oturumsuz
- *   çalışır (Electron da x-device-id gönderir; kind ayrımı bu yüzden şart).
+ *   çalışır.
+ *   ⚠️ Bu satır bir süre "Electron DA x-device-id gönderir; kind ayrımı bu
+ *   yüzden şart" diyordu ve YANLIŞTI. Electron `x-device-id` GÖNDERMEZ
+ *   (`Electron/src/services/apiClient.ts`, gerekçesi orada: cihaz-eşleştirme
+ *   kilidi). Dev DB'de DESKTOP cihaz kayıtları var ama onlar
+ *   `/api/devices/announce` ile doğdu; normal isteklerde başlık yoktur.
+ *   Pratik sonucu: panelden yapılan girişlerde `req.device` YOK → oturum yok →
+ *   `Roll.entryStationId` NULL kalır ve bu MEŞRUDUR (istasyon bağlamı gerçekten
+ *   yoktur). Bu yorumu okuyup "Electron'da da oturum vardır" varsayma.
  * - Tx DIŞINDA çağrılmalı (tx süresi kısa kuralı) — indexed tek sorgu + tembel idle.
  */
 export async function getStampContext(

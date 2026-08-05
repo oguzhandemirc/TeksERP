@@ -93,9 +93,9 @@ export interface Roll {
    * Okuyacak yer `detail`'dir.
    */
   manualReason?: string | null;
-  /** Topu sisteme giren kullanıcı — YALNIZ detay ucunda döner. */
+  /** Topu sisteme giren kullanıcı — liste VE detay ucunda döner (ROLL_LIST_INCLUDE). */
   createdBy?: { id: string; fullName?: string | null; username?: string | null } | null;
-  /** Girişin yapıldığı makine (varsa) — YALNIZ detay ucunda döner. */
+  /** Girişin yapıldığı makine (varsa) — liste VE detay ucunda döner. */
   createdMachine?: { id: string; name: string; code?: string | null } | null;
   /**
    * Topun ŞU AN bulunduğu iş emri adımı + istasyonu. Liste VE detay ucunda döner
@@ -108,6 +108,13 @@ export interface Roll {
     station: { id: string; code: string; name: string; kind: string } | null;
     workOrder: { id: string; workOrderNumber: string } | null;
   } | null;
+  /**
+   * Topun DOĞDUĞU istasyon — kalıcı, bir daha değişmez (Roll.entryStationId).
+   * `currentStep.station` ile KARIŞTIRMA: o, topun ŞU AN nerede olduğunu söyler
+   * ve depoya inince boşalır. Bu alan "nereden geldi" sorusunun cevabıdır.
+   * İstasyonsuz girişlerde (Electron paneli) ve geçmiş kayıtlarda null.
+   */
+  entryStation?: { id: string; code: string; name: string } | null;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */
   parentReceiptId: string | null;

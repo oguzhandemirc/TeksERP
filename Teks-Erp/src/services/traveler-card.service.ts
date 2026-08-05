@@ -103,12 +103,12 @@ const SAMPLE_TRAVELER_SNAPSHOT: Omit<TravelerCardSnapshot, "config"> = {
 /** Önizleme partileri — gerçek veri DEĞİL (canlı kartta resolveLiveBatches çözer). */
 const SAMPLE_TRAVELER_BATCHES: TravelerBatchLine[] = [
   {
-    batchNumber: "P1207260001",
+    batchNumber: "P1207261",
     rollCount: 4,
     quantity: 1240,
     dispatch: { dispatchNo: "FS1207260001", subcontractorName: "Yıldız Boyahane", moreCount: 0 },
   },
-  { batchNumber: "P1207260002", rollCount: 2, quantity: 610, dispatch: null },
+  { batchNumber: "P1207262", rollCount: 2, quantity: 610, dispatch: null },
 ];
 
 export class TravelerCardService {
@@ -228,6 +228,8 @@ export class TravelerCardService {
             snapshot,
             printedById: userId ?? null,
             printedAt: new Date(),
+            // Yeniden basım = eldeki kâğıt tazelendi → bayat işareti kalkar.
+            contentDirty: false,
           },
         });
       });
@@ -256,6 +258,43 @@ export class TravelerCardService {
       data: card,
       message: `Refakat kartı yeniden basıldı: ${card.cardNumber} (v${card.version})`,
     };
+  }
+
+  /**
+   * BASKI OLAYI — "bu kart fiziksel olarak basıldı" bildirimi. Bayat işaretini
+   * (`contentDirty`) temizler + `printedAt`'i tazeler. Yeni VERSİYON doğurmaz,
+   * snapshot'a DOKUNMAZ (içerik değişmedi, yalnız kâğıt yenilendi).
+   *
+   * ⚠️ NEDEN AYRI UÇ — `GET /traveler-cards/:id/html` bayrağı TEMİZLEYEMEZ:
+   * o uç önizleme tarafından da çağrılır ("HTML almak" ≠ "basmak"), ve GET'in
+   * yan etkisi olmamalı. Emsal: `POST /api/labels/rolls/:id/print` ve
+   * `POST /api/labels/sacks/:id/print-event` — ikisi de `labelDirty`'yi orada
+   * temizler. İstemci `printHtml` BAŞARIYLA döndükten sonra çağırır.
+   *
+   * `contentDirty: true` koşulu yok — baskı olayı her hâlükârda `printedAt`
+   * tazeler; koşullu updateMany "zaten temizdi" durumunda tarihi güncellemezdi.
+   */
+  async recordPrintEvent(cardId: string, userId?: string): Promise<ApiResponse<null>> {
+    const card = await prisma.travelerCard.findUnique({
+      where: { id: cardId },
+      select: { id: true, cardNumber: true, status: true, contentDirty: true },
+    });
+    if (!card) throw AppError.notFound("Refakat kartı bulunamadı");
+
+    await prisma.travelerCard.update({
+      where: { id: cardId },
+      data: { contentDirty: false, printedAt: new Date(), printedById: userId ?? null },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "TRAVELER_CARD",
+      recordId: cardId,
+      newData: { cardNumber: card.cardNumber, event: "PRINT_EVENT", wasDirty: card.contentDirty },
+    });
+
+    return { success: true, data: null, message: "Baskı kaydedildi" };
   }
 
   /**
@@ -467,6 +506,7 @@ export class TravelerCardService {
           status: true,
           workOrderId: true,
           printedAt: true,
+          contentDirty: true,
           workOrder: {
             select: {
               id: true,
@@ -581,7 +621,10 @@ export class TravelerCardService {
   private async resolveLiveBatches(workOrderId: string): Promise<TravelerBatchLine[]> {
     const batches = await prisma.batch.findMany({
       where: { workOrderId, mergedIntoId: null },
-      orderBy: { batchNumber: "asc" },
+      // ⚠️ `batchNumber` ile SIRALAMA YOK: parti no dolgusuzdur (P0508262 …
+      // P05082610) → sözlüksel sıra sayısal sırayı ters çevirir. Doğuş sırası
+      // zaten istenen sıradır ve diğer tüm parti listeleri de böyle sıralar.
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { id: true, batchNumber: true },
     });
     if (batches.length === 0) return [];

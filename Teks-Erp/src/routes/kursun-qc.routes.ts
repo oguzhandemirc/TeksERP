@@ -357,14 +357,24 @@ router.get(
  *       401: { description: Yetkisiz }
  *       500: { description: Sunucu hatası }
  */
-// Yetki BİLİNÇLİ olarak DAR (`quality:write`) — `priority` TABLET akışının
-// çalışma sırasıdır (`open-cards` bu alanla sıralanır) ve dağıtılmış adımlar o
-// listede zaten görünmez. Dağıtımcının sıralayacak bir şeyi yok; kuyruğu
-// izlemesi (GET /queue) ve acil işaretlemesi yeterli.
+// Yetki 2026-08-05'te GENİŞLEDİ — `urgent` ucuyla aynı kümeye getirildi.
+// Eskiden DAR'dı (`quality:write`) ve gerekçesi "priority TABLET akışının çalışma
+// sırasıdır, dağıtımcının sıralayacak bir şeyi yok" idi. O gerekçe Kurşun Sırası
+// ile Kurşun Dağıtım ekranları BİRLEŞTİĞİNDE düştü: sıralama artık dağıtımcının
+// kendi çalışma sırası (hangi işi önce hangi makineye vereceği) ve bekleyen liste
+// ile dağıtım listesi AYNI listedir. Dar bırakmak, birleşik ekranda kullanamayacağı
+// bir sürükleme kolu gösterip 403 aldırmak olurdu.
+//
+// Sıralama bir PLANLAMA kararıdır, kalite kararı değil — `urgent` ucu bu ayrımı
+// 2026-08-01'de zaten yapmıştı; iki uç şimdi aynı üç izni kabul ediyor.
 router.patch(
   "/queue/reorder",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission(
+    "quality:write",
+    "workorder:distribute",
+    "mobile:kursun-dagitim",
+  ),
   controller.reorderQueue,
 );
 

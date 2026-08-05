@@ -100,6 +100,11 @@ const dispatchSchema = z.object({
   driverName: z.string().trim().max(100).optional().nullable(),
   carrier: z.string().trim().max(100).optional().nullable(),
 });
+// Sevki geri al (storno) — gerekçe ZORUNLU: resmi çıkış belgesi iptal ediliyor,
+// "neden" audit'te ve belgenin voidReason'ında yazılı kalmalı.
+const undoDispatchSchema = z.object({
+  reason: z.string().trim().min(3, "Geri alma gerekçesi zorunlu (en az 3 karakter)").max(500),
+});
 
 export class ShippingController {
   private service = new ShippingService();
@@ -360,6 +365,22 @@ export class ShippingController {
   cancelShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.cancelShipment(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- SEVKİ GERİ AL (STORNO) ----------------------------------------------
+  undoDispatchPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getUndoDispatchPreview(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  undoDispatch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = undoDispatchSchema.parse(req.body);
+      const result = await this.service.undoDispatch(req.params.id as string, body.reason, req.user?.userId);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

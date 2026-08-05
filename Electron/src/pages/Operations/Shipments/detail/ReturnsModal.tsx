@@ -44,9 +44,10 @@ export function ReturnsModal({
   const [dateTo, setDateTo] = useState("");
   const [sortField, setSortField] = useState<ReturnSortField | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  // returnedRolls[].id = RollReturn.id = RETURN_DISPATCH belgesinin sourceId'si.
-  // Sevk irsaliyesi iadeyle DEĞİŞMEZ (sevk anını gösterir); iadenin resmi karşılığı
-  // bu ayrı belgedir — zincirin görünür olduğu yer burası.
+  // RETURN_DISPATCH belgesinin sourceId'si = `documentSourceId` (çok kalemli iadede
+  // GRUP LİDERİ, tekilde satırın kendisi). Sevk irsaliyesi iadeyle DEĞİŞMEZ (sevk
+  // anını gösterir); iadenin resmi karşılığı bu ayrı belgedir — zincirin görünür
+  // olduğu yer burası.
   const [docReturnId, setDocReturnId] = useState<string | null>(null);
   const q = normalizeSearch(search);
   const sackById = useMemo(() => new Map(d.sacks.map((s) => [s.id, s])), [d.sacks]);
@@ -266,7 +267,7 @@ export function ReturnsModal({
                       <td className="text-right">
                         <button
                           type="button"
-                          onClick={() => setDocReturnId(r.id)}
+                          onClick={() => setDocReturnId(r.documentSourceId ?? r.id)}
                           title="İade irsaliyesini aç"
                           className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
                         >

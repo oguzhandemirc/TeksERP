@@ -85,9 +85,19 @@ export function useMobileRasterEnabled(): boolean {
 
 /** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı? Default FALSE
  *  (yüklenene kadar / hata halinde de false — fail-closed).
- *  ⚠️ "Kurşun Dağıtım" ekranının görünürlüğü artık YALNIZ buna bağlı DEĞİL: bayrak
- *  kapalı olsa da bekleyen dağıtım varsa ekran görünür (bkz. useVisibleScreens +
- *  useKursunBypassVisibility). Bu bayrak "yeni atama yapılabilir mi"yi söyler. */
+ *  ⚠️ 2026-08-05: "Kurşun Dağıtım" ekranının GÖRÜNÜRLÜĞÜNÜ artık HİÇ etkilemez —
+ *  ekran yalnız `mobile:kursun-dagitim` iznine bağlı (bkz. useVisibleScreens).
+ *  Bayrak iki şeyi söyler: yeni atama yapılabilir mi, ve kurşun TABLETİ salt-okunur
+ *  mu (ikincisini backend `StepSummary.tabletReadOnly` ile adım adım bildirir). */
 export function useKursunBypassEnabled(): boolean {
   return useFeatureFlags().data?.kursunBypassEnabled ?? false;
+}
+
+/** Müşteri şubeleri (sevk noktaları) kullanılıyor mu? Default TRUE — Electron ile
+ *  AYNI varsayılan (`useCustomerBranchesEnabled`). Kapalı fabrikada sipariş formu
+ *  şubeyi HİÇ SORMAZ (alan gizlenir, payload'a `branchId` konmaz). Fail-OPEN
+ *  bilinçli: yüklenememiş bayrak yüzünden şube sormayı bırakırsak, şube kullanan
+ *  fabrikada sipariş sessizce şubesiz açılır ve sevk hedefi kaybolur. */
+export function useCustomerBranchesEnabled(): boolean {
+  return useFeatureFlags().data?.customerBranchesEnabled ?? true;
 }

@@ -25,4 +25,27 @@ export const colorService = {
       .get<PaginatedResponse<Color>>(`/colors${qs}${sep}scope=public`)
       .then((r) => r.data);
   },
+
+  /**
+   * SADECE bu müşteriye ATANMIŞ (exclusive) renkler — sipariş kalemi picker'ının
+   * üstteki "Müşteri Renkleri" bloğu (`PickerModal.pinnedOptions`).
+   *
+   * `scope=public` ile BİRLİKTE kullanılır ve ikisi kesişmez: public listesi
+   * atanmış renkleri dışlar, bu uç yalnız onları getirir. Sipariş bağlamında
+   * müşterinin özel rengi seçilebilmeli (Hızlı İş Emri stok üretimi olduğu için
+   * orada yalnız public kullanılır) — ama BAŞKA müşterinin özel rengi listede
+   * çıkmamalı. `property:read` yerine mobil izniyle de çalışır.
+   */
+  listAssignedToCustomer: (
+    customerId: string,
+    params: Partial<QueryParams> = {},
+  ): Promise<PaginatedResponse<Color>> => {
+    const qs = buildQueryString(params);
+    const sep = qs ? '&' : '?';
+    return apiClient
+      .get<PaginatedResponse<Color>>(
+        `/colors${qs}${sep}assignedTo=${encodeURIComponent(customerId)}`,
+      )
+      .then((r) => r.data);
+  },
 };

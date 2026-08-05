@@ -41,13 +41,22 @@ const specFieldSchema = specFieldObj.default(DEF_SPEC_FIELD);
 // gevşek: onların tek kaynağı servisteki normalize/sanitize fonksiyonlarıdır ve
 // eski kayıtlardan gelen geriye-uyum alanlarını (örn. `showOrderTotal`) okurlar —
 // strict yapılırsa eski istemci/round-trip yükleri 400 alır.
-const updateSchema = z.strictObject({
+// `export` — mekanik bekçi (`scripts/test_feature_flag_contract.ts`) `.shape`'i
+// ÇALIŞMA ZAMANINDA okur. Yorumdaki üç-yer sözleşmesi 2026-08-04'e kadar yalnız
+// yazıydı ve fiilen tutulmadı: `kk1DuplicateGuardEnabled` servis + Electron
+// ayaklarını aldı, bu şemaya yazılmadı → bayrak panelden hiç açılamadı/KAPATILAMADI.
+export const updateSchema = z.strictObject({
   // ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli).
   companyName: z.string().trim().max(120).optional(),
   pricingEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),
+  // kk1.duplicateGuardEnabled — ham girişte mükerrer top tuzağı (default FALSE).
+  // Backend ENFORCE eder: 409 POSSIBLE_DUPLICATE + `confirmDuplicate` ile geçilir.
+  // ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — tuzak sahada yanlış pozitif
+  // üretirse tek geri dönüş yolu budur (enforcement okuması kasten cache'siz).
+  kk1DuplicateGuardEnabled: z.boolean().optional(),
   // Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (false=default → backend
   // ENFORCE, 400). Yalnız demo/eğitim kurulumu açar; kg irsaliyeye/çekiye basılır.
   shippingSimulatedWeightEnabled: z.boolean().optional(),
@@ -62,6 +71,9 @@ const updateSchema = z.strictObject({
   devicePairingRequired: z.boolean().optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
+  // shipping.undoDispatchSameDayOnly — sevk geri almayı aynı günle sınırla
+  // (default false = sınırsız). Backend ENFORCE (undoDispatch).
+  shipmentUndoSameDayOnly: z.boolean().optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).

@@ -50,7 +50,7 @@ const router = Router();
  *     responses:
  *       200: { description: Sayfalanmış renk listesi }
  */
-router.get("/", verifyToken, requireAnyPermission("property:read", "mobile:hizli-is-emri"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("property:read", "mobile:hizli-is-emri", "mobile:siparis"), controller.findAll);
 
 /**
  * @openapi

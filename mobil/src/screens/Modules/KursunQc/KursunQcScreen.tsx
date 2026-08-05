@@ -991,6 +991,21 @@ export default function KursunQcScreen() {
     activeJob.stepSummary.rolls.length > 0 &&
     activeJob.stepSummary.rolls.every((r) => r.qc2Completed);
 
+  /**
+   * KURŞUN BYPASS — bu kartta tablet SALT-OKUNUR mu? (2026-08-05)
+   *
+   * Kararı backend verir (`StepSummary.tabletReadOnly`); ekran yalnız uygular.
+   * İki sebep de aynı sonuca çıkar: iş ya bir kurşun makinesine dağıtılmıştır,
+   * ya da kurşun dağıtımı açıktır ve bu iş dağıtılacaktır. Her iki hâlde de
+   * kurşun adımı Tambur'da kart okutulunca kapanır.
+   *
+   * ⚠️ Aksiyonları GİZLEMEK yetmez, ama gizlemek de ŞARTTIR: gerçek kapı
+   * sunucudadır (offline kuyruk ekranı hiç görmeden istek gönderebilir), buradaki
+   * gizleme operatörü çıkmaza sokan bir 409'dan korur. Eskiden alan hiç okunmuyordu
+   * ve operatör dağıtılmış bir kartı okutup her butonda ham 409 yiyordu.
+   */
+  const tabletReadOnly = activeJob?.stepSummary.tabletReadOnly ?? null;
+
   // Sağ panel içeriği — hem inline rightCol'da (tablet) hem RightDrawer'da
   // (telefon compact) aynı kullanılır. NumpadHost ayrı render edilir; compact'ta
   // native klavye kullanıldığı için drawer içinde NumpadHost yoktur.
@@ -1227,6 +1242,24 @@ export default function KursunQcScreen() {
                 {compact
                   ? 'Üstten "Açık İşler" butonuyla kart okutarak başlayın'
                   : 'Sağ üstten refakat kartı barkodunu okutarak başlayın'}
+              </Text>
+            </View>
+          ) : tabletReadOnly ? (
+            // SALT-OKUNUR: iş kâğıtla yürüyor. Kart yine AÇILIR ve toplar sağ
+            // listede görünür (operatörün "bu kart bende ne kadar mal" sorusu
+            // meşru); yalnız yazma yüzeyi hiç çizilmez. Kartı hiç açmamak,
+            // operatöre "kart bozuk" dedirtirdi.
+            <View style={styles.readOnlyState}>
+              <Icon source="clipboard-text-clock-outline" size={64} color="#0369a1" />
+              <Text style={styles.readOnlyTitle}>Bu iş kurşun dağıtımında</Text>
+              <Text style={styles.readOnlyText}>{tabletReadOnly.reason}</Text>
+              {!!activeJob.stepSummary.bypassAssignment && (
+                <Text style={styles.readOnlyMachine}>
+                  Makine: {activeJob.stepSummary.bypassAssignment.machineName}
+                </Text>
+              )}
+              <Text style={styles.readOnlyCount}>
+                {activeJob.stepSummary.rolls.length} top bekliyor
               </Text>
             </View>
           ) : !selectedRoll ? (
@@ -2411,6 +2444,31 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#475569' },
   emptyHint: { fontSize: 13, color: '#94a3b8', textAlign: 'center', maxWidth: 320 },
+
+  // Kurşun bypass salt-okunur durumu. Boş-durum grisinden AYRI bir renk (mavi):
+  // "burada yapacak bir şey yok" ile "bu iş başka yerde yürüyor" farklı şeyler;
+  // aynı gri operatöre "kart yüklenmedi" dedirtirdi.
+  readOnlyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 10,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  readOnlyTitle: { fontSize: 20, fontWeight: '800', color: '#075985' },
+  readOnlyText: {
+    fontSize: 15,
+    color: '#0c4a6e',
+    textAlign: 'center',
+    maxWidth: 420,
+    lineHeight: 21,
+  },
+  readOnlyMachine: { fontSize: 16, fontWeight: '700', color: '#0369a1' },
+  readOnlyCount: { fontSize: 13, color: '#0284c7' },
 
   // Sabit (sticky) hata giriş zonu — header ile scroll arasında, kaymaz.
   // Dış yatay boşluk minimal (8) → amber kutu kolon genişliğini neredeyse

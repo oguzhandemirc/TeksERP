@@ -11,6 +11,10 @@ export type MobilePermission =
   | 'mobile:kartela-kabul'
   | 'mobile:iade'
   | 'mobile:hizli-is-emri'
+  // Telefondan sipariş LİSTELEME + AÇMA. Backend'de `order:read` + `order:write`'ın
+  // DAR mobil ikizi: yalnız okuma ve yaratma uçlarında kabul edilir —
+  // düzenleme/iptal/silme hâlâ `order:write` ister.
+  | 'mobile:siparis'
   // Kurşun Dağıtım ekranı — web ikizi `workorder:distribute` (backend uçları
   // requireAnyPermission ile ikisini de kabul eder).
   | 'mobile:kursun-dagitim'
@@ -52,6 +56,7 @@ export type MobileScreenKey =
   | 'KartelaKabul'
   | 'IadeGirisi'
   | 'HizliIsEmri'
+  | 'Siparis'
   | 'KursunDagitim';
 
 export interface MobileScreenMeta {
@@ -152,9 +157,21 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     description: 'Topu okutup iş emri başlat/yönet',
   },
   {
+    // Satış/planlama ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).
+    // "Hızlı Sipariş"in (Sevkiyat altındaki, elindeki topları siparişe çeviren
+    // geriye dönük akış) TERSİDİR: burada henüz üretilmemiş bir talep açılır.
+    key: 'Siparis',
+    permission: 'mobile:siparis',
+    label: 'Sipariş',
+    icon: 'clipboard-text-outline',
+    description: 'Sipariş listesi + yeni müşteri siparişi aç',
+  },
+  {
     // Ofis/süpervizör ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).
-    // Ayrıca KOŞULLU görünür: `kursunBypassEnabled` bayrağı kapalı VE bekleyen
-    // dağıtım yoksa gizlenir (useVisibleScreens + useKursunBypassVisibility).
+    // 2026-08-05: KOŞULLU görünürlük KALDIRILDI (eskiden `kursunBypassEnabled`
+    // kapalı + bekleyen dağıtım yoksa gizleniyordu). Electron'da Kurşun Sırası ile
+    // Kurşun Dağıtım "Kurşun Planlama"da birleşip bayraktan bağımsızlaşınca mobil
+    // ikizi de hizalandı: ekran bayrak kapalıyken de bekleyen kuyruğu gösteriyor.
     key: 'KursunDagitim',
     permission: 'mobile:kursun-dagitim',
     label: 'Kurşun Dağıtım',

@@ -173,6 +173,13 @@ export function RollsPage() {
       // iki tarih birlikte gösterilmez (operatörü karıştırıyor).
       updatedAt: tab !== "RAW_STOCK",
       createdAt: tab === "RAW_STOCK",
+      // İZLENEBİLİRLİK sütunları varsayılan GİZLİ (2026-08-05 kullanıcı kararı).
+      // Gerekçe envanter listesi standardı: liste yüzeyi operatörün ANLIK
+      // kararı için sade kalır, izlenebilirlik verisi ihtiyaç duyanın açtığı
+      // sütunda ve detay panelinde durur. Tercih kaydedilir (Görünümler) —
+      // her açılışta tekrar açmak gerekmez.
+      entrySource: false,
+      createdBy: false,
     },
     enabled: isTableTab,
   });

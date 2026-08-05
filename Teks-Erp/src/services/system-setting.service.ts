@@ -89,6 +89,11 @@ export const SETTING_KEYS = {
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
   SHIPMENT_CONFIRMATION_ENABLED: "shipping.confirmationEnabled",
+  /** Sevk geri alma (storno) YALNIZ aynı fabrika gününde mi yapılabilsin. Default false
+   *  (KAPALI = zaman sınırı YOK). Açıkken `dispatchedAt` bugünün fabrika günü başlangıcından
+   *  (Europe/Istanbul) önceyse 409. Fatura ve iade koşulları bu ayardan BAĞIMSIZ ve her
+   *  zaman geçerlidir — bu yalnız EK bir daraltmadır. ENFORCE edilir (backend). */
+  SHIPMENT_UNDO_SAME_DAY_ONLY: "shipping.undoDispatchSameDayOnly",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -635,6 +640,9 @@ export interface FeatureFlags {
   devicePairingRequired: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
+  /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi (default false = sınırsız).
+   *  Faturasız + iadesiz koşulları bundan bağımsız her zaman geçerlidir. */
+  shipmentUndoSameDayOnly: boolean;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -914,6 +922,7 @@ export class SystemSettingService {
       fasonNoteMobileEntry: await readFasonNoteMobileEntry(cacheClient),
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
+      shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -1100,6 +1109,18 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
         input.shipmentConfirmationEnabled,
         "Sevk için ayrı 'ambar aldı / çıkış' onay adımı zorunlu olsun (kapalıyken paketleyen direkt sevk eder)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shipmentUndoSameDayOnly")) {
+      if (typeof input.shipmentUndoSameDayOnly !== "boolean") {
+        throw AppError.badRequest("shipmentUndoSameDayOnly boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPMENT_UNDO_SAME_DAY_ONLY,
+        input.shipmentUndoSameDayOnly,
+        "Sevk geri alma (storno) yalnız aynı gün yapılabilsin (kapalıyken tarih sınırı yok)",
         userId
       );
     }
@@ -1813,6 +1834,27 @@ export async function readShipmentConfirmationEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Sevk geri alma (storno) yalnız AYNI GÜN mü yapılabilsin? Default FALSE (sınır yok).
+ *
+ * "Aynı gün" TAKVİM günüdür ve saat dilimine bağlıdır → `factoryDayStart()` ile
+ * çözülür (fabrika günü tek kaynağı; gece vardiyasında 01:00'de yapılan sevk hâlâ
+ * "dün akşam"ın işidir ve UTC gününe göre kesilseydi sessizce geri alınamaz olurdu).
+ *
+ * Bu ayar yalnız EK bir daraltmadır: faturasız + iadesiz koşulları ayardan bağımsız
+ * her zaman koşar. UNCACHED (enforcement yolu).
+ */
+export async function readShipmentUndoSameDayOnly(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPMENT_UNDO_SAME_DAY_ONLY },
     select: { value: true },
   });
   return asBoolean(setting?.value);

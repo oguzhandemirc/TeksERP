@@ -44,6 +44,11 @@ export interface FasonReceiptDoc {
   appliedColor: string | null;
   /** Uygulanan üretim özellikleri (apre vb.) — boşsa blok basılmaz. */
   appliedProperties: string[];
+  /** Dönen topların partileri — "hangi partiyi gönderdim / hangi parti döndü" döngüsünü
+   *  kapatır. ÇOĞUL: sevkte K10 "bir sevk = bir parti" garantisi vardır ama KABUL birden
+   *  fazla sevki kapsayabilir (kısmi/örtüşen kabul) → tekil alan sessizce yanlış olurdu.
+   *  ⚠️ OPSİYONEL: 2026-08-05 öncesi donmuş makbuzlarda YOK → satır basılmaz. */
+  batchNumbers?: string[];
   rolls: FasonReceiptRoll[];
   totals: { rollCount: number };
 }
@@ -124,11 +129,16 @@ export function renderFasonReceiptHtml(
 
   const showSub = sectionOn(cfg.sections, "subcontractorInfo");
   const showApplied = sectionOn(cfg.sections, "appliedInfo");
+  // Parti satırı — varsayılan AÇIK (fason firmanın operasyonel ihtiyacı). Alan
+  // taşımayan eski donmuş makbuzlarda dizi boş → satır hiç doğmaz.
+  const showBatch = sectionOn(cfg.sections, "batchInfo");
+  const batchNumbers = doc.batchNumbers ?? [];
   const subBox = showSub
     ? `<div class="box"><div class="box-t">FASON FİRMA</div>
         <div class="row"><span>Adı:</span><b>${esc(doc.subcontractor.name)}</b></div>
         ${doc.subcontractor.code ? `<div class="row"><span>Kod:</span><b>${esc(doc.subcontractor.code)}</b></div>` : ""}
         <div class="row"><span>İş Emri:</span><b>${esc(doc.workOrder.workOrderNumber)}</b></div>
+        ${showBatch && batchNumbers.length ? `<div class="row"><span>Parti:</span><b>${esc(batchNumbers.join(", "))}</b></div>` : ""}
         <div class="row"><span>İşlem:</span><b>${esc(doc.stationName)}</b></div>
         ${doc.manifestNo ? `<div class="row"><span>Fason İrs.:</span><b>${esc(doc.manifestNo)}</b></div>` : ""}
       </div>`

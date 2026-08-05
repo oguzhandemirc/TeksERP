@@ -30,6 +30,7 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = 
   KartelaKabul: () => require('../screens/Modules/KartelaKabul/KartelaKabulScreen').default,
   IadeGirisi: () => require('../screens/Modules/IadeGirisi/IadeGirisiScreen').default,
   HizliIsEmri: () => require('../screens/Modules/HizliIsEmri/HizliIsEmriScreen').default,
+  Siparis: () => require('../screens/Modules/Siparis/SiparisScreen').default,
   KursunDagitim: () => require('../screens/Modules/KursunDagitim/KursunDagitimScreen').default,
 };
 

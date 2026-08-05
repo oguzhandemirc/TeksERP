@@ -246,6 +246,29 @@ export interface TargetPropertyChangeImpact {
   inProductionCount: number;
 }
 
+/** `GET /work-orders/:id/documents` satırı — dört belge kaynağının ortak şekli.
+ *  Baskı ucu tipe göre değişir: TRAVELER_CARD → /traveler-cards/:id/html,
+ *  diğerleri → /printed-documents/:docType/:sourceId/html. */
+export interface WorkOrderDocument {
+  docType:
+    | "TRAVELER_CARD"
+    | "SUBCONTRACTOR_DISPATCH"
+    | "SUBCONTRACTOR_RECEIPT"
+    | "SUBCONTRACTOR_DIRECT_SHIP";
+  sourceId: string;
+  documentNo: string;
+  /** ISO — kartta basım anı, diğerlerinde olay anı (sevk/kabul/çıkış). */
+  date: string;
+  /** Grup başlığı: "İş Emri Belgeleri" ya da fason adımının istasyon adı. */
+  group: string;
+  title: string;
+  subtitle: string;
+  /** İptal edilmiş belge listede KALIR — donmuş belge silinmez, filigranla basılır. */
+  cancelled: boolean;
+  /** Yalnız TRAVELER_CARD: basılı kâğıt gerçekle ayrıştı mı. */
+  contentDirty?: boolean;
+}
+
 export type TravelerCardStatus = "ACTIVE" | "REPRINTED" | "VOIDED" | "COMPLETED";
 
 export interface TravelerCard {
@@ -258,6 +281,10 @@ export interface TravelerCard {
   status: TravelerCardStatus;
   printedAt: string;
   printedById: string | null;
+  /** Basılı kâğıt gerçekle ayrıştı mı (parti doğdu/bölündü/birleşti, sevk yapıldı,
+   *  WO içeriği düzenlendi). `Roll.labelDirty` ile aynı sözleşme — baskı olayında
+   *  (`POST /traveler-cards/:id/print-event`) temizlenir. Eski API'de yok. */
+  contentDirty?: boolean;
   voidedAt?: string | null;
   voidReason?: string | null;
   printedBy?: { id: string; username: string; fullName: string | null } | null;

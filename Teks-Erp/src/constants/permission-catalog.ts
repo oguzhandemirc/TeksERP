@@ -85,10 +85,24 @@ export const PERMISSION_CATALOG = [
   { code: "shipping:read", module: "LOGISTICS", category: "web", description: "Sevkiyat/çuval listesi/detay görüntüleme" },
   { code: "shipping:write", module: "LOGISTICS", category: "web", description: "Çuval/irsaliye oluşturma, tartı/kapama, sevk" },
   { code: "shipping:invoice", module: "LOGISTICS", category: "web", description: "Sevkiyatı faturalandı olarak işaretleme (muhasebe)" },
+  // Sevk geri alma (storno) — `shipping:write`ten AYRI: sevk eden herkesin resmi
+  // çıkış belgesini iptal edip stok/karşılanma defterini geri sarabilmesi istenmiyor.
+  { code: "shipping:undo-dispatch", module: "LOGISTICS", category: "web", description: "Sevk edilmiş sevkiyatı geri alma (irsaliye iptal + stok depoya)" },
   { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
   { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu oluşturma/düzenleme/silme" },
   { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
   { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
+  // 2026-08-05: "Bu Bilgisayar" (yerel donanım) ayarları — etiket yazıcısı,
+  // kantar, barkod tabancası, sunucu adresi. `admin:settings`ten AYRI olması
+  // ürün kararıdır: bu ayarların HİÇBİRİ sunucuya yazılmaz, yalnız o makinenin
+  // yerel deposunda (electron-store) yaşar → yanlış girilse bile etkisi tek
+  // bilgisayarla sınırlıdır. Yazıcısını kendisi kuran depo/sevkiyat personeline
+  // sistem geneli özellik anahtarlarını, oturum politikasını, cihaz onayını ve
+  // log arşivini açmak zorunda kalmamak için var.
+  // Kategorisi `admin` DEĞİL `web` — çünkü bir YÖNETİM yetkisi değil, masaüstü
+  // uygulamasının bir yeteneği (Electron `hasAdminAccess` bu kodu saymaz →
+  // taşıyan kişi "Yönetim" menüsünü ve Sistem hub'ını GÖRMEZ).
+  { code: "settings:workstation", module: "ADMIN", category: "web", description: "Bu bilgisayarın yerel ayarları (etiket yazıcısı / kantar / tabanca / sunucu adresi) — sistem geneli ayarlar HARİÇ" },
   { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
   { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
   { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş raporları" },
@@ -113,10 +127,11 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
   { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
   { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → iş emri başlat + iş emri yönetimi)" },
-  // Telefondan müşteri siparişi AÇMA (satış/planlama). `order:write`'ın mobil
-  // ikizi — ama YALNIZ sipariş yaratmayı açar: iptal/manuel-kapatma/düzenleme
-  // uçları hâlâ `order:write` ister (satış temsilcisine sipariş iptal ettirme).
-  { code: "mobile:siparis", module: "MOBILE", category: "mobile", description: "Mobil — Yeni Sipariş ekranı (müşteri siparişi aç)" },
+  // Telefondan sipariş LİSTELEME + AÇMA (satış/planlama). `order:read` +
+  // `order:write`'ın DAR mobil ikizi: yalnız okuma ve yaratma. Düzenleme /
+  // iptal / manuel-kapatma / silme uçları hâlâ `order:write` ister — satış
+  // temsilcisine sipariş sildirmemek için (bekçi: test_mobile_order_permission).
+  { code: "mobile:siparis", module: "MOBILE", category: "mobile", description: "Mobil — Sipariş ekranı (sipariş listesi + yeni sipariş açma)" },
   { code: "mobile:kursun-dagitim", module: "MOBILE", category: "mobile", description: "Mobil — Kurşun Dağıtım ekranı" },
   // Ekran değil, KK1 içi yetenek: yalnız seçili ham giriş operatörlerine verilir.
   { code: "mobile:kk1-desen", module: "MOBILE", category: "mobile", description: "KK1 ham girişte inline yeni desen (FABRIC kumaş) oluşturma" },

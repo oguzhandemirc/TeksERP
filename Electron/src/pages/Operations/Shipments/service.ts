@@ -48,6 +48,18 @@ export const shipmentService = {
     apiClient
       .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/dispatch-note`, { dispatchNote })
       .then((r) => r.data),
+
+  /** Storno önizlemesi — geri dönecek çuval/top + engel varsa sebebi (`blockReason`). */
+  undoDispatchPreview: (id: string): Promise<ApiResponse<UndoDispatchPreview>> =>
+    apiClient
+      .get<ApiResponse<UndoDispatchPreview>>(`/api/shipping/shipments/${id}/undo-dispatch-preview`)
+      .then((r) => r.data),
+
+  /** Sevki geri al (DISPATCHED → PLANNED) — gerekçe zorunlu, irsaliye İPTAL edilir. */
+  undoDispatch: (id: string, reason: string): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/undo-dispatch`, { reason })
+      .then((r) => r.data),
 };
 
 /** İptal önizleme yanıtı (backend getCancelPreview ile eşleşir — havuz modeli, rolls[] YOK). */
@@ -63,4 +75,31 @@ export interface CancelPreview {
   rollCount: number;
   swatchCount: number;
   affectedOrders: { orderNumber: string; qty: string }[];
+}
+
+/**
+ * Storno (Sevki Geri Al) önizleme yanıtı — backend getUndoDispatchPreview aynası.
+ *
+ * `blockReason` backend'in TEK kaynağından gelir; istemci kendi kuralını KURMAZ
+ * (kopyalanan kural, ekranda "yapılabilir" derken uçta 409 üretirdi).
+ */
+export interface UndoDispatchPreview {
+  shipmentId: string;
+  shipmentNo: string;
+  status: string;
+  dispatchedAt: string | null;
+  customerName: string;
+  branchName: string | null;
+  plateNumber: string | null;
+  driverName: string | null;
+  canUndo: boolean;
+  blockReason: string | null;
+  sackCount: number;
+  rollCount: number;
+  swatchCount: number;
+  sacks: { id: string; sackNo: string; rollCount: number }[];
+  affectedOrders: string[];
+  voidsDispatchNote: boolean;
+  /** Topların döneceği raflar (WAREHOUSE / A1_STOCK …) — 2. kalite ayrımı görünür kalsın. */
+  returnTargets: { status: string; rollCount: number }[];
 }

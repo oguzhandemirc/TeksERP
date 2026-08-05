@@ -6,7 +6,10 @@ import "../types/express-augment";
 
 // ---- Zod şemaları ----------------------------------------------------------
 const createReturnSchema = z.object({
-  rollId: z.string().uuid("Geçersiz top ID"),
+  // Tekil iade (mobil + eski istemciler). ÇOKLU iadede `rollIds` gönderilir; en az
+  // biri zorunlu (servis boş listeyi 400'le reddeder, ama kontrat burada da yazılı).
+  rollId: z.string().uuid("Geçersiz top ID").optional(),
+  rollIds: z.array(z.string().uuid("Geçersiz top ID")).max(200).optional(),
   // Personelin seçtiği sipariş (tek aday otomatik; yoksa null)
   orderId: z.string().uuid("Geçersiz sipariş ID").optional().nullable(),
   // İade nedeni — seçilebilir (katalog) ve/veya yazılabilir; ikisi de opsiyonel/boş
@@ -15,6 +18,9 @@ const createReturnSchema = z.object({
   note: z.string().trim().max(1000).optional().nullable(),
   // Kalite override — yalnız returnGradingEnabled açıkken honor edilir (servis enforce eder)
   qualityGradeId: z.string().uuid("Geçersiz kalite ID").optional().nullable(),
+}).refine((v) => Boolean(v.rollId) || (v.rollIds?.length ?? 0) > 0, {
+  message: "İade alınacak top seçilmeli (rollId veya rollIds)",
+  path: ["rollId"],
 });
 
 const cancelReturnSchema = z.object({
@@ -36,6 +42,17 @@ export class ReturnController {
     try {
       const barcode = (req.query.barcode as string | undefined) ?? "";
       const result = await this.service.lookupForReturn(barcode);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  /** Çuval kodu okut → çuvalın sevk edilmiş topları (toplu iade girişi). */
+  lookupSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const code = (req.query.sackCode as string | undefined) ?? "";
+      const result = await this.service.lookupSackForReturn(code);
       res.status(200).json(result);
     } catch (e) {
       next(e);

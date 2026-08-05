@@ -1,5 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
-import { useKursunVisibility } from "@/hooks/useKursunVisibility";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { sackStoreService } from "./SackStore/service";
 import type { OperationsVisibilityContext } from "./tile-config";
 
 /**
@@ -16,12 +18,21 @@ import type { OperationsVisibilityContext } from "./tile-config";
  */
 export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
-  const kursun = useKursunVisibility();
+  const { hasPermission } = useRoleAccess();
+
+  // Çıkış bekleyen sevkiyat SONDASI — yalnız karar bunu gerektiriyorsa koşar:
+  // bayrak açıksa karo zaten görünür (sorgu gereksiz), izin yoksa uç 403 verir.
+  // `limit: 1` yeter — sayı değil VARLIK soruluyor.
+  const probeEnabled = !shipmentConfirmationEnabled && hasPermission("shipping:read");
+  const pending = useQuery({
+    queryKey: ["ops-visibility", "planned-shipments"],
+    queryFn: () => sackStoreService.list({ limit: 1 }),
+    enabled: probeEnabled,
+    staleTime: 60 * 1000,
+  });
 
   return {
     shipmentConfirmationEnabled,
-    kursunBypassEnabled: kursun.flagEnabled,
-    kursunPendingAssignmentCount: kursun.pendingAssignmentCount,
-    kursunTabletRegimeCount: kursun.tabletRegimeCount,
+    pendingPlannedShipments: pending.data?.data?.length ?? 0,
   };
 }

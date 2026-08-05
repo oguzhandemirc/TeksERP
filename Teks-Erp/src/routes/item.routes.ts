@@ -83,7 +83,7 @@ const quickCreateBody = z
  *       401:
  *         description: Yetkisiz erişim
  */
-router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1", "mobile:siparis"), controller.findAll);
 
 /**
  * @openapi

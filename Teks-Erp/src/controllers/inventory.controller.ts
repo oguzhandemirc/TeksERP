@@ -27,7 +27,16 @@ const initialEntrySchema = z.object({
   /** Mükerrer tuzağı 409 döndükten sonra operatörün açık onayı ("evet, ayrı bir
    *  top"). Yalnız bu uçta anlamlı — dahili çağrılar tuzağa hiç girmez. */
   confirmDuplicate: z.boolean().optional(),
+  /** Operatörün "Kaydet"e BASTIĞI an (ISO-8601). Mükerrer tuzağının 90 sn'lik
+   *  penceresi bununla ölçülür — sunucu `createdAt`'i offline flush'ta girişin
+   *  anı DEĞİLDİR. Sunucu doğrular (makul aralık) ve güvenilmezse yok sayar. */
+  clientEnteredAt: z.coerce.date().optional(),
 });
+// ⚠️ Bu şema BİLEREK düz `z.object` (strict DEĞİL): bilinmeyen alan sessizce
+// atılır. `feature-flag.routes.ts`'te strict doğru karardı (panel ↔ backend, tek
+// sürüm), ama BURASI istemci ucudur — sahada eski APK'lar var ve strict'e
+// çevirmek yeni bir alan eklendiğinde ters yönü (yeni APK ↔ eski backend) 400'e
+// düşürür, yani ham giriş durur. Bu asimetri bilinçlidir.
 
 const openFabricSchema = z.object({
   receiptId: z.string().uuid("Geçersiz mal kabul ID"),
@@ -209,7 +218,17 @@ export class InventoryController {
         Boolean(req.device),
         // Mükerrer tuzağı YALNIZ bu HTTP yolunda çalışır — dahili çağıranlar
         // (tambur-manual) `opts` vermediği için etkilenmez (F221 deseni).
-        { duplicateGuard: { confirmed: confirmDuplicate === true } },
+        {
+          duplicateGuard: { confirmed: confirmDuplicate === true },
+          // GİRİŞ İSTASYONU — oturumdan. Bu yolda ADIM YOKTUR (top henüz hiçbir
+          // iş emrine bağlı değil), dolayısıyla tek doğru kaynak oturumdur.
+          //
+          // ⚠️ `req.device.machineId` → `Machine.stationId` fallback'i BİLEREK
+          // YOK: makine sonradan taşınırsa geçmiş toplar başka istasyonda
+          // girilmiş görünür — kolonun var olma sebebi tam da bu. Oturum yoksa
+          // damga NULL kalır ve bu dürüst cevaptır.
+          entryStationId: stamp?.stationId ?? null,
+        },
       );
       res.status(201).json(result);
     } catch (error) {

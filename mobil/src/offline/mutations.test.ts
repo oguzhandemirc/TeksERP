@@ -54,7 +54,9 @@ import {
   NoAuthError,
   isNoAuthError,
   NO_AUTH_RETRY_MS,
+  stationOpLabel,
 } from "./mutations";
+import { useFailedOps } from "./failedOps";
 import {
   queryClient,
   asyncStoragePersister,
@@ -262,6 +264,85 @@ describe("offline pause → online resume (gerçek networkMode + retry)", () => 
     // mutationFn (vars, context) ile çağrılır — ilk argüman bizim vars olmalı.
     expect(localFn.mock.calls[0][0]).toEqual(vars);
     unsub();
+  });
+});
+
+// =============================================================================
+// ÖLÜ MEKTUP KUTUSU — MutationCache köprüsü (2026-08-05)
+// =============================================================================
+// Bu blok, kutunun neden `setMutationDefaults`'a DEĞİL `MutationCache`'e bağlandığını
+// kanıtlar: cache callback'i observer olsun olmasın koşar. Key-bazlı bir `onError`
+// ise component kendi `onError`'ını verdiğinde EZİLİRDİ (defaultMutationOptions
+// sırası: global < key defaults < component) — yani kayıt "bazen" yakalanırdı.
+// =============================================================================
+describe("ölü mektup kutusu — MutationCache köprüsü", () => {
+  beforeAll(() => queryClient.mount());
+  afterAll(() => {
+    queryClient.getMutationCache().clear();
+    queryClient.unmount();
+  });
+  beforeEach(() => {
+    useFailedOps.setState({ rows: [], hydrated: true });
+    onlineManager.setOnline(true);
+  });
+
+  it("⭐ OBSERVER'SIZ (restore edilmiş) mutation'ın hatası da kutuya düşer", async () => {
+    // `build(...).execute(...)` hydration'ın restore edilmiş mutation'ı kurduğu
+    // yolun aynısı: hiçbir component, hiçbir observer yok.
+    const vars = { itemId: "urun-1", initialQty: 140, clientToken: "tok-x" };
+    await queryClient
+      .getMutationCache()
+      .build(queryClient, {
+        mutationKey: STATION_MUT.KK1_CREATE_ENTRY as unknown as unknown[],
+        mutationFn: async () => {
+          throw Object.assign(new Error("Bu top az önce girilmiş olabilir"), {
+            status: 409,
+            details: { code: "POSSIBLE_DUPLICATE", barcode: "T050826H0001" },
+          });
+        },
+        retry: false,
+      })
+      .execute(vars)
+      .catch(() => {});
+
+    const rows = useFailedOps.getState().rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].code).toBe("POSSIBLE_DUPLICATE");
+    expect(rows[0].barcode).toBe("T050826H0001");
+  });
+
+  it("aynı payload sonradan BAŞARILI olursa satır kendiliğinden düşer", async () => {
+    const vars = { itemId: "urun-1", initialQty: 140, clientToken: "tok-y" };
+    const key = STATION_MUT.KK1_CREATE_ENTRY as unknown as unknown[];
+    await queryClient
+      .getMutationCache()
+      .build(queryClient, {
+        mutationKey: key,
+        mutationFn: async () => {
+          throw new Error("ağ hatası");
+        },
+        retry: false,
+      })
+      .execute(vars)
+      .catch(() => {});
+    expect(useFailedOps.getState().rows).toHaveLength(1);
+
+    // "Tekrar Gönder" — AYNI vars, bu kez geçti.
+    await queryClient
+      .getMutationCache()
+      .build(queryClient, { mutationKey: key, mutationFn: async () => ({ ok: true }), retry: false })
+      .execute(vars);
+    expect(useFailedOps.getState().rows).toHaveLength(0);
+  });
+
+  it("her STATION_MUT anahtarının operatöre görünen bir ETİKETİ var", () => {
+    // Yeni bir istasyon anahtarı eklenip etiketi unutulursa kutu satırı ham
+    // anahtarı basar — bu test onu geliştirme anında düşürür.
+    for (const key of Object.values(STATION_MUT)) {
+      const label = stationOpLabel(key);
+      expect(label).not.toBe("İşlem");
+      expect(label).not.toBe(key[1]);
+    }
   });
 });
 

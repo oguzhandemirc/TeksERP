@@ -48,12 +48,32 @@ export type CategoryKind =
   | "session"
   | "label";
 
+/**
+ * Genel Ayarlar'ın varsayılan kapısı — sistem GENELİNİ değiştiren her kategori
+ * bunu ister (ayar sunucuya yazılır, tüm fabrikayı etkiler).
+ */
+export const SETTINGS_ADMIN_PERMISSION = "admin:settings";
+
+/**
+ * "Bu Bilgisayar" kategorisinin dar izni. Buradaki ayarların hiçbiri sunucuya
+ * yazılmaz (yerel `machine-config` deposu) → etkisi tek makineyle sınırlı, o
+ * yüzden yazıcısını/kantarını kendisi kuran personele `admin:settings`
+ * vermeden atanabilir. Backend aynası: `Teks-Erp` permission-catalog.
+ */
+export const WORKSTATION_PERMISSION = "settings:workstation";
+
 export interface SettingsCategory {
   id: string;
   label: string;
   icon: LucideIcon;
   description: string;
   kind: CategoryKind;
+  /**
+   * Bu kategoriyi GÖRMEK için yeterli izinlerden herhangi biri. Verilmezse
+   * `admin:settings` gerekir — yeni kategori eklerken varsayılan DAR olsun diye
+   * (izin unutulursa kategori gizlenir; ters kurgu sistem ayarını sızdırırdı).
+   */
+  permissionAny?: string[];
   /** kind === "flags" için doldurulur. */
   flags?: FlagDef[];
   /**
@@ -126,7 +146,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "partyCodeAuto",
         title: "İş emri parti kodunu otomatik üret",
-        desc: "Kapalıyken (varsayılan) iş emri formunda Parti Kodu elle girilir ve zorunludur. Açıkken sistem otomatik üretir (P1207260001 — P + GGAAYY + sıra); formda 'elle gir' ile yine değiştirilebilir.",
+        desc: "Kapalıyken (varsayılan) iş emri formunda İş Emri No elle girilir ve zorunludur. Açıkken sistem otomatik üretir (İE1207260001 — İE + GGAAYY + sıra); formda 'elle gir' ile yine değiştirilebilir. Not: partinin kendi numarası (P1207261) her zaman otomatiktir, bu ayardan etkilenmez.",
       },
     ],
   },
@@ -193,6 +213,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalı (varsayılan): depo çuvallarını seç → doğrudan sevk edilir (stok o an düşer). Açık: önce PLANNED (planlı) sevkiyat kurulur; fiili çıkış ayrıca 'Sevk Kapısı' ekranından onaylanır. Stok her iki modda da yalnız çıkışta düşer.",
       },
       {
+        key: "shipmentUndoSameDayOnly",
+        title: "Sevk geri almayı aynı günle sınırla",
+        desc: "Kapalı (varsayılan): sevk edilmiş bir sevkiyat tarih sınırı olmadan geri alınabilir (\"Sevki Geri Al\" — mal hiç çıkmadıysa; irsaliye İPTAL edilir, toplar sevk öncesi rafına döner). Açık: yalnız BUGÜN sevk edilenler geri alınabilir. Faturalanmış sevkiyat ve bu sevkiyattan iade alınmış olması bu ayardan bağımsız olarak her zaman geri almayı engeller. Geri alma ayrı bir izin ister: shipping:undo-dispatch.",
+      },
+      {
         key: "returnGradingEnabled",
         title: "İade kabulünde personel kaliteyi değiştirebilsin",
         desc: "Kapalıyken mobil İade ekranında 'kalite belirt' kontrolü gizlenir; top çıktığı kaliteyle döner. Açıkken teslim alan personel topun kalitesini düzeltebilir (etiket değişir; iade yine Hazır Depo'ya iner). Kapalıyken backend gönderilen kalite override'ını yok sayar.",
@@ -257,5 +282,18 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "kantar tartı scale sunucu adresi API backend bağlantı url endpoint bu bilgisayar yerel workstation " +
       "barkod qr tabanca okuyucu scanner wedge klavye usb bluetooth her yerde okut terminator enter tab hassasiyet test",
     kind: "workstation",
+    // Tek "geniş olmayan" kategori: yerel donanımını kendisi kuran personel
+    // `settings:workstation` ile YALNIZ bu sekmeyi görür (sayfadaki diğer
+    // kategoriler listeye bile girmez).
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
   },
 ];
+
+/** Kullanıcının izinlerine göre görünen kategoriler (sayfa + komut paleti ORTAK). */
+export function visibleSettingsCategories(
+  hasAnyPermission: (perms: string[]) => boolean,
+): SettingsCategory[] {
+  return SETTINGS_CATEGORIES.filter((cat) =>
+    hasAnyPermission(cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION]),
+  );
+}

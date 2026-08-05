@@ -51,7 +51,7 @@ const router = Router({ mergeParams: true });
 router.get(
   "/",
   verifyToken,
-  requireAnyPermission("customer:read", "mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul"),
+  requireAnyPermission("customer:read", "mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul", "mobile:siparis"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const customerId = req.params.customerId as string;

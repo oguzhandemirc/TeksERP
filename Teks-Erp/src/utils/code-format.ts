@@ -13,6 +13,17 @@
 // - Ayraçsız: el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu;
 //   salt harf-rakam her düzende sorunsuz taranır.
 // - Sıra GÜN + PREFIX başına 1'den başlar; 4 hane = 9999/gün kapasite.
+// - ⚠️ TEK İSTİSNA — PARTİ NO (`P`) DOLGUSUZDUR (2026-08-05, kullanıcı kararı):
+//   `P0508261`, `P05082619`, `P050826123`… Sıra kuralı aynı (gün başına 1'den),
+//   yalnız zero-pad yok ve bu yüzden hane sayısı SERBEST (9999/gün tavanı da
+//   düşer). Parti no OKUTULMAZ (barkod/QR değil, kâğıda basılan iz) — sabit
+//   uzunluk varsayan bir tarayıcı/parser yolu yok, `isDailyCode` "P" ile hiç
+//   çağrılmıyor. Ayrıştırma dolgudan bağımsızdır: prefix `P`+GGAAYY her zaman
+//   7 karakter, kuyruk `parseInt` edilir → eski dolgulu kayıtlar (`P0508260019`)
+//   aynı gün içinde bile sorunsuz okunur ve sayaç kaldığı yerden devam eder.
+//   ⚠️ Bedeli: dolgusuz kodda SÖZLÜKSEL sıra ≠ SAYISAL sıra (`P05082610` <
+//   `P0508262`). Parti listeleyen hiçbir yer `orderBy: batchNumber` KULLANMAZ,
+//   hepsi `createdAt` ile sıralar — yeni bir yüzey eklerken aynısını yap.
 // - Checksum/Crockford YOK: etiketler her zaman OKUTULUR (elle yazılmaz) ve
 //   Code128/QR sembolünün kendi check-digit'i yanlış okumayı zaten yakalar.
 //   İnsan-okur kod = tarama barkodu (tek kod) — kartta iki ayrı kod basılmaz.
@@ -54,7 +65,11 @@ export function dailyCodePrefix(prefix: string, date: Date = new Date()): string
   return `${prefix}${ddmmyy(date)}`;
 }
 
-/** Tam kod: `PREFIX + GGAAYY + NNNN`. seq 1-tabanlı günlük sıra. */
+/**
+ * Tam kod: `PREFIX + GGAAYY + NNNN`. seq 1-tabanlı günlük sıra.
+ * `digits = 1` → DOLGU YOK (`padStart(1)` seq ≥ 1 için no-op) ve hane serbest;
+ * parti no (`P`) bunu kullanır, bkz. dosya başlığındaki istisna notu.
+ */
 export function buildDailyCode(
   prefix: string,
   seq: number,

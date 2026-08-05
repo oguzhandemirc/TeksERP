@@ -223,11 +223,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
         <WorkOrderDocumentsDialog
           open={documentsOpen}
           onOpenChange={setDocumentsOpen}
+          workOrderId={wo?.id}
           onPrintTravelerCard={() => {
             setDocumentsOpen(false);
             setTravelerCardOpen(true);
           }}
-          steps={wo?.steps}
           onPrintDispatch={(id) => {
             setDocumentsOpen(false);
             setPrintDispatchId(id);

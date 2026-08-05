@@ -185,6 +185,56 @@ function testColorFallback(): void {
   check("requestedColor yoksa rol rengi", noReq.includes("LACİVERT"));
 }
 
+// ── 10) PARTİ NO (2026-08-05) ───────────────────────────────────────────────
+// Sektör standardı: lot/parti sevk belgesinin zorunlu alanıdır (SAP delivery
+// `CHARG`); tekstilde boyahane parti bazında boyar, dönüş parti bazında eşleşir.
+// K10 "bir sevk = bir parti" olduğu için alan TEKİLDİR (taslak yolu virgüllü
+// liste basabilir — orada henüz sevk yoktur).
+function testBatchNumber(): void {
+  console.log("\n── 10) Parti no ──");
+
+  const withBatch = renderFasonCekiHtml(makeSnap({ doc: { batchNumber: "P1908260007" } }));
+  check("parti no basılır", withBatch.includes("P1908260007"));
+  check("etiketi 'Parti No'", withBatch.includes("Parti No:"));
+
+  // ⚠️ EN KRİTİK KONTROL — donmuş belge kuralı: alan 2026-08-05 öncesi
+  // snapshot'larda YOKTUR. O belgeler yeniden basıldığında satır DOĞMAMALI ve
+  // çıktı eskisiyle BİREBİR aynı kalmalı (geriye dönük doldurma YAPILMAZ).
+  const legacy = renderFasonCekiHtml(makeSnap());
+  check("alansız ESKİ snapshot → satır YOK", !legacy.includes("Parti No"));
+  const legacyExplicitNull = renderFasonCekiHtml(makeSnap({ doc: { batchNumber: null } }));
+  check("batchNumber=null → satır YOK", !legacyExplicitNull.includes("Parti No"));
+  check(
+    "alansız çıktı, null çıktıyla BİREBİR aynı (parmak izi korundu)",
+    legacy === legacyExplicitNull,
+  );
+
+  // Bölüm aç/kapa — varsayılan AÇIK (fason firmanın operasyonel ihtiyacı),
+  // yalnız açıkça `false` yazılırsa susar (blocklist mantığı).
+  const off = renderFasonCekiHtml(
+    makeSnap({ doc: { batchNumber: "P1908260007" }, docConfigOverride: { sections: { batchInfo: false } } }),
+  );
+  check("sections.batchInfo=false → basılmaz", !off.includes("P1908260007"));
+  const onExplicit = renderFasonCekiHtml(
+    makeSnap({ doc: { batchNumber: "P1908260007" }, docConfigOverride: { sections: { batchInfo: true } } }),
+  );
+  check("sections.batchInfo=true → basılır", onExplicit.includes("P1908260007"));
+  const otherSection = renderFasonCekiHtml(
+    makeSnap({ doc: { batchNumber: "P1908260007" }, docConfigOverride: { sections: { notes: false } } }),
+  );
+  check("başka bölüm kapalıyken parti ETKİLENMEZ", otherSection.includes("P1908260007"));
+
+  // Taslak yolu (previewDownstreamFasonCeki) çoğul liste geçirebilir.
+  const draft = renderFasonCekiHtml(
+    makeSnap({ doc: { dispatchNo: "(TASLAK)", batchNumber: "P1908260007, P1908260008" } }),
+  );
+  check("taslakta çoklu parti listesi", draft.includes("P1908260007, P1908260008"));
+
+  // XSS: parti no da diğer alanlar gibi escape edilir.
+  const evil = renderFasonCekiHtml(makeSnap({ doc: { batchNumber: "<script>x</script>" } }));
+  check("parti no escape edilir", !evil.includes("<script>x</script>") && evil.includes("&lt;script&gt;"));
+}
+
 function main(): void {
   testBasic();
   testGrid();
@@ -195,6 +245,7 @@ function main(): void {
   testInstruction();
   testDocConfig();
   testColorFallback();
+  testBatchNumber();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

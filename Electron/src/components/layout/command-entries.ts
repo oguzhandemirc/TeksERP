@@ -8,7 +8,10 @@ import {
 } from "@/pages/Operations/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
 import { systemTiles } from "@/pages/System/tile-config";
-import { SETTINGS_CATEGORIES } from "@/pages/GeneralSettings/settings-config";
+import {
+  SETTINGS_ADMIN_PERMISSION,
+  SETTINGS_CATEGORIES,
+} from "@/pages/GeneralSettings/settings-config";
 
 export interface CommandEntry {
   key: string;
@@ -110,7 +113,10 @@ export const commandSections: CommandSection[] = [
       description: cat.description,
       icon: cat.icon,
       to: `/system/settings?tab=${cat.id}`,
-      permission: "admin:settings",
+      // Karo/route ile AYNI kapı — paletten görünüp tıklanınca /forbidden'a
+      // atan bir giriş, izni olmayan kullanıcıya "yetkim varmış ama bozuk"
+      // dedirtir ("Kurşun Sırası" dersi, yukarıdaki visibleWhen notu).
+      permissionAny: cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION],
       keywords: cat.keywords,
     })),
   },

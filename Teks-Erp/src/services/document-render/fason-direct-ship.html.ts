@@ -63,6 +63,9 @@ interface DirectShipDoc {
   driverName: string | null;
   plateNumber: string | null;
   notes: string | null;
+  /** Kaynak fason sevkin partisi (K10). Varsayılan BASILIR; `sections.batchInfo`
+   *  ile kapatılır. Eski donmuş belgelerde alan YOK → satır doğmaz. */
+  batchNumber?: string | null;
   /** Malın gittiği müşteri — doğrudan sevk irsaliyesinin asıl alıcısı. */
   customer?: {
     id: string;
@@ -182,6 +185,11 @@ export function renderFasonDirectShipHtml(
   const showVeh = sectionOn(cfg.sections, "vehicleInfo");
   // Fason Sevk No satırı (dispatchNo) — sections.fasonDispatchNo !== false ise.
   const showFasonDispatchNo = sectionOn(cfg.sections, "fasonDispatchNo");
+  // Parti no varsayılan AÇIK (2026-08-05 ürün kararı). Önce opt-in yapılmıştı —
+  // gerekçe "müşteri belgesinin yerleşimi sormadan değişmesin"di; fabrika lot
+  // no'nun müşterinin de sorduğu bir bilgi olduğuna karar verdi. `sectionOn`
+  // blocklist'tir: yalnız açıkça `false` yazılırsa susar.
+  const showBatchInfo = sectionOn(cfg.sections, "batchInfo");
   // İhracat Kodu — TEK satır: şube kodu doluysa onu, yoksa müşteri ihracat kodunu
   // bas (branchCode ?? exportCode). "exportCode" section toggle'ıyla (varsayılan açık).
   const showExportCode = sectionOn(cfg.sections, "exportCode");
@@ -348,6 +356,7 @@ export function renderFasonDirectShipHtml(
         <div class="ln">İrsaliye No: <b>${esc(doc.shipmentNo ?? doc.dispatchNo)}</b></div>
         ${showFasonDispatchNo && doc.shipmentNo ? `<div class="ln">Fason Sevk No: <b>${esc(doc.dispatchNo)}</b></div>` : ""}
         <div class="ln">Tarih: <b>${esc(fmtDate(shippedDate))}</b></div>
+        ${showBatchInfo && doc.batchNumber ? `<div class="ln">Parti No: <b>${esc(doc.batchNumber)}</b></div>` : ""}
       </div>
     </header>
 

@@ -46,7 +46,11 @@ export const peripheralRouter = Router();
  *   get: { tags: [Peripherals], summary: Cihaz kaydı listesi (yazıcı/sinyal), security: [{ bearerAuth: [] }], responses: { 200: { description: Liste } } }
  *   post: { tags: [Peripherals], summary: Cihaz kaydı oluştur, security: [{ bearerAuth: [] }], responses: { 201: { description: Oluşturuldu } } }
  */
-peripheralRouter.get("/", verifyToken, requireAnyPermission("station:read", ...MOBILE_LABEL_PRINTERS), controller.findAll);
+// `settings:workstation` de okuyabilir: "Bu Bilgisayar → Yazıcı" sekmesi, yerel
+// yazıcıyı bir CİHAZ KAYDINA bağlar (dil/şablon oradan çözülür). Liste olmadan o
+// seçim yapılamaz ve diyalogsuz baskı net hatayla durur — yani izni verip listeyi
+// kapamak, ekranı yarım açmak olurdu. Yazma uçları `station:write`te KALIR.
+peripheralRouter.get("/", verifyToken, requireAnyPermission("station:read", "settings:workstation", ...MOBILE_LABEL_PRINTERS), controller.findAll);
 
 /**
  * @openapi

@@ -153,6 +153,20 @@ export const stationHardRemove = makeGuardedHardRemove({
         `İstasyonun makinelerinde ${n} top girişi (KK1) yapılmış — kalıcı silinemez. Pasife alın.`,
     },
     {
+      // 2026-08-05: `Roll.entryStationId` de SetNull FK'sidir — yukarıdaki iki
+      // guard'la AYNI sınıf. Bu satır olmadan istasyon kalıcı silindiğinde o
+      // istasyonda doğmuş TÜM topların köken izi sessizce boşalırdı.
+      //
+      // ⚠️ `machineRollCreatedCount` bunu KAPSAMAZ: o, makine üzerinden dolaylı
+      // sayar ve makine damgası yalnız oturumlu (tablet) girişlerde dolar.
+      // Tambur kesimi / fason kabulü gibi yollarda istasyon damgası VARDIR ama
+      // makine damgası YOKTUR — o toplar eski guard'a görünmezdi.
+      key: "rollEntryStationCount",
+      count: (id) => prisma.roll.count({ where: { entryStationId: id } }),
+      message: (n) =>
+        `Bu istasyonda ${n} top sisteme girmiş (giriş istasyonu kaydı) — kalıcı silinemez. Pasife alın.`,
+    },
+    {
       key: "peripheralCount",
       count: (id) =>
         prisma.peripheralDevice.count({

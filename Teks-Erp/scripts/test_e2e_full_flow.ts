@@ -28,6 +28,7 @@
 //   "RAW_QC üretim akışına step olarak girmez").
 
 import {
+  Prisma,
   RollStatus,
   RollOperationType,
   StationKind,
@@ -37,6 +38,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { KursunQcService } from "../src/services/kursun-qc.service";
@@ -96,8 +98,54 @@ const shippedQtyOf = async (lineId: string) =>
 const allocOf = async (lineId: string) =>
   Number((await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId }, _sum: { qty: true } }))._sum.qty ?? 0);
 
+/**
+ * Bu test TABLET REJİMİNİ ölçer (KK1 → kurşun tabletinde KK2 → Tambur → sevk).
+ * `production.kursunBypassEnabled` AÇIKKEN kurşun tableti salt-okunurdur
+ * (2026-08-05 rejim kilidi) → KK2 tamamlama 409 döner ve test çöker.
+ *
+ * Bayrağı ORTAMDAN DEVRALMAK, "ortamdaki veriye bağımlı olma" kuralının ihlaliydi:
+ * aynı test dev DB'sinin ayarına göre yeşil/kırmızı oluyordu. Test artık ölçtüğü
+ * rejimi AÇIKÇA BEYAN EDER ve çıkışta eski değeri geri yükler. Bypass rejiminin
+ * kendi kapsamlı testleri ayrıdır (`test_kursun_bypass`, `test_kursun_regime_lock`).
+ */
+let originalKursunFlag: Prisma.JsonValue | null | undefined;
+
+async function pinKursunBypassFlag(enabled: boolean): Promise<void> {
+  const existing = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED },
+    select: { value: true },
+  });
+  originalKursunFlag = existing ? existing.value : null;
+  await prisma.systemSetting.upsert({
+    where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED },
+    create: {
+      key: SETTING_KEYS.KURSUN_BYPASS_ENABLED,
+      value: enabled,
+      description: "TEST — kurşun bypass bayrağı",
+    },
+    update: { value: enabled },
+  });
+}
+
+async function restoreKursunBypassFlag(): Promise<void> {
+  if (originalKursunFlag === undefined) return; // hiç pinlenmedi
+  if (originalKursunFlag === null) {
+    await prisma.systemSetting
+      .delete({ where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED } })
+      .catch(() => {});
+  } else {
+    await prisma.systemSetting.update({
+      where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED },
+      data: { value: originalKursunFlag as Prisma.InputJsonValue },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   console.log("=== Üretim Hattı Uçtan Uca (E2E) Testi ===\n");
+
+  // Ölçülen rejim: TABLET akışı → kurşun bypass KAPALI olmalı (bkz. üst not).
+  await pinKursunBypassFlag(false);
 
   // ===========================================================================
   // HOP 0 — Master data'yı BUSINESS-KEY ile çöz (hardcoded UUID yok)
@@ -442,6 +490,8 @@ main()
   })
   .finally(async () => {
     await cleanup();
+    // Global ayarı ESKİ HÂLİNE getir — dev DB konfigürasyonu bozulmasın.
+    await restoreKursunBypassFlag().catch(() => {});
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
   });

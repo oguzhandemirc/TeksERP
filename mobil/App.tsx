@@ -26,13 +26,17 @@ import {
 } from './src/offline/queryClient';
 import { registerStationMutationDefaults } from './src/offline/mutations';
 import { isPersistedQueryKey, shouldPersistMutation } from './src/offline/persistPolicy';
+import { useFailedOps } from './src/offline/failedOps';
 import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
-import { KURSUN_VISIBILITY_KEY } from './src/hooks/useKursunBypassVisibility';
 import { colors } from './src/theme/tokens';
 import { recordActivity } from './src/store/lockStore';
 import IdleLockGate from './src/components/lock/IdleLockGate';
 
 registerStationMutationDefaults();
+
+// Ölü mektup kutusunu diskten yükle. RQ persister'ından AYRI bir depodur
+// (`PERSIST_BUSTER` bump'ı onu silmez) — bkz. offline/failedOps.ts.
+void useFailedOps.getState().hydrate();
 
 // Android'de operatör sistem fontunu büyütse de barkod/metraj/tablo alanları
 // taşmasın diye global cap. 1.3x'e kadar serbest (erişilebilirlik korunur),
@@ -63,17 +67,16 @@ export default function App() {
   // operatör uygulamayı öne getirince 5 dk staleTime'ı beklemeden yansır.
   // invalidate aktif observer'ı hemen refetch'e zorlar; offline ise (queries
   // networkMode='online') refetch beklemeye alınır, son persisted değer korunur.
-  // Kurşun görünürlük sayacı da aynı sepette: planlamacı Electron'dan iş dağıtınca
-  // "Kurşun Dağıtım" karosu bayrak kapalı olsa da öne dönüşte belirir (izni
-  // olmayan kullanıcıda sorgu enabled:false olduğu için invalidate no-op'tur).
   const appState = useRef(AppState.currentState);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       const prev = appState.current;
       appState.current = next;
       if (next === 'active' && prev !== 'active') {
+        // Yalnız FEATURE FLAG'ler tazelenir. Kurşun görünürlük sayacı
+        // (`['kursun-bypass','visibility']`) 2026-08-05'te kaldırıldı: Kurşun
+        // Dağıtım karosu artık bayrak/sayaçtan bağımsız, yalnız izne bağlı.
         void queryClient.invalidateQueries({ queryKey: FLAGS_KEY });
-        void queryClient.invalidateQueries({ queryKey: KURSUN_VISIBILITY_KEY });
       }
     });
     return () => sub.remove();

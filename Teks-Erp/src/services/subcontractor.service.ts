@@ -18,6 +18,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
+import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
 import {
@@ -49,6 +50,7 @@ import {
 } from "./printed-document.service";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
+import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
@@ -433,6 +435,12 @@ async function createFasonShipChild(
   shipQty: number,
   stepId: string,
   userId?: string,
+  /**
+   * Sevk adımının istasyonu — çocuğun GİRİŞ İSTASYONU damgası.
+   * Çağıran zaten `dispatch.step.stationId`i select ediyor; buraya geçirmemek
+   * damganın sessizce NULL kalması demekti.
+   */
+  stepStationId?: string | null,
 ): Promise<string> {
   const barcode = await generateRollBarcode(tx, "H");
   const props = await tx.rollProperty.findMany({
@@ -455,6 +463,7 @@ async function createFasonShipChild(
       batchId: parent.batchId,
       entrySource: RollEntrySource.TAMBUR_SPLIT,
       createdById: userId ?? null,
+      entryStationId: resolveEntryStationId({ stepStationId }),
     },
   });
   if (props.length > 0) {
@@ -516,6 +525,8 @@ async function applyDirectShipSplits(
   rollShipQtys: Record<string, number> | undefined,
   stepId: string,
   userId?: string,
+  /** Sevk adiminin istasyonu — bolunen cocuklarin giris istasyonu damgasi. */
+  stepStationId?: string | null,
 ): Promise<{ effectiveShipRollIds: string[]; anySplit: boolean }> {
   if (!rollShipQtys || Object.keys(rollShipQtys).length === 0) {
     return { effectiveShipRollIds: shipRollIds, anySplit: false };
@@ -545,7 +556,7 @@ async function applyDirectShipSplits(
     }
     if (!(q > 0)) throw AppError.badRequest("Sevk metresi pozitif olmalı");
     anySplit = true;
-    effective.push(await createFasonShipChild(tx, roll, q, stepId, userId));
+    effective.push(await createFasonShipChild(tx, roll, q, stepId, userId, stepStationId));
   }
   return { effectiveShipRollIds: effective, anySplit };
 }
@@ -1203,6 +1214,12 @@ export class SubcontractorService {
         userId
       );
 
+      // Refakat kartının parti bloğundaki "Sevk" sütunu (fason firma + sevk no)
+      // ancak SEVKTEN SONRA dolar — eldeki kâğıt o sütunda boş kaldı → bayat.
+      // (Sevk anında doğan/bölünen partiler zaten createBatchTx'ten işaretlendi;
+      // bu çağrı sevkin KENDİSİNİ, yani mevcut partiye eklenen bilgiyi kapsar.)
+      await markTravelerCardDirtyTx(tx, data.workOrderId);
+
       // Rolls: AT_SUBCONTRACTOR + SUBCONTRACTOR_SENT log (TOPLU — eski kod top
       // başına update+findFirst+create+upsert yapıyordu = N+1).
       const dispatchRollIds = rolls.map((r) => r.id);
@@ -1749,6 +1766,10 @@ export class SubcontractorService {
       include: {
         item: { select: { code: true, name: true } },
         color: { select: { code: true, name: true } },
+        // Taslakta henüz sevk (dolayısıyla batchId) YOK — parti topların üyeliğinden
+        // projekte edilir. Gerçek sevkte K10 tek partiye indirir; taslak o güvenceyi
+        // taşıyamadığı için çoğulu da basabilmeli (aşağıda virgüllü liste).
+        batch: { select: { batchNumber: true } },
       },
       orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
     });
@@ -1771,6 +1792,11 @@ export class SubcontractorService {
       width: r.width != null ? Number(r.width) : null,
     }));
     const totalQty = Number(rolls.reduce((s, r) => s.plus(r.dispatchedQty), new Prisma.Decimal(0)));
+    // Partisiz top (batchId null) meşrudur → listeye girmez, ama diğerlerini de
+    // susturmaz. Hiç parti yoksa null → çeki bloğu basılmaz.
+    const draftBatchNumbers = [
+      ...new Set(projected.map((r) => r.batch?.batchNumber).filter((b): b is string => !!b)),
+    ].sort();
 
     const doc = assembleFasonCekiDoc({
       dispatchNo: "(TASLAK)",
@@ -1792,6 +1818,7 @@ export class SubcontractorService {
       },
       requestedColor: step.workOrder.targetColor?.name ?? null,
       targetProperties: step.workOrder.targetProperties.map((p) => p.property.name),
+      batchNumber: draftBatchNumbers.length ? draftBatchNumbers.join(", ") : null,
       step: {
         id: step.id,
         stepSequence: step.stepSequence,
@@ -1914,6 +1941,9 @@ export class SubcontractorService {
       if (cancelClaim.count === 0) {
         throw AppError.conflict("Bu sevk az önce başka bir kullanıcı tarafından iptal edilmiş.");
       }
+      // Sevk iptal edildi → kartın parti bloğundaki "Sevk" sütunu boşalır (ya da
+      // varsa bir önceki sevke düşer). Basılı kâğıt iptal edilmiş sevki gösteriyor.
+      await markTravelerCardDirtyTx(tx, dispatch.workOrderId);
 
       // 1b) RESMİ BELGE — irsaliye VOIDED'e çekilir (baskıda İPTAL filigranı).
       // Belge silinmez; tarihsel kayıt korunur.
@@ -2619,6 +2649,13 @@ export class SubcontractorService {
             entrySource: "SUBCONTRACTOR_RETURN",
             parentReceiptId: receipt.id,
             batchId: bornBatchId,
+            // GİRİŞ İSTASYONU — makbuzun ADIMI (fason istasyonu). Top burada
+            // doğdu: orijinal rulolar emekliye ayrıldı, bunlar makbuzdan doğdu.
+            //
+            // ⚠️ `currentStepId` DEĞİL — o bir SONRAKİ adımdır (nextStep) ve
+            // topun gideceği yeri söyler, doğduğu yeri değil. Oradan çözmek
+            // her fason dönüşü topuna yanlış istasyon yazardı.
+            entryStationId: resolveEntryStationId({ stepStationId: step.stationId }),
             // Born açık-kumaş topu bu fason adımında "üretildi" — roll→WO bağı.
             producedInStepId: data.stepId,
             currentStepId: nextStep ? nextStep.id : null,
@@ -4392,6 +4429,8 @@ export class SubcontractorService {
       if (cancelClaim.count === 0) {
         throw AppError.conflict("Bu sevk az önce başka bir kullanıcı tarafından iptal edilmiş.");
       }
+      // Aktarım geri alma da bir sevk iptalidir → kart "Sevk" sütunu bayat.
+      await markTravelerCardDirtyTx(tx, workOrderId);
       await printedDocumentService.voidForSource(
         tx,
         PrintedDocType.SUBCONTRACTOR_DISPATCH,
@@ -5096,6 +5135,8 @@ export class SubcontractorService {
         data.rollShipQtys,
         dispatch.stepId,
         userId,
+        // Sevk adiminin istasyonu — zaten select edilmis, damga icin geciriliyor.
+        dispatch.step?.stationId ?? null,
       );
       if (anySplit) {
         if (completeWorkOrder) {
@@ -5420,6 +5461,11 @@ function assembleFasonCekiDoc(args: {
   requestedColor: string | null;
   /** WO hedef üretim özellikleri (FabricProperty adları) — boyahaneye "bu özellikleri uygula" der. */
   targetProperties: string[];
+  /** Sevkin partisi (K10: bir sevk = bir parti). Belge DONARKEN zaten bilinir —
+   *  `SubcontractorDispatch.batchId` NOT NULL ve aynı create tx'inde yazılır.
+   *  Taslak çekide (previewDownstreamFasonCeki) henüz sevk yoktur → projekte edilen
+   *  topların partilerinden çözülür, birden fazlaysa virgüllü liste, hiç yoksa null. */
+  batchNumber: string | null;
   step: { id: string; stepSequence: number; station: { name: string; code: string } };
   rolls: Array<{
     id: string;
@@ -5448,6 +5494,7 @@ function assembleFasonCekiDoc(args: {
     subcontractor: args.subcontractor,
     requestedColor: args.requestedColor,
     targetProperties: args.targetProperties,
+    batchNumber: args.batchNumber,
     step: args.step,
     rolls,
     totals: { rollCount: rolls.length, totalQty: args.totalQty, totalWeight },
@@ -5462,6 +5509,8 @@ async function buildFasonDispatchDoc(
     where: { id: dispatchId },
     include: {
       subcontractor: { select: { id: true, name: true, code: true } },
+      // K10: bir sevk = bir parti. Parti no belgeye DONAR (batchId NOT NULL, aynı tx).
+      batch: { select: { batchNumber: true } },
       workOrder: {
         select: {
           id: true,
@@ -5531,6 +5580,7 @@ async function buildFasonDispatchDoc(
       },
       requestedColor: dispatch.workOrder.targetColor?.name ?? null,
       targetProperties: dispatch.workOrder.targetProperties.map((p) => p.property.name),
+      batchNumber: dispatch.batch?.batchNumber ?? null,
       step: {
         id: dispatch.step.id,
         stepSequence: dispatch.step.stepSequence,
@@ -5580,6 +5630,9 @@ async function buildFasonDirectShipDoc(
           driverName: true,
           plateNumber: true,
           notes: true,
+          // K10: bir sevk = bir parti. Bu belge MÜŞTERİYE gittiği için parti
+          // varsayılan olarak BASILMAZ (opt-in — `sections.batchInfo === true`).
+          batch: { select: { batchNumber: true } },
           subcontractor: { select: { id: true, name: true, code: true } },
           workOrder: { select: { id: true, workOrderNumber: true, parameters: true, type: true } },
           step: {
@@ -5653,6 +5706,7 @@ async function buildFasonDirectShipDoc(
       driverName: ds.dispatch.driverName,
       plateNumber: ds.dispatch.plateNumber,
       notes: ds.dispatch.notes,
+      batchNumber: ds.dispatch.batch?.batchNumber ?? null,
       // Malın gittiği MÜŞTERİ — doğrudan sevk irsaliyesinin asıl alıcısı.
       customer: {
         id: ds.customer.id,
@@ -5733,6 +5787,9 @@ async function buildFasonReceiptDoc(
               width: true,
               item: { select: { name: true } },
               color: { select: { name: true } },
+              // Fason dönüşünde doğan top partiyi kaynak sevkten kalıtır
+              // (`SubcontractorDispatch.batchId`) → makbuz "hangi parti döndü"yü söyler.
+              batch: { select: { batchNumber: true } },
             },
           },
         },
@@ -5762,6 +5819,12 @@ async function buildFasonReceiptDoc(
     stationName: receipt.step.station.name,
     appliedColor: receipt.appliedColor?.name ?? null,
     appliedProperties: receipt.appliedProperties.map((p) => p.property.name),
+    // Distinct + sıralı: bir kabul birden fazla sevki (dolayısıyla partiyi) kapsayabilir.
+    batchNumbers: [
+      ...new Set(
+        receipt.items.map((it) => it.newRoll.batch?.batchNumber).filter((b): b is string => !!b),
+      ),
+    ].sort(),
     rolls,
     totals: { rollCount: rolls.length },
   };

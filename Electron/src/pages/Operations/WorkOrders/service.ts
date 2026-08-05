@@ -2,7 +2,12 @@ import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
-import type { WorkOrder, TargetPropertyChangeImpact, TravelerCard } from "./types";
+import type {
+  WorkOrder,
+  TargetPropertyChangeImpact,
+  TravelerCard,
+  WorkOrderDocument,
+} from "./types";
 
 const base = createCrudService<WorkOrder>("/api/work-orders");
 
@@ -73,6 +78,25 @@ export const workOrderService = {
   getTravelerCardHistory: (id: string) =>
     apiClient
       .get<ApiResponse<TravelerCard[]>>(`/api/work-orders/${id}/traveler-cards/history`)
+      .then((r) => r.data),
+
+  /** İş emrinin TÜM belgeleri — TEK KAYNAK. Dört ayrı kaynağı (refakat kartı +
+   *  üç PrintedDocument tipi) tek listede döndürür; istemciler kendi listelerini
+   *  kurmaz. İPTAL edilmiş belgeler `cancelled: true` ile listede KALIR. */
+  getDocuments: (id: string) =>
+    apiClient
+      .get<ApiResponse<{ workOrderNumber: string; documents: WorkOrderDocument[] }>>(
+        `/api/work-orders/${id}/documents`,
+      )
+      .then((r) => r.data),
+
+  /** Baskı GERÇEKLEŞTİ bildirimi — kartın "güncel değil" işaretini temizler.
+   *  ⚠️ `getTravelerCardHtml` bunu YAPMAZ: o uç önizleme tarafından da çağrılır
+   *  ("HTML almak" ≠ "basmak"). Emsal: rol/çuval etiketindeki print-event uçları.
+   *  Yalnız baskı BAŞARIYLA döndükten sonra çağrılır. */
+  recordTravelerCardPrint: (cardId: string) =>
+    apiClient
+      .post<ApiResponse<null>>(`/api/traveler-cards/${cardId}/print-event`)
       .then((r) => r.data),
 
   /** Refakat kartının baskı-hazır HTML'i (TEK KAYNAK) — backend render eder; mobil

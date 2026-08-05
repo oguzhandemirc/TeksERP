@@ -32,6 +32,10 @@ import { printedDocumentService } from "./printed-document.service";
 // topların açık+outstanding sevk kalemleri hedef partiyi izler (retarget /
 // kısmi-bölme yeni sevk / hedef sevkine kalem birleştirme).
 import { performDispatchSurgeryTx } from "./helpers/batch-dispatch-surgery.helper";
+import {
+  markTravelerCardDirtyTx,
+  markTravelerCardsDirtyTx,
+} from "./helpers/traveler-card-dirty.helper";
 
 // K18: üyelik değişiminde etiketi bayatlamayan (labelDirty atlanacak) TARİHÇE
 // statüleri — tüketilmiş/iptal top fiziksel etikete çıkmaz, bayraklanmaz.
@@ -49,9 +53,25 @@ export interface CreateBatchResult {
 }
 
 /**
- * Parti no üretici (P + GGAAYY + NNNN) — tx İÇİNDE, sequence okuması closure içinde
+ * Parti no üretici (P + GGAAYY + SIRA) — tx İÇİNDE, sequence okuması closure içinde
  * (withBarcodeRetry kapsamında). `batches` tablosundan günün NUMERIC max'ı +1
  * (O-4 deseni: gte index seek + startsWith collation-bağımsız + Number.isFinite).
+ *
+ * ⚠️ SIRA DOLGUSUZDUR (2026-08-05, kullanıcı kararı): `P0508261`, `P05082619`,
+ * `P050826123`… Diğer tüm belge/barkod kodları 4 hane zero-pad'lidir; parti no
+ * TEK İSTİSNADIR ve bunun meşruiyeti şu: parti no OKUTULMAZ (barkod/QR değil,
+ * kâğıda basılan iz), yani sabit uzunluğa dayanan hiçbir tarayıcı/parser yolu
+ * yok — `isDailyCode` "P" ile hiç çağrılmıyor. Yan kazanç: 9999/gün tavanı düşer.
+ *
+ * ESKİ DOLGULU KAYITLAR (2026-08-05 öncesi `P0508260019`) OLDUĞU GİBİ DURUR ve
+ * geriye dönük düzeltilmez (canlı veri + o numaralar kâğıda basıldı). Karışım
+ * güvenlidir: prefix `P`+GGAAYY sabit 7 karakter olduğu için `nextDailySeq`
+ * kuyruğu `parseInt` ile okur ("0019" → 19) — aynı gün içinde format değişse
+ * bile sayaç kaldığı yerden devam eder (P0508260019 → P05082620).
+ *
+ * ⚠️ Bedeli: SÖZLÜKSEL sıra ≠ SAYISAL sıra (`P05082610` < `P0508262`). Parti
+ * listeleyen hiçbir yer `orderBy: batchNumber` kullanmaz — hepsi `createdAt`
+ * ile sıralar (traveler-card `resolveLiveBatches` dahil). Yeni yüzeyde aynısını yap.
  */
 export async function generateBatchNumberTx(
   tx: Prisma.TransactionClient,
@@ -66,7 +86,8 @@ export async function generateBatchNumberTx(
     todays.map((b) => b.batchNumber),
     prefix,
   );
-  return buildDailyCode("P", seq, date);
+  // digits=1 → padStart(1) seq ≥ 1 için no-op: dolgu yok, hane serbest.
+  return buildDailyCode("P", seq, date, 1);
 }
 
 /**
@@ -106,6 +127,13 @@ export async function createBatchTx(
       data: { batchId: batch.id },
     });
   }
+
+  // Refakat kartında YENİ bir parti satırı doğdu → basılı kâğıt eksik kaldı.
+  // Bu, "kartta parti no yok" şikayetinin ASIL kaynağıdır: kart iş emri açılışında
+  // basılır, parti ise `attachRolls`'ta (yani sonra) doğar. Buradan işaretlemek
+  // `splitBatch` ve fason sevkindeki `splitRemainder` yollarını da kapsar — ikisi
+  // de partiyi bu fonksiyondan doğurur.
+  await markTravelerCardDirtyTx(tx, params.workOrderId);
 
   return { batch };
 }
@@ -338,6 +366,10 @@ export async function moveRolls(
         where: { id: { in: changingIds }, status: { notIn: K18_DEAD_STATUSES } },
         data: { labelDirty: true },
       });
+      // Kartın parti satırlarındaki top adedi/metraj kaydı — üyelik taşınınca
+      // eldeki kâğıt bu iki sütunda yanlışlanır. Kaynak partiler guard gereği
+      // hedefle AYNI iş emrinde (yukarıda doğrulandı) → tek WO yeter.
+      await markTravelerCardDirtyTx(tx, target.workOrderId);
     }
     await tx.roll.updateMany({ where: { id: { in: rollIds } }, data: { batchId: toBatchId } });
 
@@ -555,6 +587,11 @@ export async function mergeBatches(
       where: { batchId: { in: sourceIds }, status: { notIn: K18_DEAD_STATUSES } },
       data: { labelDirty: true },
     });
+    // Aynı gerekçe REFAKAT KARTI için: kaynak partiler survivor altına birleşti →
+    // `resolveLiveBatches` onları artık BASMIYOR (`mergedIntoId != null` atlanır),
+    // yani eldeki kâğıtta var olmayan parti numaraları yazılı kalıyor. Kart WO
+    // başına olduğu için survivor + kaynakların TÜM iş emirleri işaretlenir.
+    await markTravelerCardsDirtyTx(tx, batches.map((b) => b.workOrderId));
     // Toplar — CONSUMED/CANCELLED tarihçe topları DAHİL (where yalnız batchId).
     await tx.roll.updateMany({
       where: { batchId: { in: sourceIds } },

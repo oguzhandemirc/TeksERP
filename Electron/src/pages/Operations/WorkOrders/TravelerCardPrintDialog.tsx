@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Inbox, Printer, RefreshCw } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Inbox, Printer, RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +63,31 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
     void htmlQuery.refetch();
   };
 
+  const queryClient = useQueryClient();
+
+  /**
+   * Yazdır → baskı diyaloğu → BAŞARILIYSA "basıldı" bildir.
+   *
+   * Bildirim baskının KENDİSİNDEN ayrı bir çağrıdır, çünkü backend GET /html'de
+   * bayrağı temizleyemez (o uç önizlemeyi de besler). Bildirim hata verirse
+   * SESSİZ geçilir: kâğıt çıktı, operatörün işi bitti — rozetin bir süre daha
+   * durması, baskıyı hata toast'ıyla kesmekten iyidir.
+   */
+  const handlePrint = async () => {
+    if (!html || !activeCard) return;
+    printHtmlString(html);
+    try {
+      await workOrderService.recordTravelerCardPrint(activeCard.id);
+      // Rozet üç yerde okunuyor (WO detay başlığı, kart geçmişi, bu diyalog).
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["traveler-cards", workOrder?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["work-order", workOrder?.id] }),
+      ]);
+    } catch {
+      /* yukarıdaki gerekçe — baskı akışını düşürme */
+    }
+  };
+
   if (!workOrder) return null;
 
   return (
@@ -75,6 +100,18 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
             Partiler her baskıda güncel okunur.
           </DialogDescription>
         </DialogHeader>
+
+        {activeCard?.contentDirty && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <strong>Bu kartın basılı kopyası güncel değil.</strong> Kart basıldıktan
+              sonra parti, fason sevki veya iş emri içeriği değişti — sahadaki kâğıtta
+              eksik/yanlış parti no olabilir. Aşağıdaki önizleme <em>günceldir</em>;
+              yazdırıp eskisiyle değiştirin.
+            </span>
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
           {cardQuery.isLoading ? (
@@ -157,12 +194,7 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>
-          <Button
-            type="button"
-            className="gap-1"
-            disabled={!html}
-            onClick={() => html && printHtmlString(html)}
-          >
+          <Button type="button" className="gap-1" disabled={!html} onClick={() => void handlePrint()}>
             <Printer className="h-4 w-4" /> Yazdır
           </Button>
           </div>

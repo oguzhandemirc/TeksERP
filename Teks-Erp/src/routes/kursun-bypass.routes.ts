@@ -153,6 +153,73 @@ router.post("/assign", verifyToken, canDistribute, controller.assign);
 
 /**
  * @openapi
+ * /api/kursun-bypass/assign-bulk:
+ *   post:
+ *     tags: [KursunBypass]
+ *     summary: SEÇİLEN iş emirlerini bir kurşun MAKİNESİNE topluca dağıt / taşı
+ *     description: |
+ *       Havuzdan (bekleyen kuyruk) toplu dağıtım ve makineler arası toplu TAŞIMA
+ *       aynı uçtur — `assign` yeniden-atamayı taşıma olarak ele alır.
+ *
+ *       ⚠️ **Sonuç PARÇALI olabilir.** Her iş emri KENDİ transaction'ında işlenir;
+ *       hepsi-ya-hiç DEĞİLDİR. Gerekçe: (a) `assign` iş emri satırını kilitler,
+ *       onlarca satırı tek tx'te kilitli tutmak deadlock riskidir; (b) listedeki
+ *       bir iş bu arada uygunluğunu yitirdiyse diğerlerinin dağıtımını geri almak
+ *       planlamacının niyetine aykırıdır (dağıtım zaten geri alınabilir).
+ *       Atlanan her satır somut sebebiyle `failed` dizisinde döner.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [workOrderIds, machineId]
+ *             properties:
+ *               workOrderIds: { type: array, minItems: 1, maxItems: 100, items: { type: string, format: uuid } }
+ *               machineId:    { type: string, format: uuid }
+ *               notes:        { type: string, maxLength: 500 }
+ *     responses:
+ *       200: { description: "Sonuç: assigned / moved / failed[]" }
+ *       400: { description: Geçersiz gövde (boş liste, 100 üstü, geçersiz UUID) }
+ *       401: { description: Yetkisiz }
+ *       500: { description: Sunucu hatası }
+ */
+router.post("/assign-bulk", verifyToken, canDistribute, controller.assignBulk);
+
+/**
+ * @openapi
+ * /api/kursun-bypass/cancel-bulk:
+ *   post:
+ *     tags: [KursunBypass]
+ *     summary: SEÇİLEN dağıtımları topluca kaldır (işler havuza döner)
+ *     description: |
+ *       `assign-bulk` ile aynı sözleşme: her satır kendi transaction'ında,
+ *       sonuç parçalı olabilir, atlanan satır somut sebebiyle döner.
+ *
+ *       Yalnız ATAMA satırı soft-cancel edilir; adıma, topa ve adımın
+ *       istasyonuna DOKUNULMAZ.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [assignmentIds]
+ *             properties:
+ *               assignmentIds: { type: array, minItems: 1, maxItems: 100, items: { type: string, format: uuid } }
+ *               reason:        { type: string, maxLength: 200 }
+ *     responses:
+ *       200: { description: "Sonuç: cancelled / failed[]" }
+ *       400: { description: Geçersiz gövde }
+ *       401: { description: Yetkisiz }
+ *       500: { description: Sunucu hatası }
+ */
+router.post("/cancel-bulk", verifyToken, canDistribute, controller.cancelBulk);
+
+/**
+ * @openapi
  * /api/kursun-bypass/{id}/cancel:
  *   post:
  *     tags: [KursunBypass]

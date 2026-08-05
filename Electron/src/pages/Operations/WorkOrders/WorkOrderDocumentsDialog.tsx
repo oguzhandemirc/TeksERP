@@ -1,4 +1,6 @@
-import { FileText, Printer, Truck } from "lucide-react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { CircleAlert, FileText, Inbox, Loader2, Printer, Truck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -6,21 +8,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { safeFormat, formatNumber } from "@/lib/format";
-import type { StepDispatch, WorkOrderStepLite } from "./types";
-
-interface DispatchEntry extends StepDispatch {
-  stationName: string;
-}
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { safeFormat } from "@/lib/format";
+import { printHtmlString } from "@/lib/print";
+import { printedDocumentService, type PrintedDocType } from "@/services/printedDocumentService";
+import { workOrderService } from "./service";
+import type { WorkOrderDocument } from "./types";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Refakat kartı yazdırma seçeneği — modalda buton olarak gösterilir. */
+  /** İş emri — belge listesi bundan çekilir. */
+  workOrderId?: string;
+  /** Refakat kartı yazdırma — zengin önizleme diyaloğunu açar (sayfa boyutu, yenile). */
   onPrintTravelerCard: () => void;
-  /** WO adımlarındaki tüm aktif fason sevkler — her biri yazdırılabilir belge. */
-  steps?: WorkOrderStepLite[];
-  /** Fason sevk irsaliyesi yazdırma. Dialog kapatılıp print dialog açılır. */
+  /** Fason sevk irsaliyesi — zengin diyalog (versiyon geçmişi, revizyon, boya overlay'i). */
   onPrintDispatch: (dispatchId: string) => void;
 }
 
@@ -30,81 +33,117 @@ function stripFason(s: string): string {
 }
 
 /**
- * İş emri belgeleri — belge türüne göre gruplu grid: (1) iş emri belgeleri (refakat
- * kartı), (2..N) her FASON ADIMI kendi grubu (Zımpara / Boyahane irsaliyeleri).
- * Fason satırı sade: irsaliye no + firma, sağda miktar + tarih (plaka/sürücü/talimat
- * irsaliyenin basılı hâlinde; seçim ekranında yok).
+ * İş emri belgeleri — TEK KAYNAK `GET /work-orders/:id/documents`.
+ *
+ * Eskiden bu diyalog listeyi KENDİSİ kuruyordu (`wo.steps[].dispatches`), bu yüzden
+ * **fason kabul makbuzu** ve **fasondan doğrudan sevk irsaliyesi** hiç görünmüyordu —
+ * belge vardı, kapısı yoktu. Ayrıca iptal edilmiş sevkleri gizliyordu; oysa donmuş
+ * belge silinmez, İPTAL filigranıyla basılır ve dosyaya bakan onu isteyebilir.
+ * Artık liste backend'den gelir → mobil ile Electron aynı belgeleri gösterir ve yeni
+ * bir belge tipi eklendiğinde burada kod değişmez.
+ *
+ * Baskı yolu belge tipine göre üçe ayrılır:
+ *   • Refakat kartı / fason sevk → mevcut ZENGİN diyaloglar (versiyon, revizyon,
+ *     sayfa boyutu). Bunları sadeleştirmek özellik kaybı olurdu.
+ *   • Diğerleri (kabul makbuzu, doğrudan sevk) → doğrudan baskı. Bu belgelerin
+ *     zaten bir Electron diyaloğu yok; onları basılabilir kılmak asıl kazanç.
  */
 export function WorkOrderDocumentsDialog({
   open,
   onOpenChange,
+  workOrderId,
   onPrintTravelerCard,
-  steps,
   onPrintDispatch,
 }: Props) {
-  // Fason irsaliyelerini ADIMA göre grupla + grupları ROTA sırasına (stepSequence)
-  // diz — Zımpara (adım 1) → Boyahane (adım 2)…, sevk tarihine göre değil. Grup içi
-  // sevkler yeni → eski.
-  const stationGroups = [...(steps ?? [])]
-    .sort((a, b) => a.stepSequence - b.stepSequence)
-    .filter((s) => (s.dispatches?.length ?? 0) > 0)
-    .map((step): [string, DispatchEntry[]] => [
-      stripFason(step.station?.name ?? "—"),
-      [...(step.dispatches ?? [])]
-        .map((d) => ({ ...d, stationName: step.station?.name ?? "—" }))
-        .sort((a, b) => b.dispatchedAt.localeCompare(a.dispatchedAt)),
-    ]);
+  const [printingKey, setPrintingKey] = useState<string | null>(null);
+
+  const q = useQuery({
+    queryKey: ["work-order-documents", workOrderId],
+    queryFn: () => workOrderService.getDocuments(workOrderId!),
+    enabled: open && Boolean(workOrderId),
+    staleTime: 15_000,
+  });
+
+  const docs = q.data?.data?.documents ?? [];
+
+  // Grupları veriden kur (backend sırasını KORU: kart önce, fason belgeleri tarih desc).
+  const groups: [string, WorkOrderDocument[]][] = [];
+  for (const d of docs) {
+    const label = stripFason(d.group);
+    const last = groups[groups.length - 1];
+    if (last && last[0] === label) last[1].push(d);
+    else groups.push([label, [d]]);
+  }
+
+  const handleClick = async (d: WorkOrderDocument) => {
+    const key = `${d.docType}-${d.sourceId}`;
+    if (d.docType === "TRAVELER_CARD") {
+      onOpenChange(false);
+      onPrintTravelerCard();
+      return;
+    }
+    if (d.docType === "SUBCONTRACTOR_DISPATCH") {
+      onOpenChange(false);
+      onPrintDispatch(d.sourceId);
+      return;
+    }
+    // Zengin diyaloğu olmayan belgeler — doğrudan bas.
+    setPrintingKey(key);
+    try {
+      const html = await printedDocumentService.getHtml(d.docType as PrintedDocType, d.sourceId);
+      printHtmlString(html);
+    } catch (e) {
+      toast.error("Belge yazdırılamadı", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setPrintingKey(null);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Belgeler</DialogTitle>
-          <DialogDescription>İş emrinden çıkarılabilecek belgeler.</DialogDescription>
+          <DialogDescription>
+            İş emrinden çıkarılabilecek belgeler — satıra tıklayın.
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(240px,1fr))] items-start gap-5 overflow-y-auto px-6 py-4">
-          {/* İş emri belgeleri */}
-          <section className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              İş Emri Belgeleri
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+          {q.isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
             </div>
-            <button
-              type="button"
-              onClick={onPrintTravelerCard}
-              className="flex w-full items-start gap-3 rounded-md border bg-background p-3 text-left hover:bg-muted/50"
-            >
-              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1 space-y-0.5">
-                <div className="text-sm font-medium">Refakat Kartını Yazdır</div>
-                <div className="text-xs text-muted-foreground">
-                  Üretim sahasında topla birlikte dolaşan barkodlu kart.
-                </div>
-              </div>
-              <Printer className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            </button>
-          </section>
-
-          {/* Fason irsaliyeleri — her fason adımı ayrı grup */}
-          {stationGroups.length === 0 ? (
-            <section className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Fason Sevk İrsaliyeleri (0)
-              </div>
-              <div className="rounded-md border border-dashed p-3 text-center text-xs italic text-muted-foreground">
-                Bu iş emrinde fason sevk irsaliyesi yok.
-              </div>
-            </section>
+          ) : q.isError ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+              Belgeler yüklenemedi: {(q.error as Error)?.message}
+            </div>
+          ) : docs.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-10 text-center">
+              <Inbox className="h-6 w-6 text-muted-foreground" />
+              <div className="text-sm font-medium">Bu iş emrine ait belge yok</div>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Refakat kartı iş emri açılışında doğar; fason belgeleri sevk/kabul
+                yapıldıkça listelenir.
+              </p>
+            </div>
           ) : (
-            stationGroups.map(([station, list]) => (
-              <section key={station} className="space-y-2">
+            groups.map(([label, list]) => (
+              <section key={label} className="space-y-2">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {station} İrsaliyeleri ({list.length})
+                  {label} ({list.length})
                 </div>
                 <ul className="space-y-1.5">
                   {list.map((d) => (
-                    <li key={d.id}>
-                      <DispatchDocRow dispatch={d} onPrint={() => onPrintDispatch(d.id)} />
+                    <li key={`${d.docType}-${d.sourceId}`}>
+                      <DocRow
+                        doc={d}
+                        busy={printingKey === `${d.docType}-${d.sourceId}`}
+                        onClick={() => void handleClick(d)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -117,32 +156,57 @@ export function WorkOrderDocumentsDialog({
   );
 }
 
-/** Tek fason sevk irsaliyesi satırı — no + firma; sağda miktar + tarih; yazdır. */
-function DispatchDocRow({
-  dispatch,
-  onPrint,
+/** Tek belge satırı — başlık + no + açıklama; sağda tarih ve yazdır ikonu. */
+function DocRow({
+  doc,
+  busy,
+  onClick,
 }: {
-  dispatch: DispatchEntry;
-  onPrint: () => void;
+  doc: WorkOrderDocument;
+  busy: boolean;
+  onClick: () => void;
 }) {
+  const Icon = doc.docType === "TRAVELER_CARD" ? FileText : Truck;
   return (
     <button
       type="button"
-      onClick={onPrint}
-      className="flex w-full items-center gap-3 rounded-md border bg-background p-2.5 text-left hover:bg-muted/50"
+      onClick={onClick}
+      disabled={busy}
+      className={
+        "flex w-full items-center gap-3 rounded-md border bg-background p-2.5 text-left hover:bg-muted/50 disabled:opacity-60 " +
+        (doc.cancelled ? "opacity-60" : "")
+      }
     >
-      <Truck className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <div className="font-mono text-sm font-medium">{dispatch.dispatchNo}</div>
-        <div className="truncate text-xs text-muted-foreground">{dispatch.subcontractor.name}</div>
-      </div>
-      <div className="shrink-0 text-right">
-        <div className="text-sm font-medium tabular-nums">{formatNumber(dispatch.totalQty, 0)} m</div>
-        <div className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
-          {safeFormat(dispatch.dispatchedAt, "dd.MM.yyyy · HH:mm")}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{doc.title}</span>
+          {doc.cancelled && (
+            <span className="rounded border border-destructive/40 px-1 py-px text-[10px] font-semibold uppercase text-destructive">
+              İptal
+            </span>
+          )}
+          {doc.contentDirty && (
+            <span className="rounded border border-amber-500/40 px-1 py-px text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-300">
+              Güncel değil
+            </span>
+          )}
         </div>
+        <div className="font-mono text-xs text-muted-foreground">{doc.documentNo}</div>
+        {doc.subtitle && (
+          <div className="truncate text-xs text-muted-foreground">{doc.subtitle}</div>
+        )}
       </div>
-      <Printer className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
+        {safeFormat(doc.date, "dd.MM.yyyy · HH:mm")}
+      </div>
+      {busy ? (
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+      ) : doc.cancelled ? (
+        <CircleAlert className="h-4 w-4 shrink-0 text-muted-foreground" />
+      ) : (
+        <Printer className="h-4 w-4 shrink-0 text-muted-foreground" />
+      )}
     </button>
   );
 }

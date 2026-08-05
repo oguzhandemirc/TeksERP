@@ -17,6 +17,19 @@ export async function printTravelerCard(cardId: string): Promise<void> {
   });
   const html = typeof res.data === 'string' ? res.data : String(res.data);
   await printHtml({ html });
+
+  // Baskı GERÇEKLEŞTİ → kartın "güncel değil" işaretini temizle.
+  // ⚠️ Yukarıdaki GET bunu YAPAMAZ: aynı uç önizlemeyi de besler ("HTML almak"
+  // ≠ "basmak"). Emsal: rol/çuval etiketindeki print-event uçları.
+  // `printHtml` kullanıcı iptalinde throw eder → bu satıra hiç gelinmez, yani
+  // iptal edilen baskı bayrağı yanlışlıkla temizlemez (doğru davranış).
+  // Bildirim hatası YUTULUR: kâğıt çıktı, operatörün işi bitti — rozetin bir
+  // süre daha durması, baskıyı hata ile kesmekten iyidir.
+  try {
+    await apiClient.post(`/traveler-cards/${cardId}/print-event`);
+  } catch {
+    /* yukarıdaki gerekçe */
+  }
 }
 
 /**

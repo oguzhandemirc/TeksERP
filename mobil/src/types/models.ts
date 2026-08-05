@@ -176,8 +176,23 @@ export interface Item {
   isActive?: boolean;
   /** Saha (KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
-  allowedColors?: Color[];
-  allowedProperties?: FabricProperty[];
+  /** M:N pivot satırları — `GET /items` `include: { allowedColors: { include: { color } } }`
+   *  ile döner, yani eleman DÜZ `Color` DEĞİLDİR (renk `.color` altındadır).
+   *  Boş/verilmemiş = sınırsız (kumaş her renkte üretilebilir). */
+  allowedColors?: ItemAllowedColor[];
+  allowedProperties?: ItemAllowedProperty[];
+}
+
+/** `item_allowed_colors` pivotu — kumaşın izinli renk listesi. */
+export interface ItemAllowedColor {
+  colorId: string;
+  color?: Color;
+}
+
+/** `item_allowed_properties` pivotu — kumaşın izinli özellik listesi. */
+export interface ItemAllowedProperty {
+  propertyId: string;
+  property?: FabricProperty;
 }
 
 // =============================================================================
@@ -619,6 +634,10 @@ export interface TravelerCardLookup {
   status: TravelerCardStatus;
   workOrderId: string;
   printedAt: string;
+  /** Basılı kâğıt gerçekle ayrıştı mı (parti doğdu/bölündü/birleşti, sevk yapıldı,
+   *  iş emri içeriği değişti). `Roll.labelDirty` ile aynı sözleşme; baskı olayında
+   *  (`POST /traveler-cards/:id/print-event`) temizlenir. Eski backend'de yok. */
+  contentDirty?: boolean;
   workOrder?: WorkOrder;
   /** Bu WO'da iptal edilmemiş + mal kabulü tamamlanmamış açık sevk var mı. */
   hasOpenDispatch?: boolean;
@@ -674,6 +693,26 @@ export interface KursunStepSummary {
   /** Bu adıma yazılan not (WorkOrderStep.notes; rotada KK2 istasyonuna özel
    *  talimat) — kart açıkken üstte gösterilir. */
   stepNote?: string | null;
+  /**
+   * Bu adım bir fiziksel kurşun MAKİNESİNE dağıtılmışsa (kurşun bypass) dolu.
+   * Bilgi amaçlı: iş kâğıtla yürüyor, kapanışı Tambur yapıyor.
+   */
+  bypassAssignment?: { machineName: string; assignedAt: string } | null;
+  /**
+   * TABLET SALT-OKUNUR MU? Non-null ise kurşun tabletinin HİÇBİR yazma yolu
+   * çalışmaz (backend `assertKursunTabletMayWrite` ile 409 döner) → ekran tüm
+   * aksiyonları gizler ve `reason`'ı basar.
+   *
+   * İki sebepten doğar: adım makineye dağıtılmış, ya da kurşun dağıtımı bayrağı
+   * AÇIK ve adım dağıtıma uygun. Uygun OLMAYAN adımlarda null gelir — o iş
+   * tablette işlenmeye devam eder (kurşundan sonra Tambur gelmeyen rotalar
+   * çıkmaza girmesin).
+   *
+   * Eski APK'larda alan gelmez → `undefined` → davranış eskisi gibi kalır.
+   * Bu yüzden backend + APK aynı pencerede dağıtılmalı; yoksa tablet yazmaya
+   * çalışır ve ham 409 görür.
+   */
+  tabletReadOnly?: { reason: string } | null;
   rolls: KursunRollSummary[];
 }
 
@@ -1115,4 +1154,51 @@ export interface LabelTemplateUpdateRequest {
   isDefault?: boolean;
   isActive?: boolean;
   fields?: LabelTemplateField[];
+}
+
+// =============================================================================
+// Order — mobil "Sipariş" ekranı (liste + detay). Backend `GET /orders`
+// `defaultInclude`'u ile birebir: customer, branch ve lines TEK istekte gelir,
+// bu yüzden detay için ayrı bir uç çağrılmaz.
+//
+// ⚠️ Alan kümesi Electron'un `Orders/types.ts`'inin ALT KÜMESİDİR — mobil
+// yalnız gösterdiğini tipler. Fiyat (`unitPrice`/`totalAmount`) ve müşteri-adı
+// override'ları bilinçli olarak DIŞARIDA: mobil sipariş formu bunları
+// yazmıyor, ekran da göstermiyor.
+// =============================================================================
+
+export type OrderStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'PARTIAL_SHIPPED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export interface OrderLine {
+  id: string;
+  itemId: string;
+  colorId: string | null;
+  /** İstenen metraj. Prisma Decimal → JSON'da string gelebilir. */
+  quantity: number | string;
+  width: number | string | null;
+  /** Denormalize SEVK toplamı. Açık = quantity − shippedQty (rezerv YOK). */
+  shippedQty?: number | string;
+  item?: { id: string; code: string; name: string };
+  color?: { id: string; code: string; name: string; hex?: string | null } | null;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  customerId: string;
+  branchId: string | null;
+  status: OrderStatus;
+  orderDate: string;
+  deadline: string | null;
+  /** Sipariş geneli denormalize sevk toplamı (m). */
+  shippedQty?: number | string;
+  createdAt?: string;
+  customer?: { id: string; code: string; name: string };
+  branch?: { id: string; name: string; code?: string | null } | null;
+  lines?: OrderLine[];
 }

@@ -190,6 +190,19 @@ export class TravelerCardController {
     }
   }
 
+  /** POST /api/traveler-cards/:id/print-event — baskı gerçekleşti, bayat işaretini temizle */
+  async recordPrintEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.recordPrintEvent(
+        req.params.id as string,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** POST /api/traveler-cards/sample-html — Belge Şablonu önizlemesi (örnek veri + taslak config) */
   async getSampleHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

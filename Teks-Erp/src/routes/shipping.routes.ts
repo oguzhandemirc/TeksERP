@@ -16,6 +16,11 @@ const ACCOUNTING_READ = requireAnyPermission("shipping:read", "shipping:write", 
 // açardı) → ayrı, dar kapsamlı izin. `shipping:write` de kabul edilir: sevkiyatçının
 // mevcut yetkisi daralmasın.
 const INVOICE_WRITE = requireAnyPermission("shipping:invoice", "shipping:write");
+// Sevki geri alma (storno): `shipping:write`ten AYRI ve onu KAPSAMAZ. Sevk eden
+// herkesin resmi çıkış belgesini iptal edip stok/karşılanma defterini geri
+// sarabilmesi istenmiyor. Önizleme de aynı izinle kapılı — göremeyeceği işlemin
+// yıkım listesini okumasının anlamı yok.
+const UNDO_DISPATCH = requireAnyPermission("shipping:undo-dispatch");
 
 // ===========================================================================
 // SİPARİŞ SEÇİM — açık siparişler + depo karşılaması (paketleme rehberi)
@@ -281,5 +286,50 @@ router.post("/shipments/:id/dispatch-note", verifyToken, WRITE, controller.setDi
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
 router.get("/shipments/:id/cancel-preview", verifyToken, READ, controller.cancelPreview);
 router.post("/shipments/:id/cancel", verifyToken, WRITE, controller.cancelShipment);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/undo-dispatch-preview:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevki geri alma (storno) önizlemesi
+ *     description: |
+ *       Geri dönecek çuval/top/sipariş + topların döneceği raflar + engel varsa
+ *       SEBEBİ (`blockReason`). Engel kuralları mutasyonla AYNI kaynaktan gelir:
+ *       faturalanmış · bu sevkiyattan iade alınmış · (ayar açıksa) aynı gün değil.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Önizleme (canUndo + blockReason) }
+ *       404: { description: Sevkiyat bulunamadı }
+ */
+router.get("/shipments/:id/undo-dispatch-preview", verifyToken, UNDO_DISPATCH, controller.undoDispatchPreview);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/undo-dispatch:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevki geri al (storno) — İADE DEĞİL
+ *     description: |
+ *       "Mal hiç çıkmadı" durumu (araç kapıda, yanlış sevkiyat onaylandı): sevkiyat
+ *       DISPATCHED → PLANNED, toplar sevk ÖNCESİ rafına döner, sipariş karşılanması
+ *       geri hesaplanır, sevk irsaliyesi VOIDED'e çekilir (silinmez). İade defterine
+ *       KAYIT GİRMEZ — mal müşteriye ulaşıp dönmedi.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3 }
+ *     responses:
+ *       200: { description: Sevk geri alındı }
+ *       400: { description: Gerekçe eksik }
+ *       409: { description: Faturalanmış / iade alınmış / aynı gün değil / durum değişti }
+ */
+router.post("/shipments/:id/undo-dispatch", verifyToken, UNDO_DISPATCH, controller.undoDispatch);
 
 export default router;

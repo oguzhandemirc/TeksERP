@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, Check, FileText, Maximize2, Search } from "lucide-react";
+import { Ban, Check, FileText, Maximize2, Search, Undo2 } from "lucide-react";
 import { PermissionGate } from "@/components/PermissionGate";
 import { CancelShipmentDialog } from "./CancelShipmentDialog";
+import { UndoDispatchDialog } from "./UndoDispatchDialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ interface Props {
 export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem, matchColor }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [undoOpen, setUndoOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [onlyMatched, setOnlyMatched] = useState(false);
   const openTarget = useOpenTarget();
@@ -128,6 +130,22 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem,
                   </Button>
                 </PermissionGate>
               )}
+              {/* Storno: yalnız SEVK EDİLMİŞ sevkiyatta. Uygunluğun geri kalanı
+                  (fatura/iade/aynı gün) backend'in tek kaynağından gelir ve
+                  dialogda `blockReason` ile söylenir — burada kopyalanmaz. */}
+              {d.status === "DISPATCHED" && (
+                <PermissionGate permission="shipping:undo-dispatch">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setUndoOpen(true)}
+                  >
+                    <Undo2 className="h-3.5 w-3.5" /> Sevki Geri Al
+                  </Button>
+                </PermissionGate>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -187,6 +205,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem,
           returns={d ? { count: d.summary.returnedCount, meters: d.summary.returnedMeters } : undefined}
         />
         <CancelShipmentDialog shipmentId={cancelOpen ? shipmentId : null} onOpenChange={(o) => setCancelOpen(o)} />
+        <UndoDispatchDialog shipmentId={undoOpen ? shipmentId : null} onOpenChange={(o) => setUndoOpen(o)} />
       </SheetContent>
     </Sheet>
   );

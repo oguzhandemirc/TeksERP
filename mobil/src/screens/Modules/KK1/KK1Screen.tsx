@@ -77,17 +77,28 @@ import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import {
   IDLE_ATTEMPT,
+  decideSubmit,
+  entryFingerprint,
+  freshEntryIdentity,
   isAmbiguousFailure,
   isRetrying,
+  onAttemptDetached,
   onAttemptFailed,
+  onAttemptSettled,
+  onAttemptStarted,
   onAttemptSucceeded,
   onCollisionResolvedAsNew,
+  shouldReleaseInFlight,
   tokenForSubmit,
   type EntryAttemptState,
 } from '../../../offline/entryAttempt';
-import { useIsOnline } from '../../../offline/hooks';
+import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
+// `onMutate` içinde HOOK okunamaz (render dışı) — modül seviyesindeki anlık
+// okuyucu kullanılır; `useOfflineReason` yalnız render için.
+import { offlineReason } from '../../../offline/serverReachability';
 import { usePermissions } from '../../../hooks/usePermission';
 import SyncStatusChip from '../../../components/SyncStatusChip';
+import { opIdFor, useFailedOps } from '../../../offline/failedOps';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
   AnimatedEntrance,
@@ -290,6 +301,9 @@ export default function KK1Screen() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const isOnline = useIsOnline();
+  /** Çevrimdışıysak SEBEBİ — 'link' (ağ yok) ile 'server' (sunucu ölü) uçuş
+   *  kimliği açısından farklı davranır; bkz. aşağıdaki detach effect'i. */
+  const offlineWhy = useOfflineReason();
   // "Yeni Desen" yalnız seçili operatörlere (mobile:kk1-desen; mobile:*/admin:* devralır).
   const { has } = usePermissions();
   const canAddDesen = has('mobile:kk1-desen');
@@ -350,6 +364,13 @@ export default function KK1Screen() {
   // başarısız denemenin TEKRARIDIR (aynı token) ve CTA "Tekrar Dene"ye döner.
   // Sözleşmenin tamamı + neden "yapışkan tek ref" olmadığı: offline/entryAttempt.ts
   const [attempt, setAttempt] = useState<EntryAttemptState>(IDLE_ATTEMPT);
+  // Mutation geri çağrıları `mutate()` ANINDAKİ closure'ı taşır; uçuş penceresi
+  // 47 sn'ye kadar sürebildiği için o closure'daki `attempt` bayat olur. Okuma
+  // ref'ten (emsal: `activePrintRollRef`), yazma fonksiyonel `setAttempt` ile.
+  const attemptRef = useRef<EntryAttemptState>(attempt);
+  useEffect(() => {
+    attemptRef.current = attempt;
+  }, [attempt]);
   // Backend'in İKİ 409'u da aynı soruyu sorar: "aradığın top zaten var mı?"
   //  • CLIENT_TOKEN_COLLISION → önceki deneme aslında COMMIT olmuştu
   //  • POSSIBLE_DUPLICATE     → sunucu tuzağı "az önce birebir aynısı girildi" dedi
@@ -362,6 +383,10 @@ export default function KK1Screen() {
   } | null>(null);
   /** Ortada tekrarlanmayı bekleyen düşmüş bir deneme var mı (CTA'yı değiştirir). */
   const retrying = isRetrying(attempt);
+  /** ONLINE bir deneme uçuşta mı — CTA "Gönderiliyor…" der (B4: dürüst geri
+   *  bildirim). Sağlıklı ağda ~300 ms sürer ve görünmez; yalnız gerçekten bozuk
+   *  anlarda belirir ve orada zaten kaydedilecek bir şey yoktur. */
+  const sending = attempt.inFlight !== null;
   // Düşen denemenin payload'ı — "Tekrar Dene" formu/makineyi YENİDEN OKUMAZ,
   // bunu birebir gönderir. Otomatik modda yeniden okumak metrajı değiştirir
   // (kumaş bu arada oynamış olabilir) → aynı token + farklı payload = gereksiz
@@ -584,6 +609,18 @@ export default function KK1Screen() {
     topIdRef.current = newTopId;
   }, [recentRolls]);
 
+  // AĞ LİNKİ koptu → uçuştaki deneme artık OUTBOX'ın işi; uçuş kilidi kalkar ve
+  // offline seri giriş bugünkü hızıyla sürer (operatör çevrimdışı olduğunu
+  // BİLİYOR, çip söylüyor).
+  //
+  // ⚠️ SUNUCU erişilemezliğinde (B6) DETACH ETME: orada kesinti yeni fark
+  // ediliyordur, basışlar panik olabilir ve uçuş kimliği korunmazsa B6 saha
+  // vakasını kuyruk üzerinden geri getirir. Koruma `INFLIGHT_REUSE_WINDOW_MS`
+  // (90 sn) ile sınırlı — uzun kesintide sıradaki gerçek top yutulmaz.
+  useEffect(() => {
+    if (shouldReleaseInFlight(offlineWhy)) setAttempt(onAttemptDetached);
+  }, [offlineWhy]);
+
   // "✓ Kaydedildi" CTA flaşını ~900ms sonra söndür.
   useEffect(() => {
     if (!justSaved) return;
@@ -620,17 +657,65 @@ export default function KK1Screen() {
     mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
     onMutate: (vars) => {
       const prevForm = form;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({
-        type: 'success',
-        text1: 'Top kaydedildi',
-        text2: onlineManager.isOnline()
-          ? 'Barkod sunucudan atanıyor — etikete basılacak'
-          : 'Çevrimdışı — sync bekliyor',
-      });
-      // Oturum sayacı (pending) + başarı flaşı (ekran-içi tatmin, offline'da da çalışır).
+      // Kuyruğa mı düşüyor? `onlineManager.isOnline()` ile retryer'ın `isPaused`
+      // kararı AYNI predicate'ten gelir — okuma deterministik.
+      const queued = !onlineManager.isOnline();
+      // ⚠️ UÇUŞ KAYDI İÇİN AYRI SORU: kayıt yalnız operatörün BİLDİĞİ bir
+      // çevrimdışılıkta (ağ linki yok) açılmaz. "Sunucuya ulaşılamıyor"da
+      // (B6) açılır — orada basışlar panik olabilir ve aynı yük 90 sn içinde
+      // tek kimliğe toplanmalı.
+      const knownOffline = offlineReason() === 'link';
+      // Yeni deneme → eski yeşil flaş söner (aksi hâlde "Kaydedildi ✓" hâlâ
+      // ekranda dururken ikinci basış gönderilirdi).
+      setJustSaved(false);
+      if (vars.clientToken) {
+        const identity = {
+          clientToken: vars.clientToken,
+          clientEnteredAt: vars.clientEnteredAt ?? new Date().toISOString(),
+        };
+        const fp = entryFingerprint({
+          itemId: vars.itemId,
+          initialQty: vars.initialQty,
+          width: vars.width ?? null,
+        });
+        setAttempt((s) => {
+          const next = onAttemptStarted(s, identity, fp, { queued: knownOffline });
+          // Ref'i SENKRON yaz: `onSuccess`'in "bu benim beklediğim deneme mi"
+          // kontrolü ref'ten okuyor ve çok hızlı bir yanıt, `useEffect`'in
+          // ref'i tazelemesinden ÖNCE gelebilir. O durumda yeşil "Kaydedildi ✓"
+          // sessizce düşerdi. Fonksiyon saf ve idempotent → updater iki kez
+          // çağrılsa da (StrictMode) sonuç aynı.
+          attemptRef.current = next;
+          return next;
+        });
+      }
+      if (queued) {
+        // ÇEVRİMDIŞI: kayıt gerçekten diske alındı, kuyruk dürüst konuşuyor.
+        // Sebep AYRI anlatılır: "wifi'yi aç" ile "sunucu kapalı, IT'ye haber
+        // ver" operatör için farklı işlerdir.
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Toast.show({
+          type: 'success',
+          text1: knownOffline ? 'Top alındı (çevrimdışı)' : 'Top alındı (sunucuya ulaşılamıyor)',
+          text2: knownOffline
+            ? 'Ağ gelince kendiliğinden gönderilecek — etiket o zaman çıkar'
+            : 'Sunucu dönünce kendiliğinden gönderilecek — etiket o zaman çıkar',
+        });
+        setJustSaved(true);
+      } else {
+        // ONLINE: HENÜZ KAYDEDİLMEDİ. 2026-08-03 saha vakasında operatörü tekrar
+        // basmaya davet eden şey tam da buradaki koşulsuz yeşil "Top kaydedildi"
+        // toast'ıydı: sunucu ölüyken bile "kaydedildi" diyor, etiket çıkmıyor,
+        // operatör tekrar basıyordu. Yeşil ve başarı haptiği artık `onSuccess`'te.
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        Toast.show({
+          type: 'info',
+          text1: 'Kaydediliyor…',
+          text2: 'Etiket, kayıt tamamlanınca çıkacak — bekle, tekrar basma',
+        });
+      }
+      // Oturum sayacı (pending) — offline'da da çalışır.
       useSessionEntriesStore.getState().addPending('RAW_QC');
-      setJustSaved(true);
       // Form'daki her alan KALICI (ürün, en, kalite) — aynı en'den seri giriş.
       // Yalnızca per-roll manuel değerler (mt/kg) temizlenir.
       const prevManualQty = manualQty;
@@ -652,6 +737,21 @@ export default function KK1Screen() {
         setAttempt((s) => onAttemptSucceeded(s, token));
       }
       failedVarsRef.current = null;
+      // YEŞİL BURADA (B4): yalnız operatörün ŞU AN beklediği deneme onaylandıysa.
+      // Dakikalar önce kuyruğa girmiş bir kayıt şimdi flush olduysa operatör 5 top
+      // ileridedir — o an "Kaydedildi ✓" basmak hangi topun onaylandığı konusunda
+      // yanıltırdı (o kayıt kendi toast'ını basış anında zaten aldı).
+      if (vars.clientToken && attemptRef.current.inFlight?.identity.clientToken === vars.clientToken) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setJustSaved(true);
+        Toast.show({
+          type: 'success',
+          text1: 'Kaydedildi ✓',
+          text2: res.data?.barcode
+            ? `${res.data.barcode} — etiket basılıyor`
+            : undefined,
+        });
+      }
       if (!res.data) return;
       // "Kaydet ve Etiket Bas" — başarılı kayıttan sonra otomatik etiket basımı.
       // Offline'da pause olduysa burası ancak online dönünce çalışır.
@@ -735,6 +835,13 @@ export default function KK1Screen() {
             ? `${err.message} — "Tekrar Dene" ile AYNI kayıt yeniden gönderilir.`
             : err.message,
       });
+    },
+    // UÇUŞ KAYDININ TEK KAPANIŞ NOKTASI. `onError`'ın erken dönüş dalları
+    // (`isWorkSessionLost`, 409 modalı) uçuşu temizlemeden çıkıyor; `onSettled`
+    // her yolda koşar. Yalnız BEKLENEN token kapatılır (gecikmiş yanıt yeni bir
+    // uçuşu düşürmesin).
+    onSettled: (_res, _err, vars) => {
+      setAttempt((s) => onAttemptSettled(s, vars?.clientToken));
     },
   });
 
@@ -958,21 +1065,43 @@ export default function KK1Screen() {
       }
     }
 
-    // Offline-aware idempotency: clientToken ÜRETİLMEZ, ÇÖZÜLÜR (2026-08-03 saha
-    // vakası — eskiden her basış yeni token üretiyordu ve koruma hiç devreye
-    // girmiyordu). Ortada düşmüş bir deneme varsa AYNI token gider → backend
-    // clientToken @unique P2002 yakalayıp cached Roll döner (mükerrer top yok);
-    // yoksa taze token → yeni top. Mutate paused olursa persist edilen vars sabit
-    // kalır → resume'da da aynı token. Barkod SUNUCU'da sıralı atanır
-    // (TEKS+YYMMDD+H/F+A001..); etiket res.data ile basılır.
-    const clientToken = tokenForSubmit(attempt);
+    // Offline-aware idempotency: KİMLİK (token + giriş damgası) ÜRETİLMEZ,
+    // ÇÖZÜLÜR (2026-08-03 saha vakası — eskiden her basış yeni token üretiyordu
+    // ve koruma hiç devreye girmiyordu). Üç dal:
+    //   • resend-failed   → düşmüş deneme; yukarıdaki erken dönüş bunu zaten
+    //     `failedVarsRef` ile birebir gönderdi (buraya normalde düşülmez).
+    //   • reuse-inflight  → ONLINE bir deneme uçuşta ve yük BİREBİR aynı: aynı
+    //     kimlik gider → backend `clientToken @unique` P2002 → tek kayıt.
+    //   • send-new        → taze kimlik → yeni top.
+    // Mutate paused olursa persist edilen vars sabit kalır → resume'da da aynı
+    // kimlik. Barkod SUNUCU'da sıralı atanır; etiket res.data ile basılır.
+    //
+    // ⚠️ DAMGA TAZELENMEZ. `clientEnteredAt` operatörün BASTIĞI andır; retry ya da
+    // uçuş tekrarı onu yenilerse backend'in 90 sn'lik mükerrer penceresi kayar ve
+    // koruma tam da en çok gerektiği anda kapanır (bkz. entryAttempt sözleşmesi).
+    const fingerprint = entryFingerprint({
+      itemId: form.itemId,
+      initialQty: qty,
+      width: width ?? null,
+    });
+    const action = decideSubmit(attempt, fingerprint);
+    const fresh = freshEntryIdentity();
+    const identity =
+      action === 'reuse-inflight' && attempt.inFlight
+        ? attempt.inFlight.identity
+        : // `resend-failed` normalde yukarıdaki erken dönüşte `failedVarsRef` ile
+          // karşılanır; buraya yalnız ref boşsa (payload kaybolmuşsa) düşülür —
+          // o durumda form yeniden okunduğu için damga da yeni olmak DURUMUNDA,
+          // ama token yapışkan kalır ki backend kopyayı yine de eritsin.
+          { clientToken: tokenForSubmit(attempt, () => fresh.clientToken), clientEnteredAt: fresh.clientEnteredAt };
     createMutation.mutate({
       itemId: form.itemId,
       initialQty: qty,
       width,
       weightKg,
       qualityGrade: form.qualityGrade || undefined,
-      clientToken,
+      clientToken: identity.clientToken,
+      clientEnteredAt: identity.clientEnteredAt,
     });
   };
 
@@ -986,8 +1115,40 @@ export default function KK1Screen() {
   const clearConflict = () => {
     setAttempt(onCollisionResolvedAsNew());
     failedVarsRef.current = null;
+    // Modal ile çözülen çakışma kutuda ÖLÜ SATIR bırakmasın: `MutationCache`
+    // her kalıcı düşüşü kutuya yazar (ekran mount olsun olmasın) — modal
+    // burada kararı verdiğine göre satırın işi bitti. Çift yüzey bilinçli:
+    // modal geçici, kutu kalıcı; ama ikisi aynı kaydı iki kez sordurmamalı.
+    if (conflict) {
+      useFailedOps.getState().clear(opIdFor(STATION_MUT.KK1_CREATE_ENTRY, conflict.vars));
+    }
     setConflict(null);
   };
+
+  /**
+   * Barkoddan etiket bas — sunucudan topu okur, yazıcı kuyruğuna atar.
+   * Çakışma modalı VE ölü mektup kutusu (`SyncStatusChip → OutboxModal`) aynı
+   * yeteneği kullanır; kutu her ekrandan açılabildiği için yetenek oraya
+   * KK1'den enjekte edilir (yazıcı kuyruğu bu ekrana ait).
+   */
+  const printBarcode = useCallback(
+    async (barcode: string): Promise<boolean> => {
+      try {
+        const res = await rollService.getByBarcode(barcode);
+        if (!res.data) throw new Error('Top bulunamadı');
+        enqueuePrint(res.data);
+        return true;
+      } catch {
+        Toast.show({
+          type: 'error',
+          text1: 'Etiket alınamadı',
+          text2: `${barcode} — "Son Kayıtlar" listesinden de basabilirsiniz`,
+        });
+        return false;
+      }
+    },
+    [enqueuePrint],
+  );
 
   const printConflictingRoll = async () => {
     const barcode = conflict?.barcode;
@@ -997,17 +1158,8 @@ export default function KK1Screen() {
     }
     setConflictPrinting(true);
     try {
-      const res = await rollService.getByBarcode(barcode);
-      if (!res.data) throw new Error('Top bulunamadı');
-      enqueuePrint(res.data);
-      clearConflict();
-    } catch {
-      // Etiket çekilemedi → modal AÇIK kalır; operatör diğer yolu seçebilir.
-      Toast.show({
-        type: 'error',
-        text1: 'Etiket alınamadı',
-        text2: `${barcode} — "Son Kayıtlar" listesinden de basabilirsiniz`,
-      });
+      // Başarısızsa modal AÇIK kalır; operatör diğer yolu seçebilir.
+      if (await printBarcode(barcode)) clearConflict();
     } finally {
       setConflictPrinting(false);
     }
@@ -1020,14 +1172,20 @@ export default function KK1Screen() {
   const saveConflictAsNew = () => {
     if (!conflict) return;
     const { kind, vars } = conflict;
+    // Modal kararı verdi → kutudaki ölü satır düşer (bkz. clearConflict notu).
+    useFailedOps.getState().clear(opIdFor(STATION_MUT.KK1_CREATE_ENTRY, vars));
     setConflict(null);
     const next = onCollisionResolvedAsNew();
     setAttempt(next);
     failedVarsRef.current = null;
     createMutation.mutate(
       kind === 'POSSIBLE_DUPLICATE'
-        ? { ...vars, confirmDuplicate: true }
-        : { ...vars, clientToken: tokenForSubmit(next) },
+        ? // Aynı FİZİKSEL giriş, operatör "bu ayrı bir top" dedi → kimlik AYNEN
+          // korunur (damga da), yalnız tuzak açık onayla atlanır.
+          { ...vars, confirmDuplicate: true }
+        : // TOKEN_COLLISION → önceki deneme aslında COMMIT olmuştu; bu YENİ bir
+          // mantıksal toptur → token VE damga birlikte tazelenir (ikisi tek kimlik).
+          { ...vars, ...freshEntryIdentity() },
     );
   };
 
@@ -1136,13 +1294,19 @@ export default function KK1Screen() {
                       ? `${printingCount} etiket${!isOnline ? ' · çevrimdışı' : ''}`
                       : ''}
                     {printingCount > 0 && failedPrints.length > 0 ? ' · ' : ''}
-                    {failedPrints.length > 0 ? `${failedPrints.length} HATALI` : ''}
+                    {/* "ETİKET" kelimesi LOAD-BEARING: yan taraftaki SyncStatusChip
+                        "N KAYIT HATALI" diyor ve o SUNUCUYA YAZILAMAMIŞ kaydı
+                        anlatıyor. İkisi aynı header'da yan yana durduğu için
+                        çıplak "N HATALI" operatörü yanıltırdı. */}
+                    {failedPrints.length > 0 ? `${failedPrints.length} ETİKET HATALI` : ''}
                   </Text>
                 </View>
               </TouchableRipple>
             </Animated.View>
           )}
-          <SyncStatusChip />
+          {/* Ölü mektup kutusundaki "Etiketi Bas" yeteneği yalnız burada var —
+              yazıcı kuyruğu KK1'e ait. Diğer ekranlarda buton hiç çıkmaz. */}
+          <SyncStatusChip onPrintBarcode={printBarcode} />
           {!compact && sessionActionsRow}
           {/* Dikey telefonda "Son Kayıtlar" çekmece tetiği artık 2. katta
               (phoneSecondRow) — yan menü açan tuş burada değil. */}
@@ -1446,7 +1610,7 @@ export default function KK1Screen() {
           <Button
             mode="contained"
             icon={
-              pulling
+              pulling || sending
                 ? undefined
                 : justSaved
                   ? 'check-bold'
@@ -1455,7 +1619,11 @@ export default function KK1Screen() {
                     : 'package-check'
             }
             onPress={handleSubmit}
-            loading={pulling}
+            loading={pulling || sending}
+            // `disabled` YALNIZ `pulling` — uçuşta buton BASILABİLİR kalır.
+            // Disabled buton geri bildirim vermez, operatör "dondu" sanıp daha
+            // sert basar; onun yerine aynı yükle gelen basış uçuştaki KİMLİĞİ
+            // yeniden kullanır (entryAttempt: reuse-inflight) → tek kayıt.
             disabled={pulling}
             buttonColor={
               justSaved ? colors.success : retrying ? colors.warningDark : undefined
@@ -1468,9 +1636,11 @@ export default function KK1Screen() {
               ? 'Makineden okunuyor…'
               : justSaved
                 ? 'Kaydedildi ✓'
-                : retrying
-                  ? 'Tekrar Dene (aynı top)'
-                  : 'Kaydet ve Etiket Bas'}
+                : sending
+                  ? 'Kaydediliyor… bekle'
+                  : retrying
+                    ? 'Tekrar Dene (aynı top)'
+                    : 'Kaydet ve Etiket Bas'}
           </Button>
         </Animated.View>
         </View>
@@ -2268,43 +2438,51 @@ function EntryConflictModal({
           <Icon source="content-duplicate" size={36} color={colors.warningDark} />
         </View>
         <Text variant="titleLarge" style={scrapStyles.title}>
-          {suspected ? 'Bu top az önce girilmiş olabilir' : 'Bu top zaten kaydedilmiş'}
+          {suspected ? 'AYNI TOP TEKRAR MI GİRİLDİ?' : 'BU TOP ZATEN KAYDEDİLMİŞ'}
         </Text>
 
         <View style={scrapStyles.infoBox}>
           <View style={scrapStyles.infoRow}>
-            <Text style={scrapStyles.infoLabel}>Barkod</Text>
+            <Text style={scrapStyles.infoLabel}>Kayıtlı barkod</Text>
             <Text style={scrapStyles.infoValue}>{barcode ?? '—'}</Text>
           </View>
         </View>
 
         <Text style={scrapStyles.hint}>
           {suspected
-            ? 'Aynı kumaş, metraj ve en kısa süre önce kaydedilmiş. Gerçekten ayrı bir topsa onaylayın.'
-            : 'Az önce gönderilemedi sanılan kayıt sunucuya ulaşmış. Yeni bir top oluşturulmadı — mükerrer kayıt önlendi.'}
+            ? 'Az önce aynı kumaş, aynı metraj ve aynı en kaydedilmiş.\n\nElindeki top yukarıdaki barkodla AYNI mı, yoksa ikinci bir top mu?'
+            : 'Gönderilemedi sanılan kayıt aslında ulaşmış. Yeni top oluşturulmadı — kopya kayıt önlendi.\n\nElindeki top yukarıdaki barkodla AYNI mı, yoksa ikinci bir top mu?'}
         </Text>
 
+        {/* RENK = SONUÇ. MAVİ: yalnız kâğıt basar, veriye dokunmaz.
+            AMBER: YENİ bir stok kaydı doğurur — geri alması zor, o yüzden
+            "devam" gibi nötr değil, dikkat rengi. İkisi de büyük ve dolgun:
+            eldivenli operatör metni okumasa da renkten ayırt edebilmeli. */}
         <View style={scrapStyles.actions}>
           <Button
             mode="contained"
             icon="printer"
+            buttonColor={colors.infoDark}
+            textColor="#fff"
             onPress={onPrintExisting}
             loading={printing}
             disabled={printing}
             style={scrapStyles.actionBtn}
             contentStyle={scrapStyles.actionBtnContent}
           >
-            Etiketi Bas
+            AYNI TOP — Etiketini Bas
           </Button>
           <Button
-            mode="outlined"
-            icon="plus"
+            mode="contained"
+            icon="plus-box"
+            buttonColor={colors.warningDark}
+            textColor="#fff"
             onPress={onSaveAsNew}
             disabled={printing}
             style={scrapStyles.actionBtn}
             contentStyle={scrapStyles.actionBtnContent}
           >
-            {suspected ? 'Evet, Ayrı Bir Top' : 'Bu Farklı Bir Top'}
+            AYRI TOP — Yine de Kaydet
           </Button>
         </View>
       </View>

@@ -102,6 +102,26 @@ export interface InitialEntryRequest {
    * birebir eşit metrajlı toplar arka arkaya meşru olarak girilebilir.
    */
   confirmDuplicate?: boolean;
+  /**
+   * Operatörün "Kaydet"e BASTIĞI an (ISO-8601, UTC). Backend mükerrer tuzağının
+   * 90 sn'lik penceresini SUNUCU SAATİYLE DEĞİL bununla ölçer.
+   *
+   * NEDEN: offline kuyruk tek flush'ta boşalır → çevrimdışı 40 dakikaya yayılmış
+   * 5 giriş sunucuda milisaniyelerle ayrılır. Sunucu saatiyle ölçülen pencere bu
+   * yüzden her flush'ta doludur ve "aynı partiden eşit metrajlı toplar" (tekstilde
+   * olağan) yanlış POZİTİF alırdı; tersi de mümkündür (3 sn arayla girilip ayrı
+   * ayrı flush olanlar dakikalarca ayrı görünür → yanlış NEGATİF). Damga operatörün
+   * gerçek ritmini taşır.
+   *
+   * ⚠️ YAŞAM DÖNGÜSÜ `clientToken` İLE AYNIDIR (`offline/entryAttempt`
+   * → `freshEntryIdentity`): birlikte doğar, birlikte yolculuk eder. **Retry ve
+   * uçuş tekrarı TAZELEMEZ** — tazelenirse pencere kayar ve koruma tam da en çok
+   * gerektiği anda kapanır.
+   *
+   * Eski backend'e gönderilirse Zod'un düz `z.object`'i alanı SESSİZCE atar
+   * (400 YOK) — yani APK, backend'den önce de sahaya çıkabilir.
+   */
+  clientEnteredAt?: string;
 }
 
 export const rollService = {

@@ -55,6 +55,12 @@ interface FasonCekiDoc {
   /** WO hedef üretim özellikleri (FabricProperty adları) — "bu apreleri uygula".
    *  Eski donmuş snapshot'larda yok → blok basılmaz. `sections.productionProps` ile aç/kapa. */
   targetProperties?: string[];
+  /** Sevkin parti no'su (K10: bir sevk = bir parti). Boyahane parti bazında boyar ve
+   *  dönüş parti bazında eşleşir — fason belgesinin kimlik alanıdır.
+   *  ⚠️ OPSİYONEL: alan 2026-08-05'ten önce donmuş snapshot'larda YOKTUR → o belgeler
+   *  basılırken satır çıkmaz. Geriye dönük doldurma YAPILMAZ (donmuş belge kuralı).
+   *  `sections.batchInfo` ile aç/kapa (varsayılan AÇIK — fasoncunun ihtiyacı). */
+  batchNumber?: string | null;
   step: { stepSequence: number; station: { name: string; code: string } };
   rolls: FasonCekiRoll[];
   totals: { rollCount: number; totalQty: number; totalWeight: number };
@@ -211,6 +217,17 @@ export function renderFasonCekiHtml(
         }${doc.driverName ? `Şoför: <b>${esc(doc.driverName)}</b>` : ""}</div>`
       : "";
 
+  // Parti no satırı — sections.batchInfo !== false ise (default AÇIK: boyahane parti
+  // bazında boyar, dönüş parti bazında eşleşir). Alan taşımayan ESKİ donmuş belgede
+  // `doc.batchNumber` undefined → satır hiç doğmaz.
+  // ⚠️ Satır, "Tarih" satırının SONUNA eklenir (kendi satırında `${...}` bırakmak,
+  // blok kapalıyken çıktıya boş satır sokup eski belgelerin parmak izini bozardı).
+  const showBatchInfo = cfg.sections?.batchInfo !== false;
+  const batchRow =
+    showBatchInfo && doc.batchNumber
+      ? `\n        <div class="ln">Parti No: <b>${esc(doc.batchNumber)}</b></div>`
+      : "";
+
   // Alt bilgi satırı (İstasyon · İş Emri · Hesap) — sections.workOrderInfo !== false ise.
   const showWorkOrderInfo = cfg.sections?.workOrderInfo !== false;
   const subLine = showWorkOrderInfo
@@ -350,7 +367,7 @@ export function renderFasonCekiHtml(
         <div class="title">${esc(title)}</div>
         ${copyBadge}
         <div class="ln">İrsaliye No: <b>${esc(doc.dispatchNo)}</b></div>
-        <div class="ln">Tarih: <b>${esc(fmtDate(doc.dispatchedAt))}</b></div>
+        <div class="ln">Tarih: <b>${esc(fmtDate(doc.dispatchedAt))}</b></div>${batchRow}
       </div>
     </header>
 

@@ -305,7 +305,11 @@ router.post(
  *       200:
  *         description: Sayfalanmış sipariş listesi
  */
-router.get("/", verifyToken, requirePermission("order:read"), controller.findAll);
+// Mobil "Sipariş" ekranının listesi de bu ucu kullanır (`?mode=cursor`).
+// `mobile:siparis` OKUMAYA açıktır: sipariş açan kişi açtığını göremezse ekran
+// yarım kalır ("kaydettim ama nerede?"). YAZMA sınırı değişmedi — PATCH/DELETE/
+// iptal/manuel-kapatma hâlâ `order:write` ister (bekçi: test_mobile_order_permission).
+router.get("/", verifyToken, requireAnyPermission("order:read", "mobile:siparis"), controller.findAll);
 
 /**
  * @openapi
@@ -480,7 +484,8 @@ router.get(
   verifyToken,
   // Sipariş formundan (satış kullanıcısı) çağrılır → order:read ŞART. Planlamacı
   // da erişebilsin diye workorder:read eklenir; yalnız workorder:read satışçıya 403.
-  requireAnyPermission("order:read", "order:write", "workorder:read"),
+  // `mobile:siparis`: telefondaki sipariş formu da aynı ipucunu gösterir.
+  requireAnyPermission("order:read", "order:write", "workorder:read", "mobile:siparis"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const schema = z.object({
@@ -564,7 +569,10 @@ router.get("/:id", verifyToken, requirePermission("order:read"), controller.find
  *       400:
  *         description: Geçersiz para birimi veya validasyon hatası
  */
-router.post("/", verifyToken, requirePermission("order:write"), controller.create);
+// Mobil "Yeni Sipariş" ekranı da bu ucu kullanır. `mobile:siparis` YALNIZ buraya
+// (yaratma) eklenir — iptal / manuel-kapatma / PATCH / DELETE hâlâ `order:write`
+// ister, yoksa saha kullanıcısına sipariş silme yetkisi de vermiş olurduk.
+router.post("/", verifyToken, requireAnyPermission("order:write", "mobile:siparis"), controller.create);
 
 /**
  * @openapi

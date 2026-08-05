@@ -12,7 +12,6 @@ const TILE_TONES: Record<string, string> = {
   "work-orders": "text-primary",
   "product-balance": "text-station-fason",
   rolls: "text-station-depo",
-  "kursun-queue": "text-station-process",
   "kursun-dagitim": "text-station-process",
   shipments: "text-success",
 };

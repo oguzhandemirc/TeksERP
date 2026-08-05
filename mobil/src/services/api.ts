@@ -7,6 +7,10 @@ import { getOrCreateDeviceId } from '../utils/deviceId';
 // Import yönü güvenli: authStore yalnız utils/storage'a bağımlı (api'yi import etmez).
 import { useAuthStore } from '../store/authStore';
 import { recordNetSample } from './netStats';
+import {
+  reportServerReachable,
+  reportServerUnreachable,
+} from '../offline/serverReachability';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -107,10 +111,17 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (res) => {
     sampleFromConfig(res.config, res.status, (res.config as TimedConfig).__startedAt);
+    // B6 kanıtı: sunucu cevap verdi → erişilebilir.
+    reportServerReachable();
     return res;
   },
   (error) => {
     const status = error.response?.status;
+    // B6 kanıtı: YANIT YOKSA sunucuya ulaşılamıyor demektir (ağ hatası / zaman
+    // aşımı). Yanıt VARSA — 500 bile olsa — sunucu ayaktadır; tek bir hatalı uç
+    // tüm kuyruğu durdurmamalı.
+    if (error.response) reportServerReachable();
+    else reportServerUnreachable();
     sampleFromConfig(
       error.config,
       status ?? (error.code === 'ECONNABORTED' ? 'TIMEOUT' : 'ERR'),

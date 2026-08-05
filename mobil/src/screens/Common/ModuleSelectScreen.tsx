@@ -11,6 +11,7 @@ import Sortable, {
   type SortableGridDragEndParams,
 } from 'react-native-sortables';
 import ScreenChrome from '../../components/ScreenChrome';
+import SyncStatusChip from '../../components/SyncStatusChip';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { useModuleOrder } from '../../hooks/useModuleOrder';
 import { colors, moduleAccents, radius, shadow, spacing } from '../../theme';
@@ -37,19 +38,23 @@ export default function ModuleSelectScreen() {
   const rows = Math.max(1, Math.ceil(count / maxCols));
   const columns = isPhone ? 2 : Math.max(1, Math.ceil(count / rows));
 
-  // Tablet: grid tek ekrana sığar → kartları ölçülen alana göre yükselt (doldur).
-  // Telefon: scroll'lu, sabit yükseklik.
+  // Yerleşim TEK yol: her iki cihazda da grid kaydırılabilir bir alanda yaşar.
+  // Tablet kartları ölçülen alana YAYILIR (ekranı doldurur) ama dolgu yüksekliği
+  // taban yüksekliğin altına düşerse (tüm yetkileri açık kullanıcıda 12+ kart)
+  // kartlar tabanda kalır ve grid dikeyde TAŞAR → kaydırma devreye girer.
+  // Eskiden tablet dalı sabit bir View'daydı: taşan kartlar erişilemez oluyordu.
   const scrollableRef = useAnimatedRef<Animated.ScrollView>();
   const [areaH, setAreaH] = useState(0);
   const onArea = useCallback((e: LayoutChangeEvent) => {
     setAreaH(e.nativeEvent.layout.height);
   }, []);
 
-  const cardHeight = isPhone
-    ? 168
-    : areaH > 0
-      ? Math.max(180, Math.floor((areaH - 2 * gap - (rows - 1) * gap) / rows))
-      : 200;
+  const pad = isPhone ? spacing.md : spacing.lg;
+  const minCardHeight = isPhone ? 168 : 180;
+  // areaH ölçülen GÖRÜNÜR alandır (ScrollView'in kendi yüksekliği), içeriğin değil.
+  const fillHeight =
+    areaH > 0 ? Math.floor((areaH - 2 * pad - (rows - 1) * gap) / rows) : 0;
+  const cardHeight = isPhone ? minCardHeight : Math.max(minCardHeight, fillHeight);
 
   const renderItem = useCallback<SortableGridRenderItem<MobileScreenMeta>>(
     ({ item }) => (
@@ -84,8 +89,8 @@ export default function ModuleSelectScreen() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       hapticsEnabled={false}
-      autoScrollEnabled={isPhone}
-      {...(isPhone ? { scrollableRef } : {})}
+      autoScrollEnabled
+      scrollableRef={scrollableRef}
     />
   );
 
@@ -94,7 +99,11 @@ export default function ModuleSelectScreen() {
   // olduğunu söyle: operatör "uygulama bozuldu" sanmasın.
   if (count === 0) {
     return (
-      <ScreenChrome title="Adnan Şahin Tekstil" subtitle="Bölüm Seçimi">
+      <ScreenChrome
+        title="Adnan Şahin Tekstil"
+        subtitle="Bölüm Seçimi"
+        headerExtras={<SyncStatusChip />}
+      >
         <View style={styles.empty}>
           <MaterialCommunityIcons name="folder-off-outline" size={64} color={colors.textMuted} />
           <Text variant="titleMedium" style={styles.emptyTitle}>
@@ -110,20 +119,22 @@ export default function ModuleSelectScreen() {
   }
 
   return (
-    <ScreenChrome title="Adnan Şahin Tekstil" subtitle="Bölüm Seçimi">
-      {isPhone ? (
-        <Animated.ScrollView
-          ref={scrollableRef}
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
-        >
-          {grid}
-        </Animated.ScrollView>
-      ) : (
-        <View style={styles.tabletArea} onLayout={onArea}>
-          {grid}
-        </View>
-      )}
+    <ScreenChrome
+      title="Adnan Şahin Tekstil"
+      subtitle="Bölüm Seçimi"
+      // Ölü mektup kutusunun ANA MENÜDEKİ girişi: operatör istasyondan çıkıp
+      // buraya dönse de gönderilemeyen kaydı görebilsin (istasyon ekranlarında
+      // çip zaten header'da duruyor). Hiçbir yerde görünmeyen kayıt yok demektir.
+      headerExtras={<SyncStatusChip />}
+    >
+      <Animated.ScrollView
+        ref={scrollableRef}
+        onLayout={onArea}
+        contentContainerStyle={isPhone ? styles.scroll : styles.scrollTablet}
+        showsVerticalScrollIndicator={!isPhone}
+      >
+        {grid}
+      </Animated.ScrollView>
     </ScreenChrome>
   );
 }
@@ -168,7 +179,7 @@ const ModuleCard = React.memo(function ModuleCard({
 
 const styles = StyleSheet.create({
   scroll: { padding: spacing.md },
-  tabletArea: { flex: 1, padding: spacing.lg },
+  scrollTablet: { padding: spacing.lg },
   empty: {
     flex: 1,
     alignItems: 'center',

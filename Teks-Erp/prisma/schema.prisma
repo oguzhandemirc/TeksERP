@@ -499,6 +499,8 @@ model Station {
 
   // Relations
   machines             Machine[]
+  /// Bu istasyonda sisteme GİREN toplar (Roll.entryStationId) — kalıcı köken izi.
+  entryRolls           Roll[]             @relation("RollEntryStation")
   routeSteps           RouteStep[]
   workOrderSteps       WorkOrderStep[]
   cardScans            TravelerCardScan[]
@@ -932,6 +934,22 @@ model Roll {
 
   // Status & Quality
   status         RollStatus @default(STOCK)
+  /// SEVK ÖNCESİ statü — sevk geri alma (storno) topu tam olarak eski rafına koysun diye.
+  ///
+  /// `performDispatchTx` çuvaldaki HER topu `SHIPPED` yapar ve bunu yaparken önceki
+  /// statü BİLGİSİ KAYBOLUR. Çuvalda hem `WAREHOUSE` hem `A1_STOCK` (2. kalite) top
+  /// bulunabildiği için geri almada hepsini `WAREHOUSE`'a döndürmek 2. kalite topu
+  /// sessizce 1. kalite rafına yazardı — hata yok, log yok, yanlış stok.
+  ///
+  /// Emsal: `RollReturn.prevSackId`/`prevQualityGrade` (iade iptali de aynı soruyu
+  /// "kaydın kendi satırındaki snapshot" ile yanıtlıyor; audit'ten türetmek
+  /// `archive-scheduler` yüzünden 6 ay sonra sessizce boşa düşerdi).
+  ///
+  /// Yaşam döngüsü: sevkte YAZILIR, geri almada okunup NULL'lanır. İade yolu buna
+  /// dokunmaz (iade `RollReturn`'ün kendi snapshot'ını kullanır) — iadeli sevkiyat
+  /// zaten storno'ya kapalıdır. NULL = bu karardan önce sevk edilmiş / hiç sevk
+  /// edilmemiş top; storno'da `WAREHOUSE` varsayılır.
+  preShipStatus  RollStatus?
   /// Fiziksel form — TOP (rulo) | ACIK (açık kumaş). Otomatik set: ham giriş & Tambur
   /// çocukları TOP; Tambur-DIŞI son-adım finalize'ı + fason dönüşü doğumları + açık kumaş
   /// = ACIK. Operatör seçmez; "durgunda" (final/serbest) anlamlı — ara-üretim flip'i izlenmez.
@@ -989,6 +1007,31 @@ model Roll {
   /// YAZILMADI: yanlış bir kat değeri, boş değerden daha zararlıdır.
   foldType String? @db.VarChar(64)
 
+  /// İstemcinin BEYAN ETTİĞİ giriş anı — operatörün "Kaydet"e bastığı an.
+  ///
+  /// Mükerrer top tuzağının 90 sn'lik penceresi bununla ölçülür, `createdAt` ile
+  /// DEĞİL. Sebep (2026-08-04 saha testi): mobil offline kuyruğu tek flush'ta
+  /// boşalır → çevrimdışı 40 dakikaya yayılmış 5 girişin hepsi sunucuda
+  /// milisaniyeler içinde doğar. Sunucu saatiyle ölçülen pencere bu yüzden **her
+  /// flush'ta daima doludur**: tekstilde olağan olan "aynı partiden eşit metrajlı
+  /// arka arkaya toplar" 409 fırtınası üretirdi. Damga operatörün gerçek ritmini
+  /// taşır — 3 dk arayla girilenler geçer, 2 sn arayla girilen panik basışı takılır.
+  ///
+  /// `client` öneki `clientToken` ile aynı sözleşmeyi taşır: **istemci beyanıdır,
+  /// sunucu üretimi değildir.** Doğrulanır (makul aralık kelepçesi,
+  /// `helpers/duplicate-guard.helper.resolveEntryStamp`) ve güvenilmezse NULL
+  /// yazılır — kolon doluysa "bu damgaya güvenildi" demektir.
+  ///
+  /// Saat kayması ihmal edilebilir: tuzak zaten `createdById` + `createdMachineId`
+  /// eşitliği arar, yani karşılaştırılan iki damga AYNI cihazın AYNI saatinden
+  /// gelir ve sabit ofset farkta sadeleşir.
+  ///
+  /// ⚠️ `RollMovement.enteredAt` ile KARIŞTIRMA — o "istasyona giriş anı"dır.
+  /// ⚠️ İŞ ZAMANI OLARAK KULLANILMAZ: "ne zaman oluştu" sorusunun cevabı
+  /// `createdAt`'tir (sunucu, güvenilir). Bu alan yalnız tuzağın penceresi içindir.
+  /// NULL = beyan yok (eski istemci / dahili çağrı / bu karardan önceki toplar).
+  clientEnteredAt DateTime? @db.Timestamptz
+
   // Kartelalık işareti — Tambur finalize'da set edilir. Depoda kartelaya gidecek
   // topları kolay bulmak için bir filtre/rozet. Sevki ENGELLEMEZ; işaretsiz top da
   // kartelaya gönderilebilir. Backend toggle ile kaldırılabilir (frontend gerekmez).
@@ -1020,6 +1063,24 @@ model Roll {
   // damgalanır — Faz 2). KK1 girişi RollOperation üretmediği için makine atfı Roll
   // üstünde kapanır (createdById'nin makine kardeşi). NULL = oturumsuz giriş (web).
   createdMachineId String? @db.Uuid
+
+  /// GİRİŞ İSTASYONU — topun sisteme DOĞDUĞU istasyon (2026-08-05).
+  ///
+  /// `createdMachineId`in kardeşi ama ONUN YERİNE GEÇMEZ ve ondan TÜRETİLMEZ:
+  /// makine sonradan başka istasyona taşınabilir; o an `Machine.stationId`
+  /// üzerinden okunan "giriş istasyonu" GERİYE DÖNÜK DEĞİŞİRDİ. Kolon, giriş
+  /// anında damgalanır ve bir daha değişmez — donmuş belge mantığının aynısı.
+  /// Ayrıca makine damgası yalnız oturumlu (tablet) girişlerde dolar; istasyon
+  /// bağlamı bazı yollarda (Tambur kesimi, fason kabulü) makine olmadan da
+  /// bilinir.
+  ///
+  /// ⚠️ `currentStepId → step.station` ile KARIŞTIRMA: o, topun ŞU AN nerede
+  /// olduğunu söyler ve top depoya inince NULL'a düşer. Bu alan "nereden geldi"
+  /// sorusunun kalıcı cevabıdır.
+  ///
+  /// NULL meşrudur: istasyon bağlamı olmayan girişler (Electron paneli) ve bu
+  /// karardan ÖNCE doğmuş toplar.
+  entryStationId String? @db.Uuid
 
   // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
   // (serbest depo). Çuvallanan top PLANNED boyunca WAREHOUSE kalır ama
@@ -1073,6 +1134,7 @@ model Roll {
   producedInStep       WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
   createdBy            User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
   createdMachine       Machine?                    @relation("RollCreatedMachine", fields: [createdMachineId], references: [id])
+  entryStation         Station?                    @relation("RollEntryStation", fields: [entryStationId], references: [id])
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
@@ -1091,6 +1153,9 @@ model Roll {
   @@index([createdById])
   // KK1 makine atfı raporu ("bu makinede girilen toplar")
   @@index([createdMachineId])
+  // "Bu istasyonda girilen toplar" — sütun bugün, filtre yarın.
+  // createdMachineId ile AYNI desen (kardeş alan): tam index, opsiyonel ilişki.
+  @@index([entryStationId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
   // Envanter sekmeleri: status filter + updatedAt desc sort ("son hareket" sıralaması).
@@ -1878,6 +1943,15 @@ model TravelerCard {
   printedById String?            @db.Uuid
   voidedAt    DateTime?          @db.Timestamptz
   voidReason  String?
+
+  /// Basılı kartın içeriği gerçekle ayrıştı mı — `Roll.labelDirty` / `Sack.labelDirty`
+  /// ile AYNI sözleşme (bayat kâğıt uyarısı; baskı olayında temizlenir).
+  /// ⚠️ ROL ETİKETİNDEN BİR NOKTADA AYRILIR: K18 "ilk parti ataması bayraklanmaz" der,
+  /// çünkü top etiketi henüz parti numarasıyla basılmamıştır. KARTTA TERSİ geçerlidir —
+  /// kart iş emri AÇILIŞINDA (henüz top/parti yokken) basılabildiği için ilk parti
+  /// doğuşu tam da kâğıdı yanlışlayan olaydır. K18 mantığını buraya kopyalama.
+  /// Tek yazma noktası: `traveler-card.service.markCardDirtyTx`.
+  contentDirty Boolean @default(false)
 
   /// Basım anında DONDURULAN içerik (ürün/renk/rota/sipariş + render config). Değişken
   /// veriler (top sayısı/metraj) BASILMAZ. Reprint güncel WO'dan yeniden dondurur —
@@ -2926,6 +3000,19 @@ model RollReturn {
   cancelReason  String?   @db.Text
   cancelledById String?   @db.Uuid
 
+  /// ÇOK KALEMLİ İADE — aynı olayda (tek çuval / tek okutma oturumu) alınan
+  /// iadelerin ortak anahtarı. Değeri grubun LİDER satırının `id`'sidir.
+  ///
+  /// Defter satır bazında kalır (her top ayrı `RollReturn` — brüt kuralı, iade
+  /// raporları ve `prevSackId` geri-ekleme mantığı bozulmasın), BELGE ise grup
+  /// bazındadır: `PrintedDocument.sourceId` = lider id. Sektör standardı bir
+  /// iade = bir çok kalemli irsaliyedir; top başına 20 kâğıt basmak değil.
+  ///
+  /// NULL = tekil iade (2026-08-05 öncesi TÜM kayıtlar + mobil tek-top akışı).
+  /// Belge çözümü o durumda bugünkü davranışı AYNEN sürdürür (sourceId = kendi
+  /// id'si) → eski donmuş belgeler ve eski APK etkilenmez.
+  returnGroupId String? @db.Uuid
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -2955,6 +3042,9 @@ model RollReturn {
   @@index([cancelledById])
   @@index([cancelledAt])
   @@index([createdAt])
+  // Grup üyelerini toplama yolu (belge kurulumu + grup iptali). Null-yoğun
+  // (tekil iadeler NULL) → partial index migration'da uygulanır.
+  @@index([returnGroupId])
   @@map("roll_returns")
 }
 

@@ -523,6 +523,41 @@ router.get("/:id/rolls", verifyToken, requireAnyPermission("workorder:read", "mo
 
 /**
  * @openapi
+ * /api/work-orders/{id}/documents:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: İş emrinin TÜM belgeleri (refakat kartı + fason sevk/kabul/doğrudan sevk)
+ *     description: >
+ *       Belgeler dört ayrı kaynakta yaşıyor; bu uç tek liste döner ki istemciler
+ *       kendi listelerini kurup ayrışmasın. İPTAL edilmiş belgeler listede KALIR
+ *       (`cancelled: true`) — donmuş belge silinmez, İPTAL filigranıyla basılır.
+ *       Baskı: TRAVELER_CARD → /traveler-cards/:id/html, diğerleri →
+ *       /printed-documents/:docType/:sourceId/html.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Belge listesi (grup + başlık + tarih + iptal bilgisiyle)
+ *       404:
+ *         description: İş emri bulunamadı
+ */
+// LİSTE izni okuma seviyesindedir; asıl kapı baskı ucundaki belge-tipi bazlı
+// `requireDocPermission`'dır (bir belgeyi GÖRMEK ile BASMAK ayrı sorular değil,
+// ama liste tek uçtan geldiği için tip-bazlı gate baskı tarafında kalır).
+router.get(
+  "/:id/documents",
+  verifyToken,
+  requireAnyPermission("workorder:read", "workorder:write", "mobile:hizli-is-emri", "mobile:fason-sevk", "mobile:fason-kabul"),
+  controller.getDocuments,
+);
+
+/**
+ * @openapi
  * /api/work-orders/{id}:
  *   delete:
  *     tags: [WorkOrders]

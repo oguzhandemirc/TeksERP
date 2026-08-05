@@ -5,7 +5,8 @@ import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE_FLAGS_QUERY_KEY } from "@/hooks/usePricingEnabled";
-import { SETTINGS_CATEGORIES } from "./settings-config";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { visibleSettingsCategories } from "./settings-config";
 import { FeatureFlagSection } from "./FeatureFlagSection";
 import { DevicePairingSection } from "./DevicePairingSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
@@ -20,11 +21,23 @@ import { SettingsDirtyProvider } from "./settings-dirty";
  * otomatik render edilir; cihaz eşleştirme ve sunucu adresi özel section'lardır.
  */
 export function GeneralSettingsPage() {
+  // Kategoriler izne göre süzülür: `settings:workstation` taşıyan (ama
+  // `admin:settings` taşımayan) personel YALNIZ "Bu Bilgisayar"ı görür — sistem
+  // geneli kategoriler salt-okunur bile olsa listelenmez.
+  const { hasAnyPermission } = useRoleAccess();
+  const categories = visibleSettingsCategories(hasAnyPermission);
+
   // Aktif kategori URL'den (?tab=) gelir → komut paleti / derin bağlantı doğru sekmeyi açar.
   const [searchParams, setSearchParams] = useSearchParams();
-  const fallback = SETTINGS_CATEGORIES[0]?.id;
+  const fallback = categories[0]?.id;
   const param = searchParams.get("tab");
-  const active = SETTINGS_CATEGORIES.some((c) => c.id === param) ? param! : fallback;
+  // Görünmeyen bir sekmeye derin bağlantı gelirse (izin daraldı / eski favori)
+  // sessizce ilk görünür sekmeye düşülür — boş ekran gösterme.
+  const active = categories.some((c) => c.id === param) ? param! : fallback;
+
+  // Tek kategori kalıyorsa başlık onun adı olur: "Genel Ayarlar" yazan bir sayfada
+  // tek satır görmek, ayarların gizlendiği izlenimi verirdi.
+  const soleCategory = categories.length === 1 ? categories[0] : undefined;
 
   // Aktif sekmede kaydedilmemiş taslak varsa sekme değişiminde uyar (taslak kaybını
   // önle). Aktif bölüm kendi kirliliğini SettingsDirtyProvider üzerinden bildirir.
@@ -55,7 +68,7 @@ export function GeneralSettingsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Genel Ayarlar"
+        title={soleCategory ? soleCategory.label : "Genel Ayarlar"}
         actions={
           <RefreshButton queryKey={FEATURE_FLAGS_QUERY_KEY} successMessage="Ayarlar yenilendi" />
         }
@@ -68,24 +81,29 @@ export function GeneralSettingsPage() {
         orientation="vertical"
         className="flex min-h-0 flex-1"
       >
-        <TabsList className="h-full w-56 shrink-0 flex-col items-stretch justify-start gap-1 overflow-auto rounded-none border-r bg-muted/30 p-3">
-          {SETTINGS_CATEGORIES.map((cat) => {
-            const Icon = cat.icon;
-            return (
-              <TabsTrigger
-                key={cat.id}
-                value={cat.id}
-                className="w-full justify-start gap-2.5 rounded-md px-3 py-2 text-muted-foreground shadow-none hover:bg-muted/70 hover:text-foreground data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none"
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="truncate">{cat.label}</span>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
+        {/* Tek kategori kalıyorsa sol ray HİÇ çizilmez — tek satırlık bir menü,
+            seçilecek başka bir şey varmış izlenimi verir. (Radix'te TabsContent
+            listeye bağımlı değil, `value` eşleşmesiyle çalışır.) */}
+        {!soleCategory && (
+          <TabsList className="h-full w-56 shrink-0 flex-col items-stretch justify-start gap-1 overflow-auto rounded-none border-r bg-muted/30 p-3">
+            {categories.map((cat) => {
+              const Icon = cat.icon;
+              return (
+                <TabsTrigger
+                  key={cat.id}
+                  value={cat.id}
+                  className="w-full justify-start gap-2.5 rounded-md px-3 py-2 text-muted-foreground shadow-none hover:bg-muted/70 hover:text-foreground data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none"
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{cat.label}</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        )}
 
         <div className="min-w-0 flex-1 overflow-auto p-6">
-          {SETTINGS_CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const Icon = cat.icon;
             return (
               <TabsContent key={cat.id} value={cat.id} className="mt-0 max-w-3xl">

@@ -16,7 +16,7 @@
 // siparişten" sorusu personelin sevkiyat aday siparişlerinden seçimiyle cevaplanır.
 // =============================================================================
 
-import { Prisma, RollStatus, OrderStatus, PrintedDocType } from "@prisma/client";
+import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import {
   printedDocumentService,
@@ -74,6 +74,21 @@ const RETURN_SEARCH_FIELDS = [
   "roll.barcode",
 ];
 const RETURN_DATE_FIELDS = ["createdAt"] as const;
+
+/**
+ * Satıra "irsaliyesi hangi kayda bağlı" bilgisini ekler.
+ *
+ * Çok kalemli iadede (`returnGroupId` dolu) belge YALNIZ grup liderinin id'sine
+ * bağlıdır; istemci bir üye satırına tıklayıp kendi id'siyle belge isterse belge
+ * bulunamaz (builder bilinçli `null` döner). Bu türetilmiş alan olmadan her
+ * istemcinin aynı `?? id` kuralını kendi kopyalaması gerekirdi — ve kopyalamayan
+ * istemcide "irsaliye yok" sessizliği doğardı.
+ */
+function withDocumentSourceId<T extends { id: string; returnGroupId: string | null }>(
+  row: T,
+): T & { documentSourceId: string } {
+  return { ...row, documentSourceId: row.returnGroupId ?? row.id };
+}
 
 export class ReturnService {
   // =========================================================================
@@ -193,11 +208,131 @@ export class ReturnService {
   }
 
   // =========================================================================
+  // LOOKUP (ÇUVAL) — çuval kodu okut → sevk edilmiş toplarını topluca iade al
+  // =========================================================================
+  /**
+   * Çuval bazlı iade girişi. `lookupForReturn`in çuval kardeşi: tek tek 20 barkod
+   * okutmak yerine çuval kodu okutulur, içindeki SEVK EDİLMİŞ toplar listelenir,
+   * operatör seçip tek nedenle topluca iade alır (tek belge, N defter satırı).
+   *
+   * Çuvalın toplarında `sackId` sevk sonrası da DURUR (sevk çuvalı bozmaz) — iade
+   * alınan top ise `sackId`'sini kaybeder, yani bu sorgu zaten iade alınmışları
+   * doğal olarak dışarıda bırakır; ayrı bir "iade edildi mi" süzgeci gerekmez.
+   */
+  async lookupSackForReturn(sackCode: string): Promise<ApiResponse<unknown>> {
+    const code = sackCode.trim();
+    if (!code) throw AppError.badRequest("Çuval kodu gerekli");
+
+    const sack = await prisma.sack.findUnique({
+      where: { sackNo: code },
+      select: {
+        id: true,
+        sackNo: true,
+        shipment: {
+          select: {
+            id: true,
+            shipmentNo: true,
+            status: true,
+            dispatchedAt: true,
+            customer: { select: { id: true, code: true, name: true } },
+            branch: { select: { id: true, name: true } },
+            orders: {
+              select: {
+                order: {
+                  select: {
+                    id: true,
+                    orderNumber: true,
+                    status: true,
+                    deadline: true,
+                    lines: { select: { itemId: true, colorId: true, width: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        rolls: {
+          where: { status: RollStatus.SHIPPED },
+          orderBy: { barcode: "asc" },
+          select: {
+            id: true,
+            barcode: true,
+            currentQty: true,
+            width: true,
+            qualityGrade: true,
+            itemId: true,
+            colorId: true,
+            item: { select: { id: true, code: true, name: true } },
+            color: { select: { id: true, code: true, name: true } },
+            qualityGradeRef: { select: { id: true, code: true, name: true, color: true } },
+          },
+        },
+      },
+    });
+    if (!sack) throw AppError.notFound(`Çuval bulunamadı: ${code}`);
+    if (!sack.shipment) {
+      throw AppError.badRequest("Bu çuval bir sevkiyata bağlı değil (depoda) — iade alınamaz.");
+    }
+    if (sack.shipment.status !== ShipmentStatus.DISPATCHED) {
+      throw AppError.badRequest(
+        "Bu çuvalın sevkiyatı henüz sevk edilmemiş — iade alınamaz. Planlı sevkiyattan çuval çıkarmak için Sevkiyat detayını kullanın."
+      );
+    }
+    if (sack.rolls.length === 0) {
+      throw AppError.badRequest("Bu çuvalda iade alınabilecek top kalmamış (hepsi iade alınmış olabilir).");
+    }
+
+    // Aday siparişler: sevkiyatın iptal EDİLMEMİŞ ve çuvaldaki TÜM topların spec'ine
+    // uyan siparişleri. "En az birine uyan" listelemek yanıltıcı olurdu: sipariş
+    // seçimi TÜM seçili toplara uygulanır ve backend her top için doğrular → uymayan
+    // bir sipariş seçilebilir görünüp kaydetmede 400 verirdi.
+    const candidateOrders = sack.shipment.orders
+      .map((so) => so.order)
+      .filter(
+        (o) =>
+          o.status !== OrderStatus.CANCELLED &&
+          sack.rolls.every((r) =>
+            o.lines.some((l) => specMatch(l, { itemId: r.itemId, colorId: r.colorId, width: r.width }))
+          )
+      )
+      .map((o) => ({ id: o.id, orderNumber: o.orderNumber, status: o.status, deadline: o.deadline }));
+
+    return {
+      success: true,
+      data: {
+        sack: { id: sack.id, sackNo: sack.sackNo },
+        shipment: {
+          id: sack.shipment.id,
+          shipmentNo: sack.shipment.shipmentNo,
+          dispatchedAt: sack.shipment.dispatchedAt,
+        },
+        customer: sack.shipment.customer,
+        branch: sack.shipment.branch,
+        rolls: sack.rolls.map((r) => ({
+          id: r.id,
+          barcode: r.barcode,
+          currentQty: r.currentQty,
+          width: r.width,
+          item: r.item,
+          color: r.color,
+          qualityGrade: r.qualityGrade,
+          qualityGradeRef: r.qualityGradeRef,
+        })),
+        candidateOrders,
+        returnGradingEnabled: await readReturnGradingEnabled(),
+      },
+    };
+  }
+
+  // =========================================================================
   // CREATE — iade al → top Hazır Depo'ya, defter kaydı
   // =========================================================================
   async createReturn(
     input: {
-      rollId: string;
+      /** Tekil iade (mobil + eski istemciler) — `rollIds` ile birlikte de verilebilir. */
+      rollId?: string;
+      /** ÇOKLU iade (çuval bazlı toplu kabul) — tek olay, tek belge, N defter satırı. */
+      rollIds?: string[];
       orderId?: string | null;
       reasonId?: string | null;
       reasonText?: string | null;
@@ -208,8 +343,17 @@ export class ReturnService {
   ): Promise<ApiResponse<unknown>> {
     if (!userId) throw AppError.unauthorized();
 
-    const roll = await prisma.roll.findUnique({
-      where: { id: input.rollId },
+    const rollIds = [
+      ...new Set([...(input.rollIds ?? []), ...(input.rollId ? [input.rollId] : [])]),
+    ];
+    if (rollIds.length === 0) throw AppError.badRequest("İade alınacak top seçilmeli");
+    // Üst sınır: tek çuval ~30 top; 200 fazlasıyla yeter ve tx'i sınırlar.
+    if (rollIds.length > 200) {
+      throw AppError.badRequest("Tek seferde en fazla 200 top iade alınabilir");
+    }
+
+    const rolls = await prisma.roll.findMany({
+      where: { id: { in: rollIds } },
       select: {
         id: true,
         barcode: true,
@@ -241,31 +385,56 @@ export class ReturnService {
         },
       },
     });
-    if (!roll) throw AppError.notFound("Top bulunamadı");
-    if (roll.status !== RollStatus.SHIPPED) {
+    if (rolls.length !== rollIds.length) throw AppError.notFound("Top bulunamadı");
+
+    const ref = (r: { barcode: string | null; id: string }) => r.barcode ?? r.id;
+    for (const r of rolls) {
+      if (r.status !== RollStatus.SHIPPED) {
+        throw AppError.badRequest(
+          `${ref(r)}: bu top sevk edilmemiş (durum: ${r.status}) — iade alınamaz.`
+        );
+      }
+      if (!r.shipment || !r.shipmentId) {
+        throw AppError.badRequest(`${ref(r)}: bu topun sevkiyat bağı yok — iade alınamaz.`);
+      }
+    }
+    // TEK SEVKİYAT KURALI: bir iade belgesinin künyesi (müşteri + geldiği sevkiyat)
+    // tektir. Farklı sevkiyatlardan toplar tek belgeye girseydi başlıktaki sevkiyat
+    // no yalnız birini gösterir, diğerlerinin izi sessizce kaybolurdu.
+    if (new Set(rolls.map((r) => r.shipmentId)).size > 1) {
       throw AppError.badRequest(
-        `Bu top sevk edilmemiş (durum: ${roll.status}) — iade alınamaz.`
+        "Seçilen toplar farklı sevkiyatlardan — tek iade belgesi tek sevkiyata aittir. Sevkiyat bazında ayrı ayrı iade alın."
       );
     }
-    if (!roll.shipment || !roll.shipmentId) {
-      throw AppError.badRequest("Bu topun sevkiyat bağı yok — iade alınamaz.");
-    }
-    const customerId = roll.shipment.customerId;
+
+    // Sıra korunur: liste sırası belge kalem sırasıdır (lider = ilk kalem).
+    const orderedRolls = rollIds.map((id) => rolls.find((r) => r.id === id)!);
+    const roll = orderedRolls[0]!;
+    const customerId = roll.shipment!.customerId;
 
     // Sipariş atfı — verildiyse aday kriterini sağlamalı: bu sevkiyatta + iptal değil
     // + topun spec'ine (ürün+renk+en) uyan satırı olmalı (lookup'taki aday mantığının aynısı).
+    // Çoklu iadede sipariş atfı TÜM toplara uygulanır → her top ayrı ayrı doğrulanır
+    // (biri uymuyorsa hangisi olduğu barkodla söylenir; sessizce atlamak, o topun
+    // iadesini siparişsiz bırakıp defteri yanıltırdı).
     let orderId: string | null = null;
     if (input.orderId) {
-      const link = roll.shipment.orders.find((o) => o.orderId === input.orderId);
+      const link = roll.shipment!.orders.find((o) => o.orderId === input.orderId);
       if (!link) {
         throw AppError.badRequest("Seçilen sipariş bu topun sevkiyatına ait değil");
       }
       if (link.order.status === OrderStatus.CANCELLED) {
         throw AppError.badRequest("İptal edilmiş sipariş seçilemez");
       }
-      const rollSpec = { itemId: roll.itemId, colorId: roll.colorId, width: roll.width };
-      if (!link.order.lines.some((l) => specMatch(l, rollSpec))) {
-        throw AppError.badRequest("Seçilen sipariş bu topun ürün/renk/en bilgisine uymuyor");
+      for (const r of orderedRolls) {
+        const rollSpec = { itemId: r.itemId, colorId: r.colorId, width: r.width };
+        if (!link.order.lines.some((l) => specMatch(l, rollSpec))) {
+          throw AppError.badRequest(
+            orderedRolls.length > 1
+              ? `${ref(r)}: seçilen sipariş bu topun ürün/renk/en bilgisine uymuyor`
+              : "Seçilen sipariş bu topun ürün/renk/en bilgisine uymuyor"
+          );
+        }
       }
       orderId = input.orderId;
     }
@@ -310,82 +479,112 @@ export class ReturnService {
       appliedStatus = qg.returnTargetStatus ?? RollStatus.WAREHOUSE;
     }
 
-    const qty = new Prisma.Decimal(roll.currentQty);
     const note = input.note?.trim() || null;
 
     const created = await prisma.$transaction(async (tx) => {
-      // Top iade rafına — appliedStatus (override yoksa WAREHOUSE; FİRE→SCRAP vb.).
-      // KOŞULLU flip (status===SHIPPED): eşzamanlı/çift iade'de yalnız ilki başarılı
-      // olur; ikincisi count=0 görür → tüm tx geri sarılır, çift RollReturn yazılmaz.
-      const flip = await tx.roll.updateMany({
-        where: { id: roll.id, status: RollStatus.SHIPPED },
-        data: {
-          status: appliedStatus,
-          shipmentId: null,
-          sackId: null,
-          ...(overrideQualityGradeId
-            ? { qualityGradeId: overrideQualityGradeId, qualityGrade: overrideQualityCode! }
-            : {}),
-        },
-      });
-      if (flip.count === 0) {
-        throw AppError.conflict("Bu top zaten iade alınmış veya durumu değişmiş.");
+      const createdIds: string[] = [];
+      let totalQty = new Prisma.Decimal(0);
+      // `tx` içinde Promise.all YASAK (pg adapter tek bağlantı) → seri döngü.
+      for (const r of orderedRolls) {
+        // Top iade rafına — appliedStatus (override yoksa WAREHOUSE; FİRE→SCRAP vb.).
+        // KOŞULLU flip (status===SHIPPED): eşzamanlı/çift iade'de yalnız ilki başarılı
+        // olur; ikincisi count=0 görür → tüm tx geri sarılır, çift RollReturn yazılmaz.
+        // Çoklu iadede bu ATOMİKLİK GRUBUN TAMAMINI kapsar: bir top araya giren başka
+        // bir iadeyle kapılmışsa TÜM grup geri sarılır (yarım iade belgesi doğmaz).
+        const flip = await tx.roll.updateMany({
+          where: { id: r.id, status: RollStatus.SHIPPED },
+          data: {
+            status: appliedStatus,
+            shipmentId: null,
+            sackId: null,
+            ...(overrideQualityGradeId
+              ? { qualityGradeId: overrideQualityGradeId, qualityGrade: overrideQualityCode! }
+              : {}),
+          },
+        });
+        if (flip.count === 0) {
+          throw AppError.conflict(
+            orderedRolls.length > 1
+              ? `${ref(r)}: bu top zaten iade alınmış veya durumu değişmiş — hiçbir top iade alınmadı.`
+              : "Bu top zaten iade alınmış veya durumu değişmiş."
+          );
+        }
+        const qty = new Prisma.Decimal(r.currentQty);
+        totalQty = totalQty.plus(qty);
+        const rr = await tx.rollReturn.create({
+          data: {
+            rollId: r.id,
+            fromShipmentId: r.shipmentId,
+            customerId,
+            orderId,
+            itemId: r.itemId,
+            colorId: r.colorId,
+            width: r.width,
+            qty,
+            reasonId: input.reasonId ?? null,
+            reasonText,
+            note,
+            qualityGradeId: overrideQualityGradeId,
+            appliedStatus,
+            receivedById: userId,
+            // İade öncesi snapshot — iptal (geri al) topu bunlarla eski haline döndürür.
+            prevSackId: r.sackId,
+            prevQualityGrade: r.qualityGrade,
+            prevQualityGradeId: r.qualityGradeId,
+          },
+          select: { id: true },
+        });
+        createdIds.push(rr.id);
       }
-      const rr = await tx.rollReturn.create({
-        data: {
-          rollId: roll.id,
-          fromShipmentId: roll.shipmentId,
-          customerId,
-          orderId,
-          itemId: roll.itemId,
-          colorId: roll.colorId,
-          width: roll.width,
-          qty,
-          reasonId: input.reasonId ?? null,
-          reasonText,
-          note,
-          qualityGradeId: overrideQualityGradeId,
-          appliedStatus,
-          receivedById: userId,
-          // İade öncesi snapshot — iptal (geri al) topu bunlarla eski haline döndürür.
-          prevSackId: roll.sackId,
-          prevQualityGrade: roll.qualityGrade,
-          prevQualityGradeId: roll.qualityGradeId,
-        },
-        select: { id: true },
-      });
+
+      // GRUP anahtarı = LİDERİN id'si. Tekil iadede alan NULL kalır → belge çözümü,
+      // eski kayıtlar ve mobil akışı bugünküyle birebir aynı davranır.
+      const leaderId = createdIds[0]!;
+      if (createdIds.length > 1) {
+        await tx.rollReturn.updateMany({
+          where: { id: { in: createdIds } },
+          data: { returnGroupId: leaderId },
+        });
+      }
+
       // RESMİ BELGE — iade irsaliyesini iade ANINDA dondur (sevk irsaliyesiyle aynı
       // desen: `shipping.service` dispatch tx'i). Eskiden belge yalnız biri ekranı
       // AÇTIĞINDA lazy-init ile kuruluyordu; yani hiç açılmayan iadenin resmi kaydı
       // hiç doğmuyordu (SVK2007260001'in 20.07.2026 iadesinde `printed_documents`
       // satırı yoktu) ve künye/şablon "ilk açan kişinin gününe" göre donuyordu.
       // Tx İÇİNDE: iade başarısızsa belge de geri sarılır.
+      // ÇOK KALEMLİDE TEK BELGE: sourceId = lider (sektörde bir iade = bir irsaliye).
       await printedDocumentService.freezeForSource(
         tx,
         PrintedDocType.RETURN_DISPATCH,
-        rr.id,
+        leaderId,
         userId,
       );
-      return rr;
+      return { ids: createdIds, leaderId, totalQty };
     });
 
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "ROLL_RETURN",
-      recordId: created.id,
-      newData: {
-        rollId: roll.id,
-        barcode: roll.barcode,
-        fromShipmentId: roll.shipmentId,
-        customerId,
-        orderId,
-        qty: qty.toString(),
-        reasonId: input.reasonId ?? null,
-        qualityGradeId: overrideQualityGradeId,
-        appliedStatus,
-      },
-    });
+    // Audit SATIR BAZLI kalır (defter satır bazlı) — grup kimliği her satıra yazılır.
+    for (let i = 0; i < created.ids.length; i++) {
+      const r = orderedRolls[i]!;
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "ROLL_RETURN",
+        recordId: created.ids[i]!,
+        newData: {
+          rollId: r.id,
+          barcode: r.barcode,
+          fromShipmentId: r.shipmentId,
+          customerId,
+          orderId,
+          qty: r.currentQty.toString(),
+          reasonId: input.reasonId ?? null,
+          qualityGradeId: overrideQualityGradeId,
+          appliedStatus,
+          ...(created.ids.length > 1 ? { returnGroupId: created.leaderId } : {}),
+        },
+      });
+    }
 
     const shelfLabel =
       appliedStatus === RollStatus.SCRAP
@@ -393,10 +592,20 @@ export class ReturnService {
         : appliedStatus === RollStatus.A1_STOCK
           ? "2. kalite stoğa"
           : "Hazır Depo'ya";
+    const multi = created.ids.length > 1;
     return {
       success: true,
-      data: { id: created.id, rollId: roll.id, appliedStatus },
-      message: `İade alındı — top ${shelfLabel} eklendi`,
+      data: {
+        id: created.leaderId,
+        rollId: roll.id,
+        appliedStatus,
+        ...(multi
+          ? { ids: created.ids, returnGroupId: created.leaderId, rollCount: created.ids.length }
+          : {}),
+      },
+      message: multi
+        ? `İade alındı — ${created.ids.length} top ${shelfLabel} eklendi (tek irsaliye)`
+        : `İade alındı — top ${shelfLabel} eklendi`,
     };
   }
 
@@ -472,6 +681,9 @@ export class ReturnService {
       cancelledAt: true,
       cancelReason: true,
       cancelledBy: { select: { id: true, fullName: true } },
+      // Çok kalemli iade grubu — belge LİDERİN id'sine bağlıdır. İstemci irsaliyeyi
+      // `documentSourceId` ile açar (aşağıda türetilir), satırın kendi id'siyle DEĞİL.
+      returnGroupId: true,
     } as const;
 
     // Toplam (filtreli set) — "ne kadar iade geldi" (adet + metraj). where ile aynı.
@@ -502,7 +714,8 @@ export class ReturnService {
         wantTotal ? summarize() : Promise.resolve(undefined),
       ]);
       const hasMore = items.length > limit;
-      const data = hasMore ? items.slice(0, limit) : items;
+      const page = hasMore ? items.slice(0, limit) : items;
+      const data = page.map(withDocumentSourceId);
       const last = data[data.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
       return {
@@ -528,7 +741,7 @@ export class ReturnService {
       }),
       summarize(),
     ]);
-    return { success: true, data: items, summary };
+    return { success: true, data: items.map(withDocumentSourceId), summary };
   }
 
   // =========================================================================
@@ -560,7 +773,7 @@ export class ReturnService {
       },
     });
     if (!r) throw AppError.notFound("İade kaydı bulunamadı");
-    return { success: true, data: r };
+    return { success: true, data: withDocumentSourceId(r) };
   }
 
   // =========================================================================
@@ -594,6 +807,8 @@ export class ReturnService {
         prevQualityGrade: true,
         prevQualityGradeId: true,
         appliedStatus: true,
+        // Çok kalemli iade belgesinin kaynağı — iptalde void mi revize mi kararı bununla.
+        returnGroupId: true,
         roll: { select: { barcode: true, status: true, shipmentId: true, sackId: true } },
       },
     });
@@ -675,17 +890,36 @@ export class ReturnService {
         where: { id: rr.id },
         data: { cancelledAt: new Date(), cancelReason: trimmedReason, cancelledById: userId },
       });
-      // Belge de iptale gitsin (baskıda İPTAL filigranı). Belge artık iade ANINDA
-      // donduruluyor; bu satır olmadan iptal edilmiş iadenin irsaliyesi ACTIVE kalır
-      // ve geçerli bir belge gibi basılabilirdi. (Eskiden belge lazy kurulduğu için
-      // `buildReturnDispatchDoc`'un `voidInfo`'su bu işi yapıyordu — o yol yalnız
-      // HİÇ dondurulmamış eski kayıtlar için ayakta.)
-      await printedDocumentService.voidForSource(
-        tx,
-        PrintedDocType.RETURN_DISPATCH,
-        rr.id,
-        trimmedReason,
-      );
+      // BELGE — iki dal, çünkü belge artık ÇOK KALEMLİ olabilir (`returnGroupId`):
+      //  • Gruptaki SON aktif kalem iptal edildiyse → belge VOIDED (İPTAL filigranı).
+      //  • Hâlâ aktif kalem varsa → belge REVİZE (v+1): iptal edilen satır düşer,
+      //    kalanlar için belge geçerli kalır. Tümünü void etmek, iadesi duran
+      //    topların resmi kaydını sessizce yok ederdi.
+      // Belge kaynağı GRUP LİDERİ'dir (tekil iadede lider = kaydın kendisi → eski
+      // davranış birebir korunur).
+      const docSourceId = rr.returnGroupId ?? rr.id;
+      const remaining = await tx.rollReturn.count({
+        where: {
+          cancelledAt: null,
+          OR: [{ returnGroupId: docSourceId }, { id: docSourceId }],
+        },
+      });
+      if (remaining === 0) {
+        await printedDocumentService.voidForSource(
+          tx,
+          PrintedDocType.RETURN_DISPATCH,
+          docSourceId,
+          trimmedReason,
+        );
+      } else {
+        await printedDocumentService.reissueForSourceTx(
+          tx,
+          PrintedDocType.RETURN_DISPATCH,
+          docSourceId,
+          `Kalem iptali: ${trimmedReason}`,
+          userId,
+        );
+      }
     });
 
     await AuditService.log({
@@ -779,9 +1013,14 @@ export const returnService = new ReturnService();
 // =============================================================================
 // RESMİ BELGE — İade İrsaliyesi (PrintedDocument)
 // =============================================================================
-// Müşteriden dönen topun kabul belgesi. sourceId = RollReturn.id (top-başına).
+// Müşteriden dönen topun kabul belgesi. sourceId = GRUP LİDERİ RollReturn.id.
 // İade iptali (cancelledAt) → belge VOIDED. Belge no yok → createdAt + kısa id'den
 // okunur bir numara türetilir (IADE-GGAAYY-XXXXXX).
+//
+// ÇOK KALEMLİ (2026-08-05): çuval bazlı toplu kabulde her top yine ayrı `RollReturn`
+// satırıdır (defter satır bazlı kalır — brüt kuralı, `prevSackId` geri-ekleme, iade
+// raporları), ama BELGE tektir: sourceId = liderin id'si, kalemler `returnGroupId`
+// ile toplanır. Tekil iadede (`returnGroupId` NULL) davranış AYNEN eskisi gibi.
 async function buildReturnDispatchDoc(
   db: PrintedDocDb,
   returnId: string,
@@ -790,7 +1029,7 @@ async function buildReturnDispatchDoc(
     where: { id: returnId },
     select: {
       id: true, qty: true, width: true, createdAt: true, reasonText: true, note: true,
-      cancelledAt: true, cancelReason: true,
+      cancelledAt: true, cancelReason: true, returnGroupId: true,
       customer: { select: { code: true, name: true } },
       order: { select: { orderNumber: true } },
       fromShipment: { select: { shipmentNo: true } },
@@ -803,6 +1042,32 @@ async function buildReturnDispatchDoc(
     },
   });
   if (!rr) return null;
+  // ÜYE id'siyle İKİNCİ BİR BELGE DOĞMASIN. Çok kalemli iadede belge YALNIZ liderin
+  // id'sine bağlıdır (`returnGroupId === id`). Bir üyenin id'siyle çağrılırsa (eski
+  // istemci, elle URL, lazy-init) burada `null` döneriz: aksi halde `getCurrent`
+  // lazy-init ile aynı grubun İKİNCİ kopyasını farklı bir sourceId altında dondurur
+  // ve tek iade olayı iki resmi belgeyle görünürdü. İstemciler `documentSourceId`
+  // alanını kullanır (liste + detay yanıtlarında döner).
+  if (rr.returnGroupId && rr.returnGroupId !== rr.id) return null;
+
+  // Grup ÜYELERİ — lider dahil, İPTAL EDİLENLER HARİÇ. Bir kalem iptal edilince
+  // belge `reissue` ile tazelenir ve o satır düşer (sektörde iade belgesi revize
+  // edilir; tüm kalemler iptal olursa belge VOIDED'e çekilir — `cancelReturn`).
+  const groupId = rr.returnGroupId ?? rr.id;
+  const members = await db.rollReturn.findMany({
+    where: {
+      cancelledAt: null,
+      OR: [{ returnGroupId: groupId }, { id: groupId }],
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      qty: true, width: true,
+      item: { select: { name: true } },
+      color: { select: { name: true } },
+      qualityGrade: { select: { name: true } },
+      roll: { select: { barcode: true } },
+    },
+  });
 
   const d = rr.createdAt;
   const p = (x: number) => String(x).padStart(2, "0");
@@ -817,6 +1082,7 @@ async function buildReturnDispatchDoc(
       fromShipmentNo: rr.fromShipment?.shipmentNo ?? null,
       orderNo: rr.order?.orderNumber ?? null,
     },
+    // `line` her zaman LİDERİN kalemidir — eski snapshot şekliyle uyum (kaldırılamaz).
     line: {
       barcode: rr.roll?.barcode ?? null,
       itemName: rr.item.name,
@@ -825,6 +1091,20 @@ async function buildReturnDispatchDoc(
       qty: Number(rr.qty),
       grade: rr.qualityGrade?.name ?? "",
     },
+    // `lines` YALNIZ çok kalemlide yazılır: tekil iadede alan hiç doğmaz ve
+    // renderer `[line]`e düşer → çıktı bugünküyle bayt-bayt aynı kalır.
+    ...(members.length > 1
+      ? {
+          lines: members.map((m) => ({
+            barcode: m.roll?.barcode ?? null,
+            itemName: m.item.name,
+            colorName: m.color?.name ?? null,
+            width: m.width != null ? Number(m.width) : null,
+            qty: Number(m.qty),
+            grade: m.qualityGrade?.name ?? "",
+          })),
+        }
+      : {}),
     reason: rr.reason?.name ?? rr.reasonText ?? null,
     note: rr.note ?? null,
     receivedBy: rr.receivedBy?.fullName ?? null,

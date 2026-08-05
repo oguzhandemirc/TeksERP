@@ -42,8 +42,10 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
       { code: "Ç-02", seq: 2, totalMeters: 200, totalKg: 31, packageCount: 2 },
     ],
     cekiRows: [
-      { sackCode: "Ç-01", barcode: "TR-260607-R0200", desen: "Pamuklu Astar", varyant: "Bej", width: 150, meters: 480, kg: 42.5 },
-      { sackCode: "Ç-02", barcode: "TR-260607-R0201", desen: "Süet Kumaş", varyant: "Antrasit", width: 140, meters: 200, kg: 31 },
+      { sackCode: "Ç-01", barcode: "TR-260607-R0200", desen: "Pamuklu Astar", varyant: "Bej", width: 150, meters: 480, kg: 42.5, batchNumber: "P1207261" },
+      // Bilerek FARKLI parti: çuval karışık içerikli olabilir — kolonu açan kişi
+      // partinin çuval değil TOP başına taşındığını önizlemede görsün.
+      { sackCode: "Ç-02", barcode: "TR-260607-R0201", desen: "Süet Kumaş", varyant: "Antrasit", width: 140, meters: 200, kg: 31, batchNumber: "P1207262" },
     ],
     totals: { totalRolls: 5, totalMeters: 680, totalKg: 73.5, sackCount: 2 },
   },
@@ -59,6 +61,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     requestedColor: "Bej",
     targetProperties: ["Yanmazlık Apresi", "Su İtici"],
+    batchNumber: "P1207261",
     instruction: "Yıkama yapma, matlaştır",
     step: { stepSequence: 2, station: { name: "Boyahane (Fason)", code: "DYE" } },
     rolls: [
@@ -79,6 +82,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     driverName: "Ali Demir",
     plateNumber: "16 XYZ 789",
     notes: null,
+    batchNumber: "P1207261",
     customer: { id: "cus1", name: "Örnek Tekstil A.Ş.", code: "M001", taxNumber: "1234567890", branchName: "Merkez Şube", branchCode: "IST-01", exportCode: "EXP-TR-042" },
     workOrder: { id: "wo1", workOrderNumber: "IE1207260001", type: "ORDER_PRODUCTION" },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
@@ -119,6 +123,9 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     stationName: "Boyahane (Fason)",
     appliedColor: "Bej",
     appliedProperties: ["Yanmazlık Apresi", "Su İtici"],
+    // Örnek bilerek ÇOĞUL: ayarı yapan kişi kabulün birden fazla partiyi
+    // kapsayabildiğini önizlemede görsün.
+    batchNumbers: ["P1207261", "P1207262"],
     rolls: [
       { sequence: 1, barcode: "TR-260607-R0301", itemName: "Pamuklu Astar", colorName: "Bej", width: 150 },
       { sequence: 2, barcode: "TR-260607-R0302", itemName: "Pamuklu Astar", colorName: "Bej", width: 150 },

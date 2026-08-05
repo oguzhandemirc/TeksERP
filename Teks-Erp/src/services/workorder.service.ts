@@ -61,6 +61,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 // Kurşun bypass (kurşun istasyonunda tablet YOK): WO yaşam döngüsü olayları açık
 // dağıtım atamalarını bayat bırakmasın. Guard helper hiçbir servise bağlı değil —
 // `kursun-bypass.service`'i import etmek burada döngü yaratırdı.
@@ -1970,7 +1971,8 @@ export class WorkOrderService {
     // Kart iş emri başına (tek) — tüm parti lane'leri aynı WO kartını gösterir.
     const woCard = await prisma.travelerCard.findFirst({
       where: { workOrderId, status: "ACTIVE" },
-      select: { cardNumber: true, barcode: true },
+      // `contentDirty` = "basılı kart güncel değil" rozeti (WO detay başlığı).
+      select: { cardNumber: true, barcode: true, contentDirty: true },
     });
 
     const batches = await prisma.batch.findMany({
@@ -3953,6 +3955,9 @@ export class WorkOrderService {
           "İş emri bu sırada tamamlandı veya iptal edildi, düzenlenemez. Sayfayı yenileyin."
         );
       }
+      // Kart snapshot'ı bu alanları DONDURUYOR (ürün/renk/en/miktar/kat/tarihler) —
+      // WO değişince eldeki kâğıt yanlışlanır. Snapshot yalnız `reprint` ile tazelenir.
+      await markTravelerCardDirtyTx(tx, id);
     });
     const updated = await prisma.workOrder.findUnique({ where: { id } });
 
@@ -4622,6 +4627,10 @@ export class WorkOrderService {
         },
       });
 
+      // `replace` rotayı, sipariş bağlarını ve hedef özellikleri baştan yazar —
+      // kart snapshot'ındaki adım listesi/sipariş tablosu topluca yanlışlanır.
+      await markTravelerCardDirtyTx(tx, id);
+
       return wo;
     });
 
@@ -4758,6 +4767,9 @@ export class WorkOrderService {
           await tx.rollProperty.createMany({ data });
         }
       }
+
+      // Hedef özellikler kartın "İSTENEN ÖZELLİKLER" bloğunda basılı.
+      await markTravelerCardDirtyTx(tx, id);
 
       return { affectedRollCount: rollIds.length };
     });
@@ -4913,6 +4925,11 @@ export class WorkOrderService {
         "İş emri bu sırada tamamlandı/iptal edildi — adım planlaması güncellenemedi. Sayfayı yenileyin.",
       );
     }
+    // Planlanan fasoncu kartın OPERASYON tablosunda basılı ("Boyahane (Fason) —
+    // Yıldız Boyahane"). Bu metodun tx'i YOK (tek atomik claim); helper `prisma`
+    // ile de çalışır — işaret bağımsız ve idempotent, claim'e bağlı değil.
+    await markTravelerCardDirtyTx(prisma, workOrderId);
+
     const updated = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
@@ -5161,6 +5178,165 @@ export class WorkOrderService {
       success: true,
       data: updated!,
       message: "İş emri kilitlendi ve üretime (IN_PROGRESS) alındı.",
+    };
+  }
+
+  /**
+   * BİR İŞ EMRİNİN TÜM BELGELERİ — tek liste, tek sözleşme.
+   *
+   * Neden ayrı uç: belgeler dört ayrı kaynakta yaşıyor (TravelerCard + üç
+   * PrintedDocument tipi) ve `findById` yalnız `steps[].dispatches`'i taşıyor.
+   * Sonuç: fason **kabul makbuzu** ve **fasondan doğrudan sevk irsaliyesi** iki
+   * istemcide de iş emrinden ULAŞILAMIYORDU — belge vardı, kapısı yoktu.
+   * İstemciler artık bu listeyi basar; yeni bir belge tipi eklendiğinde tek yer
+   * güncellenir (aksi halde her istemci kendi listesini kurar ve ayrışırlar).
+   *
+   * ⚠️ İPTAL EDİLMİŞ belgeler LİSTEDE KALIR (`cancelled: true`). Donmuş belge
+   * silinmez, VOIDED'e çekilir ve baskıda İPTAL filigranı alır — dosyaya bakan
+   * kişi onu yeniden basabilmeli. İstemci rozetle ayırır. (Electron'un eski
+   * Belgeler diyaloğu iptalleri gizliyor; bu uca geçtiğinde davranış birleşir.)
+   *
+   * Sıralama: kart önce (iş emri belgesi), sonra fason belgeleri TARİH DESC —
+   * sahada en çok aranan "en son basılan"dır.
+   */
+  async getDocuments(workOrderId: string): Promise<ApiResponse<unknown>> {
+    const wo = await prisma.workOrder.findUnique({
+      where: { id: workOrderId },
+      select: { id: true, workOrderNumber: true },
+    });
+    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+
+    // Dört kaynak paralel değil SERİ okunur (pg adapter tek connection —
+    // `Promise.all([tx.*])` yasağıyla aynı gerekçe; burada tx yok ama havuz
+    // davranışı için de seri okumak güvenli ve fark ölçülemez: 4 küçük sorgu).
+    const card = await prisma.travelerCard.findUnique({
+      where: { workOrderId },
+      select: { id: true, cardNumber: true, printedAt: true, version: true, status: true, contentDirty: true },
+    });
+
+    const dispatches = await prisma.subcontractorDispatch.findMany({
+      where: { workOrderId },
+      orderBy: { dispatchedAt: "desc" },
+      select: {
+        id: true,
+        dispatchNo: true,
+        dispatchedAt: true,
+        totalQty: true,
+        cancelledAt: true,
+        directShippedAt: true,
+        subcontractor: { select: { name: true } },
+        batch: { select: { batchNumber: true } },
+        step: { select: { stepSequence: true, station: { select: { name: true } } } },
+        _count: { select: { items: true } },
+      },
+    });
+
+    const receipts = await prisma.subcontractorReceipt.findMany({
+      where: { workOrderId },
+      orderBy: { receivedAt: "desc" },
+      select: {
+        id: true,
+        receiptNo: true,
+        manifestNo: true,
+        receivedAt: true,
+        cancelledAt: true,
+        subcontractor: { select: { name: true } },
+        step: { select: { stepSequence: true, station: { select: { name: true } } } },
+        _count: { select: { items: true } },
+      },
+    });
+
+    // Doğrudan sevk WO'ya DOLAYLI bağlı (DirectShipment → dispatch → workOrder).
+    const directShipments = dispatches.length
+      ? await prisma.directShipment.findMany({
+          where: { dispatchId: { in: dispatches.map((d) => d.id) } },
+          orderBy: { shippedAt: "desc" },
+          select: {
+            id: true,
+            shipmentNo: true,
+            shippedAt: true,
+            totalQty: true,
+            customer: { select: { name: true } },
+            dispatch: { select: { step: { select: { station: { select: { name: true } } } } } },
+          },
+        })
+      : [];
+
+    const docs: Record<string, unknown>[] = [];
+
+    if (card) {
+      docs.push({
+        docType: "TRAVELER_CARD",
+        sourceId: card.id,
+        documentNo: card.cardNumber,
+        date: card.printedAt.toISOString(),
+        group: "İş Emri Belgeleri",
+        title: "Refakat Kartı",
+        subtitle: `v${card.version} · Üretim sahasında topla birlikte dolaşır`,
+        cancelled: card.status === "VOIDED",
+        // İstemci "güncel değil" rozetini bu alandan basar (bkz. contentDirty).
+        contentDirty: card.contentDirty,
+      });
+    }
+
+    for (const d of dispatches) {
+      const station = d.step?.station?.name ?? "Fason";
+      docs.push({
+        docType: "SUBCONTRACTOR_DISPATCH",
+        sourceId: d.id,
+        documentNo: d.dispatchNo,
+        date: d.dispatchedAt.toISOString(),
+        group: station,
+        title: "Fason Sevk İrsaliyesi",
+        subtitle: [
+          d.subcontractor?.name,
+          d.batch?.batchNumber ? `Parti ${d.batch.batchNumber}` : null,
+          `${d._count.items} top · ${Number(d.totalQty)} m`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        cancelled: d.cancelledAt != null,
+      });
+    }
+
+    for (const r of receipts) {
+      const station = r.step?.station?.name ?? "Fason";
+      docs.push({
+        docType: "SUBCONTRACTOR_RECEIPT",
+        sourceId: r.id,
+        documentNo: r.receiptNo,
+        date: r.receivedAt.toISOString(),
+        group: station,
+        title: "Fason Kabul Makbuzu",
+        subtitle: [
+          r.subcontractor?.name,
+          r.manifestNo ? `Fason İrs. ${r.manifestNo}` : null,
+          `${r._count.items} top`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        cancelled: r.cancelledAt != null,
+      });
+    }
+
+    for (const ds of directShipments) {
+      docs.push({
+        docType: "SUBCONTRACTOR_DIRECT_SHIP",
+        sourceId: ds.id,
+        documentNo: ds.shipmentNo,
+        date: ds.shippedAt.toISOString(),
+        group: ds.dispatch?.step?.station?.name ?? "Fason",
+        title: "Fasondan Sevk İrsaliyesi",
+        subtitle: [ds.customer?.name, `${Number(ds.totalQty)} m`].filter(Boolean).join(" · "),
+        // Doğrudan sevk terminaldir — iptal yolu yok (buildFasonDirectShipDoc da
+        // `voidInfo: null` der); alan sözleşme bütünlüğü için sabit false.
+        cancelled: false,
+      });
+    }
+
+    return {
+      success: true,
+      data: { workOrderNumber: wo.workOrderNumber, documents: docs },
     };
   }
 

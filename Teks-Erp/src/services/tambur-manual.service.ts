@@ -79,6 +79,7 @@ import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { K18_DEAD_STATUSES } from "./batch.service";
 import { InventoryService } from "./inventory.service";
+import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import {
   MOVABLE_STATUSES,
   WorkOrderManualMoveService,
@@ -823,6 +824,12 @@ export class TamburManualService {
         entryReason: reason,
         // KAT — operatörün o an seçtiği değer (miras DEĞİL).
         foldType: input.foldType ?? null,
+        // GİRİŞ İSTASYONU — adım kazanır. Oturum da elde ama ikisinin eşit
+        // olduğu yukarıdaki STATION_MISMATCH guard'ıyla zaten garanti.
+        entryStationId: resolveEntryStationId({
+          stepStationId: step.stationId,
+          sessionStationId: ctx.stationId,
+        }),
       },
     );
     const roll = created.data;
@@ -1140,6 +1147,8 @@ export class TamburManualService {
           // KAT — Manuel Mod bunu operatöre ZORUNLU soruyor; Zod eksikken
           // veri buraya hiç ulaşmıyordu.
           foldType: input.foldType ?? null,
+          // Bu yolda ADIM YOK (kartsız üretim) → tek kaynak oturum.
+          entryStationId: resolveEntryStationId({ sessionStationId: ctx.stationId }),
           markedForKartela: input.markedForKartela,
           labelIntentSnapshot: buildIntentSnapshot(intent),
         },

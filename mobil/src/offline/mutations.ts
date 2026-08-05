@@ -56,6 +56,33 @@ export const STATION_MUT = {
   KARTELA_KABUL_RECEIVE: ['station', 'kartela-kabul-receive'] as const,
 } as const;
 
+/**
+ * İstasyon kaydının operatöre GÖRÜNEN adı — ölü mektup kutusu satırları bunu
+ * basar ("Ham Giriş · 3 dk önce · Bu top az önce girilmiş olabilir").
+ * `STATION_MUT` ile aynı dosyada durur ki yeni bir anahtar eklerken etiket
+ * unutulmasın (bekçi: `mutations.test.ts` — her anahtarın etiketi olmalı).
+ */
+export const STATION_MUT_LABELS: Record<string, string> = {
+  'qc2-complete': 'Kurşun / QC2',
+  'qc2-report-error': 'QC2 hata bildirimi',
+  'qc2-delete-error': 'QC2 hata silme',
+  'qc2-finish-step': 'QC2 adım kapatma',
+  'kursun-finish': 'Kurşun bitirme',
+  'tambur-finalize-open-fabric': 'Tambur finalize',
+  'kk1-create-entry': 'Ham Giriş',
+  'kk1-scrap': 'Top iptali',
+  'fason-kabul-receive': 'Fason Kabul',
+  'fason-sevk-dispatch': 'Fason Sevk',
+  'kartela-sevk-dispatch': 'Kartela Sevk',
+  'kartela-kabul-receive': 'Kartela Kabul',
+};
+
+/** Bilinmeyen anahtar boş basmaz, ham anahtarı gösterir (sessiz kayıp yok). */
+export function stationOpLabel(key: unknown): string {
+  if (!Array.isArray(key) || typeof key[1] !== 'string') return 'İşlem';
+  return STATION_MUT_LABELS[key[1]] ?? key[1];
+}
+
 export interface TamburFinalizeOpenFabricVars {
   rollId: string;
   remainingAction: TamburFinalizeRemainingAction;

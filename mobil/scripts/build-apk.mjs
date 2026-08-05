@@ -112,6 +112,9 @@ const arg = (ad) => {
 };
 const SADECE_KONTROL = argv.includes('--check');
 const SADECE_DOGRULA = arg('verify-only') !== undefined;
+/** Sürüm kapısını bilinçli olarak geç (ASCII eşanlamlısı da kabul edilir). */
+const SURUM_KAPISI_ATLA =
+  argv.includes('--sürüm-farkını-biliyorum') || argv.includes('--surum-farkini-biliyorum');
 
 /* ------------------------------------------------------------------ *
  * (a) + (b) + ek: sunucu adresini çöz ve DOĞRULA
@@ -364,16 +367,40 @@ function surumBas() {
   bilgi(`Expo yapılandırması (app.json)          : ${s.appVersion ?? '?'} (versionCode ${s.appVersionCode ?? '?'})`);
   // Sürüm kayması sessiz bir tuzaktır: deploy notuna app.json'daki sürümü
   // yazarsınız ama tablete gradle'daki sürüm kurulur.
+  //
+  // 2026-08-05: UYARI → FATAL. Gerekçe ölçülen bir veri kaybı yolu:
+  // `android/` **git dışıdır** (`.gitignore`) ve `expo prebuild` çıktısıdır. Bu
+  // makinede gradle 28 iken app.json 12 diyordu; paket BAŞKA bir makinede ya da
+  // `prebuild --clean` sonrası derlenirse versionCode 28 → 12'ye DÜŞER. Android
+  // downgrade kurulumunu reddeder (INSTALL_FAILED_VERSION_DOWNGRADE), operatör
+  // "kaldır-kur" yapar ve AsyncStorage silinir — yani offline kuyruktaki GERÇEK
+  // toplar yok olur. `PERSIST_BUSTER`'ı bump etmemeye gösterilen tüm özen tam
+  // buradan by-pass edilirdi.
   if (
     s.gradleVersionName &&
     s.appVersion &&
     (s.gradleVersionName !== s.appVersion || s.gradleVersionCode !== s.appVersionCode)
   ) {
-    uyari(
-      'SÜRÜM UYUŞMAZLIĞI — app.json ile android/app/build.gradle farklı!\n' +
-        "     Tablete kurulan sürüm GRADLE'dakidir; deploy notuna onu yaz.\n" +
-        '     İkisini elle eşitle (android/ prebuild çıktısıdır, otomatik eşitlenmez).',
-    );
+    if (SURUM_KAPISI_ATLA) {
+      uyari(
+        'SÜRÜM UYUŞMAZLIĞI — --sürüm-farkını-biliyorum ile GEÇİLDİ.\n' +
+          "     Tablete kurulan sürüm GRADLE'dakidir; deploy notuna onu yaz.",
+      );
+    } else {
+      dur(
+        'SÜRÜM UYUŞMAZLIĞI (app.json ↔ android/app/build.gradle)',
+        `app.json  : ${s.appVersion} (versionCode ${s.appVersionCode})`,
+        `build.gradle: ${s.gradleVersionName} (versionCode ${s.gradleVersionCode})`,
+        '',
+        "Tablete kurulan sürüm GRADLE'dakidir. `android/` git dışıdır ve prebuild",
+        'çıktısıdır → başka bir makinede derlenirse versionCode DÜŞEBİLİR.',
+        'Android downgrade kurulumunu REDDEDER; operatör kaldır-kur yapar ve',
+        'offline kuyruktaki gerçek toplar AsyncStorage ile birlikte SİLİNİR.',
+        '',
+        'Yapılacak: ikisini elle eşitle (ve yeni paket için ikisini de BUMP et).',
+        'Bilinçli olarak geçmek istiyorsan: --sürüm-farkını-biliyorum',
+      );
+    }
   }
   return s;
 }
@@ -668,7 +695,12 @@ async function main() {
   await sunucuyuYokla(adres);
 
   if (SADECE_KONTROL) {
-    console.log('\n  ✔ Ön kontrol tamam (--check): adres tanımlı ve kullanılabilir. Derleme YAPILMADI.\n');
+    // Sürüm kapısı UCUZ yolda da koşar. Eskiden yalnız gerçek derlemede
+    // çalışıyordu; oysa `--check`'in varlık sebebi "sahaya paket hazırlamadan
+    // önce saniyeler içinde doğrula" — sürüm kayması tam olarak orada
+    // yakalanmalı, 70 saniyelik derlemenin ortasında değil.
+    surumBas();
+    console.log('\n  ✔ Ön kontrol tamam (--check): adres ve sürüm tutarlı. Derleme YAPILMADI.\n');
     return;
   }
 

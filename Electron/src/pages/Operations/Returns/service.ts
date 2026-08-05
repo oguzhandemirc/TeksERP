@@ -26,6 +26,14 @@ export interface ReturnRow {
   cancelledAt: string | null;
   cancelReason: string | null;
   cancelledBy: { id: string; fullName: string } | null;
+  /** Çok kalemli iadenin grup anahtarı (lider id) — tekil iadede null. */
+  returnGroupId: string | null;
+  /**
+   * İRSALİYENİN kaynağı (`returnGroupId ?? id`) — backend türetir. Belgeyi AÇARKEN
+   * satırın kendi id'si DEĞİL bu kullanılır: çok kalemli iadede belge yalnız grup
+   * liderine bağlıdır, üye id'siyle sorulunca "belge yok" görünürdü.
+   */
+  documentSourceId: string;
 }
 
 // --- İade girişi (lookup → create) — backend return.service ile uyumlu ---
@@ -56,8 +64,23 @@ export interface ReturnLookupResult {
   returnGradingEnabled: boolean;
 }
 
+/** Çuval kodu okutunca dönen toplu iade bağlamı (backend lookupSackForReturn). */
+export interface SackReturnLookupResult {
+  sack: { id: string; sackNo: string };
+  shipment: { id: string; shipmentNo: string; dispatchedAt: string | null };
+  customer: { id: string; code: string; name: string } | null;
+  branch: { id: string; name: string } | null;
+  /** Çuvalda HÂLÂ sevk edilmiş (iade alınmamış) toplar. */
+  rolls: ReturnLookupRoll[];
+  /** Çuvaldaki TÜM toplara uyan siparişler (seçim tüm toplara uygulanır). */
+  candidateOrders: ReturnCandidateOrder[];
+  returnGradingEnabled: boolean;
+}
+
 export interface CreateReturnPayload {
-  rollId: string;
+  /** Tekil iade. Çoklu iadede `rollIds` gönderilir — en az biri zorunlu. */
+  rollId?: string;
+  rollIds?: string[];
   orderId?: string | null;
   reasonId?: string | null;
   reasonText?: string | null;
@@ -93,12 +116,35 @@ export const returnsService = {
       .get<ApiResponse<ReturnLookupResult>>(`/api/returns/lookup?barcode=${encodeURIComponent(barcode)}`)
       .then((r) => r.data),
 
-  /** İade al → top iade rafına (WAREHOUSE/A1_STOCK/SCRAP), defter kaydı. */
+  /** Çuval kodu okut → çuvalın sevk edilmiş topları (toplu iade girişi). */
+  lookupSack: (sackCode: string): Promise<ApiResponse<SackReturnLookupResult>> =>
+    apiClient
+      .get<ApiResponse<SackReturnLookupResult>>(
+        `/api/returns/lookup-sack?sackCode=${encodeURIComponent(sackCode)}`,
+      )
+      .then((r) => r.data),
+
+  /** İade al → top iade rafına (WAREHOUSE/A1_STOCK/SCRAP), defter kaydı.
+   *  Çoklu iadede tek belge doğar; `rollCount` yalnız o durumda döner. */
   create: (
     payload: CreateReturnPayload,
-  ): Promise<ApiResponse<{ id: string; rollId: string; appliedStatus: ReturnAppliedStatus }>> =>
+  ): Promise<
+    ApiResponse<{
+      id: string;
+      rollId: string;
+      appliedStatus: ReturnAppliedStatus;
+      rollCount?: number;
+    }>
+  > =>
     apiClient
-      .post<ApiResponse<{ id: string; rollId: string; appliedStatus: ReturnAppliedStatus }>>(`/api/returns`, payload)
+      .post<
+        ApiResponse<{
+          id: string;
+          rollId: string;
+          appliedStatus: ReturnAppliedStatus;
+          rollCount?: number;
+        }>
+      >(`/api/returns`, payload)
       .then((r) => r.data),
 
   /** İade kaydını düzelt (neden + not) — top statüsü/sevkiyatı değişmez. */

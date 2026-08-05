@@ -3,20 +3,38 @@
 // - AsyncStorage persister: paused mutation'lar app restart'ı sonrası kalır
 // - Mutation default: networkMode='online' → offline'da paused, online'da otomatik resume
 
-import { QueryClient, onlineManager } from '@tanstack/react-query';
+import { MutationCache, QueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
-import NetInfo from '@react-native-community/netinfo';
 import { jitteredBackoff } from './backoff';
 import { revivePendingStationMutations } from './persistPolicy';
+import { clearStationFailure, recordStationFailure } from './failedOps';
+import { installOnlineSignal } from './serverReachability';
 
-onlineManager.setEventListener((setOnline) => {
-  return NetInfo.addEventListener((state) => {
-    setOnline(state.isConnected === true);
-  });
-});
+// "Online" = AĞ LİNKİ **ve** SUNUCU ERİŞİLEBİLİR (B6). Eskiden burada düz bir
+// `NetInfo.isConnected` vardı; "wifi var, sunucu ölü" durumu ONLINE sayılıyor ve
+// offline kuyruğu hiç devreye girmiyordu. Sözleşmenin tamamı + neden bu
+// değişikliğin ancak atomik guard + damga penceresiyle BİRLİKTE güvenli olduğu:
+// offline/serverReachability.ts
+installOnlineSignal();
 
 export const queryClient = new QueryClient({
+  // ÖLÜ MEKTUP KUTUSU — kalıcı düşüşlerin TEK yakalama noktası (2026-08-05).
+  //
+  // Neden BURASI, `setMutationDefaults` DEĞİL: key-bazlı `onError`, component
+  // kendi `onError`'ını verdiğinde EZİLİR (query-core defaultMutationOptions
+  // sırası: global < key defaults < component). Kayıt "bazen" yakalanırdı —
+  // sessiz tuzak. MutationCache callback'i ise her zaman ve component'ten ÖNCE
+  // koşar; ayrıca observer'sız (restore edilmiş) mutation'ları da kapsar ve
+  // yalnız KALICI düşüşte tetiklenir (ara retry'lar `onFail`'e gider).
+  mutationCache: new MutationCache({
+    onError: (error, variables, _ctx, mutation) =>
+      recordStationFailure(mutation.options.mutationKey, variables, error),
+    // Aynı payload sonradan başarılı olursa satır kendiliğinden düşer
+    // (opIdFor deterministik olduğu için ek eşleştirme gerekmez).
+    onSuccess: (_data, variables, _ctx, mutation) =>
+      clearStationFailure(mutation.options.mutationKey, variables),
+  }),
   defaultOptions: {
     queries: {
       retry: 1,

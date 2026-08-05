@@ -42,7 +42,12 @@ import {
 import { renderQualityCertificateHtml, type QualityCertificateDoc } from "./document-render/quality-certificate.html";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { p2002Mentions } from "../utils/p2002";
-import { readShipmentConfirmationEnabled, readSimulatedWeightEnabled } from "./system-setting.service";
+import {
+  readShipmentConfirmationEnabled,
+  readShipmentUndoSameDayOnly,
+  readSimulatedWeightEnabled,
+} from "./system-setting.service";
+import { factoryDayStart } from "../constants/time";
 import { dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
 import { touchWarehouseSackTx, touchShipmentPlannedTx } from "./helpers/shipment-locks.helper";
 import {
@@ -1721,7 +1726,24 @@ export class ShippingService {
     }
 
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
-    const flipped = await tx.roll.updateMany({ where: { shipmentId, status: { not: RollStatus.SHIPPED } }, data: { status: RollStatus.SHIPPED } });
+    // SEVK ÖNCESİ STATÜ SNAPSHOT'I (2026-08-05) — tek `updateMany` ile hepsini
+    // SHIPPED yapmak, geri alma (storno) için gereken "bu top hangi raftan geldi"
+    // bilgisini yok ediyordu. Çuvalda `WAREHOUSE` ve `A1_STOCK` (2. kalite) toplar
+    // BİRLİKTE bulunabilir; geri almada hepsini WAREHOUSE'a döndürmek 2. kaliteyi
+    // sessizce 1. kalite rafına yazardı. Statüye göre gruplayıp her grubu kendi
+    // snapshot'ıyla yazıyoruz (pratikte 1-2 grup; `tx` içinde Promise.all YASAK).
+    const preStatusGroups = await tx.roll.groupBy({
+      by: ["status"],
+      where: { shipmentId, status: { not: RollStatus.SHIPPED } },
+    });
+    let flipped = 0;
+    for (const g of preStatusGroups) {
+      const res = await tx.roll.updateMany({
+        where: { shipmentId, status: g.status },
+        data: { status: RollStatus.SHIPPED, preShipStatus: g.status },
+      });
+      flipped += res.count;
+    }
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
     const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
     // Lost-update kilidi: recompute defteri KİLİTSİZ okuyup shippedQty yazar — READ
@@ -1736,7 +1758,7 @@ export class ShippingService {
     await recomputeOrderStatusForOrders(tx, orderIds);
     // Resmi belge — sevk irsaliyesi v1 burada donar.
     await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
-    return flipped.count;
+    return flipped;
   }
 
   /**
@@ -1838,6 +1860,216 @@ export class ShippingService {
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "CANCEL", freedSacks: shipment._count.sacks } });
     return { success: true, data: { shipmentId, freedSacks: shipment._count.sacks }, message: "Sevkiyat iptal edildi — çuvallar depoya döndü" };
+  }
+
+  // =========================================================================
+  // SEVKİ GERİ AL (STORNO) — "mal hiç çıkmadı", İADE DEĞİL
+  // =========================================================================
+  //
+  // İADE ile karıştırma — sektörde iki AYRI belge ve iki ayrı gerçek:
+  //   • İade (RMA)   : mal müşteriye ULAŞTI, geri geldi. Çıkış belgesi DÜZELTİLMEZ
+  //                    (brüt kuralı), ayrı iade irsaliyesi kesilir, iade defterine yazılır.
+  //   • Storno (bu)  : mal HİÇ ÇIKMADI — kayıt erken/hatalı (araç kapıda, yanlış
+  //                    sevkiyat onaylandı). Çıkış belgesi İPTAL edilir, stok geri döner,
+  //                    iade defterine GİRMEZ (yoksa "müşteri iade etti" yalanı doğar ve
+  //                    iade nedeni zorunlu olduğu için kalite verisi de kirlenir).
+  // SAP karşılığı VL09 (reverse goods issue). Aynı ayrımın projedeki emsali:
+  // `InventoryService.softDelete` (qtyOut=0, storno) ↔ WO-kapanış dispozisyonu (qtyOut=qtyIn).
+
+  /**
+   * Storno engel sebebi — TEK KAYNAK. Önizleme ve mutasyon AYNI yüklemi çağırır
+   * (kopyalanan ikinci bir kural, ekranda "yapılabilir" derken uçta 409 verirdi).
+   * `null` = geri alınabilir.
+   */
+  private resolveUndoBlockReason(input: {
+    status: ShipmentStatus;
+    invoiceNo: string | null;
+    dispatchedAt: Date | null;
+    activeReturnCount: number;
+    sameDayOnly: boolean;
+  }): string | null {
+    if (input.status === ShipmentStatus.CANCELLED) return "İptal edilmiş sevkiyat geri alınamaz.";
+    if (input.status !== ShipmentStatus.DISPATCHED) {
+      return "Yalnız sevk edilmiş sevkiyat geri alınabilir — bu sevkiyat henüz çıkmamış.";
+    }
+    // Fatura: dış muhasebe programında belge kesilmiş demektir; çıkışı geri sarmak
+    // faturayı dayanaksız bırakır. Doğru yol iade + iade faturasıdır.
+    if (input.invoiceNo) {
+      return `Bu sevkiyat faturalanmış (${input.invoiceNo}) — geri alınamaz. Fatura işaretini kaldırın ya da iade akışını kullanın.`;
+    }
+    // İade: iki motor aynı topa dokunur. İade "mal çıktı ve döndü" der, storno
+    // "hiç çıkmadı" — ikisi aynı sevkiyatta birleşince hangi rakamın doğru olduğu
+    // hiçbir yüzeyde söylenemez hale gelir.
+    if (input.activeReturnCount > 0) {
+      return `Bu sevkiyattan ${input.activeReturnCount} iade alınmış — geri alınamaz. Mal çıkıp döndüyse kalanı da iade olarak alın.`;
+    }
+    if (input.sameDayOnly) {
+      const dayStart = factoryDayStart();
+      if (!input.dispatchedAt || input.dispatchedAt < dayStart) {
+        return "Sevk geri alma aynı günle sınırlı (Genel Ayarlar → Sevkiyat & İade). Bu sevkiyat bugün sevk edilmemiş.";
+      }
+    }
+    return null;
+  }
+
+  /** Storno önizleme (yıkıcı işlem kuralı: etkilenen her kayıt somut listelenir). */
+  async getUndoDispatchPreview(shipmentId: string): Promise<ApiResponse<unknown>> {
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: {
+        id: true, shipmentNo: true, status: true, dispatchedAt: true, invoiceNo: true,
+        plateNumber: true, driverName: true,
+        customer: { select: { name: true } },
+        branch: { select: { name: true } },
+        _count: { select: { sacks: true, rolls: true, swatches: true } },
+        sacks: { select: { id: true, sackNo: true, _count: { select: { rolls: true } } } },
+        orders: { select: { order: { select: { orderNumber: true } } } },
+      },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+
+    const [activeReturnCount, sameDayOnly] = await Promise.all([
+      prisma.rollReturn.count({ where: { fromShipmentId: shipmentId, cancelledAt: null } }),
+      readShipmentUndoSameDayOnly(),
+    ]);
+    const blockReason = this.resolveUndoBlockReason({
+      status: shipment.status,
+      invoiceNo: shipment.invoiceNo,
+      dispatchedAt: shipment.dispatchedAt,
+      activeReturnCount,
+      sameDayOnly,
+    });
+
+    // Topların döneceği raflar — 2. kalite topu WAREHOUSE'a yazmadığımız burada da görünür.
+    const shelves = await prisma.roll.groupBy({
+      by: ["preShipStatus"],
+      where: { shipmentId, status: RollStatus.SHIPPED },
+      _count: { _all: true },
+    });
+
+    return {
+      success: true,
+      data: {
+        shipmentId: shipment.id,
+        shipmentNo: shipment.shipmentNo,
+        status: shipment.status,
+        dispatchedAt: shipment.dispatchedAt,
+        customerName: shipment.customer.name,
+        branchName: shipment.branch?.name ?? null,
+        plateNumber: shipment.plateNumber,
+        driverName: shipment.driverName,
+        canUndo: blockReason === null,
+        blockReason,
+        sackCount: shipment._count.sacks,
+        rollCount: shipment._count.rolls,
+        swatchCount: shipment._count.swatches,
+        sacks: shipment.sacks.map((s) => ({ id: s.id, sackNo: s.sackNo, rollCount: s._count.rolls })),
+        affectedOrders: [...new Set(shipment.orders.map((o) => o.order.orderNumber))],
+        // Sevk irsaliyesi İPTAL (VOIDED) olacak — kullanıcı bunu onaydan ÖNCE bilmeli.
+        voidsDispatchNote: true,
+        returnTargets: shelves.map((g) => ({
+          status: g.preShipStatus ?? RollStatus.WAREHOUSE,
+          rollCount: g._count._all,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Sevki geri al: DISPATCHED → PLANNED. Toplar sevk ÖNCESİ rafına döner, sipariş
+   * karşılanması geri hesaplanır, sevk irsaliyesi VOIDED'e çekilir (silinmez —
+   * donmuş belge kuralı; İPTAL filigranıyla basılabilir kalır).
+   *
+   * Plaka/şoför/nakliyeci BİLİNÇLİ olarak KORUNUR: aynı araca yeniden yüklenecek
+   * olması olağan; yeniden sevkte zaten üzerine yazılır.
+   */
+  async undoDispatch(shipmentId: string, reason: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const trimmed = reason?.trim() ?? "";
+    if (trimmed.length < 3) throw AppError.badRequest("Geri alma gerekçesi zorunlu (en az 3 karakter)");
+    const sameDayOnly = await readShipmentUndoSameDayOnly();
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Engel kontrolü TX İÇİNDE ve TAZE — önizleme ile onay arasında fatura
+      // işaretlenmiş ya da iade alınmış olabilir.
+      const sh = await tx.shipment.findUnique({
+        where: { id: shipmentId },
+        select: { id: true, status: true, invoiceNo: true, dispatchedAt: true },
+      });
+      if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
+      const activeReturnCount = await tx.rollReturn.count({
+        where: { fromShipmentId: shipmentId, cancelledAt: null },
+      });
+      const block = this.resolveUndoBlockReason({
+        status: sh.status,
+        invoiceNo: sh.invoiceNo,
+        dispatchedAt: sh.dispatchedAt,
+        activeReturnCount,
+        sameDayOnly,
+      });
+      if (block) throw AppError.conflict(block);
+
+      const claim = await tx.shipment.updateMany({
+        where: { id: shipmentId, status: ShipmentStatus.DISPATCHED },
+        data: { status: ShipmentStatus.PLANNED, dispatchedAt: null, dispatchedById: null },
+      });
+      if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
+
+      // `isActive` şemada "sevkiyat PLANNED mı" denormudur (dispatch/cancel false yapar).
+      await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: true } });
+
+      // Toplar sevk ÖNCESİ rafına — `preShipStatus` yoksa (bu karardan önce sevk
+      // edilmiş sevkiyat) WAREHOUSE. Statü bazında gruplu yazım; `tx` içinde
+      // Promise.all YASAK olduğu için seri döngü.
+      const groups = await tx.roll.groupBy({
+        by: ["preShipStatus"],
+        where: { shipmentId, status: RollStatus.SHIPPED },
+      });
+      let restored = 0;
+      for (const g of groups) {
+        const res = await tx.roll.updateMany({
+          where: { shipmentId, status: RollStatus.SHIPPED, preShipStatus: g.preShipStatus },
+          data: { status: g.preShipStatus ?? RollStatus.WAREHOUSE, preShipStatus: null },
+        });
+        restored += res.count;
+      }
+
+      // Tahsisler SİLİNMEZ — `shippedQty` defterden türetilir ve yalnız DISPATCHED
+      // sevkiyattaki tahsisleri sayar; sevkiyat PLANNED olunca karşılanma kendiliğinden
+      // düşer. Kilit protokolü performDispatchTx ile simetrik (lost-update).
+      const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+      const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
+      const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
+      await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
+      await recomputeOrderStatusForOrders(tx, orderIds);
+
+      // Resmi belge İPTAL — silinmez. Yeniden sevkte `freezeForSource` v2 üretir.
+      const voidedDocs = await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.SHIPMENT_DISPATCH,
+        shipmentId,
+        `Sevk geri alındı: ${trimmed}`,
+      );
+      return { restored, voidedDocs, orderIds };
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SHIPMENT",
+      recordId: shipmentId,
+      newData: {
+        kind: "UNDO_DISPATCH",
+        reason: trimmed,
+        restoredRolls: result.restored,
+        voidedDocs: result.voidedDocs,
+        affectedOrders: result.orderIds.length,
+      },
+    });
+    return {
+      success: true,
+      data: { shipmentId, restoredRolls: result.restored, voidedDocs: result.voidedDocs },
+      message: `Sevk geri alındı — ${result.restored} top depoya döndü, irsaliye iptal edildi`,
+    };
   }
 
   // =========================================================================
@@ -2473,6 +2705,9 @@ export class ShippingService {
         // prevQualityGrade: iade anındaki kalite. Canlı `roll.qualityGrade`
         // okunamaz — iade topu WAREHOUSE'a çekerken kaliteyi değiştirebilir.
         prevQualityGrade: true,
+        // Çok kalemli iade belgesinin kaynağı — irsaliye GRUP LİDERİNE bağlıdır;
+        // üye id'siyle sorulursa belge bulunamaz (builder bilinçli null döner).
+        returnGroupId: true,
         roll: { select: { barcode: true } },
         // ⚠️ `id` ŞART: Electron facet süzgeci (useShipmentDetailFilter) kumaş/renk
         // eşleşmesini ID ile yapar. id olmadan iade satırları "Kumaş" filtresi
@@ -2564,7 +2799,7 @@ export class ShippingService {
     // Bu dizi ekrandaki "BU SEVKİYATTAN İADE EDİLENLER" kartını besler ve AYNEN
     // KALIR — sektör standardındaki ayrı "iade defteri"nin karşılığıdır; çuval
     // içindeki rozetli satır onun yerine geçmez, konumunu söyler.
-    const returnedRolls = returnRows.map((rr) => ({ id: rr.id, barcode: rr.roll.barcode, item: rr.item, color: rr.color, width: rr.width, qty: rr.qty, returnedAt: rr.createdAt, reasonName: rr.reason?.name ?? rr.reasonText ?? null, reasonColor: rr.reason?.color ?? null, prevSackId: rr.prevSackId }));
+    const returnedRolls = returnRows.map((rr) => ({ id: rr.id, documentSourceId: rr.returnGroupId ?? rr.id, barcode: rr.roll.barcode, item: rr.item, color: rr.color, width: rr.width, qty: rr.qty, returnedAt: rr.createdAt, reasonName: rr.reason?.name ?? rr.reasonText ?? null, reasonColor: rr.reason?.color ?? null, prevSackId: rr.prevSackId }));
     const returnedMeters = returnRows.reduce((s, r) => s.plus(r.qty), D0());
 
     // ⚠️ TEK KAYNAK: brüt top dizisi BİR KEZ kurulur, hem payload'daki `rolls`
@@ -2775,6 +3010,9 @@ export class ShippingService {
             width: true,
             item: { select: { name: true } },
             color: { select: { name: true } },
+            // collectShipmentDocContent ile AYNI şekil — yalnız birini güncellemek
+            // iki belgeyi ayrıştırır (bu metodun tek varlık sebebi şekil birliği).
+            batch: { select: { batchNumber: true } },
           },
         },
       },
@@ -2792,7 +3030,7 @@ export class ShippingService {
       g.totalMeters = g.totalMeters.plus(r.currentQty);
       productMap.set(stokAdi, g);
       // Çuval yok → sackCode "—", kg top-başına taşınmaz (0).
-      return { rollId: r.id, sackCode: "—", barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", meters: Number(r.currentQty), kg: 0 };
+      return { rollId: r.id, sackCode: "—", barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", meters: Number(r.currentQty), kg: 0, batchNumber: r.batch?.batchNumber ?? null };
     });
     const products = [...productMap.values()].map((p) => ({ name: p.name, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
     const orderNos = [...new Set(ds.allocations.map((a) => a.orderLine.order.orderNumber))].join(", ");
@@ -2958,7 +3196,10 @@ async function collectShipmentDocContent(
         // belge). Donmuş eski snapshot'lar etkilenmez (JSON olarak saklı); filtre
         // yalnız YENİ build'leri etkiler (taslak önizleme, lazy-init reconstruction,
         // reissue) — reissue'de düzeltilmiş çıkması İSTENEN davranıştır.
-        select: { seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, item: { select: { name: true } }, color: { select: { name: true } } } } },
+        // `batch` = çeki satırındaki Parti No. Çuval KARIŞIK içerikli olabildiği için
+        // parti çuval değil TOP başına taşınır. Kolon opt-in (defaultHidden) — müşteri
+        // belgesinin yerleşimi sormadan değişmesin.
+        select: { seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
       },
     },
   });
@@ -2981,7 +3222,7 @@ async function collectShipmentDocContent(
   });
 
   const cekiRows = sh.sacks.flatMap((sk) =>
-    sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0 }))
+    sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null }))
   );
 
   const products = [...productMap.values()].map((p) => ({ name: p.name, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));

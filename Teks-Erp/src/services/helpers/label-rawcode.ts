@@ -100,7 +100,7 @@ export function mockPayload(kind: LabelKind): LabelPayload {
     itemCode: "PA-60S", itemName: "Cotton Lining 60s", itemNameDefault: "Pamuk Astar 60s", itemNameSource: "OVERRIDE",
     colorCode: "BJ", colorName: "Beige", colorNameDefault: "Bej", colorNameSource: "OVERRIDE",
     customerName: "Demo Tekstil A.S.", customerId: "preview", orderNumber: "SIP1207260001", orderLineId: "preview",
-    batchNumber: "P1207260001", printedAt: new Date().toISOString(),
+    batchNumber: "P1207261", printedAt: new Date().toISOString(),
     kind, cardNumber: "KRT1207260001", lengthCm: 30, parentRollBarcode: "T120726H0001",
   };
   // SACK dalı ŞART: stüdyo önizlemesi bu payload'ı kullanır. Çuval alanları

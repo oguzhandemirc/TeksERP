@@ -187,7 +187,17 @@ export class TamburController {
     try {
       const id = req.params.id as string;
       const body = cutWarehouseRollSchema.parse(req.body);
-      const result = await this.service.cutWarehouseRoll(id, body, req.user?.userId);
+      // Oturum bağlamı — çıkan parçanın GİRİŞ İSTASYONU damgası için.
+      // ⚠️ `enforceForMobile` KOYULMADI: bu uç bugüne kadar oturum ZORUNLU
+      // kılmıyordu; enforce eklemek oturumsuz tablette 409 üretir ve çalışan
+      // Top Kesme akışını durdururdu. Damga "varsa yazılır" sözleşmesidir.
+      const stamp = await getStampContext(req);
+      const result = await this.service.cutWarehouseRoll(
+        id,
+        body,
+        req.user?.userId,
+        stamp?.stationId ?? null,
+      );
       res.status(201).json(result);
     } catch (err) {
       next(err);
@@ -199,7 +209,15 @@ export class TamburController {
     try {
       const id = req.params.id as string;
       const body = finalizeWarehouseCutSchema.parse(req.body);
-      const result = await this.service.finalizeWarehouseCut(id, body, req.user?.userId);
+      // Kesilen parçayla AYNI damga — biri yapılıp diğeri unutulursa aynı kesimin
+      // parçası dolu, kalanı boş doğar.
+      const stamp = await getStampContext(req);
+      const result = await this.service.finalizeWarehouseCut(
+        id,
+        body,
+        req.user?.userId,
+        stamp?.stationId ?? null,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);

@@ -9,6 +9,7 @@
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType } from "./helpers/fold-type";
+import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
@@ -28,13 +29,16 @@ import {
   buildTurkishSearch,
 } from "../utils/query-parser";
 
-/**
- * Mükerrer ham giriş tuzağının penceresi. 90 sn: bir operatörün "kaydolmadı"
- * sanıp tekrar basma refleksi saniyeler içindedir; gerçek iki ayrı topun
- * ölçülüp girilmesi ise pratikte daha uzun sürer. Pencereyi büyütmek yanlış
- * pozitifi (meşru arka arkaya aynı top) artırır.
- */
-const DUPLICATE_ENTRY_WINDOW_MS = 90_000;
+// Mükerrer tuzağının saf parçaları (pencere sabiti, kilit anahtarı, damga
+// kelepçesi, index çıpası) `helpers/duplicate-guard.helper` içinde — DB'ye
+// dokunmadıkları için birim testlenebilirler.
+import {
+  DUPLICATE_ENTRY_WINDOW_MS,
+  DUPLICATE_GUARD_LOCK_NS,
+  duplicateGuardLockKey,
+  duplicateGuardCreatedAtFloor,
+  resolveEntryStamp,
+} from "./helpers/duplicate-guard.helper";
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
 
@@ -108,10 +112,8 @@ import {
   completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import {
-  assertStepNotBypassAssigned,
-  hasBypassClosureOnProcessQcTx,
-} from "./helpers/kursun-bypass-guard.helper";
+import { hasBypassClosureOnProcessQcTx } from "./helpers/kursun-bypass-guard.helper";
+import { assertKursunTabletMayWrite } from "./helpers/kursun-bypass-eligibility.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
@@ -359,6 +361,14 @@ const ROLL_LIST_INCLUDE = {
   color: { select: { id: true, code: true, name: true, hex: true } },
   operations: { select: { operationType: true } },
   createdBy: { select: { id: true, username: true, fullName: true } },
+  // 2026-08-05: "Ekleyen" sütunu kişinin altına MAKİNEYİ de yazıyor. Bu satır
+  // olmasaydı sütun makine kısmını HİÇ basamazdı ve kimse fark etmezdi — aynı
+  // gün düzeltilen `manualReason` hatasının birebir aynısı ("alan var sanıldı,
+  // o yanıtta yoktu"). To-one ilişki: sayfa başına tek ek sorgu, N+1 yok.
+  createdMachine: { select: { id: true, name: true, code: true } },
+  // GİRİŞ İSTASYONU — yazma tarafı olmadan görünmez, okuma tarafı olmadan yazılan
+  // değer görünmez. İkisi AYNI commit'te olmalı.
+  entryStation: { select: { id: true, code: true, name: true } },
   properties: {
     select: {
       propertyId: true,
@@ -495,6 +505,13 @@ export class InventoryService {
        * token'la 2. çağrı cached Roll döner. Verilmezse (backend-içi çağrı) dedup yok.
        */
       clientToken?: string;
+      /**
+       * İstemcinin BEYAN ETTİĞİ giriş anı — operatörün "Kaydet"e bastığı an.
+       * Mükerrer tuzağının penceresi bununla ölçülür (sunucu `createdAt`'i offline
+       * flush'ta girişin anı DEĞİLDİR — bkz. `Roll.clientEnteredAt` şema notu).
+       * Verilmezse / makul aralık dışındaysa sunucu saatine düşülür.
+       */
+      clientEnteredAt?: Date | null;
     },
     userId?: string,
     /** KK1 makine atfı — aktif çalışma oturumundan (controller çözer). KK1 girişi
@@ -552,6 +569,19 @@ export class InventoryService {
        * geçerli olan değeri AÇIKÇA verir; verilmezse NULL ("bilinmiyor").
        */
       foldType?: string | null;
+      /**
+       * GİRİŞ İSTASYONU — topun doğduğu istasyon (Roll.entryStationId).
+       *
+       * ⚠️ Bu metot içinde TÜRETİLMEZ. `machineId` elde olsa bile ondan
+       * `Machine.stationId`e gitmek YANLIŞTIR: makine sonradan taşınırsa
+       * geçmiş toplar başka istasyonda doğmuş görünür (kolonun var olma
+       * sebebi tam da bu). Ayrıca bu TEK create noktası ÜÇ farklı mantıksal
+       * yolu besliyor (KK1 ham giriş / Electron manuel / Tambur manuel) ve
+       * üçünün doğru cevabı farklı — sezgi burada sessizce yanlış olur.
+       * Çağıran `resolveEntryStationId` ile çözer ve AÇIKÇA verir
+       * (`forcedEntrySource` emsali).
+       */
+      entryStationId?: string | null;
       /**
        * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
        * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
@@ -679,7 +709,7 @@ export class InventoryService {
     // ANCHOR'I DEĞİL (aşağıdaki catch).
     const rollType: RollBarcodeType = finalBarcodeType(initialStatus);
 
-    // ── MÜKERRER TOP TUZAĞI (2026-08-03 saha vakası) ────────────────────────
+    // ── MÜKERRER TOP TUZAĞI (2026-08-03 saha vakası, 2026-08-05 atomikleştirildi) ──
     // `clientToken` istemcinin DÜRÜST olmasına bağlıdır: token'ı her basışta
     // yenileyen bir istemci (ki tam bu yüzden N kopya doğdu) korumayı boşa
     // düşürür. Bu kontrol istemciye GÜVENMEZ — farklı cihaz, uygulama yeniden
@@ -689,53 +719,108 @@ export class InventoryService {
     // gerçekten gelir (aynı partiden eşit metrajlı toplar). Bu yüzden 409 +
     // açık `confirmDuplicate` ile geçilir; sessizce reddedilmez.
     //
-    // Maliyet: `@@index([entrySource, createdAt])` üstünden 90 sn'lik pencere —
-    // yeni index gerekmez. Bayrak kapalıyken sorgu HİÇ koşmaz.
-    if (opts?.duplicateGuard && !opts.duplicateGuard.confirmed) {
-      if (await readKk1DuplicateGuardEnabled()) {
-        const since = new Date(Date.now() - DUPLICATE_ENTRY_WINDOW_MS);
-        const twin = await prisma.roll.findFirst({
-          where: {
-            entrySource,
-            createdAt: { gte: since },
-            itemId: data.itemId,
-            colorId: data.colorId ?? null,
-            initialQty: new Prisma.Decimal(data.initialQty),
-            width: data.width ?? null,
-            // Aynı ELDEN çıkmış olmalı — iki operatörün aynı anda benzer top
-            // girmesi meşrudur ve uyarılmamalıdır.
-            createdById: userId ?? null,
-            createdMachineId: machineId ?? null,
-            // İptal/fire edilmiş top yeniden girilebilir — o bir kopya değil,
-            // düzeltmedir.
-            status: { notIn: [RollStatus.CANCELLED, RollStatus.SCRAP] },
-            // Aynı token zaten idempotent yoldan (P2002) dönecek; onu kopya sayma.
-            ...(data.clientToken ? { clientToken: { not: data.clientToken } } : {}),
-          },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, barcode: true, createdAt: true },
-        });
-        if (twin) {
-          throw AppError.conflict(
-            `Bu top az önce girilmiş olabilir (barkod ${twin.barcode}). Gerçekten ayrı bir topsa onaylayın.`,
-            {
-              code: "POSSIBLE_DUPLICATE",
-              barcode: twin.barcode,
-              existing: {
-                id: twin.id,
-                barcode: twin.barcode,
-                createdAt: twin.createdAt,
-              },
-              windowSeconds: DUPLICATE_ENTRY_WINDOW_MS / 1000,
-            },
-          );
-        }
-      }
-    }
+    // ⚠️ BAYRAK OKUMASI TX DIŞINDA — `readKk1DuplicateGuardEnabled()` argümansız
+    // çağrıldığında global `prisma`'yı kullanır; tx İÇİNDEN çağrılırsa havuzdan
+    // İKİNCİ bir bağlantı ister. 30 eşzamanlı tx aynı anda bunu yaparsa havuz
+    // (max 30) kendi kendini kilitler ve tüm uygulama 503'e döner.
+    const guardActive =
+      opts?.duplicateGuard && !opts.duplicateGuard.confirmed
+        ? await readKk1DuplicateGuardEnabled()
+        : false;
+
+    // Giriş anı damgası: istemcinin beyanı MAKUL ise pencerenin çapası odur,
+    // değilse sunucu saati (fail-open — bozuk tablet saati üretimi durdurmaz).
+    const nowForEntry = new Date();
+    const { storedEnteredAt, anchorMs } = resolveEntryStamp(data.clientEnteredAt, nowForEntry);
 
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {
       roll = await prisma.$transaction(async (tx) => {
+        if (guardActive) {
+          // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcode`'dan da ÖNCE.
+          //
+          //  · Kilit SONRA alınırsa guard hiçbir şey kazanmaz: READ COMMITTED'da her
+          //    ifade taze snapshot alır, yani kilidi bekleyen tx uyandığında öndekinin
+          //    commit'ini GÖRÜR — ama sorguyu çoktan koşmuş olurdu (bugünkü hatanın
+          //    aynısı, sadece tx içinde). Eski kod `prisma.roll.findFirst`'ü tx DIŞINDA
+          //    koşturuyordu: 2026-08-04'te 5 eşzamanlı giriş 46 ms içinde hiçbirinin
+          //    commit'ini görmeden geçti (klasik TOCTOU).
+          //  · Kilit barkod sayacından SONRA alınırsa ABBA deadlock riski doğar
+          //    (sayaç satır kilidini tutup advisory bekleyen tx ↔ tersi) ve global
+          //    sayaç kilidi guard sorgusunun tüm süresi boyunca tutulurdu.
+          //
+          // `$executeRaw` parametreli → injection yok. `$queryRaw` yolu ise pg driver
+          // adapter'ında `void` kolonunu deserialize edemediği için alt-sorgu
+          // sarmalaması ister (bkz. permission-management.service) — gereksiz mayın.
+          const lockKey = duplicateGuardLockKey({
+            entrySource,
+            itemId: data.itemId,
+            colorId: data.colorId ?? null,
+            initialQty: data.initialQty,
+            width: data.width ?? null,
+            userId: userId ?? null,
+            machineId: machineId ?? null,
+          });
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DUPLICATE_GUARD_LOCK_NS}::int, hashtext(${lockKey}))`;
+
+          const since = new Date(anchorMs - DUPLICATE_ENTRY_WINDOW_MS);
+          const until = new Date(anchorMs + DUPLICATE_ENTRY_WINDOW_MS);
+          const twin = await tx.roll.findFirst({
+            where: {
+              entrySource,
+              // Yalnız INDEX ÇIPASI — doğruluk aşağıdaki OR'da. Sağlamlık ispatı
+              // `duplicateGuardCreatedAtFloor` başlığında.
+              createdAt: { gte: duplicateGuardCreatedAtFloor(anchorMs, nowForEntry.getTime()) },
+              // Pencere İKİ YÖNLÜ: "iki girişin damgaları birbirinden 90 sn içinde"
+              // simetrik ve sıra bağımsız bir tanımdır (offline kuyruk sırayı bozabilir).
+              // Tek yönlü `gte` ile saati ileri kaymış bir cihazın satırları sonsuza
+              // kadar "ikiz" görünürdü.
+              OR: [
+                { clientEnteredAt: { gte: since, lte: until } },
+                // İkizin damgası yoksa (eski istemci / bu karardan önceki top)
+                // sunucu saatine düşülür — tek kural, iki taşıyıcı.
+                { clientEnteredAt: null, createdAt: { gte: since, lte: until } },
+              ],
+              itemId: data.itemId,
+              colorId: data.colorId ?? null,
+              initialQty: new Prisma.Decimal(data.initialQty),
+              width: data.width ?? null,
+              // Aynı ELDEN çıkmış olmalı — iki operatörün aynı anda benzer top
+              // girmesi meşrudur ve uyarılmamalıdır.
+              createdById: userId ?? null,
+              createdMachineId: machineId ?? null,
+              // İptal/fire edilmiş top yeniden girilebilir — o bir kopya değil,
+              // düzeltmedir.
+              status: { notIn: [RollStatus.CANCELLED, RollStatus.SCRAP] },
+              // Aynı token zaten idempotent yoldan (P2002) dönecek; onu kopya sayma.
+              ...(data.clientToken ? { clientToken: { not: data.clientToken } } : {}),
+            },
+            orderBy: { createdAt: "desc" },
+            select: { id: true, barcode: true, createdAt: true, clientEnteredAt: true },
+          });
+          if (twin) {
+            // tx İÇİNDE throw: Prisma callback'i rollback eder ve hatayı DEĞİŞTİRMEDEN
+            // yeniden fırlatır (emsal: session-registry.service). Rollback yan etkisiz —
+            // bu noktaya kadar tek yazma yok, barkod sayacı hiç artmadı (boşluk oluşmaz).
+            throw AppError.conflict(
+              `Bu top az önce girilmiş olabilir (barkod ${twin.barcode}). Gerçekten ayrı bir topsa onaylayın.`,
+              {
+                code: "POSSIBLE_DUPLICATE",
+                barcode: twin.barcode,
+                existing: {
+                  id: twin.id,
+                  barcode: twin.barcode,
+                  createdAt: twin.createdAt,
+                  // İstemci "3 dakika önce girilmişti" diyebilsin diye — mevcut
+                  // alanlar KALDIRILMADI (mobil + Electron onları okuyor).
+                  clientEnteredAt: twin.clientEnteredAt,
+                },
+                windowSeconds: DUPLICATE_ENTRY_WINDOW_MS / 1000,
+              },
+            );
+          }
+        }
+
         // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
         const barcode = await generateRollBarcode(tx, rollType);
         const created = await tx.roll.create({
@@ -754,6 +839,13 @@ export class InventoryService {
             entrySource,
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
+            // GİRİŞ İSTASYONU — çağıranın AÇIKÇA verdiği değer, burada
+            // TÜRETİLMEZ (`machineId` elde olsa bile; bkz. opts dokümanı).
+            entryStationId: opts?.entryStationId ?? null,
+            // Koşulsuz yazılır — `null` da doğru cevaptır ("beyan yok / güvenilmez").
+            // Kolon doluysa "bu damgaya güvenildi" demektir; kelepçeyi geçemeyen
+            // beyan saklanmaz (bkz. resolveEntryStamp).
+            clientEnteredAt: storedEnteredAt,
             // `form` YAZILMAZ → şema varsayılanı TOP. KK1 girişi de, bitmiş-ürün
             // girişi de fiziksel olarak bir TOP'tur (açık kumaş yalnız istasyon
             // çıktısı olarak doğar — `roll-finalize.helper` ACIK yazan tek yer).
@@ -848,6 +940,11 @@ export class InventoryService {
         status: roll.status,
         entrySource: roll.entrySource,
         propertyIds: dedupedProps,
+        // İstemcinin HAM beyanı — kelepçeyi geçemediyse kolon NULL kalır ama
+        // beyan burada durur. Saha teşhisi bunu ister: "bu tabletin saati 2 gün
+        // ileri" sorusu ancak reddedilen değeri görerek cevaplanır.
+        declaredEnteredAt: data.clientEnteredAt ?? null,
+        clientEnteredAt: roll.clientEnteredAt,
       },
     });
 
@@ -1865,6 +1962,8 @@ export class InventoryService {
         // Elle eklenen topta "kim ekledi" sorusu sebep kadar önemli.
         createdBy: { select: { id: true, fullName: true, username: true } },
         createdMachine: { select: { id: true, name: true, code: true } },
+        // GİRİŞ İSTASYONU — liste include'uyla AYNI şekil.
+        entryStation: { select: { id: true, code: true, name: true } },
         // TOPUN BULUNDUĞU ADIM/İSTASYON — liste include'uyla AYNI şekil.
         // İkisi ayrışırsa panel ile satır aynı top için farklı şey söyler.
         currentStep: {
@@ -3287,7 +3386,7 @@ export class InventoryService {
       // kapanır ve `RollMovement.machineId` ile o makineye mal edilir.
       // Doğru yol: dağıtımı iptal et, topu aç, yeniden dağıt. Guard WO kilidinin
       // (touchWorkOrderTx) ALTINDA — `assign` de aynı kilidi alır, yarış serileşir.
-      await assertStepNotBypassAssigned(tx, data.stepId, "açık kumaş açma");
+      await assertKursunTabletMayWrite(tx, data.stepId, "açık kumaş açma");
 
       const created = await tx.roll.create({
         data: {
@@ -3305,6 +3404,8 @@ export class InventoryService {
           qualityGradeId: null,
           entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
           createdById: userId ?? null,
+          // GİRİŞ İSTASYONU — adım elde (Kurşun/KK2), kaynağı odur.
+          entryStationId: resolveEntryStationId({ stepStationId: step.stationId }),
           currentStepId: step.id,
           producedInStepId: step.id,
           parentReceiptId: receipt.id,
@@ -3777,7 +3878,7 @@ export class InventoryService {
       // İdempotent erken dönüş (roll PROCESS_QC'yi çoktan bırakmış + geçmiş
       // QC2_COMPLETED var → `priorFinish` dalı) tx'e hiç girmeden çalışır, yani
       // zaten bitmiş işin retry'ı 409 gürültüsü yapmaz.
-      await assertStepNotBypassAssigned(tx, stepId, "kurşun bitirme");
+      await assertKursunTabletMayWrite(tx, stepId, "kurşun bitirme");
 
       // 1) Roll metraj güncelle
       await tx.roll.update({

@@ -242,6 +242,7 @@ export class WorkOrderController {
     this.replace = this.replace.bind(this);
     this.lockWorkOrder = this.lockWorkOrder.bind(this);
     this.getAttachedRolls = this.getAttachedRolls.bind(this);
+    this.getDocuments = this.getDocuments.bind(this);
     this.getTravelCard = this.getTravelCard.bind(this);
     this.getManifest = this.getManifest.bind(this);
     this.createManifest = this.createManifest.bind(this);
@@ -514,6 +515,18 @@ export class WorkOrderController {
   async getAttachedRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getAttachedRolls(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/documents — iş emrinin TÜM belgeleri (tek liste)
+   */
+  async getDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getDocuments(req.params.id as string);
       res.status(200).json(result);
     } catch (error) {
       next(error);

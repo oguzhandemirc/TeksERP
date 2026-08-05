@@ -205,6 +205,9 @@ export interface ShipmentDetailSack {
 /** Bu sevkiyattan iade edilmiş top (canlı rolls'ta görünmez; RollReturn'den gelir). */
 export interface ShipmentReturnedRoll {
   id: string;
+  /** İrsaliyenin kaynağı (`returnGroupId ?? id`) — çok kalemli iadede belge grup
+   *  liderine bağlıdır; satırın kendi id'siyle sorulursa belge bulunamaz. */
+  documentSourceId: string;
   barcode: string | null;
   item: { code: string; name: string } | null;
   color: { code: string; name: string } | null;

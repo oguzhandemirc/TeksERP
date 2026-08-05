@@ -1,0 +1,31 @@
+-- =============================================================================
+-- Roll.clientEnteredAt — mükerrer tuzağının penceresi için "giriş anı" damgası
+-- =============================================================================
+-- SAHA TESTİ (2026-08-04): tablette wifi kapatılıp aynı top peş peşe girildi;
+-- bağlantı gelince 5 kayıt da yazıldı. Tuzak AÇIK olmasına rağmen ateşlemedi.
+-- İki sebepten biri buydu: pencere SUNUCU saatiyle ölçülüyordu.
+--
+-- Mobil offline kuyruğu tek flush'ta boşalır → çevrimdışı 40 dakikaya yayılmış
+-- girişlerin hepsi sunucuda milisaniyeler içinde doğar (ölçüldü: 5 top / 46 ms).
+-- Yani `createdAt` tabanlı 90 sn penceresi HER flush'ta doludur — tuzak atomik
+-- yapılsaydı bu kez tekstilde olağan olan "aynı partiden eşit metrajlı arka
+-- arkaya toplar" 409 fırtınası üretirdi. Damga operatörün GERÇEK ritmini taşır.
+--
+-- Saat güvenilirliği: tuzak zaten `createdById` + `createdMachineId` eşitliği
+-- arıyor → karşılaştırılan iki damga AYNI cihazın AYNI saatinden gelir; sabit
+-- ofset farkta sadeleşir. Makul aralık dışındaki beyan servis tarafında yok
+-- sayılır ve kolona NULL yazılır (`resolveEntryStamp`).
+--
+-- NULLABLE + VARSAYILANSIZ → PG11+ tablo yeniden yazımı YAPMAZ, kilit anlık.
+-- Emsal: `20260804210000_roll_fold_type_and_entry_reason` (aynı tablo, ÖLÇÜLDÜ:
+-- 6 ms). Vardiya saati kısıtı (CLAUDE.md perf kuralı 14) BU migration için
+-- geçerli DEĞİLDİR — index eklenmiyor, `SET statement_timeout = 0` gerekmez.
+--
+-- INDEX BİLİNÇLİ OLARAK EKLENMEDİ: guard sorgusu `@@index([entrySource,
+-- createdAt])` üstünden koşmaya devam eder; damga penceresi ayrı bir `createdAt`
+-- TABANI ile çıpalanır (`duplicateGuardCreatedAtFloor` — sağlamlık ispatı orada).
+-- `rolls` bu şemanın en yazma-yoğun ve en çok indeksli tablosu; 22. index'in
+-- her INSERT'e maliyeti var, karşılığında yalnız bu tek sorgu var.
+-- =============================================================================
+
+ALTER TABLE "rolls" ADD COLUMN "clientEnteredAt" timestamptz;

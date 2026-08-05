@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { Monitor, RotateCcw, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,13 +9,29 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { AppearanceControls } from "@/components/layout/AppearanceControls";
 import { findCommandEntry } from "@/components/layout/command-entries";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import {
+  SETTINGS_ADMIN_PERMISSION,
+  WORKSTATION_PERMISSION,
+} from "@/pages/GeneralSettings/settings-config";
 import { usePreferences } from "@/providers/PreferencesProvider";
 
 export function SettingsPage() {
   const navigate = useNavigate();
   const { favorites, toggleFavorite } = useFavorites();
   const { prefs, resetPreferences } = usePreferences();
+  const { hasAnyPermission } = useRoleAccess();
   const [resetOpen, setResetOpen] = useState(false);
+
+  // "Bu Bilgisayar" (yerel donanım) ayarları Genel Ayarlar sayfasında yaşar ama
+  // oraya götüren tek yol Sistem hub'ıydı ve o hub `admin:settings` ister →
+  // `settings:workstation` taşıyan personelin ekrana ULAŞACAK bir kapısı olmazdı.
+  // Herkesin topbar'dan girebildiği bu sayfa o kapı. (İzni verip yolu vermemek,
+  // izni hiç vermemekle aynı şeydir.)
+  const canOpenWorkstation = hasAnyPermission([
+    SETTINGS_ADMIN_PERMISSION,
+    WORKSTATION_PERMISSION,
+  ]);
 
   const savedViewCount = Object.values(prefs.savedViews ?? {}).reduce((n, v) => n + v.length, 0);
 
@@ -78,6 +94,32 @@ export function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {canOpenWorkstation && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Monitor className="h-4 w-4 text-muted-foreground" />
+                Bu Bilgisayar
+              </CardTitle>
+              <CardDescription>
+                Etiket yazıcısı, kantar, barkod tabancası ve sunucu adresi. Yalnız bu
+                bilgisayarı etkiler — diğer kullanıcıların ekranları değişmez.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => navigate("/system/settings?tab=system")}
+              >
+                <Monitor className="h-4 w-4" />
+                Donanım Ayarlarını Aç
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="lg:col-span-2">
           <CardHeader>

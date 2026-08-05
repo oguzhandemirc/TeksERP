@@ -157,9 +157,11 @@ export function ReturnsPage() {
           </>
         )}
       />
+      {/* Çok kalemli iadede belge GRUP LİDERİNE bağlıdır → satırın kendi id'si değil,
+          backend'in türettiği `documentSourceId` kullanılır. */}
       <PrintedDocDialog
         docType="RETURN_DISPATCH"
-        sourceId={docReturn?.id ?? null}
+        sourceId={docReturn?.documentSourceId ?? docReturn?.id ?? null}
         open={Boolean(docReturn)}
         onOpenChange={(o) => !o && setDocReturn(null)}
         title="İade İrsaliyesi"

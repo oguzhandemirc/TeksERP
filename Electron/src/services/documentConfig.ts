@@ -101,6 +101,21 @@ export interface ResolvedDocConfig {
 export interface DocSectionDef {
   key: string;
   label: string;
+  /** OPT-IN bölüm: varsayılan KAPALI. `DocTableDef.columns[].defaultHidden` ile aynı
+   *  gerekçe — `sections` bir BLOCKLIST'tir (anahtar yoksa AÇIK sayılır), yani yeni
+   *  bir bölüm MÜŞTERİYE giden canlı bir belgede sormadan görünür doğar. İç/hassas
+   *  veri taşıyan bölümler için. Renderer karşılığı `cfg.sections?.<key> === true`.
+   *
+   *  ⚠️ İki taraf BİRLİKTE değişmeli: yalnız burayı işaretlemek paneli "kapalı"
+   *  gösterirken renderer'ı basmaya devam ettirir (ya da tersi — panel "açık" der,
+   *  belge boş çıkar).
+   *
+   *  BUGÜN HİÇBİR BÖLÜM KULLANMIYOR (parti no 2026-08-05'te varsayılan AÇIK'a
+   *  çevrildi). Alan yine de duruyor, çünkü asıl değeri `resolveDocConfig`'teki
+   *  düzeltmede: orası bölümleri koşulsuz "kayıt yoksa AÇIK" diye çözüyordu, yani
+   *  opt-in bir bölüm YAZILAMIYORDU. Kolon tarafındaki ikizi (`sackNote`) aktif
+   *  kullanımda — kavram spekülatif değil. */
+  defaultHidden?: boolean;
 }
 
 /** Tablo kolon kaydı — kolon aç/kapa + sıralama UI'ı bu listeden beslenir.
@@ -211,6 +226,7 @@ export const DOC_DEFS: DocDef[] = [
         columns: [
           { key: "sackCode", label: "Çuval no" },
           { key: "barcode", label: "Barkod no" },
+          { key: "batchNumber", label: "Parti no" },
           { key: "desen", label: "Desen" },
           { key: "varyant", label: "Varyant" },
           { key: "width", label: "En" },
@@ -229,6 +245,7 @@ export const DOC_DEFS: DocDef[] = [
     sections: [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
       { key: "workOrderInfo", label: "İş emri / istasyon satırı" },
+      { key: "batchInfo", label: "Parti no" },
       { key: "vehicleInfo", label: "Sevk / araç bilgisi" },
       { key: "requestedColor", label: "İstenen renk kutusu" },
       { key: "productionProps", label: "İstenen özellikler kutusu" },
@@ -259,6 +276,7 @@ export const DOC_DEFS: DocDef[] = [
     sections: [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
       { key: "fasonDispatchNo", label: "Fason sevk no" },
+      { key: "batchInfo", label: "Parti no" },
       { key: "branchName", label: "Şube adı" },
       { key: "taxNo", label: "Vergi no" },
       { key: "exportCode", label: "İhracat / şube kodu" },
@@ -326,6 +344,7 @@ export const DOC_DEFS: DocDef[] = [
     defaultSignatures: ["Teslim Eden (Fason)", "Teslim Alan"],
     sections: [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
+      { key: "batchInfo", label: "Parti no" },
       { key: "receiptNo", label: "Makbuz no" },
       { key: "date", label: "Tarih" },
       { key: "taxNo", label: "Vergi dairesi / no" },
@@ -431,7 +450,9 @@ export function resolveDocConfig(
   const raw = documentsConfig?.[docKey] ?? {};
   const sections: Record<string, boolean> = {};
   for (const s of def?.sections ?? []) {
-    sections[s.key] = raw.sections?.[s.key] !== false; // default açık
+    // Kayıtlı değer varsa o; yoksa bölümün kendi varsayılanı. `defaultHidden`
+    // taşımayan bölümlerde sonuç bugünküyle BİREBİR aynı (undefined → true).
+    sections[s.key] = raw.sections?.[s.key] ?? !s.defaultHidden;
   }
   // İmza etiketi: kutu başına override (boş → o kutunun varsayılanı).
   const sig = (def?.defaultSignatures ?? []).map(

@@ -34,7 +34,11 @@ import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-tran
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
-import { assertStepNotBypassAssigned } from "./helpers/kursun-bypass-guard.helper";
+import {
+  assertKursunTabletMayWrite,
+  resolveStepBypassEligibility,
+} from "./helpers/kursun-bypass-eligibility.helper";
+import { readKursunBypassEnabled } from "./system-setting.service";
 
 /**
  * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
@@ -96,6 +100,21 @@ interface StepSummary {
   /// adımın istasyonu zaten tabletin bulunduğu tek PROCESS_QC istasyonudur —
   /// istasyon adını basmak operatöre "kendi istasyonuna dağıtıldı" dedirtirdi.
   bypassAssignment: { machineName: string; assignedAt: Date } | null;
+  /**
+   * TABLET SALT-OKUNUR MU? (2026-08-05 — "bayrak açıkken kurşun istasyonu yalnız
+   * bilgi görür, hiçbir yetkisi yoktur") Non-null ise mobil ekran TÜM yazma
+   * aksiyonlarını gizler ve `reason`'ı banda basar.
+   *
+   * İki sebepten doğar ve ikisi de aynı kapıdır (`assertKursunTabletMayWrite`):
+   * adım bir kurşun makinesine dağıtılmış, ya da bayrak açık + adım dağıtıma
+   * uygun. Uygun OLMAYAN adımlarda null kalır — o iş tablette yürümeye devam
+   * eder (kurşundan sonra Tambur gelmeyen rotalar çıkmaza girmesin).
+   *
+   * ⚠️ Bu alan BİLGİDİR, koruma DEĞİL: gerçek kapı sunucudaki guard'tır (tablet
+   * offline kuyruk taşır, ekranı hiç görmeyen istek gelebilir). İkisi aynı
+   * fonksiyondan beslenir ki ekran ile red sebebi ayrışmasın.
+   */
+  tabletReadOnly: { reason: string } | null;
   rolls: RollSummary[];
 }
 
@@ -250,6 +269,15 @@ export class KursunQcService {
         // akışın her adımı 409 döner → operatöre seçtirip sonra reddetmek
         // yerine hiç göstermiyoruz. (Fiziksel kart yine okutulabilir; o yolda
         // getByCardBarcode `bypassAssignment` ile durumu açıklar.)
+        //
+        // ⚠️ BAYRAK AÇIKKEN "dağıtıma UYGUN" adımlar burada SÜZÜLMEZ (2026-08-05
+        // bilinçli kararı). İki gerekçe: (a) uygunluk kuralı rota + üç dijital-iz
+        // sorgusu ister ve bu uç tablet tarafından 5 SANİYEDE BİR yoklanıyor —
+        // filtre, hiç yapılmayacak bir işi elemek için sürekli maliyet demekti;
+        // (b) artık gereksiz: kart açıldığında `tabletReadOnly` bandı sebebi
+        // SOMUT olarak söylüyor, yani eski "sessiz 409" sorunu kaynağında çözüldü.
+        // Uygun OLMAYAN adımlar zaten listede KALMALI (tablet onları işlemeye
+        // devam eder) — kör bir bayrak filtresi onları da yutardı.
         kursunBypasses: { none: PENDING_BYPASS_WHERE },
       },
       select: {
@@ -370,7 +398,7 @@ export class KursunQcService {
       // için pencerede araya giren `assign` bu QC2 op'unu commit ettirirdi.
       // (Ters yön zaten kapalı: `assign` de adımda fiilen yapılmış QC2 op'u
       // görürse dağıtımı reddediyor — iki yön birbirini eler.)
-      await assertStepNotBypassAssigned(tx, data.stepId, "KK2 tamamlama");
+      await assertKursunTabletMayWrite(tx, data.stepId, "KK2 tamamlama");
 
       const qc2Op = await tx.rollOperation.upsert({
         where: {
@@ -512,7 +540,7 @@ export class KursunQcService {
     // kontrolü anlamsızlaştırırdı. Guard idempotent clientErrorId dönüşünden
     // SONRA: zaten kayıtlı hatanın replay'i 409'a düşmemeli (kayıt ya dağıtım
     // öncesinde açıldı ya da yarışı kaybetti; ikisinde de yeni yazma yok).
-    await assertStepNotBypassAssigned(prisma, data.stepId, "hata kaydı");
+    await assertKursunTabletMayWrite(prisma, data.stepId, "hata kaydı");
 
     // Mükerrer engeli: aynı top + aynı metre + aynı hata tipi tekrar girilemez.
     // Aynı metrede FARKLI tip serbest (50. metrede hem delik hem leke olabilir).
@@ -711,7 +739,7 @@ export class KursunQcService {
     // gerçek sebep yerine yanıltıcı bir kalite mesajı görürdü. Guard'ın tx içindeki
     // ikizi KALDIRILMADI: burası tx dışı olduğu için eşzamanlı `assign` ile yarışır,
     // asıl serileşme WO kilidinin altındaki kopyada sağlanır.
-    await assertStepNotBypassAssigned(prisma, step.id, "tablet adım kapatma");
+    await assertKursunTabletMayWrite(prisma, step.id, "tablet adım kapatma");
 
     // Tüm açık rollerde QC2_COMPLETED olmalı — tek IN sorgusuyla kontrol et.
     // Tambur kalıtım kayıtları sayılmaz — sadece bu step'te fiilen yapılan QC2.
@@ -768,7 +796,7 @@ export class KursunQcService {
       //         hiç yazma yok → guard'ı önce koşturmak offline kuyruğun geç gelen
       //         mükerrer isteğine gereksiz 409 üretirdi. Erken dönüş sessizce
       //         "zaten kapalı" der ve tablet kuyruğu temizler.
-      await assertStepNotBypassAssigned(tx, step.id, "tablet adım kapatma");
+      await assertKursunTabletMayWrite(tx, step.id, "tablet adım kapatma");
 
       // 1) Açık movement'leri ATOMİK kapat (qty/weight per-row eşitlik) + RETURNING
       //    ile fiilen BİZİM kapattığımız rolleri al. `exitedAt IS NULL` guard'ı:
@@ -1359,8 +1387,41 @@ export class KursunQcService {
         bypassAssignment: bypass
           ? { machineName: bypass.machine.name, assignedAt: bypass.assignedAt }
           : null,
+        tabletReadOnly: await this.resolveTabletReadOnly(
+          stepId,
+          bypass?.machine.name ?? null,
+        ),
         rolls,
       },
+    };
+  }
+
+  /**
+   * `StepSummary.tabletReadOnly` üretici — yazma guard'ıyla AYNI üç dalı sorar
+   * (`assertKursunTabletMayWrite`), yalnız fırlatmak yerine sebebi döner.
+   *
+   * Kuralı ikinci kez YAZMAZ: uygunluk `resolveStepBypassEligibility`'den gelir.
+   * Guard fırlatır, bu anlatır — ikisi aynı kaynaktan beslendiği için "ekran
+   * yazabilirsin diyor ama sunucu reddediyor" durumu doğamaz.
+   */
+  private async resolveTabletReadOnly(
+    stepId: string,
+    assignedMachineName: string | null,
+  ): Promise<{ reason: string } | null> {
+    if (assignedMachineName) {
+      return {
+        reason: `Bu iş ${assignedMachineName} makinesine dağıtıldı — kâğıtla işleniyor. Tambur'da kart okutulduğunda kurşun adımı kapanır.`,
+      };
+    }
+    const flagEnabled = await readKursunBypassEnabled();
+    if (!flagEnabled) return null;
+
+    const eligibility = await resolveStepBypassEligibility(prisma, stepId);
+    if (!eligibility?.eligible) return null;
+
+    return {
+      reason:
+        "Kurşun dağıtımı açık — bu iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılacak. Tablette işlem yapılmaz.",
     };
   }
 

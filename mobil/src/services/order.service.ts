@@ -1,5 +1,6 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import type { Order } from '../types/models';
 
 // =============================================================================
 // Sipariş servisleri — Tambur "Kime?" picker'ı + sipariş bağı yardımcıları.
@@ -57,6 +58,58 @@ export interface QuickOrderResult {
   lineCount: number;
   rollCount: number;
   preparedToWarehouse: number;
+}
+
+/**
+ * "Yeni Sipariş" ekranının gönderdiği kalem. Kapsam BİLİNÇLİ olarak dardır
+ * (2026-08-04 ürün kararı): müşterideki kumaş/renk adı override'ı, özellik ve
+ * fiyat telefondan GİRİLMEZ. Override boş bırakıldığında backend etkin adı
+ * `CustomerItemAlias`/`CustomerColorAlias` master'ından CANLI çözer — telefondan
+ * yazılan bir değer o bağı dondururdu (bkz. schema.prisma OrderLine yorumu).
+ */
+export interface NewOrderLine {
+  itemId: string;
+  colorId: string | null;
+  /** Metre. */
+  quantity: number;
+  /** İstenen en (cm) — opsiyonel. */
+  width: number | null;
+}
+
+export interface NewOrderPayload {
+  customerId: string;
+  /** Şube bayrağı kapalıysa HİÇ gönderilmez (undefined) — null "şube yok" demek. */
+  branchId?: string | null;
+  /** ISO tarih. Verilmezse backend `order.defaultDeadlineDays` ile hesaplar. */
+  deadline?: string;
+  lines: NewOrderLine[];
+  /** İdempotency anahtarı — timeout-replay'de mükerrer sipariş önlenir. */
+  clientToken: string;
+}
+
+export interface CreatedOrder {
+  id: string;
+  orderNumber: string;
+}
+
+/** Cursor (keyset) sayfa cevabı — sipariş listesi infinite scroll. */
+export interface OrderCursorPage {
+  success: boolean;
+  data: Order[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+    /** Yalnız ilk sayfada (`withTotal`) ve YAKLAŞIKtır. */
+    totalEstimate?: number;
+  };
+}
+
+/** Spec (kumaş+renk+en) anlık müsaitlik — sipariş formu ipucu (metre). REZERV DEĞİL. */
+export interface SpecAvailability {
+  freeWarehouse: number;
+  inProduction: number;
+  freeStock: number;
 }
 
 export const orderService = {
@@ -117,6 +170,58 @@ export const orderService = {
     if (params.withInProduction) q.set('withInProduction', 'true');
     return apiClient
       .get<AvailableOrderLinesCursorPage>(`/orders/order-lines/available?${q.toString()}`)
+      .then((r) => r.data);
+  },
+
+  /**
+   * Sipariş listesi — cursor (keyset) + infinite scroll (mobil sayfalama
+   * standardı; offset modeli `MAX_OFFSET=10000` guard'ına takılır ve her
+   * sayfada COUNT(*) koşar).
+   *
+   * Yanıt `defaultInclude` ile customer + branch + lines TAŞIR, bu yüzden detay
+   * sayfası için ayrı istek YOK — sheet listedeki satırdan çizer.
+   */
+  listCursor: (params: {
+    cursor?: string | null;
+    limit?: number;
+    search?: string | null;
+    status?: string | null;
+    customerId?: string | null;
+    withTotal?: boolean;
+  }): Promise<OrderCursorPage> => {
+    const sp = new URLSearchParams();
+    sp.set('mode', 'cursor');
+    sp.set('limit', String(params.limit ?? 20));
+    if (params.cursor) sp.set('cursor', params.cursor);
+    if (params.search) sp.set('search', params.search);
+    if (params.status) sp.set('filter[status]', params.status);
+    if (params.customerId) sp.set('filter[customerId]', params.customerId);
+    if (params.withTotal) sp.set('withTotal', 'true');
+    // En yeni sipariş üstte — satış ekranında beklenen sıra.
+    sp.set('sortBy', 'createdAt');
+    sp.set('sortOrder', 'desc');
+    return apiClient.get<OrderCursorPage>(`/orders?${sp.toString()}`).then((r) => r.data);
+  },
+
+  /**
+   * Yeni müşteri siparişi (mobil sihirbaz). Backend `POST /orders` — sipariş
+   * numarasını SUNUCU üretir (SIP+GGAAYY+NNNN), bu yüzden offline kuyruğa
+   * ALINMAZ; ekran çevrimdışıyken gönderimi kapatır.
+   */
+  create: (data: NewOrderPayload): Promise<ApiResponse<CreatedOrder>> =>
+    apiClient.post<ApiResponse<CreatedOrder>>('/orders', data).then((r) => r.data),
+
+  /** Kumaş+renk+en için depo/üretim/ham metrajı — kalem eklerken ipucu. */
+  getSpecAvailability: (params: {
+    itemId: string;
+    colorId?: string | null;
+    width?: number | null;
+  }): Promise<ApiResponse<SpecAvailability>> => {
+    const q = new URLSearchParams({ itemId: params.itemId });
+    if (params.colorId) q.set('colorId', params.colorId);
+    if (params.width != null) q.set('width', String(params.width));
+    return apiClient
+      .get<ApiResponse<SpecAvailability>>(`/orders/spec-availability?${q.toString()}`)
       .then((r) => r.data);
   },
 

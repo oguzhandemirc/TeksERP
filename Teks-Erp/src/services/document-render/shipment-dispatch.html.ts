@@ -65,6 +65,7 @@ const LABELS = {
     cekiCaption: "ÇEKİ LİSTESİ",
     cuvalNo: "ÇUVAL NO",
     barkodNo: "BARKOD NO",
+    parti: "PARTİ NO",
     desen: "DESEN",
     varyant: "VARYANT",
     en: "EN",
@@ -108,6 +109,7 @@ const LABELS = {
     cekiCaption: "PACKING LIST",
     cuvalNo: "PACKAGE NO",
     barkodNo: "BARCODE",
+    parti: "LOT NO",
     desen: "PATTERN",
     varyant: "VARIANT",
     en: "WIDTH",
@@ -146,6 +148,11 @@ interface ShipmentDocCeki {
   width?: number | null;
   meters: number;
   kg: number;
+  /** Topun parti no'su. Parti ÇUVAL değil TOP başına taşınır — çuval karışık içerikli
+   *  olabilir, çuval başına tek parti yazmak sessizce yanlış olurdu.
+   *  Eski donmuş snapshot'larda alan YOK → kolon durur, hücre "—" basar
+   *  (geriye dönük doldurma YAPILMAZ). */
+  batchNumber?: string | null;
 }
 
 /** Donmuş sevk belgesi payload'ı — collectShipmentDocContent / getDispatchReport
@@ -460,6 +467,9 @@ export function renderShipmentDispatchHtml(
         cols: [
           { key: "sackCode", label: L.cuvalNo, align: "l", cell: (c) => esc(c.sackCode) },
           { key: "barcode", label: L.barkodNo, align: "l", cell: (c) => esc(c.barcode ?? "—") },
+          // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
+          // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
+          { key: "batchNumber", label: L.parti, align: "l", cell: (c) => esc(c.batchNumber ?? "—") },
           { key: "desen", label: L.desen, align: "l", cell: (c) => esc(c.desen) },
           { key: "varyant", label: L.varyant, align: "l", cell: (c) => esc(c.varyant) },
           { key: "width", label: L.en, align: "c", cell: (c) => (blankWidths ? "" : c.width != null ? `${esc(Math.round(c.width))} cm` : "—") },

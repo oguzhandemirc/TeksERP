@@ -284,22 +284,36 @@ export class PrintedDocumentService {
     tx: Prisma.TransactionClient,
     docType: PrintedDocType,
     sourceId: string,
-    userId?: string
+    userId?: string,
+    /** Revizyon gerekçesi — yalnız `reissueForSourceTx` üzerinden gelir (v1'de boş). */
+    reissueReason?: string,
   ): Promise<void> {
     const built = await requireBuilder(docType).fresh(tx, sourceId);
     if (!built) {
       throw AppError.internal(`Belge dondurulamadı — kaynak uygun durumda değil: ${docType}/${sourceId}`);
     }
     const snapshot = await buildSnapshotEnvelope(tx, docType, built.doc, sourceId);
+    // VERSİYON SABİT 1 DEĞİL (2026-08-05): bir kaynak İKİNCİ kez dondurulabilir.
+    // Somut yol — sevk geri alma (storno): sevk irsaliyesi v1 VOIDED'e çekilir,
+    // sevkiyat PLANNED'a döner, mal düzeltilip yeniden sevk edilir ve o an ikinci
+    // freeze koşar. Sabit `1` ile bu çağrı `docType_sourceId_version` unique'ine
+    // çarpıp 500 verirdi — hem de tam sevk anında, tx'i geri sararak.
+    // İlk dondurmada davranış BİREBİR aynı (kayıt yok → max null → 1).
+    const prev = await tx.printedDocument.findFirst({
+      where: { docType, sourceId },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
     await tx.printedDocument.create({
       data: {
         docType,
         sourceId,
-        version: 1,
+        version: (prev?.version ?? 0) + 1,
         status: PrintedDocStatus.ACTIVE,
         documentNo: built.documentNo,
         snapshot: snapshot as unknown as Prisma.InputJsonValue,
         printedById: userId ?? null,
+        ...(reissueReason ? { reissueReason } : {}),
       },
     });
   }
@@ -649,6 +663,41 @@ export class PrintedDocumentService {
       data: { status: PrintedDocStatus.VOIDED, voidedAt: new Date(), voidReason: reason },
     });
     return res.count;
+  }
+
+  /**
+   * REVİZE (tx içi) — kaynağın İÇERİĞİ değiştiğinde belgeyi yeni versiyonla tazeler:
+   * mevcut ACTIVE → SUPERSEDED, güncel veriden v+1 ACTIVE doğar.
+   *
+   * Public `reissue`den farkı: kendi transaction'ını AÇMAZ, çağıranınkine katılır —
+   * yani kaynak mutasyonu ile belge revizyonu ya birlikte olur ya hiç olmaz. Somut
+   * kullanım: ÇOK KALEMLİ iade belgesinden bir kalemin iptali (kalan kalemler için
+   * belge geçerli kalmalı, ama iptal edilen satır artık basılmamalı).
+   *
+   * Belge hiç doğmamışsa / zaten VOIDED ise sessiz no-op döner (`false`) — iptal
+   * edilmiş belge revize edilmez (public `reissue` ile aynı kural).
+   */
+  async reissueForSourceTx(
+    tx: Prisma.TransactionClient,
+    docType: PrintedDocType,
+    sourceId: string,
+    reason: string,
+    userId?: string,
+  ): Promise<boolean> {
+    const latest = await tx.printedDocument.findFirst({
+      where: { docType, sourceId },
+      orderBy: { version: "desc" },
+      select: { id: true, status: true },
+    });
+    if (!latest || latest.status === PrintedDocStatus.VOIDED) return false;
+    // Atomik claim — eşzamanlı ikinci revize count===0 görür (public reissue ile aynı).
+    const claim = await tx.printedDocument.updateMany({
+      where: { id: latest.id, status: PrintedDocStatus.ACTIVE },
+      data: { status: PrintedDocStatus.SUPERSEDED, supersededAt: new Date() },
+    });
+    if (claim.count === 0) throw AppError.conflict("Belge durumu değişti — yenileyip tekrar deneyin");
+    await this.freezeForSource(tx, docType, sourceId, userId, reason);
+    return true;
   }
 
   /** Versiyon listesi — snapshot JSON'u ÇEKMEDEN (perf kuralı 13). */

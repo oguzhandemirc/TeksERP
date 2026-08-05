@@ -51,6 +51,13 @@ export interface KursunDistributionWaitingRow extends KursunDistributionRowBase 
 }
 
 export interface KursunDistributionAssignedRow extends KursunDistributionRowBase {
+  /**
+   * `WorkOrderStep.priority` — MAKİNE İÇİ sıra. Sürükle-bırak bunu yeniden yazar
+   * (bekleyen kuyrukla AYNI uç ve AYNI alan). Backend `assigned`'ı bu sıraya göre
+   * döner; UI onu okumaz (yeni değerler index'ten üretilir) ama sözleşme burada
+   * yazılı olmalı — alan sessizce düşerse liste "dağıtım anı" sırasına geri döner.
+   */
+  priority: number;
   assignmentId: string;
   /** ATANAN fiziksel kurşun makinesi — izleme/gruplama bu alanla yapılır. */
   machineId: string;
@@ -76,21 +83,30 @@ export interface KursunDistributionPayload {
   assigned: KursunDistributionAssignedRow[];
 }
 
+// `KursunBypassVisibility` (menü sayaçları) 2026-08-05'te kaldırıldı — Kurşun
+// Planlama karosu bayrak/sayaçtan bağımsız, yalnız izinle süzülüyor.
+
 /**
- * MENÜ ÇİZME payload'ı (`GET /api/kursun-bypass/visibility`) — üç sayı, gövde yok.
+ * TOPLU uçların ORTAK sonuç gövdesi — parçalı başarı sözleşmesi.
  *
- * İki ekranın karosu artık salt bayrağa değil "işi kaldı mı" sorusuna bağlı:
- *   • "Kurşun Sırası"  görünür ⇔ `!flagEnabled || tabletRegimeCount > 0`
- *   • "Kurşun Dağıtım" görünür ⇔ `flagEnabled  || pendingAssignmentCount > 0`
- * Kuralı BACKEND uygulamaz (ham sayı döner) — bkz. `tile-config.ts`.
+ * `failed` boş değilse bazı satırlar ATLANMIŞTIR ve arayüz bunu göstermek
+ * zorundadır; "N tamamlandı" deyip atlananları yutmak, planlamacıya yapılmamış
+ * bir işi yapılmış gösterir.
  */
-export interface KursunBypassVisibility {
-  /** `production.kursunBypassEnabled` — YENİ atama açık mı. */
-  flagEnabled: boolean;
-  /** Açık dağıtım sayısı (`completedAt IS NULL AND cancelledAt IS NULL`). */
-  pendingAssignmentCount: number;
-  /** Tablet rejiminde bekleyen kurşun adımı sayısı (dağıtım `waiting` kümesiyle aynı where). */
-  tabletRegimeCount: number;
+export interface KursunBulkResult {
+  failed: Array<{ message: string }>;
+}
+
+export interface KursunBulkAssignResult extends KursunBulkResult {
+  assigned: number;
+  /** Bunlardan kaçı BAŞKA bir makineden taşındı (yeni atama değil). */
+  moved: number;
+  failed: Array<{ workOrderId: string; message: string }>;
+}
+
+export interface KursunBulkCancelResult extends KursunBulkResult {
+  cancelled: number;
+  failed: Array<{ assignmentId: string; message: string }>;
 }
 
 export interface KursunBypassPreviewRoll {

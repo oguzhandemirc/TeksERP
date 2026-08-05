@@ -62,7 +62,6 @@ export function KursunDagitimCompleteDialog({
     onSuccess: (res) => {
       toast.success(res.message ?? "İş tamamlandı.");
       void qc.invalidateQueries({ queryKey: ["kursun-bypass"] });
-      void qc.invalidateQueries({ queryKey: ["kursun-queue"] });
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       void qc.invalidateQueries({ queryKey: ["orders"] });

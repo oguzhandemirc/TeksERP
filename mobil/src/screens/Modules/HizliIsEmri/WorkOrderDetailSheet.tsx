@@ -10,6 +10,8 @@ import * as Haptics from 'expo-haptics';
 import AppModal from '../../../components/AppModal';
 import WorkOrderHeaderFields, { type WoHeaderFieldValues } from './WorkOrderHeaderFields';
 import { printTravelerCardForWorkOrder } from '../../../services/travelerCardPrint';
+import { travelerCardService } from '../../../services/travelerCard.service';
+import WorkOrderDocumentsSheet from './WorkOrderDocumentsSheet';
 import { workOrderService } from '../../../services/workOrder.service';
 import {
   WORK_ORDER_STATUS_LABEL,
@@ -34,6 +36,7 @@ type Mode = 'detail' | 'edit' | 'cancel';
 export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }: Props) {
   const qc = useQueryClient();
   const [printing, setPrinting] = useState(false);
+  const [documentsOpen, setDocumentsOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('detail');
   const [edit, setEdit] = useState<WoHeaderFieldValues | null>(null);
 
@@ -58,6 +61,19 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
     queryFn: () => workOrderService.getCancelImpact(workOrderId as string),
     enabled: visible && mode === 'cancel',
   });
+  // Basılı kart gerçekle ayrıştı mı — "Çıktı" butonunun altındaki uyarı için.
+  // Sahadaki asıl vaka: kart iş emri açılışında basıldı, sonra top bağlandı →
+  // kâğıtta parti no YOK. Bayrağı backend kurar, baskı olayı temizler.
+  const cardQuery = useQuery({
+    queryKey: ['traveler-card-active', workOrderId],
+    queryFn: () =>
+      travelerCardService.list({
+        filters: { workOrderId: workOrderId as string, status: 'ACTIVE' },
+        pageSize: 1,
+      }),
+    enabled: visible && Boolean(workOrderId),
+  });
+  const cardDirty = (cardQuery.data?.data ?? [])[0]?.contentDirty === true;
 
   const wo = woQuery.data?.data;
   // Tüketilmiş/emekli toplar (Tambur kesimi, fason açık-kumaş, kartela, iptal)
@@ -128,6 +144,9 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
     setPrinting(true);
     try {
       await printTravelerCardForWorkOrder(workOrderId);
+      // Baskı olayı bayrağı temizledi → uyarı bandı + Belgeler rozeti sönsün.
+      qc.invalidateQueries({ queryKey: ['traveler-card-active', workOrderId] });
+      qc.invalidateQueries({ queryKey: ['work-order-documents', workOrderId] });
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (!/cancel|dismiss/i.test(msg)) {
@@ -156,6 +175,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   }, [wo, rolls]);
 
   return (
+    <>
     <AppModal visible={visible} onDismiss={onClose} position="bottom" contentStyle={styles.sheet}>
       {/* Başlık */}
       <View style={styles.header}>
@@ -315,18 +335,41 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             )}
           </View>
 
+          {/* Basılı kart bayat — sahadaki kâğıtta parti no eksik/yanlış olabilir.
+              Banda DOKUNUNCA kart doğrudan basılır: uyarıyı gören operatörün
+              düzeltmesi tek dokunuş olmalı, "Belgeler → listeden bul" değil. */}
+          {cardDirty && (
+            <TouchableRipple
+              onPress={doPrint}
+              disabled={printing}
+              style={styles.cardStaleBanner}
+              borderless={false}
+            >
+              <View style={styles.cardStaleInner}>
+                <Icon source="alert" size={16} color={colors.warning} />
+                <Text style={styles.cardStaleText}>
+                  Basılı refakat kartı güncel değil — kart basıldıktan sonra parti / sevk /
+                  iş emri içeriği değişti. <Text style={styles.cardStaleCta}>Yeniden basmak için dokunun.</Text>
+                </Text>
+                {printing && <ActivityIndicator size={16} />}
+              </View>
+            </TouchableRipple>
+          )}
+
           {/* Aksiyonlar */}
           <View style={styles.actionGrid}>
+            {/* "Belgeler" = iş emrinin TÜM belgeleri (refakat kartı + fason sevk /
+                kabul / doğrudan sevk irsaliyeleri). Eski "Çıktı" butonu yalnız
+                refakat kartını basıyordu; diğer belgelere mobilden hiç
+                ulaşılamıyordu. Kart hâlâ bir dokunuş uzakta (listenin ilk satırı). */}
             <Button
               mode="contained"
-              icon="printer"
-              onPress={doPrint}
-              loading={printing}
-              disabled={printing}
+              icon="file-document-multiple-outline"
+              onPress={() => setDocumentsOpen(true)}
               style={styles.actionBtn}
               contentStyle={styles.btnContent}
             >
-              Çıktı
+              Belgeler
             </Button>
             {editable ? (
               <Button mode="contained-tonal" icon="pencil" onPress={startEdit} style={styles.actionBtn} contentStyle={styles.btnContent}>
@@ -349,7 +392,21 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
           <View style={{ height: spacing.lg }} />
         </ScrollView>
       )}
+
     </AppModal>
+
+    {/* Belgeler — detay modalının KARDEŞİ, İÇİNDE değil. AppModal Paper `Portal`
+        kullanıyor: iki sheet de kök portal host'una taşınır, sonra mount olan
+        üstte kalır ve detay arkada açık durur (kapatınca detaya dönülür).
+        İç içe yerleştirme kod tabanında hiç emsali olmayan bir kurulumdu —
+        `RemoteListSheet` bugüne dek hep AppModal DIŞINDA kullanıldı. */}
+    <WorkOrderDocumentsSheet
+      visible={documentsOpen}
+      onDismiss={() => setDocumentsOpen(false)}
+      workOrderId={workOrderId ?? null}
+      workOrderNumber={wo?.workOrderNumber}
+    />
+    </>
   );
 }
 
@@ -400,6 +457,21 @@ const styles = StyleSheet.create({
   warnBox: { flexDirection: 'row', gap: spacing.sm, backgroundColor: colors.dangerContainer, borderRadius: radius.md, padding: spacing.md },
   warnText: { flex: 1, color: colors.dangerText, fontSize: 13, lineHeight: 18, fontWeight: '600' },
 
+  cardStaleBanner: {
+    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    backgroundColor: `${colors.warning}1A`,
+  },
+  cardStaleInner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.sm,
+  },
+  cardStaleText: { flex: 1, fontSize: 13, lineHeight: 18, color: colors.warningText },
+  cardStaleCta: { fontWeight: '700', textDecorationLine: 'underline' },
   actionGrid: { flexDirection: 'row', gap: spacing.md },
   actionBtn: { flex: 1, borderRadius: radius.md },
   cancelBtn: { borderRadius: radius.md, borderColor: colors.danger },

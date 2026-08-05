@@ -42,6 +42,34 @@ router.get(
 
 /**
  * @openapi
+ * /api/returns/lookup-sack:
+ *   get:
+ *     tags: [Returns]
+ *     summary: Çuval kodu okut → çuvalın sevk edilmiş topları (toplu iade)
+ *     description: |
+ *       Tek tek barkod okutmadan çuval bazlı iade girişi. Sevk EDİLMİŞ çuvalın hâlâ
+ *       iade alınmamış topları + aday siparişler döner. Aday siparişler çuvaldaki
+ *       TÜM toplara uyanlardır (seçim tüm toplara uygulanır).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: sackCode
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Çuval + toplar + aday siparişler }
+ *       400: { description: Çuval sevk edilmemiş / iade alınacak top kalmamış }
+ *       404: { description: Çuval bulunamadı }
+ */
+router.get(
+  "/lookup-sack",
+  verifyToken,
+  requireAnyPermission("return:write", "mobile:iade"),
+  controller.lookupSack
+);
+
+/**
+ * @openapi
  * /api/returns:
  *   post:
  *     tags: [Returns]

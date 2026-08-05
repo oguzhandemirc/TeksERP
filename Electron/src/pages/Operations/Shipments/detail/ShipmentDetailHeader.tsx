@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, FileText, Globe } from "lucide-react";
+import { Ban, FileText, Globe, Undo2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/operations/StatusBadge";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentDetail } from "../types";
 import { ShipmentDispatchNote } from "../ShipmentDispatchNote";
 import { CancelShipmentDialog } from "../CancelShipmentDialog";
+import { UndoDispatchDialog } from "../UndoDispatchDialog";
 
 /**
  * Tam-sayfa sevkiyat detayının sabit başlığı — kimlik (sevkiyat no + statü + ihracat
@@ -25,7 +26,12 @@ export function ShipmentDetailHeader({
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [undoOpen, setUndoOpen] = useState(false);
   const canCancel = d != null && d.status !== "DISPATCHED" && d.status !== "CANCELLED";
+  // Storno yalnız SEVK EDİLMİŞ sevkiyatta anlamlı. Uygunluğun geri kalanı
+  // (fatura/iade/aynı gün) backend'in tek kaynağından gelir ve dialog içinde
+  // `blockReason` ile söylenir — burada kopyalanmaz.
+  const canUndoDispatch = d != null && d.status === "DISPATCHED";
 
   return (
     <>
@@ -69,6 +75,19 @@ export function ShipmentDetailHeader({
                   </Button>
                 </PermissionGate>
               )}
+              {canUndoDispatch && (
+                <PermissionGate permission="shipping:undo-dispatch">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-destructive hover:text-destructive"
+                    onClick={() => setUndoOpen(true)}
+                  >
+                    <Undo2 className="h-3.5 w-3.5" /> Sevki Geri Al
+                  </Button>
+                </PermissionGate>
+              )}
             </>
           ) : undefined
         }
@@ -83,6 +102,10 @@ export function ShipmentDetailHeader({
       <CancelShipmentDialog
         shipmentId={cancelOpen ? shipmentId : null}
         onOpenChange={(o) => setCancelOpen(o)}
+      />
+      <UndoDispatchDialog
+        shipmentId={undoOpen ? shipmentId : null}
+        onOpenChange={(o) => setUndoOpen(o)}
       />
     </>
   );

@@ -1,187 +1,222 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Info } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { DragEndEvent } from "@dnd-kit/core";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { RefreshButton } from "@/components/RefreshButton";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatNumber } from "@/lib/format";
-import { kursunDagitimService } from "./service";
-import { EligibleRow } from "./EligibleRow";
-import { AssignedMachineGroup, groupAssignedByMachine } from "./AssignedMachineGroup";
+import { PoolPanel } from "./PoolPanel";
+import { MachinePanel } from "./MachinePanel";
 import { KursunDagitimCompleteDialog } from "./KursunDagitimCompleteDialog";
-import type { KursunDistributionAssignedRow } from "./types";
-
-const QUERY_KEY = ["kursun-bypass", "distribution"];
+import { applyGroupOrder, reorderRows } from "./queue-reorder";
+import { buildTabs, POOL_TAB } from "./machine-tabs";
+import { DISTRIBUTION_QUERY_KEY, useKursunDistribution } from "./useKursunDistribution";
+import type {
+  KursunDistributionAssignedRow,
+  KursunDistributionWaitingRow,
+} from "./types";
 
 /**
- * Kurşun Dağıtım — kurşun makinelerinde tablet YOK; işi planlamacı buradan
- * fiziksel kurşun MAKİNELERİNE dağıtır (istasyon tek, makineler N tane). İki
- * bölüm ÜST ÜSTE durur (sekme DEĞİL): planlamacı "ne bekliyor" ile "hangi
- * makine ne kadar dolu" sorularını aynı anda görmeden karar veremez.
+ * Kurşun Planlama — kurşun adımının TEK planlama yüzeyi.
+ *
+ * TASARIM (2026-08-05): **havuz + makine başına birer SEKME**. Eski hâlinde
+ * bekleyenler ve tüm makineler alt alta duruyordu; makine sayısı arttıkça sayfa
+ * uzuyor ve toplu seçim iki makineye birden taşabiliyordu. Sekme bunu yapısal
+ * olarak çözer — ekranda tek liste vardır, "seçtiklerim nereye ait" sorusu
+ * doğmaz.
+ *
+ * "Hangi makine ne kadar dolu?" görünürlüğü SEKME ŞERİDİNE taşındı (her sekmede
+ * iş adedi + metraj + bayat rozeti): sekmeye geçmeden yükü görebilmek, dağıtım
+ * kararının ön koşuludur.
+ *
+ * ⚠️ EKRAN BAYRAKTAN BAĞIMSIZ: menüde her zaman durur, yalnız izinle süzülür.
+ * Bayrak SADECE dağıtım kontrollerini açıp kapatır; sıralama ve acil işaretleme
+ * her iki rejimde de çalışır.
  */
 export function KursunDagitimPage() {
-  const qc = useQueryClient();
+  const { hasAnyPermission } = useRoleAccess();
+  const canReorder = hasAnyPermission(["quality:write", "workorder:distribute"]);
+
+  const d = useKursunDistribution();
+  const data = d.query.data?.data;
+  const flagEnabled = data?.flagEnabled ?? false;
+  const machines = useMemo(() => data?.machines ?? [], [data]);
+
+  // Sürükleme İYİMSER güncellenir → iki liste de yerel state'te tutulur ve her
+  // sunucu yanıtında tazelenir. Doğrudan `query.data`'dan okumak, sürükleme ile
+  // sunucu yanıtı arasındaki ~200ms'de satırı eski yerine geri zıplatırdı.
+  const [waiting, setWaiting] = useState<KursunDistributionWaitingRow[]>([]);
+  const [assigned, setAssigned] = useState<KursunDistributionAssignedRow[]>([]);
+  useEffect(() => {
+    setWaiting(data?.waiting ?? []);
+    setAssigned(data?.assigned ?? []);
+  }, [data]);
+
+  const [tab, setTab] = useState<string>(POOL_TAB);
+  /**
+   * Seçim TEK dizidir ama sekme değişince TEMİZLENİR. Sekmeler arası taşınan bir
+   * seçim, görünmeyen satırlar üzerinde toplu işlem yaptırırdı — panellerin
+   * `visibleSelection` kesişimi ikinci hattır, bu birincisi.
+   */
+  const [selected, setSelected] = useState<string[]>([]);
+  const changeTab = (next: string) => {
+    setTab(next);
+    setSelected([]);
+  };
+
   const [completeRow, setCompleteRow] = useState<KursunDistributionAssignedRow | null>(
     null,
   );
 
-  const query = useQuery({
-    queryKey: QUERY_KEY,
-    queryFn: () => kursunDagitimService.getDistribution(),
-    refetchOnMount: "always",
-    staleTime: 0,
-  });
+  const tabs = useMemo(
+    () => buildTabs(machines, waiting, assigned),
+    [machines, waiting, assigned],
+  );
+  // Sekme kayboldu mu (makine pasifleşti / son iş bitti) → havuza düş.
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some((t) => t.key === tab)) changeTab(POOL_TAB);
+  }, [tabs, tab]);
 
-  const data = query.data?.data;
-  const flagEnabled = data?.flagEnabled ?? false;
-  const machines = data?.machines ?? [];
-  const waiting = data?.waiting ?? [];
-  // `?? []` her render'da YENİ dizi doğurur → useMemo bağımlılığı olarak
-  // kullanılamaz (gruplama her render'da yeniden koşar). Referansı sabitle.
-  const assigned = useMemo(() => data?.assigned ?? [], [data]);
-  const groups = useMemo(() => groupAssignedByMachine(assigned), [assigned]);
+  /** Seçili adım id'lerinden iş emri id'leri (toplu dağıtım/taşıma payload'ı). */
+  const workOrderIdsOf = (stepIds: string[]) =>
+    [...waiting, ...assigned]
+      .filter((r) => stepIds.includes(r.workOrderStepId))
+      .map((r) => r.workOrderId);
 
-  const eligibleCount = waiting.filter((w) => w.eligible).length;
-  const staleCount = assigned.filter((a) => a.stale).length;
-  const assignedMeters = assigned.reduce((s, a) => s + a.totalMeters, 0);
+  /** Seçili adım id'lerinden atama id'leri (toplu havuza alma payload'ı). */
+  const assignmentIdsOf = (stepIds: string[]) =>
+    assigned
+      .filter((r) => stepIds.includes(r.workOrderStepId))
+      .map((r) => r.assignmentId);
 
-  /** Dağıtım kurşun kuyruğunun bypass rozetini de değiştirir → ikisi birlikte tazelenir. */
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ["kursun-bypass"] });
-    void qc.invalidateQueries({ queryKey: ["kursun-queue"] });
+  const runBulkAssign = (stepIds: string[], machineId: string) => {
+    const workOrderIds = workOrderIdsOf(stepIds);
+    if (workOrderIds.length === 0 || !machineId) return;
+    d.assignBulk.mutate({ workOrderIds, machineId });
+    setSelected([]);
   };
 
-  const assignMut = useMutation({
-    mutationFn: kursunDagitimService.assign,
-    onSuccess: (res) => {
-      toast.success(res.message ?? "İş emri makineye dağıtıldı.");
-      refresh();
-    },
-  });
+  const runBulkCancel = (stepIds: string[]) => {
+    const assignmentIds = assignmentIdsOf(stepIds);
+    if (assignmentIds.length === 0) return;
+    d.cancelBulk.mutate({ assignmentIds });
+    setSelected([]);
+  };
 
-  const cancelMut = useMutation({
-    mutationFn: (assignmentId: string) => kursunDagitimService.cancel(assignmentId),
-    onSuccess: (res) => {
-      toast.success(res.message ?? "Dağıtım kaldırıldı.");
-      refresh();
-    },
-  });
+  /** Havuz sürüklemesi — priority hesabı `reorderRows`'de (saf, birim testli). */
+  const handlePoolDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    const result = reorderRows(waiting, String(active.id), String(over.id));
+    if (!result) return;
+    setWaiting(result.next);
+    if (result.payload.length > 0) d.reorder.mutate(result.payload);
+  };
 
-  const urgentMut = useMutation({
-    mutationFn: (v: { stepId: string; isUrgent: boolean }) =>
-      kursunDagitimService.setUrgent(v.stepId, v.isUrgent),
-    onSuccess: () => {
-      toast.success("Acillik durumu güncellendi.");
-      refresh();
-    },
-  });
-
-  const busy = assignMut.isPending || cancelMut.isPending || urgentMut.isPending;
+  /** Makine içi sıralama — yeni sıra `applyGroupOrder` ile düz diziye örülür. */
+  const handleMachineReorder = (machineId: string, activeId: string, overId: string) => {
+    const groupRows = assigned.filter((r) => r.machineId === machineId);
+    const result = reorderRows(groupRows, activeId, overId);
+    if (!result) return;
+    setAssigned(applyGroupOrder(assigned, machineId, result.next));
+    if (result.payload.length > 0) d.reorder.mutate(result.payload);
+  };
 
   return (
     <PageShell>
       <PageHeader
-        title="Kurşun Dağıtım"
-        description="Kurşun adımında bekleyen iş emirlerini fiziksel kurşun makinelerine dağıt."
+        title="Kurşun Planlama"
+        description="Havuzdaki işleri sırala ve kurşun makinelerine dağıt; makineler arasında taşı."
         actions={
-          <RefreshButton queryKey={QUERY_KEY} successMessage="Dağıtım listesi yenilendi" />
+          <RefreshButton
+            queryKey={DISTRIBUTION_QUERY_KEY}
+            successMessage="Liste yenilendi"
+          />
         }
       />
 
-      <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-3 py-2 text-xs">
-        <span>
-          <span className="text-foreground font-medium">{waiting.length}</span> bekleyen
-          {waiting.length > 0 && ` (${eligibleCount} uygun)`}
-        </span>
-        <span>
-          <span className="text-foreground font-medium">{assigned.length}</span> dağıtılmış
-          · {groups.length} makine · {formatNumber(assignedMeters, 0)} m
-        </span>
-        {staleCount > 0 && (
-          <span className="text-warning-foreground">{staleCount} bayat dağıtım</span>
-        )}
-      </div>
-
-      <PageBody className="space-y-6 p-4">
-        {query.isLoading ? (
+      <PageBody className="p-4">
+        {d.query.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-full" />
             ))}
           </div>
         ) : (
-          <>
-            {!flagEnabled && (
-              <div className="bg-muted/30 flex items-start gap-2 rounded-md border p-3 text-xs">
-                <Info className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Kurşun bypass özelliği kapalı — yeni dağıtım yapılamaz; mevcut atamalar
-                  çalışmaya devam eder.
-                </span>
-              </div>
-            )}
+          <Tabs value={tab} onValueChange={changeTab} className="space-y-3">
+            <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+              {tabs.map((t) => (
+                <TabsTrigger key={t.key} value={t.key} className="gap-2">
+                  <span>{t.label}</span>
+                  <Badge variant="muted" className="tabular-nums">
+                    {t.count}
+                  </Badge>
+                  <span className="text-muted-foreground text-[11px] tabular-nums">
+                    {formatNumber(t.meters, 0)} m
+                  </span>
+                  {t.staleCount > 0 && (
+                    <Badge variant="outline" className="text-warning-foreground text-[10px]">
+                      {t.staleCount} bayat
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-            {flagEnabled && (
-              <section className="space-y-2">
-                <h2 className="text-sm font-semibold">Dağıtım Bekleyen</h2>
-                {waiting.length === 0 ? (
-                  <div className="text-muted-foreground flex h-24 items-center justify-center rounded-md border border-dashed text-sm">
-                    Kurşun adımında dağıtım bekleyen iş emri yok.
-                  </div>
-                ) : (
-                  <ul className="space-y-2">
-                    {waiting.map((row) => (
-                      <EligibleRow
-                        key={row.workOrderStepId}
-                        row={row}
-                        machines={machines}
-                        busy={busy}
-                        flagEnabled={flagEnabled}
-                        onAssign={(machineId) =>
-                          assignMut.mutate({ workOrderId: row.workOrderId, machineId })
-                        }
-                        onToggleUrgent={() =>
-                          urgentMut.mutate({
-                            stepId: row.workOrderStepId,
-                            isUrgent: !row.isUrgent,
-                          })
-                        }
-                      />
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
+            <TabsContent value={POOL_TAB} className="mt-0">
+              <PoolPanel
+                rows={waiting}
+                machines={machines}
+                busy={d.busy}
+                flagEnabled={flagEnabled}
+                canReorder={canReorder}
+                selected={selected}
+                onSelectedChange={setSelected}
+                onDragEnd={handlePoolDragEnd}
+                onAssignOne={(row, machineId) =>
+                  d.assign.mutate({ workOrderId: row.workOrderId, machineId })
+                }
+                onToggleUrgent={(row) =>
+                  d.setUrgent.mutate({
+                    stepId: row.workOrderStepId,
+                    isUrgent: !row.isUrgent,
+                  })
+                }
+                onAssignBulk={runBulkAssign}
+              />
+            </TabsContent>
 
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold">Makinelere Dağıtılmış</h2>
-              {groups.length === 0 ? (
-                <div className="text-muted-foreground flex h-24 items-center justify-center rounded-md border border-dashed text-sm">
-                  Hiçbir makineye dağıtılmış iş emri yok.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {groups.map((group) => (
-                    <AssignedMachineGroup
-                      key={group.machineId}
-                      group={group}
-                      busy={busy}
-                      onCancel={(row) => cancelMut.mutate(row.assignmentId)}
-                      onToggleUrgent={(row) =>
-                        urgentMut.mutate({
-                          stepId: row.workOrderStepId,
-                          isUrgent: !row.isUrgent,
-                        })
-                      }
-                      onComplete={(row) => setCompleteRow(row)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          </>
+            {tabs
+              .filter((t) => t.key !== POOL_TAB)
+              .map((t) => (
+                <TabsContent key={t.key} value={t.key} className="mt-0">
+                  <MachinePanel
+                    machineId={t.key}
+                    machineName={t.label}
+                    rows={assigned.filter((r) => r.machineId === t.key)}
+                    machines={machines}
+                    busy={d.busy}
+                    canReorder={canReorder}
+                    selected={selected}
+                    onSelectedChange={setSelected}
+                    onReorder={handleMachineReorder}
+                    onToggleUrgent={(row) =>
+                      d.setUrgent.mutate({
+                        stepId: row.workOrderStepId,
+                        isUrgent: !row.isUrgent,
+                      })
+                    }
+                    onComplete={setCompleteRow}
+                    onCancelOne={(row) => d.cancel.mutate(row.assignmentId)}
+                    onCancelBulk={runBulkCancel}
+                    onMoveBulk={runBulkAssign}
+                  />
+                </TabsContent>
+              ))}
+          </Tabs>
         )}
       </PageBody>
 
@@ -191,7 +226,7 @@ export function KursunDagitimPage() {
           if (!open) setCompleteRow(null);
         }}
         row={completeRow}
-        onCompleted={refresh}
+        onCompleted={d.refresh}
       />
     </PageShell>
   );

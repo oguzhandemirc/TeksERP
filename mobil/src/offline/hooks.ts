@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { onlineManager, useMutationState } from '@tanstack/react-query';
+import { offlineReason, subscribeOfflineReason, type OfflineReason } from './serverReachability';
 
 export function useIsOnline(): boolean {
   const [online, setOnline] = useState<boolean>(onlineManager.isOnline());
@@ -14,6 +15,20 @@ export function useIsOnline(): boolean {
     });
   }, []);
   return online;
+}
+
+/**
+ * Çevrimdışıysak NEDEN? `'link'` (ağ bağlantısı yok) · `'server'` (ağ var ama
+ * sunucuya ulaşılamıyor) · `null` (çevrimiçi).
+ *
+ * İkisi operatöre AYRI anlatılır — "wifi'yi aç" ile "sunucu kapalı, IT'ye haber
+ * ver" farklı işlerdir — ve `entryAttempt` de ikisinde farklı davranır
+ * (bkz. `onAttemptDetached`).
+ */
+export function useOfflineReason(): OfflineReason {
+  const [reason, setReason] = useState<OfflineReason>(offlineReason());
+  useEffect(() => subscribeOfflineReason(() => setReason(offlineReason())), []);
+  return reason;
 }
 
 export interface PendingStationOp {

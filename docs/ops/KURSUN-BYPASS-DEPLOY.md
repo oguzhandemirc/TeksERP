@@ -412,11 +412,10 @@ Ayar anahtarı: **`production.kursunBypassEnabled`**, varsayılan **`false`**.
 4. **İSTEMCİLER YENİDEN DAĞITILIR** (aşağıda §e) — backend'i güncellemek yetmez
 5. Yetkili kullanıcı **yeniden giriş yapar** (JWT içindeki permission listesi yenilensin)
 6. Panel → Genel Ayarlar → **Kurşun bypass = AÇIK**
-   — Operasyonlar ekranını **yenile**: "Kurşun Dağıtım" karosu gelmiş olmalı.
-   **"Kurşun Sırası" karosu hemen gitmeyebilir** ve bu NORMALDİR: tablet rejiminde
-   bekleyen kurşun adımı varsa ekran o işler bitene kadar durur (§f.2). Gitmesi
-   gerektiğini düşünüyorsan §f.2 sonundaki doğrulama sorgusuyla `tablet_rejimi`
-   sayacına bak.
+   — Operasyonlar ekranındaki **"Kurşun Planlama"** karosu bayraktan BAĞIMSIZ olarak
+   zaten oradadır (§f.2); bayrağı açmak o ekrandaki satırlara **makine seçici + "Ata"**
+   kontrollerini ekler. Ayrıca kurşun TABLETİ bu andan itibaren dağıtıma uygun
+   işlerde **salt-okunur** olur (§f.3) — tabletlerin yeni APK’yı almış olması şart.
 7. Tek bir iş emriyle uçtan uca dene: **bir makine seçip** dağıt → Tambur'da kart okut.
    **Beklenen: hiçbir onay/önizleme ekranı ÇIKMAZ** — kart doğrudan normal Tambur işi
    olarak açılır. Ardından doğrula: kurşun adımı `COMPLETED` mi, toplar Tambur adımında
@@ -484,115 +483,124 @@ okutmasını bir dokunuş uzatır. Denetim izi onaydan bağımsızdır (movement
 > ekranıdır** (kapanmadan önce iptal edilir). Kapanmış bir atamanın makinesi ancak
 > `roll_movements."machineId"` üzerinden görülür (aşağıdaki doğrulama sorguları).
 
-### 2. İki ekran da "KOŞULLU GÖSTER" — bayrağı çevirmek yarım işi ekransız BIRAKMAZ
+### 2. TEK EKRAN: "Kurşun Planlama" — bayrak ARTIK GÖRÜNÜRLÜĞÜ ETKİLEMEZ
 
-> **2026-08-02 kullanıcı kararı.** Önceki düzende iki ekranın görünürlüğü **yalnız
-> bayrağa** bakıyordu ve bu, bayrağın çevrildiği ANDA iki boşluk açıyordu (aşağıda).
-> Yeni kural her iki ekran için de aynı cümledir: **işi kaldıysa ekran durur, iş
-> bitince kendiliğinden kaybolur.** Dört durum canlı uçla + bağımsız ham SQL ile
-> sınandı (bayrak × atama × tablet işi kombinasyonları).
+> **2026-08-05 kullanıcı kararı — bu bölüm KÖKTEN DEĞİŞTİ.** Eskiden iki ayrı ekran
+> vardı (**Kurşun Sırası** + **Kurşun Dağıtım**) ve görünürlükleri bayrak + iki sayaçla
+> koşulluydu. Sahadan gelen soru kuralın kendisini düşürdü: *"bypass açıkken menüde
+> ikisi birden görünüyor, normal mi?"* Normaldi — ama iki ekran **AYNI iş emirlerini**
+> gösteriyordu ve planlamacı aynı işi iki menüde arıyordu.
 
-| Ekran | GÖRÜNÜR olma koşulu | Gizlendiği tek durum |
+| Ekran | Adres | GÖRÜNÜR olma koşulu |
 |---|---|---|
-| **Kurşun Sırası** (`/operations/kursun-queue`) | bayrak **KAPALI** **VEYA** tablet rejiminde bekleyen kurşun adımı **VAR** | bayrak AÇIK **ve** tablette hiç kurşun işi kalmamış |
-| **Kurşun Dağıtım** (`/operations/kursun-dagitim`, mobil ekran) | bayrak **AÇIK** **VEYA** bekleyen (açık) dağıtım **VAR** | bayrak KAPALI **ve** hiç açık dağıtım yok |
+| **Kurşun Planlama** (Electron) | `/operations/kursun-dagitim` | **Yalnız izin:** `quality:write` **veya** `workorder:distribute`. Bayrak ETKİLEMEZ. |
+| **Kurşun Dağıtım** (mobil) | — | **Yalnız izin:** `mobile:kursun-dagitim`. Bayrak ETKİLEMEZ. |
 
-**Kapatılan iki boşluk:**
+Eski `/operations/kursun-queue` adresi **Kurşun Planlama'ya yönlendirilir** (kayıtlı
+sekme / ezberlenmiş adres boşa düşmez).
 
-1. **Bayrak AÇILDIĞINDA** eskiden Kurşun Sırası anında gizleniyordu. Ama tablette
-   **DOKUNULMUŞ** iş emirleri (KK2 kaydı / hata kaydı / bypass dışı kapanmış hareket
-   taşıyanlar) **dağıtılamaz** — uygunluk kuralları reddeder — ve tablet rejiminde
-   kalırlar. Ekran gizlenince planlamacı onların **sırasını değiştiremiyor, acil
-   işaretleyemiyordu**. İş durmuyordu (tablet operatörü kendi "Açık Kartlar" listesini
-   ayrı uçtan sıralı görüyor), yalnız **önceliklendirme körleşiyordu**. Artık ekran o
-   işler bitene kadar durur.
-2. **Bayrak KAPATILDIĞINDA** Kurşun Dağıtım karosu gizleniyordu ama route bilinçli
-   olarak açık bırakılmıştı (dağıtılmış işler bitirilebilsin diye). Sonuç tuhaftı:
-   *sayfa çalışıyor ama menüde yok* — yalnız komut paletinden/adresle girilebiliyordu.
-   **Mobilde ekran tamamen kayboluyordu** ve saha personeli dağıtılmış işi ne iptal
-   ne de tamamlayabiliyordu (tablette adres çubuğu/komut paleti gibi kaçış yolu YOK).
-   Artık menü route ile hizalı: son atama kapanana kadar ekran durur.
+**Ekranın iki bölümü:**
 
-**Kurşun Sırası'nın ROUTE'u karosuyla AYNI koşulu uygular** (karo gizleyip route açık
-bırakmak, adres çubuğuna alışmış kullanıcıya "gizlenmiş ama hâlâ çalışan" ikinci bir
-gerçeklik bırakırdı). **Komut paleti de aynı koşulu uygular** — hub'da gizli bir ekran
-palette çıkıp tıklanınca hub'a geri atmaz. **Kurşun Dağıtım route'u ise bilinçli olarak
-her zaman açıktır**; artık menü de onunla hizalı olduğu için tuhaflık kalmadı.
+1. **Kurşun Sırası (bekleyen)** — kurşun adımında bekleyen iş emirleri. Sürükle-bırak
+   sıralama + "Acil" işaretleme **her iki rejimde de** çalışır. Bayrak **AÇIKSA** her
+   satırda ayrıca **makine seçici + "Ata"** çıkar.
+2. **Makinelerde** — dağıtılmış işler, makine bazında gruplu (iptal / "İşi Bitir").
+   Yalnız dağıtılmış iş VARSA çizilir.
 
-**Sıralama/acil verisi hiç silinmez:** gizleme salt görünürlüktür. Bayrak kapatılıp
-Kurşun Sırası geri geldiğinde `priority` / `isUrgent` kaldığı yerdedir.
+> **Bayrak KAPALIYKEN bu ekran eski "Kurşun Sırası"nın birebir işini görür.** Bayrağı
+> kapatmak hiçbir işi ekransız bırakmaz: bekleyen liste durur, daha önce dağıtılmış
+> işler "Makinelerde" bölümünde bitirilmeye devam eder.
 
-**Neden bayrak AÇIKKEN Kurşun Sırası'nın *sonunda* kaybolması doğru:** o ekranın tek
-işi sıra numarası vermekti ve o sıranın tek tüketicisi **kurşun tabletiydi**. Bypass'ın
-tanımı "bu makinelerde tablet yok" olduğuna göre, tablet rejiminde iş kalmadığı anda
-sırayı okuyacak kimse de kalmaz — ekranı açık bırakmak planlamacıya hiçbir şeye etki
-etmeyen bir sürükle-bırak sunar. İzleme ve **acil işaretleme** bypass rejiminde
-**Kurşun Dağıtım** ekranındadır ve **makine bazında gruplanır**.
+**Sıralama yetkisi genişledi:** `PATCH /api/kursun-qc/queue/reorder` artık
+`quality:write` **|** `workorder:distribute` **|** `mobile:kursun-dagitim` kabul eder
+(eskiden yalnız `quality:write`). Birleşik ekranda bekleyen liste ile dağıtım listesi
+aynı liste olduğu için dağıtımcının da sıralayabilmesi gerekiyor.
 
-#### Sayaçlar nereden geliyor — `GET /api/kursun-bypass/visibility`
+**Sıralama/acil verisi hiç silinmez:** `priority` / `isUrgent` bayrak durumundan
+bağımsız olarak kaydedilir ve korunur.
 
-Menüyü çizen **çok hafif** bir uçtur (bir ayar okuması + iki `count`; liste/gövde YOK).
-Üç sayı döner ve **kuralı backend UYGULAMAZ** — karar istemcidedir:
+**SIRALAMA İKİ YERDE ÇALIŞIR:**
 
-| Alan | Anlamı |
-|---|---|
-| `flagEnabled` | `production.kursunBypassEnabled` |
-| `pendingAssignmentCount` | açık dağıtım: `completedAt IS NULL AND cancelledAt IS NULL` |
-| `tabletRegimeCount` | tablet rejiminde bekleyen kurşun adımı: `PROCESS_QC` adımı **+** açık hareketi olan top var **+** iş emri `PLANNED`/`IN_PROGRESS` **+** o adımda açık atama YOK |
+1. **Bekleyen kuyrukta** — hangi işin sıradaki olduğunu belirler.
+2. **Makine İÇİNDE** — o makinedeki işlerin hangi sırayla yapılacağını belirler.
+   Operatöre kâğıt elden verildiği için bu karar planlamacınındır ve bir yerde
+   yazılı olmalıdır.
 
-> `tabletRegimeCount` **uygunluk hesaplamaz**: bypass'a dağıtılamayan (dijital iz
-> taşıyan) adım da sayıya **girer**. Doğrusu budur — o adım tam olarak "tablette
-> işlenecek iş"tir ve planlamacının görmesi gereken şeydir.
+İkisi de aynı alanı (`WorkOrderStep.priority`) ve aynı ucu kullanır; çakışmaz, çünkü
+bir adım aynı anda ya bekleyendir ya bir makinededir ya da tabletin açık-kart
+listesindedir — üçü birbirini dışlar.
 
-Uç, gizlediği iki ekranın izinlerinin **birleşimine** açıktır (`quality:read`,
-`quality:write`, `workorder:distribute`, `mobile:kk2-kursun`, `mobile:kursun-dagitim`) —
-dar tutulsaydı kalite kullanıcısı 403 alır, sayıyı çözemez ve karo hep gizli/hep görünür
-kalırdı. Hassas veri dönmez: iş emri numarası, müşteri, metraj, makine, kişi adı YOK.
+> **Satırlar makineler ARASINDA sürüklenemez** (her makine kartının kendi sürükleme
+> alanı vardır). Makine değiştirmek bir yeniden ATAMA'dır: **Kaldır** → tekrar
+> **Ata**. Kazara bir sürükleme hareketiyle iş başka makineye geçmesin diye bilinçli.
 
-#### "Ekran neden şimdi geldi / neden kayboldu?" — operatöre verilecek cevap
+**EKRAN YERLEŞİMİ — havuz + makine başına bir SEKME.**
+
+| Sekme | İçerik | Toplu aksiyonlar |
+|---|---|---|
+| **Havuz** | Kurşun adımında bekleyen, makineye verilmemiş işler | seç → **Dağıt** (hedef makine) |
+| **&lt;Makine adı&gt;** | O makineye dağıtılmış işler | seç → **Havuza Al** / **Taşı** (başka makine) |
+
+Sekme şeridi her sekmede **iş adedi + metraj** (ve varsa bayat rozeti) gösterir —
+"hangi makine ne kadar dolu" sorusu sekmeye geçmeden yanıtlanır. İşi olmayan
+makinenin de sekmesi vardır; pasifleşmiş ama üstünde açık iş kalan makine
+`(pasif)` etiketiyle listelenir (o işler havuza döndürülebilsin).
+
+Satırlar **sekmenin içinde** sürüklenip sıralanır; makineler arasında
+sürüklenemez — makine değiştirmek **Taşı** aksiyonuyla, hedef açıkça
+seçilerek yapılır.
+
+> **⚠️ TOPLU İŞLEM SONUCU PARÇALI OLABİLİR.** Her satır kendi transaction'ında
+> işlenir; hepsi-ya-hiç DEĞİLDİR. Uygunluğunu yitirmiş satırlar ATLANIR ve
+> ekranda sebebiyle listelenir ("2 iş emri dağıtıldı, 1 tanesi atlandı").
+> Havuz çubuğu seçim anında da uyarır: "N tanesi dağıtıma uygun değil, atlanacak".
+> Bu bir kusur değil karardır: bir satır yüzünden diğer 49'un dağıtımını geri
+> almak planlamacının niyetine aykırıdır ve dağıtım zaten geri alınabilir.
+
+### 3. Bayrak AÇIKKEN kurşun TABLETİ salt-okunur olur
+
+> **2026-08-05 kullanıcı kararı:** *"kurşun istasyonu kartı okutursa sadece bilgi görür,
+> hiçbir yetkisi yoktur — bypass açıkken."*
+
+Kart yine **açılır** (operatör "bende ne kadar mal var" görebilmeli) ama ekranda hiçbir
+yazma aksiyonu çizilmez; yerine mavi bir bilgi paneli çıkar. Sunucu tarafında da BEŞ
+yazma yolu birden 409 döner: KK2 tamamlama · hata kaydı · tablet adım kapatma · açık
+kumaş açma · kurşun bitirme.
+
+**⚠️ KİLİT "BAYRAK AÇIKSA HER ADIM" DEĞİLDİR — "bayrak açık VE adım dağıtıma UYGUN"
+ise kilitlenir.** Bu ayrım load-bearing'dir: kurşundan sonra **Tambur GELMEYEN** bir
+rotada (örn. kurşun → zımpara → tambur) bypass kapanışını yapacak istasyon yoktur, yani
+kör bir kilit o iş emrini **ne tablette işlenebilir ne dağıtılabilir** hale getirir —
+hata vermeden, log bırakmadan. Uygun olmayan adımlar tablette yürümeye **devam eder**.
+
+| Adımın durumu (bayrak AÇIK) | Tablet | Ekranda ne yazar |
+|---|---|---|
+| Bir kurşun makinesine **dağıtılmış** | 409 | "Bu iş `<makine>` makinesine dağıtıldı — kâğıtla işleniyor. Tambur'da kart okutulduğunda kurşun adımı kapanır." |
+| Dağıtıma **uygun**, henüz dağıtılmamış | 409 | "Kurşun dağıtımı açık — bu iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılacak." |
+| Dağıtıma **uygun değil** (rota Tambur'la bitmiyor / eski KK2/hata kaydı var) | **Serbest** | — (ekran normal çalışır) |
+
+> **⚠️ APK ZORUNLU:** salt-okunur kararını backend `KursunStepSummary.tabletReadOnly`
+> ile bildirir. **Eski APK bu alanı görmez** → operatör yazmaya çalışır ve ham 409 yer.
+> Backend + Electron + APK **aynı pencerede** dağıtılmalıdır.
+
+#### `GET /api/kursun-bypass/visibility` — ARTIK KULLANILMIYOR
+
+Uç **duruyor** ama hiçbir yeni istemci çağırmıyor: menü görünürlüğü saf izne indi.
+**Silinmedi**, çünkü sahadaki **eski APK'lar** onu hâlâ yokluyor (uygulama öne
+geldiğinde + modül seçim ekranında); kaldırmak, backend deploy'u ile APK dağıtımı
+arasındaki pencerede o tabletlerde 404 üretirdi. Tüm APK'lar yenilendikten sonra
+kaldırılabilir.
+
+#### "Ekran neden geldi / neden kayboldu?" — operatöre verilecek cevap
 
 | Soru | Cevap |
 |---|---|
-| Bayrağı açtım, **Kurşun Sırası hâlâ duruyor** | Tablette dokunulmuş, dağıtılamayan iş emri var. O işler bitince ekran kendiliğinden kaybolur. |
-| Bayrağı kapattım, **Kurşun Dağıtım hâlâ duruyor** | Bitmemiş dağıtım var. Ekrandan tamamlayın ya da iptal edin; sonuncusu kapanınca ekran kendiliğinden kaybolur. |
-| Ekran **hemen** kaybolmadı/gelmedi | Sayaç önbelleklidir: Electron ~45 sn, mobil ~60 sn. Dağıt/iptal/bitir işlemlerinden **hemen sonra** ve mobilde uygulama öne getirildiğinde anında tazelenir. Sayfayı yenilemek de yeterlidir. |
-| Mobilde ekran hiç yok | Önce izin (`mobile:kursun-dagitim`), sonra koşul. İzin yoksa sayaç hiç sorulmaz. |
-| Sayaç okunamadı (yetki/ağ hatası) | Davranış **eski saf bayrak kuralına** düşer (fail-closed): bilinmeyen sayı "iş var" sayılmaz. |
-
-**Doğrulama (salt-okunur) — ekranın görünmesi gerekiyor mu:**
-
-```sql
--- İki sayaç: ucun döndürdüğü değerlerin bağımsız karşılığı
-SELECT
-  (SELECT count(*) FROM kursun_bypass_assignments
-    WHERE "completedAt" IS NULL AND "cancelledAt" IS NULL)          AS bekleyen_dagitim,
-  (SELECT count(*)
-     FROM work_order_steps s
-     JOIN stations    st ON st.id = s."stationId"
-     JOIN work_orders w  ON w.id  = s."workOrderId"
-    WHERE st.kind = 'PROCESS_QC'
-      AND w.status IN ('PLANNED','IN_PROGRESS')
-      AND EXISTS (SELECT 1 FROM roll_movements m
-                   WHERE m."workOrderStepId" = s.id AND m."exitedAt" IS NULL)
-      AND NOT EXISTS (SELECT 1 FROM kursun_bypass_assignments a
-                       WHERE a."workOrderStepId" = s.id
-                         AND a."completedAt" IS NULL
-                         AND a."cancelledAt" IS NULL))               AS tablet_rejimi,
-  COALESCE((SELECT value = 'true'::jsonb OR value = '"true"'::jsonb
-              FROM system_settings
-             WHERE key = 'production.kursunBypassEnabled'), false)    AS bayrak;
--- Kurşun Sırası  görünmeli ⇔ bayrak false  VEYA tablet_rejimi   > 0
--- Kurşun Dağıtım görünmeli ⇔ bayrak true   VEYA bekleyen_dagitim > 0
-```
-
-> Bayrak karşılaştırması **iki temsili birden** kabul eder (`true` ve `"true"`) —
-> `asBoolean` (`system-setting.service.ts`) de öyle yapar. Panel/`setFeatureFlags`
-> **jsonb boolean** yazar; ham `UPDATE ... SET value = '"true"'` gibi elle bir
-> müdahale jsonb **string** bırakabilir. Uygulama ikisini de doğru okur, ama düz
-> `value::text = 'true'` yazan bir kontrol sorgusu string temsilde **yanlış**
-> "kapalı" der.
-
----
+| Kurşun Planlama karosu **hiç görünmüyor** | İzin yok. `quality:write` ya da `workorder:distribute` gerekir; izin verildikten sonra kullanıcı **yeniden giriş** yapmalı (JWT'de izin donuyor). |
+| Bayrağı kapattım, ekran **hâlâ duruyor** | Doğrusu bu. Ekran artık bayraktan bağımsız; bayrak kapalıyken bekleyen kuyruğu göstermeye ve sıralamaya devam eder. |
+| **Makine seçici / "Ata" butonu yok** | Bayrak KAPALI (ya da kullanıcıda `workorder:distribute` yok). Genel Ayarlar → Kurşun bypass = AÇIK. |
+| Kurşun tabletinde **hiçbir butona basamıyorum** | Bayrak açık ve bu iş dağıtım rejiminde. Kart üstündeki mavi bandı okuyun; iş Kurşun Planlama'dan dağıtılır, Tambur'da kart okutulunca kapanır. |
+| Kurşun tabletinde **hâlâ çalışabiliyorum** (bayrak açıkken) | O iş emri dağıtıma uygun değil (rota Tambur'la bitmiyor ya da adımda eski KK2/hata kaydı var). Doğru davranış budur — o iş tablette bitirilir. |
+| Mobilde Kurşun Dağıtım ekranı yok | `mobile:kursun-dagitim` izni yok. |
 
 ## Doğrulama sorguları (özellik açıldıktan sonra)
 

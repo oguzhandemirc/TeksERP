@@ -63,10 +63,15 @@ export interface FeatureFlags {
   /** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı (default false).
    *  Backend ENFORCE eder ama YALNIZ yeni atama oluşturmayı kapılar — dağıtılmış iş
    *  emirleri bayrak kapansa da bypass rejiminde biter (rejim atama satırında kalıcı).
-   *  Mobilde "Kurşun Dağıtım" ekranının görünürlüğünü ETKİLER ama tek başına
-   *  BELİRLEMEZ: bayrak kapalıyken de bekleyen dağıtım varsa ekran görünür
-   *  (bkz. hooks/useVisibleScreens + hooks/useKursunBypassVisibility). */
+   *  2026-08-05: mobilde "Kurşun Dağıtım" ekranının GÖRÜNÜRLÜĞÜNÜ etkilemez —
+   *  ekran yalnız izne bağlı (bkz. hooks/useVisibleScreens). Bayrak ayrıca kurşun
+   *  TABLETİNİ salt-okunur yapar; kararı adım adım backend bildirir
+   *  (`KursunStepSummary.tabletReadOnly`). */
   kursunBypassEnabled: boolean;
+  /** Müşteri şubeleri (sevk noktaları) kullanılıyor mu (default TRUE). Kapalıysa
+   *  sipariş formu şube alanını hiç göstermez. Yalnız UI rehberi — backend
+   *  `branchId` gönderilirse yine doğrular. */
+  customerBranchesEnabled: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -90,6 +95,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   mobileLockOnBackground: true,
   mobileRasterEnabled: false,
   kursunBypassEnabled: false,
+  // Backend/Electron ile aynı yön: şube kullanımı varsayılan AÇIK.
+  customerBranchesEnabled: true,
 };
 
 export const featureFlagService = {
