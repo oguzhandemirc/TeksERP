@@ -348,8 +348,9 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
               <View style={styles.cardStaleInner}>
                 <Icon source="alert" size={16} color={colors.warning} />
                 <Text style={styles.cardStaleText}>
-                  Basılı refakat kartı güncel değil — kart basıldıktan sonra parti / sevk /
-                  iş emri içeriği değişti. <Text style={styles.cardStaleCta}>Yeniden basmak için dokunun.</Text>
+                  Sahadaki refakat kartı güncel değil — kart basıldıktan sonra parti / sevk /
+                  iş emri içeriği değişti. Yeni baskı iş emrinin şu anki hâlini basar.{" "}
+                  <Text style={styles.cardStaleCta}>Basmak için dokunun, eski kâğıdı değiştirin.</Text>
                 </Text>
                 {printing && <ActivityIndicator size={16} />}
               </View>

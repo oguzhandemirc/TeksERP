@@ -7,9 +7,12 @@
 // sevkinde kalanlar YENİ parti alır; çok partili sevkte K11 merge kaynakları yutar.
 // Üçünde de basılı kâğıt sessizce yanlışlanıyordu — hiçbir yerde uyarı yoktu.
 //
-// Bu test kuralın İKİ yönünü de kilitler:
+// Bu test kuralın ÜÇ yönünü de kilitler:
 //   (a) işaretlenmesi GEREKEN olaylar bayrağı kaldırıyor mu,
-//   (b) temizlemesi GEREKEN yollar temizliyor, GEREKMEYENLER dokunmuyor mu.
+//   (b) temizlemesi GEREKEN yollar temizliyor, GEREKMEYENLER dokunmuyor mu,
+//   (c) §6 — baskı GÜNCEL planı basıyor ve içerik değiştiyse OTOMATİK revize
+//       ediyor mu (bayrağı temizlemek tek başına yetmez: bayat uyarısı sönerken
+//       kâğıda eski plan basılırsa hata sessizce kalıcılaşır).
 //
 // ⚠️ (b)'nin ikinci yarısı asıl kırılgan taraf: `GET /traveler-cards/:id/html`
 // bayrağı TEMİZLEMEMELİ — o uç önizlemeyi de besler. Biri "kolaylık olsun" diye
@@ -197,7 +200,9 @@ async function testClearing(woId: string): Promise<void> {
     return;
   }
 
-  // (a) print-event temizler + versiyon ARTIRMAZ (içerik değişmedi, kâğıt yenilendi)
+  // (a) print-event temizler; iş emri içeriği DEĞİŞMEDİĞİ için versiyon ARTMAZ
+  //     (aynı belgenin ikinci kopyası revizyon değildir — parti/sevk değişikliği
+  //     plan snapshot'ına girmez, canlı çözülür).
   await prisma.$transaction((tx) => markTravelerCardDirtyTx(tx, woId));
   check("ön koşul: bayrak açık", await dirty(woId));
   await cardService.recordPrintEvent(card.id);
@@ -207,9 +212,9 @@ async function testClearing(woId: string): Promise<void> {
     select: { version: true },
   });
   check(
-    "print-event versiyonu ARTIRMAZ",
+    "içerik değişmemişse print-event versiyonu ARTIRMAZ",
     afterPrint?.version === card.version,
-    "baskı olayı içerik revizyonu değildir",
+    "parti/sevk kaynaklı bayatlık revizyon DEĞİLDİR",
   );
 
   // (b) ⚠️ getCardHtml TEMİZLEMEZ — önizleme de aynı ucu çağırır.
@@ -224,6 +229,124 @@ async function testClearing(woId: string): Promise<void> {
   // (c) reprint temizler (snapshot'ı da tazeler)
   await cardService.reprint(woId, "bekçi testi — yeniden basım");
   check("reprint bayrağı temizler", (await dirty(woId)) === false);
+}
+
+// ── 6) OTOMATİK REVİZYON — plan CANLI, sunum DONMUŞ ─────────────────────────
+// Kart kontrollü belgedir (ISO 9001 §7.5.3): sahaya inen kâğıt YÜRÜRLÜKTEKİ planı
+// göstermeli. Eskiden `getCardHtml` doğuşta donmuş snapshot'ı basıyor, `print-event`
+// ise bayrağı temizleyip snapshot'a DOKUNMUYORDU → iş emri içeriği değiştiğinde
+// operatör "önizleme günceldir" yazan bir bantla ESKİ planı basıyor ve uyarı da
+// sönüyordu (sessizce yanlış kâğıt). Bu bölüm dört kuralı birden kilitler.
+async function testAutoRevision(woId: string): Promise<void> {
+  console.log("\n── 6) Otomatik revizyon ──");
+
+  const card0 = await prisma.travelerCard.findUnique({
+    where: { workOrderId: woId },
+    select: { id: true, version: true, snapshot: true },
+  });
+  if (!card0) {
+    check("kart bulundu", false);
+    return;
+  }
+  // (a) Değişiklik yokken baskı = düz kopya (revizyon DEĞİL)
+  await cardService.recordPrintEvent(card0.id);
+  const v1 = await prisma.travelerCard.findUnique({
+    where: { id: card0.id },
+    select: { version: true },
+  });
+  check("değişiklik yokken baskı sürüm ARTIRMAZ", v1?.version === card0.version);
+
+  // (b) İş emri içeriği değişti → önizleme CANLI planı basar
+  await prisma.workOrder.update({ where: { id: woId }, data: { width: 155 } });
+  const html = await cardService.getCardHtml(card0.id);
+  check(
+    "getCardHtml ACTIVE kartta GÜNCEL planı basar",
+    html.includes("155 cm"),
+    "yürürlükteki plan sahaya iner (donmuş kopya değil)",
+  );
+
+  // (c) Önizlemedeki sürüm = basıldığında yazılacak sürüm. Ayrışırlarsa kâğıttaki
+  //     revizyon numarası içeriği tanımlamaz olur — revizyon kontrolü çöker.
+  const nextV = card0.version + 1;
+  check("önizleme 'bu baskı v{N} olacak' der", html.includes(`v${nextV} ·`), `v${nextV}`);
+  const untouched = await prisma.travelerCard.findUnique({
+    where: { id: card0.id },
+    select: { version: true },
+  });
+  check(
+    "önizleme kart satırını DEĞİŞTİRMEZ (GET yan etkisiz)",
+    untouched?.version === card0.version,
+    "önizleyip kapatan kullanıcı hiçbir şey yazmaz",
+  );
+
+  // SUNUM sondası: kartın donmuş sayfa boyutunu, `resolveForPrint`'in döndüreceğinin
+  // TERSİNE çevir. Baskı yolu sunumu karttan taşımak yerine yeniden çözerse bu değer
+  // sessizce geri döner — kontrol (e) ancak bu ayrım kurulduğunda kırmızı verebilir
+  // (fixture'da şablon satırı yok; iki yol da aynı config'i üretir → kontrol kör kalırdı).
+  const cfgStored = ((card0.snapshot as Record<string, unknown> | null)?.config ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const flipped = cfgStored.pageSize === "A4" ? "A5" : "A4";
+  await prisma.travelerCard.update({
+    where: { id: card0.id },
+    data: {
+      snapshot: {
+        ...(card0.snapshot as Record<string, unknown>),
+        config: { ...cfgStored, pageSize: flipped },
+      } as never,
+    },
+  });
+
+  // (d) Baskı → revizyon: sürüm önizlemedeki numaraya çekilir, basılan plan kaydedilir
+  await cardService.recordPrintEvent(card0.id);
+  const after = await prisma.travelerCard.findUnique({
+    where: { id: card0.id },
+    select: { version: true, snapshot: true },
+  });
+  const snap = after?.snapshot as Record<string, unknown> | null;
+  check("içerik değişmişse baskı sürümü ARTIRIR", after?.version === nextV, `v${after?.version}`);
+  check("basılan plan snapshot'a kaydedilir", snap?.width === 155, "snapshot = son basılan kopya");
+
+  // (e) SUNUM baskı yolunda TAZELENMEZ — şablon/sayfa yalnız `reprint` ile değişir
+  //     ("şablonu değiştirdim, sahadaki kartlar niye değişmedi?" kuralı).
+  check(
+    "baskı SUNUMU (şablon/config) tazelemez",
+    (snap?.config as Record<string, unknown> | undefined)?.pageSize === flipped,
+    "sunum kartta donmuş kalır — yalnız reprint tazeler",
+  );
+
+  // (f) Aynı içerikte ikinci baskı yine düz kopyadır
+  await cardService.recordPrintEvent(card0.id);
+  const v3 = await prisma.travelerCard.findUnique({
+    where: { id: card0.id },
+    select: { version: true },
+  });
+  check("aynı içerikte ikinci baskı sürüm ARTIRMAZ", v3?.version === nextV, "sürüm şişmesi yok");
+
+  // (g) ACTIVE OLMAYAN kart REVİZE EDİLMEZ — elde olan tarihsel kopyadır; iptal
+  //     edilmiş kartı bugünkü planla tazelemek belgeyi geçmişe dönük değiştirmektir.
+  await prisma.travelerCard.update({
+    where: { id: card0.id },
+    data: { status: TravelerCardStatus.VOIDED },
+  });
+  await prisma.workOrder.update({ where: { id: woId }, data: { width: 166 } });
+  const voidHtml = await cardService.getCardHtml(card0.id);
+  check(
+    "VOIDED kart DONMUŞ kopyadan basılır",
+    voidHtml.includes("155 cm") && !voidHtml.includes("166 cm"),
+    "geçersiz kart canlı planla tazelenmez",
+  );
+  await cardService.recordPrintEvent(card0.id);
+  const v4 = await prisma.travelerCard.findUnique({
+    where: { id: card0.id },
+    select: { version: true },
+  });
+  check("VOIDED kartta baskı sürüm ARTIRMAZ", v4?.version === nextV);
+  await prisma.travelerCard.update({
+    where: { id: card0.id },
+    data: { status: TravelerCardStatus.ACTIVE },
+  });
 }
 
 // ── 5) Helper sözleşmesi ────────────────────────────────────────────────────
@@ -279,6 +402,7 @@ async function main(): Promise<void> {
     await testBatchSurgery(woId, rollIds);
     await testClearing(woId);
     await testHelperContract(woId);
+    await testAutoRevision(woId);
   } catch (e) {
     fail++;
     console.log(`  ✗ BEKLENMEYEN HATA: ${e instanceof Error ? e.message : String(e)}`);

@@ -24,9 +24,13 @@ interface Props {
 /**
  * Refakat Kartı — ÖNİZLEME = BASKI = MOBİL (tek kaynak). Hem ekran önizlemesi hem
  * baskı backend `GET /traveler-cards/:id/html` çıktısını (iframe srcDoc /
- * printHtmlString) kullanır → format her cihazda birebir aynı. İçerik kartın
- * donmuş snapshot'ından üretilir; QR sunucuda gömülür. (Eski @react-pdf
- * TravelerCardPdfDocument yolu kaldırıldı.)
+ * printHtmlString) kullanır → format her cihazda birebir aynı. QR sunucuda gömülür.
+ *
+ * İÇERİK CANLIDIR (2026-08-05): ACTIVE kartta HTML iş emrinin GÜNCEL hâlinden
+ * üretilir ve `print-event` basılan planı kaydeder — içerik değiştiyse otomatik
+ * `version++`. Bu yüzden önizlemedeki "v" numarası kartın DB'deki mevcut sürümü
+ * değil, **bu baskının alacağı** sürümdür; ikisini karıştırıp ekranda ayrı bir
+ * "mevcut sürüm" göstergesi yazma.
  */
 export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props) {
   const cardQuery = useQuery({
@@ -96,8 +100,8 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
         <DialogHeader>
           <DialogTitle>Refakat Kartı — Önizleme</DialogTitle>
           <DialogDescription>
-            Basım anında dondurulan resmi kart — önizleme baskıyla birebir aynı.
-            Partiler her baskıda güncel okunur.
+            Önizleme baskıyla birebir aynı. İçerik her baskıda iş emrinin güncel
+            hâlinden üretilir; plan değiştiyse kart yeni versiyona geçer.
           </DialogDescription>
         </DialogHeader>
 
@@ -105,10 +109,12 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
           <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              <strong>Bu kartın basılı kopyası güncel değil.</strong> Kart basıldıktan
-              sonra parti, fason sevki veya iş emri içeriği değişti — sahadaki kâğıtta
-              eksik/yanlış parti no olabilir. Aşağıdaki önizleme <em>günceldir</em>;
-              yazdırıp eskisiyle değiştirin.
+              <strong>Sahadaki basılı kopya güncel değil.</strong> Kart basıldıktan
+              sonra parti, fason sevki veya iş emri içeriği değişti — eldeki kâğıtta
+              eksik/yanlış bilgi olabilir. Aşağıdaki önizleme iş emrinin{" "}
+              <em>şu anki hâlidir</em>: yazdırın ve sahadaki eski kâğıtla değiştirin.
+              İçerik değiştiyse kart, yazdırdığınızda üstünde yazan versiyona revize
+              edilir.
             </span>
           </div>
         )}

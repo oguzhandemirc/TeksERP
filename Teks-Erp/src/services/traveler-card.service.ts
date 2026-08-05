@@ -15,6 +15,19 @@
 //   - Scan (tarama) ACTIVE olmayan kart ile reddedilir.
 //   - WO COMPLETED / CANCELLED olunca kart COMPLETED / VOIDED'a çekilir
 //     (setWorkOrderCardStatuses fan-out helper).
+//
+// ⚠️ PLAN CANLI, SUNUM DONMUŞ (2026-08-05 — otomatik revizyon):
+//   Kart kontrollü bir belgedir (ISO 9001 §7.5.3) ve sahaya inen kâğıt HER ZAMAN
+//   yürürlükteki planı göstermelidir. Bu yüzden ACTIVE kartın İÇERİĞİ (rota,
+//   sipariş, hedef spec) baskı/önizleme anında iş emrinin GÜNCEL hâlinden üretilir
+//   — SAP PP'nin "değişiklik baskısı" (Änderungsdruck) davranışı. `snapshot` artık
+//   "doğuşta dondurulan plan" değil **son BASILAN kopyanın kaydıdır**; baskı olayı
+//   onu tazeler ve içerik gerçekten değiştiyse `version++` eder (otomatik revizyon).
+//   Kartın SUNUMU (şablon + sayfa/config) buna DAHİL DEĞİLDİR: o donmuş kalır ve
+//   yalnız açık `reprint` ile tazelenir ("şablonu değiştirdim, sahadaki kartlar niye
+//   değişmedi?" cevabı hâlâ "yeniden bas"tır). Tek karar noktası: `resolvePrintPlan`
+//   — önizleme, baskı ve versiyon numarası ondan beslenir; ayrıştırırsan önizleme
+//   "v2" der, baskı "v3" yazar.
 // =============================================================================
 
 import { Request } from "express";
@@ -54,6 +67,41 @@ const TRAVELER_SORTABLE_FIELDS = ["printedAt", "cardNumber", "status", "version"
 /** Kart kodu kabulü — İE (yeni tek-kod) birincil, RK (eski kart) legacy toleransı. */
 function isCardCode(code: string): boolean {
   return isDailyCode(code, "IE") || isDailyCode(code, "RK");
+}
+
+/**
+ * PLAN karşılaştırma anahtarı — iki snapshot'ın İÇERİK olarak aynı olup olmadığını
+ * anahtar sırasından bağımsız söyler (otomatik revizyon kararı bunun üzerine kurulu).
+ *
+ * `config` + `template` BİLEREK DIŞARIDA: onlar kartın SUNUMU'dur, içeriği değil.
+ * Şablon/sayfa düzenlemesi revizyon sayılsaydı, bir kez letterhead değiştirildiğinde
+ * sahadaki HER kart bir sonraki baskısında sürüm atlar ve revizyon numarası "içerik
+ * değişti" anlamını yitirirdi. Aynı ayrım `contentDirty` tarafında da geçerli —
+ * şablon düzenlemesi kartı bayat İŞARETLEMEZ (markTravelerCardDirtyTx çağrılmaz).
+ *
+ * ⚠️ Anahtar sırası bağımsızlığı ŞART: Prisma alan sırasını garanti etmez, düz
+ * `JSON.stringify` karşılaştırması hiç değişmemiş kartı "revize edildi" sayıp her
+ * baskıda sürüm şişirirdi. Aynı sebeple `buildPlan` dizileri deterministik sıralar.
+ */
+function planKey(snapshot: unknown): string {
+  const sortDeep = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sortDeep);
+    if (v && typeof v === "object") {
+      const src = v as Record<string, unknown>;
+      return Object.keys(src)
+        .sort()
+        .reduce<Record<string, unknown>>((acc, k) => {
+          acc[k] = sortDeep(src[k]);
+          return acc;
+        }, {});
+    }
+    return v;
+  };
+  if (!snapshot || typeof snapshot !== "object") return "";
+  const plan = { ...(snapshot as Record<string, unknown>) };
+  delete plan.config;
+  delete plan.template;
+  return JSON.stringify(sortDeep(plan));
 }
 
 // Belge Şablonu (Refakat Kartı Ayarları) canlı önizlemesi için örnek içerik.
@@ -195,8 +243,14 @@ export class TravelerCardService {
 
   /**
    * Yeniden basım — AYNI satırda: snapshot'ı GÜNCEL WO'dan tazeler + version++.
-   * Karekod (İE) DEĞİŞMEZ. WO'ya sipariş/müşteri eklendiyse operatör bununla güncel
-   * kartı basar. Yalnız ACTIVE kart yeniden basılabilir (iptal/tamamlanmış WO'da 409).
+   * Karekod (İE) DEĞİŞMEZ. Yalnız ACTIVE kart yeniden basılabilir (iptal/tamamlanmış
+   * WO'da 409).
+   *
+   * ⚠️ İÇERİK için ARTIK GEREKLİ DEĞİL (2026-08-05): düz baskı zaten güncel planı
+   * basıp gerekiyorsa otomatik revize ediyor. Bu yolun kalan tek farkı SUNUMU da
+   * tazelemesi (`buildSnapshot` → güncel şablon/config) ve gerekçe istemesi — yani
+   * "şablonu/puntoyu değiştirdim, bu kart da yeni tasarımla bassın" durumu.
+   * Bugün hiçbir istemci çağırmıyor; sunumu tazelemenin arayüzde karşılığı yok.
    */
   async reprint(
     workOrderId: string,
@@ -262,8 +316,14 @@ export class TravelerCardService {
 
   /**
    * BASKI OLAYI — "bu kart fiziksel olarak basıldı" bildirimi. Bayat işaretini
-   * (`contentDirty`) temizler + `printedAt`'i tazeler. Yeni VERSİYON doğurmaz,
-   * snapshot'a DOKUNMAZ (içerik değişmedi, yalnız kâğıt yenilendi).
+   * (`contentDirty`) temizler, `printedAt`'i tazeler ve **basılan planı kaydeder**.
+   *
+   * OTOMATİK REVİZYON (2026-08-05): snapshot artık "doğuşta donan içerik" değil
+   * *son basılan kopyanın kaydı*dır. Baskıda plan yeniden çözülür; iş emri içeriği
+   * gerçekten değiştiyse `version++` (revizyon), değişmediyse sürüm AYNI kalır
+   * (aynı belgenin ikinci kopyası revizyon değildir). Karar `resolvePrintPlan`'da —
+   * önizleme aynı fonksiyondan beslendiği için kâğıda basılan "v" ile DB'ye yazılan
+   * "v" tanım gereği aynıdır. Sunum (şablon/sayfa) bu yolda TAZELENMEZ.
    *
    * ⚠️ NEDEN AYRI UÇ — `GET /traveler-cards/:id/html` bayrağı TEMİZLEYEMEZ:
    * o uç önizleme tarafından da çağrılır ("HTML almak" ≠ "basmak"), ve GET'in
@@ -273,17 +333,42 @@ export class TravelerCardService {
    *
    * `contentDirty: true` koşulu yok — baskı olayı her hâlükârda `printedAt`
    * tazeler; koşullu updateMany "zaten temizdi" durumunda tarihi güncellemezdi.
+   *
+   * ⚠️ BİLİNEN SINIR (bilinçli, makinesi kurulmadı): HTML'i çekmek ile "basıldı"
+   * demek AYRI isteklerdir. İş emri tam o saniyelerde düzenlenirse kâğıt A planını
+   * gösterir, burada kaydedilen B planı olur (ikisi de aynı sürüm numarasını taşır)
+   * ve bayat işareti bir kez boşa temizlenir. Pencere saniyelerdir, sınıf olarak
+   * YENİ DEĞİL (canlı partiler baştan beri aynı boşluğu taşıyor) ve bir sonraki WO
+   * düzenlemesi işareti geri koyar. Gerçekten sorun olursa doğru çözüm istemcinin
+   * bastığı sürümü geri bildirmesi + sunucunun sürüm oynamışsa 409 vermesidir;
+   * "her ihtimale karşı temizleme" gibi yarım çözümler işareti tümden güvenilmez yapar.
    */
   async recordPrintEvent(cardId: string, userId?: string): Promise<ApiResponse<null>> {
     const card = await prisma.travelerCard.findUnique({
       where: { id: cardId },
-      select: { id: true, cardNumber: true, status: true, contentDirty: true },
+      select: {
+        id: true,
+        cardNumber: true,
+        status: true,
+        contentDirty: true,
+        version: true,
+        snapshot: true,
+        workOrderId: true,
+      },
     });
     if (!card) throw AppError.notFound("Refakat kartı bulunamadı");
 
+    const plan = await this.resolvePrintPlan(card);
+
     await prisma.travelerCard.update({
       where: { id: cardId },
-      data: { contentDirty: false, printedAt: new Date(), printedById: userId ?? null },
+      data: {
+        contentDirty: false,
+        printedAt: new Date(),
+        printedById: userId ?? null,
+        snapshot: plan.snapshot as unknown as Prisma.InputJsonValue,
+        version: plan.version,
+      },
     });
 
     await AuditService.log({
@@ -291,10 +376,23 @@ export class TravelerCardService {
       action: "UPDATE",
       tableName: "TRAVELER_CARD",
       recordId: cardId,
-      newData: { cardNumber: card.cardNumber, event: "PRINT_EVENT", wasDirty: card.contentDirty },
+      // Revizyon ile düz kopya AYRI olaylardır: denetimde "bu kâğıt neden değişti"
+      // sorusunun cevabı sürüm numarasının yanında yazılı olmalı.
+      newData: {
+        cardNumber: card.cardNumber,
+        event: plan.revised ? "PRINT_REVISION" : "PRINT_EVENT",
+        wasDirty: card.contentDirty,
+        version: plan.version,
+      },
     });
 
-    return { success: true, data: null, message: "Baskı kaydedildi" };
+    return {
+      success: true,
+      data: null,
+      message: plan.revised
+        ? `Refakat kartı güncel içerikle basıldı — revizyon v${plan.version}`
+        : "Baskı kaydedildi",
+    };
   }
 
   /**
@@ -675,9 +773,70 @@ export class TravelerCardService {
   }
 
   /**
+   * BASILACAK PLANI ÇÖZ — önizleme, baskı ve versiyon numarasının TEK KAYNAĞI.
+   *
+   * Üç karar burada birlikte verilir, çünkü ayrıştıkları anda önizlemedeki "v2" ile
+   * DB'ye yazılan "v3" birbirinden kopar ve kâğıttaki revizyon numarası içeriği
+   * tanımlamaz olur (revizyon kontrolünün tamamı bu eşitliğe dayanır):
+   *
+   *   ① İÇERİK — ACTIVE kartta iş emrinin GÜNCEL hâli (yürürlükteki plan sahaya iner).
+   *   ② SUNUM  — şablon + sayfa/config kartta DONMUŞ kalır; yalnız `reprint` tazeler.
+   *   ③ SÜRÜM  — içerik gerçekten değiştiyse +1 (revizyon), aksi halde aynı.
+   *
+   * ⚠️ ACTIVE OLMAYAN kart (VOIDED/COMPLETED/REPRINTED) **hiç revize edilmez**:
+   * elde olan tarihsel bir kopyadır, iptal edilmiş kartın içeriğini bugünkü planla
+   * tazelemek belgeyi geçmişe dönük değiştirmek olurdu.
+   *
+   * ⚠️ İş emri okunamazsa (silinmiş/erişilemez) **eldeki snapshot'a düşülür**:
+   * baskı yolunu düşürmek, biraz eski bir kâğıt basmaktan kötüdür.
+   *
+   * ⚠️ `snapshot` NULL olan eski kartta sürüm ARTMAZ — karşılaştırılacak bir önceki
+   * içerik yok; revize edilecek bir şey de yok, sadece ilk kayıt oluşur.
+   */
+  private async resolvePrintPlan(card: {
+    status: TravelerCardStatus;
+    version: number;
+    snapshot: Prisma.JsonValue | null;
+    workOrderId: string;
+  }): Promise<{ snapshot: TravelerCardSnapshot; version: number; revised: boolean }> {
+    const stored = card.snapshot as unknown as TravelerCardSnapshot | null;
+    const frozen = async (): Promise<TravelerCardSnapshot> =>
+      stored ??
+      ((await this.buildSnapshot(prisma, card.workOrderId)) as unknown as TravelerCardSnapshot);
+
+    if (card.status !== TravelerCardStatus.ACTIVE) {
+      return { snapshot: await frozen(), version: card.version, revised: false };
+    }
+
+    const plan = await this.buildPlan(prisma, card.workOrderId);
+    if (!plan) return { snapshot: await frozen(), version: card.version, revised: false };
+
+    // SUNUM donmuş kalır — şablon düzenlemesi sahadaki kartı kendiliğinden
+    // değiştirmez ("yeniden bas" kuralı). Kartta sunum yoksa (eski/boş snapshot)
+    // güncel şablon çözülür, aksi halde kart hiç basılamazdı.
+    const presentation =
+      stored?.template && stored?.config
+        ? { template: stored.template, config: stored.config }
+        : await travelerTemplateService.resolveForPrint(null, prisma);
+
+    const snapshot = {
+      config: presentation.config,
+      template: presentation.template,
+      ...plan,
+    } as unknown as TravelerCardSnapshot;
+    const revised = stored != null && planKey(stored) !== planKey(snapshot);
+    return { snapshot, version: card.version + (revised ? 1 : 0), revised };
+  }
+
+  /**
    * Refakat kartının resmi HTML çıktısı — TEK KAYNAK (Electron + mobil aynı HTML).
-   * İçerik kartın DONMUŞ snapshot'ından; yoksa WO'dan canlı kurulur. QR = barkod (İE).
-   * Partiler snapshot'ta değil, canlı çözülür (bkz. resolveLiveBatches).
+   * İçerik `resolvePrintPlan`'dan gelir: ACTIVE kartta iş emrinin GÜNCEL hâli,
+   * geçersiz kartta donmuş kopya. QR = barkod (İE). Partiler zaten canlı çözülür
+   * (bkz. resolveLiveBatches).
+   *
+   * ⚠️ Basılan versiyon numarası da oradan gelir — kart henüz revize EDİLMEDİĞİ
+   * hâlde önizleme "bu baskı v2 olacak" der ve `recordPrintEvent` tam o numarayı
+   * yazar. GET yan etkisizdir: önizleyip kapatan kullanıcı hiçbir şey değiştirmez.
    *
    * `opts.pageSize` = TEK SEFERLİK sayfa boyutu ezmesi (baskı diyaloğundan). Kalıcı
    * ayarı da donmuş snapshot'ı da EZER ama HİÇBİR YERE YAZILMAZ ve yeni kart
@@ -701,14 +860,15 @@ export class TravelerCardService {
     });
     if (!card) throw new AppError("Refakat kartı bulunamadı", 404);
 
-    const frozen =
-      (card.snapshot as unknown as TravelerCardSnapshot | null) ??
-      ((await this.buildSnapshot(prisma, card.workOrderId)) as unknown as TravelerCardSnapshot);
+    const plan = await this.resolvePrintPlan(card);
     // Tek seferlik ezme yalnız BU render'ın kopyasına uygulanır — `card.snapshot`
-    // satırına dokunulmaz (donmuş belge korunur).
+    // satırına dokunulmaz (kartın kendi sayfa boyutu korunur).
     const snapshot: TravelerCardSnapshot = opts?.pageSize
-      ? { ...frozen, config: { ...(frozen.config ?? {}), pageSize: opts.pageSize } as TravelerCardConfig }
-      : frozen;
+      ? {
+          ...plan.snapshot,
+          config: { ...(plan.snapshot.config ?? {}), pageSize: opts.pageSize } as TravelerCardConfig,
+        }
+      : plan.snapshot;
 
     let qrSvg: string | null = null;
     try {
@@ -720,7 +880,8 @@ export class TravelerCardService {
     return renderTravelerCard(snapshot, {
       cardNumber: card.cardNumber,
       barcode: card.barcode,
-      version: card.version,
+      // Kâğıda basılan sürüm = baskı kaydedildiğinde yazılacak sürüm (tek kaynak).
+      version: plan.version,
       printedAt: card.printedAt.toISOString(),
       status: card.status,
       voidReason: card.voidReason,
@@ -759,13 +920,21 @@ export class TravelerCardService {
   }
 
   /**
-   * Basım anında WO içeriğini DONDURUR (kart snapshot'ı). Değişken veriler
-   * (top sayısı/metraj) plandan gelir; kartta müşteri/sipariş/rota sabit kalır.
+   * Kartın İÇERİĞİ (plan) — sunum (şablon/config) HARİÇ. Değişken veriler
+   * (top sayısı/metraj/parti) buraya girmez; onlar baskı anında canlı çözülür.
+   *
+   * ⚠️ Diziler DETERMİNİSTİK sıralanır (`targetProperties`, `orderLinks`). Prisma
+   * `orderBy` verilmeyen ilişkide satır sırasını garanti etmez; sıra oynadığında
+   * `planKey` karşılaştırması "içerik değişti" der ve hiç değişmemiş kart her
+   * baskıda sürüm atlardı. Sıra ayrıca kâğıttaki satır sırasıdır — sabit olması
+   * operatörün iki kopyayı karşılaştırabilmesi için de gerekli.
+   *
+   * @returns WO okunamazsa `null` (çağıran eldeki snapshot'a düşer).
    */
-  private async buildSnapshot(
+  private async buildPlan(
     client: Prisma.TransactionClient,
     workOrderId: string,
-  ): Promise<Prisma.InputJsonValue> {
+  ): Promise<Record<string, unknown> | null> {
     const wo = await client.workOrder.findUnique({
       where: { id: workOrderId },
       select: {
@@ -781,6 +950,7 @@ export class TravelerCardService {
         targetItem: { select: { code: true, name: true } },
         targetColor: { select: { name: true, hex: true } },
         targetProperties: {
+          orderBy: { propertyId: "asc" },
           select: { propertyId: true, property: { select: { name: true } } },
         },
         steps: {
@@ -795,6 +965,7 @@ export class TravelerCardService {
           },
         },
         orderLinks: {
+          orderBy: { orderLineId: "asc" },
           select: {
             orderLineId: true,
             orderLine: {
@@ -811,19 +982,9 @@ export class TravelerCardService {
         },
       },
     });
-    if (!wo) return {};
-    // ŞABLON BURADA DONAR (Faz 2). Kart basıldıktan sonra şablon düzenlense de
-    // bu kart aynı çıkar; `reprint` snapshot'ı tazelediği için YENİ şablonu alır
-    // — yani "şablonu değiştirdim, sahadaki kartlar niye değişmedi?" sorusunun
-    // cevabı tasarım gereği "yeniden bas"tır.
-    // `config` artık sistem ayarından DEĞİL şablondan gelir; şablon yoksa
-    // resolveForPrint zaten sistem ayarına düşer → şablonsuz kurulumda davranış
-    // Faz 2 öncesiyle birebir aynı.
-    const { template, config } = await travelerTemplateService.resolveForPrint(null, client);
+    if (!wo) return null;
     const num = (d: Prisma.Decimal | null) => (d == null ? null : Number(d));
     return {
-      config,
-      template,
       workOrderNumber: wo.workOrderNumber, // İş Emri no (İE…) — kartta iri kimlik
       type: wo.type,
       width: num(wo.width),
@@ -871,6 +1032,29 @@ export class TravelerCardService {
             }
           : null,
       })),
-    } as unknown as Prisma.InputJsonValue;
+    };
+  }
+
+  /**
+   * Kartın TAM snapshot'ı = plan + SUNUM (şablon/config).
+   *
+   * Şablon burada DONAR (Faz 2): kart basıldıktan sonra şablon düzenlense de bu kart
+   * aynı çıkar; sunumu tazeleyen tek yol `reprint`'tir — yani "şablonu değiştirdim,
+   * sahadaki kartlar niye değişmedi?" sorusunun cevabı tasarım gereği "yeniden bas".
+   * `config` sistem ayarından DEĞİL şablondan gelir; şablon yoksa `resolveForPrint`
+   * zaten sistem ayarına düşer → şablonsuz kurulumda davranış Faz 2 öncesiyle aynı.
+   *
+   * ⚠️ Baskı yolunda ÇAĞRILMAZ (`resolvePrintPlan` sunumu karttan taşır) — burada
+   * kullanılırsa donmuş şablon sessizce güncel şablonla değişir. Kart doğuşu ve
+   * `reprint` için, yani sunumun MEŞRUEN tazelendiği iki nokta için vardır.
+   */
+  private async buildSnapshot(
+    client: Prisma.TransactionClient,
+    workOrderId: string,
+  ): Promise<Prisma.InputJsonValue> {
+    const plan = await this.buildPlan(client, workOrderId);
+    if (!plan) return {};
+    const { template, config } = await travelerTemplateService.resolveForPrint(null, client);
+    return { config, template, ...plan } as unknown as Prisma.InputJsonValue;
   }
 }
