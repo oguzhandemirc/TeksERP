@@ -8,7 +8,6 @@ import { registerPrinterIpc } from "./printer.ipc.js";
 import { registerScaleIpc } from "./scale.ipc.js";
 import { registerPdfIpc } from "./pdf.ipc.js";
 import { registerFilesIpc } from "./files.ipc.js";
-import { registerFindIpc } from "./find.ipc.js";
 
 export function registerIpcHandlers(): void {
   registerSecureStoreIpc();
@@ -21,5 +20,4 @@ export function registerIpcHandlers(): void {
   registerScaleIpc();
   registerPdfIpc();
   registerFilesIpc();
-  registerFindIpc();
 }

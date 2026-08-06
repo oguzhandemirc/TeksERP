@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   ApiBridge,
-  FindResult,
   AppPlatform,
   ScannerStatus,
   ScannerTransport,
@@ -70,15 +69,6 @@ const api: ApiBridge = {
   files: {
     save: (opts: FileSaveOpts) => ipcRenderer.invoke("files:save", opts),
     saveBatch: (opts: FilesSaveBatchOpts) => ipcRenderer.invoke("files:saveBatch", opts),
-  },
-  find: {
-    start: (text, opts) => ipcRenderer.send("find:start", text, opts),
-    stop: (clearSelection) => ipcRenderer.send("find:stop", clearSelection),
-    onResult: (cb) => {
-      const listener = (_e: unknown, r: FindResult) => cb(r);
-      ipcRenderer.on("find:result", listener);
-      return () => ipcRenderer.removeListener("find:result", listener);
-    },
   },
 };
 

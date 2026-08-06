@@ -3,8 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 const SHORTCUTS: { keys: string[]; desc: string }[] = [
   { keys: ["⌘", "K"], desc: "Komut paleti" },
   { keys: ["/"], desc: "Arama" },
-  // "Sayfada" vurgusu bilinçli: kayıt araması DEĞİL, ekrandaki metin araması.
-  { keys: ["Ctrl", "F"], desc: "Sayfada metin ara" },
   { keys: ["G", "D"], desc: "Anasayfa" },
   { keys: ["G", "O"], desc: "Operasyon" },
   { keys: ["G", "T"], desc: "Tanımlar" },

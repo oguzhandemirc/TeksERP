@@ -1,14 +1,12 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
-import { FindBar } from "./FindBar";
 import { TabHost } from "./tabs";
 import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
-import { useFindShortcut } from "@/hooks/useFindShortcut";
 import { useServerHeartbeat } from "@/hooks/useServerClock";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useExpiryAutoLogout } from "@/hooks/useExpiryAutoLogout";
@@ -28,11 +26,6 @@ export function AppShell() {
   });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  // Sayfa içi arama (Ctrl+F). `useCallback` şart: `useFindShortcut` bağımlılığı
-  // her render'da değişirse dinleyici sürekli sökülüp takılırdı.
-  const [findOpen, setFindOpen] = useState(false);
-  const openFind = useCallback(() => setFindOpen(true), []);
-  const closeFind = useCallback(() => setFindOpen(false), []);
 
   // Barkod tabancası — "her yerde okut" (opt-in, default kapalı). Wedge global
   // keydown'ı dinler, nitelikli burst'ü store'a iter; overlay sonucu gösterir.
@@ -63,7 +56,6 @@ export function AppShell() {
     onOpenHelp: () => setHelpOpen(true),
     isScannerCapturing: isCapturing,
   });
-  useFindShortcut(openFind);
   useTabShortcuts();
   useServerHeartbeat();
   useIdleLogout();
@@ -90,9 +82,6 @@ export function AppShell() {
         <Sidebar collapsed={collapsed} />
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <TabHost />
-          {/* Sayfa içi arama — main relative olduğu için çubuk içerik alanının
-              sağ üstüne oturur; sekme değişse de açık kalır (tarayıcı gibi). */}
-          <FindBar open={findOpen} onClose={closeFind} />
         </main>
       </div>
       <CommandPalette

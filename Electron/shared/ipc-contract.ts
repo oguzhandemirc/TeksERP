@@ -218,38 +218,6 @@ export interface ScaleApi {
   read: (opts: ScaleReadOpts) => Promise<ScaleReadResult>;
 }
 
-/** `found-in-page` sonucu — "3/17" sayacını besler. */
-export interface FindResult {
-  /** Kaçıncı eşleşmedeyiz (1-bazlı; eşleşme yoksa 0). */
-  activeMatchOrdinal: number;
-  /** Toplam eşleşme. */
-  matches: number;
-}
-
-export interface FindOpts {
-  /** İleri mi arasın (Shift+Enter → false). */
-  forward?: boolean;
-  /** Aynı metinde SONRAKİ eşleşmeye geç (yeni arama değil). */
-  findNext?: boolean;
-}
-
-/**
- * Sayfa içi metin arama — Chromium'un kendi `findInPage`'i (tarayıcıdaki Ctrl+F).
- *
- * ⚠️ SINIR: yalnız O AN DOM'da olan yazıyı bulur. Uzun listeler kaydırdıkça
- * yüklendiği için henüz yüklenmemiş satırlar bulunamaz — arayüz bunu gizlemez,
- * çubukta açıkça yazar (bkz. `FindBar`). Kayıt aramak için listenin kendi arama
- * kutusu kullanılmalı; o sunucuya sorar.
- */
-export interface FindApi {
-  /** Aramayı başlat/ilerlet. Boş metin aramayı durdurur. */
-  start: (text: string, opts?: FindOpts) => void;
-  /** Aramayı bitir; vurguları temizler. */
-  stop: (clearSelection?: boolean) => void;
-  /** Eşleşme sayacı olaylarına abone ol; dönen fonksiyon aboneliği bırakır. */
-  onResult: (cb: (result: FindResult) => void) => () => void;
-}
-
 export interface ApiBridge {
   secureStore: SecureStoreApi;
   appInfo: AppInfoApi;
@@ -261,7 +229,6 @@ export interface ApiBridge {
   scale: ScaleApi;
   pdf: PdfApi;
   files: FilesApi;
-  find: FindApi;
 }
 
 declare global {
