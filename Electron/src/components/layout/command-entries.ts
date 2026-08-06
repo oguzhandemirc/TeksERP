@@ -1,48 +1,31 @@
-import type { LucideIcon } from "lucide-react";
+import { Settings as SettingsIcon, FilePlus2 } from "lucide-react";
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
-import {
-  operationsTiles,
-  type OperationsVisibilityContext,
-} from "@/pages/Operations/tile-config";
+import { operationsTiles } from "@/pages/Operations/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
 import { systemTiles } from "@/pages/System/tile-config";
 import {
   SETTINGS_ADMIN_PERMISSION,
   SETTINGS_CATEGORIES,
 } from "@/pages/GeneralSettings/settings-config";
+import { reportCommandSections } from "./command-entries.reports";
+import { deepCommandSections } from "./command-entries.deep";
+import type { CommandEntry, CommandSection } from "./command-entries.types";
 
-export interface CommandEntry {
-  key: string;
-  label: string;
-  description?: string;
-  icon: LucideIcon;
-  to: string;
-  permission?: string;
-  /** Birden çok izinden HERHANGİ biri yeterli (tile permissionAny ile hizalı). */
-  permissionAny?: string[];
-  adminOnly?: boolean;
-  /** Görünmeyen ek arama anahtarları (cmdk eşleşme değerine eklenir). */
-  keywords?: string;
-  /**
-   * Operasyon karolarının DURUMA BAĞLI görünürlüğü (`OperationsTile.visibleWhen`
-   * ile AYNI yüklem — kopyalanmaz, taşınır).
-   *
-   * NEDEN PALET DE SÜZÜLÜR: hub karosu gizlendiğinde palet girişi kalırsa üçüncü
-   * bir giriş kapısı kuralla çelişir. "Kurşun Sırası"nda bu somut bir hataya
-   * dönüşüyordu — route kapısı da aynı koşulu uyguladığı için paletten seçen
-   * kullanıcı sayfa yerine hub'a atılıyor ve sebebini hiçbir yerde göremiyordu.
-   * (`OperationsTile` dışındaki girişlerde bu alan yoktur → her zaman görünür.)
-   */
-  visibleWhen?: (ctx: OperationsVisibilityContext) => boolean;
-}
+export type { CommandEntry, CommandSection } from "./command-entries.types";
 
-export interface CommandSection {
-  heading: string;
-  entries: CommandEntry[];
-}
-
+/**
+ * Komut paletinin (Ctrl+K) kataloğu — uygulamadaki HER ekranın tek listesi.
+ *
+ * KAYNAK KOPYALANMAZ, TAŞINIR: bölümler hub karo config'lerinden türetilir
+ * (her modülün `tile-config.ts`i). Yeni bir ekran karo olarak eklendiği an
+ * palette de çıkar; buraya elle satır yazmak, ikisinin ayrışacağı ilk yerdir.
+ *
+ * İZİN, ROUTE'UN İZNİDİR. `ProtectedRoute` katı davranır (admin kısayolu YOK) →
+ * girişe route'un istediğinden farklı bir izin yazmak, kullanıcıya görünen ama
+ * tıklayınca `/forbidden`'a düşen bir satır üretir.
+ */
 export const commandSections: CommandSection[] = [
   ...navGroups.map<CommandSection>((group) => ({
     heading: group.label,
@@ -57,18 +40,32 @@ export const commandSections: CommandSection[] = [
   })),
   {
     heading: "Operasyon",
-    entries: operationsTiles.map((tile) => ({
-      key: `ops:${tile.key}`,
-      label: tile.title,
-      description: tile.description,
-      icon: tile.icon,
-      to: tile.to,
-      permission: tile.permission,
-      permissionAny: tile.permissionAny,
-      // Karo ile AYNI yüklem nesnesi — palet hub'dan ayrışamaz.
-      visibleWhen: tile.visibleWhen,
-    })),
+    entries: [
+      ...operationsTiles.map<CommandEntry>((tile) => ({
+        key: `ops:${tile.key}`,
+        label: tile.title,
+        description: tile.description,
+        icon: tile.icon,
+        to: tile.to,
+        permission: tile.permission,
+        permissionAny: tile.permissionAny,
+        // Karo ile AYNI yüklem nesnesi — palet hub'dan ayrışamaz.
+        visibleWhen: tile.visibleWhen,
+      })),
+      {
+        // Karosu yok (hub'da "İş Emirleri"nin içinden açılır) ama en sık
+        // yapılan işlerden biri — paletten tek adımda açılabilmeli.
+        key: "ops:work-order-new",
+        label: "Yeni İş Emri",
+        description: "Boş iş emri formunu aç",
+        icon: FilePlus2,
+        to: "/operations/work-orders/new",
+        permission: "workorder:write",
+        keywords: "iş emri oluştur ekle yeni üretim aç",
+      },
+    ],
   },
+  ...reportCommandSections,
   ...definitionGroups.map<CommandSection>((group) => ({
     heading: `Tanımlar · ${group.title}`,
     entries: definitionTiles
@@ -80,6 +77,9 @@ export const commandSections: CommandSection[] = [
         icon: tile.icon,
         to: tile.to,
         permission: tile.permission,
+        // permissionAny taşıyan karolar (belge tasarım ekranları) route ile
+        // AYNI listeyi kullanır — düşürülürse kart görünür, sayfa açılmaz.
+        permissionAny: tile.permissionAny,
       })),
   })),
   {
@@ -115,17 +115,37 @@ export const commandSections: CommandSection[] = [
       to: `/system/settings?tab=${cat.id}`,
       // Karo/route ile AYNI kapı — paletten görünüp tıklanınca /forbidden'a
       // atan bir giriş, izni olmayan kullanıcıya "yetkim varmış ama bozuk"
-      // dedirtir ("Kurşun Sırası" dersi, yukarıdaki visibleWhen notu).
+      // dedirtir ("Kurşun Sırası" dersi, `visibleWhen` notu).
       permissionAny: cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION],
       keywords: cat.keywords,
     })),
   },
+  {
+    heading: "Kişisel",
+    entries: [
+      {
+        key: "personal:settings",
+        label: "Ayarlar",
+        description: "Tema, vurgu rengi, yoğunluk, favoriler ve kayıtlı görünümler",
+        icon: SettingsIcon,
+        to: "/settings",
+        keywords: "ayar tercih tema koyu açık renk yoğunluk favori kayıtlı görünüm sıfırla kişisel profil",
+      },
+    ],
+  },
+  ...deepCommandSections,
 ];
 
 /** Tüm komut girişleri düz liste — favoriler katalogu olarak da kullanılır. */
 export const allCommandEntries: CommandEntry[] = commandSections.flatMap((s) => s.entries);
 
-/** Route (pathname) → komut girişi. Favori çözümleme + favori edilebilirlik kontrolü. */
+/**
+ * Route (pathname) → komut girişi. Favori çözümleme + favori edilebilirlik kontrolü.
+ *
+ * ⚠️ Sıra ÖNEMLİ: aynı `to` birden çok girişte olabilir (ör. hub bölüm
+ * başlıkları `/definitions`e çıkar). Üst seviye bölümler dizide önce geldiği
+ * için sayfanın KENDİ girişi kazanır; `deepCommandSections` en sonda durur.
+ */
 export function findCommandEntry(to: string): CommandEntry | undefined {
   return allCommandEntries.find((e) => e.to === to);
 }
@@ -141,6 +161,10 @@ const SECTION_PARENTS: Record<string, { label: string; to: string }> = {
 export function findBreadcrumbParent(to: string): { label: string; to: string } | null {
   for (const section of commandSections) {
     if (section.entries.some((e) => e.to === to)) {
+      // Bölüm kendi üstünü bildiriyorsa (ör. rapor kategorileri) o kazanır.
+      // `to` bölümün üstünün TA KENDİSİYSE (kategori hub'ı) bir üst kata çıkılır.
+      if (section.parent && section.parent.to !== to) return section.parent;
+      if (section.heading.startsWith("Raporlar")) return { label: "Raporlar", to: "/reports" };
       if (section.heading.startsWith("Tanımlar")) return { label: "Tanımlar", to: "/definitions" };
       return SECTION_PARENTS[section.heading] ?? null;
     }

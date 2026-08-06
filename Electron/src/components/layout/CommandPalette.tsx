@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Keyboard, LogOut, Moon, RotateCw, Rows3, Star, type LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -35,6 +35,17 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   const { prefs, setPreference } = usePreferences();
   const { theme, setTheme } = useTheme();
   const logout = useAuthStore((s) => s.logout);
+  // Arama metni bizde: "alt başlık" girişleri (sekmeler, tek tek ayarlar, hub
+  // bölümleri) YALNIZ arama yapılırken listelenir — boş palet sayfa listesi
+  // olarak sade kalsın, arama ise tam katalogda koşsun.
+  const [search, setSearch] = useState("");
+  const searching = search.trim().length > 0;
+
+  // Palet kapanınca arama sıfırlanır: bir sonraki Ctrl+K önceki sorgunun
+  // süzdüğü listeyle açılmamalı (cmdk kendi state'ini korur).
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -57,7 +68,8 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     fn();
   };
 
-  const isVisible = (entry: CommandEntry) => {
+  /** Kullanıcı bu girişi AÇABİLİR mi (izin + duruma bağlı görünürlük). */
+  const isAllowed = (entry: CommandEntry) => {
     // Durum süzgeci İZİNDEN ÖNCE: yüklem "bu ekranın şu an yapacağı iş var mı"
     // sorusunu yanıtlar, izinden bağımsızdır ve ikisi VE ile birleşir.
     if (entry.visibleWhen && !entry.visibleWhen(visibilityCtx)) return false;
@@ -67,10 +79,16 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     return true;
   };
 
+  /** Katalog listesinde ŞU AN çizilir mi — alt başlıklar yalnız arama sırasında. */
+  const isVisible = (entry: CommandEntry) => isAllowed(entry) && (searching || !entry.deep);
+
+  // Favoriler `deep` süzgecine TABİ DEĞİL: kullanıcı bir sayfayı bilerek
+  // sabitlemişse, o sayfa alt başlık katalogundan gelse bile favorisi boş
+  // palette görünmeli (aksi halde yıldızladığı satır kaybolur).
   const favEntries = favorites
     .map(findCommandEntry)
     .filter((e): e is CommandEntry => Boolean(e))
-    .filter(isVisible);
+    .filter(isAllowed);
 
   const nextTheme = theme === "dark" ? "light" : "dark";
   const nextDensity = prefs.density === "compact" ? "comfortable" : "compact";
@@ -102,8 +120,14 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Komut yaz veya ara..." />
-      <CommandList>
+      <CommandInput
+        placeholder="Sayfa, rapor, ayar ara..."
+        value={search}
+        onValueChange={setSearch}
+      />
+      {/* Katalog büyük (tüm sayfalar + raporlar + alt başlıklar) — liste
+          yüksekliği primitifin 300px'ini aşar, ekrana göre büyür. */}
+      <CommandList className="max-h-[min(60vh,32rem)]">
         <CommandEmpty>Sonuç yok.</CommandEmpty>
 
         {favEntries.length > 0 && (
