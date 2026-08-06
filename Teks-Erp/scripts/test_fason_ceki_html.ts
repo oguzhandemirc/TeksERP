@@ -407,45 +407,72 @@ function testNewSections(): void {
   check("sections.accountNo=false → basılmaz", !accOff.includes("Hesap:"));
   check("hesap no kapalıyken istasyon/iş emri satırı DURUR", plain.includes("Boyahane"));
 
-  // (b) KUMAŞ + RENKLER üst bloğu — OPT-IN (yeni blok eski belgelere sızmasın).
-  check("üst blok varsayılan BASILMAZ", !plain.includes("fabline"));
+  // (b) CİNS / EN / RENK satırları — PARTİ NO'NUN ALTINA (2026-08-06 saha isteği:
+  // "sayfada 1'den fazla kez olacak" — üstte bu satırlar, altta toplam tablosu).
+  // OPT-IN: yeni satırlar eski belgelere sızmasın.
+  check("üst satırlar varsayılan BASILMAZ", !plain.includes("ln-fabric"));
   const rolls = [
     roll(1, 100, 150, { itemName: "PATOS", colorName: "LACİVERT" }),
-    roll(2, 120, 150, { itemName: "MUS-001", colorName: "SİYAH" }),
+    roll(2, 120, 140, { itemName: "MUS-001", colorName: "SİYAH" }),
     roll(3, 90, 150, { itemName: "PATOS", colorName: "LACİVERT" }),
   ];
   const fab = renderFasonCekiHtml(
     makeSnap({ rolls, doc: { requestedColor: null }, docConfigOverride: { sections: { fabricHeader: true } } }),
   );
-  check("üst blok açılır", fab.includes('class="fabline"'));
-  check("TÜM kumaşlar listelenir (yinelenen tekilleşir)", fab.includes("PATOS, MUS-001"));
-  check("TÜM renkler listelenir", fab.includes("LACİVERT, SİYAH"));
-  check("üst blok CSS'i yalnız blok AÇIKKEN basılır",
-    fab.includes(".fabline {") && !plain.includes(".fabline {"));
+  check("üst satırlar açılır", fab.includes('class="ln ln-fabric"'));
+  check("CİNS satırı", fab.includes("Cinsi: <b>PATOS, MUS-001</b>"));
+  check("EN satırı (karışık sevkte hepsi)", fab.includes("En: <b>150, 140 cm</b>"));
+  check("RENK satırı", fab.includes("Renk: <b>LACİVERT, SİYAH</b>"));
+  check("üç ayrı satır basılır", countOccur(fab, 'class="ln ln-fabric"') === 3);
+
   // ⚠️ Kapalı blok GÖVDEYE BOŞ SATIR BIRAKMAMALI: koşullu parça kendi satır
   // başını taşır, gövdede kendi satırında `${...}` olarak DURMAZ. Aksi halde
   // ayarı hiç açmamış her belgenin çıktısı sessizce bir satır kayardı.
   const offExplicit = renderFasonCekiHtml(makeSnap({ docConfigOverride: { sections: { fabricHeader: false } } }));
-  check("blok kapalı → çıktı ayarsızla BİREBİR aynı", plain === offExplicit);
-  // Koşullu parça KENDİ satır başını taşır: açıkken gövdeye TAM 1 satır ekler,
-  // kapalıyken 0. Gövdede kendi satırında `${...}` olarak dursaydı kapalıyken de
-  // 1 satır eklerdi ve ayarı hiç açmamış her belgenin çıktısı sessizce kayardı.
+  check("kapalı → çıktı ayarsızla BİREBİR aynı", plain === offExplicit);
   const bodyLines = (s: string) => s.slice(s.indexOf("<body>")).split("\n").length;
   const fhOff = renderFasonCekiHtml(makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: false } } }));
   const fhOn = renderFasonCekiHtml(makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true } } }));
-  check("açık blok gövdeye TAM 1 satır ekler, kapalı blok 0",
-    bodyLines(fhOn) === bodyLines(fhOff) + 1,
+  check("açık → gövdeye TAM 3 satır ekler, kapalı → 0",
+    bodyLines(fhOn) === bodyLines(fhOff) + 3,
     `${bodyLines(fhOff)} → ${bodyLines(fhOn)}`);
+
+  // Satırlar PARTİ NO ile aynı blokta ve ONUN ALTINDA olmalı — istek buydu.
+  const hlIdx0 = fab.indexOf('<div class="hl">');
+  const hrIdx0 = fab.indexOf('<div class="hr">');
+  check("varsayılan: parti no ile birlikte SAĞ blokta", fab.indexOf("ln-fabric") > hrIdx0);
+  const fabLeft = renderFasonCekiHtml(
+    makeSnap({
+      rolls,
+      doc: { batchNumber: "P07" },
+      docConfigOverride: { sections: { fabricHeader: true }, placements: { batchInfo: "left" } },
+    }),
+  );
+  check("parti no SOLA alınınca satırlar da SOLA gider",
+    fabLeft.indexOf("ln-fabric") > fabLeft.indexOf('<div class="hl">') &&
+      fabLeft.indexOf("ln-fabric") < fabLeft.indexOf('<div class="hr">'));
+  check("satırlar parti no'nun ALTINDA (sonrasında)",
+    fabLeft.indexOf("ln-batch") < fabLeft.indexOf("ln-fabric"));
+  void hlIdx0;
+
   // Hedef renk varsa listenin BAŞINDA olmalı (fasoncuya "şu renge boya" der).
   const fabTarget = renderFasonCekiHtml(
     makeSnap({ rolls, doc: { requestedColor: "BEJ" }, docConfigOverride: { sections: { fabricHeader: true } } }),
   );
-  check("hedef renk listenin başında", fabTarget.includes("BEJ, LACİVERT, SİYAH"));
-  // Renk bilgisi kapalıysa üst blokta da renk YOK (tek anahtar, iki yüzey).
+  check("hedef renk listenin başında", fabTarget.includes("Renk: <b>BEJ, LACİVERT, SİYAH</b>"));
+  // Renk bilgisi kapalıysa üst satırlarda da renk YOK (tek anahtar, iki yüzey).
   const fabNoColor = renderFasonCekiHtml(
     makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true, requestedColor: false } } }),
   );
-  check("requestedColor=false → üst blokta RENK yok", !fabNoColor.includes("RENK:") && fabNoColor.includes("KUMAŞ:"));
+  check("requestedColor=false → RENK satırı yok, CİNS durur",
+    !fabNoColor.includes("Renk: <b>") && fabNoColor.includes("Cinsi: <b>"));
+  // ⚠️ "EN elle doldurulacak" ayarı açıkken EN üstte de BASILMAZ — aksi halde
+  // belge bir yerde "boş bırak" derken öbür yerde değeri söylerdi.
+  const fabBlank = renderFasonCekiHtml(
+    makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true }, blankWidths: true } }),
+  );
+  check("blankWidths=true → EN satırı basılmaz (belge kendiyle çelişmez)",
+    !fabBlank.includes("En: <b>") && fabBlank.includes("Cinsi: <b>"));
 
   // (c) ÖLÜ TOGGLE'LAR artık gerçekten çalışıyor (2026-08-05'e kadar panel
   // kapatıyor, belge basmaya devam ediyordu).

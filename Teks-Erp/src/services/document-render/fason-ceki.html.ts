@@ -315,20 +315,37 @@ export function renderFasonCekiHtml(
   // Payload DEĞİŞMEDİ: alanlar donmuş snapshot'ta zaten var, eski belge de basar.
   const showFabricHeader = cfg.sections?.fabricHeader === true;
   const fabrics = uniqNonEmpty(doc.rolls.map((r) => r.itemName));
+  // EN, alt toplam tablosundakiyle AYNI kaynaktan gelir ama aynı kuralla DEĞİL:
+  // orada "tüm enler aynıysa yaz, değilse boş" var (tek hücre), burada karışık
+  // sevkte hepsi listelenir. Tek hücrelik kısıt bir tablo kısıtıdır, bilgi
+  // kısıtı değil — üstte "140, 150" yazmak sessizce boş bırakmaktan iyidir.
+  // `blankWidths` (EN elle doldurulacak) açıksa EN burada da BASILMAZ: aksi
+  // halde belge bir yerde "boş bırak" derken öbür yerde değeri söylerdi.
+  const fabWidths = blankWidths
+    ? []
+    : uniqNonEmpty(doc.rolls.map((r) => (r.width != null ? String(Math.round(r.width)) : null)));
   const fabColors = showColor
     ? uniqNonEmpty([doc.requestedColor, ...doc.rolls.map((r) => r.colorName)])
     : [];
-  // ⚠️ Kendi satır başını TAŞIR (`\n    `), gövdede kendi satırında `${...}`
-  // olarak DURMAZ: kapalıyken çıktıya boş bir satır sokar ve A4 parmak izini
-  // bozardı — `batchRow`'daki aynı disiplin.
-  const fabricBlock =
-    showFabricHeader && (fabrics.length || fabColors.length)
-      ? `\n    <div class="fabline">${
-          fabrics.length ? `<span class="fab-lbl">KUMAŞ:</span> ${esc(fabrics.join(", "))}` : ""
-        }${fabrics.length && fabColors.length ? " &nbsp;·&nbsp; " : ""}${
-          fabColors.length ? `<span class="fab-lbl">RENK:</span> ${esc(fabColors.join(", "))}` : ""
-        }</div>`
-      : "";
+  // Satırlar PARTİ NO'NUN ALTINA, onunla AYNI blokta durur (saha isteği) — yani
+  // `placements.batchInfo` sol ise bunlar da sola gider. Parti no kapalı olsa
+  // bile blok tarafı o ayardan okunur; "altına" demek "aynı sütunda" demektir.
+  // ⚠️ Her satır kendi satır başını TAŞIR: kapalıyken çıktıya boş satır sokmasın
+  // (A4 parmak izi — `batchRow`'daki aynı disiplin).
+  const fabricRows = showFabricHeader
+    ? [
+        fabrics.length ? `Cinsi: <b>${esc(fabrics.join(", "))}</b>` : "",
+        fabWidths.length ? `En: <b>${esc(fabWidths.join(", "))} cm</b>` : "",
+        fabColors.length ? `Renk: <b>${esc(fabColors.join(", "))}</b>` : "",
+      ]
+        .filter(Boolean)
+        .map((h) => `\n        <div class="ln ln-fabric">${h}</div>`)
+        .join("")
+    : "";
+  // Satırlar parti no ile AYNI blokta durur — taraf `placements.batchInfo`'dan
+  // okunur, parti no kapalı olsa bile ("altına" = "aynı sütunda").
+  const headerFabLeft = batchOnLeft ? fabricRows : "";
+  const headerFabRight = batchOnLeft ? "" : fabricRows;
 
   // Serbest not bloğu (doc.notes + cfg.footerNote) — sections.notes !== false ise.
   const showNotes = cfg.sections?.notes !== false;
@@ -383,14 +400,6 @@ export function renderFasonCekiHtml(
     ],
   });
 
-  // Kumaş/renk bloğunun CSS'i yalnız blok AÇIKKEN basılır — kapalıyken tek bayt
-  // bile eklenmesin (A4 parmak izi korunur; refakat kartındaki aynı disiplin).
-  const fabricCss = fabricBlock
-    ? `
-  .fabline { margin-bottom: ${d.fabLineMarB}px; font-size: ${d.fabLine}px; font-weight: 700; }
-  .fabline .fab-lbl { font-weight: 400; color: #444; }`
-    : "";
-
   // Alan bazlı punto/kalınlık — override yoksa BOŞ string (tek bayt basılmaz).
   const fieldCss = fasonFieldCss(cfg.fields, d);
 
@@ -431,7 +440,7 @@ export function renderFasonCekiHtml(
   .grid .c-met { width: ${col.met}; }
   .grid .c-cm  { width: ${col.cm}; }
   .grid tbody .c-top { font-weight: 700; }
-  .meta-row { margin: ${d.metaRowMarY}px 0; font-size: ${d.metaRow}px; }${fabricCss}
+  .meta-row { margin: ${d.metaRowMarY}px 0; font-size: ${d.metaRow}px; }
   .totals { margin-top: ${d.totalsMarT}px; }
   .totals th, .totals td { border: 1px solid #000; padding: ${d.totalsPad}; font-size: ${d.totalsCell}px; }
   .totals th { background: #f1f5f9; text-align: left; font-size: ${d.totalsHead}px; text-transform: uppercase; }
@@ -471,17 +480,16 @@ export function renderFasonCekiHtml(
         ${logo.left}
         <div class="company">${esc(company?.name ?? "")}</div>
         ${lhLines}${sayinRow}
-        ${subLine}${batchRowLeft}
+        ${subLine}${batchRowLeft}${headerFabLeft}
       </div>
       <div class="hr">
         ${logo.right}
         <div class="title">${esc(title)}</div>
         ${copyBadge}
         <div class="ln ln-docno">İrsaliye No: <b>${esc(doc.dispatchNo)}</b></div>
-        <div class="ln ln-date">Tarih: <b>${esc(fmtDate(doc.dispatchedAt))}</b></div>${batchRowRight}
+        <div class="ln ln-date">Tarih: <b>${esc(fmtDate(doc.dispatchedAt))}</b></div>${batchRowRight}${headerFabRight}
       </div>
     </header>
-${fabricBlock}
     ${vehicleRow}
     ${blocksTop}
     ${grids}

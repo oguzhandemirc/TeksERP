@@ -241,7 +241,7 @@ export const FASON_FIELD_DEFS: DocFieldDef[] = [
   { key: "batchNo", label: "Parti no", group: "header" },
   { key: "lnLabel", label: "Satır etiketleri (İrsaliye No: / Tarih: / Parti No:)", group: "header" },
   { key: "vehicle", label: "Plaka / şoför satırı", group: "header" },
-  { key: "fabricLine", label: "Kumaş adı + renkler (üst blok)", group: "header" },
+  { key: "fabricLine", label: "Cins / En / Renk satırları (parti no altı)", group: "header" },
 
   { key: "gridHead", label: "Grid başlıkları (Top / Metre / Cm)", group: "grid" },
   { key: "gridTop", label: "Grid — top sıra no", group: "grid" },
@@ -492,7 +492,7 @@ export const DOC_DEFS: DocDef[] = [
       { key: "requestedColor", label: "Renk bilgisi (üst blok + CİNSİ hücresi)" },
       // OPT-IN: yeni blok `sections` blocklist'inde varsayılan AÇIK doğsaydı,
       // sahadaki her eski çeki yeniden basıldığında sormadan yeni satır kazanırdı.
-      { key: "fabricHeader", label: "Kumaş adı + renkler (üst blok)", defaultHidden: true },
+      { key: "fabricHeader", label: "Cins / En / Renk — parti no altına da yaz", defaultHidden: true },
       { key: "productionProps", label: "İstenen özellikler kutusu" },
       { key: "dyehouseNote", label: "Fason talimatı kutusu" },
       { key: "notes", label: "Not / alt bilgi" },

@@ -74,7 +74,7 @@ export const FASON_FIELDS: FasonFieldDef[] = [
   { key: "batchNo", label: "Parti no", group: "header", selector: ".ln.ln-batch b", base: (d) => d.lnB, weight: 700 },
   { key: "lnLabel", label: "Satır etiketleri (İrsaliye No: / Tarih: / Parti No:)", group: "header", selector: ".ln", base: (d) => d.ln, weight: 400 },
   { key: "vehicle", label: "Plaka / şoför satırı", group: "header", selector: ".meta-row", base: (d) => d.metaRow, weight: 400 },
-  { key: "fabricLine", label: "Kumaş adı + renkler (üst blok)", group: "header", selector: ".fabline", base: (d) => d.fabLine, weight: 700 },
+  { key: "fabricLine", label: "Cins / En / Renk satırları (parti no altı)", group: "header", selector: ".ln.ln-fabric, .ln.ln-fabric b", base: (d) => d.lnB, weight: 700 },
 
   // ── grid ───────────────────────────────────────────────────────────────────
   { key: "gridHead", label: "Grid başlıkları (Top / Metre / Cm)", group: "grid", selector: ".grid thead th", base: (d) => d.gridCell, weight: 700 },
