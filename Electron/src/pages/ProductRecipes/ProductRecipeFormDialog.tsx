@@ -19,7 +19,10 @@ import type { ProductionRoute } from "@/pages/Routes/types";
 import { TargetItemPicker } from "@/pages/Operations/WorkOrders/TargetItemPicker";
 import { RouteEditor } from "@/pages/Operations/WorkOrders/RouteEditor";
 import { useDesignerSteps } from "@/pages/Operations/WorkOrders/useDesignerSteps";
-import { routeStepsToCreatePayload } from "@/pages/Operations/WorkOrders/workOrderPrefill";
+import {
+  routeStepsToCreatePayload,
+  type RouteStepTargetPlan,
+} from "@/pages/Operations/WorkOrders/workOrderPrefill";
 import type { WorkOrderFormValues } from "@/pages/Operations/WorkOrders/schema";
 import {
   recipeFormDefaults,
@@ -104,7 +107,10 @@ export function ProductRecipeFormDialog({
   // Hedef kumaş/renk picker'ları WorkOrderFormValues'a tipli — alan adları aynı.
   const woControl = form.control as unknown as Control<WorkOrderFormValues>;
 
-  const createRouteFromSteps = async (name: string): Promise<string> => {
+  const createRouteFromSteps = async (
+    name: string,
+    stepTargets?: Map<string, RouteStepTargetPlan>,
+  ): Promise<string> => {
     const res = await routeService.create({
       name: `${name} rotası`,
       // Kod backend'de üretilir (ROT+GGAAYY+NNNN) — istemci göndermez.
@@ -114,13 +120,17 @@ export function ProductRecipeFormDialog({
       // inline map yalnız stationId/sequence/defaultNotes gönderiyordu → İş Emri
       // Şablonu'na seçilen fason firma DÜŞÜYORDU (rota tekrar uygulanınca boş
       // geliyordu). routeStepsToCreatePayload = WO formuyla tek ortak kaynak.
-      steps: routeStepsToCreatePayload(routeSteps),
+      steps: routeStepsToCreatePayload(routeSteps, stepTargets),
     } as unknown as Partial<ProductionRoute>);
     return (res.data as { id: string }).id;
   };
 
+  // "Rotayı Kaydet" — açıkça bir rota şablonu üretir, o yüzden şablon hedefi de
+  // yazılır. Reçetenin KENDİ rotası (handleSubmit) hedefsiz kalır: hedef zaten
+  // reçetede saklanıyor, rotaya da yazmak aynı bilgiyi iki yere kopyalardı.
   const saveTemplateMut = useMutation({
-    mutationFn: (params: { name: string }) => createRouteFromSteps(params.name),
+    mutationFn: (params: { name: string; stepTargets: Map<string, RouteStepTargetPlan> }) =>
+      createRouteFromSteps(params.name, params.stepTargets),
     onSuccess: () => {
       toast.success("Rota şablonu kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["routes"] });
@@ -220,7 +230,9 @@ export function ProductRecipeFormDialog({
             }}
             onSetFirm={(id, patch) => updateStep(id, patch)}
             onSeed={handleSeedRoute}
-            onSaveTemplate={(name) => saveTemplateMut.mutate({ name })}
+            onSaveTemplate={(name, _forCustomer, stepTargets) =>
+              saveTemplateMut.mutate({ name, stepTargets })
+            }
             savePending={saveTemplateMut.isPending}
             customerId={null}
             target={{

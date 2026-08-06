@@ -1,11 +1,15 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { DocumentConfig, DocDef, DocTableDef } from "@/services/documentConfig";
+import type { DocumentConfig, DocDef } from "@/services/documentConfig";
 import { FlagToggle } from "./SettingRow";
 
 // =============================================================================
-// Belge gelişmiş kontrolleri — kolon aç/kapa+sıra, damgalar/QR, metin blokları,
-// dil seçimi. DocumentConfigSection'ın alt paneli; ham config'e patch atar.
+// Belge gelişmiş kontrolleri — EN kaynağı, grid düzeni, konum, damgalar/QR,
+// metin blokları, dil. DocumentConfigSection'ın alt paneli; ham config'e patch atar.
+//
+// Burada kalanların ortak özelliği: hepsi BELGE GENELİ kararlardır. Alan bazlı
+// olan her şey (bölüm görünürlüğü, punto/kalınlık, kolonlar ve kolon sırası)
+// 2026-08-06'da tek tabloya taşındı → `DocumentFieldsPanel`.
 // =============================================================================
 
 export function DocumentAdvancedControls({
@@ -21,15 +25,10 @@ export function DocumentAdvancedControls({
 }) {
   return (
     <>
-      {def.tables?.map((t) => (
-        <TableColumnsPanel
-          key={t.key}
-          table={t}
-          cfg={cfg}
-          disabled={disabled}
-          patch={patch}
-        />
-      ))}
+      {/* Kolon görünürlüğü + sırası 2026-08-06'da "Belge Alanları" tek tablosuna
+          taşındı (`DocumentFieldsPanel`) — kolonlar da belgenin alanlarıdır ve
+          ayrı bir panelde durmaları, aynı belgeyi iki listede aratıyordu.
+          Buradaki paneller belge GENELİ kararlardır (damga, QR, dil, blok). */}
       {def.supportsBlankWidths && <WidthModePanel cfg={cfg} disabled={disabled} patch={patch} />}
       {def.supportsGridGroups && <GridGroupsPanel cfg={cfg} disabled={disabled} patch={patch} />}
       {def.supportsPlacements?.length ? (
@@ -214,107 +213,6 @@ function PlacementsPanel({
       <p className="mt-2 text-xs text-muted-foreground">
         Başlığın sol bloğu firma/alıcı bilgisini, sağ bloğu belge no ve tarihi taşır.
       </p>
-    </div>
-  );
-}
-
-/** Bir tablonun kolonlarını aç/kapa + ↑↓ sırala. Sıra = order dizisi (boş → varsayılan). */
-function TableColumnsPanel({
-  table,
-  cfg,
-  disabled,
-  patch,
-}: {
-  table: DocTableDef;
-  cfg: DocumentConfig | undefined;
-  disabled: boolean;
-  patch: (next: Partial<DocumentConfig>) => void;
-}) {
-  const colCfg = cfg?.columns?.[table.key] ?? {};
-  const hidden = new Set(colCfg.hidden ?? []);
-  // OPT-IN (defaultHidden) kolonlar ALLOWLIST'le yönetilir: `shown` içermiyorsa
-  // basılmaz ve o kolonda `hidden` yok sayılır. Böylece yeni bir iç-veri kolonu
-  // eklemek mevcut belgelerde kendiliğinden görünür olmaz.
-  const shown = new Set(colCfg.shown ?? []);
-  const isOn = (c: DocTableDef["columns"][number]) =>
-    c.defaultHidden ? shown.has(c.key) : !hidden.has(c.key);
-  // Görünen sıra: order verilmişse ona göre, bilinmeyenler kayıt sırasıyla sona.
-  const orderPos = new Map((colCfg.order ?? []).map((k, i) => [k, i]));
-  const ordered = [...table.columns].sort(
-    (a, b) => (orderPos.get(a.key) ?? 999) - (orderPos.get(b.key) ?? 999),
-  );
-
-  const write = (nextHidden: Set<string>, nextOrder: string[], nextShown: Set<string>) =>
-    patch({
-      columns: {
-        ...cfg?.columns,
-        [table.key]: {
-          ...(nextHidden.size ? { hidden: [...nextHidden] } : {}),
-          ...(nextOrder.length ? { order: nextOrder } : {}),
-          ...(nextShown.size ? { shown: [...nextShown] } : {}),
-        },
-      },
-    });
-
-  const toggle = (c: DocTableDef["columns"][number]) => {
-    if (c.defaultHidden) {
-      const next = new Set(shown);
-      if (next.has(c.key)) next.delete(c.key);
-      else next.add(c.key);
-      write(hidden, colCfg.order ?? [], next);
-      return;
-    }
-    const next = new Set(hidden);
-    if (next.has(c.key)) next.delete(c.key);
-    else next.add(c.key);
-    write(next, colCfg.order ?? [], shown);
-  };
-
-  const move = (index: number, dir: -1 | 1) => {
-    const keys = ordered.map((c) => c.key);
-    const j = index + dir;
-    if (j < 0 || j >= keys.length) return;
-    const a = keys[index];
-    const b = keys[j];
-    if (a === undefined || b === undefined) return;
-    keys[index] = b;
-    keys[j] = a;
-    write(hidden, keys, shown);
-  };
-
-  return (
-    <div className="rounded-md border p-3">
-      <div className="pb-2 text-sm font-medium">Kolonlar — {table.label}</div>
-      <div className="space-y-1">
-        {ordered.map((c, i) => (
-          <div key={c.key} className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              id={`col-${table.key}-${c.key}`}
-              checked={isOn(c)}
-              disabled={disabled}
-              onChange={() => toggle(c)}
-              className="h-4 w-4"
-            />
-            <label htmlFor={`col-${table.key}-${c.key}`} className="flex-1">
-              {c.label}
-              {c.defaultHidden && (
-                <span className="ml-1 text-[10px] text-muted-foreground">
-                  (varsayılan kapalı — baskı sırasında tek seferlik de açılabilir)
-                </span>
-              )}
-            </label>
-            <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0"
-              disabled={disabled || i === 0} onClick={() => move(i, -1)}>
-              <ArrowUp className="h-3.5 w-3.5" />
-            </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0"
-              disabled={disabled || i === ordered.length - 1} onClick={() => move(i, 1)}>
-              <ArrowDown className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

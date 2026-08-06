@@ -7,6 +7,13 @@ export interface RouteStep {
   /** Saha #14: şablonda saklanan fason planlaması — WO açılışında default klonlanır. */
   requiredCategoryId?: string | null;
   plannedSubcontractorId?: string | null;
+  /** 2026-08-06: adımın şablon hedefi — WO açılışında hedef alanlara kopyalanır. */
+  plannedColorId?: string | null;
+  plannedColor?: { id: string; code: string; name: string; hex: string | null } | null;
+  plannedProperties?: {
+    propertyId: string;
+    property?: { id: string; code: string; name: string };
+  }[];
   station?: {
     id: string;
     code: string;

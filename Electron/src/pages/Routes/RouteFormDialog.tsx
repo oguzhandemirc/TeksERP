@@ -42,6 +42,10 @@ function stepToForm(s: ProductionRoute["steps"][number]) {
       ? s.requiredCategoryId ?? s.station?.defaultCategoryId ?? null
       : null,
     plannedSubcontractorId: isExternal ? s.plannedSubcontractorId ?? null : null,
+    // Şablon hedefi — fason planlamasının aksine istasyon TİPİNE bağlı değil:
+    // iç istasyon (zımpara, tambur) da özellik kazandırır.
+    plannedColorId: s.plannedColorId ?? null,
+    plannedPropertyIds: (s.plannedProperties ?? []).map((p) => p.propertyId),
   };
 }
 
@@ -128,7 +132,9 @@ export function RouteFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Rotayı Düzenle" : "Yeni Üretim Rotası"}</DialogTitle>
           <DialogDescription>
-            İş emrinde kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden sıralanabilir.
+            İş emrinde kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden
+            sıralanabilir. Her adımda o istasyonun uygulayabildiği renk/özellikler seçilirse
+            iş emri açılışında hedef alanlar hazır gelir.
           </DialogDescription>
         </DialogHeader>
 
@@ -173,7 +179,7 @@ export function RouteFormDialog({
           </FormField>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField label="Müşteri (opsiyonel)" hint="Müşteriye özel default rota">
+            <FormField label="Müşteri (opsiyonel)" hint="Müşteriye özel varsayılan rota">
               <Controller
                 control={form.control}
                 name="customerId"

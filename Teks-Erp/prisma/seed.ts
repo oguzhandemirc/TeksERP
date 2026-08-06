@@ -33,6 +33,10 @@ import "dotenv/config";
 import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { buildDefaultFields } from "../src/config/label-fields";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
+import {
+  ROLE_TEMPLATE_CATALOG,
+  resolveRoleTemplateCodes,
+} from "../src/constants/role-template-catalog";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, options: PG_SESSION_OPTIONS });
 const adapter = new PrismaPg(pool);
@@ -80,78 +84,39 @@ async function main() {
   // ===========================================================================
   // 2. PERMISSION TEMPLATES (Admin + mobil roller)
   // ===========================================================================
-  const templates: { name: string; description: string; codes: string[] }[] = [
-    {
-      name: "Admin (Tam Yetki)",
-      description: "Tüm web + mobil + admin yetkileri",
-      codes: PERMISSION_CATALOG.map((p) => p.code),
-    },
-    {
-      // Yeni kullanıcının varsayılan aldığı üretim paketi (KK1↔KK2↔Tambur rotasyonu).
-      // createUser bunu otomatik verir; şablon admin'in sonradan tek tıkla uygulaması için.
-      name: "Mobil — Üretim Operatörü",
-      description: "KK1 + Kurşun/KK2 + Tambur (varsayılan istasyon rotasyonu)",
-      codes: ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur"],
-    },
-    { name: "Mobil — KK1 Operatörü",         description: "Ham kumaş kabul ekranı",         codes: ["mobile:kk1"] },
-    { name: "Mobil — KK2/Kurşun Operatörü",  description: "Kurşun + QC2 ekranı",            codes: ["mobile:kk2-kursun"] },
-    { name: "Mobil — Tambur Operatörü",      description: "Tambur karar / kesim ekranı",    codes: ["mobile:tambur"] },
-    { name: "Mobil — Depo Operatörü",        description: "Depo ekranı (salt-okunur)",        codes: ["mobile:depo"] },
-    { name: "Mobil — Fason Sevk Operatörü",  description: "Fason firmaya sevk ekranı",      codes: ["mobile:fason-sevk"] },
-    { name: "Mobil — Fason Kabul Operatörü", description: "Fason firmadan mal kabul ekranı", codes: ["mobile:fason-kabul"] },
-    { name: "Mobil — Kartela Sevk Operatörü",  description: "Kartela firmaya sevk ekranı",      codes: ["mobile:kartela-sevk"] },
-    { name: "Mobil — Kartela Kabul Operatörü", description: "Kartela firmadan mal kabul ekranı", codes: ["mobile:kartela-kabul"] },
-    { name: "Mobil — Paketleme Operatörü",   description: "Tartı & Paketleme ekranı",       codes: ["mobile:tarti-paket"] },
-    { name: "Mobil — Sevkiyat Operatörü",    description: "Sevkiyat yönetimi ekranı",        codes: ["mobile:sevkiyat"] },
-    { name: "Mobil — İade Operatörü",        description: "İade girişi ekranı",             codes: ["mobile:iade"] },
-    {
-      // Mobilde masaüstüyle aynı iş emri yetkileri: stok topu okut → WO başlat,
-      // eski WO'ları listele/görüntüle/çıktı al/düzenle. Ekran görünürlüğü
-      // `mobile:hizli-is-emri` ile; aksiyonlar için gereken master-data read'leri bundle'da.
-      name: "Mobil — Hızlı İş Emri",
-      description: "Stok topu okut → iş emri başlat + iş emri yönetimi (masaüstü iş emri yetkileriyle aynı)",
-      codes: [
-        "mobile:hizli-is-emri",
-        "workorder:read", "workorder:write",
-        "roll:read",
-        "item:read", "property:read", "station:read",
-        "subcontractor:read", "order:read", "customer:read",
-        "label:print",
-      ],
-    },
-    {
-      // Kurşun bypass düzeni (production.kursunBypassEnabled): fabrika kurşun
-      // makinelerine tablet KOYMUYOR — yetkili personel, kurşun adımında bekleyen
-      // iş emrini fiziksel kurşun MAKİNESİNE atar (tek PROCESS_QC istasyonunun
-      // altındaki `Machine` satırlarından birine — istasyona DEĞİL). Ekran görünürlüğü
-      // `mobile:kursun-dagitim` ile; route'lar `requireAnyPermission("workorder:distribute",
-      // "mobile:kursun-dagitim")` kullanır. Web ikizi `workorder:distribute` BİLİNÇLİ olarak
-      // buraya konmadı (mobil şablon, saha kullanıcısına masaüstü yetkisi taşımasın);
-      // planlama/süpervizör kullanıcısına admin panelinden tek tek verilir.
-      name: "Mobil — Kurşun Dağıtım",
-      description: "Kurşun dağıtım ekranı (iş emrini fiziksel kurşun makinesine ata + son adımsa işi bitir)",
-      codes: [
-        "mobile:kursun-dagitim",
-        "workorder:read",
-        "roll:read",
-        "station:read",
-      ],
-    },
-    { name: "Mobil — Tüm Ekranlar",          description: "Tüm mobil ekranlar (wildcard)",  codes: ["mobile:*"] },
-  ];
-
-  for (const tpl of templates) {
-    await prisma.permissionTemplate.create({
-      data: {
-        name: tpl.name,
-        description: tpl.description,
-        permissions: {
-          create: tpl.codes.map((c) => ({ permissionId: permByCode.get(c)!.id })),
-        },
-      },
+  // Liste burada DEĞİL — TEK KAYNAK `src/constants/role-template-catalog.ts`.
+  // Aynı katalogu backend açılışta da okur ve DB'de eksik rolleri/izinleri yazar
+  // (boot-time uzlaştırma, `src/jobs/role-template-catalog.job.ts`); seed yalnız
+  // taze kurulumun ilk yazımıdır. Yeni rol eklerken buraya DEĞİL, katalog
+  // dosyasına yaz.
+  //
+  // ⚠️ İzin adımıyla aynı gerekçeyle İDEMPOTENT: artık şablonların da İKİ yazarı
+  // var (seed + uzlaştırma). Taze kurulumda backend seed'den önce bir kez ayağa
+  // kalkarsa roller zaten doğmuş olur; `create` bunu P2002 sayıp seed'i düşürürdü.
+  let yeniSablon = 0;
+  for (const tpl of ROLE_TEMPLATE_CATALOG) {
+    const izinler = resolveRoleTemplateCodes(tpl)
+      .map((c) => permByCode.get(c)?.id)
+      .filter((id): id is string => Boolean(id));
+    const olusan = await prisma.permissionTemplate.createMany({
+      data: [{ code: tpl.code, name: tpl.name, description: tpl.description }],
+      skipDuplicates: true,
+    });
+    if (olusan.count === 0) continue; // uzlaştırma bu arada yazmış
+    yeniSablon++;
+    const row = await prisma.permissionTemplate.findUniqueOrThrow({
+      where: { code: tpl.code },
+      select: { id: true },
+    });
+    await prisma.permissionTemplateItem.createMany({
+      data: izinler.map((permissionId) => ({ templateId: row.id, permissionId })),
+      skipDuplicates: true,
     });
   }
-  console.log(`✅ ${templates.length} permission template (Admin + ${templates.length - 1} mobil rol)`);
+  console.log(
+    `✅ ${ROLE_TEMPLATE_CATALOG.length} yetki şablonu (rol) — ${yeniSablon} yeni yazıldı, ` +
+      `${ROLE_TEMPLATE_CATALOG.length - yeniSablon} zaten vardı`
+  );
 
   // ===========================================================================
   // 3. USERS

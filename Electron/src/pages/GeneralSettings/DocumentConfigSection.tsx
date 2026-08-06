@@ -25,7 +25,7 @@ import {
 } from "@/services/documentConfig";
 import { FlagToggle } from "./SettingRow";
 import { DocumentStyleControls } from "./DocumentStyleControls";
-import { DocumentFieldStyleControls } from "./DocumentFieldStyleControls";
+import { DocumentFieldsPanel } from "./DocumentFieldsPanel";
 import { DocumentAdvancedControls } from "./DocumentAdvancedControls";
 
 /**
@@ -104,8 +104,8 @@ export function DocumentConfigSection({
   const patch = (next: Partial<DocumentConfig>) =>
     setDraft((d) => ({ ...d, [selected]: { ...d[selected], ...next } }));
 
-  const setSection = (key: string, value: boolean) =>
-    patch({ sections: { ...resolved.sections, [key]: value } });
+  // Bölüm görünürlüğü artık `DocumentFieldsPanel` içinde, alanın kendi satırında
+  // yazılıyor (`docRows.writeDocRow`) — buradaki yardımcı 2026-08-06'da düştü.
 
   const setSignature = (index: number, value: string) => {
     if (!def) return;
@@ -162,8 +162,8 @@ export function DocumentConfigSection({
               />
             </div>
 
-            {/* Künye + bölüm görünürlükleri */}
-            <div className="divide-y divide-border rounded-md border px-3">
+            {/* Künye — belge geneli bir karar, alan listesine girmez. */}
+            <div className="rounded-md border px-3">
               <div className="py-3">
                 <FlagToggle
                   title="Firma künyesini bas"
@@ -173,17 +173,6 @@ export function DocumentConfigSection({
                   onChange={(v) => patch({ showLetterhead: v })}
                 />
               </div>
-              {def.sections.map((s) => (
-                <div key={s.key} className="py-3">
-                  <FlagToggle
-                    title={s.label}
-                    desc=""
-                    checked={resolved.sections[s.key] ?? true}
-                    disabled={mut.isPending}
-                    onChange={(v) => setSection(s.key, v)}
-                  />
-                </div>
-              ))}
             </div>
 
             {/* İmza kutuları */}
@@ -222,10 +211,13 @@ export function DocumentConfigSection({
               patch={patch}
             />
 
-            {/* Alan bazlı punto/kalınlık — yalnız DocDef.fields taşıyan belgede */}
-            <DocumentFieldStyleControls
+            {/* TEK TABLO: bölüm görünürlüğü + alan puntosu + kolonlar bir arada.
+                Eskiden üç ayrı paneldi ve aynı şey iki farklı adla iki yerde
+                aranıyordu (bkz. `docRows.ts` başlığı). */}
+            <DocumentFieldsPanel
               def={def}
               cfg={draft[selected]}
+              resolved={resolved}
               disabled={mut.isPending}
               patch={patch}
             />

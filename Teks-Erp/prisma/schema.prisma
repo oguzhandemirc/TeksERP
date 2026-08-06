@@ -448,7 +448,13 @@ model UserPermission {
 /// permission'ları UserPermission'a kopyalanır ve şablon-user bağı kalmaz.
 /// Bu sayede şablonu sonradan değiştirmek mevcut kullanıcıları etkilemez.
 model PermissionTemplate {
-  id          String  @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
+  /// Sistem rolünün KALICI kimliği (`constants/role-template-catalog.ts`).
+  /// Boot uzlaştırması şablonu bu kodla bulur — fabrika adı değiştirse bile
+  /// ikizi doğmaz. NULL = fabrikanın panelden kendi yarattığı şablon
+  /// (uzlaştırma ona hiç dokunmaz). Sistem şablonu SİLİNMEZ, pasifleştirilir:
+  /// sert silme bir sonraki restart'ta diriliş demekti.
+  code        String? @unique @db.VarChar(64)
   name        String  @unique @db.VarChar(64)
   description String? @db.VarChar(200)
   isActive    Boolean @default(true)
@@ -798,12 +804,28 @@ model RouteStep {
   // WO açılışında bu değerler default olarak klonlanır (overlay yine ezebilir).
   requiredCategoryId     String? @db.Uuid
   plannedSubcontractorId String? @db.Uuid
+  /// 2026-08-06: rota şablonu artık adımın HEDEFİNİ de saklar — "bu akışta
+  /// boyahane MAVİ basar, zımpara ZIMPARALI kazandırır". İş emri açılışında
+  /// rota seçilince WO hedef renk/özellikleri buradan ön-doldurulur (operatör
+  /// yine değiştirebilir; şablon bir ÖNERİDİR, kilit değil).
+  ///
+  /// ⚠️ `WorkOrder.targetColorId`/`WorkOrderTargetProperty` ile KARIŞTIRMA: orası
+  /// üretimin gerçek hedefi (sipariş kalemi kilitleyebilir), burası yalnız şablon
+  /// varsayılanı. Rota adımı tüketildiğinde hiçbir yere kopyalanmaz — kopyalayan
+  /// tek yer istemcinin "rotayı uygula" adımıdır.
+  ///
+  /// Renk rotaya sabitlenince rota o renge özel hale gelir (kullanıcı kararı,
+  /// 2026-08-06). Boş bırakmak meşru ve varsayılandır: renksiz rota her renkte
+  /// yeniden kullanılır.
+  plannedColorId         String? @db.Uuid
 
   // Relations
   route                Route                  @relation(fields: [routeId], references: [id], onDelete: Cascade)
   station              Station                @relation(fields: [stationId], references: [id])
   requiredCategory     SubcontractorCategory? @relation("RouteStepRequiredCategory", fields: [requiredCategoryId], references: [id])
   plannedSubcontractor Subcontractor?         @relation("RouteStepPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
+  plannedColor         Color?                 @relation("RouteStepPlannedColor", fields: [plannedColorId], references: [id])
+  plannedProperties    RouteStepProperty[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -818,7 +840,30 @@ model RouteStep {
   @@index([stationId])
   @@index([requiredCategoryId])
   @@index([plannedSubcontractorId])
+  @@index([plannedColorId])
   @@map("route_steps")
+}
+
+/// RouteStep ↔ FabricProperty M:N — rota adımının şablon hedef özellikleri
+/// ("bu akışta zımpara adımı ZIMPARALI kazandırır"). Append-only pivot
+/// (sadece createdAt) — `ProductRecipeProperty` ile birebir aynı kalıp.
+///
+/// Adım silinince satırlar da düşer (`onDelete: Cascade`): rota güncellemesi
+/// adımları `deleteMany` + `create` ile tamamen değiştiriyor, cascade olmasaydı
+/// her kayıtta FK ihlali dönerdi.
+model RouteStepProperty {
+  id          String @id @default(uuid()) @db.Uuid
+  routeStepId String @db.Uuid
+  propertyId  String @db.Uuid
+
+  routeStep RouteStep      @relation(fields: [routeStepId], references: [id], onDelete: Cascade)
+  property  FabricProperty @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([routeStepId, propertyId])
+  @@index([propertyId])
+  @@map("route_step_properties")
 }
 
 /// Üretim reçetesi — bir ürünü (kumaş + renk + özellikler + en + rota) tek
@@ -2293,6 +2338,23 @@ model SubcontractorReceipt {
   /// Renk vermeyen fason kategorilerinde (yıkama, zımpara) NULL kalır.
   appliedColorId String? @db.Uuid
 
+  /// Bu kabulde ÖLÇÜLEN en (cm) — doğan tüm açık-kumaş toplarına uygulanır.
+  /// `appliedColorId` ile aynı seviyede ve aynı gerekçeyle makbuzdadır: ikisi de
+  /// "bu kabulde uygulanan kimlik"tir, top başına değil kabul başına yazılır
+  /// (aynı sevkten dönen parçaların eni aynıdır; 10 parçalı kabulde 10 giriş yerine 1).
+  ///
+  /// ⚠️ `appliedColorId`'den bir farkı var: renk YALNIZ "renk veren" kategoride
+  /// (boyahane) sorulur, en ise HER fason dönüşünde sorulur — zımpara eni
+  /// değiştirmese de yazılan değer bir ölçüm teyididir. Gerekçe veri: ham girişte
+  /// en tasarım gereği yazılmıyor (`kk1.rawWidthEnabled` kapalı, KK1 kaynaklı
+  /// 47 topun 47'si ensiz), yani topun enini ilk kez öğrendiğimiz yer burasıdır.
+  /// Yalnız boyahanede sorulsaydı zımparadan dönen top sonsuza dek ensiz kalırdı.
+  ///
+  /// NULL = bu kabulde en girilmedi (2026-08-05 öncesi kayıtlar + alanı göndermeyen
+  /// eski APK'lar). Zorunluluk ARAYÜZDE yaşar, API'de değil: burada zorunlu yapmak
+  /// sahadaki eski APK'ların HER fason kabulünü 400'e düşürürdü.
+  appliedWidth Decimal? @db.Decimal(12, 3)
+
   // Soft-cancel — kabul yanlış girilmişse operatör geri çeker.
   // Rulalar AT_SUBCONTRACTOR'a döner, colorId/RollProperty (renk veren adımdan
   // gelmişse) sıfırlanır. Belge silinmez, audit izi kalır.
@@ -3154,6 +3216,8 @@ model Color {
   productRecipes      ProductRecipe[]
   rollReturns         RollReturn[]
   swatchReductions    SwatchStockReduction[]
+  /// Rota şablonu adımlarında planlanan hedef renk (şablon varsayılanı).
+  routeStepPlanned    RouteStep[]            @relation("RouteStepPlannedColor")
 
   @@index([isActive, sortOrder])
   @@map("colors")
@@ -3185,6 +3249,8 @@ model FabricProperty {
   /// Fason kabullerde uygulandığı receipt'ler (boyahane dönüşü gibi).
   appliedAtReceipts    SubcontractorReceiptProperty[]
   productRecipeTargets ProductRecipeProperty[]
+  /// Rota şablonu adımlarında planlanan hedef özellikler (şablon varsayılanı).
+  routeStepTargets     RouteStepProperty[]
 
   @@index([isActive, sortOrder])
   @@index([category])

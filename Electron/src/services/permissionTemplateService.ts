@@ -4,6 +4,10 @@ import type { Permission } from "@/types/permissions";
 
 export interface PermissionTemplate {
   id: string;
+  /** Sistem rolünün kalıcı kimliği (backend `role-template-catalog.ts`).
+   *  null = fabrikanın panelden yarattığı şablon. Sistem rolleri silinmez,
+   *  pasifleştirilir — sert silme bir sonraki sunucu açılışında geri gelirdi. */
+  code: string | null;
   name: string;
   description: string | null;
   isActive: boolean;
@@ -22,6 +26,8 @@ interface UpdateInput {
   name?: string;
   description?: string | null;
   permissionIds?: string[];
+  /** Pasifleştirilmiş rolü geri açmak için. */
+  isActive?: boolean;
 }
 
 export const permissionTemplateService = {

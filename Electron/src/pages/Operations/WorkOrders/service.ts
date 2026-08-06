@@ -32,6 +32,48 @@ export const workOrderService = {
       .get<ApiResponse<WorkOrderCancelImpact>>(`/api/work-orders/${id}/cancel-impact`)
       .then((r) => r.data),
 
+  /**
+   * Karar vererek iptal. `DELETE /:id` (gövdesiz, eski mobil) DOKUNULMADAN durur —
+   * karar listesi ve gerekçe yalnız bu uçtan geçer.
+   */
+  cancelWithDecisions: (id: string, payload: CancelWorkOrderPayload) =>
+    apiClient
+      .post<ApiResponse<WorkOrder>>(`/api/work-orders/${id}/cancel`, payload)
+      .then((r) => r.data),
+
+  /** Açık fason sevklerini TEK onayla iptal et → toplar depoya döner. */
+  cancelFasonDispatchBulk: (dispatchIds: string[], reason: string) =>
+    apiClient
+      .post<
+        ApiResponse<{
+          cancelled: number;
+          cancelledNos: string[];
+          failed: { dispatchId: string; dispatchNo: string | null; message: string }[];
+        }>
+      >(`/api/subcontractor/dispatches/cancel-bulk`, { dispatchIds, reason })
+      .then((r) => r.data),
+
+  /** Parti düşürme önizlemesi. */
+  getBatchDropPreview: (workOrderId: string, batchId: string) =>
+    apiClient
+      .get<ApiResponse<BatchDropPreview>>(
+        `/api/work-orders/${workOrderId}/batches/${batchId}/drop-preview`,
+      )
+      .then((r) => r.data),
+
+  /** Partiyi iş emrinden düşür — iş emri diğer partileriyle devam eder. */
+  dropBatch: (
+    workOrderId: string,
+    batchId: string,
+    payload: { reason: string; dispositions?: { rollId: string; action: CancelDisposition }[] },
+  ) =>
+    apiClient
+      .post<ApiResponse<BatchDropResult>>(
+        `/api/work-orders/${workOrderId}/batches/${batchId}/drop`,
+        payload,
+      )
+      .then((r) => r.data),
+
   /** Manuel kapatma önizleme: atlanacak adımlar + dispozisyon bekleyen/engelleyen toplar. */
   getCompletePreview: (id: string) =>
     apiClient
@@ -758,6 +800,46 @@ export interface CancelImpactRoll {
   processed: boolean;
   /** Hâlâ fason/boyahanede (fiziksel olarak dışarıda). */
   atSubcontractor: boolean;
+  /** İptalde gerçekten STOCK'a dönecek mi (backend mutasyon yükleminin aynası). */
+  willRevertToStock: boolean;
+  /** Bulunduğu istasyon — liste buna göre gruplanır. */
+  stationName: string | null;
+  batchId: string | null;
+  batchNumber: string | null;
+  /** Fason dönüşü mal ham stoğa dönemez → "Ham stok" seçeneği kilitlenir. */
+  canReturnToStock: boolean;
+  /** Karar verilebilir mi (yalnız işlemdeki toplar). */
+  decidable: boolean;
+}
+
+/** İptalde bir topa verilebilecek karar — kapatmanın altı aksiyonundan farklı. */
+export type CancelDisposition = "STOCK" | "SCRAP" | "CANCELLED";
+
+/** İş emrinin açık fason sevki — iptal ekranından toplu iptal edilir. */
+export interface CancelImpactDispatch {
+  dispatchId: string;
+  dispatchNo: string;
+  dispatchedAt: string | null;
+  subcontractorName: string;
+  stationName: string;
+  stepSequence: number;
+  batchId: string | null;
+  batchNumber: string | null;
+  rollCount: number;
+  totalQty: number;
+  /** Backend'in İPTAL yükleminden gelir — ekran ile uç ayrışmaz. */
+  cancellable: boolean;
+  blockReason: string | null;
+}
+
+export interface CancelImpactBatch {
+  batchId: string;
+  batchNumber: string;
+  liveRollCount: number;
+  meters: number;
+  /** Fasonda top ya da açık sevk var. */
+  locked: boolean;
+  mergedIntoBatchNumber: string | null;
 }
 
 export interface WorkOrderCancelImpact {
@@ -770,7 +852,66 @@ export interface WorkOrderCancelImpact {
   rollCount: number;
   processedCount: number;
   atSubcontractorCount: number;
+  fasonInFlightCount: number;
   rolls: CancelImpactRoll[];
+  /** Liste 200 ile kırpıldıysa true — sayılar yine de tam. */
+  rollsTruncated: boolean;
+  openDispatches: CancelImpactDispatch[];
+  batches: CancelImpactBatch[];
+  fasonBlock: {
+    /** Sevk iptaliyle çözülür. */
+    atSubcontractorCount: number;
+    /** Çözülmez — doğru araç KAPATMA. */
+    returnedFromSubcontractorCount: number;
+    subcontractorReturnInProductionCount: number;
+  };
+  /** İptal bloklu ama kapatma açık → arayüz "Kapat'a geç" sunar. */
+  canSwitchToClose: boolean;
+  closeHint: string | null;
+}
+
+/** `POST /work-orders/:id/cancel` gövdesi. */
+export interface CancelWorkOrderPayload {
+  reason: string;
+  /** Gönderilmeyen top varsayılan STOCK'a döner. */
+  dispositions?: { rollId: string; action: CancelDisposition }[];
+}
+
+export interface BatchDropPreviewRoll {
+  id: string;
+  barcode: string | null;
+  status: string;
+  currentQty: number;
+  colorName: string | null;
+  colorHex: string | null;
+  qualityGrade: string | null;
+  stationName: string;
+  canReturnToStock: boolean;
+  /** "Ham stok" seçilirse topun GERÇEKTEN gideceği statü (renkli top depoya döner). */
+  revertStatus: string;
+}
+
+export interface BatchDropPreview {
+  workOrderId: string;
+  workOrderNumber: string;
+  batchId: string;
+  batchNumber: string;
+  canDrop: boolean;
+  blockReason: string | null;
+  rolls: BatchDropPreviewRoll[];
+  rollCount: number;
+  totalMeters: number;
+  openDispatches: { dispatchId: string; dispatchNo: string }[];
+  otherBatches: { batchId: string; batchNumber: string; rollCount: number }[];
+}
+
+export interface BatchDropResult {
+  batchNumber: string;
+  workOrderNumber: string;
+  droppedCount: number;
+  batchDeleted: boolean;
+  /** İş emrinde canlı top kalmadı → arayüz "iş emrini de iptal et" teklif eder. */
+  noLiveRollsRemain: boolean;
 }
 
 /**

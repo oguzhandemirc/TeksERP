@@ -21,7 +21,11 @@ import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus } from "@prisma
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { createBatchTx, deleteIfEmptyAndTraceless } from "./batch.service";
+import {
+  createBatchTx,
+  deleteIfEmptyAndTraceless,
+  NO_LIVE_MATERIAL_STATUSES,
+} from "./batch.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
@@ -260,17 +264,14 @@ export class WorkOrderSplitService {
     tx: Prisma.TransactionClient,
     workOrderId: string,
   ): Promise<boolean> {
+    // ⚠️ Küme TEK KAYNAKTAN (`NO_LIVE_MATERIAL_STATUSES`). Satır içi yazılıyken
+    // `KARTELA_CONSUMED` EKSİKTİ: son topu kartelaya giden iş emri kalıcı olarak
+    // "boş değil" sayılıyor ve hiç SUPERSEDED olamıyordu — sessiz, kimsenin
+    // bakmadığı bir kilitlenme.
     const liveRolls = await tx.roll.count({
       where: {
         batch: { workOrderId },
-        status: {
-          notIn: [
-            RollStatus.CANCELLED,
-            RollStatus.SUBCONTRACTOR_CONSUMED,
-            RollStatus.TAMBUR_CONSUMED,
-            RollStatus.SHIPPED,
-          ],
-        },
+        status: { notIn: NO_LIVE_MATERIAL_STATUSES },
       },
     });
     if (liveRolls > 0) return false;

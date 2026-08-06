@@ -56,6 +56,7 @@ import {
   designerStepsFromWorkOrder,
   stepsToCustom,
   routeStepsToCreatePayload,
+  type RouteStepTargetPlan,
 } from "./workOrderPrefill";
 import type { WorkOrder } from "./types";
 
@@ -227,7 +228,11 @@ export function WorkOrderFormView({
 
   // Rota şablonu olarak kaydet (inline — ayrı dialog yok).
   const saveTemplateMut = useMutation({
-    mutationFn: (params: { name: string; forCustomer: boolean }) => {
+    mutationFn: (params: {
+      name: string;
+      forCustomer: boolean;
+      stepTargets: Map<string, RouteStepTargetPlan>;
+    }) => {
       const payload = {
         name: params.name,
         // Kod backend'de üretilir (ROT+GGAAYY+NNNN) — istemci göndermez.
@@ -235,7 +240,8 @@ export function WorkOrderFormView({
         isActive: true,
         isFavorite: false,
         // Fason planlamasını (kategori + firma) KORUR — bkz. routeStepsToCreatePayload.
-        steps: routeStepsToCreatePayload(routeSteps),
+        // Şablon hedefi (renk/özellik) RouteEditor'da türetilir (deriveStepTargets).
+        steps: routeStepsToCreatePayload(routeSteps, params.stepTargets),
       };
       return routeService.create(payload as unknown as Partial<ProductionRoute>);
     },
@@ -278,9 +284,24 @@ export function WorkOrderFormView({
     },
   });
 
+  /**
+   * Rota şablonunun HEDEFİNİ (renk + özellik) forma uygular. Sipariş bağlıysa
+   * DOKUNMAZ: orada hedef sipariş kaleminden gelir (ve kilitli olabilir) —
+   * şablon bir öneridir, siparişin dediğini ezemez.
+   */
+  const applyRouteTarget = (
+    seeded: { colorId: string | null; propertyIds: string[] } | null,
+  ) => {
+    if (!seeded || pickedLines.length > 0) return;
+    if (seeded.colorId) form.setValue("targetColorId", seeded.colorId);
+    if (seeded.propertyIds.length > 0) {
+      form.setValue("targetPropertyIds", seeded.propertyIds);
+    }
+  };
+
   // Şablondan tohumla (boş seçilirse akışı temizle).
   const handleSeedRoute = (routeId: string | null) => {
-    if (routeId) void seedFromRoute(routeId);
+    if (routeId) void seedFromRoute(routeId).then(applyRouteTarget);
     else resetRouteSteps([]);
   };
 
@@ -727,8 +748,8 @@ export function WorkOrderFormView({
                 onSetNotes={(clientId, notes) => updateStep(clientId, { notes })}
                 onSetFirm={(clientId, patch) => updateStep(clientId, patch)}
                 onSeed={handleSeedRoute}
-                onSaveTemplate={(name, forCustomer) =>
-                  saveTemplateMut.mutate({ name, forCustomer })
+                onSaveTemplate={(name, forCustomer, stepTargets) =>
+                  saveTemplateMut.mutate({ name, forCustomer, stepTargets })
                 }
                 savePending={saveTemplateMut.isPending}
                 customerId={pickedLines[0]?.customerId ?? null}

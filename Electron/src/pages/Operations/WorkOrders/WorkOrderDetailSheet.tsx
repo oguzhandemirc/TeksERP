@@ -252,6 +252,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
           workOrderId={wo?.id ?? null}
           batchNumber={wo?.workOrderNumber}
           onCancelled={() => onOpenChange(false)}
+          onSwitchToClose={() => setCompleteOpen(true)}
         />
 
         <WorkOrderCompleteDialog

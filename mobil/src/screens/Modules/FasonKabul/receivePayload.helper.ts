@@ -9,7 +9,6 @@
  * payload'a birleştirir.
  */
 import type {
-  Color,
   FabricProperty,
   PendingReturnGroup,
   PendingReturnParty,
@@ -39,6 +38,18 @@ export function parseNewRolls(newRolls: NewRollRow[]): ReceiveNewRollInput[] {
   return out;
 }
 
+/**
+ * Kabulde ÖLÇÜLEN en (cm) — ham metinden sayıya. Metraj ile aynı sözleşme:
+ * virgül→nokta, sonlu ve pozitif değilse "girilmedi" sayılır (null).
+ *
+ * `0` bilinçli olarak null'a düşer: 0 cm'lik kumaş yoktur, 0 "ölçmedim" demektir.
+ * Backend de aynı süzgeci uygular (`appliedWidth > 0`) — iki katman aynı şeyi söyler.
+ */
+export function parseAppliedWidth(raw: string): number | null {
+  const n = parseFloat(raw.replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export interface BuildReceivePayloadArgs {
   selectedGroup: PendingReturnGroup | null;
   selectedParty: PendingReturnParty | null;
@@ -47,8 +58,12 @@ export interface BuildReceivePayloadArgs {
   manifestNo: string;
   notes: string;
   appliesColor: boolean;
-  appliedColor: Color | null;
+  /** Seçili rengin ID'si. Ad/hex ekranda `ColorSelectField` tarafından çözülür —
+   *  burada kimlik yeter ve tam da backend'e giden şeydir. */
+  appliedColorId: string | null;
   appliedProperties: FabricProperty[];
+  /** Kabulde ölçülen en — HAM metin (NumpadInput değeri); burada parse edilir. */
+  appliedWidth: string;
 }
 
 /**
@@ -73,8 +88,9 @@ export function buildReceivePayload(args: BuildReceivePayloadArgs): ReceiveReque
     manifestNo,
     notes,
     appliesColor,
-    appliedColor,
+    appliedColorId,
     appliedProperties,
+    appliedWidth,
   } = args;
 
   if (!selectedGroup) return null;
@@ -99,9 +115,18 @@ export function buildReceivePayload(args: BuildReceivePayloadArgs): ReceiveReque
     // Refactor 9 — "renk veren" kategori için receipt seviyesi renk/özellik
     ...(appliesColor
       ? {
-          appliedColorId: appliedColor?.id ?? null,
+          appliedColorId,
           appliedPropertyIds: appliedProperties.map((p) => p.id),
         }
+      : {}),
+    // EN kategoriye BAKMAZ — renkten ayrıldığı tek yer burası. Renk yalnız "renk
+    // veren" fasonda (boyahane) sorulur; en HER fason dönüşünde sorulur, çünkü
+    // topun enini ilk kez burada öğreniyoruz (ham girişte en yazılmıyor). Yalnız
+    // appliesColor'a bağlansaydı zımparadan dönen top sonsuza dek ensiz kalırdı.
+    // Girilmediyse alan hiç GÖNDERİLMEZ (undefined) — `null` göndermek ile aynı
+    // sonucu verir ama "ölçtüm ve boş" gibi okunur; sözleşme sessiz kalmayı seçer.
+    ...(parseAppliedWidth(appliedWidth) != null
+      ? { appliedWidth: parseAppliedWidth(appliedWidth) as number }
       : {}),
     returns,
     newRolls: parsed,

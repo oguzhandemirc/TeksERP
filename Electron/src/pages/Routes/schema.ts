@@ -14,6 +14,12 @@ export const routeStepSchema = z.object({
   stationType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   requiredCategoryId: z.string().nullable().optional(),
   plannedSubcontractorId: z.string().nullable().optional(),
+  // 2026-08-06: adımın şablon HEDEFİ. Rota iş emrine uygulanınca hedef renk /
+  // özellik alanlarını ön-doldurur; boş bırakmak meşru (renksiz rota her renkte
+  // yeniden kullanılır). İstasyonun gerçekten uygulayıp uygulayamadığı
+  // `RouteStepTargets` ile sorulur, backend ikinci hat olarak doğrular.
+  plannedColorId: z.string().nullable().optional(),
+  plannedPropertyIds: z.array(z.string()).optional(),
 });
 
 export const routeFormSchema = z.object({

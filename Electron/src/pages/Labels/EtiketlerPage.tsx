@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelAssignmentsPage } from "@/pages/Labels/LabelAssignmentsPage";
 import { StandalonePrintPage } from "@/pages/Labels/StandalonePrintPage";
+import { resolveEtiketTab } from "@/pages/Labels/tabs-config";
 
 /**
  * Etiketler — tek başlık + içerikte iki sekme (çift PageHeader sorunu giderildi).
@@ -21,13 +22,9 @@ export function EtiketlerPage() {
   // Alt sayfaların Yenile/+Yeni butonları başlığa PORTAL'lanır (yıldızın sağına) —
   // ref-callback state'i: element mount olunca alt sayfalara geçer.
   const [actionsEl, setActionsEl] = useState<HTMLDivElement | null>(null);
-  const tabParam = sp.get("tab");
-  const tab =
-    tabParam === "assignments"
-      ? "assignments"
-      : tabParam === "freeprint"
-        ? "freeprint"
-        : "templates";
+  // Sekme anahtarları `tabs-config.ts`te — komut paleti aynı listeden derin
+  // bağlantı üretiyor (kopyalanırsa palet olmayan bir sekmeye götürür).
+  const tab = resolveEtiketTab(sp.get("tab"));
   const setTab = (v: string) => {
     const n = new URLSearchParams(sp);
     n.set("tab", v);

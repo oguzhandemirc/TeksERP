@@ -20,6 +20,7 @@ import {
   type TravelerDensity,
 } from "./traveler-card.density";
 import { resolveSectionOrder, type TravelerSectionKey } from "./traveler-card.sections";
+import { travelerFieldCss } from "./traveler-card.fields";
 import { renderRawTemplate, buildRawContext, wrapRawDocument } from "./traveler-card-raw";
 
 interface SnapStep {
@@ -152,32 +153,59 @@ function fmtDateTime(iso: string): string {
 // Global fontScale/fontWeight hem CSS default'u hem override'ı regex ile ölçekler/kaydırır.
 // sm/lg px değerleri SAYFA BOYUTUNA bağlıdır (yoğunluk profili) → render içinde kurulur:
 // A5'te taban 8px iken "lg" hücrenin A4'ün 14px'i olması kartı taşırırdı.
-const OVR_WEIGHT: Record<string, number> = { light: 400, bold: 800 }; // normal → CSS default
+// HÜCRE KALINLIĞI — kartın KENDİ ölçeği, katalog alanlarınınkinden (doc-style
+// `DOC_FIELD_WEIGHTS`, 300/400/500/700/800) BİLEREK AYRI. İki sebep:
+//   ① Hücrelerin CSS tabanı sütuna göre değişir (.o-num 700, .c-val 600,
+//      .ord td 400). "normal" burada BİR SAYI DEĞİL, "inline basma, sütunun
+//      kendi tabanını koru" demektir — bu yüzden haritada YOKTUR. Eklemek tüm
+//      sütun tabanlarını sessizce düzleştirirdi.
+//   ② `bold: 800` 2026-08-05 öncesinden gelen KAYITLI değerdir. Ortak ölçeğe
+//      (bold: 700) çekmek, ayarı yıllar önce yapmış kartların çıktısını sessizce
+//      inceltirdi — canlı çıktıya dokunma kuralı.
+// Panelde ikisi de aynı beş etiketle görünür; sıralama (ince → çok kalın) her
+// iki haritada da monotondur, kullanıcı ayrımı görmez.
+const OVR_WEIGHT: Record<string, number> = { light: 400, medium: 600, bold: 800, black: 900 };
 
 /** Alanın (boyut/kalınlık) inline override stilini üret — default'ta boş string. */
-function ovrStyle(f: { size: string; weight: string }, sizeMap: Record<string, number>): string {
+function ovrStyle(f: SpecCell, sizeMap: Record<string, number>): string {
   const p: string[] = [];
-  if (sizeMap[f.size] != null) p.push(`font-size:${sizeMap[f.size]}px`);
+  // `px` (sayısal punto) kademenin ÜSTÜNDEDİR: 2026-08-05'te panel tek birime
+  // (px) geçti, kademe yalnız eski kayıtlar + donmuş snapshot'lar için okunuyor.
+  const size = f.px ?? sizeMap[f.size];
+  if (size != null) p.push(`font-size:${size}px`);
   if (OVR_WEIGHT[f.weight] != null) p.push(`font-weight:${OVR_WEIGHT[f.weight]}`);
   return p.length ? ` style="${p.join(";")}"` : "";
 }
 
-// Toplam satırı tek + tam denetimli → HER ZAMAN inline (md dahil). sm/md/lg + ince/normal/kalın.
+// Toplam satırı tek + tam denetimli → HER ZAMAN inline (md dahil).
 // (Boyut haritası yoğunluk profilinden kurulur — bkz. OVR_WEIGHT notu.)
-const FULL_WEIGHT: Record<string, number> = { light: 400, normal: 600, bold: 800 };
-function fullStyle(f: { size: string; weight: string }, sizeMap: Record<string, number>): string {
-  return ` style="font-size:${sizeMap[f.size] ?? sizeMap.md}px;font-weight:${FULL_WEIGHT[f.weight] ?? 600}"`;
+const FULL_WEIGHT: Record<string, number> = { light: 400, normal: 600, medium: 700, bold: 800, black: 900 };
+function fullStyle(f: SpecCell, sizeMap: Record<string, number>): string {
+  const size = f.px ?? sizeMap[f.size] ?? sizeMap.md;
+  return ` style="font-size:${size}px;font-weight:${FULL_WEIGHT[f.weight] ?? 600}"`;
 }
 
+/** Çözülmüş hücre ayarı — `px` yeni (sayısal), `size` eski kademe (geriye uyum). */
+interface SpecCell {
+  show: boolean;
+  size: string;
+  weight: string;
+  px?: number;
+}
+
+const CELL_WEIGHTS = new Set(["light", "medium", "bold", "black"]);
+
 /** Ham spec alan değerini (boolean eski şekil | nesne | undefined) çöz. */
-function coerceSpecCell(v: unknown): { show: boolean; size: string; weight: string } {
+function coerceSpecCell(v: unknown): SpecCell {
   if (v === false) return { show: false, size: "md", weight: "normal" };
   if (v == null || v === true) return { show: true, size: "md", weight: "normal" };
   const f = v as Record<string, unknown>;
+  const px = typeof f.px === "number" && Number.isFinite(f.px) ? f.px : undefined;
   return {
     show: f.show !== false,
     size: f.size === "sm" || f.size === "lg" ? (f.size as string) : "md",
-    weight: f.weight === "light" || f.weight === "bold" ? (f.weight as string) : "normal",
+    weight: typeof f.weight === "string" && CELL_WEIGHTS.has(f.weight) ? f.weight : "normal",
+    ...(px != null ? { px } : {}),
   };
 }
 
@@ -233,6 +261,14 @@ export function renderTravelerCardHtml(
   // değerlerin birebir aynısı; A5 sıkı profil). Hücre-başına sm/lg override
   // haritaları da profile bağlı.
   const d: TravelerDensity = DENSITY[pageSize];
+  // ALAN BAZLI görünürlük + yazı ayarı (`traveler-card.fields.ts`) — kartın
+  // TEKİL yüzeyleri (firma adı, İŞ EMRİ NO, bölüm başlıkları, filigran…).
+  // Override yoksa boş string → çıktı bugünküyle BAYT-BAYT aynı.
+  // ⚠️ TABLO HÜCRELERİ buradan GEÇMEZ: onlar `specFields`/`orderFields`/
+  // `batchFields` üzerinden hücre-başına INLINE basılır (sütun sütun farklı
+  // olabilsin diye) ve inline zaten CSS'i ezer.
+  const fieldCss = travelerFieldCss(cfg.fields, d);
+  // Kademe (sm/lg) haritaları — yalnız `px` taşımayan ESKİ kayıtlar için.
   const specOvrSize: Record<string, number> = { sm: d.specSm, lg: d.specLg };
   const orderOvrSize: Record<string, number> = { sm: d.ordSm, lg: d.ordLg };
   const batchOvrSize: Record<string, number> = { sm: d.batSm, lg: d.batLg };
@@ -285,7 +321,7 @@ export function renderTravelerCardHtml(
     : "";
 
   // Spec grid — yalnız AÇIK alanlar; boyut/kalınlık default'tan farklıysa inline override.
-  const cell = (label: string, value: string, f: { size: string; weight: string }, hi = false) =>
+  const cell = (label: string, value: string, f: SpecCell, hi = false) =>
     `<div class="cell${hi ? " hi" : ""}"><div class="c-lbl">${esc(label)}</div>` +
     `<div class="c-val"${ovrStyle(f, specOvrSize)}>${value}</div></div>`;
   const gridCells: string[] = [];
@@ -561,6 +597,12 @@ export function renderTravelerCardHtml(
     .map((s) => `    ${sectionBody[s.key]}`)
     .join("\n");
 
+  // Alan bazlı kurallar TABAN CSS'İN SONUNA eklenir (özgüllük zaten `.sheet`
+  // önekiyle garantili — sıra ikinci hat). ⚠️ Kendi SATIRINDA `${…}` bırakma:
+  // override yokken boş bir satır kalır ve A4 parmak izi testi düşer; bu yüzden
+  // önek `\n` string'in İÇİNDE ve bir önceki kuralın sonuna yapışır.
+  const fieldTail = fieldCss ? `\n  /* Alan bazlı yazı ayarı (config.fields) */\n  ${fieldCss}` : "";
+
   const doc = `<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <style>
   * { box-sizing: border-box; }
@@ -648,7 +690,7 @@ export function renderTravelerCardHtml(
   .ord-total-lbl { text-align: right; padding-right: 8px; letter-spacing: 0.5px; }
 ${batchCss}
   .empty { border: 0.5px dashed #bbb; text-align: center; padding: ${d.emptyPad}px; font-size: ${d.empty}px; color: #555; }
-  .foot-note { border: 0.5px solid #999; border-radius: 3px; padding: ${d.footNotePad}px; margin-top: ${d.footNoteMarT}px; font-size: ${d.footNote}px; color: #555; }
+  .foot-note { border: 0.5px solid #999; border-radius: 3px; padding: ${d.footNotePad}px; margin-top: ${d.footNoteMarT}px; font-size: ${d.footNote}px; color: #555; }${fieldTail}
 </style></head>
 <body>
   ${watermark}

@@ -138,6 +138,40 @@ const manualMoveSchema = z
 // Manuel kapatma: istasyonda kalan her top için dispozisyon kararı (WIP disposition).
 // Kalite yalnız WAREHOUSE/A1_STOCK'ta anlamlı ve OPSİYONEL — servis diğer aksiyonlarda
 // gelirse reddeder. `reason` dispozisyon varsa zorunlu (servis doğrular).
+const cancelSchema = z.object({
+  reason: z.string().trim().min(3, "İptal nedeni en az 3 karakter olmalı").max(500),
+  /**
+   * İşlemdeki topların ALT KÜMESİ — gönderilmeyen top varsayılan `STOCK`'a döner.
+   * Kapatmadaki altı aksiyondan farklı olarak üç seçenek: iptal "üretildi" demez.
+   * ⚠️ `z.object` bilinmeyen anahtarı sessizce ATAR — `qualityGradeId` gönderen bir
+   * istemci 400 almaz, alan düşer. Üç aksiyonda kalite anlamsız olduğu için bu
+   * kabul edilir; aksiyon kümesi genişletilirse şema da genişletilmeli.
+   */
+  dispositions: z
+    .array(
+      z.object({
+        rollId: z.string().uuid("Geçersiz top ID"),
+        action: z.enum(["STOCK", "SCRAP", "CANCELLED"]),
+      })
+    )
+    .max(200, "Tek iptalde en fazla 200 top için karar verilebilir")
+    .optional(),
+});
+
+/** Parti düşürme — iptalle AYNI üç aksiyon (kapsam farklı, karar dili aynı). */
+const batchDropSchema = z.object({
+  reason: z.string().trim().min(3, "Düşürme nedeni en az 3 karakter olmalı").max(500),
+  dispositions: z
+    .array(
+      z.object({
+        rollId: z.string().uuid("Geçersiz top ID"),
+        action: z.enum(["STOCK", "SCRAP", "CANCELLED"]),
+      })
+    )
+    .max(200, "Tek işlemde en fazla 200 top için karar verilebilir")
+    .optional(),
+});
+
 const completeSchema = z.object({
   reason: z.string().max(500).optional(),
   dispositions: z
@@ -250,6 +284,9 @@ export class WorkOrderController {
     this.getManifestById = this.getManifestById.bind(this);
     this.cancelImpact = this.cancelImpact.bind(this);
     this.softDelete = this.softDelete.bind(this);
+    this.cancelWorkOrder = this.cancelWorkOrder.bind(this);
+    this.batchDropPreview = this.batchDropPreview.bind(this);
+    this.dropBatch = this.dropBatch.bind(this);
     this.completePreview = this.completePreview.bind(this);
     this.completeWorkOrder = this.completeWorkOrder.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
@@ -631,6 +668,78 @@ export class WorkOrderController {
     try {
       const result = await this.service.softDelete(
         req.params.id as string,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/work-orders/:id/cancel
+   * Karar vererek iptal: gerekçe ZORUNLU + istasyondaki toplar için üç seçenek.
+   *
+   * ⚠️ Neden `DELETE` değil de ayrı bir POST: gövdeli DELETE bazı ara katmanlarda
+   * sessizce düşer (bu repo aynı kararı `inventory.controller.ts` iptal ucunda da
+   * verdi) ve 200 satırlık karar listesi query string'e sığmaz. Ayrıca `DELETE /:id`
+   * dokunulmadan kalınca sahadaki eski mobil APK'lar YAPISAL olarak çalışmaya devam
+   * eder — geriye uyum ispatlanacak bir şey değil, kurulumun sonucu olur.
+   */
+  async cancelWorkOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = cancelSchema.parse(req.body ?? {});
+      // Yetki kontrolü STOCK'u DIŞLAR: `STOCK` bu ucun bugün de `workorder:write`
+      // ile ürettiği sonuçtur, onun için süpervizör yetkisi istemek mobil iptali
+      // yeni APK açık karar göndermeye başladığı gün kırardı. Envanteri yok eden
+      // `SCRAP`/`CANCELLED` ise tam olarak `roll:manual-adjust`'ın konusudur.
+      const needsAdjust = (body.dispositions ?? []).some((d) => d.action !== "STOCK");
+      if (needsAdjust && !matchesPermission(req.user?.permissions ?? [], "roll:manual-adjust")) {
+        throw AppError.forbidden(
+          "Fire / hatalı kayıt kararı için 'roll:manual-adjust' yetkisi gerekli."
+        );
+      }
+      const result = await this.service.softDelete(
+        req.params.id as string,
+        req.user?.userId,
+        body
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/work-orders/:id/batches/:batchId/drop-preview */
+  async batchDropPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getBatchDropPreview(
+        req.params.id as string,
+        req.params.batchId as string
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/work-orders/:id/batches/:batchId/drop
+   * Partiyi iş emrinden düşürür — iş emri diğer partileriyle DEVAM eder.
+   */
+  async dropBatch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = batchDropSchema.parse(req.body ?? {});
+      const needsAdjust = (body.dispositions ?? []).some((d) => d.action !== "STOCK");
+      if (needsAdjust && !matchesPermission(req.user?.permissions ?? [], "roll:manual-adjust")) {
+        throw AppError.forbidden(
+          "Fire / hatalı kayıt kararı için 'roll:manual-adjust' yetkisi gerekli."
+        );
+      }
+      const result = await this.service.dropBatch(
+        req.params.id as string,
+        req.params.batchId as string,
+        body,
         req.user?.userId
       );
       res.status(200).json(result);

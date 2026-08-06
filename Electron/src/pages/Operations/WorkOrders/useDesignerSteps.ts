@@ -101,7 +101,17 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
     ]);
   };
 
-  const seedFromRoute = async (routeId: string) => {
+  /**
+   * Rota şablonunu akışa yükler ve şablonun HEDEFİNİ (renk + özellik) çağırana
+   * DÖNER — hedef adım bazında saklanır ama iş emrinde tek/düz alandır, o yüzden
+   * çeviri burada yapılır: renk için SON renk veren adım kazanır (yeniden boyama
+   * varsa nihai renk odur), özellikler ise birleşiktir (her adım kendi katkısını
+   * ekler). Hedefi burada forma YAZMAYIZ — sipariş bağlı iş emrinde renk/özellik
+   * sipariş kaleminden gelir ve şablon onu ezmemeli; kararı çağıran verir.
+   */
+  const seedFromRoute = async (
+    routeId: string,
+  ): Promise<{ colorId: string | null; propertyIds: string[] } | null> => {
     try {
       const res = await qc.fetchQuery({
         queryKey: ["route", routeId, "designer-seed"],
@@ -109,7 +119,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         staleTime: 60_000,
       });
       const route = res.data;
-      if (!route) return;
+      if (!route) return null;
       let newSteps: DesignerStep[] = (route.steps ?? []).map((s) => {
         const base = {
           clientId: newClientId(),
@@ -146,8 +156,18 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         );
       }
       setSteps(newSteps);
+
+      const sorted = [...(route.steps ?? [])].sort((a, b) => a.sequence - b.sequence);
+      let colorId: string | null = null;
+      const propertyIds = new Set<string>();
+      for (const s of sorted) {
+        if (s.plannedColorId) colorId = s.plannedColorId; // son renk veren adım kazanır
+        for (const p of s.plannedProperties ?? []) propertyIds.add(p.propertyId);
+      }
+      return { colorId, propertyIds: [...propertyIds] };
     } catch {
       toast.error("Şablon yüklenemedi.");
+      return null;
     }
   };
 

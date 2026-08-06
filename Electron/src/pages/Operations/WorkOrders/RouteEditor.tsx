@@ -43,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RouteStepDetail, type RouteTargetBinding } from "./RouteStepDetail";
+import { deriveStepTargets, type RouteStepTargetPlan } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 interface Props {
@@ -57,7 +58,17 @@ interface Props {
   onSeed: (routeId: string | null) => void;
   /** İç "Şablondan başla" picker'ını gizle — WO formu onu bölüm başlığına taşıdı. */
   hideSeedPicker?: boolean;
-  onSaveTemplate: (name: string, forCustomer: boolean) => void;
+  /**
+   * `stepTargets`: iş emrinin düz hedefinden türetilen ADIM BAŞINA şablon hedefi
+   * (2026-08-06). Burada türetilir çünkü istasyon yetenekleri zaten bu bileşende
+   * yüklü — çağırana ikinci bir sorgu turu yaptırmak, ekranda gösterilen kuralla
+   * kaydedilen kuralın ayrışma riskini de doğururdu.
+   */
+  onSaveTemplate: (
+    name: string,
+    forCustomer: boolean,
+    stepTargets: Map<string, RouteStepTargetPlan>,
+  ) => void;
   savePending: boolean;
   /** İç "Rotayı Kaydet" tetiğini gizle — WO formu onu bölüm başlığına, "Rota Seç"in
    *  yanına taşıdı. Kaydet modalı (ad + müşteri seçeneği) burada kalır; açık/kapalı
@@ -174,9 +185,14 @@ export function RouteEditor({
   });
   const coveredProps = new Set<string>();
   let hasColorStation = false;
-  for (const r of capResults) {
+  // Aynı yetenek yanıtları "Rotayı Kaydet"te adım başına hedef türetmek için de
+  // kullanılır (deriveStepTargets) — ikinci bir sorgu turu YOK.
+  const capsByStation = new Map<string, NonNullable<(typeof capResults)[number]["data"]>["data"]>();
+  for (const [i, r] of capResults.entries()) {
     const cap = r.data?.data;
     if (!cap) continue;
+    const sid = stationIds[i];
+    if (sid) capsByStation.set(sid, cap);
     // Renk kısıtı yok — "renk veren adım var mı" sorusu yalnız kategori bayrağına
     // bakar (backend `appliesColor` kuralıyla aynı). Eskiden istasyonun renk
     // listesi de dolu olmak zorundaydı → yeni renk seçilince rota doğruyken bile
@@ -380,7 +396,8 @@ export function RouteEditor({
             </DialogTitle>
             <DialogDescription>
               Bu üretim akışını yeniden kullanılabilir bir rota olarak kaydet — sonraki
-              iş emirlerinde başlıktaki "Rota seç" ile tek tıkla gelir.
+              iş emirlerinde başlıktaki "Rota seç" ile tek tıkla gelir. Seçili hedef
+              renk/özellikler de adımlarına yazılır; rota uygulanınca hazır gelirler.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
@@ -416,7 +433,11 @@ export function RouteEditor({
               className="gap-1.5 bg-gradient-to-b from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
               disabled={savePending || !saveName.trim() || steps.length === 0}
               onClick={() => {
-                onSaveTemplate(saveName.trim(), forCustomer);
+                onSaveTemplate(
+                  saveName.trim(),
+                  forCustomer,
+                  deriveStepTargets(steps, target, capsByStation),
+                );
                 setSaveModalOpen(false);
               }}
             >

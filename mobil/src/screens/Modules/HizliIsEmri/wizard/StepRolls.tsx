@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TouchableRipple, Icon, TextInput, Surface } from 'react-native-paper';
-import { useCameraPermissions } from 'expo-camera';
 
 import OrderLinkPicker from '../OrderLinkPicker';
 import type { useQuickWorkOrder } from '../useQuickWorkOrder';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
+import { useCameraUnusable } from '../../../../hooks/useCameraUnusable';
 import { colors, spacing, radius } from '../../../../theme';
 
 interface Props {
@@ -24,9 +24,10 @@ interface Props {
  * Adım ③'e konsaydı operatörün adım ②'de girdiği değerleri geriye dönük ezerdi.
  *
  * "Listeden Ekle" birincil buton DEĞİL — kamera birincil yoldur. Liste kurtarma
- * yoludur ve iki yerde çıkar: (a) tarayıcı modalının içinde her zaman (O15, bkz.
- * BarcodeScannerModal.onPickFromList — kameranın çalışmadığı yer orasıdır),
- * (b) kameranın bu cihazda kullanılamadığı BİLİNİYORSA burada da buton olarak.
+ * yoludur ve iki yüzeyde de AYNI koşulla çıkar (2026-08-05): Ayarlar → Barkod ve
+ * Kamera → "Kamera arızalı" bayrağı açıkken burada buton olarak, tarayıcının
+ * içinde de "Listeden Seç" olarak. Tek kaynak `useCameraUnusable`; ayrışırlarsa
+ * operatör kaçış yolunu bir ekranda bulup diğerinde bulamaz.
  */
 export default function StepRolls({
   wo,
@@ -37,16 +38,12 @@ export default function StepRolls({
   onOrderPickerOpenChange,
 }: Props) {
   const manualMode = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
-  const [permission] = useCameraPermissions();
   const [manualBarcode, setManualBarcode] = useState('');
 
-  // Kamera bu cihazda kullanılamıyor mu? İki kesin sinyal:
-  //  • izin KALICI reddedilmiş (canAskAgain=false) — sistem diyaloğu artık açılmaz,
-  //  • operatör Ayarlar'dan "manuel barkod girişi"ni açmış (mevcut "kamera arızalı"
-  //    bayrağı; bkz. deviceSettingsStore).
-  // İlk açılıştaki "henüz sorulmadı" hâli sayılmaz — herkese gereksiz buton çıkardı.
-  const cameraUnusable =
-    manualMode || (!!permission && !permission.granted && !permission.canAskAgain);
+  // Kamera bu cihazda kullanılamıyor mu? Tek kaynak: Ayarlar → "Kamera arızalı"
+  // (+ kalıcı izin reddi). bkz. hooks/useCameraUnusable — aynı sinyal tarayıcı
+  // içindeki "Listeden Seç" butonunu da açar, ikisi ayrışamasın.
+  const cameraUnusable = useCameraUnusable();
 
   const hasRolls = wo.scanned.length > 0;
 
@@ -85,6 +82,19 @@ export default function StepRolls({
           </>
         )}
       </Surface>
+
+      {/* Parti homojenliği — UYARI, engel değil. Ürün kilitli ama en değil;
+          farklı enli topların tek partiye karışması meşru olabilir, sessizce
+          olması olamaz (bkz. useQuickWorkOrder.widthWarning). */}
+      {wo.widthWarning ? (
+        <View style={styles.warnBanner}>
+          <Icon source="alert-outline" size={18} color={colors.warningDark} />
+          <Text style={styles.warnText}>
+            {wo.widthWarning} — aynı iş emrinde farklı enler var. Bilerek yapıyorsanız
+            devam edin.
+          </Text>
+        </View>
+      ) : null}
 
       {manualMode ? (
         <TextInput
@@ -180,6 +190,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     maxWidth: 300,
   },
+  warnBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.warningContainer,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  warnText: { flex: 1, color: colors.warningDark, fontSize: 12, fontWeight: '700', lineHeight: 17 },
   manualInput: { backgroundColor: colors.surface },
   scanBtn: {
     minHeight: 68,

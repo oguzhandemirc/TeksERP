@@ -32,6 +32,7 @@
 import prisma from "../lib/prisma";
 import { PERMISSION_CATALOG, type PermissionCatalogEntry } from "../constants/permission-catalog";
 import { AuditService } from "../services/audit.service";
+import { reconcileRoleTemplates } from "./role-template-catalog.job";
 
 // Soğuk açılışta DB (özellikle Windows sunucuda PostgreSQL servisi) backend'den
 // sonra hazır olabiliyor. Emsal job'lar bunu 60sn sabit gecikmeyle çözüyor; bu iş
@@ -132,41 +133,51 @@ export async function reconcilePermissionCatalog(): Promise<PermissionReconcileR
  * Açılışta BİR KEZ koşar (periyodik timer yok — katalog ancak yeni bir deploy ile
  * değişir). Hata sunucuyu düşürmez; sınırlı sayıda yeniden dener, tükenirse
  * gürültülü loglar.
+ *
+ * İKİ FAZ, sırayla: (1) izin kodları, (2) rol şablonları
+ * (`role-template-catalog.job.ts`). Şablon satırları izin satırlarına FK ile
+ * bağlı olduğu için sıra zorunludur.
  */
 export function startPermissionCatalogReconciler(): void {
   if (started) return;
   started = true;
 
   const attempt = (n: number): void => {
-    void reconcilePermissionCatalog().catch((err) => {
-      if (n < MAX_ATTEMPTS) {
-        // Soğuk açılışta DB henüz ayakta olmayabilir — uyarı, hata değil.
-        console.warn(
-          `[permission-catalog] uzlaştırma denemesi ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
-            `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
-          err instanceof Error ? err.message : err,
+    // ⚠️ SIRA LOAD-BEARING: rol şablonları izin satırlarına FK ile bağlı.
+    // Ayrı bir timer'la koşturmak ikisini yarıştırır ve ilk boot'ta yeni roller
+    // izinleri "DB'de yok" diye eksik kurulur — bu yüzden aynı zincirde, aynı
+    // yeniden-deneme politikasıyla ve izinlerden SONRA.
+    void reconcilePermissionCatalog()
+      .then(() => reconcileRoleTemplates())
+      .catch((err) => {
+        if (n < MAX_ATTEMPTS) {
+          // Soğuk açılışta DB henüz ayakta olmayabilir — uyarı, hata değil.
+          console.warn(
+            `[permission-catalog] uzlaştırma denemesi ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
+              `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
+            err instanceof Error ? err.message : err,
+          );
+          setTimeout(() => attempt(n + 1), RETRY_DELAY_MS).unref();
+          return;
+        }
+        // Buraya düşmek = yeni izinler DB'de YOK demektir → Admin dışı kullanıcılar
+        // ilgili ekranlarda 403 alır. Sessiz yutma YOK.
+        console.error(
+          `[permission-catalog] UZLAŞTIRMA BAŞARISIZ (${MAX_ATTEMPTS} deneme). ` +
+            "Yeni izinler ve/veya rol şablonları DB'ye YAZILAMADI — Admin dışı kullanıcılar " +
+            "yeni ekranlarda 403 alabilir. Sunucuyu yeniden başlatın ya da elle kontrol edin.",
+          err,
         );
-        setTimeout(() => attempt(n + 1), RETRY_DELAY_MS).unref();
-        return;
-      }
-      // Buraya düşmek = yeni izinler DB'de YOK demektir → Admin dışı kullanıcılar
-      // ilgili ekranlarda 403 alır. Sessiz yutma YOK.
-      console.error(
-        `[permission-catalog] UZLAŞTIRMA BAŞARISIZ (${MAX_ATTEMPTS} deneme). ` +
-          "Yeni izinler DB'ye YAZILAMADI — Admin dışı kullanıcılar yeni ekranlarda 403 alabilir. " +
-          "Sunucuyu yeniden başlatın ya da elle kontrol edin.",
-        err,
-      );
-      void AuditService.logEvent({
-        category: "SYSTEM",
-        action: "PERMISSION_CATALOG_RECONCILE_FAILED",
-        tableName: "permissions",
-        payload: {
-          attempts: MAX_ATTEMPTS,
-          error: err instanceof Error ? err.message : String(err),
-        },
+        void AuditService.logEvent({
+          category: "SYSTEM",
+          action: "PERMISSION_CATALOG_RECONCILE_FAILED",
+          tableName: "permissions",
+          payload: {
+            attempts: MAX_ATTEMPTS,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
       });
-    });
   };
 
   setTimeout(() => attempt(1), STARTUP_DELAY_MS).unref();

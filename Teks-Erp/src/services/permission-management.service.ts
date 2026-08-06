@@ -52,10 +52,31 @@ export class PermissionManagementService {
   // ---------------------------------------------------------------------------
   // Yetki kataloğu — admin UI grid'i için
   // ---------------------------------------------------------------------------
+  /**
+   * Yetki kataloğu + KULLANIM SAYAÇLARI.
+   *
+   * Sayaçlar süs değil: 2026-08-06 denetiminde canlı fabrikada YEDİ iznin
+   * (`document-template:*`, `settings:workstation`, `roll:history`,
+   * `shipping:undo-dispatch`, `mobile:kumas`, `mobile:siparis`) hiçbir
+   * kullanıcıda olmadığı görüldü — yani o ekranlar deploy edildi ve kimseye
+   * açılmadı. Boot uzlaştırması izni DB'ye getirir ama ATAMAZ ("katalog koda,
+   * atama panele"); atamanın unutulduğunu gösterecek TEK yüzey bu ekrandır.
+   *
+   * `userCount` süre penceresini GÖZETMEZ (bilinçli): "atanmış mı" sorusu
+   * "şu an geçerli mi"den farklıdır ve panel boşluğu göstermek için ilkini sorar.
+   */
   static async listPermissions() {
-    return prisma.permission.findMany({
+    const rows = await prisma.permission.findMany({
       orderBy: [{ category: "asc" }, { module: "asc" }, { code: "asc" }],
+      include: {
+        _count: { select: { userPermissions: true, templateMemberships: true } },
+      },
     });
+    return rows.map(({ _count, ...p }) => ({
+      ...p,
+      userCount: _count.userPermissions,
+      templateCount: _count.templateMemberships,
+    }));
   }
 
   // ---------------------------------------------------------------------------
@@ -813,7 +834,14 @@ export class PermissionManagementService {
 
   static async updateTemplate(
     id: string,
-    input: { name?: string; description?: string | null; permissionIds?: string[] },
+    input: {
+      name?: string;
+      description?: string | null;
+      permissionIds?: string[];
+      /** Pasifleştirilmiş sistem rolünü geri açmak için (silme → pasifleştirme
+       *  olduğundan geri dönüş yolu gerekli). */
+      isActive?: boolean;
+    },
     actorUserId: string | undefined
   ) {
     const existing = await prisma.permissionTemplate.findUnique({
@@ -841,6 +869,7 @@ export class PermissionManagementService {
       const data: Prisma.PermissionTemplateUpdateInput = {};
       if (nextName !== undefined) data.name = nextName;
       if (input.description !== undefined) data.description = input.description;
+      if (input.isActive !== undefined) data.isActive = input.isActive;
 
       const t = await tx.permissionTemplate.update({ where: { id }, data });
 
@@ -871,18 +900,36 @@ export class PermissionManagementService {
     return this.getTemplate(updated.id);
   }
 
+  /**
+   * Şablonu kaldırır.
+   *
+   * ⚠️ SİSTEM ROLÜ (`code != null`) SERT SİLİNMEZ, PASİFLEŞTİRİLİR. Sebep
+   * mekanik: rol kataloğu boot-time uzlaştırması eksik kodları yeniden yaratır
+   * (`jobs/role-template-catalog.job.ts`) → sert silinen sistem rolü bir sonraki
+   * `pm2 restart`'ta geri gelir ve admin sebebini hiçbir yerde göremezdi.
+   * Pasif satır DURDUĞU için uzlaştırma onu "var" sayar ve dokunmaz — yani
+   * "bu rolü kullanmıyorum" kararı KALICI olur. Fabrikanın kendi şablonu
+   * (`code = null`) eskisi gibi gerçekten silinir.
+   */
   static async deleteTemplate(id: string, actorUserId: string | undefined) {
     const existing = await prisma.permissionTemplate.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Şablon bulunamadı");
 
-    await prisma.permissionTemplate.delete({ where: { id } });
+    const sistemRolu = existing.code !== null;
+    if (sistemRolu) {
+      if (!existing.isActive) return; // zaten pasif — idempotent
+      await prisma.permissionTemplate.update({ where: { id }, data: { isActive: false } });
+    } else {
+      await prisma.permissionTemplate.delete({ where: { id } });
+    }
 
     await AuditService.log({
       userId: actorUserId,
-      action: "DELETE",
+      action: sistemRolu ? "UPDATE" : "DELETE",
       tableName: "PERMISSION_TEMPLATE",
       recordId: id,
-      oldData: { name: existing.name },
+      oldData: { name: existing.name, code: existing.code, isActive: existing.isActive },
+      newData: sistemRolu ? { isActive: false, reason: "SYSTEM_TEMPLATE_DEACTIVATED" } : undefined,
     });
   }
 
@@ -906,6 +953,14 @@ export class PermissionManagementService {
     ]);
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
     if (!template) throw AppError.notFound("Şablon bulunamadı");
+    // Pasif şablon "bu rolü kullanmıyorum" kararıdır — listelerde gizlenir ama
+    // uçtan doğrudan çağrılabilir. Sessizce uygulamak, kaldırılmış bir paketin
+    // yetkilerini kullanıcıya taşırdı.
+    if (!template.isActive) {
+      throw AppError.badRequest(
+        `'${template.name}' şablonu pasif durumda — önce Yetki Şablonları ekranından geri açın.`,
+      );
+    }
 
     const templatePermIds = template.permissions.map((p) => p.permissionId);
 

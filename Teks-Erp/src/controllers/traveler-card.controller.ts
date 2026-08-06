@@ -8,43 +8,32 @@ import { TravelerCardService } from "../services/traveler-card.service";
 import { normalizeTravelerCardConfig } from "../services/system-setting.service";
 import "../types/express-augment";
 
-/** Refakat kartı önizlemesi — admin'in düzenlediği taslak içerik ayarı. */
-const travelerCardConfigSchema = z
-  .object({
-    companyName: z.string().optional(),
-    addressLine: z.string().optional(),
-    phone: z.string().optional(),
-    pageSize: z.enum(["A4", "A5"]).optional(),
-    margins: z
-      .object({
-        top: z.number(),
-        right: z.number(),
-        bottom: z.number(),
-        left: z.number(),
-      })
-      .partial()
-      .optional(),
-    fontScale: z.number().optional(),
-    fontWeight: z.enum(["light", "normal", "bold"]).optional(),
-    showOperationGrid: z.boolean().optional(),
-    showNotes: z.boolean().optional(),
-    showOrders: z.boolean().optional(),
-    showProperties: z.boolean().optional(),
-    // Boyut/kalınlık nesnesi (veya eski boolean) — normalizeTravelerCardConfig çözer.
-    specFields: z.record(z.string(), z.unknown()).optional(),
-    specColumns: z.number().optional(),
-    orderFields: z.record(z.string(), z.unknown()).optional(),
-    // Toplam: yeni orderTotal nesnesi (veya eski showOrderTotal boolean) — normalize çözer.
-    orderTotal: z.record(z.string(), z.unknown()).optional(),
-    showOrderTotal: z.boolean().optional(),
-    footerNote: z.string().optional(),
-  })
-  .partial();
+/**
+ * Refakat kartı önizlemesi — panelin düzenlediği taslak içerik ayarı.
+ *
+ * ⚠️ ANAHTARLAR BURADA TEK TEK SAYILMAZ ve bu bilinçlidir. Eski hâli her alanı
+ * elle listeliyordu; `showBatches`/`batchFields`/`batchTotal`/`sections` o listeye
+ * hiç eklenmedi (backend'e sonradan geldiler) ve düz `z.object` bilinmeyen
+ * anahtarı SESSİZCE ATTIĞI için önizleme onları hiç görmedi: kullanıcı Partiler
+ * bölümünün puntosunu değiştiriyor, sağdaki önizleme kılını kıpırdatmıyor, hata
+ * da çıkmıyordu. (2026-08-06 saha bulgusu — "punto değişince önizlemede
+ * göremiyorum".)
+ *
+ * Şekil ham bırakıldı; TEK SÜZGEÇ `normalizeTravelerCardConfig`tir — kaydetme
+ * yolu (`setFeatureFlags`) ve şablon yolu (`traveler-template.routes`) da onu
+ * kullanıyor. Böylece "önizlemede var, kayıtta yok" (ya da tersi) sınıfı bir
+ * daha doğamaz: yeni alan eklenince güncellenecek tek yer normalize'dır.
+ */
+const travelerCardConfigSchema = z.record(z.string(), z.unknown());
 
 // Önizleme, Şablon Stüdyosu'nun KAYDEDİLMEMİŞ taslağını da alabilir — böylece
 // uzman modundaki ham HTML kaydedilmeden görülür. `html` burada sanitize
 // EDİLMEZ; render yolundaki `renderRawTemplate` her durumda temizler (tek nokta).
-const sampleHtmlSchema = z.object({
+// `export` — mekanik bekçi (`scripts/test_traveler_card_fields.ts` §10) bu şemayı
+// ÇALIŞMA ZAMANINDA çağırıp panelin gönderdiği hiçbir anahtarın düşmediğini
+// doğrular. Şemanın kopyasını teste yazmak, tam da yakalanmak istenen drift'i
+// görünmez yapardı.
+export const sampleHtmlSchema = z.object({
   config: travelerCardConfigSchema.optional(),
   template: z
     .object({

@@ -74,6 +74,8 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useVisibleScreens } from '../../../hooks/useVisibleScreens';
 import { ReceiptRow, ReceiptDetailModal } from '../../../components/receipt';
+import ColorSelectField from '../../../components/ColorSelectField';
+import NumpadInput from '../../../components/NumpadInput';
 import {
   subcontractorService,
   type PendingReturnErrorDetails,
@@ -90,7 +92,7 @@ import {
   makeNewRollRow,
   rebuildPrefilledNewRolls,
 } from './newRolls.helper';
-import { parseNewRolls, buildReceivePayload } from './receivePayload.helper';
+import { parseNewRolls, buildReceivePayload, parseAppliedWidth } from './receivePayload.helper';
 import type {
   PendingReturnGroup,
   PendingReturnParty,
@@ -98,7 +100,6 @@ import type {
   ReceiveRequest,
   ReceiveNewRollInput,
   TravelerCardLookup,
-  Color,
   FabricProperty,
   ReceiptCancelPreview,
 } from '../../../types/models';
@@ -215,12 +216,44 @@ export default function FasonKabulScreen() {
   const [notes, setNotes] = useState('');
   /**
    * Receipt seviyesinde uygulanan renk + özellik (Refactor 9 — Boyahane akışı).
-   * Adımın `requiredCategory.appliesColor === true` olduğunda backend default
-   * olarak WO.targetColor / targetProperties'i kullanır; operatör override
-   * etmek isterse buradan değiştirir. NULL gönderilirse backend default'a düşer.
+   * Adımın `requiredCategory.appliesColor === true` olduğunda WO.targetColor /
+   * targetProperties ÖN SEÇİLİ gelir; operatör değiştirebilir.
+   *
+   * 2026-08-05: renk artık dokunulamaz bir ETİKET değil, seçilebilir bir alan.
+   * Eskiden yalnız gösteriliyordu ve iş emrinde hedef renk yoksa operatörün
+   * yapabileceği hiçbir şey yoktu — kabul 400 ile kilitleniyordu (saha vakası
+   * IE0508260006). Kimlik olarak ID tutulur; ad/hex'i `ColorSelectField` çözer,
+   * böylece müşteriye özel bir renk seçili olsa bile adı doğru görünür.
    */
-  const [appliedColor, setAppliedColor] = useState<Color | null>(null);
+  const [appliedColorId, setAppliedColorId] = useState<string | null>(null);
   const [appliedProperties, setAppliedProperties] = useState<FabricProperty[]>([]);
+  /**
+   * Kabulde ÖLÇÜLEN en (cm) — kabul BAŞINA tek değer, doğan tüm parçalara uygulanır
+   * (aynı sevkten dönen parçaların eni aynıdır; 10 parçalı kabulde 10 giriş yerine 1).
+   *
+   * ⚠️ Renkten farklı olarak `appliesColor`'a BAĞLI DEĞİL — her fason dönüşünde
+   * sorulur. Gerekçe: topun eni sisteme ilk kez burada giriyor (ham girişte en
+   * tasarım gereği yazılmıyor; KK1 kaynaklı 47 topun 47'si ensiz). Yalnız
+   * boyahanede sorulsaydı zımparadan dönen top sonsuza dek ensiz kalırdı.
+   * Ham metin tutulur (NumpadInput sözleşmesi); parse `receivePayload.helper`de.
+   */
+  const [appliedWidth, setAppliedWidth] = useState('');
+  /**
+   * "Uygulanan" paneli açık mı? Renk ve en İŞ EMRİNDEN dolu geldiyse panel KAPALI
+   * açılır ve tek satırlık özete iner — rutin kabulde operatörün önünde yer kaplamaz.
+   * Eksik varsa panel kendiliğinden AÇILIR (aşağıda `appliedPanelOpen`), çünkü o
+   * durumda operatörün vermesi gereken bir karar vardır. Emsal: aynı ekranın
+   * "İrsaliye No / Kabul Notu" satırı (opsiyonel olan kapalı başlar).
+   */
+  const [appliedOpen, setAppliedOpen] = useState(false);
+  /**
+   * Seçili rengin ADI — yalnız KAPALI paneldeki özet satırı için. Panel kapalıyken
+   * `ColorSelectField` mount edilmediği için adı kendisi çözemez; bu yüzden parti
+   * yüklenirken iş emrinin renk adından doldurulur, panel açılınca alanın kendi
+   * çözümü (`onLabelResolved`) üstüne yazar. Kimlik hâlâ `appliedColorId`'dir —
+   * bu alan yalnız GÖSTERİM, backend'e gitmez.
+   */
+  const [appliedColorLabel, setAppliedColorLabel] = useState<string | null>(null);
 
   /**
    * Fasondan dönen açık kumaş parçaları — backend min(1) zorunlu.
@@ -311,7 +344,8 @@ export default function FasonKabulScreen() {
                 notes: r.notes,
               })));
             }
-            if (d.appliedColor) setAppliedColor(d.appliedColor as Color);
+            if (typeof d.appliedColorId === 'string') setAppliedColorId(d.appliedColorId);
+            if (typeof d.appliedWidth === 'string') setAppliedWidth(d.appliedWidth);
             if (Array.isArray(d.appliedProperties)) setAppliedProperties(d.appliedProperties as FabricProperty[]);
             if (d.receiveMode === 'SINGLE' || d.receiveMode === 'PER_ROLL') {
               setReceiveMode(d.receiveMode);
@@ -343,13 +377,14 @@ export default function FasonKabulScreen() {
         manifestNo,
         notes,
         newRolls: newRolls.map((r) => ({ qty: r.qty, notes: r.notes, prefilled: r.prefilled })),
-        appliedColor,
+        appliedColorId,
+        appliedWidth,
         appliedProperties,
         receiveMode,
       }));
     }, 600);
     return () => clearTimeout(t);
-  }, [selectedGroup, selectedParty, rows, manifestNo, notes, newRolls, appliedColor, appliedProperties, receiveMode]);
+  }, [selectedGroup, selectedParty, rows, manifestNo, notes, newRolls, appliedColorId, appliedWidth, appliedProperties, receiveMode]);
 
   // ── Queries ──
   // staleTime 30sn: ekran focus / tab geçişi tetikli otomatik refetch'leri susturur,
@@ -570,6 +605,11 @@ export default function FasonKabulScreen() {
     setNotes('');
     setNewRolls([]);
     setReceiveMode('SINGLE');
+    setAppliedColorId(null);
+    setAppliedColorLabel(null);
+    setAppliedWidth('');
+    setAppliedProperties([]);
+    setAppliedOpen(false);
     setMismatchConfirmOpen(false);
     setExtrasOpen(false);
     setHighlightedWorkOrderId(null);
@@ -626,7 +666,16 @@ export default function FasonKabulScreen() {
         noteOpen: false,
       }))
     );
-    setAppliedColor(g.workOrder.targetColor ?? null);
+    // Renk ve en İŞ EMRİNDEN ön gelir; ikisi de doluysa panel KAPALI açılır
+    // (aşağıdaki `appliedReady`) — rutin işte operatörün önünü kalabalıklaştırmaz.
+    //
+    // ⚠️ En'in kaynağı `workOrder.width`, GİDEN TOPUN eni DEĞİL: iş emrinin eni
+    // işlem SONRASI hedeftir, giden topunki ise terbiye ÖNCESİ ölçüdür ve ram/
+    // fikse/sanfor tam da onu değiştirir. Giden topun eninden doldurmak,
+    // ölçülmemiş bir rakamı ölçülmüş gibi kaydetmek olurdu (ipucu olarak yazılır).
+    setAppliedColorId(g.workOrder.targetColor?.id ?? null);
+    setAppliedColorLabel(g.workOrder.targetColor?.name ?? null);
+    setAppliedWidth(g.workOrder.width != null ? String(g.workOrder.width) : '');
     setAppliedProperties(g.workOrder.targetProperties ?? []);
     // Her parti yüklemesi varsayılan moda döner — SINGLE: dikili tek parça.
     setReceiveMode('SINGLE');
@@ -705,7 +754,9 @@ export default function FasonKabulScreen() {
       setSelectedParty(null);
       setRows([]);
       setNewRolls([]);
-      setAppliedColor(g.workOrder.targetColor ?? null);
+      setAppliedColorId(g.workOrder.targetColor?.id ?? null);
+      setAppliedColorLabel(g.workOrder.targetColor?.name ?? null);
+      setAppliedWidth(g.workOrder.width != null ? String(g.workOrder.width) : '');
       setAppliedProperties(g.workOrder.targetProperties ?? []);
       setManifestNo('');
       setNotes('');
@@ -901,10 +952,38 @@ export default function FasonKabulScreen() {
   const qtyDiff = returnedTotal - sentTotal;
   const hasQtyMismatch = Math.abs(qtyDiff) > 0.01;
 
+  /**
+   * "Bu kabulde uygulanan" eksikleri — ZORUNLULUK BURADA yaşar, API'de değil.
+   * Backend'de zorunlu yapmak, alanları göndermeyen sahadaki eski APK'ların HER
+   * fason kabulünü 400'e düşürürdü; sözleşme opsiyonel kalır, ekran ısrar eder.
+   *
+   * Renk yalnız "renk veren" kategoride (boyahane) aranır, en HER dönüşte.
+   */
+  const missingColor = appliesColor && !appliedColorId;
+  const missingWidth = parseAppliedWidth(appliedWidth) == null;
+  /**
+   * Panel AÇIK mı? İki durumda açılır: (a) operatör kendisi açtı (override), ya da
+   * (b) eksik var — o zaman operatörün vermesi gereken bir karar vardır ve panel
+   * KENDİLİĞİNDEN açılır. İş emrinden ikisi de dolu geldiyse kapalı kalır ve tek
+   * satırlık özete iner. FAIL-OPEN bilinçli: "eksikse gizle" davranışı, operatörün
+   * göremediği bir alan yüzünden basamadığı bir butonla baş başa bırakırdı.
+   */
+  const appliedPanelOpen = appliedOpen || missingColor || missingWidth;
+  /** Pasif butonun ÜSTÜNE yazılacak eksik metni — buton yalnız grileşip susmaz. */
+  const appliedMissingLabel = missingColor
+    ? missingWidth
+      ? 'Renk ve en girilmeden kabul yapılamaz'
+      : 'Renk seçilmeden kabul yapılamaz'
+    : missingWidth
+      ? 'En girilmeden kabul yapılamaz'
+      : null;
+
   const canSubmit =
     !!selectedGroup &&
     checkedCount > 0 &&
-    hasValidNewRolls;
+    hasValidNewRolls &&
+    !missingColor &&
+    !missingWidth;
   // NOT: receiveMutation.isPending bilerek dahil edilmedi — offline'da paused
   // mutation hook'un isPending'i true kalır ve sıradaki kabul aksiyonunu
   // engelleyebilir. Optimistic onMutate zaten form'u temizliyor.
@@ -932,8 +1011,9 @@ export default function FasonKabulScreen() {
       manifestNo,
       notes,
       appliesColor,
-      appliedColor,
+      appliedColorId,
       appliedProperties,
+      appliedWidth,
     });
   };
 
@@ -954,6 +1034,22 @@ export default function FasonKabulScreen() {
         type: 'error',
         text1: 'Açık kumaş eksik',
         text2: 'En az bir parça için metraj gir',
+      });
+      return;
+    }
+    if (missingColor) {
+      Toast.show({
+        type: 'error',
+        text1: 'Renk seçilmedi',
+        text2: 'Bu kabulde uygulanan rengi seçin',
+      });
+      return;
+    }
+    if (missingWidth) {
+      Toast.show({
+        type: 'error',
+        text1: 'En girilmedi',
+        text2: 'Dönen kumaşın enini (cm) ölçüp yazın',
       });
       return;
     }
@@ -1186,27 +1282,12 @@ export default function FasonKabulScreen() {
                     </Text>
                   </View>
                 </View>
-                {/* Renk + üretim özellikleri SAĞDA — ayrı satır yerine parti/firma
-                    kolonunun yanında; header 3 satırdan 2 satıra iner. */}
-                {appliesColor && (
+                {/* Üretim özellikleri SAĞDA — salt bilgi, dokunulmaz.
+                    RENK BURADAN TAŞINDI (2026-08-05): artık seçilebilir bir alan
+                    olduğu için başlığın altındaki "uygulanan" satırında yaşıyor —
+                    56dp dokunma hedefi bu dar başlık şeridine sığmaz. */}
+                {appliesColor && appliedProperties.length > 0 && (
                   <View style={styles.headerAppliesRow}>
-                    {appliedColor ? (
-                      <View style={styles.appliesColorChip}>
-                        <View
-                          style={[
-                            styles.colorSwatch,
-                            { backgroundColor: appliedColor.hex ?? '#a78bfa' },
-                          ]}
-                        />
-                        <Text style={styles.appliesColorChipText}>
-                          {appliedColor.name}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.appliesColorEmpty}>
-                        Renk belirtilmemiş
-                      </Text>
-                    )}
                     {appliedProperties.map((p) => (
                       <View key={p.id} style={styles.appliesPropertyChip}>
                         <Text style={styles.appliesPropertyChipText}>
@@ -1223,6 +1304,81 @@ export default function FasonKabulScreen() {
                   accessibilityLabel="Sıfırla"
                   style={{ margin: 0 }}
                 />
+              </Surface>
+
+              {/* ── BU KABULDE UYGULANAN: renk (varsa) + en ────────────────────
+                  Renk YALNIZ "renk veren" kategoride (boyahane) sorulur; EN HER
+                  fason dönüşünde sorulur — ikisinin koşulu bilerek AYRI. Topun eni
+                  sisteme ilk kez burada giriyor (ham girişte en tasarım gereği
+                  yazılmıyor), yani yalnız boyahaneye bağlansaydı zımparadan dönen
+                  top sonsuza dek ensiz kalırdı.
+                  Yeni BÖLÜM açılmadı: tek satır, başlığın hemen altında — ekran
+                  uzamasın, operatör nereye basacağını aramasın. */}
+              <Surface style={styles.appliedBand} elevation={1}>
+                {/* KAPALI: iş emrinden renk+en dolu geldi → tek satır özet.
+                    Dokununca açılır (override). Emsal: "İrsaliye No / Kabul Notu". */}
+                {!appliedPanelOpen ? (
+                  <TouchableRipple
+                    onPress={() => setAppliedOpen(true)}
+                    style={styles.appliedToggle}
+                    borderless
+                    accessibilityLabel="Uygulanan renk ve eni değiştir"
+                  >
+                    <View style={styles.appliedToggleInner}>
+                      <Icon source="pencil" size={15} color="#64748b" />
+                      <Text style={styles.appliedToggleText} numberOfLines={1}>
+                        {[
+                          appliesColor
+                            ? `Renk: ${appliedColorLabel ?? '—'}`
+                            : null,
+                          `En: ${appliedWidth} cm`,
+                        ]
+                          .filter(Boolean)
+                          .join('  ·  ')}
+                        {'   '}(değiştirmek için dokun)
+                      </Text>
+                    </View>
+                  </TouchableRipple>
+                ) : (
+                  <>
+                <View style={styles.appliedRow}>
+                  {appliesColor && (
+                    <View style={styles.appliedCol}>
+                      <Text style={styles.appliedLabel}>UYGULANAN RENK</Text>
+                      <ColorSelectField
+                        value={appliedColorId}
+                        onChange={setAppliedColorId}
+                        onLabelResolved={setAppliedColorLabel}
+                        showClear={false}
+                      />
+                    </View>
+                  )}
+                  <View style={[styles.appliedCol, styles.appliedColWidth]}>
+                    <Text style={styles.appliedLabel}>EN (cm)</Text>
+                    <NumpadInput
+                      mode="outlined"
+                      dense
+                      value={appliedWidth}
+                      onChangeText={setAppliedWidth}
+                      numpadLabel="En (cm)"
+                      placeholder="ölç ve yaz"
+                      useNativeKeyboard
+                      autoActivate={false}
+                      style={styles.appliedWidthInput}
+                    />
+                  </View>
+                </View>
+                {/* GİDEN topun eni yalnız İPUCU — alana ÖN DOLDURULMAZ. Ön değer
+                    İŞ EMRİNİN hedef eninden gelir; giden topunki terbiye ÖNCESİ
+                    ölçüdür ve ram/fikse/sanfor tam da onu değiştirir. Oradan
+                    doldurmak, ölçülmemiş bir rakamı ölçülmüş gibi kaydetmek olurdu. */}
+                <Text style={styles.appliedHint}>
+                  {fabricWidth != null
+                    ? `Bu kabuldeki tüm parçalara uygulanır · giden topun eni: ${fabricWidth} cm`
+                    : 'Bu kabuldeki tüm parçalara uygulanır'}
+                </Text>
+                  </>
+                )}
               </Surface>
 
               {/* Çoklu parti: aktif parti + diğerlerine dönüş */}
@@ -1606,7 +1762,11 @@ export default function FasonKabulScreen() {
                     hasMissing || hasQtyMismatch ? '#d97706' : '#059669'
                   }
                 >
-                  {hasMissing
+                  {/* Eksik varsa buton NE eksik olduğunu yazar; sadece grileşip
+                      susmak operatörü "niye basamıyorum" diye aratır. */}
+                  {appliedMissingLabel
+                    ? appliedMissingLabel
+                    : hasMissing
                     ? `Mal Kabulü Yap · ${missingCount} EKSİK`
                     : hasQtyMismatch
                       ? `Mal Kabulü Yap · FARK ${qtyDiff > 0 ? '+' : ''}${fmtMeters(qtyDiff)} m`
@@ -3190,27 +3350,34 @@ const styles = StyleSheet.create({
   warningText: { fontSize: 11, color: '#92400e', flex: 1 },
 
   // Boyahane / "renk veren" kategori uygulama bilgisi (header band içindeki şeritte).
-  appliesColorChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd6fe',
+  // "Bu kabulde uygulanan" şeridi — başlığın hemen altında TEK satır.
+  // (Eski salt-okunur renk çipi stilleri — appliesColorChip / colorSwatch /
+  // appliesColorChipText / appliesColorEmpty — 2026-08-05'te kaldırıldı: renk
+  // artık gösterilen değil SEÇİLEN bir alan, ColorSelectField kendi stilini taşır.)
+  appliedBand: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
+    gap: 4,
   },
-  colorSwatch: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1f2937',
+  appliedRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  // min-w-0 karşılığı: flex çocuğu uzun renk adında komşusuna binmesin.
+  appliedCol: { flex: 1, minWidth: 0, gap: 3 },
+  // En kutusu dar ve SABİT — sayı 3 hane, renk adı uzun; eşit bölmek en'i şişirirdi.
+  appliedColWidth: { flex: 0, width: 118 },
+  appliedLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#64748b',
   },
-  appliesColorChipText: { fontSize: 13, fontWeight: '600', color: '#0f172a' },
-  appliesColorEmpty: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
+  appliedWidthInput: { backgroundColor: '#ffffff' },
+  appliedHint: { fontSize: 11, color: '#94a3b8' },
+  // Kapalı özet satırı — 56dp dokunma hedefi korunur (paddingVertical 12 + metin).
+  appliedToggle: { borderRadius: 6, paddingVertical: 12, paddingHorizontal: 4 },
+  appliedToggleInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appliedToggleText: { flex: 1, minWidth: 0, fontSize: 12.5, color: '#475569', fontWeight: '600' },
   appliesPropertyChip: {
     backgroundColor: '#ede9fe',
     paddingHorizontal: 8,

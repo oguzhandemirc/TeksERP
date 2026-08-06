@@ -67,8 +67,22 @@ describe("komut paleti — karo yüklemi taşınıyor", () => {
   const opsEntries =
     commandSections.find((s) => s.heading === "Operasyon")?.entries ?? [];
 
-  it("Operasyon bölümü karolarla aynı sayıda giriş üretir", () => {
-    expect(opsEntries).toHaveLength(operationsTiles.length);
+  it("her karo için bir giriş üretilir (karo sessizce düşmez)", () => {
+    const entryKeys = new Set(opsEntries.map((e) => e.key));
+    const missing = operationsTiles
+      .map((t) => `ops:${t.key}`)
+      .filter((k) => !entryKeys.has(k));
+    expect(missing).toEqual([]);
+  });
+
+  it("karo dışı girişler AÇIKÇA listelidir", () => {
+    // Bölüm hub karolarından türer; karosu olmayan bir giriş eklemek bilinçli
+    // bir karardır (hub'da görünmeyen ama paletten açılan ekran) — sessizce
+    // birikmesin diye burada tek tek yazılır.
+    const extra = opsEntries
+      .filter((e) => !operationsTiles.some((t) => `ops:${t.key}` === e.key))
+      .map((e) => e.key);
+    expect(extra).toEqual(["ops:work-order-new"]);
   });
 
   it("her operasyon girişi karosunun yüklemini AYNEN taşır", () => {

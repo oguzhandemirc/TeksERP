@@ -174,6 +174,9 @@ export function WorkOrderDetailHeader({
         onCancelled={() => {
           if (wo) qc.invalidateQueries({ queryKey: ["work-order-detail", wo.id] });
         }}
+        // Fason dönüşü mal yüzünden iptal kapalıysa tek çıkış KAPATMA'dır —
+        // kullanıcıyı menüye geri göndermek yerine doğrudan oraya taşı.
+        onSwitchToClose={() => setCompleteOpen(true)}
       />
       <WorkOrderCompleteDialog
         open={completeOpen}

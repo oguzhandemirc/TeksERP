@@ -29,6 +29,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { DISPOSITION_NOTE_PREFIXES } from "../src/services/helpers/roll-disposition.helper";
 
 let pass = 0,
   fail = 0;
@@ -260,10 +261,18 @@ FROM roll_movements rm
 WHERE rm."exitedAt" IS NOT NULL
   AND rm."qtyOut" IS DISTINCT FROM rm."qtyIn"`,
     noise: {
-      // Bu dört kapanış İSTASYON BİTİRMESİ DEĞİLDİR, dolayısıyla "qtyOut = qtyIn"
+      // Bu kapanışlar İSTASYON BİTİRMESİ DEĞİLDİR, dolayısıyla "qtyOut = qtyIn"
       // kuralının (commit 64263fc) konusu da değildir:
-      //   WO_CLOSE_*      → kapanış dispozisyonu; kalan metraj yazılır, giren değil
-      //                     (workorder.service.ts:3099)
+      //   <ORIGIN>_*      → dispozisyon motoru (WO_CLOSE / WO_CANCEL / BATCH_DROP).
+      //                     CANCELLED aksiyonunda qtyOut BİLİNÇLİ 0'dır (storno).
+      //                     ⚠️ Desenler `DISPOSITION_NOTE_PREFIXES`'ten TÜRETİLİR —
+      //                     elle yazılsaydı dördüncü bir origin eklendiğinde muaf
+      //                     sessizce eksik kalır ve bu bekçi, özellikle hiç ilgisi
+      //                     yokmuş gibi görünen bir hatayla canlı veride kırmızıya
+      //                     dönerdi (roll-disposition.helper.ts başlığına bak).
+      //   WO_CANCELLED    → iş emri iptalinin toplu hareket süpürmesi; kalan metraj
+      //                     yazılır, giren değil (workorder.service.ts süpürme SQL'i)
+      //   DETACHED_FROM_WO→ topu iş emrinden ayırma; aynı gerekçe (detachRolls)
       //   MANUAL_MOVE_OUT → manuel taşımada hayalet movement kapatılır, ölçüm yok
       //                     (workorder-manual-move.service.ts:628)
       //   REDYE_REWIND    → redye/parti geri sarmada movement iptal edilir
@@ -274,17 +283,19 @@ WHERE rm."exitedAt" IS NOT NULL
       //                     olarak boş bırakılır. (2026-08-03 eklendi; marker'ın tek
       //                     yazarı orasıdır ve mevcut nota " | " ile EKLENİR, bu
       //                     yüzden eşitlik değil iki LIKE deseni gerekir.)
-      // Dördünde de qtyOut bilinçli olarak yazılmaz/farklıdır. Kapı bu dördü
-      // dışındaki her kapanışa uygulanır — asıl korunan şey normal istasyon
-      // FINISH'idir.
+      // Hepsinde qtyOut bilinçli olarak yazılmaz/farklıdır. Kapı bunlar dışındaki
+      // her kapanışa uygulanır — asıl korunan şey normal istasyon FINISH'idir.
       where: `WHERE NOT EXISTS (
                 SELECT 1 FROM roll_movements rm_n
                 WHERE rm_n.id = drift.id
-                  AND (rm_n.notes LIKE 'WO_CLOSE\\_%'
-                       OR rm_n.notes IN ('MANUAL_MOVE_OUT','REDYE_REWIND')
+                  AND (${DISPOSITION_NOTE_PREFIXES.map(
+                    (p) => `rm_n.notes LIKE '${p}\\_%'`,
+                  ).join("\n                       OR ")}
+                       OR rm_n.notes IN ('MANUAL_MOVE_OUT','REDYE_REWIND','WO_CANCELLED','DETACHED_FROM_WO')
+                       OR rm_n.notes LIKE '%| WO_CANCELLED'
                        OR rm_n.notes LIKE 'CANCEL:%'
                        OR rm_n.notes LIKE '%| CANCEL:%'))`,
-      why: "kapanış dispozisyonu / manuel taşıma / redye geri sarma / fason sevk iptali istasyon bitirmesi değildir",
+      why: "dispozisyon motoru / iş emri iptali / manuel taşıma / redye geri sarma / fason sevk iptali istasyon bitirmesi değildir",
     },
   },
   {

@@ -258,6 +258,45 @@ async function main(): Promise<void> {
       check("topun kendi metrajı 700 olarak korundu", Number(roll?.currentQty) === 700, String(roll?.currentQty));
     }
 
+    // === C3) HATALI KAYIT = STORNO (2026-08-06 taşımasıyla DEĞİŞTİ) ===
+    // Kapatma artık ortak dispozisyon motorunu kullanıyor ve `CANCELLED` her yolda
+    // AYNI şeyi yapıyor: "mal bu istasyondan HİÇ geçmedi". Eskiden burada `qtyOut =
+    // qtyIn` yazılıyordu — hiç var olmamış metraj istasyon iş hacmine giriyordu — ve
+    // topun iptal izi kolonları BOŞ kalıyordu (satırda "neden" yazmıyor, geri alma
+    // yanlış rafa dönüyordu). Bu blok o iki düzeltmeyi kilitler.
+    console.log("\n=== C3) CANCELLED → storno (qtyOut=0) + iptal izi kolonları ===");
+    {
+      const { woId } = await makeWo();
+      const rId = await attachedRoll(woId, 800);
+      await prisma.roll.update({ where: { id: rId }, data: { currentQty: 700 } });
+
+      await svc.completeWorkOrder(woId, {
+        reason: "hatalı kayıt — bu top hiç yoktu",
+        dispositions: [{ rollId: rId, action: "CANCELLED" }],
+      }, ADMIN);
+
+      const mv = await prisma.rollMovement.findFirst({
+        where: { rollId: rId },
+        select: { qtyIn: true, qtyOut: true, weightOut: true, notes: true },
+      });
+      check("STORNO: qtyOut = 0 (qtyIn DEĞİL)",
+        Number(mv?.qtyOut) === 0 && Number(mv?.qtyIn) === 800,
+        `${mv?.qtyIn}→${mv?.qtyOut}`);
+      check("STORNO: weightOut = 0", Number(mv?.weightOut ?? 0) === 0);
+      check("not WO_CLOSE_CANCELLED + gerekçe",
+        (mv?.notes ?? "").startsWith("WO_CLOSE_CANCELLED: hatalı kayıt"), String(mv?.notes));
+
+      const roll = await prisma.roll.findUnique({
+        where: { id: rId },
+        select: { status: true, cancelledAt: true, cancelledById: true, cancelReason: true, preCancelStatus: true },
+      });
+      check("top CANCELLED", roll?.status === RollStatus.CANCELLED, String(roll?.status));
+      check("cancelReason gerekçeyi taşıyor", roll?.cancelReason === "hatalı kayıt — bu top hiç yoktu", String(roll?.cancelReason));
+      check("cancelledAt + cancelledById yazıldı", roll?.cancelledAt !== null && roll?.cancelledById === ADMIN);
+      check("preCancelStatus = IN_PRODUCTION (geri almanın döneceği raf)",
+        roll?.preCancelStatus === RollStatus.IN_PRODUCTION, String(roll?.preCancelStatus));
+    }
+
     // === D) FASON BLOK ===
     console.log("\n=== D) Fasonda top → 409, WO IN_PROGRESS kalır ===");
     {

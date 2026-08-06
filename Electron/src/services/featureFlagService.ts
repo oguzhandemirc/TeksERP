@@ -21,11 +21,21 @@ export interface TravelerCardMargins {
   left: number;
 }
 export type TravelerCardFieldSize = "sm" | "md" | "lg";
-/** Tek spec alanı — göster + boyut + kalınlık (alan-başına bağımsız). */
+/** Hücre kalınlığı — 2026-08-05'te medium/black eklendi (panel beş kademe). */
+export type TravelerCardCellWeight = TravelerCardFontWeight | "medium" | "black";
+/**
+ * Tek tablo hücresi — göster + boyut + kalınlık (hücre-başına bağımsız).
+ *
+ * ⚠️ İKİ BOYUT ALANI VAR ve bu kalıcıdır: `px` yeni (sayısal punto, panel yalnız
+ * bunu yazar), `size` eski kademe — donmuş snapshot'lar onu taşıdığı için
+ * OKUNMAYA devam eder ve silinemez. Backend aynası: `system-setting.service.ts`.
+ */
 export interface TravelerCardSpecField {
   show: boolean;
   size: TravelerCardFieldSize;
-  weight: TravelerCardFontWeight;
+  weight: TravelerCardCellWeight;
+  /** Sayısal punto (5–48). Verilmezse `size` kademesi, o da yoksa profil tabanı. */
+  px?: number;
 }
 /** Spec grid alanları — her biri tek tek (göster/boyut/kalınlık). */
 export interface TravelerCardSpecFields {
@@ -91,9 +101,37 @@ export interface TravelerCardConfig {
   batchFields: TravelerCardBatchFields;
   /** Parti toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
   batchTotal: TravelerCardSpecField;
+  /**
+   * ALAN BAZLI yazı ayarı — `key → { size?: px, weight? }`. Anahtar kataloğu
+   * `pages/GeneralSettings/travelerCardFields.ts` (backend
+   * `document-render/traveler-card.fields.ts`'in aynası; Electron backend'i
+   * import edemez, ikisi birlikte güncellenir).
+   *
+   * `specFields`/`orderFields`/`batchFields` ile ÇAKIŞMAZ, KATMANLIDIR: onlar
+   * hücre-başına sm/lg kademesidir; buradaki `specValue`/`orderCell`/`batchCell`
+   * o kademelerin TABANINI belirler ve renderer kademeleri tabana oranlar.
+   *
+   * ⚠️ Verilmezse renderer tek bayt ek CSS basmaz (bugünkü çıktı korunur), bu
+   * yüzden boş nesne GÖNDERİLMEZ — panel `undefined` bırakır.
+   */
+  fields?: Record<string, TravelerCardFieldStyle>;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
+
+/** Alan bazlı görünürlük + yazı ayarı — sayısal punto + beş kademeli kalınlık. */
+export type TravelerCardFieldWeight = "light" | "normal" | "medium" | "bold" | "black";
+export interface TravelerCardFieldStyle {
+  /** Yazı boyu px. Verilmezse alanın yoğunluk profilindeki tabanı geçerlidir. */
+  size?: number;
+  /** Yazı kalınlığı. Verilmezse alanın taban kalınlığı geçerlidir. */
+  weight?: TravelerCardFieldWeight;
+  /** true → alan basılmaz. `false` YAZILMAZ (varsayılan zaten görünür). */
+  hidden?: boolean;
+}
+/** Backend `doc-style.ts` ile AYNI sınırlar — panel de aynı sınırı göstermeli. */
+export const TRAVELER_FIELD_SIZE_MIN = 5;
+export const TRAVELER_FIELD_SIZE_MAX = 48;
 
 export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   companyName: "Adnan Şahin Tekstil",

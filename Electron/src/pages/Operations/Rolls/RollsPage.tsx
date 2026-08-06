@@ -2,20 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  Package,
-  Cog,
-  Send,
-  Archive,
-  FlaskConical,
-  Disc3,
-  Plus,
-  Warehouse,
-  Columns3,
-  ShoppingBag,
-  ClipboardList,
-  Loader2,
-} from "lucide-react";
+import { Plus, ClipboardList, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -46,38 +33,15 @@ import {
   rollTabDefaultSortBy,
   type RollStatusTabKey,
 } from "./service";
+import { ROLL_TABS, isRollTabKey, type RollTabKey } from "./tabs-config";
 import { downloadInventorySummary } from "./inventorySummary";
 import type { LabelCustomerContext } from "@/services/labelService";
 import type { Roll } from "./types";
 
-type RollTabKey = RollStatusTabKey | "KANBAN";
-
-// Sıralama: stoklar (giriş/çıkış) önde yan yana → üretim akışı (super-set +
-// alt-kümeler) → arşiv/kartela. Operatör en sık giriş/çıkış sayım için
-// stoklara bakar, üretim akışı sekmeleri orta blokta.
-const TABS: Array<{ key: RollTabKey; label: string; Icon: typeof Package }> = [
-  { key: "RAW_STOCK",      label: "Ham Stok",        Icon: Package },
-  { key: "FINISHED_STOCK", label: "Bitmiş Depo",     Icon: Warehouse },
-  { key: "IN_SACK",        label: "Çuvalda",         Icon: ShoppingBag },
-  { key: "PRODUCTION",     label: "Üretimde",        Icon: Cog },
-  { key: "KANBAN",         label: "Üretim Akışı",    Icon: Columns3 },
-  { key: "SUBCONTRACTOR",  label: "Fasonda",         Icon: Send },
-  { key: "KURSUN_PENDING", label: "Kurşun Bekleyen", Icon: FlaskConical },
-  { key: "TAMBUR_PENDING", label: "Tambur Bekleyen", Icon: Disc3 },
-];
-// ⚠️ "Arşiv" sekmesi 2026-08-05'te BURADAN KALDIRILDI → Sistem → Top Arşivi
-// (`/system/roll-archive`, admin:settings). Kullanıcı kararı: "arşiv oradan
-// kalksın, kimsenin tıklamayacağı zor bulunan bir yere koyalım."
-// STATUS_GROUPS.ARCHIVE anahtarı DURUYOR ve yeni sayfa onu kullanıyor —
-// silinirse tip hatası verir (`RollStatusTabKey` union'ı) ve arşiv statüleri
-// için tek kaynak kaybolur.
-
-const TAB_KEYS = new Set<RollTabKey>(TABS.map((t) => t.key));
+// Sekme listesi `tabs-config.ts`te — komut paleti aynı listeden `?tab=` derin
+// bağlantısı üretiyor (kopyalanırsa palet ile sayfa ayrışır).
+const TABS = ROLL_TABS;
 const REORDERABLE_KEYS = TABS.map((t) => t.key);
-
-function isRollTabKey(v: string | null): v is RollTabKey {
-  return v !== null && TAB_KEYS.has(v as RollTabKey);
-}
 
 export function RollsPage() {
   const [searchParams, setSearchParams] = useSearchParams();

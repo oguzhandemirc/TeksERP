@@ -63,6 +63,11 @@ const cancelDispatchSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
 });
 
+const cancelDispatchBulkSchema = z.object({
+  dispatchIds: z.array(z.string().uuid()).min(1, "İptal edilecek sevk seçilmedi").max(50),
+  reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
+});
+
 const directShipSchema = z.object({
   reason: z.string().trim().min(3, "Fasondan sevk sebebi en az 3 karakter").max(500),
   /** Sevk edilecek topların alt-kümesi (yok/boş = sevkin tümü). */
@@ -109,6 +114,13 @@ const receiveSchema = z.object({
   // özellik: appliesProperty=true kategoride WO.targetProperties otomatik.
   appliedColorId: z.string().uuid().nullish(),
   appliedPropertyIds: z.array(z.string().uuid()).optional(),
+  // Bu kabulde ÖLÇÜLEN en (cm) — doğan tüm parçalara uygulanır ve makbuza yazılır.
+  // Renkten farkı: renk yalnız "renk veren" kategoride sorulur, en HER fason
+  // dönüşünde sorulur (topun enini ilk kez burada öğreniyoruz; ham girişte en
+  // tasarım gereği yazılmıyor). OPSİYONEL kalması zorunlu — zorunlu yapmak
+  // sahadaki, alanı göndermeyen eski APK'ların HER fason kabulünü 400'e düşürürdü.
+  // Zorunluluk arayüzde yaşar (gönder butonu pasif).
+  appliedWidth: z.number().positive("En pozitif olmalı").max(999_999_999, "En çok büyük").nullish(),
   // Fasondan gelen açık kumaş parçaları — ZORUNLU. Receipt anında her parça
   // için open-fabric Roll kaydı (barcode=null) doğar ve rotadaki bir sonraki
   // adıma (genelde Kurşun/KK2) bağlanır. Boş geçilirse KK2 ekranına ve stok
@@ -138,6 +150,7 @@ export class SubcontractorController {
     this.fasonCekiDraft = this.fasonCekiDraft.bind(this);
     this.updateInstruction = this.updateInstruction.bind(this);
     this.cancelDispatch = this.cancelDispatch.bind(this);
+    this.cancelDispatchBulk = this.cancelDispatchBulk.bind(this);
     this.receive = this.receive.bind(this);
     this.pendingReturns = this.pendingReturns.bind(this);
     this.pendingReturnDetail = this.pendingReturnDetail.bind(this);
@@ -230,6 +243,17 @@ export class SubcontractorController {
     }
   }
 
+  /** POST /api/subcontractor/dispatches/cancel-bulk */
+  async cancelDispatchBulk(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = cancelDispatchBulkSchema.parse(req.body);
+      const result = await this.service.cancelBulk(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** POST /api/subcontractor/receive */
   async receive(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -247,6 +271,7 @@ export class SubcontractorController {
           })),
           appliedColorId: body.appliedColorId,
           appliedPropertyIds: body.appliedPropertyIds,
+          appliedWidth: body.appliedWidth,
           newRolls: body.newRolls?.map((nr) => ({
             qty: nr.qty,
             weightKg: nr.weightKg ?? null,

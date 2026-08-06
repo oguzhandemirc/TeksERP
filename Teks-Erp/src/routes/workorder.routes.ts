@@ -679,6 +679,110 @@ router.get("/:id/cancel-impact", verifyToken, requireAnyPermission("workorder:wr
 router.get("/:id/complete-preview", verifyToken, requirePermission("workorder:write"), controller.completePreview);
 router.post("/:id/complete", verifyToken, requirePermission("workorder:write"), controller.completeWorkOrder);
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/cancel:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Karar vererek iptal et (gerekçe zorunlu)
+ *     description: |
+ *       `DELETE /:id`'nin karar veren hali. İstasyonda kalan toplar için üç seçenek:
+ *       `STOCK` (ham stoğa dön — varsayılan, gönderilmesi gerekmez), `SCRAP` (fire),
+ *       `CANCELLED` (hatalı kayıt — storno). `SCRAP`/`CANCELLED` için ayrıca
+ *       `roll:manual-adjust` yetkisi aranır. Fasondaki mal hâlâ hard-block'tur.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *               dispositions:
+ *                 type: array
+ *                 maxItems: 200
+ *                 items:
+ *                   type: object
+ *                   required: [rollId, action]
+ *                   properties:
+ *                     rollId: { type: string, format: uuid }
+ *                     action: { type: string, enum: [STOCK, SCRAP, CANCELLED] }
+ *     responses:
+ *       200: { description: İş emri iptal edildi }
+ *       400: { description: Gerekçe eksik / liste bayat }
+ *       403: { description: Fire-hatalı kayıt için roll:manual-adjust gerekli }
+ *       409: { description: Fasonda top var ya da kayıt bu sırada değişti }
+ */
+router.post("/:id/cancel", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.cancelWorkOrder);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/batches/{batchId}/drop:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Partiyi iş emrinden düşür (iş emri devam eder)
+ *     description: |
+ *       Seçilen partinin canlı topları karara göre çözülür (`STOCK` renge duyarlıdır:
+ *       renkli top kaliteden çözülen rafa döner) ve parti üyeliği kopar — iptal
+ *       edilen toplar HARİÇ, onlar tarihçe satırı olarak partide kalır. İş emri
+ *       durumu DEĞİŞMEZ; canlı top kalmadıysa yanıt `noLiveRollsRemain: true` der ve
+ *       arayüz "iş emrini de iptal et" teklif eder.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: batchId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *               dispositions:
+ *                 type: array
+ *                 maxItems: 200
+ *                 items:
+ *                   type: object
+ *                   required: [rollId, action]
+ *                   properties:
+ *                     rollId: { type: string, format: uuid }
+ *                     action: { type: string, enum: [STOCK, SCRAP, CANCELLED] }
+ *     responses:
+ *       200: { description: Parti düşürüldü }
+ *       400: { description: Parti bu iş emrine ait değil / liste bayat }
+ *       409: { description: Açık fason sevki, fasonda top ya da birleştirilmiş parti }
+ */
+router.get(
+  "/:id/batches/:batchId/drop-preview",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.batchDropPreview
+);
+router.post(
+  "/:id/batches/:batchId/drop",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.dropBatch
+);
+
+// ⚠️ AYNEN KALIR — sahadaki eski mobil APK'lar bu ucu gövdesiz çağırır ve gövdesiz
+// çağrı bugünkü davranışın birebir aynısını üretir (bkz. softDelete). Yeni karar
+// veren yüzey POST /:id/cancel'dır; bu satırı ona yönlendirme.
 router.delete("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.softDelete);
 
 /**

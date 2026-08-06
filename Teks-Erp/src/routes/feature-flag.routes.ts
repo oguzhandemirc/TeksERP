@@ -45,14 +45,31 @@ const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void =
   guard(req, res, next);
 };
 
-// Tek spec alanı — göster + boyut + kalınlık (default'larla tam nesne üretir).
+// Tek tablo hücresi — göster + boyut + kalınlık (default'larla tam nesne üretir).
+// `px` 2026-08-05'te eklendi (panel tek birime geçti); `size` kademesi eski
+// kayıtlar + donmuş snapshot'lar için OKUNMAYA DEVAM EDER, silinemez.
 const DEF_SPEC_FIELD = { show: true, size: "md" as const, weight: "normal" as const };
 const specFieldObj = z.object({
   show: z.boolean().default(true),
   size: z.enum(["sm", "md", "lg"]).default("md"),
-  weight: z.enum(["light", "normal", "bold"]).default("normal"),
+  weight: z.enum(["light", "normal", "medium", "bold", "black"]).default("normal"),
+  // Sınır (5–48) BİLEREK burada değil `coerceSpecField`te: aşım 400 değil KIRPMA
+  // olmalı — tek bir punto yüzünden ayar kaydının tamamı reddedilmemeli.
+  px: z.number().optional(),
 });
 const specFieldSchema = specFieldObj.default(DEF_SPEC_FIELD);
+
+// Alan bazlı görünürlük + yazı ayarı (`travelerCardConfig.fields`) —
+// `traveler-card.fields.TravelerFieldStyle` ile AYNI şekil. Kırpma/atma
+// `sanitizeTravelerFields`te; burası yalnız tipi tutar.
+const travelerFieldStyleSchema = z.record(
+  z.string(),
+  z.object({
+    size: z.number().optional(),
+    weight: z.enum(["light", "normal", "medium", "bold", "black"]).optional(),
+    hidden: z.boolean().optional(),
+  }),
+);
 
 // NEDEN `strictObject` (2026-07-31 denetimi): düz `z.object` şemada OLMAYAN bir
 // anahtarı SESSİZCE atar. Sonuç: panel yeni bir bayrağı PATCH eder, uç 200 +
@@ -256,6 +273,18 @@ export const updateSchema = z.strictObject({
           dispatch: DEF_SPEC_FIELD,
         }),
       batchTotal: specFieldObj.default({ show: true, size: "md", weight: "bold" }),
+      // ALAN BAZLI yazı ayarı (punto/kalınlık) — anahtar kataloğu
+      // `document-render/traveler-card.fields.ts`, süzgeç `sanitizeDocFields`.
+      // ⚠️ Bu satır olmadan iç nesne düz `z.object` olduğu için anahtar SESSİZCE
+      // atılırdı: panel kaydeder, uç 200 der, hiçbir şey yazılmaz (bu şemanın en
+      // üstündeki `strictObject` gerekçesinin iç-nesne ikizi).
+      // Şekil bilerek AÇIK (komşu `specFields` gibi gevşek değil): bu anahtarın
+      // geriye-uyum yükü YOK (2026-08-05'te doğdu), o yüzden "eski istemci 400
+      // alır" gerekçesi burada geçerli değil ve tip `TravelerCardConfig["fields"]`
+      // ile birebir tutulabiliyor. SINIR (5–48 px) BİLEREK burada değil
+      // `sanitizeDocFields`te: sınır aşımı 400 değil KIRPMA olmalı — punto
+      // yüzünden ayar kaydının tamamı reddedilmemeli.
+      fields: travelerFieldStyleSchema.optional(),
       footerNote: z.string().trim().max(500).default(""),
     })
     .optional(),

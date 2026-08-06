@@ -2,11 +2,11 @@ import { makeNewRollRow, rebuildPrefilledNewRolls } from './newRolls.helper';
 import {
   parseNewRolls,
   buildReceivePayload,
+  parseAppliedWidth,
   type BuildReceivePayloadArgs,
   type PayloadRollRow,
 } from './receivePayload.helper';
 import type {
-  Color,
   FabricProperty,
   PendingReturnGroup,
   PendingReturnParty,
@@ -33,8 +33,9 @@ function baseArgs(overrides: Partial<BuildReceivePayloadArgs> = {}): BuildReceiv
     manifestNo: '',
     notes: '',
     appliesColor: false,
-    appliedColor: null,
+    appliedColorId: null,
     appliedProperties: [],
+    appliedWidth: '',
     ...overrides,
   };
 }
@@ -184,7 +185,7 @@ describe('buildReceivePayload — appliesColor dalı', () => {
         rows: [row('r1', true)],
         newRolls: [makeNewRollRow('10', true)],
         appliesColor: true,
-        appliedColor: { id: 'c1' } as unknown as Color,
+        appliedColorId: 'c1',
         appliedProperties: [
           { id: 'p1' } as unknown as FabricProperty,
           { id: 'p2' } as unknown as FabricProperty,
@@ -200,5 +201,62 @@ describe('buildReceivePayload — appliesColor dalı', () => {
     );
     expect(p).not.toHaveProperty('appliedColorId');
     expect(p).not.toHaveProperty('appliedPropertyIds');
+  });
+});
+
+describe('parseAppliedWidth', () => {
+  it('virgülü noktaya çevirir', () => {
+    expect(parseAppliedWidth('145,5')).toBe(145.5);
+  });
+  it('geçerli sayıyı döner', () => {
+    expect(parseAppliedWidth('280')).toBe(280);
+  });
+  it('boş / sıfır / negatif / anlamsız → null ("ölçülmedi")', () => {
+    // 0 bilinçli olarak null: 0 cm'lik kumaş yok, 0 "ölçmedim" demektir.
+    expect(parseAppliedWidth('')).toBeNull();
+    expect(parseAppliedWidth('0')).toBeNull();
+    expect(parseAppliedWidth('-5')).toBeNull();
+    expect(parseAppliedWidth('abc')).toBeNull();
+  });
+});
+
+describe('buildReceivePayload — appliedWidth (EN)', () => {
+  it('geçerli en payload\'a girer', () => {
+    const p = buildReceivePayload(
+      baseArgs({
+        rows: [row('r1', true)],
+        newRolls: [makeNewRollRow('10', true)],
+        appliedWidth: '145,5',
+      }),
+    );
+    expect(p).toMatchObject({ appliedWidth: 145.5 });
+  });
+
+  it('en girilmediyse alan payload\'da HİÇ YOK (null gönderilmez)', () => {
+    const p = buildReceivePayload(
+      baseArgs({ rows: [row('r1', true)], newRolls: [makeNewRollRow('10', true)] }),
+    );
+    expect(p).not.toHaveProperty('appliedWidth');
+  });
+
+  /**
+   * ⚠️ KURALIN KENDİSİ — bu test bir davranışı değil bir KARARI kilitler.
+   * EN, renkten farklı olarak `appliesColor`'a BAĞLI DEĞİLDİR: renk yalnız "renk
+   * veren" kategoride (boyahane) sorulur, en HER fason dönüşünde (zımpara dahil).
+   * Gerekçe: topun eni sisteme ilk kez fason kabulünde giriyor — ham girişte en
+   * tasarım gereği yazılmıyor. İkisi tek bir `if` altında birleştirilirse
+   * zımparadan dönen top sonsuza dek ensiz kalır ve HİÇBİR HATA ÇIKMAZ.
+   */
+  it('appliesColor=false olsa BİLE en gönderilir (renkle aynı koşula bağlanmamalı)', () => {
+    const p = buildReceivePayload(
+      baseArgs({
+        rows: [row('r1', true)],
+        newRolls: [makeNewRollRow('10', true)],
+        appliesColor: false,
+        appliedWidth: '160',
+      }),
+    );
+    expect(p).toMatchObject({ appliedWidth: 160 });
+    expect(p).not.toHaveProperty('appliedColorId');
   });
 });

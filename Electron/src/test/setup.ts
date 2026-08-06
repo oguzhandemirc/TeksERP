@@ -30,6 +30,23 @@ if (!("IntersectionObserver" in globalThis)) {
   });
 }
 
+// jsdom ResizeObserver da sağlamaz — cmdk (komut paleti) liste yüksekliğini
+// ölçmek için mount'ta bir tane kurar ve yoksa render "ResizeObserver is not
+// defined" ile düşer. No-op stub davranışı değiştirmez (ölçüm yalnız CSS
+// değişkeni yazar), yalnız jsdom boşluğunu kapatır.
+if (!("ResizeObserver" in globalThis)) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    writable: true,
+    configurable: true,
+    value: ResizeObserverStub,
+  });
+}
+
 // jsdom Pointer Events API'sini uygulamaz; Radix Select/DropdownMenu trigger'ı
 // pointerdown'da hasPointerCapture çağırır ve test "target.hasPointerCapture is not
 // a function" ile patlar. Ayrıca açılan liste seçili öğeye scrollIntoView yapar.

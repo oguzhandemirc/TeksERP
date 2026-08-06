@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowRightLeft,
   ArrowUpRight,
+  Ban,
   ChevronDown,
   GitMerge,
   History,
@@ -51,6 +52,7 @@ import { UndoTransferModal } from "./UndoTransferModal";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { FasonStepRollSelectModal } from "./FasonStepRollSelectModal";
 import { BatchCorrectModal } from "./BatchCorrectModal";
+import { BatchDropDialog } from "./BatchDropDialog";
 import { ManualMoveModal } from "./ManualMoveModal";
 import { BatchTimeline, stripFason } from "./BatchTimeline";
 import { findBatchTransferContext, type BatchTransferContext } from "./batch-transfer";
@@ -108,6 +110,7 @@ export function BranchLanes({
     null,
   );
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [correctTarget, setCorrectTarget] = useState<{
     batchId: string;
     batchNumber: string;
@@ -201,6 +204,7 @@ export function BranchLanes({
       onCorrect={() =>
         setCorrectTarget({ batchId: b.batchId, batchNumber: b.batchNumber, locked: b.locked })
       }
+      onDrop={() => setDropTarget(b.batchId)}
       onManualMove={() =>
         setMoveTarget({ batchId: b.batchId, batchNumber: b.batchNumber, rolls: b.rolls ?? [] })
       }
@@ -328,6 +332,12 @@ export function BranchLanes({
         workOrderId={workOrderId}
         source={moveTarget}
       />
+      <BatchDropDialog
+        open={Boolean(dropTarget)}
+        onOpenChange={(o) => !o && setDropTarget(null)}
+        workOrderId={workOrderId}
+        batchId={dropTarget}
+      />
       {transferTarget && (
         <FasonStepRollSelectModal
           open={Boolean(transferTarget)}
@@ -368,6 +378,7 @@ function BatchLaneCard({
   selected,
   onToggleSelect,
   onCorrect,
+  onDrop,
   onManualMove,
   onTebdil,
   onDirectShip,
@@ -385,6 +396,8 @@ function BatchLaneCard({
   /** K8 düzeltme (top taşı / yeni partiye böl) — K14: kilitli partide de açık
    *  (K16 sevk kalemini böler/taşır). Birleşmiş lane'de menü zaten gizli. */
   onCorrect: () => void;
+  /** Partiyi iş emrinden düşür — iş emri diğer partileriyle devam eder. */
+  onDrop: () => void;
   /** Süpervizör "Konumu Düzelt" — rotada ileri/geri manuel taşıma (parti/top bazında). */
   onManualMove: () => void;
   /** Tebdil sihirbazı — normal (ayır/yeniden boya) veya dispatchOnly (badge'den yalnız sevk). */
@@ -536,6 +549,10 @@ function BatchLaneCard({
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={onCorrect}>
                     <Wrench className="mr-2 h-4 w-4" /> Düzelt (top taşı / ayır)
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-destructive" onClick={onDrop}>
+                    <Ban className="mr-2 h-4 w-4" /> Partiyi Düşür
                   </DropdownMenuItem>
                 </PermissionGate>
               )}

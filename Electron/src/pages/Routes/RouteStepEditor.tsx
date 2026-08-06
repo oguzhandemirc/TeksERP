@@ -27,6 +27,7 @@ import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { RouteStepTargets } from "./RouteStepTargets";
 import { newClientId, type RouteStepFormValues } from "./schema";
 
 interface Props {
@@ -100,16 +101,22 @@ export function RouteStepEditor({ value, onChange, error }: Props) {
 
   // İstasyon seçimi: tip + (EXTERNAL ise) varsayılan kategori + favori fason firmasını çöz.
   const handleStationPick = async (clientId: string, stationId: string | null) => {
+    // İstasyon değişince şablon hedefi SIFIRLANIR: özellik istasyona bağlı bir
+    // yetenektir, eski istasyonun özelliği yenisinde geçersizdir (backend 400
+    // döner) ve renk de artık başka bir adımın kararıdır. Sessizce taşımak,
+    // kaydet'e basınca anlaşılmaz bir hata üretirdi.
+    const clearTargets = { plannedColorId: null, plannedPropertyIds: [] };
     if (!stationId) {
       updateStep(clientId, {
         stationId: "",
         stationType: undefined,
         requiredCategoryId: null,
         plannedSubcontractorId: null,
+        ...clearTargets,
       });
       return;
     }
-    updateStep(clientId, { stationId }); // seçimi anında yansıt
+    updateStep(clientId, { stationId, ...clearTargets }); // seçimi anında yansıt
     try {
       const res = await qc.fetchQuery({
         queryKey: ["station", stationId, "route-step"],
@@ -227,11 +234,12 @@ function StepRow({ step, index, onStationPick, onUpdate, onRemove }: RowProps) {
           className="text-sm"
         />
 
-        {/* Fason firma — yalnız EXTERNAL adımda; default favori firma seçilir. */}
+        {/* Fason firma — yalnız EXTERNAL adımda; varsayılan favori firma seçilir.
+            Hedeften ÖNCE: "işi kim yapıyor" sorusu "ne kazandırıyor"dan önce gelir. */}
         {step.stationType === "EXTERNAL" && (
           <div className="space-y-1 sm:col-span-2">
             <label className="text-xs text-muted-foreground">
-              Fason Firma <span className="text-muted-foreground/70">(default: favori)</span>
+              Fason Firma <span className="text-muted-foreground/70">(varsayılan: favori)</span>
             </label>
             <ReferenceSelect<Subcontractor>
               value={step.plannedSubcontractorId ?? null}
@@ -243,6 +251,21 @@ function StepRow({ step, index, onStationPick, onUpdate, onRemove }: RowProps) {
               nullable
               noneLabel="— Seçilmedi"
               extraFilters={step.requiredCategoryId ? { categoryId: step.requiredCategoryId } : undefined}
+            />
+          </div>
+        )}
+
+        {/* Adımın şablon hedefi (renk + özellik) — istasyon seçilince çıkar.
+            Ayrı dosyada: yetenek sorgusu + iki koşullu blok bu satırı 300 satır
+            kuralının üstüne taşıyordu. */}
+        {step.stationId && (
+          <div className="sm:col-span-2">
+            <RouteStepTargets
+              stationId={step.stationId}
+              colorId={step.plannedColorId ?? null}
+              propertyIds={step.plannedPropertyIds ?? []}
+              onColor={(id) => onUpdate({ plannedColorId: id })}
+              onProperties={(ids) => onUpdate({ plannedPropertyIds: ids })}
             />
           </div>
         )}

@@ -23,7 +23,10 @@ export function TemplateApplyPanel({ onApply, disabled }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const list = templates.data?.data ?? [];
+  // Pasif rol = "bu paketi kullanmıyoruz" kararı; uygulama listesinde durmamalı.
+  // Backend de pasif şablonun uygulanmasını 400 ile reddeder — iki katman aynı
+  // şeyi söyler, liste "uygulanabilir" göstermez.
+  const list = (templates.data?.data ?? []).filter((t) => t.isActive);
 
   return (
     <div className="flex w-72 shrink-0 flex-col gap-2 rounded-md border">

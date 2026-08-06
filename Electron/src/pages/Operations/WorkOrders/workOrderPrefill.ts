@@ -184,6 +184,54 @@ export function stepsToCustom(steps: DesignerStep[]): CustomRouteStep[] {
   }));
 }
 
+/** Rota adımının şablon hedefi (2026-08-06) — `clientId` ile eşlenir. */
+export interface RouteStepTargetPlan {
+  plannedColorId: string | null;
+  plannedPropertyIds: string[];
+}
+
+/** `deriveStepTargets`'ın ihtiyaç duyduğu yetenek şekli (StationCapabilityDetail alt kümesi). */
+interface CapabilityLike {
+  hasDefaultCategory: boolean;
+  canApplyColor: boolean;
+  canApplyProperty: boolean;
+  properties: { id: string }[];
+}
+
+/**
+ * İŞ EMRİ hedefi (tek, düz) → ROTA adımlarının şablon hedefi (adım başına).
+ *
+ * WO formunda renk/özellik iş emri seviyesinde tutulur; rota şablonunda ise
+ * adım başına saklanır. "Rotayı Kaydet" bu iki modeli çevirir ve çeviri kuralı
+ * ekranda chip'leri kapsayan kuralın AYNISIDIR: renk yalnız renk veren
+ * kategorinin adımına, özellik yalnız o istasyonun yetenek listesindekilere
+ * yazılır. Aksi halde kaydedilen şablon backend doğrulamasına takılırdı (400)
+ * ya da daha kötüsü, hiçbir istasyonun uygulayamayacağı bir hedef taşırdı.
+ *
+ * Yetenek bilinmiyorsa (sorgu henüz dönmedi) o adım hedefsiz kaydedilir —
+ * eksik şablon, yanlış şablondan iyidir.
+ */
+export function deriveStepTargets(
+  steps: DesignerStep[],
+  target: { colorId: string | null; propertyIds: string[] },
+  caps: Map<string, CapabilityLike>,
+): Map<string, RouteStepTargetPlan> {
+  const out = new Map<string, RouteStepTargetPlan>();
+  for (const s of steps) {
+    const cap = caps.get(s.stationId);
+    if (!cap) continue;
+    const colorOk = cap.hasDefaultCategory && cap.canApplyColor;
+    const capProps = new Set(cap.properties.map((p) => p.id));
+    out.set(s.clientId, {
+      plannedColorId: colorOk ? target.colorId : null,
+      plannedPropertyIds: cap.canApplyProperty
+        ? target.propertyIds.filter((id) => capProps.has(id))
+        : [],
+    });
+  }
+  return out;
+}
+
 /**
  * DesignerStep[] → ROTA ŞABLONU create steps payload (route şeması alan adları:
  * sequence + defaultNotes). `stepsToCustom`'un route-create kardeşi.
@@ -192,15 +240,36 @@ export function stepsToCustom(steps: DesignerStep[]): CustomRouteStep[] {
  * WO formundaki "Şablon kaydet" / "İş emri şablonu kaydet" kısayolları eskiden bu
  * iki alanı düşürüyordu → şablona seçilen fason firma kaydedilmiyor, rota tekrar
  * uygulanınca firma boş geliyordu. (Standalone RouteDesignerDialog zaten gönderir.)
+ *
+ * `stepTargets` verilirse adımın şablon hedefi de yazılır (bkz. deriveStepTargets);
+ * verilmezse alanlar hiç gönderilmez ve gövde 2026-08-06 öncesiyle birebir aynı olur.
  */
 export function routeStepsToCreatePayload(
   steps: DesignerStep[],
-): { stationId: string; sequence: number; defaultNotes: string | null; requiredCategoryId: string | null; plannedSubcontractorId: string | null }[] {
-  return steps.map((s, i) => ({
-    stationId: s.stationId,
-    sequence: i + 1,
-    defaultNotes: s.notes.trim() || null,
-    requiredCategoryId: s.requiredCategoryId,
-    plannedSubcontractorId: s.plannedSubcontractorId,
-  }));
+  stepTargets?: Map<string, RouteStepTargetPlan>,
+): {
+  stationId: string;
+  sequence: number;
+  defaultNotes: string | null;
+  requiredCategoryId: string | null;
+  plannedSubcontractorId: string | null;
+  plannedColorId?: string | null;
+  plannedPropertyIds?: string[];
+}[] {
+  return steps.map((s, i) => {
+    const plan = stepTargets?.get(s.clientId);
+    return {
+      stationId: s.stationId,
+      sequence: i + 1,
+      defaultNotes: s.notes.trim() || null,
+      requiredCategoryId: s.requiredCategoryId,
+      plannedSubcontractorId: s.plannedSubcontractorId,
+      ...(plan
+        ? {
+            plannedColorId: plan.plannedColorId,
+            plannedPropertyIds: plan.plannedPropertyIds,
+          }
+        : {}),
+    };
+  });
 }

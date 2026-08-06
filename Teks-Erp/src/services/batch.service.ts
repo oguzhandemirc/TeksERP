@@ -58,6 +58,25 @@ export const K18_DEAD_STATUSES: RollStatus[] = [
   RollStatus.CANCELLED,
 ];
 
+/**
+ * "Bu iş emrinde CANLI malzeme kaldı mı" sorusunun statü kümesi.
+ *
+ * ⚠️ K18 İLE KARIŞTIRMA — iki AYRI soru: K18 *"lane'de/etikette göster"* der,
+ * bu küme *"iş kaldı mı"* der. Fark iki statüde somutlaşır:
+ *   • `SCRAP` K18'de DEĞİLDİR (fire gerçek bir karardır, mal vardı ve üretildi)
+ *     ama burada ölüdür — fire top üzerinde yapılacak iş yoktur.
+ *   • `SHIPPED` de aynı şekilde: sevk edilmiş mal iş emrinde iş bırakmaz.
+ *
+ * `workorder-split.service.supersedeEmptiedSourceWorkOrderTx` bu listeyi satır içi
+ * yazıyordu ve **`KARTELA_CONSUMED` eksikti** → son topu kartelaya giden bir iş emri
+ * kalıcı olarak "boş değil" sayılıyor ve hiç SUPERSEDED olamıyordu. Tek kaynak.
+ */
+export const NO_LIVE_MATERIAL_STATUSES: RollStatus[] = [
+  ...K18_DEAD_STATUSES,
+  RollStatus.SHIPPED,
+  RollStatus.SCRAP,
+];
+
 export interface CreateBatchResult {
   batch: { id: string; batchNumber: string; workOrderId: string; splitFromId: string | null };
 }

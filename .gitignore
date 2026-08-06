@@ -28,3 +28,7 @@ Teks-Erp/_*.mjs
 
 # Yerel çalıştırma/derleme logları (dev artefaktı — repo'ya girmez)
 *.log
+
+# Veritabanı dökümleri — fabrika verisi, repoya GİRMEZ
+*.dump
+*.sql.gz

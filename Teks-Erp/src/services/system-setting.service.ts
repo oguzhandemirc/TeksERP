@@ -17,6 +17,12 @@ import {
   type DocStyleConfig,
 } from "./document-render/doc-style";
 import { resolveConfigPageSize } from "./document-render/traveler-card.density";
+import {
+  sanitizeTravelerFields,
+  TRAVELER_FIELD_SIZE_MAX,
+  TRAVELER_FIELD_SIZE_MIN,
+  type TravelerFieldStyle,
+} from "./document-render/traveler-card.fields";
 import { resolveSectionOrder, type TravelerSection } from "./document-render/traveler-card.sections";
 
 /**
@@ -322,14 +328,28 @@ export interface TravelerCardMargins {
 /** Yazı kalınlığı — tüm font-weight'leri kaydırır (ince −100, kalın +100). */
 export type TravelerCardFontWeight = "light" | "normal" | "bold";
 
-/** Alan boyutu — sm/md/lg. */
+/** Alan boyutu — sm/md/lg. ESKİ kademe; yeni kayıtlar `px` taşır (bkz. aşağı). */
 export type TravelerCardFieldSize = "sm" | "md" | "lg";
 
-/** Tek spec alanı — göster + boyut + kalınlık (alan-başına bağımsız müdahale). */
+/** Hücre kalınlığı — 2026-08-05'te `medium`/`black` eklendi (panel beş kademe). */
+export type TravelerCardCellWeight = TravelerCardFontWeight | "medium" | "black";
+
+/**
+ * Tek tablo hücresi ayarı — göster + boyut + kalınlık (hücre-başına bağımsız).
+ *
+ * ⚠️ İKİ BOYUT ALANI VAR ve bu geçicidir DEĞİL, KALICIDIR:
+ *   • `px` — 2026-08-05'te panel tek birime (sayısal punto) geçti; yeni kayıtlar
+ *     bunu yazar ve renderer'da kademenin ÜSTÜNDE gelir.
+ *   • `size` — eski kademe (sm/md/lg). SİLİNEMEZ: yıllar önce basılmış kartların
+ *     donmuş snapshot'ları bu alanı taşıyor ve o belgeler aynen basılabilmeli.
+ * Panel yalnız `px` gösterir; `size` okunur ama yazılmaz.
+ */
 export interface TravelerCardSpecField {
   show: boolean;
   size: TravelerCardFieldSize;
-  weight: TravelerCardFontWeight;
+  weight: TravelerCardCellWeight;
+  /** Sayısal punto (5–48). Verilmezse `size` kademesi, o da yoksa profil tabanı. */
+  px?: number;
 }
 
 /** Spec grid alanları — her biri tek tek (göster/boyut/kalınlık). */
@@ -365,15 +385,27 @@ export interface TravelerCardBatchFields {
   dispatch: TravelerCardSpecField;
 }
 
+const CELL_WEIGHTS = new Set<TravelerCardCellWeight>(["light", "medium", "bold", "black"]);
+
 /** Ham değeri (boolean eski şekil | nesne | undefined) tam spec alanına çözer. */
 export function coerceSpecField(v: unknown): TravelerCardSpecField {
   if (v === false) return { show: false, size: "md", weight: "normal" };
   if (v == null || v === true) return { show: true, size: "md", weight: "normal" };
   const f = v as Record<string, unknown>;
+  // `px` sınırları alan kataloğuyla AYNI (5–48) — panel tek bir sınır gösteriyor,
+  // iki farklı sınır tutmak kullanıcıya iki farklı kırpma davranışı yaşatırdı.
+  const rawPx = typeof f.px === "number" ? f.px : Number(f.px);
+  const px = Number.isFinite(rawPx)
+    ? Number(Math.min(TRAVELER_FIELD_SIZE_MAX, Math.max(TRAVELER_FIELD_SIZE_MIN, rawPx)).toFixed(2))
+    : undefined;
   return {
     show: f.show !== false,
     size: f.size === "sm" || f.size === "lg" ? f.size : "md",
-    weight: f.weight === "light" || f.weight === "bold" ? f.weight : "normal",
+    weight:
+      typeof f.weight === "string" && CELL_WEIGHTS.has(f.weight as TravelerCardCellWeight)
+        ? (f.weight as TravelerCardCellWeight)
+        : "normal",
+    ...(px != null ? { px } : {}),
   };
 }
 
@@ -421,6 +453,22 @@ export interface TravelerCardConfig {
    * (`document-render/traveler-card.sections.resolveSectionOrder`).
    */
   sections?: TravelerSection[];
+  /**
+   * ALAN BAZLI yazı ayarı — `key → { size?: px, weight? }`. Katalog + CSS üretimi
+   * `document-render/traveler-card.fields.ts`'te; burada yalnız SAKLANIR.
+   *
+   * `specFields`/`orderFields`/`batchFields` ile ÇAKIŞMAZ, KATMANLIDIR: onlar
+   * hücre-başına sm/lg kademesidir ve inline basıldıkları için CSS'i ezerler;
+   * buradaki `specValue`/`orderCell`/`batchCell` o kademelerin TABANINI belirler
+   * (renderer sm/lg'yi tabana oranlar). Diğer ~20 anahtar kartın hiçbir yerden
+   * ayarlanamayan yazı yüzeylerine (firma adı, İŞ EMRİ NO, özet tablo etiketleri,
+   * bölüm başlıkları, filigran…) karşılık gelir.
+   *
+   * ⚠️ Verilmemişse (`undefined`) renderer TEK BAYT ek CSS basmaz — ayara hiç
+   * dokunulmamış kartın çıktısı bugünküyle birebir aynı kalır. Bu yüzden boş
+   * nesne YAZILMAZ (`sanitizeTravelerFields` boşta `undefined` döner).
+   */
+  fields?: Record<string, TravelerFieldStyle>;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -545,6 +593,15 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
     // Her config'e varsayılan sırayı YAZMAK cazip ama yanlış olurdu: o zaman
     // yarın eklenecek bir bölüm, bugün kaydedilmiş her kartta eksik kalırdı.
     ...(o.sections === undefined ? {} : { sections: resolveSectionOrder(o.sections) }),
+    // Alan bazlı yazı ayarı — `sections` ile AYNI disiplin: boş/anlamsız girdi
+    // `undefined`'a çözülür ve anahtar config'e HİÇ yazılmaz. Boş bir `{}`
+    // yazmak zararsız görünür ama renderer'daki "override yoksa tek bayt CSS
+    // basılmaz" kuralını okuması zorlaşan bir şarta çevirir; ayrıca her kayıtlı
+    // ayara ölü bir anahtar eklerdi.
+    ...(() => {
+      const f = sanitizeTravelerFields(o.fields);
+      return f ? { fields: f } : {};
+    })(),
     footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
   };
 }
@@ -616,14 +673,14 @@ export interface DocumentConfig {
   /** ALAN BAZLI yazı ayarı: { [alanKey]: { size, weight } }. Belge geneli
    *  `style.fontScale/fontWeight` TÜM belgeye uygulanır; bu ise tek bir alanı
    *  (ör. grid'deki METRE değeri) ayrı ayarlar ve genel ayar onun üstüne biner.
-   *  Alan kataloğu belgeye özeldir — `document-render/doc-fields.ts` (altı belge)
-   *  ve `document-render/fason-ceki.fields.ts`. Bilinmeyen anahtar basımda
+   *  Alan kataloğu belgeye özeldir — bugün yalnız fason çeki
+   *  (`document-render/fason-ceki.fields.ts`). Bilinmeyen anahtar basımda
    *  sessizce atlanır (yazım hatası vardiyayı durdurmasın). */
   fields?: Record<string, DocFieldStyle>;
   /** Konumlandırılabilir bölümler: { [bölümKey]: "left" | "right" }. Bugün yalnız
-   *  `batchInfo` (fason çekide parti no — başlığın sol veya sağ bloğu; default
-   *  "right" = bugünkü çıktı). Genel harita, çünkü ikinci bir alan için ikinci
-   *  bir tekil anahtar açmak aynı kavramı iki yere bölerdi. */
+   *  `batchInfo` (parti no — başlığın sol veya sağ bloğu; default "right" =
+   *  bugünkü çıktı). Genel harita, çünkü ikinci bir alan için ikinci bir tekil
+   *  anahtar açmak aynı kavramı iki yere böler. */
   placements?: Record<string, "left" | "right">;
   /** Fason çeki grid'inde satır başına grup sayısı (3 | 4 | 5; default 5 =
    *  fiziksel KUMAŞ İRSALİYESİ formu). Daha az grup = daha geniş hücre → A5'te

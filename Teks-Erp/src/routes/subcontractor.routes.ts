@@ -369,6 +369,42 @@ router.post(
 
 /**
  * @openapi
+ * /api/subcontractor/dispatches/cancel-bulk:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Birden çok fason sevkini tek çağrıda iptal et
+ *     description: |
+ *       Tekil iptalin aynısını her sevk için ayrı transaction'da koşar. SONUÇ
+ *       PARÇALIDIR: iptal edilemeyen sevkler `failed[]` içinde somut sebebiyle
+ *       döner (hepsi-ya-hiç DEĞİL). İş emrini iptal etmeden önce fasondaki malı
+ *       tek onayla içeri almak için.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [dispatchIds, reason]
+ *             properties:
+ *               dispatchIds:
+ *                 type: array
+ *                 maxItems: 50
+ *                 items: { type: string, format: uuid }
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: "Sonuç (parçalı olabilir): cancelled, cancelledNos, failed[]" }
+ *       400: { description: Geçersiz sebep / boş liste / sınır aşıldı }
+ */
+router.post(
+  "/dispatches/cancel-bulk",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:fason-sevk"),
+  controller.cancelDispatchBulk
+);
+
+/**
+ * @openapi
  * /api/subcontractor/dispatches/{id}/direct-ship-preview:
  *   get:
  *     tags: [Subcontractor]

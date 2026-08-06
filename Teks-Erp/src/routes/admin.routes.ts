@@ -623,6 +623,9 @@ const updateTemplateSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional().nullable(),
   permissionIds: z.array(z.string().min(1)).optional(),
+  // Sistem rolünün "silinmesi" pasifleştirmedir (bkz. deleteTemplate) — geri
+  // açma yolu olmadan o karar tek yönlü olurdu.
+  isActive: z.boolean().optional(),
 });
 
 router.patch(

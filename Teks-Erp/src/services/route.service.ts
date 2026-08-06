@@ -10,6 +10,7 @@
 
 import prisma from "../lib/prisma";
 import { BaseService, type BaseServiceConfig } from "./base.service";
+import { deriveCapabilityFlags } from "./station-capability.service";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 
@@ -48,6 +49,16 @@ export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
         // adını ayrı sorgu olmadan gösterebilsin. (Scalar plannedSubcontractorId
         // zaten include ile dönüyor; bu yalnız adı ekler.)
         plannedSubcontractor: { select: { id: true, name: true } },
+        // 2026-08-06: adımın şablon hedefi (renk + özellikler). İstemci rotayı
+        // iş emrine uygularken bu iki alanı hedef alanlara kopyalar; ADI da
+        // dönmeli, yoksa panel her adım için ayrı renk/özellik sorgusu atardı.
+        plannedColor: { select: { id: true, code: true, name: true, hex: true } },
+        plannedProperties: {
+          select: {
+            propertyId: true,
+            property: { select: { id: true, code: true, name: true } },
+          },
+        },
       },
       orderBy: { sequence: "asc" },
     },
@@ -65,17 +76,30 @@ interface IncomingStep {
   plannedSubcontractorId?: string | null;
   sequence?: number;
   defaultNotes?: string | null;
+  /** 2026-08-06: adımın şablon hedefi. `plannedPropertyIds` DÜZ ID DİZİSİDİR — */
+  plannedColorId?: string | null;
+  /** serviste `{ create: [{ propertyId }] }` nested write'ına ÇEVRİLİR (aşağı). */
+  plannedPropertyIds?: string[];
+  /** Çeviri sonrası oluşan Prisma nested write — istemciden GELMEZ (allowlist reddeder). */
+  plannedProperties?: { create: { propertyId: string }[] };
 }
 
 export class RouteService extends BaseService {
   // F209: rota adımında izinli alanlar — nested create çocukları sanitizeWriteData'yı
   // baypas eder; yalnız bunlar geçer (mass-assignment kapatılır).
+  //
+  // ⚠️ `plannedPropertyIds` bilinçli olarak DÜZ BİR ID DİZİSİDİR, ham Prisma
+  // nested write DEĞİL. İstemciye `{ create: [...] }` yazdırmak, tam da bu
+  // allowlist'in kapattığı ilişki-manipülasyonu kapısını yeniden açardı
+  // (`{ connect: ... }` / `{ deleteMany: ... }` de aynı yoldan geçerdi).
   private static readonly ALLOWED_STEP_KEYS = new Set([
     "stationId",
     "sequence",
     "defaultNotes",
     "requiredCategoryId",
     "plannedSubcontractorId",
+    "plannedColorId",
+    "plannedPropertyIds",
   ]);
 
   /** Dizi-form VE nested-write ({create:[...]}) formundan step nesnelerini çıkarır. */
@@ -178,6 +202,158 @@ export class RouteService extends BaseService {
         throw AppError.badRequest(
           "Rota adımında seçilen fason firma, adımın gerektirdiği kategoride hizmet vermiyor",
         );
+      }
+    }
+
+    await this.applyStepTargets(steps);
+  }
+
+  /**
+   * Adımın ŞABLON HEDEFİ (renk + özellikler): doğrula, sonra düz id dizisini
+   * Prisma nested write'ına çevir. `validateSteps`'in son adımı — çeviri
+   * doğrulamadan SONRA yapılır, yoksa reddedilmesi gereken bir id nested
+   * write'ın içine gömülür ve buradaki allowlist'in anlamı kalmaz.
+   *
+   * ⚠️ Hedef bir ÖNERİDİR: iş emri açılışında istemci bu değerleri hedef
+   * alanlara kopyalar, operatör değiştirebilir. Bu yüzden burada "sipariş
+   * kalemiyle uyumlu mu" gibi bir kontrol YOK — o soru WO create'e aittir ve
+   * şablon yazılırken hangi siparişe bağlanacağı henüz bilinmez.
+   */
+  private async applyStepTargets(steps: IncomingStep[]): Promise<void> {
+    const colorIds = [
+      ...new Set(
+        steps
+          .map((s) => s.plannedColorId)
+          .filter((x): x is string => typeof x === "string" && x.length > 0),
+      ),
+    ];
+
+    const propertyIds = new Set<string>();
+    for (const s of steps) {
+      const raw = s.plannedPropertyIds;
+      if (raw === undefined || raw === null) continue;
+      if (
+        !Array.isArray(raw) ||
+        raw.some((id) => typeof id !== "string" || id.length === 0)
+      ) {
+        throw AppError.badRequest(
+          "Rota adımının hedef özellik listesi geçersiz (id dizisi bekleniyor)",
+        );
+      }
+      for (const id of raw) propertyIds.add(id);
+    }
+
+    if (colorIds.length === 0 && propertyIds.size === 0) {
+      // Hiç hedef yok — eski istemciler (ve hedefsiz rotalar) tek ek sorgu bile
+      // koşturmaz; nested write da üretilmez, gövde bayt-bayt eskisi gibi gider.
+      this.stripTargetInput(steps);
+      return;
+    }
+
+    if (colorIds.length > 0) {
+      const found = await prisma.color.findMany({
+        where: { id: { in: colorIds }, isActive: true },
+        select: { id: true },
+      });
+      if (found.length !== colorIds.length) {
+        throw AppError.badRequest("Rota adımında bulunmayan veya pasif renk var");
+      }
+    }
+
+    if (propertyIds.size > 0) {
+      const ids = [...propertyIds];
+      const found = await prisma.fabricProperty.findMany({
+        where: { id: { in: ids }, isActive: true },
+        select: { id: true },
+      });
+      if (found.length !== ids.length) {
+        throw AppError.badRequest("Rota adımında bulunmayan veya pasif özellik var");
+      }
+    }
+
+    // İstasyon yeteneği — panel yalnız uygulanabilir olanları gösteriyor, ama
+    // API'ye doğrudan gelen sapma sessizce kaydedilmemeli: "zımpara adımına MAVİ"
+    // yazan bir şablon iş emrini renk uygulamayan bir rotayla açtırırdı.
+    // ⚠️ RENK KISITI İSTASYON LİSTESİNDEN OKUNMAZ (2026-08-02 kuralı): yalnız
+    // "bu adım renk uygulayan bir kategoride mi" sorulur. Özellik ise gerçek
+    // proses kısıtıdır → StationProperty listesine bakılır.
+    const targeted = steps.filter(
+      (s) =>
+        (typeof s.plannedColorId === "string" && s.plannedColorId.length > 0) ||
+        (s.plannedPropertyIds?.length ?? 0) > 0,
+    );
+    const stationIds = [
+      ...new Set(
+        targeted.map((s) => s.stationId).filter((x): x is string => typeof x === "string" && x.length > 0),
+      ),
+    ];
+    if (stationIds.length > 0) {
+      const stations = await prisma.station.findMany({
+        where: { id: { in: stationIds } },
+        select: {
+          id: true,
+          name: true,
+          kind: true,
+          defaultCategory: { select: { appliesColor: true, appliesProperty: true } },
+          propertyCapabilities: { select: { propertyId: true } },
+        },
+      });
+      const byId = new Map(stations.map((st) => [st.id, st]));
+
+      for (const s of targeted) {
+        const station = s.stationId ? byId.get(s.stationId) : undefined;
+        if (!station) continue; // stationId doğrulaması yukarıda yapıldı
+        // Tek kaynak: station-capability.service. Kuralı buraya KOPYALAMA —
+        // "kategori yoksa açık" davranışı iki yerde ayrı yazılırsa ayrışır.
+        const flags = deriveCapabilityFlags(station);
+        // ⚠️ Renkte `hasDefaultCategory` DE aranır — `canApplyColor` tek başına
+        // yetmez, çünkü kategorisiz istasyonda o bayrak "bilinmiyor → serbest"
+        // anlamında true doğar. Panel (RouteStepDetail/RouteStepTargets), rota
+        // kapsama uyarısı ve mobil Hızlı İş Emri de aynı bileşik koşulu kullanır;
+        // yalnız burada gevşetmek Tambur adımına renk yazılmasına izin verirdi.
+        if (
+          typeof s.plannedColorId === "string" &&
+          s.plannedColorId.length > 0 &&
+          !(flags.hasDefaultCategory && flags.canApplyColor)
+        ) {
+          throw AppError.badRequest(
+            `'${station.name}' adımı renk uygulamıyor — hedef renk seçilemez`,
+          );
+        }
+        const wanted = s.plannedPropertyIds ?? [];
+        if (wanted.length > 0) {
+          if (!flags.canApplyProperty) {
+            throw AppError.badRequest(
+              `'${station.name}' adımı özellik uygulamıyor — hedef özellik seçilemez`,
+            );
+          }
+          const capable = new Set(station.propertyCapabilities.map((c) => c.propertyId));
+          if (wanted.some((id) => !capable.has(id))) {
+            throw AppError.badRequest(
+              `'${station.name}' adımının yetenek listesinde olmayan bir özellik seçildi`,
+            );
+          }
+        }
+      }
+    }
+
+    this.stripTargetInput(steps);
+  }
+
+  /**
+   * `plannedPropertyIds` (istemci sözleşmesi) → `plannedProperties.create`
+   * (Prisma). Boş/eksik dizi nested write ÜRETMEZ: `{ create: [] }` göndermek
+   * de çalışırdı ama gövdeye anlamsız bir operatör yazar ve "hiç dokunmadım"
+   * ile "hepsini temizledim" ayrımını gölgeler — adımlar zaten her kayıtta
+   * silinip yeniden yazıldığı için boş dizi doğal olarak "hiçbiri" demektir.
+   */
+  private stripTargetInput(steps: IncomingStep[]): void {
+    for (const s of steps) {
+      const ids = s.plannedPropertyIds;
+      delete s.plannedPropertyIds;
+      const unique = [...new Set(ids ?? [])];
+      if (unique.length > 0) {
+        s.plannedProperties = { create: unique.map((propertyId) => ({ propertyId })) };
       }
     }
   }

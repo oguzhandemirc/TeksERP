@@ -19,6 +19,12 @@ export interface ProductionRoute {
     requiredCategoryId?: string | null;
     plannedSubcontractorId?: string | null;
     plannedSubcontractor?: { id: string; name: string } | null;
+    // 2026-08-06: adımın ŞABLON HEDEFİ — rota seçilince hedef renk/özellik
+    // alanları buradan ön-doldurulur (öneridir, operatör değiştirebilir).
+    // Eski backend bu alanları göndermez → undefined kalır, ön-doldurma olmaz.
+    plannedColorId?: string | null;
+    plannedColor?: { id: string; code?: string | null; name: string; hex?: string | null } | null;
+    plannedProperties?: { propertyId: string; property?: { id: string; name: string } }[];
     station?: {
       id: string;
       code?: string | null;

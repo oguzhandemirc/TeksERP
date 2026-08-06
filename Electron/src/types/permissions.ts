@@ -6,6 +6,11 @@ export interface Permission {
   description: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Bu yetkiyi taşıyan kullanıcı sayısı. Yalnız yetki kataloğu ucunda döner
+   *  (kullanıcı/şablon gridleri bu alanı taşımaz) → opsiyonel. */
+  userCount?: number;
+  /** Bu yetkiyi içeren şablon (rol) sayısı. */
+  templateCount?: number;
 }
 
 export interface UserPermissionGrant {

@@ -62,6 +62,36 @@ export function WorkOrderCompleteDispositionList({ rolls, choices, onChange }: P
         Depo / 2. kalite seçilen toplarda kalite boş bırakılabilir — top depoda &quot;kalite
         —&quot; olarak durur.
       </p>
+
+      {/* TOPLU UYGULAMA — 50 toplu kapanışta 50 ayrı menü açmak tek gerçek engeldi.
+          Fason dönüşü topa "Ham stok" yazılmaz (backend reddeder), o satır atlanır. */}
+      {rolls.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-md border bg-muted/20 px-2 py-1.5">
+          <span className="text-[11px] text-muted-foreground">Hepsine:</span>
+          {DISPOSITION_OPTIONS.filter((o) => o.value !== "TRANSFER").map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => {
+                for (const r of rolls) {
+                  if (o.value === "STOCK" && !r.canReturnToStock) continue;
+                  onChange(r.id, {
+                    action: o.value,
+                    // Aksiyon değişince bayat kalite düşürülür (satır içi kuralın aynısı).
+                    qualityGradeId: QUALITY_ACTIONS.includes(o.value)
+                      ? (choices[r.id]?.qualityGradeId ?? null)
+                      : null,
+                  });
+                }
+              }}
+              className="rounded border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted"
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <ul className="space-y-2">
       {rolls.map((r) => {
         const choice = choices[r.id] ?? { action: null, qualityGradeId: null };

@@ -81,12 +81,20 @@ import {
 import { WorkOrderSplitService } from "./workorder-split.service";
 import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
+import { loadQualityTargetMaps, resolveFinalStatus } from "./helpers/roll-finalize.helper";
 import {
-  loadQualityTargetMaps,
-  resolveFinalStatus,
-  finalBarcodeType,
-} from "./helpers/roll-finalize.helper";
-import { generateRollBarcode } from "./helpers/roll-barcode.helper";
+  applyRollDispositionsTx,
+  DISPOSITION_MAX_ROLLS,
+  type AppliedRollDisposition,
+} from "./helpers/roll-disposition.helper";
+import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
+// Parti düşürme ayrı dosyada (bu dosya 5700+ satır) — `workorder-split` /
+// `workorder-manual-move` ile aynı delegasyon deseni. Ters yöndeki bağ YALNIZ
+// tip (`CancelDisposition`) olduğu için derlemede silinir → çalışma anında döngü yok.
+import {
+  workOrderBatchDropService,
+  type BatchDropInput,
+} from "./workorder-batch-drop.service";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -118,17 +126,11 @@ export type CloseDisposition =
   | "CANCELLED" // hatalı kayıt geri alındı (fire DEĞİL — mal hiç yoktu)
   | "TRANSFER"; // üretim yeni (devam) iş emrinde sürer — statü değişmez
 
-/** Dispozisyonun hedef `RollStatus`'u. TRANSFER burada YOK — statü değiştirmez. */
-const DISPOSITION_STATUS: Record<Exclude<CloseDisposition, "TRANSFER">, RollStatus> = {
-  STOCK: RollStatus.STOCK,
-  WAREHOUSE: RollStatus.WAREHOUSE,
-  A1_STOCK: RollStatus.A1_STOCK,
-  SCRAP: RollStatus.SCRAP,
-  CANCELLED: RollStatus.CANCELLED,
-};
-
-/** Satılabilir final statüler — barkod ("her kumaşa etiket") + kalite bunlarda anlamlı. */
-const SELLABLE_DISPOSITIONS: RollStatus[] = [RollStatus.WAREHOUSE, RollStatus.A1_STOCK];
+// ⚠️ `DISPOSITION_STATUS` ve `SELLABLE_DISPOSITIONS` buradan KALDIRILDI (2026-08-06):
+// artık `helpers/roll-disposition.helper.ts` içinde `DISPOSITION_TARGET_STATUS` ve
+// `SELLABLE_DISPOSITION_STATUSES` olarak yaşıyorlar ve kararı UYGULAYAN kodla aynı
+// dosyadalar. Buraya ikinci bir kopya koyma: iki liste ayrıştığı gün "hangisi doğru"
+// sorusunun cevabı, kararın hangi ekrandan verildiğine bağlı hale gelir.
 
 /**
  * Fiziksel olarak DIŞARIDA (fason/boyahane) olan statüler — kapanışta hard-block.
@@ -167,6 +169,28 @@ interface AppliedDisposition {
   from: RollStatus;
   to: RollStatus;
   action: CloseDisposition;
+}
+
+// -----------------------------------------------------------------------------
+// İPTAL DİSPOZİSYONU (2026-08-06)
+// -----------------------------------------------------------------------------
+// Kapatmanın ALTI aksiyonundan farklı olarak iptalde ÜÇ karar vardır. Fark keyfî
+// değil: iptal "bu iş emri hiç olmayacaktı" demektir, "üretildi" demez — depo /
+// 2. kalite / devir seçenekleri kapatmanın kelimeleridir. Depoya alınacak bir mal
+// varsa doğru yol KAPATMAK'tır (arayüz bunu `canSwitchToClose` ile söyler).
+
+/** İptalde bir topa uygulanabilecek karar. */
+export type CancelDisposition = "STOCK" | "SCRAP" | "CANCELLED";
+
+/** İptal payload'ı — hiçbiri verilmezse davranış 2026-08-06 öncesiyle birebir aynı. */
+export interface CancelWorkOrderInput {
+  /** Yeni uçta ZORUNLU (min 3). Eski gövdesiz `DELETE /:id` bunu taşımaz. */
+  reason?: string;
+  /**
+   * İşlemdeki topların ALT KÜMESİ. Gönderilmeyen her top varsayılan `STOCK`'a
+   * döner — "eksik gönderdin" hatası bilinçli olarak YOKTUR.
+   */
+  dispositions?: Array<{ rollId: string; action: CancelDisposition }>;
 }
 
 /** Manuel kapatma payload'ı. */
@@ -2449,6 +2473,21 @@ export class WorkOrderService {
     return workOrderManualMoveService.manualMove(workOrderId, input, userId);
   }
 
+  /** Parti düşürme önizlemesi — bkz. `workorder-batch-drop.service.ts`. */
+  async getBatchDropPreview(workOrderId: string, batchId: string) {
+    return workOrderBatchDropService.getDropPreview(workOrderId, batchId);
+  }
+
+  /** Partiyi iş emrinden düşür — iş emri diğer partileriyle DEVAM eder. */
+  async dropBatch(
+    workOrderId: string,
+    batchId: string,
+    input: BatchDropInput,
+    userId?: string,
+  ) {
+    return workOrderBatchDropService.dropBatch(workOrderId, batchId, input, userId);
+  }
+
   /**
    * İptal etkisini ÖNİZLER (yıkıcı işlem onayı için). Hiçbir şeyi değiştirmez.
    * Döner: STOCK'a çekilecek toplar + VOID olacak ACTIVE refakat kartı sayısı.
@@ -2486,7 +2525,12 @@ export class WorkOrderService {
               colorId: true,
               currentStepId: true,
               entrySource: true,
+              batchId: true,
               color: { select: { name: true, hex: true } },
+              // İstasyon adı: iptal ekranı topları istasyona göre gruplar (düz liste
+              // 50 topta okunmuyor). Parti kimliği kapsam seçici için.
+              currentStep: { select: { station: { select: { name: true } } } },
+              batch: { select: { batchNumber: true } },
               _count: { select: { properties: true } },
             },
             take: 200,
@@ -2534,7 +2578,11 @@ export class WorkOrderService {
       id: r.id,
       barcode: r.barcode,
       status: r.status,
-      currentQty: r.currentQty,
+      // `Number()` — kardeş yüzeylerle (getCompletePreview, getBranches) aynı.
+      // Ham `Decimal` JSON'a STRING olarak çıkıyordu ve istemci tipi `number`
+      // diyordu; kırılma üretmiyordu (Intl string'i sayıya çeviriyor) ama
+      // sıralama/aritmetik ekleyen ilk kişiyi sessizce yanıltırdı.
+      currentQty: Number(r.currentQty),
       colorName: r.color?.name ?? null,
       colorHex: r.color?.hex ?? null,
       propertyCount: r._count.properties,
@@ -2550,6 +2598,16 @@ export class WorkOrderService {
         stepIdSet.has(r.currentStepId) &&
         r.status === RollStatus.IN_PRODUCTION &&
         String(r.entrySource) !== "SUBCONTRACTOR_RETURN",
+      stationName: r.currentStep?.station?.name ?? null,
+      batchId: r.batchId,
+      batchNumber: r.batch?.batchNumber ?? null,
+      /** Fason dönüşü mal ham stoğa DÖNEMEZ — arayüz seçeneği kilitler. */
+      canReturnToStock: String(r.entrySource) !== "SUBCONTRACTOR_RETURN",
+      /** Karar verilebilir mi (yalnız işlemdeki toplar). */
+      decidable:
+        r.currentStepId !== null &&
+        stepIdSet.has(r.currentStepId) &&
+        r.status === RollStatus.IN_PRODUCTION,
     }));
     // Sayılar LİMİTSİZ count'lardan (liste 200 ile kırpılı olabilir).
     const atSubcontractorCount =
@@ -2578,6 +2636,145 @@ export class WorkOrderService {
           })
         : 0;
 
+    // ── AÇIK FASON SEVKLERİ ───────────────────────────────────────────────────
+    // Fason bloğunun ÇÖZÜM YOLU bu listedir: kullanıcı parti parti gezmek yerine
+    // buradan toplu iptal eder ve mal içeri döner. Her satır kendi iptal
+    // edilebilirliğini TEK KAYNAKTAN (`resolveDispatchCancelBlockReason`) taşır —
+    // ekran "iptal edilebilir" derken ucun 409 vermesi bu sayede imkânsız.
+    const openDispatchRows =
+      stepIds.length > 0
+        ? await prisma.subcontractorDispatch.findMany({
+            where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
+            select: {
+              id: true,
+              dispatchNo: true,
+              dispatchedAt: true,
+              totalQty: true,
+              stepId: true,
+              subcontractor: { select: { name: true } },
+              batch: { select: { id: true, batchNumber: true } },
+              step: { select: { stepSequence: true, station: { select: { name: true } } } },
+              items: { select: { rollId: true } },
+              _count: { select: { items: true } },
+            },
+            orderBy: { dispatchedAt: "asc" },
+          })
+        : [];
+
+    // Kabul izi ve "sevkten sonra taşınmış top" bilgisi toplu okunur (sevk başına
+    // ayrı sorgu, tipik 1-3 sevkte gereksiz tur demekti).
+    const openDispatchIds = openDispatchRows.map((d) => d.id);
+    const activeReceiptRows = openDispatchIds.length
+      ? await prisma.subcontractorReceiptItem.findMany({
+          where: {
+            sourceDispatchItem: { is: { dispatchId: { in: openDispatchIds } } },
+            receipt: { cancelledAt: null },
+          },
+          select: {
+            sourceDispatchItem: { select: { dispatchId: true } },
+            receipt: { select: { receiptNo: true } },
+          },
+        })
+      : [];
+    const receiptNoByDispatch = new Map<string, string>();
+    for (const r of activeReceiptRows) {
+      const did = r.sourceDispatchItem?.dispatchId;
+      if (did && !receiptNoByDispatch.has(did)) {
+        receiptNoByDispatch.set(did, r.receipt.receiptNo);
+      }
+    }
+    const dispatchRollIds = openDispatchRows.flatMap((d) => d.items.map((i) => i.rollId));
+    // "Taşınmış" tanımı SEVKE GÖREDİR (`cancel`'ın guard'ıyla aynı): top ya artık
+    // AT_SUBCONTRACTOR değildir ya da o sevkin adımında değildir. Tek bir global
+    // koşulla süzmek ikinci şartı kaybederdi.
+    const dispatchRollRows = dispatchRollIds.length
+      ? await prisma.roll.findMany({
+          where: { id: { in: dispatchRollIds } },
+          select: { id: true, currentStepId: true, status: true },
+        })
+      : [];
+    const rollStateById = new Map(dispatchRollRows.map((r) => [r.id, r]));
+
+    const openDispatches = openDispatchRows.map((d) => {
+      const movedCount = d.items.filter((i) => {
+        const st = rollStateById.get(i.rollId);
+        if (!st) return true; // top okunamıyorsa güvenli taraf: "değişmiş" say
+        return st.status !== RollStatus.AT_SUBCONTRACTOR || st.currentStepId !== d.stepId;
+      }).length;
+      const dispatchBlock = resolveDispatchCancelBlockReason({
+        cancelledAt: null,
+        activeReceiptNo: receiptNoByDispatch.get(d.id) ?? null,
+        movedRollCount: movedCount,
+      });
+      return {
+        dispatchId: d.id,
+        dispatchNo: d.dispatchNo,
+        dispatchedAt: d.dispatchedAt,
+        subcontractorName: d.subcontractor?.name ?? "—",
+        stationName: d.step?.station?.name ?? "—",
+        stepSequence: d.step?.stepSequence ?? 0,
+        batchId: d.batch?.id ?? null,
+        batchNumber: d.batch?.batchNumber ?? null,
+        rollCount: d._count.items,
+        totalQty: Number(d.totalQty ?? 0),
+        cancellable: dispatchBlock === null,
+        blockReason: dispatchBlock,
+      };
+    });
+
+    // ── PARTİ KIRILIMI ────────────────────────────────────────────────────────
+    // ⚠️ AGGREGATE'ten üretilir, yukarıdaki 200 ile KIRPILMIŞ `rolls` dizisinden
+    // DEĞİL. JS'te gruplamak cazip ama tam da dialogun en çok işe yaradığı büyük
+    // iş emirlerinde sessizce yanlış sayı basar.
+    const batchGroups =
+      stepIds.length > 0
+        ? await prisma.roll.groupBy({
+            by: ["batchId"],
+            where: {
+              batch: { workOrderId: id },
+              status: { notIn: K18_DEAD_STATUSES },
+            },
+            _count: { _all: true },
+            _sum: { currentQty: true },
+          })
+        : [];
+    const batchRows = await prisma.batch.findMany({
+      where: { workOrderId: id },
+      select: {
+        id: true,
+        batchNumber: true,
+        createdAt: true,
+        mergedInto: { select: { batchNumber: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const groupByBatch = new Map(batchGroups.map((g) => [g.batchId ?? "", g]));
+    const lockedBatchIds = new Set(
+      openDispatches.filter((d) => d.batchId).map((d) => d.batchId as string),
+    );
+    const atSubBatchRows =
+      stepIds.length > 0
+        ? await prisma.roll.groupBy({
+            by: ["batchId"],
+            where: { batch: { workOrderId: id }, status: RollStatus.AT_SUBCONTRACTOR },
+            _count: { _all: true },
+          })
+        : [];
+    for (const r of atSubBatchRows) if (r.batchId) lockedBatchIds.add(r.batchId);
+
+    const batches = batchRows.map((b) => {
+      const g = groupByBatch.get(b.id);
+      const liveRollCount = g?._count._all ?? 0;
+      return {
+        batchId: b.id,
+        batchNumber: b.batchNumber,
+        liveRollCount,
+        meters: Number(g?._sum.currentQty ?? 0),
+        locked: lockedBatchIds.has(b.id),
+        mergedIntoBatchNumber: b.mergedInto?.batchNumber ?? null,
+      };
+    });
+
     let blockReason: string | null = null;
     if (wo.status === WorkOrderStatus.CANCELLED) {
       blockReason = "İş emri zaten iptal edilmiş.";
@@ -2591,6 +2788,65 @@ export class WorkOrderService {
         "stoğa dönemez; sipariş iptal olsa bile bu mal stok için üretilmeye " +
         "devam eder, iş emri iptal edilemez.";
     }
+
+    // ── FASON BLOĞUNUN KIRILIMI ───────────────────────────────────────────────
+    // İki tür fason engeli aynı cümleye sığdırılınca kullanıcı ne yapacağını
+    // bilemiyor. Ayrımı yapan şey basit: mal HÂLÂ dışarıdaysa sevk iptaliyle
+    // içeri gelir; mal DÖNDÜYSE (boyanmış) iptal yolu tanım gereği kapalıdır ve
+    // doğru araç KAPATMA'dır.
+    const returnedCount =
+      stepIds.length > 0
+        ? await prisma.roll.count({
+            where: {
+              AND: [rollWhere, { status: RollStatus.RETURNED_FROM_SUBCONTRACTOR }],
+            },
+          })
+        : 0;
+    const returnInProductionCount =
+      stepIds.length > 0
+        ? await prisma.roll.count({
+            where: {
+              AND: [
+                rollWhere,
+                {
+                  status: RollStatus.IN_PRODUCTION,
+                  entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
+                },
+              ],
+            },
+          })
+        : 0;
+
+    // ── "İPTAL EDİLEMEZ AMA KAPATILABİLİR" ÇIKIŞI ─────────────────────────────
+    // Kapatmanın kurallarını KOPYALAMAZ, aynı modüldeki sabitleri KULLANIR —
+    // kopyalansaydı kapatma bir gün değiştiğinde ikisi sessizce ayrışırdı.
+    const closeBlockedRolls =
+      stepIds.length > 0
+        ? await prisma.roll.count({
+            where: { currentStepId: { in: stepIds }, status: { in: CLOSE_BLOCKED_STATUSES } },
+          })
+        : 0;
+    const inFlightForClose =
+      stepIds.length > 0
+        ? await prisma.roll.count({
+            where: { currentStepId: { in: stepIds }, status: { in: CLOSE_IN_FLIGHT_STATUSES } },
+          })
+        : 0;
+    const closeOpenDispatchItems =
+      stepIds.length > 0
+        ? await prisma.subcontractorDispatchItem.count({
+            where: {
+              dispatch: { cancelledAt: null },
+              roll: { currentStepId: { in: stepIds }, status: { in: CLOSE_IN_FLIGHT_STATUSES } },
+            },
+          })
+        : 0;
+    const canSwitchToClose =
+      blockReason !== null &&
+      wo.status === WorkOrderStatus.IN_PROGRESS &&
+      closeBlockedRolls === 0 &&
+      closeOpenDispatchItems === 0 &&
+      inFlightForClose <= CLOSE_DISPOSITION_MAX_ROLLS;
 
     return {
       success: true,
@@ -2608,6 +2864,20 @@ export class WorkOrderService {
         rolls: mappedRolls,
         // Liste 200 ile kırpıldıysa UI "ilk 200 gösteriliyor" diyebilsin.
         rollsTruncated: totalRollCount > rolls.length,
+        // ── 2026-08-06 eklemeleri (hepsi ADDITIVE — eski istemciler yok sayar) ──
+        openDispatches,
+        batches,
+        fasonBlock: {
+          /** Sevk iptaliyle ÇÖZÜLÜR. */
+          atSubcontractorCount,
+          /** Çözülmez — doğru araç KAPATMA. */
+          returnedFromSubcontractorCount: returnedCount,
+          subcontractorReturnInProductionCount: returnInProductionCount,
+        },
+        canSwitchToClose,
+        closeHint: canSwitchToClose
+          ? "Bu iş emri iptal edilemez ama kapatılabilir — istasyondaki toplara depo / 2. kalite / devir kararı verilir."
+          : null,
       },
     };
   }
@@ -2626,8 +2896,18 @@ export class WorkOrderService {
    *    TAMBUR_CONSUMED) dokunulmaz.
    * 3. ACTIVE refakat kartları VOIDED'a düşer.
    * Tüm bu işlemler güvenli bir transaction bloğunda gerçekleşir.
+   *
+   * KARAR VEREREK İPTAL (2026-08-06): üçüncü parametre ile istasyonda kalan topların
+   * bir kısmı `STOCK` yerine `SCRAP` (fire) ya da `CANCELLED` (hatalı kayıt) olarak
+   * çözülebilir. Parametre VERİLMEZSE davranış bire bir eskisidir — `DELETE /:id`
+   * (eski mobil APK, gövdesiz) tam olarak bu yoldan geçer, yani geriye uyum
+   * ispatlanacak bir şey değil YAPISAL bir sonuçtur.
    */
-  async softDelete(id: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
+  async softDelete(
+    id: string,
+    userId?: string,
+    input: CancelWorkOrderInput = {},
+  ): Promise<ApiResponse<WorkOrder>> {
     const existing = await prisma.workOrder.findUnique({
       where: { id },
       include: {
@@ -2652,7 +2932,36 @@ export class WorkOrderService {
 
     const stepIds = existing.steps.map((step) => step.id);
 
-    const { updated } = await prisma.$transaction(async (tx) => {
+    // ⚠️ STOCK MOTORA VERİLMEZ. İptalde `STOCK` VARSAYILANDIR ve aşağıdaki toplu
+    // yolda (blanket updateMany + hareket süpürmesi) uygulanır. İstemci listede
+    // açıkça göndermiş olsa bile motora geçirilmez — aksi halde AYNI kullanıcı
+    // kararı, istemcinin satırı gönderip göndermemesine göre `roll_movements`'ta
+    // iki farklı not/metraj üretirdi (sessiz, kalıcı, raporlanamaz).
+    const decided = (input.dispositions ?? []).filter((d) => d.action !== "STOCK");
+    const reason = (input.reason ?? "").trim();
+
+    if (decided.length > 0) {
+      if (reason.length < 3) {
+        throw AppError.badRequest("İptal nedeni (en az 3 karakter) zorunludur");
+      }
+      if (decided.length > DISPOSITION_MAX_ROLLS) {
+        throw AppError.badRequest(
+          `Tek iptalde en fazla ${DISPOSITION_MAX_ROLLS} top için karar verilebilir`,
+        );
+      }
+      const seen = new Set<string>();
+      for (const d of decided) {
+        if (seen.has(d.rollId)) {
+          throw AppError.badRequest("Aynı top için birden fazla karar gönderildi");
+        }
+        seen.add(d.rollId);
+      }
+      if (stepIds.length === 0) {
+        throw AppError.badRequest("İş emrinin adımı yok — karar verilebilecek top da yok");
+      }
+    }
+
+    const { updated, applied } = await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM ÖNCE (F57): WO satırını status-koşullu updateMany ile
       // kilitle. Fason in-flight guard'ı BUNDAN SONRA çalışır — böylece guard,
       // WO satır kilidini tutarken okur ve eşzamanlı bir fason sevkinin (dispatch
@@ -2721,6 +3030,52 @@ export class WorkOrderService {
         }
       }
 
+      // KARARLI TOPLAR (fire / hatalı kayıt) — varsayılan STOCK dışına çıkanlar.
+      // Guard'lardan SONRA, toplu geri çekmeden ÖNCE koşar: motor topları
+      // IN_PRODUCTION'dan çıkarır, böylece aşağıdaki blanket updateMany onları
+      // kendiliğinden kapsam dışı bırakır — bakımı gereken bir `notIn` listesi YOK.
+      const applied: AppliedRollDisposition[] = [];
+      if (decided.length > 0) {
+        // Kapsam guard'ı: karar verilen her top tx içinde TAZE okunan işlemdeki
+        // kümede olmalı. Kapatmadan farklı olarak BİREBİR eşleşme aranmaz (alt küme
+        // yeterli) — listelenmeyen her top zaten varsayılan STOCK'a gider ve
+        // gövdesiz eski çağrıyı yapısal olarak aynı bırakan şey budur.
+        const inFlight = await tx.roll.findMany({
+          where: { currentStepId: { in: stepIds }, status: RollStatus.IN_PRODUCTION },
+          select: {
+            id: true,
+            barcode: true,
+            status: true,
+            currentQty: true,
+            weightKg: true,
+            entrySource: true,
+          },
+        });
+        const inFlightById = new Map(inFlight.map((r) => [r.id, r]));
+        const missing = decided.filter((d) => !inFlightById.has(d.rollId));
+        if (missing.length > 0) {
+          throw AppError.badRequest(
+            `${missing.length} top artık işlemde değil — liste bu sırada değişti. ` +
+              "Sayfayı yenileyip tekrar deneyin.",
+          );
+        }
+        applied.push(
+          ...(await applyRollDispositionsTx(tx, {
+            origin: "WO_CANCEL",
+            reason,
+            userId,
+            rolls: inFlight,
+            dispositions: decided,
+            stepIds,
+            // İptalde parti üyeliği KORUNUR (`inventory.softDelete` emsali): "hangi
+            // partiye yanlış top yazılmıştı" izi iptalle birlikte silinmemeli.
+            clearBatchId: () => false,
+            // Üç aksiyonun hiçbiri satılabilir değil → barkod üretimi gereksiz.
+            generateBarcodes: false,
+          })),
+        );
+      }
+
       if (stepIds.length > 0) {
         // Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen
         // üretimdeki topları STOCK'a geri çek. `producedInStepId` (üretim izi)
@@ -2779,7 +3134,7 @@ export class WorkOrderService {
       await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_CANCELLED" });
 
       const cancelledWO = await tx.workOrder.findUnique({ where: { id } });
-      return { updated: cancelledWO! };
+      return { updated: cancelledWO!, applied };
     });
 
     await AuditService.log({
@@ -2788,13 +3143,46 @@ export class WorkOrderService {
       tableName: "WORK_ORDER",
       recordId: id,
       oldData: { batchNumber: existing.workOrderNumber, status: existing.status },
-      newData: { status: WorkOrderStatus.CANCELLED },
+      newData: {
+        status: WorkOrderStatus.CANCELLED,
+        ...(applied.length > 0 ? { dispositionCount: applied.length, reason } : {}),
+      },
     });
+
+    // Top başına ayrı iz — sabit olay koduyla ayrıştırılabilir olmalı: altı ay sonra
+    // "bu top neden fire yazılmış" sorusunun cevabı burada. `WO_CLOSE_DISPOSITION`
+    // ile aynı desen, farklı kod (kapatma ile iptal karışmasın).
+    for (const a of applied) {
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ROLL",
+        recordId: a.rollId,
+        oldData: { status: a.from },
+        newData: {
+          status: a.to,
+          event: "WO_CANCEL_DISPOSITION",
+          action: a.action,
+          reason,
+          workOrderNumber: existing.workOrderNumber,
+        },
+      });
+    }
+
+    const scrapCount = applied.filter((a) => a.action === "SCRAP").length;
+    const voidCount = applied.filter((a) => a.action === "CANCELLED").length;
+    const extra = [
+      scrapCount > 0 ? `${scrapCount} fire` : null,
+      voidCount > 0 ? `${voidCount} hatalı kayıt` : null,
+    ].filter(Boolean);
 
     return {
       success: true,
       data: updated,
-      message: `İş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`,
+      message:
+        extra.length > 0
+          ? `İş emri iptal edildi (${extra.join(", ")}), kalan ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`
+          : `İş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`,
     };
   }
 
@@ -3162,80 +3550,42 @@ export class WorkOrderService {
             }
           }
 
-          // 2) STATÜ DİSPOZİSYONLARI (tx içinde SIRALI — Promise.all yasak).
-          for (const d of dispositions) {
-            if (d.action === "TRANSFER") continue;
-            const roll = byId.get(d.rollId)!;
-            const target = DISPOSITION_STATUS[d.action];
-
-            // Açık movement'ları FİZİKSEL çıkışla kapat (softDelete'in "hiç olmadı"
-            // semantiği DEĞİL). notes = sebep kodu.
-            //
-            // qtyOut = movement'ın KENDİ qtyIn'i — tambur/kursun finishStep paritesi.
-            // `currentQty` ile kapatmak YANLIŞ olurdu: top daha önce Tambur'da
-            // kesilmişse (currentQty < qtyIn) aradaki fark istasyon iş-hacmi
-            // raporunda HAYALET KAYIP gibi görünürdü (800 girdi / 700 çıktı).
-            // qtyIn ölçülmemişse (0/null — KK1 kenarı) kalan metraja düşülür.
-            const openMoves = await tx.rollMovement.findMany({
-              where: { rollId: roll.id, exitedAt: null },
-              select: { id: true, qtyIn: true, weightIn: true },
-            });
-            for (const m of openMoves) {
-              const qtyOut =
-                m.qtyIn && new Prisma.Decimal(m.qtyIn).greaterThan(0)
-                  ? new Prisma.Decimal(m.qtyIn)
-                  : roll.currentQty;
-              await tx.rollMovement.update({
-                where: { id: m.id },
-                data: {
-                  exitedAt: new Date(),
-                  qtyOut,
-                  weightOut: m.weightIn ?? roll.weightKg,
-                  notes: `WO_CLOSE_${d.action}`,
-                },
-              });
-            }
-
-            // Atomik claim: IN_PRODUCTION + serbest (çuval/sevk yok) iken hedefe çek.
-            const rollClaim = await tx.roll.updateMany({
-              where: {
-                id: roll.id,
-                status: RollStatus.IN_PRODUCTION,
-                shipmentId: null,
-                sackId: null,
-              },
-              data: { status: target, currentStepId: null },
-            });
-            if (rollClaim.count === 0) {
-              throw AppError.conflict(
-                `${roll.barcode ?? "Açık kumaş"} bu sırada başka bir işleme girdi — ` +
-                  "yenileyip tekrar deneyin.",
-              );
-            }
-
-            // "Her kumaşa etiket" (F4): satılabilir final statüde barkodsuz top kalmaz.
-            const quality = d.qualityGradeId ? qualityById.get(d.qualityGradeId)! : null;
-            const newBarcode =
-              roll.barcode == null && SELLABLE_DISPOSITIONS.includes(target)
-                ? await generateRollBarcode(tx, finalBarcodeType(target))
-                : null;
-            if (newBarcode || quality) {
-              await tx.roll.update({
-                where: { id: roll.id },
-                data: {
-                  ...(newBarcode ? { barcode: newBarcode } : {}),
-                  ...(quality ? { qualityGradeId: quality.id, qualityGrade: quality.code } : {}),
-                },
-              });
-            }
-
-            appliedRows.push({
-              rollId: roll.id,
-              barcode: newBarcode ?? roll.barcode,
-              from: roll.status,
-              to: target,
-              action: d.action,
-            });
+          // 2) STATÜ DİSPOZİSYONLARI — ORTAK MOTOR (`applyRollDispositionsTx`).
+          //
+          // Eskiden burada per-top bir döngü vardı ve aynı kararı iptal / parti
+          // düşürme yolları KENDİ kopyalarıyla uyguluyordu. Üç kopya, aynı kelimeye
+          // ("Hatalı kayıt") üç farklı hareket satırı yazma riski demekti.
+          //
+          // ⚠️ BU TAŞIMA İKİ DAVRANIŞI BİLİNÇLİ OLARAK DEĞİŞTİRİR (`CANCELLED`):
+          //   • `qtyOut = 0` (storno) — eskiden `qtyIn` yazılıyordu. "Mal hiç yoktu"
+          //     diyen bir karar, istasyon iş hacmine metraj yazamaz; `inventory.
+          //     softDelete` bu semantiği zaten böyle tanımlamıştı.
+          //   • İptal izi kolonları (`cancelledAt/ById/Reason/preCancelStatus`)
+          //     artık DOLDURULUR — eskiden boştu, yani kapatmada iptal edilen topun
+          //     satırında "neden" yazmıyordu ve geri alma yanlış rafa dönerdi.
+          // Diğer dört aksiyonun çıktısı bayt-bayt aynıdır (`qtyOut = qtyIn`,
+          // `WO_CLOSE_<AKSİYON>` öneki, barkod ve kalite yazımı).
+          //
+          // `stepIds` GEÇİLMEZ: kapatma, topun TÜM açık hareketlerini kapatır
+          // (eski `where: { rollId, exitedAt: null }` sözleşmesi). İptal ve parti
+          // düşürme kendi adımlarıyla sınırlar.
+          const statusDispositions = dispositions.filter((d) => d.action !== "TRANSFER");
+          if (statusDispositions.length > 0) {
+            appliedRows.push(
+              ...(await applyRollDispositionsTx(tx, {
+                origin: "WO_CLOSE",
+                reason,
+                userId,
+                rolls: statusDispositions.map((d) => byId.get(d.rollId)!),
+                dispositions: statusDispositions.map((d) => ({
+                  rollId: d.rollId,
+                  action: d.action as Exclude<CloseDisposition, "TRANSFER">,
+                  qualityGradeId: d.qualityGradeId,
+                })),
+                qualityById,
+                generateBarcodes: true,
+              })),
+            );
           }
         }
 

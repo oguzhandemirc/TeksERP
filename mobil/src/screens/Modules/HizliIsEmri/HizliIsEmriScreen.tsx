@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,31 @@ export default function HizliIsEmriScreen() {
   // Sihirbaz adımı kabukta tutulur: Appbar geri tuşu bir ADIM geri gitsin,
   // yalnız ilk adımda listeye dönsün (native geri hareketiyle aynı beklenti).
   const [step, setStep] = useState(0);
+  // Sihirbaz başarı ekranında mı (bkz. NewWorkOrderView.onResultChange).
+  const [hasResult, setHasResult] = useState(false);
+  // Bu sihirbaz oturumunda en az bir iş emri açıldı mı → listeye dönüşte tazele.
+  const [listDirty, setListDirty] = useState(false);
+
+  /**
+   * Listeye dön. İş emri açıldıysa liste TAZELENİR ve BAŞA sarılır: yeni kayıt
+   * en üstteki satırdır ve operatörün ilk baktığı yer orasıdır. Sorgu 30 sn
+   * `staleTime` taşıdığı için remount tek başına tazelemeyi garanti etmez —
+   * `refreshKey` sorgu anahtarını değiştirerek bunu kesinleştirir.
+   */
+  const goToList = useCallback((refresh: boolean) => {
+    if (refresh) setRefreshKey((k) => k + 1);
+    setListDirty(false);
+    setHasResult(false);
+    setStep(0);
+    setView('list');
+  }, []);
+
+  const handleResultChange = useCallback((v: boolean) => {
+    setHasResult(v);
+    // "Yeni İş Emri"ne basılıp sonuç ekranı kapansa da tazeleme borcu KALIR —
+    // aksi halde iş emri açıp sonra vazgeçen operatör bayat listeye dönerdi.
+    if (v) setListDirty(true);
+  }, []);
 
   return (
     <ScreenChrome
@@ -26,18 +51,28 @@ export default function HizliIsEmriScreen() {
       onStepBack={
         view === 'new'
           ? () => {
+              // Sonuç ekranında geri = LİSTE. Adımlara geri saymak, biten bir
+              // işin formunu yeniden açar ve üç dokunuş ister.
+              if (hasResult) {
+                goToList(true);
+                return;
+              }
               if (step > 0) {
                 setStep((s) => s - 1);
                 return;
               }
-              setView('list');
+              goToList(listDirty);
             }
           : undefined
       }
     >
       <View style={styles.root}>
         {view === 'new' ? (
-          <NewWorkOrderView step={step} onStepChange={setStep} />
+          <NewWorkOrderView
+            step={step}
+            onStepChange={setStep}
+            onResultChange={handleResultChange}
+          />
         ) : (
           <>
             <View style={styles.listWrap}>

@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Monitor, Smartphone, Shield, Search, Info, Asterisk } from "lucide-react";
+import { Monitor, Smartphone, Shield, Search, Info, Asterisk, UserX } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,18 @@ export function PermissionsCatalogPage() {
     return byCat;
   }, [query.data, search]);
 
+  // Hiçbir kullanıcıda olmayan yetkiler. Bu bandın sebebi ölçülmüş bir saha
+  // hatasıdır: 2026-08-06'da canlıda YEDİ izin (belge tasarımı, iş istasyonu
+  // ayarı, top geçmişi, sevk geri alma, mobil kumaş/sipariş) hiç kimseye
+  // atanmamıştı — ekranlar deploy edilmiş ama kimseye açılmamıştı. Boot
+  // uzlaştırması izni DB'ye GETİRİR, kimseye ATAMAZ; atamanın unutulduğunu
+  // gösteren tek yüzey burasıdır. Arama kutusundan BAĞIMSIZ hesaplanır —
+  // süzgeç açıkken banda güvenip "boşluk yok" sanmak, tam da önlenmek istenen şey.
+  const atanmamis = useMemo(
+    () => (query.data?.data ?? []).filter((p) => p.userCount === 0),
+    [query.data],
+  );
+
   return (
     <PageShell>
       <PageHeader
@@ -78,6 +90,33 @@ export function PermissionsCatalogPage() {
       </div>
 
       <PageBody className="overflow-x-hidden p-6">
+        {atanmamis.length > 0 && (
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+            <UserX className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+            <div className="min-w-0">
+              <div className="font-medium text-amber-700 dark:text-amber-400">
+                {atanmamis.length} yetki hiçbir kullanıcıda yok
+              </div>
+              <p className="mt-0.5 text-muted-foreground">
+                Bu yetkilerin arkasındaki ekranlar sistemde var ama <span className="font-medium">kimse açamıyor</span>.
+                Yeni bir sürümle gelen yetkiler otomatik olarak kimseye atanmaz — ilgili kişiye{" "}
+                <span className="font-medium">Kullanıcılar → Yetkiler</span> sekmesinden verin.
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {atanmamis.map((p) => (
+                  <code
+                    key={p.id}
+                    className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11px] text-amber-800 dark:text-amber-300"
+                    title={p.description ?? undefined}
+                  >
+                    {p.code}
+                  </code>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {query.isLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-32 w-full" />
@@ -94,6 +133,8 @@ export function PermissionsCatalogPage() {
                 <TableRow>
                   <TableHead className="w-72">Yetki</TableHead>
                   <TableHead>Açıklama</TableHead>
+                  <TableHead className="w-24 text-right">Kullanıcı</TableHead>
+                  <TableHead className="w-20 text-right">Rol</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -103,7 +144,7 @@ export function PermissionsCatalogPage() {
                   return (
                     <Fragment key={category}>
                       <TableRow className="bg-muted/30">
-                        <TableCell colSpan={2} className="px-3 py-1.5">
+                        <TableCell colSpan={4} className="px-3 py-1.5">
                           <div className="flex items-center gap-2">
                             <Icon className="h-3.5 w-3.5" />
                             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -118,7 +159,7 @@ export function PermissionsCatalogPage() {
                       {Array.from(modules.entries()).map(([module, perms]) => (
                         <Fragment key={module}>
                           <TableRow className="bg-muted/10">
-                            <TableCell colSpan={2} className="py-1.5 pl-7">
+                            <TableCell colSpan={4} className="py-1.5 pl-7">
                               <span className="text-sm font-medium">{moduleLabels[module] ?? module}</span>
                             </TableCell>
                           </TableRow>
@@ -151,6 +192,24 @@ export function PermissionsCatalogPage() {
                                 <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
                                   {p.description}
                                 </TableCell>
+                                <TableCell className="py-1.5 text-right">
+                                  {p.userCount === 0 ? (
+                                    <Badge
+                                      variant="muted"
+                                      className="border-amber-500/40 bg-amber-500/10 font-normal text-amber-700 dark:text-amber-400"
+                                      title="Bu yetki hiçbir kullanıcıda yok — arkasındaki ekranı kimse açamıyor."
+                                    >
+                                      kimsede yok
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-xs tabular-nums text-muted-foreground">
+                                      {p.userCount ?? "—"}
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                                  {p.templateCount ?? "—"}
+                                </TableCell>
                               </TableRow>
                             );
                           })}
@@ -176,7 +235,7 @@ export function PermissionsCatalogPage() {
           <div className="flex items-start gap-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <div>
-              Yetki tanımları sistem kurulumunda <span className="font-mono">seed</span> dosyasından yüklenir. Yeni yetki eklemek için backend tarafında tanımlanması gerekir.
+              Yetki tanımları koddaki katalogda yaşar ve sunucu her açıldığında eksikler otomatik olarak veritabanına yazılır — yani yeni sürüm, yeni yetkileri kendiliğinden getirir. <span className="font-medium">Ama kimseye atamaz:</span> yetkiyi kullanıcıya vermek her zaman bilinçli bir karardır (Kullanıcılar → Yetkiler). Yeni bir yetki KODU eklemek backend tarafında tanımlanmayı gerektirir.
             </div>
           </div>
         </div>

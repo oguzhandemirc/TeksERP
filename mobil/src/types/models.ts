@@ -423,6 +423,10 @@ export interface PendingReturnGroup {
     status: WorkOrderStatus;
     targetColor?: Color | null;
     targetProperties?: FabricProperty[];
+    /** İş emrinin HEDEF eni (cm) — işlem SONRASI beklenen en, giden topun eni DEĞİL.
+     *  Fason kabulünde en alanına ön değer olarak düşer; dolu geldiğinde
+     *  "uygulanan" paneli kapalı açılır (operatörün önünü kalabalıklaştırmasın). */
+    width?: number | null;
   };
   lastDispatch: {
     id: string;
@@ -531,6 +535,13 @@ export interface ReceiveRequest {
   appliedColorId?: string | null;
   /** Receipt seviyesinde uygulanan özellikler (override; appliesColor=true kategoride boş bırakılabilir → WO.targetProperties). */
   appliedPropertyIds?: string[];
+  /**
+   * Kabulde ÖLÇÜLEN en (cm) — doğan TÜM parçalara uygulanır (kabul başına tek değer).
+   * Renkten farkı: renk yalnız "renk veren" kategoride sorulur, en HER fason
+   * dönüşünde. Topun enini ilk kez burada öğreniyoruz — ham girişte en tasarım
+   * gereği yazılmıyor. Opsiyonel: zorunluluk ekranda yaşar, sözleşmede değil.
+   */
+  appliedWidth?: number;
   returns: ReceiveReturnInput[];
   /** Fasondan dönen açık kumaş parçaları — backend min(1) zorunlu. */
   newRolls: ReceiveNewRollInput[];

@@ -1,0 +1,21 @@
+-- Fason kabulünde ÖLÇÜLEN en (2026-08-05).
+--
+-- Topun eni sisteme ilk kez burada giriyor: ham girişte en tasarım gereği
+-- yazılmıyor (kumaş henüz ram/sanfor görmemiş, eni oturmamış — `kk1.rawWidthEnabled`
+-- kapalı ve KK1 kaynaklı 47 topun 47'si ensiz). Eni belirleyen operasyon terbiyedir,
+-- ölçülebilir hale geldiği an da mal kabul masasıdır.
+--
+-- `appliedColorId` ile aynı seviyede: kabul BAŞINA tek değer, doğan tüm parçalara
+-- uygulanır (aynı sevkten dönen parçaların eni aynıdır).
+--
+-- NULLABLE → PG11+ metadata-only, tablo yeniden yazılmaz. Zorunluluk ARAYÜZDE
+-- yaşar: burada NOT NULL yapmak sahadaki eski APK'ların her fason kabulünü
+-- 400'e düşürürdü.
+--
+-- ⚠️ `migrate dev` bu diff'te de `rolls_sackId_shipmentId_consistency_fkey` ve
+-- `swatches_...` DROP satırlarını üretti; ikisi datamodel'de temsil edilemeyen
+-- DEFERRABLE composite FK'lardır (schema.prisma:2557-2558) ve SİLİNDİ —
+-- uygulansaydı çuval/sevkiyat tutarlılık seddi düşerdi.
+
+-- AlterTable
+ALTER TABLE "subcontractor_receipts" ADD COLUMN     "appliedWidth" DECIMAL(12,3);

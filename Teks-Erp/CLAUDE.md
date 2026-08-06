@@ -125,6 +125,23 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **DB'de olmalı** (
 
 **Uzlaştırma yalnız EKLER — silmez, güncellemez.** Katalogdan bir kodu çıkarmak onu DB'den kaldırmaz (kullanıcı atamaları sessizce düşmesin diye); mevcut satırın `description`/`module` alanları da ezilmez (fabrika panelden düzeltmiş olabilir). Gerçekten kaldırmak/yeniden adlandırmak **bilinçli bir veri migration'ı** ister.
 
+### ROL (yetki şablonu) kataloğu — aynı üç parça, ikinci tur (2026-08-06)
+
+Yeni izin **kodunun** DB'ye gelmesi yetmiyordu; onu kullanıcıya götüren **paketin** de gelmesi gerekiyor. Şablonlar (`PermissionTemplate`) da yalnız `seed.ts`'te yaşıyordu ve aynı boşluk aynı şekilde açıldı — bu kez ölçüldü: canlı fabrikada **"Admin (Tam Yetki)" şablonu 55 izin taşıyordu, katalog 67**. O şablonla açılan yeni yönetici 12 yetkiyi ALMIYOR ve bunu hiçbir yerde göremiyordu. Ayrıca **masaüstü (büro) rolü HİÇ YOKTU**: 16 şablonun 15'i tek-ekran mobil, biri tam yetki → üç masaüstü kullanıcısı (Eda · Enes · Samet) **birebir aynı 40 izne** sahipti.
+
+| Parça | Dosya | İşi |
+|---|---|---|
+| 1. **Tek kaynak** | `src/constants/role-template-catalog.ts` | 26 rol (8 masaüstü + 17 mobil + tam yetki). `codes` alanı `PERMISSION_CATALOG`'a bağlı. |
+| 2. **Boot-time uzlaştırma** | `src/jobs/role-template-catalog.job.ts` | İzin uzlaştırmasından **SONRA**, aynı zincirde koşar (şablon satırları izin satırlarına FK ile bağlı). |
+| 3. **Mekanik bekçi** | `scripts/test_role_template_catalog.ts` | Katalog tutarlılığı + **kapsam** + DB uzlaştırması + idempotentlik. |
+
+- **`mode:"all"` yalnız "Admin (Tam Yetki)" içindir** — o şablonun tanımı bir liste değil bir KURALDIR ("her şey"), bu yüzden her boot'ta katalogla eşitlenir ve bir daha bayatlayamaz. Diğer rollerde eksik izinler eklenir, **fazlalar korunur, hiçbir izin çıkarılmaz**.
+- ⚠️ **Kimlik `code`'dur, ad değil** (`permission_templates.code`, migration `20260806040111`). Fabrika şablonu yeniden adlandırabilir; ada bakan bir uzlaştırma o rolü "yok" sayıp **ikizini doğururdu**. `code = null` → fabrikanın kendi şablonu, uzlaştırma ona hiç dokunmaz.
+- ⚠️ **Sistem rolü SİLİNMEZ, PASİFLEŞTİRİLİR** (`deleteTemplate`). Sert silme, bir sonraki `pm2 restart`'ta **dirilişti** ve admin sebebini hiçbir yerde göremezdi. Pasif satır durduğu için uzlaştırma onu "var" sayar → "bu rolü kullanmıyorum" kararı kalıcı olur. Geri açma `PATCH … { isActive: true }`. `applyTemplate` pasif şablonu **400 ile reddeder** ve panel listesi onu gizler (iki katman aynı şeyi söyler).
+- ⚠️ **Sahiplenme YALNIZ `LEGACY_TEMPLATE_NAME_TO_CODE` üzerinden.** Kodsuz eski seed satırlarını adlarıyla eşleyip kodlar. Bunu `entry.name`e de açmak cazip ama YANLIŞ: fabrika kendi "Muhasebe" şablonunu yaratmış olabilir ve o satır sessizce sistem rolüne dönüşüp bizim izin listemizi üstüne alırdı. Yeni rolde ad çakışması varsa **oluşturma atlanır**, sessizce genişletilmez.
+- **Bekçinin en kolay kaybedilen kuralı:** kapsam kontrolü **"Admin (Tam Yetki)" DIŞINDAKİ** roller üzerinde koşar. O şablon hariç tutulmazsa kontrol **vakumen yeşil** kalır (tanımı gereği her izni içerir). Kapsam dışı kalması meşru izinler `ROLE_COVERAGE_EXEMPT`'te **gerekçeyle** durur (`admin:*`, `mobile:tambur-duzelt`, `mobile:kk1-desen`) ve muaf listesi **iki yönlü** denetlenir — ölü muaf da, gereksiz muaf da testi düşürür.
+- **Katalog yine ATAMA İÇERMEZ.** Rol DB'ye gelir, kimseye verilmez. Unutulan atamayı görünür kılan tek yüzey **Yetki Kataloğu ekranındaki "N yetki hiçbir kullanıcıda yok" bandı**dır (`listPermissions` artık `userCount`/`templateCount` döner).
+
 **Katalog NE İÇERMEZ:** kullanıcı→izin ATAMALARI ve fabrikanın düzenlemiş olabileceği şablon içerikleri — bunlar ortama özgüdür (bir kurulumda planlamacı Ahmet, diğerinde Mehmet), panelden veya `scripts/sync-*-permissions.ts` deseniyle verilir. Kural: *katalog koda, atama script'e.* Yeni bir ekran canlıda görünmüyorsa sırayla bak: (1) satır DB'de mi (boot log'u: `[permission-catalog] ...`), (2) kullanıcıya **atanmış** mı, (3) kullanıcı yeniden giriş yaptı mı (JWT'deki izin listesi bayat olabilir).
 
 > **Mobil ayrı union taşır:** `mobil/src/types/permissions.ts` bağımsız bir projedir, bu katalogu import edemez — mobil ekran izni eklerken oradaki liste elle güncellenir (bekçi orayı taramaz).

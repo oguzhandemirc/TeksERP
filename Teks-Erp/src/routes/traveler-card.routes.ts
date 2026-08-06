@@ -8,6 +8,7 @@
 
 import { Router } from "express";
 import { TravelerCardController } from "../controllers/traveler-card.controller";
+import { DOCUMENT_DESIGN_READ } from "../constants/document-design";
 import { verifyToken } from "../middlewares/auth.middleware";
 import {
   requirePermission,
@@ -115,10 +116,15 @@ const travelerCardRouter = Router();
  *       200: { description: text/html önizleme çıktısı }
  */
 // :id'den ÖNCE — "sample-html" segmenti :id param'ına yakalanmasın.
+// İZİN: ekranı AÇAN izinle aynı küme olmalı. Refakat Kartı ekranı 2026-08-05'te
+// `document-template:read`e taşındı ama bu uç `admin:settings`te kaldı → o izinle
+// giren tasarımcı ekranı açıyor, sol tarafta ayar yapıyor ve sağdaki önizleme
+// sessizce 403 alıyordu ("liste izni ile baskı izni hizalı olmalı" kuralının
+// önizleme ikizi). `DOCUMENT_DESIGN_READ` `admin:settings`i zaten OR ile kapsar.
 travelerCardRouter.post(
   "/sample-html",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission(...DOCUMENT_DESIGN_READ),
   controller.getSampleHtml
 );
 

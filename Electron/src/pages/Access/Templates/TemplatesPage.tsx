@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, RotateCcw, Lock } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -25,7 +25,7 @@ export function TemplatesPage() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<PermissionTemplate | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<PermissionTemplate | null>(null);
 
   const query = useQuery({
     queryKey: [QUERY_KEY],
@@ -65,8 +65,17 @@ export function TemplatesPage() {
 
   const removeMut = useMutation({
     mutationFn: permissionTemplateService.remove,
+    onSuccess: (_data, id) => {
+      const t = (query.data?.data ?? []).find((x) => x.id === id);
+      toast.success(t?.code ? "Rol pasifleştirildi." : "Şablon silindi.");
+      invalidate();
+    },
+  });
+
+  const reactivateMut = useMutation({
+    mutationFn: (id: string) => permissionTemplateService.update(id, { isActive: true }),
     onSuccess: () => {
-      toast.success("Şablon silindi.");
+      toast.success("Rol geri açıldı.");
       invalidate();
     },
   });
@@ -144,8 +153,26 @@ export function TemplatesPage() {
               </TableRow>
             ) : (
               filtered.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.name}</TableCell>
+                <TableRow key={t.id} className={t.isActive ? undefined : "opacity-60"}>
+                  <TableCell className="font-medium">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate">{t.name}</span>
+                      {t.code && (
+                        <Badge
+                          variant="muted"
+                          className="shrink-0 gap-1 font-normal"
+                          title="Sistem rolü — sürümle birlikte gelir ve yeni yetkiler eklendikçe otomatik güncellenir. Silinmez, pasifleştirilir."
+                        >
+                          <Lock className="h-3 w-3" /> sistem
+                        </Badge>
+                      )}
+                      {!t.isActive && (
+                        <Badge variant="destructive" className="shrink-0 font-normal">
+                          pasif
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="muted">{t.permissions.length}</Badge>
                   </TableCell>
@@ -165,6 +192,7 @@ export function TemplatesPage() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
+                        title="Düzenle"
                         onClick={() => {
                           setEditing(t);
                           setFormOpen(true);
@@ -172,14 +200,28 @@ export function TemplatesPage() {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive"
-                        onClick={() => setRemovingId(t.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {t.isActive ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          title={t.code ? "Pasifleştir" : "Sil"}
+                          onClick={() => setRemoving(t)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Geri aç"
+                          disabled={reactivateMut.isPending}
+                          onClick={() => reactivateMut.mutate(t.id)}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -201,17 +243,21 @@ export function TemplatesPage() {
       />
 
       <ConfirmDialog
-        open={Boolean(removingId)}
-        onOpenChange={(open) => !open && setRemovingId(null)}
-        title="Şablonu sil"
-        description="Şablonu silmek mevcut kullanıcılara yansımaz (yetkiler kopya tutulur). Devam edilsin mi?"
-        confirmLabel="Sil"
+        open={Boolean(removing)}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        title={removing?.code ? "Rolü pasifleştir" : "Şablonu sil"}
+        description={
+          removing?.code
+            ? "Bu bir SİSTEM rolüdür ve silinmez — pasifleştirilir. Sebep: sistem rolleri sürümle birlikte gelir, sert silinseydi sunucu her açıldığında geri gelirdi. Pasif rol yetki atama ekranındaki listede görünmez; istediğinde geri açabilirsin. Mevcut kullanıcıların yetkileri ETKİLENMEZ (rol uygulandığında yetkiler kopyalanır)."
+            : "Şablonu silmek mevcut kullanıcılara yansımaz (yetkiler kopya tutulur). Devam edilsin mi?"
+        }
+        confirmLabel={removing?.code ? "Pasifleştir" : "Sil"}
         destructive
         isPending={removeMut.isPending}
         onConfirm={async () => {
-          if (!removingId) return;
-          await removeMut.mutateAsync(removingId);
-          setRemovingId(null);
+          if (!removing) return;
+          await removeMut.mutateAsync(removing.id);
+          setRemoving(null);
         }}
       />
     </PageShell>

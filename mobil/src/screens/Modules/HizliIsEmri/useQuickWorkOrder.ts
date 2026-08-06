@@ -352,12 +352,25 @@ export function useQuickWorkOrder() {
       setStepSubcontractors({}); // rota değişti → eski firma override'ları geçersiz
       setSubmitError(null);
 
-      const next = routeApplyCaps(
-        (routesQuery.data?.data ?? []).find((r) => r.id === id) ?? null,
-      );
+      const route = (routesQuery.data?.data ?? []).find((r) => r.id === id) ?? null;
+      const next = routeApplyCaps(route);
       // Siparişten gelen renk düşürülemez (siparişin şartı) → uyarıya bırakılır.
       if (!next.canApplyColor && !orderLinked) setTargetColorId(null);
       if (!next.canApplyProps) setTargetPropertyIds([]);
+
+      // Şablon hedefi (2026-08-06): rota adımlarında kayıtlı renk/özellik varsa
+      // hedefi ön-doldur. Renk için SON renk veren adım kazanır (yeniden boyama),
+      // özellikler birleşir. Sipariş bağlıyken renge DOKUNULMAZ — orada renk
+      // siparişin şartıdır, şablon onu ezemez. Eski backend alanları hiç
+      // göndermez → döngü boş geçer, davranış bugünküyle aynı kalır.
+      let planColor: string | null = null;
+      const planProps = new Set<string>();
+      for (const s of [...(route?.steps ?? [])].sort((a, b) => a.sequence - b.sequence)) {
+        if (s.plannedColorId) planColor = s.plannedColorId;
+        for (const p of s.plannedProperties ?? []) planProps.add(p.propertyId);
+      }
+      if (planColor && next.canApplyColor && !orderLinked) setTargetColorId(planColor);
+      if (planProps.size > 0 && next.canApplyProps) setTargetPropertyIds([...planProps]);
     },
     [routesQuery.data, orderLinked],
   );

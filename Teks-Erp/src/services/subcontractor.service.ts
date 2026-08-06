@@ -51,6 +51,7 @@ import {
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
+import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
@@ -276,6 +277,13 @@ const AWAITING_DISPATCH_STATUSES: RollStatus[] = [
 const awaitingStatusSql = Prisma.join(
   AWAITING_DISPATCH_STATUSES.map((s) => Prisma.raw(`'${s}'`)),
 );
+
+/**
+ * Tek çağrıda iptal edilebilecek en fazla fason sevki. Bir iş emrinin açık sevk
+ * sayısı parti sayısıyla sınırlıdır (K10: bir sevk = bir parti) — pratikte tek
+ * haneli. Sınır sessiz kırpma DEĞİL, aşılırsa 400 döner.
+ */
+const BULK_DISPATCH_CANCEL_MAX = 50;
 
 // -----------------------------------------------------------------------------
 // Mesaj hijyeni — hata metinlerinde ham UUID yerine barkod
@@ -1868,9 +1876,8 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
-    if (dispatch.cancelledAt) {
-      throw AppError.conflict("Bu sevk zaten iptal edilmiş");
-    }
+
+    const rollIds = dispatch.items.map((i) => i.rollId);
 
     // Mal kabul edilmiş sevk iptal edilemez (ReceiptItem.sourceDispatchItem
     // üzerinden bağlı). cancelledAt:null filtresi şart — iptal edilmiş receipt
@@ -1883,13 +1890,6 @@ export class SubcontractorService {
       },
       select: { receipt: { select: { receiptNo: true } } },
     });
-    if (acceptedReceiptItem?.receipt) {
-      throw AppError.conflict(
-        `Mal kabul yapılmış sevk iptal edilemez (kabul: ${acceptedReceiptItem.receipt.receiptNo}). Önce kabul iptal edilmeli.`
-      );
-    }
-
-    const rollIds = dispatch.items.map((i) => i.rollId);
 
     // Defansif state check: dispatch'te listelenen tüm rolls hala
     // AT_SUBCONTRACTOR + bu step'te olmalı. Bir şey "fason sevkten sonraki
@@ -1907,19 +1907,29 @@ export class SubcontractorService {
       },
       select: { id: true, barcode: true, status: true, currentStepId: true },
     });
-    if (movedRolls.length > 0) {
+
+    // Engel kararı TEK KAYNAKTAN (`resolveDispatchCancelBlockReason`) — iptal
+    // önizlemesi (`getCancelImpact.openDispatches[].cancellable`) aynı yüklemi
+    // çağırır. Kopyalanırsa ekran "iptal edilebilir" der, uç 409 verir.
+    const blockReason = resolveDispatchCancelBlockReason({
+      cancelledAt: dispatch.cancelledAt,
+      activeReceiptNo: acceptedReceiptItem?.receipt?.receiptNo ?? null,
+      movedRollCount: movedRolls.length,
+    });
+    if (blockReason) {
       throw AppError.conflict(
-        `${movedRolls.length} top fason sevkten sonra taşınmış veya statüsü değişmiş — sevk iptal edilemez. ` +
-          `Önce ilgili işlemleri (mal kabul / hareket) geri al.`,
-        {
-          code: "ROLLS_MOVED_PAST_DISPATCH",
-          movedRolls: movedRolls.map((r) => ({
-            id: r.id,
-            barcode: r.barcode,
-            status: r.status,
-            currentStepId: r.currentStepId,
-          })),
-        },
+        blockReason,
+        movedRolls.length > 0 && !dispatch.cancelledAt && !acceptedReceiptItem
+          ? {
+              code: "ROLLS_MOVED_PAST_DISPATCH",
+              movedRolls: movedRolls.map((r) => ({
+                id: r.id,
+                barcode: r.barcode,
+                status: r.status,
+                currentStepId: r.currentStepId,
+              })),
+            }
+          : undefined,
       );
     }
 
@@ -2090,6 +2100,104 @@ export class SubcontractorService {
     };
   }
 
+  /**
+   * ÇOK SEVKİ tek çağrıda iptal eder → toplar depoya döner.
+   *
+   * Neden var: bir iş emrinin fason çıkışı K10 gereği parti başına AYRI sevktir
+   * (`SubcontractorDispatch.batchId` NOT NULL). Malı içeri almak isteyen kişi
+   * bugün parti parti gezip her sevki tek tek iptal ediyor — iş emrini iptal
+   * etmenin ön koşulu tam olarak bu. Uç, o gezinmeyi tek onaya indirir.
+   *
+   * ⚠️ SONUÇ PARÇALIDIR ve bu BİLİNÇLİDİR (`kursun-bypass.cancelBulk` sözleşmesi):
+   * her sevk KENDİ tx'inde iptal edilir. Tek tx yanlış olurdu — (a) `cancel()`
+   * her sevkte WO satırını kilitler, onlarca sevki tek tx'te tutmak deadlock
+   * riskidir; (b) hepsi-ya-hiç semantiği burada zararlıdır: aralarından biri bu
+   * arada mal kabul görmüşse diğerlerinin iptalini geri almak kullanıcının
+   * niyetine aykırıdır. Karşılığında atlanan her sevk SOMUT sebebiyle döner —
+   * "5 sevk iptal edildi" deyip 2'sinin neden atlandığını yutmak en kötüsüdür.
+   */
+  async cancelBulk(
+    input: { dispatchIds: string[]; reason: string },
+    userId?: string
+  ): Promise<
+    ApiResponse<{
+      cancelled: number;
+      cancelledNos: string[];
+      failed: Array<{ dispatchId: string; dispatchNo: string | null; message: string }>;
+    }>
+  > {
+    const trimmedReason = input.reason?.trim();
+    if (!trimmedReason || trimmedReason.length < 3) {
+      throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı");
+    }
+    // Tekrarlı id gönderimi ikinci turda "zaten iptal edilmiş" hatası üretirdi —
+    // kullanıcının görmediği bir çift tıklama, uydurma bir başarısızlık satırına
+    // dönüşmemeli.
+    const ids = [...new Set(input.dispatchIds)];
+    if (ids.length === 0) {
+      throw AppError.badRequest("İptal edilecek sevk seçilmedi");
+    }
+    if (ids.length > BULK_DISPATCH_CANCEL_MAX) {
+      throw AppError.badRequest(
+        `Tek seferde en fazla ${BULK_DISPATCH_CANCEL_MAX} sevk iptal edilebilir`
+      );
+    }
+
+    // Sevk numaraları başarısızlık satırında da görünsün — kullanıcı "hangisi
+    // atlandı" sorusunu id ile değil belge numarasıyla sorar. Bilinmeyen id de
+    // `failed` satırıdır: tek yanlış id yüzünden 404 ile tüm çağrıyı düşürmek,
+    // geri kalan 20 sevki sebepsiz yere fasonda bırakırdı.
+    const known = await prisma.subcontractorDispatch.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, dispatchNo: true, workOrderId: true, dispatchedAt: true },
+    });
+    const byId = new Map(known.map((d) => [d.id, d]));
+
+    // ⚠️ DETERMİNİSTİK SIRA — deadlock önlemi, süs değil. Bir toplu seçim çoğunlukla
+    // AYNI iş emrinin partilerini taşır ve `cancel()` her satırda `touchWorkOrderTx`
+    // ile o WO satırını kilitler. İki kullanıcı çakışan kümeleri farklı sırayla
+    // gönderirse kilitler ters sırada alınır ve deadlock doğar. Global sıra bunu
+    // yapısal olarak imkânsız kılar.
+    const ordered = [...ids].sort((a, b) => {
+      const da = byId.get(a);
+      const db = byId.get(b);
+      if (!da || !db) return da ? -1 : db ? 1 : a.localeCompare(b);
+      if (da.workOrderId !== db.workOrderId) return da.workOrderId.localeCompare(db.workOrderId);
+      const ta = da.dispatchedAt?.getTime() ?? 0;
+      const tb = db.dispatchedAt?.getTime() ?? 0;
+      if (ta !== tb) return ta - tb;
+      return a.localeCompare(b);
+    });
+
+    const cancelledNos: string[] = [];
+    const failed: Array<{ dispatchId: string; dispatchNo: string | null; message: string }> = [];
+
+    // SIRALI koşar (Promise.all DEĞİL): her `cancel()` aynı WO satırını kilitler;
+    // paralel çalıştırmak kilitleri rastgele sırada alıp deadlock üretirdi.
+    for (const dispatchId of ordered) {
+      const dispatchNo = byId.get(dispatchId)?.dispatchNo ?? null;
+      try {
+        await this.cancel(dispatchId, trimmedReason, userId);
+        cancelledNos.push(dispatchNo ?? dispatchId);
+      } catch (e) {
+        // ⚠️ YALNIZ iş kuralı hatası `failed` satırına dönüşür. DB kesintisi ya da
+        // programlama hatası (`AppError` olmayan her şey) YUTULMAZ — yoksa gerçek
+        // bir arıza "2 sevk atlandı" diye rapor edilir ve kimse bakmaz.
+        if (!(e instanceof AppError)) throw e;
+        failed.push({ dispatchId, dispatchNo, message: e.message });
+      }
+    }
+
+    return {
+      success: true,
+      data: { cancelled: cancelledNos.length, cancelledNos, failed },
+      message:
+        failed.length === 0
+          ? `${cancelledNos.length} sevk iptal edildi, toplar depoya döndü`
+          : `${cancelledNos.length} sevk iptal edildi, ${failed.length} tanesi atlandı`,
+    };
+  }
+
   // ===========================================================================
   // RECEIVE — Fason mal kabul (etiket basmaz, ölçüm yapmaz)
   // ===========================================================================
@@ -2124,6 +2232,12 @@ export class SubcontractorService {
       /// Override — fason kategorisi appliesProperty=true ise WO.targetProperties
       /// otomatik kullanılır; UI farklı liste verirse buradan gönderilir (replace).
       appliedPropertyIds?: string[];
+      /// Bu kabulde ÖLÇÜLEN en (cm) — doğan TÜM parçalara uygulanır ve makbuza yazılır.
+      /// Renkten farkı: renk yalnız "renk veren" kategoride sorulur, en HER fason
+      /// dönüşünde sorulur (topun enini ilk kez burada öğreniyoruz — ham girişte en
+      /// tasarım gereği yazılmıyor). Zorunluluk ARAYÜZDE; burada opsiyonel kalması
+      /// zorunludur, yoksa alanı göndermeyen eski APK'ların her kabulü 400 alır.
+      appliedWidth?: number | null;
       /// Fasondan gelen açık kumaş parçaları — verilirse Receipt anında yeni
       /// "open-fabric" Roll'lar otomatik doğar ve rotadaki bir sonraki adıma
       /// bağlanır. Verilmezse mevcut akış: Kurşun/KK2 operatörü
@@ -2262,8 +2376,13 @@ export class SubcontractorService {
     const appliesColor = !!step.requiredCategory?.appliesColor;
     const appliesProperty = !!step.requiredCategory?.appliesProperty;
     if (appliesColor && !wo.targetColorId && data.appliedColorId === undefined) {
+      // Mesaj OPERATÖRE yazılır, geliştiriciye değil: eski hâli "appliedColorId
+      // override gönderin" diyordu ve tablette duran kişiye hiçbir şey söylemiyordu
+      // — üstelik yapılabilecek tek şeyi (rengi ekrandan seçmek) hiç anmıyordu.
+      // Üç dal da somut: ne oldu · ne yapmalı · ekranda o yüzey yoksa neden yok.
       throw AppError.badRequest(
-        "Bu adım renk uygulayan bir fason kategorisinde, ancak iş emrinde hedef renk tanımlı değil. Planlamayı düzeltin veya appliedColorId override gönderin.",
+        "Bu iş emrinde hedef renk tanımlı değil — kabulde uygulanan rengi seçmeniz gerekiyor. " +
+          "Ekranda renk seçimi görünmüyorsa uygulama sürümü eskidir; yöneticinize bildirin.",
       );
     }
 
@@ -2278,6 +2397,14 @@ export class SubcontractorService {
         : appliesColor
           ? wo.targetColorId
           : null;
+    // Kabulde ÖLÇÜLEN en — renkten farklı olarak kategoriye BAKMAZ (her fason
+    // dönüşünde sorulur). Burada çözülür çünkü iki yerde birden kullanılıyor:
+    // makbuz satırı (aşağıda) ve doğan topların width'i (newRolls bloğu).
+    // `> 0` süzgeci: 0 "ölçülmedi" demektir, 0 cm'lik kumaş yok.
+    const measuredWidth =
+      data.appliedWidth != null && data.appliedWidth > 0
+        ? new Prisma.Decimal(data.appliedWidth)
+        : null;
     // Dedupe ŞART: payload'da tekrar eden property, rollProperty @@unique
     // P2002'sine çarpıp withBarcodeRetry'ı yanlış tetikliyordu (koca kabul
     // tx'i 5 kez boşuna denenip yanıltıcı "Barkod üretimi başarısız" 409'u).
@@ -2431,6 +2558,7 @@ export class SubcontractorService {
           receivedById: userId ?? null,
           notes: data.notes ?? null,
           appliedColorId: resolvedAppliedColorId,
+          appliedWidth: measuredWidth,
         },
       });
 
@@ -2584,17 +2712,24 @@ export class SubcontractorService {
       //    bağlanır (kullanıcı sonra Dispatch çağırır), değilse Kurşun/KK2 gibi
       //    internal step'e. nextStep yoksa Roll'lar serbest stokta kalır.
       if (data.newRolls && data.newRolls.length > 0) {
-        // Kaynak roll'lardan inherit: itemId + width. Kumaş eni boyahanede
-        // değişmez — fiziksel gerçek source roll'da. WO.width (kullanıcı
-        // formdan değiştirmiş olabilir) bu fiziksel değeri override etmemeli.
-        // Width: source önce, WO sadece source'da yoksa fallback.
-        // ItemId: WO.targetItemId önce (rota hedefi belli) — değilse source.
+        // Kaynak roll'lardan inherit: itemId + width. ItemId: WO.targetItemId önce
+        // (rota hedefi belli) — değilse source.
+        //
+        // WIDTH ÖNCELİĞİ (2026-08-05'te DEĞİŞTİ — sıra load-bearing):
+        //   1. data.appliedWidth — kabulü yapan personelin ÖLÇTÜĞÜ değer
+        //   2. sourceRoll.width — kaynak topun eni
+        //   3. wo.width — iş emri hedef eni
+        // Eskiden 1. basamak yoktu ve yorum "kumaş eni boyahanede değişmez" diyordu;
+        // bu YANLIŞTI: ram/fikse/sanfor tam da eni değiştiren operasyonlardır. Üstelik
+        // pratikte 2. ve 3. basamak da boştu (ham girişte en yazılmıyor → kaynak top
+        // ensiz), yani doğan top ensiz doğuyor ve bir daha hiç en kazanmıyordu.
+        // Operatörün ölçümü en üstte: gözlem, varsayımı yener.
         const sourceRoll = await tx.roll.findFirst({
           where: { id: { in: returnRollIds } },
           select: { itemId: true, width: true },
         });
         const bornItemId = wo.targetItemId ?? sourceRoll?.itemId ?? null;
-        const bornWidth = sourceRoll?.width ?? wo.width ?? null;
+        const bornWidth = measuredWidth ?? sourceRoll?.width ?? wo.width ?? null;
         if (!bornItemId) {
           throw AppError.badRequest(
             "Yeni Roll için item belirlenemedi (WO.targetItemId ve kaynak Roll itemId yok)"
@@ -2731,6 +2866,7 @@ export class SubcontractorService {
         stepId: data.stepId,
         consumedRollCount: data.returns.length,
         appliedColorId: resolvedAppliedColorId,
+        appliedWidth: measuredWidth ? Number(measuredWidth) : null,
         appliedPropertyIds: resolvedAppliedPropertyIds,
       },
     });
@@ -2920,9 +3056,25 @@ export class SubcontractorService {
         select: {
           id: true, stepSequence: true, notes: true,
           station: { select: { id: true, code: true, name: true, type: true } },
-          workOrder: { select: { id: true, workOrderNumber: true, status: true } },
+          // ŞEKİL EŞİTLİĞİ (2026-08-05): bu liste ucu ile adım-detayı ucu AYNI
+          // ekranı besliyor ama farklı alanlar dönüyordu — kabulü refakat kartını
+          // okutarak açan operatör `appliesColor`'ı hiç görmüyor, renk seçemiyor ve
+          // 400 alıyordu; aynı kabul listeden açılınca çalışıyordu. Üç uç artık
+          // aynı şekli döner. Renk EKLENİRKEN ÖZELLİKLER DE EKLENMELİ: yalnız
+          // rengi eklemek, istemcinin özellik listesini boş görüp kabulde topların
+          // özelliklerini (zımparalı/sanforlu) sıfırlamasına yol açardı.
+          workOrder: {
+            select: {
+              id: true, workOrderNumber: true, status: true,
+              width: true,
+              targetColor: { select: { id: true, code: true, name: true, hex: true } },
+              targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
+            },
+          },
           plannedSubcontractor: { select: { id: true, code: true, name: true } },
-          requiredCategory: { select: { id: true, code: true, name: true } },
+          requiredCategory: {
+            select: { id: true, code: true, name: true, appliesColor: true, appliesProperty: true },
+          },
         },
       });
 
@@ -2963,7 +3115,18 @@ export class SubcontractorService {
             notes: step.notes, requiredCategory: step.requiredCategory,
             plannedSubcontractor: step.plannedSubcontractor,
           },
-          workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.workOrderNumber, status: step.workOrder.status },
+          // `targetProperties` DÜZLEŞTİRİLİR (`p.property`) — detay ucu da böyle
+          // döner. Pivot satırını ham geçirmek istemciye `{ property: {...} }`
+          // kabuğu gönderir ve mobil tarafta sessizce boş liste olarak okunur.
+          workOrder: {
+            id: step.workOrder.id,
+            batchNumber: step.workOrder.workOrderNumber,
+            status: step.workOrder.status,
+            // Hedef en — tablet kabul ekranı "iş emrinde varsa sorma" için kullanır.
+            width: step.workOrder.width != null ? Number(step.workOrder.width) : null,
+            targetColor: step.workOrder.targetColor ?? null,
+            targetProperties: step.workOrder.targetProperties.map((p) => p.property),
+          },
           lastDispatch,
           parties: buildPendingParties(stepRolls, stepDispatches),
           rolls: stepRolls,
@@ -3049,9 +3212,20 @@ export class SubcontractorService {
       select: {
         id: true, stepSequence: true, notes: true,
         station: { select: { id: true, code: true, name: true, type: true } },
-        workOrder: { select: { id: true, workOrderNumber: true, status: true } },
+        // Şekil eşitliği — yukarıdaki liste ucuyla aynı gerekçe (adım-detayı ucunun
+        // şekli kanoniktir; renk ve özellikler BİRLİKTE taşınır).
+        workOrder: {
+          select: {
+            id: true, workOrderNumber: true, status: true,
+            width: true,
+            targetColor: { select: { id: true, code: true, name: true, hex: true } },
+            targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
+          },
+        },
         plannedSubcontractor: { select: { id: true, code: true, name: true } },
-        requiredCategory: { select: { id: true, code: true, name: true } },
+        requiredCategory: {
+          select: { id: true, code: true, name: true, appliesColor: true, appliesProperty: true },
+        },
       },
     });
 
@@ -3104,7 +3278,16 @@ export class SubcontractorService {
           notes: step.notes, requiredCategory: step.requiredCategory,
           plannedSubcontractor: step.plannedSubcontractor,
         },
-        workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.workOrderNumber, status: step.workOrder.status },
+        // Düzleştirme detay ucuyla aynı — bkz. yukarıdaki not.
+        workOrder: {
+          id: step.workOrder.id,
+          batchNumber: step.workOrder.workOrderNumber,
+          status: step.workOrder.status,
+          // Hedef en — tablet kabul ekranı "iş emrinde varsa sorma" için kullanır.
+          width: step.workOrder.width != null ? Number(step.workOrder.width) : null,
+          targetColor: step.workOrder.targetColor ?? null,
+          targetProperties: step.workOrder.targetProperties.map((p) => p.property),
+        },
         lastDispatch,
         rollCount: Number(stat?.roll_count ?? 0),
         totalQty: new Prisma.Decimal(stat?.total_qty ?? "0"),
@@ -3134,6 +3317,7 @@ export class SubcontractorService {
         workOrder: {
           select: {
             id: true, workOrderNumber: true, status: true,
+            width: true,
             targetColor: { select: { id: true, code: true, name: true, hex: true } },
             targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
           },
@@ -3206,6 +3390,8 @@ export class SubcontractorService {
           id: step.workOrder.id,
           batchNumber: step.workOrder.workOrderNumber,
           status: step.workOrder.status,
+          // Hedef en — tablet kabul ekranı "iş emrinde varsa sorma" için kullanır.
+          width: step.workOrder.width != null ? Number(step.workOrder.width) : null,
           targetColor: step.workOrder.targetColor ?? null,
           targetProperties: step.workOrder.targetProperties.map((p) => p.property),
         },

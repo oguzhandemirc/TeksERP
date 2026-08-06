@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, TextInput, TouchableRipple, ActivityIndicator, Icon } from 'react-native-paper';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
@@ -60,6 +60,14 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
 
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
   const total = q.data?.pages[0]?.pagination.totalEstimate;
+
+  // Tazeleme sonrası BAŞA sar. `keepPreviousData` yüzünden liste anahtar
+  // değişince unmount OLMAZ (eski veriyle çizili kalır) — yani kaydırma konumu
+  // korunur ve yeni açılan iş emri en üstte doğsa bile operatör onu görmez.
+  const listRef = useRef<FlashListRef<WorkOrder>>(null);
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [refreshKey]);
 
   const renderItem = ({ item }: { item: WorkOrder }) => {
     const statusColor = WORK_ORDER_STATUS_COLOR[item.status] ?? colors.textMuted;
@@ -144,6 +152,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
         </View>
       ) : (
         <FlashList
+          ref={listRef}
           data={items}
           keyExtractor={(w) => w.id}
           renderItem={renderItem}
