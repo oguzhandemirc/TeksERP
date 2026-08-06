@@ -332,15 +332,18 @@ export function renderFasonCekiHtml(
   // bile blok tarafı o ayardan okunur; "altına" demek "aynı sütunda" demektir.
   // ⚠️ Her satır kendi satır başını TAŞIR: kapalıyken çıktıya boş satır sokmasın
   // (A4 parmak izi — `batchRow`'daki aynı disiplin).
-  const fabricRows = showFabricHeader
-    ? [
-        fabrics.length ? `Cinsi: <b>${esc(fabrics.join(", "))}</b>` : "",
-        fabWidths.length ? `En: <b>${esc(fabWidths.join(", "))} cm</b>` : "",
-        fabColors.length ? `Renk: <b>${esc(fabColors.join(", "))}</b>` : "",
-      ]
-        .filter(Boolean)
-        .map((h) => `\n        <div class="ln ln-fabric">${h}</div>`)
-        .join("")
+  // ⚠️ ETİKETSİZ, TEK SATIR (2026-08-06 kullanıcı kararı: "hepsi yan yana olsun,
+  // hiç key-value gibi yapma, direkt yazsın içeriği"). Yani "Cinsi: X / En: Y"
+  // değil, doğrudan "X · Y cm · Z". Ayırıcı belgenin geri kalanıyla aynı
+  // (`Plaka: … · Şoför: …`). "cm" ETİKET DEĞİL BİRİMDİR — etiketsiz bir sayının
+  // ne olduğu okunmaz, o yüzden kalır.
+  const fabricBits = [
+    fabrics.length ? esc(fabrics.join(", ")) : "",
+    fabWidths.length ? `${esc(fabWidths.join(", "))} cm` : "",
+    fabColors.length ? esc(fabColors.join(", ")) : "",
+  ].filter(Boolean);
+  const fabricRows = showFabricHeader && fabricBits.length
+    ? `\n        <div class="ln ln-fabric"><b>${fabricBits.join(" &nbsp;·&nbsp; ")}</b></div>`
     : "";
   // Satırlar parti no ile AYNI blokta durur — taraf `placements.batchInfo`'dan
   // okunur, parti no kapalı olsa bile ("altına" = "aynı sütunda").

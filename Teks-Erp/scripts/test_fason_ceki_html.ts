@@ -420,10 +420,16 @@ function testNewSections(): void {
     makeSnap({ rolls, doc: { requestedColor: null }, docConfigOverride: { sections: { fabricHeader: true } } }),
   );
   check("üst satırlar açılır", fab.includes('class="ln ln-fabric"'));
-  check("CİNS satırı", fab.includes("Cinsi: <b>PATOS, MUS-001</b>"));
-  check("EN satırı (karışık sevkte hepsi)", fab.includes("En: <b>150, 140 cm</b>"));
-  check("RENK satırı", fab.includes("Renk: <b>LACİVERT, SİYAH</b>"));
-  check("üç ayrı satır basılır", countOccur(fab, 'class="ln ln-fabric"') === 3);
+  // ETİKETSİZ TEK SATIR (kullanıcı kararı): "cins · en · renk", key-value YOK.
+  check(
+    "cins · en · renk TEK satırda, yan yana",
+    fab.includes("PATOS, MUS-001 &nbsp;·&nbsp; 150, 140 cm &nbsp;·&nbsp; LACİVERT, SİYAH"),
+  );
+  check(
+    "key-value etiketi YOK",
+    !fab.includes("Cinsi:") && !fab.includes("En: <b>") && !fab.includes("Renk:"),
+  );
+  check("tek satır basılır", countOccur(fab, 'class="ln ln-fabric"') === 1);
 
   // ⚠️ Kapalı blok GÖVDEYE BOŞ SATIR BIRAKMAMALI: koşullu parça kendi satır
   // başını taşır, gövdede kendi satırında `${...}` olarak DURMAZ. Aksi halde
@@ -433,8 +439,8 @@ function testNewSections(): void {
   const bodyLines = (s: string) => s.slice(s.indexOf("<body>")).split("\n").length;
   const fhOff = renderFasonCekiHtml(makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: false } } }));
   const fhOn = renderFasonCekiHtml(makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true } } }));
-  check("açık → gövdeye TAM 3 satır ekler, kapalı → 0",
-    bodyLines(fhOn) === bodyLines(fhOff) + 3,
+  check("açık → gövdeye TAM 1 satır ekler, kapalı → 0",
+    bodyLines(fhOn) === bodyLines(fhOff) + 1,
     `${bodyLines(fhOff)} → ${bodyLines(fhOn)}`);
 
   // Satırlar PARTİ NO ile aynı blokta ve ONUN ALTINDA olmalı — istek buydu.
@@ -459,20 +465,20 @@ function testNewSections(): void {
   const fabTarget = renderFasonCekiHtml(
     makeSnap({ rolls, doc: { requestedColor: "BEJ" }, docConfigOverride: { sections: { fabricHeader: true } } }),
   );
-  check("hedef renk listenin başında", fabTarget.includes("Renk: <b>BEJ, LACİVERT, SİYAH</b>"));
+  check("hedef renk listenin başında", fabTarget.includes("BEJ, LACİVERT, SİYAH"));
   // Renk bilgisi kapalıysa üst satırlarda da renk YOK (tek anahtar, iki yüzey).
   const fabNoColor = renderFasonCekiHtml(
     makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true, requestedColor: false } } }),
   );
-  check("requestedColor=false → RENK satırı yok, CİNS durur",
-    !fabNoColor.includes("Renk: <b>") && fabNoColor.includes("Cinsi: <b>"));
+  check("requestedColor=false → renk YOK, cins durur",
+    !fabNoColor.includes("LACİVERT") && fabNoColor.includes("PATOS, MUS-001"));
   // ⚠️ "EN elle doldurulacak" ayarı açıkken EN üstte de BASILMAZ — aksi halde
   // belge bir yerde "boş bırak" derken öbür yerde değeri söylerdi.
   const fabBlank = renderFasonCekiHtml(
     makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true }, blankWidths: true } }),
   );
-  check("blankWidths=true → EN satırı basılmaz (belge kendiyle çelişmez)",
-    !fabBlank.includes("En: <b>") && fabBlank.includes("Cinsi: <b>"));
+  check("blankWidths=true → EN basılmaz (belge kendiyle çelişmez)",
+    !fabBlank.includes("150, 140 cm") && fabBlank.includes("PATOS, MUS-001"));
 
   // (c) ÖLÜ TOGGLE'LAR artık gerçekten çalışıyor (2026-08-05'e kadar panel
   // kapatıyor, belge basmaya devam ediyordu).
