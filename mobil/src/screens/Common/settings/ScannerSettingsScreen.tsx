@@ -16,9 +16,16 @@ import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './setti
 export default function ScannerSettingsScreen() {
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const setManualBarcodeEntry = useDeviceSettingsStore((s) => s.setManualBarcodeEntry);
+  const scanSoundEnabled = useDeviceSettingsStore((s) => s.scanSoundEnabled);
+  const setScanSoundEnabled = useDeviceSettingsStore((s) => s.setScanSoundEnabled);
 
   const toggle = (next: boolean) => {
     void setManualBarcodeEntry(next);
+    void Haptics.selectionAsync();
+  };
+
+  const toggleSound = (next: boolean) => {
+    void setScanSoundEnabled(next);
     void Haptics.selectionAsync();
   };
 
@@ -60,6 +67,46 @@ export default function ScannerSettingsScreen() {
 
         <Text style={settingsStyles.hint}>
           Bu ayar yalnızca bu cihaz için geçerlidir ve uygulama kapansa da korunur.
+        </Text>
+      </View>
+
+      <View style={settingsStyles.card}>
+        <View style={settingsStyles.headRow}>
+          <View style={settingsStyles.iconBox}>
+            <Icon source="volume-high" size={28} color={COLORS.accentLight} />
+          </View>
+          <View style={settingsStyles.headText}>
+            <Text style={settingsStyles.title}>Okutma Sesi</Text>
+            <Text style={settingsStyles.subtitle}>
+              Top okutulduğunda kabul / mükerrer / ret için ayrı bip sesi çalar.
+              Varsayılan: açık.
+            </Text>
+          </View>
+        </View>
+
+        <TouchableRipple
+          onPress={() => toggleSound(!scanSoundEnabled)}
+          rippleColor="rgba(99,102,241,0.2)"
+          style={styles.toggleRow}
+        >
+          <View style={styles.toggleRowInner}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>Bip sesi</Text>
+              <Text style={styles.toggleHint}>
+                Kapatmak titreşimi etkilemez — o her zaman çalışır
+              </Text>
+            </View>
+            <Switch
+              value={scanSoundEnabled}
+              onValueChange={toggleSound}
+              color={COLORS.accentLight}
+            />
+          </View>
+        </TouchableRipple>
+
+        <Text style={settingsStyles.hint}>
+          Gürültülü fabrikada bip, eldivenle hissedilmeyen titreşimin yerini tutar.
+          Sessiz çalışılan yerlerde kapatın.
         </Text>
       </View>
     </SettingsPage>

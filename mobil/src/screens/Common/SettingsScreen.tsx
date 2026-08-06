@@ -40,6 +40,7 @@ export default function SettingsScreen() {
   const baseUrl = useBaseUrlStore((s) => s.baseUrl);
   const customUrl = useBaseUrlStore((s) => s.customUrl);
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
+  const scanSoundEnabled = useDeviceSettingsStore((s) => s.scanSoundEnabled);
   const paired = useDeviceStore((s) => s.paired);
   const active = useSessionStore((s) => s.active);
 
@@ -71,7 +72,12 @@ export default function SettingsScreen() {
       key: 'scanner',
       icon: 'barcode-scan',
       title: 'Barkod ve Kamera',
-      value: manualBarcodeEntry ? 'Elle barkod girişi açık' : 'Sadece kamera',
+      // Menü satırı sayfadaki AYARLARIN ÖZETİDİR — sayfaya ikinci bir anahtar
+      // eklenince özet de büyümeli, yoksa "ses kapalı" durumu menüden görünmez.
+      value: [
+        manualBarcodeEntry ? 'Elle barkod girişi açık' : 'Sadece kamera',
+        scanSoundEnabled ? 'ses açık' : 'ses kapalı',
+      ].join(' · '),
       route: 'SettingsScanner',
     },
   ];

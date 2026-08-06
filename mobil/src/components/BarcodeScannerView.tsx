@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, IconButton, Text } from 'react-native-paper';
+import { Button, IconButton, Text, TouchableRipple } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -66,10 +66,29 @@ interface Props {
    *  duran tablette QR'ı önden okutmak için kilit ekranı 'front' geçer; sağ-üst
    *  flip butonuyla her zaman değiştirilebilir. */
   initialFacing?: 'front' | 'back';
+  /**
+   * Okuma tetikleyicisi.
+   *
+   * `'auto'` (default) — kamera kadrajdaki her barkodu kendiliğinden okur.
+   * `'tap'` — **dokunarak okut**: kamera SİLAHSIZ açılır, yalnız operatör
+   * "OKUT" tuşuna bastıktan sonra tek bir okuma yapar ve hemen tekrar silahsız
+   * kalır. Saha gerekçesi (2026-08-05, Hızlı İş Emri): operatör telefonu top
+   * yığınının üzerinde gezdirirken kadraja giren KOMŞU topların barkodları da
+   * okunup iş emrine ekleniyordu. Sorun "yanlış okuma" değil "istenmeden
+   * okuma"dır; onay sorarak değil **taramayı kapatarak** çözülür — gezinme
+   * sırasında okuyacak bir tarayıcı olmaz.
+   */
+  trigger?: 'auto' | 'tap';
 }
 
 // Sürekli modda iki okuma arası yeniden silahlanma gecikmesi (ms).
 const REARM_MS = 1400;
+// Dokunarak okut: "OKUT"a basıldıktan sonra tarayıcının açık kalacağı süre.
+// Süre dolarsa kendiliğinden silahsız kalır — operatör tuşa basıp topu bulamadan
+// vazgeçtiyse tarayıcı arkada açık kalmamalı (aynı sorun geri gelir).
+const TAP_ARM_MS = 8000;
+// Dokunarak okut: yakalama onayının (yeşil tik) ekranda kalma süresi.
+const TAP_FEEDBACK_MS = 1200;
 
 const FRAME = 260;
 const LINE_H = 3;
@@ -98,12 +117,60 @@ export function BarcodeScannerView({
   counter,
   captureHaptic = true,
   initialFacing = 'back',
+  trigger = 'auto',
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [facing, setFacing] = useState<'front' | 'back'>(initialFacing);
+  // Fener — endüstriyel el terminallerinin hepsinde aydınlatma vardır ve sebebi
+  // fizik: karanlık koridorda / topun gölgede kalan ucunda kamera odaklanamaz.
+  // Oturum ömürlü (cihazda saklanmaz): ışık ihtiyacı okutulan YERE bağlıdır,
+  // cihaza değil — açık unutulan fener pili boşuna tüketir.
+  const [torch, setTorch] = useState(false);
   const reduced = useReducedMotion();
+  // Sürekli modda aynı barkodu üst üste işlememek için son okunan kod.
+  const lastScanRef = useRef<string | null>(null);
+
+  // ── Dokunarak okut ────────────────────────────────────────────────────────
+  // `armed` yalnız tap modunda anlamlıdır; auto modda hep true kabul edilir ve
+  // aşağıdaki dallar bugünkü davranışı bayt-bayt korur.
+  const tapMode = trigger === 'tap';
+  // handleScanned stable ([] deps) — güncel modu ref'ten okur (continuousRef deseni).
+  const tapModeRef = useRef(tapMode);
+  useEffect(() => {
+    tapModeRef.current = tapMode;
+  }, [tapMode]);
+  const [armed, setArmed] = useState(false);
+  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [armExpired, setArmExpired] = useState(false);
+  const clearArmTimer = () => {
+    if (armTimerRef.current) {
+      clearTimeout(armTimerRef.current);
+      armTimerRef.current = null;
+    }
+  };
+  const disarm = useCallback(() => {
+    clearArmTimer();
+    setArmed(false);
+  }, []);
+  const arm = useCallback(() => {
+    clearArmTimer();
+    // Yeniden silahlanma okuma kilidini de açar: `scannedRef` tek-okuma
+    // bekçisidir, tap modunda onu açan tek şey bu tuştur.
+    scannedRef.current = false;
+    setBusy(false);
+    lastScanRef.current = null;
+    setArmExpired(false);
+    setArmed(true);
+    recordActivity();
+    armTimerRef.current = setTimeout(() => {
+      armTimerRef.current = null;
+      setArmed(false);
+      setArmExpired(true);
+    }, TAP_ARM_MS);
+  }, []);
+  useEffect(() => clearArmTimer, []);
 
   const onScanRef = useRef(onScan);
   useEffect(() => {
@@ -120,8 +187,6 @@ export function BarcodeScannerView({
   useEffect(() => {
     captureHapticRef.current = captureHaptic;
   }, [captureHaptic]);
-  // Sürekli modda aynı barkodu üst üste işlememek için son okunan kod.
-  const lastScanRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (active) {
@@ -129,6 +194,12 @@ export function BarcodeScannerView({
       setBusy(false);
       lastScanRef.current = null;
     }
+    // Tarayıcı kapanınca/açılınca tap modu daima SİLAHSIZ başlar — modal
+    // yeniden açıldığında önceki oturumdan kalan silahlı hâl "açar açmaz
+    // okudu" sürprizini geri getirirdi.
+    clearArmTimer();
+    setArmed(false);
+    setArmExpired(false);
   }, [active]);
 
   const handleScanned = useCallback(({ data }: { data: string }) => {
@@ -146,6 +217,18 @@ export function BarcodeScannerView({
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     setTimeout(() => onScanRef.current(data), 180);
+    // Tap modunda OTOMATİK yeniden silahlanma YOK — bir dokunuş bir okumadır.
+    // (Zamanlayıcıyla silahlansaydı "gezdirirken okuyor" sorunu 1,4 sn'lik bir
+    // pencereyle aynen geri gelirdi.) Silahlanmayı yalnız "OKUT" tuşu yapar.
+    if (tapModeRef.current) {
+      clearArmTimer();
+      setArmed(false);
+      // Yakalama onayı KISA sürer: kalıcı yeşil tik, çağıran topu reddetse bile
+      // (farklı ürün / stokta değil) "eklendi" izlenimi verirdi. Yakalamanın
+      // sonucunu söyleyen yer tarayıcı değil, çağıranın listesi/toast'ıdır.
+      setTimeout(() => setBusy(false), TAP_FEEDBACK_MS);
+      return;
+    }
     // Sürekli modda kısa gecikmeyle yeniden silahlan (modal açık kalır).
     if (continuousRef.current) {
       setTimeout(() => {
@@ -155,7 +238,9 @@ export function BarcodeScannerView({
     }
   }, []);
 
-  const scanning = active && !!permission?.granted && !busy;
+  // Tap modunda tarama yalnız silahlıyken canlıdır.
+  const live = !tapMode || armed;
+  const scanning = active && !!permission?.granted && !busy && live;
 
   // Tarama çizgisi — çerçeve içinde yukarı/aşağı süpürür.
   const scanY = useSharedValue(0);
@@ -215,8 +300,20 @@ export function BarcodeScannerView({
     opacity: successV.value * 0.16,
   }));
 
-  const cornerColor = busy ? colors.success : '#fff';
+  // Tap modunda silahsızken köşeler sönük — "şu an okumuyorum" durumu kadrajın
+  // kendisinden okunmalı, yalnız alttaki tuşun yazısından değil.
+  const cornerColor = busy ? colors.success : live ? '#fff' : 'rgba(255,255,255,0.35)';
   const over = !!counter && counter.scanned > counter.expected;
+
+  const overlayHint = busy
+    ? 'Okundu'
+    : tapMode
+      ? armed
+        ? 'Topu çerçeveye alın'
+        : armExpired
+          ? 'Okunamadı — tekrar OKUT’a basın'
+          : 'OKUT’a basınca tek top okunur'
+      : "QR'ı çerçeve içine alın · otomatik okunur";
 
   const body = !permission ? (
     <View style={styles.center}>
@@ -246,10 +343,18 @@ export function BarcodeScannerView({
       <CameraView
         style={StyleSheet.absoluteFill}
         facing={facing}
+        // Ön kamerada fener yok — açık kalırsa arkaya dönüldüğünde beklenmedik
+        // şekilde yanar. Yön değişince sönmesi yerine burada bastırılır ki
+        // operatör geri döndüğünde tuş hâlâ "açık" dediği şeyi yapsın.
+        enableTorch={torch && facing === 'back'}
         barcodeScannerSettings={{ barcodeTypes }}
-        onBarcodeScanned={busy ? undefined : handleScanned}
+        // Tap modunda silahsızken handler HİÇ bağlanmaz — "okuyup atmak"
+        // değil, taramayı kapatmak. Kadrajdan geçen komşu top hiç işlenmez.
+        onBarcodeScanned={busy || !live ? undefined : handleScanned}
       />
-      <View style={styles.overlay} pointerEvents="none">
+      {/* paddingBottom: ortalanan kadraj + ipucu, alttaki OKUT tuşunun altına
+          girmesin (tuş absolute, layout'a yer açmaz). */}
+      <View style={[styles.overlay, tapMode && styles.overlayTapMode]} pointerEvents="none">
         <View style={styles.frame}>
           {/* Yakalamada yeşil flaş */}
           <Animated.View
@@ -273,19 +378,52 @@ export function BarcodeScannerView({
             </Animated.View>
           )}
         </View>
-        <Text style={styles.overlayHint}>
-          {busy ? 'Okundu' : "QR'ı çerçeve içine alın · otomatik okunur"}
-        </Text>
+        <Text style={styles.overlayHint}>{overlayHint}</Text>
       </View>
-      {/* Ön/arka kamera değiştir — sabit tablette QR'ı önden okutmak için. */}
-      <IconButton
-        icon="camera-flip"
-        size={24}
-        iconColor="#fff"
-        onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
-        style={styles.flipBtn}
-        accessibilityLabel="Ön/arka kamera değiştir"
-      />
+      {/* Dokunarak okut — kadrajın altında, tek büyük hedef (≥56dp). Overlay
+          `pointerEvents="none"` olduğu için tuş onun DIŞINDA durmak zorunda. */}
+      {tapMode ? (
+        <View style={styles.tapBar} pointerEvents="box-none">
+          <TouchableRipple
+            onPress={armed ? disarm : arm}
+            style={[styles.tapBtn, armed && styles.tapBtnArmed]}
+            rippleColor="rgba(255,255,255,0.25)"
+            accessibilityLabel={armed ? 'Okumayı iptal et' : 'Topu okut'}
+            borderless
+          >
+            <View style={styles.tapBtnInner}>
+              <MaterialCommunityIcons
+                name={armed ? 'close' : 'barcode-scan'}
+                size={26}
+                color="#fff"
+              />
+              <Text style={styles.tapBtnText}>{armed ? 'İPTAL' : 'OKUT'}</Text>
+            </View>
+          </TouchableRipple>
+        </View>
+      ) : null}
+      {/* Sağ üstte iki tuş: fener + ön/arka. Fener yalnız arka kamerada anlamlı
+          olduğu için ön kameradayken çizilmez (çalışmayan tuş göstermek yerine). */}
+      <View style={styles.cornerBtns}>
+        {facing === 'back' ? (
+          <IconButton
+            icon={torch ? 'flashlight' : 'flashlight-off'}
+            size={24}
+            iconColor={torch ? palette.amber[500] : '#fff'}
+            onPress={() => setTorch((t) => !t)}
+            style={styles.cornerBtn}
+            accessibilityLabel={torch ? 'Feneri kapat' : 'Feneri aç'}
+          />
+        ) : null}
+        <IconButton
+          icon="camera-flip"
+          size={24}
+          iconColor="#fff"
+          onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+          style={styles.cornerBtn}
+          accessibilityLabel="Ön/arka kamera değiştir"
+        />
+      </View>
     </View>
   ) : (
     <View style={styles.center} />
@@ -388,13 +526,15 @@ const styles = StyleSheet.create({
   // daha geniş render edip yuvarlak sayfanın dışına taşabiliyor (kamera başlıktan
   // geniş görünüyor). Sert kırpma önizlemeyi sayfa genişliğine sabitler.
   cameraWrap: { flex: 1, backgroundColor: '#000', position: 'relative', overflow: 'hidden' },
-  flipBtn: { position: 'absolute', top: 6, right: 6, margin: 0, backgroundColor: 'rgba(15,23,42,0.55)' },
+  cornerBtns: { position: 'absolute', top: 6, right: 6, flexDirection: 'row', gap: 4 },
+  cornerBtn: { margin: 0, backgroundColor: 'rgba(15,23,42,0.55)' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 20,
   },
+  overlayTapMode: { paddingBottom: 84 },
   frame: {
     width: FRAME,
     height: FRAME,
@@ -432,6 +572,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Dokunarak okut tuşu — kadrajın altında, kameranın üstünde.
+  tapBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 14,
+    alignItems: 'center',
+  },
+  tapBtn: {
+    minHeight: 56,
+    minWidth: 170,
+    borderRadius: 28,
+    backgroundColor: colors.brand,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    elevation: 6,
+  },
+  tapBtnArmed: { backgroundColor: palette.slate[700] },
+  tapBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 26,
+    paddingVertical: 14,
+  },
+  tapBtnText: { color: '#fff', fontSize: 19, fontWeight: '800', letterSpacing: 0.5 },
   overlayHint: {
     color: '#fff',
     fontSize: 14,

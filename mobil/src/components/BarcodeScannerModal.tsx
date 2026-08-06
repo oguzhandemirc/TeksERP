@@ -34,6 +34,12 @@ interface Props {
   /** Kameranın başlangıç yönü (BarcodeScannerView'e geçer). Default 'back';
    *  sabit tablette önden okutmak için 'front' geç. Flip butonu her zaman var. */
   initialFacing?: 'front' | 'back';
+  /** Okuma tetikleyicisi — `'tap'` ile kamera yalnız "OKUT" tuşuna basılınca
+   *  tek okuma yapar. bkz. BarcodeScannerView.trigger. Default 'auto'. */
+  trigger?: 'auto' | 'tap';
+  /** Kameranın ALTINDA sabit yükseklikli şerit (örn. "son okutulanlar" listesi).
+   *  Verilirse sheet biraz büyür ki kamera kadrajı ezilmesin. */
+  footer?: React.ReactNode;
 }
 
 /**
@@ -60,6 +66,8 @@ export function BarcodeScannerModal({
   captureHaptic,
   onPickFromList,
   initialFacing,
+  trigger,
+  footer,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -83,9 +91,21 @@ export function BarcodeScannerModal({
     winH - 2 * vInset - 16,
     560,
   );
+  // Alt şerit varsa (son okutulanlar) kamera alanı ezilmesin: telefonda sheet
+  // genişler/uzar, tablette kare sheet şerit kadar uzar. Şeritsiz kullanımlarda
+  // ölçüler bugünküyle BİREBİR aynı kalır.
+  const hasFooter = !!footer;
   const sheetSize = isTablet
-    ? { width: tabletSide, height: tabletSide }
-    : { width: winW * 0.7, height: winH * 0.8 };
+    ? {
+        width: tabletSide,
+        height: hasFooter
+          ? Math.min(tabletSide + FOOTER_H, winH - 2 * vInset - 16)
+          : tabletSide,
+      }
+    : {
+        width: winW * (hasFooter ? 0.9 : 0.7),
+        height: winH * (hasFooter ? 0.86 : 0.8),
+      };
 
   return (
     <AppModal
@@ -99,36 +119,45 @@ export function BarcodeScannerModal({
       contentStyle={{ width: sheetSize.width }}
     >
       <View style={[styles.sheet, sheetSize]}>
-        <BarcodeScannerView
-          active={visible}
-          onClose={onDismiss}
-          onScan={onScan}
-          title={title}
-          barcodeTypes={barcodeTypes}
-          continuous={continuous}
-          notice={notice}
-          counter={counter}
-          captureHaptic={captureHaptic}
-          initialFacing={initialFacing}
-        />
-        {onPickFromList && (
-          <View style={styles.pickRow}>
-            <Button
-              mode="contained-tonal"
-              icon="format-list-bulleted"
-              onPress={() => {
-                onDismiss();
-                onPickFromList();
-              }}
-            >
-              Listeden Seç
-            </Button>
-          </View>
-        )}
+        {/* Kamera + üzerindeki "Listeden Seç" ayrı bir katmanda: şerit eklendiğinde
+            absolute buton şeridin üstüne binmesin diye sarmalayıcı gerekiyor. */}
+        <View style={styles.cameraLayer}>
+          <BarcodeScannerView
+            active={visible}
+            onClose={onDismiss}
+            onScan={onScan}
+            title={title}
+            barcodeTypes={barcodeTypes}
+            continuous={continuous}
+            notice={notice}
+            counter={counter}
+            captureHaptic={captureHaptic}
+            initialFacing={initialFacing}
+            trigger={trigger}
+          />
+          {onPickFromList && (
+            <View style={styles.pickRow}>
+              <Button
+                mode="contained-tonal"
+                icon="format-list-bulleted"
+                onPress={() => {
+                  onDismiss();
+                  onPickFromList();
+                }}
+              >
+                Listeden Seç
+              </Button>
+            </View>
+          )}
+        </View>
+        {footer}
       </View>
     </AppModal>
   );
 }
+
+/** Alt şeridin (son okutulanlar) hesapta kullanılan yüksekliği. */
+const FOOTER_H = 156;
 
 const styles = StyleSheet.create({
   sheet: {
@@ -136,6 +165,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
   },
+  cameraLayer: { flex: 1, position: 'relative' },
   pickRow: {
     position: 'absolute',
     bottom: 12,

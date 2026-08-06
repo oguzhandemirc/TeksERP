@@ -11,6 +11,7 @@ const LAST_ROUTE_KEY = 'device_quick_wo_last_route';
 const KK1_MANUAL_METER_KEY = 'device_kk1_manual_meter';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
+const SCAN_SOUND_KEY = 'device_scan_sound';
 
 /** Metraj kaynağı: makineden oku (auto) ya da operatör elle girsin (manual). */
 export type MeterEntryMode = 'manual' | 'auto';
@@ -45,6 +46,13 @@ interface DeviceSettingsState {
    * ekranda daima belirgin işaretlenir (bkz. TamburScreen manuel mod bandı).
    */
   tamburManualMode: boolean;
+  /**
+   * Okutma sesi (kabul / mükerrer / ret için ayrı tonlar). Varsayılan AÇIK —
+   * endüstriyel okuyucunun evrensel onayı bip'tir ve eldivenli operatörde
+   * titreşim zayıf kalır. Sessiz çalışması gereken yerler (ofis/gece vardiyası)
+   * için kapatılabilir; kapatmak TİTREŞİMİ etkilemez, iki kanal ayrıdır.
+   */
+  scanSoundEnabled: boolean;
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -53,6 +61,7 @@ interface DeviceSettingsState {
   setKk1ManualEntry: (v: boolean) => Promise<void>;
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
   setTamburManualMode: (v: boolean) => Promise<void>;
+  setScanSoundEnabled: (v: boolean) => Promise<void>;
 }
 
 export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
@@ -61,15 +70,17 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   kk1ManualEntry: false,
   tamburCutMode: 'manual',
   tamburManualMode: false,
+  scanSoundEnabled: true,
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburManual] = await Promise.all([
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburManual, scanSound] = await Promise.all([
       storage.getItem(MANUAL_BARCODE_KEY),
       storage.getItem(LAST_ROUTE_KEY),
       storage.getItem(KK1_MANUAL_METER_KEY),
       storage.getItem(TAMBUR_CUT_MODE_KEY),
       storage.getItem(TAMBUR_MANUAL_MODE_KEY),
+      storage.getItem(SCAN_SOUND_KEY),
     ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -80,6 +91,9 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // Güvenli varsayılan KAPALI: yalnız birebir 'true' modu açar (bozuk değer
       // kart-atlayan modu sessizce açmasın).
       tamburManualMode: tamburManual === 'true',
+      // Varsayılan AÇIK → yalnız birebir 'false' sesi kapatır. Diğer bayraklarla
+      // ters yön: burada güvenli taraf "sinyal ver", "sessiz kal" değil.
+      scanSoundEnabled: scanSound !== 'false',
       isLoaded: true,
     });
   },
@@ -112,5 +126,10 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setTamburManualMode: async (v) => {
     set({ tamburManualMode: v });
     await storage.setItem(TAMBUR_MANUAL_MODE_KEY, v ? 'true' : 'false');
+  },
+
+  setScanSoundEnabled: async (v) => {
+    set({ scanSoundEnabled: v });
+    await storage.setItem(SCAN_SOUND_KEY, v ? 'true' : 'false');
   },
 }));
