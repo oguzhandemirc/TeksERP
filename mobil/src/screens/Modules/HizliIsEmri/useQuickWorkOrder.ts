@@ -9,6 +9,7 @@ import { subcontractorService } from '../../../services/subcontractor.service';
 import { workOrderService, type QuickStartRequest } from '../../../services/workOrder.service';
 import { fabricPropertyService } from '../../../services/fabricProperty.service';
 import { signalScan } from '../../../services/scanFeedback';
+import { useScanFeedback } from '../../../hooks/useScanFeedback';
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { generateClientUuid } from '../../../offline/barcode';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
@@ -26,21 +27,10 @@ export interface ScannedRoll {
   width: number | null;
 }
 
-/**
- * Kabul EDİLMEYEN okuma. Toast 3 sn'de kaybolduğu için sebep tarayıcı şeridinde
- * kısa süre GÖRÜNÜR kalır: operatör topu bırakıp döndüğünde "neden almadı"
- * sorusunun cevabı hâlâ ekranda olmalı (WMS'te istisna kaybolmaz).
- */
-export interface ScanReject {
-  id: number;
-  barcode: string;
-  reason: string;
-}
-
-/** Ret satırının şeritte kalma süresi. */
-const REJECT_TTL_MS = 10_000;
-/** Mükerrer okumada mevcut satırın vurgulanma süresi. */
-const DUPLICATE_FLASH_MS = 1400;
+/** Okutma geri bildirimi ortak hook'ta (`hooks/useScanFeedback`) — Fason Sevk de
+ *  aynı yüzeyi kullanıyor. Tip buradan da dışa verilir ki eski içe aktarmalar
+ *  (wizard ekranları) kırılmasın. */
+export type { ScanReject } from '../../../hooks/useScanFeedback';
 
 export interface QuickWoResult {
   /**
@@ -383,35 +373,17 @@ export function useQuickWorkOrder() {
 
   // ── Okuma geri bildirimi (kabul / mükerrer / ret) ─────────────────────────
   // Üç sonucun da AYRI sinyali var (services/scanFeedback). Mükerrer eskiden
-  // tamamen sessizdi: operatör "okumadı" sanıp tekrar okutuyordu.
-  const [rejects, setRejects] = useState<ScanReject[]>([]);
-  const [duplicateBarcode, setDuplicateBarcode] = useState<string | null>(null);
-  const rejectSeqRef = useRef(0);
-  const dupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const pushRejects = useCallback((items: { barcode: string; reason: string }[]) => {
-    if (items.length === 0) return;
-    for (const it of items) {
-      const id = ++rejectSeqRef.current;
-      setRejects((cur) => [{ id, ...it }, ...cur].slice(0, 20));
-      // Her satır KENDİ ömrünü sayar — tek ortak zamanlayıcı, arka arkaya gelen
-      // retlerden ilkinin süresi dolduğunda hepsini birden silerdi.
-      setTimeout(() => setRejects((cur) => cur.filter((r) => r.id !== id)), REJECT_TTL_MS);
-    }
-    signalScan('reject');
-  }, []);
-
-  const flashDuplicate = useCallback((barcode: string) => {
-    setDuplicateBarcode(barcode);
-    if (dupTimerRef.current) clearTimeout(dupTimerRef.current);
-    dupTimerRef.current = setTimeout(() => setDuplicateBarcode(null), DUPLICATE_FLASH_MS);
-    signalScan('duplicate');
-  }, []);
-
-  const dismissReject = useCallback(
-    (id: number) => setRejects((cur) => cur.filter((r) => r.id !== id)),
-    [],
-  );
+  // tamamen sessizdi: operatör "okumadı" sanıp tekrar okutuyordu. Şerit + merkez
+  // bildirim ortak hook'ta (hooks/useScanFeedback) — Fason Sevk'le aynı dil.
+  const {
+    rejects,
+    duplicateBarcode,
+    flash,
+    pushRejects,
+    flashDuplicate,
+    dismissReject,
+    reset: resetScanFeedback,
+  } = useScanFeedback();
 
   // ── Top ekleme (tarama + liste ortak) ─────────────────────────────────────
   const addRolls = useCallback(
@@ -731,8 +703,7 @@ export function useQuickWorkOrder() {
 
   const resetAll = useCallback(() => {
     setScanned([]);
-    setRejects([]);
-    setDuplicateBarcode(null);
+    resetScanFeedback();
     setLineTargets({});
     // Son rotayı koru (saha kolaylığı); gerisini temizle.
     setRouteTemplateId(lastRouteTemplateId);
@@ -751,7 +722,7 @@ export function useQuickWorkOrder() {
     setDispatchFirstStep(true);
     setResult(null);
     setClientToken(generateClientUuid()); // yeni WO oturumu → yeni token
-  }, [lastRouteTemplateId]);
+  }, [lastRouteTemplateId, resetScanFeedback]);
 
   return {
     // toplar
@@ -770,6 +741,8 @@ export function useQuickWorkOrder() {
     rejects,
     dismissReject,
     duplicateBarcode,
+    /** Kadrajın ortasındaki bildirim (mükerrer / ret) — tarayıcıya verilir. */
+    scanFlash: flash,
     mixedWidths,
     widthWarning,
     // rota

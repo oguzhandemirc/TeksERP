@@ -24,8 +24,11 @@ import { ReturnEntryDialog } from "./ReturnEntryDialog";
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 const FILTERS: FilterDef[] = [
-  { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
-  { kind: "lookup", key: "reasonId", label: "Neden", service: returnReasonService, queryKey: "return-reasons" },
+  // ÇOKLU: ikisi de `ALLOWED_RETURN_FILTERS` → `buildWhereClause` yolundan
+  // geçiyor ve RollReturn'de gerçek skaler kolon → CSV zaten `in` oluyor.
+  // "Hangi nedenlerden iade geliyor" karşılaştırması tek sorguda yapılabilsin.
+  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
+  { kind: "multi-lookup", key: "reasonId", label: "Neden", service: returnReasonService, queryKey: "return-reasons" },
   { kind: "dateRange", label: "Tarih", defaultField: "createdAt" },
 ];
 

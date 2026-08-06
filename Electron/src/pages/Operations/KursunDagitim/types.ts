@@ -74,6 +74,19 @@ export interface KursunDistributionAssignedRow extends KursunDistributionRowBase
   staleReason: string | null;
 }
 
+/**
+ * "Son N günde kaç iş DAĞITILMADAN Tambur'da kapandı" (2026-08-06).
+ *
+ * Dağıtım artık işin ön koşulu değil — unutulduğunda Tambur okutması kurşun
+ * adımını kendisi kapatıyor. Ama dağıtılmadan kapanan iş makine bazlı hacim
+ * raporunda ATIFSIZ kalır; bu sayaç o kaybı planlamacıya görünür kılar.
+ */
+export interface KursunUnassignedClosureStats {
+  days: number;
+  stepCount: number;
+  rollCount: number;
+}
+
 export interface KursunDistributionPayload {
   /** `production.kursunBypassEnabled` — false ise YALNIZ yeni atama kapalıdır. */
   flagEnabled: boolean;
@@ -81,6 +94,8 @@ export interface KursunDistributionPayload {
   machines: KursunBypassMachineOption[];
   waiting: KursunDistributionWaitingRow[];
   assigned: KursunDistributionAssignedRow[];
+  /** Son 7 günde dağıtılmadan kapanan işler — bilgi bandının kaynağı. */
+  unassignedClosures?: KursunUnassignedClosureStats;
 }
 
 // `KursunBypassVisibility` (menü sayaçları) 2026-08-05'te kaldırıldı — Kurşun

@@ -60,7 +60,9 @@ const FILTERS: FilterDef[] = [
     ],
   },
   {
-    kind: "lookup",
+    // ÇOKLU: `SHIPMENT_FILTER_FIELDS` allowlist'inden geçip `buildWhereClause`'a
+    // gidiyor → CSV zaten `in` oluyor (ek backend işi gerekmedi).
+    kind: "multi-lookup",
     key: "customerId",
     label: "Müşteri",
     service: customerService,
@@ -101,6 +103,12 @@ const FILTERS: FilterDef[] = [
     options: [{ value: "true", label: "Yalnız iade içerenler" }],
   },
   {
+    // TEKİL KALIR (bilinçli). `destination` NOT NULL + iki değerli: ikisini de
+    // seçmek "filtre yok" ile aynı şeydir, yani çoklu seçim hiçbir şey
+    // kazandırmaz. Üstelik zararlı olurdu: `listShipments` "destination filtresi
+    // aktif mi" sorusuna `!= null` ile bakıyor ve aktifse DirectShipment'ları
+    // union'dan DÜŞÜRÜYOR (o tabloda bu kolon yok) → "ikisini de seç" diyen
+    // kullanıcı fasondan doğrudan sevkleri sessizce kaybederdi.
     kind: "select",
     key: "destination",
     label: "Hedef",

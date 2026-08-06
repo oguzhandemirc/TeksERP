@@ -967,17 +967,31 @@ export interface TamburBypassPendingRoll {
  * COMPLETED yapılır (SKIPPED DEĞİL) ve kart normal Tambur işi olarak açılır —
  * operatöre soru SORULMAZ. null = normal akış.
  */
+/**
+ * Kapanacak kurşun işinin KAYNAĞI (2026-08-06).
+ *
+ *  • `ASSIGNED`   — planlamacı işi bir kurşun makinesine dağıttı; makine BİLİNİR.
+ *  • `UNASSIGNED` — dağıtım hiç yapılmadı (personel unuttu) ama adım bypass'a
+ *    uygun. Kapanış yine yapılır, makine atfı bilinmez ve UYDURULMAZ.
+ *
+ * Eski APK'lar bu alanı görmez ve yalnız `rolls`'u okuduğu için yeni backend'le
+ * doğru çalışmaya devam eder — kaybedilen tek şey bilgi metninin ayrıntısıdır.
+ */
+export type TamburBypassSource = 'ASSIGNED' | 'UNASSIGNED';
+
 export interface TamburBypassPending {
-  assignmentId: string;
+  /** `UNASSIGNED` kaynakta null — ortada atama satırı yoktur. */
+  assignmentId: string | null;
+  source: TamburBypassSource;
   /** Kurşun/KK2 adımı (WorkOrderStep) — kapanacak olan adım. */
   stepId: string;
-  /** İşin ATANDIĞI fiziksel kurşun makinesi (atama makine bazındadır). */
-  machineId: string;
-  machineName: string;
-  /** Makinenin istasyonu — bağlam bilgisi (tek PROCESS_QC istasyonu). */
+  /** İşin ATANDIĞI fiziksel kurşun makinesi; `UNASSIGNED`'da null. */
+  machineId: string | null;
+  machineName: string | null;
+  /** Kurşun/KK2 istasyonu — bağlam bilgisi (tek PROCESS_QC istasyonu). */
   stationId: string;
   stationName: string;
-  assignedAt: string;
+  assignedAt: string | null;
   assignedByName: string | null;
   notes: string | null;
   rollCount: number;

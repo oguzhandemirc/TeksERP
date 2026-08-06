@@ -1740,6 +1740,8 @@ export class SubcontractorService {
             workOrderNumber: true,
             type: true,
             parameters: true,
+            // Çekideki tek EN değerinin kaynağı (bkz. assembleFasonCekiDoc notu).
+            width: true,
             targetColor: { select: { name: true } },
             targetProperties: { select: { property: { select: { name: true } } } },
             steps: {
@@ -1818,6 +1820,7 @@ export class SubcontractorService {
         workOrderNumber: step.workOrder.workOrderNumber,
         parameters: (step.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: step.workOrder.type,
+        width: step.workOrder.width != null ? Number(step.workOrder.width) : null,
       },
       subcontractor: {
         id: step.plannedSubcontractor.id,
@@ -5642,7 +5645,19 @@ function assembleFasonCekiDoc(args: {
   plateNumber: string | null;
   notes: string | null;
   instruction: string | null;
-  workOrder: { id: string; workOrderNumber: string; parameters: Record<string, unknown> | null; type: string };
+  /** `width` = iş emrinin eni. Çekideki TEK "EN" değerinin kaynağı budur —
+   *  topun kendi eni DEĞİL (2026-08-06 kullanıcı kararı: "bir tane en değeri
+   *  koy, o da iş emrinden gelsin"). Sebep ölçüldü: sahadaki fason sevklerinin
+   *  yedisinde sekizde giden topların `Roll.width`'i NULL (KK1'de en opsiyonel
+   *  ve doldurulmuyor), iş emrinin eni ise HER ZAMAN dolu. Belge topun eninden
+   *  beslendiği sürece EN kolonu başlığıyla basılıp değeriyle boş kalıyordu. */
+  workOrder: {
+    id: string;
+    workOrderNumber: string;
+    parameters: Record<string, unknown> | null;
+    type: string;
+    width: number | null;
+  };
   subcontractor: { id: string; name: string; code: string | null };
   requestedColor: string | null;
   /** WO hedef üretim özellikleri (FabricProperty adları) — boyahaneye "bu özellikleri uygula" der. */
@@ -5703,6 +5718,8 @@ async function buildFasonDispatchDoc(
           workOrderNumber: true,
           parameters: true,
           type: true,
+          // Çekideki tek EN değerinin kaynağı (bkz. assembleFasonCekiDoc notu).
+          width: true,
           // İstenen renk = boyamanın hedef rengi. Sevkte toplar HAM (renksiz) gider;
           // çeki listesi boyahaneye "şu renge boya" der → WO.targetColor gösterilir.
           targetColor: { select: { name: true } },
@@ -5758,6 +5775,7 @@ async function buildFasonDispatchDoc(
         workOrderNumber: dispatch.workOrder.workOrderNumber,
         parameters: (dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
         type: dispatch.workOrder.type,
+        width: dispatch.workOrder.width != null ? Number(dispatch.workOrder.width) : null,
       },
       subcontractor: {
         id: dispatch.subcontractor.id,

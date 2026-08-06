@@ -110,6 +110,55 @@ export function applyDateRange(
 }
 
 /**
+ * Filtre değerini temiz bir liste hâline getirir. FilterBar çoklu seçimi
+ * `filter[x]=a,b` (CSV) olarak yollar; Express tekrarlı anahtarda dizi verir.
+ * Her iki biçim de aynı listeye indirgenir.
+ */
+export function readFilterList(value: string | string[] | undefined): string[] {
+  if (Array.isArray(value)) return value.map((v) => v.trim()).filter(Boolean);
+  if (typeof value === "string" && value.length > 0) {
+    return value.split(",").map((v) => v.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+/**
+ * Çoklu-seçim filtre değerini Prisma koşuluna çevirir:
+ *   hiç değer → `null` (filtre uygulanmaz) · tek değer → düz eşitlik · N değer → `{ in: [...] }`
+ *
+ * ⚠️ NEDEN GEREKLİ. `buildWhereClause` CSV'yi zaten `in`'e çevirir, ama filtreyi
+ * ELLE okuyan servisler (inventory `buildRollWhere`, order `extraWhere`, kartela,
+ * production-balance) `typeof v === "string"` kontrolüyle okuyordu — **CSV de bir
+ * string'dir**. Ham geçirmenin ÜÇ ayrı arıza modu var; hangisinin çıkacağı kolonun
+ * tipine bağlı (üçü de `scripts/test_filter_multi_select.ts` sondalarıyla ölçüldü):
+ *
+ *   1. **uuid kolon** (itemId/colorId/customerId/subcontractorId…): Postgres
+ *      `invalid input syntax for type uuid` → Prisma **P2007** → error middleware
+ *      onu **HTTP 400** + *"Geçersiz veri formatı (örn. hatalı ID)"* mesajına
+ *      çevirir. Liste tamamen boş/hatalı döner. ⚠️ Servisi DOĞRUDAN çağıran
+ *      bekçilerde ham `PrismaClientKnownRequestError` görülür (middleware devrede
+ *      değildir) — "500" sanma, sahadaki karşılığı bu 400 mesajıdır.
+ *   2. **uuid OLMAYAN string kolon** (`foldType` emsali): **0 satır, hata yok,
+ *      log yok** — operatör "bu kumaştan hiç yok" sanır.
+ *   3. **ön-süzgeçli alan** (`currentStationId`, UUID regex'inden geçer): CSV
+ *      regex'e takılır, filtre **sessizce DÜŞER** ve liste filtresizmiş gibi
+ *      döner. En tehlikelisi: boş liste değil **YANLIŞ liste**, hiçbir uyarı yok
+ *      (ölçüm: iki istasyon seçilince 2 yerine 6 satır).
+ *
+ * Elle okunan HER id filtresi bu yardımcıdan geçmeli.
+ *
+ * Tek değerde `in` yerine düz eşitlik üretilir: sorgu planı aynı, ama mevcut
+ * `where` şekli (ve onu okuyan bekçiler) bayt-bayt korunur.
+ */
+export function readIdCondition(
+  value: string | string[] | undefined
+): string | { in: string[] } | null {
+  const list = readFilterList(value);
+  if (list.length === 0) return null;
+  return list.length === 1 ? (list[0] as string) : { in: list };
+}
+
+/**
  * Build Prisma `where` clause from parsed filters.
  * Supports: exact match, enum match, comma-separated IN, boolean.
  */

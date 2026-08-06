@@ -32,6 +32,8 @@ import {
   applyDateRange,
   resolveSortBy,
   buildTurkishSearch,
+  readFilterList,
+  readIdCondition,
 } from "../utils/query-parser";
 
 // Mükerrer tuzağının saf parçaları (pencere sabiti, kilit anahtarı, damga
@@ -71,13 +73,11 @@ const ROLL_SORTABLE_FIELDS = [
   "foldType",
 ] as const;
 
-function readList(value: string | string[] | undefined): string[] {
-  if (Array.isArray(value)) return value.filter(Boolean);
-  if (typeof value === "string" && value.length > 0) {
-    return value.split(",").map((v) => v.trim()).filter(Boolean);
-  }
-  return [];
-}
+// CSV/dizi filtre okuma TEK KAYNAK `utils/query-parser` (readFilterList /
+// readIdCondition) — aynı sözleşmeyi order, kartela ve production-balance de
+// kullanıyor. Yerel kopya, çoklu-seçimin bir serviste sessizce çalışmamasına
+// yol açardı (sessiz 0-satır tuzağı; gerekçe yardımcının başında).
+const readList = readFilterList;
 
 function readNumberRange(
   min: string | string[] | undefined,
@@ -305,7 +305,8 @@ export interface RollCancelPreview {
   openMovementCount: number;
   /**
    * Topun ÜSTÜNDE fiziksel etiket var mı (`labelPrintedAt != null`). true ise
-   * iptal `confirmLabelPrinted` + SEBEP ister: kayıt ölür ama kâğıt topun üstünde
+   * iptal `confirmLabelPrinted` ONAYI ister (sebep 2026-08-06'dan beri opsiyonel;
+   * bkz. `softDelete` guard'ı): kayıt ölür ama kâğıt topun üstünde
    * kalır → sonraki okutma "stokta değil" der ve kimse sebebini bilmez.
    * `requiresConfirm`'den AYRI bir eksen: o "mal bir istasyonda mı", bu "sahada
    * ölü etiket bırakıyor muyum". Bir top ikisini birden tetikleyebilir.
@@ -1044,7 +1045,12 @@ export class InventoryService {
     }
 
     // --- Roll-level renk + processingStatus filtreleri ---
-    const colorIdFilter = typeof f["colorId"] === "string" ? f["colorId"] : null;
+    // ÇOKLU SEÇİM: `filter[colorId]=a,b` → `{ in: [a,b] }` (VEYA). Tekil değerde
+    // şekil değişmez. `readIdCondition` olmadan CSV ham geçer; colorId uuid
+    // kolonu olduğu için sonuç 0 satır DEĞİL, `invalid input syntax for type
+    // uuid` → Prisma P2007 → **HTTP 400** *"Geçersiz veri formatı (örn. hatalı
+    // ID)"* olur (arıza modları: query-parser'daki not).
+    const colorIdFilter = readIdCondition(f["colorId"]);
     delete where.colorId;
     if (colorIdFilter) {
       where.colorId = colorIdFilter;
@@ -1175,9 +1181,18 @@ export class InventoryService {
     // olmasaydı filter[currentStationId]=<uuid> doğrudan where içine düşer ve
     // Prisma "Unknown argument" ile 500 verirdi (foldType'taki "sessiz 0 satır"
     // tuzağının gürültülü kardeşi). Anahtar her hâlükârda silinir.
-    const currentStationIdRaw = f["currentStationId"] as string | undefined;
+    //
+    // ÇOKLU SEÇİM: UUID süzgeci LİSTENİN HER ELEMANINA ayrı uygulanır. Tek
+    // string'e uygulanan eski `ROLL_UUID_RE.test(csv)` çoklu seçimde fail eder
+    // ve filtre **sessizce DÜŞERDİ**. Bu, uuid kolonlarındaki 500'den DAHA
+    // kötüdür: regex Prisma'dan önce devreye girdiği için hata bile doğmaz;
+    // operatör iki makine seçer, TÜM istasyonların topları döner, hiçbir uyarı
+    // çıkmaz (bekçi ölçümü: 2 beklenirken 6 satır).
+    const currentStationIds = readList(f["currentStationId"]).filter((v) =>
+      ROLL_UUID_RE.test(v)
+    );
     delete where.currentStationId;
-    if (currentStationIdRaw && ROLL_UUID_RE.test(currentStationIdRaw)) {
+    if (currentStationIds.length > 0) {
       const prev = (where.currentStep as { is?: Record<string, unknown> } | undefined)?.is;
       where.currentStep = {
         is: {
@@ -1186,7 +1201,10 @@ export class InventoryService {
           // yazmak iki filtreden birini sessizce yok saymak olurdu.
           station: {
             ...((prev?.station as Record<string, unknown> | undefined) ?? {}),
-            id: currentStationIdRaw,
+            id:
+              currentStationIds.length === 1
+                ? (currentStationIds[0] as string)
+                : { in: currentStationIds },
           },
         },
       };
@@ -1280,7 +1298,8 @@ export class InventoryService {
       ];
     }
 
-    const itemId = typeof f["itemId"] === "string" ? f["itemId"] : null;
+    // ÇOKLU SEÇİM: `filter[itemId]=a,b` → `{ in: [a,b] }` (VEYA).
+    const itemId = readIdCondition(f["itemId"]);
     delete where.itemId;
     if (itemId) {
       where.itemId = itemId;
@@ -1321,15 +1340,12 @@ export class InventoryService {
     // renk scope'larıyla kesişir); sekme tabanı (status=AT_SUBCONTRACTOR)
     // frontend forceFilters'tan ayrıca gelir. delete where.X ŞART: buildWhereClause
     // her filter anahtarını düz kolon olarak kopyalar, Roll'da bu kolonlar yok.
-    const subcontractorId =
-      typeof f["subcontractorId"] === "string" && f["subcontractorId"]
-        ? (f["subcontractorId"] as string)
-        : null;
+    // ÇOKLU SEÇİM: iki filtre de `{ in: [...] }`'e açıldı. Firma ile kategori
+    // ARALARINDA hâlâ AND'dir (aynı açık sevk kalemi hem seçili firmalardan
+    // birine hem seçili kategorilerden birine ait olmalı) — kendi içlerinde OR.
+    const subcontractorId = readIdCondition(f["subcontractorId"]);
     delete where.subcontractorId;
-    const subcontractorCategoryId =
-      typeof f["subcontractorCategoryId"] === "string" && f["subcontractorCategoryId"]
-        ? (f["subcontractorCategoryId"] as string)
-        : null;
+    const subcontractorCategoryId = readIdCondition(f["subcontractorCategoryId"]);
     delete where.subcontractorCategoryId;
     if (subcontractorId || subcontractorCategoryId) {
       where.AND = [
@@ -2771,7 +2787,13 @@ export class InventoryService {
        * `LABEL_PRINTED` — bkz. aşağıdaki guard'ın gerekçesi.
        */
       confirmLabelPrinted?: boolean;
-      /** İptal gerekçesi. Etiketi basılmış topta ZORUNLU (min 3 karakter). */
+      /**
+       * İptal gerekçesi — OPSİYONEL (2026-08-06 kullanıcı kararı; öncesinde
+       * etiketli topta zorunluydu). Verilmezse `cancelReason` NULL kalır ve
+       * yüzeyler bunu "Seçilmedi" diye gösterir. 3 karakterden kısa değer
+       * saklanmaz: "a"/"." gibi doldurma, boş bırakmaktan kötüdür (denetimde
+       * cevap varmış gibi görünür, hiçbir şey söylemez).
+       */
       reason?: string;
     },
   ): Promise<ApiResponse<Roll>> {
@@ -2873,27 +2895,30 @@ export class InventoryService {
     // kendi onayını ister. Hard-block DEĞİL — onay + sebeple geçilir, çünkü meşru
     // durum var: etiket henüz topa yapıştırılmamış olabilir.
     //
-    // Sebep neden burada ZORUNLU ama diğer iptallerde değil: ölü etiket sahada
-    // dolaşmaya devam eder ve onu bulan kişinin ilk sorusu "bu neden iptal edilmiş"
-    // olur. Cevabı `Roll.cancelReason`'da durur — audit'te DEĞİL (archive-scheduler
-    // 6 ayda bir system_logs'u taşır, `Roll.entryReason` dersinin aynısı).
-    const reason = opts?.reason?.trim() || null;
-    if (existing.labelPrintedAt) {
-      if (!opts?.confirmLabelPrinted) {
-        throw AppError.conflict(
-          `Bu topun etiketi basıldı (${formatFactoryDateTime(existing.labelPrintedAt)}) ve ` +
-            "büyük ihtimalle topun üstünde. İptal edersen sahada ÖLÜ ETİKET kalır: " +
-            "kayıt ölür, kâğıt durur, sonraki okutma sebebini söyleyemez. " +
-            "Önce etiketi toptan sök, sonra onaylayarak iptal et.",
-          { code: "LABEL_PRINTED", labelPrintedAt: existing.labelPrintedAt },
-        );
-      }
-      if (!reason || reason.length < 3) {
-        throw AppError.badRequest(
-          "Etiketi basılmış topun iptali için sebep zorunlu (en az 3 karakter).",
-          { code: "CANCEL_REASON_REQUIRED" },
-        );
-      }
+    // ⚠️ SEBEP 2026-08-06'da ZORUNLU OLMAKTAN ÇIKTI (kullanıcı kararı: "personelin
+    // işini hızlı ve hatasız yapması önemli"). Gerekçe hâlâ geçerli — ölü etiketi
+    // sahada bulan kişinin ilk sorusu "bu neden iptal edilmiş" olur — ama zorunluluk
+    // eldivenli operatörü vardiya ortasında rastgele bir kategori seçmeye itiyordu ve
+    // o cevap, cevapsızlıktan KÖTÜDÜR: denetimde dolu görünür, hiçbir şey söylemez
+    // (`manualReasons.ts` ile aynı ders). Artık sebep verilmezse `cancelReason` NULL
+    // kalır ve yüzeyler bunu açıkça "Seçilmedi" diye gösterir.
+    //
+    // ONAY (`confirmLabelPrinted`) KALDIRILMADI: o "kâğıdı söktüm" beyanıdır, veri
+    // değil — ve eski istemcileri fail-closed tutan şey odur (sebep gibi sessizce
+    // atlanabilseydi, uyarıyı hiç görmeyen APK etiketli topu iptal edebilirdi).
+    //
+    // 3 karakter alt sınırı DURUYOR ama artık RED değil ELEME: kısa doldurma
+    // saklanmaz, sebepsiz iptal olarak kaydedilir.
+    const trimmedReason = opts?.reason?.trim() || "";
+    const reason = trimmedReason.length >= 3 ? trimmedReason : null;
+    if (existing.labelPrintedAt && !opts?.confirmLabelPrinted) {
+      throw AppError.conflict(
+        `Bu topun etiketi basıldı (${formatFactoryDateTime(existing.labelPrintedAt)}) ve ` +
+          "büyük ihtimalle topun üstünde. İptal edersen sahada ÖLÜ ETİKET kalır: " +
+          "kayıt ölür, kâğıt durur, sonraki okutma sebebini söyleyemez. " +
+          "Önce etiketi toptan sök, sonra onaylayarak iptal et.",
+        { code: "LABEL_PRINTED", labelPrintedAt: existing.labelPrintedAt },
+      );
     }
 
     const updated = await prisma.$transaction(async (tx) => {

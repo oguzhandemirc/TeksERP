@@ -10,9 +10,11 @@ import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
  * kapatır, kayıt oluşturma tarihine göre değil.
  */
 export const ACCOUNTING_FILTERS: FilterDef[] = [
-  { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
+  // Müşteri ÇOKLU: muhasebeci dönemi çoğu zaman birkaç cari üzerinden kapatır.
+  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
   // Şube müşteriye bağlı (Sevkiyatlar ekranıyla aynı dependent-lookup); şube bazlı
-  // cari takipte muhasebeci sevkleri şubeye göre ayırabilsin.
+  // cari takipte muhasebeci sevkleri şubeye göre ayırabilsin. Üst filtre çoklu
+  // olabilir — ham CSV `/api/customer-branches`e aynen geçer (BaseService → `in`).
   {
     kind: "dependent-lookup",
     key: "branchId",
@@ -37,6 +39,8 @@ export const ACCOUNTING_FILTERS: FilterDef[] = [
     },
   },
   // İhracat faturası ayrı kesilir → yön muhasebecinin ilk ayırdığı eksen.
+  // TEKİL KALIR — gerekçe Sevkiyatlar ekranındaki `destination` notunda
+  // (iki değerli NOT NULL enum + DirectShipment union'ı düşme riski).
   {
     kind: "select",
     key: "destination",

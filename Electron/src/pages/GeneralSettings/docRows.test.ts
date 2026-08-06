@@ -203,6 +203,39 @@ describe("kolon sırası", () => {
   });
 });
 
+describe("grid'in En (Cm) kutusu", () => {
+  // Saha isteği: "40 satırlık listedeki en sütununu kapatabilelim." Sütun ELLE
+  // DOLDURULAN boş kutudur; belgenin bildiği tek EN alt toplam tablosundadır ve
+  // AYRI bir kolon ayarıyla yönetilir. İkisi tek kutuya bağlanırsa "kutuları
+  // kaldır" diyen kullanıcı belgedeki rakamı da sessizce siler.
+  const row = () => rowById(FASON, "s:gridWidth");
+
+  it("satır GRID grubunda çıkar (başlık bandında değil)", () => {
+    const g = buildDocRowGroups(FASON).find((x) => x.rows.some((r) => r.id === "s:gridWidth"));
+    expect(g?.key).toBe("grid");
+  });
+  it("varsayılan AÇIK ve kapatılabilir", () => {
+    const v = read("fasonSevk", {}, row());
+    expect(v.visible).toBe(true);
+    expect(v.canHide).toBe(true);
+  });
+  it("kapatınca sections.gridWidth=false yazılır", () => {
+    expect(write("fasonSevk", {}, row(), { visible: false }).sections?.gridWidth).toBe(false);
+  });
+  it("kapalıyken kapalı okunur", () => {
+    expect(read("fasonSevk", { sections: { gridWidth: false } }, row()).visible).toBe(false);
+  });
+  it("kutu ALT TABLODAKİ En kolonunu ETKİLEMEZ (ayrı ayarlar)", () => {
+    const out = write("fasonSevk", {}, row(), { visible: false });
+    expect(out.columns).toBeUndefined();
+    const enCol = rowById(FASON, "c:totals:en");
+    expect(read("fasonSevk", { sections: { gridWidth: false } }, enCol).visible).toBe(true);
+  });
+  it("boş kutunun puntosu ayarlanamaz (yazacak metni yok)", () => {
+    expect(read("fasonSevk", {}, row()).canStyle).toBe(false);
+  });
+});
+
 describe("punto ve kalınlık", () => {
   const row = () => rowById(FASON, "f:gridMetre");
 
@@ -218,9 +251,13 @@ describe("punto ve kalınlık", () => {
     const out = write("fasonSevk", cfg, row(), { weight: "bold" });
     expect(out.fields?.gridMetre).toEqual({ size: 14, weight: "bold" });
   });
-  it("komşu alana dokunmaz — metre ↔ cm ayrı kalır", () => {
+  // ⚠️ Komşu GERÇEK bir alan olmalı. Eskiden burada `gridCm` yazıyordu; o alan
+  // 2026-08-06'da kaldırıldı (grid'de EN sütunu yok) ve kontrol sessizce
+  // BOŞA DÖNDÜ — var olmayan anahtar her koşulda undefined'dır.
+  it("komşu alana dokunmaz — metre ↔ top sıra no ayrı kalır", () => {
     const out = write("fasonSevk", {}, row(), { size: 14 });
-    expect(out.fields?.gridCm).toBeUndefined();
+    expect(out.fields?.gridTop).toBeUndefined();
+    expect(out.fields?.gridMetre).toEqual({ size: 14 });
   });
   it("stil taşımayan satırda punto girdisi çizilmez", () => {
     const secOnly = allRows(FASON).find((r) => r.section && !r.field);

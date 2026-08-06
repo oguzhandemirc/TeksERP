@@ -213,16 +213,29 @@ export function registerStationMutationDefaults(): void {
   // backend conflict atar, replay'de optimistic kaldırma rollback olur.
   queryClient.setMutationDefaults(STATION_MUT.KK1_SCRAP, {
     mutationFn: withAuthGuard(
-      (vars: { id: string; confirmActive: boolean; reason?: string }) =>
-        rollService.scrap(
+      (vars: {
+        id: string;
+        confirmActive: boolean;
+        /**
+         * "Etiketi toptan söktüm" beyanı. ⚠️ AÇIKÇA taşınır (2026-08-06): sebep
+         * opsiyonelleşince eski `vars.reason ? …` çıkarımı çöktü — sebepsiz
+         * onaylanan etiketli iptal, onay bayrağını kaybedip 409 `LABEL_PRINTED`
+         * alırdı ve operatör modalda onayladığı hâlde reddedilirdi.
+         */
+        confirmLabelPrinted?: boolean;
+        reason?: string;
+      }) => {
+        // Eski sürümden KUYRUKTA bekleyen kayıtlarda bu alan yok; orada sebebin
+        // varlığı onayın da verildiği anlamına geliyordu → geriye dönük çıkarım.
+        const confirmLabelPrinted = vars.confirmLabelPrinted ?? !!vars.reason;
+        return rollService.scrap(
           vars.id,
           vars.confirmActive,
-          // Sebep VARSA bu, etiketi basılmış bir topun iptalidir ve operatör
-          // uyarıyı görüp onaylamıştır → onay bayrağı sebeple BİRLİKTE gider.
-          // İkisini ayrı taşımak, kuyruktan flush edilen bir isteğin sebebi
-          // taşıyıp onayı taşımaması gibi anlamsız bir ara duruma izin verirdi.
-          vars.reason ? { confirmLabelPrinted: true, reason: vars.reason } : undefined,
-        ),
+          confirmLabelPrinted || vars.reason
+            ? { confirmLabelPrinted, reason: vars.reason }
+            : undefined,
+        );
+      },
     ),
     ...OFFLINE_AWARE,
   });

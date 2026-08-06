@@ -246,7 +246,6 @@ export const FASON_FIELD_DEFS: DocFieldDef[] = [
   { key: "gridHead", label: "Grid başlıkları (Top / Metre / Cm)", group: "grid" },
   { key: "gridTop", label: "Grid — top sıra no", group: "grid" },
   { key: "gridMetre", label: "Grid — METRE değeri", group: "grid" },
-  { key: "gridCm", label: "Grid — EN (cm) değeri", group: "grid" },
 
   { key: "totalsHead", label: "Alt tablo başlıkları (CİNSİ / EN / TOP …)", group: "totals" },
   { key: "totalsCell", label: "Alt tablo değerleri", group: "totals" },
@@ -496,7 +495,10 @@ export const DOC_DEFS: DocDef[] = [
       { key: "productionProps", label: "İstenen özellikler kutusu" },
       { key: "dyehouseNote", label: "Fason talimatı kutusu" },
       { key: "notes", label: "Not / alt bilgi" },
-      { key: "gridWidth", label: "Grid'de En (Cm) kolonu" },
+      // ⚠️ Bu sütun ELLE DOLDURULAN boş kutudur — top başına EN değeri BASMAZ
+      // (belgenin bildiği tek EN alt toplam tablosundadır ve iş emrinden gelir,
+      // o da "Alt Toplam Tablosu — kolonlar → En" ile ayrıca kapatılır).
+      { key: "gridWidth", label: "Grid'de En (Cm) kolonu — elle doldurulan boş kutular" },
     ],
     fields: FASON_FIELD_DEFS,
     supportsPlacements: [{ key: "batchInfo", label: "Parti no" }],

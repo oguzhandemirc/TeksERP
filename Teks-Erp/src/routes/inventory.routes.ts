@@ -23,6 +23,22 @@ const MOBILE_ROLL_READ = [
 ] as const;
 const MOBILE_ROLL_WRITE_KK1 = ["mobile:kk1"] as const;
 const MOBILE_ROLL_WRITE_KURSUN = ["mobile:kk2-kursun"] as const;
+/**
+ * TOP İPTALİ (+ önizleme + geri alma) — KK1'in YANINDA DEPO da yapabilir.
+ *
+ * NEDEN (2026-08-06 saha isteği): yanlış etiketle stoğa girmiş top çoğu zaman
+ * KK1'de değil DEPODA fark edilir — kâğıt orada okutulur. Depo personelinin
+ * yetkisi yoksa tek çare "KK1'e git, birini bul" olur ve saha onu beklemez:
+ * 2026-08-05 vakasında beklemedi, doğaçladı ve aynı fiziksel top için ikinci
+ * bir barkod doğdu. Kapıyı açan şey izin DEĞİL, guard'lardır — statü beyaz
+ * listesi (`CANCELABLE_ROLL_STATUSES`), `confirmActive` ve ölü etiket onayı
+ * `softDelete` içinde ve her iki yüzey için de birebir aynı koşar.
+ *
+ * ⚠️ `/initial-entry` bu kümeye GİRMEZ: depo topu iptal eder, ham giriş AÇMAZ.
+ * Üç ucun kümesi ise birbirinden ayrılmamalı — iptal edebilen geri de
+ * alabilmeli, yoksa hata yapan kişi yine doğaçlar.
+ */
+const MOBILE_ROLL_CANCEL = ["mobile:kk1", "mobile:depo"] as const;
 
 const controller = new InventoryController();
 const router = Router();
@@ -503,9 +519,9 @@ router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ..
  *       404:
  *         description: Top bulunamadı
  */
-router.get("/:id/cancel-preview", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), controller.cancelPreview);
+router.get("/:id/cancel-preview", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_CANCEL), controller.cancelPreview);
 
-router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), controller.softDelete);
+router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_CANCEL), controller.softDelete);
 
 /**
  * @openapi
@@ -550,7 +566,7 @@ router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_
 router.post(
   "/:id/restore-cancel",
   verifyToken,
-  requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1),
+  requireAnyPermission("roll:write", ...MOBILE_ROLL_CANCEL),
   controller.restoreCancelled,
 );
 

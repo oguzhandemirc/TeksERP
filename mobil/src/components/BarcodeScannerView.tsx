@@ -18,6 +18,33 @@ import { colors, palette } from '../theme/tokens';
 import { springs } from '../theme/motion';
 import { recordActivity, withSystemDialog } from '../store/lockStore';
 
+/**
+ * Kadrajın ORTASINDA kısa süre duran büyük bildirim.
+ *
+ * Saha gerekçesi (2026-08-06): mükerrer okumada tek görsel iz ALTTAKİ şeritte
+ * yanıp sönen satırdı. Operatör telefonu topa doğrultmuş, gözü kadrajın
+ * içindedir — şerit görüş alanının dışında kalıyor ve "okumadı" sanıp tekrar
+ * okutuyordu (sesi/titreşimi gürültülü ortamda ayırt edemeyen vardiya için de
+ * tek hat kalmıştı). Bildirim tam da bakılan yere basılır.
+ *
+ * İki tür var ve ikisi de kullanımda: `duplicate` (zaten listede) ve `reject`
+ * (kabul edilmedi — sebebiyle). Kabul için tür YOK: onu kadrajın kendi yeşil
+ * tiki + şerit satırı zaten söylüyor.
+ */
+export interface ScanFlash {
+  kind: 'duplicate' | 'reject';
+  /** Büyük satır — tek bakışta okunacak olan ("ZATEN OKUTULDU"). */
+  title: string;
+  /** İnce satır — barkod / sebep. */
+  detail?: string;
+  /**
+   * Aynı olay tekrar ederse (aynı barkod peş peşe okutulursa) nesne kimliği
+   * değişsin diye artan sayaç — giriş animasyonu yeniden oynar. Sayaç olmadan
+   * ikinci okutma state'i aynı bıraktığı için ekranda HİÇBİR ŞEY değişmezdi.
+   */
+  seq?: number;
+}
+
 export type SupportedBarcodeType =
   | 'qr'
   | 'code128'
@@ -79,6 +106,13 @@ interface Props {
    * sırasında okuyacak bir tarayıcı olmaz.
    */
   trigger?: 'auto' | 'tap';
+  /**
+   * Kadrajın ortasında kısa süre duran bildirim (mükerrer / ret). Süresini
+   * ÇAĞIRAN yönetir (bkz. `hooks/useScanFeedback`): tarayıcı okumanın sonucunu
+   * bilmez, onu çözen taraf bilir. `null`/verilmemişse hiçbir şey çizilmez ve
+   * bu bileşenin bugünkü çıktısı birebir korunur.
+   */
+  flash?: ScanFlash | null;
 }
 
 // Sürekli modda iki okuma arası yeniden silahlanma gecikmesi (ms).
@@ -118,6 +152,7 @@ export function BarcodeScannerView({
   captureHaptic = true,
   initialFacing = 'back',
   trigger = 'auto',
+  flash = null,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
@@ -281,9 +316,13 @@ export function BarcodeScannerView({
   }));
 
   // Yakalama onayı — çerçeve yeşil + yaylı check.
+  // ⚠️ Bildirim varken BASTIRILIR: yakalama onayı (yeşil tik) okumanın SONUCUNU
+  // değil yalnız "kod yakalandı"yı söyler; mükerrer bildiriminin arkasında yeşil
+  // tik yanarsa operatör iki zıt işaret görür ve topu eklenmiş sanar.
   const successV = useSharedValue(0);
+  const showSuccess = busy && !flash;
   useEffect(() => {
-    if (busy) {
+    if (showSuccess) {
       successV.value = 0;
       successV.value = reduced
         ? withTiming(1, { duration: 160 })
@@ -291,13 +330,28 @@ export function BarcodeScannerView({
     } else {
       successV.value = 0;
     }
-  }, [busy, reduced, successV]);
+  }, [showSuccess, reduced, successV]);
   const successCheckStyle = useAnimatedStyle(() => ({
     opacity: successV.value,
     transform: [{ scale: 0.5 + successV.value * 0.5 }],
   }));
   const successTintStyle = useAnimatedStyle(() => ({
     opacity: successV.value * 0.16,
+  }));
+
+  // Merkez bildirim — her yeni olayda (nesne kimliği değişir) yeniden açılır.
+  const flashV = useSharedValue(0);
+  useEffect(() => {
+    if (flash) {
+      flashV.value = 0;
+      flashV.value = reduced ? withTiming(1, { duration: 140 }) : withSpring(1, springs.bouncy);
+    } else {
+      flashV.value = withTiming(0, { duration: 140 });
+    }
+  }, [flash, reduced, flashV]);
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: flashV.value,
+    transform: [{ scale: 0.82 + flashV.value * 0.18 }],
   }));
 
   // Tap modunda silahsızken köşeler sönük — "şu an okumuyorum" durumu kadrajın
@@ -372,14 +426,42 @@ export function BarcodeScannerView({
             <Animated.View style={[styles.scanLine, scanLineStyle]} />
           )}
           {/* Yakalama onay işareti */}
-          {busy && (
-            <Animated.View style={[styles.successCheck, successCheckStyle]}>
+          {showSuccess && (
+            <Animated.View style={[styles.successCheck, successCheckStyle]} testID="scan-success-check">
               <MaterialCommunityIcons name="check-bold" size={56} color="#fff" />
             </Animated.View>
           )}
         </View>
-        <Text style={styles.overlayHint}>{overlayHint}</Text>
+        {/* İpucu bildirim varken susar — kartın altında "Okundu" yazması,
+            "zaten okutuldu" mesajıyla çelişirdi. */}
+        {flash ? null : <Text style={styles.overlayHint}>{overlayHint}</Text>}
       </View>
+      {/* Merkez bildirim — operatörün BAKTIĞI yere basılır. pointerEvents="none":
+          altındaki OKUT tuşunu yutmamalı (bildirim 1-2 sn duruyor ve operatör o
+          sırada sıradaki topu okutmak isteyebilir). */}
+      {flash ? (
+        <View style={styles.flashLayer} pointerEvents="none" testID="scan-flash">
+          <Animated.View
+            style={[
+              styles.flashCard,
+              flash.kind === 'duplicate' ? styles.flashDuplicate : styles.flashReject,
+              flashStyle,
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={flash.kind === 'duplicate' ? 'content-duplicate' : 'close-octagon'}
+              size={42}
+              color="#fff"
+            />
+            <Text style={styles.flashTitle}>{flash.title}</Text>
+            {flash.detail ? (
+              <Text style={styles.flashDetail} numberOfLines={2}>
+                {flash.detail}
+              </Text>
+            ) : null}
+          </Animated.View>
+        </View>
+      ) : null}
       {/* Dokunarak okut — kadrajın altında, tek büyük hedef (≥56dp). Overlay
           `pointerEvents="none"` olduğu için tuş onun DIŞINDA durmak zorunda. */}
       {tapMode ? (
@@ -599,6 +681,35 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   tapBtnText: { color: '#fff', fontSize: 19, fontWeight: '800', letterSpacing: 0.5 },
+  // Merkez bildirim — kadrajın üstünde, tam ortada.
+  flashLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  flashCard: {
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '94%',
+    paddingHorizontal: 24,
+    paddingVertical: 18,
+    borderRadius: 18,
+    borderWidth: 2,
+    elevation: 8,
+  },
+  // Mükerrer amber, ret kırmızı — şeritteki satır renkleriyle AYNI dil
+  // (ScannerRollStrip.rowDuplicate / rowReject); iki yüzey aynı olayı farklı
+  // renkle anlatırsa operatör hangisinin doğru olduğunu sorar.
+  flashDuplicate: { backgroundColor: 'rgba(180,83,9,0.95)', borderColor: palette.amber[500] },
+  flashReject: { backgroundColor: 'rgba(153,27,27,0.95)', borderColor: palette.red[500] },
+  flashTitle: { color: '#fff', fontSize: 21, fontWeight: '800', letterSpacing: 0.5, textAlign: 'center' },
+  flashDetail: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   overlayHint: {
     color: '#fff',
     fontSize: 14,

@@ -206,6 +206,45 @@ bayrağıyla aynı gerekçe).
 - Test: `store/deviceSettingsStore.test.ts` (kalıcılığı bozan sondayla kırmızı verdiği
   doğrulandı). **Sahaya çıkması için yeni APK derlemesi gerekir.**
 
+### Top okutma yüzeyi = ÜÇ katman, üçü de ORTAK (2026-08-06)
+
+Sahadan iki geri bildirim: *"mükerrer uyarısını göremiyorum"* ve *"fason sevkteki
+QR okutma eski tip — sürekli okuyor, okuduğunu ekranda göremiyorsun"*. İkisinin de
+kökü aynıydı: okutma geri bildirimi ekran ekran kopyalanıyordu (Hızlı İş Emri'nde
+şerit + vurgu vardı, Fason Sevk'te kaybolan bir toast). Aynı okutma iki ekranda iki
+şey söylerse operatör hangisine güveneceğini bilemez. Tek kaynak:
+
+- **`services/scanFeedback.signalScan`** — ses + titreşim (kabul / mükerrer / ret).
+  Ekranlar `Haptics`i DOĞRUDAN çağırmaz; çağırırsa üç sonucun ayrımı kayar.
+- **`hooks/useScanFeedback`** — ekranda ne görüneceği. `signalScan`i **kendisi**
+  çağırır (çağıran ayrıca çağırırsa çift bip olur) ve iki yüzey döndürür:
+  `flash` (merkez bildirim) + `rejects`/`duplicateBarcode` (şerit).
+- **`components/ScannerRollStrip`** — kameranın ALTINDAKİ "son okutulanlar" şeridi.
+
+**İki yüzey birbirinin YERİNE geçmez, süreleri bilinçli farklı:** merkez bildirim
+kadraja bakan göz içindir (~1,5-2,5 sn; `BarcodeScannerModal.flash`), şerit satırı
+topu bırakıp dönen operatör içindir (mükerrer vurgusu 1,4 sn, ret sebebi ~10 sn).
+Mükerrer eskiden YALNIZ şeritte yanıp sönüyordu ve operatörün gözü kadrajın
+içinde olduğu için görünmüyordu — "okumadı" sanıp tekrar okutuyordu.
+
+- ⚠️ **Bildirim varken yakalama onayı (yeşil tik) BASTIRILIR** (`showSuccess = busy
+  && !flash`). Yeşil tik yalnız "kod yakalandı" der, sonucu söyleyen taraf
+  çağırandır; ikisi aynı anda görünürse operatör topu eklenmiş sanar.
+- ⚠️ **Şeridin `rolls` girişi EKLENME sırasındadır** (en eski önce) — şerit onu ters
+  çevirir. Ters sırada state tutan ekran (Fason Sevk yeni topu **başa** ekler)
+  çeviriyi kendi yapar; yapmazsa en son okutulan top en ALTA düşer ve yeşil vurgu
+  yanlış satıra gider: hata vermez, sadece yanlış olur.
+- **Geri bildirim tarayıcı AÇIKKEN ekranda, kapalıyken toast** (Fason Sevk'te elle
+  giriş / listeden seçme yolları). Aynı olayı iki kez söyleme.
+- **Çok top okutan her ekran `trigger="tap"`** (Hızlı İş Emri 2026-08-05, Fason Sevk
+  2026-08-06): kamera KENDİLİĞİNDEN okumaz. Toplar üst üste duruyor ve gezdirirken
+  kadraja giren KOMŞU top listeye giriyordu — sorun "yanlış okuma" değil
+  "istenmeden okuma"dır, onay sorarak değil taramayı KAPATARAK çözülür. Tek okuyup
+  kapanan ekranlar (KK1 / Tambur / Kartela / refakat kartı) `auto` kalır.
+- Bekçiler: `hooks/useScanFeedback.test.ts` · `components/ScannerRollStrip.test.tsx`
+  · `components/BarcodeScannerView.test.tsx` §7-§9 (dördü de negatif sondayla
+  kırmızı verdiği doğrulandı). **Sahaya çıkması için yeni APK gerekir.**
+
 ## Liste Sayfalama — DEFAULT: cursor + infinite scroll
 
 > **Kural:** Bir listeyi sayfalandırman istendiğinde **varsayılan olarak cursor (keyset) + infinite scroll** kullan — offset/`page`+`pageSize` modeli DEĞİL. Offset modeli yalnızca açıkça istenirse veya tablonun hacmi kalıcı olarak küçük kalacaksa (örn. master-data, kalite dereceleri) seçilir. Yüksek hacimli tablolar (`Roll`, `RollMovement`, `RollOperation`, hareket/log geçmişleri) **her zaman** cursor.

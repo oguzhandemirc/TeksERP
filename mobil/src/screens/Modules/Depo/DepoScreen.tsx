@@ -7,11 +7,17 @@ import {
   Surface,
   ActivityIndicator,
   TouchableRipple,
+  Button,
   Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { SkeletonList } from '../../../components/motion';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -24,17 +30,22 @@ import DetailSheet, {
   MutedText,
   type SummaryItem,
 } from '../../../components/DetailSheet';
+import RollCancelModal from '../../../components/RollCancelModal';
+import CancelledRollSheet from '../../../components/CancelledRollSheet';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
-import { rollService } from '../../../services/roll.service';
+import { useIsOnline } from '../../../offline/hooks';
+import { STATION_MUT } from '../../../offline/mutations';
+import { rollService, type RollCancelPreview } from '../../../services/roll.service';
 import {
   swatchService,
   type SwatchListItem,
   type KartelaStockGroup,
 } from '../../../services/swatch.service';
+import type { Roll } from '../../../types/models';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { KartelaStockReduceModal } from './KartelaStockReduceModal';
 
@@ -60,6 +71,20 @@ const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'KARTELALIK', label: 'Kartelalık', color: '#059669' },
 ];
 
+/**
+ * Onay modalının depo dili. Motor KK1 ile aynı; değişen yalnız SÖZCÜK — depo
+ * personeli "iptal" değil "stoktan kaldırma" yapıyor ve aynı ekranda "Kayıt
+ * iptal edildi" ile "top raftan düştü" farklı şeyler gibi okunuyor.
+ */
+const REMOVE_FROM_STOCK_COPY = {
+  title: 'Topu stoktan kaldır?',
+  blockedTitle: 'Bu top stoktan kaldırılamaz',
+  confirm: 'Stoktan Kaldır',
+  hint:
+    'Yanlış etiketle stoğa girmiş top için kullan. Fire sayılmaz — kayıt iptal edilir, ' +
+    'metraj fire istatistiğine YAZILMAZ.',
+};
+
 /** Rezerve topun bağlı olduğu sevkiyat aşaması — detay özetindeki "Sevkiyat" satırı. */
 const SHIPMENT_SCOPE_LABEL: Record<string, string> = {
   PLANNED: 'Çuval Depo',
@@ -67,34 +92,19 @@ const SHIPMENT_SCOPE_LABEL: Record<string, string> = {
   CANCELLED: 'İptal',
 };
 
-interface RollListItem {
-  id: string;
-  barcode: string;
-  itemId: string;
+/**
+ * Depo listesinin satır şekli — `Roll`'u GENİŞLETİR, kopyalamaz.
+ *
+ * Eskiden bağımsız bir interface'ti ve `Roll`'un iptal/etiket teşhis alanlarını
+ * (`labelPrintedAt`, `cancelReason`, `canRestore`…) taşımıyordu. Satırdan açılan
+ * "Stoktan Kaldır" akışı ortak `RollCancelModal`/`CancelledRollSheet`'e o alanlarla
+ * gider; iki şekli ayrı tutmak, aynı topun listede ve modalda farklı şey söylemesi
+ * demekti (yalnız cast'le gizlenen, derleyicinin yakalayamadığı bir ayrışma).
+ */
+interface RollListItem extends Roll {
+  /** Liste sorgusundan gelen varyant — `Roll` tipinde yok. */
   variantId: string | null;
-  initialQty: number;
-  currentQty: number;
-  weightKg: number | null;
-  width: number | null;
-  qualityGrade: string;
-  status: string;
-  /** Tambur'da kartela için işaretlendi mi — depoda ayırt etmek için rozet. */
-  markedForKartela?: boolean;
-  /** Topun üstündeki son basılan etiket (null = stok/etiket yok). */
-  lastLabelSnapshot?: { customerName: string | null; orderNumber: string | null } | null;
-  createdAt?: string;
-  item?: { id: string; code: string; name: string };
   variant?: { id: string; code: string; name: string } | null;
-  color?: { id: string; code: string; name: string; hex?: string | null } | null;
-  properties?: {
-    propertyId: string;
-    property?: { id: string; code: string; name: string };
-  }[];
-  /** Sevkiyat rezervasyonu — dolu ise top serbest depoda DEĞİL (çuvalda). */
-  shipmentId?: string | null;
-  sackId?: string | null;
-  shipment?: { id: string; shipmentNo: string; status: string } | null;
-  sack?: { id: string; sackNo: string; seq: number } | null;
 }
 
 export default function DepoScreen() {
@@ -109,6 +119,16 @@ export default function DepoScreen() {
   const [reduceGroup, setReduceGroup] = useState<KartelaStockGroup | null>(null);
   const handleRollDetailDismiss = useCallback(() => setDetailRoll(null), []);
   const handleSwatchDetailDismiss = useCallback(() => setDetailSwatch(null), []);
+
+  // ── STOKTAN KALDIRMA (top iptali) ────────────────────────────────────────
+  // Yanlış etiketle stoğa girmiş top çoğu zaman burada, kâğıt okutulurken fark
+  // edilir. Motor KK1'inkiyle AYNI (`DELETE /rolls/:id` + ortak onay modalı);
+  // burada yalnız giriş kapısı var.
+  const qc = useQueryClient();
+  const isOnline = useIsOnline();
+  const [cancelTarget, setCancelTarget] = useState<RollListItem | null>(null);
+  /** Okutulan barkod iptalli çıktı → teşhis + geri alma paneli. */
+  const [cancelledRoll, setCancelledRoll] = useState<Roll | null>(null);
 
   const isSwatchMode = mode === 'SWATCH';
   const isKartelalikMode = mode === 'KARTELALIK';
@@ -240,6 +260,7 @@ export default function DepoScreen() {
   // scanner.onModalHide'da detail modal'ı açıyoruz.
   const pendingDetailRef = useRef<
     | { kind: 'roll'; data: RollListItem }
+    | { kind: 'cancelled'; data: Roll }
     | { kind: 'swatch'; data: SwatchListItem }
     | null
   >(null);
@@ -274,6 +295,13 @@ export default function DepoScreen() {
         if (!r) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
+        } else if (r.status === 'CANCELLED') {
+          // İptalli barkod düz detay olarak açılırsa ekran yalnız "İptal" yazıp
+          // SUSAR — 2026-08-05'te operatörü ikinci bir kayıt açmaya iten sessizlik
+          // tam buydu. Teşhis paneli kimin/neden iptal ettiğini söyler ve
+          // (kapsamdaysa) geri alma yolunu verir.
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          pendingDetailRef.current = { kind: 'cancelled', data: r };
         } else {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           pendingDetailRef.current = { kind: 'roll', data: r as RollListItem };
@@ -294,8 +322,87 @@ export default function DepoScreen() {
     if (!pending) return;
     pendingDetailRef.current = null;
     if (pending.kind === 'roll') setDetailRoll(pending.data);
+    else if (pending.kind === 'cancelled') setCancelledRoll(pending.data);
     else setDetailSwatch(pending.data);
   }, []);
+
+  // İptal önizlemesi — hedef seçilince koşar. Ekran ile uç AYNI yüklemi görsün
+  // diye karar backend'den gelir (`canCancel`/`requiresConfirm`/`labelPrinted`);
+  // istemci kendi kuralını kurarsa buton çizilir, uç 409 verir. staleTime 0:
+  // top bu arada bir istasyona okutulmuş olabilir.
+  const cancelPreviewQuery = useQuery({
+    queryKey: ['rolls', 'cancel-preview', cancelTarget?.id] as const,
+    queryFn: () => rollService.getCancelPreview(cancelTarget!.id),
+    enabled: !!cancelTarget && isOnline,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const cancelPreview: RollCancelPreview | null = cancelPreviewQuery.data?.data ?? null;
+
+  // ⚠️ mutationKey KK1 ile ORTAK ve adı bilerek değiştirilmedi: anahtar diske
+  // persist ediliyor (offline kuyruk) — yeniden adlandırmak, güncelleme anında
+  // kuyrukta bekleyen iptalleri sahipsiz bırakırdı. İşlem zaten aynı: aynı uç,
+  // aynı payload, aynı guard'lar; ölü mektup etiketi de jenerik ("Top iptali").
+  const cancelMutation = useMutation<
+    Awaited<ReturnType<typeof rollService.scrap>>,
+    Error,
+    // ⚠️ `confirmLabelPrinted` AÇIKÇA taşınır — sebep 2026-08-06'da opsiyonel
+    // oldu, "sebep varsa onay da vardır" çıkarımı artık geçersiz.
+    { id: string; confirmActive: boolean; confirmLabelPrinted?: boolean; reason?: string }
+  >({
+    mutationKey: STATION_MUT.KK1_SCRAP,
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Toast.show({
+        type: 'success',
+        text1: 'Top stoktan kaldırıldı',
+        text2: isOnline ? undefined : 'Çevrimdışı — sync bekliyor',
+      });
+    },
+    onError: (err) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Toast.show({ type: 'error', text1: 'Kaldırılamadı', text2: err.message });
+    },
+    // Optimistic satır düşürme YOK (KK1'den bilinçli fark): burada liste
+    // sunucudan sayfalanıyor ve üstteki sayaçlar ayrı bir aggregate ucundan
+    // geliyor. Satırı elle düşürmek sayaçlarla listeyi ayrıştırırdı; tam
+    // invalidate ikisini birlikte tazeler.
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['rolls', 'depo'] });
+      qc.invalidateQueries({ queryKey: ['rolls', 'warehouse-scope'] });
+    },
+  });
+
+  /**
+   * Detay sheet'inden "Stoktan Kaldır" — detay kapanır, onay açılır.
+   *
+   * Scanner'daki `onModalHide` sırasına gerek YOK: o tuzak RN `Modal`'a özgüdür
+   * (kapanan overlay dokunmaları yutuyordu), `AppModal` ise Paper `Portal`
+   * kullanır ve `detailRoll` null olunca zaten anında unmount olur — bekleyecek
+   * bir kapanış animasyonu, dolayısıyla bir `onHidden` de yoktur.
+   */
+  const requestCancel = useCallback((roll: RollListItem) => {
+    setDetailRoll(null);
+    setCancelTarget(roll);
+  }, []);
+
+  const confirmCancel = useCallback(
+    (reason?: string) => {
+      if (!cancelTarget) return;
+      // Hard-block'ta hiç gönderme (buton zaten çizilmiyor; ikinci hat).
+      if (cancelPreview && !cancelPreview.canCancel) return;
+      cancelMutation.mutate({
+        id: cancelTarget.id,
+        confirmActive: cancelPreview?.requiresConfirm ?? false,
+        // "Kâğıdı söktüm" beyanı: modalın uyarıyı gösterme koşuluyla AYNI
+        // önizleme alanından türer (sebep artık opsiyonel — ondan çıkarılamaz).
+        confirmLabelPrinted: cancelPreview?.labelPrinted ?? false,
+        reason,
+      });
+      setCancelTarget(null);
+    },
+    [cancelTarget, cancelPreview, cancelMutation],
+  );
 
   const listLoading = isSwatchMode ? kartelaStockQuery.isLoading : rollsQuery.isLoading;
   const refresh = useManualRefresh(
@@ -538,11 +645,39 @@ export default function DepoScreen() {
 
       {/* Detay modal — yalnızca seçili top varken mount: hook'lar/query'ler boşa çalışmasın */}
       {detailRoll && (
-        <RollDetailModal roll={detailRoll} onDismiss={handleRollDetailDismiss} />
+        <RollDetailModal
+          roll={detailRoll}
+          onDismiss={handleRollDetailDismiss}
+          onRemoveFromStock={requestCancel}
+        />
       )}
       {detailSwatch && (
         <SwatchDetailModal swatch={detailSwatch} onDismiss={handleSwatchDetailDismiss} />
       )}
+
+      {/* Stoktan kaldırma onayı — KK1 "Sil" ile ORTAK bileşen (aynı uç, aynı guard'lar) */}
+      <RollCancelModal
+        roll={cancelTarget}
+        preview={cancelPreview}
+        previewLoading={cancelPreviewQuery.isLoading}
+        previewError={cancelPreviewQuery.isError ? (cancelPreviewQuery.error as Error) : null}
+        offline={!isOnline}
+        loading={cancelMutation.isPending}
+        onDismiss={() => setCancelTarget(null)}
+        onConfirm={confirmCancel}
+        copy={REMOVE_FROM_STOCK_COPY}
+      />
+
+      {/* Okutulan barkod iptalli — teşhis + (kapsamdaysa) geri alma */}
+      <CancelledRollSheet
+        roll={cancelledRoll}
+        onDismiss={() => setCancelledRoll(null)}
+        onRestored={() => {
+          setCancelledRoll(null);
+          qc.invalidateQueries({ queryKey: ['rolls', 'depo'] });
+          qc.invalidateQueries({ queryKey: ['rolls', 'warehouse-scope'] });
+        }}
+      />
 
       {/* Kartela stoğunu elle düşürme — kayıp/hasar/sayım düzeltmesi */}
       <KartelaStockReduceModal
@@ -749,9 +884,11 @@ function SwatchDetailModal({
 function RollDetailModal({
   roll,
   onDismiss,
+  onRemoveFromStock,
 }: {
   roll: RollListItem | null;
   onDismiss: () => void;
+  onRemoveFromStock?: (roll: RollListItem) => void;
 }) {
   const historyQuery = useQuery({
     queryKey: ['roll-history', roll?.id],
@@ -865,7 +1002,7 @@ function RollDetailModal({
       visible={!!roll}
       onDismiss={onDismiss}
       icon="package-variant"
-      title={roll.barcode}
+      title={roll.barcode ?? '—'}
       subtitle={
         (roll.item?.name ?? '—') +
         (roll.color?.name ? ` · ${roll.color.name}` : '')
@@ -875,6 +1012,26 @@ function RollDetailModal({
       summaryAside={hasAside ? summaryAside : undefined}
       summaryTitle={hasAside ? 'Top Bilgisi' : undefined}
       asideTitle={hasAside ? 'Kumaş & Renk' : undefined}
+      actions={
+        onRemoveFromStock ? (
+          // Buton statüye göre GİZLENMEZ: hangi topların kaldırılabileceği
+          // (statü beyaz listesi, açık fason sevki, çuval/sevkiyat bağı) yalnız
+          // backend'in bildiği bir sorudur. Burada gizlemek, operatöre sebepsiz
+          // eksik bir ekran gösterirdi; onay modalı hem sorar hem — kaldırılamıyorsa —
+          // somut Türkçe sebebi basar.
+          <Button
+            mode="contained"
+            icon="trash-can-outline"
+            buttonColor="#dc2626"
+            textColor="#fff"
+            onPress={() => onRemoveFromStock(roll)}
+            style={detailActionStyles.btn}
+            contentStyle={detailActionStyles.btnContent}
+          >
+            Stoktan Kaldır
+          </Button>
+        ) : undefined
+      }
     >
       {/* Geçmiş — açılır/kapanır section, varsayılan KAPALI */}
       <CollapsibleSection title={`Yaşam Döngüsü (${events.length})`}>
@@ -1039,6 +1196,12 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   kartelaCountUnit: { fontSize: 10, color: '#94a3b8' },
+});
+
+// Detay sheet'inin sabit alt aksiyon çubuğu — 56dp dokunma hedefi (UI kuralı).
+const detailActionStyles = StyleSheet.create({
+  btn: { flex: 1, borderRadius: 10 },
+  btnContent: { minHeight: 56 },
 });
 
 // RollDetailModal'a özel event card stilleri — DetailSheet children içinde

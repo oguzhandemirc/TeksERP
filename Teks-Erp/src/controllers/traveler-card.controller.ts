@@ -72,6 +72,15 @@ export class TravelerCardController {
     this.findByBarcode = this.findByBarcode.bind(this);
     this.getHistory   = this.getHistory.bind(this);
     this.getCardHtml  = this.getCardHtml.bind(this);
+    // ⚠️ 2026-08-06: BU SATIR UNUTULMUŞTU ve uç eklendiğinden beri (2026-08-05)
+    // HER ÇAĞRIDA 500 veriyordu — route `controller.recordPrintEvent`'i ÇIPLAK
+    // referans olarak geçiyor, `this` undefined kalıyor, `this.service` patlıyor.
+    // Sessiz kalmasının sebebi: baskı istemci tarafında (kâğıt çıkıyor), bildirim
+    // best-effort yutuluyor ve bekçi testleri servisi DOĞRUDAN çağırıp controller'ı
+    // hiç geçmiyor. Sonuç: `contentDirty` hiç temizlenmedi, otomatik revizyonun
+    // `version++`'ı hiç yazılmadı. Yeni handler eklerken bu listeye de ekle —
+    // mekanik bekçi: `scripts/test_controller_binds.ts`.
+    this.recordPrintEvent = this.recordPrintEvent.bind(this);
     this.getSampleHtml = this.getSampleHtml.bind(this);
     this.list         = this.list.bind(this);
   }

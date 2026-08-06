@@ -62,7 +62,7 @@ const MERGE: Record<string, Record<string, string>> = {
     vehicle: "vehicleInfo",
     fabricLine: "fabricHeader",
     note: "notes",
-    gridCm: "gridWidth",
+    // `gridCm` ↔ `gridWidth` ikizi 2026-08-06'da düştü: grid'de EN sütunu yok.
   },
   fasonDirectShip: { sayin: "subcontractorInfo", vehicle: "vehicleInfo", note: "notes" },
   kartelaCeki: { sayin: "subcontractorInfo", vehicle: "vehicleInfo", note: "notes" },
@@ -78,7 +78,11 @@ const MERGE: Record<string, Record<string, string>> = {
  * noktalarıdır (belge no, tarih, vergi no, müşteri kodu…).
  */
 const SECTION_GROUP: Record<string, Record<string, DocFieldGroup>> = {
-  fasonSevk: { productionProps: "boxes", dyehouseNote: "boxes" },
+  // ⚠️ `gridWidth` GRID grubunda listelenmeli. İkizi olan `gridCm` alanı
+  // kaldırıldığı için (sütun artık boş kutu, punto ayarlanacak metni yok) satır
+  // "eşleşmemiş bölüm" dalından geliyor ve o dalın varsayılanı `header` —
+  // yazılmazsa kutu, ilgisiz biçimde başlık bandının altında çıkardı.
+  fasonSevk: { productionProps: "boxes", dyehouseNote: "boxes", gridWidth: "grid" },
   fasonDirectShip: { directShipInfo: "boxes" },
   fasonKabul: { appliedInfo: "boxes" },
   iadeIrsaliyesi: { reason: "boxes" },

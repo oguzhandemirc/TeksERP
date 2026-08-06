@@ -47,6 +47,9 @@ import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import WorkOrderDetailPanel from '../../../components/workOrder/WorkOrderDetailPanel';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import ScannerRollStrip from '../../../components/ScannerRollStrip';
+import { useScanFeedback } from '../../../hooks/useScanFeedback';
+import { signalScan } from '../../../services/scanFeedback';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { workOrderService } from '../../../services/workOrder.service';
 import { rollService } from '../../../services/roll.service';
@@ -138,6 +141,16 @@ export default function FasonSevkScreen() {
   // Top barkodu kamera tarama — okutulan barkod barcodeInput'a yazılır + resolve edilir.
   const [rollScannerOpen, setRollScannerOpen] = useState(false);
   const [rollPickerOpen, setRollPickerOpen] = useState(false);
+  // Okutma geri bildirimi (merkez bildirim + son okutulanlar şeridi) — Hızlı İş
+  // Emri ile AYNI hook. Eskiden buradaki tek iz kaybolan bir toast'tı: operatör
+  // kadraja bakarken ne eklendiğini, ne mükerrer olduğunu göremiyordu.
+  const scanFb = useScanFeedback();
+  // Geri bildirim tarayıcı AÇIKKEN ekranda (kadraj + şerit); kapalıyken görünecek
+  // yer yok, orada toast doğru araçtır. Async yollardan okunabilmesi için ref.
+  const rollScannerOpenRef = useRef(false);
+  useEffect(() => {
+    rollScannerOpenRef.current = rollScannerOpen;
+  }, [rollScannerOpen]);
 
   const [plateNumber, setPlateNumber] = useState('');
   const [driverName, setDriverName] = useState('');
@@ -736,7 +749,7 @@ export default function FasonSevkScreen() {
   type AddResult = 'added' | 'duplicate' | 'mismatch';
   const addRollToList = (r: Roll, opts?: { overrideItem?: boolean }): AddResult => {
     if (scannedRolls.some((s) => s.barcode === r.barcode)) {
-      Toast.show({ type: 'info', text1: 'Bu top zaten listede' });
+      notifyDuplicate(r.barcode ?? '—');
       return 'duplicate';
     }
     // Kumaş (Item) kontrolü — SADECE kumaşa bakar; en/metraj/kalite önemsiz.
@@ -772,8 +785,30 @@ export default function FasonSevkScreen() {
       },
       ...prev,
     ]);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Kabul sinyali TEK kapıdan (services/scanFeedback): kabul / mükerrer / ret
+    // ayrımı ekran ekran kaymasın. Ham `Haptics` çağrısı mükerrerle aynı hissi
+    // veriyordu — operatör hangisi olduğunu elden ayırt edemiyordu.
+    signalScan('accept');
     return 'added';
+  };
+
+  /** Mükerrer okuma — tarayıcı açıkken kadrajın ortasında bildirim + şeritte
+   *  vurgu, kapalıyken (elle giriş / liste) toast. Aynı olayı iki kez
+   *  söylemeyiz: bildirim varken toast gürültüdür. */
+  const notifyDuplicate = (barcode: string) => {
+    if (rollScannerOpenRef.current) scanFb.flashDuplicate(barcode);
+    else Toast.show({ type: 'info', text1: 'Bu top zaten listede', text2: barcode });
+  };
+
+  /** Kabul edilmeyen okuma — tarayıcı açıkken merkez bildirim + şeritte ~10 sn
+   *  duran sebep satırı, kapalıyken toast. */
+  const notifyReject = (barcode: string, reason: string) => {
+    if (rollScannerOpenRef.current) {
+      scanFb.pushRejects([{ barcode, reason }]);
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Toast.show({ type: 'error', text1: 'Top eklenmedi', text2: `${barcode} · ${reason}` });
   };
 
   const handleAddBarcodeFromInput = () => addBarcodeFromString(barcodeInput);
@@ -787,7 +822,7 @@ export default function FasonSevkScreen() {
     if (!barcode) return;
 
     if (scannedRolls.some((r) => r.barcode === barcode)) {
-      Toast.show({ type: 'info', text1: 'Bu top zaten listede' });
+      notifyDuplicate(barcode);
       setBarcodeInput('');
       return;
     }
@@ -795,12 +830,16 @@ export default function FasonSevkScreen() {
 
     // Yanlış tip: refakat kartı (RK-) top alanına okutulduysa anında net hata.
     if (looksLikeCardBarcode(barcode)) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Toast.show({
-        type: 'error',
-        text1: 'Bu bir refakat kartı',
-        text2: 'Buraya top (rulo) barkodu okutun.',
-      });
+      if (rollScannerOpenRef.current) {
+        scanFb.pushRejects([{ barcode, reason: 'Bu bir refakat kartı — top barkodu okutun' }]);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Toast.show({
+          type: 'error',
+          text1: 'Bu bir refakat kartı',
+          text2: 'Buraya top (rulo) barkodu okutun.',
+        });
+      }
       setBarcodeInput('');
       return;
     }
@@ -811,19 +850,13 @@ export default function FasonSevkScreen() {
       const res = await rollService.getByBarcode(barcode);
       const r = res.data;
       if (!r) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
+        notifyReject(barcode, 'Bulunamadı');
         return;
       }
       addRollToList(r);
       setBarcodeInput('');
     } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({
-        type: 'error',
-        text1: 'Top sorgulanamadı',
-        text2: (err as Error).message,
-      });
+      notifyReject(barcode, (err as Error).message || 'Okunamadı');
     } finally {
       setScanning(false);
       resolvingBarcodesRef.current.delete(barcode);
@@ -833,6 +866,28 @@ export default function FasonSevkScreen() {
   const handleRemoveRoll = useCallback((id: string) => {
     setScannedRolls((prev) => prev.filter((r) => r.id !== id));
   }, []);
+
+  /** Tarayıcı şeridi satırı BARKODLA tanır (ekranların ortak sözleşmesi) —
+   *  buradaki liste id ile silinir, çeviri tek yerde kalsın. */
+  const handleRemoveRollByBarcode = useCallback((barcode: string) => {
+    setScannedRolls((prev) => prev.filter((r) => r.barcode !== barcode));
+  }, []);
+
+  /** Şeridin beklediği asgari şekil. İki çeviri birden yapılır:
+   *  • Barkodsuz top (defansif dal) şeride GİRMEZ — satırın kimliği barkoddur,
+   *    silme de onun üzerinden yapılıyor.
+   *  • SIRA TERSLENİR: bu ekranın listesi en yeniyi BAŞA ekler, şerit ise
+   *    eklenme sırası (en eski önce) bekler ve kendi içinde ters çevirir.
+   *    Çevrilmezse en son okutulan top şeridin en ALTINA düşer ve yeşil "az önce
+   *    eklendi" vurgusu yanlış satıra gider. */
+  const stripRolls = useMemo(
+    () =>
+      scannedRolls
+        .filter((r): r is ScannedRoll & { barcode: string } => !!r.barcode)
+        .map((r) => ({ barcode: r.barcode, qty: Number(r.currentQty ?? 0), width: r.width }))
+        .reverse(),
+    [scannedRolls],
+  );
 
   // Sevk listesindeki toplam metraj — her render'da reduce çalışmasın.
   // currentQty backend'den string (Prisma Decimal) gelebilir; Number()'a sarmadan
@@ -1447,13 +1502,37 @@ export default function FasonSevkScreen() {
         title="Refakat Kartı Okut"
       />
 
-      {/* ── Top barkodu kamera tarama: sürekli mod — kullanıcı kapatana dek açık kalır ── */}
+      {/* ── Top barkodu kamera tarama ────────────────────────────────────────
+          Hızlı İş Emri ile AYNI kalıp (2026-08-06 saha geri bildirimi: "eski tip,
+          sürekli okuyor ve okuduğunu göremiyorsun"):
+          • trigger="tap" → kamera KENDİLİĞİNDEN okumaz. Sevk edilecek toplar üst
+            üste duruyor; gezdirirken kadraja giren KOMŞU top da sevk listesine
+            giriyordu. Sorun "yanlış okuma" değil "istenmeden okuma"dır ve onay
+            sorarak değil taramayı kapatarak çözülür.
+          • footer → son okutulanlar şeridi: ne eklendiği, ne mükerrer olduğu ve
+            ret sebebi tarayıcıdan ÇIKMADAN görünür; yanlış top yerinde silinir.
+          • flash → kadrajın ortasında bildirim (gözün baktığı yer).
+          • captureHaptic={false} → kabul/mükerrer/ret sinyalini `signalScan`
+            veriyor; yakalama haptiği üstüne binerse ikisi ayırt edilemez. */}
       <BarcodeScannerModal
         visible={rollScannerOpen}
         onDismiss={() => setRollScannerOpen(false)}
         continuous
+        trigger="tap"
+        captureHaptic={false}
         onScan={(data) => void addBarcodeFromString(data)}
         title="Top Barkodunu Okut"
+        flash={scanFb.flash}
+        footer={
+          <ScannerRollStrip
+            rolls={stripRolls}
+            totalQty={scannedRollsTotal}
+            onRemove={handleRemoveRollByBarcode}
+            rejects={scanFb.rejects}
+            onDismissReject={scanFb.dismissReject}
+            duplicateBarcode={scanFb.duplicateBarcode}
+          />
+        }
       />
 
       {/* Item mismatch onay modal'ı — WO ürünü ile rulo ürünü uyuşmuyor.

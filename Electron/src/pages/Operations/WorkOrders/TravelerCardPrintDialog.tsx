@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Inbox, Printer, RefreshCw } from "lucide-react";
+import { Inbox, Printer, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,16 @@ interface Props {
  * `version++`. Bu yüzden önizlemedeki "v" numarası kartın DB'deki mevcut sürümü
  * değil, **bu baskının alacağı** sürümdür; ikisini karıştırıp ekranda ayrı bir
  * "mevcut sürüm" göstergesi yazma.
+ *
+ * ⚠️ "GÜNCEL DEĞİL" BANDI KALDIRILDI (2026-08-06, kullanıcı kararı). `contentDirty`
+ * *sahada malla gezen kâğıdın* eskidiğini söylüyordu, ekrandaki belgenin değil — ama
+ * operatör uyarıyı bastığı belgenin yanında görüp "ekrandaki eski" diye okuyordu ve
+ * içerik canlı çözüldüğünden bu okuma HER ZAMAN yanlıştı. İşaret ayrıca canlı bir iş
+ * emrinde sürekli yanıyordu (parti doğumu / fason sevki / WO düzenlemesi işaretler,
+ * yalnız baskı olayı temizler) → gürültü sinyali yuttu. Backend tarafı DURUYOR
+ * (kolon + `print-event` temizliği + audit `wasDirty`); yalnız gösterim kalktı.
+ * Geri getirmek istenirse çözüm bu bandı geri koymak DEĞİL, işareti gerçek
+ * karşılaştırmaya bağlamaktır (`planKey` + basılan parti parmak izi).
  */
 export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props) {
   const cardQuery = useQuery({
@@ -73,9 +84,19 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
    * Yazdır → baskı diyaloğu → BAŞARILIYSA "basıldı" bildir.
    *
    * Bildirim baskının KENDİSİNDEN ayrı bir çağrıdır, çünkü backend GET /html'de
-   * bayrağı temizleyemez (o uç önizlemeyi de besler). Bildirim hata verirse
-   * SESSİZ geçilir: kâğıt çıktı, operatörün işi bitti — rozetin bir süre daha
-   * durması, baskıyı hata toast'ıyla kesmekten iyidir.
+   * bayrağı temizleyemez (o uç önizlemeyi de besler). Baskı TAMAMEN istemci
+   * tarafındadır (`printHtmlString` → izole iframe → yazıcı): bildirim düşse de
+   * kâğıt çıkmıştır.
+   *
+   * ⚠️ HATA MESAJI SONUCU SÖYLER, HTTP'yi DEĞİL (2026-08-06 saha bildirimi:
+   * "kart çıkıyor ama sunucu hatası yazıyor"). Eskiden bu dal sessizdi ama
+   * SESSİZLİK GERÇEKLEŞMİYORDU: genel interceptor 5xx'te "Sunucu hatası",
+   * sunucu kapalıyken "Sunucuya ulaşılamıyor" basıyor, catch ise ondan SONRA
+   * çalışıyordu. Elinde kâğıt tutan operatör bunu "baskı başarısız" diye okuyup
+   * tekrar bastırıyordu. Artık istek `suppressErrorToast` taşıyor (bkz. service.ts)
+   * ve mesajı burası basıyor. Sessiz geçmek de doğru DEĞİL: bildirim düştüğünde
+   * kâğıda basılan versiyon numarası DB'ye yazılmaz (otomatik revizyon), yani
+   * kayıt ile kâğıt ayrışır — bunu söylemeyen bir arayüz yanlış güven verir.
    */
   const handlePrint = async () => {
     if (!html || !activeCard) return;
@@ -88,7 +109,11 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
         queryClient.invalidateQueries({ queryKey: ["work-order", workOrder?.id] }),
       ]);
     } catch {
-      /* yukarıdaki gerekçe — baskı akışını düşürme */
+      toast.warning("Kart yazdırıldı — baskı kaydı sunucuya işlenemedi.", {
+        description:
+          "Kâğıt geçerlidir; tekrar bastırmanız gerekmez. Kartın baskı tarihi ve versiyonu güncellenmedi.",
+        duration: 8000,
+      });
     }
   };
 
@@ -104,20 +129,6 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
             hâlinden üretilir; plan değiştiyse kart yeni versiyona geçer.
           </DialogDescription>
         </DialogHeader>
-
-        {activeCard?.contentDirty && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              <strong>Sahadaki basılı kopya güncel değil.</strong> Kart basıldıktan
-              sonra parti, fason sevki veya iş emri içeriği değişti — eldeki kâğıtta
-              eksik/yanlış bilgi olabilir. Aşağıdaki önizleme iş emrinin{" "}
-              <em>şu anki hâlidir</em>: yazdırın ve sahadaki eski kâğıtla değiştirin.
-              İçerik değiştiyse kart, yazdırdığınızda üstünde yazan versiyona revize
-              edilir.
-            </span>
-          </div>
-        )}
 
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
           {cardQuery.isLoading ? (

@@ -44,6 +44,7 @@ export function KursunDagitimPage() {
   const data = d.query.data?.data;
   const flagEnabled = data?.flagEnabled ?? false;
   const machines = useMemo(() => data?.machines ?? [], [data]);
+  const unassignedClosures = data?.unassignedClosures;
 
   // Sürükleme İYİMSER güncellenir → iki liste de yerel state'te tutulur ve her
   // sunucu yanıtında tazelenir. Doğrudan `query.data`'dan okumak, sürükleme ile
@@ -139,6 +140,21 @@ export function KursunDagitimPage() {
       />
 
       <PageBody className="p-4">
+        {/*
+          DAĞITILMADAN KAPANAN İŞLER (2026-08-06). Dağıtım artık işin ön koşulu
+          değil — unutulduğunda Tambur okutması kurşun adımını kendisi kapatıyor.
+          Ama o iş makine bazlı hacim raporunda ATIFSIZ kalır; bant bu kaybı
+          görünür tutar. Hata değil BİLGİ; sayaç 0 ise hiç çizilmez.
+        */}
+        {unassignedClosures && unassignedClosures.stepCount > 0 && (
+          <div className="border-warning/40 bg-warning/10 text-warning-foreground mb-3 rounded-md border px-3 py-2 text-xs">
+            Son {unassignedClosures.days} günde{" "}
+            <strong className="tabular-nums">{unassignedClosures.stepCount}</strong> iş (
+            <span className="tabular-nums">{unassignedClosures.rollCount}</span> top){" "}
+            <strong>dağıtılmadan</strong> Tambur'da kapandı — bu işler makine bazlı
+            hacim raporunda görünmez.
+          </div>
+        )}
         {d.query.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (

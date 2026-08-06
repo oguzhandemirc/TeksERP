@@ -17,9 +17,12 @@ import type { BalanceGroup, BalanceSpecRow, WoTarget } from "./types";
 const QUERY_KEY = "product-balance";
 
 // Kumaş → backend (sorguları daraltır). Renk/Durum → client-side (anlık).
+// Kumaş + renk ÇOKLU. Durum TEKİL kalır: Açık / Karşılanıyor birbirinin
+// tümleyeni (ikisini seçmek "filtre yok" demek) ve Ham açığı onlarla kesişir —
+// çoklu seçim burada kullanıcıya anlamsız kombinasyon vaat ederdi.
 const FILTERS: FilterDef[] = [
-  { kind: "lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
-  { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
+  { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
+  { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
     kind: "select",
     key: "status",
@@ -35,8 +38,13 @@ const FILTERS: FilterDef[] = [
 export function ProductBalancePage() {
   const [searchParams] = useSearchParams();
   // itemId server-side (queryKey + ?itemId=...); diğerleri client-side filtre.
+  // Kumaş ve renk ÇOKLU (`filter[x]=a,b`): itemId CSV olarak backend'e AYNEN
+  // gider (`getBalance` → `readIdCondition` → `in`), renk burada listede süzülür.
   const itemId = searchParams.get("filter[itemId]") ?? undefined;
-  const colorId = searchParams.get("filter[colorId]") ?? undefined;
+  const colorIds = useMemo(() => {
+    const csv = searchParams.get("filter[colorId]");
+    return csv ? csv.split(",").filter(Boolean) : [];
+  }, [searchParams]);
   const status = searchParams.get("filter[status]") ?? undefined;
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -54,7 +62,8 @@ export function ProductBalancePage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLocaleLowerCase("tr");
     return groups.filter((g) => {
-      if (colorId && g.colorId !== colorId) return false;
+      // Çoklu renk = VEYA. Boş seçim (hiç renk yok) filtre uygulamaz.
+      if (colorIds.length > 0 && !(g.colorId && colorIds.includes(g.colorId))) return false;
       if (status === "OPEN" && !(g.uretilecek > 0)) return false;
       if (status === "COVERED" && g.uretilecek > 0) return false;
       if (status === "MATERIAL_SHORT" && !(g.malzemeAcigi > 0)) return false;
@@ -74,7 +83,7 @@ export function ProductBalancePage() {
         )
       );
     });
-  }, [groups, colorId, status, search]);
+  }, [groups, colorIds, status, search]);
 
   // Perf: ProductBalanceRow React.memo'lu — aramaya yazarken filtre dışı kalmayan
   // satırlar re-render olmasın diye handler'lar kararlı referans (useCallback).

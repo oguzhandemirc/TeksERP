@@ -62,6 +62,7 @@ import {
   buildTurkishSearch,
   buildWhereClause,
   parseQueryParams,
+  readIdCondition,
 } from "../utils/query-parser";
 import { Request } from "express";
 
@@ -239,18 +240,22 @@ export class OrderService extends BaseService {
    * where'ine AND'liyoruz. itemId+colorId birden verilirse AYNI satır eşleşmeli
    * (ürün X + renk Y olan kalem). `woState` = "İş Emri" rollup filtresi (CSV,
    * çoklu seçim OR'lanır) — DB'de hesaplanır, sayfadaki veriyle sınırlı değildir.
+   *
+   * itemId/colorId de ÇOKLU seçilebilir (`readIdCondition` → `{ in: [...] }`):
+   * kendi içinde OR, birbirleriyle AND — "kırmızı VEYA mavi olan patos kalemi".
+   * Eski `typeof === "string"` okuması CSV'yi ham geçirirdi; ikisi de uuid
+   * kolonu olduğu için sonuç boş liste değil P2007 → HTTP 400 *"Geçersiz veri
+   * formatı"* olurdu (arıza modları: query-parser `readIdCondition` notu).
    */
   protected extraWhere(req: Request): Record<string, unknown> | undefined {
     const { filters } = parseQueryParams(req);
     const conds: Record<string, unknown>[] = [];
 
     const lineCond: Record<string, unknown> = {};
-    if (typeof filters.itemId === "string" && filters.itemId) {
-      lineCond.itemId = filters.itemId;
-    }
-    if (typeof filters.colorId === "string" && filters.colorId) {
-      lineCond.colorId = filters.colorId;
-    }
+    const itemCond = readIdCondition(filters.itemId);
+    if (itemCond) lineCond.itemId = itemCond;
+    const colorCond = readIdCondition(filters.colorId);
+    if (colorCond) lineCond.colorId = colorCond;
     if (Object.keys(lineCond).length > 0) conds.push({ lines: { some: lineCond } });
 
     const woCond = buildWoStateWhere(filters.woState);

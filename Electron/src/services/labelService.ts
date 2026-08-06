@@ -175,10 +175,23 @@ export const labelService = {
       })
       .then((r) => r.data),
 
-  /** Çuval etiketi baskı izi (LABEL_PRINT_EVENT) — yalnız gerçek baskıdan sonra. */
+  /** Çuval etiketi baskı izi (LABEL_PRINT_EVENT) — yalnız gerçek baskıdan sonra.
+   *
+   *  ⚠️ `suppressErrorToast`: çağıranlar bu isteği BEST-EFFORT olarak yutar
+   *  (`.catch(() => {})`) ve hemen ardından yeşil "etiketi basıldı" toast'ı basar —
+   *  ama genel interceptor 5xx'te "Sunucu hatası", sunucu kapalıyken "Sunucuya
+   *  ulaşılamıyor" basıp bunu ÖNCE gösteriyordu: aynı baskı için biri kırmızı biri
+   *  yeşil, çelişen iki bildirim. Etiket zaten çıkmıştır; iz düşerse `labelDirty`
+   *  temizlenmez ve bayat-etiket işareti KENDİ BAŞINA görünür kalır (sessizlik
+   *  burada meşru — bilgi kaybolmuyor, işaret duruyor). Refakat kartındaki
+   *  emsalden farkı budur; orada kayıp görünür değil, o yüzden mesaj basılır. */
   recordSackPrintEvent: (sackId: string): Promise<ApiResponse<{ sackId: string }>> =>
     apiClient
-      .post<ApiResponse<{ sackId: string }>>(`/api/labels/sacks/${sackId}/print-event`, {})
+      .post<ApiResponse<{ sackId: string }>>(
+        `/api/labels/sacks/${sackId}/print-event`,
+        {},
+        { suppressErrorToast: true },
+      )
       .then((r) => r.data),
 
   /** Toplu native (PPLA) tek-job — N farklı top tek seri/COM gönderiminde (diyalogsuz). */

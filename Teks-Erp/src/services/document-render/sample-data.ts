@@ -57,7 +57,11 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     driverName: "Ali Demir",
     plateNumber: "16 XYZ 789",
     notes: "Acele — bugün dönüş bekleniyor",
-    workOrder: { id: "wo1", workOrderNumber: "IE1207260001", type: "STOCK_PRODUCTION" },
+    // ⚠️ `width` ZORUNLU: belgedeki tek EN değerinin kaynağı iş emridir. Örnek
+    // veride eksik kalırsa Belge Şablonları'nın canlı önizlemesi EN'i BOŞ gösterir
+    // ama gerçek baskı dolu çıkar — "önizleme = gerçek baskı" sözleşmesi tam da
+    // ayarı yapan kişinin gözü önünde bozulur.
+    workOrder: { id: "wo1", workOrderNumber: "IE1207260001", type: "STOCK_PRODUCTION", width: 150 },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     requestedColor: "Bej",
     targetProperties: ["Yanmazlık Apresi", "Su İtici"],

@@ -20,8 +20,11 @@ const STATUS_FILTER: FilterDef = {
   ],
 };
 
+// ÇOKLU: birden fazla kartela firmasının sevk/kabullerini tek listede karşılaştır.
+// Durum filtresi TEKİL kalır — active/open/received/cancelled/all birbirini
+// DIŞLAYAN kapsam anahtarlarıdır (backend if/else zinciri), OR semantiği yok.
 const FIRM_FILTER: FilterDef = {
-  kind: "lookup",
+  kind: "multi-lookup",
   key: "subcontractorId",
   label: "Firma",
   service: subcontractorService,

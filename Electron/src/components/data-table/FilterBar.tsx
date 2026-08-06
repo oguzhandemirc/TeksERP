@@ -48,6 +48,7 @@ function toLocalYmd(iso: string): string {
  *
  * Filtre türleri:
  *  - `select`: sabit seçenek listesi (status, type vb.)
+ *  - `multi-select`: çoklu sabit seçenek (popover + checkbox) — virgülle ayrılmış
  *  - `lookup`: master data dropdown (customer, item — `CrudService.getAll`)
  *  - `multi-lookup`: çoklu master data (popover + checkbox) — virgülle ayrılmış
  *  - `dependent-lookup`: üst filtreye bağlı çoklu lookup (örn. müşteri → şube);
@@ -55,6 +56,18 @@ function toLocalYmd(iso: string): string {
  *    değişince çocuk seçim temizlenir
  *  - `numberRange`: iki sayısal input (min-max). URL'e `<key>Min`, `<key>Max`
  *  - `dateRange`: preset (Son 7g/30g/90g/Tümü) — `dateField` zorunlu
+ *
+ * ⚠️ ÇOKLU SEÇİM = `filter[key]=a,b` (CSV). Bir filtreyi `multi-*`'a çevirmeden
+ * önce o alanı okuyan BACKEND yolunun CSV'yi `in`'e çevirdiğinden emin ol.
+ * Jenerik yol (`buildWhereClause`) çevirir; filtreyi ELLE okuyan servisler
+ * (inventory `buildRollWhere`, order `extraWhere`, kartela, production-balance)
+ * `utils/query-parser.readIdCondition`'dan geçmek ZORUNDA — geçmiyorsa uuid
+ * kolonlarında HTTP 500, ön-süzgeçli alanlarda ise filtre SESSİZCE düşer ve
+ * liste filtresizmiş gibi döner. Bekçi: `Teks-Erp/scripts/test_filter_multi_select.ts`.
+ *
+ * `dependent-lookup` üst filtresi ÇOKLU olabilir: ham CSV `fetchOptions`'a
+ * aynen geçer ve `/api/customer-branches` gibi BaseService uçları onu `in`'e
+ * çevirir. Üst küme değişince çocuk seçim temizlenir (bayat şube kalmasın).
  *
  * `defaultDateRangeDays` set edilirse URL'de tarih yokken otomatik uygular —
  * operasyon sayfaları için "son N gün" performans varsayılanı.

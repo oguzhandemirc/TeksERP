@@ -59,10 +59,12 @@ const FILTERS: FilterDef[] = [
       { value: "COMPLETED", label: "Üretildi" },
     ],
   },
-  { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
+  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
   {
-    // Şube SEÇİLEN MÜŞTERİYE bağlı (dependent-lookup): müşteri seçilmeden pasif,
-    // seçilince yalnız o müşterinin şubeleri. Backend filter[branchId] (scalar) otomatik.
+    // Şube SEÇİLEN MÜŞTERİ(LER)E bağlı (dependent-lookup): müşteri seçilmeden
+    // pasif, seçilince yalnız o müşterilerin şubeleri. Müşteri ÇOKLU olabilir —
+    // ham CSV `/api/customer-branches`e aynen geçer, BaseService onu `in` yapar.
+    // Backend filter[branchId] (scalar) otomatik.
     kind: "dependent-lookup",
     key: "branchId",
     label: "Şube",
@@ -85,8 +87,11 @@ const FILTERS: FilterDef[] = [
       return b.city ? `${b.name} (${b.city})` : b.name;
     },
   },
-  { kind: "lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
-  { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
+  // Kumaş/renk kalem-içi filtredir (`OrderService.extraWhere` → `lines.some`).
+  // Çoklu seçimde de TEK `some` bloğu kalır: kumaş ∈ seçilenler VE renk ∈
+  // seçilenler AYNI kalemde eşleşmeli ("kırmızı VEYA mavi patos kalemi").
+  { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
+  { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
     kind: "dateRange",
     label: "Tarih",

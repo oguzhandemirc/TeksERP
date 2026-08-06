@@ -56,10 +56,10 @@ export interface FasonFieldDef {
 /**
  * Alan kataloğu. Sıra panelde göründüğü sıradır.
  *
- * ⚠️ `gridMetre` ve `gridCm` BİLEREK AYRI satırlardır — istek tam olarak buydu.
- * Taban CSS'te ikisi de `.grid th, .grid td` kuralından besleniyor; ayrı ayrı
- * ayarlanabilmeleri için seçiciler `tbody` üzerinden özgülleştirildi (başlık
- * satırı `gridHead` ile ayrı yönetilir).
+ * ⚠️ `gridMetre` gövde hücresidir, `gridHead` başlık satırı — BİLEREK AYRI
+ * satırlardır. Taban CSS'te ikisi de `.grid th, .grid td` kuralından besleniyor;
+ * ayrı ayrı ayarlanabilmeleri için gövde seçicisi `tbody` üzerinden
+ * özgülleştirildi. (Üçüncü kardeş `gridCm` 2026-08-06'da düştü — aşağıya bak.)
  */
 export const FASON_FIELDS: FasonFieldDef[] = [
   // ── başlık bandı ───────────────────────────────────────────────────────────
@@ -80,7 +80,10 @@ export const FASON_FIELDS: FasonFieldDef[] = [
   { key: "gridHead", label: "Grid başlıkları (Top / Metre / Cm)", group: "grid", selector: ".grid thead th", base: (d) => d.gridCell, weight: 700 },
   { key: "gridTop", label: "Grid — top sıra no", group: "grid", selector: ".grid tbody .c-top", base: (d) => d.gridCell, weight: 700 },
   { key: "gridMetre", label: "Grid — METRE değeri", group: "grid", selector: ".grid tbody .c-met", base: (d) => d.gridCell, weight: 400 },
-  { key: "gridCm", label: "Grid — EN (cm) değeri", group: "grid", selector: ".grid tbody .c-cm", base: (d) => d.gridCell, weight: 400 },
+  // ⚠️ `gridCm` 2026-08-06'da KALDIRILDI: grid'de top başına EN sütunu artık yok
+  // (belgede tek EN var, iş emrinden gelir). Katalogda bırakmak, panelde hiçbir
+  // şeyi değiştirmeyen bir punto kutusu çizerdi — bu dosyanın "ölü toggle" yasağı.
+  // Eski kayıtlardaki `fields.gridCm` sessizce atlanır (fasonFieldCss kuralı).
 
   // ── alt toplam tablosu ─────────────────────────────────────────────────────
   { key: "totalsHead", label: "Alt tablo başlıkları (CİNSİ / EN / TOP …)", group: "totals", selector: ".totals thead th", base: (d) => d.totalsHead, weight: 700 },

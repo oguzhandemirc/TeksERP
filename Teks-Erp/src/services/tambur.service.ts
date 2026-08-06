@@ -400,6 +400,41 @@ export class TamburService {
   }
 
   /**
+   * `assertWoAtStepKind(TAMBUR)` + mal kurşunda bekliyorsa SOMUT SEBEP.
+   *
+   * Ham 400 *"Tabletinizi yanlış istasyonda okutmuş olabilirsiniz"* diyor; mal
+   * kurşun adımında beklerken operatör TAM DOĞRU istasyonda duruyor ve bu cümle
+   * onu yanlış yere bakmaya gönderiyor (saha bulgusu 2026-08-06). Sebep kuralı
+   * `kursun-bypass.service`'te yaşar — burada yalnız mesaja iliştirilir.
+   *
+   * Zenginleştirme SESSİZ başarısız olur: sebep sorgusu düşerse operatör en
+   * azından eski (doğru ama eksik) mesajı görür — baskın hatayı maskelemeyiz.
+   */
+  private async enrichTamburScanError(
+    err: unknown,
+    workOrderId: string,
+  ): Promise<unknown> {
+    if (!(err instanceof AppError) || err.statusCode !== 400) return err;
+    const reason = await this.bypassService
+      .explainTamburScanBlock(workOrderId)
+      .catch(() => null);
+    if (!reason) return err;
+    return AppError.badRequest(
+      `Bu iş emrinin "Tambur" adımında şu an açık top yok. ${reason}`,
+    );
+  }
+
+  private async assertAtTamburWithReason(
+    workOrderId: string,
+  ): Promise<{ stepId: string; openRollCount: number }> {
+    try {
+      return await assertWoAtStepKind(workOrderId, StationKind.TAMBUR);
+    } catch (err) {
+      throw await this.enrichTamburScanError(err, workOrderId);
+    }
+  }
+
+  /**
    * Refakat kartı barkoduyla TAMBUR adımını çöz ve o adımda şu an bekleyen
    * rolleri (stok kodu, lot/varyant kodu, en, hata özeti ile birlikte) döndür.
    *
@@ -425,10 +460,7 @@ export class TamburService {
 
     // Multi-batch destekli doğrulama. Eğer WO'nun rulları şu an Tambur'da
     // değilse net mesaj döner ("şu an Boyahane'de" gibi).
-    const { stepId } = await assertWoAtStepKind(
-      card.workOrderId,
-      StationKind.TAMBUR,
-    );
+    const { stepId } = await this.assertAtTamburWithReason(card.workOrderId);
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
@@ -3062,6 +3094,10 @@ export class TamburService {
     let stepId: string;
     let emptyStep = false;
     try {
+      // ⚠️ Burada ZENGİNLEŞTİRİLMEMİŞ assert kullanılır: `bypassPending` dolu
+      // olduğunda bu hata zaten YUTULUYOR ve sebep sorgusu (rota + üç iz
+      // sorgusu) boşa koşardı — üstelik bypass rejiminin EN SIK yolunda.
+      // Zenginleştirme yalnız gerçekten fırlatılacak dalda yapılır (aşağıda).
       ({ stepId } = await assertWoAtStepKind(card.workOrderId, StationKind.TAMBUR));
     } catch (err) {
       // Bekleyen dağıtım YOKSA **ve** saha düzeltmesi yetkisi YOKSA davranış birebir
@@ -3076,7 +3112,9 @@ export class TamburService {
       // yok" bandını gösterip yalnız saha düzeltmesini sunar. Yetkisiz operatörde
       // davranış DEĞİŞMEZ — boş kart kafa karıştırır, hata doğru cevaptır.
       if (!(err instanceof AppError)) throw err;
-      if (!bypassPending && !opts?.allowEmptyStep) throw err;
+      if (!bypassPending && !opts?.allowEmptyStep) {
+        throw await this.enrichTamburScanError(err, card.workOrderId);
+      }
       if (!bypassPending) emptyStep = true;
       // Rotanın ilk Tambur adımı (assertWoAtStepKind ile aynı seçim kuralı).
       const tamburStep = await prisma.workOrderStep.findFirst({

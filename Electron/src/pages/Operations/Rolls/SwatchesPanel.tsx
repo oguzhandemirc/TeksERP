@@ -15,9 +15,12 @@ import { ReduceKartelaStockDialog } from "./ReduceKartelaStockDialog";
 
 const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
 
+// ÇOKLU: kartela stoğu ürün+renk kırılımında sayılır; birkaç kumaşı yan yana
+// görmek tam da bu ekranın sorusu. Backend `kartela.getStock` CSV'yi `in`'e
+// çevirir (`readIdCondition`) — çevirmeseydi groupBy where'i uuid cast'inde patlardı.
 const FILTERS: FilterDef[] = [
-  { kind: "lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
-  { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
+  { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
+  { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
 ];
 
 function groupKey(g: KartelaStockGroup): string {

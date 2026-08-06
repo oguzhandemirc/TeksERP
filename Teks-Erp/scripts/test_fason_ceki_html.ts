@@ -10,6 +10,7 @@ import path from "path";
 import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.html";
 import { FASON_FIELDS } from "../src/services/document-render/fason-ceki.fields";
 import { sanitizeDocumentsConfig } from "../src/services/system-setting.service";
+import { SAMPLE_PRINTED_DOCS } from "../src/services/document-render/sample-data";
 
 let pass = 0;
 let fail = 0;
@@ -61,7 +62,9 @@ function makeSnap(over: {
       driverName: null,
       plateNumber: null,
       notes: null,
-      workOrder: { id: "wo1", batchNumber: "P-260619-001", type: "STOCK_PRODUCTION" },
+      // ⚠️ `width` = belgedeki TEK EN'in kaynağı (2026-08-06). Topların `width`i
+      // payload'da DURUR ama artık hiçbir yerde BASILMAZ.
+      workOrder: { id: "wo1", batchNumber: "P-260619-001", type: "STOCK_PRODUCTION", width: 150 },
       subcontractor: { id: "s1", name: "Boyer Boyacılık", code: "BOYER" },
       requestedColor: "BEYAZ",
       instruction: null,
@@ -99,8 +102,11 @@ function testBasic(): void {
   check("İrsaliye No = dispatchNo", html.includes("SD2606000013"));
   check("Tarih DD.MM.YYYY", html.includes("19.06.2026"), "fmtDate");
   check("grid başlıkları Top/Metre/Cm", html.includes(">Top<") && html.includes(">Metre<") && html.includes(">Cm<"));
+  // ⚠️ Cm sütunu ELLE DOLDURULAN kutudur: başlık basılır, hücreler HER ZAMAN boş.
+  check("grid Cm hücreleri BOŞ (top başına değer basılmaz)",
+    html.includes('<td class="c-cm"></td>') && !/<td class="c-cm">[^<]/.test(html));
   check("metreler 115/100/83", html.includes(">115<") && html.includes(">100<") && html.includes(">83<"));
-  check("en (cm) 150", html.includes(">150<"));
+  check("EN tek değer, iş emrinden (150 cm)", html.includes(">150 cm<"));
   check("toplam METRE 298", html.includes(">298<"), "115+100+83");
   check("CİNSİ ürün adı PATOS", html.includes("PATOS"));
   check("istenen renk (hedef) BEYAZ", html.includes("BEYAZ"));
@@ -141,11 +147,15 @@ function testMultiPage(): void {
 function testFormatting(): void {
   console.log("\n── 4) Formatlama kenar durumları ──");
   const html = renderFasonCekiHtml(
-    makeSnap({ rolls: [roll(1, 100.5, 148), roll(2, 90, null)] }),
+    makeSnap({
+      rolls: [roll(1, 100.5, 148), roll(2, 90, null)],
+      // EN artık iş emrinden gelir → yuvarlama da onun üstünde ölçülür.
+      doc: { workOrder: { id: "wo1", type: "STOCK_PRODUCTION", width: 147.6 } },
+    }),
   );
   check("ondalık 100.5 korunur", html.includes(">100.5<"));
   check("tam sayı 90 ondalıksız", html.includes(">90<") && !html.includes(">90.0<"));
-  check("yuvarlanan en 148", html.includes(">148<"));
+  check("yuvarlanan en 148 (147.6 → 148)", html.includes(">148 cm<"));
   const badDate = renderFasonCekiHtml(makeSnap({ doc: { dispatchedAt: "gecersiz" } }));
   check("geçersiz tarih → boş (çökmez)", typeof badDate === "string" && badDate.length > 100);
 }
@@ -356,11 +366,13 @@ function testFieldStyles(): void {
   check("gridMetre kuralı basılır", metre.includes(".sheet .grid tbody .c-met {"));
   check("gridMetre puntosu uygulanır", rule(metre, ".sheet .grid tbody .c-met").includes("font-size: 16px"));
   check("gridMetre kalınlığı uygulanır", rule(metre, ".sheet .grid tbody .c-met").includes("font-weight: 800"));
-  check("gridMetre CM'ye DOKUNMAZ", !metre.includes(".sheet .grid tbody .c-cm {"));
+  check("gridMetre TOP'a DOKUNMAZ", !metre.includes(".sheet .grid tbody .c-top {"));
 
+  // ⚠️ `gridCm` alanı KALDIRILDI (grid'de EN sütunu yok). Eski kayıtlardaki
+  // override sessizce atlanmalı — baskıyı düşürmemeli, CSS de üretmemeli.
   const cm = renderFasonCekiHtml(makeSnap({ docConfigOverride: { fields: { gridCm: { size: 7 } } } }));
-  check("gridCm ayrı ayarlanır", rule(cm, ".sheet .grid tbody .c-cm").includes("font-size: 7px"));
-  check("gridCm METRE'ye DOKUNMAZ", !cm.includes(".sheet .grid tbody .c-met {"));
+  check("eski gridCm ayarı sessizce yok sayılır", !cm.includes(".sheet .grid tbody .c-cm"));
+  check("eski gridCm ayarı baskıyı düşürmez", cm.includes("KUMAŞ İRSALİYESİ"));
 
   // Özgüllük: alan kuralı `.sheet ` önekiyle taban kuralı EZER. Önek düşerse
   // `.grid tbody .c-met` yine kazanırdı ama `.company` gibi tek-sınıflı alanlar
@@ -421,10 +433,13 @@ function testNewSections(): void {
   );
   check("üst satırlar açılır", fab.includes('class="ln ln-fabric"'));
   // ETİKETSİZ TEK SATIR (kullanıcı kararı): "cins · en · renk", key-value YOK.
+  // ⚠️ EN artık TEK DEĞER ve İŞ EMRİNDEN gelir — topların enleri (150, 140)
+  // listelenmez (2026-08-06). Fixture'ın iş emri eni 150.
   check(
     "cins · en · renk TEK satırda, yan yana",
-    fab.includes("PATOS, MUS-001 &nbsp;·&nbsp; 150, 140 cm &nbsp;·&nbsp; LACİVERT, SİYAH"),
+    fab.includes("PATOS, MUS-001 &nbsp;·&nbsp; 150 cm &nbsp;·&nbsp; LACİVERT, SİYAH"),
   );
+  check("topların en LİSTESİ basılmaz", !fab.includes("150, 140"));
   check(
     "key-value etiketi YOK",
     !fab.includes("Cinsi:") && !fab.includes("En: <b>") && !fab.includes("Renk:"),
@@ -478,7 +493,7 @@ function testNewSections(): void {
     makeSnap({ rolls, docConfigOverride: { sections: { fabricHeader: true }, blankWidths: true } }),
   );
   check("blankWidths=true → EN basılmaz (belge kendiyle çelişmez)",
-    !fabBlank.includes("150, 140 cm") && fabBlank.includes("PATOS, MUS-001"));
+    !fabBlank.includes("150 cm") && fabBlank.includes("PATOS, MUS-001"));
 
   // (c) ÖLÜ TOGGLE'LAR artık gerçekten çalışıyor (2026-08-05'e kadar panel
   // kapatıyor, belge basmaya devam ediyordu).
@@ -506,6 +521,86 @@ function testNewSections(): void {
     makeSnap({ ...withBatch, docConfigOverride: { placements: { batchInfo: "right" } } }),
   );
   check("placements.batchInfo=right → varsayılanla BİREBİR aynı", rightExplicit === right);
+}
+
+// ── 14b) TEK EN DEĞERİ — kaynak İŞ EMRİ (2026-08-06) ───────────────────────
+//
+// Saha vakası: EN kolonu açıktı, "Sistemden al" modundaydı, panel doğruydu —
+// ama kâğıtta değer YOKTU. Sebep: belge topun eninden besleniyordu ve KK1'de en
+// opsiyonel olduğu için sahadaki topların çoğunda NULL (8 fason sevkinin 7'sinde
+// giden topların HEPSİ boştu), iş emrinin eni ise her zaman dolu.
+//
+// Kural: belgede TEK EN vardır ve `doc.workOrder.width`'ten gelir. Topun eni
+// artık hiçbir yüzeyi beslemez — bu bölüm o bağın geri kurulmasını engeller.
+function testSingleWidth(): void {
+  console.log("\n── 14b) Tek EN değeri (kaynak: iş emri) ──");
+
+  // (a) Toplar BOŞ olsa da iş emri eni basılır — düzeltmenin ta kendisi.
+  const noRollWidth = [roll(1, 58, null), roll(2, 300, null)];
+  const fixed = renderFasonCekiHtml(makeSnap({ rolls: noRollWidth }));
+  check("topların eni NULL iken bile EN basılır", fixed.includes(">150 cm<"));
+
+  // (a2) ⚠️ EN ÇİFTİ AYRI YÖNETİLİR: grid'in Cm KUTULARI (elle doldurulur) ile
+  // belgenin bildiği tek EN (alt tablo, iş emrinden) iki farklı ayardır.
+  // Toplarda dolu `width` olsa BİLE grid kutuları boş kalmalı.
+  const withRollWidth = renderFasonCekiHtml(makeSnap({ rolls: [roll(1, 58, 220), roll(2, 300, 220)] }));
+  // `[^<]` = hücrede kapanış etiketinden BAŞKA bir şey var mı. `\S` YANLIŞTI:
+  // boş hücrede bile bir sonraki karakter `<` olduğu için her zaman eşleşiyordu.
+  check("topun eni DOLU olsa da grid kutuları boş", !/<td class="c-cm">[^<]/.test(withRollWidth));
+  check("grid kutuları iş emri eniyle de DOLDURULMAZ", !withRollWidth.includes('<td class="c-cm">150'));
+
+  // (a3) Grid'in Cm sütunu KAPATILABİLİR — saha isteği ("40 satırlık listedeki
+  // en sütununu kapatabilelim"). Kapatmak alt tablodaki EN'i ETKİLEMEZ.
+  const gridOff = renderFasonCekiHtml(makeSnap({ docConfigOverride: { sections: { gridWidth: false } } }));
+  check("sections.gridWidth=false → Cm sütunu gider",
+    !gridOff.includes(">Cm<") && !gridOff.includes('class="c-cm"'));
+  check("Cm kapalıyken Top/Metre DURUR", gridOff.includes(">Top<") && gridOff.includes(">Metre<"));
+  check("Cm kapalıyken alt tablodaki EN DURUR", gridOff.includes(">150 cm<"));
+  // Kapalıyken METRE, Cm'in payını alır → tablo dar kalıp sola yaslanmaz.
+  check("Cm kapalıyken METRE genişler (14%)", rule(gridOff, ".grid .c-met").includes("width: 14%"));
+  check("Cm kapalıyken c-cm kuralı hiç basılmaz", !gridOff.includes(".c-cm"));
+
+  // (b) ⚠️ REGRESYON KAPISI: iş emrinin eni yoksa EN BOŞ kalır — topun eninden
+  // BESLENMEZ. Bu kontrol düşerse eski (yanlış) kaynak sessizce geri gelir.
+  const woNull = renderFasonCekiHtml(
+    makeSnap({ rolls: [roll(1, 58, 220), roll(2, 300, 220)], doc: { workOrder: { id: "wo1", type: "STOCK_PRODUCTION", width: null } } }),
+  );
+  check("iş emri eni yoksa EN BOŞ — topun eninden beslenmez",
+    !woNull.includes("220 cm") && !woNull.includes(">220<"));
+  check("iş emri eni yokken de grid kutuları çizilir (form alanı)",
+    woNull.includes('<td class="c-cm"></td>'));
+
+  // (c) Toplar FARKLI enlerde olsa da belge tek değeri (iş emrininkini) basar.
+  const mixed = renderFasonCekiHtml(makeSnap({ rolls: [roll(1, 58, 140), roll(2, 300, 160)] }));
+  check("karışık en'li sevkte de TEK değer basılır", mixed.includes(">150 cm<"));
+  check("karışık en'ler listelenmez", !mixed.includes("140") && !mixed.includes("160"));
+
+  // (d) ESKİ DONMUŞ BELGE — `workOrder.width` alanı YOK (2026-08-05 öncesi).
+  // EN boş kalır ve belge bugünküyle birebir aynı basılır; geriye dönük
+  // doldurma YAPILMAZ (`reissue` tazeler). Parti no eklenirken de aynı kural.
+  const legacy = renderFasonCekiHtml(
+    makeSnap({ doc: { workOrder: { id: "wo1", type: "STOCK_PRODUCTION" } } }),
+  );
+  check("eski snapshot (width alanı yok) → EN boş", !legacy.includes(" cm<"));
+  check("eski snapshot yine de basılır", legacy.includes("KUMAŞ İRSALİYESİ") && legacy.includes(">115<"));
+
+  // (e) "Elle yazılacak" modu değeri BİLSE DE bastırmaz.
+  const blank = renderFasonCekiHtml(makeSnap({ docConfigOverride: { blankWidths: true } }));
+  check("blankWidths=true → EN hücresi boş", !blank.includes("150 cm"));
+  check("blankWidths EN dışına DOKUNMAZ", blank.includes(">115<") && blank.includes(">298<"));
+
+  // (f) EN kolonu kapatılabilir olmayı sürdürür (alt tablo kolon ayarı).
+  const enOff = renderFasonCekiHtml(
+    makeSnap({ docConfigOverride: { columns: { totals: { hidden: ["en"] } } } }),
+  );
+  check("columns.totals.hidden=[en] → kolon gider", !enOff.includes(">EN<") && !enOff.includes("150 cm"));
+  check("EN kapalıyken diğer kolonlar DURUR", enOff.includes(">TOP<") && enOff.includes(">METRE<"));
+
+  // (g) ⚠️ ÖNİZLEME = GERÇEK BASKI. Belge Şablonları'nın canlı önizlemesi örnek
+  // veriden basılır; oraya `workOrder.width` konmazsa ayarı yapan kişi EN'i BOŞ
+  // görür ama sahadaki baskı dolu çıkar. Sözleşme burada mekanik kilitlenir.
+  const sample = SAMPLE_PRINTED_DOCS.SUBCONTRACTOR_DISPATCH as { workOrder?: { width?: number | null } };
+  check("örnek veri iş emri eni taşır", typeof sample.workOrder?.width === "number");
 }
 
 // ── 15) GRID GRUP SAYISI ───────────────────────────────────────────────────
@@ -589,6 +684,20 @@ function testElectronMirror(): void {
   check("panelde eksik alan YOK (backend'de var, ayarlanamaz)", eksik.length === 0, eksik.join(", "));
   check("panelde fazla alan YOK (ayarlanır ama baskıyı etkilemez)", fazla.length === 0, fazla.join(", "));
   check("sıra da aynı (panel = belge okuma sırası)", uiKeys.join(",") === beKeys.join(","));
+
+  // ⚠️ ETİKETLER de aynalanır. Anahtar/sıra kontrolü bu kaymayı GÖRMEZ ve kayma
+  // sessizdir: kullanıcı panelde yazanı okur, belgede başkasını görür. Gerçek
+  // vaka (2026-08-06): grid'in Cm sütunu kaldırılıp geri konurken paneldeki
+  // "Grid başlıkları (Top / Metre / Cm)" etiketi "(Top / Metre)"de kaldı —
+  // sütun basılıyor ama panel yokmuş gibi anlatıyordu.
+  const labelOf = (block: string) =>
+    new Map(
+      [...block.matchAll(/\{\s*key:\s*"([^"]+)",\s*label:\s*("[^"]*"|'[^']*')/g)]
+        .map((m) => [m[1], m[2]!.slice(1, -1)] as const),
+    );
+  const uiLabels = labelOf(block[1]!);
+  const labelDrift = FASON_FIELDS.filter((f) => uiLabels.get(f.key) !== f.label).map((f) => f.key);
+  check("etiketler de birebir", labelDrift.length === 0, labelDrift.join(", "));
 
   // Grup adları da aynalanır — bilinmeyen grup paneldeki satırı GÖRÜNMEZ yapar
   // (DocumentFieldStyleControls yalnız tanıdığı grupları çizer).
@@ -692,6 +801,7 @@ function main(): void {
   testA5Density();
   testFieldStyles();
   testNewSections();
+  testSingleWidth();
   testGridGroups();
   testElectronMirror();
   testPreviewSchemaParity();

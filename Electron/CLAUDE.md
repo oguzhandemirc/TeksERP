@@ -198,6 +198,41 @@ config'lerde `hidden` içinde olmadığı için **varsayılan GÖRÜNÜR** doğa
   renderer'da TEK yerde uygulanır (efektif kolon ayarı kurulurken). Diyalogdaki checkbox
   `DocDef.supportsRowNotes` ile gösterilir. Referans testler: `Teks-Erp/scripts/test_sack_note_document.ts`.
 
+## Toplu Belge (çok belgeyi TEK baskı işine birleştirme) — 2026-08-06
+
+İş emri listesinde satır seçimi → **"Belgeleri Çıkar"** → tür seç → **Yazdır** (tek
+baskı işi) veya **PDF Kaydet** (klasöre, her belge ayrı dosya). Liste TEK KAYNAKTAN
+gelir (`GET /work-orders/:id/documents`) — ekran hangi belgelerin olduğunu VARSAYMAZ,
+tür kutuları gerçekten bulunanlardan doğar. `src/lib/print-merge.ts` +
+`pages/Operations/WorkOrders/bulkDocs.ts`. Saf Electron: backend/migration/izin YOK.
+
+- ⚠️ **`getBulkRollLabelsHtml` PATERNİ (ilk belgenin `<head>`i + gövdeler) BURADA
+  YANLIŞTIR.** O patern etiketlerde doğru çünkü tüm etiketlerin CSS'i birebir aynı;
+  belgelerde ise sınıf adları GENERİK (`.sheet`, `.company`, `.cell`, `table`) ve
+  aynı ad farklı değerler taşır → biri diğerini ezer, resmi belge sessizce yanlış
+  görünümde basılır. Bu yüzden her belge kendi **gölge köküne** konur (declarative
+  shadow DOM, `<template shadowrootmode="open">` — script GEREKMEZ; baskı iframe'i
+  `allow-scripts` taşımıyor). **iframe DEĞİL:** iframe içeriği sayfalara BÖLÜNMEZ.
+- ⚠️ **`@page` gövde CSS'inde KALAMAZ** (belge geneline uygulanır, son yazan kazanır
+  → A5 kart A4'e basılır). Adlandırılmış sayfaya taşınır: `@page wdoc3 {…}` +
+  sarmalayıcıda `page: wdoc3`. İkisi de Electron 42 motorunda ölçüldü.
+- ⚠️ **CSS YORUMLARI ÖNCE SİLİNİR.** Tarayıcılar düz metne bakıyor; refakat kartının
+  CSS'inde "…@page (yalnız baskı)…" diye bir AÇIKLAMA yorumu var ve yorum
+  silinmeden tarandığında blok sayacı komşu `@media screen` kuralını yutuyordu →
+  kart A5'te 1 yerine 2 sayfa basıyordu (hata yok, log yok). Bekçi:
+  `print-merge.test.ts` "YORUM içindeki @page tuzağına düşmez".
+- ⚠️ **`position: fixed` → `absolute`**: sabit filigran (İPTAL) gölge kökten taşar ve
+  işteki YABANCI belgelerin sayfalarına da basardı. Bedeli bilinçli: filigran her
+  sayfada değil, belgenin içinde bir kez.
+- **TEK belge verilirse HTML AYNEN döner** — bugünkü tekil baskı çıktısı bayt-bayt
+  korunur. **PDF yolu birleştirmeyi HİÇ kullanmaz** (`pdf:saveBatch` her belgeyi
+  kendi gizli penceresinde render eder) → arşiv çıktısı tekil baskıyla birebir.
+- **`print-event` YALNIZ kâğıt baskısında** bildirilir (refakat kartı sürümü orada
+  ilerler); PDF'e yazmak "bastım" değildir — her arşiv indirmesinde sürüm
+  ilerletmek numarayı anlamsızlaştırır.
+- **Atlanan hiçbir şey sessiz değil:** belgesi olmayan iş emri, listesi alınamayan
+  iş emri, HTML'i alınamayan belge ve birleştirilemeyen belge ayrı ayrı raporlanır.
+
 ## Dosya Boyutu Kuralı
 
 - **Tek dosya 300 satırı geçmesin.** Geçiyorsa parçala.

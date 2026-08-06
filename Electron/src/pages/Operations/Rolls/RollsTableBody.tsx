@@ -31,14 +31,18 @@ const FILTERS: FilterDef[] = [
       { value: "open_fabric", label: "Açık Kumaş" },
     ],
   },
+  // Kumaş/renk ÇOKLU (VEYA): "patos VEYA saten", "mavi VEYA kırmızı". Backend
+  // `buildRollWhere` CSV'yi `readIdCondition` ile `in`'e çevirir; iki filtre
+  // birlikte verilirse AND'lenir (kesişim) — `/rolls/stats` de aynı where'i
+  // paylaştığı için sayaçlar listeyle tutarlı kalır.
   {
-    kind: "lookup",
+    kind: "multi-lookup",
     key: "itemId",
     label: "Kumaş",
     service: itemService,
     queryKey: "items",
   },
-  { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
+  { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
     kind: "multi-lookup",
     key: "propertyIds",
@@ -51,7 +55,7 @@ const FILTERS: FilterDef[] = [
   // KAT — backend değeri KANONİKLEŞTİRİLMİŞ tutuyor ("4-KAT"); serbest metin
   // göndermek sessizce 0 sonuç verirdi, o yüzden seçenekli filtre.
   {
-    kind: "select",
+    kind: "multi-select",
     key: "foldType",
     label: "Kat",
     options: [
@@ -65,7 +69,9 @@ const FILTERS: FilterDef[] = [
   // kaynağındaki sorun (etiket kopması, kayıt atlanması) çözülemez.
   // Backend filtresi HAZIRDI: buildWhereClause düz Roll alanlarını geçiriyor.
   {
-    kind: "select",
+    // ÇOKLU: "elle eklenen toplar" iki kaynağa birden dağılıyor (Tambur manuel +
+    // Electron manuel) — tek seçimle sayılamıyordu.
+    kind: "multi-select",
     key: "entrySource",
     label: "Giriş Kaynağı",
     options: [
@@ -83,8 +89,12 @@ const FILTERS: FilterDef[] = [
   //
   // Tür değil KİMLİK filtreleniyor: tür iki ayrı boyahaneyi tek seçenekte
   // birleştirirdi, oysa operatör belirli bir makineyi soruyor.
+  //
+  // ÇOKLU: "iki boyahanede ne var" tek sorguda. ⚠️ Backend bu alanı UUID
+  // regex'inden geçiriyor; süzgeç LİSTENİN HER ELEMANINA uygulanmazsa filtre
+  // sessizce düşer ve liste FİLTRESİZ döner (bekçi ölçümü: 2 yerine 6 satır).
   {
-    kind: "lookup",
+    kind: "multi-lookup",
     key: "currentStationId",
     label: "İstasyon",
     service: stationService,
@@ -109,16 +119,18 @@ const SHIPMENT_SCOPE_FILTER: FilterDef = {
 // Yalnız "Fasonda" sekmesi: aktif fason sevkine göre firma + işlem (kategori)
 // daraltması. Özet şeridi chip/kartları da AYNI filter anahtarlarına yazar —
 // FilterBar dropdown'ı ile chip seçimi tek URL state'inde buluşur.
+// Firma/işlem ÇOKLU: her biri kendi içinde VEYA, ikisi arasında AND — yani
+// "seçili firmalardan birindeki, seçili işlemlerden birini gören toplar".
 const FASON_FILTERS: FilterDef[] = [
   {
-    kind: "lookup",
+    kind: "multi-lookup",
     key: "subcontractorId",
     label: "Fason Firması",
     service: subcontractorService,
     queryKey: "subcontractors",
   },
   {
-    kind: "lookup",
+    kind: "multi-lookup",
     key: "subcontractorCategoryId",
     label: "İşlem",
     service: subcontractorCategoryService,

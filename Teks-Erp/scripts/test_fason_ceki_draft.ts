@@ -97,6 +97,13 @@ async function main(): Promise<void> {
   check("Toplam metre (550) çekide", html.includes("550"), "550 m");
   check("Fason talimatı (adım notu) çekide", html.includes("yıkama yapma"));
   check("İş emri parti kodu çekide", html.includes(wo.workOrderNumber));
+  // ⚠️ EN = İŞ EMRİNİN eni, TEK değer (2026-08-06). Gerçek DB üzerinden kanıt:
+  // payload iş emrinin enini taşıyor ve belge onu basıyor. Grid'de top başına
+  // Cm sütunu ARTIK YOK — o sütun boş basılıp sahayı yanıltıyordu.
+  check(`EN iş emrinden basılır (${WIDTH} cm)`, html.includes(`>${WIDTH} cm<`));
+  // Grid'in Cm sütunu ELLE DOLDURULAN kutudur: başlık var, hücreler boş.
+  // Toplar (WIDTH=250) dolu enle yaratıldığı hâlde kutulara değer YAZILMAZ.
+  check("grid Cm kutuları boş basılır", !/<td class="c-cm">[^<]/.test(html));
 
   // Durum DEĞİŞMEDİ — taslak hiçbir kayda dokunmaz
   const after = await prisma.roll.findMany({ where: { id: { in: [A, B] } }, select: { id: true, status: true, currentStepId: true } });

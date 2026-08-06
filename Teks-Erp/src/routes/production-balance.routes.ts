@@ -30,7 +30,7 @@ const router = Router();
  *       - in: query
  *         name: itemId
  *         schema: { type: string }
- *         description: Verilirse denge yalnız bu ürün için hesaplanır (arz/talep/üretim daraltılır).
+ *         description: "Verilirse denge yalnız bu ürün(ler) için hesaplanır. Çoklu seçim virgülle: `itemId=a,b`."
  *     responses:
  *       200: { description: "Spec başına denge listesi" }
  */
@@ -41,6 +41,8 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // itemId plain String FK — eşleşmeyen değer boş sonuç verir (Prisma hatası yok).
+      // CSV (`a,b`) da bir string'dir ve buradan AYNEN geçer; listeye çevirmeyi
+      // servis yapar (`readIdCondition`) — burada bölersek iki yerde iki sözleşme olur.
       const itemId =
         typeof req.query.itemId === "string" && req.query.itemId
           ? req.query.itemId

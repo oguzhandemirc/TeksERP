@@ -48,7 +48,14 @@ import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
-import { CANCEL_REASON_PRESETS, CANCEL_MIN_REASON } from '../../../constants/cancelReasons';
+import {
+  DUPLICATE_CHOICE_SAME,
+  DUPLICATE_CHOICE_NEW,
+  type DuplicateEntryChoice,
+} from '../../../constants/duplicateEntryChoice';
+import RollCancelModal, {
+  rollCancelStyles,
+} from '../../../components/RollCancelModal';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -861,6 +868,33 @@ export default function KK1Screen() {
   const cancelPreview: RollCancelPreview | null =
     cancelPreviewQuery.data?.data ?? null;
 
+  /**
+   * İPTALİ GERİ AL — tek dokunuşla iptalin karşılığı (iptal toast'ındaki buton).
+   * Kapsam backend'de dar (hareketsiz/partisiz/çuvalsız/kesilmemiş top); az önce
+   * girilmiş bir KK1 topu tam olarak o kapsamdadır. Reddedilirse SEBEBİ gösterilir:
+   * sessiz başarısızlık operatöre "geri aldım" sanısı verirdi.
+   */
+  const undoScrap = useCallback(
+    (rollId: string) => {
+      rollService
+        .restoreCancel(rollId)
+        .then(() => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+            () => {},
+          );
+          Toast.show({ type: 'success', text1: 'İptal geri alındı' });
+          qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
+        })
+        .catch((err: Error) => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
+            () => {},
+          );
+          Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: err.message });
+        });
+    },
+    [qc],
+  );
+
   // Yanlış giriş / hurda — top CANCELLED'a çekilir, open movement'lar kapatılır.
   // İstasyonda aktif top için backend confirmActive ister (önizlemeden gelir).
   //
@@ -871,9 +905,9 @@ export default function KK1Screen() {
   const scrapMutation = useMutation<
     Awaited<ReturnType<typeof rollService.scrap>>,
     Error,
-    // `reason` doluysa etiketi basılmış topun iptalidir → backend ayrıca
-    // confirmLabelPrinted bekler; ikisi birlikte gider (bkz. offline/mutations).
-    { id: string; confirmActive: boolean; reason?: string },
+    // ⚠️ `confirmLabelPrinted` AÇIKÇA taşınır — sebep 2026-08-06'da opsiyonel
+    // oldu, "sebep varsa onay da vardır" çıkarımı artık geçersiz.
+    { id: string; confirmActive: boolean; confirmLabelPrinted?: boolean; reason?: string },
     { snapshots: [readonly unknown[], unknown][] }
   >({
     mutationKey: STATION_MUT.KK1_SCRAP,
@@ -887,12 +921,29 @@ export default function KK1Screen() {
         }
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({
-        type: 'success',
-        text1: 'Top iptal edildi',
-        text2: onlineManager.isOnline() ? undefined : 'Çevrimdışı — sync bekliyor',
-      });
+      // ⚠️ ÇEVRİMDIŞI ONAYI BURADA, ÇEVRİMİÇİ ONAYI `onSuccess`'te. Sunucu
+      // varken "iptal edildi" demek, sunucu daha bakmadan verilmiş bir sözdür
+      // (KK1 giriş toast'ında öğrenilen ders). Offline'da sunucu YOK: söz
+      // verilebilecek tek şey kuyruğa alındığıdır ve onu şimdi söylemek gerekir.
+      if (!onlineManager.isOnline()) {
+        Toast.show({
+          type: 'success',
+          text1: 'İptal sıraya alındı',
+          text2: 'Çevrimdışı — bağlanınca uygulanacak',
+        });
+      }
       return { snapshots };
+    },
+    // Tek dokunuşla iptalin emniyeti: sunucu onayladıktan sonra GERİ AL.
+    // (`restoreCancel` offline-aware DEĞİL; zaten yalnız online yolda basılır.)
+    onSuccess: (_res, vars) => {
+      Toast.show({
+        type: 'undoable',
+        text1: 'Top iptal edildi',
+        text2: vars.reason ?? 'Sebep: seçilmedi',
+        visibilityTime: 6000,
+        props: { actionLabel: 'GERİ AL', onAction: () => undoScrap(vars.id) },
+      });
     },
     onError: (err, _vars, context) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
@@ -948,11 +999,22 @@ export default function KK1Screen() {
       if (cancelPreview && !cancelPreview.canCancel) return;
       // İstasyonda aktif top için bilinçli onay bayrağı.
       const confirmActive = cancelPreview?.requiresConfirm ?? false;
-      scrapMutation.mutate({ id: scrapTarget.id, confirmActive, reason });
+      // "Kâğıdı söktüm" beyanı: modalın uyarıyı gösterme koşuluyla AYNI önizleme
+      // alanından türer. Offline'da önizleme yok → bayrak gitmez ve backend
+      // etiketli topu reddeder; bu fail-closed davranış BİLİNÇLİ (operatör o
+      // uyarıyı hiç görmemiştir).
+      const confirmLabelPrinted = cancelPreview?.labelPrinted ?? false;
+      scrapMutation.mutate({
+        id: scrapTarget.id,
+        confirmActive,
+        confirmLabelPrinted,
+        reason,
+      });
       setScrapTarget(null);
     },
     [scrapTarget, cancelPreview, scrapMutation],
   );
+
 
   // ── Actions ──
   // En'i tek tuşla temizle — operatör değiştirmek isterse defalarca silmesin.
@@ -1830,8 +1892,8 @@ export default function KK1Screen() {
         onResult={handlePrintResult}
       />
 
-      {/* ── Scrap onay modal'ı (kendi modalımız; native Alert'i değiştirdi) ── */}
-      <ScrapConfirmModal
+      {/* ── Scrap onay modal'ı (Depo "Stoktan Kaldır" ile ORTAK bileşen) ── */}
+      <RollCancelModal
         roll={scrapTarget}
         preview={cancelPreview}
         previewLoading={cancelPreviewQuery.isLoading}
@@ -2409,12 +2471,20 @@ const qmStyles = StyleSheet.create({
 //
 // Operatörün ekranda görmesi gereken şey hata metni değil, ARADIĞI TOPUN BARKODU.
 //
+// ── SADELEŞTİRME (2026-08-06) ───────────────────────────────────────────────
+// Başlık artık iki teşhis için AYRI cümle kurmuyor: sorulan karar tek ("elimdeki
+// top bu mu?") ve iki 409'un farkı tek satırlık alt metne indi. Eskiden 4 satırlık
+// açıklamanın SONUNDA duran soru, eldivenli operatör tarafından okunmuyordu.
+// Kimlik bloğu iptal modalıyla ORTAK (`idBox`) — aynı ekranda arka arkaya çıkan
+// iki onay yüzeyi barkodu aynı yerde ve aynı boyutta göstermeli.
+//
 // Kapatılamaz (dismissable={false}): iki çıkış da veri açısından güvenli ve
 // açıktır. Belirsiz bir "kapat" ya sonsuz 409 döngüsü (aynı istek tekrar gider)
 // ya da operatörün farkında olmadığı bir kopya üretirdi.
 //
-// Görsel dil `scrapStyles` ile paylaşılır — stil adları jeneriktir (sheet/title/
-// infoBox/actions) ve ikinci bir kopya blok bakımı zorlaştırırdı.
+// Görsel dil `rollCancelStyles` ile paylaşılır (bkz. `components/RollCancelModal`)
+// — stil adları jeneriktir (sheet/title/infoBox/actions) ve ikinci bir kopya blok
+// bakımı zorlaştırırdı.
 // =============================================================================
 interface EntryConflictModalProps {
   kind: 'TOKEN_COLLISION' | 'POSSIBLE_DUPLICATE';
@@ -2437,456 +2507,167 @@ function EntryConflictModal({
   const sheetWidth = Math.min(winW * 0.9, 460);
   const suspected = kind === 'POSSIBLE_DUPLICATE';
 
-  return (
-    <AppModal visible={visible} onDismiss={() => {}} dismissable={false}>
-      <View style={[scrapStyles.sheet, { width: sheetWidth }]}>
-        <View style={[scrapStyles.iconCircle, { backgroundColor: '#fffbeb' }]}>
-          <Icon source="content-duplicate" size={36} color={colors.warningDark} />
-        </View>
-        <Text variant="titleLarge" style={scrapStyles.title}>
-          {suspected ? 'AYNI TOP TEKRAR MI GİRİLDİ?' : 'BU TOP ZATEN KAYDEDİLMİŞ'}
-        </Text>
-
-        <View style={scrapStyles.infoBox}>
-          <View style={scrapStyles.infoRow}>
-            <Text style={scrapStyles.infoLabel}>Kayıtlı barkod</Text>
-            <Text style={scrapStyles.infoValue}>{barcode ?? '—'}</Text>
-          </View>
-        </View>
-
-        <Text style={scrapStyles.hint}>
-          {suspected
-            ? 'Az önce aynı kumaş, aynı metraj ve aynı en kaydedilmiş.\n\nElindeki top yukarıdaki barkodla AYNI mı, yoksa ikinci bir top mu?'
-            : 'Gönderilemedi sanılan kayıt aslında ulaşmış. Yeni top oluşturulmadı — kopya kayıt önlendi.\n\nElindeki top yukarıdaki barkodla AYNI mı, yoksa ikinci bir top mu?'}
-        </Text>
-
-        {/* RENK = SONUÇ. MAVİ: yalnız kâğıt basar, veriye dokunmaz.
-            AMBER: YENİ bir stok kaydı doğurur — geri alması zor, o yüzden
-            "devam" gibi nötr değil, dikkat rengi. İkisi de büyük ve dolgun:
-            eldivenli operatör metni okumasa da renkten ayırt edebilmeli. */}
-        <View style={scrapStyles.actions}>
-          <Button
-            mode="contained"
-            icon="printer"
-            buttonColor={colors.infoDark}
-            textColor="#fff"
-            onPress={onPrintExisting}
-            loading={printing}
-            disabled={printing}
-            style={scrapStyles.actionBtn}
-            contentStyle={scrapStyles.actionBtnContent}
-          >
-            AYNI TOP — Etiketini Bas
-          </Button>
-          <Button
-            mode="contained"
-            icon="plus-box"
-            buttonColor={colors.warningDark}
-            textColor="#fff"
-            onPress={onSaveAsNew}
-            disabled={printing}
-            style={scrapStyles.actionBtn}
-            contentStyle={scrapStyles.actionBtnContent}
-          >
-            AYRI TOP — Yine de Kaydet
-          </Button>
-        </View>
-      </View>
-    </AppModal>
-  );
-}
-
-interface ScrapConfirmModalProps {
-  roll: Roll | null;
-  /** Backend iptal önizlemesi (null = henüz gelmedi). */
-  preview: RollCancelPreview | null;
-  previewLoading: boolean;
-  previewError: Error | null;
-  /** Çevrimdışı → önizleme yok; iptal kuyruğa alınır, bağlanınca uygulanır. */
-  offline: boolean;
-  loading: boolean;
-  onDismiss: () => void;
-  /** Etiketli iptalde sebep taşınır; etiketsizde `undefined`. */
-  onConfirm: (reason?: string) => void;
-}
-
-/** "X iş emrinin Y adımında aktif" gibi okunur cümle. */
-function activeAtText(activeAt: RollCancelPreview['activeAt']): string {
-  if (!activeAt) return 'Bu top bir istasyonda/iş emrinde aktif.';
-  const wo = activeAt.batchNumber ? `"${activeAt.batchNumber}"` : 'bir';
-  const station = activeAt.stationName ?? 'bir istasyon';
-  return `Bu top ${wo} iş emrinin "${station}" adımında aktif.`;
-}
-
-function ScrapConfirmModal({
-  roll,
-  preview,
-  previewLoading,
-  previewError,
-  offline,
-  loading,
-  onDismiss,
-  onConfirm,
-}: ScrapConfirmModalProps) {
-  const { width: winW } = useWindowDimensions();
-  const sheetWidth = Math.min(winW * 0.9, 460);
-
-  // Önizleme henüz gelmedi → güvenli tarafta kal (onay butonu beklemede).
-  const blocked = !offline && !!preview && !preview.canCancel;
-  const needsConfirm = !!preview && preview.canCancel && preview.requiresConfirm;
-
-  // ── ÖLÜ ETİKET EKSENİ (2026-08-05) ────────────────────────────────────────
-  // `needsConfirm`'den AYRI soru: o "mal bir istasyonda mı" (sistem içi etki),
-  // bu "sahaya geçersiz bir kâğıt bırakıyor muyum" (sistem DIŞI etki). Bir top
-  // ikisini birden tetikleyebilir; ikisi de kendi uyarısını gösterir.
-  const labelPrinted = !offline && !!preview && preview.canCancel && preview.labelPrinted;
-  const [reason, setReason] = useState('');
-  const [otherOpen, setOtherOpen] = useState(false);
-  // Modal her açılışta temiz başlamalı — önceki topun sebebi yenisine sızmasın.
-  useEffect(() => {
-    if (roll) {
-      setReason('');
-      setOtherOpen(false);
-    }
-  }, [roll?.id]);
-  const reasonOk = reason.trim().length >= CANCEL_MIN_REASON;
-
-  // Hard-block iken hiç gönderme. Önizleme yüklenirken de butonu kilitle ki
-  // operatör requiresConfirm bilinmeden iptal etmesin. Offline'da önizleme yok →
-  // butonu kilitleme (kuyruğa alınır, backend replay'de güvenliği uygular).
-  // Etiketli topta sebep girilmeden buton açılmaz (backend zaten reddeder;
-  // burada kilitlemek operatörü boş bir 400'e yürütmemek içindir).
-  const confirmDisabled =
-    loading || (!offline && previewLoading) || blocked || (labelPrinted && !reasonOk);
-  // Onay rengi/etiketi duruma göre.
-  const accent = blocked
-    ? colors.danger
-    : needsConfirm || labelPrinted
-      ? colors.warningDark
-      : '#dc2626';
-
-  return (
-    <AppModal visible={!!roll} onDismiss={onDismiss} dismissable={!loading}>
-      <View style={[scrapStyles.sheet, { width: sheetWidth }]}>
-        <View
-          style={[
-            scrapStyles.iconCircle,
-            needsConfirm && { backgroundColor: '#fffbeb' },
-          ]}
-        >
-          <Icon
-            source={blocked ? 'cancel' : 'alert-circle-outline'}
-            size={36}
-            color={accent}
-          />
-        </View>
-        <Text variant="titleLarge" style={scrapStyles.title}>
-          {blocked ? 'Top iptal edilemez' : 'Topu iptal et?'}
-        </Text>
-
-        {roll && (
-          <View style={scrapStyles.infoBox}>
-            <View style={scrapStyles.infoRow}>
-              <Text style={scrapStyles.infoLabel}>Barkod</Text>
-              <Text style={scrapStyles.infoValue}>{roll.barcode ?? '—'}</Text>
-            </View>
-            <View style={scrapStyles.infoRow}>
-              <Text style={scrapStyles.infoLabel}>Ürün</Text>
-              <Text style={scrapStyles.infoValue} numberOfLines={2}>
-                {roll.item?.name ?? '—'}
-                {roll.color?.name ? ` · ${roll.color.name}` : ''}
-              </Text>
-            </View>
-            <View style={scrapStyles.infoRow}>
-              <Text style={scrapStyles.infoLabel}>Metraj</Text>
-              <Text style={scrapStyles.infoValue}>
-                {roll.initialQty} mt
-                {roll.width != null ? ` · ${roll.width} cm` : ''}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Önizleme durum bölümü */}
-        {offline ? (
-          <View style={scrapStyles.warnBox}>
-            <Icon source="wifi-off" size={18} color={colors.warningDark} />
-            <View style={{ flex: 1 }}>
-              <Text style={scrapStyles.warnText}>
-                Çevrimdışısın — durum önizlemesi yok.
-              </Text>
-              <Text style={scrapStyles.warnSub}>
-                İptal sıraya alınır, bağlanınca uygulanır. Top bu sırada bir
-                istasyonda aktifleştiyse sunucu reddedebilir.
-              </Text>
-            </View>
-          </View>
-        ) : previewLoading ? (
-          <View style={scrapStyles.previewLoadingRow}>
-            <ActivityIndicator size="small" color="#64748b" />
-            <Text style={scrapStyles.previewLoadingText}>
-              Durum kontrol ediliyor…
-            </Text>
-          </View>
-        ) : blocked ? (
-          <View style={scrapStyles.blockBox}>
-            <Icon source="information-outline" size={18} color={colors.danger} />
-            <Text style={scrapStyles.blockText}>{preview!.blockReason}</Text>
-          </View>
-        ) : needsConfirm ? (
-          <View style={scrapStyles.warnBox}>
-            <Icon source="alert" size={18} color={colors.warningDark} />
-            <View style={{ flex: 1 }}>
-              <Text style={scrapStyles.warnText}>
-                {activeAtText(preview!.activeAt)}
-              </Text>
-              <Text style={scrapStyles.warnSub}>
-                İptal edilirse bu adımdan düşülür ve adım durumu geri sarılır.
-                Yine de iptal etmek istiyor musun?
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <>
-            {previewError && (
-              <Text style={scrapStyles.previewErrText}>
-                Durum doğrulanamadı — yine de deneyebilirsin.
-              </Text>
-            )}
-            <Text style={scrapStyles.hint}>
-              Yanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece
-              kayıt geri alınır.
-            </Text>
-          </>
-        )}
-
-        {/* ── ÖLÜ ETİKET UYARISI + SEBEP ──────────────────────────────────────
-            Etiket basmak fiziksel dünyada geri alınamaz; kayıt geri alınabilir.
-            Bu kutu tam o farkı operatöre söyler: kâğıt topun üstünde KALACAK.
-            Sahada olan buydu — uyarı yoktu, kayıt öldü, kâğıt kaldı, aynı top
-            saatler sonra ikinci bir barkodla yeniden girildi. */}
-        {labelPrinted && (
-          <View style={scrapStyles.deadLabelBox}>
-            <View style={scrapStyles.deadLabelHead}>
-              <Icon source="label-off-outline" size={18} color={colors.warningDark} />
-              <Text style={scrapStyles.deadLabelTitle}>Bu topun etiketi basıldı</Text>
-            </View>
-            <Text style={scrapStyles.warnSub}>
-              Kâğıt büyük ihtimalle topun üstünde. İptal edersen orada GEÇERSİZ bir
-              etiket kalır — sonraki okutmada &quot;stokta değil&quot; der.
-              {'\n'}Önce etiketi toptan sök.
-            </Text>
-
-            <Text style={scrapStyles.reasonLabel}>İptal sebebi (zorunlu)</Text>
-            <View style={scrapStyles.reasonChips}>
-              {CANCEL_REASON_PRESETS.map((p) => {
-                const selected = reason === p && !otherOpen;
-                return (
-                  <TouchableRipple
-                    key={p}
-                    onPress={() => {
-                      setReason(p);
-                      setOtherOpen(false);
-                    }}
-                    style={[scrapStyles.reasonChip, selected && scrapStyles.reasonChipOn]}
-                    borderless
-                  >
-                    <Text
-                      style={[
-                        scrapStyles.reasonChipText,
-                        selected && scrapStyles.reasonChipTextOn,
-                      ]}
-                    >
-                      {p}
-                    </Text>
-                  </TouchableRipple>
-                );
-              })}
-              {/* Serbest yazım kaldırılmadı, "Diğer"in altına alındı: hazır
-                  seçenek sürtünmeyi kaldırır ve veriyi sayılabilir yapar, ama
-                  katalog dışı gerçek durumlar da olur. */}
-              <TouchableRipple
-                onPress={() => {
-                  setOtherOpen(true);
-                  setReason('');
-                }}
-                style={[scrapStyles.reasonChip, otherOpen && scrapStyles.reasonChipOn]}
-                borderless
-              >
-                <Text
-                  style={[scrapStyles.reasonChipText, otherOpen && scrapStyles.reasonChipTextOn]}
-                >
-                  Diğer…
+  /** İki seçenek de AYNI kalıptan çizilir — biri diğerinden sessizce ayrışmasın. */
+  const renderChoice = (
+    choice: DuplicateEntryChoice,
+    onPress: () => void,
+    busy: boolean,
+    dimmed: boolean,
+  ) => (
+    <TouchableRipple
+      onPress={busy || dimmed ? undefined : onPress}
+      style={[
+        conflictStyles.choice,
+        { backgroundColor: choice.color, borderColor: choice.borderColor },
+      ]}
+      borderless
+      accessibilityRole="button"
+      accessibilityState={{ disabled: busy || dimmed }}
+      accessibilityLabel={choice.a11y}
+    >
+      <View style={conflictStyles.choiceInner}>
+        {/* ROZET — dilden bağımsız ayırt edici ve kartın EN YÜKSEK kontrastlı
+            öğesi. Beyaz DOLGU + renkli içerik (12:1); saydam beyaz çip denendi
+            ve ölçüldü: kart zemininden 1.4:1 ile ayrışıyordu, yani parlak ışıkta
+            asıl buluş görünmez oluyordu. Baskı sürerken yerini göstergeye
+            bırakır — operatör "oldu mu" diye ikinci kez basmasın. */}
+        <View style={[conflictStyles.badge, { backgroundColor: choice.badgeBg }]}>
+          {busy ? (
+            <ActivityIndicator size="small" color={choice.badgeFg} />
+          ) : (
+            <>
+              {choice.badgeIcon ? (
+                <Icon source={choice.badgeIcon} size={26} color={choice.badgeFg} />
+              ) : (
+                <Text style={[conflictStyles.badgeText, { color: choice.badgeFg }]}>
+                  {choice.badgeText}
                 </Text>
-              </TouchableRipple>
-            </View>
-            {otherOpen && (
-              <PaperTextInput
-                mode="outlined"
-                dense
-                autoFocus
-                placeholder="Sebebi yaz (en az 3 karakter)"
-                value={reason}
-                onChangeText={setReason}
-                maxLength={500}
-                style={scrapStyles.reasonInput}
-              />
-            )}
-          </View>
-        )}
-
-        <View style={scrapStyles.actions}>
-          <Button
-            mode="outlined"
-            onPress={onDismiss}
-            disabled={loading}
-            style={scrapStyles.actionBtn}
-            contentStyle={scrapStyles.actionBtnContent}
-          >
-            {blocked ? 'Kapat' : 'Vazgeç'}
-          </Button>
-          {!blocked && (
-            <Button
-              mode="contained"
-              buttonColor={needsConfirm || labelPrinted ? colors.warningDark : '#dc2626'}
-              textColor="#fff"
-              icon="trash-can-outline"
-              onPress={() => onConfirm(labelPrinted ? reason.trim() : undefined)}
-              loading={loading}
-              disabled={confirmDisabled}
-              style={scrapStyles.actionBtn}
-              contentStyle={scrapStyles.actionBtnContent}
-            >
-              {labelPrinted
-                ? 'Etiketi Söktüm, İptal Et'
-                : needsConfirm
-                  ? 'Yine de İptal Et'
-                  : 'İptal Et'}
-            </Button>
+              )}
+              <Text style={[conflictStyles.badgeCaption, { color: choice.badgeFg }]}>
+                {choice.badgeCaption}
+              </Text>
+            </>
           )}
         </View>
+        <View style={conflictStyles.choiceText}>
+          {/* numberOfLines YOK: metin SARSIN. Bu ekranın bilinen hatası kesilen
+              etiketti; kart tam da onu yapısal olarak imkânsız kılmak için var. */}
+          <Text style={[conflictStyles.choiceLabel, { color: choice.textColor }]}>
+            {busy ? 'ETİKET BASILIYOR…' : choice.label}
+          </Text>
+          {/* Alt metin ana metinle AYNI renkte — hiyerarşi punto/ağırlıktan gelir.
+              Saydam metin ölçüldü: amber üstünde 4.51:1 (AA'yı 0.01 payla geçiyor)
+              ve parlamada 3.37'ye düşüyordu, hem de stok doğuran kartta. */}
+          <Text style={[conflictStyles.choiceSub, { color: choice.textColor }]}>
+            {busy ? 'Bekle, tekrar basma' : choice.sublabel}
+          </Text>
+        </View>
+      </View>
+      {/* SOLUKLAŞTIRMA DEĞİL PERDE, ve perde kartın KUTBUNU izler. `opacity`
+          tüm alt ağacı beyaza doğru kompoze eder: koyu karttaki beyaz metnin
+          kontrastı 5.0 → 2.3'e düşer, hem de tam operatörün ekrana kilitlendiği
+          anda (baskı sürerken). Koyu kartta siyah, açık kartta beyaz perde ters
+          yönde çalışır: kart söner, metin OKUNUR kalır. */}
+      {dimmed && (
+        <View
+          style={[conflictStyles.scrim, { backgroundColor: choice.scrim }]}
+          pointerEvents="none"
+        />
+      )}
+    </TouchableRipple>
+  );
+
+  return (
+    <AppModal visible={visible} onDismiss={() => {}} dismissable={false}>
+      <View style={[rollCancelStyles.sheet, { width: sheetWidth }]}>
+        {/* ⚠️ Başlık dairesi NÖTR GRİ — eskiden amberdi. Aşağıdaki iki karttan
+            biri amber ve anlamı kesin: "YENİ stok kaydı doğar". Başlıkta da amber
+            olsaydı renk o ekranda iki farklı şey söylerdi ve ayırt ediciliğini
+            kaybederdi. */}
+        <View style={[rollCancelStyles.iconCircle, { backgroundColor: '#f1f5f9' }]}>
+          <Icon source="content-duplicate" size={36} color={colors.textSecondary} />
+        </View>
+        {/* BAŞLIK = SORULAN SORU ve iki cevabı aşağıdaki iki kartta KELİMESİ
+            KELİMESİNE bulunur ("kayıtlı" A'nın alt satırında, "yeni" B'nin
+            başlığında) — okuması zor olan kişi eşleştirerek de seçebilsin.
+            ⚠️ Başlık BİR ŞEY İDDİA ETMEZ: "Bu top zaten kayıtlı" demek
+            POSSIBLE_DUPLICATE dalında YALAN olurdu (orada kayıt yazılmamıştır)
+            ve B'yi seçmesi gereken operatör ekranın en büyük yazısını yalanlamak
+            zorunda kalırdı — Türkçesi zayıf biri bunu yapmaz, otoriteye uyar.
+            İki 409'un teşhis farkı tek satırlık alt metne indi; eskiden 4 satırdı
+            ve sonundaki soru okunmadan kalıyordu. */}
+        <Text variant="titleLarge" style={rollCancelStyles.title}>
+          Bu top kayıtlı mı, yeni mi?
+        </Text>
+
+        <View style={rollCancelStyles.idBox}>
+          <Text style={rollCancelStyles.idBarcode} numberOfLines={1}>
+            {barcode ?? '—'}
+          </Text>
+          {/* Bu cümle İKİ 409'da da doğrudur: yazılmış olan, az önceki toptur.
+              "Bu top az önce kaydedildi" dalların birinde yalan olurdu. */}
+          <Text style={rollCancelStyles.idMeta}>Az önce birebir aynısı kaydedildi</Text>
+        </View>
+
+        {/* İKİ KART, ALT ALTA ve TAM GENİŞLİK. Yan yana düzende her kart ≈203dp
+            kalıyor ve Paper Button metni SARMAZ, KESER — aynı ekranda "Etiketi
+            Söktüm, İpta…" diye kesildi. Kart hem sonucu ikinci satırda anlatmaya
+            yer bırakır hem rakam çipine. Sıra 1 → 2: okuma sırası sayı sırasıdır.
+            Metin/renk/ikon/rakam seçimleri `constants/duplicateEntryChoice`de ve
+            bekçisi var (`duplicateEntryChoice.test.ts`) — buraya ham dize yazma. */}
+        <View style={conflictStyles.choices}>
+          {renderChoice(DUPLICATE_CHOICE_SAME, onPrintExisting, printing, false)}
+          {renderChoice(DUPLICATE_CHOICE_NEW, onSaveAsNew, false, printing)}
+        </View>
+
+        {/* Dipnot bir KURAL söyler, yönlendirme YAPMAZ.
+            ⚠️ Buraya "emin değilsen etiket bas, stok bozulmaz" gibi bir tavsiye
+            YAZMA. Yanlış vaattir: gerçekten iki top varsa (a) ikinci top kayda
+            hiç girmez — eksik stok, kopyanın aynadaki ikizi ve ondan kötüsü — ve
+            (b) basılan etiket ikinci topa yapışırsa sahada AYNI BARKODLU İKİ TOP
+            dolaşır, geri alması hayalet kayıttan zordur. İki seçeneğin de kendi
+            riski var; ekran taraf tutamaz. Söylenebilecek doğru şey, ayrımı
+            operatörün kendi eline bağlayan değişmez kuraldır. */}
+        <Text style={conflictStyles.footnote}>Her topun kendi barkodu olur.</Text>
       </View>
     </AppModal>
   );
 }
 
-const scrapStyles = StyleSheet.create({
-  sheet: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    alignItems: 'stretch',
-    gap: 12,
+const conflictStyles = StyleSheet.create({
+  // ⚠️ 24dp: güvenli seçenek ile stok doğuran seçenek arasındaki FİZİKSEL pay.
+  // 10dp ≈ 1.6mm idi ve eldivenli parmağın temas lekesi ~8-10mm — kartın alt
+  // kenarından kayan bir dokunuş doğrudan "+1 stok" üretirdi.
+  choices: { gap: 24 },
+  // minHeight (sabit height DEĞİL): alt satır telefonda ve büyük sistem yazı
+  // ölçeğinde iki satıra sarar; sabit yükseklik onu kırpardı — bu ekranın
+  // bilinen hatası tam olarak kırpılan metindi.
+  choice: {
+    borderRadius: 14,
+    // Kenarlık AÇIK kart için gerçek bir ihtiyaç: amber-500 beyaz sayfada kenarını
+    // kaybeder. Koyu kartta da simetriyi bozmasın diye ikisinde de var.
+    borderWidth: 2,
+    minHeight: 88,
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  iconCircle: {
-    alignSelf: 'center',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#fef2f2',
+  choiceInner: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
+  badge: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontWeight: '700', color: '#0f172a', textAlign: 'center' },
-  infoBox: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    padding: 12,
-    gap: 6,
-  },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  infoLabel: { width: 70, fontSize: 13, color: '#64748b', fontWeight: '600' },
-  infoValue: { flex: 1, fontSize: 14, color: '#0f172a', fontWeight: '600' },
-  hint: {
-    fontSize: 13,
-    color: '#64748b',
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  actionBtn: { flex: 1, borderRadius: 10 },
-  actionBtnContent: { height: 48 },
-  previewLoadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  previewLoadingText: { fontSize: 13, color: '#64748b' },
-  previewErrText: {
-    fontSize: 12,
-    color: colors.warningDark,
-    textAlign: 'center',
-  },
-  // Engelli (hard-block): kırmızı bilgi kutusu
-  blockBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#fef2f2',
-    borderRadius: 10,
-    padding: 12,
-  },
-  blockText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#991b1b',
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  // İstasyonda aktif uyarısı: kehribar kutu
-  warnBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#fffbeb',
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#fde68a',
-  },
-  warnText: {
-    fontSize: 14,
-    color: '#92400e',
-    fontWeight: '700',
-    lineHeight: 19,
-  },
-  warnSub: {
-    fontSize: 12.5,
-    color: '#b45309',
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  // ── Ölü etiket kutusu ──
-  deadLabelBox: {
-    backgroundColor: '#fffbeb',
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-  },
-  deadLabelHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  deadLabelTitle: { fontSize: 14, fontWeight: '800', color: '#92400e' },
-  reasonLabel: { fontSize: 12, fontWeight: '700', color: '#92400e', marginTop: 2 },
-  reasonChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  reasonChip: {
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-    backgroundColor: '#fff',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    // 40dp: modal içi ikincil seçim; ana aksiyonlar (Vazgeç/İptal Et) 56dp kalır.
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  reasonChipOn: { backgroundColor: colors.warningDark, borderColor: colors.warningDark },
-  reasonChipText: { fontSize: 12.5, color: '#92400e', fontWeight: '600' },
-  reasonChipTextOn: { color: '#fff' },
-  reasonInput: { backgroundColor: '#fff' },
+  badgeText: { fontSize: 24, fontWeight: '900', lineHeight: 27 },
+  badgeCaption: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.3 },
+  choiceText: { flex: 1, gap: 3 },
+  choiceLabel: { fontSize: 18, fontWeight: '800' },
+  choiceSub: { fontSize: 13.5, fontWeight: '600', lineHeight: 18 },
+  scrim: { ...StyleSheet.absoluteFillObject, borderRadius: 12 },
+  // #334155: ekranın en soluk metni değil (10.3:1). Eski ipucu satırı #64748b
+  // ile 4.76:1 idi — en zayıf kontrast, en karmaşık cümle, en kritik anda.
+  footnote: { fontSize: 13, fontWeight: '600', color: '#334155', textAlign: 'center' },
 });
 
 // ── Liste satırı: Roll + kim girdi + ne zaman ──

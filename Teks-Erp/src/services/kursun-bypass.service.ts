@@ -45,6 +45,7 @@ import { randomUUID } from "crypto";
 import {
   KursunBypassCompletionSource,
   Prisma,
+  type PrismaClient,
   RollOperationType,
   StationKind,
   StepStatus,
@@ -85,6 +86,23 @@ import {
  * ki mevcut çağrı yerleri (test scripti dahil) kırılmasın.
  */
 export { KURSUN_BYPASS_MARKER_PREFIX };
+
+/**
+ * DAĞITILMADAN yapılan kapanışın marker ön eki (2026-08-06).
+ *
+ * ⚠️ `KURSUN_BYPASS_MARKER_PREFIX` ile BAŞLAMAK ZORUNDA. Ön eki bağımsız bir
+ * değer yapmak sessiz bir regresyon üretirdi: `hasBypassClosureOnProcessQcTx`
+ * (inventory) ve `loadBypassEligibilitySignals.closedNonBypass` bu satırları
+ * `startsWith(KURSUN_BYPASS_MARKER_PREFIX)` ile tanıyor — eşleşme kopsaydı
+ * çok-partili işin İKİNCİ turu "bu adımda bypass dışı kapanmış hareket var"
+ * diye uygunluğunu kaybeder ve iş yeniden çıkmaza düşerdi.
+ *
+ * Tam değer: `KURSUN_BYPASS_FINISHED:UNASSIGNED:<uuid>`.
+ */
+export const KURSUN_BYPASS_UNASSIGNED_MARKER_PREFIX = `${KURSUN_BYPASS_MARKER_PREFIX}:UNASSIGNED`;
+
+/** Dağıtılmadan kapanış sayacının penceresi (gün). */
+const UNASSIGNED_CLOSURE_WINDOW_DAYS = 7;
 
 /** Emniyet tavanı — listQueue emsali. Dolarsa liste kırpılmış olabilir, uyarı loglanır. */
 const LIST_CAP = 500;
@@ -196,6 +214,26 @@ export interface KursunDistributionAssignedRow extends KursunDistributionRowBase
   staleReason: string | null;
 }
 
+/**
+ * "Son N günde kaç iş DAĞITILMADAN Tambur'da kapandı" sayacı.
+ *
+ * Dağıtım artık işin ön koşulu değil (2026-08-06); ama disiplinin sessizce
+ * erimesi de doğru değil — dağıtılmadan kapanan her iş makine bazlı hacim
+ * raporunda ATIFSIZ kalır. Bu sayaç planlamacıya o kaybı görünür kılar.
+ *
+ * ⚠️ KAYNAK `SystemLog` DEĞİL, movement marker'ıdır: `archive-scheduler` audit
+ * satırlarını 6 ayda bir arşive TAŞIR (kök CLAUDE.md, `Roll.entryReason`
+ * emsali) ve sayaç sessizce sıfırlanırdı.
+ */
+export interface KursunUnassignedClosureStats {
+  /** Pencere (gün) — sabit; istemci metni bundan kurar. */
+  days: number;
+  /** Dağıtılmadan kapanmış DISTINCT kurşun adımı sayısı. */
+  stepCount: number;
+  /** O adımlarda kapanan toplam top (hareket) adedi. */
+  rollCount: number;
+}
+
 export interface KursunDistributionPayload {
   /** `production.kursunBypassEnabled` — false ise YENİ atama yapılamaz (mevcutlar biter). */
   flagEnabled: boolean;
@@ -203,6 +241,8 @@ export interface KursunDistributionPayload {
   machines: KursunBypassMachineOption[];
   waiting: KursunDistributionWaitingRow[];
   assigned: KursunDistributionAssignedRow[];
+  /** Son 7 günde dağıtılmadan kapanan işler — bilgi bandı kaynağı. */
+  unassignedClosures: KursunUnassignedClosureStats;
 }
 
 /**
@@ -277,16 +317,43 @@ export interface KursunBypassTamburRoll {
   colorName: string | null;
 }
 
+/**
+ * Tambur okutmasında kapanacak kurşun işinin KAYNAĞI.
+ *
+ *  • `ASSIGNED`   — planlamacı işi bir kurşun makinesine dağıttı; kapanış o
+ *    kararın uygulanmasıdır ve makine atfı BİLİNİR.
+ *  • `UNASSIGNED` — dağıtım hiç yapılmadı (personel unuttu) ama adım bypass
+ *    rejimine uygun. Kapanış yine yapılır; makine atfı BİLİNMEZ ve uydurulmaz.
+ *    Sektör karşılığı milestone confirmation: kilometre taşı (Tambur) onayı
+ *    öncesindeki onaylanmamış operasyonu kapatır.
+ */
+export type KursunBypassTamburSource = "ASSIGNED" | "UNASSIGNED";
+
 export interface KursunBypassTamburContext {
-  assignmentId: string;
+  /**
+   * ⚠️ `UNASSIGNED` kaynakta NULL — ortada atama satırı YOKTUR. Bu alanı
+   * "kapanış yapılabilir mi" sorusunun cevabı sanma; o soruyu `source` yanıtlar.
+   */
+  assignmentId: string | null;
+  /** Bu bekleyenin kaynağı — istemciler bilgi metnini buna göre dallandırır. */
+  source: KursunBypassTamburSource;
   stepId: string;
-  /** İşin ATANDIĞI kurşun makinesi — Tambur onay ekranı bunu gösterir. */
-  machineId: string;
-  machineName: string;
-  /** Makinenin istasyonu — bağlam bilgisi (tek PROCESS_QC istasyonu). */
+  /**
+   * İşin ATANDIĞI kurşun makinesi — Tambur onay ekranı bunu gösterir.
+   * `UNASSIGNED` kaynakta NULL: işi hangi makinenin yaptığı bilinmiyor ve
+   * varsayılan bir makineye yazmak makine bazlı hacim raporunu sessizce
+   * yanlışlardı (ürün kararı 2026-08-06).
+   */
+  machineId: string | null;
+  machineName: string | null;
+  /**
+   * Yetenek kopyalamasının okunacağı istasyon. `ASSIGNED`'da makinenin
+   * istasyonu, `UNASSIGNED`'da adımın KENDİ istasyonu — fabrikada PROCESS_QC
+   * türünde tek istasyon olduğu için ikisi aynı satıra işaret eder.
+   */
   stationId: string;
   stationName: string;
-  assignedAt: Date;
+  assignedAt: Date | null;
   assignedByName: string | null;
   notes: string | null;
   rollCount: number;
@@ -581,9 +648,41 @@ export class KursunBypassService {
     // adımda (`WorkOrderStep`) — tek `orderBy` ile ifade edilemez.
     assigned.sort(sortByPlanOrder);
 
+    const unassignedClosures = await this.loadUnassignedClosureStats();
+
     return {
       success: true,
-      data: { flagEnabled, machines, waiting, assigned },
+      data: { flagEnabled, machines, waiting, assigned, unassignedClosures },
+    };
+  }
+
+  /**
+   * "Son N günde kaç iş DAĞITILMADAN kapandı" — planlamacı bandının kaynağı.
+   *
+   * Dağıtım artık işin ön koşulu değil, ama dağıtılmadan kapanan her iş makine
+   * bazlı hacim raporunda ATIFSIZ kalıyor. Sayaç o kaybı görünür tutar; sahada
+   * sürekli oluyorsa cevap sayacı gizlemek değil, dağıtım adımını sorgulamaktır.
+   *
+   * ⚠️ KAYNAK movement marker'ıdır, `SystemLog` DEĞİL: `archive-scheduler` audit
+   * satırlarını 6 ayda bir arşive TAŞIR ve sayaç sessizce sıfırlanırdı.
+   * `exitedAt` aralığı mevcut `roll_movements_exitedAt_idx`'i kullanır; satır
+   * yüklenmez, yalnız `distinct` adım kimlikleri okunur.
+   */
+  private async loadUnassignedClosureStats(): Promise<KursunUnassignedClosureStats> {
+    const since = new Date(
+      Date.now() - UNASSIGNED_CLOSURE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const rows = await prisma.rollMovement.findMany({
+      where: {
+        exitedAt: { gte: since },
+        notes: { startsWith: KURSUN_BYPASS_UNASSIGNED_MARKER_PREFIX },
+      },
+      select: { workOrderStepId: true },
+    });
+    return {
+      days: UNASSIGNED_CLOSURE_WINDOW_DAYS,
+      stepCount: new Set(rows.map((r) => r.workOrderStepId)).size,
+      rollCount: rows.length,
     };
   }
 
@@ -1336,31 +1435,124 @@ export class KursunBypassService {
   // TAMBUR YOLU
   // ---------------------------------------------------------------------------
   /**
-   * Tambur ekranının okuma ucu — `tambur.service` bunu çağırır (ters yönde import
-   * YOK). null = bu iş emrinde bekleyen kurşun dağıtımı yok (normal akış).
+   * DAĞITILMADAN KAPANIŞIN TEK KAPISI — "bu iş emrinin kurşun adımı, atama
+   * olmadan Tambur okutmasıyla kapatılabilir mi?"
+   *
+   * Hem okuma yolu (`findPendingForTambur` → sanal bekleyen) hem yazma yolu
+   * (`completeFromTambur` → tx İÇİNDE taze doğrulama) buradan geçer. İki yerde
+   * kopyalansaydı ekran "kapanabilir" derken uç reddeder (ya da tersi) duruma
+   * düşerdi — sahada operatörü çıkmaza sokan sınıf.
+   *
+   * ÜÇ KOŞUL ve üçü de mevcut TEK KAYNAKLARDAN okunur, yeni kural yazılmaz:
+   *   1. Bayrak AÇIK (`readKursunBypassEnabled`) — kapalıyken kurşun tableti
+   *      normal dijital akışta çalışır ve onu sessizce atlamak kalite verisini
+   *      hiç girilmemiş bırakırdı.
+   *   2. Adım bypass'a UYGUN (`resolveBypassBlockReason` — KK2 kaydı yok, hata
+   *      kaydı yok, ölçümsüz top yok, bypass dışı kapanmış hareket yok). Bu,
+   *      kurşun tabletini kilitleyen yüklemin AYNISI: kilit ile kapanış aynı
+   *      kaynaktan beslendiği için "tablet yazamıyor ama Tambur da kapatamıyor"
+   *      çıkmazı yapısal olarak imkânsız.
+   *   3. Sonraki non-SKIPPED adım gerçekten TAMBUR — `completeFromTambur`'un
+   *      mevcut guard'ıyla birebir aynı koşul (kurşun SON adımsa kapanış
+   *      "İşi Bitir"e aittir).
+   *
+   * @returns `ok` → kapatılabilir. `reason: null` → soru bu iş emri için
+   *   anlamsız (bayrak kapalı / böyle bir adım yok / zaten dağıtılmış) ve
+   *   çağıran sessizce çekilir. `reason` dolu → adım VAR ama kapatılamaz; yazma
+   *   yolu bunu 409 olarak gösterir (sessiz ret, yanlış işlem yaptırmaktan
+   *   sonra en kötüsüdür).
    */
-  async findPendingForTambur(
+  private async resolveUnassignedTamburClosure(
+    db: PrismaClient | Prisma.TransactionClient,
     workOrderId: string,
-  ): Promise<KursunBypassTamburContext | null> {
-    const a = await prisma.kursunBypassAssignment.findFirst({
-      where: { workOrderId, completedAt: null, cancelledAt: null },
+  ): Promise<
+    | {
+        ok: true;
+        stepId: string;
+        stationId: string;
+        stationName: string;
+        tamburStepId: string;
+      }
+    | { ok: false; reason: string | null }
+  > {
+    if (!(await readKursunBypassEnabled(db))) return { ok: false, reason: null };
+
+    const step = await db.workOrderStep.findFirst({
+      where: {
+        workOrderId,
+        station: { kind: StationKind.PROCESS_QC },
+        movements: { some: { exitedAt: null } },
+      },
+      orderBy: { stepSequence: "asc" },
       select: {
         id: true,
-        workOrderStepId: true,
-        machineId: true,
-        assignedAt: true,
-        notes: true,
-        machine: {
-          select: { name: true, stationId: true, station: { select: { name: true } } },
+        status: true,
+        stationId: true,
+        station: { select: { name: true } },
+        movements: { where: { exitedAt: null }, select: { qtyIn: true } },
+        workOrder: {
+          select: {
+            status: true,
+            steps: {
+              orderBy: { stepSequence: "asc" },
+              select: {
+                id: true,
+                stepSequence: true,
+                status: true,
+                station: { select: { kind: true, name: true } },
+              },
+            },
+          },
         },
-        assignedBy: { select: { fullName: true } },
       },
-      orderBy: { assignedAt: "desc" },
     });
-    if (!a) return null;
+    if (!step) return { ok: false, reason: null };
 
+    // Dağıtılmışsa bu yol devreye GİRMEZ — atanmış akış zaten kendi dalında
+    // çalışıyor. (Yazma yolunda bu kontrol yarış kapısıdır: önizleme ile onay
+    // arasında planlamacı dağıtım yapmış olabilir.)
+    if (await findPendingBypassAssignmentTx(db, step.id)) {
+      return { ok: false, reason: null };
+    }
+
+    if (!ASSIGNABLE_WO_STATUSES.includes(step.workOrder.status)) {
+      return { ok: false, reason: null };
+    }
+
+    const signals = await loadBypassEligibilitySignals(db, [step.id]);
+    const blockReason = resolveBypassBlockReason(
+      { id: step.id, status: step.status, movements: step.movements, workOrder: step.workOrder },
+      signals,
+    );
+    if (blockReason) return { ok: false, reason: blockReason };
+
+    // `resolveBypassBlockReason` kurşunun SON adım olmasını engellemez (o rota
+    // meşrudur ve "İşi Bitir" ile kapanır) — ama Tambur okutmasıyla kapanamaz.
+    const next = nextNonSkippedStep(step.workOrder.steps, step.id);
+    if (!next || next.station.kind !== StationKind.TAMBUR) {
+      return {
+        ok: false,
+        reason: next
+          ? `Kurşundan sonraki adım Tambur değil (${next.station.name}) — kapanışı o istasyon yapamaz.`
+          : "Kurşun rotanın son adımı — kapanış Kurşun Planlama ekranındaki 'İşi Bitir' ile yapılır.",
+      };
+    }
+
+    return {
+      ok: true,
+      stepId: step.id,
+      stationId: step.stationId,
+      stationName: step.station.name,
+      tamburStepId: next.id,
+    };
+  }
+
+  /** Bir kurşun adımının AÇIK toplarını Tambur önizleme şekline çevirir. */
+  private async loadTamburPendingRolls(
+    stepId: string,
+  ): Promise<{ rolls: KursunBypassTamburRoll[]; totalMeters: number }> {
     const movements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: a.workOrderStepId, exitedAt: null },
+      where: { workOrderStepId: stepId, exitedAt: null },
       select: {
         roll: {
           select: {
@@ -1381,17 +1573,6 @@ export class KursunBypassService {
     );
 
     return {
-      assignmentId: a.id,
-      stepId: a.workOrderStepId,
-      machineId: a.machineId,
-      machineName: a.machine.name,
-      stationId: a.machine.stationId,
-      stationName: a.machine.station.name,
-      assignedAt: a.assignedAt,
-      assignedByName: a.assignedBy?.fullName ?? null,
-      notes: a.notes,
-      rollCount: movements.length,
-      totalMeters: totalMeters.toNumber(),
       rolls: movements.map((m) => ({
         rollId: m.roll.id,
         barcode: m.roll.barcode,
@@ -1400,6 +1581,109 @@ export class KursunBypassService {
         colorCode: m.roll.color?.code ?? null,
         colorName: m.roll.color?.name ?? null,
       })),
+      totalMeters: totalMeters.toNumber(),
+    };
+  }
+
+  /**
+   * "Tambur'da kartı okuttum, 'bu adımda açık top yok' dedi — NEDEN?"
+   *
+   * `assertWoAtStepKind`'in genel 400'ü *"Tabletinizi yanlış istasyonda okutmuş
+   * olabilirsiniz"* diyor; oysa mal kurşunda beklerken operatör TAM DOĞRU
+   * istasyonda duruyor ve mesaj onu yanlış yere bakmaya gönderiyor. Bu metot,
+   * o cümlenin sonuna eklenecek somut sebebi üretir.
+   *
+   * `null` = eklenecek bir şey yok (mal kurşunda beklemiyor) → mesaj aynen kalır.
+   */
+  async explainTamburScanBlock(workOrderId: string): Promise<string | null> {
+    const target = await this.resolveUnassignedTamburClosure(prisma, workOrderId);
+    // Kapatılabilir durumda buraya hiç gelinmez (çağıran o dala girer); gelinirse
+    // eklenecek bir "engel" de yoktur.
+    if (target.ok) return null;
+    if (target.reason) return target.reason;
+
+    const step = await prisma.workOrderStep.findFirst({
+      where: {
+        workOrderId,
+        station: { kind: StationKind.PROCESS_QC },
+        movements: { some: { exitedAt: null } },
+      },
+      orderBy: { stepSequence: "asc" },
+      select: { id: true, station: { select: { name: true } } },
+    });
+    if (!step) return null;
+
+    if (await findPendingBypassAssignmentTx(prisma, step.id)) {
+      return `Toplar "${step.station.name}" adımında ve iş bir kurşun makinesine dağıtılmış — kapanış için Kurşun Planlama ekranını kontrol edin.`;
+    }
+    return `Toplar "${step.station.name}" adımında bekliyor — kapanış kurşun tabletinden yapılır.`;
+  }
+
+  /**
+   * Tambur ekranının okuma ucu — `tambur.service` bunu çağırır (ters yönde import
+   * YOK). null = bu iş emrinde Tambur'da kapatılacak kurşun işi yok (normal akış).
+   *
+   * İKİ KAYNAK (2026-08-06): açık ATAMA varsa `source: "ASSIGNED"`; yoksa ve adım
+   * dağıtımsız kapanışa uygunsa `source: "UNASSIGNED"` ile SANAL bekleyen üretilir
+   * — dağıtım fabrikada kritik bir adım değil ve unutulduğunda mal Tambur'un
+   * önünde kilitleniyordu.
+   */
+  async findPendingForTambur(
+    workOrderId: string,
+  ): Promise<KursunBypassTamburContext | null> {
+    const a = await prisma.kursunBypassAssignment.findFirst({
+      where: { workOrderId, completedAt: null, cancelledAt: null },
+      select: {
+        id: true,
+        workOrderStepId: true,
+        machineId: true,
+        assignedAt: true,
+        notes: true,
+        machine: {
+          select: { name: true, stationId: true, station: { select: { name: true } } },
+        },
+        assignedBy: { select: { fullName: true } },
+      },
+      orderBy: { assignedAt: "desc" },
+    });
+    if (!a) {
+      const target = await this.resolveUnassignedTamburClosure(prisma, workOrderId);
+      if (!target.ok) return null;
+      const { rolls, totalMeters } = await this.loadTamburPendingRolls(target.stepId);
+      return {
+        assignmentId: null,
+        source: "UNASSIGNED",
+        stepId: target.stepId,
+        // Atıf UYDURULMAZ: işi hangi kurşun makinesinin yaptığı bilinmiyor.
+        machineId: null,
+        machineName: null,
+        stationId: target.stationId,
+        stationName: target.stationName,
+        assignedAt: null,
+        assignedByName: null,
+        notes: null,
+        rollCount: rolls.length,
+        totalMeters,
+        rolls,
+      };
+    }
+
+    const { rolls, totalMeters } = await this.loadTamburPendingRolls(a.workOrderStepId);
+
+    return {
+      assignmentId: a.id,
+      source: "ASSIGNED",
+      stepId: a.workOrderStepId,
+      machineId: a.machineId,
+      machineName: a.machine.name,
+      stationId: a.machine.stationId,
+      stationName: a.machine.station.name,
+      assignedAt: a.assignedAt,
+      assignedByName: a.assignedBy?.fullName ?? null,
+      notes: a.notes,
+      rollCount: rolls.length,
+      totalMeters,
+      rolls,
     };
   }
 
@@ -1443,6 +1727,24 @@ export class KursunBypassService {
       orderBy: { assignedAt: "desc" },
     });
     if (!pending) {
+      // DAĞITILMADAN KAPANIŞ (2026-08-06). Dağıtım fabrikada kritik bir adım
+      // değil ve unutuluyor; bayrak açıkken kurşun tableti de salt-okunur olduğu
+      // için iş iki taraftan kilitleniyordu. Adım bypass'a UYGUNSA (aynı yüklem)
+      // kapanışı Tambur okutması yapar — makine atfı olmadan.
+      const target = await this.resolveUnassignedTamburClosure(prisma, card.workOrderId);
+      if (target.ok) {
+        return await this.completeUnassignedFromTambur(
+          { cardBarcode: input.cardBarcode, rollIds },
+          card.workOrderId,
+          target,
+          userId,
+          machineId,
+        );
+      }
+      // Adım VAR ama kapatılamıyor → sessiz 404 yerine somut sebep. (Pratikte
+      // yarış: önizleme ile onay arasında tablette KK2 yazılmış olabilir.)
+      if (target.reason) throw AppError.conflict(target.reason);
+
       // İDEMPOTENT TEKRAR. Tambur tabletinin isteği commit oldu ama yanıt
       // istemciye ulaşmadıysa (ağ kesintisi / offline kuyruk replay'i) operatör
       // AYNI okutmayı tekrar gönderir. O noktada açık atama YOKTUR — bu dal
@@ -1462,6 +1764,22 @@ export class KursunBypassService {
             workOrderId: card.workOrderId,
           },
           message: "Bu dağıtım zaten tamamlanmış (idempotent tekrar)",
+        };
+      }
+      // Dağıtılmadan kapanmış işin atama satırı YOKTUR — idempotent tekrarın izi
+      // movement marker'ıdır. Bu dal olmadan replay 404 alır ve operatör kendi
+      // bitirdiği işi "yok" diye görürdü.
+      const doneUnassigned = await this.findCompletedUnassignedClosure(card.workOrderId);
+      if (doneUnassigned) {
+        return {
+          success: true,
+          data: {
+            alreadyDone: true,
+            movedRollCount: 0,
+            tamburStepId: doneUnassigned.tamburStepId,
+            workOrderId: card.workOrderId,
+          },
+          message: "Kurşun adımı zaten kapatılmış (idempotent tekrar)",
         };
       }
       throw AppError.notFound("Bu iş emrinde bekleyen kurşun dağıtımı yok");
@@ -1599,6 +1917,151 @@ export class KursunBypassService {
     };
   }
 
+  /**
+   * DAĞITILMADAN KAPANIŞ — atama satırı olmadan kurşun adımını Tambur
+   * okutmasıyla kapatır. `completeFromTambur`'un ikinci dalı; atanmış yolla
+   * AYNI mekaniği kullanır, iki noktada bilinçli olarak ayrılır:
+   *
+   *   • `machineId = null` — işi hangi kurşun makinesinin yaptığı BİLİNMİYOR.
+   *     Varsayılan bir makineye yazmak makine bazlı hacim raporunu sistematik
+   *     olarak yanlışlardı (ürün kararı); boşluk dürüsttür ve sayaçla görünür.
+   *   • Yetenekler adımın KENDİ istasyonundan kopyalanır (atanmış yolda
+   *     makinenin istasyonundan) — fabrikada tek PROCESS_QC istasyonu olduğu
+   *     için sonuç aynı satırdır.
+   *
+   * ⚠️ ATOMİK CLAIM'e gerek YOK ve bilinçli olarak eklenmedi: claim'in işini
+   * `closeBypassMovementsTx` zaten yapıyor (`exitedAt IS NULL` guard'ı + kapsam
+   * paritesi). İki eşzamanlı okutmada biri kapatır, diğeri 409 alır; mobil zaten
+   * kapsamı tazeleyip bir kez yeniden dener ve o turda kart normal yolla açılır.
+   */
+  private async completeUnassignedFromTambur(
+    input: { cardBarcode: string; rollIds: string[] },
+    workOrderId: string,
+    target: { stepId: string; stationId: string; tamburStepId: string },
+    userId?: string,
+    scannedOnMachineId?: string | null,
+  ): Promise<
+    ApiResponse<{
+      alreadyDone: boolean;
+      movedRollCount: number;
+      tamburStepId: string | null;
+      workOrderId: string;
+    }>
+  > {
+    const { rollIds } = input;
+    let moved: number;
+    try {
+      moved = await prisma.$transaction(async (tx) => {
+        await touchWorkOrderTx(tx, workOrderId);
+        await this.assertWorkOrderAliveTx(tx, workOrderId);
+
+        // ⚠️ TAZE DOĞRULAMA — tx DIŞINDAKİ ön kontrolün TOCTOU ikizi. Ön kontrol
+        // ile bu tx arasında planlamacı dağıtım yapmış ya da kurşun tableti
+        // (offline kuyruktan gelen bir istekle) KK2 yazmış olabilir; iki rejimin
+        // aynı adıma yazması tam da bu pencerede doğar. Fail-closed: yarım
+        // kapanış bırakmaktansa hiç kapatma.
+        //
+        // ⚠️ BEKÇİ ERİŞEMEZ: bu dal ancak GERÇEK bir eşzamanlılıkta tetiklenir —
+        // tek iş parçacıklı testte ön kontrol her zaman önce reddeder (ölçüldü:
+        // bu blok körleştirilince test 50/50 yeşil kalıyor). Yani burası derinlik
+        // savunmasıdır; silmeden önce yerine ne koyduğunu bil. Testin ölçtüğü
+        // eşzamanlılık özelliği ayrıdır: N paralel okutmadan yalnız biri kapatır
+        // (`closeBypassMovementsTx`'in `exitedAt IS NULL` claim'i).
+        const fresh = await this.resolveUnassignedTamburClosure(tx, workOrderId);
+        if (
+          !fresh.ok ||
+          fresh.stepId !== target.stepId ||
+          fresh.tamburStepId !== target.tamburStepId
+        ) {
+          throw AppError.conflict(
+            !fresh.ok && fresh.reason
+              ? `Kurşun adımı bu sırada değişti: ${fresh.reason} Ekranı yenileyin.`
+              : "Kurşun adımı bu sırada değişti (dağıtıldı ya da başka yoldan kapandı) — ekranı yenileyin.",
+          );
+        }
+
+        const closed = await this.closeBypassMovementsTx(
+          tx,
+          fresh.stepId,
+          rollIds,
+          null,
+          KURSUN_BYPASS_UNASSIGNED_MARKER_PREFIX,
+        );
+        const closedRollIds = closed.map((m) => m.rollId);
+
+        // İstasyon yetenekleri (KURSUN) — iş fiziksel olarak yapıldı. SIRALI.
+        for (const rollId of closedRollIds) {
+          await copyStationCapabilitiesToRoll(tx, {
+            stationId: fresh.stationId,
+            rollId,
+          });
+        }
+
+        // Tambur adımına GİRİŞ movement'ları — atanmış yolla birebir aynı
+        // sözleşme (`machineId` burada yazılmaz, Tambur FINISH'inde konur).
+        await tx.rollMovement.createMany({
+          data: closed.map((m) => ({
+            rollId: m.rollId,
+            workOrderStepId: fresh.tamburStepId,
+            qtyIn: m.qtyIn,
+            weightIn: m.weightIn ?? null,
+            operatorId: userId ?? null,
+            notes: null,
+          })),
+        });
+        // KALİTEYE DOKUNMA — qualityGrade null kalır, Tambur belirler.
+        await tx.roll.updateMany({
+          where: { id: { in: closedRollIds } },
+          data: { currentStepId: fresh.tamburStepId },
+        });
+
+        await recomputeStepStatus(tx, fresh.tamburStepId);
+        await recomputeStepStatus(tx, fresh.stepId);
+
+        return closedRollIds.length;
+      });
+    } catch (err) {
+      if (p2002Mentions(err, /one_open_per_roll_step/i)) {
+        throw AppError.conflict(
+          "Toplar bu sırada Tambur'a taşınmış — ekranı yenileyin.",
+        );
+      }
+      throw err;
+    }
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      // Gösterilecek atama satırı YOK — iz adımın kendisine bağlanır.
+      tableName: "WORK_ORDER_STEP",
+      recordId: target.stepId,
+      newData: {
+        event: "KURSUN_BYPASS_TAMBUR_COMPLETE_UNASSIGNED",
+        workOrderId,
+        workOrderStepId: target.stepId,
+        tamburStepId: target.tamburStepId,
+        stationId: target.stationId,
+        // AÇIKÇA null: "bilinmiyor" ile "yazılmamış" denetimde ayırt edilebilsin.
+        machineId: null,
+        cardBarcode: input.cardBarcode,
+        rollIds,
+        rollCount: moved,
+        scannedOnMachineId: scannedOnMachineId ?? null,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        alreadyDone: false,
+        movedRollCount: moved,
+        tamburStepId: target.tamburStepId,
+        workOrderId,
+      },
+      message: `Kurşun adımı dağıtımsız kapatıldı, ${moved} top Tambur'a alındı`,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // ORTAK ÖZEL YARDIMCILAR
   // ---------------------------------------------------------------------------
@@ -1648,6 +2111,63 @@ export class KursunBypassService {
     if (stillOpen > 0) return null;
 
     const next = nextNonSkippedStep(done.workOrder.steps, done.workOrderStepId);
+    return {
+      tamburStepId:
+        next && next.station.kind === StationKind.TAMBUR ? next.id : null,
+    };
+  }
+
+  /**
+   * `findCompletedTamburBypass`'in DAĞITILMADAN kapanış kardeşi.
+   *
+   * O yol atama satırına bakar; burada atama satırı YOKTUR, kapanışın izi
+   * `RollMovement.notes` marker'ıdır. Bu dal olmadan offline replay / ağ
+   * kesintisi sonrası tekrar 404 alır ve operatör kendi bitirdiği işi "yok"
+   * diye görürdü.
+   *
+   * `null` döner: hiç dağıtımsız kapanış yok, ya da adımda YENİDEN açık top var
+   * (çok-parti 2. turu) — ikincisinde "zaten bitti" demek yanlış olurdu.
+   */
+  private async findCompletedUnassignedClosure(
+    workOrderId: string,
+  ): Promise<{ tamburStepId: string | null } | null> {
+    const step = await prisma.workOrderStep.findFirst({
+      where: {
+        workOrderId,
+        station: { kind: StationKind.PROCESS_QC },
+        movements: {
+          some: {
+            exitedAt: { not: null },
+            notes: { startsWith: KURSUN_BYPASS_UNASSIGNED_MARKER_PREFIX },
+          },
+        },
+      },
+      orderBy: { stepSequence: "asc" },
+      select: {
+        id: true,
+        workOrder: {
+          select: {
+            steps: {
+              orderBy: { stepSequence: "asc" },
+              select: {
+                id: true,
+                stepSequence: true,
+                status: true,
+                station: { select: { kind: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!step) return null;
+
+    const stillOpen = await prisma.rollMovement.count({
+      where: { workOrderStepId: step.id, exitedAt: null },
+    });
+    if (stillOpen > 0) return null;
+
+    const next = nextNonSkippedStep(step.workOrder.steps, step.id);
     return {
       tamburStepId:
         next && next.station.kind === StationKind.TAMBUR ? next.id : null,
@@ -1785,16 +2305,24 @@ export class KursunBypassService {
    *   makinesi başına metraj) bu sayede bypass işlerini de görür. Koşulsuz
    *   yazılır: satır zaten `exitedAt IS NULL` olduğundan bu tur bu adımda
    *   makine damgası koyan İLK ve TEK yazımdır.
+   *   ⚠️ DAĞITILMADAN kapanışta `null` gelir — atıf bilinmiyor ve uydurulmaz;
+   *   o iş makine bazlı raporda görünmez ve bu bilinçlidir (sayaçla izlenir).
+   *
+   * @param markerPrefix Kapanışın kaynağını `RollMovement.notes`'a yazan ön ek.
+   *   İki değer de `KURSUN_BYPASS_MARKER_PREFIX` ile BAŞLAR — okuyan yerler
+   *   (`hasBypassClosureOnProcessQcTx`, `loadBypassEligibilitySignals`) satırı
+   *   `startsWith` ile tanıyor; kopması sessiz regresyon üretirdi.
    */
   private async closeBypassMovementsTx(
     tx: Prisma.TransactionClient,
     stepId: string,
     rollIds: string[],
-    machineId: string,
+    machineId: string | null,
+    markerPrefix: string = KURSUN_BYPASS_MARKER_PREFIX,
   ): Promise<
     Array<{ rollId: string; qtyIn: Prisma.Decimal; weightIn: Prisma.Decimal | null }>
   > {
-    const marker = `${KURSUN_BYPASS_MARKER_PREFIX}:${randomUUID()}`;
+    const marker = `${markerPrefix}:${randomUUID()}`;
     const closed = await tx.$queryRaw<
       Array<{ rollId: string; qtyIn: Prisma.Decimal; weightIn: Prisma.Decimal | null }>
     >`

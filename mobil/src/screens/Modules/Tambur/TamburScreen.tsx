@@ -93,6 +93,7 @@ import type {
   TamburDecision,
   TamburFoldType,
   TamburContext,
+  TamburBypassSource,
   TamburContextOrder,
   TamburRollDefect,
   TamburFinalizeRemainingAction,
@@ -275,7 +276,13 @@ function HeaderChip({
  */
 type SilentBypassResult =
   | { kind: 'none' }
-  | { kind: 'done'; movedRollCount: number; alreadyDone: boolean }
+  | {
+      kind: 'done';
+      movedRollCount: number;
+      alreadyDone: boolean;
+      /** Kapanışın kaynağı — bilgi metni buna göre değişir (dağıtılmış / dağıtımsız). */
+      source: TamburBypassSource;
+    }
   | { kind: 'error'; message: string };
 
 async function completeKursunBypassSilently(
@@ -291,13 +298,17 @@ async function completeKursunBypassSilently(
 
   let pending = await readPending();
   if (!pending) return { kind: 'none' };
+  // Kaynak İLK önizlemeden saklanır: yarışı kaybedip `pending` null'landığında
+  // bile operatöre doğru bilgi metnini basabilmek için. Eski backend bu alanı
+  // göndermez → dağıtılmış kabul edilir (o sürümdeki tek kaynak oydu).
+  const source: TamburBypassSource = pending.source ?? 'ASSIGNED';
 
   let lastError: Error | null = null;
   // İki deneme: ilki önizlemedeki kapsamla, ikincisi TAZELENMİŞ kapsamla.
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!pending) {
       // Yarışın kaybedeni olduk ama iş bitti (başka cihaz kapattı) — kart açılır.
-      return { kind: 'done', movedRollCount: 0, alreadyDone: true };
+      return { kind: 'done', movedRollCount: 0, alreadyDone: true, source };
     }
     try {
       const res = await tamburService.bypassComplete(
@@ -308,6 +319,7 @@ async function completeKursunBypassSilently(
         kind: 'done',
         movedRollCount: res.data.movedRollCount,
         alreadyDone: res.data.alreadyDone,
+        source,
       };
     } catch (e) {
       lastError = e as Error;
@@ -791,19 +803,27 @@ export default function TamburScreen() {
       if (bypass.kind === 'done') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         // Onay DEĞİL, bilgi: operatör kurşun adımının ne zaman kapandığını
-        // görmezse kartın neden birden açıldığını da anlamaz.
+        // görmezse kartın neden birden açıldığını da anlamaz. Dağıtımsız
+        // kapanışta metin AÇIKÇA farklıdır — "dağıtım yapılmadı ama iş yürüdü"
+        // bilgisi operatörün de planlamacıya iletebileceği bir şeydir.
         Toast.show(
           bypass.alreadyDone
             ? {
                 type: 'info',
-                text1: 'Kurşun/KK2 bypass zaten tamamlanmış',
+                text1: 'Kurşun/KK2 adımı zaten kapatılmış',
                 text2: 'Kart Tambur işi olarak açılıyor',
               }
-            : {
-                type: 'info',
-                text1: 'Kurşun/KK2 bypass ile tamamlandı',
-                text2: `${bypass.movedRollCount} top Tambur'a alındı`,
-              },
+            : bypass.source === 'UNASSIGNED'
+              ? {
+                  type: 'info',
+                  text1: 'Kurşun dağıtılmamıştı — adım kapatıldı',
+                  text2: `${bypass.movedRollCount} top Tambur'a alındı`,
+                }
+              : {
+                  type: 'info',
+                  text1: 'Kurşun/KK2 bypass ile tamamlandı',
+                  text2: `${bypass.movedRollCount} top Tambur'a alındı`,
+                },
         );
         void qc.invalidateQueries({ queryKey: ['tambur'] });
         void qc.invalidateQueries({ queryKey: ['rolls'] });

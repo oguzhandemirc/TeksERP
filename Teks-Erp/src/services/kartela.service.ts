@@ -32,7 +32,7 @@ import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
+import { buildPagination, buildTurkishSearch, readIdCondition } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -856,7 +856,11 @@ export class KartelaService {
     // Filtre: firma + durum + tarih(dispatchedAt) + arama(belge no/firma adı).
     // Tüm filtre kolonları indeksli (@@index dispatchedAt / subcontractorId,dispatchedAt).
     const where: Prisma.KartelaDispatchWhereInput = {};
-    if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
+    // Firma ÇOKLU seçilebilir (`?subcontractorId=a,b`). Ham CSV atansaydı Prisma
+    // `subcontractorId = "a,b"` arar → uuid kolonu olduğu için P2007 → HTTP 400
+    // (arıza modları: query-parser `readIdCondition` notu).
+    const subCond = readIdCondition(params?.subcontractorId);
+    if (subCond) where.subcontractorId = subCond;
     // "Kabul edilmiş" = en az bir sevk kalemi, iptal edilmemiş bir kabulde tüketilmiş.
     // (cancelDispatch ile aynı kural — receiptItem.sourceDispatchItem üzerinden.)
     const receivedFilter: Prisma.KartelaDispatchWhereInput = {
@@ -992,7 +996,9 @@ export class KartelaService {
 
   async listReceipts(params?: KartelaListParams): Promise<ListResult> {
     const where: Prisma.KartelaReceiptWhereInput = {};
-    if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
+    // Firma ÇOKLU (sevk listesiyle aynı sözleşme).
+    const subCond = readIdCondition(params?.subcontractorId);
+    if (subCond) where.subcontractorId = subCond;
     const status = params?.status ?? "active";
     // F171: controller open/received durumlarını da geçiriyor; bunlar 'active' gibi
     // cancelledAt=null süzülmeli (aksi halde iptaller de listeye sızıyordu). Yalnız
@@ -1230,6 +1236,10 @@ export class KartelaService {
     itemId?: string;
     colorId?: string;
   }): Promise<ApiResponse<KartelaStockGroup[]>> {
+    // Kumaş/renk ÇOKLU seçilebilir (`?itemId=a,b`) — `readIdCondition` olmadan
+    // CSV ham `groupBy` where'ine düşer ve uuid cast'inde patlardı.
+    const itemCond = readIdCondition(params?.itemId);
+    const colorCond = readIdCondition(params?.colorId);
     const groups = await prisma.swatch.groupBy({
       by: ["itemId", "colorId"],
       // sackId:null: çuvala girmiş kartela stokta sayılmaz (havuz rezervi).
@@ -1237,8 +1247,8 @@ export class KartelaService {
         shipmentId: null,
         sackId: null,
         cancelledAt: null,
-        ...(params?.itemId && { itemId: params.itemId }),
-        ...(params?.colorId && { colorId: params.colorId }),
+        ...(itemCond && { itemId: itemCond }),
+        ...(colorCond && { colorId: colorCond }),
       },
       _count: { _all: true },
     });

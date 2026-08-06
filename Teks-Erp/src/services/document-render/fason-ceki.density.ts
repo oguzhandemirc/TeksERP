@@ -245,13 +245,31 @@ export function resolveGridRows(v: unknown): number {
   return Math.min(GRID_ROWS_MAX, Math.max(GRID_ROWS_MIN, Math.round(v)));
 }
 
+/**
+ * ⚠️ "cm" SÜTUNU AÇILIP KAPANIR (`sections.gridWidth`, varsayılan AÇIK) ve
+ * kapalıyken boşalan %5 METRE'ye geçer. İki kolonda da grup toplamı **18.5**
+ * KALIR (5×18.5 = %92.5) — yani tablonun genel geometrisi ve `5/G` ölçeklemesi
+ * iki durumda da aynı; sütun kapatıldığında tablo dar kalıp sola yaslanmaz.
+ *
+ * Sütun AÇIKken üretilen metin fiziksel formun bugünkü değerleridir
+ * (4.5% / 9% / 5%) — A4 parmak izi korunur.
+ */
 const BASE_COL = { top: 4.5, met: 9, cm: 5 } as const;
+/** Cm kapalıyken METRE onun payını da alır (9 + 5). */
+const MET_NO_CM = BASE_COL.met + BASE_COL.cm;
 
-/** Grup sayısına göre sütun genişlikleri (yüzde metni, G=5'te bugünkü değerler). */
-export function gridColWidths(groups: GridGroups): { top: string; met: string; cm: string } {
+/** Grup sayısına göre sütun genişlikleri (yüzde metni). */
+export function gridColWidths(
+  groups: GridGroups,
+  showWidth: boolean,
+): { top: string; met: string; cm: string } {
   const k = 5 / groups;
   const fmt = (n: number): string => String(Number((n * k).toFixed(3)));
-  return { top: `${fmt(BASE_COL.top)}%`, met: `${fmt(BASE_COL.met)}%`, cm: `${fmt(BASE_COL.cm)}%` };
+  return {
+    top: `${fmt(BASE_COL.top)}%`,
+    met: `${fmt(showWidth ? BASE_COL.met : MET_NO_CM)}%`,
+    cm: `${fmt(BASE_COL.cm)}%`,
+  };
 }
 
 /** Ham ayarı geçerli grup sayısına indirger (varsayılan 5 = bugünkü davranış). */

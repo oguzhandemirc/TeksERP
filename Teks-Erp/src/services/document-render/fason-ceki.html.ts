@@ -60,6 +60,9 @@ interface FasonCekiRoll {
   dispatchedQty: number;
   dispatchedWeight: number | null;
   qualityGrade: string;
+  /** ⚠️ 2026-08-06'dan beri BASILMAZ. Payload'da duruyor (donmuş belgelerin şekli
+   *  değişmesin + izlenebilirlik), ama belgedeki EN artık İŞ EMRİNDEN gelir —
+   *  bkz. `renderFasonCekiHtml` içindeki `docWidth`. Buraya geri bağlama. */
   width: number | null;
 }
 
@@ -69,7 +72,10 @@ interface FasonCekiDoc {
   driverName: string | null;
   plateNumber: string | null;
   notes: string | null;
-  workOrder: { id: string; workOrderNumber: string; type: string };
+  /** `width` = belgedeki TEK "EN" değerinin kaynağı. ⚠️ 2026-08-05 öncesi donmuş
+   *  snapshot'larda YOKTUR → o belgeler basılırken EN yine boş çıkar (donmuş belge
+   *  kuralı; geriye dönük doldurma yapılmaz, `reissue` tazeler). */
+  workOrder: { id: string; workOrderNumber: string; type: string; width?: number | null };
   subcontractor: { id: string; name: string; code: string | null };
   /** Boyamanın hedef rengi — sevkte toplar ham gider, çeki "şu renge boya" der. */
   requestedColor?: string | null;
@@ -149,13 +155,23 @@ function uniqNonEmpty(values: (string | null | undefined)[]): string[] {
 }
 
 /** Tek bir grid sayfası (rolls[startIdx .. startIdx+slots-1]).
- *  showWidth: Cm sütunu basılsın mı (açılıp-kapanır). blankWidth: sütun DURUR ama
- *  değerler boş gelir (elle doldurulur / iş emrinden çekilecek). */
+ *
+ *  ⚠️ "Cm" SÜTUNU HER ZAMAN BOŞ BASILIR — top başına EN **değeri** yazmaz
+ *  (2026-08-06 kullanıcı kararı: "sayfadaki bütün kumaşlara en değeri vermeyi
+ *  kaldır, bir tane en değeri koy"). Sütun bir VERİ sütunu değil, fiziksel
+ *  KUMAŞ İRSALİYESİ formundaki gibi **elle doldurulan kutu**dur: fason firma
+ *  kendi ölçüp yazar. Belgenin bildiği tek EN alt toplam tablosundadır ve iş
+ *  emrinden gelir.
+ *
+ *  Buraya `roll.width` (ya da iş emri eni) bağlamak iki hatadan birini yapar:
+ *  topun eni sahada NULL olduğu için sütun yine boş kalır, ya da tek bir nominal
+ *  ölçü 40 satıra damgalanıp ölçülmemiş rakam ölçülmüş gibi görünür.
+ *
+ *  `showWidth`: sütun basılsın mı (`sections.gridWidth`, varsayılan AÇIK). */
 function renderGridPage(
   rolls: FasonCekiRoll[],
   startIdx: number,
   showWidth: boolean,
-  blankWidth: boolean,
   groups: GridGroups,
   rows: number,
 ): string {
@@ -175,13 +191,10 @@ function renderGridPage(
     for (let g = 0; g < groups; g++) {
       const topNo = startIdx + g * rows + r + 1; // 1-bazlı sıra no
       const roll = rolls[topNo - 1];
-      const cmCell = showWidth
-        ? `<td class="c-cm">${roll && !blankWidth ? esc(fmtCm(roll.width)) : ""}</td>`
-        : "";
       body +=
         `<td class="c-top">${topNo}</td>` +
         `<td class="c-met">${roll ? esc(fmtMetre(roll.dispatchedQty)) : ""}</td>` +
-        cmCell;
+        (showWidth ? `<td class="c-cm"></td>` : "");
     }
     body += "</tr>";
   }
@@ -222,26 +235,37 @@ export function renderFasonCekiHtml(
   // İstenen (hedef) renk öncelikli; yoksa topların mevcut rengi (boyanmış dönüşte).
   const renk = showColor ? (doc.requestedColor ?? doc.rolls[0]?.colorName ?? "") : "";
 
-  // En (Cm) kolonu: grid'de gösterilsin mi (default açık). blankWidths → kolon DURUR
-  // ama değerler boş gelir (elle doldurulur / "iş emrinden çek" kapalıysa).
-  const showGridWidth = cfg.sections?.gridWidth !== false;
+  // ── BELGENİN TEK "EN" DEĞERİ ───────────────────────────────────────────────
+  // Kaynak İŞ EMRİDİR, topların eni DEĞİL (2026-08-06 kullanıcı kararı). Eskiden
+  // "tüm topların eni aynıysa o değeri yaz" kuralı vardı ve sahada pratikte HİÇ
+  // yazmıyordu: `Roll.width` KK1'de opsiyonel ve doldurulmuyor (ölçüm: 8 fason
+  // sevkinin 7'sinde giden topların hepsi NULL), iş emrinin eni ise hep dolu.
+  // ⚠️ Alan taşımayan ESKİ donmuş snapshot'ta `width` undefined → EN yine boş
+  // basılır ve o belgeler bugünküyle birebir aynı kalır (donmuş belge kuralı).
+  // blankWidths → "elle yazılacak": değer BİLİNSE DE basılmaz.
   const blankWidths = cfg.blankWidths === true;
-  // Tüm topların eni aynıysa alt toplam tablosundaki EN hücresi o değeri yazar.
-  const distinctWidths = [...new Set(doc.rolls.map((r) => (r.width != null ? Math.round(r.width) : null)).filter((w): w is number => w != null))];
-  const commonWidth = distinctWidths.length === 1 ? distinctWidths[0] : null;
+  const woWidth = doc.workOrder.width;
+  const docWidth = blankWidths || woWidth == null ? null : fmtCm(woWidth);
+
+  // Grid'in elle doldurulan "Cm" kutusu — aç/kapa (varsayılan AÇIK, `sections`
+  // blocklist'i). ⚠️ Bu ayar belgenin BİLDİĞİ EN'i (alt tablo) etkilemez; o
+  // ayrı bir kolondur ve `columns.totals` ile yönetilir. İkisini tek anahtara
+  // bağlamak, "kutuları kaldır" isteyen kullanıcının belgedeki rakamı da
+  // sessizce silmesi olurdu.
+  const showGridWidth = cfg.sections?.gridWidth !== false;
 
   // Grid grup sayısı (varsayılan 5 = fiziksel form). 3/4, A5'te punto büyütmek
   // isteyen kullanıcıya yer açar — 15 kolon 132mm'ye sığmıyor.
   const groups = resolveGridGroups(cfg.gridGroups);
   const rows = resolveGridRows(cfg.gridRows);
   const slotsPerPage = groups * rows;
-  const col = gridColWidths(groups);
+  const col = gridColWidths(groups, showGridWidth);
 
   // Çok sayfa: slotsPerPage'lik gridler (çoğu sevk tek sayfa).
   const pageCount = Math.max(1, Math.ceil(doc.rolls.length / slotsPerPage));
   let grids = "";
   for (let p = 0; p < pageCount; p++) {
-    grids += renderGridPage(doc.rolls, p * slotsPerPage, showGridWidth, blankWidths, groups, rows);
+    grids += renderGridPage(doc.rolls, p * slotsPerPage, showGridWidth, groups, rows);
   }
 
   // Antet (gönderen) satırları — sadece dolu olanlar.
@@ -315,15 +339,10 @@ export function renderFasonCekiHtml(
   // Payload DEĞİŞMEDİ: alanlar donmuş snapshot'ta zaten var, eski belge de basar.
   const showFabricHeader = cfg.sections?.fabricHeader === true;
   const fabrics = uniqNonEmpty(doc.rolls.map((r) => r.itemName));
-  // EN, alt toplam tablosundakiyle AYNI kaynaktan gelir ama aynı kuralla DEĞİL:
-  // orada "tüm enler aynıysa yaz, değilse boş" var (tek hücre), burada karışık
-  // sevkte hepsi listelenir. Tek hücrelik kısıt bir tablo kısıtıdır, bilgi
-  // kısıtı değil — üstte "140, 150" yazmak sessizce boş bırakmaktan iyidir.
-  // `blankWidths` (EN elle doldurulacak) açıksa EN burada da BASILMAZ: aksi
-  // halde belge bir yerde "boş bırak" derken öbür yerde değeri söylerdi.
-  const fabWidths = blankWidths
-    ? []
-    : uniqNonEmpty(doc.rolls.map((r) => (r.width != null ? String(Math.round(r.width)) : null)));
+  // EN, alt toplam tablosuyla AYNI TEK DEĞERDİR (`docWidth`). Eskiden burada
+  // topların enleri listeleniyordu ("140, 150 cm") — o da kaldırıldı: belgede
+  // tek bir en vardır ve iş emrinden gelir. `blankWidths` ikisini birden
+  // susturur, yoksa belge bir yerde "boş bırak" derken öbür yerde değeri söylerdi.
   const fabColors = showColor
     ? uniqNonEmpty([doc.requestedColor, ...doc.rolls.map((r) => r.colorName)])
     : [];
@@ -339,7 +358,7 @@ export function renderFasonCekiHtml(
   // ne olduğu okunmaz, o yüzden kalır.
   const fabricBits = [
     fabrics.length ? esc(fabrics.join(", ")) : "",
-    fabWidths.length ? `${esc(fabWidths.join(", "))} cm` : "",
+    docWidth ? `${esc(docWidth)} cm` : "",
     fabColors.length ? esc(fabColors.join(", ")) : "",
   ].filter(Boolean);
   const fabricRows = showFabricHeader && fabricBits.length
@@ -386,8 +405,8 @@ export function renderFasonCekiHtml(
 
   // Alt toplam tablosu — kolonlar cfg.columns.totals ile aç/kapa (boş FİYATI/TUTARI
   // kolonları gizlenebilir). TOPLAM satırı foot mekanizmasıyla (tr.tot) basılır.
-  // EN hücresi: blankWidths → boş; değilse tüm enler aynıysa o değer, değilse boş.
-  const enCell = blankWidths ? "" : commonWidth != null ? `${commonWidth} cm` : "";
+  // EN hücresi = belgenin TEK en'i (iş emrinden); blankWidths → boş.
+  const enCell = docWidth ? `${docWidth} cm` : "";
   const totalsTable = buildDocTable<{ cins: string }>({
     className: "totals",
     colCfg: cfg.columns?.totals,
@@ -440,8 +459,8 @@ export function renderFasonCekiHtml(
                        font-size: ${d.gridCell}px; padding: 0 ${d.gridPadX}px; overflow: hidden; }
   .grid th { background: #f1f5f9; font-weight: 700; }
   .grid .c-top { width: ${col.top}; background: #f8fafc; }
-  .grid .c-met { width: ${col.met}; }
-  .grid .c-cm  { width: ${col.cm}; }
+  .grid .c-met { width: ${col.met}; }${showGridWidth ? `
+  .grid .c-cm  { width: ${col.cm}; }` : ""}
   .grid tbody .c-top { font-weight: 700; }
   .meta-row { margin: ${d.metaRowMarY}px 0; font-size: ${d.metaRow}px; }
   .totals { margin-top: ${d.totalsMarT}px; }

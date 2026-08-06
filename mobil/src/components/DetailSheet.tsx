@@ -70,6 +70,13 @@ interface Props {
 
   /** Summary altında ek section'lar (event list, born rolls vb.). */
   children?: React.ReactNode;
+
+  /**
+   * Sheet'in ALTINA sabitlenen aksiyon çubuğu — kaydırılmaz. Yıkıcı/ana eylemler
+   * (ör. "Stoktan Kaldır") `children` içine konursa uzun bir detayda ekranın
+   * dışında kalır ve operatör onları hiç görmez.
+   */
+  actions?: React.ReactNode;
 }
 
 export default function DetailSheet({
@@ -86,6 +93,7 @@ export default function DetailSheet({
   widthRatio = 0.65,
   heightRatio = 0.85,
   children,
+  actions,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
 
@@ -155,6 +163,7 @@ export default function DetailSheet({
           )}
           {children}
         </ScrollView>
+        {actions && <View style={styles.actions}>{actions}</View>}
       </View>
     </AppModal>
   );
@@ -226,6 +235,16 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
 
   scroll: { padding: 14, gap: 10 },
+
+  // Sabit alt aksiyon çubuğu — gövde kayarken yerinde kalır.
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
 
   columns: { gap: 10 },
   columnsRow: { flexDirection: 'row', alignItems: 'stretch' },

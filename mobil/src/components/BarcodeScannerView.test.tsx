@@ -116,13 +116,65 @@ describe("BarcodeScannerView — dokunarak okut", () => {
   });
 
   it("§6 auto mod (varsayılan) DEĞİŞMEDİ — açılışta bağlı, OKUT tuşu yok", () => {
-    // KK1 / Tambur / Paketleme / Fason ekranları bu daldan geçiyor; tap modu
-    // onlara sızarsa saha sessizce "kamera okumuyor" der.
+    // KK1 / Tambur / Paketleme / Kartela ekranları bu daldan geçiyor; tap modu
+    // onlara sızarsa saha sessizce "kamera okumuyor" der. (Fason Sevk top
+    // tarayıcısı 2026-08-06'da bilinçli olarak tap moduna geçti.)
     const onScan = jest.fn();
     const { getByTestId, queryByLabelText } = renderWithPaper(
       <BarcodeScannerView active onScan={onScan} continuous />,
     );
     expect(getByTestId("camera-view").props.onBarcodeScanned).toBeDefined();
     expect(queryByLabelText("Topu okut")).toBeNull();
+  });
+});
+
+// =============================================================================
+// Merkez bildirim (flash) — 2026-08-06 saha geri bildirimi.
+// =============================================================================
+// Vaka: mükerrer okumada tek görsel iz ALTTAKİ şeritte yanıp sönen satırdı.
+// Operatörün gözü kadrajın içinde olduğu için şeridi görmüyor, "okumadı" sanıp
+// tekrar okutuyordu. Bildirim tam da bakılan yere basılır.
+// =============================================================================
+describe("BarcodeScannerView — merkez bildirim", () => {
+  it("§7 bildirim verilince kadrajın ortasına basılır (başlık + detay)", () => {
+    const { getByText, getByTestId } = renderWithPaper(
+      <BarcodeScannerView
+        active
+        onScan={jest.fn()}
+        flash={{ kind: "duplicate", title: "ZATEN OKUTULDU", detail: "T2508260001", seq: 1 }}
+      />,
+    );
+    expect(getByTestId("scan-flash")).toBeTruthy();
+    expect(getByText("ZATEN OKUTULDU")).toBeTruthy();
+    expect(getByText("T2508260001")).toBeTruthy();
+  });
+
+  it("§8 bildirim yokken hiç çizilmez — bugünkü çıktı birebir korunur", () => {
+    const { queryByTestId } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} />,
+    );
+    expect(queryByTestId("scan-flash")).toBeNull();
+  });
+
+  it("§9 bildirim varken yakalama onayı (yeşil tik) BASTIRILIR", () => {
+    // İki zıt işaret aynı anda görünürse operatör topu eklenmiş sanar: yeşil tik
+    // yalnız "kod yakalandı" der, sonucu söyleyen taraf çağırandır.
+    const flash = { kind: "duplicate" as const, title: "ZATEN OKUTULDU", seq: 1 };
+    const { rerender, queryByTestId, getByLabelText, getByTestId } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} trigger="tap" continuous />,
+    );
+    fireEvent.press(getByLabelText("Topu okut"));
+    const handler = () =>
+      getByTestId("camera-view").props.onBarcodeScanned as ScanHandler;
+    act(() => handler()?.({ data: "T2508260001" }));
+    // Yakalama anı: bildirim yokken yeşil tik var (bugünkü davranış).
+    expect(queryByTestId("scan-success-check")).toBeTruthy();
+
+    // Çağıran "mükerrer" kararını verince tik yerini bildirime bırakır.
+    rerender(
+      <BarcodeScannerView active onScan={jest.fn()} trigger="tap" continuous flash={flash} />,
+    );
+    expect(queryByTestId("scan-success-check")).toBeNull();
+    expect(queryByTestId("scan-flash")).toBeTruthy();
   });
 });

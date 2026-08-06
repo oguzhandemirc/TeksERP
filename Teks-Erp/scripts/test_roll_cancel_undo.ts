@@ -12,7 +12,10 @@
 //
 // Dört yapısal boşluk vardı; bu bekçi dördünü de kilitler:
 //   [1] İptal, etiketin basıldığına BAKMIYORDU        → LABEL_PRINTED guard'ı
-//   [2] Etiketli iptalde sebep sorulmuyordu           → CANCEL_REASON_REQUIRED
+//   [2] Etiketli iptalde sebep sorulmuyordu           → sebep alanı (§2/§2b)
+//       ⚠️ 2026-08-06: sebep ZORUNLU olmaktan çıktı (kullanıcı kararı — zorunluluk
+//       rastgele kategori seçtiriyordu, o da cevapsızlıktan kötü). Sorulmaya devam
+//       ediyor, verilmezse NULL kalıyor. Fail-closed'ı taşıyan ONAY bayrağıdır.
 //   [3] İptalin GERİ DÖNÜŞÜ yoktu (→ ikinci barkod)   → restoreCancelledRoll
 //   [4] Okutma yüzeyi sebebi söylemiyordu             → lookup teşhis alanları
 //
@@ -121,16 +124,6 @@ async function main(): Promise<void> {
     const still = await prisma.roll.findUnique({ where: { id: r.id }, select: { status: true } });
     check("top hâlâ iptal EDİLMEMİŞ", still?.status === RollStatus.STOCK, String(still?.status));
 
-    // Onay var ama SEBEP yok → yine reddedilir.
-    try {
-      await service.softDelete(r.id, undefined, { confirmLabelPrinted: true });
-      check("sebepsiz iptal reddedildi", false, "GEÇTİ — sebep zorunluluğu yok!");
-    } catch (e) {
-      const c = (e as { details?: { code?: string } }).details?.code ?? "";
-      check("onaylı ama sebepsiz iptal reddedildi", true);
-      check("hata kodu CANCEL_REASON_REQUIRED", c === "CANCEL_REASON_REQUIRED", c);
-    }
-
     // Onay + sebep → geçer ve sebep TOPUN SATIRINA yazılır (audit'e değil).
     await service.softDelete(r.id, undefined, {
       confirmLabelPrinted: true,
@@ -146,6 +139,65 @@ async function main(): Promise<void> {
       done?.cancelReason === "yanlış metraj girildi",
       String(done?.cancelReason),
     );
+  }
+
+  // ── §2b SEBEP OPSİYONEL (2026-08-06) ──────────────────────────────────────
+  // Zorunluluk kaldırıldı: eldivenli operatör vardiya ortasında kategori seçmeye
+  // zorlanınca rastgele seçiyordu ve o cevap cevapsızlıktan kötüdür. ONAY yine
+  // ZORUNLU — eski istemcileri fail-closed tutan tek şey odur.
+  console.log("\n§2b Etiketli top — sebep OPSİYONEL, onay ZORUNLU");
+  {
+    const r = await makeRoll({ labelPrinted: true });
+    // ⚠️ try/catch ŞART: zorunluluk geri gelirse burası fırlatır ve testi çökertip
+    // geri kalan §'leri hiç koşmadan bırakırdı — çökme de kırmızıdır ama NEDENİNİ
+    // söylemez. Sonda buradan girecek, o yüzden mesaj net olsun.
+    try {
+      await service.softDelete(r.id, undefined, { confirmLabelPrinted: true });
+      check("sebepsiz iptal reddedilmedi (sebep opsiyonel)", true);
+    } catch (e) {
+      check(
+        "sebepsiz iptal reddedilmedi (sebep opsiyonel)",
+        false,
+        `FIRLATTI: ${(e as Error).message.slice(0, 60)}`,
+      );
+    }
+    const done = await prisma.roll.findUnique({
+      where: { id: r.id },
+      select: { status: true, cancelReason: true, cancelledAt: true },
+    });
+    check("sebepsiz iptal GEÇER", done?.status === RollStatus.CANCELLED, String(done?.status));
+    check(
+      "sebep NULL kalır (uydurma metin yazılmaz — yüzeyler 'Seçilmedi' gösterir)",
+      done?.cancelReason === null,
+      String(done?.cancelReason),
+    );
+    check("iptal anı yine damgalanır", done?.cancelledAt != null);
+
+    // Doldurma metni ELENİR: "a"/"." denetimde cevap varmış gibi görünür.
+    const r2 = await makeRoll({ labelPrinted: true });
+    await service
+      .softDelete(r2.id, undefined, { confirmLabelPrinted: true, reason: " . " })
+      .catch((e: Error) => check("doldurma sebep iptali fırlatmadı", false, e.message.slice(0, 60)));
+    const done2 = await prisma.roll.findUnique({
+      where: { id: r2.id },
+      select: { status: true, cancelReason: true },
+    });
+    check("3 karakterden kısa sebep iptali DÜŞÜRMEZ", done2?.status === RollStatus.CANCELLED);
+    check(
+      "3 karakterden kısa sebep SAKLANMAZ (null)",
+      done2?.cancelReason === null,
+      String(done2?.cancelReason),
+    );
+
+    // Onay hâlâ zorunlu — bu dal düşerse etiketli top sessizce iptal edilirdi.
+    const r3 = await makeRoll({ labelPrinted: true });
+    try {
+      await service.softDelete(r3.id, undefined, { reason: "yanlış ürün seçildi" });
+      check("sebep var ama ONAY yok → reddedilir", false, "GEÇTİ — onay guard'ı düştü!");
+    } catch (e) {
+      const c = (e as { details?: { code?: string } }).details?.code ?? "";
+      check("sebep var ama ONAY yok → 409 LABEL_PRINTED", c === "LABEL_PRINTED", c);
+    }
   }
 
   // ── §3 Geri alma: temiz kayıt geri döner, RAFI KORUNUR ────────────────────

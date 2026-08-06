@@ -2,20 +2,37 @@ import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, TouchableRipple, Icon } from 'react-native-paper';
 
-import type { ScannedRoll, ScanReject } from '../useQuickWorkOrder';
-import { colors, palette } from '../../../../theme';
+import type { ScanReject } from '../hooks/useScanFeedback';
+import { colors, palette } from '../theme';
+
+/** Şeridin çizmek için ihtiyaç duyduğu ASGARİ top şekli. Ekranların kendi
+ *  `ScannedRoll` tipleri (Hızlı İş Emri / Fason Sevk) buna eşlenir — şerit
+ *  ekranların modeline bağlanmaz, yoksa üçüncü ekranda yeniden yazılırdı. */
+export interface ScanStripRoll {
+  barcode: string;
+  /** Metraj (m). */
+  qty: number;
+  width?: number | null;
+}
 
 interface Props {
-  rolls: ScannedRoll[];
+  /**
+   * ⚠️ EKLENME sırasında (en eski önce). Şerit ekranda bunu TERS çevirir —
+   * "en son ne oldu" sorusunun cevabı en üstte durmalı ve ilk satır yeşil
+   * vurguyu alır. Ekranların kendi state'i ters sırada tutuluyorsa (Fason Sevk
+   * yeni topu başa ekler) çeviriyi ÇAĞIRAN yapar; yoksa şerit en yeni topu en
+   * alta yazar ve vurgu yanlış satıra düşer — hata vermez, sadece yanlış olur.
+   */
+  rolls: ScanStripRoll[];
   totalQty: number;
   onRemove: (barcode: string) => void;
   /** Kabul edilmeyen okumalar — şeridin EN ÜSTÜNDE kırmızı satır olarak durur. */
-  rejects: ScanReject[];
-  onDismissReject: (id: number) => void;
+  rejects?: ScanReject[];
+  onDismissReject?: (id: number) => void;
   /** Az önce mükerrer okutulan barkod — o satır vurgulanır. */
-  duplicateBarcode: string | null;
+  duplicateBarcode?: string | null;
   /** Farklı en okutulduysa satırlarda en de gösterilir (aksi halde gürültü). */
-  showWidth: boolean;
+  showWidth?: boolean;
 }
 
 /**
@@ -30,18 +47,20 @@ interface Props {
  * yeşil vurguyla en üstte, MÜKERRER olan kendi satırında yanıp söner, RET ise
  * sebebiyle birlikte kırmızı satır olarak ~10 sn durur. Toast bunların hiçbirini
  * yapamaz — 3 sn'de kaybolur ve operatör topu bırakıp döndüğünde ekran boştur.
+ * Kadraja bakan gözün kaçırmaması için ayrıca merkez bildirim vardır
+ * (`BarcodeScannerView.flash`); ikisi aynı olayın iki farklı süreli yüzüdür.
  *
  * Sıralama YENİDEN ESKİYE. Şeridin işi "en son ne oldu" sorusunu cevaplamaktır,
- * tam envanter dökümü değil (o `ScannedRollsModal`'da).
+ * tam envanter dökümü değil (o ekranın kendi listesinde).
  */
 export default function ScannerRollStrip({
   rolls,
   totalQty,
   onRemove,
-  rejects,
+  rejects = [],
   onDismissReject,
-  duplicateBarcode,
-  showWidth,
+  duplicateBarcode = null,
+  showWidth = false,
 }: Props) {
   const recent = [...rolls].reverse();
   const empty = recent.length === 0 && rejects.length === 0;
@@ -80,14 +99,16 @@ export default function ScannerRollStrip({
                   {r.reason}
                 </Text>
               </View>
-              <TouchableRipple
-                onPress={() => onDismissReject(r.id)}
-                borderless
-                style={styles.remove}
-                accessibilityLabel={`${r.barcode} uyarısını kapat`}
-              >
-                <Icon source="close" size={20} color={colors.textOnDarkMuted} />
-              </TouchableRipple>
+              {onDismissReject ? (
+                <TouchableRipple
+                  onPress={() => onDismissReject(r.id)}
+                  borderless
+                  style={styles.remove}
+                  accessibilityLabel={`${r.barcode} uyarısını kapat`}
+                >
+                  <Icon source="close" size={20} color={colors.textOnDarkMuted} />
+                </TouchableRipple>
+              ) : null}
             </View>
           ))}
 

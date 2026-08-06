@@ -3,7 +3,11 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Button } from 'react-native-paper';
 import AppModal from './AppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarcodeScannerView, type SupportedBarcodeType } from './BarcodeScannerView';
+import {
+  BarcodeScannerView,
+  type ScanFlash,
+  type SupportedBarcodeType,
+} from './BarcodeScannerView';
 import { useDeviceType } from '../hooks/useDeviceType';
 
 interface Props {
@@ -40,6 +44,9 @@ interface Props {
   /** Kameranın ALTINDA sabit yükseklikli şerit (örn. "son okutulanlar" listesi).
    *  Verilirse sheet biraz büyür ki kamera kadrajı ezilmesin. */
   footer?: React.ReactNode;
+  /** Kadrajın ortasında kısa süre duran bildirim (mükerrer / ret).
+   *  bkz. BarcodeScannerView.flash + hooks/useScanFeedback. */
+  flash?: ScanFlash | null;
 }
 
 /**
@@ -68,6 +75,7 @@ export function BarcodeScannerModal({
   initialFacing,
   trigger,
   footer,
+  flash,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -134,6 +142,7 @@ export function BarcodeScannerModal({
             captureHaptic={captureHaptic}
             initialFacing={initialFacing}
             trigger={trigger}
+            flash={flash}
           />
           {onPickFromList && (
             <View style={styles.pickRow}>

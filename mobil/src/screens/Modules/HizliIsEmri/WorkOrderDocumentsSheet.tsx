@@ -117,7 +117,9 @@ export default function WorkOrderDocumentsSheet({
                 {d.title}
               </Text>
               {d.cancelled && <Text style={styles.badgeCancel}>İPTAL</Text>}
-              {d.contentDirty && <Text style={styles.badgeStale}>GÜNCEL DEĞİL</Text>}
+              {/* ⚠️ "GÜNCEL DEĞİL" rozeti KALDIRILDI (2026-08-06, kullanıcı kararı) —
+                  gerekçe Electron `TravelerCardPrintDialog` başlığında. `contentDirty`
+                  yanıtta hâlâ dönüyor; geri koymadan önce oradaki notu oku. */}
             </View>
             <Text style={styles.cardNo} numberOfLines={1}>
               {d.documentNo}
@@ -196,16 +198,6 @@ const styles = StyleSheet.create({
     color: colors.danger,
     borderWidth: 1,
     borderColor: colors.danger,
-    borderRadius: radius.sm,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  badgeStale: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.warningText,
-    borderWidth: 1,
-    borderColor: colors.warning,
     borderRadius: radius.sm,
     paddingHorizontal: 4,
     paddingVertical: 1,

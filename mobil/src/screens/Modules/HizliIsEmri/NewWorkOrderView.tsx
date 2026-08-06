@@ -16,7 +16,7 @@ import StepRolls from './wizard/StepRolls';
 import StepProduction from './wizard/StepProduction';
 import StepConfirm from './wizard/StepConfirm';
 import ScannedRollsModal from './wizard/ScannedRollsModal';
-import ScannerRollStrip from './wizard/ScannerRollStrip';
+import ScannerRollStrip from '../../../components/ScannerRollStrip';
 import CancelledRollSheet from '../../../components/CancelledRollSheet';
 import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
 import { colors, spacing, radius } from '../../../theme';
@@ -330,6 +330,9 @@ export default function NewWorkOrderView({
             : undefined
         }
         notice={wo.widthWarning ?? undefined}
+        // Mükerrer/ret bildirimi kadrajın ORTASINDA: operatörün gözü kamerada,
+        // alttaki şeridi görmüyor ve "okumadı" sanıp tekrar okutuyordu.
+        flash={wo.scanFlash}
         footer={
           <ScannerRollStrip
             rolls={wo.scanned}
