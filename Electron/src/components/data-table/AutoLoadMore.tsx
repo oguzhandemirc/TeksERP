@@ -27,6 +27,9 @@ export const AutoLoadMore = forwardRef<HTMLDivElement, Props>(function AutoLoadM
     <div
       ref={ref}
       aria-hidden={!isFetchingMore}
+      /* Ctrl+F çubuğu bunu okur: yüklenmemiş satır varken arama sonucu EKSİK
+         olabilir ve bu kullanıcıya SÖYLENİR (bkz. FindBar). */
+      data-find-unloaded={hasMore ? "1" : undefined}
       className={cn(
         "flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground",
         className,

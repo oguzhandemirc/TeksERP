@@ -134,7 +134,12 @@ export function DataTable<T>({
   });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      /* Ctrl+F çubuğu bunu okur: sonsuz kaydırmada henüz yüklenmemiş satır
+         varsa arama sonucu EKSİK olabilir ve kullanıcıya söylenir. */
+      data-find-unloaded={pagination?.hasMore ? "1" : undefined}
+    >
       <div ref={rootRef} className="flex-1 overflow-auto">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           {/* containerClassName="overflow-visible": Table'ın kendi overflow-auto
