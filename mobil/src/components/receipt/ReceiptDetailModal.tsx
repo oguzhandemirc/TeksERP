@@ -137,6 +137,59 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
                 )}
               </Surface>
 
+              {/* ÜRETİM BİLGİSİ (2026-08-09 saha isteği: "mal kabul detayında
+                  işlem detayı yok"). Fasona NE İÇİN gittiğini söyler: hedef
+                  renk + üretim özellikleri + en + kat. Bu blok olmadan ekran
+                  "kim, ne zaman, kaç top" diyordu ama "ne işlem yapıldı"
+                  sorusunu hiç cevaplamıyordu.
+                  ⚠️ Alanların hepsi `getReceipt` yanıtında GENİŞLETİLDİ —
+                  `workOrder: true` ilişkileri getirmiyordu. */}
+              {(() => {
+                const wo = receipt.workOrder;
+                if (!wo) return null;
+                const props = (wo.targetProperties ?? [])
+                  .map((tp) => tp.property?.name)
+                  .filter(Boolean) as string[];
+                const hasAny =
+                  wo.targetColor?.name || props.length > 0 || wo.width != null || wo.foldType;
+                if (!hasAny) return null;
+                return (
+                  <Surface style={styles.production} elevation={0}>
+                    <View style={styles.productionHead}>
+                      <Icon source="flask-outline" size={15} color="#7c3aed" />
+                      <Text style={styles.productionTitle}>Üretim</Text>
+                    </View>
+                    <View style={styles.chipRow}>
+                      {wo.targetColor?.name ? (
+                        <View style={[styles.chip, styles.chipColor]}>
+                          {wo.targetColor.hex ? (
+                            <View
+                              style={[styles.colorDot, { backgroundColor: wo.targetColor.hex }]}
+                            />
+                          ) : null}
+                          <Text style={styles.chipText}>{wo.targetColor.name}</Text>
+                        </View>
+                      ) : null}
+                      {wo.width != null && (
+                        <View style={styles.chip}>
+                          <Text style={styles.chipText}>↔ {Number(wo.width).toFixed(0)} cm</Text>
+                        </View>
+                      )}
+                      {wo.foldType ? (
+                        <View style={styles.chip}>
+                          <Text style={styles.chipText}>{wo.foldType}</Text>
+                        </View>
+                      ) : null}
+                      {props.map((p) => (
+                        <View key={p} style={[styles.chip, styles.chipProp]}>
+                          <Text style={styles.chipText}>{p}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </Surface>
+                );
+              })()}
+
               {/* Fasona gönderilen orijinal toplar (items.newRoll = original Roll) */}
               <Text style={styles.sectionTitle}>
                 Fasona Giden Toplar ({receipt.items?.length ?? 0})
@@ -281,6 +334,34 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 13, color: '#0f172a', fontWeight: '600' },
 
   sectionTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a', marginTop: 8 },
+
+  // ── Üretim bilgisi (renk / en / kat / özellikler) ────────────────────────
+  production: {
+    backgroundColor: '#faf5ff',
+    padding: 10,
+    borderRadius: 10,
+    gap: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#a855f7',
+  },
+  productionHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  productionTitle: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e9d5ff',
+  },
+  chipColor: { borderColor: '#c4b5fd' },
+  chipProp: { backgroundColor: '#f3e8ff' },
+  chipText: { fontSize: 12, fontWeight: '700', color: '#4c1d95' },
+  colorDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: '#00000022' },
 
   rollItem: {
     flexDirection: 'row',

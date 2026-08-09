@@ -1,19 +1,18 @@
-import { Award, AlarmClock } from "lucide-react";
+import { Scissors } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
+/**
+ * Fason raporları — 2026-08-09'da iki rapor tek karneye birleşti.
+ *   • "Fasoncu Performansı" → karnenin firma tablosu (üstelik FİRE kolonuyla:
+ *     eskisi süre + adet veriyordu, sahada tartışılan metraj farkı yoktu).
+ *   • "Açık Fason Sevkleri"  → karnenin "en eski açık sevkler" tablosu.
+ */
 export const subcontractReportTiles: HubTile[] = [
   {
-    key: "performance",
-    title: "Fasoncu Performansı",
-    description: "Süre, fire ve kalite metrikleri",
-    icon: Award,
-    to: "/reports/subcontract/performance",
-  },
-  {
-    key: "open-dispatches",
-    title: "Açık Fason Sevkleri",
-    description: "Geri gelmemiş rulolar ve yaşlandırma",
-    icon: AlarmClock,
-    to: "/reports/subcontract/open-dispatches",
+    key: "scorecard",
+    title: "Fason Karnesi",
+    description: "Fason firesi (giden ↔ dönen metraj), dönüş süresi ve açık bakiye",
+    icon: Scissors,
+    to: "/reports/subcontract/scorecard",
   },
 ];

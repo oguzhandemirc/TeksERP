@@ -1,33 +1,31 @@
-import { Bug, TrendingDown, CheckCircle2, Crosshair } from "lucide-react";
+import { Award, Trash2 } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
+/**
+ * Kalite raporları — 2026-08-09'da DÖRT rapor kaldırıldı, yerine iki karne geldi.
+ *
+ * Kaldırılanlar ve nedenleri:
+ *   • "Hata Türü Dağılımı" + "İstasyon Hata Oranı" → Fire Karnesi'nin tespit
+ *     tablolarında, üstelik hurda METRAJIYLA birlikte (eskiden yalnız adet vardı).
+ *   • "QC2 Kararları" → enum ikiye indikten sonra (CUT/NO_CUT) Fire Karnesi'nin
+ *     tespit tablosuyla neredeyse birebir örtüşüyordu.
+ *   • "Kurşun Uygulama Oranı" → yönetim sorusu değil proses parametresi denetimi;
+ *     ayrıca iki bağımsız sayacı oranlıyordu (top eşleştirmiyordu), yani dönem
+ *     sınırlarında kayan bir rakamdı.
+ */
 export const qualityReportTiles: HubTile[] = [
   {
-    key: "defect-distribution",
-    title: "Hata Türü Dağılımı",
-    description: "DefectType bazında frekans ve metraj kaybı",
-    icon: Bug,
-    to: "/reports/quality/defect-distribution",
+    key: "scorecard",
+    title: "Kalite Karnesi",
+    description: "Metraj ağırlıklı 1./2. kalite oranı — kumaş, renk, fason kırılımıyla",
+    icon: Award,
+    to: "/reports/quality/scorecard",
   },
   {
-    key: "station-defect-rate",
-    title: "İstasyon Hata Oranı",
-    description: "KK1 / KK2 / Tambur kırılımında hata yoğunluğu",
-    icon: TrendingDown,
-    to: "/reports/quality/station-defect-rate",
-  },
-  {
-    key: "qc2-decisions",
-    title: "QC2 Kararları",
-    description: "Tambur red/kabul oranı ve müşteri iadeleri",
-    icon: CheckCircle2,
-    to: "/reports/quality/qc2-decisions",
-  },
-  {
-    key: "kursun-application",
-    title: "Kurşun Uygulama Oranı",
-    description: "Hangi siparişlerde / topların yüzde kaçına Kurşun geçildi",
-    icon: Crosshair,
-    to: "/reports/quality/kursun-application",
+    key: "scrap-scorecard",
+    title: "Fire Karnesi",
+    description: "Hurda metrajı ve nedeni — hata türü, kumaş, kaynak kırılımıyla",
+    icon: Trash2,
+    to: "/reports/quality/scrap-scorecard",
   },
 ];

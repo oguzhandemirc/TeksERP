@@ -6,32 +6,25 @@ import { Router, Request, Response, NextFunction } from "express";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import {
+  compareRangeSchema,
   dateRangeSchema,
   reportEnvelope,
+  resolveCompareRange,
   resolveDateRange,
 } from "../../services/reports/_shared";
-import {
-  getOpenDispatches,
-  getSubcontractorPerformance,
-} from "../../services/reports/subcontract.report.service";
+import { getSubcontractScorecard } from "../../services/reports/subcontract-scorecard.report.service";
 
 const router = Router();
 const guard = [verifyToken, requirePermission("report:subcontract")];
 
-router.get("/performance", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+/** FASON KARNESİ — fire (giden ↔ dönen metraj), süre, açık bakiye. */
+router.get("/scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getSubcontractorPerformance(range);
-    res.status(200).json(reportEnvelope(data, range));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get("/open-dispatches", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = await getOpenDispatches();
-    res.status(200).json({ success: true, data });
+    const input = compareRangeSchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const compareRange = resolveCompareRange(input, range);
+    const data = await getSubcontractScorecard(range, compareRange);
+    res.status(200).json(reportEnvelope(data, range, compareRange));
   } catch (e) {
     next(e);
   }

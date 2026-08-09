@@ -53,11 +53,24 @@ export const workOrderDocumentService = {
  * Belgeyi bas. Kullanıcı yazdırma diyaloğunu iptal ederse `printHtml` throw eder
  * → çağıran sessiz geçer (mevcut kart/çeki baskı yollarıyla aynı sözleşme).
  */
-export async function printDocument(doc: WorkOrderDocument): Promise<void> {
+export async function printDocument(
+  doc: WorkOrderDocument,
+  /**
+   * TEK SEFERLİK kâğıt boyu. Verilmezse hiç GÖNDERİLMEZ ve backend kalıcı ayarı
+   * uygular — yani bu parametreyi eklemek eski davranışı bozmaz.
+   *
+   * ⚠️ Ne kalıcı ayara ne donmuş snapshot'a yazılır, yeni belge versiyonu
+   * doğurmaz (backend sözleşmesi: `?rowNotes=1` ile aynı sınıf). Cihazdaki
+   * hafıza `deviceSettingsStore.docPageSize`tedir, sunucuda değil.
+   */
+  pageSize?: 'A4' | 'A5',
+): Promise<void> {
+  const params = pageSize ? { pageSize } : undefined;
   if (doc.docType === 'TRAVELER_CARD') {
     const res = await apiClient.get<string>(`/traveler-cards/${doc.sourceId}/html`, {
       responseType: 'text',
       headers: { Accept: 'text/html' },
+      params,
     });
     await printHtml({ html: typeof res.data === 'string' ? res.data : String(res.data) });
     // Baskı GERÇEKLEŞTİ → "kart güncel değil" işaretini temizle. GET /html bunu
@@ -72,7 +85,7 @@ export async function printDocument(doc: WorkOrderDocument): Promise<void> {
 
   const res = await apiClient.get<string>(
     `/printed-documents/${doc.docType}/${doc.sourceId}/html`,
-    { responseType: 'text', headers: { Accept: 'text/html' } },
+    { responseType: 'text', headers: { Accept: 'text/html' }, params },
   );
   await printHtml({ html: typeof res.data === 'string' ? res.data : String(res.data) });
 }

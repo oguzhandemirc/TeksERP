@@ -53,29 +53,22 @@ import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
-import { StationEfficiencyPage } from "@/pages/Reports/Production/StationEfficiencyPage";
+import { WipScorecardPage } from "@/pages/Reports/Production/WipScorecardPage";
 import { OperatorPerformancePage } from "@/pages/Reports/Production/OperatorPerformancePage";
-import { MachineUsagePage } from "@/pages/Reports/Production/MachineUsagePage";
 import { TravelerTracePage } from "@/pages/Reports/Production/TravelerTracePage";
-import { ScrapPage } from "@/pages/Reports/Production/ScrapPage";
+import { BatchTracePage } from "@/pages/Reports/Production/BatchTracePage";
 import { SalesReportsHubPage } from "@/pages/Reports/Sales/SalesReportsHubPage";
-import { OrderFulfillmentPage } from "@/pages/Reports/Sales/OrderFulfillmentPage";
-import { LateDeliveryPage } from "@/pages/Reports/Sales/LateDeliveryPage";
+import { ReturnScorecardPage } from "@/pages/Reports/Sales/ReturnScorecardPage";
+import { ShipmentScorecardPage } from "@/pages/Reports/Sales/ShipmentScorecardPage";
 import { QualityReportsHubPage } from "@/pages/Reports/Quality/QualityReportsHubPage";
-import { DefectDistributionPage } from "@/pages/Reports/Quality/DefectDistributionPage";
-import { StationDefectRatePage } from "@/pages/Reports/Quality/StationDefectRatePage";
-import { Qc2DecisionsPage } from "@/pages/Reports/Quality/Qc2DecisionsPage";
-import { KursunApplicationPage } from "@/pages/Reports/Quality/KursunApplicationPage";
+import { QualityScorecardPage } from "@/pages/Reports/Quality/QualityScorecardPage";
+import { ScrapScorecardPage } from "@/pages/Reports/Quality/ScrapScorecardPage";
 import { InventoryReportsHubPage } from "@/pages/Reports/Inventory/InventoryReportsHubPage";
-import { RollAgingPage } from "@/pages/Reports/Inventory/RollAgingPage";
-import { StockDistributionPage } from "@/pages/Reports/Inventory/StockDistributionPage";
-import { MovementsPage } from "@/pages/Reports/Inventory/MovementsPage";
+import { StockScorecardPage } from "@/pages/Reports/Inventory/StockScorecardPage";
 import { SubcontractReportsHubPage } from "@/pages/Reports/Subcontract/SubcontractReportsHubPage";
-import { PerformancePage as SubcontractPerformancePage } from "@/pages/Reports/Subcontract/PerformancePage";
-import { OpenDispatchesPage } from "@/pages/Reports/Subcontract/OpenDispatchesPage";
+import { SubcontractScorecardPage } from "@/pages/Reports/Subcontract/SubcontractScorecardPage";
 import { CustomerReportsHubPage } from "@/pages/Reports/Customer/CustomerReportsHubPage";
 import { OrderProfilePage } from "@/pages/Reports/Customer/OrderProfilePage";
-import { AliasStatsPage } from "@/pages/Reports/Customer/AliasStatsPage";
 import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
 import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage";
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
@@ -637,10 +630,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/production/station-efficiency",
+    path: "reports/production/wip",
     element: (
       <ProtectedRoute requirePermission="report:production">
-        <StationEfficiencyPage />
+        <WipScorecardPage />
       </ProtectedRoute>
     ),
   },
@@ -653,10 +646,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/production/machine-usage",
+    path: "reports/production/batch-trace",
     element: (
       <ProtectedRoute requirePermission="report:production">
-        <MachineUsagePage />
+        <BatchTracePage />
       </ProtectedRoute>
     ),
   },
@@ -669,14 +662,6 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/production/scrap",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <ScrapPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: "reports/sales",
     element: (
       <ProtectedRoute requirePermission="report:sales">
@@ -685,18 +670,18 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/sales/order-fulfillment",
+    path: "reports/sales/shipment-scorecard",
     element: (
       <ProtectedRoute requirePermission="report:sales">
-        <OrderFulfillmentPage />
+        <ShipmentScorecardPage />
       </ProtectedRoute>
     ),
   },
   {
-    path: "reports/sales/late-delivery",
+    path: "reports/sales/return-scorecard",
     element: (
       <ProtectedRoute requirePermission="report:sales">
-        <LateDeliveryPage />
+        <ReturnScorecardPage />
       </ProtectedRoute>
     ),
   },
@@ -709,34 +694,18 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/quality/defect-distribution",
+    path: "reports/quality/scorecard",
     element: (
       <ProtectedRoute requirePermission="report:quality">
-        <DefectDistributionPage />
+        <QualityScorecardPage />
       </ProtectedRoute>
     ),
   },
   {
-    path: "reports/quality/station-defect-rate",
+    path: "reports/quality/scrap-scorecard",
     element: (
       <ProtectedRoute requirePermission="report:quality">
-        <StationDefectRatePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/quality/qc2-decisions",
-    element: (
-      <ProtectedRoute requirePermission="report:quality">
-        <Qc2DecisionsPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/quality/kursun-application",
-    element: (
-      <ProtectedRoute requirePermission="report:quality">
-        <KursunApplicationPage />
+        <ScrapScorecardPage />
       </ProtectedRoute>
     ),
   },
@@ -749,26 +718,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/inventory/roll-aging",
+    path: "reports/inventory/scorecard",
     element: (
       <ProtectedRoute requirePermission="report:inventory">
-        <RollAgingPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/inventory/stock-distribution",
-    element: (
-      <ProtectedRoute requirePermission="report:inventory">
-        <StockDistributionPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/inventory/movements",
-    element: (
-      <ProtectedRoute requirePermission="report:inventory">
-        <MovementsPage />
+        <StockScorecardPage />
       </ProtectedRoute>
     ),
   },
@@ -781,18 +734,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/subcontract/performance",
+    path: "reports/subcontract/scorecard",
     element: (
       <ProtectedRoute requirePermission="report:subcontract">
-        <SubcontractPerformancePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/subcontract/open-dispatches",
-    element: (
-      <ProtectedRoute requirePermission="report:subcontract">
-        <OpenDispatchesPage />
+        <SubcontractScorecardPage />
       </ProtectedRoute>
     ),
   },
@@ -809,14 +754,6 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:customer">
         <OrderProfilePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/customer/alias-stats",
-    element: (
-      <ProtectedRoute requirePermission="report:customer">
-        <AliasStatsPage />
       </ProtectedRoute>
     ),
   },

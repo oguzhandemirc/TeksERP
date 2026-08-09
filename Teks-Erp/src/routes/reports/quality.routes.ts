@@ -6,55 +6,49 @@ import { Router, Request, Response, NextFunction } from "express";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import {
+  compareRangeSchema,
   dateRangeSchema,
   reportEnvelope,
+  resolveCompareRange,
   resolveDateRange,
 } from "../../services/reports/_shared";
-import {
-  getDefectDistribution,
-  getKursunApplication,
-  getQc2Decisions,
-  getStationDefectRate,
-} from "../../services/reports/quality.report.service";
+import { getQualityScorecard } from "../../services/reports/quality-scorecard.report.service";
+import { getScrapScorecard } from "../../services/reports/scrap-scorecard.report.service";
 
 const router = Router();
 const guard = [verifyToken, requirePermission("report:quality")];
 
-router.get("/defect-distribution", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * KALİTE KARNESİ — dönem karşılaştırmalı.
+ *
+ * `compare=prev|prevYear|custom` verilmezse karşılaştırma sorgusu HİÇ koşmaz
+ * (karşılaştırma istemeyen ekran maliyetini ödemesin). `compareRangeSchema`
+ * `.strict()` olduğu için yanlış yazılmış bir parametre sessizce yok sayılmaz,
+ * 400 döner — sessiz "karşılaştırma çalışmıyor" şikâyetinin önü kapalı.
+ */
+router.get("/scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getDefectDistribution(range);
-    res.status(200).json(reportEnvelope(data, range));
+    const input = compareRangeSchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const compareRange = resolveCompareRange(input, range);
+    const data = await getQualityScorecard(range, compareRange);
+    res.status(200).json(reportEnvelope(data, range, compareRange));
   } catch (e) {
     next(e);
   }
 });
 
-router.get("/station-defect-rate", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * FİRE KARNESİ — Kalite Karnesi'nin ikizi, aynı evren ve aynı çıpa.
+ * İkisinin `producedQty`'si birebir aynı olmak zorunda (bekçi: test_scrap_scorecard).
+ */
+router.get("/scrap-scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getStationDefectRate(range);
-    res.status(200).json(reportEnvelope(data, range));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get("/qc2-decisions", ...guard, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getQc2Decisions(range);
-    res.status(200).json(reportEnvelope(data, range));
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get("/kursun-application", ...guard, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getKursunApplication(range);
-    res.status(200).json(reportEnvelope(data, range));
+    const input = compareRangeSchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const compareRange = resolveCompareRange(input, range);
+    const data = await getScrapScorecard(range, compareRange);
+    res.status(200).json(reportEnvelope(data, range, compareRange));
   } catch (e) {
     next(e);
   }

@@ -265,6 +265,140 @@ export function docBlocksHtml(
     .join("");
 }
 
+// =============================================================================
+// AYARLANABİLİR BOŞ GRID (2026-08-09)
+// =============================================================================
+// Saha isteği "kurşuncular için tablo koy" diye başladı ama istenen şey ÖZEL bir
+// tablo değil, GENEL bir yapıydı — kullanıcının kendi ifadesiyle: *"belgede
+// istediğim gibi grid ayarlayabileyim; satır, sütun sayısını ben belirleyeceğim.
+// İlk satırda tanım sütunları olmayacak yani hepsi boş olacak hücrelerin. Sütun
+// genişliklerini de ben belirleyeceğim."*
+//
+// ⚠️ OPT-IN ve VARSAYILAN KAPALI — `enabled` verilmezse **tek bayt basılmaz**
+// (ne HTML ne CSS). Ayarına dokunulmamış belgelerin çıktısı bayt-bayt korunur;
+// donmuş belgeler de öyle (snapshot anahtarı taşımaz → kapalı). Bu, belge
+// katmanının kurulu kuralıdır: `docBlocksHtml` da boş dizide "" döner.
+//
+// ⚠️ HÜCRELER ELLE DOLDURULUR — veri BASILMAZ. Grid'in tamamı boş kutulardır;
+// "ilk satırda başlık" bile OPSİYONELDİR (kullanıcı kararı). Buraya veri bağlama
+// isteği gelirse çözüm bu bloğu genişletmek değil, belgeye gerçek bir tablo
+// eklemektir — boş grid'in tanımı "sistemin bilmediği şeyi elle yaz"dır.
+// =============================================================================
+
+/** Ham (kısmi) boş-grid ayarı — `DocumentConfig.blankGrid`. */
+export interface BlankGridConfig {
+  /** OPT-IN. false/verilmedi → hiç basılmaz (tek bayt bile). */
+  enabled?: boolean;
+  /** Üst başlık ("KURŞUN KAYDI" gibi). Boş → başlık satırı basılmaz. */
+  title?: string;
+  /** Satır sayısı (1–40). */
+  rows?: number;
+  /** Sütun sayısı (1–12). */
+  columns?: number;
+  /** Sütun genişlikleri, YÜZDE. Eksik/hatalıysa eşit bölünür. */
+  columnWidths?: number[];
+  /** İlk satır sütun başlıkları. Tamamı boşsa başlık satırı HİÇ basılmaz. */
+  headers?: string[];
+  /** Belgede konum — serbest metin bloklarıyla aynı iki çıpa. */
+  position?: "afterHeader" | "beforeSignatures";
+}
+
+export const BLANK_GRID_MAX_ROWS = 40;
+export const BLANK_GRID_MAX_COLS = 12;
+
+/** Sınır içine kırp; sayı olmayan değer varsayılana düşer (fason çeki sözleşmesi). */
+function clampInt(v: unknown, min: number, max: number, dflt: number): number {
+  const n = typeof v === "number" && Number.isFinite(v) ? Math.round(v) : NaN;
+  if (Number.isNaN(n)) return dflt;
+  return Math.min(max, Math.max(min, n));
+}
+
+/** Kayıt kapısı — panelden gelen ham değeri güvenli hale getirir. */
+export function sanitizeBlankGrid(raw: unknown): BlankGridConfig | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  // ⚠️ `enabled` YOKSA ayar hiç saklanmaz: kapalı bir grid'i kaydetmek, ayar
+  // dosyasını anlamsız satırlarla şişirir ve "dokunulmamış belge" ile
+  // "kapatılmış belge" ayrımını kaybettirir.
+  const enabled = o.enabled === true;
+  if (!enabled) return undefined;
+  const columns = clampInt(o.columns, 1, BLANK_GRID_MAX_COLS, 5);
+  const widths = Array.isArray(o.columnWidths)
+    ? o.columnWidths.filter((w): w is number => typeof w === "number" && Number.isFinite(w) && w > 0)
+    : [];
+  const headers = Array.isArray(o.headers)
+    ? o.headers.slice(0, columns).map((h) => (typeof h === "string" ? h.slice(0, 40) : ""))
+    : [];
+  return {
+    enabled: true,
+    title: typeof o.title === "string" ? o.title.slice(0, 100) : undefined,
+    rows: clampInt(o.rows, 1, BLANK_GRID_MAX_ROWS, 10),
+    columns,
+    // Genişlik sayısı sütun sayısıyla UYUŞMUYORSA tamamen atılır (eşit bölünür).
+    // Kısmi listeyi kabul edip kalanını doldurmak, kullanıcının gördüğü tabloyla
+    // basılanı sessizce ayrıştırırdı.
+    ...(widths.length === columns ? { columnWidths: widths } : {}),
+    ...(headers.some((h) => h.trim()) ? { headers } : {}),
+    position: o.position === "afterHeader" ? "afterHeader" : "beforeSignatures",
+  };
+}
+
+/** Boş grid CSS'i — grid KAPALIYSA boş string (parmak izi korunur). */
+export function docBlankGridCss(cfg: { blankGrid?: BlankGridConfig }): string {
+  if (!cfg.blankGrid?.enabled) return "";
+  return `
+  .bgrid-wrap { margin: 8px 0; }
+  .bgrid-title { font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+                 text-transform: uppercase; margin-bottom: 3px; }
+  .bgrid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .bgrid th, .bgrid td { border: 0.5px solid #000; padding: 0; }
+  .bgrid th { font-size: 10px; font-weight: 700; text-align: center; padding: 3px 2px; }
+  /* Yükseklik hücrenin KENDİSİNDE — elle yazılacak kutunun yüksekliği budur.
+     İçerik olmadığı için satır yüksekliği başka türlü doğmaz. */
+  .bgrid td { height: 18px; }
+`;
+}
+
+/**
+ * Boş grid HTML'i. Grid kapalıysa ya da konum eşleşmiyorsa **boş string**.
+ *
+ * `docBlocksHtml` ile aynı çağrı sözleşmesi: renderer iki çıpada da çağırır,
+ * hangisinin basılacağına ayar karar verir.
+ */
+export function docBlankGridHtml(
+  cfg: { blankGrid?: BlankGridConfig },
+  position: "afterHeader" | "beforeSignatures",
+  esc: EscFn,
+): string {
+  const g = cfg.blankGrid;
+  if (!g?.enabled) return "";
+  if ((g.position ?? "beforeSignatures") !== position) return "";
+
+  const cols = g.columns ?? 5;
+  const rows = g.rows ?? 10;
+  const widths = g.columnWidths;
+  const colgroup = `<colgroup>${Array.from({ length: cols }, (_, i) => {
+    const w = widths ? widths[i] : undefined;
+    // Yüzdeler toplamı 100 olmak ZORUNDA DEĞİL — tarayıcı oranlar. Kullanıcıya
+    // "toplam 100 olmalı" kuralı dayatmak gereksiz sürtünmedir.
+    return w != null ? `<col style="width:${w}%">` : "<col>";
+  }).join("")}</colgroup>`;
+
+  const headerRow =
+    g.headers && g.headers.some((h) => h.trim())
+      ? `<thead><tr>${Array.from(
+          { length: cols },
+          (_, i) => `<th>${esc(g.headers?.[i] ?? "")}</th>`,
+        ).join("")}</tr></thead>`
+      : "";
+
+  const emptyRow = `<tr>${"<td></td>".repeat(cols)}</tr>`;
+  const body = `<tbody>${emptyRow.repeat(rows)}</tbody>`;
+  const title = g.title?.trim() ? `<div class="bgrid-title">${esc(g.title)}</div>` : "";
+
+  return `<div class="bgrid-wrap">${title}<table class="bgrid">${colgroup}${headerRow}${body}</table></div>`;
+}
+
 /** Tek seferlik baskı notu (?printNote=) — kalıcı ayara girmez, bu render'a özeldir. */
 export function docPrintNoteHtml(printNote: string | null | undefined, esc: EscFn): string {
   return printNote?.trim() ? `<div class="doc-block">${esc(printNote)}</div>` : "";

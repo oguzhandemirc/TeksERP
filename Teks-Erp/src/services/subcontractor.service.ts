@@ -3787,6 +3787,9 @@ export class SubcontractorService {
             currentQty: true,
             weightKg: true,
             width: true,
+            // KAT — topun kalıcı özelliği (migration 20260804210000). Seçilmezse
+            // ekranda "—" çıkardı ve operatör "kat girilmemiş" sanırdı.
+            foldType: true,
             status: true,
             qualityGrade: true,
             item: { select: { code: true, name: true } },

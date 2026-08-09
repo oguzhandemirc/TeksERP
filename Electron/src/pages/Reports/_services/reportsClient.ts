@@ -5,12 +5,21 @@
 // =============================================================================
 
 import apiClient from "@/services/apiClient";
-import type { ReportDateParams, ReportResponse } from "./types";
+import type { ReportCompareParams, ReportResponse } from "./types";
 
-async function getReport<T>(path: string, params: ReportDateParams = {}): Promise<ReportResponse<T>> {
+/**
+ * ⚠️ Backend şemaları `.strict()` — TANIMADIĞI parametre 400 döndürür (sessizce
+ * yok saymaz). Bu yüzden burada yalnız BİLİNEN anahtarlar yazılır; `params`
+ * nesnesini olduğu gibi querystring'e dökmek, çağıranın eklediği herhangi bir
+ * alanla tüm raporu 400'e düşürürdü.
+ */
+async function getReport<T>(path: string, params: ReportCompareParams = {}): Promise<ReportResponse<T>> {
   const search = new URLSearchParams();
   if (params.dateFrom) search.set("dateFrom", params.dateFrom);
   if (params.dateTo) search.set("dateTo", params.dateTo);
+  if (params.compare) search.set("compare", params.compare);
+  if (params.compareFrom) search.set("compareFrom", params.compareFrom);
+  if (params.compareTo) search.set("compareTo", params.compareTo);
   const qs = search.toString();
   const res = await apiClient.get<ReportResponse<T>>(
     `/api/reports/${path}${qs ? `?${qs}` : ""}`,

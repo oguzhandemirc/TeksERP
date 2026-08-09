@@ -10,6 +10,7 @@ import { workOrderService, type QuickStartRequest } from '../../../services/work
 import { fabricPropertyService } from '../../../services/fabricProperty.service';
 import { signalScan } from '../../../services/scanFeedback';
 import { useScanFeedback } from '../../../hooks/useScanFeedback';
+import { useSubcontractorDefault } from '../../../hooks/useSubcontractorDefault';
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { generateClientUuid } from '../../../offline/barcode';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
@@ -95,6 +96,9 @@ function routeApplyCaps(route: RouteLike) {
  */
 export function useQuickWorkOrder() {
   const qc = useQueryClient();
+  // KİŞİSEL tercih (2026-08-09) — fason varsayılanı favori mi son seçilen mi.
+  // Electron ile AYNI tercih blob'unu okur (kullanıcı iki cihazda aynı davranışı görür).
+  const { pickDefault, remember: rememberFirms } = useSubcontractorDefault();
   const lastRouteTemplateId = useDeviceSettingsStore((s) => s.lastRouteTemplateId);
   const setLastRouteTemplateId = useDeviceSettingsStore((s) => s.setLastRouteTemplateId);
 
@@ -256,7 +260,7 @@ export function useQuickWorkOrder() {
     enabled: fasonCategoryIds.length > 0,
     staleTime: 10 * 60 * 1000,
   });
-  const favoriteFirmFor = useCallback(
+  const rawFavoriteFirmFor = useCallback(
     (categoryId: string): string | undefined => {
       const subs = subcontractorsQuery.data?.data ?? [];
       const inCat = subs.filter((s) => s.categories?.some((c) => c.categoryId === categoryId));
@@ -264,6 +268,17 @@ export function useQuickWorkOrder() {
       return (inCat.find((s) => s.isFavorite) ?? inCat[0]).id;
     },
     [subcontractorsQuery.data],
+  );
+
+  /**
+   * Kategorinin VARSAYILAN firması — KİŞİSEL tercihe göre (2026-08-09).
+   * Tercih "favori" ise bugünkü davranış aynen korunur; "son seçilen" ise o
+   * kategoride en son kullanılan firma gelir (geçmiş yoksa favoriye düşer).
+   * Electron ile AYNI tercih blob'unu okur.
+   */
+  const favoriteFirmFor = useCallback(
+    (categoryId: string): string | undefined => pickDefault(categoryId, rawFavoriteFirmFor),
+    [pickDefault, rawFavoriteFirmFor],
   );
 
   const firmOptionsByCategory = useMemo(() => {
@@ -587,6 +602,16 @@ export function useQuickWorkOrder() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Son kullanılan rotayı cihaza yaz (sonraki açılışta hazır gelsin).
       void setLastRouteTemplateId(routeTemplateId);
+      // KİŞİSEL HAFIZA (2026-08-09): kategori → en son seçilen fason firma.
+      // ⚠️ Tercih KAPALIYKEN de yazılır — anahtarı sonra çeviren kullanıcı boş
+      // bir hafızayla karşılaşmasın. Rota bazlı DEĞİL kategori bazlı: aynı
+      // boyahane farklı rotalarda kullanılıyor.
+      rememberFirms(
+        (selectedRoute?.steps ?? []).map((s) => ({
+          categoryId: s.station?.defaultCategory?.id,
+          firmId: selectedFirmBySeq[s.sequence] ?? undefined,
+        })),
+      );
       setResult({
         workOrderNumber: data.workOrder.workOrderNumber,
         batchNumber: data.batch?.batchNumber ?? null,

@@ -67,6 +67,30 @@ enum RollEntrySource {
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
 }
 
+/// ÜRETİM SAPMASININ TÜRÜ (`RollVariance.kind`, 2026-08-09).
+///
+/// Ayrım keyfî değil, sektörel: tek soruya dayanır — **bu metraj fiziksel olarak
+/// var mıydı?** SAP karşılığı: fire ayrı bir hurda hareketidir (551) ve hurda
+/// sebep kodu ZORUNLUDUR; kayıt düzeltmesi ise envanter düzeltmesidir (701/702),
+/// ayrı belge türü. İkisini tek kovaya atmak fire oranını SİSTEMATİK olarak
+/// şişirir — "fireniz neden %8?" sorusunun cevabı aslında "yanlış ölçmüşüz" olur.
+///
+/// Projedeki emsal aynı ayrımdır: `InventoryService.softDelete` açık hareketi
+/// `qtyOut = 0` ile kapatır ("mal buradan HİÇ geçmedi" = storno), WO-kapanış
+/// dispozisyonu ise `qtyOut = qtyIn` ile ("mal vardı ve çıktı").
+enum RollVarianceKind {
+  /// Mal VARDI, kullanılamaz → gerçek üretim kaybı. Fire/verim KPI'sına girer.
+  SCRAP
+  /// Mal HİÇ YOKTU, kayıt yanlıştı → stok/ölçüm düzeltmesi. Fire DEĞİLDİR.
+  /// Eski arayüz adı "At (kayıp)" idi; "kayıp" fire çağrıştırdığı için değişti.
+  RECORD_CORRECTION
+  /// Kayıtlıdan FAZLA çıktı (artı yön). 2026-08-09 öncesinde HİÇ kaydedilmiyordu:
+  /// `tambur.overQuantityEnabled` (varsayılan AÇIK) aşımı kabul ediyor, parent
+  /// `TAMBUR_CONSUMED` oluyor ve "40 m fazla çıktı" bilgisi buharlaşıyordu. Yani
+  /// sapmanın eksi yönü iz bırakıyor, artı yönü bırakmıyordu → rapor tek yönlüydü.
+  OVERAGE
+}
+
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
 enum SackWeightSource {
   SCALE // Fiziksel kantardan okundu (mobil BT-SPP / Electron seri port)
@@ -319,6 +343,8 @@ model User {
   cancelledKartelaReceipts   KartelaReceipt[]         @relation("KartelaReceiptCancelledBy")
   swatchesCreated            Swatch[]                 @relation("SwatchCreatedBy")
   rollOperations             RollOperation[]
+  rollVariances              RollVariance[]
+  reversedRollVariances      RollVariance[]           @relation("RollVarianceReversedBy")
   detectedRollErrors         RollError[]              @relation("RollErrorDetectedBy")
   processedRollErrors        RollError[]              @relation("RollErrorProcessedBy")
   createdRolls               Roll[]                   @relation("RollCreatedBy")
@@ -1201,6 +1227,106 @@ model Roll {
   /// hareketsiz/partisiz topa daraltır).
   preCancelStatus RollStatus?
 
+  /// ETİKETİNDE YAZAN MÜŞTERİ (2026-08-09) — `lastLabelSnapshot.customerId`'nin
+  /// SORGULANABİLİR aynası. Tek yazma noktası `label.service`; snapshot ile AYNI
+  /// transaction'da yazılır.
+  ///
+  /// ⚠️ ADI LOAD-BEARING: `customerId` DEĞİL. Kök kural *"Top→sipariş bağı yok"* —
+  /// çuval havuzu modelinde tahsis ÇUVAL bazında ve SEVK ANINDA yapılır
+  /// (`SackAllocation`); `packedQty`/`rebalanceCustomerPool` bilinçli olarak
+  /// kaldırılmıştı. Kullanıcının kendi ifadesiyle: *"top gerçekten birine tahsis
+  /// edilemez, her an her şey olabilir; X için üretilmiş top Y'ye gönderilebilir."*
+  /// Düz `customerId` deseydik altı ay sonra biri üstüne tahsis mantığı yazardı.
+  /// Bu kolon bir SAHİPLİK değil, **basılmış kâğıdın izidir**.
+  ///
+  /// NEDEN KOLON, neden JSON'dan okumuyoruz: `lastLabelSnapshot` bir JSON blob;
+  /// indekslenemez, `buildWhereClause` yolundan filtrelenemez. Üç yüzey bunu
+  /// sorgulanabilir ister — müşteri filtresi, toplu müşteri değiştirme ve
+  /// çuval/top uyuşmazlık uyarısı.
+  ///
+  /// NULL = stok etiketi (müşterisiz, BİLİNÇLİ bir seçim) VEYA bu karardan önce
+  /// basılmış top. İkisi ayırt edilmez ve edilmemeli: ikisinde de "bu topun
+  /// etiketinde müşteri yazmıyor" doğrudur.
+  labelCustomerId String? @db.Uuid
+
+  /// ── TAMBUR KAPANIŞINDAN ÖNCEKİ HÂL (2026-08-09) ──────────────────────────
+  /// `preShipStatus` / `preCancelStatus` ile AYNI aile, AYNI gerekçe: bir kapanış
+  /// işlemi topun önceki hâlini YOK EDİYOR ve geri alma onu türetmeye çalışıyordu.
+  ///
+  /// Sahada ölçülen hasar (IE0808260001, 2026-08-08): `applyFull` kaynak topun
+  /// metrajını ÇOCUKLARIN TOPLAMINDAN türetiyordu (`currentQty: restored`).
+  /// Aşımlı kesimde (bkz. `tambur.overQuantityEnabled`, varsayılan AÇIK) çocukların
+  /// toplamı kayıtlı metrajı geçebildiği için ortaya `initialQty=500` iken
+  /// `currentQty=520,5` taşıyan — yani giriş metrajından fazla mevcut metraj
+  /// gösteren — bir satır çıktı. Türetme yerine KAYIT: kapanış anındaki değerler
+  /// burada saklanır, geri alma onları aynen geri koyar.
+  ///
+  /// İkisi de geri almada OKUNUR ve NULL'lanır (bayat değer kalmasın).
+  /// NULL = bu karardan önce kapanmış top; geri alma eski türetme yoluna düşer
+  /// (davranış değişmez, yeni kayıtlar doğru olur).
+
+  /// Kapanış anındaki `currentQty`. Türetilemez: `initialQty` kapanışta
+  /// değişmiyor ama `currentQty` sıfırlanıyor.
+  preTamburCloseQty Decimal? @db.Decimal(12, 3)
+
+  /// Kapanış anındaki statü. YALNIZ depo kesimi (`finalizeWarehouseCut`) için
+  /// gerekli — üretim akışında kapanış öncesi statü her zaman `IN_PRODUCTION`.
+  /// ⚠️ Renkten TÜRETİLEMEZ: `colorId IS NULL → STOCK` kuralı, renksiz ama
+  /// `WAREHOUSE`'a inmiş topu (ham kumaş bitmiş ürün olarak depoya alınabiliyor)
+  /// yanlış rafa yazardı.
+  preTamburCloseStatus RollStatus?
+
+  /// ── ÜRETİM ZAMAN ÇIPALARI (rapor tabanı) ─────────────────────────────────
+  /// İkisini de UYGULAMA KODU YAZMAZ — `rolls` tablosundaki BEFORE trigger
+  /// `roll_stamp_production_timestamps` yazar (migration 20260809090000).
+  ///
+  /// NEDEN TRIGGER, neden helper değil: `Roll.status`'e yazan 40+ çağrı noktası
+  /// var (tambur, kurşun, fason, WO-kapanış, kurtarma, storno, iade, manuel
+  /// taşıma…). Bir tanesini atlamak raporda SESSİZ eksik demek — hata yok, log
+  /// yok, sadece o toplar hiçbir dönemde görünmez. Trigger atlanamaz; ham SQL
+  /// bile onu geçemez. Envanter + bekçi: `scripts/test_db_invariants.ts` §6.
+  ///
+  /// ⚠️ `updatedAt` BU İŞİ GÖREMEZ ve yerine kullanılmamalı: etiket yeniden
+  /// basımı ya da not düzenlemesi de onu günceller (kök CLAUDE.md "Buraya geliş
+  /// ≠ oluşturma" notu). Fire raporu 2026-08-09'a kadar tam o kumun üstündeydi.
+
+  /// Topun ÜRETİMDEN ÇIKTIĞI an — kalite kararı verilip nihai rafına girdiği an.
+  /// Kalite/fire/fason karnelerinin dönem çıpası budur.
+  ///
+  /// YAZILIR: üretim tarafı bir statüden (`IN_PRODUCTION`, `STOCK`,
+  /// `AT_SUBCONTRACTOR`, `RETURNED_FROM_SUBCONTRACTOR`) final statüye
+  /// (`WAREHOUSE`, `A1_STOCK`, `SCRAP`) geçişte; ayrıca top doğrudan final
+  /// statüde DOĞDUYSA (fason kabul çocuğu) INSERT'te.
+  ///
+  /// YAZILMAZ: `SHIPPED → WAREHOUSE` (sevk storno / iade — mal üretimi yeniden
+  /// bitirmedi) ve `CANCELLED → *` (iptal geri alma). Bu iki dal olmasaydı bir
+  /// storno, aylar önce üretilmiş topu BUGÜNÜN kalite karnesine sokardı.
+  ///
+  /// ⚠️ ÜZERİNE YAZILIR (write-once DEĞİL): depo topu yeni bir iş emrine girip
+  /// tekrar finalize olursa damga tazelenir. Bilinçli — `qualityGradeId` de
+  /// üzerine yazılıyor; damga sabitlenseydi top ESKİ tarihle YENİ kaliteyi
+  /// taşır ve bugünün kalite kararı geçen ayın karnesine yazılırdı. Bu kolonun
+  /// tek invariant'ı: **`finalizedAt` her zaman mevcut `qualityGradeId` ile
+  /// aynı olaydan gelir.**
+  ///
+  /// NULL = hiç finalize olmamış (ham stok / üretimde) VEYA geriye doldurma
+  /// kapsamı dışında kalmış eski kayıt (bkz. `scripts/backfill_roll_production_timestamps.ts`).
+  finalizedAt DateTime? @db.Timestamptz
+
+  /// Statünün EN SON değiştiği an — her `status` değişiminde tazelenir.
+  /// Stok yaşlandırma / FIFO ("en eski depo topunu önce sevk et") bunun için
+  /// var: kök CLAUDE.md'nin *"yalnız statü geçişlerinde damgalanan ayrı bir
+  /// kolon gerekir; `updatedAt` bunun yerine kullanılmamalı"* dediği kolon.
+  ///
+  /// `finalizedAt`ten farkı: bu HER geçişte yazılır (sevk, iptal, iade dahil),
+  /// o yalnız üretim çıkışında. İkisini karıştırma — yaşlandırma "kaç gündür
+  /// bu rafta" sorar, kalite karnesi "ne zaman üretildi" sorar.
+  ///
+  /// Index BİLİNÇLİ olarak EKLENMEDİ: tüketicisi (Stok & Ölü Stok karnesi) henüz
+  /// yazılmadı ve `rolls` zaten en çok indeksli tablo. O rapor yazılırken
+  /// `[status, statusChangedAt]` composite'i EXPLAIN kanıtıyla eklenecek.
+  statusChangedAt DateTime? @db.Timestamptz
+
   // Relations
   item                 Item                        @relation(fields: [itemId], references: [id])
   color                Color?                      @relation(fields: [colorId], references: [id])
@@ -1208,6 +1334,7 @@ model Roll {
   errors               RollError[]
   movements            RollMovement[]
   operations           RollOperation[]
+  variances            RollVariance[]
   parent               Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
   children             Roll[]                      @relation("RollLineage")
   directShipment       DirectShipment?             @relation(fields: [directShipmentId], references: [id])
@@ -1225,6 +1352,7 @@ model Roll {
   cancelledBy          User?                       @relation("RollCancelledBy", fields: [cancelledById], references: [id])
   createdMachine       Machine?                    @relation("RollCreatedMachine", fields: [createdMachineId], references: [id])
   entryStation         Station?                    @relation("RollEntryStation", fields: [entryStationId], references: [id])
+  labelCustomer        Customer?                   @relation("RollLabelCustomer", fields: [labelCustomerId], references: [id])
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
@@ -1284,6 +1412,18 @@ model Roll {
   // F123: status-filtreli listede currentQty sıralaması (depo miktar). initialQty/width/
   // qualityGrade İÇİN eklenmedi — rolls çok-index'li (D-8); ölçekte EXPLAIN ihtiyaç gösterirse.
   @@index([status, currentQty])
+  // Etiket müşterisi süzgeci ("şu müşteriye basılmış toplar"). DB'de PARTIAL'dır
+  // (WHERE "labelCustomerId" IS NOT NULL — migration 20260809023731): kolon
+  // çoğunlukla NULL (stok etiketi yaygın ve bilinçli) ve NULL satırlar hiç
+  // aranmıyor. Drift-free desen: şemada düz @@index, migration'da predicate —
+  // Prisma 7 predicate farkını drift SAYMAZ (index↔unique farkını sayar).
+  @@index([labelCustomerId])
+  // Kalite/fire/fason karnelerinin dönem taraması (`finalizedAt BETWEEN a AND b`).
+  // PARTIAL (WHERE "finalizedAt" IS NOT NULL) — migration 20260809090000. Yalnız
+  // üretimi bitmiş toplar damgalanır (ham stok + üretimdekiler NULL), yani index
+  // tablonun bir alt kümesini tutar. Tek kolon yeter: raporlar önce dönemle
+  // daraltıp sonra JOIN'liyor (kırılım item/color/subcontractor üzerinden).
+  @@index([finalizedAt])
   @@map("rolls")
 }
 
@@ -1322,6 +1462,8 @@ model Customer {
   // Relations
   orders           Order[]
   defaultRoutes    Route[]                   @relation("CustomerDefaultRoutes")
+  /// Etiketinde bu müşteri yazan toplar — SAHİPLİK DEĞİL (bkz. `Roll.labelCustomerId`).
+  labelledRolls    Roll[]                    @relation("RollLabelCustomer")
   branches         CustomerBranch[]
   itemAliases      CustomerItemAlias[]
   colorAliases     CustomerColorAlias[]
@@ -1666,6 +1808,7 @@ model WorkOrderStep {
   dispatches           SubcontractorDispatch[]
   receipts             SubcontractorReceipt[]
   operations           RollOperation[]
+  variances            RollVariance[]
   currentRolls         Roll[]                   @relation("RollCurrentStep")
   producedRolls        Roll[]                   @relation("RollProducedInStep")
   detectedErrors       RollError[]              @relation("RollErrorDetectedAt")
@@ -2000,6 +2143,87 @@ model RollOperation {
   // Operatör performans raporu createdAt aralığıyla tarar (H-14)
   @@index([createdAt])
   @@map("roll_operations")
+}
+
+// =============================================================================
+// ROLL VARIANCE — üretim sapması defteri (2026-08-09)
+// =============================================================================
+// APPEND-ONLY. "Planlanan/kayıtlı metraj ile gerçekleşen arasındaki fark nereye
+// gitti" sorusunun TEK sorgulanabilir cevabı.
+//
+// NEDEN AYRI TABLO, neden `RollOperation.metadata` DEĞİL: sapma bugüne kadar üç
+// yerde birden yaşıyordu ve üçü de raporlanamazdı —
+//   • `scrap` kararı  → gerçek bir FIRE topu doğuruyor (görünür ✅)
+//   • `discard` kararı → HİÇBİR kayıt doğmuyor; iz yalnız TAMBUR_PROCESSED'ın
+//     `metadata` JSON'unda (`remainingAction: "discard"`). JSON indekslenemez;
+//     "bu ay ne kadar metraj düzeltmesi yapıldı" sorusu tüm satırları taramadan
+//     cevaplanamaz (perf kuralı 6: JSON sorgulanacaksa GIN index, endpoint
+//     yazılmadan ÖNCE — yani JSON'a yazmak burada baştan yanlış tercih olurdu).
+//   • aşım (fazla kesim) → HİÇBİR yere yazılmıyordu.
+//
+// NEDEN `RollOperationType`'a yeni değer EKLENMEDİ: o enum "istasyonda şu işlem
+// yapıldı" diyor ve `@@unique([rollId, workOrderStepId, operationType])` taşıyor
+// — yani adım başına TEK satır. Sapma ise aynı adımda birden çok kez doğabilir
+// (üç ayrı kesimde üç aşım). Emsal: WO-kapanış dispozisyonu da o enum'u
+// genişletmedi (kök CLAUDE.md).
+//
+// ⚠️ `qty` HER ZAMAN POZİTİFTİR; yönü `kind` söyler (SCRAP/RECORD_CORRECTION
+// eksi, OVERAGE artı). İşaretli sayı saklamak "SUM(qty)" yazan her raporu sessiz
+// biçimde yanlışlar — biri işareti dikkate alır, diğeri almaz.
+// =============================================================================
+model RollVariance {
+  id              String           @id @default(uuid()) @db.Uuid
+  rollId          String           @db.Uuid
+  /// Sapmanın doğduğu iş emri adımı. NULL olabilir: depo kesimi (`cutWarehouseRoll`
+  /// / `finalizeWarehouseCut`) hiçbir adıma bağlı değildir — depo topu bir iş
+  /// emrine girmeden kesilebiliyor.
+  workOrderStepId String?          @db.Uuid
+  kind            RollVarianceKind
+  /// Sapan metraj — HER ZAMAN POZİTİF (bkz. üstteki not).
+  qty             Decimal          @db.Decimal(12, 3)
+  /// Hazır katalogdan seçilen sebep kodu (`constants/variance-reasons.ts`).
+  /// OVERAGE'da NULL olabilir — aşımı sistem tespit eder, operatör beyan etmez.
+  reasonCode      String?          @db.VarChar(64)
+  /// "Diğer" seçildiğinde operatörün yazdığı serbest metin. Serbest yazım
+  /// KALDIRILMADI, katalogun altına alındı: eldivenli operatör vardiya ortasında
+  /// "aaa" / "." gibi doldurmalar üretiyordu ve o, boş bırakmaktan DAHA KÖTÜDÜR
+  /// (denetimde cevap varmış gibi görünür, hiçbir şey söylemez).
+  reasonText      String?          @db.VarChar(500)
+  /// Sapmayı doğuran YOL — `constants/variance-reasons.ts` `VarianceSource`.
+  /// Örn. TAMBUR_FINALIZE · TAMBUR_WAREHOUSE_FINALIZE · TAMBUR_OVERCUT ·
+  /// TAMBUR_UNDO_SINGLE. Sebep "neden", kaynak "nerede" sorusunu yanıtlar.
+  source          String           @db.VarChar(64)
+  createdById     String?          @db.Uuid
+
+  /// TERSLENDİ (2026-08-09) — satır SİLİNMEZ, işaretlenir (append-only defter).
+  ///
+  /// Sapmayı doğuran işlem geri alınırsa (Tambur "Geri Al") sapma da geçersizdir.
+  /// Satırı silmek defteri geçmişe dönük değiştirmek olurdu (sektör kuralı:
+  /// tersleme bir OLAYDIR, silme değil); işaretlememek ise defterde HAYALET fire
+  /// bırakırdı — iptal edilmiş bir işin firesi raporda sonsuza dek görünürdü.
+  ///
+  /// ⚠️ Dönem raporları `reversedAt IS NULL` ile süzmeli. Süzmeyen rapor,
+  /// geri alınmış her finalize'ın firesini de sayar.
+  reversedAt      DateTime?        @db.Timestamptz
+  reversedById    String?          @db.Uuid
+
+  // Relations
+  roll       Roll           @relation(fields: [rollId], references: [id])
+  step       WorkOrderStep? @relation(fields: [workOrderStepId], references: [id])
+  createdBy  User?          @relation(fields: [createdById], references: [id])
+  reversedBy User?          @relation("RollVarianceReversedBy", fields: [reversedById], references: [id])
+
+  // Append-only log → `updatedAt` YOK (kök CLAUDE.md konvansiyonu).
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([rollId])
+  @@index([workOrderStepId])
+  // Dönem raporu: "bu ay fire / kayıt düzeltmesi / aşım ne kadar" (eşitlik önce,
+  // range sonra — perf kuralı 2).
+  @@index([kind, createdAt])
+  // "Kim ne kadar fire verdi" — operatör kırılımı.
+  @@index([createdById, createdAt])
+  @@map("roll_variances")
 }
 
 // =============================================================================

@@ -595,6 +595,21 @@ export interface SubcontractorReceipt extends SubcontractorReceiptListItem {
   appliedProperties?: FabricProperty[];
   /** Fasondan dönen yeni açık kumaş parçaları (split varsa N adet). */
   bornRolls?: ReceiptBornRoll[];
+  /**
+   * ÜRETİM BİLGİSİ (2026-08-09) — detay ucu iş emrini İLİŞKİLERİYLE döner
+   * (liste ucundaki `Pick<WorkOrder, 'id'|'workOrderNumber'>` DEĞİL).
+   *
+   * ⚠️ Liste tipini genişletme cazip ama YANLIŞ: `listReceipts` bu ilişkileri
+   * çekmiyor ve tip "var" derse ekran boş basar. Emsal: 2026-08-05 "Ekleme
+   * Nedeni" vakası — panel liste satırından okuyordu, alan yalnız detayda
+   * dönüyordu ve özellik kullanıcıya HİÇ ulaşmadı.
+   */
+  workOrder?: Pick<WorkOrder, 'id' | 'workOrderNumber'> & {
+    width?: number | null;
+    foldType?: string | null;
+    targetColor?: Pick<Color, 'id' | 'code' | 'name' | 'hex'> | null;
+    targetProperties?: Array<{ property?: { id: string; name: string } }>;
+  };
 }
 
 export interface CancelReceiptRequest {
@@ -1059,8 +1074,12 @@ export interface TamburFinalizeOpenFabricRequest {
    * Kalan metre (parent.currentQty) için operatör kararı:
    *   - keep_1kalite → 1.KALITE barkodlu top oluştur
    *   - keep_a1      → A1 barkodlu top oluştur
-   *   - scrap        → FIRE barkodlu top oluştur (stokta kalır)
-   *   - discard      → kalan metre kayıt dışı (operatör fiziksel olarak attı)
+   *   - scrap        → FIRE barkodlu top oluştur (stokta kalır) — mal VARDI
+   *   - discard      → KAYIT DÜZELTMESİ: bu metraj fiziksel olarak HİÇ YOKTU
+   *
+   * ⚠️ `discard`ın eski açıklaması "operatör fiziksel olarak attı" idi ve
+   * YANLIŞTI — "atmak" fire demektir. İkisini karıştırmak fire oranını
+   * sistematik olarak şişirir (2026-08-09).
    */
   remainingAction?: TamburFinalizeRemainingAction;
   /** Deprecated — `remainingAction` kullan. true ≈ "scrap", false ≈ "discard". */
@@ -1068,6 +1087,9 @@ export interface TamburFinalizeOpenFabricRequest {
   notes?: string | null;
   foldType?: string | null;
   layerCount?: number | null;
+  /** SAPMA SEBEBİ (2026-08-09) — `constants/varianceReasons.ts` kataloğundan. */
+  varianceReasonCode?: string | null;
+  varianceReasonText?: string | null;
 }
 
 // =============================================================================

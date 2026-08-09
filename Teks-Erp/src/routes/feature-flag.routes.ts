@@ -124,6 +124,11 @@ export const updateSchema = z.strictObject({
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).
   tamburOverQuantityEnabled: z.boolean().optional(),
+  // ⚠️ Bu satır UNUTULURSA bayrak panelden AÇILAMAZ **ve daha kötüsü
+  // KAPATILAMAZ** (`z.strictObject` → PATCH 400). 2026-08-05'te
+  // `kk1DuplicateGuardEnabled` tam bu boşluktan geçti; bekçi:
+  // `scripts/test_feature_flag_contract.ts`.
+  tamburUndoFullSameDayOnly: z.boolean().optional(),
   // production.kursunBypassEnabled — kurşun istasyonuna tablet konulmayan düzen (default false).
   // ENFORCE edilir ama yalnız YENİ dağıtım oluşturmayı kapılar; dağıtılmış iş emirleri
   // bayrak kapansa da bypass rejiminde biter.

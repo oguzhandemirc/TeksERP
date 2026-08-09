@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
+import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFieldFix from './TamburFieldFix';
 import { usePermissions } from '../../../hooks/usePermission';
 import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
@@ -40,6 +41,11 @@ import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMac
 import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
 import RemoteListSheet from '../../../components/RemoteListSheet';
+import { labelService } from '../../../services/label.service';
+import {
+  reasonsForAction,
+  isVarianceReasonValid,
+} from '../../../constants/varianceReasons';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
@@ -65,6 +71,7 @@ import {
   tamburService,
   type TamburManualProduceRequest,
   type TamburUndoPreview,
+  type TamburUndoMode,
 } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
 import { customerService } from '../../../services/customer.service';
@@ -553,6 +560,14 @@ export default function TamburScreen() {
   });
   const recutLineOptions = recutLinesQuery.data?.data ?? [];
   const [recutFinalizeOpen, setRecutFinalizeOpen] = useState(false);
+  // "Bu işten çıkanlar" panelinden açılan geri alma hedefi. `RecentOutputModal`
+  // kendi içinde ayrı bir `undoTarget` tutuyor — o modal ayrı bir bileşen ve
+  // state'i paylaşmıyorlar; ikisi aynı onay diyaloğunu kullanır.
+  const [panelUndoTarget, setPanelUndoTarget] = useState<Roll | null>(null);
+  // AÇIK KUMAŞ akışının kapanış kararı (2026-08-09). Recut'ınkinden AYRI state:
+  // iki akış aynı anda ekranda olabiliyor ve tek bayrağı paylaşsalardı biri
+  // kapanınca diğerinin modalı da kapanırdı.
+  const [openFabricFinalizeOpen, setOpenFabricFinalizeOpen] = useState(false);
   // İdempotency: clientToken MANTIKSAL KESİM DENEMESİ başına bir kez üretilir —
   // timeout/hata sonrası tekrar "Kes" basışı AYNI token'ı gönderir (backend
   // P2002 ile cache'lenmiş child'ı döner, mükerrer kesim + çift metraj düşümü
@@ -1081,24 +1096,22 @@ export default function TamburScreen() {
         ...w,
         voluntaryEntry: { ...w.voluntaryEntry, length: '' },
       }));
-      // OTOMATİK BİTİŞ: açık kumaşın kalanı ihmal edilebilir (<10cm) ise ayrı
-      // "Tamamla" beklemeden finalize et — son kesim işi otomatik kapatır,
-      // sıradakine geçer. Eşik küçük yuvarlama artıklarını da yutar.
-      // Y11 fix: KESİLEN top variables.rollId'den alınır — eski kod yanıt
-      // anındaki selectedRoll'u kullanıyordu; kesim isteği uçuştayken operatör
-      // listeden başka açık kumaşa tıklarsa İLGİSİZ topu finalize ediyordu.
-      const remaining = data?.parentRemainingQty ?? 0;
-      if (remaining < 0.1 && variables.rollId) {
-        Toast.show({ type: 'success', text1: 'Açık kumaş tamamlandı' });
-        finalizeOpenFabricMutation.mutate({
-          rollId: variables.rollId,
-          remainingAction: 'discard',
-          foldType: work.foldType ?? null,
-        });
-      } else {
-        Toast.show({ type: 'success', text1: 'Top oluşturuldu' });
-        await refetchActiveJob();
-      }
+      // ⚠️ OTOMATİK BİTİŞ KALDIRILDI (2026-08-09, saha kararı).
+      //
+      // Eskiden kalan < 0,1 m olunca iş operatör hiç dokunmadan finalize
+      // ediliyordu (`remainingAction: 'discard'`). İki şeyi birden bozuyordu:
+      //  1) FİZİKSEL KUMAŞ KALMIŞSA KESİLEMİYORDU. Sahadan birebir örnek:
+      //     "sistemde 40 metre az girilmiş olabilir, 2 parça 20'şer metre daha
+      //     kesmesi gerekiyor" — kayıt bitince iş kapanıyor, mal elde kalıyordu.
+      //     Backend aşımı ZATEN kabul ediyor (`tambur.overQuantityEnabled`
+      //     varsayılan AÇIK); tek tıkaç bu istemci satırıydı.
+      //  2) Kalan metraj SESSİZCE "discard" ediliyordu — yani operatörün hiç
+      //     görmediği bir kayıt düzeltmesi yazılıyordu.
+      //
+      // Artık iş YALNIZ operatör "Bitir"e basınca kapanır. Kalan 0 olsa bile
+      // kesmeye devam edilebilir.
+      Toast.show({ type: 'success', text1: 'Top oluşturuldu' });
+      await refetchActiveJob();
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
@@ -1317,22 +1330,18 @@ export default function TamburScreen() {
         setRecutLastParentRoll(data.parentRoll);
       }
       if (isCurrent) setRecutCutLength('');
-      // OTOMATİK BİTİŞ: kalan ~0 ise ayrı "Bitir" beklemeden arşivle — kesilen
-      // topun KENDİSİ (variables.rollId), ekrandaki o anki top DEĞİL.
+      // ⚠️ OTOMATİK BİTİŞ KALDIRILDI (2026-08-09) — açık kumaş akışıyla aynı
+      // gerekçe (oradaki uzun nota bak). Kalan 0'a inse bile iş açık kalır ve
+      // operatör kesmeye devam edebilir; kapanış YALNIZ "Bitir" ile olur.
       const remaining = data?.parentRemainingQty ?? 0;
-      if (remaining < 0.1) {
-        Toast.show({ type: 'success', text1: 'Top Kesme tamamlandı' });
-        finalizeWarehouseCutMutation.mutate({
-          rollId: variables.rollId,
-          remainingAction: 'discard',
-        });
-      } else {
-        Toast.show({
-          type: 'success',
-          text1: 'Top oluşturuldu',
-          text2: `Kalan: ${remaining.toFixed(1)} m`,
-        });
-      }
+      Toast.show({
+        type: 'success',
+        text1: 'Top oluşturuldu',
+        text2:
+          remaining > 0.05
+            ? `Kalan: ${remaining.toFixed(1)} m`
+            : 'Kayıtlı metraj bitti — fiziksel kumaş varsa kesmeye devam edebilirsiniz',
+      });
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
@@ -1350,10 +1359,19 @@ export default function TamburScreen() {
     mutationFn: ({
       rollId,
       remainingAction,
+      varianceReasonCode,
+      varianceReasonText,
     }: {
       rollId: string;
       remainingAction: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
-    }) => tamburService.finalizeWarehouseCut(rollId, { remainingAction }),
+      varianceReasonCode?: string | null;
+      varianceReasonText?: string | null;
+    }) =>
+      tamburService.finalizeWarehouseCut(rollId, {
+        remainingAction,
+        varianceReasonCode,
+        varianceReasonText,
+      }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Top Kesme bitti', text2: 'Top arşivlendi' });
@@ -2653,6 +2671,20 @@ export default function TamburScreen() {
           onSelect={selectRoll}
         />
       )}
+      {/* BU İŞTEN ÇIKANLAR (2026-08-09) — üstteki liste "işlenecek toplar"ı,
+          bu panel "çıkan toplar"ı gösterir. Backend süzgeci zaten vardı. */}
+      {activeJob && (
+        <WorkOrderOutputPanel
+          workOrderId={activeJob.stepSummary.workOrderId}
+          onPrint={(r: Roll) => {
+            // Kayıtlı etiket niyetiyle bas — "Kime?" TEKRAR SORULMAZ (kesim
+            // akışlarındaki kuralın aynısı; hedef zaten topun üstünde).
+            setLabelContext(undefined);
+            startPrint(r, printKindForRoll(r));
+          }}
+          onUndo={(r: Roll) => setPanelUndoTarget(r)}
+        />
+      )}
     </>
     );
   };
@@ -3696,14 +3728,31 @@ export default function TamburScreen() {
 
               </ScrollView>
 
-              {/* Sticky footer — ASIL aksiyon "Kes". Girilen uzunlukta top oluşur;
-                  son kesimde kalan ~0 olunca açık kumaş OTOMATİK biter (ayrı Tamamla
-                  yok). cutOpenFabric offline-aware değil → isPending'de kilitlenir. */}
+              {/* Sticky footer — ASIL aksiyon "Kes". "Bitir" 2026-08-09'da
+                  EKLENDİ: otomatik bitiş kaldırıldı, iş yalnız operatör
+                  basınca kapanır. Kalan 0 olsa da buton AÇIK kalır — tersi
+                  vaka (sistemde metraj görünürken fiziksel kumaş bitmiş) o
+                  topu sonsuza dek açık bırakırdı. Kalan > 0 iken karar
+                  penceresi zorunludur; kalan 0 ise tek dokunuşta biter. */}
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
                 onKes={handleKes}
+                onBitir={() => {
+                  if (selectedRoll.currentQty > 0.05) {
+                    setOpenFabricFinalizeOpen(true);
+                  } else {
+                    // Kalan yok → sorulacak bir şey de yok. `discard` gönderilir
+                    // ama sapma satırı DOĞMAZ (qty 0 → `recordVarianceTx` atlar).
+                    finalizeOpenFabricMutation.mutate({
+                      rollId: selectedRoll.rollId,
+                      remainingAction: 'discard',
+                      foldType: work.foldType ?? null,
+                    });
+                  }
+                }}
+                bitirLoading={finalizeOpenFabricMutation.isPending}
                 // cutOpenFabric offline-aware değil → isPending'de kilitlenir.
                 // Otomatik modda makineden okuma uçuşurken de (measuring) kilitli.
                 kesLoading={cutOpenFabricMutation.isPending || measuring}
@@ -3876,16 +3925,54 @@ export default function TamburScreen() {
       />
 
       {/* Top Kesme bitir — kalan kumaş için karar (1.KALITE/A1/FIRE/discard) */}
+      {/* "Bu işten çıkanlar" panelinden geri alma — aynı onay diyaloğu.
+          Bitince ana ekran tazelenir: geri alınan metraj kalana geri döner ve
+          kapanmış iş emri dirilmiş olabilir. */}
+      <TamburUndoConfirmModal
+        rollId={panelUndoTarget?.id ?? null}
+        barcode={panelUndoTarget?.barcode ?? null}
+        onDismiss={() => setPanelUndoTarget(null)}
+        onDone={() => {
+          setPanelUndoTarget(null);
+          void refetchActiveJob();
+          void qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
+        }}
+      />
+
+      {/* AÇIK KUMAŞ kapanışı (2026-08-09) — "Bitir" kalan metraj varken bunu
+          açar. Recut'ın modalıyla aynı bileşen: iki akış aynı dili konuşsun
+          (kararlar ve sebep katalogu tek yerde). */}
+      <FinalizeRemainingModal
+        visible={openFabricFinalizeOpen}
+        remainingQty={selectedRoll?.currentQty ?? 0}
+        onDismiss={() => setOpenFabricFinalizeOpen(false)}
+        loading={finalizeOpenFabricMutation.isPending}
+        onChoose={(action, reasonCode, reasonText) => {
+          const rollId = selectedRoll?.rollId;
+          if (!rollId) return;
+          setOpenFabricFinalizeOpen(false);
+          finalizeOpenFabricMutation.mutate({
+            rollId,
+            remainingAction: action,
+            foldType: work.foldType ?? null,
+            varianceReasonCode: reasonCode,
+            varianceReasonText: reasonText,
+          });
+        }}
+      />
+
       <FinalizeRemainingModal
         visible={recutFinalizeOpen}
         remainingQty={recutRollMeta?.currentQty ?? 0}
         onDismiss={() => setRecutFinalizeOpen(false)}
         loading={finalizeWarehouseCutMutation.isPending}
-        onChoose={(action) => {
+        onChoose={(action, reasonCode, reasonText) => {
           if (!recutResolvedRollId) return;
           finalizeWarehouseCutMutation.mutate({
             rollId: recutResolvedRollId,
             remainingAction: action,
+            varianceReasonCode: reasonCode,
+            varianceReasonText: reasonText,
           });
         }}
         onModalHide={() => {
@@ -4032,6 +4119,14 @@ export default function TamburScreen() {
       <RecentOutputModal
         visible={recentOutputOpen}
         onDismiss={() => setRecentOutputOpen(false)}
+        // TOPLU baskı — hedef zaten yazıldı, kuyruğa ver ve listeyi kapat.
+        // Kuyruk ekranın kanıtlanmış tekil baskı zinciridir; yeni bir toplu
+        // baskı yolu yazmak ikinci bir yazıcı/hata davranışı doğururdu.
+        onBulkPrint={(bulkRolls) => {
+          setRecentOutputOpen(false);
+          setLabelContext(undefined); // hedef topun ÜSTÜNE yazıldı; tekrar sorma
+          setPendingPrintRolls((prev) => [...prev, ...bulkRolls]);
+        }}
         onPrint={(roll) => {
           // "Bas" → mevcut etiketi AYNEN tekrar bas, "kime?" sorma. Liste
           // KAPANMASIN (sadece önizleme kapanır) — baskı sonrası listede kal.
@@ -4935,6 +5030,8 @@ function RelabelRollRow({
   onPress,
   onUndo,
   stacked,
+  selectMode,
+  selected,
 }: {
   roll: Roll;
   onPress: () => void;
@@ -4942,6 +5039,9 @@ function RelabelRollRow({
   onUndo?: () => void;
   /** Telefon-dik: tek satır sığmaz → okunur 3 satırlı kart. */
   stacked?: boolean;
+  /** Toplu seçim açık — satır solunda kutucuk, dokunma seçer (önizlemez). */
+  selectMode?: boolean;
+  selected?: boolean;
 }) {
   const color = roll.color ?? null;
   const grade = roll.qualityGrade ?? '—';
@@ -5005,6 +5105,8 @@ function RelabelRollRow({
           </View>
           <Text style={relabelStyles.rowStackedMeta} numberOfLines={1}>
             {qtyText}
+            {/* Telefon-dik: ayrı sütun yok → metrajın yanında (ayraçla). */}
+            {`  ·  ${formatOutputDate(roll.createdAt)}`}
           </Text>
         </View>
       </TouchableRipple>
@@ -5021,6 +5123,15 @@ function RelabelRollRow({
           Kumaş+renk ve metraj+en eskiden tek metinde birleşikti ("A · 330 cm"
           gibi) — sütunlara ayrıldı, ayraçlarla ayrıştırıldı. */}
       <View style={relabelStyles.rowInner}>
+        {/* Seçim kutucuğu — YALNIZ seçim modunda. Kapalıyken satır bugünküyle
+            bayt-bayt aynı çizilir (kolon genişlikleri kaymasın). */}
+        {selectMode && (
+          <Icon
+            source={selected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+            size={22}
+            color={selected ? '#1e40af' : '#94a3b8'}
+          />
+        )}
         <View style={[relabelStyles.gradePill, { backgroundColor: gradeBg }]}>
           <Text style={relabelStyles.gradePillText}>{grade}</Text>
         </View>
@@ -5053,6 +5164,17 @@ function RelabelRollRow({
         <View style={relabelStyles.colWidth}>
           <Text style={relabelStyles.colMutedText}>
             {roll.width != null ? `${Number(roll.width).toFixed(0)} cm` : '—'}
+          </Text>
+        </View>
+        {/* ÜRETİM ANI — gün + saat (2026-08-09 saha isteği).
+            ⚠️ `createdAt` kullanılır, `updatedAt` DEĞİL: bu liste "bu top ne
+            zaman ÇIKTI" sorusuna bakar. `updatedAt` etiket yeniden basımında da
+            değişir ve sıralamayı yalanlar (envanter kuralı: listede TEK tarih
+            kolonu görünür ve SIRALANAN kolonun aynısıdır — liste
+            `createdAt desc` sıralı). Vardiya içi ayırt etmek için saat şart. */}
+        <View style={relabelStyles.colDate}>
+          <Text style={relabelStyles.colMutedText} numberOfLines={1}>
+            {formatOutputDate(roll.createdAt)}
           </Text>
         </View>
         <View style={relabelStyles.colQty}>
@@ -5158,6 +5280,15 @@ const relabelStyles = StyleSheet.create({
     borderLeftColor: '#e2e8f0',
     alignItems: 'flex-end',
   },
+  // Üretim anı — "GG.AA SS:dd" için yeterli, kumaş adını daha fazla kırpmayan
+  // en dar genişlik.
+  colDate: {
+    width: 92,
+    paddingLeft: 10,
+    borderLeftWidth: 1,
+    borderLeftColor: '#e2e8f0',
+    alignItems: 'flex-end',
+  },
   colItemText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
   colMutedText: { fontSize: 13, color: '#475569', flexShrink: 1, fontVariant: ['tabular-nums'] },
   colQtyText: {
@@ -5189,6 +5320,17 @@ const relabelStyles = StyleSheet.create({
     borderTopColor: '#e2e8f0',
     backgroundColor: '#f8fafc',
   },
+  bulkBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#eff6ff',
+  },
+  bulkCount: { fontSize: 14, fontWeight: '800', color: '#1e40af' },
   footerText: {
     fontSize: 12,
     fontWeight: '600',
@@ -5196,6 +5338,49 @@ const relabelStyles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+/**
+ * Üretim anı — "GG.AA SS:dd". Yıl BİLEREK yok: liste en yeniden eskiye sıralı
+ * ve pratikte son günleri gösteriyor; yıl sütunu daralttığı için kumaş adı
+ * kırpılırdı. Serbest tarih filtresi zaten hangi aralığa bakıldığını söylüyor.
+ */
+function formatOutputDate(v: string | Date | null | undefined): string {
+  if (!v) return '—';
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return '—';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * ARŞİV (emekli) statüleri — backend `K18_DEAD_STATUSES` ile aynı küme.
+ *
+ * ⚠️ Mobil backend'i import EDEMEZ (bağımsız proje), bu yüzden liste burada
+ * AYNALANIR. Backend'e yeni bir emekli statü eklenirse burası da güncellenmeli;
+ * ayrışırsa arşiv topu tarama yolundan sızar ve etiketi basılabilir hale gelir.
+ */
+const ARCHIVED_ROLL_STATUSES: string[] = [
+  'TAMBUR_CONSUMED',
+  'SUBCONTRACTOR_CONSUMED',
+  'KARTELA_CONSUMED',
+  'CANCELLED',
+];
+
+/** Operatöre "neden basılamıyor" sorusunu somut cevaplar — sessiz ret en kötüsü. */
+function archivedStatusText(status: string): string {
+  switch (status) {
+    case 'TAMBUR_CONSUMED':
+      return 'kesilerek tüketildi';
+    case 'SUBCONTRACTOR_CONSUMED':
+      return 'fasona gitti';
+    case 'KARTELA_CONSUMED':
+      return 'kartelaya ayrıldı';
+    case 'CANCELLED':
+      return 'iptal edildi';
+    default:
+      return status;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tambur'dan çıkmış son toplar listesi — etiketleri sonradan tekrar basmak için
@@ -5206,6 +5391,7 @@ function RecentOutputModal({
   onPrint,
   onNewLabel,
   onPrintStock,
+  onBulkPrint,
   onUndone,
 }: {
   visible: boolean;
@@ -5214,6 +5400,12 @@ function RecentOutputModal({
   onPrint: (roll: Roll) => void;
   /** "Yeni Etiket" — yönlendir (kime? → yeni etiket). */
   onNewLabel: (roll: Roll) => void;
+  /**
+   * TOPLU baskı (2026-08-09) — seçili topların etiket hedefi YAZILDIKTAN sonra
+   * çağrılır. Yeni bir toplu baskı yolu yazılmadı: ekranın kanıtlanmış tekil
+   * baskı kuyruğuna (`pendingPrintRolls`) verilir, sırayla basar.
+   */
+  onBulkPrint: (rolls: Roll[]) => void;
   /** "Müşterisiz (Stok)" — müşteri bilgisi olmadan bas. */
   onPrintStock: (roll: Roll) => void;
   /**
@@ -5266,6 +5458,98 @@ function RecentOutputModal({
   // snapshot/effective cascade). Liste açık kalır; önizleme üstüne (Portal) açılır.
   const [previewRoll, setPreviewRoll] = useState<Roll | null>(null);
 
+  // ── TOPLU SEÇİM (2026-08-09) ────────────────────────────────────────────
+  // Saha isteği: *"son çıkan etiketleri toplu seçim yapıp etiketleri
+  // çıkarabilelim, istersek toplu müşteri de değişebilelim. Kuşakları değişen
+  // ürünlerin toplu etiket çıkarıp yenilenmesi gerekebilir."*
+  //
+  // AKIŞ (kullanıcı kararı): seç → "Kime?" sor → hepsine YAZ → hepsini BAS.
+  // Ayrı "müşteri değiştir" butonu YOK — "değiştirdim ama basmayı unuttum"
+  // durumu doğmasın diye tek akış.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkTargetOpen, setBulkTargetOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Modal kapanınca seçim TEMİZLENİR — bir sonraki açılışta bayat seçimle
+  // karşılaşmak, yanlış topa etiket basmanın en kolay yoludur.
+  useEffect(() => {
+    if (!visible) {
+      setSelectMode(false);
+      setSelected(new Set());
+    }
+  }, [visible]);
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Seçimin ilk topu = "Kime?" sheet'inin bağlamı (sipariş listesi ona göre
+  // süzülür). Seçim KARIŞIK spec taşıyorsa sipariş kalemi hedefi anlamsızdır —
+  // kalem tek bir spec'e aittir ve farklı spec'li toplara yazmak sessizce
+  // yanlış tahsis üretirdi.
+  const selectedRolls = useMemo(
+    () => rolls.filter((r) => selected.has(r.id)),
+    [rolls, selected],
+  );
+  const bulkFirst = selectedRolls[0] ?? null;
+  const bulkMixedSpec = useMemo(() => {
+    if (selectedRolls.length < 2) return false;
+    const key = (r: Roll) => `${r.itemId}|${r.colorId ?? ''}|${r.width ?? ''}`;
+    const first = key(selectedRolls[0]!);
+    return selectedRolls.some((r) => key(r) !== first);
+  }, [selectedRolls]);
+
+  /** Seçili topların hedefini yaz, sonra hepsini baskı kuyruğuna ver. */
+  const applyBulkTarget = async (ctx: LabelTargetContext | undefined) => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      const res = await labelService.seedSnapshotBulk(ids, {
+        orderLineId: ctx?.orderLineId ?? null,
+        customerId: ctx?.customerId ?? null,
+        stock: ctx?.stock === true,
+      });
+      const { seeded, failed } = res.data;
+      // ⚠️ ATLANANLAR YUTULMAZ. "42 yazıldı" deyip 8'inin sebebini söylememek
+      // en kötü davranıştır (kurşun toplu dağıtımıyla aynı kural).
+      if (failed.length) {
+        Toast.show({
+          type: 'error',
+          text1: `${failed.length} top atlandı`,
+          text2: failed
+            .slice(0, 3)
+            .map((f: { barcode: string | null; reason: string }) => `${f.barcode ?? '?'}: ${f.reason}`)
+            .join(' · '),
+          visibilityTime: 8000,
+        });
+      }
+      if (seeded.length) {
+        // Baskı: yeni bir toplu yol YAZILMADI — ekranın kanıtlanmış tekil
+        // baskı kuyruğu (`pendingPrintRolls`) kullanılır, sırayla basar.
+        const seededSet = new Set(seeded);
+        onBulkPrint(rolls.filter((r) => seededSet.has(r.id)));
+        Toast.show({
+          type: 'success',
+          text1: `${seeded.length} topun etiketi yenileniyor`,
+        });
+      }
+      setSelected(new Set());
+      setSelectMode(false);
+      void q.refetch();
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Toplu işlem başarısız', text2: (e as Error).message });
+    } finally {
+      setBulkBusy(false);
+      setBulkTargetOpen(false);
+    }
+  };
+
   // "Geri Al" — Tambur kesim/finalize iptali (önizleme onaylı, yıkıcı-işlem kuralı).
   const [undoTarget, setUndoTarget] = useState<Roll | null>(null);
 
@@ -5284,6 +5568,20 @@ function RecentOutputModal({
       const roll = res.data as Roll | null;
       if (!roll) {
         Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: trimmed });
+        return;
+      }
+      // ⚠️ ARŞİV KORUMASI (2026-08-09). Liste zaten emekli statüleri gizliyor
+      // (`status notIn K18_DEAD_STATUSES`) ama TARAMA yolu o süzgeci hiç
+      // geçmiyordu: arşivdeki topun önizlemesi açılıyor ve ETİKETİ BASILABİLİYORDU
+      // — fiziksel olarak var olmayan topun etiketi kumaşa yapıştırılabilirdi.
+      if (ARCHIVED_ROLL_STATUSES.includes(roll.status)) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Toast.show({
+          type: 'error',
+          text1: 'Bu top arşivde',
+          text2: `${trimmed} — ${archivedStatusText(roll.status)}. Etiket basılamaz.`,
+          visibilityTime: 5000,
+        });
         return;
       }
       setPreviewRoll(roll);
@@ -5351,14 +5649,58 @@ function RecentOutputModal({
               containerColor="#1e40af"
               iconColor="#fff"
               onPress={() => setScanOpen(true)}
-              disabled={scanResolving}
+              disabled={scanResolving || selectMode}
               accessibilityLabel="Kameradan okut"
+              style={relabelStyles.scanBtn}
+            />
+            {/* Seçim modu anahtarı — "kuşağı değişen ürünlerin toplu
+                yenilenmesi" için. Kapalıyken ekran bugünküyle aynı. */}
+            <IconButton
+              icon={selectMode ? 'close' : 'checkbox-multiple-marked-outline'}
+              mode="contained"
+              size={26}
+              containerColor={selectMode ? '#b45309' : '#475569'}
+              iconColor="#fff"
+              onPress={() => {
+                setSelectMode((v) => !v);
+                setSelected(new Set());
+              }}
+              accessibilityLabel={selectMode ? 'Seçimi kapat' : 'Toplu seçim'}
               style={relabelStyles.scanBtn}
             />
           </View>
         }
         footer={
-          total != null ? (
+          selectMode ? (
+            /* SEÇİM ÇUBUĞU — sayaç + tek aksiyon. Ayrı "müşteri değiştir"
+               butonu YOK: tek akış (seç → Kime? → yaz + bas). */
+            <View style={relabelStyles.bulkBar}>
+              <Text style={relabelStyles.bulkCount}>{selected.size} top seçili</Text>
+              <View style={{ flex: 1 }} />
+              <Button
+                mode="text"
+                compact
+                onPress={() => {
+                  setSelectMode(false);
+                  setSelected(new Set());
+                }}
+                disabled={bulkBusy}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                mode="contained"
+                icon="printer"
+                compact
+                disabled={selected.size === 0 || bulkBusy}
+                loading={bulkBusy}
+                onPress={() => setBulkTargetOpen(true)}
+                buttonColor="#1e40af"
+              >
+                Etiket Bas
+              </Button>
+            </View>
+          ) : total != null ? (
             <View style={relabelStyles.footer}>
               <Text style={relabelStyles.footerText}>
                 {total} top · {rolls.length} gösteriliyor
@@ -5369,11 +5711,16 @@ function RecentOutputModal({
         renderItem={(roll) => (
           // Dokun → önizleme modalı (Bas / Yeni Etiket). Telefon-dik'te okunur
           // 3 satırlı kart (stacked); tablet/yatayda ince tek satır.
+          // SEÇİM MODUNDA dokunma anlamı DEĞİŞİR: önizleme yerine seç/bırak.
+          // Aynı dokunuşun iki anlamı olması kafa karıştırır, o yüzden mod
+          // açıkken satır aksiyonları (geri al) da çizilmez.
           <RelabelRollRow
             roll={roll}
             stacked={isCompactPortrait}
-            onPress={() => setPreviewRoll(roll)}
-            onUndo={() => setUndoTarget(roll)}
+            selectMode={selectMode}
+            selected={selected.has(roll.id)}
+            onPress={() => (selectMode ? toggleSelect(roll.id) : setPreviewRoll(roll))}
+            onUndo={selectMode ? undefined : () => setUndoTarget(roll)}
           />
         )}
         emptyIcon="package-variant"
@@ -5420,6 +5767,31 @@ function RecentOutputModal({
           void q.refetch(); // bu modalın kendi "Çıkanlar" listesi
           onUndone(); // ana ekran: aktif iş + kalan metraj + top listeleri
         }}
+      />
+
+      {/* TOPLU "Kime?" — seçili topların hepsine AYNI hedef yazılır.
+          Bağlam olarak ilk seçili top verilir (sipariş listesi onun spec'ine
+          göre süzülür); seçim karışık spec taşıyorsa sheet sipariş kalemini
+          HİÇ göstermez ve yalnız müşteri/stok seçtirir. */}
+      <LabelTargetSheet
+        roll={
+          bulkTargetOpen && bulkFirst
+            ? {
+                id: bulkFirst.id,
+                barcode: bulkFirst.barcode,
+                itemId: bulkFirst.itemId,
+                colorId: bulkFirst.colorId,
+                width: bulkFirst.width != null ? Number(bulkFirst.width) : null,
+                itemName: bulkFirst.item?.name,
+                colorName: bulkFirst.color?.name ?? null,
+                lastLabelSnapshot: null,
+              }
+            : null
+        }
+        bulkCount={selected.size}
+        mixedSpec={bulkMixedSpec}
+        onCancel={() => setBulkTargetOpen(false)}
+        onConfirm={(ctx) => void applyBulkTarget(ctx)}
       />
 
       {/* Kameradan üretilen topu okut → çözülünce o topun önizlemesi açılır. */}
@@ -5880,11 +6252,28 @@ function FinalizeRemainingModal({
   visible: boolean;
   remainingQty: number;
   onDismiss: () => void;
-  onChoose: (action: TamburFinalizeRemainingAction) => void;
+  onChoose: (
+    action: TamburFinalizeRemainingAction,
+    reasonCode: string | null,
+    reasonText: string | null,
+  ) => void;
   loading: boolean;
   onModalHide?: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  // Sebep sorulacak karar (fire / kayıt düzeltmesi) seçilince adım 2'ye geçilir.
+  const [pending, setPending] = useState<'scrap' | 'discard' | null>(null);
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  // Modal her kapanışta sıfırlanır — bir sonraki top temiz başlasın, yoksa
+  // önceki topun sebebi sessizce yeni karara yapışırdı.
+  useEffect(() => {
+    if (!visible) {
+      setPending(null);
+      setReasonCode(null);
+      setReasonText('');
+    }
+  }, [visible]);
   const isCompactPortrait = winH > winW;
   const qtyText = `${remainingQty.toFixed(1)} mt`;
 
@@ -5925,56 +6314,149 @@ function FinalizeRemainingModal({
           )}
         </View>
 
-        <View style={{ padding: 16, gap: 10 }}>
-          <Text style={{ color: '#475569', fontSize: 13 }}>
-            Bu açık kumaştan kalan {qtyText} kumaşı nasıl kaydedeyim?
-          </Text>
-          <Button
-            mode="contained"
-            icon="check-circle"
-            onPress={() => onChoose('keep_1kalite')}
-            disabled={loading}
-            loading={loading}
-            buttonColor="#059669"
-            contentStyle={{ paddingVertical: 6 }}
-            labelStyle={{ fontSize: 15, fontWeight: '700' }}
-          >
-            1. Kalite Top Yap ({qtyText})
-          </Button>
-          <Button
-            mode="contained"
-            icon="alpha-a-circle"
-            onPress={() => onChoose('keep_a1')}
-            disabled={loading}
-            buttonColor="#d97706"
-            contentStyle={{ paddingVertical: 6 }}
-            labelStyle={{ fontSize: 15, fontWeight: '700' }}
-          >
-            A1 (2. Kalite) Top Yap ({qtyText})
-          </Button>
-          <Button
-            mode="contained"
-            icon="fire"
-            onPress={() => onChoose('scrap')}
-            disabled={loading}
-            buttonColor="#dc2626"
-            contentStyle={{ paddingVertical: 6 }}
-            labelStyle={{ fontSize: 15, fontWeight: '700' }}
-          >
-            Fire Top Yap ({qtyText})
-          </Button>
-          <Button
-            mode="outlined"
-            icon="delete-outline"
-            onPress={() => onChoose('discard')}
-            disabled={loading}
-            textColor="#475569"
-            contentStyle={{ paddingVertical: 6 }}
-            labelStyle={{ fontSize: 14 }}
-          >
-            Kayıt Dışı (Operatör Attı)
-          </Button>
-        </View>
+        {/* ADIM 1 — karar. `keep_*` sapma DEĞİLDİR ve tek dokunuşta biter;
+            sebep yalnız fire / kayıt düzeltmesinde sorulur (adım 2). */}
+        {pending === null ? (
+          <View style={{ padding: 16, gap: 10 }}>
+            <Text style={{ color: '#475569', fontSize: 13 }}>
+              Bu açık kumaştan kalan {qtyText} kumaşı nasıl kaydedeyim?
+            </Text>
+            <Button
+              mode="contained"
+              icon="check-circle"
+              onPress={() => onChoose('keep_1kalite', null, null)}
+              disabled={loading}
+              loading={loading}
+              buttonColor="#059669"
+              contentStyle={{ paddingVertical: 6 }}
+              labelStyle={{ fontSize: 15, fontWeight: '700' }}
+            >
+              1. Kalite Top Yap ({qtyText})
+            </Button>
+            <Button
+              mode="contained"
+              icon="alpha-a-circle"
+              onPress={() => onChoose('keep_a1', null, null)}
+              disabled={loading}
+              buttonColor="#d97706"
+              contentStyle={{ paddingVertical: 6 }}
+              labelStyle={{ fontSize: 15, fontWeight: '700' }}
+            >
+              A1 (2. Kalite) Top Yap ({qtyText})
+            </Button>
+            <Button
+              mode="contained"
+              icon="fire"
+              onPress={() => setPending('scrap')}
+              disabled={loading}
+              buttonColor="#dc2626"
+              contentStyle={{ paddingVertical: 6 }}
+              labelStyle={{ fontSize: 15, fontWeight: '700' }}
+            >
+              Fire Top Yap ({qtyText})
+            </Button>
+            {/* ⚠️ ESKİ AD "Kayıt Dışı (Operatör Attı)" İDİ ve yanıltıyordu:
+                "attı" fire çağrıştırıyor, oysa bu kararın anlamı "bu metraj
+                fiziksel olarak HİÇ YOKTU". İkisini aynı kovaya atmak fire
+                oranını sistematik olarak şişirir (bkz. RollVarianceKind). */}
+            <Button
+              mode="outlined"
+              icon="clipboard-edit-outline"
+              onPress={() => setPending('discard')}
+              disabled={loading}
+              textColor="#475569"
+              contentStyle={{ paddingVertical: 6 }}
+              labelStyle={{ fontSize: 14 }}
+            >
+              Kayıt Düzeltmesi ({qtyText} aslında yoktu)
+            </Button>
+          </View>
+        ) : (
+          /* ADIM 2 — SEBEP. Hazır katalog: eldivenli operatör vardiya ortasında
+             metin yazmıyor, "aaa" yazıyor ve o boş bırakmaktan kötüdür. */
+          <View style={{ padding: 16, gap: 8 }}>
+            <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '700' }}>
+              {pending === 'scrap'
+                ? `${qtyText} FİRE — sebep nedir?`
+                : `${qtyText} KAYIT DÜZELTMESİ — sebep nedir?`}
+            </Text>
+            <Text style={{ color: '#64748b', fontSize: 12, marginBottom: 2 }}>
+              {pending === 'scrap'
+                ? 'Mal vardı ama kullanılamaz. Fire oranına girer.'
+                : 'Bu metraj fiziksel olarak hiç yoktu — kayıt yanlıştı. Fire DEĞİLDİR.'}
+            </Text>
+            {reasonsForAction(pending).map((r) => {
+              const active = reasonCode === r.code;
+              return (
+                <TouchableRipple
+                  key={r.code}
+                  onPress={() => setReasonCode(r.code)}
+                  disabled={loading}
+                  style={{
+                    minHeight: 52,
+                    justifyContent: 'center',
+                    paddingHorizontal: 14,
+                    borderRadius: 10,
+                    borderWidth: active ? 2 : 1,
+                    borderColor: active ? '#1d4ed8' : '#cbd5e1',
+                    backgroundColor: active ? '#eff6ff' : '#fff',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: active ? '700' : '500',
+                      color: active ? '#1d4ed8' : '#334155',
+                    }}
+                  >
+                    {r.label}
+                  </Text>
+                </TouchableRipple>
+              );
+            })}
+            {reasonsForAction(pending).find((r) => r.code === reasonCode)?.requiresText && (
+              <TextInput
+                mode="outlined"
+                dense
+                placeholder="Kısaca açıkla (en az 3 karakter)"
+                value={reasonText}
+                onChangeText={setReasonText}
+                disabled={loading}
+                style={{ backgroundColor: '#fff' }}
+              />
+            )}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setPending(null);
+                  setReasonCode(null);
+                  setReasonText('');
+                }}
+                disabled={loading}
+                style={{ flex: 1 }}
+                contentStyle={{ paddingVertical: 6 }}
+              >
+                Geri
+              </Button>
+              <Button
+                mode="contained"
+                onPress={() => onChoose(pending, reasonCode, reasonText.trim() || null)}
+                // Sebep seçilmeden "Kaydet" AÇIK OLMAZ: backend eski istemciler
+                // için sebepsiz çağrıyı kabul ediyor ("BELIRTILMEDI"), ama YENİ
+                // istemcinin o kovaya yazması özelliği anlamsızlaştırırdı.
+                disabled={loading || !isVarianceReasonValid(pending, reasonCode, reasonText)}
+                loading={loading}
+                buttonColor={pending === 'scrap' ? '#dc2626' : '#475569'}
+                style={{ flex: 2 }}
+                contentStyle={{ paddingVertical: 6 }}
+                labelStyle={{ fontSize: 15, fontWeight: '700' }}
+              >
+                Kaydet
+              </Button>
+            </View>
+          </View>
+        )}
       </View>
     </AppModal>
   );
@@ -6357,17 +6839,36 @@ function TamburUndoConfirmModal({
   const phone = winW < 600;
   const qc = useQueryClient();
 
+  // MOD ARTIK OPERATÖRDEN (2026-08-09). Backend `options[]` ile yapılabilecek
+  // her modu anlatır; burada seçilir. `null` = henüz seçilmedi → backend'in
+  // `defaultMode`u (her zaman EN DAR olan) kullanılır.
+  const [mode, setMode] = useState<TamburUndoMode | null>(null);
+  const [fullReason, setFullReason] = useState('');
+  useEffect(() => {
+    if (rollId === null) {
+      setMode(null);
+      setFullReason('');
+    }
+  }, [rollId]);
+
   const previewQ = useQuery({
-    queryKey: ['tambur', 'undo-preview', rollId],
-    queryFn: () => tamburService.undoPreview(rollId!),
+    queryKey: ['tambur', 'undo-preview', rollId, mode],
+    queryFn: () => tamburService.undoPreview(rollId!, mode ?? undefined),
     enabled: !!rollId,
     staleTime: 0,
     gcTime: 0,
   });
   const preview: TamburUndoPreview | null = previewQ.data?.data ?? null;
+  const effectiveMode = mode ?? preview?.defaultMode ?? null;
+  const needsReason =
+    preview?.options?.find((o) => o.mode === effectiveMode)?.requiresReason ?? false;
 
   const applyMut = useMutation({
-    mutationFn: () => tamburService.applyUndo(rollId!),
+    mutationFn: () =>
+      tamburService.applyUndo(rollId!, {
+        mode: effectiveMode ?? undefined,
+        reason: fullReason.trim() || undefined,
+      }),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'İşlem geri alındı', text2: res.message });
@@ -6385,11 +6886,16 @@ function TamburUndoConfirmModal({
   });
 
   const isManualUndo = preview?.mode === 'MANUAL';
-  const modeText = isManualUndo
-    ? 'Elle eklenen bu topun KAYDI geri alınacak — top iptal edilir, sanki hiç eklenmemiş gibi olur.'
-    : preview?.mode === 'FULL'
-      ? 'İşlem TÜMDEN geri alınacak — tüm parçalar iptal olur, metraj kaynak topa döner.'
-      : 'Yalnız bu parça iptal edilecek — metrajı kaynak topa geri döner.';
+  // ⚠️ AÇIKLAMA ARTIK BACKEND'DEN GELİR (`option.description`). Eskiden istemci
+  // kendi cümlesini kuruyordu ve `canApply`e BAKMIYORDU: engelli bir kapanışta
+  // diyalog "TÜMDEN geri alınacak — tüm parçalar iptal olur" diye ilan edip
+  // hemen altında "İPTAL EDİLECEK PARÇALAR (0)" ve "geri alınamaz" yazıyordu.
+  // Aynı ekranda üç çelişkili cümle — sahadan gelen fotoğraf tam buydu.
+  const activeOption = preview?.options?.find((o) => o.mode === effectiveMode) ?? null;
+  const modeText = activeOption?.description ?? '';
+  // Seçenek SORULUR mu: birden fazla uygulanabilir yol varsa. Tek yol varsa
+  // soru sormak gereksiz sürtünmedir.
+  const showModePicker = (preview?.options?.length ?? 0) > 1;
 
   return (
     <AppModal
@@ -6420,8 +6926,74 @@ function TamburUndoConfirmModal({
           </View>
         ) : previewQ.isError ? (
           <Text style={undoStyles.blockText}>{(previewQ.error as Error).message}</Text>
+        ) : preview && !preview.canApply ? (
+          /* ⛔ ENGELLİ — YALNIZ SEBEP. Mod açıklaması, kaynak top metrajı ve
+             parça sayacı BASILMAZ: yapılmayacak bir işi ilan eden diyalog,
+             hiç açılmayan diyalogdan kötüdür (sahadan gelen fotoğraf). */
+          <ScrollView contentContainerStyle={undoStyles.body}>
+            {barcode ? <Text style={undoStyles.rowLine}>Okutulan: {barcode}</Text> : null}
+            <Text style={undoStyles.blockText}>⛔ {preview.blockReason}</Text>
+            {/* Diğer yol açıksa operatörü ÇIKMAZDA bırakma — söyle. */}
+            {preview.options
+              .filter((o) => o.mode !== effectiveMode && o.canApply)
+              .map((o) => (
+                <Button
+                  key={o.mode}
+                  mode="outlined"
+                  onPress={() => setMode(o.mode)}
+                  style={{ marginTop: 12 }}
+                >
+                  {o.label}
+                </Button>
+              ))}
+          </ScrollView>
         ) : preview ? (
           <ScrollView contentContainerStyle={undoStyles.body}>
+            {/* MOD SEÇİMİ — 2026-08-08 saha vakasının doğrudan düzeltmesi.
+                Operatör "şu topu iptal et" derken 14 topluk bir işlem alıyordu
+                çünkü mod SİSTEM DURUMUNDAN türetiliyordu. Artık soruluyor ve
+                varsayılan EN DAR olan. */}
+            {showModePicker && (
+              <View style={{ gap: 8, marginBottom: 6 }}>
+                <Text style={undoStyles.sectionTitle}>Ne yapılsın?</Text>
+                {preview.options.map((o) => {
+                  const active = o.mode === effectiveMode;
+                  return (
+                    <TouchableRipple
+                      key={o.mode}
+                      onPress={() => setMode(o.mode)}
+                      disabled={applyMut.isPending}
+                      style={{
+                        minHeight: 56,
+                        justifyContent: 'center',
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        borderWidth: active ? 2 : 1,
+                        borderColor: active ? '#b45309' : '#cbd5e1',
+                        backgroundColor: active ? '#fff7ed' : '#fff',
+                        opacity: o.canApply ? 1 : 0.55,
+                      }}
+                    >
+                      <View>
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: active ? '800' : '600',
+                            color: active ? '#7c2d12' : '#334155',
+                          }}
+                        >
+                          {o.label}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+                          {o.canApply ? o.description : `⛔ ${o.blockReason}`}
+                        </Text>
+                      </View>
+                    </TouchableRipple>
+                  );
+                })}
+              </View>
+            )}
             <Text style={undoStyles.modeText}>{modeText}</Text>
             {barcode && !isManualUndo ? (
               <Text style={undoStyles.rowLine}>Dokunulan parça: {barcode}</Text>
@@ -6464,7 +7036,23 @@ function TamburUndoConfirmModal({
             {preview.warnings.map((w) => (
               <Text key={w} style={undoStyles.warnText}>⚠ {w}</Text>
             ))}
-            {preview.blockReason && <Text style={undoStyles.blockText}>⛔ {preview.blockReason}</Text>}
+            {/* SEBEP — yalnız tümden geri almada. İş emrinin geçmişini yeniden
+                yazan bir işlem "neden" sorusunu cevapsız bırakmamalı; backend
+                de sebepsiz çağrıyı 403'ler (tek kaynak: fullGateBlockReason). */}
+            {needsReason && (
+              <View style={{ marginTop: 10, gap: 4 }}>
+                <Text style={undoStyles.sectionTitle}>Sebep (zorunlu)</Text>
+                <TextInput
+                  mode="outlined"
+                  dense
+                  placeholder="Neden tümden geri alıyorsunuz?"
+                  value={fullReason}
+                  onChangeText={setFullReason}
+                  disabled={applyMut.isPending}
+                  style={{ backgroundColor: '#fff' }}
+                />
+              </View>
+            )}
           </ScrollView>
         ) : null}
 
@@ -6476,11 +7064,18 @@ function TamburUndoConfirmModal({
             mode="contained"
             buttonColor="#b45309"
             loading={applyMut.isPending}
-            disabled={!preview?.canApply || applyMut.isPending}
+            disabled={
+              !preview?.canApply ||
+              applyMut.isPending ||
+              // Sebep zorunluysa yazılana dek kapalı — backend zaten 403'ler,
+              // ama operatörü sunucuya gidip hata yiyerek öğrenmeye zorlamak
+              // kötü bir yüzeydir.
+              (needsReason && fullReason.trim().length < 3)
+            }
             onPress={() => applyMut.mutate()}
             style={undoStyles.actionBtn}
           >
-            Geri Al
+            {effectiveMode === 'FULL' ? 'Tümden Geri Al' : 'Geri Al'}
           </Button>
         </View>
       </View>

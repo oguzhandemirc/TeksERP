@@ -17,62 +17,6 @@ import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { factoryDaySql } from "../../constants/time";
 
-// ---------- 1) Station Efficiency --------------------------------------------
-
-export interface StationEfficiencyRow {
-  stationId: string;
-  stationName: string;
-  stationKind: string;
-  rollCount: number; // distinct rolls that touched
-  qtyIn: number;
-  qtyOut: number;
-  avgDurationMin: number | null; // dakikalar
-  stillIn: number; // henüz çıkmamış (in-progress)
-}
-
-export async function getStationEfficiency(range: DateRange): Promise<StationEfficiencyRow[]> {
-  const rows = await prisma.$queryRaw<
-    Array<{
-      stationId: string;
-      stationName: string;
-      stationKind: string;
-      rollCount: bigint;
-      qtyIn: number | null;
-      qtyOut: number | null;
-      avgDurationSec: number | null;
-      stillIn: bigint;
-    }>
-  >(Prisma.sql`
-    SELECT
-      s.id                AS "stationId",
-      s.name              AS "stationName",
-      s.kind::text        AS "stationKind",
-      COUNT(DISTINCT rm."rollId")                                                    AS "rollCount",
-      SUM(rm."qtyIn")::float                                                         AS "qtyIn",
-      SUM(rm."qtyOut")::float                                                        AS "qtyOut",
-      AVG(EXTRACT(EPOCH FROM (rm."exitedAt" - rm."enteredAt")))
-        FILTER (WHERE rm."exitedAt" IS NOT NULL)                                     AS "avgDurationSec",
-      COUNT(*) FILTER (WHERE rm."exitedAt" IS NULL)                                  AS "stillIn"
-    FROM roll_movements rm
-    JOIN work_order_steps wos ON rm."workOrderStepId" = wos.id
-    JOIN stations s           ON wos."stationId" = s.id
-    WHERE rm."enteredAt" >= ${range.from} AND rm."enteredAt" <= ${range.to}
-    GROUP BY s.id, s.name, s.kind
-    ORDER BY "rollCount" DESC, s.name ASC
-  `);
-
-  return rows.map((r) => ({
-    stationId: r.stationId,
-    stationName: r.stationName,
-    stationKind: r.stationKind,
-    rollCount: Number(r.rollCount),
-    qtyIn: Number(r.qtyIn ?? 0),
-    qtyOut: Number(r.qtyOut ?? 0),
-    avgDurationMin: r.avgDurationSec === null ? null : Math.round((r.avgDurationSec / 60) * 10) / 10,
-    stillIn: Number(r.stillIn),
-  }));
-}
-
 // ---------- 2) Operator Performance ------------------------------------------
 
 export interface OperatorPerformanceRow {
@@ -126,58 +70,6 @@ export async function getOperatorPerformance(range: DateRange, limit = 50): Prom
     qc2Count: Number(r.qc2Count),
     tamburCount: Number(r.tamburCount),
     subcontractorOps: Number(r.subcontractorOps),
-  }));
-}
-
-// ---------- 3) Machine Usage -------------------------------------------------
-
-export interface MachineUsageRow {
-  machineId: string;
-  machineName: string;
-  stationId: string;
-  stationName: string;
-  stationKind: string;
-  opCount: number;
-  rollCount: number;
-}
-
-export async function getMachineUsage(range: DateRange): Promise<MachineUsageRow[]> {
-  const rows = await prisma.$queryRaw<
-    Array<{
-      machineId: string;
-      machineName: string;
-      stationId: string;
-      stationName: string;
-      stationKind: string;
-      opCount: bigint;
-      rollCount: bigint;
-    }>
-  >(Prisma.sql`
-    SELECT
-      m.id            AS "machineId",
-      m.name          AS "machineName",
-      s.id            AS "stationId",
-      s.name          AS "stationName",
-      s.kind::text    AS "stationKind",
-      COUNT(*)                       AS "opCount",
-      COUNT(DISTINCT ro."rollId")    AS "rollCount"
-    FROM roll_operations ro
-    JOIN machines m  ON ro."machineId" = m.id
-    JOIN stations s  ON m."stationId" = s.id
-    WHERE ro."createdAt" >= ${range.from} AND ro."createdAt" <= ${range.to}
-      AND ro."inheritedFromParentRollId" IS NULL
-    GROUP BY m.id, m.name, s.id, s.name, s.kind
-    ORDER BY "opCount" DESC, s.name ASC, m.name ASC
-  `);
-
-  return rows.map((r) => ({
-    machineId: r.machineId,
-    machineName: r.machineName,
-    stationId: r.stationId,
-    stationName: r.stationName,
-    stationKind: r.stationKind,
-    opCount: Number(r.opCount),
-    rollCount: Number(r.rollCount),
   }));
 }
 
@@ -314,70 +206,5 @@ export async function getTravelerTrace(rollId: string): Promise<TravelerTraceRes
       width: roll.width !== null ? Number(roll.width) : null,
     },
     events,
-  };
-}
-
-// ---------- 5) Scrap / Fire --------------------------------------------------
-
-export interface ScrapSummary {
-  totalScrapRolls: number;
-  totalScrapQty: number;
-  daily: { day: string; count: number; qty: number }[];
-  byDefect: { defectName: string; count: number }[];
-}
-
-export async function getScrapSummary(range: DateRange): Promise<ScrapSummary> {
-  // SCRAP statüsündeki rulolar — updatedAt range içinde (status değişimi proxy'si)
-  //
-  // GÜN SORUSU = TAKVİM GÜNÜ (fabrika saati). "Hangi gün fire verdik" sorusunun
-  // muhatabı üretim müdürü ve cevabı onun duvar saatiyle okunur. `updatedAt`
-  // timestamptz olduğu için DATE_TRUNC oturum saat diliminde (UTC) keserdi →
-  // gece vardiyasında 00:00–03:00 arası hurdaya ayrılan toplar BİR ÖNCEKİ günün
-  // çubuğuna düşerdi. `factoryDaySql` günü Europe/Istanbul'da keser.
-  const dailyRows = await prisma.$queryRaw<
-    Array<{ day: Date; count: bigint; qty: number | null }>
-  >(Prisma.sql`
-    SELECT
-      ${factoryDaySql('r."updatedAt"')}      AS day,
-      COUNT(*)                               AS count,
-      SUM(r."currentQty")::float             AS qty
-    FROM rolls r
-    WHERE r.status = 'SCRAP'
-      AND r."updatedAt" >= ${range.from} AND r."updatedAt" <= ${range.to}
-    GROUP BY 1
-    ORDER BY 1 ASC
-  `);
-
-  // Tambur tarafından "CUT" (hata parçası kesildi/scrap) kararı verilen hatalar → defect kırılımı
-  const defectRows = await prisma.$queryRaw<
-    Array<{ defectName: string; count: bigint }>
-  >(Prisma.sql`
-    SELECT
-      COALESCE(dt.name, re."errorType", 'Bilinmiyor') AS "defectName",
-      COUNT(*)                                         AS count
-    FROM roll_errors re
-    LEFT JOIN defect_types dt ON re."defectTypeId" = dt.id
-    WHERE re."actionTaken" = 'CUT'
-      AND re."processedAt" >= ${range.from} AND re."processedAt" <= ${range.to}
-    GROUP BY COALESCE(dt.name, re."errorType", 'Bilinmiyor')
-    ORDER BY count DESC
-    LIMIT 20
-  `);
-
-  const totalScrapRolls = dailyRows.reduce((acc, r) => acc + Number(r.count), 0);
-  const totalScrapQty = dailyRows.reduce((acc, r) => acc + Number(r.qty ?? 0), 0);
-
-  return {
-    totalScrapRolls,
-    totalScrapQty: Math.round(totalScrapQty * 10) / 10,
-    daily: dailyRows.map((r) => ({
-      day: r.day.toISOString().slice(0, 10),
-      count: Number(r.count),
-      qty: Math.round(Number(r.qty ?? 0) * 10) / 10,
-    })),
-    byDefect: defectRows.map((r) => ({
-      defectName: r.defectName,
-      count: Number(r.count),
-    })),
   };
 }

@@ -154,6 +154,7 @@ async function cleanup() {
   const allRollIds = [...parentIds, ...childIds];
   if (allRollIds.length) {
     await prisma.systemLog.deleteMany({ where: { recordId: { in: allRollIds } } });
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: allRollIds } } });
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: allRollIds } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: allRollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: allRollIds } } });

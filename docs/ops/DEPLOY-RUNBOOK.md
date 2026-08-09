@@ -14,6 +14,23 @@ Bu doküman backend'i (`Teks-Erp/`, Express 5 + Prisma 7 + PostgreSQL) bir
 > Migration ayrıntıları için `Teks-Erp/MIGRATION-DEPLOY.md`'ye, deploy öncesi
 > madde-madde kontrol için `URETIM-KONTROL-LISTESI.md`'ye bakın.
 
+> ### ⚠️ ÖNCE SÜRÜME ÖZEL NOTU OKU
+>
+> Bu runbook **genel** sırayı anlatır. Bazı sürümler `migrate deploy`'un
+> ARDINDAN koşulması gereken **tek seferlik** adımlar getirir (geriye doldurma
+> script'i, izin ataması, veri onarımı). Bunlar `docs/ops/SURUM-*-DEPLOY.md`
+> dosyalarında yaşar ve **runbook'ta tekrarlanmaz** — atlanırsa hata vermez,
+> sessizce eksik veri bırakır.
+>
+> **Deploy etmeden önce `docs/ops/` içindeki en yeni `SURUM-*-DEPLOY.md`
+> dosyalarını, en son deploy tarihinden bugüne kadar olanları oku.**
+>
+> | Sürüm | Ek adım |
+> |---|---|
+> | `SURUM-2026-08-09-RAPORLAR-DEPLOY.md` | migration + **`backfill_roll_production_timestamps.ts --apply`** |
+> | `SURUM-2026-08-06-YETKI-DEPLOY.md` | rol şablonları — izin ATAMASI elle |
+> | `SURUM-2026-08-05-DEPLOY.md` · `SURUM-2026-08-03-DEPLOY.md` | kendi notlarına bak |
+
 ---
 
 ## SAHADAKİ KURULUM — yetkili değerler (SAHINSRV, 192.168.1.250)

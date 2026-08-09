@@ -12,12 +12,11 @@ import {
   resolveDateRange,
 } from "../../services/reports/_shared";
 import {
-  getMachineUsage,
   getOperatorPerformance,
-  getScrapSummary,
-  getStationEfficiency,
   getTravelerTrace,
 } from "../../services/reports/production.report.service";
+import { getWipScorecard } from "../../services/reports/wip-scorecard.report.service";
+import { getBatchTrace, searchBatches } from "../../services/reports/batch-trace.report.service";
 import { AppError } from "../../utils/app-error";
 
 const router = Router();
@@ -38,10 +37,43 @@ const guard = [verifyToken, requirePermission("report:production")];
  *         name: dateTo
  *         schema: { type: string, format: date-time }
  */
-router.get("/station-efficiency", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * NEREDE TAKILDI (WIP) — anlık bekleyen + dönemsel geçen.
+ * Tarih aralığı YALNIZ "geçen" bölümünü etkiler; bekleyen kısım snapshot'tır.
+ */
+/**
+ * PARTİ ARAMA — parti no ya da top barkodu ile ADAY listesi.
+ * ⚠️ Daima liste döner: parti numarası P01…P99 arasında DÖNER ve benzersiz
+ * DEĞİLDİR (kök CLAUDE.md). Tek sonuç varsaymak, aynı numarayı taşıyan başka
+ * bir partinin müşterilerini göstermek olurdu.
+ */
+router.get("/batch-search", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = typeof req.query.q === "string" ? req.query.q : "";
+    res.status(200).json({ success: true, data: await searchBatches(q) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** PARTİ İZLEME — bu partiden kime ne gitti (geri izleme). */
+router.get("/batch-trace/:batchId", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await getBatchTrace(req.params.batchId as string);
+    if (!data) {
+      res.status(404).json({ success: false, message: "Parti bulunamadı" });
+      return;
+    }
+    res.status(200).json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/wip", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getStationEfficiency(range);
+    const data = await getWipScorecard(range);
     res.status(200).json(reportEnvelope(data, range));
   } catch (e) {
     next(e);
@@ -76,16 +108,6 @@ router.get("/operator-performance", ...guard, async (req: Request, res: Response
  *     summary: Makine başına işlem ve rulo sayısı
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/machine-usage", ...guard, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getMachineUsage(range);
-    res.status(200).json(reportEnvelope(data, range));
-  } catch (e) {
-    next(e);
-  }
-});
-
 const traceSchema = z.object({
   rollId: z.string().uuid("Geçersiz rulo id"),
 });
@@ -122,14 +144,4 @@ router.get("/traveler-trace", ...guard, async (req: Request, res: Response, next
  *     summary: Fire & hurda özeti (günlük seri + defect kırılımı)
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/scrap", ...guard, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getScrapSummary(range);
-    res.status(200).json(reportEnvelope(data, range));
-  } catch (e) {
-    next(e);
-  }
-});
-
 export default router;

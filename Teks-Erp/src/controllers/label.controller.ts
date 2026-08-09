@@ -10,6 +10,18 @@ import { LabelService } from "../services/label.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
+/**
+ * TOPLU etiket hedefi (2026-08-09) — `bulkLabelsSchema` ile AYNI tavan (2000).
+ * İstemci aynı seçimi önce buraya sonra baskıya gönderir; tavanlar ayrışırsa
+ * yazılan ama basılamayan (ya da tersi) bir küme doğar.
+ */
+const seedBulkSchema = z.object({
+  rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top").max(2000),
+  orderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").nullish(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
+  stock: z.boolean().optional(),
+});
+
 const bulkLabelsSchema = z.object({
   rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top").max(2000),
   copies: z.number().int().min(1).max(5).optional(),
@@ -504,6 +516,32 @@ export class LabelController {
       const body = printEventSchema.parse(req.body ?? {});
       const result = await this.service.seedRollLabelSnapshot(
         req.params.id as string,
+        req.user?.userId,
+        {
+          orderLineId: body.orderLineId ?? undefined,
+          customerId: body.customerId ?? undefined,
+          stock: body.stock === true,
+        },
+      );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * POST /api/labels/rolls/seed-snapshot-bulk — N topun etiket hedefini TOPLU yaz.
+   *
+   * "Kuşağı değişen ürünlerin toplu etiket çıkarıp yenilenmesi" (saha isteği).
+   * Akış: seç → "Kime?" sor → hepsine yaz (bu uç) → hepsini bas (`bulk-html`).
+   *
+   * ⚠️ Tavan `bulkLabelsSchema` ile AYNI olmalı — istemci aynı seçimi önce buraya,
+   * sonra baskıya gönderiyor; tavanlar ayrışırsa yazılan ama basılamayan (ya da
+   * tersi) bir küme doğar.
+   */
+  seedRollLabelSnapshotsBulk = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = seedBulkSchema.parse(req.body ?? {});
+      const result = await this.service.seedRollLabelSnapshotsBulk(
+        body.rollIds,
         req.user?.userId,
         {
           orderLineId: body.orderLineId ?? undefined,

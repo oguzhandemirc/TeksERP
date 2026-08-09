@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Callout } from "@/components/ui/callout";
+import { ShipmentMismatchSummary } from "./ContentMismatchBanner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { customerService } from "@/pages/Customers/service";
@@ -167,6 +168,11 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
               </ul>
             </Callout>
           )}
+
+          {/* İçerik uyuşmazlığı — sevk kurmadan ÖNCEKİ SON kapı (2026-08-09).
+              Notlarla aynı gerekçe: burada görülmesi en değerli, çünkü mal henüz
+              araca yüklenmedi. ⚠️ Sevki ENGELLEMEZ — kural gereği uyarıdır. */}
+          <ShipmentMismatchSummary sackIds={sackIds} />
 
           {/* Müşteri / şube */}
           <div className="grid gap-3 sm:grid-cols-2">

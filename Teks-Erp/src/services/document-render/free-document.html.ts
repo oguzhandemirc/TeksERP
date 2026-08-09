@@ -9,6 +9,7 @@
 import type { CompanyLetterhead, DocumentConfig } from "../system-setting.service";
 import {
   resolveDocStyle, docPageCss, scaleDocCss, docLogoHtml,
+  docBlankGridCss, docBlankGridHtml,
   DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
 } from "./doc-style";
 
@@ -79,13 +80,14 @@ export function renderFreeDocumentHtml(snapshot: FreeDocumentSnapshot, meta: Ren
   .sign { display: flex; gap: 24px; margin-top: 40px; justify-content: flex-end; } .sign-box { width: 200px; text-align: center; } .sign-line { border-top: 1px solid #000; margin-bottom: 3px; margin-top: 28px; } .sign-lbl { font-size: 10px; color: #333; }
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
+  ${docBlankGridCss(cfg)}
 `,
     style,
   );
 
   const copyBadge = docCopyBadge(cfg, esc);
-  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc);
-  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc);
+  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc) + docBlankGridHtml(cfg, "afterHeader", esc);
+  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc) + docBlankGridHtml(cfg, "beforeSignatures", esc);
   const printNote = docPrintNoteHtml(meta.printNote, esc);
   const stampsBar = docStampsBar(cfg, meta, esc, { printedAt: "Basım", printedBy: "Basan" });
 

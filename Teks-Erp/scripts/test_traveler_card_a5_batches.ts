@@ -303,10 +303,63 @@ async function cleanup(): Promise<void> {
   await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
 }
 
+/**
+ * §PX — SAYISAL PUNTO da sayfa boyutuna göre ölçeklenir (2026-08-09).
+ *
+ * Profil KADEME sistemini (sm/md/lg) sayfa boyutuna bağlamıştı ve dosyanın
+ * başındaki not bunu açıkça uyarıyordu. 2026-08-05'te panel tek birime (sayısal
+ * `px`) geçince o koruma DELİNDİ: `f.px` haritayı atlayıp doğrudan inline stile
+ * yazılıyordu.
+ *
+ * ÖLÇÜLDÜ (gerçek kayıtlı ayar, `traveler.cardConfig`): parti no `px: 27` +
+ * `fontScale: 1.15` → A4'te 31,05px (bilinçli, 194mm yazı alanında okunur) ama
+ * A5'te de AYNI 31,05px — 132mm alanda uzun parti no üç satıra sarıyor ve
+ * sayfanın dörtte birini yiyordu. Hata yok, log yok; yalnız kâğıt bozuk.
+ */
+function runPxScale(): void {
+  console.log("\n=== PX) Sayısal punto sayfa boyutuna göre ölçeklenir ===");
+
+  const withPx = (pageSize: "A4" | "A5"): string =>
+    renderTravelerCardHtml(
+      snap({
+        ...DEFAULT_TRAVELER_CARD_CONFIG,
+        pageSize,
+        // Sahadaki gerçek ayarın birebir aynısı.
+        batchFields: {
+          batchNumber: { show: true, size: "md", weight: "black", px: 27 },
+        },
+      } as unknown as Partial<TravelerCardConfig>),
+      { ...META, batches: [{ batchNumber: "P2207260001", rollCount: 2, quantity: 480, dispatch: null }] },
+    );
+
+  const a4 = withPx("A4");
+  const a5 = withPx("A5");
+
+  // A4 = 1 ölçek → panelde girilen değer AYNEN basılır (canlı çıktı korunur).
+  check("A4'te sayısal punto AYNEN basılır (27px)", a4.includes("font-size:27px"), "27px");
+  // A5 = 8/9.5 ≈ 0,842 → 27 * 0,842 = 22,74
+  check(
+    "⭐ A5'te sayısal punto ÖLÇEKLENİR (27 → 22.74px)",
+    a5.includes("font-size:22.74px"),
+    "profil atlanırsa burada da 27px çıkar — sahadaki hata tam olarak buydu",
+  );
+  check("A5'te ham 27px KALMADI", !a5.includes("font-size:27px"));
+  // Kalınlık ölçekten ETKİLENMEZ — o bir punto değil, ağırlık kademesi.
+  check("kalınlık iki boyutta da aynı (900)", a4.includes("font-weight:900") && a5.includes("font-weight:900"));
+  // Körlük zemini: override hiç basılmıyorsa yukarıdaki "kalmadı" kontrolü
+  // VAKUMEN yeşil kalırdı.
+  check(
+    "körlük zemini: override gerçekten basılıyor",
+    /class="b-no" style="font-size:[\d.]+px/.test(a5),
+    "b-no hücresinde inline stil var",
+  );
+}
+
 async function main(): Promise<void> {
   await resolveFixtures();
   try {
     await run();
+    runPxScale();
   } finally {
     await cleanup();
     console.log("(test verisi temizlendi)");

@@ -10,6 +10,7 @@ import type { PrintedDocStatus } from "@prisma/client";
 import type { PrintedDocSnapshot } from "../printed-document.service";
 import {
   resolveDocStyle, docPageCss, docTableCss, scaleDocCss, docLogoHtml,
+  docBlankGridCss, docBlankGridHtml,
   DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
@@ -166,6 +167,7 @@ export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: Ren
   .box .row { margin-top: 2px; }
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
+  ${docBlankGridCss(cfg)}
   ${docTableCss(style, [".sec"])}
   ${docFieldCss(cfg.fields, DOC_FIELD_CATALOGS["iadeIrsaliyesi"], d)}
 `,
@@ -173,8 +175,8 @@ export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: Ren
   );
 
   const copyBadge = docCopyBadge(cfg, esc);
-  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc);
-  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc);
+  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc) + docBlankGridHtml(cfg, "afterHeader", esc);
+  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc) + docBlankGridHtml(cfg, "beforeSignatures", esc);
   const printNote = docPrintNoteHtml(meta.printNote, esc);
   const stampsBar = docStampsBar(cfg, meta, esc, { printedAt: "Basım", printedBy: "Basan" });
 

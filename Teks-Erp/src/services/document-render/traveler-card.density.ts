@@ -28,6 +28,26 @@
 
 export type TravelerPageSize = "A4" | "A5";
 
+/**
+ * SAYISAL PUNTO ÖLÇEĞİ (2026-08-09) — panelde elle girilen `px` değerlerinin
+ * sayfa boyutuna göre çarpanı.
+ *
+ * NEDEN GEREKLİ: profil, KADEME sistemini (sm/md/lg) sayfa boyutuna bağlamıştı
+ * ve dosyanın başındaki not bunu açıkça uyarıyor — *"A5'te taban 8px iken 'lg'
+ * hücrenin A4'ün 14px'i olması kartı taşırırdı"*. 2026-08-05'te panel tek birime
+ * (sayısal px) geçince o koruma DELİNDİ: `f.px` haritayı atlayıp doğrudan inline
+ * stile yazılıyordu.
+ *
+ * ÖLÇÜLDÜ (2026-08-09, gerçek kayıtlı ayar): parti no `px: 27` + `fontScale
+ * 1.15` → 31,05px. A4'te (yazı alanı 194mm) bilinçli ve okunur; A5'te (132mm)
+ * AYNI 31,05px kalıyor, "DEMO-KRSP-M2-A" ÜÇ SATIRA sarıyor ve sayfanın dörtte
+ * birini yiyor. Hata yok, log yok — yalnız kâğıt bozuk çıkıyor.
+ *
+ * Değer `base` oranıdır (A5 8 / A4 9.5 ≈ 0,842) — profilin kendi yazı ölçeğiyle
+ * aynı aile. ⚠️ A4 = 1 olmak ZORUNDA: A4 çıktısı bayt-bayt korunmalı.
+ */
+export const PX_SCALE: Record<TravelerPageSize, number> = { A4: 1, A5: 8 / 9.5 };
+
 /** Fiziksel sayfa ölçüsü (mm) — ekran önizlemesinde sayfayı gerçek boyunda çizmek için. */
 export const PAGE_DIM: Record<TravelerPageSize, { w: number; h: number }> = {
   A4: { w: 210, h: 297 },

@@ -172,4 +172,35 @@ export const labelService = {
         ...(ctx?.stock ? { stock: true } : {}),
       })
       .then((r) => r.data),
+
+  /**
+   * TOPLU etiket hedefi (2026-08-09) — "kuşağı değişen ürünlerin toplu etiket
+   * çıkarıp yenilenmesi" saha isteği.
+   *
+   * ⚠️ Sonuç PARÇALIDIR: `failed[]` atlanan her topu barkodu ve SEBEBİYLE döner.
+   * Ekran bunu YUTMAMALI — "42 yazıldı" deyip 8'inin neden atlandığını
+   * söylememek en kötü davranıştır.
+   */
+  seedSnapshotBulk: (
+    rollIds: string[],
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
+  ): Promise<
+    ApiResponse<{
+      seeded: string[];
+      failed: Array<{ rollId: string; barcode: string | null; reason: string }>;
+    }>
+  > =>
+    apiClient
+      .post<
+        ApiResponse<{
+          seeded: string[];
+          failed: Array<{ rollId: string; barcode: string | null; reason: string }>;
+        }>
+      >('/labels/rolls/seed-snapshot-bulk', {
+        rollIds,
+        ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
+        ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
+        ...(ctx?.stock ? { stock: true } : {}),
+      })
+      .then((r) => r.data),
 };

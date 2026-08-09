@@ -19,6 +19,7 @@ import { useBaseUrlStore, displayUrl } from '../../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
 import { useDeviceStore } from '../../store/deviceStore';
 import { useSessionStore } from '../../store/sessionStore';
+import { useSubcontractorDefault } from '../../hooks/useSubcontractorDefault';
 import type { RootStackParamList } from '../../navigation/types';
 import { SETTINGS_COLORS as COLORS } from './settings/settingsUi';
 
@@ -43,6 +44,8 @@ export default function SettingsScreen() {
   const scanSoundEnabled = useDeviceSettingsStore((s) => s.scanSoundEnabled);
   const paired = useDeviceStore((s) => s.paired);
   const active = useSessionStore((s) => s.active);
+  // Kişisel tercih (2026-08-09) — menü satırında özet göstermek için.
+  const { mode: firmMode } = useSubcontractorDefault();
 
   const rows: MenuRow[] = [
     {
@@ -79,6 +82,19 @@ export default function SettingsScreen() {
         scanSoundEnabled ? 'ses açık' : 'ses kapalı',
       ].join(' · '),
       route: 'SettingsScanner',
+    },
+    {
+      key: 'workPrefs',
+      icon: 'account-cog',
+      title: 'Çalışma Tercihleri',
+      // ⚠️ Menü satırı sayfadaki AYARIN ÖZETİDİR (Barkod satırıyla aynı kural):
+      // seçili mod burada görünmezse kullanıcı hangi davranışta olduğunu
+      // öğrenmek için sayfayı açmak zorunda kalır.
+      value:
+        firmMode === 'lastUsed'
+          ? 'Fason: en son seçtiğim'
+          : 'Fason: kategorinin favorisi',
+      route: 'SettingsWorkPreferences',
     },
   ];
 

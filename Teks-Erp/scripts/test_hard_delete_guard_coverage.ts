@@ -42,6 +42,22 @@ const EXPECTED: Record<string, string> = {
   "Customer <- CustomerTemplateRoute.customer : Cascade": "cascade-intended — müşteri şablon yönlendirmesi",
   "Customer <- Route.customer : SetNull": "guarded (routeCount, A5 2026-07-31)",
   "Customer <- Sack.customer : SetNull": "guarded (sackCount, 2026-07-15)",
+  // 2026-08-09 — `Roll.labelCustomerId`, `lastLabelSnapshot.customerId`'nin
+  // SORGULANABİLİR aynası (sahiplik DEĞİL, basılmış kâğıdın izi).
+  //
+  // SetNull BİLİNÇLİ ve sayım guard'ı EKLENMEDİ: bu kolon bir BAĞ değil, bir
+  // AYNADIR. Müşteri gerçekten kalıcı silindiyse (soft delete varsayılan;
+  // hard delete zaten `/permanent` guard'ından geçiyor) aynanın boşalması
+  // DOĞRUDUR — artık var olmayan bir müşteriye işaret etmemeli.
+  //
+  // ⚠️ Tarihsel kayıt KAYBOLMAZ: `lastLabelSnapshot` JSON'u o baskıdaki
+  // müşteri id'sini ve ADINI taşımaya devam eder (snapshot tanım gereği
+  // dondurulmuş kayıttır). Kaybolan yalnız FİLTRELENEBİLİRLİK — ki silinmiş
+  // müşteriye göre filtrelemenin zaten bir anlamı yok.
+  //
+  // Guard eklemek TERS etki yapardı: "bu müşteriye 3 yıl önce etiket basılmış"
+  // diye müşteri silmeyi bloklamak, silinemeyen müşteri yığını üretirdi.
+  "Customer <- Roll.labelCustomer : SetNull": "ayna kolon — bağ değil; müşteri silinince aynanın boşalması doğru (snapshot JSON tarihsel kaydı korur)",
   "Device <- DevicePeripheral.device : Cascade": "guarded (pivotCount, A5 2026-07-31)",
   "Device <- PeripheralDevice.device : SetNull": "guarded (peripheralCount, A5 2026-07-31)",
   "Item <- CustomerItemAlias.item : Cascade": "cascade-intended — alias ürünsüz anlamsız",

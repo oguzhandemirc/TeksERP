@@ -10,6 +10,8 @@ interface Props {
   actions?: ReactNode;
   /** false ise tarih aralığı filtresi gizlenir (snapshot raporlar için). */
   showDateRange?: boolean;
+  /** Dönem karşılaştırma seçicisi — yalnız karşılaştırmayı DESTEKLEYEN raporlarda. */
+  showCompare?: boolean;
   defaultDays?: number;
   /** Date range yerine custom filter UI'ı (örn. arama kutusu) render et. */
   filters?: ReactNode;
@@ -26,6 +28,7 @@ export function ReportPageLayout({
   description,
   actions,
   showDateRange = true,
+  showCompare = false,
   defaultDays = 30,
   filters,
   children,
@@ -33,7 +36,11 @@ export function ReportPageLayout({
   return (
     <PageShell className="overflow-hidden">
       <PageHeader title={title} description={description} actions={actions} />
-      {filters ? filters : showDateRange ? <ReportDateRange defaultDays={defaultDays} /> : null}
+      {filters ? (
+        filters
+      ) : showDateRange ? (
+        <ReportDateRange defaultDays={defaultDays} showCompare={showCompare} />
+      ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <PageBody className="p-4">
           <div className="mx-auto flex max-w-7xl flex-col gap-4">{children}</div>

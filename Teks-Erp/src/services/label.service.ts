@@ -1780,9 +1780,82 @@ export class LabelService {
     }
     await prisma.roll.update({
       where: { id: rollId },
-      data: { lastLabelSnapshot: buildDenormalizedSnapshot(labelData, userId, operatorName) },
+      data: {
+        lastLabelSnapshot: buildDenormalizedSnapshot(labelData, userId, operatorName),
+        // SORGULANABİLİR AYNA (2026-08-09) — snapshot'la AYNI update'te yazılır.
+        // İkisi ayrı yazılsaydı biri düşünce kolon ile JSON ayrışır ve müşteri
+        // filtresi sessizce yanlış liste döndürürdü. Stok etiketinde NULL:
+        // "bu topun etiketinde müşteri yazmıyor" ifadesinin doğru karşılığı.
+        labelCustomerId: labelData.customerId ?? null,
+      },
     });
     return { success: true, data: { seeded: true } };
+  }
+
+  /**
+   * TOPLU etiket hedefi yazma (2026-08-09) — "kuşağı değişen ürünlerin toplu
+   * etiket çıkarıp yenilenmesi" saha isteği.
+   *
+   * ⚠️ SONUÇ PARÇALIDIR ve bu BİLİNÇLİDİR — tek transaction DEĞİL. Gerekçe
+   * `kursun-bypass.assignBulk` ile aynı: (a) 50 topu tek tx'te tutmak perf
+   * kuralı 10 ihlali; (b) hepsi-ya-hiç YANLIŞ semantiktir — listedeki bir top
+   * bu arada çuvala okutulduysa diğerlerinin etiketini geri almak operatörün
+   * niyetine aykırıdır.
+   *
+   * ⚠️ Karşılığında **ATLANAN HER SATIR SOMUT SEBEBİYLE DÖNER** (`failed[]`).
+   * *"42 yazıldı"* deyip 8'inin neden atlandığını yutmak en kötü davranıştır.
+   */
+  async seedRollLabelSnapshotsBulk(
+    rollIds: string[],
+    userId?: string,
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+  ): Promise<
+    ApiResponse<{
+      seeded: string[];
+      failed: Array<{ rollId: string; barcode: string | null; reason: string }>;
+    }>
+  > {
+    const seeded: string[] = [];
+    const failed: Array<{ rollId: string; barcode: string | null; reason: string }> = [];
+
+    // Barkodları tek sorguda çöz — hata mesajı id değil BARKOD göstersin
+    // (operatör id'yi tanımaz, elindeki kâğıtta barkod yazar).
+    const rows = await prisma.roll.findMany({
+      where: { id: { in: rollIds } },
+      select: { id: true, barcode: true, status: true },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    for (const rollId of rollIds) {
+      const row = byId.get(rollId);
+      if (!row) {
+        failed.push({ rollId, barcode: null, reason: "Top bulunamadı" });
+        continue;
+      }
+      // Emekli top: etiketi yeniden yönlendirmek fiziksel olarak var olmayan
+      // topu diriltmek olurdu (tarama yolundaki arşiv koruması ile aynı kural).
+      if (DEAD_LABEL_STATUSES.includes(row.status)) {
+        failed.push({
+          rollId,
+          barcode: row.barcode,
+          reason: `Arşivde (${row.status}) — etiketi yönlendirilemez`,
+        });
+        continue;
+      }
+      try {
+        const res = await this.seedRollLabelSnapshot(rollId, userId, opts);
+        if (res.data.seeded) seeded.push(rollId);
+        else {
+          // `seedRollLabelSnapshot` etiket çözülemezse sessizce {seeded:false}
+          // döner (baskı yolunu düşürmemek için). Toplu akışta o sessizlik
+          // kabul edilemez — sebebi listeye taşı.
+          failed.push({ rollId, barcode: row.barcode, reason: "Etiket çözülemedi" });
+        }
+      } catch (e) {
+        failed.push({ rollId, barcode: row.barcode, reason: (e as Error).message });
+      }
+    }
+    return { success: true, data: { seeded, failed } };
   }
 
   /**

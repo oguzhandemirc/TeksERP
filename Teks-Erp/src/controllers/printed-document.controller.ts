@@ -37,7 +37,10 @@ const docStyleSchema = z.object({
 });
 
 /** Belge Şablonu önizlemesi — admin'in düzenlediği taslak içerik ayarı (ResolvedDocConfig). */
-const docConfigSchema = z
+// export: `scripts/test_blank_grid.ts` §5 bu şemayı GERÇEK parse ile sınar — Zod
+// tanımadığı anahtarı hata vermeden ATAR, yani yeni bir DocumentConfig alanı
+// buraya eklenmezse ayar canlı önizlemede SESSİZCE kaybolur.
+export const docConfigSchema = z
   .object({
     titleOverride: z.string().optional(),
     showLetterhead: z.boolean().optional(),
@@ -93,6 +96,21 @@ const docConfigSchema = z
     placements: z.record(z.string(), z.enum(["left", "right"])).optional(),
     gridGroups: z.number().optional(),
     gridRows: z.number().optional(),
+    // AYARLANABİLİR BOŞ GRID (2026-08-09) — üçüncü kapı. Buraya yazılmazsa grid
+    // kaydedilir ve GERÇEK BASKIDA görünür, ama canlı önizlemede GÖRÜNMEZ:
+    // "önizleme = gerçek baskı" sözleşmesi tam da ayarı yapan kişinin gözü
+    // önünde bozulur.
+    blankGrid: z
+      .object({
+        enabled: z.boolean().optional(),
+        title: z.string().optional(),
+        rows: z.number().optional(),
+        columns: z.number().optional(),
+        columnWidths: z.array(z.number()).optional(),
+        headers: z.array(z.string()).optional(),
+        position: z.enum(["afterHeader", "beforeSignatures"]).optional(),
+      })
+      .optional(),
   })
   .nullable();
 // ⚠️ BU ŞEMA BİR SESSİZ AYRIŞMA KAPISI. `z.object` tanımadığı anahtarı hata
@@ -173,6 +191,16 @@ export class PrintedDocumentController {
           : undefined;
       // ?merge=1 → listeleri aynı sayfada akıt. Varsayılan AYRI sayfa.
       const mergeSections = req.query.merge === "1" || req.query.merge === "true";
+      // ?pageSize=A4|A5 → TEK SEFERLİK kâğıt boyu ezmesi (2026-08-09).
+      // Refakat kartındaki (`traveler-card.controller`) sözleşmenin AYNISI:
+      // kalıcı ayara da donmuş snapshot'a da YAZILMAZ, yeni versiyon DOĞURMAZ.
+      // Meşruiyeti: kâğıt boyu SUNUM kararıdır, belgenin içeriği değil — aynı
+      // belge A4 yazıcıdan da A5 yazıcıdan da çıkabilmeli.
+      // ⚠️ Geçersiz değer SESSİZCE yok sayılır, 400'e düşülmez: yazım hatası
+      // yüzünden sahayı kâğıtsız bırakmak, kalıcı ayarla basmaktan kötüdür.
+      const rawPageSize = req.query.pageSize;
+      const pageSize =
+        rawPageSize === "A4" || rawPageSize === "A5" ? rawPageSize : undefined;
       const result = await printedDocumentService.getHtml(docType, sourceId, version, {
         allowDraft,
         useCurrentConfig,
@@ -181,6 +209,7 @@ export class PrintedDocumentController {
         forceRowNotes,
         listSections,
         mergeSections,
+        pageSize,
       });
       const data = result.data as { html: string } | null;
       if (!data) {

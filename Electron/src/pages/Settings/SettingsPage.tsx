@@ -19,7 +19,7 @@ import { usePreferences } from "@/providers/PreferencesProvider";
 export function SettingsPage() {
   const navigate = useNavigate();
   const { favorites, toggleFavorite } = useFavorites();
-  const { prefs, resetPreferences } = usePreferences();
+  const { prefs, setPreference, resetPreferences } = usePreferences();
   const { hasAnyPermission } = useRoleAccess();
   const [resetOpen, setResetOpen] = useState(false);
 
@@ -47,6 +47,61 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent>
             <AppearanceControls />
+          </CardContent>
+        </Card>
+
+        {/* KİŞİSEL ÇALIŞMA TERCİHLERİ (2026-08-09) — sistem geneli ayarlarla
+            KARIŞTIRMA: buradakiler yalnız BU kullanıcıyı etkiler ve
+            `UserPreference` blob'unda yaşar (audit'ten muaf kişisel UI durumu).
+            Sistem geneli ayarlar Genel Ayarlar ekranında ve `admin:settings`
+            arkasındadır. */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Çalışma Tercihleri</CardTitle>
+            <CardDescription>
+              Yalnız seni etkiler — diğer kullanıcıların ekranı değişmez.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">İş emrinde fason firma varsayılanı</p>
+              <p className="pb-2 text-xs text-muted-foreground">
+                Rotaya fason adımı eklediğinde hangi firma hazır gelsin?
+              </p>
+              <div className="flex gap-2">
+                {(
+                  [
+                    ["favorite", "Kategorinin favorisi", "Bugünkü davranış — ⭐ işaretli firma gelir."],
+                    ["lastUsed", "En son seçtiğim", "O kategoride en son kullandığın firma gelir; geçmiş yoksa favoriye düşer."],
+                  ] as const
+                ).map(([val, label, desc]) => {
+                  const active = (prefs.workOrders?.subcontractorDefault ?? "favorite") === val;
+                  return (
+                    <button
+                      key={val}
+                      type="button"
+                      title={desc}
+                      onClick={() =>
+                        setPreference({
+                          workOrders: { ...(prefs.workOrders ?? {}), subcontractorDefault: val },
+                        })
+                      }
+                      className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium ${
+                        active
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted/70"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="pt-2 text-xs text-muted-foreground">
+                Favori yıldızı her iki durumda da listede görünür — bu ayar yalnız
+                <b> hazır gelen</b> firmayı değiştirir.
+              </p>
+            </div>
           </CardContent>
         </Card>
 

@@ -277,6 +277,7 @@ async function cleanup() {
   if (createdRolls.length) {
     await prisma.systemLog.deleteMany({ where: { recordId: { in: createdRolls } } }).catch(() => {});
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
     // Önce çocuklar (parentRollId set), sonra parent'lar.

@@ -1,47 +1,91 @@
 import { reportsClient } from "../_services/reportsClient";
-import type { ReportDateParams } from "../_services/types";
+import type { BreakdownRow } from "../_components/BreakdownTable";
+import type { ReportCompareParams } from "../_services/types";
 
-export interface DefectDistributionRow {
-  defectName: string;
+// ---------- Kalite Karnesi (backend quality-scorecard.report.service ile birebir)
+
+export interface GradeShare {
+  gradeId: string | null;
+  code: string;
+  name: string;
+  sortOrder: number;
+  rollCount: number;
+  qty: number;
+  pct: number;
+  prevQty?: number;
+  prevPct?: number;
+}
+
+export interface ScorecardBreakdownRow {
+  key: string;
+  label: string;
+  rollCount: number;
+  totalQty: number;
+  topGradeQty: number;
+  topGradePct: number;
+  qtyByGrade: Record<string, number>;
+  prevTotalQty?: number;
+  prevTopGradePct?: number;
+}
+
+export interface QualityScorecard {
+  summary: {
+    rollCount: number;
+    totalQty: number;
+    gradedQty: number;
+    ungradedQty: number;
+    topGrade: { code: string; name: string; qty: number; pct: number } | null;
+    prevRollCount?: number;
+    prevTotalQty?: number;
+    prevTopGradePct?: number;
+  };
+  grades: GradeShare[];
+  byItem: ScorecardBreakdownRow[];
+  byColor: ScorecardBreakdownRow[];
+  bySubcontractor: ScorecardBreakdownRow[];
+  daily: Array<{ day: string; totalQty: number; topGradeQty: number; topGradePct: number }>;
+  topGradeCode: string | null;
+  gradeOrder: Array<{ code: string; name: string }>;
+  unanchoredRollCount: number;
+}
+
+// ---------- Fire Karnesi (backend scrap-scorecard.report.service ile birebir)
+
+export interface DefectDetectionRow {
+  key: string;
+  label: string;
   count: number;
-  processedCount: number;
-  scrapCount: number;
-  keptAsA1Count: number;
-  noActionCount: number;
+  cutCount: number;
+  noCutCount: number;
+  openCount: number;
+  prevCount?: number;
 }
 
-export interface StationDefectRateRow {
-  stationId: string;
-  stationName: string;
-  stationKind: string;
-  throughputRolls: number;
-  defectCount: number;
-  defectsPerRoll: number;
-}
-
-export interface Qc2DecisionsSummary {
-  totalProcessed: number;
-  decisions: { action: string; count: number }[];
-  totalErrorsClosed: number;
-  scrapClosed: number;
-  keptAsA1: number;
-  noAction: number;
-}
-
-export interface KursunApplicationSummary {
-  qc2Completed: number;
-  kursunApplied: number;
-  applicationPct: number;
-  daily: { day: string; kursun: number; qc2: number; pct: number }[];
+export interface ScrapScorecard {
+  summary: {
+    scrapQty: number;
+    scrapRollCount: number;
+    /** Dönemde üretimi biten TOPLAM metraj — Kalite Karnesi ile birebir aynı. */
+    producedQty: number;
+    scrapPct: number;
+    /** Çıpası AYRI (detectedAt) — hurda metrajıyla toplanamaz, o yüzden ADET. */
+    defectsDetected: number;
+    defectsOpen: number;
+    prevScrapQty?: number;
+    prevScrapPct?: number;
+    prevDefectsDetected?: number;
+  };
+  scrapByDefect: BreakdownRow[];
+  byItem: BreakdownRow[];
+  byColor: BreakdownRow[];
+  bySource: BreakdownRow[];
+  detectionByStation: DefectDetectionRow[];
+  detectionByDefect: DefectDetectionRow[];
+  daily: Array<{ day: string; scrapQty: number; scrapCount: number }>;
 }
 
 export const qualityReportsApi = {
-  defectDistribution: (p: ReportDateParams) =>
-    reportsClient.get<DefectDistributionRow[]>("quality/defect-distribution", p),
-  stationDefectRate: (p: ReportDateParams) =>
-    reportsClient.get<StationDefectRateRow[]>("quality/station-defect-rate", p),
-  qc2Decisions: (p: ReportDateParams) =>
-    reportsClient.get<Qc2DecisionsSummary>("quality/qc2-decisions", p),
-  kursunApplication: (p: ReportDateParams) =>
-    reportsClient.get<KursunApplicationSummary>("quality/kursun-application", p),
+  scorecard: (p: ReportCompareParams) => reportsClient.get<QualityScorecard>("quality/scorecard", p),
+  scrapScorecard: (p: ReportCompareParams) =>
+    reportsClient.get<ScrapScorecard>("quality/scrap-scorecard", p),
 };

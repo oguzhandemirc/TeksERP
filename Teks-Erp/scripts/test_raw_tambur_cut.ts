@@ -160,6 +160,7 @@ async function cleanup() {
   if (created.length === 0) return;
   await prisma.systemLog.deleteMany({ where: { recordId: { in: created } } });
   await prisma.rollProperty.deleteMany({ where: { rollId: { in: created } } });
+  await prisma.rollVariance.deleteMany({ where: { rollId: { in: created } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: created } } });
   // parentRollId self-FK: child'ları (parentRollId set) önce sil.
   await prisma.roll.deleteMany({ where: { id: { in: created }, parentRollId: { not: null } } });

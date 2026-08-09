@@ -453,6 +453,7 @@ async function cleanup(): Promise<void> {
     await prisma.shipment.deleteMany({ where: { id: { in: createdShipmentIds } } }).catch(() => {});
 
     if (createdRollIds.length > 0) {
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRollIds } } }).catch(() => {});
       await prisma.rollOperation.deleteMany({ where: { rollId: { in: createdRollIds } } }).catch(() => {});
       await prisma.rollMovement.deleteMany({ where: { rollId: { in: createdRollIds } } }).catch(() => {});
       await prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRollIds } } }).catch(() => {});

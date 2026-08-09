@@ -12,6 +12,7 @@ import {
   type WorkOrderDocument,
 } from '../../../services/workOrderDocuments';
 import { colors, spacing, radius } from '../../../theme';
+import { useDeviceSettingsStore, type DocPageSize } from '../../../store/deviceSettingsStore';
 
 // =============================================================================
 // İŞ EMRİ BELGELERİ — sahadaki operatör iş emrine basınca TÜM belgelerine
@@ -43,6 +44,11 @@ export default function WorkOrderDocumentsSheet({
   const qc = useQueryClient();
   // Aynı anda yalnız bir baskı — hangi satırın döndüğü görünsün.
   const [printingKey, setPrintingKey] = useState<string | null>(null);
+  // Kâğıt boyu CİHAZDA hatırlanır (kullanıcıda değil): boy, o istasyona bağlı
+  // YAZICININ özelliğidir — vardiya değişince yazıcı değişmez.
+  const docPageSize = useDeviceSettingsStore((s) => s.docPageSize);
+  const setDocPageSize = useDeviceSettingsStore((s) => s.setDocPageSize);
+  const clearDocPageSize = useDeviceSettingsStore((s) => s.clearDocPageSize);
 
   const q = useQuery({
     queryKey: ['work-order-documents', workOrderId],
@@ -71,7 +77,9 @@ export default function WorkOrderDocumentsSheet({
     if (printingKey) return; // tek soket değil ama çift baskı da istenmez
     setPrintingKey(key);
     try {
-      await printDocument(doc);
+      // Kayıt yoksa `undefined` gider ve istemci parametreyi HİÇ göndermez →
+      // backend kalıcı ayarı uygular (bugünkü davranış birebir korunur).
+      await printDocument(doc, docPageSize[doc.docType]);
       if (doc.docType === 'TRAVELER_CARD') {
         // Baskı olayı "bayat" işaretini temizledi → rozetler tazelensin.
         qc.invalidateQueries({ queryKey: ['work-order-documents', workOrderId] });
@@ -86,6 +94,22 @@ export default function WorkOrderDocumentsSheet({
     } finally {
       setPrintingKey(null);
     }
+  };
+
+  /**
+   * Kâğıt boyu rozeti — ÜÇ durumlu: `Ayar → A4 → A5 → Ayar`.
+   *
+   * ⚠️ "Ayar" durumu ŞART ve kaldırılmamalı. Mobil, sunucudaki KALICI belge
+   * ayarının ne olduğunu BİLMİYOR; rozette varsayılan olarak "A4" göstermek,
+   * ayar A5 iken ekranın YALAN söylemesi olurdu. Üçüncü durum hem dürüst hem de
+   * geri dönülebilir: operatör seçimini iptal edip kalıcı ayara dönebilir.
+   * (İki durumlu yapılırsa "kalıcı ayarı kullan" hâline bir daha ulaşılamaz.)
+   */
+  const cyclePageSize = async (docType: string) => {
+    const cur = docPageSize[docType];
+    const next: DocPageSize | null = cur == null ? 'A4' : cur === 'A4' ? 'A5' : null;
+    if (next == null) await clearDocPageSize(docType);
+    else await setDocPageSize(docType, next);
   };
 
   const renderItem = (row: Row) => {
@@ -132,6 +156,17 @@ export default function WorkOrderDocumentsSheet({
             <Text style={styles.cardDate}>{dayjs(d.date).format('DD.MM.YYYY HH:mm')}</Text>
           </View>
           <View style={styles.cardAction}>
+            {/* KÂĞIT BOYU ROZETİ — dokunmak BASMAZ, yalnız boyu değiştirir.
+                İç TouchableRipple dokunmayı yakalar (RN responder sistemi:
+                en içteki kazanır), bu yüzden kartın baskı onPress'i tetiklenmez. */}
+            <TouchableRipple
+              onPress={() => void cyclePageSize(d.docType)}
+              disabled={busy}
+              style={styles.sizeBadge}
+              borderless={false}
+            >
+              <Text style={styles.sizeBadgeText}>{docPageSize[d.docType] ?? 'Ayar'}</Text>
+            </TouchableRipple>
             {busy ? <ActivityIndicator size={20} /> : <Icon source="printer" size={22} color={colors.textMuted} />}
           </View>
         </View>
@@ -156,7 +191,10 @@ export default function WorkOrderDocumentsSheet({
       emptyIcon="file-document-outline"
       emptyText="Bu iş emrine ait belge yok"
       emptyHint="Refakat kartı iş emri açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir."
-      hint={{ text: 'Satıra dokun → belge yazdırılır.', icon: 'printer' }}
+      hint={{
+        text: 'Satıra dokun → yazdırılır. Kâğıt boyu için sağdaki kutuya dokun (bu cihazda hatırlanır).',
+        icon: 'printer',
+      }}
       // ScrollView (FlashList değil): liste KISA (bir iş emrinin belgeleri) ve
       // satırlar HETEROJEN (grup başlığı ↔ belge kartı). FlashList farklı tipleri
       // aynı havuzda geri dönüştürür; `getItemType` verilmediğinde başlık ile kart
@@ -205,5 +243,20 @@ const styles = StyleSheet.create({
   cardNo: { fontSize: 15, fontWeight: '600', color: colors.brand },
   cardSub: { fontSize: 13, color: colors.textMuted },
   cardDate: { fontSize: 12, color: colors.textMuted },
-  cardAction: { width: 32, alignItems: 'center' },
+  // Rozet + yazıcı ikonu alt alta; genişlik rozete göre büyüdü.
+  cardAction: { width: 56, alignItems: 'center', gap: 6 },
+  // ⚠️ Dokunma hedefi bilerek geniş (min 44dp): eldivenli operatör rozete
+  // isabet edemezse kartın baskı onPress'i tetiklenir ve YANLIŞLIKLA basar.
+  sizeBadge: {
+    minWidth: 44,
+    minHeight: 30,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sizeBadgeText: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
 });

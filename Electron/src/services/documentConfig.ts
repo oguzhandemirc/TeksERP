@@ -78,6 +78,13 @@ export interface DocumentConfig {
   /** Fason çeki grid'inde satır başına grup sayısı (3|4|5; default 5 = fiziksel
    *  form). Az grup = geniş hücre → A5'te punto büyütülebilir. */
   gridGroups?: number;
+  /**
+   * AYARLANABİLİR BOŞ GRID (2026-08-09) — elle doldurulan kutular.
+   * OPT-IN: `enabled` false/verilmedi → belgeye TEK BAYT eklenmez.
+   * Backend `document-render/doc-style.BlankGridConfig` ile AYNI sözleşme;
+   * ikisi birlikte değişir (dördüncü kapı).
+   */
+  blankGrid?: BlankGridConfig;
   /** Fason çeki grid'inde GRUP BAŞINA SATIR (1–40; default 10).
    *  Sayfa başına top = gridGroups × gridRows (varsayılan 5 × 10 = 50). */
   gridRows?: number;
@@ -85,6 +92,23 @@ export interface DocumentConfig {
 
 /** Alan bazlı yazı ayarı — backend `document-render/doc-style.ts` ile aynı sözleşme. */
 export type DocFieldWeight = "light" | "normal" | "medium" | "bold" | "black";
+
+export interface BlankGridConfig {
+  /** OPT-IN. false/verilmedi → hiç basılmaz. */
+  enabled?: boolean;
+  /** Üst başlık. Boş → başlık satırı basılmaz. */
+  title?: string;
+  /** Satır sayısı (1–40). */
+  rows?: number;
+  /** Sütun sayısı (1–12). */
+  columns?: number;
+  /** Sütun genişlikleri YÜZDE. Sayı sütunla uyuşmazsa TAMAMEN atılır. */
+  columnWidths?: number[];
+  /** İlk satır sütun başlıkları. Tamamı boşsa başlık satırı hiç basılmaz. */
+  headers?: string[];
+  /** Konum — serbest metin bloklarıyla aynı iki çıpa. */
+  position?: "afterHeader" | "beforeSignatures";
+}
 
 export interface DocFieldStyle {
   /** Yazı boyu px. Verilmezse alanın (sayfa boyutuna bağlı) tabanı geçerlidir. */
@@ -155,6 +179,7 @@ export interface ResolvedDocConfig {
   placements: NonNullable<DocumentConfig["placements"]>;
   gridGroups?: number;
   gridRows?: number;
+  blankGrid?: BlankGridConfig;
 }
 
 export interface DocSectionDef {
@@ -739,5 +764,7 @@ export function resolveDocConfig(
     placements: raw.placements ?? {},
     gridGroups: raw.gridGroups,
     gridRows: raw.gridRows,
+    // Ham geçiş — önizleme backend renderer.a aynen taşır (dördüncü kapı).
+    blankGrid: raw.blankGrid,
   };
 }

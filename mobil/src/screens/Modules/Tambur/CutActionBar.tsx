@@ -58,11 +58,19 @@ interface Props {
   kesDisabled: boolean;
   /** İşlem sürüyor (spinner + kilit, ama mor görünüm korunur). */
   kesLoading: boolean;
-  /** Opsiyonel "Bitir" aksiyonu (Top Kesme akışı): kalan kumaş için karar modalını
-   *  açar (1.KALITE/A1/FIRE). Verilmezse buton render edilmez — açık kumaş akışı
-   *  kendi bitişini yönetir. */
+  /**
+   * "Bitir" aksiyonu — kalan kumaş için karar modalını açar (1.KALITE / A1 /
+   * FİRE / Kayıt Düzeltmesi). Verilmezse buton render edilmez.
+   *
+   * ⚠️ 2026-08-09'a kadar YALNIZ "Top Kesme" akışında vardı; açık kumaş akışı
+   * kalan < 0,1 m olunca OTOMATİK kapanıyordu. O otomatik kapanış kaldırıldı
+   * ve buton her iki akışa da kondu — sebep: fiziksel kumaş kayıttan fazla
+   * olduğunda (sahada olağan) iş kapanıyor, mal elde kalıyordu.
+   */
   onBitir?: () => void;
   bitirDisabled?: boolean;
+  /** Kapanış isteği uçuşta — çift dokunuş engellenir. */
+  bitirLoading?: boolean;
 }
 
 export default function CutActionBar({
@@ -75,6 +83,7 @@ export default function CutActionBar({
   kesLoading,
   onBitir,
   bitirDisabled,
+  bitirLoading,
 }: Props) {
   return (
     <Surface style={styles.bar} elevation={3}>
@@ -83,7 +92,10 @@ export default function CutActionBar({
         {onBitir && (
           <BitirButton
             onPress={onBitir}
-            disabled={!!bitirDisabled}
+            // ⚠️ Kalan metraj VARKEN de AÇIK kalır — bilinçli. Kapatmak
+            // "sistemde 40 m görünüyor ama kumaş bitti" vakasında topu
+            // sonsuza dek açık bırakırdı. Kalan varsa karar penceresi çıkar.
+            disabled={!!bitirDisabled || !!bitirLoading}
             compact={compact}
           />
         )}

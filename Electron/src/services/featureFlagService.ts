@@ -234,6 +234,12 @@ export interface FeatureFlags {
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma)
    *  onay sonrası kabul edilir; kaynak top tamamen tüketilir. Backend ENFORCE eder. */
   tamburOverQuantityEnabled: boolean;
+  /** Tambur "TÜMDEN geri al" yalnız AYNI FABRİKA GÜNÜ içinde yapılabilsin mi
+   *  (false=default, sınır YOK). Asıl koruma parçaların kendisindedir (çuvala
+   *  okutulmuş / sevke girmiş / yeniden kesilmiş parça zaten reddedilir); sert
+   *  bir süre sınırı dün akşamki hatayı sabah düzeltmeyi imkânsız kılabilir.
+   *  TEK PARÇA iptali bu ayardan ETKİLENMEZ. Emsal: shipping.undoDispatchSameDayOnly. */
+  tamburUndoFullSameDayOnly: boolean;
   /** Kurşun bypass düzeni açık mı (false=default). Kurşun makinelerinde tablet YOK:
    *  iş fiziksel olarak yapılır ama dijital izlenmez; yetkili "Kurşun Dağıtım"
    *  ekranından işi fiziksel bir kurşun MAKİNESİNE atar (istasyon değil — PROCESS_QC

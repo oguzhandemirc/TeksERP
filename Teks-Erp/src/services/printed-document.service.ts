@@ -429,6 +429,12 @@ export class PrintedDocumentService {
       listSections?: string[];
       /** Üç listeyi aynı sayfada akıt (?merge=1). Varsayılan: ayrı sayfalar. */
       mergeSections?: boolean;
+      /**
+       * TEK SEFERLİK kâğıt boyu (?pageSize=A4|A5). Kalıcı ayarı VE donmuş
+       * snapshot'ın kendi boyunu EZER; hiçbir yere yazılmaz, yeni versiyon
+       * doğurmaz — `forceRowNotes`/`listSections` ile aynı sözleşme.
+       */
+      pageSize?: "A4" | "A5";
     },
   ): Promise<ApiResponse<{ html: string } | null>> {
     const entry = requireBuilder(docType);
@@ -456,6 +462,29 @@ export class PrintedDocumentService {
       mergeSections: opts?.mergeSections ?? false,
     };
 
+    /**
+     * TEK SEFERLİK kâğıt boyu ezmesi — yalnız BU render'ın zarfını değiştirir.
+     *
+     * ⚠️ Kopya üretir, snapshot'ı YERİNDE DEĞİŞTİRMEZ: `rec.snapshot` çağrı
+     * zincirinde başka yerlere de gidiyor ve mutasyon, "hiçbir yere yazılmaz"
+     * sözünü sessizce bozacak ilk yol olurdu.
+     *
+     * ⚠️ `style`in DİĞER alanları KORUNUR (yayılarak yazılır). Tüm `style`i
+     * `{ pageSize }` ile değiştirmek, belgenin kayıtlı kenar boşluğunu ve punto
+     * ölçeğini de sıfırlardı — yani "A5 seç" demek belgenin yerleşimini de
+     * bozardı. `resolveDocStyle` kısmi config'i varsayılanlarla çözer.
+     */
+    const withPageSize = (s: PrintedDocSnapshot): PrintedDocSnapshot =>
+      opts?.pageSize
+        ? {
+            ...s,
+            docConfigOverride: {
+              ...(s.docConfigOverride ?? {}),
+              style: { ...(s.docConfigOverride?.style ?? {}), pageSize: opts.pageSize },
+            },
+          }
+        : s;
+
     // version verilirse o versiyonun HTML'i (Electron versiyon çubuğu); yoksa güncel.
     const res =
       version != null
@@ -478,6 +507,9 @@ export class PrintedDocumentService {
         const fresh = await buildSnapshotEnvelope(prisma, docType, snapshot.doc, sourceId);
         snapshot = { ...fresh, frozenAt: snapshot.frozenAt };
       }
+      // Kâğıt boyu ezmesi EN SONDA: "güncel şablonla bas" taze config getirse
+      // bile operatörün bu baskı için seçtiği boy kazanmalı.
+      snapshot = withPageSize(snapshot);
       const extras = await buildRenderExtras(snapshot, {
         documentNo: rec.documentNo,
         version: rec.version,
@@ -497,7 +529,12 @@ export class PrintedDocumentService {
     if (opts?.allowDraft && version == null && entry.buildPreview) {
       const built = await entry.buildPreview(prisma, sourceId);
       if (built) {
-        const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc, sourceId);
+        // TASLAK yolunda da geçerli — sevk öncesi çeki önizlemesi/baskısı da
+        // aynı yazıcıya gidiyor; ezmeyi yalnız donmuş dala koymak "taslakta
+        // A5 seçemiyorum" gibi açıklanamaz bir asimetri üretirdi.
+        const snapshot = withPageSize(
+          await buildSnapshotEnvelope(prisma, docType, built.doc, sourceId),
+        );
         const extras = await buildRenderExtras(snapshot, {
           documentNo: built.documentNo,
           printedBy: opts?.printedBy,

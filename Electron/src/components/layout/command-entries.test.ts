@@ -82,7 +82,10 @@ describe("komut paleti kataloğu", () => {
   });
 
   it("alt rapor breadcrumb'ı kategori hub'ına, hub ise Raporlar'a çıkar", () => {
-    expect(findBreadcrumbParent("/reports/production/scrap")).toEqual({
+    // 2026-08-09: "/reports/production/scrap" KALDIRILDI (Fire Karnesi Kalite
+    // altında). Örnek, hâlâ var olan bir alt raporla değiştirildi — silinmiş bir
+    // rotayla test etmek, breadcrumb kuralını değil yokluğu doğrulardı.
+    expect(findBreadcrumbParent("/reports/production/wip")).toEqual({
       label: "Üretim",
       to: "/reports/production",
     });

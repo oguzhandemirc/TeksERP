@@ -36,8 +36,17 @@ const finalizeSchema = z.object({
         relatedErrorIds: z.array(z.string().uuid()).default([]),
       })
     )
-    // Cap: her segment tx içinde ayrı roll.create+property+op üretir. Cömert üst
-    // sınır — pathological girdinin 5s tx timeout'una/uzun kilide yol açmasını önler.
+    // Cap: her segment tx içinde ayrı roll.create + rollProperty + rollOperation
+    // üretir (segment başına 3-4 round-trip). Gerekçe SÜRE değil İŞ MİKTARIDIR:
+    // 200 segment ~600-800 round-trip demektir ve o süre boyunca GLOBAL barkod
+    // sayacının satır kilidi tx'te tutulur (bkz. helpers/roll-barcode.helper).
+    //
+    // ⚠️ 2026-08-09 düzeltmesi: eski gerekçe "5s tx timeout'unu önler" diyordu —
+    // BAYATTI. Gerçek bütçe `lib/prisma.ts`teki global `transactionOptions.timeout`
+    // ile 20 sn'ye çekilmiş ve bu yorum güncellenmemişti. Tavanı bir daha
+    // seçerken bütçeyi BURADAN değil o dosyadan oku; ölçülen geçmişte (system_logs,
+    // en eski kayıt 2026-07-16) tek bir P2028/P2024 kaydı YOK, yani bugünkü
+    // bütçe 200 kesimi rahat karşılıyor.
     .max(200, "Tek seferde en fazla 200 kesim girilebilir")
     .default([]),
   decisions: z
@@ -83,7 +92,12 @@ const cutOpenFabricSchema = z.object({
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 
-const finalizeOpenFabricSchema = z.object({
+// export: `scripts/test_roll_variance.ts` §7 bu şemayı GERÇEK parse ile sınar.
+// Zod `z.object` tanımadığı anahtarı hata vermeden ATAR — yani sapma sebebi
+// eklenmeyi unutulursa mobil onu gönderir, backend sessizce siler ve defter
+// "BELIRTILMEDI" ile dolar. Kaynak metni okuyan bir kontrol bunu yakalayamaz
+// (alan adı yorumda geçse de yeter), o yüzden şema dışarı veriliyor.
+export const finalizeOpenFabricSchema = z.object({
   // Yeni: kalan metre için operatör kararı. Verilmezse scrapRemaining'den türetilir.
   remainingAction: z
     .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
@@ -93,6 +107,12 @@ const finalizeOpenFabricSchema = z.object({
   notes: z.string().max(1000).optional().nullable(),
   // Tambur kararı — WO planlaması override (verilmezse WO.foldType kullanılır).
   foldType: foldTypeSchema,
+  // SAPMA SEBEBİ (2026-08-09) — `scrap`/`discard` kararında kalan metrajın neden
+  // gittiğini söyler. ⚠️ Bu iki satır UNUTULURSA Zod tanımadığı anahtarı SESSİZCE
+  // SİLER: mobil sebebi gönderir, defter "BELIRTILMEDI" ile dolar ve kimse
+  // sebebini bulamaz (aynı tuzak 2026-08-05'te `foldType`'ta yaşandı).
+  varianceReasonCode: z.string().max(64).optional().nullable(),
+  varianceReasonText: z.string().max(500).optional().nullable(),
 });
 
 const cutWarehouseRollSchema = z.object({
@@ -124,11 +144,44 @@ const bypassCompleteSchema = z.object({
     .min(1, "En az bir top seçilmelidir"),
 });
 
-const finalizeWarehouseCutSchema = z.object({
+/**
+ * "Son Çıkan Toplar" filtreleri (2026-08-09 saha isteği).
+ *
+ * `dayRange` HIZLI seçimdir (1 = bugün, 2 = son 2 gün, 7 = son 7 gün) ve gün
+ * sınırı FABRİKA gününe göre çözülür — gece vardiyasının 00:00-03:00 arası işi
+ * bir önceki güne yazılmasın (kök CLAUDE.md "fabrika günü" kuralı).
+ * Serbest aralıkla birlikte gelirse `dayRange` KAZANIR (servis notuna bak).
+ */
+const recentOutputFilterSchema = z.object({
+  dayRange: z.coerce.number().int().min(1).max(365).optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
+  qualityGrade: z.string().trim().max(50).optional(),
+  customerId: z.string().uuid().optional(),
+});
+
+// GERİ ALMA — mod ARTIK İSTEMCİDEN gelir (2026-08-09). Verilmezse servis EN DAR
+// modu uygular; yani alanı hiç göndermeyen ESKİ APK, tek-parça iptaline düşer.
+// Bu bilinçli bir güvenlik yönü: eski istemci artık kazara 14 top iptal edemez.
+export const undoApplySchema = z.object({
+  mode: z.enum(["SINGLE", "FULL", "MANUAL"]).optional(),
+  reason: z.string().trim().max(500).optional().nullable(),
+});
+
+/** Önizleme aynı parametreleri query'den alır (GET yan etkisiz kalsın). */
+export const undoQuerySchema = z.object({
+  mode: z.enum(["SINGLE", "FULL", "MANUAL"]).optional(),
+  reason: z.string().trim().max(500).optional().nullable(),
+});
+
+export const finalizeWarehouseCutSchema = z.object({
   remainingAction: z
     .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
     .optional(),
   notes: z.string().max(1000).optional().nullable(),
+  // SAPMA SEBEBİ — `finalizeOpenFabricSchema` ile aynı sözleşme (bkz. oradaki not).
+  varianceReasonCode: z.string().max(64).optional().nullable(),
+  varianceReasonText: z.string().max(500).optional().nullable(),
 });
 
 export class TamburController {
@@ -166,7 +219,14 @@ export class TamburController {
   async getUndoPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const rollId = z.string().uuid("Geçersiz top ID").parse(req.params.rollId);
-      res.status(200).json(await this.undoService.getUndoPreview(rollId));
+      const q = undoQuerySchema.parse(req.query);
+      res.status(200).json(
+        await this.undoService.getUndoPreview(rollId, {
+          mode: q.mode,
+          reason: q.reason ?? null,
+          permissions: req.user?.permissions,
+        }),
+      );
     } catch (error) {
       next(error);
     }
@@ -176,7 +236,18 @@ export class TamburController {
   async applyUndo(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const rollId = z.string().uuid("Geçersiz top ID").parse(req.params.rollId);
-      res.status(200).json(await this.undoService.applyUndo(rollId, req.user?.userId));
+      const body = undoApplySchema.parse(req.body ?? {});
+      res.status(200).json(
+        await this.undoService.applyUndo(rollId, req.user?.userId, {
+          mode: body.mode,
+          reason: body.reason ?? null,
+          // ⚠️ İZİNLER HER ZAMAN GEÇİRİLİR. Servis `permissions` verilmezse
+          // yetki kontrolünü ATLAR (F221 deseni — dahili çağrılar için); bu
+          // satır düşerse TÜMDEN geri alma herkese açılır ve hiçbir test
+          // kırmızı vermez. Bekçi: test_tambur_undo.ts §4.
+          permissions: req.user?.permissions ?? [],
+        }),
+      );
     } catch (error) {
       next(error);
     }
@@ -300,6 +371,9 @@ export class TamburController {
         typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined;
       const limit =
         typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+      // FİLTRELER (2026-08-09 saha isteği). Zod ile parse edilir — düz
+      // `Number(req.query.x)` NaN üretip sessizce `where`e girerdi.
+      const f = recentOutputFilterSchema.parse(req.query);
       const result = await this.service.listRecentOutputRolls({
         workOrderId,
         limit: Number.isFinite(limit) ? limit : undefined,
@@ -307,6 +381,11 @@ export class TamburController {
         mode: typeof req.query.mode === "string" ? req.query.mode : undefined,
         search: typeof req.query.search === "string" ? req.query.search : undefined,
         withTotal: req.query.withTotal === "true",
+        dayRange: f.dayRange,
+        dateFrom: f.dateFrom,
+        dateTo: f.dateTo,
+        qualityGrade: f.qualityGrade,
+        customerId: f.customerId,
       });
       res.status(200).json(result);
     } catch (error) {

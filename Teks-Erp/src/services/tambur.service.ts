@@ -21,6 +21,13 @@ import { ApiResponse } from "../types/api.types";
 import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { readTamburOverQuantityEnabled } from "./system-setting.service";
+import { recordVarianceTx, overageOf } from "./helpers/roll-variance.helper";
+import {
+  VARIANCE_SOURCES,
+  varianceKindForRemainingAction,
+} from "../constants/variance-reasons";
+import { RollVarianceKind } from "@prisma/client";
+import { factoryDayStart } from "../constants/time";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -54,7 +61,7 @@ import {
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
-import { resolveLabelIntent } from "./helpers/label-intent.helper";
+import { resolveLabelIntent, labelCustomerIdOf } from "./helpers/label-intent.helper";
 import { generateRollBarcode, reserveRollBarcodesInOrder } from "./helpers/roll-barcode.helper";
 // ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
 // `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
@@ -1151,6 +1158,9 @@ export class TamburService {
           currentQty: 0,
           status: RollStatus.TAMBUR_CONSUMED,
           currentStepId: null,
+          // KAPANIŞ ÖNCESİ METRAJ (2026-08-09) — geri alma bunu çocukların
+          // toplamından TÜRETMESİN (aşımda `currentQty > initialQty` üretiyordu).
+          preTamburCloseQty: totalQtyD,
         },
         include: {
           item: true,
@@ -1197,6 +1207,20 @@ export class TamburService {
         });
         await recomputeStepStatus(tx, oldStepId);
       }
+
+      // AŞIM DEFTERİ (2026-08-09) — klasik karar akışının artı yönü.
+      // `cumulativeLenD > totalQtyD` kontrolü yukarıda zaten yapıldı ve bayrak
+      // açıkken kabul edildi; burada YALNIZ kayda geçirilir. Üç kesim yolunun
+      // (bu, cutOpenFabric, cutWarehouseRoll) üçü de aynı hesabı kullanır —
+      // `overageOf` tek kaynak, kopyalanırsa defter sessizce eksik kalır.
+      await recordVarianceTx(tx, {
+        rollId: data.rollId,
+        workOrderStepId: oldStepId,
+        kind: RollVarianceKind.OVERAGE,
+        qty: overageOf(cumulativeLenD, totalQtyD),
+        source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+        userId,
+      });
 
       // WO completion — Tambur production'ın son istasyonu. Tüm üretim step'leri
       // COMPLETED/SKIPPED ise WO kapanır. (Tartı/paket/sevkiyat artık step değil,
@@ -1296,6 +1320,20 @@ export class TamburService {
     search?: string;
     /** Cursor mode ilk fetch'te totalEstimate doldur. */
     withTotal?: boolean;
+    /**
+     * HIZLI TARİH: kaç FABRİKA GÜNÜ geriye bakılacak (1 = bugün, 2 = son 2 gün).
+     * `dateFrom`/`dateTo` ile birlikte gönderilirse BU KAZANIR — hızlı seçim
+     * operatörün son dokunduğu şeydir; ikisini AND'lemek "bugün" derken boş
+     * liste döndürebilirdi (aralık dünü gösteriyorsa kesişim boş).
+     */
+    dayRange?: number;
+    /** Serbest aralık (mutlak an — istemci yerel gün sınırlarını kendisi yollar). */
+    dateFrom?: Date;
+    dateTo?: Date;
+    /** Kalite kodu (1.KALITE / A1 / FIRE). */
+    qualityGrade?: string;
+    /** Etiket hedefindeki müşteri (`Roll.labelCustomerId`). */
+    customerId?: string;
   }): Promise<ApiResponse<Roll[]> | CursorPaginatedResponse<Roll>> {
     const where: Prisma.RollWhereInput = {
       // Tambur istasyonundan ÇIKAN her top — iki doğum yolu var:
@@ -1321,6 +1359,35 @@ export class TamburService {
         ? { producedInStep: { workOrderId: params.workOrderId } }
         : {}),
     };
+    // ── TARİH SÜZGECİ (2026-08-09) ──────────────────────────────────────────
+    // Saha isteği: "bugün / son 2 gün / belli tarih aralığı". Gün sınırı
+    // `factoryDayStart()` ile çözülür — düz `new Date()` gece vardiyasının
+    // 00:00-03:00 arasındaki işini BİR ÖNCEKİ güne yazardı (kök CLAUDE.md'nin
+    // "fabrika günü" kuralı). Çıpa `createdAt`: bu liste ÜRETİM anına bakar,
+    // "son işlem"e değil (etiket yeniden basımı tarihi kaydırmasın).
+    if (params?.dayRange) {
+      // Çıpayı N-1 gün geri al, SONRA gün başına yasla — `factoryDayStart`
+      // hedef günün kendi UTC ofsetini yeniden türettiği için yaz/kış saati
+      // geçişinde de doğru sınır çıkar (düz ms çıkarma tek başına kayardı).
+      const anchor = new Date(Date.now() - (params.dayRange - 1) * 86_400_000);
+      where.createdAt = { gte: factoryDayStart(anchor) };
+    } else if (params?.dateFrom || params?.dateTo) {
+      // Serbest aralık: sınırlar İSTEMCİNİNDİR (raporlardaki `resolveDateRange`
+      // sözleşmesi) — backend ek gün yuvarlaması YAPMAZ, yaparsa istemcinin
+      // niyeti iki kez yorumlanır.
+      where.createdAt = {
+        ...(params.dateFrom ? { gte: params.dateFrom } : {}),
+        ...(params.dateTo ? { lte: params.dateTo } : {}),
+      };
+    }
+    if (params?.qualityGrade) where.qualityGrade = params.qualityGrade;
+    if (params?.customerId) {
+      // Etiket hedefindeki müşteri — `Roll.labelCustomerId` (B4). Kolon
+      // yazılmadan önce basılmış toplarda NULL'dur ve süzgece takılmaz;
+      // bu bilinçli (geri doldurma ayrı bir adım).
+      where.labelCustomerId = params.customerId;
+    }
+
     const search = params?.search?.trim();
     if (search) {
       // Barkod: TAM eşleşme (unique index seek) — `contains`/ILIKE en_US.UTF-8
@@ -1965,10 +2032,15 @@ export class TamburService {
     const childBarcode = await generateRollBarcode(prisma, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
     // (üretime devam) child stok etiketle doğar.
-    const cutIntentSnapshot =
+    // Niyeti BİR KEZ çöz, hem snapshot'a hem sorgulanabilir aynaya kullan —
+    // iki kez çözülseydi araya giren bir müşteri pasifleştirmesi ikisini
+    // ayrıştırabilirdi.
+    const cutIntent =
       childStatus === RollStatus.WAREHOUSE
-        ? buildIntentSnapshot(await resolveLabelIntent(data))
-        : buildIntentSnapshot({ stock: true });
+        ? await resolveLabelIntent(data)
+        : { stock: true as const };
+    const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
+    const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
 
     let result: { child: Roll; newParentQty: number; updatedParent: Roll };
     try {
@@ -2005,6 +2077,8 @@ export class TamburService {
             (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
           // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
           lastLabelSnapshot: cutIntentSnapshot,
+          // Sorgulanabilir ayna — snapshot ile AYNI create'te (bkz. Roll.labelCustomerId).
+          labelCustomerId: cutLabelCustomerId,
         },
       });
 
@@ -2097,6 +2171,18 @@ export class TamburService {
       }
       const newParentQty = Number(updatedParent.currentQty);
 
+      // AŞIM DEFTERİ — `cutOpenFabric` ikizi. Depo kesimi adıma bağlı DEĞİL.
+      if (exceedsRemaining) {
+        await recordVarianceTx(tx, {
+          rollId: parent.id,
+          workOrderStepId: null,
+          kind: RollVarianceKind.OVERAGE,
+          qty: overageOf(data.cutLength, parent.currentQty),
+          source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+          userId,
+        });
+      }
+
       return { child, newParentQty, updatedParent };
       });
     } catch (err) {
@@ -2171,6 +2257,9 @@ export class TamburService {
     data: {
       remainingAction?: "keep_1kalite" | "keep_a1" | "scrap" | "discard";
       notes?: string | null;
+      /// SAPMA SEBEBİ (2026-08-09) — `finalizeOpenFabric` ile aynı sözleşme.
+      varianceReasonCode?: string | null;
+      varianceReasonText?: string | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -2387,11 +2476,34 @@ export class TamburService {
       // topta sonsuza dek "açık hata" kalıyordu. Depo topu adımsız → stepId null.
       await closeOrphanRollErrors(tx, parent.id, null, userId);
 
-      // Parent retire — statüyü claim çevirdi; metrajı sıfırla
+      // Parent retire — statüyü claim çevirdi; metrajı sıfırla.
+      // KAPANIŞ ÖNCESİ HÂL kaydedilir (2026-08-09): geri alma bunları TÜRETMEYE
+      // çalışmasın. `parent.status` claim'in eşleştirdiği değerdir (WHERE koşulu
+      // onu doğruladı), `remainingQty` de claim kilidi altında okundu.
       await tx.roll.update({
         where: { id: parent.id },
-        data: { currentQty: 0 },
+        data: {
+          currentQty: 0,
+          preTamburCloseQty: new Prisma.Decimal(remainingQty),
+          preTamburCloseStatus: parent.status,
+        },
       });
+
+      // SAPMA DEFTERİ — depo kesimi kapanışının kalan metraj kararı.
+      const varianceKind = varianceKindForRemainingAction(action);
+      if (varianceKind) {
+        await recordVarianceTx(tx, {
+          rollId: parent.id,
+          // Depo kesimi hiçbir iş emri adımına bağlı DEĞİL — uydurma step yazma.
+          workOrderStepId: null,
+          kind: varianceKind,
+          qty: remainingQty,
+          source: VARIANCE_SOURCES.TAMBUR_WAREHOUSE_FINALIZE,
+          reasonCode: data.varianceReasonCode ?? null,
+          reasonText: data.varianceReasonText ?? null,
+          userId,
+        });
+      }
 
       return { remainingChild, remainingQty };
     });
@@ -2536,7 +2648,9 @@ export class TamburService {
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
     const childBarcode = await generateRollBarcode(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
-    const cutIntentSnapshot = buildIntentSnapshot(await resolveLabelIntent(data));
+    const cutIntent = await resolveLabelIntent(data);
+    const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
+    const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
 
     // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); sistem-türetimli
     // ("1.KALITE"/"A1"/"FIRE" sabitleri) lenient kalır.
@@ -2598,6 +2712,8 @@ export class TamburService {
             (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
           // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
           lastLabelSnapshot: cutIntentSnapshot,
+          // Sorgulanabilir ayna — snapshot ile AYNI create'te (bkz. Roll.labelCustomerId).
+          labelCustomerId: cutLabelCustomerId,
           // currentStepId: child Tambur'dan çıktı (depo değil bir step) — null.
         },
       });
@@ -2682,6 +2798,22 @@ export class TamburService {
       }
       const newParentQty = Number(updatedParent.currentQty);
 
+      // AŞIM DEFTERİ (2026-08-09) — sapmanın ARTI yönü. 2026-08-09 öncesinde
+      // hiçbir yere yazılmıyordu: bayrak aşımı kabul ediyor, parent tamamen
+      // tüketiliyor ve "N m fazla çıktı" bilgisi buharlaşıyordu. Sonuç: rapor
+      // yalnız eksi yönü görüyordu ("giriş 100, çıkış 140" açıklamasız kalıyordu).
+      // Sebep SORULMAZ — aşımı sistem tespit eder, operatör beyan etmez.
+      if (exceedsRemaining) {
+        await recordVarianceTx(tx, {
+          rollId: parent.id,
+          workOrderStepId: tamburStepId,
+          kind: RollVarianceKind.OVERAGE,
+          qty: overageOf(data.lengthMeters, parent.currentQty),
+          source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+          userId,
+        });
+      }
+
       return { child, newParentQty };
       });
     } catch (err) {
@@ -2758,6 +2890,11 @@ export class TamburService {
       /// Tambur kararı — WO.foldType (planlama) override. Verilmezse planlanan
       /// kullanılır (WO.foldType). Bu değer audit/RollOperation metadata'ya yazılır.
       foldType?: string | null;
+      /// SAPMA SEBEBİ (2026-08-09) — yalnız `scrap` / `discard` aksiyonlarında
+      /// anlamlı. Gönderilmezse satır `BELIRTILMEDI` ile yazılır (eski istemci);
+      /// bkz. `constants/variance-reasons.LEGACY_REASON_CODE`.
+      varianceReasonCode?: string | null;
+      varianceReasonText?: string | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
@@ -2957,12 +3094,18 @@ export class TamburService {
       // #8 — parent tüketilmeden kalan açık hatalar NO_CUT olarak kapansın.
       await closeOrphanRollErrors(tx, parent.id, tamburStepId, userId);
 
-      // Parent CONSUMED_AT_TAMBUR — statüyü claim çevirdi; metraj+adım temizle
+      // Parent CONSUMED_AT_TAMBUR — statüyü claim çevirdi; metraj+adım temizle.
+      // KAPANIŞ ÖNCESİ METRAJ kaydedilir (2026-08-09): `applyFull` bunu eskiden
+      // çocukların toplamından TÜRETİYORDU ve aşımlı kesimde `currentQty >
+      // initialQty` üretiyordu (saha vakası IE0808260001 — 520,5 / 500).
+      // Statü kaydedilmez: üretim akışında kapanış öncesi her zaman IN_PRODUCTION
+      // (yukarıdaki claim onu WHERE koşuluyla doğruladı).
       await tx.roll.update({
         where: { id: parent.id },
         data: {
           currentQty: 0,
           currentStepId: null,
+          preTamburCloseQty: new Prisma.Decimal(remainingQty),
         },
       });
 
@@ -3025,6 +3168,23 @@ export class TamburService {
         },
         update: {},
       });
+
+      // SAPMA DEFTERİ (2026-08-09) — kalan metrajın kaderi sorgulanabilir hale gelir.
+      // `keep_*` sapma DEĞİLDİR (kalan gerçek bir top olarak stoğa girer); yalnız
+      // `scrap` (mal vardı, çöpe gitti) ve `discard` (mal hiç yoktu) yazılır.
+      const varianceKind = varianceKindForRemainingAction(action);
+      if (varianceKind) {
+        await recordVarianceTx(tx, {
+          rollId: parent.id,
+          workOrderStepId: tamburStepId,
+          kind: varianceKind,
+          qty: remainingQty,
+          source: VARIANCE_SOURCES.TAMBUR_FINALIZE,
+          reasonCode: data.varianceReasonCode ?? null,
+          reasonText: data.varianceReasonText ?? null,
+          userId,
+        });
+      }
 
       await recomputeStepStatus(tx, tamburStepId);
 

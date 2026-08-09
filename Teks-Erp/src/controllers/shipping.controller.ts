@@ -4,6 +4,7 @@ import { ShippingService } from "../services/shipping.service";
 import { sackSearchService, type SackSearchScope } from "../services/sack-search.service";
 import { buildDispatchAccountingExport } from "../services/accounting-export.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { detectMismatchesForSacks } from "../services/helpers/sack-content-mismatch.helper";
 import "../types/express-augment";
 
 // ---- Zod şemaları ----------------------------------------------------------
@@ -494,6 +495,26 @@ export class ShippingController {
     try {
       const result = await sackSearchService.getSackContents(req.params.id as string);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * POST /api/shipping/sacks/mismatch-check — çuval içeriği uyuşmazlık denetimi.
+   *
+   * SALT-OKUNUR ve HİÇBİR ŞEYİ ENGELLEMEZ (saha kararı: *"uyar ama engel olma"*).
+   * Aynı motoru hem çuval kartı hem sevkiyat kurma özeti çağırır — tek kaynak,
+   * yoksa iki yüzey aynı çuval için farklı şey söyler.
+   */
+  checkSackMismatches = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // 200 tavanı `getPickList` ile aynı — sevkiyat kurmada seçilebilecek en
+      // büyük küme; tavansız sorgu perf kuralı ihlali olurdu.
+      const body = z.object({ sackIds: z.array(z.string().uuid()).min(1).max(200) }).parse(req.body);
+      const map = await detectMismatchesForSacks(body.sackIds);
+      res.status(200).json({
+        success: true,
+        data: Object.fromEntries(map),
+      });
     } catch (e) { next(e); }
   };
 

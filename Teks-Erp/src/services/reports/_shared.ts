@@ -64,17 +64,108 @@ export function resolveDateRange(input: DateRangeInput): DateRange {
   return { from, to };
 }
 
+// =============================================================================
+// DÖNEM KARŞILAŞTIRMA
+// =============================================================================
+// "Bu ay 1. kalite oranımız %92" tek başına bir bilgi değil; yönetim sorusu her
+// zaman "geçen aya göre ne oldu"dur. Bu yüzden karşılaştırma raporun İÇİNDE,
+// istemci tarafında iki ayrı istek birleştirilerek DEĞİL.
+//
+// NEDEN BURADA (ortak katmanda): kalan beş karne de aynı üç modu isteyecek.
+// Her raporun kendi "önceki dönem" yorumunu yazması, iki ekranın aynı düğmeye
+// farklı anlam yüklemesi demekti.
+//
+// ⚠️ `prev` MUTLAK pencere kaydırmasıdır, takvim ayı DEĞİL: 1-31 Temmuz'un
+// öncesi "Haziran" değil, aynı UZUNLUKTA hemen önceki penceredir. Sebep:
+// `dateFrom`/`dateTo` mutlak an sözleşmesi (yukarı bak) ve kullanıcı 12 günlük
+// bir aralık seçebiliyor — "önceki takvim ayı" o durumda anlamsızdır. Takvim ayı
+// karşılaştırması isteyen kullanıcı iki tarihi de kendisi seçer (`custom`).
+export const COMPARE_MODES = ["none", "prev", "prevYear", "custom"] as const;
+export type CompareMode = (typeof COMPARE_MODES)[number];
+
+export const compareRangeSchema = z
+  .object({
+    dateFrom: z.string().datetime().optional(),
+    dateTo: z.string().datetime().optional(),
+    compare: z.enum(COMPARE_MODES).optional(),
+    compareFrom: z.string().datetime().optional(),
+    compareTo: z.string().datetime().optional(),
+  })
+  .strict();
+
+export type CompareRangeInput = z.infer<typeof compareRangeSchema>;
+
+/**
+ * Karşılaştırma aralığını çözer. `none` / verilmemiş → `null` (rapor tek dönem
+ * çalışır ve ek sorgu KOŞMAZ — karşılaştırma istemeyen ekran bugünkü maliyeti
+ * ödemesin).
+ *
+ * ⚠️ `prevYear` TAKVİM yılı kaydırmasıdır (`setUTCFullYear(-1)`), 365 gün değil:
+ * "geçen yıl aynı dönem" sorusu takvim sorusudur ve 365 gün eklemek artık yıl
+ * geçilen her aralıkta cevabı bir gün kaydırırdı. Bilinen sınır: 29 Şubat bir
+ * önceki yılda yoktur ve JS onu 1 Mart'a taşır — yılda bir günlük bu kayma,
+ * alternatifin (her dört yılda bir gün kayan TÜM aralıklar) yanında kabul edildi.
+ */
+export function resolveCompareRange(input: CompareRangeInput, primary: DateRange): DateRange | null {
+  const mode: CompareMode = input.compare ?? "none";
+  if (mode === "none") return null;
+
+  if (mode === "custom") {
+    if (!input.compareFrom || !input.compareTo) {
+      throw AppError.badRequest("Özel karşılaştırma için compareFrom ve compareTo zorunludur");
+    }
+    const from = new Date(input.compareFrom);
+    const to = new Date(input.compareTo);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      throw AppError.badRequest("Geçersiz karşılaştırma tarihi formatı");
+    }
+    if (from > to) {
+      throw AppError.badRequest("Karşılaştırma başlangıcı bitişten büyük olamaz");
+    }
+    if (to.getTime() - from.getTime() > MAX_RANGE_MS) {
+      throw AppError.badRequest("Karşılaştırma aralığı en fazla 366 gün olabilir");
+    }
+    return { from, to };
+  }
+
+  if (mode === "prev") {
+    const span = primary.to.getTime() - primary.from.getTime();
+    // Bitiş, ana dönemin başlangıcından 1 ms ÖNCE: iki pencere bitişik ama
+    // ÇAKIŞMAZ. Aynı anı iki dönemde birden saymak, tam da karşılaştırmanın
+    // ölçtüğü farkı bozardı.
+    const to = new Date(primary.from.getTime() - 1);
+    return { from: new Date(to.getTime() - span), to };
+  }
+
+  // prevYear
+  const shift = (d: Date): Date => {
+    const c = new Date(d.getTime());
+    c.setUTCFullYear(c.getUTCFullYear() - 1);
+    return c;
+  };
+  return { from: shift(primary.from), to: shift(primary.to) };
+}
+
 export interface ReportResponse<T> {
   success: true;
   data: T;
   range: { from: string; to: string };
+  /** Yalnız karşılaştırma istendiyse dolar — istemci varlığına bakarak Δ çizer. */
+  compareRange?: { from: string; to: string };
 }
 
-export function reportEnvelope<T>(data: T, range: DateRange): ReportResponse<T> {
+export function reportEnvelope<T>(
+  data: T,
+  range: DateRange,
+  compareRange?: DateRange | null,
+): ReportResponse<T> {
   return {
     success: true,
     data,
     range: { from: range.from.toISOString(), to: range.to.toISOString() },
+    ...(compareRange
+      ? { compareRange: { from: compareRange.from.toISOString(), to: compareRange.to.toISOString() } }
+      : {}),
   };
 }
 

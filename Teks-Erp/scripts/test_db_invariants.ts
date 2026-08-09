@@ -107,6 +107,14 @@ const PARTIAL_INDEXES: Array<{
   { table: "rolls", index: "rolls_batchId_idx", uniq: false, predicate: `("batchId" IS NOT NULL)`, why: "null-yoğun FK (parti modeli)" },
   { table: "rolls", index: "rolls_markedForKartela_idx", uniq: false, predicate: `("markedForKartela" = true)`, why: "kartela adayı seyrek" },
   { table: "rolls", index: "rolls_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "rolls", index: "rolls_labelCustomerId_idx", uniq: false, predicate: `("labelCustomerId" IS NOT NULL)`, why: "null-yoğun FK (stok etiketi yaygın); sorgu yolu hep 'şu müşterinin topları'" },
+  {
+    table: "rolls",
+    index: "rolls_finalizedAt_idx",
+    uniq: false,
+    predicate: `("finalizedAt" IS NOT NULL)`,
+    why: "kalite/fire/fason karnelerinin dönem taraması; yalnız üretimi bitmiş toplar damgalı (migration 20260809090000)",
+  },
   // swatches
   { table: "swatches", index: "swatches_createdAt_idx", uniq: false, predicate: `("cancelledAt" IS NULL)`, why: "iptal edilmemiş kartela listesi" },
   { table: "swatches", index: "swatches_parentReceiptId_idx", uniq: false, predicate: `("parentReceiptId" IS NOT NULL)`, why: "null-yoğun FK" },
@@ -194,6 +202,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   { table: "direct_shipments", name: "direct_shipments_rollCount_pos" },
   { table: "roll_returns", name: "roll_returns_qty_pos" },
   { table: "work_orders", name: "work_orders_stockprod_targetItem" },
+  // 2026-08-09 — sapma defteri (migration 20260809015353_roll_variance_ledger).
+  // `qty` HER ZAMAN pozitif; yönü `kind` söyler. İşaretli sayı saklamak
+  // "SUM(qty)" yazan her raporu sessizce yanlışlar (biri işareti dikkate alır,
+  // diğeri almaz) ve bu yıllar sonra fark edilir.
+  { table: "roll_variances", name: "roll_variances_qty_positive" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,6 +239,24 @@ const EXT_STATS: Array<{ name: string; table: string }> = [{ name: "sl_day_exact
 const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string }> = [
   { table: "users", index: "users_username_lower_uq", expr: "lower(username)" },
   { table: "permission_templates", index: "permission_templates_name_lower_uq", expr: "lower(name)" },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6) TRIGGER'lar (1) — migration 20260809090000_roll_production_timestamps
+//    Prisma trigger modelleyemez → şema-dışı ve DİĞERLERİNDEN DAHA KRİTİK:
+//    partial index kaybolursa sorgu yavaşlar (sonuç doğru kalır), trigger
+//    kaybolursa kolon HİÇ yazılmaz ve tüm dönem raporları sessizce boşalır.
+// ─────────────────────────────────────────────────────────────────────────────
+const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: string }> = [
+  {
+    table: "rolls",
+    trigger: "rolls_stamp_production_timestamps",
+    // BEFORE zorunlu: AFTER trigger NEW'i değiştiremez → damgalama sessizce
+    // hiçbir şey yazmaz. INSERT dalı da zorunlu: doğrudan final statüde doğan
+    // toplar (fason kabul çocuğu) başka hiçbir yerde damgalanmaz.
+    timing: ["BEFORE INSERT OR UPDATE", "FOR EACH ROW"],
+    why: "Roll.finalizedAt / statusChangedAt'in TEK yazma noktası — kalite/fire/fason karnelerinin dönem çıpası",
+  },
 ];
 
 async function main(): Promise<void> {
@@ -466,6 +497,47 @@ async function main(): Promise<void> {
       const l = exprByName.get(n);
       return `${l?.table_name}.${n} ON (${l?.expr})`;
     }
+  );
+
+  // ── 6) Trigger'lar ──
+  // Prisma trigger'ı ŞEMADA TEMSİL EDEMEZ — yani bu bölüm olmadan bir trigger
+  // sessizce kaybolabilir ve kaybını hiçbir şey söylemez. Diğer şema-dışı
+  // nesnelerden FARKI: partial index kaybolursa sorgu yavaşlar (sonuç doğru
+  // kalır), trigger kaybolursa VERİ YAZILMAZ ve raporlar sessizce boşalır.
+  console.log("\n── 6) Trigger'lar (var + zamanlama + olay) ──");
+  const liveTriggers = await prisma.$queryRaw<
+    Array<{ table_name: string; trigger_name: string; def: string }>
+  >`
+    SELECT t.relname AS table_name,
+           tg.tgname  AS trigger_name,
+           pg_get_triggerdef(tg.oid) AS def
+    FROM pg_trigger tg
+    JOIN pg_class t     ON t.oid = tg.tgrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = 'public' AND NOT tg.tgisinternal
+  `;
+  const trgByName = new Map(liveTriggers.map((r) => [r.trigger_name, r]));
+  for (const exp of TRIGGERS) {
+    const live = trgByName.get(exp.trigger);
+    if (!live) {
+      check(exp.trigger, false, `trigger YOK (${exp.table}) — ${exp.why}`);
+      continue;
+    }
+    // Zamanlama LOAD-BEARING: AFTER trigger NEW'i değiştiremez, yani BEFORE
+    // düşerse damgalama sessizce hiçbir şey yazmaz (hata da vermez).
+    const defN = norm(live.def);
+    const timingOk = exp.timing.every((frag) => defN.includes(norm(frag)));
+    check(
+      exp.trigger,
+      timingOk,
+      timingOk ? `${exp.table} · ${exp.timing.join(" ")}` : `tanım DEĞİŞMİŞ: ${live.def}`
+    );
+  }
+  checkNoExtras(
+    "6) Trigger'lar",
+    liveTriggers.map((r) => r.trigger_name),
+    new Set(TRIGGERS.map((e) => e.trigger)),
+    (n) => `${trgByName.get(n)?.table_name}.${n}`
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

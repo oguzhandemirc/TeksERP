@@ -11,6 +11,8 @@ export type RootStackParamList = {
   SettingsServer: undefined;
   SettingsPlaceHardware: undefined;
   SettingsScanner: undefined;
+  /** Kişisel çalışma tercihleri (fason varsayılanı) — kullanıcıya bağlı, cihaza değil. */
+  SettingsWorkPreferences: undefined;
   DevicePairing: undefined;
 };
 

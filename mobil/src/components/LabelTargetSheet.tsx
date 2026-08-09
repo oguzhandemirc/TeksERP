@@ -50,11 +50,31 @@ interface Props {
   roll: LabelTargetRoll | null;
   /** Kesimde önceden seçilen sipariş (varsa) — listede vurgulanır. */
   defaultLineId?: string | null;
+  /**
+   * TOPLU seçim modu (2026-08-09) — N topa AYNI hedef yazılacak.
+   *
+   * ⚠️ Karışık spec'li (farklı kumaş/renk/en) seçimde SİPARİŞ KALEMİ hedefi
+   * ANLAMSIZDIR: kalem tek bir spec'e aittir ve onu farklı spec'li toplara
+   * yazmak sessizce yanlış tahsis üretir. Bu durumda liste hiç gösterilmez,
+   * yalnız MÜŞTERİ ve STOK seçilebilir.
+   *
+   * Tek spec'li toplu seçimde kısıt YOKTUR — orada kalem hedefi doğrudur.
+   */
+  bulkCount?: number;
+  /** Seçim karışık spec taşıyor mu — true ise sipariş kalemi seçtirilmez. */
+  mixedSpec?: boolean;
   onCancel: () => void;
   onConfirm: (ctx: LabelTargetContext) => void;
 }
 
-export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConfirm }: Props) {
+export default function LabelTargetSheet({
+  roll,
+  defaultLineId,
+  bulkCount,
+  mixedSpec,
+  onCancel,
+  onConfirm,
+}: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   // Daralt: tablet/yatayda yarı genişlik ama 460px tavanlı, telefon dikte %92.
   const sheetWidth = winH > winW ? winW * 0.92 : Math.min(winW * 0.5, 460);
@@ -133,8 +153,24 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
         </View>
         <Divider style={{ marginVertical: 8 }} />
 
+        {/* TOPLU seçim bilgisi — kaç topa yazılacağı SOMUT söylenir. "N kayıt
+            etkilenecek" gibi soyut ifade yeterli değildir kuralının kardeşi. */}
+        {bulkCount != null && bulkCount > 1 && (
+          <Text style={styles.bulkNote}>
+            Seçilen hedef <Text style={{ fontWeight: '800' }}>{bulkCount} topa</Text> yazılacak
+            ve etiketleri yeniden basılacak.
+            {mixedSpec
+              ? ' Seçimde farklı kumaş/renk/en var — sipariş kalemi seçilemez, yalnız müşteri veya stok.'
+              : ''}
+          </Text>
+        )}
+
         {mode === 'choose' ? (
           <>
+            {/* Karışık spec'li toplu seçimde sipariş listesi HİÇ çizilmez —
+                gri/pasif göstermek "belki seçilebilir" vaat ederdi. */}
+            {mixedSpec ? null : (
+            <>
             <Text style={styles.label}>Sipariş seç (topun spec'ine uyan açık satırlar):</Text>
             {linesQ.isLoading ? (
               <ActivityIndicator style={{ marginVertical: 16 }} />
@@ -167,6 +203,8 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
                   );
                 })}
               </ScrollView>
+            )}
+            </>
             )}
             <View style={styles.actions}>
               <Button
@@ -246,6 +284,15 @@ const styles = StyleSheet.create({
   currentLabel: { fontSize: 12, color: '#b45309', marginTop: 4, fontWeight: '600' },
   label: { fontSize: 12, color: '#64748b', marginBottom: 4 },
   empty: { fontSize: 13, color: '#94a3b8', marginVertical: 12 },
+  bulkNote: {
+    fontSize: 13,
+    color: '#7c2d12',
+    backgroundColor: '#ffedd5',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
   row: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 8 },
   rowActive: { backgroundColor: '#ecfdf5' },
   rowCustomer: { fontSize: 15, fontWeight: '600', color: '#0f172a' },

@@ -10,38 +10,21 @@ import {
   reportEnvelope,
   resolveDateRange,
 } from "../../services/reports/_shared";
-import {
-  getDailyMovements,
-  getRollAging,
-  getStockDistribution,
-} from "../../services/reports/inventory.report.service";
+import { getStockScorecard } from "../../services/reports/stock-scorecard.report.service";
 
 const router = Router();
 const guard = [verifyToken, requirePermission("report:inventory")];
 
-router.get("/roll-aging", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
+/**
+ * STOK & ÖLÜ STOK — SNAPSHOT (tarih aralığı YOK).
+ * "Şu an rafta ne var, kaç gündür duruyor, siparişi var mı" sorusunun tarih
+ * filtresiyle işi yoktur; zarf yine de `resolveDateRange` ile doldurulur ki
+ * istemci sözleşmesi tek tip kalsın.
+ */
+router.get("/scorecard", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await getRollAging();
-    res.status(200).json({ success: true, data });
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get("/stock-distribution", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = await getStockDistribution();
-    res.status(200).json({ success: true, data });
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get("/movements", ...guard, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    const data = await getDailyMovements(range);
-    res.status(200).json(reportEnvelope(data, range));
+    const data = await getStockScorecard();
+    res.status(200).json(reportEnvelope(data, resolveDateRange({})));
   } catch (e) {
     next(e);
   }

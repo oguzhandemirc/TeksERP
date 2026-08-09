@@ -36,6 +36,28 @@ export interface AppPreferences {
   tabOrder?: Record<string, string[]>;
   /** Hub kart sırası — hub anahtarı (örn "operations") → kart key listesi. */
   hubOrder?: Record<string, string[]>;
+  /**
+   * İŞ EMRİ tercihleri — KİŞİSEL (kullanıcı bazlı), sistem geneli DEĞİL.
+   *
+   * Saha isteği: *"iş emri oluştururken son seçilen fasoncu otomatik gelsin;
+   * favori geliyor şu an"* → kullanıcı kararı: **açılır-kapanır tercih**, çünkü
+   * planlamacılar farklı çalışıyor.
+   *
+   * ⚠️ Varsayılan `favorite` = BUGÜNKÜ davranış. Yeni davranışı varsayılan
+   * yapmak, sahadaki herkesin alışkanlığını habersiz değiştirirdi.
+   */
+  workOrders?: {
+    /** Fason firma varsayılanı: kategorinin favorisi mi, en son seçilen mi. */
+    subcontractorDefault?: "favorite" | "lastUsed";
+    /**
+     * Kategori → en son seçilen firma. `subcontractorDefault: "lastUsed"`
+     * seçiliyken okunur; her iş emri kaydında güncellenir.
+     *
+     * ⚠️ Tercih kapalıyken de YAZILIR — açıldığı an geçmişi olsun diye.
+     * Yazmamak, anahtarı çeviren kullanıcıya boş bir hafıza verirdi.
+     */
+    lastSubcontractorByCategory?: Record<string, string>;
+  };
   /** Toplar ekranı tercihleri. */
   rolls?: {
     /** Barkod okutunca detay panelini otomatik aç (default açık). Kapalıyken okutma

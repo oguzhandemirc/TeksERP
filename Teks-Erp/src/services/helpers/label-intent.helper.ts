@@ -32,6 +32,17 @@ export interface ResolvedLabelIntent {
   orderLineId?: string;
   customerId?: string;
   stock?: boolean;
+  /**
+   * SORGULANABİLİR AYNA için çözülen müşteri (`Roll.labelCustomerId`).
+   * `customerId`den farkı: sipariş kalemi yolunda da dolar. Snapshot'a
+   * YAZILMAZ — snapshot minimal literal sözleşmesini korur.
+   */
+  resolvedCustomerId?: string | null;
+}
+
+/** Niyetten `Roll.labelCustomerId` değeri — stok etiketinde `null`. */
+export function labelCustomerIdOf(intent: ResolvedLabelIntent): string | null {
+  return intent.resolvedCustomerId ?? intent.customerId ?? null;
 }
 
 /**
@@ -47,14 +58,18 @@ export async function resolveLabelIntent(data: LabelIntentInput): Promise<Resolv
   if (data.targetOrderLineId) {
     const ol = await prisma.orderLine.findUnique({
       where: { id: data.targetOrderLineId },
-      select: { id: true },
+      // `order.customerId` de çekilir: sorgulanabilir ayna (`Roll.labelCustomerId`)
+      // sipariş kalemi yolunda da DOLMALI. Snapshot burada yalnız `{orderLineId}`
+      // taşır; müşteri baskı anında çözülür. Kolonu boş bırakmak "bu topun
+      // etiketinde müşteri yazmıyor" demek olurdu — YAZIYOR, sadece dolaylı.
+      select: { id: true, order: { select: { customerId: true } } },
     });
     if (!ol) {
       throw AppError.badRequest("Hedef sipariş kalemi bulunamadı", {
         code: "ORDER_LINE_NOT_FOUND",
       });
     }
-    return { orderLineId: ol.id };
+    return { orderLineId: ol.id, resolvedCustomerId: ol.order.customerId };
   }
   if (data.targetCustomerId) {
     const cust = await prisma.customer.findUnique({

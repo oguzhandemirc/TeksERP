@@ -23,6 +23,8 @@ import {
   DOC_STAMPS_CSS,
   docCopyBadge,
   docBlocksHtml,
+  docBlankGridCss,
+  docBlankGridHtml,
   docPrintNoteHtml,
   docStampsBar,
 } from "./doc-style";
@@ -203,6 +205,7 @@ export function renderKartelaCekiHtml(
   ${docChromeCss(d, { boxLabelA4: 56 })}
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
+  ${docBlankGridCss(cfg)}
   ${docTableCss(style, [".sec"])}
   ${docFieldCss(cfg.fields, DOC_FIELD_CATALOGS["kartelaCeki"], d)}
 `,
@@ -211,8 +214,8 @@ export function renderKartelaCekiHtml(
 
   // Nüsha rozeti + konumlu bloklar + tek seferlik baskı notu + damga/QR çubuğu.
   const copyBadge = docCopyBadge(cfg, esc);
-  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc);
-  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc);
+  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc) + docBlankGridHtml(cfg, "afterHeader", esc);
+  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc) + docBlankGridHtml(cfg, "beforeSignatures", esc);
   const printNote = docPrintNoteHtml(meta.printNote, esc);
   const stampsBar = docStampsBar(cfg, meta, esc, { printedAt: "Basım", printedBy: "Basan" });
 

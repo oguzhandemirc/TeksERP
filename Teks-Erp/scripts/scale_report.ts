@@ -26,8 +26,8 @@ import { DashboardService } from "../src/services/dashboard.service";
 import { ShippingService } from "../src/services/shipping.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { SystemLogService } from "../src/services/system-log.service";
-import { getStockDistribution } from "../src/services/reports/inventory.report.service";
-import { getOrderFulfillment } from "../src/services/reports/sales.report.service";
+import { getStockScorecard } from "../src/services/reports/stock-scorecard.report.service";
+import { getShipmentScorecard } from "../src/services/reports/shipment-scorecard.report.service";
 import { getSystemLogSummary, getUserActivity } from "../src/services/reports/audit.report.service";
 import { buildPagination } from "../src/utils/query-parser";
 import { AppError } from "../src/utils/app-error";
@@ -211,21 +211,22 @@ async function main(): Promise<void> {
 
   // reports: getStockDistribution
   await measure(
-    "reports.getStockDistribution",
-    () => getStockDistribution(),
+    "reports.getStockScorecard",
+    () => getStockScorecard(),
     `SELECT i.name, COALESCE(c.name,'Ham'), COUNT(*), SUM(r."currentQty")
      FROM rolls r JOIN items i ON r."itemId"=i.id LEFT JOIN colors c ON r."colorId"=c.id
      WHERE r.status IN ('WAREHOUSE','STOCK') GROUP BY i.name, COALESCE(c.name,'Ham')
      ORDER BY 4 DESC NULLS LAST LIMIT 100`
   );
 
-  // reports: getOrderFulfillment (date range)
+  // reports: Sevk & Termin Karnesi (getOrderFulfillment'in yerini aldı — 2026-08-09).
+  // Ölçek açısından daha ağır: sevk hacmi UNION ALL ile üç kaynak tarar
+  // (canlı sevk satırları + iade geri-eklemesi + doğrudan sevkler).
   await measure(
-    "reports.getOrderFulfillment",
-    () => getOrderFulfillment(fullYear),
-    `SELECT o.status, COUNT(*), SUM(lines.total_qty), SUM(o."shippedQty")
-     FROM orders o LEFT JOIN LATERAL (SELECT COALESCE(SUM(ol.quantity),0) total_qty FROM order_lines ol WHERE ol."orderId"=o.id) lines ON true
-     WHERE o."createdAt">=NOW()-INTERVAL '365 days' GROUP BY o.status`
+    "reports.getShipmentScorecard",
+    () => getShipmentScorecard(fullYear),
+    `WITH disp AS (SELECT id FROM shipments WHERE status='DISPATCHED' AND "dispatchedAt">=NOW()-INTERVAL '365 days')
+     SELECT COUNT(*) FROM rolls r JOIN disp d ON d.id=r."shipmentId"`
   );
 
   // reports: getSystemLogSummary

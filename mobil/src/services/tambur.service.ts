@@ -23,7 +23,29 @@ export interface TamburUndoPreview {
    * doldurur (parent = topun kendisi, restoredQty = 0) — ekran onları MANUAL'de
    * BASMAMALI, yoksa "0 m geri dönecek" gibi anlamsız bir cümle çıkar.
    */
-  mode: 'SINGLE' | 'FULL' | 'MANUAL';
+  mode: TamburUndoMode;
+  /**
+   * YAPILABİLECEK modlar (2026-08-09). Mod artık sistem durumundan TÜRETİLMEZ,
+   * operatöre SORULUR — 2026-08-08 saha vakasında operatör tek top iptali
+   * isterken 14 topluk bir işlem almıştı.
+   *
+   * `description` ekranda BİREBİR basılır: cümleyi istemcinin kurması, backend
+   * "yapamam" derken ekranın "yapacağım" demesine yol açıyordu.
+   */
+  options: Array<{
+    mode: TamburUndoMode;
+    label: string;
+    description: string;
+    canApply: boolean;
+    blockReason: string | null;
+    affectedCount: number;
+    restoredQty: number;
+    requiresReason: boolean;
+  }>;
+  /** Hiçbir şey seçilmezse uygulanacak mod — HER ZAMAN en dar olan. */
+  defaultMode: TamburUndoMode;
+  /** Kaynak top arşivde mi — tekil iptalde metraj GERİ DÖNMEZ, sapma yazılır. */
+  parentArchived: boolean;
   canApply: boolean;
   blockReason: string | null;
   parent: { id: string; barcode: string | null; status: string; currentQty: number; initialQty: number };
@@ -33,6 +55,8 @@ export interface TamburUndoPreview {
   workOrder: { id: string; workOrderNumber: string; status: string; willRevive: boolean } | null;
   warnings: string[];
 }
+
+export type TamburUndoMode = 'SINGLE' | 'FULL' | 'MANUAL';
 // =============================================================================
 // SAHA DÜZELTMESİ (`/tambur/manual/*`) — backend `TamburManualService`
 // =============================================================================
@@ -268,17 +292,31 @@ export const tamburService = {
    * mod (SINGLE = tek parça iptali / FULL = finalize'ı tümden geri al) sunucuda
    * çözülür. canApply=false ise blockReason gösterilir, apply çağrılmaz.
    */
-  undoPreview: (rollId: string): Promise<ApiResponse<TamburUndoPreview>> =>
+  undoPreview: (
+    rollId: string,
+    /** Seçilen mod — verilmezse backend EN DAR modu (defaultMode) anlatır. */
+    mode?: TamburUndoMode,
+  ): Promise<ApiResponse<TamburUndoPreview>> =>
     apiClient
-      .get<ApiResponse<TamburUndoPreview>>(`/tambur/rolls/${rollId}/undo-preview`)
+      .get<ApiResponse<TamburUndoPreview>>(`/tambur/rolls/${rollId}/undo-preview`, {
+        params: mode ? { mode } : undefined,
+      })
       .then((r) => r.data),
 
   /** GERİ AL uygula — backend tx-içi taze guard'larla korur (yarışta 409). */
-  applyUndo: (rollId: string): Promise<ApiResponse<{ mode: string; cancelledChildIds: string[]; restoredQty: number }>> =>
+  applyUndo: (
+    rollId: string,
+    /**
+     * `mode` verilmezse backend EN DAR modu uygular (tek parça). Bu, alanı hiç
+     * bilmeyen ESKİ APK'ları da güvenli tarafa düşürür — kazara toplu iptal
+     * yapamazlar. `reason` yalnız FULL'de zorunludur.
+     */
+    opts?: { mode?: TamburUndoMode; reason?: string },
+  ): Promise<ApiResponse<{ mode: string; cancelledChildIds: string[]; restoredQty: number }>> =>
     apiClient
       .post<ApiResponse<{ mode: string; cancelledChildIds: string[]; restoredQty: number }>>(
         `/tambur/rolls/${rollId}/undo`,
-        {},
+        { mode: opts?.mode, reason: opts?.reason },
       )
       .then((r) => r.data),
 
@@ -398,6 +436,9 @@ export const tamburService = {
     data: {
       remainingAction?: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
       notes?: string | null;
+      /** SAPMA SEBEBİ (2026-08-09) — yalnız `scrap`/`discard` kararında anlamlı. */
+      varianceReasonCode?: string | null;
+      varianceReasonText?: string | null;
     }
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> =>
     apiClient

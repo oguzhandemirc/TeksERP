@@ -26,6 +26,7 @@ import { fromDumpRows } from "./sackDump";
 import { SackNoteDialog } from "./SackNoteDialog";
 import { useSackWeighAction } from "./useSackWeighAction";
 import { StaleLabelsBanner } from "./StaleLabelsBanner";
+import { ContentMismatchBanner } from "./ContentMismatchBanner";
 import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
 import type { EditorTarget } from "./types";
 
@@ -215,6 +216,11 @@ export function SackEditorView({
         customerId={target.customerId}
         customerName={target.customerName}
       />
+
+      {/* İçerik uyuşmazlığı (2026-08-09) — StaleLabels ile FARKLI soru: o
+          "müşteri değişti, etiket bayatladı" der, bu "içerideki toplar bu
+          müşteriye uyuyor mu" der. İkisi aynı çuvalda birden çıkabilir. */}
+      <ContentMismatchBanner sackId={data?.id ?? null} rollCount={rolls.length} />
 
       {/* Not VARSA tek satırlık şerit — yoksa hiç yer kaplamaz (boş input yok). */}
       {data?.notes && (

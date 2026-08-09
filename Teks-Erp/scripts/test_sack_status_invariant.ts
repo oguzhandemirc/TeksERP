@@ -427,6 +427,7 @@ async function teardown(): Promise<void> {
   await prisma.sack.deleteMany({ where: { customerId: CUSTOMER } });
   await prisma.shipment.deleteMany({ where: { customerId: CUSTOMER } });
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
   // KARTELA ZİNCİRİ — bu test `kartela.dispatch` çağırıyor ve başarılı olan
   // çağrılar `kartela_dispatch_items` satırı bırakıyor. O FK RESTRICT: temizlenmezse

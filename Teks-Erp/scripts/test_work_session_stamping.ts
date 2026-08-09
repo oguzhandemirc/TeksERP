@@ -227,6 +227,7 @@ async function main() {
   } finally {
     await prisma.workSession.deleteMany({ where: { deviceId: device.id } }).catch(() => {});
     await prisma.peripheralDevice.deleteMany({ where: { id: { in: peripheralIds } } }).catch(() => {});
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});

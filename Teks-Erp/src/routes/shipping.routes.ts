@@ -173,6 +173,27 @@ router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList)
  */
 router.post("/sack-search/content-dump", verifyToken, READ, controller.getContentDump);
 router.get("/sacks/:id/contents", verifyToken, READ, controller.getSackContents);
+
+/**
+ * @swagger
+ * /api/shipping/sacks/mismatch-check:
+ *   post:
+ *     summary: Çuval içeriği uyuşmazlık denetimi (salt-okunur, ENGELLEMEZ)
+ *     description: >
+ *       *"Bu topun etiketi, gideceği müşteri için bugün basılsaydı İÇERİĞİ farklı
+ *       çıkar mıydı?"* sorusunu yanıtlar. Düz "basıldığı müşteri ≠ gideceği
+ *       müşteri" karşılaştırması YAPILMAZ — o çoğu meşru gönderimde de yanar ve
+ *       operatörü körleştirir. Ayrıca 2. kalite (A1) topu müşteri çuvalında
+ *       işaretler. Hiçbir sinyal sevki engellemez.
+ *     tags: [Shipping]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "sackId → sinyal listesi (boş çuvallar dönmez)" }
+ */
+// ⚠️ Bu satır `/sacks/:id/...` route'larından SONRA gelemez mi diye bakma —
+// Express 5'te statik segment (`mismatch-check`) parametreli segmentle (`:id`)
+// çakışmaz; sıra sorun değildir. READ izni yeterli: hiçbir şey yazmaz.
+router.post("/sacks/mismatch-check", verifyToken, READ, controller.checkSackMismatches);
 router.get("/locate-roll", verifyToken, READ, controller.locateRoll);
 
 // ===========================================================================

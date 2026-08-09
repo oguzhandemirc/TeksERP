@@ -66,13 +66,13 @@ describe("CommandPalette", () => {
     // Şikâyetin merkezi: Raporlar hiç eklenmemişti — hub da alt rapor da yoktu.
     open();
     expect(screen.getByText("Üretim")).toBeInTheDocument();
-    expect(screen.getByText("İstasyon Verimliliği")).toBeInTheDocument();
+    expect(screen.getByText("Nerede Takıldı (WIP)")).toBeInTheDocument();
   });
 
   it("izin yoksa rapor girişi hiç çizilmez", () => {
     permissions = ["roll:read"];
     open();
-    expect(screen.queryByText("İstasyon Verimliliği")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
   });
 
   it("alt başlık (sekme) boş palette YOK, aranınca VAR", async () => {
@@ -93,7 +93,7 @@ describe("CommandPalette", () => {
 
   it("seçim aktif sekmede gezinir (yeni pencere açmaz)", () => {
     open();
-    fireEvent.click(screen.getByText("İstasyon Verimliliği"));
-    expect(navigateActive).toHaveBeenCalledWith("/reports/production/station-efficiency");
+    fireEvent.click(screen.getByText("Nerede Takıldı (WIP)"));
+    expect(navigateActive).toHaveBeenCalledWith("/reports/production/wip");
   });
 });

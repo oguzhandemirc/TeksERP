@@ -87,6 +87,15 @@ export interface TamburFinalizeOpenFabricVars {
   rollId: string;
   remainingAction: TamburFinalizeRemainingAction;
   foldType: string | null;
+  /**
+   * SAPMA SEBEBİ (2026-08-09) — yalnız `scrap`/`discard` kararında anlamlı.
+   * ⚠️ Bu tip OFFLINE KUYRUĞA serileşiyor: alan eklendiği için eski kuyrukta
+   * bekleyen kayıtlarda `undefined` gelir ve backend onu "BELIRTILMEDI" ile
+   * yazar (kabul edilir, reddedilmez). Alanı ZORUNLU yapma — bekleyen kuyruk
+   * flush edilirken toplu 400 üretirdi.
+   */
+  varianceReasonCode?: string | null;
+  varianceReasonText?: string | null;
 }
 
 /** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
@@ -194,6 +203,12 @@ export function registerStationMutationDefaults(): void {
       tamburService.finalizeOpenFabric(vars.rollId, {
         remainingAction: vars.remainingAction,
         foldType: vars.foldType,
+        // ⚠️ Bu iki satır UNUTULURSA sebep ekranda sorulur, operatör seçer ve
+        // İSTEK GÖVDESİNE HİÇ GİRMEZ — defter "BELIRTILMEDI" ile dolar ve
+        // kimse sebebini bulamaz. (Kuyruk yolu ile doğrudan çağrı yolu ayrı
+        // kod; ikisini birlikte güncelle.)
+        varianceReasonCode: vars.varianceReasonCode,
+        varianceReasonText: vars.varianceReasonText,
       })),
     ...OFFLINE_AWARE,
   });

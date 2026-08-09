@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { usePreferences } from "@/providers/PreferencesProvider";
 import { fireConfetti } from "@/lib/confetti";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -29,6 +30,33 @@ export function WorkOrderFormPage() {
   const location = useLocation();
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const qc = useQueryClient();
+  const { prefs, setPreference } = usePreferences();
+
+  /**
+   * Kategori → en son seçilen fason firma (KİŞİSEL hafıza, 2026-08-09).
+   *
+   * ⚠️ Tercih KAPALIYKEN de yazılır: anahtarı sonra çeviren kullanıcı boş bir
+   * hafızayla karşılaşmasın. Okuma tarafı `useDesignerSteps.pickDefaultFirmId`.
+   * Yalnız kategori + firma İKİSİ de dolu olan adımlar sayılır — biri eksikse
+   * hangi kategoriye yazılacağı belirsizdir ve yanlış kategoriye yazmak, sonraki
+   * iş emrinde sessizce yanlış firma önerirdi.
+   */
+  const rememberLastSubcontractors = (payload: CreatePayload) => {
+    const next = { ...(prefs.workOrders?.lastSubcontractorByCategory ?? {}) };
+    let changed = false;
+    for (const s of payload.stepPlanning ?? []) {
+      if (s.requiredCategoryId && s.plannedSubcontractorId) {
+        if (next[s.requiredCategoryId] !== s.plannedSubcontractorId) {
+          next[s.requiredCategoryId] = s.plannedSubcontractorId;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) return; // gereksiz PUT atma (tercih blob'u her kayıtta gitmesin)
+    setPreference({
+      workOrders: { ...(prefs.workOrders ?? {}), lastSubcontractorByCategory: next },
+    });
+  };
   const targetQuantityEnabled = useTargetQuantityEnabled();
   // Başlık satırındaki sağ slot — form "Şablon seç" butonunu buraya portal'lar.
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
@@ -70,7 +98,11 @@ export function WorkOrderFormPage() {
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       workOrderService.create(payload as unknown as Partial<WorkOrder>),
-    onSuccess: (res) => {
+    onSuccess: (res, payload) => {
+      // KİŞİSEL HAFIZA (2026-08-09): kategori → en son seçilen fason firma.
+      // ⚠️ Tercih KAPALIYKEN de yazılır — anahtarı sonra çeviren kullanıcı boş
+      // bir hafızayla karşılaşmasın. Okuma tarafı `pickDefaultFirmId`.
+      rememberLastSubcontractors(payload);
       toast.success("İş emri oluşturuldu.");
       fireConfetti();
       void qc.invalidateQueries({ queryKey: ["work-orders"] });

@@ -8,3 +8,5 @@ export { SimpleBarChart } from "./SimpleBarChart";
 export { SimpleLineChart } from "./SimpleLineChart";
 export { SimplePieChart } from "./SimplePieChart";
 export { DetailTable } from "./DetailTable";
+export { BreakdownTable, DeltaBadge, type BreakdownRow } from "./BreakdownTable";
+export { ReportExportBar } from "./ReportExportBar";

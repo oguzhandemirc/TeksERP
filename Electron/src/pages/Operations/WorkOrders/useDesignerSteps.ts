@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePreferences } from "@/providers/PreferencesProvider";
 import { useQueryClient } from "@tanstack/react-query";
 import { arrayMove } from "@dnd-kit/sortable";
 import { toast } from "sonner";
@@ -45,7 +46,37 @@ function pickFavoriteFirmId(
   );
 }
 
+/**
+ * Fason adımının VARSAYILAN firması — kişisel tercihe göre (2026-08-09).
+ *
+ * Saha isteği: *"son seçilen fasoncu otomatik gelsin; favori geliyor şu an."*
+ * Kullanıcı kararı: **açılır-kapanır kişisel tercih** — planlamacılar farklı
+ * çalışıyor, birini diğerine dayatmak yerine seçtiriyoruz.
+ *
+ * ⚠️ `lastUsed` seçiliyken bile geçmiş YOKSA favoriye düşülür. Boş bırakmak,
+ * yeni bir kategoride tercihi açan kullanıcıya "hiçbir şey gelmiyor" dedirtirdi.
+ * ⚠️ Varsayılan `favorite` = bugünkü davranış (kimsenin alışkanlığı habersiz
+ * değişmez).
+ *
+ * SAF fonksiyon — bekçi doğrudan bunu sınar.
+ */
+export function pickDefaultFirmId(
+  mode: "favorite" | "lastUsed" | undefined,
+  favs: { id: string; isFavorite: boolean; categories: { categoryId: string }[] }[],
+  lastByCategory: Record<string, string> | undefined,
+  categoryId: string,
+): string | null {
+  const fav = pickFavoriteFirmId(favs, categoryId);
+  if (mode !== "lastUsed") return fav;
+  return lastByCategory?.[categoryId] ?? fav;
+}
+
 export function useDesignerSteps(initialSteps?: DesignerStep[]) {
+  // KİŞİSEL tercih (2026-08-09): fason varsayılanı favori mi, son seçilen mi.
+  // Varsayılan "favorite" = bugünkü davranış.
+  const { prefs } = usePreferences();
+  const firmMode = prefs.workOrders?.subcontractorDefault;
+  const lastByCategory = prefs.workOrders?.lastSubcontractorByCategory;
   const qc = useQueryClient();
   const [steps, setSteps] = useState<DesignerStep[]>(initialSteps ?? []);
 
@@ -151,7 +182,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         const favs = await fetchFavoriteFirms();
         newSteps = newSteps.map((s) =>
           s.stationType === "EXTERNAL" && s.requiredCategoryId && !s.plannedSubcontractorId
-            ? { ...s, plannedSubcontractorId: pickFavoriteFirmId(favs, s.requiredCategoryId) }
+            ? { ...s, plannedSubcontractorId: pickDefaultFirmId(firmMode, favs, lastByCategory, s.requiredCategoryId) }
             : s,
         );
       }
@@ -218,7 +249,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
       let plannedSubcontractorId: string | null = null;
       if (designer.stationType === "EXTERNAL" && designer.requiredCategoryId) {
         const favs = await fetchFavoriteFirms();
-        plannedSubcontractorId = pickFavoriteFirmId(favs, designer.requiredCategoryId);
+        plannedSubcontractorId = pickDefaultFirmId(firmMode, favs, lastByCategory, designer.requiredCategoryId);
       }
       updateStep(clientId, { ...designer, plannedSubcontractorId });
     } catch {

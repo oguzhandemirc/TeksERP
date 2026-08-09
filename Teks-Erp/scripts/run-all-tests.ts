@@ -7,6 +7,14 @@
 // fixture'ını yaratıp finally'de temizler. Paralel koşum fixture çakışması
 // yaratabilir → sıralı koşum güvenli. (jest/vitest YOK — CLAUDE.md kuralı.)
 // =============================================================================
+// .env'i BURADA da yükle. Koşucu bugüne kadar yalnız süreç başlatıyordu ve
+// `DATABASE_URL`'i hiç okumuyordu — onu her test kendi içinde `src/lib/prisma`
+// üzerinden alıyor. `productionDbGate()` hedefi koşumdan ÖNCE bilmek zorunda,
+// yani bu import olmadan geçit her yerel koşumda "DATABASE_URL yok" deyip
+// fail-closed düşerdi (2026-08-09'da negatif sondayla ölçüldü).
+// Çocuk süreçlere `env: process.env` aynen geçtiği için davranış değişmez:
+// dotenv var olan değişkenin ÜSTÜNE YAZMAZ.
+import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -66,10 +74,104 @@ function typecheckGate(): boolean {
   return false;
 }
 
+/**
+ * ÜRETİM VERİTABANI GEÇİDİ — HER ŞEYDEN ÖNCE koşar, FAIL-CLOSED.
+ *
+ * NEDEN: bu paket mock KULLANMAZ. 273 testin 235'i `src/lib/prisma`'yı doğrudan
+ * import eder ve `DATABASE_URL` ne gösteriyorsa oraya YAZAR. Testlerde toplam
+ * 1.539 `deleteMany` çağrısı var (209 dosyada). 2026-08-09 denetiminde ölçüldü:
+ * dosyaların HİÇBİRİNDE ortam kontrolü yoktu — yani `DATABASE_URL` yanlışlıkla
+ * saha sunucusunu gösterirse `npm test` canlı fabrika verisine 1.539 silme
+ * gönderir. Tek koruma KONVANSİYONdu (silme kararları `TEST-`/`TST-` kod önekine
+ * bakıyor); konvansiyon bir sed değildir.
+ *
+ * KURAL: yalnız YEREL host'a izin verilir. Gerekçe ölçümle seçildi —
+ *   • dev  : postgresql://…@localhost:5432/adnansahin_db
+ *   • CI   : postgresql://…@localhost:5432/teks_ci   (.github/workflows/ci.yml)
+ *   • saha : 192.168.1.250 / SAHINSRV                (docs/ops/DEPLOY-RUNBOOK.md)
+ * Yani localhost allowlist'i dev ve CI'yı AYNEN geçirir, sahayı bloklar.
+ *
+ * FAIL-CLOSED: `DATABASE_URL` yoksa ya da çözümlenemiyorsa DURUR. "Bilinmeyen
+ * hedef" ile "güvenli hedef" aynı yeşile çıkmamalı.
+ *
+ * KAÇIŞ: uzak bir test DB'si gerçekten gerekiyorsa `ALLOW_NONLOCAL_TEST_DB=1`.
+ * Bilinçli ve görünür bir karardır; geçtiğinde ekrana uyarı basar.
+ * NODE_ENV/APP_ENV `production` ise kaçış anahtarı DA çalışmaz — orada
+ * yanılma payı bırakmıyoruz.
+ */
+function productionDbGate(): void {
+  const url = process.env.DATABASE_URL;
+  const dur = () => {
+    console.error("\n⛔ TEST PAKETİ DURDURULDU — üretim veritabanı koruması.\n");
+    process.exit(1);
+  };
+
+  const nodeEnv = process.env.NODE_ENV ?? "";
+  const appEnv = process.env.APP_ENV ?? "";
+  if (nodeEnv === "production" || appEnv === "production") {
+    console.error(
+      `\n❌ NODE_ENV/APP_ENV "production" — test paketi üretim ortamında KOŞTURULAMAZ.\n` +
+        `   (NODE_ENV=${nodeEnv || "<yok>"}, APP_ENV=${appEnv || "<yok>"})\n` +
+        `   Bu kontrol ALLOW_NONLOCAL_TEST_DB ile atlanamaz.`
+    );
+    dur();
+  }
+
+  if (!url) {
+    console.error(
+      "\n❌ DATABASE_URL tanımlı değil. Hedef veritabanı bilinmiyor → fail-closed."
+    );
+    dur();
+  }
+
+  let host: string;
+  let dbName: string;
+  try {
+    // postgresql:// şeması URL ile çözülür; hostname IPv6'da köşeli parantezsiz gelir.
+    const u = new URL(url as string);
+    host = u.hostname.toLowerCase();
+    dbName = decodeURIComponent(u.pathname.replace(/^\//, "")) || "<isimsiz>";
+  } catch {
+    console.error(
+      `\n❌ DATABASE_URL çözümlenemedi → hedefin yerel olduğu DOĞRULANAMIYOR (fail-closed).`
+    );
+    dur();
+    return;
+  }
+
+  const YEREL = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+  if (YEREL.has(host)) {
+    console.log(`→ Hedef DB: ${dbName} @ ${host} (yerel) ✅\n`);
+    return;
+  }
+
+  if (process.env.ALLOW_NONLOCAL_TEST_DB === "1") {
+    console.warn(
+      `\n⚠️  UZAK VERİTABANINA TEST KOŞULUYOR: ${dbName} @ ${host}\n` +
+        `   ALLOW_NONLOCAL_TEST_DB=1 ile bilinçli olarak geçildi.\n` +
+        `   Bu paket ${"1.539"} adet deleteMany çağrısı içerir. Hedefin doğru olduğundan emin ol.\n`
+    );
+    return;
+  }
+
+  console.error(
+    `\n❌ Test hedefi YEREL DEĞİL: ${dbName} @ ${host}\n\n` +
+      `   Bu paket gerçek veritabanına yazar ve siler (1.539 deleteMany, 209 dosyada).\n` +
+      `   Yerel olmayan bir hedefe koşmak canlı fabrika verisini yok edebilir.\n\n` +
+      `   İzin verilen host'lar: ${[...YEREL].join(", ")}\n` +
+      `   Gerçekten uzak bir TEST veritabanıysa: ALLOW_NONLOCAL_TEST_DB=1 npm test`
+  );
+  dur();
+}
+
 function main() {
   // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
   const filter = process.argv[2];
+
+  // Geçit SIRASI load-bearing: DB koruması tip kontrolünden ÖNCE ve filtreden
+  // BAĞIMSIZ koşar. Tek test koşmak da yazma yapar — tehlike filtreyle azalmaz.
+  productionDbGate();
 
   if (!filter && !process.env.SKIP_TYPECHECK && !typecheckGate()) process.exit(1);
 

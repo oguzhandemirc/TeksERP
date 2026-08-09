@@ -16,6 +16,7 @@ import type { TravelerCardConfig } from "../system-setting.service";
 import {
   DENSITY,
   PAGE_DIM,
+  PX_SCALE,
   resolveFrozenPageSize,
   type TravelerDensity,
 } from "./traveler-card.density";
@@ -166,12 +167,26 @@ function fmtDateTime(iso: string): string {
 // iki haritada da monotondur, kullanıcı ayrımı görmez.
 const OVR_WEIGHT: Record<string, number> = { light: 400, medium: 600, bold: 800, black: 900 };
 
+/**
+ * Sayısal punto → sayfa boyutuna göre ölçekle (2026-08-09).
+ *
+ * Kademe (`sizeMap`) zaten yoğunluk profilinden geliyor, yani sayfa-boyutu
+ * duyarlı. Sayısal `px` ise panelden HAM geliyordu ve profili ATLIYORDU —
+ * A5'te A4 puntosu basılıyor, uzun değerler sarıp kartı taşırıyordu.
+ * ⚠️ A4'te `PX_SCALE = 1` → çıktı bayt-bayt korunur.
+ */
+function scalePx(px: number, pxScale: number): number {
+  // Yuvarlama: 2 ondalık. Profilin kendi sayıları da (8.63, 9.2…) bu hassasiyette;
+  // tam sayıya yuvarlamak 27→23 gibi görünür bir sapma üretirdi.
+  return Math.round(px * pxScale * 100) / 100;
+}
+
 /** Alanın (boyut/kalınlık) inline override stilini üret — default'ta boş string. */
-function ovrStyle(f: SpecCell, sizeMap: Record<string, number>): string {
+function ovrStyle(f: SpecCell, sizeMap: Record<string, number>, pxScale: number): string {
   const p: string[] = [];
   // `px` (sayısal punto) kademenin ÜSTÜNDEDİR: 2026-08-05'te panel tek birime
   // (px) geçti, kademe yalnız eski kayıtlar + donmuş snapshot'lar için okunuyor.
-  const size = f.px ?? sizeMap[f.size];
+  const size = f.px != null ? scalePx(f.px, pxScale) : sizeMap[f.size];
   if (size != null) p.push(`font-size:${size}px`);
   if (OVR_WEIGHT[f.weight] != null) p.push(`font-weight:${OVR_WEIGHT[f.weight]}`);
   return p.length ? ` style="${p.join(";")}"` : "";
@@ -180,8 +195,8 @@ function ovrStyle(f: SpecCell, sizeMap: Record<string, number>): string {
 // Toplam satırı tek + tam denetimli → HER ZAMAN inline (md dahil).
 // (Boyut haritası yoğunluk profilinden kurulur — bkz. OVR_WEIGHT notu.)
 const FULL_WEIGHT: Record<string, number> = { light: 400, normal: 600, medium: 700, bold: 800, black: 900 };
-function fullStyle(f: SpecCell, sizeMap: Record<string, number>): string {
-  const size = f.px ?? sizeMap[f.size] ?? sizeMap.md;
+function fullStyle(f: SpecCell, sizeMap: Record<string, number>, pxScale: number): string {
+  const size = f.px != null ? scalePx(f.px, pxScale) : (sizeMap[f.size] ?? sizeMap.md);
   return ` style="font-size:${size}px;font-weight:${FULL_WEIGHT[f.weight] ?? 600}"`;
 }
 
@@ -261,6 +276,9 @@ export function renderTravelerCardHtml(
   // değerlerin birebir aynısı; A5 sıkı profil). Hücre-başına sm/lg override
   // haritaları da profile bağlı.
   const d: TravelerDensity = DENSITY[pageSize];
+  // Panelden elle girilen sayısal punto (`px`) da sayfa boyutuna göre ölçeklenir
+  // — kademe (sm/lg) zaten profilden geliyordu, `px` profili ATLIYORDU (2026-08-09).
+  const pxScale = PX_SCALE[pageSize];
   // ALAN BAZLI görünürlük + yazı ayarı (`traveler-card.fields.ts`) — kartın
   // TEKİL yüzeyleri (firma adı, İŞ EMRİ NO, bölüm başlıkları, filigran…).
   // Override yoksa boş string → çıktı bugünküyle BAYT-BAYT aynı.
@@ -323,7 +341,7 @@ export function renderTravelerCardHtml(
   // Spec grid — yalnız AÇIK alanlar; boyut/kalınlık default'tan farklıysa inline override.
   const cell = (label: string, value: string, f: SpecCell, hi = false) =>
     `<div class="cell${hi ? " hi" : ""}"><div class="c-lbl">${esc(label)}</div>` +
-    `<div class="c-val"${ovrStyle(f, specOvrSize)}>${value}</div></div>`;
+    `<div class="c-val"${ovrStyle(f, specOvrSize, pxScale)}>${value}</div></div>`;
   const gridCells: string[] = [];
   const add = (v: unknown, label: string, value: string, hi = false) => {
     const f = coerceSpecCell(v);
@@ -426,7 +444,7 @@ export function renderTravelerCardHtml(
   const batCntShown = shownBatchCols.some((col) => col.cls === "b-cnt");
   const batQtyShown = shownBatchCols.some((col) => col.cls === "b-qty");
   const showBatchTotal = batchTotalF.show && (batCntShown || batQtyShown);
-  const batchTotalStyle = fullStyle(batchTotalF, batchFullSize);
+  const batchTotalStyle = fullStyle(batchTotalF, batchFullSize, pxScale);
   const batchRollTotal = batches.reduce((s, b) => s + b.rollCount, 0);
   const batchQtyTotal = batches.reduce((s, b) => s + (b.quantity ?? 0), 0);
   // Toplam satırı gövdenin sütun DÜZENİNİ izler: ["#", ...açık sütunlar]. Sipariş
@@ -464,7 +482,7 @@ export function renderTravelerCardHtml(
             .map(
               (b, i) =>
                 `<tr><td class="b-seq">${esc(i + 1)}</td>${shownBatchCols
-                  .map((col) => `<td class="${col.cls}"${ovrStyle(col.c, batchOvrSize)}>${col.val(b)}</td>`)
+                  .map((col) => `<td class="${col.cls}"${ovrStyle(col.c, batchOvrSize, pxScale)}>${col.val(b)}</td>`)
                   .join("")}</tr>`,
             )
             .join("")}
@@ -512,7 +530,7 @@ export function renderTravelerCardHtml(
   );
   const showTotal = totalF.show && qtyShown;
   const orderTotal = orderLinks.reduce((s, l) => s + (l.orderLine?.quantity ?? 0), 0);
-  const totalStyle = fullStyle(totalF, orderFullSize);
+  const totalStyle = fullStyle(totalF, orderFullSize, pxScale);
   // Miktar en sağdaki görünür sütun (orderCols sırası) → etiket öncekileri colspan'ler.
   const totalRow =
     showTotal && shownOrderCols.length > 0
@@ -536,7 +554,7 @@ export function renderTravelerCardHtml(
               .map(
                 (l) =>
                   `<tr>${shownOrderCols
-                    .map((col) => `<td class="${col.cls}"${ovrStyle(col.c, orderOvrSize)}>${col.val(l.orderLine)}</td>`)
+                    .map((col) => `<td class="${col.cls}"${ovrStyle(col.c, orderOvrSize, pxScale)}>${col.val(l.orderLine)}</td>`)
                     .join("")}</tr>`,
               )
               .join("")}

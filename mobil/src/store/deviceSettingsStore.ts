@@ -12,9 +12,13 @@ const KK1_MANUAL_METER_KEY = 'device_kk1_manual_meter';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
 const SCAN_SOUND_KEY = 'device_scan_sound';
+const DOC_PAGE_SIZE_KEY = 'device_doc_page_size';
 
 /** Metraj kaynağı: makineden oku (auto) ya da operatör elle girsin (manual). */
 export type MeterEntryMode = 'manual' | 'auto';
+
+/** Baskı kâğıdı boyu. */
+export type DocPageSize = 'A4' | 'A5';
 
 interface DeviceSettingsState {
   /** true → barkod ekranlarında manuel giriş input'ları görünür. Default false:
@@ -53,6 +57,21 @@ interface DeviceSettingsState {
    * için kapatılabilir; kapatmak TİTREŞİMİ etkilemez, iki kanal ayrıdır.
    */
   scanSoundEnabled: boolean;
+  /**
+   * Belge baskısında son seçilen kâğıt boyu — **BELGE TİPİ BAŞINA**.
+   *
+   * Neden tipe göre: refakat kartı doğal olarak A5 (küçük kart), fason çeki ise
+   * grid listesi ve A4 istiyor. TEK ortak hafıza bu ikisini birbirine ezdirir ve
+   * operatör her baskıda anahtarı çevirmek zorunda kalırdı — `kk1ManualEntry`i
+   * cihaza taşımamızın sebebi tam olarak buydu ("her girişte anahtar çevirme").
+   *
+   * ⚠️ CİHAZDA kalıcı, kullanıcıda DEĞİL: kâğıt boyu o istasyona bağlı YAZICININ
+   * özelliğidir, operatörün tercihi değil. Vardiya değişince yazıcı değişmez.
+   *
+   * Kayıt YOKSA ilgili tip için `undefined` döner ve istemci hiçbir şey
+   * göndermez → backend KALICI AYARI uygular (bugünkü davranış korunur).
+   */
+  docPageSize: Record<string, DocPageSize>;
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -62,6 +81,31 @@ interface DeviceSettingsState {
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
   setTamburManualMode: (v: boolean) => Promise<void>;
   setScanSoundEnabled: (v: boolean) => Promise<void>;
+  setDocPageSize: (docType: string, v: DocPageSize) => Promise<void>;
+  /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
+  clearDocPageSize: (docType: string) => Promise<void>;
+}
+
+/**
+ * Diskteki kâğıt boyu haritasını çözer.
+ *
+ * ⚠️ FAIL-SAFE: bozuk JSON, dizi, yabancı değer ("A3"/null/sayı) → o giriş
+ * ATILIR, tüm harita çöpe gitmez. Baskı yolunu bozuk bir tercih kaydı yüzünden
+ * düşürmek, kalıcı ayarla basmaktan çok daha kötüdür.
+ */
+export function parseDocPageSizes(raw: string | null): Record<string, DocPageSize> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, DocPageSize> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (v === 'A4' || v === 'A5') out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
@@ -71,17 +115,20 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   tamburCutMode: 'manual',
   tamburManualMode: false,
   scanSoundEnabled: true,
+  docPageSize: {},
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburManual, scanSound] = await Promise.all([
-      storage.getItem(MANUAL_BARCODE_KEY),
-      storage.getItem(LAST_ROUTE_KEY),
-      storage.getItem(KK1_MANUAL_METER_KEY),
-      storage.getItem(TAMBUR_CUT_MODE_KEY),
-      storage.getItem(TAMBUR_MANUAL_MODE_KEY),
-      storage.getItem(SCAN_SOUND_KEY),
-    ]);
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburManual, scanSound, docSizes] =
+      await Promise.all([
+        storage.getItem(MANUAL_BARCODE_KEY),
+        storage.getItem(LAST_ROUTE_KEY),
+        storage.getItem(KK1_MANUAL_METER_KEY),
+        storage.getItem(TAMBUR_CUT_MODE_KEY),
+        storage.getItem(TAMBUR_MANUAL_MODE_KEY),
+        storage.getItem(SCAN_SOUND_KEY),
+        storage.getItem(DOC_PAGE_SIZE_KEY),
+      ]);
     set({
       manualBarcodeEntry: stored === 'true',
       lastRouteTemplateId: lastRoute || null,
@@ -94,6 +141,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // Varsayılan AÇIK → yalnız birebir 'false' sesi kapatır. Diğer bayraklarla
       // ters yön: burada güvenli taraf "sinyal ver", "sessiz kal" değil.
       scanSoundEnabled: scanSound !== 'false',
+      docPageSize: parseDocPageSizes(docSizes),
       isLoaded: true,
     });
   },
@@ -131,5 +179,30 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setScanSoundEnabled: async (v) => {
     set({ scanSoundEnabled: v });
     await storage.setItem(SCAN_SOUND_KEY, v ? 'true' : 'false');
+  },
+
+  // Aynı desen: rozet ANINDA dönsün diye önce state, sonra disk.
+  // Harita KOMPLE yazılır (tek anahtar) — belge tipi başına ayrı storage anahtarı
+  // açmak, tip eklendikçe `init`in Promise.all listesini büyütürdü.
+  setDocPageSize: async (docType, v) => {
+    let next: Record<string, DocPageSize> = {};
+    set((s) => {
+      next = { ...s.docPageSize, [docType]: v };
+      return { docPageSize: next };
+    });
+    await storage.setItem(DOC_PAGE_SIZE_KEY, JSON.stringify(next));
+  },
+
+  clearDocPageSize: async (docType) => {
+    let next: Record<string, DocPageSize> = {};
+    set((s) => {
+      // Anahtarı `undefined` bırakmak yerine SİL: `JSON.stringify` undefined
+      // değeri zaten atar, ama harita bellekte de temiz kalsın (`in` ile bakan
+      // bir çağıran ileride yanılmasın).
+      const { [docType]: _drop, ...rest } = s.docPageSize;
+      next = rest;
+      return { docPageSize: next };
+    });
+    await storage.setItem(DOC_PAGE_SIZE_KEY, JSON.stringify(next));
   },
 }));

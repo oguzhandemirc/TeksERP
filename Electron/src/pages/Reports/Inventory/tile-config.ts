@@ -1,26 +1,23 @@
-import { Hourglass, Boxes, ArrowLeftRight } from "lucide-react";
+import { Boxes } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
+/**
+ * Stok raporları — 2026-08-09 sadeleştirmesi.
+ *
+ * "Rulo Yaşlandırma" + "Stok Dağılımı" TEK karnede birleşti. Eksik olan şey
+ * ikisinin KESİŞİMİYDİ: yaşlı olmak tek başına sorun değil (sipariş bekliyor
+ * olabilir), siparişsiz olmak da tek başına sorun değil (dün üretilmiş
+ * olabilir). Nakit sıkışması ikisi birden olduğunda başlar.
+ *
+ * "Hareket Geçmişi" KALDIRILDI: günlük hareket sayacıydı, bir karar
+ * değiştirmiyordu; tek top izleme ihtiyacını Üretim → Top İzleme karşılıyor.
+ */
 export const inventoryReportTiles: HubTile[] = [
   {
-    key: "roll-aging",
-    title: "Rulo Yaşlandırma",
-    description: "Depodaki rulonun bekleme süresi dağılımı",
-    icon: Hourglass,
-    to: "/reports/inventory/roll-aging",
-  },
-  {
-    key: "stock-distribution",
-    title: "Stok Dağılımı",
-    description: "Renk, desen ve en bazında stok metrajı",
+    key: "scorecard",
+    title: "Stok & Ölü Stok",
+    description: "Rafta ne var, kaç gündür duruyor, siparişi var mı",
     icon: Boxes,
-    to: "/reports/inventory/stock-distribution",
-  },
-  {
-    key: "movements",
-    title: "Hareket Geçmişi",
-    description: "Rulo bazında istasyon giriş/çıkış zaman çizelgesi",
-    icon: ArrowLeftRight,
-    to: "/reports/inventory/movements",
+    to: "/reports/inventory/scorecard",
   },
 ];

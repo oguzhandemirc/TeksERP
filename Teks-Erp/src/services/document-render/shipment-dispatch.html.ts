@@ -27,6 +27,8 @@ import {
   DOC_STAMPS_CSS,
   docCopyBadge,
   docBlocksHtml,
+  docBlankGridCss,
+  docBlankGridHtml,
   docPrintNoteHtml,
   docStampsBar,
 } from "./doc-style";
@@ -507,8 +509,8 @@ export function renderShipmentDispatchHtml(
 
   // Nüsha rozeti + konumlu bloklar + tek seferlik baskı notu + damga/QR çubuğu.
   const copyBadge = docCopyBadge(cfg, esc);
-  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc);
-  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc);
+  const blocksTop = docBlocksHtml(cfg, "afterHeader", esc) + docBlankGridHtml(cfg, "afterHeader", esc);
+  const blocksBottom = docBlocksHtml(cfg, "beforeSignatures", esc) + docBlankGridHtml(cfg, "beforeSignatures", esc);
   const printNote = docPrintNoteHtml(meta.printNote, esc);
   const stampsBar = docStampsBar(cfg, meta, esc, {
     printedAt: L.printedAt,
@@ -536,6 +538,7 @@ export function renderShipmentDispatchHtml(
   .sec td.wrap { white-space: pre-wrap; word-break: break-word; font-size: ${scaleF(d, 10)}px; }
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
+  ${docBlankGridCss(cfg)}
   /* Sayfa ayrımı — .pgb taşıyan liste kendi sayfasından başlar. İlk liste bu
      sınıfı ALMAZ (belge boş bir sayfayla açılmasın). ?merge=1 ile sınıf hiç
      basılmaz, listeler eskisi gibi akar. */

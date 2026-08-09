@@ -11,8 +11,10 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import {
+  sanitizeBlankGrid,
   sanitizeDocFields,
   sanitizeDocStyleConfig,
+  type BlankGridConfig,
   type DocFieldStyle,
   type DocStyleConfig,
 } from "./document-render/doc-style";
@@ -133,6 +135,13 @@ export const SETTING_KEYS = {
    *  kapatırsa çıkış ≤ giriş zorunlu olur (aşan giriş 400 ile reddedilir). Diğer flag'lerin
    *  aksine backend ENFORCE eder (guard bu flag'e bağlı). */
   TAMBUR_OVER_QUANTITY_ENABLED: "tambur.overQuantityEnabled",
+  /** Tambur "TÜMDEN geri al" yalnız AYNI FABRİKA GÜNÜ içinde yapılabilsin mi.
+   *  Default FALSE (sınır yok) — bilinçli. Asıl koruma parçaların kendisindedir
+   *  (çuvala okutulmuş / sevke girmiş / yeniden kesilmiş parça zaten reddedilir);
+   *  sert bir süre sınırı, dün akşam yapılmış bir hatayı sabah düzeltmeyi imkânsız
+   *  kılarak tam da düzeltilmek istenen türden yeni bir çıkmaz üretebilir.
+   *  Emsal: `shipping.undoDispatchSameDayOnly`. TEK PARÇA iptali etkilenmez. */
+  TAMBUR_UNDO_FULL_SAME_DAY_ONLY: "tambur.undoFullSameDayOnly",
   /** Kurşun bypass (kurşun istasyonuna tablet KOYULMAYAN fabrika düzeni) açık mı.
    *  Default FALSE (kapalı). Diğer flag'lerin çoğunun aksine backend ENFORCE eder,
    *  ama ENFORCE kapsamı DAR: yalnız YENİ ATAMA OLUŞTURMAYI kapılar (bayrak kapalıyken
@@ -686,6 +695,14 @@ export interface DocumentConfig {
    *  fiziksel KUMAŞ İRSALİYESİ formu). Daha az grup = daha geniş hücre → A5'te
    *  punto büyütülebilir. Grup başına satır (20) ayarlanmaz. */
   gridGroups?: number;
+  /**
+   * AYARLANABİLİR BOŞ GRID (2026-08-09) — elle doldurulan kutular.
+   *
+   * ⚠️ OPT-IN, varsayılan KAPALI: verilmezse belgeye **tek bayt** eklenmez
+   * (ne HTML ne CSS). Ayarına dokunulmamış ve donmuş belgelerin çıktısı
+   * bayt-bayt korunur. Renderer: `document-render/doc-style.docBlankGridHtml`.
+   */
+  blankGrid?: BlankGridConfig;
   /** Fason çeki grid'inde GRUP BAŞINA SATIR (1–40; default 10).
    *  SAYFA BAŞINA TOP = gridGroups × gridRows (varsayılan 5 × 10 = 50).
    *  Hücreler elle doldurulan BOŞ kutulardır; eski 100'lük formda kutuların
@@ -746,6 +763,8 @@ export interface FeatureFlags {
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
    *  Diğer flag'lerin aksine ENFORCE edilir — tambur kesim guard'ı bu flag'e bağlı. */
   tamburOverQuantityEnabled: boolean;
+  /** Tambur "TÜMDEN geri al" yalnız aynı fabrika günü içinde mi (default FALSE). */
+  tamburUndoFullSameDayOnly: boolean;
   /** Kurşun bypass düzeni açık mı (default FALSE/kapalı). ENFORCE edilir ama YALNIZ
    *  yeni atama oluşturmayı kapılar; dağıtılmış iş emirleri bayrak kapansa da bypass
    *  rejiminde biter (rejim atama satırında kalıcıdır). */
@@ -1021,6 +1040,7 @@ export class SystemSettingService {
       companyLetterhead: await readCompanyLetterhead(cacheClient),
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
+      tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       sessionDurationMinutes: sessionMinutes,
@@ -1329,6 +1349,18 @@ export class SystemSettingService {
         SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED,
         input.tamburOverQuantityEnabled,
         "Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin (aşımda parent top tamamen tüketilir)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "tamburUndoFullSameDayOnly")) {
+      if (typeof input.tamburUndoFullSameDayOnly !== "boolean") {
+        throw AppError.badRequest("tamburUndoFullSameDayOnly boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_UNDO_FULL_SAME_DAY_ONLY,
+        input.tamburUndoFullSameDayOnly,
+        "Tambur 'tümden geri al' yalnız aynı fabrika günü içinde yapılabilsin (tek parça iptali etkilenmez)",
         userId
       );
     }
@@ -2061,6 +2093,26 @@ export async function readTamburOverQuantityEnabled(
 }
 
 /**
+ * Tambur "TÜMDEN geri al" için aynı-gün sınırı açık mı.
+ *
+ * Default KAPALI (kayıt yoksa `false`) — `readTamburOverQuantityEnabled`'ın
+ * TERSİ yönde varsayılan taşır ve bu bilinçlidir: aşım bayrağı bir ÜRETİM
+ * gerçeğini kabul eder (tambur asıl ölçüm noktası), bu ise bir KISITTIR ve
+ * kısıtlar sessizce açık doğmaz.
+ */
+export async function readTamburUndoFullSameDayOnly(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_UNDO_FULL_SAME_DAY_ONLY },
+    select: { value: true },
+  });
+  if (!setting) return false;
+  return asBoolean(setting.value);
+}
+
+/**
  * Refakat kartı marka/içerik ayarını okur (yoksa/eksikse default'lara düşer).
  * buildSnapshot bunu çağırıp config'i karta dondurur.
  */
@@ -2279,6 +2331,12 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
     if (typeof o.gridRows === "number" && Number.isFinite(o.gridRows)) {
       cfg.gridRows = Math.min(40, Math.max(1, Math.round(o.gridRows)));
     }
+    // BOŞ GRID — kayıt kapısının DÖRDÜNCÜ ayağı. ⚠️ Bu satır olmadan panelden
+    // kaydedilen grid SESSİZCE ATILIR (kullanıcı ayarlar, kaydolmaz, sebebi
+    // hiçbir yerde yazmaz). `gridRows`/`fields`/`placements` de aynı boşluktan
+    // geçmişti — bekçi: `test_fason_ceki_html` §18 round-trip.
+    const bg = sanitizeBlankGrid(o.blankGrid);
+    if (bg) cfg.blankGrid = bg;
     out[docKey] = cfg;
   }
   return out;

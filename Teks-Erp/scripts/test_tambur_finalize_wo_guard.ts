@@ -144,6 +144,7 @@ let woId: string | null = null;
   } finally {
     try {
       // Söküm: op → movement → property → log → roll → step → WO.
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });

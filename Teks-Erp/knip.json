@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/server.ts",
+    "prisma.config.ts",
+    "prisma/seed.ts",
+    "prisma/seed-fixtures.ts",
+    "prisma/seed-demo-stations.ts",
+    "prisma/seed-shipping-scenario.ts",
+    "scripts/**/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "prisma/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "ignore": [
+    "dist/**",
+    "_e2e/**",
+    "scratch/**",
+    "src/generated/**"
+  ],
+  "ignoreDependencies": [
+    "@faker-js/faker"
+  ],
+  "ignoreExportsUsedInFile": true
+}

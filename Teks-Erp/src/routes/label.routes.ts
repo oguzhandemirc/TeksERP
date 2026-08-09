@@ -610,6 +610,28 @@ router.post(
   controller.seedRollLabelSnapshot,
 );
 
+/**
+ * @swagger
+ * /api/labels/rolls/seed-snapshot-bulk:
+ *   post:
+ *     tags: [Labels]
+ *     summary: N topun etiket HEDEFİNİ toplu yaz ("kuşak değişti → toplu yenile")
+ *     description: >
+ *       Akış: seç → "Kime?" sor → hepsine yaz (bu uç) → hepsini bas (bulk-html).
+ *       ⚠️ Sonuç PARÇALIDIR ve bu bilinçlidir: atlanan her satır somut sebebiyle
+ *       `failed[]` içinde döner. "42 yazıldı" deyip 8`."`"`inin neden atlandığını
+ *       yutmak en kötü davranıştır.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "seeded[] + failed[] (barkod + sebep)" }
+ */
+router.post(
+  "/rolls/seed-snapshot-bulk",
+  verifyToken,
+  requireAnyPermission("label:print", ...MOBILE_LABEL_PRINTERS),
+  controller.seedRollLabelSnapshotsBulk,
+);
+
 // ---- Serbest (statik) etiket baskısı — rulo/kartela bağlamı olmadan ----
 // NOT: literal /standalone-templates, param'lı /templates/:id/*'tan ÖNCE (segment
 // çakışması yok ama tutarlılık için).

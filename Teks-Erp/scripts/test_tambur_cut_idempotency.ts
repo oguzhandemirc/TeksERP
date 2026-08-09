@@ -133,6 +133,8 @@ async function run(): Promise<void> {
 }
 
 async function cleanup(): Promise<void> {
+  await prisma.rollVariance.deleteMany({ where: { roll: { parentRollId: { in: parentIds } } } }).catch(() => undefined);
+  await prisma.rollVariance.deleteMany({ where: { rollId: { in: parentIds } } }).catch(() => undefined);
   await prisma.rollOperation.deleteMany({ where: { roll: { parentRollId: { in: parentIds } } } }).catch(() => undefined);
   await prisma.roll.deleteMany({ where: { parentRollId: { in: parentIds } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: parentIds } } }).catch(() => undefined);

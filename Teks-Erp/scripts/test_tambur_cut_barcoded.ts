@@ -83,6 +83,7 @@ let woId: string | null = null;
     console.error("HATA:", e instanceof Error ? e.message : e);
   } finally {
     try {
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });

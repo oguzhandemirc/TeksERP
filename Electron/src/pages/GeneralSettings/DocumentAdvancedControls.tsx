@@ -35,6 +35,11 @@ export function DocumentAdvancedControls({
         <PlacementsPanel def={def} cfg={cfg} disabled={disabled} patch={patch} />
       ) : null}
       <StampsPanel cfg={cfg} disabled={disabled} patch={patch} />
+      {/* BOŞ GRID — TÜM belgelerde var ama OPT-IN (varsayılan kapalı). `def`
+          süzgeci YOK: kullanıcı isteği "belgede istediğim gibi grid
+          ayarlayabileyim" idi, belge listesi değil. Kapalıyken belgeye tek bayt
+          eklenmez, yani her belgede göstermek çıktıyı riske atmaz. */}
+      <BlankGridPanel cfg={cfg} disabled={disabled} patch={patch} />
       <BlocksPanel cfg={cfg} disabled={disabled} patch={patch} />
       {def.supportsLanguage && <LanguagePanel cfg={cfg} disabled={disabled} patch={patch} />}
     </>
@@ -383,6 +388,184 @@ function LanguagePanel({
         <option value="en">İngilizce</option>
         <option value="auto">Otomatik (ihracatta İngilizce)</option>
       </select>
+    </div>
+  );
+}
+
+// =============================================================================
+// BOŞ GRID — elle doldurulan kutular (2026-08-09)
+// =============================================================================
+// Saha isteği "kurşuncular için tablo" diye başladı ama istenen GENEL bir
+// yapıydı: *"satır, sütun sayısını ben belirleyeceğim; ilk satırda tanım
+// sütunları olmayacak yani hepsi boş olacak; sütun genişliklerini de ben
+// belirleyeceğim."*
+//
+// ⚠️ OPT-IN. Kapalıyken belgeye TEK BAYT eklenmez (ne HTML ne CSS) — ayarına
+// dokunulmamış ve donmuş belgelerin çıktısı bayt-bayt korunur.
+// Bekçi: `Teks-Erp/scripts/test_blank_grid.ts`.
+// =============================================================================
+function BlankGridPanel({
+  cfg,
+  disabled,
+  patch,
+}: {
+  cfg: DocumentConfig | undefined;
+  disabled: boolean;
+  patch: (next: Partial<DocumentConfig>) => void;
+}) {
+  const g = cfg?.blankGrid;
+  const on = g?.enabled === true;
+  const rows = g?.rows ?? 10;
+  const cols = g?.columns ?? 5;
+  const widths = g?.columnWidths ?? [];
+  const headers = g?.headers ?? [];
+
+  const set = (next: Partial<NonNullable<DocumentConfig["blankGrid"]>>) =>
+    patch({ blankGrid: { ...(g ?? {}), enabled: true, ...next } });
+
+  return (
+    <div className="rounded-md border p-3">
+      <FlagToggle
+        title="Boş grid (elle doldurulan kutular)"
+        desc="Belgeye tamamen boş bir tablo ekler — hücreler sahada elle doldurulur (kurşun kaydı, imza listesi vb.). Kapalıyken belgeye hiçbir şey eklenmez."
+        checked={on}
+        disabled={disabled}
+        // Kapatınca ayar TAMAMEN silinir (undefined) — `enabled:false` saklamak
+        // ayar dosyasını anlamsız satırlarla şişirir ve backend kayıt kapısı da
+        // onu zaten atar.
+        onChange={(v) => patch({ blankGrid: v ? { enabled: true } : undefined })}
+      />
+
+      {on && (
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-28">
+              <label className="text-xs text-muted-foreground">Satır</label>
+              <input
+                type="number"
+                min={1}
+                max={40}
+                value={rows}
+                disabled={disabled}
+                onChange={(e) =>
+                  e.target.value !== "" &&
+                  set({ rows: Math.min(40, Math.max(1, Math.round(Number(e.target.value)))) })
+                }
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+            <div className="w-28">
+              <label className="text-xs text-muted-foreground">Sütun</label>
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={cols}
+                disabled={disabled}
+                onChange={(e) => {
+                  if (e.target.value === "") return;
+                  const c = Math.min(12, Math.max(1, Math.round(Number(e.target.value))));
+                  // Sütun sayısı değişince genişlik/başlık listeleri UZUNLUĞA
+                  // uydurulur; uydurulmazsa backend "sayı uyuşmuyor" diye
+                  // genişlikleri tamamen atar ve kullanıcı sebebini göremez.
+                  set({
+                    columns: c,
+                    columnWidths: widths.length ? Array.from({ length: c }, (_, i) => widths[i] ?? 0).filter((w) => w > 0).length === c ? Array.from({ length: c }, (_, i) => widths[i] ?? Math.round(100 / c)) : undefined : undefined,
+                    headers: headers.length ? Array.from({ length: c }, (_, i) => headers[i] ?? "") : undefined,
+                  });
+                }}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+            <p className="pb-2 text-xs text-muted-foreground">
+              = {rows * cols} boş hücre
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground">Başlık (boş bırakılabilir)</label>
+            <input
+              type="text"
+              maxLength={100}
+              value={g?.title ?? ""}
+              disabled={disabled}
+              placeholder="örn. KURŞUN KAYDI"
+              onChange={(e) => set({ title: e.target.value })}
+              className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground">
+              Sütun başlıkları ve genişlikleri (%) — hepsini boş bırakırsanız tablo tamamen boş basılır
+            </label>
+            <div className="mt-1 space-y-1.5">
+              {Array.from({ length: cols }, (_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-6 text-xs text-muted-foreground">{i + 1}.</span>
+                  <input
+                    type="text"
+                    maxLength={40}
+                    value={headers[i] ?? ""}
+                    disabled={disabled}
+                    placeholder="başlık (opsiyonel)"
+                    onChange={(e) => {
+                      const next = Array.from({ length: cols }, (_, k) => headers[k] ?? "");
+                      next[i] = e.target.value;
+                      set({ headers: next });
+                    }}
+                    className="flex h-8 flex-1 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={widths[i] ?? ""}
+                    disabled={disabled}
+                    placeholder="%"
+                    onChange={(e) => {
+                      const next = Array.from({ length: cols }, (_, k) => widths[k] ?? Math.round(100 / cols));
+                      next[i] = Math.min(100, Math.max(1, Math.round(Number(e.target.value) || 1)));
+                      set({ columnWidths: next });
+                    }}
+                    className="h-8 w-16 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="pt-1 text-xs text-muted-foreground">
+              Genişliklerin toplamı 100 olmak zorunda değil — oranlanır. Bir sütunun
+              genişliğini boş bırakırsanız tümü eşit bölünür.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground">Konum</label>
+            <div className="mt-1 flex gap-2">
+              {(
+                [
+                  ["beforeSignatures", "İmzalardan önce (varsayılan)"],
+                  ["afterHeader", "Başlıktan hemen sonra"],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => set({ position: val })}
+                  className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium ${
+                    (g?.position ?? "beforeSignatures") === val
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted/70"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
