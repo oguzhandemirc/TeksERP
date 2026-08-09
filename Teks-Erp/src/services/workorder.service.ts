@@ -61,6 +61,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 // Kurşun bypass (kurşun istasyonunda tablet YOK): WO yaşam döngüsü olayları açık
 // dağıtım atamalarını bayat bırakmasın. Guard helper hiçbir servise bağlı değil —
@@ -503,6 +504,10 @@ export class WorkOrderService {
     data: WorkOrderCreateInput,
     userId?: string
   ): Promise<ApiResponse<WorkOrder> & { idempotentReplay?: boolean }> {
+    // Kat katalog doğrulaması — YERİNDE kanonikleştirir, böylece aşağıdaki tüm
+    // kullanımlar (yazım + kilit karşılaştırmaları) aynı değeri görür.
+    await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
+
     const type = (data.type as WorkOrder["type"]) ?? "ORDER_PRODUCTION";
 
     // ── Rota adımlarını hazırla (şablondan veya raw'dan) ────────────────────
@@ -4184,6 +4189,11 @@ export class WorkOrderService {
       );
     }
 
+    // Kat katalog doğrulaması — kilit karşılaştırmalarından ÖNCE kanonikleştir.
+    // Sonra yapılsaydı "tüp" gönderen istemci, WO'da "TÜP" dururken alanı
+    // DEĞİŞMİŞ sayılır ve hiç dokunmadığı bir alandan kilit hatası alırdı.
+    await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
+
     // ── Fiziksel taahhüt kilitleri (replace() ile AYNI kurallar — PUT/PATCH
     // drift'i kapatıldı: bu yol mobil düzenlemede aktif kullanılıyor). PATCH
     // kısmi semantik: yalnız GÖNDERİLEN ve fiilen DEĞİŞEN alan kilide çarpar;
@@ -4399,6 +4409,10 @@ export class WorkOrderService {
         "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
       );
     }
+
+    // Kat katalog doğrulaması — kilit karşılaştırmalarından ÖNCE (update ile
+    // aynı gerekçe: kanonikleştirme sonra yapılırsa değişmemiş alan kilide çarpar).
+    await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
 
     // ── Fiziksel taahhüt kilitleri ──────────────────────────────────────────
     // Sevk gittiyse / herhangi adım başladıysa kumaş/en/metraj artık değişmez.

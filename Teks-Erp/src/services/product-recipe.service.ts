@@ -10,7 +10,7 @@ import prisma from "../lib/prisma";
 import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { canonicalizeFoldTypeInPlace } from "./helpers/fold-type";
+import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import type { ApiResponse } from "../types/api.types";
 
 /** properties[] dizisinden BENZERSİZ propertyId'leri çıkar (dedup). */
@@ -124,7 +124,7 @@ export class ProductRecipeService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     await this.validateRefs(data);
     const next = { ...data };
-    canonicalizeFoldTypeInPlace(next); // D-13: reçete foldType kanonik ("4-kat"→"4-KAT")
+    await applyFoldTypeForWriteInPlace(next); // D-13 biçim + katalog doğrulaması
     // properties dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
     // BaseService config (nestedCreateFields:["properties"]) deduped diziyi {create:[...]} sarar.
     if (Array.isArray(next.properties)) {
@@ -140,7 +140,7 @@ export class ProductRecipeService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     await this.validateRefs(data, id);
     const next = { ...data };
-    canonicalizeFoldTypeInPlace(next); // D-13: reçete foldType kanonik
+    await applyFoldTypeForWriteInPlace(next); // D-13 biçim + katalog doğrulaması
     if (Array.isArray(next.properties)) {
       // dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
       const ids = recipePropertyIds(next.properties);
@@ -165,7 +165,7 @@ export class ProductRecipeService extends BaseService {
     const { properties, ...rest } = data;
     const oldRecord = await this.delegate.findUnique({ where: { id } });
     const updateData: Record<string, unknown> = { ...rest, isActive: true };
-    canonicalizeFoldTypeInPlace(updateData); // D-13: reçete foldType kanonik
+    await applyFoldTypeForWriteInPlace(updateData); // D-13 biçim + katalog doğrulaması
     if (Array.isArray(properties)) {
       const ids = recipePropertyIds(properties);
       updateData.properties = {

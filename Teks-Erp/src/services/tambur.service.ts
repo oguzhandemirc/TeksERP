@@ -36,6 +36,7 @@ import {
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 import { K18_DEAD_STATUSES } from "./batch.service";
+import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 
 export interface SwatchStats {
@@ -531,7 +532,10 @@ export class TamburService {
       rollId: string;
       decisions: ErrorDecision[];
       cuts: CutInput[];
-      foldType?: "2-KAT" | "4-KAT";
+      /** Operatörün seçtiği kat. 2026-08-10'dan beri KATALOĞA bağlı (2-KAT /
+       *  4-KAT / TÜP / fabrikanın eklediği 6-KAT…) → literal union DEĞİL.
+       *  Geçerlilik `resolveFoldTypeForWrite` ile ölçülür. */
+      foldType?: string | null;
       /** Çıktı topları (depoya gidenler) kartelalık işaretlensin — depoda
        *  kartela sevki için kolay bulunsun. Sevki engellemez. */
       markedForKartela?: boolean;
@@ -661,6 +665,10 @@ export class TamburService {
     const totalQty = Number(roll.currentQty);
     const wo = roll.currentStep.workOrder;
     const plannedFoldType = wo?.foldType ?? null;
+
+    // Kat katalog doğrulaması — tx DIŞINDA (salt okuma; kilit süresini uzatmaz).
+    // `undefined` korunur: aşağıdaki "operatör override etti mi" dalları buna bakar.
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
 
     // Savunma katmanı (cutOpenFabric BUG-2 paritesi): iptal/devredilmiş iş emrinin
     // Tambur adımında sıkışmış top finalize EDİLEMEZ — ölü WO'ya çocuk top üretimi
@@ -1100,7 +1108,7 @@ export class TamburService {
       }
 
       // Tambur parametrelerini (kat tipi vs.) step.stepData'ya yaz.
-      if (data.foldType !== undefined && roll.currentStepId) {
+      if (foldType !== undefined && roll.currentStepId) {
         const step = await tx.workOrderStep.findUnique({
           where: { id: roll.currentStepId },
           select: { stepData: true },
@@ -1109,7 +1117,7 @@ export class TamburService {
         const merged: Record<string, unknown> = {
           ...existing,
           tamburDecidedAt: new Date().toISOString(),
-          foldType: data.foldType,
+          foldType,
         };
         await tx.workOrderStep.update({
           where: { id: roll.currentStepId },
@@ -1192,7 +1200,7 @@ export class TamburService {
               // Planlanan (WO.foldType) — Tambur ekranına bilgi olarak gelir.
               plannedFoldType,
               // Operatörün gerçek seçimi (override etmiş olabilir).
-              foldType: data.foldType ?? null,
+              foldType: foldType ?? null,
               childRollCount: segments.length,
               // BU finalize çağrısında doğan çocuklar — idempotent retry cevabı
               // yalnız bunları döner (öncesindeki cutOpenFabric çocukları değil;
@@ -1964,6 +1972,9 @@ export class TamburService {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
 
+    // Kat katalog doğrulaması — `undefined` korunur (parent'tan miras dalı ona bakar).
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
+
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
@@ -2054,7 +2065,7 @@ export class TamburService {
           width: parent.width,
           // KAT — kesim anında seçilen değer KAZANIR. Bu yolda iş emri/adım YOK
           // (depo topu kesimi), tek bağlam parent → fallback yalnız parent.
-          foldType: data.foldType !== undefined ? data.foldType : (parent.foldType ?? null),
+          foldType: foldType !== undefined ? foldType : (parent.foldType ?? null),
           initialQty: data.cutLength,
           currentQty: data.cutLength,
           weightKg: null,
@@ -2584,6 +2595,9 @@ export class TamburService {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
 
+    // Kat katalog doğrulaması — `undefined` korunur (parent → WO fallback zinciri).
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
+
     const parent = await prisma.roll.findUnique({
       where: { id: openFabricRollId },
       include: {
@@ -2688,8 +2702,8 @@ export class TamburService {
           // alanı hiç GÖNDERMEDİ → parent, o da yoksa iş emri planı (eski APK
           // geri-uyumluluğu; MİRAS DEĞİL). `null` = istemci açıkça "kat yok" dedi.
           foldType:
-            data.foldType !== undefined
-              ? data.foldType
+            foldType !== undefined
+              ? foldType
               : (parent.foldType ?? parent.currentStep?.workOrder?.foldType ?? null),
           initialQty: data.lengthMeters,
           currentQty: data.lengthMeters,
@@ -2979,11 +2993,12 @@ export class TamburService {
 
     // Planlanan foldType WO'dan — operatör override etmemişse bu kullanılır.
     // Override + planlanan ikisini de metadata'ya yaz ki sapma izlenebilsin.
+    // Kat katalog doğrulaması: `undefined` korunur, override dalı ona bakıyor.
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
     const plannedFoldType = parent.currentStep.workOrder.foldType ?? null;
-    const actualFoldType =
-      data.foldType !== undefined ? data.foldType : plannedFoldType;
+    const actualFoldType = foldType !== undefined ? foldType : plannedFoldType;
     const overriddenFoldType =
-      data.foldType !== undefined && data.foldType !== plannedFoldType;
+      foldType !== undefined && foldType !== plannedFoldType;
 
     // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
     const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);

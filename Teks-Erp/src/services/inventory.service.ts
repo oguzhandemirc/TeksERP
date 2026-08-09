@@ -106,6 +106,7 @@ import {
   RollForm,
   ItemType,
   StationKind,
+  StationPropertyMode,
   StepStatus,
   WorkOrderStatus,
   ShipmentStatus,
@@ -119,7 +120,11 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { hasBypassClosureOnProcessQcTx } from "./helpers/kursun-bypass-guard.helper";
 import { assertKursunTabletMayWrite } from "./helpers/kursun-bypass-eligibility.helper";
-import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
+import {
+  assertRequiredPropertiesSelected,
+  copyStationCapabilitiesToRoll,
+  loadStationPropertyCaps,
+} from "./helpers/station-capability-transfer.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
@@ -4015,6 +4020,15 @@ export class InventoryService {
         defectTypeId?: string | null;
       }>;
       notes?: string | null;
+      /**
+       * Operatörün işaretlediği OPTIONAL/REQUIRED istasyon özellikleri
+       * (2026-08-10 mod sözleşmesi). AUTO satırlar gönderilmese de yazılır;
+       * eski APK bu alanı hiç göndermez → yalnız AUTO uygulanır (bugünkü sonuç).
+       * Sözleşme `kursun-qc.completeQc2` ile BİREBİR — iki tablet yolu aynı
+       * özelliği farklı kurallarla uygularsa aynı top iki yoldan iki farklı
+       * özellik kümesi kazanır.
+       */
+      propertyIds?: string[] | null;
     },
     userId?: string,
     /** PROCESS_QC makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -4144,12 +4158,18 @@ export class InventoryService {
     const stationId = roll.currentStep.stationId;
     const woId = roll.currentStep.workOrderId;
 
-    // Kurşun yeteneği per-station: istasyona KURSUN özelliği atanmışsa
-    // KURSUN_APPLIED log'u atılır + RollProperty(KURSUN) otomatik kazanılır.
-    const hasKursunCap = await prisma.stationProperty.findFirst({
-      where: { stationId, property: { code: "KURSUN" } },
-      select: { id: true },
-    });
+    // Kurşun yeteneği per-station + MOD (2026-08-10): KURSUN_APPLIED log'u ile
+    // RollProperty(KURSUN) yazımı AYNI karardan beslenir — AUTO ise her zaman,
+    // OPTIONAL/REQUIRED ise ancak operatör işaretlediyse. Ayrışırlarsa log
+    // "kurşun geçildi" derken topun özelliği boş kalırdı.
+    const stationCaps = await loadStationPropertyCaps(prisma, stationId);
+    assertRequiredPropertiesSelected(stationCaps, data.propertyIds);
+    const selectedProps = new Set(data.propertyIds ?? []);
+    const kursunCap = stationCaps.find((c) => c.code === "KURSUN");
+    const kursunApplied =
+      !!kursunCap &&
+      (kursunCap.mode === StationPropertyMode.AUTO ||
+        selectedProps.has(kursunCap.propertyId));
 
     // Eşzamanlı çift çağrıda kaybeden tx movement kapatmada 0 satır eşler →
     // tüm tx (mükerrer RollError'lar dahil) geri sarılır, idempotent cevap döner.
@@ -4210,7 +4230,7 @@ export class InventoryService {
           } as Prisma.InputJsonValue,
         },
       ];
-      if (hasKursunCap) {
+      if (kursunApplied) {
         ops.push({
           rollId,
           workOrderStepId: stepId,
@@ -4222,8 +4242,14 @@ export class InventoryService {
       }
       await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
 
-      // 3b) İstasyon yetenekleri (propertyCapabilities) Roll'a kopyalanır.
-      await copyStationCapabilitiesToRoll(tx, { stationId, rollId });
+      // 3b) İstasyon yetenekleri Roll'a kopyalanır — AUTO satırlar + operatörün
+      //     işaretledikleri (mod sözleşmesi, station-capability-transfer.helper).
+      await copyStationCapabilitiesToRoll(tx, {
+        stationId,
+        rollId,
+        selectedPropertyIds: data.propertyIds,
+        caps: stationCaps,
+      });
 
       // 4) Kurşun/KK2 movement'ı kapat (qtyOut = ölçülen toplam metre)
       //    ATOMİK CLAIM (BL-3 kardeşi): idempotency guard'ı tx DIŞINDA — iki

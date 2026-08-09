@@ -12,6 +12,10 @@ const completeQc2Schema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   stepId: z.string().uuid("Geçersiz adım ID"),
   notes: z.string().max(500).nullish(),
+  // Operatörün işaretlediği OPTIONAL/REQUIRED istasyon özellikleri (mod
+  // sözleşmesi, 2026-08-10). AUTO satırlar gönderilmese de uygulanır; eski APK
+  // bu alanı hiç göndermez → yalnız AUTO yazılır (bugünkü davranış).
+  propertyIds: z.array(z.string().uuid()).max(50).nullish(),
 });
 
 // Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
@@ -110,7 +114,12 @@ export class KursunQcController {
       // cihazın statik ataması (Faz 6'da sökülür — mobil oturum akışı gelince).
       const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.completeQc2(
-        { rollId: body.rollId, stepId: body.stepId, notes: body.notes ?? null },
+        {
+          rollId: body.rollId,
+          stepId: body.stepId,
+          notes: body.notes ?? null,
+          propertyIds: body.propertyIds ?? null,
+        },
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null
       );

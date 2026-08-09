@@ -1,13 +1,12 @@
-// D-13: foldType tek kaynak sözlüğü — normalize + Zod şeması + servis guard'ı.
+// D-13: foldType BİÇİM normalleştirmesi + Zod şeması.
 // Server'sız birim testi: helper doğrudan import, HTTP yok.
 //   npx tsx scripts/test_fold_type.ts
+//
+// ⚠️ KAPSAM: bu dosya yalnız SENKRON BİÇİM işini ölçer. Katalog geçerliliği
+// (`resolveFoldTypeForWrite` / `applyFoldTypeForWriteInPlace`) DB ister ve
+// `test_fold_catalog.ts`te ölçülür — ikisini karıştırma.
 
-import {
-  FOLD_TYPES,
-  normalizeFoldType,
-  foldTypeSchema,
-  canonicalizeFoldTypeInPlace,
-} from "../src/services/helpers/fold-type";
+import { normalizeFoldType, foldTypeSchema } from "../src/services/helpers/fold-type";
 
 let pass = 0;
 let fail = 0;
@@ -22,10 +21,7 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 function main(): void {
-  console.log("=== 1) FOLD_TYPES sözlüğü ===");
-  check("kanonik değerler [2-KAT, 4-KAT]", JSON.stringify([...FOLD_TYPES]) === JSON.stringify(["2-KAT", "4-KAT"]));
-
-  console.log("\n=== 2) normalizeFoldType kanonikleştirme ===");
+  console.log("=== 1) normalizeFoldType kanonikleştirme ===");
   const cases: Array<[string, string | null]> = [
     ["4-KAT", "4-KAT"],
     ["4-kat", "4-KAT"],
@@ -43,32 +39,24 @@ function main(): void {
   // Tanınmayan (TÜP/özel) → trim'lenip DEĞİŞMEDEN geçer (reddetme yok)
   check('normalize("TUP") → "TUP" (özel değer korunur)', normalizeFoldType("TUP") === "TUP");
   check('normalize("  Tüp ") → "Tüp" (yalnız trim)', normalizeFoldType("  Tüp ") === "Tüp");
-  check('normalize("3-KAT") → "3-KAT" (kanal-dışı, korunur)', normalizeFoldType("3-KAT") === "3-KAT");
 
-  console.log("\n=== 3) foldTypeSchema (Zod) — kanonikleştir, reddetme yok ===");
+  console.log("\n=== 2) RAKAM SINIFI GENEL — katalog 2/4 ile sınırlı değil ===");
+  // ⚠️ Regex eskiden `[24]` idi. Fabrika katalogdan "6-KAT" eklediğinde
+  // "6 kat" yazımı normalleşmez, katalog eşleşmesi kaçar ve değer ham geçerdi.
+  // Bu üç kontrol tam olarak o gerilemeyi yakalar.
+  check('normalize("6 kat") → "6-KAT"', normalizeFoldType("6 kat") === "6-KAT", `got=${normalizeFoldType("6 kat")}`);
+  check('normalize("8KAT") → "8-KAT"', normalizeFoldType("8KAT") === "8-KAT", `got=${normalizeFoldType("8KAT")}`);
+  check('normalize("3-KAT") → "3-KAT"', normalizeFoldType("3-KAT") === "3-KAT");
+  check('normalize("12_kat") → "12-KAT" (çok haneli)', normalizeFoldType("12_kat") === "12-KAT");
+
+  console.log("\n=== 3) foldTypeSchema (Zod) — yalnız BİÇİM, reddetme yok ===");
   check('parse("4-kat") → "4-KAT"', foldTypeSchema.parse("4-kat") === "4-KAT");
   check('parse("2 KAT") → "2-KAT"', foldTypeSchema.parse("2 KAT") === "2-KAT");
+  check('parse("6 kat") → "6-KAT"', foldTypeSchema.parse("6 kat") === "6-KAT");
   check('parse("TUP") → "TUP" (özel değer geçer)', foldTypeSchema.parse("TUP") === "TUP");
   check('parse("") → null (temizle)', foldTypeSchema.parse("") === null);
   check("parse(null) → null", foldTypeSchema.parse(null) === null);
   check("parse(undefined) → undefined (update no-op)", foldTypeSchema.parse(undefined) === undefined);
-
-  console.log("\n=== 4) canonicalizeFoldTypeInPlace (servis guard) ===");
-  const d1: Record<string, unknown> = { foldType: "4-kat", other: 1 };
-  canonicalizeFoldTypeInPlace(d1);
-  check('{foldType:"4-kat"} → "4-KAT" (yerinde)', d1.foldType === "4-KAT" && d1.other === 1);
-
-  const d2: Record<string, unknown> = { name: "x" };
-  canonicalizeFoldTypeInPlace(d2);
-  check("foldType yoksa → dokunmaz (no-op)", !("foldType" in d2));
-
-  const d3: Record<string, unknown> = { foldType: null };
-  canonicalizeFoldTypeInPlace(d3);
-  check("{foldType:null} → null korunur (temizle)", d3.foldType === null);
-
-  const d4: Record<string, unknown> = { foldType: "TÜP" };
-  canonicalizeFoldTypeInPlace(d4);
-  check('{foldType:"TÜP"} → "TÜP" korunur (özel değer reddedilmez)', d4.foldType === "TÜP");
 
   console.log("\n──────────────────────────────────────────");
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

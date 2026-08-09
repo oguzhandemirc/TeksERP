@@ -9,7 +9,7 @@ import { TamburUndoService } from "../services/tambur-undo.service";
 import { KursunBypassService } from "../services/kursun-bypass.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { getStampContext } from "../services/helpers/work-session.helper";
-import { FOLD_TYPES, foldTypeSchema } from "../services/helpers/fold-type";
+import { foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
 
 // Tambur finalize — yeni model (cumulative length-based):
@@ -57,7 +57,12 @@ const finalizeSchema = z.object({
       })
     )
     .default([]),
-  foldType: z.enum(FOLD_TYPES).optional(),
+  // ⚠️ 2026-08-10: eskiden `z.enum(FOLD_TYPES)` ile 2/4-KAT'a KİLİTLİYDİ. Katalog
+  // modeline geçince bu satır, panelden eklenmiş "6-KAT"ı seçen operatöre sebebi
+  // yazmayan bir 400 döndürürdü — yani özelliğin tek görünür sonucu bir hata
+  // olurdu. Geçerlilik artık serviste katalogdan ölçülür (`resolveFoldTypeForWrite`),
+  // burada yalnız BİÇİM normalleştirilir.
+  foldType: foldTypeSchema,
   markedForKartela: z.boolean().optional(),
 });
 

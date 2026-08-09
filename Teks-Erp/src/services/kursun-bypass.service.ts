@@ -48,6 +48,7 @@ import {
   type PrismaClient,
   RollOperationType,
   StationKind,
+  StationPropertyMode,
   StepStatus,
   TravelerCardStatus,
   WorkOrderStatus,
@@ -924,13 +925,24 @@ export class KursunBypassService {
         //    kontrol de sadeleşti: istasyon zaten tek, "hangi istasyon neyi
         //    karşılıyor" karşılaştırması anlamsız — tek soru kaldı, sebebini
         //    dağıtımcıya söylemek yine değerli.
+        //    ⚠️ 2026-08-10: MOD **AUTO** ARANIR, satırın varlığı YETMEZ. Bypass
+        //    rejiminde tablet salt-okunurdur — özelliği işaretleyecek bir
+        //    operatör YOKTUR, dolayısıyla OPTIONAL/REQUIRED bir KURSUN satırı
+        //    kapanışta topa hiç yazılmaz ve yukarıdaki "kilit modeli yalan
+        //    söyler" arızası aynen geri gelirdi (bu kez sessizce).
         const kursunCap = await tx.stationProperty.findFirst({
-          where: { stationId: machine.stationId, property: { code: "KURSUN" } },
+          where: {
+            stationId: machine.stationId,
+            property: { code: "KURSUN" },
+            mode: StationPropertyMode.AUTO,
+          },
           select: { id: true },
         });
         if (!kursunCap) {
           throw AppError.badRequest(
-            `Seçilen makinenin istasyonu (${machine.station.name}) kurşun uygulayamıyor — istasyon yeteneklerine KURSUN özelliğini ekleyin.`,
+            `Seçilen makinenin istasyonu (${machine.station.name}) kurşunu OTOMATİK uygulamıyor — ` +
+              `bypass'ta tablette işaretleme yapılmadığı için KURSUN özelliği "Otomatik" modunda olmalı. ` +
+              `İstasyon Yetenekleri ekranından düzeltin.`,
           );
         }
 

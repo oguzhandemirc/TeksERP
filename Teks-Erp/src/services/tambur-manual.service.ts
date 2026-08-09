@@ -89,6 +89,7 @@ import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-s
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
+import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { buildIntentSnapshot } from "./label.service";
 
 /**
@@ -660,6 +661,11 @@ export class TamburManualService {
     if (!(input.initialQty > 0)) {
       throw AppError.badRequest("Metraj pozitif olmalı", { code: "QTY_REQUIRED" });
     }
+    // Kat katalog doğrulaması. SIRA: payload'ın KENDİ tutarlılığı bağlam
+    // çözümünden (adım/parti) ÖNCE — yoksa geçersiz kat gönderen istemci önce
+    // BATCH_REQUIRED alır, partiyi seçer, asıl hatasını iki tur sonra öğrenir.
+    const foldType = await resolveFoldTypeForWrite(input.foldType);
+
     const step = await this.resolveTamburStep(input.targetStepId, ctx.stationId);
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -823,7 +829,7 @@ export class TamburManualService {
         // 6 ayda bir arşivleniyor, oradan okumak sebebi zamanla kaybettiriyordu.
         entryReason: reason,
         // KAT — operatörün o an seçtiği değer (miras DEĞİL).
-        foldType: input.foldType ?? null,
+        foldType: foldType ?? null,
         // GİRİŞ İSTASYONU — adım kazanır. Oturum da elde ama ikisinin eşit
         // olduğu yukarıdaki STATION_MISMATCH guard'ıyla zaten garanti.
         entryStationId: resolveEntryStationId({
@@ -1071,6 +1077,9 @@ export class TamburManualService {
     if (!(input.initialQty > 0)) {
       throw AppError.badRequest("Metraj pozitif olmalı", { code: "QTY_REQUIRED" });
     }
+    // Kat katalog doğrulaması — payload tutarlılığı, bağlam çözümünden önce.
+    const foldType = await resolveFoldTypeForWrite(input.foldType);
+
     // Ürün ZORUNLU: miras alınacak bir iş emri YOK (createManualRoll'un
     // `targetItemId` mirası burada yok — kart olmadığı için hedef de yok).
     const itemId = input.itemId?.trim();
@@ -1146,7 +1155,7 @@ export class TamburManualService {
           entryReason: reason,
           // KAT — Manuel Mod bunu operatöre ZORUNLU soruyor; Zod eksikken
           // veri buraya hiç ulaşmıyordu.
-          foldType: input.foldType ?? null,
+          foldType: foldType ?? null,
           // Bu yolda ADIM YOK (kartsız üretim) → tek kaynak oturum.
           entryStationId: resolveEntryStationId({ sessionStationId: ctx.stationId }),
           markedForKartela: input.markedForKartela,

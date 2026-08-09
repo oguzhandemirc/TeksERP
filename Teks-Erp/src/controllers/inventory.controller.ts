@@ -123,6 +123,10 @@ const kursunFinishSchema = z.object({
     .optional()
     .default([]),
   notes: z.string().max(1000).optional().nullable(),
+  // Mod sözleşmesi (2026-08-10) — `kursun-qc.completeQc2` ile BİREBİR aynı alan.
+  // İki tablet yolu aynı istasyonun özelliklerini farklı kurallarla uygularsa
+  // aynı top iki yoldan iki farklı özellik kümesi kazanır.
+  propertyIds: z.array(z.string().uuid()).max(50).optional().nullable(),
 });
 
 export class InventoryController {
