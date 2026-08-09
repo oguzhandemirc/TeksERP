@@ -102,7 +102,26 @@ module.exports = {
         BACKUP_RETENTION_DAYS: "30",
         // Offsite ikinci kopya (NAS/UNC/harici disk). BOŞ BIRAKILIRSA tüm yedekler
         // DB ile aynı diskte kalır (tek disk arızası = veri + yedek gider).
+        // Yerel ikinci hedef (ağ paylaşımı / ikinci disk). Boş = kapalı.
+        // ⚠️ Bu ayar YALNIZ backend'in KENDİ aldığı yedeklere uygulanır
+        // (panelden elle alınanlar). Sahada gece yedeğini harici görev aldığı
+        // için gerçek felaket koruması aşağıdaki rclone süpürücüsüdür.
         BACKUP_OFFSITE_DIR: "",
+
+        // ── OFFSITE SÜPÜRÜCÜ (rclone) — denetim 2026-08-10, F-OPS-VER-003 ────
+        // Yedek klasörüne DÜŞEN her dosyayı, kim almış olursa olsun, saatte bir
+        // uzak hedefe kopyalar. `copy` kullanır (`sync` DEĞİL): yereldeki silme
+        // ya da şifrelenme uzağa YANSIMAZ — fidye yazılımına karşı asıl koruma
+        // budur. Bu yoldan uzaktan hiçbir şey silinmez.
+        //
+        // Kurulum (sunucuda bir kerelik):
+        //   1) rclone.org/downloads → rclone.exe'yi C:/Etkili-Yazilim/rclone/ altına koy
+        //   2) rclone config → n → ad: gdrive → tür: drive → tarayıcıda Google girişi
+        //   3) rclone lsd gdrive:  ile bağlantıyı doğrula
+        //   4) BACKUP_RCLONE_REMOTE'u doldur (örn. "gdrive:tekserp-yedek"), pm2 restart
+        // Doğrulama: GET /api/admin/health → offsite.missingCount = 0 olmalı.
+        BACKUP_RCLONE_REMOTE: "",
+        BACKUP_RCLONE_BIN: "C:/Etkili-Yazilim/rclone/rclone.exe",
         // Gece yedeğinin saati — YALNIZ FALLBACK. Yetkili kaynak artık panel:
         // Sistem → Yedekler → "Otomatik yedek saati" (SystemSetting `backup.hour`).
         // Öncelik: DB kaydı → bu env → 3. Panelden bir kez kaydedilirse bu değer

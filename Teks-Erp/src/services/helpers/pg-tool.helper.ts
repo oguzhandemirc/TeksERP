@@ -29,6 +29,20 @@ export interface ToolResult {
   spawnError: string | null;
   /** Zaman aşımı nedeniyle öldürüldü mü — çağıran "başarısız" ile "asıldı"yı ayırabilsin. */
   timedOut?: boolean;
+  /** Yalnız `captureStdout` istendiğinde dolar (örn. `rclone lsf`). */
+  stdout?: string;
+}
+
+export interface RunProcessOptions {
+  timeoutMs?: number;
+  /** `process.env` ÜZERİNE eklenir (üzerine yazmaz — çağıran neyi ezdiğini bilir). */
+  env?: NodeJS.ProcessEnv;
+  /**
+   * stdout'u topla. VARSAYILAN KAPALI ve bu bilinçli: `pg_dump -Fc -f` dosyaya
+   * yazar, `pg_restore --list` çıktısı bizi ilgilendirmez. Yalnız çıktısı VERİ
+   * olan araçlar için aç (`rclone lsf`).
+   */
+  captureStdout?: boolean;
 }
 
 /**
@@ -63,23 +77,53 @@ export function runTool(
   password: string,
   timeoutMs: number = DEFAULT_TOOL_TIMEOUT_MS,
 ): Promise<ToolResult> {
+  return runProcess(file, args, { timeoutMs, env: { PGPASSWORD: password } });
+}
+
+/**
+ * `runTool`'un altındaki genel çocuk-süreç disiplini. PG'ye özgü DEĞİLDİR;
+ * offsite kopya (`rclone`) da buradan geçer.
+ *
+ * ⚠️ TEK UYGULAMA NOKTASI OLARAK KALMALI. Zaman aşımı + `SIGKILL` + stderr
+ * tüketimi + `error`/`close` ayrımı burada bir kez doğru yazıldı (F-OPS-VER-004:
+ * üst sınırsız `spawn` asılırsa promise HİÇ settle etmez ve o gecenin yedeği
+ * sessizce kaybolur). Yeni bir dış araç eklerken `spawn`ı doğrudan çağırma —
+ * o disiplini yeniden yazman gerekir ve bir yerini atlarsan aynı sessiz kayıp
+ * bu kez başka bir yoldan geri gelir.
+ *
+ * stderr'i tüketmek ŞART (yoksa pipe dolduğunda child asılır). stdout yalnız
+ * istendiğinde toplanır; ikisi de 64 KB ile sınırlı — bozuk bir çağrı
+ * megabaytlarca çıktı üretip belleği şişirmesin.
+ */
+export function runProcess(
+  file: string,
+  args: string[],
+  opts: RunProcessOptions = {},
+): Promise<ToolResult> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
   return new Promise((resolve) => {
     const child = spawn(file, args, {
       windowsHide: true,
-      env: { ...process.env, PGPASSWORD: password },
+      env: { ...process.env, ...(opts.env ?? {}) },
       timeout: timeoutMs,
       killSignal: "SIGKILL",
     });
     let stderr = "";
-    let timedOut = false;
+    let stdout = "";
     child.stderr?.on("data", (d) => {
-      // Üst sınır: bozuk bir çağrı megabaytlarca stderr üretip belleği şişirmesin.
       if (stderr.length < 64 * 1024) stderr += d.toString();
     });
-    child.on("error", (err) => resolve({ code: -1, stderr, spawnError: err.message }));
+    if (opts.captureStdout) {
+      child.stdout?.on("data", (d) => {
+        if (stdout.length < 64 * 1024) stdout += d.toString();
+      });
+    }
+    child.on("error", (err) =>
+      resolve({ code: -1, stderr, spawnError: err.message, ...(opts.captureStdout ? { stdout } : {}) }),
+    );
     child.on("close", (code, signal) => {
       // Node timeout'ta `killSignal` ile öldürür → code null, signal dolu gelir.
-      timedOut = signal === "SIGKILL" && code === null;
+      const timedOut = signal === "SIGKILL" && code === null;
       resolve({
         code: code ?? -1,
         stderr: timedOut
@@ -87,6 +131,7 @@ export function runTool(
           : stderr,
         spawnError: null,
         timedOut,
+        ...(opts.captureStdout ? { stdout } : {}),
       });
     });
   });

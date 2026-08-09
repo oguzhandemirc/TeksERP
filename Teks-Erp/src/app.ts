@@ -13,6 +13,7 @@ import { installDecimalNumberSerializer } from "./utils/json-replacer";
 import prisma from "./lib/prisma";
 import { readAppDiskMetrics } from "./lib/disk-metrics";
 import { getPoolHealth } from "./lib/pool-health";
+import { getOffsiteHealth } from "./services/helpers/offsite-backup.helper";
 import { AuditService } from "./services/audit.service";
 
 // Tüm res.json() çıktısında Prisma Decimal → number çevirir
@@ -412,6 +413,9 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     // Senkron getter (SORGU YOK) ve try/catch DIŞINDA → DB DOWN iken de doğru
     // değer döner; havuz durumu tam o anda en çok gereken şeydir.
     ...getPoolHealth(),
+    // Felaket kurtarma kapsamı — 'yedek var mı' ile 'yedek BAŞKA YERDE var mı'
+    // ayrı sorulardır; ikincisi 2026-08-10'a kadar hiçbir yüzeyde görünmüyordu.
+    ...getOffsiteHealth(),
     // Disk doluluğu (DB + yedeklerin bulunduğu sürücü) — 30sn cache
     ...readAppDiskMetrics(),
     // Anlık online kullanıcı + bağlı cihaz (bellekte, son 5 dk)

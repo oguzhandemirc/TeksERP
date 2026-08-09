@@ -5,6 +5,7 @@ import app from './app';
 import prisma, { pool } from './lib/prisma';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { startBackupScheduler } from './jobs/backup-scheduler';
+import { startOffsiteSweeper } from './jobs/offsite-sweeper';
 import { startPermissionCatalogReconciler } from './jobs/permission-catalog.job';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
@@ -80,6 +81,10 @@ const server = app.listen(Number(PORT), HOST, () => {
 
     startArchiveScheduler();
     startBackupScheduler();
+    // ⚠️ AYRI ÇAĞRI — `startBackupScheduler` sahada erken döner
+    // (BACKUP_SCHEDULE_ENABLED=false: gece yedeğini harici görev alıyor).
+    // Süpürme oraya gömülseydi ihtiyaç duyulan tek ortamda hiç koşmazdı.
+    startOffsiteSweeper();
     // İzin kataloğu uzlaştırması BOOT-TIME'dır çünkü tek alternatifi olan "elle SQL
     // / veri migration'ı yaz" adımı UNUTULABİLİR bir adımdır ve 2026-08-01'de fiilen
     // unutuldu (kurşun bypass ekranı canlıya çıktı, izin satırı olmadığı için Admin
