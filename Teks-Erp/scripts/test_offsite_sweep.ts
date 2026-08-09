@@ -132,6 +132,83 @@ function sourceContract(): void {
     /runProcess\(/.test(helper) && !/\bspawn\(/.test(helper),
   );
   check("yükleme zaman aşımı tanımlı", /SWEEP_TIMEOUT_MS/.test(helper));
+
+  // ── İZİN ZİNCİRİ — yedek dışa sızdırma yolu ───────────────────────────────
+  // ⚠️ Hedefi DEĞİŞTİREBİLEN uç, `/backups` indirmesiyle AYNI zinciri taşımalı
+  // (`admin:settings` VE `admin:users`). `.dump` TÜM kullanıcıların düz
+  // quickPin/cardToken'ını içerdiği için indirme iki izin ister; hedefi tek
+  // izinle değiştirebilen biri, indirmeye hiç dokunmadan aynı dosyaların KENDİ
+  // bulutuna teslim edilmesini sağlar — kapatılmış kapının yanına ikinci kapı.
+  const routes = stripComments(fs.readFileSync(path.join(SRC, "routes/admin.routes.ts"), "utf8"));
+  /**
+   * Bir route bloğunun gövdesini çıkarır — METOT + YOL ile birlikte eşleşir.
+   *
+   * ⚠️ Yalnız yola bakmak YETMEZ: `GET /backups/offsite` ile
+   * `PATCH /backups/offsite` aynı yol dizesini taşıyor ve `indexOf` ilkini
+   * bulur. İlk yazımda tam bu oldu — bekçi PATCH'i denetlediğini sanırken
+   * GET'i ölçtü ve tek izinli (doğru) GET yüzünden kırmızı verdi. Ters yönü
+   * daha tehlikeli: PATCH tek izne düşürülse bekçi GET'i okuyup YEŞİL kalırdı.
+   */
+  const blockOf = (method: string, routePath: string): string => {
+    const needle = `router.${method}(`;
+    let from = 0;
+    for (;;) {
+      const i = routes.indexOf(needle, from);
+      if (i < 0) return "";
+      const rest = routes.slice(i);
+      const end = rest.indexOf("router.", 1);
+      const block = end > 0 ? rest.slice(0, end) : rest;
+      if (new RegExp(`["']${routePath.replace(/\//g, "\\/")}["']\\s*,`).test(block)) return block;
+      from = i + 1;
+    }
+  };
+  for (const [label, method, routePath] of [
+    ["hedef ayarı (PATCH /backups/offsite)", "patch", "/backups/offsite"],
+    ["Drive yetkilendirme (POST …/authorize)", "post", "/backups/offsite/authorize"],
+  ] as const) {
+    const b = blockOf(method, routePath);
+    check(
+      `${label} İKİ izin birden taşıyor (admin:settings + admin:users)`,
+      b.length > 0 &&
+        /requirePermission\("admin:settings"\)/.test(b) &&
+        /requirePermission\("admin:users"\)/.test(b),
+      b ? "" : "route bulunamadı — yol/metot değiştiyse bekçiyi güncelle",
+    );
+  }
+  // Salt-okuma/tetikleme uçları tek izinle kalmalı: yeni hedef tanımlamıyorlar.
+  for (const [label, method, routePath] of [
+    ["durum (GET /backups/offsite)", "get", "/backups/offsite"],
+    ["test (POST …/test)", "post", "/backups/offsite/test"],
+    ["elle süpürme (POST …/sweep)", "post", "/backups/offsite/sweep"],
+  ] as const) {
+    const b = blockOf(method, routePath);
+    check(
+      `${label} kimlik doğrulaması + admin:settings taşıyor`,
+      b.length > 0 && /verifyToken/.test(b) && /requirePermission\("admin:settings"\)/.test(b),
+      b ? "" : "route bulunamadı",
+    );
+  }
+
+  // ── Token güvenliği ───────────────────────────────────────────────────────
+  const authBlock = blockOf("post", "/backups/offsite/authorize");
+  check("token yanıtta GERİ DÖNMÜYOR (authorize yanıtı yalnız mesaj taşır)", !/data:\s*\{[^}]*token/.test(authBlock));
+  check("token audit payload'ına YAZILMIYOR", !/payload:\s*\{[^}]*\btoken\b/.test(authBlock));
+  check(
+    "rclone.conf yedek klasörünün İÇİNE yazılmıyor (süpürülüp buluta giderdi)",
+    /path\.dirname\(path\.resolve\(dir\)\)/.test(helper),
+  );
+  check(
+    "yapılandırma dosyası kısıtlı izinle yazılıyor (0600)",
+    /mode:\s*0o600/.test(helper),
+  );
+  check(
+    "refresh_token yoksa REDDEDİLİYOR (erişim 1 saatte biterdi)",
+    /refresh_token/.test(helper),
+  );
+  check(
+    "rclone çağrıları `--config` ile açık yol veriyor (pm2 hesabı belirsizliği)",
+    /"--config"/.test(helper) && /configArgs\(\)/.test(helper),
+  );
 }
 
 // ── §2 Davranış: sahte rclone ile uçtan uca ─────────────────────────────────

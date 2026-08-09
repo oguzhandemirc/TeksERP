@@ -29,12 +29,14 @@
 // =============================================================================
 
 import fs from "fs";
+import path from "path";
 import { runProcess } from "./pg-tool.helper";
 import {
   NIGHTLY_PREFIX,
   PREMIGRATE_PREFIX,
   PRE_RESTORE_PREFIX,
 } from "./backup-naming.helper";
+import { readOffsiteRemote } from "../system-setting.service";
 
 /**
  * Kopyalanacak dosya adı ön ekleri — `backup-naming.helper` TEK KAYNAĞINDAN.
@@ -46,11 +48,37 @@ import {
  */
 const COPY_PREFIXES = [NIGHTLY_PREFIX, PREMIGRATE_PREFIX, PRE_RESTORE_PREFIX] as const;
 
-/** Uzak hedef, rclone sözdiziminde: `<remote>:<yol>` (örn. `gdrive:tekserp-yedek`). */
-const REMOTE = (): string => (process.env.BACKUP_RCLONE_REMOTE ?? "").trim();
 /** rclone ikilisinin yolu. Windows'ta PATH'te olmayabilir → env ile verilir. */
 const RCLONE_BIN = (): string => (process.env.BACKUP_RCLONE_BIN ?? "rclone").trim() || "rclone";
 const BACKUP_DIR = (): string | undefined => process.env.BACKUP_DIR;
+
+/**
+ * rclone yapılandırma dosyasının yolu — HER çağrıda `--config` ile verilir.
+ *
+ * ⚠️ AÇIKÇA VERİLMEK ZORUNDA. rclone varsayılan olarak kullanıcı profilindeki
+ * `%APPDATA%\rclone\rclone.conf`u okur; backend'i pm2 hangi Windows hesabıyla
+ * çalıştırıyorsa o hesabın profili geçerli olur. Sunucuda `rclone config`
+ * çalıştıran kişi başka bir hesapta oturmuşsa (ya da pm2 servis hesabıyla
+ * koşuyorsa) yapılandırma "kayıp" görünür ve sebebi hiçbir yerde yazmaz.
+ * Sabit bir yol bu belirsizliği tamamen kaldırır — ve panelden token yazan
+ * sihirbazın nereye yazacağını da tanımlar.
+ *
+ * Varsayılan: yedek klasörünün KARDEŞİ (`<BACKUP_DIR>/../rclone.conf`).
+ * ⚠️ Yedek klasörünün İÇİNE konmaz — orası süpürülüyor, yani yapılandırma
+ * dosyası (içinde Drive yenileme token'ı ile) buluta kopyalanırdı.
+ */
+function rcloneConfigPath(): string | null {
+  const explicit = (process.env.BACKUP_RCLONE_CONFIG ?? "").trim();
+  if (explicit) return explicit;
+  const dir = BACKUP_DIR();
+  return dir ? path.join(path.dirname(path.resolve(dir)), "rclone.conf") : null;
+}
+
+/** `--config <yol>` argümanları (yol çözülemezse boş — rclone kendi varsayılanını kullanır). */
+function configArgs(): string[] {
+  const p = rcloneConfigPath();
+  return p ? ["--config", p] : [];
+}
 
 /**
  * Yükleme üst sınırı: 3 saat. `pg-tool`un varsayılanıyla ve
@@ -94,7 +122,7 @@ async function localNames(dir: string): Promise<string[]> {
  * gerçek eksikleri yutardı).
  */
 async function remoteNames(remote: string): Promise<string[] | null> {
-  const res = await runProcess(RCLONE_BIN(), ["lsf", remote, "--files-only"], {
+  const res = await runProcess(RCLONE_BIN(), ["lsf", remote, "--files-only", ...configArgs()], {
     timeoutMs: LIST_TIMEOUT_MS,
     captureStdout: true,
   });
@@ -131,7 +159,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
   });
 
   const dir = BACKUP_DIR();
-  const remote = REMOTE();
+  const remote = await readOffsiteRemote();
 
   if (!dir) {
     warnings.push("BACKUP_DIR tanımsız — offsite süpürme yapılamaz.");
@@ -173,6 +201,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
       dir,
       remote,
       ...includeArgs,
+      ...configArgs(),
       "--immutable",
       "--no-traverse",
       "--retries",
@@ -237,9 +266,10 @@ export function recordSweep(r: OffsiteSweepResult): void {
   lastSweep = r;
 }
 
-export function getOffsiteHealth(): Record<string, unknown> {
+export async function getOffsiteHealth(): Promise<Record<string, unknown>> {
   if (!lastSweep) {
-    return { offsite: { configured: REMOTE().length > 0, state: "henüz-koşmadı" } };
+    const remote = await readOffsiteRemote().catch(() => "");
+    return { offsite: { configured: remote.length > 0, state: "henüz-koşmadı" } };
   }
   return {
     offsite: {
@@ -257,4 +287,100 @@ export function getOffsiteHealth(): Record<string, unknown> {
   };
 }
 
-export { COPY_PREFIXES, SWEEP_TIMEOUT_MS };
+/**
+ * Uzak hedefe bağlanabiliyor muyuz — panelin "Bağlantıyı test et" düğmesi.
+ * `lsd` (dizinleri listele) seçildi çünkü en ucuz ve en az yetki isteyen çağrı.
+ */
+export async function testOffsiteRemote(): Promise<{ ok: boolean; message: string }> {
+  const remote = await readOffsiteRemote();
+  if (!remote) return { ok: false, message: "Uzak hedef ayarlanmamış." };
+  const res = await runProcess(RCLONE_BIN(), ["lsd", remote, ...configArgs()], {
+    timeoutMs: LIST_TIMEOUT_MS,
+    captureStdout: true,
+  });
+  if (res.spawnError) {
+    return {
+      ok: false,
+      message:
+        `rclone çalıştırılamadı ("${RCLONE_BIN()}"): ${res.spawnError}. ` +
+        "Sunucuda kurulu mu? Tam yolu BACKUP_RCLONE_BIN ile verin.",
+    };
+  }
+  if (res.timedOut) return { ok: false, message: "Bağlantı zaman aşımına uğradı." };
+  if (res.code !== 0) {
+    // ⚠️ stderr KIRPILIR ama YUTULMAZ: rclone'un hata metni ("didn't find section
+    // in config file", "token expired") sorunu çözen tek bilgidir.
+    return { ok: false, message: `Bağlanılamadı (rclone ${res.code}): ${res.stderr.trim().slice(0, 400)}` };
+  }
+  return { ok: true, message: `Bağlantı başarılı — hedefte ${(res.stdout ?? "").split(/\r?\n/).filter(Boolean).length} klasör görüldü.` };
+}
+
+/**
+ * `rclone authorize "drive"` çıktısındaki token'ı yapılandırma dosyasına yazar.
+ *
+ * ⚠️ GÜVENLİK SÖZLEŞMESİ — üçü de zorunlu:
+ *  1. Token HİÇBİR yere loglanmaz ve yanıtta GERİ DÖNMEZ. Bir Google yenileme
+ *     token'ı, hesabın Drive'ına süresiz erişimdir.
+ *  2. Dosya `0600` ile yazılır (Windows'ta etkisiz ama POSIX'te gerçek koruma).
+ *  3. Yedek klasörünün İÇİNE yazılmaz — orası buluta süpürülüyor.
+ *
+ * Kendi Google OAuth istemcimizi GÖMMÜYORUZ (client secret depoya girerdi —
+ * `.env` bulgusunun aynısını üretirdi). rclone'un kendi istemcisi kullanılır;
+ * bu, rclone'un belgelenmiş "başsız sunucu" akışıdır.
+ */
+export async function writeRcloneDriveToken(
+  remoteName: string,
+  tokenJson: string,
+): Promise<{ ok: boolean; message: string; configPath?: string }> {
+  const cfg = rcloneConfigPath();
+  if (!cfg) return { ok: false, message: "Yapılandırma yolu çözülemedi (BACKUP_DIR tanımsız)." };
+
+  const name = remoteName.trim();
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(name)) {
+    return { ok: false, message: "Hedef adı yalnız harf/rakam/alt çizgi/tire içerebilir (en fazla 32)." };
+  }
+
+  // Token bir JSON nesnesi olmalı ve yenileme token'ı taşımalı. Doğrulama, yanlış
+  // yapıştırmayı ("Paste the following into your remote machine --->" satırı da
+  // kopyalanmış olabilir) SESSİZ bir bozuk config'e çevirmemek için.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(tokenJson.trim());
+  } catch {
+    return { ok: false, message: "Token geçerli bir JSON değil — yalnız süslü parantezle başlayan bölümü yapıştırın." };
+  }
+  const t = parsed as Record<string, unknown>;
+  if (!t || typeof t !== "object" || typeof t.access_token !== "string") {
+    return { ok: false, message: "Token beklenen alanları taşımıyor (access_token yok)." };
+  }
+  if (typeof t.refresh_token !== "string" || !t.refresh_token) {
+    // Yenileme token'ı yoksa erişim ~1 saatte biter ve gece yedeği sessizce
+    // kopyalanamaz hale gelir. Bunu kabul etmek, çalıştığını sanıp korumasız
+    // kalmak demektir.
+    return {
+      ok: false,
+      message: "Token yenileme anahtarı (refresh_token) içermiyor — erişim 1 saatte biterdi. Yetkilendirmeyi tekrarlayın.",
+    };
+  }
+
+  const section = `[${name}]\ntype = drive\nscope = drive\ntoken = ${JSON.stringify(parsed)}\n`;
+
+  try {
+    await fs.promises.mkdir(path.dirname(cfg), { recursive: true });
+    let existing = "";
+    try {
+      existing = await fs.promises.readFile(cfg, "utf8");
+    } catch {
+      /* dosya yok — ilk yazım */
+    }
+    // Aynı adlı bölüm varsa DEĞİŞTİR, yoksa EKLE. Diğer hedefler korunur.
+    const re = new RegExp(`^\\[${name}\\][^\\[]*`, "m");
+    const next = re.test(existing) ? existing.replace(re, section) : `${existing.trimEnd()}\n\n${section}`.trimStart();
+    await fs.promises.writeFile(cfg, next, { mode: 0o600 });
+    return { ok: true, message: `"${name}" hedefi yapılandırıldı.`, configPath: cfg };
+  } catch (err) {
+    return { ok: false, message: `Yapılandırma yazılamadı (${cfg}): ${err instanceof Error ? err.message : err}` };
+  }
+}
+
+export { COPY_PREFIXES, SWEEP_TIMEOUT_MS, rcloneConfigPath, RCLONE_BIN };

@@ -118,10 +118,19 @@ module.exports = {
         //   1) rclone.org/downloads → rclone.exe'yi C:/Etkili-Yazilim/rclone/ altına koy
         //   2) rclone config → n → ad: gdrive → tür: drive → tarayıcıda Google girişi
         //   3) rclone lsd gdrive:  ile bağlantıyı doğrula
-        //   4) BACKUP_RCLONE_REMOTE'u doldur (örn. "gdrive:tekserp-yedek"), pm2 restart
-        // Doğrulama: GET /api/admin/health → offsite.missingCount = 0 olmalı.
+        //   4) HEDEFİ PANELDEN GİR: Sistem → Yedekler → "Offsite Yedek" kartı
+        //      (Google girişini de oradaki sihirbaz yapar; 2-3 adımı atlar.)
+        //
+        // ⚠️ AŞAĞIDAKİ İKİ ENV ARTIK YALNIZ BAŞLANGIÇ DEĞERİDİR. Panelden
+        // yapılan ayar `SystemSetting`e yazılır ve env'i EZER (`backup.hour`
+        // emsali) — pm2 restart gerekmez. Kayıt bir kez oluştuktan sonra bu
+        // satırı değiştirmek hiçbir şeyi değiştirmez; panelden bakın.
         BACKUP_RCLONE_REMOTE: "",
         BACKUP_RCLONE_BIN: "C:/Etkili-Yazilim/rclone/rclone.exe",
+        // rclone yapılandırma dosyası (Drive token'ı burada durur). Boşsa
+        // `<BACKUP_DIR>/../rclone.conf` kullanılır — yedek klasörünün İÇİNE
+        // konmaz, orası buluta süpürülüyor.
+        BACKUP_RCLONE_CONFIG: "",
         // Gece yedeğinin saati — YALNIZ FALLBACK. Yetkili kaynak artık panel:
         // Sistem → Yedekler → "Otomatik yedek saati" (SystemSetting `backup.hour`).
         // Öncelik: DB kaydı → bu env → 3. Panelden bir kez kaydedilirse bu değer

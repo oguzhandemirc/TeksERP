@@ -251,6 +251,13 @@ export const SETTING_KEYS = {
    *  pm2 restart GEREKMEZ. Kayıt yoksa BACKUP_HOUR env'i, o da yoksa 3 kullanılır.
    *  Yedek klasörü/offsite yolu bilinçli olarak burada DEĞİL (ops config → env). */
   BACKUP_HOUR: "backup.hour",
+  /** Offsite uzak hedef, rclone sözdiziminde (`gdrive:tekserp-yedek`). Panelden
+   *  ayarlanır, pm2 restart GEREKMEZ. Kayıt yoksa `BACKUP_RCLONE_REMOTE` env'i. */
+  BACKUP_OFFSITE_REMOTE: "backup.offsiteRemote",
+  /** Offsite YEREL ikinci hedef (ağ paylaşımı / ikinci disk). Kayıt yoksa
+   *  `BACKUP_OFFSITE_DIR` env'i. Uzak hedeften BAĞIMSIZ — ikisi birlikte
+   *  kullanılabilir (3-2-1 kuralı: iki ortam + bir offsite). */
+  BACKUP_OFFSITE_DIR: "backup.offsiteDir",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -2662,6 +2669,46 @@ export async function readBackupHour(
     return fromEnv;
   }
   return DEFAULT_BACKUP_HOUR;
+}
+
+/**
+ * Offsite metin ayarlarının ORTAK okuyucusu: SystemSetting → env → "".
+ *
+ * ⚠️ ÖNCELİK YAZILI OLMAK ZORUNDA (`backup.hour` emsali). İki kaynaklı bir ayarda
+ * öncelik belirsizse "panelde değiştirdim, değişmedi" sınıfı sessiz hata doğar —
+ * kullanıcı ayarı yaptığını sanır, sistem env'i okumaya devam eder ve hiçbir
+ * yerde uyarı çıkmaz.
+ *
+ * Boş string ile kaydedilen değer "KAPAT" demektir ve env'e DÜŞMEZ: aksi halde
+ * panelden hedefi silmek imkânsız olurdu (silince env geri gelirdi).
+ */
+async function readOffsiteText(
+  key: string,
+  envName: string,
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<string> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key },
+    select: { value: true },
+  });
+  // Kayıt VARSA (boş olsa bile) o kazanır — bilinçli bir "kapat" kararıdır.
+  if (setting && typeof setting.value === "string") return setting.value.trim();
+  return (process.env[envName] ?? "").trim();
+}
+
+/** Offsite uzak hedef (rclone). Boş = kapalı. */
+export async function readOffsiteRemote(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<string> {
+  return readOffsiteText(SETTING_KEYS.BACKUP_OFFSITE_REMOTE, "BACKUP_RCLONE_REMOTE", tx);
+}
+
+/** Offsite YEREL ikinci hedef (ağ paylaşımı / ikinci disk). Boş = kapalı. */
+export async function readOffsiteDir(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<string> {
+  return readOffsiteText(SETTING_KEYS.BACKUP_OFFSITE_DIR, "BACKUP_OFFSITE_DIR", tx);
 }
 
 /** Kısa ceza süresi, SANİYE (default 60, 5..3600). */

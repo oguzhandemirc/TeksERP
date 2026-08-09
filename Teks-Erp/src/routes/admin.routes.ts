@@ -11,6 +11,15 @@ import { PermissionManagementService } from "../services/permission-management.s
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
+import {
+  getOffsiteHealth,
+  testOffsiteRemote,
+  writeRcloneDriveToken,
+  rcloneConfigPath,
+  RCLONE_BIN,
+} from "../services/helpers/offsite-backup.helper";
+import { readOffsiteRemote, readOffsiteDir } from "../services/system-setting.service";
+import { runOffsiteSweepNow } from "../jobs/offsite-sweeper";
 import { getRestoreImpact } from "../services/backup-impact.service";
 import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
 import {
@@ -1284,6 +1293,160 @@ router.get(
         },
       });
       res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OFFSITE YEDEK — durum / ayar / test / elle süpürme / Drive yetkilendirme
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️⚠️ İZİN ZİNCİRİ AYRIMI — GEVŞETMEYİN.
+// AYAR YAZAN uçlar `/backups` ile AYNI zinciri taşır (`admin:settings` VE
+// `admin:users`). Sebep F287'nin devamı: `.dump` dosyası TÜM kullanıcıların düz
+// `quickPin`/`cardToken`'ını içerir, bu yüzden yedek İNDİRME iki izin ister.
+// Offsite hedefini değiştirebilen biri, indirmeye hiç dokunmadan aynı dosyaların
+// KENDİ bulutuna teslim edilmesini sağlayabilir — yani tek izinle bırakmak,
+// kapatılmış kapının yanına ikinci bir kapı açmak olurdu.
+// SALT-OKUMA ve TETİKLEME uçları (`durum`, `test`, `süpür`) yalnız
+// `admin:settings` ister: yeni bir hedef tanımlamazlar, var olan yapılandırmayı
+// çalıştırır ya da okurlar.
+
+/** Offsite durumu + mevcut yapılandırma (sırlar HARİÇ). */
+router.get(
+  "/backups/offsite",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const [health, remote, dir] = await Promise.all([
+        getOffsiteHealth(),
+        readOffsiteRemote(),
+        readOffsiteDir(),
+      ]);
+      res.status(200).json({
+        success: true,
+        data: {
+          ...health,
+          config: {
+            remote,
+            localDir: dir,
+            // Token DEĞİL, yalnız YOLU — kurulum yapan kişinin bilmesi gereken tek şey.
+            configPath: rcloneConfigPath(),
+            rcloneBin: RCLONE_BIN(),
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+const offsiteConfigSchema = z
+  .object({
+    // Boş string MEŞRU ve "kapat" demektir — aksi halde panelden hedefi silmek
+    // imkânsız olurdu (silince env geri gelirdi).
+    remote: z.string().trim().max(200).optional(),
+    localDir: z.string().trim().max(400).optional(),
+  })
+  .refine((v) => v.remote !== undefined || v.localDir !== undefined, {
+    message: "En az bir alan gönderilmeli",
+  });
+
+/** Offsite hedeflerini ayarla (SystemSetting → pm2 restart GEREKMEZ). */
+router.patch(
+  "/backups/offsite",
+  verifyToken,
+  requirePermission("admin:settings"),
+  requirePermission("admin:users"), // ← yukarıdaki gerekçe: hedef = yedeklerin gideceği yer
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = offsiteConfigSchema.parse(req.body);
+      const userId = req.user?.userId;
+      if (body.remote !== undefined) {
+        await systemSettingService.set(
+          SETTING_KEYS.BACKUP_OFFSITE_REMOTE,
+          body.remote,
+          "Offsite uzak hedef (rclone)",
+          userId
+        );
+      }
+      if (body.localDir !== undefined) {
+        await systemSettingService.set(
+          SETTING_KEYS.BACKUP_OFFSITE_DIR,
+          body.localDir,
+          "Offsite yerel ikinci hedef (ağ paylaşımı / ikinci disk)",
+          userId
+        );
+      }
+      const [remote, localDir] = await Promise.all([readOffsiteRemote(), readOffsiteDir()]);
+      res.status(200).json({ success: true, data: { remote, localDir } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** Uzak hedefe bağlanılabiliyor mu. Yeni hedef TANIMLAMAZ → tek izin yeter. */
+router.post(
+  "/backups/offsite/test",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({ success: true, data: await testOffsiteRemote() });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** Süpürmeyi ŞİMDİ koştur. Var olan yapılandırmayı çalıştırır → tek izin yeter. */
+router.post(
+  "/backups/offsite/sweep",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      await runOffsiteSweepNow();
+      res.status(200).json({ success: true, data: await getOffsiteHealth() });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+const offsiteTokenSchema = z.object({
+  name: z.string().trim().min(1).max(32),
+  token: z.string().trim().min(20).max(8000),
+});
+
+/**
+ * `rclone authorize "drive"` çıktısındaki token'ı yapılandırmaya yazar.
+ *
+ * ⚠️ Token yanıtta GERİ DÖNMEZ ve audit payload'ına YAZILMAZ — bir Google
+ * yenileme anahtarı, hesabın Drive'ına süresiz erişimdir. Audit yalnız OLAYI
+ * kaydeder (kim, ne zaman, hangi hedef adı).
+ */
+router.post(
+  "/backups/offsite/authorize",
+  verifyToken,
+  requirePermission("admin:settings"),
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = offsiteTokenSchema.parse(req.body);
+      const result = await writeRcloneDriveToken(body.name, body.token);
+      if (!result.ok) throw AppError.badRequest(result.message);
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "OFFSITE_REMOTE_AUTHORIZED",
+        userId: req.user?.userId ?? null,
+        payload: { remoteName: body.name, configPath: result.configPath },
+      });
+      res.status(200).json({ success: true, data: { message: result.message } });
     } catch (error) {
       next(error);
     }

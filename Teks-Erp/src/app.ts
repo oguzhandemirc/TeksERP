@@ -415,7 +415,7 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     ...getPoolHealth(),
     // Felaket kurtarma kapsamı — 'yedek var mı' ile 'yedek BAŞKA YERDE var mı'
     // ayrı sorulardır; ikincisi 2026-08-10'a kadar hiçbir yüzeyde görünmüyordu.
-    ...getOffsiteHealth(),
+    ...(await getOffsiteHealth()),
     // Disk doluluğu (DB + yedeklerin bulunduğu sürücü) — 30sn cache
     ...readAppDiskMetrics(),
     // Anlık online kullanıcı + bağlı cihaz (bellekte, son 5 dk)
