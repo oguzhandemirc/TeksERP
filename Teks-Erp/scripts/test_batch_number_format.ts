@@ -348,7 +348,26 @@ async function main(): Promise<void> {
     dupes.join(" | ") || "temiz",
   );
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    // ── withBarcodeRetry JITTER SÖZLEŞMESİ (2026-08-09, F-URE-ESZ-001) ────────
+  // Kod/numara üretimi P2002 çakışmasında TÜM işlemi yeniden koşturuyor. Eskiden
+  // denemeler arasında HİÇ bekleme yoktu: çakışan iki istek beklemeden yeniden
+  // koşup aynı mikrosaniye penceresinde TEKRAR çarpışabiliyordu (livelock
+  // eğilimi) ve beş deneme tükenince kullanıcı sebebini anlamadığı bir 409
+  // alıyordu. Rastgelelik ŞART — sabit bekleme iki isteği aynı ritimde tutar.
+  {
+    const rsrc = require("fs").readFileSync(
+      require("path").join(__dirname, "../src/utils/barcode-retry.ts"),
+      "utf8",
+    ) as string;
+    check("withBarcodeRetry denemeler arasında bekliyor", /setTimeout\(/.test(rsrc));
+    check("bekleme JITTER'lı (sabit değil)", /Math\.random\(\)/.test(rsrc));
+    check(
+      "son denemeden sonra beklemiyor (hata mesajını geciktirmez)",
+      /attempt < maxAttempts/.test(rsrc),
+    );
+  }
+
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
 main()

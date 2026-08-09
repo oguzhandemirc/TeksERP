@@ -41,6 +41,7 @@ import {
   dynamicCursorWhere,
   buildNextDynamicCursor,
 } from "../utils/cursor";
+import { lockShipmentScopeTx } from "./helpers/shipment-locks.helper";
 
 const D0 = () => new Prisma.Decimal(0);
 
@@ -482,6 +483,16 @@ export class ReturnService {
     const note = input.note?.trim() || null;
 
     const created = await prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İFADESİ — sevkiyat kapsamlı advisory lock (F-SEV-ESZ-001).
+      // `undoDispatch` (storno) AYNI kilidi alır. Aksi halde iki akış birbirini
+      // yalnız TOP satırında görüyordu ve o satıra storno GEÇ dokunduğu için tek
+      // yönlü koruma vardı: storno önce commit ederse aşağıdaki koşullu flip iadeyi
+      // reddediyordu, ama iade önce commit ederse storno'nun iade sayımı 0 okumuş
+      // olduğu için bloklamayı geçip sevkiyatı PLANNED'a çekiyordu (üretildi).
+      // Yukarıda tüm topların TEK sevkiyata ait olduğu doğrulandı → tek kilit yeter.
+      const lockShipmentId = orderedRolls[0]?.shipmentId ?? null;
+      if (lockShipmentId) await lockShipmentScopeTx(tx, lockShipmentId);
+
       const createdIds: string[] = [];
       let totalQty = new Prisma.Decimal(0);
       // `tx` içinde Promise.all YASAK (pg adapter tek bağlantı) → seri döngü.

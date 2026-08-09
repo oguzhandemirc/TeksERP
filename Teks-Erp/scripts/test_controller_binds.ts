@@ -37,9 +37,15 @@ const CONTROLLERS_DIR = join(__dirname, "..", "src", "controllers");
 const ROUTES_DIR = join(__dirname, "..", "src", "routes");
 
 // Taramanın gerçekten bir şeye baktığının kanıtı (körlük zemini).
+// Körlük zemini — 2026-08-09'da GERÇEĞE göre yeniden ayarlandı (F-CORE-API-002).
+// Eski değerler (10 / 100 / 100) ölçülen gerçeğin (12 / 152 / 472) çok altındaydı;
+// özellikle route referansı zemini gerçeğin ~%21'iydi, yani tarayıcı bozulup
+// referansların dörtte üçünü kaybetse bile test YEŞİL kalırdı. Zemin, gerçeğin
+// kabaca üçte ikisine çekildi: meşru silmelerde yanlış alarm vermez ama
+// tarayıcının boşa düşmesini yakalar.
 const MIN_CLASSES_WITH_BIND = 10;
-const MIN_HANDLERS = 100;
-const MIN_ROUTE_REFS = 100;
+const MIN_HANDLERS = 120;
+const MIN_ROUTE_REFS = 300;
 
 let pass = 0;
 let fail = 0;
@@ -67,9 +73,23 @@ function main(): void {
     .map((r) => r.src)
     .join("\n");
 
-  // Route'larda çıplak geçilen handler adları: `controller.foo`, `ctrl.foo` …
+  // Route'larda çıplak geçilen handler adları.
+  //
+  // ⚠️ DESENE bağla, DEĞİŞKEN ADINA değil (2026-08-09 denetimi, F-CORE-API-002).
+  // Eski desen `/\b(?:controller|ctrl|c)\.(\w+)\b/` idi ve BÜYÜK-KÜÇÜK harf
+  // duyarlı olduğu + `\b` sınırı bileşik adları eşlemediği için route
+  // dosyalarındaki `stationController.` (5), `machineController.` (6) ve
+  // `manualController.` (4) referanslarını — toplam 15 tanesini — HİÇ GÖRMÜYORDU.
+  // O sınıflara bağlanmamış bir metot eklenseydi test YEŞİL kalırdı; yani bekçi,
+  // kendisini doğuran vakayı (print-event bind'ının unutulması) üretebilecek üç
+  // değişkeni kapsam dışında bırakmıştı.
+  //
+  // Yeni yaklaşım: `<tanımlayıcı>.<metot>` biçimindeki TÜM referansları topla.
+  // Aşırı toplama zararsız — aşağıda controller DOSYALARINDAN çıkarılan handler
+  // adlarıyla KESİŞTİRİLİYOR, yani `prisma.roll` gibi alakasız eşleşmeler
+  // kendiliğinden eleniyor ve değişken adı hiç önemli olmuyor.
   const routeRefs = new Set(
-    [...routeSrc.matchAll(/\b(?:controller|ctrl|c)\.(\w+)\b/g)].map((m) => m[1]),
+    [...routeSrc.matchAll(/\b[A-Za-z_$][\w$]*\.(\w+)\b/g)].map((m) => m[1]),
   );
 
   let classesWithBind = 0;
@@ -80,11 +100,20 @@ function main(): void {
     const binds = new Set(
       [...src.matchAll(/this\.(\w+)\s*=\s*this\.\1\.bind\(this\)/g)].map((m) => m[1]),
     );
-    if (binds.size === 0) continue; // sınıf bind desenini kullanmıyor — kapsam dışı
-    classesWithBind++;
-
     // Sınıf gövdesindeki Express handler'ları: `  async foo(req: …` / `  foo(req: …`
+    // (statik metotlar `  static async foo(` biçiminde — bu desene UYMAZ ve
+    // bind gerektirmez, yani kapsam dışı kalmaları doğrudur.)
     const handlers = [...src.matchAll(/^ {2}(?:async )?(\w+)\s*\(\s*req:/gm)].map((m) => m[1]);
+
+    // ⚠️ `binds.size === 0 → continue` DALI KALDIRILDI (2026-08-09, F-CORE-API-002).
+    // Eski hâli "bu sınıf bind desenini kullanmıyor" diye TÜM dosyayı atlıyordu —
+    // ama tam olarak önlenmek istenen durum budur: prototip handler'ı OLAN ve
+    // hiçbirini BAĞLAMAYAN yeni bir controller sessizce kapsam dışında kalır ve
+    // o sınıfın tüm uçları çalışma zamanında `this` undefined ile 500 verir.
+    // Doğru kural: prototip handler'ı varsa sınıf KAPSAMDADIR; bağlanmamış bir
+    // handler route'ta çıplak geçiyorsa ihlaldir.
+    if (handlers.length === 0) continue; // gerçekten prototip handler'ı yok (statik/arrow sınıf)
+    classesWithBind++;
     handlerCount += handlers.length;
 
     for (const h of handlers) {

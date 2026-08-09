@@ -10,7 +10,7 @@
 // birebir aynı olsun diye label-html.shared formatNumber/formatDate'i kullanır.
 // =============================================================================
 
-import type { LabelPayload } from "../label.service";
+import type { LabelPayload } from "../../types/label.types";
 import { formatNumber, formatDate } from "./label-html.shared";
 
 /** Alanın etiketteki yerleşim rolü. scan = barkod/QR (sabit sol kolon, metin değil);

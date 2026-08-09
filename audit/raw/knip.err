@@ -1,0 +1,11 @@
+Configuration hints (10)
+dist/**                             knip.json  Remove from ignore                                           
+_e2e/**                             knip.json  Remove from ignore                                           
+scratch/**                          knip.json  Remove from ignore                                           
+src/generated/**                    knip.json  Remove from ignore                                           
+prisma.config.ts                    knip.json  Remove redundant entry pattern                               
+prisma/seed.ts                      knip.json  Remove redundant entry pattern                               
+prisma/seed-fixtures.ts             knip.json  Remove redundant entry pattern                               
+prisma/seed-demo-stations.ts        knip.json  Remove redundant entry pattern                               
+prisma/seed-shipping-scenario.ts    knip.json  Remove redundant entry pattern                               
+.prisma                             knip.json  Compiled extension excluded by project (imports not followed)

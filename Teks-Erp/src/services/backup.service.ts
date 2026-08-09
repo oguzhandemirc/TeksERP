@@ -220,16 +220,36 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
 
   running = true;
   const out = path.join(BACKUP_DIR, `${NIGHTLY_PREFIX}${stamp(new Date())}.dump`);
+  // ⚠️ YARIM DOSYA NİHAİ ADI ALMAZ (denetim 2026-08-09, F-CORE-OPS-001).
+  // pg_dump eskiden DOĞRUDAN `out`a yazıyordu. Süreç dump sırasında ölürse
+  // (pm2 restart / deploy — gracefulShutdown 5 sn'de `process.exit` zorluyor)
+  // temizlik dalları hiç koşmuyor ve yarım `.dump` diskte KALIYORDU. O dosya
+  // sonra ÜÇ yerde sağlam yedek gibi davranılıyordu: `/health` `lastBackup`
+  // (en yeni .dump'ı mtime ile seçer), rotasyonun MIN_KEEP koruması ve
+  // Yedekler ekranı. Artık dump `.part`a yazılır ve YALNIZ bütünlük doğrulaması
+  // geçtikten sonra nihai ada alınır (`rename` aynı dizinde atomiktir).
+  //
+  // `.part` uzantısı her yerde GÖRÜNMEZDİR ve bu tesadüf değil: dosya listeleyen
+  // dört yol da `.dump` ile bitmeyi şart koşuyor (app.ts latestBackupInfo,
+  // rotasyon filtresi, listBackups, resolveBackupPath) — yeni bir yüzey eklerken
+  // aynı şartı koru.
+  const partPath = `${out}.part`;
+  /** rename başarıyla koştu mu — catch'in doğrulanmış yedeği silmemesi için. */
+  let published = false;
   try {
     await fs.promises.mkdir(BACKUP_DIR, { recursive: true });
+    // Önceki bir çöküşten kalan bayat `.part` dosyalarını buda (24 saatten eski).
+    // Görünmez oldukları için zarar vermezler ama sessizce disk yerler.
+    await sweepStaleParts();
 
     // --- 1) pg_dump (custom format: pg_restore ile seçmeli geri yükleme mümkün)
     const dump = await runTool(
       pgTool("pg_dump"),
-      [...pgToolArgs(conn), "-Fc", "-f", out],
+      [...pgToolArgs(conn), "-Fc", "-f", partPath],
       conn.password,
     );
     if (dump.spawnError) {
+      await fs.promises.rm(partPath, { force: true });
       return finish(
         false,
         `pg_dump başlatılamadı: ${dump.spawnError}. ` +
@@ -238,8 +258,14 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
       );
     }
     if (dump.code !== 0) {
-      await fs.promises.rm(out, { force: true });
-      return finish(false, `pg_dump başarısız (kod ${dump.code}). ${dump.stderr.trim()}`, null);
+      await fs.promises.rm(partPath, { force: true });
+      return finish(
+        false,
+        dump.timedOut
+          ? `pg_dump ZAMAN AŞIMINA uğradı ve öldürüldü — yarım dosya silindi. ${dump.stderr.trim()}`
+          : `pg_dump başarısız (kod ${dump.code}). ${dump.stderr.trim()}`,
+        null,
+      );
     }
 
     // --- 2) BÜTÜNLÜK DOĞRULAMA (O-17)
@@ -248,9 +274,9 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     // NOT: burada "unknown" da reddedilir (aşağıdaki `!== "ok"`). Geri yükleme
     // önizlemesinin aksine burada muhafazakâr olmak bedava: doğrulanamayan bir
     // dosyayı yedek diye saklamaktansa atıp bir sonraki turda yeniden almak yeğdir.
-    const verdict = await verifyBackupFile(out);
+    const verdict = await verifyBackupFile(partPath);
     if (verdict !== "ok") {
-      await fs.promises.rm(out, { force: true });
+      await fs.promises.rm(partPath, { force: true });
       return finish(
         false,
         `Yedek DOĞRULANAMADI (pg_restore --list: ${verdict}) — bozuk dump silindi, ` +
@@ -258,6 +284,12 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
         null,
       );
     }
+
+    // --- 2b) YAYINLA: doğrulanmış dosya nihai adını ALIR (aynı dizinde atomik).
+    // Bu satırdan ÖNCE hiçbir yüzey bu yedeği göremez; bu satırdan SONRA dosya
+    // tam ve doğrulanmıştır. Aradaki "yarım ama taze görünen yedek" penceresi YOK.
+    await fs.promises.rename(partPath, out);
+    published = true;
 
     // --- 3) Saklama rotasyonu (GÜN bazlı)
     // Yalnız günlük (tekserp_*) yedekler rotasyona girer; migration öncesi
@@ -309,10 +341,42 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     const suffix = warnings.length > 0 ? ` UYARI: ${warnings.join(" | ")}` : "";
     return finish(true, `Yedek alındı ve doğrulandı: ${path.basename(out)}.${suffix}`, out);
   } catch (err) {
-    await fs.promises.rm(out, { force: true }).catch(() => {});
-    return finish(false, `Yedek hatası: ${err instanceof Error ? err.message : String(err)}`, null);
+    // Yarım dosyayı her hâlükârda temizle (yoksa no-op).
+    await fs.promises.rm(partPath, { force: true }).catch(() => {});
+    // ⚠️ DOĞRULANMIŞ yedeği SİLME. Eski hâli koşulsuz `rm(out)` yapıyordu: rename
+    // sonrası bir adımda (rotasyon/offsite) beklenmedik bir hata fırlarsa, o gece
+    // ALINMIŞ VE DOĞRULANMIŞ yedek yok ediliyordu — yani hata telafisi, korumaya
+    // çalıştığı şeyi imha ediyordu. Artık yalnız YAYINLANMAMIŞ dosya silinir.
+    if (!published) await fs.promises.rm(out, { force: true }).catch(() => {});
+    return finish(
+      false,
+      `Yedek hatası: ${err instanceof Error ? err.message : String(err)}` +
+        (published ? " (yedek dosyası ALINDI ve korundu — hata sonraki adımda oluştu)" : ""),
+      published ? out : null,
+    );
   } finally {
     running = false;
+  }
+}
+
+/**
+ * Bayat `.part` dosyalarını buda — süreç dump ortasında öldüyse geriye kalanlar.
+ * Görünmez oldukları için zarar vermezler ama sessizce disk yerler. 24 saat eşiği:
+ * KOŞMAKTA OLAN bir dump'ın dosyasına asla dokunmamak için cömert tutuldu
+ * (ayrıca `running` bayrağı zaten ikinci bir turu engelliyor).
+ */
+async function sweepStaleParts(): Promise<void> {
+  if (!BACKUP_DIR) return;
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  try {
+    for (const name of await fs.promises.readdir(BACKUP_DIR)) {
+      if (!name.endsWith(".dump.part")) continue;
+      const full = path.join(BACKUP_DIR, name);
+      const st = await fs.promises.stat(full).catch(() => null);
+      if (st && st.mtimeMs < cutoff) await fs.promises.rm(full, { force: true }).catch(() => {});
+    }
+  } catch {
+    // Budama başarısızlığı yedeği geçersiz kılmaz — sessizce geç.
   }
 }
 

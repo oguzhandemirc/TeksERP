@@ -35,7 +35,7 @@ import {
   resolveFinalStatus,
   finalBarcodeType,
 } from "./helpers/roll-finalize.helper";
-import { generateRollBarcode } from "./helpers/roll-barcode.helper";
+import { reserveRollBarcodes } from "./helpers/roll-barcode.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import {
   applyRollDispositionsTx,
@@ -391,13 +391,19 @@ class WorkOrderBatchDropService {
 
         // 2b) Satılabilir rafa düşen barkodsuz topa barkod ("her kumaşa etiket").
         //     Tek per-top adım; bu yüzden tx `withBarcodeRetry` ile sarılı.
+        //     (2026-08-10, F-CORE-VER-001) Hedef grubu başına TEK rezervasyon —
+        //     eskiden her top ayrı bir sayaç turu atıyordu ve sayaç satırının
+        //     kilidi ilk turdan itibaren zaten tutulduğu için araya giren her
+        //     tur kilidi o kadar uzatıyordu. ⚠️ Tx'in İÇİNDE kaldı: barkodsuz
+        //     küme claim'den SONRA okunan `residual`den çözülüyor, tx öncesi
+        //     okuma bayat olurdu.
         const residualById = new Map(residual.map((r) => [r.id, r]));
         for (const [target, ids] of idsByTarget) {
           if (!SELLABLE_DISPOSITION_STATUSES.includes(target)) continue;
-          for (const rid of ids) {
-            if (residualById.get(rid)?.barcode != null) continue;
-            const barcode = await generateRollBarcode(tx, finalBarcodeType(target));
-            await tx.roll.update({ where: { id: rid }, data: { barcode } });
+          const unbarcoded = ids.filter((rid) => residualById.get(rid)?.barcode == null);
+          const reserved = await reserveRollBarcodes(tx, finalBarcodeType(target), unbarcoded.length);
+          for (const [i, rid] of unbarcoded.entries()) {
+            await tx.roll.update({ where: { id: rid }, data: { barcode: reserved[i]! } });
           }
         }
 

@@ -49,7 +49,11 @@ import {
 } from "./system-setting.service";
 import { factoryDayStart } from "../constants/time";
 import { dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
-import { touchWarehouseSackTx, touchShipmentPlannedTx } from "./helpers/shipment-locks.helper";
+import {
+  touchWarehouseSackTx,
+  touchShipmentPlannedTx,
+  lockShipmentScopeTx,
+} from "./helpers/shipment-locks.helper";
 import {
   NON_SACKABLE_STATUSES,
   SACK_ABSENT_STATUSES,
@@ -1989,6 +1993,13 @@ export class ShippingService {
     const sameDayOnly = await readShipmentUndoSameDayOnly();
 
     const result = await prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İFADESİ — sevkiyat kapsamlı advisory lock (F-SEV-ESZ-001).
+      // Aşağıdaki `rollReturn.count` HENÜZ OLMAYAN satırları sorar (phantom) ve
+      // satır kilidi phantom'u kapatmaz: iade tx'i bu sayım ile commit arasında
+      // araya girip yasak duruma yol açıyordu (üretildi — helper'daki nota bak).
+      // `createReturn` AYNI kilidi alır, böylece iki akış aynı sevkiyat için serileşir.
+      // Kilit BURADA, sayımdan ÖNCE olmak zorunda; sonrasına alınırsa hiçbir şey kazanılmaz.
+      await lockShipmentScopeTx(tx, shipmentId);
       // Engel kontrolü TX İÇİNDE ve TAZE — önizleme ile onay arasında fatura
       // işaretlenmiş ya da iade alınmış olabilir.
       const sh = await tx.shipment.findUnique({
@@ -2379,23 +2390,46 @@ export class ShippingService {
     const attachTotals = async <T extends UnifiedRow>(rows: T[]): Promise<T[]> => {
       const shipIds = rows.filter((r) => r.kind === "SHIPMENT").map((r) => r.id);
       if (shipIds.length === 0) return rows;
-      const [rollGroups, sackGroups, returnGroups] = await Promise.all([
-        prisma.roll.groupBy({
-          by: ["shipmentId"],
-          where: { shipmentId: { in: shipIds } },
-          _sum: { currentQty: true },
-        }),
-        prisma.sack.groupBy({
-          by: ["shipmentId"],
-          where: { shipmentId: { in: shipIds } },
-          _sum: { weightKg: true },
-        }),
-        prisma.rollReturn.groupBy({
-          by: ["fromShipmentId"],
-          where: { fromShipmentId: { in: shipIds }, cancelledAt: null },
-          _sum: { qty: true },
-        }),
-      ]);
+      // ⚠️ TEK ANLIK GÖRÜNTÜ ŞART (2026-08-09 denetimi, F-SEV-ESZ-002).
+      // Brüt metraj `canlı toplam + iade geri-eklemesi` ile üretiliyor; iki sayım
+      // FARKLI anlık görüntülerden gelirse aradaki pencerede commit eden bir iade
+      // ya ÇİFT sayılır (top hâlâ sevkiyatta görünürken iade satırı da eklenir)
+      // ya da KAYBOLUR (shipmentId nullanmış, iade henüz görünmüyor). İkisi de
+      // geçicidir ve tam da bu yüzden teşhis edilemez: muhasebeci ekranda 501 m
+      // görür, Excel'de 452 m okur ve hangisinin doğru olduğunu bilemez.
+      //
+      // `Promise.all` bunu SAĞLAMAZ — havuzdan AYRI bağlantılar, ayrı görüntüler.
+      // Batch `$transaction` tek bağlantıda çalıştırır AMA tek başına yetmez:
+      // PostgreSQL varsayılanı READ COMMITTED ve orada her İFADE kendi anlık
+      // görüntüsünü alır, transaction içinde bile. Bu yüzden izolasyon
+      // RepeatableRead'e yükseltilir — tx'in İLK ifadesinde alınan görüntü
+      // üçünde de geçerli olur.
+      //
+      // ⚠️ Bu, "tx.* ile Promise.all YASAK" kuralının ihlali DEĞİLDİR: o kural
+      // interaktif tx client'ını paylaşmaya ilişkindir; burada BATCH API var
+      // (dizi formu), Prisma'nın kendisi sırayla çalıştırır.
+      // ⚠️ P2034 riski YOK: üçü de SALT OKUMA; RepeatableRead serileştirme
+      // hatasını yalnız YAZAN transaction'larda üretir.
+      const [rollGroups, sackGroups, returnGroups] = await prisma.$transaction(
+        [
+          prisma.roll.groupBy({
+            by: ["shipmentId"],
+            where: { shipmentId: { in: shipIds } },
+            _sum: { currentQty: true },
+          }),
+          prisma.sack.groupBy({
+            by: ["shipmentId"],
+            where: { shipmentId: { in: shipIds } },
+            _sum: { weightKg: true },
+          }),
+          prisma.rollReturn.groupBy({
+            by: ["fromShipmentId"],
+            where: { fromShipmentId: { in: shipIds }, cancelledAt: null },
+            _sum: { qty: true },
+          }),
+        ],
+        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      );
       const liveMeters = new Map(rollGroups.map((g) => [g.shipmentId, g._sum.currentQty ?? D0()]));
       const kg = new Map(sackGroups.map((g) => [g.shipmentId, g._sum.weightKg ?? D0()]));
       const returnedMeters = new Map(returnGroups.map((g) => [g.fromShipmentId, g._sum.qty ?? D0()]));

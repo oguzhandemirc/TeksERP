@@ -114,6 +114,40 @@ const POOL_TIMEOUT_RECORD_ID = "POOL_TIMEOUT";
 /** CHECK ihlali audit'inde ayırt edici recordId (POOL_TIMEOUT emsali). */
 const CHECK_VIOLATION_RECORD_ID = "CHECK_VIOLATION";
 
+// =============================================================================
+// Prisma kod SINIFLANDIRMASI (2026-08-09, denetim F-CORE-OPS-002)
+// =============================================================================
+// Yukarıdaki özel dallar (P2002/P2003/P2025/…) kendi mesajlarıyla döner. Bu iki
+// küme, o dallara girmeyen kalan kodların NEREYE düşeceğini belirler ve karar
+// TEK YERDE durur — eskiden karar yoktu, hepsi koşulsuz 400'e düşüyordu.
+//
+// ⚠️ Ayrımın ölçüsü "hata mesajı ne diyor" değil: **istemcinin gönderdiği veriyi
+// değiştirerek bu hatadan kurtulabilir mi?** Kurtulabiliyorsa 400, kurtulamıyorsa
+// (şema/bağlantı/sorgu arızası) 500 + audit.
+
+/** Sunucu/şema arızası — 500 + SYSTEM/ERROR audit. İstemci veriyi değiştirerek kurtulamaz. */
+const SERVER_FAULT_PRISMA_CODES = new Set<string>([
+  "P2021", // tablo bulunamadı — yarım uygulanmış migration (D-23)
+  "P2022", // kolon bulunamadı — şema drift (eski özel dal, davranışı korunuyor)
+  "P2010", // ham sorgu başarısız ($queryRaw: raporlar, /health, tutarlılık kontrolleri)
+  "P2015", // ilgili kayıt bulunamadı (ilişki çözümlenemedi)
+  "P2017", // ilişki kayıtları bağlı değil
+  "P2018", // gerekli bağlı kayıtlar bulunamadı
+]);
+
+/** İstemci verisi hatası — 400, audit YOK (gürültü olurdu). Davranış eskisiyle aynı. */
+const CLIENT_DATA_PRISMA_CODES = new Set<string>([
+  "P2000", // değer kolon için çok uzun
+  "P2005", // kolon için geçersiz değer
+  "P2006", // sağlanan değer geçersiz
+  "P2011", // null kısıtı ihlali
+  "P2012", // eksik zorunlu değer
+  "P2013", // eksik zorunlu argüman
+  "P2019", // girdi hatası
+  "P2020", // aralık dışı değer (eski özel dal da var; burada yedek)
+  "P2033", // sayı 64-bit tamsayıya sığmıyor
+]);
+
 /**
  * PostgreSQL CHECK constraint ihlali (SQLSTATE 23514) → constraint adı.
  *
@@ -191,6 +225,26 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
+  // ⚠️ BAŞLIKLAR GÖNDERİLDİYSE YANITA DOKUNMA (2026-08-09, F-CORE-OPS-005).
+  // Tek akış yanıtı `res.download` (admin yedek indirme). Aktarım ORTASINDA bir
+  // okuma hatası olursa Express `next(err)` verir ve buraya düşeriz; aşağıdaki
+  // dalların hepsi `res.status(...).json(...)` yazmaya çalışır ve
+  // ERR_HTTP_HEADERS_SENT fırlatır. ÖLÇÜLDÜ (izole Express 5 sondası): süreç
+  // ÖLMÜYOR — Express fırlatılanı yakalayıp finalhandler'a devrediyor, o da
+  // soketi yok ediyor. Yani davranış zaten "bağlantıyı kes"ti; kazanılan şey
+  // TEŞHİS: eski hâlde audit satırı, ASIL hatayı değil onu bildirme girişiminin
+  // hatasını (ERR_HTTP_HEADERS_SENT) kaydediyordu ve teşhis yanlış yöne gidiyordu.
+  // Şimdi asıl hata konsola kendi bağlamıyla düşüyor, sahte audit satırı doğmuyor.
+  if (res.headersSent) {
+    console.error(
+      `[error.middleware] Yanıt zaten başlamıştı (${req.method} ${req.originalUrl}) — ` +
+        `bağlantı kesiliyor. Asıl hata:`,
+      err,
+    );
+    _next(err); // Express finalhandler: başlıklar gönderilmişse soketi yok eder.
+    return;
+  }
+
   // Known operational errors
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
@@ -392,11 +446,20 @@ export const errorHandler = (
       return;
     }
 
-    // P2022 — Column not found (schema drift).
-    // DB'ye migration uygulanmamış; STARTUP audit hatası gibi durumlar.
-    // 5xx olarak işaretle ve audit'e düşür — client'ı yanıltmayalım.
-    if (prismaErr.code === "P2022") {
-      console.error("[error.middleware] Schema drift detected (P2022):", prismaErr.meta);
+    // P2022 — Column not found (schema drift). KARDEŞLERİYLE BİRLİKTE (2026-08-09,
+    // F-CORE-OPS-002): aynı kazanın farklı ayakları aynı muameleyi görmeli.
+    //   P2021 — tablo bulunamadı  (migration yarım uygulandı; D-23: `migrate resolve
+    //           --applied` SQL'in KOŞTUĞUNU doğrulamaz, statement_timeout'ta kesilen
+    //           DDL sessizce "uygulandı" görünür)
+    //   P2010 — ham sorgu başarısız ($queryRaw yolu: raporlar, /health, tutarlılık)
+    //   P2015/P2017/P2018 — ilişki/bağlantı kaydı çözülemedi (şema ya da veri arızası)
+    // Bunlar İSTEMCİ VERİSİ HATASI DEĞİLDİR; 400 dönmek operatörü kendi girdisini
+    // kontrol etmeye gönderir ve gerçek sebep (drift) hiçbir deftere düşmez.
+    if (SERVER_FAULT_PRISMA_CODES.has(prismaErr.code)) {
+      console.error(
+        `[error.middleware] Sunucu/şema arızası (${prismaErr.code}):`,
+        prismaErr.meta,
+      );
       // F21: 5xx'e eşlenen şema-drift incident'i de SYSTEM/ERROR audit'e/metriğe düşsün.
       void AuditService.logEvent({
         category: "SYSTEM",
@@ -455,13 +518,43 @@ export const errorHandler = (
       return;
     }
 
-    // Diğer Prisma known error'lar — code'u sızdırmadan generic 400 dön.
-    // Detay server log'una düşer (Prisma kendisi yazıyor); SYSTEM/ERROR audit'i
-    // alta düşmesin diye buradan return ediyoruz.
-    console.error(`[error.middleware] Unhandled Prisma code ${prismaErr.code}:`, prismaErr.meta);
-    res.status(400).json({
+    // İstemci verisinden kaynaklanabilecek KALAN kodlar → 400 (davranış korunur).
+    if (CLIENT_DATA_PRISMA_CODES.has(prismaErr.code)) {
+      console.error(`[error.middleware] İstemci verisi hatası ${prismaErr.code}:`, prismaErr.meta);
+      res.status(400).json({
+        success: false,
+        message: "İstek işlenemedi. Gönderilen veriyi kontrol edin.",
+      });
+      return;
+    }
+
+    // TANINMAYAN kod → FAIL-LOUD (2026-08-09, F-CORE-OPS-002). Eskiden burası
+    // koşulsuz 400 dönüyor ve audit YAZMIYORDU: sunucu kaynaklı bir arıza istemci
+    // hatası gibi görünüyor, SystemLog'da iz bırakmıyor ve /health sağlıklı
+    // kalıyordu. Varsayılanı sunucu tarafına almak bilinçli: yanlışlıkla 500 demek,
+    // gerçek bir drift'i 400 olarak yutmaktan ucuzdur. Yeni bir Prisma kodu
+    // görüldüğünde yukarıdaki iki kümeden birine YAZILMALI — bu dal bir uyarıdır.
+    console.error(
+      `[error.middleware] SINIFLANDIRILMAMIŞ Prisma kodu ${prismaErr.code} ` +
+        `(sunucu arızası varsayıldı — kodu error.middleware'deki iki kümeden birine ekleyin):`,
+      prismaErr.meta,
+    );
+    void AuditService.logEvent({
+      category: "SYSTEM",
+      action: "ERROR",
+      userId: req.user?.userId,
+      recordId: prismaErr.code,
+      ipAddress: req.ip ?? null,
+      payload: {
+        code: prismaErr.code,
+        unclassified: true,
+        method: req.method,
+        path: req.originalUrl,
+      },
+    });
+    res.status(500).json({
       success: false,
-      message: "İstek işlenemedi. Gönderilen veriyi kontrol edin.",
+      message: "Sunucu hatası oluştu.",
     });
     return;
   }

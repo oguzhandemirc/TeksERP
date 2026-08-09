@@ -26,6 +26,8 @@
 import prisma from "../lib/prisma";
 import { runBackupJob } from "../services/backup.service";
 import { readBackupHour } from "../services/system-setting.service";
+import { reportJobFailure } from "./job-failure";
+import { factoryDayStart } from "../constants/time";
 
 const SETTING_KEY = "backup.lastNightlyAt";
 const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15dk
@@ -80,9 +82,17 @@ async function runIfDue(): Promise<void> {
     // Yedekler ekranından saati değiştirdiğinde pm2 restart GEREKMEZ, en geç bir
     // sonraki kontrol turunda (15dk) yeni saat geçerli olur.
     const hour = await readBackupHour();
-    // Bugünün hedef saati (yerel). now bu saatin öncesindeyse henüz sıra gelmedi.
-    const dueAt = new Date(now);
-    dueAt.setHours(hour, 0, 0, 0);
+    // Bugünün hedef saati — FABRİKA gününe göre (2026-08-09, F-OPS-VER-005).
+    // Eskiden `new Date(now).setHours(hour, 0, 0, 0)` idi ve SÜREÇ saat dilimini
+    // kullanıyordu; kod tabanındaki TEK üretim `setHours`u buydu ve fabrika günü
+    // tek kaynağını (`constants/time.ts`) atlıyordu. Bugün etkisi yok — sahada
+    // scheduler KAPALI (BACKUP_SCHEDULE_ENABLED=false) ve dev makinesi zaten
+    // Europe/Istanbul. Risk bayrak açıldığı gün doğardı: süreç farklı bir TZ ile
+    // başlarsa (pm2 servis olarak başka kullanıcıdan, ya da makine UTC'ye ayarlı)
+    // `BACKUP_HOUR=3` yerel 03:00 DEĞİL süreç TZ'sinde 03:00 anlamına gelir —
+    // Europe/Istanbul için UTC'de bu yerel 06:00'dır, yani pg_dump VARDİYA İÇİNDE
+    // koşup dolu bir DB'de dakikalarca I/O yapardı. Hata, log ya da uyarı YOK.
+    const dueAt = new Date(factoryDayStart(now).getTime() + hour * 60 * 60 * 1000);
     if (now < dueAt) return;
 
     const last = await getLastRun();
@@ -98,7 +108,10 @@ async function runIfDue(): Promise<void> {
       console.error(`[backup] gece yedeği BAŞARISIZ — ${result.message}`);
     }
   } catch (err) {
-    console.error("[backup] zamanlayıcı çalışması başarısız:", err);
+    // Konsol + SystemLog + (havuz zaman aşımıysa) /health sayacı — F-CORE-OPS-004.
+    // NOT: `runBackupJob`ın KENDİ başarısızlığı zaten BACKUP_FAILED audit'i yazar;
+    // buraya düşen şey o zincirin DIŞINDAKİ hatadır (ayar okuma, damga yazma).
+    reportJobFailure("backup", err);
   } finally {
     checking = false;
     checkingSince = null;

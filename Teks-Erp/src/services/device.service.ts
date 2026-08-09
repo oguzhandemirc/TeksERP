@@ -13,6 +13,17 @@ import { DeviceKind } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 
+/**
+ * Eşleşme bekleyen cihaz üst sınırı (F-CORE-GUV-003). Kimlik doğrulamasız
+ * `announce` ucunun sınırsız satır açmasını engeller. Gerçekte bekleyen cihaz
+ * sayısı tek hanelidir (2026-08-09 ölçümü: 9) — 200 cömert bir tavandır ve
+ * meşru bir kuruluma (aynı gün onlarca tablet devreye alma) engel olmaz.
+ */
+const MAX_PENDING_DEVICES = 200;
+
+/** Admin cihaz listesi okuma tavanı — tavansız `findMany` yasağı (perf kuralı 5). */
+const DEVICE_LIST_LIMIT = 500;
+
 const DEVICE_INCLUDE = {
   machine: {
     select: { id: true, code: true, name: true, station: { select: { id: true, name: true } } },
@@ -69,6 +80,13 @@ export class DeviceService {
     return prisma.device.findMany({
       orderBy: [{ status: "asc" }, { isActive: "desc" }, { createdAt: "desc" }],
       include: DEVICE_INCLUDE,
+      // ⚠️ TAVAN (2026-08-09, F-CORE-GUV-003). Eskiden tavansızdı ve bu, kimlik
+      // doğrulamasız `announce` ucuyla birleşince asıl zararı üretiyordu: sahte
+      // kayıtlar tek yanıtta dönüp ekranı kullanılamaz hale getiriyordu. Artık
+      // hem kaynakta tavan (MAX_PENDING_DEVICES) hem burada okuma tavanı var —
+      // iki bağımsız hat. Sıralama PENDING'i öne aldığı için tavan, eşleşme
+      // bekleyen cihazları KESMEZ; kesilen taraf eski APPROVED kuyruğudur.
+      take: DEVICE_LIST_LIMIT,
     });
   }
 
@@ -142,6 +160,32 @@ export class DeviceService {
     const kind = normalizeDeviceKind(input.kind);
     const kindLabel = kind === "PHONE" ? "Telefon" : kind === "DESKTOP" ? "Masaüstü" : "Tablet";
     const fallbackName = input.name?.trim() || `${kindLabel} ${deviceId.slice(0, 8)}`;
+    // ⚠️ YENİ CİHAZ KAYDI TAVANLI (2026-08-09 denetimi, F-CORE-GUV-003).
+    // Bu uç KİMLİK DOĞRULAMASIZ (tablet eşleşmeden token alamaz) ve hız sınırı
+    // yok — yani rastgele `deviceId` üreten bir betik sınırsız PENDING satırı
+    // açabiliyordu. Zarar satır sayısı değil GÖRÜNÜRLÜK: admin Cihazlar ekranı
+    // sahadaki gerçek tableti binlerce sahte kayıt arasında bulup onaylayamaz,
+    // yani yeni tablet üretime alınamaz. Temizlik yolu satır satır (hard delete).
+    //
+    // Tavan YALNIZ YENİ KAYIT açar/kapatır: bilinen bir cihazın `announce`ı
+    // (canlılık yazımı) HER ZAMAN çalışır — sahadaki tabletleri tavana kurban
+    // etmek, önlenmeye çalışılan şeyden kötü olurdu. Eşik cömert: gerçekte
+    // eşleşme bekleyen cihaz sayısı tek hanelidir (ölçüm: 9).
+    const existing = await prisma.device.findUnique({
+      where: { deviceId },
+      select: { id: true },
+    });
+    if (!existing) {
+      const pendingCount = await prisma.device.count({ where: { status: "PENDING" } });
+      if (pendingCount >= MAX_PENDING_DEVICES) {
+        throw AppError.tooManyRequests(
+          `Eşleşme bekleyen cihaz sayısı üst sınıra ulaştı (${MAX_PENDING_DEVICES}). ` +
+            `Yönetici panelinden bekleyen cihazları onaylayın veya kaldırın.`,
+          { code: "PENDING_DEVICE_LIMIT" },
+        );
+      }
+    }
+
     const device = await prisma.device.upsert({
       where: { deviceId },
       create: { deviceId, name: fallbackName, kind, status: "PENDING", isActive: true, lastSeenAt: new Date() },

@@ -75,7 +75,15 @@ export function useServerHealth() {
   const q = useQuery({
     queryKey: ["server-health"],
     queryFn: async () => {
-      const res = await apiClient.get<HealthResponse>("/health", {
+      // ⚠️ `/health` DEĞİL `/admin/health` (backend denetimi 2026-08-09,
+      // F-CORE-GUV-002). Public `/health` artık YALNIZ canlılık döndürüyor
+      // (status/api/db/version/time) — bu ekranın okuduğu her metrik
+      // (lastBackup, poolMax, diskUsedPct, dbSizeBytes, activeUsers,
+      // lastPoolTimeoutError) `admin:settings` arkasına alındı; o alanlar
+      // kimlik doğrulamasız bir uçtan LAN'a açıktı.
+      // ⚠️ BACKEND ile AYNI PENCEREDE deploy edilmeli: backend önce giderse bu
+      // ekran 404, panel önce giderse 401 alır.
+      const res = await apiClient.get<HealthResponse>("/admin/health", {
         suppressErrorToast: true,
       });
       return res.data;

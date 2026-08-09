@@ -8,7 +8,7 @@
 // topları son adımda finalize eder.
 // =============================================================================
 import { Prisma, RollStatus, RollForm } from "@prisma/client";
-import { generateRollBarcode, type RollBarcodeType } from "./roll-barcode.helper";
+import { reserveRollBarcodesInOrder, type RollBarcodeType } from "./roll-barcode.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -83,13 +83,33 @@ export async function finalizeRollsAtLastStep(
     rolls.map((r) => r.qualityGrade),
   );
 
+  // Barkod gereken toplar için TEK rezervasyon (tip başına tek ifade).
+  // (2026-08-10 denetimi, F-CORE-VER-001) Eskiden döngü her barkodsuz top için
+  // ayrı bir sayaç turu atıyordu; N top = N gidiş-dönüş ve sayaç satırının kilidi
+  // ilk turdan itibaren zaten tutuluyordu, yani araya giren her tur kilidi o
+  // kadar daha uzun tutuyordu. Artık tip başına tek ifade.
+  //
+  // ⚠️ REZERVASYON BİLİNÇLİ OLARAK TX'İN İÇİNDE KALDI, dışarı taşınmadı.
+  // Taşımak imkânsız: çağıranların ikisinde (`kursun-bypass.service` ~1386,
+  // `kursun-qc.service` ~866) `rollIds` listesi tx'in İÇİNDE hesaplanıyor
+  // (o an hareketi kapanan toplar) — çağıran tx açılmadan hangi topların
+  // barkoda ihtiyacı olduğunu BİLEMEZ. Tx içinde kalmanın bir kazancı da var:
+  // tx geri sararsa sayaç artışı da geri sarılır, boşluk doğmaz.
+  const statusOf = new Map(rolls.map((r) => [r.id, resolveFinalStatus(r.qualityGrade, statusByCode)]));
+  const needBarcode = rolls.filter((r) => !r.barcode);
+  const reserved = await reserveRollBarcodesInOrder(
+    tx,
+    needBarcode.map((r) => finalBarcodeType(statusOf.get(r.id)!)),
+  );
+  const barcodeFor = new Map(needBarcode.map((r, i) => [r.id, reserved[i]!]));
+
   const out: FinalizedRoll[] = [];
   for (const r of rolls) {
-    const status = resolveFinalStatus(r.qualityGrade, statusByCode);
+    const status = statusOf.get(r.id)!;
     let barcode = r.barcode;
     let barcodeGenerated = false;
     if (!barcode) {
-      barcode = await generateRollBarcode(tx, finalBarcodeType(status));
+      barcode = barcodeFor.get(r.id)!;
       barcodeGenerated = true;
     }
     const resolvedQualityGradeId =

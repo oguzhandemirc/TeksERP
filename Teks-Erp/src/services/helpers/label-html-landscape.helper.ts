@@ -14,7 +14,7 @@
 // Tüm alanlar template `vis()/lbl()/sty()` ile geçirgen — admin Electron'da yönetir.
 // =============================================================================
 
-import type { LabelPayload } from "../label.service";
+import type { LabelPayload } from "../../types/label.types";
 import type { LabelTemplate } from "@prisma/client";
 import { LabelKind } from "@prisma/client";
 import {

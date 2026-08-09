@@ -16,9 +16,21 @@ import { AppError } from "../utils/app-error";
  * Kullanıcı izinleri arasında required iznin karşılanıp karşılanmadığını kontrol eder.
  * Domain-bazlı wildcard ("mobile:*") ve global wildcard ("*") destekler.
  *
- * Domain wildcard yalnızca tek seviyelidir: "admin:*" → "admin:users", "admin:settings"
- * eşleşir ama hierarchical değildir (yani "mobile:*" → "mobile:depo:read" gibi
- * iki kolonlu kodları kapsamaz; öyle bir konvansiyon kullanılmıyor).
+ * ⚠️ DOMAIN = İLK iki noktaya kadarki ön ek — ve bu, çok kolonlu kodları DA kapsar.
+ * (2026-08-09 denetimi, F-CORE-GUV-004: buradaki eski açıklama kodun TERSİNİ
+ * söylüyordu — "mobile:* iki kolonlu mobile:depo:read'i KAPSAMAZ" diyordu.)
+ * Gerçek davranış: `indexOf(":")` İLK iki noktayı bulur, yani required
+ * "mobile:depo:read" için üretilen wildcard "mobile:*"tır ve EŞLEŞİR.
+ *
+ * Yanlış açıklamanın tehlikesi somuttu: birisi `mobile:depo:write` gibi iki
+ * kolonlu bir kod ekleyip "mobile:* bunu vermez, ayrıca atamam gerekir" diye
+ * varsayardı; kod ise `mobile:*` taşıyan HERKESE o yetkiyi sessizce verirdi —
+ * ve bu, kullanıcının atanmış izin listesinde GÖRÜNMEZDİ.
+ *
+ * Bugün katalogdaki 67 kodun tamamı TEK kolonludur (mekanik olarak doğrulanıyor:
+ * `scripts/test_permission_catalog.ts` her kodun tam bir iki nokta taşıdığını
+ * iddia eder). Yani bu bir gelecek tuzağıdır, bugünkü bir açık değil — ve
+ * kolon-sayısı kontrolü tam olarak o tuzağın kapısıdır.
  */
 export const matchesPermission = (
   userPermissions: readonly string[],

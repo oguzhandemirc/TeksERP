@@ -34,6 +34,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { OrderService } from "../src/services/order.service";
 import { KartelaService } from "../src/services/kartela.service";
 import { ProductionBalanceService } from "../src/services/production-balance.service";
+import { buildDispatchAccountingExport } from "../src/services/accounting-export.service";
 import type { Request } from "express";
 
 let pass = 0;
@@ -405,8 +406,80 @@ async function main(): Promise<void> {
       balTwo.length === 2 && !balTwo.some((g) => g.itemId === itemC.id),
       `${balTwo.length} grup`,
     );
+    // ── 7) MUHASEBE EXCEL EXPORT'U — müşteri çoklu (F-CORE-API-001) ───────────
+    // Bu yüzey 2026-08-06 çoklu-seçim turunda ATLANMIŞTI: LİSTE (`listShipments`)
+    // CSV'yi buildWhereClause üzerinden doğru işliyordu ama EXPORT kendi tekil
+    // `UUID_RE.test(params.filters.customerId)` doğrulamasını yapıyordu; CSV o testi
+    // geçemiyor, üstteki `delete where.customerId` filtreyi zaten silmiş oluyordu →
+    // müşteri koşulu SESSİZCE DÜŞÜYORDU. Ekran 2 müşteri gösterirken inen Excel
+    // dönemdeki TÜM müşterileri içeriyordu (muhasebe mutabakatı yanlış kümede yapılır).
+    //
+    // Sondanın deterministik olmasını sağlayan şey ÜÇÜNCÜ müşteridir (cuC): iddia
+    // "A ve B var" değil "C YOK" — ortamda başka sevkiyat olsa da olmasa da geçerli.
+    console.log("\n[7] Muhasebe Excel export'u: müşteri çoklu");
+    const mkCustomer = async (suffix: string) =>
+      prisma.customer.create({
+        data: { code: `${tag}-${suffix}`, name: `${tag} ${suffix}` },
+        select: { id: true, code: true },
+      });
+    const [cuA, cuB, cuC] = [await mkCustomer("EXA"), await mkCustomer("EXB"), await mkCustomer("EXC")];
+    customerIds.push(cuA.id, cuB.id, cuC.id);
+    const dispatchedAt = new Date();
+    const shipIds: string[] = [];
+    for (const [i, cu] of [cuA, cuB, cuC].entries()) {
+      const sh = await prisma.shipment.create({
+        data: {
+          shipmentNo: `${tag}-S${i}`,
+          customerId: cu.id,
+          status: "DISPATCHED",
+          dispatchedAt,
+        },
+        select: { id: true },
+      });
+      shipIds.push(sh.id);
+    }
+    // Pencere: damganın 1 dk öncesi–sonrası (dönem modu her zaman sınırlı aralık ister).
+    const win = {
+      dateField: "dispatchedAt",
+      dateFrom: new Date(dispatchedAt.getTime() - 60_000).toISOString(),
+      dateTo: new Date(dispatchedAt.getTime() + 60_000).toISOString(),
+    };
+    const exportCodes = async (customerCsv: string): Promise<string[]> => {
+      const res = await buildDispatchAccountingExport(
+        fakeReq({ ...win, "filter[customerId]": customerCsv }),
+      );
+      const rows = (res.data as { shipments: Array<{ customerCode: string }> }).shipments;
+      // Yalnız BU testin fixture'ları (ortamdaki gerçek sevkiyatlar sayıma girmesin).
+      return rows.map((r) => r.customerCode).filter((c) => c.startsWith(`${tag}-EX`));
+    };
+    const exOne = await exportCodes(cuA.id);
+    check(
+      "tek müşteri — davranış değişmedi (yalnız A)",
+      exOne.length === 1 && exOne[0] === cuA.code,
+      exOne.join(",") || "boş",
+    );
+    const exTwo = await exportCodes(`${cuA.id},${cuB.id}`);
+    check(
+      "iki müşteri (CSV) → A ve B var",
+      exTwo.includes(cuA.code) && exTwo.includes(cuB.code),
+      exTwo.join(",") || "boş",
+    );
+    check(
+      "iki müşteri (CSV) → C YOK (filtre sessizce düşmüyor)",
+      !exTwo.includes(cuC.code),
+      exTwo.join(",") || "boş",
+    );
+    // Bozuk uuid içeren CSV: sessizce düşmek YERİNE net 400 (parça başına doğrulama).
+    let malformedRejected = false;
+    try {
+      await exportCodes(`${cuA.id},bozuk-uuid`);
+    } catch (e) {
+      malformedRejected = (e as { statusCode?: number })?.statusCode === 400;
+    }
+    check("CSV içinde bozuk uuid → 400 (sessiz düşme yok)", malformedRejected);
   } finally {
     // Bağımlılık sırası: yaprak → kök.
+    await prisma.shipment.deleteMany({ where: { shipmentNo: { startsWith: `${tag}-S` } } });
     await prisma.swatch.deleteMany({ where: { id: { in: swatchIds } } });
     await prisma.kartelaDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
     await prisma.subcontractor.deleteMany({ where: { id: { in: subIds } } });

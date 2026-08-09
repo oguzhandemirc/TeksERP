@@ -8,7 +8,7 @@
 // =============================================================================
 import bwipjs from "bwip-js";
 import { PrinterLanguage, type LabelKind } from "@prisma/client";
-import type { LabelPayload } from "../label.service";
+import type { LabelPayload } from "../../types/label.types";
 import { fieldDisplayValue } from "./label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./native-preview";
 import { escapeHtml } from "./label-html.shared";

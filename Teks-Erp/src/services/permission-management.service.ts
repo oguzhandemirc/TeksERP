@@ -16,6 +16,11 @@ import { readLoginMethods } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 
+/** Yetki (son-admin) guard'ı advisory lock namespace'i (F-KIM-GUV-003). Tek anahtar:
+ *  guard sistem geneli tek bir seri kapıdır, kullanıcı başına DEĞİL. */
+export const PERM_ADMIN_LOCK_NS: number = 8025;
+export const PERM_ADMIN_LOCK_KEY: number = 1;
+
 /**
  * Yeni kullanıcının varsayılan olarak aldığı üretim istasyon izinleri (opt-out'lu).
  * Tabletler yalnız bu üç istasyonda olduğundan yeni operatör KK1↔KK2↔Tambur arası
@@ -581,7 +586,9 @@ export class PermissionManagementService {
   private static async acquireAdminGuardLock(tx: Prisma.TransactionClient): Promise<void> {
     // void dönüşü alt sorguda gizlenir — pg driver adapter void kolonu
     // deserialize edemiyor (UnsupportedNativeDataType), dışarı yalnız int çıkar.
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('perm-admin-guard'))) AS l`;
+    // 2 ARGÜMANLI form (2026-08-09, F-KIM-GUV-003) — 1-argümanlı uzay AYRI bir
+    // uzaydır ve onu `session-registry` ile paylaşıyorduk. Bkz. o dosyadaki not.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(${PERM_ADMIN_LOCK_NS}::int, ${PERM_ADMIN_LOCK_KEY}::int)) AS l`;
   }
 
   /** F253: Bir admin yetkisi sökülürken (revoke/set) sistemde efektif admin:users

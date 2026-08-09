@@ -1,0 +1,1833 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 179,
+        "endLoc": {
+          "column": 39,
+          "line": 179,
+          "position": 6111
+        },
+        "name": "controllers/auth.controller.ts",
+        "start": 151,
+        "startLoc": {
+          "column": 30,
+          "line": 151,
+          "position": 5156
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 29,
+      "secondFile": {
+        "end": 258,
+        "endLoc": {
+          "column": 39,
+          "line": 258,
+          "position": 9059
+        },
+        "name": "controllers/auth.controller.ts",
+        "start": 230,
+        "startLoc": {
+          "column": 34,
+          "line": 230,
+          "position": 8105
+        }
+      },
+      "tokens": 134
+    },
+    {
+      "firstFile": {
+        "end": 507,
+        "endLoc": {
+          "column": 7,
+          "line": 507,
+          "position": 21283
+        },
+        "name": "controllers/inventory.controller.ts",
+        "start": 477,
+        "startLoc": {
+          "column": 6,
+          "line": 477,
+          "position": 20378
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 31,
+      "secondFile": {
+        "end": 814,
+        "endLoc": {
+          "column": 7,
+          "line": 814,
+          "position": 30670
+        },
+        "name": "controllers/workorder.controller.ts",
+        "start": 787,
+        "startLoc": {
+          "column": 6,
+          "line": 787,
+          "position": 30014
+        }
+      },
+      "tokens": 101
+    },
+    {
+      "firstFile": {
+        "end": 121,
+        "endLoc": {
+          "column": 43,
+          "line": 121,
+          "position": 5718
+        },
+        "name": "controllers/label.controller.ts",
+        "start": 100,
+        "startLoc": {
+          "column": 76,
+          "line": 100,
+          "position": 4769
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 276,
+        "endLoc": {
+          "column": 4,
+          "line": 276,
+          "position": 13272
+        },
+        "name": "controllers/label.controller.ts",
+        "start": 268,
+        "startLoc": {
+          "column": 97,
+          "line": 268,
+          "position": 12879
+        }
+      },
+      "tokens": 96
+    },
+    {
+      "firstFile": {
+        "end": 453,
+        "endLoc": {
+          "column": 17,
+          "line": 453,
+          "position": 20747
+        },
+        "name": "controllers/label.controller.ts",
+        "start": 433,
+        "startLoc": {
+          "column": 41,
+          "line": 433,
+          "position": 20097
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 21,
+      "secondFile": {
+        "end": 593,
+        "endLoc": {
+          "column": 4,
+          "line": 593,
+          "position": 26553
+        },
+        "name": "controllers/label.controller.ts",
+        "start": 573,
+        "startLoc": {
+          "column": 16,
+          "line": 573,
+          "position": 25923
+        }
+      },
+      "tokens": 140
+    },
+    {
+      "firstFile": {
+        "end": 62,
+        "endLoc": {
+          "column": 1,
+          "line": 62,
+          "position": 3402
+        },
+        "name": "controllers/workorder.controller.ts",
+        "start": 35,
+        "startLoc": {
+          "column": 6,
+          "line": 35,
+          "position": 2196
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 28,
+      "secondFile": {
+        "end": 252,
+        "endLoc": {
+          "column": 1,
+          "line": 252,
+          "position": 12008
+        },
+        "name": "controllers/workorder.controller.ts",
+        "start": 230,
+        "startLoc": {
+          "column": 6,
+          "line": 230,
+          "position": 11067
+        }
+      },
+      "tokens": 272
+    },
+    {
+      "firstFile": {
+        "end": 310,
+        "endLoc": {
+          "column": 6,
+          "line": 310,
+          "position": 9387
+        },
+        "name": "routes/admin.routes.ts",
+        "start": 290,
+        "startLoc": {
+          "column": 49,
+          "line": 290,
+          "position": 8723
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 21,
+      "secondFile": {
+        "end": 346,
+        "endLoc": {
+          "column": 5,
+          "line": 346,
+          "position": 10695
+        },
+        "name": "routes/admin.routes.ts",
+        "start": 335,
+        "startLoc": {
+          "column": 51,
+          "line": 335,
+          "position": 10250
+        }
+      },
+      "tokens": 78
+    },
+    {
+      "firstFile": {
+        "end": 151,
+        "endLoc": {
+          "column": 22,
+          "line": 151,
+          "position": 5039
+        },
+        "name": "routes/color.routes.ts",
+        "start": 71,
+        "startLoc": {
+          "column": 114,
+          "line": 71,
+          "position": 2492
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 81,
+      "secondFile": {
+        "end": 196,
+        "endLoc": {
+          "column": 22,
+          "line": 196,
+          "position": 7272
+        },
+        "name": "routes/fabric-property.routes.ts",
+        "start": 108,
+        "startLoc": {
+          "column": 0,
+          "line": 108,
+          "position": 4203
+        }
+      },
+      "tokens": 60
+    },
+    {
+      "firstFile": {
+        "end": 178,
+        "endLoc": {
+          "column": 80,
+          "line": 178,
+          "position": 5931
+        },
+        "name": "routes/product-recipe.routes.ts",
+        "start": 33,
+        "startLoc": {
+          "column": 1,
+          "line": 33,
+          "position": 1562
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 146,
+      "secondFile": {
+        "end": 160,
+        "endLoc": {
+          "column": 80,
+          "line": 160,
+          "position": 5084
+        },
+        "name": "routes/route.routes.ts",
+        "start": 16,
+        "startLoc": {
+          "column": 53,
+          "line": 16,
+          "position": 1009
+        }
+      },
+      "tokens": 125
+    },
+    {
+      "firstFile": {
+        "end": 342,
+        "endLoc": {
+          "column": 11,
+          "line": 342,
+          "position": 14753
+        },
+        "name": "services/base.service.ts",
+        "start": 318,
+        "startLoc": {
+          "column": 19,
+          "line": 318,
+          "position": 14000
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 25,
+      "secondFile": {
+        "end": 112,
+        "endLoc": {
+          "column": 7,
+          "line": 112,
+          "position": 4776
+        },
+        "name": "services/subcontractor-management.service.ts",
+        "start": 97,
+        "startLoc": {
+          "column": 34,
+          "line": 97,
+          "position": 4521
+        }
+      },
+      "tokens": 55
+    },
+    {
+      "firstFile": {
+        "end": 342,
+        "endLoc": {
+          "column": 90,
+          "line": 342,
+          "position": 14832
+        },
+        "name": "services/base.service.ts",
+        "start": 318,
+        "startLoc": {
+          "column": 19,
+          "line": 318,
+          "position": 14000
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 25,
+      "secondFile": {
+        "end": 373,
+        "endLoc": {
+          "column": 9,
+          "line": 373,
+          "position": 13508
+        },
+        "name": "services/subcontractor-management.service.ts",
+        "start": 357,
+        "startLoc": {
+          "column": 26,
+          "line": 357,
+          "position": 13189
+        }
+      },
+      "tokens": 71
+    },
+    {
+      "firstFile": {
+        "end": 456,
+        "endLoc": {
+          "column": 9,
+          "line": 456,
+          "position": 19165
+        },
+        "name": "services/base.service.ts",
+        "start": 434,
+        "startLoc": {
+          "column": 56,
+          "line": 434,
+          "position": 18612
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 23,
+      "secondFile": {
+        "end": 1421,
+        "endLoc": {
+          "column": 11,
+          "line": 1421,
+          "position": 61105
+        },
+        "name": "services/workorder.service.ts",
+        "start": 1401,
+        "startLoc": {
+          "column": 91,
+          "line": 1401,
+          "position": 60509
+        }
+      },
+      "tokens": 106
+    },
+    {
+      "firstFile": {
+        "end": 713,
+        "endLoc": {
+          "column": 14,
+          "line": 713,
+          "position": 29117
+        },
+        "name": "services/base.service.ts",
+        "start": 691,
+        "startLoc": {
+          "column": 4,
+          "line": 691,
+          "position": 28617
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 23,
+      "secondFile": {
+        "end": 192,
+        "endLoc": {
+          "column": 14,
+          "line": 192,
+          "position": 7909
+        },
+        "name": "services/product-recipe.service.ts",
+        "start": 175,
+        "startLoc": {
+          "column": 4,
+          "line": 175,
+          "position": 7428
+        }
+      },
+      "tokens": 103
+    },
+    {
+      "firstFile": {
+        "end": 126,
+        "endLoc": {
+          "column": 8,
+          "line": 126,
+          "position": 5858
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 96,
+        "startLoc": {
+          "column": 22,
+          "line": 96,
+          "position": 4818
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 31,
+      "secondFile": {
+        "end": 119,
+        "endLoc": {
+          "column": 8,
+          "line": 119,
+          "position": 4546
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 89,
+        "startLoc": {
+          "column": 35,
+          "line": 89,
+          "position": 3515
+        }
+      },
+      "tokens": 122
+    },
+    {
+      "firstFile": {
+        "end": 150,
+        "endLoc": {
+          "column": 36,
+          "line": 150,
+          "position": 6723
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 96,
+        "startLoc": {
+          "column": 22,
+          "line": 96,
+          "position": 4818
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 55,
+      "secondFile": {
+        "end": 109,
+        "endLoc": {
+          "column": 15,
+          "line": 109,
+          "position": 4059
+        },
+        "name": "services/document-render/kartela-ceki.html.ts",
+        "start": 54,
+        "startLoc": {
+          "column": 24,
+          "line": 54,
+          "position": 2027
+        }
+      },
+      "tokens": 380
+    },
+    {
+      "firstFile": {
+        "end": 126,
+        "endLoc": {
+          "column": 8,
+          "line": 126,
+          "position": 5858
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 97,
+        "startLoc": {
+          "column": 60,
+          "line": 97,
+          "position": 4882
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 30,
+      "secondFile": {
+        "end": 77,
+        "endLoc": {
+          "column": 8,
+          "line": 77,
+          "position": 2707
+        },
+        "name": "services/document-render/fason-receipt.html.ts",
+        "start": 55,
+        "startLoc": {
+          "column": 21,
+          "line": 55,
+          "position": 2261
+        }
+      },
+      "tokens": 107
+    },
+    {
+      "firstFile": {
+        "end": 126,
+        "endLoc": {
+          "column": 8,
+          "line": 126,
+          "position": 5858
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 97,
+        "startLoc": {
+          "column": 60,
+          "line": 97,
+          "position": 4882
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 30,
+      "secondFile": {
+        "end": 69,
+        "endLoc": {
+          "column": 8,
+          "line": 69,
+          "position": 2087
+        },
+        "name": "services/document-render/quality-certificate.html.ts",
+        "start": 52,
+        "startLoc": {
+          "column": 42,
+          "line": 52,
+          "position": 1662
+        }
+      },
+      "tokens": 107
+    },
+    {
+      "firstFile": {
+        "end": 147,
+        "endLoc": {
+          "column": 7,
+          "line": 147,
+          "position": 6600
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 97,
+        "startLoc": {
+          "column": 70,
+          "line": 97,
+          "position": 4892
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 51,
+      "secondFile": {
+        "end": 74,
+        "endLoc": {
+          "column": 15,
+          "line": 74,
+          "position": 3021
+        },
+        "name": "services/document-render/return-dispatch.html.ts",
+        "start": 46,
+        "startLoc": {
+          "column": 27,
+          "line": 46,
+          "position": 1948
+        }
+      },
+      "tokens": 317
+    },
+    {
+      "firstFile": {
+        "end": 120,
+        "endLoc": {
+          "column": 13,
+          "line": 120,
+          "position": 5682
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 100,
+        "startLoc": {
+          "column": 21,
+          "line": 100,
+          "position": 4918
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 21,
+      "secondFile": {
+        "end": 136,
+        "endLoc": {
+          "column": 5,
+          "line": 136,
+          "position": 7200
+        },
+        "name": "services/printed-document.service.ts",
+        "start": 110,
+        "startLoc": {
+          "column": 10,
+          "line": 110,
+          "position": 5881
+        }
+      },
+      "tokens": 79
+    },
+    {
+      "firstFile": {
+        "end": 134,
+        "endLoc": {
+          "column": 31,
+          "line": 134,
+          "position": 6158
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 114,
+        "startLoc": {
+          "column": 27,
+          "line": 114,
+          "position": 5576
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 21,
+      "secondFile": {
+        "end": 38,
+        "endLoc": {
+          "column": 1,
+          "line": 38,
+          "position": 1730
+        },
+        "name": "services/document-render/free-document.html.ts",
+        "start": 26,
+        "startLoc": {
+          "column": 17,
+          "line": 26,
+          "position": 1302
+        }
+      },
+      "tokens": 145
+    },
+    {
+      "firstFile": {
+        "end": 504,
+        "endLoc": {
+          "column": 17,
+          "line": 504,
+          "position": 25624
+        },
+        "name": "services/document-render/fason-ceki.html.ts",
+        "start": 483,
+        "startLoc": {
+          "column": 12,
+          "line": 483,
+          "position": 24910
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 321,
+        "endLoc": {
+          "column": 17,
+          "line": 321,
+          "position": 14533
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 300,
+        "startLoc": {
+          "column": 69,
+          "line": 300,
+          "position": 13819
+        }
+      },
+      "tokens": 94
+    },
+    {
+      "firstFile": {
+        "end": 189,
+        "endLoc": {
+          "column": 7,
+          "line": 189,
+          "position": 7389
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 169,
+        "startLoc": {
+          "column": 61,
+          "line": 169,
+          "position": 6625
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 21,
+      "secondFile": {
+        "end": 151,
+        "endLoc": {
+          "column": 7,
+          "line": 151,
+          "position": 5711
+        },
+        "name": "services/document-render/kartela-ceki.html.ts",
+        "start": 132,
+        "startLoc": {
+          "column": 22,
+          "line": 132,
+          "position": 5068
+        }
+      },
+      "tokens": 114
+    },
+    {
+      "firstFile": {
+        "end": 296,
+        "endLoc": {
+          "column": 33,
+          "line": 296,
+          "position": 13670
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 262,
+        "startLoc": {
+          "column": 50,
+          "line": 262,
+          "position": 11929
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 35,
+      "secondFile": {
+        "end": 203,
+        "endLoc": {
+          "column": 33,
+          "line": 203,
+          "position": 8498
+        },
+        "name": "services/document-render/kartela-ceki.html.ts",
+        "start": 169,
+        "startLoc": {
+          "column": 50,
+          "line": 169,
+          "position": 6757
+        }
+      },
+      "tokens": 401
+    },
+    {
+      "firstFile": {
+        "end": 326,
+        "endLoc": {
+          "column": 19,
+          "line": 326,
+          "position": 14659
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 300,
+        "startLoc": {
+          "column": 64,
+          "line": 300,
+          "position": 13814
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 27,
+      "secondFile": {
+        "end": 218,
+        "endLoc": {
+          "column": 19,
+          "line": 218,
+          "position": 8921
+        },
+        "name": "services/document-render/fason-receipt.html.ts",
+        "start": 193,
+        "startLoc": {
+          "column": 59,
+          "line": 193,
+          "position": 8161
+        }
+      },
+      "tokens": 109
+    },
+    {
+      "firstFile": {
+        "end": 326,
+        "endLoc": {
+          "column": 19,
+          "line": 326,
+          "position": 14659
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 300,
+        "startLoc": {
+          "column": 64,
+          "line": 300,
+          "position": 13814
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 27,
+      "secondFile": {
+        "end": 233,
+        "endLoc": {
+          "column": 19,
+          "line": 233,
+          "position": 9483
+        },
+        "name": "services/document-render/kartela-ceki.html.ts",
+        "start": 207,
+        "startLoc": {
+          "column": 60,
+          "line": 207,
+          "position": 8638
+        }
+      },
+      "tokens": 109
+    },
+    {
+      "firstFile": {
+        "end": 321,
+        "endLoc": {
+          "column": 17,
+          "line": 321,
+          "position": 14533
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 300,
+        "startLoc": {
+          "column": 64,
+          "line": 300,
+          "position": 13814
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 193,
+        "endLoc": {
+          "column": 17,
+          "line": 193,
+          "position": 8095
+        },
+        "name": "services/document-render/quality-certificate.html.ts",
+        "start": 174,
+        "startLoc": {
+          "column": 66,
+          "line": 174,
+          "position": 7462
+        }
+      },
+      "tokens": 98
+    },
+    {
+      "firstFile": {
+        "end": 328,
+        "endLoc": {
+          "column": 106,
+          "line": 328,
+          "position": 14859
+        },
+        "name": "services/document-render/fason-direct-ship.html.ts",
+        "start": 300,
+        "startLoc": {
+          "column": 64,
+          "line": 300,
+          "position": 13814
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 29,
+      "secondFile": {
+        "end": 197,
+        "endLoc": {
+          "column": 10,
+          "line": 197,
+          "position": 9458
+        },
+        "name": "services/document-render/return-dispatch.html.ts",
+        "start": 170,
+        "startLoc": {
+          "column": 63,
+          "line": 170,
+          "position": 8511
+        }
+      },
+      "tokens": 134
+    },
+    {
+      "firstFile": {
+        "end": 434,
+        "endLoc": {
+          "column": 4,
+          "line": 434,
+          "position": 17601
+        },
+        "name": "services/inventory.service.ts",
+        "start": 411,
+        "startLoc": {
+          "column": 47,
+          "line": 411,
+          "position": 16453
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 24,
+      "secondFile": {
+        "end": 2026,
+        "endLoc": {
+          "column": 10,
+          "line": 2026,
+          "position": 89181
+        },
+        "name": "services/inventory.service.ts",
+        "start": 2016,
+        "startLoc": {
+          "column": 60,
+          "line": 2016,
+          "position": 88729
+        }
+      },
+      "tokens": 63
+    },
+    {
+      "firstFile": {
+        "end": 478,
+        "endLoc": {
+          "column": 1,
+          "line": 478,
+          "position": 19740
+        },
+        "name": "services/inventory.service.ts",
+        "start": 432,
+        "startLoc": {
+          "column": 63,
+          "line": 432,
+          "position": 17587
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 47,
+      "secondFile": {
+        "end": 2098,
+        "endLoc": {
+          "column": 7,
+          "line": 2098,
+          "position": 91913
+        },
+        "name": "services/inventory.service.ts",
+        "start": 2064,
+        "startLoc": {
+          "column": 12,
+          "line": 2064,
+          "position": 90523
+        }
+      },
+      "tokens": 154
+    },
+    {
+      "firstFile": {
+        "end": 1462,
+        "endLoc": {
+          "column": 9,
+          "line": 1462,
+          "position": 65657
+        },
+        "name": "services/inventory.service.ts",
+        "start": 1441,
+        "startLoc": {
+          "column": 31,
+          "line": 1441,
+          "position": 65044
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 1467,
+        "endLoc": {
+          "column": 9,
+          "line": 1467,
+          "position": 61186
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1446,
+        "startLoc": {
+          "column": 41,
+          "line": 1446,
+          "position": 60366
+        }
+      },
+      "tokens": 115
+    },
+    {
+      "firstFile": {
+        "end": 1479,
+        "endLoc": {
+          "column": 40,
+          "line": 1479,
+          "position": 57558
+        },
+        "name": "services/kartela.service.ts",
+        "start": 1453,
+        "startLoc": {
+          "column": 66,
+          "line": 1453,
+          "position": 56741
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 27,
+      "secondFile": {
+        "end": 5756,
+        "endLoc": {
+          "column": 40,
+          "line": 5756,
+          "position": 245456
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 5730,
+        "startLoc": {
+          "column": 73,
+          "line": 5730,
+          "position": 244639
+        }
+      },
+      "tokens": 196
+    },
+    {
+      "firstFile": {
+        "end": 250,
+        "endLoc": {
+          "column": 30,
+          "line": 250,
+          "position": 10937
+        },
+        "name": "services/kursun-qc.service.ts",
+        "start": 228,
+        "startLoc": {
+          "column": 40,
+          "line": 228,
+          "position": 10232
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 23,
+      "secondFile": {
+        "end": 1716,
+        "endLoc": {
+          "column": 30,
+          "line": 1716,
+          "position": 69906
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1698,
+        "startLoc": {
+          "column": 5,
+          "line": 1698,
+          "position": 69451
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 622,
+        "endLoc": {
+          "column": 35,
+          "line": 622,
+          "position": 25878
+        },
+        "name": "services/kursun-qc.service.ts",
+        "start": 598,
+        "startLoc": {
+          "column": 8,
+          "line": 598,
+          "position": 25097
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 25,
+      "secondFile": {
+        "end": 1689,
+        "endLoc": {
+          "column": 35,
+          "line": 1689,
+          "position": 69282
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1665,
+        "startLoc": {
+          "column": 8,
+          "line": 1665,
+          "position": 68501
+        }
+      },
+      "tokens": 138
+    },
+    {
+      "firstFile": {
+        "end": 878,
+        "endLoc": {
+          "column": 21,
+          "line": 878,
+          "position": 37058
+        },
+        "name": "services/order.service.ts",
+        "start": 856,
+        "startLoc": {
+          "column": 10,
+          "line": 856,
+          "position": 36223
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 23,
+      "secondFile": {
+        "end": 971,
+        "endLoc": {
+          "column": 21,
+          "line": 971,
+          "position": 40547
+        },
+        "name": "services/order.service.ts",
+        "start": 948,
+        "startLoc": {
+          "column": 55,
+          "line": 948,
+          "position": 39604
+        }
+      },
+      "tokens": 171
+    },
+    {
+      "firstFile": {
+        "end": 329,
+        "endLoc": {
+          "column": 24,
+          "line": 329,
+          "position": 14895
+        },
+        "name": "services/sack-search.service.ts",
+        "start": 307,
+        "startLoc": {
+          "column": 65,
+          "line": 307,
+          "position": 13994
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 23,
+      "secondFile": {
+        "end": 420,
+        "endLoc": {
+          "column": 70,
+          "line": 420,
+          "position": 18574
+        },
+        "name": "services/sack-search.service.ts",
+        "start": 404,
+        "startLoc": {
+          "column": 58,
+          "line": 404,
+          "position": 17895
+        }
+      },
+      "tokens": 120
+    },
+    {
+      "firstFile": {
+        "end": 244,
+        "endLoc": {
+          "column": 9,
+          "line": 244,
+          "position": 11488
+        },
+        "name": "services/shipping.service.ts",
+        "start": 214,
+        "startLoc": {
+          "column": 59,
+          "line": 214,
+          "position": 10301
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 31,
+      "secondFile": {
+        "end": 369,
+        "endLoc": {
+          "column": 9,
+          "line": 369,
+          "position": 17602
+        },
+        "name": "services/shipping.service.ts",
+        "start": 327,
+        "startLoc": {
+          "column": 124,
+          "line": 327,
+          "position": 15475
+        }
+      },
+      "tokens": 242
+    },
+    {
+      "firstFile": {
+        "end": 3096,
+        "endLoc": {
+          "column": 19,
+          "line": 3096,
+          "position": 135984
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 3056,
+        "startLoc": {
+          "column": 108,
+          "line": 3056,
+          "position": 133824
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 41,
+      "secondFile": {
+        "end": 3247,
+        "endLoc": {
+          "column": 17,
+          "line": 3247,
+          "position": 143551
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 3211,
+        "startLoc": {
+          "column": 57,
+          "line": 3211,
+          "position": 141913
+        }
+      },
+      "tokens": 258
+    },
+    {
+      "firstFile": {
+        "end": 3082,
+        "endLoc": {
+          "column": 9,
+          "line": 3082,
+          "position": 135304
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 3061,
+        "startLoc": {
+          "column": 69,
+          "line": 3061,
+          "position": 134064
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 3333,
+        "endLoc": {
+          "column": 7,
+          "line": 3333,
+          "position": 147399
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 3319,
+        "startLoc": {
+          "column": 79,
+          "line": 3319,
+          "position": 146812
+        }
+      },
+      "tokens": 137
+    },
+    {
+      "firstFile": {
+        "end": 3134,
+        "endLoc": {
+          "column": 17,
+          "line": 3134,
+          "position": 137870
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 3114,
+        "startLoc": {
+          "column": 96,
+          "line": 3114,
+          "position": 136810
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 21,
+      "secondFile": {
+        "end": 3295,
+        "endLoc": {
+          "column": 17,
+          "line": 3295,
+          "position": 145587
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 3277,
+        "startLoc": {
+          "column": 59,
+          "line": 3277,
+          "position": 144747
+        }
+      },
+      "tokens": 125
+    },
+    {
+      "firstFile": {
+        "end": 4910,
+        "endLoc": {
+          "column": 24,
+          "line": 4910,
+          "position": 208696
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 4889,
+        "startLoc": {
+          "column": 22,
+          "line": 4889,
+          "position": 207771
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 5033,
+        "endLoc": {
+          "column": 14,
+          "line": 5033,
+          "position": 213014
+        },
+        "name": "services/subcontractor.service.ts",
+        "start": 5012,
+        "startLoc": {
+          "column": 12,
+          "line": 5012,
+          "position": 212299
+        }
+      },
+      "tokens": 123
+    },
+    {
+      "firstFile": {
+        "end": 77,
+        "endLoc": {
+          "column": 31,
+          "line": 77,
+          "position": 2843
+        },
+        "name": "services/system-log.service.ts",
+        "start": 55,
+        "startLoc": {
+          "column": 44,
+          "line": 55,
+          "position": 2014
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 23,
+      "secondFile": {
+        "end": 139,
+        "endLoc": {
+          "column": 31,
+          "line": 139,
+          "position": 5249
+        },
+        "name": "services/system-log.service.ts",
+        "start": 117,
+        "startLoc": {
+          "column": 51,
+          "line": 117,
+          "position": 4420
+        }
+      },
+      "tokens": 218
+    },
+    {
+      "firstFile": {
+        "end": 789,
+        "endLoc": {
+          "column": 9,
+          "line": 789,
+          "position": 34220
+        },
+        "name": "services/tambur-manual.service.ts",
+        "start": 765,
+        "startLoc": {
+          "column": 4,
+          "line": 765,
+          "position": 32970
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 25,
+      "secondFile": {
+        "end": 1123,
+        "endLoc": {
+          "column": 7,
+          "line": 1123,
+          "position": 49556
+        },
+        "name": "services/tambur-manual.service.ts",
+        "start": 1095,
+        "startLoc": {
+          "column": 4,
+          "line": 1095,
+          "position": 48179
+        }
+      },
+      "tokens": 93
+    },
+    {
+      "firstFile": {
+        "end": 522,
+        "endLoc": {
+          "column": 7,
+          "line": 522,
+          "position": 20085
+        },
+        "name": "services/tambur.service.ts",
+        "start": 472,
+        "startLoc": {
+          "column": 78,
+          "line": 472,
+          "position": 17925
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 51,
+      "secondFile": {
+        "end": 1564,
+        "endLoc": {
+          "column": 7,
+          "line": 1564,
+          "position": 64431
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1536,
+        "startLoc": {
+          "column": 64,
+          "line": 1536,
+          "position": 63549
+        }
+      },
+      "tokens": 73
+    },
+    {
+      "firstFile": {
+        "end": 1410,
+        "endLoc": {
+          "column": 9,
+          "line": 1410,
+          "position": 58966
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1387,
+        "startLoc": {
+          "column": 68,
+          "line": 1387,
+          "position": 57876
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 24,
+      "secondFile": {
+        "end": 1507,
+        "endLoc": {
+          "column": 9,
+          "line": 1507,
+          "position": 62633
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1488,
+        "startLoc": {
+          "column": 37,
+          "line": 1488,
+          "position": 61857
+        }
+      },
+      "tokens": 85
+    },
+    {
+      "firstFile": {
+        "end": 2035,
+        "endLoc": {
+          "column": 45,
+          "line": 2035,
+          "position": 85124
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1957,
+        "startLoc": {
+          "column": 67,
+          "line": 1957,
+          "position": 81351
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 79,
+      "secondFile": {
+        "end": 2594,
+        "endLoc": {
+          "column": 45,
+          "line": 2594,
+          "position": 110301
+        },
+        "name": "services/tambur.service.ts",
+        "start": 2522,
+        "startLoc": {
+          "column": 95,
+          "line": 2522,
+          "position": 107006
+        }
+      },
+      "tokens": 273
+    },
+    {
+      "firstFile": {
+        "end": 2014,
+        "endLoc": {
+          "column": 7,
+          "line": 2014,
+          "position": 83700
+        },
+        "name": "services/tambur.service.ts",
+        "start": 1965,
+        "startLoc": {
+          "column": 46,
+          "line": 1965,
+          "position": 81837
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 50,
+      "secondFile": {
+        "end": 2310,
+        "endLoc": {
+          "column": 9,
+          "line": 2310,
+          "position": 97001
+        },
+        "name": "services/tambur.service.ts",
+        "start": 2268,
+        "startLoc": {
+          "column": 46,
+          "line": 2268,
+          "position": 95483
+        }
+      },
+      "tokens": 211
+    },
+    {
+      "firstFile": {
+        "end": 580,
+        "endLoc": {
+          "column": 43,
+          "line": 580,
+          "position": 24453
+        },
+        "name": "services/workorder.service.ts",
+        "start": 559,
+        "startLoc": {
+          "column": 8,
+          "line": 559,
+          "position": 23371
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 4545,
+        "endLoc": {
+          "column": 43,
+          "line": 4545,
+          "position": 190611
+        },
+        "name": "services/workorder.service.ts",
+        "start": 4527,
+        "startLoc": {
+          "column": 8,
+          "line": 4527,
+          "position": 189684
+        }
+      },
+      "tokens": 132
+    },
+    {
+      "firstFile": {
+        "end": 627,
+        "endLoc": {
+          "column": 75,
+          "line": 627,
+          "position": 26656
+        },
+        "name": "services/workorder.service.ts",
+        "start": 597,
+        "startLoc": {
+          "column": 6,
+          "line": 597,
+          "position": 25280
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 31,
+      "secondFile": {
+        "end": 4588,
+        "endLoc": {
+          "column": 75,
+          "line": 4588,
+          "position": 192510
+        },
+        "name": "services/workorder.service.ts",
+        "start": 4560,
+        "startLoc": {
+          "column": 6,
+          "line": 4560,
+          "position": 191303
+        }
+      },
+      "tokens": 234
+    },
+    {
+      "firstFile": {
+        "end": 756,
+        "endLoc": {
+          "column": 7,
+          "line": 756,
+          "position": 32090
+        },
+        "name": "services/workorder.service.ts",
+        "start": 634,
+        "startLoc": {
+          "column": 8,
+          "line": 634,
+          "position": 26930
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 123,
+      "secondFile": {
+        "end": 4706,
+        "endLoc": {
+          "column": 7,
+          "line": 4706,
+          "position": 197274
+        },
+        "name": "services/workorder.service.ts",
+        "start": 4595,
+        "startLoc": {
+          "column": 8,
+          "line": 4595,
+          "position": 192786
+        }
+      },
+      "tokens": 700
+    },
+    {
+      "firstFile": {
+        "end": 887,
+        "endLoc": {
+          "column": 11,
+          "line": 887,
+          "position": 38398
+        },
+        "name": "services/workorder.service.ts",
+        "start": 845,
+        "startLoc": {
+          "column": 11,
+          "line": 845,
+          "position": 36964
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 43,
+      "secondFile": {
+        "end": 5025,
+        "endLoc": {
+          "column": 11,
+          "line": 5025,
+          "position": 211157
+        },
+        "name": "services/workorder.service.ts",
+        "start": 4987,
+        "startLoc": {
+          "column": 41,
+          "line": 4987,
+          "position": 209976
+        }
+      },
+      "tokens": 161
+    },
+    {
+      "firstFile": {
+        "end": 2569,
+        "endLoc": {
+          "column": 12,
+          "line": 2569,
+          "position": 106598
+        },
+        "name": "services/workorder.service.ts",
+        "start": 2548,
+        "startLoc": {
+          "column": 22,
+          "line": 2548,
+          "position": 105912
+        }
+      },
+      "format": "typescript",
+      "fragment": "",
+      "lines": 22,
+      "secondFile": {
+        "end": 3023,
+        "endLoc": {
+          "column": 10,
+          "line": 3023,
+          "position": 126083
+        },
+        "name": "services/workorder.service.ts",
+        "start": 3002,
+        "startLoc": {
+          "column": 38,
+          "line": 3002,
+          "position": 125439
+        }
+      },
+      "tokens": 85
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-08-08T23:59:39.658Z",
+    "formats": {
+      "typescript": {
+        "clones": 50,
+        "duplicatedLines": 1691,
+        "duplicatedTokens": 7814,
+        "lines": 103482,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 1.6341006165323437,
+        "percentageTokens": 1.5226507451518365,
+        "sources": 266,
+        "tokens": 513184
+      }
+    },
+    "total": {
+      "clones": 50,
+      "duplicatedLines": 1691,
+      "duplicatedTokens": 7814,
+      "lines": 103482,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 1.6341006165323437,
+      "percentageTokens": 1.5226507451518365,
+      "sources": 266,
+      "tokens": 513184
+    }
+  }
+}

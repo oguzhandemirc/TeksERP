@@ -33,6 +33,22 @@ export async function withBarcodeRetry<T>(
       if (isRetryable && !isRetryable(err)) throw err;
       // Retry edilebilir P2002 — bir sonraki denemede findFirst büyümüş `lastSeq`'i
       // okur. Son denemeye kadar düşmediyse aşağıda 409 fırlatılır.
+      //
+      // ⚠️ JITTER'LI BEKLEME (2026-08-09 denetimi, F-URE-ESZ-001). Eskiden hiç
+      // bekleme yoktu: çakışan iki istek BEKLEMEDEN yeniden koşuyor ve aynı
+      // mikrosaniye penceresinde TEKRAR çarpışabiliyordu (livelock eğilimi) —
+      // beş deneme de tükenirse kullanıcı "Barkod üretimi 5 denemede başarısız
+      // oldu" 409'unu alır ve neyi yanlış yaptığını anlamaz. Rastgelelik ŞART:
+      // sabit bekleme iki isteği aynı ritimde tutar, yani çarpışmayı çözmez,
+      // erteler. Süre kasten küçük (5-30 ms) — tek kullanıcıya görünmez, ama
+      // iki isteği birbirinden ayırmaya yeter.
+      //
+      // ⚠️ SON DENEMEDEN SONRA BEKLEME YOK: döngü bitiyorsa beklemek yalnız
+      // hata mesajını geciktirir.
+      if (attempt < maxAttempts) {
+        const jitterMs = 5 + Math.floor(Math.random() * 25);
+        await new Promise((resolve) => setTimeout(resolve, jitterMs));
+      }
     }
   }
   throw AppError.conflict(

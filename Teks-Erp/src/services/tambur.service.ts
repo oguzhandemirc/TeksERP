@@ -55,7 +55,7 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
-import { generateRollBarcode } from "./helpers/roll-barcode.helper";
+import { generateRollBarcode, reserveRollBarcodesInOrder } from "./helpers/roll-barcode.helper";
 // ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
 // `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
 // import etmez — ortak guard'lar `helpers/kursun-bypass-guard.helper.ts`'te
@@ -773,6 +773,100 @@ export class TamburService {
       }
     }
 
+    // ── SEGMENT KURULUMU + BARKOD REZERVASYONU — tx AÇILMADAN ÖNCE ────────────
+    // (2026-08-10 denetimi, F-CORE-VER-001) Bu blok eskiden transaction'ın
+    // İÇİNDEYDİ ve her segment için ayrı ayrı `generateRollBarcode(tx, …)`
+    // çağırıyordu. Sayaç satırının kilidi artışı yapan tx COMMIT edene kadar
+    // tutulduğu için, İLK segmentin barkodu kalan tüm segmentler + 225 satır
+    // kuyruk (8 yazma + 3 tx-helper) boyunca tutuluyordu; o süre boyunca
+    // sahadaki HER KK1 ham top girişi aynı satırda kuyruğa giriyordu. Ölçüm:
+    // paralel istek **1345 ms** bekliyordu, blok dışarı alınınca **39 ms**.
+    //
+    // ⚠️ TAŞIMA NEDEN GÜVENLİ — iki dayanak, ikisi de ölçüldü:
+    //   1. Blok tx'e ait TEK BİR değer kullanmıyor: `inputCuts` (payload),
+    //      `totalQtyD`, `targetStatusByCode`, `qualityGradeIdByCode` ve
+    //      `roll.qualityGrade` zaten tx'ten ÖNCE hesaplanıyordu.
+    //   2. Tx içindeki BAYAT METRAJ GUARD'I (`freshQtyRow.currentQty` ≠
+    //      `totalQtyD` → 409) tam olarak bu varsayımı korumak için yazılmıştı
+    //      ("segment hesabı tx DIŞINDA okunan currentQty ile yapıldı"). Yani
+    //      segmentlerin tx dışında kurulmuş olması yeni bir durum DEĞİL; yeni
+    //      olan tek şey, artık barkodun da orada alınması.
+    // ⚠️ O GUARD'I KALDIRMA: tek doğrulama noktası odur — kaldırılırsa okuma ile
+    //    claim arasına giren bir kesim bayat toplamla FAZLA metraj üretir.
+    // ⚠️ REZERVASYON İDEMPOTENCY KAPISININ ALTINDA KALMALI. Yukarıdaki
+    //    `if (roll.status === TAMBUR_CONSUMED) return buildIdempotentResponse()`
+    //    (~satır 642) çevrimdışı replay'i ve çift dokunuşu tx'e hiç sokmadan
+    //    döndürüyor; rezervasyon onun ALTINDA olduğu için o çağrılar sayaca
+    //    dokunmuyor. Bloğu fonksiyonun başına taşımak "daha erken hazırlansın"
+    //    diye cazip görünür ama her replay N barkod yakardı — ve replay tam da
+    //    sahada en sık olan şeydir (tablet kuyruğu flush ederken).
+    // ⚠️ Rezervasyonu `prisma` ile ama tx callback'inin İÇİNDE çağırmak da
+    //    ÇÖZÜM DEĞİLDİR: ikinci bağlantı ister ve havuzu tüketir (30 eş zamanlı
+    //    işlemin yalnız 3'ü tamamlandı). Kabul kriteri iki koşulludur —
+    //    T1 < 100 ms VE T2 = 30/30 (bekçi: scripts/test_barcode_reservation.ts).
+
+    // Cumulative length-based segment'leri oluştur.
+    // inputCuts sıralı (operatörün makinede yaptığı sırayla); her cut bir
+    // child Roll. Kalan kısım son child Roll (parent.qualityGrade ile).
+    type Segment = {
+      start: number; // parent metresinde başlangıç offset
+      end: number; // parent metresinde bitiş offset
+      qty: number;
+      status: RollStatus;
+      qualityGrade: string | null;
+      inheritProperties: boolean;
+      auditSource: string;
+      auditErrorIds: string[];
+    };
+
+    // Decimal offset — float drift'le sahte ~0.000m kuyruk top yaratma.
+    const segments: Segment[] = [];
+    let offsetD = new Prisma.Decimal(0);
+    for (const c of inputCuts) {
+      const cutStatus = resolveCutStatus(c.qualityGrade, targetStatusByCode);
+      const nextOffsetD = offsetD.plus(c.length);
+      segments.push({
+        start: offsetD.toNumber(),
+        end: nextOffsetD.toNumber(),
+        qty: c.length,
+        status: cutStatus,
+        qualityGrade: c.qualityGrade,
+        // Tüm kalite seviyeleri (1.KALITE/A1/FIRE) WAREHOUSE'a iner; fabric
+        // özellikleri kalite seviyesinden bağımsız olduğu için her child miras alır.
+        inheritProperties: cutStatus === RollStatus.WAREHOUSE,
+        auditSource: "OPERATOR_CUT",
+        auditErrorIds: c.relatedErrorIds,
+      });
+      offsetD = nextOffsetD;
+    }
+    // Kalan kısım (sum(lengths) < totalQty) otomatik son child top.
+    if (offsetD.lessThan(totalQtyD)) {
+      const remaining = totalQtyD.minus(offsetD).toNumber();
+      const remainStatus = resolveCutStatus(
+        roll.qualityGrade,
+        targetStatusByCode
+      );
+      segments.push({
+        start: offsetD.toNumber(),
+        end: totalQtyD.toNumber(),
+        qty: remaining,
+        status: remainStatus,
+        qualityGrade: roll.qualityGrade,
+        inheritProperties: remainStatus === RollStatus.WAREHOUSE,
+        auditSource: "REMAINING_TAIL",
+        auditErrorIds: [],
+      });
+    }
+
+    // Split çocuğu FRESH kısa barkod alır (soy-ağacı parentRollId'de tutulur;
+    // eski `parent+KS+suffix` biçimi hem uzundu hem hiçbir yerde parse edilmiyordu).
+    // Tip başına TEK ifade; dönen dizi segment SIRASINI korur (yer değiştirirse
+    // fiziksel toplara yanlış etiket basılır — bkz. helper'daki uyarı).
+    const segmentBarcodes = await reserveRollBarcodesInOrder(
+      prisma,
+      segments.map((seg) => (seg.status === RollStatus.WAREHOUSE ? "F" : "H")),
+    );
+
     const splitRolls: Roll[] = [];
     let processedCount = 0;
 
@@ -898,64 +992,12 @@ export class TamburService {
         select: { propertyId: true },
       });
 
-      // Cumulative length-based segment'leri oluştur.
-      // inputCuts sıralı (operatörün makinede yaptığı sırayla); her cut bir
-      // child Roll. Kalan kısım son child Roll (parent.qualityGrade ile).
-      type Segment = {
-        start: number; // parent metresinde başlangıç offset
-        end: number; // parent metresinde bitiş offset
-        qty: number;
-        status: RollStatus;
-        qualityGrade: string | null;
-        inheritProperties: boolean;
-        auditSource: string;
-        auditErrorIds: string[];
-      };
-
-      // Decimal offset — float drift'le sahte ~0.000m kuyruk top yaratma.
-      const segments: Segment[] = [];
-      let offsetD = new Prisma.Decimal(0);
-      for (const c of inputCuts) {
-        const cutStatus = resolveCutStatus(c.qualityGrade, targetStatusByCode);
-        const nextOffsetD = offsetD.plus(c.length);
-        segments.push({
-          start: offsetD.toNumber(),
-          end: nextOffsetD.toNumber(),
-          qty: c.length,
-          status: cutStatus,
-          qualityGrade: c.qualityGrade,
-          // Tüm kalite seviyeleri (1.KALITE/A1/FIRE) WAREHOUSE'a iner; fabric
-          // özellikleri kalite seviyesinden bağımsız olduğu için her child miras alır.
-          inheritProperties: cutStatus === RollStatus.WAREHOUSE,
-          auditSource: "OPERATOR_CUT",
-          auditErrorIds: c.relatedErrorIds,
-        });
-        offsetD = nextOffsetD;
-      }
-      // Kalan kısım (sum(lengths) < totalQty) otomatik son child top.
-      if (offsetD.lessThan(totalQtyD)) {
-        const remaining = totalQtyD.minus(offsetD).toNumber();
-        const remainStatus = resolveCutStatus(
-          roll.qualityGrade,
-          targetStatusByCode
-        );
-        segments.push({
-          start: offsetD.toNumber(),
-          end: totalQtyD.toNumber(),
-          qty: remaining,
-          status: remainStatus,
-          qualityGrade: roll.qualityGrade,
-          inheritProperties: remainStatus === RollStatus.WAREHOUSE,
-          auditSource: "REMAINING_TAIL",
-          auditErrorIds: [],
-        });
-      }
-
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
-      for (const seg of segments) {
-        // Split çocuğu FRESH kısa barkod alır (soy-ağacı parentRollId'de tutulur;
-        // eski `parent+KS+suffix` biçimi hem uzundu hem hiçbir yerde parse edilmiyordu).
-        const splitBarcode = await generateRollBarcode(tx, seg.status === RollStatus.WAREHOUSE ? "F" : "H");
+      // (Segmentler ve barkodları tx AÇILMADAN ÖNCE hazırlandı — gerekçe ve
+      // ölçüm yukarıdaki blokta; barkodu burada üretmek sayaç kilidini bu tx'in
+      // sonuna kadar tutardı.)
+      for (const [segIndex, seg] of segments.entries()) {
+        const splitBarcode = segmentBarcodes[segIndex]!;
         const splitRoll = await tx.roll.create({
           data: {
             barcode: splitBarcode,
@@ -2208,6 +2250,34 @@ export class TamburService {
       ? await resolveQualityGradeId(childQualityGrade)
       : null;
 
+    // Barkod tx AÇILMADAN ÖNCE rezerve edilir (F-CORE-VER-001): tx içinde
+    // alınırsa sayaç kilidi kalan 108 satır + 4 yazma + 2 tx-helper boyunca
+    // tutulur ve sahadaki tüm KK1 girişleri o satırda kuyruğa girer.
+    // ⚠️ `wantChild` tx İÇİNDEKİ taze metrajdan çözülüyor, yani burada henüz
+    // kesin değil. `action === "discard"` tarafı kesin (payload'dan) → o durumda
+    // sayaca hiç dokunulmaz. Kalan belirsizlik yalnız "taze metraj 0 çıkarsa"
+    // hâlidir ve bedeli TEK numaralık boşluktur; barkod bir KİMLİKTİR, sayaç
+    // değil (helper'ın sözleşmesi). Ters tercih — kesinliği beklemek — kilidi
+    // tam da kaçınılan yere, tx'in içine geri koyardı.
+    //
+    // ⚠️ BİLİNÇLİ DAVRANIŞ DEĞİŞİKLİĞİ — REPLAY ARTIK BİR NUMARA YAKIYOR.
+    // Bu yolun idempotency'si `finalize`ınkinden FARKLI: orada tx'ten ÖNCE bir
+    // kapı var (`status === TAMBUR_CONSUMED` → erken dön), burada mekanizma
+    // tx'in İÇİNDE `clientToken @unique` → P2002 → rollback → catch'te idempotent
+    // yanıt. Eskiden barkod da tx içinde alındığı için o rollback sayaç artışını
+    // da geri sarıyordu (boşluk yoktu); artık rezervasyon tx'ten önce commit
+    // ettiği için aynı token'la gelen her tekrar TEK numara boşluğu bırakır.
+    // Kabul edildi: `stationRetry` denemeleri sınırlı (4), kapasite 9.999/gün/tip
+    // ve barkod bir kimliktir. Rahatsız ederse doğru çözüm rezervasyonu tx'e geri
+    // koymak DEĞİL, buraya `finalize`daki gibi tx-öncesi bir clientToken kapısı
+    // eklemektir — o, replay'de koca bir transaction'ı da kurtarır.
+    const reservedChildBarcode =
+      action === "discard"
+        ? null
+        : (await reserveRollBarcodesInOrder(prisma, [
+            childStatus === RollStatus.WAREHOUSE ? "F" : "H",
+          ]))[0]!;
+
     const result = await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM (finalize()'daki desen): tüm ön-kontroller tx DIŞINDA —
       // eşzamanlı çift çağrı ikisinde de geçer ve kalan child İKİ kez basılırdı
@@ -2238,7 +2308,8 @@ export class TamburService {
       let remainingChild: Roll | null = null;
 
       if (wantChild) {
-        const childBarcode = await generateRollBarcode(tx, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
+        // `action !== "discard"` olduğu için rezervasyon yapılmış olmak zorunda.
+        const childBarcode = reservedChildBarcode!;
         const child = await tx.roll.create({
           data: {
             barcode: childBarcode,
@@ -2780,6 +2851,15 @@ export class TamburService {
     // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
     const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);
 
+    // Barkod tx AÇILMADAN ÖNCE (F-CORE-VER-001) — burası kilidi finalize'dan
+    // sonra en uzun tutan ikinci yoldu (146 satır + 5 yazma + 4 tx-helper).
+    // Koşulsuzluk gerekçesi, replay'de tek-numaralık boşluk kabulü ve "rahatsız
+    // ederse çözüm nedir" notu için `cutWarehouseRoll` içindeki aynı desenin
+    // açıklamasına bak (idempotency mekanizması burada da P2002 tabanlı).
+    // Tip her zaman "F" (hepsi depoya iner).
+    const reservedChildBarcode =
+      action === "discard" ? null : (await reserveRollBarcodesInOrder(prisma, ["F"]))[0]!;
+
     const result = await prisma.$transaction(async (tx) => {
       // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
       // (~2620) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
@@ -2830,7 +2910,8 @@ export class TamburService {
       // Kalan metre için child Roll oluştur (action != discard ve kalan > 0).
       // Kalite operatörün seçimine göre: 1.KALITE / A1 / FIRE. Hepsi WAREHOUSE'a iner.
       if (wantChild) {
-        const childBarcode = await generateRollBarcode(tx, "F"); // hepsi depoya → final
+        // `action !== "discard"` olduğu için rezervasyon yapılmış olmak zorunda.
+        const childBarcode = reservedChildBarcode!; // hepsi depoya → final
         const child = await tx.roll.create({
           data: {
             barcode: childBarcode,

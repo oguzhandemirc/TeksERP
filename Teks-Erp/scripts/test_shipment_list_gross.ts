@@ -221,7 +221,31 @@ async function main() {
     await prisma.customer.delete({ where: { id: customer.id } }).catch(() => {});
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    // ── TEK ANLIK GÖRÜNTÜ SÖZLEŞMESİ (2026-08-09, F-SEV-ESZ-002) ─────────────
+  // Brüt metraj `canlı + iade geri-eklemesi` ile üretiliyor. İki sayım FARKLI
+  // anlık görüntülerden gelirse aradaki pencerede commit eden bir iade ya ÇİFT
+  // sayılır ya KAYBOLUR — geçici ve bu yüzden teşhis edilemez. `Promise.all`
+  // bunu sağlamaz (ayrı bağlantılar); batch `$transaction` tek başına da yetmez
+  // (READ COMMITTED'da her İFADE kendi görüntüsünü alır) → izolasyon şart.
+  {
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "../src/services/shipping.service.ts"),
+      "utf8",
+    ) as string;
+    const at = src.indexOf("const attachTotals =");
+    const body = at === -1 ? "" : src.slice(at, at + 3000);
+    check("attachTotals gövdesi çözülebildi", body.length > 500);
+    check(
+      "üç groupBy TEK transaction'da (Promise.all DEĞİL)",
+      body.includes("prisma.$transaction(") && !/const \[rollGroups[\s\S]{0,40}Promise\.all/.test(body),
+    );
+    check(
+      "izolasyon RepeatableRead'e yükseltilmiş (READ COMMITTED ifade başına görüntü alır)",
+      body.includes("RepeatableRead"),
+    );
+  }
+
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }

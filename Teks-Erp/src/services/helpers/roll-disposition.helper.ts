@@ -18,7 +18,7 @@
 import { Prisma, RollStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { finalBarcodeType } from "./roll-finalize.helper";
-import { generateRollBarcode } from "./roll-barcode.helper";
+import { reserveRollBarcodes } from "./roll-barcode.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -240,8 +240,16 @@ export async function applyRollDispositionsTx(
     const generated = new Map<string, string>();
     if (needsBarcode) {
       const unbarcoded = ids.filter((id) => byId.get(id)!.barcode == null);
-      for (const id of unbarcoded) {
-        const barcode = await generateRollBarcode(tx, finalBarcodeType(target));
+      // TEK rezervasyon (F-CORE-VER-001): tüm toplar aynı `target`e gittiği için
+      // tip de tektir. Eskiden döngü her top için ayrı sayaç turu atıyordu ve
+      // sayaç satırının kilidi ilk turdan itibaren zaten tutulduğu için araya
+      // giren her tur kilidi o kadar uzatıyordu.
+      // ⚠️ Tx'in İÇİNDE kaldı, dışarı taşınmadı: `unbarcoded` kümesi claim'den
+      // SONRA okunan `byId`den çözülüyor — tx öncesi okuma bayat olurdu. Tx içi
+      // kalmanın kazancı: geri sarmada sayaç da geri sarılır, boşluk doğmaz.
+      const reserved = await reserveRollBarcodes(tx, finalBarcodeType(target), unbarcoded.length);
+      for (const [i, id] of unbarcoded.entries()) {
+        const barcode = reserved[i]!;
         await tx.roll.update({ where: { id }, data: { barcode } });
         generated.set(id, barcode);
       }

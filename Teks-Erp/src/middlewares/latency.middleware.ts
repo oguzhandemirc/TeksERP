@@ -72,9 +72,20 @@ function resolveRouteKey(req: Request, statusCode: number): string {
   }
   // Route'a hiç ulaşmadan abort edilen istek (499) de "eşleşmemiş" sayılır —
   // statik dosya kovasına düşmesi yanıltıcı olurdu.
-  return statusCode === 404 || statusCode === CLIENT_ABORTED_STATUS
-    ? UNMATCHED_ROUTE_KEY
-    : STATIC_ROUTE_KEY;
+  if (statusCode === 404 || statusCode === CLIENT_ABORTED_STATUS) return UNMATCHED_ROUTE_KEY;
+
+  // ROUTE'A ULAŞAMADAN REDDEDİLEN /api İSTEĞİ (2026-08-09, F-CORE-OPS-003).
+  // Gövde ayrıştırıcısı bozuk JSON'da 400, 1MB aşımında 413 ile hata zincirine
+  // çıkar; `req.route` hiç dolmaz. Bunları "(statik/diğer)" kovasına atmak
+  // ölçümü sayar ama KULLANILAMAZ kılar: operatör bir şeylerin ters gittiğini
+  // görür, HANGİ ucun 413 döngüsünde olduğunu göremez. Yol `/api` ile başlıyorsa
+  // gerçek bir uç hedeflenmiştir → normalize edilmiş yol anahtar olur.
+  // Anahtar patlaması riski YOK: `MAX_ROUTE_KEYS` tavanı ve `(diğer)` taşma
+  // kovası zaten var, ayrıca `normalizeKeyPath` UUID/sayı segmentlerini çöker.
+  const path = (req.originalUrl ?? "").split("?")[0];
+  if (path.startsWith("/api/")) return normalizeKeyPath(path.replace(/\/+$/, "")) || STATIC_ROUTE_KEY;
+
+  return STATIC_ROUTE_KEY;
 }
 
 /** İstemci isteği yarıda kesti (timeout/pencere kapatma) — cevap tamamlanmadı.

@@ -6,7 +6,7 @@
 // =============================================================================
 
 import { LabelKind, PrinterLanguage, type LabelTemplate, type PrinterMediaType } from "@prisma/client";
-import type { LabelPayload } from "../label.service";
+import type { LabelPayload } from "../../types/label.types";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import type { FontSize, TemplateField } from "../../config/label-fields";
 import { fieldDisplayValue } from "./label-field-values";

@@ -15,6 +15,7 @@
 
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
+import { reportJobFailure } from "./job-failure";
 
 const SETTING_KEY = "audit.lastArchiveAt";
 const MONTHS_TO_KEEP = 6;
@@ -88,7 +89,8 @@ async function runIfDue(): Promise<void> {
       );
     }
   } catch (err) {
-    console.error("[audit-archive] çalışma başarısız:", err);
+    // Konsol + SystemLog + (havuz zaman aşımıysa) /health sayacı — F-CORE-OPS-004.
+    reportJobFailure("audit-archive", err);
   } finally {
     running = false;
     runningSince = null;

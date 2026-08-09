@@ -21,6 +21,16 @@ import { ClientType } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import type { SameTypeSessionPolicy } from "./system-setting.service";
 
+/**
+ * Oturum kaydı advisory lock namespace'i (2026-08-09, F-KIM-GUV-003).
+ * ENVANTER (tek yer burada değil — audit/surface/12-tx-global-gercekler.md §4.2):
+ *   8021 KK1 mükerrer giriş · 8022 parti no · 8023 sevkiyat kapsamı
+ *   8024 oturum kaydı (bu) · 8025 yetki (son-admin) guard'ı
+ * Yeni bir kilit eklerken 2 ARGÜMANLI formu kullan ve buraya satır ekle;
+ * 1-argümanlı uzay AYRI bir uzaydır ve paylaşımı sessiz serileşme üretir.
+ */
+export const SESSION_REGISTRY_LOCK_NS: number = 8024;
+
 export interface OpenLoginSessionInput {
   userId: string;
   deviceType: ClientType;
@@ -60,7 +70,13 @@ export class SessionRegistryService {
     // Advisory xact-lock commit/rollback'te otomatik bırakılır; throw yalnız okuma
     // sonrası olduğundan rollback yan etkisiz. $executeRaw parametreli → injection yok.
     return prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}|${deviceType}`}))`;
+      // 2 ARGÜMANLI form (2026-08-09, F-KIM-GUV-003). Eskiden 1-argümanlı formdaydı
+      // ve o uzayı `permission-management`in `perm-admin-guard` kilidiyle PAYLAŞIYORDU;
+      // 2-argümanlı kullanıcılar (KK1 8021, parti no 8022) namespace'i özenle ayırmışken
+      // bu ikisi ayırmamıştı. Çakışmanın sonucu yanlış veri değil GECİKMEdir: bir
+      // kullanıcının oturum kaydı, alakasız bir yetki mutasyonuyla serileşir ve sebebi
+      // hiçbir yerde yazmaz. Taşıma davranışsal NO-OP'tur (aynı serileştirme, ayrı uzay).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SESSION_REGISTRY_LOCK_NS}::int, hashtext(${`${userId}|${deviceType}`}))`;
 
       // notify: onay verilmediyse ve aynı tipte AKTİF (revoke edilmemiş, süresi dolmamış)
       // oturum varsa 409 döner; client confirmKick=true ile tekrar çağırıp ikisini açar.

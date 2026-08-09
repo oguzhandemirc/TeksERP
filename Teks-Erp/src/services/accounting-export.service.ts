@@ -24,7 +24,12 @@ import { Prisma, ShipmentStatus } from "@prisma/client";
 import type { Request } from "express";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { parseQueryParams, buildWhereClause } from "../utils/query-parser";
+import {
+  parseQueryParams,
+  buildWhereClause,
+  readFilterList,
+  readIdCondition,
+} from "../utils/query-parser";
 
 // listShipments ile aynı whitelist (drift olmaması için aynı değerler).
 const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier", "customer.name"];
@@ -120,17 +125,27 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
   // F248: customerId TEK doğrulanmış kaynak (where + returnWhere). buildWhereClause
   // filter[customerId]'yi doğrulamadan yazmış olabilir → önce sil, sonra doğrulanmış
   // değeri ata (malformed UUID → Prisma parse 500 yerine açık Türkçe 400).
+  //
+  // ⚠️ ÇOKLU SEÇİM (denetim 2026-08-09, F-CORE-API-001): muhasebe ekranının müşteri
+  // filtresi `multi-lookup`tur ve FilterBar CSV yollar (`filter[customerId]=a,b`);
+  // export isteği ekranın URL parametrelerini AYNEN iletir. Eski kod tekil `UUID_RE.test`
+  // ile doğruluyordu, CSV o testi geçemiyordu ve `delete` zaten filtreyi silmiş olduğu
+  // için müşteri koşulu SESSİZCE DÜŞÜYORDU: ekran 2 müşteri gösterirken inen Excel
+  // dönemdeki TÜM müşterileri içeriyordu. Kural (kök CLAUDE.md): elle okunan her id
+  // filtresi `readIdCondition`dan geçer — tek değer düz eşitlik, N değer `{ in: [...] }`.
   delete (where as { customerId?: unknown }).customerId;
-  const rawCustomerId =
-    typeof req.query.customerId === "string" ? req.query.customerId.trim() : undefined;
-  if (rawCustomerId && !UUID_RE.test(rawCustomerId)) {
-    throw AppError.badRequest("Geçersiz müşteri ID.");
+  // `?customerId=` (doğrudan) `filter[customerId]`e göre ÖNCELİKLİDİR — eski davranış.
+  const rawCustomerIds = readFilterList(
+    req.query.customerId as string | string[] | undefined,
+  );
+  const customerIds = rawCustomerIds.length
+    ? rawCustomerIds
+    : readFilterList(params.filters.customerId);
+  // Doğrulama PARÇA BAŞINA: bozuk bir uuid sessizce düşmez, net Türkçe 400 verir.
+  for (const id of customerIds) {
+    if (!UUID_RE.test(id)) throw AppError.badRequest("Geçersiz müşteri ID.");
   }
-  const filterCustomerId =
-    typeof params.filters.customerId === "string" && UUID_RE.test(params.filters.customerId)
-      ? params.filters.customerId
-      : undefined;
-  const customerId = rawCustomerId ?? filterCustomerId;
+  const customerId = readIdCondition(customerIds) ?? undefined;
   if (customerId) where.customerId = customerId;
 
   // İki mod:

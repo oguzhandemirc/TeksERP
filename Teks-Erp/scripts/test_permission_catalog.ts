@@ -295,6 +295,32 @@ function cagriYerleri(sf: ts.SourceFile): CagriYeri[] {
 async function main(): Promise<void> {
   const katalogKodlari = new Set<string>(PERMISSION_CATALOG.map((p) => p.code));
 
+  // ── 0) İZİN KODU BİÇİMİ — tam BİR iki nokta (2026-08-09, F-CORE-GUV-004) ────
+  // `rbac.middleware.matchesPermission` domain wildcard'ını `indexOf(":")` ile,
+  // yani İLK iki noktaya göre üretir. Bunun sonucu: iki kolonlu bir kod
+  // (`mobile:depo:write`) eklenirse `mobile:*` taşıyan HERKES onu otomatik alır —
+  // ve bu, kullanıcının atanmış izin listesinde GÖRÜNMEZ. Uzun süre kodun
+  // yorumu bunun TERSİNİ söylüyordu ("mobile:* iki kolonluları kapsamaz"), yani
+  // yanlış varsayımla ilerlemek kolaydı. Kural artık mekanik: yeni bir kod
+  // eklerken kolon sayısı tektir; gerçekten hiyerarşi gerekiyorsa bu test
+  // KIRMIZI verir ve karar (wildcard semantiğini değiştirmek mi, kodu düzleştirmek
+  // mi) BİLİNÇLİ olarak verilir.
+  // `as string`: katalog kodları literal union'a daralıyor ve `c !== "*"`
+  // karşılaştırması TS2367 veriyor (union'da düz `"*"` yok, `"mobile:*"` var).
+  const kolonIhlali = PERMISSION_CATALOG.map((p) => p.code as string).filter(
+    (c) => c !== "*" && (c.match(/:/g) ?? []).length !== 1,
+  );
+  check(
+    "her izin kodu TAM BİR iki nokta taşıyor (wildcard semantiği tek seviyeli)",
+    kolonIhlali.length === 0,
+    kolonIhlali.join(", "),
+  );
+  check(
+    "körlük zemini: katalogda en az 50 kod var",
+    katalogKodlari.size >= 50,
+    `bulunan: ${katalogKodlari.size}`,
+  );
+
   // ───────────────────────────────────────────────────────────────────────────
   // 1) TARAMA — route'lar (asıl hedef) + kalan src (matchesPermission çağrıları)
   // ───────────────────────────────────────────────────────────────────────────

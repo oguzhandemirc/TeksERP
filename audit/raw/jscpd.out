@@ -1,0 +1,164 @@
+[1mClone found (typescript)[22m
+ - [1m[32mcontrollers/auth.controller.ts[39m[22m [151:31 - 179:40] (29 lines, 134 tokens)
+   controllers/auth.controller.ts [230:35 - 258:40]
+[1mClone found (typescript)[22m
+ - [1m[32mcontrollers/inventory.controller.ts[39m[22m [477:7 - 507:8] (31 lines, 101 tokens)
+   controllers/workorder.controller.ts [787:7 - 814:8]
+[1mClone found (typescript)[22m
+ - [1m[32mcontrollers/label.controller.ts[39m[22m [100:77 - 121:44] (22 lines, 96 tokens)
+   controllers/label.controller.ts [268:98 - 276:5]
+[1mClone found (typescript)[22m
+ - [1m[32mcontrollers/label.controller.ts[39m[22m [433:42 - 453:18] (21 lines, 140 tokens)
+   controllers/label.controller.ts [573:17 - 593:5]
+[1mClone found (typescript)[22m
+ - [1m[32mcontrollers/workorder.controller.ts[39m[22m [35:7 - 62:2] (28 lines, 272 tokens)
+   controllers/workorder.controller.ts [230:7 - 252:2]
+[1mClone found (typescript)[22m
+ - [1m[32mroutes/admin.routes.ts[39m[22m [290:50 - 310:7] (21 lines, 78 tokens)
+   routes/admin.routes.ts [335:52 - 346:6]
+[1mClone found (typescript)[22m
+ - [1m[32mroutes/color.routes.ts[39m[22m [71:115 - 151:23] (81 lines, 60 tokens)
+   routes/fabric-property.routes.ts [108:1 - 196:23]
+[1mClone found (typescript)[22m
+ - [1m[32mroutes/product-recipe.routes.ts[39m[22m [33:2 - 178:81] (146 lines, 125 tokens)
+   routes/route.routes.ts [16:54 - 160:81]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/base.service.ts[39m[22m [318:20 - 342:12] (25 lines, 55 tokens)
+   services/subcontractor-management.service.ts [97:35 - 112:8]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/base.service.ts[39m[22m [318:20 - 342:91] (25 lines, 71 tokens)
+   services/subcontractor-management.service.ts [357:27 - 373:10]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/base.service.ts[39m[22m [434:57 - 456:10] (23 lines, 106 tokens)
+   services/workorder.service.ts [1401:92 - 1421:12]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/base.service.ts[39m[22m [691:5 - 713:15] (23 lines, 103 tokens)
+   services/product-recipe.service.ts [175:5 - 192:15]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [96:23 - 126:9] (31 lines, 122 tokens)
+   services/document-render/fason-direct-ship.html.ts [89:36 - 119:9]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [96:23 - 150:37] (55 lines, 380 tokens)
+   services/document-render/kartela-ceki.html.ts [54:25 - 109:16]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [97:61 - 126:9] (30 lines, 107 tokens)
+   services/document-render/fason-receipt.html.ts [55:22 - 77:9]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [97:61 - 126:9] (30 lines, 107 tokens)
+   services/document-render/quality-certificate.html.ts [52:43 - 69:9]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [97:71 - 147:8] (51 lines, 317 tokens)
+   services/document-render/return-dispatch.html.ts [46:28 - 74:16]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [100:22 - 120:14] (21 lines, 79 tokens)
+   services/printed-document.service.ts [110:11 - 136:6]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [114:28 - 134:32] (21 lines, 145 tokens)
+   services/document-render/free-document.html.ts [26:18 - 38:2]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-ceki.html.ts[39m[22m [483:13 - 504:18] (22 lines, 94 tokens)
+   services/document-render/fason-direct-ship.html.ts [300:70 - 321:18]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-direct-ship.html.ts[39m[22m [169:62 - 189:8] (21 lines, 114 tokens)
+   services/document-render/kartela-ceki.html.ts [132:23 - 151:8]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-direct-ship.html.ts[39m[22m [262:51 - 296:34] (35 lines, 401 tokens)
+   services/document-render/kartela-ceki.html.ts [169:51 - 203:34]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-direct-ship.html.ts[39m[22m [300:65 - 326:20] (27 lines, 109 tokens)
+   services/document-render/fason-receipt.html.ts [193:60 - 218:20]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-direct-ship.html.ts[39m[22m [300:65 - 326:20] (27 lines, 109 tokens)
+   services/document-render/kartela-ceki.html.ts [207:61 - 233:20]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-direct-ship.html.ts[39m[22m [300:65 - 321:18] (22 lines, 98 tokens)
+   services/document-render/quality-certificate.html.ts [174:67 - 193:18]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/document-render/fason-direct-ship.html.ts[39m[22m [300:65 - 328:107] (29 lines, 134 tokens)
+   services/document-render/return-dispatch.html.ts [170:64 - 197:11]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/inventory.service.ts[39m[22m [411:48 - 434:5] (24 lines, 63 tokens)
+   services/inventory.service.ts [2016:61 - 2026:11]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/inventory.service.ts[39m[22m [432:64 - 478:2] (47 lines, 154 tokens)
+   services/inventory.service.ts [2064:13 - 2098:8]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/inventory.service.ts[39m[22m [1441:32 - 1462:10] (22 lines, 115 tokens)
+   services/tambur.service.ts [1446:42 - 1467:10]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/kartela.service.ts[39m[22m [1453:67 - 1479:41] (27 lines, 196 tokens)
+   services/subcontractor.service.ts [5730:74 - 5756:41]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/kursun-qc.service.ts[39m[22m [228:41 - 250:31] (23 lines, 50 tokens)
+   services/tambur.service.ts [1698:6 - 1716:31]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/kursun-qc.service.ts[39m[22m [598:9 - 622:36] (25 lines, 138 tokens)
+   services/tambur.service.ts [1665:9 - 1689:36]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/order.service.ts[39m[22m [856:11 - 878:22] (23 lines, 171 tokens)
+   services/order.service.ts [948:56 - 971:22]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/sack-search.service.ts[39m[22m [307:66 - 329:25] (23 lines, 120 tokens)
+   services/sack-search.service.ts [404:59 - 420:71]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/shipping.service.ts[39m[22m [214:60 - 244:10] (31 lines, 242 tokens)
+   services/shipping.service.ts [327:125 - 369:10]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/subcontractor.service.ts[39m[22m [3056:109 - 3096:20] (41 lines, 258 tokens)
+   services/subcontractor.service.ts [3211:58 - 3247:18]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/subcontractor.service.ts[39m[22m [3061:70 - 3082:10] (22 lines, 137 tokens)
+   services/subcontractor.service.ts [3319:80 - 3333:8]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/subcontractor.service.ts[39m[22m [3114:97 - 3134:18] (21 lines, 125 tokens)
+   services/subcontractor.service.ts [3277:60 - 3295:18]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/subcontractor.service.ts[39m[22m [4889:23 - 4910:25] (22 lines, 123 tokens)
+   services/subcontractor.service.ts [5012:13 - 5033:15]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/system-log.service.ts[39m[22m [55:45 - 77:32] (23 lines, 218 tokens)
+   services/system-log.service.ts [117:52 - 139:32]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/tambur-manual.service.ts[39m[22m [765:5 - 789:10] (25 lines, 93 tokens)
+   services/tambur-manual.service.ts [1095:5 - 1123:8]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/tambur.service.ts[39m[22m [472:79 - 522:8] (51 lines, 73 tokens)
+   services/tambur.service.ts [1536:65 - 1564:8]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/tambur.service.ts[39m[22m [1387:69 - 1410:10] (24 lines, 85 tokens)
+   services/tambur.service.ts [1488:38 - 1507:10]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/tambur.service.ts[39m[22m [1957:68 - 2035:46] (79 lines, 273 tokens)
+   services/tambur.service.ts [2522:96 - 2594:46]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/tambur.service.ts[39m[22m [1965:47 - 2014:8] (50 lines, 211 tokens)
+   services/tambur.service.ts [2268:47 - 2310:10]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/workorder.service.ts[39m[22m [559:9 - 580:44] (22 lines, 132 tokens)
+   services/workorder.service.ts [4527:9 - 4545:44]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/workorder.service.ts[39m[22m [597:7 - 627:76] (31 lines, 234 tokens)
+   services/workorder.service.ts [4560:7 - 4588:76]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/workorder.service.ts[39m[22m [634:9 - 756:8] (123 lines, 700 tokens)
+   services/workorder.service.ts [4595:9 - 4706:8]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/workorder.service.ts[39m[22m [845:12 - 887:12] (43 lines, 161 tokens)
+   services/workorder.service.ts [4987:42 - 5025:12]
+[1mClone found (typescript)[22m
+ - [1m[32mservices/workorder.service.ts[39m[22m [2548:23 - 2569:13] (22 lines, 85 tokens)
+   services/workorder.service.ts [3002:39 - 3023:11]
+[90m┌────────────┬────────────────┬─────────────┬──────────────┬──────────────┬──────────────────┬───────────────────┐[39m
+[90m│[39m[31m Format     [39m[90m│[39m[31m Files analyzed [39m[90m│[39m[31m Total lines [39m[90m│[39m[31m Total tokens [39m[90m│[39m[31m Clones found [39m[90m│[39m[31m Duplicated lines [39m[90m│[39m[31m Duplicated tokens [39m[90m│[39m
+[90m├────────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤[39m
+[90m│[39m typescript [90m│[39m 266            [90m│[39m 103482      [90m│[39m 513184       [90m│[39m 50           [90m│[39m 1691 (1.63%)     [90m│[39m 7814 (1.52%)      [90m│[39m
+[90m├────────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤[39m
+[90m│[39m [1mTotal:[22m     [90m│[39m 266            [90m│[39m 103482      [90m│[39m 513184       [90m│[39m 50           [90m│[39m 1691 (1.63%)     [90m│[39m 7814 (1.52%)      [90m│[39m
+[90m└────────────┴────────────────┴─────────────┴──────────────┴──────────────┴──────────────────┴───────────────────┘[39m
+[90mFound 50 clones.[39m
+[32mJSON report saved to /Users/oad/Documents/projeler/AdnanSahin/audit/raw/jscpd/jscpd-report.json[39m
+[90mtime: 102.897ms[39m
+
+[90m💡 Auto-refactor with AI: [1m[39mnpx skills add https://github.com/kucherenko/jscpd --skill dry-refactoring[90m[22m
+[90m🎩 New: Gangsta Agents — discipline your AI coding → gangsta.page[39m
+[90m💖 Support jscpd project → https://opencollective.com/jscpd[39m

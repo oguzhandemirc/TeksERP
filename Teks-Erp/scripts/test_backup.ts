@@ -192,7 +192,78 @@ async function main(): Promise<void> {
         check("dump custom-format imzası (PGDMP)", head === "PGDMP", `imza='${head}'`);
       }
       check("dosya adı tekserp_ ön ekli", path.basename(result.file).startsWith("tekserp_"));
+      check("nihai ad .dump ile biter (.part DEĞİL)", result.file.endsWith(".dump"));
     }
+
+    // -------------------------------------------------------------------------
+    // 2b) YARIM DOSYA NİHAİ ADI ALMAZ (denetim 2026-08-09, F-CORE-OPS-001)
+    // -------------------------------------------------------------------------
+    // pg_dump eskiden DOĞRUDAN nihai ada yazıyordu; süreç dump ortasında ölürse
+    // (pm2 restart / deploy) yarım `.dump` diskte kalıyor ve `/health` lastBackup +
+    // rotasyonun MIN_KEEP koruması + Yedekler ekranı onu TAZE YEDEK sayıyordu.
+    // Artık `.part`a yazılır ve YALNIZ doğrulama geçince rename edilir.
+    check(
+      "başarılı koşum sonrası ARTIK .part dosyası kalmadı",
+      fs.readdirSync(backupDir).filter((f) => f.endsWith(".part")).length === 0,
+      fs.readdirSync(backupDir).filter((f) => f.endsWith(".part")).join(","),
+    );
+
+    // Yarım dosya taklidi: elle bir `.part` bırak → hiçbir listeleme yüzeyi görmemeli.
+    const fakePart = path.join(backupDir, "tekserp_20260809_030000.dump.part");
+    fs.writeFileSync(fakePart, "YARIM-DUMP");
+    const listingWithPart = await svc.listBackups();
+    check(
+      ".part dosyası listBackups'ta GÖRÜNMÜYOR",
+      !listingWithPart.files.some((f) => f.name.endsWith(".part")),
+      listingWithPart.files.map((f) => f.name).join(","),
+    );
+    check(
+      ".part dosyası resolveBackupPath ile ÇÖZÜLEMİYOR (indirilemez)",
+      svc.resolveBackupPath("tekserp_20260809_030000.dump.part") === null,
+    );
+
+    fs.rmSync(fakePart, { force: true }); // fixture sızmasın — aşağıdaki .part sayımları temiz kalsın
+    // NOT: bayat `.part` budaması ikinci bir `runBackupJob` gerektiriyor ve o da
+    // dosya sayımına dayanan aşağıdaki bölümleri (rotasyon, offsite) bozar —
+    // bu yüzden bölüm 12'ye, tüm sayımlardan SONRAYA alındı.
+
+    // -------------------------------------------------------------------------
+    // 2c) pg_dump ZAMAN AŞIMI SÖZLEŞMESİ (F-OPS-VER-004) — kaynak kontrolü
+    // -------------------------------------------------------------------------
+    // Asılan bir child'ı gerçekten üretmek testte pratik değil (3 saatlik varsayılan);
+    // korunan şey `spawn`a üst sınırın VERİLMİŞ olmasıdır. Sınır düşerse promise
+    // hiç settle etmez ve o gecenin yedeği ne COMPLETED ne FAILED audit'i bırakır.
+    const toolSrc = fs.readFileSync(
+      path.resolve(__dirname, "../src/services/helpers/pg-tool.helper.ts"),
+      "utf8",
+    );
+    check("runTool spawn'a timeout veriyor", /spawn\([\s\S]*?timeout:/.test(toolSrc));
+    check("runTool killSignal tanımlı", /killSignal:/.test(toolSrc));
+    check("zaman aşımı sonucu çağırana bildiriliyor (timedOut)", /timedOut/.test(toolSrc));
+
+    // ⚠️ MEKANİZMA KONTROLÜ — kaynak seviyesinde, ve bu BİLİNÇLİ bir tercih.
+    // Yukarıdaki `.part` kontrolleri korunan olayı ÖLÇMÜYOR: onların hepsi eski
+    // (doğrudan nihai ada yazan) davranışta da YEŞİL kalır — çünkü o davranışta
+    // hiç `.part` üretilmez, yani "`.part` kalmadı" iddiası vakumen doğrudur.
+    // (Negatif sondayla ölçüldü: dump hedefi `out`a çevrildiğinde 88/88 yeşil kaldı.)
+    // Asıl olay — süreç dump ORTASINDA öldürülüyor — süreç içi bir testte
+    // üretilemez; dolayısıyla korunabilecek şey ZİNCİRİN KENDİSİDİR:
+    //   dump `.part`a yazar → doğrulama `.part`ı okur → rename SONRA gelir.
+    const bkSrc = fs.readFileSync(
+      path.resolve(__dirname, "../src/services/backup.service.ts"),
+      "utf8",
+    );
+    const dumpAt = bkSrc.indexOf('"-f", partPath');
+    const verifyAt = bkSrc.indexOf("verifyBackupFile(partPath)");
+    const renameAt = bkSrc.indexOf("rename(partPath, out)");
+    check("pg_dump hedefi .part dosyası (nihai ad DEĞİL)", dumpAt !== -1);
+    check("bütünlük doğrulaması .part üzerinde koşuyor", verifyAt !== -1);
+    check("rename var (doğrulanmış dosya nihai adını alır)", renameAt !== -1);
+    check(
+      "SIRA: dump → doğrula → rename",
+      dumpAt !== -1 && verifyAt !== -1 && renameAt !== -1 && dumpAt < verifyAt && verifyAt < renameAt,
+      `dump@${dumpAt} verify@${verifyAt} rename@${renameAt}`,
+    );
 
     // -------------------------------------------------------------------------
     // 3) Saklama rotasyonu
@@ -477,6 +548,27 @@ async function main(): Promise<void> {
       broken.message.includes("PG_BIN_DIR") || broken.message.includes("başlatılamadı"),
       broken.message,
     );
+    // Bozuk yol koşumu da geriye yarım dosya BIRAKMAMALI (spawnError dalı `.part`ı siler).
+    check(
+      "başarısız koşum .part bırakmadı",
+      fs.readdirSync(backupDir).filter((f) => f.endsWith(".part")).length === 0,
+      fs.readdirSync(backupDir).filter((f) => f.endsWith(".part")).join(","),
+    );
+
+    // -------------------------------------------------------------------------
+    // 12) BAYAT .part BUDAMASI (F-CORE-OPS-001) — dosya sayımlarından SONRA
+    // -------------------------------------------------------------------------
+    // Ek bir `runBackupJob` gerektirdiği için en sona alındı: yukarıdaki rotasyon
+    // ve offsite kontrolleri klasördeki dosya SAYISINA dayanıyor.
+    const stalePart = path.join(backupDir, "tekserp_20260101_030000.dump.part");
+    fs.writeFileSync(stalePart, "YARIM-DUMP");
+    const staleMs = Date.now() - 48 * 60 * 60 * 1000;
+    fs.utimesSync(stalePart, staleMs / 1000, staleMs / 1000);
+    const freshPart = path.join(backupDir, "tekserp_20260102_030000.dump.part");
+    fs.writeFileSync(freshPart, "YARIM-DUMP"); // taze → DOKUNULMAMALI
+    await svc.runBackupJob("manual");
+    check("24 saatten ESKİ .part budandı", !fs.existsSync(stalePart));
+    check("TAZE .part'a dokunulmadı (koşan dump'ın dosyası olabilir)", fs.existsSync(freshPart));
   } finally {
     // Test kendi yarattığını siler: geçici klasör + bu koşumun audit satırları
     // + 12c-2'nin geçici topu.

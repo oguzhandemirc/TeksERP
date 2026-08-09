@@ -11,7 +11,7 @@
 import { mmToDots, resolveQrScale, bannerValueText, alignOffsetDots } from "../native-label.shared";
 import { fieldDisplayValue } from "../label-field-values";
 import { elementText, type CanvasRenderInput } from "../label-canvas-native.helper";
-import type { LabelPayload } from "../../label.service";
+import type { LabelPayload } from "../../../types/label.types";
 import type { ResolvedLabelFormat } from "../label-format.resolver";
 import { ICON_DEFAULT_MM, prepareElements, type CanvasRotation, type LengthBannerElement } from "../../../config/label-elements";
 import { Bitmap1, rotatedSize } from "./raster-bitmap";

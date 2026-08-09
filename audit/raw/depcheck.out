@@ -1,0 +1,4 @@
+Unused devDependencies
+* @faker-js/faker
+Missing dependencies
+* playwright-core: ./_final.mjs

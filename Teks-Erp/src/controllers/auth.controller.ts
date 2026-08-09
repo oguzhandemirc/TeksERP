@@ -95,6 +95,37 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    // Deneme kilidi — kart/PIN yollarıyla AYNI mekanizma (denetim 2026-08-09,
+    // F-KIM-GUV-001). Klasik şifre girişi bu kilide BAĞLI DEĞİLDİ: sınırsız
+    // deneme yapılabiliyordu ve her deneme bcryptjs (maliyet 10) hesabını TEK
+    // event loop'ta koşturduğu için aynı boşluk hem hesap ele geçirme hem hizmet
+    // kesintisi yoluydu.
+    //
+    // ⚠️ SIRA LOAD-BEARING: rezervasyon `AuthService.login`den (dolayısıyla
+    // bcrypt.compare'den) ÖNCE. Ters sırada kilitli bir anahtar da CPU harcamaya
+    // devam eder, yani DoS ayağı hiç kapanmaz.
+    //
+    // ⚠️ Anahtar kart/PIN ile AYNI (`resolveLoginLockoutKey` → req.ip). Kullanıcı
+    // adını anahtara EKLEMEDİK: `app.set("trust proxy")` verilmediği için req.ip
+    // soket IP'sidir ve fabrika LAN'ında her cihaz kendi IP'sini taşır (paylaşımlı
+    // IP yanlış-pozitifi yok); buna karşılık kullanıcı adını eklemek, saldırganın
+    // kullanıcı adı değiştirerek kilidi atlamasına (password spraying) izin verirdi.
+    //
+    // ⚠️ AYAR PAYLAŞIMI: kilit `auth.pinLockoutEnabled` ile açılıp kapanır
+    // (varsayılan TRUE, canlıda ezen kayıt yok → şu an AÇIK). Adı "pin" olsa da
+    // artık ŞİFRE girişini de kapsıyor — panelden kapatılırsa üç yol da korumasız
+    // kalır. Ayarın etiketi bunu söylemeli.
+    const lockoutKey = resolveLoginLockoutKey(req);
+    const lock = await reserveLoginAttempt(lockoutKey);
+    if (lock.blocked) {
+      next(
+        AppError.tooManyRequests(
+          `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
+          { code: "LOGIN_LOCKED", retryAfterSec: lock.retryAfterSec },
+        ),
+      );
+      return;
+    }
     const ctx: LoginContext = {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
@@ -103,6 +134,7 @@ export class AuthController {
 
     try {
       const result = await AuthService.login(body.username, body.password, ctx);
+      resetLoginLockout(lockoutKey);
 
       // SystemLog'a AUTH event (Sistem Kayıtları sayfası bunu okur).
       void AuditService.logEvent({
@@ -122,12 +154,21 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
+      // F49 (kart/PIN ile aynı kural): yalnız 401 brute-force sayılır. 409
+      // SESSION_EXISTS / 403 gibi sonuçlar kimlik-bilgisi denemesi DEĞİLDİR →
+      // assume-fail rezervasyonunu geri al, yoksa "başka cihazda oturum açık"
+      // uyarısını üst üste gören meşru kullanıcı kendini 429'a kilitlerdi.
+      const isCredentialError = error instanceof AppError && error.statusCode === 401;
+      if (!isCredentialError) releaseLoginAttempt(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
-        action: "LOGIN_FAILED",
+        action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
         recordId: body.username,
         ipAddress,
-        payload: { reason: error instanceof Error ? error.message : "unknown" },
+        payload: {
+          statusCode: error instanceof AppError ? error.statusCode : 500,
+          reason: error instanceof Error ? error.message : "unknown",
+        },
       });
       next(error);
     }

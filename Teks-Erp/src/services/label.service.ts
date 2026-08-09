@@ -23,6 +23,21 @@ import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, typ
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
+
+/**
+ * Etiketi YENİDEN YÖNLENDİRİLEMEZ statüler — emekli (arşiv) toplar.
+ *
+ * ⚠️ `K18_DEAD_STATUSES` (batch.service) ile AYNI kümedir ama oradan import
+ * EDİLMEZ: `label.service` → `batch.service` bağımlılığı, batch tarafının
+ * etiket servisini import ettiği gün döngü kurardı. Küme küçük ve kararlı;
+ * ayrışırsa arşiv topunun etiketi toplu akıştan sızar.
+ */
+const DEAD_LABEL_STATUSES: RollStatus[] = [
+  RollStatus.TAMBUR_CONSUMED,
+  RollStatus.SUBCONTRACTOR_CONSUMED,
+  RollStatus.KARTELA_CONSUMED,
+  RollStatus.CANCELLED,
+];
 import { ApiResponse } from "../types/api.types";
 import {
   resolveName,
@@ -50,89 +65,17 @@ import { dispatchNativeSend, type PrinterTransportResult } from "./helpers/print
 const TABLE_ORDER_LINE = "ORDER_LINE";
 const TABLE_LABEL_PRINT = "LABEL_PRINT_EVENT";
 
-export type { NameSource };
+// ⚠️ ETİKET YÜKÜ SÖZLEŞMESİ ARTIK `types/label.types.ts`TE (F-BLG-MIM-001).
+// Buradan yalnız GERİ UYUM için yeniden ihraç edilir; YENİ kod tipi doğrudan
+// o dosyadan almalı. Sebep: tip bu 1.991 satırlık SERVİSİN içindeyken on dosya
+// onu `import type ... from "../label.service"` ile alıyordu ve döngüyü önleyen
+// tek şey `type` kelimesiydi — biri `import`a çevirse gerçek bir runtime
+// döngüsü doğardı ve hiçbir bekçi görmezdi. Değer taşımayan bir modülden değer
+// import edilemeyeceği için koruma artık yapısaldır.
+import type { LabelPayload, SwatchLabelPayload } from "../types/label.types";
+export type { NameSource, LabelPayload, SwatchLabelPayload } from "../types/label.types";
 
-export interface LabelPayload {
-  // Roll core
-  rollId: string;
-  barcode: string;
-  status: string;
-  qualityGrade: string;
-  widthCm: number | null;
-  lengthMeters: number;
-  weightKg: number | null;
-  // Tambur'da kartela için işaretlendi mi — true ise etikette mor "KARTELALIK"
-  // damgası basılır (kartelaMark alanı template'te açıksa).
-  markedForKartela: boolean;
 
-  // Item/Color (effective ↔ default ayrı tutulur, frontend istediğini gösterir)
-  itemCode: string;
-  itemName: string;             // effective (cascade)
-  itemNameDefault: string;       // bizim isim (Item.name)
-  itemNameSource: NameSource;
-  colorCode: string | null;
-  colorName: string | null;      // effective (cascade) — colorId null ise null
-  colorNameDefault: string | null;
-  colorNameSource: NameSource | null;
-
-  // Customer/Order — allocation YOKSA HEPSİ NULL (frontend bloğu render etmez)
-  customerName: string | null;
-  customerId: string | null;
-  orderNumber: string | null;
-  orderLineId: string | null;
-
-  // Batch (parti) + İş Emri
-  batchNumber: string | null;
-  workOrderNumber?: string | null;
-  printedAt: string;
-
-  // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
-  //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---
-  /** Etiket türü ayırt edici — verilmezse roll (ROLL_RAW/ROLL_FINISHED) kabul edilir. */
-  kind?: LabelKind;
-  /** Kartela kart no (KRT...). */
-  cardNumber?: string | null;
-  /** Kartela Boy (cm) — roll'da metraj (lengthMeters) kullanılır. */
-  lengthCm?: number | null;
-  /** Kartelanın doğduğu bitmiş topun barkodu. */
-  parentRollBarcode?: string | null;
-
-  // --- SACK (çuval) için opsiyonel alanlar — roll/swatch payload'unda undefined.
-  //     Yalnız `kind === SACK` iken doldurulur. Çuvalda ÜRÜN/RENK alanı YOK
-  //     (karışık içerik → tek ürün adı sessizce yanlış olur). ---
-  /** Çuval kodu (CV+GGAAYY+NNNN) — barkod/QR ile AYNI değer (tek kod kuralı). */
-  sackNo?: string | null;
-  /** Çuvaldaki (ölü olmayan) top adedi. */
-  rollCount?: number | null;
-  /** Çuvalın müşteri şubesi. */
-  branchName?: string | null;
-  /** Çuval yorumu (iç not) — şablona sürüklenmişse basılır, boşsa eleman atlanır. */
-  sackNote?: string | null;
-}
-
-export interface SwatchLabelPayload {
-  swatchId: string;
-  cardNumber: string;
-  barcode: string;
-  itemCode: string;
-  itemName: string;
-  itemNameDefault: string;
-  itemNameSource: NameSource;
-  colorCode: string | null;
-  colorName: string | null;
-  colorNameDefault: string | null;
-  colorNameSource: NameSource | null;
-  widthCm: number | null;
-  lengthCm: number | null;
-  weightKg: number | null;
-  customerName: string | null;
-  customerId: string | null;
-  orderNumber: string | null;
-  orderLineId: string | null;
-  batchNumber: string | null;
-  parentRollBarcode: string | null;
-  printedAt: string;
-}
 
 export interface UpdateOrderLineCustomerNamesInput {
   customerItemName?: string | null;

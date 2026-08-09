@@ -63,11 +63,14 @@ import {
 import {
   recomputeStepStatus,
   ensureWorkOrderInProgress,
+  // WO kapanışı YALNIZ bu helper'la yapılır — terminal guard (CANCELLED/SUPERSEDED
+  // asla COMPLETED'a dirilmez) orada yaşıyor. Bu dosya eskiden aynı kuralı ÜÇ yerde
+  // elle yazıyordu ve üçünde de guard yoktu (denetim 2026-08-09, F-FAS-ESZ-001).
+  completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
-import { generateRollBarcode } from "./helpers/roll-barcode.helper";
+import { generateRollBarcode, reserveRollBarcodes } from "./helpers/roll-barcode.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 // Fasondan doğrudan sevk önizlemesi karşılanma projeksiyonunu shipping'in saf
 // FIFO/spec-eşleşmesiyle üretir (tek karşılanma kaynağı; circular yok — shipping
 // subcontractor'ı import etmez).
@@ -2049,19 +2052,8 @@ export class SubcontractorService {
             });
             // Bu adım WO'nun son eksik adımıysa WO'yu tamamla (receive'daki
             // kontrolün aynası — iptal sonrası WO IN_PROGRESS'te takılmasın).
-            const remainingSteps = await tx.workOrderStep.count({
-              where: {
-                workOrderId: dispatch.workOrderId,
-                status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-              },
-            });
-            if (remainingSteps === 0) {
-              await tx.workOrder.update({
-                where: { id: dispatch.workOrderId },
-                data: { status: WorkOrderStatus.COMPLETED },
-              });
-              await setWorkOrderCardStatuses(tx, dispatch.workOrderId, TravelerCardStatus.ACTIVE, TravelerCardStatus.COMPLETED);
-            }
+            // Adım sayımı + kart geçişi helper'ın İÇİNDE; burada elle tekrarlama.
+            await completeWorkOrderIfStepsDone(tx, dispatch.workOrderId);
           } else {
             // Hiç kabul yok → sevk öncesi duruma (PENDING) dön.
             await tx.workOrderStep.update({
@@ -2692,21 +2684,10 @@ export class SubcontractorService {
         });
       }
 
-      // Son step + hepsi tamamlandıysa WO COMPLETED
+      // Son step + hepsi tamamlandıysa WO COMPLETED (adım sayımı + kart geçişi
+      // helper'ın içinde; terminal guard da orada).
       if (!nextStep && stillAtSubcontractor === 0) {
-        const remaining = await tx.workOrderStep.count({
-          where: {
-            workOrderId: data.workOrderId,
-            status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-          },
-        });
-        if (remaining === 0) {
-          await tx.workOrder.update({
-            where: { id: data.workOrderId },
-            data: { status: WorkOrderStatus.COMPLETED },
-          });
-          await setWorkOrderCardStatuses(tx, data.workOrderId, TravelerCardStatus.ACTIVE, TravelerCardStatus.COMPLETED);
-        }
+        await completeWorkOrderIfStepsDone(tx, data.workOrderId);
       }
 
       // 5) newRolls açık kumaş Roll'larını burada doğur. Controller seviyesinde
@@ -2765,10 +2746,19 @@ export class SubcontractorService {
         // barkodsuz (kesin ölçüm/etiket bir sonraki İÇ istasyonun FINISH'inde damgalanır;
         // STOCK yerine IN_PRODUCTION — currentStepId dolu, cutOpenFabric bunu zorunlu kılar).
         const bornStatus = nextStep ? RollStatus.IN_PRODUCTION : RollStatus.WAREHOUSE;
-        const bornBarcodes: (string | null)[] = [];
-        for (let i = 0; i < bornRollInputs.length; i++) {
-          bornBarcodes.push(nextStep ? null : await generateRollBarcode(tx, "F"));
-        }
+        // (2026-08-10, F-CORE-VER-001) TEK rezervasyon — eskiden döngü her doğan
+        // top için ayrı bir sayaç turu atıyordu; sayaç satırının kilidi ilk turdan
+        // itibaren zaten tutulduğu için araya giren her tur kilidi o kadar
+        // uzatıyordu. Ara adımda (nextStep var) barkod HİÇ üretilmez → sayaca
+        // dokunulmaz (`count = 0` sayaç satırına hiç yazmaz).
+        const reservedBorn = await reserveRollBarcodes(
+          tx,
+          "F",
+          nextStep ? 0 : bornRollInputs.length,
+        );
+        const bornBarcodes: (string | null)[] = bornRollInputs.map((_, i) =>
+          nextStep ? null : reservedBorn[i]!,
+        );
 
         await tx.roll.createMany({
           data: bornRollInputs.map(({ id, nr }, i) => ({
@@ -3767,7 +3757,20 @@ export class SubcontractorService {
       where: { id },
       include: {
         subcontractor: true,
-        workOrder: true,
+        // ÜRETİM BİLGİSİ (2026-08-09 saha isteği): "mal kabul detayında işlem
+        // detayı yok". `workOrder: true` YALNIZ skaler alanları getirir —
+        // hedef RENK ADI ve ÖZELLİKLER ilişkidir ve gelmiyordu, yani ekran
+        // onları basmak isteseydi boş görürdü.
+        // ⚠️ Ders (2026-08-05 "Ekleme Nedeni" vakası): alanı ekrana koymak
+        // yetmez, HANGİ YANITTA döndüğünü doğrula.
+        workOrder: {
+          include: {
+            targetColor: { select: { id: true, code: true, name: true, hex: true } },
+            targetProperties: {
+              select: { property: { select: { id: true, name: true } } },
+            },
+          },
+        },
         step: { include: { station: true } },
         items: {
           include: {
@@ -5469,19 +5472,8 @@ export class SubcontractorService {
             data: { status: StepStatus.SKIPPED, skipReason: "FASON_DIRECT_SHIP" },
           });
 
-          const remaining = await tx.workOrderStep.count({
-            where: {
-              workOrderId: dispatch.workOrderId,
-              status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-            },
-          });
-          if (remaining === 0) {
-            await tx.workOrder.update({
-              where: { id: dispatch.workOrderId },
-              data: { status: WorkOrderStatus.COMPLETED },
-            });
-            await setWorkOrderCardStatuses(tx, dispatch.workOrderId, TravelerCardStatus.ACTIVE, TravelerCardStatus.COMPLETED);
-          }
+          // Adım sayımı + kart geçişi helper'ın içinde; terminal guard da orada.
+          await completeWorkOrderIfStepsDone(tx, dispatch.workOrderId);
         }
       }
 

@@ -16,7 +16,7 @@
 // - Sanitize akış üreticileriyle birebir: cleanCtl/asciiFold + dil-özel kaçış.
 // =============================================================================
 
-import type { LabelPayload } from "../label.service";
+import type { LabelPayload } from "../../types/label.types";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import {
   cleanCtl,

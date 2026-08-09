@@ -9,7 +9,7 @@
 // =============================================================================
 
 import { PrinterLanguage, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
-import type { LabelPayload } from "../label.service";
+import type { LabelPayload } from "../../types/label.types";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import { buildRollLabelHtml } from "./label-html.helper";
 import { buildRollLabelPpla } from "./label-ppla.helper";

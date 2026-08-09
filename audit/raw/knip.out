@@ -1,0 +1,26 @@
+Unused devDependencies (1)
+@types/bcryptjs  package.json:45:6
+Unused exports (19)
+LABEL_KINDS                           src/config/label-kind.schema.ts:54:14                       
+validateLongText            function  src/lib/string-validators.ts:129:17                         
+validateHexColor            function  src/lib/string-validators.ts:148:17                         
+getLastBackupResult         function  src/services/backup.service.ts:169:17                       
+getCurrentJob               function  src/services/db-copy.service.ts:132:17                      
+getLastJobResult            function  src/services/db-copy.service.ts:135:17                      
+DOC_PAGE_DIM                          src/services/document-render/doc-density.ts:42:14           
+resolveDocField             function  src/services/document-render/doc-fields.ts:129:17           
+PAGE_DIM                              src/services/document-render/fason-ceki.density.ts:40:14    
+resolveFasonField           function  src/services/document-render/fason-ceki.fields.ts:146:17    
+TRAVELER_SECTION_LABELS               src/services/document-render/traveler-card.sections.ts:35:14
+skippedTypesFor             function  src/services/helpers/label-canvas-native.helper.ts:624:17   
+getKindExclusiveKeys        function  src/services/helpers/label-context-fit.ts:53:17             
+resolveLabelIntentSnapshot  function  src/services/helpers/label-intent.helper.ts:78:23           
+LEFT_COL_MM                           src/services/helpers/native-label.shared.ts:26:14           
+getLabelFont                function  src/services/helpers/raster/raster-font.ts:61:17            
+eachDay                     function  src/services/reports/_shared.ts:182:18                      
+ymdLocal                    function  src/services/reports/_shared.ts:200:17                      
+readSessionDurationHours    function  src/services/system-setting.service.ts:2358:23              
+Unused exported types (3)
+DocFieldWeight  type  src/services/document-render/fason-ceki.fields.ts:160:30   
+DocFieldWeight  type  src/services/document-render/traveler-card.fields.ts:242:30
+FoldType        type  src/services/helpers/fold-type.ts:23:13                    

@@ -62,6 +62,8 @@ import returnReasonRoutes from "./routes/return-reason.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import adminRoutes from "./routes/admin.routes";
+import { verifyToken } from "./middlewares/auth.middleware";
+import { requirePermission } from "./middlewares/rbac.middleware";
 import dbCopyRoutes from "./routes/db-copy.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
@@ -99,9 +101,6 @@ app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Cou
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
 // 1KB altı response'lar atlanır (overhead'e değmez).
 app.use(compression({ threshold: 1024 }));
-// F16: 1MB limit — toplu uçlar (yüzlerce rollId) 100kb default'u aşınca generic
-// 500/İngilizce 'entity.too.large' yerine error.middleware net 413 Türkçe döner.
-app.use(express.json({ limit: "1mb" }));
 // F17: production'da 'combined' (tarih/IP/UA — pm2 dosya log'una ANSI'siz),
 // dev'de renkli kısa 'dev'.
 const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
@@ -114,8 +113,18 @@ app.use(morgan(isProd ? "combined" : "dev"));
 // Bkz. docs/history/SAHA-DAYANIKLILIK-FAZ2.md §B + docs/history/SAHA-DAYANIKLILIK-FAZ3.md §P1.
 app.use(latencyMiddleware);
 
-// x-device-id header'ı varsa req.device'a Device + machineId çöz
-app.use(resolveDevice);
+// F16: 1MB limit — toplu uçlar (yüzlerce rollId) 100kb default'u aşınca generic
+// 500/İngilizce 'entity.too.large' yerine error.middleware net 413 Türkçe döner.
+//
+// ⚠️ KONUM: morgan + latency'den SONRA (2026-08-09, denetim F-CORE-OPS-003).
+// Eskiden ikisinden de ÖNCEYDİ ve bu bir gözlemlenebilirlik kör noktasıydı:
+// bozuk JSON (400) ve 1MB aşımı (413) burada `next(err)` ile hata zincirine
+// çıkıyor, hata zinciri sonraki NORMAL middleware'ları ATLIYOR ve o istekler NE
+// erişim log'una NE gecikme metriğine düşüyordu. Yani 413 döngüsüne girmiş bir
+// tablet `/api/admin/perf` ekranında HİÇ görünmüyordu — uç sanki hiç çağrılmamış
+// gibi. Bağımlılık yok: morgan ve latency gövdeyi okumaz, resolveDevice yalnız
+// x-device-id başlığına bakar, route handler'ları zaten aşağıda.
+app.use(express.json({ limit: "1mb" }));
 
 // =============================================================================
 // Swagger UI Documentation
@@ -133,6 +142,17 @@ setupSwagger(app);
 // public\ klasörü bunun altındadır.
 const publicDir = path.join(process.cwd(), "public");
 app.use(express.static(publicDir));
+
+// x-device-id header'ı varsa req.device'a Device + machineId çöz.
+//
+// ⚠️ KONUM: swagger + statik varlıklardan SONRA (2026-08-09 denetimi,
+// F-CORE-VER-002). Eskiden ikisinden de ÖNCEYDİ ve bu, mobil istemcinin
+// gönderdiği HER statik dosya isteğine (durum sayfası, logo, swagger iç
+// varlıkları) bir `device` DB sorgusu bindiriyordu — o sorgunun sonucunu
+// statik yolun okuması İMKÂNSIZ. Ölçülen taban: 18 APPROVED cihaz, 5 sn'de bir
+// yoklama; kimlik+cihaz çözümü iş sorgusu başlamadan ~11 sorgu/sn ediyordu.
+// API route'ları AŞAĞIDA olduğu için `req.device`a bağlı hiçbir yol etkilenmez.
+app.use(resolveDevice);
 
 // Sürüm bilgisi (durum sayfasında gösterilir). pm2 derlenmiş server.js'i doğrudan
 // çalıştırır (npm script üzerinden değil) → `npm_package_version` env'i üretimde
@@ -282,7 +302,26 @@ function readResourceMetrics() {
 // eder. Geriye dönük uyumluluk için HTTP durumu 200 KALIR ve eski alanlar
 // (status, message) korunur — yeni alanlar (db, version, uptimeSec, dbSizeBytes,
 // dbConnections, lastBackup) eklenir.
-app.get("/health", async (_req: Request, res: Response) => {
+// ⚠️ İKİ UÇ, İKİ SÖZLEŞME (2026-08-09 denetimi, F-CORE-GUV-002):
+//
+//   GET /health             → PUBLIC, YALNIZ CANLILIK (5 alan)
+//   GET /api/admin/health   → verifyToken + admin:settings, TAM operasyon panosu
+//
+// `/health` kimlik doğrulaması TAŞIYAMAZ: Electron login ÖNCESİ sunucu adresini
+// onunla test ediyor (ApiEndpointDialog) ve `useServerClock` yanıttaki `Date`
+// başlığını okuyor; kök durum sayfası (public/status.js) da onu çağırıyor.
+// Ama uç, canlılığın çok ötesinde bir panoyu kimliksiz döndürüyordu: DB boyutu,
+// disk doluluğu, havuz içleri, o an online kullanıcı/cihaz sayısı, YEDEK DOSYA
+// ADI ve iki HAM hata metni (`lastAuditError`, `lastPoolTimeoutError` —
+// içerikleri süzülmüyor; Prisma/pg metinleri şema ve bağlantı ayrıntısı
+// taşıyabilir). LAN'daki kimliksiz herhangi bir istemci — CORS `*` sayesinde
+// ofis bilgisayarında açılan herhangi bir web sayfası dahil — hepsini tek GET
+// ile okuyabiliyordu.
+//
+// ⚠️ YENİ METRİK EKLERKEN: "bu alan sunucuya erişimi olmayan birine ne söyler?"
+// Cevap "operasyonel iç durum" ise `buildRichHealth`e ekle, `/health`e DEĞİL.
+// `/health`in alan kümesi DONDURULMUŞTUR.
+async function buildRichHealth(): Promise<Record<string, unknown>> {
   let db: "UP" | "DOWN" = "DOWN";
   let dbSizeBytes: number | null = null;
   let dbConnections: number | null = null;
@@ -349,7 +388,7 @@ app.get("/health", async (_req: Request, res: Response) => {
   }
   // Audit yazım sağlığı — best-effort log'lar sessizce düşerse burada görünür.
   const auditHealth = AuditService.getHealth();
-  res.status(200).json({
+  return {
     status: "UP",
     message: "TeksERP API is running.",
     api: "UP",
@@ -383,6 +422,29 @@ app.get("/health", async (_req: Request, res: Response) => {
     lastAuditFailureAt: auditHealth.lastFailureAt,
     // Backend prosesinin + makinenin kaynak kullanımı (CPU/RAM)
     ...readResourceMetrics(),
+  };
+}
+
+/**
+ * PUBLIC canlılık ucu — SÖZLEŞMESİ DONDURULMUŞ beş alan.
+ * DB'ye YALNIZ ucuz bir `SELECT 1` atar: zengin yükün pg_stat sorgusu buraya
+ * gerekmiyor ve kimliksiz bir istemcinin onu tetiklemesi için sebep yok.
+ */
+app.get("/health", async (_req: Request, res: Response) => {
+  let db: "UP" | "DOWN" = "DOWN";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    db = "UP";
+  } catch {
+    db = "DOWN";
+  }
+  res.status(200).json({
+    status: "UP",
+    message: "TeksERP API is running.",
+    api: "UP",
+    db,
+    version: appVersion,
+    time: new Date().toISOString(),
   });
 });
 
@@ -431,6 +493,18 @@ app.use("/api/feature-flags", featureFlagRoutes);
 // db-copies GENEL admin router'ından ÖNCE: Express 5 prefix eşleşmesinde daha
 // spesifik olan önce gelmeli, yoksa admin.routes içindeki bir yakalayıcı öne geçebilir.
 app.use("/api/admin/db-copies", dbCopyRoutes);
+// ZENGİN sağlık yükü — `/health`ten AYRILDI (F-CORE-GUV-002). adminRoutes'tan
+// ÖNCE kaydedilir ki aynı prefix altında bu özel yol önce eşleşsin. Guard'lar
+// route satırında açık: kimlik + `admin:settings` (Sunucu Durumu ekranı zaten
+// Sistem hub'ının arkasında ve o izni taşıyan kişi tarafından açılıyor).
+app.get(
+  "/api/admin/health",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response) => {
+    res.status(200).json(await buildRichHealth());
+  },
+);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);

@@ -187,8 +187,29 @@ async function main(): Promise<void> {
         const lines = fs.readFileSync(p, "utf8").split("\n");
         lines.forEach((line, i) => {
           const code = line.split("--")[0] ?? ""; // SQL yorumları sayılmaz
+          // JS yorumları da sayılmaz: tarihsel notlar ("eski `setHours` deseni…")
+          // meşru ve çoktur; aranan şey ÇALIŞAN koddur.
+          const trimmed = code.trim();
+          if (trimmed.startsWith("//") || trimmed.startsWith("*")) return;
           if (/DATE_TRUNC\s*\(\s*'(day|week|month)'/i.test(code) || /\bCURRENT_DATE\b/.test(code)) {
             offenders.push(`${path.relative(SRC, p)}:${i + 1}  ${line.trim().slice(0, 90)}`);
+          }
+          // JS TARAFI (2026-08-09, F-OPS-VER-005): gün sınırını SÜREÇ saat
+          // dilimiyle kuran yerel-zaman mutasyonları. Bu cephe eskiden taranmıyordu
+          // ve kod tabanındaki tek üretim `setHours`u (backup-scheduler'ın yedek
+          // saati) tam o boşluktan geçmişti: `BACKUP_HOUR=3` süreç TZ'sinde 03:00
+          // demekti, fabrika gününde değil.
+          // ⚠️ KAPSAM DAR: yalnız `setHours`. `setDate`/`setMonth` BİLEREK dışarıda —
+          // onlar gün SINIRI kurmaz, SÜRE kaydırır ("termin + 30 gün",
+          // order.service.ts:1438 / workorder.service.ts:250) ve o işlem saat
+          // diliminden bağımsız olarak doğrudur; üstelik yerel saati koruduğu için
+          // DST geçişlerinde `+ n*86400000`den DAHA doğrudur. İlk yazımda ikisi de
+          // taranıyordu ve bu iki meşru satırı yanlış pozitif olarak işaretledi.
+          // Kök CLAUDE.md ayrımı: TAKVİM GÜNÜ tz'ye bağlıdır, MUTLAK PENCERE değildir.
+          if (/\.setHours\s*\(/.test(code)) {
+            offenders.push(
+              `${path.relative(SRC, p)}:${i + 1}  [JS gün sınırı] ${line.trim().slice(0, 80)}`,
+            );
           }
         });
       }

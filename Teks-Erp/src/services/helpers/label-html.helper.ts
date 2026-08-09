@@ -20,7 +20,7 @@
 //   - qrSvg: bwip-js QR SVG (mobil scanner)
 // =============================================================================
 
-import type { LabelPayload } from "../label.service";
+import type { LabelPayload } from "../../types/label.types";
 import type { LabelTemplate } from "@prisma/client";
 import {
   type TemplateField,
