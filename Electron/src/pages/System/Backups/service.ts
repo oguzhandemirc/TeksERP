@@ -178,3 +178,77 @@ export function restoreCommand(
     `pm2 start ${app}`,
   ].join("\n");
 }
+
+// ─── OFFSITE YEDEK ────────────────────────────────────────────────────────────
+// (denetim 2026-08-10, F-OPS-VER-003) Felaket kurtarma kapsamı. "Yedek var mı"
+// ile "yedek BAŞKA YERDE var mı" ayrı sorulardır; ikincisi bu ekrandan önce
+// hiçbir yüzeyde görünmüyordu ve sorunun yıllarca fark edilmemesinin sebebi
+// tam olarak buydu.
+
+export interface OffsiteStatus {
+  offsite: {
+    configured: boolean;
+    state?: string;
+    ok?: boolean;
+    localCount?: number;
+    remoteCount?: number;
+    missingCount?: number;
+    missing?: string[];
+    durationMs?: number;
+    finishedAt?: string;
+    warnings?: string[];
+  };
+  config: {
+    remote: string;
+    localDir: string;
+    configPath: string | null;
+    rcloneBin: string;
+  };
+}
+
+export const OFFSITE_QUERY_KEY = ["admin", "backups", "offsite"] as const;
+
+export function useOffsiteStatus() {
+  return useQuery({
+    queryKey: OFFSITE_QUERY_KEY,
+    queryFn: async (): Promise<OffsiteStatus> => {
+      const { data } = await apiClient.get("/admin/backups/offsite");
+      return data.data as OffsiteStatus;
+    },
+    // Süpürme saatte bir koşuyor; bu ekran açıkken dakikada bir tazelemek yeter.
+    refetchInterval: 60_000,
+  });
+}
+
+export async function updateOffsiteConfig(body: {
+  remote?: string;
+  localDir?: string;
+}): Promise<{ remote: string; localDir: string }> {
+  const { data } = await apiClient.patch("/admin/backups/offsite", body);
+  return data.data;
+}
+
+export async function testOffsiteConnection(): Promise<{ ok: boolean; message: string }> {
+  const { data } = await apiClient.post("/admin/backups/offsite/test");
+  return data.data;
+}
+
+export async function sweepOffsiteNow(): Promise<OffsiteStatus["offsite"]> {
+  const { data } = await apiClient.post("/admin/backups/offsite/sweep");
+  return data.data.offsite;
+}
+
+/**
+ * `rclone authorize "drive"` çıktısındaki token'ı sunucuya yazar.
+ *
+ * ⚠️ Token buradan SONRA hiçbir yerde tutulmaz: state'e yazılmaz, log'a düşmez,
+ * yanıtta geri gelmez. Bir Google yenileme anahtarı, hesabın Drive'ına süresiz
+ * erişimdir.
+ */
+export async function authorizeOffsiteDrive(body: {
+  name: string;
+  token: string;
+}): Promise<{ message: string }> {
+  const { data } = await apiClient.post("/admin/backups/offsite/authorize", body);
+  return data.data;
+}

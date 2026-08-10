@@ -10,6 +10,7 @@ import { safeFormat } from "@/lib/format";
 import { BackupButton } from "../ServerStatus/BackupButton";
 import { useBackups, downloadBackup } from "./service";
 import { BackupScheduleCard } from "./BackupScheduleCard";
+import { OffsiteBackupCard } from "./OffsiteBackupCard";
 import { BackupsTable } from "./BackupsTable";
 import { RestoreDialog } from "./RestoreDialog";
 
@@ -45,6 +46,7 @@ export function BackupsPage() {
 
       <PageBody className="space-y-6 p-6">
         <BackupScheduleCard />
+        <OffsiteBackupCard />
 
         <Callout tone="warning" title="Geri yükleme veritabanının tamamını değiştirir">
           Geri yükleme, yedek anından sonraki tüm değişiklikleri siler ve backend'i geçici

@@ -70,7 +70,15 @@ async function main(): Promise<void> {
   console.log("\n=== Fire Karnesi bekçisi ===\n");
 
   const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
-  const defects = await prisma.defectType.findMany({ take: 2, select: { id: true, name: true } });
+  // ⚠️ `orderBy` ZORUNLU. Sıralamasız `findMany` hangi iki türün, hangi SIRAYLA
+  // döneceğini garanti ETMEZ (PostgreSQL heap/plan düzenine göre değişir) — yani
+  // `d1`/`d2` ortamdan ortama yer değiştirir ve aşağıdaki atıf kontrolü yazı-tura
+  // olur. CI 2026-08-09 kırmızısının iki sebebinden biri buydu.
+  const defects = await prisma.defectType.findMany({
+    orderBy: { id: "asc" },
+    take: 2,
+    select: { id: true, name: true },
+  });
   const grade = await prisma.qualityGrade.findFirst({ orderBy: { sortOrder: "asc" }, select: { id: true } });
   if (!item || defects.length < 2 || !grade) {
     console.log("❌ Ön koşul yok (1 kumaş + 2 hata türü + 1 kalite gerekli)");
@@ -82,7 +90,13 @@ async function main(): Promise<void> {
   // ── FIXTURE ────────────────────────────────────────────────────────────────
   // Hurda (dönem içi): 100 m (İKİ hatalı — çift sayım sondası) + 40 m fason
   const twoDefect = await makeRoll({ itemId: item.id, qty: 100, status: "SCRAP", finalizedAt: IN_WINDOW });
-  await makeError(twoDefect, d1.id, 10, IN_WINDOW, true);
+  // ⚠️ İKİ HATANIN DAMGASI FARKLI OLMAK ZORUNDA. Eskiden ikisi de `IN_WINDOW`
+  // taşıyordu; "en erken tespit kazanır" kuralı beraberlikte hiçbir şey seçmez ve
+  // sonuç PostgreSQL'in satır sırasına kalırdı. Test o hâliyle kuralı DEĞİL,
+  // yazı-turayı ölçüyordu (yerelde d1 çıkıyor, CI'da d2 — CI 2026-08-09).
+  // `d1` bilinçli olarak 1 saat ÖNCE: atıf ona gitmeli.
+  const EARLIER = new Date(IN_WINDOW.getTime() - 60 * 60 * 1000);
+  await makeError(twoDefect, d1.id, 10, EARLIER, true);
   await makeError(twoDefect, d2.id, 55, IN_WINDOW, true);
   await makeRoll({
     itemId: item.id, qty: 40, status: "SCRAP", finalizedAt: IN_WINDOW,
