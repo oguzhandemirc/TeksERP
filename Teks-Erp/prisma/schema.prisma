@@ -3535,6 +3535,11 @@ model FabricProperty {
 /// yazılır ve envanter filtresi/sıralaması onun üzerinden çalışır; fabrika
 /// görüntü adını değiştirirse ("4 Kat") kod bozulmamalı.
 ///
+/// ⚠️ KOD ASCII OLMALI. Seed "TUP" yazar, "TÜP" DEĞİL — görünen ad "Tüp" kalır.
+/// Türkçe karakterli bir kod, ASCII yazan her istemciyi sessizce reddettirir
+/// (ölçüldü: `test_recipe` "TUP" gönderiyor ve "TÜP" koduna takıldı). Bekçi
+/// `test_fold_catalog.ts` katalogdaki ASCII-dışı kodu kırmızı verir.
+///
 /// ⚠️ Kod karşılaştırması `toUpperCase()` ile yapılır, `toLocaleUpperCase("tr")`
 /// ile DEĞİL — Türkçe upper "i"yi "İ" yapıp eşleşmeyi sessizce bozar
 /// (2026-08-02 etiket koşulu dersinin aynısı).

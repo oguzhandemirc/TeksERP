@@ -135,7 +135,10 @@ async function main() {
     );
 
     // 4) update properties[] vermeyince mevcut M:N KORUNUR (skaler-only PATCH)
-    await svc.update(created.id, { name: "TEST REÇETE v3", foldType: "ACIK" }, undefined);
+    // ⚠️ foldType burada yalnız "skaler alan da gönderiliyor" demek için var;
+    // 2026-08-10'dan beri KATALOG değeri olmak zorunda (eski "ACIK" serbest
+    // metniydi). Rastgele bir değerle değiştirme — katalog doğrulaması reddeder.
+    await svc.update(created.id, { name: "TEST REÇETE v3", foldType: "2-KAT" }, undefined);
     const afterScalar = await reload(created.id);
     check(
       "update properties'siz → mevcut özellik korundu",

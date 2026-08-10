@@ -32,11 +32,18 @@ import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
 
 const APPLY = process.argv.includes("--apply");
 
-/** Kat değerleri — kod KİMLİKTİR, ad görüntüdür. */
+/**
+ * Kat değerleri — kod KİMLİKTİR, ad görüntüdür.
+ *
+ * ⚠️ KOD ASCII: "TUP", "TÜP" DEĞİL. Kod `Roll.foldType` gibi kolonlara aynen
+ * yazılıyor ve API'den serbest metin de gelebiliyor; Türkçe karakterli bir kod,
+ * ASCII yazan her istemciyi ("TUP") sessizce reddettirirdi. Görünen ad Türkçe
+ * kalır — kullanıcı "Tüp" görür, sistem "TUP" saklar.
+ */
 const FOLD_VALUES = [
   { code: "2-KAT", name: "2 Kat", sortOrder: 10 },
   { code: "4-KAT", name: "4 Kat", sortOrder: 20 },
-  { code: "TÜP", name: "Tüp", sortOrder: 30 },
+  { code: "TUP", name: "Tüp", sortOrder: 30 },
 ];
 
 /**
