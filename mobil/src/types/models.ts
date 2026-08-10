@@ -756,6 +756,12 @@ export interface KursunStepSummary {
     code: string;
     name: string;
     mode: 'AUTO' | 'OPTIONAL' | 'REQUIRED';
+    /** BAYRAK → aç/kapa çipi · SEÇİM → değer çipleri (2026-08-11).
+     *  Eski backend göndermez → undefined → BAYRAK gibi davranılır. */
+    valueType?: 'FLAG' | 'CHOICE';
+    /** SEÇİM tipliyse operatöre sunulacak AKTİF değerler. Tuşlar BURADAN
+     *  çizilir — kodda sabit liste YOK (25GR/50GR/75GR panelden tanımlanır). */
+    values?: { code: string; name: string }[];
   }[];
   /** Bu adıma yazılan not (WorkOrderStep.notes; rotada KK2 istasyonuna özel
    *  talimat) — kart açıkken üstte gösterilir. */

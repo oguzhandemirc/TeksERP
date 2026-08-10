@@ -25,6 +25,7 @@ import {
   RollOperation,
   RollOperationType,
   RollStatus,
+  FabricPropertyValueType,
   StationKind,
   StationPropertyMode,
   StepStatus,
@@ -32,7 +33,8 @@ import {
 } from "@prisma/client";
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import {
-  assertRequiredPropertiesSelected,
+  assertPropertySelectionsValid,
+  type PropertySelection,
   copyStationCapabilitiesToRoll,
   loadStationPropertyCaps,
 } from "./helpers/station-capability-transfer.helper";
@@ -105,6 +107,11 @@ interface StepSummary {
     code: string;
     name: string;
     mode: StationPropertyMode;
+    /// BAYRAK → aç/kapa çipi · SEÇİM → değer çipleri (2026-08-11).
+    valueType: FabricPropertyValueType;
+    /// SEÇİM tipliyse operatöre sunulacak AKTİF değerler (BAYRAK'ta boş).
+    /// Tablet tuşlarını BURADAN çizer — kodda sabit liste YOK.
+    values: { code: string; name: string }[];
   }[];
   /// Bu adıma (Kurşun + KK2) yazılan serbest talimat — WorkOrderStep.notes
   /// (rotadaki RouteStep.defaultNotes'tan WO açılırken kopyalanır). Operatöre
@@ -373,8 +380,10 @@ export class KursunQcService {
    * operatör `finishStep` çağrısıyla adımı kapatır.
    *
    * Yetenek aktarımı MODA bağlıdır (2026-08-10): AUTO satırlar her zaman,
-   * OPTIONAL/REQUIRED satırlar yalnız operatör işaretlediyse (`propertyIds`)
+   * OPTIONAL/REQUIRED satırlar yalnız operatör işaretlediyse (`properties`)
    * Roll'a yazılır. REQUIRED bir özellik işaretlenmemişse adım kapanmaz.
+   * SEÇİM tipli özellikte işaret yetmez, DEĞER de gelir (2026-08-11):
+   * `{ propertyId, valueCode }` → `RollProperty.valueId`.
    *
    * KURSUN_APPLIED log'u, KURSUN özelliğinin bu topa GERÇEKTEN yazılıp
    * yazılmadığına bağlıdır — eski per-roll "Kurşun geçildi mi?" toggle'ının yerini
@@ -386,9 +395,10 @@ export class KursunQcService {
       rollId: string;
       stepId: string;
       notes?: string | null;
-      /** Operatörün işaretlediği OPTIONAL/REQUIRED özellikler. AUTO'lar
-       *  gönderilmese de yazılır; eski APK bu alanı hiç göndermez. */
-      propertyIds?: string[] | null;
+      /** Operatörün cevapları (OPTIONAL/REQUIRED). AUTO'lar gönderilmese de
+       *  yazılır; eski APK bu alanı hiç göndermez → yalnız AUTO uygulanır.
+       *  SEÇİM tipli özellikte `valueCode` ZORUNLUDUR. */
+      properties?: PropertySelection[] | null;
     },
     userId?: string,
     machineId?: string | null
@@ -402,11 +412,11 @@ export class KursunQcService {
     if (!step) throw AppError.notFound("Adım bulunamadı");
 
     const caps = await loadStationPropertyCaps(prisma, step.stationId);
-    assertRequiredPropertiesSelected(caps, data.propertyIds);
+    assertPropertySelectionsValid(caps, data.properties);
 
     // KURSUN bu topa yazılacak mı? AUTO ise evet, OPTIONAL/REQUIRED ise ancak
     // operatör işaretlediyse. Log ile RollProperty aynı karardan beslenir.
-    const selectedSet = new Set(data.propertyIds ?? []);
+    const selectedSet = new Set((data.properties ?? []).map((p) => p.propertyId));
     const kursunCap = caps.find((c) => c.code === "KURSUN");
     const kursunApplied =
       !!kursunCap &&
@@ -478,7 +488,7 @@ export class KursunQcService {
       await copyStationCapabilitiesToRoll(tx, {
         stationId: step.stationId,
         rollId: data.rollId,
-        selectedPropertyIds: data.propertyIds,
+        selections: data.properties,
         caps,
       });
 
@@ -498,7 +508,7 @@ export class KursunQcService {
           type: RollOperationType.QC2_COMPLETED,
           kursunApplied,
           // Operatörün elle işaretledikleri — AUTO'lar bu listede olmayabilir.
-          selectedPropertyIds: data.propertyIds ?? [],
+          selections: data.properties ?? [],
         },
       });
     }
@@ -1431,6 +1441,8 @@ export class KursunQcService {
           code: c.code,
           name: c.name,
           mode: c.mode,
+          valueType: c.valueType,
+          values: c.values.map((v) => ({ code: v.code, name: v.name })),
         })),
         stepNote: step.notes,
         bypassAssignment: bypass

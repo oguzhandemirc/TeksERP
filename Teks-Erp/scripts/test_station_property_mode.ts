@@ -23,7 +23,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import {
-  assertRequiredPropertiesSelected,
+  assertPropertySelectionsValid,
   copyStationCapabilitiesToRoll,
   loadStationPropertyCaps,
 } from "../src/services/helpers/station-capability-transfer.helper";
@@ -121,7 +121,7 @@ async function main() {
     await copyStationCapabilitiesToRoll(prisma, {
       stationId: station.id,
       rollId: r2,
-      selectedPropertyIds: [pOpt.id, pOutsider.id],
+      selections: [{ propertyId: pOpt.id }, { propertyId: pOutsider.id }],
       caps,
     });
     const r2set = new Set(
@@ -135,7 +135,7 @@ async function main() {
     // ── 5/6) REQUIRED zorunluluğu ────────────────────────────────────────────
     let reqErr = "";
     try {
-      assertRequiredPropertiesSelected(caps, [pOpt.id]);
+      assertPropertySelectionsValid(caps, [{ propertyId: pOpt.id }]);
     } catch (e) {
       reqErr = e instanceof Error ? e.message : String(e);
     }
@@ -145,7 +145,7 @@ async function main() {
 
     let okErr = "";
     try {
-      assertRequiredPropertiesSelected(caps, [pReq.id]);
+      assertPropertySelectionsValid(caps, [{ propertyId: pReq.id }]);
     } catch (e) {
       okErr = e instanceof Error ? e.message : String(e);
     }

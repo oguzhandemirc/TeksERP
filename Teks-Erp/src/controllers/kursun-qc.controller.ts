@@ -12,10 +12,21 @@ const completeQc2Schema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   stepId: z.string().uuid("Geçersiz adım ID"),
   notes: z.string().max(500).nullish(),
-  // Operatörün işaretlediği OPTIONAL/REQUIRED istasyon özellikleri (mod
-  // sözleşmesi, 2026-08-10). AUTO satırlar gönderilmese de uygulanır; eski APK
-  // bu alanı hiç göndermez → yalnız AUTO yazılır (bugünkü davranış).
-  propertyIds: z.array(z.string().uuid()).max(50).nullish(),
+  // Operatörün cevapları (mod sözleşmesi 2026-08-10 + değer sözleşmesi
+  // 2026-08-11). AUTO satırlar gönderilmese de uygulanır; eski APK bu alanı hiç
+  // göndermez → yalnız AUTO yazılır (bugünkü davranış).
+  //
+  // ⚠️ `valueCode` SEÇİM tipli özellikte zorunlu, BAYRAK'ta yasak — ikisini de
+  // servis doğrular (`assertPropertySelectionsValid`), burada yalnız BİÇİM.
+  properties: z
+    .array(
+      z.object({
+        propertyId: z.string().uuid(),
+        valueCode: z.string().trim().max(32).nullish(),
+      }),
+    )
+    .max(50)
+    .nullish(),
 });
 
 // Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
@@ -118,7 +129,7 @@ export class KursunQcController {
           rollId: body.rollId,
           stepId: body.stepId,
           notes: body.notes ?? null,
-          propertyIds: body.propertyIds ?? null,
+          properties: body.properties ?? null,
         },
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null

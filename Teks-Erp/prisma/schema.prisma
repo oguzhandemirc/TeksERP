@@ -3580,6 +3580,9 @@ model FabricPropertyValue {
   isActive   Boolean @default(true)
 
   property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
+  /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
+  rollProperties RollProperty[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -3855,13 +3858,34 @@ model RollProperty {
   rollId     String @db.Uuid
   propertyId String @db.Uuid
 
-  roll     Roll           @relation(fields: [rollId], references: [id], onDelete: Cascade)
-  property FabricProperty @relation(fields: [propertyId], references: [id])
+  /// SEÇİM tipli özellikte operatörün seçtiği DEĞER (2026-08-11).
+  /// Örnek: Kurşun istasyonunda "GRAMAJ" özelliği → 25GR / 50GR / 75GR.
+  ///
+  /// BAYRAK tipli özellikte NULL — orada özelliğin varlığı zaten cevaptır
+  /// ("zımparalı mı? evet"). SEÇİM tipinde varlık yetmez, hangisi olduğu lazım.
+  ///
+  /// ⚠️ `@@unique([rollId, propertyId])` KORUNUYOR ve bu, DIŞLAYICILIĞIN
+  /// kendisidir: bir topa aynı özellikten iki değer (hem 25GR hem 50GR)
+  /// yazılamaz. Bu yüzden değer AYRI bir satır değil, MEVCUT satırın kolonu.
+  ///
+  /// ⚠️ KATALOG SATIRINA FK — serbest metin DEĞİL. `Roll.foldType`'tan farkı
+  /// bilinçli: kat indekslenip filtrelenip sıralanıyor (skaler kolon şart),
+  /// bu değer ise yalnız okunup gösteriliyor → FK bütünlüğü daha değerli
+  /// ("50 GR" / "50gr" gibi yazım çeşitlemesi doğamaz).
+  ///
+  /// ⚠️ Değer satırı SİLİNMEZ, pasifleşir (`fabric-property.service`) — bu
+  /// yüzden `onDelete: Restrict`: geçmiş topun taşıdığı değer yok edilemez.
+  valueId String? @db.Uuid
+
+  roll     Roll                 @relation(fields: [rollId], references: [id], onDelete: Cascade)
+  property FabricProperty       @relation(fields: [propertyId], references: [id])
+  value    FabricPropertyValue? @relation(fields: [valueId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@unique([rollId, propertyId])
   @@index([propertyId])
+  @@index([valueId])
   @@map("roll_properties")
 }
 

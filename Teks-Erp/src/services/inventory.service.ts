@@ -121,7 +121,8 @@ import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { hasBypassClosureOnProcessQcTx } from "./helpers/kursun-bypass-guard.helper";
 import { assertKursunTabletMayWrite } from "./helpers/kursun-bypass-eligibility.helper";
 import {
-  assertRequiredPropertiesSelected,
+  assertPropertySelectionsValid,
+  type PropertySelection,
   copyStationCapabilitiesToRoll,
   loadStationPropertyCaps,
 } from "./helpers/station-capability-transfer.helper";
@@ -410,6 +411,10 @@ const ROLL_LIST_INCLUDE = {
     select: {
       propertyId: true,
       property: { select: { id: true, code: true, name: true } },
+      // SEÇİM tipli özellikte operatörün seçtiği DEĞER (GRAMAJ=50GR).
+      // Liste ve detay AYNI şekli döner — ayrışırsa satır ile panel aynı top
+      // için farklı şey söyler.
+      value: { select: { code: true, name: true } },
     },
   },
   shipment: { select: { id: true, shipmentNo: true, status: true } },
@@ -2247,6 +2252,7 @@ export class InventoryService {
           select: {
             propertyId: true,
             property: { select: { id: true, code: true, name: true, color: true } },
+            value: { select: { code: true, name: true } },
           },
         },
         shipment: { select: { id: true, shipmentNo: true, status: true } },
@@ -4021,14 +4027,16 @@ export class InventoryService {
       }>;
       notes?: string | null;
       /**
-       * Operatörün işaretlediği OPTIONAL/REQUIRED istasyon özellikleri
-       * (2026-08-10 mod sözleşmesi). AUTO satırlar gönderilmese de yazılır;
-       * eski APK bu alanı hiç göndermez → yalnız AUTO uygulanır (bugünkü sonuç).
+       * Operatörün cevapları (2026-08-10 mod + 2026-08-11 değer sözleşmesi).
+       * AUTO satırlar gönderilmese de yazılır; eski APK bu alanı hiç göndermez
+       * → yalnız AUTO uygulanır (bugünkü sonuç). SEÇİM tipli özellikte
+       * `valueCode` ZORUNLUDUR.
+       *
        * Sözleşme `kursun-qc.completeQc2` ile BİREBİR — iki tablet yolu aynı
        * özelliği farklı kurallarla uygularsa aynı top iki yoldan iki farklı
        * özellik kümesi kazanır.
        */
-      propertyIds?: string[] | null;
+      properties?: PropertySelection[] | null;
     },
     userId?: string,
     /** PROCESS_QC makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -4163,8 +4171,8 @@ export class InventoryService {
     // OPTIONAL/REQUIRED ise ancak operatör işaretlediyse. Ayrışırlarsa log
     // "kurşun geçildi" derken topun özelliği boş kalırdı.
     const stationCaps = await loadStationPropertyCaps(prisma, stationId);
-    assertRequiredPropertiesSelected(stationCaps, data.propertyIds);
-    const selectedProps = new Set(data.propertyIds ?? []);
+    assertPropertySelectionsValid(stationCaps, data.properties);
+    const selectedProps = new Set((data.properties ?? []).map((p) => p.propertyId));
     const kursunCap = stationCaps.find((c) => c.code === "KURSUN");
     const kursunApplied =
       !!kursunCap &&
@@ -4247,7 +4255,7 @@ export class InventoryService {
       await copyStationCapabilitiesToRoll(tx, {
         stationId,
         rollId,
-        selectedPropertyIds: data.propertyIds,
+        selections: data.properties,
         caps: stationCaps,
       });
 

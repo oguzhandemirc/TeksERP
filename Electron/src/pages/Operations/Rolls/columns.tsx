@@ -126,7 +126,9 @@ export const rollColumns: ColumnDef<Roll>[] = [
         <div className="flex flex-wrap gap-0.5">
           {props.slice(0, 2).map((p) => (
             <Badge key={p.propertyId} variant="muted" className="text-[10px]">
-              {p.property.name}
+              {/* SEÇİM tipli özellikte DEĞER de basılır — liste ile detay panelinin
+                  aynı topu farklı anlatmaması için (RollDetailSheet ile aynı kural). */}
+              {p.value ? `${p.property.name}: ${p.value.name}` : p.property.name}
             </Badge>
           ))}
           {props.length > 2 && (

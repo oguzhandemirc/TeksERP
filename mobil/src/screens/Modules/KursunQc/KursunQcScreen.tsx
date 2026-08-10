@@ -274,17 +274,50 @@ export default function KursunQcScreen() {
     () => stationProps.filter((p) => p.mode !== 'AUTO'),
     [stationProps],
   );
-  // İşaretlemeler TOP BAŞINA sıfırlanır: bir topta işaretlenen özellik, sıradaki
-  // topa taşınırsa operatör hiç dokunmadan ikinci topa da yazılır.
-  const [checkedProps, setCheckedProps] = useState<string[]>([]);
+  // Operatörün CEVAPLARI: propertyId → seçim. BAYRAK'ta değer `true`, SEÇİM'de
+  // seçilen değer KODU ("50GR"). Tek harita, çünkü ikisi de "bu özelliğe cevap
+  // verildi mi" sorusunu yanıtlıyor — ayrı iki state, zorunluluk kontrolünün
+  // birini unutmasına açık olurdu.
+  //
+  // ⚠️ TOP BAŞINA sıfırlanır: bir topta işaretlenen özellik sıradaki topa
+  // taşınırsa operatör hiç dokunmadan ikinci topa da yazılır.
+  const [propAnswers, setPropAnswers] = useState<Record<string, true | string>>({});
   useEffect(() => {
-    setCheckedProps([]);
+    setPropAnswers({});
   }, [activeJob?.selectedRollId, activeCardId]);
-  const toggleProp = (id: string) =>
-    setCheckedProps((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  /** BAYRAK çipi: aç/kapa. */
+  const toggleFlagProp = (id: string) =>
+    setPropAnswers((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id];
+      else next[id] = true;
+      return next;
+    });
+
+  /** SEÇİM çipi: aynı değere tekrar basmak seçimi KALDIRIR (opsiyonelde
+   *  vazgeçebilmeli); farklı değere basmak DEĞİŞTİRİR (tek seçim). */
+  const pickValueProp = (id: string, code: string) =>
+    setPropAnswers((prev) => {
+      const next = { ...prev };
+      if (next[id] === code) delete next[id];
+      else next[id] = code;
+      return next;
+    });
+
   const missingRequiredProps = useMemo(
-    () => pickableProps.filter((p) => p.mode === 'REQUIRED' && !checkedProps.includes(p.propertyId)),
-    [pickableProps, checkedProps],
+    () => pickableProps.filter((p) => p.mode === 'REQUIRED' && !propAnswers[p.propertyId]),
+    [pickableProps, propAnswers],
+  );
+
+  /** Backend sözleşmesi: [{propertyId, valueCode?}] — AUTO'lar GÖNDERİLMEZ. */
+  const propertySelections = useMemo(
+    () =>
+      Object.entries(propAnswers).map(([propertyId, v]) => ({
+        propertyId,
+        ...(typeof v === 'string' ? { valueCode: v } : {}),
+      })),
+    [propAnswers],
   );
 
   // Cetveldeki hata noktası modalı — dokunulan marker'ın hata id'leri CANLI defect
@@ -921,7 +954,7 @@ export default function KursunQcScreen() {
       stepId: activeJob.stepSummary.workOrderStepId,
       // AUTO satırlar GÖNDERİLMEZ — backend onları kendisi ekler; buradan da
       // yollamak, iki kaynağın ayrışması demekti.
-      propertyIds: checkedProps,
+      properties: propertySelections,
     });
   };
 
@@ -1438,25 +1471,64 @@ export default function KursunQcScreen() {
                         Otomatik: {autoProps.map((p) => p.name).join(', ')}
                       </Text>
                     )}
-                    {pickableProps.length > 0 && (
-                      <View style={styles.propChipsRow}>
-                        {pickableProps.map((p) => {
-                          const on = checkedProps.includes(p.propertyId);
-                          return (
-                            <TouchableRipple
-                              key={p.propertyId}
-                              borderless
-                              onPress={() => toggleProp(p.propertyId)}
-                              style={[styles.propChip, on && styles.propChipOn]}
-                            >
-                              <Text style={[styles.propChipText, on && styles.propChipTextOn]}>
-                                {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
+                    {pickableProps.map((p) => {
+                      // SEÇİM tipli özellik (GRAMAJ → 25GR/50GR/75GR): kendi
+                      // başlığı + değer çipleri. Değerler KATALOGDAN gelir,
+                      // kodda sabit liste YOK.
+                      if (p.valueType === 'CHOICE') {
+                        const picked = propAnswers[p.propertyId];
+                        return (
+                          <View key={p.propertyId} style={styles.propChoiceBlock}>
+                            <Text style={styles.propChoiceLabel}>
+                              {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
+                            </Text>
+                            {(p.values ?? []).length === 0 ? (
+                              // Değersiz SEÇİM özelliği: backend bunu doğduğu anda
+                              // reddediyor ama sahada eski bir kayıt olabilir —
+                              // sessiz boşluk bırakma, sebebini yaz.
+                              <Text style={styles.propWarnLine}>
+                                Bu özelliğin tanımlı değeri yok — panelden değer ekleyin.
                               </Text>
-                            </TouchableRipple>
-                          );
-                        })}
-                      </View>
-                    )}
+                            ) : (
+                              <View style={styles.propChipsRow}>
+                                {(p.values ?? []).map((v) => {
+                                  const on = picked === v.code;
+                                  return (
+                                    <TouchableRipple
+                                      key={v.code}
+                                      borderless
+                                      onPress={() => pickValueProp(p.propertyId, v.code)}
+                                      style={[styles.propChip, on && styles.propChipOn]}
+                                    >
+                                      <Text
+                                        style={[styles.propChipText, on && styles.propChipTextOn]}
+                                      >
+                                        {v.name}
+                                      </Text>
+                                    </TouchableRipple>
+                                  );
+                                })}
+                              </View>
+                            )}
+                          </View>
+                        );
+                      }
+                      // BAYRAK tipli özellik: tek aç/kapa çipi (bugünkü davranış).
+                      const on = !!propAnswers[p.propertyId];
+                      return (
+                        <View key={p.propertyId} style={styles.propChipsRow}>
+                          <TouchableRipple
+                            borderless
+                            onPress={() => toggleFlagProp(p.propertyId)}
+                            style={[styles.propChip, on && styles.propChipOn]}
+                          >
+                            <Text style={[styles.propChipText, on && styles.propChipTextOn]}>
+                              {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
+                            </Text>
+                          </TouchableRipple>
+                        </View>
+                      );
+                    })}
                     {missingRequiredProps.length > 0 && (
                       <Text style={styles.propWarnLine}>
                         Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden
@@ -2573,6 +2645,9 @@ const styles = StyleSheet.create({
   propAutoLine: { fontSize: 13, color: '#475569', marginTop: 6 },
   propWarnLine: { fontSize: 12, color: '#b45309', marginTop: 6, fontWeight: '700' },
   propChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  // SEÇİM tipli özellik bloğu: kendi başlığı + değer çipleri.
+  propChoiceBlock: { marginTop: 10 },
+  propChoiceLabel: { fontSize: 13, fontWeight: '700', color: '#334155' },
   propChip: {
     paddingHorizontal: 16,
     // ≥56dp dokunma hedefi (fabrika eldiveni) — UI kuralı.

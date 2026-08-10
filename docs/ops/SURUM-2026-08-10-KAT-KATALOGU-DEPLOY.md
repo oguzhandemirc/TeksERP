@@ -1,7 +1,7 @@
 # Sürüm 2026-08-10 — Üretim karakteristiği (kat kataloğu + istasyon yetenek modeli)
 
 **Branch:** `feature/istasyon-yetenek-modeli` (GitHub'da; `main`'e merge EDİLMEDİ)
-**Kapsam:** backend + Electron + **APK** · 2 migration · 1 veri göç script'i · yeni izin YOK
+**Kapsam:** backend + Electron + **APK** · 3 migration · 1 veri göç script'i · yeni izin YOK
 
 ---
 
@@ -49,12 +49,13 @@ npm run prisma:migrate        # = prisma migrate deploy
 pm2 restart tekserp-api
 ```
 
-Uygulanacak iki migration (ikisi de küçük; tablo yeniden yazımı yok):
+Uygulanacak üç migration (üçü de küçük; tablo yeniden yazımı yok):
 
 | Migration | Ne yapar |
 |---|---|
 | `20260809232529_property_value_type_and_station_mode` | `FabricProperty.valueType` · yeni `fabric_property_values` tablosu · `StationProperty.mode` |
 | `20260810010330_station_capability_flags` | `Station.appliesColor/appliesProperty` + **geri-doldurma UPDATE'i** (EXTERNAL bayrakları kategoriden) |
+| `20260810233446_roll_property_value` | `RollProperty.valueId` (SEÇİM tipli özellikte operatörün seçtiği değer) |
 
 > İkinci migration geri-doldurmayı **kendi içinde** yapar; ayrı bir komut yok.
 > Vardiya dışı gerekmez (index yok, tablo yeniden yazımı yok).
@@ -148,6 +149,22 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 | 10 | Rota editörü → Tambur adımına renk atamayı dene | **Reddedilir** (bugünkü davranış korunur) |
 
 **Test bittiğinde 6-KAT'ı silme** — pasifleştir (kayıtlar o kodu taşıyor olabilir).
+
+### 7b) Değer taşıyan özellik (gramaj) — opsiyonel kabul turu
+
+Bu sürüm SEÇİM tipli özelliği **her istasyonda** kullanılabilir kılıyor; kat
+artık tek örnek değil.
+
+| # | Adım | Beklenen |
+|---|---|---|
+| 1 | Kumaş Özellikleri → Yeni → tip **Seçim**, ad "Gramaj", istasyon **Kurşun+KK2**, değerler `25GR/25 gr`, `50GR/50 gr`, `75GR/75 gr` | Kaydolur |
+| 2 | İstasyon Yetenekleri → Kurşun → Gramaj satırı → **Otomatik**'i dene | **Reddedilir** ("değeri operatör seçmelidir") |
+| 3 | Aynı satırı **Zorunlu** yap | Kaydolur |
+| 4 | Tablet → Kurşun/QC2 → bir top seç | "Gramaj *" başlığı + **üç değer çipi** çıkar |
+| 5 | Değer seçmeden "KK2 Tamamla" | Engellenir, eksik özellik ADIYLA yazılır |
+| 6 | 50 gr seç → KK2 Tamamla | Geçer |
+| 7 | Panel → Envanter → o top → detay | Rozet **"Gramaj: 50 gr"** yazar (listede de) |
+| 8 | Aynı topu tekrar işle, 25 gr seç | Değer **düzelir**, ikinci satır AÇILMAZ |
 
 ---
 

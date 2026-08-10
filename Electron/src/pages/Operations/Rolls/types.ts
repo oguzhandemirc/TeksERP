@@ -55,6 +55,14 @@ export function activeCategoryOf(roll: Roll): { id: string; name: string } | nul
 export interface RollPropertyLink {
   propertyId: string;
   property: { id: string; code: string; name: string };
+  /**
+   * SEÇİM tipli özellikte operatörün seçtiği DEĞER (2026-08-11) —
+   * "GRAMAJ = 50 gr". BAYRAK tipli özellikte null (varlık zaten cevaptır).
+   *
+   * ⚠️ Rozette GÖSTERİLMELİ: yoksa operatör tablette 50GR seçer, panelde
+   * yalnız "Gramaj" görünür ve hangi değer olduğu hiçbir yerde okunamaz.
+   */
+  value?: { code: string; name: string } | null;
 }
 
 export interface Roll {

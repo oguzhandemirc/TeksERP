@@ -311,11 +311,27 @@ export class StationCapabilityService {
     if (targetIds.length > 0) {
       const props = await prisma.fabricProperty.findMany({
         where: { id: { in: targetIds }, isActive: true },
-        select: { id: true },
+        select: { id: true, name: true, valueType: true },
       });
       if (props.length !== targetIds.length) {
         throw AppError.badRequest(
           "Bazı özellikler bulunamadı veya pasif durumda",
+        );
+      }
+
+      // ⚠️ SEÇİM tipli özellik AUTO moda ALINAMAZ (2026-08-11).
+      // AUTO = "operatöre sorulmaz, adım kapanınca yazılır". Seçim tipinde
+      // yazılacak DEĞER operatörün cevabıdır; sorulmadan yazmak sistemin
+      // değerlerden birini KENDİ SEÇMESİ demek olurdu — 25GR mi 50GR mi?
+      // Uydurma varsayılan, boş değerden zararlıdır (raporda gerçek sanılır).
+      const byId = new Map(props.map((p) => [p.id, p]));
+      const badAuto = targets.find(
+        (t) => t.mode === "AUTO" && byId.get(t.propertyId)?.valueType === "CHOICE",
+      );
+      if (badAuto) {
+        throw AppError.badRequest(
+          `'${byId.get(badAuto.propertyId)!.name}' bir SEÇİM özelliğidir — "Otomatik" moda alınamaz. ` +
+            `Değeri operatör seçmelidir: "Opsiyonel" ya da "Zorunlu" kullanın.`,
         );
       }
     }
