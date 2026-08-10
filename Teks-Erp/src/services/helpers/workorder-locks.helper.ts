@@ -34,6 +34,7 @@
 // =============================================================================
 
 import type { Prisma, PrismaClient, StepStatus } from "@prisma/client";
+import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./step-capability.helper";
 
 /**
  * WorkOrder satırını write-kilitle — fason completion yollarını serileştirir.
@@ -107,6 +108,9 @@ export async function computeWorkOrderLocks(
             select: {
               id: true,
               kind: true,
+              // Renk kilidi artık ADIM bazında çözülüyor: istasyonun kendi
+              // bayrağı VEYA adımda seçilmiş fason hizmeti (stepCanApplyColor).
+              ...STEP_CAPABILITY_SELECT,
               propertyCapabilities: { select: { propertyId: true } },
             },
           },
@@ -150,10 +154,15 @@ export async function computeWorkOrderLocks(
 
   // ── Renk kilidi ────────────────────────────────────────────────────────
   // Rotada "renk veren" bir adım varsa ve o adım COMPLETED ise renk sabit.
+  //
+  // ⚠️ 2026-08-10: yalnız `requiredCategory.appliesColor`'a bakılıyordu — yani
+  // renk uygulayan bir İÇ istasyon adımı tamamlansa bile renk KİLİTLENMİYORDU
+  // (mal boyanmış, hedef hâlâ düzenlenebilir). Artık ortak yüklem: istasyon
+  // bayrağı VEYA fason hizmeti. Fason rotalarda sonuç birebir aynı.
   let targetColor = false;
   if (wo.targetColorId) {
-    const dyedSteps = wo.steps.filter(
-      (s) => s.requiredCategory?.appliesColor ?? false,
+    const dyedSteps = wo.steps.filter((s) =>
+      stepCanApplyColor(s.station, s.requiredCategory),
     );
     if (dyedSteps.length > 0 && dyedSteps.every((s) => s.status === "COMPLETED")) {
       // Tüm renk uygulayan adımlar bittiyse: artık değiştirilemez. (Birden fazla

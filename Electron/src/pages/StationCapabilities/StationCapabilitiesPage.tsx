@@ -28,10 +28,13 @@ import { CapabilitiesEditSheet } from "./CapabilitiesEditSheet";
 import type { StationCapabilitySummary } from "./types";
 
 function disabledHint(cap: StationCapabilitySummary): string {
-  if (!cap.hasDefaultCategory) {
-    return "Bu istasyonun atanmış kategorisi yok — kategori atanmadan da renk/özellik atanabilir";
-  }
-  return "Atanmış kategori renk veya özellik uygulamıyor (appliesColor / appliesProperty kapalı)";
+  // ⚠️ 2026-08-10: yetenek artık kategoriden TÜRETİLMİYOR, istasyonun kendi
+  // alanında. Eski metin ("kategori atanmadan da atanabilir") yanlış yönlendirir:
+  // düzeltme yeri artık Tanımlar → İstasyonlar → Yetenekler.
+  const suffix = cap.hasDefaultCategory
+    ? " (istasyonun kendi bayrağı kapalı; fason kategorisi de vermiyorsa hiç uygulanmaz)"
+    : "";
+  return `Bu istasyon "özellik uygular" olarak işaretli değil${suffix} — Tanımlar → İstasyonlar → Yetenekler'den açın.`;
 }
 
 const QUERY_KEY = "station-capabilities";

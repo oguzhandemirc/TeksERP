@@ -10,7 +10,7 @@
 
 import prisma from "../lib/prisma";
 import { BaseService, type BaseServiceConfig } from "./base.service";
-import { deriveCapabilityFlags } from "./station-capability.service";
+import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capability.helper";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 
@@ -294,27 +294,50 @@ export class RouteService extends BaseService {
           id: true,
           name: true,
           kind: true,
+          appliesColor: true,
+          appliesProperty: true,
           defaultCategory: { select: { appliesColor: true, appliesProperty: true } },
           propertyCapabilities: { select: { propertyId: true } },
         },
       });
       const byId = new Map(stations.map((st) => [st.id, st]));
 
+      // Adımlarda AÇIKÇA seçilmiş fason kategorileri (istasyonun varsayılanından
+      // farklı olabilir — sevk edilecek hizmeti planlamacı adımda belirler).
+      const stepCatIds = [
+        ...new Set(targeted.map((s) => s.requiredCategoryId).filter((c): c is string => !!c)),
+      ];
+      const stepCats =
+        stepCatIds.length > 0
+          ? await prisma.subcontractorCategory.findMany({
+              where: { id: { in: stepCatIds } },
+              select: { id: true, appliesColor: true, appliesProperty: true },
+            })
+          : [];
+      const catById = new Map(stepCats.map((c) => [c.id, c]));
+
       for (const s of targeted) {
         const station = s.stationId ? byId.get(s.stationId) : undefined;
         if (!station) continue; // stationId doğrulaması yukarıda yapıldı
-        // Tek kaynak: station-capability.service. Kuralı buraya KOPYALAMA —
-        // "kategori yoksa açık" davranışı iki yerde ayrı yazılırsa ayrışır.
-        const flags = deriveCapabilityFlags(station);
-        // ⚠️ Renkte `hasDefaultCategory` DE aranır — `canApplyColor` tek başına
-        // yetmez, çünkü kategorisiz istasyonda o bayrak "bilinmiyor → serbest"
-        // anlamında true doğar. Panel (RouteStepDetail/RouteStepTargets), rota
-        // kapsama uyarısı ve mobil Hızlı İş Emri de aynı bileşik koşulu kullanır;
-        // yalnız burada gevşetmek Tambur adımına renk yazılmasına izin verirdi.
+        // ⚠️ Eski hâli bileşikti: `hasDefaultCategory && canApplyColor` — çünkü
+        // kategorisiz istasyonda `canApplyColor` "bilinmiyor → serbest" anlamında
+        // true doğuyordu. 2026-08-10'da yetenek `Station`'ın kendi alanına taşındı
+        // ve bayrak DÜRÜST oldu; bileşik koşul tek yükleme indi. Yüklem
+        // `stepCanApplyColor` — rota adımı, WO guard'ı ve renk kilidi ONU paylaşır.
+        //
+        // ⚠️ ADIMIN KATEGORİSİ DE OKUNUR. Yalnız istasyona bakılsaydı, kategorisi
+        // BOYA olan bir fason boyahane adımı (istasyonun kendi bayrağı henüz
+        // açılmamışsa) reddedilirdi — ölçüldü, `test_route_step_targets` bunu
+        // yakaladı. Adımda kategori seçilmemişse istasyonun VARSAYILAN kategorisi
+        // kullanılır: rota şablonunda `requiredCategoryId` opsiyoneldir ve
+        // planlamacı boş bıraktığında niyeti "istasyonun her zamanki hizmeti"dir.
+        const stepCat = s.requiredCategoryId
+          ? (catById.get(s.requiredCategoryId) ?? station.defaultCategory)
+          : station.defaultCategory;
         if (
           typeof s.plannedColorId === "string" &&
           s.plannedColorId.length > 0 &&
-          !(flags.hasDefaultCategory && flags.canApplyColor)
+          !stepCanApplyColor(station, stepCat)
         ) {
           throw AppError.badRequest(
             `'${station.name}' adımı renk uygulamıyor — hedef renk seçilemez`,
@@ -322,7 +345,7 @@ export class RouteService extends BaseService {
         }
         const wanted = s.plannedPropertyIds ?? [];
         if (wanted.length > 0) {
-          if (!flags.canApplyProperty) {
+          if (!stepCanApplyProperty(station, stepCat)) {
             throw AppError.badRequest(
               `'${station.name}' adımı özellik uygulamıyor — hedef özellik seçilemez`,
             );

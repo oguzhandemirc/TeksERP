@@ -5,13 +5,14 @@
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
+import { StationService } from "../services/station.service";
 import { stationHardRemove, machineHardRemove, machineDeletePreview } from "../services/helpers/guarded-hard-remove";
 import { WorkSessionService, MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 // --- Station ---
-const stationService = new BaseService({
+const stationService = new StationService({
   modelName: "station",
   tableName: "STATION",
   searchFields: ["code", "name"],

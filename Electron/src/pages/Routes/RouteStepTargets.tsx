@@ -7,7 +7,7 @@ import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerMod
 import { QuickAddProperty } from "@/components/forms/QuickAddProperty";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
-import { isTargetableProperty } from "@/pages/StationCapabilities/types";
+import { capCanApplyColor, isTargetableProperty } from "@/pages/StationCapabilities/types";
 
 interface Props {
   stationId: string;
@@ -61,7 +61,9 @@ export function RouteStepTargets({
     return <div className="text-[11px] text-muted-foreground">Yetenekler yükleniyor...</div>;
   }
 
-  const appliesColor = Boolean(cap?.hasDefaultCategory && cap.canApplyColor);
+  // Tek bayrak (2026-08-10) — bileşik `hasDefaultCategory && …` kalktı; bkz.
+  // StationCapabilities/types.capCanApplyColor.
+  const appliesColor = capCanApplyColor(cap);
   const appliesProperty = Boolean(cap?.canApplyProperty);
 
   // "Uygulamaz" ile "listesi boş" AYRI cümlelerdir — yetenek listesi hiç

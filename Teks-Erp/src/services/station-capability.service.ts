@@ -108,30 +108,37 @@ function toCapabilityProperty(row: {
 }
 
 /**
- * Renk/özellik uygulayabilirliği — kategori varsa bayraklarından türetilir
- * (fason kabul otomatik kopyalama mekanizması için anlamlı), yoksa ikisi de
- * açık kabul edilir (operatör manuel atayabilir).
+ * İstasyonun renk/özellik yeteneği — 2026-08-10'dan beri İSTASYONUN KENDİ
+ * ALANLARINDAN okunur (`Station.appliesColor` / `appliesProperty`).
+ *
+ * Eskiden bu, `defaultCategory` bayraklarından TÜRETİLİYORDU ve kategorisi
+ * olmayan istasyonda "ikisi de açık" varsayılıyordu. O varsayım "bilinmiyor →
+ * serbest" demekti, "yapabilir" değil — bu yüzden renk tarafında çağıranlar
+ * bileşik `hasDefaultCategory && canApplyColor` koşulu yazmak zorundaydı ve o
+ * bileşiği unutmak Tambur adımına renk yazılmasına izin veriyordu.
+ * Artık bayrak DÜRÜST: göçte iç istasyonlara `appliesColor=false` yazıldı,
+ * çağıranlar tek koşula indi.
+ *
+ * `hasDefaultCategory` DTO'da KALIR (panel ipucu metni kullanıyor) ama artık
+ * hiçbir KARAR ona bakmaz.
  *
  * EXPORT: `fabric-property.service` özellik doğarken istasyon bağını kurarken
- * aynı kuralı uygular. Kuralı ORAYA KOPYALAMA — "kategori yoksa açık" davranışı
- * iki yerde ayrı yazılırsa biri değişince sessizce ayrışır.
+ * aynı kuralı uygular. Kuralı ORAYA KOPYALAMA.
  */
 export function deriveCapabilityFlags(station: {
   kind: StationKind;
+  appliesColor: boolean;
+  appliesProperty: boolean;
   defaultCategory: { appliesColor: boolean; appliesProperty: boolean } | null;
 }): {
   hasDefaultCategory: boolean;
   canApplyColor: boolean;
   canApplyProperty: boolean;
 } {
-  const hasDefaultCategory = !!station.defaultCategory;
-  if (!station.defaultCategory) {
-    return { hasDefaultCategory, canApplyColor: true, canApplyProperty: true };
-  }
   return {
-    hasDefaultCategory,
-    canApplyColor: station.defaultCategory.appliesColor,
-    canApplyProperty: station.defaultCategory.appliesProperty,
+    hasDefaultCategory: !!station.defaultCategory,
+    canApplyColor: station.appliesColor,
+    canApplyProperty: station.appliesProperty,
   };
 }
 
@@ -149,6 +156,8 @@ export class StationCapabilityService {
         code: true,
         name: true,
         kind: true,
+        appliesColor: true,
+        appliesProperty: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
         },
@@ -253,6 +262,8 @@ export class StationCapabilityService {
         code: true,
         name: true,
         kind: true,
+        appliesColor: true,
+        appliesProperty: true,
         isActive: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
@@ -409,6 +420,8 @@ export class StationCapabilityService {
         code: true,
         name: true,
         kind: true,
+        appliesColor: true,
+        appliesProperty: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
         },
@@ -450,6 +463,8 @@ export class StationCapabilityService {
         code: true,
         name: true,
         kind: true,
+        appliesColor: true,
+        appliesProperty: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
         },

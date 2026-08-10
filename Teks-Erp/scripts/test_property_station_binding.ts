@@ -72,7 +72,13 @@ async function main() {
     data: { code: `TEST-PSB-OFF-${ts}`, name: "TEST Bağ Pasif", type: "INTERNAL", kind: "OTHER", isActive: false },
     select: { id: true, name: true },
   });
-  // KARTELA kategorisi appliesProperty=false → özellik kazandıramaz.
+  // Özellik kazandıramayan istasyon (KARTELA kategorisi appliesProperty=false).
+  //
+  // ⚠️ 2026-08-10: `appliesProperty` AÇIKÇA yazılır. Yetenek artık kategoriden
+  // TÜRETİLMİYOR, istasyonun kendi alanında; bu fixture `prisma.station.create`
+  // ile SERVİSİ ATLIYOR, dolayısıyla `StationService`'in "kategoriden tohumla"
+  // adımı koşmaz ve kolon varsayılanı (true) kalırdı. Panelden açılan bir
+  // kartela istasyonu bu değeri servis üzerinden otomatik alır.
   const kartelaCat = await prisma.subcontractorCategory.findUnique({ where: { code: "KARTELA" } });
   if (!kartelaCat) throw new Error("KARTELA kategorisi eksik (npm run seed)");
   const stNoProp = await prisma.station.create({
@@ -82,6 +88,7 @@ async function main() {
       type: "EXTERNAL",
       kind: "OTHER",
       defaultCategoryId: kartelaCat.id,
+      appliesProperty: kartelaCat.appliesProperty, // = false
     },
     select: { id: true, name: true },
   });

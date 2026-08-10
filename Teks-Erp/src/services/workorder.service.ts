@@ -62,6 +62,11 @@ import {
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
+import {
+  STEP_CAPABILITY_SELECT,
+  stepCanApplyColor,
+  stepCanApplyProperty,
+} from "./helpers/step-capability.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 // Kurşun bypass (kurşun istasyonunda tablet YOK): WO yaşam döngüsü olayları açık
 // dağıtım atamalarını bayat bırakmasın. Guard helper hiçbir servise bağlı değil —
@@ -108,6 +113,75 @@ import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.serv
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   return typeof v === "number" ? v : Number(v);
+}
+
+/**
+ * "Bu rota hedef rengi/özelliği UYGULAYABİLİR mi?" — create ve replace ORTAK.
+ *
+ * ⚠️ 2026-08-10'da SORU DEĞİŞTİ. Eskisi *"rotada fason kategorisi var mı"* diye
+ * soruyordu ve tümü İÇ istasyonlardan oluşan bir rotayı, istasyonlar o işi
+ * yapabilse bile 400 ile reddediyordu ("Hedef renk veya özellik seçildi ama
+ * rotada hiç fason kategorisi tanımlı değil"). İç boyahane/iç zımpara
+ * senaryosunun önündeki asıl engel buydu.
+ *
+ * Yeni soru: *"renk/özellik VEREBİLEN bir adım var mı"* — adım bazında
+ * İSTASYON bayrağı VEYA o adımda seçilmiş fason hizmetinin bayrağı
+ * (`stepCanApplyColor`). Fason rotalarda sonuç birebir aynı: EXTERNAL
+ * istasyonların bayrakları göçte kategorilerinden dolduruldu.
+ *
+ * İki blok halinde kopyalanmıştı; ayrışırlarsa aynı iş emri create'te kabul
+ * edilip replace'te reddedilirdi (2026-08-02'de özellik kapsamasında tam bu
+ * asimetri yaşandı).
+ */
+async function assertRouteCoversTargets(
+  steps: { stationId: string; requiredCategoryId?: string | null }[],
+  need: { color: boolean; property: boolean },
+): Promise<void> {
+  const stationIds = [...new Set(steps.map((s) => s.stationId).filter(Boolean))];
+  const categoryIds = [
+    ...new Set(steps.map((s) => s.requiredCategoryId).filter((c): c is string => !!c)),
+  ];
+  const [stations, categories] = await Promise.all([
+    stationIds.length > 0
+      ? prisma.station.findMany({
+          where: { id: { in: stationIds } },
+          select: { id: true, ...STEP_CAPABILITY_SELECT },
+        })
+      : Promise.resolve([]),
+    categoryIds.length > 0
+      ? prisma.subcontractorCategory.findMany({
+          where: { id: { in: categoryIds } },
+          select: { id: true, appliesColor: true, appliesProperty: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const stById = new Map(stations.map((s) => [s.id, s]));
+  const catById = new Map(categories.map((c) => [c.id, c]));
+
+  // Yüklem parametreli: iki dal AYNI adım gezintisini paylaşsın (ayrı yazılırsa
+  // biri `requiredCategory`yi okumayı unutur ve sessizce farklı cevap verir).
+  const can = (
+    pick: (
+      st: { appliesColor: boolean; appliesProperty: boolean } | undefined,
+      cat: { appliesColor: boolean; appliesProperty: boolean } | undefined,
+    ) => boolean,
+  ) =>
+    steps.some((s) =>
+      pick(stById.get(s.stationId), s.requiredCategoryId ? catById.get(s.requiredCategoryId) : undefined),
+    );
+
+  if (need.color && !can(stepCanApplyColor)) {
+    throw AppError.badRequest(
+      "Rotada 'renk veren' bir adım yok. Hedef rengin uygulanabilmesi için renk uygulayan " +
+        "bir istasyon (ör. boyahane) ya da renk veren bir fason adımı eklenmelidir.",
+    );
+  }
+  if (need.property && !can(stepCanApplyProperty)) {
+    throw AppError.badRequest(
+      "Rotada 'özellik veren' bir adım yok. Hedef özelliklerin uygulanabilmesi için özellik " +
+        "uygulayan bir istasyon ya da fason adımı eklenmelidir.",
+    );
+  }
 }
 
 // =============================================================================
@@ -733,31 +807,10 @@ export class WorkOrderService {
 
       // "Renk veren" / "Özellik veren" adım var mı? (rota uygunluk kontrolü)
       if (resolvedTargetColorId || targetPropertyIds.length > 0) {
-        const stepCategoryIds = finalSteps
-          .map((s) => s.requiredCategoryId)
-          .filter((c): c is string => !!c);
-        if (stepCategoryIds.length === 0) {
-          throw AppError.badRequest(
-            "Hedef renk veya özellik seçildi ama rotada hiç fason kategorisi tanımlı değil. Uygulayabilecek bir adım gerekiyor.",
-          );
-        }
-        const categoryFlags = await prisma.subcontractorCategory.findMany({
-          where: { id: { in: stepCategoryIds } },
-          select: { appliesColor: true, appliesProperty: true },
+        await assertRouteCoversTargets(finalSteps, {
+          color: !!resolvedTargetColorId,
+          property: targetPropertyIds.length > 0,
         });
-        if (resolvedTargetColorId && !categoryFlags.some((c) => c.appliesColor)) {
-          throw AppError.badRequest(
-            "Rotada 'renk veren' bir fason adımı (örn. boyahane) tanımlı değil. Hedef rengin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
-        if (
-          targetPropertyIds.length > 0 &&
-          !categoryFlags.some((c) => c.appliesProperty)
-        ) {
-          throw AppError.badRequest(
-            "Rotada 'özellik veren' bir fason adımı tanımlı değil. Hedef özelliklerin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
       }
 
       // ── Özellik başına rota kapsaması ────────────────────────────────────
@@ -4692,31 +4745,10 @@ export class WorkOrderService {
       }
 
       if (resolvedTargetColorId || targetPropertyIds.length > 0) {
-        const stepCategoryIds = finalSteps
-          .map((s) => s.requiredCategoryId)
-          .filter((c): c is string => !!c);
-        if (stepCategoryIds.length === 0) {
-          throw AppError.badRequest(
-            "Hedef renk veya özellik seçildi ama rotada hiç fason kategorisi tanımlı değil. Uygulayabilecek bir adım gerekiyor.",
-          );
-        }
-        const categoryFlags = await prisma.subcontractorCategory.findMany({
-          where: { id: { in: stepCategoryIds } },
-          select: { appliesColor: true, appliesProperty: true },
+        await assertRouteCoversTargets(finalSteps, {
+          color: !!resolvedTargetColorId,
+          property: targetPropertyIds.length > 0,
         });
-        if (resolvedTargetColorId && !categoryFlags.some((c) => c.appliesColor)) {
-          throw AppError.badRequest(
-            "Rotada 'renk veren' bir fason adımı (örn. boyahane) tanımlı değil. Hedef rengin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
-        if (
-          targetPropertyIds.length > 0 &&
-          !categoryFlags.some((c) => c.appliesProperty)
-        ) {
-          throw AppError.badRequest(
-            "Rotada 'özellik veren' bir fason adımı tanımlı değil. Hedef özelliklerin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
       }
     }
 

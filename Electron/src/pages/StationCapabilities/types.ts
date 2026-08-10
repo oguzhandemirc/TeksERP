@@ -44,6 +44,26 @@ export interface StationCapabilityProperty {
 }
 
 /**
+ * Bu adım/istasyon RENK uygulayabilir mi? — `Teks-Erp/src/services/helpers/
+ * step-capability.helper.stepCanApplyColor`'ın AYNASI.
+ *
+ * ⚠️ 2026-08-10 öncesinde bu, `hasDefaultCategory && canApplyColor` bileşiğiydi
+ * ve DÖRT dosyada elle tekrarlanıyordu — çünkü kategorisiz istasyonda
+ * `canApplyColor` "bilinmiyor → serbest" anlamında `true` doğuyordu. Yetenek
+ * `Station`'ın kendi alanına taşınınca bayrak dürüst oldu; bileşik kalktı.
+ * Bileşiği GERİ EKLEME: artık `canApplyColor=true` gerçekten "renk uygular"
+ * demek ve kategorisi olmayan bir İÇ boyahaneyi yanlışlıkla eler.
+ *
+ * Electron backend'i import edemez — bu, kuralın ikinci nüshasıdır; backend
+ * yüklemi değişirse burası da değişmeli.
+ */
+export function capCanApplyColor(
+  cap: { canApplyColor?: boolean } | null | undefined,
+): boolean {
+  return Boolean(cap?.canApplyColor);
+}
+
+/**
  * HEDEF-ÖZELLİK seçicilerinde gösterilebilir mi?
  *
  * SEÇİM tipli özellik (KAT) hedef listesine SIZMAMALI: planlamacı "Kat"ı

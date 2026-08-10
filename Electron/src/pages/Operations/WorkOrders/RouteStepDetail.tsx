@@ -18,7 +18,7 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
-import { isTargetableProperty } from "@/pages/StationCapabilities/types";
+import { capCanApplyColor, isTargetableProperty } from "@/pages/StationCapabilities/types";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 export interface RouteTargetBinding {
@@ -90,7 +90,9 @@ export function RouteStepDetail({
   // `appliesColor` kuralıyla aynı kaynak), ve tüm aktif katalog gösterilir.
   // İstasyonun StationColor listesi artık okunmuyor — geri ekleme, yeni tanımlanan
   // renk hiçbir listede olmadığı için tekrar görünmez olur.
-  const appliesColor = Boolean(cap?.hasDefaultCategory && cap.canApplyColor);
+  // Tek bayrak (2026-08-10) — bileşik `hasDefaultCategory && …` kalktı; bkz.
+  // StationCapabilities/types.capCanApplyColor.
+  const appliesColor = capCanApplyColor(cap);
 
   const subFilter = step.requiredCategoryId
     ? { categoryId: step.requiredCategoryId }

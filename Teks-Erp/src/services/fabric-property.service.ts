@@ -127,6 +127,8 @@ async function assertStationsCanApplyProperty(stationIds: string[]): Promise<voi
       id: true,
       name: true,
       kind: true,
+      appliesColor: true,
+      appliesProperty: true,
       isActive: true,
       defaultCategory: { select: { appliesColor: true, appliesProperty: true } },
     },

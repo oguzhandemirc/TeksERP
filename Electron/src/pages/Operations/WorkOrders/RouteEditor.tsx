@@ -32,6 +32,7 @@ import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPicker
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
+import { capCanApplyColor } from "@/pages/StationCapabilities/types";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { colorService } from "@/pages/Colors/service";
 import { Input } from "@/components/ui/input";
@@ -197,7 +198,7 @@ export function RouteEditor({
     // bakar (backend `appliesColor` kuralıyla aynı). Eskiden istasyonun renk
     // listesi de dolu olmak zorundaydı → yeni renk seçilince rota doğruyken bile
     // "karşılayan istasyon yok" uyarısı çıkıyordu.
-    if (cap.hasDefaultCategory && cap.canApplyColor) hasColorStation = true;
+    if (capCanApplyColor(cap)) hasColorStation = true;
     if (cap.canApplyProperty) for (const p of cap.properties) coveredProps.add(p.id);
   }
   const uncoveredPropIds = target.propertyIds.filter((id) => !coveredProps.has(id));

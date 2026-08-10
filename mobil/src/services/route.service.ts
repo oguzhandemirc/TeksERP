@@ -34,6 +34,10 @@ export interface ProductionRoute {
        *  (kat tipi yalnız Tambur'lu rotada sorulur). Backend `include` ile tüm
        *  skaler alanları döndürüyor; eski backend'de undefined kalır. */
       kind?: string;
+      /** İSTASYONUN KENDİ yetenekleri (2026-08-10) — kategoriden bağımsız.
+       *  Adım renk/özellik verebilir ⇔ istasyon verir VEYA kategori verir. */
+      appliesColor?: boolean;
+      appliesProperty?: boolean;
       // İstasyonun varsayılan fason kategorisi (defaultInclude döndürür). Hızlı İş Emri
       // "Gelişmiş" renk uygulaması, renk/özellik veren adımı buradan türetir.
       // appliesColor/appliesProperty: bu kategori gerçekten renk/özellik uyguluyor mu —

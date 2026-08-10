@@ -550,6 +550,30 @@ model Station {
   defaultCategoryId String?                @db.Uuid
   defaultCategory   SubcontractorCategory? @relation("StationDefaultCategory", fields: [defaultCategoryId], references: [id])
 
+  /// Bu istasyon RENK uygulayabilir mi? (2026-08-10)
+  ///
+  /// Eskiden bu soru YALNIZ `defaultCategory.appliesColor`'dan türetiliyordu ve
+  /// kategorisi olmayan bir İÇ istasyon tanım gereği "renk veremez" oluyordu —
+  /// iç boyahane senaryosunun önündeki asıl engel buydu. Yetenek artık
+  /// istasyonun KENDİ alanı; EXTERNAL satırlar göçte kategoriden dolduruldu.
+  ///
+  /// ⚠️ VARSAYILAN FALSE. Göçte iç istasyonlara da `false` yazıldı — bugünkü
+  /// davranışı BİREBİR korumak için: eski kural `hasDefaultCategory &&
+  /// canApplyColor` bileşik koşuluydu ve kategorisiz istasyonda sonucu
+  /// **false**'tu. `true` yazmak Tambur/Kurşun adımına renk yazılmasına izin
+  /// verirdi (2026-08-06 notunun açıkça uyardığı şey).
+  ///
+  /// ⚠️ Bu bayrak PLANLAMA sorusunu yanıtlar ("bu adım renk verebilir mi").
+  /// Fason kabulde rengin FİİLEN uygulanıp uygulanmadığı hâlâ o sevkin
+  /// `requiredCategory.appliesColor` bayrağından okunur — satın alınan hizmet
+  /// odur. İkisini birleştirme; ortak yüklem `stepCanApplyColor`.
+  appliesColor Boolean @default(false)
+
+  /// Bu istasyon ÖZELLİK uygulayabilir mi? Renk ile aynı gerekçe.
+  /// ⚠️ VARSAYILAN TRUE — eski kural kategorisiz istasyonda `canApplyProperty`
+  /// için **true** üretiyordu (KURSUN özelliği KURSUN_KK2'ye böyle bağlanmıştı).
+  appliesProperty Boolean @default(true)
+
   // Relations
   machines             Machine[]
   /// Bu istasyonda sisteme GİREN toplar (Roll.entryStationId) — kalıcı köken izi.
