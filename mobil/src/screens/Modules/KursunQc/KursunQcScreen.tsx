@@ -265,6 +265,28 @@ export default function KursunQcScreen() {
     );
   }, [activeJob]);
 
+  // ── İSTASYON ÖZELLİKLERİ (mod sözleşmesi, 2026-08-10) ─────────────────────
+  // AUTO → salt bilgi (backend her topa yazar) · OPSİYONEL/ZORUNLU → tuş.
+  // Eski backend `properties` göndermez → hepsi boş → ekran bugünküyle aynı.
+  const stationProps = activeJob?.stepSummary.properties ?? [];
+  const autoProps = useMemo(() => stationProps.filter((p) => p.mode === 'AUTO'), [stationProps]);
+  const pickableProps = useMemo(
+    () => stationProps.filter((p) => p.mode !== 'AUTO'),
+    [stationProps],
+  );
+  // İşaretlemeler TOP BAŞINA sıfırlanır: bir topta işaretlenen özellik, sıradaki
+  // topa taşınırsa operatör hiç dokunmadan ikinci topa da yazılır.
+  const [checkedProps, setCheckedProps] = useState<string[]>([]);
+  useEffect(() => {
+    setCheckedProps([]);
+  }, [activeJob?.selectedRollId, activeCardId]);
+  const toggleProp = (id: string) =>
+    setCheckedProps((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const missingRequiredProps = useMemo(
+    () => pickableProps.filter((p) => p.mode === 'REQUIRED' && !checkedProps.includes(p.propertyId)),
+    [pickableProps, checkedProps],
+  );
+
   // Cetveldeki hata noktası modalı — dokunulan marker'ın hata id'leri CANLI defect
   // listesinden çözülür; hata silindikçe liste küçülür, boşalınca modal kapanır
   // (o noktadaki tüm hatalar silindi → nokta kalmadı).
@@ -884,9 +906,22 @@ export default function KursunQcScreen() {
 
   const handleCompleteQc2 = () => {
     if (!activeJob || !selectedRoll) return;
+    // Zorunlu özellik eksikse İSTEK HİÇ GİTMEZ — backend de reddeder ama
+    // operatörün 400'ü beklemesi gereksiz; sebep zaten ekranda yazılı.
+    if (missingRequiredProps.length > 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Zorunlu özellik işaretlenmedi',
+        text2: missingRequiredProps.map((p) => p.name).join(', '),
+      });
+      return;
+    }
     completeQc2Mutation.mutate({
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
+      // AUTO satırlar GÖNDERİLMEZ — backend onları kendisi ekler; buradan da
+      // yollamak, iki kaynağın ayrışması demekti.
+      propertyIds: checkedProps,
     });
   };
 
@@ -1388,6 +1423,48 @@ export default function KursunQcScreen() {
                     </View>
                   )}
                 </Surface>
+
+                {/* ── İSTASYON ÖZELLİKLERİ (mod güdümlü, 2026-08-10) ──
+                    OTOMATİK satırlar salt bilgi (operatöre sorulmaz, adım
+                    kapanınca yazılır); OPSİYONEL/ZORUNLU satırlar tuş olur.
+                    ZORUNLU işaretlenmeden "KK2 Tamamla" basılırsa backend ADIYLA
+                    400 döner — buradaki disable o hatanın istemci ikizidir.
+                    Kart yalnız gerçekten çizilecek satır varsa görünür. */}
+                {!selectedRoll.qc2Completed && (autoProps.length > 0 || pickableProps.length > 0) && (
+                  <Surface style={styles.section} elevation={1}>
+                    <Text style={styles.sectionTitle}>Bu istasyonun kazandırdıkları</Text>
+                    {autoProps.length > 0 && (
+                      <Text style={styles.propAutoLine}>
+                        Otomatik: {autoProps.map((p) => p.name).join(', ')}
+                      </Text>
+                    )}
+                    {pickableProps.length > 0 && (
+                      <View style={styles.propChipsRow}>
+                        {pickableProps.map((p) => {
+                          const on = checkedProps.includes(p.propertyId);
+                          return (
+                            <TouchableRipple
+                              key={p.propertyId}
+                              borderless
+                              onPress={() => toggleProp(p.propertyId)}
+                              style={[styles.propChip, on && styles.propChipOn]}
+                            >
+                              <Text style={[styles.propChipText, on && styles.propChipTextOn]}>
+                                {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
+                              </Text>
+                            </TouchableRipple>
+                          );
+                        })}
+                      </View>
+                    )}
+                    {missingRequiredProps.length > 0 && (
+                      <Text style={styles.propWarnLine}>
+                        Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden
+                        KK2 tamamlanamaz.
+                      </Text>
+                    )}
+                  </Surface>
+                )}
               </View>
 
               {/* Sticky footer — durum sırası:
@@ -2492,6 +2569,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  // İstasyon özellikleri (mod güdümlü) — AUTO satırı salt bilgi, gerisi tuş.
+  propAutoLine: { fontSize: 13, color: '#475569', marginTop: 6 },
+  propWarnLine: { fontSize: 12, color: '#b45309', marginTop: 6, fontWeight: '700' },
+  propChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  propChip: {
+    paddingHorizontal: 16,
+    // ≥56dp dokunma hedefi (fabrika eldiveni) — UI kuralı.
+    paddingVertical: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+  },
+  propChipOn: { borderColor: '#059669', borderWidth: 2, backgroundColor: '#ecfdf5' },
+  propChipText: { fontSize: 15, fontWeight: '700', color: '#475569' },
+  propChipTextOn: { color: '#047857' },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',

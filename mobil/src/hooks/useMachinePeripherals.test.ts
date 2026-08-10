@@ -24,29 +24,48 @@ const dev = (over: Partial<DevicePeripheral>): DevicePeripheral => ({
   ...over,
 });
 
-describe('meterPeripheralFor (Tambur 2/4-kat)', () => {
+// =============================================================================
+// meterPeripheralFor — BİREBİR ROL EŞLEŞMESİ, SAPMA YOK (2026-08-10)
+// =============================================================================
+// Eski hâli `foldType === '4-KAT' ? '4-KAT' : '2-KAT'` idi: ÜÇLÜ bir kararı
+// ikiliye indiriyordu. Kat kataloğa taşınıp fabrika "6-KAT" ekleyince 6 katlı
+// top **2-KAT metresiyle** ölçülürdü — hata yok, log yok, YANLIŞ METRAJ.
+// Rolsüz cihaza düşme dalı da kaldırıldı: kat ayrımı olan bir istasyonda
+// "rolsüz metre" hangi kata ait olduğu bilinmeyen cihazdır.
+describe('meterPeripheralFor (kat → metre, birebir rol)', () => {
   const rows = [
     dev({ code: '2K', role: '2-KAT' }),
     dev({ code: '4K', role: '4-KAT' }),
+    dev({ code: '6K', role: '6-KAT' }),
   ];
 
-  it('4-KAT foldType → 4-KAT cihazı', () => {
+  it('4-KAT → 4-KAT cihazı', () => {
     expect(meterPeripheralFor(rows, '4-KAT')?.code).toBe('4K');
   });
-  it('2-KAT foldType → 2-KAT cihazı', () => {
+  it('2-KAT → 2-KAT cihazı', () => {
     expect(meterPeripheralFor(rows, '2-KAT')?.code).toBe('2K');
   });
-  it('null/undefined foldType → 2-KAT varsayılan', () => {
-    expect(meterPeripheralFor(rows, null)?.code).toBe('2K');
-    expect(meterPeripheralFor(rows, undefined)?.code).toBe('2K');
+  it('KATALOG DEĞERİ: 6-KAT → 6-KAT cihazı (2-KAT\'a SAPMAZ)', () => {
+    expect(meterPeripheralFor(rows, '6-KAT')?.code).toBe('6K');
   });
-  it('eşleşen role yok ama rolesiz var → rolesiz fallback', () => {
+  it('metresi OLMAYAN kat → null (başka kata sapmaz, elle girişe düşülür)', () => {
+    const r = [dev({ code: '2K', role: '2-KAT' }), dev({ code: '4K', role: '4-KAT' })];
+    expect(meterPeripheralFor(r, '6-KAT')).toBeNull();
+    expect(meterPeripheralFor(r, 'TUP')).toBeNull();
+  });
+  it('null/undefined/boş kat → null (varsayılan cihaz SEÇİLMEZ)', () => {
+    expect(meterPeripheralFor(rows, null)).toBeNull();
+    expect(meterPeripheralFor(rows, undefined)).toBeNull();
+    expect(meterPeripheralFor(rows, '   ')).toBeNull();
+  });
+  it('ROLSÜZ cihaza DÜŞMEZ — hangi kata ait olduğu bilinmiyor', () => {
     const r = [dev({ code: 'ANY', role: null })];
-    expect(meterPeripheralFor(r, '4-KAT')?.code).toBe('ANY');
+    expect(meterPeripheralFor(r, '4-KAT')).toBeNull();
   });
-  it('eşleşen role ve rolesiz yok → null', () => {
-    const r = [dev({ code: 'X', role: '4-KAT' })];
-    expect(meterPeripheralFor(r, '2-KAT')).toBeNull();
+  it('karşılaştırma büyük/küçük harf duyarsız (locale-bağımsız)', () => {
+    const r = [dev({ code: 'T', role: 'TUP' })];
+    expect(meterPeripheralFor(r, 'tup')?.code).toBe('T');
+    expect(meterPeripheralFor(r, ' TuP ')?.code).toBe('T');
   });
   it('boş liste → null', () => {
     expect(meterPeripheralFor([], '2-KAT')).toBeNull();

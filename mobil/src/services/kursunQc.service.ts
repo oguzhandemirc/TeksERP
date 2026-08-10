@@ -14,6 +14,17 @@ export interface CompleteQc2Request {
   rollId: string;
   stepId: string;
   notes?: string | null;
+  /**
+   * Operatörün İŞARETLEDİĞİ istasyon özellikleri (2026-08-10 mod sözleşmesi).
+   *
+   * AUTO modundaki özellikler bu listede OLMASA DA topa yazılır — backend onları
+   * kendisi ekler. Buraya yalnız OPSİYONEL/ZORUNLU modundakiler girer.
+   * ZORUNLU bir özellik eksikse backend 400 döner (adıyla).
+   *
+   * Alan gönderilmezse davranış eskisi gibidir (yalnız AUTO uygulanır) — yani
+   * eski APK yeni backend'e karşı bugünkü sonucu üretir.
+   */
+  propertyIds?: string[];
 }
 
 export interface ReportErrorRequest {

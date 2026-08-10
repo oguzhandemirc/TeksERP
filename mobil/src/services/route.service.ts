@@ -30,6 +30,10 @@ export interface ProductionRoute {
       code?: string | null;
       name: string;
       type?: string;
+      /** İstasyonun domain rolü — "rotada Tambur var mı" sorusu buradan çözülür
+       *  (kat tipi yalnız Tambur'lu rotada sorulur). Backend `include` ile tüm
+       *  skaler alanları döndürüyor; eski backend'de undefined kalır. */
+      kind?: string;
       // İstasyonun varsayılan fason kategorisi (defaultInclude döndürür). Hızlı İş Emri
       // "Gelişmiş" renk uygulaması, renk/özellik veren adımı buradan türetir.
       // appliesColor/appliesProperty: bu kategori gerçekten renk/özellik uyguluyor mu —

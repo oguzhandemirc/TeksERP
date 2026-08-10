@@ -22,13 +22,31 @@ export function useMachinePeripherals(kind: 'METER' | 'SCALE'): DevicePeripheral
   return q.data ?? [];
 }
 
-/** foldType → ilgili metre cihazı (role 2-KAT/4-KAT). Bulunamazsa null. */
+/**
+ * foldType → ilgili metre cihazı (cihazın `role`'ü kat KODUDUR). Yoksa null.
+ *
+ * ⚠️ 2026-08-10 — SAPMA KALDIRILDI. Eski hâli şuydu:
+ *     const want = foldType === '4-KAT' ? '4-KAT' : '2-KAT';
+ * yani ÜÇLÜ bir kararı ikiliye indiriyordu. Kat kataloğa taşınıp fabrika
+ * "6-KAT" ekleyince 6 katlı top **2-KAT metresiyle** ölçülürdü: hata yok, log
+ * yok, sadece YANLIŞ METRAJ. (Aynı sapma "TÜP" değerinde de vardı.)
+ *
+ * Yeni kural: rol BİREBİR eşleşir. Eşleşme yoksa **başka cihaza SAPMAZ** — null
+ * döner ve çağıran "bu kat için metre tanımlı değil, elle girin" der. Rolsüz
+ * cihaza düşme dalı da kaldırıldı: kat ayrımı olan bir istasyonda "rolsüz metre"
+ * hangi kata ait olduğu bilinmeyen bir cihazdır; ona güvenmek sessizce yanlış
+ * ölçmenin ta kendisiydi. Tek metreli istasyonlar `primaryMeterFor` kullanır.
+ *
+ * Karşılaştırma `toUpperCase()` ile (locale-bağımsız) — backend katalog kodunu
+ * da böyle karşılaştırıyor.
+ */
 export function meterPeripheralFor(
   rows: DevicePeripheral[],
   foldType: string | null | undefined,
 ): DevicePeripheral | null {
-  const want = foldType === '4-KAT' ? '4-KAT' : '2-KAT';
-  return rows.find((r) => r.role === want) ?? rows.find((r) => !r.role) ?? null;
+  const want = (foldType ?? '').trim().toUpperCase();
+  if (!want) return null;
+  return rows.find((r) => (r.role ?? '').toUpperCase() === want) ?? null;
 }
 
 /**

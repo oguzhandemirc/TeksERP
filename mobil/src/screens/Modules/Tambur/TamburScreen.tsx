@@ -90,6 +90,7 @@ import { MANUAL_REASON_PRESETS, MANUAL_MIN_REASON } from '../../../constants/man
 import Animated from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
+import { useFoldValues } from '../../../hooks/useFoldValues';
 import { generateClientUuid } from '../../../offline/barcode';
 import type {
   TamburStepSummary,
@@ -177,9 +178,10 @@ const EMPTY_VOLUNTARY_ENTRY: VoluntaryEntryState = {
 };
 const EMPTY_WORK: RollWorkState = {
   decisions: {},
-  // Kat seçimi asla boş kalmaz — operatör değiştirebilir ama biri hep seçili.
-  // İş emrinde plan varsa effect bunu override eder (bkz. defaultFold).
-  foldType: '2-KAT',
+  // ⚠️ BOŞ başlar (2026-08-10) — sabit '2-KAT' katalogda o değer yoksa geçersiz
+  // bir ön-seçimdi. Değeri her zaman effect doldurur: iş emri planı → yoksa
+  // katalogun ilk değeri (bkz. defaultFold).
+  foldType: null,
   voluntaryCuts: [],
   voluntaryEntry: EMPTY_VOLUNTARY_ENTRY,
   errorEntry: EMPTY_ERROR_ENTRY,
@@ -418,6 +420,8 @@ export default function TamburScreen() {
 
   // Aktif top'un çalışma state'i — top/sekme değişince sıfırlanır.
   const [work, setWork] = useState<RollWorkState>(EMPTY_WORK);
+  // Kat seçenekleri katalogdan — tuşlar, ön-seçim ve metre rolü hep bu listeden.
+  const { values: foldValues } = useFoldValues();
   // Kesim uzunluğu kaynağı. Faz 1'de MANUEL varsayılan (gerçek makine yok);
   // Otomatik'te uzunluk makineden ölçülür → input + numpad gizlenir.
   // CİHAZDA KALICI (deviceSettingsStore) ve "Top Kesme" ile AYNI tercih: seçim
@@ -722,14 +726,22 @@ export default function TamburScreen() {
     );
   }, [activeJob]);
 
-  // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde planlanan
-  // katlama (2-KAT / 4-KAT) otomatik seçili gelir; plan yoksa 2-KAT varsayılır.
-  // Operatör değiştirebilir ama biri her zaman seçilidir (asla boş kalmaz).
+  // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
+  // otomatik seçili gelir; plan yoksa KATALOGUN İLK değeri. Operatör
+  // değiştirebilir ama biri her zaman seçilidir (asla boş kalmaz).
+  //
+  // ⚠️ Eskiden `planned === '4-KAT' ? '4-KAT' : '2-KAT'` idi: ÜÇLÜ bir kararı
+  // ikiliye indiriyordu. Katalog büyüyünce 6-KAT planlanmış bir iş emrinde
+  // ekran sessizce 2-KAT'ı seçili gösterirdi — operatör fark etmezse top
+  // YANLIŞ katla kaydedilir ve yanlış metreyle ölçülürdü.
   useEffect(() => {
-    const planned = activeJob?.context?.plannedFoldType;
-    const defaultFold: TamburFoldType = planned === '4-KAT' ? '4-KAT' : '2-KAT';
+    const planned = activeJob?.context?.plannedFoldType ?? null;
+    const known = planned && foldValues.some((v) => v.code === planned) ? planned : null;
+    // Plan katalogda yoksa (silinmiş/pasif değer) yine de PLANI KORU: iş emrinin
+    // spec'ini istemci tarafında değiştirmek, sessizce başka bir ürün üretmektir.
+    const defaultFold: TamburFoldType | null = known ?? planned ?? foldValues[0]?.code ?? null;
     setWork({ ...EMPTY_WORK, foldType: defaultFold });
-  }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType]);
+  }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType, foldValues]);
 
 
   // ── Backend re-fetch helper ──
@@ -1632,7 +1644,9 @@ export default function TamburScreen() {
   // null döner (hata gösterilir, kesim YAPILMAZ; sessiz sahte değer YOK).
   // 2-KAT → 2-kat makinesi, 4-KAT → 4-kat makinesi.
   const measureFromMachine = async (remaining: number): Promise<number | null> => {
-    const katLabel = work.foldType === '4-KAT' ? '4 Kat' : '2 Kat';
+    // Kat KODU doğrudan yazılır — eskiden `=== '4-KAT' ? '4 Kat' : '2 Kat'` idi ve
+    // katalog büyüyünce 6-KAT'lı bir topta ekranda "2 Kat metresi" yazardı.
+    const katLabel = work.foldType ?? 'Kat';
     const sim = () => {
       const lo = Math.min(5, remaining);
       const hi = Math.min(80, remaining);
@@ -1643,7 +1657,8 @@ export default function TamburScreen() {
       Toast.show({
         type: 'error',
         text1: `${katLabel} metresi tanımlı değil`,
-        text2: 'Admin → Cihaz Kaydı’ndan bu makineye METER cihazı (role) ekleyin.',
+        // ⚠️ Başka kata ait metreye SAPILMAZ (yanlış ölçüm) — elle girişe düşülür.
+        text2: `Metrajı elle girin. Kalıcı çözüm: Admin → Cihaz Kaydı'ndan bu makineye "${katLabel}" rollü METER cihazı ekleyin.`,
         visibilityTime: 6000,
       });
       return null;
@@ -3036,19 +3051,21 @@ export default function TamburScreen() {
                         ZORUNLU olduğu için (miras alınacak bağlam yok) buraya
                         oturdu — ekstra satır açmadan, En ile aynı hizada. */}
                     <View style={[styles.manualPickCol, styles.foldPickRow]}>
-                      {(['2-KAT', '4-KAT'] as const).map((ft) => {
-                        const active = manualFoldType === ft;
+                      {/* Seçenekler KATALOGDAN (2026-08-10) — sabit iki çip,
+                          panelden eklenen 6-KAT'ı tablette görünmez yapardı. */}
+                      {foldValues.map((ft) => {
+                        const active = manualFoldType === ft.code;
                         return (
                           <TouchableRipple
-                            key={ft}
+                            key={ft.code}
                             borderless
-                            onPress={() => setManualFoldType(ft)}
+                            onPress={() => setManualFoldType(ft.code)}
                             style={[styles.manualFoldChip, active && styles.manualFoldChipOn]}
                           >
                             <Text
                               style={[styles.manualFoldChipText, active && styles.manualFoldChipTextOn]}
                             >
-                              {ft === '2-KAT' ? '2 Kat' : '4 Kat'}
+                              {ft.name}
                             </Text>
                           </TouchableRipple>
                         );
@@ -3638,15 +3655,17 @@ export default function TamburScreen() {
                 <Surface style={styles.section} elevation={1}>
                   {/* Katlama (2/4 kat) — başlıksız, bölümün en üstünde. */}
                   <View style={styles.foldInlineRow}>
-                    {(['2-KAT', '4-KAT'] as TamburFoldType[]).map((ft) => {
-                      const active = work.foldType === ft;
+                    {/* Seçenekler KATALOGDAN (2026-08-10). Seçilen kod hem topa
+                        yazılır hem METRE cihazının rolüyle BİREBİR eşleştirilir. */}
+                    {foldValues.map((ft) => {
+                      const active = work.foldType === ft.code;
                       return (
                         <TouchableRipple
-                          key={ft}
+                          key={ft.code}
                           borderless
                           // Biri her zaman seçili kalmalı → aktif chip'e basınca
                           // boşa düşmez; sadece diğerine geçiş yapılır.
-                          onPress={() => setWork((w) => ({ ...w, foldType: ft }))}
+                          onPress={() => setWork((w) => ({ ...w, foldType: ft.code }))}
                           style={[styles.foldChipSm, active && styles.foldChipActive]}
                         >
                           <Text
@@ -3655,7 +3674,7 @@ export default function TamburScreen() {
                               active && styles.foldChipTextActive,
                             ]}
                           >
-                            {ft === '2-KAT' ? '2 Kat' : '4 Kat'}
+                            {ft.name}
                           </Text>
                         </TouchableRipple>
                       );

@@ -10,6 +10,7 @@ import { workOrderService, type QuickStartRequest } from '../../../services/work
 import { fabricPropertyService } from '../../../services/fabricProperty.service';
 import { signalScan } from '../../../services/scanFeedback';
 import { useScanFeedback } from '../../../hooks/useScanFeedback';
+import { useFoldValues } from '../../../hooks/useFoldValues';
 import { useSubcontractorDefault } from '../../../hooks/useSubcontractorDefault';
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { generateClientUuid } from '../../../offline/barcode';
@@ -130,7 +131,11 @@ export function useQuickWorkOrder() {
   // basılır. Backend AÇILIŞTA en'i kaleme karşı doğrulamaz (yalnız ürün + renk),
   // bu yüzden override serbesttir; kilit yalnız mal fasona çıktıktan SONRA doğar.
   const [orderWidth, setOrderWidth] = useState<string | null>(null);
-  const [foldType, setFoldType] = useState<string | null>('2-KAT');
+  // ⚠️ Varsayılan BOŞ — eskiden '2-KAT' sabitiydi. Kat kataloğa taşındıktan
+  // sonra (2026-08-10) sabit varsayılan, 2-KAT'ı OLMAYAN bir katalogda geçersiz
+  // bir değeri sessizce gönderirdi (backend katalog doğrulamasıyla 400).
+  // Ön-seçim aşağıda katalogun İLK değeriyle yapılır.
+  const [foldType, setFoldType] = useState<string | null>(null);
   // Boş bırakılırsa ve sipariş bağlıysa backend kalemlerin requiredProperties
   // birleşimini kendisi uygular (workorder.service create()) — istemci bu listeyi
   // okuyamaz (AvailableOrderLine taşımaz), o yüzden ön-doldurma YAPILMAZ; arayüz
@@ -206,6 +211,32 @@ export function useQuickWorkOrder() {
     () => (routesQuery.data?.data ?? []).find((r) => r.id === routeTemplateId) ?? null,
     [routesQuery.data, routeTemplateId],
   );
+
+  // KAT — seçenekler katalogdan; alan yalnız rotada TAMBUR varsa sorulur.
+  //
+  // ⚠️ `hasTambur` koşulu 2026-08-10'da EKLENDİ: mobil kat tipini KOŞULSUZ zorunlu
+  // tutuyordu, Electron ise rotada Tambur yoksa alanı hiç sormuyordu. İki istemci
+  // aynı iş emri için farklı sözleşme uyguluyordu; tamburu olmayan bir rota
+  // tanımlandığı gün mobil, hiçbir yerde uygulanmayacak bir kat değeri yazdırırdı.
+  // (Kat tipi Tambur operatörüne yönelik bir üretim spec'idir.)
+  const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
+  const hasTambur = useMemo(
+    () => (selectedRoute?.steps ?? []).some((s) => s.station?.kind === 'TAMBUR'),
+    [selectedRoute],
+  );
+
+  // Ön-seçim: Tambur'lu rotada katalogun ilk değeri seçili gelsin (eski davranışın
+  // karşılığı). Tambur yoksa değeri TEMİZLE — aksi halde rota değiştirildiğinde
+  // eski seçim payload'da kalır ve uygulanmayacak bir spec gönderilir.
+  useEffect(() => {
+    if (!hasTambur) {
+      if (foldType !== null) setFoldType(null);
+      return;
+    }
+    if (foldType) return;
+    const first = foldValues[0];
+    if (first) setFoldType(first.code);
+  }, [hasTambur, foldValues, foldType]);
 
   /** Rota adım şeridi ("KK1 → Boyahane → Tambur") — ⓘ açmadan ne olacağı görünsün. */
   const routeStepNames = useMemo(
@@ -640,11 +671,16 @@ export function useQuickWorkOrder() {
   const blockingReason = useMemo(() => {
     if (scanned.length === 0) return 'En az bir top okutun veya listeden seçin.';
     if (!routeTemplateId) return 'Bir rota şablonu seçmelisiniz.';
-    if (!foldType) return 'Kat tipi seçmelisiniz (2-KAT veya 4-KAT).';
+    // Kat yalnız Tambur'lu rotada zorunlu (Electron ile aynı sözleşme).
+    if (hasTambur && !foldType) {
+      return foldNotConfigured
+        ? 'Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin.'
+        : 'Kat tipi seçmelisiniz.';
+    }
     if (applyMissing)
       return `Seçili rota ${applyMissing} uygulayacak bir fason adımı içermiyor. Uygun bir rota seçin.`;
     return null;
-  }, [scanned.length, routeTemplateId, foldType, applyMissing]);
+  }, [scanned.length, routeTemplateId, foldType, hasTambur, foldNotConfigured, applyMissing]);
 
   const canSubmit = !blockingReason && !mutation.isPending;
 
@@ -735,7 +771,10 @@ export function useQuickWorkOrder() {
     setTargetColorId(null);
     setWidth('');
     setOrderWidth(null);
-    setFoldType('2-KAT');
+    // null → yukarıdaki efekt katalogun ilk değerini yeniden ön-seçer (rotada
+    // Tambur varsa). Sabit '2-KAT' yazmak, katalogda o değer yoksa geçersiz bir
+    // seçimle başlamak demekti.
+    setFoldType(null);
     setTargetPropertyIds([]);
     setOrderLineIds([]);
     setOrderDerivedItemId(null);
@@ -790,6 +829,10 @@ export function useQuickWorkOrder() {
     orderWidth,
     foldType,
     setFoldType,
+    // Kat seçenekleri katalogdan + "bu rotada kat sorulur mu" kararı.
+    foldValues,
+    foldNotConfigured,
+    hasTambur,
     targetPropertyIds,
     setTargetPropertyIds,
     propertiesQuery,

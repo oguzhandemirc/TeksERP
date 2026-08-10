@@ -735,8 +735,28 @@ export interface KursunStepSummary {
   workOrderId: string;
   batchNumber: string;
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
-  /** İstasyona KURSUN özelliği yetenek olarak atanmış mı? */
+  /**
+   * İstasyona KURSUN özelliği yetenek olarak atanmış mı?
+   *
+   * ⚠️ Bu alan "İSTASYON verebilir mi" der, "BU TOPA yazılacak mı" DEMEZ —
+   * 2026-08-10 mod modelinde ikisi ayrıldı. Uygulanma kararı `properties`
+   * içindeki KURSUN satırının `mode`'undadır.
+   */
   appliesKursun: boolean;
+  /**
+   * İstasyonun özellik yetenekleri + MODLARI (2026-08-10).
+   *   OTOMATİK → operatöre sorulmaz, adım kapanınca yazılır (tuş çizilmez)
+   *   OPSİYONEL → tuş çıkar; yalnız işaretlenirse yazılır
+   *   ZORUNLU   → tuş çıkar; işaretlenmeden adım kapanmaz (backend 400)
+   * Eski backend bu alanı göndermez → `undefined` → tuş çizilmez, davranış
+   * bugünküyle aynı (yalnız AUTO uygulanır).
+   */
+  properties?: {
+    propertyId: string;
+    code: string;
+    name: string;
+    mode: 'AUTO' | 'OPTIONAL' | 'REQUIRED';
+  }[];
   /** Bu adıma yazılan not (WorkOrderStep.notes; rotada KK2 istasyonuna özel
    *  talimat) — kart açıkken üstte gösterilir. */
   stepNote?: string | null;
