@@ -127,6 +127,25 @@ async function main(): Promise<void> {
     console.log(`   ℹ️  muaf ${kod} — ${gerekce.split(".")[0]}.`);
 
   console.log("\n=== §3 DB UZLAŞTIRMASI ===");
+  // ⚠️ ÖN KOŞULU TEST KENDİSİ KURAR — "backend'i yeniden başlatın" beklemez.
+  // Uzlaştırma yalnız server boot'unda koşuyor (`server.ts`). CI backend'i HİÇ
+  // ayağa kaldırmaz (yalnız `migrate deploy` + `seed` + test koşucusu), dolayısıyla
+  // eski hâlinde bu bölüm temiz DB'de kaçınılmaz olarak kırmızıydı: §3 "rol eksik"
+  // diyordu ve §4'ün "İKİNCİ koşum" dediği şey aslında BİRİNCİ koşum olduğu için
+  // idempotentlik kontrolü de düşüyordu (CI 2026-08-09: MOBILE_KURSUN_DAGITIM).
+  //
+  // Burada çağırmak testi ZAYIFLATMAZ, GÜÇLENDİRİR: eski hâli "birinin backend'i
+  // yeniden başlatmış olması" gibi ortama ait bir OLAYI ölçüyordu; yenisi
+  // fonksiyonun KENDİSİNİN doğru durumu ürettiğini ölçüyor. Dev DB'de (boot zaten
+  // koşmuş) çağrı no-op'tur, yani orada davranış değişmez.
+  const ilk = await reconcileRoleTemplates();
+  if (ilk.created.length + ilk.adopted.length + Object.keys(ilk.itemsAdded).length > 0) {
+    console.log(
+      `   ℹ️  ilk uzlaştırma: +${ilk.created.length} yeni · ${ilk.adopted.length} sahiplenildi · ` +
+        `${Object.keys(ilk.itemsAdded).length} role izin eklendi`,
+    );
+  }
+
   const dbSablonlar = await prisma.permissionTemplate.findMany({
     select: {
       code: true,

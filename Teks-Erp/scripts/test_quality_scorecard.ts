@@ -73,6 +73,25 @@ async function makeRoll(opts: {
     select: { id: true },
   });
   createdRollIds.push(r.id);
+
+  // ⚠️ ÇIPASIZ TOP TRIGGER'A RAĞMEN KURULUR — `finalizedAt: null` GÖNDERMEK YETMEZ.
+  // Trigger'ın INSERT dalı tam da bunu yapar: final statüde doğan ve damgası
+  // olmayan topa `now()` yazar. Yani fixture "çıpasız" istese de satır damgalı
+  // doğar ve `unanchoredRollCount` 0 kalır.
+  //
+  // Bu, CI'ı 2026-08-09'da kırmızıya düşüren şeydi: dev DB'de migration ÖNCESİNDEN
+  // kalma çıpasız toplar var, o yüzden yerelde yeşildi; temiz CI DB'sinde her top
+  // trigger'dan geçtiği için sayaç 0 çıkıyordu. Test ortamın eski verisine
+  // yaslanıyordu (`CLAUDE.md`: "Ortamdaki veriye BAĞIMLI OLMA").
+  //
+  // Çözüm, trigger'ı devre dışı bırakmak DEĞİL (o zaman kuralı test etmeyi
+  // bırakırdık): statüye DOKUNMADAN ham UPDATE ile damgayı silmek. Trigger'ın
+  // UPDATE dalı yalnız `status` GERÇEKTEN değiştiğinde çalışır, bu yüzden bu
+  // yazım ondan sessizce geçer — ve sonuç, migration öncesinden kalmış bir eski
+  // satırın BİREBİR aynısıdır. Yani fixture gerçek dünyayı taklit ediyor.
+  if (opts.finalizedAt === null && ["WAREHOUSE", "A1_STOCK", "SCRAP"].includes(opts.status)) {
+    await prisma.$executeRaw`UPDATE "rolls" SET "finalizedAt" = NULL WHERE "id" = ${r.id}::uuid`;
+  }
   return r.id;
 }
 

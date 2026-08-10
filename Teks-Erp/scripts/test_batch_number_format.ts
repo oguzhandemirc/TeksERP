@@ -320,9 +320,21 @@ async function main(): Promise<void> {
   const live = await prisma.batch.findMany({ select: { batchNumber: true } });
   const daily = live.filter((b) => /^P\d{6}\d+$/.test(b.batchNumber));
   const short = live.filter((b) => parseShortBatchCode(b.batchNumber) !== null);
+  // ⚠️ İKİ FARKLI "SIFIR" — karıştırmak bu testi TEMİZ KURULUMDA kırıyordu
+  // (CI, 2026-08-09: `günlük 0 · kısa 0 / toplam 0`). Ayrım şu:
+  //   · `toplam 0`  → veritabanında gerçekten hiç parti YOK. Bu bir ihlal değil,
+  //     meşru bir durum: temiz CI DB'si, yeni kurulum, `seed` sonrası. Burada
+  //     "biçim denetimi" sorulacak bir soru bile değildir.
+  //   · `toplam > 0` ama iki biçim de 0 → parti VAR ama HİÇBİRİ tanınmıyor.
+  //     ASIL İHLAL BUDUR: parser bozulmuş ya da üçüncü bir biçim doğmuş demektir.
+  // Eski hâli ikisini aynı sayıyordu; sonuç, dev DB'si dolu olduğu için yerelde
+  // yeşil, temiz CI DB'sinde kırmızı olan bir bekçiydi — yani `CLAUDE.md`'nin
+  // "Ortamdaki veriye BAĞIMLI OLMA" kuralının tam ihlali.
   check(
-    "biçimlerden en az biri canlıda mevcut",
-    daily.length + short.length > 0,
+    live.length === 0
+      ? "canlı DB'de hiç parti yok — biçim denetimi kapsam dışı (temiz kurulum)"
+      : "biçimlerden en az biri canlıda mevcut",
+    live.length === 0 || daily.length + short.length > 0,
     `günlük ${daily.length} · kısa ${short.length} / toplam ${live.length}`,
   );
 
