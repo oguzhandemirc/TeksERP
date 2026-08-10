@@ -151,7 +151,18 @@ async function collectScrap(range: DateRange): Promise<ScrapCell[]> {
       FROM roll_errors re
       LEFT JOIN defect_types dt ON dt.id = re."defectTypeId"
       WHERE re."rollId" = r.id
-      ORDER BY re."detectedAt" ASC
+      -- UYARI: id EŞİTLİK BOZUCUDUR, süs değil. detectedAt TEK BAŞINA yetmez:
+      -- aynı işlemde kaydedilen iki hata BİREBİR aynı damgayı taşıyabilir (tek
+      -- tx, tek new Date()), ve beraberlikte PostgreSQL satır sırasını garanti
+      -- ETMEZ — plan/heap düzenine göre değişir. Sonuç, aynı verinin AYNI raporu
+      -- iki koşumda farklı hataya atfetmesidir: hata yok, log yok, yalnız rakam
+      -- oynar. CI 2026-08-09'da tam bu yüzden kırmızıydı (yerelde d1, CI'da d2).
+      -- id uuid'dir, yani seçim keyfî ama KARARLI — raporun tekrarlanabilir
+      -- olması, "doğru" hatayı seçmekten daha önemlidir (eşit damgada zaten
+      -- doğru diye bir şey yok).
+      -- NOT: bu yorumda BACKTICK KULLANMA — blok bir JS template literal'ının
+      -- içinde ve backtick onu ortadan böler (dosya hiç derlenmez).
+      ORDER BY re."detectedAt" ASC, re."id" ASC
       LIMIT 1
     ) e ON true
     WHERE r.status = 'SCRAP'
