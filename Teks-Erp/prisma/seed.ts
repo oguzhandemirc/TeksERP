@@ -195,6 +195,30 @@ async function main() {
   const propByCode = new Map(properties.map((p) => [p.code, p]));
   console.log(`✅ ${properties.length} kumaş özelliği (KURSUN + ZIMPARALI)`);
 
+  // --- KAT: SEÇİM tipli üretim karakteristiği (2026-08-10) ---
+  // ⚠️ TAZE KURULUM İÇİN ZORUNLU. Kat değerleri artık kodda değil katalogda;
+  // bu satır olmadan Tambur ekranında HİÇ kat tuşu çıkmaz ve `foldType`
+  // doğrulaması fail-open'a düşer (çalışır ama özellik hiç görünmez).
+  // ⚠️ Kod ASCII: "TUP", "TÜP" DEĞİL — Türkçe karakterli kod, ASCII yazan
+  // istemciyi sessizce reddettirir (görünen ad "Tüp" kalır).
+  const katProperty = await prisma.fabricProperty.create({
+    data: {
+      code: "KAT",
+      name: "Kat",
+      category: "Üretim",
+      valueType: "CHOICE",
+      sortOrder: 5,
+      values: {
+        create: [
+          { code: "2-KAT", name: "2 Kat", sortOrder: 10 },
+          { code: "4-KAT", name: "4 Kat", sortOrder: 20 },
+          { code: "TUP",   name: "Tüp",   sortOrder: 30 },
+        ],
+      },
+    },
+  });
+  console.log("✅ KAT karakteristiği (SEÇİM: 2-KAT / 4-KAT / TUP)");
+
   // --- Fason kategori + firma ---
   const cats = await Promise.all([
     prisma.subcontractorCategory.create({
@@ -275,16 +299,24 @@ async function main() {
   const tambur = await prisma.station.create({
     data: { code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE" },
   });
+  // ⚠️ YETENEK BAYRAKLARI AÇIKÇA YAZILIR (2026-08-10). Seed ham prisma kullanır,
+  // yani `StationService`in "kategoriden tohumla" adımı KOŞMAZ; kolon
+  // varsayılanı `appliesColor=false` olduğu için taze kurulumda boyahane RENK
+  // VEREMEZ görünürdü ve hedef renkli iş emri "rotada renk veren adım yok" ile
+  // reddedilirdi. (Migration'ın geri-doldurma UPDATE'i de kurtarmaz: migration
+  // seed'den ÖNCE, tablo boşken koşar.)
   const boyaFason = await prisma.station.create({
     data: {
       code: "BOYA_FASON", name: "Boyahane (Fason)", type: "EXTERNAL", kind: "SUBCONTRACTOR",
       department: "TERBIYE", defaultCategoryId: catByCode.get("BOYA")!.id,
+      appliesColor: true, appliesProperty: true, // = BOYA kategorisinin bayrakları
     },
   });
   const zimparaFason = await prisma.station.create({
     data: {
       code: "ZIMPARA_FASON", name: "Zımpara (Fason)", type: "EXTERNAL", kind: "SUBCONTRACTOR",
       department: "TERBIYE", defaultCategoryId: catByCode.get("ZIMPARA")!.id,
+      appliesColor: false, appliesProperty: true, // = ZIMPARA kategorisinin bayrakları
     },
   });
   // Sevkiyat/paketleme noktası: üretim dışı MAKİNESİZ istasyon (StationKind.SHIPPING).
@@ -510,14 +542,23 @@ async function main() {
   // --- İstasyon yetenekleri ---
   // Renk ve demo özellik seed'lenmediği için boyahane yeteneği BOŞ başlar (admin
   // renk/özellik ekleyip atar). Kurşun ve Zımpara kendi işlevsel özelliğini uygular.
+  // ⚠️ MOD AÇIKÇA YAZILIR (2026-08-10). Şema varsayılanı OPTIONAL; KURSUN
+  // satırı AUTO olmazsa kurşun özelliği toplara YAZILMAZ ve kurşun bypass
+  // ataması "istasyon kurşunu OTOMATİK uygulamıyor" ile reddedilir.
   await prisma.stationProperty.create({
-    data: { stationId: kursun.id, propertyId: propByCode.get("KURSUN")!.id },
+    data: { stationId: kursun.id, propertyId: propByCode.get("KURSUN")!.id, mode: "AUTO" },
   });
+  // Zımpara fason: mod İNERT (fason kabulde özellik `WO.targetProperties`'ten
+  // yazılır, `copyStationCapabilitiesToRoll` o yolda çağrılmaz) → OPTIONAL kalır.
   await prisma.stationProperty.create({
     data: { stationId: zimparaFason.id, propertyId: propByCode.get("ZIMPARALI")!.id },
   });
-  // Tambur'un yeteneği yok (karar noktası).
-  console.log("✅ İstasyon yetenekleri (Kurşun=KURSUN, Zımpara=ZIMPARALI; boyahane boş)");
+  // Tambur: kat KARAKTERİSTİĞİNİ sorar (mod ZORUNLU — operatör seçmeden adım
+  // kapanmaz). Tambur'un başka yeteneği yok; burası karar noktasıdır.
+  await prisma.stationProperty.create({
+    data: { stationId: tambur.id, propertyId: katProperty.id, mode: "REQUIRED" },
+  });
+  console.log("✅ İstasyon yetenekleri (Kurşun=KURSUN/AUTO, Zımpara=ZIMPARALI, Tambur=KAT/ZORUNLU)");
 
   // --- Hata tipleri ---
   // Saha #18: GENEL — KK2'de hata tipini belirtmek istemeyen operatör için
