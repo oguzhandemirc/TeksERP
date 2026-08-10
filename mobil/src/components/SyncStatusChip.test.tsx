@@ -31,8 +31,15 @@ function renderChip(props: Parameters<typeof SyncStatusChip>[0] = {}) {
 jest.mock('./motion/Pulse', () => 'Pulse');
 jest.mock('./outbox/OutboxModal', () => {
   const { Text } = require('react-native');
-  return ({ visible }: { visible: boolean }) =>
+  // ⚠️ İSİMLİ olmak ZORUNDA. İsimsiz bir ok fonksiyonu döndürmek
+  // `react/display-name` kuralını ihlal ediyor ve bu, mobil CI işini düşüren
+  // TEK hataydı (kalan 111 bulgu uyarı; job'ı yalnız bu 1 error düşürüyordu).
+  // Çözüm eslint-disable EKLEMEK DEĞİL: dosya zaten "kullanılmayan
+  // eslint-disable" uyarıları taşıyor, yani susturma yönü sorunun kendisi.
+  const MockOutboxModal = ({ visible }: { visible: boolean }) =>
     visible ? <Text>OUTBOX_ACIK</Text> : null;
+  MockOutboxModal.displayName = 'OutboxModal';
+  return MockOutboxModal;
 });
 
 beforeEach(() => {
