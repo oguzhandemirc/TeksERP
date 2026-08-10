@@ -21,6 +21,7 @@
 //  10. SEÇİM tipli özellik hedef-özellik seçicisine SIZMAZ (valueType ayrımı)
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { FabricPropertyService } from "../src/services/fabric-property.service";
 import {
   FOLD_PROPERTY_CODE,
   loadFoldTypeCatalog,
@@ -38,6 +39,24 @@ async function expectErr(label: string, part: string, fn: () => Promise<unknown>
   try { await fn(); check(label, false, "hata bekleniyordu"); }
   catch (e) { const m = e instanceof Error ? e.message : String(e); check(label, m.includes(part), m); }
 }
+
+// Panelin kullandığı gerçek config (fabric-property.routes.ts aynası) — yanıt
+// tazeliği ancak `defaultInclude` ile ölçülebilir.
+const propSvc = new FabricPropertyService({
+  modelName: "fabricProperty",
+  tableName: "FABRIC_PROPERTY",
+  searchFields: ["code", "name"],
+  nestedCreateFields: ["stationCapabilities", "values"],
+  defaultInclude: {
+    stationCapabilities: { select: { stationId: true } },
+    values: {
+      select: { id: true, code: true, name: true, sortOrder: true, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+    },
+  },
+  duplicateNameField: "name",
+  entityLabel: "özellik",
+});
 
 async function main() {
   const ts = Date.now();
@@ -173,6 +192,25 @@ async function main() {
     await expectErr("in-place: katalog dışı değer reddedilir", "geçerli bir kat değeri değil", () =>
       applyFoldTypeForWriteInPlace({ foldType: "77-KAT" }),
     );
+
+    // ── 9b) MUTASYON YANITI TAZE OLMALI (2026-08-10 HTTP sondasında bulundu) ──
+    // `super.update` değer yazımından ÖNCE koşuyor; yanıt tazelenmezse panele
+    // BAYAT liste döner. Saha okuması: "6-KAT'ı ekledim, kaydettim, görünmedi"
+    // (oysa DB'ye yazılmıştı). Bu kontrol o sessiz yanlışı kilitler.
+    const svcRes = (await propSvc.update(propertyId, {
+      values: [
+        ...(await prisma.fabricPropertyValue.findMany({
+          where: { propertyId },
+          select: { code: true, name: true, isActive: true },
+          orderBy: { sortOrder: "asc" },
+        })),
+        { code: "7-KAT", name: `7 Kat ${PROBE}`, isActive: true },
+      ],
+    })) as { data?: { values?: { code: string }[] } };
+    const respCodes = (svcRes.data?.values ?? []).map((v) => v.code);
+    check("update YANITI yeni değeri İÇERİR (bayat liste dönmez)",
+      respCodes.includes("7-KAT"), respCodes.join(",") || "(values yok)");
+    await prisma.fabricPropertyValue.deleteMany({ where: { propertyId, code: "7-KAT" } });
 
     // ── 10) SEÇİM tipli özellik hedef-özellik seçicisine SIZMAZ ─────────────
     // Sızsaydı planlamacı "KAT"ı hedef özellik olarak işaretler (hangi kat?) ve

@@ -311,6 +311,16 @@ export class FabricPropertyService extends BaseService {
       if (values !== undefined) await replaceValuesTx(tx, id, values);
     });
 
+    // ⚠️ YANITI TAZELE. `super.update` bağ/değer yazımından ÖNCE koştuğu için
+    // döndürdüğü nesne BAYAT `stationCapabilities`/`values` taşır. Sahada
+    // gözlendi (2026-08-10, HTTP sondası): panelden "6-KAT" eklendi, DB'ye
+    // yazıldı, ama yanıt eski üç değeri döndü — kullanıcı için bu "kaydettim,
+    // görünmedi" demektir. Sıra bilinçli (önce skaler update: ad-mükerrer gibi
+    // asıl red sebepleri orada), o yüzden çözüm sırayı değiştirmek değil,
+    // yazımdan SONRA yeniden okumaktır.
+    if (stationIds !== undefined || values !== undefined) {
+      return super.findById(id);
+    }
     return updated;
   }
 }
