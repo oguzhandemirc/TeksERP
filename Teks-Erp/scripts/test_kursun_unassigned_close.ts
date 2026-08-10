@@ -248,8 +248,11 @@ async function main(): Promise<void> {
   const kursunStationId = await makeStation("S", "TEST Kurşun İstasyonu", StationKind.PROCESS_QC);
   // Yetenek: dağıtımsız kapanış da `copyStationCapabilitiesToRoll` çağırıyor —
   // topun KURSUN özelliğini gerçekten kazandığını ölçebilmek için gerekli.
+  // ⚠️ mode AUTO ZORUNLU (2026-08-10): bypass rejiminde tablet salt-okunur,
+  // işaretleyecek operatör yok → `assign` OPTIONAL satırı reddeder. Şema
+  // varsayılanı OPTIONAL olduğu için fixture bunu AÇIKÇA yazar.
   await prisma.stationProperty.create({
-    data: { stationId: kursunStationId, propertyId: kursunProperty.id },
+    data: { stationId: kursunStationId, propertyId: kursunProperty.id , mode: "AUTO" },
   });
   const machine = await prisma.machine.create({
     data: {

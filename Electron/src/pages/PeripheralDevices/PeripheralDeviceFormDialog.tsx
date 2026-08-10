@@ -11,6 +11,7 @@ import { stationService } from "@/pages/Stations/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { deviceService } from "@/pages/Devices/service";
 import { peripheralService } from "./service";
+import { useFoldValues } from "@/hooks/useFoldValues";
 import { PrinterSettingsFields } from "./PrinterSettingsFields";
 import {
   peripheralFormDefaults,
@@ -30,10 +31,15 @@ interface Props {
 const SELECT_CLS = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 
 // Metre/kantar "rol" ayrımı — mobil HAL bunu BİREBİR string eşleştirir
-// (Tambur foldType→2-KAT/4-KAT, tek-metre istasyonu→PRIMARY). Serbest metin +
-// typo = sahada sessiz "yanlış/eksik cihaz" hatası olduğundan sabit listeye
-// çekildi; kayıtta bulunan bilinmeyen değer "(özel)" olarak korunur.
-const ROLE_OPTIONS = ["2-KAT", "4-KAT", "PRIMARY"] as const;
+// (Tambur foldType→kat kodu, tek-metre istasyonu→PRIMARY). Serbest metin +
+// typo = sahada sessiz "yanlış/eksik cihaz" hatası olduğundan seçenekli;
+// kayıtta bulunan bilinmeyen değer "(özel)" olarak korunur.
+//
+// ⚠️ Kat rolleri KATALOGDAN gelir (2026-08-10). Sabit ["2-KAT","4-KAT"] listesi,
+// panelden 6-KAT eklendiğinde o kata METRE ATANMASINI imkânsız kılardı — ve
+// metresiz kat, mobilde elle girişe düşer (eskiden sessizce 2-KAT metresini
+// kullanıyordu, yani YANLIŞ ÖLÇERDİ).
+const STATIC_ROLE_OPTIONS = ["PRIMARY"] as const;
 
 function routeTemplateId(initial: PeripheralDevice | null | undefined, kind: RouteLabelKind): string {
   return initial?.templateRoutes?.find((r) => r.kind === kind)?.templateId ?? "";
@@ -47,6 +53,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
     enabled: open,
   });
   const devices = devicesQuery.data?.data ?? [];
+
+  // Rol seçenekleri = kat katalogu + PRIMARY. Yeni bir kat tanımlandığı an o
+  // kata metre atanabilir olmalı; aksi halde katalog büyür, donanım büyümez.
+  const { values: foldValues } = useFoldValues();
+  const roleOptions: string[] = [...foldValues.map((v) => v.code), ...STATIC_ROLE_OPTIONS];
 
   // MAKİNESİZ istasyonlar (SHIPPING gibi) — istasyona-sabit donanım yalnız bunlara
   // bağlanabilir (backend enforce; liste baştan filtreli sunulur).
@@ -235,13 +246,13 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   <FormField label="Satır Sonu" hint="boş → CR/LF">
                     <Input className="font-mono" {...form.register("terminator")} placeholder={"\\r\\n"} />
                   </FormField>
-                  <FormField label="Rol" hint="Tambur: 2/4-KAT · tek metre: PRIMARY">
+                  <FormField label="Rol" hint="Tambur: kat kodu · tek metre: PRIMARY">
                     <select className={SELECT_CLS} {...form.register("role")}>
                       <option value="">— (yok)</option>
-                      {ROLE_OPTIONS.map((r) => (
+                      {roleOptions.map((r) => (
                         <option key={r} value={r}>{r}</option>
                       ))}
-                      {roleVal && !ROLE_OPTIONS.includes(roleVal as (typeof ROLE_OPTIONS)[number]) && (
+                      {roleVal && !roleOptions.includes(roleVal) && (
                         <option value={roleVal}>{roleVal} (özel)</option>
                       )}
                     </select>

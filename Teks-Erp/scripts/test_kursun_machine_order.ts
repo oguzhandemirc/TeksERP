@@ -200,8 +200,11 @@ async function main(): Promise<void> {
   );
 
   const kursunStationId = await makeStation("KURSUN", StationKind.PROCESS_QC);
+  // ⚠️ mode AUTO ZORUNLU (2026-08-10): bypass rejiminde tablet salt-okunur,
+  // işaretleyecek operatör yok → `assign` OPTIONAL satırı reddeder. Şema
+  // varsayılanı OPTIONAL olduğu için fixture bunu AÇIKÇA yazar.
   await prisma.stationProperty.create({
-    data: { stationId: kursunStationId, propertyId: kursunProperty.id },
+    data: { stationId: kursunStationId, propertyId: kursunProperty.id , mode: "AUTO" },
   });
   const tamburStationId = await makeStation("TAMBUR", StationKind.TAMBUR);
   const machineA = await makeMachine(kursunStationId, "A");

@@ -47,6 +47,55 @@ async function nextPropertyCode(): Promise<string> {
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
+/** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */
+export interface PropertyValueInput {
+  code: string;
+  name: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+/**
+ * Gövdeden `values`'ı ayıklar. `undefined` = alan gönderilmedi (dokunma).
+ *
+ * ⚠️ İstemci sözleşmesi DÜZ NESNE dizisidir, ham Prisma nested write DEĞİL —
+ * `stationIds` ile aynı gerekçe (F209 seddi: generic CRUD üzerinden ilişki
+ * manipülasyonu kapalı). Çeviriyi servis yapar.
+ */
+function extractValues(data: Record<string, unknown>): PropertyValueInput[] | undefined {
+  if (!("values" in data)) return undefined;
+  const raw = data.values;
+  delete data.values;
+  if (!Array.isArray(raw)) {
+    throw AppError.badRequest("values bir değer listesi olmalı");
+  }
+  return raw.map((v, i) => {
+    if (!v || typeof v !== "object") {
+      throw AppError.badRequest(`${i + 1}. değer satırı geçersiz`);
+    }
+    const row = v as Record<string, unknown>;
+    const code = typeof row.code === "string" ? row.code.trim().toUpperCase() : "";
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    if (!code) throw AppError.badRequest(`${i + 1}. değerin kodu boş olamaz`);
+    if (!name) throw AppError.badRequest(`'${code}' değerinin adı boş olamaz`);
+    // ⚠️ ASCII ZORUNLU. Kod `Roll.foldType` gibi kolonlara aynen yazılıyor ve
+    // API'den serbest metin de gelebiliyor; "TÜP" kodu, ASCII yazan her
+    // istemciyi ("TUP") sessizce reddettirir. Görünen ad Türkçe kalabilir.
+    if (!/^[\x20-\x7E]+$/.test(code)) {
+      throw AppError.badRequest(
+        `'${code}' kodunda Türkçe/ASCII-dışı karakter var. Kod kimliktir ve İngilizce ` +
+          `harflerle yazılmalı (örn. TUP); Türkçe yazım GÖRÜNEN AD alanına yazılır (Tüp).`,
+      );
+    }
+    return {
+      code,
+      name,
+      sortOrder: typeof row.sortOrder === "number" ? row.sortOrder : (i + 1) * 10,
+      isActive: row.isActive === undefined ? true : Boolean(row.isActive),
+    };
+  });
+}
+
 /**
  * Gövdeden `stationIds`'i ayıklar (tekrarları eler) ve payload'dan siler.
  * `undefined` = alan hiç gönderilmedi (update'te "dokunma" demek).
@@ -97,6 +146,61 @@ async function assertStationsCanApplyProperty(stationIds: string[]): Promise<voi
   }
 }
 
+/**
+ * SEÇİM tipli özellik en az bir AKTİF değer taşımalı. Değersiz bir SEÇİM
+ * özelliği, `stationIds`siz doğan özelliğin ikizidir: tanımlı ama seçilemez —
+ * Tambur ekranında hiç tuş çıkmaz ve sebebi hiçbir yerde yazmaz.
+ */
+function assertChoiceHasValues(
+  valueType: string,
+  values: PropertyValueInput[] | undefined,
+  existingActiveCount: number,
+): void {
+  if (valueType !== "CHOICE") return;
+  const incomingActive = values?.filter((v) => v.isActive).length;
+  const effective = incomingActive === undefined ? existingActiveCount : incomingActive;
+  if (effective === 0) {
+    throw AppError.badRequest(
+      "Seçim tipli özellik en az bir AKTİF değer taşımalı — değersiz bir seçim listesi " +
+        "hiçbir ekranda seçilemez.",
+    );
+  }
+}
+
+/**
+ * Değer listesini replace eder — ama HİÇBİR SATIRI FİZİKSEL SİLMEZ.
+ * Listede olmayan kod PASİFLEŞTİRİLİR (kök CLAUDE.md "sadece soft delete").
+ *
+ * ⚠️ Sert silme, o kodu taşıyan GEÇMİŞ kayıtları (`Roll.foldType = "TUP"`)
+ * anlamsız bırakırdı: kolonda metin durur, karşılığı katalogda yoktur ve
+ * `resolveFoldTypeForWrite` o kaydın düzenlenmesini reddetmeye başlar.
+ * Kodu tekrar listeye eklemek satırı yeniden aktifleştirir.
+ */
+async function replaceValuesTx(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  propertyId: string,
+  values: PropertyValueInput[],
+): Promise<void> {
+  const keep = values.map((v) => v.code);
+  await tx.fabricPropertyValue.updateMany({
+    where: { propertyId, code: { notIn: keep } },
+    data: { isActive: false },
+  });
+  for (const v of values) {
+    await tx.fabricPropertyValue.upsert({
+      where: { propertyId_code: { propertyId, code: v.code } },
+      create: {
+        propertyId,
+        code: v.code,
+        name: v.name,
+        sortOrder: v.sortOrder ?? 0,
+        isActive: v.isActive ?? true,
+      },
+      update: { name: v.name, sortOrder: v.sortOrder ?? 0, isActive: v.isActive ?? true },
+    });
+  }
+}
+
 export class FabricPropertyService extends BaseService {
   /**
    * Özellik kodu backend-authoritative: her zaman `OZL+GGAAYY+NNNN` günlük sıralı
@@ -112,15 +216,35 @@ export class FabricPropertyService extends BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     const stationIds = extractStationIds(data);
+    const values = extractValues(data);
     if (stationIds === undefined) {
       throw AppError.badRequest(
         "Özelliği uygulayacak istasyon(lar) belirtilmeli (stationIds)",
       );
     }
     await assertStationsCanApplyProperty(stationIds);
+
+    const valueType = typeof data.valueType === "string" ? data.valueType : "FLAG";
+    if (valueType === "FLAG" && values && values.length > 0) {
+      throw AppError.badRequest(
+        "Bayrak tipli özellik değer listesi taşıyamaz — değer listesi için tipi 'Seçim' yapın.",
+      );
+    }
+    assertChoiceHasValues(valueType, values, 0);
+
     // nestedCreateFields → performInsert bunu `{ create: [...] }`'a çevirir, yani
-    // özellik ve istasyon bağları TEK insert'te doğar.
+    // özellik, istasyon bağları ve (varsa) değerleri TEK insert'te doğar. Değerler
+    // de nested: `stationIds`siz özellik gibi, DEĞERSİZ bir seçim özelliği de ara
+    // durumda doğmasın.
     data.stationCapabilities = stationIds.map((stationId) => ({ stationId }));
+    if (values && values.length > 0) {
+      data.values = values.map((v) => ({
+        code: v.code,
+        name: v.name,
+        sortOrder: v.sortOrder ?? 0,
+        isActive: v.isActive ?? true,
+      }));
+    }
 
     return withBarcodeRetry(async () => {
       data.code = await nextPropertyCode();
@@ -132,6 +256,9 @@ export class FabricPropertyService extends BaseService {
    * `stationIds` gönderilirse istasyon bağlarını replace eder (yine en az bir
    * istasyon şart — kayıt sonradan da bağsız bırakılamaz). Gönderilmezse bağlara
    * DOKUNULMAZ; özelliğin adı/rengi düzenlenirken bağlar sessizce silinmesin.
+   *
+   * `values` için aynı sözleşme: gönderilmezse dokunulmaz, gönderilirse replace
+   * (listede olmayan kod PASİFLEŞİR, silinmez — bkz. `replaceValuesTx`).
    */
   async update(
     id: string,
@@ -139,9 +266,26 @@ export class FabricPropertyService extends BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     const stationIds = extractStationIds(data);
-    if (stationIds === undefined) return super.update(id, data, userId);
+    const values = extractValues(data);
+    if (stationIds === undefined && values === undefined) {
+      return super.update(id, data, userId);
+    }
 
-    await assertStationsCanApplyProperty(stationIds);
+    if (stationIds !== undefined) await assertStationsCanApplyProperty(stationIds);
+
+    // Etkin tip: gövde tipi değiştiriyorsa o, değilse mevcut kayıttaki.
+    const current = await prisma.fabricProperty.findUnique({
+      where: { id },
+      select: { valueType: true, _count: { select: { values: { where: { isActive: true } } } } },
+    });
+    if (!current) throw AppError.notFound("Özellik bulunamadı");
+    const valueType = typeof data.valueType === "string" ? data.valueType : current.valueType;
+    if (valueType === "FLAG" && values && values.length > 0) {
+      throw AppError.badRequest(
+        "Bayrak tipli özellik değer listesi taşıyamaz — değer listesi için tipi 'Seçim' yapın.",
+      );
+    }
+    assertChoiceHasValues(valueType, values, current._count.values);
 
     // SIRA ÖNEMLİ: önce skaler update (ad-mükerrer gibi asıl red sebepleri orada),
     // sonra bağ replace. Ters sırada, ad çakışmasına takılan bir düzenleme bağları
@@ -150,16 +294,19 @@ export class FabricPropertyService extends BaseService {
     const updated = await super.update(id, data, userId);
 
     await prisma.$transaction(async (tx) => {
-      // Hedef-set-tabanlı replace (station-capability.setCapabilities ile aynı
-      // desen): bayat diff yerine `notIn` sil + createMany(skipDuplicates), böylece
-      // eşzamanlı iki yazım birbirinin sonucunu ezmez.
-      await tx.stationProperty.deleteMany({
-        where: { propertyId: id, stationId: { notIn: stationIds } },
-      });
-      await tx.stationProperty.createMany({
-        data: stationIds.map((stationId) => ({ stationId, propertyId: id })),
-        skipDuplicates: true,
-      });
+      if (stationIds !== undefined) {
+        // Hedef-set-tabanlı replace (station-capability.setCapabilities ile aynı
+        // desen): bayat diff yerine `notIn` sil + createMany(skipDuplicates), böylece
+        // eşzamanlı iki yazım birbirinin sonucunu ezmez.
+        await tx.stationProperty.deleteMany({
+          where: { propertyId: id, stationId: { notIn: stationIds } },
+        });
+        await tx.stationProperty.createMany({
+          data: stationIds.map((stationId) => ({ stationId, propertyId: id })),
+          skipDuplicates: true,
+        });
+      }
+      if (values !== undefined) await replaceValuesTx(tx, id, values);
     });
 
     return updated;

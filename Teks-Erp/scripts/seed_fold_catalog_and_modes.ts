@@ -27,6 +27,7 @@
 // ⚠️ CANLI VERİ KURALI (kök CLAUDE.md): DRY-RUN varsayılan; `--apply` öncesi
 // etkilenecek HER kayıt somut olarak listelenir. İdempotent — tekrar koşulabilir.
 // =============================================================================
+import type { StationPropertyMode } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
 
@@ -50,7 +51,7 @@ const FOLD_VALUES = [
  * Mevcut istasyon-özellik satırlarının hedef modu. Anahtar `<istasyonKodu>/<özellikKodu>`.
  * Listede OLMAYAN satıra DOKUNULMAZ (şema varsayılanı OPTIONAL'da kalır).
  */
-const MODE_PLAN: Record<string, "AUTO" | "OPTIONAL" | "REQUIRED"> = {
+const MODE_PLAN: Record<string, StationPropertyMode> = {
   // Bugün gerçekten otomatik uygulanan TEK satır (kursun-qc + kursunFinish +
   // bypass kapanışı `copyStationCapabilitiesToRoll` ile yazıyor).
   "KURSUN_KK2/KURSUN": "AUTO",
@@ -109,7 +110,7 @@ async function main(): Promise<void> {
     orderBy: [{ station: { code: "asc" } }, { property: { code: "asc" } }],
   });
 
-  const modeUpdates: { id: string; label: string; from: string; to: string }[] = [];
+  const modeUpdates: { id: string; label: string; from: string; to: StationPropertyMode }[] = [];
   for (const c of caps) {
     const key = `${c.station.code}/${c.property.code}`;
     const target = MODE_PLAN[key];

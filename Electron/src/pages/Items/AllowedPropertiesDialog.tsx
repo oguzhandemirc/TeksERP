@@ -27,7 +27,10 @@ interface Props {
   onChange: (next: string[]) => void;
 }
 
-const PROPS_QUERY_KEY = ["fabric-properties", "all-active"] as const;
+// ⚠️ "all-active" DEĞİL: bu liste SEÇİM tiplileri süzüyor ve o anahtarı
+// CapabilitiesEditSheet ham liste için kullanıyor (istasyona KAT bağlanabilmeli).
+// Aynı anahtarı paylaşmak, hangi ekran önce açıldıysa diğerine yanlış liste verirdi.
+const PROPS_QUERY_KEY = ["fabric-properties", "targetable"] as const;
 
 export function AllowedPropertiesDialog({
   open,
@@ -46,7 +49,7 @@ export function AllowedPropertiesDialog({
         pageSize: 200,
         sortBy: "sortOrder",
         sortOrder: "asc",
-        filters: { isActive: "true" },
+        filters: { isActive: "true" , valueType: "FLAG" },
       }),
     staleTime: 60_000,
     enabled: open,

@@ -81,7 +81,10 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   targetWeight: null,
   plannedStartDate: "",
   plannedEndDate: "",
-  // Kat tipi her iş emrinde belirli olmalı (kumaş 2 veya 4 kat sarılır). Yeni
-  // kayıtta varsayılan 2-KAT; operatör değiştirebilir ama boş bırakamaz.
-  foldType: "2-KAT",
+  // Kat tipi her iş emrinde belirli olmalı. ⚠️ Varsayılan BOŞ — eskiden burada
+  // "2-KAT" sabiti vardı ve kat kataloğa taşındıktan sonra (2026-08-10) bu,
+  // katalogunda 2-KAT OLMAYAN bir fabrikada geçersiz bir ön-seçim demekti
+  // (kullanıcı hiç dokunmadan kaydeder, backend katalog doğrulamasıyla 400).
+  // Ön-seçim artık formda, katalogun İLK değeriyle yapılır.
+  foldType: "",
 };

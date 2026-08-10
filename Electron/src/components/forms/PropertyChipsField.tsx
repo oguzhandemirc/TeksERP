@@ -51,14 +51,14 @@ export function PropertyChipsField({
   );
 
   const propsQ = useQuery({
-    queryKey: ["fabric-properties", "all"],
+    queryKey: ["fabric-properties", "targetable"], // SEÇİM tipliler süzülü — RouteEditor "all" anahtarını ham liste için kullanıyor, aynı anahtarı paylaşmak ona eksik liste servis ederdi
     queryFn: () =>
       fabricPropertyService.getAll({
         page: 1,
         pageSize: 200,
         sortBy: "sortOrder",
         sortOrder: "asc",
-        filters: { isActive: "true" },
+        filters: { isActive: "true" , valueType: "FLAG" },
       }),
     staleTime: 60_000,
   });

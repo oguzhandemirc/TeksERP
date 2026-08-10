@@ -20,6 +20,7 @@ import { SwatchesPanel } from "@/pages/Operations/Rolls/SwatchesPanel";
 import { SwatchDetailSheet } from "@/pages/Operations/Rolls/SwatchDetailSheet";
 import { swatchService, type Swatch } from "@/pages/Operations/Rolls/swatchService";
 import type { Roll } from "@/pages/Operations/Rolls/types";
+import { useFoldValues } from "@/hooks/useFoldValues";
 import { KartelaDetailSheet, type KartelaSelection } from "./KartelaDetailSheet";
 import { DispatchesTab, ReceiptsTab } from "./KartelaTabs";
 
@@ -89,7 +90,16 @@ export function KartelaPage() {
   // "Kartelada Toplar" tablosu — Sütunlar/Görünümler/Fire araçlarını sekme
   // şeridiyle AYNI satırda göstermek için tablo örneği burada (üst chrome'da)
   // kurulur; diğer sekmelerde `enabled: false` ile fetch atılmaz.
-  const rollFilterDefs = useMemo(() => buildRollFilterDefs("KARTELA_SENT"), []);
+  // Kat seçenekleri katalogdan; boşsa filtre hiç çizilmez (buildRollFilterDefs).
+  const { values: foldValues } = useFoldValues();
+  const rollFilterDefs = useMemo(
+    () =>
+      buildRollFilterDefs(
+        "KARTELA_SENT",
+        foldValues.map((v) => ({ value: v.code, label: v.name })),
+      ),
+    [foldValues],
+  );
   const rollForceFilters = useMemo(() => buildRollForceFilters("KARTELA_SENT"), []);
   const rollsTable = useDataTable<Roll>({
     queryKey: "rolls:KARTELA_SENT",

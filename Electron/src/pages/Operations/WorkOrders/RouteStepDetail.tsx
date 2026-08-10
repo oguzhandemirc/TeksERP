@@ -18,6 +18,7 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
+import { isTargetableProperty } from "@/pages/StationCapabilities/types";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 export interface RouteTargetBinding {
@@ -100,8 +101,12 @@ export function RouteStepDetail({
   // yetenek listesi hiç doldurulmamış bir istasyon, sistemin öyle tasarlandığı
   // sanılarak geçiliyordu. Zımpara (Fason) tam bu durumdaydı.
   const appliesNothing = !cap || (!appliesColor && !cap.canApplyProperty);
+  // SEÇİM tipli özellikler (KAT) hedef listesinde GÖRÜNMEZ — kendi alanında
+  // seçilir. Boş-liste kontrolü SÜZÜLMÜŞ küme üzerinden (RouteStepTargets ile
+  // aynı gerekçe: ham liste "boş değil" derken hiç chip çizilmezdi).
+  const targetableProps = (cap?.properties ?? []).filter(isTargetableProperty);
   const propertyListEmpty = Boolean(
-    cap && !appliesNothing && cap.canApplyProperty && cap.properties.length === 0,
+    cap && !appliesNothing && cap.canApplyProperty && targetableProps.length === 0,
   );
 
   return (
@@ -235,7 +240,7 @@ export function RouteStepDetail({
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1">
-                    {cap!.properties.map((p) => {
+                    {targetableProps.map((p) => {
                       const on = selectedProps.has(p.id);
                       const locked = lockedSet.has(p.id);
                       return (

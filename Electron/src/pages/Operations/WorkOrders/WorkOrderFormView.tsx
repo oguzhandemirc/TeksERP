@@ -41,6 +41,7 @@ import type { ProductRecipe } from "@/pages/ProductRecipes/types";
 import { useTargetQuantityEnabled, usePartyCodeAuto } from "@/hooks/usePricingEnabled";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
+import { useFoldValues } from "@/hooks/useFoldValues";
 import { useDesignerSteps } from "./useDesignerSteps";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
@@ -193,6 +194,23 @@ export function WorkOrderFormView({
   // Rota Tambur içeriyor mu — "Kat Tipi" seçeneği yalnız Tambur'lu rotalarda görünür
   // ve zorunlu olur (kat tipi Tambur operatörüne yönelik bir üretim spec'idir).
   const hasTambur = routeSteps.some((s) => s.stationKind === "TAMBUR");
+
+  // Kat seçenekleri KATALOGDAN (2026-08-10) — eskiden ["2-KAT","4-KAT"] literaldi
+  // ve fabrika 6-KAT ekleyemiyordu. Sorgu yalnız Tambur'lu rotada anlamlı ama
+  // koşulsuz koşar: hook'u koşullu çağırmak React kuralını bozar, maliyet ise
+  // 60 sn cache'li tek küçük istek.
+  const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
+
+  // Ön-seçim: yeni iş emrinde katalogun İLK değeri seçili gelsin (eski davranış
+  // "2-KAT sabit ön-seçili" idi). Katalogdan okunduğu için 2-KAT'ı olmayan bir
+  // fabrikada da geçerli bir değer seçilir. Kullanıcı bir kez dokunduysa
+  // (`value` dolu) ya da düzenleme modundaysak KARIŞMAZ.
+  useEffect(() => {
+    const first = foldValues[0];
+    if (isEdit || !hasTambur || !first) return;
+    if (form.getValues("foldType")) return;
+    form.setValue("foldType", first.code);
+  }, [isEdit, hasTambur, foldValues, form]);
 
   // Mount + workOrder kimliği değişince formu tohumla. (Tam sayfa: her gezinme
   // taze mount → modal `open` bayrağına ihtiyaç yok.)
@@ -779,24 +797,45 @@ export function WorkOrderFormView({
                     control={form.control}
                     name="foldType"
                     render={({ field }) => (
-                      <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
-                        {(["2-KAT", "4-KAT"] as const).map((opt) => {
-                          const active = field.value === opt;
-                          return (
-                            <Button
-                              key={opt}
-                              type="button"
-                              variant={active ? "default" : "outline"}
-                              disabled={Boolean(locks?.foldType)}
-                              title={
-                                locks?.foldType ? locks.reasons.foldType : undefined
-                              }
-                              onClick={() => field.onChange(opt)}
-                            >
-                              {opt}
-                            </Button>
-                          );
-                        })}
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap gap-2 sm:max-w-md">
+                          {foldValues.map((opt) => {
+                            const active = field.value === opt.code;
+                            return (
+                              <Button
+                                key={opt.code}
+                                type="button"
+                                variant={active ? "default" : "outline"}
+                                disabled={Boolean(locks?.foldType)}
+                                title={
+                                  locks?.foldType ? locks.reasons.foldType : undefined
+                                }
+                                onClick={() => field.onChange(opt.code)}
+                              >
+                                {opt.name}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        {/* Katalog boşsa SESSİZ KALMA: tuş yokluğu "kat gerekmiyor"
+                            gibi okunur, oysa alan zorunlu ve kaydet düşer. */}
+                        {foldNotConfigured && (
+                          <p className="text-xs text-warning">
+                            Kat değeri tanımlı değil — Tanımlar → Kumaş Özellikleri →
+                            "KAT" özelliğine değer ekleyin.
+                          </p>
+                        )}
+                        {/* Kayıtlı ama katalogdan kaldırılmış değer: tuşu yok, ama
+                            kaydın taşıdığı değer görünmeli (aksi halde form boş
+                            görünür ve kullanıcı farkında olmadan üzerine yazar). */}
+                        {field.value &&
+                          !foldValues.some((v) => v.code === field.value) && (
+                            <p className="text-xs text-muted-foreground">
+                              Kayıtlı değer:{" "}
+                              <span className="font-mono">{field.value}</span> (katalogda
+                              aktif değil)
+                            </p>
+                          )}
                       </div>
                     )}
                   />

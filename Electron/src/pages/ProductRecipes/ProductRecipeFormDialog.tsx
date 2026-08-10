@@ -18,6 +18,7 @@ import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { TargetItemPicker } from "@/pages/Operations/WorkOrders/TargetItemPicker";
 import { RouteEditor } from "@/pages/Operations/WorkOrders/RouteEditor";
+import { useFoldValues } from "@/hooks/useFoldValues";
 import { useDesignerSteps } from "@/pages/Operations/WorkOrders/useDesignerSteps";
 import {
   routeStepsToCreatePayload,
@@ -62,6 +63,7 @@ export function ProductRecipeFormDialog({
 }: Props) {
   const isEdit = Boolean(initial);
   const qc = useQueryClient();
+  const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   const form = useForm<RecipeFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(recipeFormSchema as any) as unknown as Resolver<RecipeFormValues>,
@@ -260,20 +262,29 @@ export function ProductRecipeFormDialog({
                 control={form.control}
                 name="foldType"
                 render={({ field }) => (
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["2-KAT", "4-KAT"] as const).map((opt) => {
-                      const active = field.value === opt;
-                      return (
-                        <Button
-                          key={opt}
-                          type="button"
-                          variant={active ? "default" : "outline"}
-                          onClick={() => field.onChange(active ? "" : opt)}
-                        >
-                          {opt}
-                        </Button>
-                      );
-                    })}
+                  <div className="space-y-1.5">
+                    {/* Seçenekler KATALOGDAN (2026-08-10) — sabit iki tuş, fabrikanın
+                        panelden eklediği 6-KAT'ı sessizce yok sayardı. */}
+                    <div className="flex flex-wrap gap-2">
+                      {foldValues.map((opt) => {
+                        const active = field.value === opt.code;
+                        return (
+                          <Button
+                            key={opt.code}
+                            type="button"
+                            variant={active ? "default" : "outline"}
+                            onClick={() => field.onChange(active ? "" : opt.code)}
+                          >
+                            {opt.name}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    {foldNotConfigured && (
+                      <p className="text-xs text-muted-foreground">
+                        Kat değeri tanımlı değil (Tanımlar → Kumaş Özellikleri → KAT).
+                      </p>
+                    )}
                   </div>
                 )}
               />

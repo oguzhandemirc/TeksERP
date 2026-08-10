@@ -1,6 +1,10 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { StationCapabilityDetail, StationCapabilitySummary } from "./types";
+import type {
+  StationCapabilityDetail,
+  StationCapabilitySummary,
+  StationPropertyMode,
+} from "./types";
 
 export const stationCapabilityService = {
   list: (): Promise<ApiResponse<StationCapabilitySummary[]>> =>
@@ -18,14 +22,17 @@ export const stationCapabilityService = {
    * GÖNDERİLMEZ — renk artık istasyon bazlı kısıt değil ve backend alanı
    * opsiyonel karşılar; boş dizi göndermek istasyonun geçmiş renk atamalarını
    * silerdi.
+   *
+   * 2026-08-10: her satır bir MOD taşır (AUTO/OPTIONAL/REQUIRED). Mod
+   * gönderilmezse backend mevcut satırın modunu KORUR, yeni satır OPTIONAL doğar.
    */
   setCapabilities: (
     stationId: string,
-    propertyIds: string[],
+    properties: { propertyId: string; mode?: StationPropertyMode }[],
   ): Promise<ApiResponse<StationCapabilityDetail>> =>
     apiClient
       .put<ApiResponse<StationCapabilityDetail>>(`/api/station-capabilities/${stationId}`, {
-        propertyIds,
+        properties,
       })
       .then((r) => r.data),
 };

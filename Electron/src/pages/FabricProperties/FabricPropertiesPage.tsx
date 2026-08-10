@@ -37,6 +37,21 @@ export function FabricPropertiesPage() {
     // update'te replace). `Partial<FabricProperty>` şeklinde bir alan değil —
     // bilinçli olarak payload'a ek olarak taşınıyor.
     stationIds: v.stationIds,
+    valueType: v.valueType,
+    // `values` de `stationIds` gibi DÜZ bir liste olarak gider; backend onu
+    // FabricPropertyValue satırlarına çevirir (ham nested write YASAK — F209).
+    // BAYRAK tipte HİÇ GÖNDERİLMEZ: boş dizi göndermek, tipi Seçim'den Bayrak'a
+    // çeviren bir düzenlemede mevcut değerleri sessizce pasifleştirirdi.
+    ...(v.valueType === "CHOICE"
+      ? {
+          values: v.values.map((x, i) => ({
+            code: x.code.trim().toUpperCase(),
+            name: x.name.trim(),
+            sortOrder: (i + 1) * 10,
+            isActive: x.isActive,
+          })),
+        }
+      : {}),
     isActive: v.isActive,
   } as Partial<FabricProperty> & { stationIds: string[] });
 

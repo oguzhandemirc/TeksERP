@@ -17,7 +17,16 @@ import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
+import { useFoldValues } from "@/hooks/useFoldValues";
 import type { Roll } from "./types";
+
+/** Kat filtresinin yer tutucusu — seçenekleri `buildRollFilterDefs` doldurur. */
+const FOLD_FILTER_PLACEHOLDER: FilterDef = {
+  kind: "multi-select",
+  key: "foldType",
+  label: "Kat",
+  options: [],
+};
 
 const FILTERS: FilterDef[] = [
   {
@@ -52,17 +61,11 @@ const FILTERS: FilterDef[] = [
   },
   { kind: "numberRange", key: "width", label: "En", unit: "cm" },
   { kind: "numberRange", key: "qty", label: "Boy", unit: "mt" },
-  // KAT — backend değeri KANONİKLEŞTİRİLMİŞ tutuyor ("4-KAT"); serbest metin
-  // göndermek sessizce 0 sonuç verirdi, o yüzden seçenekli filtre.
-  {
-    kind: "multi-select",
-    key: "foldType",
-    label: "Kat",
-    options: [
-      { value: "2-KAT", label: "2 Kat" },
-      { value: "4-KAT", label: "4 Kat" },
-    ],
-  },
+  // KAT — seçenekler KATALOGDAN enjekte edilir (aşağıdaki `buildRollFilterDefs`).
+  // Sabit liste, panelden eklenen 6-KAT'ı filtrede GÖRÜNMEZ yapardı ve backend
+  // değeri kanonik tuttuğu için serbest metin de sessizce 0 sonuç verirdi.
+  // Buradaki `options` yer tutucudur; boşsa filtre HİÇ ÇİZİLMEZ.
+  FOLD_FILTER_PLACEHOLDER,
   // GİRİŞ KAYNAĞI (2026-08-04): "elle eklenen toplar" tek filtreyle çıksın.
   // Zincir-dışı doğan topları (Tambur manuel / Electron manuel) saymak ve
   // sebeplerine bakmak için — manuel giriş bir semptomdur, ölçülmeden
@@ -139,10 +142,23 @@ const FASON_FILTERS: FilterDef[] = [
 ];
 
 // Serbest/rezerve filtresi yalnız depo (Bitmiş Depo); fason filtreleri yalnız Fasonda.
-export function buildRollFilterDefs(tab: RollStatusTabKey): FilterDef[] {
-  if (tab === "FINISHED_STOCK") return [...FILTERS, SHIPMENT_SCOPE_FILTER];
-  if (tab === "SUBCONTRACTOR") return [...FILTERS, ...FASON_FILTERS];
-  return FILTERS;
+//
+// `foldOptions` katalogdan gelir (`useFoldValues`). BOŞ ise kat filtresi listeden
+// DÜŞÜRÜLÜR: seçeneksiz bir çoklu-seçim kutusu, kullanıcıya tıklayıp hiçbir şey
+// bulamayacağı ölü bir kontrol vaat eder.
+export function buildRollFilterDefs(
+  tab: RollStatusTabKey,
+  foldOptions: { value: string; label: string }[] = [],
+): FilterDef[] {
+  // `kind` ile daralt: FilterDef bir union ve `dateRange` varyantında `key` YOK
+  // (düz `f.key` derlenmez).
+  const base = FILTERS.flatMap<FilterDef>((f) => {
+    if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
+    return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
+  });
+  if (tab === "FINISHED_STOCK") return [...base, SHIPMENT_SCOPE_FILTER];
+  if (tab === "SUBCONTRACTOR") return [...base, ...FASON_FILTERS];
+  return base;
 }
 
 interface Props {
@@ -174,7 +190,11 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
 
-  const filters = useMemo(() => buildRollFilterDefs(tab), [tab]);
+  const { values: foldValues } = useFoldValues();
+  const filters = useMemo(
+    () => buildRollFilterDefs(tab, foldValues.map((v) => ({ value: v.code, label: v.name }))),
+    [tab, foldValues],
+  );
 
   // Toplu iptal — Ham Stok + Bitmiş Depo'da sunulur (STOCK/WAREHOUSE→CANCELLED,
   // yanlış giriş düzeltmesi). Backend softDelete WAREHOUSE'a izin verir; rezerve

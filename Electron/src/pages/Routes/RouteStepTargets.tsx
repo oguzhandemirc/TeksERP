@@ -7,6 +7,7 @@ import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerMod
 import { QuickAddProperty } from "@/components/forms/QuickAddProperty";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
+import { isTargetableProperty } from "@/pages/StationCapabilities/types";
 
 interface Props {
   stationId: string;
@@ -73,7 +74,12 @@ export function RouteStepTargets({
     );
   }
 
-  const propertyListEmpty = appliesProperty && cap.properties.length === 0;
+  // SEÇİM tipli özellikler (KAT) hedef listesinde GÖRÜNMEZ — kendi alanında
+  // seçilir. Boş-liste kontrolü de SÜZÜLMÜŞ küme üzerinden yapılır; ham liste
+  // kullanılsaydı yalnız KAT taşıyan bir istasyonda "liste boş değil" denip
+  // hiç chip çizilmeyen sessiz bir boşluk kalırdı.
+  const targetableProps = cap.properties.filter(isTargetableProperty);
+  const propertyListEmpty = appliesProperty && targetableProps.length === 0;
 
   return (
     <div className="space-y-2 rounded-md border border-dashed bg-muted/20 p-2">
@@ -105,7 +111,7 @@ export function RouteStepTargets({
             </div>
           ) : (
             <div className="flex flex-wrap gap-1">
-              {cap.properties.map((p) => {
+              {targetableProps.map((p) => {
                 const on = selected.has(p.id);
                 return (
                   <Badge
