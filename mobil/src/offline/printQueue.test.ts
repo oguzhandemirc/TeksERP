@@ -14,11 +14,14 @@
 import {
   classifyPrintRetry,
   prunePrintJobs,
+  pruneVerifies,
   usePrintQueue,
   PRINT_AUTO_RETRY_MAX,
   PRINT_JOB_TTL_MS,
   PRINT_QUEUE_MAX,
+  VERIFY_MAX,
   type PrintJob,
+  type VerifyItem,
 } from './printQueue';
 import type { Roll } from '../types/models';
 
@@ -34,7 +37,7 @@ const job = (id: string, extra?: Partial<PrintJob>): PrintJob => ({
 });
 
 beforeEach(() => {
-  usePrintQueue.setState({ jobs: [], activeId: null, hydrated: true });
+  usePrintQueue.setState({ jobs: [], verifies: [], activeId: null, hydrated: true });
 });
 
 describe('printQueue — kuyruk davranışı', () => {
@@ -159,6 +162,49 @@ describe('printQueue — otomatik yeniden deneme (ağ dönüşü)', () => {
       .getState()
       .resolveActive({ ok: false, cancelled: false, error: 'BT' });
     expect(res2.wasAuto).toBe(false);
+  });
+});
+
+describe('printQueue — scan-back (etiket geri-okutma)', () => {
+  it('resolveActive(ok) printedRoll döner; İPTAL borç doğurmaz (printedRoll null)', () => {
+    usePrintQueue.setState({ jobs: [job('a')], activeId: 'a' });
+    const ok = usePrintQueue.getState().resolveActive({ ok: true, cancelled: false });
+    expect(ok.printedRoll?.id).toBe('a');
+    usePrintQueue.setState({ jobs: [job('b')], activeId: 'b' });
+    const cancel = usePrintQueue.getState().resolveActive({ ok: false, cancelled: true });
+    expect(cancel.printedRoll).toBeNull();
+  });
+
+  it('addVerify: rollId ile dedup; BARKODSUZ top borç doğurmaz', () => {
+    const s = usePrintQueue.getState();
+    s.addVerify(roll('a'));
+    s.addVerify(roll('a')); // yeniden basım — ikinci borç yok
+    s.addVerify({ id: 'x', barcode: null } as unknown as Roll); // açık kumaş
+    expect(usePrintQueue.getState().verifies).toHaveLength(1);
+  });
+
+  it('confirmVerify: doğru kod borcu düşürür, yanlış kod dokunmaz', () => {
+    usePrintQueue.getState().addVerify(roll('a')); // barcode T-a
+    expect(usePrintQueue.getState().confirmVerify('YANLIS-KOD')).toBe('unknown');
+    expect(usePrintQueue.getState().verifies).toHaveLength(1);
+    expect(usePrintQueue.getState().confirmVerify('  T-a  ')).toBe('ok'); // trim
+    expect(usePrintQueue.getState().verifies).toHaveLength(0);
+  });
+
+  it(`pruneVerifies: TTL + tavan (${VERIFY_MAX})`, () => {
+    const now = Date.now();
+    const v = (id: string, printedAt: number): VerifyItem => ({
+      rollId: id,
+      barcode: `T-${id}`,
+      printedAt,
+    });
+    const out = pruneVerifies(
+      [v('old', now - PRINT_JOB_TTL_MS - 1), v('new', now)],
+      now,
+    );
+    expect(out.map((x) => x.rollId)).toEqual(['new']);
+    const many = Array.from({ length: VERIFY_MAX + 3 }, (_, i) => v(`v${i}`, now - (VERIFY_MAX + 3 - i)));
+    expect(pruneVerifies(many, now)).toHaveLength(VERIFY_MAX);
   });
 });
 

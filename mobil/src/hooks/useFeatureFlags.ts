@@ -39,6 +39,12 @@ export function useKk1OnlineOnlyEnabled(): boolean {
   return useFeatureFlags().data?.kk1OnlineOnlyEnabled ?? false;
 }
 
+/** KK1 etiket geri-okutma doğrulaması (scan-back) açık mı? Default false —
+ *  kapalıyken ekranda hiçbir doğrulama öğesi görünmez. */
+export function useKk1LabelScanVerifyEnabled(): boolean {
+  return useFeatureFlags().data?.kk1LabelScanVerifyEnabled ?? false;
+}
+
 /** İade kabulünde personel kaliteyi değiştirebilir mi? Default false (gizli). */
 export function useReturnGradingEnabled(): boolean {
   return useFeatureFlags().data?.returnGradingEnabled ?? false;

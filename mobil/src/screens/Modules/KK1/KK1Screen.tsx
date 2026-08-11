@@ -65,7 +65,9 @@ import {
   useRawWidthEnabled,
   useKk1WeightEntryEnabled,
   useKk1OnlineOnlyEnabled,
+  useKk1LabelScanVerifyEnabled,
 } from '../../../hooks/useFeatureFlags';
+import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
@@ -334,6 +336,11 @@ export default function KK1Screen() {
   // Gerekçe: kesintide kuyruğa giren kayıtların etiketi sonradan basılamayınca
   // operatör aynı topu YENİDEN giriyordu (07.08 vakası — 4 top ikizlendi).
   const onlineOnly = useKk1OnlineOnlyEnabled();
+  // SCAN-BACK (print & verify, bayrak varsayılan KAPALI — kapalıyken ekranda
+  // HİÇBİR iz yok): basılan etiket GERİ OKUTULMADAN yeni top girilemez.
+  // "Etiket çıktı" sinyali yazılımdan alınamaz (BT yazıcı onay döndürmez) —
+  // tek güvenilir kanıt kâğıttaki barkodun tarayıcıdan geçmesidir.
+  const scanVerifyEnabled = useKk1LabelScanVerifyEnabled();
   // Otomatik metraj okuması için bu makineye atanmış METER cihaz(lar)ı (HAL).
   // Tablet hangi makineye atanmışsa onun cihazları gelir (backend for-device).
   const meterPeripherals = useMachinePeripherals('METER');
@@ -425,6 +432,11 @@ export default function KK1Screen() {
   const printJobs = usePrintQueue((s) => s.jobs);
   const printActiveId = usePrintQueue((s) => s.activeId);
   const printHydrated = usePrintQueue((s) => s.hydrated);
+  // Scan-back bekleyenleri — bayrak KAPALIYKEN liste boş kalır (addVerify hiç
+  // çağrılmaz) ve `verifyPending` false olduğu için ekranda tek öğe çizilmez.
+  const verifies = usePrintQueue((s) => s.verifies);
+  const verifyPending = scanVerifyEnabled && verifies.length > 0;
+  const [verifyScanOpen, setVerifyScanOpen] = useState(false);
   const activePrintRoll =
     printJobs.find((j) => j.roll.id === printActiveId)?.roll ?? null;
   const printQueue = printJobs
@@ -479,6 +491,11 @@ export default function KK1Screen() {
   const handlePrintResult = useCallback(
     (r: { ok: boolean; cancelled: boolean; retryable?: boolean; error?: string }) => {
       const res = usePrintQueue.getState().resolveActive(r);
+      // SCAN-BACK: gerçek baskı başarısı okutma borcu doğurur (yalnız bayrak
+      // açıkken — kapalıyken addVerify hiç çağrılmaz, liste hep boş).
+      if (res.printedRoll && scanVerifyEnabled) {
+        usePrintQueue.getState().addVerify(res.printedRoll);
+      }
       // ONLINE-ONLY: baskı hatası köşede çip olarak bekleyemez — kuyruk
       // görünümü KENDİLİĞİNDEN açılır ve operatör "Tekrar Dene / çıkar"
       // kararını vermeden geçemez. İSTİSNA: OTOMATİK yeniden denemenin düşüşü
@@ -486,8 +503,25 @@ export default function KK1Screen() {
       // zaten kırmızı). Kuyruklu rejimde davranış eskisi gibi: çip/bant yanar.
       if (res.failed && onlineOnly && !res.wasAuto) setQueueOpen(true);
     },
-    [onlineOnly],
+    [onlineOnly, scanVerifyEnabled],
   );
+  // Scan-back okutması: kod listedeki bir etiketle eşleşirse borç düşer.
+  const handleVerifyScan = useCallback((code: string) => {
+    const result = usePrintQueue.getState().confirmVerify(code);
+    if (result === 'ok') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Toast.show({ type: 'success', text1: 'Etiket doğrulandı ✓', text2: code.trim() });
+      // Son borç da kapandıysa tarayıcıyı kapat — operatör forma dönsün.
+      if (usePrintQueue.getState().verifies.length === 0) setVerifyScanOpen(false);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Toast.show({
+        type: 'error',
+        text1: 'Bu kod okutulacaklar listesinde yok',
+        text2: `${code.trim()} — çıkan kâğıttaki barkodu okutun`,
+      });
+    }
+  }, []);
   const retryFailedPrint = useCallback((roll: Roll) => {
     usePrintQueue.getState().retryJob(roll.id);
   }, []);
@@ -1133,6 +1167,19 @@ export default function KK1Screen() {
       });
       return;
     }
+    // SCAN-BACK KAPISI: okutulmamış etiket varken yeni top girilemez — buton
+    // görünürde basılabilir kalır (disabled buton "dondu" hissi verir) ama
+    // basış doğrudan TARAYICIYI açar: en hızlı uyum yolu engelin kendisidir.
+    if (verifyPending) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      Toast.show({
+        type: 'info',
+        text1: 'Önce etiketi okut',
+        text2: `${verifies.length} basılı etiket doğrulama bekliyor — çıkan kâğıdı okutun`,
+      });
+      setVerifyScanOpen(true);
+      return;
+    }
     // TEKRAR DENE: düşen deneme birebir yeniden gönderilir — form okunmaz,
     // makineye gidilmez, doğrulama tekrarlanmaz (payload zaten geçerliydi).
     // Aynı token + aynı içerik → backend idempotent yolu → kopya doğmaz.
@@ -1725,6 +1772,40 @@ export default function KK1Screen() {
             compact && footerAnimStyle,
           ]}
         >
+          {/* SCAN-BACK BANDI (yalnız bayrak açıkken): basılan etiket geri
+              okutulmadan yeni top girilemez. İndigo = "sıradaki adım" (kırmızı
+              hata, amber durum bandlarından bilinçli ayrı kutup). Dokununca
+              tarayıcı açılır; Kaydet butonu da aynı yere yönlendirir. */}
+          {verifyPending && (
+            <TouchableRipple
+              borderless
+              onPress={() => setVerifyScanOpen(true)}
+              rippleColor="rgba(79,70,229,0.15)"
+              style={styles.verifyBanner}
+            >
+              <View style={styles.verifyBannerInner}>
+                <Icon source="barcode-scan" size={18} color="#4338ca" />
+                <Text style={styles.verifyText}>
+                  Çıkan etiketi OKUT ({verifies.length}):{' '}
+                  {verifies
+                    .slice(0, 2)
+                    .map((v) => v.barcode)
+                    .join(', ')}
+                  {verifies.length > 2 ? '…' : ''}
+                </Text>
+                <Button
+                  mode="contained"
+                  compact
+                  buttonColor="#4338ca"
+                  textColor="#fff"
+                  onPress={() => setVerifyScanOpen(true)}
+                  labelStyle={styles.labelFailBtnLabel}
+                >
+                  Okut
+                </Button>
+              </View>
+            </TouchableRipple>
+          )}
           {/* ETİKET ÇIKMADI BANDI (her iki rejimde): köşedeki çip yeterince
               görünür değildi — operatör etiketi çıkmayan topu sistemde yok
               sanıp YENİDEN giriyordu (07.08 vakası). Bant operatörün baktığı
@@ -1794,15 +1875,17 @@ export default function KK1Screen() {
           >
             {onlineOnly && !isOnline
               ? 'Çevrimdışı — kayıt kapalı'
-              : pulling
-                ? 'Makineden okunuyor…'
-                : justSaved
-                  ? 'Kaydedildi ✓'
-                  : sending
-                    ? 'Kaydediliyor… bekle'
-                    : retrying
-                      ? 'Tekrar Dene (aynı top)'
-                      : 'Kaydet ve Etiket Bas'}
+              : verifyPending
+                ? 'Önce Etiketi OKUT'
+                : pulling
+                  ? 'Makineden okunuyor…'
+                  : justSaved
+                    ? 'Kaydedildi ✓'
+                    : sending
+                      ? 'Kaydediliyor… bekle'
+                      : retrying
+                        ? 'Tekrar Dene (aynı top)'
+                        : 'Kaydet ve Etiket Bas'}
           </Button>
         </Animated.View>
         </View>
@@ -1902,6 +1985,19 @@ export default function KK1Screen() {
       />
 
       {/* ── Yazıcı kuyruğu görünümü (çipe dokununca): basılıyor / sırada / başarısız ── */}
+      {/* ── Scan-back tarayıcısı (yalnız bayrak açıkken açılabilir): basılan
+            etiketin kâğıdını geri okut → borç düşer. continuous: birden fazla
+            bekleyen varsa modal açık kalır, hepsi peş peşe okutulur.
+            captureHaptic kapalı — kabul/ret titreşimini handleVerifyScan verir. */}
+      <BarcodeScannerModal
+        visible={verifyScanOpen}
+        onDismiss={() => setVerifyScanOpen(false)}
+        onScan={handleVerifyScan}
+        title="Etiket Doğrulama — çıkan kâğıdı okut"
+        notice={`Okutulacak ${verifies.length} etiket`}
+        continuous
+        captureHaptic={false}
+      />
       <PrintQueueModal
         visible={queueOpen}
         onDismiss={() => setQueueOpen(false)}
@@ -3094,6 +3190,30 @@ const styles = StyleSheet.create({
   labelFailBtnLabel: {
     fontSize: 13,
     fontWeight: '800',
+  },
+  // Scan-back bandı — İNDİGO ("sıradaki adım"): kırmızı (hata) ve amber (durum)
+  // bandlarından üçüncü, ayrı kutup. Operatör renkten işi ayırt eder.
+  verifyBanner: {
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  verifyBannerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e0e7ff',
+    borderWidth: 1,
+    borderColor: '#4f46e5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  verifyText: {
+    flex: 1,
+    color: '#312e81',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   // Telefon: footer AKIŞTAN ÇIKAR — formCol'un altında YÜZER (absolute), arka
   // plan/çizgi YOK (sadece buton, gri şerit yok). İçerik full-height kayar,

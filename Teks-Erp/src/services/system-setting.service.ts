@@ -77,6 +77,13 @@ export const SETTING_KEYS = {
    *  eski APK bayrağı görmez ve kuyruklu davranışa devam eder (zarar yok, ama
    *  karışıklık da kapanmaz). */
   KK1_ONLINE_ONLY_ENABLED: "kk1.onlineOnlyEnabled",
+  /** KK1'de ETİKET GERİ-OKUTMA doğrulaması (scan-back / print&verify). Default
+   *  FALSE — kapalıyken ekranda hiçbir iz yok. Açıkken basılan her etiket için
+   *  "okut" doğrulaması istenir ve okutulmadan yeni top girilemez: "etiket
+   *  çıktı mı" sorusunu yazılım değil tarayıcı cevaplar (BT yazıcı baskı onayı
+   *  DÖNDÜRMEZ — yazılımın "bastım"ı kâğıdın çıktığını kanıtlamaz). Client
+   *  (mobil) ENFORCE. Sahada takarsa geri dönüş bu anahtardır. */
+  KK1_LABEL_SCAN_VERIFY_ENABLED: "kk1.labelScanVerifyEnabled",
   /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
    *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
   RETURN_GRADING_ENABLED: "return.gradingEnabled",
@@ -752,6 +759,9 @@ export interface FeatureFlags {
    *  Client (mobil) ENFORCE — açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket
    *  tek nefeste yürür. */
   kk1OnlineOnlyEnabled: boolean;
+  /** KK1 etiket geri-okutma doğrulaması (default false). Client (mobil) ENFORCE —
+   *  açıkken basılan etiket okutulmadan yeni top girilemez. */
+  kk1LabelScanVerifyEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma `weighSack`'te 400).
    *  Demo/eğitim kurulumu açar — çuval kg'si irsaliyeye/çeki listesine basılır. */
@@ -1048,6 +1058,7 @@ export class SystemSettingService {
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
       kk1DuplicateGuardEnabled: await readKk1DuplicateGuardEnabled(cacheClient),
       kk1OnlineOnlyEnabled: await readKk1OnlineOnlyEnabled(cacheClient),
+      kk1LabelScanVerifyEnabled: await readKk1LabelScanVerifyEnabled(cacheClient),
       shippingSimulatedWeightEnabled: await readSimulatedWeightEnabled(cacheClient),
       returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
       kartelaMeasurementEnabled: await readKartelaMeasurementEnabled(cacheClient),
@@ -1172,6 +1183,18 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_ONLINE_ONLY_ENABLED,
         input.kk1OnlineOnlyEnabled,
         "Ham giriş çevrimdışı kuyruksuz (online-only) rejim",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kk1LabelScanVerifyEnabled")) {
+      if (typeof input.kk1LabelScanVerifyEnabled !== "boolean") {
+        throw AppError.badRequest("kk1LabelScanVerifyEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_LABEL_SCAN_VERIFY_ENABLED,
+        input.kk1LabelScanVerifyEnabled,
+        "Ham girişte etiket geri-okutma doğrulaması (scan-back)",
         userId
       );
     }
@@ -1907,6 +1930,26 @@ export async function readKk1OnlineOnlyEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.KK1_ONLINE_ONLY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KK1 etiket geri-okutma doğrulaması (scan-back) açık mı? Default false.
+ *
+ * Print & verify: "etiket çıktı" sinyali yazılımdan alınamaz (BT yazıcı baskı
+ * onayı döndürmez) — tek güvenilir kanıt basılan barkodun GERİ OKUTULMASIDIR.
+ * Açıkken mobil KK1, basılan her etiket için okutma ister ve okutulmadan yeni
+ * top girişine izin vermez. ENFORCE istemcidedir; bu okuma yalnız
+ * feature-flags yanıtını besler.
+ */
+export async function readKk1LabelScanVerifyEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_LABEL_SCAN_VERIFY_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

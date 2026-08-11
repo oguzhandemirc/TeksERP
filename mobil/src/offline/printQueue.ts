@@ -62,8 +62,25 @@ export interface PrintResult {
   error?: string;
 }
 
+/** SCAN-BACK (print & verify) bekleyeni — basıldı, henüz GERİ OKUTULMADI.
+ *  Yalnız `kk1.labelScanVerifyEnabled` bayrağı açıkken doğar (ekleyen KK1);
+ *  bayrak kapalıyken liste hep boştur ve ekranda hiçbir iz yoktur. */
+export interface VerifyItem {
+  rollId: string;
+  barcode: string;
+  /** Bant/liste satırında görünen ad (opsiyonel). */
+  itemName?: string;
+  printedAt: number;
+}
+
+/** Doğrulama listesi tavanı — kuyruktan küçük: okutulmamış 20 etiket zaten
+ *  operasyonel bir sorunun işaretidir, listeyi büyütmek çözüm değil. */
+export const VERIFY_MAX = 20;
+
 interface PrintQueueState {
   jobs: PrintJob[];
+  /** Scan-back bekleyenleri — persist edilir (restart okutma borcunu silmesin). */
+  verifies: VerifyItem[];
   /** Şu an LabelPrinter'a verilen işin roll.id'si — RAM'de, persist edilmez. */
   activeId: string | null;
   hydrated: boolean;
@@ -74,8 +91,19 @@ interface PrintQueueState {
   /** Pompa: aktif iş yokken ilk bekleyeni aktif yapar (KK1 effect'i çağırır). */
   startNext: () => void;
   /** Aktif işin sonucu: ok/iptal → iş düşer; hata → başarısız işaretlenir.
-   *  Dönüş, ekranın "modal açayım mı" kararı için: {failed, wasAuto}. */
-  resolveActive: (r: PrintResult) => { failed: boolean; wasAuto: boolean };
+   *  Dönüş ekran kararları için: {failed, wasAuto, printedRoll} — `printedRoll`
+   *  yalnız GERÇEK başarıda dolu (iptalde değil); scan-back bayrağı açıksa
+   *  ekran onu `addVerify`e verir (store bayrağı bilmez, karar ekranın). */
+  resolveActive: (r: PrintResult) => {
+    failed: boolean;
+    wasAuto: boolean;
+    printedRoll: Roll | null;
+  };
+  /** Scan-back: basılan top okutma listesine girer (rollId ile dedup;
+   *  barkodsuz top eklenmez — okutulacak kod yok). */
+  addVerify: (roll: Roll) => void;
+  /** Okutulan kodu listeyle eşle: 'ok' → satır düşer; 'unknown' → listede yok. */
+  confirmVerify: (code: string) => 'ok' | 'unknown';
   /** onDone güvenlik ağı — onResult ÇAĞRILMAYAN yol (barkodsuz top erken
    *  dönüşü) aktif işi askıda bırakmasın. onResult işini yaptıysa no-op. */
   finishActive: (rollId: string) => void;
@@ -89,9 +117,11 @@ interface PrintQueueState {
   requeueRetryable: () => number;
 }
 
-function persist(jobs: PrintJob[]): void {
+function persist(jobs: PrintJob[], verifies: VerifyItem[]): void {
   // Fire-and-forget — baskı akışını disk yazımı geciktirmesin (failedOps emsali).
-  void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(jobs)).catch(() => {});
+  void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ jobs, verifies })).catch(
+    () => {},
+  );
 }
 
 export function prunePrintJobs(jobs: PrintJob[], now = Date.now()): PrintJob[] {
@@ -99,8 +129,14 @@ export function prunePrintJobs(jobs: PrintJob[], now = Date.now()): PrintJob[] {
   return jobs.filter((j) => j.queuedAt >= cutoff).slice(-PRINT_QUEUE_MAX);
 }
 
+export function pruneVerifies(items: VerifyItem[], now = Date.now()): VerifyItem[] {
+  const cutoff = now - PRINT_JOB_TTL_MS;
+  return items.filter((v) => v.printedAt >= cutoff).slice(-VERIFY_MAX);
+}
+
 export const usePrintQueue = create<PrintQueueState>((set, get) => ({
   jobs: [],
+  verifies: [],
   activeId: null,
   hydrated: false,
 
@@ -108,21 +144,37 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
     if (get().hydrated) return;
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      const parsed: unknown = raw ? JSON.parse(raw) : [];
-      // Bozuk/eski JSON uygulamayı ÇÖKERTMEZ — kuyruk boş açılır.
-      const jobs = Array.isArray(parsed)
-        ? prunePrintJobs(
-            parsed
-              .filter(
-                (j): j is PrintJob =>
-                  !!j && typeof (j as PrintJob).roll?.id === 'string',
-              )
-              .map((j) => ({ ...j, autoRetries: j.autoRetries ?? 0, lastAuto: false })),
-          )
+      const parsed: unknown = raw ? JSON.parse(raw) : {};
+      // Bozuk/eski JSON uygulamayı ÇÖKERTMEZ — kuyruk boş açılır. Eski biçim
+      // (düz dizi = yalnız jobs) de kabul edilir.
+      const rawJobs = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray((parsed as { jobs?: unknown }).jobs)
+          ? ((parsed as { jobs: unknown[] }).jobs)
+          : [];
+      const rawVerifies = !Array.isArray(parsed)
+        ? Array.isArray((parsed as { verifies?: unknown }).verifies)
+          ? ((parsed as { verifies: unknown[] }).verifies)
+          : []
         : [];
-      set({ jobs, hydrated: true });
+      const jobs = prunePrintJobs(
+        rawJobs
+          .filter(
+            (j): j is PrintJob => !!j && typeof (j as PrintJob).roll?.id === 'string',
+          )
+          .map((j) => ({ ...j, autoRetries: j.autoRetries ?? 0, lastAuto: false })),
+      );
+      const verifies = pruneVerifies(
+        rawVerifies.filter(
+          (v): v is VerifyItem =>
+            !!v &&
+            typeof (v as VerifyItem).rollId === 'string' &&
+            typeof (v as VerifyItem).barcode === 'string',
+        ),
+      );
+      set({ jobs, verifies, hydrated: true });
     } catch {
-      set({ jobs: [], hydrated: true });
+      set({ jobs: [], verifies: [], hydrated: true });
     }
   },
 
@@ -145,7 +197,7 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
       ]);
     }
     set({ jobs: next });
-    persist(next);
+    persist(next, get().verifies);
   },
 
   startNext: () => {
@@ -158,14 +210,16 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
   resolveActive: (r) => {
     const { jobs, activeId } = get();
     const job = jobs.find((j) => j.roll.id === activeId);
-    if (!job) return { failed: false, wasAuto: false };
+    if (!job) return { failed: false, wasAuto: false, printedRoll: null };
     if (r.ok || r.cancelled) {
       // İptal de işi DÜŞÜRÜR (bugünkü davranış): operatör diyaloğu bilerek
       // kapattı — başarısız sayıp bantta "çıkmadı" demek yanlış alarm olur.
       const next = jobs.filter((j) => j.roll.id !== job.roll.id);
       set({ jobs: next, activeId: null });
-      persist(next);
-      return { failed: false, wasAuto: false };
+      persist(next, get().verifies);
+      // `printedRoll` yalnız GERÇEK baskıda döner — iptal edilen iş scan-back
+      // borcu doğurmaz (kâğıt çıkmadı, okutulacak şey yok).
+      return { failed: false, wasAuto: false, printedRoll: r.ok ? job.roll : null };
     }
     const wasAuto = job.lastAuto;
     const next = jobs.map((j) =>
@@ -179,8 +233,37 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
         : j,
     );
     set({ jobs: next, activeId: null });
-    persist(next);
-    return { failed: true, wasAuto };
+    persist(next, get().verifies);
+    return { failed: true, wasAuto, printedRoll: null };
+  },
+
+  addVerify: (roll) => {
+    if (!roll.barcode) return; // okutulacak kod yok (açık kumaş) — borç doğmaz
+    const { jobs, verifies } = get();
+    if (verifies.some((v) => v.rollId === roll.id)) return; // dedup (yeniden basım)
+    const next = pruneVerifies([
+      ...verifies,
+      {
+        rollId: roll.id,
+        barcode: roll.barcode,
+        itemName: roll.item?.name,
+        printedAt: Date.now(),
+      },
+    ]);
+    set({ verifies: next });
+    persist(jobs, next);
+  },
+
+  confirmVerify: (code) => {
+    const norm = code.trim();
+    if (!norm) return 'unknown';
+    const { jobs, verifies } = get();
+    const hit = verifies.find((v) => v.barcode === norm);
+    if (!hit) return 'unknown';
+    const next = verifies.filter((v) => v.rollId !== hit.rollId);
+    set({ verifies: next });
+    persist(jobs, next);
+    return 'ok';
   },
 
   finishActive: (rollId) => {
@@ -188,7 +271,7 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
     if (activeId !== rollId) return; // onResult zaten çözdü
     const next = jobs.filter((j) => j.roll.id !== rollId);
     set({ jobs: next, activeId: null });
-    persist(next);
+    persist(next, get().verifies);
   },
 
   retryJob: (rollId) => {
@@ -199,7 +282,7 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
         : j,
     );
     set({ jobs: next });
-    persist(next);
+    persist(next, get().verifies);
   },
 
   retryAllFailed: () => {
@@ -210,7 +293,7 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
         : j,
     );
     set({ jobs: next });
-    persist(next);
+    persist(next, get().verifies);
   },
 
   removeJob: (rollId) => {
@@ -218,7 +301,7 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
     if (activeId === rollId) return; // basılmakta olan çıkarılamaz (modal da listelemez)
     const next = jobs.filter((j) => j.roll.id !== rollId);
     set({ jobs: next });
-    persist(next);
+    persist(next, get().verifies);
   },
 
   requeueRetryable: () => {
@@ -237,7 +320,7 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
     });
     if (count > 0) {
       set({ jobs: next });
-      persist(next);
+      persist(next, get().verifies);
     }
     return count;
   },

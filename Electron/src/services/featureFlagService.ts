@@ -208,6 +208,9 @@ export interface FeatureFlags {
   /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi — default false;
    *  mobil ENFORCE eder (açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket tek nefeste). */
   kk1OnlineOnlyEnabled: boolean;
+  /** KK1 etiket geri-okutma doğrulaması (scan-back) — default false; mobil ENFORCE
+   *  eder (açıkken basılan etiket okutulmadan yeni top girilemez). */
+  kk1LabelScanVerifyEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi — default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma 400). Yalnız demo/eğitim. */
   shippingSimulatedWeightEnabled: boolean;

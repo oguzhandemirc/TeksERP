@@ -29,6 +29,10 @@ export interface FeatureFlags {
    *  kayıt asla offline kuyruğa düşmez — kayıt+etiket tek nefeste yürür.
    *  ENFORCE bu istemcidedir (kuyruk istemci kavramı). */
   kk1OnlineOnlyEnabled: boolean;
+  /** KK1 etiket geri-okutma doğrulaması (scan-back, default false). Açıkken
+   *  basılan her etiket için okutma istenir ve okutulmadan yeni top girilemez.
+   *  ENFORCE bu istemcidedir; kapalıyken ekranda hiçbir iz yok. */
+  kk1LabelScanVerifyEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (default false).
    *  Backend ENFORCE eder — kapalıyken SIMULATED beyanlı tartı 400 döner. Elle
    *  giriş (MANUAL) muaftır. Yalnız demo/eğitim kurulumu açar. */
@@ -87,6 +91,9 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // Varsayılan KAPALI (kuyruklu davranış) — fail-toward-queue: bayrak
   // yüklenemezse yanlış yönde kilitlemektense kayıt almak tercih edilir.
   kk1OnlineOnlyEnabled: false,
+  // Varsayılan KAPALI — bayrak yüklenemezken okutma zorunluluğu dayatılmaz
+  // (fail-open: doğrulama ek güvencedir, yokluğu akışı durdurmamalı).
+  kk1LabelScanVerifyEnabled: false,
   shippingSimulatedWeightEnabled: false,
   returnGradingEnabled: false,
   kartelaMeasurementEnabled: false,

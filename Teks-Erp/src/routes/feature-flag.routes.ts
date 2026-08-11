@@ -108,6 +108,11 @@ export const updateSchema = z.strictObject({
   // nefeste. ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — rejim sahada
   // sorun çıkarırsa (kesintiler girişleri fazla durduruyorsa) tek geri dönüş yolu.
   kk1OnlineOnlyEnabled: z.boolean().optional(),
+  // kk1.labelScanVerifyEnabled — ham girişte etiket geri-okutma doğrulaması
+  // (scan-back / print&verify, default FALSE). Client (mobil) ENFORCE: açıkken
+  // basılan etiket okutulmadan yeni top girilemez. ⚠️ ACİL KAPATMA anahtarı —
+  // doğrulama sahada akışı tıkarsa (kamera arızası vb.) tek geri dönüş yolu.
+  kk1LabelScanVerifyEnabled: z.boolean().optional(),
   // Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (false=default → backend
   // ENFORCE, 400). Yalnız demo/eğitim kurulumu açar; kg irsaliyeye/çekiye basılır.
   shippingSimulatedWeightEnabled: z.boolean().optional(),
