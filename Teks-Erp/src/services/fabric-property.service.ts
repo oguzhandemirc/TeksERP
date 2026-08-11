@@ -25,6 +25,7 @@ import { AppError } from "../utils/app-error";
 import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
+import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 
 /** Özellik kodu prefix'i — tek-tip kod formatı: `OZL + GGAAYY + NNNN`. */
 const PROPERTY_CODE_PREFIX = "OZL";
@@ -159,7 +160,10 @@ function assertChoiceHasValues(
   existingActiveCount: number,
 ): void {
   if (valueType !== "CHOICE") return;
-  const incomingActive = values?.filter((v) => v.isActive).length;
+  // `isActive` verilmemişse yazma yolu `?? true` ile AKTİF yazar — sayaç da aynı
+  // varsayımı yapmalı, yoksa isActive'siz gönderen istemci "0 aktif değer" diye
+  // sahte 400 yer (yazılacak satırlar gerçekte aktif olacakken).
+  const incomingActive = values?.filter((v) => v.isActive !== false).length;
   const effective = incomingActive === undefined ? existingActiveCount : incomingActive;
   if (effective === 0) {
     throw AppError.badRequest(
@@ -269,7 +273,11 @@ export class FabricPropertyService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const stationIds = extractStationIds(data);
     const values = extractValues(data);
-    if (stationIds === undefined && values === undefined) {
+    // ⚠️ ERKEN DÖNÜŞ `data.valueType` VARKEN KULLANILAMAZ (denetim F5). Eski
+    // hâli yalnız stationIds/values yokluğuna bakıyordu; `PATCH {valueType:
+    // "FLAG"}` o dala girip TÜM tip-geçiş guard'larını atlıyordu — KAT bayrağa
+    // çevrilip hedef seçicilere sızabilir, 0 değerli SEÇİM doğabilirdi.
+    if (stationIds === undefined && values === undefined && data.valueType === undefined) {
       return super.update(id, data, userId);
     }
 
@@ -278,10 +286,82 @@ export class FabricPropertyService extends BaseService {
     // Etkin tip: gövde tipi değiştiriyorsa o, değilse mevcut kayıttaki.
     const current = await prisma.fabricProperty.findUnique({
       where: { id },
-      select: { valueType: true, _count: { select: { values: { where: { isActive: true } } } } },
+      select: {
+        code: true,
+        name: true,
+        valueType: true,
+        _count: { select: { values: { where: { isActive: true } } } },
+      },
     });
     if (!current) throw AppError.notFound("Özellik bulunamadı");
     const valueType = typeof data.valueType === "string" ? data.valueType : current.valueType;
+    const typeChanging =
+      typeof data.valueType === "string" && data.valueType !== current.valueType;
+
+    if (typeChanging) {
+      // ── TİP GEÇİŞ KİLİTLERİ (2026-08-11, denetim F5 + SEK-3) ────────────────
+      // KAT'ın tipi HİÇ değiştirilemez: `fold-type.ts` ve üç istemcinin kat
+      // tuşları bu özelliğin CHOICE olmasına dayanıyor; FLAG'e çevirmek katalog
+      // doğrulamasını fail-open'a düşürür ve KAT'ı hedef seçicilere sokar.
+      if (current.code === FOLD_PROPERTY_CODE) {
+        throw AppError.badRequest(
+          `'${current.name}' (KAT) sistem karakteristiğidir — tipi değiştirilemez.`,
+        );
+      }
+      if (valueType === "FLAG") {
+        // CHOICE→FLAG: değer listesi ya da topa yazılmış değer varsa YASAK.
+        // Değer satırları silinmez (pasifleşir) → tip geri dönerse liste durur;
+        // bayrağa çevirmek o kayıtları "değeri olan bayrak" limbosuna atardı ve
+        // isTargetableProperty özelliği hedef seçicilere AÇARDI.
+        const [valueCount, usedCount] = await Promise.all([
+          prisma.fabricPropertyValue.count({ where: { propertyId: id } }),
+          prisma.rollProperty.count({ where: { propertyId: id, valueId: { not: null } } }),
+        ]);
+        if (valueCount > 0 || usedCount > 0) {
+          throw AppError.badRequest(
+            `'${current.name}' Seçim tipinden Bayrak'a çevrilemez: ` +
+              (usedCount > 0
+                ? `${usedCount} topta seçilmiş değeri var.`
+                : `değer listesi taşıyor (${valueCount} satır).`) +
+              " Yanlış tanımlandıysa özelliği pasifleştirip yenisini açın.",
+          );
+        }
+      } else {
+        // FLAG→CHOICE: (a) AUTO modlu istasyon bağı varsa yasak — CHOICE+AUTO
+        // yasağının yan kapısı (SEK-3): AUTO "sorulmaz" demek, seçim sorulmadan
+        // yazılamaz. (b) Hedef/planlama pivotlarında kullanılıyorsa yasak —
+        // hedef listeleri yalnız BAYRAK taşır; tip değişince o satırlar
+        // "hedefte duran seçim" tutarsızlığına dönüşürdü.
+        const autoRow = await prisma.stationProperty.findFirst({
+          where: { propertyId: id, mode: "AUTO" },
+          select: { station: { select: { name: true } } },
+        });
+        if (autoRow) {
+          throw AppError.badRequest(
+            `'${current.name}' özelliği '${autoRow.station.name}' istasyonunda Otomatik modda — ` +
+              `Seçim tipine çevirmeden önce o istasyonda modu Opsiyonel/Zorunlu yapın.`,
+          );
+        }
+        const [woT, lineT, routeT, itemT] = await Promise.all([
+          prisma.workOrderTargetProperty.count({ where: { propertyId: id } }),
+          prisma.orderLineRequiredProperty.count({ where: { propertyId: id } }),
+          prisma.routeStepProperty.count({ where: { propertyId: id } }),
+          prisma.itemAllowedProperty.count({ where: { propertyId: id } }),
+        ]);
+        const usage: string[] = [];
+        if (woT > 0) usage.push(`${woT} iş emri hedefi`);
+        if (lineT > 0) usage.push(`${lineT} sipariş kalemi`);
+        if (routeT > 0) usage.push(`${routeT} rota adımı`);
+        if (itemT > 0) usage.push(`${itemT} ürün izinli listesi`);
+        if (usage.length > 0) {
+          throw AppError.badRequest(
+            `'${current.name}' Bayrak'tan Seçim'e çevrilemez: hedef/planlama listelerinde ` +
+              `kullanılıyor (${usage.join(", ")}). Önce o bağları kaldırın.`,
+          );
+        }
+      }
+    }
+
     if (valueType === "FLAG" && values && values.length > 0) {
       throw AppError.badRequest(
         "Bayrak tipli özellik değer listesi taşıyamaz — değer listesi için tipi 'Seçim' yapın.",
