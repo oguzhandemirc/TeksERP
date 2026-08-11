@@ -11,6 +11,7 @@
 import prisma from "../lib/prisma";
 import { BaseService, type BaseServiceConfig } from "./base.service";
 import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capability.helper";
+import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 
@@ -56,7 +57,10 @@ export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
         plannedProperties: {
           select: {
             propertyId: true,
-            property: { select: { id: true, code: true, name: true } },
+            // valueType: istemciler "rotayı uygula" birleşiminde SEÇİM (CHOICE)
+            // tiplileri süzer (Q1) — hedef listesine CHOICE sızarsa WO create
+            // 400 verir; süzgü hatayı en erken noktada keser.
+            property: { select: { id: true, code: true, name: true, valueType: true } },
           },
         },
       },
@@ -269,6 +273,10 @@ export class RouteService extends BaseService {
       if (found.length !== ids.length) {
         throw AppError.badRequest("Rota adımında bulunmayan veya pasif özellik var");
       }
+      // SEÇİM tipli özellik rota şablonu hedefi olamaz (denetim Q2) — şablon
+      // uygulanınca WO hedef listesine kopyalanır ve oradaki guard'a çarpar;
+      // hatayı kaynağında (şablon kaydında) söylemek daha dürüst.
+      await assertTargetablePropertyIds(ids, "rota adımı hedef özelliği");
     }
 
     // İstasyon yeteneği — panel yalnız uygulanabilir olanları gösteriyor, ama

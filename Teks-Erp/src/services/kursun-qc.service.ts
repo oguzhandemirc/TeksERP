@@ -511,6 +511,25 @@ export class KursunQcService {
           selections: data.properties ?? [],
         },
       });
+    } else if (data.properties?.length) {
+      // Op zaten vardı ama operatör SEÇİM göndererek tekrar bastı — meşru
+      // düzeltme yolu: `copyStationCapabilitiesToRoll` upsert'i valueId'yi
+      // günceller (örn. gramaj 25GR → 50GR). Bu dalı sessiz bırakmak, topun
+      // özellik DEĞERİNİN kayıtsız değişmesi demekti (denetim F2). Aynı
+      // seçimlerin no-op replay'i de bu audit'i yazar — kabul edilen bedel:
+      // fazladan bir UPDATE satırı, kaybolan bir düzeltme izinden iyidir.
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ROLL_OPERATION",
+        recordId: op.id,
+        newData: {
+          rollId: data.rollId,
+          stepId: data.stepId,
+          type: RollOperationType.QC2_COMPLETED,
+          reappliedSelections: data.properties,
+        },
+      });
     }
 
     return { success: true, data: op, message: "Kalite Kontrol 2 tamamlandı" };

@@ -23,6 +23,7 @@ import {
 } from "./helpers/name-normalize.helper";
 import { nextDailySeq } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -167,6 +168,8 @@ export class ItemService extends BaseService {
       if (inactive) {
         throw AppError.badRequest(`'${inactive.name}' özelliği pasif`);
       }
+      // SEÇİM tipli özellik izinli-listeye giremez — update yolundaki guard ile aynı.
+      await assertTargetablePropertyIds(allowedPropertyIds, "ürün izinli özelliği");
     }
 
     // Otomatik kodda sequence okuma retry kapsamı İÇİNDE — P2002'de taze max
@@ -370,6 +373,10 @@ export class ItemService extends BaseService {
       if (inactiveProp) {
         throw AppError.badRequest(`'${inactiveProp.name}' özelliği pasif`);
       }
+      // SEÇİM tipli özellik ürün izinli-listesine giremez (denetim Q2): o liste
+      // hedef seçicilerin evrenidir ve SEÇİM oralara zaten çıkamaz — listede
+      // durması yalnız kafa karıştırır, allowed-parite kontrollerini bozar.
+      await assertTargetablePropertyIds(allowedPropertyIds, "ürün izinli özelliği");
     }
 
     const updated = await prisma.$transaction(async (tx) => {

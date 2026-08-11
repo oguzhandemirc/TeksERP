@@ -111,7 +111,8 @@ const relabelSchema = z.object({
 // mevcut currentQty'si (fason kabulden gelen irsaliye değeri) kullanılır.
 // Hata aralık değil nokta (endMeter kaldırıldı). Hatalar genelde "Hata Ekle"
 // (reportError) ile tek tek girilir; bu endpoint sadece roll'u ilerletir.
-const kursunFinishSchema = z.object({
+// Export: Zod katmanı bekçisi için (bkz. kursun-qc.controller.completeQc2Schema).
+export const kursunFinishSchema = z.object({
   totalMeters: z.number().positive("Toplam metraj pozitif olmalı").max(999_999, "Toplam metraj çok büyük").optional(),
   errors: z
     .array(

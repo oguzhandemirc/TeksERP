@@ -53,6 +53,7 @@ import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
+import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { CustomerAliasService } from "./customer-alias.service";
 import {
@@ -532,6 +533,10 @@ export class OrderService extends BaseService {
       if (live.length !== propertyIds.size) {
         throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif özellik var");
       }
+      // SEÇİM tipli özellik sipariş şartı olamaz (denetim Q2): "müşteri GRAMAJ
+      // istiyor" hangi gramaj olduğunu söylemez; iş emri kalıtımıyla hedef
+      // listeye ve oradan doğan toplara değersiz satır olarak yayılırdı.
+      await assertTargetablePropertyIds([...propertyIds], "sipariş kalemi özelliği");
     }
   }
 

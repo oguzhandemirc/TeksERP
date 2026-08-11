@@ -360,7 +360,13 @@ export class TamburService {
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
             properties: {
-              select: { property: { select: { id: true, name: true } } },
+              // value: Tambur FINAL KARAR noktasıdır — kurşunda seçilen GRAMAJ
+              // değeri kesim/kalite kararını veren operatörün gözü önünde olmalı
+              // (denetim VAL-03: ad basılıyordu, değer basılmıyordu).
+              select: {
+                property: { select: { id: true, name: true } },
+                value: { select: { code: true, name: true } },
+              },
             },
             errors: {
               where: { isProcessed: false },
@@ -392,6 +398,7 @@ export class TamburService {
         properties: m.roll.properties.map((p) => ({
           id: p.property.id,
           name: p.property.name,
+          value: p.value ?? null,
         })),
         errorCount: m.roll.errors.length,
         errors: m.roll.errors.map((e) => ({
@@ -1004,7 +1011,8 @@ export class TamburService {
       // kopyalanmış durumda; Tambur sadece propagate eder.)
       const parentProperties = await tx.rollProperty.findMany({
         where: { rollId: data.rollId },
-        select: { propertyId: true },
+        // valueId: miras DEĞER-FARKINDA (denetim F6) — GRAMAJ=50GR çocuğa geçer.
+        select: { propertyId: true, valueId: true },
       });
 
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
@@ -1066,6 +1074,7 @@ export class TamburService {
             data: parentProperties.map((p) => ({
               rollId: splitRoll.id,
               propertyId: p.propertyId,
+              valueId: p.valueId,
             })),
           });
         }
@@ -1978,7 +1987,7 @@ export class TamburService {
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
         // Çuval kodu — aşağıdaki çuval guard'ının mesajı için (operatör çuvalı bulmalı).
         sack: { select: { sackNo: true } },
       },
@@ -2038,7 +2047,13 @@ export class TamburService {
       data.qualityGrade && data.qualityGrade !== parent.qualityGrade
         ? await resolveQualityGradeIdStrict(data.qualityGrade)
         : parent.qualityGradeId;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
     // Barkod SUNUCU'da sıralı atanır (atomik sayaç). WAREHOUSE child → "F", raw→STOCK → "H".
     const childBarcode = await generateRollBarcode(prisma, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
@@ -2093,11 +2108,12 @@ export class TamburService {
         },
       });
 
-      if (propertyIds.length > 0) {
+      if (propertySnapshot.length > 0) {
         await tx.rollProperty.createMany({
-          data: propertyIds.map((propertyId) => ({
+          data: propertySnapshot.map((p) => ({
             rollId: child.id,
-            propertyId,
+            propertyId: p.propertyId,
+            valueId: p.valueId,
           })),
           skipDuplicates: true,
         });
@@ -2279,7 +2295,7 @@ export class TamburService {
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
         // Çuval kodu — aşağıdaki çuval guard'ının mesajı için.
         sack: { select: { sackNo: true } },
       },
@@ -2342,7 +2358,13 @@ export class TamburService {
         ? RollStatus.SCRAP
         : RollStatus.STOCK
       : RollStatus.WAREHOUSE;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
 
     // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
     // childQualityGrade nullable (ham parent + keep → parent.qualityGrade null olabilir).
@@ -2439,11 +2461,12 @@ export class TamburService {
             lastLabelSnapshot: { stock: true },
             },
         });
-        if (propertyIds.length > 0) {
+        if (propertySnapshot.length > 0) {
           await tx.rollProperty.createMany({
-            data: propertyIds.map((propertyId) => ({
+            data: propertySnapshot.map((p) => ({
               rollId: child.id,
-              propertyId,
+              propertyId: p.propertyId,
+              valueId: p.valueId,
             })),
             skipDuplicates: true,
           });
@@ -2608,7 +2631,7 @@ export class TamburService {
             workOrder: { select: { status: true, foldType: true } },
           },
         },
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
       },
     });
     if (!parent) throw AppError.notFound("Roll bulunamadı");
@@ -2658,7 +2681,13 @@ export class TamburService {
     const childStatus = RollStatus.WAREHOUSE;
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
     const childBarcode = await generateRollBarcode(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
@@ -2732,11 +2761,12 @@ export class TamburService {
         },
       });
 
-      if (propertyIds.length > 0) {
+      if (propertySnapshot.length > 0) {
         await tx.rollProperty.createMany({
-          data: propertyIds.map((propertyId) => ({
+          data: propertySnapshot.map((p) => ({
             rollId: child.id,
-            propertyId,
+            propertyId: p.propertyId,
+            valueId: p.valueId,
           })),
           skipDuplicates: true,
         });
@@ -2929,7 +2959,7 @@ export class TamburService {
             },
           },
         },
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
       },
     });
     if (!parent) throw AppError.notFound("Roll bulunamadı");
@@ -2989,7 +3019,13 @@ export class TamburService {
       action === "keep_1kalite" ? "1.KALITE" : action === "keep_a1" ? "A1" : "FIRE";
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
 
     // Planlanan foldType WO'dan — operatör override etmemişse bu kullanılır.
     // Override + planlanan ikisini de metadata'ya yaz ki sapma izlenebilsin.
@@ -3094,11 +3130,12 @@ export class TamburService {
             lastLabelSnapshot: { stock: true },
             },
         });
-        if (propertyIds.length > 0) {
+        if (propertySnapshot.length > 0) {
           await tx.rollProperty.createMany({
-            data: propertyIds.map((propertyId) => ({
+            data: propertySnapshot.map((p) => ({
               rollId: child.id,
-              propertyId,
+              propertyId: p.propertyId,
+              valueId: p.valueId,
             })),
             skipDuplicates: true,
           });

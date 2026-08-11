@@ -67,6 +67,7 @@ import {
   stepCanApplyColor,
   stepCanApplyProperty,
 } from "./helpers/step-capability.helper";
+import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 // Kurşun bypass (kurşun istasyonunda tablet YOK): WO yaşam döngüsü olayları açık
 // dağıtım atamalarını bayat bırakmasın. Guard helper hiçbir servise bağlı değil —
@@ -791,6 +792,10 @@ export class WorkOrderService {
         if (propRows.length !== targetPropertyIds.length) {
           throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
         }
+
+        // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty sunucu karşılığı
+        // (denetim Q2): değerini istasyonda operatör verir, hedef listesi taşımaz.
+        await assertTargetablePropertyIds(targetPropertyIds, "iş emri hedef özelliği");
 
         const allowedSet = new Set(
           (targetItemFull?.allowedProperties ?? []).map((p) => p.propertyId),
@@ -4731,6 +4736,10 @@ export class WorkOrderService {
         if (propRows.length !== targetPropertyIds.length) {
           throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
         }
+
+        // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty sunucu karşılığı
+        // (denetim Q2): değerini istasyonda operatör verir, hedef listesi taşımaz.
+        await assertTargetablePropertyIds(targetPropertyIds, "iş emri hedef özelliği");
         const allowedSet = new Set(
           (targetItemFull?.allowedProperties ?? []).map((p) => p.propertyId),
         );
@@ -5160,6 +5169,9 @@ export class WorkOrderService {
       if (propRows.length !== dedupedIds.length) {
         throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
       }
+      // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty'nin sunucu
+      // karşılığı (denetim Q2). Buradaki istemci aktif seçim yapıyor → 400 doğru.
+      await assertTargetablePropertyIds(dedupedIds, "iş emri hedef özelliği");
 
       const allowedSet = new Set(
         (wo.targetItem?.allowedProperties ?? []).map((p) => p.propertyId),
@@ -5196,14 +5208,24 @@ export class WorkOrderService {
       });
       const rollIds = affectedRolls.map((r) => r.id);
 
-      // 3) Roll.properties replace
+      // 3) Roll.properties replace — YALNIZ BAYRAK (FLAG) EVRENİ (2026-08-11,
+      //    denetim F4). "Roll.properties = WO hedeflerinin kopyası" varsayımı
+      //    istasyon-seçimli değer modeliyle bozuldu: SEÇİM satırlarını (GRAMAJ=
+      //    50GR) İSTASYON OPERATÖRÜ yazar, hedef listesi değil. Koşulsuz replace,
+      //    planlamacı WO hedeflerine her dokunduğunda o seçimi sessizce silerdi.
       if (rollIds.length > 0) {
-        await tx.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+        await tx.rollProperty.deleteMany({
+          where: { rollId: { in: rollIds }, property: { valueType: "FLAG" } },
+        });
         if (dedupedIds.length > 0) {
           const data = rollIds.flatMap((rollId) =>
             dedupedIds.map((propertyId) => ({ rollId, propertyId })),
           );
-          await tx.rollProperty.createMany({ data });
+          // skipDuplicates: CHOICE satırları artık hayatta kaldığı için
+          // @@unique([rollId, propertyId]) çakışması TEORİK olarak yalnız
+          // hedef listesi CHOICE içerseydi olurdu (yukarıda 400) — yine de
+          // idempotent yazım replace yarışlarına karşı daha dayanıklı.
+          await tx.rollProperty.createMany({ data, skipDuplicates: true });
         }
       }
 

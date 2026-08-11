@@ -1195,16 +1195,24 @@ export class TamburUndoService {
       if (parentPropCount === 0) {
         const donor = await tx.rollProperty.findMany({
           where: { rollId: { in: ids } },
-          select: { rollId: true, propertyId: true },
+          // valueId: geri kurulum DEĞER-FARKINDA (denetim F6) — çocuk kesimde
+          // GRAMAJ=50GR'ı miras aldıysa geri dönen ebeveyn de onu taşımalı.
+          select: { rollId: true, propertyId: true, valueId: true },
         });
         if (donor.length > 0) {
           const donorId = donor[0].rollId;
-          const propertyIds = [...new Set(donor.filter((d) => d.rollId === donorId).map((d) => d.propertyId))];
+          const donorRows = new Map(
+            donor.filter((d) => d.rollId === donorId).map((d) => [d.propertyId, d.valueId ?? null]),
+          );
           await tx.rollProperty.createMany({
-            data: propertyIds.map((propertyId) => ({ rollId: parentId, propertyId })),
+            data: [...donorRows].map(([propertyId, valueId]) => ({
+              rollId: parentId,
+              propertyId,
+              valueId,
+            })),
             skipDuplicates: true,
           });
-          propsRestored = propertyIds.length;
+          propsRestored = donorRows.size;
         }
       }
 

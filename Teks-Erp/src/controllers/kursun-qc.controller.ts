@@ -8,7 +8,10 @@ import { KursunQcService } from "../services/kursun-qc.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
-const completeQc2Schema = z.object({
+// Export: Zod katmanı bekçisi (`test_property_value_selection` §Zod) — şema
+// `properties`/`valueCode`yi sessizce ELERSE (2026-08-05 "kat iki uçta Zod'da
+// yoktu" vakasının ikizi) test kırmızı versin diye dışa açık.
+export const completeQc2Schema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   stepId: z.string().uuid("Geçersiz adım ID"),
   notes: z.string().max(500).nullish(),
