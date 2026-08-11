@@ -21,7 +21,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.teks.erp.mobil",
-      "versionCode": 34,
+      "versionCode": 35,
       "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.CAMERA",
