@@ -111,6 +111,7 @@ import { offlineReason } from '../../../offline/serverReachability';
 import { usePermissions } from '../../../hooks/usePermission';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { opIdFor, useFailedOps } from '../../../offline/failedOps';
+import { usePrintQueue } from '../../../offline/printQueue';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
   AnimatedEntrance,
@@ -384,7 +385,8 @@ export default function KK1Screen() {
   const [attempt, setAttempt] = useState<EntryAttemptState>(IDLE_ATTEMPT);
   // Mutation geri çağrıları `mutate()` ANINDAKİ closure'ı taşır; uçuş penceresi
   // 47 sn'ye kadar sürebildiği için o closure'daki `attempt` bayat olur. Okuma
-  // ref'ten (emsal: `activePrintRollRef`), yazma fonksiyonel `setAttempt` ile.
+  // ref'ten, yazma fonksiyonel `setAttempt` ile. (Baskı tarafındaki aynı sınıf
+  // sorun store'a taşınarak çözüldü — `usePrintQueue.resolveActive`.)
   const attemptRef = useRef<EntryAttemptState>(attempt);
   useEffect(() => {
     attemptRef.current = attempt;
@@ -413,78 +415,87 @@ export default function KK1Screen() {
   // Listede yeni beliren topu kısa süre vurgulamak için.
   const [flashRollId, setFlashRollId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  // Etiket basımı — sıralı kuyruk. activePrintRoll = şu an LabelPrinter'a verilen
-  // (null = boşta). printQueue = sırada bekleyenler. Offline'da N entry toplu
-  // sync olduğunda hepsi print edilebilsin diye queue mantığı; ayrıca manuel
-  // "Bas" tetikleri de aynı kuyruğa düşer.
-  const [activePrintRoll, setActivePrintRoll] = useState<Roll | null>(null);
-  const [printQueue, setPrintQueue] = useState<Roll[]>([]);
+  // Etiket basımı — KALICI sıralı kuyruk (`offline/printQueue.ts`: zustand +
+  // AsyncStorage). Eskiden ekran state'iydi ve uygulama kapanınca "Başarısız"
+  // listesi SİLİNİYORDU (07.08 vakası: kesintide biriken 4 etiketin izi kayboldu,
+  // operatör topları yeniden girdi → stokta hayalet toplar). Bekleyen + başarısız
+  // artık diskte yaşar; POMPA (aşağıdaki effect) yalnız bu ekran mount'ken
+  // çalışır — yazıcı çalışma oturumundan çözüldüğü için başka ekranda basmaya
+  // kalkmak for-session fail-closed sözleşmesini bozardı.
+  const printJobs = usePrintQueue((s) => s.jobs);
+  const printActiveId = usePrintQueue((s) => s.activeId);
+  const printHydrated = usePrintQueue((s) => s.hydrated);
+  const activePrintRoll =
+    printJobs.find((j) => j.roll.id === printActiveId)?.roll ?? null;
+  const printQueue = printJobs
+    .filter((j) => !j.error && j.roll.id !== printActiveId)
+    .map((j) => j.roll);
+  const failedPrints = printJobs
+    .filter((j) => j.error)
+    .map((j) => ({ roll: j.roll, error: j.error! }));
 
-  // activePrint null ve queue dolu ise → bir sonrakini başlat. Print finish'te
-  // activePrint = null olur, bu effect bir sonrakini alır. Sonsuz cycle yok
-  // (queue boşalırsa effect no-op).
-  // OFFLINE: LabelPrinter etiket HTML'ini backend'den çekiyor → offline basamaz.
-  // Bu yüzden offline'da kuyruğu İLERLETME; entry'ler birikir, ağ gelince
-  // (isOnline → true, effect tekrar çalışır) sırayla basılır.
+  // Diskten yükle (idempotent) — restart sonrası bekleyen/başarısız işler geri gelir.
   useEffect(() => {
-    if (isOnline && activePrintRoll === null && printQueue.length > 0) {
-      setActivePrintRoll(printQueue[0]);
-      setPrintQueue((q) => q.slice(1));
-    }
-  }, [isOnline, activePrintRoll, printQueue]);
-
-  const enqueuePrint = useCallback((roll: Roll) => {
-    setPrintQueue((q) => [...q, roll]);
+    void usePrintQueue.getState().hydrate();
   }, []);
 
-  const handlePrintDone = useCallback(() => {
-    setActivePrintRoll(null); // useEffect bir sonrakini alır
+  // POMPA: aktif iş yok + bekleyen var + ONLINE → sıradakini başlat.
+  // OFFLINE: LabelPrinter etiket içeriğini backend'den çekiyor → offline basamaz.
+  // Kuyruk İLERLETİLMEZ; ağ gelince effect yeniden koşar, sırayla basılır.
+  useEffect(() => {
+    if (isOnline && printHydrated && printActiveId === null) {
+      usePrintQueue.getState().startNext();
+    }
+  }, [isOnline, printHydrated, printActiveId, printJobs]);
+
+  // AĞ DÖNÜŞÜ: ağ kaynaklı düşen işler (retryable) otomatik yeniden kuyruğa
+  // alınır — tavan PRINT_AUTO_RETRY_MAX (flap eden sunucuda osilasyon kesici).
+  // BT/yapılandırma hataları burada DÖNMEZ; onlar ağla düzelmez, elle
+  // "Tekrar Dene" ister (aksi sonsuz hata toast'ı gürültüsü üretirdi).
+  useEffect(() => {
+    if (isOnline && printHydrated) usePrintQueue.getState().requeueRetryable();
+  }, [isOnline, printHydrated]);
+
+  // Aynı top zaten bekliyorsa store dedup eder (çift dokunuş 2 kâğıt basmaz).
+  const enqueuePrint = useCallback((roll: Roll) => {
+    usePrintQueue.getState().enqueue(roll);
+  }, []);
+
+  // onDone güvenlik ağı — onResult ÇAĞRILMAYAN yol (barkodsuz top erken dönüşü)
+  // aktif işi askıda bırakmasın. onResult zaten çözdüyse store no-op yapar.
+  const handlePrintDone = useCallback((printed: Roll) => {
+    usePrintQueue.getState().finishActive(printed.id);
   }, []);
 
   // ── Başarısız baskılar + kuyruk görünümü ──
   // BT hatası / zaman aşımında etiket KAYBOLMAZ: top "başarısızlar"a düşer,
-  // kuyruk çipine dokununca açılan görünümden Tekrar Dene ile yeniden sıraya
-  // alınır. İptal (yazdırma diyaloğu kapatıldı) hata SAYILMAZ.
-  const [failedPrints, setFailedPrints] = useState<{ roll: Roll; error: string }[]>([]);
+  // kuyruk çipinden / footer'daki kırmızı banttan yeniden sıraya alınır.
+  // İptal (yazdırma diyaloğu kapatıldı) hata SAYILMAZ.
   const [queueOpen, setQueueOpen] = useState(false);
   // "Bu oturum" rozetine dokununca oturum listesi modalı (veri sessionEntriesStore'da).
   const [sessionListOpen, setSessionListOpen] = useState(false);
 
-  // onResult anında activePrintRoll state'i closure'da bayat olabilir → ref.
-  const activePrintRollRef = useRef<Roll | null>(null);
-  useEffect(() => {
-    activePrintRollRef.current = activePrintRoll;
-  }, [activePrintRoll]);
+  // Baskı sonucu STORE'da çözülür — aktif işi o bilir (bayat closure derdi yok).
   const handlePrintResult = useCallback(
-    (r: { ok: boolean; cancelled: boolean; error?: string }) => {
-      const roll = activePrintRollRef.current;
-      if (!roll) return;
-      if (r.ok) {
-        setFailedPrints((f) => f.filter((x) => x.roll.id !== roll.id));
-      } else if (!r.cancelled) {
-        setFailedPrints((f) => [
-          { roll, error: r.error || 'Yazdırma hatası' },
-          ...f.filter((x) => x.roll.id !== roll.id),
-        ]);
-        // ONLINE-ONLY: baskı hatası köşede çip olarak bekleyemez — kuyruk
-        // görünümü KENDİLİĞİNDEN açılır ve operatör "Tekrar Dene / çıkar"
-        // kararını vermeden geçemez. Rejimin sözü "kayıt + etiket tek nefeste";
-        // nefes yarıda kesildiyse bunu en görünür yüzey söyler. (Kuyruklu
-        // rejimde davranış eskisi gibi: çip kırmızıya döner, operatör açar.)
-        if (onlineOnly) setQueueOpen(true);
-      }
+    (r: { ok: boolean; cancelled: boolean; retryable?: boolean; error?: string }) => {
+      const res = usePrintQueue.getState().resolveActive(r);
+      // ONLINE-ONLY: baskı hatası köşede çip olarak bekleyemez — kuyruk
+      // görünümü KENDİLİĞİNDEN açılır ve operatör "Tekrar Dene / çıkar"
+      // kararını vermeden geçemez. İSTİSNA: OTOMATİK yeniden denemenin düşüşü
+      // modalı tekrar AÇMAZ (operatör tetiklemedi, spam olur — çip + bant
+      // zaten kırmızı). Kuyruklu rejimde davranış eskisi gibi: çip/bant yanar.
+      if (res.failed && onlineOnly && !res.wasAuto) setQueueOpen(true);
     },
     [onlineOnly],
   );
   const retryFailedPrint = useCallback((roll: Roll) => {
-    setFailedPrints((f) => f.filter((x) => x.roll.id !== roll.id));
-    setPrintQueue((q) => [...q, roll]);
+    usePrintQueue.getState().retryJob(roll.id);
   }, []);
   const dismissFailedPrint = useCallback((id: string) => {
-    setFailedPrints((f) => f.filter((x) => x.roll.id !== id));
+    usePrintQueue.getState().removeJob(id);
   }, []);
   const removeFromQueue = useCallback((id: string) => {
-    setPrintQueue((q) => q.filter((r) => r.id !== id));
+    usePrintQueue.getState().removeJob(id);
   }, []);
   // Scrap onay modal'ı — native Alert yerine kendi modalımız (alert telefon yönünü değiştiriyordu).
   const [scrapTarget, setScrapTarget] = useState<Roll | null>(null);
@@ -1714,6 +1725,34 @@ export default function KK1Screen() {
             compact && footerAnimStyle,
           ]}
         >
+          {/* ETİKET ÇIKMADI BANDI (her iki rejimde): köşedeki çip yeterince
+              görünür değildi — operatör etiketi çıkmayan topu sistemde yok
+              sanıp YENİDEN giriyordu (07.08 vakası). Bant operatörün baktığı
+              yerde (Kaydet butonunun üstünde) durur ve iki şeyi söyler:
+              top KAYITLI + tek dokunuşla tekrar bas. Kalıcı store'dan
+              beslendiği için uygulama yeniden başlasa da görünür. */}
+          {failedPrints.length > 0 && (
+            <View style={styles.labelFailBanner}>
+              <Icon source="printer-off" size={18} color="#b91c1c" />
+              <Text style={styles.labelFailText}>
+                Etiket çıkmadı — {failedPrints.length} top. Top sistemde KAYITLI,
+                yeniden girme.
+              </Text>
+              <Button
+                mode="contained"
+                compact
+                buttonColor="#b91c1c"
+                textColor="#fff"
+                // Baskı içeriği sunucudan çekilir → çevrimdışıyken denemek
+                // anlamsız; kilit + (varsa) offline bandı sebebini söyler.
+                disabled={!isOnline}
+                onPress={() => usePrintQueue.getState().retryAllFailed()}
+                labelStyle={styles.labelFailBtnLabel}
+              >
+                Tekrar Bas
+              </Button>
+            </View>
+          )}
           {/* ONLINE-ONLY: çevrimdışıyken buton kilitli + üstünde sebep bandı.
               Sebep operatörün yapacağı işi söyler — wifi mi, sunucu mu. */}
           {onlineOnly && !isOnline && (
@@ -3028,6 +3067,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 18,
+  },
+  // "Etiket çıkmadı" bandı — KIRMIZI (aksiyon ister), amber offline kilidiyle
+  // (bilgi verir) bilinçli olarak ayrı kutup: ikisi aynı anda görünebilir ve
+  // operatör metni okumadan da hangisinin "iş" hangisinin "durum" olduğunu
+  // renkten ayırt edebilmeli (OutboxModal renk sözleşmesinin akrabası).
+  labelFailBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#dc2626',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  labelFailText: {
+    flex: 1,
+    color: '#7f1d1d',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  labelFailBtnLabel: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   // Telefon: footer AKIŞTAN ÇIKAR — formCol'un altında YÜZER (absolute), arka
   // plan/çizgi YOK (sadece buton, gri şerit yok). İçerik full-height kayar,
