@@ -13,7 +13,11 @@ import {
   ensurePrinterPaired,
 } from '../services/btPrinter.service';
 import { useMobileRasterEnabled } from '../hooks/useFeatureFlags';
-import { classifyPrintRetry, type PrintPhase } from '../offline/printQueue';
+import {
+  classifyPrintRetry,
+  type PrintPhase,
+  type PrintResult,
+} from '../offline/printQueue';
 import type { Roll } from '../types/models';
 
 interface Props {
@@ -39,13 +43,9 @@ interface Props {
    *  `retryable` = hata AĞ/SUNUCU kaynaklı (içerik fetch'i yanıtsız/5xx düştü) —
    *  parent online dönünce otomatik yeniden deneyebilir; BT/yapılandırma
    *  hataları retryable DEĞİLDİR (ağla düzelmez). Alan opsiyonel: eski
-   *  tüketiciler görmezden gelir, davranışları değişmez. */
-  onResult?: (r: {
-    ok: boolean;
-    cancelled: boolean;
-    retryable?: boolean;
-    error?: string;
-  }) => void;
+   *  tüketiciler görmezden gelir, davranışları değişmez. Şekil TEK KAYNAKTAN
+   *  (`printQueue.PrintResult`) — üç ayrı inline kopya sessizce ayrışıyordu. */
+  onResult?: (r: PrintResult) => void;
 }
 
 /**
@@ -83,8 +83,12 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
     onResultRef.current = onResult;
   }, [onResult]);
 
-  // Async print akışı saniyeler sürer; bu sırada parent unmount olursa
-  // onDone çağrısı ve Toast/Haptic side-effect'leri anlamsız → mounted bayrağı.
+  // Async print akışı saniyeler sürer; bu sırada parent unmount olabilir.
+  // ⚠️ mountedRef YALNIZ görsel yan etkileri (Toast/Haptic) kapar — onResult/
+  // onDone HER DURUMDA çağrılır (2026-08-11 inceleme bulgusu): sonuç artık
+  // kalıcı bir store'a yazılıyor (KK1 printQueue) ve unmount'ta yutulursa
+  // başarılı baskı "bekliyor" olarak kalır → ekrana dönüşte AYNI etiket ikinci
+  // kez basılır, scan-back borcu hiç doğmaz ve aktif iş kilidi askıda kalırdı.
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -109,12 +113,14 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
     chainRef.current = chainRef.current.then(async () => {
       const { roll: jobRoll, kind: jobKind, labelContext: jobContext } = job;
       if (!jobRoll.barcode) {
-        Toast.show({
-          type: 'info',
-          text1: 'Bu top için etiket basılamaz',
-          text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
-        });
-        if (mountedRef.current) onDoneRef.current(jobRoll);
+        if (mountedRef.current) {
+          Toast.show({
+            type: 'info',
+            text1: 'Bu top için etiket basılamaz',
+            text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
+          });
+        }
+        onDoneRef.current(jobRoll); // unmount'ta da — iş askıda kalmasın
         return;
       }
       // Etiket NİYETİNİ (müşteri / stok / sipariş) fiziksel baskıdan BAĞIMSIZ
@@ -219,8 +225,12 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
             margins: { left: 0, top: 0, right: 0, bottom: 0 },
           });
         }
-        if (!mountedRef.current) return;
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // SONUÇ HER DURUMDA BİLDİRİLİR (unmount'ta da) — kâğıt fiziksel olarak
+        // çıktı; store bunu öğrenmezse iş "bekliyor" kalır ve ekrana dönüşte
+        // ikinci kâğıt basılır. Yalnız görsel geri bildirim mount'a bağlı.
+        if (mountedRef.current) {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
         onResultRef.current?.({ ok: true, cancelled: false });
         // Niyet YUKARIDA seedSnapshot ile zaten kalıcı. Burada — yalnız GERÇEK
         // baskı tamamlandığında — LABEL_PRINTED audit'i düş (iptal/hata catch'e
@@ -229,7 +239,6 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           console.warn('Baskı audit kaydı başarısız', (e as Error).message);
         });
       } catch (err) {
-        if (!mountedRef.current) return;
         // expo-print iptal: kullanıcı yazdırma diyalogunu kapattı → hata değil,
         // info toast göster. "did not complete" expo-print'in iptal mesajı.
         const msg = (err as Error).message ?? '';
@@ -247,19 +256,21 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           retryable: !isCancel && classifyPrintRetry(phase, err),
           error: msg,
         });
-        void Haptics.notificationAsync(
-          isCancel
-            ? Haptics.NotificationFeedbackType.Warning
-            : Haptics.NotificationFeedbackType.Error,
-        );
-        Toast.show({
-          type: isCancel ? 'info' : 'error',
-          text1: isCancel ? 'Yazdırma iptal edildi' : 'Yazdırma hatası',
-          text2: isCancel ? 'Etiket basılmadı' : msg || 'Yazıcıya gönderilemedi',
-          visibilityTime: isCancel ? 3000 : 8000,
-        });
+        if (mountedRef.current) {
+          void Haptics.notificationAsync(
+            isCancel
+              ? Haptics.NotificationFeedbackType.Warning
+              : Haptics.NotificationFeedbackType.Error,
+          );
+          Toast.show({
+            type: isCancel ? 'info' : 'error',
+            text1: isCancel ? 'Yazdırma iptal edildi' : 'Yazdırma hatası',
+            text2: isCancel ? 'Etiket basılmadı' : msg || 'Yazıcıya gönderilemedi',
+            visibilityTime: isCancel ? 3000 : 8000,
+          });
+        }
       } finally {
-        if (mountedRef.current) onDoneRef.current(jobRoll);
+        onDoneRef.current(jobRoll); // unmount'ta da — aktif iş kilidi çözülsün
       }
     });
   }, [roll, kind, labelContext]);

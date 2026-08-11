@@ -27,6 +27,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { isAmbiguousFailure } from './entryAttempt';
 import type { Roll } from '../types/models';
 
 const STORAGE_KEY = 'TEKSERP_PRINT_QUEUE_V1';
@@ -124,11 +125,37 @@ function persist(jobs: PrintJob[], verifies: VerifyItem[]): void {
   );
 }
 
-export function prunePrintJobs(jobs: PrintJob[], now = Date.now()): PrintJob[] {
+/**
+ * Kuyruk budaması — İKİ KORUMA taşır (2026-08-11 inceleme bulguları):
+ *  • `protectId` (aktif iş) NE TTL NE TAVAN ile atılır — aktif iş budanırsa
+ *    `activeId` öksüz kalır ve pompa KALICI kilitlenirdi (startNext
+ *    `activeId !== null` görüp hiç başlamaz; hata yok, log yok).
+ *  • Tavan aşımında önce en eski BEKLEYENLER düşer, BAŞARISIZLAR korunur:
+ *    başarısız satır "bu top KAYITLI, yeniden girme" KANITIDIR — kanıtı atıp
+ *    yeniden basılabilir bekleyeni tutmak, 07.08 hayalet-top senaryosunu
+ *    tavanda yeniden üretirdi. (Başarısızlar tek başına tavanı aşarsa son
+ *    çare olarak en eskileri düşer — 50 başarısız zaten operasyonel alarmdır.)
+ */
+export function prunePrintJobs(
+  jobs: PrintJob[],
+  now = Date.now(),
+  protectId?: string,
+): PrintJob[] {
   const cutoff = now - PRINT_JOB_TTL_MS;
-  return jobs.filter((j) => j.queuedAt >= cutoff).slice(-PRINT_QUEUE_MAX);
+  const alive = jobs.filter((j) => j.queuedAt >= cutoff || j.roll.id === protectId);
+  if (alive.length <= PRINT_QUEUE_MAX) return alive;
+  const mustKeep = new Set(
+    alive.filter((j) => j.error || j.roll.id === protectId),
+  );
+  const pending = alive.filter((j) => !mustKeep.has(j));
+  const room = PRINT_QUEUE_MAX - mustKeep.size;
+  const keepPending = new Set(room > 0 ? pending.slice(-room) : []);
+  const kept = alive.filter((j) => mustKeep.has(j) || keepPending.has(j));
+  return kept.length <= PRINT_QUEUE_MAX ? kept : kept.slice(-PRINT_QUEUE_MAX);
 }
 
+/** YALNIZ hydrate emniyeti (bozuk/şişmiş disk verisi): TTL + tavan. CANLI borç
+ *  listesi bununla KIRPILMAZ — bkz. `addVerify` (sessiz af garantiyi deler). */
 export function pruneVerifies(items: VerifyItem[], now = Date.now()): VerifyItem[] {
   const cutoff = now - PRINT_JOB_TTL_MS;
   return items.filter((v) => v.printedAt >= cutoff).slice(-VERIFY_MAX);
@@ -145,36 +172,52 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
       const parsed: unknown = raw ? JSON.parse(raw) : {};
-      // Bozuk/eski JSON uygulamayı ÇÖKERTMEZ — kuyruk boş açılır. Eski biçim
-      // (düz dizi = yalnız jobs) de kabul edilir.
-      const rawJobs = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray((parsed as { jobs?: unknown }).jobs)
-          ? ((parsed as { jobs: unknown[] }).jobs)
-          : [];
-      const rawVerifies = !Array.isArray(parsed)
-        ? Array.isArray((parsed as { verifies?: unknown }).verifies)
-          ? ((parsed as { verifies: unknown[] }).verifies)
-          : []
+      // Bozuk JSON uygulamayı ÇÖKERTMEZ — kuyruk boş açılır.
+      const rawJobs = Array.isArray((parsed as { jobs?: unknown })?.jobs)
+        ? ((parsed as { jobs: unknown[] }).jobs)
         : [];
-      const jobs = prunePrintJobs(
-        rawJobs
-          .filter(
-            (j): j is PrintJob => !!j && typeof (j as PrintJob).roll?.id === 'string',
-          )
-          .map((j) => ({ ...j, autoRetries: j.autoRetries ?? 0, lastAuto: false })),
+      const rawVerifies = Array.isArray((parsed as { verifies?: unknown })?.verifies)
+        ? ((parsed as { verifies: unknown[] }).verifies)
+        : [];
+      const loadedJobs = rawJobs
+        .filter(
+          (j): j is PrintJob => !!j && typeof (j as PrintJob).roll?.id === 'string',
+        )
+        .map((j) => ({ ...j, autoRetries: j.autoRetries ?? 0, lastAuto: false }));
+      const loadedVerifies = rawVerifies.filter(
+        (v): v is VerifyItem =>
+          !!v &&
+          typeof (v as VerifyItem).rollId === 'string' &&
+          typeof (v as VerifyItem).barcode === 'string',
       );
-      const verifies = pruneVerifies(
-        rawVerifies.filter(
-          (v): v is VerifyItem =>
-            !!v &&
-            typeof (v as VerifyItem).rollId === 'string' &&
-            typeof (v as VerifyItem).barcode === 'string',
-        ),
-      );
-      set({ jobs, verifies, hydrated: true });
+      // ⚠️ MERGE — tam-değiştirme DEĞİL (2026-08-11 inceleme bulgusu): hydrate
+      // async'tir; yavaş diskte ilk kayıt/borç okuma bitmeden düşebilir. Tam
+      // set() o kaydı bellekte EZER, öncesindeki persist() ise diskteki eski
+      // defteri silmiş olur — iki yönde de sessiz kayıp. Bellekteki taraf
+      // YENİdir ve kazanır; diskten yalnız bellekte olmayanlar eklenir.
+      set((s) => {
+        const jobs = prunePrintJobs(
+          [
+            ...loadedJobs.filter(
+              (lj) => !s.jobs.some((j) => j.roll.id === lj.roll.id),
+            ),
+            ...s.jobs,
+          ],
+          Date.now(),
+          s.activeId ?? undefined,
+        );
+        const verifies = pruneVerifies([
+          ...loadedVerifies.filter(
+            (lv) => !s.verifies.some((v) => v.rollId === lv.rollId),
+          ),
+          ...s.verifies,
+        ]);
+        persist(jobs, verifies);
+        return { jobs, verifies, hydrated: true };
+      });
     } catch {
-      set({ jobs: [], verifies: [], hydrated: true });
+      // Okuma düştü → bellekteki durum korunur (silme YOK), kutu açık kalır.
+      set({ hydrated: true });
     }
   },
 
@@ -191,10 +234,12 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
           : j,
       );
     } else {
-      next = prunePrintJobs([
-        ...jobs,
-        { roll, queuedAt: Date.now(), autoRetries: 0, lastAuto: false },
-      ]);
+      // Aktif iş budamaya karşı KORUNUR (protectId) — atılırsa pompa kilitlenir.
+      next = prunePrintJobs(
+        [...jobs, { roll, queuedAt: Date.now(), autoRetries: 0, lastAuto: false }],
+        Date.now(),
+        get().activeId ?? undefined,
+      );
     }
     set({ jobs: next });
     persist(next, get().verifies);
@@ -202,15 +247,22 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
 
   startNext: () => {
     const { jobs, activeId } = get();
-    if (activeId !== null) return;
+    // ÖKSÜZ activeId onarımı (savunma hattı): aktif işin satırı bir şekilde
+    // kaybolduysa (budama/dış temizlik) kilidi çöz — yoksa pompa sonsuza dek
+    // "meşgulüm" der ve kuyruk sessizce donar.
+    if (activeId !== null && jobs.some((j) => j.roll.id === activeId)) return;
     const first = jobs.find((j) => !j.error);
-    if (first) set({ activeId: first.roll.id });
+    set({ activeId: first ? first.roll.id : null });
   },
 
   resolveActive: (r) => {
     const { jobs, activeId } = get();
     const job = jobs.find((j) => j.roll.id === activeId);
-    if (!job) return { failed: false, wasAuto: false, printedRoll: null };
+    if (!job) {
+      // Öksüz aktif kilit burada da çözülür (satır kaybolmuş olabilir).
+      if (activeId !== null) set({ activeId: null });
+      return { failed: false, wasAuto: false, printedRoll: null };
+    }
     if (r.ok || r.cancelled) {
       // İptal de işi DÜŞÜRÜR (bugünkü davranış): operatör diyaloğu bilerek
       // kapattı — başarısız sayıp bantta "çıkmadı" demek yanlış alarm olur.
@@ -241,15 +293,22 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
     if (!roll.barcode) return; // okutulacak kod yok (açık kumaş) — borç doğmaz
     const { jobs, verifies } = get();
     if (verifies.some((v) => v.rollId === roll.id)) return; // dedup (yeniden basım)
-    const next = pruneVerifies([
-      ...verifies,
+    // ⚠️ CANLI LİSTE TAVANLA KIRPILMAZ (2026-08-11 inceleme bulgusu): tavan
+    // burada uygulansaydı 21. borç en eskisini SESSİZCE affederdi — o etiket
+    // doğrulamadan kalıcı muaf olur ve bayrağın "basılan her etiket okutulur"
+    // sözü kimse görmeden delinirdi. Yalnız TTL süzülür; tavan hydrate'te
+    // (bozuk disk verisi emniyeti). 20+ borç birikmesi zaten alarm durumudur
+    // ve bant sayacı bunu açıkça gösterir.
+    const cutoff = Date.now() - PRINT_JOB_TTL_MS;
+    const next = [
+      ...verifies.filter((v) => v.printedAt >= cutoff),
       {
         rollId: roll.id,
         barcode: roll.barcode,
         itemName: roll.item?.name,
         printedAt: Date.now(),
       },
-    ]);
+    ];
     set({ verifies: next });
     persist(jobs, next);
   },
@@ -337,13 +396,40 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
 export type PrintPhase = 'prep' | 'fetch' | 'output';
 
 /**
- * Otomatik yeniden denemeye UYGUN mu? Yalnız FETCH aşamasında yanıtsız
- * (timeout/ağ — status yok) ya da 5xx ile düşen hata: bunlar ağ/sunucu
- * düzelince kendiliğinden geçer. 4xx (top silinmiş, yetki) tekrarla
- * DÜZELMEZ; 'output'/'prep' hataları ağla ilgisizdir — otomatik denenmez.
+ * Otomatik yeniden denemeye UYGUN mu? Yalnız FETCH aşamasında BELİRSİZ sonuçla
+ * (yanıtsız/timeout/5xx) düşen hata: bunlar ağ/sunucu düzelince kendiliğinden
+ * geçer. 4xx (top silinmiş, yetki) tekrarla DÜZELMEZ; 'output'/'prep' hataları
+ * ağla ilgisizdir — otomatik denenmez.
+ *
+ * "Belirsiz sonuç" taksonomisinin TEK KAYNAĞI `entryAttempt.isAmbiguousFailure`
+ * — üçüncü bir el yazması kopya, api.ts hata şekli değişince yalnız bir yolun
+ * güncellenmesi demekti (inceleme bulgusu).
  */
 export function classifyPrintRetry(phase: PrintPhase, error: unknown): boolean {
-  if (phase !== 'fetch') return false;
-  const status = (error as { status?: number } | null)?.status;
-  return status == null || status >= 500;
+  return phase === 'fetch' && isAmbiguousFailure(error);
+}
+
+// -----------------------------------------------------------------------------
+// Ağ dönüşü otomatik yeniden basım — KENAR tetikli, mount tetikli DEĞİL
+// -----------------------------------------------------------------------------
+// ⚠️ KK1 effect'i doğrudan `requeueRetryable()` çağırsaydı her ekran ziyareti
+// (mount + online) bir otomatik deneme HAKKI yakardı: kalıcı 5xx'te operatör
+// ekrana 3 kez girip çıkınca hak biter ve "ağ gelince kendiliğinden basılır"
+// sözü sessizce düşerdi (inceleme bulgusu). Kurma bayrağı MODÜL ömürlüdür:
+// uygulama oturumu başına bir kez + her offline→online geçişinde yeniden kurulur.
+let requeueArmed = true;
+
+export function requeueOnReconnect(online: boolean, hydrated: boolean): number {
+  if (!online) {
+    requeueArmed = true; // offline görüldü → sıradaki online geçişi yeni hak
+    return 0;
+  }
+  if (!hydrated || !requeueArmed) return 0;
+  requeueArmed = false;
+  return usePrintQueue.getState().requeueRetryable();
+}
+
+/** Test kancası — modül-ömürlü kurma bayrağını sıfırlar. */
+export function __resetRequeueArmForTests(): void {
+  requeueArmed = true;
 }

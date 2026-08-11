@@ -113,7 +113,13 @@ import { offlineReason } from '../../../offline/serverReachability';
 import { usePermissions } from '../../../hooks/usePermission';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { opIdFor, useFailedOps } from '../../../offline/failedOps';
-import { usePrintQueue } from '../../../offline/printQueue';
+import {
+  usePrintQueue,
+  requeueOnReconnect,
+  type PrintResult,
+} from '../../../offline/printQueue';
+import { signalScan } from '../../../services/scanFeedback';
+import type { ScanFlash } from '../../../components/BarcodeScannerView';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
   AnimatedEntrance,
@@ -437,14 +443,24 @@ export default function KK1Screen() {
   const verifies = usePrintQueue((s) => s.verifies);
   const verifyPending = scanVerifyEnabled && verifies.length > 0;
   const [verifyScanOpen, setVerifyScanOpen] = useState(false);
-  const activePrintRoll =
-    printJobs.find((j) => j.roll.id === printActiveId)?.roll ?? null;
-  const printQueue = printJobs
-    .filter((j) => !j.error && j.roll.id !== printActiveId)
-    .map((j) => j.roll);
-  const failedPrints = printJobs
-    .filter((j) => j.error)
-    .map((j) => ({ roll: j.roll, error: j.error! }));
+  // useMemo: 3000+ satırlık ekranda her render'da taze dizi kimliği üretmek
+  // alt bileşen memoizasyonunu boşa düşürür (inceleme bulgusu — perf).
+  const activePrintRoll = useMemo(
+    () => printJobs.find((j) => j.roll.id === printActiveId)?.roll ?? null,
+    [printJobs, printActiveId],
+  );
+  const printQueue = useMemo(
+    () =>
+      printJobs
+        .filter((j) => !j.error && j.roll.id !== printActiveId)
+        .map((j) => j.roll),
+    [printJobs, printActiveId],
+  );
+  const failedPrints = useMemo(
+    () =>
+      printJobs.filter((j) => j.error).map((j) => ({ roll: j.roll, error: j.error! })),
+    [printJobs],
+  );
 
   // Diskten yükle (idempotent) — restart sonrası bekleyen/başarısız işler geri gelir.
   useEffect(() => {
@@ -463,9 +479,12 @@ export default function KK1Screen() {
   // AĞ DÖNÜŞÜ: ağ kaynaklı düşen işler (retryable) otomatik yeniden kuyruğa
   // alınır — tavan PRINT_AUTO_RETRY_MAX (flap eden sunucuda osilasyon kesici).
   // BT/yapılandırma hataları burada DÖNMEZ; onlar ağla düzelmez, elle
-  // "Tekrar Dene" ister (aksi sonsuz hata toast'ı gürültüsü üretirdi).
+  // "Tekrar Dene" ister. ⚠️ KENAR tetikli (requeueOnReconnect, modül-ömürlü
+  // kurma bayrağı): doğrudan requeueRetryable çağrılsaydı HER ekran ziyareti
+  // bir otomatik deneme hakkı yakardı — kalıcı 5xx'te 3 giriş-çıkış hakları
+  // bitirir, operatör "kendiliğinden basılır"ı boşuna beklerdi (inceleme bulgusu).
   useEffect(() => {
-    if (isOnline && printHydrated) usePrintQueue.getState().requeueRetryable();
+    requeueOnReconnect(isOnline, printHydrated);
   }, [isOnline, printHydrated]);
 
   // Aynı top zaten bekliyorsa store dedup eder (çift dokunuş 2 kâğıt basmaz).
@@ -489,7 +508,7 @@ export default function KK1Screen() {
 
   // Baskı sonucu STORE'da çözülür — aktif işi o bilir (bayat closure derdi yok).
   const handlePrintResult = useCallback(
-    (r: { ok: boolean; cancelled: boolean; retryable?: boolean; error?: string }) => {
+    (r: PrintResult) => {
       const res = usePrintQueue.getState().resolveActive(r);
       // SCAN-BACK: gerçek baskı başarısı okutma borcu doğurur (yalnız bayrak
       // açıkken — kapalıyken addVerify hiç çağrılmaz, liste hep boş).
@@ -506,19 +525,30 @@ export default function KK1Screen() {
     [onlineOnly, scanVerifyEnabled],
   );
   // Scan-back okutması: kod listedeki bir etiketle eşleşirse borç düşer.
+  // Geri bildirim ORTAK katmandan (mobil CLAUDE.md sözleşmesi): ses+titreşim
+  // `signalScan` (ekran Haptics'i DOĞRUDAN çağırmaz), görsel sonuç tarayıcı
+  // AÇIKKEN ekran-içi flash'tır — operatörün gözü kadrajda, arkada kalan toast
+  // görülmez ("Fason Sevk'te kaybolan toast" vakasının birebir dersi).
+  const verifyFlashSeq = useRef(0);
+  const [verifyFlash, setVerifyFlash] = useState<ScanFlash | null>(null);
   const handleVerifyScan = useCallback((code: string) => {
     const result = usePrintQueue.getState().confirmVerify(code);
     if (result === 'ok') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      Toast.show({ type: 'success', text1: 'Etiket doğrulandı ✓', text2: code.trim() });
-      // Son borç da kapandıysa tarayıcıyı kapat — operatör forma dönsün.
-      if (usePrintQueue.getState().verifies.length === 0) setVerifyScanOpen(false);
+      signalScan('accept');
+      setVerifyFlash(null); // varsa eski ret bandı düşsün, yeşil tik görünsün
+      // Son borç da kapandıysa tarayıcıyı kapat — kapanınca toast serbesttir.
+      if (usePrintQueue.getState().verifies.length === 0) {
+        setVerifyScanOpen(false);
+        Toast.show({ type: 'success', text1: 'Etiketler doğrulandı ✓' });
+      }
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      Toast.show({
-        type: 'error',
-        text1: 'Bu kod okutulacaklar listesinde yok',
-        text2: `${code.trim()} — çıkan kâğıttaki barkodu okutun`,
+      signalScan('reject');
+      verifyFlashSeq.current += 1;
+      setVerifyFlash({
+        kind: 'reject',
+        title: 'LİSTEDE YOK',
+        detail: `${code.trim()} — çıkan kâğıttaki barkodu okutun`,
+        seq: verifyFlashSeq.current,
       });
     }
   }, []);
@@ -1793,6 +1823,24 @@ export default function KK1Screen() {
                     .join(', ')}
                   {verifies.length > 2 ? '…' : ''}
                 </Text>
+                {/* KAÇIŞ YOLU (inceleme bulgusu): etiket lekeli/okunmuyor ya da
+                    kayıpsa borç kapıyı SÜRESİZ kilitlerdi (48 sa kalıcı) ve tek
+                    çıkış admin'in bayrağı kapatmasıydı. "Tekrar Bas" bekleyen
+                    borçların etiketini yeniden basar → taze kâğıt okutulur,
+                    borç normal yoldan kapanır. Borcu SİLME yolu bilinçli YOK. */}
+                <Button
+                  mode="outlined"
+                  compact
+                  textColor="#4338ca"
+                  disabled={!isOnline}
+                  onPress={() => {
+                    for (const v of verifies) void printBarcode(v.barcode);
+                  }}
+                  style={{ borderColor: '#4f46e5', borderWidth: 1.5 }}
+                  labelStyle={styles.labelFailBtnLabel}
+                >
+                  Tekrar Bas
+                </Button>
                 <Button
                   mode="contained"
                   compact
@@ -1988,14 +2036,24 @@ export default function KK1Screen() {
       {/* ── Scan-back tarayıcısı (yalnız bayrak açıkken açılabilir): basılan
             etiketin kâğıdını geri okut → borç düşer. continuous: birden fazla
             bekleyen varsa modal açık kalır, hepsi peş peşe okutulur.
-            captureHaptic kapalı — kabul/ret titreşimini handleVerifyScan verir. */}
+            ⚠️ trigger="tap" — çok-okutmalı yüzey sözleşmesi (mobil CLAUDE.md):
+            yazıcı çıkışında etiketler üst üste durur; kendiliğinden okuyan
+            kamera KOMŞU etiketi yakalayıp onun borcunu düşürürdü — doğrulanan
+            şey elindeki kâğıt olmalı, kadraja giren herhangi bir kâğıt değil.
+            captureHaptic kapalı — kabul/ret sinyalini handleVerifyScan verir
+            (signalScan); görsel sonuç ekran-içi flash. */}
       <BarcodeScannerModal
         visible={verifyScanOpen}
-        onDismiss={() => setVerifyScanOpen(false)}
+        onDismiss={() => {
+          setVerifyScanOpen(false);
+          setVerifyFlash(null);
+        }}
         onScan={handleVerifyScan}
         title="Etiket Doğrulama — çıkan kâğıdı okut"
         notice={`Okutulacak ${verifies.length} etiket`}
         continuous
+        trigger="tap"
+        flash={verifyFlash}
         captureHaptic={false}
       />
       <PrintQueueModal

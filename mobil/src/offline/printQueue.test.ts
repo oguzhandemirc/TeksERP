@@ -11,11 +11,14 @@
 //   • sınıflandırma: yalnız fetch + yanıtsız/5xx retryable
 // =============================================================================
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   classifyPrintRetry,
   prunePrintJobs,
   pruneVerifies,
+  requeueOnReconnect,
   usePrintQueue,
+  __resetRequeueArmForTests,
   PRINT_AUTO_RETRY_MAX,
   PRINT_JOB_TTL_MS,
   PRINT_QUEUE_MAX,
@@ -205,6 +208,85 @@ describe('printQueue — scan-back (etiket geri-okutma)', () => {
     expect(out.map((x) => x.rollId)).toEqual(['new']);
     const many = Array.from({ length: VERIFY_MAX + 3 }, (_, i) => v(`v${i}`, now - (VERIFY_MAX + 3 - i)));
     expect(pruneVerifies(many, now)).toHaveLength(VERIFY_MAX);
+  });
+});
+
+describe('printQueue — inceleme bulguları (2026-08-11 code review)', () => {
+  it('F1: tavandayken enqueue AKTİF işi budayamaz — pompa kilitlenmesin', () => {
+    const now = Date.now();
+    const many = Array.from({ length: PRINT_QUEUE_MAX }, (_, i) =>
+      job(`j${i}`, { queuedAt: now - (PRINT_QUEUE_MAX - i) }),
+    );
+    usePrintQueue.setState({ jobs: many, activeId: 'j0' }); // en eski = aktif
+    usePrintQueue.getState().enqueue(roll('yeni'));
+    const jobs = usePrintQueue.getState().jobs;
+    expect(jobs.some((j) => j.roll.id === 'j0')).toBe(true); // aktif korundu
+    expect(jobs.some((j) => j.roll.id === 'yeni')).toBe(true);
+    expect(jobs.length).toBeLessThanOrEqual(PRINT_QUEUE_MAX);
+  });
+
+  it('F1b: öksüz activeId startNext ile kendini onarır (kalıcı kilit yok)', () => {
+    usePrintQueue.setState({ jobs: [job('y')], activeId: 'hayalet' });
+    usePrintQueue.getState().startNext();
+    expect(usePrintQueue.getState().activeId).toBe('y');
+  });
+
+  it('F1c: resolveActive öksüz aktif kilidi çözer', () => {
+    usePrintQueue.setState({ jobs: [], activeId: 'hayalet' });
+    usePrintQueue.getState().resolveActive({ ok: true, cancelled: false });
+    expect(usePrintQueue.getState().activeId).toBeNull();
+  });
+
+  it('F2: hydrate MERGE eder — erken düşen kayıt diskteki defteri ezmez, disk belleği silmez', async () => {
+    await AsyncStorage.setItem(
+      'TEKSERP_PRINT_QUEUE_V1',
+      JSON.stringify({
+        jobs: [job('diskteki', { error: 'dünkü BT hatası' })],
+        verifies: [{ rollId: 'v1', barcode: 'T-v1', printedAt: Date.now() }],
+      }),
+    );
+    // hydrate bitmeden bellekte yeni iş doğdu (yarış):
+    usePrintQueue.setState({ jobs: [job('bellekteki')], hydrated: false });
+    await usePrintQueue.getState().hydrate();
+    const s = usePrintQueue.getState();
+    expect(s.jobs.some((j) => j.roll.id === 'diskteki')).toBe(true);
+    expect(s.jobs.some((j) => j.roll.id === 'bellekteki')).toBe(true);
+    expect(s.verifies).toHaveLength(1);
+  });
+
+  it('F7: tavanda BAŞARISIZ kanıt korunur, en eski BEKLEYEN düşer', () => {
+    const now = Date.now();
+    const failed = Array.from({ length: 5 }, (_, i) =>
+      job(`f${i}`, { queuedAt: now - 10_000 - i, error: 'BT' }),
+    );
+    const pending = Array.from({ length: PRINT_QUEUE_MAX }, (_, i) =>
+      job(`p${i}`, { queuedAt: now - (PRINT_QUEUE_MAX - i) }),
+    );
+    const out = prunePrintJobs([...failed, ...pending], now);
+    expect(out.filter((j) => j.error)).toHaveLength(5); // kanıt tam
+    expect(out.length).toBe(PRINT_QUEUE_MAX);
+    expect(out.some((j) => j.roll.id === 'p0')).toBe(false); // en eski bekleyen düştü
+  });
+
+  it('F5: canlı borç listesi tavanla KIRPILMAZ — sessiz af yok', () => {
+    for (let i = 0; i < VERIFY_MAX + 5; i++) {
+      usePrintQueue.getState().addVerify(roll(`r${i}`));
+    }
+    expect(usePrintQueue.getState().verifies).toHaveLength(VERIFY_MAX + 5);
+  });
+
+  it('F10: otomatik yeniden basım KENAR tetikli — her mount bir hak yakmaz', () => {
+    __resetRequeueArmForTests();
+    usePrintQueue.setState({
+      jobs: [job('net', { error: 'timeout', retryable: true })],
+    });
+    expect(requeueOnReconnect(true, true)).toBe(1); // ilk online görüşü
+    usePrintQueue.setState({
+      jobs: [job('net', { error: 'timeout', retryable: true })],
+    });
+    expect(requeueOnReconnect(true, true)).toBe(0); // tekrar mount → hak yakmaz
+    requeueOnReconnect(false, true); // offline görüldü → yeniden kurulur
+    expect(requeueOnReconnect(true, true)).toBe(1);
   });
 });
 
