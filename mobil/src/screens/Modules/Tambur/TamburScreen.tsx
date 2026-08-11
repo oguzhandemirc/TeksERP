@@ -3499,7 +3499,9 @@ export default function TamburScreen() {
                       {selectedRoll.properties.map((p) => (
                         <View key={p.id} style={styles.headerPropChip}>
                           <Text style={styles.headerPropChipText} numberOfLines={1}>
-                            {p.name}
+                            {/* Değer de basılır ("Gramaj: 50 gr") — final kararı
+                                veren operatör kurşundaki seçimi görmeli (VAL-03). */}
+                            {p.value ? `${p.name}: ${p.value.name}` : p.name}
                           </Text>
                         </View>
                       ))}

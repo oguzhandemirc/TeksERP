@@ -91,6 +91,10 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         // Kayıtlı olmayan (bu oturumda eklenmiş) satır → backend varsayılanı.
         mode: modes[id] ?? ("OPTIONAL" as StationPropertyMode),
         isNew: !known,
+        // AUTO tuşunu kilitlemek için (SEÇİM tipinde otomatik uygulanacak
+        // değer yoktur — backend de 400 ile reddeder, buradaki kilit sadece
+        // hatayı Kaydet'e bırakmamak için).
+        valueType: known?.valueType ?? cat?.valueType ?? "FLAG",
       };
     });
   }, [propertyIds, modes, detail.data, propsQuery.data]);
@@ -195,19 +199,30 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
                       )}
                     </span>
                     <div className="flex shrink-0 gap-1">
-                      {(["AUTO", "OPTIONAL", "REQUIRED"] as const).map((m) => (
-                        <Button
-                          key={m}
-                          type="button"
-                          size="sm"
-                          variant={row.mode === m ? "default" : "outline"}
-                          className="h-7 px-2 text-[11px]"
-                          title={STATION_PROPERTY_MODE_HINTS[m]}
-                          onClick={() => setModes((prev) => ({ ...prev, [row.id]: m }))}
-                        >
-                          {STATION_PROPERTY_MODE_LABELS[m]}
-                        </Button>
-                      ))}
+                      {(["AUTO", "OPTIONAL", "REQUIRED"] as const).map((m) => {
+                        // SEÇİM tipli özellik AUTO olamaz: otomatik uygulanacak
+                        // tek bir değer yoktur (25GR mi 50GR mi?). Backend de
+                        // reddeder; tuşu açık bırakmak hatayı Kaydet'e saklardı.
+                        const autoBlocked = m === "AUTO" && row.valueType === "CHOICE";
+                        return (
+                          <Button
+                            key={m}
+                            type="button"
+                            size="sm"
+                            variant={row.mode === m ? "default" : "outline"}
+                            className="h-7 px-2 text-[11px]"
+                            disabled={autoBlocked}
+                            title={
+                              autoBlocked
+                                ? "Değer listesi olan (SEÇİM tipli) özellik otomatik uygulanamaz — hangi değerin yazılacağı operatör kararıdır."
+                                : STATION_PROPERTY_MODE_HINTS[m]
+                            }
+                            onClick={() => setModes((prev) => ({ ...prev, [row.id]: m }))}
+                          >
+                            {STATION_PROPERTY_MODE_LABELS[m]}
+                          </Button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

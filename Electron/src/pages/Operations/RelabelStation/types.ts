@@ -27,6 +27,11 @@ export interface RelabelChip {
   code: string;
   name: string;
   color: string | null;
+  /** SEÇİM (CHOICE) tipli özelliğin topa damgalı değeri (örn. GRAMAJ → "50 gr").
+   *  Dolu gelen satır Düzelt formunda SALT-OKUNUR bilgidir: değer istasyonda
+   *  (Kurşun/QC2) seçilir, backend replace'i de bu satırlara dokunmaz (F1).
+   *  BAYRAK özelliklerde her zaman null. */
+  value?: { code: string; name: string } | null;
 }
 
 export interface RelabelContext {

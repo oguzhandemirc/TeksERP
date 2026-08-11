@@ -24,7 +24,13 @@ export interface ProductionRoute {
     // Eski backend bu alanları göndermez → undefined kalır, ön-doldurma olmaz.
     plannedColorId?: string | null;
     plannedColor?: { id: string; code?: string | null; name: string; hex?: string | null } | null;
-    plannedProperties?: { propertyId: string; property?: { id: string; name: string } }[];
+    plannedProperties?: {
+      propertyId: string;
+      // valueType: SEÇİM (CHOICE) tipliler "rotayı uygula" birleşiminde süzülür
+      // (hedef listesi BAYRAK evrenidir). Eski backend alanı göndermez → süzgü
+      // devreye girmez, davranış aynı kalır.
+      property?: { id: string; name: string; valueType?: 'FLAG' | 'CHOICE' };
+    }[];
     station?: {
       id: string;
       code?: string | null;

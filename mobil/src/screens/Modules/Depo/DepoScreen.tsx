@@ -987,7 +987,10 @@ function RollDetailModal({
           {props.map((p) => (
             <View key={p.propertyId} style={modalStyles.propChip}>
               <Text style={modalStyles.propChipText}>
-                {p.property?.name ?? '—'}
+                {/* Değer de basılır — Electron rozeti ile aynı kural (VAL-04). */}
+                {p.value
+                  ? `${p.property?.name ?? '—'}: ${p.value.name}`
+                  : (p.property?.name ?? '—')}
               </Text>
             </View>
           ))}

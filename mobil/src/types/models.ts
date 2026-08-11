@@ -324,6 +324,10 @@ export interface SubcontractorDispatch {
 export interface RollProperty {
   propertyId: string;
   property?: FabricProperty;
+  /** SEÇİM tipli özellikte seçilen değer — backend GET /rolls yanıtında ZATEN
+   *  gönderiyor (ROLL_LIST_INCLUDE); tip taşımayınca ekranlar basamıyordu
+   *  (denetim VAL-04). */
+  value?: { code: string; name: string } | null;
 }
 
 export interface RollErrorRecord {
@@ -846,8 +850,10 @@ export interface TamburRollSummary {
   currentQty: number;
   width: number | null;
   qualityGrade: string;
-  /** Rulonun fiilen taşıdığı özellikler (RollProperty). */
-  properties: { id: string; name: string }[];
+  /** Rulonun fiilen taşıdığı özellikler (RollProperty). `value`: SEÇİM tipli
+   *  özellikte operatörün seçtiği değer (GRAMAJ=50 gr) — final kararı veren
+   *  Tambur operatörü görmeli. Eski backend göndermez → undefined. */
+  properties: { id: string; name: string; value?: { code: string; name: string } | null }[];
   errorCount: number;
   errors: TamburRollDefect[];
   /** Parti (Batch) kimliği — null = partisiz/doğrudan top. Bu alanla gruplanır. */

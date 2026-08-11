@@ -286,7 +286,10 @@ export function useQuickWorkOrder() {
         pageSize: 200,
         sortBy: 'name',
         sortOrder: 'asc',
-        filters: { isActive: 'true' },
+        // valueType süzgüsü (Q1): SEÇİM (CHOICE) tipli özellik — GRAMAJ gibi —
+        // hedef özellik DEĞİLDİR (değeri istasyonda seçilir); picker'da görünse
+        // seçim WO create'te 400 yerdi. Electron PropertyChipsField ile aynı kural.
+        filters: { isActive: 'true', valueType: 'FLAG' },
       }),
     enabled: canApplyProps,
     staleTime: 10 * 60 * 1000,
@@ -425,7 +428,13 @@ export function useQuickWorkOrder() {
       const planProps = new Set<string>();
       for (const s of [...(route?.steps ?? [])].sort((a, b) => a.sequence - b.sequence)) {
         if (s.plannedColorId) planColor = s.plannedColorId;
-        for (const p of s.plannedProperties ?? []) planProps.add(p.propertyId);
+        for (const p of s.plannedProperties ?? []) {
+          // SEÇİM (CHOICE) tipli özellik hedef listesine SIZMAZ (Q1): backend
+          // rota kaydını zaten reddediyor ama eski/elle yazılmış kayıt taşıyorsa
+          // buradan geçirmek WO create'i 400'e düşürürdü. Alanı göndermeyen
+          // eski backend'de süzgü devreye girmez (undefined !== 'CHOICE').
+          if (p.property?.valueType !== 'CHOICE') planProps.add(p.propertyId);
+        }
       }
       if (planColor && next.canApplyColor && !orderLinked) setTargetColorId(planColor);
       if (planProps.size > 0 && next.canApplyProps) setTargetPropertyIds([...planProps]);
