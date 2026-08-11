@@ -24,6 +24,11 @@ export interface FeatureFlags {
   /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi (default false).
    *  Backend ENFORCE eder — kapalıyken gönderilen weightKg reddedilir. */
   kk1WeightEntryEnabled: boolean;
+  /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi (default false).
+   *  Açıkken KK1 çevrimdışıyken kayıt ALMAZ (form kilitli + sebep bandı) ve
+   *  kayıt asla offline kuyruğa düşmez — kayıt+etiket tek nefeste yürür.
+   *  ENFORCE bu istemcidedir (kuyruk istemci kavramı). */
+  kk1OnlineOnlyEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (default false).
    *  Backend ENFORCE eder — kapalıyken SIMULATED beyanlı tartı 400 döner. Elle
    *  giriş (MANUAL) muaftır. Yalnız demo/eğitim kurulumu açar. */
@@ -79,6 +84,9 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   targetQuantityEnabled: false,
   rawWidthEnabled: false,
   kk1WeightEntryEnabled: false,
+  // Varsayılan KAPALI (kuyruklu davranış) — fail-toward-queue: bayrak
+  // yüklenemezse yanlış yönde kilitlemektense kayıt almak tercih edilir.
+  kk1OnlineOnlyEnabled: false,
   shippingSimulatedWeightEnabled: false,
   returnGradingEnabled: false,
   kartelaMeasurementEnabled: false,

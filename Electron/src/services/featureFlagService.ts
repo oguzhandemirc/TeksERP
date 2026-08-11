@@ -205,6 +205,9 @@ export interface FeatureFlags {
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
   kk1WeightEntryEnabled: boolean;
   kk1DuplicateGuardEnabled: boolean;
+  /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi — default false;
+   *  mobil ENFORCE eder (açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket tek nefeste). */
+  kk1OnlineOnlyEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi — default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma 400). Yalnız demo/eğitim. */
   shippingSimulatedWeightEnabled: boolean;

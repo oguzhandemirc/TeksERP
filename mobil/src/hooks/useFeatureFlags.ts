@@ -31,6 +31,14 @@ export function useKk1WeightEntryEnabled(): boolean {
   return useFeatureFlags().data?.kk1WeightEntryEnabled ?? false;
 }
 
+/** KK1 çevrimdışı kuyruksuz (online-only) rejimde mi? Default false (kuyruklu davranış).
+ *  Fail-toward-queue bilinçli: bayrak henüz yüklenmemişken kuyruklu (bugünkü) davranış
+ *  sürer — yanlış yönde kilitlemektense kayıt almak tercih edilir; RQ cache'i persist
+ *  olduğu için son bilinen değer offline açılışta da geçerlidir. */
+export function useKk1OnlineOnlyEnabled(): boolean {
+  return useFeatureFlags().data?.kk1OnlineOnlyEnabled ?? false;
+}
+
 /** İade kabulünde personel kaliteyi değiştirebilir mi? Default false (gizli). */
 export function useReturnGradingEnabled(): boolean {
   return useFeatureFlags().data?.returnGradingEnabled ?? false;

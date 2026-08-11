@@ -68,6 +68,15 @@ export const SETTING_KEYS = {
    *  arka arkaya gelir). ⚠️ Bunu açmadan ÖNCE sahadaki tabletler 409'u tanıyan
    *  APK'ya güncellenmeli; eski APK hatayı çıkışsız gösterir. */
   KK1_DUPLICATE_GUARD_ENABLED: "kk1.duplicateGuardEnabled",
+  /** KK1 ham giriş ÇEVRİMDIŞI KUYRUKSUZ (online-only) rejimde mi. Default FALSE.
+   *  Açıkken mobil KK1 çevrimdışıyken kayıt ALMAZ (form kilitli, sebep yazılır)
+   *  ve kayıt+etiket tek nefeste yürür — "Sırada/Başarısız/Gitmedi" liste
+   *  karışıklığının kökten kapatılması (2026-08-11 saha kararı). Client (mobil)
+   *  ENFORCE — backend'in kuyruğu yoktur, sunucu tarafında zorlanacak bir şey yok.
+   *  ⚠️ Bayrağı açmadan önce sahadaki tabletler bu rejimi tanıyan APK'da olmalı;
+   *  eski APK bayrağı görmez ve kuyruklu davranışa devam eder (zarar yok, ama
+   *  karışıklık da kapanmaz). */
+  KK1_ONLINE_ONLY_ENABLED: "kk1.onlineOnlyEnabled",
   /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
    *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
   RETURN_GRADING_ENABLED: "return.gradingEnabled",
@@ -739,6 +748,10 @@ export interface FeatureFlags {
    *  eder: 90 sn içinde birebir aynı giriş 409 POSSIBLE_DUPLICATE alır ve ancak
    *  açık onayla (`confirmDuplicate`) geçer. */
   kk1DuplicateGuardEnabled: boolean;
+  /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi (default false).
+   *  Client (mobil) ENFORCE — açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket
+   *  tek nefeste yürür. */
+  kk1OnlineOnlyEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma `weighSack`'te 400).
    *  Demo/eğitim kurulumu açar — çuval kg'si irsaliyeye/çeki listesine basılır. */
@@ -1034,6 +1047,7 @@ export class SystemSettingService {
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
       kk1DuplicateGuardEnabled: await readKk1DuplicateGuardEnabled(cacheClient),
+      kk1OnlineOnlyEnabled: await readKk1OnlineOnlyEnabled(cacheClient),
       shippingSimulatedWeightEnabled: await readSimulatedWeightEnabled(cacheClient),
       returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
       kartelaMeasurementEnabled: await readKartelaMeasurementEnabled(cacheClient),
@@ -1146,6 +1160,18 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED,
         input.kk1DuplicateGuardEnabled,
         "Ham girişte mükerrer top uyarısı",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kk1OnlineOnlyEnabled")) {
+      if (typeof input.kk1OnlineOnlyEnabled !== "boolean") {
+        throw AppError.badRequest("kk1OnlineOnlyEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_ONLINE_ONLY_ENABLED,
+        input.kk1OnlineOnlyEnabled,
+        "Ham giriş çevrimdışı kuyruksuz (online-only) rejim",
         userId
       );
     }
@@ -1860,6 +1886,27 @@ export async function readKk1DuplicateGuardEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi? Default false.
+ *
+ * SAHA KARARI (2026-08-11): kesinti anında kuyruğa alınan kayıtların etiketi
+ * sonradan basılamayınca operatör aynı topu YENİDEN giriyordu (07.08 vakası:
+ * 4 top 34-52 dk sonra ikizlendi). Bayrak açıkken mobil KK1 çevrimdışı kayıt
+ * hiç ALMAZ — kayıt + etiket tek nefeste yürür, "Sırada/Başarısız" listeleri
+ * doğmaz. ENFORCE istemcidedir (kuyruk istemci kavramı); bu okuma yalnız
+ * feature-flags yanıtını besler.
+ */
+export async function readKk1OnlineOnlyEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_ONLINE_ONLY_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -103,6 +103,11 @@ export const updateSchema = z.strictObject({
   // ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — tuzak sahada yanlış pozitif
   // üretirse tek geri dönüş yolu budur (enforcement okuması kasten cache'siz).
   kk1DuplicateGuardEnabled: z.boolean().optional(),
+  // kk1.onlineOnlyEnabled — KK1 ham giriş çevrimdışı kuyruksuz rejim (default FALSE).
+  // Client (mobil) ENFORCE: açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket tek
+  // nefeste. ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — rejim sahada
+  // sorun çıkarırsa (kesintiler girişleri fazla durduruyorsa) tek geri dönüş yolu.
+  kk1OnlineOnlyEnabled: z.boolean().optional(),
   // Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (false=default → backend
   // ENFORCE, 400). Yalnız demo/eğitim kurulumu açar; kg irsaliyeye/çekiye basılır.
   shippingSimulatedWeightEnabled: z.boolean().optional(),

@@ -61,7 +61,11 @@ import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
-import { useRawWidthEnabled, useKk1WeightEntryEnabled } from '../../../hooks/useFeatureFlags';
+import {
+  useRawWidthEnabled,
+  useKk1WeightEntryEnabled,
+  useKk1OnlineOnlyEnabled,
+} from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
@@ -323,6 +327,12 @@ export default function KK1Screen() {
   // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
   const rawWidthEnabled = useRawWidthEnabled();
   const weightEntryEnabled = useKk1WeightEntryEnabled();
+  // ONLINE-ONLY REJİM (2026-08-11 saha kararı, bayrak varsayılan KAPALI):
+  // açıkken KK1 çevrimdışıyken kayıt ALMAZ — form kilitlenir, sebep bandı çıkar
+  // ve kayıt asla offline kuyruğa düşmez (mutation networkMode 'always').
+  // Gerekçe: kesintide kuyruğa giren kayıtların etiketi sonradan basılamayınca
+  // operatör aynı topu YENİDEN giriyordu (07.08 vakası — 4 top ikizlendi).
+  const onlineOnly = useKk1OnlineOnlyEnabled();
   // Otomatik metraj okuması için bu makineye atanmış METER cihaz(lar)ı (HAL).
   // Tablet hangi makineye atanmışsa onun cihazları gelir (backend for-device).
   const meterPeripherals = useMachinePeripherals('METER');
@@ -456,9 +466,15 @@ export default function KK1Screen() {
           { roll, error: r.error || 'Yazdırma hatası' },
           ...f.filter((x) => x.roll.id !== roll.id),
         ]);
+        // ONLINE-ONLY: baskı hatası köşede çip olarak bekleyemez — kuyruk
+        // görünümü KENDİLİĞİNDEN açılır ve operatör "Tekrar Dene / çıkar"
+        // kararını vermeden geçemez. Rejimin sözü "kayıt + etiket tek nefeste";
+        // nefes yarıda kesildiyse bunu en görünür yüzey söyler. (Kuyruklu
+        // rejimde davranış eskisi gibi: çip kırmızıya döner, operatör açar.)
+        if (onlineOnly) setQueueOpen(true);
       }
     },
-    [],
+    [onlineOnly],
   );
   const retryFailedPrint = useCallback((roll: Roll) => {
     setFailedPrints((f) => f.filter((x) => x.roll.id !== roll.id));
@@ -663,11 +679,18 @@ export default function KK1Screen() {
     } | undefined
   >({
     mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
+    // ONLINE-ONLY: 'always' → mutation offline'da PAUSE OLMAZ, kuyruğa girmez.
+    // Çevrimdışı basış zaten handleSubmit kapısında engelli; uçuş ortasında
+    // kopan ağda istek düşer, stationRetry dener, kalıcı düşüş görünür hata +
+    // yapışkan token olur (sıradaki basış AYNI kimlikle gider → kopya yok).
+    // Bayrak kapalıyken defaults'taki 'online' (kuyruklu) davranış birebir sürer.
+    ...(onlineOnly ? { networkMode: 'always' as const } : {}),
     onMutate: (vars) => {
       const prevForm = form;
       // Kuyruğa mı düşüyor? `onlineManager.isOnline()` ile retryer'ın `isPaused`
-      // kararı AYNI predicate'ten gelir — okuma deterministik.
-      const queued = !onlineManager.isOnline();
+      // kararı AYNI predicate'ten gelir — okuma deterministik. Online-only
+      // rejimde mutation hiç pause olmadığı için kuyruk dalı da kapalıdır.
+      const queued = !onlineOnly && !onlineManager.isOnline();
       // ⚠️ UÇUŞ KAYDI İÇİN AYRI SORU: kayıt yalnız operatörün BİLDİĞİ bir
       // çevrimdışılıkta (ağ linki yok) açılmaz. "Sunucuya ulaşılamıyor"da
       // (B6) açılır — orada basışlar panik olabilir ve aynı yük 90 sn içinde
@@ -1083,6 +1106,22 @@ export default function KK1Screen() {
 
   const handleSubmit = async () => {
     if (pulling) return; // makineden okuma sürerken çift tetikleme yok
+    // ONLINE-ONLY KAPISI: çevrimdışıyken kayıt HİÇ alınmaz (kuyruk yok). Buton
+    // zaten disabled ama bu guard yarış penceresini de kapatır (basış anında
+    // bağlantı düşmüş olabilir). Sebep ayrı anlatılır — "wifi'yi aç" ile
+    // "sunucu kapalı, IT'ye haber ver" operatör için farklı işlerdir.
+    if (onlineOnly && !onlineManager.isOnline()) {
+      const why = offlineReason();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Toast.show({
+        type: 'error',
+        text1: why === 'server' ? 'Sunucuya ulaşılamıyor' : 'Ağ bağlantısı yok',
+        text2:
+          'Kayıt ALINMADI — bu ekranda çevrimdışı giriş kapalı. ' +
+          'Bağlantı gelince topu girin; sıraya alınan hiçbir şey yok.',
+      });
+      return;
+    }
     // TEKRAR DENE: düşen deneme birebir yeniden gönderilir — form okunmaz,
     // makineye gidilmez, doğrulama tekrarlanmaz (payload zaten geçerliydi).
     // Aynı token + aynı içerik → backend idempotent yolu → kopya doğmaz.
@@ -1675,6 +1714,18 @@ export default function KK1Screen() {
             compact && footerAnimStyle,
           ]}
         >
+          {/* ONLINE-ONLY: çevrimdışıyken buton kilitli + üstünde sebep bandı.
+              Sebep operatörün yapacağı işi söyler — wifi mi, sunucu mu. */}
+          {onlineOnly && !isOnline && (
+            <View style={styles.offlineLockBanner}>
+              <Icon source="wifi-off" size={18} color="#b45309" />
+              <Text style={styles.offlineLockText}>
+                {offlineWhy === 'server'
+                  ? 'Sunucuya ulaşılamıyor — kayıt girilemez. Sunucu dönünce devam edin; sürerse yetkiliye haber verin.'
+                  : 'Ağ bağlantısı yok — kayıt girilemez. Wifi bağlantısını kontrol edin; toplar bağlantı gelince girilir.'}
+              </Text>
+            </View>
+          )}
           <Button
             mode="contained"
             icon={
@@ -1692,7 +1743,9 @@ export default function KK1Screen() {
             // Disabled buton geri bildirim vermez, operatör "dondu" sanıp daha
             // sert basar; onun yerine aynı yükle gelen basış uçuştaki KİMLİĞİ
             // yeniden kullanır (entryAttempt: reuse-inflight) → tek kayıt.
-            disabled={pulling}
+            // İSTİSNA — online-only rejimde çevrimdışı: kayıt alınamayacak,
+            // basılabilir buton yalan söylerdi; kilit + yukarıdaki bant birlikte.
+            disabled={pulling || (onlineOnly && !isOnline)}
             buttonColor={
               justSaved ? colors.success : retrying ? colors.warningDark : undefined
             }
@@ -1700,15 +1753,17 @@ export default function KK1Screen() {
             contentStyle={[styles.submitBtnContent, !compact && styles.submitBtnContentTablet]}
             labelStyle={[styles.submitBtnLabel, !compact && styles.submitBtnLabelTablet]}
           >
-            {pulling
-              ? 'Makineden okunuyor…'
-              : justSaved
-                ? 'Kaydedildi ✓'
-                : sending
-                  ? 'Kaydediliyor… bekle'
-                  : retrying
-                    ? 'Tekrar Dene (aynı top)'
-                    : 'Kaydet ve Etiket Bas'}
+            {onlineOnly && !isOnline
+              ? 'Çevrimdışı — kayıt kapalı'
+              : pulling
+                ? 'Makineden okunuyor…'
+                : justSaved
+                  ? 'Kaydedildi ✓'
+                  : sending
+                    ? 'Kaydediliyor… bekle'
+                    : retrying
+                      ? 'Tekrar Dene (aynı top)'
+                      : 'Kaydet ve Etiket Bas'}
           </Button>
         </Animated.View>
         </View>
@@ -2951,6 +3006,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
+  },
+  // ONLINE-ONLY rejimde çevrimdışı kilit bandı — amber (uyarı, hata değil):
+  // kayıt girilemez ama kaybolan da yok. Butonun hemen üstünde durur ki
+  // "buton neden basılmıyor" sorusunun cevabı gözün gittiği yerde olsun.
+  offlineLockBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  offlineLockText: {
+    flex: 1,
+    color: '#78350f',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   // Telefon: footer AKIŞTAN ÇIKAR — formCol'un altında YÜZER (absolute), arka
   // plan/çizgi YOK (sadece buton, gri şerit yok). İçerik full-height kayar,
