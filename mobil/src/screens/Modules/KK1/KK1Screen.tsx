@@ -2743,7 +2743,11 @@ interface EntryConflictModalProps {
   onSaveAsNew: () => void;
 }
 
-function EntryConflictModal({
+// `export` — render bekçisi için (EntryConflictModal.test.tsx): bu modal
+// sahada İLK tetiklenişinde çökmüştü (Children.only) çünkü hiçbir test onu
+// gerçekten ÇİZMİYORDU; metin sabitlerinin bekçisi (duplicateEntryChoice.test)
+// render'ı göremez.
+export function EntryConflictModal({
   kind,
   barcode,
   visible,
@@ -2773,6 +2777,13 @@ function EntryConflictModal({
       accessibilityState={{ disabled: busy || dimmed }}
       accessibilityLabel={choice.a11y}
     >
+      {/* ⚠️ TEK SARMALAYICI ZORUNLU (2026-08-12 saha çökmesi): TouchableRipple
+          çocuğunu React.Children.only'den geçirir — [choiceInner, scrim] gibi
+          İKİ doğrudan çocuk her açılışta FATAL çöker (scrim koşulu false'ken
+          bile: [View, false] bir dizidir). Modal sahada ilk kez seri-birebir
+          giriş testinde tetiklendi ve uygulamayı kapattı; render bekçisi:
+          EntryConflictModal.test.tsx. */}
+      <View style={conflictStyles.choiceWrap}>
       <View style={conflictStyles.choiceInner}>
         {/* ROZET — dilden bağımsız ayırt edici ve kartın EN YÜKSEK kontrastlı
             öğesi. Beyaz DOLGU + renkli içerik (12:1); saydam beyaz çip denendi
@@ -2822,6 +2833,7 @@ function EntryConflictModal({
           pointerEvents="none"
         />
       )}
+      </View>
     </TouchableRipple>
   );
 
@@ -2898,6 +2910,12 @@ const conflictStyles = StyleSheet.create({
     minHeight: 88,
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  // Children.only sarmalayıcısı — scrim absoluteFill'i kartın tamamını kaplasın
+  // diye minHeight'ı ripple ile aynı taşır (içerik kısa kalırsa perde delik açmasın).
+  choiceWrap: {
+    minHeight: 84,
+    justifyContent: 'center',
   },
   choiceInner: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
   badge: {
