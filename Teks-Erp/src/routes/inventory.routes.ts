@@ -819,8 +819,11 @@ router.post(
  *       Yapılan işlemler:
  *       - Roll.initialQty / currentQty = totalMeters
  *       - RollError'lar insert (sadece startMeter zorunlu, endMeter opsiyonel)
- *       - RollOperation: QC2_COMPLETED her zaman; KURSUN_APPLIED istasyonun KURSUN yeteneği varsa
- *       - İstasyonun propertyCapabilities listesi Roll'a RollProperty olarak kopyalanır
+ *       - RollOperation: QC2_COMPLETED her zaman; KURSUN_APPLIED yalnız KURSUN özelliği topa GERÇEKTEN yazıldıysa
+ *       - İstasyon özellikleri MODA göre uygulanır (2026-08-10): AUTO her zaman;
+ *         OPTIONAL yalnız `properties` listesinde geldiyse; REQUIRED eksikse 400.
+ *         SEÇİM (CHOICE) tipli özellikte `valueCode` zorunlu, BAYRAK'ta yasak.
+ *         Eski APK `properties` göndermez → yalnız AUTO uygulanır.
  *       - Kurşun/KK2 movement'ı kapatılır (qtyOut = totalMeters)
  *       - Sonraki step (Tambur) için movement açılır + Roll.currentStepId güncellenir
  *

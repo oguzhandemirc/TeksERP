@@ -71,7 +71,7 @@ npx tsx scripts/seed_fold_catalog_and_modes.ts --apply
 
 Script iki iş yapar ve **idempotenttir** (tekrar koşulabilir):
 
-1. `KAT` karakteristiği + değerleri (`2-KAT`/`4-KAT`/`TUP`) + Tambur bağı (mod **ZORUNLU**)
+1. `KAT` karakteristiği + değerleri (`2-KAT`/`4-KAT`/`TUP`) + Tambur bağı (mod **OPSİYONEL**)
 2. `KURSUN_KK2/KURSUN` satırını **AUTO**'ya çeker
 
 > ⚠️ **2. adım atlanırsa iki şey SESSİZCE bozulur:** kurşun özelliği toplara
@@ -89,7 +89,7 @@ ZIMPARA_FASON/ZIMPARALI    OPTIONAL (dokunulmuyor)
 KURSUN_KK2/KURSUN          OPTIONAL → AUTO
 + FabricProperty OLUŞTUR   code=KAT valueType=CHOICE
     + değer 2-KAT / 4-KAT / TUP
-    + istasyon bağı TAMBUR_1 mod=REQUIRED
+    + istasyon bağı TAMBUR_1 mod=OPTIONAL
 ```
 
 ---
@@ -196,3 +196,39 @@ ilerlemesi. Model kuruldu (iç istasyon rotada renk/özellik taşıyabilir), ak�
 YAZILMADI: bugün fabrikada içeride yapılan bir proses yok. İç bir makine
 alındığında ayrı bir iş olarak planlanmalı — yoksa top o adımda kilitlenir
 (ilerletecek yüzey yok) ve yalnız "Konumu Düzelt" ile kurtarılır.
+
+---
+
+## 11) 2026-08-11 denetim revizyonu (aynı branch, aynı pencere)
+
+Sektör-standardı denetimi (5 mercek + çapraz doğrulama) 24 doğrulanmış bulgu
+üretti; hepsi bu branch'te kapatıldı. **Yeni migration YOK** (Faz B'nin
+`RollProperty.valueId` migration'ı zaten §2'de). Deploy'a etkisi olan kararlar:
+
+- **Değer koruması (F1):** Düzelt / iş emri hedef güncellemesi artık yalnız
+  BAYRAK satırlarını replace eder — GRAMAJ gibi SEÇİM tipli satırların değeri
+  silinemez. Soyağacı kopyaları (kesim çocuğu, undo, kısmi sevk) `valueId`
+  taşır.
+- **CHOICE hedef listesine giremez (Q1/F2/F3):** 9 backend kapısı
+  (`assertTargetablePropertyIds`) + istemci süzgüleri. SEÇİM tipli özellik
+  hedef/rota/sipariş/ürün-izinli listelerinde 400 ile reddedilir.
+- **Tip geçiş kilitleri (F5):** kullanılmış CHOICE→FLAG ve pivotlu/AUTO'lu
+  FLAG→CHOICE 400; `KAT` tipi hiç değiştirilemez.
+- **TAMBUR_1/KAT modu OPTIONAL (SEK-5):** REQUIRED *yalancı beyandı* — Tambur
+  akışı capability kapısını çağırmıyor (kat kolon-projeksiyon istisnası; UI
+  zorunlu sorar, backend eski-APK sözleşmesi gereği null fallback kabul eder).
+  Seed'ler OPTIONAL yazar. **Script'i eski sürümüyle koşmuş bir kurulumda**
+  (satır REQUIRED kalmışsa) tek seferlik düzeltme:
+  ```sql
+  UPDATE station_properties sp SET mode='OPTIONAL'
+  FROM stations s, fabric_properties fp
+  WHERE sp."stationId"=s.id AND sp."propertyId"=fp.id
+    AND s.code='TAMBUR_1' AND fp.code='KAT' AND sp.mode='REQUIRED';
+  ```
+- **Yazılı ayrım (SEK-5):** *İSTASYON ekranı yeteneği adım payload'ından
+  (Kurşun/QC2 → open-cards `stepSummary.properties`), PLANLAMA ekranı
+  katalogdan (Tambur kat tuşları + Hızlı İş Emri → `code=KAT` araması) okur.*
+  `GET /station-capabilities/for-session` ucunun bugün İSTEMCİSİ YOK — ileride
+  istasyon-bağlı üçüncü ekran için hazır altyapı.
+- **Görünürlük (VAL-02/03/04):** Düzelt diyaloğu + mobil Tambur/Depo çipleri
+  artık SEÇİM değerini basar ("GRAMAJ: 50 gr").

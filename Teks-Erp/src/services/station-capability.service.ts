@@ -209,12 +209,22 @@ export class StationCapabilityService {
 
   /**
    * Aktif çalışma OTURUMUNUN istasyonunun yetkinlikleri — `peripherals/for-session`
-   * kardeşi. Tablet kendi istasyon id'sini bilmek zorunda kalmasın diye var:
-   * Tambur kat tuşlarını ve Kurşun/QC2 özellik tuşlarını buradan çizer.
+   * kardeşi. Tablet kendi istasyon id'sini bilmek zorunda kalmasın diye var.
+   *
+   * ⚠️ HENÜZ İSTEMCİSİ YOK (2026-08-11 denetimi SEK-5) — dürüst kayıt: bugünkü
+   * gerçek mekanizmalar farklı. Kurşun/QC2 özellik tuşları open-cards içindeki
+   * `stepSummary.properties`'ten çizilir (kursun-qc.service `buildStepSummary` —
+   * mod+değer listesi oraya gömülü, ayrı istek yok); Tambur kat tuşları katalog
+   * kod aramasından gelir (mobil `fabricProperty.service.getFoldValues`, çünkü
+   * KAT kolon-projeksiyon istisnasıdır ve Hızlı İş Emri gibi OTURUMSUZ planlama
+   * yüzeyleri de aynı listeye muhtaç — oturuma bağlanamaz). Ayrım yazılı kural:
+   * İSTASYON ekranı yeteneği adım payload'ından, PLANLAMA ekranı katalogdan
+   * okur. Bu uç, istasyon-bağlı üçüncü bir ekran doğarsa hazır altyapıdır;
+   * tüketicisi doğmadan "buradan çiziliyor" iddiasıyla yorumlanmamalı.
    *
    * ⚠️ Oturum yoksa 404 DEĞİL, "yetkinlik yok" döner mi? HAYIR — 400 döner.
-   * Boş liste, Tambur'da "kat seçeneği tanımlı değil" ile "oturum açık değil"i
-   * aynı ekrana çıkarırdı; operatör hangisini düzelteceğini bilemezdi.
+   * Boş liste, "kat seçeneği tanımlı değil" ile "oturum açık değil"i aynı
+   * ekrana çıkarırdı; operatör hangisini düzelteceğini bilemezdi.
    */
   async getForSession(
     stationId: string | null | undefined,

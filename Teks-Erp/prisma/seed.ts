@@ -553,12 +553,16 @@ async function main() {
   await prisma.stationProperty.create({
     data: { stationId: zimparaFason.id, propertyId: propByCode.get("ZIMPARALI")!.id },
   });
-  // Tambur: kat KARAKTERİSTİĞİNİ sorar (mod ZORUNLU — operatör seçmeden adım
-  // kapanmaz). Tambur'un başka yeteneği yok; burası karar noktasıdır.
+  // Tambur: kat karakteristiği bağı. Mod OPTIONAL — REQUIRED yazmak YALANCI
+  // BEYAN olurdu (SEK-5, 2026-08-11): Tambur akışı capability kapısını hiç
+  // çağırmıyor (kat kolon-projeksiyon istisnası — tablet tuşları katalog kod
+  // aramasından, kayıt `resolveFoldTypeForWrite`'tan geçer; UI zorunlu sorar,
+  // backend eski-APK sözleşmesi gereği null fallback kabul eder). Panelde
+  // "zorunlu" görünüp hiçbir kapıda uygulanmayan mod, ayarı yanıltıcı yapar.
   await prisma.stationProperty.create({
-    data: { stationId: tambur.id, propertyId: katProperty.id, mode: "REQUIRED" },
+    data: { stationId: tambur.id, propertyId: katProperty.id, mode: "OPTIONAL" },
   });
-  console.log("✅ İstasyon yetenekleri (Kurşun=KURSUN/AUTO, Zımpara=ZIMPARALI, Tambur=KAT/ZORUNLU)");
+  console.log("✅ İstasyon yetenekleri (Kurşun=KURSUN/AUTO, Zımpara=ZIMPARALI, Tambur=KAT/OPSİYONEL)");
 
   // --- Hata tipleri ---
   // Saha #18: GENEL — KK2'de hata tipini belirtmek istemeyen operatör için

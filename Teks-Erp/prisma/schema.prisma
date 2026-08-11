@@ -1108,7 +1108,13 @@ model Roll {
   /// birlikte durmaya devam eder; bu kolon GÖRÜNEN ve RAPORLANAN kaynaktır.
   entryReason String? @db.VarChar(500)
 
-  /// Kaç KAT sarıldığı — "2-KAT" | "4-KAT" (serbest metin; ileride 6-KAT gelebilir).
+  /// Kaç KAT sarıldığı — değer KATALOGDAN doğrulanır (2026-08-10): `KAT` kodlu
+  /// SEÇİM (CHOICE) tipli FabricProperty'nin değer listesi (`FabricPropertyValue`,
+  /// varsayılan 2-KAT/4-KAT/TUP; panelden 6-KAT eklenebilir). Serbest metin
+  /// DEĞİLDİR — `resolveFoldTypeForWrite` katalog dışını 400 ile reddeder
+  /// (katalog satırı yoksa fail-open, eski davranış). Değer bu KOLONDA yaşar
+  /// (kolon-projeksiyon istisnası: filtre/sıralama için), RollProperty.valueId
+  /// değil — GRAMAJ gibi diğer CHOICE özellikler valueId kullanır.
   ///
   /// TOPUN KALICI ÖZELLİĞİDİR (2026-08-04 ürün kararı). Önceden yalnız
   /// `WorkOrderStep.stepData` (adım seviyesi, her finalize ezer) ve
@@ -1716,10 +1722,11 @@ model WorkOrder {
   targetItemId  String? @db.Uuid
   targetColorId String? @db.Uuid
 
-  /// Tambur planlama bilgisi — kumaşın kaç-kat sarılacağı ("2-KAT" / "4-KAT" gibi).
-  /// Tambur ekranında **bilgi olarak** gösterilir; nihai kararı operatör verir
-  /// (finalize sırasında override edebilir, gerçek değer RollOperation
-  /// metadata'sına yazılır).
+  /// Tambur planlama bilgisi — kumaşın kaç-kat sarılacağı. Değer KAT kataloğundan
+  /// gelir (bkz. Roll.foldType notu). Tambur ekranında **bilgi olarak** gösterilir;
+  /// nihai kararı operatör verir (finalize sırasında override edebilir, gerçek
+  /// değer topun KENDİ kolonuna — `Roll.foldType` — yazılır; 2026-08-04'ten beri
+  /// RollOperation.metadata yalnız ikincil izdir).
   foldType String?
 
   // O-9: WorkOrder.dyehouseNote kaldırıldı — fason talimatı tek kaynağı

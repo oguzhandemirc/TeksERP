@@ -87,11 +87,14 @@ router.get(
  * /api/kursun-qc/complete-qc2:
  *   post:
  *     tags: [KursunQc]
- *     summary: Bir topun QC2'sini tamamlandı olarak işaretle (kurşun yeteneği varsa otomatik uygular)
+ *     summary: Bir topun QC2'sini tamamlandı olarak işaretle (istasyon özellik modlarına göre uygular)
  *     description: |
- *       İstasyonun propertyCapabilities listesindeki tüm özellikler Roll'a
- *       otomatik RollProperty olarak kopyalanır. KURSUN yetenek olarak atanmışsa
- *       KURSUN_APPLIED log'u da otomatik atılır.
+ *       İstasyonun özellik listesi MODA göre uygulanır (2026-08-10): AUTO satırlar
+ *       operatör göndermese de topa yazılır; OPTIONAL yalnız `properties` listesinde
+ *       geldiyse; REQUIRED eksikse özellik adıyla 400. SEÇİM (CHOICE) tipli özellikte
+ *       `valueCode` zorunludur (örn. GRAMAJ → "50GR"), BAYRAK (FLAG) tipte yasaktır.
+ *       KURSUN özelliği topa gerçekten yazıldıysa KURSUN_APPLIED log'u atılır.
+ *       Eski APK `properties` alanını hiç göndermez → yalnız AUTO uygulanır.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -104,6 +107,20 @@ router.get(
  *               rollId: { type: string, format: uuid }
  *               stepId: { type: string, format: uuid }
  *               notes:  { type: string }
+ *               properties:
+ *                 type: array
+ *                 maxItems: 50
+ *                 description: Operatör cevapları — AUTO satırlar için gerekmez.
+ *                 items:
+ *                   type: object
+ *                   required: [propertyId]
+ *                   properties:
+ *                     propertyId: { type: string, format: uuid }
+ *                     valueCode:
+ *                       type: string
+ *                       maxLength: 32
+ *                       nullable: true
+ *                       description: SEÇİM tipli özellikte katalog değer kodu (zorunlu); BAYRAK'ta gönderilmez.
  *     responses:
  *       201: { description: İşlem kaydedildi }
  *       400: { description: Top bu adımda değil }

@@ -72,8 +72,12 @@ router.get(
  *     description: |
  *       İstasyon, cihazın aktif WorkSession'ından çözülür (x-device-id → oturum) —
  *       `peripherals/for-session` ile aynı desen. Tablet kendi istasyon id'sini
- *       bilmek zorunda kalmaz: Tambur kat tuşlarını ve Kurşun/QC2 özellik
- *       tuşlarını (mod + değer listesi) buradan çizer.
+ *       bilmek zorunda kalmaz.
+ *
+ *       ⚠️ HENÜZ İSTEMCİSİ YOK: Kurşun/QC2 özellik tuşları open-cards
+ *       payload'ındaki `stepSummary.properties`'ten, Tambur kat tuşları katalog
+ *       kod aramasından çizilir (oturumsuz planlama yüzeyleri de aynı listeyi
+ *       kullanır). Bu uç istasyon-bağlı yeni bir ekran için hazır altyapıdır.
  *
  *       Oturum yoksa 400 — boş liste döndürmek "kat seçeneği tanımlı değil" ile
  *       "oturum açık değil"i aynı ekrana çıkarırdı.
@@ -134,7 +138,11 @@ router.get(
  *   put:
  *     tags: [StationCapabilities]
  *     summary: İstasyonun renk + özellik yetkinliklerini topluca değiştir
- *     description: Replace semantics — eski liste silinip yeni liste yazılır.
+ *     description: |
+ *       Replace semantics — eski liste silinip yeni liste yazılır; mevcut satırın
+ *       MODU korunur (2026-08-10). `colorIds` gönderilmezse renk satırlarına
+ *       dokunulmaz. `properties` mod taşıyan yeni sözleşmedir; `propertyIds`
+ *       (modsuz) eski sözleşme olarak kabul edilmeye devam eder.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -153,7 +161,20 @@ router.get(
  *                 items: { type: string, format: uuid }
  *               propertyIds:
  *                 type: array
+ *                 description: Eski sözleşme — mod verilmeden satır listesi (yeni satır OPTIONAL doğar).
  *                 items: { type: string, format: uuid }
+ *               properties:
+ *                 type: array
+ *                 description: Yeni sözleşme — satır başına davranış modu.
+ *                 items:
+ *                   type: object
+ *                   required: [propertyId]
+ *                   properties:
+ *                     propertyId: { type: string, format: uuid }
+ *                     mode:
+ *                       type: string
+ *                       enum: [AUTO, OPTIONAL, REQUIRED]
+ *                       description: Verilmezse mevcut satırın modu korunur; yeni satırda OPTIONAL.
  *     responses:
  *       200: { description: Güncel yetkinlikler döner }
  */

@@ -6,7 +6,8 @@
 // İki iş yapar:
 //
 //   1. KAT KATALOĞU — `FabricProperty(code="KAT", valueType=CHOICE)` + değerleri
-//      (2-KAT / 4-KAT / TÜP) + Tambur istasyonuna bağı (mod REQUIRED).
+//      (2-KAT / 4-KAT / TÜP) + Tambur istasyonuna bağı (mod OPTIONAL — REQUIRED
+//      yalancı beyan olurdu, Tambur akışı capability kapısını çağırmıyor; SEK-5).
 //      Bu satır olmadan `resolveFoldTypeForWrite` FAIL-OPEN çalışır: kat
 //      doğrulanmaz, tablet tuşlarını çizemez. Yani script koşmazsa özellik
 //      sessizce "eski davranış"a düşer — bozulma değil, ama kazanç da yok.
@@ -85,7 +86,7 @@ async function main(): Promise<void> {
   if (!existing) {
     lines.push(`+ FabricProperty OLUŞTUR  code=${FOLD_PROPERTY_CODE} name="Kat" valueType=CHOICE`);
     for (const v of FOLD_VALUES) lines.push(`    + değer  ${v.code}  ("${v.name}")`);
-    if (tambur) lines.push(`    + istasyon bağı  ${tambur.code} (${tambur.name})  mod=REQUIRED`);
+    if (tambur) lines.push(`    + istasyon bağı  ${tambur.code} (${tambur.name})  mod=OPTIONAL`);
   } else {
     if (existing.valueType !== "CHOICE") {
       lines.push(`~ FabricProperty ${FOLD_PROPERTY_CODE}: valueType ${existing.valueType} → CHOICE`);
@@ -95,7 +96,7 @@ async function main(): Promise<void> {
       if (!have.has(v.code)) lines.push(`    + değer EKLE  ${v.code}  ("${v.name}")`);
     }
     if (tambur && !existing.stationCapabilities.some((c) => c.stationId === tambur.id)) {
-      lines.push(`    + istasyon bağı EKLE  ${tambur.code}  mod=REQUIRED`);
+      lines.push(`    + istasyon bağı EKLE  ${tambur.code}  mod=OPTIONAL`);
     }
   }
 
@@ -181,7 +182,12 @@ async function main(): Promise<void> {
       });
       if (!link) {
         await tx.stationProperty.create({
-          data: { stationId: tambur.id, propertyId, mode: "REQUIRED" },
+          // SEK-5 (2026-08-11): mod OPTIONAL — REQUIRED yazmak YALANCI BEYAN olurdu:
+          // Tambur akışı capability kapısını hiç çağırmıyor (kat kolon-projeksiyon
+          // istisnası; UI zorunlu soruyor, backend eski-APK sözleşmesi gereği null
+          // fallback kabul ediyor). Panelde "zorunlu" görünen ama hiçbir kapıda
+          // uygulanmayan mod, ayarı yapan kişiyi yanıltır.
+          data: { stationId: tambur.id, propertyId, mode: "OPTIONAL" },
         });
       }
       // Mevcut bağın modu EZİLMEZ — fabrika bilinçli olarak değiştirmiş olabilir.
