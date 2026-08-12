@@ -1,4 +1,4 @@
-import express, { Express, Request, Response } from "express";
+import express, { Express, NextFunction, Request, Response } from "express";
 import path from "path";
 import fs from "fs";
 import os from "os";
@@ -86,11 +86,34 @@ const app: Express = express();
 // yalnizca http://...:4000 konustugu icin bu istekler basarisiz olur ve durum
 // sayfasi "Kontrol ediliyor..." ekraninda donar. Direktifi null'a cekip kaldir.
 // HSTS de HTTPS olmadigi icin anlamsiz (tarayici http'de zaten yok sayar).
+//
+// WEB PANELI (OPT-IN, 2026-08-12): `WEB_DIST_DIR` ortam degiskeni dolu ise web
+// paneli build'i (Electron/dist-web) ayni origin'den servis edilir — panel ile
+// API tek adreste bulusur (CORS/mixed-content/adres-ayari uclusu tamamen duser).
+// Degisken YOKKEN davranis bayt-bayt bugunku gibidir; fabrika deploy'u etkilenmez.
+const webDistDir = process.env.WEB_DIST_DIR ?? null;
 app.use(
   helmet({
     contentSecurityPolicy: {
       useDefaults: true,
-      directives: { upgradeInsecureRequests: null },
+      directives: {
+        upgradeInsecureRequests: null,
+        // Panel modunda header CSP'si panelin index.html'indeki meta CSP ile
+        // esitlenir (efektif politika iki CSP'nin KESISIMIdir — helmet
+        // varsayilanlari daha dar oldugu icin panelin blob: worker'lari ve
+        // data: baglantilarini sessizce kirardi). Panel modu disinda helmet
+        // varsayilanlari aynen kalir.
+        ...(webDistDir
+          ? {
+              scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+              connectSrc: ["'self'", "data:"],
+              imgSrc: ["'self'", "data:", "blob:"],
+              fontSrc: ["'self'", "data:"],
+              frameSrc: ["'self'", "blob:"],
+              workerSrc: ["'self'", "blob:"],
+            }
+          : {}),
+      },
     },
     strictTransportSecurity: false,
   })
@@ -141,6 +164,13 @@ setupSwagger(app);
 // helmet'in varsayılan CSP'si inline script'i bloklar; harici 'self' dosyalar geçer.
 // CWD = backend kökü (dev) veya app\ (üretimde pm2 `cwd`) → her ikisinde de
 // public\ klasörü bunun altındadır.
+// Web paneli statigi DURUM SAYFASINDAN ONCE baglanir: panel modunda kok (/)
+// artik paneldir (durum bilgisi /health'te yasamaya devam eder). Env yokken bu
+// blok hic kosmaz ve kok, asagidaki durum sayfasidir.
+if (webDistDir) {
+  app.use(express.static(webDistDir));
+}
+
 const publicDir = path.join(process.cwd(), "public");
 app.use(express.static(publicDir));
 
@@ -531,6 +561,24 @@ app.use("/api", (req: Request, res: Response) => {
     message: `Endpoint bulunamadı: ${req.method} ${req.originalUrl}`,
   });
 });
+
+// =============================================================================
+// SPA fallback (yalniz panel modunda) — /api* disindaki HTML isteyen GET'ler
+// panelin index.html'ine duser. Panel HashRouter kullandigi icin bugun derin
+// yol istegi zaten gelmez ("/" + asset'ler yeter); bu blok, router ileride
+// BrowserRouter'a gecerse yenileme/derin baglanti 404'lerini simdiden kapatir.
+// =============================================================================
+if (webDistDir) {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== "GET") return next();
+    if (req.path.startsWith("/api")) return next(); // JSON 404 sozlesmesi bozulmasin
+    if (!req.accepts("html")) return next();
+    // `root` opsiyonu SART: mutlak yol verilirse `send` yolun ICINDEKI nokta
+    // segmentlerini (orn. gelistirme worktree'sindeki `.claude/`) gizli dosya
+    // sayip 404 uretir; root'a gore "index.html" ise nokta segmenti tasimaz.
+    res.sendFile("index.html", { root: webDistDir });
+  });
+}
 
 // =============================================================================
 // Global Error Handler (must be LAST middleware)
