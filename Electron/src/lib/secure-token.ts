@@ -1,3 +1,5 @@
+import { secureStore } from "@/lib/secure-store";
+
 const TOKEN_KEY = "auth.token";
 
 // Bellek cache'i (Faz 2 — docs/history/SAHA-DAYANIKLILIK-FAZ2.md §E2): her HTTP isteği token'ı
@@ -11,14 +13,14 @@ let primed = false;
 export const tokenStore = {
   async get(): Promise<string | null> {
     if (primed) return cachedToken;
-    const value = await window.api.secureStore.get(TOKEN_KEY);
+    const value = await secureStore.get(TOKEN_KEY);
     cachedToken = value ?? null;
     primed = true;
     return cachedToken;
   },
   async set(token: string): Promise<void> {
     // Önce disk (yazım hatasında cache eski-doğru değerde kalır), sonra cache.
-    await window.api.secureStore.set(TOKEN_KEY, token);
+    await secureStore.set(TOKEN_KEY, token);
     cachedToken = token;
     primed = true;
   },
@@ -27,6 +29,6 @@ export const tokenStore = {
     // ANINDA bırakır — güvenli yön), sonra disk.
     cachedToken = null;
     primed = true;
-    await window.api.secureStore.delete(TOKEN_KEY);
+    await secureStore.delete(TOKEN_KEY);
   },
 };
