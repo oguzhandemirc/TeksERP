@@ -279,3 +279,18 @@ export async function createRate(body: { rateDate: string; currency: Currency; r
   const res = await apiClient.post("/api/finance/exchange-rates", body);
   return res.data;
 }
+
+export interface TcmbFetchSummary {
+  /** Bülten tarihi (YYYY-MM-DD) — fetch günü değil. */
+  fetched: string;
+  written: Array<{ currency: Currency; rate: string }>;
+  /** Elle girilmiş (MANUAL) olduğu için dokunulmayanlar. */
+  skippedManual: Array<{ currency: Currency; rate: string }>;
+  unchanged: Array<{ currency: Currency; rate: string }>;
+  missing: Currency[];
+}
+
+export async function fetchTcmbRates(): Promise<TcmbFetchSummary> {
+  const res = await apiClient.post("/api/finance/exchange-rates/fetch-tcmb");
+  return (res.data as { data: TcmbFetchSummary }).data;
+}

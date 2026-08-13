@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
-import { listRates, createRate, type Currency } from "./service";
+import { listRates, createRate, fetchTcmbRates, type Currency } from "./service";
 
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
@@ -31,6 +31,22 @@ export function RatesPage() {
     onSuccess: () => {
       toast.success("Kur kaydedildi.");
       setRate(0);
+      void qc.invalidateQueries({ queryKey: ["finance", "rates"] });
+    },
+  });
+
+  // Hata toast'ı apiClient interceptor'undan gelir (onError eklenmez — duplicate olur).
+  const tcmbM = useMutation({
+    mutationFn: fetchTcmbRates,
+    onSuccess: (s) => {
+      const date = new Date(`${s.fetched}T00:00:00Z`).toLocaleDateString("tr-TR", { timeZone: "UTC" });
+      const parts: string[] = [];
+      if (s.written.length > 0) parts.push(`${s.written.length} kur yazıldı`);
+      if (s.unchanged.length > 0) parts.push(`${s.unchanged.length} kur zaten günceldi`);
+      if (s.skippedManual.length > 0)
+        parts.push(`elle girilmiş ${s.skippedManual.map((x) => x.currency).join(", ")} korundu`);
+      if (s.missing.length > 0) parts.push(`bültende bulunamayan: ${s.missing.join(", ")}`);
+      toast.success(`TCMB ${date} bülteni: ${parts.join(" · ")}`);
       void qc.invalidateQueries({ queryKey: ["finance", "rates"] });
     },
   });
@@ -75,6 +91,15 @@ export function RatesPage() {
             <Button disabled={rate <= 0 || createM.isPending} onClick={() => createM.mutate()}>
               <Plus className="mr-1 h-4 w-4" />
               {createM.isPending ? "Kaydediliyor…" : "Kur ekle"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={tcmbM.isPending}
+              onClick={() => tcmbM.mutate()}
+              title="TCMB döviz alış (ForexBuying) kurlarını bülten tarihine yazar. Elle girilmiş kurlar korunur."
+            >
+              <RefreshCw className={`mr-1 h-4 w-4 ${tcmbM.isPending ? "animate-spin" : ""}`} />
+              {tcmbM.isPending ? "Çekiliyor…" : "TCMB'den Çek"}
             </Button>
           </div>
         </PermissionGate>

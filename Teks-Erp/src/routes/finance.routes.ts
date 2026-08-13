@@ -19,6 +19,7 @@ import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { cariService } from "../services/cari.service";
 import { invoiceService } from "../services/invoice.service";
 import { paymentService } from "../services/payment.service";
+import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
 const router = Router();
 
@@ -377,5 +378,33 @@ router.patch("/bank-accounts/:id", requirePermission("finance:write"), stripBala
 router.get("/exchange-rates", requirePermission("finance:read"), rateCtl.findAll);
 router.post("/exchange-rates", requirePermission("finance:write"), rateCtl.create);
 router.patch("/exchange-rates/:id", requirePermission("finance:write"), rateCtl.update);
+
+/**
+ * @swagger
+ * /api/finance/exchange-rates/fetch-tcmb:
+ *   post:
+ *     summary: TCMB'den güncel döviz kurlarını çek (USD/EUR/GBP/RUB)
+ *     description: >
+ *       today.xml'den ForexBuying (döviz ALIŞ — VUK gereği fatura/değerleme
+ *       çevrimi bu kurla yapılır) okunur, Unit'e bölünerek normalize edilir ve
+ *       BÜLTEN tarihine yazılır (fetch gününe değil). Aynı güne elle girilmiş
+ *       (MANUAL) kur varsa DOKUNULMAZ; mevcut TCMB satırı güncellenir. Yanıt
+ *       özeti yazılan/atlanan/değişmeyen kurları ayrı ayrı listeler.
+ *     tags: [Finance]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: "{ fetched, written[], skippedManual[], unchanged[], missing[] }"
+ *       502:
+ *         description: TCMB'ye ulaşılamadı ya da XML ayrıştırılamadı
+ */
+router.post("/exchange-rates/fetch-tcmb", requirePermission("finance:write"), async (req, res, next) => {
+  try {
+    const summary = await fetchTcmbRates(req.user?.userId);
+    res.json({ success: true, data: summary });
+  } catch (e) {
+    next(e);
+  }
+});
 
 export default router;

@@ -8,6 +8,7 @@ import { startBackupScheduler } from './jobs/backup-scheduler';
 import { startOffsiteSweeper } from './jobs/offsite-sweeper';
 import { startPermissionCatalogReconciler } from './jobs/permission-catalog.job';
 import { startDefaultWarehouseReconciler } from './jobs/default-warehouse.job';
+import { startExchangeRateScheduler } from './jobs/exchange-rate.job';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
@@ -98,6 +99,9 @@ const server = app.listen(Number(PORT), HOST, () => {
     // gömmek uuid/adı taşa yazar). Bu satır olmadan `resolveTargetWarehouseId`
     // varsayılan bulamaz ve yeni toplar deposuz doğar.
     startDefaultWarehouseReconciler();
+    // TCMB kur çekme: `finance.enabled` KAPALIYKEN tam no-op (dış HTTP denemesi
+    // bile atmaz — üretici fabrika internetsiz; gerekçe jobs/exchange-rate.job.ts).
+    startExchangeRateScheduler();
 
     void AuditService.logEvent({
         category: "SYSTEM",
