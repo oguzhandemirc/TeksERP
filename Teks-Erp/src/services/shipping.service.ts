@@ -1381,32 +1381,22 @@ export class ShippingService {
     let result: { id: string; shipmentNo: string };
     try {
       result = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const shipmentNo = await nextShipmentNo(tx);
-        const created = await tx.shipment.create({
-          data: { shipmentNo, clientToken: data.clientToken ?? null, customerId: data.customerId, branchId, status: ShipmentStatus.PLANNED, destination, procedureCode: data.procedureCode?.trim() || null },
-          select: { id: true, shipmentNo: true },
-        });
-        // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
-        for (let i = 0; i < sackIds.length; i++) {
-          const claimed = await tx.sack.updateMany({
-            where: { id: sackIds[i], shipmentId: null },
-            data: { shipmentId: created.id, seq: i + 1, customerId: data.customerId, branchId },
-          });
-          if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
-        }
-        // İçerik shipmentId açıkça (composite FK deferred → commit'te doğrulanır).
-        await tx.roll.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId: created.id } });
-        await tx.swatch.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId: created.id } });
-        // Sipariş kümesi (kullanıcı seçimi) + spec-FIFO tahsis.
-        await this.setShipmentOrdersTx(tx, created.id, orderIds);
-        await this.writeShipmentAllocationsTx(tx, created.id, orderIds, branchId);
-        // Onay kapalı → aynı tx'te sevk et (DISPATCHED).
-        if (!confirmationEnabled) {
-          await this.performDispatchTx(tx, created.id, { plateNumber: data.plateNumber, driverName: data.driverName, carrier: data.carrier }, userId);
-        }
-        return created;
-      }),
+      prisma.$transaction(async (tx) =>
+        this.createShipmentCoreTx(tx, {
+          sackIds,
+          customerId: data.customerId,
+          branchId,
+          orderIds,
+          destination,
+          procedureCode: data.procedureCode,
+          plateNumber: data.plateNumber,
+          driverName: data.driverName,
+          carrier: data.carrier,
+          clientToken: data.clientToken,
+          confirmationEnabled,
+          userId,
+        }),
+      ),
       undefined,
       (err) => {
         // clientToken P2002'si retry EDİLMEZ (retry hep aynı token'ı yazar) —
@@ -1428,6 +1418,241 @@ export class ShippingService {
       success: true,
       data: { id: result.id, shipmentNo: result.shipmentNo, status: dispatched ? ShipmentStatus.DISPATCHED : ShipmentStatus.PLANNED, dispatched },
       message: dispatched ? `Sevk edildi: ${result.shipmentNo}` : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`,
+    };
+  }
+
+  /**
+   * SEVKİYAT KURULUMUNUN ÇEKİRDEĞİ — tx İÇİNDE koşar.
+   *
+   * `createShipment` (çuvaldan) ve `createShipmentFromRolls` (Hızlı Sevk) AYNI
+   * çekirdeği çağırır. Kopyalansaydı iki yol zamanla ayrışırdı ve fark en kötü
+   * yerde ortaya çıkardı: tahsis (`SackAllocation`), donmuş irsaliye ve iade
+   * zinciri bu blokta kuruluyor — biri güncellenip diğeri unutulsa "hızlı sevk
+   * ettiğim mal siparişe işlenmemiş" gibi sessiz bir fark doğardı.
+   */
+  private async createShipmentCoreTx(
+    tx: Prisma.TransactionClient,
+    p: {
+      sackIds: string[];
+      customerId: string;
+      branchId: string | null;
+      orderIds: string[];
+      destination: ShipmentDestination;
+      procedureCode?: string | null;
+      plateNumber?: string | null;
+      driverName?: string | null;
+      carrier?: string | null;
+      clientToken?: string | null;
+      confirmationEnabled: boolean;
+      userId?: string;
+    },
+  ): Promise<{ id: string; shipmentNo: string }> {
+    const shipmentNo = await nextShipmentNo(tx);
+    const created = await tx.shipment.create({
+      data: {
+        shipmentNo,
+        clientToken: p.clientToken ?? null,
+        customerId: p.customerId,
+        branchId: p.branchId,
+        status: ShipmentStatus.PLANNED,
+        destination: p.destination,
+        procedureCode: p.procedureCode?.trim() || null,
+      },
+      select: { id: true, shipmentNo: true },
+    });
+    // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
+    for (let i = 0; i < p.sackIds.length; i++) {
+      const claimed = await tx.sack.updateMany({
+        where: { id: p.sackIds[i], shipmentId: null },
+        data: { shipmentId: created.id, seq: i + 1, customerId: p.customerId, branchId: p.branchId },
+      });
+      if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
+    }
+    // İçerik shipmentId açıkça (composite FK deferred → commit'te doğrulanır).
+    await tx.roll.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
+    await tx.swatch.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
+    // Sipariş kümesi (kullanıcı seçimi) + spec-FIFO tahsis.
+    await this.setShipmentOrdersTx(tx, created.id, p.orderIds);
+    await this.writeShipmentAllocationsTx(tx, created.id, p.orderIds, p.branchId);
+    // Onay kapalı → aynı tx'te sevk et (DISPATCHED).
+    if (!p.confirmationEnabled) {
+      await this.performDispatchTx(
+        tx,
+        created.id,
+        { plateNumber: p.plateNumber, driverName: p.driverName, carrier: p.carrier },
+        p.userId,
+      );
+    }
+    return created;
+  }
+
+  /**
+   * HIZLI SEVK — topları doğrudan sevk et (çuval kullanıcıya GÖRÜNMEZ).
+   *
+   * Persona denetiminin KRİTİK bulgusu: alım-satım firmasının en sık işi
+   * "depodan 20 top seç → müşteriye gönder"di ve sistem bunu üç ekran +
+   * top başına tekil barkod okutma olarak dayatıyordu. Çuval bu modelde
+   * irsaliyenin, tahsisin ve iade zincirinin taşıyıcısı olduğu için
+   * KALDIRILAMAZ — ama operatörden GİZLENEBİLİR: burada tek transaction
+   * içinde otomatik açılır, doldurulur ve sevk edilir.
+   *
+   * ⚠️ TEK TRANSACTION: istemcide openSack + scan×N + createShipment
+   * zincirlemek de mümkündü ama yarıda kopan akış yarı dolu bir çuval
+   * bırakırdı (kod tabanının kendi emsali: `splitSack` yorumu). Tek tx
+   * ya hepsini yapar ya hiçbirini.
+   *
+   * ⚠️ BARKOD İSTEMEZ: girdi `rollIds`'tir. Etiket basmayan, stoğunu ekrandan
+   * yöneten kullanıcı birinci sınıf müşteridir; `scanIntoSack`'in barkod
+   * anahtarlı yolu (fiziksel okutma) AYNEN durur.
+   */
+  async createShipmentFromRolls(
+    data: {
+      rollIds: string[];
+      customerId: string;
+      branchId?: string | null;
+      orderIds?: string[];
+      destination?: ShipmentDestination;
+      procedureCode?: string | null;
+      plateNumber?: string | null;
+      driverName?: string | null;
+      carrier?: string | null;
+      clientToken?: string | null;
+    },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    if (data.clientToken) {
+      const cached = await this.readCreateShipmentReplay(data.clientToken);
+      if (cached) return cached;
+    }
+    const rollIds = [...new Set(data.rollIds)];
+    if (rollIds.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
+    if (!data.customerId) throw AppError.badRequest("Müşteri seçilmeli");
+    const orderIds = [...new Set(data.orderIds ?? [])];
+    const branchId = data.branchId ?? null;
+    const destination = data.destination ?? ShipmentDestination.DOMESTIC;
+
+    // ⚠️ İHRACAT çuval TARTISI ister (`assertExportWeighed`) ve hızlı sevkte
+    // çuval yeni doğduğu için tartısı YOKTUR. Sessizce yurtiçi saymak gümrük
+    // belgesini yanlışlardı; kullanıcıyı doğru akışa yönlendiriyoruz.
+    if (destination === ShipmentDestination.EXPORT) {
+      throw AppError.badRequest(
+        "İhracat sevkiyatı çuval tartısı ister — Paketleme / Çuvallar ekranından çuvalı açıp tartın, sonra sevkiyatı kurun.",
+      );
+    }
+    await this.assertOrdersBelong(orderIds, data.customerId, branchId);
+
+    // Ön kontrol (tx DIŞINDA, UX için): uygun olmayan topu ekranda söyle —
+    // 20 top seçip tek satır yüzünden hepsini kaybetmek kötü bir deneyim.
+    // Gerçek guard tx içindeki atomik claim'dir.
+    const rolls = await prisma.roll.findMany({
+      where: { id: { in: rollIds } },
+      select: { id: true, barcode: true, status: true, sackId: true, shipmentId: true, warehouseId: true },
+    });
+    const problems: string[] = [];
+    const ref = (r: { id: string; barcode: string | null }) => r.barcode ?? r.id.slice(0, 8);
+    const found = new Set(rolls.map((r) => r.id));
+    for (const missing of rollIds.filter((id) => !found.has(id))) {
+      problems.push(`${missing.slice(0, 8)}: top bulunamadı`);
+    }
+    for (const r of rolls) {
+      if (r.shipmentId) problems.push(`${ref(r)}: zaten bir sevkiyatta`);
+      else if (r.sackId) problems.push(`${ref(r)}: bir çuvalın içinde — Paketleme ekranından çıkarın`);
+      else if (NON_SACKABLE_STATUSES.includes(r.status)) problems.push(`${ref(r)}: durumu uygun değil (${r.status})`);
+    }
+    if (problems.length > 0) {
+      throw AppError.badRequest(
+        `${problems.length} top sevk edilemez: ${problems.slice(0, 8).join(" · ")}${problems.length > 8 ? " · …" : ""}`,
+      );
+    }
+    // Toplar TEK depodan olmalı: bir sevkiyat tek yerden çıkar ve çuvalın
+    // konumu tek değer taşır. Karışık seçim sessizce tek depoya damgalanırsa
+    // envanter "bu depodan çıktı" derken mal başka depodaydı.
+    const warehouses = new Set(rolls.map((r) => r.warehouseId ?? "—"));
+    if (warehouses.size > 1) {
+      throw AppError.badRequest("Seçilen toplar farklı depolarda — tek sevkiyat tek depodan çıkar.");
+    }
+
+    let result: { id: string; shipmentNo: string };
+    try {
+      result = await withBarcodeRetry(
+        () =>
+          prisma.$transaction(async (tx) => {
+            // 1) Çuval doğar (operatöre görünmez) — konumu topların deposu.
+            const sackNo = await nextSackNo(tx);
+            const sack = await tx.sack.create({
+              data: {
+                sackNo,
+                customerId: data.customerId,
+                branchId,
+                warehouseId: rolls[0]?.warehouseId ?? null,
+              },
+              select: { id: true },
+            });
+            // 2) Toplar ATOMİK claim ile bağlanır (barkod değil id ile).
+            const claimed = await tx.roll.updateMany({
+              where: {
+                id: { in: rollIds },
+                sackId: null,
+                shipmentId: null,
+                status: { notIn: NON_SACKABLE_STATUSES },
+              },
+              data: { sackId: sack.id },
+            });
+            if (claimed.count !== rollIds.length) {
+              throw AppError.conflict(
+                `Toplar bu sırada başka bir akışa girdi (${claimed.count}/${rollIds.length}) — sevkiyat kurulmadı, yenileyip tekrar deneyin.`,
+              );
+            }
+            // 3) Normal sevkiyat çekirdeği — TAHSİS/İRSALİYE/İADE zinciri birebir aynı.
+            return this.createShipmentCoreTx(tx, {
+              sackIds: [sack.id],
+              customerId: data.customerId,
+              branchId,
+              orderIds,
+              destination,
+              procedureCode: data.procedureCode,
+              plateNumber: data.plateNumber,
+              driverName: data.driverName,
+              carrier: data.carrier,
+              clientToken: data.clientToken,
+              confirmationEnabled: await readShipmentConfirmationEnabled(),
+              userId,
+            });
+          }),
+        undefined,
+        (err) => {
+          if (p2002Mentions(err, /clientToken/i)) return false;
+          return true;
+        },
+      );
+    } catch (err) {
+      if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
+        const cached = await this.readCreateShipmentReplay(data.clientToken);
+        if (cached) return cached;
+      }
+      throw err;
+    }
+
+    const dispatched = !(await readShipmentConfirmationEnabled());
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "SHIPMENT",
+      recordId: result.id,
+      newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, orderIds },
+    });
+    return {
+      success: true,
+      data: {
+        id: result.id,
+        shipmentNo: result.shipmentNo,
+        status: dispatched ? ShipmentStatus.DISPATCHED : ShipmentStatus.PLANNED,
+        dispatched,
+        rollCount: rollIds.length,
+      },
+      message: dispatched
+        ? `Sevk edildi: ${result.shipmentNo} (${rollIds.length} top)`
+        : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`,
     };
   }
 
