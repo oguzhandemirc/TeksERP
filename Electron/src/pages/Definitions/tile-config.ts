@@ -181,7 +181,12 @@ export const definitionTiles: DefinitionTile[] = [
     icon: Tags,
     to: "/definitions/labels",
     group: "cikti",
-    permission: "station:read",
+    // ⚠️ İZİN HİZASI (2026-08-14, persona denetimi bulgusu): kart yalnız
+    // `station:read` isterken etiket şablonu tanımlamak isteyen ticaret
+    // kullanıcısı (label:read/print + label-template:read taşır ama İSTASYON
+    // kavramıyla hiç işi yok) kartı GÖREMİYORDU. Rol şablonu kataloğunda
+    // "bilinen hizasızlık" diye yazılıydı. Route ile AYNI liste.
+    permissionAny: ["station:read", "label-template:read"],
   },
   {
     key: "routes",

@@ -196,6 +196,21 @@ async function main(): Promise<void> {
     WEB_WAREHOUSE_SHIPPING: ["warehouse:read", "warehouse:transfer"],
     // Depoyu tanımlayan kişi sistem yöneticisidir.
     WEB_SYSTEM_ADMIN: ["warehouse:write"],
+    // ⚠️ TİCARET KURULUM ŞABLONU (2026-08-14) — bu kuralın BİLİNÇLİ istisnası.
+    // Kural "goods-receipt hiçbir şablonda olmasın" idi ve gerekçesi
+    // GÖRÜNÜRLÜKTÜ: mal kabul karosu yalnız izinle kapılı, şablona akarsa
+    // fabrikada belirir. WEB_TRADE bu gerekçeyi ihlal ETMEZ çünkü şablon
+    // fabrikada KİMSEYE ATANMAZ (kural: katalog koda, atama panele) — atanmamış
+    // şablon kimseye izin vermez, dolayısıyla hiçbir karo doğmaz. Persona
+    // denetimi olmadığında kurulum 3 şablon + elle 4 izin istiyordu ve iki izin
+    // atlanınca Envanter/Siparişler HİÇ görünmüyordu.
+    WEB_TRADE: [
+      "warehouse:read",
+      "warehouse:write",
+      "warehouse:transfer",
+      "goods-receipt:read",
+      "goods-receipt:write",
+    ],
   };
   const leaked: string[] = [];
   const seenAllowed = new Set<string>();
@@ -224,9 +239,16 @@ async function main(): Promise<void> {
   );
   // goods-receipt izinlerinin hiçbir şablonda OLMAMASI ayrıca ve açıkça ölçülür
   // — muaf listesine bir gün eklenirse bu satır düşer.
+  // Mal kabul izni YALNIZ ticaret şablonunda olabilir. Fabrika rollerinden
+  // birine sızarsa (Depo&Sevkiyat, Muhasebe, Satış…) Mal Kabul karosu fabrikada
+  // gerçekten belirir — kuralın koruduğu şey budur, "hiç olmasın" değil.
+  const grLeak = Object.entries(ALLOWED_LEAKS)
+    .filter(([code]) => code !== "WEB_TRADE")
+    .flatMap(([code, ps]) => ps.filter((x) => x.startsWith("goods-receipt:")).map((x) => code + ":" + x));
   check(
-    "§5c Mal kabul izni HİÇBİR rol şablonunda yok (ticaret kurulumunda elle atanır)",
-    !Object.values(ALLOWED_LEAKS).flat().some((p) => p.startsWith("goods-receipt:")),
+    "§5c Mal kabul izni YALNIZ ticaret şablonunda (fabrika rollerine sızmadı)",
+    grLeak.length === 0,
+    grLeak.join(", ") || "temiz",
   );
 
   // ── §6 DEFTER AYRIMI ────────────────────────────────────────────────────

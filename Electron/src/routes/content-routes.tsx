@@ -159,7 +159,9 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "definitions/labels",
     element: (
-      <ProtectedRoute requirePermission="station:read">
+      // Karo (Definitions/tile-config "labels") ile AYNI liste — ayrışırsa kart
+      // görünür, tıklayınca /forbidden.
+      <ProtectedRoute requireAnyPermission={["station:read", "label-template:read"]}>
         <EtiketlerPage />
       </ProtectedRoute>
     ),

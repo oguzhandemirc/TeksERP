@@ -289,6 +289,71 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     ],
   },
   {
+    // ── TİCARET KURULUMU: TEK ŞABLON (2026-08-14) ─────────────────────────
+    // Persona denetimi ölçtü: "birkaç depo + mal kabul + depodan satış + sevk,
+    // üretim ve mobil YOK" kullanıcısını kurmak için ÜÇ şablon (Depo&Sevkiyat +
+    // Muhasebe + Satış) uygulayıp üstüne elle 4 izin vermek gerekiyordu; iki
+    // izin (roll:read, order:read) atlanırsa Envanter ve Siparişler ekranları
+    // HİÇ görünmüyor ve kullanıcı sebebini hiçbir yerde göremiyordu.
+    //
+    // ⚠️ Bu şablon FABRİKAYA DA GİDER ama kimseye ATANMAZ (kural: katalog koda,
+    // atama panele). Görünürlük riski yok: mal kabul/depo/muhasebe yüzeylerinin
+    // hepsi ya multiWarehouse ya finance.enabled rejimine kapılı ve fabrika
+    // ikisinde de kapalı taraftadır.
+    //
+    // ⚠️ goods-receipt:* bilinçli olarak BAŞKA hiçbir şablonda yok
+    // (test_single_warehouse_parity §5c). Burada olması o kuralın İSTİSNASIDIR
+    // ve bekçinin muaf listesine gerekçesiyle yazıldı — ticaret kurulumunun
+    // tanımı gereği mal kabul onun ana işidir.
+    code: "WEB_TRADE",
+    name: "Ticaret (Depo + Satış + Muhasebe)",
+    description:
+      "Alım-satım kurulumu: mal kabul, depo/transfer, stok, sipariş, sevkiyat, iade ve ön muhasebe — ÜRETİM YOK",
+    mode: "list",
+    codes: [
+      // Depo & stok
+      "warehouse:read",
+      "warehouse:write",
+      "warehouse:transfer",
+      "goods-receipt:read",
+      "goods-receipt:write",
+      "roll:read",
+      "roll:write",
+      // Satış & sevkiyat
+      "order:read",
+      "order:write",
+      "customer:read",
+      "customer:write",
+      "customer-alias:read",
+      "customer-alias:write",
+      "shipping:read",
+      "shipping:write",
+      "shipping:invoice",
+      "return:read",
+      "return:write",
+      // Katalog — ticaret firması kendi kumaş/renk kartlarını açar
+      "item:read",
+      "item:write",
+      "property:read",
+      "quality:read",
+      // Etiket (opsiyonel kullanım; basmak zorunlu değil)
+      "label:read",
+      "label:print",
+      "label-template:read",
+      // Ön muhasebe — SoD gereği finance:payment DAHİL (tek kişilik ekipte aynı
+      // kişi; ayrı çalışan varsa panelden ayrılır)
+      "finance:read",
+      "finance:write",
+      "finance:invoice",
+      "finance:payment",
+      // Raporlar
+      "report:sales",
+      "report:inventory",
+      "report:customer",
+      "report:finance",
+    ],
+  },
+  {
     code: "WEB_SYSTEM_ADMIN",
     name: "Sistem Yöneticisi",
     description:
@@ -416,8 +481,9 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Ekran değil, Tambur-içi yetenek: envanter zincirinde DELİK açar (elle top yaratma). Varsayılan operatör paketine GİRMEZ, panelden SEÇİLİ kişiye verilir (root CLAUDE.md, 2026-08-04).",
   "mobile:kk1-desen":
     "Ekran değil, KK1-içi yetenek: inline yeni desen açma. Yalnız seçili ham giriş operatörlerine verilir (permission-catalog.ts).",
-  "goods-receipt:read":
-    "Mal Kabul yalnız ALIM-SATIM kurulumunda kullanılır (üretici fabrika malı KK1'den alır). Varsayılan bir role konulsaydı ekran fabrikada da belirirdi; ticaret kurulumunda admin elle atar (2026-08-13).",
-  "goods-receipt:write":
-    "Aynı gerekçe — üretimsiz mal girişi fabrikanın akışı DEĞİL. Şablona akarsa fabrikada Mal Kabul karosu görünür hale gelir (2026-08-13).",
+  // 2026-08-14: goods-receipt:* muafları KALDIRILDI — artık dar bir rol
+  // (WEB_TRADE) onları taşıyor. Muaf bırakmak "ölü muaf" olurdu ve bekçinin
+  // iki yönlü denetimi zaten kırmızı verdi. Fabrika görünürlüğü şablonla
+  // değil REJİMLE korunuyor: şablon kimseye atanmaz ve mal kabul karosu
+  // goods-receipt izni olmayan kullanıcıda zaten çizilmez.
 };
