@@ -4768,14 +4768,18 @@ model CashBox {
   name     String   @db.VarChar(100)
   currency Currency @default(TRY)
 
-  /// Denormalize — `Payment` toplamıyla aynı tx'te güncellenir, bekçisi
-  /// `test_consistency`.
+  /// Denormalize — İKİ YAZAR: `Payment` (carili tahsilat/ödeme) ve
+  /// `CashTransaction` (carisiz masraf/gelir/virman/açılış). İkisi de aynı
+  /// tx'te increment eder; mutabakat `test_consistency` §23 İKİ TABLOYU birden
+  /// toplar — yalnız birine bakan bir sorgu, diğer yazarın hareketlerini
+  /// "drift" sanardı.
   balance Decimal @default(0) @db.Decimal(14, 2)
 
   isActive Boolean @default(true)
   notes    String? @db.VarChar(500)
 
-  payments Payment[]
+  payments         Payment[]
+  cashTransactions CashTransaction[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4796,13 +4800,93 @@ model BankAccount {
   isActive Boolean  @default(true)
   notes    String?  @db.VarChar(500)
 
-  payments Payment[]
+  payments         Payment[]
+  cashTransactions CashTransaction[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([isActive])
   @@map("bank_accounts")
+}
+
+/// Carisiz kasa/banka hareketinin TÜRÜ.
+///
+/// ⚠️ Neden ayrı model (`Payment`e nullable `cariId` DEĞİL): `Payment`'ın
+/// sözleşmesi "cari deftere satır + bakiye + kasa aynı tx'te oynar"dır ve o
+/// sözleşme storno, kapama ve ekstre yollarının tamamında varsayılır. Kira
+/// ödemesinin carisi YOKTUR; `cariId`yi nullable yapmak, en hassas kod
+/// yolundaki her `Payment` okumasına sessiz bir "cari var mı" dalı eklerdi.
+/// Ayrım aynı zamanda ekranı da doğru böler: Tahsilat/Ödeme listesi CARİ
+/// hareketidir, Kasa Hareketleri ise kasanın kendi defteridir.
+enum CashTxnKind {
+  /// Gider — kira, maaş, elektrik, nakliye…
+  EXPENSE
+  /// Carisiz gelir — kur farkı geliri, hurda satışı, tahsilat dışı giriş.
+  INCOME
+  /// Virman — kasadan bankaya / bankadan kasaya. TEK uç İKİ satır üretir
+  /// (`transferGroupId` ile bağlı): biri OUT, diğeri IN.
+  TRANSFER_OUT
+  TRANSFER_IN
+  /// Açılış/devir bakiyesi — sisteme geçişte kasada/bankada var olan para.
+  /// Bakiye elle YAZILMAZ (generic CRUD'da `stripBalance` engelliyor); açılış
+  /// da bir HAREKETTİR, böylece "bu para nereden geldi" defterden okunur.
+  OPENING
+}
+
+/// Kasa/banka hareketi — CARİSİZ.
+///
+/// Yön `direction` kolonundadır, tutar HER ZAMAN POZİTİFTİR (RollVariance /
+/// WarehouseMovement emsali: işaretli tutar yönü iki yerde saklamaktır ve
+/// ikisi bir gün ayrışır).
+model CashTransaction {
+  id     String           @id @default(uuid()) @db.Uuid
+  /// KH + GGAAYY + NNNN.
+  docNo  String           @unique @db.VarChar(32)
+  kind   CashTxnKind
+  direction PaymentDirection
+  status PaymentStatus    @default(ACTIVE)
+
+  /// Kasa VEYA banka — ikisi birden olamaz (CHECK, Payment ile aynı kural).
+  cashBoxId     String? @db.Uuid
+  bankAccountId String? @db.Uuid
+
+  currency Currency @default(TRY)
+  /// Hesabın para biriminde; kur damgası TL karşılığı raporlar için.
+  exchangeRate Decimal @default(1) @db.Decimal(18, 6)
+  amount       Decimal @db.Decimal(14, 2)
+  amountTry    Decimal @db.Decimal(14, 2)
+
+  txnDate     DateTime @db.Timestamptz
+  /// Serbest kategori metni ("Kira", "Elektrik"). Katalog BİLİNÇLİ olarak
+  /// yok: fabrika/ticaret gider kalemleri çok değişken ve boş bir katalog
+  /// kullanıcıyı "Diğer"e mahkûm ederdi (KK1 sebep kataloğu dersi: kategori
+  /// GERÇEK serbest metinlere bakılarak sonradan kurulur).
+  category    String?  @db.VarChar(120)
+  description String?  @db.VarChar(300)
+  reference   String?  @db.VarChar(120)
+
+  /// Virmanın İKİ satırını bağlar (aynı uçta doğarlar). Tekil hareketlerde NULL.
+  transferGroupId String? @db.Uuid
+
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([cashBoxId, txnDate])
+  @@index([bankAccountId, txnDate])
+  @@index([kind, status, txnDate])
+  @@index([transferGroupId])
+  @@map("cash_transactions")
 }
 
 enum ExchangeRateSource {

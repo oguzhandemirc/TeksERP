@@ -19,6 +19,7 @@ import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { cariService } from "../services/cari.service";
 import { invoiceService } from "../services/invoice.service";
 import { paymentService } from "../services/payment.service";
+import { cashTransactionService } from "../services/cash-transaction.service";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
 const router = Router();
@@ -114,6 +115,195 @@ router.patch("/cari/:id", requirePermission("finance:write"), async (req, res, n
       .extend({ isActive: z.boolean().optional() })
       .parse(req.body);
     res.json(await cariService.update(req.params.id as string, body, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cari/{id}/opening-balance:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Cari açılış/devir bakiyesi
+ *     description: >
+ *       Sisteme geçişteki mevcut borç/alacağı ADJUSTMENT kaynaklı bir defter
+ *       satırı olarak yazar (bakiyeye elle yazmaz — ekstrede görünür ve ters
+ *       satırla düzeltilebilir). Cari+para birimi başına TEK; ikincisi 409.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Devir kaydedildi }
+ *       409: { description: Devir zaten girilmiş }
+ */
+router.post("/cari/:id/opening-balance", requirePermission("finance:invoice"), async (req, res, next) => {
+  try {
+    const b = z
+      .object({
+        currency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]),
+        // POZİTİF = cari bize borçlu; NEGATİF = biz ona borçluyuz.
+        balance: decimalString,
+        description: z.string().max(300).nullable().optional(),
+        txnDate: isoDate.optional(),
+      })
+      .strict()
+      .parse(req.body);
+    res.status(201).json(
+      await cariService.setOpeningBalance(
+        {
+          cariId: req.params.id as string,
+          currency: b.currency,
+          balance: b.balance,
+          description: b.description ?? null,
+          txnDate: b.txnDate ? new Date(b.txnDate) : undefined,
+        },
+        req.user?.userId,
+      ),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+// -----------------------------------------------------------------------------
+// KASA HAREKETLERİ — carisiz (masraf · gelir · virman · açılış)
+// -----------------------------------------------------------------------------
+// ⚠️ Tahsilat/Ödeme uçlarından AYRI: orası CARİ hareketidir, burası kasanın
+// kendi defteri. İzin de ayrışmaz — ikisi de `finance:payment` (parayı sayan
+// kişi aynı kişidir; ayrı izin, kurulumu gereksiz zorlaştırırdı).
+
+const accountRefSchema = {
+  cashBoxId: z.string().uuid().nullable().optional(),
+  bankAccountId: z.string().uuid().nullable().optional(),
+};
+
+/**
+ * @openapi
+ * /api/finance/cash-transactions:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Kasa/banka hareketleri (carisiz)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Sayfalanmış hareket listesi }
+ */
+router.get("/cash-transactions", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    const q = req.query as Record<string, string | undefined>;
+    const result = await cashTransactionService.list({
+      page: q.page ? Number(q.page) : undefined,
+      pageSize: q.pageSize ? Number(q.pageSize) : undefined,
+      kind: q.kind as never,
+      status: q.status as never,
+      cashBoxId: q.cashBoxId,
+      bankAccountId: q.bankAccountId,
+      search: q.search,
+      from: q.from ? new Date(q.from) : undefined,
+      to: q.to ? new Date(q.to) : undefined,
+    });
+    res.json({ success: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cash-transactions:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Masraf / gelir / açılış fişi (carisiz)
+ *     description: >
+ *       Para birimi HESAPTAN gelir (kasa tek para birimlidir), girdide
+ *       sorulmaz. OPENING hesap başına TEKTİR (partial unique + anlamlı 409).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Kaydedildi }
+ */
+router.post("/cash-transactions", requirePermission("finance:payment"), async (req, res, next) => {
+  try {
+    const b = z
+      .object({
+        kind: z.enum(["EXPENSE", "INCOME", "OPENING"]),
+        ...accountRefSchema,
+        amount: decimalString,
+        txnDate: isoDate.optional(),
+        category: z.string().max(120).nullable().optional(),
+        description: z.string().max(300).nullable().optional(),
+        reference: z.string().max(120).nullable().optional(),
+        exchangeRate: decimalString.nullable().optional(),
+        clientToken: z.string().uuid().optional(),
+      })
+      .strict()
+      .parse(req.body);
+    res.status(201).json(
+      await cashTransactionService.create(
+        { ...b, txnDate: b.txnDate ? new Date(b.txnDate) : undefined },
+        req.user?.userId,
+      ),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cash-transactions/transfer:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Virman — kasadan bankaya / bankadan kasaya
+ *     description: >
+ *       TEK uç İKİ satır üretir (çıkan + giren, aynı tx, transferGroupId ile
+ *       bağlı). Para birimleri EŞİT olmalı — farklı birim bir KUR İŞLEMİDİR ve
+ *       virman diye kaydedilirse kur farkı sessizce yok sayılır.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Virman kaydedildi (iki belge no) }
+ */
+router.post("/cash-transactions/transfer", requirePermission("finance:payment"), async (req, res, next) => {
+  try {
+    const b = z
+      .object({
+        fromCashBoxId: z.string().uuid().nullable().optional(),
+        fromBankAccountId: z.string().uuid().nullable().optional(),
+        toCashBoxId: z.string().uuid().nullable().optional(),
+        toBankAccountId: z.string().uuid().nullable().optional(),
+        amount: decimalString,
+        txnDate: isoDate.optional(),
+        description: z.string().max(300).nullable().optional(),
+        clientToken: z.string().uuid().optional(),
+      })
+      .strict()
+      .parse(req.body);
+    res.status(201).json(
+      await cashTransactionService.transfer(
+        { ...b, txnDate: b.txnDate ? new Date(b.txnDate) : undefined },
+        req.user?.userId,
+      ),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cash-transactions/{id}/cancel:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Kasa hareketini iptal et
+ *     description: >
+ *       Kayıt silinmez, CANCELLED işaretlenir ve bakiye ters yönde düzeltilir.
+ *       VİRMAN İPTALİ İKİ BACAĞI BİRDEN alır — tek bacak iptali "para çıktı ama
+ *       girmedi" durumunu kalıcı yapardı.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: İptal edildi }
+ */
+router.post("/cash-transactions/:id/cancel", requirePermission("finance:payment"), async (req, res, next) => {
+  try {
+    const { reason } = z.object({ reason: z.string().max(300).optional() }).parse(req.body ?? {});
+    res.json(await cashTransactionService.cancel(req.params.id as string, reason, req.user?.userId));
   } catch (e) {
     next(e);
   }

@@ -181,6 +181,13 @@ const PARTIAL_INDEXES: Array<{
   { table: "invoices", index: "invoices_one_active_per_subcon_receipt", uniq: true, predicate: `(("subcontractorReceiptId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir fason kabul → tek aktif fatura" },
   { table: "invoices", index: "invoices_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "payments", index: "payments_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  // ticaret paketi — carisiz kasa hareketi (migration 20260813230932)
+  { table: "cash_transactions", index: "cash_transactions_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  // ⚠️ AÇILIŞ HESAP BAŞINA TEK: ikinci devir satırı "hangisi gerçek açılış"
+  // sorusunu cevapsız bırakır ve bakiyeyi sessizce şişirir. İptal edilmiş
+  // açılış yenisini ENGELLEMEZ (yanlış devir düzeltilebilmeli).
+  { table: "cash_transactions", index: "cash_txn_one_opening_per_cashbox", uniq: true, predicate: `((kind = 'OPENING'::"CashTxnKind") AND ("cashBoxId" IS NOT NULL) AND (status <> 'CANCELLED'::"PaymentStatus"))`, why: "kasa başına tek açılış" },
+  { table: "cash_transactions", index: "cash_txn_one_opening_per_bank", uniq: true, predicate: `((kind = 'OPENING'::"CashTxnKind") AND ("bankAccountId" IS NOT NULL) AND (status <> 'CANCELLED'::"PaymentStatus"))`, why: "banka hesabı başına tek açılış" },
   { table: "cari_accounts", index: "cari_accounts_customerId_key", uniq: true, predicate: `("customerId" IS NOT NULL)`, why: "müşteri başına tek cari; NULL'lar (fason cariler) girmez" },
   { table: "cari_accounts", index: "cari_accounts_subcontractorId_key", uniq: true, predicate: `("subcontractorId" IS NOT NULL)`, why: "fason başına tek cari; NULL'lar (müşteri cariler) girmez" },
   // orders
@@ -252,6 +259,17 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   { table: "invoices", name: "invoices_rate_positive" },
   { table: "invoice_lines", name: "invoice_lines_positive" },
   { table: "exchange_rates", name: "exchange_rates_rate_positive" },
+  // 2026-08-14 — carisiz kasa hareketi (migration 20260813230932_cash_transaction).
+  { table: "cash_transactions", name: "cash_txn_account_xor" },
+  { table: "cash_transactions", name: "cash_txn_amount_positive" },
+  { table: "cash_transactions", name: "cash_txn_rate_positive" },
+  // Tür ↔ yön tutarlılığı: "gider ama bakiye artmış" satırı kasa defterini
+  // okunamaz yapar.
+  { table: "cash_transactions", name: "cash_txn_kind_matches_direction" },
+  // Virman satırı grubunu taşımak ZORUNDA (grupsuz TRANSFER_OUT = karşı bacağı
+  // bulunamayan yarım virman); tekil hareket taşıyamaz.
+  { table: "cash_transactions", name: "cash_txn_transfer_group" },
+  { table: "cash_transactions", name: "cash_txn_cancel_stamp" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

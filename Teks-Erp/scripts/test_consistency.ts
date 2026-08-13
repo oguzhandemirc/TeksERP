@@ -527,35 +527,62 @@ WHERE b."cariId" IS NULL AND t.toplam <> 0`,
   },
   {
     id: "23",
-    title: "CashBox.balance vs Σ(iptal edilmemiş Payment: IN − OUT)",
+    title: "CashBox.balance vs Σ(Payment + CashTransaction: IN − OUT)",
     sql: `
 SELECT c.id::text AS kasa_id, c.name, c.balance AS kayitli,
        COALESCE(p.toplam, 0) AS hesaplanan,
        c.balance - COALESCE(p.toplam, 0) AS fark
 FROM cash_boxes c
 LEFT JOIN (
-  SELECT "cashBoxId",
-         SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS toplam
-  FROM payments WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL
-  GROUP BY "cashBoxId"
+  -- ⚠️ İKİ YAZAR: carili tahsilat/ödeme (payments) VE carisiz kasa hareketi
+  -- (cash_transactions: masraf/gelir/virman/açılış). Yalnız birine bakan bir
+  -- mutabakat, diğerinin hareketlerini "drift" sanardı.
+  SELECT "cashBoxId", SUM(t) AS toplam FROM (
+    SELECT "cashBoxId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM payments WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL GROUP BY "cashBoxId"
+    UNION ALL
+    SELECT "cashBoxId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM cash_transactions WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL GROUP BY "cashBoxId"
+  ) u GROUP BY "cashBoxId"
 ) p ON p."cashBoxId" = c.id
 WHERE c.balance <> COALESCE(p.toplam, 0)`,
   },
   {
     id: "24",
-    title: "BankAccount.balance vs Σ(iptal edilmemiş Payment: IN − OUT)",
+    title: "BankAccount.balance vs Σ(Payment + CashTransaction: IN − OUT)",
     sql: `
 SELECT a.id::text AS hesap_id, a.name, a.balance AS kayitli,
        COALESCE(p.toplam, 0) AS hesaplanan,
        a.balance - COALESCE(p.toplam, 0) AS fark
 FROM bank_accounts a
 LEFT JOIN (
-  SELECT "bankAccountId",
-         SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS toplam
-  FROM payments WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL
-  GROUP BY "bankAccountId"
+  -- İki yazar — §23 ile aynı gerekçe.
+  SELECT "bankAccountId", SUM(t) AS toplam FROM (
+    SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM payments WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
+    UNION ALL
+    SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM cash_transactions WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
+  ) u GROUP BY "bankAccountId"
 ) p ON p."bankAccountId" = a.id
 WHERE a.balance <> COALESCE(p.toplam, 0)`,
+  },
+  {
+    id: "26",
+    // VİRMAN İKİ BACAKLIDIR: bir grup ya iki satır taşır (biri OUT biri IN,
+    // tutarları eşit) ya hiç. Tek bacaklı grup = "para çıktı ama girmedi" —
+    // kasa defterinde açıklanamayan fark olarak görünür ve kaynağı bulunamaz.
+    title: "Virman grupları iki bacaklı ve dengeli (çıkan = giren)",
+    sql: `
+SELECT "transferGroupId"::text AS grup, count(*)::text AS kayitli,
+       SUM(CASE WHEN direction = 'OUT' THEN amount ELSE -amount END)::text AS hesaplanan,
+       0 AS fark
+FROM cash_transactions
+WHERE "transferGroupId" IS NOT NULL AND status <> 'CANCELLED'
+GROUP BY "transferGroupId"
+HAVING count(*) <> 2
+    OR SUM(CASE WHEN direction = 'OUT' THEN amount ELSE -amount END) <> 0
+    OR count(DISTINCT currency) <> 1`,
   },
   {
     id: "25",

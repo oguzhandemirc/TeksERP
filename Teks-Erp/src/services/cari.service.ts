@@ -5,11 +5,11 @@
 // da tahsilat anında). Bu servis kartı yönetir ve defterden ekstre türetir;
 // deftere YAZAN yalnız fatura ve tahsilat servisleridir.
 // =============================================================================
-import { Prisma, CariKind, Currency } from "@prisma/client";
+import { Prisma, CariKind, Currency, CariTxnSource } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { D0, D } from "./helpers/finance.helper";
+import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CariListRow {
@@ -258,6 +258,97 @@ export class CariService {
       newData: input as Record<string, unknown>,
     });
     return { success: true, data: updated, message: "Cari hesap güncellendi." };
+  }
+
+  /**
+   * AÇILIŞ / DEVİR BAKİYESİ — sisteme geçiş gününün olmazsa olmazı.
+   *
+   * Firma programa geçtiğinde müşterilerinin ve tedarikçilerinin MEVCUT
+   * borç/alacakları vardır. Girilemezse ilk günden itibaren her bakiye ve her
+   * yaşlandırma yanlış başlar — ve yanlışlığın kaynağı hiçbir yerde görünmez.
+   *
+   * ⚠️ Devir bir HAREKETTİR, bakiyeye elle yazılan bir sayı DEĞİL: ADJUSTMENT
+   * kaynaklı normal bir defter satırı olarak düşer. Böylece ekstrede görünür,
+   * açıklaması okunur ve gerekirse TERS SATIRLA düzeltilir. CariBalance'a
+   * doğrudan yazmak defterle bakiyeyi ilk günden ayrıştırırdı (§21 mutabakatı
+   * kırmızı verirdi).
+   *
+   * ⚠️ İZİN finance:invoice — deftere işleyen her şey aynı kapıdan geçer
+   * (finance:write taslak/tanım içindir; devir taslak değildir).
+   *
+   * ⚠️ İKİNCİ devir REDDEDİLİR: ikinci açılış satırı "hangisi gerçek devir"
+   * sorusunu cevapsız bırakır ve bakiyeyi sessizce şişirir. Düzeltme yolu ters
+   * düzeltme kaydıdır — ayrı ve GÖRÜNÜR bir karar olmalı.
+   */
+  async setOpeningBalance(
+    input: {
+      cariId: string;
+      currency: Currency;
+      /** POZİTİF = cari BİZE borçlu (alacağımız); NEGATİF = biz ona borçluyuz. */
+      balance: Prisma.Decimal.Value;
+      description?: string | null;
+      /** Devrin ait olduğu an — varsayılan şimdi (geçmiş tarih girilebilir). */
+      txnDate?: Date;
+    },
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string }>> {
+    const amount = D(input.balance);
+    if (amount.isZero()) {
+      throw AppError.badRequest("Devir tutarı sıfır olamaz — sıfır bakiye için kayıt gerekmez.");
+    }
+    const cari = await prisma.cariAccount.findUnique({
+      where: { id: input.cariId },
+      select: { id: true, isActive: true },
+    });
+    if (!cari) throw AppError.notFound("Cari hesap bulunamadı.");
+    if (!cari.isActive) throw AppError.badRequest("Pasif cariye devir girilemez.");
+
+    const txnDate = input.txnDate ?? new Date();
+    const created = await prisma.$transaction(async (tx) => {
+      const dup = await tx.cariTransaction.findFirst({
+        where: { cariId: input.cariId, currency: input.currency, sourceType: CariTxnSource.ADJUSTMENT },
+        select: { id: true, txnDate: true },
+      });
+      if (dup) {
+        throw AppError.conflict(
+          `Bu cari için ${input.currency} devri zaten girilmiş (${dup.txnDate.toLocaleDateString("tr-TR")}). Düzeltmek için ters bir düzeltme kaydı girin.`,
+        );
+      }
+
+      // Devir POZİTİFSE cari bize borçludur → BORÇ kolonu (fatura yönüyle aynı
+      // sözleşme: pozitif bakiye = alacağımız).
+      const isDebit = amount.gt(0);
+      const abs = amount.abs();
+      const row = await tx.cariTransaction.create({
+        data: {
+          cariId: input.cariId,
+          currency: input.currency,
+          txnDate,
+          debit: isDebit ? abs : D0(),
+          credit: isDebit ? D0() : abs,
+          // Devirde kur damgası 1 ve TL karşılığı yalnız TRY'de dolu: tutar
+          // ZATEN o para biriminde girildi, geçmişin kuru bilinmiyor —
+          // uydurma kur TL raporunu sessizce yanlışlardı.
+          amountTry: input.currency === Currency.TRY ? abs : D0(),
+          exchangeRate: D(1),
+          sourceType: CariTxnSource.ADJUSTMENT,
+          description: input.description?.trim() || "Devir bakiyesi",
+          createdById: userId ?? null,
+        },
+        select: { id: true },
+      });
+      await applyCariBalanceTx(tx, input.cariId, input.currency, amount);
+      return row;
+    });
+
+    void AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "CARI_ACCOUNT",
+      recordId: input.cariId,
+      newData: { event: "OPENING_BALANCE", currency: input.currency, balance: amount.toString() },
+    });
+    return { success: true, data: created, message: "Devir bakiyesi kaydedildi." };
   }
 
   /**
