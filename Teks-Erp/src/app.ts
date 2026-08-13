@@ -62,6 +62,7 @@ import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
 import warehouseRoutes from "./routes/warehouse.routes";
 import goodsReceiptRoutes from "./routes/goods-receipt.routes";
+import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import adminRoutes from "./routes/admin.routes";
@@ -496,6 +497,7 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/goods-receipts", goodsReceiptRoutes);
+app.use("/api/warehouse-transfers", warehouseTransferRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
 // db-copies GENEL admin router'ından ÖNCE: Express 5 prefix eşleşmesinde daha
