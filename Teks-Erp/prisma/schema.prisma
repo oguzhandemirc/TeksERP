@@ -85,6 +85,14 @@ enum RollEntrySource {
   TAMBUR_MANUAL
   TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
+  /// SATIN ALINAN mal — Mal Kabul fişiyle (GoodsReceipt) doğrudan depoya giren top
+  /// (2026-08-13, ticaret paketi). `SUPPLIER_RECEIPT`ten AYRI: o, KK1 istasyonunda
+  /// ÖLÇÜLEREK/işlenerek alınan ham maldır ve üretim rotasının başıdır; bu ise
+  /// üretime hiç girmeyen, alınıp satılan maldır. Envanterde ayırt edilebilmesi
+  /// gerekir (alım-satım firmasında stoğun TAMAMI bu kaynaktan gelir).
+  /// ⚠️ ALTER TYPE ADD VALUE enum'a SONA ekler — sıra DB ile uyumlu kalsın diye
+  /// yeni değer daima en alta yazılır (PrintedDocType emsali).
+  PURCHASE_RECEIPT
 }
 
 /// ÜRETİM SAPMASININ TÜRÜ (`RollVariance.kind`, 2026-08-09).
@@ -369,6 +377,12 @@ model User {
   processedRollErrors        RollError[]              @relation("RollErrorProcessedBy")
   createdRolls               Roll[]                   @relation("RollCreatedBy")
   cancelledRolls             Roll[]                   @relation("RollCancelledBy")
+  // Ticaret paketi — depo hareketleri / transfer / mal kabul izleri
+  warehouseMovements         WarehouseMovement[]      @relation("WarehouseMovementUser")
+  createdTransfers           WarehouseTransfer[]      @relation("WarehouseTransferCreatedBy")
+  cancelledTransfers         WarehouseTransfer[]      @relation("WarehouseTransferCancelledBy")
+  createdGoodsReceipts       GoodsReceipt[]           @relation("GoodsReceiptCreatedBy")
+  cancelledGoodsReceipts     GoodsReceipt[]           @relation("GoodsReceiptCancelledBy")
   manualClosedOrders         Order[]                  @relation("OrderManualClosedBy")
   systemSettingsUpdates      SystemSetting[]
   preference                 UserPreference?
@@ -494,7 +508,7 @@ model UserPermission {
 /// permission'ları UserPermission'a kopyalanır ve şablon-user bağı kalmaz.
 /// Bu sayede şablonu sonradan değiştirmek mevcut kullanıcıları etkilemez.
 model PermissionTemplate {
-  id String @id @default(uuid()) @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
   /// Sistem rolünün KALICI kimliği (`constants/role-template-catalog.ts`).
   /// Boot uzlaştırması şablonu bu kodla bulur — fabrika adı değiştirse bile
   /// ikizi doğmaz. NULL = fabrikanın panelden kendi yarattığı şablon
@@ -1049,7 +1063,7 @@ model Roll {
   weightKg   Decimal? @db.Decimal(12, 3)
 
   // Status & Quality
-  status         RollStatus @default(STOCK)
+  status         RollStatus  @default(STOCK)
   /// SEVK ÖNCESİ statü — sevk geri alma (storno) topu tam olarak eski rafına koysun diye.
   ///
   /// `performDispatchTx` çuvaldaki HER topu `SHIPPED` yapar ve bunu yaparken önceki
@@ -1069,7 +1083,7 @@ model Roll {
   /// Fiziksel form — TOP (rulo) | ACIK (açık kumaş). Otomatik set: ham giriş & Tambur
   /// çocukları TOP; Tambur-DIŞI son-adım finalize'ı + fason dönüşü doğumları + açık kumaş
   /// = ACIK. Operatör seçmez; "durgunda" (final/serbest) anlamlı — ara-üretim flip'i izlenmez.
-  form           RollForm   @default(TOP)
+  form           RollForm    @default(TOP)
   /// Snapshot — yazıldığı andaki kalite kodu (katalog değişse bile sabit). NULLABLE:
   /// kaliteyi YALNIZ kalite istasyonları belirler (KK1 opsiyonel giriş, KK2/Kurşun, Tambur);
   /// kaliteye bakılmamış top (açık kumaş, fason dönüşü, kalitesiz giriş) NULL kalır → UI "—",
@@ -1077,8 +1091,8 @@ model Roll {
   qualityGrade   String?
   /// Canonical — QualityGrade kataloğundaki gerçek kayda referans.
   /// Eski satırlarda null kalabilir; yeni Tambur finalize kayıtlarında doldurulur.
-  qualityGradeId String?    @db.Uuid
-  width          Decimal?   @db.Decimal(12, 3) // En (cm) — KK1 girişinde ölçülen kumaş eni
+  qualityGradeId String?     @db.Uuid
+  width          Decimal?    @db.Decimal(12, 3) // En (cm) — KK1 girişinde ölçülen kumaş eni
 
   // Top'un sisteme nasıl girdiği — raporlama ayrımı için.
   // itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
@@ -1203,6 +1217,30 @@ model Roll {
   /// NULL meşrudur: istasyon bağlamı olmayan girişler (Electron paneli) ve bu
   /// karardan ÖNCE doğmuş toplar.
   entryStationId String? @db.Uuid
+
+  /// TOPUN DEPOSU — şu an (ya da en son) bulunduğu fiziksel depo (2026-08-13).
+  ///
+  /// Öncesinde "depo" bir varlık değil bir STATÜYDÜ (`WAREHOUSE` + `shipmentId`/
+  /// `sackId` boşluğu). Tek depolu fabrikada bu doğruydu; çok depolu ticaret
+  /// kurulumunda "mal hangi depoda" cevapsız kalıyordu.
+  ///
+  /// ⚠️ HİÇ NULL'LANMAZ. Sevk/iptal/fire topu başka statüye çeker ama deposunu
+  /// SİLMEZ — bu yüzden sevk stornosu için ayrı bir snapshot alanı (`preShipStatus`
+  /// emsali) GEREKMEZ: geri dönüş adresi topun kendi satırındadır.
+  ///
+  /// ⚠️ NULL yalnız GEÇİŞ DÖNEMİDİR (backfill öncesi). Doldurma sonrası
+  /// `test_db_invariants` NULL sayısını 0'a sabitler; kolon bir sonraki sürümde
+  /// NOT NULL'a çekilir. Nullable başlamanın sebebi: 9 fiziksel `roll.create`
+  /// noktasından biri gözden kaçarsa NOT NULL production'da 500 üretirdi.
+  ///
+  /// Tek doldurma noktası: `helpers/warehouse.helper.resolveTargetWarehouseId`
+  /// (açık depo yoksa varsayılan depo) — fabrika akışları hiç parametre vermez.
+  warehouseId String? @db.Uuid
+
+  /// Bu topu doğuran MAL KABUL FİŞİ (satın alınan mal). NULL = üretimden/başka
+  /// yoldan doğmuş top. `parentReceiptId` (fason kabulü) ile karıştırma: o
+  /// fasondan DÖNEN malın izidir, bu SATIN ALINAN malın.
+  goodsReceiptId String? @db.Uuid
 
   // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
   // (serbest depo). Çuvallanan top PLANNED boyunca WAREHOUSE kalır ama
@@ -1402,6 +1440,9 @@ model Roll {
   cancelledBy          User?                       @relation("RollCancelledBy", fields: [cancelledById], references: [id])
   createdMachine       Machine?                    @relation("RollCreatedMachine", fields: [createdMachineId], references: [id])
   entryStation         Station?                    @relation("RollEntryStation", fields: [entryStationId], references: [id])
+  warehouse            Warehouse?                  @relation(fields: [warehouseId], references: [id])
+  goodsReceipt         GoodsReceipt?               @relation(fields: [goodsReceiptId], references: [id])
+  warehouseMovements   WarehouseMovement[]
   labelCustomer        Customer?                   @relation("RollLabelCustomer", fields: [labelCustomerId], references: [id])
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
@@ -1424,6 +1465,15 @@ model Roll {
   // "Bu istasyonda girilen toplar" — sütun bugün, filtre yarın.
   // createdMachineId ile AYNI desen (kardeş alan): tam index, opsiyonel ilişki.
   @@index([entryStationId])
+  // Depo bazlı stok listesi/sayımı: "X deposunda WAREHOUSE olan toplar".
+  // Eşitlik kolonu önce (perf kuralı 2). Mevcut [status, itemId, colorId, width]
+  // fungible-havuz indeksine depo boyutu BİLİNÇLİ eklenmedi: o sorgu bugün
+  // depo-bağımsız koşuyor ve `rolls` zaten en çok indeksli tablo — depo filtresi
+  // o yola girerse EXPLAIN kanıtıyla eklenecek.
+  @@index([warehouseId, status])
+  // Mal kabul fişinin topları (fiş detayı + iptal kapsamı).
+  // PARTIAL (WHERE "goodsReceiptId" IS NOT NULL) — çoğu topta null.
+  @@index([goodsReceiptId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
   // Envanter sekmeleri: status filter + updatedAt desc sort ("son hareket" sıralaması).
@@ -1520,6 +1570,8 @@ model Customer {
   shipments        Shipment[]
   sacks            Sack[]
   rollReturns      RollReturn[]
+  /// Bu firmadan alınan mal kabul fişleri (tedarikçi rolü — CompanyType.SUPPLIER).
+  goodsReceipts    GoodsReceipt[]            @relation("GoodsReceiptSupplier")
   directShipments  DirectShipment[]
   templateRoutes   CustomerTemplateRoute[]
   standaloneLabels CustomerStandaloneLabel[]
@@ -2255,8 +2307,8 @@ model RollVariance {
   ///
   /// ⚠️ Dönem raporları `reversedAt IS NULL` ile süzmeli. Süzmeyen rapor,
   /// geri alınmış her finalize'ın firesini de sayar.
-  reversedAt      DateTime?        @db.Timestamptz
-  reversedById    String?          @db.Uuid
+  reversedAt   DateTime? @db.Timestamptz
+  reversedById String?   @db.Uuid
 
   // Relations
   roll       Roll           @relation(fields: [rollId], references: [id])
@@ -3048,6 +3100,13 @@ enum PrintedDocType {
   SUBCONTRACTOR_RECEIPT // Fason kabul makbuzu (SubcontractorReceipt)
   QUALITY_CERTIFICATE // Kalite/sevk sertifikası (Shipment — kalite özeti)
   RETURN_DISPATCH // İade irsaliyesi (RollReturn)
+  // ⚠️ SIRADAKİ (ticaret paketi, henüz EKLENMEDİ): TRANSFER_DISPATCH (depolar arası
+  // transfer irsaliyesi) + GOODS_RECEIPT (mal kabul fişi). Bilerek burada değiller:
+  // enum'a değer eklemek `DOC_CONFIG_KEYS` ve `SAMPLE_PRINTED_DOCS` exhaustive
+  // Record'larını derlemede kırar (iyi bir bekçi) — yani belge tipi, builder'ı +
+  // renderer'ı + ÖRNEK VERİSİ ile aynı commit'te gelmeli. Örneksiz eklemek Belge
+  // Şablonları ekranının canlı önizlemesinde boş/çöp bir kart doğururdu.
+  // Eklerken yine SONA yazılır (ALTER TYPE ADD VALUE kuralı).
 }
 
 enum PrintedDocStatus {
@@ -3283,15 +3342,17 @@ model Shipment {
   invoicedById String?   @db.Uuid
 
   // Relations
-  customer     Customer        @relation(fields: [customerId], references: [id])
-  dispatchedBy User?           @relation("ShipmentDispatchedBy", fields: [dispatchedById], references: [id])
-  invoicedBy   User?           @relation("ShipmentInvoicedBy", fields: [invoicedById], references: [id])
-  branch       CustomerBranch? @relation(fields: [branchId], references: [id])
-  sacks        Sack[]
-  orders       ShipmentOrder[] // Donmuş tahsislerden türetilen sipariş kümesi (denorm; irsaliye orderNos)
-  rolls        Roll[] // Atanan çuvalların içindeki toplar
-  swatches     Swatch[] // Atanan çuvalların içindeki kartelalar (siparişe sayılmaz)
-  returns      RollReturn[] // Bu sevkiyattan gelen iadeler (izlenebilirlik)
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  dispatchedBy       User?               @relation("ShipmentDispatchedBy", fields: [dispatchedById], references: [id])
+  invoicedBy         User?               @relation("ShipmentInvoicedBy", fields: [invoicedById], references: [id])
+  branch             CustomerBranch?     @relation(fields: [branchId], references: [id])
+  sacks              Sack[]
+  orders             ShipmentOrder[] // Donmuş tahsislerden türetilen sipariş kümesi (denorm; irsaliye orderNos)
+  rolls              Roll[] // Atanan çuvalların içindeki toplar
+  swatches           Swatch[] // Atanan çuvalların içindeki kartelalar (siparişe sayılmaz)
+  returns            RollReturn[] // Bu sevkiyattan gelen iadeler (izlenebilirlik)
+  /// Bu sevkin depo defterindeki izleri (SHIPMENT / SHIPMENT_REVERSAL).
+  warehouseMovements WarehouseMovement[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -3412,16 +3473,18 @@ model RollReturn {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Relations
-  roll         Roll          @relation(fields: [rollId], references: [id])
-  fromShipment Shipment?     @relation(fields: [fromShipmentId], references: [id])
-  customer     Customer      @relation(fields: [customerId], references: [id])
-  order        Order?        @relation(fields: [orderId], references: [id])
-  item         Item          @relation(fields: [itemId], references: [id])
-  color        Color?        @relation(fields: [colorId], references: [id])
-  reason       ReturnReason? @relation(fields: [reasonId], references: [id])
-  qualityGrade QualityGrade? @relation(fields: [qualityGradeId], references: [id])
-  receivedBy   User          @relation("RollReturnReceivedBy", fields: [receivedById], references: [id])
-  cancelledBy  User?         @relation("RollReturnCancelledBy", fields: [cancelledById], references: [id])
+  roll               Roll                @relation(fields: [rollId], references: [id])
+  fromShipment       Shipment?           @relation(fields: [fromShipmentId], references: [id])
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  /// İadenin depo defterindeki izi (RETURN — mal hangi depoya geri girdi).
+  warehouseMovements WarehouseMovement[]
+  order              Order?              @relation(fields: [orderId], references: [id])
+  item               Item                @relation(fields: [itemId], references: [id])
+  color              Color?              @relation(fields: [colorId], references: [id])
+  reason             ReturnReason?       @relation(fields: [reasonId], references: [id])
+  qualityGrade       QualityGrade?       @relation(fields: [qualityGradeId], references: [id])
+  receivedBy         User                @relation("RollReturnReceivedBy", fields: [receivedById], references: [id])
+  cancelledBy        User?               @relation("RollReturnCancelledBy", fields: [cancelledById], references: [id])
 
   @@index([orderId])
   @@index([customerId, createdAt])
@@ -3504,14 +3567,14 @@ model Color {
 ///   - WorkOrderTargetProperty : bir iş emrinin üretim çıktısında olacak özellikler
 ///   - RollProperty   : bir rulonun fiilen sahip olduğu özellikler
 model FabricProperty {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique @db.VarChar(32) // "YANMAZLIK", "KAYGAN"
-  name        String   @db.VarChar(100)
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(32) // "YANMAZLIK", "KAYGAN"
+  name        String  @db.VarChar(100)
   category    String? // "Dayanıklılık", "Yüzey", "Kimyasal" vb. (UI gruplama için)
   description String?
-  color       String?  @db.VarChar(7) // UI badge hex
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
+  color       String? @db.VarChar(7) // UI badge hex
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
 
   /// BAYRAK mı, SEÇİM mi? (2026-08-10 — "üretim karakteristiği" modeli)
   ///
@@ -3575,18 +3638,18 @@ model FabricProperty {
 /// ile DEĞİL — Türkçe upper "i"yi "İ" yapıp eşleşmeyi sessizce bozar
 /// (2026-08-02 etiket koşulu dersinin aynısı).
 model FabricPropertyValue {
-  id         String @id @default(uuid()) @db.Uuid
-  propertyId String @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  propertyId String  @db.Uuid
   /// Kayda yazılan değer ("4-KAT"). Özellik içinde benzersiz.
-  code       String @db.VarChar(32)
+  code       String  @db.VarChar(32)
   /// Ekranda görünen ad ("4 Kat"). Kimlik DEĞİL.
-  name       String @db.VarChar(100)
-  sortOrder  Int    @default(0)
+  name       String  @db.VarChar(100)
+  sortOrder  Int     @default(0)
   /// Pasif değer yeni kayıtlarda seçilemez ama GEÇMİŞ kayıtlarda durur —
   /// bu yüzden değer satırı silinmez, pasifleştirilir.
   isActive   Boolean @default(true)
 
-  property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property       FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
   /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
   rollProperties RollProperty[]
@@ -4101,4 +4164,218 @@ enum TravelerTemplateMode {
   BUILTIN
   SECTIONS
   RAW_HTML
+}
+
+// =============================================================================
+// TİCARET PAKETİ — ÇOKLU DEPO + MAL KABUL (2026-08-13)
+// =============================================================================
+// Tasarım + gerekçeler: docs/design/TICARET-PAKETI-TASARIM.md
+//
+// Öncesinde "depo" bir VARLIK değil bir STATÜYDÜ (`RollStatus.WAREHOUSE` +
+// `shipmentId`/`sackId` boşluğu → `getWarehouseScope`). Tek depolu üretici
+// fabrikada bu doğruydu. Alım-satım kurulumunda N depo + depolar arası transfer
+// gerekiyor ve "mal hangi depoda / nereden nereye gitti" sorusu cevapsızdı.
+//
+// ⚠️ FABRİKA UYUMU: bu blok tamamen EKLEMELİdir. Depo verilmeyen her yol
+// varsayılan depoya düşer (`resolveTargetWarehouseId`); tek depo varken arayüzde
+// hiçbir depo yüzeyi çizilmez. Bekçi: scripts/test_single_warehouse_parity.ts
+// =============================================================================
+
+/// FİZİKSEL DEPO. Saf tanım verisi (BaseService CRUD).
+///
+/// ⚠️ `Station` DEĞİLDİR: istasyon bir ÜRETİM noktasıdır (`StationKind`), depo bir
+/// STOK lokasyonudur. İkisini birleştirmek fabrikanın istasyon listesine sahte
+/// depo satırları sokardı.
+model Warehouse {
+  id   String @id @default(uuid()) @db.Uuid
+  /// DP + GGAAYY + NNNN (BaseService autoCode).
+  code String @unique @db.VarChar(32)
+  name String @db.VarChar(100)
+
+  /// Depo belirtilmeyen her girişin düştüğü depo. Sistemde TAM BİR TANE olur.
+  /// DB'de ŞEMA-DIŞI partial unique — warehouses_one_default WHERE "isDefault"=true
+  /// (traveler_card_templates_one_default emsali). Şemada `@@unique` olarak durur
+  /// çünkü Prisma 7 index↔unique farkını drift SAYAR (perf kuralı 4).
+  /// Servis guard'ı: varsayılan depo pasifleştirilemez/silinemez.
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+  address   String? @db.VarChar(300)
+  notes     String? @db.VarChar(500)
+
+  rolls         Roll[]
+  transfersFrom WarehouseTransfer[] @relation("TransferFrom")
+  transfersTo   WarehouseTransfer[] @relation("TransferTo")
+  movementsFrom WarehouseMovement[] @relation("MovementFrom")
+  movementsTo   WarehouseMovement[] @relation("MovementTo")
+  goodsReceipts GoodsReceipt[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([isDefault])
+  @@index([isActive])
+  @@map("warehouses")
+}
+
+/// Depo hareketinin TÜRÜ. Yön `fromWarehouseId`/`toWarehouseId` doluluğundan değil
+/// BURADAN okunur — `qty` her zaman pozitiftir (RollVariance emsali).
+enum WarehouseEventType {
+  ENTRY // depoya doğum (mal kabul, KK1, tambur finalize, fason dönüşü) — from boş
+  TRANSFER // depolar arası — from + to dolu ve FARKLI
+  TRANSFER_REVERSAL // transfer iptali (ters yön, aynı transferId)
+  SHIPMENT // müşteriye sevk — to boş
+  SHIPMENT_REVERSAL // sevk stornosu — mal depoya döndü
+  RETURN // müşteri iadesi girişi
+  CANCEL // top iptali/fire (softDelete) — depodan düştü
+}
+
+/// DEPO HAREKET DEFTERİ — append-only: "mal hangi depoya girdi / hangisinden çıktı".
+///
+/// ⚠️ NEDEN AYRI TABLO, neden `RollMovement` DEĞİL: o tablonun `workOrderStepId`
+/// alanı NOT NULL'dır ve bir İŞ EMRİ ADIMINA giriş/çıkışı temsil eder; iş emri
+/// olmayan bir depo transferi oraya yapısal olarak sığmaz. Ayrıca ölçüldü: depo
+/// hayatı bugün TAMAMEN hareketsiz (bitmiş topların hiçbirinde kapanmış
+/// RollMovement yok) — yani orası bu soruyu zaten yanıtlamıyor. Emsal gerekçe:
+/// `RollVariance` ("neden ayrı tablo, neden metadata değil").
+///
+/// ⚠️ Statü TERFİSİ hareket DEĞİLDİR: `STOCK → WAREHOUSE` (prepareRawForSale)
+/// satır YAZMAZ — bu defter KONUM defteridir, statü izi audit'tedir.
+model WarehouseMovement {
+  id        String             @id @default(uuid()) @db.Uuid
+  rollId    String             @db.Uuid
+  eventType WarehouseEventType
+
+  fromWarehouseId String? @db.Uuid
+  toWarehouseId   String? @db.Uuid
+
+  /// Olay anındaki metraj — HER ZAMAN POZİTİF; yönü `eventType` söyler.
+  qty Decimal @db.Decimal(12, 3)
+
+  // Belge bağları — typed FK (polimorfik değil). Hangi olayda hangisi dolar:
+  // TRANSFER*/transferId · ENTRY(mal kabul)/goodsReceiptId · SHIPMENT*/shipmentId
+  // · RETURN/rollReturnId. Diğer ENTRY yolları (KK1, tambur) belgesizdir.
+  transferId     String? @db.Uuid
+  goodsReceiptId String? @db.Uuid
+  shipmentId     String? @db.Uuid
+  rollReturnId   String? @db.Uuid
+
+  userId String? @db.Uuid
+  notes  String? @db.VarChar(300)
+
+  roll          Roll               @relation(fields: [rollId], references: [id], onDelete: Cascade)
+  fromWarehouse Warehouse?         @relation("MovementFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse?         @relation("MovementTo", fields: [toWarehouseId], references: [id])
+  transfer      WarehouseTransfer? @relation(fields: [transferId], references: [id])
+  goodsReceipt  GoodsReceipt?      @relation(fields: [goodsReceiptId], references: [id])
+  shipment      Shipment?          @relation(fields: [shipmentId], references: [id])
+  rollReturn    RollReturn?        @relation(fields: [rollReturnId], references: [id])
+  user          User?              @relation("WarehouseMovementUser", fields: [userId], references: [id])
+
+  /// Append-only log → `updatedAt` YOK (konvansiyon).
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([rollId, createdAt])
+  @@index([toWarehouseId, eventType, createdAt])
+  @@index([fromWarehouseId, eventType, createdAt])
+  @@index([transferId])
+  @@index([goodsReceiptId])
+  @@map("warehouse_movements")
+}
+
+enum WarehouseTransferStatus {
+  COMPLETED
+  CANCELLED
+}
+
+/// DEPOLAR ARASI TRANSFER BELGESİ.
+///
+/// TEK ADIMLI: "yolda" (in-transit) durumu yok — yerel depolar arasında araç takibi
+/// ihtiyacı yok. Gerekirse enum'a SONA `IN_TRANSIT` eklenerek açılır.
+///
+/// ⚠️ SATIR TABLOSU YOK: kalemler `WarehouseMovement` satırlarıdır (`transferId`).
+/// Belgenin donmuş içeriği zaten `PrintedDocument.snapshot`'ta yaşar.
+model WarehouseTransfer {
+  id         String @id @default(uuid()) @db.Uuid
+  /// DT + GGAAYY + NNNN (nextPrefixedSequence + withBarcodeRetry).
+  transferNo String @unique @db.VarChar(32)
+
+  fromWarehouseId String                  @db.Uuid
+  toWarehouseId   String                  @db.Uuid
+  status          WarehouseTransferStatus @default(COMPLETED)
+  notes           String?                 @db.VarChar(500)
+
+  /// İstemci idempotency anahtarı — timeout/retry'da mükerrer transfer doğmasın.
+  clientToken String? @unique @db.Uuid
+
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  fromWarehouse Warehouse           @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse           @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  createdBy     User?               @relation("WarehouseTransferCreatedBy", fields: [createdById], references: [id])
+  cancelledBy   User?               @relation("WarehouseTransferCancelledBy", fields: [cancelledById], references: [id])
+  movements     WarehouseMovement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([fromWarehouseId, createdAt])
+  @@index([toWarehouseId, createdAt])
+  @@index([status, createdAt])
+  @@map("warehouse_transfers")
+}
+
+enum GoodsReceiptStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// MAL KABUL FİŞİ — satın alınan malın depoya girişi (üretimsiz stok girişi).
+///
+/// Topları `InventoryService.createInitialEntry` ÜRETİR (`forcedStatus: WAREHOUSE`,
+/// `forcedEntrySource: PURCHASE_RECEIPT`) — ikinci bir giriş motoru YAZILMAZ;
+/// mükerrer tuzağı, barkod rezervasyonu, izinli renk/özellik doğrulaması ve
+/// idempotency o yoldan bedava gelir. Emsal: `tambur-manual.produceFinishedRoll`.
+///
+/// ALIŞ SİPARİŞİ (PurchaseOrder) Faz 2 — kullanıcı kararı gereği sipariş
+/// OPSİYONEL. Faz 1'de tedarikçi + tedarikçinin kâğıt irsaliye numarası yeterli.
+model GoodsReceipt {
+  id        String @id @default(uuid()) @db.Uuid
+  /// MK + GGAAYY + NNNN.
+  receiptNo String @unique @db.VarChar(32)
+
+  warehouseId    String  @db.Uuid
+  /// Tedarikçi — `Customer` (`CompanyType.SUPPLIER`). Ayrı tedarikçi modeli
+  /// AÇILMADI: cari kart tek yerde kalsın (ön muhasebe de oraya bağlanacak).
+  supplierId     String? @db.Uuid
+  /// Tedarikçinin kendi irsaliye numarası (serbest metin) — alış faturası
+  /// mutabakatının çıpası.
+  deliveryNoteNo String? @db.VarChar(64)
+
+  status GoodsReceiptStatus @default(ACTIVE)
+  notes  String?            @db.VarChar(500)
+
+  clientToken String? @unique @db.Uuid
+
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  warehouse   Warehouse           @relation(fields: [warehouseId], references: [id])
+  supplier    Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
+  createdBy   User?               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
+  cancelledBy User?               @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
+  rolls       Roll[]
+  movements   WarehouseMovement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([warehouseId, createdAt])
+  @@index([supplierId, createdAt])
+  @@index([status, createdAt])
+  @@map("goods_receipts")
 }

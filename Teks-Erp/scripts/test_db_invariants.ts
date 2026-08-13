@@ -108,6 +108,7 @@ const PARTIAL_INDEXES: Array<{
   { table: "rolls", index: "rolls_markedForKartela_idx", uniq: false, predicate: `("markedForKartela" = true)`, why: "kartela adayı seyrek" },
   { table: "rolls", index: "rolls_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "rolls", index: "rolls_labelCustomerId_idx", uniq: false, predicate: `("labelCustomerId" IS NOT NULL)`, why: "null-yoğun FK (stok etiketi yaygın); sorgu yolu hep 'şu müşterinin topları'" },
+  { table: "rolls", index: "rolls_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun FK: yalnız mal kabulle doğmuş toplarda dolu (migration 20260813090000)" },
   {
     table: "rolls",
     index: "rolls_finalizedAt_idx",
@@ -152,6 +153,18 @@ const PARTIAL_INDEXES: Array<{
   { table: "roll_errors", index: "roll_errors_roll_meter_defect_uq", uniq: true, predicate: `("defectTypeId" IS NOT NULL)`, why: "aynı metrede mükerrer hata seddi" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
+  // ticaret paketi — çoklu depo + mal kabul (migration 20260813090000)
+  {
+    table: "warehouses",
+    index: "warehouses_isDefault_key",
+    uniq: true,
+    predicate: `("isDefault" = true)`,
+    why: "sistemde TEK varsayılan depo — düz unique olsaydı toplam İKİ depo tutulabilirdi (traveler_card_templates_one_default emsali)",
+  },
+  { table: "warehouse_transfers", index: "warehouse_transfers_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "goods_receipts", index: "goods_receipts_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "warehouse_movements", index: "warehouse_movements_transferId_idx", uniq: false, predicate: `("transferId" IS NOT NULL)`, why: "null-yoğun belge bağı (KK1/tambur girişleri belgesiz)" },
+  { table: "warehouse_movements", index: "warehouse_movements_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun belge bağı" },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
   // swatch_stock_reductions
