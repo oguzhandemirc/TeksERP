@@ -63,16 +63,18 @@ function lineTotals(l: DraftLine) {
 
 export function InvoiceFormDialog({ open, onOpenChange, onCreated }: Props) {
   const [type, setType] = useState<InvoiceType>("SALES");
+  const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">("CUSTOMER");
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
   const [currency, setCurrency] = useState<Currency>("TRY");
   const [externalNo, setExternalNo] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
 
-  // ⚠️ SATIŞ faturası MÜŞTERİYE, ALIŞ faturası FASONA kesilir. Tek bir "cari"
-  // seçici koyup ikisini karıştırmak, satış faturasını fason firmaya kesme
-  // ihtimalini açardı — cari defterin yönü de o karara bağlı.
-  const isPurchase = type === "PURCHASE" || type === "PURCHASE_RETURN";
+  // Taraf iki AYRI karttan gelir: Müşteri/Tedarikçi (Customer — tedarikçi de
+  // bu karttadır, CompanyType.SUPPLIER) ve Fason (Subcontractor). Alış faturası
+  // her ikisine de kesilebilir: tedarikçiden mal, fasondan hizmet alınır.
+  // Cari defterin YÖNÜ türden gelir (invoiceLedgerSide), taraftan değil.
+  const isCustomerParty = party === "CUSTOMER";
 
   const totals = useMemo(() => {
     let net = 0;
@@ -89,15 +91,15 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated }: Props) {
   }, [lines]);
 
   const valid =
-    (isPurchase ? Boolean(subcontractorId) : Boolean(customerId)) &&
+    (isCustomerParty ? Boolean(customerId) : Boolean(subcontractorId)) &&
     lines.some((l) => l.description.trim() && l.qty > 0);
 
   const createM = useMutation({
     mutationFn: () =>
       createInvoice({
         type,
-        customerId: isPurchase ? null : customerId,
-        subcontractorId: isPurchase ? subcontractorId : null,
+        customerId: isCustomerParty ? customerId : null,
+        subcontractorId: isCustomerParty ? null : subcontractorId,
         currency,
         externalNo: externalNo || null,
         clientToken: crypto.randomUUID(),
@@ -151,10 +153,30 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated }: Props) {
               ))}
             </select>
           </div>
-          <div className="col-span-2">
-            <Label>{isPurchase ? "Fason firma" : "Müşteri"}</Label>
+          <div>
+            <Label>Cari türü</Label>
+            <select
+              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+              value={party}
+              onChange={(e) => setParty(e.target.value as "CUSTOMER" | "SUBCONTRACTOR")}
+            >
+              <option value="CUSTOMER">Müşteri / Tedarikçi</option>
+              <option value="SUBCONTRACTOR">Fason firma</option>
+            </select>
+          </div>
+          <div>
+            <Label>{isCustomerParty ? "Müşteri / Tedarikçi" : "Fason firma"}</Label>
             <div className="mt-1">
-              {isPurchase ? (
+              {isCustomerParty ? (
+                <ReferenceSelect<Customer>
+                  value={customerId}
+                  onChange={setCustomerId}
+                  service={customerService}
+                  queryKey="customers"
+                  getLabel={(c) => `${c.code} — ${c.name}`}
+                  placeholder="Kart ara..."
+                />
+              ) : (
                 <ReferenceSelect
                   value={subcontractorId}
                   onChange={setSubcontractorId}
@@ -162,15 +184,6 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated }: Props) {
                   queryKey="subcontractors"
                   getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
                   placeholder="Fason firma ara..."
-                />
-              ) : (
-                <ReferenceSelect<Customer>
-                  value={customerId}
-                  onChange={setCustomerId}
-                  service={customerService}
-                  queryKey="customers"
-                  getLabel={(c) => `${c.code} — ${c.name}`}
-                  placeholder="Müşteri ara..."
                 />
               )}
             </div>
