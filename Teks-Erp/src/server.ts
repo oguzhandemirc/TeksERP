@@ -7,6 +7,7 @@ import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { startBackupScheduler } from './jobs/backup-scheduler';
 import { startOffsiteSweeper } from './jobs/offsite-sweeper';
 import { startPermissionCatalogReconciler } from './jobs/permission-catalog.job';
+import { startDefaultWarehouseReconciler } from './jobs/default-warehouse.job';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
@@ -93,6 +94,10 @@ const server = app.listen(Number(PORT), HOST, () => {
     // da güncellemez, dolayısıyla kimsenin yetkisi sessizce düşmez. Best-effort:
     // başarısız olursa sunucuyu düşürmez, gürültülü loglar.
     startPermissionCatalogReconciler();
+    // Varsayılan depo da aynı gerekçeyle boot-time uzlaştırılır (migration'a INSERT
+    // gömmek uuid/adı taşa yazar). Bu satır olmadan `resolveTargetWarehouseId`
+    // varsayılan bulamaz ve yeni toplar deposuz doğar.
+    startDefaultWarehouseReconciler();
 
     void AuditService.logEvent({
         category: "SYSTEM",
