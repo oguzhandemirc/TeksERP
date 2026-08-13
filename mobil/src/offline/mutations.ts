@@ -62,26 +62,9 @@ export const STATION_MUT = {
  * `STATION_MUT` ile aynı dosyada durur ki yeni bir anahtar eklerken etiket
  * unutulmasın (bekçi: `mutations.test.ts` — her anahtarın etiketi olmalı).
  */
-export const STATION_MUT_LABELS: Record<string, string> = {
-  'qc2-complete': 'Kurşun / QC2',
-  'qc2-report-error': 'QC2 hata bildirimi',
-  'qc2-delete-error': 'QC2 hata silme',
-  'qc2-finish-step': 'QC2 adım kapatma',
-  'kursun-finish': 'Kurşun bitirme',
-  'tambur-finalize-open-fabric': 'Tambur finalize',
-  'kk1-create-entry': 'Ham Giriş',
-  'kk1-scrap': 'Top iptali',
-  'fason-kabul-receive': 'Fason Kabul',
-  'fason-sevk-dispatch': 'Fason Sevk',
-  'kartela-sevk-dispatch': 'Kartela Sevk',
-  'kartela-kabul-receive': 'Kartela Kabul',
-};
-
-/** Bilinmeyen anahtar boş basmaz, ham anahtarı gösterir (sessiz kayıp yok). */
-export function stationOpLabel(key: unknown): string {
-  if (!Array.isArray(key) || typeof key[1] !== 'string') return 'İşlem';
-  return STATION_MUT_LABELS[key[1]] ?? key[1];
-}
+// Tanımlar `stationLabels.ts`e taşındı (queryClient ↔ mutations içe aktarma
+// döngüsünü kırmak için); çağrı yerleri değişmesin diye buradan re-export edilir.
+export { STATION_MUT_LABELS, stationOpLabel } from './stationLabels';
 
 export interface TamburFinalizeOpenFabricVars {
   rollId: string;

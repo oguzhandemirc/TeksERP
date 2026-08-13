@@ -43,7 +43,14 @@ jest.mock("../services/api", () => ({
   resolveAuthToken: jest.fn(async () => "test-token"),
 }));
 
+// Kalıcı düşüş duyurusunun TEK yüzeyi toast — köprüyü ölçmek için mock'lanır.
+jest.mock("react-native-toast-message", () => ({
+  __esModule: true,
+  default: { show: jest.fn() },
+}));
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Toast from "react-native-toast-message";
 import { onlineManager, MutationObserver } from "@tanstack/react-query";
 import { kursunQcService } from "../services/kursunQc.service";
 import { resolveAuthToken } from "../services/api";
@@ -56,7 +63,6 @@ import {
   NO_AUTH_RETRY_MS,
   stationOpLabel,
 } from "./mutations";
-import { useFailedOps } from "./failedOps";
 import {
   queryClient,
   asyncStoragePersister,
@@ -268,76 +274,84 @@ describe("offline pause → online resume (gerçek networkMode + retry)", () => 
 });
 
 // =============================================================================
-// ÖLÜ MEKTUP KUTUSU — MutationCache köprüsü (2026-08-05)
+// KALICI DÜŞÜŞ DUYURUSU — MutationCache köprüsü (2026-08-12)
 // =============================================================================
-// Bu blok, kutunun neden `setMutationDefaults`'a DEĞİL `MutationCache`'e bağlandığını
-// kanıtlar: cache callback'i observer olsun olmasın koşar. Key-bazlı bir `onError`
-// ise component kendi `onError`'ını verdiğinde EZİLİRDİ (defaultMutationOptions
-// sırası: global < key defaults < component) — yani kayıt "bazen" yakalanırdı.
+// Bu blok, duyurunun neden `setMutationDefaults`'a DEĞİL `MutationCache`'e
+// bağlandığını kanıtlar: cache callback'i observer olsun olmasın koşar.
+// Key-bazlı bir `onError` ise component kendi `onError`'ını verdiğinde EZİLİRDİ
+// (defaultMutationOptions sırası: global < key defaults < component) — yani
+// uyarı "bazen" basılırdı. Önceki kurguda aynı köprü kalıcı bir kutuya
+// yazıyordu; kutu kaldırıldı (gerekçe: offline/announceFailure.ts başlığı).
 // =============================================================================
-describe("ölü mektup kutusu — MutationCache köprüsü", () => {
+describe("kalıcı düşüş duyurusu — MutationCache köprüsü", () => {
   beforeAll(() => queryClient.mount());
   afterAll(() => {
     queryClient.getMutationCache().clear();
     queryClient.unmount();
   });
   beforeEach(() => {
-    useFailedOps.setState({ rows: [], hydrated: true });
+    (Toast.show as jest.Mock).mockClear();
     onlineManager.setOnline(true);
   });
 
-  it("⭐ OBSERVER'SIZ (restore edilmiş) mutation'ın hatası da kutuya düşer", async () => {
-    // `build(...).execute(...)` hydration'ın restore edilmiş mutation'ı kurduğu
-    // yolun aynısı: hiçbir component, hiçbir observer yok.
-    const vars = { itemId: "urun-1", initialQty: 140, clientToken: "tok-x" };
+  /** Observer'sız (restore edilmiş) mutation kurar — hydration yolunun aynısı. */
+  async function runFailing(error: unknown, vars: Record<string, unknown>) {
     await queryClient
       .getMutationCache()
       .build(queryClient, {
         mutationKey: STATION_MUT.KK1_CREATE_ENTRY as unknown as unknown[],
         mutationFn: async () => {
-          throw Object.assign(new Error("Bu top az önce girilmiş olabilir"), {
-            status: 409,
-            details: { code: "POSSIBLE_DUPLICATE", barcode: "T050826H0001" },
-          });
+          throw error;
         },
         retry: false,
       })
       .execute(vars)
       .catch(() => {});
+  }
 
-    const rows = useFailedOps.getState().rows;
-    expect(rows).toHaveLength(1);
-    expect(rows[0].code).toBe("POSSIBLE_DUPLICATE");
-    expect(rows[0].barcode).toBe("T050826H0001");
+  it("⭐ OBSERVER'SIZ (restore edilmiş) mutation'ın hatası da DUYURULUR", () => {
+    // Hiçbir component, hiçbir observer yok — eskiden bu sınıf tam sessizdi.
+    return runFailing(new Error("Sunucuya ulaşılamadı"), {
+      itemId: "urun-1",
+      initialQty: 140,
+      clientToken: "tok-x",
+    }).then(() => {
+      expect(Toast.show).toHaveBeenCalledTimes(1);
+      const arg = (Toast.show as jest.Mock).mock.calls[0][0];
+      expect(arg.type).toBe("error");
+      // Etiket sözlüğünden çözülür — operatör ham anahtar görmemeli.
+      expect(arg.text1).toContain("Ham Giriş");
+      expect(arg.text2).toContain("Sunucuya ulaşılamadı");
+    });
   });
 
-  it("aynı payload sonradan BAŞARILI olursa satır kendiliğinden düşer", async () => {
-    const vars = { itemId: "urun-1", initialQty: 140, clientToken: "tok-y" };
-    const key = STATION_MUT.KK1_CREATE_ENTRY as unknown as unknown[];
+  it("⭐ çakışma 409'u TOAST BASMAZ (ekran modalla soruyor)", () => {
+    return runFailing(
+      Object.assign(new Error("Bu top az önce girilmiş olabilir"), {
+        status: 409,
+        details: { code: "POSSIBLE_DUPLICATE", barcode: "T050826H0001" },
+      }),
+      { itemId: "urun-1", initialQty: 140, clientToken: "tok-y" },
+    ).then(() => {
+      expect(Toast.show).not.toHaveBeenCalled();
+    });
+  });
+
+  it("BAŞARILI mutation hiçbir şey duyurmaz", async () => {
     await queryClient
       .getMutationCache()
       .build(queryClient, {
-        mutationKey: key,
-        mutationFn: async () => {
-          throw new Error("ağ hatası");
-        },
+        mutationKey: STATION_MUT.KK1_CREATE_ENTRY as unknown as unknown[],
+        mutationFn: async () => ({ ok: true }),
         retry: false,
       })
-      .execute(vars)
-      .catch(() => {});
-    expect(useFailedOps.getState().rows).toHaveLength(1);
-
-    // "Tekrar Gönder" — AYNI vars, bu kez geçti.
-    await queryClient
-      .getMutationCache()
-      .build(queryClient, { mutationKey: key, mutationFn: async () => ({ ok: true }), retry: false })
-      .execute(vars);
-    expect(useFailedOps.getState().rows).toHaveLength(0);
+      .execute({ itemId: "urun-1", clientToken: "tok-z" });
+    expect(Toast.show).not.toHaveBeenCalled();
   });
 
   it("her STATION_MUT anahtarının operatöre görünen bir ETİKETİ var", () => {
-    // Yeni bir istasyon anahtarı eklenip etiketi unutulursa kutu satırı ham
-    // anahtarı basar — bu test onu geliştirme anında düşürür.
+    // Yeni bir istasyon anahtarı eklenip etiketi unutulursa toast ham anahtarı
+    // basar — bu test onu geliştirme anında düşürür.
     for (const key of Object.values(STATION_MUT)) {
       const label = stationOpLabel(key);
       expect(label).not.toBe("İşlem");

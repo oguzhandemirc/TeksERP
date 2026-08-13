@@ -1,89 +1,90 @@
 // =============================================================================
-// Bekçi: SyncStatusChip — ölü mektup kutusunun TEK görünür girişi
+// Bekçi: SyncStatusChip — bağlantı DURUMU rozeti (iş istemez, dokunulamaz)
 // =============================================================================
-// Kutu (failedOps) doğru çalışsa bile operatör onu GÖREMİYORSA kayıt fiilen
-// kayıptır. Bu bekçi görünürlük sözleşmesini kilitler:
-//   • tam senkronda çip hiç render EDİLMEZ (gürültü yok)
-//   • hatalı kayıt varsa çip görünür ve "KAYIT" der (yazıcı çipiyle karışmasın)
-//   • çip DOKUNULABİLİR (kutuyu açan tek yol)
+// 2026-08-12'ye kadar bu rozet bir "ölü mektup kutusu"nun girişiydi ve kırmızı
+// "N KAYIT GİTMEDİ" basıyordu. Kutu kaldırıldı; rozet yalnız durum bildirir.
+// Kilitlenen sözleşme:
+//   • tam senkronda HİÇ render edilmez (gürültü yok),
+//   • çevrimdışı sebebi AYRI cümledir (wifi mi, sunucu mu — farklı iş),
+//   • rozet DOKUNULAMAZ ve "KAYIT GİTMEDİ" ARTIK BASMAZ (regresyon zemini:
+//     kutu geri sızarsa bu test kırmızı verir).
 // =============================================================================
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import { QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { PaperProvider } from 'react-native-paper';
 import SyncStatusChip from './SyncStatusChip';
-import { useFailedOps } from '../offline/failedOps';
 import { queryClient } from '../offline/queryClient';
+import {
+  __resetOnlineSignalForTests,
+  reportServerUnreachable,
+} from '../offline/serverReachability';
 
 /** `usePendingStationOps` (useMutationState) provider ister; Paper de tema ister. */
-function renderChip(props: Parameters<typeof SyncStatusChip>[0] = {}) {
+function renderChip() {
   return render(
     <QueryClientProvider client={queryClient}>
       <PaperProvider>
-        <SyncStatusChip {...props} />
+        <SyncStatusChip />
       </PaperProvider>
     </QueryClientProvider>,
   );
 }
 
-// Reanimated/Portal ağırlığından kaçın — bu testin konusu görünürlük mantığı.
+// Reanimated ağırlığından kaçın — bu testin konusu görünürlük mantığı.
 jest.mock('./motion/Pulse', () => 'Pulse');
-jest.mock('./outbox/OutboxModal', () => {
-  const { Text } = require('react-native');
-  // ⚠️ İSİMLİ olmak ZORUNDA. İsimsiz bir ok fonksiyonu döndürmek
-  // `react/display-name` kuralını ihlal ediyor ve bu, mobil CI işini düşüren
-  // TEK hataydı (kalan 111 bulgu uyarı; job'ı yalnız bu 1 error düşürüyordu).
-  // Çözüm eslint-disable EKLEMEK DEĞİL: dosya zaten "kullanılmayan
-  // eslint-disable" uyarıları taşıyor, yani susturma yönü sorunun kendisi.
-  const MockOutboxModal = ({ visible }: { visible: boolean }) =>
-    visible ? <Text>OUTBOX_ACIK</Text> : null;
-  MockOutboxModal.displayName = 'OutboxModal';
-  return MockOutboxModal;
-});
 
 beforeEach(() => {
-  useFailedOps.setState({ rows: [], hydrated: true });
+  __resetOnlineSignalForTests();
   onlineManager.setOnline(true);
 });
 
-const failedRow = {
-  id: 'op-1',
-  key: ['station', 'kk1-create-entry'] as const,
-  variables: { itemId: 'x', initialQty: 140 },
-  message: 'Bu top az önce girilmiş olabilir',
-  status: 409,
-  code: 'POSSIBLE_DUPLICATE',
-  barcode: 'T050826H0001',
-  failedAt: Date.now(),
-};
-
 describe('SyncStatusChip', () => {
-  it('tam senkronda (online + 0 bekleyen + 0 hatalı) HİÇ render edilmez', () => {
+  it('tam senkronda (online + 0 bekleyen) HİÇ render edilmez', () => {
     renderChip();
-    expect(screen.queryByText(/sync|Çevrimdışı|GİTMEDİ/)).toBeNull();
+    expect(screen.queryByText(/sync|Çevrimdışı|ULAŞILAMIYOR/)).toBeNull();
   });
 
-  it('⭐ hatalı kayıt varsa "N KAYIT GİTMEDİ" görünür', () => {
-    useFailedOps.setState({ rows: [failedRow], hydrated: true });
-    renderChip();
-    // "GİTMEDİ" LOAD-BEARING: saha personeli "HATALI" kelimesini "kayıt yanlış
-    // girilmiş" diye okuyor; anlatılan ise "sisteme ULAŞMADI". Ayrıca KK1in
-    // yazıcı çipi "N ETİKET HATALI" diyor ve ikisi aynı headerda yan yana.
-    expect(screen.getByText('1 KAYIT GİTMEDİ')).toBeTruthy();
-  });
-
-  it('çipe dokununca kutu açılır (kaydın tek çıkış yolu)', () => {
-    useFailedOps.setState({ rows: [failedRow], hydrated: true });
-    renderChip();
-    expect(screen.queryByText('OUTBOX_ACIK')).toBeNull();
-    fireEvent.press(screen.getByText('1 KAYIT GİTMEDİ'));
-    expect(screen.getByText('OUTBOX_ACIK')).toBeTruthy();
-  });
-
-  it('çevrimdışı ama hatasızken eski davranış korunur', () => {
+  it('ağ linki yokken "Çevrimdışı" der', () => {
     onlineManager.setOnline(false);
     renderChip();
     expect(screen.getByText('Çevrimdışı')).toBeTruthy();
+  });
+
+  it('sunucuya ulaşılamıyorsa SEBEBİ ayrı cümleyle söyler', () => {
+    // İki durum farklı İŞ demek: wifi'yi operatör düzeltir, ölü sunucuyu IT.
+    // ⚠️ Bu dalı kurmak ZORUNLU — `setOnline(false)` yalnız link dalını çalıştırır
+    // ve sunucu dalı test edilmeden kalırsa oraya sızan bir metin görülmez
+    // (negatif sonda ilk yazımda tam bu yüzden yeşil kaldı).
+    reportServerUnreachable();
+    onlineManager.setOnline(false);
+    renderChip();
+    expect(screen.getByText('SUNUCUYA ULAŞILAMIYOR')).toBeTruthy();
+  });
+
+  it('⭐ "KAYIT GİTMEDİ" ARTIK BASILMAZ — ölü mektup kutusu kaldırıldı (her iki dalda)', () => {
+    // Regresyon zemini: kutu (ya da onun metni) geri sızarsa burada yakalanır.
+    // Kaldırılma gerekçesi SyncStatusChip.tsx ve announceFailure.ts başlıklarında.
+    onlineManager.setOnline(false);
+    const linkOnly = renderChip();
+    expect(screen.queryByText(/GİTMEDİ|HATALI/)).toBeNull();
+    linkOnly.unmount();
+
+    reportServerUnreachable();
+    renderChip();
+    expect(screen.queryByText(/GİTMEDİ|HATALI/)).toBeNull();
+  });
+
+  it('rozet DOKUNULABİLİR DEĞİL — açacağı bir yüzey yok', () => {
+    onlineManager.setOnline(false);
+    renderChip();
+    // Rozet bir düğme gibi davranmamalı: dokunmayı vaat edip hiçbir şey
+    // yapmamak, kutu dönemindeki "dokun → karar ver" alışkanlığını sürdürürdü.
+    // `queryByRole` YETMEZ (sarmalayıcı Animated.View'da rol yakalanmıyor —
+    // ölçüldü); gerçek regresyon bir Touchable EKLEMEKtir, o yüzden basılabilir
+    // düğüm sayısına bakılır.
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.UNSAFE_queryAllByProps({ onPress: expect.anything() })).toHaveLength(0);
   });
 });

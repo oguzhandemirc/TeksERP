@@ -6,9 +6,12 @@
 import { MutationCache, QueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import Toast from 'react-native-toast-message';
 import { jitteredBackoff } from './backoff';
 import { revivePendingStationMutations } from './persistPolicy';
-import { clearStationFailure, recordStationFailure } from './failedOps';
+import { failureToastText, shouldAnnounceFailure } from './announceFailure';
+// ⚠️ `stationLabels`ten — `mutations`tan DEĞİL: o dosya bu dosyayı import ediyor.
+import { stationOpLabel } from './stationLabels';
 import { installOnlineSignal } from './serverReachability';
 
 // "Online" = AĞ LİNKİ **ve** SUNUCU ERİŞİLEBİLİR (B6). Eskiden burada düz bir
@@ -18,22 +21,36 @@ import { installOnlineSignal } from './serverReachability';
 // offline/serverReachability.ts
 installOnlineSignal();
 
+/** Kalıcı düşüşü operatöre ANINDA söyle (karar `offline/announceFailure.ts`). */
+function announceStationFailure(key: unknown, error: unknown): void {
+  if (!shouldAnnounceFailure(key, error)) return;
+  const { text1, text2 } = failureToastText(error, stationOpLabel(key));
+  // Uzun tut: operatör tabletin başında olmayabilir, mesajı kaçırmasın.
+  Toast.show({ type: 'error', text1, text2, visibilityTime: 6000 });
+}
+
 export const queryClient = new QueryClient({
-  // ÖLÜ MEKTUP KUTUSU — kalıcı düşüşlerin TEK yakalama noktası (2026-08-05).
+  // KALICI DÜŞÜŞ → OLDUĞU ANDA SÖYLE, HİÇBİR YERE YAZMA (2026-08-12).
   //
   // Neden BURASI, `setMutationDefaults` DEĞİL: key-bazlı `onError`, component
   // kendi `onError`'ını verdiğinde EZİLİR (query-core defaultMutationOptions
-  // sırası: global < key defaults < component). Kayıt "bazen" yakalanırdı —
+  // sırası: global < key defaults < component). Uyarı "bazen" basılırdı —
   // sessiz tuzak. MutationCache callback'i ise her zaman ve component'ten ÖNCE
   // koşar; ayrıca observer'sız (restore edilmiş) mutation'ları da kapsar ve
   // yalnız KALICI düşüşte tetiklenir (ara retry'lar `onFail`'e gider).
+  //
+  // ÖNCESİ: aynı olay kalıcı bir "ölü mektup kutusuna" yazılıyor, header'daki
+  // rozet kırmızıya dönüyor ve operatör listeden karar veriyordu. Kaldırıldı —
+  // gerekçe SyncStatusChip.tsx başlığında. Özeti: kutu "ulaşamadım" ile
+  // "sunucu soru sordu"yu tek başlıkta topluyordu, ikincisi zaten ekranda
+  // modalla soruluyordu ve karar verilmeyen satırlar günlerce çürüyordu.
+  //
+  // ⚠️ ÇAKIŞMA 409'LARI TOAST BASMAZ: onların TEK yüzeyi ekranın kendi
+  // modalıdır (KK1 EntryConflictModal — "aynı top mu, ayrı top mu"). Toast
+  // basmak aynı kararı ikinci kez, üstelik cevaplanamaz biçimde sordururdu.
   mutationCache: new MutationCache({
-    onError: (error, variables, _ctx, mutation) =>
-      recordStationFailure(mutation.options.mutationKey, variables, error),
-    // Aynı payload sonradan başarılı olursa satır kendiliğinden düşer
-    // (opIdFor deterministik olduğu için ek eşleştirme gerekmez).
-    onSuccess: (_data, variables, _ctx, mutation) =>
-      clearStationFailure(mutation.options.mutationKey, variables),
+    onError: (error, _variables, _ctx, mutation) =>
+      announceStationFailure(mutation.options.mutationKey, error),
   }),
   defaultOptions: {
     queries: {
