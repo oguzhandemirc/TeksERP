@@ -22,6 +22,7 @@ import { GoodsReceiptStatus, RollEntrySource, RollStatus, WarehouseEventType } f
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
+import { printedDocumentService } from "../src/services/printed-document.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 
 let pass = 0;
@@ -82,6 +83,18 @@ async function main(): Promise<void> {
   });
   check("B1) Her top için ENTRY satırı", ledger.length === 2 && ledger.every((l) => l.eventType === WarehouseEventType.ENTRY));
   check("B2) Defter satırı fişin deposunu ve fişi taşıyor", ledger.every((l) => l.toWarehouseId === wh.id && l.goodsReceiptId === detail.id));
+
+  // ── B3-B5) Fiş belgesi: LAZY-INIT (açılışta DEĞİL, ilk baskıda donar) ────
+  const beforePrint = await prisma.printedDocument.count({ where: { docType: "GOODS_RECEIPT", sourceId: detail.id } });
+  check(
+    "B3) ⭐ Fiş açılışında belge DONMADI (fiş bir KAPTIR — satır sonradan eklenir)",
+    beforePrint === 0,
+    `belge=${beforePrint}`,
+  );
+  const grHtml = (await printedDocumentService.getHtml("GOODS_RECEIPT" as never, detail.id)).data?.html ?? "";
+  check("B4) İlk baskıda belge üretildi ve tedarikçi irsaliyesini yazıyor", grHtml.includes("MAL KABUL") && grHtml.includes("IRS-12345"), `uzunluk=${grHtml.length}`);
+  const afterPrint = await prisma.printedDocument.count({ where: { docType: "GOODS_RECEIPT", sourceId: detail.id } });
+  check("B5) Baskı belgeyi dondurdu (lazy-init)", afterPrint === 1, `belge=${afterPrint}`);
 
   // ── C) İdempotency ──────────────────────────────────────────────────────
   const token = randomUUID();

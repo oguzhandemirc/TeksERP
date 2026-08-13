@@ -159,4 +159,41 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     note: "Müşteri partiyle uyumsuz olduğunu bildirdi",
     receivedBy: "Ayşe Kaya",
   },
+  // ── Ticaret paketi: iç depo belgeleri (2026-08-13) ────────────────────────
+  // Örnek veri, Belge Şablonları ekranının CANLI ÖNİZLEMESİNİ besler — bu yüzden
+  // belge tipiyle AYNI commit'te gelmek zorunda (örneksiz tip = boş/çöp kart).
+  TRANSFER_DISPATCH: {
+    header: {
+      documentNo: "DT1308260001",
+      date: ISO,
+      fromWarehouseName: "Merkez Depo",
+      fromWarehouseCode: "DP-MERKEZ",
+      toWarehouseName: "Şube Deposu",
+      toWarehouseCode: "DP1308260002",
+      createdBy: "Mehmet Yılmaz",
+    },
+    lines: [
+      { barcode: "T130826F0101", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, qty: 120 },
+      { barcode: "T130826F0102", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, qty: 85.5 },
+    ],
+    notes: "Şube talebi üzerine sevk edildi",
+  },
+  GOODS_RECEIPT: {
+    header: {
+      documentNo: "MK1308260001",
+      date: ISO,
+      warehouseName: "Merkez Depo",
+      warehouseCode: "DP-MERKEZ",
+      supplierName: "Örnek Tedarik A.Ş.",
+      supplierCode: "MUS1308260007",
+      deliveryNoteNo: "IRS-2026-4471",
+      createdBy: "Ayşe Kaya",
+    },
+    lines: [
+      { barcode: "T130826F0201", itemName: "Perde Kumaşı", colorName: "Krem", width: 300, qty: 200 },
+      { barcode: "T130826F0202", itemName: "Perde Kumaşı", colorName: "Krem", width: 300, qty: 180 },
+      { barcode: "T130826F0203", itemName: "Tül", colorName: null, width: 280, qty: 150 },
+    ],
+    notes: null,
+  },
 };

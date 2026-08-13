@@ -3106,13 +3106,11 @@ enum PrintedDocType {
   SUBCONTRACTOR_RECEIPT // Fason kabul makbuzu (SubcontractorReceipt)
   QUALITY_CERTIFICATE // Kalite/sevk sertifikası (Shipment — kalite özeti)
   RETURN_DISPATCH // İade irsaliyesi (RollReturn)
-  // ⚠️ SIRADAKİ (ticaret paketi, henüz EKLENMEDİ): TRANSFER_DISPATCH (depolar arası
-  // transfer irsaliyesi) + GOODS_RECEIPT (mal kabul fişi). Bilerek burada değiller:
-  // enum'a değer eklemek `DOC_CONFIG_KEYS` ve `SAMPLE_PRINTED_DOCS` exhaustive
-  // Record'larını derlemede kırar (iyi bir bekçi) — yani belge tipi, builder'ı +
-  // renderer'ı + ÖRNEK VERİSİ ile aynı commit'te gelmeli. Örneksiz eklemek Belge
-  // Şablonları ekranının canlı önizlemesinde boş/çöp bir kart doğururdu.
-  // Eklerken yine SONA yazılır (ALTER TYPE ADD VALUE kuralı).
+  // 2026-08-13 ticaret paketi (yine SONA — ALTER TYPE ADD VALUE kuralı). İkisi de
+  // İÇ belgedir (müşteriye gitmez) ama resmi zincir aynıdır: donmuş snapshot +
+  // versiyon + İPTAL filigranı.
+  TRANSFER_DISPATCH // Depolar arası transfer irsaliyesi (WarehouseTransfer)
+  GOODS_RECEIPT // Mal kabul fişi (GoodsReceipt — satın alınan malın depo girişi)
 }
 
 enum PrintedDocStatus {

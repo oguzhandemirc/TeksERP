@@ -44,6 +44,8 @@ const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   SUBCONTRACTOR_RECEIPT: "fasonKabul",
   QUALITY_CERTIFICATE: "kaliteSertifikasi",
   RETURN_DISPATCH: "iadeIrsaliyesi",
+  TRANSFER_DISPATCH: "depoTransfer",
+  GOODS_RECEIPT: "malKabul",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */

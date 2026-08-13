@@ -296,6 +296,8 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
   SUBCONTRACTOR_RECEIPT: "fasonKabul",
   QUALITY_CERTIFICATE: "kaliteSertifikasi",
   RETURN_DISPATCH: "iadeIrsaliyesi",
+  TRANSFER_DISPATCH: "depoTransfer",
+  GOODS_RECEIPT: "malKabul",
 };
 
 /**
@@ -409,6 +411,49 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
     { key: "decl", label: "Beyan metni", group: "footer" },
   ],
   iadeIrsaliyesi: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  // ── Ticaret paketi: iç depo belgeleri (2026-08-13) ────────────────────────
+  // Backend'de `depoTransfer` / `malKabul` (doc-fields.ts) — bekçi ikisinin
+  // birebirliğini mekanik doğrular (test_doc_density_fields).
+  depoTransfer: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  malKabul: [
     { key: "company", label: "Firma adı", group: "header" },
     { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
     { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
@@ -707,6 +752,58 @@ export const DOC_DEFS: DocDef[] = [
           { key: "itemColor", label: "Ürün / renk" },
           { key: "width", label: "En" },
           { key: "grade", label: "Kalite" },
+          { key: "qty", label: "Metre" },
+        ],
+      },
+    ],
+  },
+  // ── Ticaret paketi: iç depo belgeleri (müşteriye gitmez) ──────────────────
+  {
+    key: "depoTransfer",
+    label: "Depo Transfer İrsaliyesi",
+    defaultTitle: "Depo Transfer İrsaliyesi",
+    fields: DOC_FIELD_CATALOGS.depoTransfer,
+    defaultSignatures: ["Teslim Eden", "Teslim Alan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "createdBy", label: "Düzenleyen" },
+      { key: "rollTable", label: "Taşınan top tablosu" },
+    ],
+    tables: [
+      {
+        key: "rollTable",
+        label: "Taşınan Toplar",
+        columns: [
+          { key: "barcode", label: "Barkod" },
+          { key: "itemColor", label: "Ürün / renk" },
+          { key: "width", label: "En" },
+          { key: "qty", label: "Metre" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "malKabul",
+    label: "Mal Kabul Fişi",
+    defaultTitle: "Mal Kabul Fişi",
+    fields: DOC_FIELD_CATALOGS.malKabul,
+    defaultSignatures: ["Teslim Eden (Tedarikçi)", "Teslim Alan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "deliveryNote", label: "Tedarikçi irsaliye no" },
+      { key: "createdBy", label: "Teslim alan" },
+      { key: "rollTable", label: "Kabul edilen top tablosu" },
+    ],
+    tables: [
+      {
+        key: "rollTable",
+        label: "Kabul Edilen Toplar",
+        columns: [
+          { key: "barcode", label: "Barkod" },
+          { key: "itemColor", label: "Ürün / renk" },
+          { key: "width", label: "En" },
           { key: "qty", label: "Metre" },
         ],
       },

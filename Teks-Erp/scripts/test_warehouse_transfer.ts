@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { warehouseTransferService } from "../src/services/warehouse-transfer.service";
 import { InventoryService } from "../src/services/inventory.service";
+import { printedDocumentService } from "../src/services/printed-document.service";
 
 const inventory = new InventoryService();
 
@@ -79,6 +80,20 @@ async function main(): Promise<void> {
   });
   check("A4) Defterde iki TRANSFER satırı, yönleriyle", trMoves.length === 2 && trMoves.every((m) => m.fromWarehouseId === a.id && m.toWarehouseId === b.id));
 
+  // ── A5-A7) Resmi belge: transfer tx'inde DONDU ve BASILABİLİYOR ─────────
+  const frozen = await prisma.printedDocument.findFirst({
+    where: { docType: "TRANSFER_DISPATCH", sourceId: detail.id },
+    select: { version: true, status: true, documentNo: true },
+  });
+  check("A5) Transfer irsaliyesi tx içinde dondu", frozen?.version === 1 && frozen?.status === "ACTIVE", `no=${frozen?.documentNo}`);
+  const html = (await printedDocumentService.getHtml("TRANSFER_DISPATCH" as never, detail.id)).data?.html ?? "";
+  check(
+    "A6) Belge HTML'i basıldı ve iki depoyu da yazıyor",
+    html.includes("TRANSFER") && html.includes("A Deposu") && html.includes("B Deposu"),
+    `uzunluk=${html.length}`,
+  );
+  check("A7) Taşınan toplar belgede", html.includes("TAŞINAN TOPLAR"));
+
   // ── B + C) Atomiklik + somut mesaj ──────────────────────────────────────
   const okRoll = await makeRoll(a.id, 70, item.id);
   const wrongRoll = await makeRoll(b.id, 30, item.id); // B'de duruyor, A'dan taşınamaz
@@ -123,6 +138,12 @@ async function main(): Promise<void> {
   check("E2) Transfer CANCELLED", status?.status === WarehouseTransferStatus.CANCELLED);
   const reversal = await prisma.warehouseMovement.count({ where: { transferId: detail.id, eventType: WarehouseEventType.TRANSFER_REVERSAL } });
   check("E3) TRANSFER_REVERSAL satırları yazıldı", reversal === 2, `satır=${reversal}`);
+  const voided = await prisma.printedDocument.findFirst({
+    where: { docType: "TRANSFER_DISPATCH", sourceId: detail.id },
+    orderBy: { version: "desc" },
+    select: { status: true },
+  });
+  check("E4) Belge VOIDED (silinmedi — kâğıt sahada dolaşmış olabilir)", voided?.status === "VOIDED", `durum=${voided?.status}`);
   const stillThere = await prisma.warehouseMovement.count({ where: { transferId: detail.id, eventType: WarehouseEventType.TRANSFER } });
   check("F) ⭐ Defter APPEND-ONLY: TRANSFER satırları SİLİNMEDİ", stillThere === 2, `satır=${stillThere}`);
 

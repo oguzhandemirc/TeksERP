@@ -73,6 +73,17 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read: ["return:read", "return:write", "mobile:iade"],
     write: ["return:write"],
   },
+  // ── Ticaret paketi: iç depo belgeleri (2026-08-13) ────────────────────────
+  // Liste izniyle BASKI izni hizalı tutulur: belgeyi ekranda görüp basamamak
+  // sessiz bir 403 kapanıdır (operatör satıra basar, hiçbir şey olmaz).
+  TRANSFER_DISPATCH: {
+    read: ["warehouse:transfer", "warehouse:read", "warehouse:write"],
+    write: ["warehouse:transfer"],
+  },
+  GOODS_RECEIPT: {
+    read: ["goods-receipt:read", "goods-receipt:write"],
+    write: ["goods-receipt:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

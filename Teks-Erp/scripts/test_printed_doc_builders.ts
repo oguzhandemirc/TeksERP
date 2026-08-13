@@ -33,12 +33,16 @@
 import { PrintedDocType, Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { getRegisteredDocBuilders } from "../src/services/printed-document.service";
-// Builder kayıtları import YAN ETKİSİYLE oluşur — bu dört import silinirse
-// registry boş kalır ve bekçi vakumen yeşile döner (körlük zemini onu yakalar).
+// Builder kayıtları import YAN ETKİSİYLE oluşur — bu importlar silinirse registry
+// boş kalır ve bekçi vakumen yeşile döner (körlük zemini onu yakalar).
+// ⚠️ YENİ BELGE TİPİ EKLERKEN buraya da import ekle; eklemezsen "kayıtlı builder
+// yok" diye kırmızı verir (2026-08-13'te transfer/mal kabul tam böyle yakalandı).
 import "../src/services/shipping.service";
 import "../src/services/subcontractor.service";
 import "../src/services/kartela.service";
 import "../src/services/return.service";
+import "../src/services/warehouse-transfer.service";
+import "../src/services/goods-receipt.service";
 
 let pass = 0;
 let fail = 0;
@@ -71,6 +75,10 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
     (await prisma.kartelaDispatch.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
   [PrintedDocType.RETURN_DISPATCH]: async () =>
     (await prisma.rollReturn.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.TRANSFER_DISPATCH]: async () =>
+    (await prisma.warehouseTransfer.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.GOODS_RECEIPT]: async () =>
+    (await prisma.goodsReceipt.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

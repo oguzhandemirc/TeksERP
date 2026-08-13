@@ -92,6 +92,9 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
     { key: "decl", label: "Beyan metni", group: "footer", selector: ".decl", base: (d) => d.note, weight: 400 },
   ],
   iadeIrsaliyesi: [...COMMON, ...BOXES, SEC_CAPTION],
+  // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
+  depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],
+  malKabul: [...COMMON, ...BOXES, SEC_CAPTION],
 };
 
 /**

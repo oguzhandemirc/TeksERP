@@ -18,6 +18,11 @@ import "../src/services/shipping.service";
 import "../src/services/subcontractor.service";
 import "../src/services/kartela.service";
 import "../src/services/return.service";
+// ⚠️ Builder kaydı import YAN ETKİSİYLE oluşur: bu dosya TÜM PrintedDocType
+// değerlerini dolaştığı için yeni bir belge tipi eklendiğinde servisi de buraya
+// import edilmeli, yoksa `requireBuilder` 500 verir (2026-08-13'te böyle yakalandı).
+import "../src/services/warehouse-transfer.service";
+import "../src/services/goods-receipt.service";
 import {
   systemSettingService,
   readDocumentsLogo,

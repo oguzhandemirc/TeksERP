@@ -18,7 +18,9 @@
 // somut sebebiyle döner (`failed[]`) — "10 top girildi" deyip 2'sini yutmak en
 // kötü davranıştır (kurşun toplu dağıtım emsali).
 // =============================================================================
-import { GoodsReceiptStatus, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
+import { GoodsReceiptStatus, PrintedDocType, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
+import { registerPrintedDocBuilder } from "./printed-document.service";
+import { renderGoodsReceiptHtml, type GoodsReceiptDoc } from "./document-render/warehouse-doc.html";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -368,3 +370,73 @@ export class GoodsReceiptService {
 
 export const goodsReceiptService = new GoodsReceiptService();
 export default goodsReceiptService;
+
+// =============================================================================
+// DONMUŞ BELGE — Mal Kabul Fişi
+// =============================================================================
+// ⚠️ TRANSFERDEN FARKLI OLARAK BELGE İLK BASKIDA (lazy-init) DONAR, fiş açılışında
+// DEĞİL. Sebep: fiş bir KAPTIR — mal parça parça gelir ve satırlar sonradan
+// eklenir (`POST /:id/lines`). Açılışta dondurmak, içi BOŞ bir resmi belge
+// üretirdi. `getCurrent`in lazy-init yolu ilk baskıda o anki içeriği dondurur.
+//
+// İptal edilmiş fişin belgesi İPTAL filigranıyla basılır (`voidInfo`) — kâğıt
+// sahada dolaşmış olabilir, kaydı yok sayılmaz.
+registerPrintedDocBuilder(PrintedDocType.GOODS_RECEIPT, {
+  fresh: async (db, sourceId) => {
+    const r = await db.goodsReceipt.findUnique({
+      where: { id: sourceId },
+      select: {
+        receiptNo: true, createdAt: true, notes: true, deliveryNoteNo: true,
+        status: true, cancelledAt: true, cancelReason: true,
+        warehouse: { select: { name: true, code: true } },
+        supplier: { select: { name: true, code: true } },
+        createdBy: { select: { fullName: true, username: true } },
+        rolls: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            barcode: true, currentQty: true, width: true, status: true,
+            item: { select: { name: true } },
+            color: { select: { name: true } },
+          },
+        },
+      },
+    });
+    if (!r) return null;
+
+    const doc: GoodsReceiptDoc = {
+      header: {
+        documentNo: r.receiptNo,
+        date: r.createdAt.toISOString(),
+        warehouseName: r.warehouse.name,
+        warehouseCode: r.warehouse.code,
+        supplierName: r.supplier?.name ?? null,
+        supplierCode: r.supplier?.code ?? null,
+        deliveryNoteNo: r.deliveryNoteNo,
+        createdBy: r.createdBy?.fullName ?? r.createdBy?.username ?? null,
+      },
+      // İPTAL EDİLMİŞ top belgede GÖRÜNMEZ: fiş "bu mal girdi" der; iptal edilen
+      // satır girmemiş sayılır (softDelete = qtyOut 0 stornosu ile aynı semantik).
+      lines: r.rolls
+        .filter((x) => x.status !== RollStatus.CANCELLED)
+        .map((x) => ({
+          barcode: x.barcode,
+          itemName: x.item.name,
+          colorName: x.color?.name ?? null,
+          width: x.width != null ? Number(x.width) : null,
+          qty: Number(x.currentQty),
+        })),
+      notes: r.notes,
+    };
+
+    return {
+      documentNo: r.receiptNo,
+      doc: doc as unknown as Record<string, unknown>,
+      // Fiş iptal edilmişken ilk kez basılıyorsa belge doğrudan VOIDED doğar.
+      voidInfo:
+        r.status === GoodsReceiptStatus.CANCELLED
+          ? { reason: r.cancelReason, at: r.cancelledAt ?? new Date() }
+          : null,
+    };
+  },
+  renderHtml: renderGoodsReceiptHtml,
+});

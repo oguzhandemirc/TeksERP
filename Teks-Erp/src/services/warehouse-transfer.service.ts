@@ -12,7 +12,9 @@
 //
 // ⚠️ SATIR TABLOSU YOK: kalemler `WarehouseMovement` satırlarıdır (`transferId`).
 // =============================================================================
-import { Prisma, RollStatus, WarehouseEventType, WarehouseTransferStatus } from "@prisma/client";
+import { Prisma, PrintedDocType, RollStatus, WarehouseEventType, WarehouseTransferStatus } from "@prisma/client";
+import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
+import { renderWarehouseTransferHtml, type WarehouseTransferDoc } from "./document-render/warehouse-doc.html";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -158,6 +160,10 @@ export class WarehouseTransferService {
           })),
         );
 
+        // Resmi belge — transfer irsaliyesi v1 BURADA, aynı tx içinde donar
+        // (sevk irsaliyesi emsali): içerik "taşıma anı"dır.
+        await printedDocumentService.freezeForSource(tx, PrintedDocType.TRANSFER_DISPATCH, transfer.id, userId);
+
         return { id: transfer.id, transferNo: transfer.transferNo, count: rolls.length };
       }),
     );
@@ -254,6 +260,15 @@ export class WarehouseTransferService {
         })),
       );
 
+      // Belge İPTAL filigranıyla VOIDED'e çekilir — silinmez: transfer gerçekten
+      // yapılmıştı ve kâğıdı sahada dolaşmış olabilir.
+      await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.TRANSFER_DISPATCH,
+        id,
+        reason?.trim() || "Transfer geri alındı",
+      );
+
       return { count: rollIds.length };
     });
 
@@ -338,3 +353,61 @@ export class WarehouseTransferService {
 
 export const warehouseTransferService = new WarehouseTransferService();
 export default warehouseTransferService;
+
+// =============================================================================
+// DONMUŞ BELGE — Transfer İrsaliyesi
+// =============================================================================
+// Kalemler DEFTERDEN okunur (transferin ayrı satır tablosu yok). Belge, transfer
+// tx'inin İÇİNDE dondurulur → içerik "taşıma anı"dır; sonradan bir top başka
+// depoya giderse belge DEĞİŞMEZ (donmuş belge kuralı).
+registerPrintedDocBuilder(PrintedDocType.TRANSFER_DISPATCH, {
+  fresh: async (db, sourceId) => {
+    const t = await db.warehouseTransfer.findUnique({
+      where: { id: sourceId },
+      select: {
+        transferNo: true, createdAt: true, notes: true,
+        fromWarehouse: { select: { name: true, code: true } },
+        toWarehouse: { select: { name: true, code: true } },
+        createdBy: { select: { fullName: true, username: true } },
+      },
+    });
+    if (!t) return null;
+
+    const lines = await db.warehouseMovement.findMany({
+      where: { transferId: sourceId, eventType: WarehouseEventType.TRANSFER },
+      orderBy: { createdAt: "asc" },
+      select: {
+        qty: true,
+        roll: {
+          select: {
+            barcode: true, width: true,
+            item: { select: { name: true } },
+            color: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    const doc: WarehouseTransferDoc = {
+      header: {
+        documentNo: t.transferNo,
+        date: t.createdAt.toISOString(),
+        fromWarehouseName: t.fromWarehouse.name,
+        fromWarehouseCode: t.fromWarehouse.code,
+        toWarehouseName: t.toWarehouse.name,
+        toWarehouseCode: t.toWarehouse.code,
+        createdBy: t.createdBy?.fullName ?? t.createdBy?.username ?? null,
+      },
+      lines: lines.map((l) => ({
+        barcode: l.roll.barcode,
+        itemName: l.roll.item.name,
+        colorName: l.roll.color?.name ?? null,
+        width: l.roll.width != null ? Number(l.roll.width) : null,
+        qty: Number(l.qty),
+      })),
+      notes: t.notes,
+    };
+    return { documentNo: t.transferNo, doc: doc as unknown as Record<string, unknown> };
+  },
+  renderHtml: renderWarehouseTransferHtml,
+});
