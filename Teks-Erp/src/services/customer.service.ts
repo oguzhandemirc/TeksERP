@@ -363,7 +363,8 @@ export class CustomerService extends BaseService {
     });
     if (!existing) return { success: false, data: null, message: "Müşteri bulunamadı" };
 
-    const [orderCount, shipmentCount, returnCount, branchCount, sackCount, routeCount] = await Promise.all([
+    const [orderCount, shipmentCount, returnCount, branchCount, sackCount, routeCount, goodsReceiptCount] =
+      await Promise.all([
       prisma.order.count({ where: { customerId: id } }),
       prisma.shipment.count({ where: { customerId: id } }),
       prisma.rollReturn.count({ where: { customerId: id } }),
@@ -374,6 +375,11 @@ export class CustomerService extends BaseService {
       // routes.customerId de ON DELETE SET NULL (A5, 2026-07-31 denetimi) — müşteriye
       // özel varsayılan rota, guard'sız silmede sessizce "genel" rotaya dönerdi.
       prisma.route.count({ where: { customerId: id } }),
+      // goods_receipts.supplierId de ON DELETE SET NULL (ticaret paketi, 2026-08-13):
+      // firma TEDARİKÇİ rolündeyken mal kabul fişlerine bağlanır. Guard'sız silmede
+      // fişler sessizce "tedarikçisiz" kalır — satın alma izi kaybolur ve alış
+      // faturası mutabakatı dayanağını yitirir.
+      prisma.goodsReceipt.count({ where: { supplierId: id } }),
     ]);
 
     const blockers: string[] = [];
@@ -383,6 +389,7 @@ export class CustomerService extends BaseService {
     if (branchCount > 0) blockers.push(`${branchCount} şube`);
     if (sackCount > 0) blockers.push(`${sackCount} çuval`);
     if (routeCount > 0) blockers.push(`${routeCount} müşteriye özel rota`);
+    if (goodsReceiptCount > 0) blockers.push(`${goodsReceiptCount} mal kabul fişi`);
 
     if (blockers.length > 0) {
       throw AppError.conflict(

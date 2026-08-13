@@ -42,6 +42,9 @@ const EXPECTED: Record<string, string> = {
   "Customer <- CustomerTemplateRoute.customer : Cascade": "cascade-intended — müşteri şablon yönlendirmesi",
   "Customer <- Route.customer : SetNull": "guarded (routeCount, A5 2026-07-31)",
   "Customer <- Sack.customer : SetNull": "guarded (sackCount, 2026-07-15)",
+  // Ticaret paketi (2026-08-13): firma TEDARİKÇİ rolündeyken mal kabul fişine
+  // bağlanır; guard'sız silmede satın alma izi sessizce kopardı.
+  "Customer <- GoodsReceipt.supplier : SetNull": "guarded (goodsReceiptCount, 2026-08-13)",
   // 2026-08-09 — `Roll.labelCustomerId`, `lastLabelSnapshot.customerId`'nin
   // SORGULANABİLİR aynası (sahiplik DEĞİL, basılmış kâğıdın izi).
   //
