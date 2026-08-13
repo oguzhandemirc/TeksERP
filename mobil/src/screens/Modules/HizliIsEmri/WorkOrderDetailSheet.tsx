@@ -131,6 +131,16 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   const statusColor = wo ? WORK_ORDER_STATUS_COLOR[wo.status] ?? colors.textMuted : colors.textMuted;
   const impact = impactQuery.data?.data;
 
+  /** Hedef üretim özellikleri — pivot (`{property:{name}}`) ya da düz şekil. */
+  const targetPropertyNames = useMemo<string[]>(() => {
+    const raw = (wo?.targetProperties ?? []) as Array<
+      { name?: string | null; property?: { name?: string | null } | null } | null
+    >;
+    return raw
+      .map((tp) => tp?.property?.name ?? tp?.name ?? null)
+      .filter((n): n is string => !!n);
+  }, [wo]);
+
   const infoRows = useMemo(() => {
     if (!wo) return [];
     return [
@@ -138,12 +148,17 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       ['Renk', wo.targetColor?.name ?? 'Renksiz / Ham'],
       ['En', wo.width != null ? `${wo.width} cm` : '—'],
       ['Kat Tipi', wo.foldType ?? '—'],
+      // ÜRETİM ÖZELLİĞİ (2026-08-13 saha bulgusu: geçmiş iş emri detayında hiç
+      // yazmıyordu). ⚠️ Backend pivotu `{ property: {...} }` ile döner; tip
+      // düz `FabricProperty[]` olduğu için İKİ ŞEKLİ de karşıla — biri boş
+      // çıkarsa satır sessizce "—" olur ve eksiklik yine görünmez.
+      ['Üretim Özelliği', targetPropertyNames.length ? targetPropertyNames.join(', ') : '—'],
       ['Tip', trLabel(WORK_ORDER_TYPE_LABEL, wo.type)],
       ['Hedef Metraj', wo.targetQuantity != null ? `${Math.round(wo.targetQuantity)} m` : '—'],
       ['Hedef Kg', wo.targetWeight != null ? `${Math.round(wo.targetWeight)} kg` : '—'],
       ['Oluşturma', wo.createdAt ? dayjs(wo.createdAt).format('DD.MM.YYYY HH:mm') : '—'],
     ];
-  }, [wo, rolls]);
+  }, [wo, rolls, targetPropertyNames]);
 
   return (
     <>

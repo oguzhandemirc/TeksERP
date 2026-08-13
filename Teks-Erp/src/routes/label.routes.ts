@@ -327,6 +327,30 @@ router.post(
  *     responses:
  *       200: { description: HTML, content: { text/html: { schema: { type: string } } } }
  */
+/**
+ * @openapi
+ * /api/labels/name-preview:
+ *   get:
+ *     tags: [Labels]
+ *     summary: "Bu hedefe basarsam etikette hangi ad çıkar?" (top doğmadan)
+ *     description: |
+ *       Tambur kesim ekranı, KESMEDEN ÖNCE müşterideki kumaş/renk adını gösterir.
+ *       Zincir `getRollLabel` ile AYNI: sipariş satırı override'ı → müşteri master
+ *       alias'ı → bizdeki ad. `orderLineId`/`customerId` yoksa stok baskısıdır ve
+ *       bizdeki ad döner. Salt-okunur.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ itemName, itemNameSource, colorName, colorNameSource, customerName }" }
+ */
+// ⚠️ `/rolls/:id` ile ÇAKIŞMAZ (farklı ön ek) ama statik segment olduğu için yine
+// de parametreli rotalardan önce durur — Express 5 sıra kuralı (`/stats` emsali).
+router.get(
+  "/name-preview",
+  verifyToken,
+  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
+  controller.previewCustomerNames,
+);
+
 router.post(
   "/preview/html",
   verifyToken,

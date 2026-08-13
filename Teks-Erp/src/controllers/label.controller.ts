@@ -22,6 +22,19 @@ const seedBulkSchema = z.object({
   stock: z.boolean().optional(),
 });
 
+/**
+ * Ad önizlemesi (Tambur, top doğmadan). `orderLineId` VEYA `customerId` — ikisi
+ * de yoksa stok baskısıdır ve zincir hiç koşmaz (bizdeki ad döner).
+ */
+const namePreviewSchema = z.object({
+  // Kaynak top (Tambur kesim akışı) — ürün/renk ondan çözülür.
+  rollId: z.string().uuid("Geçersiz top ID").nullish(),
+  itemId: z.string().uuid("Geçersiz ürün ID").nullish(),
+  colorId: z.string().uuid("Geçersiz renk ID").nullish(),
+  orderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").nullish(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
+});
+
 const bulkLabelsSchema = z.object({
   rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top").max(2000),
   copies: z.number().int().min(1).max(5).optional(),
@@ -125,6 +138,17 @@ export class LabelController {
    *
    * Response: text/html (raw), JSON sarmalama yok — iframe ve Print için direkt.
    */
+  /**
+   * "Bu hedefe basarsam etikette hangi ad çıkar?" — Tambur kesim ekranı, top
+   * DOĞMADAN önce sorar. Salt-okunur; hiçbir şey yazmaz.
+   */
+  previewCustomerNames = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = namePreviewSchema.parse(req.query);
+      res.status(200).json(await this.service.previewCustomerNames(q));
+    } catch (e) { next(e); }
+  };
+
   /**
    * Şablon düzenleme önizlemesi için HTML. Body: { kind, fields[] }. Henüz
    * kaydedilmemiş değişiklikleri preview için backend render eder; Electron

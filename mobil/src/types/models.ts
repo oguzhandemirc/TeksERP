@@ -362,6 +362,8 @@ export interface Roll {
     workOrder?: { id: string; workOrderNumber: string } | null;
   } | null;
   createdBy?: { id: string; username: string; fullName: string } | null;
+  /** Topun sisteme GİRDİĞİ istasyon (kalıcı köken; 2026-08-05 öncesi toplar null). */
+  entryStation?: { id: string; code: string; name: string } | null;
   /** Topun üstündeki son basılan etiket snapshot'ı (null = stok/etiket yok). BAĞ DEĞİL. */
   lastLabelSnapshot?: RollLabelSnapshot | null;
   /** Sevkiyat rezervasyonu: dolu ise top "serbest depo" DEĞİL — bir çuvalın
