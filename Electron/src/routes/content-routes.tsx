@@ -22,6 +22,12 @@ import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
 import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
+import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
+import { CariPage } from "@/pages/Finance/CariPage";
+import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
+import { PaymentsPage } from "@/pages/Finance/PaymentsPage";
+import { AccountsPage } from "@/pages/Finance/AccountsPage";
+import { RatesPage } from "@/pages/Finance/RatesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -203,6 +209,59 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="return:read">
         <ReturnReasonsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── ÖN MUHASEBE ────────────────────────────────────────────────────────
+  // ⚠️ Route izni ile hub karosunun `permissionAny` listesi AYNI olmalı
+  // (Finance/tile-config.ts) — ayrışırsa kart görünür, tıklanır, /forbidden.
+  // Modülün GÖRÜNÜRLÜK kapısı ise bayrak: menü satırı `financeEnabled`
+  // olmadan çizilmez ve backend her ucu 403'ler.
+  {
+    path: "finance",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <FinanceHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/cari",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <CariPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/invoices",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <InvoicesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/payments",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <PaymentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/accounts",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <AccountsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/rates",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <RatesPage />
       </ProtectedRoute>
     ),
   },

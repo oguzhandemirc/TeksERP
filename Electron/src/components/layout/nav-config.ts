@@ -5,6 +5,7 @@ import {
   ScrollText,
   ServerCog,
   ClipboardList,
+  Calculator,
   type LucideIcon,
 } from "lucide-react";
 
@@ -16,6 +17,15 @@ export interface NavItem {
   adminOnly?: boolean;
   /** Opsiyonel sayısal rozet (bekleyen iş / uyarı). Veri bağlandığında dolar. */
   badge?: number;
+  /**
+   * Bu satırın bağlı olduğu özellik bayrağı. Bayrak KAPALIYSA satır hiç
+   * çizilmez — izin taşıyan kullanıcıda bile.
+   *
+   * ⚠️ Bayrak bir GÖRÜNÜRLÜK süsü değil REJİM kapısıdır: backend de aynı
+   * bayrağa bakıp 403 döner (`requireFinanceEnabled`). İki taraf ayrışırsa
+   * kullanıcı menüde göremediği ama adresle açabildiği bir modül bulur.
+   */
+  featureFlag?: "financeEnabled";
 }
 
 export interface NavGroup {
@@ -31,6 +41,13 @@ export const navGroups: NavGroup[] = [
       { label: "Tanımlar", to: "/definitions", icon: Library },
       { label: "Operasyon", to: "/operations", icon: ClipboardList },
       { label: "Raporlar", to: "/reports", icon: ScrollText },
+      {
+        label: "Muhasebe",
+        to: "/finance",
+        icon: Calculator,
+        permission: "finance:read",
+        featureFlag: "financeEnabled",
+      },
     ],
   },
   {

@@ -3,6 +3,7 @@ import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
 import { operationsTiles } from "@/pages/Operations/tile-config";
+import { financeTiles } from "@/pages/Finance/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
 import { systemTiles } from "@/pages/System/tile-config";
 import {
@@ -64,6 +65,22 @@ export const commandSections: CommandSection[] = [
         keywords: "iş emri oluştur ekle yeni üretim aç",
       },
     ],
+  },
+  {
+    // ⚠️ Muhasebe ekranları palette KOŞULSUZ listelenir; görünürlük kapısı
+    // izindir (`permissionAny`). Bayrak kapalı bir kurulumda finance izni
+    // atanmamış olur, dolayısıyla satırlar da çıkmaz — ve bayrak açılıp izin
+    // verilen an kendiliğinden belirirler. Palete ayrıca bayrak yüklemi
+    // koymak, hub karolarıyla ayrışabilecek İKİNCİ bir kural demekti.
+    heading: "Muhasebe",
+    entries: financeTiles.map<CommandEntry>((tile) => ({
+      key: `fin:${tile.key}`,
+      label: tile.title,
+      description: tile.description,
+      icon: tile.icon,
+      to: tile.to,
+      permissionAny: tile.permissionAny,
+    })),
   },
   ...reportCommandSections,
   ...definitionGroups.map<CommandSection>((group) => ({

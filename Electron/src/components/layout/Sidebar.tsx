@@ -19,6 +19,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useMenuOrder } from "@/hooks/useMenuOrder";
 import { ADMIN_PERMISSION_LIST } from "@/types/auth";
 import { navGroups, type NavItem, type NavGroup } from "./nav-config";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { findCommandEntry, type CommandEntry } from "./command-entries";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarBrand, SidebarFooter } from "./sidebar-brand";
@@ -30,6 +31,7 @@ interface Props {
 
 export function Sidebar({ collapsed }: Props) {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
+  const flagsQuery = useFeatureFlags();
   const { favorites, reorderFavorites } = useFavorites();
   const { orderItems, setGroupOrder } = useMenuOrder();
 
@@ -42,6 +44,10 @@ export function Sidebar({ collapsed }: Props) {
   const visible = (item: NavItem) => {
     if (item.adminOnly && !isAdmin && !hasAnyPermission(ADMIN_PERMISSION_LIST)) return false;
     if (item.permission && !hasPermission(item.permission)) return false;
+    // ⚠️ Bayrak yüklenene kadar KAPALI tarafa düşülür (`?? false`): belirsizken
+    // satır çizmek, fabrikada "Muhasebe" menüsünün bir an belirip kaybolması
+    // demekti. Tersi yalnız bir gecikmedir (useMultiWarehouse ile aynı karar).
+    if (item.featureFlag && !(flagsQuery.data?.data?.[item.featureFlag] ?? false)) return false;
     return true;
   };
 
