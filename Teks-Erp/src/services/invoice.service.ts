@@ -374,6 +374,8 @@ export class InvoiceService {
           currency: true,
           exchangeRate: true,
           issueDate: true,
+          shipmentId: true,
+          directShipmentId: true,
         },
       });
 
@@ -427,6 +429,54 @@ export class InvoiceService {
       // Bakiye: POZİTİF = cari BİZE borçlu.
       const delta = side === "debit" ? totals.grandTotal : totals.grandTotal.negated();
       await applyCariBalanceTx(tx, inv.cariId, inv.currency, delta);
+
+      // ── KAYNAK SEVKİYAT DAMGASI — "iki faturalandı gerçeği" birleşir ─────
+      // `Shipment.invoiceNo` dış muhasebe programındaki belgenin izi olarak
+      // doğdu (2026-08-02). İç fatura modülü gelince aynı soru ("bu sevkiyat
+      // faturalandı mı") İKİ kaynaktan cevaplanır oldu ve ayrışabilirlerdi:
+      // muhasebe ekranı işaretsiz gösterirken içeride onaylı fatura durabilir,
+      // storno guard'ı (faturalı sevk geri alınamaz) da devreye girmezdi.
+      // Onay artık kaynağı AYNI tx'te damgalar; iptal (aşağıda) yalnız KENDİ
+      // damgasını temizler — elle basılmış dış-program işaretine dokunmaz.
+      if (inv.shipmentId) {
+        const shp = await tx.shipment.findUniqueOrThrow({
+          where: { id: inv.shipmentId },
+          select: { status: true, invoiceNo: true, shipmentNo: true },
+        });
+        if (shp.invoiceNo && shp.invoiceNo !== inv.docNo) {
+          // Elle farklı bir belge numarası işaretlenmiş — çift faturalama
+          // sinyali; sessizce üstüne yazmak dış muhasebedeki izi yok ederdi.
+          throw AppError.conflict(
+            `${shp.shipmentNo} zaten "${shp.invoiceNo}" ile faturalanmış işaretli — önce Muhasebe ekranından o işareti kaldırın.`,
+          );
+        }
+        // PLANNED sevkiyat damgalanmaz (fatura irsaliyeden kesilir; işaret
+        // sözleşmesi "yalnız DISPATCHED" — 2026-08-02 kuralı). Fatura yine
+        // geçerlidir; sevk edildiğinde işaret muhasebe ekranından basılabilir.
+        if (shp.status === "DISPATCHED" && !shp.invoiceNo) {
+          await tx.shipment.update({
+            where: { id: inv.shipmentId },
+            data: { invoiceNo: inv.docNo, invoicedAt: new Date(), invoicedById: userId ?? null },
+          });
+        }
+      }
+      if (inv.directShipmentId) {
+        const ds = await tx.directShipment.findUniqueOrThrow({
+          where: { id: inv.directShipmentId },
+          select: { invoiceNo: true, dispatchNo: true },
+        });
+        if (ds.invoiceNo && ds.invoiceNo !== inv.docNo) {
+          throw AppError.conflict(
+            `${ds.dispatchNo} zaten "${ds.invoiceNo}" ile faturalanmış işaretli — önce Muhasebe ekranından o işareti kaldırın.`,
+          );
+        }
+        if (!ds.invoiceNo) {
+          await tx.directShipment.update({
+            where: { id: inv.directShipmentId },
+            data: { invoiceNo: inv.docNo, invoicedAt: new Date(), invoicedById: userId ?? null },
+          });
+        }
+      }
 
       return { id: inv.id, docNo: inv.docNo };
     });
@@ -483,6 +533,8 @@ export class InvoiceService {
           exchangeRate: true,
           grandTotal: true,
           grandTotalTry: true,
+          shipmentId: true,
+          directShipmentId: true,
         },
       });
 
@@ -512,6 +564,23 @@ export class InvoiceService {
         });
         const delta = side === "debit" ? D(inv.grandTotal).negated() : D(inv.grandTotal);
         await applyCariBalanceTx(tx, inv.cariId, inv.currency, delta);
+      }
+
+      // Kaynak damgası YALNIZ bizimse temizlenir (updateMany koşulu bunu
+      // atomik yapar): elle basılmış dış-program işareti bizim iptalimizle
+      // silinmemeli. Tarih de birlikte temizlenir — yarım durum yok
+      // (setShipmentInvoice sözleşmesiyle aynı).
+      if (inv.shipmentId) {
+        await tx.shipment.updateMany({
+          where: { id: inv.shipmentId, invoiceNo: inv.docNo },
+          data: { invoiceNo: null, invoicedAt: null, invoicedById: null },
+        });
+      }
+      if (inv.directShipmentId) {
+        await tx.directShipment.updateMany({
+          where: { id: inv.directShipmentId, invoiceNo: inv.docNo },
+          data: { invoiceNo: null, invoicedAt: null, invoicedById: null },
+        });
       }
 
       return { id: inv.id, docNo: inv.docNo, wasPosted: Boolean(posted) };

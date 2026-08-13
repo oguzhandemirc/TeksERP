@@ -23,12 +23,15 @@ export const unitForItemType: Record<ItemType, string> = {
 export const CompanyType = {
   CUSTOMER: "CUSTOMER",
   SUPPLIER: "SUPPLIER",
+  // Alıcı + Satıcı — tip bir ETİKET, akışları kısıtlamaz (backend zorlamıyor).
+  BOTH: "BOTH",
 } as const;
 export type CompanyType = (typeof CompanyType)[keyof typeof CompanyType];
 
 export const companyTypeLabels: Record<CompanyType, string> = {
   CUSTOMER: "Müşteri",
   SUPPLIER: "Tedarikçi",
+  BOTH: "Alıcı + Satıcı",
 };
 
 export const StationType = {

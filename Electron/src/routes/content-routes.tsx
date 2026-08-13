@@ -22,6 +22,7 @@ import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
 import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
 import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
+import { CarilerPage } from "@/pages/Definitions/CarilerPage";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
 import { CariPage } from "@/pages/Finance/CariPage";
 import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
@@ -262,6 +263,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="finance:read">
         <RatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Birleşik cari görünümü — karo (Definitions/tile-config) ile AYNI izin listesi.
+    path: "definitions/cariler",
+    element: (
+      <ProtectedRoute requireAnyPermission={["customer:read", "subcontractor:read"]}>
+        <CarilerPage />
       </ProtectedRoute>
     ),
   },

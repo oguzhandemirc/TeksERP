@@ -99,6 +99,19 @@ export const definitionTiles: DefinitionTile[] = [
     permission: "warehouse:read",
   },
   {
+    // Birleşik görünüm (2026-08-14): müşteri + tedarikçi + fason TEK listede,
+    // rol rozetiyle. Kartlar kendi tablolarında/formlarında yaşamaya devam
+    // eder — bu bir GÖRÜNÜM birleştirmesi, tablo birleştirmesi değil.
+    // ⚠️ Karo ile route AYNI izin listesini taşır (content-routes aynası).
+    key: "cariler",
+    title: "Cariler",
+    description: "Müşteri, tedarikçi ve fason kartları — tek liste, rol rozetiyle",
+    icon: Users2,
+    to: "/definitions/cariler",
+    group: "partners",
+    permissionAny: ["customer:read", "subcontractor:read"],
+  },
+  {
     key: "customers",
     title: "Müşteriler",
     description: "Müşteri ve tedarikçi firmalar",

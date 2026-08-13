@@ -19,7 +19,7 @@ interface BranchCreatePayload {
 
 type CustomerWritePayload = Partial<Customer> & { branches?: BranchCreatePayload[] };
 
-const buildPayload = (v: CustomerFormValues, initial: Customer | null): CustomerWritePayload => {
+export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | null): CustomerWritePayload => {
   // Şubeler yalnız OLUŞTURMADA gönderilir (müşteri + şubeler tek transaction'da doğar);
   // düzenlemede şubeler ayrı sekmeden yönetilir → payload'a eklenmez. Tamamen boş
   // taslak satırları (yanlışlıkla "Şube ekle") elenir — validasyon içerikli satırda
@@ -69,7 +69,7 @@ export function CustomersPage() {
           onOpenChange={onOpenChange}
           initial={initial}
           isSubmitting={isSubmitting}
-          onSubmit={(values) => onSubmit(buildPayload(values, initial))}
+          onSubmit={(values) => onSubmit(buildCustomerPayload(values, initial))}
         />
       )}
     />

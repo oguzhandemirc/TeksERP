@@ -88,8 +88,8 @@ export const customerFormSchema = z.object({
   notes: z.string().max(500, "En fazla 500 karakter").optional().or(z.literal("")),
   // Belge şablon profili — boş = genel Belge Şablonları ayarı.
   documentProfileId: z.string().uuid().nullable().optional(),
-  type: z.enum([CompanyType.CUSTOMER, CompanyType.SUPPLIER], {
-    message: "Müşteri veya tedarikçi seçilmeli",
+  type: z.enum([CompanyType.CUSTOMER, CompanyType.SUPPLIER, CompanyType.BOTH], {
+    message: "Müşteri, tedarikçi veya her ikisi seçilmeli",
   }),
   isActive: z.boolean(),
   // Yalnız oluşturma formunda dolar; düzenlemede boş kalır (şubeler sekmeden yönetilir).

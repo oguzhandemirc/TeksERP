@@ -20,6 +20,8 @@
 //   §8 Fiyatsız satırla ONAY reddedilir (taslakta serbest)
 //   §9 Kur bulunamazsa 400 — sessizce 1'e DÜŞMEZ
 //   §10 MUTABAKAT: SUM(defter) === CariBalance
+//   §11 KAYNAK DAMGASI: onay sevkiyata invoiceNo damgalar (DISPATCHED),
+//       iptal YALNIZ kendi damgasını temizler, elle işaret ÇAKIŞMA verir
 // =============================================================================
 import { Prisma, InvoiceStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -40,6 +42,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 
 const TAG = `TEST-FIN-${Date.now()}`;
 const invoiceIds: string[] = [];
+const shipmentIds: string[] = [];
 const cariIds: string[] = [];
 let cariId: string | null = null;
 let customerId: string | null = null;
@@ -128,8 +131,12 @@ async function main(): Promise<void> {
   check("§4b Onaylı fatura SİLİNEMEZ", /taslak değil/i.test(delErr), delErr.slice(0, 60));
 
   // ── §7 BİR KAYNAK → TEK AKTİF FATURA ────────────────────────────────────
-  const shipment = await prisma.shipment.findFirst({ select: { id: true } });
-  if (shipment) {
+  const shipment = await prisma.shipment.create({
+    data: { shipmentNo: `${TAG}-S1`, customerId },
+    select: { id: true },
+  });
+  shipmentIds.push(shipment.id);
+  {
     const first = await invoiceService.createDraft({
       type: "SALES",
       customerId,
@@ -161,8 +168,6 @@ async function main(): Promise<void> {
     invoiceIds.push(afterCancel.data.id);
     check("§7c İptalden SONRA yeni fatura kesilebiliyor", Boolean(afterCancel.data.id));
     await invoiceService.cancel(afterCancel.data.id, "bekçi temizlik");
-  } else {
-    console.log("   ⏭️  §7 atlandı — DB'de sevkiyat yok");
   }
 
   // ── §8 FİYATSIZ SATIRLA ONAY ────────────────────────────────────────────
@@ -272,6 +277,59 @@ async function main(): Promise<void> {
   }
   check("§5f İkinci iptal 409", /zaten iptal/i.test(reCancel), reCancel.slice(0, 60));
 
+  // ── §11 KAYNAK DAMGASI ──────────────────────────────────────────────────
+  // "İki faturalandı gerçeği" birleşmeli: Shipment.invoiceNo dış-program izi
+  // olarak doğdu; iç fatura onayı da aynı alanı damgalar, yoksa muhasebe
+  // ekranı "faturalanmadı" derken içeride onaylı fatura durur ve storno
+  // guard'ı (faturalı sevk geri alınamaz) devreye girmezdi.
+  const dispatched = await prisma.shipment.create({
+    data: { shipmentNo: `${TAG}-S2`, customerId, status: "DISPATCHED", dispatchedAt: new Date() },
+    select: { id: true },
+  });
+  shipmentIds.push(dispatched.id);
+  const stampInv = await invoiceService.createDraft({
+    type: "SALES",
+    customerId,
+    lines: [LINES[0] as never],
+    shipmentId: dispatched.id,
+  });
+  invoiceIds.push(stampInv.data.id);
+  await invoiceService.confirm(stampInv.data.id);
+  const stamped = await prisma.shipment.findUniqueOrThrow({
+    where: { id: dispatched.id },
+    select: { invoiceNo: true, invoicedAt: true },
+  });
+  check("§11a Onay sevkiyata invoiceNo DAMGALADI", stamped.invoiceNo === stampInv.data.docNo, `invoiceNo=${stamped.invoiceNo}`);
+  check("§11b Damga tarihi de yazıldı (yarım durum yok)", stamped.invoicedAt !== null);
+
+  await invoiceService.cancel(stampInv.data.id, "bekçi");
+  const cleared = await prisma.shipment.findUniqueOrThrow({
+    where: { id: dispatched.id },
+    select: { invoiceNo: true, invoicedAt: true },
+  });
+  check("§11c İptal damgayı TEMİZLEDİ (tarihle birlikte)", cleared.invoiceNo === null && cleared.invoicedAt === null);
+
+  // Elle (dış program) işareti varken iç fatura onayı ÇAKIŞMA vermeli —
+  // sessizce üstüne yazmak dış muhasebedeki izi yok ederdi.
+  await prisma.shipment.update({ where: { id: dispatched.id }, data: { invoiceNo: "DIS-PROG-42" } });
+  const conflictInv = await invoiceService.createDraft({
+    type: "SALES",
+    customerId,
+    lines: [LINES[0] as never],
+    shipmentId: dispatched.id,
+  });
+  invoiceIds.push(conflictInv.data.id);
+  let stampErr = "";
+  try {
+    await invoiceService.confirm(conflictInv.data.id);
+  } catch (e) {
+    stampErr = (e as Error).message;
+  }
+  check("§11d Elle işaretliyken onay 409 (belge no'suyla)", /DIS-PROG-42/.test(stampErr), stampErr.slice(0, 80));
+  check("§11e Çakışan onay fatura durumunu YARIM BIRAKMADI (taslak/iptal değil ama defter boş)",
+    (await prisma.cariTransaction.count({ where: { invoiceId: conflictInv.data.id } })) === 0);
+  await prisma.shipment.update({ where: { id: dispatched.id }, data: { invoiceNo: null } });
+
   // ── §10 MUTABAKAT ───────────────────────────────────────────────────────
   // Bu, `test_consistency`nin muhasebe bölümünün çekirdeği: bakiye denormalize
   // ve DB seddi yok; tek koruma bu eşitliğin ölçülmesi.
@@ -321,6 +379,7 @@ main()
       await prisma.cariTransaction.deleteMany({ where: { cariId: { in: cariIds } } });
       await prisma.cariAccount.deleteMany({ where: { id: { in: cariIds } } });
     }
+    if (shipmentIds.length > 0) await prisma.shipment.deleteMany({ where: { id: { in: shipmentIds } } });
     if (customerId) await prisma.customer.deleteMany({ where: { id: customerId, code: { startsWith: "TEST-FIN-" } } });
     if (subcontractorId) await prisma.subcontractor.deleteMany({ where: { id: subcontractorId, code: { startsWith: "TEST-FIN-" } } });
     await prisma.$disconnect();

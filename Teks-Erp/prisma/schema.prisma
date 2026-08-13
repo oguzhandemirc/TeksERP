@@ -154,6 +154,11 @@ enum RollForm {
 enum CompanyType {
   CUSTOMER
   SUPPLIER
+  /// Alıcı + Satıcı (2026-08-14, ticaret paketi) — sektör standardı üçlü
+  /// (Logo/Mikro cari kartı). ⚠️ Tip bir ETİKET, duvar DEĞİL: hiçbir akış tipi
+  /// zorlamaz (mal kabul/fatura yalnız "kart var + aktif" bakar); değer yalnız
+  /// liste/rapor filtresini dürüstleştirir. Tek kart = tek cari = mahsup.
+  BOTH
 }
 
 // F6+D-15: Device.kind serbest string yerine enum (saha cihaz tipi).
