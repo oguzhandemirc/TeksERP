@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
-import { printHtmlString } from "@/lib/print";
-import { printedDocumentService } from "@/services/printedDocumentService";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { cancelGoodsReceipt, getGoodsReceipt } from "./service";
 
 interface Props {
@@ -19,6 +18,10 @@ interface Props {
 export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
   const qc = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // #2 (saha isteği): "Bas" doğrudan yazdırmaz — ÖNİZLEME açar. Operatör ne
+  // basacağını görmeden kâğıt harcamasın. Genel bileşen versiyon çubuğunu,
+  // revizyonu ve PDF'i de getirir (ShipmentDispatchNote ile aynı yüzey).
+  const [docOpen, setDocOpen] = useState(false);
 
   const q = useQuery({
     queryKey: ["goods-receipt", id],
@@ -26,15 +29,6 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
     enabled: Boolean(id),
   });
   const r = q.data;
-
-  const printM = useMutation({
-    mutationFn: async () => {
-      // Belge İLK BASKIDA donar (lazy-init) — fiş bir kaptır, satırlar sonradan
-      // eklenebildiği için açılışta dondurmak boş belge üretirdi.
-      return printedDocumentService.getHtml("GOODS_RECEIPT", id!);
-    },
-    onSuccess: (html) => printHtmlString(html),
-  });
 
   const cancelM = useMutation({
     mutationFn: (reason: string) => cancelGoodsReceipt(id!, reason),
@@ -110,9 +104,9 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => printM.mutate()} disabled={printM.isPending}>
+                <Button variant="outline" onClick={() => setDocOpen(true)}>
                   <Printer className="mr-1 h-4 w-4" />
-                  Fişi Bas
+                  Fişi Görüntüle / Bas
                 </Button>
                 {r.status === "ACTIVE" && (
                   <PermissionGate permission="goods-receipt:write">
@@ -127,6 +121,16 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
           )}
         </SheetContent>
       </Sheet>
+
+      <PrintedDocDialog
+        docType="GOODS_RECEIPT"
+        sourceId={id}
+        open={docOpen}
+        onOpenChange={setDocOpen}
+        title={`Mal Kabul Fişi — ${r?.receiptNo ?? ""}`}
+        description="Belge İLK BASKIDA donar (fiş bir kaptır; satırlar sonradan eklenebilir)."
+        writePermission="goods-receipt:write"
+      />
 
       <ConfirmDialog
         open={confirmCancel}

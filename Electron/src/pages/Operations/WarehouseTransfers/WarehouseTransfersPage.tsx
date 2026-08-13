@@ -11,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
-import { printHtmlString } from "@/lib/print";
-import { printedDocumentService } from "@/services/printedDocumentService";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
 import { cancelTransfer, getTransfer, listTransfers } from "./service";
 import { TransferFormDialog } from "./TransferFormDialog";
@@ -29,6 +28,8 @@ export function WarehouseTransfersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Baskı yerine ÖNİZLEME (saha isteği): ne basılacağı görülmeden kâğıt gitmesin.
+  const [docOpen, setDocOpen] = useState(false);
 
   const listQ = useQuery({ queryKey: ["warehouse-transfers"], queryFn: () => listTransfers({ page: 1, pageSize: 100 }) });
   const detailQ = useQuery({
@@ -37,13 +38,6 @@ export function WarehouseTransfersPage() {
     enabled: Boolean(detailId),
   });
   const t = detailQ.data;
-
-  const printM = useMutation({
-    mutationFn: async () => {
-      return printedDocumentService.getHtml("TRANSFER_DISPATCH", detailId!);
-    },
-    onSuccess: (html) => printHtmlString(html),
-  });
 
   const cancelM = useMutation({
     mutationFn: (reason: string) => cancelTransfer(detailId!, reason),
@@ -173,9 +167,9 @@ export function WarehouseTransfersPage() {
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => printM.mutate()} disabled={printM.isPending}>
+                <Button variant="outline" onClick={() => setDocOpen(true)}>
                   <Printer className="mr-1 h-4 w-4" />
-                  İrsaliyeyi Bas
+                  İrsaliyeyi Görüntüle / Bas
                 </Button>
                 {t.status === "COMPLETED" && (
                   <PermissionGate permission="warehouse:transfer">
@@ -190,6 +184,15 @@ export function WarehouseTransfersPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <PrintedDocDialog
+        docType="TRANSFER_DISPATCH"
+        sourceId={detailId}
+        open={docOpen}
+        onOpenChange={setDocOpen}
+        title={`Transfer İrsaliyesi — ${t?.transferNo ?? ""}`}
+        writePermission="warehouse:transfer"
+      />
 
       <ConfirmDialog
         open={confirmCancel}

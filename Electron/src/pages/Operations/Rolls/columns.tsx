@@ -334,6 +334,21 @@ export const rollColumns: ColumnDef<Roll>[] = [
     },
   },
   {
+    // DEPO (2026-08-13): malın FİZİKSEL olarak hangi depoda durduğu.
+    // ⚠️ Sekme (Ham Stok / Bitmiş Depo) ile KARIŞTIRMA: o STATÜ'dür — malın
+    // hangi HÂLDE olduğunu söyler. Bu kolon HANGİ BİNADA olduğunu söyler.
+    // İkisi dik eksenlerdir: her depoda hem ham hem bitmiş top bulunabilir.
+    // Kolon tek depolu kurulumda gizlenir (RollsPage `initialVisibility`).
+    id: "warehouse",
+    header: "Depo",
+    meta: { label: "Depo" },
+    cell: ({ row }) => {
+      const w = row.original.warehouse;
+      if (!w) return <span className="text-muted-foreground">—</span>;
+      return <span className="truncate text-xs">{w.name}</span>;
+    },
+  },
+  {
     accessorKey: "qualityGrade",
     header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
     meta: { label: "Kalite" },

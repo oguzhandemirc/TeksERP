@@ -18,6 +18,9 @@ export interface GoodsReceiptLineInput {
   initialQty: number;
   width?: number | null;
   weightKg?: number | null;
+  /** Kat — opsiyonel, katalogdan (backend kanonikleştirir). */
+  foldType?: string | null;
+  propertyIds?: string[];
   clientToken?: string;
 }
 

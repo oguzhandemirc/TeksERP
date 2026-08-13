@@ -13,6 +13,7 @@ import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
 import { classifyBarcode, BARCODE_FORMATS } from "@/lib/scanner/barcode-kind";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { useDataTable } from "@/hooks/useDataTable";
+import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { exportTableToPdf, exportTableToXlsx, exportListName } from "@/lib/table-export";
@@ -59,6 +60,8 @@ export function RollsPage() {
   // "Tümünü İndir" ilerlemesi (sağ alt) — 30k'da "N / ~T" göstergesi için.
   const [dlProgress, setDlProgress] = useState<{ loaded: number; total?: number } | null>(null);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
+  // Depo kolonu + filtresi yalnız ÇOK DEPOLU kurulumda çizilir (tek kaynak hook).
+  const { multiWarehouse } = useMultiWarehouse();
 
   // "Envanter Özeti" — her kategori için backend sayımı (top + metre) tek Excel'e.
   // Tablo-dışı KANBAN hariç tüm sekmeler; ekrandaki 100 değil GERÇEK toplamlar.
@@ -145,6 +148,10 @@ export function RollsPage() {
       entrySource: false,
       createdBy: false,
       entryStation: false,
+      // DEPO kolonu TEK DEPOLU kurulumda gizli: orada her top aynı depoda ve
+      // kolon yalnız gürültü olur ("fabrikada sıfır görünür fark"). İkinci depo
+      // açıldığı gün kendiliğinden görünür.
+      warehouse: multiWarehouse,
     },
     enabled: isTableTab,
   });

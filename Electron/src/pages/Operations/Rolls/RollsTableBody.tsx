@@ -17,8 +17,9 @@ import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
-import { entryStationLookupService, entryUserLookupService } from "./entryLookupServices";
+import { entryStationLookupService, entryUserLookupService, warehouseLookupService } from "./entryLookupServices";
 import { useFoldValues } from "@/hooks/useFoldValues";
+import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import type { Roll } from "./types";
 
 /** Kat filtresinin yer tutucusu — seçenekleri `buildRollFilterDefs` doldurur. */
@@ -98,6 +99,20 @@ const FILTERS: FilterDef[] = [
     service: entryStationLookupService,
     queryKey: "roll-entry-stations",
   },
+  // DEPO (2026-08-13): malın ŞU AN hangi FİZİKSEL depoda durduğu.
+  // ⚠️ Üç komşu filtreyle karıştırma — dördü FARKLI soru sorar:
+  //   İstasyon (currentStationId)    → şu an hangi ÜRETİM noktasında
+  //   Giriş İstasyonu (entryStationId) → sisteme nereden GİRDİ (kalıcı köken)
+  //   Giriş Kaynağı (entrySource)     → girişin TÜRÜ
+  //   Depo (warehouseId)              → hangi BİNADA duruyor
+  // Yalnız ÇOK DEPOLU kurulumda listeye eklenir (tek depoda ayırt edeceği şey yok).
+  {
+    kind: "multi-lookup",
+    key: "warehouseId",
+    label: "Depo",
+    service: warehouseLookupService,
+    queryKey: "warehouses-filter",
+  },
   // EKLEYEN (2026-08-12): "hangi personel girdi". Kolon 2026-08-05'ten beri
   // vardı, filtre yoktu — 50 bin satırda gözle aranıyordu. Seçenekler yalnız
   // top girmiş kullanıcılar (/rolls/entry-users) — admin:users GEREKMEZ.
@@ -168,10 +183,17 @@ const FASON_FILTERS: FilterDef[] = [
 export function buildRollFilterDefs(
   tab: RollStatusTabKey,
   foldOptions: { value: string; label: string }[] = [],
+  multiWarehouse = false,
 ): FilterDef[] {
   // `kind` ile daralt: FilterDef bir union ve `dateRange` varyantında `key` YOK
   // (düz `f.key` derlenmez).
   const base = FILTERS.flatMap<FilterDef>((f) => {
+    if (f.kind === "multi-lookup" && f.key === "warehouseId") {
+      // TEK DEPOLU kurulumda düşürülür: seçeneksiz/tek seçenekli bir kutu,
+      // kullanıcıya ayırt edecek bir şey vaat eder ama hiçbir şey ayırmaz
+      // (kat filtresinin boş katalogda düşürülmesiyle aynı gerekçe).
+      return multiWarehouse ? [f] : [];
+    }
     if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
     return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
   });
@@ -217,9 +239,11 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
 
   const { values: foldValues } = useFoldValues();
+  // Depo filtresi yalnız ÇOK DEPOLU kurulumda listeye girer (tek kaynak hook).
+  const { multiWarehouse } = useMultiWarehouse();
   const filters = useMemo(
-    () => buildRollFilterDefs(tab, foldValues.map((v) => ({ value: v.code, label: v.name }))),
-    [tab, foldValues],
+    () => buildRollFilterDefs(tab, foldValues.map((v) => ({ value: v.code, label: v.name })), multiWarehouse),
+    [tab, foldValues, multiWarehouse],
   );
 
   // Toplu iptal — Ham Stok + Bitmiş Depo'da sunulur (STOCK/WAREHOUSE→CANCELLED,

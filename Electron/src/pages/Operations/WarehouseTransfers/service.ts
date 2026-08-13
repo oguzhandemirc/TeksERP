@@ -64,12 +64,37 @@ export async function cancelTransfer(id: string, reason?: string) {
   return res.data;
 }
 
-/** Barkodla top çözümü — transfer ekranı okutulan barkodu id'ye çevirir. */
+/**
+ * Transfer edilebilir statüler — backend `warehouse-transfer.service.TRANSFERABLE`
+ * ile AYNI küme. Ayrışırsa ekran "bulunamadı" der ya da backend'in reddedeceği
+ * topu listeye alır.
+ */
+const TRANSFERABLE_STATUSES = ["STOCK", "WAREHOUSE", "A1_STOCK", "RETURNED_FROM_SUBCONTRACTOR"];
+
+/**
+ * Barkodla top çözümü — transfer ekranı okutulan barkodu id'ye çevirir.
+ *
+ * İKİ ŞART, ikisi de saha bulgusundan (2026-08-13):
+ * ① `filter[statusIn]` GÖNDERİLMEK ZORUNDA — `/api/rolls` statü verilmediğinde
+ *    VARSAYILAN olarak yalnız `STOCK` döner (ham stok), dolayısıyla depo topu
+ *    (`WAREHOUSE`) barkodu TAM eşleşse bile "bulunamadı" görünüyordu. Sekmeler
+ *    her zaman statü gönderdiği için bu varsayılan hiç fark edilmemişti.
+ * ② `search` DEĞİL `filter[barcode]` — barkod araması TAM EŞLEŞMEDİR (unique
+ *    index seek); birden fazla barkodu boşlukla birleştirip `search`e vermek
+ *    HİÇBİRİNİ bulmaz. CSV filtre ise generic yolda `{ in: [...] }`e çevrilir.
+ */
 export async function lookupRollsByBarcodes(barcodes: string[]): Promise<
   Array<{ id: string; barcode: string | null; itemName: string; colorName: string | null; qty: number; warehouseId: string | null; status: string }>
 > {
+  const clean = barcodes.map((b) => b.trim()).filter(Boolean);
+  if (clean.length === 0) return [];
   const res = await apiClient.get("/api/rolls", {
-    params: { page: 1, pageSize: 200, search: barcodes.join(" ") },
+    params: {
+      page: 1,
+      pageSize: 200,
+      "filter[barcode]": clean.join(","),
+      "filter[statusIn]": TRANSFERABLE_STATUSES.join(","),
+    },
   });
   type Row = {
     id: string; barcode: string | null; status: string; currentQty: string | number; warehouseId: string | null;

@@ -427,6 +427,11 @@ const ROLL_LIST_INCLUDE = {
   // GİRİŞ İSTASYONU — yazma tarafı olmadan görünmez, okuma tarafı olmadan yazılan
   // değer görünmez. İkisi AYNI commit'te olmalı.
   entryStation: { select: { id: true, code: true, name: true } },
+  // DEPO — "mal hangi depoda" sorusunun liste yüzeyi. `warehouseId` skaler olarak
+  // zaten dönüyordu ama ADI olmadan kolon yazılamazdı (aynı sınıf hata:
+  // "alan var sanıldı, o yanıtta yoktu"). Liste ve DETAY aynı şekli döner —
+  // ayrışırsa satır ile panel aynı top için farklı şey söyler.
+  warehouse: { select: { id: true, code: true, name: true } },
   properties: {
     select: {
       propertyId: true,
@@ -1116,6 +1121,14 @@ export class InventoryService {
     delete where.colorId;
     if (colorIdFilter) {
       where.colorId = colorIdFilter;
+    }
+
+    // DEPO filtresi — çoklu seçim (CSV → `in`). `readIdCondition` olmadan CSV ham
+    // geçer ve uuid kolonunda P2007 → HTTP 400 üretir (colorId ile aynı arıza modu).
+    const warehouseIdFilter = readIdCondition(f["warehouseId"]);
+    delete where.warehouseId;
+    if (warehouseIdFilter) {
+      where.warehouseId = warehouseIdFilter;
     }
 
     const processingStatus = f["processingStatus"] as string | undefined;
@@ -2120,6 +2133,9 @@ export class InventoryService {
         createdMachine: { select: { id: true, name: true, code: true } },
         // GİRİŞ İSTASYONU — liste include'uyla AYNI şekil.
         entryStation: { select: { id: true, code: true, name: true } },
+        // Detay paneli listeyle AYNI şekli döner (ROLL_LIST_INCLUDE emsali).
+        warehouse: { select: { id: true, code: true, name: true } },
+        goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
         // TOPUN BULUNDUĞU ADIM/İSTASYON — liste include'uyla AYNI şekil.
         // İkisi ayrışırsa panel ile satır aynı top için farklı şey söyler.
         currentStep: {
