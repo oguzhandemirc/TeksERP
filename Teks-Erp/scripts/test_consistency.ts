@@ -481,6 +481,99 @@ WHERE a.kayitli <> (CASE WHEN a.acik > 0 THEN 'ACTIVE'
       why: "fixture WO'ları: testler adım durumunu doğrudan yazar / yarım temizler (ölçüm: 305 driftin 305'i fixture)",
     },
   },
+  // ───────────────────────────────────────────────────────────────────────────
+  // §21-§24 — ÖN MUHASEBE. `consistency-check.sql`'de karşılıkları YOK.
+  //
+  // `CariBalance.balance`, `CashBox.balance` ve `BankAccount.balance` üçü de
+  // DENORMALİZE ve DB SEDDİ YOK. Tek koruma "defter satırı ile bakiye AYNI
+  // transaction'da atomik increment ile yazılır" disiplinidir; disiplin sessizce
+  // kırılır (hata yok, log yok) ve fark ancak ay sonunda müşteriyle yüzleşince
+  // anlaşılır. Bu, `Order.shippedQty`nin (D-9) muhasebe ikizidir.
+  //
+  // ⚠️ Bu bölümler MUHASEBE MODÜLÜ KAPALI kurulumda da koşar ve BOŞ TABLODA
+  // TRIVIALLY yeşildir — bu doğrudur ve zararsızdır: fabrikada satır olmadığı
+  // için sapma da olamaz. Modül açıldığı gün bekçi kendiliğinden anlamlanır.
+  // ───────────────────────────────────────────────────────────────────────────
+  {
+    id: "21",
+    title: "CariBalance.balance vs Σ(CariTransaction.debit − credit)",
+    sql: `
+SELECT b."cariId"::text AS cari_id, b.currency::text AS para_birimi,
+       b.balance AS kayitli,
+       COALESCE(t.toplam, 0) AS hesaplanan,
+       b.balance - COALESCE(t.toplam, 0) AS fark
+FROM cari_balances b
+LEFT JOIN (
+  SELECT "cariId", currency, SUM(debit) - SUM(credit) AS toplam
+  FROM cari_transactions GROUP BY "cariId", currency
+) t ON t."cariId" = b."cariId" AND t.currency = b.currency
+WHERE b.balance <> COALESCE(t.toplam, 0)`,
+  },
+  {
+    id: "22",
+    // Ters yön: defterde satırı olan her (cari, para birimi) için bakiye SATIRI
+    // olmalı. Yalnız §21'e bakmak, bakiye satırı hiç DOĞMAMIŞ bir cariyi
+    // kaçırırdı — o cari listede "bakiyesiz" görünür, alacak sessizce kaybolur.
+    title: "Defterde hareketi olan her (cari, para birimi) için CariBalance satırı var",
+    sql: `
+SELECT t."cariId"::text AS cari_id, t.currency::text AS para_birimi,
+       0 AS kayitli, t.toplam AS hesaplanan, -t.toplam AS fark
+FROM (
+  SELECT "cariId", currency, SUM(debit) - SUM(credit) AS toplam
+  FROM cari_transactions GROUP BY "cariId", currency
+) t
+LEFT JOIN cari_balances b ON b."cariId" = t."cariId" AND b.currency = t.currency
+WHERE b."cariId" IS NULL AND t.toplam <> 0`,
+  },
+  {
+    id: "23",
+    title: "CashBox.balance vs Σ(iptal edilmemiş Payment: IN − OUT)",
+    sql: `
+SELECT c.id::text AS kasa_id, c.name, c.balance AS kayitli,
+       COALESCE(p.toplam, 0) AS hesaplanan,
+       c.balance - COALESCE(p.toplam, 0) AS fark
+FROM cash_boxes c
+LEFT JOIN (
+  SELECT "cashBoxId",
+         SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS toplam
+  FROM payments WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL
+  GROUP BY "cashBoxId"
+) p ON p."cashBoxId" = c.id
+WHERE c.balance <> COALESCE(p.toplam, 0)`,
+  },
+  {
+    id: "24",
+    title: "BankAccount.balance vs Σ(iptal edilmemiş Payment: IN − OUT)",
+    sql: `
+SELECT a.id::text AS hesap_id, a.name, a.balance AS kayitli,
+       COALESCE(p.toplam, 0) AS hesaplanan,
+       a.balance - COALESCE(p.toplam, 0) AS fark
+FROM bank_accounts a
+LEFT JOIN (
+  SELECT "bankAccountId",
+         SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS toplam
+  FROM payments WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL
+  GROUP BY "bankAccountId"
+) p ON p."bankAccountId" = a.id
+WHERE a.balance <> COALESCE(p.toplam, 0)`,
+  },
+  {
+    id: "25",
+    // ONAYLI faturanın deftere işlemiş OLMASI gerekir; iptal edilmiş faturanın
+    // ise TERS satırı olmalı. İkisi de "yarım kalmış transaction" belirtisidir:
+    // fatura CONFIRMED görünür ama cari borcu hiç doğmamıştır (ya da tersi).
+    title: "Onaylı fatura defterde var / iptal edilen faturanın storno satırı var",
+    sql: `
+SELECT i.id::text AS fatura_id, i."docNo",
+       (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE') AS kayitli,
+       (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE_CANCEL') AS hesaplanan,
+       0 AS fark
+FROM invoices i
+WHERE (i.status = 'CONFIRMED'
+       AND (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE') <> 1)
+   OR (i.status = 'CANCELLED' AND i."confirmedAt" IS NOT NULL
+       AND (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE_CANCEL') <> 1)`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {
