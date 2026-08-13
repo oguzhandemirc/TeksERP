@@ -313,6 +313,10 @@ enum Currency {
   USD
   EUR
   GBP
+  /// 2026-08-13 — ticaret paketi (fiyatlama). SONA eklendi: ALTER TYPE ADD VALUE
+  /// ile eklenen değer aynı transaction içinde KULLANILAMAZ, bu yüzden kendi
+  /// migration'ında gelir.
+  RUB
 }
 
 /// Login yapan istemci türü — aynı-tip oturum politikası bunun üzerinden çalışır
@@ -1036,6 +1040,7 @@ model Item {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([itemType])
+  invoiceLines InvoiceLine[]
   @@map("items")
 }
 
@@ -1588,6 +1593,7 @@ model Customer {
 
   @@index([type])
   @@index([documentProfileId])
+  cariAccount CariAccount?
   @@map("customers")
 }
 
@@ -2648,6 +2654,7 @@ model DirectShipment {
   @@index([dispatchId])
   @@index([customerId])
   @@index([shippedAt])
+  invoices Invoice[]
   @@map("direct_shipments")
 }
 
@@ -2719,6 +2726,7 @@ model SubcontractorReceipt {
   @@index([workOrderId, receivedAt])
   // Composite: Fason firma-filtreli + tarih sıralı liste
   @@index([subcontractorId, receivedAt])
+  invoices Invoice[]
   @@map("subcontractor_receipts")
 }
 
@@ -2837,6 +2845,7 @@ model Subcontractor {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([documentProfileId])
+  cariAccount CariAccount?
   @@map("subcontractors")
 }
 
@@ -3367,6 +3376,7 @@ model Shipment {
   // Muhasebe listesi sevk tarihine göre sıralanır (status=DISPATCHED sabit filtre) →
   // eşitlik kolonu önce, sıralama kolonu sonra (perf kuralı 2).
   @@index([status, dispatchedAt])
+  invoices Invoice[]
   @@map("shipments")
 }
 
@@ -4382,4 +4392,421 @@ model GoodsReceipt {
   @@index([supplierId, createdAt])
   @@index([status, createdAt])
   @@map("goods_receipts")
+}
+
+// =============================================================================
+// ÖN MUHASEBE (Paket 2) — cari · fatura · tahsilat · kasa/banka · kur
+// =============================================================================
+// KAPSAM: bu bir MUHASEBE PROGRAMI DEĞİL, bir ÖN muhasebe defteridir. ERP resmî
+// fatura KESMEZ (e-fatura yok); dış muhasebe programında kesilen belgenin izi
+// `externalNo` ile eşlenir. Amaç "kim bana ne kadar borçlu, ben kime ne kadar
+// borçluyum, kasada/bankada ne var" sorularını sevkiyat/fason verisinden
+// TÜRETEREK cevaplamak.
+//
+// ⚠️ FABRİKA SIFIR-FARK: tüm yüzeyler `finance.enabled` bayrağı (varsayılan
+// KAPALI) + `finance:*` izinleri arkasında. Tablolar boş kaldığı sürece hiçbir
+// mevcut sorgu bunlara dokunmaz.
+// =============================================================================
+
+/// Cari hesabın hangi taraf kaydına bağlı olduğu.
+enum CariKind {
+  CUSTOMER
+  SUBCONTRACTOR
+}
+
+/// Cari hesap — MÜŞTERİ/FASON kartının MUHASEBE yüzü.
+///
+/// ⚠️ Neden ayrı tablo: `Customer`/`Subcontractor` operasyonun kartlarıdır ve
+/// onlara vergi dairesi / vade / risk limiti eklemek, muhasebe alanlarını
+/// operasyon ekranlarına sızdırırdı. Ayrıca cari LAZY açılır (ilk fatura/tahsilat
+/// anında) — bugün 200 müşterinin çoğunun cari hareketi yok, hepsine boş hesap
+/// açmak listeyi anlamsız şişirirdi.
+///
+/// ⚠️ `customerId` XOR `subcontractorId`: ikisi de dolu ya da ikisi de boş
+/// OLAMAZ. DB'de CHECK constraint ile kilitli (şema-dışı, envanterde kayıtlı).
+model CariAccount {
+  id   String   @id @default(uuid()) @db.Uuid
+  kind CariKind
+
+  customerId      String? @unique @db.Uuid
+  subcontractorId String? @unique @db.Uuid
+
+  /// Vergi dairesi BURADA — Customer/Subcontractor kartlarına dokunulmaz.
+  taxOffice String? @db.VarChar(100)
+
+  /// Fatura/tahsilat formlarının ön-doldurduğu para birimi (ezilebilir).
+  defaultCurrency Currency @default(TRY)
+
+  /// Vade günü — "fatura + N gün". Yaşlandırma raporunun girdisi.
+  paymentTermDays Int?
+
+  /// Risk limiti UYARIDIR, bloklamaz: satışı durdurma kararı ticari bir karardır
+  /// ve yazılımın vardiya ortasında sessizce vermesi yanlış olurdu.
+  riskLimit Decimal? @db.Decimal(14, 2)
+
+  notes    String? @db.VarChar(500)
+  isActive Boolean @default(true)
+
+  customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: Restrict)
+
+  balances     CariBalance[]
+  transactions CariTransaction[]
+  invoices     Invoice[]
+  payments     Payment[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([kind, isActive])
+  @@map("cari_accounts")
+}
+
+/// Cari bakiyesi — PARA BİRİMİ BAZINDA AYRI.
+///
+/// ⚠️ Döviz bakiyeleri TL'ye EZİLMEZ: 1000 USD alacak ile 30.000 TL alacak farklı
+/// şeylerdir ve tek kolona toplanırsa hangi kurla kapatılacağı bilgisi kaybolur.
+/// TL karşılığı raporda, rapor günü kuruyla ve DİPNOTLU gösterilir.
+///
+/// Denormalize: `CariTransaction` toplamıyla aynı tx'te atomik increment edilir.
+/// Doğruluğunun DB seddi yoktur → `test_consistency` bölümü zorunludur
+/// (`Order.shippedQty` emsali).
+model CariBalance {
+  cariId   String   @db.Uuid
+  currency Currency
+  balance  Decimal  @default(0) @db.Decimal(14, 2)
+
+  cari CariAccount @relation(fields: [cariId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@id([cariId, currency])
+  @@map("cari_balances")
+}
+
+enum InvoiceType {
+  SALES
+  PURCHASE
+  SALES_RETURN
+  PURCHASE_RETURN
+}
+
+enum InvoiceStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+/// Fatura — TASLAK üretilir, ONAY ile deftere işler.
+///
+/// ⚠️ CONFIRMED fatura ASLA düzenlenmez/silinmez; düzeltme = İPTAL (storno) +
+/// yeni fatura. Sektör standardı budur ve `CariTransaction`'ın append-only
+/// olmasının sebebi de odur.
+///
+/// ⚠️ "Bir kaynak → en çok BİR aktif fatura": kaynak bağları üzerinde şema-dışı
+/// partial unique'ler var (WHERE status <> 'CANCELLED'). Çift taslak yapısal
+/// olarak imkânsız — aksi halde aynı sevkiyat iki kez faturalanır ve cari
+/// bakiyesi sessizce iki katına çıkardı.
+model Invoice {
+  id     String        @id @default(uuid()) @db.Uuid
+  /// SF/AF/SI/AI + GGAAYY + NNNN.
+  docNo  String        @unique @db.VarChar(32)
+  type   InvoiceType
+  status InvoiceStatus @default(DRAFT)
+
+  cariId String @db.Uuid
+
+  currency Currency @default(TRY)
+
+  /// Belgeye DAMGALANAN kur — sonradan kur tablosu düzeltilse bile bu belge
+  /// kendi kuruyla kalır (donmuş belge kuralının muhasebe karşılığı).
+  exchangeRate Decimal @default(1) @db.Decimal(18, 6)
+
+  issueDate DateTime  @db.Timestamptz
+  dueDate   DateTime? @db.Timestamptz
+
+  /// Dış muhasebe programında kesilen faturanın numarası (varsa).
+  externalNo String? @db.VarChar(64)
+  notes      String? @db.VarChar(500)
+
+  /// Satırlardan Decimal ile yeniden hesaplanıp ONAY anında damgalanır.
+  subtotal         Decimal @default(0) @db.Decimal(14, 2)
+  discountTotal    Decimal @default(0) @db.Decimal(14, 2)
+  vatTotal         Decimal @default(0) @db.Decimal(14, 2)
+  withholdingTotal Decimal @default(0) @db.Decimal(14, 2)
+  grandTotal       Decimal @default(0) @db.Decimal(14, 2)
+
+  /// TL karşılığı — rapor toplamları tek para biriminde okunabilsin diye.
+  grandTotalTry Decimal @default(0) @db.Decimal(14, 2)
+
+  /// KAYNAK BAĞLARI — typed nullable FK (polimorfik sourceType+sourceId DEĞİL:
+  /// FK'siz bağ, kaynak silinince sessizce hayalet fatura bırakırdı).
+  shipmentId             String? @db.Uuid
+  directShipmentId       String? @db.Uuid
+  returnGroupId          String? @db.Uuid
+  subcontractorReceiptId String? @db.Uuid
+
+  confirmedAt   DateTime? @db.Timestamptz
+  confirmedById String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  cari                 CariAccount           @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  shipment             Shipment?             @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  directShipment       DirectShipment?       @relation(fields: [directShipmentId], references: [id], onDelete: Restrict)
+  subcontractorReceipt SubcontractorReceipt? @relation(fields: [subcontractorReceiptId], references: [id], onDelete: Restrict)
+
+  lines        InvoiceLine[]
+  transactions CariTransaction[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([cariId, status, issueDate])
+  @@index([type, status, issueDate])
+  @@index([status, issueDate])
+  @@index([shipmentId])
+  @@index([directShipmentId])
+  @@index([returnGroupId])
+  @@index([subcontractorReceiptId])
+  @@map("invoices")
+}
+
+/// Fatura satırı — `itemId` OPSİYONEL.
+///
+/// ⚠️ Serbest satır bilinçli: firma iplik de satabiliyor ve iplik stok modelinde
+/// YOK. Zorunlu `itemId`, olmayan bir ürünü uydurmaya zorlardı. Açıklama her
+/// satırda vardır ve belgeye o basılır.
+model InvoiceLine {
+  id        String @id @default(uuid()) @db.Uuid
+  invoiceId String @db.Uuid
+  lineNo    Int
+
+  itemId      String? @db.Uuid
+  description String  @db.VarChar(300)
+
+  qty       Decimal @db.Decimal(14, 3)
+  unit      String  @default("m") @db.VarChar(16)
+  unitPrice Decimal @db.Decimal(14, 4)
+
+  /// Oranlar SATIRA DAMGALANIR — KDV kataloğu sonradan değişse bile geçmiş
+  /// fatura kendi oranıyla okunur.
+  discountRate Decimal @default(0) @db.Decimal(5, 2)
+  vatRate      Decimal @default(0) @db.Decimal(5, 2)
+
+  /// Fason tevkifatı (satın alma faturasında).
+  withholdingRate Decimal @default(0) @db.Decimal(5, 2)
+
+  lineTotal Decimal @db.Decimal(14, 2)
+  vatAmount Decimal @db.Decimal(14, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item    Item?   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([invoiceId, lineNo])
+  @@index([itemId])
+  @@map("invoice_lines")
+}
+
+enum CariTxnSource {
+  INVOICE
+  INVOICE_CANCEL
+  PAYMENT
+  PAYMENT_CANCEL
+  ADJUSTMENT
+}
+
+/// Cari hareket defteri — APPEND-ONLY.
+///
+/// ⚠️ UPDATE/DELETE YOK. Düzeltme daima TERS SATIRDIR (storno). Bir defterin
+/// güvenilirliği tam olarak bundan gelir: geçmişi değiştirilebilen defter,
+/// denetimde hiçbir şey kanıtlamaz.
+///
+/// `debit`/`credit` iki AYRI kolon (tek işaretli kolon değil): muhasebede borç
+/// ve alacak ayrı sütunlardır ve ekstre o şekilde basılır.
+model CariTransaction {
+  id       String   @id @default(uuid()) @db.Uuid
+  cariId   String   @db.Uuid
+  currency Currency
+  txnDate  DateTime @db.Timestamptz
+
+  debit  Decimal @default(0) @db.Decimal(14, 2)
+  credit Decimal @default(0) @db.Decimal(14, 2)
+
+  /// TL karşılığı — dönem toplamları tek birimde okunabilsin diye damgalanır.
+  amountTry    Decimal @default(0) @db.Decimal(14, 2)
+  exchangeRate Decimal @default(1) @db.Decimal(18, 6)
+
+  sourceType  CariTxnSource
+  invoiceId   String?       @db.Uuid
+  paymentId   String?       @db.Uuid
+  description String?       @db.VarChar(300)
+
+  createdById String? @db.Uuid
+
+  cari    CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  invoice Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment Payment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([cariId, currency, txnDate])
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@map("cari_transactions")
+}
+
+enum PaymentDirection {
+  IN
+  OUT
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CREDIT_CARD
+  OTHER
+}
+
+enum PaymentStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// Tahsilat / ödeme.
+///
+/// ⚠️ Çek/senet BU FAZDA YOK (Faz 2): çekin kendi yaşam döngüsü var (portföy →
+/// ciro → tahsil → karşılıksız) ve onu `PaymentMethod`'a bir değer olarak
+/// eklemek, o döngüyü modellemeden "tahsil edildi" demek olurdu.
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// TH/OD + GGAAYY + NNNN.
+  docNo String @unique @db.VarChar(32)
+
+  direction PaymentDirection
+  method    PaymentMethod
+  status    PaymentStatus    @default(ACTIVE)
+
+  cariId String @db.Uuid
+
+  currency     Currency @default(TRY)
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  amount       Decimal  @db.Decimal(14, 2)
+  amountTry    Decimal  @db.Decimal(14, 2)
+
+  /// Kasa VEYA banka — ikisi birden olamaz (CHECK constraint).
+  cashBoxId     String? @db.Uuid
+  bankAccountId String? @db.Uuid
+
+  paymentDate DateTime @db.Timestamptz
+  reference   String?  @db.VarChar(120)
+  notes       String?  @db.VarChar(500)
+
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  cari        CariAccount  @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  transactions CariTransaction[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([cariId, status, paymentDate])
+  @@index([direction, status, paymentDate])
+  @@index([cashBoxId, paymentDate])
+  @@index([bankAccountId, paymentDate])
+  @@map("payments")
+}
+
+/// Kasa — TEK PARA BİRİMLİ.
+///
+/// ⚠️ Çok para birimli tek kasa, "kasada ne var" sorusunu cevaplanamaz yapardı
+/// (hangi kurla toplanacak?). RUB kasası ayrı karttır.
+model CashBox {
+  id       String   @id @default(uuid()) @db.Uuid
+  code     String   @unique @db.VarChar(32)
+  name     String   @db.VarChar(100)
+  currency Currency @default(TRY)
+
+  /// Denormalize — `Payment` toplamıyla aynı tx'te güncellenir, bekçisi
+  /// `test_consistency`.
+  balance Decimal @default(0) @db.Decimal(14, 2)
+
+  isActive Boolean @default(true)
+  notes    String? @db.VarChar(500)
+
+  payments Payment[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([isActive])
+  @@map("cash_boxes")
+}
+
+/// Banka hesabı — kasa ile aynı kural (tek para birimi).
+model BankAccount {
+  id       String   @id @default(uuid()) @db.Uuid
+  code     String   @unique @db.VarChar(32)
+  name     String   @db.VarChar(100)
+  bankName String?  @db.VarChar(100)
+  iban     String?  @db.VarChar(34)
+  currency Currency @default(TRY)
+  balance  Decimal  @default(0) @db.Decimal(14, 2)
+  isActive Boolean  @default(true)
+  notes    String?  @db.VarChar(500)
+
+  payments Payment[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([isActive])
+  @@map("bank_accounts")
+}
+
+enum ExchangeRateSource {
+  MANUAL
+  TCMB
+}
+
+/// Günlük kur.
+///
+/// ⚠️ `rateDate` @db.Date — bu bir TAKVİM GÜNÜ anahtarıdır, an değil
+/// (`EndpointLatencyDaily.day` emsali). Timestamptz'ye çevrilirse gün sınırı
+/// saat dilimine bağlanır ve "13 Ağustos kuru" iki farklı satıra düşebilir.
+/// `test_timestamptz_contract` muaf listesine yazılmıştır.
+///
+/// Faz 1'de yalnız MANUAL (elle giriş); TCMB çekme işi Faz 2.
+model ExchangeRate {
+  id       String   @id @default(uuid()) @db.Uuid
+  rateDate DateTime @db.Date
+  currency Currency
+
+  /// 1 birim döviz kaç TL.
+  rate   Decimal            @db.Decimal(18, 6)
+  source ExchangeRateSource @default(MANUAL)
+
+  createdById String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([rateDate, currency])
+  @@index([currency, rateDate])
+  @@map("exchange_rates")
 }

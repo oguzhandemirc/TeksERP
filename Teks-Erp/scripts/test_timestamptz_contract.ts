@@ -69,7 +69,12 @@ function check(label: string, ok: boolean, extra = ""): void {
 // `endpoint_latency_daily.day` bilinçli olarak `date` tipidir (saat taşımayan
 // takvim günü — günlük gecikme rollup'ının anahtarı). timestamptz'ye ÇEVİRME:
 // gün sınırı saat dilimine bağlı hale gelir ve rollup anahtarı kayar.
-const DATE_ONLY_FIELDS = new Set(["EndpointLatencyDaily.day"]);
+const DATE_ONLY_FIELDS = new Set([
+  "EndpointLatencyDaily.day",
+  // Kur bir TAKVİM GÜNÜ anahtarıdır, an değil: timestamptz olsaydı gün sınırı
+  // saat dilimine bağlanır ve "13 Ağustos kuru" iki satıra düşebilirdi.
+  "ExchangeRate.rateDate",
+]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.
 const PRISMA_OWN_TABLE = "_prisma_migrations";

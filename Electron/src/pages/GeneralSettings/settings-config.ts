@@ -138,6 +138,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
   {
+    id: "finance",
+    label: "Muhasebe",
+    icon: Banknote,
+    description: "Ön muhasebe modülü — cari hesaplar, fatura, tahsilat/ödeme, kasa ve banka.",
+    keywords:
+      "muhasebe cari fatura tahsilat ödeme kasa banka bakiye ekstre yaşlandırma vade kur döviz finance",
+    kind: "flags",
+    flags: [
+      {
+        key: "financeEnabled",
+        title: "Ön muhasebe modülünü aç",
+        desc: "Kapalıyken (varsayılan) menüde 'Muhasebe' satırı çizilmez, ekranlar açılmaz ve sevkiyattan otomatik fatura taslağı ÜRETİLMEZ. Bu bir görünürlük ayarı değil rejim anahtarıdır — kapatmak mevcut kayıtları silmez, yalnız modülü devre dışı bırakır. Ekranları görmek için ayrıca 'finance:*' yetkisi gerekir.",
+      },
+    ],
+  },
+  {
     id: "work-orders",
     label: "İş Emirleri",
     icon: ClipboardList,

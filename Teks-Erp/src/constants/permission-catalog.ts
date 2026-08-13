@@ -100,6 +100,19 @@ export const PERMISSION_CATALOG = [
   // `roll:write`e YASLANMAZ: o izin fabrika rollerinde yaygın ve Mal Kabul karosu
   // fabrikada görünür hale gelirdi (ekran yalnız alım-satım kurulumu içindir).
   { code: "goods-receipt:write", module: "LOGISTICS", category: "web", description: "Mal kabul fişi oluşturma/iptal (satın alınan malın depo girişi)" },
+  // ── Ticaret paketi: ön muhasebe (2026-08-13) ──────────────────────────────
+  // ⚠️ Modül "FINANCE" — `PermissionCategory` ENUM'una DOKUNULMAZ (o Prisma
+  // enum'u; `module` serbest string). Kategori "web": muhasebeci "Yönetim"
+  // menüsünü ve Sistem hub'ını GÖRMEZ (`hasAdminAccess` saymaz).
+  { code: "finance:read", module: "FINANCE", category: "web", description: "Cari/fatura/tahsilat görüntüleme — TUTAR GÖRME kapısı" },
+  { code: "finance:write", module: "FINANCE", category: "web", description: "Fatura taslağı + cari/kasa/banka/kur tanımları" },
+  // ⚠️ GÖREV AYRILIĞI (SoD): taslak hazırlayan ile deftere İŞLEYEN aynı kişi
+  // olmak zorunda değil. Onay geri alınamaz bir muhasebe olayıdır (iptal ancak
+  // storno ile); `finance:write` bunu VERMEZ.
+  { code: "finance:invoice", module: "FINANCE", category: "web", description: "Fatura onaylama + iptal (storno) — cari deftere işler" },
+  // Parayı sayan ile faturayı kesen de ayrı olabilmeli.
+  { code: "finance:payment", module: "FINANCE", category: "web", description: "Tahsilat/ödeme kaydı + iptali — kasa/banka bakiyesine işler" },
+  { code: "report:finance", module: "REPORTS", category: "web", description: "Cari bakiye · yaşlandırma · ekstre · kasa-banka raporları" },
   { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
   { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
   // 2026-08-05: "Bu Bilgisayar" (yerel donanım) ayarları — etiket yazıcısı,

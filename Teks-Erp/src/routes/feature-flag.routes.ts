@@ -95,6 +95,9 @@ export const updateSchema = z.strictObject({
   // ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli).
   companyName: z.string().trim().max(120).optional(),
   pricingEnabled: z.boolean().optional(),
+  // ⚠️ strictObject — burada olmayan anahtar PATCH'i 400 yapar; bayrak eklerken
+  // asıl tehlike açamamak değil KAPATAMAMAKtır (2026-08-05 kk1 dersi).
+  financeEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),

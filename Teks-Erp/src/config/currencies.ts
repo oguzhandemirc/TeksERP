@@ -17,4 +17,6 @@ export const CURRENCIES: readonly CurrencyDef[] = [
   { code: "USD", name: "Amerikan Doları", symbol: "$" },
   { code: "EUR", name: "Euro",           symbol: "€" },
   { code: "GBP", name: "İngiliz Sterlini", symbol: "£" },
+  // 2026-08-13 — ticaret paketi: FİYATLAMA için (arayüz dili değişmez, i18n yok).
+  { code: "RUB", name: "Rus Rublesi",    symbol: "₽" },
 ] as const;

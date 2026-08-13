@@ -171,6 +171,38 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "report:customer",
       "report:inventory",
       "report:subcontract",
+      // ── Ön muhasebe (2026-08-13) ────────────────────────────────────────
+      // ⚠️ GÖREV AYRILIĞI korunuyor: bu rol taslak hazırlar ve ONAYLAR
+      // (`finance:invoice`) — çünkü muhasebeci zaten `shipping:invoice` ile
+      // dış fatura izini işaretliyor, aynı kişi. TAHSİLAT (`finance:payment`)
+      // BİLİNÇLİ OLARAK YOK: parayı sayan ile faturayı kesen ayrı olabilmeli;
+      // gerekiyorsa panelden ayrıca verilir.
+      // ⚠️ Bu izinler ÜRETİCİ FABRİKAYA da gider ama `finance.enabled` bayrağı
+      // varsayılan KAPALI olduğu için orada tek satır bile çizilmez —
+      // görünürlüğün gerçek kapısı bayraktır, izin değil.
+      "finance:read",
+      "finance:write",
+      "finance:invoice",
+      "report:finance",
+    ],
+  },
+  {
+    // Ticaret paketi (2026-08-13) — GÖREV AYRILIĞI gereği ayrı rol: parayı
+    // sayan kişi ile faturayı kesen kişi aynı olmak ZORUNDA değil. Küçük
+    // firmada ikisi de aynı kullanıcıya verilebilir; ayrımı yazılım dayatmaz,
+    // yalnız MÜMKÜN kılar. `finance:read` olmadan tahsilat ekranı tutar
+    // gösteremezdi (o izin tutar görme kapısıdır).
+    code: "WEB_CASHIER",
+    name: "Kasa / Tahsilat",
+    description:
+      "Tahsilat ve ödeme kaydı, kasa/banka bakiyesi — fatura onaylama YETKİSİ YOK",
+    mode: "list",
+    codes: [
+      "finance:read",
+      "finance:payment",
+      "customer:read",
+      "subcontractor:read",
+      "report:finance",
     ],
   },
   {

@@ -218,6 +218,11 @@ export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama geneli. */
   companyName: string;
   pricingEnabled: boolean;
+  /** Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka). Varsayılan
+   *  KAPALI — kapalıyken menüde tek satır bile çizilmez ve route 403 verir.
+   *  ⚠️ `pricingEnabled` ile bağımsız: o OPERASYON ekranlarındaki fiyat
+   *  alanlarını açar, bu ayrı bir MUHASEBE modülünü açar. */
+  financeEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */

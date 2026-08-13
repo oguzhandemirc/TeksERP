@@ -54,6 +54,11 @@ export const SETTING_KEYS = {
   SHIPPING_TOLERANCE_METERS: "shipping.toleranceMeters",
   /** Pricing/currency UI'da gösterilsin mi (sipariş ve ileride sevkiyat). */
   FINANCE_PRICING_ENABLED: "finance.pricingEnabled",
+  // Ön muhasebe modülünün ANA şalteri (2026-08-13). ⚠️ `pricingEnabled` ile
+  // KARIŞTIRMA: o, OPERASYON ekranlarındaki fiyat alanlarını açar; bu, ayrı bir
+  // MUHASEBE modülünü (cari/fatura/tahsilat) açar. İki kapı bağımsızdır —
+  // fiyatı sipariş ekranında gösteren fabrikanın cari defteri tutması gerekmez.
+  FINANCE_ENABLED: "finance.enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
@@ -777,6 +782,10 @@ export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli). */
   companyName: string;
   pricingEnabled: boolean;
+  /** Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka) açık mı.
+   *  Varsayılan KAPALI — üretici fabrika bu modülü kullanmıyor ve kapalıyken
+   *  menüde tek satır bile görünmez. `pricingEnabled` ile bağımsız. */
+  financeEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
@@ -1087,6 +1096,7 @@ export class SystemSettingService {
     const flags: FeatureFlags = {
       companyName: await readCompanyName(cacheClient),
       pricingEnabled: await readPricingEnabled(cacheClient),
+      financeEnabled: await readFinanceEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
@@ -1158,6 +1168,18 @@ export class SystemSettingService {
         SETTING_KEYS.FINANCE_PRICING_ENABLED,
         input.pricingEnabled,
         "Sipariş/sevkiyat ekranlarında para birimi + fiyat alanlarını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeEnabled")) {
+      if (typeof input.financeEnabled !== "boolean") {
+        throw AppError.badRequest("financeEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_ENABLED,
+        input.financeEnabled,
+        "Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka)",
         userId
       );
     }
@@ -1888,6 +1910,25 @@ export async function readPricingEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.FINANCE_PRICING_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Ön muhasebe modülü açık mı? Default false.
+ *
+ * ⚠️ Bu bayrak GÖRÜNÜRLÜK değil REJİM anahtarıdır: kapalıyken menü satırı
+ * çizilmez, route 403 verir ve otomatik taslak kancaları no-op olur. Üçü de
+ * ayrı ayrı test edilir (`test_finance_flag_off`) — yalnız menüyü gizlemek,
+ * adresi bilen birine modülü açık bırakırdı.
+ */
+export async function readFinanceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

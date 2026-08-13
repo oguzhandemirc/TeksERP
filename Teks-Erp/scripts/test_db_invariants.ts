@@ -165,6 +165,21 @@ const PARTIAL_INDEXES: Array<{
   { table: "goods_receipts", index: "goods_receipts_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "warehouse_movements", index: "warehouse_movements_transferId_idx", uniq: false, predicate: `("transferId" IS NOT NULL)`, why: "null-yoğun belge bağı (KK1/tambur girişleri belgesiz)" },
   { table: "warehouse_movements", index: "warehouse_movements_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun belge bağı" },
+  // ticaret paketi — ön muhasebe (migration 20260813201311)
+  // ⚠️ "BİR KAYNAK → EN ÇOK BİR AKTİF FATURA". Uygulama katmanındaki
+  // findFirst→if→create yarışa açıktır; yapısal engel partial unique'tir. Aynı
+  // sevkiyat iki kez faturalanırsa cari bakiyesi sessizce İKİ KATINA çıkar ve
+  // fark ay sonunda müşteriyle yüzleşince anlaşılır.
+  // `status <> 'CANCELLED'`: iptal edilmiş fatura yerinde kalır (donmuş belge
+  // silinmez) ama yeni fatura kesilmesini ENGELLEMEMELİDİR — storno'nun amacı bu.
+  { table: "invoices", index: "invoices_one_active_per_shipment", uniq: true, predicate: `(("shipmentId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir sevkiyat → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_direct_shipment", uniq: true, predicate: `(("directShipmentId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir doğrudan sevk → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_return_group", uniq: true, predicate: `(("returnGroupId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir iade grubu → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_subcon_receipt", uniq: true, predicate: `(("subcontractorReceiptId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir fason kabul → tek aktif fatura" },
+  { table: "invoices", index: "invoices_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "payments", index: "payments_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "cari_accounts", index: "cari_accounts_customerId_key", uniq: true, predicate: `("customerId" IS NOT NULL)`, why: "müşteri başına tek cari; NULL'lar (fason cariler) girmez" },
+  { table: "cari_accounts", index: "cari_accounts_subcontractorId_key", uniq: true, predicate: `("subcontractorId" IS NOT NULL)`, why: "fason başına tek cari; NULL'lar (müşteri cariler) girmez" },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
   // swatch_stock_reductions
@@ -220,6 +235,20 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   // "SUM(qty)" yazan her raporu sessizce yanlışlar (biri işareti dikkate alır,
   // diğeri almaz) ve bu yıllar sonra fark edilir.
   { table: "roll_variances", name: "roll_variances_qty_positive" },
+  // 2026-08-13 — ön muhasebe (migration 20260813201311_finance_preaccounting).
+  // Muhasebe seddleri "veri tutarlı olsun" değil "DEFTER OKUNABİLİR olsun"
+  // içindir: yönü iki yerde saklayan (işaretli tutar) ya da yarım durum bırakan
+  // (onaylı ama kim/ne zaman boş) bir satır, denetimde hiçbir şey kanıtlamaz.
+  { table: "cari_accounts", name: "cari_accounts_party_xor" },
+  { table: "cari_accounts", name: "cari_accounts_kind_matches_party" },
+  { table: "payments", name: "payments_account_xor" },
+  { table: "payments", name: "payments_amount_positive" },
+  { table: "payments", name: "payments_rate_positive" },
+  { table: "cari_transactions", name: "cari_txn_debit_credit_xor" },
+  { table: "invoices", name: "invoices_status_stamps" },
+  { table: "invoices", name: "invoices_rate_positive" },
+  { table: "invoice_lines", name: "invoice_lines_positive" },
+  { table: "exchange_rates", name: "exchange_rates_rate_positive" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
