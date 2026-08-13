@@ -8,7 +8,7 @@
 
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
-import { normalizeFoldType } from "./helpers/fold-type";
+import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -260,6 +260,9 @@ export interface RelabelContext {
   qualityGradeId: string | null;
   qualityGradeRef: { id: string; code: string; name: string; color: string | null } | null;
   width: number | null;
+  /** KAT — katalog KODU ("6-KAT" / "TUP"); kat girilmemiş topta null. Düzelt
+   *  diyaloğu bunu seçici ile düzeltir (kolon, pivot DEĞİL — bkz. applyManualProperties). */
+  foldType: string | null;
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
@@ -1705,6 +1708,50 @@ export class InventoryService {
    * "Toplam metre / Toplam kg / Statü dağılımı / Kalite dağılımı" gibi
    * panelleri için. Filtre seti findAllRolls ile aynı (buildRollWhere paylaşılır).
    */
+  /**
+   * GİRİŞ FİLTRESİ LOOKUP'LARI (2026-08-12) — "Ekleyen" / "Giriş İstasyonu"
+   * filtre seçenekleri. Kullanıcı/istasyon kataloğunun TAMAMI değil, gerçekten
+   * top girmiş olanlar döner: (a) "Ekleyen" seçeneği için `admin:users` iznine
+   * gerek kalmaz (o uç kullanıcı YÖNETİMİdir; buradaki ad zaten roll:read'in
+   * gördüğü satırlarda basılıyor — yeni bilgi sızmaz), (b) hiç giriş yapmamış
+   * hesap/istasyon listeyi şişirmez. Kaynak sorgu indeksli tekil kolonlardır
+   * (`@@index([createdById])` / `@@index([entryStationId])`) — 300k satırda da
+   * index-only scan.
+   */
+  async listEntryUsers(): Promise<ApiResponse<{ id: string; name: string; code: string | null }[]>> {
+    const groups = await prisma.roll.groupBy({
+      by: ["createdById"],
+      where: { createdById: { not: null } },
+    });
+    const ids = groups.map((g) => g.createdById).filter((v): v is string => !!v);
+    if (ids.length === 0) return { success: true, data: [] };
+    const users = await prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true, fullName: true },
+      orderBy: { fullName: "asc" },
+    });
+    return {
+      success: true,
+      // FilterBar/PickerModal sözleşmesi: {id, name} (+ code alt etiketi).
+      data: users.map((u) => ({ id: u.id, name: u.fullName ?? u.username, code: u.username })),
+    };
+  }
+
+  async listEntryStations(): Promise<ApiResponse<{ id: string; name: string; code: string | null }[]>> {
+    const groups = await prisma.roll.groupBy({
+      by: ["entryStationId"],
+      where: { entryStationId: { not: null } },
+    });
+    const ids = groups.map((g) => g.entryStationId).filter((v): v is string => !!v);
+    if (ids.length === 0) return { success: true, data: [] };
+    const stations = await prisma.station.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return { success: true, data: stations.map((st) => ({ id: st.id, name: st.name, code: st.code })) };
+  }
+
   async getRollStats(req: Request): Promise<ApiResponse<RollStats>> {
     const params = parseQueryParams(req);
     const where = this.buildRollWhere(params) as Prisma.RollWhereInput;
@@ -2262,6 +2309,7 @@ export class InventoryService {
         qualityGradeId: true,
         qualityGradeRef: { select: { id: true, code: true, name: true, color: true } },
         width: true,
+        foldType: true,
         currentQty: true,
         weightKg: true,
         markedForKartela: true,
@@ -2347,6 +2395,7 @@ export class InventoryService {
         qualityGradeId: roll.qualityGradeId,
         qualityGradeRef: roll.qualityGradeRef,
         width: roll.width != null ? Number(roll.width) : null,
+        foldType: roll.foldType,
         currentQty: Number(roll.currentQty),
         weightKg: roll.weightKg != null ? Number(roll.weightKg) : null,
         markedForKartela: roll.markedForKartela,
@@ -3264,7 +3313,24 @@ export class InventoryService {
    */
   async applyManualProperties(
     rollId: string,
-    data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string; currentQty?: number; reason?: string },
+    data: {
+      colorId: string | null;
+      propertyIds: string[];
+      width?: number | null;
+      qualityGrade?: string;
+      currentQty?: number;
+      /**
+       * KAT — `undefined` DOKUNMA, `null` TEMİZLE, kod YAZ (foldTypeSchema sözleşmesi).
+       *
+       * Kat bir SEÇİM (CHOICE) karakteristiğidir ama `RollProperty` pivotunda değil
+       * `Roll.foldType` KOLONUNDA yaşar (filtrelenip sıralandığı için) — bu yüzden
+       * yukarıdaki "CHOICE satırları bu uçtan yönetilmez" kuralının DIŞINDADIR ve
+       * panelden düzeltilebilir. Kesim sırasında istemci alanı düşürdüğü için
+       * (2026-08-13) katsız doğmuş topların tek düzeltme yolu burasıdır.
+       */
+      foldType?: string | null;
+      reason?: string;
+    },
     userId?: string,
     /** F221 deseni: sağlanırsa süpervizör kapsamı için `roll:manual-adjust` ENFORCE
      *  edilir. Controller `req.user.permissions`'ı HER ZAMAN geçirir; omit =
@@ -3281,6 +3347,7 @@ export class InventoryService {
         status: true,
         width: true,
         qualityGrade: true,
+        foldType: true,
         initialQty: true,
         currentQty: true,
         shipmentId: true,
@@ -3465,6 +3532,13 @@ export class InventoryService {
       rollData.qualityGradeId = await resolveQualityGradeIdStrict(code);
       rollData.qualityGrade = code;
     }
+    // KAT — katalog doğrulaması + kanoniklik TEK YERDE (`resolveFoldTypeForWrite`;
+    // kesim/finalize/elle ekleme yollarıyla AYNI fonksiyon). Burada elle karşılaştırma
+    // yapma: "4 kat" yazımı normalleşmeden kaydedilirse envanterin kat filtresi o topu
+    // BULAMAZ ve hata/log çıkmaz (2026-08-04 notu).
+    const resolvedFold = await resolveFoldTypeForWrite(data.foldType);
+    const foldChanged = resolvedFold !== undefined && resolvedFold !== roll.foldType;
+    if (foldChanged) rollData.foldType = resolvedFold;
 
     // Etiket bayat: etiket-görünür bir alan (renk/en/metraj/kalite/özellik) GERÇEKTEN
     // değiştiyse topun fiziksel etiketi artık uyuşmuyor → labelDirty=true (baskıda temizlenir).
@@ -3488,7 +3562,9 @@ export class InventoryService {
       data.qualityGrade !== undefined &&
       data.qualityGrade.trim() !== "" &&
       data.qualityGrade.trim() !== roll.qualityGrade;
-    if (colorChanged || widthChanged || metrajChanged || qualityChanged || propsChanged) {
+    // ⚠️ `foldChanged` de etiketi bayatlatır: kat 2026-08-13'ten beri etiket alan
+    // kataloğunda (ROLL_RAW + ROLL_FINISHED) — şablona sürüklenmişse kâğıda basılıyor.
+    if (colorChanged || widthChanged || metrajChanged || qualityChanged || propsChanged || foldChanged) {
       rollData.labelDirty = true;
     }
 
@@ -3546,6 +3622,7 @@ export class InventoryService {
         colorId: roll.colorId,
         width: roll.width != null ? Number(roll.width) : null,
         qualityGrade: roll.qualityGrade,
+        foldType: roll.foldType,
         currentQty: Number(roll.currentQty),
       },
       newData: {
@@ -3556,6 +3633,9 @@ export class InventoryService {
         untouchedChoicePropertyIds: untouchedChoiceIds,
         width: data.width,
         qualityGrade: data.qualityGrade,
+        // KANONİK değer yazılır (istemcinin ham girdisi değil) — audit ile kolon
+        // ayrışırsa "ne yazıldı" sorusunun iki cevabı olur.
+        foldType: resolvedFold ?? null,
         currentQty: data.currentQty ?? null,
         reason: data.reason ?? null,
         // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör

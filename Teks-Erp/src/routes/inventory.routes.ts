@@ -272,6 +272,28 @@ router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_RO
 
 /**
  * @openapi
+ * /api/rolls/entry-users:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Top girmiş kullanıcılar — "Ekleyen" filtre lookup'ı
+ *     description: Kullanıcı kataloğu DEĞİL; yalnız en az bir top yaratmış kullanıcılar (id + ad).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/entry-users", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.listEntryUsers);
+
+/**
+ * @openapi
+ * /api/rolls/entry-stations:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Giriş istasyonları — "Giriş İstasyonu" filtre lookup'ı
+ *     description: Yalnız en az bir topun giriş istasyonu olmuş istasyonlar (id + ad).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/entry-stations", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.listEntryStations);
+
+/**
+ * @openapi
  * /api/rolls/stats-batch:
  *   post:
  *     tags: [Inventory]

@@ -320,6 +320,20 @@ export const rollColumns: ColumnDef<Roll>[] = [
     },
   },
   {
+    // GİRİŞ İSTASYONU (2026-08-12): topun sisteme GİRDİĞİ yer — kalıcı köken.
+    // "Ekleyen"in makine satırı oturum makinesini gösterir; bu kolon istasyon
+    // düzeyidir ve ikinci ham giriş istasyonu açıldığında ayrım burada okunur.
+    // 2026-08-05 öncesi toplar geriye doldurulmadı (bilinçli) → "—" meşrudur.
+    id: "entryStation",
+    header: "Giriş İstasyonu",
+    meta: { label: "Giriş İstasyonu" },
+    cell: ({ row }) => {
+      const st = row.original.entryStation;
+      if (!st) return <span className="text-muted-foreground">—</span>;
+      return <span className="truncate text-xs">{st.name}</span>;
+    },
+  },
+  {
     accessorKey: "qualityGrade",
     header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
     meta: { label: "Kalite" },

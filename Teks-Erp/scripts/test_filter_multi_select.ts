@@ -133,6 +133,8 @@ async function main(): Promise<void> {
   };
 
   const stationIds: string[] = [];
+
+  const testUserIds: string[] = [];
   const woIds: string[] = [];
   const stepIds: string[] = [];
   const customerIds: string[] = [];
@@ -210,6 +212,61 @@ async function main(): Promise<void> {
       "/rolls/stats aynı where'i paylaşıyor — sayaç sıfırlanmadı",
       (stats.data?.totalCount ?? 0) >= 2,
       `totalCount=${stats.data?.totalCount}`,
+    );
+
+    // ── 2b) ENVANTER — createdById + entryStationId (GENERIC yol, 2026-08-12) ──
+    // "Ekleyen" / "Giriş İstasyonu" filtreleri `buildWhereClause`ın GENERIC
+    // yolundan geçer (CSV→in otomatik). Bu bölüm o varsayımı KİLİTLER: biri
+    // ileride bu anahtarları buildRollWhere'de ELLE okumaya başlar ve
+    // readIdCondition'ı atlarsa, CSV uuid kolonuna ham gider → P2007. Ayrıca
+    // mobil KK1 "yalnız kendi kayıtlarım" daraltması tam bu filtreye dayanıyor.
+    console.log("\n[2b] Envanter: ekleyen + giriş istasyonu");
+    const entrySt = await prisma.station.create({
+      data: { code: `${tag}-EST`, name: `${tag} Giriş İst`, kind: "RAW_QC", type: "INTERNAL" },
+      select: { id: true },
+    });
+    stationIds.push(entrySt.id);
+    const userA = await prisma.user.create({
+      data: { username: `${tag}-opA`.toLowerCase(), passwordHash: "x", fullName: `${tag} Operatör A`, isActive: true },
+      select: { id: true },
+    });
+    const userB = await prisma.user.create({
+      data: { username: `${tag}-opB`.toLowerCase(), passwordHash: "x", fullName: `${tag} Operatör B`, isActive: true },
+      select: { id: true },
+    });
+    testUserIds.push(userA.id, userB.id);
+    const rOpA = await mkRoll("OPA", itemA.id, colX.id, { createdById: userA.id, entryStationId: entrySt.id });
+    const rOpB = await mkRoll("OPB", itemA.id, colX.id, { createdById: userB.id });
+
+    const mineOnly = await listRolls({ "filter[createdById]": userA.id });
+    check(
+      "createdById tek değer — yalnız o operatörün topları",
+      mineOnly.some((r) => r.id === rOpA) && !mineOnly.some((r) => r.id === rOpB),
+      `${mineOnly.length} satır`,
+    );
+    const bothOps = await listRolls({ "filter[createdById]": `${userA.id},${userB.id}` });
+    check(
+      "createdById CSV → in (500/P2007 YOK, ikisi de gelir)",
+      bothOps.some((r) => r.id === rOpA) && bothOps.some((r) => r.id === rOpB),
+      `${bothOps.length} satır`,
+    );
+    const byEntrySt = await listRolls({ "filter[entryStationId]": entrySt.id });
+    check(
+      "entryStationId — yalnız o istasyondan girenler",
+      byEntrySt.some((r) => r.id === rOpA) && !byEntrySt.some((r) => r.id === rOpB),
+      `${byEntrySt.length} satır`,
+    );
+    // Lookup uçları: yalnız GERÇEKTEN top girmiş kullanıcı/istasyon döner.
+    const lookupUsers = (await inventory.listEntryUsers()).data ?? [];
+    check(
+      "entry-users lookup'ı top girmiş kullanıcıyı içeriyor",
+      lookupUsers.some((u) => u.id === userA.id),
+      `${lookupUsers.length} kullanıcı`,
+    );
+    const lookupStations = (await inventory.listEntryStations()).data ?? [];
+    check(
+      "entry-stations lookup'ı giriş istasyonunu içeriyor",
+      lookupStations.some((st) => st.id === entrySt.id),
     );
 
     // ── 3) ENVANTER — currentStationId (SESSİZ DÜŞME, en tehlikelisi) ─────────
@@ -487,6 +544,7 @@ async function main(): Promise<void> {
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: testUserIds } } });
     await prisma.workOrderStep.deleteMany({ where: { id: { in: stepIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     await prisma.station.deleteMany({ where: { id: { in: stationIds } } });

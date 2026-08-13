@@ -72,6 +72,16 @@ export interface CursorListParams {
   filters?: Record<string, string | string[]>;
   /** Backend `?withTotal=true` — ilk sayfada total döndürmek için. */
   withTotal?: boolean;
+  /**
+   * Tarih aralığı (top listesi filtresi). ⚠️ `dateField` GÖNDERİLMEK ZORUNDA:
+   * backend `applyDateRange` alan adı yoksa aralığı SESSİZCE yok sayar
+   * (`if (!params.dateField) return`) — filtre seçili görünür, liste süzülmez.
+   * İzinli alan: `createdAt` (`ROLL_DATE_FIELDS`).
+   */
+  dateField?: string;
+  /** ISO — mutlak an. Gün sınırını istemci çözer (Electron ile aynı sözleşme). */
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 function buildCursorQueryString(params: CursorListParams): string {
@@ -81,6 +91,12 @@ function buildCursorQueryString(params: CursorListParams): string {
   if (params.cursor) sp.set('cursor', params.cursor);
   if (params.search) sp.set('search', params.search);
   if (params.withTotal) sp.set('withTotal', 'true');
+  // Tarih üçlüsü: alan adı olmadan aralık backend'de sessizce düşer.
+  if (params.dateField && (params.dateFrom || params.dateTo)) {
+    sp.set('dateField', params.dateField);
+    if (params.dateFrom) sp.set('dateFrom', params.dateFrom);
+    if (params.dateTo) sp.set('dateTo', params.dateTo);
+  }
   if (params.filters) {
     for (const [k, v] of Object.entries(params.filters)) {
       if (!v || (Array.isArray(v) && v.length === 0)) continue;
@@ -203,6 +219,19 @@ export const rollService = {
   /** Cursor-pagination liste — infinite scroll için. */
   getAllCursor: (params: CursorListParams): Promise<RollCursorPage> =>
     apiClient.get<RollCursorPage>(`/rolls${buildCursorQueryString(params)}`).then((r) => r.data),
+
+  /** "Personel" filtre seçenekleri — yalnız en az bir top girmiş kullanıcılar.
+   *  (Kullanıcı kataloğu DEĞİL: o uç admin:users ister, bu MOBILE_ROLL_READ.) */
+  getEntryUsers: (): Promise<{ success: boolean; data: { id: string; name: string; code: string | null }[] }> =>
+    apiClient
+      .get<{ success: boolean; data: { id: string; name: string; code: string | null }[] }>('/rolls/entry-users')
+      .then((r) => r.data),
+
+  /** "Giriş İstasyonu" filtre seçenekleri — giriş istasyonu olmuş istasyonlar. */
+  getEntryStations: (): Promise<{ success: boolean; data: { id: string; name: string; code: string | null }[] }> =>
+    apiClient
+      .get<{ success: boolean; data: { id: string; name: string; code: string | null }[] }>('/rolls/entry-stations')
+      .then((r) => r.data),
 
   /**
    * Liste ile aynı filtre setini paylaşan TÜM-DB özeti.

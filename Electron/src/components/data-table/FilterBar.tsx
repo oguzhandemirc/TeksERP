@@ -97,7 +97,9 @@ export type FilterDef =
       kind: "lookup";
       key: string;
       label: string;
-      service: CrudService<LookupItemBase>;
+      // Yalnız getAll çağrılır — hafif lookup servisleri (örn. /rolls/entry-users)
+      // tam CrudService kurmak zorunda kalmasın diye tip bilinçli DAR.
+      service: Pick<CrudService<LookupItemBase>, "getAll">;
       queryKey: string;
       getLabel?: LookupGetLabel;
       /** Lookup listesini daraltmak için ek backend filter (örn. isDerived=false). */
@@ -107,7 +109,7 @@ export type FilterDef =
       kind: "multi-lookup";
       key: string;
       label: string;
-      service: CrudService<LookupItemBase>;
+      service: Pick<CrudService<LookupItemBase>, "getAll">;
       queryKey: string;
       getLabel?: LookupGetLabel;
       extraFilters?: Record<string, string>;

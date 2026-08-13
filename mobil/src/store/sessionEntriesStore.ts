@@ -17,6 +17,17 @@
 import { create } from 'zustand';
 import type { Roll } from '../types/models';
 
+/**
+ * Kova anahtarı (2026-08-12): tür + İSTASYON KİMLİĞİ. Eskiden yalnız tür idi
+ * ('RAW_QC') — ikinci bir ham giriş istasyonu açıldığında iki istasyonun
+ * kayıtları TEK kovaya karışır, operatör istasyon değiştirince "nerede ne
+ * girdim" ayırt edilemezdi. stationId yoksa (oturum henüz yüklenmedi) tür tek
+ * başına kullanılır — tek istasyonlu bugünkü davranışla birebir aynı.
+ */
+export function sessionBucketKey(kind: string, stationId?: string | null): string {
+  return stationId ? `${kind}:${stationId}` : kind;
+}
+
 interface Bucket {
   rolls: Roll[];
   pending: number;

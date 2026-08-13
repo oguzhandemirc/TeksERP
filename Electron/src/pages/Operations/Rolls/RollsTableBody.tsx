@@ -17,6 +17,7 @@ import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
+import { entryStationLookupService, entryUserLookupService } from "./entryLookupServices";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import type { Roll } from "./types";
 
@@ -85,25 +86,43 @@ const FILTERS: FilterDef[] = [
       { value: "MANUAL_ENTRY", label: "Manuel Giriş" },
     ],
   },
-  // İSTASYON (2026-08-05): "şu makinede ne var" sorusu. Backend
-  // filter[currentStationId] ile karşılanıyor — o blok bu filtre için yazıldı;
-  // öncesinde yalnız istasyon TÜRÜ filtresi vardı (currentStepKind) ve o da
-  // kullanıcıya hiç açılmamıştı, yalnız sabit sekmelerde kullanılıyordu.
-  //
-  // Tür değil KİMLİK filtreleniyor: tür iki ayrı boyahaneyi tek seçenekte
-  // birleştirirdi, oysa operatör belirli bir makineyi soruyor.
-  //
-  // ÇOKLU: "iki boyahanede ne var" tek sorguda. ⚠️ Backend bu alanı UUID
-  // regex'inden geçiriyor; süzgeç LİSTENİN HER ELEMANINA uygulanmazsa filtre
-  // sessizce düşer ve liste FİLTRESİZ döner (bekçi ölçümü: 2 yerine 6 satır).
+  // GİRİŞ İSTASYONU (2026-08-12): "bu top SİSTEME nereden girdi" — kalıcı köken.
+  // Yukarıdaki "İstasyon" (currentStationId) topun ŞU AN bulunduğu yerdir; ikisi
+  // farklı soru. Seçenekler kataloğun tamamı değil, gerçekten giriş istasyonu
+  // olmuş istasyonlar (/rolls/entry-stations). Backend'de generic yol karşılar
+  // (CSV→in otomatik; bekçi: test_filter_multi_select §2b).
   {
     kind: "multi-lookup",
-    key: "currentStationId",
-    label: "İstasyon",
-    service: stationService,
-    queryKey: "stations",
+    key: "entryStationId",
+    label: "Giriş İstasyonu",
+    service: entryStationLookupService,
+    queryKey: "roll-entry-stations",
+  },
+  // EKLEYEN (2026-08-12): "hangi personel girdi". Kolon 2026-08-05'ten beri
+  // vardı, filtre yoktu — 50 bin satırda gözle aranıyordu. Seçenekler yalnız
+  // top girmiş kullanıcılar (/rolls/entry-users) — admin:users GEREKMEZ.
+  {
+    kind: "multi-lookup",
+    key: "createdById",
+    label: "Ekleyen",
+    service: entryUserLookupService,
+    queryKey: "roll-entry-users",
   },
 ];
+
+// İSTASYON (2026-08-05): "şu makinede ne var" — topun ŞU AN bulunduğu istasyon.
+// Tür değil KİMLİK filtrelenir (tür iki boyahaneyi tek seçenekte birleştirirdi).
+// ⚠️ Backend bu alanı UUID regex'inden geçirir; süzgeç listenin her elemanına
+// uygulanmazsa filtre sessizce düşer (bekçi ölçümü: 2 yerine 6 satır).
+// ⚠️ base FILTERS'ta DEĞİL: yalnız üretim sekmelerinde eklenir (buildRollFilterDefs) —
+// Ham Stok/Bitmiş Depo'da anlamı yok, hep boş liste döndürüp "bozuk" görünüyordu.
+const CURRENT_STATION_FILTER: FilterDef = {
+  kind: "multi-lookup",
+  key: "currentStationId",
+  label: "İstasyon",
+  service: stationService,
+  queryKey: "stations",
+};
 
 export const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;
 
@@ -158,6 +177,13 @@ export function buildRollFilterDefs(
   });
   if (tab === "FINISHED_STOCK") return [...base, SHIPMENT_SCOPE_FILTER];
   if (tab === "SUBCONTRACTOR") return [...base, ...FASON_FILTERS];
+  // İSTASYON (currentStationId) YALNIZ topun gerçekten bir istasyonda DURDUĞU
+  // sekmelerde: "şu an nerede" filtresi Ham Stok / Bitmiş Depo'da her zaman boş
+  // döner (o toplarda currentStep yok) ve saha bunu "filtre bozuk" diye okudu
+  // (2026-08-12). "Nereden girdi" sorusunun cevabı Giriş İstasyonu filtresidir.
+  if (tab === "PRODUCTION" || tab === "KURSUN_PENDING" || tab === "TAMBUR_PENDING") {
+    return [...base, CURRENT_STATION_FILTER];
+  }
   return base;
 }
 
