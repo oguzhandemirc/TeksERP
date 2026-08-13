@@ -21,6 +21,9 @@ export const TRAVELER_SECTION_KEYS = [
   "operations",
   "instructions",
   "orders",
+  // Elle doldurulan boş tablo (2026-08-13) — varsayılan sırada EN SONA yakın:
+  // kartın alt boşluğunu kullanmak için var, üstteki bilgi bloklarını itmemeli.
+  "blankGrid",
   "footer",
 ] as const;
 
@@ -41,6 +44,10 @@ export const TRAVELER_SECTION_LABELS: Record<TravelerSectionKey, { label: string
   operations: { label: "Operasyon Kaydı", desc: "İstasyon satırları + elle doldurulan imza grid'i." },
   instructions: { label: "Talimatlar", desc: "Adım notları (boyahane talimatı vb.)." },
   orders: { label: "Bağlı Siparişler", desc: "Sipariş no, müşteri, ürün, renk, miktar." },
+  blankGrid: {
+    label: "Boş Tablo",
+    desc: "Elle doldurulan ızgara (kurşun kaydı vb.) — sütunları ve satır sayısı ayarlanır.",
+  },
   footer: { label: "Alt Not", desc: "Kartın altına basılan serbest not." },
 };
 

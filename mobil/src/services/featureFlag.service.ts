@@ -33,6 +33,12 @@ export interface FeatureFlags {
    *  basılan her etiket için okutma istenir ve okutulmadan yeni top girilemez.
    *  ENFORCE bu istemcidedir; kapalıyken ekranda hiçbir iz yok. */
   kk1LabelScanVerifyEnabled: boolean;
+  /** KK1 "Tüm Girişler" TÜM operatörlerin kayıtlarını göstersin mi (default
+   *  false). Kapalıyken liste yalnız oturumdaki operatörün kendi girdiği
+   *  toplar; sağdaki "Son Kayıtlar" bayraktan bağımsız HER ZAMAN kişiye özel.
+   *  ENFORCE bu istemcidedir (createdById filtresini istemci gönderir) —
+   *  yetki duvarı değil ekran sadeleştirmesi. */
+  kk1HistoryAllEntriesEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (default false).
    *  Backend ENFORCE eder — kapalıyken SIMULATED beyanlı tartı 400 döner. Elle
    *  giriş (MANUAL) muaftır. Yalnız demo/eğitim kurulumu açar. */
@@ -88,6 +94,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   targetQuantityEnabled: false,
   rawWidthEnabled: false,
   kk1WeightEntryEnabled: false,
+  kk1HistoryAllEntriesEnabled: false,
   // Varsayılan KAPALI (kuyruklu davranış) — fail-toward-queue: bayrak
   // yüklenemezse yanlış yönde kilitlemektense kayıt almak tercih edilir.
   kk1OnlineOnlyEnabled: false,

@@ -115,8 +115,26 @@ export interface TravelerCardConfig {
    * yüzden boş nesne GÖNDERİLMEZ — panel `undefined` bırakır.
    */
   fields?: Record<string, TravelerCardFieldStyle>;
+  /**
+   * BOŞ TABLO (2026-08-13) — kartın alt boşluğuna elle doldurulan ızgara
+   * (kurşun kaydı vb.). Şekil BELGELERLE ORTAK (`documentConfig.BlankGridConfig`)
+   * çünkü backend'de de tip/sanitize/renderer ortak; panelde de AYNI bileşen
+   * (`BlankGridPanel`) kullanılır — iki farklı grid ayarı yüzeyi doğmasın.
+   */
+  blankGrid?: TravelerCardBlankGrid;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
+}
+
+/** Belgelerdeki `BlankGridConfig` ile BİREBİR (backend `doc-style.ts`). */
+export interface TravelerCardBlankGrid {
+  enabled?: boolean;
+  title?: string;
+  rows?: number;
+  columns?: number;
+  columnWidths?: number[];
+  headers?: string[];
+  position?: "afterHeader" | "beforeSignatures";
 }
 
 /** Alan bazlı görünürlük + yazı ayarı — sayısal punto + beş kademeli kalınlık. */
@@ -211,6 +229,9 @@ export interface FeatureFlags {
   /** KK1 etiket geri-okutma doğrulaması (scan-back) — default false; mobil ENFORCE
    *  eder (açıkken basılan etiket okutulmadan yeni top girilemez). */
   kk1LabelScanVerifyEnabled: boolean;
+  /** KK1 "Tüm Girişler" tüm operatörlerin kayıtlarını göstersin — default false;
+   *  mobil ENFORCE eder (kapalıyken operatör yalnız kendi girdiği topları görür). */
+  kk1HistoryAllEntriesEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi — default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma 400). Yalnız demo/eğitim. */
   shippingSimulatedWeightEnabled: boolean;

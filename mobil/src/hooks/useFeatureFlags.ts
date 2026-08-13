@@ -45,6 +45,13 @@ export function useKk1LabelScanVerifyEnabled(): boolean {
   return useFeatureFlags().data?.kk1LabelScanVerifyEnabled ?? false;
 }
 
+/** KK1 "Tüm Girişler" tüm operatörleri göstersin mi? Default false — bayrak
+ *  yüklenemezse DAR kapsama düşülür (yalnız kendi kayıtları): yanlışlıkla
+ *  fazla göstermektense az göstermek; operatörün kendi işi her durumda tam. */
+export function useKk1HistoryAllEntriesEnabled(): boolean {
+  return useFeatureFlags().data?.kk1HistoryAllEntriesEnabled ?? false;
+}
+
 /** İade kabulünde personel kaliteyi değiştirebilir mi? Default false (gizli). */
 export function useReturnGradingEnabled(): boolean {
   return useFeatureFlags().data?.returnGradingEnabled ?? false;

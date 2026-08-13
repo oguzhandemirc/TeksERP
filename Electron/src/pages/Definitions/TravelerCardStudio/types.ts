@@ -25,6 +25,10 @@ export const SECTION_KEYS = [
   "operations",
   "instructions",
   "orders",
+  // Boş tablo (2026-08-13) — backend `traveler-card.sections.ts` ile BİREBİR
+  // sıralı olmalı: Electron backend'i import edemez, ikisi elle birlikte
+  // güncellenir (mobil `permissions.ts` ile aynı durum).
+  "blankGrid",
   "footer",
 ] as const;
 export type SectionKey = (typeof SECTION_KEYS)[number];
@@ -43,6 +47,10 @@ export const SECTION_LABELS: Record<SectionKey, { label: string; desc: string }>
   operations: { label: "Operasyon Kaydı", desc: "İstasyon satırları + imza grid'i" },
   instructions: { label: "Talimatlar", desc: "Adım notları (boyahane talimatı vb.)" },
   orders: { label: "Bağlı Siparişler", desc: "Sipariş no, müşteri, ürün, renk, miktar" },
+  blankGrid: {
+    label: "Boş Tablo",
+    desc: "Elle doldurulan ızgara — sütun/satır ayarı Refakat Kartı Ayarları'nda",
+  },
   footer: { label: "Alt Not", desc: "Kartın altına basılan serbest not" },
 };
 
@@ -60,6 +68,8 @@ export const SECTION_LEGACY_FLAG: Record<SectionKey, keyof TravelerCardConfig | 
   operations: "showOperationGrid",
   instructions: "showNotes",
   orders: "showOrders",
+  // Eski bayrağı YOK: açık/kapalı tek kapıdan (`blankGrid.enabled`) yönetilir.
+  blankGrid: null,
   footer: null,
 };
 

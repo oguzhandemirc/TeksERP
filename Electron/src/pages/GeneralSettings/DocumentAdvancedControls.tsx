@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { DocumentConfig, DocDef } from "@/services/documentConfig";
+import type { BlankGridConfig, DocumentConfig, DocDef } from "@/services/documentConfig";
 import { FlagToggle } from "./SettingRow";
 
 // =============================================================================
@@ -39,7 +39,11 @@ export function DocumentAdvancedControls({
           süzgeci YOK: kullanıcı isteği "belgede istediğim gibi grid
           ayarlayabileyim" idi, belge listesi değil. Kapalıyken belgeye tek bayt
           eklenmez, yani her belgede göstermek çıktıyı riske atmaz. */}
-      <BlankGridPanel cfg={cfg} disabled={disabled} patch={patch} />
+      <BlankGridPanel
+        value={cfg?.blankGrid}
+        disabled={disabled}
+        onChange={(next) => patch({ blankGrid: next })}
+      />
       <BlocksPanel cfg={cfg} disabled={disabled} patch={patch} />
       {def.supportsLanguage && <LanguagePanel cfg={cfg} disabled={disabled} patch={patch} />}
     </>
@@ -404,16 +408,26 @@ function LanguagePanel({
 // dokunulmamış ve donmuş belgelerin çıktısı bayt-bayt korunur.
 // Bekçi: `Teks-Erp/scripts/test_blank_grid.ts`.
 // =============================================================================
-function BlankGridPanel({
-  cfg,
+/**
+ * ⚠️ REFAKAT KARTI DA BUNU KULLANIR (2026-08-13). Bu yüzden props artık
+ * `DocumentConfig`e değil YALNIZ grid değerine bağlı: aynı ayarın iki ekranda
+ * iki farklı yüzeyle sorulması, kullanıcıya iki farklı davranış öğretirdi
+ * (backend'de de tip/sanitize/renderer zaten ortak).
+ * `hidePosition`: kartta konum çıpası YOK — orada yeri bölüm sırası belirler.
+ */
+export function BlankGridPanel({
+  value,
   disabled,
-  patch,
+  onChange,
+  hidePosition = false,
 }: {
-  cfg: DocumentConfig | undefined;
+  value: BlankGridConfig | undefined;
   disabled: boolean;
-  patch: (next: Partial<DocumentConfig>) => void;
-}) {
-  const g = cfg?.blankGrid;
+  onChange: (next: BlankGridConfig | undefined) => void;
+}  & { hidePosition?: boolean }) {
+  const g = value;
+  const patch = (next: Partial<DocumentConfig>) =>
+    onChange(next.blankGrid as BlankGridConfig | undefined);
   const on = g?.enabled === true;
   const rows = g?.rows ?? 10;
   const cols = g?.columns ?? 5;
@@ -539,7 +553,10 @@ function BlankGridPanel({
             </p>
           </div>
 
-          <div>
+          {/* Konum yalnız BELGELERDE sorulur — refakat kartında grid'in yeri
+              bölüm sırasıyla (Şablon Stüdyosu) belirlenir; ikinci bir konum
+              ayarı orada iki farklı doğru üretirdi. */}
+          <div className={hidePosition ? "hidden" : undefined}>
             <label className="text-xs text-muted-foreground">Konum</label>
             <div className="mt-1 flex gap-2">
               {(

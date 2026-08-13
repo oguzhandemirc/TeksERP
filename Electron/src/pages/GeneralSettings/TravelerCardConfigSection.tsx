@@ -20,6 +20,8 @@ import {
   type TravelerCardBatchFields,
 } from "@/services/featureFlagService";
 import { TravelerCardFieldsPanel } from "./TravelerCardFieldsPanel";
+// Boş tablo paneli — belgelerle ORTAK bileşen (bkz. BlankGridPanel notu).
+import { BlankGridPanel } from "./DocumentAdvancedControls";
 
 /**
  * Ham hücre değerini (boolean eski şekil | nesne | undefined) tam alana çözer.
@@ -286,6 +288,18 @@ export function TravelerCardConfigSection({
         </div>
 
         <TravelerCardFieldsPanel cfg={draft} disabled={mut.isPending} onChange={setDraft} />
+
+        {/* BOŞ TABLO (2026-08-13 saha isteği: "kartın alt boşluğuna istediğimiz
+            ölçüde grid, sütun genişlikleri de ayarlanabilsin"). Panel BELGELERLE
+            ORTAK — aynı ayarın iki ekranda iki farklı yüzeyi olmasın. Konum
+            seçici gizli: kartta grid'in yerini Şablon Stüdyosu'ndaki bölüm
+            sırası belirler. */}
+        <BlankGridPanel
+          value={draft.blankGrid}
+          disabled={mut.isPending}
+          hidePosition
+          onChange={(next) => setDraft((d) => ({ ...d, blankGrid: next }))}
+        />
 
         <div>
           <label htmlFor="tc-footer" className="text-sm font-medium">Alt Not</label>

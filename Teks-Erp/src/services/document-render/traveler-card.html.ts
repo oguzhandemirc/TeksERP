@@ -21,6 +21,9 @@ import {
   type TravelerDensity,
 } from "./traveler-card.density";
 import { resolveSectionOrder, type TravelerSectionKey } from "./traveler-card.sections";
+// Boş grid — belgelerle ORTAK üretici (ikinci bir kopya yazmak, aynı ayarın iki
+// farklı çizimi demekti; bkz. TravelerCardConfig.blankGrid notu).
+import { docBlankGridCss, docBlankGridHtml } from "./doc-style";
 import { travelerFieldCss } from "./traveler-card.fields";
 import { renderRawTemplate, buildRawContext, wrapRawDocument } from "./traveler-card-raw";
 
@@ -397,6 +400,19 @@ export function renderTravelerCardHtml(
       </table>`
     : "";
 
+  // BOŞ TABLO — elle doldurulur, VERİ TAŞIMAZ. Çizim BELGELERLE ORTAK
+  // (`docBlankGridHtml`): aynı ayar şekli, aynı sanitize, aynı HTML → panelde
+  // öğrenilen davranış kartta da birebir geçerli. Kartta `position` çıpası
+  // KULLANILMAZ (bölüm sırası zaten konumu belirler) — bu yüzden ayarın
+  // konumundan bağımsız basılsın diye grid'in kendi konumu geçilir.
+  const blankGridHtml = cfg.blankGrid?.enabled
+    ? docBlankGridHtml(
+        { blankGrid: cfg.blankGrid },
+        cfg.blankGrid.position ?? "beforeSignatures",
+        esc,
+      )
+    : "";
+
   const notesBlock =
     showNotes && steps.some((st) => st.notes?.trim())
       ? `<div class="notes"><span class="p-lbl">TALİMATLAR</span>${steps
@@ -606,6 +622,7 @@ export function renderTravelerCardHtml(
     properties: propsBlock,
     batches: batchesBlock,
     operations: opGrid,
+    blankGrid: blankGridHtml,
     instructions: notesBlock,
     orders: ordersBlock,
     footer: footerBlock,
@@ -692,6 +709,11 @@ export function renderTravelerCardHtml(
   .op-dt { width: ${d.opDtW}px; }
   .op-q { width: ${d.opQW}px; }
   .op-sg { width: ${d.opSgW}px; }
+  /* BOŞ TABLO — CSS de belgelerle ORTAK (docBlankGridCss); grid kapalıyken
+     tek bayt basmaz, yani dokunulmamış kartın parmak izi korunur.
+     NOT: bu blok bir JS şablon literalinin İÇİNDE — yoruma bile backtick yazma,
+     literali ortadan böler ve dosya derlenmez (projede yazılı kural). */
+  ${docBlankGridCss({ blankGrid: cfg.blankGrid })}
 
   .notes { border: 0.8px solid #b91c1c; background: #fef2f2; border-radius: 3px; padding: ${d.notesPad}px; margin-bottom: ${d.notesMarB}px; }
   .notes-t { font-size: ${d.notes}px; margin-top: 2px; }
