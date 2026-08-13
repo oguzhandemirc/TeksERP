@@ -20,6 +20,8 @@ export interface GoodsReceiptLineInput {
   weightKg?: number | null;
   /** Kat — opsiyonel, katalogdan (backend kanonikleştirir). */
   foldType?: string | null;
+  /** Satın alma birim fiyatı — fişin para biriminde (opsiyonel). */
+  unitPrice?: number | null;
   propertyIds?: string[];
   clientToken?: string;
 }
@@ -29,6 +31,7 @@ export interface GoodsReceiptDetail {
   receiptNo: string;
   status: "ACTIVE" | "CANCELLED";
   deliveryNoteNo: string | null;
+  currency: "TRY" | "USD" | "EUR" | "GBP" | "RUB";
   notes: string | null;
   createdAt: string;
   warehouse: { id: string; code: string; name: string };
@@ -39,6 +42,7 @@ export interface GoodsReceiptDetail {
     barcode: string | null;
     status: string;
     currentQty: string | number;
+    purchasePrice?: string | number | null;
     width: string | number | null;
     item: { id: string; name: string };
     color: { id: string; name: string } | null;
@@ -64,6 +68,7 @@ export async function createGoodsReceipt(body: {
   warehouseId: string;
   supplierId?: string | null;
   deliveryNoteNo?: string | null;
+  currency?: "TRY" | "USD" | "EUR" | "GBP" | "RUB";
   notes?: string | null;
   clientToken?: string;
   lines?: GoodsReceiptLineInput[];
@@ -75,4 +80,13 @@ export async function createGoodsReceipt(body: {
 export async function cancelGoodsReceipt(id: string, reason?: string) {
   const res = await apiClient.post(`/api/goods-receipts/${id}/cancel`, { reason });
   return res.data;
+}
+
+/**
+ * Fişten alış faturası taslağı üretir (backend gruplar: ürün+renk+FİYAT).
+ * ⚠️ Yol TAM — apiClient.baseURL "/api" içermez.
+ */
+export async function createInvoiceFromReceipt(receiptId: string) {
+  const res = await apiClient.post(`/api/finance/invoices/from-goods-receipt/${receiptId}`);
+  return res.data as { data: { id: string; docNo: string }; message?: string };
 }

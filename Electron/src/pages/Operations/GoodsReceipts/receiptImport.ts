@@ -55,6 +55,7 @@ export const IMPORT_HEADERS = [
   "En (cm)",
   "Kg",
   "Kat",
+  "Birim Fiyat",
   "Adet",
 ] as const;
 
@@ -173,6 +174,7 @@ export function parseReceiptRows(
       width: toNumber(raw["En (cm)"]),
       weightKg: toNumber(raw["Kg"]),
       foldType,
+      unitPrice: toNumber(raw["Birim Fiyat"]),
       propertyIds: [],
       count,
     });

@@ -31,6 +31,8 @@ export interface DraftLine {
   width: number | null;
   weightKg: number | null;
   foldType: string | null;
+  /** Satın alma birim fiyatı (fişin para biriminde) — opsiyonel. */
+  unitPrice: number | null;
   /** Üretim özellikleri (FabricProperty id'leri) — opsiyonel. */
   propertyIds: string[];
   /** Kaç TOP gelmiş — kaydederken bu sayıda ayrı top doğar. */
@@ -46,6 +48,7 @@ export function emptyLine(): DraftLine {
     width: null,
     weightKg: null,
     foldType: null,
+    unitPrice: null,
     propertyIds: [],
     count: 1,
   };
@@ -67,7 +70,7 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
   const patch = (key: string, p: Partial<DraftLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
-  const cols = "grid-cols-[minmax(0,1fr)_140px_86px_74px_74px_104px_64px_66px_84px]";
+  const cols = "grid-cols-[minmax(0,1fr)_128px_80px_66px_66px_96px_84px_58px_60px_76px]";
 
   return (
     <div className="rounded-md border">
@@ -78,6 +81,7 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
         <span>En (cm)</span>
         <span>Kg</span>
         <span>Kat</span>
+        <span>Birim Fiyat</span>
         <span className="text-center">Özellik</span>
         <span className="text-center">Adet</span>
         <span />
@@ -133,6 +137,14 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
             ) : (
               <span className="text-center text-xs text-muted-foreground">—</span>
             )}
+            {/* Alış fiyatı OPSİYONEL: girilirse topa yazılır ve alış faturası
+                satırının fiyatı ondan türer; boşsa fatura fiyatsız taslak doğar
+                (onay zaten fiyatsızı reddediyor). */}
+            <Input
+              type="number" min={0} step="0.0001" placeholder="—"
+              value={l.unitPrice ?? ""}
+              onChange={(e) => patch(l.key, { unitPrice: e.target.value ? Number(e.target.value) : null })}
+            />
             <LinePropertiesButton
               itemId={l.itemId}
               value={l.propertyIds}
@@ -170,12 +182,16 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
   );
 }
 
-/** Formun canlı özeti — kaç TOP doğacak ve toplam kaç metre. */
-export function receiptTotals(lines: DraftLine[]): { rolls: number; meters: number } {
+/** Formun canlı özeti — kaç TOP doğacak, kaç metre, kaç para. */
+export function receiptTotals(lines: DraftLine[]): { rolls: number; meters: number; amount: number } {
   const valid = lines.filter((l) => l.itemId && l.initialQty > 0 && l.count > 0);
   return {
     rolls: valid.reduce((s, l) => s + l.count, 0),
     meters: valid.reduce((s, l) => s + l.initialQty * l.count, 0),
+    // Fiyat girilmemiş satır tutara 0 katkı verir — "eksik fiyat" uyarısı
+    // BİLİNÇLİ olarak yok: fiyat opsiyoneldir ve fatura onayı zaten fiyatsızı
+    // reddediyor (uyarıyı iki yerde tekrarlamak gürültüdür).
+    amount: valid.reduce((s, l) => s + (l.unitPrice ?? 0) * l.initialQty * l.count, 0),
   };
 }
 
@@ -191,6 +207,7 @@ export function expandLines(lines: DraftLine[]) {
         width: l.width,
         weightKg: l.weightKg,
         foldType: l.foldType,
+        unitPrice: l.unitPrice,
         propertyIds: l.propertyIds.length > 0 ? l.propertyIds : undefined,
         // Her TOP kendi idempotency anahtarını taşır (backend uuid bekler).
         // Asıl koruma FİŞ seviyesindedir — aynı `clientToken` ile ikinci POST

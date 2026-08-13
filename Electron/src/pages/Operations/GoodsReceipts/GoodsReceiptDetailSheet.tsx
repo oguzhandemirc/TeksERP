@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Printer, Ban } from "lucide-react";
+import { Printer, Ban, FileText } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
-import { cancelGoodsReceipt, getGoodsReceipt } from "./service";
+import { BulkRollLabelButton } from "@/components/print/BulkRollLabelButton";
+import { cancelGoodsReceipt, createInvoiceFromReceipt, getGoodsReceipt } from "./service";
 
 interface Props {
   id: string | null;
@@ -22,6 +23,17 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
   // basacağını görmeden kâğıt harcamasın. Genel bileşen versiyon çubuğunu,
   // revizyonu ve PDF'i de getirir (ShipmentDispatchNote ile aynı yüzey).
   const [docOpen, setDocOpen] = useState(false);
+
+  // Fişten alış faturası taslağı — satırları backend gruplar (ürün+renk+FİYAT).
+  // Hata toast'ı apiClient interceptor'undan gelir (onError eklenmez).
+  const invoiceM = useMutation({
+    // `id` sheet kapalıyken null; mutation yalnız açıkken tetiklenir.
+    mutationFn: () => createInvoiceFromReceipt(id as string),
+    onSuccess: (res) => {
+      toast.success(res.message ?? `${res.data.docNo} taslağı oluşturuldu.`);
+      void qc.invalidateQueries({ queryKey: ["finance"] });
+    },
+  });
 
   const q = useQuery({
     queryKey: ["goods-receipt", id],
@@ -103,11 +115,33 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
                 </table>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => setDocOpen(true)}>
                   <Printer className="mr-1 h-4 w-4" />
                   Fişi Görüntüle / Bas
                 </Button>
+                {/* ⚠️ Etiket basmak ZORUNLU DEĞİLDİR — barkod topun DB kimliği
+                    olarak zaten doğdu; bu düğme yalnız bir kolaylıktır.
+                    İptal edilmiş toplar dışarıda (etiketi basılacak mal yok). */}
+                <PermissionGate permission="label:read">
+                  <BulkRollLabelButton
+                    rollIds={(r.rolls ?? []).filter((x) => x.status !== "CANCELLED").map((x) => x.id)}
+                    label="Etiketleri Bas"
+                  />
+                </PermissionGate>
+                {r.status === "ACTIVE" && (
+                  <PermissionGate permission="finance:write">
+                    <Button
+                      variant="outline"
+                      disabled={invoiceM.isPending}
+                      onClick={() => invoiceM.mutate()}
+                      title="Fişin toplarını ürün+renk+fiyat kırılımında gruplayıp alış faturası taslağı üretir"
+                    >
+                      <FileText className="mr-1 h-4 w-4" />
+                      {invoiceM.isPending ? "Oluşturuluyor…" : "Alış Faturası Oluştur"}
+                    </Button>
+                  </PermissionGate>
+                )}
                 {r.status === "ACTIVE" && (
                   <PermissionGate permission="goods-receipt:write">
                     <Button variant="destructive" onClick={() => setConfirmCancel(true)}>

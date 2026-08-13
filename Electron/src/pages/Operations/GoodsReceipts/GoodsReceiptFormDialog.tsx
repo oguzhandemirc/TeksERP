@@ -32,6 +32,9 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [deliveryNoteNo, setDeliveryNoteNo] = useState("");
+  // Fiş TEK para birimlidir — satır fiyatları bu birimde. Karışık fiş, alış
+  // faturasını iki para biriminde kesmeyi gerektirirdi (fatura tek birimli).
+  const [currency, setCurrency] = useState<"TRY" | "USD" | "EUR" | "GBP" | "RUB">("TRY");
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
 
   // ⚠️ TEK DEPOLU KURULUMDA SEÇİCİ ÇİZİLMEZ — depo otomatik varsayılandır.
@@ -47,6 +50,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         warehouseId: effectiveWarehouseId,
         supplierId,
         deliveryNoteNo: deliveryNoteNo || null,
+        currency,
         // Fişin KENDİ idempotency anahtarı — çift tıklama/ağ kopması ikinci fiş
         // AÇMAZ ve satırları tekrar İŞLEMEZ (backend mevcut fişi döner).
         clientToken: crypto.randomUUID(),
@@ -82,7 +86,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             {multiWarehouse && (
               <div>
                 <Label>Depo</Label>
@@ -110,6 +114,18 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
                   placeholder="Tedarikçi ara..."
                 />
               </div>
+            </div>
+            <div>
+              <Label>Para Birimi</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as typeof currency)}
+              >
+                {(["TRY", "USD", "EUR", "GBP", "RUB"] as const).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
             <div>
               <Label>Tedarikçi İrsaliye No (opsiyonel)</Label>
@@ -145,6 +161,15 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             <p className="text-sm text-muted-foreground">
               Toplam: <b className="text-foreground">{totals.rolls}</b> top ·{" "}
               <b className="text-foreground">{totals.meters.toLocaleString("tr-TR")}</b> m
+              {totals.amount > 0 && (
+                <>
+                  {" · "}
+                  <b className="text-foreground">
+                    {totals.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </b>{" "}
+                  {currency}
+                </>
+              )}
             </p>
           </div>
         </div>
