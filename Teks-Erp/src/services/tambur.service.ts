@@ -20,6 +20,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
+import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import { readTamburOverQuantityEnabled } from "./system-setting.service";
 import { recordVarianceTx, overageOf } from "./helpers/roll-variance.helper";
 import {
@@ -1015,6 +1016,10 @@ export class TamburService {
         select: { propertyId: true, valueId: true },
       });
 
+      // Parent deposuz ise (backfill öncesi kayıt) düşülecek depo — döngü DIŞINDA
+      // bir kez çözülür (segment başına sorgu açmamak için).
+      const cutWarehouseFallbackId = roll.warehouseId ?? (await resolveTargetWarehouseId(tx));
+
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
       // (Segmentler ve barkodları tx AÇILMADAN ÖNCE hazırlandı — gerekçe ve
       // ölçüm yukarıdaki blokta; barkodu burada üretmek sayaç kilidini bu tx'in
@@ -1048,6 +1053,11 @@ export class TamburService {
             // Parti (batch) kimliğini parent'tan kalıt → bölünen toplar depoya
             // gitse bile hangi partiden geldiği lane'de izlenir.
             batchId: roll.batchId,
+            // DEPO parent'tan MİRAS ALINIR — giriş istasyonunun TERSİNE. Sebep:
+            // kesmek malı TAŞIMAZ; çocuk fiziksel olarak ebeveynin durduğu
+            // depodadır. (Giriş istasyonu "nerede doğdu"yu sorar, depo "nerede
+            // duruyor"u.) Parent deposuz ise (backfill öncesi kayıt) varsayılan.
+            warehouseId: roll.warehouseId ?? cutWarehouseFallbackId,
             // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
             // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
@@ -2105,6 +2115,10 @@ export class TamburService {
           parentRollId: parent.id,
           // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
           batchId: parent.batchId,
+          // DEPO parent'tan MİRAS ALINIR (giriş istasyonunun TERSİNE): kesmek malı
+          // TAŞIMAZ, çocuk ebeveynin durduğu depodadır. Sorgu yalnız ebeveyn deposuz
+          // ise (backfill öncesi kayıt) koşar — `??` sağ tarafı kısa devre yapar.
+          warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
           // GİRİŞ İSTASYONU — bu yolda ADIM YOK (depo topu kesimi) → oturum tek kaynak.
           // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
           // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
@@ -2470,6 +2484,8 @@ export class TamburService {
             parentRollId: parent.id,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
+            // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
+            warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
             // GİRİŞ İSTASYONU — kesilen parçayla AYNI kaynak — ikisi aynı kesimin ürünü.
             // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
@@ -2766,6 +2782,8 @@ export class TamburService {
           parentRollId: parent.id,
           // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
           batchId: parent.batchId,
+          // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
+          warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
           // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
           // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
           // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
@@ -3152,6 +3170,8 @@ export class TamburService {
             parentRollId: parent.id,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
+            // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
+            warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
             // GİRİŞ İSTASYONU — kalan parça da aynı kesimin ürünü.
             // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.

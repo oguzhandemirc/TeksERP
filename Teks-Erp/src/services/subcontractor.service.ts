@@ -19,6 +19,7 @@ import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
+import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
 import {
@@ -443,6 +444,8 @@ async function createFasonShipChild(
     qualityGrade: string | null;
     qualityGradeId: string | null;
     batchId: string | null;
+    /** Çocuğun mirasla alacağı depo (kısmi sevk topu BÖLER, taşımaz). */
+    warehouseId: string | null;
   },
   shipQty: number,
   stepId: string,
@@ -466,6 +469,9 @@ async function createFasonShipChild(
       itemId: parent.itemId,
       colorId: parent.colorId,
       width: parent.width,
+      // DEPO parent'tan MİRAS ALINIR: kısmi sevkte top BÖLÜNÜR, taşınmaz — kalan
+      // parça ebeveynin durduğu depodadır. Sorgu yalnız ebeveyn deposuz ise koşar.
+      warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
       initialQty: shipQty,
       currentQty: shipQty,
       status: RollStatus.AT_SUBCONTRACTOR,
@@ -559,6 +565,9 @@ async function applyDirectShipSplits(
       qualityGradeId: true,
       batchId: true,
       currentQty: true,
+      // Çocuk depoyu ebeveynden miras alır — select'ten düşerse derleme kırılır
+      // (createFasonShipChild parametre tipi bunu ZORUNLU tutar).
+      warehouseId: true,
     },
   });
   const byId = new Map(rolls.map((r) => [r.id, r]));
@@ -2773,6 +2782,16 @@ export class SubcontractorService {
           nextStep ? null : reservedBorn[i]!,
         );
 
+        // DEPO — fason dönüşünde TEKİL bir ebeveyn YOKTUR: orijinal rulolar
+        // emekliye ayrıldı, bu toplar MAKBUZDAN doğdu (N kaynak, tek çıktı kümesi).
+        // Miras alınacak tek bir depo olmadığı için varsayılan depoya yazılır.
+        // ⚠️ Çok depolu bir kurulumda fason kullanılırsa mal "geldiği depoya"
+        // değil varsayılana düşer — bilinçli sadeleştirme: ticaret kurulumunda
+        // fason akışı hiç kullanılmıyor, fabrikada ise tek depo var. Çok depolu
+        // fason gerçek bir ihtiyaç olursa doğru çözüm sevkin çıktığı depoyu
+        // `SubcontractorDispatch` üzerinde damgalamaktır.
+        const bornWarehouseId = await resolveTargetWarehouseId(tx);
+
         await tx.roll.createMany({
           data: bornRollInputs.map(({ id, nr }, i) => ({
             id,
@@ -2783,6 +2802,7 @@ export class SubcontractorService {
             weightKg: nr.weightKg ?? null,
             width: bornWidth,
             status: bornStatus,
+            warehouseId: bornWarehouseId,
             // Fason dönüşü = açık kumaş (Tambur'dan geçmedi), kaliteye bakılmadı.
             form: RollForm.ACIK,
             qualityGrade: null,

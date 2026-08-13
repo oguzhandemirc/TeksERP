@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
+import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
@@ -642,6 +643,17 @@ export class InventoryService {
        */
       entryStationId?: string | null;
       /**
+       * Topun gireceği DEPO (ticaret paketi, 2026-08-13).
+       *
+       * VERİLMEZSE varsayılan depoya düşer — fabrika akışlarının (KK1 ham giriş,
+       * Tambur manuel) hiçbiri bunu göndermez ve davranışları güncelleme
+       * öncesiyle bayt-bayt aynı kalır. Yalnız Mal Kabul fişi açıkça verir.
+       * Doğrulama (var mı/aktif mi) `resolveTargetWarehouseId`'de.
+       */
+      warehouseId?: string | null;
+      /** Topu doğuran mal kabul fişi (yalnız `GoodsReceipt` yolu doldurur). */
+      goodsReceiptId?: string | null;
+      /**
        * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
        * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
        * (`helpers/label-intent.helper`) — burada DB okuması yok.
@@ -887,9 +899,14 @@ export class InventoryService {
 
         // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
         const barcode = await generateRollBarcode(tx, rollType);
+        // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
+        // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
+        const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
         const created = await tx.roll.create({
           data: {
             barcode,
+            warehouseId: targetWarehouseId,
+            goodsReceiptId: opts?.goodsReceiptId ?? null,
             clientToken: data.clientToken ?? null,
             itemId: data.itemId,
             colorId: data.colorId ?? null,
@@ -3818,9 +3835,15 @@ export class InventoryService {
       // (touchWorkOrderTx) ALTINDA — `assign` de aynı kilidi alır, yarış serileşir.
       await assertKursunTabletMayWrite(tx, data.stepId, "açık kumaş açma");
 
+      // DEPO: açık kumaş ÜRETİMDE doğar, bir depoda değil — ama kolon "en son
+      // bulunduğu depo"yu taşır ve NULL bırakmak envanteri deliklendirir. Tek
+      // depolu fabrikada zaten tek doğru cevap var; çok depolu ticaret kurulumu
+      // bu yolu (fason dönüşü açık kumaş) hiç kullanmıyor.
+      const openFabricWarehouseId = await resolveTargetWarehouseId(tx);
       const created = await tx.roll.create({
         data: {
           barcode: null,
+          warehouseId: openFabricWarehouseId,
           clientToken: data.clientToken ?? null,
           itemId: fr.workOrder.targetItemId,
           colorId: receipt.appliedColorId,

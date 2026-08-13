@@ -1440,8 +1440,14 @@ model Roll {
   cancelledBy          User?                       @relation("RollCancelledBy", fields: [cancelledById], references: [id])
   createdMachine       Machine?                    @relation("RollCreatedMachine", fields: [createdMachineId], references: [id])
   entryStation         Station?                    @relation("RollEntryStation", fields: [entryStationId], references: [id])
-  warehouse            Warehouse?                  @relation(fields: [warehouseId], references: [id])
-  goodsReceipt         GoodsReceipt?               @relation(fields: [goodsReceiptId], references: [id])
+  /// ⚠️ onDelete: Restrict — Prisma'nın opsiyonel ilişkilerdeki VARSAYILANI
+  /// `SetNull`'dır ve burada YANLIŞ olurdu: bir depoyu silmek, içindeki topları
+  /// SESSİZCE deposuz bırakırdı (ölçüldü — bekçi bunu yakaladı). Servis guard'ı
+  /// zaten dolu depoyu silmiyor; RESTRICT o kuralı DB seddine çevirir.
+  warehouse            Warehouse?                  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  /// Aynı gerekçe: fiş silinirse topun kökeni sessizce kaybolurdu (fişler zaten
+  /// silinmez, iptal edilir).
+  goodsReceipt         GoodsReceipt?               @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
   warehouseMovements   WarehouseMovement[]
   labelCustomer        Customer?                   @relation("RollLabelCustomer", fields: [labelCustomerId], references: [id])
   properties           RollProperty[]

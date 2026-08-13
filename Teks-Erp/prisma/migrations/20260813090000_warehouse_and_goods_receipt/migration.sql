@@ -157,8 +157,12 @@ CREATE INDEX "rolls_warehouseId_status_idx" ON "rolls"("warehouseId", "status");
 CREATE INDEX "rolls_goodsReceiptId_idx" ON "rolls"("goodsReceiptId") WHERE "goodsReceiptId" IS NOT NULL;
 
 -- AddForeignKey
-ALTER TABLE "rolls" ADD CONSTRAINT "rolls_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "warehouses"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "rolls" ADD CONSTRAINT "rolls_goodsReceiptId_fkey" FOREIGN KEY ("goodsReceiptId") REFERENCES "goods_receipts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- ⚠️ RESTRICT, SET NULL DEĞİL (Prisma'nın opsiyonel ilişkilerdeki varsayılanı
+-- SetNull'dır ve burada yanlış olurdu): depo silmek içindeki topları SESSİZCE
+-- deposuz bırakırdı — ölçüldü, bekçi yakaladı (test_roll_warehouse_stamp).
+-- Servis guard'ı dolu depoyu zaten silmiyor; bu satır o kuralı DB seddine çevirir.
+ALTER TABLE "rolls" ADD CONSTRAINT "rolls_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "warehouses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "rolls" ADD CONSTRAINT "rolls_goodsReceiptId_fkey" FOREIGN KEY ("goodsReceiptId") REFERENCES "goods_receipts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "warehouse_transfers" ADD CONSTRAINT "warehouse_transfers_fromWarehouseId_fkey" FOREIGN KEY ("fromWarehouseId") REFERENCES "warehouses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
