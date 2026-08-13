@@ -11,6 +11,7 @@ import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
+import { writeWarehouseMovement, writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
@@ -111,6 +112,7 @@ import {
   StepStatus,
   WorkOrderStatus,
   ShipmentStatus,
+  WarehouseEventType,
 } from "@prisma/client";
 import {
   ensureWorkOrderInProgress,
@@ -950,6 +952,17 @@ export class InventoryService {
             data: dedupedProps.map((propertyId) => ({ rollId: created.id, propertyId })),
           });
         }
+        // DEPO DEFTERİ — mal DIŞARIDAN geldi (KK1 ham giriş / elle ekleme / Tambur
+        // manuel / Mal Kabul). Kesim çocuğu bu yoldan geçmez ve satır yazmaz:
+        // kesim bir dönüşümdür, hareket değil (bkz. warehouse-ledger.helper).
+        await writeWarehouseMovement(tx, {
+          rollId: created.id,
+          eventType: WarehouseEventType.ENTRY,
+          qty: data.initialQty,
+          toWarehouseId: targetWarehouseId,
+          goodsReceiptId: opts?.goodsReceiptId ?? null,
+          userId: userId ?? null,
+        });
         return created;
       });
     } catch (err) {
@@ -3079,6 +3092,18 @@ export class InventoryService {
         );
       }
       const r = await tx.roll.findUniqueOrThrow({ where: { id } });
+
+      // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
+      // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
+      // iptal geri alınırsa (restoreCancelled) top rafına dönebilsin.
+      await writeWarehouseMovement(tx, {
+        rollId: id,
+        eventType: WarehouseEventType.CANCEL,
+        qty: r.currentQty,
+        fromWarehouseId: r.warehouseId,
+        userId: userId ?? null,
+        notes: reason ? reason.slice(0, 300) : null,
+      });
 
       // Etkilenen step'lerin status'unu recompute et
       for (const stepId of affectedStepIds) {

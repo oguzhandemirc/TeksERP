@@ -16,7 +16,8 @@
 // siparişten" sorusu personelin sevkiyat aday siparişlerinden seçimiyle cevaplanır.
 // =============================================================================
 
-import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus } from "@prisma/client";
+import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
+import { writeWarehouseMovement } from "./helpers/warehouse-ledger.helper";
 import prisma from "../lib/prisma";
 import {
   printedDocumentService,
@@ -367,6 +368,8 @@ export class ReturnService {
         qualityGradeId: true,
         shipmentId: true,
         sackId: true,
+        // İade depo defterine "hangi depoya geri girdi" yazar (sevkte temizlenmez).
+        warehouseId: true,
         shipment: {
           select: {
             id: true,
@@ -546,6 +549,19 @@ export class ReturnService {
           select: { id: true },
         });
         createdIds.push(rr.id);
+
+        // DEPO DEFTERİ — mal müşteriden GERİ GELDİ ve depoya girdi. Hedef depo,
+        // topun sevkten önce durduğu depodur: `Roll.warehouseId` sevkte
+        // temizlenmiyor, dolayısıyla iade malı geldiği rafa döner (SCRAP'a düşse
+        // bile "hangi depoya girdi" izi doğru kalır).
+        await writeWarehouseMovement(tx, {
+          rollId: r.id,
+          eventType: WarehouseEventType.RETURN,
+          qty,
+          toWarehouseId: r.warehouseId ?? null,
+          rollReturnId: rr.id,
+          userId,
+        });
       }
 
       // GRUP anahtarı = LİDERİN id'si. Tekil iadede alan NULL kalır → belge çözümü,

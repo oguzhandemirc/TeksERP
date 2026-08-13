@@ -25,8 +25,10 @@ import {
   PrintedDocType,
   PrintedDocStatus,
   LabelKind,
+  WarehouseEventType,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import {
@@ -1748,6 +1750,26 @@ export class ShippingService {
       });
       flipped += res.count;
     }
+    // DEPO DEFTERİ — mal depodan ÇIKTI. `Roll.warehouseId` BİLEREK temizlenmez
+    // ("en son hangi depodaydı" izi + sevk stornosunun geri dönüş adresi), o yüzden
+    // çıkışı yalnız bu defter kaydeder. Tek `createMany` (perf kuralı 9).
+    if (flipped > 0) {
+      const shippedRows = await tx.roll.findMany({
+        where: { shipmentId, status: RollStatus.SHIPPED },
+        select: { id: true, currentQty: true, warehouseId: true },
+      });
+      await writeWarehouseMovements(
+        tx,
+        shippedRows.map((r) => ({
+          rollId: r.id,
+          eventType: WarehouseEventType.SHIPMENT,
+          qty: r.currentQty,
+          fromWarehouseId: r.warehouseId,
+          shipmentId,
+          userId: userId ?? null,
+        })),
+      );
+    }
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
     const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
     // Lost-update kilidi: recompute defteri KİLİTSİZ okuyup shippedQty yazar — READ
@@ -2042,6 +2064,28 @@ export class ShippingService {
           data: { status: g.preShipStatus ?? RollStatus.WAREHOUSE, preShipStatus: null },
         });
         restored += res.count;
+      }
+
+      // DEPO DEFTERİ — mal depoya GERİ DÖNDÜ (storno). Geri dönüş adresi topun
+      // kendi `warehouseId`'sinde duruyor (sevkte temizlenmiyor) → ayrı snapshot
+      // gerekmez. SHIPMENT satırı SİLİNMEZ: defter append-only, çıkış gerçekten
+      // olmuştu; iki satır birlikte "çıktı ve geri geldi" der.
+      if (restored > 0) {
+        const backRows = await tx.roll.findMany({
+          where: { shipmentId, status: { not: RollStatus.SHIPPED } },
+          select: { id: true, currentQty: true, warehouseId: true },
+        });
+        await writeWarehouseMovements(
+          tx,
+          backRows.map((r) => ({
+            rollId: r.id,
+            eventType: WarehouseEventType.SHIPMENT_REVERSAL,
+            qty: r.currentQty,
+            toWarehouseId: r.warehouseId,
+            shipmentId,
+            userId: userId ?? null,
+          })),
+        );
       }
 
       // Tahsisler SİLİNMEZ — `shippedQty` defterden türetilir ve yalnız DISPATCHED

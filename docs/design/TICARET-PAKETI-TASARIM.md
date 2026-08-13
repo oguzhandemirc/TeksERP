@@ -79,14 +79,20 @@ Append-only, satır başına bir olay:
 | `qty` | Olay anındaki metraj — **her zaman POZİTİF**, yönü `eventType` söyler (RollVariance emsali) |
 | `transferId? · goodsReceiptId? · shipmentId? · rollReturnId?` | Belge bağları (typed FK, polimorfik değil) |
 
-**Satır yazan olaylar ve yerleri:** `createInitialEntry` (ENTRY — tüm sarmalayıcılar bedava kapsanır) ·
-createInitialEntry dışı 8 `roll.create` noktası (Tambur kesim/finalize, fason dönüşü…) ·
-`performDispatchTx` (SHIPMENT) · sevk stornosu (SHIPMENT_REVERSAL) · `return.service` (RETURN) ·
-`softDelete` (CANCEL) · transfer servisi (TRANSFER / TRANSFER_REVERSAL).
+**Satır yazan olaylar ve yerleri:** `createInitialEntry` (ENTRY — KK1 ham giriş, elle ekleme, Tambur
+manuel, Mal Kabul; tüm sarmalayıcılar bedava kapsanır) · fason dönüşü born topları (ENTRY — mal
+gerçekten dışarıdan geldi) · `performDispatchTx` (SHIPMENT) · sevk stornosu (SHIPMENT_REVERSAL) ·
+`return.service` (RETURN) · `softDelete` (CANCEL) · transfer servisi (TRANSFER / TRANSFER_REVERSAL).
 
-**Bilinçli yazmayanlar:** `STOCK → WAREHOUSE` statü terfisi (`prepareRawForSale`) — konum değişmiyor,
-bu defter **konum** defteridir; fason/kartela dış akışı (Faz 2 — ticaret firması kullanmıyor);
-**backfill** (açılış durumu `Roll.warehouseId`'dedir, milyonlarca anlamsız "başlangıç" satırı üretilmez).
+⚠️ **KESİM ÇOCUĞU SATIR YAZMAZ.** Bu defter bir *hareket* defteridir; kesim bir **dönüşümdür**,
+hareket değil — mal zaten o depoda ve toplam metraj değişmiyor. Çocuğa ENTRY yazmak depoya
+giren malı **ikinci kez** saydırırdı (100 m'lik top 2×50 olunca depoya 100 m daha girmiş görünür).
+Çocuğun nerede olduğu zaten kendi `warehouseId`'sinde yazılı (ebeveynden miras).
+
+**Diğer bilinçli yazmayanlar:** `STOCK → WAREHOUSE` statü terfisi (`prepareRawForSale`) — konum
+değişmiyor, bu defter **konum** defteridir; fason/kartela sevk-kabul dış akışı (Faz 2 — ticaret
+firması kullanmıyor); **backfill** (açılış durumu `Roll.warehouseId`'dedir, yüz binlerce anlamsız
+"başlangıç" satırı üretilmez).
 
 ## 4. Transfer belgesi (`WarehouseTransfer`)
 

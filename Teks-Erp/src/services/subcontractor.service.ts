@@ -20,6 +20,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
+import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
 import {
@@ -42,6 +43,7 @@ import {
   TravelerCardStatus,
   WorkOrderStatus,
   ScanType,
+  WarehouseEventType,
 } from "@prisma/client";
 import {
   printedDocumentService,
@@ -2825,6 +2827,22 @@ export class SubcontractorService {
             barcode: bornBarcodes[i],
           })),
         });
+
+        // DEPO DEFTERİ — fason dönüşü GERÇEK bir giriştir: orijinal rulolar
+        // emekliye ayrıldı (dışarıda tüketildi), bu toplar makbuzdan doğdu ve
+        // fiziksel olarak fabrikaya geri girdi. Kesim çocuğundan farkı bu:
+        // orada mal zaten içerideydi (dönüşüm), burada dışarıdan geldi.
+        await writeWarehouseMovements(
+          tx,
+          bornRollInputs.map(({ id, nr }) => ({
+            rollId: id,
+            eventType: WarehouseEventType.ENTRY,
+            qty: nr.qty,
+            toWarehouseId: bornWarehouseId,
+            userId: userId ?? null,
+            notes: `Fason dönüşü (${receipt.receiptNo})`,
+          })),
+        );
 
         // Receipt-seviyesi özellikler tüm born roll'larda aynı (resolvedAppliedPropertyIds)
         // → roll × property cross product tek createMany ile. skipDuplicates:
