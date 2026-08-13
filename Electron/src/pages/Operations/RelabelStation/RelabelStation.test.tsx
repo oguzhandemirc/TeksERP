@@ -89,6 +89,7 @@ const baseCtx: RelabelContext = {
   qualityGradeId: "qg-1",
   qualityGradeRef: { id: "qg-1", code: "1.KALITE", name: "1. Kalite", color: null },
   width: 150,
+  foldType: null,
   currentQty: 100,
   weightKg: 30,
   markedForKartela: false,

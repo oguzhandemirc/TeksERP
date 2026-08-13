@@ -16,7 +16,7 @@ import { flowTemplateToCanvas } from "../src/services/helpers/label-flow-to-canv
 import { mockPayload } from "../src/services/helpers/label-rawcode";
 import { fieldDisplayValue } from "../src/services/helpers/label-field-values";
 import { escapeHtml } from "../src/services/helpers/label-html.shared";
-import { asciiFold } from "../src/services/helpers/native-label.shared";
+import { asciiFold, cleanCtlCp1254 } from "../src/services/helpers/native-label.shared";
 import type { TemplateField } from "../src/config/label-fields";
 import type { LabelTemplate, LabelTemplateVariant, PrinterLanguage } from "@prisma/client";
 
@@ -70,14 +70,25 @@ async function main() {
       .map((key) => ({ key, dv: fieldDisplayValue(payload, key) }))
       .filter((x) => x.dv.present && x.dv.role !== "scan");
 
-    // NATIVE: değer ASCII'ye katlanır → katlanmış değer çıktıda olmalı (veri düşmez).
+    // NATIVE: değer çıktıda olmalı (veri düşmez) — ama BEKLENEN BİÇİM DİLE GÖRE
+    // DEĞİŞİR ve bu bilinçlidir:
+    //   • PPLA/ZPL → `cleanCtl` = asciiFold ("Merkez Şube" → "Merkez Sube")
+    //   • PPLB     → `cleanCtlCp1254` ("Merkez Şube" → "Merkez Þube"): EPL2 header'ı
+    //     `I8,E` ile CP1254 seçiyor, yani yazıcı GERÇEK TÜRKÇE basıyor (bkz.
+    //     label-canvas-native.helper `eplData` notu). Katlanmış metin aramak
+    //     PPLB'de veri düşmediği hâlde YANLIŞ KIRMIZI verir — 2026-08-13'te tam
+    //     bu oldu: fabrikanın çuval şablonu dev'e çekilince Türkçe değerli iki
+    //     alan (branchName "Merkez Şube", sackNote "Ölçü şüpheli…") ilk kez
+    //     PPLB'den geçti ve bekçi "eksik" dedi. Beklentiyi emitter'ın kendi
+    //     dönüşümüyle kur — yoksa Türkçe içeren HER yeni alan sahte kırmızı üretir.
     // (renderLabel 2026-07 icon işiyle ASYNC → await.)
     for (const lang of NATIVE_LANGS) {
       const out = (await renderLabel(lang as PrinterLanguage, {
         payload, template: flowTemplate, variant: fakeVariant, barcodeSvg: "", qrSvg: "", copies: 2,
         format: { ...format, language: lang as PrinterLanguage },
       })).content;
-      const missing = boundValues.filter((x) => !out.includes(asciiFold(x.dv.value))).map((x) => x.key);
+      const expectIn = lang === "PPLB" ? cleanCtlCp1254 : asciiFold;
+      const missing = boundValues.filter((x) => !out.includes(expectIn(x.dv.value))).map((x) => x.key);
       check(`${tag} × ${lang}: kanvas alan değerleri çıktıda (${boundValues.length} alan, veri düşmez)`,
         missing.length === 0, missing.length ? `eksik: ${missing.join(", ")}` : "");
     }

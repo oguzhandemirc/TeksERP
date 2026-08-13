@@ -101,16 +101,22 @@ async function main() {
     check('resolve("2_KAT") → "2-KAT"', (await resolveFoldTypeForWrite("2_KAT")) === "2-KAT");
 
     // ── 3) Katalogda olmayan değer reddedilir ───────────────────────────────
-    await expectErr("katalog dışı '6-KAT' reddedilir", "geçerli bir kat değeri değil", () =>
-      resolveFoldTypeForWrite("6-KAT"),
+    // ⚠️ SONDA KODU KOŞUM-BAŞINA BENZERSİZ (2026-08-13). Eskiden sabit "6-KAT"
+    // idi ve fabrika kataloğuna gerçekten 6-KAT eklendiği gün test "katalog dışı"
+    // varsayımını kaybedip P2002 ile ÇÖKTÜ — ölçtüğü kural (yeni değer eklenince
+    // kabul edilir) doğru çalışırken. Kural: "bu değer katalogda YOK" diyen bir
+    // sonda, kataloğa eklenebilecek gerçek bir kodu KULLANAMAZ.
+    const NEW_FOLD = `${PROBE}-KAT`;
+    await expectErr(`katalog dışı '${NEW_FOLD}' reddedilir`, "geçerli bir kat değeri değil", () =>
+      resolveFoldTypeForWrite(NEW_FOLD),
     );
     await expectErr("red mesajı tanımlı değerleri sayar", "4-KAT", () =>
-      resolveFoldTypeForWrite("6-KAT"),
+      resolveFoldTypeForWrite(NEW_FOLD),
     );
 
     // ── 4) ASIL VAAT: panelden değer eklenince aynı çağrı kabul eder ────────
     const v6 = await prisma.fabricPropertyValue.create({
-      data: { propertyId, code: "6-KAT", name: `6 Kat ${PROBE}`, sortOrder: 90 },
+      data: { propertyId, code: NEW_FOLD, name: `Sonda Kat ${PROBE}`, sortOrder: 90 },
       select: { id: true },
     });
     probeValueIds.push(v6.id);
@@ -120,10 +126,17 @@ async function main() {
     const safe = async (v: string) => {
       try { return await resolveFoldTypeForWrite(v); } catch { return `__THROWN__`; }
     };
-    check('değer eklendikten SONRA resolve("6-KAT") kabul', (await safe("6-KAT")) === "6-KAT",
-      String(await safe("6-KAT")));
-    check('"6 kat" yazımı da kabul (biçim + katalog birlikte)', (await safe("6 kat")) === "6-KAT",
-      String(await safe("6 kat")));
+    check("değer eklendikten SONRA aynı kod KABUL edilir", (await safe(NEW_FOLD)) === NEW_FOLD,
+      String(await safe(NEW_FOLD)));
+    // Biçim + katalog BİRLİKTE: rakamlı yazım normalleşip katalogla eşleşmeli.
+    // (Bu kontrol gerçek bir rakam kodu ister → kataloğa geçici "7-KAT" eklenir.)
+    const v7 = await prisma.fabricPropertyValue.create({
+      data: { propertyId, code: "7-KAT", name: `7 Kat ${PROBE}`, sortOrder: 91 },
+      select: { id: true },
+    });
+    probeValueIds.push(v7.id);
+    check('"7 kat" yazımı da kabul (biçim + katalog birlikte)', (await safe("7 kat")) === "7-KAT",
+      String(await safe("7 kat")));
 
     // ── 5) Pasif değer: yazmada kabul, listede görünmez ─────────────────────
     const vOld = await prisma.fabricPropertyValue.create({

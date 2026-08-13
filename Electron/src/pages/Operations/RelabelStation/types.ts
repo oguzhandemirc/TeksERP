@@ -47,6 +47,8 @@ export interface RelabelContext {
   qualityGradeId: string | null;
   qualityGradeRef: { id: string; code: string; name: string; color: string | null } | null;
   width: number | null;
+  /** KAT — katalog KODU ("6-KAT"/"TUP"); kat girilmemiş topta null. */
+  foldType: string | null;
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
@@ -67,6 +69,12 @@ export interface RelabelSpecPayload {
   propertyIds: string[];
   width: number | null;
   qualityGrade?: string;
+  /**
+   * KAT düzeltmesi — katalog kodu ("6-KAT"), `null` = kat bilgisini temizle,
+   * ALAN YOKSA kata dokunulmaz. Bu üçlü sözleşme backend'in `foldTypeSchema`'sı
+   * ile birebir; `null` ile `undefined` farkını koru (biri siler, biri korur).
+   */
+  foldType?: string | null;
   /** Metraj (mt) düzeltmesi — yalnız değiştiyse gönderilir; bütün topta izinli. */
   currentQty?: number;
   /**
