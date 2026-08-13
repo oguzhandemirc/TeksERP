@@ -2,8 +2,8 @@
 // Test: HER route kimlik doğrulaması taşır (2026-08-09 denetimi, F-CORE-GUV-001)
 // Çalıştır: npx tsx scripts/test_route_auth_coverage.ts
 // =============================================================================
-// `verifyToken` 47 router'ın her route SATIRINA tek tek takılıyor —
-// `router.use(verifyToken)` HİÇ YOK (grep → 0). Bu FAIL-OPEN bir desendir:
+// `verifyToken` router'ların çoğunda her route SATIRINA tek tek takılıyor.
+// Bu FAIL-OPEN bir desendir:
 // yeni bir uç eklenip guard unutulursa uç SESSİZCE public olur, hata da log da
 // çıkmaz. Denetimde ölçüldü: 478 ucun tek koruması bu satırdı ve invariant'ın
 // mekanik bir bekçisi YOKTU (`test_permission_catalog.ts` "verifyToken"
@@ -16,6 +16,17 @@
 // lookup): `router.get("/", verifyToken, controller.findAll)` satırından tek
 // kelime düşerse uç tamamen kimlik doğrulamasız çalışır. O sınıf büyüyor —
 // bu yüzden aşağıda ayrıca SAYILIYOR.
+//
+// ⚠️ 2026-08-13: ROUTER SEVİYESİ GUARD ARTIK TANINIYOR. Ön muhasebe router'ı
+// `router.use(verifyToken, requireFinanceEnabled)` kullanıyor (24 ucun tamamı
+// için tek satır) — ve bu, satır-içi tekrardan DAHA güvenlidir: yeni bir uç
+// eklendiğinde guard'ı unutmak İMKÂNSIZ. Eski tarayıcı yalnız `route.stack`e
+// bakıyordu, yani `router.use` ile korunan her ucu "korumasız" sayıyordu:
+// bekçi 24 SAHTE KIRMIZI veriyordu ve bunun tehlikesi görünürden büyük —
+// düzeltilmezse ekip kırmızı bekçiyi görmezden gelmeyi öğrenir.
+// Çözüm: ağaç gezilirken üstteki router katmanlarının `use` yığını taşınır
+// (`inherited`), route kendi zincirinde YA DA miras aldığı zincirde
+// `verifyToken` taşıyorsa korumalı sayılır.
 //
 // SAF: DB'ye yazmaz, HTTP isteği atmaz; yalnız Express route ağacını gezer.
 // =============================================================================
@@ -62,6 +73,7 @@ const BARE_CHAIN_BASELINE = 9;
 const MIN_ROUTE_LAYERS = 400;
 
 type Layer = {
+  name?: string;
   route?: { path: string; methods: Record<string, boolean>; stack: Array<{ name: string }> };
   handle?: { stack?: Layer[] };
 };
@@ -86,7 +98,16 @@ interface RouteInfo {
 
 function collectRoutes(): RouteInfo[] {
   const out: RouteInfo[] = [];
-  const walk = (layers: Layer[]): void => {
+  /**
+   * @param inheritedAuth üstteki router katmanlarından `router.use(verifyToken)`
+   *   ile miras alınan kimlik guard'ı var mı.
+   */
+  const walk = (layers: Layer[], inheritedAuth: boolean, inheritedCount: number): void => {
+    // Bu seviyedeki `router.use(...)` katmanları — route TANIMLARINDAN ÖNCE
+    // gelenler sonrakileri korur. Express sırayı korur; bu yüzden tek geçişte
+    // biriktirilir ve o andan itibaren geçerli sayılır.
+    let levelAuth = inheritedAuth;
+    let levelCount = inheritedCount;
     for (const l of layers) {
       if (l.route) {
         const methods = Object.keys(l.route.methods)
@@ -95,15 +116,23 @@ function collectRoutes(): RouteInfo[] {
           .toUpperCase();
         out.push({
           key: `${methods} ${l.route.path}`,
-          hasAuth: l.route.stack.some((s) => s.name === "verifyToken"),
-          chainLength: l.route.stack.length,
+          hasAuth: levelAuth || l.route.stack.some((s) => s.name === "verifyToken"),
+          chainLength: levelCount + l.route.stack.length,
         });
       } else if (l.handle?.stack) {
-        walk(l.handle.stack);
+        walk(l.handle.stack, levelAuth, levelCount);
+      } else if (l.name === "verifyToken") {
+        // `router.use(verifyToken)` — bundan SONRAKİ her route korumalı.
+        levelAuth = true;
+        levelCount += 1;
+      } else if (levelAuth) {
+        // Kimlikten SONRA gelen router seviyesi guard'lar (örn.
+        // `requireFinanceEnabled`) da etkin zincire dahildir.
+        levelCount += 1;
       }
     }
   };
-  walk((app as unknown as { router: { stack: Layer[] } }).router.stack);
+  walk((app as unknown as { router: { stack: Layer[] } }).router.stack, false, 0);
   return out;
 }
 
