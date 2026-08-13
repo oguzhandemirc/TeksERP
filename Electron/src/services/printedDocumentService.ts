@@ -17,7 +17,12 @@ export type PrintedDocType =
   | "KARTELA_DISPATCH"
   | "SUBCONTRACTOR_RECEIPT"
   | "QUALITY_CERTIFICATE"
-  | "RETURN_DISPATCH";
+  | "RETURN_DISPATCH"
+  // Ticaret paketi (2026-08-13) — iç depo belgeleri. ⚠️ Electron backend enum'unu
+  // IMPORT EDEMEZ (ayrı proje): bu union `PrintedDocType` ile ELLE senkron tutulur,
+  // tıpkı `DOC_TYPE_TO_KEY` aynası gibi.
+  | "TRANSFER_DISPATCH"
+  | "GOODS_RECEIPT";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

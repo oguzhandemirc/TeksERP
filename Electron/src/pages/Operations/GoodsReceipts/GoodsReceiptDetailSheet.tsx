@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { printHtmlString } from "@/lib/print";
-import apiClient from "@/services/apiClient";
+import { printedDocumentService } from "@/services/printedDocumentService";
 import { cancelGoodsReceipt, getGoodsReceipt } from "./service";
 
 interface Props {
@@ -31,8 +31,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
     mutationFn: async () => {
       // Belge İLK BASKIDA donar (lazy-init) — fiş bir kaptır, satırlar sonradan
       // eklenebildiği için açılışta dondurmak boş belge üretirdi.
-      const res = await apiClient.get(`/api/printed-documents/GOODS_RECEIPT/${id}/html`);
-      return res.data.data.html as string;
+      return printedDocumentService.getHtml("GOODS_RECEIPT", id!);
     },
     onSuccess: (html) => printHtmlString(html),
   });

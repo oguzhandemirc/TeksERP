@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { printHtmlString } from "@/lib/print";
-import apiClient from "@/services/apiClient";
+import { printedDocumentService } from "@/services/printedDocumentService";
 import { WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
 import { cancelTransfer, getTransfer, listTransfers } from "./service";
 import { TransferFormDialog } from "./TransferFormDialog";
@@ -40,8 +40,7 @@ export function WarehouseTransfersPage() {
 
   const printM = useMutation({
     mutationFn: async () => {
-      const res = await apiClient.get(`/api/printed-documents/TRANSFER_DISPATCH/${detailId}/html`);
-      return res.data.data.html as string;
+      return printedDocumentService.getHtml("TRANSFER_DISPATCH", detailId!);
     },
     onSuccess: (html) => printHtmlString(html),
   });
