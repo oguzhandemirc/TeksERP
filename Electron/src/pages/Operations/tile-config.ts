@@ -49,6 +49,15 @@ export interface OperationsVisibilityContext {
    * onu kullanır; orada kapı İZİNDİR (`goods-receipt:*`, hiçbir varsayılan rolde yok).
    */
   multiWarehouse: boolean;
+  /**
+   * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
+   * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
+   * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +
+   * Fason Firmalar. Belirsizken (yükleniyor) FALSE → fabrika görünümüne düşülür
+   * (Sidebar featureFlag kararıyla aynı yön: yanlış tarafa düşmek fabrikada
+   * karo titremesi demekti, ticarette yalnız kısa bir gecikme).
+   */
+  financeEnabled: boolean;
 }
 
 export interface OperationsTile {

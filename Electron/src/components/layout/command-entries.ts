@@ -97,6 +97,8 @@ export const commandSections: CommandSection[] = [
         // permissionAny taşıyan karolar (belge tasarım ekranları) route ile
         // AYNI listeyi kullanır — düşürülürse kart görünür, sayfa açılmaz.
         permissionAny: tile.permissionAny,
+        // Rejim yüklemi karodan taşınır (cari rejimi) — palet hub'dan ayrışamaz.
+        visibleWhen: tile.visibleWhen,
       })),
   })),
   {

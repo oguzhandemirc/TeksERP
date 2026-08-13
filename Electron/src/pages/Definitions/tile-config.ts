@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
+import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
 
 export interface DefinitionTile {
@@ -31,6 +32,14 @@ export interface DefinitionTile {
   icon: LucideIcon;
   to: string;
   group: DefinitionGroupKey;
+  /**
+   * DURUMA bağlı görünürlük — Operasyon karolarıyla AYNI bağlam (komut paleti
+   * de aynı yüklemi uygular; ayrı bir tip, paletle ayrışırdı).
+   * ⚠️ İZİN kontrolünden BAĞIMSIZ uygulanır ve admin kısa devresi bunu
+   * ATLAMAZ: rejim bir yetki değil kurulum türü sorusudur — admin de fabrika
+   * kurulumunda Cariler karosunu görmemeli.
+   */
+  visibleWhen?: (ctx: OperationsVisibilityContext) => boolean;
   permission?: string;
   /**
    * Bunlardan HERHANGİ biri yeterli. `permission` ile birlikte verilmez —
@@ -110,6 +119,10 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/cariler",
     group: "partners",
     permissionAny: ["customer:read", "subcontractor:read"],
+    // TİCARET REJİMİ (2026-08-14, kullanıcı kararı): bayrak açıkken TEK cari
+    // listesi bu; Müşteriler + Fason karoları gizlenir (üç örtüşen liste
+    // karışıklığı). Fabrikada (bayrak kapalı) bu karo HİÇ görünmez.
+    visibleWhen: (ctx) => ctx.financeEnabled,
   },
   {
     key: "customers",
@@ -119,6 +132,9 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/customers",
     group: "partners",
     permission: "customer:read",
+    // Ticaret rejiminde Cariler'in içinde — karo gizlenir, ROUTE DURUR
+    // (derin bağlantı/favori kırılmaz).
+    visibleWhen: (ctx) => !ctx.financeEnabled,
   },
   {
     key: "subcontractors",
@@ -128,6 +144,8 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/subcontractors",
     group: "partners",
     permission: "subcontractor:read",
+    // Ticaret rejiminde Cariler'in içinde (Müşteriler karosuyla aynı kural).
+    visibleWhen: (ctx) => !ctx.financeEnabled,
   },
   {
     key: "subcontractor-categories",

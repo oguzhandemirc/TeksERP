@@ -13,15 +13,15 @@
 // alan eklendi ama bu ekranın eşlemesi düşürdü" sınıfı sessiz kayıp demekti
 // (allowlist tuzağı — bu hafta iki kez ısırdı).
 //
-// Yeni kart AÇMA bilinçli olarak burada değil: müşteri oluşturma satır-içi şube
-// editörü taşıyor (tek tx'te doğarlar) ve o akış kendi sayfasında; buradaki
-// düğmeler oraya götürür.
+// OLUŞTURMA DA BURADA (2026-08-14 rejim kararı): ticaret kurulumunda Müşteriler
+// ve Fason karoları gizlendiği için tek giriş kapısı bu ekran. Formlar yine
+// SAHİPLERİNİN diyalogları (müşteri oluşturma satır-içi şube editörüyle) —
+// davranış eski sayfalarla birebir.
 // =============================================================================
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, ExternalLink, Pencil } from "lucide-react";
+import { Search, Plus, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Badge } from "@/components/ui/badge";
@@ -51,12 +51,12 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 export function CarilerPage() {
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [editSub, setEditSub] = useState<Subcontractor | null>(null);
+  const [createKind, setCreateKind] = useState<"CUSTOMER" | "SUBCONTRACTOR" | null>(null);
 
   // filters: {} → pasifler DAHİL tüm kartlar (varsayılan isActive süzgeci
   // bilinçle ezilir: yönetim görünümü pasif kartı da bulabilmeli).
@@ -109,6 +109,23 @@ export function CarilerPage() {
       .sort((a, b) => a.name.localeCompare(b.name, "tr"));
   }, [customersQ.data, subsQ.data, search, role]);
 
+  const createCustomerM = useMutation({
+    mutationFn: (payload: Partial<Customer>) => customerService.create(payload),
+    onSuccess: () => {
+      toast.success("Kart oluşturuldu.");
+      setCreateKind(null);
+      void qc.invalidateQueries({ queryKey: ["customers"] });
+    },
+  });
+  const createSubM = useMutation({
+    mutationFn: (payload: Partial<Subcontractor>) => subcontractorService.create(payload),
+    onSuccess: () => {
+      toast.success("Kart oluşturuldu.");
+      setCreateKind(null);
+      void qc.invalidateQueries({ queryKey: ["subcontractors"] });
+    },
+  });
+
   const updateCustomerM = useMutation({
     mutationFn: (vars: { id: string; payload: Partial<Customer> }) => customerService.update(vars.id, vars.payload),
     onSuccess: () => {
@@ -136,15 +153,15 @@ export function CarilerPage() {
         actions={
           <div className="flex gap-2">
             <PermissionGate permission="customer:write">
-              <Button variant="outline" size="sm" onClick={() => navigate("/definitions/customers")}>
-                <ExternalLink className="mr-1 h-4 w-4" />
-                Müşteriler sayfası
+              <Button size="sm" onClick={() => setCreateKind("CUSTOMER")}>
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni Müşteri / Tedarikçi
               </Button>
             </PermissionGate>
             <PermissionGate permission="subcontractor:write">
-              <Button variant="outline" size="sm" onClick={() => navigate("/definitions/subcontractors")}>
-                <ExternalLink className="mr-1 h-4 w-4" />
-                Fason Firmalar sayfası
+              <Button variant="outline" size="sm" onClick={() => setCreateKind("SUBCONTRACTOR")}>
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni Fason
               </Button>
             </PermissionGate>
           </div>
@@ -232,29 +249,44 @@ export function CarilerPage() {
         )}
       </PageBody>
 
-      {/* Kendi form diyalogları — davranış sahiplerinin sayfasıyla BİREBİR. */}
+      {/* Sahiplerinin form diyalogları — davranış eski sayfalarla BİREBİR;
+          oluşturma initial=null (müşteri formu satır-içi şube editörünü açar). */}
       <CustomerFormDialog
-        open={Boolean(editCustomer)}
-        onOpenChange={(v) => !v && setEditCustomer(null)}
+        open={Boolean(editCustomer) || createKind === "CUSTOMER"}
+        onOpenChange={(v) => {
+          if (!v) {
+            setEditCustomer(null);
+            setCreateKind((k) => (k === "CUSTOMER" ? null : k));
+          }
+        }}
         initial={editCustomer}
-        isSubmitting={updateCustomerM.isPending}
+        isSubmitting={updateCustomerM.isPending || createCustomerM.isPending}
         onSubmit={(values) => {
           if (editCustomer) {
             updateCustomerM.mutate({ id: editCustomer.id, payload: buildCustomerPayload(values, editCustomer) });
+          } else {
+            createCustomerM.mutate(buildCustomerPayload(values, null));
           }
         }}
       />
       <SubcontractorFormDialog
-        open={Boolean(editSub)}
-        onOpenChange={(v) => !v && setEditSub(null)}
+        open={Boolean(editSub) || createKind === "SUBCONTRACTOR"}
+        onOpenChange={(v) => {
+          if (!v) {
+            setEditSub(null);
+            setCreateKind((k) => (k === "SUBCONTRACTOR" ? null : k));
+          }
+        }}
         initial={editSub}
-        isSubmitting={updateSubM.isPending}
+        isSubmitting={updateSubM.isPending || createSubM.isPending}
         onSubmit={(values) => {
           if (editSub) {
             updateSubM.mutate({
               id: editSub.id,
               payload: buildSubcontractorPayload(values, editSub) as unknown as Partial<Subcontractor>,
             });
+          } else {
+            createSubM.mutate(buildSubcontractorPayload(values, null) as unknown as Partial<Subcontractor>);
           }
         }}
       />
