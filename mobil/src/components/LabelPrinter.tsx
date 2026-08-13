@@ -13,6 +13,11 @@ import {
   ensurePrinterPaired,
 } from '../services/btPrinter.service';
 import { useMobileRasterEnabled } from '../hooks/useFeatureFlags';
+import {
+  classifyPrintRetry,
+  type PrintPhase,
+  type PrintResult,
+} from '../offline/printQueue';
 import type { Roll } from '../types/models';
 
 interface Props {
@@ -34,8 +39,13 @@ interface Props {
   onDone: (printed: Roll) => void;
   /** Sonuç bildirimi (opsiyonel): ok=false + cancelled=false → GERÇEK hata —
    *  parent (KK1) topu "başarısızlar" listesine alıp Tekrar Dene sunar.
-   *  İptal (expo-print diyaloğu kapatıldı) hata SAYILMAZ (cancelled=true). */
-  onResult?: (r: { ok: boolean; cancelled: boolean; error?: string }) => void;
+   *  İptal (expo-print diyaloğu kapatıldı) hata SAYILMAZ (cancelled=true).
+   *  `retryable` = hata AĞ/SUNUCU kaynaklı (içerik fetch'i yanıtsız/5xx düştü) —
+   *  parent online dönünce otomatik yeniden deneyebilir; BT/yapılandırma
+   *  hataları retryable DEĞİLDİR (ağla düzelmez). Alan opsiyonel: eski
+   *  tüketiciler görmezden gelir, davranışları değişmez. Şekil TEK KAYNAKTAN
+   *  (`printQueue.PrintResult`) — üç ayrı inline kopya sessizce ayrışıyordu. */
+  onResult?: (r: PrintResult) => void;
 }
 
 /**
@@ -73,8 +83,12 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
     onResultRef.current = onResult;
   }, [onResult]);
 
-  // Async print akışı saniyeler sürer; bu sırada parent unmount olursa
-  // onDone çağrısı ve Toast/Haptic side-effect'leri anlamsız → mounted bayrağı.
+  // Async print akışı saniyeler sürer; bu sırada parent unmount olabilir.
+  // ⚠️ mountedRef YALNIZ görsel yan etkileri (Toast/Haptic) kapar — onResult/
+  // onDone HER DURUMDA çağrılır (2026-08-11 inceleme bulgusu): sonuç artık
+  // kalıcı bir store'a yazılıyor (KK1 printQueue) ve unmount'ta yutulursa
+  // başarılı baskı "bekliyor" olarak kalır → ekrana dönüşte AYNI etiket ikinci
+  // kez basılır, scan-back borcu hiç doğmaz ve aktif iş kilidi askıda kalırdı.
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -99,12 +113,14 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
     chainRef.current = chainRef.current.then(async () => {
       const { roll: jobRoll, kind: jobKind, labelContext: jobContext } = job;
       if (!jobRoll.barcode) {
-        Toast.show({
-          type: 'info',
-          text1: 'Bu top için etiket basılamaz',
-          text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
-        });
-        if (mountedRef.current) onDoneRef.current(jobRoll);
+        if (mountedRef.current) {
+          Toast.show({
+            type: 'info',
+            text1: 'Bu top için etiket basılamaz',
+            text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
+          });
+        }
+        onDoneRef.current(jobRoll); // unmount'ta da — iş askıda kalmasın
         return;
       }
       // Etiket NİYETİNİ (müşteri / stok / sipariş) fiziksel baskıdan BAĞIMSIZ
@@ -143,18 +159,24 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
       // GÖRÜNÜR hata olsun. expo-print yalnız BT yazıcı YOKKEN devreye girer.
       const directOnly = viaBt;
       let usedBt = false;
+      // FAZ TAKİBİ — hata sınıflandırması için: 'fetch' aşamasında düşen hata
+      // ağ/sunucu kaynaklıdır (online dönünce otomatik denenebilir), 'output'
+      // (BT/expo-print) ve 'prep' (doğrulama) hataları ağla düzelmez.
+      let phase: PrintPhase = 'prep';
       try {
         if (viaBt && btPrinterAddr) {
           // Cihazın diline göre native (PPLA/PPLB/ZPL) — kayıttaki yazıcı belirler
           // (backend resolveLabelRouting; cihaz kaydı yoksa RASTER_HTML → aşağıda
           // fail-closed). kind: KK1 ham / Tambur bitmiş paritesi. rasterCapable=flag →
           // açıkken backend cihazın rasterMode'unu onurlandırır (raster GW bitmap, base64).
+          phase = 'fetch';
           const native = await labelService.getRollNative(
             jobRoll.id,
             jobKind,
             jobContext,
             rasterEnabledRef.current,
           );
+          phase = 'prep'; // fetch bitti — dil doğrulaması ağ hatası DEĞİLDİR
           // FAIL-CLOSED: yalnız bilinen native dil ham gönderilir. RASTER_HTML/boş/
           // bilinmeyen → diyaloğa düşmek yerine NET hata (akış ortasında yazdırma
           // ekranı çıkmasın; çöp etiket de basılmasın).
@@ -165,6 +187,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           }
           // İlk baskıda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.
           // Zaten eşleşikse no-op; değilse Android PIN'i bir kez sorar, sonra basar.
+          phase = 'output';
           await ensurePrinterPaired(btPrinterAddr);
           if (native.encoding === 'base64') {
             // Raster: base64 → ham byte (atob = latin1 binary string) → chunk'lı BT gönderim
@@ -176,6 +199,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           usedBt = true;
         }
         if (!usedBt && !directOnly) {
+          phase = 'fetch';
           const r = await apiClient.get<string>(`/labels/rolls/${jobRoll.id}/html`, {
             params: {
               kind: jobKind,
@@ -186,10 +210,12 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
             responseType: 'text',
             transformResponse: [(d) => d],
           });
+          phase = 'prep'; // fetch bitti — boş/bozuk HTML içerik hatasıdır, ağ değil
           const html = String(r.data ?? '');
           if (!html.startsWith('<')) {
             throw new Error('Etiket HTML alınamadı');
           }
+          phase = 'output';
           // margins: 0 → expo-print default kenar payını sıfırlar. Aksi halde
           // HTML'deki @page { margin: 0 } iOS/Android WebKit print preview'a
           // tam yansımıyor, etiket sayfanın sol üst köşesinden 4-5mm aşağıda
@@ -199,8 +225,12 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
             margins: { left: 0, top: 0, right: 0, bottom: 0 },
           });
         }
-        if (!mountedRef.current) return;
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // SONUÇ HER DURUMDA BİLDİRİLİR (unmount'ta da) — kâğıt fiziksel olarak
+        // çıktı; store bunu öğrenmezse iş "bekliyor" kalır ve ekrana dönüşte
+        // ikinci kâğıt basılır. Yalnız görsel geri bildirim mount'a bağlı.
+        if (mountedRef.current) {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
         onResultRef.current?.({ ok: true, cancelled: false });
         // Niyet YUKARIDA seedSnapshot ile zaten kalıcı. Burada — yalnız GERÇEK
         // baskı tamamlandığında — LABEL_PRINTED audit'i düş (iptal/hata catch'e
@@ -209,7 +239,6 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
           console.warn('Baskı audit kaydı başarısız', (e as Error).message);
         });
       } catch (err) {
-        if (!mountedRef.current) return;
         // expo-print iptal: kullanıcı yazdırma diyalogunu kapattı → hata değil,
         // info toast göster. "did not complete" expo-print'in iptal mesajı.
         const msg = (err as Error).message ?? '';
@@ -220,20 +249,28 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
         // Print.printAsync native hatası mı, eksik PrintSpooler mı). Kök neden
         // bulununca bu satır kaldırılacak.
         console.warn('[LabelPrinter] print failed:', msg, err);
-        onResultRef.current?.({ ok: false, cancelled: isCancel, error: msg });
-        void Haptics.notificationAsync(
-          isCancel
-            ? Haptics.NotificationFeedbackType.Warning
-            : Haptics.NotificationFeedbackType.Error,
-        );
-        Toast.show({
-          type: isCancel ? 'info' : 'error',
-          text1: isCancel ? 'Yazdırma iptal edildi' : 'Yazdırma hatası',
-          text2: isCancel ? 'Etiket basılmadı' : msg || 'Yazıcıya gönderilemedi',
-          visibilityTime: isCancel ? 3000 : 8000,
+        onResultRef.current?.({
+          ok: false,
+          cancelled: isCancel,
+          // İptal sınıflandırılmaz (hata değil); gerisi faz + statüden çözülür.
+          retryable: !isCancel && classifyPrintRetry(phase, err),
+          error: msg,
         });
+        if (mountedRef.current) {
+          void Haptics.notificationAsync(
+            isCancel
+              ? Haptics.NotificationFeedbackType.Warning
+              : Haptics.NotificationFeedbackType.Error,
+          );
+          Toast.show({
+            type: isCancel ? 'info' : 'error',
+            text1: isCancel ? 'Yazdırma iptal edildi' : 'Yazdırma hatası',
+            text2: isCancel ? 'Etiket basılmadı' : msg || 'Yazıcıya gönderilemedi',
+            visibilityTime: isCancel ? 3000 : 8000,
+          });
+        }
       } finally {
-        if (mountedRef.current) onDoneRef.current(jobRoll);
+        onDoneRef.current(jobRoll); // unmount'ta da — aktif iş kilidi çözülsün
       }
     });
   }, [roll, kind, labelContext]);

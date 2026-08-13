@@ -46,6 +46,7 @@ import {
   type TamburManualRollRequest,
 } from '../../../services/tambur.service';
 import { generateClientUuid } from '../../../offline/barcode';
+import { useFoldValues } from '../../../hooks/useFoldValues';
 import {
   MANUAL_REASON_PRESETS,
   MANUAL_MIN_REASON,
@@ -108,6 +109,8 @@ export default function TamburManualRollModal({
   // değeri, boş bir kat değerinden zararlıdır (envanterde filtrelenir, güvenilir
   // sanılır). "Kat sorulsun" kullanıcı kararı (2026-08-05).
   const [foldType, setFoldType] = useState<string | null>(null);
+  // Kat seçenekleri katalogdan; ön seçim YOK (yanlış kat, boş kattan zararlı).
+  const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   // Sebep artık hazır kataloğdan seçilir; serbest yazım "Diğer" ile ikinci planda.
   const [reasonPickerOpen, setReasonPickerOpen] = useState(false);
   const [reasonFreeOpen, setReasonFreeOpen] = useState(false);
@@ -287,24 +290,31 @@ export default function TamburManualRollModal({
                   <Text style={styles.label}>
                     Kat <Text style={styles.req}>*</Text>
                   </Text>
+                  {/* Seçenekler KATALOGDAN (2026-08-10). Ön seçim YOK (kullanıcı
+                      kararı): yanlış kat değeri, boş değerden zararlıdır. */}
                   <View style={styles.foldRow}>
-                    {(['2-KAT', '4-KAT'] as const).map((ft) => {
-                      const active = foldType === ft;
+                    {foldValues.map((ft) => {
+                      const active = foldType === ft.code;
                       return (
                         <TouchableRipple
-                          key={ft}
+                          key={ft.code}
                           borderless
                           disabled={busy}
-                          onPress={() => setFoldType(ft)}
+                          onPress={() => setFoldType(ft.code)}
                           style={[styles.foldChip, active && styles.foldChipOn]}
                         >
                           <Text style={[styles.foldChipText, active && styles.foldChipTextOn]}>
-                            {ft === '2-KAT' ? '2 Kat' : '4 Kat'}
+                            {ft.name}
                           </Text>
                         </TouchableRipple>
                       );
                     })}
                   </View>
+                  {foldNotConfigured && (
+                    <Text style={styles.hintSmall}>
+                      Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin.
+                    </Text>
+                  )}
                 </View>
 
                 {/* ── Zorunlu: sebep — hazır kategoriden TEK DOKUNUŞ ──
@@ -342,7 +352,13 @@ export default function TamburManualRollModal({
                       operatör değiştiremez (2026-08-04 kararı) — ekranda göstermek
                       "seçebilirim" izlenimi verirdi. Kalite/en de sorulmuyor;
                       kalite Tambur kararında, en sonraki ölçümde belirlenir. */}
-                  <SummaryRow label="Kat" value={foldType === '4-KAT' ? '4 Kat' : '2 Kat'} />
+                  {/* Kat ADI katalogdan; kod bulunamazsa kodun kendisi yazılır —
+                      eski `=== '4-KAT' ? … : '2 Kat'` biçimi 6-KAT'lı bir topta
+                      özet satırında "2 Kat" YAZARDI (onay ekranında yanlış bilgi). */}
+                  <SummaryRow
+                    label="Kat"
+                    value={foldValues.find((v) => v.code === foldType)?.name ?? foldType ?? '—'}
+                  />
                   <SummaryRow label="Sebep" value={reason.trim()} />
                   {/* Parti YALNIZ operatör seçtiyse yazılır. Seçilmediğinde
                       "PARTİSİZ" YAZMA: backend tek açık partiyi sessizce

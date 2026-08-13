@@ -26,6 +26,9 @@ export const stationFormSchema = z.object({
     .optional()
     .or(z.literal("")),
   isActive: z.boolean(),
+  // Yetenek bayrakları — HER TİPTE sorulur (iç istasyon da renk/özellik verebilir).
+  appliesColor: z.boolean(),
+  appliesProperty: z.boolean(),
   defaultCategoryId: z.string().nullable().optional(),
 });
 
@@ -37,5 +40,9 @@ export const stationFormDefaults: StationFormValues = {
   kind: StationKind.OTHER,
   department: "",
   isActive: true,
+  // Varsayılan: renk KAPALI, özellik AÇIK — backend kolon varsayılanlarıyla aynı.
+  // Renk için "kapalı" güvenli taraf: yanlışlıkla Tambur adımına renk atanmasın.
+  appliesColor: false,
+  appliesProperty: true,
   defaultCategoryId: null,
 };

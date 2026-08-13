@@ -36,6 +36,7 @@ import {
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 import { K18_DEAD_STATUSES } from "./batch.service";
+import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 
 export interface SwatchStats {
@@ -359,7 +360,13 @@ export class TamburService {
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
             properties: {
-              select: { property: { select: { id: true, name: true } } },
+              // value: Tambur FINAL KARAR noktasıdır — kurşunda seçilen GRAMAJ
+              // değeri kesim/kalite kararını veren operatörün gözü önünde olmalı
+              // (denetim VAL-03: ad basılıyordu, değer basılmıyordu).
+              select: {
+                property: { select: { id: true, name: true } },
+                value: { select: { code: true, name: true } },
+              },
             },
             errors: {
               where: { isProcessed: false },
@@ -391,6 +398,7 @@ export class TamburService {
         properties: m.roll.properties.map((p) => ({
           id: p.property.id,
           name: p.property.name,
+          value: p.value ?? null,
         })),
         errorCount: m.roll.errors.length,
         errors: m.roll.errors.map((e) => ({
@@ -531,7 +539,10 @@ export class TamburService {
       rollId: string;
       decisions: ErrorDecision[];
       cuts: CutInput[];
-      foldType?: "2-KAT" | "4-KAT";
+      /** Operatörün seçtiği kat. 2026-08-10'dan beri KATALOĞA bağlı (2-KAT /
+       *  4-KAT / TÜP / fabrikanın eklediği 6-KAT…) → literal union DEĞİL.
+       *  Geçerlilik `resolveFoldTypeForWrite` ile ölçülür. */
+      foldType?: string | null;
       /** Çıktı topları (depoya gidenler) kartelalık işaretlensin — depoda
        *  kartela sevki için kolay bulunsun. Sevki engellemez. */
       markedForKartela?: boolean;
@@ -661,6 +672,10 @@ export class TamburService {
     const totalQty = Number(roll.currentQty);
     const wo = roll.currentStep.workOrder;
     const plannedFoldType = wo?.foldType ?? null;
+
+    // Kat katalog doğrulaması — tx DIŞINDA (salt okuma; kilit süresini uzatmaz).
+    // `undefined` korunur: aşağıdaki "operatör override etti mi" dalları buna bakar.
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
 
     // Savunma katmanı (cutOpenFabric BUG-2 paritesi): iptal/devredilmiş iş emrinin
     // Tambur adımında sıkışmış top finalize EDİLEMEZ — ölü WO'ya çocuk top üretimi
@@ -996,7 +1011,8 @@ export class TamburService {
       // kopyalanmış durumda; Tambur sadece propagate eder.)
       const parentProperties = await tx.rollProperty.findMany({
         where: { rollId: data.rollId },
-        select: { propertyId: true },
+        // valueId: miras DEĞER-FARKINDA (denetim F6) — GRAMAJ=50GR çocuğa geçer.
+        select: { propertyId: true, valueId: true },
       });
 
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
@@ -1058,6 +1074,7 @@ export class TamburService {
             data: parentProperties.map((p) => ({
               rollId: splitRoll.id,
               propertyId: p.propertyId,
+              valueId: p.valueId,
             })),
           });
         }
@@ -1100,7 +1117,7 @@ export class TamburService {
       }
 
       // Tambur parametrelerini (kat tipi vs.) step.stepData'ya yaz.
-      if (data.foldType !== undefined && roll.currentStepId) {
+      if (foldType !== undefined && roll.currentStepId) {
         const step = await tx.workOrderStep.findUnique({
           where: { id: roll.currentStepId },
           select: { stepData: true },
@@ -1109,7 +1126,7 @@ export class TamburService {
         const merged: Record<string, unknown> = {
           ...existing,
           tamburDecidedAt: new Date().toISOString(),
-          foldType: data.foldType,
+          foldType,
         };
         await tx.workOrderStep.update({
           where: { id: roll.currentStepId },
@@ -1192,7 +1209,7 @@ export class TamburService {
               // Planlanan (WO.foldType) — Tambur ekranına bilgi olarak gelir.
               plannedFoldType,
               // Operatörün gerçek seçimi (override etmiş olabilir).
-              foldType: data.foldType ?? null,
+              foldType: foldType ?? null,
               childRollCount: segments.length,
               // BU finalize çağrısında doğan çocuklar — idempotent retry cevabı
               // yalnız bunları döner (öncesindeki cutOpenFabric çocukları değil;
@@ -1334,6 +1351,11 @@ export class TamburService {
     qualityGrade?: string;
     /** Etiket hedefindeki müşteri (`Roll.labelCustomerId`). */
     customerId?: string;
+    /** Kumaş (2026-08-12) — KK1 "Tüm Girişler" ile ORTAK filtre şeridinden. */
+    itemId?: string;
+    /** Kesimi yapan makine / personel (2026-08-12): "Bu makine" + Personel çipi. */
+    createdMachineId?: string;
+    createdById?: string;
   }): Promise<ApiResponse<Roll[]> | CursorPaginatedResponse<Roll>> {
     const where: Prisma.RollWhereInput = {
       // Tambur istasyonundan ÇIKAN her top — iki doğum yolu var:
@@ -1381,6 +1403,11 @@ export class TamburService {
       };
     }
     if (params?.qualityGrade) where.qualityGrade = params.qualityGrade;
+    // Kumaş: düz eşitlik (tekil seçim). Çoklu seçim istenirse `readIdCondition`
+    // ile `{ in: [...] }`e çevrilir — ham CSV geçirmek P2007/400 demektir.
+    if (params?.itemId) where.itemId = params.itemId;
+    if (params?.createdMachineId) where.createdMachineId = params.createdMachineId;
+    if (params?.createdById) where.createdById = params.createdById;
     if (params?.customerId) {
       // Etiket hedefindeki müşteri — `Roll.labelCustomerId` (B4). Kolon
       // yazılmadan önce basılmış toplarda NULL'dur ve süzgece takılmaz;
@@ -1959,15 +1986,22 @@ export class TamburService {
      * eski istemciler ve dahili çağrılar kırılmaz.
      */
     sessionStationId?: string | null,
+    /** Kesimin yapıldığı makine — "Bu makine" süzgeci + makine raporları için.
+     *  (2026-08-12: kesim çocukları createdById alıyordu ama createdMachineId
+     *  ALMIYORDU → makine süzgeci kesimleri hiç göremiyordu.) */
+    sessionMachineId?: string | null,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
 
+    // Kat katalog doğrulaması — `undefined` korunur (parent'tan miras dalı ona bakar).
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
+
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
         // Çuval kodu — aşağıdaki çuval guard'ının mesajı için (operatör çuvalı bulmalı).
         sack: { select: { sackNo: true } },
       },
@@ -2027,7 +2061,13 @@ export class TamburService {
       data.qualityGrade && data.qualityGrade !== parent.qualityGrade
         ? await resolveQualityGradeIdStrict(data.qualityGrade)
         : parent.qualityGradeId;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
     // Barkod SUNUCU'da sıralı atanır (atomik sayaç). WAREHOUSE child → "F", raw→STOCK → "H".
     const childBarcode = await generateRollBarcode(prisma, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
@@ -2054,7 +2094,7 @@ export class TamburService {
           width: parent.width,
           // KAT — kesim anında seçilen değer KAZANIR. Bu yolda iş emri/adım YOK
           // (depo topu kesimi), tek bağlam parent → fallback yalnız parent.
-          foldType: data.foldType !== undefined ? data.foldType : (parent.foldType ?? null),
+          foldType: foldType !== undefined ? foldType : (parent.foldType ?? null),
           initialQty: data.cutLength,
           currentQty: data.cutLength,
           weightKg: null,
@@ -2071,6 +2111,7 @@ export class TamburService {
           entryStationId: resolveEntryStationId({ sessionStationId }),
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          createdMachineId: sessionMachineId ?? null,
           // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
           // dönen (üretime devam) parçada işaretlenmez.
           markedForKartela:
@@ -2082,11 +2123,12 @@ export class TamburService {
         },
       });
 
-      if (propertyIds.length > 0) {
+      if (propertySnapshot.length > 0) {
         await tx.rollProperty.createMany({
-          data: propertyIds.map((propertyId) => ({
+          data: propertySnapshot.map((p) => ({
             rollId: child.id,
-            propertyId,
+            propertyId: p.propertyId,
+            valueId: p.valueId,
           })),
           skipDuplicates: true,
         });
@@ -2148,7 +2190,9 @@ export class TamburService {
       try {
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null, currentQty: { gt: 0 } },
+              // ⚠️ `currentQty > 0` YOK — cutOpenFabric aşım dalıyla aynı gerekçe
+              // (0'a inmiş topta ek kesim; 2026-08-12). Çuval/sevk guard'ları duruyor.
+              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null },
               data: { currentQty: 0, initialQty: 0 },
             })
           : await tx.roll.update({
@@ -2264,11 +2308,13 @@ export class TamburService {
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
     sessionStationId?: string | null,
+    /** Kesimin makinesi — kesilen parçayla AYNI damga (cutWarehouseRoll ikizi). */
+    sessionMachineId?: string | null,
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> {
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
         // Çuval kodu — aşağıdaki çuval guard'ının mesajı için.
         sack: { select: { sackNo: true } },
       },
@@ -2331,7 +2377,13 @@ export class TamburService {
         ? RollStatus.SCRAP
         : RollStatus.STOCK
       : RollStatus.WAREHOUSE;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
 
     // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
     // childQualityGrade nullable (ham parent + keep → parent.qualityGrade null olabilir).
@@ -2424,15 +2476,17 @@ export class TamburService {
             entryStationId: resolveEntryStationId({ sessionStationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            createdMachineId: sessionMachineId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
             lastLabelSnapshot: { stock: true },
             },
         });
-        if (propertyIds.length > 0) {
+        if (propertySnapshot.length > 0) {
           await tx.rollProperty.createMany({
-            data: propertyIds.map((propertyId) => ({
+            data: propertySnapshot.map((p) => ({
               rollId: child.id,
-              propertyId,
+              propertyId: p.propertyId,
+              valueId: p.valueId,
             })),
             skipDuplicates: true,
           });
@@ -2579,10 +2633,15 @@ export class TamburService {
       clientToken?: string;
     },
     userId?: string,
+    /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
+    sessionMachineId?: string | null,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.lengthMeters > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
+
+    // Kat katalog doğrulaması — `undefined` korunur (parent → WO fallback zinciri).
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
 
     const parent = await prisma.roll.findUnique({
       where: { id: openFabricRollId },
@@ -2594,7 +2653,7 @@ export class TamburService {
             workOrder: { select: { status: true, foldType: true } },
           },
         },
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
       },
     });
     if (!parent) throw AppError.notFound("Roll bulunamadı");
@@ -2644,7 +2703,13 @@ export class TamburService {
     const childStatus = RollStatus.WAREHOUSE;
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
     const childBarcode = await generateRollBarcode(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
@@ -2688,8 +2753,8 @@ export class TamburService {
           // alanı hiç GÖNDERMEDİ → parent, o da yoksa iş emri planı (eski APK
           // geri-uyumluluğu; MİRAS DEĞİL). `null` = istemci açıkça "kat yok" dedi.
           foldType:
-            data.foldType !== undefined
-              ? data.foldType
+            foldType !== undefined
+              ? foldType
               : (parent.foldType ?? parent.currentStep?.workOrder?.foldType ?? null),
           initialQty: data.lengthMeters,
           currentQty: data.lengthMeters,
@@ -2707,6 +2772,7 @@ export class TamburService {
           entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          createdMachineId: sessionMachineId ?? null,
           // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
           markedForKartela:
             (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
@@ -2718,11 +2784,12 @@ export class TamburService {
         },
       });
 
-      if (propertyIds.length > 0) {
+      if (propertySnapshot.length > 0) {
         await tx.rollProperty.createMany({
-          data: propertyIds.map((propertyId) => ({
+          data: propertySnapshot.map((p) => ({
             rollId: child.id,
-            propertyId,
+            propertyId: p.propertyId,
+            valueId: p.valueId,
           })),
           skipDuplicates: true,
         });
@@ -2778,7 +2845,16 @@ export class TamburService {
         // WHERE eşleşmez → P2025 → 409 (KK2'ye geri çekilmiş top kesilmez).
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gt: 0 } },
+              // ⚠️ AŞIM DALINDA `currentQty > 0` ŞARTI YOK (2026-08-12 saha
+              // vakası): 500 m kayıtlı kumaş fiziksel 550 m çıkabilir ve fazlalık
+              // TEK kesimde bitmeyebilir (50 m'den 3 top). İlk aşım kesimi kalanı
+              // 0'a çeker; guard `gt: 0` olarak kalsaydı 0'daki topta İKİNCİ kesim
+              // P2025'e düşüp "bu sırada değişti" yarış mesajını basıyordu —
+              // oysa yarış yok, mal fiziksel olarak elde. Çifte-harcama koruması
+              // burada ANLAMSIZ: 0'ın altına inilecek gerçek stok kalmadı; her
+              // aşım kesimi çocuk + sapma satırı üretir (aşağıdaki defter), yani
+              // iz kaybolmaz. KK2 reopen/statü guard'ları AYNEN duruyor.
+              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId },
               data: { currentQty: 0 },
             })
           : await tx.roll.update({
@@ -2915,7 +2991,7 @@ export class TamburService {
             },
           },
         },
-        properties: { select: { propertyId: true } },
+        properties: { select: { propertyId: true, valueId: true } },
       },
     });
     if (!parent) throw AppError.notFound("Roll bulunamadı");
@@ -2975,15 +3051,22 @@ export class TamburService {
       action === "keep_1kalite" ? "1.KALITE" : action === "keep_a1" ? "A1" : "FIRE";
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
-    const propertyIds = parent.properties.map((p) => p.propertyId);
+    // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
+    // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
+    // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
+    const propertySnapshot = parent.properties.map((p) => ({
+      propertyId: p.propertyId,
+      valueId: p.valueId ?? null,
+    }));
 
     // Planlanan foldType WO'dan — operatör override etmemişse bu kullanılır.
     // Override + planlanan ikisini de metadata'ya yaz ki sapma izlenebilsin.
+    // Kat katalog doğrulaması: `undefined` korunur, override dalı ona bakıyor.
+    const foldType = await resolveFoldTypeForWrite(data.foldType);
     const plannedFoldType = parent.currentStep.workOrder.foldType ?? null;
-    const actualFoldType =
-      data.foldType !== undefined ? data.foldType : plannedFoldType;
+    const actualFoldType = foldType !== undefined ? foldType : plannedFoldType;
     const overriddenFoldType =
-      data.foldType !== undefined && data.foldType !== plannedFoldType;
+      foldType !== undefined && foldType !== plannedFoldType;
 
     // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
     const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);
@@ -3075,15 +3158,17 @@ export class TamburService {
             entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            createdMachineId: machineId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
             lastLabelSnapshot: { stock: true },
             },
         });
-        if (propertyIds.length > 0) {
+        if (propertySnapshot.length > 0) {
           await tx.rollProperty.createMany({
-            data: propertyIds.map((propertyId) => ({
+            data: propertySnapshot.map((p) => ({
               rollId: child.id,
-              propertyId,
+              propertyId: p.propertyId,
+              valueId: p.valueId,
             })),
             skipDuplicates: true,
           });

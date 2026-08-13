@@ -26,17 +26,12 @@ import {
 } from './src/offline/queryClient';
 import { registerStationMutationDefaults } from './src/offline/mutations';
 import { isPersistedQueryKey, shouldPersistMutation } from './src/offline/persistPolicy';
-import { useFailedOps } from './src/offline/failedOps';
 import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
 import { colors } from './src/theme/tokens';
 import { recordActivity } from './src/store/lockStore';
 import IdleLockGate from './src/components/lock/IdleLockGate';
 
 registerStationMutationDefaults();
-
-// Ölü mektup kutusunu diskten yükle. RQ persister'ından AYRI bir depodur
-// (`PERSIST_BUSTER` bump'ı onu silmez) — bkz. offline/failedOps.ts.
-void useFailedOps.getState().hydrate();
 
 // Android'de operatör sistem fontunu büyütse de barkod/metraj/tablo alanları
 // taşmasın diye global cap. 1.3x'e kadar serbest (erişilebilirlik korunur),

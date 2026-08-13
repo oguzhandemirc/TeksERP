@@ -126,7 +126,9 @@ export const rollColumns: ColumnDef<Roll>[] = [
         <div className="flex flex-wrap gap-0.5">
           {props.slice(0, 2).map((p) => (
             <Badge key={p.propertyId} variant="muted" className="text-[10px]">
-              {p.property.name}
+              {/* SEÇİM tipli özellikte DEĞER de basılır — liste ile detay panelinin
+                  aynı topu farklı anlatmaması için (RollDetailSheet ile aynı kural). */}
+              {p.value ? `${p.property.name}: ${p.value.name}` : p.property.name}
             </Badge>
           ))}
           {props.length > 2 && (
@@ -315,6 +317,20 @@ export const rollColumns: ColumnDef<Roll>[] = [
           )}
         </div>
       );
+    },
+  },
+  {
+    // GİRİŞ İSTASYONU (2026-08-12): topun sisteme GİRDİĞİ yer — kalıcı köken.
+    // "Ekleyen"in makine satırı oturum makinesini gösterir; bu kolon istasyon
+    // düzeyidir ve ikinci ham giriş istasyonu açıldığında ayrım burada okunur.
+    // 2026-08-05 öncesi toplar geriye doldurulmadı (bilinçli) → "—" meşrudur.
+    id: "entryStation",
+    header: "Giriş İstasyonu",
+    meta: { label: "Giriş İstasyonu" },
+    cell: ({ row }) => {
+      const st = row.original.entryStation;
+      if (!st) return <span className="text-muted-foreground">—</span>;
+      return <span className="truncate text-xs">{st.name}</span>;
     },
   },
   {

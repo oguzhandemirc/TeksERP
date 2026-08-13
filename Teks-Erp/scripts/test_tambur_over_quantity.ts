@@ -230,6 +230,32 @@ async function main() {
     `kalan=${ofRes.data.parentRemainingQty}`,
   );
 
+  // 5b. 0'A İNMİŞ TOPTA EK KESİMLER (2026-08-12 saha vakası): 500 m kayıtlı kumaş
+  // fiziksel 550 m çıkar; fazlalık TEK topta bitmeyebilir (50 m → 3 top). Eski
+  // aşım dalı `currentQty: { gt: 0 }` şartı taşıdığı için İKİNCİ kesim P2025'e
+  // düşüp "bu sırada değişti" YARIŞ mesajı basıyordu — oysa yarış yoktu.
+  const zc1 = await tambur.cutOpenFabric(of, { lengthMeters: 20, status: "WAREHOUSE" });
+  createdRolls.push(zc1.data.childRoll.id);
+  check(
+    "0 kalanlı topta 2. kesim KABUL (çocuk 20m)",
+    Number(zc1.data.childRoll.currentQty) === 20 && zc1.data.parentRemainingQty === 0,
+    `çocuk=${zc1.data.childRoll.currentQty} kalan=${zc1.data.parentRemainingQty}`,
+  );
+  const zc2 = await tambur.cutOpenFabric(of, { lengthMeters: 15, status: "WAREHOUSE" });
+  createdRolls.push(zc2.data.childRoll.id);
+  check(
+    "0 kalanlı topta 3. kesim de KABUL (çocuk 15m)",
+    Number(zc2.data.childRoll.currentQty) === 15,
+    `çocuk=${zc2.data.childRoll.currentQty}`,
+  );
+  // Her sıfır-üstü kesim SAPMA DEFTERİNE artı satır yazar — iz kaybolmaz.
+  const zeroVariances = await prisma.rollVariance.count({ where: { rollId: of } });
+  check(
+    "sıfır-üstü kesimlerin HER BİRİ sapma defterinde",
+    zeroVariances >= 3,
+    `satır=${zeroVariances}`,
+  );
+
   // 6. finalize(100, cuts toplam 150)
   const fin = await makeFinalizeRoll(itemId, 100);
   const finRes = await tambur.finalize({

@@ -49,6 +49,8 @@ export const ROLL_RAW_FIELDS: readonly FieldDef[] = [
   { key: "widthCm",         defaultLabel: "En (cm)",           type: "number" },
   { key: "lengthMeters",    defaultLabel: "Metraj (m)",        type: "number" },
   { key: "weightKg",        defaultLabel: "Ağırlık (kg)",      type: "number" },
+  // KAT — katalog KODU basılır ("6-KAT"/"TUP"), ad değil (bkz. LabelPayload.foldType).
+  { key: "foldType",        defaultLabel: "Kat",               type: "text" },
   { key: "printedAt",       defaultLabel: "Baskı Tarihi",      type: "date" },
 ] as const;
 
@@ -71,6 +73,9 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   { key: "widthCm",          defaultLabel: "En (cm)",                type: "number" },
   { key: "lengthMeters",     defaultLabel: "Metraj (m)",             type: "number" },
   { key: "weightKg",         defaultLabel: "Ağırlık (kg)",           type: "number" },
+  // KAT — bitmiş topta da basılabilir; kesimde SEÇİLEN değer topun üstünde kalıcıdır
+  // (miras alınmaz), yani etikete basılan kat o parçanın gerçeğidir.
+  { key: "foldType",         defaultLabel: "Kat",                    type: "text" },
   { key: "customerName",     defaultLabel: "Müşteri",                type: "text" },
   { key: "orderNumber",      defaultLabel: "Sipariş No",             type: "text" },
   { key: "batchNumber",      defaultLabel: "Parti No",               type: "text" },

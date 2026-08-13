@@ -8,10 +8,28 @@ import { KursunQcService } from "../services/kursun-qc.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
-const completeQc2Schema = z.object({
+// Export: Zod katmanı bekçisi (`test_property_value_selection` §Zod) — şema
+// `properties`/`valueCode`yi sessizce ELERSE (2026-08-05 "kat iki uçta Zod'da
+// yoktu" vakasının ikizi) test kırmızı versin diye dışa açık.
+export const completeQc2Schema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   stepId: z.string().uuid("Geçersiz adım ID"),
   notes: z.string().max(500).nullish(),
+  // Operatörün cevapları (mod sözleşmesi 2026-08-10 + değer sözleşmesi
+  // 2026-08-11). AUTO satırlar gönderilmese de uygulanır; eski APK bu alanı hiç
+  // göndermez → yalnız AUTO yazılır (bugünkü davranış).
+  //
+  // ⚠️ `valueCode` SEÇİM tipli özellikte zorunlu, BAYRAK'ta yasak — ikisini de
+  // servis doğrular (`assertPropertySelectionsValid`), burada yalnız BİÇİM.
+  properties: z
+    .array(
+      z.object({
+        propertyId: z.string().uuid(),
+        valueCode: z.string().trim().max(32).nullish(),
+      }),
+    )
+    .max(50)
+    .nullish(),
 });
 
 // Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
@@ -110,7 +128,12 @@ export class KursunQcController {
       // cihazın statik ataması (Faz 6'da sökülür — mobil oturum akışı gelince).
       const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.completeQc2(
-        { rollId: body.rollId, stepId: body.stepId, notes: body.notes ?? null },
+        {
+          rollId: body.rollId,
+          stepId: body.stepId,
+          notes: body.notes ?? null,
+          properties: body.properties ?? null,
+        },
         req.user?.userId,
         stamp?.machineId ?? req.device?.machineId ?? null
       );

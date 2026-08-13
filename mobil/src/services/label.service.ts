@@ -2,9 +2,24 @@ import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type {
   LabelPayload,
+  NameSource,
   SwatchLabelPayload,
   UpdateOrderLineCustomerNamesRequest,
 } from '../types/models';
+
+/** `GET /labels/name-preview` yanıtı — kesimden ÖNCE "etikette ne yazacak". */
+export interface LabelNamePreview {
+  itemId: string;
+  colorId: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  itemName: string;
+  itemNameDefault: string;
+  itemNameSource: NameSource;
+  colorName: string | null;
+  colorNameDefault: string | null;
+  colorNameSource: NameSource | null;
+}
 
 // =============================================================================
 // Label endpoints — effective name cascade ile payload + audit print + override
@@ -202,5 +217,51 @@ export const labelService = {
         ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
         ...(ctx?.stock ? { stock: true } : {}),
       })
+      .then((r) => r.data),
+
+  /**
+   * "Bu hedefe basarsam etikette hangi AD çıkar?" — top DOĞMADAN önce (2026-08-13).
+   * Zincir backend'de çözülür (sipariş override'ı → müşteri alias'ı → bizdeki ad);
+   * istemci onu TEKRAR YAZMAZ, yoksa önizleme ile basılan etiket ayrışır.
+   */
+  previewCustomerNames: (params: {
+    rollId: string;
+    orderLineId?: string | null;
+    customerId?: string | null;
+  }): Promise<ApiResponse<LabelNamePreview>> =>
+    apiClient
+      .get<ApiResponse<LabelNamePreview>>('/labels/name-preview', {
+        params: {
+          rollId: params.rollId,
+          ...(params.orderLineId ? { orderLineId: params.orderLineId } : {}),
+          ...(params.customerId ? { customerId: params.customerId } : {}),
+        },
+      })
+      .then((r) => r.data),
+
+  /**
+   * KALICI müşteri adı (master alias) — bu müşteride bu kumaş/renk BUNDAN SONRA
+   * hep böyle basılır. `customer-alias:write` ister.
+   *
+   * ⚠️ Sipariş satırı override'ı (`updateOrderLineCustomerNames`) ile KARIŞTIRMA:
+   * o yalnız O SİPARİŞ için geçerlidir ve zincirde alias'ın ÖNÜNDE gelir — yani
+   * satırda override varken alias'ı düzeltmek etiketi DEĞİŞTİRMEZ.
+   */
+  setCustomerItemAlias: (
+    customerId: string,
+    itemId: string,
+    alias: string,
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .put<ApiResponse<unknown>>(`/customers/${customerId}/item-aliases/${itemId}`, { alias })
+      .then((r) => r.data),
+
+  setCustomerColorAlias: (
+    customerId: string,
+    colorId: string,
+    alias: string,
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .put<ApiResponse<unknown>>(`/customers/${customerId}/color-aliases/${colorId}`, { alias })
       .then((r) => r.data),
 };

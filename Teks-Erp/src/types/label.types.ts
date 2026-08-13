@@ -65,6 +65,16 @@ export interface LabelPayload {
   workOrderNumber?: string | null;
   printedAt: string;
 
+  /**
+   * KAT — topun kalıcı özelliği (`Roll.foldType`, katalog kodu: "2-KAT"/"6-KAT"/"TUP").
+   *
+   * Katalog KODU basılır, görünen ad DEĞİL: kod topun kimliğidir ve etiketi okuyan
+   * (bizim depo, fason, müşteri) kayıttaki değerin aynısını görmeli. Katalogdan ad
+   * çözmek etikete DB okuması eklerdi ve ad değişince geçmiş baskılarla uyuşmazdı.
+   * Kat girilmemiş topta null → alan şablonda dursa bile baskıda atlanır.
+   */
+  foldType?: string | null;
+
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---
   /** Etiket türü ayırt edici — verilmezse roll (ROLL_RAW/ROLL_FINISHED) kabul edilir. */

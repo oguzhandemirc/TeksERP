@@ -12,7 +12,7 @@
 // aggregate'ler yalnız sayfadaki çuvallar için (over-fetch yok).
 // =============================================================================
 
-import { Prisma, ShipmentStatus } from "@prisma/client";
+import { Prisma, RollStatus, ShipmentStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -32,6 +32,28 @@ function toIdList(v: string | string[] | undefined): string[] {
   return (Array.isArray(v) ? v : v ? [v] : []).map((s) => s.trim()).filter(Boolean);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Kalite filtresi değerlerini KODA çevirir. Panel standart `multi-lookup`
+ * kullandığı için UUID gönderir; uçlar/scriptler kodla da çağırabilir.
+ *
+ * ⚠️ Katalog KODU hiçbir yere gömülmez ("A1" karşılaştırması yalnız statü
+ * eşlemesi içindir): fabrika kaliteyi yeniden adlandırırsa liste kendiliğinden
+ * doğru kalır (2026-08-09 "1. KALİTE koda gömülmez" kuralının kardeşi).
+ */
+async function resolveQualityCodes(values: string[]): Promise<string[]> {
+  if (values.length === 0) return [];
+  const ids = values.filter((v) => UUID_RE.test(v));
+  const codes = values.filter((v) => !UUID_RE.test(v)).map((c) => c.toUpperCase());
+  if (ids.length === 0) return codes;
+  const rows = await prisma.qualityGrade.findMany({
+    where: { id: { in: ids } },
+    select: { code: true },
+  });
+  return [...new Set([...codes, ...rows.map((r) => r.code.toUpperCase())])];
+}
+
 export type SackSearchScope = "POOL" | "PLANNED" | "DISPATCHED" | "ALL";
 
 export interface SackSearchParams {
@@ -42,6 +64,22 @@ export interface SackSearchParams {
   widthMin?: number;
   widthMax?: number;
   customerId?: string | string[];
+  /**
+   * İÇİNDE bu kaliteden top OLAN çuvallar (kalite KODU: "1.KALITE" / "A1" / …).
+   *
+   * Saha sorusu (2026-08-13): *"hangi çuvalda 2. kalite ürün var?"* — detayda
+   * uyarı bandı vardı ama listede tek bakışta görülemiyordu.
+   *
+   * ⚠️ Semantik "İÇEREN"dir, "yalnız o kaliteden oluşan" DEĞİL: karışık çuval
+   * meşrudur ve asıl aranan zaten "içine 2. kalite karışmış mı" sorusudur.
+   * Çoklu seçim VEYA'dır (kumaş/renk ile aynı kural).
+   *
+   * ⚠️ `A1_STOCK` STATÜSÜ DE SAYILIR: top çuvala girerken statüsü değişebiliyor
+   * ama kalite kodu üstünde kalıcı — uyuşmazlık bandı da (`sack-content-mismatch`)
+   * ikisine ayrı ayrı bakıyor. Yalnız koda bakmak, statüsü A1 olup kodu
+   * yazılmamış topu SESSİZCE atlardı.
+   */
+  qualityGrade?: string | string[];
   scope?: SackSearchScope;
   shipmentNo?: string;
   sackCode?: string;
@@ -96,6 +134,21 @@ export class SackSearchService {
       };
     } else if (params.width != null) {
       rollFilter.width = params.width;
+    }
+    // KALİTE — kod VEYA statü (bkz. `qualityGrade` param dokümanı). Bu tek alan
+    // kendi içinde OR taşıdığı için `rollFilter`a doğrudan yazılamaz; ayrı OR
+    // bloğu olarak eklenir ve diğer içerik koşullarıyla VE'lenir.
+    //
+    // ⚠️ SÜZGEÇ FK'ya DEĞİL KOD SNAPSHOT'INA bakar: canlı veride 22 topun
+    // `qualityGrade` kodu dolu ama `qualityGradeId` NULL (kolon sonradan geldi).
+    // `qualityGradeId: { in }` yazmak o topları SESSİZCE atlardı — filtre "0
+    // sonuç" değil EKSİK sonuç verirdi ki bu daha tehlikelidir.
+    const qualityCodes = await resolveQualityCodes(toIdList(params.qualityGrade));
+    if (qualityCodes.length) {
+      rollFilter.OR = [
+        { qualityGrade: { in: qualityCodes } },
+        ...(qualityCodes.includes("A1") ? [{ status: RollStatus.A1_STOCK }] : []),
+      ];
     }
     const hasContentFilter = Object.keys(rollFilter).length > 0;
 

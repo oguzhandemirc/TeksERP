@@ -10,6 +10,7 @@ import { workOrderService, type QuickStartRequest } from '../../../services/work
 import { fabricPropertyService } from '../../../services/fabricProperty.service';
 import { signalScan } from '../../../services/scanFeedback';
 import { useScanFeedback } from '../../../hooks/useScanFeedback';
+import { useFoldValues } from '../../../hooks/useFoldValues';
 import { useSubcontractorDefault } from '../../../hooks/useSubcontractorDefault';
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { generateClientUuid } from '../../../offline/barcode';
@@ -70,15 +71,37 @@ const errMessage = (err: unknown): string => {
   return e?.response?.data?.message ?? e?.message ?? 'Bilinmeyen hata';
 };
 
-type RouteLike = { steps?: { station?: { defaultCategory?: { id: string; appliesColor?: boolean; appliesProperty?: boolean } | null } | null }[] } | null;
+type RouteLike = {
+  steps?: {
+    station?: {
+      appliesColor?: boolean;
+      appliesProperty?: boolean;
+      defaultCategory?: { id: string; appliesColor?: boolean; appliesProperty?: boolean } | null;
+    } | null;
+  }[];
+} | null;
 
-/** Rota hedef renk / özellik uygulayabilir mi + fason kategorileri hangileri. */
+/**
+ * Rota hedef renk / özellik uygulayabilir mi + fason kategorileri hangileri.
+ *
+ * ⚠️ 2026-08-10: İSTASYONUN KENDİ bayrakları da okunur. Eskiden yalnız fason
+ * kategorisine bakılıyordu — backend guard'ı da öyleydi; ikisi birlikte
+ * değişti. Renk/özellik uygulayan bir İÇ istasyon içeren rota, eski hâlde
+ * "uygulayamaz" görünüp ekranda alanı gizlerdi (backend kabul etse bile).
+ *
+ * Eski backend `appliesColor` göndermez → `undefined` → eski davranış (yalnız
+ * kategori) sürer. Yani bu değişiklik APK'yı ZORUNLU kılmaz.
+ */
 function routeApplyCaps(route: RouteLike) {
   const ids = new Set<string>();
   let color = false;
   let props = false;
   for (const s of route?.steps ?? []) {
-    const cat = s.station?.defaultCategory;
+    const st = s.station;
+    if (!st) continue;
+    if (st.appliesColor) color = true;
+    if (st.appliesProperty) props = true;
+    const cat = st.defaultCategory;
     if (!cat) continue;
     ids.add(cat.id);
     if (cat.appliesColor) color = true;
@@ -130,7 +153,11 @@ export function useQuickWorkOrder() {
   // basılır. Backend AÇILIŞTA en'i kaleme karşı doğrulamaz (yalnız ürün + renk),
   // bu yüzden override serbesttir; kilit yalnız mal fasona çıktıktan SONRA doğar.
   const [orderWidth, setOrderWidth] = useState<string | null>(null);
-  const [foldType, setFoldType] = useState<string | null>('2-KAT');
+  // ⚠️ Varsayılan BOŞ — eskiden '2-KAT' sabitiydi. Kat kataloğa taşındıktan
+  // sonra (2026-08-10) sabit varsayılan, 2-KAT'ı OLMAYAN bir katalogda geçersiz
+  // bir değeri sessizce gönderirdi (backend katalog doğrulamasıyla 400).
+  // Ön-seçim aşağıda katalogun İLK değeriyle yapılır.
+  const [foldType, setFoldType] = useState<string | null>(null);
   // Boş bırakılırsa ve sipariş bağlıysa backend kalemlerin requiredProperties
   // birleşimini kendisi uygular (workorder.service create()) — istemci bu listeyi
   // okuyamaz (AvailableOrderLine taşımaz), o yüzden ön-doldurma YAPILMAZ; arayüz
@@ -207,6 +234,32 @@ export function useQuickWorkOrder() {
     [routesQuery.data, routeTemplateId],
   );
 
+  // KAT — seçenekler katalogdan; alan yalnız rotada TAMBUR varsa sorulur.
+  //
+  // ⚠️ `hasTambur` koşulu 2026-08-10'da EKLENDİ: mobil kat tipini KOŞULSUZ zorunlu
+  // tutuyordu, Electron ise rotada Tambur yoksa alanı hiç sormuyordu. İki istemci
+  // aynı iş emri için farklı sözleşme uyguluyordu; tamburu olmayan bir rota
+  // tanımlandığı gün mobil, hiçbir yerde uygulanmayacak bir kat değeri yazdırırdı.
+  // (Kat tipi Tambur operatörüne yönelik bir üretim spec'idir.)
+  const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
+  const hasTambur = useMemo(
+    () => (selectedRoute?.steps ?? []).some((s) => s.station?.kind === 'TAMBUR'),
+    [selectedRoute],
+  );
+
+  // Ön-seçim: Tambur'lu rotada katalogun ilk değeri seçili gelsin (eski davranışın
+  // karşılığı). Tambur yoksa değeri TEMİZLE — aksi halde rota değiştirildiğinde
+  // eski seçim payload'da kalır ve uygulanmayacak bir spec gönderilir.
+  useEffect(() => {
+    if (!hasTambur) {
+      if (foldType !== null) setFoldType(null);
+      return;
+    }
+    if (foldType) return;
+    const first = foldValues[0];
+    if (first) setFoldType(first.code);
+  }, [hasTambur, foldValues, foldType]);
+
   /** Rota adım şeridi ("KK1 → Boyahane → Tambur") — ⓘ açmadan ne olacağı görünsün. */
   const routeStepNames = useMemo(
     () =>
@@ -233,7 +286,10 @@ export function useQuickWorkOrder() {
         pageSize: 200,
         sortBy: 'name',
         sortOrder: 'asc',
-        filters: { isActive: 'true' },
+        // valueType süzgüsü (Q1): SEÇİM (CHOICE) tipli özellik — GRAMAJ gibi —
+        // hedef özellik DEĞİLDİR (değeri istasyonda seçilir); picker'da görünse
+        // seçim WO create'te 400 yerdi. Electron PropertyChipsField ile aynı kural.
+        filters: { isActive: 'true', valueType: 'FLAG' },
       }),
     enabled: canApplyProps,
     staleTime: 10 * 60 * 1000,
@@ -372,7 +428,13 @@ export function useQuickWorkOrder() {
       const planProps = new Set<string>();
       for (const s of [...(route?.steps ?? [])].sort((a, b) => a.sequence - b.sequence)) {
         if (s.plannedColorId) planColor = s.plannedColorId;
-        for (const p of s.plannedProperties ?? []) planProps.add(p.propertyId);
+        for (const p of s.plannedProperties ?? []) {
+          // SEÇİM (CHOICE) tipli özellik hedef listesine SIZMAZ (Q1): backend
+          // rota kaydını zaten reddediyor ama eski/elle yazılmış kayıt taşıyorsa
+          // buradan geçirmek WO create'i 400'e düşürürdü. Alanı göndermeyen
+          // eski backend'de süzgü devreye girmez (undefined !== 'CHOICE').
+          if (p.property?.valueType !== 'CHOICE') planProps.add(p.propertyId);
+        }
       }
       if (planColor && next.canApplyColor && !orderLinked) setTargetColorId(planColor);
       if (planProps.size > 0 && next.canApplyProps) setTargetPropertyIds([...planProps]);
@@ -640,11 +702,16 @@ export function useQuickWorkOrder() {
   const blockingReason = useMemo(() => {
     if (scanned.length === 0) return 'En az bir top okutun veya listeden seçin.';
     if (!routeTemplateId) return 'Bir rota şablonu seçmelisiniz.';
-    if (!foldType) return 'Kat tipi seçmelisiniz (2-KAT veya 4-KAT).';
+    // Kat yalnız Tambur'lu rotada zorunlu (Electron ile aynı sözleşme).
+    if (hasTambur && !foldType) {
+      return foldNotConfigured
+        ? 'Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin.'
+        : 'Kat tipi seçmelisiniz.';
+    }
     if (applyMissing)
       return `Seçili rota ${applyMissing} uygulayacak bir fason adımı içermiyor. Uygun bir rota seçin.`;
     return null;
-  }, [scanned.length, routeTemplateId, foldType, applyMissing]);
+  }, [scanned.length, routeTemplateId, foldType, hasTambur, foldNotConfigured, applyMissing]);
 
   const canSubmit = !blockingReason && !mutation.isPending;
 
@@ -735,7 +802,10 @@ export function useQuickWorkOrder() {
     setTargetColorId(null);
     setWidth('');
     setOrderWidth(null);
-    setFoldType('2-KAT');
+    // null → yukarıdaki efekt katalogun ilk değerini yeniden ön-seçer (rotada
+    // Tambur varsa). Sabit '2-KAT' yazmak, katalogda o değer yoksa geçersiz bir
+    // seçimle başlamak demekti.
+    setFoldType(null);
     setTargetPropertyIds([]);
     setOrderLineIds([]);
     setOrderDerivedItemId(null);
@@ -790,6 +860,10 @@ export function useQuickWorkOrder() {
     orderWidth,
     foldType,
     setFoldType,
+    // Kat seçenekleri katalogdan + "bu rotada kat sorulur mu" kararı.
+    foldValues,
+    foldNotConfigured,
+    hasTambur,
     targetPropertyIds,
     setTargetPropertyIds,
     propertiesQuery,

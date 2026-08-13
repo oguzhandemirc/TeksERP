@@ -14,6 +14,20 @@ export interface CompleteQc2Request {
   rollId: string;
   stepId: string;
   notes?: string | null;
+  /**
+   * Operatörün CEVAPLARI (2026-08-10 mod + 2026-08-11 değer sözleşmesi).
+   *
+   * AUTO modundaki özellikler bu listede OLMASA DA topa yazılır — backend onları
+   * kendisi ekler. Buraya yalnız OPSİYONEL/ZORUNLU modundakiler girer.
+   * ZORUNLU bir özellik eksikse backend 400 döner (adıyla).
+   *
+   * ⚠️ SEÇİM tipli özellikte `valueCode` ZORUNLUDUR (GRAMAJ → "50GR");
+   * BAYRAK tipinde gönderilirse backend 400 verir.
+   *
+   * Alan gönderilmezse davranış eskisi gibidir (yalnız AUTO uygulanır) — yani
+   * eski APK yeni backend'e karşı bugünkü sonucu üretir.
+   */
+  properties?: { propertyId: string; valueCode?: string }[];
 }
 
 export interface ReportErrorRequest {

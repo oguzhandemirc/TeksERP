@@ -61,9 +61,9 @@ JWT_SECRET="..."
 
 **Routes → Controllers → Services → Prisma** — alt katman atlamak yasak. (Bilinçli istisna: ince read/ayar endpoint'leri — admin/dashboard/feature-flag/customer-branch/production-balance/station-capability route'ları controller'sız, route içinde Zod parse + servise delege; iş mantığı yine serviste, prisma import'u route/controller'da YASAK.)
 
-- `controllers/` (~20 dosya) — HTTP layer, Zod validate, service çağırır
-- `services/` (~45 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
-- `routes/` (~41 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
+- `controllers/` — HTTP layer, Zod validate, service çağırır
+- `services/` (+ `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
+- `routes/` (+ `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
 - `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil allowlist/atama: x-device-id → req.device.machineId), `uuid-param` (UUID path validate), `latency` (per-endpoint gecikme ölçümü), `login-lockout` (PIN/kart giriş kilidi)
 - `prisma/schema.prisma` — ~78 model, ~35 enum, `@prisma/adapter-pg`. **İdempotency katmanı:** `clientToken String? @unique @db.Uuid` (Roll/Order/WorkOrder) + `SwatchStockReduction` olay modeli (kartela stok-düşüm/iptal idempotency'sini taşır — KartelaDispatch'te clientToken yok).
 
@@ -88,7 +88,7 @@ Sadece bunlar. Alternatif tanıtma.
 
 ## RBAC Permission Kodları
 
-`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **65 permission**, **10 modül**:
+`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Kanonik liste + güncel sayı **`src/constants/permission-catalog.ts`**'tedir (aşağıdaki tablo modül kırılımı + gerekçe notları içindir, sayaç değil):
 
 | Modül | Permissions |
 |---|---|

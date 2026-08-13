@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { InventoryService } from "../services/inventory.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import "../types/express-augment";
 
@@ -54,6 +55,9 @@ const manualAttributesSchema = z.object({
   propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional(),
   width:        z.number().positive("En pozitif olmalı").max(999_999_999).optional().nullable(),
   qualityGrade: z.string().trim().max(50).optional(),
+  // KAT — yalnız BİÇİM normalleştirilir; geçerlilik serviste katalogla ölçülür
+  // (`resolveFoldTypeForWrite`). Alan gönderilmezse kata DOKUNULMAZ.
+  foldType:     foldTypeSchema,
   reason:       z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
 });
 
@@ -98,6 +102,10 @@ const relabelSchema = z.object({
   propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional(),
   width:        z.number().positive("En pozitif olmalı").max(999_999_999).optional().nullable(),
   qualityGrade: z.string().trim().max(50).optional(),
+  // KAT düzeltmesi (2026-08-13) — kesim yolunda istemci alanı düşürdüğü için katsız
+  // doğmuş topların tek düzeltme kapısı. Yalnız BİÇİM burada; katalog doğrulaması
+  // serviste (`resolveFoldTypeForWrite`). Gönderilmezse kata dokunulmaz.
+  foldType:     foldTypeSchema,
   // Metraj (currentQty) düzeltmesi — yanlış girilen ölçüm. Aynı guard'lara tabi
   // (hurda/iptal + commit'li sevkiyat reddi). Kısmen tüketilmiş topta servis reddeder.
   currentQty:   z.number().positive("Metraj pozitif olmalı").max(999_999).optional(),
@@ -111,7 +119,8 @@ const relabelSchema = z.object({
 // mevcut currentQty'si (fason kabulden gelen irsaliye değeri) kullanılır.
 // Hata aralık değil nokta (endMeter kaldırıldı). Hatalar genelde "Hata Ekle"
 // (reportError) ile tek tek girilir; bu endpoint sadece roll'u ilerletir.
-const kursunFinishSchema = z.object({
+// Export: Zod katmanı bekçisi için (bkz. kursun-qc.controller.completeQc2Schema).
+export const kursunFinishSchema = z.object({
   totalMeters: z.number().positive("Toplam metraj pozitif olmalı").max(999_999, "Toplam metraj çok büyük").optional(),
   errors: z
     .array(
@@ -123,6 +132,18 @@ const kursunFinishSchema = z.object({
     .optional()
     .default([]),
   notes: z.string().max(1000).optional().nullable(),
+  // Mod + değer sözleşmesi — `kursun-qc.completeQc2` ile BİREBİR aynı alan.
+  // İki tablet yolu aynı istasyonun özelliklerini farklı kurallarla uygularsa
+  // aynı top iki yoldan iki farklı özellik kümesi kazanır.
+  properties: z
+    .array(
+      z.object({
+        propertyId: z.string().uuid(),
+        valueCode: z.string().trim().max(32).nullish(),
+      }),
+    )
+    .max(50)
+    .nullish(),
 });
 
 export class InventoryController {
@@ -135,6 +156,8 @@ export class InventoryController {
     this.findAllRolls = this.findAllRolls.bind(this);
     this.getProductionFlow = this.getProductionFlow.bind(this);
     this.getRollStats = this.getRollStats.bind(this);
+    this.listEntryUsers = this.listEntryUsers.bind(this);
+    this.listEntryStations = this.listEntryStations.bind(this);
     this.getRollStatsBatch = this.getRollStatsBatch.bind(this);
     this.getWarehouseScope = this.getWarehouseScope.bind(this);
     this.getSubcontractorSummary = this.getSubcontractorSummary.bind(this);
@@ -285,6 +308,24 @@ export class InventoryController {
     try {
       const result = await this.service.getRollStats(req);
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/rolls/entry-users — "Ekleyen" filtre seçenekleri (top girmiş kullanıcılar). */
+  async listEntryUsers(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json(await this.service.listEntryUsers());
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/rolls/entry-stations — "Giriş İstasyonu" filtre seçenekleri. */
+  async listEntryStations(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json(await this.service.listEntryStations());
     } catch (error) {
       next(error);
     }
@@ -514,6 +555,7 @@ export class InventoryController {
           propertyIds: body.propertyIds ?? [],
           width: body.width,
           qualityGrade: body.qualityGrade,
+          foldType: body.foldType,
           currentQty: body.currentQty,
           reason: body.reason,
         },
@@ -553,6 +595,7 @@ export class InventoryController {
           propertyIds: body.propertyIds ?? [],
           width: body.width,
           qualityGrade: body.qualityGrade,
+          foldType: body.foldType,
           reason: body.reason,
         },
         req.user?.userId,

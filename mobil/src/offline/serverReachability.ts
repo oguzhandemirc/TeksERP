@@ -29,7 +29,13 @@
 
 import NetInfo from '@react-native-community/netinfo';
 import { onlineManager } from '@tanstack/react-query';
-import { API_URL } from '../constants/api';
+// ⚠️ `constants/api`nin API_URL'i DEĞİL — o DERLEME ZAMANI sabitidir. Gerçek
+// istekler `getCurrentBaseUrl()` ile operatörün Ayarlar'dan girdiği adrese
+// gidiyor (api.ts request interceptor'ı). Yoklama sabiti kullandığı sürece
+// BAŞKA BİR SUNUCUYU sorar ve adres düzeltilse bile asla yeşile dönmez.
+// İçe aktarma tek yönlüdür: baseUrlStore bu dosyayı import ETMEZ (döngü olurdu);
+// adres değişimini aşağıda `subscribe` ile biz dinliyoruz.
+import { useBaseUrlStore, getCurrentBaseUrl } from '../store/baseUrlStore';
 import { jitteredBackoff } from './backoff';
 
 /** Çevrimdışıysak SEBEBİ. UI bunu farklı anlatır, `entryAttempt` farklı davranır. */
@@ -63,9 +69,15 @@ export function subscribeOfflineReason(cb: () => void): () => void {
 // -----------------------------------------------------------------------------
 // Sunucu yoklaması
 // -----------------------------------------------------------------------------
-/** `/health` kökü: API_URL `.../api` ile biter, sağlık ucu onun KARDEŞİDİR. */
+/**
+ * `/health` kökü: taban adres `.../api` ile biter, sağlık ucu onun KARDEŞİDİR.
+ *
+ * ⚠️ ADRES HER ÇAĞRIDA CANLI OKUNUR — modül yüklenirken bir kez değil. Operatör
+ * adresi kesinti sırasında düzeltebilir; sabitlenen bir URL, düzeltmeden sonra
+ * da eski sunucuyu yoklar ve uygulama kalıcı olarak çevrimdışı kalır.
+ */
 function healthUrl(): string {
-  return `${API_URL.replace(/\/api\/?$/, '')}/health`;
+  return `${getCurrentBaseUrl().replace(/\/api\/?$/, '')}/health`;
 }
 
 async function probeOnce(): Promise<boolean> {
@@ -95,8 +107,14 @@ function stopProbe(): void {
 function scheduleProbe(): void {
   if (probeTimer) return;
   // Jitter'lı backoff: onlarca tablet aynı anda ölü sunucuya yüklenmesin
-  // (SAHA-AG-DAYANIKLILIK §S5 ile aynı gerekçe). Taban 2 sn, tavan 30 sn.
-  const delay = jitteredBackoff(probeAttempt, 2000, 30_000);
+  // (SAHA-AG-DAYANIKLILIK §S5 ile aynı gerekçe). Taban 2 sn, tavan 10 sn.
+  //
+  // ⚠️ TAVAN 30 → 10 sn (2026-08-12): yoklama YALNIZ kesinti sürerken koşar
+  // (sağlıklı durumda tek bir ek istek bile atılmaz — dosya başlığındaki
+  // "kanıt tabanlı" kuralı), yani bu sıklık sunucu ayaktayken hiçbir maliyet
+  // doğurmaz. 30 sn ise sunucu döndükten sonra operatörü yarım dakika kilitli
+  // ekranda bekletiyordu ve o süre "bozuk" diye okunuyordu.
+  const delay = jitteredBackoff(probeAttempt, 2000, 10_000);
   probeTimer = setTimeout(() => {
     probeTimer = null;
     void (async () => {
@@ -133,6 +151,30 @@ export function reportServerReachable(): void {
   apply();
 }
 
+/**
+ * ŞİMDİ DENE — backoff'u beklemeden tek seferlik yoklama.
+ *
+ * NEDEN GEREKLİ (2026-08-12, gerçek kilitlenme): çevrimdışı sayılırken
+ * TanStack Query sorguları duraklatır, yani HİÇBİR gerçek istek çıkmaz →
+ * `reportServerReachable`ın tek tetikleyicisi yoklama kalır. Yoklama bir sebeple
+ * tutmuyorsa (bugün: yanlış adresi soruyordu) uygulama yeniden başlatılana kadar
+ * çevrimdışı KİLİTLENİR. Bu fonksiyon o döngünün elle açılan kapısıdır:
+ * operatörün bandındaki "Şimdi dene" ve adres değişimi bunu çağırır.
+ *
+ * Dönüş: sunucuya ulaşıldı mı (UI "denendi, hâlâ yok" diyebilsin).
+ */
+export async function revalidateServer(): Promise<boolean> {
+  if (!hasLink) return false; // link yokken yoklama anlamsız
+  stopProbe(); // bekleyen backoff'u iptal et — kullanıcı ŞİMDİ istedi
+  if (await probeOnce()) {
+    reportServerReachable();
+    return true;
+  }
+  // Hâlâ yok: sıfırdan backoff ile otomatik yoklamaya devam.
+  if (!serverReachable) scheduleProbe();
+  return false;
+}
+
 // -----------------------------------------------------------------------------
 // onlineManager bağlantısı — TEK giriş noktası
 // -----------------------------------------------------------------------------
@@ -150,8 +192,20 @@ export function installOnlineSignal(): void {
       }
       apply();
     });
+    // ADRES DEĞİŞİNCE HEMEN YENİDEN DEĞERLENDİR. Kesinti sırasında operatörün
+    // yapacağı ilk şey adresi düzeltmektir; backoff'u beklemek o düzeltmeyi
+    // "işe yaramadı" gibi gösterirdi. Abonelik BU YÖNDEDİR (store bizi değil,
+    // biz store'u dinleriz) — tersi içe aktarma döngüsü olurdu.
+    const unsubUrl = useBaseUrlStore.subscribe((state, prev) => {
+      if (state.baseUrl === prev?.baseUrl) return;
+      // Yalnız çevrimdışıyken anlamlı: çevrimiçiyken zaten ek istek atmıyoruz
+      // ve yeni adres yanlışsa ilk gerçek istek bunu zaten bildirir.
+      if (!serverReachable) void revalidateServer();
+    });
+
     return () => {
       unsub();
+      unsubUrl();
       stopProbe();
       emit = null;
     };

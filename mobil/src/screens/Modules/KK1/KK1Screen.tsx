@@ -61,14 +61,22 @@ import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
-import { useRawWidthEnabled, useKk1WeightEntryEnabled } from '../../../hooks/useFeatureFlags';
-import { NumpadHost } from '../../../components/NumpadProvider';
+import {
+  useRawWidthEnabled,
+  useKk1WeightEntryEnabled,
+  useKk1OnlineOnlyEnabled,
+  useKk1HistoryAllEntriesEnabled,
+  useKk1LabelScanVerifyEnabled,
+} from '../../../hooks/useFeatureFlags';
+import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { NumpadHost, useOptionalNumpadContext } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
-import { useSessionEntriesStore } from '../../../store/sessionEntriesStore';
+import { sessionBucketKey, useSessionEntriesStore } from '../../../store/sessionEntriesStore';
 import { useSessionStore } from '../../../store/sessionStore';
+import { useAuthStore } from '../../../store/authStore';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { itemService } from '../../../services/item.service';
 import {
@@ -103,10 +111,24 @@ import {
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
 // `onMutate` içinde HOOK okunamaz (render dışı) — modül seviyesindeki anlık
 // okuyucu kullanılır; `useOfflineReason` yalnız render için.
-import { offlineReason } from '../../../offline/serverReachability';
+import { offlineReason, revalidateServer } from '../../../offline/serverReachability';
+import RollFilterBar from '../../../components/filters/RollFilterBar';
+import {
+  EMPTY_ROLL_FILTER,
+  buildRollQueryParams,
+  filterQueryKey,
+  forcedCreatorFilter,
+  type RollHistoryFilterState,
+} from '../../../components/filters/rollHistoryFilter';
 import { usePermissions } from '../../../hooks/usePermission';
 import SyncStatusChip from '../../../components/SyncStatusChip';
-import { opIdFor, useFailedOps } from '../../../offline/failedOps';
+import {
+  usePrintQueue,
+  requeueOnReconnect,
+  type PrintResult,
+} from '../../../offline/printQueue';
+import { signalScan } from '../../../services/scanFeedback';
+import type { ScanFlash } from '../../../components/BarcodeScannerView';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
   AnimatedEntrance,
@@ -312,6 +334,27 @@ export default function KK1Screen() {
   /** Çevrimdışıysak SEBEBİ — 'link' (ağ yok) ile 'server' (sunucu ölü) uçuş
    *  kimliği açısından farklı davranır; bkz. aşağıdaki detach effect'i. */
   const offlineWhy = useOfflineReason();
+  /** "Şimdi dene" — çevrimdışı kilidinin elle açılan kapısı (bkz. bant yorumu). */
+  const [retryingLink, setRetryingLink] = useState(false);
+  const handleRetryConnection = useCallback(async () => {
+    setRetryingLink(true);
+    try {
+      const ok = await revalidateServer();
+      Toast.show(
+        ok
+          ? { type: 'success', text1: 'Bağlantı geri geldi', text2: 'Kayıt girebilirsiniz.' }
+          : {
+              type: 'error',
+              text1: 'Hâlâ ulaşılamıyor',
+              // Sonraki adımı SÖYLE: sunucu adresi tabletten değiştirilebiliyor
+              // ve saha vakalarının çoğu (IP değişimi) tam olarak orada çözülüyor.
+              text2: 'Sunucu kapalı olabilir; adres doğruysa yetkiliye haber verin.',
+            },
+      );
+    } finally {
+      setRetryingLink(false);
+    }
+  }, []);
   // "Yeni Desen" yalnız seçili operatörlere (mobile:kk1-desen; mobile:*/admin:* devralır).
   const { has } = usePermissions();
   const canAddDesen = has('mobile:kk1-desen');
@@ -323,6 +366,17 @@ export default function KK1Screen() {
   // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
   const rawWidthEnabled = useRawWidthEnabled();
   const weightEntryEnabled = useKk1WeightEntryEnabled();
+  // ONLINE-ONLY REJİM (2026-08-11 saha kararı, bayrak varsayılan KAPALI):
+  // açıkken KK1 çevrimdışıyken kayıt ALMAZ — form kilitlenir, sebep bandı çıkar
+  // ve kayıt asla offline kuyruğa düşmez (mutation networkMode 'always').
+  // Gerekçe: kesintide kuyruğa giren kayıtların etiketi sonradan basılamayınca
+  // operatör aynı topu YENİDEN giriyordu (07.08 vakası — 4 top ikizlendi).
+  const onlineOnly = useKk1OnlineOnlyEnabled();
+  // SCAN-BACK (print & verify, bayrak varsayılan KAPALI — kapalıyken ekranda
+  // HİÇBİR iz yok): basılan etiket GERİ OKUTULMADAN yeni top girilemez.
+  // "Etiket çıktı" sinyali yazılımdan alınamaz (BT yazıcı onay döndürmez) —
+  // tek güvenilir kanıt kâğıttaki barkodun tarayıcıdan geçmesidir.
+  const scanVerifyEnabled = useKk1LabelScanVerifyEnabled();
   // Otomatik metraj okuması için bu makineye atanmış METER cihaz(lar)ı (HAL).
   // Tablet hangi makineye atanmışsa onun cihazları gelir (backend for-device).
   const meterPeripherals = useMachinePeripherals('METER');
@@ -362,7 +416,11 @@ export default function KK1Screen() {
   // Bölüm Değiş/aynı bölüme dönüş, makine-istasyon değişimi, araya başka bölüme
   // bakmak listeyi SIFIRLAMAZ; yalnız çıkış/operatör değişimi temizler.
   // Sayaç = onaylı kayıtlar + gönderimde bekleyenler (çevrimdışı dahil).
-  const sessionBucket = useSessionEntriesStore((s) => s.buckets['RAW_QC']);
+  // Kova = tür + istasyon kimliği: ikinci ham giriş istasyonu açıldığında
+  // listeler karışmasın (sessionBucketKey açıklaması store'da).
+  const activeStationId = useSessionStore((st) => st.active?.stationId ?? null);
+  const bucketKey = sessionBucketKey('RAW_QC', activeStationId);
+  const sessionBucket = useSessionEntriesStore((s) => s.buckets[bucketKey]);
   const sessionRolls = sessionBucket?.rolls ?? [];
   const sessionCount = sessionRolls.length + (sessionBucket?.pending ?? 0);
   // Kaydet sonrası kısa "✓ Kaydedildi" başarı flaşı (CTA).
@@ -374,7 +432,8 @@ export default function KK1Screen() {
   const [attempt, setAttempt] = useState<EntryAttemptState>(IDLE_ATTEMPT);
   // Mutation geri çağrıları `mutate()` ANINDAKİ closure'ı taşır; uçuş penceresi
   // 47 sn'ye kadar sürebildiği için o closure'daki `attempt` bayat olur. Okuma
-  // ref'ten (emsal: `activePrintRollRef`), yazma fonksiyonel `setAttempt` ile.
+  // ref'ten, yazma fonksiyonel `setAttempt` ile. (Baskı tarafındaki aynı sınıf
+  // sorun store'a taşınarak çözüldü — `usePrintQueue.resolveActive`.)
   const attemptRef = useRef<EntryAttemptState>(attempt);
   useEffect(() => {
     attemptRef.current = attempt;
@@ -403,72 +462,138 @@ export default function KK1Screen() {
   // Listede yeni beliren topu kısa süre vurgulamak için.
   const [flashRollId, setFlashRollId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  // Etiket basımı — sıralı kuyruk. activePrintRoll = şu an LabelPrinter'a verilen
-  // (null = boşta). printQueue = sırada bekleyenler. Offline'da N entry toplu
-  // sync olduğunda hepsi print edilebilsin diye queue mantığı; ayrıca manuel
-  // "Bas" tetikleri de aynı kuyruğa düşer.
-  const [activePrintRoll, setActivePrintRoll] = useState<Roll | null>(null);
-  const [printQueue, setPrintQueue] = useState<Roll[]>([]);
+  // Etiket basımı — KALICI sıralı kuyruk (`offline/printQueue.ts`: zustand +
+  // AsyncStorage). Eskiden ekran state'iydi ve uygulama kapanınca "Başarısız"
+  // listesi SİLİNİYORDU (07.08 vakası: kesintide biriken 4 etiketin izi kayboldu,
+  // operatör topları yeniden girdi → stokta hayalet toplar). Bekleyen + başarısız
+  // artık diskte yaşar; POMPA (aşağıdaki effect) yalnız bu ekran mount'ken
+  // çalışır — yazıcı çalışma oturumundan çözüldüğü için başka ekranda basmaya
+  // kalkmak for-session fail-closed sözleşmesini bozardı.
+  const printJobs = usePrintQueue((s) => s.jobs);
+  const printActiveId = usePrintQueue((s) => s.activeId);
+  const printHydrated = usePrintQueue((s) => s.hydrated);
+  // Scan-back bekleyenleri — bayrak KAPALIYKEN liste boş kalır (addVerify hiç
+  // çağrılmaz) ve `verifyPending` false olduğu için ekranda tek öğe çizilmez.
+  const verifies = usePrintQueue((s) => s.verifies);
+  const verifyPending = scanVerifyEnabled && verifies.length > 0;
+  const [verifyScanOpen, setVerifyScanOpen] = useState(false);
+  // useMemo: 3000+ satırlık ekranda her render'da taze dizi kimliği üretmek
+  // alt bileşen memoizasyonunu boşa düşürür (inceleme bulgusu — perf).
+  const activePrintRoll = useMemo(
+    () => printJobs.find((j) => j.roll.id === printActiveId)?.roll ?? null,
+    [printJobs, printActiveId],
+  );
+  const printQueue = useMemo(
+    () =>
+      printJobs
+        .filter((j) => !j.error && j.roll.id !== printActiveId)
+        .map((j) => j.roll),
+    [printJobs, printActiveId],
+  );
+  const failedPrints = useMemo(
+    () =>
+      printJobs.filter((j) => j.error).map((j) => ({ roll: j.roll, error: j.error! })),
+    [printJobs],
+  );
 
-  // activePrint null ve queue dolu ise → bir sonrakini başlat. Print finish'te
-  // activePrint = null olur, bu effect bir sonrakini alır. Sonsuz cycle yok
-  // (queue boşalırsa effect no-op).
-  // OFFLINE: LabelPrinter etiket HTML'ini backend'den çekiyor → offline basamaz.
-  // Bu yüzden offline'da kuyruğu İLERLETME; entry'ler birikir, ağ gelince
-  // (isOnline → true, effect tekrar çalışır) sırayla basılır.
+  // Diskten yükle (idempotent) — restart sonrası bekleyen/başarısız işler geri gelir.
   useEffect(() => {
-    if (isOnline && activePrintRoll === null && printQueue.length > 0) {
-      setActivePrintRoll(printQueue[0]);
-      setPrintQueue((q) => q.slice(1));
-    }
-  }, [isOnline, activePrintRoll, printQueue]);
-
-  const enqueuePrint = useCallback((roll: Roll) => {
-    setPrintQueue((q) => [...q, roll]);
+    void usePrintQueue.getState().hydrate();
   }, []);
 
-  const handlePrintDone = useCallback(() => {
-    setActivePrintRoll(null); // useEffect bir sonrakini alır
+  // POMPA: aktif iş yok + bekleyen var + ONLINE → sıradakini başlat.
+  // OFFLINE: LabelPrinter etiket içeriğini backend'den çekiyor → offline basamaz.
+  // Kuyruk İLERLETİLMEZ; ağ gelince effect yeniden koşar, sırayla basılır.
+  useEffect(() => {
+    if (isOnline && printHydrated && printActiveId === null) {
+      usePrintQueue.getState().startNext();
+    }
+  }, [isOnline, printHydrated, printActiveId, printJobs]);
+
+  // AĞ DÖNÜŞÜ: ağ kaynaklı düşen işler (retryable) otomatik yeniden kuyruğa
+  // alınır — tavan PRINT_AUTO_RETRY_MAX (flap eden sunucuda osilasyon kesici).
+  // BT/yapılandırma hataları burada DÖNMEZ; onlar ağla düzelmez, elle
+  // "Tekrar Dene" ister. ⚠️ KENAR tetikli (requeueOnReconnect, modül-ömürlü
+  // kurma bayrağı): doğrudan requeueRetryable çağrılsaydı HER ekran ziyareti
+  // bir otomatik deneme hakkı yakardı — kalıcı 5xx'te 3 giriş-çıkış hakları
+  // bitirir, operatör "kendiliğinden basılır"ı boşuna beklerdi (inceleme bulgusu).
+  useEffect(() => {
+    requeueOnReconnect(isOnline, printHydrated);
+  }, [isOnline, printHydrated]);
+
+  // Aynı top zaten bekliyorsa store dedup eder (çift dokunuş 2 kâğıt basmaz).
+  const enqueuePrint = useCallback((roll: Roll) => {
+    usePrintQueue.getState().enqueue(roll);
+  }, []);
+
+  // onDone güvenlik ağı — onResult ÇAĞRILMAYAN yol (barkodsuz top erken dönüşü)
+  // aktif işi askıda bırakmasın. onResult zaten çözdüyse store no-op yapar.
+  const handlePrintDone = useCallback((printed: Roll) => {
+    usePrintQueue.getState().finishActive(printed.id);
   }, []);
 
   // ── Başarısız baskılar + kuyruk görünümü ──
   // BT hatası / zaman aşımında etiket KAYBOLMAZ: top "başarısızlar"a düşer,
-  // kuyruk çipine dokununca açılan görünümden Tekrar Dene ile yeniden sıraya
-  // alınır. İptal (yazdırma diyaloğu kapatıldı) hata SAYILMAZ.
-  const [failedPrints, setFailedPrints] = useState<{ roll: Roll; error: string }[]>([]);
+  // kuyruk çipinden / footer'daki kırmızı banttan yeniden sıraya alınır.
+  // İptal (yazdırma diyaloğu kapatıldı) hata SAYILMAZ.
   const [queueOpen, setQueueOpen] = useState(false);
   // "Bu oturum" rozetine dokununca oturum listesi modalı (veri sessionEntriesStore'da).
   const [sessionListOpen, setSessionListOpen] = useState(false);
 
-  // onResult anında activePrintRoll state'i closure'da bayat olabilir → ref.
-  const activePrintRollRef = useRef<Roll | null>(null);
-  useEffect(() => {
-    activePrintRollRef.current = activePrintRoll;
-  }, [activePrintRoll]);
+  // Baskı sonucu STORE'da çözülür — aktif işi o bilir (bayat closure derdi yok).
   const handlePrintResult = useCallback(
-    (r: { ok: boolean; cancelled: boolean; error?: string }) => {
-      const roll = activePrintRollRef.current;
-      if (!roll) return;
-      if (r.ok) {
-        setFailedPrints((f) => f.filter((x) => x.roll.id !== roll.id));
-      } else if (!r.cancelled) {
-        setFailedPrints((f) => [
-          { roll, error: r.error || 'Yazdırma hatası' },
-          ...f.filter((x) => x.roll.id !== roll.id),
-        ]);
+    (r: PrintResult) => {
+      const res = usePrintQueue.getState().resolveActive(r);
+      // SCAN-BACK: gerçek baskı başarısı okutma borcu doğurur (yalnız bayrak
+      // açıkken — kapalıyken addVerify hiç çağrılmaz, liste hep boş).
+      if (res.printedRoll && scanVerifyEnabled) {
+        usePrintQueue.getState().addVerify(res.printedRoll);
       }
+      // ONLINE-ONLY: baskı hatası köşede çip olarak bekleyemez — kuyruk
+      // görünümü KENDİLİĞİNDEN açılır ve operatör "Tekrar Dene / çıkar"
+      // kararını vermeden geçemez. İSTİSNA: OTOMATİK yeniden denemenin düşüşü
+      // modalı tekrar AÇMAZ (operatör tetiklemedi, spam olur — çip + bant
+      // zaten kırmızı). Kuyruklu rejimde davranış eskisi gibi: çip/bant yanar.
+      if (res.failed && onlineOnly && !res.wasAuto) setQueueOpen(true);
     },
-    [],
+    [onlineOnly, scanVerifyEnabled],
   );
+  // Scan-back okutması: kod listedeki bir etiketle eşleşirse borç düşer.
+  // Geri bildirim ORTAK katmandan (mobil CLAUDE.md sözleşmesi): ses+titreşim
+  // `signalScan` (ekran Haptics'i DOĞRUDAN çağırmaz), görsel sonuç tarayıcı
+  // AÇIKKEN ekran-içi flash'tır — operatörün gözü kadrajda, arkada kalan toast
+  // görülmez ("Fason Sevk'te kaybolan toast" vakasının birebir dersi).
+  const verifyFlashSeq = useRef(0);
+  const [verifyFlash, setVerifyFlash] = useState<ScanFlash | null>(null);
+  const handleVerifyScan = useCallback((code: string) => {
+    const result = usePrintQueue.getState().confirmVerify(code);
+    if (result === 'ok') {
+      signalScan('accept');
+      setVerifyFlash(null); // varsa eski ret bandı düşsün, yeşil tik görünsün
+      // Son borç da kapandıysa tarayıcıyı kapat — kapanınca toast serbesttir.
+      if (usePrintQueue.getState().verifies.length === 0) {
+        setVerifyScanOpen(false);
+        Toast.show({ type: 'success', text1: 'Etiketler doğrulandı ✓' });
+      }
+    } else {
+      signalScan('reject');
+      verifyFlashSeq.current += 1;
+      setVerifyFlash({
+        kind: 'reject',
+        title: 'LİSTEDE YOK',
+        detail: `${code.trim()} — çıkan kâğıttaki barkodu okutun`,
+        seq: verifyFlashSeq.current,
+      });
+    }
+  }, []);
   const retryFailedPrint = useCallback((roll: Roll) => {
-    setFailedPrints((f) => f.filter((x) => x.roll.id !== roll.id));
-    setPrintQueue((q) => [...q, roll]);
+    usePrintQueue.getState().retryJob(roll.id);
   }, []);
   const dismissFailedPrint = useCallback((id: string) => {
-    setFailedPrints((f) => f.filter((x) => x.roll.id !== id));
+    usePrintQueue.getState().removeJob(id);
   }, []);
   const removeFromQueue = useCallback((id: string) => {
-    setPrintQueue((q) => q.filter((r) => r.id !== id));
+    usePrintQueue.getState().removeJob(id);
   }, []);
   // Scrap onay modal'ı — native Alert yerine kendi modalımız (alert telefon yönünü değiştiriyordu).
   const [scrapTarget, setScrapTarget] = useState<Roll | null>(null);
@@ -501,6 +626,19 @@ export default function KK1Screen() {
       requestAnimationFrame(() => widthRef.current?.focus());
     }
   }, [compact, manualMode, rawWidthEnabled]);
+
+  // NUMPAD ASLA ÖLÜ KALMASIN (2026-08-12 saha isteği). `NumpadHost`
+  // `disabled = !target` çalışıyor: hedef boşalırsa tuşlar gri olur ve operatör
+  // "klavye bozuldu" der. Bugün `closeTarget`ı kimse çağırmıyor, yani bu yol
+  // pratikte tetiklenmiyor — ama tek satırlık bir değişiklik (bir modalın
+  // kapanışta hedefi bırakması) numpad'i sessizce öldürebilirdi. Manuel modda
+  // toparlanma hedefi METRAJDIR; operatörün oraya dokunması beklenmez.
+  const numpadCtx = useOptionalNumpadContext();
+  const numpadTarget = numpadCtx?.target ?? null;
+  useEffect(() => {
+    if (compact || !manualMode || numpadTarget !== null) return;
+    requestAnimationFrame(() => manualQtyRef.current?.focus());
+  }, [compact, manualMode, numpadTarget]);
 
   // ── Items: kumaş (Variant kaldırıldı; RAW/DYED ayrımı yok artık) ──
   const itemsQuery = useQuery({
@@ -572,15 +710,27 @@ export default function KK1Screen() {
   // değeri oldu, CSV ile ikisi de kapsanır (backend buildWhereClause virgülü `in`'e çevirir).
   // Backend enum'unda 'ALL' / 'PRODUCTION' YOK — status filtresi vermiyoruz ki
   // tüm statüsler (STOCK ham, WAREHOUSE renkli, vs.) görünsün.
+  // KİŞİYE ÖZEL (2026-08-12 saha kararı): sağdaki liste operatörün KENDİ
+  // girdikleridir — bayraktan bağımsız. İki operatör aynı tablette dönüşümlü
+  // çalışırken "benim girdiğim kayboldu / bu benim değil" karışıklığı bitmeli;
+  // başkalarının girişleri "Tüm Girişler"de (bayrak açıksa) durur. Süzme
+  // SUNUCUDA (filter[createdById] — generic buildWhereClause yolu, bekçi:
+  // test_filter_multi_select §2b); istemcide süzmek sayfalı listede yanıltır.
+  const authUserId = useAuthStore((st) => st.user?.userId) ?? null;
   const recentRollsQuery = useQuery({
-    queryKey: ['rolls', 'kk1', 'recent'],
+    queryKey: ['rolls', 'kk1', 'recent', authUserId],
     queryFn: () =>
       rollService.getAll({
         page: 1,
         pageSize: RECENT_PAGE_SIZE,
         sortBy: 'createdAt',
         sortOrder: 'desc',
-        filters: { entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY' },
+        filters: {
+          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY',
+          // Kimlik henüz yüklenmediyse (teorik açılış yarışı) filtre GÖNDERME —
+          // boş string tüm listeyi sessizce boşaltırdı.
+          ...(authUserId ? { createdById: authUserId } : {}),
+        },
       }),
   });
 
@@ -663,11 +813,18 @@ export default function KK1Screen() {
     } | undefined
   >({
     mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
+    // ONLINE-ONLY: 'always' → mutation offline'da PAUSE OLMAZ, kuyruğa girmez.
+    // Çevrimdışı basış zaten handleSubmit kapısında engelli; uçuş ortasında
+    // kopan ağda istek düşer, stationRetry dener, kalıcı düşüş görünür hata +
+    // yapışkan token olur (sıradaki basış AYNI kimlikle gider → kopya yok).
+    // Bayrak kapalıyken defaults'taki 'online' (kuyruklu) davranış birebir sürer.
+    ...(onlineOnly ? { networkMode: 'always' as const } : {}),
     onMutate: (vars) => {
       const prevForm = form;
       // Kuyruğa mı düşüyor? `onlineManager.isOnline()` ile retryer'ın `isPaused`
-      // kararı AYNI predicate'ten gelir — okuma deterministik.
-      const queued = !onlineManager.isOnline();
+      // kararı AYNI predicate'ten gelir — okuma deterministik. Online-only
+      // rejimde mutation hiç pause olmadığı için kuyruk dalı da kapalıdır.
+      const queued = !onlineOnly && !onlineManager.isOnline();
       // ⚠️ UÇUŞ KAYDI İÇİN AYRI SORU: kayıt yalnız operatörün BİLDİĞİ bir
       // çevrimdışılıkta (ağ linki yok) açılmaz. "Sunucuya ulaşılamıyor"da
       // (B6) açılır — orada basışlar panik olabilir ve aynı yük 90 sn içinde
@@ -723,7 +880,7 @@ export default function KK1Screen() {
         });
       }
       // Oturum sayacı (pending) — offline'da da çalışır.
-      useSessionEntriesStore.getState().addPending('RAW_QC');
+      useSessionEntriesStore.getState().addPending(bucketKey);
       // Form'daki her alan KALICI (ürün, en, kalite) — aynı en'den seri giriş.
       // Yalnızca per-roll manuel değerler (mt/kg) temizlenir.
       const prevManualQty = manualQty;
@@ -767,12 +924,12 @@ export default function KK1Screen() {
       // (eskiden setPrintRoll overwrite ediyordu, sadece son etiket basıyordu).
       enqueuePrint(res.data);
       // "Bu oturum" listesi — sunucu onayı: pending → onaylı kayda dönüşür.
-      useSessionEntriesStore.getState().confirmRoll('RAW_QC', res.data as Roll);
+      useSessionEntriesStore.getState().confirmRoll(bucketKey, res.data as Roll);
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
     onError: (err, vars, context) => {
       // Kayıt reddedildi → oturum sayacındaki pending geri alınır (sayaç şişmesin).
-      useSessionEntriesStore.getState().failPending('RAW_QC');
+      useSessionEntriesStore.getState().failPending(bucketKey);
       // CTA "Kaydedildi ✓" flaşında takılı kalmasın — hata durumunu ezerdi.
       setJustSaved(false);
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
@@ -1083,6 +1240,35 @@ export default function KK1Screen() {
 
   const handleSubmit = async () => {
     if (pulling) return; // makineden okuma sürerken çift tetikleme yok
+    // ONLINE-ONLY KAPISI: çevrimdışıyken kayıt HİÇ alınmaz (kuyruk yok). Buton
+    // zaten disabled ama bu guard yarış penceresini de kapatır (basış anında
+    // bağlantı düşmüş olabilir). Sebep ayrı anlatılır — "wifi'yi aç" ile
+    // "sunucu kapalı, IT'ye haber ver" operatör için farklı işlerdir.
+    if (onlineOnly && !onlineManager.isOnline()) {
+      const why = offlineReason();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Toast.show({
+        type: 'error',
+        text1: why === 'server' ? 'Sunucuya ulaşılamıyor' : 'Ağ bağlantısı yok',
+        text2:
+          'Kayıt ALINMADI — bu ekranda çevrimdışı giriş kapalı. ' +
+          'Bağlantı gelince topu girin; sıraya alınan hiçbir şey yok.',
+      });
+      return;
+    }
+    // SCAN-BACK KAPISI: okutulmamış etiket varken yeni top girilemez — buton
+    // görünürde basılabilir kalır (disabled buton "dondu" hissi verir) ama
+    // basış doğrudan TARAYICIYI açar: en hızlı uyum yolu engelin kendisidir.
+    if (verifyPending) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      Toast.show({
+        type: 'info',
+        text1: 'Önce etiketi okut',
+        text2: `${verifies.length} basılı etiket doğrulama bekliyor — çıkan kâğıdı okutun`,
+      });
+      setVerifyScanOpen(true);
+      return;
+    }
     // TEKRAR DENE: düşen deneme birebir yeniden gönderilir — form okunmaz,
     // makineye gidilmez, doğrulama tekrarlanmaz (payload zaten geçerliydi).
     // Aynı token + aynı içerik → backend idempotent yolu → kopya doğmaz.
@@ -1183,21 +1369,12 @@ export default function KK1Screen() {
   const clearConflict = () => {
     setAttempt(onCollisionResolvedAsNew());
     failedVarsRef.current = null;
-    // Modal ile çözülen çakışma kutuda ÖLÜ SATIR bırakmasın: `MutationCache`
-    // her kalıcı düşüşü kutuya yazar (ekran mount olsun olmasın) — modal
-    // burada kararı verdiğine göre satırın işi bitti. Çift yüzey bilinçli:
-    // modal geçici, kutu kalıcı; ama ikisi aynı kaydı iki kez sordurmamalı.
-    if (conflict) {
-      useFailedOps.getState().clear(opIdFor(STATION_MUT.KK1_CREATE_ENTRY, conflict.vars));
-    }
     setConflict(null);
   };
 
   /**
    * Barkoddan etiket bas — sunucudan topu okur, yazıcı kuyruğuna atar.
-   * Çakışma modalı VE ölü mektup kutusu (`SyncStatusChip → OutboxModal`) aynı
-   * yeteneği kullanır; kutu her ekrandan açılabildiği için yetenek oraya
-   * KK1'den enjekte edilir (yazıcı kuyruğu bu ekrana ait).
+   * Çakışma modalının "var olanın etiketini bas" yolu bunu kullanır.
    */
   const printBarcode = useCallback(
     async (barcode: string): Promise<boolean> => {
@@ -1240,8 +1417,6 @@ export default function KK1Screen() {
   const saveConflictAsNew = () => {
     if (!conflict) return;
     const { kind, vars } = conflict;
-    // Modal kararı verdi → kutudaki ölü satır düşer (bkz. clearConflict notu).
-    useFailedOps.getState().clear(opIdFor(STATION_MUT.KK1_CREATE_ENTRY, vars));
     setConflict(null);
     const next = onCollisionResolvedAsNew();
     setAttempt(next);
@@ -1342,7 +1517,15 @@ export default function KK1Screen() {
       hidePlaceChip={compact}
       headerExtras={
         <View style={styles.headerExtrasRow}>
-          {(printingCount > 0 || failedPrints.length > 0) && (
+          {/* ÇİP YALNIZ "AKIYOR" DURUMUNU GÖSTERİR — hata kısmı 2026-08-12'de
+              buradan ÇIKARILDI ve tek yüzey olarak aşağıdaki kırmızı banda
+              indirildi. Gerekçe: aynı hata hem burada ("N ETİKET HATALI") hem
+              Kaydet butonunun üstündeki bantta duruyordu; header'da ayrıca
+              SyncStatusChip'in kırmızısı da olabildiği için operatörden üç
+              kırmızı kutucuğu birbirinden ayırt etmesi bekleniyordu (sahada
+              gözlendi). Basım göstergesi KALDI: anlıktır, nötr renktir ve
+              "şu an bir şey oluyor" bilgisini başka hiçbir yüzey vermiyor. */}
+          {printingCount > 0 && (
             <Animated.View
               entering={FadeInUp.duration(180)}
               exiting={FadeOutUp.duration(140)}
@@ -1352,29 +1535,19 @@ export default function KK1Screen() {
                 borderless
                 onPress={() => setQueueOpen(true)}
                 rippleColor="rgba(255,255,255,0.2)"
-                style={[styles.printChip, failedPrints.length > 0 && styles.printChipFailed]}
+                style={styles.printChip}
                 accessibilityLabel="Yazıcı kuyruğunu göster"
               >
                 <View style={styles.printChipInner}>
-                  {printingCount > 0 && <Pulse color="#fff" size={7} />}
+                  <Pulse color="#fff" size={7} />
                   <Text style={styles.printChipText}>
-                    {printingCount > 0
-                      ? `${printingCount} etiket${!isOnline ? ' · çevrimdışı' : ''}`
-                      : ''}
-                    {printingCount > 0 && failedPrints.length > 0 ? ' · ' : ''}
-                    {/* "ETİKET" kelimesi LOAD-BEARING: yan taraftaki SyncStatusChip
-                        "N KAYIT HATALI" diyor ve o SUNUCUYA YAZILAMAMIŞ kaydı
-                        anlatıyor. İkisi aynı header'da yan yana durduğu için
-                        çıplak "N HATALI" operatörü yanıltırdı. */}
-                    {failedPrints.length > 0 ? `${failedPrints.length} ETİKET HATALI` : ''}
+                    {`${printingCount} etiket${!isOnline ? ' · çevrimdışı' : ''}`}
                   </Text>
                 </View>
               </TouchableRipple>
             </Animated.View>
           )}
-          {/* Ölü mektup kutusundaki "Etiketi Bas" yeteneği yalnız burada var —
-              yazıcı kuyruğu KK1'e ait. Diğer ekranlarda buton hiç çıkmaz. */}
-          <SyncStatusChip onPrintBarcode={printBarcode} />
+          <SyncStatusChip />
           {!compact && sessionActionsRow}
           {/* Dikey telefonda "Son Kayıtlar" çekmece tetiği artık 2. katta
               (phoneSecondRow) — yan menü açan tuş burada değil. */}
@@ -1479,6 +1652,14 @@ export default function KK1Screen() {
                     style={styles.input}
                     contentStyle={[styles.manualInputContent, !compact && styles.manualInputContentTablet]}
                     useNativeKeyboard={compact}
+                    // MANUEL MODDA NUMPAD'İN VARSAYILAN HEDEFİ BURASIDIR
+                    // (2026-08-12 saha isteği). Öncesinde hiçbir alan hedef
+                    // almıyordu: `NumpadHost` `disabled = !target` olduğu için
+                    // manuel giriş açılınca tuşlar GRİ ve tıklanamaz kalıyor,
+                    // operatör önce metraj kutusuna dokunmak zorunda kalıyordu.
+                    // (En alanı bayrakla kapalıysa ekranda hedef alacak BAŞKA
+                    // alan da yok — numpad tamamen ölüydü.)
+                    autoActivate={!compact && manualMode}
                   />
                 </View>
                 {weightEntryEnabled && (
@@ -1610,7 +1791,13 @@ export default function KK1Screen() {
                     style={[styles.input, styles.widthInput]}
                     contentStyle={styles.widthInputContent}
                     useNativeKeyboard={compact}
-                    autoActivate={!compact}
+                    // ⚠️ MANUEL MODDA HEDEFİ METRAJA BIRAK. İki alan da
+                    // `autoActivate` olsaydı kazanan MOUNT SIRASI olurdu (En
+                    // sonra mount olduğu için o kazanırdı) ve operatör metraj
+                    // beklerken tuşlar EN'i değiştirirdi — sessiz ve yanlış.
+                    // Otomatik modda metraj kantardan/metreden gelir, operatörün
+                    // gireceği tek sayı En'dir; orada varsayılan yine En.
+                    autoActivate={!compact && !manualMode}
                   />
                   <IconButton
                     icon="backspace-outline"
@@ -1675,6 +1862,132 @@ export default function KK1Screen() {
             compact && footerAnimStyle,
           ]}
         >
+          {/* SCAN-BACK BANDI (yalnız bayrak açıkken): basılan etiket geri
+              okutulmadan yeni top girilemez. İndigo = "sıradaki adım" (kırmızı
+              hata, amber durum bandlarından bilinçli ayrı kutup). Dokununca
+              tarayıcı açılır; Kaydet butonu da aynı yere yönlendirir. */}
+          {verifyPending && (
+            <TouchableRipple
+              borderless
+              onPress={() => setVerifyScanOpen(true)}
+              rippleColor="rgba(79,70,229,0.15)"
+              style={styles.verifyBanner}
+            >
+              <View style={styles.verifyBannerInner}>
+                <Icon source="barcode-scan" size={18} color="#4338ca" />
+                <Text style={styles.verifyText}>
+                  Çıkan etiketi OKUT ({verifies.length}):{' '}
+                  {verifies
+                    .slice(0, 2)
+                    .map((v) => v.barcode)
+                    .join(', ')}
+                  {verifies.length > 2 ? '…' : ''}
+                </Text>
+                {/* KAÇIŞ YOLU (inceleme bulgusu): etiket lekeli/okunmuyor ya da
+                    kayıpsa borç kapıyı SÜRESİZ kilitlerdi (48 sa kalıcı) ve tek
+                    çıkış admin'in bayrağı kapatmasıydı. "Tekrar Bas" bekleyen
+                    borçların etiketini yeniden basar → taze kâğıt okutulur,
+                    borç normal yoldan kapanır. Borcu SİLME yolu bilinçli YOK. */}
+                <Button
+                  mode="outlined"
+                  compact
+                  textColor="#4338ca"
+                  disabled={!isOnline}
+                  onPress={() => {
+                    for (const v of verifies) void printBarcode(v.barcode);
+                  }}
+                  style={{ borderColor: '#4f46e5', borderWidth: 1.5 }}
+                  labelStyle={styles.labelFailBtnLabel}
+                >
+                  Tekrar Bas
+                </Button>
+                <Button
+                  mode="contained"
+                  compact
+                  buttonColor="#4338ca"
+                  textColor="#fff"
+                  onPress={() => setVerifyScanOpen(true)}
+                  labelStyle={styles.labelFailBtnLabel}
+                >
+                  Okut
+                </Button>
+              </View>
+            </TouchableRipple>
+          )}
+          {/* ETİKET ÇIKMADI BANDI (her iki rejimde): köşedeki çip yeterince
+              görünür değildi — operatör etiketi çıkmayan topu sistemde yok
+              sanıp YENİDEN giriyordu (07.08 vakası). Bant operatörün baktığı
+              yerde (Kaydet butonunun üstünde) durur ve iki şeyi söyler:
+              top KAYITLI + tek dokunuşla tekrar bas. Kalıcı store'dan
+              beslendiği için uygulama yeniden başlasa da görünür. */}
+          {failedPrints.length > 0 && (
+            // BANT ARTIK TEK YÜZEY (2026-08-12): header'daki "N ETİKET HATALI"
+            // çipi kaldırıldı, onun tek işi olan detay listesi buraya bağlandı.
+            // Banda dokunmak yazıcı kuyruğunu açar (hangi barkodlar, tek tek
+            // tekrar/sil); "Tekrar Bas" ise hepsini tek dokunuşla dener ve
+            // operatörün %90 durumda isteyeceği şey odur — o yüzden dışarıda.
+            // ⚠️ TouchableRipple TEK element çocuk ister (2.5.0'daki
+            // Children.only çökmesi) — sarılan View bilinçli olarak tek.
+            <TouchableRipple
+              onPress={() => setQueueOpen(true)}
+              rippleColor="rgba(185,28,28,0.15)"
+              style={styles.labelFailBannerTouch}
+              accessibilityRole="button"
+              accessibilityLabel={`Etiket çıkmadı, ${failedPrints.length} top. Listeyi açmak için dokun`}
+            >
+              <View style={styles.labelFailBanner}>
+                <Icon source="printer-off" size={18} color="#b91c1c" />
+                <Text style={styles.labelFailText}>
+                  Etiket çıkmadı — {failedPrints.length} top. Top sistemde KAYITLI,
+                  yeniden girme.
+                </Text>
+                <Button
+                  mode="contained"
+                  compact
+                  buttonColor="#b91c1c"
+                  textColor="#fff"
+                  // Baskı içeriği sunucudan çekilir → çevrimdışıyken denemek
+                  // anlamsız; kilit + (varsa) offline bandı sebebini söyler.
+                  disabled={!isOnline}
+                  onPress={() => usePrintQueue.getState().retryAllFailed()}
+                  labelStyle={styles.labelFailBtnLabel}
+                >
+                  Tekrar Bas
+                </Button>
+                <Icon source="chevron-right" size={20} color="#b91c1c" />
+              </View>
+            </TouchableRipple>
+          )}
+          {/* ONLINE-ONLY: çevrimdışıyken buton kilitli + üstünde sebep bandı.
+              Sebep operatörün yapacağı işi söyler — wifi mi, sunucu mu. */}
+          {onlineOnly && !isOnline && (
+            <View style={styles.offlineLockBanner}>
+              <Icon source="wifi-off" size={18} color="#b45309" />
+              <Text style={styles.offlineLockText}>
+                {offlineWhy === 'server'
+                  ? 'Sunucuya ulaşılamıyor — kayıt girilemez. Sunucu dönünce devam edin; sürerse yetkiliye haber verin.'
+                  : 'Ağ bağlantısı yok — kayıt girilemez. Wifi bağlantısını kontrol edin; toplar bağlantı gelince girilir.'}
+              </Text>
+              {/* ÇIKIŞ KAPISI (2026-08-12): çevrimdışıyken sorgular duraklar,
+                  yani hiçbir gerçek istek çıkmaz ve otomatik yoklama tek
+                  tetikleyicidir. Yoklama bir sebeple tutmazsa ekran kalıcı
+                  kilitlenir (gerçek vaka: yoklama yanlış adresi soruyordu).
+                  Bu tuş operatöre backoff'u beklemeden deneme hakkı verir —
+                  sunucu döndüğünde 10 sn'yi de beklemesin. */}
+              <Button
+                mode="contained"
+                compact
+                buttonColor="#b45309"
+                textColor="#fff"
+                loading={retryingLink}
+                disabled={retryingLink}
+                onPress={handleRetryConnection}
+                labelStyle={styles.labelFailBtnLabel}
+              >
+                Şimdi dene
+              </Button>
+            </View>
+          )}
           <Button
             mode="contained"
             icon={
@@ -1692,7 +2005,9 @@ export default function KK1Screen() {
             // Disabled buton geri bildirim vermez, operatör "dondu" sanıp daha
             // sert basar; onun yerine aynı yükle gelen basış uçuştaki KİMLİĞİ
             // yeniden kullanır (entryAttempt: reuse-inflight) → tek kayıt.
-            disabled={pulling}
+            // İSTİSNA — online-only rejimde çevrimdışı: kayıt alınamayacak,
+            // basılabilir buton yalan söylerdi; kilit + yukarıdaki bant birlikte.
+            disabled={pulling || (onlineOnly && !isOnline)}
             buttonColor={
               justSaved ? colors.success : retrying ? colors.warningDark : undefined
             }
@@ -1700,15 +2015,19 @@ export default function KK1Screen() {
             contentStyle={[styles.submitBtnContent, !compact && styles.submitBtnContentTablet]}
             labelStyle={[styles.submitBtnLabel, !compact && styles.submitBtnLabelTablet]}
           >
-            {pulling
-              ? 'Makineden okunuyor…'
-              : justSaved
-                ? 'Kaydedildi ✓'
-                : sending
-                  ? 'Kaydediliyor… bekle'
-                  : retrying
-                    ? 'Tekrar Dene (aynı top)'
-                    : 'Kaydet ve Etiket Bas'}
+            {onlineOnly && !isOnline
+              ? 'Çevrimdışı — kayıt kapalı'
+              : verifyPending
+                ? 'Önce Etiketi OKUT'
+                : pulling
+                  ? 'Makineden okunuyor…'
+                  : justSaved
+                    ? 'Kaydedildi ✓'
+                    : sending
+                      ? 'Kaydediliyor… bekle'
+                      : retrying
+                        ? 'Tekrar Dene (aynı top)'
+                        : 'Kaydet ve Etiket Bas'}
           </Button>
         </Animated.View>
         </View>
@@ -1808,6 +2127,29 @@ export default function KK1Screen() {
       />
 
       {/* ── Yazıcı kuyruğu görünümü (çipe dokununca): basılıyor / sırada / başarısız ── */}
+      {/* ── Scan-back tarayıcısı (yalnız bayrak açıkken açılabilir): basılan
+            etiketin kâğıdını geri okut → borç düşer. continuous: birden fazla
+            bekleyen varsa modal açık kalır, hepsi peş peşe okutulur.
+            ⚠️ trigger="tap" — çok-okutmalı yüzey sözleşmesi (mobil CLAUDE.md):
+            yazıcı çıkışında etiketler üst üste durur; kendiliğinden okuyan
+            kamera KOMŞU etiketi yakalayıp onun borcunu düşürürdü — doğrulanan
+            şey elindeki kâğıt olmalı, kadraja giren herhangi bir kâğıt değil.
+            captureHaptic kapalı — kabul/ret sinyalini handleVerifyScan verir
+            (signalScan); görsel sonuç ekran-içi flash. */}
+      <BarcodeScannerModal
+        visible={verifyScanOpen}
+        onDismiss={() => {
+          setVerifyScanOpen(false);
+          setVerifyFlash(null);
+        }}
+        onScan={handleVerifyScan}
+        title="Etiket Doğrulama — çıkan kâğıdı okut"
+        notice={`Okutulacak ${verifies.length} etiket`}
+        continuous
+        trigger="tap"
+        flash={verifyFlash}
+        captureHaptic={false}
+      />
       <PrintQueueModal
         visible={queueOpen}
         onDismiss={() => setQueueOpen(false)}
@@ -2087,16 +2429,101 @@ function RollHistoryModal({
   // Liste sona yaklaşınca bir sonraki sayfa keyset cursor ile çekilir; derin
   // sayfada offset taraması + her sayfada COUNT(*) yok. Toplam yalnız ilk
   // sayfada (withTotal) yaklaşık olarak gelir.
+  // ── Filtre (zaman + kumaş) — Tambur listesiyle ORTAK bileşen ──
+  // Süzme SUNUCUDA yapılır: liste cursor'lu sonsuz kaydırma olduğu için
+  // istemcide süzmek yalnız o anki sayfayı süzer ve operatör "kayıt yok"
+  // sanardı — oysa kayıt bir sonraki sayfadadır.
+  const [filter, setFilter] = useState<RollHistoryFilterState>(EMPTY_ROLL_FILTER);
+  const filterKey = filterQueryKey(filter);
+  // KAPSAM (2026-08-12 saha kararı): bayrak KAPALIYKEN (varsayılan) liste yalnız
+  // oturumdaki operatörün KENDİ girdiği toplar — sunucuya zorunlu
+  // filter[createdById] gider ve "Personel" çipi HİÇ ÇİZİLMEZ (ölü filtre
+  // "bastım, olmadı" üretir). Bayrak AÇIKKEN herkesin kayıtları + Personel çipi.
+  // ENFORCE istemcide: bu bir yetki duvarı değil ekran sadeleştirmesi (panel
+  // roll:read ile aynı veriyi zaten görür); bayrak yüklenemezse DAR kapsama
+  // düşülür — az göstermek, yanlışlıkla fazla göstermekten iyidir.
+  const allEntries = useKk1HistoryAllEntriesEnabled();
+  const authUserId = useAuthStore((st) => st.user?.userId) ?? null;
+  const forcedCreatorId = allEntries ? null : authUserId;
+
+  const itemsQuery = useQuery({
+    queryKey: ['items', 'filter', 'FABRIC'],
+    queryFn: () =>
+      itemService.getAll({
+        page: 1,
+        pageSize: 500,
+        sortBy: 'code',
+        sortOrder: 'asc',
+        filters: { isActive: 'true', itemType: 'FABRIC' },
+      }),
+    enabled: visible,
+  });
+  // Personel seçenekleri yalnız bayrak açıkken çekilir (kapalıyken çip yok).
+  const operatorsQuery = useQuery({
+    queryKey: ['rolls', 'entry-users'],
+    queryFn: () => rollService.getEntryUsers(),
+    enabled: visible && allEntries,
+    staleTime: 5 * 60 * 1000,
+  });
+  const operatorOptions = useMemo<PickerOption[] | undefined>(
+    () =>
+      allEntries
+        ? (operatorsQuery.data?.data ?? []).map((u) => ({
+            value: u.id,
+            label: u.name,
+            sublabel: u.code ?? undefined,
+          }))
+        : undefined,
+    [allEntries, operatorsQuery.data],
+  );
+  const stationsQuery = useQuery({
+    queryKey: ['rolls', 'entry-stations'],
+    queryFn: () => rollService.getEntryStations(),
+    enabled: visible,
+    staleTime: 5 * 60 * 1000,
+  });
+  // Tek giriş istasyonu varken çip GEREKSİZ — ayırt edeceği bir şey yok; ikinci
+  // istasyon açıldığı gün kendiliğinden belirir (seçenek listesi veriden gelir).
+  const entryStationOptions = useMemo<PickerOption[] | undefined>(() => {
+    const rows = stationsQuery.data?.data ?? [];
+    if (rows.length < 2) return undefined;
+    return rows.map((st) => ({ value: st.id, label: st.name, sublabel: st.code ?? undefined }));
+  }, [stationsQuery.data]);
+  const itemOptions = useMemo<PickerOption[]>(
+    () =>
+      (itemsQuery.data?.data ?? []).map((i) => ({
+        value: i.id,
+        label: i.name,
+        sublabel: i.code,
+      })),
+    [itemsQuery.data],
+  );
+
   const q = useInfiniteQuery({
-    queryKey: ['rolls', 'kk1', 'history'],
-    queryFn: ({ pageParam }) =>
-      rollService.getAllCursor({
+    // Kapsam anahtara GİRER: bayrak panelden çevrildiğinde "kendi kayıtlarım"
+    // önbelleği "herkes" listesi olarak geri gelmesin.
+    queryKey: ['rolls', 'kk1', 'history', filterKey, forcedCreatorId ?? 'all'],
+    queryFn: ({ pageParam }) => {
+      // Gün sınırı SORGU ANINDA çözülür — `now` anahtara girmez, yoksa liste
+      // her render'da yeniden çekilirdi.
+      const fp = buildRollQueryParams(filter, new Date());
+      return rollService.getAllCursor({
         limit: HISTORY_PAGE_SIZE,
         cursor: pageParam,
         // Bkz. yukarıdaki "Son kayıtlar" sorgusu — aynı CSV kapsam gerekçesi.
-        filters: { entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY' },
+        // Zorunlu kapsam EN SONA yazılır: bayrak kapalıyken çipten sızabilecek
+        // herhangi bir createdById'yi de ezer (savunma hattı — çip zaten yok).
+        filters: {
+          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY',
+          ...fp.filters,
+          ...forcedCreatorFilter(allEntries, authUserId),
+        },
+        dateField: fp.dateField,
+        dateFrom: fp.dateFrom,
+        dateTo: fp.dateTo,
         withTotal: !pageParam,
-      }),
+      });
+    },
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
       last.pagination.hasMore ? last.pagination.nextCursor : undefined,
@@ -2153,6 +2580,9 @@ function RollHistoryModal({
             </Text>
             <Text variant="bodySmall" style={historyStyles.subtitle}>
               Toplam {totalCount} kayıt
+              {/* Kapsamı SÖYLE: dar listeye bakan operatör "kayıtlar silinmiş"
+                  sanmasın — daralma bir ayardır ve burada yazar. */}
+              {forcedCreatorId ? ' · yalnız senin girişlerin' : ''}
             </Text>
           </View>
           <RefreshButton
@@ -2164,6 +2594,19 @@ function RollHistoryModal({
           />
           <IconButton icon="close" size={28} onPress={onDismiss} accessibilityLabel="Kapat" />
         </View>
+
+        {/* Ortak filtre şeridi — Tambur "Son Çıkan Toplar" ile AYNI bileşen. */}
+        <RollFilterBar
+          value={filter}
+          onChange={setFilter}
+          itemOptions={itemOptions}
+          itemsLoading={itemsQuery.isLoading}
+          onItemPickerOpen={() => void itemsQuery.refetch()}
+          operatorOptions={operatorOptions}
+          operatorsLoading={operatorsQuery.isLoading}
+          entryStationOptions={entryStationOptions}
+          entryStationsLoading={stationsQuery.isLoading}
+        />
 
         <View style={historyStyles.listBox}>
           {q.isLoading ? (
@@ -2185,6 +2628,8 @@ function RollHistoryModal({
               ref={listRef}
               data={rolls}
               keyExtractor={(r) => r.id}
+              // Kart kenarlığı liste sınırına YAPIŞMASIN — 2px nefes payı.
+              contentContainerStyle={historyStyles.listContent}
               // FlashList v2'de maintainVisibleContentPosition VARSAYILAN AÇIK:
               // modal açılırken refetch yeni kaydı başa eklediğinde liste eski
               // üst satıra "tutunup" yeni kaydı görüş alanının ÜSTÜNE itiyordu
@@ -2239,6 +2684,7 @@ const historyStyles = StyleSheet.create({
   title: { fontWeight: '700', color: '#0f172a' },
   subtitle: { color: '#64748b', marginTop: 2 },
   listBox: { flex: 1 },
+  listContent: { paddingHorizontal: 2 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 4 },
   emptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
   emptyHint: { fontSize: 13, color: '#cbd5e1' },
@@ -2495,7 +2941,11 @@ interface EntryConflictModalProps {
   onSaveAsNew: () => void;
 }
 
-function EntryConflictModal({
+// `export` — render bekçisi için (EntryConflictModal.test.tsx): bu modal
+// sahada İLK tetiklenişinde çökmüştü (Children.only) çünkü hiçbir test onu
+// gerçekten ÇİZMİYORDU; metin sabitlerinin bekçisi (duplicateEntryChoice.test)
+// render'ı göremez.
+export function EntryConflictModal({
   kind,
   barcode,
   visible,
@@ -2525,6 +2975,13 @@ function EntryConflictModal({
       accessibilityState={{ disabled: busy || dimmed }}
       accessibilityLabel={choice.a11y}
     >
+      {/* ⚠️ TEK SARMALAYICI ZORUNLU (2026-08-12 saha çökmesi): TouchableRipple
+          çocuğunu React.Children.only'den geçirir — [choiceInner, scrim] gibi
+          İKİ doğrudan çocuk her açılışta FATAL çöker (scrim koşulu false'ken
+          bile: [View, false] bir dizidir). Modal sahada ilk kez seri-birebir
+          giriş testinde tetiklendi ve uygulamayı kapattı; render bekçisi:
+          EntryConflictModal.test.tsx. */}
+      <View style={conflictStyles.choiceWrap}>
       <View style={conflictStyles.choiceInner}>
         {/* ROZET — dilden bağımsız ayırt edici ve kartın EN YÜKSEK kontrastlı
             öğesi. Beyaz DOLGU + renkli içerik (12:1); saydam beyaz çip denendi
@@ -2574,6 +3031,7 @@ function EntryConflictModal({
           pointerEvents="none"
         />
       )}
+      </View>
     </TouchableRipple>
   );
 
@@ -2650,6 +3108,12 @@ const conflictStyles = StyleSheet.create({
     minHeight: 88,
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  // Children.only sarmalayıcısı — scrim absoluteFill'i kartın tamamını kaplasın
+  // diye minHeight'ı ripple ile aynı taşır (içerik kısa kalırsa perde delik açmasın).
+  choiceWrap: {
+    minHeight: 84,
+    justifyContent: 'center',
   },
   choiceInner: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
   badge: {
@@ -2777,7 +3241,7 @@ function RollListItem({
           isInactive && styles.recentItemScrapped,
           isNew && !isInactive && styles.recentItemNew,
         ]}
-        elevation={1}
+        elevation={0}
       >
         <View style={styles.recentSingleRow}>
           {/* Sol blok: AD tam genişlik (uzun isim 2 satıra sarar, okunur kalır);
@@ -2817,9 +3281,19 @@ function RollListItem({
               <View style={styles.recentOperatorAvatar}>
                 <Icon source="account" size={14} color="#fff" />
               </View>
-              <Text style={styles.recentOperatorText} numberOfLines={1}>
-                {operator}
-              </Text>
+              {/* "Kim + nereden": ikinci ham giriş istasyonu açıldığında satırın
+                  kökeni buradan okunur (Electron "Ekleyen" kolonuyla aynı dil).
+                  Eski toplar entryStation taşımaz → tek satır, bugünkü görünüm. */}
+              <View style={styles.recentOperatorTextWrap}>
+                <Text style={styles.recentOperatorText} numberOfLines={1}>
+                  {operator}
+                </Text>
+                {roll.entryStation?.name ? (
+                  <Text style={styles.recentOperatorSub} numberOfLines={1}>
+                    {roll.entryStation.name}
+                  </Text>
+                ) : null}
+              </View>
             </View>
           )}
           <Text style={[styles.recentTime, hideOperator && styles.recentTimeRight]}>
@@ -2839,7 +3313,7 @@ function RollListItem({
         isNew && !isInactive && styles.recentItemNew,
         compactLayout && { padding: 6, marginVertical: 2, gap: 2 },
       ]}
-      elevation={1}
+      elevation={0}
     >
       {/* Satır 1: SOL blok = ad (tam genişlik, kırpılmaz) + ALTINDA küçük barkod;
           sağda aksiyonlar. Adla barkod aynı satırı paylaşmıyor → ikisi de okunur.
@@ -2898,9 +3372,16 @@ function RollListItem({
             <View style={styles.recentOperatorAvatar}>
               <Icon source="account" size={14} color="#fff" />
             </View>
-            <Text style={styles.recentOperatorText} numberOfLines={1}>
-              {operator}
-            </Text>
+            <View style={styles.recentOperatorTextWrap}>
+              <Text style={styles.recentOperatorText} numberOfLines={1}>
+                {operator}
+              </Text>
+              {roll.entryStation?.name ? (
+                <Text style={styles.recentOperatorSub} numberOfLines={1}>
+                  {roll.entryStation.name}
+                </Text>
+              ) : null}
+            </View>
           </View>
         )}
       </View>
@@ -2951,6 +3432,85 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
+  },
+  // ONLINE-ONLY rejimde çevrimdışı kilit bandı — amber (uyarı, hata değil):
+  // kayıt girilemez ama kaybolan da yok. Butonun hemen üstünde durur ki
+  // "buton neden basılmıyor" sorusunun cevabı gözün gittiği yerde olsun.
+  offlineLockBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  offlineLockText: {
+    flex: 1,
+    color: '#78350f',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  // "Etiket çıkmadı" bandı — KIRMIZI (aksiyon ister), amber offline kilidiyle
+  // (bilgi verir) bilinçli olarak ayrı kutup: ikisi aynı anda görünebilir ve
+  // operatör metni okumadan da hangisinin "iş" hangisinin "durum" olduğunu
+  // renkten ayırt edebilmeli.
+  // Dış sarmalayıcı: ripple'ı köşelerden kırpar. Yerleşim ölçüleri (marginBottom,
+  // borderRadius) BURADA yaşar — içeride kalsalardı ripple dikdörtgen taşardı.
+  labelFailBannerTouch: {
+    borderRadius: 10,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  labelFailBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#dc2626',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  labelFailText: {
+    flex: 1,
+    color: '#7f1d1d',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  labelFailBtnLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  // Scan-back bandı — İNDİGO ("sıradaki adım"): kırmızı (hata) ve amber (durum)
+  // bandlarından üçüncü, ayrı kutup. Operatör renkten işi ayırt eder.
+  verifyBanner: {
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  verifyBannerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e0e7ff',
+    borderWidth: 1,
+    borderColor: '#4f46e5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  verifyText: {
+    flex: 1,
+    color: '#312e81',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   // Telefon: footer AKIŞTAN ÇIKAR — formCol'un altında YÜZER (absolute), arka
   // plan/çizgi YOK (sadece buton, gri şerit yok). İçerik full-height kayar,
@@ -3256,9 +3816,16 @@ const styles = StyleSheet.create({
   recentsEmptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
   recentsEmptyHint: { fontSize: 13, color: '#cbd5e1' },
 
+  // ⚠️ GÖLGE YOK, KENARLIK VAR (2026-08-12 saha bulgusu). Satır `Surface`
+  // elevation=1 ile çiziliyordu; Android'de elevation gölgeyi kartın DIŞINA
+  // taşırır ve liste satırı tam genişlikte olduğu için gölgenin sol/sağ ucu
+  // liste sınırında KIRPILIYOR — ekranda "yarıda kesilmiş çerçeve" olarak
+  // görünüyordu. Kenarlık kırpılmaz, kartın sınırını da daha net gösterir.
   recentItem: {
     backgroundColor: '#f8fafc',
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     padding: 12,
     marginVertical: 4,
     gap: 4,
@@ -3340,6 +3907,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3730a3',
     flexShrink: 1,
+  },
+  recentOperatorTextWrap: { minWidth: 0, flexShrink: 1 },
+  recentOperatorSub: {
+    fontSize: 10,
+    color: '#6366f1',
   },
 
   // Sabit numpad — sağ sütunun altında

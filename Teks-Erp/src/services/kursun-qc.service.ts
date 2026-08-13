@@ -25,12 +25,19 @@ import {
   RollOperation,
   RollOperationType,
   RollStatus,
+  FabricPropertyValueType,
   StationKind,
+  StationPropertyMode,
   StepStatus,
   WorkOrderStatus,
 } from "@prisma/client";
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
-import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
+import {
+  assertPropertySelectionsValid,
+  type PropertySelection,
+  copyStationCapabilitiesToRoll,
+  loadStationPropertyCaps,
+} from "./helpers/station-capability-transfer.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
@@ -86,7 +93,26 @@ interface StepSummary {
   status: StepStatus;
   /// İstasyona KURSUN özelliği yetenek olarak atanmış mı? Mobil UI'da
   /// "her top otomatik kurşunlanır" banner'ı için.
+  ///
+  /// ⚠️ 2026-08-10: bu alan "İSTASYON verebilir mi" der, "BU TOPA yazılacak mı"
+  /// DEMEZ — mod modelinde ikisi ayrıldı. Uygulanma kararı için `properties`
+  /// içindeki KURSUN satırının `mode`'una bak. Alan eski APK sözleşmesi olduğu
+  /// için anlamı değiştirilmeden bırakıldı.
   appliesKursun: boolean;
+  /// İstasyonun özellik yetenekleri + MODLARI — tablet bu listeden tuş çizer.
+  /// AUTO → salt bilgi satırı · OPTIONAL → tuş · REQUIRED → tuş + kapanış engeli.
+  /// Eski APK bu alanı yok sayar (davranış: bugünkü gibi, yalnız AUTO yazılır).
+  properties: {
+    propertyId: string;
+    code: string;
+    name: string;
+    mode: StationPropertyMode;
+    /// BAYRAK → aç/kapa çipi · SEÇİM → değer çipleri (2026-08-11).
+    valueType: FabricPropertyValueType;
+    /// SEÇİM tipliyse operatöre sunulacak AKTİF değerler (BAYRAK'ta boş).
+    /// Tablet tuşlarını BURADAN çizer — kodda sabit liste YOK.
+    values: { code: string; name: string }[];
+  }[];
   /// Bu adıma (Kurşun + KK2) yazılan serbest talimat — WorkOrderStep.notes
   /// (rotadaki RouteStep.defaultNotes'tan WO açılırken kopyalanır). Operatöre
   /// kart açıkken üstte sticky şerit olarak gösterilir (Tambur stepNote ile aynı).
@@ -353,13 +379,27 @@ export class KursunQcService {
    * Toplar teker teker `QC2_COMPLETED` işaretlenir; tüm roller bittiğinde
    * operatör `finishStep` çağrısıyla adımı kapatır.
    *
-   * Otomatik yetenek aktarımı: bu istasyona atanmış property capability'leri
-   * Roll'a RollProperty olarak kopyalanır (skipDuplicates). Capability listesi
-   * KURSUN'u içeriyorsa KURSUN_APPLIED log'u da otomatik atılır — eski per-roll
-   * "Kurşun geçildi mi?" toggle'ının yerini alır.
+   * Yetenek aktarımı MODA bağlıdır (2026-08-10): AUTO satırlar her zaman,
+   * OPTIONAL/REQUIRED satırlar yalnız operatör işaretlediyse (`properties`)
+   * Roll'a yazılır. REQUIRED bir özellik işaretlenmemişse adım kapanmaz.
+   * SEÇİM tipli özellikte işaret yetmez, DEĞER de gelir (2026-08-11):
+   * `{ propertyId, valueCode }` → `RollProperty.valueId`.
+   *
+   * KURSUN_APPLIED log'u, KURSUN özelliğinin bu topa GERÇEKTEN yazılıp
+   * yazılmadığına bağlıdır — eski per-roll "Kurşun geçildi mi?" toggle'ının yerini
+   * alır. ⚠️ Eskiden yalnız "istasyonun listesinde KURSUN var mı" diye bakılıyordu;
+   * mod modelinde bu, operatörün işaretlemediği bir kurşunu log'a yazmak olurdu.
    */
   async completeQc2(
-    data: { rollId: string; stepId: string; notes?: string | null },
+    data: {
+      rollId: string;
+      stepId: string;
+      notes?: string | null;
+      /** Operatörün cevapları (OPTIONAL/REQUIRED). AUTO'lar gönderilmese de
+       *  yazılır; eski APK bu alanı hiç göndermez → yalnız AUTO uygulanır.
+       *  SEÇİM tipli özellikte `valueCode` ZORUNLUDUR. */
+      properties?: PropertySelection[] | null;
+    },
     userId?: string,
     machineId?: string | null
   ): Promise<ApiResponse<RollOperation>> {
@@ -371,10 +411,16 @@ export class KursunQcService {
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
 
-    const hasKursunCap = await prisma.stationProperty.findFirst({
-      where: { stationId: step.stationId, property: { code: "KURSUN" } },
-      select: { id: true },
-    });
+    const caps = await loadStationPropertyCaps(prisma, step.stationId);
+    assertPropertySelectionsValid(caps, data.properties);
+
+    // KURSUN bu topa yazılacak mı? AUTO ise evet, OPTIONAL/REQUIRED ise ancak
+    // operatör işaretlediyse. Log ile RollProperty aynı karardan beslenir.
+    const selectedSet = new Set((data.properties ?? []).map((p) => p.propertyId));
+    const kursunCap = caps.find((c) => c.code === "KURSUN");
+    const kursunApplied =
+      !!kursunCap &&
+      (kursunCap.mode === StationPropertyMode.AUTO || selectedSet.has(kursunCap.propertyId));
 
     // F283: Idempotency — op zaten varsa (offline outbox replay: sunucu commit etti
     // ama yanıt istemciye ulaşmadı) upsert no-op'tur. RollOperation append-only
@@ -394,7 +440,7 @@ export class KursunQcService {
     const op = await prisma.$transaction(async (tx) => {
       // Kurşun bypass: adım fiziksel bir kurşun MAKİNESİNE dağıtılmışsa iş
       // KÂĞITTA yürüyor — tablet KK2 kaydı yazamaz. Guard tx İÇİNDE ve ilk
-      // sırada: `existedBefore` / `hasKursunCap` okumaları tx DIŞINDA yapıldığı
+      // sırada: `existedBefore` / yetenek okumaları tx DIŞINDA yapıldığı
       // için pencerede araya giren `assign` bu QC2 op'unu commit ettirirdi.
       // (Ters yön zaten kapalı: `assign` de adımda fiilen yapılmış QC2 op'u
       // görürse dağıtımı reddediyor — iki yön birbirini eler.)
@@ -419,7 +465,7 @@ export class KursunQcService {
         update: {},
       });
 
-      if (hasKursunCap) {
+      if (kursunApplied) {
         await tx.rollOperation.upsert({
           where: {
             rollId_workOrderStepId_operationType: {
@@ -442,6 +488,8 @@ export class KursunQcService {
       await copyStationCapabilitiesToRoll(tx, {
         stationId: step.stationId,
         rollId: data.rollId,
+        selections: data.properties,
+        caps,
       });
 
       return qc2Op;
@@ -458,7 +506,28 @@ export class KursunQcService {
           rollId: data.rollId,
           stepId: data.stepId,
           type: RollOperationType.QC2_COMPLETED,
-          kursunAutoApplied: !!hasKursunCap,
+          kursunApplied,
+          // Operatörün elle işaretledikleri — AUTO'lar bu listede olmayabilir.
+          selections: data.properties ?? [],
+        },
+      });
+    } else if (data.properties?.length) {
+      // Op zaten vardı ama operatör SEÇİM göndererek tekrar bastı — meşru
+      // düzeltme yolu: `copyStationCapabilitiesToRoll` upsert'i valueId'yi
+      // günceller (örn. gramaj 25GR → 50GR). Bu dalı sessiz bırakmak, topun
+      // özellik DEĞERİNİN kayıtsız değişmesi demekti (denetim F2). Aynı
+      // seçimlerin no-op replay'i de bu audit'i yazar — kabul edilen bedel:
+      // fazladan bir UPDATE satırı, kaybolan bir düzeltme izinden iyidir.
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ROLL_OPERATION",
+        recordId: op.id,
+        newData: {
+          rollId: data.rollId,
+          stepId: data.stepId,
+          type: RollOperationType.QC2_COMPLETED,
+          reappliedSelections: data.properties,
         },
       });
     }
@@ -1308,7 +1377,7 @@ export class KursunQcService {
     });
 
     const rollIds = openMovements.map((m) => m.roll.id);
-    const [qc2Ops, errors, kursunCap, bypass] = await Promise.all([
+    const [qc2Ops, errors, stationCaps, bypass] = await Promise.all([
       // Tambur kalıtım kayıtları sayılmaz — bu step'te fiilen yapılan QC2.
       prisma.rollOperation.findMany({
         where: {
@@ -1330,10 +1399,9 @@ export class KursunQcService {
         },
         orderBy: { startMeter: "asc" },
       }),
-      prisma.stationProperty.findFirst({
-        where: { stationId: step.stationId, property: { code: "KURSUN" } },
-        select: { id: true },
-      }),
+      // İstasyonun özellik yetenekleri + MODLARI. Tablet bu listeden tuş çizer:
+      // AUTO → salt bilgi, OPTIONAL → tuş, REQUIRED → tuş + kapanış engeli.
+      loadStationPropertyCaps(prisma, step.stationId),
       // Kurşun bypass: adımın AÇIK ataması (varsa). Partial unique
       // (kursun_bypass_one_pending_per_step_uq) en fazla bir satır garanti eder.
       prisma.kursunBypassAssignment.findFirst({
@@ -1382,7 +1450,19 @@ export class KursunQcService {
         workOrderId: step.workOrder.id,
         batchNumber: step.workOrder.workOrderNumber,
         status: step.status,
-        appliesKursun: !!kursunCap,
+        // Eski APK sözleşmesi — KORUNUYOR. Mod modelinde "istasyon kurşun
+        // uygulayabilir mi" ile "bu topa uygulanacak mı" ayrıştı; bu alan
+        // BİRİNCİYİ söyler (eskiden de öyleydi).
+        appliesKursun: stationCaps.some((c) => c.code === "KURSUN"),
+        // Yeni: mod güdümlü ekran çizimi. Eski APK bu alanı yok sayar.
+        properties: stationCaps.map((c) => ({
+          propertyId: c.propertyId,
+          code: c.code,
+          name: c.name,
+          mode: c.mode,
+          valueType: c.valueType,
+          values: c.values.map((v) => ({ code: v.code, name: v.name })),
+        })),
         stepNote: step.notes,
         bypassAssignment: bypass
           ? { machineName: bypass.machine.name, assignedAt: bypass.assignedAt }

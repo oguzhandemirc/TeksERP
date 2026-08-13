@@ -9,7 +9,7 @@ import { TamburUndoService } from "../services/tambur-undo.service";
 import { KursunBypassService } from "../services/kursun-bypass.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { getStampContext } from "../services/helpers/work-session.helper";
-import { FOLD_TYPES, foldTypeSchema } from "../services/helpers/fold-type";
+import { foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
 
 // Tambur finalize — yeni model (cumulative length-based):
@@ -57,7 +57,12 @@ const finalizeSchema = z.object({
       })
     )
     .default([]),
-  foldType: z.enum(FOLD_TYPES).optional(),
+  // ⚠️ 2026-08-10: eskiden `z.enum(FOLD_TYPES)` ile 2/4-KAT'a KİLİTLİYDİ. Katalog
+  // modeline geçince bu satır, panelden eklenmiş "6-KAT"ı seçen operatöre sebebi
+  // yazmayan bir 400 döndürürdü — yani özelliğin tek görünür sonucu bir hata
+  // olurdu. Geçerlilik artık serviste katalogdan ölçülür (`resolveFoldTypeForWrite`),
+  // burada yalnız BİÇİM normalleştirilir.
+  foldType: foldTypeSchema,
   markedForKartela: z.boolean().optional(),
 });
 
@@ -158,19 +163,27 @@ const recentOutputFilterSchema = z.object({
   dateTo: z.coerce.date().optional(),
   qualityGrade: z.string().trim().max(50).optional(),
   customerId: z.string().uuid().optional(),
+  /** Kumaş (2026-08-12). `.uuid()` şart: ham CSV/serbest metin Prisma'da
+   *  `invalid input syntax for type uuid` → P2007 → 400 üretirdi. */
+  itemId: z.string().uuid().optional(),
+  /** Kesimi yapan makine ("Bu makine" tuşu) + kesen personel (2026-08-12).
+   *  Tambur'da İKİ aktif makine var — liste varsayılan HEPSİNİ gösterir,
+   *  operatör kendi makinesine daraltabilir. */
+  createdMachineId: z.string().uuid().optional(),
+  createdById: z.string().uuid().optional(),
 });
 
 // GERİ ALMA — mod ARTIK İSTEMCİDEN gelir (2026-08-09). Verilmezse servis EN DAR
 // modu uygular; yani alanı hiç göndermeyen ESKİ APK, tek-parça iptaline düşer.
 // Bu bilinçli bir güvenlik yönü: eski istemci artık kazara 14 top iptal edemez.
 export const undoApplySchema = z.object({
-  mode: z.enum(["SINGLE", "FULL", "MANUAL"]).optional(),
+  mode: z.enum(["SINGLE", "SINGLE_RESTORE", "FULL", "MANUAL"]).optional(),
   reason: z.string().trim().max(500).optional().nullable(),
 });
 
 /** Önizleme aynı parametreleri query'den alır (GET yan etkisiz kalsın). */
 export const undoQuerySchema = z.object({
-  mode: z.enum(["SINGLE", "FULL", "MANUAL"]).optional(),
+  mode: z.enum(["SINGLE", "SINGLE_RESTORE", "FULL", "MANUAL"]).optional(),
   reason: z.string().trim().max(500).optional().nullable(),
 });
 
@@ -268,6 +281,7 @@ export class TamburController {
         body,
         req.user?.userId,
         stamp?.stationId ?? null,
+        stamp?.machineId ?? req.device?.machineId ?? null,
       );
       res.status(201).json(result);
     } catch (err) {
@@ -288,6 +302,7 @@ export class TamburController {
         body,
         req.user?.userId,
         stamp?.stationId ?? null,
+        stamp?.machineId ?? req.device?.machineId ?? null,
       );
       res.status(200).json(result);
     } catch (err) {
@@ -300,7 +315,14 @@ export class TamburController {
     try {
       const id = req.params.id as string;
       const body = cutOpenFabricSchema.parse(req.body);
-      const result = await this.service.cutOpenFabric(id, body, req.user?.userId);
+      // Makine atfı: kesim çocukları "Bu makine" süzgecinde görünebilsin (2026-08-12).
+      const stamp = await getStampContext(req);
+      const result = await this.service.cutOpenFabric(
+        id,
+        body,
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
       res.status(201).json(result);
     } catch (err) {
       next(err);
@@ -386,6 +408,9 @@ export class TamburController {
         dateTo: f.dateTo,
         qualityGrade: f.qualityGrade,
         customerId: f.customerId,
+        itemId: f.itemId,
+        createdMachineId: f.createdMachineId,
+        createdById: f.createdById,
       });
       res.status(200).json(result);
     } catch (error) {

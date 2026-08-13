@@ -56,7 +56,9 @@ export interface TamburUndoPreview {
   warnings: string[];
 }
 
-export type TamburUndoMode = 'SINGLE' | 'FULL' | 'MANUAL';
+// SINGLE_RESTORE (2026-08-12): kapanmış kaynakta tek topu iptal edip metrajını
+// kaynak topa geri koyar (iş emri dirilir) — kardeşlere dokunmaz.
+export type TamburUndoMode = 'SINGLE' | 'SINGLE_RESTORE' | 'FULL' | 'MANUAL';
 // =============================================================================
 // SAHA DÜZELTMESİ (`/tambur/manual/*`) — backend `TamburManualService`
 // =============================================================================
@@ -328,6 +330,14 @@ export const tamburService = {
     cursor?: string | null;
     search?: string;
     withTotal?: boolean;
+    /** Ortak filtre şeridi (KK1 ile aynı) — mutlak an, gün sınırını istemci çözer. */
+    dateFrom?: string;
+    dateTo?: string;
+    /** Kumaş. Backend `.uuid()` bekler; boş string GÖNDERİLMEZ. */
+    itemId?: string;
+    /** Kesen personel (Personel çipi) + kesimin makinesi ("Bu makine" tuşu). */
+    createdById?: string;
+    createdMachineId?: string;
   }): Promise<RollCursorPage> => {
     const qs = new URLSearchParams();
     qs.set('mode', 'cursor');
@@ -336,6 +346,11 @@ export const tamburService = {
     if (params?.cursor) qs.set('cursor', params.cursor);
     if (params?.search) qs.set('search', params.search);
     if (params?.withTotal) qs.set('withTotal', 'true');
+    if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.set('dateTo', params.dateTo);
+    if (params?.itemId) qs.set('itemId', params.itemId);
+    if (params?.createdById) qs.set('createdById', params.createdById);
+    if (params?.createdMachineId) qs.set('createdMachineId', params.createdMachineId);
     return apiClient
       .get<RollCursorPage>(`/tambur/recent-output-rolls?${qs.toString()}`)
       .then((r) => r.data);

@@ -340,8 +340,11 @@ async function main(): Promise<void> {
   // olarak geçmeli (6f). Rota adımı da BU istasyona bağlanır; testin en önemli
   // invariantı "bu bağ hiç değişmez"dir.
   const stationKursunId = await makeStation("S", "TEST Kurşun İstasyonu", StationKind.PROCESS_QC);
+  // ⚠️ mode AUTO ZORUNLU (2026-08-10): bypass'ta tablet salt-okunur, özelliği
+  // işaretleyecek operatör yok → `assign` OPTIONAL bir KURSUN satırını reddeder.
+  // Şema varsayılanı OPTIONAL olduğu için fixture bunu AÇIKÇA yazmalı.
   await prisma.stationProperty.create({
-    data: { stationId: stationKursunId, propertyId: kursunProperty.id },
+    data: { stationId: stationKursunId, propertyId: kursunProperty.id, mode: "AUTO" },
   });
   const machineA = await makeMachine(stationKursunId, "A", "TEST Kurşun Makinesi A");
   const machineB = await makeMachine(stationKursunId, "B", "TEST Kurşun Makinesi B");
@@ -512,8 +515,27 @@ async function main(): Promise<void> {
     "2f Makinenin istasyonunda KURSUN yeteneği yok → 400",
     400,
     () => bypassSvc.assign({ workOrderId: fx2b.woId, machineId: machineNoCap }, md.adminUserId),
-    /kurşun uygulayamıyor/i,
+    /kurşunu OTOMATİK uygulamıyor/i,
   );
+  // 2f-2 (2026-08-10): yetenek VAR ama modu AUTO DEĞİL → yine 400.
+  // Bypass'ta tablet salt-okunur; OPTIONAL bir KURSUN satırı kapanışta topa hiç
+  // yazılmaz ve `computeWorkOrderLocks` "bu özelliği veren adım tamamlandı"
+  // derdi → kilit modeli SESSİZCE yalan söylerdi. Satırın varlığına bakmak
+  // yetmez; bu kontrol o gerilemeyi kilitler.
+  await prisma.stationProperty.update({
+    where: { stationId_propertyId: { stationId: stationKursunId, propertyId: kursunProperty.id } },
+    data: { mode: "OPTIONAL" },
+  });
+  await expectError(
+    "2f-2 KURSUN yeteneği OPTIONAL modda → 400 (AUTO şart)",
+    400,
+    () => bypassSvc.assign({ workOrderId: fx2b.woId, machineId: machineA }, md.adminUserId),
+    /kurşunu OTOMATİK uygulamıyor/i,
+  );
+  await prisma.stationProperty.update({
+    where: { stationId_propertyId: { stationId: stationKursunId, propertyId: kursunProperty.id } },
+    data: { mode: "AUTO" },
+  });
   await expectError(
     "2g Var olmayan makine → 404",
     404,

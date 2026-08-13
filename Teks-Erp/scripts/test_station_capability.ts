@@ -86,15 +86,32 @@ async function main() {
   const codes = (...xs: Array<{ code: string }>): string[] => xs.map((x) => x.code).sort();
 
   // --- TEST fixture: kendi istasyonumuz + kendi pasif renk/özelliğimiz ---
-  // Kategorisiz INTERNAL istasyon → canApplyColor/Property türetimi true.
+  // ⚠️ 2026-08-10: yetenek artık İSTASYONUN KENDİ alanından okunuyor, kategoriden
+  // TÜRETİLMİYOR. Bu test renk atamayı da denediği için `appliesColor` AÇIKÇA
+  // açılır — eskiden "kategorisiz istasyon her şeyi yapar" varsayımıyla bedava
+  // geliyordu ve o varsayım "bilinmiyor → serbest" demekti, "yapabilir" değil.
   const testStation = await prisma.station.create({
     data: {
       code: `TEST-STCAP-${ts}`,
       name: "TEST İstasyon Yetenek",
       type: "INTERNAL",
       kind: "OTHER",
+      appliesColor: true,
+      appliesProperty: true,
     },
     select: { id: true, code: true },
+  });
+
+  // Yeteneksiz kardeşi — "kategorisiz istasyon artık varsayılan olarak renk
+  // VERMEZ" kuralını kilitler (eski davranış: verirdi).
+  const noCapStation = await prisma.station.create({
+    data: {
+      code: `TEST-STCAP-NOCAP-${ts}`,
+      name: "TEST Yeteneksiz İstasyon",
+      type: "INTERNAL",
+      kind: "OTHER",
+    },
+    select: { id: true },
   });
   const inactiveColor = await prisma.color.create({
     data: { code: `TEST-COL-${ts}`, name: "TEST Pasif Renk", isActive: false },
@@ -118,10 +135,10 @@ async function main() {
   const NIL = "00000000-0000-0000-0000-000000000000";
 
   try {
-    // 1) findByStation şekil + kategorisiz türetim
+    // 1) findByStation şekil + yetenek İSTASYONUN KENDİ alanından okunur
     const initial = await svc.findByStation(testStation.id);
     check(
-      "findByStation şekil (boş yetkinlik, kategorisiz türetim)",
+      "findByStation şekil (boş yetkinlik, bayraklar istasyondan)",
       initial.success === true &&
         initial.data.stationCode === testStation.code &&
         initial.data.hasDefaultCategory === false &&
@@ -229,6 +246,22 @@ async function main() {
       `colors=${afterErr.data.colors.length} props=${afterErr.data.properties.length}`,
     );
 
+    // 8a-2) YETENEK ARTIK KATEGORİDEN TÜRETİLMİYOR (2026-08-10).
+    // Kategorisiz bir istasyon eskiden "her şeyi yapar" sayılıyordu ("bilinmiyor
+    // → serbest"); artık bayrak dürüst ve kapalıysa renk ATANAMAZ. Bu kontrol,
+    // yeteneği tekrar kategoriden türetmeye çalışan bir gerilemeyi yakalar.
+    const noCap = await svc.findByStation(noCapStation.id);
+    check(
+      "kategorisiz + bayraksız istasyon: canApplyColor FALSE (eski hâlde true'ydu)",
+      noCap.data.canApplyColor === false && noCap.data.canApplyProperty === true,
+      `renk=${noCap.data.canApplyColor} özellik=${noCap.data.canApplyProperty}`,
+    );
+    await expectErr(
+      "bayraksız istasyona renk atanamaz",
+      "renk atanamaz",
+      () => svc.setCapabilities(noCapStation.id, { colorIds: [beyaz.id], propertyIds: [] }, undefined),
+    );
+
     // 8b) colorIds HİÇ gönderilmezse renk satırlarına dokunulmaz (2026-08-02).
     // Panel renk göndermeyi bıraktı; `[]` ile "gönderilmedi" karışırsa istasyonun
     // geçmiş renk atamaları ilk özellik kaydında sessizce silinir.
@@ -292,6 +325,7 @@ async function main() {
     await prisma.stationColor.deleteMany({ where: { stationId: zimpara.id } }).catch(() => {});
     await prisma.stationProperty.deleteMany({ where: { stationId: zimpara.id } }).catch(() => {});
     await prisma.station.delete({ where: { id: testStation.id } }).catch(() => {});
+    await prisma.station.delete({ where: { id: noCapStation.id } }).catch(() => {});
     await prisma.station.delete({ where: { id: inactiveStation.id } }).catch(() => {});
     await prisma.color.delete({ where: { id: inactiveColor.id } }).catch(() => {});
     await prisma.fabricProperty.delete({ where: { id: inactiveProp.id } }).catch(() => {});

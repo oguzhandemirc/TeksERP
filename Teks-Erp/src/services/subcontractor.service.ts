@@ -71,6 +71,7 @@ import {
 import { generateRollBarcode, reserveRollBarcodes } from "./helpers/roll-barcode.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 // Fasondan doğrudan sevk önizlemesi karşılanma projeksiyonunu shipping'in saf
 // FIFO/spec-eşleşmesiyle üretir (tek karşılanma kaynağı; circular yok — shipping
 // subcontractor'ı import etmez).
@@ -456,7 +457,8 @@ async function createFasonShipChild(
   const barcode = await generateRollBarcode(tx, "H");
   const props = await tx.rollProperty.findMany({
     where: { rollId: parent.id },
-    select: { propertyId: true },
+    // valueId: kısmi-sevk çocuğu ebeveynin değer seçimini de devralır (denetim F6).
+    select: { propertyId: true, valueId: true },
   });
   const child = await tx.roll.create({
     data: {
@@ -479,7 +481,11 @@ async function createFasonShipChild(
   });
   if (props.length > 0) {
     await tx.rollProperty.createMany({
-      data: props.map((p) => ({ rollId: child.id, propertyId: p.propertyId })),
+      data: props.map((p) => ({
+        rollId: child.id,
+        propertyId: p.propertyId,
+        valueId: p.valueId,
+      })),
       skipDuplicates: true,
     });
   }
@@ -2425,7 +2431,11 @@ export class SubcontractorService {
         throw AppError.badRequest("Uygulanan renk bulunamadı veya pasif");
       }
     }
-    if (data.appliedPropertyIds !== undefined && resolvedAppliedPropertyIds.length > 0) {
+    if (resolvedAppliedPropertyIds.length > 0) {
+      // ⚠️ Doğrulama artık KAYNAKTAN BAĞIMSIZ (denetim F3): eski `data.appliedPropertyIds
+      // !== undefined` şartı, override GELMEDİĞİNDE WO.targetProperties'ten çözülen
+      // listeyi hiç doğrulamıyordu — hedef listesine sızmış bir SEÇİM özelliği
+      // (KAT/GRAMAJ) fason dönüşünde doğan HER topa valueId'siz kopyalanırdı.
       const propRows = await prisma.fabricProperty.findMany({
         where: { id: { in: resolvedAppliedPropertyIds }, isActive: true },
         select: { id: true },
@@ -2433,6 +2443,9 @@ export class SubcontractorService {
       if (propRows.length !== resolvedAppliedPropertyIds.length) {
         throw AppError.badRequest("Uygulanan özelliklerden bazıları bulunamadı veya pasif");
       }
+      // SEÇİM tipli özellik fason kabulle UYGULANAMAZ: değeri yoktur, "uygulandı"
+      // demek hangi değerin uygulandığını söylemez.
+      await assertTargetablePropertyIds(resolvedAppliedPropertyIds, "fason kabulde uygulanan özellik");
     }
 
     // Bu step'te halen AT_SUBCONTRACTOR olan roller

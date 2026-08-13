@@ -8,7 +8,7 @@
 
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
-import { normalizeFoldType } from "./helpers/fold-type";
+import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -106,6 +106,7 @@ import {
   RollForm,
   ItemType,
   StationKind,
+  StationPropertyMode,
   StepStatus,
   WorkOrderStatus,
   ShipmentStatus,
@@ -119,8 +120,17 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { hasBypassClosureOnProcessQcTx } from "./helpers/kursun-bypass-guard.helper";
 import { assertKursunTabletMayWrite } from "./helpers/kursun-bypass-eligibility.helper";
-import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
+import {
+  assertPropertySelectionsValid,
+  type PropertySelection,
+  copyStationCapabilitiesToRoll,
+  loadStationPropertyCaps,
+} from "./helpers/station-capability-transfer.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
+import {
+  assertTargetablePropertyIds,
+  partitionTargetableIds,
+} from "./helpers/targetable-property.helper";
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
@@ -250,13 +260,26 @@ export interface RelabelContext {
   qualityGradeId: string | null;
   qualityGradeRef: { id: string; code: string; name: string; color: string | null } | null;
   width: number | null;
+  /** KAT — katalog KODU ("6-KAT" / "TUP"); kat girilmemiş topta null. Düzelt
+   *  diyaloğu bunu seçici ile düzeltir (kolon, pivot DEĞİL — bkz. applyManualProperties). */
+  foldType: string | null;
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
   /** Etiket bayat mı — veri/metraj düzeltilmiş ama fiziksel etiket yeniden basılmamış → true. */
   labelDirty: boolean;
-  /** Topta hâlihazırda damgalı özellikler — relabel formu TAM liste olarak replace eder. */
-  properties: { id: string; code: string; name: string; color: string | null }[];
+  /** Topta hâlihazırda damgalı özellikler — relabel formu BAYRAK evrenini TAM
+   *  liste olarak replace eder; SEÇİM tipliler (value dolu) salt-okunur bilgidir
+   *  (backend onlara dokunmaz — 2026-08-11 denetim F1). `value` alanı olmadan
+   *  Düzelt diyaloğu "GRAMAJ" çipini gösterir ama HANGİ gramaj olduğunu
+   *  gösteremezdi (denetim VAL-02: veri sorgulanıp eşlemede atılıyordu). */
+  properties: {
+    id: string;
+    code: string;
+    name: string;
+    color: string | null;
+    value?: { code: string; name: string } | null;
+  }[];
   propertyIds: string[];
   /** Son basılan etiketin künyesi ("A": kime/hangi sipariş/ne zaman) — null=hiç basılmadı/stok. */
   lastLabelSnapshot: Prisma.JsonValue | null;
@@ -405,6 +428,10 @@ const ROLL_LIST_INCLUDE = {
     select: {
       propertyId: true,
       property: { select: { id: true, code: true, name: true } },
+      // SEÇİM tipli özellikte operatörün seçtiği DEĞER (GRAMAJ=50GR).
+      // Liste ve detay AYNI şekli döner — ayrışırsa satır ile panel aynı top
+      // için farklı şey söyler.
+      value: { select: { code: true, name: true } },
     },
   },
   shipment: { select: { id: true, shipmentNo: true, status: true } },
@@ -690,6 +717,11 @@ export class InventoryService {
       if (props.length !== dedupedProps.length) {
         throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
       }
+      // SEÇİM tipli özellik KK1 girişinden verilemez (denetim F2): değersiz
+      // "GRAMAJ var ama hangisi belli değil" satırı doğardı. İleride KK1'e
+      // değerli giriş istenirse sözleşme {propertyId, valueCode} olarak
+      // genişletilir (station-capability-transfer.helper hazır).
+      await assertTargetablePropertyIds(dedupedProps, "KK1 giriş özelliği");
       const allowedPropCount = await prisma.itemAllowedProperty.count({
         where: { itemId: data.itemId },
       });
@@ -1676,6 +1708,50 @@ export class InventoryService {
    * "Toplam metre / Toplam kg / Statü dağılımı / Kalite dağılımı" gibi
    * panelleri için. Filtre seti findAllRolls ile aynı (buildRollWhere paylaşılır).
    */
+  /**
+   * GİRİŞ FİLTRESİ LOOKUP'LARI (2026-08-12) — "Ekleyen" / "Giriş İstasyonu"
+   * filtre seçenekleri. Kullanıcı/istasyon kataloğunun TAMAMI değil, gerçekten
+   * top girmiş olanlar döner: (a) "Ekleyen" seçeneği için `admin:users` iznine
+   * gerek kalmaz (o uç kullanıcı YÖNETİMİdir; buradaki ad zaten roll:read'in
+   * gördüğü satırlarda basılıyor — yeni bilgi sızmaz), (b) hiç giriş yapmamış
+   * hesap/istasyon listeyi şişirmez. Kaynak sorgu indeksli tekil kolonlardır
+   * (`@@index([createdById])` / `@@index([entryStationId])`) — 300k satırda da
+   * index-only scan.
+   */
+  async listEntryUsers(): Promise<ApiResponse<{ id: string; name: string; code: string | null }[]>> {
+    const groups = await prisma.roll.groupBy({
+      by: ["createdById"],
+      where: { createdById: { not: null } },
+    });
+    const ids = groups.map((g) => g.createdById).filter((v): v is string => !!v);
+    if (ids.length === 0) return { success: true, data: [] };
+    const users = await prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true, fullName: true },
+      orderBy: { fullName: "asc" },
+    });
+    return {
+      success: true,
+      // FilterBar/PickerModal sözleşmesi: {id, name} (+ code alt etiketi).
+      data: users.map((u) => ({ id: u.id, name: u.fullName ?? u.username, code: u.username })),
+    };
+  }
+
+  async listEntryStations(): Promise<ApiResponse<{ id: string; name: string; code: string | null }[]>> {
+    const groups = await prisma.roll.groupBy({
+      by: ["entryStationId"],
+      where: { entryStationId: { not: null } },
+    });
+    const ids = groups.map((g) => g.entryStationId).filter((v): v is string => !!v);
+    if (ids.length === 0) return { success: true, data: [] };
+    const stations = await prisma.station.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return { success: true, data: stations.map((st) => ({ id: st.id, name: st.name, code: st.code })) };
+  }
+
   async getRollStats(req: Request): Promise<ApiResponse<RollStats>> {
     const params = parseQueryParams(req);
     const where = this.buildRollWhere(params) as Prisma.RollWhereInput;
@@ -2233,6 +2309,7 @@ export class InventoryService {
         qualityGradeId: true,
         qualityGradeRef: { select: { id: true, code: true, name: true, color: true } },
         width: true,
+        foldType: true,
         currentQty: true,
         weightKg: true,
         markedForKartela: true,
@@ -2242,6 +2319,7 @@ export class InventoryService {
           select: {
             propertyId: true,
             property: { select: { id: true, code: true, name: true, color: true } },
+            value: { select: { code: true, name: true } },
           },
         },
         shipment: { select: { id: true, shipmentNo: true, status: true } },
@@ -2317,12 +2395,13 @@ export class InventoryService {
         qualityGradeId: roll.qualityGradeId,
         qualityGradeRef: roll.qualityGradeRef,
         width: roll.width != null ? Number(roll.width) : null,
+        foldType: roll.foldType,
         currentQty: Number(roll.currentQty),
         weightKg: roll.weightKg != null ? Number(roll.weightKg) : null,
         markedForKartela: roll.markedForKartela,
         lastLabelSnapshot: roll.lastLabelSnapshot,
         labelDirty: roll.labelDirty,
-        properties: roll.properties.map((p) => p.property),
+        properties: roll.properties.map((p) => ({ ...p.property, value: p.value ?? null })),
         propertyIds: roll.properties.map((p) => p.propertyId),
         shipment: roll.shipment,
         sack: roll.sack,
@@ -3234,7 +3313,24 @@ export class InventoryService {
    */
   async applyManualProperties(
     rollId: string,
-    data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string; currentQty?: number; reason?: string },
+    data: {
+      colorId: string | null;
+      propertyIds: string[];
+      width?: number | null;
+      qualityGrade?: string;
+      currentQty?: number;
+      /**
+       * KAT — `undefined` DOKUNMA, `null` TEMİZLE, kod YAZ (foldTypeSchema sözleşmesi).
+       *
+       * Kat bir SEÇİM (CHOICE) karakteristiğidir ama `RollProperty` pivotunda değil
+       * `Roll.foldType` KOLONUNDA yaşar (filtrelenip sıralandığı için) — bu yüzden
+       * yukarıdaki "CHOICE satırları bu uçtan yönetilmez" kuralının DIŞINDADIR ve
+       * panelden düzeltilebilir. Kesim sırasında istemci alanı düşürdüğü için
+       * (2026-08-13) katsız doğmuş topların tek düzeltme yolu burasıdır.
+       */
+      foldType?: string | null;
+      reason?: string;
+    },
     userId?: string,
     /** F221 deseni: sağlanırsa süpervizör kapsamı için `roll:manual-adjust` ENFORCE
      *  edilir. Controller `req.user.permissions`'ı HER ZAMAN geçirir; omit =
@@ -3251,13 +3347,16 @@ export class InventoryService {
         status: true,
         width: true,
         qualityGrade: true,
+        foldType: true,
         initialQty: true,
         currentQty: true,
         shipmentId: true,
         shipment: { select: { status: true } },
         sackId: true,
         sack: { select: { shipmentId: true } },
-        properties: { select: { propertyId: true } },
+        // valueType: bu uç yalnız BAYRAK evrenini yönetir (aşağıya bak) —
+        // mevcut kümenin FLAG alt kümesini bilmek zorunda.
+        properties: { select: { propertyId: true, property: { select: { valueType: true } } } },
       },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
@@ -3370,27 +3469,41 @@ export class InventoryService {
         }
       }
     }
+    // ⚠️ BU UÇ YALNIZ BAYRAK (FLAG) EVRENİNİ YÖNETİR (2026-08-11, denetim F1).
+    // SEÇİM tipli satırlar (GRAMAJ=50GR gibi, RollProperty.valueId taşıyan) bu
+    // uçtan NE SİLİNİR NE YAZILIR — onları istasyon operatörü yönetir.
+    //
+    // Neden 400 değil SESSİZ AYIRMA: Düzelt diyaloğu bağlamdan gelen TÜM
+    // propertyId'leri olduğu gibi geri yollar (echo) ve chips alanı FLAG süzdüğü
+    // için CHOICE id "görünmez yolcu"dur — operatör onu seçmedi. 400 dönmek,
+    // gramajlı topun HİÇBİR alanını (renk/en/metraj) düzeltilemez yapardı.
+    // Eski davranış daha kötüydü: koşulsuz deleteMany+createMany, operatörün
+    // tabletteki 50GR seçimini HER kayıtta sessizce siliyordu.
     const dedupedProps = [...new Set(data.propertyIds)];
-    if (dedupedProps.length > 0) {
+    const { flagIds: dedupedFlagProps, choiceIds: untouchedChoiceIds } =
+      await partitionTargetableIds(dedupedProps);
+    if (dedupedFlagProps.length > 0) {
       const props = await prisma.fabricProperty.findMany({
-        where: { id: { in: dedupedProps }, isActive: true },
+        where: { id: { in: dedupedFlagProps }, isActive: true },
         select: { id: true },
       });
-      if (props.length !== dedupedProps.length) {
+      if (props.length !== dedupedFlagProps.length) {
         throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
       }
       // Item allowed-property listesi (boş → serbest) — createInitialEntry PARİTE.
       // Yeniden-etiketlemede de seçilen özellikler ürünün uygulanabilir listesinde
       // olmalı; aksi halde create-path'te reddedilen kombinasyon relabel'la sızardı.
+      // ⚠️ Kontrol FLAG kümesiyle: CHOICE id'yi pariteye sokmak, GRAMAJ izinli
+      // listede değilse topun TÜM düzeltmelerini 400'e kilitlerdi (denetim F1b).
       const allowedPropCount = await prisma.itemAllowedProperty.count({
         where: { itemId: roll.itemId },
       });
       if (allowedPropCount > 0) {
         const inAllowed = await prisma.itemAllowedProperty.findMany({
-          where: { itemId: roll.itemId, propertyId: { in: dedupedProps } },
+          where: { itemId: roll.itemId, propertyId: { in: dedupedFlagProps } },
           select: { propertyId: true },
         });
-        if (inAllowed.length !== dedupedProps.length) {
+        if (inAllowed.length !== dedupedFlagProps.length) {
           throw AppError.badRequest(
             "Seçilen özelliklerden biri bu ürüne uygulanabilir listesinde değil",
           );
@@ -3419,14 +3532,27 @@ export class InventoryService {
       rollData.qualityGradeId = await resolveQualityGradeIdStrict(code);
       rollData.qualityGrade = code;
     }
+    // KAT — katalog doğrulaması + kanoniklik TEK YERDE (`resolveFoldTypeForWrite`;
+    // kesim/finalize/elle ekleme yollarıyla AYNI fonksiyon). Burada elle karşılaştırma
+    // yapma: "4 kat" yazımı normalleşmeden kaydedilirse envanterin kat filtresi o topu
+    // BULAMAZ ve hata/log çıkmaz (2026-08-04 notu).
+    const resolvedFold = await resolveFoldTypeForWrite(data.foldType);
+    const foldChanged = resolvedFold !== undefined && resolvedFold !== roll.foldType;
+    if (foldChanged) rollData.foldType = resolvedFold;
 
     // Etiket bayat: etiket-görünür bir alan (renk/en/metraj/kalite/özellik) GERÇEKTEN
     // değiştiyse topun fiziksel etiketi artık uyuşmuyor → labelDirty=true (baskıda temizlenir).
     // NOT: kalite/en blokları değer aynı olsa da yazılabildiğinden (FK self-heal / unconditional),
     // "değişti mi"yi Object.keys(rollData) yerine alan-alan karşılaştır → no-op kayıtta dirty olmaz.
-    const existingPropIds = new Set(roll.properties.map((p) => p.propertyId));
+    // ⚠️ Karşılaştırma FLAG evreniyle: CHOICE satırları bu uçta değişmez, kümeye
+    // katmak echo edilen id yüzünden her kayıtta sahte propsChanged üretirdi
+    // (etiket boşuna bayatlar).
+    const existingPropIds = new Set(
+      roll.properties.filter((p) => p.property.valueType === "FLAG").map((p) => p.propertyId),
+    );
     const propsChanged =
-      dedupedProps.length !== existingPropIds.size || dedupedProps.some((id) => !existingPropIds.has(id));
+      dedupedFlagProps.length !== existingPropIds.size ||
+      dedupedFlagProps.some((id) => !existingPropIds.has(id));
     const oldWidth = roll.width == null ? null : Number(roll.width);
     const widthChanged = data.width !== undefined && data.width !== oldWidth;
     const colorChanged = roll.colorId !== data.colorId;
@@ -3436,7 +3562,9 @@ export class InventoryService {
       data.qualityGrade !== undefined &&
       data.qualityGrade.trim() !== "" &&
       data.qualityGrade.trim() !== roll.qualityGrade;
-    if (colorChanged || widthChanged || metrajChanged || qualityChanged || propsChanged) {
+    // ⚠️ `foldChanged` de etiketi bayatlatır: kat 2026-08-13'ten beri etiket alan
+    // kataloğunda (ROLL_RAW + ROLL_FINISHED) — şablona sürüklenmişse kâğıda basılıyor.
+    if (colorChanged || widthChanged || metrajChanged || qualityChanged || propsChanged || foldChanged) {
       rollData.labelDirty = true;
     }
 
@@ -3467,11 +3595,16 @@ export class InventoryService {
         }
       }
 
-      // 2) Roll.properties replace
-      await tx.rollProperty.deleteMany({ where: { rollId } });
-      if (dedupedProps.length > 0) {
+      // 2) Roll.properties replace — YALNIZ BAYRAK EVRENİ. SEÇİM satırlarına
+      //    (valueId taşıyanlar) dokunulmaz: silmek operatörün istasyonda yaptığı
+      //    değer seçimini (50GR) yok etmek olurdu ve bunu geri getirecek hiçbir
+      //    yüzey yoktur (denetim F1, CRITICAL).
+      await tx.rollProperty.deleteMany({
+        where: { rollId, property: { valueType: "FLAG" } },
+      });
+      if (dedupedFlagProps.length > 0) {
         await tx.rollProperty.createMany({
-          data: dedupedProps.map((propertyId) => ({ rollId, propertyId })),
+          data: dedupedFlagProps.map((propertyId) => ({ rollId, propertyId })),
         });
       }
 
@@ -3489,13 +3622,20 @@ export class InventoryService {
         colorId: roll.colorId,
         width: roll.width != null ? Number(roll.width) : null,
         qualityGrade: roll.qualityGrade,
+        foldType: roll.foldType,
         currentQty: Number(roll.currentQty),
       },
       newData: {
         colorId: data.colorId,
-        propertyIds: dedupedProps,
+        propertyIds: dedupedFlagProps,
+        // Sessiz ayırma audit'te GÖRÜNMEZ olmasın: bu id'ler istemciden geldi
+        // ama SEÇİM tipli oldukları için bu uç onlara dokunmadı.
+        untouchedChoicePropertyIds: untouchedChoiceIds,
         width: data.width,
         qualityGrade: data.qualityGrade,
+        // KANONİK değer yazılır (istemcinin ham girdisi değil) — audit ile kolon
+        // ayrışırsa "ne yazıldı" sorusunun iki cevabı olur.
+        foldType: resolvedFold ?? null,
         currentQty: data.currentQty ?? null,
         reason: data.reason ?? null,
         // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör
@@ -3509,7 +3649,7 @@ export class InventoryService {
       data: {
         rollId,
         colorId: data.colorId,
-        propertyIds: dedupedProps,
+        propertyIds: dedupedFlagProps,
         width: data.width,
         qualityGrade: data.qualityGrade,
         currentQty: data.currentQty,
@@ -4015,6 +4155,17 @@ export class InventoryService {
         defectTypeId?: string | null;
       }>;
       notes?: string | null;
+      /**
+       * Operatörün cevapları (2026-08-10 mod + 2026-08-11 değer sözleşmesi).
+       * AUTO satırlar gönderilmese de yazılır; eski APK bu alanı hiç göndermez
+       * → yalnız AUTO uygulanır (bugünkü sonuç). SEÇİM tipli özellikte
+       * `valueCode` ZORUNLUDUR.
+       *
+       * Sözleşme `kursun-qc.completeQc2` ile BİREBİR — iki tablet yolu aynı
+       * özelliği farklı kurallarla uygularsa aynı top iki yoldan iki farklı
+       * özellik kümesi kazanır.
+       */
+      properties?: PropertySelection[] | null;
     },
     userId?: string,
     /** PROCESS_QC makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -4144,12 +4295,18 @@ export class InventoryService {
     const stationId = roll.currentStep.stationId;
     const woId = roll.currentStep.workOrderId;
 
-    // Kurşun yeteneği per-station: istasyona KURSUN özelliği atanmışsa
-    // KURSUN_APPLIED log'u atılır + RollProperty(KURSUN) otomatik kazanılır.
-    const hasKursunCap = await prisma.stationProperty.findFirst({
-      where: { stationId, property: { code: "KURSUN" } },
-      select: { id: true },
-    });
+    // Kurşun yeteneği per-station + MOD (2026-08-10): KURSUN_APPLIED log'u ile
+    // RollProperty(KURSUN) yazımı AYNI karardan beslenir — AUTO ise her zaman,
+    // OPTIONAL/REQUIRED ise ancak operatör işaretlediyse. Ayrışırlarsa log
+    // "kurşun geçildi" derken topun özelliği boş kalırdı.
+    const stationCaps = await loadStationPropertyCaps(prisma, stationId);
+    assertPropertySelectionsValid(stationCaps, data.properties);
+    const selectedProps = new Set((data.properties ?? []).map((p) => p.propertyId));
+    const kursunCap = stationCaps.find((c) => c.code === "KURSUN");
+    const kursunApplied =
+      !!kursunCap &&
+      (kursunCap.mode === StationPropertyMode.AUTO ||
+        selectedProps.has(kursunCap.propertyId));
 
     // Eşzamanlı çift çağrıda kaybeden tx movement kapatmada 0 satır eşler →
     // tüm tx (mükerrer RollError'lar dahil) geri sarılır, idempotent cevap döner.
@@ -4210,7 +4367,7 @@ export class InventoryService {
           } as Prisma.InputJsonValue,
         },
       ];
-      if (hasKursunCap) {
+      if (kursunApplied) {
         ops.push({
           rollId,
           workOrderStepId: stepId,
@@ -4222,8 +4379,14 @@ export class InventoryService {
       }
       await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
 
-      // 3b) İstasyon yetenekleri (propertyCapabilities) Roll'a kopyalanır.
-      await copyStationCapabilitiesToRoll(tx, { stationId, rollId });
+      // 3b) İstasyon yetenekleri Roll'a kopyalanır — AUTO satırlar + operatörün
+      //     işaretledikleri (mod sözleşmesi, station-capability-transfer.helper).
+      await copyStationCapabilitiesToRoll(tx, {
+        stationId,
+        rollId,
+        selections: data.properties,
+        caps: stationCaps,
+      });
 
       // 4) Kurşun/KK2 movement'ı kapat (qtyOut = ölçülen toplam metre)
       //    ATOMİK CLAIM (BL-3 kardeşi): idempotency guard'ı tx DIŞINDA — iki
@@ -4300,6 +4463,9 @@ export class InventoryService {
         totalMeters: totalMeters,
         errorCount: errors.length,
         nextStepId: nextStep?.id ?? null,
+        // Operatörün elle işaretledikleri (SEÇİM tipinde valueCode ile) —
+        // completeQc2 audit'i ile aynı iz; AUTO'lar bu listede olmayabilir (F2).
+        selections: data.properties ?? [],
       },
     });
 

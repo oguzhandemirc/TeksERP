@@ -25,17 +25,26 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 // `defaultInclude` istasyon bağlarını listeye de taşır; panelin "hiçbir istasyona
 // bağlı değil" rozetini basabilmesi buna dayanır. Tablo master-data ölçeğinde
 // (onlarca satır) olduğu için join maliyeti ihmal edilebilir.
+// `values` de nested-create: SEÇİM tipli özellik DEĞERSİZ doğamaz (bağsız
+// özellik ara durumuyla birebir aynı gerekçe — tanımlı ama hiçbir ekranda
+// seçilemez). `defaultInclude`'a alınır ki panel ve tablet listeyi tek istekte
+// görsün; master-data ölçeğinde (özellik başına birkaç satır) maliyet ihmal
+// edilebilir.
 const service = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
   searchFields: ["code", "name", "category", "description"],
-  nestedCreateFields: ["stationCapabilities"],
+  nestedCreateFields: ["stationCapabilities", "values"],
   defaultInclude: {
     stationCapabilities: {
       select: {
         stationId: true,
         station: { select: { id: true, code: true, name: true, isActive: true } },
       },
+    },
+    values: {
+      select: { id: true, code: true, name: true, sortOrder: true, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
     },
   },
   duplicateNameField: "name",

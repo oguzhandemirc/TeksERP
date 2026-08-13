@@ -36,6 +36,26 @@ enum StationKind {
   OTHER // Diğer / özel istasyon
 }
 
+/// `FabricProperty` veri tipi — gerekçe ve tuzaklar için o modelin notuna bak.
+enum FabricPropertyValueType {
+  FLAG // var/yok (ZIMPARALI, KURSUN) — RollProperty satırı
+  CHOICE // birbirini dışlayan değerlerden biri (KAT) — değer kaydın kolonunda
+}
+
+/// İstasyonun bir özelliği NASIL teyit ettiği — SAP rota operasyonundaki
+/// *control key* (onay otomatik / opsiyonel / zorunlu) karşılığı.
+///
+/// ⚠️ Bu bayrak ÇALIŞMA ZAMANINA aittir, PLANLAMAYA değil. "Bu istasyon bu
+/// özelliği VEREBİLİR mi" sorusunun cevabı satırın VARLIĞIDIR; mod yalnız
+/// "nasıl teyit edilir" sorusunu yanıtlar. İkisini karıştırıp OPTIONAL satırı
+/// kapsama dışı saymak, rotada zımpara adımı dururken ZIMPARALI hedefli iş
+/// emirlerini 409'a düşürür (`workorder.service` özellik-başına rota kapsaması).
+enum StationPropertyMode {
+  AUTO // operatöre sorulmaz; adım kapanınca topa otomatik yazılır (backflush)
+  OPTIONAL // tuş görünür, ön-seçim yok; yalnız operatör işaretlerse yazılır
+  REQUIRED // tuş görünür; seçim yapılmadan adım kapanmaz
+}
+
 /// Top üzerinde yapılan her somut işlemin log'u.
 /// Boolean bayrak kullanmak yerine tarih + operatör + metadata ile tam iz bırakır.
 enum RollOperationType {
@@ -529,6 +549,30 @@ model Station {
   // fason planlama modalında otomatik önerilir (kullanıcı değiştirebilir).
   defaultCategoryId String?                @db.Uuid
   defaultCategory   SubcontractorCategory? @relation("StationDefaultCategory", fields: [defaultCategoryId], references: [id])
+
+  /// Bu istasyon RENK uygulayabilir mi? (2026-08-10)
+  ///
+  /// Eskiden bu soru YALNIZ `defaultCategory.appliesColor`'dan türetiliyordu ve
+  /// kategorisi olmayan bir İÇ istasyon tanım gereği "renk veremez" oluyordu —
+  /// iç boyahane senaryosunun önündeki asıl engel buydu. Yetenek artık
+  /// istasyonun KENDİ alanı; EXTERNAL satırlar göçte kategoriden dolduruldu.
+  ///
+  /// ⚠️ VARSAYILAN FALSE. Göçte iç istasyonlara da `false` yazıldı — bugünkü
+  /// davranışı BİREBİR korumak için: eski kural `hasDefaultCategory &&
+  /// canApplyColor` bileşik koşuluydu ve kategorisiz istasyonda sonucu
+  /// **false**'tu. `true` yazmak Tambur/Kurşun adımına renk yazılmasına izin
+  /// verirdi (2026-08-06 notunun açıkça uyardığı şey).
+  ///
+  /// ⚠️ Bu bayrak PLANLAMA sorusunu yanıtlar ("bu adım renk verebilir mi").
+  /// Fason kabulde rengin FİİLEN uygulanıp uygulanmadığı hâlâ o sevkin
+  /// `requiredCategory.appliesColor` bayrağından okunur — satın alınan hizmet
+  /// odur. İkisini birleştirme; ortak yüklem `stepCanApplyColor`.
+  appliesColor Boolean @default(false)
+
+  /// Bu istasyon ÖZELLİK uygulayabilir mi? Renk ile aynı gerekçe.
+  /// ⚠️ VARSAYILAN TRUE — eski kural kategorisiz istasyonda `canApplyProperty`
+  /// için **true** üretiyordu (KURSUN özelliği KURSUN_KK2'ye böyle bağlanmıştı).
+  appliesProperty Boolean @default(true)
 
   // Relations
   machines             Machine[]
@@ -1064,7 +1108,13 @@ model Roll {
   /// birlikte durmaya devam eder; bu kolon GÖRÜNEN ve RAPORLANAN kaynaktır.
   entryReason String? @db.VarChar(500)
 
-  /// Kaç KAT sarıldığı — "2-KAT" | "4-KAT" (serbest metin; ileride 6-KAT gelebilir).
+  /// Kaç KAT sarıldığı — değer KATALOGDAN doğrulanır (2026-08-10): `KAT` kodlu
+  /// SEÇİM (CHOICE) tipli FabricProperty'nin değer listesi (`FabricPropertyValue`,
+  /// varsayılan 2-KAT/4-KAT/TUP; panelden 6-KAT eklenebilir). Serbest metin
+  /// DEĞİLDİR — `resolveFoldTypeForWrite` katalog dışını 400 ile reddeder
+  /// (katalog satırı yoksa fail-open, eski davranış). Değer bu KOLONDA yaşar
+  /// (kolon-projeksiyon istisnası: filtre/sıralama için), RollProperty.valueId
+  /// değil — GRAMAJ gibi diğer CHOICE özellikler valueId kullanır.
   ///
   /// TOPUN KALICI ÖZELLİĞİDİR (2026-08-04 ürün kararı). Önceden yalnız
   /// `WorkOrderStep.stepData` (adım seviyesi, her finalize ezer) ve
@@ -1672,10 +1722,11 @@ model WorkOrder {
   targetItemId  String? @db.Uuid
   targetColorId String? @db.Uuid
 
-  /// Tambur planlama bilgisi — kumaşın kaç-kat sarılacağı ("2-KAT" / "4-KAT" gibi).
-  /// Tambur ekranında **bilgi olarak** gösterilir; nihai kararı operatör verir
-  /// (finalize sırasında override edebilir, gerçek değer RollOperation
-  /// metadata'sına yazılır).
+  /// Tambur planlama bilgisi — kumaşın kaç-kat sarılacağı. Değer KAT kataloğundan
+  /// gelir (bkz. Roll.foldType notu). Tambur ekranında **bilgi olarak** gösterilir;
+  /// nihai kararı operatör verir (finalize sırasında override edebilir, gerçek
+  /// değer topun KENDİ kolonuna — `Roll.foldType` — yazılır; 2026-08-04'ten beri
+  /// RollOperation.metadata yalnız ikincil izdir).
   foldType String?
 
   // O-9: WorkOrder.dyehouseNote kaldırıldı — fason talimatı tek kaynağı
@@ -3461,8 +3512,33 @@ model FabricProperty {
   color       String?  @db.VarChar(7) // UI badge hex
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now()) @db.Timestamptz
-  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  /// BAYRAK mı, SEÇİM mi? (2026-08-10 — "üretim karakteristiği" modeli)
+  ///
+  /// BAYRAK: klasik var/yok özelliği (ZIMPARALI, KURSUN). Topa `RollProperty`
+  /// satırı olarak yazılır, değeri yoktur.
+  ///
+  /// SEÇİM: birbirini DIŞLAYAN değerlerden biri seçilir (KAT → 2-KAT/4-KAT/TÜP).
+  /// Değer listesi `values` ilişkisindedir. ⚠️ SEÇİM tipli özelliğin değeri
+  /// `RollProperty`'ye YAZILMAZ — o pivot bir KÜME modelidir (`@@unique([rollId,
+  /// propertyId])`, değer kolonu yok) ve bir topa hem 2-KAT hem 4-KAT
+  /// yazılmasını engelleyemez. Değer, kaydın KENDİ kolonunda durur
+  /// (`Roll.foldType` / `WorkOrder.foldType` / `ProductRecipe.foldType`);
+  /// katalog yalnız "hangi değerler geçerli + hangi istasyon sorar" sorusunu
+  /// yanıtlar. Sektör emsali: SAP'ta sınıflandırma katalogda, raporlanan değer
+  /// kaydın kolonunda durur.
+  ///
+  /// ⚠️ SEÇİM tipli özellik HEDEF-ÖZELLİK seçicilerinde GÖRÜNMEZ (WO hedef
+  /// özellikleri, rota adımı chip'leri, `ItemAllowedProperty`). Görünürse
+  /// planlamacı "KAT" işaretler (hangi kat?) ve `workorder.service`'in
+  /// "renk/özellik verebilen adım var mı" guard'ı iş emrini reddeder.
+  ///
+  /// İkinci bir SEÇİM tipli özellik doğduğunda ya kendi kolonunu ister ya da
+  /// `RollProperty`/`WorkOrderTargetProperty` pivotlarına `valueId` eklenir.
+  valueType FabricPropertyValueType @default(FLAG)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Relations
   itemAllowed          ItemAllowedProperty[]
@@ -3475,10 +3551,52 @@ model FabricProperty {
   productRecipeTargets ProductRecipeProperty[]
   /// Rota şablonu adımlarında planlanan hedef özellikler (şablon varsayılanı).
   routeStepTargets     RouteStepProperty[]
+  /// SEÇİM tipli özelliğin izin verilen değerleri (BAYRAK tipte boş).
+  values               FabricPropertyValue[]
 
   @@index([isActive, sortOrder])
   @@index([category])
   @@map("fabric_properties")
+}
+
+/// SEÇİM tipli `FabricProperty`'nin izin verilen değerleri — `Color`
+/// kataloğunun küçük ikizi. Bugünkü tek tüketicisi KAT (2-KAT / 4-KAT / TÜP).
+///
+/// ⚠️ KİMLİK `code`'DUR, ad DEĞİL. Kod `Roll.foldType` gibi kolonlara AYNEN
+/// yazılır ve envanter filtresi/sıralaması onun üzerinden çalışır; fabrika
+/// görüntü adını değiştirirse ("4 Kat") kod bozulmamalı.
+///
+/// ⚠️ KOD ASCII OLMALI. Seed "TUP" yazar, "TÜP" DEĞİL — görünen ad "Tüp" kalır.
+/// Türkçe karakterli bir kod, ASCII yazan her istemciyi sessizce reddettirir
+/// (ölçüldü: `test_recipe` "TUP" gönderiyor ve "TÜP" koduna takıldı). Bekçi
+/// `test_fold_catalog.ts` katalogdaki ASCII-dışı kodu kırmızı verir.
+///
+/// ⚠️ Kod karşılaştırması `toUpperCase()` ile yapılır, `toLocaleUpperCase("tr")`
+/// ile DEĞİL — Türkçe upper "i"yi "İ" yapıp eşleşmeyi sessizce bozar
+/// (2026-08-02 etiket koşulu dersinin aynısı).
+model FabricPropertyValue {
+  id         String @id @default(uuid()) @db.Uuid
+  propertyId String @db.Uuid
+  /// Kayda yazılan değer ("4-KAT"). Özellik içinde benzersiz.
+  code       String @db.VarChar(32)
+  /// Ekranda görünen ad ("4 Kat"). Kimlik DEĞİL.
+  name       String @db.VarChar(100)
+  sortOrder  Int    @default(0)
+  /// Pasif değer yeni kayıtlarda seçilemez ama GEÇMİŞ kayıtlarda durur —
+  /// bu yüzden değer satırı silinmez, pasifleştirilir.
+  isActive   Boolean @default(true)
+
+  property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
+  /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
+  rollProperties RollProperty[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([propertyId, code])
+  @@index([propertyId, sortOrder])
+  @@map("fabric_property_values")
 }
 
 /// Item ↔ FabricProperty M:N — bir Item'a uygulanabilir özellikler (allowed list).
@@ -3747,13 +3865,34 @@ model RollProperty {
   rollId     String @db.Uuid
   propertyId String @db.Uuid
 
-  roll     Roll           @relation(fields: [rollId], references: [id], onDelete: Cascade)
-  property FabricProperty @relation(fields: [propertyId], references: [id])
+  /// SEÇİM tipli özellikte operatörün seçtiği DEĞER (2026-08-11).
+  /// Örnek: Kurşun istasyonunda "GRAMAJ" özelliği → 25GR / 50GR / 75GR.
+  ///
+  /// BAYRAK tipli özellikte NULL — orada özelliğin varlığı zaten cevaptır
+  /// ("zımparalı mı? evet"). SEÇİM tipinde varlık yetmez, hangisi olduğu lazım.
+  ///
+  /// ⚠️ `@@unique([rollId, propertyId])` KORUNUYOR ve bu, DIŞLAYICILIĞIN
+  /// kendisidir: bir topa aynı özellikten iki değer (hem 25GR hem 50GR)
+  /// yazılamaz. Bu yüzden değer AYRI bir satır değil, MEVCUT satırın kolonu.
+  ///
+  /// ⚠️ KATALOG SATIRINA FK — serbest metin DEĞİL. `Roll.foldType`'tan farkı
+  /// bilinçli: kat indekslenip filtrelenip sıralanıyor (skaler kolon şart),
+  /// bu değer ise yalnız okunup gösteriliyor → FK bütünlüğü daha değerli
+  /// ("50 GR" / "50gr" gibi yazım çeşitlemesi doğamaz).
+  ///
+  /// ⚠️ Değer satırı SİLİNMEZ, pasifleşir (`fabric-property.service`) — bu
+  /// yüzden `onDelete: Restrict`: geçmiş topun taşıdığı değer yok edilemez.
+  valueId String? @db.Uuid
+
+  roll     Roll                 @relation(fields: [rollId], references: [id], onDelete: Cascade)
+  property FabricProperty       @relation(fields: [propertyId], references: [id])
+  value    FabricPropertyValue? @relation(fields: [valueId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@unique([rollId, propertyId])
   @@index([propertyId])
+  @@index([valueId])
   @@map("roll_properties")
 }
 
@@ -3794,24 +3933,44 @@ model StationColor {
 /// `FabricProperty` artık `stationIds` ZORUNLU olarak yaratılır ve bağ aynı
 /// insert'te kurulur (bkz. `fabric-property.service.ts`).
 ///
-/// ⚠️ BU TABLO İKİ AYRI İŞ YAPAR — yeni kod yazarken hangisini kastettiğini bil:
+/// ⚠️ BU TABLO İKİ AYRI İŞ YAPAR ve 2026-08-10'da bunlar AYRIŞTIRILDI:
 ///   1. **Planlama filtresi** — "bu istasyon şu özelliği verebilir": WO create'te
 ///      (`workorder.service` özellik-başına rota kapsaması) ve edit'te
 ///      (`workorder-locks.applicablePropertyIds`) hedef özellik kümesini sınırlar.
-///   2. **Otomatik uygulama** — `copyStationCapabilitiesToRoll`: bu istasyondan
-///      GEÇEN her top listedeki TÜM özellikleri kazanır. Çağıranlar bugün yalnız
-///      Kurşun/QC2 yolları (kursun-qc, inventory.kursunFinish, kursun-bypass);
-///      fason kabul bu tabloyu KULLANMAZ, `WO.targetProperties`'tan kopyalar.
-/// Bugün ikisi tesadüfen ayrışmış (Boyahane satırları yalnız 1, Kurşun satırı
-/// yalnız 2 için kullanılıyor) ama sözleşme bunu garanti ETMEZ: Kurşun'un
-/// listesine ikinci bir özellik eklendiği gün o özellik oradan geçen HER TOPA
-/// sessizce yazılır. İkisini gerçekten ayırmak gerekirse buraya `autoApply
-/// Boolean @default(false)` eklenir ve mevcut satırlar `true` ile taşınır
-/// (bugünkü davranışı birebir korur).
+///      Kaynağı satırın **VARLIĞI**dır; `mode` bu soruya KARIŞMAZ.
+///   2. **Otomatik uygulama** — `copyStationCapabilitiesToRoll`: artık yalnız
+///      `mode == AUTO` satırları kopyalanır. Çağıranlar bugün yalnız Kurşun/QC2
+///      yolları (kursun-qc, inventory.kursunFinish, kursun-bypass); fason kabul
+///      bu tabloyu KULLANMAZ, `WO.targetProperties`'tan kopyalar.
+///
+/// Eskiden ayrım YOKTU ve şu tuzak açıktı: "Kurşun'un listesine ikinci bir
+/// özellik eklendiği gün o özellik oradan geçen HER TOPA sessizce yazılır."
+/// `mode` varsayılanı OPTIONAL olduğu için bu tuzak kapandı — yeni satır hiçbir
+/// şey yapmaz, otomatiklik açık bir karardır.
+///
+/// ⚠️ Fason istasyonlarında mod bugün İNERT: `copyStationCapabilitiesToRoll` o
+/// yolda hiç çağrılmıyor, özellik fason kabulde `WO.targetProperties`'ten
+/// yazılıyor. Bu yüzden `BOYA_FASON`/`ZIMPARA_FASON` satırları OPTIONAL taşır —
+/// toplu AUTO işaretlemek, iç boyahane akışı yazıldığı gün 7 özelliği sessizce
+/// her topa yazdırırdı.
 model StationProperty {
   id         String @id @default(uuid()) @db.Uuid
   stationId  String @db.Uuid
   propertyId String @db.Uuid
+
+  /// İstasyonun bu özelliği NASIL teyit ettiği (2026-08-10). Yukarıdaki "bu tablo
+  /// iki iş yapar" uyarısının çözümü: artık planlama filtresi = satırın VARLIĞI,
+  /// otomatik uygulama = `mode == AUTO`.
+  ///
+  /// ⚠️ Varsayılan OPTIONAL, AUTO DEĞİL — eski davranış "eklenen her özellik
+  /// oradan geçen HER TOPA sessizce yazılır" idi ve tam da bu notta tuzak olarak
+  /// işaretlenmişti. Bundan sonra otomatiklik açık bir karardır.
+  ///
+  /// ⚠️ `setCapabilities`/`fabric-property.update` replace deseni
+  /// (`deleteMany notIn` + `createMany skipDuplicates`) mevcut satırı
+  /// GÜNCELLEMEZ → modu değiştirmek ayrı bir `update` ister. Bu, özellik adı
+  /// düzenlenirken modun korunmasını sağladığı için istenen davranıştır.
+  mode StationPropertyMode @default(OPTIONAL)
 
   station  Station        @relation(fields: [stationId], references: [id], onDelete: Cascade)
   property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)

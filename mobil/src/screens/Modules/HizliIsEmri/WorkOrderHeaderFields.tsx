@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TextInput, TouchableRipple, Icon } from 'react-native-paper';
 import ColorSelectField from '../../../components/ColorSelectField';
+import { useFoldValues } from '../../../hooks/useFoldValues';
 import { colors, spacing, radius } from '../../../theme';
 
 // İş emri "Düzenle" formunun ortak alanları. (Hızlı İş Emri sihirbazı bu bileşeni
@@ -20,13 +21,16 @@ export const EMPTY_HEADER_FIELDS: WoHeaderFieldValues = {
   width: '',
   targetQuantity: '',
   targetWeight: '',
-  // Kat tipi her iş emrinde belirli olmalı (kumaş 2 veya 4 kat sarılır).
-  // Varsayılan 2-KAT; operatör değiştirebilir ama boş bırakamaz.
-  foldType: '2-KAT',
+  // ⚠️ Varsayılan BOŞ (2026-08-10). Eskiden '2-KAT' sabitiydi; kat kataloğa
+  // taşındıktan sonra bu, 2-KAT'ı OLMAYAN bir katalogda geçersiz bir ön-seçim
+  // demekti. Form değeri iş emrinden yükler; boş form katalogdan seçtirir.
+  foldType: null,
   batchNumber: '',
 };
 
-export const FOLD_OPTIONS = ['2-KAT', '4-KAT'];
+// ⚠️ `FOLD_OPTIONS` sabiti KALDIRILDI (2026-08-10) — kat değerleri katalogda
+// (`FabricProperty(code="KAT")`). Geri ekleme: panelden eklenen 6-KAT tablette
+// görünmez olur ve fabrika yeni kat tanımlayamaz.
 
 interface Props {
   value: WoHeaderFieldValues;
@@ -38,6 +42,15 @@ interface Props {
 export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber }: Props) {
   // Hedef metraj/kg nadiren kullanılır → varsayılan kapalı; değer varsa açık gelir.
   const [qtyOpen, setQtyOpen] = useState(() => !!(value.targetQuantity || value.targetWeight));
+
+  // Kat seçenekleri katalogdan + kayıtta duran ama katalogdan düşmüş değer.
+  const { values: foldValues } = useFoldValues();
+  const foldChoices = useMemo(() => {
+    const base = foldValues.map((v) => ({ code: v.code, name: v.name }));
+    const cur = value.foldType;
+    if (cur && !base.some((b) => b.code === cur)) base.push({ code: cur, name: `${cur} (katalog dışı)` });
+    return base;
+  }, [foldValues, value.foldType]);
 
   return (
     <View style={styles.root}>
@@ -66,20 +79,23 @@ export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber
           <Text style={styles.label}>
             Kat Tipi <Text style={styles.req}>*</Text>
           </Text>
-          {/* Zorunlu — bir tanesi mutlaka seçili olmalı; aktif çipe tekrar basınca seçim
-              kaldırılmaz (sarım tipi boş bırakılamaz). */}
+          {/* Seçenekler KATALOGDAN (2026-08-10). Aktif çipe tekrar basınca seçim
+              kaldırılmaz (kat boş bırakılamaz).
+              ⚠️ Kayıtlı değer katalogdan düşmüşse yine de çip olarak gösterilir —
+              aksi halde düzenleme formu değeri boş gösterir ve operatör farkında
+              olmadan üzerine yazar. */}
           <View style={styles.chipsRow}>
-            {FOLD_OPTIONS.map((f) => {
-              const active = value.foldType === f;
+            {foldChoices.map((f) => {
+              const active = value.foldType === f.code;
               return (
                 <TouchableRipple
-                  key={f}
-                  onPress={() => onChange({ foldType: f })}
+                  key={f.code}
+                  onPress={() => onChange({ foldType: f.code })}
                   style={[styles.chip, active && styles.chipActive]}
                   borderless
                   rippleColor="rgba(79,70,229,0.12)"
                 >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{f}</Text>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.name}</Text>
                 </TouchableRipple>
               );
             })}

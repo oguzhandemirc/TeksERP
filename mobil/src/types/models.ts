@@ -324,6 +324,10 @@ export interface SubcontractorDispatch {
 export interface RollProperty {
   propertyId: string;
   property?: FabricProperty;
+  /** SEÇİM tipli özellikte seçilen değer — backend GET /rolls yanıtında ZATEN
+   *  gönderiyor (ROLL_LIST_INCLUDE); tip taşımayınca ekranlar basamıyordu
+   *  (denetim VAL-04). */
+  value?: { code: string; name: string } | null;
 }
 
 export interface RollErrorRecord {
@@ -358,6 +362,8 @@ export interface Roll {
     workOrder?: { id: string; workOrderNumber: string } | null;
   } | null;
   createdBy?: { id: string; username: string; fullName: string } | null;
+  /** Topun sisteme GİRDİĞİ istasyon (kalıcı köken; 2026-08-05 öncesi toplar null). */
+  entryStation?: { id: string; code: string; name: string } | null;
   /** Topun üstündeki son basılan etiket snapshot'ı (null = stok/etiket yok). BAĞ DEĞİL. */
   lastLabelSnapshot?: RollLabelSnapshot | null;
   /** Sevkiyat rezervasyonu: dolu ise top "serbest depo" DEĞİL — bir çuvalın
@@ -735,8 +741,34 @@ export interface KursunStepSummary {
   workOrderId: string;
   batchNumber: string;
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
-  /** İstasyona KURSUN özelliği yetenek olarak atanmış mı? */
+  /**
+   * İstasyona KURSUN özelliği yetenek olarak atanmış mı?
+   *
+   * ⚠️ Bu alan "İSTASYON verebilir mi" der, "BU TOPA yazılacak mı" DEMEZ —
+   * 2026-08-10 mod modelinde ikisi ayrıldı. Uygulanma kararı `properties`
+   * içindeki KURSUN satırının `mode`'undadır.
+   */
   appliesKursun: boolean;
+  /**
+   * İstasyonun özellik yetenekleri + MODLARI (2026-08-10).
+   *   OTOMATİK → operatöre sorulmaz, adım kapanınca yazılır (tuş çizilmez)
+   *   OPSİYONEL → tuş çıkar; yalnız işaretlenirse yazılır
+   *   ZORUNLU   → tuş çıkar; işaretlenmeden adım kapanmaz (backend 400)
+   * Eski backend bu alanı göndermez → `undefined` → tuş çizilmez, davranış
+   * bugünküyle aynı (yalnız AUTO uygulanır).
+   */
+  properties?: {
+    propertyId: string;
+    code: string;
+    name: string;
+    mode: 'AUTO' | 'OPTIONAL' | 'REQUIRED';
+    /** BAYRAK → aç/kapa çipi · SEÇİM → değer çipleri (2026-08-11).
+     *  Eski backend göndermez → undefined → BAYRAK gibi davranılır. */
+    valueType?: 'FLAG' | 'CHOICE';
+    /** SEÇİM tipliyse operatöre sunulacak AKTİF değerler. Tuşlar BURADAN
+     *  çizilir — kodda sabit liste YOK (25GR/50GR/75GR panelden tanımlanır). */
+    values?: { code: string; name: string }[];
+  }[];
   /** Bu adıma yazılan not (WorkOrderStep.notes; rotada KK2 istasyonuna özel
    *  talimat) — kart açıkken üstte gösterilir. */
   stepNote?: string | null;
@@ -820,8 +852,10 @@ export interface TamburRollSummary {
   currentQty: number;
   width: number | null;
   qualityGrade: string;
-  /** Rulonun fiilen taşıdığı özellikler (RollProperty). */
-  properties: { id: string; name: string }[];
+  /** Rulonun fiilen taşıdığı özellikler (RollProperty). `value`: SEÇİM tipli
+   *  özellikte operatörün seçtiği değer (GRAMAJ=50 gr) — final kararı veren
+   *  Tambur operatörü görmeli. Eski backend göndermez → undefined. */
+  properties: { id: string; name: string; value?: { code: string; name: string } | null }[];
   errorCount: number;
   errors: TamburRollDefect[];
   /** Parti (Batch) kimliği — null = partisiz/doğrudan top. Bu alanla gruplanır. */

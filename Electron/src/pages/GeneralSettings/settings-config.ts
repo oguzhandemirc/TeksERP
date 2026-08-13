@@ -193,6 +193,24 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken aynı operatör/makine 90 saniye içinde birebir aynı kumaş + metraj + en girerse sistem uyarır ve kaydı ancak açık onayla alır (engellemez — arka arkaya birebir aynı top gerçekten gelebilir). Sunucu yeniden başlarken tuşa üst üste basılması sonucu doğan kopya stok kayıtlarına karşı ikinci savunma hattıdır. ⚠️ Açmadan önce sahadaki tabletlerin güncel sürüme yükseltildiğinden emin olun — eski sürüm bu uyarıyı tanımaz.",
       },
       {
+        key: "kk1OnlineOnlyEnabled",
+        group: "KK1 / Kalite",
+        title: "Ham girişte çevrimdışı kuyruğu kapat (online-only)",
+        desc: "Açıkken mobil KK1 sunucuya ulaşamazken kayıt ALMAZ: form kilitlenir ve sebebi yazar (ağ mı, sunucu mu). Kayıt ile etiket tek akışta yürür — 'sırada bekleyen / basılamayan etiket' listeleri hiç doğmaz, kesintide girilemeyen top sunucu dönünce girilir. Kapalıyken (varsayılan) bugünkü davranış: çevrimdışı girişler kuyruğa alınır, bağlantı gelince gönderilir ve etiketleri o zaman basılır. ⚠️ Açmadan önce sahadaki tabletlerin bu rejimi tanıyan APK'da olduğundan emin olun — eski sürüm bayrağı görmez ve kuyrukla çalışmaya devam eder.",
+      },
+      {
+        key: "kk1HistoryAllEntriesEnabled",
+        group: "KK1 / Kalite",
+        title: "Ham girişte 'Tüm Girişler' herkesin kayıtlarını göstersin",
+        desc: "Açıkken tabletteki 'Tüm Girişler' listesi TÜM operatörlerin ham girişlerini gösterir ve operatöre göre süzülebilir. Kapalıyken (varsayılan) operatör yalnız KENDİ girdiği topları görür — sağdaki 'Son Kayıtlar' listesi bu ayardan bağımsız her zaman kişiye özeldir. Bu bir yetki duvarı değil ekran sadeleştirmesidir; yönetim panelindeki Toplar listesi aynı veriyi 'Ekleyen' filtresiyle her durumda görür.",
+      },
+      {
+        key: "kk1LabelScanVerifyEnabled",
+        group: "KK1 / Kalite",
+        title: "Ham girişte etiket geri-okutma doğrulaması (scan-back)",
+        desc: "Açıkken basılan her top etiketi için tablet 'çıkan kâğıdı OKUT' ister ve okutulmadan yeni top girilemez — 'etiket çıktı mı' sorusunu yazılım değil tarayıcı cevaplar (yazıcı baskı onayı döndürmez; yazılımın 'bastım' demesi kâğıdın çıktığını kanıtlamaz). Etiket okunmuyorsa 'Tekrar Bas' ile yeni kâğıt basılır. Kapalıyken (varsayılan) ekranda bu akışa dair hiçbir öğe görünmez. ⚠️ Seri girişe her topta bir okutma adımı ekler; kamera arızasında akışı tıkayabilir — geri dönüş yolu bu anahtarı kapatmaktır. Açmadan önce tabletlerin güncel APK'da olduğundan emin olun.",
+      },
+      {
         key: "fasonNoteMobileEntry",
         group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",

@@ -35,6 +35,33 @@ export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
       ),
   },
   {
+    id: "valueType",
+    header: "Tip",
+    // SEÇİM tipli özellik hedef-özellik seçicilerinde GÖRÜNMEZ; hangi satırın
+    // öyle olduğu listede okunabilmeli, yoksa "neden listede yok" sorusunun
+    // cevabı hiçbir ekranda yazmaz.
+    cell: ({ row }) => {
+      const vt = row.original.valueType ?? "FLAG";
+      if (vt !== "CHOICE") return <span className="text-xs text-muted-foreground">Bayrak</span>;
+      const active = (row.original.values ?? []).filter((v) => v.isActive);
+      return (
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge variant="outline" className="text-[10px]">
+            Seçim
+          </Badge>
+          {active.slice(0, 4).map((v) => (
+            <Badge key={v.code} variant="muted" className="font-mono text-[10px]">
+              {v.code}
+            </Badge>
+          ))}
+          {active.length > 4 && (
+            <span className="text-[10px] text-muted-foreground">+{active.length - 4}</span>
+          )}
+        </div>
+      );
+    },
+  },
+  {
     id: "stations",
     header: "Uygulayan İstasyonlar",
     // Bağsız özellik = hiçbir iş emrinde seçilemez. Eskiden bu durum hiçbir

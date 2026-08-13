@@ -5,6 +5,7 @@ import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { WorkOrderFormValues } from "./schema";
 import type { WorkOrder } from "./types";
 import type { Order } from "@/pages/Operations/Orders/types";
+import { capCanApplyColor } from "@/pages/StationCapabilities/types";
 
 /**
  * Kumaş Dengesi "WO Aç (stoğa üret)" → WO formuna sipariş bağı olmadan hedef
@@ -220,7 +221,7 @@ export function deriveStepTargets(
   for (const s of steps) {
     const cap = caps.get(s.stationId);
     if (!cap) continue;
-    const colorOk = cap.hasDefaultCategory && cap.canApplyColor;
+    const colorOk = capCanApplyColor(cap);
     const capProps = new Set(cap.properties.map((p) => p.id));
     out.set(s.clientId, {
       plannedColorId: colorOk ? target.colorId : null,

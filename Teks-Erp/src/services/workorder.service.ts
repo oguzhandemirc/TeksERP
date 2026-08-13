@@ -61,6 +61,13 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
+import {
+  STEP_CAPABILITY_SELECT,
+  stepCanApplyColor,
+  stepCanApplyProperty,
+} from "./helpers/step-capability.helper";
+import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 // Kurşun bypass (kurşun istasyonunda tablet YOK): WO yaşam döngüsü olayları açık
 // dağıtım atamalarını bayat bırakmasın. Guard helper hiçbir servise bağlı değil —
@@ -107,6 +114,75 @@ import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.serv
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   return typeof v === "number" ? v : Number(v);
+}
+
+/**
+ * "Bu rota hedef rengi/özelliği UYGULAYABİLİR mi?" — create ve replace ORTAK.
+ *
+ * ⚠️ 2026-08-10'da SORU DEĞİŞTİ. Eskisi *"rotada fason kategorisi var mı"* diye
+ * soruyordu ve tümü İÇ istasyonlardan oluşan bir rotayı, istasyonlar o işi
+ * yapabilse bile 400 ile reddediyordu ("Hedef renk veya özellik seçildi ama
+ * rotada hiç fason kategorisi tanımlı değil"). İç boyahane/iç zımpara
+ * senaryosunun önündeki asıl engel buydu.
+ *
+ * Yeni soru: *"renk/özellik VEREBİLEN bir adım var mı"* — adım bazında
+ * İSTASYON bayrağı VEYA o adımda seçilmiş fason hizmetinin bayrağı
+ * (`stepCanApplyColor`). Fason rotalarda sonuç birebir aynı: EXTERNAL
+ * istasyonların bayrakları göçte kategorilerinden dolduruldu.
+ *
+ * İki blok halinde kopyalanmıştı; ayrışırlarsa aynı iş emri create'te kabul
+ * edilip replace'te reddedilirdi (2026-08-02'de özellik kapsamasında tam bu
+ * asimetri yaşandı).
+ */
+async function assertRouteCoversTargets(
+  steps: { stationId: string; requiredCategoryId?: string | null }[],
+  need: { color: boolean; property: boolean },
+): Promise<void> {
+  const stationIds = [...new Set(steps.map((s) => s.stationId).filter(Boolean))];
+  const categoryIds = [
+    ...new Set(steps.map((s) => s.requiredCategoryId).filter((c): c is string => !!c)),
+  ];
+  const [stations, categories] = await Promise.all([
+    stationIds.length > 0
+      ? prisma.station.findMany({
+          where: { id: { in: stationIds } },
+          select: { id: true, ...STEP_CAPABILITY_SELECT },
+        })
+      : Promise.resolve([]),
+    categoryIds.length > 0
+      ? prisma.subcontractorCategory.findMany({
+          where: { id: { in: categoryIds } },
+          select: { id: true, appliesColor: true, appliesProperty: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const stById = new Map(stations.map((s) => [s.id, s]));
+  const catById = new Map(categories.map((c) => [c.id, c]));
+
+  // Yüklem parametreli: iki dal AYNI adım gezintisini paylaşsın (ayrı yazılırsa
+  // biri `requiredCategory`yi okumayı unutur ve sessizce farklı cevap verir).
+  const can = (
+    pick: (
+      st: { appliesColor: boolean; appliesProperty: boolean } | undefined,
+      cat: { appliesColor: boolean; appliesProperty: boolean } | undefined,
+    ) => boolean,
+  ) =>
+    steps.some((s) =>
+      pick(stById.get(s.stationId), s.requiredCategoryId ? catById.get(s.requiredCategoryId) : undefined),
+    );
+
+  if (need.color && !can(stepCanApplyColor)) {
+    throw AppError.badRequest(
+      "Rotada 'renk veren' bir adım yok. Hedef rengin uygulanabilmesi için renk uygulayan " +
+        "bir istasyon (ör. boyahane) ya da renk veren bir fason adımı eklenmelidir.",
+    );
+  }
+  if (need.property && !can(stepCanApplyProperty)) {
+    throw AppError.badRequest(
+      "Rotada 'özellik veren' bir adım yok. Hedef özelliklerin uygulanabilmesi için özellik " +
+        "uygulayan bir istasyon ya da fason adımı eklenmelidir.",
+    );
+  }
 }
 
 // =============================================================================
@@ -503,6 +579,10 @@ export class WorkOrderService {
     data: WorkOrderCreateInput,
     userId?: string
   ): Promise<ApiResponse<WorkOrder> & { idempotentReplay?: boolean }> {
+    // Kat katalog doğrulaması — YERİNDE kanonikleştirir, böylece aşağıdaki tüm
+    // kullanımlar (yazım + kilit karşılaştırmaları) aynı değeri görür.
+    await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
+
     const type = (data.type as WorkOrder["type"]) ?? "ORDER_PRODUCTION";
 
     // ── Rota adımlarını hazırla (şablondan veya raw'dan) ────────────────────
@@ -713,6 +793,10 @@ export class WorkOrderService {
           throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
         }
 
+        // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty sunucu karşılığı
+        // (denetim Q2): değerini istasyonda operatör verir, hedef listesi taşımaz.
+        await assertTargetablePropertyIds(targetPropertyIds, "iş emri hedef özelliği");
+
         const allowedSet = new Set(
           (targetItemFull?.allowedProperties ?? []).map((p) => p.propertyId),
         );
@@ -728,31 +812,10 @@ export class WorkOrderService {
 
       // "Renk veren" / "Özellik veren" adım var mı? (rota uygunluk kontrolü)
       if (resolvedTargetColorId || targetPropertyIds.length > 0) {
-        const stepCategoryIds = finalSteps
-          .map((s) => s.requiredCategoryId)
-          .filter((c): c is string => !!c);
-        if (stepCategoryIds.length === 0) {
-          throw AppError.badRequest(
-            "Hedef renk veya özellik seçildi ama rotada hiç fason kategorisi tanımlı değil. Uygulayabilecek bir adım gerekiyor.",
-          );
-        }
-        const categoryFlags = await prisma.subcontractorCategory.findMany({
-          where: { id: { in: stepCategoryIds } },
-          select: { appliesColor: true, appliesProperty: true },
+        await assertRouteCoversTargets(finalSteps, {
+          color: !!resolvedTargetColorId,
+          property: targetPropertyIds.length > 0,
         });
-        if (resolvedTargetColorId && !categoryFlags.some((c) => c.appliesColor)) {
-          throw AppError.badRequest(
-            "Rotada 'renk veren' bir fason adımı (örn. boyahane) tanımlı değil. Hedef rengin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
-        if (
-          targetPropertyIds.length > 0 &&
-          !categoryFlags.some((c) => c.appliesProperty)
-        ) {
-          throw AppError.badRequest(
-            "Rotada 'özellik veren' bir fason adımı tanımlı değil. Hedef özelliklerin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
       }
 
       // ── Özellik başına rota kapsaması ────────────────────────────────────
@@ -4184,6 +4247,11 @@ export class WorkOrderService {
       );
     }
 
+    // Kat katalog doğrulaması — kilit karşılaştırmalarından ÖNCE kanonikleştir.
+    // Sonra yapılsaydı "tüp" gönderen istemci, WO'da "TÜP" dururken alanı
+    // DEĞİŞMİŞ sayılır ve hiç dokunmadığı bir alandan kilit hatası alırdı.
+    await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
+
     // ── Fiziksel taahhüt kilitleri (replace() ile AYNI kurallar — PUT/PATCH
     // drift'i kapatıldı: bu yol mobil düzenlemede aktif kullanılıyor). PATCH
     // kısmi semantik: yalnız GÖNDERİLEN ve fiilen DEĞİŞEN alan kilide çarpar;
@@ -4399,6 +4467,10 @@ export class WorkOrderService {
         "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
       );
     }
+
+    // Kat katalog doğrulaması — kilit karşılaştırmalarından ÖNCE (update ile
+    // aynı gerekçe: kanonikleştirme sonra yapılırsa değişmemiş alan kilide çarpar).
+    await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
 
     // ── Fiziksel taahhüt kilitleri ──────────────────────────────────────────
     // Sevk gittiyse / herhangi adım başladıysa kumaş/en/metraj artık değişmez.
@@ -4664,6 +4736,10 @@ export class WorkOrderService {
         if (propRows.length !== targetPropertyIds.length) {
           throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
         }
+
+        // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty sunucu karşılığı
+        // (denetim Q2): değerini istasyonda operatör verir, hedef listesi taşımaz.
+        await assertTargetablePropertyIds(targetPropertyIds, "iş emri hedef özelliği");
         const allowedSet = new Set(
           (targetItemFull?.allowedProperties ?? []).map((p) => p.propertyId),
         );
@@ -4678,31 +4754,10 @@ export class WorkOrderService {
       }
 
       if (resolvedTargetColorId || targetPropertyIds.length > 0) {
-        const stepCategoryIds = finalSteps
-          .map((s) => s.requiredCategoryId)
-          .filter((c): c is string => !!c);
-        if (stepCategoryIds.length === 0) {
-          throw AppError.badRequest(
-            "Hedef renk veya özellik seçildi ama rotada hiç fason kategorisi tanımlı değil. Uygulayabilecek bir adım gerekiyor.",
-          );
-        }
-        const categoryFlags = await prisma.subcontractorCategory.findMany({
-          where: { id: { in: stepCategoryIds } },
-          select: { appliesColor: true, appliesProperty: true },
+        await assertRouteCoversTargets(finalSteps, {
+          color: !!resolvedTargetColorId,
+          property: targetPropertyIds.length > 0,
         });
-        if (resolvedTargetColorId && !categoryFlags.some((c) => c.appliesColor)) {
-          throw AppError.badRequest(
-            "Rotada 'renk veren' bir fason adımı (örn. boyahane) tanımlı değil. Hedef rengin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
-        if (
-          targetPropertyIds.length > 0 &&
-          !categoryFlags.some((c) => c.appliesProperty)
-        ) {
-          throw AppError.badRequest(
-            "Rotada 'özellik veren' bir fason adımı tanımlı değil. Hedef özelliklerin uygulanabilmesi için böyle bir adım eklenmelidir.",
-          );
-        }
       }
     }
 
@@ -5114,6 +5169,9 @@ export class WorkOrderService {
       if (propRows.length !== dedupedIds.length) {
         throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
       }
+      // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty'nin sunucu
+      // karşılığı (denetim Q2). Buradaki istemci aktif seçim yapıyor → 400 doğru.
+      await assertTargetablePropertyIds(dedupedIds, "iş emri hedef özelliği");
 
       const allowedSet = new Set(
         (wo.targetItem?.allowedProperties ?? []).map((p) => p.propertyId),
@@ -5150,14 +5208,24 @@ export class WorkOrderService {
       });
       const rollIds = affectedRolls.map((r) => r.id);
 
-      // 3) Roll.properties replace
+      // 3) Roll.properties replace — YALNIZ BAYRAK (FLAG) EVRENİ (2026-08-11,
+      //    denetim F4). "Roll.properties = WO hedeflerinin kopyası" varsayımı
+      //    istasyon-seçimli değer modeliyle bozuldu: SEÇİM satırlarını (GRAMAJ=
+      //    50GR) İSTASYON OPERATÖRÜ yazar, hedef listesi değil. Koşulsuz replace,
+      //    planlamacı WO hedeflerine her dokunduğunda o seçimi sessizce silerdi.
       if (rollIds.length > 0) {
-        await tx.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+        await tx.rollProperty.deleteMany({
+          where: { rollId: { in: rollIds }, property: { valueType: "FLAG" } },
+        });
         if (dedupedIds.length > 0) {
           const data = rollIds.flatMap((rollId) =>
             dedupedIds.map((propertyId) => ({ rollId, propertyId })),
           );
-          await tx.rollProperty.createMany({ data });
+          // skipDuplicates: CHOICE satırları artık hayatta kaldığı için
+          // @@unique([rollId, propertyId]) çakışması TEORİK olarak yalnız
+          // hedef listesi CHOICE içerseydi olurdu (yukarıda 400) — yine de
+          // idempotent yazım replace yarışlarına karşı daha dayanıklı.
+          await tx.rollProperty.createMany({ data, skipDuplicates: true });
         }
       }
 

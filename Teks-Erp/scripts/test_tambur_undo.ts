@@ -117,11 +117,17 @@ async function main(): Promise<void> {
 
     const p1 = await pv(s1.childIds[0]!);
     check(
-      "kapanmış kaynağın çocuğunda İKİ seçenek de sunuluyor",
-      p1.options.length === 2 &&
+      "kapanmış kaynağın çocuğunda ÜÇ seçenek de sunuluyor (2026-08-12: +SINGLE_RESTORE)",
+      p1.options.length === 3 &&
         p1.options.some((o) => o.mode === "SINGLE") &&
+        p1.options.some((o) => o.mode === "SINGLE_RESTORE") &&
         p1.options.some((o) => o.mode === "FULL"),
       `options=[${p1.options.map((o) => o.mode).join(",")}]`,
+    );
+    check(
+      "canlandırma seçeneği İLK sırada (sahadaki asıl ihtiyaç)",
+      p1.options[0]?.mode === "SINGLE_RESTORE",
+      `ilk=${p1.options[0]?.mode}`,
     );
     check(
       "varsayılan mod EN DAR olan (SINGLE)",
@@ -486,6 +492,157 @@ async function main(): Promise<void> {
       "⭐ ve hiçbir şey YAPILMADI (sessiz tek-parça iptali olmadı)",
       s8cChild?.status !== RollStatus.CANCELLED,
       `çocuk=${s8cChild?.status}`,
+    );
+
+    // ── §9 TEKİL CANLANDIRMA (SINGLE_RESTORE, 2026-08-12) ────────────────────
+    // Saha ihtiyacı: "iş emri bitmiş, tek topun kaydı yanlış, kumaş elimde —
+    // yalnız onu geri alayım". Eskiden tek yol FULL'dü ve o kardeşleri de
+    // iptal ediyordu; SINGLE ise metrajı sapmaya yazıp kaybediyordu.
+    console.log("\n── §9 ⭐ Tekil canlandırma — kardeşlere dokunmadan metraj döner ──");
+
+    const s9 = await buildCutSession("S9", 100, [30, 30]);
+    await tambur.finalizeWarehouseCut(
+      s9.parentId,
+      { remainingAction: "discard", varianceReasonCode: "OLCUM_HATASI" },
+      undefined,
+      null,
+    );
+
+    const s9Pv = await pv(s9.childIds[0]!, { mode: "SINGLE_RESTORE" });
+    const s9Opt = s9Pv.options.find((o) => o.mode === "SINGLE_RESTORE");
+    check(
+      "canlandırma seçeneği: 1 top · 30 m · sebep İSTEMEZ",
+      s9Opt?.affectedCount === 1 && s9Opt?.restoredQty === 30 && s9Opt?.requiresReason === false,
+      `affected=${s9Opt?.affectedCount} restored=${s9Opt?.restoredQty} reason=${s9Opt?.requiresReason}`,
+    );
+
+    const s9Res = (
+      await undo.applyUndo(s9.childIds[0]!, undefined, { mode: "SINGLE_RESTORE" })
+    ).data as { restoredQty: number };
+    check("uygulama 30 m geri koydu", s9Res.restoredQty === 30, `restored=${s9Res.restoredQty}`);
+
+    const s9Parent = await prisma.roll.findUnique({
+      where: { id: s9.parentId },
+      select: { status: true, currentQty: true, initialQty: true, preTamburCloseQty: true },
+    });
+    check(
+      "⭐ kaynak dirildi ve YALNIZ bu topun metrajını taşıyor (30 m)",
+      s9Parent?.status === RollStatus.WAREHOUSE && Number(s9Parent?.currentQty) === 30,
+      `status=${s9Parent?.status} cur=${s9Parent?.currentQty}`,
+    );
+    check(
+      "metraj invariantı korunur (depo dalı initialQty'yi de geri ekler)",
+      Number(s9Parent?.currentQty) <= Number(s9Parent?.initialQty),
+      `cur=${s9Parent?.currentQty} init=${s9Parent?.initialQty}`,
+    );
+    check("kapanış-öncesi kayıt tüketildi", s9Parent?.preTamburCloseQty === null);
+
+    const s9Sibling = await prisma.roll.findUnique({
+      where: { id: s9.childIds[1]! },
+      select: { status: true },
+    });
+    check(
+      "⭐ KARDEŞ TOPA DOKUNULMADI (FULL'den ayıran özellik)",
+      s9Sibling?.status === RollStatus.WAREHOUSE,
+      `kardeş=${s9Sibling?.status}`,
+    );
+    const s9Child = await prisma.roll.findUnique({
+      where: { id: s9.childIds[0]! },
+      select: { status: true },
+    });
+    check("dokunulan top iptal edildi", s9Child?.status === RollStatus.CANCELLED);
+
+    // Kapanışın kalan-metraj kararı (atılan 40) AYAKTA kalmalı — canlandırma
+    // kapanışı kısmen açar, kararlarını geçersiz kılmaz.
+    const s9CloseVar = await prisma.rollVariance.findFirst({
+      where: { rollId: s9.parentId, source: "TAMBUR_WAREHOUSE_FINALIZE" },
+      select: { reversedAt: true },
+    });
+    check(
+      "kapanışın sapma satırı TERSLENMEDİ (kararlar ayakta)",
+      s9CloseVar != null && s9CloseVar.reversedAt === null,
+    );
+    // Ve metraj SAPMAYA YAZILMADI — kayıp yok, top olarak elde.
+    const s9SingleVar = await prisma.rollVariance.count({
+      where: { rollId: s9.childIds[0]!, source: "TAMBUR_UNDO_SINGLE" },
+    });
+    check("⭐ metraj sapma defterine YAZILMADI (kayıp değil, geri kondu)", s9SingleVar === 0);
+
+    // Kaynak artık YAŞIYOR → aynı çocuk için canlandırma teklif edilmez
+    // (kaldı ki çocuk zaten iptal).
+    const s9Pv2 = await pv(s9.childIds[1]!);
+    check(
+      "kaynak dirilince kalan kardeşin önizlemesi canlandırma SUNMAZ (kaynak canlı)",
+      !s9Pv2.options.some((o) => o.mode === "SINGLE_RESTORE"),
+      `options=[${s9Pv2.options.map((o) => o.mode).join(",")}]`,
+    );
+
+    // ── §10 F0402 ÇIKMAZI: sıfır-çocuklu kapanışta FULL çalışır ──────────────
+    // Saha vakası: tüm çocuklar TEK TEK iptal edilmiş (her biri metrajı sapmaya
+    // yazdı), kapanışın "iptal edilebilir çocuğu kalmamış" → FULL de reddediyor,
+    // 208 m sonsuza dek kayıp. Artık: sapma defterindeki metraj geri konur ve
+    // o satırlar terslenir.
+    console.log("\n── §10 ⭐ F0402: sıfır-çocuklu kapanışta tümden geri alma ──");
+
+    const s10 = await buildCutSession("S10", 100, [30, 20]);
+    await tambur.finalizeWarehouseCut(
+      s10.parentId,
+      { remainingAction: "discard", varianceReasonCode: "OLCUM_HATASI" },
+      undefined,
+      null,
+    );
+    // İki çocuğu da TEK TEK iptal et (arşiv dalı → sapma yazar).
+    await undo.applyUndo(s10.childIds[0]!, undefined, { mode: "SINGLE" });
+    await undo.applyUndo(s10.childIds[1]!, undefined, { mode: "SINGLE" });
+
+    const s10Pv = await pv(s10.parentId, { mode: "FULL", permissions: ADMIN });
+    const s10Full = s10Pv.options.find((o) => o.mode === "FULL");
+    check(
+      "⭐ sıfır-çocuklu kapanışta FULL artık UYGULANABİLİR",
+      s10Full?.canApply === true,
+      `canApply=${s10Full?.canApply} block=${s10Full?.blockReason ?? "-"}`,
+    );
+    check(
+      "⭐ geri konacak metraj tekil iptallerin kaybını da sayar (30+20 kesim + 50 atılan = 100)",
+      s10Full?.restoredQty === 100,
+      `restored=${s10Full?.restoredQty} — tekil kayıplar sayılmasaydı 50 çıkardı`,
+    );
+
+    const s10Res = (
+      await undo.applyUndo(s10.parentId, undefined, {
+        mode: "FULL",
+        reason: "test — F0402 çıkmazı",
+        permissions: ADMIN,
+      })
+    ).data as { restoredQty: number; reversedVariances: number };
+    const s10Parent = await prisma.roll.findUnique({
+      where: { id: s10.parentId },
+      select: { status: true, currentQty: true, initialQty: true },
+    });
+    check(
+      "⭐ kaynak 100 m ile dirildi (kayıp metraj kurtarıldı)",
+      s10Parent?.status === RollStatus.WAREHOUSE && Number(s10Parent?.currentQty) === 100,
+      `status=${s10Parent?.status} cur=${s10Parent?.currentQty}`,
+    );
+    check(
+      "metraj invariantı korunur",
+      Number(s10Parent?.currentQty) <= Number(s10Parent?.initialQty),
+      `cur=${s10Parent?.currentQty} init=${s10Parent?.initialQty}`,
+    );
+    // Tekil iptallerin sapma satırları TERSLENDİ — senkron sözleşmesi: geri
+    // sayılan her satır terslenir, yoksa dönem raporu metrajı İKİ KEZ görür.
+    const s10ChildVars = await prisma.rollVariance.findMany({
+      where: { rollId: { in: s10.childIds }, source: "TAMBUR_UNDO_SINGLE" },
+      select: { reversedAt: true },
+    });
+    check(
+      "⭐ tekil iptallerin sapma satırları TERSLENDİ (çift sayım yok)",
+      s10ChildVars.length === 2 && s10ChildVars.every((v) => v.reversedAt !== null),
+      `${s10ChildVars.filter((v) => v.reversedAt !== null).length}/${s10ChildVars.length} terslendi`,
+    );
+    check(
+      "satırlar SİLİNMEDİ (append-only defter)",
+      s10ChildVars.length === 2,
     );
   } finally {
     if (rollIds.length) {

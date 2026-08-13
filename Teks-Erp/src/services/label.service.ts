@@ -386,10 +386,146 @@ export class LabelService {
 
       batchNumber: roll.batch?.batchNumber ?? null,
       workOrderNumber: roll.batch?.workOrder?.workOrderNumber ?? null,
+      // KAT — kolondan OLDUĞU GİBİ (katalog kodu); ada çevrilmez (bkz. LabelPayload).
+      foldType: roll.foldType ?? null,
       printedAt: new Date().toISOString(),
     };
 
     return { success: true, data: payload };
+  }
+
+  /**
+   * "Bu hedefe basarsam etikette hangi AD çıkar?" — TOP DOĞMADAN ÖNCE (2026-08-13).
+   *
+   * Tambur'da etiket kesimle birlikte anında basılıyor; operatörün müşterideki
+   * kumaş/renk adını GÖRDÜĞÜ tek an baskıdan sonraydı. Bu uç kesim ekranına
+   * "Etikette: AKTOS · MAVİ" satırını besler.
+   *
+   * ⚠️ ZİNCİR İSTEMCİDE TEKRAR YAZILMAZ. `getRollLabel`in ad çözümüyle AYNI
+   * sıra: sipariş satırı override'ı → müşteri master alias'ı → bizdeki ad
+   * (`resolveName`). Ayrı yazılsaydı önizleme bir ad, basılan etiket başka bir
+   * ad gösterirdi — yani özelliğin tek işi olan güveni yok ederdi.
+   *
+   * Müşteri YOKSA (stok baskısı) zincir hiç koşmaz: `DEFAULT` döner, çünkü
+   * müşterisiz etikette müşteriye özel hiçbir şey basılmaz.
+   */
+  async previewCustomerNames(input: {
+    /**
+     * KAYNAK TOP — kesilecek açık kumaş/depo topu. Çocuk henüz DOĞMADIĞI için
+     * ürün/renk ondan miras alınır; istemcinin item/color UUID'sini taşıması
+     * gerekmez (Tambur adım özeti onları hiç göndermiyor).
+     */
+    rollId?: string | null;
+    itemId?: string | null;
+    colorId?: string | null;
+    orderLineId?: string | null;
+    customerId?: string | null;
+  }): Promise<
+    ApiResponse<{
+      /** Kalıcı alias yazmak için gerekir — istemci bu ID'leri başka yerden bilmiyor. */
+      itemId: string;
+      colorId: string | null;
+      customerId: string | null;
+      customerName: string | null;
+      itemName: string;
+      itemNameDefault: string;
+      itemNameSource: NameSource;
+      colorName: string | null;
+      colorNameDefault: string | null;
+      colorNameSource: NameSource | null;
+    }>
+  > {
+    let itemId = input.itemId ?? null;
+    let colorId = input.colorId ?? null;
+    if (input.rollId) {
+      const src = await prisma.roll.findUnique({
+        where: { id: input.rollId },
+        select: { itemId: true, colorId: true },
+      });
+      if (!src) throw AppError.notFound("Top bulunamadı");
+      itemId = src.itemId;
+      colorId = src.colorId;
+    }
+    if (!itemId) throw AppError.badRequest("Ürün belirtilmedi (rollId ya da itemId gerekir)");
+
+    const item = await prisma.item.findUnique({
+      where: { id: itemId },
+      select: { id: true, name: true },
+    });
+    if (!item) throw AppError.notFound("Ürün bulunamadı");
+    const color = colorId
+      ? await prisma.color.findUnique({
+          where: { id: colorId },
+          select: { id: true, name: true },
+        })
+      : null;
+
+    let customerId: string | null = null;
+    let customerName: string | null = null;
+    let itemOverride: string | null = null;
+    let colorOverride: string | null = null;
+
+    if (input.orderLineId) {
+      const line = await prisma.orderLine.findUnique({
+        where: { id: input.orderLineId },
+        select: {
+          customerItemName: true,
+          customerColorName: true,
+          order: { select: { customerId: true, customer: { select: { name: true } } } },
+        },
+      });
+      if (line) {
+        customerId = line.order.customerId;
+        customerName = line.order.customer.name;
+        itemOverride = line.customerItemName;
+        colorOverride = line.customerColorName;
+      }
+    } else if (input.customerId) {
+      const cust = await prisma.customer.findUnique({
+        where: { id: input.customerId },
+        select: { id: true, name: true },
+      });
+      if (cust) {
+        customerId = cust.id;
+        customerName = cust.name;
+      }
+    }
+
+    let itemMaster: string | null = null;
+    let colorMaster: string | null = null;
+    if (customerId) {
+      const ia = await prisma.customerItemAlias.findUnique({
+        where: { customerId_itemId: { customerId, itemId: item.id } },
+        select: { alias: true },
+      });
+      itemMaster = ia?.alias ?? null;
+      if (color) {
+        const ca = await prisma.customerColorAlias.findUnique({
+          where: { customerId_colorId: { customerId, colorId: color.id } },
+          select: { alias: true },
+        });
+        colorMaster = ca?.alias ?? null;
+      }
+    }
+
+    const itemResolved = resolveName(itemOverride, itemMaster, item.name);
+    const colorResolved = color ? resolveName(colorOverride, colorMaster, color.name) : null;
+
+    return {
+      success: true,
+      data: {
+        itemId: item.id,
+        colorId: color?.id ?? null,
+        customerId,
+        customerName,
+        itemName: itemResolved.name,
+        itemNameDefault: item.name,
+        itemNameSource: itemResolved.source,
+        colorName: colorResolved?.name ?? null,
+        colorNameDefault: color?.name ?? null,
+        colorNameSource: colorResolved?.source ?? null,
+      },
+    };
   }
 
   /**
@@ -435,6 +571,9 @@ export class LabelService {
       orderNumber: "SIP1207260001",
       orderLineId: "preview",
       batchNumber: "P1207261",
+      // Önizlemede kat dolu gelsin — tasarımcı "Kat" alanını tuvale sürükleyince
+      // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
+      foldType: "4-KAT",
       printedAt: new Date().toISOString(),
       // SWATCH önizlemesinde kartela alanları görünsün (roll düzeninde yok sayılır).
       kind: input.kind,
@@ -512,6 +651,9 @@ export class LabelService {
       orderNumber: "SIP1207260001",
       orderLineId: "preview",
       batchNumber: "P1207261",
+      // Önizlemede kat dolu gelsin — tasarımcı "Kat" alanını tuvale sürükleyince
+      // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
+      foldType: "4-KAT",
       printedAt: new Date().toISOString(),
       kind: input.kind,
       cardNumber: "KRT1207260001",
@@ -868,6 +1010,9 @@ export class LabelService {
       orderNumber: "SIP1207260001",
       orderLineId: null,
       batchNumber: "P1207261",
+      // Önizlemede kat dolu gelsin — tasarımcı "Kat" alanını tuvale sürükleyince
+      // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
+      foldType: "4-KAT",
       printedAt: new Date().toISOString(),
     };
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);

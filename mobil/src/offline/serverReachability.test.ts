@@ -14,7 +14,9 @@ import {
   offlineReason,
   reportServerReachable,
   reportServerUnreachable,
+  revalidateServer,
 } from './serverReachability';
+import { useBaseUrlStore } from '../store/baseUrlStore';
 import {
   IDLE_ATTEMPT,
   INFLIGHT_REUSE_WINDOW_MS,
@@ -113,5 +115,76 @@ describe('⭐ B6 saha vakasını kuyruk üzerinden GERİ GETİRMİYOR', () => {
     // Backend: DUPLICATE_ENTRY_WINDOW_MS = 90_000 (duplicate-guard.helper.ts).
     // Sayılar ayrışırsa bir katman "aynı top" derken diğeri "ayrı top" der.
     expect(INFLIGHT_REUSE_WINDOW_MS).toBe(90_000);
+  });
+});
+
+// =============================================================================
+// ⭐⭐ KALICI ÇEVRİMDIŞI KİLİTLENMESİ (2026-08-12 saha vakası)
+// =============================================================================
+// Gözlem: API kapatıldı → uygulama çevrimdışına düştü → API geri açıldı → uygulama
+// ASLA çevrimiçiye dönmedi (yeniden başlatmak gerekti). İki parça birlikte kilit
+// üretiyordu:
+//   1. `healthUrl()` DERLEME ZAMANI sabitini (`constants/api`) yokluyordu; oysa
+//      gerçek istekler operatörün Ayarlar'dan girdiği adrese gidiyor. Yoklama
+//      başka bir sunucuyu sorduğu için ASLA tutmuyordu.
+//   2. Çevrimdışıyken TanStack Query sorguları duraklatır → hiçbir gerçek istek
+//      çıkmaz → `reportServerReachable`ın tek tetikleyicisi yoklamadır.
+// Yani (1) kırıldığında çıkış yolu KALMIYOR. Bu blok üçünü de kilitler:
+// canlı adres · elle "Şimdi dene" · adres değişince otomatik yeniden değerlendirme.
+// =============================================================================
+
+describe('⭐⭐ yoklama CANLI adresi kullanır (kalıcı kilitlenmenin kökü)', () => {
+  const REAL = 'http://10.0.0.7:4000/api';
+  let fetchMock: jest.Mock;
+
+  beforeEach(() => {
+    __resetOnlineSignalForTests();
+    fetchMock = jest.fn(async () => ({ status: 200 }) as Response);
+    (global as unknown as { fetch: unknown }).fetch = fetchMock;
+    // Operatör adresi Ayarlar'dan değiştirmiş durumda.
+    useBaseUrlStore.setState({ baseUrl: REAL });
+  });
+
+  it('⭐ /health, DERLEME sabitine değil AYARLANAN adrese gider', async () => {
+    reportServerUnreachable();
+    await revalidateServer();
+
+    expect(fetchMock).toHaveBeenCalled();
+    const url = String(fetchMock.mock.calls[0][0]);
+    // Kilitlenmenin kökü buydu: sabit adres yoklanınca operatör adresi
+    // düzeltse bile yoklama başka sunucuyu sorar ve asla yeşile dönmez.
+    expect(url).toBe('http://10.0.0.7:4000/health');
+    expect(url).not.toContain('localhost');
+  });
+
+  it('/api soneki atılır, /health onun KARDEŞİdir', async () => {
+    useBaseUrlStore.setState({ baseUrl: 'http://10.0.0.7:4000/api/' });
+    reportServerUnreachable();
+    await revalidateServer();
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://10.0.0.7:4000/health');
+  });
+
+  it('⭐ "Şimdi dene" tutarsa çevrimiçiye döner (kilidin elle açılan kapısı)', async () => {
+    reportServerUnreachable();
+    expect(offlineReason()).toBe('server');
+
+    const ok = await revalidateServer();
+    expect(ok).toBe(true);
+    expect(offlineReason()).toBeNull();
+  });
+
+  it('"Şimdi dene" tutmazsa çevrimdışı KALIR ve false döner (UI yalan söylemesin)', async () => {
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    reportServerUnreachable();
+
+    const ok = await revalidateServer();
+    expect(ok).toBe(false);
+    expect(offlineReason()).toBe('server');
+  });
+
+  it('5xx bile ULAŞILABİLİRdir — sunucu cevap vermiştir', async () => {
+    fetchMock.mockResolvedValue({ status: 503 } as Response);
+    reportServerUnreachable();
+    expect(await revalidateServer()).toBe(true);
   });
 });

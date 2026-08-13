@@ -27,6 +27,11 @@ export interface RelabelChip {
   code: string;
   name: string;
   color: string | null;
+  /** SEÇİM (CHOICE) tipli özelliğin topa damgalı değeri (örn. GRAMAJ → "50 gr").
+   *  Dolu gelen satır Düzelt formunda SALT-OKUNUR bilgidir: değer istasyonda
+   *  (Kurşun/QC2) seçilir, backend replace'i de bu satırlara dokunmaz (F1).
+   *  BAYRAK özelliklerde her zaman null. */
+  value?: { code: string; name: string } | null;
 }
 
 export interface RelabelContext {
@@ -42,6 +47,8 @@ export interface RelabelContext {
   qualityGradeId: string | null;
   qualityGradeRef: { id: string; code: string; name: string; color: string | null } | null;
   width: number | null;
+  /** KAT — katalog KODU ("6-KAT"/"TUP"); kat girilmemiş topta null. */
+  foldType: string | null;
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
@@ -62,6 +69,12 @@ export interface RelabelSpecPayload {
   propertyIds: string[];
   width: number | null;
   qualityGrade?: string;
+  /**
+   * KAT düzeltmesi — katalog kodu ("6-KAT"), `null` = kat bilgisini temizle,
+   * ALAN YOKSA kata dokunulmaz. Bu üçlü sözleşme backend'in `foldTypeSchema`'sı
+   * ile birebir; `null` ile `undefined` farkını koru (biri siler, biri korur).
+   */
+  foldType?: string | null;
   /** Metraj (mt) düzeltmesi — yalnız değiştiyse gönderilir; bütün topta izinli. */
   currentQty?: number;
   /**

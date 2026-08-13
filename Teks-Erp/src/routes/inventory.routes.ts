@@ -272,6 +272,28 @@ router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_RO
 
 /**
  * @openapi
+ * /api/rolls/entry-users:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Top girmiş kullanıcılar — "Ekleyen" filtre lookup'ı
+ *     description: Kullanıcı kataloğu DEĞİL; yalnız en az bir top yaratmış kullanıcılar (id + ad).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/entry-users", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.listEntryUsers);
+
+/**
+ * @openapi
+ * /api/rolls/entry-stations:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Giriş istasyonları — "Giriş İstasyonu" filtre lookup'ı
+ *     description: Yalnız en az bir topun giriş istasyonu olmuş istasyonlar (id + ad).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/entry-stations", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.listEntryStations);
+
+/**
+ * @openapi
  * /api/rolls/stats-batch:
  *   post:
  *     tags: [Inventory]
@@ -819,8 +841,11 @@ router.post(
  *       Yapılan işlemler:
  *       - Roll.initialQty / currentQty = totalMeters
  *       - RollError'lar insert (sadece startMeter zorunlu, endMeter opsiyonel)
- *       - RollOperation: QC2_COMPLETED her zaman; KURSUN_APPLIED istasyonun KURSUN yeteneği varsa
- *       - İstasyonun propertyCapabilities listesi Roll'a RollProperty olarak kopyalanır
+ *       - RollOperation: QC2_COMPLETED her zaman; KURSUN_APPLIED yalnız KURSUN özelliği topa GERÇEKTEN yazıldıysa
+ *       - İstasyon özellikleri MODA göre uygulanır (2026-08-10): AUTO her zaman;
+ *         OPTIONAL yalnız `properties` listesinde geldiyse; REQUIRED eksikse 400.
+ *         SEÇİM (CHOICE) tipli özellikte `valueCode` zorunlu, BAYRAK'ta yasak.
+ *         Eski APK `properties` göndermez → yalnız AUTO uygulanır.
  *       - Kurşun/KK2 movement'ı kapatılır (qtyOut = totalMeters)
  *       - Sonraki step (Tambur) için movement açılır + Roll.currentStepId güncellenir
  *

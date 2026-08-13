@@ -103,6 +103,19 @@ export const updateSchema = z.strictObject({
   // ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — tuzak sahada yanlış pozitif
   // üretirse tek geri dönüş yolu budur (enforcement okuması kasten cache'siz).
   kk1DuplicateGuardEnabled: z.boolean().optional(),
+  // kk1.onlineOnlyEnabled — KK1 ham giriş çevrimdışı kuyruksuz rejim (default FALSE).
+  // Client (mobil) ENFORCE: açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket tek
+  // nefeste. ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — rejim sahada
+  // sorun çıkarırsa (kesintiler girişleri fazla durduruyorsa) tek geri dönüş yolu.
+  kk1OnlineOnlyEnabled: z.boolean().optional(),
+  // kk1.historyAllEntriesEnabled — KK1 "Tüm Girişler" tüm operatörleri göstersin
+  // (default FALSE: operatör yalnız kendi kayıtlarını görür; enforce istemcide).
+  kk1HistoryAllEntriesEnabled: z.boolean().optional(),
+  // kk1.labelScanVerifyEnabled — ham girişte etiket geri-okutma doğrulaması
+  // (scan-back / print&verify, default FALSE). Client (mobil) ENFORCE: açıkken
+  // basılan etiket okutulmadan yeni top girilemez. ⚠️ ACİL KAPATMA anahtarı —
+  // doğrulama sahada akışı tıkarsa (kamera arızası vb.) tek geri dönüş yolu.
+  kk1LabelScanVerifyEnabled: z.boolean().optional(),
   // Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (false=default → backend
   // ENFORCE, 400). Yalnız demo/eğitim kurulumu açar; kg irsaliyeye/çekiye basılır.
   shippingSimulatedWeightEnabled: z.boolean().optional(),
@@ -290,6 +303,22 @@ export const updateSchema = z.strictObject({
       // `sanitizeDocFields`te: sınır aşımı 400 değil KIRPMA olmalı — punto
       // yüzünden ayar kaydının tamamı reddedilmemeli.
       fields: travelerFieldStyleSchema.optional(),
+      // BOŞ TABLO (2026-08-13) — şekil belgelerdeki `blankGrid` ile BİREBİR
+      // (`printed-document.controller.docConfigSchema`), çünkü tip, sanitize ve
+      // renderer da ortak. Sınırlar burada DEĞİL `sanitizeBlankGrid`te: aralık
+      // dışı satır/sütun 400 değil KIRPMA olmalı (ayar kaydı bir yazım hatası
+      // yüzünden tümden reddedilmemeli — `gridRows` emsali).
+      blankGrid: z
+        .object({
+          enabled: z.boolean().optional(),
+          title: z.string().optional(),
+          rows: z.number().optional(),
+          columns: z.number().optional(),
+          columnWidths: z.array(z.number()).optional(),
+          headers: z.array(z.string()).optional(),
+          position: z.enum(["afterHeader", "beforeSignatures"]).optional(),
+        })
+        .optional(),
       footerNote: z.string().trim().max(500).default(""),
     })
     .optional(),

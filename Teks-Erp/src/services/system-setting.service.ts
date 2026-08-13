@@ -68,6 +68,30 @@ export const SETTING_KEYS = {
    *  arka arkaya gelir). ⚠️ Bunu açmadan ÖNCE sahadaki tabletler 409'u tanıyan
    *  APK'ya güncellenmeli; eski APK hatayı çıkışsız gösterir. */
   KK1_DUPLICATE_GUARD_ENABLED: "kk1.duplicateGuardEnabled",
+  /** KK1 ham giriş ÇEVRİMDIŞI KUYRUKSUZ (online-only) rejimde mi. Default FALSE.
+   *  Açıkken mobil KK1 çevrimdışıyken kayıt ALMAZ (form kilitli, sebep yazılır)
+   *  ve kayıt+etiket tek nefeste yürür — "Sırada/Başarısız/Gitmedi" liste
+   *  karışıklığının kökten kapatılması (2026-08-11 saha kararı). Client (mobil)
+   *  ENFORCE — backend'in kuyruğu yoktur, sunucu tarafında zorlanacak bir şey yok.
+   *  ⚠️ Bayrağı açmadan önce sahadaki tabletler bu rejimi tanıyan APK'da olmalı;
+   *  eski APK bayrağı görmez ve kuyruklu davranışa devam eder (zarar yok, ama
+   *  karışıklık da kapanmaz). */
+  KK1_ONLINE_ONLY_ENABLED: "kk1.onlineOnlyEnabled",
+  /** KK1'de ETİKET GERİ-OKUTMA doğrulaması (scan-back / print&verify). Default
+   *  FALSE — kapalıyken ekranda hiçbir iz yok. Açıkken basılan her etiket için
+   *  "okut" doğrulaması istenir ve okutulmadan yeni top girilemez: "etiket
+   *  çıktı mı" sorusunu yazılım değil tarayıcı cevaplar (BT yazıcı baskı onayı
+   *  DÖNDÜRMEZ — yazılımın "bastım"ı kâğıdın çıktığını kanıtlamaz). Client
+   *  (mobil) ENFORCE. Sahada takarsa geri dönüş bu anahtardır. */
+  KK1_LABEL_SCAN_VERIFY_ENABLED: "kk1.labelScanVerifyEnabled",
+  /** KK1 "Tüm Girişler" listesi TÜM operatörlerin kayıtlarını göstersin mi.
+   *  Default FALSE — kapalıyken operatör yalnız KENDİ girdiği topları görür
+   *  (2026-08-12 saha kararı: sağdaki "Son Kayıtlar" listesi HER ZAMAN kişiye
+   *  özeldir, bayrak yalnız "Tüm Girişler" modalının kapsamını açar). Client
+   *  (mobil) ENFORCE — sunucu filtreyi istemciden gelen createdById ile uygular;
+   *  bu bir GİZLİLİK duvarı değil, ekran sadeleştirmesidir (aynı veriyi panel
+   *  roll:read ile zaten görür). */
+  KK1_HISTORY_ALL_ENTRIES_ENABLED: "kk1.historyAllEntriesEnabled",
   /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
    *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
   RETURN_GRADING_ENABLED: "return.gradingEnabled",
@@ -485,6 +509,20 @@ export interface TravelerCardConfig {
    * nesne YAZILMAZ (`sanitizeTravelerFields` boşta `undefined` döner).
    */
   fields?: Record<string, TravelerFieldStyle>;
+  /**
+   * BOŞ GRID (2026-08-13 saha isteği) — kartın alt boşluğuna elle doldurulacak
+   * tablo (kurşuncular kendi kayıtlarını buraya yazıyor).
+   *
+   * ⚠️ TİP BELGELERLE ORTAK (`doc-style.BlankGridConfig`) ve bu bilinçli: aynı
+   * kavram için ikinci bir şekil, ikinci bir kayıt kapısı ve ikinci bir renderer
+   * demekti — panelde "satır/sütun/genişlik" iki farklı biçimde sorulurdu.
+   * Sanitize (`sanitizeBlankGrid`) ve çizim (`docBlankGridHtml/Css`) da AYNI.
+   * Tek fark konum: belgede `position` çıpası var, kartta bölüm SIRASI belirler.
+   *
+   * ⚠️ VERİ TAŞIMAZ, kasten: hücreler boş basılır. Sisteme girmesi gereken bir
+   * bilgiyi buraya yazdırmak onu aranamaz/raporlanamaz kılar.
+   */
+  blankGrid?: BlankGridConfig;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -531,6 +569,9 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     dispatch: { show: true, size: "md", weight: "normal" },
   },
   batchTotal: { show: true, size: "md", weight: "bold" },
+  // Boş grid varsayılanda YOK (anahtar hiç yazılmaz) — belgelerdeki kuralın
+  // aynısı: kartın bugünkü çıktısı bayt-bayt korunur, açan kurulum sütunlarını
+  // kendi kurar.
   footerNote: "",
 };
 
@@ -617,6 +658,12 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
     ...(() => {
       const f = sanitizeTravelerFields(o.fields);
       return f ? { fields: f } : {};
+    })(),
+    // Belgelerdeki kayıt kapısının AYNISI: kapalı grid `undefined` döner ve
+    // anahtar config'e HİÇ yazılmaz (`sections`/`fields` ile aynı disiplin).
+    ...(() => {
+      const g = sanitizeBlankGrid(o.blankGrid);
+      return g ? { blankGrid: g } : {};
     })(),
     footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
   };
@@ -739,6 +786,16 @@ export interface FeatureFlags {
    *  eder: 90 sn içinde birebir aynı giriş 409 POSSIBLE_DUPLICATE alır ve ancak
    *  açık onayla (`confirmDuplicate`) geçer. */
   kk1DuplicateGuardEnabled: boolean;
+  /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi (default false).
+   *  Client (mobil) ENFORCE — açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket
+   *  tek nefeste yürür. */
+  kk1OnlineOnlyEnabled: boolean;
+  /** KK1 etiket geri-okutma doğrulaması (default false). Client (mobil) ENFORCE —
+   *  açıkken basılan etiket okutulmadan yeni top girilemez. */
+  kk1LabelScanVerifyEnabled: boolean;
+  /** KK1 "Tüm Girişler" tüm operatörleri göstersin mi (default false). Client
+   *  (mobil) ENFORCE — kapalıyken liste yalnız operatörün kendi kayıtları. */
+  kk1HistoryAllEntriesEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken simüle okuma `weighSack`'te 400).
    *  Demo/eğitim kurulumu açar — çuval kg'si irsaliyeye/çeki listesine basılır. */
@@ -1034,6 +1091,9 @@ export class SystemSettingService {
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
       kk1DuplicateGuardEnabled: await readKk1DuplicateGuardEnabled(cacheClient),
+      kk1OnlineOnlyEnabled: await readKk1OnlineOnlyEnabled(cacheClient),
+      kk1LabelScanVerifyEnabled: await readKk1LabelScanVerifyEnabled(cacheClient),
+      kk1HistoryAllEntriesEnabled: await readKk1HistoryAllEntriesEnabled(cacheClient),
       shippingSimulatedWeightEnabled: await readSimulatedWeightEnabled(cacheClient),
       returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
       kartelaMeasurementEnabled: await readKartelaMeasurementEnabled(cacheClient),
@@ -1146,6 +1206,42 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED,
         input.kk1DuplicateGuardEnabled,
         "Ham girişte mükerrer top uyarısı",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kk1OnlineOnlyEnabled")) {
+      if (typeof input.kk1OnlineOnlyEnabled !== "boolean") {
+        throw AppError.badRequest("kk1OnlineOnlyEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_ONLINE_ONLY_ENABLED,
+        input.kk1OnlineOnlyEnabled,
+        "Ham giriş çevrimdışı kuyruksuz (online-only) rejim",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kk1LabelScanVerifyEnabled")) {
+      if (typeof input.kk1LabelScanVerifyEnabled !== "boolean") {
+        throw AppError.badRequest("kk1LabelScanVerifyEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_LABEL_SCAN_VERIFY_ENABLED,
+        input.kk1LabelScanVerifyEnabled,
+        "Ham girişte etiket geri-okutma doğrulaması (scan-back)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kk1HistoryAllEntriesEnabled")) {
+      if (typeof input.kk1HistoryAllEntriesEnabled !== "boolean") {
+        throw AppError.badRequest("kk1HistoryAllEntriesEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_HISTORY_ALL_ENTRIES_ENABLED,
+        input.kk1HistoryAllEntriesEnabled,
+        "KK1 Tüm Girişler: tüm operatörlerin kayıtları görünür",
         userId
       );
     }
@@ -1860,6 +1956,67 @@ export async function readKk1DuplicateGuardEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi? Default false.
+ *
+ * SAHA KARARI (2026-08-11): kesinti anında kuyruğa alınan kayıtların etiketi
+ * sonradan basılamayınca operatör aynı topu YENİDEN giriyordu (07.08 vakası:
+ * 4 top 34-52 dk sonra ikizlendi). Bayrak açıkken mobil KK1 çevrimdışı kayıt
+ * hiç ALMAZ — kayıt + etiket tek nefeste yürür, "Sırada/Başarısız" listeleri
+ * doğmaz. ENFORCE istemcidedir (kuyruk istemci kavramı); bu okuma yalnız
+ * feature-flags yanıtını besler.
+ */
+export async function readKk1OnlineOnlyEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_ONLINE_ONLY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KK1 etiket geri-okutma doğrulaması (scan-back) açık mı? Default false.
+ *
+ * Print & verify: "etiket çıktı" sinyali yazılımdan alınamaz (BT yazıcı baskı
+ * onayı döndürmez) — tek güvenilir kanıt basılan barkodun GERİ OKUTULMASIDIR.
+ * Açıkken mobil KK1, basılan her etiket için okutma ister ve okutulmadan yeni
+ * top girişine izin vermez. ENFORCE istemcidedir; bu okuma yalnız
+ * feature-flags yanıtını besler.
+ */
+export async function readKk1LabelScanVerifyEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_LABEL_SCAN_VERIFY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KK1 "Tüm Girişler" listesi tüm operatörleri kapsasın mı? Default false.
+ *
+ * Kapalıyken (varsayılan) mobil KK1'in "Tüm Girişler" modalı yalnız oturumdaki
+ * operatörün KENDİ girdiği topları listeler; sağdaki "Son Kayıtlar" listesi
+ * bayraktan bağımsız HER ZAMAN kişiye özeldir. ENFORCE istemcidedir (istemci
+ * kendi createdById filtresini gönderir) — bu bir yetki duvarı DEĞİL, saha
+ * ekranı sadeleştirmesidir; paneldeki roll:read aynı veriyi zaten görür.
+ */
+export async function readKk1HistoryAllEntriesEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_HISTORY_ALL_ENTRIES_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

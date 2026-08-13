@@ -32,6 +32,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
+import { LabelNamePreview } from './LabelNamePreview';
 import TamburFieldFix from './TamburFieldFix';
 import { usePermissions } from '../../../hooks/usePermission';
 import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
@@ -58,6 +59,13 @@ import { useTamburOverQuantityEnabled } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
+import RollFilterBar from '../../../components/filters/RollFilterBar';
+import {
+  EMPTY_ROLL_FILTER,
+  buildRollQueryParams,
+  filterQueryKey,
+  type RollHistoryFilterState,
+} from '../../../components/filters/rollHistoryFilter';
 import AppModal from '../../../components/AppModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet';
@@ -90,6 +98,7 @@ import { MANUAL_REASON_PRESETS, MANUAL_MIN_REASON } from '../../../constants/man
 import Animated from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
+import { useFoldValues } from '../../../hooks/useFoldValues';
 import { generateClientUuid } from '../../../offline/barcode';
 import type {
   TamburStepSummary,
@@ -177,9 +186,10 @@ const EMPTY_VOLUNTARY_ENTRY: VoluntaryEntryState = {
 };
 const EMPTY_WORK: RollWorkState = {
   decisions: {},
-  // Kat seçimi asla boş kalmaz — operatör değiştirebilir ama biri hep seçili.
-  // İş emrinde plan varsa effect bunu override eder (bkz. defaultFold).
-  foldType: '2-KAT',
+  // ⚠️ BOŞ başlar (2026-08-10) — sabit '2-KAT' katalogda o değer yoksa geçersiz
+  // bir ön-seçimdi. Değeri her zaman effect doldurur: iş emri planı → yoksa
+  // katalogun ilk değeri (bkz. defaultFold).
+  foldType: null,
   voluntaryCuts: [],
   voluntaryEntry: EMPTY_VOLUNTARY_ENTRY,
   errorEntry: EMPTY_ERROR_ENTRY,
@@ -418,6 +428,8 @@ export default function TamburScreen() {
 
   // Aktif top'un çalışma state'i — top/sekme değişince sıfırlanır.
   const [work, setWork] = useState<RollWorkState>(EMPTY_WORK);
+  // Kat seçenekleri katalogdan — tuşlar, ön-seçim ve metre rolü hep bu listeden.
+  const { values: foldValues } = useFoldValues();
   // Kesim uzunluğu kaynağı. Faz 1'de MANUEL varsayılan (gerçek makine yok);
   // Otomatik'te uzunluk makineden ölçülür → input + numpad gizlenir.
   // CİHAZDA KALICI (deviceSettingsStore) ve "Top Kesme" ile AYNI tercih: seçim
@@ -722,14 +734,22 @@ export default function TamburScreen() {
     );
   }, [activeJob]);
 
-  // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde planlanan
-  // katlama (2-KAT / 4-KAT) otomatik seçili gelir; plan yoksa 2-KAT varsayılır.
-  // Operatör değiştirebilir ama biri her zaman seçilidir (asla boş kalmaz).
+  // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
+  // otomatik seçili gelir; plan yoksa KATALOGUN İLK değeri. Operatör
+  // değiştirebilir ama biri her zaman seçilidir (asla boş kalmaz).
+  //
+  // ⚠️ Eskiden `planned === '4-KAT' ? '4-KAT' : '2-KAT'` idi: ÜÇLÜ bir kararı
+  // ikiliye indiriyordu. Katalog büyüyünce 6-KAT planlanmış bir iş emrinde
+  // ekran sessizce 2-KAT'ı seçili gösterirdi — operatör fark etmezse top
+  // YANLIŞ katla kaydedilir ve yanlış metreyle ölçülürdü.
   useEffect(() => {
-    const planned = activeJob?.context?.plannedFoldType;
-    const defaultFold: TamburFoldType = planned === '4-KAT' ? '4-KAT' : '2-KAT';
+    const planned = activeJob?.context?.plannedFoldType ?? null;
+    const known = planned && foldValues.some((v) => v.code === planned) ? planned : null;
+    // Plan katalogda yoksa (silinmiş/pasif değer) yine de PLANI KORU: iş emrinin
+    // spec'ini istemci tarafında değiştirmek, sessizce başka bir ürün üretmektir.
+    const defaultFold: TamburFoldType | null = known ?? planned ?? foldValues[0]?.code ?? null;
     setWork({ ...EMPTY_WORK, foldType: defaultFold });
-  }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType]);
+  }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType, foldValues]);
 
 
   // ── Backend re-fetch helper ──
@@ -842,6 +862,10 @@ export default function TamburScreen() {
         );
         void qc.invalidateQueries({ queryKey: ['tambur'] });
         void qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
         void qc.invalidateQueries({ queryKey: ['work-orders'] });
         reopenAfterBypass = true;
         if (fromInput) setCardBarcode('');
@@ -1027,6 +1051,10 @@ export default function TamburScreen() {
         );
       }
       qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
@@ -1056,6 +1084,12 @@ export default function TamburScreen() {
         lengthMeters: data.lengthMeters,
         status: data.status,
         qualityGrade: data.qualityGrade,
+        // ⚠️ KAT BURADA UNUTULMUŞTU (2026-08-13 saha bulgusu): ekran gönderiyor,
+        // tip tanımı taşıyor, ama gövde elle kurulurken alan düşüyordu — operatör
+        // "6 Kat" seçip kesiyor, çocuk KATSIZ doğuyordu (hata yok, log yok; Zod'un
+        // 2026-08-05'te sessizce sildiği alanın istemci-tarafı ikizi). Gövdeye
+        // alan eklerken kaynak `data`dan HER alanı geçirdiğini kontrol et.
+        foldType: data.foldType ?? null,
         targetOrderLineId: data.targetOrderLineId ?? null,
         // Niyet backend'e gider → child lastLabelSnapshot'a seed edilir (kalıcı).
         targetCustomerId: data.targetCustomerId ?? null,
@@ -1068,6 +1102,10 @@ export default function TamburScreen() {
       if (cutTokenRef.current?.rollId === variables.rollId) cutTokenRef.current = null;
       // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
       qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
       const data = res.data as
         | { childRoll?: Roll; parentRemainingQty?: number }
         | undefined;
@@ -1161,6 +1199,10 @@ export default function TamburScreen() {
       setMarkAsKartela(false); // bir sonraki top için sıfırla
       if (!activeJob) {
         qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
         return;
       }
       // Backend'den güncel step'i çek; bitirilen roll listeden düşmüş olmalı
@@ -1199,6 +1241,10 @@ export default function TamburScreen() {
         );
       }
       qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
     },
     onError: (err, _vars, context) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
@@ -1291,6 +1337,10 @@ export default function TamburScreen() {
       if (recutTokenRef.current?.rollId === variables.rollId) recutTokenRef.current = null;
       // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
       qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
       const data = res.data;
       // Y11 paritesi (açık kumaş kesimindeki düzeltmenin aynısı): yanıt geldiğinde
       // ekranda BAŞKA top olabilir (istek uçuştayken operatör yeni top okuttu).
@@ -1385,6 +1435,10 @@ export default function TamburScreen() {
           setPendingPrintRolls((prev) => [...prev, remainingChild as Roll]);
         }
         qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
         return;
       }
       setMarkAsKartela(false); // bir sonraki top için sıfırla
@@ -1406,6 +1460,10 @@ export default function TamburScreen() {
         setRecutQualityGrade('1.KALITE');
         setRecutLastParentRoll(null);
         qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
       }
     },
     onError: (err: Error) => {
@@ -1426,6 +1484,10 @@ export default function TamburScreen() {
       manualTokenRef.current = null;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
       const d = res.data;
       Toast.show({
         type: d.idempotentReplay ? 'info' : 'success',
@@ -1632,7 +1694,9 @@ export default function TamburScreen() {
   // null döner (hata gösterilir, kesim YAPILMAZ; sessiz sahte değer YOK).
   // 2-KAT → 2-kat makinesi, 4-KAT → 4-kat makinesi.
   const measureFromMachine = async (remaining: number): Promise<number | null> => {
-    const katLabel = work.foldType === '4-KAT' ? '4 Kat' : '2 Kat';
+    // Kat KODU doğrudan yazılır — eskiden `=== '4-KAT' ? '4 Kat' : '2 Kat'` idi ve
+    // katalog büyüyünce 6-KAT'lı bir topta ekranda "2 Kat metresi" yazardı.
+    const katLabel = work.foldType ?? 'Kat';
     const sim = () => {
       const lo = Math.min(5, remaining);
       const hi = Math.min(80, remaining);
@@ -1643,7 +1707,8 @@ export default function TamburScreen() {
       Toast.show({
         type: 'error',
         text1: `${katLabel} metresi tanımlı değil`,
-        text2: 'Admin → Cihaz Kaydı’ndan bu makineye METER cihazı (role) ekleyin.',
+        // ⚠️ Başka kata ait metreye SAPILMAZ (yanlış ölçüm) — elle girişe düşülür.
+        text2: `Metrajı elle girin. Kalıcı çözüm: Admin → Cihaz Kaydı'ndan bu makineye "${katLabel}" rollü METER cihazı ekleyin.`,
         visibilityTime: 6000,
       });
       return null;
@@ -2438,6 +2503,13 @@ export default function TamburScreen() {
         {/* SABİT — scroll'la kaymaz; tüm müşteriler (sipariştekiler önce) */}
         {kimeListChip}
         {opts.orderShortcuts}
+        {/* ETİKETTE NE YAZACAK — kesim ve baskı aynı dokunuşta olduğu için
+            operatörün müşterideki adı görebileceği TEK an burası (2026-08-13). */}
+        <LabelNamePreview
+          rollId={selectedRoll?.rollId ?? null}
+          orderLineId={work.voluntaryEntry.targetOrderLineId ?? null}
+          customerId={work.voluntaryEntry.targetCustomerId ?? null}
+        />
       </View>
 
       <View style={styles.kaliteCol}>
@@ -2505,6 +2577,10 @@ export default function TamburScreen() {
     // Kesim yapıldıysa parent metrajı değişti — RollPickerModal / rulo listeleri
     // bayat kalmasın (finalize yollarındaki invalidation X-kapatta çalışmıyordu).
     qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
   };
 
   const renderRightContent = () => {
@@ -3036,19 +3112,21 @@ export default function TamburScreen() {
                         ZORUNLU olduğu için (miras alınacak bağlam yok) buraya
                         oturdu — ekstra satır açmadan, En ile aynı hizada. */}
                     <View style={[styles.manualPickCol, styles.foldPickRow]}>
-                      {(['2-KAT', '4-KAT'] as const).map((ft) => {
-                        const active = manualFoldType === ft;
+                      {/* Seçenekler KATALOGDAN (2026-08-10) — sabit iki çip,
+                          panelden eklenen 6-KAT'ı tablette görünmez yapardı. */}
+                      {foldValues.map((ft) => {
+                        const active = manualFoldType === ft.code;
                         return (
                           <TouchableRipple
-                            key={ft}
+                            key={ft.code}
                             borderless
-                            onPress={() => setManualFoldType(ft)}
+                            onPress={() => setManualFoldType(ft.code)}
                             style={[styles.manualFoldChip, active && styles.manualFoldChipOn]}
                           >
                             <Text
                               style={[styles.manualFoldChipText, active && styles.manualFoldChipTextOn]}
                             >
-                              {ft === '2-KAT' ? '2 Kat' : '4 Kat'}
+                              {ft.name}
                             </Text>
                           </TouchableRipple>
                         );
@@ -3482,7 +3560,9 @@ export default function TamburScreen() {
                       {selectedRoll.properties.map((p) => (
                         <View key={p.id} style={styles.headerPropChip}>
                           <Text style={styles.headerPropChipText} numberOfLines={1}>
-                            {p.name}
+                            {/* Değer de basılır ("Gramaj: 50 gr") — final kararı
+                                veren operatör kurşundaki seçimi görmeli (VAL-03). */}
+                            {p.value ? `${p.name}: ${p.value.name}` : p.name}
                           </Text>
                         </View>
                       ))}
@@ -3638,15 +3718,17 @@ export default function TamburScreen() {
                 <Surface style={styles.section} elevation={1}>
                   {/* Katlama (2/4 kat) — başlıksız, bölümün en üstünde. */}
                   <View style={styles.foldInlineRow}>
-                    {(['2-KAT', '4-KAT'] as TamburFoldType[]).map((ft) => {
-                      const active = work.foldType === ft;
+                    {/* Seçenekler KATALOGDAN (2026-08-10). Seçilen kod hem topa
+                        yazılır hem METRE cihazının rolüyle BİREBİR eşleştirilir. */}
+                    {foldValues.map((ft) => {
+                      const active = work.foldType === ft.code;
                       return (
                         <TouchableRipple
-                          key={ft}
+                          key={ft.code}
                           borderless
                           // Biri her zaman seçili kalmalı → aktif chip'e basınca
                           // boşa düşmez; sadece diğerine geçiş yapılır.
-                          onPress={() => setWork((w) => ({ ...w, foldType: ft }))}
+                          onPress={() => setWork((w) => ({ ...w, foldType: ft.code }))}
                           style={[styles.foldChipSm, active && styles.foldChipActive]}
                         >
                           <Text
@@ -3655,7 +3737,7 @@ export default function TamburScreen() {
                               active && styles.foldChipTextActive,
                             ]}
                           >
-                            {ft === '2-KAT' ? '2 Kat' : '4 Kat'}
+                            {ft.name}
                           </Text>
                         </TouchableRipple>
                       );
@@ -3894,6 +3976,10 @@ export default function TamburScreen() {
             // listeleri (Listeden Seç / Çıkanlar) bayat kalmasın.
             void refetchActiveJob();
             qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
           }}
         />
       )}
@@ -3988,6 +4074,10 @@ export default function TamburScreen() {
             setRecutQualityGrade('1.KALITE');
             setRecutLastParentRoll(null);
             qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
           }
         }}
       />
@@ -4148,6 +4238,10 @@ export default function TamburScreen() {
           // (`onApplied`) ile AYNI tazeleme sözleşmesi.
           void refetchActiveJob();
           qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
         }}
       />
 
@@ -5208,6 +5302,8 @@ const relabelStyles = StyleSheet.create({
     paddingBottom: 4,
   },
   searchInput: { flex: 1, backgroundColor: '#fff' },
+  // Filtre şeridi arama kutusuyla AYNI hizadan başlasın (searchRow paddingH: 12).
+  filterBar: { paddingHorizontal: 12 },
   scanBtn: { margin: 0, borderRadius: 12, height: 52, width: 52 },
   // Düz liste satırı — kart değil; ince alt çizgiyle ayrılır, tek satır.
   row: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eef2f6' },
@@ -5426,18 +5522,79 @@ function RecentOutputModal({
 
   // Modal kapanınca aramayı sıfırla — sonraki açılış temiz başlasın.
   useEffect(() => {
-    if (!visible) setSearch('');
+    if (!visible) {
+      setSearch('');
+      // Filtre de sıfırlanır: sonraki açılış "her şey" ile başlasın. Aksi hâlde
+      // operatör dün "Bugün" seçip kapatır, ertesi gün listeyi boş bulup
+      // "kayıtlar kayboldu" derdi (filtre şeridi ekranın üstünde ama küçük).
+      setFilter(EMPTY_ROLL_FILTER);
+      setOnlyMyMachine(false);
+    }
   }, [visible]);
 
+  // ── Filtre (zaman + kumaş + personel) — KK1 "Tüm Girişler" ile ORTAK bileşen ──
+  // Süzme SUNUCUDA: liste cursor'lu sonsuz kaydırma, istemcide süzmek yalnız
+  // o anki sayfayı süzer ve operatör "kayıt yok" sanardı.
+  const [filter, setFilter] = useState<RollHistoryFilterState>(EMPTY_ROLL_FILTER);
+  // "BU MAKİNE" (2026-08-12 saha isteği): İKİ aktif Tambur makinesi var ve bu
+  // liste HEPSİNİN kesimlerini gösterir (varsayılan korunur — "hepsi görünüyorsa
+  // aynen kalsın" kararı). Tuş, listeyi oturumun makinesine daraltır; makinesi
+  // olmayan oturumda (teorik) tuş hiç çizilmez.
+  const [onlyMyMachine, setOnlyMyMachine] = useState(false);
+  const sessionMachineId = useSessionStore((st) => st.active?.machineId ?? null);
+  // Personel seçenekleri: top yaratmış kullanıcılar (KK1 lookup'ının aynısı).
+  // 2+ seçenek yoksa çip çizilmez — tek kişilik listede ayırt edeceği şey yok.
+  const operatorsQuery = useQuery({
+    queryKey: ['rolls', 'entry-users'],
+    queryFn: () => rollService.getEntryUsers(),
+    enabled: visible,
+    staleTime: 5 * 60 * 1000,
+  });
+  const operatorOptions = useMemo<PickerOption[] | undefined>(() => {
+    const rows = operatorsQuery.data?.data ?? [];
+    if (rows.length < 2) return undefined;
+    return rows.map((u) => ({ value: u.id, label: u.name, sublabel: u.code ?? undefined }));
+  }, [operatorsQuery.data]);
+  const filterKey = filterQueryKey(filter);
+  const itemsQuery = useQuery({
+    queryKey: ['items', 'filter', 'FABRIC'],
+    queryFn: () =>
+      itemService.getAll({
+        page: 1,
+        pageSize: 500,
+        sortBy: 'code',
+        sortOrder: 'asc',
+        filters: { isActive: 'true', itemType: 'FABRIC' },
+      }),
+    enabled: visible,
+  });
+  const itemOptions = useMemo<PickerOption[]>(
+    () =>
+      (itemsQuery.data?.data ?? []).map((i) => ({
+        value: i.id,
+        label: i.name,
+        sublabel: i.code,
+      })),
+    [itemsQuery.data],
+  );
+
   const q = useInfiniteQuery({
-    queryKey: ['tambur', 'recent-output-rolls', debouncedSearch],
-    queryFn: ({ pageParam }) =>
-      tamburService.recentOutputRolls({
+    queryKey: ['tambur', 'recent-output-rolls', debouncedSearch, filterKey, onlyMyMachine],
+    queryFn: ({ pageParam }) => {
+      // Gün sınırı SORGU ANINDA çözülür — `now` anahtara girmez.
+      const fp = buildRollQueryParams(filter, new Date());
+      return tamburService.recentOutputRolls({
         limit: 30,
         cursor: pageParam,
         search: debouncedSearch || undefined,
         withTotal: !pageParam,
-      }),
+        dateFrom: fp.dateFrom,
+        dateTo: fp.dateTo,
+        itemId: fp.filters.itemId,
+        createdById: fp.filters.createdById,
+        createdMachineId: onlyMyMachine && sessionMachineId ? sessionMachineId : undefined,
+      });
+    },
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
       last.pagination.hasMore ? last.pagination.nextCursor : undefined,
@@ -5624,7 +5781,8 @@ function RecentOutputModal({
           ) : null
         }
         subHeader={
-          <View style={relabelStyles.searchRow}>
+          <View>
+            <View style={relabelStyles.searchRow}>
             <TextInput
               mode="outlined"
               dense
@@ -5667,6 +5825,33 @@ function RecentOutputModal({
               }}
               accessibilityLabel={selectMode ? 'Seçimi kapat' : 'Toplu seçim'}
               style={relabelStyles.scanBtn}
+            />
+            </View>
+            {/* Ortak filtre şeridi — KK1 "Tüm Girişler" ile AYNI bileşen.
+                style: arama kutusuyla AYNI 12px iç boşluk (searchRow) — şerit
+                soldan taşmış görünüyordu (2026-08-12 saha bulgusu). */}
+            <RollFilterBar
+              value={filter}
+              onChange={setFilter}
+              itemOptions={itemOptions}
+              itemsLoading={itemsQuery.isLoading}
+              onItemPickerOpen={() => void itemsQuery.refetch()}
+              operatorOptions={operatorOptions}
+              operatorsLoading={operatorsQuery.isLoading}
+              style={relabelStyles.filterBar}
+              extraChips={
+                sessionMachineId
+                  ? [
+                      {
+                        key: 'my-machine',
+                        label: 'Bu makine',
+                        icon: 'robot-industrial',
+                        active: onlyMyMachine,
+                        onPress: () => setOnlyMyMachine((v) => !v),
+                      },
+                    ]
+                  : []
+              }
             />
           </View>
         }
@@ -6857,6 +7042,8 @@ function TamburUndoConfirmModal({
     enabled: !!rollId,
     staleTime: 0,
     gcTime: 0,
+    // Mod değişince önceki görünüm dursun — kart seçiminde modal titremesin.
+    placeholderData: keepPreviousData,
   });
   const preview: TamburUndoPreview | null = previewQ.data?.data ?? null;
   const effectiveMode = mode ?? preview?.defaultMode ?? null;
@@ -6874,6 +7061,10 @@ function TamburUndoConfirmModal({
       Toast.show({ type: 'success', text1: 'İşlem geri alındı', text2: res.message });
       void qc.invalidateQueries({ queryKey: ['tambur'] });
       void qc.invalidateQueries({ queryKey: ['rolls'] });
+      // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
+      // altında değil ve operatör kesimden sonra kendi topunu panelde
+      // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
+      qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
       void qc.invalidateQueries({ queryKey: ['work-orders'] });
       onDone();
     },
@@ -6893,9 +7084,25 @@ function TamburUndoConfirmModal({
   // Aynı ekranda üç çelişkili cümle — sahadan gelen fotoğraf tam buydu.
   const activeOption = preview?.options?.find((o) => o.mode === effectiveMode) ?? null;
   const modeText = activeOption?.description ?? '';
-  // Seçenek SORULUR mu: birden fazla uygulanabilir yol varsa. Tek yol varsa
-  // soru sormak gereksiz sürtünmedir.
-  const showModePicker = (preview?.options?.length ?? 0) > 1;
+  // GÖRÜNÜM KURGUSU (2026-08-12 saha geri bildirimi: "çok kalabalık" + metin
+  // seti kararı):
+  //  • Tek-top işlemleri (SINGLE / SINGLE_RESTORE) modalın gövdesidir. Kaynak
+  //    arşivdeyse İKİ gerçek olabilir — kumaş elde (→ iş emrine geri al) ya da
+  //    kayıt yanlıştı (→ iptal + kayıt düzeltmesi) — ve bunu YALNIZ operatör
+  //    bilir: iki kart gösterilir, ÖN SEÇİM YOKTUR, seçilmeden onay kapalıdır.
+  //  • FULL bir süpervizör aracıdır; altta ÇERÇEVELİ buton olarak durur (düz
+  //    metin "tıklanabilir hissi vermiyor" — saha). Yetkisizde de görünür,
+  //    dokununca engel sebebi o görünümde söylenir (kullanıcı kararı).
+  const SINGLE_FAMILY: TamburUndoMode[] = ['SINGLE', 'SINGLE_RESTORE'];
+  const singleChoices =
+    preview?.options?.filter((o) => SINGLE_FAMILY.includes(o.mode)) ?? [];
+  const fullOption = preview?.options?.find((o) => o.mode === 'FULL') ?? null;
+  const inSingleFamily = effectiveMode != null && SINGLE_FAMILY.includes(effectiveMode);
+  // Kart görünümü: birden fazla tekil yol varsa. Operatör henüz seçmediyse
+  // (mode null) onay düğmesi kapalı kalır — yanlış varsayılanla arşive
+  // yazmaktansa bir dokunuş daha iyidir.
+  const showChoiceCards = inSingleFamily && singleChoices.length > 1;
+  const choicePending = showChoiceCards && mode === null;
 
   return (
     <AppModal
@@ -6949,43 +7156,31 @@ function TamburUndoConfirmModal({
           </ScrollView>
         ) : preview ? (
           <ScrollView contentContainerStyle={undoStyles.body}>
-            {/* MOD SEÇİMİ — 2026-08-08 saha vakasının doğrudan düzeltmesi.
-                Operatör "şu topu iptal et" derken 14 topluk bir işlem alıyordu
-                çünkü mod SİSTEM DURUMUNDAN türetiliyordu. Artık soruluyor ve
-                varsayılan EN DAR olan. */}
-            {showModePicker && (
-              <View style={{ gap: 8, marginBottom: 6 }}>
-                <Text style={undoStyles.sectionTitle}>Ne yapılsın?</Text>
-                {preview.options.map((o) => {
-                  const active = o.mode === effectiveMode;
+            {/* Mod HÂLÂ operatörden gelir (2026-08-08 vakasının düzeltmesi) —
+                yalnız sorma biçimi duruma göre: tek yol varsa düz anlatım,
+                iki tekil yol varsa seçim kartları. */}
+            {showChoiceCards ? (
+              <View style={{ gap: 8 }}>
+                {singleChoices.map((o) => {
+                  const active = mode === o.mode;
                   return (
                     <TouchableRipple
                       key={o.mode}
                       onPress={() => setMode(o.mode)}
                       disabled={applyMut.isPending}
-                      style={{
-                        minHeight: 56,
-                        justifyContent: 'center',
-                        paddingHorizontal: 14,
-                        paddingVertical: 10,
-                        borderRadius: 10,
-                        borderWidth: active ? 2 : 1,
-                        borderColor: active ? '#b45309' : '#cbd5e1',
-                        backgroundColor: active ? '#fff7ed' : '#fff',
-                        opacity: o.canApply ? 1 : 0.55,
-                      }}
+                      style={[
+                        undoStyles.choiceCard,
+                        active && undoStyles.choiceCardActive,
+                        !o.canApply && { opacity: 0.55 },
+                      ]}
                     >
                       <View>
                         <Text
-                          style={{
-                            fontSize: 15,
-                            fontWeight: active ? '800' : '600',
-                            color: active ? '#7c2d12' : '#334155',
-                          }}
+                          style={[undoStyles.choiceTitle, active && { color: '#7c2d12' }]}
                         >
                           {o.label}
                         </Text>
-                        <Text style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+                        <Text style={undoStyles.choiceDesc}>
                           {o.canApply ? o.description : `⛔ ${o.blockReason}`}
                         </Text>
                       </View>
@@ -6993,35 +7188,45 @@ function TamburUndoConfirmModal({
                   );
                 })}
               </View>
+            ) : (
+              <Text style={undoStyles.modeText}>{modeText}</Text>
             )}
-            <Text style={undoStyles.modeText}>{modeText}</Text>
-            {barcode && !isManualUndo ? (
-              <Text style={undoStyles.rowLine}>Dokunulan parça: {barcode}</Text>
-            ) : null}
 
-            {/* MANUAL modda "kaynak top" ve "geri dönecek metraj" YOKTUR — top bir
-                kesimden doğmadı. O blokları basmak "0 m geri dönecek" gibi anlamsız
-                bir cümle üretirdi. Yıkıcı-işlem kuralı yine de sağlanıyor: iptal
-                edilecek kayıt aşağıda barkodu ve metrajıyla SOMUT listeleniyor. */}
-            {!isManualUndo && (
+            {/* SINGLE'da ayrı "kaynak top" / "iptal edilecek parçalar" blokları
+                BASILMAZ: tek etkilenen kayıt zaten yukarıdaki cümlede barkodu ve
+                metrajıyla adlandırılıyor (yıkıcı-işlem kuralı böylece sağlanıyor).
+                Aynısını ikinci kez listelemek ekranı kalabalıklaştıran şeydi. */}
+            {effectiveMode === 'FULL' && (
               <>
+                {barcode ? (
+                  <Text style={undoStyles.rowLine}>Okutulan parça: {barcode}</Text>
+                ) : null}
                 <Text style={undoStyles.sectionTitle}>Kaynak top</Text>
                 <Text style={undoStyles.rowLine}>
-                  {preview.parent.barcode ?? preview.parent.id} — geri dönecek metraj: {preview.restoredQty} m
+                  {preview.parent.barcode ?? 'barkodsuz açık kumaş'} — geri dönecek metraj: {preview.restoredQty} m
                 </Text>
+                <Text style={undoStyles.sectionTitle}>
+                  İptal edilecek parçalar ({preview.children.length})
+                </Text>
+                {preview.children.map((c) => (
+                  <Text key={c.id} style={[undoStyles.rowLine, c.blockReason ? undoStyles.blockedRow : null]}>
+                    • {c.barcode ?? c.id} — {c.qty} m{c.blockReason ? `  ⛔ ${c.blockReason}` : ''}
+                  </Text>
+                ))}
               </>
             )}
 
-            <Text style={undoStyles.sectionTitle}>
-              {isManualUndo
-                ? 'İptal edilecek kayıt'
-                : `İptal edilecek parçalar (${preview.children.length})`}
-            </Text>
-            {preview.children.map((c) => (
-              <Text key={c.id} style={[undoStyles.rowLine, c.blockReason ? undoStyles.blockedRow : null]}>
-                • {c.barcode ?? c.id} — {c.qty} m{c.blockReason ? `  ⛔ ${c.blockReason}` : ''}
-              </Text>
-            ))}
+            {/* MANUAL: iptal edilecek kayıt topun kendisi — somut listelenir. */}
+            {isManualUndo && (
+              <>
+                <Text style={undoStyles.sectionTitle}>İptal edilecek kayıt</Text>
+                {preview.children.map((c) => (
+                  <Text key={c.id} style={[undoStyles.rowLine, c.blockReason ? undoStyles.blockedRow : null]}>
+                    • {c.barcode ?? c.id} — {c.qty} m{c.blockReason ? `  ⛔ ${c.blockReason}` : ''}
+                  </Text>
+                ))}
+              </>
+            )}
 
             {preview.reopenErrorCount > 0 && (
               <Text style={undoStyles.warnText}>
@@ -7053,6 +7258,36 @@ function TamburUndoConfirmModal({
                 />
               </View>
             )}
+
+            {/* TÜMDEN GERİ ALMA — süpervizör aracı, ÇERÇEVELİ buton (düz metin
+                "tıklanabilir hissi vermiyor" — 2026-08-12 saha). Yetkisizde de
+                çizilir; dokununca engel sebebi o görünümde açıkça söylenir
+                ("yapılamayanı ilan etme" kuralı bozulmaz — ilan değil kapı). */}
+            {effectiveMode !== 'FULL' && fullOption && (
+              <Button
+                mode="outlined"
+                compact
+                icon="undo-variant"
+                textColor="#7c2d12"
+                disabled={applyMut.isPending}
+                onPress={() => setMode('FULL')}
+                style={undoStyles.fullBtn}
+              >
+                {fullOption.label}
+              </Button>
+            )}
+            {effectiveMode === 'FULL' && singleChoices.length > 0 && (
+              <Button
+                mode="text"
+                compact
+                textColor="#64748b"
+                disabled={applyMut.isPending}
+                onPress={() => setMode(null)}
+                style={{ marginTop: 12, alignSelf: 'flex-start' }}
+              >
+                ‹ Tek top işlemleri
+              </Button>
+            )}
           </ScrollView>
         ) : null}
 
@@ -7067,6 +7302,9 @@ function TamburUndoConfirmModal({
             disabled={
               !preview?.canApply ||
               applyMut.isPending ||
+              // İki tekil yol varken operatör SEÇMEDEN onay yok — yanlış
+              // varsayılanla arşive yazmaktansa bir dokunuş daha iyidir.
+              choicePending ||
               // Sebep zorunluysa yazılana dek kapalı — backend zaten 403'ler,
               // ama operatörü sunucuya gidip hata yiyerek öğrenmeye zorlamak
               // kötü bir yüzeydir.
@@ -7075,7 +7313,20 @@ function TamburUndoConfirmModal({
             onPress={() => applyMut.mutate()}
             style={undoStyles.actionBtn}
           >
-            {effectiveMode === 'FULL' ? 'Tümden Geri Al' : 'Geri Al'}
+            {/* METİN SETİ (2026-08-12 kullanıcı kararı): tuş yaptığı işin adını
+                taşır — arşive yazan işleme "Geri Al" demek operatörü metrajın
+                döneceğine inandırıyordu. */}
+            {effectiveMode === 'FULL'
+              ? 'Tümden Geri Al'
+              : effectiveMode === 'SINGLE_RESTORE'
+                ? 'İş Emrine Geri Al'
+                : effectiveMode === 'MANUAL'
+                  ? 'Kaydı İptal Et'
+                  : choicePending
+                    ? 'Önce seçim yapın'
+                    : preview?.parentArchived
+                      ? 'Topu İptal Et'
+                      : 'Kesimi Geri Al'}
           </Button>
         </View>
       </View>
@@ -7102,6 +7353,24 @@ const undoStyles = StyleSheet.create({
   blockedRow: { color: '#b91c1c' },
   warnText: { fontSize: 14, color: '#b45309', fontWeight: '600', marginTop: 6 },
   blockText: { fontSize: 15, color: '#b91c1c', fontWeight: '700', marginTop: 10, paddingHorizontal: 4 },
+  // Tekil yol seçim kartları — "kumaş elde mi, kayıt mı yanlıştı" sorusunu
+  // yalnız operatör bilir; kartlar o soruyu somutlaştırır. Ön seçim YOK.
+  choiceCard: {
+    minHeight: 56,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+  },
+  choiceCardActive: { borderWidth: 2, borderColor: '#b45309', backgroundColor: '#fff7ed' },
+  choiceTitle: { fontSize: 15, fontWeight: '800', color: '#334155' },
+  choiceDesc: { fontSize: 13, color: '#64748b', marginTop: 2 },
+  // "Tüm işlemi geri al" — çerçeveli süpervizör butonu (düz metin bağlantı
+  // tıklanabilir hissi vermiyordu, 2026-08-12 saha).
+  fullBtn: { marginTop: 14, alignSelf: 'flex-start', borderColor: '#fdba74', borderRadius: 8 },
   actions: {
     flexDirection: 'row', gap: 10, padding: 14,
     borderTopWidth: 1, borderTopColor: '#f1f5f9',

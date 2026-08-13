@@ -83,7 +83,10 @@ export function useServerHealth() {
       // kimlik doğrulamasız bir uçtan LAN'a açıktı.
       // ⚠️ BACKEND ile AYNI PENCEREDE deploy edilmeli: backend önce giderse bu
       // ekran 404, panel önce giderse 401 alır.
-      const res = await apiClient.get<HealthResponse>("/admin/health", {
+      // ⚠️ `/api` öneki ZORUNLU (baseURL onu içermez). Öneksiz hâli 404 döndürüyordu
+      // ve `suppressErrorToast` yüzünden ekranda HİÇ hata görünmüyordu — panoyu
+      // boş sanıp backend'i suçlamaya götüren sessiz arıza (2026-08-13).
+      const res = await apiClient.get<HealthResponse>("/api/admin/health", {
         suppressErrorToast: true,
       });
       return res.data;

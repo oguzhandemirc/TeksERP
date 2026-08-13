@@ -304,7 +304,10 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       <div className="flex flex-wrap gap-1">
                         {roll.properties.map((p) => (
                           <Badge key={p.propertyId} variant="muted" className="text-[10px]">
-                            {p.property.name}
+                            {/* SEÇİM tipli özellikte DEĞER de basılır ("Gramaj: 50 gr").
+                                Yalnız adı basmak, operatörün tablette yaptığı seçimi
+                                panelde okunamaz kılardı. */}
+                            {p.value ? `${p.property.name}: ${p.value.name}` : p.property.name}
                           </Badge>
                         ))}
                       </div>

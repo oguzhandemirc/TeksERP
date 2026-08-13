@@ -265,6 +265,61 @@ export default function KursunQcScreen() {
     );
   }, [activeJob]);
 
+  // ── İSTASYON ÖZELLİKLERİ (mod sözleşmesi, 2026-08-10) ─────────────────────
+  // AUTO → salt bilgi (backend her topa yazar) · OPSİYONEL/ZORUNLU → tuş.
+  // Eski backend `properties` göndermez → hepsi boş → ekran bugünküyle aynı.
+  const stationProps = activeJob?.stepSummary.properties ?? [];
+  const autoProps = useMemo(() => stationProps.filter((p) => p.mode === 'AUTO'), [stationProps]);
+  const pickableProps = useMemo(
+    () => stationProps.filter((p) => p.mode !== 'AUTO'),
+    [stationProps],
+  );
+  // Operatörün CEVAPLARI: propertyId → seçim. BAYRAK'ta değer `true`, SEÇİM'de
+  // seçilen değer KODU ("50GR"). Tek harita, çünkü ikisi de "bu özelliğe cevap
+  // verildi mi" sorusunu yanıtlıyor — ayrı iki state, zorunluluk kontrolünün
+  // birini unutmasına açık olurdu.
+  //
+  // ⚠️ TOP BAŞINA sıfırlanır: bir topta işaretlenen özellik sıradaki topa
+  // taşınırsa operatör hiç dokunmadan ikinci topa da yazılır.
+  const [propAnswers, setPropAnswers] = useState<Record<string, true | string>>({});
+  useEffect(() => {
+    setPropAnswers({});
+  }, [activeJob?.selectedRollId, activeCardId]);
+
+  /** BAYRAK çipi: aç/kapa. */
+  const toggleFlagProp = (id: string) =>
+    setPropAnswers((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id];
+      else next[id] = true;
+      return next;
+    });
+
+  /** SEÇİM çipi: aynı değere tekrar basmak seçimi KALDIRIR (opsiyonelde
+   *  vazgeçebilmeli); farklı değere basmak DEĞİŞTİRİR (tek seçim). */
+  const pickValueProp = (id: string, code: string) =>
+    setPropAnswers((prev) => {
+      const next = { ...prev };
+      if (next[id] === code) delete next[id];
+      else next[id] = code;
+      return next;
+    });
+
+  const missingRequiredProps = useMemo(
+    () => pickableProps.filter((p) => p.mode === 'REQUIRED' && !propAnswers[p.propertyId]),
+    [pickableProps, propAnswers],
+  );
+
+  /** Backend sözleşmesi: [{propertyId, valueCode?}] — AUTO'lar GÖNDERİLMEZ. */
+  const propertySelections = useMemo(
+    () =>
+      Object.entries(propAnswers).map(([propertyId, v]) => ({
+        propertyId,
+        ...(typeof v === 'string' ? { valueCode: v } : {}),
+      })),
+    [propAnswers],
+  );
+
   // Cetveldeki hata noktası modalı — dokunulan marker'ın hata id'leri CANLI defect
   // listesinden çözülür; hata silindikçe liste küçülür, boşalınca modal kapanır
   // (o noktadaki tüm hatalar silindi → nokta kalmadı).
@@ -884,9 +939,22 @@ export default function KursunQcScreen() {
 
   const handleCompleteQc2 = () => {
     if (!activeJob || !selectedRoll) return;
+    // Zorunlu özellik eksikse İSTEK HİÇ GİTMEZ — backend de reddeder ama
+    // operatörün 400'ü beklemesi gereksiz; sebep zaten ekranda yazılı.
+    if (missingRequiredProps.length > 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Zorunlu özellik işaretlenmedi',
+        text2: missingRequiredProps.map((p) => p.name).join(', '),
+      });
+      return;
+    }
     completeQc2Mutation.mutate({
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
+      // AUTO satırlar GÖNDERİLMEZ — backend onları kendisi ekler; buradan da
+      // yollamak, iki kaynağın ayrışması demekti.
+      properties: propertySelections,
     });
   };
 
@@ -1388,6 +1456,87 @@ export default function KursunQcScreen() {
                     </View>
                   )}
                 </Surface>
+
+                {/* ── İSTASYON ÖZELLİKLERİ (mod güdümlü, 2026-08-10) ──
+                    OTOMATİK satırlar salt bilgi (operatöre sorulmaz, adım
+                    kapanınca yazılır); OPSİYONEL/ZORUNLU satırlar tuş olur.
+                    ZORUNLU işaretlenmeden "KK2 Tamamla" basılırsa backend ADIYLA
+                    400 döner — buradaki disable o hatanın istemci ikizidir.
+                    Kart yalnız gerçekten çizilecek satır varsa görünür. */}
+                {!selectedRoll.qc2Completed && (autoProps.length > 0 || pickableProps.length > 0) && (
+                  <Surface style={styles.section} elevation={1}>
+                    <Text style={styles.sectionTitle}>Bu istasyonun kazandırdıkları</Text>
+                    {autoProps.length > 0 && (
+                      <Text style={styles.propAutoLine}>
+                        Otomatik: {autoProps.map((p) => p.name).join(', ')}
+                      </Text>
+                    )}
+                    {pickableProps.map((p) => {
+                      // SEÇİM tipli özellik (GRAMAJ → 25GR/50GR/75GR): kendi
+                      // başlığı + değer çipleri. Değerler KATALOGDAN gelir,
+                      // kodda sabit liste YOK.
+                      if (p.valueType === 'CHOICE') {
+                        const picked = propAnswers[p.propertyId];
+                        return (
+                          <View key={p.propertyId} style={styles.propChoiceBlock}>
+                            <Text style={styles.propChoiceLabel}>
+                              {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
+                            </Text>
+                            {(p.values ?? []).length === 0 ? (
+                              // Değersiz SEÇİM özelliği: backend bunu doğduğu anda
+                              // reddediyor ama sahada eski bir kayıt olabilir —
+                              // sessiz boşluk bırakma, sebebini yaz.
+                              <Text style={styles.propWarnLine}>
+                                Bu özelliğin tanımlı değeri yok — panelden değer ekleyin.
+                              </Text>
+                            ) : (
+                              <View style={styles.propChipsRow}>
+                                {(p.values ?? []).map((v) => {
+                                  const on = picked === v.code;
+                                  return (
+                                    <TouchableRipple
+                                      key={v.code}
+                                      borderless
+                                      onPress={() => pickValueProp(p.propertyId, v.code)}
+                                      style={[styles.propChip, on && styles.propChipOn]}
+                                    >
+                                      <Text
+                                        style={[styles.propChipText, on && styles.propChipTextOn]}
+                                      >
+                                        {v.name}
+                                      </Text>
+                                    </TouchableRipple>
+                                  );
+                                })}
+                              </View>
+                            )}
+                          </View>
+                        );
+                      }
+                      // BAYRAK tipli özellik: tek aç/kapa çipi (bugünkü davranış).
+                      const on = !!propAnswers[p.propertyId];
+                      return (
+                        <View key={p.propertyId} style={styles.propChipsRow}>
+                          <TouchableRipple
+                            borderless
+                            onPress={() => toggleFlagProp(p.propertyId)}
+                            style={[styles.propChip, on && styles.propChipOn]}
+                          >
+                            <Text style={[styles.propChipText, on && styles.propChipTextOn]}>
+                              {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
+                            </Text>
+                          </TouchableRipple>
+                        </View>
+                      );
+                    })}
+                    {missingRequiredProps.length > 0 && (
+                      <Text style={styles.propWarnLine}>
+                        Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden
+                        KK2 tamamlanamaz.
+                      </Text>
+                    )}
+                  </Surface>
+                )}
               </View>
 
               {/* Sticky footer — durum sırası:
@@ -2492,6 +2641,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  // İstasyon özellikleri (mod güdümlü) — AUTO satırı salt bilgi, gerisi tuş.
+  propAutoLine: { fontSize: 13, color: '#475569', marginTop: 6 },
+  propWarnLine: { fontSize: 12, color: '#b45309', marginTop: 6, fontWeight: '700' },
+  propChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  // SEÇİM tipli özellik bloğu: kendi başlığı + değer çipleri.
+  propChoiceBlock: { marginTop: 10 },
+  propChoiceLabel: { fontSize: 13, fontWeight: '700', color: '#334155' },
+  propChip: {
+    paddingHorizontal: 16,
+    // ≥56dp dokunma hedefi (fabrika eldiveni) — UI kuralı.
+    paddingVertical: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+  },
+  propChipOn: { borderColor: '#059669', borderWidth: 2, backgroundColor: '#ecfdf5' },
+  propChipText: { fontSize: 15, fontWeight: '700', color: '#475569' },
+  propChipTextOn: { color: '#047857' },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',

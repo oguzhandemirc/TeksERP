@@ -17,7 +17,17 @@ import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
+import { entryStationLookupService, entryUserLookupService } from "./entryLookupServices";
+import { useFoldValues } from "@/hooks/useFoldValues";
 import type { Roll } from "./types";
+
+/** Kat filtresinin yer tutucusu — seçenekleri `buildRollFilterDefs` doldurur. */
+const FOLD_FILTER_PLACEHOLDER: FilterDef = {
+  kind: "multi-select",
+  key: "foldType",
+  label: "Kat",
+  options: [],
+};
 
 const FILTERS: FilterDef[] = [
   {
@@ -52,17 +62,11 @@ const FILTERS: FilterDef[] = [
   },
   { kind: "numberRange", key: "width", label: "En", unit: "cm" },
   { kind: "numberRange", key: "qty", label: "Boy", unit: "mt" },
-  // KAT — backend değeri KANONİKLEŞTİRİLMİŞ tutuyor ("4-KAT"); serbest metin
-  // göndermek sessizce 0 sonuç verirdi, o yüzden seçenekli filtre.
-  {
-    kind: "multi-select",
-    key: "foldType",
-    label: "Kat",
-    options: [
-      { value: "2-KAT", label: "2 Kat" },
-      { value: "4-KAT", label: "4 Kat" },
-    ],
-  },
+  // KAT — seçenekler KATALOGDAN enjekte edilir (aşağıdaki `buildRollFilterDefs`).
+  // Sabit liste, panelden eklenen 6-KAT'ı filtrede GÖRÜNMEZ yapardı ve backend
+  // değeri kanonik tuttuğu için serbest metin de sessizce 0 sonuç verirdi.
+  // Buradaki `options` yer tutucudur; boşsa filtre HİÇ ÇİZİLMEZ.
+  FOLD_FILTER_PLACEHOLDER,
   // GİRİŞ KAYNAĞI (2026-08-04): "elle eklenen toplar" tek filtreyle çıksın.
   // Zincir-dışı doğan topları (Tambur manuel / Electron manuel) saymak ve
   // sebeplerine bakmak için — manuel giriş bir semptomdur, ölçülmeden
@@ -82,25 +86,43 @@ const FILTERS: FilterDef[] = [
       { value: "MANUAL_ENTRY", label: "Manuel Giriş" },
     ],
   },
-  // İSTASYON (2026-08-05): "şu makinede ne var" sorusu. Backend
-  // filter[currentStationId] ile karşılanıyor — o blok bu filtre için yazıldı;
-  // öncesinde yalnız istasyon TÜRÜ filtresi vardı (currentStepKind) ve o da
-  // kullanıcıya hiç açılmamıştı, yalnız sabit sekmelerde kullanılıyordu.
-  //
-  // Tür değil KİMLİK filtreleniyor: tür iki ayrı boyahaneyi tek seçenekte
-  // birleştirirdi, oysa operatör belirli bir makineyi soruyor.
-  //
-  // ÇOKLU: "iki boyahanede ne var" tek sorguda. ⚠️ Backend bu alanı UUID
-  // regex'inden geçiriyor; süzgeç LİSTENİN HER ELEMANINA uygulanmazsa filtre
-  // sessizce düşer ve liste FİLTRESİZ döner (bekçi ölçümü: 2 yerine 6 satır).
+  // GİRİŞ İSTASYONU (2026-08-12): "bu top SİSTEME nereden girdi" — kalıcı köken.
+  // Yukarıdaki "İstasyon" (currentStationId) topun ŞU AN bulunduğu yerdir; ikisi
+  // farklı soru. Seçenekler kataloğun tamamı değil, gerçekten giriş istasyonu
+  // olmuş istasyonlar (/rolls/entry-stations). Backend'de generic yol karşılar
+  // (CSV→in otomatik; bekçi: test_filter_multi_select §2b).
   {
     kind: "multi-lookup",
-    key: "currentStationId",
-    label: "İstasyon",
-    service: stationService,
-    queryKey: "stations",
+    key: "entryStationId",
+    label: "Giriş İstasyonu",
+    service: entryStationLookupService,
+    queryKey: "roll-entry-stations",
+  },
+  // EKLEYEN (2026-08-12): "hangi personel girdi". Kolon 2026-08-05'ten beri
+  // vardı, filtre yoktu — 50 bin satırda gözle aranıyordu. Seçenekler yalnız
+  // top girmiş kullanıcılar (/rolls/entry-users) — admin:users GEREKMEZ.
+  {
+    kind: "multi-lookup",
+    key: "createdById",
+    label: "Ekleyen",
+    service: entryUserLookupService,
+    queryKey: "roll-entry-users",
   },
 ];
+
+// İSTASYON (2026-08-05): "şu makinede ne var" — topun ŞU AN bulunduğu istasyon.
+// Tür değil KİMLİK filtrelenir (tür iki boyahaneyi tek seçenekte birleştirirdi).
+// ⚠️ Backend bu alanı UUID regex'inden geçirir; süzgeç listenin her elemanına
+// uygulanmazsa filtre sessizce düşer (bekçi ölçümü: 2 yerine 6 satır).
+// ⚠️ base FILTERS'ta DEĞİL: yalnız üretim sekmelerinde eklenir (buildRollFilterDefs) —
+// Ham Stok/Bitmiş Depo'da anlamı yok, hep boş liste döndürüp "bozuk" görünüyordu.
+const CURRENT_STATION_FILTER: FilterDef = {
+  kind: "multi-lookup",
+  key: "currentStationId",
+  label: "İstasyon",
+  service: stationService,
+  queryKey: "stations",
+};
 
 export const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;
 
@@ -139,10 +161,30 @@ const FASON_FILTERS: FilterDef[] = [
 ];
 
 // Serbest/rezerve filtresi yalnız depo (Bitmiş Depo); fason filtreleri yalnız Fasonda.
-export function buildRollFilterDefs(tab: RollStatusTabKey): FilterDef[] {
-  if (tab === "FINISHED_STOCK") return [...FILTERS, SHIPMENT_SCOPE_FILTER];
-  if (tab === "SUBCONTRACTOR") return [...FILTERS, ...FASON_FILTERS];
-  return FILTERS;
+//
+// `foldOptions` katalogdan gelir (`useFoldValues`). BOŞ ise kat filtresi listeden
+// DÜŞÜRÜLÜR: seçeneksiz bir çoklu-seçim kutusu, kullanıcıya tıklayıp hiçbir şey
+// bulamayacağı ölü bir kontrol vaat eder.
+export function buildRollFilterDefs(
+  tab: RollStatusTabKey,
+  foldOptions: { value: string; label: string }[] = [],
+): FilterDef[] {
+  // `kind` ile daralt: FilterDef bir union ve `dateRange` varyantında `key` YOK
+  // (düz `f.key` derlenmez).
+  const base = FILTERS.flatMap<FilterDef>((f) => {
+    if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
+    return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
+  });
+  if (tab === "FINISHED_STOCK") return [...base, SHIPMENT_SCOPE_FILTER];
+  if (tab === "SUBCONTRACTOR") return [...base, ...FASON_FILTERS];
+  // İSTASYON (currentStationId) YALNIZ topun gerçekten bir istasyonda DURDUĞU
+  // sekmelerde: "şu an nerede" filtresi Ham Stok / Bitmiş Depo'da her zaman boş
+  // döner (o toplarda currentStep yok) ve saha bunu "filtre bozuk" diye okudu
+  // (2026-08-12). "Nereden girdi" sorusunun cevabı Giriş İstasyonu filtresidir.
+  if (tab === "PRODUCTION" || tab === "KURSUN_PENDING" || tab === "TAMBUR_PENDING") {
+    return [...base, CURRENT_STATION_FILTER];
+  }
+  return base;
 }
 
 interface Props {
@@ -174,7 +216,11 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
 
-  const filters = useMemo(() => buildRollFilterDefs(tab), [tab]);
+  const { values: foldValues } = useFoldValues();
+  const filters = useMemo(
+    () => buildRollFilterDefs(tab, foldValues.map((v) => ({ value: v.code, label: v.name }))),
+    [tab, foldValues],
+  );
 
   // Toplu iptal — Ham Stok + Bitmiş Depo'da sunulur (STOCK/WAREHOUSE→CANCELLED,
   // yanlış giriş düzeltmesi). Backend softDelete WAREHOUSE'a izin verir; rezerve

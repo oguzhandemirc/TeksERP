@@ -144,6 +144,7 @@ export function RollsPage() {
       // her açılışta tekrar açmak gerekmez.
       entrySource: false,
       createdBy: false,
+      entryStation: false,
     },
     enabled: isTableTab,
   });

@@ -26,6 +26,8 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         kind: initial.kind,
         department: initial.department ?? "",
         isActive: initial.isActive,
+        appliesColor: initial.appliesColor ?? false,
+        appliesProperty: initial.appliesProperty ?? true,
         defaultCategoryId: initial.defaultCategoryId ?? null,
       }
     : stationFormDefaults;
@@ -105,6 +107,25 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               />
             </FormField>
           )}
+          {/* YETENEKLER — HER TİPTE görünür (2026-08-10). Eskiden bu soruların
+              cevabı yalnız fason kategorisinden türetiliyordu, dolayısıyla
+              kategorisi olmayan bir İÇ istasyon tanım gereği "renk veremez"di.
+              İç boyahane/iç zımpara senaryosunun önündeki engel buydu.
+              ⚠️ Renk varsayılanı KAPALI: açık gelirse Tambur/Kurşun adımlarına
+              renk atanabilir hale gelir (2026-08-06 uyarısı). */}
+          <FormField
+            label="Yetenekler"
+            hint="Bu istasyondan geçen topa ne uygulanabilir? Fason istasyonlarda kategori de renk/özellik verebilir — ikisinden biri yeterlidir."
+          >
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" {...form.register("appliesColor")} /> Renk uygular
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" {...form.register("appliesProperty")} /> Özellik uygular
+              </label>
+            </div>
+          </FormField>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif
           </label>

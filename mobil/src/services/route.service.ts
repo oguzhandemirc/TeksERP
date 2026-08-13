@@ -24,12 +24,26 @@ export interface ProductionRoute {
     // Eski backend bu alanları göndermez → undefined kalır, ön-doldurma olmaz.
     plannedColorId?: string | null;
     plannedColor?: { id: string; code?: string | null; name: string; hex?: string | null } | null;
-    plannedProperties?: { propertyId: string; property?: { id: string; name: string } }[];
+    plannedProperties?: {
+      propertyId: string;
+      // valueType: SEÇİM (CHOICE) tipliler "rotayı uygula" birleşiminde süzülür
+      // (hedef listesi BAYRAK evrenidir). Eski backend alanı göndermez → süzgü
+      // devreye girmez, davranış aynı kalır.
+      property?: { id: string; name: string; valueType?: 'FLAG' | 'CHOICE' };
+    }[];
     station?: {
       id: string;
       code?: string | null;
       name: string;
       type?: string;
+      /** İstasyonun domain rolü — "rotada Tambur var mı" sorusu buradan çözülür
+       *  (kat tipi yalnız Tambur'lu rotada sorulur). Backend `include` ile tüm
+       *  skaler alanları döndürüyor; eski backend'de undefined kalır. */
+      kind?: string;
+      /** İSTASYONUN KENDİ yetenekleri (2026-08-10) — kategoriden bağımsız.
+       *  Adım renk/özellik verebilir ⇔ istasyon verir VEYA kategori verir. */
+      appliesColor?: boolean;
+      appliesProperty?: boolean;
       // İstasyonun varsayılan fason kategorisi (defaultInclude döndürür). Hızlı İş Emri
       // "Gelişmiş" renk uygulaması, renk/özellik veren adımı buradan türetir.
       // appliesColor/appliesProperty: bu kategori gerçekten renk/özellik uyguluyor mu —

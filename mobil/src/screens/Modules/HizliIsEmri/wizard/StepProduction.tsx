@@ -6,7 +6,6 @@ import PickerModal from '../../../../components/PickerModal';
 import ColorSelectField from '../../../../components/ColorSelectField';
 import PropertyPickerModal from './PropertyPickerModal';
 import RouteStepsModal from '../RouteStepsModal';
-import { FOLD_OPTIONS } from '../WorkOrderHeaderFields';
 import type { useQuickWorkOrder } from '../useQuickWorkOrder';
 import { colors, spacing, radius } from '../../../../theme';
 
@@ -102,29 +101,42 @@ export default function StepProduction({ wo }: Props) {
 
       {/* ── Kat tipi + En ── */}
       <View style={styles.twoCol}>
-        <View style={styles.col}>
-          <Text style={styles.label}>
-            Kat Tipi <Text style={styles.req}>*</Text>
-          </Text>
-          {/* Zorunlu — biri mutlaka seçili; aktif çipe tekrar basınca kaldırılmaz.
-              Metre cihazı da bundan seçilir (meterPeripheralFor). */}
-          <View style={styles.chipsRow}>
-            {FOLD_OPTIONS.map((f) => {
-              const active = wo.foldType === f;
-              return (
-                <TouchableRipple
-                  key={f}
-                  onPress={() => wo.setFoldType(f)}
-                  style={[styles.foldChip, active && styles.foldChipActive]}
-                  borderless
-                  rippleColor="rgba(79,70,229,0.12)"
-                >
-                  <Text style={[styles.foldChipText, active && styles.foldChipTextActive]}>{f}</Text>
-                </TouchableRipple>
-              );
-            })}
+        {/* Kat YALNIZ Tambur'lu rotada sorulur (Electron ile aynı sözleşme, 2026-08-10):
+            kat Tambur operatörüne yönelik bir spec'tir; tamburu olmayan rotada
+            sorulursa hiçbir yerde uygulanmayacak bir değer kaydedilir. */}
+        {wo.hasTambur && (
+          <View style={styles.col}>
+            <Text style={styles.label}>
+              Kat Tipi <Text style={styles.req}>*</Text>
+            </Text>
+            {/* Seçenekler KATALOGDAN — sabit iki çip, panelden eklenen 6-KAT'ı
+                tablette görünmez yapardı. Metre cihazı da seçilen kodun ROLÜNDEN
+                bulunur (meterPeripheralFor, birebir eşleşme). */}
+            <View style={styles.chipsRow}>
+              {wo.foldValues.map((f) => {
+                const active = wo.foldType === f.code;
+                return (
+                  <TouchableRipple
+                    key={f.code}
+                    onPress={() => wo.setFoldType(f.code)}
+                    style={[styles.foldChip, active && styles.foldChipActive]}
+                    borderless
+                    rippleColor="rgba(79,70,229,0.12)"
+                  >
+                    <Text style={[styles.foldChipText, active && styles.foldChipTextActive]}>
+                      {f.name}
+                    </Text>
+                  </TouchableRipple>
+                );
+              })}
+            </View>
+            {wo.foldNotConfigured && (
+              <Text style={styles.applyWarnText}>
+                Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin.
+              </Text>
+            )}
           </View>
-        </View>
+        )}
         <View style={styles.col}>
           <Text style={styles.label}>En (cm)</Text>
           <TextInput

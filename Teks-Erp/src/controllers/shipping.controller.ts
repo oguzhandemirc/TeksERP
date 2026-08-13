@@ -479,6 +479,9 @@ export class ShippingController {
         widthMin: num(filt("widthMin")),
         widthMax: num(filt("widthMax")),
         customerId: filtIds("customerId"),
+        // Kalite KODU taşır (uuid değil) — `filtIds` yalnız virgülle böler,
+        // tip varsaymaz; servis kanonikleştirip OR'a çevirir.
+        qualityGrade: filtIds("qualityGrade"),
         scope,
         search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
         sortBy: typeof req.query.sortBy === "string" ? req.query.sortBy : undefined,

@@ -67,6 +67,10 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
 
     case "qualityGrade":
       return str(payload.qualityGrade);
+    // KAT — katalog kodu ("6-KAT" / "TUP"). Kat girilmemiş topta present:false →
+    // eleman şablonda dursa bile baskıda atlanır (sackNote emsali).
+    case "foldType":
+      return str(payload.foldType);
     case "widthCm":
       return num(payload.widthCm, "cm");
     case "lengthMeters":

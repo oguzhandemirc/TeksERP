@@ -1,6 +1,6 @@
 // sessionEntriesStore — "bu oturumda girilenler" kovası: pending/onay/başarısızlık
 // akışı + logout temizliği. Liste ekran değil GİRİŞ OTURUMU ömürlüdür.
-import { useSessionEntriesStore } from './sessionEntriesStore';
+import { sessionBucketKey, useSessionEntriesStore } from './sessionEntriesStore';
 import type { Roll } from '../types/models';
 
 const roll = (id: string): Roll =>
@@ -60,5 +60,27 @@ describe('sessionEntriesStore', () => {
     const b = useSessionEntriesStore.getState().buckets.RAW_QC;
     expect(b.rolls).toHaveLength(200);
     expect(b.rolls[0].id).toBe('204'); // en yeni başta
+  });
+});
+
+describe('sessionBucketKey — istasyon kimliği kovaları ayırır (2026-08-12)', () => {
+  it('⭐ iki ham giriş istasyonunun kayıtları AYRI kovalarda', () => {
+    // Eski anahtar yalnız türdü ('RAW_QC') — ikinci istasyon açıldığında iki
+    // istasyonun listeleri tek kovaya karışırdı.
+    const k1 = sessionBucketKey('RAW_QC', 'st-1');
+    const k2 = sessionBucketKey('RAW_QC', 'st-2');
+    expect(k1).not.toBe(k2);
+    const s = useSessionEntriesStore.getState();
+    s.addPending(k1);
+    s.addPending(k2);
+    s.addPending(k2);
+    const b = useSessionEntriesStore.getState().buckets;
+    expect(b[k1]?.pending).toBe(1);
+    expect(b[k2]?.pending).toBe(2);
+  });
+
+  it('istasyon kimliği yoksa tür tek başına — bugünkü davranış birebir', () => {
+    expect(sessionBucketKey('RAW_QC', null)).toBe('RAW_QC');
+    expect(sessionBucketKey('RAW_QC', undefined)).toBe('RAW_QC');
   });
 });
