@@ -43,7 +43,11 @@ export function ContentMismatchBanner({
     queryKey: ["sack-mismatch", sackId, rollCount],
     queryFn: async () => {
       const res = await apiClient.post<ApiResponse<Record<string, MismatchSignal[]>>>(
-        "/shipping/sacks/mismatch-check",
+        // ⚠️ YOL TAM YAZILIR: `apiClient.baseURL` `/api` İÇERMEZ. Öneksiz yol 404
+        // döner ve ekranda yalnız "Beklenmeyen bir hata oluştu" görünür — banner
+        // sessizce hiç çıkmaz (2026-08-13 saha bulgusu; aynı sınıf hata bir gün
+        // önce Rolls entry-users lookup'ında yaşandı).
+        "/api/shipping/sacks/mismatch-check",
         { sackIds: [sackId] },
       );
       return res.data.data?.[sackId!] ?? [];
@@ -118,7 +122,11 @@ export function ShipmentMismatchSummary({ sackIds }: { sackIds: string[] }) {
     queryKey: ["sack-mismatch", "bulk", key],
     queryFn: async () => {
       const res = await apiClient.post<ApiResponse<Record<string, MismatchSignal[]>>>(
-        "/shipping/sacks/mismatch-check",
+        // ⚠️ YOL TAM YAZILIR: `apiClient.baseURL` `/api` İÇERMEZ. Öneksiz yol 404
+        // döner ve ekranda yalnız "Beklenmeyen bir hata oluştu" görünür — banner
+        // sessizce hiç çıkmaz (2026-08-13 saha bulgusu; aynı sınıf hata bir gün
+        // önce Rolls entry-users lookup'ında yaşandı).
+        "/api/shipping/sacks/mismatch-check",
         { sackIds },
       );
       return res.data.data ?? {};

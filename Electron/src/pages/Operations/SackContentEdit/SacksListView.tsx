@@ -16,6 +16,7 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { customerService } from "@/pages/Customers/service";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
+import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { sackHubService } from "./service";
 import { sacksColumns } from "./sacksColumns";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
@@ -47,6 +48,18 @@ const SACK_FILTERS: FilterDef[] = [
   { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
   { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
   { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
+  // KALİTE (2026-08-13 saha isteği: "hangi çuvalda 2. kalite var?"). Semantik
+  // İÇEREN'dir: seçilen kaliteden EN AZ BİR top taşıyan çuvallar gelir — karışık
+  // çuval meşru ve zaten aranan da "içine karışmış mı" sorusu.
+  // Katalogdan okunur (sabit liste YOK): fabrika kalite ekler/adlandırırsa
+  // filtre kendiliğinden doğru kalır.
+  {
+    kind: "multi-lookup",
+    key: "qualityGrade",
+    label: "Kalite",
+    service: qualityGradeService,
+    queryKey: "quality-grades",
+  },
   { kind: "numberRange", key: "width", label: "En", unit: "cm" },
 ];
 
