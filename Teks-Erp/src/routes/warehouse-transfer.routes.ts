@@ -18,10 +18,50 @@ const createSchema = z.object({
   toWarehouseId: z.string().uuid(),
   // 500 top üst sınırı: tek transfer tek tx'te koşuyor (perf kuralı 10 —
   // transaction süresi kısa kalmalı).
-  rollIds: z.array(z.string().uuid()).min(1).max(500),
+  // min(0): yalnız çuval taşınan transferde toplar boş olabilir — "ikisi de
+  // boş" kontrolü serviste (anlamlı Türkçe mesajla).
+  rollIds: z.array(z.string().uuid()).min(0).max(500),
+  // Çuval-BÜTÜN transfer: çuval içindeki tüm toplarıyla taşınır (2026-08-14).
+  sackIds: z.array(z.string().uuid()).max(100).optional(),
   notes: z.string().max(500).nullable().optional(),
   clientToken: z.string().uuid().optional(),
 });
+
+/**
+ * @openapi
+ * /api/warehouse-transfers/sack-lookup:
+ *   get:
+ *     tags: [WarehouseTransfers]
+ *     summary: Çuval kodlarını transfer için çözer (CSV)
+ *     description: >
+ *       Transfer formunun tarayıcı girişi — CV kodu okutulunca çuval + üye top
+ *       özeti döner. Uygunluk hükmü BURADA verilmez (yalnız bilgi taşınır);
+ *       gerçek guard'lar create transaction'ının içindedir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: codes
+ *         schema: { type: string, example: "CV1408260001,CV1408260002" }
+ *     responses:
+ *       200: { description: Çuval listesi (üye sayısı + toplam metraj + konum) }
+ */
+router.get(
+  "/sack-lookup",
+  verifyToken,
+  requirePermission("warehouse:transfer"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const codes = String(req.query.codes ?? "")
+        .split(",")
+        .map((c) => c.trim().toUpperCase())
+        .filter(Boolean)
+        .slice(0, 100);
+      res.json(await warehouseTransferService.lookupSacks(codes));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 /**
  * @openapi

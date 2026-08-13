@@ -165,6 +165,9 @@ const PARTIAL_INDEXES: Array<{
   { table: "goods_receipts", index: "goods_receipts_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "warehouse_movements", index: "warehouse_movements_transferId_idx", uniq: false, predicate: `("transferId" IS NOT NULL)`, why: "null-yoğun belge bağı (KK1/tambur girişleri belgesiz)" },
   { table: "warehouse_movements", index: "warehouse_movements_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun belge bağı" },
+  // ticaret paketi — çuval-bütün transfer (migration 20260813212341)
+  { table: "warehouse_movements", index: "warehouse_movements_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun: yalnız çuval-bütün transfer satırları taşır" },
+  { table: "sacks", index: "sacks_warehouseId_idx", uniq: false, predicate: `("warehouseId" IS NOT NULL)`, why: "eski çuvallar NULL (lazy adoption) — dolu satırlar 'bu depoda hangi çuvallar' sorgusunun yolu" },
   // ticaret paketi — ön muhasebe (migration 20260813201311)
   // ⚠️ "BİR KAYNAK → EN ÇOK BİR AKTİF FATURA". Uygulama katmanındaki
   // findFirst→if→create yarışa açıktır; yapısal engel partial unique'tir. Aynı

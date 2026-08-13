@@ -50,6 +50,7 @@ import {
   readSimulatedWeightEnabled,
 } from "./system-setting.service";
 import { factoryDayStart } from "../constants/time";
+import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import { dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
 import {
   touchWarehouseSackTx,
@@ -253,12 +254,18 @@ export class ShippingService {
       sack = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const sackNo = manualSackNo ?? (await nextSackNo(tx));
+        // Çuval doğduğu yerde damgalanır (createInitialEntry'nin top için yaptığının
+        // çuval karşılığı). Tek depolu fabrikada varsayılan depo yazılır ve hiçbir
+        // yüzey okumaz — sıfır görünür fark; çok depoluda "bu depoda hangi çuvallar"
+        // ve çuval-bütün transferin guard'ı buradan beslenir.
+        const sackWarehouseId = await resolveTargetWarehouseId(tx, null);
         return tx.sack.create({
           data: {
             sackNo,
             clientToken: data.clientToken ?? null,
             customerId,
             branchId,
+            warehouseId: sackWarehouseId,
             shipmentId: null,
             seq: null,
             weightKg: data.weightKg != null ? new Prisma.Decimal(data.weightKg) : null,
@@ -804,7 +811,7 @@ export class ShippingService {
     if (!data.rollIds?.length) throw AppError.badRequest("Ayrılacak top seçilmedi");
     const source = await prisma.sack.findUnique({
       where: { id: data.sackId },
-      select: { id: true, shipmentId: true, customerId: true, branchId: true, _count: { select: { rolls: true } } },
+      select: { id: true, shipmentId: true, customerId: true, branchId: true, warehouseId: true, _count: { select: { rolls: true } } },
     });
     if (!source) throw AppError.notFound("Çuval bulunamadı");
     if (source.shipmentId != null) {
@@ -847,6 +854,9 @@ export class ShippingService {
               sackNo: await nextSackNo(tx),
               customerId: source.customerId,
               branchId: source.branchId,
+              // Bölme fiziksel olarak kaynağın YANINDA olur → depo MİRAS alınır
+              // (kaynak eski/damgasızsa NULL kalır, lazy adoption transfer anında).
+              warehouseId: source.warehouseId,
             },
             select: { id: true, sackNo: true },
           });

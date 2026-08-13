@@ -32,6 +32,9 @@ export interface WarehouseLedgerEntry {
   goodsReceiptId?: string | null;
   shipmentId?: string | null;
   rollReturnId?: string | null;
+  /** Top bu harekete bir çuvalın ÜYESİ olarak girdiyse çuvalın kimliği —
+   *  transfer iptalinin "top hâlâ AYNI çuvalda mı" guard'ı buradan okur. */
+  sackId?: string | null;
   userId?: string | null;
   notes?: string | null;
 }
@@ -57,6 +60,7 @@ export async function writeWarehouseMovement(tx: Tx, entry: WarehouseLedgerEntry
       goodsReceiptId: entry.goodsReceiptId ?? null,
       shipmentId: entry.shipmentId ?? null,
       rollReturnId: entry.rollReturnId ?? null,
+      sackId: entry.sackId ?? null,
       userId: entry.userId ?? null,
       notes: entry.notes ?? null,
     },
@@ -83,6 +87,12 @@ export async function writeWarehouseMovements(tx: Tx, entries: WarehouseLedgerEn
       goodsReceiptId: e.goodsReceiptId ?? null,
       shipmentId: e.shipmentId ?? null,
       rollReturnId: e.rollReturnId ?? null,
+      // ⚠️ Bu map bir ALLOWLIST'tir (z.object / elle kurulan gövde dersinin
+      // defter ikizi): yeni alan Entry tipine eklenip BURAYA yazılmazsa satır
+      // alanı SESSİZCE düşürür — 2026-08-14'te sackId ile birebir yaşandı ve
+      // bekçi (§1d) ilk koşuda yakaladı. Tekil writeWarehouseMovement ile bu
+      // map'i birlikte güncelle.
+      sackId: e.sackId ?? null,
       userId: e.userId ?? null,
       notes: e.notes ?? null,
     }));

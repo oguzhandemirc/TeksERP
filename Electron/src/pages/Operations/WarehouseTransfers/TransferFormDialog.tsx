@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Trash2, Package } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMultiWarehouse, WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
-import { createTransfer, lookupRollsByBarcodes } from "./service";
+import { createTransfer, lookupRollsByBarcodes, lookupSacksByCodes, type PickedSack } from "./service";
 
 interface Props {
   open: boolean;
@@ -35,19 +35,41 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
   const [toId, setToId] = useState("");
   const [scan, setScan] = useState("");
   const [picked, setPicked] = useState<PickedRoll[]>([]);
+  const [pickedSacks, setPickedSacks] = useState<PickedSack[]>([]);
 
-  /** Okutulan/yapıştırılan barkodları topa çevirir (birden fazlası boşlukla). */
+  /**
+   * Okutulan/yapıştırılan kodları çözer (birden fazlası boşlukla): önce TOP
+   * araması, topta bulunamayanlar ÇUVAL olarak denenir. "CV ile mi başlıyor"
+   * ön ayrımı BİLEREK yok — çuval no elle de verilebiliyor (manualSackNo) ve
+   * deseni tahmin etmek elle numaralı çuvalı sessizce "bulunamadı"ya düşürürdü.
+   */
   const addM = useMutation({
-    mutationFn: (raw: string) => lookupRollsByBarcodes(raw.split(/[\s,;]+/).filter(Boolean)),
-    onSuccess: (rows, raw) => {
-      const requested = raw.split(/[\s,;]+/).filter(Boolean);
-      const found = new Set(rows.map((r) => r.barcode?.toUpperCase()));
-      const missing = requested.filter((b) => !found.has(b.trim().toUpperCase()));
-      // Bulunamayan barkod SESSİZ GEÇMEZ — operatör hangi topu okutamadığını bilmeli.
-      if (missing.length) toast.warning(`Bulunamadı: ${missing.slice(0, 5).join(", ")}`);
+    mutationFn: async (raw: string) => {
+      const codes = raw.split(/[\s,;]+/).filter(Boolean);
+      const rolls = await lookupRollsByBarcodes(codes);
+      const foundRolls = new Set(rolls.map((r) => r.barcode?.toUpperCase()));
+      const rest = codes.filter((c) => !foundRolls.has(c.trim().toUpperCase()));
+      const sackRes = rest.length ? await lookupSacksByCodes(rest) : { sacks: [], notFound: [] };
+      return { rolls, sacks: sackRes.sacks, notFound: sackRes.notFound };
+    },
+    onSuccess: ({ rolls, sacks, notFound }) => {
+      // Bulunamayan kod SESSİZ GEÇMEZ — operatör hangi kodu okutamadığını bilmeli.
+      if (notFound.length) toast.warning(`Bulunamadı: ${notFound.slice(0, 5).join(", ")}`);
+      const blocked = sacks.filter((sk) => sk.shipmentAssigned);
+      if (blocked.length) {
+        toast.warning(`Sevkiyata atanmış çuval taşınamaz: ${blocked.map((b) => b.sackNo).slice(0, 3).join(", ")}`);
+      }
+      const empty = sacks.filter((sk) => !sk.shipmentAssigned && sk.rollCount === 0);
+      if (empty.length) {
+        toast.warning(`Boş çuval taşınmaz: ${empty.map((b) => b.sackNo).slice(0, 3).join(", ")} — hedef depoda yeni çuval açın.`);
+      }
       setPicked((p) => {
         const seen = new Set(p.map((x) => x.id));
-        return [...p, ...rows.filter((r) => !seen.has(r.id))];
+        return [...p, ...rolls.filter((r) => !seen.has(r.id))];
+      });
+      setPickedSacks((p) => {
+        const seen = new Set(p.map((x) => x.id));
+        return [...p, ...sacks.filter((sk) => !sk.shipmentAssigned && sk.rollCount > 0 && !seen.has(sk.id))];
       });
       setScan("");
     },
@@ -59,6 +81,7 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
         fromWarehouseId: fromId,
         toWarehouseId: toId,
         rollIds: picked.map((p) => p.id),
+        sackIds: pickedSacks.map((sk) => sk.id),
         clientToken: crypto.randomUUID(),
       }),
     onSuccess: (res) => {
@@ -67,6 +90,7 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       void qc.invalidateQueries({ queryKey: WAREHOUSES_QUERY_KEY });
       setPicked([]);
+      setPickedSacks([]);
       setFromId("");
       setToId("");
       onCreated(res.data.id);
@@ -77,7 +101,12 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
   // transfer düşer). Ekranda ÖNCEDEN işaretlemek, operatörün 20 top okutup
   // tek satır yüzünden hepsini kaybetmesini engeller.
   const mismatched = fromId ? picked.filter((p) => p.warehouseId !== fromId) : [];
-  const valid = fromId && toId && fromId !== toId && picked.length > 0 && mismatched.length === 0;
+  // Damgasız (konumu NULL) eski çuval uyarı SAYILMAZ: backend onu transferde
+  // sahiplenir (lazy adoption) — üye topları zaten kaynak depoda doğrulanır.
+  const mismatchedSacks = fromId ? pickedSacks.filter((sk) => sk.warehouseId !== null && sk.warehouseId !== fromId) : [];
+  const totalRollCount = picked.length + pickedSacks.reduce((sum, sk) => sum + sk.rollCount, 0);
+  const valid =
+    fromId && toId && fromId !== toId && totalRollCount > 0 && mismatched.length === 0 && mismatchedSacks.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,7 +114,7 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
         <DialogHeader>
           <DialogTitle>Yeni Depo Transferi</DialogTitle>
           <DialogDescription>
-            Toplar tek işlemde taşınır — biri uygun değilse HİÇBİRİ taşınmaz (yarım transfer olmaz).
+            Top barkodu veya çuval kodu okutun. Çuval BÜTÜN taşınır (içindeki tüm toplarla). Biri uygun değilse HİÇBİRİ taşınmaz — yarım transfer olmaz.
           </DialogDescription>
         </DialogHeader>
 
@@ -140,6 +169,46 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
             </div>
           </div>
 
+          {mismatchedSacks.length > 0 && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              {mismatchedSacks.length} çuval seçilen çıkan depoda DEĞİL (
+              {mismatchedSacks.map((sk) => sk.sackNo).slice(0, 3).join(", ")}
+              {mismatchedSacks.length > 3 ? "…" : ""}).
+            </div>
+          )}
+
+          {pickedSacks.length > 0 && (
+            <div className="rounded-md border">
+              <div className="border-b bg-muted/50 px-2 py-1.5 text-xs font-medium uppercase text-muted-foreground">
+                Çuvallar — bütün taşınır (içindeki tüm toplarla)
+              </div>
+              <table className="w-full text-sm">
+                <tbody>
+                  {pickedSacks.map((sk) => (
+                    <tr key={sk.id} className={`border-t first:border-t-0 ${fromId && sk.warehouseId !== null && sk.warehouseId !== fromId ? "bg-amber-50 dark:bg-amber-950/40" : ""}`}>
+                      <td className="p-2">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-xs">
+                          <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                          {sk.sackNo}
+                        </span>
+                      </td>
+                      <td className="p-2 text-muted-foreground">
+                        {sk.customerName ?? "Genel stok"}
+                        {sk.warehouseName ? ` · ${sk.warehouseName}` : " · konum damgasız (ilk transferde sahiplenilir)"}
+                      </td>
+                      <td className="p-2 text-right tabular-nums">{sk.rollCount} top · {sk.totalQty} m</td>
+                      <td className="p-2 text-right">
+                        <Button variant="ghost" size="icon" onClick={() => setPickedSacks((x) => x.filter((y) => y.id !== sk.id))}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {mismatched.length > 0 && (
             <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
               {mismatched.length} top seçilen çıkan depoda DEĞİL ({mismatched.map((m) => m.barcode).slice(0, 3).join(", ")}
@@ -149,7 +218,9 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
 
           <div className="max-h-[35vh] overflow-auto rounded-md border">
             {picked.length === 0 ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Henüz top eklenmedi.</p>
+              <p className="p-4 text-center text-sm text-muted-foreground">
+                {pickedSacks.length > 0 ? "Serbest top yok — yalnız çuval taşınacak." : "Henüz top veya çuval eklenmedi."}
+              </p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
@@ -182,7 +253,9 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
           <Button disabled={!valid || createM.isPending} onClick={() => createM.mutate()}>
-            {createM.isPending ? "Taşınıyor…" : `Transferi Yap (${picked.length} top)`}
+            {createM.isPending
+              ? "Taşınıyor…"
+              : `Transferi Yap (${totalRollCount} top${pickedSacks.length > 0 ? `, ${pickedSacks.length} çuval` : ""})`}
           </Button>
         </DialogFooter>
       </DialogContent>

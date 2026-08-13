@@ -52,6 +52,8 @@ export async function createTransfer(body: {
   fromWarehouseId: string;
   toWarehouseId: string;
   rollIds: string[];
+  /** Çuval-BÜTÜN transfer — çuval içindeki tüm toplarıyla taşınır. */
+  sackIds?: string[];
   notes?: string | null;
   clientToken?: string;
 }) {
@@ -113,4 +115,29 @@ export async function lookupRollsByBarcodes(barcodes: string[]): Promise<
       warehouseId: r.warehouseId,
       status: r.status,
     }));
+}
+
+export interface PickedSack {
+  id: string;
+  sackNo: string;
+  warehouseId: string | null;
+  warehouseName: string | null;
+  customerName: string | null;
+  shipmentAssigned: boolean;
+  rollCount: number;
+  totalQty: number;
+}
+
+/**
+ * Çuval kodu çözümü — transfer formu CV kodu okutunca çuvalı üye özetiyle alır.
+ * Uygunluk HÜKMÜ backend create tx'indedir; burası yalnız karar verdirecek
+ * bilgiyi taşır (konum, sevkiyat bağı, kaç top / kaç metre).
+ */
+export async function lookupSacksByCodes(codes: string[]): Promise<{ sacks: PickedSack[]; notFound: string[] }> {
+  const clean = codes.map((c) => c.trim()).filter(Boolean);
+  if (clean.length === 0) return { sacks: [], notFound: [] };
+  const res = await apiClient.get("/api/warehouse-transfers/sack-lookup", {
+    params: { codes: clean.join(",") },
+  });
+  return res.data.data as { sacks: PickedSack[]; notFound: string[] };
 }

@@ -45,6 +45,13 @@ export interface TransferCreateInput {
   fromWarehouseId: string;
   toWarehouseId: string;
   rollIds: string[];
+  /**
+   * Çuval-BÜTÜN transfer (2026-08-14): çuval, içindeki TÜM toplarla birlikte
+   * taşınır — toplar çuvaldan ÇIKMAZ (sackId korunur). Yarım çuval taşımak
+   * fiziksel dünyada "çuvalı boşaltıp yeniden doldurmak"tır ve o iş zaten
+   * çuval bölme/çıkarma akışının işidir, transferin değil.
+   */
+  sackIds?: string[];
   notes?: string | null;
   clientToken?: string;
 }
@@ -70,7 +77,10 @@ export class WarehouseTransferService {
     if (input.fromWarehouseId === input.toWarehouseId) {
       throw AppError.badRequest("Kaynak ve hedef depo aynı olamaz.");
     }
-    if (input.rollIds.length === 0) throw AppError.badRequest("Transfer edilecek top seçilmedi.");
+    const sackIds = [...new Set(input.sackIds ?? [])];
+    if (input.rollIds.length === 0 && sackIds.length === 0) {
+      throw AppError.badRequest("Transfer edilecek top veya çuval seçilmedi.");
+    }
 
     const [from, to] = await Promise.all([
       prisma.warehouse.findUnique({ where: { id: input.fromWarehouseId }, select: { id: true, name: true, isActive: true } }),
@@ -102,6 +112,19 @@ export class WarehouseTransferService {
           },
         });
 
+        // ── ÇUVALLAR — bütün olarak, üye toplarıyla ─────────────────────────
+        const sacks = sackIds.length
+          ? await tx.sack.findMany({
+              where: { id: { in: sackIds } },
+              select: {
+                id: true, sackNo: true, warehouseId: true, shipmentId: true,
+                rolls: {
+                  select: { id: true, barcode: true, status: true, currentQty: true, warehouseId: true, shipmentId: true },
+                },
+              },
+            })
+          : [];
+
         const problems: string[] = [];
         const ref = (r: { id: string; barcode: string | null }) => r.barcode ?? r.id.slice(0, 8);
         const foundIds = new Set(rolls.map((r) => r.id));
@@ -111,8 +134,44 @@ export class WarehouseTransferService {
         for (const r of rolls) {
           if (r.warehouseId !== input.fromWarehouseId) problems.push(`${ref(r)}: bu depoda değil`);
           else if (!TRANSFERABLE.includes(r.status)) problems.push(`${ref(r)}: durumu uygun değil (${r.status})`);
-          else if (r.sackId) problems.push(`${ref(r)}: çuvalda — önce çuvaldan çıkarın`);
+          // Çuvaldaki top TEK taşınmaz — çuval bütünlüğü. Çuval da seçildiyse
+          // mesaj yol gösterir: top zaten çuvalıyla gidiyor, tekrar seçme.
+          else if (r.sackId && sackIds.includes(r.sackId)) problems.push(`${ref(r)}: seçilen çuvalın içinde — çuvalla birlikte zaten taşınacak`);
+          else if (r.sackId) problems.push(`${ref(r)}: çuvalda — çuvalı bütün taşıyın ya da önce çuvaldan çıkarın`);
           else if (r.shipmentId) problems.push(`${ref(r)}: sevkiyata bağlı`);
+        }
+
+        // Çuval guard'ları — hepsi SOMUT çuval numarasıyla.
+        const foundSackIds = new Set(sacks.map((sk) => sk.id));
+        for (const missing of sackIds.filter((sid) => !foundSackIds.has(sid))) {
+          problems.push(`${missing.slice(0, 8)}: çuval bulunamadı`);
+        }
+        const sackRollIds: string[] = [];
+        for (const sk of sacks) {
+          if (sk.shipmentId) {
+            problems.push(`${sk.sackNo}: sevkiyata atanmış — önce sevkiyattan çıkarın`);
+            continue;
+          }
+          // Boş çuval TAŞINMAZ: envanter değeri yok, defter satırı üretemez
+          // ("kaç metre taşındı" cevapsız kalır). Doğru akış: hedef depoda yeni
+          // çuval açmak.
+          if (sk.rolls.length === 0) {
+            problems.push(`${sk.sackNo}: boş çuval taşınmaz — hedef depoda yeni çuval açın`);
+            continue;
+          }
+          // Konum kuralı: çuval kaynak depoda olmalı. NULL = 2026-08-14 öncesi
+          // damgasız çuval → üye topların deposu üzerinden SAHİPLENİLİR (lazy
+          // adoption); topların hepsi zaten kaynakta olmak zorunda (aşağıda).
+          if (sk.warehouseId !== null && sk.warehouseId !== input.fromWarehouseId) {
+            problems.push(`${sk.sackNo}: bu depoda görünmüyor`);
+            continue;
+          }
+          for (const r of sk.rolls) {
+            if (r.warehouseId !== input.fromWarehouseId) problems.push(`${sk.sackNo}/${ref(r)}: çuval üyesi bu depoda değil`);
+            else if (!TRANSFERABLE.includes(r.status)) problems.push(`${sk.sackNo}/${ref(r)}: durumu uygun değil (${r.status})`);
+            else if (r.shipmentId) problems.push(`${sk.sackNo}/${ref(r)}: sevkiyata bağlı`);
+            else sackRollIds.push(r.id);
+          }
         }
         if (problems.length > 0) {
           const sample = problems.slice(0, 8).join(" · ");
@@ -137,6 +196,8 @@ export class WarehouseTransferService {
         // ATOMİK CLAIM: taşıma yalnız toplar HÂLÂ kaynak depodaysa geçer. Guard'lar
         // yukarıda tx İÇİNDE okundu ama araya giren bir sevk/başka transfer aynı
         // pencerede commit edebilir; koşullu updateMany kaybedeni 409'a düşürür.
+        // Serbest toplar ile çuval üyeleri AYRI claim'dir: guard koşulları farklı
+        // (serbest top sackId=null ister, üye top sackId=çuvalı ister).
         const moved = await tx.roll.updateMany({
           where: { id: { in: uniqueIds }, warehouseId: input.fromWarehouseId, sackId: null, shipmentId: null },
           data: { warehouseId: input.toWarehouseId },
@@ -146,10 +207,41 @@ export class WarehouseTransferService {
             `Toplar bu sırada başka bir işleme girdi (${moved.count}/${uniqueIds.length} taşınabildi) — transfer iptal edildi, tekrar deneyin.`,
           );
         }
+        if (sackRollIds.length > 0) {
+          const movedMembers = await tx.roll.updateMany({
+            where: { id: { in: sackRollIds }, warehouseId: input.fromWarehouseId, sackId: { in: sackIds }, shipmentId: null },
+            data: { warehouseId: input.toWarehouseId },
+          });
+          if (movedMembers.count !== sackRollIds.length) {
+            throw AppError.conflict(
+              `Çuval içeriği bu sırada değişti (${movedMembers.count}/${sackRollIds.length}) — transfer iptal edildi, tekrar deneyin.`,
+            );
+          }
+          // Çuvalın KENDİ konumu — sevkiyata atanmamışsa. Damgasız (NULL) çuval
+          // burada sahiplenilmiş olur: bundan sonra konumu hep dolu.
+          const movedSacks = await tx.sack.updateMany({
+            where: { id: { in: sackIds }, shipmentId: null },
+            data: { warehouseId: input.toWarehouseId },
+          });
+          if (movedSacks.count !== sackIds.length) {
+            throw AppError.conflict("Çuval bu sırada sevkiyata atandı — transfer iptal edildi, tekrar deneyin.");
+          }
+        }
 
-        await writeWarehouseMovements(
-          tx,
-          rolls.map((r) => ({
+        const memberRows = sacks.flatMap((sk) =>
+          sk.rolls.map((r) => ({
+            rollId: r.id,
+            eventType: WarehouseEventType.TRANSFER,
+            qty: r.currentQty,
+            fromWarehouseId: input.fromWarehouseId,
+            toWarehouseId: input.toWarehouseId,
+            transferId: transfer.id,
+            sackId: sk.id,
+            userId: userId ?? null,
+          })),
+        );
+        await writeWarehouseMovements(tx, [
+          ...rolls.map((r) => ({
             rollId: r.id,
             eventType: WarehouseEventType.TRANSFER,
             qty: r.currentQty,
@@ -158,13 +250,14 @@ export class WarehouseTransferService {
             transferId: transfer.id,
             userId: userId ?? null,
           })),
-        );
+          ...memberRows,
+        ]);
 
         // Resmi belge — transfer irsaliyesi v1 BURADA, aynı tx içinde donar
         // (sevk irsaliyesi emsali): içerik "taşıma anı"dır.
         await printedDocumentService.freezeForSource(tx, PrintedDocType.TRANSFER_DISPATCH, transfer.id, userId);
 
-        return { id: transfer.id, transferNo: transfer.transferNo, count: rolls.length };
+        return { id: transfer.id, transferNo: transfer.transferNo, count: rolls.length + sackRollIds.length, sackCount: sacks.length };
       }),
     );
 
@@ -173,13 +266,57 @@ export class WarehouseTransferService {
       action: "CREATE",
       tableName: "WAREHOUSE_TRANSFER",
       recordId: result.id,
-      newData: { transferNo: result.transferNo, from: from.name, to: to.name, rollCount: result.count },
+      newData: { transferNo: result.transferNo, from: from.name, to: to.name, rollCount: result.count, sackCount: result.sackCount },
     });
 
     return {
       success: true,
       data: await this.loadDetail(result.id),
-      message: `${result.transferNo}: ${result.count} top "${from.name}" → "${to.name}" taşındı.`,
+      message: `${result.transferNo}: ${result.count} top${result.sackCount > 0 ? ` (${result.sackCount} çuval)` : ""} "${from.name}" → "${to.name}" taşındı.`,
+    };
+  }
+
+  /**
+   * Çuval kodlarını transfer formu için çözer.
+   *
+   * ⚠️ Uygunluk HÜKMÜ burada verilmez, yalnız KARAR VERDİRECEK bilgi taşınır
+   * (konum, sevkiyat bağı, üye sayısı/metraj) — gerçek guard'lar create
+   * transaction'ının içindedir. Form-anı hükmü ile tx-anı gerçeği ayrışabilir;
+   * hüküm iki yerde yaşarsa bir gün biri "olur" derken diğeri 400 verir.
+   *
+   * Bulunamayan kod SESSİZCE ATLANMAZ — `notFound` listesiyle döner: operatör
+   * yanlış okuttuğu kodu bilmezse çuvalı taşıdığını sanır.
+   */
+  async lookupSacks(codes: string[]): Promise<ApiResponse<unknown>> {
+    if (codes.length === 0) return { success: true, data: { sacks: [], notFound: [] } };
+    const sacks = await prisma.sack.findMany({
+      where: { sackNo: { in: codes } },
+      select: {
+        id: true,
+        sackNo: true,
+        shipmentId: true,
+        warehouseId: true,
+        warehouse: { select: { id: true, name: true } },
+        customer: { select: { name: true } },
+        rolls: { select: { id: true, currentQty: true, status: true } },
+      },
+    });
+    const foundNos = new Set(sacks.map((sk) => sk.sackNo));
+    return {
+      success: true,
+      data: {
+        sacks: sacks.map((sk) => ({
+          id: sk.id,
+          sackNo: sk.sackNo,
+          warehouseId: sk.warehouseId,
+          warehouseName: sk.warehouse?.name ?? null,
+          customerName: sk.customer?.name ?? null,
+          shipmentAssigned: sk.shipmentId != null,
+          rollCount: sk.rolls.length,
+          totalQty: sk.rolls.reduce((sum, r) => sum + Number(r.currentQty), 0),
+        })),
+        notFound: codes.filter((c) => !foundNos.has(c)),
+      },
     };
   }
 
@@ -206,7 +343,7 @@ export class WarehouseTransferService {
     const result = await prisma.$transaction(async (tx) => {
       const rows = await tx.warehouseMovement.findMany({
         where: { transferId: id, eventType: WarehouseEventType.TRANSFER },
-        select: { rollId: true, qty: true },
+        select: { rollId: true, qty: true, sackId: true },
       });
       if (rows.length === 0) throw AppError.conflict("Transferin kalemleri bulunamadı.");
 
@@ -215,8 +352,19 @@ export class WarehouseTransferService {
         where: { id: { in: rollIds } },
         select: { id: true, barcode: true, status: true, warehouseId: true, sackId: true, shipmentId: true },
       });
+      // Guard "aynı halde mi" sorusudur ve çuval üyeliği o halin PARÇASIDIR:
+      // hareket satırı sackId taşıyorsa top hâlâ AYNI çuvalda olmalı; taşımıyorsa
+      // hâlâ serbest olmalı. Çuvaldan çıkarılmış/başka çuvala konmuş top,
+      // "transfer sonrası işlem görmüş"tür ve geri sarma yanlış defter yazar.
+      const expectedSack = new Map(rows.map((r) => [r.rollId, r.sackId ?? null]));
       const problems = rolls
-        .filter((r) => r.warehouseId !== transfer.toWarehouseId || r.sackId || r.shipmentId || !TRANSFERABLE.includes(r.status))
+        .filter(
+          (r) =>
+            r.warehouseId !== transfer.toWarehouseId ||
+            r.sackId !== (expectedSack.get(r.id) ?? null) ||
+            r.shipmentId ||
+            !TRANSFERABLE.includes(r.status),
+        )
         .map((r) => `${r.barcode ?? r.id.slice(0, 8)} (${r.status})`);
       if (problems.length > 0) {
         throw AppError.conflict(
@@ -236,12 +384,34 @@ export class WarehouseTransferService {
       });
       if (claim.count === 0) throw AppError.conflict("Transfer bu sırada başka bir işleme girdi — yenileyip tekrar deneyin.");
 
-      const back = await tx.roll.updateMany({
-        where: { id: { in: rollIds }, warehouseId: transfer.toWarehouseId, sackId: null, shipmentId: null },
-        data: { warehouseId: transfer.fromWarehouseId },
-      });
-      if (back.count !== rollIds.length) {
+      const looseIds = rows.filter((r) => !r.sackId).map((r) => r.rollId);
+      const memberIds = rows.filter((r) => r.sackId).map((r) => r.rollId);
+      const cancelSackIds = [...new Set(rows.map((r) => r.sackId).filter((x): x is string => Boolean(x)))];
+      let backCount = 0;
+      if (looseIds.length > 0) {
+        const back = await tx.roll.updateMany({
+          where: { id: { in: looseIds }, warehouseId: transfer.toWarehouseId, sackId: null, shipmentId: null },
+          data: { warehouseId: transfer.fromWarehouseId },
+        });
+        backCount += back.count;
+      }
+      if (memberIds.length > 0) {
+        const back = await tx.roll.updateMany({
+          where: { id: { in: memberIds }, warehouseId: transfer.toWarehouseId, sackId: { in: cancelSackIds }, shipmentId: null },
+          data: { warehouseId: transfer.fromWarehouseId },
+        });
+        backCount += back.count;
+      }
+      if (backCount !== rollIds.length) {
         throw AppError.conflict("Toplar bu sırada taşındı — transfer geri alınamadı, tekrar deneyin.");
+      }
+      if (cancelSackIds.length > 0) {
+        // Çuval da kaynak depoya döner — sevkiyata atanmışsa yukarıdaki roll
+        // guard'ı zaten düşürdü (üyeler shipmentId taşırdı).
+        await tx.sack.updateMany({
+          where: { id: { in: cancelSackIds }, shipmentId: null },
+          data: { warehouseId: transfer.fromWarehouseId },
+        });
       }
 
       // Defter APPEND-ONLY: TRANSFER satırı silinmez, ters satır eklenir —
@@ -255,6 +425,7 @@ export class WarehouseTransferService {
           fromWarehouseId: transfer.toWarehouseId,
           toWarehouseId: transfer.fromWarehouseId,
           transferId: id,
+          sackId: r.sackId ?? null,
           userId: userId ?? null,
           notes: reason?.trim() || null,
         })),

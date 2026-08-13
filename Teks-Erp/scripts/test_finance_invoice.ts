@@ -38,9 +38,12 @@ function check(label: string, ok: boolean, detail = ""): void {
   }
 }
 
+const TAG = `TEST-FIN-${Date.now()}`;
 const invoiceIds: string[] = [];
+const cariIds: string[] = [];
 let cariId: string | null = null;
 let customerId: string | null = null;
+let subcontractorId: string | null = null;
 
 const LINES = [
   { description: "Perde kumaşı", qty: 100, unitPrice: 25, vatRate: 20 },
@@ -59,17 +62,14 @@ async function balanceOf(currency: "TRY" | "USD" = "TRY"): Promise<Prisma.Decima
 async function main(): Promise<void> {
   console.log("=== Fatura bekçisi ===\n");
 
-  const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true, name: true } });
-  if (!customer) throw new Error("Test verisi yetersiz — aktif Customer yok.");
+  // Bekçi KENDİ tarafını yaratır — ortamdaki müşteriye dokunmak, o müşterinin
+  // GERÇEK bakiyesini test temizliğinde silmek demekti (yaşandı: İSABELLA'nın
+  // demo bakiyesi silindi, §22 mutabakat bekçisi drift raporladı).
+  const customer = await prisma.customer.create({
+    data: { code: TAG, name: `${TAG} Müşteri` },
+    select: { id: true },
+  });
   customerId = customer.id;
-
-  // Test carisini temiz başlat: önceki koşumdan kalan bakiye varsa ölçümler
-  // kayar. (Cari kaydı KALIR — başka testler de aynı müşteriyi kullanabilir.)
-  const existingCari = await prisma.cariAccount.findFirst({ where: { customerId }, select: { id: true } });
-  if (existingCari) {
-    cariId = existingCari.id;
-    await prisma.cariBalance.deleteMany({ where: { cariId } });
-  }
 
   const totals = computeInvoiceTotals(LINES);
   console.log(`   (beklenen tutar: ${totals.grandTotal.toString()} TRY)\n`);
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
   if (!cariId) {
     const c = await prisma.cariAccount.findFirstOrThrow({ where: { customerId }, select: { id: true } });
     cariId = c.id;
-    await prisma.cariBalance.deleteMany({ where: { cariId } });
+    cariIds.push(c.id);
   }
   check("§1a Taslak oluştu ve belge no aldı", /^SF\d{10}$/.test(draft.data.docNo), draft.data.docNo);
   const txnAfterDraft = await prisma.cariTransaction.count({ where: { invoiceId: draft.data.id } });
@@ -211,8 +211,12 @@ async function main(): Promise<void> {
   );
 
   // ── §6 ALIŞ FATURASI TERS YÖN ───────────────────────────────────────────
-  const sub = await prisma.subcontractor.findFirst({ where: { isActive: true }, select: { id: true } });
-  if (sub) {
+  const sub = await prisma.subcontractor.create({
+    data: { code: `${TAG}-F`, name: `${TAG} Fason` },
+    select: { id: true },
+  });
+  subcontractorId = sub.id;
+  {
     const purchase = await invoiceService.createDraft({
       type: "PURCHASE",
       subcontractorId: sub.id,
@@ -236,8 +240,7 @@ async function main(): Promise<void> {
       select: { balance: true },
     });
     check("§6c Storno fason bakiyesini SIFIRLADI", D(subBal2.balance).isZero(), `bakiye=${subBal2.balance}`);
-  } else {
-    console.log("   ⏭️  §6 atlandı — DB'de fason firma yok");
+    cariIds.push(pTxn.cariId);
   }
 
   // ── §5 STORNO ───────────────────────────────────────────────────────────
@@ -308,9 +311,18 @@ main()
       await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
       await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
     }
-    // Fason tarafında da kalan olabilir (§6 iptal edilmiş faturası).
+    // ⚠️ Kur satırını yalnız KENDİ yazdıysak silmek isterdik ama bu bekçi §9'da
+    // USD kurlarını zaten deleteMany ile temizleyip kendi değerini yazıyor —
+    // izole ticaret DB'sinde kabul edilmiş bedel; paylaşılan dev DB'sine taşınırsa
+    // burada tarih-etiketli satır kullan.
     await prisma.exchangeRate.deleteMany({ where: { currency: "USD" } });
-    if (cariId) await prisma.cariBalance.deleteMany({ where: { cariId } });
+    if (cariIds.length > 0) {
+      await prisma.cariBalance.deleteMany({ where: { cariId: { in: cariIds } } });
+      await prisma.cariTransaction.deleteMany({ where: { cariId: { in: cariIds } } });
+      await prisma.cariAccount.deleteMany({ where: { id: { in: cariIds } } });
+    }
+    if (customerId) await prisma.customer.deleteMany({ where: { id: customerId, code: { startsWith: "TEST-FIN-" } } });
+    if (subcontractorId) await prisma.subcontractor.deleteMany({ where: { id: subcontractorId, code: { startsWith: "TEST-FIN-" } } });
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);
