@@ -389,6 +389,30 @@ router.post("/invoices", requirePermission("finance:write"), async (req, res, ne
   }
 });
 
+/**
+ * @openapi
+ * /api/finance/invoices/from-goods-receipt/{id}:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Mal kabul fişinden alış faturası taslağı
+ *     description: >
+ *       Fişin toplarını ürün+renk+FİYAT kırılımında gruplayıp taslak üretir
+ *       (20 top = 20 satır DEĞİL). İptal edilmiş toplar dışarıda; miktar
+ *       initialQty (fatura mal kabul anını belgeler). Aynı fişin ikinci aktif
+ *       faturası partial unique ile engellidir.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Taslak oluşturuldu }
+ *       409: { description: Fiş zaten faturalanmış / iptal edilmiş }
+ */
+router.post("/invoices/from-goods-receipt/:id", requirePermission("finance:write"), async (req, res, next) => {
+  try {
+    res.status(201).json(await invoiceService.createDraftFromGoodsReceipt(req.params.id as string, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.patch("/invoices/:id", requirePermission("finance:write"), async (req, res, next) => {
   try {
     const b = z

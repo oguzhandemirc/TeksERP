@@ -44,6 +44,10 @@ export interface GoodsReceiptLineInput {
   qualityGrade?: string | null;
   foldType?: string | null;
   propertyIds?: string[];
+  /** Satın alma BİRİM fiyatı (opsiyonel) — fişin para biriminde. Topa yazılır
+   *  ve alış faturası satırının fiyatı ondan türer. Girilmezse fatura fiyatsız
+   *  taslak doğar (onay zaten fiyatsızı reddediyor). */
+  unitPrice?: number | null;
   /** Satır başına idempotency — ağ kopmasında yarım fiş mükerrer top doğurmaz. */
   clientToken?: string;
 }
@@ -52,6 +56,7 @@ export interface GoodsReceiptCreateInput {
   warehouseId: string;
   supplierId?: string | null;
   deliveryNoteNo?: string | null;
+  currency?: "TRY" | "USD" | "EUR" | "GBP" | "RUB";
   notes?: string | null;
   clientToken?: string;
   lines?: GoodsReceiptLineInput[];
@@ -122,6 +127,7 @@ export class GoodsReceiptService {
             warehouseId: input.warehouseId,
             supplierId: input.supplierId ?? null,
             deliveryNoteNo: input.deliveryNoteNo?.trim() || null,
+            currency: input.currency ?? "TRY",
             notes: input.notes?.trim() || null,
             clientToken: input.clientToken ?? null,
             createdById: userId ?? null,
@@ -197,6 +203,7 @@ export class GoodsReceiptService {
             warehouseId: receipt.warehouseId,
             goodsReceiptId: receipt.id,
             foldType: line.foldType ?? null,
+            purchasePrice: line.unitPrice ?? null,
             // Mal kabulde istasyon YOK (üretim noktası değil) — kolon NULL kalır.
             entryStationId: null,
           },

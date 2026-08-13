@@ -23,6 +23,9 @@ const lineSchema = z.object({
   qualityGrade: z.string().max(64).nullable().optional(),
   foldType: z.string().max(64).nullable().optional(),
   propertyIds: z.array(z.string().uuid()).optional(),
+  // Satın alma birim fiyatı — fişin para biriminde. ⚠️ Zod tanımadığı anahtarı
+  // SESSİZCE ATAR: bu satır olmadan panel fiyat gönderir, backend düşürür.
+  unitPrice: z.number().nonnegative().nullable().optional(),
   clientToken: z.string().uuid().optional(),
 });
 
@@ -30,6 +33,8 @@ const createSchema = z.object({
   warehouseId: z.string().uuid(),
   supplierId: z.string().uuid().nullable().optional(),
   deliveryNoteNo: z.string().max(64).nullable().optional(),
+  // Fiş TEK para birimlidir (satır fiyatları bu birimde).
+  currency: z.enum(["TRY","USD","EUR","GBP","RUB"]).optional(),
   notes: z.string().max(500).nullable().optional(),
   clientToken: z.string().uuid().optional(),
   lines: z.array(lineSchema).max(500).optional(),

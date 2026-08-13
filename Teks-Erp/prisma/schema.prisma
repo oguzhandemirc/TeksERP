@@ -1252,6 +1252,22 @@ model Roll {
   /// fasondan DÖNEN malın izidir, bu SATIN ALINAN malın.
   goodsReceiptId String? @db.Uuid
 
+  /// Satın alma BİRİM fiyatı (ticaret paketi, 2026-08-14) — topun metre/kg
+  /// başına alış bedeli. Para birimi topun KENDİ alanında değil, doğduğu
+  /// fişte (`GoodsReceipt.currency`): fiş tek para birimlidir ve fiyatı
+  /// satırda, birimi belgede tutmak "aynı fişte iki para birimi" saçmalığını
+  /// yapısal olarak imkânsız kılar.
+  ///
+  /// ⚠️ NEDEN TOPTA: alış fiyatı topun KALICI özelliğidir — stok değerlemesi
+  /// ("depoda kaç para var") ve alış faturasının satır tutarı ondan türer;
+  /// fişe tek fiyat yazmak aynı fişte farklı fiyatlı kalemleri (olağan)
+  /// imkânsız kılardı. Nullable: üretimden doğan topun alış fiyatı YOKTUR ve
+  /// uydurulmaz. Fabrikada daima NULL — kolon eklemek PG11+'ta metadata-only.
+  ///
+  /// Index BİLİNÇLİ EKLENMEDİ: hiçbir sorgu fiyatla süzmüyor (raporlar topu
+  /// başka kolondan bulup fiyatı OKUR) ve `rolls` zaten en çok indeksli tablo.
+  purchasePrice Decimal? @db.Decimal(14, 4)
+
   // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
   // (serbest depo). Çuvallanan top PLANNED boyunca WAREHOUSE kalır ama
   // shipmentId dolu → SERBEST stoktan düşer (çuval depo/kapı önü). SHIPPED'a yalnız
@@ -4394,6 +4410,12 @@ model GoodsReceipt {
   /// mutabakatının çıpası.
   deliveryNoteNo String? @db.VarChar(64)
 
+  /// Fişin para birimi (ticaret paketi) — satırların `Roll.purchasePrice`
+  /// değerleri BU birimdedir. Fiş TEK para birimlidir: karışık fiş, alış
+  /// faturasını iki para biriminde kesmeyi gerektirirdi ve fatura tek
+  /// birimlidir. Varsayılan TRY → mevcut fişler ve fabrika davranışı aynı.
+  currency Currency @default(TRY)
+
   status GoodsReceiptStatus @default(ACTIVE)
   notes  String?            @db.VarChar(500)
 
@@ -4410,6 +4432,7 @@ model GoodsReceipt {
   cancelledBy User?               @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
   rolls       Roll[]
   movements   WarehouseMovement[]
+  invoices    Invoice[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4571,6 +4594,9 @@ model Invoice {
   directShipmentId       String? @db.Uuid
   returnGroupId          String? @db.Uuid
   subcontractorReceiptId String? @db.Uuid
+  /// Mal kabul fişi (ticaret paketi) — alış faturasının kaynağı. Partial unique
+  /// ile "bir fiş → en çok BİR aktif fatura" (diğer kaynaklarla aynı sed).
+  goodsReceiptId         String? @db.Uuid
 
   confirmedAt   DateTime? @db.Timestamptz
   confirmedById String?   @db.Uuid
@@ -4585,6 +4611,7 @@ model Invoice {
   shipment             Shipment?             @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
   directShipment       DirectShipment?       @relation(fields: [directShipmentId], references: [id], onDelete: Restrict)
   subcontractorReceipt SubcontractorReceipt? @relation(fields: [subcontractorReceiptId], references: [id], onDelete: Restrict)
+  goodsReceipt         GoodsReceipt?         @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
 
   lines        InvoiceLine[]
   transactions CariTransaction[]
@@ -4599,6 +4626,7 @@ model Invoice {
   @@index([directShipmentId])
   @@index([returnGroupId])
   @@index([subcontractorReceiptId])
+  @@index([goodsReceiptId])
   @@map("invoices")
 }
 

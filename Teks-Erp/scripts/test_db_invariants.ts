@@ -179,6 +179,7 @@ const PARTIAL_INDEXES: Array<{
   { table: "invoices", index: "invoices_one_active_per_direct_shipment", uniq: true, predicate: `(("directShipmentId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir doğrudan sevk → tek aktif fatura" },
   { table: "invoices", index: "invoices_one_active_per_return_group", uniq: true, predicate: `(("returnGroupId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir iade grubu → tek aktif fatura" },
   { table: "invoices", index: "invoices_one_active_per_subcon_receipt", uniq: true, predicate: `(("subcontractorReceiptId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir fason kabul → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_goods_receipt", uniq: true, predicate: `(("goodsReceiptId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir mal kabul fişi → tek aktif alış faturası" },
   { table: "invoices", index: "invoices_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "payments", index: "payments_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   // ticaret paketi — carisiz kasa hareketi (migration 20260813230932)
@@ -270,6 +271,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   // bulunamayan yarım virman); tekil hareket taşıyamaz.
   { table: "cash_transactions", name: "cash_txn_transfer_group" },
   { table: "cash_transactions", name: "cash_txn_cancel_stamp" },
+  // Alış fiyatı negatif olamaz (0 meşru: bedelsiz numune).
+  { table: "rolls", name: "rolls_purchase_price_nonneg" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

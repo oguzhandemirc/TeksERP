@@ -54,6 +54,7 @@ export interface CreateInvoiceInput {
   directShipmentId?: string | null;
   returnGroupId?: string | null;
   subcontractorReceiptId?: string | null;
+  goodsReceiptId?: string | null;
   clientToken?: string | null;
 }
 
@@ -156,6 +157,7 @@ export class InvoiceService {
             directShipmentId: input.directShipmentId ?? null,
             returnGroupId: input.returnGroupId ?? null,
             subcontractorReceiptId: input.subcontractorReceiptId ?? null,
+            goodsReceiptId: input.goodsReceiptId ?? null,
             createdById: userId ?? null,
             clientToken: input.clientToken ?? null,
             lines: {
@@ -194,6 +196,106 @@ export class InvoiceService {
   }
 
   /**
+   * MAL KABUL FİŞİNDEN ALIŞ FATURASI TASLAĞI.
+   *
+   * Muhasebecinin 20 kalemlik fişi satır satır yeniden yazmasını önler —
+   * persona denetiminde "kritik" işaretlenen sürtünmelerden biri.
+   *
+   * ⚠️ SATIRLAR GRUPLANIR (ürün + renk + FİYAT): fiş 20 top doğurmuş olabilir
+   * ama fatura satırı 20 olmamalı — tedarikçi faturası "Patos gri 10.000 m"
+   * der, "500 m × 20 satır" demez. Gruplama anahtarına FİYAT dahildir: aynı
+   * kumaşın farklı fiyatlı partileri tek satırda toplanamaz (ortalama fiyat
+   * uydurmak olurdu).
+   *
+   * ⚠️ İPTAL EDİLMİŞ TOPLAR DIŞARIDA: iptal "bu mal hiç gelmedi" demektir
+   * (softDelete qtyOut=0 semantiği) — faturaya girerse gelmeyen mala para
+   * ödenir.
+   *
+   * ⚠️ Miktar `currentQty` DEĞİL `initialQty`: fatura MAL KABUL ANINI belgeler;
+   * top sonradan kesilir/sevk edilirse tedarikçiye borcumuz değişmez.
+   */
+  async createDraftFromGoodsReceipt(
+    goodsReceiptId: string,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const receipt = await prisma.goodsReceipt.findUnique({
+      where: { id: goodsReceiptId },
+      select: {
+        id: true,
+        receiptNo: true,
+        status: true,
+        currency: true,
+        supplierId: true,
+        deliveryNoteNo: true,
+        createdAt: true,
+        rolls: {
+          where: { status: { not: "CANCELLED" } },
+          select: {
+            initialQty: true,
+            purchasePrice: true,
+            item: { select: { id: true, name: true, unit: true } },
+            color: { select: { name: true } },
+          },
+        },
+      },
+    });
+    if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
+    if (receipt.status === "CANCELLED") {
+      throw AppError.conflict(`${receipt.receiptNo} iptal edilmiş — faturası kesilemez.`);
+    }
+    if (!receipt.supplierId) {
+      throw AppError.badRequest(
+        `${receipt.receiptNo} fişinde tedarikçi seçilmemiş — alış faturası için tedarikçi gerekli.`,
+      );
+    }
+    if (receipt.rolls.length === 0) {
+      throw AppError.badRequest(`${receipt.receiptNo} fişinde faturalanacak top yok.`);
+    }
+
+    const groups = new Map<
+      string,
+      { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }
+    >();
+    for (const r of receipt.rolls) {
+      const price = D(r.purchasePrice ?? 0);
+      const key = `${r.item.id}|${r.color?.name ?? ""}|${price.toString()}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.qty = existing.qty.plus(D(r.initialQty));
+      } else {
+        groups.set(key, {
+          itemId: r.item.id,
+          description: r.color?.name ? `${r.item.name} · ${r.color.name}` : r.item.name,
+          qty: D(r.initialQty),
+          unitPrice: price,
+          unit: r.item.unit ?? "m",
+        });
+      }
+    }
+
+    return this.createDraft(
+      {
+        type: InvoiceType.PURCHASE,
+        customerId: receipt.supplierId,
+        currency: receipt.currency,
+        issueDate: receipt.createdAt,
+        externalNo: receipt.deliveryNoteNo,
+        notes: `${receipt.receiptNo} mal kabul fişinden üretildi.`,
+        goodsReceiptId: receipt.id,
+        lines: [...groups.values()].map((g) => ({
+          itemId: g.itemId,
+          description: g.description,
+          qty: g.qty,
+          unit: g.unit,
+          unitPrice: g.unitPrice,
+          vatRate: 20,
+        })),
+      },
+      userId,
+    );
+  }
+
+  /**
    * Kaynak belge zaten faturalanmış mı?
    *
    * ⚠️ Bu kontrol partial unique'i YEDEKLEMEZ, ONU AÇIKLAR: DB seddi yarışı
@@ -207,6 +309,7 @@ export class InvoiceService {
       ["directShipmentId", "directShipmentId", "Bu doğrudan sevk"],
       ["returnGroupId", "returnGroupId", "Bu iade"],
       ["subcontractorReceiptId", "subcontractorReceiptId", "Bu fason kabul"],
+      ["goodsReceiptId", "goodsReceiptId", "Bu mal kabul fişi"],
     ];
     for (const [key, col, label] of src) {
       const value = input[key] as string | null | undefined;
@@ -664,6 +767,7 @@ export class InvoiceService {
             subcontractor: { select: { id: true, code: true, name: true, taxNumber: true } },
           },
         },
+        goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
         lines: { orderBy: { lineNo: "asc" }, include: { item: { select: { id: true, code: true, name: true } } } },
       },
     });

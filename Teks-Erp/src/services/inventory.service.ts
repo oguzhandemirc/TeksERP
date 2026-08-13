@@ -658,6 +658,8 @@ export class InventoryService {
        * Doğrulama (var mı/aktif mi) `resolveTargetWarehouseId`'de.
        */
       warehouseId?: string | null;
+      /** Satın alma birim fiyatı (mal kabul yolu) — topun kalıcı alış bedeli. */
+      purchasePrice?: number | null;
       /** Topu doğuran mal kabul fişi (yalnız `GoodsReceipt` yolu doldurur). */
       goodsReceiptId?: string | null;
       /**
@@ -913,6 +915,7 @@ export class InventoryService {
           data: {
             barcode,
             warehouseId: targetWarehouseId,
+            purchasePrice: opts?.purchasePrice ?? null,
             goodsReceiptId: opts?.goodsReceiptId ?? null,
             clientToken: data.clientToken ?? null,
             itemId: data.itemId,
