@@ -20,6 +20,9 @@ import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
+import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
+import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
+import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
 import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesPage";
@@ -200,6 +203,32 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="return:read">
         <ReturnReasonsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/goods-receipts",
+    element: (
+      <ProtectedRoute requirePermission="goods-receipt:read">
+        <GoodsReceiptsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/warehouse-transfers",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:transfer">
+        <WarehouseTransfersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Depolar — "tek depo varken gizle" kuralının DIŞINDA (ikinci depoyu açmanın
+    // tek yolu burasıdır); yalnız izinle kapılı. Karo ile route AYNI izni taşır.
+    path: "definitions/warehouses",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <WarehousesPage />
       </ProtectedRoute>
     ),
   },

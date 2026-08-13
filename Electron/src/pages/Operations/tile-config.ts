@@ -1,7 +1,9 @@
 import {
   ShoppingCart,
   Factory,
+  ArrowLeftRight,
   Package,
+  PackagePlus,
   Scale,
   Truck,
   SwatchBook,
@@ -35,6 +37,18 @@ export interface OperationsVisibilityContext {
    * (izin yok / henüz yüklenmedi) 0 — karo yalnız bayrağa göre karar verir.
    */
   pendingPlannedShipments: number;
+  /**
+   * ÇOK DEPOLU kurulum mu (aktif depo > 1)?
+   *
+   * ⚠️ "Fabrikada sıfır görünür fark" kuralının karo ayağı: tek depolu üretici
+   * fabrikada Depo Transferi karosu ÇİZİLMEZ — orada taşınacak ikinci depo yok
+   * ve karo yalnız gürültü olurdu. İkinci depo açıldığı gün kendiliğinden belirir.
+   * Emsal: mobil `PlaceActions` (seçenek sayısı 1 ise madde anlamsız).
+   *
+   * Mal Kabul karosu bu bayrağa BAĞLANMAZ — tek depolu bir alım-satım firması da
+   * onu kullanır; orada kapı İZİNDİR (`goods-receipt:*`, hiçbir varsayılan rolde yok).
+   */
+  multiWarehouse: boolean;
 }
 
 export interface OperationsTile {
@@ -104,6 +118,30 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/rolls",
     group: "warehouse",
     permission: "roll:read",
+  },
+  {
+    key: "goods-receipts",
+    title: "Mal Kabul",
+    description: "Satın alınan malın depo girişi — fiş + barkod + etiket",
+    icon: PackagePlus,
+    to: "/operations/goods-receipts",
+    group: "warehouse",
+    // Kapı İZİN: bu ekran yalnız alım-satım kurulumundadır (üretici fabrika malı
+    // KK1'den alır) ve izin hiçbir varsayılan rol şablonunda YOK.
+    // ⚠️ `multiWarehouse` şartı KONMAZ — tek depolu ticaret firması da kullanır.
+    permission: "goods-receipt:read",
+  },
+  {
+    key: "warehouse-transfers",
+    title: "Depo Transferi",
+    description: "Depolar arası taşıma + transfer irsaliyesi",
+    icon: ArrowLeftRight,
+    to: "/operations/warehouse-transfers",
+    group: "warehouse",
+    permission: "warehouse:transfer",
+    // Tek depolu kurulumda taşınacak ikinci depo YOK → karo çizilmez (fabrikada
+    // sıfır görünür fark). İkinci depo açıldığı gün kendiliğinden belirir.
+    visibleWhen: (ctx) => ctx.multiWarehouse,
   },
   {
     key: "shipments",

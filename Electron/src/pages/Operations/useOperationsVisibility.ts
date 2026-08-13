@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { sackStoreService } from "./SackStore/service";
 import type { OperationsVisibilityContext } from "./tile-config";
 
@@ -19,6 +20,7 @@ import type { OperationsVisibilityContext } from "./tile-config";
 export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
   const { hasPermission } = useRoleAccess();
+  const { multiWarehouse } = useMultiWarehouse();
 
   // Çıkış bekleyen sevkiyat SONDASI — yalnız karar bunu gerektiriyorsa koşar:
   // bayrak açıksa karo zaten görünür (sorgu gereksiz), izin yoksa uç 403 verir.
@@ -34,5 +36,8 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   return {
     shipmentConfirmationEnabled,
     pendingPlannedShipments: pending.data?.data?.length ?? 0,
+    // Tek kaynak `useMultiWarehouse` — karar burada YENİDEN hesaplanmaz
+    // (kopyalansa biri gün gelir "aktif" süzgecini unuturdu).
+    multiWarehouse,
   };
 }

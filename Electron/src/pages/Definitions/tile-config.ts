@@ -14,6 +14,7 @@ import {
   Settings2,
   Tags,
   Undo2,
+  Warehouse,
   FileText,
   Printer,
   Ruler,
@@ -85,6 +86,17 @@ export const definitionTiles: DefinitionTile[] = [
     // Ürün niteliği değil, kalite/iade olay kodu — Hata Tipleri ile aynı grupta.
     group: "production",
     permission: "return:read",
+  },
+  {
+    key: "warehouses",
+    title: "Depolar",
+    description: "Fiziksel depo tanımları + varsayılan depo",
+    icon: Warehouse,
+    to: "/definitions/warehouses",
+    group: "production",
+    // ⚠️ İzin route ile BİREBİR (`content-routes.tsx`): ayrışırsa kart görünür,
+    // tıklayınca /forbidden'a düşer.
+    permission: "warehouse:read",
   },
   {
     key: "customers",

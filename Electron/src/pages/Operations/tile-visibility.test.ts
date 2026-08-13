@@ -21,7 +21,13 @@ import { commandSections } from "@/components/layout/command-entries";
 function ctx(
   over: Partial<OperationsVisibilityContext> = {},
 ): OperationsVisibilityContext {
-  return { shipmentConfirmationEnabled: false, pendingPlannedShipments: 0, ...over };
+  return {
+    shipmentConfirmationEnabled: false,
+    pendingPlannedShipments: 0,
+    // Varsayılan TEK DEPO (fabrika kurulumu) — depo yüzeyleri çizilmemeli.
+    multiWarehouse: false,
+    ...over,
+  };
 }
 
 describe("karo bağlantıları", () => {
@@ -50,9 +56,28 @@ describe("karo bağlantıları", () => {
     expect(predicate?.(ctx({ shipmentConfirmationEnabled: true, pendingPlannedShipments: 3 }))).toBe(true);
   });
 
-  it("koşullu karo YALNIZ Sevk Kapısı (kurşun karoları koşulsuzlaştı)", () => {
+  it("⭐ Depo Transferi TEK depoda çizilmez, ikinci depo açılınca belirir", () => {
+    const predicate = tile("warehouse-transfers")?.visibleWhen;
+    expect(predicate).toBeDefined();
+    // Fabrika kurulumu (tek depo): karo YOK — "sıfır görünür fark" kuralı.
+    expect(predicate?.(ctx())).toBe(false);
+    // İkinci depo açıldığı an kendiliğinden görünür.
+    expect(predicate?.(ctx({ multiWarehouse: true }))).toBe(true);
+  });
+
+  it("Mal Kabul karosu depo sayısına BAĞLI DEĞİL (kapısı izindir)", () => {
+    const tileDef = tile("goods-receipts");
+    expect(tileDef).toBeDefined();
+    // Tek depolu bir alım-satım firması da bu ekranı kullanır → koşul konmaz;
+    // fabrikada görünmemesini sağlayan şey `goods-receipt:read` izninin hiçbir
+    // varsayılan rol şablonunda OLMAMASIDIR.
+    expect(tileDef?.visibleWhen).toBeUndefined();
+    expect(tileDef?.permission).toBe("goods-receipt:read");
+  });
+
+  it("koşullu karolar: Sevk Kapısı + Depo Transferi", () => {
     const conditional = operationsTiles.filter((t) => t.visibleWhen).map((t) => t.key);
-    expect(conditional.sort()).toEqual(["sack-store"]);
+    expect(conditional.sort()).toEqual(["sack-store", "warehouse-transfers"]);
   });
 });
 
