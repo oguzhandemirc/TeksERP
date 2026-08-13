@@ -11,6 +11,7 @@ const LAST_ROUTE_KEY = 'device_quick_wo_last_route';
 const KK1_MANUAL_METER_KEY = 'device_kk1_manual_meter';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
+const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
 const SCAN_SOUND_KEY = 'device_scan_sound';
 const DOC_PAGE_SIZE_KEY = 'device_doc_page_size';
 
@@ -77,6 +78,11 @@ interface DeviceSettingsState {
   init: () => Promise<void>;
   setManualBarcodeEntry: (v: boolean) => Promise<void>;
   setLastRouteTemplateId: (v: string | null) => Promise<void>;
+  /** Tambur "Bu işten çıkanlar" paneli katlı mı. Cihazda kalıcı: manuel metre
+   *  girişi açık istasyonda yer dar — operatör kapatır, her kartta yeniden
+   *  kapatmak zorunda kalmaz (kk1ManualEntry ile aynı gerekçe). */
+  tamburOutputCollapsed: boolean;
+  setTamburOutputCollapsed: (v: boolean) => Promise<void>;
   setKk1ManualEntry: (v: boolean) => Promise<void>;
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
   setTamburManualMode: (v: boolean) => Promise<void>;
@@ -114,12 +120,13 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   kk1ManualEntry: false,
   tamburCutMode: 'manual',
   tamburManualMode: false,
+  tamburOutputCollapsed: false,
   scanSoundEnabled: true,
   docPageSize: {},
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburManual, scanSound, docSizes] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburManual, scanSound, docSizes, outputCollapsed] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -128,11 +135,13 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(TAMBUR_MANUAL_MODE_KEY),
         storage.getItem(SCAN_SOUND_KEY),
         storage.getItem(DOC_PAGE_SIZE_KEY),
+        storage.getItem(TAMBUR_OUTPUT_COLLAPSED_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
       lastRouteTemplateId: lastRoute || null,
       kk1ManualEntry: kk1Manual === 'true',
+      tamburOutputCollapsed: outputCollapsed === 'true',
       // Bilinmeyen/bozuk değer → varsayılan 'manual' (kayıt yoksa da öyle).
       tamburCutMode: tamburMode === 'auto' ? 'auto' : 'manual',
       // Güvenli varsayılan KAPALI: yalnız birebir 'true' modu açar (bozuk değer
@@ -162,6 +171,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setKk1ManualEntry: async (v) => {
     set({ kk1ManualEntry: v });
     await storage.setItem(KK1_MANUAL_METER_KEY, v ? 'true' : 'false');
+  },
+
+  setTamburOutputCollapsed: async (v) => {
+    set({ tamburOutputCollapsed: v });
+    await storage.setItem(TAMBUR_OUTPUT_COLLAPSED_KEY, String(v));
   },
 
   setTamburCutMode: async (v) => {

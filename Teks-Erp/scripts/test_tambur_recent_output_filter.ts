@@ -73,6 +73,84 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
       "cursor modunda da TAMBUR_MANUAL topu listede",
     );
 
+    // ── KUMAŞ FİLTRESİ (2026-08-12) ──────────────────────────────────────────
+    // KK1 "Tüm Girişler" + Tambur "Son Çıkan Toplar" ORTAK filtre şeridi bunu
+    // kullanıyor. ⚠️ Bilinmeyen anahtar Zod `z.object`te SESSİZCE ATILIR: filtre
+    // seçili görünür, liste süzülmez ve operatör yanlış listeye bakar. Bu yüzden
+    // kontrol "etkisi var mı" diye sorar — varlığına değil DAVRANIŞA bakar.
+    const otherItem = await p.item.findFirst({
+      where: { isActive: true, id: { not: item.id } },
+      select: { id: true },
+    });
+    const byItem = await svc.listRecentOutputRolls({ mode: "cursor", limit: 50, itemId: item.id });
+    const byItemRows = byItem.data as { id: string; itemId: string }[];
+    ok(
+      byItemRows.length > 0 && byItemRows.every((r) => r.itemId === item.id),
+      "kumaş filtresi: dönen HER satır seçilen kumaşa ait",
+    );
+    if (otherItem) {
+      const otherRes = await svc.listRecentOutputRolls({
+        mode: "cursor",
+        limit: 50,
+        itemId: otherItem.id,
+      });
+      ok(
+        !(otherRes.data as { id: string }[]).some((r) => r.id === alive.id),
+        "kumaş filtresi: BAŞKA kumaş seçilince bu top listede DEĞİL",
+      );
+    }
+
+    // ── MAKİNE + PERSONEL (2026-08-12) — "Bu makine" tuşu + Personel çipi ────
+    // İki aktif Tambur makinesi var; liste varsayılan HEPSİNİ gösterir, süzgeç
+    // opsiyoneldir. Körleşirse tuş "seçili" görünür ama liste süzülmez.
+    const opUser = await p.user.create({
+      data: { username: `${stamp}-tambur-op`.toLowerCase(), passwordHash: "x", fullName: "Tambur Op", isActive: true },
+      select: { id: true },
+    });
+    const st = await p.station.create({
+      data: { code: `TEST-RCO-ST-${stamp}`, name: `${stamp} İst`, kind: "TAMBUR", type: "INTERNAL" },
+      select: { id: true },
+    });
+    const mach = await p.machine.create({
+      data: { code: `TEST-RCO-M-${stamp}`, name: `${stamp} Makine`, stationId: st.id, isActive: true },
+      select: { id: true },
+    });
+    const attributed = await p.roll.create({
+      data: {
+        barcode: `TEST-RCO-AT-${stamp}`, itemId: item.id, initialQty: 40, currentQty: 40,
+        status: "WAREHOUSE", entrySource: "TAMBUR_SPLIT", form: "TOP",
+        createdById: opUser.id, createdMachineId: mach.id,
+      },
+      select: { id: true },
+    });
+    createdIds.push(attributed.id);
+    const byMachine = await svc.listRecentOutputRolls({ mode: "cursor", limit: 50, createdMachineId: mach.id });
+    ok(
+      (byMachine.data as { id: string }[]).some((r) => r.id === attributed.id) &&
+        !(byMachine.data as { id: string }[]).some((r) => r.id === alive.id),
+      "createdMachineId: yalnız o makinenin kesimleri",
+    );
+    const byCreator = await svc.listRecentOutputRolls({ mode: "cursor", limit: 50, createdById: opUser.id });
+    ok(
+      (byCreator.data as { id: string }[]).some((r) => r.id === attributed.id) &&
+        !(byCreator.data as { id: string }[]).some((r) => r.id === alive.id),
+      "createdById: yalnız o personelin kesimleri",
+    );
+    await p.roll.deleteMany({ where: { id: attributed.id } });
+    createdIds.splice(createdIds.indexOf(attributed.id), 1);
+    await p.machine.delete({ where: { id: mach.id } });
+    await p.station.delete({ where: { id: st.id } });
+    await p.user.delete({ where: { id: opUser.id } });
+
+    // Tarih aralığı: gelecekteki pencere hiçbir şey döndürmemeli. `dateField`
+    // sözleşmesinin mobil tarafı (buildRollQueryParams) buna dayanıyor.
+    const future = await svc.listRecentOutputRolls({
+      mode: "cursor",
+      limit: 50,
+      dateFrom: new Date(Date.now() + 86_400_000),
+    });
+    ok((future.data as unknown[]).length === 0, "tarih aralığı: gelecek pencerede 0 satır");
+
     // Ölü manuel top yine düşmeli — entrySource genişledi diye statü kapısı
     // gevşemedi (iptal edilen manuel topun etiketi basılamaz).
     const deadManualBarcode = `TEST-RCO-MD-${stamp}`;

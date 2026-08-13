@@ -1351,6 +1351,11 @@ export class TamburService {
     qualityGrade?: string;
     /** Etiket hedefindeki müşteri (`Roll.labelCustomerId`). */
     customerId?: string;
+    /** Kumaş (2026-08-12) — KK1 "Tüm Girişler" ile ORTAK filtre şeridinden. */
+    itemId?: string;
+    /** Kesimi yapan makine / personel (2026-08-12): "Bu makine" + Personel çipi. */
+    createdMachineId?: string;
+    createdById?: string;
   }): Promise<ApiResponse<Roll[]> | CursorPaginatedResponse<Roll>> {
     const where: Prisma.RollWhereInput = {
       // Tambur istasyonundan ÇIKAN her top — iki doğum yolu var:
@@ -1398,6 +1403,11 @@ export class TamburService {
       };
     }
     if (params?.qualityGrade) where.qualityGrade = params.qualityGrade;
+    // Kumaş: düz eşitlik (tekil seçim). Çoklu seçim istenirse `readIdCondition`
+    // ile `{ in: [...] }`e çevrilir — ham CSV geçirmek P2007/400 demektir.
+    if (params?.itemId) where.itemId = params.itemId;
+    if (params?.createdMachineId) where.createdMachineId = params.createdMachineId;
+    if (params?.createdById) where.createdById = params.createdById;
     if (params?.customerId) {
       // Etiket hedefindeki müşteri — `Roll.labelCustomerId` (B4). Kolon
       // yazılmadan önce basılmış toplarda NULL'dur ve süzgece takılmaz;
@@ -1976,6 +1986,10 @@ export class TamburService {
      * eski istemciler ve dahili çağrılar kırılmaz.
      */
     sessionStationId?: string | null,
+    /** Kesimin yapıldığı makine — "Bu makine" süzgeci + makine raporları için.
+     *  (2026-08-12: kesim çocukları createdById alıyordu ama createdMachineId
+     *  ALMIYORDU → makine süzgeci kesimleri hiç göremiyordu.) */
+    sessionMachineId?: string | null,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
@@ -2097,6 +2111,7 @@ export class TamburService {
           entryStationId: resolveEntryStationId({ sessionStationId }),
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          createdMachineId: sessionMachineId ?? null,
           // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
           // dönen (üretime devam) parçada işaretlenmez.
           markedForKartela:
@@ -2175,7 +2190,9 @@ export class TamburService {
       try {
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null, currentQty: { gt: 0 } },
+              // ⚠️ `currentQty > 0` YOK — cutOpenFabric aşım dalıyla aynı gerekçe
+              // (0'a inmiş topta ek kesim; 2026-08-12). Çuval/sevk guard'ları duruyor.
+              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null },
               data: { currentQty: 0, initialQty: 0 },
             })
           : await tx.roll.update({
@@ -2291,6 +2308,8 @@ export class TamburService {
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
     sessionStationId?: string | null,
+    /** Kesimin makinesi — kesilen parçayla AYNI damga (cutWarehouseRoll ikizi). */
+    sessionMachineId?: string | null,
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> {
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
@@ -2457,6 +2476,7 @@ export class TamburService {
             entryStationId: resolveEntryStationId({ sessionStationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            createdMachineId: sessionMachineId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
             lastLabelSnapshot: { stock: true },
             },
@@ -2613,6 +2633,8 @@ export class TamburService {
       clientToken?: string;
     },
     userId?: string,
+    /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
+    sessionMachineId?: string | null,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.lengthMeters > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
@@ -2750,6 +2772,7 @@ export class TamburService {
           entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          createdMachineId: sessionMachineId ?? null,
           // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
           markedForKartela:
             (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
@@ -2822,7 +2845,16 @@ export class TamburService {
         // WHERE eşleşmez → P2025 → 409 (KK2'ye geri çekilmiş top kesilmez).
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gt: 0 } },
+              // ⚠️ AŞIM DALINDA `currentQty > 0` ŞARTI YOK (2026-08-12 saha
+              // vakası): 500 m kayıtlı kumaş fiziksel 550 m çıkabilir ve fazlalık
+              // TEK kesimde bitmeyebilir (50 m'den 3 top). İlk aşım kesimi kalanı
+              // 0'a çeker; guard `gt: 0` olarak kalsaydı 0'daki topta İKİNCİ kesim
+              // P2025'e düşüp "bu sırada değişti" yarış mesajını basıyordu —
+              // oysa yarış yok, mal fiziksel olarak elde. Çifte-harcama koruması
+              // burada ANLAMSIZ: 0'ın altına inilecek gerçek stok kalmadı; her
+              // aşım kesimi çocuk + sapma satırı üretir (aşağıdaki defter), yani
+              // iz kaybolmaz. KK2 reopen/statü guard'ları AYNEN duruyor.
+              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId },
               data: { currentQty: 0 },
             })
           : await tx.roll.update({
@@ -3126,6 +3158,7 @@ export class TamburService {
             entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            createdMachineId: machineId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
             lastLabelSnapshot: { stock: true },
             },

@@ -119,8 +119,19 @@ const CHILD_CANCELABLE_STATUSES: RollStatus[] = [
 ];
 
 /**
- * SINGLE = tek kesim parçası · FULL = finalize tümden · MANUAL = elle eklenen
- * topun kaydını geri alma (2026-08-04).
+ * SINGLE = tek kesim parçası · SINGLE_RESTORE = tek parçayı iptal edip
+ * metrajını KAYNAK TOPA GERİ KOY (2026-08-12) · FULL = finalize tümden ·
+ * MANUAL = elle eklenen topun kaydını geri alma (2026-08-04).
+ *
+ * SINGLE_RESTORE neden var: kaynak arşivdeyken iki farklı fiziksel gerçek
+ * olabilir ve 2026-08-09'a kadar yalnız BİRİ yazılmıştı — (a) kumaş hiç yoktu
+ * (çift giriş) → SINGLE'ın kayıt-düzeltmesi dalı doğru cevap; (b) kumaş elde,
+ * kaydı yanlış, yeniden kesilecek → metraj iş emrine DÖNMELİ. (b)'nin tek yolu
+ * "Tüm işlemi geri al"dı ve o, partinin DİĞER toplarını da iptal ediyordu
+ * (saha sorusu 2026-08-12: "diğer topları canlandırmaya ne gerek var?").
+ * SINGLE_RESTORE = FULL'ün dirilme makinesi, TEK topun metrajıyla ve kardeş
+ * iptali olmadan. Ek izin/sebep İSTEMEZ — operatörün günlük düzeltmesidir
+ * (FULL'ün yetki kapısı "iş emri geçmişini toptan yeniden yazma" içindi).
  *
  * MANUAL neden BU serviste: operatörün elindeki buton zaten burada ("Son Çıkan
  * Toplar" satırındaki Geri Al) ve o buton elle eklenen topta da GÖRÜNÜYORDU —
@@ -129,7 +140,7 @@ const CHILD_CANCELABLE_STATUSES: RollStatus[] = [
  * Ayrı bir uç/ekran açmak yerine var olan yüzey doğru cevabı verir hâle
  * getirildi; yeni izin kodu da doğmadı (2026-08-01 kurşun bypass dersi).
  */
-type UndoMode = "SINGLE" | "FULL" | "MANUAL";
+type UndoMode = "SINGLE" | "SINGLE_RESTORE" | "FULL" | "MANUAL";
 
 /** Bir modun önizlemesi — istemci bunları YAN YANA gösterip operatöre sordurur. */
 export interface UndoOption {
@@ -253,6 +264,9 @@ export class TamburUndoService {
     if (ctx.mode === "SINGLE") {
       return this.applySingle(ctx.parentId, ctx.children[0]!.id, userId, ctx.parentArchived);
     }
+    if (ctx.mode === "SINGLE_RESTORE") {
+      return this.applySingleRestore(ctx.parentId, ctx.children[0]!.id, userId);
+    }
     return this.applyFull(ctx.parentId, userId, opts?.reason ?? null);
   }
 
@@ -339,7 +353,28 @@ export class TamburUndoService {
       },
       _sum: { qty: true },
     });
-    return childSum.plus(discardedAgg._sum.qty ?? new Prisma.Decimal(0));
+    // TEKİL İPTALLERİN "KAYBOLAN" METRAJI DA GERİ SAYILIR (2026-08-12, F0402).
+    // Arşiv dalındaki tekil iptal, metrajı ÇOCUĞUN satırına kayıt düzeltmesi
+    // olarak yazar (`applySingle` → rollId: childId, source: TAMBUR_UNDO_SINGLE)
+    // ve çocuk CANCELLED olduğu için yukarıdaki children toplamına GİRMEZ.
+    // Sayılmasaydı: tüm çocukları tek tek iptal edilmiş bir kapanışta (saha
+    // vakası F0402, 208 m) "iptal edilebilir çocuk kalmamış" + geri konacak
+    // metraj 0 → tümden geri alma da imkânsız, metraj sonsuza dek kayıp.
+    // ⚠️ SENKRON SÖZLEŞMESİ: buraya eklenen HER kaynak, applyFull 5b'deki
+    // tersleme süzgecine de eklenmek ZORUNDA — yoksa metraj geri konur ama
+    // sapma satırı canlı kalır ve dönem raporu aynı metrajı İKİ KEZ görür.
+    const singleUndoAgg = await client.rollVariance.aggregate({
+      where: {
+        reversedAt: null,
+        kind: RollVarianceKind.RECORD_CORRECTION,
+        source: VARIANCE_SOURCES.TAMBUR_UNDO_SINGLE,
+        roll: { parentRollId: parentId },
+      },
+      _sum: { qty: true },
+    });
+    return childSum
+      .plus(discardedAgg._sum.qty ?? new Prisma.Decimal(0))
+      .plus(singleUndoAgg._sum.qty ?? new Prisma.Decimal(0));
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -389,8 +424,12 @@ export class TamburUndoService {
 
     // Hangi modlar MÜMKÜN: bir çocuğa dokunulduysa tekil iptal her zaman
     // masadadır (kaynak arşivde olsa bile — o durumda metraj geri dönmez,
-    // SAPMA olarak kayda geçer). Tümden geri alma yalnız kapanmış kaynakta.
+    // SAPMA olarak kayda geçer). Tekil CANLANDIRMA yalnız kaynak arşivdeyken
+    // anlamlı — kaynak yaşıyorsa SINGLE metrajı zaten geri veriyor, ikinci bir
+    // "geri koy" seçeneği aynı işi iki adla sunmak olurdu. Tümden geri alma
+    // yalnız kapanmış kaynakta.
     const canOfferSingle = touchedChildId !== null;
+    const canOfferRestore = touchedChildId !== null && parentArchived;
     const canOfferFull = parentArchived || roll.status === RollStatus.TAMBUR_CONSUMED;
     const defaultMode: UndoMode = canOfferSingle ? "SINGLE" : "FULL";
 
@@ -402,12 +441,19 @@ export class TamburUndoService {
     // Doğru cevap "yenileyin"dir. Mod GÖNDERMEYEN eski istemci etkilenmez —
     // o `defaultMode`a düşer ve bu bilinçli olarak EN DAR olandır.
     if (opts?.mode) {
-      const available = opts.mode === "SINGLE" ? canOfferSingle : canOfferFull;
+      const available =
+        opts.mode === "SINGLE"
+          ? canOfferSingle
+          : opts.mode === "SINGLE_RESTORE"
+            ? canOfferRestore
+            : canOfferFull;
       if (!available) {
         throw AppError.conflict(
           opts.mode === "FULL"
             ? "Bu top için tümden geri alma artık yapılamıyor (kapanış bu sırada değişmiş olabilir) — ekranı yenileyin"
-            : "Bu top için tek parça iptali yapılamıyor — ekranı yenileyin",
+            : opts.mode === "SINGLE_RESTORE"
+              ? "Bu top için iş emrine geri alma yapılamıyor (kaynak top artık arşivde değil) — ekranı yenileyin"
+              : "Bu top için tek parça iptali yapılamıyor — ekranı yenileyin",
         );
       }
     }
@@ -433,13 +479,23 @@ export class TamburUndoService {
     const single = touchedChildId
       ? await this.previewSingle(touchedChildId, parent, parentArchived)
       : null;
+    const restore =
+      canOfferRestore && touchedChildId
+        ? await this.previewSingleRestore(touchedChildId, parentId)
+        : null;
     const full = canOfferFull ? await this.previewFull(parentId, parent, opts) : null;
 
+    // SIRA = GÖSTERİM SIRASI: canlandırma ÖNCE — sahadaki asıl ihtiyaç o
+    // ("kumaş elimde, yeniden keseceğim"); kayıt düzeltmesi ikinci; tümden
+    // geri alma en sonda (süpervizör aracı). `defaultMode` bundan bağımsız
+    // olarak EN DAR kalır (mod göndermeyen eski istemci güvenliği).
     const options: UndoOption[] = [];
+    if (restore) options.push(restore.option);
     if (single) options.push(single.option);
     if (full) options.push(full.option);
 
-    const selected = mode === "SINGLE" ? single : full;
+    const selected =
+      mode === "SINGLE" ? single : mode === "SINGLE_RESTORE" ? restore : full;
     if (!selected) {
       // Buraya düşmek mantıksal olarak imkânsız (mod çözümü yalnız mümkün
       // olanlardan seçiyor) — yine de sessiz undefined dönmek yerine konuş.
@@ -496,16 +552,19 @@ export class TamburUndoService {
     const finalBlock = childBlock ?? parentBlock;
     const qty = Number(child.initialQty);
     if (child.barcode) warnings.push(`Basılmış ${child.barcode} etiketi varsa imha edilmeli`);
-    if (parentArchived) {
-      warnings.push(
-        `Kaynak top arşivde — ${qty} m geri DÖNMEZ, "kayıt düzeltmesi" olarak kayda geçer`,
-      );
-    }
+    // ⚠️ ARŞİV UYARISI BURAYA GERİ EKLENMEZ: aynı bilgi `description`'da kelimesi
+    // kelimesine var ("kaynağa geri dönmez … kayıt düzeltmesi olarak yazılır") ve
+    // istemci ikisini alt alta basıyordu — 2026-08-12 "modal çok kalabalık" saha
+    // geri bildiriminin kalemlerinden biri. warnings[] YALNIZ description'da
+    // olmayan bilgiyi taşır (örn. etiket imhası).
 
     return {
       option: {
         mode: "SINGLE",
-        label: "Yalnız bu topu iptal et",
+        // METİN SETİ (2026-08-12 kullanıcı kararı): tuş yaptığı İŞİN adını
+        // taşır. Arşiv dalında hiçbir şey "geri alınmıyor" — top iptal ediliyor;
+        // "Geri Al" adı operatörü metrajın döneceğine inandırıyordu.
+        label: parentArchived ? "Topu iptal et (kayıt yanlıştı)" : "Kesimi geri al",
         description: parentArchived
           ? `${child.barcode ?? "bu parça"} iptal edilir. ${qty} m kaynağa geri dönmez (kaynak arşivde) — kayıt düzeltmesi olarak yazılır. İş emri KAPALI kalır.`
           : `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri döner.`,
@@ -530,6 +589,100 @@ export class TamburUndoService {
         ],
         reopenErrorCount: 0,
         workOrder: null,
+        warnings,
+      },
+    };
+  }
+
+  /**
+   * TEKİL CANLANDIRMA önizlemesi (İş Emrine Geri Al, 2026-08-12).
+   *
+   * Yalnız kaynak ARŞİVDEYKEN sunulur. Fiziksel gerçek: kesilen parça elde ama
+   * kaydı yanlış (metraj/kesim) ve yeniden işlenecek — metrajı kaynak topa geri
+   * konur, kaynak Tambur adımına (ya da depo kesiminde kapanış-öncesi rafına)
+   * dirilir, KARDEŞ TOPLARA DOKUNULMAZ. İş emri KAPALI ise yeniden açılır.
+   *
+   * ⚠️ Aynı-gün ayarı (`tamburUndoFullSameDayOnly`) BURAYA UYGULANMAZ — o ayar
+   * adıyla ve anlamıyla TÜMDEN geri almayı kapılar (iş emri geçmişini toptan
+   * yeniden yazma). Tekil canlandırma tek topun düzeltmesidir; kapsamını
+   * sessizce genişletmek ayarın sözleşmesini bozar.
+   */
+  private async previewSingleRestore(
+    childId: string,
+    parentId: string,
+  ): Promise<{ option: UndoOption; ctx: Omit<UndoContext, "mode" | "options" | "defaultMode" | "parentArchived" | "parentId" | "parent"> }> {
+    const warnings: string[] = [];
+    const child = await this.loadChild(childId);
+    const alreadyCancelled =
+      child.status === RollStatus.CANCELLED ? "Bu parça zaten iptal edilmiş" : null;
+    const grandchildren = await prisma.roll.count({ where: { parentRollId: child.id } });
+    const childBlock = alreadyCancelled ?? childBlockReason(child, grandchildren);
+
+    // Kapanışın adımı + iş emri — FULL ile aynı çözüm (depo kesiminde ikisi de
+    // yok ve bu meşru: kaynak, kapanış-öncesi rafına döner).
+    const op = await prisma.rollOperation.findFirst({
+      where: { rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
+      orderBy: { createdAt: "desc" },
+      select: { workOrderStepId: true },
+    });
+    let wo: UndoContext["workOrder"] = null;
+    let woBlock: string | null = null;
+    if (op) {
+      const step = await prisma.workOrderStep.findUnique({
+        where: { id: op.workOrderStepId },
+        select: { workOrder: { select: { id: true, workOrderNumber: true, status: true } } },
+      });
+      const w = step?.workOrder ?? null;
+      if (w) {
+        if (w.status === WorkOrderStatus.CANCELLED || w.status === WorkOrderStatus.SUPERSEDED) {
+          // manualMove disipliniyle aynı: iptal/devredilmiş iş emrine top
+          // diriltmek "canlı ama kimsenin okutamadığı" çıkmazı üretir.
+          woBlock = `İş emri ${w.status === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "devredilmiş"} — iş emrine geri alınamaz`;
+        }
+        wo = {
+          id: w.id,
+          workOrderNumber: w.workOrderNumber,
+          status: w.status,
+          willRevive: w.status === WorkOrderStatus.COMPLETED,
+        };
+      }
+    }
+
+    const finalBlock = childBlock ?? woBlock;
+    const qty = Number(child.initialQty);
+    if (child.barcode) warnings.push(`Basılmış ${child.barcode} etiketi varsa imha edilmeli`);
+    if (wo?.willRevive) {
+      warnings.push("Tamamlanmış iş emri yeniden AÇILACAK (refakat kartı tekrar aktif olur)");
+    }
+
+    return {
+      option: {
+        mode: "SINGLE_RESTORE",
+        label: "İş emrine geri al (kumaş elimde)",
+        description: op
+          ? `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri konur ve top Tambur adımına döner — yeniden kesilebilir. Diğer toplara dokunulmaz.`
+          : `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri konur ve top depoya döner. Diğer toplara dokunulmaz.`,
+        canApply: finalBlock == null,
+        blockReason: finalBlock,
+        affectedCount: 1,
+        restoredQty: qty,
+        requiresReason: false,
+      },
+      ctx: {
+        canApply: finalBlock == null,
+        blockReason: finalBlock,
+        restoredQty: qty,
+        children: [
+          {
+            id: child.id,
+            barcode: child.barcode,
+            status: child.status,
+            qty,
+            blockReason: childBlock,
+          },
+        ],
+        reopenErrorCount: 0,
+        workOrder: wo,
         warnings,
       },
     };
@@ -626,7 +779,17 @@ export class TamburUndoService {
         currentStepId: true, producedInStepId: true, qualityGrade: true,
       },
     });
-    if (childRows.length === 0) return bail("Bu işlemin iptal edilebilir çocuğu kalmamış", wo);
+    // SIFIR ÇOCUK ≠ HER ZAMAN ÇIKMAZ (2026-08-12, F0402 düzeltmesi): tüm
+    // çocuklar tek tek iptal edilmişse iptal edilecek parça kalmaz ama tekil
+    // iptallerin sapma defterine yazdığı metraj hâlâ geri konabilir. Yalnız
+    // geri konacak metraj da 0 ise gerçekten yapılacak şey yok.
+    const restoredEarly =
+      childRows.length === 0
+        ? await this.computeRestoredQty(prisma, parentId, childRows)
+        : null;
+    if (childRows.length === 0 && (restoredEarly == null || restoredEarly.lte(0))) {
+      return bail("Bu işlemin iptal edilebilir çocuğu kalmamış", wo);
+    }
 
     const grandCounts = await prisma.roll.groupBy({
       by: ["parentRollId"],
@@ -671,9 +834,14 @@ export class TamburUndoService {
     return {
       option: {
         mode: "FULL",
-        label: `Tüm işlemi geri al (${children.length} top)`,
+        label:
+          children.length > 0
+            ? `Tüm işlemi geri al (${children.length} top)`
+            : "Tüm işlemi geri al",
         description:
-          `${children.length} top iptal edilir, ${Number(restored)} m kaynak topa geri döner` +
+          (children.length > 0
+            ? `${children.length} top iptal edilir, ${Number(restored)} m kaynak topa geri döner`
+            : `İptal edilecek parça kalmamış (hepsi tek tek iptal edilmiş); ${Number(restored)} m kaynak topa geri konur`) +
           (wo?.willRevive ? ", tamamlanmış iş emri yeniden açılır" : "") +
           ". Sebep yazmanız gerekir.",
         canApply: blockReason == null,
@@ -799,8 +967,8 @@ export class TamburUndoService {
       options: [
         {
           mode: "MANUAL" as const,
-          label: "Elle eklenen topu geri al",
-          description: "Bu kayıt iptal edilir (top hiç eklenmemiş sayılır).",
+          label: "Kaydı iptal et",
+          description: "Elle eklenen bu kayıt iptal edilir (top hiç eklenmemiş sayılır).",
           canApply: blockReason === null,
           blockReason,
           affectedCount: 1,
@@ -996,6 +1164,231 @@ export class TamburUndoService {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
+  // SINGLE_RESTORE — tek parçayı iptal et, metrajını kaynak topa geri koy
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * FULL'ün dirilme makinesi, TEK topun metrajıyla — kardeşlere DOKUNULMAZ.
+   *
+   * FULL'den bilinçli farklar (her biri "kapanış kısmen ayakta" gerçeğinden):
+   *  • Kapanışın SAPMA satırları TERSLENMEZ — kapanıştaki kalan-metraj kararı
+   *    (discard/scrap) hâlâ doğrudur, yalnız bu parça geri dönüyor.
+   *  • `RollError` kayıtları YENİDEN AÇILMAZ — kapanıştaki kalite kararları
+   *    diğer parçalar üzerinden ayakta; yeniden finalize açık hata istemez.
+   *  • TAMBUR_PROCESSED izi yine SİLİNİR — kaynak adıma geri döndü, iş henüz
+   *    bitmedi; iz kalsaydı üretim raporu açık işi "kapanmış" sayardı ve
+   *    yeniden finalize ikinci bir iz yazıp çift sayım üretirdi.
+   */
+  private async applySingleRestore(
+    parentId: string,
+    childId: string,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const result = await prisma.$transaction(async (tx) => {
+      // Çocuk — taze guard'lar (önizlemeden bu yana değişmiş olabilir).
+      const child = await tx.roll.findUnique({
+        where: { id: childId },
+        select: {
+          id: true, barcode: true, status: true, initialQty: true, currentQty: true,
+          sackId: true, shipmentId: true, directShipmentId: true,
+          currentStepId: true, producedInStepId: true, qualityGrade: true,
+        },
+      });
+      if (!child) throw AppError.notFound("Parça bulunamadı");
+      const grandchildren = await tx.roll.count({ where: { parentRollId: childId } });
+      const block = childBlockReason(child, grandchildren);
+      if (block) throw AppError.conflict(block);
+
+      // Kapanışın adımı + iş emri (depo kesiminde ikisi de yok — meşru).
+      const op = await tx.rollOperation.findFirst({
+        where: { rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
+        orderBy: { createdAt: "desc" },
+        select: { workOrderStepId: true },
+      });
+      const stepId = op?.workOrderStepId ?? null;
+      let step: { id: string; workOrder: { id: string; workOrderNumber: string; status: WorkOrderStatus } } | null =
+        null;
+      if (stepId) {
+        step = await tx.workOrderStep.findUnique({
+          where: { id: stepId },
+          select: { id: true, workOrder: { select: { id: true, workOrderNumber: true, status: true } } },
+        });
+        if (!step) throw AppError.notFound("Tambur adımı bulunamadı");
+        if (
+          step.workOrder.status === WorkOrderStatus.CANCELLED ||
+          step.workOrder.status === WorkOrderStatus.SUPERSEDED
+        ) {
+          throw AppError.conflict("İş emri iptal/devredilmiş — iş emrine geri alınamaz");
+        }
+      }
+
+      // 1) Çocuğu iptal et — atomik claim (applySingle ile aynı).
+      const cancelled = await tx.roll.updateMany({
+        where: {
+          id: childId,
+          status: { in: CHILD_CANCELABLE_STATUSES },
+          sackId: null, shipmentId: null, currentStepId: null,
+        },
+        data: { status: RollStatus.CANCELLED },
+      });
+      if (cancelled.count !== 1) {
+        throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
+      }
+
+      const restored = child.initialQty;
+      const parentRow = await tx.roll.findUnique({
+        where: { id: parentId },
+        select: { preTamburCloseStatus: true, initialQty: true, currentQty: true },
+      });
+
+      // Metraj geri koyma İKİ DALDA FARKLI — `applySingle`ın canlı-kaynak
+      // dallarının birebir aynası (ayna bozulursa aynı kesimin canlı/arşiv geri
+      // alması farklı muhasebe üretir):
+      //  • ÜRETİM akışı (`cutOpenFabric`): kesim yalnız `currentQty` düşmüştü →
+      //    yalnız o geri konur; `initialQty` orijinal girişte durur.
+      //  • DEPO kesimi (`cutWarehouseRoll`): kesim İKİSİNİ birden düşmüştü →
+      //    ikisi birden geri konur (aksi hâlde sahte AŞIM satırı doğardı).
+      // Aşım koruması yalnız üretim dalında anlamlı: geri konan metraj kayıtlı
+      // girişi aşarsa `initialQty` yukarı çekilir ve fark deftere yazılır
+      // (FULL invariantının tekil ikizi — imkânsız satır bırakılmaz).
+      const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
+      const newCurrent = (parentRow?.currentQty ?? new Prisma.Decimal(0)).plus(restored);
+      const initialBump =
+        stepId && newCurrent.greaterThan(parentInitial)
+          ? newCurrent.minus(parentInitial)
+          : new Prisma.Decimal(0);
+      if (initialBump.greaterThan(0)) {
+        await recordVarianceTx(tx, {
+          rollId: parentId,
+          workOrderStepId: stepId,
+          kind: RollVarianceKind.OVERAGE,
+          qty: initialBump,
+          source: VARIANCE_SOURCES.TAMBUR_UNDO_RESTORE,
+          userId,
+        });
+      }
+
+      // 2) Kaynağın hareketini yeniden aç (üretim akışı) — FULL ile aynı.
+      if (stepId) {
+        const closedMove = await tx.rollMovement.findFirst({
+          where: { rollId: parentId, workOrderStepId: stepId, exitedAt: { not: null } },
+          orderBy: { exitedAt: "desc" },
+          select: { id: true },
+        });
+        if (closedMove) {
+          await tx.rollMovement.update({
+            where: { id: closedMove.id },
+            data: { exitedAt: null, qtyOut: null, weightOut: null, notes: "TAMBUR_UNDO_REOPEN" },
+          });
+        } else {
+          await tx.rollMovement.create({
+            data: { rollId: parentId, workOrderStepId: stepId, qtyIn: restored, notes: "TAMBUR_UNDO_REOPEN" },
+          });
+        }
+      }
+
+      // 3) Kaynağı dirilt — atomik claim; metraj YALNIZ bu çocuğunki
+      //    (increment: tüketilmiş kaynakta 0'dan başlar; drift varsa da
+      //    üzerine yazmak yerine eklemek `applySingle` ile aynı sözleşme).
+      const revivedStatus = stepId
+        ? RollStatus.IN_PRODUCTION
+        : (parentRow?.preTamburCloseStatus ?? RollStatus.WAREHOUSE);
+      const revived = await tx.roll.updateMany({
+        where: { id: parentId, status: RollStatus.TAMBUR_CONSUMED },
+        data: {
+          status: revivedStatus,
+          currentStepId: stepId,
+          currentQty: { increment: restored },
+          ...(stepId
+            ? initialBump.greaterThan(0)
+              ? { initialQty: { increment: initialBump } }
+              : {}
+            : { initialQty: { increment: restored } }),
+          // Kapanış-öncesi kayıt tüketildi — bir sonraki kapanış kendi
+          // değerini yazacak (FULL ile aynı gerekçe).
+          preTamburCloseQty: null,
+          preTamburCloseStatus: null,
+        },
+      });
+      if (revived.count !== 1) {
+        throw AppError.conflict("Kaynak top bu sırada değişti — geri alma iptal edildi");
+      }
+
+      // 4) TAMBUR_PROCESSED izini sil (gerekçe fonksiyon yorumunda).
+      if (stepId) {
+        await tx.rollOperation.deleteMany({
+          where: { rollId: parentId, workOrderStepId: stepId, operationType: RollOperationType.TAMBUR_PROCESSED },
+        });
+      }
+
+      // 5) finalize kaynağın property'lerini silmişti — iptal edilen çocuğun
+      //    kopyasından geri kur (FULL 6 ile aynı, donör = bu çocuk).
+      const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId } });
+      if (parentPropCount === 0) {
+        const donor = await tx.rollProperty.findMany({
+          where: { rollId: childId },
+          select: { propertyId: true, valueId: true },
+        });
+        if (donor.length > 0) {
+          await tx.rollProperty.createMany({
+            data: donor.map((d) => ({ rollId: parentId, propertyId: d.propertyId, valueId: d.valueId ?? null })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 6) Adım + iş emri + refakat kartı — FULL 7 ile aynı disiplin.
+      let woRevivedCount = 0;
+      if (stepId && step) {
+        await recomputeStepStatus(tx, stepId);
+        const woRevived = await tx.workOrder.updateMany({
+          where: { id: step.workOrder.id, status: WorkOrderStatus.COMPLETED },
+          data: { status: WorkOrderStatus.IN_PROGRESS },
+        });
+        woRevivedCount = woRevived.count;
+        if (woRevived.count > 0) {
+          await setWorkOrderCardStatuses(tx, step.workOrder.id, "COMPLETED", "ACTIVE");
+        }
+      }
+
+      return {
+        childBarcode: child.barcode,
+        restoredQty: Number(restored),
+        workOrderNumber: step?.workOrder.workOrderNumber ?? null,
+        woRevived: woRevivedCount > 0,
+        warehouseClosure: stepId === null,
+      };
+    });
+
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "ROLL", recordId: parentId,
+      newData: {
+        event: "TAMBUR_UNDO_RESTORE",
+        cancelledChildId: childId,
+        cancelledChildBarcode: result.childBarcode,
+        restoredQty: result.restoredQty,
+        workOrderNumber: result.workOrderNumber,
+        woRevived: result.woRevived,
+        warehouseClosure: result.warehouseClosure,
+      },
+    });
+    return {
+      success: true,
+      data: {
+        mode: "SINGLE_RESTORE",
+        cancelledChildIds: [childId],
+        restoredQty: result.restoredQty,
+        woRevived: result.woRevived,
+      },
+      message: result.warehouseClosure
+        ? `Parça iptal edildi — ${result.restoredQty} m kaynak topa geri kondu (top depoya döndü)`
+        : `Parça iptal edildi — ${result.restoredQty} m ${result.workOrderNumber ?? "iş emrinin"} Tambur adımına geri kondu${
+            result.woRevived ? " (iş emri yeniden açıldı)" : ""
+          }`,
+    };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
   // FULL — finalize'ı tümden geri al
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -1042,7 +1435,9 @@ export class TamburUndoService {
           currentStepId: true, producedInStepId: true, qualityGrade: true,
         },
       });
-      if (children.length === 0) throw AppError.conflict("İptal edilebilir parça kalmamış");
+      // SIFIR ÇOCUK burada artık hata DEĞİL (F0402): tüm çocuklar tek tek
+      // iptal edilmiş olabilir ve sapma defterindeki metraj hâlâ geri konur.
+      // Gerçek çıkmaz kontrolü `restored` hesaplandıktan sonra aşağıda.
       const grandCounts = await tx.roll.groupBy({
         by: ["parentRollId"],
         where: { parentRollId: { in: children.map((c) => c.id) } },
@@ -1076,6 +1471,9 @@ export class TamburUndoService {
         select: { preTamburCloseQty: true, preTamburCloseStatus: true, initialQty: true },
       });
       const restored = await this.computeRestoredQty(tx, parentId, children);
+      if (children.length === 0 && restored.lte(0)) {
+        throw AppError.conflict("İptal edilebilir parça kalmamış");
+      }
 
       // ⚠️ `currentQty <= initialQty` İNVARİANTI — saha vakasının somut hasarı.
       // Aşımlı kesimde geri konan toplam, kayıtlı giriş metrajını geçebilir
@@ -1188,6 +1586,19 @@ export class TamburUndoService {
         },
         data: { reversedAt: new Date(), reversedById: userId ?? null },
       });
+      // ÇOCUK-KAPSAMLI tekil-iptal düzeltmeleri de terslenir (2026-08-12) —
+      // `computeRestoredQty` o metrajı geri saydı; satır canlı kalsaydı dönem
+      // raporu aynı metrajı hem stokta hem sapmada görürdü (senkron sözleşmesi:
+      // restore-toplamına giren HER kaynak burada da terslenir).
+      const reversedChildVariances = await tx.rollVariance.updateMany({
+        where: {
+          reversedAt: null,
+          kind: RollVarianceKind.RECORD_CORRECTION,
+          source: VARIANCE_SOURCES.TAMBUR_UNDO_SINGLE,
+          roll: { parentRollId: parentId },
+        },
+        data: { reversedAt: new Date(), reversedById: userId ?? null },
+      });
 
       // 6) finalize parent'ın property'lerini SİLMİŞTİ — çocuk kopyasından geri kur.
       const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId } });
@@ -1241,7 +1652,7 @@ export class TamburUndoService {
         reopenedErrors: reopened.count,
         woRevived: woRevivedCount > 0,
         propsRestored,
-        reversedVariances: reversedVariances.count,
+        reversedVariances: reversedVariances.count + reversedChildVariances.count,
         warehouseClosure: stepId === null,
       };
     });
@@ -1274,7 +1685,10 @@ export class TamburUndoService {
         reversedVariances: result.reversedVariances,
       },
       message:
-        `İşlem geri alındı — ${result.cancelledChildIds.length} parça iptal, ` +
+        `İşlem geri alındı — ` +
+        (result.cancelledChildIds.length > 0
+          ? `${result.cancelledChildIds.length} parça iptal, `
+          : "") +
         (result.warehouseClosure
           ? `${result.restoredQty} m kaynak topa geri döndü (depo kesimi)`
           : `${result.restoredQty} m ${result.workOrderNumber} Tambur adımına döndü`) +

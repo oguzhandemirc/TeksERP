@@ -35,6 +35,11 @@ export const VARIANCE_SOURCES = {
   /** Finalize'dan SONRA tek parçanın iptali — metraj arşivdeki kaynağa dönemez. */
   TAMBUR_UNDO_SINGLE: "TAMBUR_UNDO_SINGLE",
   /**
+   * TEKİL CANLANDIRMADA (İş Emrine Geri Al, 2026-08-12) geri konan metraj
+   * kayıtlı giriş metrajını aştı — TAMBUR_UNDO_FULL aşımının tekil ikizi.
+   */
+  TAMBUR_UNDO_RESTORE: "TAMBUR_UNDO_RESTORE",
+  /**
    * Tümden geri almada geri konan metraj kayıtlı giriş metrajını AŞTI.
    * Aşımlı kesimde olur (operatör 500 m kayıtlı topu 545 m ölçtü) ve
    * `initialQty` yukarı çekilir — `currentQty > initialQty` gibi imkânsız bir

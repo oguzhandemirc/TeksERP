@@ -22,12 +22,13 @@
 // "yenile"ye basmak zorunda kalır (2026-08-04'te `RecentOutputModal`'da
 // birebir bu yaşandı).
 // =============================================================================
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Icon, IconButton, TouchableRipple, ActivityIndicator } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 
 import { tamburService } from '../../../services/tambur.service';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import type { Roll } from '../../../types/models';
 
 /** "SS:dd" — panelde tarih GEREKMEZ: kapsam zaten tek iş emri. */
@@ -56,36 +57,83 @@ export default function WorkOrderOutputPanel({
       tamburService.recentOutputRolls({ workOrderId: workOrderId!, limit: 100, withTotal: true }),
     enabled: !!workOrderId,
     staleTime: 10_000,
+    // KENDİLİĞİNDEN TAZELENİR (2026-08-12 saha şikâyeti: "sürekli refresh'e
+    // basmam gerekiyor"). İki katman: bu tabletin kesimleri mutation başarısında
+    // invalidate edilir (ANINDA görünür, TamburScreen), başka tablet/vardiya
+    // kesimleri bu yoklamayla en geç 15 sn'de düşer. Kart kapalıyken
+    // (enabled=false) yoklama hiç koşmaz.
+    refetchInterval: 15_000,
   });
 
   const rolls: Roll[] = useMemo(() => q.data?.data ?? [], [q.data]);
+
+  // YENİ ÇIKAN GÖRÜNÜR OLSUN (2026-08-12 saha: "son çıkanı görmek için
+  // kaydırmam gerekiyor bazen"). Liste yeni-en-üstte sıralı ama ScrollView
+  // piksel ofsetini KORUR: operatör daha önce aşağı kaydırdıysa yeni kesilen
+  // top listenin görünmeyen tepesine eklenir ve panel "güncellenmemiş" görünür.
+  // En üstteki topun KİMLİĞİ değişince (yeni kesim / geri alma) başa dön —
+  // sabit aralıklı refetch'te kimlik değişmez, operatörün kaydırdığı yer durur.
+  const listRef = useRef<ScrollView>(null);
+  const newestId = rolls[0]?.id ?? null;
+  useEffect(() => {
+    listRef.current?.scrollTo({ y: 0, animated: false });
+  }, [newestId]);
+
   const totals = useMemo(() => {
     let meters = 0;
     for (const r of rolls) meters += Number(r.initialQty ?? 0);
     return { count: rolls.length, meters };
   }, [rolls]);
 
+  // KATLANABİLİR (2026-08-12 saha isteği): manuel metre girişi açıkken sağ
+  // sütunda yer kalmıyor — başlığa dokununca liste kapanır, yalnız başlık +
+  // sayaçlar kalır (tek satır). Tercih CİHAZDA kalıcı: numpad'i hep açık
+  // istasyonda operatör her kartta yeniden kapatmak zorunda kalmasın.
+  const collapsed = useDeviceSettingsStore((st) => st.tamburOutputCollapsed);
+  const setCollapsed = useDeviceSettingsStore((st) => st.setTamburOutputCollapsed);
+
   if (!workOrderId) return null;
 
   return (
     <View style={s.wrap}>
-      <View style={s.header}>
-        <Icon source="tray-arrow-up" size={16} color="#1e40af" />
-        <Text style={s.headerTitle}>Bu işten çıkanlar</Text>
-        <View style={{ flex: 1 }} />
-        {q.isFetching ? (
-          <ActivityIndicator size={14} color="#1e40af" />
-        ) : (
-          <IconButton
-            icon="refresh"
-            size={16}
-            onPress={() => void q.refetch()}
-            style={{ margin: 0 }}
-            accessibilityLabel="Yenile"
-          />
-        )}
-      </View>
+      {/* Başlık satırının TAMAMI aç/kapa tetiğidir (eldivenli parmak için
+          geniş hedef); sağdaki yenile tuşu kendi dokunuşunu yutar. */}
+      <TouchableRipple
+        onPress={() => void setCollapsed(!collapsed)}
+        rippleColor="rgba(30,64,175,0.10)"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
+        accessibilityLabel={collapsed ? 'Bu işten çıkanlar — aç' : 'Bu işten çıkanlar — kapat'}
+      >
+        <View style={s.header}>
+          <Icon source="tray-arrow-up" size={16} color="#1e40af" />
+          <Text style={s.headerTitle}>Bu işten çıkanlar</Text>
+          {/* KAPALIYKEN sayaçlar başlık satırına taşınır — saha isteği:
+              "kapalı konumdayken top ve basılan m yine gözüksün". */}
+          {collapsed ? (
+            <Text style={s.headerTotals}>
+              {totals.count} top · {totals.meters.toFixed(1)} m
+            </Text>
+          ) : null}
+          <View style={{ flex: 1 }} />
+          {!collapsed &&
+            (q.isFetching ? (
+              <ActivityIndicator size={14} color="#1e40af" />
+            ) : (
+              <IconButton
+                icon="refresh"
+                size={16}
+                onPress={() => void q.refetch()}
+                style={{ margin: 0 }}
+                accessibilityLabel="Yenile"
+              />
+            ))}
+          <Icon source={collapsed ? 'chevron-down' : 'chevron-up'} size={18} color="#64748b" />
+        </View>
+      </TouchableRipple>
 
+      {collapsed ? null : (
+        <>
       {/* ÜST SAYAÇ — operatörün en çok baktığı iki sayı. "Kalan"la
           karıştırılmasın diye etiket açıkça "Basılan". */}
       <View style={s.totals}>
@@ -109,14 +157,12 @@ export default function WorkOrderOutputPanel({
           <Text style={s.emptyText}>Bu işten henüz top çıkmadı</Text>
         </View>
       ) : (
-        <ScrollView style={s.list} nestedScrollEnabled>
+        <ScrollView ref={listRef} style={s.list} nestedScrollEnabled>
           {rolls.map((r) => (
-            <TouchableRipple
-              key={r.id}
-              onPress={() => onPrint(r)}
-              rippleColor="rgba(30,64,175,0.12)"
-              style={s.row}
-            >
+            // ⚠️ SATIRA DOKUNMAK BASKI DEĞİL (2026-08-12 saha şikâyeti: listeye
+            // her dokunuş kâğıt bastırıyordu). Baskı YALNIZ yazıcı tuşundan —
+            // satırın kendisi pasif; tuşlar eldiven boyuna büyütüldü.
+            <View key={r.id} style={s.row}>
               <View style={s.rowInner}>
                 <Text style={s.rowTime}>{hhmm(r.createdAt)}</Text>
                 <Text style={s.rowBarcode} numberOfLines={1}>
@@ -125,24 +171,30 @@ export default function WorkOrderOutputPanel({
                 <Text style={s.rowQty}>{Number(r.initialQty ?? 0).toFixed(1)} m</Text>
                 <IconButton
                   icon="printer"
-                  size={18}
+                  size={26}
                   iconColor="#1e40af"
+                  containerColor="#eef2ff"
+                  mode="contained-tonal"
                   onPress={() => onPrint(r)}
                   style={s.rowBtn}
                   accessibilityLabel="Etiketi bas"
                 />
                 <IconButton
                   icon="undo-variant"
-                  size={18}
+                  size={26}
                   iconColor="#b45309"
+                  containerColor="#fef3c7"
+                  mode="contained-tonal"
                   onPress={() => onUndo(r)}
                   style={s.rowBtn}
                   accessibilityLabel="Geri al"
                 />
               </View>
-            </TouchableRipple>
+            </View>
           ))}
         </ScrollView>
+      )}
+        </>
       )}
     </View>
   );
@@ -167,6 +219,13 @@ const s = StyleSheet.create({
     paddingVertical: 4,
   },
   headerTitle: { fontSize: 13, fontWeight: '800', color: '#1e40af' },
+  headerTotals: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginLeft: 8,
+    fontVariant: ['tabular-nums'],
+  },
   totals: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -189,8 +248,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 12,
-    paddingRight: 2,
-    minHeight: 44,
+    paddingRight: 6,
+    minHeight: 56,
     gap: 8,
   },
   rowTime: {
@@ -215,7 +274,7 @@ const s = StyleSheet.create({
     color: '#0f172a',
     fontVariant: ['tabular-nums'],
   },
-  rowBtn: { margin: 0, width: 34, height: 34 },
+  rowBtn: { margin: 0, marginVertical: 4, width: 48, height: 48, borderRadius: 10 },
   empty: { paddingVertical: 18, alignItems: 'center' },
   emptyText: { fontSize: 13, color: '#94a3b8' },
 });

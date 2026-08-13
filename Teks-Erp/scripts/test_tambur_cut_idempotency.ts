@@ -96,10 +96,21 @@ async function run(): Promise<void> {
   console.log("\n=== A) cutWarehouseRoll sıralı retry idempotency ===");
   const w1 = await warehouseRoll(100);
   const b1 = tok();
-  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientToken: b1 }, ADMIN);
-  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientToken: b1 }, ADMIN); // retry
+  // MAKİNE DAMGASI (2026-08-12): kesim çocuğu createdMachineId taşımalı —
+  // "Bu makine" süzgeci ve makine raporları buna dayanır. Parametre düşerse
+  // süzgeç kesimleri SESSİZCE göremez olur (saha bulgusu: 27→5, kesimler yoktu).
+  const stampMachine = await prisma.machine.findFirst({ select: { id: true } });
+  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientToken: b1 }, ADMIN, null, stampMachine?.id ?? null);
+  await tambur.cutWarehouseRoll(w1, { cutLength: 30, clientToken: b1 }, ADMIN, null, stampMachine?.id ?? null); // retry
   check("retry: tek child (barkod 1×)", (await childCountByToken(b1)) === 1);
   check("retry: parent 1 kez düşüldü (100→70)", (await qtyOf(w1)) === 70, `qty=${await qtyOf(w1)}`);
+  if (stampMachine) {
+    const stamped = await prisma.roll.findFirst({
+      where: { clientToken: b1 },
+      select: { createdMachineId: true },
+    });
+    check("kesim çocuğu MAKİNE damgası taşıyor", stamped?.createdMachineId === stampMachine.id);
+  }
 
   // B) cutWarehouseRoll EŞZAMANLI
   console.log("\n=== B) cutWarehouseRoll eşzamanlı (2 paralel, aynı barkod) ===");
