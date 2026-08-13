@@ -60,6 +60,7 @@ import documentProfileRoutes from "./routes/document-profile.routes";
 import freeDocumentRoutes from "./routes/free-document.routes";
 import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
+import warehouseRoutes from "./routes/warehouse.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import adminRoutes from "./routes/admin.routes";
@@ -492,6 +493,7 @@ app.use("/api/document-profiles", documentProfileRoutes);
 app.use("/api/free-documents", freeDocumentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
+app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
 // db-copies GENEL admin router'ından ÖNCE: Express 5 prefix eşleşmesinde daha

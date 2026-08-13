@@ -143,6 +143,15 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Yazıcısını/kantarını kendisi kuran personel — sunucuya hiçbir şey yazmaz,
       // etkisi tek bilgisayarla sınırlıdır (bkz. permission-catalog.ts gerekçesi).
       "settings:workstation",
+      // Ticaret paketi (2026-08-13): depoyu GÖRÜR ve depolar arası TAŞIR.
+      // ⚠️ Fabrikada görünür fark YOK — tek depo varken transfer karosu ve depo
+      // seçicileri zaten çizilmiyor; izin var ama yüzey yok.
+      "warehouse:read",
+      "warehouse:transfer",
+      // ⚠️ `goods-receipt:*` BİLEREK YOK: Mal Kabul ekranı yalnız izinle kapılı
+      // (tek depolu ticaret kurulumu da kullanacağı için multiWarehouse şartı
+      // konamaz) → şablona akarsa fabrikada karo BELİRİR. Alım-satım kurulumunda
+      // admin bu izinleri elle atar.
     ],
   },
   {
@@ -258,6 +267,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "admin:settings",
       "settings:workstation",
       "report:audit",
+      // Depo TANIMI (yeni depo açma, varsayılan depo seçimi) sistem yapılandırmasıdır,
+      // günlük depo işi değil. Depo & Sevkiyat rolüne KONULMADI: fabrikada tek depo
+      // varken depo yüzeyleri gizli ve öyle kalmalı — ikinci depoyu açmak bilinçli
+      // bir kurulum kararıdır (`warehouse:transfer` ise günlük iş, o rolde).
+      "warehouse:write",
     ],
   },
 ];
@@ -370,4 +384,8 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Ekran değil, Tambur-içi yetenek: envanter zincirinde DELİK açar (elle top yaratma). Varsayılan operatör paketine GİRMEZ, panelden SEÇİLİ kişiye verilir (root CLAUDE.md, 2026-08-04).",
   "mobile:kk1-desen":
     "Ekran değil, KK1-içi yetenek: inline yeni desen açma. Yalnız seçili ham giriş operatörlerine verilir (permission-catalog.ts).",
+  "goods-receipt:read":
+    "Mal Kabul yalnız ALIM-SATIM kurulumunda kullanılır (üretici fabrika malı KK1'den alır). Varsayılan bir role konulsaydı ekran fabrikada da belirirdi; ticaret kurulumunda admin elle atar (2026-08-13).",
+  "goods-receipt:write":
+    "Aynı gerekçe — üretimsiz mal girişi fabrikanın akışı DEĞİL. Şablona akarsa fabrikada Mal Kabul karosu görünür hale gelir (2026-08-13).",
 };

@@ -90,6 +90,16 @@ export const PERMISSION_CATALOG = [
   { code: "shipping:undo-dispatch", module: "LOGISTICS", category: "web", description: "Sevk edilmiş sevkiyatı geri alma (irsaliye iptal + stok depoya)" },
   { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
   { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu oluşturma/düzenleme/silme" },
+  // ── Ticaret paketi: çoklu depo + mal kabul (2026-08-13) ────────────────────
+  { code: "warehouse:read", module: "LOGISTICS", category: "web", description: "Depo tanımlarını görüntüleme" },
+  { code: "warehouse:write", module: "LOGISTICS", category: "web", description: "Depo tanımı oluşturma/düzenleme + varsayılan depo seçimi" },
+  // Transfer AYRI izin: depo ADINI düzeltebilen herkesin STOK TAŞIYABİLMESİ
+  // istenmiyor (shipping:write ↔ shipping:undo-dispatch ayrımıyla aynı gerekçe).
+  { code: "warehouse:transfer", module: "LOGISTICS", category: "web", description: "Depolar arası transfer belgesi oluşturma/iptal" },
+  { code: "goods-receipt:read", module: "LOGISTICS", category: "web", description: "Mal kabul fişlerini görüntüleme" },
+  // `roll:write`e YASLANMAZ: o izin fabrika rollerinde yaygın ve Mal Kabul karosu
+  // fabrikada görünür hale gelirdi (ekran yalnız alım-satım kurulumu içindir).
+  { code: "goods-receipt:write", module: "LOGISTICS", category: "web", description: "Mal kabul fişi oluşturma/iptal (satın alınan malın depo girişi)" },
   { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
   { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
   // 2026-08-05: "Bu Bilgisayar" (yerel donanım) ayarları — etiket yazıcısı,
