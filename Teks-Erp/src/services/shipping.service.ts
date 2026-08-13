@@ -3420,7 +3420,12 @@ async function collectShipmentDerived(db: PrintedDocDb, shipmentId: string) {
           // ⚠️ RESMİ BELGE (kalite sertifikası + muhasebe fişi) — irsaliye ile BİREBİR
           // aynı veriden türemesi zorunlu, dolayısıyla aynı hayalet filtresi.
           rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { barcode: true, currentQty: true, width: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, qualityGradeRef: { select: { name: true } } } },
-          allocations: { select: { qty: true, orderLine: { select: { unitPrice: true, currency: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } } } } } },
+          // ⚠️ Para birimi SİPARİŞ BAŞLIĞINDA yaşar (`Order.currency`), satırda DEĞİL.
+          // `orderLine.currency` seçmek PrismaClientValidationError üretir ve bu hata
+          // DB'ye hiç gitmeden, sorgu kurulurken atılır → belge her çağrıda patlar.
+          // tsc bunu GÖREMEZ: `PrintedDocDb` bir union tipidir ve union üzerinden çağrı
+          // fazla-alan (excess property) kontrolünü düşürür.
+          allocations: { select: { qty: true, orderLine: { select: { unitPrice: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } }, order: { select: { currency: true } } } } } },
         },
       },
     },
@@ -3470,9 +3475,10 @@ async function collectShipmentDerived(db: PrintedDocDb, shipmentId: string) {
       const desc = ol.customerItemName?.trim() || `${ol.item.name}${ol.color?.name ? ` · ${ol.color.name}` : ""}`;
       const up = ol.unitPrice != null ? Number(ol.unitPrice) : null;
       if (up != null) anyPrice = true;
-      currency = ol.currency;
-      const key = `${desc}|${up ?? ""}|${ol.currency}`;
-      const row = invMap.get(key) ?? { description: desc, qty: D0(), unit: "m", unitPrice: up, currency: ol.currency, amount: up != null ? D0() : null };
+      const lineCurrency = ol.order.currency;
+      currency = lineCurrency;
+      const key = `${desc}|${up ?? ""}|${lineCurrency}`;
+      const row = invMap.get(key) ?? { description: desc, qty: D0(), unit: "m", unitPrice: up, currency: lineCurrency, amount: up != null ? D0() : null };
       row.qty = row.qty.plus(al.qty);
       if (up != null && row.amount != null) row.amount = row.amount.plus(new Prisma.Decimal(al.qty).times(up));
       invMap.set(key, row);

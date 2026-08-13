@@ -73,7 +73,7 @@ export interface BuiltDocContent {
  *  DISPATCHED değil → client TASLAK modunda canlı render eder). */
 export type PrintedDocBuilder = (db: Db, sourceId: string) => Promise<BuiltDocContent | null>;
 
-interface BuilderEntry {
+export interface BuilderEntry {
   /** Güncel veriden üretir — freeze (sevk anı) ve reissue yolu. */
   fresh: PrintedDocBuilder;
   /** Eski kayıt için geriye dönük üretim (örn. legacy printSnapshot kolonunu
@@ -141,6 +141,14 @@ const builders = new Map<PrintedDocType, BuilderEntry>();
 
 export function registerPrintedDocBuilder(docType: PrintedDocType, entry: BuilderEntry): void {
   builders.set(docType, entry);
+}
+
+/** Kayıtlı builder'ların salt-okunur görünümü — YALNIZ iç gözlem içindir
+ *  (`scripts/test_printed_doc_builders.ts`: her belge tipinin builder'ı var mı +
+ *  her giriş noktasının Prisma sorgu şekli şemayla uyumlu mu). Üretim kodu
+ *  builder'a bu haritadan DEĞİL `requireBuilder` üzerinden erişir. */
+export function getRegisteredDocBuilders(): ReadonlyMap<PrintedDocType, BuilderEntry> {
+  return builders;
 }
 
 function requireBuilder(docType: PrintedDocType): BuilderEntry {
