@@ -62,6 +62,7 @@ import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
 import warehouseRoutes from "./routes/warehouse.routes";
 import goodsReceiptRoutes from "./routes/goods-receipt.routes";
+import financeRoutes from "./routes/finance.routes";
 import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
@@ -498,6 +499,9 @@ app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/goods-receipts", goodsReceiptRoutes);
 app.use("/api/warehouse-transfers", warehouseTransferRoutes);
+// Ön muhasebe — router'ın KENDİSİ `requireFinanceEnabled` taşır (bayrak
+// kapalıysa hepsi 403). Tek tek uçlarda tekrarlanmaz.
+app.use("/api/finance", financeRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
 // db-copies GENEL admin router'ından ÖNCE: Express 5 prefix eşleşmesinde daha
