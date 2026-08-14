@@ -223,6 +223,14 @@ export interface FeatureFlags {
    *  ⚠️ `pricingEnabled` ile bağımsız: o OPERASYON ekranlarındaki fiyat
    *  alanlarını açar, bu ayrı bir MUHASEBE modülünü açar. */
   financeEnabled: boolean;
+  /** KASA eksi bakiyeye düşemesin (default false). Backend ENFORCE: 4 ileri yol
+   *  409 (ödeme OUT · masraf fişi · virmanın çıkan kasa bacağı · çek ödeme);
+   *  BANKA MUAF (kredili mevduat meşru), iptal/storno yolları MUAF. */
+  financeBlockNegativeCashEnabled: boolean;
+  /** Fatura satırının varsayılan KDV oranı, % (0–100; default 20). Yalnız
+   *  ÖN-DOLUM — fatura formunun yeni satırı ve mal kabulden üretilen alış
+   *  taslağı bu değerle açılır; satırda değiştirilebilir. */
+  financeDefaultVatRate: number;
   /** Üretim modülü — envanter üretim sekmeleri + iş emri yüzeyleri. Varsayılan AÇIK. */
   productionEnabled: boolean;
   targetQuantityEnabled: boolean;

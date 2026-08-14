@@ -22,6 +22,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { D, resolveExchangeRate } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
+import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 const CASH_PREFIX = "KH";
@@ -225,6 +226,12 @@ export class CashTransactionService {
         });
 
         const signed = KIND_DIRECTION[input.kind] === PaymentDirection.IN ? amount : amount.negated();
+        // ⚠️ EKSİ KASA ENGELİ (finance.blockNegativeCashEnabled, default KAPALI):
+        // yalnız ÇIKAN türde (EXPENSE) ve yalnız KASA — banka MUAF, `cancel`
+        // (ters yön) MUAF. Guard FOR UPDATE ile okur; increment aynı tx'te.
+        if (KIND_DIRECTION[input.kind] === PaymentDirection.OUT) {
+          await assertCashBalanceCoversTx(tx, { cashBoxId: input.cashBoxId ?? null, amount });
+        }
         await moveAccountBalance(tx, input, signed);
         return row;
       }),
@@ -360,6 +367,14 @@ export class CashTransactionService {
           { ref: to, delta: amount },
         ].sort((x, y) => compareLockKeys(accountLockKey(x.ref), accountLockKey(y.ref)));
         for (const leg of legs) {
+          // ⚠️ EKSİ KASA ENGELİ — yalnız ÇIKAN bacak ve yalnız KASA (banka
+          // muaf; helper kendisi süzer). Guard'ın FOR UPDATE kilidi BİLEREK
+          // kanonik sıralı döngünün İÇİNDE alınır: döngü dışında erken alınsa
+          // ayna virman çifti (kasa→X ‖ X→kasa) kilitleri ters sırada isteyip
+          // ABBA deadlock'u üretirdi (`accountLockKey` gerekçesinin guard ikizi).
+          if (leg.delta.isNegative()) {
+            await assertCashBalanceCoversTx(tx, { cashBoxId: leg.ref.cashBoxId ?? null, amount });
+          }
           await moveAccountBalance(tx, leg.ref, leg.delta);
         }
         return { ids: [outRow.id, inRow.id], docNos: [outRow.docNo, inRow.docNo], groupId };

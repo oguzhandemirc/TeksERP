@@ -74,7 +74,13 @@ interface DraftLine {
   withholdingRate: number;
 }
 
-const emptyLine = (): DraftLine => ({
+/**
+ * Boş satır — KDV oranı FİRMA PARAMETRESİNDEN gelir (finance.defaultVatRate;
+ * flag henüz yüklenmemişse 20 = eski hardcode, sıfır fark). Backend'in mal
+ * kabulden ürettiği alış taslağı da AYNI ayardan okur — oran iki yerde ayrı
+ * sürüklenmez. Yalnız ön-dolum: kullanıcı satırda değiştirebilir.
+ */
+const emptyLine = (vatRate: number = 20): DraftLine => ({
   key: crypto.randomUUID(),
   itemId: null,
   description: "",
@@ -82,7 +88,7 @@ const emptyLine = (): DraftLine => ({
   unit: "m",
   unitPrice: 0,
   discountRate: 0,
-  vatRate: 20,
+  vatRate,
   withholdingRate: 0,
 });
 
@@ -288,6 +294,11 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
   // ⚠️ Ön-doldurma YALNIZ başlangıç değeridir; çağıran diyaloğu koşullu mount
   // eder (her açılış taze bileşen). Prop'u render fazında senkronlamak,
   // kullanıcının sildiği satırı geri getirirdi.
+  // Varsayılan KDV — firma parametresi (finance.defaultVatRate). Diyalog her
+  // açılışta taze mount edildiği ve flag'ler app açılışında cache'lendiği için
+  // ilk render'da hazırdır; yüklenmemişse 20 (bugünkü davranış, sıfır fark).
+  const defaultVatRate = useFeatureFlags().data?.data?.financeDefaultVatRate ?? 20;
+
   const [type, setType] = useState<InvoiceType>("SALES");
   const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">("CUSTOMER");
   const [customerId, setCustomerId] = useState<string | null>(prefill?.customerId ?? null);
@@ -304,12 +315,12 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
   const [lines, setLines] = useState<DraftLine[]>(() =>
     prefill?.lines.length
       ? prefill.lines.map((l) => ({
-          ...emptyLine(),
+          ...emptyLine(defaultVatRate),
           ...l,
           unitPrice: l.unitPrice ?? 0,
           itemId: l.itemId ?? null,
         }))
-      : [emptyLine()],
+      : [emptyLine(defaultVatRate)],
   );
 
   // Taraf iki AYRI karttan gelir: Müşteri/Tedarikçi (Customer — tedarikçi de
@@ -399,7 +410,7 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
       }),
     onSuccess: (r) => {
       toast.success(r.message ?? "Taslak oluşturuldu.");
-      setLines([emptyLine()]);
+      setLines([emptyLine(defaultVatRate)]);
       setExternalNo("");
       setDueDate("");
       setAppliedDueSuggestion(null);
@@ -549,7 +560,7 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
         </div>
 
         <div className="flex items-start justify-between">
-          <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
+          <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine(defaultVatRate)])}>
             <Plus className="mr-1 h-4 w-4" />
             Satır ekle
           </Button>

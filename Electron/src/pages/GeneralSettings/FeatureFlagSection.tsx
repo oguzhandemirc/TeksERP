@@ -8,7 +8,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService, type FeatureFlags } from "@/services/featureFlagService";
 import { systemSettingService, SETTING_KEYS } from "@/services/systemSettingService";
-import type { FlagDef } from "./settings-config";
+import type { FlagDef, NumberFlagDef } from "./settings-config";
 import { FlagToggle, ReadOnlyRow } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
@@ -39,9 +39,13 @@ const DEADLINE_META = {
  */
 export function FeatureFlagSection({
   flags,
+  numberFlags = [],
   deadlineField,
 }: {
   flags: FlagDef[];
+  /** Sekmeye gömülü SAYISAL feature-flag alanları — toggle'larla AYNI taslak +
+   *  AYNI PATCH'te yazılır (deadlineField'dan farkı: o system-setting upsert'i). */
+  numberFlags?: NumberFlagDef[];
   deadlineField?: "order" | "wo";
 }) {
   const qc = useQueryClient();
@@ -80,10 +84,30 @@ export function FeatureFlagSection({
   }, [serverFlagStr]);
   useEffect(() => setDeadlineDraft(serverDeadline), [serverDeadline]);
 
+  // Sayısal feature-flag taslağı — boolean taslakla aynı yaşam döngüsü:
+  // sunucu değeri değişince eşitlenir (kayıt sonrası invalidate → dirty sıfır).
+  const serverNumFor = (f: NumberFlagDef): number => {
+    const v = server?.[f.key];
+    return typeof v === "number" && Number.isFinite(v) ? v : f.fallback;
+  };
+  const serverNumStr = JSON.stringify(numberFlags.map((f) => serverNumFor(f)));
+  const [numDraft, setNumDraft] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const next: Record<string, number> = {};
+    for (const f of numberFlags) next[f.key] = serverNumFor(f);
+    setNumDraft(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverNumStr]);
+
   const flagsDirty = flagKeys.some((k) => (flagDraft[k] ?? false) !== (server?.[k] ?? false));
+  const numDirty = numberFlags.some((f) => (numDraft[f.key] ?? serverNumFor(f)) !== serverNumFor(f));
   const deadlineDirty = Boolean(meta) && deadlineDraft !== serverDeadline;
-  const dirty = flagsDirty || deadlineDirty;
+  const dirty = flagsDirty || numDirty || deadlineDirty;
   const deadlineValid = !meta || (Number.isInteger(deadlineDraft) && deadlineDraft >= 1 && deadlineDraft <= 365);
+  const numValid = numberFlags.every((f) => {
+    const v = numDraft[f.key];
+    return v === undefined || (Number.isFinite(v) && v >= f.min && v <= f.max);
+  });
   useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
@@ -92,6 +116,13 @@ export function FeatureFlagSection({
       for (const k of flagKeys) {
         const v = flagDraft[k] ?? false;
         if (v !== (server?.[k] ?? false)) (patch as Record<string, boolean>)[k] = v;
+      }
+      // Sayısal alanlar AYNI patch'e girer — tek PATCH, tek "kaydedildi".
+      for (const f of numberFlags) {
+        const v = numDraft[f.key];
+        if (v !== undefined && v !== serverNumFor(f)) {
+          (patch as Record<string, number>)[f.key] = v;
+        }
       }
       if (Object.keys(patch).length > 0) await featureFlagService.update(patch);
       if (meta && deadlineDirty) {
@@ -109,6 +140,9 @@ export function FeatureFlagSection({
     const next: Record<string, boolean> = {};
     for (const k of flagKeys) next[k] = server?.[k] ?? false;
     setFlagDraft(next);
+    const nextNum: Record<string, number> = {};
+    for (const f of numberFlags) nextNum[f.key] = serverNumFor(f);
+    setNumDraft(nextNum);
     setDeadlineDraft(serverDeadline);
   };
 
@@ -163,6 +197,47 @@ export function FeatureFlagSection({
         ))}
       </div>
 
+      {numberFlags.length > 0 && (
+        <div className="mt-6 space-y-5 border-t pt-5">
+          {numberFlags.map((f) => {
+            const value = numDraft[f.key] ?? serverNumFor(f);
+            return (
+              <div key={f.key} className="space-y-1.5">
+                <p className="text-sm font-medium">{f.title}</p>
+                <p className="text-xs text-muted-foreground">{f.desc}</p>
+                {canEdit ? (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      min={f.min}
+                      max={f.max}
+                      step={f.step ?? 1}
+                      value={value}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (Number.isFinite(n)) {
+                          setNumDraft((d) => ({
+                            ...d,
+                            [f.key]: Math.min(f.max, Math.max(f.min, n)),
+                          }));
+                        }
+                      }}
+                      className="w-24 text-center tabular-nums"
+                    />
+                    {f.unit && <span className="text-xs text-muted-foreground">{f.unit}</span>}
+                  </div>
+                ) : (
+                  <div className="text-sm font-semibold">
+                    {serverNumFor(f)}
+                    {f.unit ? ` ${f.unit}` : ""}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {meta && (
         <div className="mt-6 space-y-3 border-t pt-5">
           <div className="flex items-start gap-2">
@@ -204,7 +279,7 @@ export function FeatureFlagSection({
         <SettingsSaveBar
           dirty={dirty}
           saving={mut.isPending}
-          canSave={deadlineValid}
+          canSave={deadlineValid && numValid}
           onSave={() => mut.mutate()}
           onReset={reset}
         />

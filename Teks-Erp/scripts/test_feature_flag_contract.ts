@@ -211,8 +211,94 @@ async function main() {
   );
 
   // ---------------------------------------------------------------------------
+  // 8) SAYISAL ANAHTARLAR — bekçinin KÖR NOKTASI kapatıldı (2026-08-14)
+  // ---------------------------------------------------------------------------
+  // Bekçi bugüne kadar YALNIZ boolean'ları denetliyordu: sayısal bir anahtar
+  // (örn. finance.defaultVatRate) şemadan ya da panelden düşse hiçbir kontrol
+  // kırmızı vermezdi — "panel ayağı elle doğrulandı" ile yetinilirdi. Aynı dört
+  // küme mantığı sayısallara da uygulanır; panelde özel section'la yönetilenler
+  // gerekçeli muaftır (boolean PANEL_EXEMPT'in sayısal ikizi).
+  const aNum = A.filter((k) => typeof flags[k] === "number");
+  check("zemin: A sayısal ≥ 10 anahtar", aNum.length >= 10, `aNum=${aNum.length}`);
+
+  const NUMERIC_PANEL_EXEMPT: Record<string, string> = {
+    sessionDurationMinutes: "kind:'session' — Oturum section'ı yönetir",
+    sessionDurationHours: "GERİYE-UYUM türetilmiş alan — panel dakika alanını yönetir",
+    idleTimeoutMinutes: "kind:'session' — Oturum section'ı yönetir",
+    workSessionIdleTimeoutMinutes: "kind:'session' — Oturum section'ı yönetir",
+    mobileIdleLockMinutes: "kind:'session' — Oturum section'ı yönetir",
+    absoluteSessionCapDays: "kind:'session' — Oturum section'ı yönetir",
+    pinLockoutAttempts: "kind:'session' — Oturum section'ı yönetir",
+    pinLockoutPenaltySec: "kind:'session' — Oturum section'ı yönetir",
+    pinLockoutEscalateAfter: "kind:'session' — Oturum section'ı yönetir",
+    pinLockoutLongPenaltyMin: "kind:'session' — Oturum section'ı yönetir",
+    labelCopies: "kind:'label' — Etiket section'ı yönetir",
+    backupHour: "Sistem > Yedekler (BackupScheduleCard) yönetir",
+  };
+
+  const numMissingInSchema = aNum.filter((k) => !B.includes(k));
+  check(
+    "⭐ API'nin döndüğü her SAYISAL anahtar updateSchema'da var",
+    numMissingInSchema.length === 0,
+    `şemada YOK: ${numMissingInSchema.join(", ")} → panelden PATCH 400 alır`,
+  );
+  const numMissingInService = aNum.filter((k) => !C.includes(k));
+  check(
+    "her SAYISAL anahtarın setFeatureFlags yazma dalı var",
+    numMissingInService.length === 0,
+    `yazılmıyor: ${numMissingInService.join(", ")}`,
+  );
+  const numUnmanaged = aNum.filter((k) => !D.includes(k) && !NUMERIC_PANEL_EXEMPT[k]);
+  check(
+    "yönetilemez SAYISAL anahtar yok (panelde yok + muaf değil)",
+    numUnmanaged.length === 0,
+    `${numUnmanaged.join(", ")} — panele (numberFlags) ekle ya da gerekçeli muaf yaz`,
+  );
+  const numStaleUnknown = Object.keys(NUMERIC_PANEL_EXEMPT).filter((k) => !aNum.includes(k));
+  check(
+    "sayısal muaf listesinde artık var olmayan anahtar yok",
+    numStaleUnknown.length === 0,
+    `API'de yok: ${numStaleUnknown.join(", ")}`,
+  );
+  const numStaleNowInPanel = Object.keys(NUMERIC_PANEL_EXEMPT).filter((k) => D.includes(k));
+  check(
+    "sayısal muaf listesindeki anahtar panele eklenmemiş (eklenmişse muafı kaldır)",
+    !electronFound || numStaleNowInPanel.length === 0,
+    `artık panelde: ${numStaleNowInPanel.join(", ")}`,
+  );
+
+  // ---------------------------------------------------------------------------
+  // 9) DOĞRUDAN SONDA — iki yeni finance anahtarı adıyla kilitli (2026-08-14)
+  // ---------------------------------------------------------------------------
+  const vatOk = updateSchema.safeParse({ financeDefaultVatRate: 20 });
+  check(
+    "⭐ updateSchema `financeDefaultVatRate` kabul ediyor (sayısal anahtar dört kapıda)",
+    vatOk.success,
+    vatOk.success ? "" : JSON.stringify(vatOk.error.issues[0]),
+  );
+  const vatBad = updateSchema.safeParse({ financeDefaultVatRate: 150 });
+  check("updateSchema KDV oranında 0–100 sınırını uyguluyor (150 → 400)", !vatBad.success);
+  const negCashOk = updateSchema.safeParse({ financeBlockNegativeCashEnabled: true });
+  check(
+    "⭐ updateSchema `financeBlockNegativeCashEnabled` kabul ediyor",
+    negCashOk.success,
+    negCashOk.success ? "" : JSON.stringify(negCashOk.error.issues[0]),
+  );
+  check(
+    "API `financeDefaultVatRate` 0–100 aralığında sayı dönüyor",
+    typeof flags.financeDefaultVatRate === "number" &&
+      (flags.financeDefaultVatRate as number) >= 0 &&
+      (flags.financeDefaultVatRate as number) <= 100,
+    `değer=${String(flags.financeDefaultVatRate)}`,
+  );
+
+  // ---------------------------------------------------------------------------
   console.log("\n   Muaflar (panelde generic toggle olarak görünmeyen boolean bayraklar):");
   for (const [k, why] of Object.entries(PANEL_EXEMPT)) {
+    console.log(`     · ${k} — ${why}`);
+  }
+  console.log("\n   Sayısal muaflar (panelde numberFlags satırı olmayan sayısal anahtarlar):");
+  for (const [k, why] of Object.entries(NUMERIC_PANEL_EXEMPT)) {
     console.log(`     · ${k} — ${why}`);
   }
 

@@ -51,6 +51,7 @@ import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-for
 import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRate } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
+import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 // -----------------------------------------------------------------------------
@@ -1136,6 +1137,13 @@ export class ChequeService {
       await this.claimTx(tx, row, ChequeStatus.PAID, {
         ...(ref.bankAccountId ? { bankAccountId: ref.bankAccountId } : {}),
       });
+
+      // ⚠️ EKSİ KASA ENGELİ (finance.blockNegativeCashEnabled, default KAPALI):
+      // İLERİ yolların dördüncüsü — kendi çekimiz KASADAN ödeniyorsa bakiye
+      // eksiye düşemez; banka MUAF (helper süzer). `collect` (para GİRER) ve
+      // `cancelCollect` (STORNO — para gerçeği ekran kuralından önce gelir)
+      // BİLEREK guard'sız. Guard FOR UPDATE ile okur; decrement aynı tx'te.
+      await assertCashBalanceCoversTx(tx, { cashBoxId: ref.cashBoxId, amount: D(row.amount) });
 
       await moveAccountBalanceTx(tx, ref, D(row.amount).negated());
 

@@ -23,6 +23,7 @@ import { renderPaymentReceiptHtml, type PaymentReceiptDoc } from "./document-ren
 import { releaseAllocationsForPaymentTx } from "./payment-allocation.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
+import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CreatePaymentInput {
@@ -173,6 +174,16 @@ export class PaymentService {
         });
 
         await applyCariBalanceTx(tx, cari.id, currency, isIn ? amount.negated() : amount);
+
+        // ⚠️ EKSİ KASA ENGELİ (finance.blockNegativeCashEnabled, default KAPALI):
+        // yalnız İLERİ yönde para ÇIKARAN kasa yazımı kapılanır — banka MUAF
+        // (kredili mevduat meşru), `cancel` (storno) MUAF (yanlış tahsilat
+        // "kasa yetmez" diye iptal edilemez kalmasın). Guard bakiyeyi FOR
+        // UPDATE ile kilitleyip okur; aşağıdaki increment aynı tx'te aynı
+        // satıra yazar → araya ikinci bir çekim giremez (TOCTOU kapalı).
+        if (!isIn) {
+          await assertCashBalanceCoversTx(tx, { cashBoxId: input.cashBoxId ?? null, amount });
+        }
 
         // Kasa/banka: para girdiyse artar, çıktıysa azalır.
         const accDelta = isIn ? amount : amount.negated();

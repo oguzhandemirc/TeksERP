@@ -121,6 +121,7 @@ export function GeneralSettingsPage() {
                 {cat.kind === "flags" && cat.flags && (
                   <FeatureFlagSection
                     flags={cat.flags}
+                    numberFlags={cat.numberFlags}
                     deadlineField={
                       cat.id === "orders" ? "order" : cat.id === "work-orders" ? "wo" : undefined
                     }

@@ -59,6 +59,19 @@ export const SETTING_KEYS = {
   // MUHASEBE modülünü (cari/fatura/tahsilat) açar. İki kapı bağımsızdır —
   // fiyatı sipariş ekranında gösteren fabrikanın cari defteri tutması gerekmez.
   FINANCE_ENABLED: "finance.enabled",
+  /** Kasa (fiziksel nakit) eksi bakiyeye DÜŞEMESİN (default FALSE). Backend
+   *  ENFORCE eder — 4 İLERİ yolda 409 (ödeme OUT · masraf fişi · virmanın çıkan
+   *  kasa bacağı · çek ödeme); BANKA MUAF (kredili mevduat meşru), İPTAL/STORNO
+   *  yolları MUAF (yanlış tahsilat "kasa yetmez" diye iptal edilemez kalmasın).
+   *  Tek yüklem: `helpers/cash-balance-guard.helper.assertCashBalanceCoversTx`. */
+  FINANCE_BLOCK_NEGATIVE_CASH_ENABLED: "finance.blockNegativeCashEnabled",
+  /** Fatura satırının VARSAYILAN KDV oranı, % (0-100; default 20). Logo/Mikro
+   *  "firma parametresi" karşılığı. İKİ tüketici: Electron fatura formunun yeni
+   *  satırı ve mal kabulden üretilen alış taslağı (`invoice.service`) — ikisi
+   *  de buradan okur, oran iki yerde ayrı sürüklenmez. Yalnız ÖN-DOLUM:
+   *  kullanıcı satırda her zaman değiştirebilir, backend satır bazında geleni
+   *  kabul etmeye devam eder. */
+  FINANCE_DEFAULT_VAT_RATE: "finance.defaultVatRate",
   /**
    * ÜRETİM modülü açık mı — envanterdeki üretim sekmeleri (Üretimde · Üretim
    * Akışı · Fasonda · Kurşun/Tambur Bekleyen) ve Siparişler'deki iş emri
@@ -342,6 +355,12 @@ export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
 /** Hızlı-PIN/kart deneme kilidi varsayılanları + aralıkları. */
 export const DEFAULT_PIN_LOCKOUT_ENABLED = true;
+/** Fatura satırı varsayılan KDV oranı (%). 20 = bugünkü hardcode'un birebir
+ *  karşılığı — ayar satırı yoksa davranış bayt-bayt aynı kalır. Tam sayı
+ *  DAYATILMAZ (kolon Decimal(5,2); küsuratlı oran temsil edilebilir). */
+export const DEFAULT_FINANCE_VAT_RATE = 20;
+const MIN_FINANCE_VAT_RATE = 0;
+const MAX_FINANCE_VAT_RATE = 100;
 /** Otomatik gece yedeği saati varsayılanı (yerel saat). Eski Görev Zamanlayıcı da 03:00'tü. */
 export const DEFAULT_BACKUP_HOUR = 3;
 const MIN_BACKUP_HOUR = 0;
@@ -798,6 +817,13 @@ export interface FeatureFlags {
    *  Varsayılan KAPALI — üretici fabrika bu modülü kullanmıyor ve kapalıyken
    *  menüde tek satır bile görünmez. `pricingEnabled` ile bağımsız. */
   financeEnabled: boolean;
+  /** Kasa eksi bakiyeye düşemesin (default false). Backend ENFORCE — 4 ileri
+   *  yol 409 (ödeme OUT · masraf · virman çıkan kasa bacağı · çek ödeme);
+   *  banka ve iptal/storno yolları MUAF. */
+  financeBlockNegativeCashEnabled: boolean;
+  /** Fatura satırının varsayılan KDV oranı, % (0-100; default 20). Yalnız
+   *  ön-dolum — kullanıcı satırda değiştirebilir. */
+  financeDefaultVatRate: number;
   /** Üretim modülü (envanter üretim sekmeleri + iş emri yüzeyleri). Varsayılan AÇIK. */
   productionEnabled: boolean;
   targetQuantityEnabled: boolean;
@@ -1111,6 +1137,8 @@ export class SystemSettingService {
       companyName: await readCompanyName(cacheClient),
       pricingEnabled: await readPricingEnabled(cacheClient),
       financeEnabled: await readFinanceEnabled(cacheClient),
+      financeBlockNegativeCashEnabled: await readFinanceBlockNegativeCashEnabled(cacheClient),
+      financeDefaultVatRate: await readFinanceDefaultVatRate(cacheClient),
       productionEnabled: await readProductionEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
@@ -1195,6 +1223,38 @@ export class SystemSettingService {
         SETTING_KEYS.FINANCE_ENABLED,
         input.financeEnabled,
         "Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeBlockNegativeCashEnabled")) {
+      if (typeof input.financeBlockNegativeCashEnabled !== "boolean") {
+        throw AppError.badRequest("financeBlockNegativeCashEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED,
+        input.financeBlockNegativeCashEnabled,
+        "Kasa eksi bakiyeye düşemesin (ödeme · masraf · virman · çek ödeme 409; banka ve iptal yolları muaf)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeDefaultVatRate")) {
+      const v = input.financeDefaultVatRate;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < MIN_FINANCE_VAT_RATE ||
+        v > MAX_FINANCE_VAT_RATE
+      ) {
+        throw AppError.badRequest(
+          `Varsayılan KDV oranı ${MIN_FINANCE_VAT_RATE}–${MAX_FINANCE_VAT_RATE} arasında bir sayı olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_DEFAULT_VAT_RATE,
+        v,
+        "Fatura satırının varsayılan KDV oranı, % (yalnız ön-dolum; satırda değiştirilebilir)",
         userId
       );
     }
@@ -1959,6 +2019,46 @@ export async function readFinanceEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/**
+ * Kasa eksi bakiye engeli açık mı? Default false.
+ *
+ * ENFORCEMENT READER — bilerek cache'siz (`readTamburOverQuantityEnabled`
+ * emsali): guard tx içinde her seferinde taze okur; panelden kapatılan bayrak
+ * bir sonraki işlemde anında etkisizleşir (acil kapatma yolu). Tek tüketici:
+ * `helpers/cash-balance-guard.helper.assertCashBalanceCoversTx`.
+ */
+export async function readFinanceBlockNegativeCashEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Fatura satırının varsayılan KDV oranı (%). Kayıt yoksa / aralık dışıysa 20
+ * (= 2026-08-14 öncesi hardcode; ayar dokunulmamış kurulumda sıfır fark).
+ * İki tüketici: `invoice.service.createDraftFromGoodsReceipt` (alış taslağı)
+ * ve Electron fatura formunun yeni satırı — ikisi de tek kaynaktan okur.
+ */
+export async function readFinanceDefaultVatRate(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_DEFAULT_VAT_RATE },
+    select: { value: true },
+  });
+  const parsed = asNumber(setting?.value);
+  if (parsed === null || parsed < MIN_FINANCE_VAT_RATE || parsed > MAX_FINANCE_VAT_RATE) {
+    return DEFAULT_FINANCE_VAT_RATE;
+  }
+  return parsed;
 }
 
 /**

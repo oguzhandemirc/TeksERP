@@ -98,6 +98,16 @@ export const updateSchema = z.strictObject({
   // ⚠️ strictObject — burada olmayan anahtar PATCH'i 400 yapar; bayrak eklerken
   // asıl tehlike açamamak değil KAPATAMAMAKtır (2026-08-05 kk1 dersi).
   financeEnabled: z.boolean().optional(),
+  // finance.blockNegativeCashEnabled — KASA eksi bakiyeye düşemesin (default KAPALI).
+  // Backend ENFORCE: 4 ileri yol 409 (ödeme OUT · masraf fişi · virmanın çıkan kasa
+  // bacağı · çek ödeme); BANKA MUAF (kredili mevduat meşru), iptal/storno yolları
+  // MUAF. ⚠️ ACİL KAPATMA anahtarı — açılış bakiyeleri girilmemiş bir kurulumda
+  // guard her çıkışı keserse tek geri dönüş yolu budur.
+  financeBlockNegativeCashEnabled: z.boolean().optional(),
+  // finance.defaultVatRate — fatura satırının varsayılan KDV oranı, % (0–100,
+  // default 20). Yalnız ÖN-DOLUM: fatura formunun yeni satırı + mal kabulden
+  // üretilen alış taslağı bu değerle açılır, satırda değiştirilebilir.
+  financeDefaultVatRate: z.number().min(0).max(100).optional(),
   productionEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),

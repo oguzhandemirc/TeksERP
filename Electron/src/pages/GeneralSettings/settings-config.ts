@@ -41,6 +41,31 @@ export interface FlagDef {
   hint?: ComponentType;
 }
 
+/** FeatureFlags'in SAYISAL değerli anahtarları (numberFlags satırları için). */
+type NumberFlagKey = {
+  [K in keyof FeatureFlags]: FeatureFlags[K] extends number ? K : never;
+}[keyof FeatureFlags];
+
+/**
+ * Sekmeye gömülü SAYISAL feature-flag alanı. Boolean toggle'larla AYNI taslak +
+ * AYNI Kaydet altında yaşar ve aynı PATCH /api/feature-flags ile yazılır —
+ * ayrı bir kaydetme yolu açmak "iki Kaydet, hangisi neyi yazdı" karışıklığıydı.
+ * (Sekme-özel `deadlineField` bundan FARKLI: o system-setting upsert'idir,
+ * feature-flag değil.)
+ */
+export interface NumberFlagDef {
+  key: NumberFlagKey;
+  title: string;
+  desc: string;
+  min: number;
+  max: number;
+  /** Sunucu değeri henüz yüklenmemişken gösterilecek değer (backend default'u). */
+  fallback: number;
+  /** Input'un yanında basılan birim etiketi (örn. "%", "gün"). */
+  unit?: string;
+  step?: number;
+}
+
 /**
  * Kategori içeriğinin nasıl render edileceği:
  * - `flags`       → config'teki flag listesini generic toggle olarak çizer
@@ -84,6 +109,8 @@ export interface SettingsCategory {
   permissionAny?: string[];
   /** kind === "flags" için doldurulur. */
   flags?: FlagDef[];
+  /** kind === "flags" sekmesine gömülü sayısal feature-flag alanları (opsiyonel). */
+  numberFlags?: NumberFlagDef[];
   /**
    * Komut paletinde (arama) bu kategoriyi bulduran ek anahtar kelimeler. İçindeki
    * tek tek ayarların adları/eş anlamlıları burada; aramada görünmez ama eşleşir.
@@ -143,8 +170,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: Banknote,
     description: "Ön muhasebe modülü — cari hesaplar, fatura, tahsilat/ödeme, kasa ve banka.",
     keywords:
-      "muhasebe cari fatura tahsilat ödeme kasa banka bakiye ekstre yaşlandırma vade kur döviz finance",
+      "muhasebe cari fatura tahsilat ödeme kasa banka bakiye ekstre yaşlandırma vade kur döviz finance " +
+      "eksi bakiye negatif kasa engeli kdv oran varsayılan vergi",
     kind: "flags",
+    numberFlags: [
+      {
+        key: "financeDefaultVatRate",
+        title: "Varsayılan KDV oranı",
+        desc: "Fatura formunda yeni satır ve mal kabulden üretilen alış taslağı bu oranla açılır. Yalnız ön-dolum — her satırda değiştirilebilir; mevcut fatura ve taslaklara dokunmaz.",
+        min: 0,
+        max: 100,
+        fallback: 20,
+        unit: "%",
+      },
+    ],
     flags: [
       {
         key: "productionEnabled",
@@ -155,6 +194,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "financeEnabled",
         title: "Ön muhasebe modülünü aç",
         desc: "Kapalıyken (varsayılan) menüde 'Muhasebe' satırı çizilmez, ekranlar açılmaz ve sevkiyattan otomatik fatura taslağı ÜRETİLMEZ. Bu bir görünürlük ayarı değil rejim anahtarıdır — kapatmak mevcut kayıtları silmez, yalnız modülü devre dışı bırakır. Ekranları görmek için ayrıca 'finance:*' yetkisi gerekir.",
+      },
+      {
+        key: "financeBlockNegativeCashEnabled",
+        title: "Kasa eksi bakiyeye düşemesin",
+        desc: "Açıkken kasadan (fiziksel nakit) para ÇIKARAN dört işlem — ödeme, masraf fişi, virmanın çıkan kasa bacağı, çek ödeme — kasayı eksiye düşürecekse reddedilir; hata mesajı kasa adını, mevcut bakiyeyi ve istenen tutarı söyler. BANKA hesapları muaftır (kredili mevduat meşru); iptal/storno her zaman geçer. ⚠️ Açmadan önce kasaların açılış/devir bakiyelerinin girildiğinden emin olun — sistemde bakiyesi 0 görünen dolu bir kasadan tek işlem bile yapılamaz.",
       },
     ],
   },
