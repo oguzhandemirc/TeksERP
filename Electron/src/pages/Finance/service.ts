@@ -182,6 +182,10 @@ export async function createInvoice(body: {
   dueDate?: string | null;
   externalNo?: string | null;
   notes?: string | null;
+  /** Kaynak sevkiyat — "bir sevkiyat → tek aktif fatura" (backend partial unique). */
+  shipmentId?: string | null;
+  /** Kaynak mal kabul fişi — aynı kural, alış tarafı. */
+  goodsReceiptId?: string | null;
   lines: InvoiceLineInput[];
   clientToken?: string;
 }) {

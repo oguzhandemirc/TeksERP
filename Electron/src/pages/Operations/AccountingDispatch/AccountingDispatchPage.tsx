@@ -19,6 +19,8 @@ import { ACCOUNTING_FILTERS } from "./filters";
 import { DispatchReceiptDialog } from "./DispatchReceiptDialog";
 import { InvoiceDialog } from "./InvoiceDialog";
 import { useAccountingExport } from "./useAccountingExport";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { ShipmentInvoiceDraft } from "./ShipmentInvoiceDraft";
 import type { DispatchCursorResponse, DispatchListItem } from "./types";
 
 const QUERY_KEY = "accounting-dispatch";
@@ -40,7 +42,14 @@ const FORCE = { status: "DISPATCHED" } as const;
 export function AccountingDispatchPage() {
   const [receiptFor, setReceiptFor] = useState<DispatchListItem | null>(null);
   const [invoiceFor, setInvoiceFor] = useState<DispatchListItem | null>(null);
-  const columns = useMemo(() => buildDispatchColumns(setReceiptFor, setInvoiceFor), []);
+  // İÇ fatura taslağı — yalnız TİCARET REJİMİNDE. Fabrikada ön muhasebe modülü
+  // kapalı olduğu için düğme hiç çizilmez (fabrika sıfır-fark).
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const [draftFor, setDraftFor] = useState<DispatchListItem | null>(null);
+  const columns = useMemo(
+    () => buildDispatchColumns(setReceiptFor, setInvoiceFor, setDraftFor, financeEnabled),
+    [financeEnabled],
+  );
 
   const { table, query, search, setSearch, pagination } = useDataTable<DispatchListItem>({
     queryKey: QUERY_KEY,
@@ -161,6 +170,11 @@ export function AccountingDispatchPage() {
 
       <DispatchReceiptDialog receiptFor={receiptFor} onClose={() => setReceiptFor(null)} />
       <InvoiceDialog row={invoiceFor} onClose={() => setInvoiceFor(null)} queryKey={QUERY_KEY} />
+      <ShipmentInvoiceDraft
+        row={draftFor}
+        onClose={() => setDraftFor(null)}
+        onCreated={() => void query.refetch()}
+      />
     </PageShell>
   );
 }

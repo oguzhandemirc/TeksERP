@@ -14,10 +14,29 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Customer } from "@/pages/Customers/types";
 import { createInvoice, money, INVOICE_TYPE_LABEL, type Currency, type InvoiceType } from "./service";
 
+/**
+ * Bir kaynak belgeden (sevkiyat / mal kabul) ön-doldurulmuş taslak.
+ *
+ * ⚠️ Bağ ALAN olarak taşınır (`shipmentId`), satır metnine gömülmez: backend
+ * "bir kaynak → tek aktif fatura" kuralını partial unique ile o alandan
+ * uyguluyor. Yalnız açıklamaya yazılsaydı aynı sevkiyat ikinci kez
+ * faturalanabilirdi ve kimse fark etmezdi.
+ */
+export interface InvoicePrefill {
+  shipmentId?: string | null;
+  customerId?: string | null;
+  currency?: Currency;
+  lines: Array<{ description: string; qty: number; unit: string; unitPrice?: number }>;
+  /** Diyalog başlığının altında "Kaynak: SVK…" olarak gösterilir. */
+  sourceLabel?: string;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  /** Verilirse form bu değerlerle açılır (kullanıcı hepsini değiştirebilir). */
+  prefill?: InvoicePrefill;
 }
 
 interface DraftLine {
@@ -61,14 +80,21 @@ function lineTotals(l: DraftLine) {
   return { net, vat, withholding };
 }
 
-export function InvoiceFormDialog({ open, onOpenChange, onCreated }: Props) {
+export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Props) {
+  // ⚠️ Ön-doldurma YALNIZ başlangıç değeridir; çağıran diyaloğu koşullu mount
+  // eder (her açılış taze bileşen). Prop'u render fazında senkronlamak,
+  // kullanıcının sildiği satırı geri getirirdi.
   const [type, setType] = useState<InvoiceType>("SALES");
   const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">("CUSTOMER");
-  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerId, setCustomerId] = useState<string | null>(prefill?.customerId ?? null);
   const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<Currency>("TRY");
+  const [currency, setCurrency] = useState<Currency>(prefill?.currency ?? "TRY");
   const [externalNo, setExternalNo] = useState("");
-  const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
+  const [lines, setLines] = useState<DraftLine[]>(() =>
+    prefill?.lines.length
+      ? prefill.lines.map((l) => ({ ...emptyLine(), ...l, unitPrice: l.unitPrice ?? 0 }))
+      : [emptyLine()],
+  );
 
   // Taraf iki AYRI karttan gelir: Müşteri/Tedarikçi (Customer — tedarikçi de
   // bu karttadır, CompanyType.SUPPLIER) ve Fason (Subcontractor). Alış faturası
@@ -102,6 +128,11 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated }: Props) {
         subcontractorId: isCustomerParty ? null : subcontractorId,
         currency,
         externalNo: externalNo || null,
+        // Kaynak bağı yalnız SATIŞ faturasında taşınır: sevkiyat bizim çıkışımız,
+        // alış faturasının kaynağı mal kabul fişidir (A3 yolu). Kullanıcı türü
+        // ALIŞ'a çevirdiyse bağ sessizce düşer — yanlış kaynağa bağlı fatura,
+        // bağsız faturadan kötüdür.
+        shipmentId: type === "SALES" ? (prefill?.shipmentId ?? null) : null,
         clientToken: crypto.randomUUID(),
         lines: lines
           .filter((l) => l.description.trim() && l.qty > 0)
@@ -135,6 +166,11 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated }: Props) {
         <DialogHeader>
           <DialogTitle>Yeni Fatura (Taslak)</DialogTitle>
           <DialogDescription>
+            {prefill?.sourceLabel && (
+              <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                Kaynak: {prefill.sourceLabel}
+              </span>
+            )}
             Taslak deftere işlemez — serbestçe düzenleyip silebilirsiniz. Cari hesaba
             işlemesi için ayrıca <b>Onayla</b> demeniz gerekir.
           </DialogDescription>

@@ -1,16 +1,21 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { FileText, Receipt } from "lucide-react";
+import { FilePlus2, FileText, Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat, formatNumber } from "@/lib/format";
+import { canDraftInvoice } from "./invoiceDraftVisibility";
 import type { DispatchListItem } from "./types";
 
 export function buildDispatchColumns(
   onReceipt: (row: DispatchListItem) => void,
   onInvoice: (row: DispatchListItem) => void,
+  /** İÇ fatura taslağı açar. Görünürlük `canDraftInvoice` ile çözülür. */
+  onDraftInvoice: (row: DispatchListItem) => void,
+  /** Ticaret rejimi — `finance.enabled`. */
+  financeEnabled: boolean,
 ): ColumnDef<DispatchListItem>[] {
   return [
     {
@@ -118,6 +123,32 @@ export function buildDispatchColumns(
                 {r.invoiceNo ? "Düzenle" : "İşaretle"}
               </Button>
             </PermissionGate>
+            {/* ⚠️ İKİ AYRI İŞ, İKİ AYRI İZİN — karıştırma:
+                • "İşaretle" (`shipping:invoice`) = DIŞ muhasebe programında
+                  kesilmiş belgenin numarasını buraya İZ olarak yazar.
+                • "Faturala" (`finance:write`) = bu sistemde İÇ fatura taslağı
+                  doğurur ve onaylanınca cari deftere işler.
+                Muhasebeciye ikisini tek izinle vermek, yalnız iz düşmesi
+                gereken kişiye defter yazma yetkisi vermek olurdu.
+                Zaten faturalanmışsa düğme ÇIKMAZ: backend "bir sevkiyat → tek
+                aktif fatura" diyor, gri buton olmayan bir yolu vaat ederdi. */}
+            {canDraftInvoice(r, financeEnabled) && (
+              <PermissionGate permission="finance:write">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 gap-1 px-2 text-[11px]"
+                  title="Bu sevkiyattan iç satış faturası taslağı oluştur"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDraftInvoice(r);
+                  }}
+                >
+                  <FilePlus2 className="h-3.5 w-3.5" />
+                  Faturala
+                </Button>
+              </PermissionGate>
+            )}
           </div>
         );
       },
