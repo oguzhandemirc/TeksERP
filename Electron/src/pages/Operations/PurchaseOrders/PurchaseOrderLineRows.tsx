@@ -19,10 +19,12 @@
 // Miktarın hangi birimde olduğu ürün seçilince kataloğa bakılarak bilinir;
 // sipariş DETAYINDA birimle birlikte basılır (backend `item.unit` döner).
 // =============================================================================
+import { useRef } from "react";
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { useItemPriceSuggestion, describeSuggestion } from "@/hooks/useItemPriceSuggestion";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 
@@ -90,9 +92,69 @@ interface Props {
    * "buraya dokunma" der; açık alan çalışmayı davet eder.
    */
   disabled?: boolean;
+  /**
+   * ALIŞ fiyat önerisi bağlamı (D2/F2): tedarikçi + siparişin para birimi.
+   * İkisi de verilmezse öneri isteği HİÇ atılmaz — form bugünkü gibi elle
+   * çalışır (form diyaloğu bu prop'ları geçirene kadar davranış birebir aynı).
+   */
+  supplierId?: string | null;
+  currency?: string;
 }
 
-export function PurchaseOrderLineRows({ lines, onChange, disabled }: Props) {
+/**
+ * Birim fiyat hücresi — ürün seçilince tedarikçiye göre ALIŞ fiyatı önerisi.
+ *
+ * Ayrı bileşen: öneri kancası satır başınadır, `map` içinde kanca çağrılamaz.
+ * Yazma kuralı ortak saf yüklemde (`shouldApplySuggestion`): boşken doldur ·
+ * kullanıcının yazdığını ASLA ezme · kaynak değişince yalnız bizim yazdığımız
+ * değeri tazele. `financeEnabled` kapısı kancanın içindedir. Salt-okunur modda
+ * (`disabled`) öneri de KAPALIDIR — okunur forma yazmak, kaydedilemeyecek bir
+ * değişikliği sessizce üretmekti.
+ */
+function PoLinePriceField({
+  line, supplierId, currency, disabled, onPatch,
+}: {
+  line: PoDraftLine;
+  supplierId: string | null;
+  currency: string | null;
+  disabled?: boolean;
+  onPatch: (p: Partial<PoDraftLine>) => void;
+}) {
+  const patchRef = useRef(onPatch);
+  patchRef.current = onPatch;
+  const suggestion = useItemPriceSuggestion({
+    itemId: line.itemId || null,
+    kind: "PURCHASE",
+    currency,
+    customerId: supplierId,
+    enabled: !disabled,
+    current: line.unitPrice,
+    onApply: (p) => patchRef.current({ unitPrice: p }),
+  });
+  const helper = describeSuggestion({
+    price: suggestion.price,
+    source: suggestion.source,
+    message: suggestion.message,
+    current: line.unitPrice,
+  });
+
+  return (
+    <div className="min-w-0">
+      <Input
+        type="number"
+        min={0}
+        step="0.0001"
+        placeholder="—"
+        disabled={disabled}
+        value={line.unitPrice ?? ""}
+        onChange={(e) => onPatch({ unitPrice: e.target.value ? Number(e.target.value) : null })}
+      />
+      {helper && <p className="mt-1 text-[10px] text-muted-foreground">{helper}</p>}
+    </div>
+  );
+}
+
+export function PurchaseOrderLineRows({ lines, onChange, disabled, supplierId, currency }: Props) {
   const patch = (key: string, p: Partial<PoDraftLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
@@ -142,14 +204,12 @@ export function PurchaseOrderLineRows({ lines, onChange, disabled }: Props) {
               value={l.qty || ""}
               onChange={(e) => patch(l.key, { qty: Number(e.target.value) })}
             />
-            <Input
-              type="number"
-              min={0}
-              step="0.0001"
-              placeholder="—"
+            <PoLinePriceField
+              line={l}
+              supplierId={supplierId ?? null}
+              currency={currency ?? null}
               disabled={disabled}
-              value={l.unitPrice ?? ""}
-              onChange={(e) => patch(l.key, { unitPrice: e.target.value ? Number(e.target.value) : null })}
+              onPatch={(p) => patch(l.key, p)}
             />
             <Input
               maxLength={300}

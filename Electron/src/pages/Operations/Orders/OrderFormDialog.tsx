@@ -289,6 +289,8 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     lineErrors={form.formState.errors.lines as any}
                     customerId={form.watch("customerId") || null}
+                    // SALE fiyat önerisinin para birimi bağlamı (F2 dikişi 2026-08-14).
+                    currency={form.watch("currency")}
                   />
                 )}
               />

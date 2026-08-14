@@ -272,7 +272,15 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
 
             {/* Kalem satırları da kapanır: diğer alanlar kapalıyken burayı açık
                 bırakmak, kaydedilemeyecek bir işi davet etmekti. */}
-            <PurchaseOrderLineRows lines={lines} onChange={setLines} disabled={editBlocked} />
+            {/* supplierId+currency: PURCHASE fiyat önerisinin bağlamı (F2 dikişi
+                2026-08-14) — tedarikçi/birim seçilmeden öneri isteği atılmaz. */}
+            <PurchaseOrderLineRows
+              lines={lines}
+              onChange={setLines}
+              disabled={editBlocked}
+              supplierId={supplierId}
+              currency={currency}
+            />
 
             <div className="flex items-center justify-between">
               <Button
