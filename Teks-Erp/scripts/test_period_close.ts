@@ -21,6 +21,10 @@
 //   §6 ⭐ Ekstre devri ÜÇ ADIM; kapanış yoksa bugünkü yol BAYT-BAYT
 //   §7 Verify: guard'ı atlayan yazar drift üretirse GÖRÜNÜR olur
 //   §8 ⭐ EŞZAMANLILIK: kapanış ile defter yazımı serileşir (advisory lock)
+//   §10 ⭐ KİLİT SIRASI — tek fonksiyon gövdesinde ≥2 elle tekil guard → kırmızı
+//       (Sınıf 3 madde 4; `test_cash_period_close` §10'un cari ikizi.
+//       Negatif sonda 2026-08-14: cari.service'e çift-çağrılı sahte fonksiyon
+//       eklendi → TAM 1 kırmızı, dosya adıyla; shasum ile birebir geri yüklendi)
 //
 // KÖRLÜK ZEMİNİ: §5 taraması ve §1 fixture'ı, "hiçbir şeye bakılmadı" ile
 // "ihlal bulunamadı"nın aynı yeşile çıkmasını engelleyen alt sınırlar taşır.
@@ -498,6 +502,69 @@ async function main(): Promise<void> {
     formatDayKeyTr(PERIOD_END) === "31.03.2026",
     formatDayKeyTr(PERIOD_END),
   );
+
+  // ── §10 KİLİT SIRASI — tek fonksiyon gövdesinde ≥2 ELLE tekil çağrı ───────
+  // Sınıf 3 (2026-08-14 sağlamlık tasarımı, madde 4): sırasız çift advisory
+  // kilit ayna çiftte PG deadlock (40P01) üretir — `cheque.bounce` tam bu
+  // desenden kilitlenmişti (iki cariye iki AYRI tekil guard çağrısı). Çok
+  // kapsama yazan tx ÇOĞUL helper'ı (assertPeriodsOpenTx) kullanmalı;
+  // anahtarları o sıralar. Bu tarama `test_cash_period_close` §10'un CARİ
+  // ikizidir — kasa tarafı orada kilitli, cari tarafı burada.
+  // ⚠️ Bilinen statik sınır (tasarımda yazılı): döngü içinden TEK çağrı
+  // noktasıyla N kilit almayı AST göremez. ⚠️ `period-guard.helper.ts` MUAF:
+  // çoğul helper tekil guard'ı SIRALANMIŞ anahtarlarla döngüde çağırır —
+  // meşru olan tek yer.
+  {
+    const isFnLike = (n: ts.Node): boolean =>
+      ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n);
+    const walkTs = (dir: string): string[] =>
+      fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) return walkTs(full);
+        return entry.isFile() && entry.name.endsWith(".ts") ? [full] : [];
+      });
+    let singularSites = 0;
+    const doubles: string[] = [];
+    for (const full of walkTs(servicesDir)) {
+      if (full.endsWith(`helpers${path.sep}period-guard.helper.ts`)) continue; // muaf (üstte gerekçeli)
+      const rel = path.relative(servicesDir, full);
+      const sf = ts.createSourceFile(full, fs.readFileSync(full, "utf8"), ts.ScriptTarget.Latest, true);
+      const countOwnBody = (fn: ts.Node): number => {
+        let c = 0;
+        const walkFn = (n: ts.Node): void => {
+          if (n !== fn && isFnLike(n)) return; // iç fonksiyon (tx callback'i) KENDİ gövdesidir
+          if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "assertPeriodOpenTx") {
+            c++;
+          }
+          ts.forEachChild(n, walkFn);
+        };
+        walkFn(fn);
+        return c;
+      };
+      const visit = (n: ts.Node): void => {
+        if (isFnLike(n)) {
+          const c = countOwnBody(n);
+          singularSites += c;
+          if (c >= 2) doubles.push(`${rel} (tek gövdede ${c} tekil çağrı)`);
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+    // Körlük zemini: bugün 7 meşru tekil çağrı var (cari ×2 · fatura ×2 ·
+    // çek ×1 · tahsilat ×2). Tarama boşa düşerse 0 bulur — "ihlal yok" ile
+    // "hiçbir şeye bakılmadı" aynı yeşile çıkmasın.
+    check(
+      "§10a Körlük zemini: elle tekil cari-guard çağrıları bulundu",
+      singularSites >= 5,
+      `tekil çağrı=${singularSites}`,
+    );
+    check(
+      "§10b ⭐ Hiçbir fonksiyon gövdesi ≥2 ELLE tekil cari-guard çağrısı taşımıyor (çok kapsam = ÇOĞUL helper)",
+      doubles.length === 0,
+      doubles.length === 0 ? "temiz" : `İHLAL: ${doubles.join(" · ")} — assertPeriodsOpenTx kullan`,
+    );
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

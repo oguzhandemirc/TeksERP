@@ -15,18 +15,25 @@
 //
 // ÖLÇÜLENLER:
 //   §1 ⭐ Fotoğraf ÜÇ yazardan doğru — CANCELLED dışarıda, gün sınırı fabrika
-//      takviminde, kapanış hiçbir deftere satır yazmaz
-//   §2 ⭐ Kapalı döneme yazma 409 (helper DOĞRUDAN — dikiş henüz yok);
+//      takviminde, kapanış hiçbir deftere satır yazmaz; SINIR ANI (yerel
+//      23:30 / 00:30) doğru güne çözülür — preview VE close yolunda
+//   §2 ⭐ Kapalı döneme yazma 409 (helper DOĞRUDAN — yazar dikişini §9 tarar);
 //      hesap bazlılık; XOR girdisi; ÇOĞUL helper
 //   §3 Gelecek dönem 400 · aynı dönem 409 · geriye kapanış 409
 //   §4 ⭐ Reopen: gerekçe · LIFO · satır silinmez · atomik claim · yeniden
 //      kapatma (partial unique ×2 ispatı)
-//   §5 ⭐ Verify: guard'ı atlayan yazım drift olarak GÖRÜNÜR (salt okuma)
+//   §5 ⭐ Verify: guard'ı atlayan yazım drift olarak GÖRÜNÜR (salt okuma) —
+//      ÜÇ yazarın HER BİRİNDEN ayrı ayrı (yeniden türetim üç kolu da okur)
 //   §6 ⭐ XOR CHECK — DB seddi (`cash_period_close_account_xor`): servis
 //      atlansa bile satırın kendisi direnir
 //   §7 ⭐ EŞZAMANLILIK: kapanış ile kasa yazımı serileşir (advisory lock) —
 //      NEGATİF SONDA HEDEFİ: close()'daki kilit satırı silinirse 7c kırmızı
 //   §8 Saf katman: kilit uzayları ayrık · kesim anı sözleşmesi
+//   §9 ⭐ KABLOLAMA: bakiye yazan her servis guard'ı çağırıyor (AST, rekürsif)
+//   §10 ⭐ KİLİT SIRASI: tek fonksiyon gövdesinde ≥2 ELLE tekil cash-guard
+//      çağrısı YASAK (Sınıf 3 — sırasız çift kilit ayna çiftte deadlock;
+//      çok hesap = ÇOĞUL helper). ⚠️ Bilinen statik sınır: döngü içinden tek
+//      çağrı noktasıyla N kilit almayı AST göremez.
 //
 // KÖRLÜK ZEMİNİ: §0 fixture sayımı — üç yazar tablosunun ÜÇÜ de fixture'da
 // temsil edilmeden fotoğraf kontrolleri koşmaz ("hiçbir şey ölçülmedi" ile
@@ -331,6 +338,36 @@ async function main(): Promise<void> {
     closeA.data.periodEnd.toISOString(),
   );
 
+  // SINIR ANI → GÜN ANAHTARI (rota ISO AN da kabul eder; servis `periodDayKey`
+  // ile fabrika gününe çevirir). Yerel 23:30 aynı güne, yerel 00:30 ertesi
+  // güne çözülmeli — gün UTC'de kesilseydi ikisi de 31.03'e düşer ve sınır
+  // gecesi verilen kapanış yanlış dönemi mühürlerdi. NEGATİF SONDA HEDEFİ:
+  // preview'daki `periodDayKey` UTC kesime çevrilirse §1j kırmızı.
+  const prevSameDay = await cashPeriodCloseService.preview({ cashBoxId: boxA, periodEnd: T_EDGE_IN });
+  const prevNextDay = await cashPeriodCloseService.preview({ cashBoxId: boxA, periodEnd: T_EDGE_OUT });
+  check(
+    "§1i ⭐ SINIR ANI: yerel 23:30 anı gün anahtarıyla AYNI döneme çözülür (fotoğraf birebir)",
+    prevSameDay.data.periodEnd.toISOString() === "2026-03-31T00:00:00.000Z" &&
+      D(prevSameDay.data.closingBalance).equals(850) &&
+      prevSameDay.data.txnCount === 5,
+    `periodEnd=${prevSameDay.data.periodEnd.toISOString()} bakiye=${prevSameDay.data.closingBalance}`,
+  );
+  check(
+    "§1j ⭐ SINIR ANI: yerel 00:30 anı ERTESİ güne çözülür (sınır-dışı satır artık içeride: 1550 / 6)",
+    prevNextDay.data.periodEnd.toISOString() === "2026-04-01T00:00:00.000Z" &&
+      D(prevNextDay.data.closingBalance).equals(1550) &&
+      prevNextDay.data.txnCount === 6,
+    `periodEnd=${prevNextDay.data.periodEnd.toISOString()} bakiye=${prevNextDay.data.closingBalance}`,
+  );
+  const errCloseInstant = await expectError(() =>
+    cashPeriodCloseService.close({ cashBoxId: boxA, periodEnd: T_EDGE_IN }),
+  );
+  check(
+    "§1k KAPANIŞ yolu da anı gün anahtarına çevirir — sınır anıyla ikinci kapanış 'zaten kapalı'",
+    /zaten kapalı/i.test(errCloseInstant),
+    errCloseInstant.slice(0, 80),
+  );
+
   // ── §2 KAPALI DÖNEME YAZMA KİLİTLİ (helper DOĞRUDAN — dikiş henüz yok) ────
   const errInside = await expectError(() => guardedCashWrite(refA, 50, T_INSIDE));
   check("§2a ⭐ Kapalı döneme kasa yazımı REDDEDİLDİ", /KAPALI dönemine/i.test(errInside), errInside.slice(0, 90));
@@ -486,6 +523,27 @@ async function main(): Promise<void> {
     ).equals(850),
   );
 
+  // ÜÇ YAZARIN HER BİRİNDEN sızıntı AYRI AYRI görünmeli: §5b yalnız yazar-2'yi
+  // (cash_transactions) ölçüyordu; verify'ın yeniden türetimi tek kolu okusaydı
+  // diğer iki yazarın drift'i sonsuza dek sessiz kalırdı. (§1a fotoğrafın üç
+  // kolunu KAPANIŞ anında ölçer; burası aynı üç kolun VERIFY yolunda da canlı
+  // olduğunun kanıtı.) NEGATİF SONDA HEDEFLERİ: measureTx'in payments kolu
+  // körleşirse §5d, cheque_events kolu körleşirse §5e kırmızı verir.
+  await payRow(refA, cariId, PaymentDirection.OUT, 100, T_INSIDE); // yazar-1 sızıntısı
+  const driftedPay = await cashPeriodCloseService.verify(closeA.data.id);
+  check(
+    "§5d ⭐ YAZAR-1 (payments) sızıntısı da drift olarak görünür (999−100 = 899 / 2)",
+    driftedPay.data.drift === true && D(driftedPay.data.balanceDelta).equals(899) && driftedPay.data.countDelta === 2,
+    `Δbakiye=${driftedPay.data.balanceDelta} Δadet=${driftedPay.data.countDelta}`,
+  );
+  await chequeRow(refA, cariId, "COLLECT", 50, T_INSIDE); // yazar-3 sızıntısı
+  const driftedChq = await cashPeriodCloseService.verify(closeA.data.id);
+  check(
+    "§5e ⭐ YAZAR-3 (cheque_events) sızıntısı da drift olarak görünür (899+50 = 949 / 3)",
+    driftedChq.data.drift === true && D(driftedChq.data.balanceDelta).equals(949) && driftedChq.data.countDelta === 3,
+    `Δbakiye=${driftedChq.data.balanceDelta} Δadet=${driftedChq.data.countDelta}`,
+  );
+
   // ── §6 XOR — SERVİS 400 + DB CHECK SEDDİ ──────────────────────────────────
   const errSvcBoth = await expectError(() =>
     cashPeriodCloseService.close({ cashBoxId: boxB, bankAccountId: bank, periodEnd: new Date(Date.UTC(2026, 0, 31)) }),
@@ -636,12 +694,21 @@ async function main(): Promise<void> {
       visit(sf);
       return { writes, guards };
     };
-    for (const entry of fs.readdirSync(servicesDir, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
-      const full = path.join(servicesDir, entry.name);
+    // REKÜRSİF yürüyüş — helpers/ ve reports/ da taranır. Bugün tüm bakiye
+    // yazarları üst düzeyde (moveAccountBalanceTx cheque.service İÇİNDE tanımlı)
+    // ama o fonksiyon yarın bir helper dosyasına taşınırsa düz readdir taraması
+    // kapsamı SESSİZCE kaybederdi — "ihlal yok" ile "bakılmadı" aynı yeşil.
+    const walkTs = (dir: string): string[] =>
+      fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) return walkTs(full);
+        return entry.isFile() && entry.name.endsWith(".ts") ? [full] : [];
+      });
+    const allServiceFiles = walkTs(servicesDir);
+    for (const full of allServiceFiles) {
       const r = scanOne(full);
       if (!r.writes) continue;
-      scanned.push({ file: entry.name, guarded: r.guards });
+      scanned.push({ file: path.relative(servicesDir, full), guarded: r.guards });
     }
     // Körlük zemini: üç yazar biliniyor (payment · cash-transaction · cheque).
     check(
@@ -658,6 +725,65 @@ async function main(): Promise<void> {
         : `BAĞLANMAMIŞ: ${unguarded.map((s) => s.file).join(", ")} — bakiye yazımından ÖNCE, AYNI tx'te ` +
           `assertCashPeriodOpenTx (tek hesap) ya da assertCashPeriodsOpenTx (çok hesap) çağır`,
     );
+
+    // ── §10 KİLİT SIRASI — tek fonksiyon gövdesinde ≥2 ELLE tekil çağrı ──────
+    // Sınıf 3: sırasız çift advisory kilit ayna çiftte PG deadlock (40P01)
+    // üretir — `cheque.bounce`ın CARİ tarafında canlı ölçülmüştü. Çok hesaba
+    // yazan tx ÇOĞUL helper'ı (assertCashPeriodsOpenTx) kullanmalı; anahtarları
+    // o sıralar. Bu tarama, bir fonksiyon gövdesinde (İÇ İÇE fonksiyonlar
+    // hariç — tx callback'i kendi gövdesidir) birden çok elle tekil çağrıyı
+    // kırmızıya bağlar. Tasarımın (Sınıf 3, madde 4) istediği bekçi budur;
+    // helper'daki yasak yalnız yorumdu ve yorum kimseyi durdurmaz.
+    // ⚠️ Bilinen statik sınır (tasarımda yazılı): döngü içinden TEK çağrı
+    // noktasıyla N kilit almayı AST göremez. ⚠️ Guard helper'ın kendisi MUAF:
+    // çoğul helper tekil guard'ı SIRALANMIŞ anahtarlarla döngüde çağırır —
+    // meşru olan tek yer.
+    {
+      type TsNode = import("typescript").Node;
+      const isFnLike = (n: TsNode): boolean =>
+        ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n);
+      let singularSites = 0;
+      const doubles: string[] = [];
+      for (const full of allServiceFiles) {
+        if (full.endsWith(`helpers${path.sep}cash-period-guard.helper.ts`)) continue; // muaf (üstte gerekçeli)
+        const rel = path.relative(servicesDir, full);
+        const sf = ts.createSourceFile(full, fs.readFileSync(full, "utf8"), ts.ScriptTarget.Latest, true);
+        const countOwnBody = (fn: TsNode): number => {
+          let c = 0;
+          const walkFn = (n: TsNode): void => {
+            if (n !== fn && isFnLike(n)) return; // iç fonksiyon kendi gövdesinde sayılır
+            if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "assertCashPeriodOpenTx") {
+              c++;
+            }
+            ts.forEachChild(n, walkFn);
+          };
+          walkFn(fn);
+          return c;
+        };
+        const visit = (n: TsNode): void => {
+          if (isFnLike(n)) {
+            const c = countOwnBody(n);
+            singularSites += c;
+            if (c >= 2) doubles.push(`${rel} (tek gövdede ${c} tekil çağrı)`);
+          }
+          ts.forEachChild(n, visit);
+        };
+        visit(sf);
+      }
+      // Körlük zemini: bugün 6 meşru tekil çağrı var (payment ×2 · cash ×1 ·
+      // cheque ×3). Tarama boşa düşerse (dizin/regex değişimi) 0 bulur ve bu
+      // kontrol "hiçbir şeye bakılmadı"yı yeşilden ayırır.
+      check(
+        "§10a Körlük zemini: elle tekil guard çağrıları bulundu",
+        singularSites >= 5,
+        `tekil çağrı=${singularSites}`,
+      );
+      check(
+        "§10b ⭐ Hiçbir fonksiyon gövdesi ≥2 ELLE tekil cash-guard çağrısı taşımıyor (çok hesap = ÇOĞUL helper)",
+        doubles.length === 0,
+        doubles.length === 0 ? "temiz" : `İHLAL: ${doubles.join(" · ")} — assertCashPeriodsOpenTx kullan`,
+      );
+    }
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

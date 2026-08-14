@@ -28,7 +28,9 @@
 //     serileştirmemeli).
 //   • Kaynak defter append-only DEĞİL: Payment/CashTransaction iptali satırı
 //     CANCELLED'a çekip toplamdan GERİYE DÖNÜK düşürür. Bu yüzden iptal
-//     yolları guard'ı ORİJİNAL tarihle çağırmalı (helper başlığında yazılı);
+//     yolları guard'ı ORİJİNAL tarihle çağırır (payment.cancel ·
+//     cash-transaction.cancel — helper başlığında yazılı; ÇEK stornosu K-2
+//     hariç: olay defteri append-only, ters satır bugüne düşer → çıpa `now`);
 //     `verify` de tam bu sınıf sızıntıyı görünür kılmak için var.
 // =============================================================================
 

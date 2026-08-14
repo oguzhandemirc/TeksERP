@@ -17,17 +17,20 @@
 // kendisidir. Cari guard'ındaki `currency` parametresinin burada karşılığı
 // bilinçli olarak YOKTUR.
 //
-// ── ÇAĞIRMASI GEREKEN ÜÇ YAZAR (dikiş ANA OTURUMDA — dosya sahipliği) ───────
+// ── ÜÇ YAZAR BAĞLI (dikiş 2026-08-14'te TAMAMLANDI; incelemede doğrulandı) ──
 //   1. payment.service          → create (paymentDate) · cancel (⚠️ ORİJİNAL
 //      paymentDate ile: kasa iptali cari stornosu gibi bugüne satır EKLEMEZ,
 //      satırı CANCELLED'a çekip toplamdan GERİYE DÖNÜK düşürür — bugünle
 //      guard'lamak kapalı dönemin fotoğrafını sessizce değiştirtirdi)
 //   2. cash-transaction.service → create · transfer (İKİ hesap → ÇOĞUL helper!)
-//      · cancel (⚠️ yine ORİJİNAL txnDate ile, virmanda iki bacak birden)
-//   3. cheque.service           → collect · pay (eventDate; K-2 gelince
-//      collectCancel de — ORİJİNAL COLLECT hesabına ters hareket yazar)
+//      · cancel (⚠️ yine ORİJİNAL txnDate ile, virmanda iki bacak birden ÇOĞUL)
+//   3. cheque.service           → collect · pay (eventDate) · collectCancel
+//      (K-2 — çıpa `now`, ORİJİNAL eventDate DEĞİL: olay defteri append-only,
+//      storno BUGÜNE yeni satır düşer ve kapalı fotoğraf DEĞİŞMEZ; iptal
+//      yollarından farkı yapısal. Hesap ise ORİJİNAL COLLECT'inkidir.)
 // Guard'ı ATLAYAN tek bir yazar kilidin tamamını sessizce delik yapar;
-// `verify` driftı görünür kılar ama ÖNLEMEZ.
+// `verify` driftı görünür kılar ama ÖNLEMEZ. Yeni bir bakiye yazarı doğduğu
+// gün bekçi kırmızı verir: `test_cash_period_close` §9 (kablolama taraması).
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
@@ -164,9 +167,11 @@ export async function assertCashPeriodOpenTx(tx: Prisma.TransactionClient, ref: 
  * alırsa PG deadlock tespit edip birini öldürür. Anahtarlar burada SIRALANDIĞI
  * için tüm çağıranlar aynı sırada kilitlenir ve deadlock yapısal olarak
  * imkânsızdır. Çok hesaplı yazar `assertCashPeriodOpenTx`'i iki kez ELLE
- * çağırmamalı — bunu kullanmalı (cari `assertPeriodsOpenTx` emsali; bekçi
- * `test_period_close` §5 sınıfındaki AST taraması "tek tx'te ≥2 elle tekil
- * çağrı" desenini zaten kırmızıya bağlıyor).
+ * çağırmamalı — bunu kullanmalı (cari `assertPeriodsOpenTx` emsali). Kural
+ * MEKANİK: `test_cash_period_close` §10, tek fonksiyon gövdesinde ≥2 elle
+ * tekil çağrıyı AST taramasıyla kırmızıya bağlar (2026-08-14 incelemesi:
+ * önceki yorum bu bekçiyi test_period_close §5'te VAR sanıyordu — orası yalnız
+ * kablolama taramasıdır; eksik bekçi §10 olarak yazıldı).
  *
  * Aynı hesap için birden çok tarih verilirse EN ERKENİ ölçülür: kapanış
  * "gün <= periodEnd" ile kapsar, en erken gün açıksa sonrakiler de açıktır.
