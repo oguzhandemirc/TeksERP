@@ -45,6 +45,8 @@ const receiptIds: string[] = [];
 const invoiceIds: string[] = [];
 const cariIds: string[] = [];
 let supplierId: string | null = null;
+/** §9 fixture'ı — testin KENDİ yarattığı YARN kalemi (temizlikte silinir). */
+let yarnItemId: string | null = null;
 
 async function expectError(fn: () => Promise<unknown>): Promise<string> {
   try {
@@ -219,6 +221,132 @@ async function main(): Promise<void> {
   const cancelledErr = await expectError(() => invoiceService.createDraftFromGoodsReceipt(nsId));
   check("§6b İptal edilmiş fiş REDDEDİLDİ", /iptal edilmiş/i.test(cancelledErr), cancelledErr.slice(0, 60));
 
+  // ── §8 ⭐ FATURALANMIŞ FİŞ İPTAL EDİLEMEZ (2026-08-14 denetim, KRİTİK) ────
+  // §6b guard'ın BİR yönünü ölçüyordu ("iptal edilmiş fişten fatura kesilemez").
+  // TERS YÖN korunmuyordu: faturası kesilmiş fiş serbestçe iptal edilebiliyor,
+  // fatura ayakta kalıyordu. Ölçülen sonuç: `confirm` kaynak fişi hiç okumadığı
+  // için onay geçiyor ve tedarikçi carisine HİÇ GELMEMİŞ mal için borç yazılıyor
+  // — belge donuyor, hata da log da çıkmıyor.
+  {
+    const r = await goodsReceiptService.create(
+      {
+        warehouseId: wh.id,
+        supplierId: supplier.id,
+        currency: "USD",
+        lines: [{ itemId: item.id, initialQty: 40, unitPrice: 2, clientToken: crypto.randomUUID() }],
+      },
+      undefined,
+    );
+    const rid = (r.data as { id: string }).id;
+    receiptIds.push(rid);
+    const dr = await invoiceService.createDraftFromGoodsReceipt(rid);
+    invoiceIds.push(dr.data.id);
+
+    const blocked = await expectError(() => goodsReceiptService.cancel(rid, "bekçi", undefined));
+    check("§8a ⭐ TASLAK faturası olan fiş iptal EDİLEMEDİ", /iptal edilemez/i.test(blocked), blocked.slice(0, 80));
+    check("§8b Mesaj faturayı ADIYLA söylüyor", blocked.includes(dr.data.docNo), dr.data.docNo);
+    // ⚠️ "önce faturayı iptal edin" yol göstermesi load-bearing: çıkmaz bir
+    // 409, kullanıcıyı destek hattına gönderir.
+    check("§8c Mesaj ÇIKIŞ YOLUNU söylüyor", /faturayı iptal/i.test(blocked));
+
+    await invoiceService.cancel(dr.data.id, "bekçi", undefined);
+    const after = await goodsReceiptService.cancel(rid, "bekçi", undefined);
+    check("§8d Fatura iptal edilince fiş İPTAL EDİLEBİLİYOR (çıkmaz yok)", after.success === true);
+
+    // İkinci hat: guard'dan ÖNCE doğmuş faturalar için `confirm` de kaynağı okur.
+    // Fişi ELLE iptal ederek (servis guard'ını atlayarak) tam o durumu kurar.
+    const r2 = await goodsReceiptService.create(
+      {
+        warehouseId: wh.id,
+        supplierId: supplier.id,
+        currency: "USD",
+        lines: [{ itemId: item.id, initialQty: 25, unitPrice: 2, clientToken: crypto.randomUUID() }],
+      },
+      undefined,
+    );
+    const rid2 = (r2.data as { id: string }).id;
+    receiptIds.push(rid2);
+    const dr2 = await invoiceService.createDraftFromGoodsReceipt(rid2);
+    invoiceIds.push(dr2.data.id);
+    await prisma.goodsReceipt.update({ where: { id: rid2 }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    const confErr = await expectError(() => invoiceService.confirm(dr2.data.id, undefined));
+    check(
+      "§8e ⭐ Kaynağı İPTAL EDİLMİŞ fatura ONAYLANAMADI (ikinci hat)",
+      /İPTAL EDİLMİŞ/i.test(confErr),
+      confErr.slice(0, 80),
+    );
+  }
+
+  // ── §9 ⭐ İPLİK SATIRI FATURAYA GİRER (2026-08-14 denetim, KRİTİK) ────────
+  // Eskiden taslak YALNIZ `rolls` okuyordu: karma fişte iplik ne satır ne uyarı
+  // olarak görünüyor, tedarikçinin gerçek faturası ipliği içerdiği için ERP'deki
+  // fatura O KADAR EKSİK onaylanıyordu (cari borç eksik, iplik depoda ama
+  // karşılığında yükümlülük yok). İplik-ONLY fişte ise bağlı fatura kesmenin
+  // HİÇBİR yolu yoktu.
+  {
+    // ⚠️ FIXTURE'I TEST KENDİSİ YARATIR. İlk yazımda ortamdaki bir YARN
+    // kalemine güveniliyordu ve dev DB'sinde hiç yoktu → §9'un TAMAMI atlandı,
+    // yani iki KRİTİK düzeltmenin yarısı ölçüsüz kaldı. CLAUDE.md'nin açık
+    // kuralı: "Ortamdaki veriye BAĞIMLI OLMA — fixture'ı test kendisi yaratır"
+    // (dolu dev DB'sinde geçer, TEMİZ CI DB'sinde düşerdi; burada tersi oldu).
+    const yarnItem = await prisma.item.create({
+      data: { code: `${TAG}-YARN`, name: `${TAG} İplik`, itemType: "YARN", unit: "KG" },
+      select: { id: true, name: true },
+    });
+    yarnItemId = yarnItem.id;
+    {
+      // (a) KARMA fiş: kumaş + iplik
+      const mixed = await goodsReceiptService.create(
+        {
+          warehouseId: wh.id,
+          supplierId: supplier.id,
+          currency: "USD",
+          lines: [
+            { itemId: item.id, initialQty: 120, unitPrice: 3, clientToken: crypto.randomUUID() },
+            { itemId: yarnItem.id, initialQty: 500, clientToken: crypto.randomUUID() },
+          ],
+        },
+        undefined,
+      );
+      const mid = (mixed.data as { id: string }).id;
+      receiptIds.push(mid);
+      const mdraft = await invoiceService.createDraftFromGoodsReceipt(mid);
+      invoiceIds.push(mdraft.data.id);
+      const mlines = await prisma.invoiceLine.findMany({
+        where: { invoiceId: mdraft.data.id },
+        select: { itemId: true, qty: true, unit: true },
+      });
+      const yline = mlines.find((l) => l.itemId === yarnItem.id);
+      check("§9a ⭐ KARMA fişte iplik satırı faturaya GİRDİ", Boolean(yline), `satır=${mlines.length}`);
+      check("§9b İplik miktarı kg olarak taşındı", yline ? D(yline.qty).equals(500) : false, `qty=${yline?.qty}`);
+      // ⚠️ Birim SABİT "kg": `Item.unit` farklı olabilir ve ona güvenmek
+      // deftere kg yazıp faturaya metre basmak demekti.
+      check("§9c İplik satırının birimi kg", yline?.unit === "kg", `unit=${yline?.unit}`);
+      check("§9d Kumaş satırı da duruyor (iplik onu EZMEDİ)", mlines.some((l) => l.itemId === item.id));
+
+      // (b) İPLİK-ONLY fiş: eskiden "faturalanacak top yok" ile 400 alıyordu
+      const yonly = await goodsReceiptService.create(
+        {
+          warehouseId: wh.id,
+          supplierId: supplier.id,
+          currency: "USD",
+          lines: [{ itemId: yarnItem.id, initialQty: 300, clientToken: crypto.randomUUID() }],
+        },
+        undefined,
+      );
+      const yid = (yonly.data as { id: string }).id;
+      receiptIds.push(yid);
+      const ydraft = await invoiceService.createDraftFromGoodsReceipt(yid);
+      invoiceIds.push(ydraft.data.id);
+      const ylines = await prisma.invoiceLine.findMany({
+        where: { invoiceId: ydraft.data.id },
+        select: { itemId: true, qty: true },
+      });
+      check("§9e ⭐ İPLİK-ONLY fiş faturalanabildi (eskiden çıkmazdı)", ylines.length === 1, `satır=${ylines.length}`);
+      check("§9f Miktar doğru", ylines[0] ? D(ylines[0].qty).equals(300) : false, `qty=${ylines[0]?.qty}`);
+    }
+  }
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
@@ -251,7 +379,17 @@ main()
       await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
       await prisma.printedDocument.deleteMany({ where: { sourceId: { in: receiptIds } } });
+      // ⚠️ İplik hareketleri fişe FK ile bağlı (RESTRICT değil ama sıra önemli:
+      // stok satırı hareketleri toplayan mutabakat bekçisinin (§27/§28) artık
+      // veri görmemesi için ikisi de silinir).
+      await prisma.yarnMovement.deleteMany({ where: { goodsReceiptId: { in: receiptIds } } });
       await prisma.goodsReceipt.deleteMany({ where: { id: { in: receiptIds } } });
+    }
+    if (yarnItemId) {
+      await prisma.yarnStock.deleteMany({ where: { itemId: yarnItemId } });
+      await prisma.yarnMovement.deleteMany({ where: { itemId: yarnItemId } });
+      await prisma.itemPrice.deleteMany({ where: { itemId: yarnItemId } });
+      await prisma.item.deleteMany({ where: { id: yarnItemId } });
     }
     if (supplierId) await prisma.customer.deleteMany({ where: { id: supplierId } });
     await prisma.$disconnect();

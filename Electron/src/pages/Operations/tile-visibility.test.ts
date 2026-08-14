@@ -78,9 +78,17 @@ describe("karo bağlantıları", () => {
     expect(tileDef?.permission).toBe("goods-receipt:read");
   });
 
-  it("koşullu karolar: Sevk Kapısı + Depo Transferi", () => {
+  it("koşullu karolar: Sevk Kapısı + Depo Transferi + Paket D (iplik · alış siparişi)", () => {
     const conditional = operationsTiles.filter((t) => t.visibleWhen).map((t) => t.key);
-    expect(conditional.sort()).toEqual(["sack-store", "warehouse-transfers"]);
+    // ⚠️ Bu liste AÇIKÇA sayılır ve genişletmek BİLİNÇLİ bir karardır: kümeye
+    // sessizce karo eklenmesin diye kurulmuş. 2026-08-14'te iki karo eklendi
+    // (Paket D, `finance.enabled` rejimine bağlı).
+    expect(conditional.sort()).toEqual([
+      "purchase-orders",
+      "sack-store",
+      "warehouse-transfers",
+      "yarn-stock",
+    ]);
   });
 });
 

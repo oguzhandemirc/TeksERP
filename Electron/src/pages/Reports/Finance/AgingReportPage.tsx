@@ -102,10 +102,24 @@ export function AgingReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report, needle]);
 
-  const overdueCari = (report?.blocks ?? []).reduce(
-    (n, b) => n + b.rows.filter((r) => !isZeroAmount(r.overdueTotal)).length,
-    0,
-  );
+  // ⚠️ CARİ SAYISI ≠ SATIR SAYISI (2026-08-14 denetim bulgusu). Rapor satırları
+  // (cari × PARA BİRİMİ) çifti başına kuruluyor: TRY'de ve USD'de bakiyesi olan
+  // TEK bir müşteri İKİ satır üretir. Bu iki kart eskiden satır sayıyordu —
+  // biri `reconciliation.rowsChecked` (adı zaten "satır"), diğeri `rows.filter
+  // (...).length` — ve yönetici "kaç müşteri bize borçlu" sorusunun cevabını
+  // buradan okuduğu için sayı SİSTEMATİK olarak şişkindi (canlı veride 5 cari
+  // için "6"). Hata da log da çıkmıyordu.
+  //
+  // ⚠️ `reconciliation.rowsChecked` DÜZELTİLMEDİ ve düzeltilmemeli: o alan
+  // MUTABAKATIN kaç satır denetlediğini söyler, adı da doğrudur — kart yanlış
+  // alana bakıyordu.
+  const distinctCari = (pred: (r: { cariId: string; overdueTotal: unknown }) => boolean): number => {
+    const ids = new Set<string>();
+    for (const b of report?.blocks ?? []) for (const r of b.rows) if (pred(r)) ids.add(r.cariId);
+    return ids.size;
+  };
+  const openCari = distinctCari(() => true);
+  const overdueCari = distinctCari((r) => !isZeroAmount(r.overdueTotal as never));
   const mismatched = report?.reconciliation.mismatchedRows ?? 0;
   const filterNote = needle ? `Ekranda “${filters.search.trim()}” araması uygulanıyor` : null;
 
@@ -143,8 +157,8 @@ export function AgingReportPage() {
         <MetricCard label="Kesit" value={asOfLabel} hint="Seçilen günün SONU itibarıyla" icon={CalendarClock} />
         <MetricCard
           label="Açık bakiyeli cari"
-          value={fmtInt(report?.reconciliation.rowsChecked)}
-          hint="Para birimleri ayrı bloklarda listelenir"
+          value={fmtInt(openCari)}
+          hint="Tekil cari sayısı — çok para birimli cari BİR kez sayılır"
           icon={Users}
           isLoading={query.isLoading}
         />

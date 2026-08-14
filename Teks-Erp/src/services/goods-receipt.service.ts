@@ -20,6 +20,7 @@
 // =============================================================================
 import {
   GoodsReceiptStatus,
+  InvoiceStatus,
   ItemType,
   PriceKind,
   PrintedDocType,
@@ -516,17 +517,71 @@ export class GoodsReceiptService {
       return { success: true, data: receipt, message: `${receipt.receiptNo} zaten iptal edilmiş.` };
     }
 
+    // ⚠️ FATURALANMIŞ FİŞ İPTAL EDİLEMEZ (2026-08-14 denetim bulgusu, KRİTİK).
+    // Guard eskiden YALNIZ topların statüsüne bakıyordu; faturaya hiç
+    // bakmıyordu. Ölçülen saha senaryosu: depocu "yanlış fiş" deyip iptal eder
+    // (toplar WAREHOUSE olduğu için guard geçer), muhasebeci ertesi gün bağlı
+    // TASLAK faturayı onaylar — `confirm` kaynak fişi hiç okumadığı için onay
+    // GEÇER ve tedarikçi carisine, hiç gelmemiş mal için borç yazılır. Belge
+    // donar, hata çıkmaz, log çıkmaz. ONAYLI faturada da aynısı ters yönde:
+    // fiş iptal edilse defter satırı yerinde kalır.
+    //
+    // ⚠️ Ters yön ZATEN korunuyordu (`invoice.service`: iptal edilmiş fişten
+    // fatura kesilemez) — yani guard TEK YÖNLÜYDÜ. Emsal karar aynı repoda
+    // var: `shipping.service` faturalanmış sevkiyatın geri alınmasını
+    // reddediyor ("Bu sevkiyat faturalanmış — geri alınamaz").
+    //
+    // ⚠️ Sıra: bu kontrol TOP kontrolünden ÖNCE. İkisi de engelliyorsa
+    // kullanıcı ÖNCE faturayı iptal etmeli — topları ayıklamak fatura dururken
+    // hiçbir işe yaramaz ve kullanıcıyı iki tur gezdirirdi.
+    const liveInvoice = await prisma.invoice.findFirst({
+      where: { goodsReceiptId: id, status: { not: InvoiceStatus.CANCELLED } },
+      select: { docNo: true, status: true },
+    });
+    if (liveInvoice) {
+      throw AppError.conflict(
+        `${receipt.receiptNo}: bu fişten ${liveInvoice.docNo} numaralı alış faturası kesilmiş ` +
+          `(${liveInvoice.status === InvoiceStatus.CONFIRMED ? "onaylı" : "taslak"}) — fiş iptal edilemez. ` +
+          `Önce faturayı iptal edin.`,
+      );
+    }
+
     const rolls = await prisma.roll.findMany({
       where: { goodsReceiptId: id },
-      select: { id: true, barcode: true, status: true },
+      select: { id: true, barcode: true, status: true, sackId: true, shipmentId: true },
     });
 
     // Guard: iptal yalnız "mal hiç kullanılmadı" iken meşru.
+    //
+    // ⚠️ STATÜ TEK BAŞINA YETMEZ (2026-08-14 denetim bulgusu). Çuvala konmuş ya
+    // da PLANNED bir sevkiyata eklenmiş top `SHIPPED` DEĞİL, hâlâ `WAREHOUSE`
+    // statüsündedir — yalnız `sackId`/`shipmentId` doludur. Eski süzgeç onları
+    // "işlem görmemiş" sayıyordu: guard geçiyor, fiş CANCELLED olarak COMMIT
+    // ediliyor, sonra `softDelete` o toplar için 409 verip `skipped[]`e
+    // düşürüyordu. Sonuç YARIM bir iptal — fiş iptal, topların bir kısmı canlı
+    // ve sevkiyatta, sipariş karşılanması sıfırlanmış, o fişten artık fatura da
+    // kesilemiyor — ve fişi geri açacak HİÇBİR uç yok.
+    //
+    // ⚠️ Çuvaldaki top (sevkiyatsız) daha sinsiydi: guard'a hiç takılmıyor,
+    // `softDelete` topu çuvaldan SESSİZCE çıkarıyor ama çuvalın denormalize
+    // `weightKg`'si bayat kalıyordu (`resetSackWeightsTx` çağrılmıyor) — ve o
+    // kg irsaliyeye gidiyordu.
     const used = rolls.filter(
-      (r) => r.status !== RollStatus.WAREHOUSE && r.status !== RollStatus.A1_STOCK && r.status !== RollStatus.CANCELLED,
+      (r) =>
+        (r.status !== RollStatus.WAREHOUSE &&
+          r.status !== RollStatus.A1_STOCK &&
+          r.status !== RollStatus.CANCELLED) ||
+        r.sackId !== null ||
+        r.shipmentId !== null,
     );
     if (used.length > 0) {
-      const sample = used.slice(0, 5).map((r) => `${r.barcode ?? r.id.slice(0, 8)} (${r.status})`).join(", ");
+      const sample = used
+        .slice(0, 5)
+        .map((r) => {
+          const nerede = r.shipmentId ? "sevkiyatta" : r.sackId ? "çuvalda" : r.status;
+          return `${r.barcode ?? r.id.slice(0, 8)} (${nerede})`;
+        })
+        .join(", ");
       throw AppError.conflict(
         `${receipt.receiptNo}: ${used.length} top işlem görmüş (${sample}${used.length > 5 ? "…" : ""}) — fiş iptal edilemez. ` +
           `Önce o topları ayıklayın.`,

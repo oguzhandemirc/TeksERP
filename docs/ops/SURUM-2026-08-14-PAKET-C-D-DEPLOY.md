@@ -36,17 +36,28 @@
 
 ## Migration — 5 adet, hepsi additive
 
+`migrate deploy` bunları **dosya adı sırasında** uygular:
+
 ```
+20260814072115_paket_d_yarn_price_purchase_order YarnStock/YarnMovement/ItemPrice/PurchaseOrder(+Line)
 20260814100000_cheque_cari_txn_sources           CariTxnSource'a SONA 5 değer
 20260814101000_cheque_portfolio                  Cheque + ChequeEvent + CariTransaction.chequeId
 20260814102000_payment_allocation                PaymentAllocation + denormalize sayaçlar
 20260814103000_cari_period_close                 CariPeriodClose
-20260814072115_paket_d_yarn_price_purchase_order YarnStock/YarnMovement/ItemPrice/PurchaseOrder(+Line)
 ```
 
-⚠️ **Sıra bağımlıdır** (`migrate deploy` zaten dosya adına göre sıralar).
-Birincisi kendi migration'ında yalnız enum değeri ekler: PG'de `ALTER TYPE ADD
-VALUE` ile eklenen değer **aynı transaction içinde kullanılamaz**.
+⚠️ **"Paket D önce geliyor" TERS DEĞİL, ZARARSIZ.** D daha SONRA yazıldı ama
+damgası küçük (`072115`), çünkü `migrate dev --create-only` **UTC** saatini
+kullandı (07:21 UTC = 10:21 yerel) oysa C'nin migration'ları elle
+adlandırılmıştı. Çapraz bağımlılık YOK: D yalnız ÖNCEDEN VAR OLAN tablolara
+(`items`, `warehouses`, `goods_receipts`, `invoices`, `users`, `customers`)
+dokunuyor, C'nin hiçbir nesnesine değmiyor. Sıra bu yüzden serbest.
+
+⚠️ C'nin **birincisi kendi migration'ında** olmak zorunda: PG'de `ALTER TYPE ADD
+VALUE` ile eklenen enum değeri **aynı transaction içinde kullanılamaz**.
+
+Demo'da bugün **172** migration uygulanmış (ölçüldü) → deploy sonrası **177**.
+`20260814090000_finance_doc_types` demo'da ZATEN VAR (imaj 04:44'te alınmıştı).
 
 ⚠️ Boş/küçük veritabanında saniyeler sürer. Tablolar YENİ olduğu için
 `CREATE INDEX` kilidi mevcut satırları etkilemez — vardiya penceresi gerekmez.
@@ -148,16 +159,44 @@ Uçların gerçekten çalıştığını görmek için giriş yapıp token'la sor
    karoları; Raporlar hub'ında **Ön Muhasebe** karosu görünmeli.
 3. Demo kullanıcısıyla giriş → karolar görünüyorsa izin ataması (adım 5) tuttu.
 
+### Sayıyla doğrulama — deploy ÖNCESİ ölçüldü, SONRASI beklenen
+
+```bash
+ssh yenisunucu "sudo docker exec postgres psql -U tekserp -d tekserp_demo -tAF' | ' -c \"
+SELECT 'demo kullanici izni', count(*)::text FROM user_permissions up
+  JOIN users u ON u.id=up.\\\"userId\\\" WHERE u.username='demo'
+UNION ALL SELECT 'WEB_TRADE sablon izni', count(*)::text FROM permission_template_items i
+  JOIN permission_templates t ON t.id=i.\\\"templateId\\\" WHERE t.code='WEB_TRADE'
+UNION ALL SELECT 'toplam izin katalogu', count(*)::text FROM permissions;\""
+```
+
+| Ölçüm | Deploy ÖNCESİ (2026-08-14 11:25, ölçüldü) | SONRASI beklenen |
+|---|---|---|
+| İzin kataloğu | **77** | **83** (+6) |
+| WEB_TRADE şablonu | **33** | **39** |
+| demo kullanıcısı | **33** | **39** |
+| Migration | **172** | **177** |
+
+⚠️ **Kullanıcı 33'te KALDIYSA adım 5 atlanmıştır** — şablon güncellendi ama
+atama kopyalanmadı. Ekranda belirti: karolar YOK, hata YOK, sebep hiçbir yerde
+yazmıyor. `finance.enabled=true` ve `production.enabled=false` demo'da ZATEN
+doğru (ölçüldü) — deploy bunlara dokunmaz.
+
 ---
 
 ## Ek — bu sürümde kapatılan sessiz hatalar
 
 Deploy eden için not değil, ama sürümün ne düzelttiğinin kaydı:
 
-- **`money()` biçimlendirmesi**: Prisma `Decimal` JSON'a **string** düşüyor,
-  panel `number` diye tipliyordu → `String.prototype.toLocaleString` seçenekleri
-  sessizce yok sayıyor ve **mevcut** Faturalar/Tahsilat/Cari ekranlarında
-  tutarlar binlik ayraçsız/kuruşsuz basılıyordu (`"3324"` → `3324`).
+- ~~**`money()` biçimlendirmesi**~~ — ⚠️ **BU MADDE YANLIŞTI, GERİ ALINDI.**
+  "Decimal string düşüyor, mevcut ekranlarda tutarlar ayraçsız basılıyor"
+  denmişti; backend bunu `app.ts`'te `installDecimalNumberSerializer()` ile
+  ZATEN çözüyor. HTTP üzerinden ölçüldü: `grandTotal` yanıtta `107640`
+  (number). İlk ölçüm bağımsız bir script'teydi ve `app.ts` import edilmediği
+  için override yüklü değildi — ölçüm doğruydu ama YANLIŞ YOLU ölçüyordu.
+  `money()` yine de `number | string` kabul ediyor (derinlik savunması) ve
+  `null`/NaN'da `—` basıyor; ikincisi gerçek bir iyileştirme (eskiden
+  `money(undefined)` patlıyordu).
 - **Mükerrer çek riski**: form `clientToken`'ı her denemede yeniliyordu →
   belirsiz timeout sonrası ikinci basış ikinci çek + ikinci defter satırı.
 - **Boş tarih → 1900-01-01**: `parseYmdLocal("")` geçerli bir tarih üretiyordu

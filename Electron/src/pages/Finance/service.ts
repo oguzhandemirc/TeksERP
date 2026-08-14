@@ -117,25 +117,25 @@ export function partyName(c: { customer: { name: string } | null; subcontractor:
 /**
  * Tutar biçimlendirici.
  *
- * ⚠️ `number | string` KABUL ETMEK ZORUNDA ve bu tip gevşetmesi DEĞİL, ÖLÇÜLMÜŞ
- * bir düzeltmedir (2026-08-14): Prisma `Decimal` kolonları JSON'a **STRING**
- * olarak düşer (`grandTotal: "3324"`), oysa bu dosyadaki arayüzler onları
- * `number` diye tipliyor. Tip yalanı derlemede yakalanmaz çünkü değer
- * `fetch`ten `any` olarak gelir; çalışma zamanında ise `String.prototype.
- * toLocaleString` çağrılır ve o, `minimumFractionDigits` gibi seçenekleri
- * SESSİZCE YOK SAYAR:
+ * ⚠️ ÖNCEKİ YORUM YANLIŞTI ve düzeltildi (2026-08-14). "Prisma `Decimal` JSON'a
+ * STRING düşer, dolayısıyla MEVCUT ekranlarda tutarlar binlik ayraçsız
+ * basılıyor" deniyordu. Backend bunu `app.ts`'te `installDecimalNumberSerializer()`
+ * ile ZATEN çözüyor (`Decimal.prototype.toJSON` override'ı) — HTTP üzerinden
+ * ÖLÇÜLDÜ: `grandTotal` yanıtta `107640` (number), string DEĞİL. İlk ölçüm
+ * bağımsız bir script'te yapılmıştı ve o script `app.ts`'i import etmediği için
+ * override yüklü değildi; yani ölçüm doğruydu ama YANLIŞ YOLU ölçüyordu.
+ * Kayıt burada duruyor ki biri "Decimal string gelir" varsayımıyla başka bir
+ * yeri "düzeltmesin".
  *
- *     "3324".toLocaleString("tr-TR", {…})  →  "3324"      ✗
- *     (3324).toLocaleString("tr-TR", {…})  →  "3.324,00"  ✓
+ * `number | string` kabulü yine de KORUNDU — ama gerekçesi artık farklı ve
+ * mütevazı: (a) serializer TEK bir global override'dır, kaldırılırsa/atlanırsa
+ * (ör. `res.json` yerine elle `JSON.stringify` kullanan bir yol) bu fonksiyon
+ * sessizce bozulmak yerine doğru basmaya devam eder — derinlik savunması;
+ * (b) `null`/`undefined`/NaN'da `—` basar. Bu ikincisi GERÇEK bir iyileştirme:
+ * eskiden `money(undefined)` çalışma zamanında patlıyordu.
  *
- * Yani hata görünür ama masumdur: rakam DOĞRU, yalnız binlik ayraç ve kuruş
- * kaybolur — muhasebe ekranında en kolay gözden kaçan, en çok güven kaybettiren
- * kusur. `RatesPage` bunu satır bazında `Number(r.rate)` ile zaten çözmüştü;
- * düzeltme TEK PAYLAŞILAN NOKTAYA alındı ki 45 çağrı yerinin her biri kendi
- * çözümünü icat etmesin.
- *
- * ⚠️ Sayıya çevrilemeyen değerde `—` basılır, `NaN ₺` DEĞİL: "0,00 ₺" yazmak da
- * yasak — sıfır bir TUTARDIR, "bilinmiyor" ile karıştırılamaz.
+ * ⚠️ Çevrilemeyen değerde `—` basılır, `NaN ₺` DEĞİL — ve `0,00 ₺` de değil:
+ * sıfır bir TUTARDIR, "bilinmiyor" ile karıştırılamaz.
  */
 export function money(value: number | string | null | undefined, currency: Currency): string {
   const n = typeof value === "number" ? value : Number(value);

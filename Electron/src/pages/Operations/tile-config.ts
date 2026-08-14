@@ -13,9 +13,15 @@ import {
   ScanBarcode,
   PackageOpen,
   Share2,
+  Boxes,
+  ShoppingBasket,
   type LucideIcon,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
+// Paket D — görünürlük kuralları SAF katmanda (bileşen içindeki bir `&&`
+// zinciri tersine çevrilse hiçbir testi kırmazdı; projenin yazılı deseni).
+import { isYarnStockVisible } from "./Yarn/yarn-regime";
+import { isPurchaseOrdersVisible } from "./PurchaseOrders/po-regime";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -139,6 +145,32 @@ export const operationsTiles: OperationsTile[] = [
     // KK1'den alır) ve izin hiçbir varsayılan rol şablonunda YOK.
     // ⚠️ `multiWarehouse` şartı KONMAZ — tek depolu ticaret firması da kullanır.
     permission: "goods-receipt:read",
+  },
+  // ── Paket D (2026-08-14) — ticaret paketi ─────────────────────────────────
+  // İkisi de `visibleWhen` ile REJİM bayrağına bağlı: fabrikada
+  // `finance.enabled` KAPALI ve bu karolar orada HİÇ çizilmez. Yüklem SAF bir
+  // modülden DOĞRUDAN geçirilir (sarmalayan ok fonksiyonu YAZILMAZ) — komut
+  // paleti bekçisi karo ile palet girişinin AYNI fonksiyon nesnesini taşıdığını
+  // `toBe` ile doğruluyor.
+  {
+    key: "yarn-stock",
+    title: "İplik Kg-Stok",
+    description: "İplik kg bakiyeleri + hareket dökümü (top/barkod yok)",
+    icon: Boxes,
+    to: "/operations/yarn-stock",
+    group: "warehouse",
+    permission: "warehouse:read",
+    visibleWhen: isYarnStockVisible,
+  },
+  {
+    key: "purchase-orders",
+    title: "Alış Siparişleri",
+    description: "Ne ısmarladım, ne geldi — tedarikçi siparişleri ve kalan miktarlar",
+    icon: ShoppingBasket,
+    to: "/operations/purchase-orders",
+    group: "warehouse",
+    permissionAny: ["purchase-order:read", "purchase-order:write"],
+    visibleWhen: isPurchaseOrdersVisible,
   },
   {
     key: "warehouse-transfers",

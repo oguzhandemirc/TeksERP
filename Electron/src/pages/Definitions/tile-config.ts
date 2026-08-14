@@ -24,6 +24,8 @@ import {
 import type { DefinitionGroupKey } from "./groups-config";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
+// Paket D — görünürlük SAF katmanda (bkz. ItemPrices/regime.ts gerekçesi).
+import { itemPricesTileVisible } from "./ItemPrices/regime";
 
 export interface DefinitionTile {
   key: string;
@@ -58,6 +60,21 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/items",
     group: "catalog",
     permission: "item:read",
+  },
+  // Paket D (2026-08-14) — ticaret paketi; fabrikada `finance.enabled` KAPALI
+  // olduğu için bu karo orada HİÇ çizilmez. Görüntüleme kapısı `item:read`
+  // (kalemi seçebilen fiyatını da görebilmeli); YAZMA ayrı bir yetkidir
+  // (`price:write`) ve sayfanın İÇİNDE ayrılır — route'a yazma iznini koymak,
+  // fiyatı görmesi gereken satışçıyı ekrandan tamamen dışarıda bırakırdı.
+  {
+    key: "item-prices",
+    title: "Kalem Fiyatları",
+    description: "Alış/satış fiyatı: kart varsayılanı + müşteriye özel istisnalar",
+    icon: Tag,
+    to: "/definitions/item-prices",
+    group: "catalog",
+    permission: "item:read",
+    visibleWhen: itemPricesTileVisible,
   },
   {
     key: "fabric-properties",

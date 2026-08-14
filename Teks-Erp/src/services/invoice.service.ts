@@ -9,7 +9,17 @@
 // Bu üçlü, `CariTransaction`'ın append-only olmasının da sebebidir: geçmişi
 // değiştirilebilen bir defter denetimde hiçbir şey kanıtlamaz.
 // =============================================================================
-import { Prisma, InvoiceStatus, InvoiceType, Currency, CariTxnSource, PriceKind, PrintedDocType } from "@prisma/client";
+import {
+  Prisma,
+  InvoiceStatus,
+  InvoiceType,
+  Currency,
+  CariTxnSource,
+  GoodsReceiptStatus,
+  PriceKind,
+  PrintedDocType,
+  YarnMovementKind,
+} from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -243,6 +253,25 @@ export class InvoiceService {
             color: { select: { name: true } },
           },
         },
+        // ⚠️ İPLİK SATIRLARI DA FATURAYA GİRER (2026-08-14 denetim bulgusu,
+        // KRİTİK). Eskiden select YALNIZ `rolls` okuyordu: karma bir fişte
+        // (2 top kumaş + 500 kg iplik) taslak SADECE kumaşı taşıyor, 500 kg
+        // iplik ne satır ne uyarı olarak görünmüyordu. Tedarikçinin gerçek
+        // faturası ipliği de içerdiği için ERP'deki alış faturası O KADAR
+        // EKSİK onaylanıyor → cari borç eksik kalıyor, iplik depoda ama
+        // karşılığında hiçbir yükümlülük yok. Hata çıkmıyor, log çıkmıyor.
+        //
+        // ⚠️ Yalnız `IN`: fiş iptali `ADJUST_OUT` yazar ve aynı
+        // `goodsReceiptId`yi taşır — süzgeç olmasa ters kayıt da faturaya
+        // satır olarak girerdi. (İptal edilmiş fiş zaten yukarıda
+        // reddediliyor; bu süzgeç derinlik savunmasıdır.)
+        yarnMovements: {
+          where: { kind: YarnMovementKind.IN },
+          select: {
+            qtyKg: true,
+            item: { select: { id: true, name: true } },
+          },
+        },
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
@@ -254,8 +283,14 @@ export class InvoiceService {
         `${receipt.receiptNo} fişinde tedarikçi seçilmemiş — alış faturası için tedarikçi gerekli.`,
       );
     }
-    if (receipt.rolls.length === 0) {
-      throw AppError.badRequest(`${receipt.receiptNo} fişinde faturalanacak top yok.`);
+    // ⚠️ "top YOK" değil "faturalanacak SATIR yok": iplik-ONLY bir fiş eskiden
+    // burada 400 alıyordu ("faturalanacak top yok") ve generic fatura ucu
+    // `.strict()` şemasında `goodsReceiptId` KABUL ETMEDİĞİ için o fişe BAĞLI
+    // fatura kesmenin hiçbir yolu kalmıyordu — 500 kg mal fiilen gelmişken.
+    // Bağsız fatura kesilirse `invoices_one_active_per_goods_receipt` koruması
+    // da devre dışı kalır, yani aynı iplik İKİ KEZ faturalanabilirdi.
+    if (receipt.rolls.length === 0 && receipt.yarnMovements.length === 0) {
+      throw AppError.badRequest(`${receipt.receiptNo} fişinde faturalanacak satır yok.`);
     }
 
     // ── FİYAT ÖN-DOLUMU (D2) ────────────────────────────────────────────────
@@ -268,7 +303,19 @@ export class InvoiceService {
     // (o sed 2026-08 öncesinden beri var). Buradan uydurma bir fiyat üretmek,
     // muhasebecinin göreceği tek uyarıyı susturmuş olurdu.
     // ⚠️ TEK sorgu (perf kuralı 9): fişte kaç top olursa olsun tek lookup.
-    const missingPrice = [...new Set(receipt.rolls.filter((r) => r.purchasePrice == null).map((r) => r.item.id))];
+    // ⚠️ İplik kalemleri fiyat çözümüne HER ZAMAN girer: `YarnMovement`in
+    // birim fiyat kolonu YOK (bilinçli şema boşluğu, ayrı iş) — yani iplik
+    // satırının fiyatı yalnız kalem kartından gelebilir. Çözülemezse `0` kalır
+    // ve satır faturaya SIFIR FİYATLA girer; bu "bedava" ilan etmek DEĞİL,
+    // `confirm`in sıfır fiyatlı satırı REDDEDEN seddine düşürmektir. Sonuç
+    // olarak muhasebeci satırı GÖRÜR ve fiyatı yazmak zorunda kalır — eski
+    // davranışta satır hiç görünmüyor ve tutar sessizce eksik kalıyordu.
+    const missingPrice = [
+      ...new Set([
+        ...receipt.rolls.filter((r) => r.purchasePrice == null).map((r) => r.item.id),
+        ...receipt.yarnMovements.map((y) => y.item.id),
+      ]),
+    ];
     const priceMap =
       missingPrice.length > 0
         ? await resolveItemPricesFor({
@@ -296,6 +343,32 @@ export class InvoiceService {
           qty: D(r.initialQty),
           unitPrice: price,
           unit: r.item.unit ?? "m",
+        });
+      }
+    }
+
+    // ── İPLİK SATIRLARI ──────────────────────────────────────────────────────
+    // ⚠️ Kumaşla AYNI `groups` haritasına yazılır ama anahtarı `yarn|` ile
+    // ön eklenir: iplik kalemi teorik olarak kumaş kalemiyle aynı `itemId`yi
+    // taşıyamaz (ItemType farklı) ama renk alanı boş olduğu için anahtarlar
+    // çakışabilirdi ve iki farklı BİRİMDEKİ (m ↔ kg) miktar tek satırda
+    // toplanırdı — sessizce yanlış bir fatura tutarı.
+    // ⚠️ Birim SABİT "kg": iplik defterinin birimi kg'dir (`YarnMovement.qtyKg`)
+    // ve `Item.unit` bundan farklı olabilir; kalem kartındaki birime güvenmek,
+    // deftere kg yazılıp faturaya metre basmak demekti.
+    for (const y of receipt.yarnMovements) {
+      const price = D(priceMap?.get(y.item.id)?.price ?? 0);
+      const key = `yarn|${y.item.id}|${price.toString()}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.qty = existing.qty.plus(D(y.qtyKg));
+      } else {
+        groups.set(key, {
+          itemId: y.item.id,
+          description: y.item.name,
+          qty: D(y.qtyKg),
+          unitPrice: price,
+          unit: "kg",
         });
       }
     }
@@ -506,8 +579,21 @@ export class InvoiceService {
           issueDate: true,
           shipmentId: true,
           directShipmentId: true,
+          // ⚠️ 2026-08-14 denetim bulgusu (KRİTİK) — İKİNCİ HAT. Asıl sed
+          // `goods-receipt.service.cancel`te: faturalanmış fiş artık iptal
+          // EDİLEMEZ. Bu kontrol o guard'dan ÖNCE doğmuş faturalar için
+          // duruyor (canlı veride örneği vardı): kaynak fiş iptal edilmişse
+          // onay, hiç gelmemiş mal için tedarikçi carisine borç yazar ve belge
+          // donar — hata da log da çıkmaz.
+          goodsReceipt: { select: { receiptNo: true, status: true } },
         },
       });
+      if (inv.goodsReceipt && inv.goodsReceipt.status === GoodsReceiptStatus.CANCELLED) {
+        throw AppError.conflict(
+          `${inv.docNo}: kaynak mal kabul fişi ${inv.goodsReceipt.receiptNo} İPTAL EDİLMİŞ — ` +
+            `bu fatura onaylanamaz (mal fiilen girmedi). Faturayı iptal edin.`,
+        );
+      }
 
       const lineRows = await tx.invoiceLine.findMany({
         where: { invoiceId: id },

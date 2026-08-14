@@ -36,6 +36,10 @@ import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
 import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
 import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
+// Paket D (2026-08-14) — hepsi NAMED export.
+import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
+import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
+import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -318,6 +322,36 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="goods-receipt:read">
         <GoodsReceiptsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── Paket D (2026-08-14) ──────────────────────────────────────────────────
+  // İzinler backend'le BİREBİR: yarn.routes `/stocks` → `warehouse:read`,
+  // purchase-order.routes okuma → `purchase-order:read` (yazma ucu `:write`,
+  // ikisinden biri ekranı açar), item-price.routes okuma → `item:read`.
+  // Karo listeleriyle de aynı; ayrışırsa kullanıcı karoyu görür, tıklar ve
+  // /forbidden'a düşer (bu projede yaşanmış bir sapma).
+  {
+    path: "operations/yarn-stock",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <YarnStockPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/purchase-orders",
+    element: (
+      <ProtectedRoute requireAnyPermission={["purchase-order:read", "purchase-order:write"]}>
+        <PurchaseOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/item-prices",
+    element: (
+      <ProtectedRoute requirePermission="item:read">
+        <ItemPricesPage />
       </ProtectedRoute>
     ),
   },
