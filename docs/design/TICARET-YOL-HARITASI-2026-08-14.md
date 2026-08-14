@@ -31,7 +31,15 @@
 
 ## 3) Paketler
 
-### F — Muhasebe akışının kayıp yarısı (~6,5 gün) — ÖNERİLEN BAŞLANGIÇ
+### F — Muhasebe akışının kayıp yarısı (~6,5 gün) — ✅ TAMAMLANDI (2026-08-14 akşam)
+
+> Commit'ler: `0b552add` (mühür okuma) · `83e200d3` (cari kart) · `010d0a9c`
+> (fiyat zinciri) · `c5efca98` (kasa hareketleri). Tarama: backend 232 kontrol +
+> Electron 897 test yeşil. Ek bulgular: W3 bin-kat seddi (`Number("1.250")=1,25`
+> tuzağı) · W2 "okunamayan alan yazdırılmaz" kuralı (notes okuma yolu açıldı) ·
+> ShipmentInvoiceDraft'a `lines[].itemId` taşımak SNAPSHOT sözleşmesine dokunur
+> (dispatch raporu DISPATCHED'ta donmuş belgeden okur) → J'ye not düştü, F'de
+> yapılmadı.
 
 | İş | İçerik | Efor |
 |---|---|---|
