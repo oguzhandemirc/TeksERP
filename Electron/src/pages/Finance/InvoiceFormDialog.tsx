@@ -38,7 +38,12 @@ import {
  * faturalanabilirdi ve kimse fark etmezdi.
  */
 export interface InvoicePrefill {
+  /** Fatura türü ön-seçimi. Verilmezse SALES. İade taslağı SALES_RETURN ile açar. */
+  type?: InvoiceType;
   shipmentId?: string | null;
+  /** Kaynak iade grubu (RollReturn.returnGroupId ?? id) — backend "bir iade
+   *  grubu → tek aktif fatura" seddini bu ALANDAN uygular (partial unique). */
+  returnGroupId?: string | null;
   customerId?: string | null;
   currency?: Currency;
   lines: Array<{
@@ -299,7 +304,7 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
   // ilk render'da hazırdır; yüklenmemişse 20 (bugünkü davranış, sıfır fark).
   const defaultVatRate = useFeatureFlags().data?.data?.financeDefaultVatRate ?? 20;
 
-  const [type, setType] = useState<InvoiceType>("SALES");
+  const [type, setType] = useState<InvoiceType>(prefill?.type ?? "SALES");
   const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">("CUSTOMER");
   const [customerId, setCustomerId] = useState<string | null>(prefill?.customerId ?? null);
   const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
@@ -394,6 +399,10 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
         // ALIŞ'a çevirdiyse bağ sessizce düşer — yanlış kaynağa bağlı fatura,
         // bağsız faturadan kötüdür.
         shipmentId: type === "SALES" ? (prefill?.shipmentId ?? null) : null,
+        // İade bağı yalnız SATIŞ İADESİ türünde taşınır (üstteki kuralın aynası):
+        // tür değiştirilirse bağ sessizce düşer — yanlış kaynağa bağlı fatura,
+        // bağsız faturadan kötüdür. Sed backend'de partial unique.
+        returnGroupId: type === "SALES_RETURN" ? (prefill?.returnGroupId ?? null) : null,
         clientToken: crypto.randomUUID(),
         lines: lines
           .filter((l) => l.description.trim() && l.qty > 0)

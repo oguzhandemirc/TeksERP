@@ -372,6 +372,8 @@ export async function createInvoice(body: {
   notes?: string | null;
   /** Kaynak sevkiyat — "bir sevkiyat → tek aktif fatura" (backend partial unique). */
   shipmentId?: string | null;
+  /** Kaynak iade grubu — aynı kural, satış-iade tarafı (H8, 2026-08-14). */
+  returnGroupId?: string | null;
   /** Kaynak mal kabul fişi — aynı kural, alış tarafı. */
   goodsReceiptId?: string | null;
   lines: InvoiceLineInput[];
