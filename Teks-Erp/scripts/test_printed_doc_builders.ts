@@ -45,6 +45,8 @@ import "../src/services/warehouse-transfer.service";
 import "../src/services/goods-receipt.service";
 import "../src/services/invoice.service";
 import "../src/services/payment.service";
+import "../src/services/reconciliation-letter.service";
+import "../src/services/cheque-delivery-note.service";
 
 let pass = 0;
 let fail = 0;
@@ -87,6 +89,10 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
     (await prisma.invoice.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
   [PrintedDocType.PAYMENT_RECEIPT]: async () =>
     (await prisma.payment.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.RECONCILIATION_LETTER]: async () =>
+    (await prisma.reconciliationLetter.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.CHEQUE_DELIVERY_NOTE]: async () =>
+    (await prisma.chequeDeliveryNote.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

@@ -35,8 +35,17 @@ import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
 export type PrintedDocDb = Prisma.TransactionClient | typeof prisma;
 type Db = PrintedDocDb;
 
-/** docType → belge ayar anahtarı (client DOC_DEFS / resolveDocConfig ile aynı key). */
-const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
+/**
+ * docType → belge ayar anahtarı (client DOC_DEFS / resolveDocConfig ile aynı key).
+ *
+ * EXPORT: `scripts/test_official_finance_docs.ts` bunu okuyup her belge tipinin
+ * anahtarı var mı + anahtarlar BENZERSİZ mi diye bakar. İki belge tipi aynı
+ * anahtarı paylaşırsa birinin şablon ayarı diğerinin baskısını da değiştirir ve
+ * bu hiçbir yerde hata vermez — sessizce yanlış görünen bir belge üretir.
+ * Üretim kodu haritaya bu export üzerinden DEĞİL, aşağıdaki iç kullanımlarla
+ * erişir.
+ */
+export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   SHIPMENT_DISPATCH: "shipmentDispatch",
   SUBCONTRACTOR_DISPATCH: "fasonSevk",
   SUBCONTRACTOR_DIRECT_SHIP: "fasonDirectShip",
@@ -49,6 +58,9 @@ const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   // 2026-08-14 ön muhasebe çıktıları.
   INVOICE_INTERNAL: "fatura",
   PAYMENT_RECEIPT: "tahsilatMakbuzu",
+  // 2026-08-15 resmi ön muhasebe belgeleri (J2 #18).
+  RECONCILIATION_LETTER: "mutabakatMektubu",
+  CHEQUE_DELIVERY_NOTE: "cekTeslimBordrosu",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */

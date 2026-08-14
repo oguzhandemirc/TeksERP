@@ -35,7 +35,7 @@
 // =============================================================================
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Plus, X } from "lucide-react";
+import { FileCheck2, FileClock, FileText, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,8 @@ import { ChequeFormDialog } from "./ChequeFormDialog";
 import { ChequeActionDialog } from "./ChequeActionDialog";
 import { ChequeDetailDialog } from "./ChequeDetailDialog";
 import { ChequeBordroDialog } from "./ChequeBordroDialog";
+import { ChequeOfficialBordroDialog } from "./ChequeOfficialBordroDialog";
+import { ChequeDeliveryNoteListDialog } from "./ChequeDeliveryNoteListDialog";
 import { KIND_LABEL } from "./labels";
 import {
   ChequeFilterBar, EMPTY_FILTERS, LIVE_STATUS, isFilterDirty, type ChequeFilterState,
@@ -73,6 +75,13 @@ export function ChequesPage() {
   const [actionTarget, setActionTarget] = useState<{ row: ChequeRow; def: ChequeActionDef } | null>(null);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [bordroOpen, setBordroOpen] = useState(false);
+  // RESMÎ bordro — anlık bordronun YERİNE geçmez, YANINDA durur (bkz.
+  // `chequeDeliveryNote.ts` başlığı: biri hızlı kâğıt, biri belge numaralı kayıt).
+  const [officialBordroOpen, setOfficialBordroOpen] = useState(false);
+  // KESİLMİŞ bordroların listesi — belgeye DÖNÜŞ YOLU. Bu ekran olmadan bir
+  // `BRD…` kaydı, oluşturma diyaloğu kapandığı anda ulaşılamaz hâle geliyordu
+  // (iptal ucu dahil; gerekçe `../officialDocs.ts`).
+  const [noteListOpen, setNoteListOpen] = useState(false);
 
   const { search, status, kind, docType, currency, dueFrom, dueTo } = filters;
 
@@ -212,6 +221,47 @@ export function ChequesPage() {
               Teslim Bordrosu
               {selectedRows.length > 0 ? ` (${selectedRows.length})` : ""}
             </Button>
+            {/* RESMÎ BORDRO — anlık çıktının YANINDA, yerine değil. İkisi ayrı
+                iştir ve metinler farkı söyler: "Teslim Bordrosu" hızlı kâğıt
+                (kayıt YOK), "Resmî Bordro" belge numaralı kayıt (BRD…, sürüm
+                geçmişi, iptal edilebilir). Tek düğmede birleştirmek, hızlı bakış
+                isteyen kullanıcıya her tıklamada iptal edilmesi gereken resmi
+                bir kayıt açtırırdı.
+                ⚠️ İzin `finance:write` — `finance:cheque` DEĞİL (backend rotası
+                da öyle): bordro çekin durumuna dokunmaz, yalnız belge üretir. */}
+            <PermissionGate permission="finance:write">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={selectedRows.length === 0}
+                title={
+                  selectedRows.length === 0
+                    ? "Resmî bordro için listeden çek/senet seçin (satır başındaki kutular)"
+                    : `${selectedRows.length} kayıt için belge numaralı teslim bordrosu`
+                }
+                onClick={() => setOfficialBordroOpen(true)}
+              >
+                <FileCheck2 className="h-4 w-4" />
+                Resmî Bordro
+                {selectedRows.length > 0 ? ` (${selectedRows.length})` : ""}
+              </Button>
+            </PermissionGate>
+            {/* KESİLMİŞ BORDROLAR — seçimden BAĞIMSIZ (aranan şey bir BELGEDİR,
+                bir kıymet değil) ve YAZMA İZNİ İSTEMEZ: liste `finance:read`,
+                iptal düğmesi listenin İÇİNDE `finance:write` ile kapılı. Ekranı
+                açabilen ama çek işleyemeyen muhasebeci de bordroyu yeniden
+                basabilmeli (dışa aktarım kararıyla aynı gerekçe). */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              title="Kesilmiş resmî bordroları aç, yeniden bas ya da iptal et"
+              onClick={() => setNoteListOpen(true)}
+            >
+              <FileClock className="h-4 w-4" />
+              Bordrolar
+            </Button>
             <ReportExportBar disabled={rows.length === 0} buildSpec={spec} />
             <PermissionGate permission="finance:cheque">
               <div className="flex gap-2">
@@ -343,6 +393,19 @@ export function ChequesPage() {
         // Bordro SEÇİLİ SATIRLARDAN beslenir (yeni istek yok): kâğıttaki liste,
         // ekrandaki seçimden farklı olamaz.
         <ChequeBordroDialog rows={selectedRows} open onOpenChange={setBordroOpen} />
+      )}
+      {officialBordroOpen && (
+        // Resmî bordro da SEÇİLİ SATIRLARDAN beslenir — belgedeki liste,
+        // ekrandaki seçimden farklı olamaz.
+        <ChequeOfficialBordroDialog
+          rows={selectedRows}
+          open
+          onOpenChange={setOfficialBordroOpen}
+        />
+      )}
+      {noteListOpen && (
+        // Kesilmiş bordroların listesi — koşullu mount (state kapanınca ölür).
+        <ChequeDeliveryNoteListDialog open onOpenChange={setNoteListOpen} />
       )}
     </PageShell>
   );

@@ -1,10 +1,11 @@
 // =============================================================================
-// ÖN MUHASEBE BELGELERİ — iç fatura + tahsilat/ödeme makbuzu
+// ÖN MUHASEBE BELGELERİ — fatura · makbuz · mutabakat mektubu · çek bordrosu
 // =============================================================================
-// İkisi de aynı iskelete oturuyor (başlık · taraf kutusu · tablo · toplam ·
+// Dördü de aynı iskelete oturuyor (başlık · taraf kutusu · tablo · toplam ·
 // imza); fark satır tablosunun kolonları ve toplam bloğu. `warehouse-doc`
-// emsalindeki gerekçenin aynısı: ayrı iki dosya "aynı tabloyu iki yerde
-// bakmak" demekti.
+// emsalindeki gerekçenin aynısı: ayrı dosyalar "aynı tabloyu iki yerde
+// bakmak" demekti. İskeleti kuran `renderFinanceDoc` bu dosyaya ÖZELdir
+// (export edilmez) — yeni bir ön muhasebe belgesi de buraya yazılır.
 //
 // ⚠️ FATURA ile MAKBUZ FARKLI ŞEY SÖYLER, karıştırma:
 //   • Fatura BORÇ doğurur (mal/hizmet karşılığı) — kalemleri, KDV'si, tevkifatı
@@ -59,6 +60,67 @@ export interface InvoiceDoc {
   };
   lines: InvoiceDocLine[];
   totals: { net: string; vat: string; withholding: string; grand: string; grandTry: string | null };
+  notes: string | null;
+}
+
+/** Mutabakat satırı — TEK para birimi. Tutarlar STRING (Decimal serileştirmesi). */
+export interface ReconciliationBalanceRow {
+  currency: string;
+  debit: string;
+  credit: string;
+  /** BORÇ − ALACAK. POZİTİF = cari BİZE borçlu (projenin tek yön sözleşmesi). */
+  balance: string;
+}
+
+export interface ReconciliationLetterDoc {
+  header: {
+    documentNo: string;
+    /** Düzenleme tarihi — mektubun kesildiği gün. */
+    date: string | null;
+    /** BAKİYE KESİTİ — içeriğin tarihi; düzenleme tarihinden FARKLI olabilir. */
+    asOf: string | null;
+    partyName: string;
+    partyCode: string | null;
+    partyTaxInfo: string | null;
+    createdBy: string | null;
+  };
+  balances: ReconciliationBalanceRow[];
+  notes: string | null;
+}
+
+/** Bordro satırı — çekin kâğıda basılan kimliği + tutarı. */
+export interface ChequeDeliveryLine {
+  docNo: string;
+  serialNo: string | null;
+  issueDate: string | null;
+  dueDate: string | null;
+  drawerName: string | null;
+  bankName: string | null;
+  currency: string;
+  amount: string;
+}
+
+/** Para birimi bazlı ara toplam (H6: farklı para birimleri TOPLANMAZ). */
+export interface ChequeDeliveryTotal {
+  currency: string;
+  count: number;
+  amount: string;
+}
+
+export interface ChequeDeliveryNoteDoc {
+  header: {
+    documentNo: string;
+    /** TESLİM tarihi. */
+    date: string | null;
+    kind: string;
+    kindLabel: string;
+    /** Teslim edilen taraf — banka hesabı / cari / serbest metin (biri ya da hiçbiri). */
+    targetName: string | null;
+    targetKindLabel: string | null;
+    createdBy: string | null;
+  };
+  lines: ChequeDeliveryLine[];
+  totals: ChequeDeliveryTotal[];
   notes: string | null;
 }
 
@@ -133,6 +195,17 @@ function renderFinanceDoc(
     notes: string | null;
     table: string;
     totalsBox: string;
+    /**
+     * BEYAN/RİCA metni (`.decl`) — tablodan ve toplam bloğundan SONRA basılır.
+     *
+     * ⚠️ `notes`/`footerNote` ile karıştırma: bunlar OPSİYONEL açıklamalardır,
+     * beyan ise belgenin HUKUKİ CÜMLESİDİR ("mutabık olup olmadığınızı imzalayıp
+     * iade ediniz" / "aşağıdaki kıymetler teslim edilmiştir"). O cümle olmadan
+     * kâğıt yalnız bir dökümdür ve karşı taraf neyi imzaladığını bilmez.
+     * Verilmezse tek bayt CSS/HTML basılmaz — fatura ve makbuzun çıktısı
+     * bayt-bayt korunur (kalite sertifikasındaki `.decl` deseni).
+     */
+    declaration?: string;
     documentNo: string;
     date: string | null;
   },
@@ -167,6 +240,12 @@ function renderFinanceDoc(
     ? `<div class="sign">${sigLabels.map((l: string) => `<div class="sign-box"><div class="sign-line"></div><div class="sign-lbl">${esc(l)}</div></div>`).join("")}</div>`
     : "";
   const noteBlock = cfg.footerNote ? `<div class="note">${esc(cfg.footerNote)}</div>` : "";
+  // ⚠️ Bölüm kapatılabilir ("declaration") ama VARSAYILAN AÇIK: beyan cümlesini
+  // sessizce düşürmek belgenin anlamını değiştirir, bu yüzden opt-out.
+  const declBlock =
+    opts.declaration && sectionOn(cfg.sections, "declaration")
+      ? `<div class="decl">${esc(opts.declaration)}</div>`
+      : "";
 
   const css = scaleDocCss(
     `
@@ -186,6 +265,13 @@ function renderFinanceDoc(
   .tot .row { display: flex; justify-content: space-between; padding: 2px 0; }
   .tot .grand { border-top: 2px solid #0f172a; margin-top: 3px; padding-top: 4px; font-weight: 800; font-size: ${d.secCell}px; }
   .tot .try { color: #475569; font-weight: 600; }
+  ${
+    // Beyan bloğu YOKSA tek bayt CSS de basılmaz (fatura/makbuz parmak izi korunur).
+    opts.declaration
+      ? `.decl { clear: both; margin-top: ${scaleW(d, 12)}px; font-size: ${d.note}px; white-space: pre-wrap;
+          border: 1px solid #cbd5e1; padding: ${scaleW(d, 8)}px ${scaleW(d, 10)}px; border-radius: 4px; font-style: italic; }`
+      : ""
+  }
   ${DOC_LOGO_CSS}
   ${DOC_STAMPS_CSS}
   ${docBlankGridCss(cfg)}
@@ -224,6 +310,7 @@ function renderFinanceDoc(
     ${partyBox}
     ${opts.table}
     ${opts.totalsBox}
+    ${declBlock}
     ${notesBox}
     ${noteBlock}
     ${blocksBottom}
@@ -343,6 +430,199 @@ export function renderPaymentReceiptHtml(snapshot: PrintedDocSnapshot, meta: Ren
     notes: doc.notes,
     table: "",
     totalsBox,
+    documentNo: h.documentNo,
+    date: h.date,
+  });
+}
+
+// =============================================================================
+// CARİ MUTABAKAT MEKTUBU (2026-08-15)
+// =============================================================================
+// ⚠️ FATURA/MAKBUZDAN FARKI: bu kâğıt karşı tarafa BİR SORU sorar ve imzalanıp
+// GERİ GELMESİ beklenir. Bu yüzden beyan bloğu (`.decl`) opsiyonel bir süs
+// değil, belgenin kendisidir; imza etiketleri de "Düzenleyen / Mutabıkız"tır
+// ("Teslim Alan" DEĞİL — teslim alınan bir şey yok).
+//
+// ⚠️ TOPLAM SATIRI YOK ve bu bilinçli: farklı para birimlerinin bakiyeleri
+// TOPLANMAZ (cari bakiye modelinin temel kuralı — `CariBalance` para birimi
+// bazında ayrıdır). Tek satırlık bir "GENEL TOPLAM", 1.000 USD ile 30.000 TL'yi
+// toplayıp anlamsız bir sayı basardı.
+
+/** Bakiye işaretinin İNSAN KARŞILIĞI — mektubun en çok yanlış okunan yeri. */
+function balanceSideLabel(balance: string): string {
+  const n = Number(balance);
+  if (!Number.isFinite(n) || n === 0) return "KAPALI";
+  return n > 0 ? "BORÇ" : "ALACAK";
+}
+
+/** Mutlak tutar — işaret DURUM kolonunda yazıyor, sayıda tekrar edilmez. */
+function fmtAbsMoney(v: string): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? fmtMoney(Math.abs(n).toFixed(2)) : fmtMoney(v);
+}
+
+export function renderReconciliationLetterHtml(
+  snapshot: PrintedDocSnapshot,
+  meta: RenderMeta = {},
+): string {
+  const doc = snapshot.doc as unknown as ReconciliationLetterDoc;
+  const h = doc.header;
+  const cfg = snapshot.docConfigOverride ?? {};
+  const rows = doc.balances ?? [];
+
+  const table = sectionOn(cfg.sections, "balanceTable")
+    ? buildDocTable<ReconciliationBalanceRow>({
+        className: "sec",
+        caption: "BAKİYE DÖKÜMÜ",
+        colCfg: cfg.columns?.balanceTable,
+        rows,
+        cols: [
+          { key: "currency", label: "PARA", align: "c", width: "60px", cell: (r) => esc(r.currency) },
+          { key: "debit", label: "BORÇ", align: "r", width: "110px", cell: (r) => esc(fmtMoney(r.debit)) },
+          { key: "credit", label: "ALACAK", align: "r", width: "110px", cell: (r) => esc(fmtMoney(r.credit)) },
+          { key: "balance", label: "BAKİYE", align: "r", width: "110px", cell: (r) => esc(fmtAbsMoney(r.balance)) },
+          { key: "side", label: "DURUM", align: "c", width: "90px", cell: (r) => esc(balanceSideLabel(r.balance)) },
+        ],
+      })
+    : "";
+
+  // Hareketi hiç olmayan cari için mektup kesilebilir (sıfır mutabakatı da bir
+  // mutabakattır) — o zaman tablo boş kalır ve kâğıt bunu AÇIKÇA söyler.
+  const emptyBox = rows.length === 0
+    ? `<div class="box"><div class="row"><span>Bakiye:</span><b>Belirtilen tarih itibarıyla kayıtlı hareket bulunmamaktadır.</b></div></div>`
+    : "";
+
+  const declaration =
+    `${fmtDate(h.asOf)} tarihi itibarıyla defterlerimizde görünen yukarıdaki bakiyeler için ` +
+    "mutabakatınızı rica ederiz. Mutabık iseniz belgeyi kaşeleyip imzalayarak tarafımıza iade " +
+    "etmenizi, mutabık değilseniz farkın gerekçesini bildirmenizi rica ederiz.\n" +
+    "BORÇ bakiyesi tarafınızın firmamıza, ALACAK bakiyesi firmamızın tarafınıza olan borcunu ifade eder.";
+
+  return renderFinanceDoc(snapshot, meta, {
+    defaultTitle: "Cari Mutabakat Mektubu",
+    configKey: "mutabakatMektubu",
+    headerLines: [
+      // ⚠️ KESİT TARİHİ BAŞLIKTA ve "Tarih"ten AYRI satırda: ikisi farklı günler
+      // olabilir ve karıştırılırsa mektup başka bir dönemi anlatıyor sanılır.
+      sectionOn(cfg.sections, "asOf")
+        ? `<div class="ln">Bakiye Tarihi: <b>${esc(fmtDate(h.asOf))}</b></div>`
+        : "",
+    ].filter(Boolean),
+    partyLines: [
+      `<div class="row"><span>Cari:</span><b>${esc(h.partyName)}${h.partyCode ? ` (${esc(h.partyCode)})` : ""}</b></div>`,
+      h.partyTaxInfo ? `<div class="row"><span>Vergi:</span><b>${esc(h.partyTaxInfo)}</b></div>` : "",
+      sectionOn(cfg.sections, "createdBy") && h.createdBy
+        ? `<div class="row"><span>Düzenleyen:</span><b>${esc(h.createdBy)}</b></div>`
+        : "",
+    ].filter(Boolean),
+    caption: "BAKİYE DÖKÜMÜ",
+    signatureLabels: ["Düzenleyen", "Mutabıkız — Kaşe / İmza"],
+    notes: doc.notes,
+    table,
+    totalsBox: emptyBox,
+    declaration,
+    documentNo: h.documentNo,
+    date: h.date,
+  });
+}
+
+// =============================================================================
+// ÇEK / SENET TESLİM BORDROSU (2026-08-15)
+// =============================================================================
+// H6'nın ANLIK Electron çıktısının (`Electron/src/pages/Finance/Cheques/
+// chequeBordro.ts`) donmuş resmi sürümü. Kolon kümesi ORADAN aynalanır:
+// karşı taraf hangi kâğıdı aldığını (belge/seri no), ne zaman paraya döneceğini
+// (keşide/vade), kimin borçlandığını (keşideci/banka) ve ne kadar için imza
+// attığını (para birimi + tutar) görmeli.
+//
+// ⚠️ FARKLI PARA BİRİMLERİ TOPLANMAZ (H6 kuralı birebir): tek TOPLAM yalnız
+// liste tek para birimindeyken yazılır; her durumda para birimi bazlı ara
+// toplamlar basılır. Karışık listede anlamsız bir toplam basmaktansa sayı hiç
+// yazılmaz — kırılım kaybolmasın diye ara toplam kutusu HER ZAMAN var.
+//
+// ⚠️ YATAY (landscape) DEĞİL: H6 Excel/rapor dışa aktarımı için landscape
+// seçmişti; resmi belge zinciri ortak A4 dikey chrome'unu kullanır (kâğıt boyu
+// zaten `?pageSize=` ve şablon ayarıyla değiştirilebilir).
+
+export function renderChequeDeliveryNoteHtml(
+  snapshot: PrintedDocSnapshot,
+  meta: RenderMeta = {},
+): string {
+  const doc = snapshot.doc as unknown as ChequeDeliveryNoteDoc;
+  const h = doc.header;
+  const cfg = snapshot.docConfigOverride ?? {};
+  const lines = doc.lines ?? [];
+  const totals = doc.totals ?? [];
+  const single = totals.length === 1 ? totals[0] : null;
+
+  const table = sectionOn(cfg.sections, "chequeTable")
+    ? buildDocTable<ChequeDeliveryLine>({
+        className: "sec",
+        caption: "TESLİM EDİLEN ÇEK / SENETLER",
+        colCfg: cfg.columns?.chequeTable,
+        rows: lines,
+        footLabel: `TOPLAM (${lines.length} adet)`,
+        cols: [
+          { key: "no", label: "SIRA", align: "c", width: "40px", cell: (_r, i) => String(i + 1) },
+          { key: "docNo", label: "BELGE NO", align: "l", cellClass: "mono", cell: (r) => esc(r.docNo) },
+          { key: "serialNo", label: "SERİ NO", align: "l", cellClass: "mono", cell: (r) => esc(r.serialNo ?? "—") },
+          { key: "issueDate", label: "KEŞİDE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.issueDate)) },
+          { key: "dueDate", label: "VADE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.dueDate)) },
+          { key: "drawer", label: "KEŞİDECİ", align: "l", cell: (r) => esc(r.drawerName ?? "—") },
+          { key: "bank", label: "BANKA", align: "l", cell: (r) => esc(r.bankName ?? "—") },
+          { key: "currency", label: "PARA", align: "c", width: "50px", cell: (r) => esc(r.currency) },
+          {
+            key: "amount", label: "TUTAR", align: "r", width: "100px",
+            cell: (r) => esc(fmtMoney(r.amount)),
+            // Karışık para biriminde hücre BOŞ — kırılım aşağıdaki kutuda.
+            foot: single ? esc(fmtMoney(single.amount)) : "",
+          },
+        ],
+      })
+    : "";
+
+  const totalsBox = totals.length
+    ? `<div class="tot">
+        ${totals
+          .map(
+            (t) =>
+              `<div class="row"><span>${esc(t.currency)} (${t.count} adet)</span><b>${esc(fmtMoney(t.amount))} ${esc(t.currency)}</b></div>`,
+          )
+          .join("")}
+      </div>`
+    : "";
+
+  const declaration =
+    (h.kind === "RECEIVED"
+      ? "Aşağıda dökümü verilen çek/senetler portföyümüzden teslim edilmiştir."
+      : "Aşağıda dökümü verilen çek/senetler tarafımızca düzenlenmiş olup teslim edilmiştir.") +
+    (totals.length > 1
+      ? "\nListede birden fazla para birimi vardır; farklı para birimleri toplanmadığı için tek TOPLAM yazılmamıştır — kırılım yukarıdadır."
+      : "") +
+    "\nİki nüsha düzenlenir; bir nüsha teslim alan tarafta kalır.";
+
+  return renderFinanceDoc(snapshot, meta, {
+    // Başlık YÖNDEN gelir: aldığımız kıymetlerin teslimi ile kendi borç
+    // senetlerimizin teslimi aynı kâğıt değildir (H6 tek-yön kuralının başlıktaki
+    // karşılığı) — tek "TESLİM BORDROSU" başlığı iki zıt olayı aynı görürdü.
+    defaultTitle: `${h.kindLabel} Çek / Senet Teslim Bordrosu`,
+    configKey: "cekTeslimBordrosu",
+    headerLines: [],
+    partyLines: [
+      h.targetName
+        ? `<div class="row"><span>${esc(h.targetKindLabel ?? "Teslim Edilen")}:</span><b>${esc(h.targetName)}</b></div>`
+        : "",
+      `<div class="row"><span>Adet:</span><b>${lines.length}</b></div>`,
+      sectionOn(cfg.sections, "createdBy") && h.createdBy
+        ? `<div class="row"><span>Düzenleyen:</span><b>${esc(h.createdBy)}</b></div>`
+        : "",
+    ].filter(Boolean),
+    caption: "TESLİM EDİLEN ÇEK / SENETLER",
+    signatureLabels: ["Teslim Eden", "Teslim Alan"],
+    notes: doc.notes,
+    table,
+    totalsBox,
+    declaration,
     documentNo: h.documentNo,
     date: h.date,
   });

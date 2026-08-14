@@ -6,19 +6,25 @@ import {
   printedDocumentService,
   type PrintedDocType,
 } from "@/services/printedDocumentService";
-import { DOC_DEF_MAP } from "@/services/documentConfig";
+import { DOC_DEF_MAP, DOC_TYPE_TO_KEY } from "@/services/documentConfig";
 import type { DocSheetPreview } from "@/components/print/print-helpers";
 
-/** Client belge anahtarı → backend PrintedDocType. */
-const DOC_TYPE_BY_KEY: Record<string, PrintedDocType> = {
-  shipmentDispatch: "SHIPMENT_DISPATCH",
-  fasonSevk: "SUBCONTRACTOR_DISPATCH",
-  fasonDirectShip: "SUBCONTRACTOR_DIRECT_SHIP",
-  kartelaCeki: "KARTELA_DISPATCH",
-  fasonKabul: "SUBCONTRACTOR_RECEIPT",
-  kaliteSertifikasi: "QUALITY_CERTIFICATE",
-  iadeIrsaliyesi: "RETURN_DISPATCH",
-};
+/**
+ * Client belge anahtarı → backend PrintedDocType.
+ *
+ * ⚠️ `DOC_TYPE_TO_KEY`in TERSİ olarak TÜRETİLİR, elle yazılmaz. Eski hâli
+ * ikinci bir liste tutuyordu ve sessizce bayatladı: ticaret/ön muhasebe
+ * paketleriyle gelen DÖRT belge (`depoTransfer` · `malKabul` · `fatura` ·
+ * `tahsilatMakbuzu`) bu listeye hiç eklenmediği için Belge Şablonları ekranında
+ * ayarları düzenlenebiliyor ama canlı önizleme "Bu belge için önizleme yok."
+ * diyordu — yani "önizleme = gerçek baskı" sözleşmesi tam da ayarı yapan kişinin
+ * gözü önünde sessizce boşa düşüyordu (2026-08-15'te bulundu ve kapatıldı).
+ * Türetilmiş hâlde yeni bir belge tek yere yazılır ve önizlemesi kendiliğinden
+ * doğar.
+ */
+const DOC_TYPE_BY_KEY: Record<string, PrintedDocType> = Object.fromEntries(
+  Object.entries(DOC_TYPE_TO_KEY).map(([docType, docKey]) => [docKey, docType as PrintedDocType]),
+);
 
 /** Fiziksel sayfa ölçüsü (mm) — backend `fason-ceki.density.PAGE_DIM` aynası. */
 const PAGE_DIM = { A4: { w: 210, h: 297 }, A5: { w: 148, h: 210 } } as const;

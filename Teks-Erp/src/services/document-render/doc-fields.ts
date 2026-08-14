@@ -74,8 +74,35 @@ const SEC_CAPTION: DocFieldDef = {
 };
 
 /**
+ * BEYAN/RİCA metni (`.decl`) — belgenin hukuki cümlesi, opsiyonel bir not DEĞİL
+ * (bkz. `finance-doc.renderFinanceDoc` → `declaration`). Kalite sertifikası,
+ * mutabakat mektubu ve çek teslim bordrosu üçü de basar; tek nesne olarak
+ * paylaşılır ki üç katalogda üç farklı taban/kalınlık doğmasın.
+ */
+const DECL: DocFieldDef = {
+  key: "decl", label: "Beyan metni", group: "footer", selector: ".decl", base: (d) => d.note, weight: 400,
+};
+
+/**
  * Belge → alan kataloğu. Anahtarlar `DOC_CONFIG_KEYS` ile aynı (fasonSevk hariç —
  * onun kendi kataloğu var, `fason-ceki.fields.ts`).
+ *
+ * ⚠️ KATALOG `DOC_CONFIG_KEYS` KADAR GENİŞ DEĞİLDİR ve olmak zorunda da değil:
+ * `docFieldCss` katalog bulamazsa boş string döner (kural 1 — override yoksa tek
+ * bayt CSS basılmaz). Ama bir belge buraya eklenecekse Electron aynası
+ * (`services/documentConfig.ts` → `DOC_FIELD_CATALOGS`) AYNI commit'te
+ * güncellenir: `scripts/test_doc_density_fields.ts` §5 birebirliği SIRA DAHİL
+ * mekanik doğrular ve yalnız bir tarafı eklemek bekçiyi anında kırmızıya çevirir.
+ *
+ * ⚠️ BİLİNEN BORÇ (2026-08-15, dört ön muhasebe belgesi): `finance-doc` chrome'u
+ * `.sayin` / `.sub` / `.meta-row` / `.box-t` elemanlarını HİÇ basmaz (taraf
+ * bilgisi `.box .row` içinde durur) — yani `sayinLabel · sayin · subLine ·
+ * vehicle · boxTitle` satırları o dört belgede panelde GÖRÜNÜR ama karşılığı
+ * YOKTUR. Yeni iki belge bilerek AİLEYLE aynı listeyi taşıyor: aynı renderer
+ * içinde iki farklı katalog felsefesi, sonradan bakan için hangisinin doğru
+ * olduğunu belirsiz yapardı. Temizlenecekse DÖRDÜ BİRDEN temizlenmeli — baskı
+ * çıktısı değişmez (o seçiciler zaten hiçbir şeye uymuyor), yalnız panelden
+ * beş ölü satır düşer.
  */
 export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   shipmentDispatch: [
@@ -86,11 +113,7 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   fasonDirectShip: [...COMMON, ...BOXES, TBL_CAP],
   fasonKabul: [...COMMON, ...BOXES, TBL_CAP],
   kartelaCeki: [...COMMON, ...BOXES, TBL_CAP],
-  kaliteSertifikasi: [
-    ...COMMON,
-    TBL_CAP,
-    { key: "decl", label: "Beyan metni", group: "footer", selector: ".decl", base: (d) => d.note, weight: 400 },
-  ],
+  kaliteSertifikasi: [...COMMON, TBL_CAP, DECL],
   iadeIrsaliyesi: [...COMMON, ...BOXES, SEC_CAPTION],
   // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
   depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],
@@ -98,6 +121,11 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   // Ön muhasebe çıktıları — aynı iskelet (başlık · kutu · tablo · imza).
   fatura: [...COMMON, ...BOXES, SEC_CAPTION],
   tahsilatMakbuzu: [...COMMON, ...BOXES, SEC_CAPTION],
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18) — aynı iskelet + BEYAN
+  // bloğu. Fatura/makbuzda beyan YOKTUR (`declaration` verilmezse tek bayt CSS
+  // basılmaz), bu ikisinde belgenin KENDİSİDİR.
+  mutabakatMektubu: [...COMMON, ...BOXES, SEC_CAPTION, DECL],
+  cekTeslimBordrosu: [...COMMON, ...BOXES, SEC_CAPTION, DECL],
 };
 
 /**

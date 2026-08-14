@@ -23,6 +23,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { ReportExportBar } from "@/pages/Reports/_components";
 import { buildStatementExport } from "@/pages/Reports/Finance/statementExport";
 import { OpeningBalanceDialog } from "./OpeningBalanceDialog";
+import { ReconciliationLetterDialog } from "./ReconciliationLetterDialog";
+import { ReconciliationLetterListDialog } from "./ReconciliationLetterListDialog";
 import { formatDayKey } from "./PeriodClose/service";
 import { findActiveDevirRowId } from "./statementDevir";
 import {
@@ -100,6 +102,11 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
   const [cancelError, setCancelError] = useState<string | null>(null);
   // Devir GİRİŞ formu — koşullu mount: kapanınca form durumu ölür (taşınmaz).
   const [openingFormOpen, setOpeningFormOpen] = useState(false);
+  // MUTABAKAT MEKTUBU — kesit tarihi ekrandaki dönemin BİTİŞİNDEN ön-dolar
+  // (gerekçe: `ReconciliationLetterDialog` başlığı).
+  const [letterOpen, setLetterOpen] = useState(false);
+  // KESİLMİŞ mektupların listesi — belgeye dönüş yolu (`officialDocs.ts`).
+  const [letterListOpen, setLetterListOpen] = useState(false);
 
   const q = useQuery({
     queryKey: ["finance", "statement", cari.id, currency, from, to],
@@ -212,16 +219,32 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
             <div className="ml-auto">
               <ReportExportBar disabled={!q.data} buildSpec={spec} />
             </div>
+            {/* MUTABAKAT MEKTUBU — resmî belge (MBT…), defteri OYNATMAZ.
+                İzin `finance:write` (backend rotasıyla birebir): mektup cari
+                defterin bir OKUMASINI resmileştirir; `finance:invoice` gibi
+                deftere YAZAN izinlere bağlamak, mektup kesebilmek için birine
+                fatura onaylama yetkisi vermek olurdu. */}
+            <PermissionGate permission="finance:write">
+              <Button variant="outline" onClick={() => setLetterOpen(true)}>
+                Mutabakat Mektubu
+              </Button>
+            </PermissionGate>
+            {/* KESİLMİŞ MEKTUPLAR — belgeye DÖNÜŞ YOLU. İzin kapısı YOK
+                (liste `finance:read` ile gelir; iptal düğmesi listenin İÇİNDE
+                `finance:write` ile kapılı): imzalı mektubun kopyasını istemek
+                bir OKUMA işidir. Bu düğme olmadan kesilen mektuba bir daha
+                ulaşılamıyordu — gerekçe `officialDocs.ts` başlığında. */}
+            <Button variant="outline" onClick={() => setLetterListOpen(true)}>
+              Mektuplar
+            </Button>
             {/* Devir GİRİŞİ — stornonun ("Devri İptal Et") giriş ayağı, aynı
                 izin kapısı. Aktif devir varken de ÇİZİLİR: gizlemek "neden
                 yok" sorusunu cevapsız bırakırdı; backend 409'u formun kendi
                 hata alanında yol göstererek söyler ("önce iptal edin"). */}
             <PermissionGate permission="finance:invoice">
-              <div className="ml-auto">
-                <Button variant="outline" onClick={() => setOpeningFormOpen(true)}>
-                  Devir Gir
-                </Button>
-              </div>
+              <Button variant="outline" onClick={() => setOpeningFormOpen(true)}>
+                Devir Gir
+              </Button>
             </PermissionGate>
           </div>
 
@@ -309,6 +332,32 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* MUTABAKAT MEKTUBU — koşullu mount. Kesit tarihi EKRANDAKİ dönemin
+          bitişinden ön-dolar: kâğıt, kullanıcının baktığı bakiyeyi anlatsın.
+          ⚠️ AYRI BİR MENÜ SAYFASI hâlâ YOK ve bu bilinçli — ama "geçmişe erişim
+          bugün gerekmiyor" gerekçesi 2026-08-15'te DÜŞTÜ: o karar yalnız
+          geçmişi değil İPTALİ de ulaşılamaz bırakıyordu ve `clientToken`ın
+          atlanmasının gerekçesi ("mükerrer kopya tek adımda iptal edilir") tam
+          o adıma dayanıyordu. Çözüm menüye sayfa açmak değil, listeyi bağlamı
+          olan yere — bu carinin ekstresine — koymaktır. */}
+      {letterOpen && (
+        <ReconciliationLetterDialog
+          cari={cari}
+          defaultAsOfYmd={to}
+          open
+          onOpenChange={setLetterOpen}
+        />
+      )}
+
+      {letterListOpen && (
+        <ReconciliationLetterListDialog
+          cariId={cari.id}
+          cariName={cari.name}
+          open
+          onOpenChange={setLetterListOpen}
+        />
+      )}
 
       {/* DEVİR GİRİŞİ — koşullu mount (form durumu kapanınca ölür). */}
       {openingFormOpen && (

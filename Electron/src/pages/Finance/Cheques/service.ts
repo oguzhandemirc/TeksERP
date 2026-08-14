@@ -283,3 +283,71 @@ export async function chequeCancel(id: string, reason?: string): Promise<Mutatio
   const res = await apiClient.post(`/api/finance/cheques/${id}/cancel`, { reason });
   return res.data as MutationResult;
 }
+
+// -----------------------------------------------------------------------------
+// RESMÎ TESLİM BORDROSU (2026-08-15, J2 #18)
+// -----------------------------------------------------------------------------
+// ⚠️ AYRI KAYNAK, AYRI YOL: `/api/finance/cheque-delivery-notes` — `…/cheques`
+// ile çakışmaz (Express tam segment eşler). Gövdeyi ekran ELLE KURMAZ,
+// `chequeDeliveryNote.buildDeliveryNoteBody` üretir (kurallar orada).
+//
+// ⚠️ İZİN `finance:write`, `finance:cheque` DEĞİL — bordro çekin DURUM
+// MAKİNESİNE dokunmaz, yalnız kâğıt üretir. Yazmayı `finance:cheque`e bağlamak
+// "teslim tutanağı bastır" isteyen kişiye çek tahsil etme yetkisi vermek olurdu
+// (backend rotasındaki gerekçenin aynısı; iki taraf hizalı kalmalı).
+
+export async function createChequeDeliveryNote(body: {
+  chequeIds: string[];
+  deliveryDate?: string;
+  bankAccountId?: string | null;
+  cariId?: string | null;
+  targetLabel?: string;
+  notes?: string;
+  /** "Zaten aktif bir bordroda" uyarısı onaylandı (409'u geçer). */
+  confirmDuplicate?: boolean;
+}): Promise<{ data?: { id: string; docNo: string; count: number }; message?: string }> {
+  const res = await apiClient.post("/api/finance/cheque-delivery-notes", body);
+  return res.data as { data?: { id: string; docNo: string; count: number }; message?: string };
+}
+
+/**
+ * Kesilmiş bordrolar — belgeye DÖNÜŞ YOLU (2026-08-15). Gerekçe:
+ * `../officialDocs.ts` başlığı (kesilen belgeye ulaşılamıyordu; iptal ucu
+ * yazılmıştı ama hiçbir kullanıcı tetikleyemiyordu).
+ */
+export interface DeliveryNoteRow {
+  id: string;
+  docNo: string;
+  kind: ChequeKind;
+  status: "ACTIVE" | "CANCELLED";
+  deliveryDate: string;
+  targetLabel: string | null;
+  notes: string | null;
+  createdAt: string;
+  bankAccount: { id: string; name: string } | null;
+  cari: {
+    id: string;
+    customer: { code: string; name: string } | null;
+    subcontractor: { code: string; name: string } | null;
+  } | null;
+  _count: { items: number };
+}
+
+export async function listChequeDeliveryNotes(params: {
+  page?: number;
+  pageSize?: number;
+  kind?: ChequeKind;
+  status?: "ACTIVE" | "CANCELLED";
+  search?: string;
+}): Promise<{ data: DeliveryNoteRow[]; pagination: { total: number } }> {
+  const res = await apiClient.get("/api/finance/cheque-delivery-notes", { params });
+  return res.data as { data: DeliveryNoteRow[]; pagination: { total: number } };
+}
+
+export async function cancelChequeDeliveryNote(
+  id: string,
+  reason?: string,
+): Promise<{ message?: string }> {
+  const res = await apiClient.post(`/api/finance/cheque-delivery-notes/${id}/cancel`, { reason });
+  return res.data as { message?: string };
+}

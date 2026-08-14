@@ -245,4 +245,62 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     amountTry: null,
     notes: "Ağustos dönemi kısmi tahsilat.",
   },
+
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18). Sınır durumları yine
+  // BİLİNÇLİ olarak örnekte: mutabakatta ÜÇ para birimi (biri SIFIR bakiyeli —
+  // "hareketi var ama kapanmış" satırı da mutabakatın konusudur) ve bordroda
+  // İKİ para birimi (tek TOPLAM yazılmadığı dal önizlemede görünsün).
+  RECONCILIATION_LETTER: {
+    header: {
+      documentNo: "MBT1508260001",
+      date: new Date().toISOString(),
+      asOf: new Date().toISOString(),
+      partyName: "Örnek Tekstil Ltd. Şti.",
+      partyCode: "CR-000148",
+      partyTaxInfo: "Merkez V.D. · 1234567890",
+      createdBy: "Ayşe Kaya",
+    },
+    balances: [
+      { currency: "TRY", debit: "184500.00", credit: "121000.00", balance: "63500.00" },
+      { currency: "USD", debit: "12000.00", credit: "15400.00", balance: "-3400.00" },
+      { currency: "EUR", debit: "5000.00", credit: "5000.00", balance: "0.00" },
+    ],
+    notes: null,
+  },
+  CHEQUE_DELIVERY_NOTE: {
+    header: {
+      documentNo: "BRD1508260001",
+      date: new Date().toISOString(),
+      kind: "RECEIVED",
+      kindLabel: "Alınan",
+      targetName: "Ziraat Bankası — TL Vadesiz",
+      targetKindLabel: "Teslim Edilen Banka",
+      createdBy: "Ayşe Kaya",
+    },
+    lines: [
+      {
+        docNo: "CKA1508260001", serialNo: "0034512", issueDate: ISO,
+        dueDate: new Date(Date.now() + 45 * 864e5).toISOString(),
+        drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
+        currency: "TRY", amount: "42500.00",
+      },
+      {
+        docNo: "CKA1508260002", serialNo: "0034513", issueDate: ISO,
+        dueDate: new Date(Date.now() + 60 * 864e5).toISOString(),
+        drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
+        currency: "TRY", amount: "18750.50",
+      },
+      {
+        docNo: "SNA1508260003", serialNo: null, issueDate: ISO,
+        dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
+        drawerName: "Delta Tekstil Ltd.", bankName: null,
+        currency: "USD", amount: "5000.00",
+      },
+    ],
+    totals: [
+      { currency: "TRY", count: 2, amount: "61250.50" },
+      { currency: "USD", count: 1, amount: "5000.00" },
+    ],
+    notes: "Tahsile verilmek üzere teslim edilmiştir.",
+  },
 };

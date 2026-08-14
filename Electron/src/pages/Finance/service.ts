@@ -582,3 +582,60 @@ export async function fetchTcmbRates(): Promise<TcmbFetchSummary> {
   const res = await apiClient.post("/api/finance/exchange-rates/fetch-tcmb");
   return (res.data as { data: TcmbFetchSummary }).data;
 }
+
+// -----------------------------------------------------------------------------
+// MUTABAKAT MEKTUBU (2026-08-15, J2 #18)
+// -----------------------------------------------------------------------------
+// ⚠️ Gövdeyi ekran ELLE KURMAZ — `reconciliationLetter.buildReconciliationLetterBody`
+// üretir; `asOf`ın gün SONU olması orada kilitli (gün başı gönderilirse o günün
+// hareketleri sessizce dışarıda kalır).
+//
+// ⚠️ Bu uç DEFTERE HİÇBİR ŞEY YAZMAZ (bakiye fotoğrafı türetilir + donar) →
+// başarıdan sonra `invalidateQueries` GEREKMEZ. Cari listesi/ekstre tazelemek
+// "bir şey değişti" sinyali verirdi; değişen tek şey yeni bir BELGEnin varlığı.
+export async function createReconciliationLetter(body: {
+  cariId: string;
+  asOf?: string;
+  notes?: string;
+}): Promise<{ data?: { id: string; docNo: string }; message?: string }> {
+  const res = await apiClient.post("/api/finance/reconciliation-letters", body);
+  return res.data as { data?: { id: string; docNo: string }; message?: string };
+}
+
+/**
+ * Kesilmiş mektuplar — belgeye DÖNÜŞ YOLU (2026-08-15).
+ *
+ * ⚠️ Bu uç önce bilinçli olarak bağlanmamıştı ("bugün olmayan bir ihtiyaç için
+ * ekran açma") ama o karar yalnız GEÇMİŞE ERİŞİMİ değil İPTALİ de ulaşılamaz
+ * bırakıyordu — gerekçesi `officialDocs.ts` başlığında.
+ */
+export interface ReconciliationLetterRow {
+  id: string;
+  docNo: string;
+  status: "ACTIVE" | "CANCELLED";
+  asOf: string;
+  notes: string | null;
+  createdAt: string;
+  cari: {
+    id: string;
+    customer: { code: string; name: string } | null;
+    subcontractor: { code: string; name: string } | null;
+  } | null;
+}
+
+export async function listReconciliationLetters(params: {
+  cariId?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{ data: ReconciliationLetterRow[]; pagination: { total: number } }> {
+  const res = await apiClient.get("/api/finance/reconciliation-letters", { params });
+  return res.data as { data: ReconciliationLetterRow[]; pagination: { total: number } };
+}
+
+export async function cancelReconciliationLetter(
+  id: string,
+  reason?: string,
+): Promise<{ message?: string }> {
+  const res = await apiClient.post(`/api/finance/reconciliation-letters/${id}/cancel`, { reason });
+  return res.data as { message?: string };
+}

@@ -96,6 +96,25 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read:  ["finance:read", "finance:write", "finance:payment"],
     write: ["finance:payment"],
   },
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18). READ, WRITE'ı KAPSAR.
+  // ⚠️ Revizyon (write) burada `finance:write`tir — fatura/makbuzdaki
+  // `finance:invoice`/`finance:payment` DEĞİL. Gerekçe simetrik: orada belge
+  // deftere İŞLEMİŞ bir kaydın kâğıdıdır (revize eden kişi o kaydı doğuran
+  // yetkiye sahip olmalı); burada belge hiçbir deftere yazmayan bir OKUMANIN
+  // kâğıdıdır ve onu düzenleyen izin `finance:write`tir. Kaynak uçlarla
+  // (`POST /reconciliation-letters`, `POST /cheque-delivery-notes`) HİZALI —
+  // ayrışırsa kullanıcı belgeyi doğurabilir ama revize edemez.
+  // ⚠️ `report:finance` READ'e eklendi: muhasebe raporlarını okuyan kişi (cari
+  // ekstre / yaşlandırma) mutabakat mektubunu da açabilmeli; o izin zaten aynı
+  // tutar bilgisini gösteriyor, yeni bir şey sızmaz.
+  RECONCILIATION_LETTER: {
+    read:  ["finance:read", "finance:write", "report:finance"],
+    write: ["finance:write"],
+  },
+  CHEQUE_DELIVERY_NOTE: {
+    read:  ["finance:read", "finance:write", "finance:cheque", "report:finance"],
+    write: ["finance:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

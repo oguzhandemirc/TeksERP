@@ -25,7 +25,11 @@ export type PrintedDocType =
   | "GOODS_RECEIPT"
   // Ön muhasebe çıktıları (2026-08-14).
   | "INVOICE_INTERNAL"
-  | "PAYMENT_RECEIPT";
+  | "PAYMENT_RECEIPT"
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18) — donmuş mutabakat mektubu
+  // ve donmuş çek/senet teslim bordrosu (H6'nın ANLIK çıktısının resmi ikizi).
+  | "RECONCILIATION_LETTER"
+  | "CHEQUE_DELIVERY_NOTE";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

@@ -66,6 +66,9 @@ import financeRoutes from "./routes/finance.routes";
 import chequeRoutes from "./routes/cheque.routes";
 import financePeriodRoutes from "./routes/finance-period.routes";
 import cashPeriodRoutes from "./routes/cash-period.routes";
+// Resmi ön muhasebe belgeleri (J2 #18) — ikisi de KENDİ kapısını taşır.
+import reconciliationLetterRoutes from "./routes/reconciliation-letter.routes";
+import chequeDeliveryNoteRoutes from "./routes/cheque-delivery-note.routes";
 // Paket D (ticaret) — üçü de KENDİ `verifyToken + requireFinanceEnabled`
 // kapısını taşır → app seviyesinde, spesifik ön ekle bağlanırlar.
 import yarnRoutes from "./routes/yarn.routes";
@@ -642,6 +645,12 @@ app.use("/api/finance/cheques", chequeRoutes);
 app.use("/api/finance/period-closes", financePeriodRoutes);
 // Kasa/banka dönem kapanışı (K-1) — aynı desen, aynı sıra kuralı.
 app.use("/api/finance/cash-period-closes", cashPeriodRoutes);
+// Resmi ön muhasebe belgeleri (J2 #18) — aynı desen, aynı sıra kuralı: kendi
+// `verifyToken + requireFinanceEnabled` kapısını taşıdıkları için `/api/finance`
+// GENEL ön ekinden ÖNCE bağlanırlar (sonra bağlansalardı her istek önce finance
+// router'ına girer, eşleşme bulamayıp çıkar ve kapı iki kez koşardı).
+app.use("/api/finance/reconciliation-letters", reconciliationLetterRoutes);
+app.use("/api/finance/cheque-delivery-notes", chequeDeliveryNoteRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);

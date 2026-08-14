@@ -25,6 +25,8 @@ import "../src/services/warehouse-transfer.service";
 import "../src/services/goods-receipt.service";
 import "../src/services/invoice.service";
 import "../src/services/payment.service";
+import "../src/services/reconciliation-letter.service";
+import "../src/services/cheque-delivery-note.service";
 import {
   systemSettingService,
   readDocumentsLogo,

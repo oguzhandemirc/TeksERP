@@ -3183,6 +3183,14 @@ enum PrintedDocType {
   // Zincir aynı: snapshot + versiyon + revizyon + İPTAL filigranı.
   INVOICE_INTERNAL // İç satış/alış faturası (Invoice — ONAYDA donar, stornoda VOID)
   PAYMENT_RECEIPT // Tahsilat/ödeme makbuzu (Payment — KAYITTA donar, iptalde VOID)
+  // 2026-08-15 resmi ön muhasebe belgeleri (yine SONA — ALTER TYPE ADD VALUE kuralı).
+  // ⚠️ İkisi de MÜŞTERİYE/KARŞI TARAFA GİDER (fatura/makbuzdan farkı bu): biri
+  // imzalanıp geri gelmesi beklenen mutabakat mektubu, diğeri elden teslim
+  // tutanağı. Kaynak modelleri BU İŞ İÇİN AÇILDI (ReconciliationLetter /
+  // ChequeDeliveryNote) — donmuş belge `docType + sourceId` ister ve o kaynak
+  // yoksa belgenin numarası, sürümü ve revizyon geçmişi olamaz.
+  RECONCILIATION_LETTER // Cari mutabakat mektubu (ReconciliationLetter — OLUŞTURMADA donar)
+  CHEQUE_DELIVERY_NOTE // Çek/senet teslim bordrosu (ChequeDeliveryNote — OLUŞTURMADA donar)
 }
 
 enum PrintedDocStatus {
@@ -4569,6 +4577,12 @@ model CariAccount {
   /// Dönem kapanışları (C3) — ekstrenin DEVİR satırının kaynağı.
   periodCloses CariPeriodClose[]
 
+  /// Resmi ön muhasebe belgeleri (2026-08-15): mutabakat mektubu bu cariye
+  /// KESİLİR, çek teslim bordrosu bu cariye TESLİM EDİLMİŞ olabilir (opsiyonel
+  /// hedef — bordronun karşı tarafı banka da olabilir, serbest metin de).
+  reconciliationLetters ReconciliationLetter[]
+  chequeDeliveryNotes   ChequeDeliveryNote[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -4988,6 +5002,8 @@ model BankAccount {
   cheques          Cheque[]
   chequeEvents     ChequeEvent[]
   periodCloses     CashPeriodClose[]
+  /// Çek teslim bordrosunun hedefi bu hesap olabilir (tahsile/teminata veriş).
+  chequeDeliveryNotes ChequeDeliveryNote[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -5319,6 +5335,10 @@ model Cheque {
   events       ChequeEvent[]
   transactions CariTransaction[]
   allocations  PaymentAllocation[]
+  /// Bu çekin girdiği teslim bordroları (2026-08-15). ⚠️ ÇOĞUL ve bu bilinçli:
+  /// aynı çek bordroya girip geri alınabilir ve yeniden teslim edilebilir
+  /// (bordro iptal edilir, yenisi kesilir) — bordro çekin DURUMUNU değiştirmez.
+  deliveryNoteItems ChequeDeliveryNoteItem[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -5758,4 +5778,177 @@ model PurchaseOrderLine {
   @@unique([purchaseOrderId, lineNo])
   @@index([itemId])
   @@map("purchase_order_lines")
+}
+
+// =============================================================================
+// RESMİ ÖN MUHASEBE BELGELERİ (2026-08-15, J2 #18) — migration 20260814220100
+// =============================================================================
+// İki YENİ SAHİPLENEN model. İkisi de var olan bir veriyi yeniden anlatır; yeni
+// bir defter AÇMAZLAR:
+//   • ReconciliationLetter → cari defterin bir ANDAKİ bakiye fotoğrafı
+//   • ChequeDeliveryNote   → seçilen çeklerin teslim tutanağı
+//
+// ⚠️ NEDEN AYRI MODEL (H6'nın "bordro grubunu sahiplenen kaynak model yok"
+// notunun cevabı): donmuş belge `docType + sourceId` ister. Kaynak yalnız
+// "kullanıcının o anki seçimi" olduğunda belgenin numarası, sürümü ve revizyon
+// geçmişi OLAMAZ ve aynı seçimle iki kez basmak iki ayrı olay üretmez. Bu iki
+// tablo tam olarak o eksik kimliği taşır.
+//
+// ⚠️ İKİSİ DE DEFTERE YAZMAZ. Ne `CariTransaction` ne bakiye ne kasa/banka —
+// hiçbiri oynamaz. Mutabakat mektubu bakiyeyi OKUR, bordro çekin DURUM
+// MAKİNESİNE DOKUNMAZ (v1 belge-only kararı; teslim olayları mevcut çek
+// akışında: deposit/endorse/collect). Bu yüzden dönem kilidi de aranmaz.
+//
+// ⚠️ `clientToken` BİLİNÇLİ OLARAK YOK — gerekçe servis dosyalarının başında
+// (özet: bu iki kayıt para/stok/defter oynatmaz, ekrandaki bir SEÇİMDEN doğar
+// ve mükerrer kopyanın maliyeti "boşa giden bir belge numarası"dır; iptali de
+// tek adımdır). Kayıt-yaratan uç sözleşmesine dönmek istenirse eklenmesi tek
+// nullable kolon + partial unique index'tir.
+// =============================================================================
+
+/// Mutabakat mektubunun durumu. `Payment`/`GoodsReceipt` emsali: iki değerli
+/// enum + `cancelledAt/By/Reason` üçlüsü. Yalın `cancelledAt IS NULL` yerine
+/// enum seçilmesinin sebebi atomik claim'dir — iptal `updateMany WHERE {id,
+/// status: ACTIVE}` ile TEK KEZ tüketilir ve ikinci istek 409 alır.
+enum ReconciliationLetterStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// CARİ MUTABAKAT MEKTUBU — "şu tarih itibarıyla bakiyeniz şudur, mutabık
+/// mısınız?" diye karşı tarafa giden, imzalanıp geri gelmesi beklenen belge.
+///
+/// ⚠️ BAKİYE SATIRLARI BU TABLODA SAKLANMAZ ve bu bilinçli: fotoğrafı donmuş
+/// `PrintedDocument.snapshot` taşır (belge OLUŞTURMADA donar). İkinci bir kopya
+/// tutmak, aynı rakam için iki kaynak demekti — ve ikisi ayrıştığı gün hangisinin
+/// "resmi" olduğu sorusunun cevabı olmazdı. Tablo yalnız belgenin KİMLİĞİNİ ve
+/// ÜRETİM PARAMETRELERİNİ (cari + kesit tarihi) taşır.
+///
+/// ⚠️ `asOf` BELGENİN İÇERİĞİDİR, düzenleme tarihi DEĞİL: geçmişe dönük bir
+/// kesit ("31 Temmuz itibarıyla") olağandır. Belge numarasının GGAAYY'si bu
+/// yüzden `asOf`tan değil DÜZENLEME anından okunur (`createdAt` ile aynı gün).
+model ReconciliationLetter {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// MBT + GGAAYY + NNNN (düzenleme günü).
+  docNo String @unique @db.VarChar(32)
+
+  cariId String @db.Uuid
+
+  /// BAKİYE KESİTİ — `txnDate <= asOf` olan tüm hareketler sayılır.
+  asOf DateTime @db.Timestamptz
+
+  status ReconciliationLetterStatus @default(ACTIVE)
+  notes  String?                    @db.VarChar(500)
+
+  /// ⚠️ FK YOK ve index YOK — ön muhasebe konvansiyonu (`Payment`/`Cheque`/
+  /// `Invoice` de `createdById`i çıplak UUID taşır). Düşük trafikli "kim yaptı"
+  /// izi; sorgu yolu doğarsa FK+index birlikte eklenir.
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  cari CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // "Şu carinin mutabakatları, yeniden eskiye" — eşitlik önce, sıralama sonra.
+  @@index([cariId, createdAt])
+  @@map("reconciliation_letters")
+}
+
+/// Çek teslim bordrosunun durumu — `ReconciliationLetterStatus` ile aynı
+/// gerekçe (atomik claim). Ayrı enum: iki belgenin durum uzayları bağımsız
+/// evrilebilmeli (ör. bordroya ileride "TESLİM ALINDI" eklenirse mutabakat
+/// mektubu ondan etkilenmemeli).
+enum ChequeDeliveryNoteStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// ÇEK / SENET TESLİM BORDROSU — H6'nın ANLIK Electron çıktısının donmuş resmi
+/// sürümü (`Electron/src/pages/Finance/Cheques/chequeBordro.ts`).
+///
+/// ⚠️ ÇEKİN DURUM MAKİNESİNE DOKUNMAZ (v1 kararı, J2 #18 planı). Bordro kesmek
+/// "bankaya verdim" ya da "ciro ettim" DEMEK DEĞİLDİR — o olaylar kendi
+/// uçlarından (`deposit`/`endorse`/`pay`) geçer ve defteri onlar oynatır.
+/// Bordro yalnız KAĞITTIR: karşı tarafın imzaladığı teslim tutanağı.
+///
+/// ⚠️ BİR BORDRO TEK YÖN TAŞIR (`kind`) — H6'nın çekirdek kuralı buradan
+/// aynalanır: aldığımız kıymetlerle kendi borç senetlerimiz aynı kâğıda giremez
+/// (toplam iki ayrı şey demeye başlar ve "teslim alan" imzası neyin teslim
+/// alındığını söylemez olur). Alan denormalize DEĞİL, belgenin KİMLİĞİDİR;
+/// servis satırlarla tutarlılığını doğrular.
+///
+/// ⚠️ HEDEF ÜÇ BİÇİMDE OLABİLİR ve EN FAZLA BİRİ YAPILANDIRILMIŞTIR:
+/// `bankAccountId` (tahsile/teminata veriş) · `cariId` (ciro/borç kapama) ·
+/// `targetLabel` (serbest metin — H6'nın `place` alanı). İkisi birden dolu bir
+/// bordro, aynı kâğıdın iki yere teslim edildiğini iddia ederdi.
+model ChequeDeliveryNote {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// BRD + GGAAYY + NNNN (teslim günü).
+  docNo String @unique @db.VarChar(32)
+
+  /// Bordronun yönü — satırlardaki çeklerin `kind`i ile AYNI olmak zorunda.
+  kind ChequeKind
+
+  /// TESLİM tarihi — belge numarasının GGAAYY çıpası ve kâğıda basılan tarih
+  /// (`Payment.paymentDate` / `Cheque.postingDate` emsali: iş olayının tarihi
+  /// kullanıcınındır). Geçmişe girilebilir; defter oynamadığı için kilit yok.
+  deliveryDate DateTime @db.Timestamptz
+
+  bankAccountId String? @db.Uuid
+  cariId        String? @db.Uuid
+  /// Serbest hedef metni (H6 `place`) — "X Bankası Kadıköy Şubesi" gibi.
+  targetLabel   String? @db.VarChar(200)
+
+  status ChequeDeliveryNoteStatus @default(ACTIVE)
+  notes  String?                  @db.VarChar(500)
+
+  /// FK/index yok — `ReconciliationLetter.createdById` ile aynı gerekçe.
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  cari        CariAccount? @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  items       ChequeDeliveryNoteItem[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([kind, deliveryDate])
+  @@index([cariId])
+  @@index([bankAccountId])
+  @@map("cheque_delivery_notes")
+}
+
+/// Bordro ↔ çek pivotu. APPEND-ONLY (`updatedAt` YOK — pivot konvansiyonu).
+///
+/// ⚠️ ÇEKİN TUTARI/VADESİ BURAYA KOPYALANMAZ: kâğıdın fotoğrafı donmuş
+/// `PrintedDocument.snapshot`tadır (Sınıf 5 — türet, ikinci kaynak açma).
+/// Pivot yalnız "bu çek bu bordroda vardı" der.
+///
+/// ⚠️ Bordro İPTAL edilince satırlar SİLİNMEZ: iptal edilmiş belge de
+/// basılabilir olmalı (donmuş belge kuralı) ve "hangi çekler bu bordrodaydı"
+/// sorusunun cevabı iptalden sonra da gerekir.
+model ChequeDeliveryNoteItem {
+  id       String @id @default(uuid()) @db.Uuid
+  noteId   String @db.Uuid
+  chequeId String @db.Uuid
+
+  note   ChequeDeliveryNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  cheque Cheque             @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // Aynı çek aynı bordroya İKİ KEZ giremez — teslim tutanağında mükerrer satır,
+  // toplamı sessizce şişirirdi.
+  @@unique([noteId, chequeId])
+  @@index([chequeId])
+  @@map("cheque_delivery_note_items")
 }

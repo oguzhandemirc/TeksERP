@@ -79,6 +79,13 @@ const TICARET_MODELLERI = new Set([
   "chequeEvent",
   "paymentAllocation",
   "cariPeriodClose",
+  // Resmi ön muhasebe belgeleri (J2 #18). ⚠️ Bunlar OLMASA da kapsam bugün
+  // türetiliyor (servisler `cariTransaction`/`cheque` okuyor) — listede
+  // durmalarının sebebi İLERİSİ: yalnız bu tablolara dokunan bir servis/router
+  // yazıldığı gün kapsam dışında kalmasın.
+  "reconciliationLetter",
+  "chequeDeliveryNote",
+  "chequeDeliveryNoteItem",
   // Paket D
   "yarnStock",
   "yarnMovement",
