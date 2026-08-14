@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Check, Ban, Trash2, Printer } from "lucide-react";
+import { Plus, Check, Ban, Trash2, Printer, Eye } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -18,28 +18,20 @@ import {
   money,
   partyName,
   settlementOf,
+  SETTLEMENT_BADGE,
   SETTLEMENT_LABEL,
+  INVOICE_STATUS_BADGE,
   INVOICE_TYPE_LABEL,
   type InvoiceRow,
-  type SettlementState,
 } from "./service";
 // Kuruş → tutar yalnız GÖSTERİM anında (allocationMath sözleşmesi).
 import { fromKurus } from "./Allocations/allocationMath";
 import { InvoiceFormDialog } from "./InvoiceFormDialog";
+import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: "Taslak", cls: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
-  CONFIRMED: { label: "Onaylı", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
-  CANCELLED: { label: "İptal", cls: "bg-muted text-muted-foreground line-through" },
-};
-
-/** Kapama rozeti renkleri — durum rozetinden AYRI soru: "belge ne durumda" ≠
- *  "parası geldi mi". AÇIK amber (bekleyen alacak), KISMİ mavi, KAPALI yeşil. */
-const SETTLEMENT_BADGE: Record<SettlementState, string> = {
-  ACIK: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  KISMI: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
-  KAPALI: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
-};
+// ⚠️ Rozet sözlükleri 2026-08-14'te `service.ts`'e TAŞINDI (buradan kopyalanmadı,
+// taşındı): detay yüzeyi ikinci tüketici oldu ve iki kopya, aynı faturayı iki
+// ekranda farklı kelimeyle gösterme riskiydi.
 
 export function InvoicesPage() {
   const qc = useQueryClient();
@@ -48,6 +40,7 @@ export function InvoicesPage() {
   const [type, setType] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [printTarget, setPrintTarget] = useState<{ id: string; docNo: string } | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<InvoiceRow | null>(null);
   const [cancelTarget, setCancelTarget] = useState<InvoiceRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InvoiceRow | null>(null);
@@ -163,7 +156,7 @@ export function InvoicesPage() {
               </thead>
               <tbody>
                 {rows.map((inv) => {
-                  const badge = STATUS_BADGE[inv.status];
+                  const badge = INVOICE_STATUS_BADGE[inv.status];
                   // Kapama TÜRETİLİR (kolon değil) ve yalnız CONFIRMED'da
                   // anlamlıdır — kural + gerekçe `settlementOf` başlığında.
                   const st = settlementOf(inv);
@@ -176,7 +169,7 @@ export function InvoicesPage() {
                         {new Date(inv.issueDate).toLocaleDateString("tr-TR")}
                       </td>
                       <td className="px-3 py-2">
-                        <Badge className={badge?.cls}>{badge?.label}</Badge>
+                        <Badge className={badge.cls}>{badge.label}</Badge>
                       </td>
                       <td className="px-3 py-2 text-right font-medium">
                         {money(inv.grandTotal, inv.currency)}
@@ -216,6 +209,17 @@ export function InvoicesPage() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-1">
+                          {/* DETAY her statüde açılır (taslak dahil): satırları
+                              ve toplamları görmek okuma iznidir, belge basmak
+                              değil. */}
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            title="Detay — satırlar, kapamalar, belge"
+                            onClick={() => setDetailId(inv.id)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           {/* BELGE — taslakta ÇIKMAZ: belge onayda donar, taslağın
                               resmi kaydı yoktur ve düğme "yok" bir şeyi vaat eder.
                               İPTAL edilmiş fatura basılabilir KALIR (İPTAL
@@ -270,6 +274,21 @@ export function InvoicesPage() {
       </PageBody>
 
       <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={invalidate} />
+
+      {/* ⚠️ Detay ile belge önizlemesi ÜST ÜSTE AÇILMAZ: "Belgeyi aç" detayı
+          kapatır ve aşağıdaki `PrintedDocDialog`'u açar. İki yığılı diyalog,
+          iki ayrı odak tuzağı ve iki ESC katmanı demekti. */}
+      {detailId && (
+        <InvoiceDetailDialog
+          invoiceId={detailId}
+          open
+          onOpenChange={(o) => !o && setDetailId(null)}
+          onShowDocument={(inv) => {
+            setDetailId(null);
+            setPrintTarget({ id: inv.id, docNo: inv.docNo });
+          }}
+        />
+      )}
 
       {/* ⚠️ Yıkıcı/geri alınamaz işlemlerde onay somut: hangi belge, hangi cari,
           hangi tutar. "Emin misiniz?" tek başına yeterli değil. */}

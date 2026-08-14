@@ -210,6 +210,93 @@ export const SETTLEMENT_LABEL: Record<SettlementState, string> = {
   KAPALI: "Kapalı",
 };
 
+/**
+ * FATURA ROZETLERİ — liste satırı ve DETAY yüzeyi AYNI sözlükten okur.
+ *
+ * ⚠️ Kopyalamak yasak (Cheques `labels.ts` başlığındaki gerekçe): ayrışırlarsa
+ * aynı fatura listede "Onaylı", detayda başka bir kelimeyle görünür ve vardiya
+ * ortasındaki kullanıcı iki farklı şey olduğunu sanar. Bu sözlükler 2026-08-14'e
+ * kadar `InvoicesPage` içinde modül-yerel duruyordu; detay yüzeyi eklenirken
+ * buraya taşındı — ikinci tüketici doğduğu an tek kaynak zorunlu hale geldi.
+ *
+ * ⚠️ Her sınıf `dark:` varyantını DA taşır; yalnız `bg-amber-100` yazan bir satır
+ * koyu temada okunmaz olur.
+ *
+ * İKİ ROZET İKİ AYRI SORUDUR ve birleştirilemez: durum "belge ne durumda"
+ * (TASLAK/ONAYLI/İPTAL), kapama "parası geldi mi" (AÇIK/KISMİ/KAPALI). Kapama
+ * yalnız ONAYLI faturada anlamlıdır — kapısı `settlementOf`'tadır.
+ */
+export const INVOICE_STATUS_BADGE: Record<InvoiceStatus, { label: string; cls: string }> = {
+  DRAFT: { label: "Taslak", cls: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  CONFIRMED: { label: "Onaylı", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
+  CANCELLED: { label: "İptal", cls: "bg-muted text-muted-foreground line-through" },
+};
+
+/** AÇIK amber (bekleyen alacak) · KISMİ mavi · KAPALI yeşil. */
+export const SETTLEMENT_BADGE: Record<SettlementState, string> = {
+  ACIK: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  KISMI: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
+  KAPALI: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
+};
+
+// -----------------------------------------------------------------------------
+// FATURA DETAYI (`GET /api/finance/invoices/:id`)
+// -----------------------------------------------------------------------------
+
+export interface InvoiceLineRow {
+  id: string;
+  lineNo: number;
+  description: string;
+  qty: number;
+  unit: string;
+  unitPrice: number;
+  discountRate: number;
+  vatRate: number;
+  withholdingRate: number;
+  lineTotal: number;
+  vatAmount: number;
+  item: { id: string; code: string; name: string } | null;
+}
+
+/**
+ * Detay yanıtı — backend `invoice.service.DETAIL_SELECT` aynası.
+ *
+ * ⚠️ Alan kümesi backend'de BEKÇİYLE sabitlenmiş (`test_finance_invoice` detay
+ * bölümü) ve burada yalnız OKUNAN alanlar tiplenmiştir. `cari` listedekinden
+ * ZENGİNDİR (vergi no/dairesi) — bu yüzden `InvoiceRow`'un cari'si spread ile
+ * miras alınmaz, yeniden yazılır.
+ *
+ * ⚠️ KAYNAK BAĞLARINDAN YALNIZ `goodsReceipt` GELİR. `shipmentId` /
+ * `directShipmentId` / `returnGroupId` / `subcontractorReceiptId` DETAIL_SELECT'te
+ * bilinçli olarak YOK (çıplak iç FK'ler yanıtta gezmesin diye) ve o kaynakların
+ * insanca adını taşıyan bir ilişki de seçilmiyor. Yani sevkiyattan/iadeden doğan
+ * faturada kaynak satırı BASILAMAZ — uydurulmaz, hiç gösterilmez.
+ */
+export interface InvoiceDetail extends Omit<InvoiceRow, "cari"> {
+  notes: string | null;
+  subtotal: number;
+  discountTotal: number;
+  vatTotal: number;
+  withholdingTotal: number;
+  cancelReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  cari: {
+    id: string;
+    kind: string;
+    taxOffice: string | null;
+    customer: { id: string; code: string; name: string; taxNumber: string | null } | null;
+    subcontractor: { id: string; code: string; name: string; taxNumber: string | null } | null;
+  };
+  goodsReceipt: { id: string; receiptNo: string; deliveryNoteNo: string | null } | null;
+  lines: InvoiceLineRow[];
+}
+
+export async function getInvoice(id: string): Promise<InvoiceDetail> {
+  const res = await apiClient.get(`/api/finance/invoices/${id}`);
+  return (res.data as { data: InvoiceDetail }).data;
+}
+
 type Paged<T> = { data: T[]; pagination: { total: number; totalPages: number } };
 
 export async function listCari(params: {
