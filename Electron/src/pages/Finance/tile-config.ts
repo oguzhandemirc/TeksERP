@@ -18,6 +18,7 @@ import {
   ScrollText,
   Link2,
   Lock,
+  Receipt,
   type LucideIcon,
 } from "lucide-react";
 
@@ -67,6 +68,19 @@ export const financeTiles: FinanceTile[] = [
     to: "/finance/accounts",
     icon: Wallet,
     tone: "text-station-depo",
+    permissionAny: ["finance:read"],
+  },
+  {
+    // ⚠️ Tahsilat/Ödeme'nin İKİZİ DEĞİL: orası CARİ hareketidir (cari defterine
+    // de yazar), burası kasanın KENDİ defteri — carisi olmayan masraf/gelir,
+    // hesaplar arası virman ve açılış. Ayrı karo, ayrı ekran (backend'de de
+    // ayrı tablo/servis).
+    key: "cash-transactions",
+    title: "Kasa Hareketleri",
+    description: "Carisiz masraf ve gelir fişleri, hesaplar arası virman, açılış bakiyesi.",
+    to: "/finance/cash-transactions",
+    icon: Receipt,
+    tone: "text-success",
     permissionAny: ["finance:read"],
   },
   // ── Paket C (2026-08-14) ──────────────────────────────────────────────────

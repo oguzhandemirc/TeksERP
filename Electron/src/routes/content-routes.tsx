@@ -28,6 +28,7 @@ import { CariPage } from "@/pages/Finance/CariPage";
 import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
 import { PaymentsPage } from "@/pages/Finance/PaymentsPage";
 import { AccountsPage } from "@/pages/Finance/AccountsPage";
+import { CashTransactionsPage } from "@/pages/Finance/CashTransactions/CashTransactionsPage";
 import { RatesPage } from "@/pages/Finance/RatesPage";
 // Paket C (2026-08-14) — hepsi NAMED export; default import boş ekran verir.
 import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
@@ -268,6 +269,18 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="finance:read">
         <AccountsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Kasanın KENDİ defteri (carisiz masraf/gelir/virman/açılış). İzin
+    // `finance:read` — karo (Finance/tile-config) ile BİREBİR aynı; yazma
+    // (`finance:payment`) sayfa İÇİNDE `PermissionGate` ile ayrılır, route'a
+    // konsaydı kayıtları görmesi gereken kişi ekrandan tamamen dışarıda kalırdı.
+    path: "finance/cash-transactions",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <CashTransactionsPage />
       </ProtectedRoute>
     ),
   },
