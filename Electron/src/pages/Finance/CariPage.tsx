@@ -1,19 +1,22 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, FileSpreadsheet } from "lucide-react";
+import { Search, FileSpreadsheet, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PermissionGate } from "@/components/PermissionGate";
 import { listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
+import { CariEditDialog } from "./CariEditDialog";
 
 export function CariPage() {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<string>("");
   const [onlyWithBalance, setOnlyWithBalance] = useState(false);
   const [statementFor, setStatementFor] = useState<CariRow | null>(null);
+  const [editFor, setEditFor] = useState<CariRow | null>(null);
 
   const q = useQuery({
     queryKey: ["finance", "cari", search, kind, onlyWithBalance],
@@ -91,14 +94,29 @@ export function CariPage() {
                 {rows.map((c) => (
                   <tr key={c.id} className="border-t">
                     <td className="px-3 py-2 font-mono text-xs">{c.code}</td>
-                    <td className="px-3 py-2 font-medium">{c.name}</td>
+                    <td className="px-3 py-2 font-medium">
+                      <span className={c.isActive ? undefined : "text-muted-foreground"}>{c.name}</span>
+                      {/* Pasifleştirme buradan yapılabildiği için görünür de olmalı:
+                          rozetsiz satır "kaydettim ama hiçbir şey değişmedi" hissi
+                          verir ve pasif cari yeni fatura/tahsilatı REDDEDER. */}
+                      {!c.isActive && (
+                        <Badge variant="outline" className="ml-2 text-[10px] text-muted-foreground">
+                          Pasif
+                        </Badge>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <Badge variant="outline">
                         {c.kind === "CUSTOMER" ? "Müşteri" : "Fason"}
                       </Badge>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
-                      {c.paymentTermDays != null ? `${c.paymentTermDays} gün` : "—"}
+                      {/* `0` = peşin; `|| "—"` yazmak onu "vadesiz" gibi gösterirdi. */}
+                      {c.paymentTermDays != null
+                        ? c.paymentTermDays === 0
+                          ? "Peşin"
+                          : `${c.paymentTermDays} gün`
+                        : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {/* ⚠️ Para birimleri AYRI satırlarda — tek sayıya indirmek
@@ -120,11 +138,19 @@ export function CariPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => setStatementFor(c)}>
-                        <FileSpreadsheet className="mr-1 h-4 w-4" />
-                        Ekstre
-                      </Button>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => setStatementFor(c)}>
+                          <FileSpreadsheet className="mr-1 h-4 w-4" />
+                          Ekstre
+                        </Button>
+                        <PermissionGate permission="finance:write">
+                          <Button variant="ghost" size="sm" onClick={() => setEditFor(c)}>
+                            <Pencil className="mr-1 h-4 w-4" />
+                            Düzenle
+                          </Button>
+                        </PermissionGate>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -137,6 +163,10 @@ export function CariPage() {
       {statementFor && (
         <StatementDialog cari={statementFor} open onOpenChange={() => setStatementFor(null)} />
       )}
+
+      {/* KOŞULLU mount — her açılış taze state demektir; kalıcı mount edilseydi
+          başka bir cariye geçildiğinde önceki kartın değerleri formda kalırdı. */}
+      {editFor && <CariEditDialog cari={editFor} open onOpenChange={() => setEditFor(null)} />}
     </PageShell>
   );
 }

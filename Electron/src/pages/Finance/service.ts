@@ -33,6 +33,8 @@ export interface CariRow {
   defaultCurrency: Currency;
   paymentTermDays: number | null;
   riskLimit: number | null;
+  /** Serbest not — backend 2026-08-14'ten beri list/findById yanıtında taşır. */
+  notes: string | null;
   isActive: boolean;
   balances: Array<{ currency: Currency; balance: number }>;
 }
@@ -156,6 +158,44 @@ export async function listCari(params: {
   return res.data;
 }
 
+/**
+ * CARİ KART GÜNCELLEME — vade / risk limiti / vergi dairesi / para birimi / aktiflik.
+ *
+ * ⚠️ GÖVDE `.strict()` (backend `finance.routes.ts:125`): şemada OLMAYAN tek bir
+ * anahtar 400 ile tüm isteği düşürür. Kabul edilenler bu tipte sayılıdır;
+ * `customerId`/`subcontractorId` PATCH'te `omit` edilmiştir (cari kartın hangi
+ * tarafa bağlı olduğu değiştirilemez) — göndermeye kalkma.
+ *
+ * ⚠️ `null` ile `undefined` AYRI ŞEYLERDİR ve ayrım backend'de gerçek:
+ * `input.X !== undefined` olan alan YAZILIR (`cari.service.ts:243-249`), yani
+ * `null` göndermek alanı TEMİZLER, alanı hiç göndermemek DOKUNMAZ. Vade günü
+ * için bu ayrım kritiktir: `0` = peşin (fatura günü vadeli) ≠ `null` = vadesiz.
+ *
+ * `notes` 2026-08-14 dikişiyle eklendi: okuma yolu (list/findById map'leri) aynı
+ * gün açıldı — okunamayan alan yazdırılmaz kuralı böyle sağlandı (alan bir süre
+ * bilinçli olarak tipte yoktu).
+ *
+ * `suppressErrorToast` YOK: "bakiyesi sıfırlanmadan pasifleştirilemez" gibi 409
+ * cümleleri interceptor toast'ıyla aynen gösterilir (mevcut sözleşme).
+ */
+export interface CariUpdateInput {
+  /** `null` → vergi dairesini temizle. */
+  taxOffice?: string | null;
+  defaultCurrency?: Currency;
+  /** `null` → vadesiz · `0` → peşin. İkisi AYRI. */
+  paymentTermDays?: number | null;
+  /** Ondalık STRING (nokta ayraçlı) ya da `null` → limitsiz. */
+  riskLimit?: string | null;
+  /** `null` → notu temizle. */
+  notes?: string | null;
+  isActive?: boolean;
+}
+
+export async function updateCari(id: string, body: CariUpdateInput) {
+  const res = await apiClient.patch(`/api/finance/cari/${id}`, body);
+  return res.data as { data: { id: string }; message?: string };
+}
+
 export async function getStatement(params: {
   cariId: string;
   currency: Currency;
@@ -167,6 +207,9 @@ export async function getStatement(params: {
   totalDebit: number;
   totalCredit: number;
   rows: StatementRow[];
+  /** Devrin kaynağı MÜHÜRLÜ kapanışsa dolu (K5, 2026-08-14) — mühürsüz cari /
+   *  eski backend'de gelmez; yoksa devir düz toplamdan ve not basılmaz. */
+  carriedFrom?: { periodEnd: string; closingBalance: number } | null;
 }> {
   const res = await apiClient.get(`/api/finance/cari/${params.cariId}/statement`, {
     params: { currency: params.currency, from: params.from, to: params.to },
