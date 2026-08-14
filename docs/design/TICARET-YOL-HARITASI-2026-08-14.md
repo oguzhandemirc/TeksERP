@@ -48,7 +48,14 @@
 | F3 | **Kasa Hareketleri sayfası** (K3): karo + liste + masraf/gelir fişi + virman + iptal; kapalı-dönem 409 mesajı aynen ekranda | 2g |
 | F4 | **Mühür okuma yolu** (K5 + kasa ikizi): cari statement devri `resolveStatementOpening`'e bağlanır (`carriedFrom` yanıta + panele); kasa defteri için `resolveCashBookOpening` yazılır ("X'e kadar mühürlü" notu) | 1,5g |
 
-### G — Depo / alış dikişleri (~6,25 gün)
+### G — Depo / alış dikişleri (~6,25 gün) — G1+G2 ✅ · G5 ✅kısmen bekliyor · G3/G4 açık
+
+> **G1+G2 TAMAMLANDI (2026-08-14 gece):** mal kabul↔PO dikişi (yazılmış-ama-bağlanmamış
+> bileşenler monte + senkron bandı kalıcı + fiş detayında PO satırı) · short-close
+> (migration `20260814120000`, sync EZMEZ, sebep zorunlu, geri açılabilir) · resync ucu ·
+> tekil top iptali senkron tetiği · liste "kalanı gelmeyecek" ipucu. Kalan G maddeleri
+> (G3 iplik çıkışı → artık BAYRAKLI tasarım, aşağıdaki bayrak bölümüne taşındı; G4 metraj
+> düzeltme; G5 depo hareket defteri) açık.
 
 | İş | İçerik | Efor |
 |---|---|---|
@@ -81,6 +88,43 @@
 | I4 | `DETAIL_SELECT` daraltma (invoice/cheque findById include→select) + doküman düzeltmeleri (şema `receivedQty` yorumu, tasarım `_count` notu, kesim notu rejim etiketi) | 0,75g |
 | I5 | **Demo zenginleştirme**: seed'e çek (portföyde+tahsil edilmiş) + kasa dönem kapanışı + devir-iptal örneği; `demo-reset.sh` (drop→migrate→seed'ler; önce elle-tetikli, cron sonra) | 1,75g |
 | I6 | **`docs/ops/TICARET-KURULUM.md`** (finance bayrakları + WEB_TRADE ataması + depo/kasa/kur/devir; bugün üç yere dağınık) + veri ÜRETMEYEN `scripts/setup-ticaret.ts` bootstrap (bayrak + şablon merge + varsayılan depo/kasa) | 1,25g |
+
+### H durumu (2026-08-14 gece): H1+H2+H3 ✅ TAMAMLANDI
+
+> Fatura listesi Kapanan/Açık + AÇIK·KISMİ·KAPALI + vadesi geçti rozetleri (kuruş
+> aritmetiği, yalnız CONFIRMED) · cari listede "Gecikmiş" kolonu (aging çekirdeği
+> `collectAgingRows` ile TEK kaynak — bekçi birebir eşitliği kilitler) · ekstre + çek
+> Excel/PDF exportları (paylaşılan katmana PDF tr-TR sayı biçimi + `orientation`
+> eklendi — tüm rapor PDF'leri düzeldi). Kalan H: H4 çek vade takvimi · H5 KDV özeti ·
+> H6 çek bordrosu · H7 kategori kırılımı · H8'in iade-fatura düğmesi.
+
+### BAYRAKLAR (2026-08-14 sektör-standardı analizi — 4 tarama ajanı + uygulama)
+
+**Uygulandı (varsayılanlar mevcut davranışı birebir korur):**
+- ✅ `finance.blockNegativeCashEnabled` (varsayılan KAPALI) — kasa (fiziksel nakit)
+  eksiye düşecekse 4 İLERİ yolda 409 (ödeme·masraf·virman çıkan bacak·çek ödemesi);
+  BANKA muaf (kredili mevduat) · TERS yollar (storno/iptal) muaf — muafiyet bekçinin
+  asıl negatif sondası. Sektör: Logo kasa eksi bakiye kontrolü / SAP B1 negative block.
+- ✅ `finance.defaultVatRate` (varsayılan 20) — iki hardcode (panel `emptyLine` +
+  mal-kabulden alış taslağı) tek ayara bağlandı. `test_feature_flag_contract` artık
+  SAYISAL anahtarları da denetliyor (eski kör nokta kapandı).
+
+**Bayrak adayları (backlog — analiz kanıtlı, efor dahil):**
+`finance.riskLimitBlockEnabled` (~1g; H1/H2 görünürlüğü geldi, sıradaki doğal adım) ·
+`finance.autoDraftFromShipment` (~1,5g; taslak üretimi dispatch TX'İ DIŞINDA) ·
+`finance.autoAllocateOnPaymentEnabled` (~1,25g) · `finance.yarnOutOnInvoiceEnabled`
+(~1,75g; G3'ün bayraklı hali — depo çözümü ön koşul) · `yarn.blockNegativeBalanceEnabled`
+(~0,5g) · `purchase.blockOverReceiptEnabled` (~0,5g) · `goodsReceipt.requirePriceEnabled`
+(~0,5g) · `finance.allowZeroPriceLineEnabled` (~0,25g) · `finance.futureDatedDocumentBlocked`
+(~0,4g; çek keşide/vade tarihi MUAF — Sınıf 1).
+
+**Bayrak OLMAYACAKLAR (analiz RED listesi, gerekçeler kayıtlı):** çek defter anı ·
+append-only/storno kuralları · Hızlı Sevk onay adımı (`shipping.confirmationEnabled`
+ZATEN kapsıyor — ikinci bayrak ikinci kaynak) · kur kaynağı (VUK md.280 mevzuat) ·
+belge no önekleri (bayrak değil numaralama-şablonu modeli) · iade faturası zorunluluğu ·
+dönem kapanışı zorunluluğu · transfer IN_TRANSIT (bayrak değil ikinci yaşam döngüsü) ·
+çok-depo bayrağı (veriden türetiliyor) · aging kova günleri (rapor sözleşmesi) ·
+kapama yön kuralı (ekonomik anlam).
 
 ### J — Karar bekleyenler (efor karardan sonra)
 

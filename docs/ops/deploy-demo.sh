@@ -58,9 +58,8 @@ say "2/6 docker compose build (imaj SUNUCUDA derlenir — sürüm kayması olmas
 run "ssh $HOST 'cd $APPDIR && sudo docker compose build'"
 
 # --- 3) Migration -------------------------------------------------------------
-# Sağlamlık paketi (2026-08-14): +3 migration (postingDate · ADJUSTMENT_CANCEL
-# · COLLECT_CANCEL + CashPeriodClose/CHECK'ler) → 177'den 180'e.
-say "3/6 prisma migrate deploy (177 → 180 beklenir)"
+# Sağlamlık paketi: +3 (→180) · G2 short-close (2026-08-14 gece): +1 → 181.
+say "3/6 prisma migrate deploy (180 → 181 beklenir)"
 run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx prisma migrate deploy\"'"
 
 # --- 4) Ayağa kaldır (boot uzlaştırması: 6 izin + rol şablonları) -------------
@@ -89,7 +88,7 @@ if [ "$APPLY" -eq 1 ]; then
     mark=$([ "$code" = "404" ] && echo "❌ MOUNT YOK" || echo "✓")
     printf '  %-34s %s  %s\n' "$u" "$code" "$mark"
   done
-  print -r -- "  --- sayılar (beklenen: 83 / 39 / 39 / 180 — sağlamlık paketi izin EKLEMEZ, yalnız migration) ---"
+  print -r -- "  --- sayılar (beklenen: 83 / 39 / 39 / 181 — sağlamlık paketi izin EKLEMEZ, yalnız migration) ---"
   ssh "$HOST" "sudo docker exec postgres psql -U tekserp -d tekserp_demo -tAF' | ' -c \"
 SELECT 'izin katalogu', count(*)::text FROM permissions
 UNION ALL SELECT 'WEB_TRADE sablonu', count(*)::text FROM permission_template_items i JOIN permission_templates t ON t.id=i.\\\"templateId\\\" WHERE t.code='WEB_TRADE'
