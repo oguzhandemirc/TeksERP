@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
+import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CariListRow {
@@ -314,6 +315,18 @@ export class CariService {
           `Bu cari için ${input.currency} devri zaten girilmiş (${dup.txnDate.toLocaleDateString("tr-TR")}). Düzeltmek için ters bir düzeltme kaydı girin.`,
         );
       }
+
+      // ⚠️ DÖNEM KİLİDİ — satır YAZILMADAN ÖNCE, AYNI tx'te. Devir, kilidin en
+      // çok gerektiği yazardır: `txnDate` KULLANICININ seçtiği geçmiş bir tarih
+      // olabilir (imza opsiyonel bırakıyor), yani kapanmış bir döneme düşmesi
+      // istisna değil OLAĞAN durumdur — ve düşerse o dönemin ilan edilmiş
+      // bakiyesini geriye dönük değiştirir. Çıpa `now` DEĞİL `txnDate`'tir.
+      //
+      // ⚠️ SIRA: mükerrer devir kontrolü (yukarıda) ÖNCE. Kaydın KENDİ
+      // tutarlılığı bağlam çözümünden önce sorulur — aksi halde ikinci kez devir
+      // giren kullanıcı "devir zaten girilmiş" yerine "dönem kapalı" duyar ve
+      // asıl hatasını iki tur sonra öğrenir.
+      await assertPeriodOpenTx(tx, { cariId: input.cariId, currency: input.currency, txnDate });
 
       // Devir POZİTİFSE cari bize borçludur → BORÇ kolonu (fatura yönüyle aynı
       // sözleşme: pozitif bakiye = alacağımız).

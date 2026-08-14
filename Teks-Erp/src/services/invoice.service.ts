@@ -27,6 +27,8 @@ import {
 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/finance-doc.html";
+import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";
+import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface InvoiceLineInput {
@@ -513,6 +515,16 @@ export class InvoiceService {
         },
       });
 
+      // ⚠️ DÖNEM KİLİDİ — satır YAZILMADAN ÖNCE. `txnDate` faturanın
+      // `issueDate`'i (now DEĞİL): geçmişe tarihli bir faturanın onayı kapanmış
+      // bir döneme düşebilir ve o dönemin ilan edilmiş bakiyesini geriye dönük
+      // değiştirirdi. Kapanış bir FOTOĞRAFTIR; sonradan içine kayıt sokulamaz.
+      await assertPeriodOpenTx(tx, {
+        cariId: inv.cariId,
+        currency: inv.currency,
+        txnDate: inv.issueDate,
+      });
+
       // DEFTER SATIRI — yön tek kaynaktan (`invoiceLedgerSide`).
       const side = invoiceLedgerSide(inv.type);
       await tx.cariTransaction.create({
@@ -655,6 +667,12 @@ export class InvoiceService {
         },
       });
 
+      // ⚠️ KAPAMA ÇÖZÜLMESİ: bu fatura tahsilat/çekle kapatılmış olabilir.
+      // Bağı çözmezsek ödeme "kullanılmış" kalır (allocatedTotal düşmez) ve o
+      // para başka bir faturayı kapatmak için bir daha kullanılamaz — sessiz
+      // bir kayıp. Taslak iptalinde satır zaten yoktur, yardımcı no-op döner.
+      await releaseAllocationsForInvoiceTx(tx, id, { reason: "INVOICE_CANCEL" });
+
       // Deftere işlemiş miydi? (taslak iptalinde ters satır YOK — yoksa hiç
       // olmamış bir borcu sıfırlayan hayalet satır doğardı.)
       const posted = await tx.cariTransaction.findFirst({
@@ -662,6 +680,13 @@ export class InvoiceService {
         select: { id: true },
       });
       if (posted) {
+        // Storno satırı CARİ döneme düşer (`txnDate: new Date()`), yine de
+        // kilit sorulur: "pratikte açık döneme düşer" bir invariant değildir.
+        await assertPeriodOpenTx(tx, {
+          cariId: inv.cariId,
+          currency: inv.currency,
+          txnDate: new Date(),
+        });
         const side = invoiceLedgerSide(inv.type);
         // TERS satır: borç yazılmışsa alacak, alacak yazılmışsa borç.
         await tx.cariTransaction.create({

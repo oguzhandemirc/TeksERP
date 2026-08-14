@@ -183,6 +183,17 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "finance:read",
       "finance:write",
       "finance:invoice",
+      // ⚠️ ÇEK/SENET muhasebecinin işidir (çek giriş bordrosu, portföy takibi,
+      // karşılıksız kaydı) — `finance:payment` yokluğuyla çelişmez: o izin
+      // NAKİT/havale sayan kişiyi tanımlar, bu izin bir BELGE VARLIĞININ
+      // yaşam döngüsünü yönetir. Fabrikada etkisi yok (`finance.enabled`
+      // varsayılan kapalı).
+      "finance:cheque",
+      // ⚠️ DÖNEM KAPANIŞI muhasebecinin işidir — ve bilinçli olarak "Kasa /
+      // Tahsilat" rolüne VERİLMEDİ: parayı sayan ile dönemi mühürleyen aynı
+      // kişi olursa, sayım hatası kapanışla birlikte geçmişe gömülür. Görev
+      // ayrılığının aynı ailesi: `shipping:write` ↔ `shipping:undo-dispatch`.
+      "finance:close",
       "report:finance",
     ],
   },
@@ -200,6 +211,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     codes: [
       "finance:read",
       "finance:payment",
+      // Çek TAHSİLİ kasa işidir: para o an banka/kasa bakiyesine girer. İzni
+      // "kayıt" ve "tahsil" diye İKİYE BÖLMEK düşünüldü ve reddedildi — sahada
+      // çeki deftere geçiren ile bankaya götüren çoğu zaman aynı kişidir ve
+      // ikinci bir izin, kurulumda atanması unutulacak bir adım daha demekti.
+      "finance:cheque",
       "customer:read",
       "subcontractor:read",
       "report:finance",
@@ -341,11 +357,19 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "label:print",
       "label-template:read",
       // Ön muhasebe — SoD gereği finance:payment DAHİL (tek kişilik ekipte aynı
-      // kişi; ayrı çalışan varsa panelden ayrılır)
+      // kişi; ayrı çalışan varsa panelden ayrılır). Çek/senet aynı gerekçeyle:
+      // alım-satım firmasında vadeli tahsilatın ana aracı çektir, portföy
+      // olmadan rol eksik kalırdı.
       "finance:read",
       "finance:write",
       "finance:invoice",
       "finance:payment",
+      "finance:cheque",
+      // Dönem kapanışı da aynı "tek kişilik ekip" gerekçesiyle: bu rolün
+      // personası ZATEN muhasebeyi kendisi tutuyor. Ayrımı isteyen kurulum
+      // `finance:close`u panelden söker — kurulum reçetesi (TICARET-KURULUM.md)
+      // bunu bir seçenek olarak söyler.
+      "finance:close",
       // Raporlar
       "report:sales",
       "report:inventory",

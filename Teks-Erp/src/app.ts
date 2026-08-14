@@ -63,6 +63,8 @@ import returnReasonRoutes from "./routes/return-reason.routes";
 import warehouseRoutes from "./routes/warehouse.routes";
 import goodsReceiptRoutes from "./routes/goods-receipt.routes";
 import financeRoutes from "./routes/finance.routes";
+import chequeRoutes from "./routes/cheque.routes";
+import financePeriodRoutes from "./routes/finance-period.routes";
 import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
@@ -616,6 +618,16 @@ app.use("/api/goods-receipts", goodsReceiptRoutes);
 app.use("/api/warehouse-transfers", warehouseTransferRoutes);
 // Ön muhasebe — router'ın KENDİSİ `requireFinanceEnabled` taşır (bayrak
 // kapalıysa hepsi 403). Tek tek uçlarda tekrarlanmaz.
+// ⚠️ Çek/senet router'ı DAHA SPESİFİK prefix taşıdığı için `/api/finance`ten
+// ÖNCE kaydedilir: sonra kaydedilseydi istek önce finance router'ına girer,
+// orada eşleşme bulamayıp çıkar ve `verifyToken` + `requireFinanceEnabled`
+// (bir ayar okuması) her çek isteğinde İKİ KEZ koşardı.
+app.use("/api/finance/cheques", chequeRoutes);
+// Dönem kapanışı (C3) — AYNI gerekçe, aynı sıra kuralı. Kendi kapısını taşıyan
+// her ön muhasebe router'ı buraya, `/api/finance`ten ÖNCE bağlanır; kapısını
+// MİRAS ALAN alt router (`/allocations`) ise `finance.routes.ts` İÇİNE bağlanır.
+// İkisini karıştırmak ya kapıyı ikilemek ya da hiç koşmamasına yol açar.
+app.use("/api/finance/period-closes", financePeriodRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);

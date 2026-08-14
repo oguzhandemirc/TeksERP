@@ -112,6 +112,20 @@ export const PERMISSION_CATALOG = [
   { code: "finance:invoice", module: "FINANCE", category: "web", description: "Fatura onaylama + iptal (storno) — cari deftere işler" },
   // Parayı sayan ile faturayı kesen de ayrı olabilmeli.
   { code: "finance:payment", module: "FINANCE", category: "web", description: "Tahsilat/ödeme kaydı + iptali — kasa/banka bakiyesine işler" },
+  // ⚠️ ÇEK AYRI İZİN (C1, 2026-08-14): `finance:payment` KAPSAMAZ. Tahsilat bir
+  // ANDIR ve kaydı o an kapanır; çek HAFTALARCA yaşayan bir varlıktır ve
+  // geçişleri (ciro · karşılıksız · iptal) hem cari deftere hem banka
+  // bakiyesine yazar, üstelik terminal durumlar geri alınamaz. Portföyü
+  // GÖRMEK için bu izin gerekmez (`finance:read` yeter) — kapatılan şey
+  // yazmadır: tutarı gören herkes çek tahsil edememeli.
+  { code: "finance:cheque", module: "FINANCE", category: "web", description: "Çek/senet portföyü: giriş/çıkış + ciro · tahsil · karşılıksız · iade" },
+  // ⚠️ DÖNEM KAPANIŞI AYRI İZİN (C3): `finance:invoice` KAPSAMAZ ve kapsamamalı.
+  // Fatura onaylayan kişi her gün deftere satır YAZAR; dönem kapatan kişi
+  // GEÇMİŞİ MÜHÜRLER — kapanmış döneme yazma girişimi artık 409 döner ve
+  // yeniden açan kişi o mührü kırar. Görev ayrılığının aynı ailesi:
+  // `shipping:write` ↔ `shipping:undo-dispatch`. Kapanışı GÖRMEK için bu izin
+  // gerekmez (`finance:read` yeter) — kapatılan şey mühürleme/kırma yetkisidir.
+  { code: "finance:close", module: "FINANCE", category: "web", description: "Dönem kapanışı: cari dönemi mühürle + yeniden aç" },
   { code: "report:finance", module: "REPORTS", category: "web", description: "Cari bakiye · yaşlandırma · ekstre · kasa-banka raporları" },
   { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
   { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },

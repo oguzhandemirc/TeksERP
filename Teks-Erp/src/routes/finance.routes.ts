@@ -20,12 +20,26 @@ import { cariService } from "../services/cari.service";
 import { invoiceService } from "../services/invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
+import allocationRoutes from "./finance-allocation.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 
 const router = Router();
 
 // Modül kapısı — bu router'daki HER uç için.
 router.use(verifyToken, requireFinanceEnabled);
+
+// -----------------------------------------------------------------------------
+// FATURA KAPAMA (C2) — alt router
+// -----------------------------------------------------------------------------
+// ⚠️ Mount BURAYA yapılır, `app.ts`'e DEĞİL: yukarıdaki `router.use(verifyToken,
+// requireFinanceEnabled)` bu alt router'ın da kapısıdır. `app.use("/api/finance/
+// allocations", ...)` ile bağlanması, bayrak kapalıyken kapama uçlarını açık
+// bırakırdı — fabrika sıfır-fark garantisinin sızacağı tek delik.
+//
+// ⚠️ Mount SIRASI: `/allocations` bu dosyadaki hiçbir yolla çakışmıyor (en yakın
+// komşu `/invoices`), yani sıra bugün serbest. Yine de üstte duruyor ki ileride
+// eklenecek bir `/:id` deseni onu yutmasın.
+router.use("/allocations", allocationRoutes);
 
 const decimalString = z.union([z.number(), z.string()]);
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());

@@ -20,6 +20,8 @@ import {
 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import { renderPaymentReceiptHtml, type PaymentReceiptDoc } from "./document-render/finance-doc.html";
+import { releaseAllocationsForPaymentTx } from "./payment-allocation.service";
+import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CreatePaymentInput {
@@ -137,6 +139,12 @@ export class PaymentService {
           select: { id: true, docNo: true },
         });
 
+        // ⚠️ DÖNEM KİLİDİ — satır YAZILMADAN ÖNCE. Burada `txnDate` kullanıcının
+        // seçtiği `paymentDate`'tir (now DEĞİL): geçmişe tarihli bir tahsilat
+        // kapanmış bir döneme düşebilir ve o dönemin ilan edilmiş bakiyesini
+        // geriye dönük değiştirirdi. Storno yolundan farkı tam olarak budur.
+        await assertPeriodOpenTx(tx, { cariId: cari.id, currency, txnDate: paymentDate });
+
         const isIn = input.direction === PaymentDirection.IN;
         await tx.cariTransaction.create({
           data: {
@@ -237,6 +245,25 @@ export class PaymentService {
           bankAccountId: true,
         },
       });
+
+      // ⚠️ KAPAMA ÇÖZÜLMESİ TERS DEFTER SATIRINDAN ÖNCE. Bu tahsilat bir ya da
+      // birkaç faturayı kapatmış olabilir; bağı çözmezsek fatura "kapalı"
+      // görünmeye devam eder ama karşılığındaki para geri alınmıştır — yani
+      // yaşlandırma ve "açık faturalar" listesi sessizce yalan söyler.
+      // (Entegrasyon ana oturum tarafından eklendi: `payment-allocation.service`
+      // yardımcıyı sunuyor, çağrı sahipliği bu dosyada.)
+      //
+      // ⚠️ Kapaması OLMAYAN tahsilatta bu çağrı NO-OP'tur (yardımcı satır
+      // bulamazsa erken döner) — yani bugünkü kapamasız yol bayt-bayt aynı.
+      // Bekçi: `test_payment_allocation` §7f (çağrı düşürülünce 3 kontrol
+      // kırmızı verdiği ölçüldü — 2026-08-14).
+      await releaseAllocationsForPaymentTx(tx, p.id, { userId, reason: "PAYMENT_CANCEL" });
+
+      // ⚠️ DÖNEM KİLİDİ: kapanmış bir döneme storno satırı yazmak, kapanışta
+      // ilan edilen bakiyeyi geriye dönük değiştirmektir. Satır YAZILMADAN ÖNCE
+      // sorulur. `txnDate` = now olduğu için pratikte CARİ döneme düşer; kilit
+      // yine de burada durur, çünkü "pratikte düşmez" bir invariant değildir.
+      await assertPeriodOpenTx(tx, { cariId: p.cariId, currency: p.currency, txnDate: new Date() });
 
       const isIn = p.direction === PaymentDirection.IN;
       await tx.cariTransaction.create({

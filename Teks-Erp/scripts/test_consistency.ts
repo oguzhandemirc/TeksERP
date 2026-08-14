@@ -527,42 +527,58 @@ WHERE b."cariId" IS NULL AND t.toplam <> 0`,
   },
   {
     id: "23",
-    title: "CashBox.balance vs Σ(Payment + CashTransaction: IN − OUT)",
+    title: "CashBox.balance vs Σ(Payment + CashTransaction + ChequeEvent: IN − OUT)",
     sql: `
 SELECT c.id::text AS kasa_id, c.name, c.balance AS kayitli,
        COALESCE(p.toplam, 0) AS hesaplanan,
        c.balance - COALESCE(p.toplam, 0) AS fark
 FROM cash_boxes c
 LEFT JOIN (
-  -- ⚠️ İKİ YAZAR: carili tahsilat/ödeme (payments) VE carisiz kasa hareketi
-  -- (cash_transactions: masraf/gelir/virman/açılış). Yalnız birine bakan bir
-  -- mutabakat, diğerinin hareketlerini "drift" sanardı.
+  -- ⚠️ ÜÇ YAZAR: carili tahsilat/ödeme (payments) · carisiz kasa hareketi
+  -- (cash_transactions: masraf/gelir/virman/açılış) · çek/senet olayları
+  -- (cheque_events: elden tahsil / kendi çekimizin elden ödenmesi). Yalnız
+  -- birine bakan bir mutabakat, diğerlerinin hareketlerini "drift" sanardı.
   SELECT "cashBoxId", SUM(t) AS toplam FROM (
     SELECT "cashBoxId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
       FROM payments WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL GROUP BY "cashBoxId"
     UNION ALL
     SELECT "cashBoxId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
       FROM cash_transactions WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL GROUP BY "cashBoxId"
+    UNION ALL
+    -- ⚠️ YALNIZ 'COLLECT' ve 'PAY' para oynatır. 'DEPOSIT' de banka/kasa alanı
+    -- taşır ama o yalnız "çek nereye teslim edildi" izidir — henüz tahsil
+    -- edilmemiştir; dahil edilseydi vadesi gelmemiş çek nakit sayılırdı.
+    -- Olay defteri APPEND-ONLY ve COLLECT/PAY TERMİNAL durumlara götürür →
+    -- "iptal edilmiş olay" diye bir şey yoktur, statü süzgeci gerekmez.
+    SELECT e."cashBoxId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
+      FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
+      WHERE e.type IN ('COLLECT', 'PAY') AND e."cashBoxId" IS NOT NULL GROUP BY e."cashBoxId"
   ) u GROUP BY "cashBoxId"
 ) p ON p."cashBoxId" = c.id
 WHERE c.balance <> COALESCE(p.toplam, 0)`,
   },
   {
     id: "24",
-    title: "BankAccount.balance vs Σ(Payment + CashTransaction: IN − OUT)",
+    title: "BankAccount.balance vs Σ(Payment + CashTransaction + ChequeEvent: IN − OUT)",
     sql: `
 SELECT a.id::text AS hesap_id, a.name, a.balance AS kayitli,
        COALESCE(p.toplam, 0) AS hesaplanan,
        a.balance - COALESCE(p.toplam, 0) AS fark
 FROM bank_accounts a
 LEFT JOIN (
-  -- İki yazar — §23 ile aynı gerekçe.
+  -- Üç yazar — §23 ile aynı gerekçe. Banka tarafında çek payı BÜYÜKTÜR:
+  -- vadeli tahsilatın olağan yolu çektir.
   SELECT "bankAccountId", SUM(t) AS toplam FROM (
     SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
       FROM payments WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
     UNION ALL
     SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
       FROM cash_transactions WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
+    UNION ALL
+    -- 'DEPOSIT' hariç (§23 notu): tahsile verilen çek henüz para değildir.
+    SELECT e."bankAccountId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
+      FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
+      WHERE e.type IN ('COLLECT', 'PAY') AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
   ) u GROUP BY "bankAccountId"
 ) p ON p."bankAccountId" = a.id
 WHERE a.balance <> COALESCE(p.toplam, 0)`,

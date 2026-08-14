@@ -15,6 +15,7 @@ import inventoryReportRoutes from "./reports/inventory.routes";
 import subcontractReportRoutes from "./reports/subcontract.routes";
 import customerReportRoutes from "./reports/customer.routes";
 import auditReportRoutes from "./reports/audit.routes";
+import financeReportRoutes from "./reports/finance.report.routes";
 
 const router = Router();
 
@@ -25,5 +26,10 @@ router.use("/inventory", inventoryReportRoutes);
 router.use("/subcontract", subcontractReportRoutes);
 router.use("/customer", customerReportRoutes);
 router.use("/audit", auditReportRoutes);
+// ⚠️ Ön muhasebe raporları (C4). Buradaki komşularından TEK farkı: kendi
+// router'ında `requireFinanceEnabled` REJİM kapısını da taşır — fabrikada
+// `finance.enabled` kapalı olduğu için bu üç uç orada 403 verir. Kapı burada
+// değil o dosyada durur; buraya taşınırsa diğer yedi rapor da rejime bağlanır.
+router.use("/finance", financeReportRoutes);
 
 export default router;

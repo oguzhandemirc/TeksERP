@@ -1,0 +1,1195 @@
+// =============================================================================
+// ÇEK / SENET PORTFÖY SERVİSİ (Paket C1)
+// =============================================================================
+// ⚠️ NEDEN `Payment` DEĞİL: `Payment` bir ANDIR — para o an el değiştirir ve
+// kayıt aynı anda kapanır. Çek bir VARLIKTIR: haftalarca yaşar, elde durur,
+// bankaya verilir, ciro edilir, tahsil olur ya da karşılıksız çıkar. Bu
+// yaşam döngüsünü `PaymentMethod`'a bir `CHEQUE` değeri ekleyerek taşımak,
+// sistemin EN HASSAS yoluna (para + cari defter) sessiz bir `if` sokmak
+// olurdu. Logo/Mikro da aynı ayrımı yapar (Çek/Senet ayrı modül).
+//
+// ⚠️ DEFTER ANI (kilitli karar): çek ALINDIĞI AN cari alacaklanır — Logo'nun
+// "Çek Giriş Bordrosu" davranışı. Müşteri çeki verdiğinde ticari olarak
+// ÖDEMİŞTİR; ekstre aksini söylerse iki taraf iki gerçekle çalışır ve
+// mutabakat imkânsızlaşır. Karşılıksız riski, kaydı GECİKTİRMENİN değil TERS
+// KAYITLA geri almanın gerekçesidir (append-only defter felsefesi).
+//
+// OLAY → DEFTER TABLOSU (tek kaynak, aşağıdaki metotlar bunu uygular):
+//   RECEIVE  → müşteri CREDIT (borcu azaldı)
+//   COLLECT  → YALNIZ banka/kasa +amount; cari İKİNCİ KEZ OYNAMAZ
+//   ENDORSE  → ciro edilen cariye DEBIT (ona olan borcumuz azaldı)
+//   BOUNCE   → müşteriye DEBIT + ENDORSED'dan geldiyse ciro carisine ters CREDIT
+//   RETURN   → çekin defter etkisi ters kayıtla geri alınır (iki yönde de)
+//   ISSUE    → cariye DEBIT (borcumuz azaldı) · PAY → YALNIZ banka/kasa −amount
+//
+// ⚠️ KASA/BANKA BAKİYESİNİN ÜÇÜNCÜ YAZARI BURASIDIR (Payment · CashTransaction ·
+// ChequeEvent). `scripts/test_consistency.ts` §23/§24 formülü bu üçünü BİRLİKTE
+// toplar — genişletilmezse İLK çek tahsilatında mevcut bekçi "drift" raporlar.
+// =============================================================================
+import {
+  Prisma,
+  CariTxnSource,
+  ChequeDocType,
+  ChequeEventType,
+  ChequeKind,
+  ChequeStatus,
+  Currency,
+} from "@prisma/client";
+import prisma from "../lib/prisma";
+import { AppError } from "../utils/app-error";
+import { AuditService } from "./audit.service";
+import { withBarcodeRetry } from "../utils/barcode-retry";
+import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRate } from "./helpers/finance.helper";
+import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
+import type { ApiResponse } from "../types/api.types";
+
+// -----------------------------------------------------------------------------
+// BELGE NUMARASI
+// -----------------------------------------------------------------------------
+
+/**
+ * Ön ek TÜR × YÖN kombinasyonundan gelir.
+ *
+ * ⚠️ Tek "CK" ön eki kullanmak, aldığımız ve verdiğimiz çekleri AYNI sayaçta
+ * karıştırırdı; muhasebeci "CK1408260007 hangisiydi" sorusunu belge
+ * numarasından cevaplayamazdı (`INVOICE_PREFIX` ile aynı gerekçe).
+ */
+const DOC_PREFIX: Record<ChequeKind, Record<ChequeDocType, string>> = {
+  RECEIVED: { CHEQUE: "CKA", PROMISSORY_NOTE: "SNA" },
+  ISSUED: { CHEQUE: "CKV", PROMISSORY_NOTE: "SNV" },
+};
+
+/**
+ * Günlük sıralı belge numarası — PREFIX + GGAAYY + NNNN.
+ *
+ * ⚠️ `orderBy` ile DEĞİL, JS'te sayısal max ile (glibc collation lexicographic
+ * ve sıra 9→10 geçişinde bozulur — `nextInvoiceNo` kanıtlı deseni). Çağıran
+ * `withBarcodeRetry` ile sarmalar: yarışta P2002 hâlâ mümkündür ve doğru cevap
+ * tekrar denemektir.
+ */
+async function nextChequeNo(
+  tx: Prisma.TransactionClient,
+  kind: ChequeKind,
+  docType: ChequeDocType,
+  date: Date,
+): Promise<string> {
+  const prefix = DOC_PREFIX[kind][docType];
+  const full = dailyCodePrefix(prefix, date);
+  const rows = await tx.cheque.findMany({
+    where: { docNo: { gte: full, startsWith: full } },
+    select: { docNo: true },
+  });
+  return buildDailyCode(prefix, nextDailySeq(rows.map((r) => r.docNo), full), date);
+}
+
+// -----------------------------------------------------------------------------
+// DURUM MAKİNESİ
+// -----------------------------------------------------------------------------
+
+/**
+ * TERMİNAL durumlar — bunlardan sonra olay YOKTUR.
+ *
+ * Terminalden çıkış "düzeltme" ile de yapılmaz: tahsil edilmiş bir çeki geri
+ * almak, banka bakiyesini de geri almak demektir ve o para gerçekten geldi.
+ * Yanlış tahsil kaydının doğru cevabı kasa hareketi tarafındaki storno'dur.
+ */
+const TERMINAL_STATUSES: readonly ChequeStatus[] = [
+  ChequeStatus.COLLECTED,
+  ChequeStatus.BOUNCED,
+  ChequeStatus.RETURNED,
+  ChequeStatus.PAID,
+  ChequeStatus.CANCELLED,
+];
+
+/** Ekranda ve hata mesajında okunan durum adları (tek kaynak). */
+const STATUS_LABEL: Record<ChequeStatus, string> = {
+  PORTFOLIO: "portföyde",
+  AT_BANK: "bankada (tahsilde)",
+  ENDORSED: "ciro edildi",
+  COLLECTED: "tahsil edildi",
+  BOUNCED: "karşılıksız",
+  RETURNED: "iade edildi",
+  ISSUED: "verildi",
+  PAID: "ödendi",
+  CANCELLED: "iptal edildi",
+};
+
+/** Belge türü etiketi — hata mesajı "çek" mi "senet" mi demeli. */
+const DOCTYPE_LABEL: Record<ChequeDocType, string> = {
+  CHEQUE: "Çek",
+  PROMISSORY_NOTE: "Senet",
+};
+
+/** Bir geçişte okunması gereken asgari başlık alanları. */
+const TRANSITION_SELECT = {
+  id: true,
+  docNo: true,
+  kind: true,
+  docType: true,
+  status: true,
+  cariId: true,
+  endorsedToCariId: true,
+  currency: true,
+  exchangeRate: true,
+  amount: true,
+  amountTry: true,
+  allocatedTotal: true,
+} satisfies Prisma.ChequeSelect;
+
+type TransitionRow = Prisma.ChequeGetPayload<{ select: typeof TRANSITION_SELECT }>;
+
+// -----------------------------------------------------------------------------
+// ORTAK YARDIMCILAR
+// -----------------------------------------------------------------------------
+
+export interface AccountRef {
+  cashBoxId?: string | null;
+  bankAccountId?: string | null;
+}
+
+/**
+ * Kasa VEYA banka hesabını çözer + aktifliğini ve para birimini doğrular.
+ *
+ * ⚠️ Kural `cash-transaction.service.loadAccount` ile BİREBİR aynıdır (kasa XOR
+ * banka · aktiflik · para birimi eşleşmesi). Ortak yardımcıya çıkarılmadı:
+ * `finance.helper` bu çalışma penceresinde başka bir iş paketinin elinde ve
+ * çakışma riski, üç satırlık tekrardan pahalı. ÜÇÜNCÜ kopya doğduğu gün
+ * `finance.helper`'a taşınmalı.
+ */
+async function loadAccountTx(
+  tx: Prisma.TransactionClient,
+  ref: AccountRef,
+  expectedCurrency: Currency,
+): Promise<{ name: string }> {
+  const hasCash = Boolean(ref.cashBoxId);
+  const hasBank = Boolean(ref.bankAccountId);
+  if (hasCash === hasBank) {
+    throw AppError.badRequest("Kasa VEYA banka hesabı seçilmeli (ikisi birden değil).");
+  }
+
+  let currency: Currency;
+  let name: string;
+  if (hasCash) {
+    const box = await tx.cashBox.findUnique({
+      where: { id: ref.cashBoxId as string },
+      select: { currency: true, name: true, isActive: true },
+    });
+    if (!box) throw AppError.badRequest("Kasa bulunamadı.");
+    if (!box.isActive) throw AppError.badRequest(`"${box.name}" kasası pasif durumda.`);
+    currency = box.currency;
+    name = box.name;
+  } else {
+    const acc = await tx.bankAccount.findUnique({
+      where: { id: ref.bankAccountId as string },
+      select: { currency: true, name: true, isActive: true },
+    });
+    if (!acc) throw AppError.badRequest("Banka hesabı bulunamadı.");
+    if (!acc.isActive) throw AppError.badRequest(`"${acc.name}" hesabı pasif durumda.`);
+    currency = acc.currency;
+    name = acc.name;
+  }
+
+  // Kasa tek para birimlidir; USD çeki TL kasasına tahsil etmek "kasada ne var"
+  // sorusunu cevaplanamaz yapardı (bakiye iki birimin toplamı olurdu).
+  if (currency !== expectedCurrency) {
+    throw AppError.badRequest(
+      `"${name}" ${currency} hesabıdır — ${expectedCurrency} çek/senet bu hesaba işlenemez. Aynı para biriminde bir kasa/hesap seçin.`,
+    );
+  }
+  return { name };
+}
+
+/** Kasa/banka bakiyesini ATOMİK oynatır (okuyup-yazmak eşzamanlıyı yutardı). */
+async function moveAccountBalanceTx(
+  tx: Prisma.TransactionClient,
+  ref: AccountRef,
+  delta: Prisma.Decimal,
+): Promise<void> {
+  if (ref.cashBoxId) {
+    await tx.cashBox.update({ where: { id: ref.cashBoxId }, data: { balance: { increment: delta } } });
+  } else if (ref.bankAccountId) {
+    await tx.bankAccount.update({ where: { id: ref.bankAccountId }, data: { balance: { increment: delta } } });
+  }
+}
+
+/** Cari referansını çözer: doğrudan `cariId` ya da müşteri/fason üzerinden lazy açılış. */
+async function resolveCariTx(
+  tx: Prisma.TransactionClient,
+  ref: { cariId?: string | null; customerId?: string | null; subcontractorId?: string | null },
+  label: string,
+): Promise<{ id: string }> {
+  if (ref.cariId) {
+    const cari = await tx.cariAccount.findUnique({
+      where: { id: ref.cariId },
+      select: { id: true, isActive: true },
+    });
+    if (!cari) throw AppError.badRequest(`${label}: cari hesap bulunamadı.`);
+    if (!cari.isActive) throw AppError.badRequest(`${label}: cari hesap pasif durumda.`);
+    return { id: cari.id };
+  }
+  return ensureCariAccountTx(tx, {
+    customerId: ref.customerId ?? null,
+    subcontractorId: ref.subcontractorId ?? null,
+  });
+}
+
+/**
+ * Cari deftere satır yazar + denormalize bakiyeyi AYNI tx'te oynatır.
+ *
+ * ⚠️ Yön sözleşmesi projedeki tek kural: bakiye POZİTİF = cari BİZE borçlu.
+ * BORÇ (debit) satırı bakiyeyi ARTIRIR, ALACAK (credit) AZALTIR. Bu eşleme
+ * kopyalanırsa bir gün biri ters yazar ve bakiye iki kat sapar (hata çıkmadan).
+ *
+ * ⚠️ C3 (dönem kapanışı) devreye girdiğinde `assertPeriodOpenTx` çağrısının
+ * yeri BURASIDIR — satır yazan tek nokta burası olduğu için çek tarafında beş
+ * ayrı yola dokunmak gerekmez.
+ */
+async function writeChequeLedgerTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    cariId: string;
+    currency: Currency;
+    txnDate: Date;
+    side: "debit" | "credit";
+    amount: Prisma.Decimal;
+    amountTry: Prisma.Decimal;
+    exchangeRate: Prisma.Decimal;
+    sourceType: CariTxnSource;
+    chequeId: string;
+    description: string;
+    userId?: string;
+  },
+): Promise<void> {
+  // ⚠️ DÖNEM KİLİDİ — satır YAZILMADAN ÖNCE, ve çek tarafında TEK yer burasıdır
+  // (dosyanın başındaki not bu noktayı işaretlemişti). Beş geçişin hepsi bu
+  // yardımcıdan geçtiği için kilit tek satırla tam kapsanır; geçişlere tek tek
+  // eklemek, yeni bir geçiş yazıldığı gün sessizce atlanan bir kapı bırakırdı.
+  await assertPeriodOpenTx(tx, {
+    cariId: input.cariId,
+    currency: input.currency,
+    txnDate: input.txnDate,
+  });
+
+  const isDebit = input.side === "debit";
+  await tx.cariTransaction.create({
+    data: {
+      cariId: input.cariId,
+      currency: input.currency,
+      txnDate: input.txnDate,
+      debit: isDebit ? input.amount : D0(),
+      credit: isDebit ? D0() : input.amount,
+      amountTry: input.amountTry,
+      exchangeRate: input.exchangeRate,
+      sourceType: input.sourceType,
+      chequeId: input.chequeId,
+      description: input.description.slice(0, 300),
+      createdById: input.userId ?? null,
+    },
+  });
+  await applyCariBalanceTx(
+    tx,
+    input.cariId,
+    input.currency,
+    isDebit ? input.amount : input.amount.negated(),
+  );
+}
+
+/** Olay defterine satır — başlıkla AYNI tx'te (ayrışmaları yapısal olarak imkânsız). */
+async function writeEventTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    chequeId: string;
+    type: ChequeEventType;
+    fromStatus: ChequeStatus | null;
+    toStatus: ChequeStatus;
+    eventDate: Date;
+    counterCariId?: string | null;
+    bankAccountId?: string | null;
+    cashBoxId?: string | null;
+    notes?: string | null;
+    userId?: string;
+  },
+): Promise<void> {
+  await tx.chequeEvent.create({
+    data: {
+      chequeId: input.chequeId,
+      type: input.type,
+      fromStatus: input.fromStatus,
+      toStatus: input.toStatus,
+      eventDate: input.eventDate,
+      counterCariId: input.counterCariId ?? null,
+      bankAccountId: input.bankAccountId ?? null,
+      cashBoxId: input.cashBoxId ?? null,
+      notes: input.notes?.trim() || null,
+      createdById: input.userId ?? null,
+    },
+  });
+}
+
+// -----------------------------------------------------------------------------
+// GİRDİ TİPLERİ
+// -----------------------------------------------------------------------------
+
+export interface CreateChequeInput {
+  kind: ChequeKind;
+  docType?: ChequeDocType;
+  /** Cari doğrudan (id) YA DA taraf üzerinden (müşteri/fason lazy açılışı). */
+  cariId?: string | null;
+  customerId?: string | null;
+  subcontractorId?: string | null;
+  currency?: Currency;
+  exchangeRate?: Prisma.Decimal.Value | null;
+  amount: Prisma.Decimal.Value;
+  issueDate?: Date;
+  dueDate: Date;
+  serialNo?: string | null;
+  bankName?: string | null;
+  branchName?: string | null;
+  drawerName?: string | null;
+  notes?: string | null;
+  clientToken?: string | null;
+}
+
+export interface ChequeEventInput {
+  eventDate?: Date;
+  notes?: string | null;
+}
+
+export interface ChequeAccountEventInput extends ChequeEventInput, AccountRef {}
+
+export interface EndorseInput extends ChequeEventInput {
+  toCariId?: string | null;
+  toCustomerId?: string | null;
+  toSubcontractorId?: string | null;
+}
+
+export class ChequeService {
+  // ---------------------------------------------------------------------------
+  // DOĞUŞ
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Çek/senet girişi (RECEIVED) ya da çıkışı (ISSUED).
+   *
+   * ⚠️ DOĞUŞ DURUMUNU `kind` BELİRLER (şemada `@default` YOK): sabit bir
+   * varsayılan, iki yönden birini sessizce yanlış durumda doğururdu.
+   */
+  async create(input: CreateChequeInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const amount = D(input.amount);
+    if (amount.lte(0)) throw AppError.badRequest("Tutar sıfırdan büyük olmalı.");
+
+    if (input.clientToken) {
+      const existing = await prisma.cheque.findUnique({
+        where: { clientToken: input.clientToken },
+        select: { id: true, docNo: true },
+      });
+      if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+    }
+
+    const kind = input.kind;
+    const docType = input.docType ?? ChequeDocType.CHEQUE;
+    const issueDate = input.issueDate ?? new Date();
+    const dueDate = input.dueDate;
+    const currency = input.currency ?? Currency.TRY;
+
+    // ⚠️ `dueDate >= issueDate` DAYATILMAZ: vadesi geçmiş çek almak sektörde
+    // olağandır (gecikmiş müşteri elindeki eski çeki verir) ve bunu bloklamak
+    // gerçek bir tahsilatı sisteme sokulamaz yapardı.
+
+    const result = await withBarcodeRetry(async () =>
+      prisma.$transaction(async (tx) => {
+        const cari = await resolveCariTx(tx, input, "Çek/senet");
+
+        const rate =
+          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, currency, issueDate);
+        if (rate == null) {
+          throw AppError.badRequest(
+            `${currency} için ${issueDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
+          );
+        }
+        if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
+
+        const amountTry = amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+        const docNo = await nextChequeNo(tx, kind, docType, issueDate);
+        const isReceived = kind === ChequeKind.RECEIVED;
+
+        const cheque = await tx.cheque.create({
+          data: {
+            docNo,
+            kind,
+            docType,
+            status: isReceived ? ChequeStatus.PORTFOLIO : ChequeStatus.ISSUED,
+            cariId: cari.id,
+            currency,
+            exchangeRate: rate,
+            amount,
+            amountTry,
+            issueDate,
+            dueDate,
+            serialNo: input.serialNo?.trim() || null,
+            bankName: input.bankName?.trim() || null,
+            branchName: input.branchName?.trim() || null,
+            drawerName: input.drawerName?.trim() || null,
+            notes: input.notes?.trim() || null,
+            createdById: userId ?? null,
+            clientToken: input.clientToken ?? null,
+          },
+          select: { id: true, docNo: true },
+        });
+
+        // DEFTER ANI — dosya başlığındaki kilitli karar. Alınan çek müşteriyi
+        // ALACAKLANDIRIR (borcu azaldı), verilen çek bizim borcumuzu azaltır.
+        await writeChequeLedgerTx(tx, {
+          cariId: cari.id,
+          currency,
+          txnDate: issueDate,
+          side: isReceived ? "credit" : "debit",
+          amount,
+          amountTry,
+          exchangeRate: rate,
+          sourceType: isReceived ? CariTxnSource.CHEQUE_RECEIVE : CariTxnSource.CHEQUE_ISSUE,
+          chequeId: cheque.id,
+          description: `${docNo} ${DOCTYPE_LABEL[docType]} ${isReceived ? "girişi" : "çıkışı"}${
+            input.serialNo ? ` — ${input.serialNo}` : ""
+          }`,
+          userId,
+        });
+
+        await writeEventTx(tx, {
+          chequeId: cheque.id,
+          type: isReceived ? ChequeEventType.RECEIVE : ChequeEventType.ISSUE,
+          fromStatus: null,
+          toStatus: isReceived ? ChequeStatus.PORTFOLIO : ChequeStatus.ISSUED,
+          eventDate: issueDate,
+          notes: input.notes ?? null,
+          userId,
+        });
+
+        return cheque;
+      }),
+    );
+
+    void AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "CHEQUE",
+      recordId: result.id,
+      newData: { docNo: result.docNo, kind, docType, amount: amount.toString(), currency },
+    });
+    return { success: true, data: result, message: `${result.docNo} kaydedildi.` };
+  }
+
+  // ---------------------------------------------------------------------------
+  // GEÇİŞLER
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Geçiş için başlığı okur ve ÖN KOŞULLARI doğrular.
+   *
+   * ⚠️ Bu okuma bir "kontrol et sonra güncelle" DEĞİLDİR: yalnız hangi durumun
+   * tüketileceğini ve anlamlı hata mesajını belirler. Gerçek koruma
+   * `claimTx`'teki atomik claim'dir — arada başka bir istek geçişi yaparsa
+   * claim 0 satır günceller ve 409 döner.
+   */
+  private async loadForTransition(
+    tx: Prisma.TransactionClient,
+    id: string,
+    allowedFrom: readonly ChequeStatus[],
+    kind: ChequeKind | null,
+    action: string,
+  ): Promise<TransitionRow> {
+    const row = await tx.cheque.findUnique({ where: { id }, select: TRANSITION_SELECT });
+    if (!row) throw AppError.notFound("Çek/senet bulunamadı.");
+
+    if (kind !== null && row.kind !== kind) {
+      throw AppError.badRequest(
+        row.kind === ChequeKind.RECEIVED
+          ? `${row.docNo} ALINAN bir ${DOCTYPE_LABEL[row.docType].toLowerCase()} — "${action}" yalnız verdiğimiz çek/senet için yapılır.`
+          : `${row.docNo} VERDİĞİMİZ bir ${DOCTYPE_LABEL[row.docType].toLowerCase()} — "${action}" yalnız aldığımız çek/senet için yapılır.`,
+      );
+    }
+
+    if (!allowedFrom.includes(row.status)) {
+      // Terminal ile "sırası değil" ayrı mesajlar: ilki geri dönüşü olmayan bir
+      // durumu, ikincisi eksik bir adımı anlatır. Tek mesaj kullanıcıyı yanlış
+      // yöne (destek çağırmaya) gönderirdi.
+      const isTerminal = TERMINAL_STATUSES.includes(row.status);
+      throw AppError.conflict(
+        isTerminal
+          ? `${row.docNo} zaten ${STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.`
+          : `${row.docNo} şu an ${STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.`,
+      );
+    }
+    return row;
+  }
+
+  /**
+   * ATOMİK CLAIM — beklenen durumu bir kez tüketir.
+   *
+   * ⚠️ `findUnique → if → update` YASAK: iki eşzamanlı "tahsil et" isteği banka
+   * bakiyesini İKİ KEZ artırırdı ve fark hiçbir yerde log'lanmazdı. `updateMany`
+   * WHERE'i durumu da içerdiği için ikinci istek 0 satır günceller.
+   */
+  private async claimTx(
+    tx: Prisma.TransactionClient,
+    row: TransitionRow,
+    to: ChequeStatus,
+    extra: Prisma.ChequeUncheckedUpdateManyInput = {},
+  ): Promise<void> {
+    const claimed = await tx.cheque.updateMany({
+      where: { id: row.id, status: row.status },
+      data: { status: to, ...extra },
+    });
+    if (claimed.count === 0) {
+      throw AppError.conflict(
+        `${row.docNo} bu sırada başka bir kullanıcı tarafından güncellendi. Ekranı yenileyip tekrar deneyin.`,
+      );
+    }
+  }
+
+  /**
+   * Faturaya kapatılmış çekin defter etkisini geri almadan önceki kapı.
+   *
+   * ⚠️ FAIL-CLOSED. Kapama satırı dururken çeki karşılıksıza/iptale çekmek
+   * "kapalı görünen ama parası yok olmuş fatura" üretirdi — yaşlandırma
+   * raporunun sessizce yalan söylediği tek senaryo budur. C2 (PaymentAllocation)
+   * kapamayı OTOMATİK çözmeyi getirdiğinde bu kapı o çözümle DEĞİŞTİRİLİR;
+   * o güne kadar kullanıcıya somut iş adımını söyleyerek durur.
+   */
+  private assertNotAllocated(row: TransitionRow, action: string): void {
+    if (D(row.allocatedTotal).gt(0)) {
+      throw AppError.conflict(
+        `${row.docNo} ${row.allocatedTotal} ${row.currency} tutarında faturaya kapatılmış — "${action}" öncesinde kapamayı kaldırın.`,
+      );
+    }
+  }
+
+  /**
+   * TAHSİLE / TEMİNATA VERME — portföyden bankaya.
+   *
+   * ⚠️ PARA HAREKETİ YOK ve bu bilinçlidir: çek bankaya verildiğinde henüz
+   * tahsil edilmemiştir. Bakiyeyi burada artırmak, vadesi gelmemiş çeki nakit
+   * saymak olurdu (ve karşılıksız çıkarsa banka bakiyesi geriye düzeltilirdi).
+   */
+  async deposit(
+    id: string,
+    input: { bankAccountId: string } & ChequeEventInput,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const eventDate = input.eventDate ?? new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(
+        tx,
+        id,
+        [ChequeStatus.PORTFOLIO],
+        ChequeKind.RECEIVED,
+        "bankaya verme",
+      );
+      await loadAccountTx(tx, { bankAccountId: input.bankAccountId }, row.currency);
+      await this.claimTx(tx, row, ChequeStatus.AT_BANK, { bankAccountId: input.bankAccountId });
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.DEPOSIT,
+        fromStatus: row.status,
+        toStatus: ChequeStatus.AT_BANK,
+        eventDate,
+        bankAccountId: input.bankAccountId,
+        notes: input.notes ?? null,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "DEPOSIT", docNo: result.docNo, bankAccountId: input.bankAccountId },
+    });
+    return { success: true, data: result, message: `${result.docNo} bankaya verildi.` };
+  }
+
+  /**
+   * TAHSİL — para hesaba geçti.
+   *
+   * ⚠️ CARİ DEFTERE SATIR YAZILMAZ. Müşterinin borcu çek ALINDIĞINDA kapandı;
+   * burada ikinci bir alacak satırı yazmak aynı tahsilatı İKİ KEZ sayardı ve
+   * cari bakiyesi tam tutar kadar eksi tarafa kayardı.
+   *
+   * Elden tahsil de meşrudur (kasa) — o yüzden hesap kasa VEYA banka.
+   */
+  async collect(
+    id: string,
+    input: ChequeAccountEventInput,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const eventDate = input.eventDate ?? new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(
+        tx,
+        id,
+        [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK],
+        ChequeKind.RECEIVED,
+        "tahsil",
+      );
+      const ref: AccountRef = { cashBoxId: input.cashBoxId ?? null, bankAccountId: input.bankAccountId ?? null };
+      await loadAccountTx(tx, ref, row.currency);
+
+      await this.claimTx(tx, row, ChequeStatus.COLLECTED, {
+        // Tahsil bankadan olduysa hesabı başlığa da yaz — portföy listesi
+        // "hangi hesaba girdi" sorusunu satırdan cevaplayabilsin.
+        ...(ref.bankAccountId ? { bankAccountId: ref.bankAccountId } : {}),
+      });
+
+      await moveAccountBalanceTx(tx, ref, D(row.amount));
+
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.COLLECT,
+        fromStatus: row.status,
+        toStatus: ChequeStatus.COLLECTED,
+        eventDate,
+        bankAccountId: ref.bankAccountId,
+        cashBoxId: ref.cashBoxId,
+        notes: input.notes ?? null,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo, amount: row.amount.toString(), currency: row.currency };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "COLLECT", docNo: result.docNo, amount: result.amount },
+    });
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} tahsil edildi.`,
+    };
+  }
+
+  /**
+   * CİRO — aldığımız çeki borcumuza karşılık başkasına devrederiz.
+   *
+   * ⚠️ TEK OLAY, İKİ CARİ. Çeki VEREN cariye burada DOKUNULMAZ (onun borcu
+   * çek alındığında kapandı); satır CİRO EDİLEN cariye yazılır: ona olan
+   * borcumuz azaldı → BORÇ. İkinci bir satırı ilk cariye yazmak, aynı çeki iki
+   * kez tahsil etmiş gibi görünmek olurdu.
+   */
+  async endorse(
+    id: string,
+    input: EndorseInput,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const eventDate = input.eventDate ?? new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(
+        tx,
+        id,
+        [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK],
+        ChequeKind.RECEIVED,
+        "ciro",
+      );
+      const target = await resolveCariTx(
+        tx,
+        { cariId: input.toCariId, customerId: input.toCustomerId, subcontractorId: input.toSubcontractorId },
+        "Ciro edilen taraf",
+      );
+      if (target.id === row.cariId) {
+        // Çeki veren kişiye geri vermek CİRO değil İADEdir; defter etkisi de
+        // terstir (ciro üçüncü tarafa borç kapatır, iade alacağı geri açar).
+        throw AppError.badRequest(
+          `${row.docNo} çeki veren cariye geri veriliyorsa bu bir ciro değil İADE'dir — "Sahibine İade" işlemini kullanın.`,
+        );
+      }
+
+      await this.claimTx(tx, row, ChequeStatus.ENDORSED, { endorsedToCariId: target.id });
+
+      await writeChequeLedgerTx(tx, {
+        cariId: target.id,
+        currency: row.currency,
+        txnDate: eventDate,
+        side: "debit",
+        amount: D(row.amount),
+        amountTry: D(row.amountTry),
+        exchangeRate: D(row.exchangeRate),
+        sourceType: CariTxnSource.CHEQUE_ENDORSE,
+        chequeId: row.id,
+        description: `${row.docNo} ciro`,
+        userId,
+      });
+
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.ENDORSE,
+        fromStatus: row.status,
+        toStatus: ChequeStatus.ENDORSED,
+        eventDate,
+        counterCariId: target.id,
+        notes: input.notes ?? null,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "ENDORSE", docNo: result.docNo },
+    });
+    return { success: true, data: result, message: `${result.docNo} ciro edildi.` };
+  }
+
+  /**
+   * KARŞILIKSIZ — defter TERS KAYITLA geri alınır.
+   *
+   * ⚠️ İKİ CARİ BİRDEN etkilenebilir: çeki veren müşterinin borcu geri doğar
+   * (DEBIT) ve çek CİRO EDİLMİŞSE ciro ettiğimiz cariye olan borcumuz da geri
+   * doğar (ters CREDIT) — çünkü onun eline geçen çek ödenmedi. İkincisi
+   * atlanırsa tedarikçiye borcumuz sistemde kapanmış görünür ve fark ancak
+   * mutabakat toplantısında ortaya çıkar.
+   *
+   * ⚠️ PARA HAREKETİ YOK: karşılıksız çek hiç tahsil edilmedi (tahsil edilmiş
+   * olsaydı durumu COLLECTED = terminal olurdu).
+   */
+  async bounce(
+    id: string,
+    input: ChequeEventInput,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const eventDate = input.eventDate ?? new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(
+        tx,
+        id,
+        [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK, ChequeStatus.ENDORSED],
+        ChequeKind.RECEIVED,
+        "karşılıksız kaydı",
+      );
+      this.assertNotAllocated(row, "karşılıksız kaydı");
+
+      const cameFromEndorsed = row.status === ChequeStatus.ENDORSED;
+      await this.claimTx(tx, row, ChequeStatus.BOUNCED);
+
+      await writeChequeLedgerTx(tx, {
+        cariId: row.cariId,
+        currency: row.currency,
+        txnDate: eventDate,
+        side: "debit",
+        amount: D(row.amount),
+        amountTry: D(row.amountTry),
+        exchangeRate: D(row.exchangeRate),
+        sourceType: CariTxnSource.CHEQUE_BOUNCE,
+        chequeId: row.id,
+        description: `${row.docNo} KARŞILIKSIZ${input.notes ? ` — ${input.notes}` : ""}`,
+        userId,
+      });
+
+      if (cameFromEndorsed && row.endorsedToCariId) {
+        await writeChequeLedgerTx(tx, {
+          cariId: row.endorsedToCariId,
+          currency: row.currency,
+          txnDate: eventDate,
+          side: "credit",
+          amount: D(row.amount),
+          amountTry: D(row.amountTry),
+          exchangeRate: D(row.exchangeRate),
+          sourceType: CariTxnSource.CHEQUE_BOUNCE,
+          chequeId: row.id,
+          description: `${row.docNo} KARŞILIKSIZ — ciro geri alındı`,
+          userId,
+        });
+      }
+
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.BOUNCE,
+        fromStatus: row.status,
+        toStatus: ChequeStatus.BOUNCED,
+        eventDate,
+        counterCariId: cameFromEndorsed ? row.endorsedToCariId : null,
+        notes: input.notes ?? null,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "BOUNCE", docNo: result.docNo },
+    });
+    return {
+      success: true,
+      data: result,
+      message: `${result.docNo} karşılıksız olarak kaydedildi ve defter ters kayıtla geri alındı.`,
+    };
+  }
+
+  /**
+   * SAHİBİNE İADE — çek geri verildi (müşteri nakit ödedi ve çekini geri istedi,
+   * ya da verdiğimiz çeki tedarikçi bize geri verdi).
+   *
+   * ⚠️ Bu bir HATA STORNOSU DEĞİLDİR — gerçek bir ticari olaydır; ama defter
+   * etkisi aynıdır: çekin doğuşta yazdığı satır ters çevrilir. Kaynak
+   * `CHEQUE_CANCEL` olarak yazılır çünkü `CariTxnSource`'ta "çekin defter
+   * etkisinin geri alınması" için ayrı bir değer yok ve `CHEQUE_BOUNCE`
+   * kullanmak karşılıksız çek raporunu kirletirdi (iade karşılıksızlık değildir).
+   * Ayrımı `ChequeEvent.type = RETURN` taşır.
+   */
+  async returnToDrawer(
+    id: string,
+    input: ChequeEventInput,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const eventDate = input.eventDate ?? new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(
+        tx,
+        id,
+        [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK, ChequeStatus.ISSUED],
+        null,
+        "iade",
+      );
+      this.assertNotAllocated(row, "iade");
+      const isReceived = row.kind === ChequeKind.RECEIVED;
+
+      await this.claimTx(tx, row, ChequeStatus.RETURNED);
+
+      // Doğuşun TERSİ: alınan çek CREDIT yazmıştı → iade DEBIT; verilen çek
+      // DEBIT yazmıştı → iade CREDIT.
+      await writeChequeLedgerTx(tx, {
+        cariId: row.cariId,
+        currency: row.currency,
+        txnDate: eventDate,
+        side: isReceived ? "debit" : "credit",
+        amount: D(row.amount),
+        amountTry: D(row.amountTry),
+        exchangeRate: D(row.exchangeRate),
+        sourceType: CariTxnSource.CHEQUE_CANCEL,
+        chequeId: row.id,
+        description: `${row.docNo} İADE${input.notes ? ` — ${input.notes}` : ""}`,
+        userId,
+      });
+
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.RETURN,
+        fromStatus: row.status,
+        toStatus: ChequeStatus.RETURNED,
+        eventDate,
+        notes: input.notes ?? null,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "RETURN", docNo: result.docNo },
+    });
+    return { success: true, data: result, message: `${result.docNo} iade edildi ve defter geri alındı.` };
+  }
+
+  /**
+   * KENDİ ÇEKİMİZ ÖDENDİ — banka/kasa −amount.
+   *
+   * ⚠️ CARİ DEFTERE SATIR YAZILMAZ: borcumuz çeki VERDİĞİMİZDE kapandı. Burada
+   * ikinci bir borç satırı yazmak, aynı ödemeyi iki kez saymak olurdu.
+   *
+   * ⚠️ "Kendi çekimizin karşılıksız çıkması" diye bir GEÇİŞ YOK ve bu bilinçli:
+   * banka ödemediyse çek hâlâ ödenmemiştir, yani doğru kayıt `ISSUED` durumunda
+   * BEKLEMEKTİR. Ayrı bir durum eklemek, portföyde anlamı olmayan bir kova açardı.
+   */
+  async pay(
+    id: string,
+    input: ChequeAccountEventInput,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const eventDate = input.eventDate ?? new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(tx, id, [ChequeStatus.ISSUED], ChequeKind.ISSUED, "ödeme");
+      const ref: AccountRef = { cashBoxId: input.cashBoxId ?? null, bankAccountId: input.bankAccountId ?? null };
+      await loadAccountTx(tx, ref, row.currency);
+
+      await this.claimTx(tx, row, ChequeStatus.PAID, {
+        ...(ref.bankAccountId ? { bankAccountId: ref.bankAccountId } : {}),
+      });
+
+      await moveAccountBalanceTx(tx, ref, D(row.amount).negated());
+
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.PAY,
+        fromStatus: row.status,
+        toStatus: ChequeStatus.PAID,
+        eventDate,
+        bankAccountId: ref.bankAccountId,
+        cashBoxId: ref.cashBoxId,
+        notes: input.notes ?? null,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "PAY", docNo: result.docNo },
+    });
+    return { success: true, data: result, message: `${result.docNo} ödendi.` };
+  }
+
+  /**
+   * KAYIT HATASI STORNOSU — çek hiç var olmamış gibi defter geri alınır.
+   *
+   * ⚠️ SATIR SİLİNMEZ (fiziksel DELETE yok): iptal edilmiş çek portföyde
+   * "İPTAL" olarak durur; kayıt hatasının kendisi de denetimde görülmelidir.
+   *
+   * ⚠️ CİRO EDİLMİŞ çek iptal EDİLEMEZ: kâğıt fiziksel olarak üçüncü tarafın
+   * elindedir ve "hiç olmamış" sayılamaz. Doğru yol o çeki geri almak (iade)
+   * ya da karşılıksız kaydıdır.
+   */
+  async cancel(
+    id: string,
+    reason: string | undefined,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const now = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(
+        tx,
+        id,
+        [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK, ChequeStatus.ISSUED],
+        null,
+        "iptal",
+      );
+      this.assertNotAllocated(row, "iptal");
+      const isReceived = row.kind === ChequeKind.RECEIVED;
+
+      await this.claimTx(tx, row, ChequeStatus.CANCELLED, {
+        cancelledAt: now,
+        cancelledById: userId ?? null,
+        cancelReason: reason ?? null,
+      });
+
+      await writeChequeLedgerTx(tx, {
+        cariId: row.cariId,
+        currency: row.currency,
+        txnDate: now,
+        side: isReceived ? "debit" : "credit",
+        amount: D(row.amount),
+        amountTry: D(row.amountTry),
+        exchangeRate: D(row.exchangeRate),
+        sourceType: CariTxnSource.CHEQUE_CANCEL,
+        chequeId: row.id,
+        description: `${row.docNo} İPTAL${reason ? ` — ${reason}` : ""}`,
+        userId,
+      });
+
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.CANCEL,
+        fromStatus: row.status,
+        toStatus: ChequeStatus.CANCELLED,
+        eventDate: now,
+        notes: reason ?? null,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "CANCEL", docNo: result.docNo, reason },
+    });
+    return { success: true, data: result, message: `${result.docNo} iptal edildi ve ters kayıtla geri alındı.` };
+  }
+
+  // ---------------------------------------------------------------------------
+  // OKUMA
+  // ---------------------------------------------------------------------------
+
+  async list(params: {
+    page?: number;
+    pageSize?: number;
+    kind?: ChequeKind;
+    docType?: ChequeDocType;
+    status?: ChequeStatus[];
+    cariId?: string;
+    currency?: Currency;
+    bankAccountId?: string;
+    dueFrom?: Date;
+    dueTo?: Date;
+    search?: string;
+  }) {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
+
+    const where: Prisma.ChequeWhereInput = {};
+    if (params.kind) where.kind = params.kind;
+    if (params.docType) where.docType = params.docType;
+    if (params.status?.length) where.status = { in: params.status };
+    if (params.currency) where.currency = params.currency;
+    if (params.bankAccountId) where.bankAccountId = params.bankAccountId;
+    // ⚠️ Cari süzgeci CİRO EDİLENİ DE kapsar: "bu firmanın çeki" sorusu hem
+    // "ondan aldıklarım" hem "ona ciro ettiklerim" anlamına gelir ve ikincisini
+    // dışarıda bırakmak, ciro edilmiş çeki hiçbir cari ekranında göstermezdi.
+    if (params.cariId) where.OR = [{ cariId: params.cariId }, { endorsedToCariId: params.cariId }];
+    if (params.dueFrom || params.dueTo) {
+      where.dueDate = {
+        ...(params.dueFrom ? { gte: params.dueFrom } : {}),
+        ...(params.dueTo ? { lte: params.dueTo } : {}),
+      };
+    }
+    if (params.search?.trim()) {
+      const q = params.search.trim();
+      where.AND = [
+        {
+          OR: [
+            { docNo: { contains: q, mode: "insensitive" } },
+            { serialNo: { contains: q, mode: "insensitive" } },
+            { drawerName: { contains: q, mode: "insensitive" } },
+            { bankName: { contains: q, mode: "insensitive" } },
+          ],
+        },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      prisma.cheque.findMany({
+        where,
+        select: {
+          id: true,
+          docNo: true,
+          kind: true,
+          docType: true,
+          status: true,
+          currency: true,
+          amount: true,
+          amountTry: true,
+          issueDate: true,
+          dueDate: true,
+          serialNo: true,
+          bankName: true,
+          drawerName: true,
+          allocatedTotal: true,
+          bankAccount: { select: { id: true, name: true } },
+          cari: {
+            select: {
+              id: true,
+              customer: { select: { code: true, name: true } },
+              subcontractor: { select: { code: true, name: true } },
+            },
+          },
+          endorsedToCari: {
+            select: {
+              id: true,
+              customer: { select: { code: true, name: true } },
+              subcontractor: { select: { code: true, name: true } },
+            },
+          },
+        },
+        // VADE birinci anahtar: portföy ekranının tek sorusu "sırada ne var".
+        orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.cheque.count({ where }),
+    ]);
+    return { data, pagination: { total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+  }
+
+  async findById(id: string) {
+    const cheque = await prisma.cheque.findUnique({
+      where: { id },
+      include: {
+        cari: {
+          select: {
+            id: true,
+            customer: { select: { code: true, name: true } },
+            subcontractor: { select: { code: true, name: true } },
+          },
+        },
+        endorsedToCari: {
+          select: {
+            id: true,
+            customer: { select: { code: true, name: true } },
+            subcontractor: { select: { code: true, name: true } },
+          },
+        },
+        bankAccount: { select: { id: true, name: true } },
+        events: {
+          // Olay defteri KRONOLOJİK okunur — "ne zaman ne oldu" sorusunun
+          // cevabı sıralamadır; ters sıralamak zinciri okunamaz yapardı.
+          orderBy: [{ eventDate: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            type: true,
+            fromStatus: true,
+            toStatus: true,
+            eventDate: true,
+            notes: true,
+            counterCari: {
+              select: {
+                id: true,
+                customer: { select: { code: true, name: true } },
+                subcontractor: { select: { code: true, name: true } },
+              },
+            },
+            bankAccount: { select: { id: true, name: true } },
+            cashBox: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!cheque) throw AppError.notFound("Çek/senet bulunamadı.");
+    return { success: true, data: cheque };
+  }
+
+  /**
+   * Portföy özeti — durum × para birimi kırılımında adet ve tutar.
+   *
+   * ⚠️ TL karşılığı TOPLANMAZ: her satır kendi para biriminde döner. Farklı
+   * birimleri damgalanmış kurlarla toplayıp tek sayı basmak, ekranda "bugünkü
+   * kurla" sanılan ama aslında geçmiş kurların karışımı olan bir rakam üretirdi.
+   */
+  async summary(params: { kind?: ChequeKind } = {}) {
+    const rows = await prisma.cheque.groupBy({
+      by: ["status", "currency", "kind"],
+      where: params.kind ? { kind: params.kind } : undefined,
+      _sum: { amount: true, amountTry: true },
+      _count: { _all: true },
+    });
+    return {
+      success: true,
+      data: rows.map((r) => ({
+        kind: r.kind,
+        status: r.status,
+        currency: r.currency,
+        count: r._count._all,
+        amount: r._sum.amount ?? D0(),
+        amountTry: r._sum.amountTry ?? D0(),
+      })),
+    };
+  }
+}
+
+export const chequeService = new ChequeService();
