@@ -14,10 +14,21 @@
 //
 // ⚠️ VADE RENGİ tek başına bilgi taşımaz (renk körlüğü + eldivenli hızlı bakış):
 // yanına "vadesi geçti" / "bu hafta" ibaresi de basılır.
+//
+// ⚠️ SEÇİM SÜTUNU KOŞULLUDUR ve BAŞLIĞI METİNSİZDİR. Metinsizlik tesadüf değil:
+// `chequeExport.test.ts` §2 bu tablonun `<thead>`'ini KAYNAKTAN okuyup dosya
+// kolonlarıyla birebir eşliyor — seçim kutusu bir "veri kolonu" değildir ve o
+// eşlemeye girmemelidir (erişilebilirlik `aria-label` ile sağlanır).
+//
+// ⚠️ SEÇİLEMEYEN SATIRIN KUTUSU KAPALI AMA SESSİZ DEĞİL: sebep `title` ile
+// satırın üstünde durur. Sebepsiz kapalı bir kutu "ekran bozuk" diye okunur —
+// oysa kural (tek yön / iptal edilmiş kayıt) kullanıcının değiştirebileceği
+// bir şeydir.
 // =============================================================================
 import { Eye, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PermissionGate } from "@/components/PermissionGate";
 import {
   DropdownMenu,
@@ -34,18 +45,44 @@ import { DOCTYPE_LABEL, KIND_LABEL, STATUS_BADGE, STATUS_LABEL, cariName } from 
 import { DUE_TONE_CLASS, dueHint, dueTone, fmtDate } from "./dates";
 import { availableActions, type ChequeActionDef } from "./transitions";
 
+/** Toplu seçim kancası — verilmezse seçim sütunu HİÇ ÇİZİLMEZ. */
+export interface ChequeTableSelection {
+  selectedIds: ReadonlySet<string>;
+  onToggle: (row: ChequeRow) => void;
+  /** Seçilemiyorsa SEBEP (kutu kapanır ve sebep `title`'da yazar), yoksa `null`. */
+  blockReason: (row: ChequeRow) => string | null;
+  /** Sayfadaki seçilebilir satırların TAMAMI seçili mi. */
+  allChecked: boolean;
+  /** En az biri seçili mi (başlık kutusunun belirsiz hâli). */
+  someChecked: boolean;
+  onToggleAll: () => void;
+}
+
 interface Props {
   rows: ChequeRow[];
   onDetail: (row: ChequeRow) => void;
   onAction: (row: ChequeRow, def: ChequeActionDef) => void;
+  selection?: ChequeTableSelection;
 }
 
-export function ChequeTable({ rows, onDetail, onAction }: Props) {
+export function ChequeTable({ rows, onDetail, onAction, selection }: Props) {
   return (
     <div className="overflow-hidden rounded-md border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
           <tr>
+            {selection && (
+              <th className="w-9 px-3 py-2">
+                <Checkbox
+                  checked={
+                    selection.allChecked ? true : selection.someChecked ? "indeterminate" : false
+                  }
+                  onCheckedChange={() => selection.onToggleAll()}
+                  aria-label="Sayfadaki uygun kayıtların tümünü seç"
+                  title="Sayfadaki uygun kayıtların tümünü seç"
+                />
+              </th>
+            )}
             <th className="px-3 py-2 text-left">Belge No</th>
             <th className="px-3 py-2 text-left">Tür</th>
             <th className="px-3 py-2 text-left">Cari</th>
@@ -64,8 +101,25 @@ export function ChequeTable({ rows, onDetail, onAction }: Props) {
             const actions = availableActions(c);
             const allocated = toNum(c.allocatedTotal);
             const cancelled = c.status === "CANCELLED";
+            const selectBlock = selection?.blockReason(c) ?? null;
             return (
               <tr key={c.id} className={cn("border-t", cancelled && "opacity-60")}>
+                {selection && (
+                  <td className="px-3 py-2">
+                    {/* ⚠️ `title` SARMALAYICI span'de, kutunun kendisinde DEĞİL:
+                        tarayıcı `disabled` bir düğmede yerel ipucunu göstermez
+                        (fare olayı hiç doğmaz) → sebep tam da gerekli olduğu
+                        anda kaybolurdu. `aria-label` yine kutuda kalır. */}
+                    <span title={selectBlock ?? "Teslim bordrosuna ekle"}>
+                      <Checkbox
+                        checked={selection.selectedIds.has(c.id)}
+                        disabled={selectBlock !== null}
+                        onCheckedChange={() => selection.onToggle(c)}
+                        aria-label={selectBlock ?? `${c.docNo} bordroya seç`}
+                      />
+                    </span>
+                  </td>
+                )}
                 <td className="px-3 py-2 font-mono text-xs">
                   {c.docNo}
                   {c.serialNo && (
