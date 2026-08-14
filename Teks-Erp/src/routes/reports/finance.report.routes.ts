@@ -1,5 +1,5 @@
 // =============================================================================
-// ÖN MUHASEBE RAPORLARI — yaşlandırma · kasa/banka defteri · cari ekstre
+// ÖN MUHASEBE RAPORLARI — yaşlandırma · kasa/banka defteri · cari ekstre · KDV özeti
 // =============================================================================
 // ⚠️ HER uç İKİ kapıdan geçer: `requireFinanceEnabled` (bu kurulum bu modülü
 // kullanıyor mu) + `requirePermission("report:finance")` (bu kişi bunu görebilir
@@ -32,6 +32,7 @@ import { requireFinanceEnabled } from "../../middlewares/finance.middleware";
 import { dateRangeSchema, reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
 import { getAgingReport } from "../../services/reports/finance-aging.report";
 import { getCashBookReport } from "../../services/reports/cash-book.report";
+import { getVatSummaryReport } from "../../services/reports/finance-vat.report";
 import { cariService } from "../../services/cari.service";
 import { AppError } from "../../utils/app-error";
 
@@ -124,6 +125,10 @@ router.get("/aging", guard, async (req: Request, res: Response, next: NextFuncti
  *       (COLLECT/PAY). Devir, dönemden önceki hareketlerin toplamıdır — saklanan
  *       bakiyeden geriye hesaplanmaz; `storedDiff` bu iki yolun mutabakatıdır.
  *       Satır dökümü ve yürüyen bakiye YALNIZ tek hesap seçiliyse döner.
+ *       Yanıt ayrıca dönem hareketlerinin KAYNAK kırılımını (`categories`)
+ *       taşır — kasa hareketleri kendi serbest kategorisiyle, carili
+ *       tahsilat/ödeme · çek · virman kendi sabit kovalarında; kırılım hesap
+ *       özetiyle AYNI hareket kümesinden türetilir (mutabakat bekçili).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Hesap özetleri (+ tek hesapta satır dökümü) }
@@ -196,6 +201,49 @@ router.get("/statement", guard, async (req: Request, res: Response, next: NextFu
       to: range.to,
     });
     res.status(200).json(reportEnvelope(result.data, range));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// -----------------------------------------------------------------------------
+// KDV DÖNEM ÖZETİ
+// -----------------------------------------------------------------------------
+
+/**
+ * @openapi
+ * /api/reports/finance/vat-summary:
+ *   get:
+ *     tags: [Reports]
+ *     summary: KDV dönem özeti — satış/alış ayrı, oran kırılımlı (beyanname DEĞİL)
+ *     description: >
+ *       Muhasebeciye giden dönem özetidir; resmî beyan dış programda yapılır.
+ *       Dönem çıpası FATURA TARİHİDİR (tahakkuk); yalnız ONAYLANMIŞ faturalar
+ *       girer. Kırılım satır `vatRate` gruplarından toplanır (karışık oranlı
+ *       fatura her oranda kendi payıyla görünür); iade faturaları kendi
+ *       bloklarında AYRI satırdır ve blok toplamına negatif girer. TL kolonları
+ *       her belgenin KENDİ kur damgasıyla çevrilir; kuruş kalıntısı en büyük
+ *       matrah satırına yazılır, `totalsTry.reconDiff` "0.00" olmak zorundadır.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Satış + alış blokları (oran kırılımı, para birimi grupları, TL toplamlar) }
+ *       403: { description: Ön muhasebe modülü kapalı ya da yetki yok }
+ */
+router.get("/vat-summary", guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = z
+      .object({
+        dateFrom: z.string().datetime({ offset: true }).optional(),
+        dateTo: z.string().datetime({ offset: true }).optional(),
+      })
+      .strict()
+      .parse(req.query);
+
+    // Ortak katman: varsayılan son 30 gün + 366 gün tavanı + saat dilimi
+    // sözleşmesi (gün sınırını İSTEMCİ çizer).
+    const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
+    const data = await getVatSummaryReport({ range });
+    res.status(200).json(reportEnvelope(data, range));
   } catch (e) {
     next(e);
   }
