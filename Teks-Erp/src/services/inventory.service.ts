@@ -17,6 +17,10 @@ import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { FACTORY_TIMEZONE } from "../constants/time";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
+// G4 sayım metraj düzeltmesi — sapma satırı TEK yazma noktasından doğar
+// (`roll-variance.helper` başlığındaki kural: çağıran `tx.rollVariance.create` yazmaz).
+import { recordVarianceTx } from "./helpers/roll-variance.helper";
+import { VARIANCE_SOURCES } from "../constants/variance-reasons";
 import {
   resolveRollRestoreBlockReason,
   resolveRestoreTargetStatus,
@@ -48,6 +52,10 @@ import {
   duplicateGuardCreatedAtFloor,
   resolveEntryStamp,
 } from "./helpers/duplicate-guard.helper";
+
+// G4 — sayım metraj düzeltmesinin sapma kaynağı: katalogdan (2026-08-14 dikişi
+// — ilk yazımdaki geçici tip köprüsü kaldırıldı, kaynak tek yerde).
+const QTY_ADJUST_VARIANCE_SOURCE = VARIANCE_SOURCES.WAREHOUSE_QTY_ADJUST;
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
 
@@ -106,6 +114,7 @@ import {
   RollOperationType,
   RollEntrySource,
   RollForm,
+  RollVarianceKind,
   GoodsReceiptStatus,
   ItemType,
   StationKind,
@@ -3766,6 +3775,230 @@ export class InventoryService {
         currentQty: data.currentQty,
       },
       message: `Top etiketi güncellendi`,
+    };
+  }
+
+  /**
+   * G4 (2026-08-14, ticaret paketi) — SAYIM METRAJ DÜZELTMESİ.
+   * `PATCH /api/rolls/:id/qty` · izin `roll:manual-adjust` · sebep ZORUNLU (min 3).
+   *
+   * `applyManualProperties`'in metraj dalıyla KARIŞTIRMA — iki ayrı iş:
+   *   • Orası ÖLÇÜM düzeltmesidir: yalnız BÜTÜN topta (initialQty == currentQty)
+   *     çalışır ve initialQty'yi de yeniden yazar ("giriş ölçümü baştan yanlıştı").
+   *   • Burası SAYIM gerçeğidir: kayıtlı 500 m'lik top rafta 480 m çıktı. YALNIZ
+   *     `currentQty` değişir — `initialQty` tarihsel giriş kaydıdır, DOKUNULMAZ;
+   *     fark zaten `initialQty - currentQty` olarak okunur (detay panelindeki
+   *     "Başlangıç: N m" satırı). Kısmen tüketilmiş topta da çalışır.
+   *
+   * KAPSAM DAR — yalnız FREE_STOCK (STOCK/WAREHOUSE/A1_STOCK) + çuvalsız/sevksiz/
+   * adımsız; gerisi ANLAMLI 409: üretimdeki topun metrajını istasyon akışı
+   * (kurşun/tambur ölçümü) belirler, sevk edilmişin kaydına dokunulmaz (brüt
+   * kuralı), fasondaki mal fiziksel olarak dışarıda, arşiv statüde canlı stok yok.
+   *
+   * İZ — RollVariance sapma defterine satır (yön → tür). Yeni `RollVarianceKind`
+   * değeri EKLENMEDİ (enum değişikliği = migration; bu iş migration'sız) — iki
+   * mevcut tür zaten tam bu iki soruyu yanıtlıyor:
+   *   • sayım DÜŞÜK  → `RECORD_CORRECTION` ("mal hiç yoktu / kayıt yanlıştı").
+   *     FIRE DEĞİL: fire "mal vardı, çöpe gitti" kararıdır ve Tambur/WO-kapanış
+   *     dispozisyonunun işidir; sayım farkını SCRAP'a yazmak fire oranını
+   *     sistematik şişirirdi (RollVarianceKind şema notu).
+   *   • sayım YÜKSEK → `OVERAGE` ("kayıtlıdan fazla çıktı") — tambur aşımının
+   *     depo ikizi.
+   *
+   * Depo hareket defterine (`WarehouseMovement`) satır YAZILMAZ: o KONUM
+   * defteridir ("hangi depoya girdi/çıktı") ve ADJUST olay tipi de yoktur;
+   * miktar sapmasının defteri RollVariance'tır. İki defter, iki ayrı soru.
+   */
+  async adjustRollQty(
+    rollId: string,
+    data: { newQty: number; reason: string },
+    userId?: string,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    // Servis katmanı Zod'a güvenmez (bekçiler servis üzerinden çağırır) —
+    // sebep zorunluluğu burada da ölçülür.
+    const reason = data.reason?.trim() ?? "";
+    if (reason.length < 3) {
+      throw AppError.badRequest(
+        "Metraj düzeltmesi için işlem nedeni (en az 3 karakter) zorunludur.",
+      );
+    }
+    if (!(data.newQty > 0)) {
+      throw AppError.badRequest("Geçerli bir metraj (mt) girilmeli");
+    }
+
+    const FREE_STOCK: RollStatus[] = [
+      RollStatus.STOCK,
+      RollStatus.WAREHOUSE,
+      RollStatus.A1_STOCK,
+    ];
+
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        initialQty: true,
+        currentQty: true,
+        sackId: true,
+        shipmentId: true,
+        currentStepId: true,
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    // Kapsam dışı statüler — sessiz red değil, SOMUT sebep (yıkıcı-işlem kuralının
+    // okuma yönü: operatör neden yapamadığını görmeli, doğaçlamaya itilmemeli).
+    if (!FREE_STOCK.includes(roll.status)) {
+      if (roll.status === RollStatus.IN_PRODUCTION) {
+        throw AppError.conflict(
+          "Bu top üretimde — metrajı istasyon akışı (kurşun/tambur ölçümü) belirler; sayım düzeltmesi yalnız serbest stok (Ham Stok / Bitmiş Depo / 2. Kalite) topunda yapılır.",
+        );
+      }
+      if (roll.status === RollStatus.SHIPPED) {
+        throw AppError.conflict(
+          "Bu top sevk edilmiş — çıkış kaydına dokunulmaz (brüt kuralı); fark iade/storno akışıyla kapatılır.",
+        );
+      }
+      if (
+        roll.status === RollStatus.AT_SUBCONTRACTOR ||
+        roll.status === RollStatus.AT_KARTELA ||
+        roll.status === RollStatus.RETURNED_FROM_SUBCONTRACTOR
+      ) {
+        throw AppError.conflict(
+          "Bu top fasonda/kartelada — mal fiziksel olarak dışarıda; metraj kabul adımında ölçülür.",
+        );
+      }
+      throw AppError.conflict(
+        `Bu top emekli/arşiv statüde (${roll.status}) — düzeltilecek canlı stok kaydı yok.`,
+      );
+    }
+    if (roll.sackId) {
+      throw AppError.conflict(
+        "Bu top bir çuvalın içinde — metraj düzeltmesi çuval toplamını ve çuval etiketini bayatlatır; önce çuvaldan çıkarın.",
+      );
+    }
+    if (roll.shipmentId) {
+      throw AppError.conflict(
+        "Bu top bir sevkiyata atanmış — önce sevkiyattan çıkarın.",
+      );
+    }
+    if (roll.currentStepId) {
+      // FREE_STOCK statüsüyle bir iş emri adımında duran top (ham kesim devamı
+      // gibi) yine istasyon akışının malıdır — prepareRawForSale ile aynı guard.
+      throw AppError.conflict(
+        "Bu top bir iş emri adımına bağlı — metrajı istasyon akışı belirler; önce üretimden ayırın.",
+      );
+    }
+
+    const oldQty = roll.currentQty;
+    const newQty = new Prisma.Decimal(data.newQty);
+    if (newQty.equals(oldQty)) {
+      throw AppError.badRequest("Yeni metraj mevcut kayıtla aynı — düzeltilecek fark yok.");
+    }
+
+    const isShort = newQty.lessThan(oldQty);
+    const kind = isShort ? RollVarianceKind.RECORD_CORRECTION : RollVarianceKind.OVERAGE;
+    const diff = isShort ? oldQty.minus(newQty) : newQty.minus(oldQty);
+
+    let varianceId: string | null = null;
+    await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM (check-then-act YASAK): üyelik + statü + METRAJ tek WHERE'de.
+      // `currentQty: oldQty` gerçek bir CAS'tır — iki paralel düzeltme aynı eski
+      // değeri okur; satır kilidini kazanan yazar, kaybedenin WHERE'i commit
+      // edilmiş YENİ değeri görüp count=0 ile 409'a düşer. Kaybeden de yazsaydı
+      // sapma defteri aynı farkı İKİ KEZ görürdü (varyans satırı claim'in
+      // ARKASINDA, aynı tx'te — ya birlikte olur ya hiç).
+      const claim = await tx.roll.updateMany({
+        where: {
+          id: rollId,
+          status: { in: FREE_STOCK },
+          sackId: null,
+          shipmentId: null,
+          currentStepId: null,
+          currentQty: oldQty,
+        },
+        // labelDirty: metraj etikete basılıyor (`label-field-values`) — fiziksel
+        // etiket artık yanlış sayıyı taşıyor. "Fark yok" hâli yukarıda elendi,
+        // yani işaret hiçbir no-op kayıtta yanmaz.
+        data: { currentQty: newQty, labelDirty: true },
+      });
+      if (claim.count === 0) {
+        // count-0 tanısı (2026-08-14 eki ①): sebep tx içinde TAZE okumayla söylenir —
+        // yarışın kaybedenine jenerik "olmadı" değil, o an geçerli engel anlatılır.
+        const fresh = await tx.roll.findUnique({
+          where: { id: rollId },
+          select: { status: true, sackId: true, shipmentId: true, currentStepId: true, currentQty: true },
+        });
+        if (!fresh) throw AppError.notFound("Top bulunamadı");
+        if (!FREE_STOCK.includes(fresh.status)) {
+          throw AppError.conflict(
+            `Top bu sırada ${fresh.status} statüsüne geçti — yenileyip tekrar deneyin.`,
+          );
+        }
+        if (fresh.sackId) {
+          throw AppError.conflict("Top bu sırada bir çuvala okutuldu — önce çuvaldan çıkarın.");
+        }
+        if (fresh.shipmentId) {
+          throw AppError.conflict("Top bu sırada bir sevkiyata atandı — önce sevkiyattan çıkarın.");
+        }
+        if (fresh.currentStepId) {
+          throw AppError.conflict("Top bu sırada bir iş emrine bağlandı — önce üretimden ayırın.");
+        }
+        throw AppError.conflict(
+          "Topun metrajı bu sırada değişti (eşzamanlı düzeltme/işlem) — güncel değeri kontrol edip tekrar deneyin.",
+        );
+      }
+
+      varianceId = await recordVarianceTx(tx, {
+        rollId,
+        kind,
+        qty: diff,
+        source: QTY_ADJUST_VARIANCE_SOURCE,
+        // RECORD_CORRECTION sebep KATALOGLUDUR (fail-closed) — sayım düzeltmesinin
+        // serbest gerekçesi "DIGER" + metin olarak yazılır (requiresText≥3, yukarıda
+        // garanti). Sayım sahada sıklaşırsa doğru adım kataloğa "SAYIM_FARKI"
+        // eklemektir (J: tam sayım belgesi işi), DIGER'i büyütmek değil.
+        // OVERAGE sebep İSTEMEZ; operatörün gerekçesi yine reasonText'te taşınır.
+        reasonCode: isShort ? "DIGER" : null,
+        reasonText: reason,
+        userId: userId ?? null,
+      });
+    });
+
+    // Audit tx-DIŞI (best-effort konvansiyonu — bu dosyadaki diğer CUD'ler gibi).
+    // Kalıcı gerekçe RollVariance satırındadır (audit 6 ayda arşivlenir; sapma
+    // defteri verinin parçasıdır — Roll.entryReason emsali).
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL_QTY_ADJUST",
+      recordId: rollId,
+      oldData: { currentQty: Number(oldQty) },
+      newData: {
+        currentQty: Number(newQty),
+        diffQty: Number(diff),
+        kind,
+        reason,
+        varianceId,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        rollId,
+        barcode: roll.barcode,
+        oldQty: Number(oldQty),
+        newQty: Number(newQty),
+        diffQty: Number(diff),
+        direction: isShort ? "SHORT" : "OVER",
+        kind,
+        varianceId,
+      },
+      message: isShort
+        ? `Metraj düzeltildi: ${Number(oldQty)} m → ${Number(newQty)} m (−${Number(diff)} m kayıt düzeltmesi)`
+        : `Metraj düzeltildi: ${Number(oldQty)} m → ${Number(newQty)} m (+${Number(diff)} m fazlalık)`,
     };
   }
 

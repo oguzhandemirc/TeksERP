@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Undo2, Palette, PackageOpen, Pencil, Wrench, AlertTriangle, Send, LogIn } from "lucide-react";
+import { History, Tag, Undo2, Palette, PackageOpen, Pencil, Ruler, Wrench, AlertTriangle, Send, LogIn } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -15,6 +15,9 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
 import { RollEditDialog } from "./RollEditDialog";
 import { RescueStuckDialog } from "./RescueStuckDialog";
+import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
+import { canAdjustRollQty } from "./qtyAdjustService";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { RollCancelCard } from "./RollCancelCard";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
@@ -30,8 +33,15 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const [labelRollId, setLabelRollId] = useState<string | null>(null);
   const [editRollId, setEditRollId] = useState<string | null>(null);
   const [rescueRollId, setRescueRollId] = useState<string | null>(null);
+  const [qtyAdjustOpen, setQtyAdjustOpen] = useState(false);
   const { hasPermission } = useRoleAccess();
   const canManualAdjust = hasPermission("roll:manual-adjust");
+  // G4 — "Metraj Düzelt" (sayım) YALNIZ ticaret rejiminde (fabrika sıfır-fark;
+  // yüklem bekçili: qtyAdjust.test.ts). RollEditDialog'un ölçüm-düzeltme
+  // dalından AYRI iş: burada yalnız currentQty değişir + sapma defteri izi.
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const canQtyAdjust =
+    canManualAdjust && !!roll && canAdjustRollQty(roll, financeEnabled);
   // YASAM DONGUSU bolumu AYRI bir izinle korunur (urun karari, 2026-08-05).
   // Izin yoksa bolum HIC CIZILMEZ — bos bir kutu gostermek "bu topun gecmisi
   // yok" yalani olurdu; oysa gecmis var, kullanicinin gorme yetkisi yok.
@@ -124,6 +134,17 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <Wrench className="h-3.5 w-3.5" /> İstasyondan Kurtar
               </Button>
             )}
+            {canQtyAdjust && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                onClick={() => setQtyAdjustOpen(true)}
+              >
+                <Ruler className="h-3.5 w-3.5" /> Metraj Düzelt
+              </Button>
+            )}
           </div>
         )}
 
@@ -140,6 +161,11 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
           rollId={rescueRollId}
           onOpenChange={(open) => !open && setRescueRollId(null)}
           onRescued={() => void detailQuery.refetch()}
+        />
+        <RollQtyAdjustDialog
+          roll={qtyAdjustOpen ? roll : null}
+          onOpenChange={(open) => !open && setQtyAdjustOpen(false)}
+          onAdjusted={() => void detailQuery.refetch()}
         />
 
         {roll && (

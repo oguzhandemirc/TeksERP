@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
-import { PanelRight, Trash2, Truck } from "lucide-react";
+import { PanelRight, Ruler, Trash2, Truck } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
@@ -18,6 +18,9 @@ import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import { QuickShipDialog } from "./QuickShipDialog";
 import { ShipmentDispatchNote } from "@/pages/Operations/Shipments/ShipmentDispatchNote";
 import { canQuickShip, type QuickShipRoll } from "./quickShipService";
+import { canAdjustRollQty } from "./qtyAdjustService";
+import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
 import { entryStationLookupService, entryUserLookupService, warehouseLookupService } from "./entryLookupServices";
@@ -259,6 +262,10 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
   const [quickShipOpen, setQuickShipOpen] = useState(false);
   const [shippedId, setShippedId] = useState<string | null>(null);
+  // G4 — sayım metraj düzeltmesi (yalnız ticaret rejimi + roll:manual-adjust).
+  const [qtyAdjustRoll, setQtyAdjustRoll] = useState<Roll | null>(null);
+  const { hasPermission } = useRoleAccess();
+  const canManualAdjust = hasPermission("roll:manual-adjust");
 
   const { values: foldValues } = useFoldValues();
   // Depo filtresi yalnız ÇOK DEPOLU kurulumda listeye girer (tek kaynak hook).
@@ -340,6 +347,15 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
             <ContextMenuItem onSelect={() => setSelected(roll)}>
               <PanelRight /> Detayı aç (panel)
             </ContextMenuItem>
+            {/* G4 — "Metraj Düzelt" (sayım): YALNIZ ticaret rejiminde çizilir
+                (`canAdjustRollQty` yüklemi financeEnabled'ı da içerir, bekçili:
+                qtyAdjust.test.ts) + roll:manual-adjust. Fabrika yüzeyi bugünküyle
+                birebir — orada metraj istasyon akışının işidir. */}
+            {canManualAdjust && canAdjustRollQty(roll, financeEnabled) && (
+              <ContextMenuItem onSelect={() => setQtyAdjustRoll(roll)}>
+                <Ruler /> Metraj Düzelt (sayım)
+              </ContextMenuItem>
+            )}
             {roll.barcode && (
               <>
                 <ContextMenuSeparator />
@@ -353,6 +369,10 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
         roll={selected}
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
+      />
+      <RollQtyAdjustDialog
+        roll={qtyAdjustRoll}
+        onOpenChange={(open) => !open && setQtyAdjustRoll(null)}
       />
       <BulkCancelRollsDialog
         open={bulkCancelOpen}

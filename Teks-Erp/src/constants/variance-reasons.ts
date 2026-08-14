@@ -46,6 +46,8 @@ export const VARIANCE_SOURCES = {
    * satır bırakmak yerine sapma kayda geçirilir.
    */
   TAMBUR_UNDO_FULL: "TAMBUR_UNDO_FULL",
+  /** Depoda SAYIM metraj düzeltmesi (G4, 2026-08-14) — `inventory.service.adjustRollQty`. */
+  WAREHOUSE_QTY_ADJUST: "WAREHOUSE_QTY_ADJUST",
 } as const;
 
 export type VarianceSource = (typeof VARIANCE_SOURCES)[keyof typeof VARIANCE_SOURCES];
