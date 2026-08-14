@@ -4,6 +4,11 @@
 
 ---
 
+> **Alım-satım (ticaret) kurulumu için:** bu runbook'un sunucu/panel bölümlerini uygula,
+> sonra `docs/ops/TICARET-KURULUM.md` reçetesine geç (finance bayrakları + WEB_TRADE
+> ataması + kasa/kur/devir). C bölümündeki istasyon/makine/rota adımları ticaret
+> kurulumunda GEREKMEZ. Mekanik kısım: `npm run setup:ticaret` (dry-run varsayılan).
+
 ## A. SUNUCU (Backend + PostgreSQL)
 
 **Tek yol: elle kurulum + pm2.** (2026-07-30: Inno Setup/NSSM installer'ı — `setup.exe`, `manage.ps1` — **tamamen kaldırıldı**. Ayrıntılı runbook: `DEPLOY-RUNBOOK.md`.)
