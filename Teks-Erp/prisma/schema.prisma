@@ -4770,6 +4770,11 @@ enum CariTxnSource {
   CHEQUE_ENDORSE
   CHEQUE_BOUNCE
   CHEQUE_CANCEL
+  /// Devir stornosu (2026-08-14): `ADJUSTMENT`ın tipli ters yolu — bu değer
+  /// gelmeden devir, ters yolu OLMAYAN tek ileri kayıt tipiydi ve 409 mesajı
+  /// var olmayan bir yolu gösteriyordu. SONA eklendi (ADD VALUE aynı-tx kuralı,
+  /// kendi migration'ında).
+  ADJUSTMENT_CANCEL
 }
 
 /// Cari hareket defteri — APPEND-ONLY.
@@ -4799,6 +4804,15 @@ model CariTransaction {
   /// Çek/senet kaynağı (C1). Diğer iki kaynak bağıyla aynı desen: polimorfik
   /// sourceId DEĞİL, typed nullable FK — kaynak silinemez, hayalet satır doğmaz.
   chequeId    String?       @db.Uuid
+  /// STORNO BAĞI (2026-08-14, SAP FB08 modeli): bu satır bir ters kayıtsa,
+  /// TERSLEDİĞİ orijinal satırın kimliği. `@unique` = bir satır EN FAZLA BİR KEZ
+  /// terslenebilir (çift storno P2002 → 409). DB'de partial'a çevrilir
+  /// (`WHERE NOT NULL` — null-yoğun kolon, perf kuralı 4); şemada `@unique`
+  /// kalmak ZORUNDA (Prisma index↔unique farkını drift sayar).
+  /// İlk tüketici: devir stornosu (`ADJUSTMENT_CANCEL`). Diğer `*_CANCEL`
+  /// satırları bağsız doğmuş durumda — geriye doldurulmaz, yeni yazımlar
+  /// bağlamak isterse alan hazır.
+  reversesTxnId String? @unique @db.Uuid
   description String?       @db.VarChar(300)
 
   createdById String? @db.Uuid
@@ -4807,6 +4821,10 @@ model CariTransaction {
   invoice Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   payment Payment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   cheque  Cheque?     @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  /// Ters kayıt → orijinal (Restrict: orijinal satır silinemez — zaten defter
+  /// append-only, bu FK o kuralın storno bacağını DB'ye de söyletir).
+  reverses   CariTransaction? @relation("TxnReversal", fields: [reversesTxnId], references: [id], onDelete: Restrict)
+  reversedBy CariTransaction? @relation("TxnReversal")
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
@@ -4920,6 +4938,7 @@ model CashBox {
   /// Elden tahsil edilen çekin olay satırı (C1) — kasa bakiyesinin ÜÇÜNCÜ
   /// yazarı. `test_consistency` §23 formülü bu tabloyu da toplamak zorunda.
   chequeEvents     ChequeEvent[]
+  periodCloses     CashPeriodClose[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4946,12 +4965,67 @@ model BankAccount {
   /// başlığı; `chequeEvents` ise o çekin banka bakiyesini oynatan olay satırları.
   cheques          Cheque[]
   chequeEvents     ChequeEvent[]
+  periodCloses     CashPeriodClose[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([isActive])
   @@map("bank_accounts")
+}
+
+/// KASA/BANKA DÖNEM KAPANIŞI (2026-08-14, K-1 — kullanıcı kararı).
+///
+/// NEDEN: `CashTransaction.txnDate` kullanıcı girdisi ve kasa/banka bakiyesine
+/// yazan ÜÇ yazarın (Payment · CashTransaction · ChequeEvent COLLECT/PAY)
+/// hiçbirinde dönem kilidi yoktu — geçmişe tarihli bir hareket, yazdırılıp
+/// Excel'e alınmış kasa defteri sayfasını SESSİZCE değiştirebiliyordu. Cari
+/// dönem kapanışı kasayı kapsamıyordu ve bu hiçbir yerde yazılı değildi.
+///
+/// `CariPeriodClose`un hesap-bazlı ikizi. Fark: cari kapanışı (cari × para
+/// birimi) bazlı; kasa kapanışı HESAP bazlıdır (kasa sayımı hesap hesap
+/// yapılır ve her hesap zaten TEK para birimlidir → currency boyutu yok).
+///
+/// ⚠️ cashBoxId XOR bankAccountId — Payment/CashTransaction ile aynı sözleşme;
+/// DB'de CHECK ile kilitli (`cash_period_close_account_xor`).
+model CashPeriodClose {
+  id String @id @default(uuid()) @db.Uuid
+
+  cashBoxId     String? @db.Uuid
+  bankAccountId String? @db.Uuid
+
+  /// Dönemin SON GÜNÜ (dahil). Başlangıç saklanmaz — önceki kapanıştan
+  /// türetilir (CariPeriodClose gerekçesiyle birebir).
+  periodEnd DateTime @db.Date
+
+  /// O ana kadarki hesap bakiyesi. Negatif olabilir → CHECK yok.
+  closingBalance Decimal @db.Decimal(14, 2)
+  /// Fotoğrafa giren hareket sayısı (ÜÇ yazarın toplamı) — yeniden türetimde
+  /// tutmuyorsa defter kapanıştan sonra değişmiş demektir.
+  txnCount       Int
+
+  notes      String? @db.VarChar(500)
+  closedById String? @db.Uuid
+
+  reopenedAt   DateTime? @db.Timestamptz
+  reopenedById String?   @db.Uuid
+  reopenReason String?   @db.VarChar(300)
+
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // DB'de PARTIAL UNIQUE ×2: `WHERE "reopenedAt" IS NULL AND "cashBoxId" IS NOT NULL`
+  // ve banka ikizi (cari_period_close_active_uq emsali — düz unique, yeniden
+  // açılan dönemin bir daha kapatılmasını engellerdi; XOR yüzünden tek bileşik
+  // unique de kurulamaz, NULL taraf çakışmaz). Şemada `@@unique` kalmak ZORUNDA.
+  @@unique([cashBoxId, periodEnd], map: "cash_period_close_box_active_uq")
+  @@unique([bankAccountId, periodEnd], map: "cash_period_close_bank_active_uq")
+  @@index([cashBoxId, periodEnd])
+  @@index([bankAccountId, periodEnd])
+  @@map("cash_period_closes")
 }
 
 /// Carisiz kasa/banka hareketinin TÜRÜ.
@@ -5176,8 +5250,20 @@ model Cheque {
   /// kapama motoru, "bu fatura ne kadar kapandı" sorusuna iki cevap üretirdi.
   allocatedTotal Decimal @default(0) @db.Decimal(14, 2)
 
-  /// Keşide/işlem tarihi — çekin deftere girdiği gün.
+  /// KEŞİDE tarihi — çekin ÜZERİNDEKİ tarih (kâğıdın bilgisi; SAP Belegdatum).
+  /// ⚠️ DEFTER ÇIPASI DEĞİLDİR (2026-08-14 sağlamlık tasarımı): keşide tarihi
+  /// çekin alındığı gün değildir — ileri keşide standart pratik, geçmiş keşideli
+  /// çek almak olağan. Defter/kilit/belge-no/kur `postingDate`ten okunur. Alan
+  /// yine de ZORUNLU ve atılamaz: TTK 796 ibraz süresi keşideden hesaplanır
+  /// (hukuki veri) ve panel kâğıdın tarihini ayrıca sorar.
   issueDate DateTime @db.Timestamptz
+  /// İŞLEM tarihi (SAP Buchungsdatum) — çekin DEFTERE girdiği gün. Cari defter
+  /// `txnDate`i, dönem kilidi çıpası, belge numarasının GGAAYY'si ve kur çözümü
+  /// DÖRDÜ DE buradan. Varsayılan bugün; geçmişe girilebilir, dönem kilidi
+  /// kapılar ("işlem tarihi kullanıcınındır, kilit kapılar" — payment emsali).
+  /// Migration `postingDate = issueDate` backfill'i ile geldi: veri taşıyan bir
+  /// kurulumda defter ZATEN issueDate'ten yazılmıştı — ekstre bayt-bayt değişmez.
+  postingDate DateTime @db.Timestamptz
   /// VADE — portföyün birinci sıralama anahtarı ve yaşlandırmanın girdisi.
   /// `@db.Date` DEĞİL: `Invoice.dueDate` ile aynı sözleşmede kalsın (istemci
   /// yerel gün sınırını mutlak ana çevirip gönderiyor).
@@ -5239,6 +5325,12 @@ enum ChequeEventType {
   RETURN
   PAY
   CANCEL
+  /// Tahsil stornosu (2026-08-14, K-2): yanlış COLLECT işaretlenen çek eskiden
+  /// SONSUZA DEK "tahsil edildi" kalıyordu — kasa stornosu kasayı düzeltir ama
+  /// çekin durumunu düzeltemezdi ve sonradan GERÇEKTEN karşılıksız çıkan çekte
+  /// portföy yalan söylerdi. Bu olay banka/kasa ters hareketi + durumu geri
+  /// (DEPOSITED→ya da PORTFOLIO) çeker; olay defterinde KENDİ adıyla durur.
+  COLLECT_CANCEL
 }
 
 /// Çekin durum defteri — APPEND-ONLY (`CariTransaction` emsali: `updatedAt` YOK).
@@ -5475,6 +5567,15 @@ model YarnMovement {
   /// Hepsi opsiyoneldir: elle sayım düzeltmesinin belgesi yoktur.
   goodsReceiptId String? @db.Uuid
   invoiceId      String? @db.Uuid
+
+  /// Satın alma BİRİM fiyatı — fişin para biriminde, `Roll.purchasePrice`
+  /// simetriği (2026-08-14, Sınıf 5). Bu alan gelmeden iplik satırı fiyat
+  /// TAŞIYAMIYORDU: fişte fiyat girmek 400 yiyor, alış faturası taslağı iplikte
+  /// hep sıfırla doğup elle fiyat adımına düşüyordu. Fiyat kabul ANINDA donar
+  /// (append-only satırda) — maliyet/fatura mutabakatının çıpası.
+  /// ⚠️ Ters kayıtlar (ADJUST_OUT, fiş iptali) fiyat TAŞIMAZ — geri sarım
+  /// ticari bir olay değildir, miktar defteridir.
+  unitPrice Decimal? @db.Decimal(14, 4)
 
   /// Serbest gerekçe. ⚠️ Audit'e DEĞİL kolona yazılır: `archive-scheduler`
   /// `SystemLog`'u 6 ayda bir taşır ve "bu düzeltme neden yapıldı" sorusunun

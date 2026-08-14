@@ -186,6 +186,7 @@ async function makeCheque(opts: {
       amount: opts.amount,
       amountTry: opts.amount,
       issueDate: new Date(),
+      postingDate: new Date(),
       dueDate: new Date(Date.now() + 30 * 86400_000),
     },
     select: { id: true },
@@ -381,15 +382,25 @@ async function main(): Promise<void> {
     await paymentAllocationService.allocate({ invoiceId: invC, chequeId: chq, amount: 900 });
     check("§7d1 Çekle kapama yazıldı", (await chequeAllocated(chq)).equals(900));
     check("§7d2 Fatura çekle kapandı", (await invoiceCounters(invC)).paid.equals(900));
-    // Karşılıksız: C1 önce durumu BOUNCED yapar, sonra bu export'u çağırır.
-    await prisma.cheque.update({ where: { id: chq }, data: { status: ChequeStatus.BOUNCED } });
+    // ⚠️ SÖZLEŞME DEĞİŞTİ (2026-08-14 sağlamlık paketi, Sınıf 4): eski fixture
+    // "önce BOUNCED yap, sonra çöz" sırasını kuruyordu — DB CHECK'i
+    // (`cheques_terminal_not_allocated`) o durumu artık TEMSİL EDİLEMEZ yapıyor
+    // ve bu fixture'ın ham `update`ini yakalayarak İLK işini burada gördü.
+    // Yeni sözleşme: kapamalı çek karşılıksız İŞARETLENEMEZ (409 "kapamayı
+    // kaldırın") → gerçek sıra ÇÖZ → sonra BOUNCE. Test o sırayı kurar.
     const relC = await prisma.$transaction(async (tx) => releaseAllocationsForChequeTx(tx, chq, { reason: "CHEQUE_BOUNCE" }));
     check("§7d3 releaseAllocationsForChequeTx çözdü", relC.count === 1 && relC.total.equals(900));
     check("§7d4 Fatura yeniden AÇIK", (await invoiceCounters(invC)).paid.isZero());
     check("§7d5 Çek sayacı sıfırlandı", (await chequeAllocated(chq)).isZero());
-    // ⚠️ `dropChequeAllocated` durum süzgeci TAŞIMAMALI: çağrıldığı an çek zaten
-    // BOUNCED'dır. Süzgeç konsaydı, çözülmesi gereken TEK durumda çözmezdi.
-    check("§7d6 BOUNCED çekte de çözülme çalıştı (durum süzgeci YOK)", relC.count === 1);
+    // Çözüldükten SONRA terminal geçiş serbest — CHECK artık izin verir.
+    await prisma.cheque.update({ where: { id: chq }, data: { status: ChequeStatus.BOUNCED } });
+    check(
+      "§7d6 Kapama çözüldükten sonra BOUNCED geçişi CHECK'ten geçti",
+      (await prisma.cheque.findUniqueOrThrow({ where: { id: chq }, select: { status: true } })).status ===
+        ChequeStatus.BOUNCED,
+    );
+    // ⚠️ CHECK'in kendisi §12d'nin ikizi olarak DB'de: kapamalı çeki ham SQL ile
+    // BOUNCED yapmayı deneyen HERHANGİ bir yol (bekçisiz refactor dahil) 23514 alır.
 
     // Boş küme: idempotent ve sessiz.
     const relEmpty = await prisma.$transaction(async (tx) => releaseAllocationsForChequeTx(tx, chq));

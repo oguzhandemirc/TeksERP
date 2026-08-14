@@ -80,6 +80,9 @@ const DATE_ONLY_FIELDS = new Set([
   // iki farklı anahtara düşüp benzersizlik seddini sessizce delerdi
   // (`ExchangeRate.rateDate` ile birebir aynı gerekçe).
   "CariPeriodClose.periodEnd",
+  // Kasa/banka kapanışı — CariPeriodClose'un hesap-bazlı ikizi, aynı gerekçe:
+  // takvim günü anahtarı + partial unique'lerin parçası.
+  "CashPeriodClose.periodEnd",
 ]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.

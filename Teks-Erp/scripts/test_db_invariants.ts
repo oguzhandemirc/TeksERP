@@ -236,6 +236,32 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("customerId" IS NOT NULL)`,
     why: "kalem+müşteri+yön+para birimi başına TEK istisna",
   },
+  // 2026-08-14 — sağlamlık paketi (migration 20260814110200_saglamlik_paketi).
+  // Storno bağı: bir defter satırı EN FAZLA BİR KEZ terslenebilir.
+  {
+    table: "cari_transactions",
+    index: "cari_transactions_reversesTxnId_key",
+    uniq: true,
+    predicate: `("reversesTxnId" IS NOT NULL)`,
+    why: "çift storno P2002→409; null-yoğun kolon → partial",
+  },
+  // Kasa/banka dönem kapanışı — cari_period_close_active_uq'nun hesap-bazlı
+  // ikizleri. `reopenedAt IS NULL`: yeniden açılan dönem anahtarı bırakır;
+  // hesap kolonu predicate'te: XOR gereği yarısı NULL, index kendi tarafını taşır.
+  {
+    table: "cash_period_closes",
+    index: "cash_period_close_box_active_uq",
+    uniq: true,
+    predicate: `(("reopenedAt" IS NULL) AND ("cashBoxId" IS NOT NULL))`,
+    why: "kasa+dönem başına TEK AKTİF kapanış",
+  },
+  {
+    table: "cash_period_closes",
+    index: "cash_period_close_bank_active_uq",
+    uniq: true,
+    predicate: `(("reopenedAt" IS NULL) AND ("bankAccountId" IS NOT NULL))`,
+    why: "banka+dönem başına TEK AKTİF kapanış",
+  },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
   // swatch_stock_reductions
@@ -357,6 +383,14 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   // ⚠️ `yarn_stocks.balanceKg >= 0` seddi de YOK: sayım girilmeden çıkış
   // yapılırsa bakiye GERÇEKTEN eksidir ve GÖRÜNMELİDİR. Sıfıra kırpmak eksiği
   // gizleyip envanteri sessizce yanlışlardı.
+  // 2026-08-14 — sağlamlık paketi (20260814110200).
+  // Kapanış hesabı kasa XOR banka (Payment/CashTransaction sözleşmesi).
+  { table: "cash_period_closes", name: "cash_period_close_account_xor" },
+  // ⚠️ SINIF 4 SEDDİ: parasız-terminal çekte (BOUNCED/RETURNED/CANCELLED) canlı
+  // kapama tutarı olamaz. Uygulamanın çift yönlü CAS yüklemi atlanırsa (ham SQL,
+  // yeni geçiş yolu) satırın kendisi direnir. COLLECTED bilinçli DIŞARIDA:
+  // tahsil edilmiş çeke kapama meşrudur.
+  { table: "cheques", name: "cheques_terminal_not_allocated" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

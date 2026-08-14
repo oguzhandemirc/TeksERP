@@ -419,6 +419,10 @@ export class ChequeService {
             docNo,
             kind,
             docType,
+            // GEÇİCİ KÖPRÜ (şema fazı): postingDate şemaya geldi, dört tüketicinin
+            // yeniden çıpalanması servis fazının işi. Bugünkü davranış BİREBİR
+            // korunur (defter hâlâ issueDate akışında) — köprü servis fazında sökülür.
+            postingDate: issueDate,
             status: isReceived ? ChequeStatus.PORTFOLIO : ChequeStatus.ISSUED,
             cariId: cari.id,
             currency,
