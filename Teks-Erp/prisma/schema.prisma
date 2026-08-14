@@ -392,6 +392,10 @@ model User {
   cancelledTransfers         WarehouseTransfer[]      @relation("WarehouseTransferCancelledBy")
   createdGoodsReceipts       GoodsReceipt[]           @relation("GoodsReceiptCreatedBy")
   cancelledGoodsReceipts     GoodsReceipt[]           @relation("GoodsReceiptCancelledBy")
+  // Paket D (ticaret).
+  yarnMovements              YarnMovement[]           @relation("YarnMovementUser")
+  createdPurchaseOrders      PurchaseOrder[]          @relation("PurchaseOrderCreatedBy")
+  cancelledPurchaseOrders    PurchaseOrder[]          @relation("PurchaseOrderCancelledBy")
   manualClosedOrders         Order[]                  @relation("OrderManualClosedBy")
   systemSettingsUpdates      SystemSetting[]
   preference                 UserPreference?
@@ -1046,6 +1050,13 @@ model Item {
 
   @@index([itemType])
   invoiceLines InvoiceLine[]
+
+  // Paket D (ticaret) — fabrikada hiçbiri doğmaz.
+  yarnStocks         YarnStock[]
+  yarnMovements      YarnMovement[]
+  prices             ItemPrice[]
+  purchaseOrderLines PurchaseOrderLine[]
+
   @@map("items")
 }
 
@@ -1604,6 +1615,9 @@ model Customer {
   rollReturns      RollReturn[]
   /// Bu firmadan alınan mal kabul fişleri (tedarikçi rolü — CompanyType.SUPPLIER).
   goodsReceipts    GoodsReceipt[]            @relation("GoodsReceiptSupplier")
+  // Paket D (ticaret) — müşteri fiyat istisnaları + tedarikçi olarak alış siparişleri.
+  itemPrices       ItemPrice[]
+  purchaseOrders   PurchaseOrder[]           @relation("PurchaseOrderSupplier")
   directShipments  DirectShipment[]
   templateRoutes   CustomerTemplateRoute[]
   standaloneLabels CustomerStandaloneLabel[]
@@ -4263,6 +4277,10 @@ model Warehouse {
   goodsReceipts GoodsReceipt[]
   sacks         Sack[]
 
+  // Paket D (ticaret) — iplik kg-stoğu depo bazlıdır.
+  yarnStocks    YarnStock[]
+  yarnMovements YarnMovement[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -4432,8 +4450,14 @@ model GoodsReceipt {
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(300)
 
-  warehouse   Warehouse           @relation(fields: [warehouseId], references: [id])
-  supplier    Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
+  /// Paket D — bu fiş hangi alış siparişini karşılıyor (opsiyonel: siparişsiz
+  /// mal kabulü meşru kalır; sipariş bir PLANDIR, kabulün ön koşulu değil).
+  purchaseOrderId String? @db.Uuid
+
+  warehouse     Warehouse           @relation(fields: [warehouseId], references: [id])
+  supplier      Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
+  purchaseOrder PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  yarnMovements YarnMovement[]
   createdBy   User?               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
   cancelledBy User?               @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
   rolls       Roll[]
@@ -4446,6 +4470,8 @@ model GoodsReceipt {
   @@index([warehouseId, createdAt])
   @@index([supplierId, createdAt])
   @@index([status, createdAt])
+  // Paket D — "bu siparişin fişleri" sorgusu (sipariş detayı + karşılanma).
+  @@index([purchaseOrderId])
   @@map("goods_receipts")
 }
 
@@ -4644,6 +4670,9 @@ model Invoice {
   goodsReceipt         GoodsReceipt?         @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
 
   lines        InvoiceLine[]
+  /// Paket D — iplik faturasının stok hareketi bağı (opsiyonel; iplik dışı
+  /// faturada boş kalır).
+  yarnMovements YarnMovement[]
   transactions CariTransaction[]
   allocations  PaymentAllocation[]
 
@@ -5378,4 +5407,214 @@ model CariPeriodClose {
   // sorguda kullanır.
   @@index([cariId, periodEnd])
   @@map("cari_period_closes")
+}
+
+// =============================================================================
+// PAKET D — TİCARET GENİŞLEMESİ (2026-08-14)
+// =============================================================================
+// D1 iplik kg-stok · D2 fiyat (kart + müşteri istisnası) · D3 alış siparişi.
+// Üçü de ticaret rejimine aittir (`finance.enabled`); fabrikada hiçbir yüzeyi
+// görünmez ve hiçbir mevcut tabloya davranış eklemez.
+// =============================================================================
+
+/// İplik hareketinin YÖNÜ. Miktar HER ZAMAN POZİTİFTİR — yönü bu enum söyler
+/// (`WarehouseMovement.qty` emsali). Sayım farkı bu yüzden tek bir "ADJUST"
+/// değil İKİ değerdir: işaretli tek alan, bir gün birinin `Math.abs()` yazıp
+/// eksi farkı artı saymasına açık kapı bırakırdı.
+enum YarnMovementKind {
+  IN
+  OUT
+  ADJUST_IN
+  ADJUST_OUT
+}
+
+/// İplik stoğunun (kalem × depo) DENORMALİZE kg bakiyesi.
+///
+/// ⚠️ İkinci yazar YOK: `balanceKg`'a yalnız `yarn.service` dokunur ve HER
+/// yazım aynı tx'te bir `YarnMovement` satırı doğurur. Mutabakat bekçisi
+/// Σ(hareket) ile karşılaştırır (`CariBalance` ↔ `CariTransaction` emsali).
+///
+/// ⚠️ LOT'A YÜKSELTME YOLU AÇIK ve KIRICI DEĞİL: bu tablo (kalem × depo)
+/// ROLLUP'ıdır. Lot geldiğinde `YarnLot` + `YarnMovement.lotId` (nullable)
+/// eklenir, lot bazlı bakiye AYRI bir tabloya iner ve BU tablo toplam olarak
+/// doğru kalmaya devam eder — yani buradaki `@@unique` değişmez. Bakiyeyi
+/// baştan lot bazına kurmak, lotsuz bugünkü veriyi göçe mahkûm ederdi.
+model YarnStock {
+  id          String @id @default(uuid()) @db.Uuid
+  itemId      String @db.Uuid
+  warehouseId String @db.Uuid
+
+  balanceKg Decimal @default(0) @db.Decimal(14, 3)
+
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([itemId, warehouseId])
+  @@index([warehouseId])
+  @@map("yarn_stocks")
+}
+
+/// İplik stok defteri — APPEND-ONLY (bu yüzden `updatedAt` YOK, konvansiyon).
+///
+/// ⚠️ Satır SİLİNMEZ/DÜZELTİLMEZ: yanlış giriş TERS KAYITLA kapatılır
+/// (ADJUST_OUT). Defter felsefesi cari/kasa ile aynı — geçmişi düzeltmek
+/// değil, düzeltmeyi de deftere yazmak.
+model YarnMovement {
+  id          String           @id @default(uuid()) @db.Uuid
+  itemId      String           @db.Uuid
+  warehouseId String           @db.Uuid
+  kind        YarnMovementKind
+
+  /// HER ZAMAN POZİTİF (DB CHECK ile kilitli); yönü `kind` söyler.
+  qtyKg Decimal @db.Decimal(14, 3)
+
+  /// Belge bağları — typed FK (polimorfik değil), `WarehouseMovement` emsali.
+  /// Hepsi opsiyoneldir: elle sayım düzeltmesinin belgesi yoktur.
+  goodsReceiptId String? @db.Uuid
+  invoiceId      String? @db.Uuid
+
+  /// Serbest gerekçe. ⚠️ Audit'e DEĞİL kolona yazılır: `archive-scheduler`
+  /// `SystemLog`'u 6 ayda bir taşır ve "bu düzeltme neden yapıldı" sorusunun
+  /// cevabı sessizce kaybolurdu (`Roll.entryReason` emsali).
+  reason String? @db.VarChar(300)
+
+  userId String? @db.Uuid
+
+  item         Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  goodsReceipt GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+  user         User?         @relation("YarnMovementUser", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([itemId, warehouseId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([goodsReceiptId])
+  @@index([invoiceId])
+  @@map("yarn_movements")
+}
+
+/// Fiyatın YÖNÜ — alış mı satış mı.
+enum PriceKind {
+  PURCHASE
+  SALE
+}
+
+/// Kalem fiyatı: KART VARSAYILANI + MÜŞTERİ İSTİSNASI.
+///
+/// ⚠️ `Item`'a fiyat alanı EKLENMEDİ: fabrika kartı ticaret paketinin
+/// kavramlarıyla şişmemeli ve fiyat (kalem × müşteri × yön × para birimi)
+/// dört boyutludur — tek kolona sığmaz.
+///
+/// ⚠️ `customerId` NULL = kart varsayılanı. Bu yüzden DB'de İKİ PARTIAL UNIQUE
+/// vardır (migration'da ham SQL): düz `@@unique` NULL'ları ÇAKIŞTIRMAZ, yani
+/// aynı kaleme İKİ farklı "varsayılan fiyat" sessizce doğardı ve `resolveItemPrice`
+/// hangisini seçtiğini kimse söyleyemezdi. Şemada `@@unique` olarak durmak
+/// ZORUNDA: Prisma 7 predicate farkını drift saymaz, index↔unique farkını SAYAR.
+model ItemPrice {
+  id         String    @id @default(uuid()) @db.Uuid
+  itemId     String    @db.Uuid
+  customerId String?   @db.Uuid
+  kind       PriceKind
+  currency   Currency
+  price      Decimal   @db.Decimal(14, 4)
+
+  item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // → partial: WHERE "customerId" IS NULL      (kart varsayılanı tektir)
+  @@unique([itemId, kind, currency], map: "item_price_default_uq")
+  // → partial: WHERE "customerId" IS NOT NULL  (müşteri istisnası tektir)
+  @@unique([itemId, customerId, kind, currency], map: "item_price_customer_uq")
+  @@index([customerId])
+  @@map("item_prices")
+}
+
+/// Alış siparişi durumu. `PARTIAL`/`CLOSED` kabul edilen miktardan TÜRETİLİR
+/// (servis her mal kabulünde yeniden hesaplar) — kullanıcı elle işaretlemez.
+enum PurchaseOrderStatus {
+  OPEN
+  PARTIAL
+  CLOSED
+  CANCELLED
+}
+
+/// Alış siparişi — "ne ısmarladım, ne geldi".
+///
+/// ⚠️ Mevcut `Order` BÜKÜLMEDİ: o model satış/üretim dünyasına bağlıdır
+/// (iş emri, sevkiyat, tahsis, refakat kartı). Alış siparişini oraya sokmak,
+/// üretim tarafındaki her sorguya "ama bu alış siparişi değilse" şartı
+/// eklemek demekti — ve o şartı unutan ilk sorgu sessizce yanlış olurdu.
+model PurchaseOrder {
+  id      String @id @default(uuid()) @db.Uuid
+  /// AS + GGAAYY + NNNN.
+  orderNo String @unique @db.VarChar(32)
+
+  /// Tedarikçi = `Customer` (`CompanyType.SUPPLIER`) — `GoodsReceipt.supplierId`
+  /// ile AYNI kaynak. Ayrı tedarikçi modeli açılmadı (cari kart tek yerde).
+  supplierId String   @db.Uuid
+  currency   Currency @default(TRY)
+
+  status       PurchaseOrderStatus @default(OPEN)
+  orderDate    DateTime            @db.Timestamptz
+  expectedDate DateTime?           @db.Timestamptz
+  notes        String?             @db.VarChar(500)
+
+  clientToken String? @unique @db.Uuid
+
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  supplier      Customer            @relation("PurchaseOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy     User?               @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  cancelledBy   User?               @relation("PurchaseOrderCancelledBy", fields: [cancelledById], references: [id])
+  lines         PurchaseOrderLine[]
+  goodsReceipts GoodsReceipt[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([supplierId, status])
+  @@index([status, orderDate])
+  @@map("purchase_orders")
+}
+
+/// Alış siparişi kalemi.
+///
+/// ⚠️ `receivedQty` DENORMALİZE ve ATOMİK yazılır (`increment`, tx içinde) —
+/// mal kabul satırı bu kaleme eşlenince artar. Fazla kabulü DB CHECK
+/// engellemez (fiziksel olarak fazla mal GELEBİLİR); servis uyarır, kayıt
+/// gerçeği yazar.
+model PurchaseOrderLine {
+  id              String @id @default(uuid()) @db.Uuid
+  purchaseOrderId String @db.Uuid
+  lineNo          Int
+
+  itemId String @db.Uuid
+  /// Sipariş birimi kalemin kendi birimidir (`Item.unit`) — satırda tekrar
+  /// saklanmaz ki ikisi ayrışmasın.
+  qty         Decimal  @db.Decimal(14, 3)
+  receivedQty Decimal  @default(0) @db.Decimal(14, 3)
+  unitPrice   Decimal? @db.Decimal(14, 4)
+
+  notes String? @db.VarChar(300)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item          Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([purchaseOrderId, lineNo])
+  @@index([itemId])
+  @@map("purchase_order_lines")
 }

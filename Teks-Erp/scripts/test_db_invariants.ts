@@ -217,6 +217,25 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("reopenedAt" IS NULL)`,
     why: "cari+para birimi+dönem başına TEK AKTİF kapanış; yeniden açılanlar anahtarı bırakır",
   },
+  // 2026-08-14 — Paket D fiyatlama (migration 20260814072115_paket_d_...).
+  // ⚠️ İKİ partial unique, çünkü `customerId IS NULL` = KART VARSAYILANI ve
+  // Postgres NULL'ları birbirine eşit SAYMAZ: düz unique aynı kaleme iki
+  // "varsayılan fiyat" satırı doğmasına izin verirdi ve `resolveItemPrice`
+  // hangisini seçtiğini kimse söyleyemezdi (hata çıkmaz, fiyat SALINIR).
+  {
+    table: "item_prices",
+    index: "item_price_default_uq",
+    uniq: true,
+    predicate: `("customerId" IS NULL)`,
+    why: "kalem+yön+para birimi başına TEK kart varsayılanı",
+  },
+  {
+    table: "item_prices",
+    index: "item_price_customer_uq",
+    uniq: true,
+    predicate: `("customerId" IS NOT NULL)`,
+    why: "kalem+müşteri+yön+para birimi başına TEK istisna",
+  },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
   // swatch_stock_reductions
@@ -323,6 +342,21 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   { table: "invoices", name: "invoices_paid_total_range" },
   { table: "payments", name: "payments_allocated_total_range" },
   { table: "cheques", name: "cheques_allocated_total_range" },
+  // 2026-08-14 — Paket D (migration 20260814072115_paket_d_...).
+  // Miktar HER ZAMAN pozitif; yönü `kind` söyler (WarehouseMovement emsali).
+  // Sıfır da yasak: "hiçbir şey olmadı" bir defter satırı değildir.
+  { table: "yarn_movements", name: "yarn_movements_qty_positive" },
+  // Fiyat negatif olamaz; SIFIR serbest (promosyon/numune satırı meşru).
+  { table: "item_prices", name: "item_prices_price_nonneg" },
+  { table: "purchase_order_lines", name: "purchase_order_lines_qty_positive" },
+  { table: "purchase_order_lines", name: "purchase_order_lines_received_nonneg" },
+  // ⚠️ `receivedQty <= qty` seddi BİLİNÇLİ OLARAK YOK: fiziksel olarak fazla mal
+  // GELEBİLİR ve kayıt gerçeği yazmalıdır. Servis uyarır, DB engellemez — aksi
+  // halde depocu gelen malı sisteme HİÇ giremezdi. Bu satır bir eksiklik değil,
+  // yazılı bir karardır; "tamamlamak" için eklemeyin.
+  // ⚠️ `yarn_stocks.balanceKg >= 0` seddi de YOK: sayım girilmeden çıkış
+  // yapılırsa bakiye GERÇEKTEN eksidir ve GÖRÜNMELİDİR. Sıfıra kırpmak eksiği
+  // gizleyip envanteri sessizce yanlışlardı.
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
