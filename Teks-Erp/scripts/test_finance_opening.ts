@@ -318,6 +318,30 @@ async function main(): Promise<void> {
       /yanlış tutar girildi/.test(revRow?.description ?? ""),
   );
 
+  // ── §10x EKSTRE SATIRLARI TERS-KAYIT BAĞINI TAŞIR (I3, 2026-08-14) ────────
+  // Panel aktif-devir tespitini bu KESİN bilgiyle yapar (statementDevir kesin
+  // yolu); alan düşerse panel sezgisel fallback'e iner ve nadir pencerede
+  // yanlış-pozitif geri gelir — bu kontrol o gerilemeyi kilitler.
+  {
+    const stmt = await cariService.statement({
+      cariId: cari2.id,
+      currency: "TRY",
+      from: new Date(Date.now() - 400 * 24 * 3600 * 1000),
+      to: new Date(Date.now() + 24 * 3600 * 1000),
+    });
+    const adjRow = stmt.data.rows.find((r) => r.sourceType === "ADJUSTMENT");
+    const cancelRow = stmt.data.rows.find((r) => r.sourceType === "ADJUSTMENT_CANCEL");
+    check(
+      "§10x ⭐ Ekstrede terslenen devir reversedByTxnId, ters satır reversesTxnId taşır",
+      adjRow != null &&
+        cancelRow != null &&
+        adjRow.reversedByTxnId === cancelRow.id &&
+        cancelRow.reversesTxnId === adjRow.id &&
+        cancelRow.reversedByTxnId == null,
+      `adj.reversedBy=${adjRow?.reversedByTxnId} cancel.reverses=${cancelRow?.reversesTxnId}`,
+    );
+  }
+
   // Storno sonrası aging: DEVİR neti sıfır → cari hiç listelenmez (ne satır
   // ne sahte "defter uyuşmuyor" bandı). Negatif sonda: FILTER'dan
   // ADJUSTMENT_CANCEL düşürülünce adjNet=8000 kalır ve satır geri gelir.

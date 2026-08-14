@@ -25,13 +25,40 @@
 export interface DevirScanRow {
   id: string;
   sourceType: string;
+  /** I3 (2026-08-14): satırı tersleyen kaydın id'si — backend artık taşıyor.
+   *  Eski backend'de alan hiç gelmez (`undefined`); o durumda sezgisel yol. */
+  reversedByTxnId?: string | null;
 }
 
 /**
  * Görünen pencerede "Devri İptal Et" düğmesinin bağlanacağı satırın id'si —
  * aktif devir tespit edilemezse `null` (düğme çizilmez).
+ *
+ * İKİ YOL (I3, 2026-08-14):
+ *   • KESİN yol — satırlar `reversedByTxnId` taşıyorsa: aktif devir =
+ *     terslenmemiş (`reversedByTxnId == null`) SON ADJUSTMENT satırı. Satır
+ *     kendi terslenme bilgisini taşıdığı için pencere kesmesi sorunu yoktur.
+ *   • SEZGİSEL fallback — alan hiç gelmiyorsa (eski backend): sayım VEYA sıra
+ *     yüklemi (aşağıda; dosya başındaki gerekçe). Fallback BAYT-BAYT korunur —
+ *     bekçi iki yolun paritesini ayrı ayrı ölçer.
+ *
+ * ⚠️ Alan tespiti ADJUSTMENT satırının KENDİSİNDEN yapılır (`in` operatörü):
+ * karışık durumda (bazı satırlar alanlı bazıları değil — olamaz ama tip bunu
+ * dışlayamaz) yanlış yolu seçmek yerine satır bazında karar verilir.
  */
 export function findActiveDevirRowId(rows: ReadonlyArray<DevirScanRow>): string | null {
+  // ── KESİN YOL ──────────────────────────────────────────────────────────────
+  const adjustments = rows.filter((r) => r.sourceType === "ADJUSTMENT");
+  const carriesLink = adjustments.length > 0 && adjustments.every((r) => "reversedByTxnId" in r && r.reversedByTxnId !== undefined);
+  if (carriesLink) {
+    const active = adjustments.filter((r) => r.reversedByTxnId == null);
+    // Backend invariant'ı cari+para birimi başına EN FAZLA BİR aktif devir der;
+    // yine de SON satırı seçeriz (invariant bozulursa en yeni kayıt kazanır —
+    // backend 404/409'u son sed olarak durur).
+    return active.length > 0 ? (active[active.length - 1]?.id ?? null) : null;
+  }
+
+  // ── SEZGİSEL FALLBACK (eski backend) ──────────────────────────────────────
   let lastAdjIdx = -1;
   let lastCancelIdx = -1;
   let adjCount = 0;

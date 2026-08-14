@@ -623,6 +623,12 @@ export class CariService {
         debit: Prisma.Decimal;
         credit: Prisma.Decimal;
         running: Prisma.Decimal;
+        /** Bu satır bir ters kayıtsa: tersledigi satırın id'si (I3, 2026-08-14). */
+        reversesTxnId: string | null;
+        /** Bu satır TERSLENMİŞSE: onu tersleyen satırın id'si. Panel aktif-devir
+         *  tespitini bu KESİN bilgiyle yapar (sezgisel sayım yalnız eski
+         *  backend fallback'i olarak kaldı — `statementDevir.ts`). */
+        reversedByTxnId: string | null;
       }>;
     }>
   > {
@@ -655,6 +661,10 @@ export class CariService {
         credit: true,
         invoice: { select: { docNo: true } },
         payment: { select: { docNo: true } },
+        reversesTxnId: true,
+        // Terslenme bilgisi SATIRIN KENDİSİNDE taşınır (I3): pencere kesmesi
+        // sorununu kökten kaldırır — satır kendi terslenip terslenmediğini bilir.
+        reversedBy: { select: { id: true } },
       },
     });
 
@@ -673,6 +683,8 @@ export class CariService {
         docNo: t.invoice?.docNo ?? t.payment?.docNo ?? null,
         debit: t.debit,
         credit: t.credit,
+        reversesTxnId: t.reversesTxnId,
+        reversedByTxnId: t.reversedBy?.id ?? null,
         running,
       };
     });

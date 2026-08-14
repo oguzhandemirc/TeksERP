@@ -69,3 +69,51 @@ describe("findActiveDevirRowId", () => {
     expect(findActiveDevirRowId([])).toBeNull();
   });
 });
+
+// ── KESİN YOL (I3, 2026-08-14) — satırlar reversedByTxnId taşıyorsa ─────────
+// Yukarıdaki testlerin TAMAMI alan taşımayan fixture kullanır → sezgisel
+// fallback'i ölçmeye DEVAM EDERLER (eski backend paritesi bedavaya kilitli).
+describe("findActiveDevirRowId — kesin yol (reversedByTxnId)", () => {
+  const linked = (id: string, sourceType: string, reversedByTxnId: string | null) => ({
+    id,
+    sourceType,
+    reversedByTxnId,
+  });
+
+  it("terslenmiş devir → null (düğme çizilmez), sayım/sıra yüklemine BAKILMAZ", () => {
+    // Sezgisel yol bu pencerede (yalnız devir görünür, iptal satırı pencere
+    // DIŞINDA) yanlış-pozitif verirdi; kesin yol satırın kendi bilgisinden bilir.
+    expect(findActiveDevirRowId([linked("d1", "ADJUSTMENT", "c1")])).toBeNull();
+  });
+
+  it("terslenmemiş devir → id", () => {
+    expect(findActiveDevirRowId([linked("d1", "ADJUSTMENT", null)])).toBe("d1");
+  });
+
+  it("iptal + yeniden giriş zinciri: yalnız AKTİF (terslenmemiş) devir seçilir", () => {
+    expect(
+      findActiveDevirRowId([
+        linked("d1", "ADJUSTMENT", "c1"),
+        linked("c1", "ADJUSTMENT_CANCEL", null),
+        linked("d2", "ADJUSTMENT", null),
+      ]),
+    ).toBe("d2");
+  });
+
+  it("geçmiş tarihli yeniden giriş (yeni devir listede iptalden ÖNCE) → yine doğru satır", () => {
+    // Sezgiselin SAYIM parçasına ihtiyaç duyduğu vaka — kesin yolda trivially doğru.
+    expect(
+      findActiveDevirRowId([
+        linked("d2", "ADJUSTMENT", null),
+        linked("d1", "ADJUSTMENT", "c1"),
+        linked("c1", "ADJUSTMENT_CANCEL", null),
+      ]),
+    ).toBe("d2");
+  });
+
+  it("alan gelmiyorsa (eski backend) SEZGİSEL fallback çalışır — terslenmiş-görünmeyen devir bulunur", () => {
+    // Aynı pencere kesin yolda null verirdi; alan yokken sezgisel devreye girer
+    // ve yanlış-pozitif SESLİ düşer (backend 404) — bilinçli fallback sözleşmesi.
+    expect(findActiveDevirRowId([{ id: "d1", sourceType: "ADJUSTMENT" }])).toBe("d1");
+  });
+});

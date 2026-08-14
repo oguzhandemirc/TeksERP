@@ -122,6 +122,10 @@ export interface StatementRow {
   debit: number;
   credit: number;
   running: number;
+  /** Ters kayıt bağı (I3, 2026-08-14) — eski backend'de gelmez, OPSİYONEL okunur. */
+  reversesTxnId?: string | null;
+  /** Bu satırı tersleyen satırın id'si — doluysa satır TERSLENMİŞTİR. */
+  reversedByTxnId?: string | null;
 }
 
 /** Cari tarafın görünen adı — hangi tarafa bağlıysa oradan. */
