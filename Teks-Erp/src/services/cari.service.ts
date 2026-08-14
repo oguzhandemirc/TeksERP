@@ -12,6 +12,10 @@ import { AuditService } from "./audit.service";
 import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, lockCariPeriodScopeTx } from "./helpers/period-guard.helper";
 import { periodCloseService } from "./period-close.service";
+// H2 (2026-08-14): "Gecikmiş" kolonunun TEK kaynağı yaşlandırma çekirdeği —
+// efektif vade + açık tutar + sanal FIFO mahsup kuralı ORADA yaşar, burada
+// ikinci bir formül YAZILMAZ (bkz. finance-aging.report.ts başlığı).
+import { collectAgingRows } from "./reports/finance-aging.report";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CariListRow {
@@ -30,6 +34,12 @@ export interface CariListRow {
   notes: string | null;
   isActive: boolean;
   balances: Array<{ currency: Currency; balance: Prisma.Decimal }>;
+  /** YALNIZ `withOverdue: true` istendiğinde döner — para birimi bazında vadesi
+   *  geçmiş AÇIK tutar. Değer yaşlandırma raporunun `overdueTotal`'ıyla TEK
+   *  kaynaktan (aynı çekirdek fonksiyon) üretilir; işaret sözleşmesi bakiyeyle
+   *  aynıdır (POZİTİF = cari bize borçlu). STRING taşınır — para `number`'a
+   *  çevrilmez (aging raporuyla aynı gerekçe). */
+  overdue?: Array<{ currency: Currency; amount: string }>;
 }
 
 const PARTY_SELECT = {
@@ -65,6 +75,9 @@ export class CariService {
     isActive?: boolean;
     /** Yalnız bakiyesi SIFIR OLMAYANLAR — "kimden alacağım var" sorusu. */
     onlyWithBalance?: boolean;
+    /** Vadesi geçmiş açık tutarları da getir (H2). Bayrak verilmezse ek sorgu
+     *  KOŞMAZ — bugünkü yol bayt-bayt aynı kalır. */
+    withOverdue?: boolean;
   }): Promise<{ data: CariListRow[]; pagination: { total: number; page: number; pageSize: number; totalPages: number } }> {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
@@ -96,6 +109,34 @@ export class CariService {
       prisma.cariAccount.count({ where }),
     ]);
 
+    // ── VADESİ GEÇEN TOPLAM (H2, 2026-08-14) — TEK KAYNAK: aging çekirdeği ──
+    // Formül BURADA YAZILMAZ: efektif vade (belge vadesi → fatura tarihi +
+    // cari vade günü → vadesiz), açık tutar (grandTotal − paidTotal) ve
+    // kapanmamış kredinin SANAL FIFO mahsubu `collectAgingRows`'ta yaşar;
+    // yaşlandırma raporu da AYNI fonksiyondan okur. İkinci bir SQL/formül,
+    // iki ekranın aynı cariye iki farklı "gecikmiş" rakamı basması demekti
+    // (bekçi: test_finance_reports §11 eşitliği fixture üzerinde birebir ölçer).
+    //
+    // ⚠️ N+1 DEĞİL: sayfadaki TÜM cari id'leri tek çağrıyla gider (`cariIds`);
+    // çekirdek sabit sayıda toplu sorgu koşar, satır başına sorgu üretmez.
+    // ⚠️ Bayrak yokken bu blok HİÇ KOŞMAZ (bekçi kaynak taramasıyla kilitler).
+    let overdueByCari: Map<string, Array<{ currency: Currency; amount: string }>> | null = null;
+    if (params.withOverdue && rows.length > 0) {
+      const agingRows = await collectAgingRows({ asOf: new Date(), cariIds: rows.map((r) => r.id) });
+      overdueByCari = new Map();
+      for (const ar of agingRows) {
+        if (D(ar.overdueTotal).isZero()) continue; // sıfır satır gürültüdür
+        const list = overdueByCari.get(ar.cariId) ?? [];
+        list.push({ currency: ar.currency, amount: ar.overdueTotal });
+        overdueByCari.set(ar.cariId, list);
+      }
+      // Determinizm: aynı istek aynı sırayı üretsin (Map/acc sırası sorgu
+      // planına göre oynayabilir).
+      for (const list of overdueByCari.values()) {
+        list.sort((a, b) => a.currency.localeCompare(b.currency));
+      }
+    }
+
     return {
       data: rows.map((r) => {
         const p = partyOf(r);
@@ -113,6 +154,8 @@ export class CariService {
           isActive: r.isActive,
           // Sıfır bakiyeli para birimi satırları gürültüdür; ekranda yer kaplar.
           balances: r.balances.filter((b) => !D(b.balance).isZero()),
+          // Alan yalnız İSTENDİĞİNDE var — bayraksız yanıt bugünküyle birebir.
+          ...(overdueByCari ? { overdue: overdueByCari.get(r.id) ?? [] } : {}),
         };
       }),
       pagination: { total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) },

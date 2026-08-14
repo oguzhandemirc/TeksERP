@@ -37,6 +37,7 @@ import {
   applyCariBalanceTx,
 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
+import { readFinanceDefaultVatRate } from "./system-setting.service";
 import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/finance-doc.html";
 import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";
 // D2 — kalem fiyatı ÇÖZÜM SIRASININ TEK KAYNAĞI. Sıra burada KOPYALANMAZ.
@@ -96,6 +97,12 @@ const LIST_SELECT = {
   externalNo: true,
   grandTotal: true,
   grandTotalTry: true,
+  // H1 (2026-08-14): kapama görünürlüğü. AÇIK/KISMİ/KAPALI liste yanıtında
+  // KOLON değil TÜRETMEDİR (payment-allocation.service başlığı: `paidTotal` ↔
+  // `grandTotal` karşılaştırması) — burada yalnız ham sayaç taşınır, durumu
+  // istemci türetir. İkinci bir durum alanı eklemek iki denormalize alanın
+  // ayrışması demekti.
+  paidTotal: true,
   confirmedAt: true,
   cancelledAt: true,
   createdAt: true,
@@ -383,6 +390,12 @@ export class InvoiceService {
       }
     }
 
+    // KDV oranı FİRMA PARAMETRESİNDEN (finance.defaultVatRate; kayıt yoksa 20 =
+    // eski hardcode, sıfır fark). Electron fatura formunun yeni satırı da aynı
+    // ayardan okur — oran iki yerde ayrı sürüklenmez. Yalnız ÖN-DOLUM: taslak
+    // satırında değiştirilebilir, `confirm` satır bazında geleni kullanır.
+    const defaultVatRate = await readFinanceDefaultVatRate();
+
     return this.createDraft(
       {
         type: InvoiceType.PURCHASE,
@@ -398,7 +411,7 @@ export class InvoiceService {
           qty: g.qty,
           unit: g.unit,
           unitPrice: g.unitPrice,
-          vatRate: 20,
+          vatRate: defaultVatRate,
         })),
       },
       userId,

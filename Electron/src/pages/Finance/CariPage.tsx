@@ -27,6 +27,10 @@ export function CariPage() {
         search: search || undefined,
         kind: kind || undefined,
         onlyWithBalance,
+        // "Gecikmiş" kolonu bu sayfanın parçası → daima istenir. Backend bunu
+        // yaşlandırma ÇEKİRDEĞİNDEN üretir (tek kaynak); eski backend bayrağı
+        // tanımazsa alan hiç gelmez ve kolon "—" basar (aşağıda opsiyonel okuma).
+        withOverdue: true,
       }),
   });
 
@@ -85,8 +89,11 @@ export function CariPage() {
                   <th className="px-3 py-2 text-left">Kod</th>
                   <th className="px-3 py-2 text-left">Ünvan</th>
                   <th className="px-3 py-2 text-left">Tür</th>
+                  {/* "Vade" (anlaşılan gün) ile "Gecikmiş" (vadesi geçmiş açık
+                      TUTAR) AYRI sorulardır — ikisi de kalır. */}
                   <th className="px-3 py-2 text-left">Vade</th>
                   <th className="px-3 py-2 text-right">Bakiye</th>
+                  <th className="px-3 py-2 text-right">Gecikmiş</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -133,6 +140,32 @@ export function CariPage() {
                               }
                             >
                               {money(b.balance, b.currency)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {/* Vadesi geçmiş AÇIK tutar — kaynağı yaşlandırma
+                          çekirdeğinin `overdueTotal`'ı (efektif vade + sanal
+                          FIFO mahsup DAHİL; Yaşlandırma raporuyla BİREBİR aynı
+                          rakam). İşaret bakiyeyle aynı: POZİTİF = bizim
+                          alacağımız gecikti (kırmızı), NEGATİF = bizim borcumuz
+                          gecikti (amber). Para birimleri AYRI satırlarda. */}
+                      {!c.overdue || c.overdue.length === 0 ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <div className="flex flex-col items-end gap-0.5">
+                          {c.overdue.map((o) => (
+                            <span
+                              key={o.currency}
+                              className={
+                                Number(o.amount) > 0
+                                  ? "font-medium text-destructive"
+                                  : "font-medium text-amber-600 dark:text-amber-400"
+                              }
+                            >
+                              {money(o.amount, o.currency)}
                             </span>
                           ))}
                         </div>

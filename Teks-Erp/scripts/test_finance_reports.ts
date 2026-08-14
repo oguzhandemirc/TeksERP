@@ -23,10 +23,28 @@
 //   §9  KASA DEFTERİ — üç yazar (tahsilat · kasa hareketi · çek COLLECT),
 //       devir hareketlerden türer, iptal İKİ satır, DEPOSIT deftere GİRMEZ
 //   §10 REJİM KAPISI — rapor uçları `requireFinanceEnabled` + `report:finance`
+//   §11 ⭐ TEK KAYNAK (H1+H2, 2026-08-14): cari LİSTESİNİN "Gecikmiş" toplamı
+//       = yaşlandırmanın `overdueTotal`'ı, AYNI fixture üzerinde BİREBİR
+//       (sanal FIFO mahsup + cari-vade-günü türetimi DAHİL — naif
+//       "grandTotal−paidTotal WHERE due<now" formülü burada KIRMIZI verir);
+//       fatura LIST_SELECT'i `paidTotal` taşır; bayraksız listede `overdue`
+//       alanı HİÇ yoktur + kaynak taraması (guard `params.withOverdue` içinde,
+//       cari.service kendi gecikme SQL'ini yazmaz, rapor da çekirdekten okur).
 //
 // KÖRLÜK ZEMİNİ: her bölümün başında "fixture gerçekten oluştu mu" kontrolü
 // vardır. Aksi halde "sapma bulunamadı" ile "hiçbir şeye bakılmadı" AYNI yeşile
 // çıkar — bu bekçinin en kolay kaybedilecek özelliği budur.
+//
+// NEGATİF SONDA (§11, 2026-08-14 — üçü de boz→ölç→geri yükle tek zincirde,
+// shasum ile birebir geri yükleme kanıtlandı):
+//   ① `cari.service` overdue eşlemesi `ar.overdueTotal` yerine `ar.openTotal`
+//      okuyacak şekilde bozuldu (formül ayrıştırma) → §11g + §11k kırmızı
+//      (liste=5100.00 aging=3400.00 — FIFO farkı yakalandı), exit 1.
+//   ② `if (params.withOverdue && ...)` kapısı kaldırıldı (koşulsuz çağrı) →
+//      §11l + §11n kırmızı, exit 1.
+//   ③ `invoice.service` LIST_SELECT'ten `paidTotal` düşürüldü → §11b + §11c
+//      kırmızı, exit 1. (İlk yazımda §11c Decimal("undefined") ile ÇÖKÜYOR ve
+//      Sonuç satırı basılmadan suite ölüyordu — `!= null` kapısı bu yüzden var.)
 // =============================================================================
 import fs from "fs";
 import path from "path";
@@ -38,6 +56,8 @@ import { cashTransactionService } from "../src/services/cash-transaction.service
 import { chequeService } from "../src/services/cheque.service";
 import { getAgingReport, bucketOfDaysOverdue, type AgingCariRow } from "../src/services/reports/finance-aging.report";
 import { getCashBookReport } from "../src/services/reports/cash-book.report";
+import { cariService } from "../src/services/cari.service";
+import { paymentAllocationService } from "../src/services/payment-allocation.service";
 
 let pass = 0;
 let fail = 0;
@@ -437,6 +457,119 @@ async function main(): Promise<void> {
       });
     }
   }
+
+  // ── §11 TEK KAYNAK: CARİ LİSTESİ "GECİKMİŞ" = AGING overdueTotal (H1+H2) ──
+  // Cari listesinin "Gecikmiş" kolonu yaşlandırmanın ÇEKİRDEĞİNDEN
+  // (`collectAgingRows`) okur — iki yüzey AYNI fixture üzerinde BİREBİR aynı
+  // rakamı basmak zorundadır. Fixture bilinçli olarak iki tuzağı da içerir:
+  //   • cariA: kapanmamış 400 TL tahsilat → SANAL FIFO mahsup gecikmişi
+  //     3800'den 3400'e düşürür (naif "grand−paid WHERE due<now" 3800 derdi);
+  //   • cariB: vade CARİ VADE GÜNÜNDEN türer + fazla tahsilat her şeyi kapatır
+  //     → gecikmiş 0 (naif formül 700 derdi — vade türetimi + FIFO ikisi birden).
+  // Formül tek tarafta değişirse (sonda ①) eşitlik burada kırmızı verir.
+
+  // H1 fixture'ı: GERÇEK bir kapama — LIST_SELECT'in `paidTotal` taşıdığını
+  // sıfırdan farklı bir değerle kanıtlar (0, "alan var" ile "alan yok"u ayırt
+  // edemezdi). Allocation deftere satır yazmadığı için §9 kasa beklentilerine
+  // dokunmaz.
+  await paymentAllocationService.allocate({ invoiceId: invB1.data.id, paymentId: payB.data.id, amount: 300 });
+  const invList = await invoiceService.list({ cariId: cariB, pageSize: 50 });
+  const invB1Row = invList.data.find((r) => r.id === invB1.data.id);
+  check("§11a KÖRLÜK ZEMİNİ: fatura listesi invB1'i döndü", Boolean(invB1Row), invB1Row?.docNo ?? "YOK");
+  check(
+    "§11b Fatura listesi `paidTotal` taşıyor (H1 — rozet türetiminin ham girdisi)",
+    invB1Row !== undefined && "paidTotal" in invB1Row && invB1Row.paidTotal !== undefined,
+  );
+  // ⚠️ `paidTotal != null` kapısı ÇÖKMEYE karşı: alan LIST_SELECT'ten
+  // düşürülürse Decimal("undefined") fırlatır ve suite Sonuç satırı basılmadan
+  // ölürdü — kırmızı yerine yarım koşum (negatif sonda ③'te ölçüldü).
+  check(
+    "§11c paidTotal gerçek kapamayı yansıtıyor (300)",
+    invB1Row?.paidTotal != null && new Prisma.Decimal(String(invB1Row.paidTotal)).toFixed(2) === "300.00",
+    invB1Row ? String(invB1Row.paidTotal) : "—",
+  );
+  check(
+    "§11d dueDate + grandTotal da listede (türetim için üçü birlikte gerekli)",
+    invB1Row !== undefined && "dueDate" in invB1Row && "grandTotal" in invB1Row,
+  );
+
+  // ── EŞİTLİK: iki yüzey aynı anda okunur (arada fixture değişmez) ──────────
+  const clOn = await cariService.list({ search: TAG, pageSize: 200, withOverdue: true });
+  const repFinal = await getAgingReport({ asOf: new Date() });
+  const agingFinal = allRows(repFinal.blocks);
+  check("§11e KÖRLÜK ZEMİNİ: bayraklı liste fixture carilerini döndü", clOn.data.length >= 4, `satır=${clOn.data.length}`);
+  check(
+    "§11f KÖRLÜK ZEMİNİ: en az bir caride gecikmiş tutar VAR (yoksa eşitlik vakumen yeşil)",
+    clOn.data.some((r) => (r.overdue ?? []).length > 0),
+  );
+
+  const listOverdueOf = (cariId: string, cur: string): string | null =>
+    clOn.data.find((r) => r.id === cariId)?.overdue?.find((o) => o.currency === cur)?.amount ?? null;
+
+  check("§11g ⭐ cariA/TRY: liste = aging = 3400 (FIFO mahsup DAHİL; naif formül 3800 derdi)",
+    listOverdueOf(cariA, "TRY") === "3400.00" && rowOf(agingFinal, cariA)?.overdueTotal === "3400.00",
+    `liste=${listOverdueOf(cariA, "TRY")} aging=${rowOf(agingFinal, cariA)?.overdueTotal}`,
+  );
+  check(
+    "§11h cariA/USD: para birimi AYRI satır — liste = aging = 250",
+    listOverdueOf(cariA, "USD") === "250.00" && rowOf(agingFinal, cariA, "USD")?.overdueTotal === "250.00",
+    `liste=${listOverdueOf(cariA, "USD")} aging=${rowOf(agingFinal, cariA, "USD")?.overdueTotal}`,
+  );
+  check(
+    "§11i cariB: vade türetimi + FIFO her şeyi kapattı → listede gecikmiş YOK (naif formül 700 derdi)",
+    (clOn.data.find((r) => r.id === cariB)?.overdue ?? []).length === 0 &&
+      rowOf(agingFinal, cariB)?.overdueTotal === "0.00",
+    `liste=${JSON.stringify(clOn.data.find((r) => r.id === cariB)?.overdue)} aging=${rowOf(agingFinal, cariB)?.overdueTotal}`,
+  );
+  check(
+    "§11j cariC: karşılıksız çek sonrası gecikmiş yeniden AÇIK — liste = aging = 1000",
+    listOverdueOf(cariC, "TRY") === "1000.00" && rowOf(agingFinal, cariC)?.overdueTotal === "1000.00",
+    `liste=${listOverdueOf(cariC, "TRY")} aging=${rowOf(agingFinal, cariC)?.overdueTotal}`,
+  );
+  // Genel tarama — İKİ YÖN: listenin bastığı her tutar aging'de birebir var VE
+  // aging'in sıfır-dışı her satırı listede var (tek yön, eksik satırı kaçırır).
+  {
+    let diff = 0;
+    for (const row of clOn.data) {
+      const expected = agingFinal.filter(
+        (r) => r.cariId === row.id && !new Prisma.Decimal(r.overdueTotal).isZero(),
+      );
+      const got = row.overdue ?? [];
+      if (got.length !== expected.length) diff++;
+      for (const o of got) {
+        const m = expected.find((r) => r.currency === o.currency);
+        if (!m || m.overdueTotal !== o.amount) diff++;
+      }
+    }
+    check("§11k ⭐ TÜM fixture satırlarında liste ↔ aging birebir (iki yönlü)", diff === 0, `fark=${diff}`);
+  }
+
+  // ── BAYRAKSIZ YOL BAYT-BAYT: `overdue` alanı HİÇ yok + ek sorgu koşmaz ────
+  const clOff = await cariService.list({ search: TAG, pageSize: 200 });
+  check(
+    "§11l Bayraksız listede `overdue` alanı HİÇ YOK (boş dizi bile değil)",
+    clOff.data.length > 0 && clOff.data.every((r) => !("overdue" in r)),
+  );
+  // Kaynak taraması (ek-sorgu-yok garantisinin mekanik hâli): çağrı bayrak
+  // kapısının içinde ve cari.service kendi gecikme formülünü YAZMIYOR.
+  const cariSrc = fs.readFileSync(path.resolve(__dirname, "../src/services/cari.service.ts"), "utf8");
+  check("§11m Tek kaynak: cari listesi collectAgingRows çağırıyor", cariSrc.includes("collectAgingRows({"));
+  check(
+    "§11n Çağrı `params.withOverdue` kapısının İÇİNDE (bayraksız yol ek sorgu koşmaz)",
+    /if \(params\.withOverdue && rows\.length > 0\) \{\s*\n\s*const agingRows = await collectAgingRows\(/.test(cariSrc),
+  );
+  check(
+    "§11o cari.service KENDİ gecikme SQL'ini/formülünü yazmıyor (ikinci formül yasak)",
+    !/daysOverdue|d90plus|effectiveDue|payment_allocations/.test(cariSrc),
+  );
+  const agingSrc = fs.readFileSync(
+    path.resolve(__dirname, "../src/services/reports/finance-aging.report.ts"),
+    "utf8",
+  );
+  check(
+    "§11p Rapor da AYNI çekirdekten okuyor (getAgingReport → collectAgingRows)",
+    /const rows = await collectAgingRows\(params\);/.test(agingSrc),
+  );
 
   // ── §9 KASA DEFTERİ ───────────────────────────────────────────────────────
   const book = await getCashBookReport({

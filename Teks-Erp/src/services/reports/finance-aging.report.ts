@@ -68,6 +68,14 @@
 // ⚠️ TUTARLAR JSON'A **STRING** OLARAK ÇIKAR (2 hane). Para `number`'a
 // çevrilirse 1234.56 + 0.1 gibi toplamlar 1234.6600000000001 üretir ve muhasebe
 // ekranında "1 kuruş tutmuyor" olarak görünür. Gün/adet alanları `number`.
+//
+// ── ÇEKİRDEK PAYLAŞILIR: `collectAgingRows` (H2, 2026-08-14) ─────────────────
+// Cari LİSTESİNİN "Gecikmiş" kolonu da AYNI çekirdekten okur
+// (`cari.service.list({ withOverdue })` → `collectAgingRows` → `overdueTotal`).
+// Efektif vade + açık tutar + sanal FIFO mahsup kuralını burada değiştirirsen
+// iki yüzey BİRLİKTE değişir; kuralı cari listesi için ayrıca yazmak YASAK —
+// iki formül bir gün ayrışır ve aynı cariye iki farklı "gecikmiş" rakamı
+// basılır (bekçi: `test_finance_reports` §11 eşitliği fixture üzerinde ölçer).
 // =============================================================================
 
 import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
@@ -294,12 +302,34 @@ function signOfInvoiceType(type: string): number {
   return invoiceLedgerSide(type as InvoiceType) === "debit" ? 1 : -1;
 }
 
-export async function getAgingReport(params: AgingParams): Promise<AgingReport> {
+/** `collectAgingRows` girdisi — rapor parametreleri + liste yüzeyinin sayfa kümesi. */
+export interface AgingRowsParams extends AgingParams {
+  /**
+   * Yalnız bu carilerin satırları (cari LİSTESİ sayfası için). `cariId` ile
+   * birlikte verilirse tekil filtre kazanır. Boş dizi → boş sonuç (sorgu
+   * koşmaz — `IN ()` sözdizimi de zaten geçersizdir).
+   */
+  cariIds?: string[];
+}
+
+/**
+ * YAŞLANDIRMANIN ÇEKİRDEĞİ — cari×para-birimi satırlarını üretir.
+ *
+ * `getAgingReport` (blok/kur/mutabakat zarfı) ve `cari.service.list`'in
+ * "Gecikmiş" kolonu (yalnız `overdueTotal`) AYNI bu fonksiyondan okur.
+ * İkinci bir formül yazmak yasak — dosya başlığındaki not.
+ */
+export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCariRow[]> {
   const asOf = params.asOf;
+  if (params.cariIds && params.cariIds.length === 0) return [];
 
   // Filtreler HER sorguya aynı şekilde uygulanır — biri kesilip diğeri
   // kesilmezse mutabakat "fark" raporlar ve fark UYDURMADIR.
-  const fCari = params.cariId ? Prisma.sql`AND ca.id = ${params.cariId}::uuid` : Prisma.empty;
+  const fCari = params.cariId
+    ? Prisma.sql`AND ca.id = ${params.cariId}::uuid`
+    : params.cariIds && params.cariIds.length > 0
+      ? Prisma.sql`AND ca.id IN (${Prisma.join(params.cariIds.map((id) => Prisma.sql`${id}::uuid`))})`
+      : Prisma.empty;
   const fKind = params.kind ? Prisma.sql`AND ca.kind::text = ${params.kind}` : Prisma.empty;
   const fCurInv = params.currency ? Prisma.sql`AND i.currency::text = ${params.currency}` : Prisma.empty;
   const fCurPay = params.currency ? Prisma.sql`AND p.currency::text = ${params.currency}` : Prisma.empty;
@@ -322,7 +352,7 @@ export async function getAgingReport(params: AgingParams): Promise<AgingReport> 
         FROM payment_allocations WHERE "createdAt" > ${asOf} GROUP BY 1
     ) al ON al."invoiceId" = i.id`;
 
-  const [cariRows, invoiceRows, invoiceAgg, paymentAgg, ledgerRows, balanceRows, chequeAlloc, rateRows] =
+  const [cariRows, invoiceRows, invoiceAgg, paymentAgg, ledgerRows, balanceRows, chequeAlloc] =
     await Promise.all([
       prisma.$queryRaw<CariRow[]>(Prisma.sql`
         SELECT ca.id, ca.kind::text AS kind, ca."paymentTermDays",
@@ -431,14 +461,6 @@ export async function getAgingReport(params: AgingParams): Promise<AgingReport> 
           JOIN cari_accounts ca ON ca.id = i."cariId"
          WHERE pa."chequeId" IS NOT NULL AND pa."createdAt" <= ${asOf} ${fCari} ${fKind} ${fCurInv}
          GROUP BY 1, 2
-      `),
-
-      // Rapor GÜNÜ kuru — kesitin fabrika takvim gününe göre.
-      prisma.$queryRaw<RateRow[]>(Prisma.sql`
-        SELECT DISTINCT ON (currency) currency::text AS currency, rate::text AS rate, "rateDate" AS "rateDate"
-          FROM exchange_rates
-         WHERE "rateDate" <= ${factoryDayKeyUtcMidnight(asOf)}
-         ORDER BY currency, "rateDate" DESC
       `),
     ]);
 
@@ -675,6 +697,24 @@ export async function getAgingReport(params: AgingParams): Promise<AgingReport> 
       ...(params.includeDetail ? { items: a.items.map((e) => e.item) } : {}),
     });
   }
+
+  return rows;
+}
+
+export async function getAgingReport(params: AgingParams): Promise<AgingReport> {
+  const asOf = params.asOf;
+
+  // Satırlar TEK çekirdekten (yukarı bak) — burada yalnız zarf kurulur:
+  // para birimi blokları, rapor günü kuru, mutabakat sayaçları, dipnotlar.
+  const rows = await collectAgingRows(params);
+
+  // Rapor GÜNÜ kuru — kesitin fabrika takvim gününe göre.
+  const rateRows = await prisma.$queryRaw<RateRow[]>(Prisma.sql`
+    SELECT DISTINCT ON (currency) currency::text AS currency, rate::text AS rate, "rateDate" AS "rateDate"
+      FROM exchange_rates
+     WHERE "rateDate" <= ${factoryDayKeyUtcMidnight(asOf)}
+     ORDER BY currency, "rateDate" DESC
+  `);
 
   // ── PARA BİRİMİ BLOKLARI ───────────────────────────────────────────────────
   const rateByCurrency = new Map(rateRows.map((r) => [r.currency, r]));

@@ -3,6 +3,10 @@
 // İÇERMEZ. Öneksiz yol 404 alır ve çağıran hatayı yutarsa ekran "boş liste"
 // gösterir (2026-08-12'de FilterBar lookup'larında tam bu yaşandı).
 import apiClient from "@/services/apiClient";
+// H1 (2026-08-14): gecikme yüklemi + kuruş aritmetiği TEK kaynaktan — kapama
+// ekranının saf katmanı. Buraya kopyalamak, "aynı fatura kapama ekranında
+// gecikmiş, listede değil" tutarsızlığının kapısını açardı.
+import { isOverdue, toKurus } from "./Allocations/allocationMath";
 
 export type Currency = "TRY" | "USD" | "EUR" | "GBP" | "RUB";
 export type InvoiceType = "SALES" | "PURCHASE" | "SALES_RETURN" | "PURCHASE_RETURN";
@@ -37,6 +41,11 @@ export interface CariRow {
   notes: string | null;
   isActive: boolean;
   balances: Array<{ currency: Currency; balance: number }>;
+  /** Vadesi geçmiş AÇIK tutar, para birimi bazında (H2). YALNIZ `withOverdue`
+   *  ile istenince gelir; eski backend'de hiç gelmez → alan OPSİYONEL okunur.
+   *  ⚠️ Tutar STRING'tir ("3400.00") — yaşlandırma raporu para hassasiyeti için
+   *  string basar ve `money()` string kabul eder; `Number()`a çevirip toplama. */
+  overdue?: Array<{ currency: Currency; amount: string }>;
 }
 
 export interface InvoiceRow {
@@ -51,6 +60,10 @@ export interface InvoiceRow {
   externalNo: string | null;
   grandTotal: number;
   grandTotalTry: number;
+  /** Kapamalarla kapanan tutar (denormalize sayaç). AÇIK/KISMİ/KAPALI bir kolon
+   *  DEĞİLDİR — `settlementOf` ile `grandTotal`'dan TÜRETİLİR (backend
+   *  payment-allocation.service başlığındaki kural). */
+  paidTotal: number;
   confirmedAt: string | null;
   cancelledAt: string | null;
   cari: {
@@ -145,6 +158,54 @@ export function money(value: number | string | null | undefined, currency: Curre
   return `${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${CURRENCY_SYMBOL[currency]}`;
 }
 
+// -----------------------------------------------------------------------------
+// KAPAMA TÜRETİMİ (H1) — saf fonksiyon, tek kaynak
+// -----------------------------------------------------------------------------
+
+export type SettlementState = "ACIK" | "KISMI" | "KAPALI";
+
+export interface Settlement {
+  state: SettlementState;
+  /** Kuruş (tam sayı) — gösterime `fromKurus` ile çevrilir. */
+  paidK: number;
+  openK: number;
+  /** Vadesi geçti VE hâlâ açık tutar var. Tam kapanmış faturada DAİMA false. */
+  overdue: boolean;
+}
+
+/**
+ * AÇIK/KISMİ/KAPALI + gecikme — fatura LİSTESİ rozetlerinin tek kaynağı.
+ *
+ * ⚠️ Durum bir KOLON değildir: backend `payment-allocation.service` başlığı
+ * gereği `paidTotal` ↔ `grandTotal` karşılaştırmasıyla TÜRETİLİR (ikinci bir
+ * denormalize alan bir gün ayrışırdı). Karşılaştırma KURUŞTA yapılır — float
+ * toplamı "1 kuruş açık kaldı" diye KISMİ basardı (`allocationMath` gerekçesi).
+ *
+ * ⚠️ YALNIZ CONFIRMED faturada anlamlı → diğer statülerde `null`:
+ *   • DRAFT deftere hiç işlemedi — "AÇIK" rozeti var olmayan bir alacağı ima eder.
+ *   • CANCELLED'da kapamalar iptalde çözülür (`releaseAllocationsForInvoiceTx`)
+ *     — rozet basmak "iptal ama tahsil edilmemiş" gibi okunurdu.
+ * Gecikme rozeti de aynı kapıdan geçer: `overdue` yalnız açık tutar varken true
+ * (tam kapalı faturaya "vadesi geçti" basmak çözülmüş bir sorunu ihbar eder);
+ * vadesiz faturada `isOverdue(null)` zaten false döner.
+ */
+export function settlementOf(
+  inv: Pick<InvoiceRow, "status" | "grandTotal" | "paidTotal" | "dueDate">,
+): Settlement | null {
+  if (inv.status !== "CONFIRMED") return null;
+  const grandK = toKurus(inv.grandTotal);
+  const paidK = toKurus(inv.paidTotal);
+  const openK = Math.max(0, grandK - paidK);
+  const state: SettlementState = openK <= 0 ? "KAPALI" : paidK <= 0 ? "ACIK" : "KISMI";
+  return { state, paidK, openK, overdue: openK > 0 && isOverdue(inv.dueDate) };
+}
+
+export const SETTLEMENT_LABEL: Record<SettlementState, string> = {
+  ACIK: "Açık",
+  KISMI: "Kısmi",
+  KAPALI: "Kapalı",
+};
+
 type Paged<T> = { data: T[]; pagination: { total: number; totalPages: number } };
 
 export async function listCari(params: {
@@ -153,6 +214,9 @@ export async function listCari(params: {
   search?: string;
   kind?: string;
   onlyWithBalance?: boolean;
+  /** Vadesi geçmiş açık tutarları da iste (H2) — backend bayraksız istekte
+   *  ek sorgu koşmaz, yanıtta `overdue` alanı hiç olmaz. */
+  withOverdue?: boolean;
 }): Promise<Paged<CariRow>> {
   const res = await apiClient.get("/api/finance/cari", { params });
   return res.data;

@@ -17,15 +17,28 @@ import {
   deleteInvoice,
   money,
   partyName,
+  settlementOf,
+  SETTLEMENT_LABEL,
   INVOICE_TYPE_LABEL,
   type InvoiceRow,
+  type SettlementState,
 } from "./service";
+// Kuruş → tutar yalnız GÖSTERİM anında (allocationMath sözleşmesi).
+import { fromKurus } from "./Allocations/allocationMath";
 import { InvoiceFormDialog } from "./InvoiceFormDialog";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "Taslak", cls: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
   CONFIRMED: { label: "Onaylı", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
   CANCELLED: { label: "İptal", cls: "bg-muted text-muted-foreground line-through" },
+};
+
+/** Kapama rozeti renkleri — durum rozetinden AYRI soru: "belge ne durumda" ≠
+ *  "parası geldi mi". AÇIK amber (bekleyen alacak), KISMİ mavi, KAPALI yeşil. */
+const SETTLEMENT_BADGE: Record<SettlementState, string> = {
+  ACIK: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  KISMI: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
+  KAPALI: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
 };
 
 export function InvoicesPage() {
@@ -144,12 +157,16 @@ export function InvoicesPage() {
                   <th className="px-3 py-2 text-left">Tarih</th>
                   <th className="px-3 py-2 text-left">Durum</th>
                   <th className="px-3 py-2 text-right">Tutar</th>
+                  <th className="px-3 py-2 text-right">Kapanan / Açık</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((inv) => {
                   const badge = STATUS_BADGE[inv.status];
+                  // Kapama TÜRETİLİR (kolon değil) ve yalnız CONFIRMED'da
+                  // anlamlıdır — kural + gerekçe `settlementOf` başlığında.
+                  const st = settlementOf(inv);
                   return (
                     <tr key={inv.id} className={`border-t ${inv.status === "CANCELLED" ? "opacity-60" : ""}`}>
                       <td className="px-3 py-2 font-mono text-xs">{inv.docNo}</td>
@@ -169,6 +186,32 @@ export function InvoicesPage() {
                           <div className="text-xs text-muted-foreground">
                             ≈ {money(inv.grandTotalTry, "TRY")}
                           </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {st ? (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <div className="flex items-center gap-1">
+                              {/* Gecikme rozeti yalnız AÇIK tutar varken —
+                                  kapalı/taslak/iptal faturada basılmaz
+                                  (settlementOf bunu zaten garanti eder). */}
+                              {st.overdue && (
+                                <Badge className="bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200">
+                                  Vadesi geçti
+                                </Badge>
+                              )}
+                              <Badge className={SETTLEMENT_BADGE[st.state]}>
+                                {SETTLEMENT_LABEL[st.state]}
+                              </Badge>
+                            </div>
+                            <span className="whitespace-nowrap text-xs text-muted-foreground">
+                              {money(fromKurus(st.paidK), inv.currency)} / {money(fromKurus(st.openK), inv.currency)}
+                            </span>
+                          </div>
+                        ) : (
+                          // Taslak/iptalde kapama sorusu YOKTUR — boş bırakmak
+                          // değil, "soru yok" demek ("—").
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">

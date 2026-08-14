@@ -70,6 +70,9 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       kind: q.kind === "CUSTOMER" || q.kind === "SUBCONTRACTOR" ? q.kind : undefined,
       isActive: q.isActive === undefined ? undefined : q.isActive === "true",
       onlyWithBalance: q.onlyWithBalance === "true",
+      // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek
+      // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
+      withOverdue: q.withOverdue === "true",
     });
     res.json({ success: true, ...result });
   } catch (e) {
