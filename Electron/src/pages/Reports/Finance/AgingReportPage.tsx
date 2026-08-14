@@ -215,7 +215,8 @@ export function AgingReportPage() {
             storedComparable={storedComparable}
             onOpenDetail={setDetailRow}
             onOpenStatement={(r) =>
-              setStatementTarget({ cariId: r.cariId, name: r.name, currency: r.currency })
+              // `code`: ekstre dosyasının kapağında cari kodu da yazsın (H3 dikişi).
+              setStatementTarget({ cariId: r.cariId, name: r.name, code: r.code, currency: r.currency })
             }
           />
         ))

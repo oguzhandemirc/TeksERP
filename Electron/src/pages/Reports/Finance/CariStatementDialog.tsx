@@ -28,9 +28,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ReportExportBar } from "../_components";
 import { fmtDate } from "../_components/formatters";
 import { formatDayKey } from "../../Finance/PeriodClose/service";
 import { ReportErrorCard } from "./ReportErrorCard";
+import { buildStatementExport } from "./statementExport";
 import {
   CARI_TXN_SOURCE_LABEL,
   dayEndIso,
@@ -48,6 +50,13 @@ export interface StatementTarget {
   cariId: string;
   name: string;
   currency: Currency;
+  /**
+   * Cari kodu — YALNIZ dışa aktarılan dosyanın kapağında kullanılır (ekran
+   * başlığı adı basıyor). OPSİYONEL: bugün çağıran (`AgingReportPage`) geçmiyor,
+   * geçmediğinde dosyada da basılmaz — uydurulmaz. Yaşlandırma satırı kodu zaten
+   * taşıyor; tek satırlık dikiş için `statementExport.ts` sonundaki nota bak.
+   */
+  code?: string | null;
 }
 
 interface Props {
@@ -88,6 +97,29 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
   });
 
   const data = q.data?.data;
+
+  // Dışa aktarım spec'i TIKLANDIĞINDA kurulur (bkz. `ReportExportBar` gerekçesi).
+  // ⚠️ Veri EKRANDAKİ sorgudan okunur — yeni istek atılmaz: dosyanın rakamı
+  // ekrandaki rakamdan farklı çıkamaz, çünkü ikisi aynı yanıttan gelir.
+  const spec = useMemo(
+    () => () =>
+      target && data
+        ? buildStatementExport({
+            cariName: target.name,
+            cariCode: target.code ?? null,
+            currency: activeCurrency,
+            fromYmd: from,
+            toYmd: to,
+            opening: data.opening,
+            closing: data.closing,
+            totalDebit: data.totalDebit,
+            totalCredit: data.totalCredit,
+            carriedFrom: data.carriedFrom ?? null,
+            rows: data.rows,
+          })
+        : null,
+    [target, data, activeCurrency, from, to],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -140,6 +172,12 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
               min={from || undefined}
               onChange={(e) => setTo(e.target.value)}
             />
+          </div>
+          {/* ⚠️ `disabled={!data}` — veri yokken (yükleniyor / hata / boş yanıt)
+              düğmeler iş yapmaz. Boş bir Excel indirmek hiç indirmemekten
+              KÖTÜDÜR: kullanıcı onu "bu carinin hareketi yok" diye okur. */}
+          <div className="ml-auto">
+            <ReportExportBar disabled={!data} buildSpec={spec} />
           </div>
         </div>
 

@@ -76,10 +76,9 @@ export interface ChequeRow {
   amountTry: DecimalLike;
   /**
    * İŞLEM tarihi — defterin/belge numarasının/kurun çıpası (SINIF 1, 2026-08-14).
-   * ⚠️ Liste ucu bu alanı HENÜZ dönmüyor (backend `list` select'inde yok) —
-   * tablo alan boşsa yalnız keşideyi basar; detay ucu her zaman döner
-   * (`ChequeDetail` zorunlu kılar). Backend select'e eklendiği gün ekranda
-   * kendiliğinden görünür.
+   * Liste ucu da dönüyor (backend `list` select'ine aynı gün eklendi — eski
+   * "HENÜZ dönmüyor" notu bayattı); tip yine OPSİYONEL kalır: eski backend'e
+   * karşı tablo yalnız keşideyi basar, "—" uydurmaz.
    */
   postingDate?: string;
   /** KEŞİDE tarihi — kâğıdın üzerindeki tarih (hukuki veri); defteri ETKİLEMEZ. */

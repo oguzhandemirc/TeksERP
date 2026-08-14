@@ -20,6 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
+import { ReportExportBar } from "@/pages/Reports/_components";
+import { buildStatementExport } from "@/pages/Reports/Finance/statementExport";
 import { OpeningBalanceDialog } from "./OpeningBalanceDialog";
 import { formatDayKey } from "./PeriodClose/service";
 import { findActiveDevirRowId } from "./statementDevir";
@@ -120,6 +122,30 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
   // Alan gelmiyorsa (mühürsüz cari / eski backend) not basılmaz — görünüm birebir.
   const carriedFrom = q.data?.carriedFrom ?? null;
 
+  // DIŞA AKTARIM — spec TIKLANDIĞINDA kurulur ve EKRANDAKİ yanıttan beslenir
+  // (yeni istek YOK): dosyadaki rakam ekrandakinden farklı çıkamaz. Kolon kümesi
+  // rapor yüzeyindeki ekstreyle BİREBİR aynıdır — aynı başlıklı iki dosyanın
+  // farklı içerik taşımaması için (gerekçe + bekçi: `Reports/Finance/statementExport.ts`).
+  const spec = useMemo(
+    () => () =>
+      q.data
+        ? buildStatementExport({
+            cariName: cari.name,
+            cariCode: cari.code,
+            currency,
+            fromYmd: from,
+            toYmd: to,
+            opening: q.data.opening,
+            closing: q.data.closing,
+            totalDebit: q.data.totalDebit,
+            totalCredit: q.data.totalCredit,
+            carriedFrom: q.data.carriedFrom ?? null,
+            rows: q.data.rows,
+          })
+        : null,
+    [q.data, cari.name, cari.code, currency, from, to],
+  );
+
   const cancelM = useMutation({
     mutationFn: (input: { reason: string }) =>
       cancelOpeningBalance({ cariId: cari.id, currency, reason: input.reason }),
@@ -178,6 +204,13 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
             <div>
               <Label className="text-xs">Bitiş</Label>
               <Input type="date" className="mt-1" value={to} onChange={(e) => setTo(e.target.value)} />
+            </div>
+            {/* Dışa aktarım — izin kapısı YOK: ekranı açabilen kişi zaten bu
+                rakamları görüyor, dosya yalnız aynı görünümü taşınabilir hâle
+                getirir. Veri yokken düğmeler iş yapmaz (boş Excel "hareket yok"
+                diye okunur). */}
+            <div className="ml-auto">
+              <ReportExportBar disabled={!q.data} buildSpec={spec} />
             </div>
             {/* Devir GİRİŞİ — stornonun ("Devri İptal Et") giriş ayağı, aynı
                 izin kapısı. Aktif devir varken de ÇİZİLİR: gizlemek "neden

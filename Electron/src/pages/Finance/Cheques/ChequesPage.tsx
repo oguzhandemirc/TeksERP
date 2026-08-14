@@ -27,13 +27,15 @@
 // GÖRÜNÜMÜDÜR ve aynı bilgi cari ekstresinde zaten görünüyor — ikinci bir izne
 // kapamak aynı veriyi bir ekranda var, bir ekranda yok yapardı).
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { ReportExportBar } from "@/pages/Reports/_components";
+import { buildChequeExport } from "./chequeExport";
 import { getChequeSummary, listCheques, type ChequeKind, type ChequeRow, type ChequeStatus } from "./service";
 import { ChequeSummaryCards } from "./ChequeSummaryCards";
 import { ChequeTable } from "./ChequeTable";
@@ -103,24 +105,42 @@ export function ChequesPage() {
     setFormOpen(true);
   };
 
+  // DIŞA AKTARIM — spec TIKLANDIĞINDA kurulur ve EKRANDAKİ satırlardan beslenir
+  // (yeni istek YOK): dosyadaki liste, ekrandaki listeden farklı olamaz. Aktif
+  // süzgeçler dosyanın kapağına yazılır — varsayılan "canlı olanlar" da bir
+  // süzgeçtir ve söylenmezse dosya tam portföy sanılır (bkz. `chequeExport.ts`).
+  const spec = useMemo(
+    () => () => (rows.length > 0 ? buildChequeExport({ rows, filters, total }) : null),
+    [rows, filters, total],
+  );
+
   return (
     <PageShell>
       <PageHeader
         title="Çek / Senet Portföyü"
         description="Alınan çek kaydedildiği AN carinin borcunu azaltır; tahsil edildiğinde kasa/banka bakiyesi artar. Her adım defterde iz bırakır."
         actions={
-          <PermissionGate permission="finance:cheque">
-            <div className="flex gap-2">
-              <Button onClick={() => openForm("RECEIVED")}>
-                <Plus className="mr-1 h-4 w-4" />
-                Çek Girişi
-              </Button>
-              <Button variant="outline" onClick={() => openForm("ISSUED")}>
-                <Plus className="mr-1 h-4 w-4" />
-                Çek Çıkışı
-              </Button>
-            </div>
-          </PermissionGate>
+          <div className="flex items-center gap-2">
+            {/* Dışa aktarım YAZMA İZNİ İSTEMEZ (`finance:cheque` gate'inin
+                DIŞINDA): dosya, ekranı zaten açabilen kişinin gördüğü listenin
+                taşınabilir hâlidir — okuma ile yazmayı aynı kapıya bağlamak,
+                portföyü görebilen ama çek işleyemeyen kullanıcıyı (muhasebe)
+                dosyasız bırakırdı. Liste boşken/hata varken düğmeler iş yapmaz:
+                boş bir Excel "portföy boş" diye okunur ve bu bir YALAN olur. */}
+            <ReportExportBar disabled={rows.length === 0} buildSpec={spec} />
+            <PermissionGate permission="finance:cheque">
+              <div className="flex gap-2">
+                <Button onClick={() => openForm("RECEIVED")}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Çek Girişi
+                </Button>
+                <Button variant="outline" onClick={() => openForm("ISSUED")}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Çek Çıkışı
+                </Button>
+              </div>
+            </PermissionGate>
+          </div>
         }
       />
 

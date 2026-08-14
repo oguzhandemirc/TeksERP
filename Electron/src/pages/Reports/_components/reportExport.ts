@@ -45,6 +45,10 @@ export interface ReportExportSpec {
   subtitle?: string;
   /** Başlığın altındaki bağlam satırları (karşılaştırma dönemi, kapsam uyarısı…). */
   meta?: string[];
+  /** PDF/Yazdır sayfa yönü. Verilmezse `portrait` — mevcut çıktı bayt-bayt
+   *  korunur. Çok kolonlu tablolar (örn. 18 kolonlu çek portföyü) `landscape`
+   *  ister; Excel tarafını ETKİLEMEZ. */
+  orientation?: "portrait" | "landscape";
   tables: ReportTableSpec[];
 }
 
@@ -67,6 +71,21 @@ export function toSheets(spec: ReportExportSpec): SheetSpec[] {
 }
 
 // ---------- PDF / Yazdır -----------------------------------------------------
+
+/**
+ * `numFmt` taşıyan kolonun PDF/Yazdır hücresi tr-TR ile biçimlenir (2026-08-14
+ * H3 dikişi). Eskiden ham `String(v)` basılıyordu → "12500.5" (binliksiz, nokta
+ * ondalıklı) — Excel hücresi doğruyken kâğıt çıktısı çıplaktı. Ondalık hane
+ * sayısı `numFmt`ten okunur ("#,##0.00" → 2, "#,##0" → 0). Sayı OLMAYAN değer
+ * (boş hücre, metin) aynen geçer — "—" veya "" sayıya zorlanmaz.
+ */
+const fmtCell = (v: unknown, numFmt?: string): string => {
+  if (numFmt === undefined || v === null || v === undefined || v === "") return String(v ?? "");
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  const decimals = /\.([0#]+)/.exec(numFmt)?.[1]?.length ?? 0;
+  return n.toLocaleString("tr-TR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+};
 
 const esc = (v: unknown): string =>
   String(v ?? "")
@@ -98,7 +117,7 @@ export function buildReportHtml(spec: ReportExportSpec): string {
             `<tr>${t.columns
               .map(
                 (c) =>
-                  `<td style="text-align:${c.align === "right" ? "right" : "left"}">${esc(r[c.key])}</td>`,
+                  `<td style="text-align:${c.align === "right" ? "right" : "left"}">${esc(fmtCell(r[c.key], c.numFmt))}</td>`,
               )
               .join("")}</tr>`,
         )
@@ -107,7 +126,7 @@ export function buildReportHtml(spec: ReportExportSpec): string {
         ? `<tr class="tot">${t.columns
             .map(
               (c) =>
-                `<td style="text-align:${c.align === "right" ? "right" : "left"}">${esc(t.totalRow?.[c.key])}</td>`,
+                `<td style="text-align:${c.align === "right" ? "right" : "left"}">${esc(fmtCell(t.totalRow?.[c.key], c.numFmt))}</td>`,
             )
             .join("")}</tr>`
         : "";
@@ -125,7 +144,7 @@ export function buildReportHtml(spec: ReportExportSpec): string {
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <title>${esc(spec.title)}</title>
 <style>
-  @page { size: A4 portrait; margin: 14mm 12mm; }
+  @page { size: A4 ${spec.orientation === "landscape" ? "landscape" : "portrait"}; margin: 14mm 12mm; }
   * { box-sizing: border-box; }
   body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; color: #111; margin: 0; font-size: 11px; }
   h1 { font-size: 17px; margin: 0 0 2px; }
