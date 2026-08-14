@@ -39,6 +39,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 const TAG = `TEST-GRI-${Date.now()}`;
+const startedAt = Date.now();
+let createdRateId: string | null = null;
 const receiptIds: string[] = [];
 const invoiceIds: string[] = [];
 const cariIds: string[] = [];
@@ -92,6 +94,26 @@ async function main(): Promise<void> {
   );
   const receipt = created.data as { id: string; receiptNo: string };
   receiptIds.push(receipt.id);
+
+  // ⚠️ KUR FİXTURE'I TESTİN KENDİSİNE AİT. Bekçi ilk yazımda ortamda BUGÜNE
+  // ait bir USD kuru bulunmasına güveniyordu (CLAUDE.md'nin açıkça yasakladığı
+  // "ortamdaki veriye bağımlı olma" hatası): yazıldığı gün geçti, ertesi gün
+  // `resolveExchangeRate` null döndü ve fatura onayı 400 verdi. Ürün davranışı
+  // DOĞRU — kur uydurmuyor; kırılan şey fixture'dı.
+  // Bugünün TARİHİ (saat değil) anahtar: kolon `@db.Date`.
+  const rateDay = new Date();
+  rateDay.setUTCHours(0, 0, 0, 0);
+  const rateFixture = await prisma.exchangeRate.upsert({
+    where: { rateDate_currency: { rateDate: rateDay, currency: "USD" } },
+    // ⚠️ Var olan kuru EZMEZ: aynı gün gerçek kur girilmişse (ya da TCMB
+    // çekmişse) onu değiştirmek başka testlerin/ekranların rakamını sessizce
+    // kaydırırdı. Yoksa yaratır, varsa aynen kullanır.
+    update: {},
+    create: { rateDate: rateDay, currency: "USD", rate: "40.000000", source: "MANUAL" },
+    select: { id: true, createdAt: true },
+  });
+  // Temizlikte YALNIZ kendi yarattığımızı sileriz (üsttekiyle aynı gerekçe).
+  createdRateId = rateFixture.createdAt.getTime() >= startedAt ? rateFixture.id : null;
 
   const row = await prisma.goodsReceipt.findUniqueOrThrow({
     where: { id: receipt.id },
@@ -206,6 +228,9 @@ main()
     fail++;
   })
   .finally(async () => {
+    // Kur fixture'ı: yalnız BU koşumda doğduysa silinir (ortamdaki gerçek kura
+    // dokunulmaz — başka test/ekran onu okuyor olabilir).
+    if (createdRateId) await prisma.exchangeRate.deleteMany({ where: { id: createdRateId } });
     if (invoiceIds.length > 0) {
       await prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
       await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
