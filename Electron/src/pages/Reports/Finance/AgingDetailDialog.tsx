@@ -50,6 +50,10 @@ const DUE_SOURCE_NOTE: Record<AgingOpenItem["dueSource"], string> = {
  */
 function typeLabel(type: string): string {
   if (type === "ADJUSTMENT") return "Devir / düzeltme";
+  // Devir stornosu (K-3, 2026-08-14). Aging'in DEVİR filtresi terslenmiş
+  // devri normalde NETLER — bu satır dökümde beklenmez; ama bir gün görünürse
+  // ham enum yerine adı basılsın.
+  if (type === "ADJUSTMENT_CANCEL") return "Devir iptali";
   return (INVOICE_TYPE_LABEL as Record<string, string | undefined>)[type] ?? type;
 }
 

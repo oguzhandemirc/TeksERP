@@ -282,6 +282,9 @@ export const CARI_TXN_SOURCE_LABEL: Record<string, string> = {
   PAYMENT: "Tahsilat / Ödeme",
   PAYMENT_CANCEL: "Tahsilat iptali",
   ADJUSTMENT: "Devir / düzeltme",
+  // ⚠️ Etiket girilmezse ekstre HAM ENUM basar ("ADJUSTMENT_CANCEL") — yeni
+  // `CariTxnSource` değeri eklenirken bu harita da güncellenir.
+  ADJUSTMENT_CANCEL: "Devir iptali",
   CHEQUE_RECEIVE: "Çek girişi",
   CHEQUE_ISSUE: "Çek çıkışı",
   CHEQUE_ENDORSE: "Çek cirosu",

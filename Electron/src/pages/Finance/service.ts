@@ -174,6 +174,62 @@ export async function getStatement(params: {
   return res.data.data;
 }
 
+/**
+ * DEVİR STORNOSU — aktif (terslenmemiş) ADJUSTMENT devrini tipli ters kayıtla
+ * iptal eder. Uç satır KİMLİĞİ almaz: backend cari+para birimi başına en fazla
+ * bir aktif devir tutar ve onu kendisi bulur.
+ *
+ * ⚠️ `suppressErrorToast`: 404/409 mesajları çağıranın onay diyaloğunda AYNEN
+ * gösterilir (backend gerçek yolu söylüyor — "zaten iptal edilmiş", "dönem
+ * kapalı"…); genel toast aynı mesajın bağlamsız ikinci bir kopyasını basardı.
+ */
+/**
+ * DEVİR BAKİYESİ GİRİŞİ — sisteme geçişteki mevcut borç/alacağı ADJUSTMENT
+ * kaynaklı bir DEFTER SATIRI olarak yazar (bakiyeye elle yazmaz: ekstrede
+ * görünür, ters kayıtla düzeltilebilir). Cari + para birimi başına TEK aktif
+ * devir — ikincisi backend'de 409.
+ *
+ * ⚠️ `balance` İMZALIDIR: POZİTİF = cari BİZE borçlu (borç satırı) · NEGATİF =
+ * biz ona borçluyuz (alacak satırı). İşareti kuran tek yer çağıran formdur.
+ *
+ * `suppressErrorToast`: 409'un "zaten girilmiş" mesajı formun kendi hata
+ * alanında AYNEN gösterilir (cancelOpeningBalance ile aynı gerekçe).
+ */
+export async function setOpeningBalance(params: {
+  cariId: string;
+  currency: Currency;
+  balance: string;
+  description?: string | null;
+  /** "YYYY-MM-DD" ya da ISO an — verilmezse backend şimdiyi yazar. */
+  txnDate?: string;
+}) {
+  const res = await apiClient.post(
+    `/api/finance/cari/${params.cariId}/opening-balance`,
+    {
+      currency: params.currency,
+      balance: params.balance,
+      description: params.description ?? null,
+      ...(params.txnDate ? { txnDate: params.txnDate } : {}),
+    },
+    { suppressErrorToast: true },
+  );
+  return res.data as { data: { id: string }; message?: string };
+}
+
+export async function cancelOpeningBalance(params: {
+  cariId: string;
+  currency: Currency;
+  /** ZORUNLU (backend min 3 karakter) — storno gerekçesiyle kayda geçer. */
+  reason: string;
+}) {
+  const res = await apiClient.post(
+    `/api/finance/cari/${params.cariId}/opening-balance/cancel`,
+    { currency: params.currency, reason: params.reason },
+    { suppressErrorToast: true },
+  );
+  return res.data as { data: { id: string; reversesTxnId: string }; message?: string };
+}
+
 export async function listInvoices(params: {
   page: number;
   pageSize: number;
