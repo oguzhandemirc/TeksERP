@@ -58,7 +58,9 @@ say "2/6 docker compose build (imaj SUNUCUDA derlenir — sürüm kayması olmas
 run "ssh $HOST 'cd $APPDIR && sudo docker compose build'"
 
 # --- 3) Migration -------------------------------------------------------------
-say "3/6 prisma migrate deploy (172 → 177 beklenir)"
+# Sağlamlık paketi (2026-08-14): +3 migration (postingDate · ADJUSTMENT_CANCEL
+# · COLLECT_CANCEL + CashPeriodClose/CHECK'ler) → 177'den 180'e.
+say "3/6 prisma migrate deploy (177 → 180 beklenir)"
 run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx prisma migrate deploy\"'"
 
 # --- 4) Ayağa kaldır (boot uzlaştırması: 6 izin + rol şablonları) -------------
@@ -81,13 +83,13 @@ run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -
 say "6/6 Doğrulama"
 if [ "$APPLY" -eq 1 ]; then
   print -r -- "  --- uçlar (404 = MOUNT YOK; 401 kesin sinyal DEĞİL) ---"
-  for u in /api/finance/cheques /api/finance/period-closes /api/reports/finance/aging \
-           /api/yarn/stocks /api/item-prices /api/purchase-orders; do
+  for u in /api/finance/cheques /api/finance/period-closes /api/finance/cash-period-closes \
+           /api/reports/finance/aging /api/yarn/stocks /api/item-prices /api/purchase-orders; do
     code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://demo.etkiliyazilim.com$u")
     mark=$([ "$code" = "404" ] && echo "❌ MOUNT YOK" || echo "✓")
     printf '  %-34s %s  %s\n' "$u" "$code" "$mark"
   done
-  print -r -- "  --- sayılar (beklenen: 83 / 39 / 39 / 177) ---"
+  print -r -- "  --- sayılar (beklenen: 83 / 39 / 39 / 180 — sağlamlık paketi izin EKLEMEZ, yalnız migration) ---"
   ssh "$HOST" "sudo docker exec postgres psql -U tekserp -d tekserp_demo -tAF' | ' -c \"
 SELECT 'izin katalogu', count(*)::text FROM permissions
 UNION ALL SELECT 'WEB_TRADE sablonu', count(*)::text FROM permission_template_items i JOIN permission_templates t ON t.id=i.\\\"templateId\\\" WHERE t.code='WEB_TRADE'
