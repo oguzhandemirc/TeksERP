@@ -10,8 +10,14 @@
 //     hiçbir yerde hata çıkmazdı.
 // =============================================================================
 import { describe, it, expect } from "vitest";
-import { describeFill, fillLinesFromOrder, showPurchaseOrderFields } from "./receiptOrderFields";
+import {
+  describeFill,
+  fillLinesFromOrder,
+  mergeFilledLines,
+  showPurchaseOrderFields,
+} from "./receiptOrderFields";
 import type { FillSourceLine } from "./receiptOrderFields";
+import { emptyLine, type DraftLine } from "../GoodsReceipts/ReceiptLineRows";
 
 const kumas: FillSourceLine["item"] = {
   id: "item-kumas",
@@ -88,6 +94,53 @@ describe("fillLinesFromOrder", () => {
       { item: iplik, remainingQty: 100, unitPrice: null },
     ]);
     expect(r.lines[0]!.key).not.toBe(r.lines[1]!.key);
+  });
+});
+
+describe("mergeFilledLines", () => {
+  const typed = (over: Partial<DraftLine>): DraftLine => ({ ...emptyLine(), ...over });
+
+  it("⭐ ELLE GİRİLEN SATIRLAR KAYBOLMAZ — doldurma EKLER, üstüne yazmaz", () => {
+    const elle = typed({ itemId: "item-a", initialQty: 120, count: 3 });
+    const filled = fillLinesFromOrder([{ item: kumas, remainingQty: 500, unitPrice: null }]).lines;
+
+    const out = mergeFilledLines([elle], filled);
+
+    expect(out).toHaveLength(2);
+    expect(out[0]).toBe(elle); // aynı nesne — hiçbir alanı yeniden yazılmadı
+    expect(out[1]!.itemId).toBe("item-kumas");
+  });
+
+  it("form açılışındaki DOKUNULMAMIŞ boş satır düşer (ölü satır bırakmaz)", () => {
+    const out = mergeFilledLines(
+      [emptyLine()],
+      fillLinesFromOrder([{ item: iplik, remainingQty: 50, unitPrice: null }]).lines,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.itemId).toBe("item-iplik");
+  });
+
+  it("⭐ İKİNCİ DOLDURMA BİRİNCİYİ SİLMEZ — kumaş satırı metresiz doğar, eleme metreye BAĞLANAMAZ", () => {
+    // Bu, kuralın en kolay kaybedilen yeri: "yalnız metresi girilmiş satırları
+    // koru" denseydi, art arda iki siparişten doldurma yapan depocu ilk
+    // siparişin satırlarını sessizce kaybederdi (hata yok, log yok).
+    const ilk = fillLinesFromOrder([{ item: kumas, remainingQty: 500, unitPrice: null }]).lines;
+    const ikinci = fillLinesFromOrder([{ item: kumas, remainingQty: 300, unitPrice: null }]).lines;
+
+    const out = mergeFilledLines(mergeFilledLines([emptyLine()], ilk), ikinci);
+
+    expect(out).toHaveLength(2);
+    expect(out.every((l) => l.initialQty === 0)).toBe(true);
+  });
+
+  it("yarım kalmış satır (ürün seçilmiş, metre yazılmamış) korunur", () => {
+    const yarim = typed({ itemId: "item-a", initialQty: 0 });
+    expect(mergeFilledLines([yarim], [])).toEqual([yarim]);
+  });
+
+  it("doldurulacak satır yoksa mevcut liste yalnız boş satırlarından arınır", () => {
+    const dolu = typed({ itemId: "item-a", initialQty: 10 });
+    expect(mergeFilledLines([dolu, emptyLine()], [])).toEqual([dolu]);
   });
 });
 

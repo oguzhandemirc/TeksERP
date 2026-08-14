@@ -106,6 +106,26 @@ export function fillLinesFromOrder(sources: FillSourceLine[]): FillResult {
 }
 
 /**
+ * Doldurulan satırları formdaki MEVCUT satırlara ekler.
+ *
+ * ⚠️ ÜZERİNE YAZMAZ. Depocu elle iki satır girdikten sonra "kalemleri
+ * siparişten doldur"a basarsa, o iki satırın sessizce kaybolması en pahalı
+ * kayıptır (mal kamyondan indi, kaydı yok). Aynı gerekçe fişteki içe aktarma
+ * düğmesinde de yazılı.
+ *
+ * ⚠️⚠️ ÖLÇÜT "İTEM VAR MI", "METRE VAR MI" DEĞİL. Doldurmanın ürettiği KUMAŞ
+ * satırı tanım gereği METRESİZ doğar (yukarıdaki kural); elemeyi metreye
+ * bağlamak, ikinci bir doldurmanın (ya da art arda iki siparişin) ilk doldurmayı
+ * SİLMESİ demekti — üstelik tam da özelliğin kendi ürettiği satırları. Yalnız
+ * HİÇ DOKUNULMAMIŞ boş placeholder (`emptyLine()`) düşer; o da form açılışında
+ * duran tek boş satırdır ve korunursa listenin başında ölü bir satır bırakırdı.
+ */
+export function mergeFilledLines(existing: DraftLine[], incoming: DraftLine[]): DraftLine[] {
+  const touched = existing.filter((l) => Boolean(l.itemId) || l.initialQty > 0);
+  return [...touched, ...incoming];
+}
+
+/**
  * Doldurma sonucunun kullanıcıya söylenecek cümlesi.
  *
  * ⚠️ SESSİZ BAŞARI YOK: "3 satır eklendi" deyip metrajın neden boş kaldığını

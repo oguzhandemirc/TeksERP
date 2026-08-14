@@ -365,6 +365,13 @@ export class GoodsReceiptService {
 
     return {
       success: true,
+      // ⚠️ `purchaseOrder` BURADA loadDetail'in sipariş BAŞLIĞINI bilerek EZER:
+      // CREATE yanıtındaki alan SENKRON SONUCUDUR (overReceiptLines/unmatched…),
+      // GET yanıtındaki aynı adlı alan ise sipariş BAŞLIĞIDIR (orderNo/status).
+      // İki şekil ayrıdır ve panel bunu iki ayrı tiple modeller
+      // (GoodsReceiptCreateData ↔ GoodsReceiptDetail). Yeni bir tüketici
+      // (mobil/rapor) yazarken hangi yanıtı okuduğuna DİKKAT — yanlış şekli
+      // okumak hata üretmez, alan sessizce boş görünür (2026-08-14 G1 notu).
       data: { ...(await this.loadDetail(receipt.id)), failed: lineResult.failed, purchaseOrder: lineResult.purchaseOrder ?? null },
       message:
         (lineResult.failed.length > 0

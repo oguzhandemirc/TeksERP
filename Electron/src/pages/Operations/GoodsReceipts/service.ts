@@ -1,4 +1,9 @@
 import apiClient from "@/services/apiClient";
+// ⚠️ TİP-ONLY import: derlemede silinir, yani mal kabul ekranı çalışma anında
+// alış siparişi modülüne BAĞLANMAZ (fabrika kurulumunda o dosyalar bundle'a
+// girmesin). Şeklin tek kaynağı orada durur; ikinci bir kopya yazmak, backend
+// sözleşmesi değiştiğinde ikisinin sessizce ayrışması demekti.
+import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
 
 export interface GoodsReceiptListRow {
   id: string;
@@ -66,6 +71,27 @@ export interface ReceiptDetailYarnLine {
 
 export type ReceiptDetailLine = ReceiptDetailFabricLine | ReceiptDetailYarnLine;
 
+/**
+ * Fişin bağlı olduğu ALIŞ SİPARİŞİNİN BAŞLIĞI — `GET /goods-receipts/:id`
+ * yanıtında döner (backend `loadDetail` → `purchaseOrder` select'i).
+ *
+ * ⚠️⚠️ AYNI ANAHTAR, İKİ FARKLI ŞEKİL — karıştırma. Bu tip yalnız DETAY
+ * (GET) yanıtındadır. CREATE (`POST /goods-receipts`) yanıtında aynı
+ * `purchaseOrder` anahtarı SENKRON SONUCUNU taşır (`ReceiptPurchaseOrderSync`:
+ * fazla kabul / siparişte olmayan ürün), çünkü backend `loadDetail`in başlığını
+ * o alanda BİLEREK EZER (`goods-receipt.service.ts` create dönüşü). Bu yüzden
+ * create yanıtı ayrı tiplenir (`GoodsReceiptCreateData`) — tek tiple modellemek,
+ * "sipariş no" beklerken "overReceiptLines" okumak demekti.
+ */
+export interface ReceiptPurchaseOrderRef {
+  id: string;
+  orderNo: string;
+  status: "OPEN" | "PARTIAL" | "CLOSED" | "CANCELLED";
+  /** Siparişin para birimi — fişinkinden FARKLI olabilir (backend engellemez). */
+  currency: "TRY" | "USD" | "EUR" | "GBP" | "RUB";
+  expectedDate: string | null;
+}
+
 export interface GoodsReceiptDetail {
   id: string;
   receiptNo: string;
@@ -94,7 +120,21 @@ export interface GoodsReceiptDetail {
   totals: { rollCount: number; totalQty: number; yarnLineCount?: number; totalYarnKg?: number };
   /** Atlanan satırlar — SEBEBİYLE döner (sessiz yutma yok). */
   failed?: Array<{ index: number; itemId: string; reason: string }>;
+  /** Bağlı alış siparişinin başlığı — siparişsiz fişte `null`/yok (D3). */
+  purchaseOrder?: ReceiptPurchaseOrderRef | null;
 }
+
+/**
+ * CREATE yanıtının gövdesi — detayın AYNISI, tek farkı `purchaseOrder`.
+ *
+ * ⚠️ Orada o alan siparişin BAŞLIĞI değil, satırlar yazıldıktan SONRA koşan
+ * karşılanma senkronunun SONUCUDUR ve yalnız bu yanıtta vardır: hiçbir yere
+ * kaydedilmez, `GET` ile geri alınamaz. Yutulursa "fazla mal geldi" ve "bu ürün
+ * siparişte yok" bilgileri KALICI OLARAK kaybolur (bkz. `receiptSync.ts`).
+ */
+export type GoodsReceiptCreateData = Omit<GoodsReceiptDetail, "purchaseOrder"> & {
+  purchaseOrder?: ReceiptPurchaseOrderSync | null;
+};
 
 export async function listGoodsReceipts(params: { page: number; pageSize: number; search?: string }) {
   const res = await apiClient.get("/api/goods-receipts", {
@@ -115,9 +155,19 @@ export async function createGoodsReceipt(body: {
   currency?: "TRY" | "USD" | "EUR" | "GBP" | "RUB";
   notes?: string | null;
   clientToken?: string;
+  /** Bu fişin karşıladığı ALIŞ SİPARİŞİ — yalnız ticaret rejiminde (D3). */
+  purchaseOrderId?: string | null;
   lines?: GoodsReceiptLineInput[];
-}): Promise<{ data: GoodsReceiptDetail; message?: string }> {
-  const res = await apiClient.post("/api/goods-receipts", body);
+}): Promise<{ data: GoodsReceiptCreateData; message?: string }> {
+  // ⚠️ SİPARİŞSİZ FİŞTE ALAN HİÇ GÖNDERİLMEZ — `purchaseOrderId: null` yazmak
+  // teknik olarak da geçerli (Zod `.nullable()`) ama gövdeyi fabrikadaki
+  // bugünkü isteğinden AYIRIR: "sıfır görünür fark" kuralı istek gövdesini de
+  // kapsar. Ayıklama servis KATINDA yapılır, çağıranın hatırlamasına bırakılmaz
+  // — ikinci bir çağıran (mobil/toplu içe aktarma) doğduğunda kural onunla
+  // birlikte gelir. Bekçi: `service.test.ts`.
+  const { purchaseOrderId, ...rest } = body;
+  const payload = purchaseOrderId ? { ...rest, purchaseOrderId } : rest;
+  const res = await apiClient.post("/api/goods-receipts", payload);
   return res.data;
 }
 

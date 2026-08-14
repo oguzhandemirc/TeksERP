@@ -12,6 +12,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { listGoodsReceipts } from "./service";
 import { GoodsReceiptFormDialog } from "./GoodsReceiptFormDialog";
 import { GoodsReceiptDetailSheet } from "./GoodsReceiptDetailSheet";
+import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
 
 /**
  * MAL KABUL — satın alınan malın depo girişi.
@@ -25,6 +26,11 @@ export function GoodsReceiptsPage() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // Oluşturma yanıtındaki sipariş senkronu — SUNUCUDA SAKLANMAZ, `GET` ile geri
+  // alınamaz. Fişin id'siyle birlikte tutulur ki listeden BAŞKA bir fiş açıldığında
+  // o fişe aitmiş gibi görünmesin (yanlış fişe yazılan uyarı, hiç uyarmamaktan
+  // kötüdür — depocu doğru fişi doğru sanır).
+  const [createdSync, setCreatedSync] = useState<{ id: string; sync: ReceiptPurchaseOrderSync } | null>(null);
 
   const q = useQuery({
     queryKey: ["goods-receipts", search],
@@ -132,12 +138,25 @@ export function GoodsReceiptsPage() {
       <GoodsReceiptFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        onCreated={(id) => {
+        onCreated={(id, sync) => {
           setFormOpen(false);
+          setCreatedSync(sync ? { id, sync } : null);
           setDetailId(id);
         }}
       />
-      <GoodsReceiptDetailSheet id={detailId} onOpenChange={(o) => !o && setDetailId(null)} />
+      {/* Uyarı bandı DETAY PANELİNDE basılır, formda değil: form kaydettiği anda
+          kapanıyor (yukarıdaki `onCreated`) — orada basmak toast'ın ikizi olurdu.
+          Panel ise operatörün kayıttan hemen sonra düştüğü yerdir ve KAPATANA
+          KADAR durur. Listeden açılan fişlerde `sync` null → bant çizilmez. */}
+      <GoodsReceiptDetailSheet
+        id={detailId}
+        sync={createdSync?.id === detailId ? createdSync.sync : null}
+        onOpenChange={(o) => {
+          if (o) return;
+          setDetailId(null);
+          setCreatedSync(null);
+        }}
+      />
     </PageShell>
   );
 }

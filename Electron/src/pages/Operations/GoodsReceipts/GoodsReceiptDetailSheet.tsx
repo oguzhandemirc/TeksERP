@@ -11,6 +11,9 @@ import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { BulkRollLabelButton } from "@/components/print/BulkRollLabelButton";
 import { cancelGoodsReceipt, createInvoiceFromReceipt, getGoodsReceipt } from "./service";
 import type { ReceiptDetailYarnLine } from "./service";
+import { PurchaseOrderSyncBand } from "../PurchaseOrders/PurchaseOrderSyncBand";
+import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
+import { PO_STATUS_LABEL } from "../PurchaseOrders/labels";
 
 /** Decimal JSON'da string gelir — görüntü için sayıya çevirip TR biçimler. */
 const fmt = (v: string | number | null | undefined): string =>
@@ -19,9 +22,17 @@ const fmt = (v: string | number | null | undefined): string =>
 interface Props {
   id: string | null;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Fiş AZ ÖNCE oluşturulduysa yanıttaki sipariş senkronu.
+   *
+   * ⚠️ Bu bilgi sunucuda SAKLANMAZ (`GET` ile geri alınamaz) — panel onu
+   * kapatana kadar gösteren tek yüzey burasıdır. Listeden açılan fişte `null`
+   * gelir ve bant TEK BAYT çizmez, yani mevcut görünüm bayt-bayt korunur.
+   */
+  sync?: ReceiptPurchaseOrderSync | null;
 }
 
-export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
+export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
   const qc = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
   // #2 (saha isteği): "Bas" doğrudan yazdırmaz — ÖNİZLEME açar. Operatör ne
@@ -82,6 +93,11 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
             </SheetTitle>
           </SheetHeader>
 
+          {/* ⚠️ YÜKLEME DALININ DIŞINDA: uyarı, fişin detayı gelmeden de
+              basılabilmeli — sunucu yavaşken kaybolan bir uyarı, hiç basılmayan
+              uyarıdır. Sipariş bağı/uyarı yoksa hiçbir şey çizilmez. */}
+          <PurchaseOrderSyncBand sync={sync} className="mt-4" />
+
           {q.isLoading ? (
             <p className="mt-4 text-sm text-muted-foreground">Yükleniyor…</p>
           ) : !r ? null : (
@@ -108,6 +124,31 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
                     {yarnLines.length > 0 && <> + {fmt(yarnKgNet)} kg iplik</>}
                   </dd>
                 </div>
+                {/* BAĞLI ALIŞ SİPARİŞİ — yalnız bağ VARSA satır çizilir.
+                    Siparişsiz fişte boş bir "—" satırı basmak, olmayan bir alanı
+                    varmış gibi gösterip fabrikadaki görünümü de değiştirirdi. */}
+                {r.purchaseOrder && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-muted-foreground">Alış siparişi</dt>
+                    <dd className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono">{r.purchaseOrder.orderNo}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({PO_STATUS_LABEL[r.purchaseOrder.status]})
+                      </span>
+                      {/* ⚠️ PARA BİRİMİ ÇELİŞKİSİ SESSİZ KALMAZ. Backend yalnız
+                          TEDARİKÇİ çelişkisini reddediyor; para birimi farkı
+                          serbesttir ve fark, fişten üretilen ALIŞ FATURASINA
+                          fişin birimiyle geçer — yani anlaşılan fiyat sessizce
+                          başka bir para biriminde faturalanır. */}
+                      {r.purchaseOrder.currency !== r.currency && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                          Sipariş {r.purchaseOrder.currency}, fiş {r.currency} — fiyatlar fişin para
+                          biriminde faturalanır
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                )}
               </dl>
 
               {/* Kumaş tablosu — YALNIZ-İPLİK fişte çizilmez (boş başlıklı tablo

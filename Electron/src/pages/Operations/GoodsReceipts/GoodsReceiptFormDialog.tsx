@@ -18,11 +18,25 @@ import {
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
 import { useItemTypes, yarnIdsFrom } from "./useItemTypes";
+// TİCARET (D3) — alış siparişi bağı. Bölüm görünürlük kararını KENDİ verir
+// (`showPurchaseOrderFields`) ve fabrikada tek bayt çizmez; burada bir `&&`
+// zinciri YOK, çünkü zincir bir gün ters çevrilirse hiçbir test kırılmazdı.
+import { GoodsReceiptOrderSection } from "../PurchaseOrders/GoodsReceiptOrderSection";
+import { mergeFilledLines } from "../PurchaseOrders/receiptOrderFields";
+import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (id: string) => void;
+  /**
+   * Fiş oluştu.
+   *
+   * ⚠️ İkinci parametre YALNIZ bu yanıtta vardır ve hiçbir yere kaydedilmez
+   * (bkz. `service.ts` → `GoodsReceiptCreateData`): "fazla mal geldi" / "bu ürün
+   * siparişte yok" bilgisi burada yutulursa BİR DAHA ELDE EDİLEMEZ. Opsiyonel
+   * bırakıldı ki sipariş bağı olmayan çağıran imzayı hiç bilmek zorunda kalmasın.
+   */
+  onCreated: (id: string, sync?: ReceiptPurchaseOrderSync | null) => void;
 }
 
 export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props) {
@@ -37,6 +51,9 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   // faturasını iki para biriminde kesmeyi gerektirirdi (fatura tek birimli).
   const [currency, setCurrency] = useState<"TRY" | "USD" | "EUR" | "GBP" | "RUB">("TRY");
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
+  // Bağlanacak alış siparişi — ticaret rejimi kapalıyken DAİMA null kalır
+  // (bölüm hiç çizilmez), yani istek gövdesi fabrikadaki bugünküyle aynıdır.
+  const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
 
   // ⚠️ TEK DEPOLU KURULUMDA SEÇİCİ ÇİZİLMEZ — depo otomatik varsayılandır.
   // Tek seçenekli bir liste, cevabı belli bir soruyu sormaktır.
@@ -69,6 +86,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         // Fişin KENDİ idempotency anahtarı — çift tıklama/ağ kopması ikinci fiş
         // AÇMAZ ve satırları tekrar İŞLEMEZ (backend mevcut fişi döner).
         clientToken: crypto.randomUUID(),
+        // Servis, değer yoksa anahtarı gövdeye HİÇ koymaz (bkz. service.ts).
+        purchaseOrderId,
         lines: expandLines(lines, yarnIds),
       }),
     onSuccess: (res) => {
@@ -88,7 +107,12 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       setLines([emptyLine()]);
       setDeliveryNoteNo("");
       setSupplierId(null);
-      onCreated(res.data.id);
+      setPurchaseOrderId(null);
+      // ⚠️ SENKRON SONUCU YUKARI TAŞINIR, TOAST'A DEĞİL: toast birkaç saniyede
+      // kaybolur ve "fazla mal geldi" / "bu ürün siparişte yok" bilgisi hiçbir
+      // yere kaydedilmediği için bir daha ELDE EDİLEMEZ. Sayfa onu fişin detay
+      // panelinde KALICI banda basar (`PurchaseOrderSyncBand`).
+      onCreated(res.data.id, res.data.purchaseOrder ?? null);
     },
   });
 
@@ -104,6 +128,20 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* ⚠️ TEDARİKÇİDEN ÖNCE: sipariş seçimi tedarikçiyi DEVRALIR (backend,
+              fişin tedarikçisi ile siparişinki farklıysa 400 verir; ekran o reddi
+              seçim ANINDA söyler). Bölüm fabrikada `null` döndüğü için buradaki
+              yerleşim de bugünküyle bayt-bayt aynı kalır. */}
+          <GoodsReceiptOrderSection
+            value={purchaseOrderId}
+            onChange={setPurchaseOrderId}
+            supplierId={supplierId}
+            onSupplierChange={setSupplierId}
+            // Satırlar EKLENİR, üstüne yazılmaz — kural saf katmanda.
+            onFillLines={(filled) => setLines((ls) => mergeFilledLines(ls, filled))}
+            disabled={createM.isPending}
+          />
+
           <div className="grid grid-cols-4 gap-3">
             {multiWarehouse && (
               <div>
