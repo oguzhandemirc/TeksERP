@@ -38,6 +38,14 @@ const EXPECTED: Record<string, string> = {
   "Customer <- CustomerBranch.customer : Cascade": "guarded (branchCount) — sayım 0 değilse silme zaten bloklanır",
   "Customer <- CustomerColorAlias.customer : Cascade": "cascade-intended — alias müşterisiz anlamsız",
   "Customer <- CustomerItemAlias.customer : Cascade": "cascade-intended — alias müşterisiz anlamsız",
+  // Paket D (2026-08-14) — `CustomerItemAlias` ile BİREBİR aynı şekil ve aynı
+  // gerekçe: fiyat satırı, ait olduğu müşteri/kalem yokken anlamsızdır. Kalıcı
+  // silme zaten bağımlılık-guard'lı `DELETE /:id/permanent` ucundan geçiyor;
+  // fiyat satırı orada "kullanımda" sayılmaz, çünkü geçmiş belgeler tutarı
+  // `InvoiceLine.unitPrice` / `Roll.purchasePrice` ile DONDURMUŞTUR — yani
+  // cascade geçmişi değiştirmez, yalnız ölü bir varsayılanı temizler.
+  "Customer <- ItemPrice.customer : Cascade": "cascade-intended — müşteri istisnası müşterisiz anlamsız",
+  "Item <- ItemPrice.item : Cascade": "cascade-intended — fiyat kalemsiz anlamsız",
   "Customer <- CustomerStandaloneLabel.customer : Cascade": "cascade-intended — müşteri etiket konfigürasyonu",
   "Customer <- CustomerTemplateRoute.customer : Cascade": "cascade-intended — müşteri şablon yönlendirmesi",
   "Customer <- Route.customer : SetNull": "guarded (routeCount, A5 2026-07-31)",
