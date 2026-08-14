@@ -1,6 +1,11 @@
 // =============================================================================
 // DÖNEMİ YENİDEN AÇ — mührü kırar, GEREKÇE ister
 // =============================================================================
+// İKİ TÜKETİCİ, TEK GÖVDE (2026-08-14): cari kapanışı ile kasa/banka kapanışı
+// aynı reopen sözleşmesini taşır (gerekçe min 3 karakter, LIFO, satır silinmez
+// işaretlenir); diyalog parametrize edildi, KOPYALANMADI. Kapsama özgü olan
+// yalnız kimlik/özet bloğu ile mutasyonun kendisidir.
+//
 // ⚠️ Bu bir "geri alma" değil, KAYDA GEÇEN bir karardır. Kapanış satırı
 // SİLİNMEZ: `reopenedAt` + gerekçe ile işaretlenir ve listede soluk satır olarak
 // durmaya devam eder. Denetimde aranan şey tam olarak budur — "bu dönem bir kez
@@ -16,7 +21,7 @@
 // O mesaj YUTULMAZ — interceptor toast'ı olduğu gibi basar.
 // =============================================================================
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, Unlock } from "lucide-react";
@@ -33,25 +38,30 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDayKey, moneyOf, reopenPeriod, type PeriodCloseRow } from "./service";
 
-interface Props {
-  row: PeriodCloseRow | null;
+const MIN_REASON = 3;
+
+interface BaseProps {
+  /** null → kapalı. Radix animasyonu için içerik kapanış boyunca çizilir. */
+  targetId: string | null;
+  /** Kimlik/özet bloğu — NEYİN açıldığı (kapsam + dönem + mühürlü rakam). */
+  summary: ReactNode;
+  doReopen: (id: string, reason: string) => Promise<{ message?: string }>;
   onOpenChange: (open: boolean) => void;
 }
 
-const MIN_REASON = 3;
-
-export function ReopenPeriodDialog({ row, onOpenChange }: Props) {
+export function PeriodReopenDialogBase({ targetId, summary, doReopen, onOpenChange }: BaseProps) {
   const qc = useQueryClient();
   const [reason, setReason] = useState("");
 
   // Hedef değişince gerekçe sıfırlanır: bir dönem için yazılan gerekçenin
-  // başka bir döneme taşınması, izin kendisini yalan yapardı.
+  // başka bir döneme taşınması, izin kendisini yalan yapardı. (Sayfadaki
+  // "sürekli mount" deseninin karşı ayağı — PeriodClosePage'deki yoruma bak.)
   useEffect(() => {
     setReason("");
-  }, [row?.id]);
+  }, [targetId]);
 
   const reopenM = useMutation({
-    mutationFn: () => reopenPeriod(row?.id as string, reason.trim()),
+    mutationFn: () => doReopen(targetId as string, reason.trim()),
     onSuccess: (r) => {
       toast.success(r.message ?? "Dönem yeniden açıldı.");
       onOpenChange(false);
@@ -62,7 +72,7 @@ export function ReopenPeriodDialog({ row, onOpenChange }: Props) {
   const valid = reason.trim().length >= MIN_REASON;
 
   return (
-    <Dialog open={Boolean(row)} onOpenChange={onOpenChange}>
+    <Dialog open={Boolean(targetId)} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Dönemi yeniden aç</DialogTitle>
@@ -72,22 +82,7 @@ export function ReopenPeriodDialog({ row, onOpenChange }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        {row && (
-          <div className="space-y-1 rounded-md border bg-muted/30 p-4 text-sm">
-            <div className="font-medium">
-              {row.cariCode} — {row.cariName}
-            </div>
-            <div className="text-muted-foreground">
-              Dönem sonu: <span className="text-foreground">{formatDayKey(row.periodEnd)}</span> · Para birimi:{" "}
-              <span className="text-foreground">{row.currency}</span>
-            </div>
-            <div className="text-muted-foreground">
-              Mühürlü bakiye:{" "}
-              <span className="font-medium text-foreground">{moneyOf(row.closingBalance, row.currency)}</span> ·{" "}
-              {row.txnCount} hareket
-            </div>
-          </div>
-        )}
+        {targetId != null && summary}
 
         <div>
           <Label>Gerekçe (zorunlu)</Label>
@@ -96,7 +91,7 @@ export function ReopenPeriodDialog({ row, onOpenChange }: Props) {
             rows={3}
             maxLength={300}
             autoFocus
-            placeholder="Örn. Aralık faturası eksik girilmiş, düzeltme yapılacak."
+            placeholder="Örn. Aralık kaydı eksik girilmiş, düzeltme yapılacak."
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
@@ -126,5 +121,39 @@ export function ReopenPeriodDialog({ row, onOpenChange }: Props) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface Props {
+  row: PeriodCloseRow | null;
+  onOpenChange: (open: boolean) => void;
+}
+
+/** Cari sarmalayıcı — davranış ve metinler 2026-08-14 öncesiyle birebir. */
+export function ReopenPeriodDialog({ row, onOpenChange }: Props) {
+  return (
+    <PeriodReopenDialogBase
+      targetId={row?.id ?? null}
+      summary={
+        row && (
+          <div className="space-y-1 rounded-md border bg-muted/30 p-4 text-sm">
+            <div className="font-medium">
+              {row.cariCode} — {row.cariName}
+            </div>
+            <div className="text-muted-foreground">
+              Dönem sonu: <span className="text-foreground">{formatDayKey(row.periodEnd)}</span> · Para birimi:{" "}
+              <span className="text-foreground">{row.currency}</span>
+            </div>
+            <div className="text-muted-foreground">
+              Mühürlü bakiye:{" "}
+              <span className="font-medium text-foreground">{moneyOf(row.closingBalance, row.currency)}</span> ·{" "}
+              {row.txnCount} hareket
+            </div>
+          </div>
+        )
+      }
+      doReopen={reopenPeriod}
+      onOpenChange={onOpenChange}
+    />
   );
 }

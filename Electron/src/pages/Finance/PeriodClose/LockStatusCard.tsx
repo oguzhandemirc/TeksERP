@@ -1,10 +1,15 @@
 // =============================================================================
-// KİLİT DURUMU KARTI — "bu cari bu para biriminde nereye kadar kapalı"
+// KİLİT DURUMU KARTI — "bu kapsam nereye kadar kapalı"
 // =============================================================================
-// ⚠️ Kart YALNIZ cari VE para birimi birlikte seçiliyken çizilir; bu bir
-// eksiklik değil, kapanışın kimliğidir: mühür (cari, para birimi) çiftine
-// aittir. Tek başına cari seçiliyken "kapalı/açık" demek, TRY kapalıyken USD'yi
-// de kapalı göstermek olurdu.
+// İKİ TÜKETİCİ, TEK GÖVDE (2026-08-14): cari kapanışı (cari × para birimi) ve
+// kasa/banka kapanışı (hesap) aynı `PeriodStatus` yanıtını okur; kart
+// parametrize edildi, KOPYALANMADI. Kapsama özgü olan yalnız üç şey prop'tur:
+// başlık etiketi, mühürün reddettiği kayıt cümlesi ve para basımı.
+//
+// ⚠️ Kart YALNIZ kapsam tam seçiliyken çizilir; bu bir eksiklik değil,
+// kapanışın kimliğidir: cari mührü (cari, para birimi) çiftine, kasa mührü
+// hesaba aittir. Eksik kapsamla "kapalı/açık" demek TRY kapalıyken USD'yi de
+// kapalı göstermek olurdu.
 //
 // ⚠️ Kapanış YOKSA bu bir HATA DEĞİLDİR — kapanış opsiyoneldir ve kullanmayan
 // kurulumda her dönem açıktır. Boş durumu "bulunamadı" diye basmak, kullanıcıyı
@@ -22,18 +27,22 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Lock, LockOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Currency } from "../service";
-import { formatDayKey, getPeriodStatus, moneyOf } from "./service";
+import { formatDayKey, getPeriodStatus, moneyOf, type Decimalish, type PeriodStatus } from "./service";
 
-interface Props {
-  cariId: string;
-  cariLabel: string;
-  currency: Currency;
+interface BaseProps {
+  /** Kapsamın görünen adı — "MÜŞTERİ01 — Ak Tekstil · TRY" ya da "KS01 — Merkez Kasa (Kasa)". */
+  label: string;
+  /** Mühür ne tür kayıtları reddediyor — modüle göre cümle ("yeni fatura, tahsilat ve çek kaydı"). */
+  sealedRecordsHint: string;
+  fmtMoney: (v: Decimalish | null | undefined) => string;
+  queryKey: readonly unknown[];
+  fetchStatus: () => Promise<PeriodStatus>;
 }
 
-export function LockStatusCard({ cariId, cariLabel, currency }: Props) {
+export function PeriodLockStatusCardBase({ label, sealedRecordsHint, fmtMoney, queryKey, fetchStatus }: BaseProps) {
   const q = useQuery({
-    queryKey: ["finance", "period-status", cariId, currency],
-    queryFn: () => getPeriodStatus({ cariId, currency }),
+    queryKey: [...queryKey],
+    queryFn: fetchStatus,
   });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Kilit durumu okunuyor…</p>;
@@ -47,8 +56,8 @@ export function LockStatusCard({ cariId, cariLabel, currency }: Props) {
         <div>
           <p className="font-medium">Kilit durumu okunamadı.</p>
           <p className="mt-0.5 text-xs">
-            {cariLabel} · {currency} için kapanış bilgisi alınamadı. Bu kutu dönemin AÇIK olduğunu
-            söylemiyor — bilinmiyor. Kayıt girmeden önce tekrar deneyin.
+            {label} için kapanış bilgisi alınamadı. Bu kutu dönemin AÇIK olduğunu söylemiyor —
+            bilinmiyor. Kayıt girmeden önce tekrar deneyin.
           </p>
           <Button variant="outline" size="sm" className="mt-2" onClick={() => void q.refetch()}>
             Tekrar dene
@@ -72,15 +81,13 @@ export function LockStatusCard({ cariId, cariLabel, currency }: Props) {
         <LockOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       )}
       <div>
-        <p className="font-medium">
-          {cariLabel} · {currency}
-        </p>
+        <p className="font-medium">{label}</p>
         {locked ? (
           <p className="mt-0.5 text-muted-foreground">
             <span className="font-medium text-foreground">{formatDayKey(s.closedThrough)}</span> tarihine kadar
             (bu gün dahil) KAPALI — mühürlü bakiye{" "}
-            <span className="font-medium text-foreground">{moneyOf(s.closingBalance, currency)}</span>. Bu tarihe
-            ve öncesine düşen yeni fatura, tahsilat ve çek kaydı reddedilir.
+            <span className="font-medium text-foreground">{fmtMoney(s.closingBalance)}</span>. Bu tarihe ve
+            öncesine düşen {sealedRecordsHint} reddedilir.
           </p>
         ) : (
           <p className="mt-0.5 text-muted-foreground">
@@ -90,5 +97,24 @@ export function LockStatusCard({ cariId, cariLabel, currency }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+interface Props {
+  cariId: string;
+  cariLabel: string;
+  currency: Currency;
+}
+
+/** Cari sarmalayıcı — davranış ve metinler 2026-08-14 öncesiyle birebir. */
+export function LockStatusCard({ cariId, cariLabel, currency }: Props) {
+  return (
+    <PeriodLockStatusCardBase
+      label={`${cariLabel} · ${currency}`}
+      sealedRecordsHint="yeni fatura, tahsilat ve çek kaydı"
+      fmtMoney={(v) => moneyOf(v, currency)}
+      queryKey={["finance", "period-status", cariId, currency]}
+      fetchStatus={() => getPeriodStatus({ cariId, currency })}
+    />
   );
 }

@@ -1,10 +1,16 @@
 // =============================================================================
 // KAPANIŞ DOĞRULAMA — saklanan fotoğraf ↔ bugünkü defter
 // =============================================================================
-// Kapanış, defterin O ANDAKİ ölçümüdür. Kaynak defter append-only olduğu için
-// aynı ölçüm her an yeniden türetilebilir; `txnCount` şemaya tam bunun için
-// kondu (kontrol toplamı). Tutmuyorsa kapanıştan sonra o döneme yazılmış
-// demektir — ya bir guard atlandı ya satır DB'ye elle girildi.
+// İKİ TÜKETİCİ, TEK GÖVDE (2026-08-14): cari kapanışı ile kasa/banka kapanışı
+// aynı `PeriodVerify` yanıt şeklini döner; diyalog parametrize edildi,
+// KOPYALANMADI. Kapsama özgü olan yalnız kimlik bloğu, para basımı ve sorgu.
+//
+// Kapanış, defterin O ANDAKİ ölçümüdür ve aynı ölçüm her an yeniden
+// türetilebilir; `txnCount` şemaya tam bunun için kondu (kontrol toplamı).
+// Tutmuyorsa kapanıştan sonra o döneme yazılmış demektir — ya bir guard
+// atlandı, ya satır DB'ye elle girildi, ya (kasa defterinde) kapalı dönemdeki
+// bir hareket iptal edildi (kasa defteri append-only DEĞİLDİR — iptal geriye
+// dönük düşürür; cari defterde bu yol yoktur).
 //
 // ⚠️ BU EKRAN HİÇBİR ŞEYİ DÜZELTMEZ ve düzeltmeye ÇALIŞMAMALI. Kapanmış resmi
 // rakamı sessizce tazelemek, bu modülün reddettiği tek şeydir: mühürlü rakam
@@ -17,28 +23,42 @@
 // gerçek ayrışmayı gürültüye boğardı (sayfa butonu o satırlarda çizmez).
 // =============================================================================
 
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { formatDayKey, moneyOf, verifyPeriodClose, type PeriodCloseRow } from "./service";
+import {
+  formatDayKey,
+  moneyOf,
+  verifyPeriodClose,
+  type Decimalish,
+  type PeriodCloseRow,
+  type PeriodVerify,
+} from "./service";
 
-interface Props {
-  row: PeriodCloseRow | null;
+interface BaseProps {
+  /** null → kapalı. Radix animasyonu için içerik kapanış boyunca çizilir. */
+  targetId: string | null;
+  /** Başlık altındaki kimlik bloğu — NEYİN doğrulandığı. */
+  summary: ReactNode;
+  fmtMoney: (v: Decimalish | null | undefined) => string;
+  queryKey: readonly unknown[];
+  fetchVerify: (id: string) => Promise<PeriodVerify>;
   onOpenChange: (open: boolean) => void;
 }
 
-export function VerifyPeriodDialog({ row, onOpenChange }: Props) {
+export function PeriodVerifyDialogBase({ targetId, summary, fmtMoney, queryKey, fetchVerify, onOpenChange }: BaseProps) {
   const q = useQuery({
-    queryKey: ["finance", "period-verify", row?.id],
-    queryFn: () => verifyPeriodClose(row?.id as string),
-    enabled: Boolean(row?.id),
+    queryKey: [...queryKey],
+    queryFn: () => fetchVerify(targetId as string),
+    enabled: Boolean(targetId),
   });
 
   const v = q.data;
 
   return (
-    <Dialog open={Boolean(row)} onOpenChange={onOpenChange}>
+    <Dialog open={Boolean(targetId)} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Kapanış doğrulama</DialogTitle>
@@ -48,22 +68,12 @@ export function VerifyPeriodDialog({ row, onOpenChange }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        {row && (
-          <div className="rounded-md border bg-muted/30 p-3 text-sm">
-            <span className="font-medium">
-              {row.cariCode} — {row.cariName}
-            </span>
-            <span className="text-muted-foreground">
-              {" "}
-              · {row.currency} · Dönem sonu {formatDayKey(row.periodEnd)}
-            </span>
-          </div>
-        )}
+        {targetId != null && summary}
 
-        {/* `!row` ÖNCE elenir: diyalog kapanırken (row → null) Radix içeriği
-            animasyon boyunca çizmeye devam eder; hata dalı önce gelseydi her
-            kapanışta kırmızı kutu yanıp sönerdi. */}
-        {!row ? null : q.isLoading ? (
+        {/* `!targetId` ÖNCE elenir: diyalog kapanırken Radix içeriği animasyon
+            boyunca çizmeye devam eder; hata dalı önce gelseydi her kapanışta
+            kırmızı kutu yanıp sönerdi. */}
+        {!targetId ? null : q.isLoading ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Defter yeniden hesaplanıyor…</p>
         ) : !v ? (
           /* Sessiz `null` YASAK: kullanıcı "karşılaştırılır" yazan bir diyalogda
@@ -96,21 +106,17 @@ export function VerifyPeriodDialog({ row, onOpenChange }: Props) {
                 <tbody>
                   <tr className="border-t">
                     <td className="px-3 py-2">Mühürlenen (kapanış anı)</td>
-                    <td className="px-3 py-2 text-right font-medium">
-                      {moneyOf(v.stored.closingBalance, row.currency)}
-                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{fmtMoney(v.stored.closingBalance)}</td>
                     <td className="px-3 py-2 text-right font-medium">{v.stored.txnCount}</td>
                   </tr>
                   <tr className="border-t">
                     <td className="px-3 py-2">Bugünkü defterden yeniden hesaplanan</td>
-                    <td className="px-3 py-2 text-right font-medium">
-                      {moneyOf(v.derived.closingBalance, row.currency)}
-                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{fmtMoney(v.derived.closingBalance)}</td>
                     <td className="px-3 py-2 text-right font-medium">{v.derived.txnCount}</td>
                   </tr>
                   <tr className="border-t-2 bg-muted/40 font-semibold">
                     <td className="px-3 py-2">Fark</td>
-                    <td className="px-3 py-2 text-right">{moneyOf(v.balanceDelta, row.currency)}</td>
+                    <td className="px-3 py-2 text-right">{fmtMoney(v.balanceDelta)}</td>
                     <td className="px-3 py-2 text-right">{v.countDelta}</td>
                   </tr>
                 </tbody>
@@ -145,5 +151,36 @@ export function VerifyPeriodDialog({ row, onOpenChange }: Props) {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface Props {
+  row: PeriodCloseRow | null;
+  onOpenChange: (open: boolean) => void;
+}
+
+/** Cari sarmalayıcı — davranış ve metinler 2026-08-14 öncesiyle birebir. */
+export function VerifyPeriodDialog({ row, onOpenChange }: Props) {
+  return (
+    <PeriodVerifyDialogBase
+      targetId={row?.id ?? null}
+      summary={
+        row && (
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <span className="font-medium">
+              {row.cariCode} — {row.cariName}
+            </span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {row.currency} · Dönem sonu {formatDayKey(row.periodEnd)}
+            </span>
+          </div>
+        )
+      }
+      fmtMoney={(v) => (row ? moneyOf(v, row.currency) : "—")}
+      queryKey={["finance", "period-verify", row?.id]}
+      fetchVerify={verifyPeriodClose}
+      onOpenChange={onOpenChange}
+    />
   );
 }

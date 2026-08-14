@@ -24,6 +24,13 @@
 // beyanda bulunur — oysa hiçbir şey bilinmiyordur. Bu ekranda o cümle
 // kullanıcıyı mühürlü bir döneme kayıt girmeye yönlendirir. Hata dalı ayrı
 // basılır ve açıkça "bilinmiyor" der.
+//
+// İKİ SEKME (2026-08-14, K-1): "Cari" (cari × para birimi mührü) ve
+// "Kasa / Banka" (hesap mührü — `CashPeriodSection`). İki kapanış AYRI
+// defterleri korur ve boyutları farklıdır; tek listeye karıştırmak "hangi
+// mühür neyi kapatıyor" sorusunu bulandırırdı. Başlıktaki "Dönem Kapat"
+// düğmesi AKTİF sekmenin diyaloğunu açar — iki ayrı düğme, aynı işin iki
+// kopyası gibi okunur ve yanlış olanına basılırdı.
 // =============================================================================
 
 import { useState } from "react";
@@ -33,9 +40,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PermissionGate } from "@/components/PermissionGate";
 import type { CariRow, Currency } from "../service";
 import { CariPicker } from "./CariPicker";
+import { CashPeriodSection } from "./CashPeriodSection";
 import { ClosePeriodDialog } from "./ClosePeriodDialog";
 import { LockStatusCard } from "./LockStatusCard";
 import { ReopenPeriodDialog } from "./ReopenPeriodDialog";
@@ -49,11 +58,15 @@ import {
   type PeriodCloseRow,
 } from "./service";
 
+type TabKey = "cari" | "cash";
+
 export function PeriodClosePage() {
+  const [tab, setTab] = useState<TabKey>("cari");
   const [cari, setCari] = useState<CariRow | null>(null);
   const [currency, setCurrency] = useState<Currency | "">("");
   const [includeReopened, setIncludeReopened] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [cashFormOpen, setCashFormOpen] = useState(false);
   const [verifyTarget, setVerifyTarget] = useState<PeriodCloseRow | null>(null);
   const [reopenTarget, setReopenTarget] = useState<PeriodCloseRow | null>(null);
 
@@ -82,10 +95,15 @@ export function PeriodClosePage() {
     <PageShell>
       <PageHeader
         title="Dönem Kapanışı"
-        description="Kapanış deftere satır yazmaz — seçilen tarihteki bakiyenin fotoğrafını çeker ve o dönemi mühürler. Mühürlü döneme fatura, tahsilat ve çek kaydı girilemez."
+        description={
+          tab === "cari"
+            ? "Kapanış deftere satır yazmaz — seçilen tarihteki bakiyenin fotoğrafını çeker ve o dönemi mühürler. Mühürlü döneme fatura, tahsilat ve çek kaydı girilemez."
+            : "Kapanış deftere satır yazmaz — hesabın seçilen tarihteki bakiyesinin fotoğrafını çeker ve o dönemi mühürler. Mühürlü döneme tahsilat/ödeme, kasa hareketi ve çek tahsilatı girilemez."
+        }
         actions={
           <PermissionGate permission="finance:close">
-            <Button onClick={() => setFormOpen(true)}>
+            {/* Tek düğme, AKTİF sekmenin diyaloğunu açar — dosya başındaki not. */}
+            <Button onClick={() => (tab === "cari" ? setFormOpen(true) : setCashFormOpen(true))}>
               <Lock className="mr-1 h-4 w-4" />
               Dönem Kapat
             </Button>
@@ -93,36 +111,45 @@ export function PeriodClosePage() {
         }
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-        <CariPicker
-          className="w-72"
-          nullable
-          value={cari?.id ?? null}
-          selectedLabel={cari ? `${cari.code} — ${cari.name}` : null}
-          onChange={setCari}
-        />
-        <select
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={currency}
-          onChange={(e) => setCurrency(e.target.value as Currency | "")}
-        >
-          <option value="">Tüm para birimleri</option>
-          {PERIOD_CURRENCIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <Button
-          variant={includeReopened ? "default" : "outline"}
-          onClick={() => setIncludeReopened((v) => !v)}
-          title="Yeniden açılmış kapanışlar da listelensin (denetim görünümü)"
-        >
-          Yeniden açılanlar
-        </Button>
-      </div>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex min-h-0 flex-1 flex-col">
+        <div className="shrink-0 border-b px-6 py-2">
+          <TabsList>
+            <TabsTrigger value="cari">Cari Hesaplar</TabsTrigger>
+            <TabsTrigger value="cash">Kasa / Banka</TabsTrigger>
+          </TabsList>
+        </div>
 
-      <PageBody className="space-y-6 p-6">
+        <TabsContent value="cari" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
+            <CariPicker
+              className="w-72"
+              nullable
+              value={cari?.id ?? null}
+              selectedLabel={cari ? `${cari.code} — ${cari.name}` : null}
+              onChange={setCari}
+            />
+            <select
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as Currency | "")}
+            >
+              <option value="">Tüm para birimleri</option>
+              {PERIOD_CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant={includeReopened ? "default" : "outline"}
+              onClick={() => setIncludeReopened((v) => !v)}
+              title="Yeniden açılmış kapanışlar da listelensin (denetim görünümü)"
+            >
+              Yeniden açılanlar
+            </Button>
+          </div>
+
+          <PageBody className="space-y-6 p-6">
         {cari && currency ? (
           <LockStatusCard cariId={cari.id} cariLabel={`${cari.code} — ${cari.name}`} currency={currency} />
         ) : null}
@@ -244,7 +271,17 @@ export function PeriodClosePage() {
             </div>
           </div>
         )}
-      </PageBody>
+          </PageBody>
+        </TabsContent>
+
+        <TabsContent value="cash" className="mt-0 flex min-h-0 flex-1 flex-col">
+          {/* Kasa sekmesi kendi filtre şeridini, listesini ve diyaloglarını
+              taşır — pasifken Radix içeriği UNMOUNT eder, sorguları koşmaz. */}
+          <PageBody className="p-6">
+            <CashPeriodSection formOpen={cashFormOpen} onFormOpenChange={setCashFormOpen} />
+          </PageBody>
+        </TabsContent>
+      </Tabs>
 
       {/* ⚠️ MOUNT DESENİ İKİ TÜRLÜ ve bilinçli — yorum kodu birebir anlatmalı:
           • Kapatma diyaloğu KOŞULLU mount edilir (`formOpen &&`): kapanınca
