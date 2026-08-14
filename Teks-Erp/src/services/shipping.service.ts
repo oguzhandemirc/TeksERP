@@ -1430,10 +1430,15 @@ export class ShippingService {
     }
     const dispatched = !confirmationEnabled;
     await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, destination, dispatched } });
+    // Otomatik fatura taslağı — YALNIZ gerçekten sevk edildiyse. PLANNED bir
+    // sevkiyat "mal çıktı" demez; onay açıkken taslak `dispatchShipment`'te doğar.
+    const draftNote = dispatched ? await this.maybeAutoDraftInvoiceAfterDispatch(result.id, userId) : null;
     return {
       success: true,
       data: { id: result.id, shipmentNo: result.shipmentNo, status: dispatched ? ShipmentStatus.DISPATCHED : ShipmentStatus.PLANNED, dispatched },
-      message: dispatched ? `Sevk edildi: ${result.shipmentNo}` : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`,
+      message:
+        (dispatched ? `Sevk edildi: ${result.shipmentNo}` : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`) +
+        (draftNote ? ` · ${draftNote}` : ""),
     };
   }
 
@@ -1717,6 +1722,8 @@ export class ShippingService {
       recordId: result.id,
       newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, orderIds },
     });
+    // Hızlı sevk de ORTAK kancayı çağırır — çuvaldan sevkle davranış ayrışmasın.
+    const draftNote = dispatched ? await this.maybeAutoDraftInvoiceAfterDispatch(result.id, userId) : null;
     return {
       success: true,
       data: {
@@ -1726,9 +1733,10 @@ export class ShippingService {
         dispatched,
         rollCount: rollIds.length,
       },
-      message: dispatched
-        ? `Sevk edildi: ${result.shipmentNo} (${rollIds.length} top)`
-        : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`,
+      message:
+        (dispatched
+          ? `Sevk edildi: ${result.shipmentNo} (${rollIds.length} top)`
+          : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`) + (draftNote ? ` · ${draftNote}` : ""),
     };
   }
 
@@ -2120,7 +2128,51 @@ export class ShippingService {
 
     const shippedRolls = await prisma.$transaction((tx) => this.performDispatchTx(tx, shipmentId, data, userId));
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DISPATCH", rollCount: shippedRolls, plateNumber: data.plateNumber ?? null, driverName: data.driverName ?? null } });
-    return { success: true, data: { shipmentId, rollCount: shippedRolls }, message: "Sevk edildi — stok bina dışı, karşılanma kesinleşti" };
+    const draftNote = await this.maybeAutoDraftInvoiceAfterDispatch(shipmentId, userId);
+    return {
+      success: true,
+      data: { shipmentId, rollCount: shippedRolls },
+      message: "Sevk edildi — stok bina dışı, karşılanma kesinleşti" + (draftNote ? ` · ${draftNote}` : ""),
+    };
+  }
+
+  // =========================================================================
+  // SEVK SONRASI KANCA — OTOMATİK SATIŞ FATURASI TASLAĞI (dinamik yükleme)
+  // =========================================================================
+  /**
+   * Üç dispatch yolunun ORTAK kancası — gövde `helpers/shipment-auto-draft.helper.ts`te
+   * yaşar ve BİLİNÇLİ olarak DİNAMİK yüklenir:
+   *  ① `shipping.routes` bir FABRİKA router'ıdır ve rejim kapısı TAŞIYAMAZ
+   *    (fabrikada sevkiyat `finance.enabled`a bağlanamaz). `invoice.service`i
+   *    buradan STATİK import etmek, `test_finance_regime_gate`in türetilmiş
+   *    kapsamında shipping + return router'larını "ticarete dokunuyor" yapar —
+   *    ve bekçi HAKLI olur: statik kenar, modül yüklenince gerçekten kurulur.
+   *    Dinamik yüklemede fabrika süreci, bayraklar kapalıyken o modülü HİÇ
+   *    yüklemez. Davranışı koruyan şey bu satır değil, helper'ın kendi çift
+   *    bayrak kapısıdır (financeEnabled → autoDraftFromShipment); bekçisi
+   *    `test_auto_draft_shipment` (§4 modül şalteri dahil).
+   *  ② invoice ↔ shipping statik çift yönü modül-init döngüsü riskiydi
+   *    (eski yorum "ters yönde import eklemeden önce yeniden ölç" diyordu);
+   *    dinamik yükleme bu sınıfı kökten kapatır.
+   *
+   * ⚠️ SEVK ASLA TASLAK YÜZÜNDEN DÜŞMEZ: helper kendi hatalarını yutar
+   * (409 sessiz, gerisi warn + mesajda çıkış yolu); buradaki catch yalnız
+   * MODÜL YÜKLEME hatasını (bozuk build) karşılar — o da sevki düşürmez.
+   */
+  private async maybeAutoDraftInvoiceAfterDispatch(
+    shipmentId: string,
+    userId?: string,
+  ): Promise<string | null> {
+    try {
+      const { autoDraftInvoiceAfterDispatch } = await import("./helpers/shipment-auto-draft.helper");
+      return await autoDraftInvoiceAfterDispatch(shipmentId, userId);
+    } catch (err) {
+      console.warn(
+        `[auto-draft] Kanca modülü yüklenemedi (sevk ${shipmentId} etkilenmedi):`,
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
   }
 
   // =========================================================================

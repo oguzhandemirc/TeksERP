@@ -92,6 +92,19 @@ const TICARET_MODELLERI = new Set([
 // -----------------------------------------------------------------------------
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/return.routes.ts",
+    neden:
+      "İade FABRİKANIN ana akışıdır (mobil iade ekranı + RollReturn) → rejim kapısı KONULAMAZ. " +
+      "invoice izi tek daldan gelir (H8, 2026-08-14): `attachReturnInvoices` sayfadaki iade " +
+      "gruplarına faturalanmışlık bilgisini SALT-OKUMA tek sorguyla ekler (panelin 'Satış İade " +
+      "Faturası' düğmesi alana bakar). Fabrikada `returnGroupId`li fatura VAR OLAMAZ (fatura " +
+      "yazan tüm uçlar rejim kapılı) → sorgu 0 satır döner, alan null kalır, davranış bayt-bayt " +
+      "aynı. Yazma yüzeyi sıfır: dal hiçbir ticaret tablosuna INSERT/UPDATE üretmez. Bu muaf " +
+      "2026-08-14 gecesi J1 dikişinde eklendi — kenar H8'den beri vardı ve o günkü taramada " +
+      "gözden kaçmıştı (shipping.service'in statik invoice importu kaldırılınca tek başına " +
+      "görünür oldu).",
+  },
+  {
     dosya: "routes/goods-receipt.routes.ts",
     neden:
       "Mal kabul FABRİKADA DA kullanılır (satın alınan kumaşın depo girişi) → rejim kapısı " +
