@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Ban, ArrowDownLeft, ArrowUpRight, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -24,6 +25,7 @@ export function PaymentsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [formDirection, setFormDirection] = useState<"IN" | "OUT">("IN");
   const [cancelTarget, setCancelTarget] = useState<PaymentRow | null>(null);
+  const [printTarget, setPrintTarget] = useState<PaymentRow | null>(null);
 
   const q = useQuery({
     queryKey: ["finance", "payments", direction],
@@ -128,6 +130,18 @@ export function PaymentsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
+                      {/* Makbuz KAYIT anında donduğu için her satırda basılabilir
+                          (iptal edilmiş olan İPTAL filigranıyla) — faturadan farkı
+                          budur: makbuzun taslak hâli YOKTUR. */}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="mr-1"
+                        title="Makbuzu yazdır / önizle"
+                        onClick={() => setPrintTarget(p)}
+                      >
+                        <Printer className="h-4 w-4" />
+                      </Button>
                       {p.status === "ACTIVE" && (
                         <PermissionGate permission="finance:payment">
                           <Button variant="outline" size="sm" onClick={() => setCancelTarget(p)}>
@@ -167,6 +181,15 @@ export function PaymentsPage() {
         onConfirm={() => {
           if (cancelTarget) cancelM.mutate(cancelTarget.id);
         }}
+      />
+      <PrintedDocDialog
+        docType="PAYMENT_RECEIPT"
+        sourceId={printTarget?.id ?? null}
+        open={Boolean(printTarget)}
+        onOpenChange={(o) => !o && setPrintTarget(null)}
+        title={printTarget ? `Makbuz — ${printTarget.docNo}` : "Makbuz"}
+        description="Belge KAYIT anında dondu; iptal edilen makbuz İPTAL filigranıyla basılır."
+        writePermission="finance:payment"
       />
     </PageShell>
   );

@@ -46,6 +46,9 @@ const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   RETURN_DISPATCH: "iadeIrsaliyesi",
   TRANSFER_DISPATCH: "depoTransfer",
   GOODS_RECEIPT: "malKabul",
+  // 2026-08-14 ön muhasebe çıktıları.
+  INVOICE_INTERNAL: "fatura",
+  PAYMENT_RECEIPT: "tahsilatMakbuzu",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */

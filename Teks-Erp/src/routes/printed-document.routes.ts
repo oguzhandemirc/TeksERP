@@ -84,6 +84,18 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read: ["goods-receipt:read", "goods-receipt:write"],
     write: ["goods-receipt:write"],
   },
+  // Ön muhasebe çıktıları (2026-08-14). READ, WRITE'ı KAPSAR — yazabilen okur.
+  // ⚠️ Revizyon (write) `finance:invoice`/`finance:payment` ister, `finance:write`
+  // DEĞİL: taslak kurabilen kişi resmi belgeyi revize edememeli — o, deftere
+  // işlemiş bir kaydın kâğıdını değiştirmektir.
+  INVOICE_INTERNAL: {
+    read:  ["finance:read", "finance:write", "finance:invoice"],
+    write: ["finance:invoice"],
+  },
+  PAYMENT_RECEIPT: {
+    read:  ["finance:read", "finance:write", "finance:payment"],
+    write: ["finance:payment"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

@@ -22,7 +22,10 @@ export type PrintedDocType =
   // IMPORT EDEMEZ (ayrı proje): bu union `PrintedDocType` ile ELLE senkron tutulur,
   // tıpkı `DOC_TYPE_TO_KEY` aynası gibi.
   | "TRANSFER_DISPATCH"
-  | "GOODS_RECEIPT";
+  | "GOODS_RECEIPT"
+  // Ön muhasebe çıktıları (2026-08-14).
+  | "INVOICE_INTERNAL"
+  | "PAYMENT_RECEIPT";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

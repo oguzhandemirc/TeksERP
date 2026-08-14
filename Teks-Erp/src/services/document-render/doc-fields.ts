@@ -95,6 +95,9 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
   depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],
   malKabul: [...COMMON, ...BOXES, SEC_CAPTION],
+  // Ön muhasebe çıktıları — aynı iskelet (başlık · kutu · tablo · imza).
+  fatura: [...COMMON, ...BOXES, SEC_CAPTION],
+  tahsilatMakbuzu: [...COMMON, ...BOXES, SEC_CAPTION],
 };
 
 /**

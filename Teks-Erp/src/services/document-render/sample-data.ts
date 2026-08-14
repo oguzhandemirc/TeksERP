@@ -196,4 +196,53 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     ],
     notes: null,
   },
+
+  // Ön muhasebe çıktıları (2026-08-14). Sınır durumları BİLİNÇLİ olarak örnekte:
+  // faturada dövizli + tevkifatlı bir kalem (TL karşılığı satırı ve tevkifat
+  // satırı önizlemede görünsün), makbuzda ise TL (en sık hâl).
+  INVOICE_INTERNAL: {
+    header: {
+      documentNo: "FTR1408260001",
+      date: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
+      type: "SALES",
+      typeLabel: "Satış Faturası",
+      partyName: "Örnek Tekstil Ltd. Şti.",
+      partyCode: "CR-000148",
+      partyTaxInfo: "Merkez V.D. · 1234567890",
+      currency: "USD",
+      exchangeRate: "40.250000",
+      externalNo: "IRS-2026-8812",
+      createdBy: "Ayşe Kaya",
+    },
+    lines: [
+      { description: "Patos Kumaş · Gri", qty: "520", unit: "m", unitPrice: "3.4500",
+        discountRate: "0", vatRate: "20", lineNet: "1794.00", lineVat: "358.80" },
+      { description: "Saten Kumaş · Ekru", qty: "180", unit: "m", unitPrice: "5.1000",
+        discountRate: "5", vatRate: "20", lineNet: "872.10", lineVat: "174.42" },
+      { description: "Nakliye bedeli", qty: "1", unit: "adet", unitPrice: "150.0000",
+        discountRate: "0", vatRate: "20", lineNet: "150.00", lineVat: "30.00" },
+    ],
+    totals: { net: "2816.10", vat: "563.22", withholding: "112.64", grand: "3266.68", grandTry: "131483.87" },
+    notes: null,
+  },
+  PAYMENT_RECEIPT: {
+    header: {
+      documentNo: "THS1408260001",
+      date: new Date().toISOString(),
+      direction: "IN",
+      directionLabel: "Tahsilat Makbuzu",
+      partyName: "Örnek Tekstil Ltd. Şti.",
+      partyCode: "CR-000148",
+      method: "BANK_TRANSFER",
+      methodLabel: "Havale / EFT",
+      accountName: "Ziraat Bankası — TL Vadesiz",
+      currency: "TRY",
+      exchangeRate: null,
+      createdBy: "Ayşe Kaya",
+    },
+    amount: "50000.00",
+    amountTry: null,
+    notes: "Ağustos dönemi kısmi tahsilat.",
+  },
 };

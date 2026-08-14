@@ -43,6 +43,8 @@ import "../src/services/kartela.service";
 import "../src/services/return.service";
 import "../src/services/warehouse-transfer.service";
 import "../src/services/goods-receipt.service";
+import "../src/services/invoice.service";
+import "../src/services/payment.service";
 
 let pass = 0;
 let fail = 0;
@@ -79,6 +81,12 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
     (await prisma.warehouseTransfer.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
   [PrintedDocType.GOODS_RECEIPT]: async () =>
     (await prisma.goodsReceipt.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  // Ön muhasebe: TASLAK fatura da geçerli bir kaynaktır (builder durumdan
+  // bağımsız çalışmalı — iptal edilmişi bile `voidInfo` ile basar).
+  [PrintedDocType.INVOICE_INTERNAL]: async () =>
+    (await prisma.invoice.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.PAYMENT_RECEIPT]: async () =>
+    (await prisma.payment.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

@@ -3141,6 +3141,12 @@ enum PrintedDocType {
   // versiyon + İPTAL filigranı.
   TRANSFER_DISPATCH // Depolar arası transfer irsaliyesi (WarehouseTransfer)
   GOODS_RECEIPT // Mal kabul fişi (GoodsReceipt — satın alınan malın depo girişi)
+  // 2026-08-14 ön muhasebe çıktıları (yine SONA — ALTER TYPE ADD VALUE kuralı).
+  // ⚠️ İkisi de DONMUŞ DEFTER semantiği taşır ve bu bilinçli: fatura/makbuz
+  // resmi kayıttır, sonradan içerik değişirse basılı kâğıt yalan söyler.
+  // Zincir aynı: snapshot + versiyon + revizyon + İPTAL filigranı.
+  INVOICE_INTERNAL // İç satış/alış faturası (Invoice — ONAYDA donar, stornoda VOID)
+  PAYMENT_RECEIPT // Tahsilat/ödeme makbuzu (Payment — KAYITTA donar, iptalde VOID)
 }
 
 enum PrintedDocStatus {

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Check, Ban, Trash2 } from "lucide-react";
+import { Plus, Check, Ban, Trash2, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -33,6 +34,7 @@ export function InvoicesPage() {
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [printTarget, setPrintTarget] = useState<{ id: string; docNo: string } | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<InvoiceRow | null>(null);
   const [cancelTarget, setCancelTarget] = useState<InvoiceRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InvoiceRow | null>(null);
@@ -171,6 +173,20 @@ export function InvoicesPage() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-1">
+                          {/* BELGE — taslakta ÇIKMAZ: belge onayda donar, taslağın
+                              resmi kaydı yoktur ve düğme "yok" bir şeyi vaat eder.
+                              İPTAL edilmiş fatura basılabilir KALIR (İPTAL
+                              filigranıyla) — dosyaya bakan kişinin ihtiyacı. */}
+                          {inv.status !== "DRAFT" && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              title="Faturayı yazdır / önizle"
+                              onClick={() => setPrintTarget(inv)}
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                          )}
                           {inv.status === "DRAFT" && (
                             <>
                               <PermissionGate permission="finance:invoice">
@@ -260,6 +276,15 @@ export function InvoicesPage() {
         onConfirm={() => {
           if (deleteTarget) deleteM.mutate(deleteTarget.id);
         }}
+      />
+      <PrintedDocDialog
+        docType="INVOICE_INTERNAL"
+        sourceId={printTarget?.id ?? null}
+        open={Boolean(printTarget)}
+        onOpenChange={(o) => !o && setPrintTarget(null)}
+        title={printTarget ? `Fatura — ${printTarget.docNo}` : "Fatura"}
+        description="Belge ONAY anında dondu; iptal edilen fatura İPTAL filigranıyla basılır."
+        writePermission="finance:invoice"
       />
     </PageShell>
   );

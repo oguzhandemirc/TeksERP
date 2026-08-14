@@ -9,7 +9,7 @@
 // Bu üçlü, `CariTransaction`'ın append-only olmasının da sebebidir: geçmişi
 // değiştirilebilen bir defter denetimde hiçbir şey kanıtlamaz.
 // =============================================================================
-import { Prisma, InvoiceStatus, InvoiceType, Currency, CariTxnSource } from "@prisma/client";
+import { Prisma, InvoiceStatus, InvoiceType, Currency, CariTxnSource, PrintedDocType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -25,6 +25,8 @@ import {
   ensureCariAccountTx,
   applyCariBalanceTx,
 } from "./helpers/finance.helper";
+import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
+import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/finance-doc.html";
 import type { ApiResponse } from "../types/api.types";
 
 export interface InvoiceLineInput {
@@ -581,6 +583,18 @@ export class InvoiceService {
         }
       }
 
+      // ⚠️ BELGE ONAY ANINDA DONAR, taslakta DEĞİL. Taslak serbestçe düzenlenip
+      // silinebilir; resmi kayıt onayla doğar. Freeze tx'in İÇİNDE: fatura
+      // deftere işlerken belge de donmalı, ikisi ya birlikte olur ya hiç.
+      // (Emsal: transfer irsaliyesi — mal kabul fişinin LAZY-INIT yolu burada
+      // YANLIŞ olurdu, çünkü fatura bir KAP değil, onaylanmış bir beyandır.)
+      await printedDocumentService.freezeForSource(
+        tx,
+        PrintedDocType.INVOICE_INTERNAL,
+        inv.id,
+        userId,
+      );
+
       return { id: inv.id, docNo: inv.docNo };
     });
 
@@ -686,6 +700,17 @@ export class InvoiceService {
         });
       }
 
+      // Storno → resmi belge İPTAL filigranıyla VOIDED'e çekilir. Belge SİLİNMEZ
+      // (donmuş belge kuralı): dosyaya bakan kişi iptal edilmiş faturayı da
+      // yeniden basabilmeli. Taslak iptalinde belge zaten hiç doğmamıştır ve
+      // `voidForSource` sessizce no-op olur.
+      await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.INVOICE_INTERNAL,
+        inv.id,
+        reason ?? "Fatura iptal edildi",
+      );
+
       return { id: inv.id, docNo: inv.docNo, wasPosted: Boolean(posted) };
     });
 
@@ -777,3 +802,109 @@ export class InvoiceService {
 }
 
 export const invoiceService = new InvoiceService();
+
+// ---------------------------------------------------------------------------
+// BELGE BUILDER — iç fatura
+// ---------------------------------------------------------------------------
+// ⚠️ Kayıt IMPORT YAN ETKİSİYLE oluşur: `app.ts` → finance.routes → bu servis.
+// Bekçilerde (`test_printed_doc_builders`, `test_document_style`) import satırı
+// yoksa registry boş kalır ve testler vakumen yeşile döner.
+
+/** Belge başlığı TÜRDEN gelir — "aldık" ile "sattık" aynı kâğıtta olamaz. */
+const INVOICE_TYPE_TITLE: Record<InvoiceType, string> = {
+  SALES: "Satış Faturası",
+  PURCHASE: "Alış Faturası",
+  SALES_RETURN: "Satış İade Faturası",
+  PURCHASE_RETURN: "Alış İade Faturası",
+};
+
+registerPrintedDocBuilder(PrintedDocType.INVOICE_INTERNAL, {
+  fresh: async (db, sourceId) => {
+    const inv = await db.invoice.findUniqueOrThrow({
+      where: { id: sourceId },
+      select: {
+        id: true, docNo: true, type: true, status: true, issueDate: true, dueDate: true,
+        currency: true, exchangeRate: true, externalNo: true, notes: true,
+        subtotal: true, vatTotal: true, withholdingTotal: true, grandTotal: true, grandTotalTry: true,
+        cancelReason: true, cancelledAt: true,
+        // Ad/kod cari kartın BAĞLI OLDUĞU taraftan gelir (CariAccount kendi adını
+        // taşımaz — `cari.service.partyOf` ile aynı kural). Vergi dairesi ise
+        // CariAccount'ta: müşteri/fason kartlarına dokunulmadı.
+        cari: {
+          select: {
+            taxOffice: true,
+            customer: { select: { code: true, name: true, taxNumber: true } },
+            subcontractor: { select: { code: true, name: true, taxNumber: true } },
+          },
+        },
+        createdById: true,
+        lines: {
+          orderBy: { lineNo: "asc" },
+          select: {
+            description: true, qty: true, unit: true, unitPrice: true,
+            discountRate: true, vatRate: true, lineTotal: true, vatAmount: true,
+          },
+        },
+      },
+    });
+    const party = inv.cari?.customer ?? inv.cari?.subcontractor ?? null;
+    const creator = inv.createdById
+      ? await db.user.findUnique({
+          where: { id: inv.createdById },
+          select: { fullName: true, username: true },
+        })
+      : null;
+    const doc: InvoiceDoc = {
+      header: {
+        documentNo: inv.docNo,
+        date: inv.issueDate?.toISOString() ?? null,
+        dueDate: inv.dueDate?.toISOString() ?? null,
+        type: inv.type,
+        typeLabel: INVOICE_TYPE_TITLE[inv.type],
+        partyName: party?.name ?? "—",
+        partyCode: party?.code ?? null,
+        // Vergi bilgisi TEK satırda birleştirilir; ikisi de boşsa alan HİÇ basılmaz
+        // (boş "Vergi: —" satırı belgeyi kirletir).
+        partyTaxInfo:
+          [inv.cari?.taxOffice, party?.taxNumber].filter(Boolean).join(" · ") || null,
+        currency: inv.currency,
+        exchangeRate: inv.exchangeRate?.toString() ?? null,
+        externalNo: inv.externalNo,
+        // ⚠️ `Invoice`ta createdBy İLİŞKİSİ yok (yalnız `createdById` kolonu) —
+        // ad ayrı sorguyla çözülür. Belge donarken tek ek okuma; snapshot'a
+        // AD yazılır, id değil: kullanıcı sonradan yeniden adlandırılsa bile
+        // basılı belge o günkü adı taşımalı (donmuş belge kuralı).
+        createdBy: creator?.fullName ?? creator?.username ?? null,
+      },
+      lines: inv.lines.map((l) => ({
+        description: l.description,
+        qty: l.qty.toString(),
+        unit: l.unit,
+        unitPrice: l.unitPrice.toString(),
+        discountRate: l.discountRate.toString(),
+        vatRate: l.vatRate.toString(),
+        lineNet: l.lineTotal.toString(),
+        lineVat: l.vatAmount.toString(),
+      })),
+      totals: {
+        net: inv.subtotal.toString(),
+        vat: inv.vatTotal.toString(),
+        withholding: inv.withholdingTotal.toString(),
+        grand: inv.grandTotal.toString(),
+        grandTry: inv.grandTotalTry?.toString() ?? null,
+      },
+      notes: inv.notes,
+    };
+    return {
+      documentNo: inv.docNo,
+      doc: doc as unknown as Record<string, unknown>,
+      // İptal edilmiş fatura ilk kez basılıyorsa belge DOĞRUDAN VOIDED doğar —
+      // İPTAL filigranıyla (mal kabul fişi emsali).
+      voidInfo:
+        inv.status === InvoiceStatus.CANCELLED
+          ? { reason: inv.cancelReason, at: inv.cancelledAt ?? new Date() }
+          : null,
+    };
+  },
+  renderHtml: renderInvoiceInternalHtml,
+});

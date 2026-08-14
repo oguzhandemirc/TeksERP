@@ -298,6 +298,8 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
   RETURN_DISPATCH: "iadeIrsaliyesi",
   TRANSFER_DISPATCH: "depoTransfer",
   GOODS_RECEIPT: "malKabul",
+  INVOICE_INTERNAL: "fatura",
+  PAYMENT_RECEIPT: "tahsilatMakbuzu",
 };
 
 /**
@@ -454,6 +456,47 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
     { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
   ],
   malKabul: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  // Ön muhasebe çıktıları — backend `doc-fields.ts` ile BİREBİR (sıra dahil).
+  fatura: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  tahsilatMakbuzu: [
     { key: "company", label: "Firma adı", group: "header" },
     { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
     { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
@@ -808,6 +851,56 @@ export const DOC_DEFS: DocDef[] = [
         ],
       },
     ],
+  },
+  {
+    // ⚠️ `sections` ve `columns` anahtarları renderer'ın okuduklarıyla BİREBİR
+    // olmak zorunda (`finance-doc.html.ts`) — ayrışırsa panelde ayar görünür
+    // ama belgede karşılığı olmaz ("ayar var, kapısı yok").
+    key: "fatura",
+    label: "Fatura (İç)",
+    defaultTitle: "Satış Faturası",
+    fields: DOC_FIELD_CATALOGS.fatura,
+    defaultSignatures: ["Düzenleyen", "Teslim Alan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "dueDate", label: "Vade" },
+      { key: "externalNo", label: "Belge / irsaliye no" },
+      { key: "createdBy", label: "Düzenleyen" },
+      { key: "lineTable", label: "Kalem tablosu" },
+      { key: "totals", label: "Toplam bloğu" },
+    ],
+    tables: [
+      {
+        key: "lineTable",
+        label: "Fatura Kalemleri",
+        columns: [
+          { key: "description", label: "Açıklama" },
+          { key: "qty", label: "Miktar" },
+          { key: "unitPrice", label: "Birim fiyat" },
+          { key: "discountRate", label: "İskonto %" },
+          { key: "vatRate", label: "KDV %" },
+          { key: "lineNet", label: "Tutar" },
+        ],
+      },
+    ],
+  },
+  {
+    // ⚠️ MAKBUZDA SATIR TABLOSU YOK — makbuz TEK bir olayı belgeler. `tables: []`
+    // bilinçli: boş bir tablo tanımı panelde "kolonları ayarla" vaadi verir ve
+    // karşılığı olmayan bir ayar üretir.
+    key: "tahsilatMakbuzu",
+    label: "Tahsilat / Ödeme Makbuzu",
+    defaultTitle: "Tahsilat Makbuzu",
+    fields: DOC_FIELD_CATALOGS.tahsilatMakbuzu,
+    defaultSignatures: ["Ödeyen", "Tahsil Eden"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "account", label: "Kasa / banka" },
+      { key: "createdBy", label: "Düzenleyen" },
+    ],
+    tables: [],
   },
 ];
 

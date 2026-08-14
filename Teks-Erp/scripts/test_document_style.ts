@@ -23,6 +23,8 @@ import "../src/services/return.service";
 // import edilmeli, yoksa `requireBuilder` 500 verir (2026-08-13'te böyle yakalandı).
 import "../src/services/warehouse-transfer.service";
 import "../src/services/goods-receipt.service";
+import "../src/services/invoice.service";
+import "../src/services/payment.service";
 import {
   systemSettingService,
   readDocumentsLogo,

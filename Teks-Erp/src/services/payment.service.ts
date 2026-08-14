@@ -5,7 +5,7 @@
 // + audit. Dördü ayrı yazılırsa biri patladığında para "kasadan çıkmış ama
 // cariye işlenmemiş" halde kalır ve bunu fark etmenin tek yolu ay sonu sayımıdır.
 // =============================================================================
-import { Prisma, PaymentDirection, PaymentMethod, PaymentStatus, Currency, CariTxnSource } from "@prisma/client";
+import { Prisma, PaymentDirection, PaymentMethod, PaymentStatus, Currency, CariTxnSource, PrintedDocType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -18,6 +18,8 @@ import {
   ensureCariAccountTx,
   applyCariBalanceTx,
 } from "./helpers/finance.helper";
+import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
+import { renderPaymentReceiptHtml, type PaymentReceiptDoc } from "./document-render/finance-doc.html";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CreatePaymentInput {
@@ -168,6 +170,17 @@ export class PaymentService {
           });
         }
 
+        // ⚠️ MAKBUZ KAYIT ANINDA DONAR (faturadan farklı olarak taslak yok):
+        // para EL DEĞİŞTİRDİĞİ an makbuz verilir; "onay" diye ikinci bir adım
+        // yoktur. Freeze tx'in İÇİNDE — kasa/banka bakiyesi ile makbuz ya
+        // birlikte doğar ya hiç.
+        await printedDocumentService.freezeForSource(
+          tx,
+          PrintedDocType.PAYMENT_RECEIPT,
+          payment.id,
+          userId,
+        );
+
         return payment;
       }),
     );
@@ -252,6 +265,15 @@ export class PaymentService {
         await tx.bankAccount.update({ where: { id: p.bankAccountId }, data: { balance: { increment: accDelta } } });
       }
 
+      // Storno → makbuz İPTAL filigranıyla VOIDED. Belge silinmez: elinde
+      // makbuz olan müşteri için iptal edilmiş kopyanın da basılabilmesi gerekir.
+      await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.PAYMENT_RECEIPT,
+        p.id,
+        reason ?? "Tahsilat/ödeme iptal edildi",
+      );
+
       return { id: p.id, docNo: p.docNo };
     });
 
@@ -331,3 +353,82 @@ export class PaymentService {
 }
 
 export const paymentService = new PaymentService();
+
+// ---------------------------------------------------------------------------
+// BELGE BUILDER — tahsilat / ödeme makbuzu
+// ---------------------------------------------------------------------------
+// ⚠️ Kayıt IMPORT YAN ETKİSİYLE oluşur (finance.routes → bu servis). Bekçilerde
+// import satırı yoksa registry boş kalır ve testler vakumen yeşile döner.
+
+/** Yön etiketi belgenin BAŞLIĞIDIR — tahsilat ile ödeme aynı kâğıt değildir. */
+const DIRECTION_TITLE: Record<PaymentDirection, string> = {
+  IN: "Tahsilat Makbuzu",
+  OUT: "Ödeme Makbuzu",
+};
+
+// ⚠️ `Record<PaymentMethod, ...>` EXHAUSTIVE: enum'a değer eklenirse tsc burayı
+// düşürür. Çek/senet bilinçli olarak YOK — C1'de ayrı bir `Cheque` modeli
+// geliyor (çek bir AN değil bir VARLIKTIR; Payment sözleşmesine istisna sokmak
+// en hassas yola sessiz bir `if` eklemek olurdu).
+const METHOD_LABEL: Record<PaymentMethod, string> = {
+  CASH: "Nakit",
+  BANK_TRANSFER: "Havale / EFT",
+  CREDIT_CARD: "Kredi Kartı",
+  OTHER: "Diğer",
+};
+
+registerPrintedDocBuilder(PrintedDocType.PAYMENT_RECEIPT, {
+  fresh: async (db, sourceId) => {
+    const p = await db.payment.findUniqueOrThrow({
+      where: { id: sourceId },
+      select: {
+        id: true, docNo: true, direction: true, method: true, status: true,
+        paymentDate: true, currency: true, exchangeRate: true, amount: true, amountTry: true,
+        notes: true, cancelReason: true, cancelledAt: true, createdById: true,
+        cari: {
+          select: {
+            customer: { select: { code: true, name: true } },
+            subcontractor: { select: { code: true, name: true } },
+          },
+        },
+        cashBox: { select: { name: true } },
+        bankAccount: { select: { name: true } },
+      },
+    });
+    const party = p.cari?.customer ?? p.cari?.subcontractor ?? null;
+    const creator = p.createdById
+      ? await db.user.findUnique({ where: { id: p.createdById }, select: { fullName: true, username: true } })
+      : null;
+    const doc: PaymentReceiptDoc = {
+      header: {
+        documentNo: p.docNo,
+        date: p.paymentDate?.toISOString() ?? null,
+        direction: p.direction,
+        directionLabel: DIRECTION_TITLE[p.direction],
+        partyName: party?.name ?? "—",
+        partyCode: party?.code ?? null,
+        method: p.method,
+        methodLabel: METHOD_LABEL[p.method] ?? p.method,
+        // Kasa XOR banka (şema CHECK'i) — hangisi doluysa o basılır.
+        accountName: p.cashBox?.name ?? p.bankAccount?.name ?? null,
+        currency: p.currency,
+        exchangeRate: p.exchangeRate?.toString() ?? null,
+        createdBy: creator?.fullName ?? creator?.username ?? null,
+      },
+      amount: p.amount.toString(),
+      // TL karşılığı YALNIZ dövizli makbuzda anlamlı; TRY'de aynı sayıyı iki kez
+      // basmak kâğıdı kirletir ve "iki farklı tutar mı" diye okunur.
+      amountTry: p.currency === "TRY" ? null : p.amountTry.toString(),
+      notes: p.notes,
+    };
+    return {
+      documentNo: p.docNo,
+      doc: doc as unknown as Record<string, unknown>,
+      voidInfo:
+        p.status === PaymentStatus.CANCELLED
+          ? { reason: p.cancelReason, at: p.cancelledAt ?? new Date() }
+          : null,
+    };
+  },
+  renderHtml: renderPaymentReceiptHtml,
+});
