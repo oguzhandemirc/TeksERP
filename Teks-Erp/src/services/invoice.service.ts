@@ -9,7 +9,7 @@
 // Bu üçlü, `CariTransaction`'ın append-only olmasının da sebebidir: geçmişi
 // değiştirilebilen bir defter denetimde hiçbir şey kanıtlamaz.
 // =============================================================================
-import { Prisma, InvoiceStatus, InvoiceType, Currency, CariTxnSource, PrintedDocType } from "@prisma/client";
+import { Prisma, InvoiceStatus, InvoiceType, Currency, CariTxnSource, PriceKind, PrintedDocType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -28,6 +28,8 @@ import {
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/finance-doc.html";
 import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";
+// D2 — kalem fiyatı ÇÖZÜM SIRASININ TEK KAYNAĞI. Sıra burada KOPYALANMAZ.
+import { resolveItemPricesFor } from "./item-price.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
@@ -256,12 +258,33 @@ export class InvoiceService {
       throw AppError.badRequest(`${receipt.receiptNo} fişinde faturalanacak top yok.`);
     }
 
+    // ── FİYAT ÖN-DOLUMU (D2) ────────────────────────────────────────────────
+    // Fişte fiyat girilmemiş toplar için kalem kartının ALIŞ fiyatı çözülür
+    // (tedarikçi istisnası > kart varsayılanı > null).
+    // ⚠️ ASLA EZMEZ: `purchasePrice` DOLUYSA o kazanır — sıfır dahil, çünkü
+    // sıfır depocunun bilinçli girdisi olabilir (bedava numune).
+    // ⚠️ Çözülemezse ESKİ DAVRANIŞ korunur (`0`) — bu, faturayı "bedava" ilan
+    // etmek değil, `confirm`in sıfır fiyatlı satırı REDDEDEN seddine düşürmektir
+    // (o sed 2026-08 öncesinden beri var). Buradan uydurma bir fiyat üretmek,
+    // muhasebecinin göreceği tek uyarıyı susturmuş olurdu.
+    // ⚠️ TEK sorgu (perf kuralı 9): fişte kaç top olursa olsun tek lookup.
+    const missingPrice = [...new Set(receipt.rolls.filter((r) => r.purchasePrice == null).map((r) => r.item.id))];
+    const priceMap =
+      missingPrice.length > 0
+        ? await resolveItemPricesFor({
+            itemIds: missingPrice,
+            kind: PriceKind.PURCHASE,
+            currency: receipt.currency,
+            customerId: receipt.supplierId,
+          })
+        : null;
+
     const groups = new Map<
       string,
       { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }
     >();
     for (const r of receipt.rolls) {
-      const price = D(r.purchasePrice ?? 0);
+      const price = D(r.purchasePrice ?? priceMap?.get(r.item.id)?.price ?? 0);
       const key = `${r.item.id}|${r.color?.name ?? ""}|${price.toString()}`;
       const existing = groups.get(key);
       if (existing) {

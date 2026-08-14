@@ -7,7 +7,7 @@
 // =============================================================================
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
-import { goodsReceiptService } from "../services/goods-receipt.service";
+import { describeOverReceipt, goodsReceiptService } from "../services/goods-receipt.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { parseQueryParams } from "../utils/query-parser";
@@ -37,6 +37,11 @@ const createSchema = z.object({
   currency: z.enum(["TRY","USD","EUR","GBP","RUB"]).optional(),
   notes: z.string().max(500).nullable().optional(),
   clientToken: z.string().uuid().optional(),
+  // D3 — bu fiş hangi ALIŞ SİPARİŞİNİ karşılıyor (opsiyonel: sipariş bir
+  // PLANDIR, kabulün ön koşulu değil). ⚠️ Zod tanımadığı anahtarı SESSİZCE
+  // ATAR: bu satır olmadan panel siparişi seçer, backend bağı düşürür ve
+  // "ne ısmarladım ne geldi" raporu hiç dolmaz.
+  purchaseOrderId: z.string().uuid().nullable().optional(),
   lines: z.array(lineSchema).max(500).optional(),
 });
 
@@ -157,13 +162,31 @@ router.post(
     try {
       const { lines } = z.object({ lines: z.array(lineSchema).min(1).max(500) }).parse(req.body);
       const result = await goodsReceiptService.addLines(req.params.id as string, lines, req.user?.userId);
+      // ⚠️ İplik satırı `Roll` doğurmaz → `created.length` onu SAYMAZ. Yalnız
+      // ona bakan mesaj, 5 kalem iplik girildiğinde "0 top eklendi" derdi ve
+      // depocu kaydın düştüğünü sanıp tekrar girerdi. İplik yokken metin
+      // eskisiyle BİREBİR.
+      const summary =
+        result.createdYarn.length > 0
+          ? `${result.created.length} top + ${result.createdYarn.length} iplik kalemi`
+          : `${result.created.length} top`;
+      // ⚠️ D3 — ALIŞ SİPARİŞİ UYARISI BU UÇTA DA BASILIR. Fiş bir KAPTIR:
+      // tipik akışta boş fiş açılır ve satırlar buradan eklenir, yani
+      // "sipariş miktarı AŞILDI" / "bu ürün siparişte YOK" uyarılarının
+      // GERÇEKTEN görüldüğü yer burasıdır. Yalnız `create`e konsaydı uyarı,
+      // sahadaki en yaygın yolda hiç görünmeyecekti. Sipariş bağı yoksa
+      // `describeOverReceipt` BOŞ string döner → mevcut mesaj bayt-bayt aynı.
       res.status(200).json({
         success: true,
-        data: { ...(await goodsReceiptService.loadDetail(req.params.id as string)), failed: result.failed },
+        data: {
+          ...(await goodsReceiptService.loadDetail(req.params.id as string)),
+          failed: result.failed,
+          purchaseOrder: result.purchaseOrder ?? null,
+        },
         message:
-          result.failed.length > 0
-            ? `${result.created.length} top eklendi, ${result.failed.length} satır atlandı.`
-            : `${result.created.length} top eklendi.`,
+          (result.failed.length > 0
+            ? `${summary} eklendi, ${result.failed.length} satır atlandı.`
+            : `${summary} eklendi.`) + describeOverReceipt(result.purchaseOrder),
       });
     } catch (e) {
       next(e);

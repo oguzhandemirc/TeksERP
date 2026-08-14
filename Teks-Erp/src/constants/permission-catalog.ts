@@ -100,6 +100,20 @@ export const PERMISSION_CATALOG = [
   // `roll:write`e YASLANMAZ: o izin fabrika rollerinde yaygın ve Mal Kabul karosu
   // fabrikada görünür hale gelirdi (ekran yalnız alım-satım kurulumu içindir).
   { code: "goods-receipt:write", module: "LOGISTICS", category: "web", description: "Mal kabul fişi oluşturma/iptal (satın alınan malın depo girişi)" },
+  // ── Paket D (ticaret paketi, 2026-08-14) ───────────────────────────────────
+  // ⚠️ ÜÇÜNÜN DE OKUMASI MEVCUT İZİNLERE BİNER (yeni `*:read` kodu AÇILMADI):
+  // iplik stoğu `warehouse:read`, fiyat `item:read`. Sebep: fiyatı OKUMAK
+  // faturayı hazırlayan HERKESİN işidir; ayrı bir `price:read` onu herkese
+  // vermek zorunda kalacağımız bir gürültü olur ve "kurulumda atanması
+  // unutulacak bir adım daha" demekti. Yazma ayrı bir yetkidir.
+  { code: "yarn:write", module: "LOGISTICS", category: "web", description: "İplik stok hareketi: giriş/çıkış + sayım düzeltmesi (kg defteri)" },
+  // Satış fiyatını KİM belirler — `item:write` (kalemi yeniden adlandıran)
+  // ile aynı kişi olmak zorunda değil.
+  { code: "price:write", module: "MASTER_DATA", category: "web", description: "Kalem fiyatı yazma: kart varsayılanı + müşteri istisnası" },
+  // Alış siparişi `order:*`ten AYRI: o kodlar SATIŞ siparişine aittir ve
+  // ikisini tek izne bağlamak, satışçıya tedarikçiye sipariş açtırmak olurdu.
+  { code: "purchase-order:read", module: "LOGISTICS", category: "web", description: "Alış siparişlerini görüntüleme (ne ısmarlandı, ne geldi)" },
+  { code: "purchase-order:write", module: "LOGISTICS", category: "web", description: "Alış siparişi açma/düzenleme/iptal" },
   // ── Ticaret paketi: ön muhasebe (2026-08-13) ──────────────────────────────
   // ⚠️ Modül "FINANCE" — `PermissionCategory` ENUM'una DOKUNULMAZ (o Prisma
   // enum'u; `module` serbest string). Kategori "web": muhasebeci "Yönetim"

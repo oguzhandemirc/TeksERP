@@ -335,6 +335,16 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "goods-receipt:write",
       "roll:read",
       "roll:write",
+      // Paket D — iplik kg-defteri + alış siparişi + fiyatlama.
+      // ⚠️ Dördü de YALNIZ bu rolde: fabrika rollerine vermek anlamsız olurdu
+      // (kavramlar `finance.enabled` rejimine ait ve fabrikada bayrak kapalı),
+      // üstelik yetki listesini kullanılmayan satırlarla şişirirdi. Ayrı bir
+      // "satın almacı" / "fiyatlamacı" rolü gerçekten doğarsa o zaman bölünür —
+      // bugünkü persona tek kişi (bkz. finance:payment/cheque/close gerekçesi).
+      "yarn:write",
+      "purchase-order:read",
+      "purchase-order:write",
+      "price:write",
       // Satış & sevkiyat
       "order:read",
       "order:write",

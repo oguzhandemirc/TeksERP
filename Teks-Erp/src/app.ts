@@ -65,6 +65,11 @@ import goodsReceiptRoutes from "./routes/goods-receipt.routes";
 import financeRoutes from "./routes/finance.routes";
 import chequeRoutes from "./routes/cheque.routes";
 import financePeriodRoutes from "./routes/finance-period.routes";
+// Paket D (ticaret) — üçü de KENDİ `verifyToken + requireFinanceEnabled`
+// kapısını taşır → app seviyesinde, spesifik ön ekle bağlanırlar.
+import yarnRoutes from "./routes/yarn.routes";
+import itemPriceRoutes from "./routes/item-price.routes";
+import purchaseOrderRoutes from "./routes/purchase-order.routes";
 import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
@@ -615,6 +620,12 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/goods-receipts", goodsReceiptRoutes);
+// Paket D — iplik kg-defteri · kalem fiyatı · alış siparişi. Üçü de ticaret
+// rejimine ait; fabrikada `finance.enabled` kapalı olduğu için hepsi 403 döner
+// (bekçi: scripts/test_finance_regime_gate.ts).
+app.use("/api/yarn", yarnRoutes);
+app.use("/api/item-prices", itemPriceRoutes);
+app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/warehouse-transfers", warehouseTransferRoutes);
 // Ön muhasebe — router'ın KENDİSİ `requireFinanceEnabled` taşır (bayrak
 // kapalıysa hepsi 403). Tek tek uçlarda tekrarlanmaz.

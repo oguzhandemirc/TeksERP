@@ -192,7 +192,7 @@ async function bumpInvoicePaid(
   return tx.$executeRaw`
     UPDATE "invoices"
        SET "paidTotal" = "paidTotal" + ${a}::numeric,
-           "updatedAt" = NOW()
+           "updatedAt" = NOW()  -- tz-ok: kolon timestamptz; ham UPDATE Prisma'nin @updatedAt kancasını atlar, elle yazılmazsa sayaç değişir ama damga BAYAT kalır
      WHERE "id" = ${invoiceId}::uuid
        AND "status" = 'CONFIRMED'
        AND "paidTotal" + ${a}::numeric <= "grandTotal"
@@ -209,7 +209,7 @@ async function dropInvoicePaid(
   return tx.$executeRaw`
     UPDATE "invoices"
        SET "paidTotal" = "paidTotal" - ${a}::numeric,
-           "updatedAt" = NOW()
+           "updatedAt" = NOW()  -- tz-ok: kolon timestamptz; ham UPDATE Prisma'nin @updatedAt kancasını atlar, elle yazılmazsa sayaç değişir ama damga BAYAT kalır
      WHERE "id" = ${invoiceId}::uuid
        AND "paidTotal" - ${a}::numeric >= 0
   `;
@@ -232,7 +232,7 @@ async function bumpPaymentAllocated(
   return tx.$executeRaw`
     UPDATE "payments"
        SET "allocatedTotal" = "allocatedTotal" + ${a}::numeric,
-           "updatedAt" = NOW()
+           "updatedAt" = NOW()  -- tz-ok: kolon timestamptz; ham UPDATE Prisma'nin @updatedAt kancasını atlar, elle yazılmazsa sayaç değişir ama damga BAYAT kalır
      WHERE "id" = ${paymentId}::uuid
        AND "status" = 'ACTIVE'
        AND "allocatedTotal" + ${a}::numeric <= "amount"
@@ -248,7 +248,7 @@ async function dropPaymentAllocated(
   return tx.$executeRaw`
     UPDATE "payments"
        SET "allocatedTotal" = "allocatedTotal" - ${a}::numeric,
-           "updatedAt" = NOW()
+           "updatedAt" = NOW()  -- tz-ok: kolon timestamptz; ham UPDATE Prisma'nin @updatedAt kancasını atlar, elle yazılmazsa sayaç değişir ama damga BAYAT kalır
      WHERE "id" = ${paymentId}::uuid
        AND "allocatedTotal" - ${a}::numeric >= 0
   `;
@@ -270,7 +270,7 @@ async function bumpChequeAllocated(
   return tx.$executeRaw`
     UPDATE "cheques"
        SET "allocatedTotal" = "allocatedTotal" + ${a}::numeric,
-           "updatedAt" = NOW()
+           "updatedAt" = NOW()  -- tz-ok: kolon timestamptz; ham UPDATE Prisma'nin @updatedAt kancasını atlar, elle yazılmazsa sayaç değişir ama damga BAYAT kalır
      WHERE "id" = ${chequeId}::uuid
        AND "status" IN ('PORTFOLIO', 'AT_BANK', 'ENDORSED', 'COLLECTED', 'ISSUED', 'PAID')
        AND "allocatedTotal" + ${a}::numeric <= "amount"
@@ -293,7 +293,7 @@ async function dropChequeAllocated(
   return tx.$executeRaw`
     UPDATE "cheques"
        SET "allocatedTotal" = "allocatedTotal" - ${a}::numeric,
-           "updatedAt" = NOW()
+           "updatedAt" = NOW()  -- tz-ok: kolon timestamptz; ham UPDATE Prisma'nin @updatedAt kancasını atlar, elle yazılmazsa sayaç değişir ama damga BAYAT kalır
      WHERE "id" = ${chequeId}::uuid
        AND "allocatedTotal" - ${a}::numeric >= 0
   `;

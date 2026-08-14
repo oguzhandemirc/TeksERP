@@ -617,6 +617,52 @@ WHERE (i.status = 'CONFIRMED'
    OR (i.status = 'CANCELLED' AND i."confirmedAt" IS NOT NULL
        AND (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE_CANCEL') <> 1)`,
   },
+  // ── Paket D — iplik kg-defteri (2026-08-14) ───────────────────────────────
+  // ⚠️ id'ler "27"/"28": ilk öneri "25"/"26" idi ve İKİSİ DE ALINMIŞTI (yukarıda
+  // fatura/storno ve virman dengesi). Bu dosyada id benzersizliğini doğrulayan
+  // bir kontrol YOK → mükerrer id sessizce geçer ve iki bölüm tek satır gibi
+  // raporlanırdı. Yeni bölüm eklerken en büyük id'yi GERÇEKTEN kontrol et.
+  {
+    id: "27",
+    // `YarnStock.balanceKg`, DB seddi (CHECK/trigger) OLMAYAN denormalize bir
+    // alandır — `CariBalance` ile birebir aynı sınıf. Tek yazar `yarn.service`
+    // ve her yazım aynı tx'te bir hareket satırı doğurur; ikisi ayrışırsa
+    // bakiye sessizce yalan söyler (hata yok, log yok).
+    title: "YarnStock.balanceKg vs Σ(YarnMovement: IN/ADJUST_IN − OUT/ADJUST_OUT)",
+    sql: `
+SELECT s."itemId"::text AS kalem, s."warehouseId"::text AS depo,
+       s."balanceKg"::text AS kayitli,
+       COALESCE(m.toplam, 0)::text AS hesaplanan,
+       (s."balanceKg" - COALESCE(m.toplam, 0))::text AS fark
+FROM yarn_stocks s
+LEFT JOIN (
+  SELECT "itemId", "warehouseId",
+         SUM(CASE WHEN kind IN ('IN','ADJUST_IN') THEN "qtyKg" ELSE -"qtyKg" END) AS toplam
+  FROM yarn_movements GROUP BY "itemId", "warehouseId"
+) m ON m."itemId" = s."itemId" AND m."warehouseId" = s."warehouseId"
+WHERE s."balanceKg" <> COALESCE(m.toplam, 0)`,
+  },
+  {
+    id: "28",
+    // TERS YÖN: hareketi olan (kalem, depo) çifti için stok satırı hiç
+    // doğmamışsa bakiye ekranda GÖRÜNMEZ — mal defterde vardır ama envanterde
+    // yoktur. §22'nin (CariBalance satırı eksik) iplik karşılığı.
+    //
+    // ⚠️ Süzgeç `toplam <> 0` DEĞİL: net sıfıra inen bir çift de satır TAŞIMALI
+    // (giriş+çıkış olmuş, kalem o depoda İŞLEM GÖRMÜŞ). Ayrıca negatif bakiye
+    // burada ihlal SAYILMAZ — o bilinçli olarak meşrudur (sayım girilmeden
+    // çıkış), aranan şey SAPMA'dır.
+    title: "Hareketi olan (kalem, depo) için YarnStock satırı yok",
+    sql: `
+SELECT m."itemId"::text AS kalem, m."warehouseId"::text AS depo,
+       0 AS kayitli, m.adet::text AS hesaplanan, m.adet::text AS fark
+FROM (
+  SELECT "itemId", "warehouseId", COUNT(*) AS adet
+  FROM yarn_movements GROUP BY "itemId", "warehouseId"
+) m
+LEFT JOIN yarn_stocks s ON s."itemId" = m."itemId" AND s."warehouseId" = m."warehouseId"
+WHERE s."itemId" IS NULL`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {

@@ -658,8 +658,16 @@ export class InventoryService {
        * Doğrulama (var mı/aktif mi) `resolveTargetWarehouseId`'de.
        */
       warehouseId?: string | null;
-      /** Satın alma birim fiyatı (mal kabul yolu) — topun kalıcı alış bedeli. */
-      purchasePrice?: number | null;
+      /**
+       * Satın alma birim fiyatı (mal kabul yolu) — topun kalıcı alış bedeli.
+       *
+       * ⚠️ Tip `Prisma.Decimal.Value` (number | string | Decimal), düz `number`
+       * DEĞİL: kalem kartından çözülen fiyat (D2 `resolveItemPrice`) bir
+       * `Decimal`dır ve `number`a çevirmek Decimal kolonuna JS float sokmak
+       * demekti (CLAUDE.md perf/doğruluk kuralı). Prisma `Decimal.Value`u
+       * doğrudan kabul eder.
+       */
+      purchasePrice?: Prisma.Decimal.Value | null;
       /** Topu doğuran mal kabul fişi (yalnız `GoodsReceipt` yolu doldurur). */
       goodsReceiptId?: string | null;
       /**
