@@ -27,13 +27,15 @@
 //   §10 FIFO ÖNERİSİ: vade sıralı, deterministik, saf fonksiyon
 //   §11 DEALLOCATE (elle düzeltme) — sayaçlar düşer, negatife inmez
 //   §12 ⭐ SINIF 4 (2026-08-14): terminal çek süzgeci ATOMİK — kilit-altı
-//       yeniden değerlendirme deterministik sondayla + count-0 TANISI
+//       yeniden değerlendirme deterministik sondayla + count-0 TANISI (ÜÇ
+//       kaynağın üçünde de: çek §12a · tahsilat §12k · fatura §12m — tavan
+//       mesajı yanlış dalda konuşmaz)
 //   §13 ⭐ EŞZAMANLILIK: allocate ‖ bounce yarışı (5 tur) — tam olarak BİR
 //       taraf kazanır, kaybeden 409'a eşlenir, BOUNCED+kapama birlikte ASLA
 //   §14 SINIF 3: virman ayna-çift yarışı (deadlock yok / 500 asla) + kanonik
 //       kilit sırası kaynak taraması + iptal bacağı işlevsel
-//   §15 GÜVENLİK AĞI: error.middleware sınıf-40 → 409 (iki kılık) + 23514
-//       finans mesajları + YANLIŞ POZİTİF korumaları
+//   §15 GÜVENLİK AĞI: error.middleware sınıf-40 → 409 (iki kılık + P2010'un
+//       META alt-kılığı) + 23514 finans mesajları + YANLIŞ POZİTİF korumaları
 //   §16 MUTABAKAT: SUM(allocation) === üç sayacın hepsi (TÜM DB) — HER ZAMAN
 //       EN SON koşar ki §12-§14'ün yarış artıkları da terazide tartılsın
 //
@@ -83,6 +85,23 @@
 //      silindi → 118/1: §15f kırmızı ("Veri bütünlüğü kuralı engelledi
 //      (cheques_terminal_not_allocated)" — operatör Türkçe sebep yerine çıplak
 //      constraint adını görür).
+// 2026-08-14 KAPAMA DENETİMİ sondaları — ÜÇÜ DE GERÇEKTEN KOŞULDU, dosyalar
+// shasum ile birebir geri yüklendi (taban 125/125 yeşil):
+//   ⑩ `allocateOneTx`'teki `explainPaymentBumpZeroTx` çağrısı silindi → 124/1:
+//      §12k kırmızı — kaybeden allocate YANLIŞ dalda konuştu ("kapamaya kalan
+//      tutar 500 TRY" tavan mesajı; oysa tahsilat o sırada İPTAL edilmişti).
+//   ⑪ `explainInvoiceBumpZeroTx` çağrısı silindi → 124/1: §12m kırmızı (aynı
+//      sınıf, fatura ikizi — "kapatılabilecek tutar 500 TRY" yalanı geri geldi).
+//   ⑫ error.middleware'in İKİ extract fonksiyonundan `meta.driverAdapterError`
+//      blokları silindi → 123/2: §15j + §15k kırmızı (ikisi de 500 "Sunucu
+//      yapılandırma hatası"na düştü). ⚠️ §15c YEŞİL KALDI ve bu ölçümün kendisi
+//      kanıttır: mesaj-kalıbı fallback'i o kılığı taşıyor, meta yolunun TEK
+//      bekçisi §15j/§15k — "fazlalık" sanıp silme.
+// ⚠️ SONDA FİXTURE DERSİ (⑪'in ilk koşumu): gate tx'i `cancelledAt` YAZMADAN
+// CANCELLED'a çekiyordu → DB CHECK'i `invoices_status_stamps` gate tx'ini
+// reddetti ve henüz await edilmemiş promise SAHİPSİZ rejection olarak Node 22'yi
+// Sonuç/temizlik basılmadan ÖLDÜRDÜ (❌ bile yok — en sessiz kırmızı). Gate
+// tx'lerine bu yüzden no-op `.catch` bağlı ve damga alanları tam yazılır.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -728,6 +747,7 @@ async function main(): Promise<void> {
       });
       await gate; // satır kilidini commit'e kadar tut
     });
+    void bounceTx.catch(() => undefined); // erken red = sahipsiz rejection → süreç ölür (bkz. §12m notu)
     await sleep(80); // updateMany kilidi aldı
     const allocP = err(() => paymentAllocationService.allocate({ invoiceId: invT, chequeId: chqT, amount: 300 }));
     await sleep(200); // allocate ön kontrolü geçti, bump kilitte bekliyor
@@ -780,6 +800,77 @@ async function main(): Promise<void> {
       CHEQUE_NO_MONEY_STATUSES.length === 3 && !CHEQUE_NO_MONEY_STATUSES.includes(ChequeStatus.COLLECTED),
       CHEQUE_NO_MONEY_STATUSES.join(","),
     );
+
+    // §12k-l TAHSİLAT İKİZİ — allocate ‖ payment.cancel yarışı, deterministik:
+    // elle açılan tx tahsilatı CANCELLED'a çekip satır kilidini tutar; allocate
+    // ön kontrolü hâlâ ACTIVE okur (MVCC), `bumpPaymentAllocated` kilitte
+    // bekler; commit sonrası WHERE'deki `status='ACTIVE'` koşulu 0 döndürür →
+    // tanı (`explainPaymentBumpZeroTx`) "iptal edildi" demeli. Tavan mesajı
+    // burada YALAN olurdu: kalan tutar değil, kaynağın KENDİSİ yok (§12a'nın
+    // çekteki gerekçesinin birebir tahsilat ikizi).
+    const payK = await makePayment({ customerId: customer.id, amount: 500 });
+    const invK = await makeInvoice({ customerId: customer.id, total: 500 });
+    let releasePayGate!: () => void;
+    const payGate = new Promise<void>((r) => (releasePayGate = r));
+    const cancelPayTx = prisma.$transaction(async (tx) => {
+      await tx.payment.updateMany({
+        where: { id: payK, status: "ACTIVE" },
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      });
+      await payGate; // satır kilidini commit'e kadar tut
+    });
+    void cancelPayTx.catch(() => undefined); // erken red = sahipsiz rejection → süreç ölür (bkz. §12m notu)
+    await sleep(80);
+    const allocK = err(() => paymentAllocationService.allocate({ invoiceId: invK, paymentId: payK, amount: 300 }));
+    await sleep(200);
+    releasePayGate();
+    await cancelPayTx;
+    const mK = await allocK;
+    check(
+      "§12k Tahsilat bu sırada iptal edilince kaybeden 'iptal edildi' dedi (tavan mesajı DEĞİL)",
+      /bu sırada iptal edildi/.test(mK),
+      mK.replace(/\s+/g, " ").slice(0, 120),
+    );
+    check(
+      "§12l Fatura sayacı GERİ SARDI + tahsilat sayacına yazılmadı",
+      (await invoiceCounters(invK)).paid.isZero() && (await paymentAllocated(payK)).isZero(),
+      `paid=${(await invoiceCounters(invK)).paid.toString()}`,
+    );
+
+    // §12m-n FATURA İKİZİ — allocate ‖ invoice.cancel: fatura bump'ı allocate'in
+    // İLK yazımı olduğu için pencere oradadır; `status='CONFIRMED'` koşulu 0
+    // döndürünce tanı (`explainInvoiceBumpZeroTx`) faturanın iptalini söylemeli.
+    const invM = await makeInvoice({ customerId: customer.id, total: 500 });
+    const payM = await makePayment({ customerId: customer.id, amount: 500 });
+    let releaseInvGate!: () => void;
+    const invGate = new Promise<void>((r) => (releaseInvGate = r));
+    const cancelInvTx = prisma.$transaction(async (tx) => {
+      await tx.invoice.updateMany({
+        where: { id: invM, status: "CONFIRMED" },
+        // ⚠️ `cancelledAt` ZORUNLU: DB CHECK'i `invoices_status_stamps`
+        // damgasız CANCELLED'ı reddediyor — ilk yazımda eksikti ve sed, sonda
+        // fixture'ını yakalayarak İLK işini burada gördü (§7d'nin ikizi).
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      });
+      await invGate;
+    });
+    // Gate tx'i erken reddederse (CHECK/bağlantı) await'e kadar SAHİPSİZ
+    // kalır → Node 22 unhandled rejection'ı FATAL sayar ve süreç Sonuç/temizlik
+    // basmadan ölür (ilk koşumda ölçüldü). No-op catch süreci ayakta tutar;
+    // aşağıdaki `await cancelInvTx` gerçek hatayı yine fırlatır.
+    void cancelInvTx.catch(() => undefined);
+    await sleep(80);
+    const allocM = err(() => paymentAllocationService.allocate({ invoiceId: invM, paymentId: payM, amount: 300 }));
+    await sleep(200);
+    releaseInvGate();
+    await cancelInvTx;
+    const mM = await allocM;
+    check(
+      "§12m Fatura bu sırada iptal edilince kaybeden 'iptal edildi' dedi (tavan mesajı DEĞİL)",
+      /bu sırada iptal edildi/.test(mM),
+      mM.replace(/\s+/g, " ").slice(0, 120),
+    );
+    check("§12n Tahsilat sayacına tek kuruş yazılmadı", (await paymentAllocated(payM)).isZero());
   }
 
   // ── §13 EŞZAMANLILIK: allocate ‖ bounce (5 tur) ─────────────────────────
@@ -991,6 +1082,43 @@ async function main(): Promise<void> {
     });
     const m7 = mapThroughErrorHandler(chkXor);
     check("§15g cash_period_close_account_xor → Türkçe iş mesajı", m7.status === 409 && /kasa VEYA banka/.test(m7.message), `${m7.status} ${m7.message.slice(0, 80)}`);
+
+    // (j)(k) P2010 sarımının META kılığı: $executeRaw yolunda SQLSTATE mesaj
+    // metninde DEĞİL `meta.driverAdapterError.cause`ta da gelir. Mesaj kalıbı
+    // BİLEREK yok (yalnız "Raw query failed") — bu iki kontrol meta yolunu TEK
+    // BAŞINA ölçer; extract fonksiyonlarından meta bloğu silinirse yalnız
+    // bunlar kırmızı verir (mesaj-kalıbı fallback'i §15c'yi yeşil tutar,
+    // negatif sonda ⑫ ile ölçüldü).
+    const p2010Meta = new Prisma.PrismaClientKnownRequestError("Raw query failed", {
+      code: "P2010",
+      clientVersion: "7.0.0",
+      meta: { driverAdapterError: { cause: { code: "40P01", originalMessage: "deadlock detected" } } },
+    });
+    const m8 = mapThroughErrorHandler(p2010Meta);
+    check(
+      "§15j P2010 META kılığındaki 40P01 → 409 (mesaj kalıbı olmadan)",
+      m8.status === 409 && /İşlem çakışması/.test(m8.message),
+      `${m8.status} ${m8.message.slice(0, 60)}`,
+    );
+
+    const p2010Chk = new Prisma.PrismaClientKnownRequestError("Raw query failed", {
+      code: "P2010",
+      clientVersion: "7.0.0",
+      meta: {
+        driverAdapterError: {
+          cause: {
+            code: "23514",
+            originalMessage: 'new row for relation "payments" violates check constraint "payments_allocated_total_range"',
+          },
+        },
+      },
+    });
+    const m9 = mapThroughErrorHandler(p2010Chk);
+    check(
+      "§15k P2010 META kılığındaki 23514 → Türkçe iş mesajı (sayaç seddi 500'e düşmez)",
+      m9.status === 409 && /kapama toplamı kendi tutarını aşamaz/.test(m9.message),
+      `${m9.status} ${m9.message.slice(0, 80)}`,
+    );
 
     // (h) Harness körlük zemini: gerçek AppError kendi statüsüyle DEĞİŞMEDEN
     // geçer — geçmeseydi §13b/§14a "her şey 409" diye vakumen yeşile dönebilirdi

@@ -671,6 +671,10 @@ export class PaymentAllocationService {
     // faturayla aynı tahsilata dokunabilir; ters sırayla yazan bir yol
     // eklenirse klasik ABBA deadlock'u doğar.
     if ((await bumpInvoicePaid(tx, inv.id, amount)) === 0) {
+      // 0'ın iki sebebi olabilir: tavan YA DA fatura kontrol ile yazım arasında
+      // iptal edildi (allocate ‖ invoice.cancel yarışı) — tanı tx İÇİNDE taze
+      // okumayla; sebep iptalse aşağıdaki tavan satırına hiç düşülmez.
+      await this.explainInvoiceBumpZeroTx(tx, inv.id);
       throw AppError.conflict(
         `${inv.docNo} için kapatılabilecek tutar ${invOpen.toString()} ${inv.currency} — ${amount.toString()} yazılamaz.`,
       );
@@ -679,11 +683,13 @@ export class PaymentAllocationService {
       ? await bumpPaymentAllocated(tx, input.paymentId, amount)
       : await bumpChequeAllocated(tx, input.chequeId as string, amount);
     if (srcBumped === 0) {
-      // Çek dalında 0'ın İKİ ayrı sebebi olabilir (tavan ya da parasız-terminal
-      // statü) ve ikisine aynı mesajı basmak yanlış dalda YALAN olur — tanı tx
-      // İÇİNDE taze okumayla konur; sebep terminalse aşağıdaki satıra hiç
-      // düşülmez (fırlatır).
+      // Kaynak dalında 0'ın İKİ ayrı sebebi olabilir (tavan ya da kaynağın bu
+      // sırada parasızlaşması — çekte terminal statü, tahsilatta iptal) ve
+      // ikisine aynı mesajı basmak yanlış dalda YALAN olur — tanı tx İÇİNDE
+      // taze okumayla konur; sebep tavan değilse aşağıdaki satıra hiç düşülmez
+      // (fırlatır).
       if (input.chequeId) await this.explainChequeBumpZeroTx(tx, input.chequeId);
+      else await this.explainPaymentBumpZeroTx(tx, input.paymentId as string);
       throw AppError.conflict(
         `${src.label} üzerinde kapamaya kalan tutar ${srcFree.toString()} ${src.currency} — ${amount.toString()} yazılamaz.`,
       );
@@ -740,6 +746,45 @@ export class PaymentAllocationService {
             : "iptal edildi";
       throw AppError.conflict(
         `${fresh.docNo} bu sırada ${label} — karşılıksız/iade/iptal çekle kapama yapılamaz (çekin parası yoktur). Listeyi yenileyip başka bir kaynak seçin.`,
+      );
+    }
+  }
+
+  /**
+   * Fatura bump'ı 0 döndüğünde SEBEBİ ayırt eder — çek tanısının FATURA ikizi.
+   *
+   * Ön kontrol DRAFT/CANCELLED'ı zaten reddetti; buraya düşen 0'ın sebebi ya
+   * TAVANDIR ya da fatura kontrol ile yazım arasında iptal edildi (allocate ‖
+   * invoice.cancel yarışı — bekçi §12m deterministik üretir). İkincisinde tavan
+   * mesajı YALAN olurdu: "kapatılabilecek tutar X" değil, faturanın kendisi yok.
+   * Üç dal: kayıt yok → 404 · CONFIRMED değil → anlamlı 409 · değilse → dönüş
+   * (çağıran mevcut tavan 409'unu basar).
+   */
+  private async explainInvoiceBumpZeroTx(tx: Prisma.TransactionClient, invoiceId: string): Promise<void> {
+    const fresh = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { docNo: true, status: true } });
+    if (!fresh) throw AppError.notFound("Fatura bulunamadı.");
+    if (fresh.status === InvoiceStatus.CANCELLED) {
+      throw AppError.conflict(
+        `${fresh.docNo} bu sırada iptal edildi — iptal edilmiş fatura kapatılamaz. Listeyi yenileyin.`,
+      );
+    }
+    if (fresh.status === InvoiceStatus.DRAFT) {
+      throw AppError.conflict(`${fresh.docNo} onaylı değil — taslak fatura kapatılamaz.`);
+    }
+  }
+
+  /**
+   * Tahsilat bump'ı 0 döndüğünde SEBEBİ ayırt eder — çek tanısının TAHSİLAT
+   * ikizi. `bumpPaymentAllocated`ın WHERE'indeki `status='ACTIVE'` koşulu,
+   * allocate ‖ payment.cancel yarışında 0 döndürür (bekçi §12k deterministik
+   * üretir); tavan mesajı basmak yanlış dalda konuşmak olurdu.
+   */
+  private async explainPaymentBumpZeroTx(tx: Prisma.TransactionClient, paymentId: string): Promise<void> {
+    const fresh = await tx.payment.findUnique({ where: { id: paymentId }, select: { docNo: true, status: true } });
+    if (!fresh) throw AppError.notFound("Tahsilat/ödeme bulunamadı.");
+    if (fresh.status !== PaymentStatus.ACTIVE) {
+      throw AppError.conflict(
+        `${fresh.docNo} bu sırada iptal edildi — iptal edilmiş tahsilatla kapama yapılamaz. Listeyi yenileyip başka bir kaynak seçin.`,
       );
     }
   }

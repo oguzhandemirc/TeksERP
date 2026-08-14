@@ -214,6 +214,12 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
     "Dönem kapanışı kasa VEYA banka hesabına bağlanmalı (ikisi birden değil).",
   invoices_paid_total_range:
     "Fatura kapama toplamı fatura tutarını aşamaz ve negatif olamaz — kapama tutarlarını kontrol edin.",
+  payments_allocated_total_range:
+    "Tahsilatın/ödemenin kapama toplamı kendi tutarını aşamaz ve negatif olamaz — kapama tutarlarını kontrol edin.",
+  cheques_allocated_total_range:
+    "Çekin kapama toplamı çek tutarını aşamaz ve negatif olamaz — kapama tutarlarını kontrol edin.",
+  payment_allocations_source_xor:
+    "Kapama kaynağı tahsilat VEYA çek olmalı (ikisi birden ya da hiçbiri değil).",
   payment_allocations_amount_positive: "Kapama tutarı sıfırdan büyük olmalı.",
   cheques_amount_positive: "Çek/senet tutarı sıfırdan büyük olmalı.",
   payments_amount_positive: "Tahsilat/ödeme tutarı sıfırdan büyük olmalı.",
@@ -222,6 +228,12 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
     "Ciro kaydı tutarsız: ciro edilen cari olmadan çek ciro edilmiş sayılamaz.",
   cari_txn_debit_credit_xor:
     "Cari hareket satırı ya borç ya alacak olmalı (ikisi birden ya da negatif olamaz).",
+  cheque_events_account_not_both:
+    "Çek olayı kasa VEYA banka hesabına bağlanmalı (ikisi birden değil).",
+  cheques_rate_positive: "Çekin kuru sıfırdan büyük olmalı.",
+  purchase_order_lines_qty_positive: "Alış siparişi satırının miktarı sıfırdan büyük olmalı.",
+  purchase_order_lines_received_nonneg: "Alış siparişinde teslim alınan miktar negatif olamaz.",
+  item_prices_price_nonneg: "Fiyat negatif olamaz.",
 };
 
 // =============================================================================
